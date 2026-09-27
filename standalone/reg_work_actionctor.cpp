@@ -59,6 +59,4 @@ void RegisterWorkActionCtorBatch() {
     RegisterExeAddr(0x1400c0ad0, reinterpret_cast<uintptr_t>(&WorkAct_PerformWorkCtor9_c0ad0));
     RegisterExeAddr(0x1400c9b70, reinterpret_cast<uintptr_t>(&WorkAct_PickupRawMaterialCopyCtor_c9b70));
     RegisterExeAddr(0x14008d3c0, reinterpret_cast<uintptr_t>(&PickupGate_TownWants_8d3c0));
-    RegisterExeAddr(0x14012d990, reinterpret_cast<uintptr_t>(&PickupGate_Accepts_12d990));
-    RegisterExeAddr(0x14012d560, reinterpret_cast<uintptr_t>(&PickupGate_AcceptMask_12d560));
 }

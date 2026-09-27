@@ -31,5 +31,4 @@ extern "C" void CitizenAI_ActionFlush_c4bb0(int64_t stack);
 
 void RegisterCitizenAIExecutor() {
     RegisterExeAddr(0x1400c4c50, reinterpret_cast<uintptr_t>(&CitizenAI_ActionExecutor_c4c50));
-    RegisterExeAddr(0x1400c4bb0, reinterpret_cast<uintptr_t>(&CitizenAI_ActionFlush_c4bb0));
 }

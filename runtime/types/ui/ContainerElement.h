@@ -21,9 +21,12 @@
 //   [6] 0x1800cc590  Draw          [7] 0x1800cc2d0  Update
 //   [8] Enable, [9] Contains, [10] SetColor, [11] GetBorder  INHERITED from Element
 //
-// ABSTRACT (slot 0 pure), no real ctor: every live one is built by the
-// `??0ContainerElement` DOOR (containerelement.cpp) or inline by
-// `ContainerDescription::CreateInstance`, and wears the MINTED table.
+// ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2): CONCRETE. A real public
+// ctor (retail's stores), its own slot 0 and the factory pair as the class's
+// own statics: every live ContainerElement -- built by the factory or by
+// `ContainerDescription::CreateInstance` -- wears the COMPILER's table. The
+// minted `??_7ContainerElement@UI@@6B@`, its RT_DELDTOR row 0x18003a050, the
+// ??0 / copy / ??1 doors and the slot doors are retired (ui-b.txt).
 //
 // LAYOUT (RULE B6-8) — MOVED here from containerelement.cpp's file-local
 // constants. Evidence: `??0ContainerElement@UI@@QEAA@XZ` (0x1800ccb40), read as
@@ -47,8 +50,33 @@ namespace UI {
 
 class ContainerElement : public Element {
 public:
+    // ??0ContainerElement@UI@@QEAA@XZ 0x1800ccb40 -- the REAL constructor:
+    // `CALL ??0Element` (the base's real ctor) ; vptr (the compiler's) ;
+    // +0xc8 dword 0 ; +0xcc WORD 0 (both flags) ; +0xd0 dword 0. +0xc0/+0xc4
+    // are NOT written (ContainerDescription::CreateInstance writes them).
+    ContainerElement() : Element() {
+        _barSize      = 0;
+        _clampWidth   = 0;
+        _clampHeight  = 0;
+        _wheelImpulse = 0;
+    }
+
     // ---- the twelve slots, in measured order -------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x18003a050
+    // [0] 0x18003a050 -- MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0xd8` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<ContainerElement*>(self + static_cast<int64_t>(i) * 0xd8)->~ContainerElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~ContainerElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180039cc0
     uint32_t    Type() const override;                            // [2] 0x180039ca0
     // [3] Persist — Element's, inherited.
@@ -70,17 +98,18 @@ public:
     // Exported, not ported (inlined by ComboDialog's ctor): declared, undefined.
     void SetSize(int32_t w, int32_t h);                           // 0x180039eb0
 
-    ContainerElement(const ContainerElement& src);                // 0x180039f00  containerelement.cpp door
+    ContainerElement(const ContainerElement& src);                // 0x180039f00  not ported (no caller)
     ContainerElement& operator=(const ContainerElement& src);     // 0x180039f90  not ported
-    static uint32_t      TypeId();                                // 0x180039cb0  not ported
-    static Object::Base* CreateNewObject();                       // 0x180039db0  not ported
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180039e50  not ported
+    // 0x180039cb0 -- over the minted `?_typeInfo@` record until the W3 fold.
+    static uint32_t      TypeId();
+    // Retail's factory pair (B39_RULES D2), containerelement.cpp.
+    static Object::Base* CreateNewObject();                       // 0x180039db0
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x180039e50
 
 protected:
-    // NOT retail's `??0ContainerElement@UI@@QEAA@XZ` (0x1800ccb40, the door).
-    ContainerElement() = default;
-    // `??1ContainerElement@UI@@UEAA@XZ` (0x1800ccb10): non-virtual, not defined
-    // in the real build; the retail body is the door `RtUi_ContainerElement_Dtor`.
+    // `??1ContainerElement@UI@@UEAA@XZ` (0x1800ccb10): NON-VIRTUAL (no virtual
+    // dtor until the normal-virtual cutover). Retail's body is the restamp and
+    // the tail into ~Element, both the compiler's (containerelement.cpp).
     ~ContainerElement();
 
 private:

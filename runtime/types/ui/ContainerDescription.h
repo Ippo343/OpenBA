@@ -23,10 +23,12 @@
 //   [8] 0x1800ccb90  CreateInstance  RETSLOT (RULE B6-2)
 //   [9] 0x180039a70  Construct       INTRODUCED by the leaf (RULE B6-1.1)
 //
-// ABSTRACT (slot 0 pure; its body is the RT_DELDTOR row). Every live one is
-// built by the `??0ContainerDescription` DOOR (factory_ui1.cpp) and wears the
-// MINTED table, so every door in containerdescription.cpp delegates with a
-// QUALIFIED call. No real constructor (B4b-2).
+// ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2): CONCRETE. A real public
+// ctor (retail's 0x1800cd060 stores), its own slot 0 and the factory pair as
+// the class's own statics: every live description wears the COMPILER's table.
+// The minted `??_7ContainerDescription@UI@@6B@`, its RT_DELDTOR row 0x180039c00,
+// the FACTUI1 row, the ??0 / ??1 doors and the slot doors are retired
+// (tools/rt_mint_retired/ui-b.txt).
 //
 // LAYOUT — the layout was already documented by the POD
 // `RtUI::ContainerDescription` in DescriptionsBatch1.h (0x90, agrees with
@@ -56,8 +58,36 @@ class Element;
 
 class ContainerDescription : public ElementDescription {
 public:
+    // ??0ContainerDescription@UI@@QEAA@XZ 0x1800cd060 -- the REAL constructor:
+    // ElementDescription's (inlined in retail) then the tail stores listed in
+    // the banner. The vptrs are the compiler's.
+    ContainerDescription() : ElementDescription() {
+        _requestedWidth  = 0x64;
+        _requestedHeight = 0x64;
+        _clampWidth      = 0;          // one WORD store with +0x71
+        _clampHeight     = 0;
+        _barSize         = 0;
+        _partDescs[0]    = nullptr;
+        _partDescs[1]    = nullptr;
+        _partDescs[2]    = nullptr;
+    }
+
     // ---- the ten slots, in measured order ----------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180039c00
+    // [0] 0x180039c00 -- MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x90` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<ContainerDescription*>(self + static_cast<int64_t>(i) * 0x90)->~ContainerDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~ContainerDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char*   TypeName() const override;                      // [1] 0x1800398d0
     uint32_t      Type() const override;                          // [2] 0x1800398b0
     int32_t       GetFileVersion() const override;                // [3] 0x1800ccfe0
@@ -73,17 +103,16 @@ public:
     // ---- exported, not ported: declared, deliberately undefined ------------
     ContainerDescription(const ContainerDescription& src);        // 0x180039a90
     ContainerDescription& operator=(const ContainerDescription&); // 0x180039b10
-    static uint32_t      TypeId();                                // 0x1800398c0
-    static Object::Base* CreateNewObject();                       // 0x1800399c0  factory_ui1.cpp door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180039a40  factory_ui1.cpp door
+    // 0x1800398c0 -- over the minted `?_typeInfo@` record until the W3 fold.
+    static uint32_t      TypeId();
+    // Retail's factory pair (B39_RULES D2), containerdescription.cpp.
+    static Object::Base* CreateNewObject();                       // 0x1800399c0
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x180039a40
 
 protected:
-    // NOT retail's `??0ContainerDescription@UI@@QEAA@XZ` (0x1800cd060, the
-    // factory_ui1.cpp door).
-    ContainerDescription() = default;
-    // `??1ContainerDescription@UI@@UEAA@XZ` (0x1800ccff0). NON-VIRTUAL and NOT
-    // defined in the real build; the retail body is the registered door
-    // `RtUi_ContainerDescription_Dtor`.
+    // `??1ContainerDescription@UI@@UEAA@XZ` (0x1800ccff0). NON-VIRTUAL; retail's
+    // body is the restamps and ~ElementDescription's +0x60 release, all the
+    // compiler's chain (containerdescription.cpp).
     ~ContainerDescription();
 
 private:

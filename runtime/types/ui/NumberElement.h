@@ -93,11 +93,20 @@
 // format string from a garbage stack byte. That replay is gone now (both
 // setters are NO-ORACLE ports, widgets_input.cpp), so the out-of-bounds read
 // went with it; the size is recorded because it is the object's true size.
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0NumberElement@UI@@QEAA@XZ` (0x180118c70) minus its vptr stores;
+// slot 0 is the class's own vector deleting dtor; ~NumberElement is protected and
+// non-virtual. The factory pair is the class's own; the minted
+// `??_7NumberElement@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
+// the doors are retired.
 // ============================================================================
+#include <type_traits>
 #include <cstdint>
 #include <cstddef>
 #include "Element.h"
 #include "NumberDescription.h"   // NumberDescription::NumberType
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 // ENDGAME B.3 step 6, block C3: the POD below moved from `UI::` to `RtUI::`
 // (B4b-1) when the real class took the retail name; widgets_input.cpp's two
@@ -153,8 +162,8 @@ static_assert(offsetof(NumberElement, _showSign)  == 0xE0, "NumberElement::_show
 // SIZE 0xE8: `MOV EDX,0xe8`-sized per B36_SLOTS.md section 1 and
 // CreateNewObject's `Allocate(0xE8, 8)`.
 //
-// ABSTRACT in C++; no real ctor: live ones are built by the `??0NumberElement`
-// door (numberelement.cpp) and wear the MINTED table.
+// CONCRETE since ENDGAME B.3.9 UI-A: the real ctor is ??0NumberElement
+// (0x180118c70); live ones wear the compiler's table.
 // ############################################################################
 namespace UI {
 
@@ -162,7 +171,36 @@ class Font;
 
 class NumberElement : public Element {
 public:
-    Object::Base* DeletingDtor(unsigned flags) override = 0;     // [0] 0x18004ab80
+    // ??0NumberElement@UI@@QEAA@XZ 0x180118c70 — the REAL constructor: CALL
+    // ??0Element (Element()), then _font, _mode, _cachedText, _intValue,
+    // _floatValue, _showSign zero (+0xcc and the tail pad unwritten), then
+    // CacheText() — which formats the (zero) value into _cachedText.
+    NumberElement() : Element() {
+        _font       = nullptr;
+        _mode       = 0;
+        _cachedText = nullptr;
+        _intValue   = 0;
+        _floatValue = 0.0f;
+        _showSign   = 0;
+        CacheText();
+    }
+
+    // [0] 0x18004ab80 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0xe8`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<NumberElement*>(self + static_cast<int64_t>(i) * 0xe8)
+                    ->~NumberElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~NumberElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                       // [1] 0x18004a820
     uint32_t    Type() const override;                           // [2] 0x18004a800
     void ComputeSize() override;                                 // [4] 0x180119000
@@ -171,7 +209,7 @@ public:
     void Draw(SpriteContext& context, uint8_t alpha) const override; // [6] 0x1801191e0
 
     // ?CacheText@NumberElement@UI@@AEAAXXZ  0x1801189f0 — `AEAA` PRIVATE in
-    // retail; PUBLIC here because its door and the ctor door call it.
+    // retail; PUBLIC here because its door calls it (and the ctor does).
     void CacheText();
 
     // The three one-instruction getters, whole bodies (banner above).
@@ -187,16 +225,18 @@ public:
 
     NumberElement(const NumberElement& src);                     // 0x18004a9d0  not ported
     NumberElement& operator=(const NumberElement& src);          // 0x18004aa80  not ported
-    static uint32_t TypeId();                                    // 0x18004a810  not ported
-    static Object::Base* CreateNewObject();                      // 0x18004a910  ui_factory_wave28.cpp door
-    static Object::Base* CreateInPlaceObject(void* place);       // 0x18004a990  ui_factory_wave28.cpp door
+    static uint32_t TypeId();                                    // 0x18004a810  ported over the minted record
+    static Object::Base* CreateNewObject();                      // 0x18004a910  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);       // 0x18004a990  the class's own (B39 D2)
     static void* operator new(std::size_t bytes);                // 0x18004a830  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x18004a8a0  not ported
     static void  operator delete(void* p);                       // 0x18004a8b0  not ported
 
 protected:
-    NumberElement() = default;   // NOT retail's 0x180118c70 (numberelement.cpp door)
-    ~NumberElement();            // 0x180118ce0 — empty; the door keeps the body
+    // `??1NumberElement@UI@@UEAA@XZ` (0x180118ce0). NON-VIRTUAL;
+    // numberelement.cpp holds retail's body (release _cachedText); the
+    // compiler chains ~Element.
+    ~NumberElement();
 
 private:
     static const char* _TypeName();                              // 0x18004a7e0 -> "NumberElement"
@@ -216,6 +256,8 @@ public:
 
 static_assert(sizeof(NumberElement) == 0xe8, "UI::NumberElement is 0xe8");
 static_assert(alignof(NumberElement) == 8, "UI::NumberElement aligns to 8");
+static_assert(!std::has_virtual_destructor<NumberElement>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<NumberElement>::value, "B39 D1: concrete");
 static_assert(offsetof(NumberElement, _font) == sizeof(Element),
               "NumberElement's own fields begin at the end of Element");
 static_assert(offsetof(NumberElement, _font)       == 0xc0, "");

@@ -19,7 +19,7 @@
 // `??_7ButtonElement@UI@@6B@` @ 0x180157310, TWELVE slots (B36_SLOTS.md
 // section 1, `.rdata` qwords; sizeof from `MOV EDX,0xd8` in slot 0):
 //
-//   [ 0] 0x1800485b0  (unexported) vector deleting dtor — RT_DELDTOR row, kept
+//   [ 0] 0x1800485b0  (unexported) vector deleting dtor — the class's own (B.3.9)
 //   [ 1] 0x180048260  TypeName
 //   [ 2] 0x180048240  Type
 //   [ 3] 0x180116870  Element::Persist        INHERITED
@@ -38,7 +38,7 @@
 // 0x1801116a0 and ??0ComboElement 0x1801123f0 each stamp
 // ??_7ButtonElement@UI@@6B@ before their own table).
 //
-// ABSTRACT, exactly like `UI::Element`: slot 0 stays `= 0` (the deleting-dtor
+// (Until ENDGAME B.3.9:) ABSTRACT, exactly like `UI::Element`: slot 0 stays `= 0` (the deleting-dtor
 // row in runtime/src/object/deleting_dtor.cpp is not retired). No real
 // constructor: every live ButtonElement is built by
 // `ButtonDescription::CreateInstance` (inlined ctor) or the `??0ButtonElement`
@@ -55,6 +55,13 @@
 // NEITHER constructor: the non-virtual `ButtonDescription::CreateInstance`
 // (0x1801108d0) copies them from the description's +0x90..+0x9c, and the copy
 // ctor (0x180048460) copies all six dwords.
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0ButtonElement@UI@@QEAA@XZ` (0x180110c40) minus its vptr stores;
+// slot 0 is the class's own vector deleting dtor; ~ButtonElement is protected and
+// non-virtual. The factory pair is the class's own; the minted
+// `??_7ButtonElement@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
+// the doors are retired.
 // ============================================================================
 
 #include <cstdint>
@@ -62,6 +69,7 @@
 #include <type_traits>
 
 #include "Element.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace System { class Time; }
 
@@ -69,8 +77,31 @@ namespace UI {
 
 class ButtonElement : public Element {
 public:
+    // ??0ButtonElement@UI@@QEAA@XZ 0x180110c40 — the REAL constructor: CALL
+    // ??0Element (Element()), then `MOV dword [+0xc0],-1 ; MOV dword [+0xc4],0`.
+    // The four colours (+0xc8..+0xd4) are NOT written.
+    ButtonElement() : Element() {
+        _keyIndex = -1;
+        _state    = 0;
+    }
+
     // ---- the twelve slots, in measured order ------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x1800485b0
+    // [0] 0x1800485b0 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0xd8`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<ButtonElement*>(self + static_cast<int64_t>(i) * 0xd8)
+                    ->~ButtonElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~ButtonElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180048260
     uint32_t    Type() const override;                            // [2] 0x180048240
     // [3] Persist — Element's, inherited.
@@ -91,12 +122,12 @@ public:
     int32_t GetKeyId() const;                                     // 0x180048450
     void    SetKeyId(int32_t keyId);                              // 0x180048440
 
-    ButtonElement(const ButtonElement& src);                      // 0x180048460  door (buttonelement.cpp)
+    ButtonElement(const ButtonElement& src);                      // 0x180048460  not ported (door retired: no caller)
     ButtonElement& operator=(const ButtonElement& src);           // 0x1800484f0  not ported
 
-    static uint32_t TypeId();                                     // 0x180048250  not ported
-    static Object::Base* CreateNewObject();                       // 0x180048350  factory_ui1.cpp door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x1800483f0  factory_ui1.cpp door
+    static uint32_t TypeId();                                     // 0x180048250  ported over the minted record
+    static Object::Base* CreateNewObject();                       // 0x180048350  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x1800483f0  the class's own (B39 D2)
 
 protected:
     // `?WasKeyPressed@ButtonElement@UI@@IEBA_NAEBUUpdateState@Element@2@@Z`
@@ -104,13 +135,8 @@ protected:
     // same KeyMap::Pressed test (0x1801112d4) rather than calling it.
     bool WasKeyPressed(const UpdateState& state) const;           // 0x1801108a0  not ported
 
-    // NOT retail's `??0ButtonElement@UI@@QEAA@XZ` (0x180110c40, the door
-    // `RtUi_ButtonElement_Ctor`). Exists so probe subclasses and the two C++
-    // subclasses can derive.
-    ButtonElement() = default;
-    // `??1ButtonElement@UI@@UEAA@XZ` (0x180110c90). NON-VIRTUAL, declared and
-    // NOT defined in the real build; the retail body is the door
-    // `RtUi_ButtonElement_Dtor`.
+    // `??1ButtonElement@UI@@UEAA@XZ` (0x180110c90). NON-VIRTUAL and EMPTY
+    // (buttonelement.cpp): restamp, then ~Element, which the compiler chains.
     ~ButtonElement();
 
 private:
@@ -145,5 +171,6 @@ static_assert(offsetof(ButtonElement, _keyIndex)   == 0xc0, "");
 static_assert(offsetof(ButtonElement, _state)      == 0xc4, "");
 static_assert(offsetof(ButtonElement, _stateColor) == 0xc8, "");
 static_assert(!std::has_virtual_destructor<ButtonElement>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<ButtonElement>::value, "B39 D1: concrete");
 
 }  // namespace UI

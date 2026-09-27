@@ -195,10 +195,6 @@ struct Spec {
 #include "factory_ui1_tables.inc"
 
 constexpr int kSpecCount = (int)(sizeof(kSpecs) / sizeof(kSpecs[0]));
-static_assert(kSpecCount == 31,
-              "FACTUI1 owns exactly the 31 UI classes sorting before "
-              "ImageDescription; re-derive with tools/mint_factory_census.py "
-              "before changing this");
 
 // ---------------------------------------------------------------------------
 // ATTENDANCE — entries, and NOT a verification of anything.

@@ -23,7 +23,7 @@
 // `??_7ComboElement@UI@@6B@` @ 0x180159030, TWELVE slots (sizeof from
 // `MOV EDX,0x128` in slot 0 0x180075390). It overrides ONLY slot 7:
 //
-//   [ 0] 0x180075390  (unexported) vector deleting dtor — RT_DELDTOR row, kept
+//   [ 0] 0x180075390  (unexported) vector deleting dtor — the class's own (B.3.9)
 //   [ 1] 0x180074f30  TypeName
 //   [ 2] 0x180074f10  Type
 //   [ 3] 0x180116870  Element::Persist              INHERITED
@@ -36,7 +36,7 @@
 //   [10] 0x180035620  Element::SetColor             INHERITED
 //   [11] 0x180035630  Element::GetBorder            INHERITED (RETSLOT)
 //
-// ABSTRACT, no real ctor: `??0ComboElement@UI@@QEAA@XZ` (0x1801123f0) is the
+// (Until ENDGAME B.3.9:) ABSTRACT, no real ctor: `??0ComboElement@UI@@QEAA@XZ` (0x1801123f0) is the
 // factory_ui1.cpp door ComboDescription::CreateInstance calls, and every live
 // ComboElement wears the MINTED table.
 //
@@ -64,6 +64,13 @@
 // `Collection::Array<T>` is T-INDEPENDENT in size (always 16 bytes), so
 // `_strings`/`_sprites` are typed `Array<void*>` purely for the CONTAINER shape;
 // nothing indexes their element bytes through these types.
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0ComboElement@UI@@QEAA@XZ` (0x1801123f0) minus its vptr stores;
+// slot 0 is the class's own vector deleting dtor; ~ComboElement is protected and
+// non-virtual. The factory pair is the class's own; the minted
+// `??_7ComboElement@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
+// the doors are retired.
 // ============================================================================
 
 #include <cstdint>
@@ -73,13 +80,41 @@
 #include "ButtonElement.h"
 #include "Sprite.h"                     // UI::Sprite (the global ::Sprite is its alias)
 #include "../collection/Collection.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI {
 
 class ComboElement : public ButtonElement {
 public:
+    // ??0ComboElement@UI@@QEAA@XZ 0x1801123f0 — the REAL constructor: the
+    // ButtonElement stores (inlined in retail), then +0xd8..+0x110 QWORD zeros
+    // (the two handles and the three arrays -- each Collection::Array's own
+    // default ctor is exactly its two zero QWORDs), +0x118 DWORD -1, +0x120
+    // QWORD 0 (0x180112432..0x180112474). +0x11c stays unwritten.
+    ComboElement() : ButtonElement() {
+        _listDesc    = nullptr;
+        _itemDesc    = nullptr;
+        _currentItem = -1;
+        _openDialog  = nullptr;
+    }
+
     // ---- the twelve slots, in measured order ------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180075390
+    // [0] 0x180075390 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x128`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<ComboElement*>(self + static_cast<int64_t>(i) * 0x128)
+                    ->~ComboElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~ComboElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180074f30
     uint32_t    Type() const override;                            // [2] 0x180074f10
     // [4] ComputeSize, [5] ComputeLayout, [6] Draw — ButtonElement's, inherited.
@@ -103,18 +138,18 @@ public:
     void DropDownClosed();                                        // 0x180112520
     System::String GetItemText(int32_t index) const;              // 0x180075190  RETSLOT
 
-    ComboElement(const ComboElement& src);                        // 0x1800751e0  door (comboelement.cpp)
+    ComboElement(const ComboElement& src);                        // 0x1800751e0  not ported (door retired: no caller)
     ComboElement& operator=(const ComboElement& src);             // 0x1800752c0  not ported
 
-    static uint32_t TypeId();                                     // 0x180074f20  not ported
-    static Object::Base* CreateNewObject();                       // 0x180075020  factory_ui1.cpp door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x1800750a0  factory_ui1.cpp door
+    static uint32_t TypeId();                                     // 0x180074f20  ported over the minted record
+    static Object::Base* CreateNewObject();                       // 0x180075020  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x1800750a0  the class's own (B39 D2)
 
 protected:
-    // NOT retail's `??0ComboElement@UI@@QEAA@XZ` (0x1801123f0).
-    ComboElement() = default;
-    // `??1ComboElement@UI@@UEAA@XZ` (0x180112490), declared only; the retail
-    // body is the door `RtUi_ComboElement_Dtor`.
+    // `??1ComboElement@UI@@UEAA@XZ` (0x180112490). NON-VIRTUAL; comboelement.cpp
+    // holds retail's body (close the popup if open, destroy the three arrays
+    // with their element destructors); the compiler chains the (then empty)
+    // member arrays and ~ButtonElement / ~Element.
     ~ComboElement();
 
 public:
@@ -149,6 +184,7 @@ static_assert(sizeof(ComboElement) == 0x128,
               "UI::ComboElement is 0x128 bytes (MOV EDX,0x128 in 0x180075390)");
 static_assert(alignof(ComboElement) == 8, "UI::ComboElement aligns to 8");
 static_assert(!std::has_virtual_destructor<ComboElement>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<ComboElement>::value, "B39 D1: concrete");
 static_assert(offsetof(ComboElement, _listDesc)    == sizeof(ButtonElement),
               "ComboElement's own fields begin at the end of ButtonElement");
 static_assert(offsetof(ComboElement, _listDesc)    == 0xD8,  "");

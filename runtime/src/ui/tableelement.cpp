@@ -45,6 +45,7 @@
 // ============================================================================
 
 #include <atomic>
+#include <new>
 
 #include "widget_common.h"
 #include "../../types/ui/TableElement.h"
@@ -54,7 +55,6 @@ using namespace rtui;
 namespace {
 
 std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_vtable{nullptr};
 
 void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     void* p = slot.load(std::memory_order_acquire);
@@ -69,7 +69,6 @@ const uint8_t* TypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@TableElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
-void* Vtable() { return AtomicExport(g_vtable, "??_7TableElement@UI@@6B@"); }
 
 // `?GetRowHeight@` (0x18011e090) / `?GetColumnWidth@` (0x18011e1a0) — declared
 // on the class, bodies still element_bodies_b5.cpp's doors (fragment pass).
@@ -83,6 +82,11 @@ using ExtentFn = int32_t (*)(void* self, int32_t index);
 namespace UI {
 
 uint32_t TableElement::Type() const {
+    const uint8_t* ti = TypeInfo();
+    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
+}
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t TableElement::TypeId() {
     const uint8_t* ti = TypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
@@ -207,87 +211,48 @@ void TableElement::Draw(SpriteContext& context, uint8_t alpha) const {
     }
 }
 
+// ??1TableElement@UI@@UEAA@XZ   0x18011e2a0 — retail's body, moved from the
+// retired door (ENDGAME B.3.9 UI-B): the two extent Arrays through 0x18001c750,
+// columns first (each frees and zeroes its header, so the compiler's member
+// ~Arrays afterwards are no-ops). The restamp and the tail into ~Element are
+// the compiler's.
+TableElement::~TableElement() {
+    RtAddr<ArrayDtorFn>(0x18001c750ull)(&_columnSizes);
+    RtAddr<ArrayDtorFn>(0x18001c750ull)(&_rowSizes);
+}
+
+// ?CreateNewObject@TableElement@UI@@SAPEAVBase@Object@@XZ 0x1800793c0 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0xf0, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* TableElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TableElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) TableElement();
+}
+// ?CreateInPlaceObject@TableElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180079440
+Object::Base* TableElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) TableElement();
+}
+
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, each a one-line
-// QUALIFIED delegation onto the member above.
+// ENDGAME B.3.9 UI-B: the slot doors, the ctor / dtor doors and the
+// factory-interpreter row are gone. Their only readers were the minted
+// `??_7TableElement@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
+// TableElement now wears the compiler's table.
 // ============================================================================
-using UI::TableElement;
 
-extern "C" uint32_t RtUi_TableElement_Type(const TableElement* self) {
-    return self->UI::TableElement::Type();
-}
-extern "C" const char* RtUi_TableElement_TypeName(const TableElement* self) {
-    return self->UI::TableElement::TypeName();
-}
-extern "C" void RtUi_TableElement_ComputeSize(TableElement* self) {
-    self->UI::TableElement::ComputeSize();
-}
-extern "C" void RtUi_TableElement_ComputeLayout(TableElement* self, int32_t x, int32_t y,
-                                                int32_t right, int32_t bottom) {
-    self->UI::TableElement::ComputeLayout(x, y, right, bottom);
-}
-extern "C" void RtUi_TableElement_Draw(const TableElement* self, void* ctx, uint8_t alpha) {
-    self->UI::TableElement::Draw(*static_cast<UI::SpriteContext*>(ctx), alpha);
-}
-
-// ??0TableElement@UI@@QEAA@XZ   0x18011e2f0 — a DOOR (B4b-2)
-extern "C" void* RtUi_TableElement_Ctor(void* selfv) {   // returns this in RAX, as every MSVC ctor does
-    ElementCtor(selfv);
-    PTR(selfv, 0x00) = Vtable();
-    TableElement* self = reinterpret_cast<TableElement*>(selfv);   // B.3.6 bridge
-    self->_rowCount    = 0;
-    self->_columnCount = 0;
-    self->_spacing     = 0;
-    self->_rowSizes._data        = nullptr;
-    self->_rowSizes._size        = 0;
-    self->_rowSizes._capacity    = 0;
-    self->_columnSizes._data     = nullptr;
-    self->_columnSizes._size     = 0;
-    self->_columnSizes._capacity = 0;
-    return selfv;
-}
-
-// ??1TableElement@UI@@UEAA@XZ   0x18011e2a0 — a DOOR (B4b-2)
-extern "C" void RtUi_TableElement_Dtor(void* selfv) {
-    PTR(selfv, 0x00) = Vtable();
-    TableElement* self = reinterpret_cast<TableElement*>(selfv);   // B.3.6 bridge
-    RtAddr<ArrayDtorFn>(0x18001c750ull)(&self->_columnSizes);
-    RtAddr<ArrayDtorFn>(0x18001c750ull)(&self->_rowSizes);
-    ElementDtor(selfv);
-}
-
-// ============================================================================
 int RtUiTableElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@TableElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_TableElement_Type);            ++n;
-    RegisterRuntimeAddr(0x1800792b0ull, (void*)&RtUi_TableElement_Type);
-
-    RegisterRuntimeExport("?TypeName@TableElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_TableElement_TypeName);        ++n;
-    RegisterRuntimeAddr(0x1800792d0ull, (void*)&RtUi_TableElement_TypeName);
-
-    RegisterRuntimeExport("??0TableElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_TableElement_Ctor);            ++n;
-    RegisterRuntimeAddr(0x18011e2f0ull, (void*)&RtUi_TableElement_Ctor);
-
-    RegisterRuntimeExport("??1TableElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_TableElement_Dtor);            ++n;
-    RegisterRuntimeAddr(0x18011e2a0ull, (void*)&RtUi_TableElement_Dtor);
-
-    RegisterRuntimeExport("?ComputeSize@TableElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_TableElement_ComputeSize);     ++n;
-    RegisterRuntimeAddr(0x18011df60ull, (void*)&RtUi_TableElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@TableElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_TableElement_ComputeLayout);   ++n;
-    RegisterRuntimeAddr(0x18011dd10ull, (void*)&RtUi_TableElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@TableElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_TableElement_Draw);            ++n;
-    RegisterRuntimeAddr(0x18011dc20ull, (void*)&RtUi_TableElement_Draw);
-
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@TableElement` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@TableElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::TableElement::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x1800793c0ull, (void*)&UI::TableElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@TableElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::TableElement::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x180079440ull, (void*)&UI::TableElement::CreateInPlaceObject);
     return n;
 }

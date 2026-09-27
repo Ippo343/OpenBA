@@ -40,7 +40,6 @@ extern "C" void      EventLog_AddEventWithName(void* eventLog, int eventType, in
 extern "C" void RegisterCitizen25Tick() {
     RegisterExeAddr(0x140025a10, reinterpret_cast<uintptr_t>(&PathBST_Insert_25a10));
     RegisterExeAddr(0x140025b30, reinterpret_cast<uintptr_t>(&PathPairs_Clear_25b30));
-    RegisterExeAddr(0x1400d6c60, reinterpret_cast<uintptr_t>(&Entity_ReassignCost_6c60));
     RegisterExeAddr(0x1400d62a0, reinterpret_cast<uintptr_t>(&PathGraph_ReassignWorkers));
     RegisterExeAddr(0x140095580, reinterpret_cast<uintptr_t>(&EventLog_AddEvent));
     RegisterExeAddr(0x140095750, reinterpret_cast<uintptr_t>(&EventLog_AddEventWithName));

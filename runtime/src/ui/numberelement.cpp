@@ -4,7 +4,7 @@
 //
 // `??_7NumberElement@UI@@6B@` (retail 0x1801574d0):
 //
-//   0  vector deleting dtor  0x18004ab80  -> deleting_dtor.cpp row (this batch)
+//   0  vector deleting dtor  0x18004ab80  -> NumberElement.h (the class's own)
 //   1  TypeName              0x18004a820  here
 //   2  Type                  0x18004a800  here
 //   4  ComputeSize           0x180119000  here
@@ -23,9 +23,10 @@
 // list; reached by address.
 //
 // ENDGAME B.3.6 block C3: the five slot bodies and CacheText are
-// `UI::NumberElement` members; the doors delegate with a QUALIFIED call. The
-// ctor/dtor stay DOOR bodies (no real ctor), and the ctor door calls the
-// CacheText member through the bridge. Font / SpriteContext calls are direct.
+// `UI::NumberElement` members. ENDGAME B.3.9 UI-A: the class is concrete (the
+// real ctor ??0 0x180118c70 is in the header and calls CacheText itself); the
+// slot and ctor/dtor doors are retired, CacheText's door stays. Font /
+// SpriteContext calls are direct.
 // ============================================================================
 
 #include <atomic>
@@ -46,10 +47,7 @@ const uint8_t* TypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfoSlot, "?_typeInfo@NumberElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
-void* Vtable() { return RT_DATA_SLOT(void*, "??_7NumberElement@UI@@6B@"); }
 
-using CtorFn = void* (*)(void* self);
-using DtorFn = void  (*)(void* self);
 using MemFreeFn = void (*)(void* p);
 // `?Format@String@System@@SA?AV12@PEBDZZ` — hidden return slot first.
 using FormatIntFn    = void* (*)(void* ret, const char* fmt, int64_t v);
@@ -96,11 +94,17 @@ void ReleaseStringField(char*& field) {
 
 namespace UI {
 
-uint32_t NumberElement::Type() const { return TypeIdOf(TypeInfo()); }
+// ?TypeId@NumberElement@UI@@SAIXZ 0x18004a810 — the record's first dword.
+uint32_t NumberElement::TypeId() { return TypeIdOf(TypeInfo()); }
+uint32_t NumberElement::Type() const { return TypeId(); }
 const char* NumberElement::TypeName() const { return TypeNameOf(TypeInfo()); }
 
-// Non-virtual, EMPTY: the dtor door keeps retail's body.
-NumberElement::~NumberElement() {}
+// ??1NumberElement@UI@@UEAA@XZ 0x180118ce0 — retail's body, moved here from
+// the retired door (ENDGAME B.3.9 UI-A): release the cached text; the restamp
+// and the chain into ~Element are the compiler's.
+NumberElement::~NumberElement() {
+    ReleaseStringField(_cachedText);
+}
 
 // ---------------------------------------------------------------------------
 // ?CacheText@NumberElement@UI@@AEAAXXZ   0x1801189f0
@@ -204,90 +208,44 @@ void NumberElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
 
 }  // namespace UI
 
-// ??0NumberElement@UI@@QEAA@XZ   0x180118c70 — a DOOR BODY (no real ctor).
-// RETURNS `this`, as every MSVC constructor does in RAX: NumberDescription::
-// CreateInstance (0x180118f81) keeps RAX as the element and hands it to
-// ElementDescription::CreateInstance, which reads its +0x10.
-extern "C" void* RtUi_NumberElement_Ctor(void* selfv) {
-    RtAddr<CtorFn>(0x180115e50ull)(selfv);                     // ??0Element
-    UI::NumberElement* self = reinterpret_cast<UI::NumberElement*>(selfv);   // B.3.6 bridge
-    *reinterpret_cast<void**>(selfv) = Vtable();
-    self->_font       = nullptr;
-    self->_mode       = 0;
-    self->_cachedText = nullptr;
-    self->_intValue   = 0;
-    self->_floatValue = 0.0f;
-    self->_showSign   = 0;
-    self->UI::NumberElement::CacheText();
-    return selfv;
+namespace UI {
+// ?CreateNewObject@NumberElement@UI@@SAPEAVBase@Object@@XZ  0x18004a910 — the
+// FACTUI2 row this replaces: MemAlloc(0xe8, 8), retail's null branch, then the
+// out-of-line ctor ??0NumberElement (0x180118c70).
+Object::Base* NumberElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(NumberElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) NumberElement();
 }
-
-// ??1NumberElement@UI@@UEAA@XZ   0x180118ce0 — a DOOR BODY.
-extern "C" void RtUi_NumberElement_Dtor(void* selfv) {
-    UI::NumberElement* self = reinterpret_cast<UI::NumberElement*>(selfv);   // B.3.6 bridge
-    *reinterpret_cast<void**>(selfv) = Vtable();
-    ReleaseStringField(self->_cachedText);
-    RtAddr<DtorFn>(0x1801161a0ull)(selfv);                     // ??1Element
+// ?CreateInPlaceObject@NumberElement@UI@@SAPEAVBase@Object@@PEAX@Z  0x18004a990
+Object::Base* NumberElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) NumberElement();
 }
+}  // namespace UI
 
 // ============================================================================
-// The registered doors — one QUALIFIED delegation each.
+// The CacheText door (a non-slot member, kept) — one QUALIFIED delegation.
+// ENDGAME B.3.9 UI-A: the five slot doors and the ??0 / ??1 doors, read only
+// by the retired minted table / RT_DELDTOR row / FACTUI2 row, are gone.
 // ============================================================================
-extern "C" uint32_t RtUi_NumberElement_Type(const void* self) {
-    return reinterpret_cast<const UI::NumberElement*>(self)->UI::NumberElement::Type();   // B.3.6 bridge
-}
-extern "C" const char* RtUi_NumberElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::NumberElement*>(self)->UI::NumberElement::TypeName();   // B.3.6 bridge
-}
 extern "C" void RtUi_NumberElement_CacheText(void* self) {
     reinterpret_cast<UI::NumberElement*>(self)->UI::NumberElement::CacheText();   // B.3.6 bridge
-}
-extern "C" void RtUi_NumberElement_ComputeSize(void* self) {
-    reinterpret_cast<UI::NumberElement*>(self)->UI::NumberElement::ComputeSize();   // B.3.6 bridge
-}
-extern "C" void RtUi_NumberElement_ComputeLayout(void* self, int32_t x, int32_t y,
-                                                 int32_t right, int32_t bottom) {
-    reinterpret_cast<UI::NumberElement*>(self)->UI::NumberElement::ComputeLayout(x, y, right, bottom);   // B.3.6 bridge
-}
-extern "C" void RtUi_NumberElement_Draw(const void* self, void* ctx, uint8_t alpha) {
-    reinterpret_cast<const UI::NumberElement*>(self)->UI::NumberElement::Draw(   // B.3.6 bridge
-        *static_cast<UI::SpriteContext*>(ctx), alpha);
 }
 
 // ============================================================================
 int RtUiNumberElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@NumberElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_NumberElement_Type);            ++n;
-    RegisterRuntimeAddr(0x18004a800ull, (void*)&RtUi_NumberElement_Type);
-
-    RegisterRuntimeExport("?TypeName@NumberElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_NumberElement_TypeName);        ++n;
-    RegisterRuntimeAddr(0x18004a820ull, (void*)&RtUi_NumberElement_TypeName);
-
-    RegisterRuntimeExport("??0NumberElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_NumberElement_Ctor);            ++n;
-    RegisterRuntimeAddr(0x180118c70ull, (void*)&RtUi_NumberElement_Ctor);
-
-    RegisterRuntimeExport("??1NumberElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_NumberElement_Dtor);            ++n;
-    RegisterRuntimeAddr(0x180118ce0ull, (void*)&RtUi_NumberElement_Dtor);
-
     RegisterRuntimeExport("?CacheText@NumberElement@UI@@AEAAXXZ",
                           (void*)&RtUi_NumberElement_CacheText);       ++n;
     RegisterRuntimeAddr(0x1801189f0ull, (void*)&RtUi_NumberElement_CacheText);
 
-    RegisterRuntimeExport("?ComputeSize@NumberElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_NumberElement_ComputeSize);     ++n;
-    RegisterRuntimeAddr(0x180119000ull, (void*)&RtUi_NumberElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@NumberElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_NumberElement_ComputeLayout);   ++n;
-    RegisterRuntimeAddr(0x180119080ull, (void*)&RtUi_NumberElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@NumberElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_NumberElement_Draw);            ++n;
-    RegisterRuntimeAddr(0x1801191e0ull, (void*)&RtUi_NumberElement_Draw);
+    RegisterRuntimeExport("?CreateNewObject@NumberElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::NumberElement::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x18004a910ull, (void*)&UI::NumberElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@NumberElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::NumberElement::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x18004a990ull, (void*)&UI::NumberElement::CreateInPlaceObject);
 
     return n;
 }

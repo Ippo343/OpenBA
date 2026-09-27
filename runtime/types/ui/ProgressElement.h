@@ -78,6 +78,13 @@ static_assert(offsetof(ProgressElement, _currentValue)== 0x128, "ProgressElement
 //   [4] 0x1801198f0 ComputeSize [5] 0x180119610 ComputeLayout
 //   [6] 0x1801192c0 Draw        [7..11] Element's (inherited — Update too)
 //
+// ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2) -- the paragraph below is
+// HISTORY: the class is now CONCRETE. A real public ctor (retail's stores), its
+// own slot 0 (the vector deleting dtor), a protected non-virtual ~ProgressElement holding
+// the retired ??1 door's body, and the factory pair as the class's own statics;
+// every live one wears the COMPILER's table. The minted `??_7ProgressElement@UI@@6B@`,
+// its RT_DELDTOR row 0x180078150 and the ctor / dtor / slot doors are retired
+// (tools/rt_mint_retired/ui-b.txt).
 // ABSTRACT (slot 0 `= 0`), NO real ctor: every live one is built by the
 // `??0ProgressElement@UI@@QEAA@XZ` door (0x180119c40, progresselement.cpp)
 // and wears the MINTED table.
@@ -86,7 +93,30 @@ namespace UI {
 
 class ProgressElement : public Element {
 public:
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180078150
+    // ??0ProgressElement@UI@@QEAA@XZ 0x180119c40 -- the REAL ctor: `CALL
+    // ??0Element`; the six UI::Sprite members' own ctors make {null, -1};
+    // then the three tail stores. +0x12c is written by nothing.
+    ProgressElement() : Element() {
+        _backgroundColor = 0xffffffffu;
+        _maxValue        = 1.0f;      // 0x3f800000
+        _currentValue    = 0.25f;     // 0x3e800000
+    }
+
+    // [0] 0x180078150 -- MSVC's VECTOR deleting destructor, both arms exactly as the
+    // retired RT_DELDTOR row ran them (`MOV EDX,0x130` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<ProgressElement*>(self + static_cast<int64_t>(i) * 0x130)->~ProgressElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~ProgressElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180077d40
     uint32_t    Type() const override;                            // [2] 0x180077d20
     void ComputeSize() override;                                  // [4] 0x1801198f0
@@ -106,13 +136,15 @@ public:
 
     ProgressElement(const ProgressElement& src);                  // 0x180077f10  not ported
     ProgressElement& operator=(const ProgressElement& src);       // 0x180078020  not ported
-    static uint32_t TypeId();                                     // not ported
-    static Object::Base* CreateNewObject();                       // factory door
-    static Object::Base* CreateInPlaceObject(void* place);        // factory door
+    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
+    static Object::Base* CreateNewObject();                       // (D2) the class's own
+    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
-    ProgressElement() = default;   // NOT ??0ProgressElement (0x180119c40, a door)
-    ~ProgressElement();            // ??1ProgressElement 0x180077ef0 — the door; declared only
+    // `??1ProgressElement@UI@@UEAA@XZ` (0x180077ef0): NON-VIRTUAL (no virtual dtor until
+    // the normal-virtual cutover). Retail's body is in progresselement.cpp;
+    // the compiler chains the base's.
+    ~ProgressElement();
 
 private:
     static const char* _TypeName();                               // 0x180077d00 -> "ProgressElement"

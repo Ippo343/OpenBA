@@ -17,7 +17,7 @@
 // GroupDescription::Serialize (0x180117d00).
 //
 // `??_7RadioDescription@UI@@6B@` @ 0x180157420, TEN slots:
-//   [0] 0x180047930  (unexported) vector deleting dtor — RT_DELDTOR row, kept
+//   [0] 0x180047930  (unexported) vector deleting dtor — the class's own (B.3.9)
 //   [1] 0x180047670  TypeName
 //   [2] 0x180047650  Type
 //   [3] 0x1800d5b10  GetFileVersion  (`MOV EAX,0x1104`)
@@ -42,9 +42,16 @@
 //                        name is that accessor's.
 //   +0x7c  _pad7c        written by nothing (alignment tail).
 //
-// ABSTRACT (slot 0 `= 0`), no real ctor: `??0RadioDescription` (0x1800d5b50)
+// (Until ENDGAME B.3.9:) ABSTRACT (slot 0 `= 0`), no real ctor: `??0RadioDescription` (0x1800d5b50)
 // is the door `RtUi_RadioDescription_Ctor`; `Construct` and `Reconstruct`
 // tail-jump into it.
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0RadioDescription@UI@@QEAA@XZ` (0x1800d5b50) minus its vptr stores;
+// slot 0 is the class's own vector deleting dtor; ~RadioDescription is protected and
+// non-virtual. The factory pair is the class's own; the minted
+// `??_7RadioDescription@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
+// the doors are retired.
 // ============================================================================
 
 #include <cstdint>
@@ -52,6 +59,7 @@
 #include <type_traits>
 
 #include "GroupDescription.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI {
 
@@ -60,8 +68,30 @@ class Element;
 
 class RadioDescription : public GroupDescription {
 public:
+    // ??0RadioDescription@UI@@QEAA@XZ 0x1800d5b50 — the REAL constructor:
+    // GroupDescription's nineteen stores (inlined in retail), then
+    // `MOV dword [RCX+0x78],-1` (0x1800d5bdf). +0x7c NOT written.
+    RadioDescription() : GroupDescription() {
+        _activeRadio = -1;
+    }
+
     // ---- the ten slots, in measured order ---------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180047930
+    // [0] 0x180047930 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x80`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<RadioDescription*>(self + static_cast<int64_t>(i) * 0x80)
+                    ->~RadioDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~RadioDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180047670
     uint32_t    Type() const override;                            // [2] 0x180047650
     int32_t     GetFileVersion() const override;                  // [3] 0x1800d5b10
@@ -77,15 +107,14 @@ public:
     // ---- exported, NOT PORTED as members ----------------------------------
     RadioDescription(const RadioDescription& src);                // 0x180047830  not ported
     RadioDescription& operator=(const RadioDescription& src);     // 0x1800478a0  not ported
-    static uint32_t TypeId();                                     // 0x180047660  not ported
-    static Object::Base* CreateNewObject();                       // 0x180047760  factory door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x1800477e0  factory door
+    static uint32_t TypeId();                                     // 0x180047660  ported over the minted record
+    static Object::Base* CreateNewObject();                       // 0x180047760  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x1800477e0  the class's own (B39 D2)
 
 protected:
-    // NOT retail's `??0RadioDescription@UI@@QEAA@XZ` (0x1800d5b50, a door).
-    RadioDescription() = default;
-    // `??1RadioDescription@UI@@UEAA@XZ` (0x1800d5b20). NON-VIRTUAL, NOT defined
-    // in the real build; the retail body is the door `RtUi_RadioDescription_Dtor`.
+    // `??1RadioDescription@UI@@UEAA@XZ` (0x1800d5b20). NON-VIRTUAL and EMPTY
+    // (radiodescription.cpp): restamp, then the tail JMP to ~GroupDescription,
+    // which the compiler chains.
     ~RadioDescription();
 
 private:
@@ -102,6 +131,7 @@ static_assert(sizeof(RadioDescription) == 0x80,
               "UI::RadioDescription is 0x80 bytes (MOV EDX,0x80 at 0x180047962)");
 static_assert(alignof(RadioDescription) == 8, "UI::RadioDescription aligns to 8");
 static_assert(!std::has_virtual_destructor<RadioDescription>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<RadioDescription>::value, "B39 D1: concrete");
 static_assert(offsetof(RadioDescription, _activeRadio) == sizeof(GroupDescription),
               "RadioDescription's own field begins at the end of GroupDescription");
 static_assert(offsetof(RadioDescription, _activeRadio) == 0x78, "");

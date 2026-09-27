@@ -6,7 +6,7 @@
 //
 //   slot  method                retail       where
 //   ----  --------------------  -----------  ---------------------------------
-//    0    vector deleting dtor  0x18003fed0  deleting_dtor.cpp row
+//    0    vector deleting dtor  0x18003fed0  EditElement.h (the class's own)
 //    1    TypeName              0x18003fae0  here
 //    2    Type                  0x18003fac0  here
 //    4    ComputeSize           0x1800d0c10  here
@@ -15,8 +15,9 @@
 //    7    Update                0x1800d0220  here
 //   12    FinalizeText          0x1800d0da0  here
 //
-// plus ??0EditElement@UI@@QEAA@AEBV01@@Z  0x18003fc90 (door body)
-//      ??1EditElement@UI@@UEAA@XZ         0x1800d0e50 (door body)
+// plus ??1EditElement@UI@@UEAA@XZ 0x1800d0e50 and the factory pair (ENDGAME
+// B.3.9 UI-A: the class is concrete; its real ctor ??0 0x1800d0f10 is in the
+// header, and the copy-ctor door, which had no caller, is retired).
 //
 // Slots 4/5/6/7 are ALSO NumberEditElement's (it inherits them); registered
 // once, here.
@@ -35,7 +36,7 @@
 //
 // NOT HERE: `?SetText@EditElement@UI@@` (widgets_input.cpp's door) and
 // `?SelectCharacter@` (element_bodies_b5.cpp's door, reached by address); the
-// constructor 0x1800d0f10 (factory_ui1.cpp).
+// constructor 0x1800d0f10 (EditElement.h since B.3.9).
 // ============================================================================
 #include <atomic>
 
@@ -82,7 +83,6 @@ const uint8_t* EditElementTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfoSlot, "?_typeInfo@EditElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
-void* VtEditElement() { return RT_DATA_SLOT(void*, "??_7EditElement@UI@@6B@"); }
 
 void** InputDeviceSlot() {
     return static_cast<void**>(AtomicExport(
@@ -99,8 +99,6 @@ double SecondsPerTick() {
 }
 
 using MemFreeFn     = void  (*)(void* p);
-using ElementCopyCtorFn = void* (*)(void* self, const void* other);
-using ElementDtorFn = void  (*)(void* self);
 using EventPushFn   = void  (*)(void* array, int newSize, const void* fill);
 // System::String, reached by address.
 using StrAppendCharFn = void* (*)(void* self, void* tmpOut, char c);
@@ -194,11 +192,25 @@ void* BuildMask(int length) {
 
 namespace UI {
 
-uint32_t EditElement::Type() const { return TypeIdOf(EditElementTypeInfo()); }
+// ?TypeId@EditElement@UI@@SAIXZ 0x18003fad0 — the record's first dword.
+uint32_t EditElement::TypeId() { return TypeIdOf(EditElementTypeInfo()); }
+uint32_t EditElement::Type() const { return TypeId(); }
 const char* EditElement::TypeName() const { return TypeNameOf(EditElementTypeInfo()); }
 
-// Non-virtual, EMPTY: the dtor door keeps retail's body.
-EditElement::~EditElement() {}
+// ??1EditElement@UI@@UEAA@XZ  0x1800d0e50 — retail's body, moved here from the
+// retired door (ENDGAME B.3.9 UI-A): DROP the text-input latch if this element
+// still holds it, release the filter and the text; the restamp is the
+// compiler's and so is the chain into ~Element. The latch decrement is the
+// destructor's half of Update's pairing; destroying a focused edit box without
+// it deafens the game.
+EditElement::~EditElement() {
+    if (_active != 0) {
+        void** cfg = InputConfigSlot();
+        --**reinterpret_cast<int32_t**>(*cfg);
+    }
+    ReleaseString(reinterpret_cast<void**>(&_filter));
+    ReleaseString(reinterpret_cast<void**>(&_text));
+}
 
 // ============================================================================
 // ?ComputeSize@EditElement@UI@@UEAAXXZ   0x1800d0c10
@@ -491,125 +503,35 @@ void EditElement::FinalizeText() {}
 }  // namespace UI
 
 // ============================================================================
-// Constructor / destructor — DOOR BODIES (no real ctor/dtor, B4b-2)
+// The factory pair (B39_RULES D2), replacing the FACTUI1 row
 // ============================================================================
-extern "C" void* RtUi_EditElement_CopyCtor(void* selfv, const void* otherv) {
-    UI::EditElement* self = reinterpret_cast<UI::EditElement*>(selfv);               // B.3.6 bridge
-    const UI::EditElement* other = reinterpret_cast<const UI::EditElement*>(otherv); // B.3.6 bridge
-    RtAddr<ElementCopyCtorFn>(0x1800358c0ull)(selfv, otherv);
-    *reinterpret_cast<void**>(selfv) = VtEditElement();
-    self->_font = other->_font;
-
-    self->_text = nullptr;
-    if (other->_text != nullptr) {
-        self->_text = other->_text;
-        ++*reinterpret_cast<int32_t*>(self->_text - 4);
-    }
-    self->_maxLength = other->_maxLength;
-    self->_password  = other->_password;
-
-    self->_filter = nullptr;
-    if (other->_filter != nullptr) {
-        self->_filter = other->_filter;
-        ++*reinterpret_cast<int32_t*>(self->_filter - 4);
-    }
-    self->_active  = other->_active;
-    self->_caret   = other->_caret;
-    self->_blinkOn = other->_blinkOn;
-    self->_blinkAccumulator = other->_blinkAccumulator;
-    return selfv;
+namespace UI {
+// ?CreateNewObject@EditElement@UI@@SAPEAVBase@Object@@XZ  0x18003fbd0 —
+// MemAlloc(0xf8, 8), retail's null branch, then the out-of-line ctor.
+Object::Base* EditElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(EditElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) EditElement();
 }
-
-// ??1EditElement@UI@@UEAA@XZ  0x1800d0e50 — own vtable, DROP the text-input
-// latch if this element still holds it, release the filter and the text, then
-// ~Element. The latch decrement is the destructor's half of Update's pairing;
-// destroying a focused edit box without it deafens the game.
-extern "C" void RtUi_EditElement_Dtor(void* selfv) {
-    UI::EditElement* self = reinterpret_cast<UI::EditElement*>(selfv);   // B.3.6 bridge
-    *reinterpret_cast<void**>(selfv) = VtEditElement();
-
-    if (self->_active != 0) {
-        void** cfg = InputConfigSlot();
-        --**reinterpret_cast<int32_t**>(*cfg);
-    }
-    ReleaseString(reinterpret_cast<void**>(&self->_filter));
-    ReleaseString(reinterpret_cast<void**>(&self->_text));
-
-    RtAddr<ElementDtorFn>(0x1801161a0ull)(selfv);
+// ?CreateInPlaceObject@EditElement@UI@@SAPEAVBase@Object@@PEAX@Z  0x18003fc50
+Object::Base* EditElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) EditElement();
 }
+}  // namespace UI
 
 // ============================================================================
-// The registered doors — one QUALIFIED delegation each.
-// ============================================================================
-extern "C" uint32_t RtUi_EditElement_Type(const void* self) {
-    return reinterpret_cast<const UI::EditElement*>(self)->UI::EditElement::Type();   // B.3.6 bridge
-}
-extern "C" const char* RtUi_EditElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::EditElement*>(self)->UI::EditElement::TypeName();   // B.3.6 bridge
-}
-extern "C" void RtUi_EditElement_ComputeSize(void* self) {
-    reinterpret_cast<UI::EditElement*>(self)->UI::EditElement::ComputeSize();   // B.3.6 bridge
-}
-extern "C" void RtUi_EditElement_ComputeLayout(void* self, int x, int y, int w, int h) {
-    reinterpret_cast<UI::EditElement*>(self)->UI::EditElement::ComputeLayout(x, y, w, h);   // B.3.6 bridge
-}
-extern "C" void RtUi_EditElement_Draw(const void* self, void* ctx, uint8_t alpha) {
-    reinterpret_cast<const UI::EditElement*>(self)->UI::EditElement::Draw(   // B.3.6 bridge
-        *static_cast<UI::SpriteContext*>(ctx), alpha);
-}
-// R9 is the ADDRESS of the caller's InternalPtr<DialogInstance> (B6-11).
-extern "C" void RtUi_EditElement_Update(void* self, const void* time, void* ui,
-                                        void** dlg, const void* state) {
-    reinterpret_cast<UI::EditElement*>(self)->UI::EditElement::Update(   // B.3.6 bridge
-        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlg),
-        *static_cast<const UI::Element::UpdateState*>(state));
-}
-extern "C" void RtUi_EditElement_FinalizeText(void* self) {
-    reinterpret_cast<UI::EditElement*>(self)->UI::EditElement::FinalizeText();   // B.3.6 bridge
-}
-
-// ============================================================================
-// Registration
+// Registration. ENDGAME B.3.9 UI-A: the seven slot doors (also
+// NumberEditElement's slots 4..7), the copy-ctor door and the ??1 door, read
+// only by the retired minted tables / RT_DELDTOR rows, are gone.
 // ============================================================================
 int RtUiEditElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?TypeName@EditElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_EditElement_TypeName);      ++n;
-    RegisterRuntimeAddr(0x18003fae0ull, (void*)&RtUi_EditElement_TypeName);
-
-    RegisterRuntimeExport("?Type@EditElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_EditElement_Type);          ++n;
-    RegisterRuntimeAddr(0x18003fac0ull, (void*)&RtUi_EditElement_Type);
-
-    RegisterRuntimeExport("?ComputeSize@EditElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_EditElement_ComputeSize);   ++n;
-    RegisterRuntimeAddr(0x1800d0c10ull, (void*)&RtUi_EditElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@EditElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_EditElement_ComputeLayout); ++n;
-    RegisterRuntimeAddr(0x1800d0ab0ull, (void*)&RtUi_EditElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@EditElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_EditElement_Draw);          ++n;
-    RegisterRuntimeAddr(0x1800d0820ull, (void*)&RtUi_EditElement_Draw);
-
-    RegisterRuntimeExport(
-        "?Update@EditElement@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@"
-        "V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@Element@2@@Z",
-        (void*)&RtUi_EditElement_Update);                          ++n;
-    RegisterRuntimeAddr(0x1800d0220ull, (void*)&RtUi_EditElement_Update);
-
-    RegisterRuntimeExport("?FinalizeText@EditElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_EditElement_FinalizeText);  ++n;
-    RegisterRuntimeAddr(0x1800d0da0ull, (void*)&RtUi_EditElement_FinalizeText);
-
-    RegisterRuntimeExport("??0EditElement@UI@@QEAA@AEBV01@@Z",
-                          (void*)&RtUi_EditElement_CopyCtor);      ++n;
-    RegisterRuntimeAddr(0x18003fc90ull, (void*)&RtUi_EditElement_CopyCtor);
-
-    RegisterRuntimeExport("??1EditElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_EditElement_Dtor);          ++n;
-    RegisterRuntimeAddr(0x1800d0e50ull, (void*)&RtUi_EditElement_Dtor);
+    RegisterRuntimeExport("?CreateNewObject@EditElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::EditElement::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x18003fbd0ull, (void*)&UI::EditElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@EditElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::EditElement::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x18003fc50ull, (void*)&UI::EditElement::CreateInPlaceObject);
     return n;
 }

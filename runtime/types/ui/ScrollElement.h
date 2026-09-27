@@ -20,6 +20,13 @@
 //   [6] 0x18011b0b0 Draw                 [7] 0x18011b620 Update
 //   [8]..[11] Element's, INHERITED
 //
+// ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2) -- the paragraph below is
+// HISTORY: the class is now CONCRETE. A real public ctor (retail's stores), its
+// own slot 0 (the vector deleting dtor), a protected non-virtual ~ScrollElement holding
+// the retired ??1 door's body, and the factory pair as the class's own statics;
+// every live one wears the COMPILER's table. The minted `??_7ScrollElement@UI@@6B@`,
+// its RT_DELDTOR row 0x18003adc0 and the ctor / dtor / slot doors are retired
+// (tools/rt_mint_retired/ui-b.txt).
 // ABSTRACT (slot 0 pure), no real ctor: every live one is built by the
 // `??0ScrollElement` DOOR (scrollelement.cpp) and wears the MINTED table.
 //
@@ -51,7 +58,35 @@ namespace UI {
 class ScrollElement : public Element {
 public:
     // ---- the twelve slots, in measured order -------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x18003adc0
+    // ??0ScrollElement@UI@@QEAA@XZ 0x18011a7f0 -- the REAL ctor: `CALL
+    // ??0Element`; the nine UI::Sprite members' own ctors make {null, -1};
+    // then retail's tail stores. +0x15c (_inset) is NOT written.
+    ScrollElement() : Element() {
+        _vertical       = 1;
+        _barColor       = 0xffffffffu;   // one unaligned qword of -1 ...
+        _unknown158     = 0xffffffffu;   // ... covering both
+        _currentValue   = 0.0f;
+        _displayPercent = 0.33333334f;   // 0x3eaaaaab
+        _maxValue       = 4.0f;          // 0x40800000
+        _dragAnchor     = 0.0f;          // the high half of that qword
+        _dragValue      = 0.0f;
+    }
+
+    // [0] 0x18003adc0 -- MSVC's VECTOR deleting destructor, both arms exactly as the
+    // retired RT_DELDTOR row ran them (`MOV EDX,0x178` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<ScrollElement*>(self + static_cast<int64_t>(i) * 0x178)->~ScrollElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~ScrollElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x18003a850
     uint32_t    Type() const override;                            // [2] 0x18003a830
     void ComputeSize() override;                                  // [4] 0x18011ad80
@@ -75,15 +110,14 @@ public:
 
     ScrollElement(const ScrollElement& src);                      // 0x18003aa30  not ported
     ScrollElement& operator=(const ScrollElement& src);           // 0x18003abe0  not ported
-    static uint32_t      TypeId();                                // 0x18003a840  not ported
-    static Object::Base* CreateNewObject();                       // 0x18003a940  ui_factory_wave28.cpp door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x18003a9c0  ui_factory_wave28.cpp door
+    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
+    static Object::Base* CreateNewObject();                       // (D2) the class's own
+    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
-    // NOT retail's `??0ScrollElement@UI@@QEAA@XZ` (0x18011a7f0, the door).
-    ScrollElement() = default;
-    // `??1ScrollElement@UI@@UEAA@XZ` (0x18011a900): non-virtual, not defined in
-    // the real build; the retail body is the door `RtUi_ScrollElement_Dtor`.
+    // `??1ScrollElement@UI@@UEAA@XZ` (0x18011a900): NON-VIRTUAL (no virtual dtor until
+    // the normal-virtual cutover). Retail's body is in scrollelement.cpp;
+    // the compiler chains the base's.
     ~ScrollElement();
 
 private:

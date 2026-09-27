@@ -50,6 +50,7 @@
 // ============================================================================
 
 #include <atomic>
+#include <new>
 
 #include "widget_common.h"
 #include "../../types/ui/ListElement.h"
@@ -64,7 +65,6 @@ constexpr int kGridSpacing  = 0xC4;   // int32
 constexpr int kGridExtents  = 0xC8;   // Array<int32>::_data
 
 std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_vtable{nullptr};
 
 void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     void* p = slot.load(std::memory_order_acquire);
@@ -79,7 +79,6 @@ const uint8_t* TypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@ListElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
-void* Vtable() { return AtomicExport(g_vtable, "??_7ListElement@UI@@6B@"); }
 
 // `?DrawHighlight@ListElement@UI@@QEBAXAEAVSpriteContext@2@HI@Z` 0x1800d3f70 —
 // declared on the class, body still element_bodies_b5.cpp's door.
@@ -100,6 +99,11 @@ using OnElementEventFn = void (*)(void* dlg, void** elem, int32_t kind, int32_t 
 namespace UI {
 
 uint32_t ListElement::Type() const {
+    const uint8_t* ti = TypeInfo();
+    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
+}
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t ListElement::TypeId() {
     const uint8_t* ti = TypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
@@ -257,101 +261,46 @@ void ListElement::Update(const System::Time& time, UserInterface* ui,
     }
 }
 
+// ??1ListElement@UI@@UEAA@XZ   0x1800d4530 — retail's body, moved from the
+// retired door (ENDGAME B.3.9 UI-B): the user-data Array through 0x180024aa0
+// (frees and zeroes the header; the compiler's `_userData.~Array()` is then a
+// no-op). The restamp and the tail into ~Element are the compiler's.
+ListElement::~ListElement() {
+    RtAddr<ArrayDtorFn>(0x180024aa0ull)(&_userData);
+}
+
+// ?CreateNewObject@ListElement@UI@@SAPEAVBase@Object@@XZ 0x180045080 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0x100, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* ListElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ListElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) ListElement();
+}
+// ?CreateInPlaceObject@ListElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180045100
+Object::Base* ListElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) ListElement();
+}
+
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, each a one-line
-// QUALIFIED delegation onto the member above.
+// ENDGAME B.3.9 UI-B: the slot doors, the ctor / dtor doors and the
+// factory-interpreter row are gone. Their only readers were the minted
+// `??_7ListElement@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
+// ListElement now wears the compiler's table.
 // ============================================================================
-using UI::ListElement;
 
-extern "C" uint32_t RtUi_ListElement_Type(const ListElement* self) {
-    return self->UI::ListElement::Type();
-}
-extern "C" const char* RtUi_ListElement_TypeName(const ListElement* self) {
-    return self->UI::ListElement::TypeName();
-}
-extern "C" void RtUi_ListElement_ComputeSize(ListElement* self) {
-    self->UI::ListElement::ComputeSize();
-}
-extern "C" void RtUi_ListElement_ComputeLayout(ListElement* self, int32_t x, int32_t y,
-                                               int32_t right, int32_t bottom) {
-    self->UI::ListElement::ComputeLayout(x, y, right, bottom);
-}
-extern "C" void RtUi_ListElement_Draw(const ListElement* self, void* ctx, uint8_t alpha) {
-    self->UI::ListElement::Draw(*static_cast<UI::SpriteContext*>(ctx), alpha);
-}
-extern "C" void RtUi_ListElement_Update(ListElement* self, const void* time, void* ui,
-                                        void** dlgPtr, const UI::Element::UpdateState* state) {
-    self->UI::ListElement::Update(
-        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr),   // B.3.6 bridge
-        *state);
-}
-
-// ??0ListElement@UI@@QEAA@XZ   0x1800d4570 — a DOOR (B4b-2)
-extern "C" void* RtUi_ListElement_Ctor(void* selfv) {   // returns this in RAX, as every MSVC ctor does
-    ElementCtor(selfv);
-    PTR(selfv, 0x00) = Vtable();
-    ListElement* self = reinterpret_cast<ListElement*>(selfv);   // B.3.6 bridge
-    self->_highlight.spriteSheet = nullptr;
-    self->_highlight.spriteIndex = -1;
-    self->_hoverColor    = 0xff808080u;   // one qword store, low half ...
-    self->_selectColor   = 0xffffffffu;   // ... high half
-    self->_selectedIndex = -1;
-    self->_hoverIndex    = -1;
-    self->_userData._data     = nullptr;
-    self->_userData._size     = 0;
-    self->_userData._capacity = 0;
-    self->_ribbon = nullptr;
-    self->_clip   = nullptr;
-    return selfv;
-}
-
-// ??1ListElement@UI@@UEAA@XZ   0x1800d4530 — a DOOR (B4b-2)
-extern "C" void RtUi_ListElement_Dtor(void* selfv) {
-    PTR(selfv, 0x00) = Vtable();
-    RtAddr<ArrayDtorFn>(0x180024aa0ull)(
-        &reinterpret_cast<ListElement*>(selfv)->_userData);   // B.3.6 bridge; already ours
-    ElementDtor(selfv);
-}
-
-// ============================================================================
 int RtUiListElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@ListElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_ListElement_Type);            ++n;
-    RegisterRuntimeAddr(0x180044f70ull, (void*)&RtUi_ListElement_Type);
-
-    RegisterRuntimeExport("?TypeName@ListElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_ListElement_TypeName);        ++n;
-    RegisterRuntimeAddr(0x180044f90ull, (void*)&RtUi_ListElement_TypeName);
-
-    RegisterRuntimeExport("??0ListElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_ListElement_Ctor);            ++n;
-    RegisterRuntimeAddr(0x1800d4570ull, (void*)&RtUi_ListElement_Ctor);
-
-    RegisterRuntimeExport("??1ListElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_ListElement_Dtor);            ++n;
-    RegisterRuntimeAddr(0x1800d4530ull, (void*)&RtUi_ListElement_Dtor);
-
-    RegisterRuntimeExport("?ComputeSize@ListElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_ListElement_ComputeSize);     ++n;
-    RegisterRuntimeAddr(0x1800d4380ull, (void*)&RtUi_ListElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@ListElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_ListElement_ComputeLayout);   ++n;
-    RegisterRuntimeAddr(0x1800d4210ull, (void*)&RtUi_ListElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@ListElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_ListElement_Draw);            ++n;
-    RegisterRuntimeAddr(0x1800d3eb0ull, (void*)&RtUi_ListElement_Draw);
-
-    RegisterRuntimeExport(
-        "?Update@ListElement@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@"
-        "V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@Element@2@@Z",
-        (void*)&RtUi_ListElement_Update);                            ++n;
-    RegisterRuntimeAddr(0x1800d3c20ull, (void*)&RtUi_ListElement_Update);
-
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@ListElement` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@ListElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::ListElement::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x180045080ull, (void*)&UI::ListElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@ListElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::ListElement::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x180045100ull, (void*)&UI::ListElement::CreateInPlaceObject);
     return n;
 }

@@ -495,13 +495,7 @@ extern "C" void RegisterGulTeardown() {
     // Shared container-free leaves — registered so any other caller that reaches
     // them through ResolveAddr gets a body instead of a null.
     RegisterExeAddr(0x140001740, reinterpret_cast<uintptr_t>(&Array8_Clear_1740));
-    RegisterExeAddr(0x1400174e0, reinterpret_cast<uintptr_t>(&TreeNodeFree_174e0));
-    RegisterExeAddr(0x1400173d0, reinterpret_cast<uintptr_t>(&Tree_Clear_173d0));
-    RegisterExeAddr(0x1400175d0, reinterpret_cast<uintptr_t>(&ArrayOfArrays_Clear_175d0));
     RegisterExeAddr(0x1400171b0, reinterpret_cast<uintptr_t>(&ArrayPlusTree_Clear_171b0));
     RegisterExeAddr(0x14000dcb0, reinterpret_cast<uintptr_t>(&Tree_Clear_dcb0));
-    RegisterExeAddr(0x14002cf30, reinterpret_cast<uintptr_t>(&NodeSubTree_Clear_2cf30));
-    RegisterExeAddr(0x14002ce60, reinterpret_cast<uintptr_t>(&TreeNodeFree_2ce60));
-    RegisterExeAddr(0x14002df90, reinterpret_cast<uintptr_t>(&TreeNodeFree_2df90));
     RegisterExeAddr(0x14002de90, reinterpret_cast<uintptr_t>(&IbpTree_Clear_2de90));
 }

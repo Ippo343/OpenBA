@@ -21,6 +21,13 @@
 //   [7] 0x180079080 Destruct             [8] 0x18011e350 CreateInstance RETSLOT
 //   [9] 0x180079070 Construct            INTRODUCED by the leaf (RULE B6-1.1)
 //
+// ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2) -- the paragraph below is
+// HISTORY: the class is now CONCRETE. A real public ctor (retail's stores), its
+// own slot 0 (the vector deleting dtor), a protected non-virtual ~TableDescription holding
+// the retired ??1 door's body, and the factory pair as the class's own statics;
+// every live one wears the COMPILER's table. The minted `??_7TableDescription@UI@@6B@`,
+// its RT_DELDTOR row 0x180079210 and the ctor / dtor / slot doors are retired
+// (tools/rt_mint_retired/ui-b.txt).
 // ABSTRACT (slot 0 pure), no real ctor: every live one is built by the
 // `??0TableDescription` DOOR (tabledescription.cpp) and wears the MINTED table.
 //
@@ -61,7 +68,33 @@ public:
     };
 
     // ---- the ten slots, in measured order ----------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180079210
+    // ??0TableDescription@UI@@QEAA@XZ 0x18011e7a0 -- the REAL ctor:
+    // ElementDescription's stores (inlined in retail), then +0x68 = 1, ONE
+    // UNALIGNED QWORD over +0x6c..+0x73 (_rowCount 1, _spacing 0), the cell
+    // Array header (its own ctor), +0x88 and +0x90 zero. +0x74 is not written.
+    TableDescription() : ElementDescription() {
+        _columnCount = 1;
+        _rowCount    = 1;
+        _spacing     = 0;
+        _unknown88   = 0;
+        _unknown90   = nullptr;
+    }
+
+    // [0] 0x180079210 -- MSVC's VECTOR deleting destructor, both arms exactly as the
+    // retired RT_DELDTOR row ran them (`MOV EDX,0x98` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<TableDescription*>(self + static_cast<int64_t>(i) * 0x98)->~TableDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~TableDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char*   TypeName() const override;                      // [1] 0x180078ed0
     uint32_t      Type() const override;                          // [2] 0x180078eb0
     int32_t       GetFileVersion() const override;                // [3] 0x18011e6e0
@@ -76,15 +109,14 @@ public:
     // ---- exported, not ported: declared, deliberately undefined ------------
     TableDescription(const TableDescription& src);                // 0x180079090
     TableDescription& operator=(const TableDescription& src);     // 0x180079130
-    static uint32_t      TypeId();                                // 0x180078ec0
-    static Object::Base* CreateNewObject();                       // 0x180078fc0  ui_factory_wave28.cpp door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180079040  ui_factory_wave28.cpp door
+    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
+    static Object::Base* CreateNewObject();                       // (D2) the class's own
+    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
-    // NOT retail's `??0TableDescription@UI@@QEAA@XZ` (0x18011e7a0, the door).
-    TableDescription() = default;
-    // `??1TableDescription@UI@@UEAA@XZ` (0x18011e6f0): non-virtual, not defined
-    // in the real build; the door `RtUi_TableDescription_Dtor` is.
+    // `??1TableDescription@UI@@UEAA@XZ` (0x18011e6f0): NON-VIRTUAL (no virtual dtor until
+    // the normal-virtual cutover). Retail's body is in tabledescription.cpp;
+    // the compiler chains the base's.
     ~TableDescription();
 
 private:

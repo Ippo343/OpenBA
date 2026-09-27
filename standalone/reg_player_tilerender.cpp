@@ -24,7 +24,6 @@ extern "C" void PlayerTileRender_BuildRecords_1380(
         float, float, float, char, char, int64_t*, int, int, char, int64_t);
 
 void RegisterPlayerTileRenderBatch() {
-    RegisterExeAddr(0x1400b10e0, reinterpret_cast<uintptr_t>(&PlayerTileRender_TerrainCorners_b10e0));
     RegisterExeAddr(0x1401008c0, reinterpret_cast<uintptr_t>(&PlayerTileRender_DrawOverlay_08c0));
     RegisterExeAddr(0x140101380, reinterpret_cast<uintptr_t>(&PlayerTileRender_BuildRecords_1380));
 }

@@ -29,6 +29,13 @@
 //   [7] 0x18004af10 Destruct        [8] 0x1800d86b0 CreateInstance RETSLOT (B6-2)
 //   [9] 0x18004af00 Construct — INTRODUCED here (B6-1.1)
 //
+// ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2) -- the paragraph below is
+// HISTORY: the class is now CONCRETE. A real public ctor (retail's stores), its
+// own slot 0 (the vector deleting dtor), a protected non-virtual ~SpinnerDescription holding
+// the retired ??1 door's body, and the factory pair as the class's own statics;
+// every live one wears the COMPILER's table. The minted `??_7SpinnerDescription@UI@@6B@`,
+// its RT_DELDTOR row 0x18004b050 and the ctor / dtor / slot doors are retired
+// (tools/rt_mint_retired/ui-b.txt).
 // ABSTRACT (slot 0 `= 0`), NO real ctor. The destructor is declared only:
 // `??1` (0x1800d8950) is the registered door.
 // ============================================================================
@@ -42,7 +49,31 @@ namespace UI {
 
 class SpinnerDescription : public ElementDescription {
 public:
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x18004b050
+    // ??0SpinnerDescription@UI@@QEAA@XZ 0x1800d89c0 -- the REAL ctor:
+    // ElementDescription's stores (inlined in retail), the three part
+    // descriptions zero and +0x80 = 1. +0x84 is written by nothing.
+    SpinnerDescription() : ElementDescription() {
+        _editDescription = nullptr;
+        _upDescription   = nullptr;
+        _downDescription = nullptr;
+        _increment       = 1;
+    }
+
+    // [0] 0x18004b050 -- MSVC's VECTOR deleting destructor, both arms exactly as the
+    // retired RT_DELDTOR row ran them (`MOV EDX,0x88` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<SpinnerDescription*>(self + static_cast<int64_t>(i) * 0x88)->~SpinnerDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~SpinnerDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x18004ad60
     uint32_t    Type() const override;                            // [2] 0x18004ad40
     int32_t     GetFileVersion() const override;                  // [3] 0x1800d8940
@@ -56,13 +87,15 @@ public:
 
     SpinnerDescription(const SpinnerDescription& src);            // 0x18004af20  not ported
     SpinnerDescription& operator=(const SpinnerDescription& src); // 0x18004af80  not ported
-    static uint32_t TypeId();                                     // not ported
-    static Object::Base* CreateNewObject();                       // factory door
-    static Object::Base* CreateInPlaceObject(void* place);        // factory door
+    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
+    static Object::Base* CreateNewObject();                       // (D2) the class's own
+    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
-    SpinnerDescription() = default;   // NOT ??0SpinnerDescription (0x1800d89c0, a door)
-    ~SpinnerDescription();            // ??1SpinnerDescription 0x1800d8950 — the door
+    // `??1SpinnerDescription@UI@@UEAA@XZ` (0x1800d8950): NON-VIRTUAL (no virtual dtor until
+    // the normal-virtual cutover). Retail's body is in spinnerdescription.cpp;
+    // the compiler chains the base's.
+    ~SpinnerDescription();
 
 private:
     static const char* _TypeName();                               // 0x18004ad20

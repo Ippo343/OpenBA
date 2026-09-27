@@ -33,5 +33,4 @@ extern "C" void*    CitizenAI_Entity_impl_f230(int64_t, void*, uint32_t, float*)
 void RegisterCitizenAIGrowUp() {
     RegisterExeAddr(0x14010c890, reinterpret_cast<uintptr_t>(&CitizenAI_State_GrowUp));
     RegisterExeAddr(0x140115e60, reinterpret_cast<uintptr_t>(&CitizenAI_State_LongTermPlan));
-    RegisterExeAddr(0x14008f230, reinterpret_cast<uintptr_t>(&CitizenAI_Entity_impl_f230));
 }

@@ -867,10 +867,7 @@ void RegisterGoalsSerialize() {
     RegisterExeAddr(0x1400f8270, reinterpret_cast<uintptr_t>(&Goals_SavePrepass_8270));
     RegisterExeAddr(0x14002d060, reinterpret_cast<uintptr_t>(&Goals_TreeArray_Serialize_d060));
     RegisterExeAddr(0x14002d5f0, reinterpret_cast<uintptr_t>(&Goals_WorkTree_Serialize_d5f0));
-    RegisterExeAddr(0x14002d340, reinterpret_cast<uintptr_t>(&Goals_SingleTree_Serialize_d340));
     RegisterExeAddr(0x14002ccf0, reinterpret_cast<uintptr_t>(&Goals_LayoutC_Insert_ccf0));
-    RegisterExeAddr(0x14002ceb0, reinterpret_cast<uintptr_t>(&Goals_LayoutC_CopyCtor_ceb0));
-    RegisterExeAddr(0x14002cfb0, reinterpret_cast<uintptr_t>(&Goals_LayoutB_DeepCopy_cfb0));
     // Type-id storage cell — needs a GetTypeIdByName("Work") fill wired into
     // FillEconomyTypeIdGlobals() (code/Game/Game/game_main.cpp) for full correctness; see
     // the file header note. Registering the storage cell alone keeps ResolveAddr non-null.

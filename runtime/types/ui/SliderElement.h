@@ -42,6 +42,13 @@
 //   [6] 0x1800d6d40 Draw        [7] 0x1800d67e0 Update — OVERRIDDEN
 //   [8..11] Element's (inherited)
 //
+// ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2) -- the paragraph below is
+// HISTORY: the class is now CONCRETE. A real public ctor (retail's stores), its
+// own slot 0 (the vector deleting dtor), a protected non-virtual ~SliderElement holding
+// the retired ??1 door's body, and the factory pair as the class's own statics;
+// every live one wears the COMPILER's table. The minted `??_7SliderElement@UI@@6B@`,
+// its RT_DELDTOR row 0x18004a180 and the ctor / dtor / slot doors are retired
+// (tools/rt_mint_retired/ui-b.txt).
 // ABSTRACT (slot 0 `= 0`), NO real ctor (the `??0SliderElement` door
 // 0x1800d7570 builds every live one; it wears the MINTED table).
 // ############################################################################
@@ -49,7 +56,34 @@ namespace UI {
 
 class SliderElement : public Element {
 public:
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x18004a180
+    // ??0SliderElement@UI@@QEAA@XZ 0x1800d7570 -- the REAL ctor: `CALL
+    // ??0Element`; the five UI::Sprite members' own ctors make {null, -1};
+    // then retail's tail stores. +0x125..+0x127 and +0x12c are not written.
+    SliderElement() : Element() {
+        _trackOffsetY = 0;
+        _thumbMargin  = 0;
+        _minimum      = 0.0f;
+        _maximum      = 1.0f;     // 0x3f800000
+        _steps        = 10;
+        _hovered      = 0;
+        _value        = 0.25f;    // 0x3e800000
+    }
+
+    // [0] 0x18004a180 -- MSVC's VECTOR deleting destructor, both arms exactly as the
+    // retired RT_DELDTOR row ran them (`MOV EDX,0x130` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<SliderElement*>(self + static_cast<int64_t>(i) * 0x130)->~SliderElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~SliderElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180049d20
     uint32_t    Type() const override;                            // [2] 0x180049d00
     void ComputeSize() override;                                  // [4] 0x1800d7380
@@ -73,13 +107,15 @@ public:
 
     SliderElement(const SliderElement& src);                      // 0x180049f00  not ported
     SliderElement& operator=(const SliderElement& src);           // 0x18004a030  not ported
-    static uint32_t TypeId();                                     // not ported
-    static Object::Base* CreateNewObject();                       // factory door
-    static Object::Base* CreateInPlaceObject(void* place);        // factory door
+    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
+    static Object::Base* CreateNewObject();                       // (D2) the class's own
+    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
-    SliderElement() = default;   // NOT ??0SliderElement (0x1800d7570, a door)
-    ~SliderElement();            // ??1SliderElement 0x180049ee0 — the door; declared only
+    // `??1SliderElement@UI@@UEAA@XZ` (0x180049ee0): NON-VIRTUAL (no virtual dtor until
+    // the normal-virtual cutover). Retail's body is in sliderelement.cpp;
+    // the compiler chains the base's.
+    ~SliderElement();
 
 public:
     // `?UpdateNumber@SliderElement@UI@@AEAAXXZ` — `AEAA` private in retail;

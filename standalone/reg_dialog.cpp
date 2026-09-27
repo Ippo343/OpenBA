@@ -20,6 +20,5 @@
 
 void RegisterDialogBatch() {
     RegisterExeAddr(0x14000d6c0, reinterpret_cast<uintptr_t>(&Dialog_FindComponent_d6c0));
-    RegisterExeAddr(0x14005dec0, reinterpret_cast<uintptr_t>(&Dialog_AutoSaveHandler));
 }
 

@@ -652,7 +652,6 @@ static void RegisterCodeFunctions() {
     // notes/wave_remaining/LANE3_DEBUGMENU_REPORT.md.
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
-    RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));
 
     // M5 — PlayerController CalcTransform/UpdateCamera + the in-game loop's .rdata
     // float constants (1.0 / audio-time-scale / camera params). Without these,
@@ -741,12 +740,9 @@ static void RegisterCodeFunctions() {
     // (uint16, int4, array-of-arrays, mesh-vertex 16B, int)
     // ============================================================
     RegisterExeAddr(0x14001c890, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride02));
-    RegisterExeAddr(0x14001efd0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride16A));
-    RegisterExeAddr(0x14001f0a0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_ArrayOfArrays));
     RegisterExeAddr(0x14001ef10, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride16B));
     RegisterExeAddr(0x1400021d0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride04));
     // NameDatabase::Serialize array resizers (code/Game/Game/namedatabase.cpp)
-    RegisterExeAddr(0x14001c7c0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride0C));
     RegisterExeAddr(0x14000a590, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Byte));
 
     // ============================================================
@@ -756,8 +752,6 @@ static void RegisterCodeFunctions() {
     //   FUN_140020150 — typed-ExternalPtr array serialize (Graphics::MaterialInstance,
     //                   typeInfo slot 0x140151350)
     // ============================================================
-    RegisterExeAddr(0x14001ffa0, reinterpret_cast<uintptr_t>(&Reimpl_Struct60B_Serialize));
-    RegisterExeAddr(0x140020150, reinterpret_cast<uintptr_t>(&Reimpl_Array_Serialize_External_MaterialInstance));
 
     // ============================================================
     // M3.5 Path B session 6 — heightmap mesh-build path helpers
@@ -777,7 +771,6 @@ static void RegisterCodeFunctions() {
     // the IO::Serializer dispatch slots (lazy-resolved within the reimpl).
     // ============================================================
     RegisterExeAddr(0x1400b04d0, reinterpret_cast<uintptr_t>(&Reimpl_TradeWork_impl_04d0));
-    RegisterExeAddr(0x1400af1a0, reinterpret_cast<uintptr_t>(&Reimpl_TradeWork_impl_f1a0));
 }
 
 // ============================================================
@@ -824,18 +817,6 @@ static void RegisterDispatchSlots() {
     // skeleton/terrain/picking update retail only does on the LAST one (2026-09-04, stress).
     RegisterDispatchSlot(0x140151f30,
         (uintptr_t)ResolveExport("?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA"));
-    RegisterDispatchSlot(0x1401518c0,
-        (uintptr_t)ResolveExport("?GetFileVersion@ElementDescription@UI@@UEBAHXZ"));
-    RegisterDispatchSlot(0x1401518f8,
-        (uintptr_t)ResolveExport("?Draw@Element@UI@@UEBAXAEAVSpriteContext@2@E@Z"));
-    RegisterDispatchSlot(0x140151908,
-        (uintptr_t)ResolveExport("?AddLine@SpriteContext@UI@@QEAAXAEBVSprite@2@HHHHI@Z"));
-    RegisterDispatchSlot(0x140151900,
-        (uintptr_t)ResolveExport("?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@HHHH@Z"));
-    RegisterDispatchSlot(0x140151910,
-        (uintptr_t)ResolveExport("?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@AEBV34@@Z"));
-    RegisterDispatchSlot(0x140151238,
-        (uintptr_t)ResolveExport("?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z"));
     // Object::Type::Serialize — slot 0x1401516b0. Used by UIDescription (entity
     // element +0x00), ConsumeProduce, SendComponentMessage, ConsumeProduceDescription.
     // UNREGISTERED previously → those reimpls' `if (s_fn_Type_Serialize)` guard
@@ -845,17 +826,9 @@ static void RegisterDispatchSlots() {
     // exe's own import string at the slot's RVA (0x1401b8d2e).
     RegisterDispatchSlot(0x1401516b0,
         (uintptr_t)ResolveExport("?Serialize@Type@Object@@QEAAXAEAVSerializer@IO@@@Z"));
-    RegisterDispatchSlot(0x1401518c8,
-        (uintptr_t)ResolveExport("?Serialize@ElementDescription@UI@@UEAA_NAEAVStream@IO@@@Z"));
     // (0x1401518b8 ??1ElementDescription / 0x1401518b0 ??0ElementDescription /
     // 0x1401518d8 ??0Element: rows deleted at ENDGAME B.3.9 EXA — their only
     // readers were engine_funcs door globals with no callers.)
-    RegisterDispatchSlot(0x1401518d0,
-        (uintptr_t)ResolveExport("?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z"));
-    RegisterDispatchSlot(0x1401518e0,
-        (uintptr_t)ResolveExport("??1Element@UI@@UEAA@XZ"));
-    RegisterDispatchSlot(0x1401518e8,
-        (uintptr_t)ResolveExport("?ComputeLayout@Element@UI@@UEAAXHHHH@Z"));
     RegisterDispatchSlot(0x1401518f0,
         // PE import table: this slot is the INSTANCE overload (6 ints + 4 int& + 2
         // bools), which is what retail FrustumOutlineElement_Slot5 (0x14006c1c0)
@@ -869,10 +842,6 @@ static void RegisterDispatchSlots() {
     // carry per-file fallbacks or MISSING traces for these). Previously UNREGISTERED:
     // PastureWork_ResolveFuncs FAILED on Random_RandTol, so the organic herder's
     // grazing-position roll had a null fn ptr. Mangled names match engine_funcs.cpp.
-    RegisterDispatchSlot(0x1401512f0,
-        (uintptr_t)ResolveExport("?RandTol@Random@System@@QEAAHH@Z"));
-    RegisterDispatchSlot(0x1401512f8,
-        (uintptr_t)ResolveExport("?RandFloat@Random@System@@QEAAMXZ"));
 
     // ----------------------------------------------------------------
     // M3.5 cleanup — IO::Serializer dispatch slots (Geometry::Serialize)
@@ -884,10 +853,6 @@ static void RegisterDispatchSlots() {
     //   UShort/Short/Byte arrays take (this, count, T*, name)
     //   GetVersion takes (this) -> int
     // Without these, terrain heightmap soft-fails and the menu renders empty.
-    RegisterDispatchSlot(0x140152ad8,
-        (uintptr_t)ResolveExport("??0Serializer@IO@@QEAA@AEAVStream@1@H@Z"));
-    RegisterDispatchSlot(0x140152ad0,
-        (uintptr_t)ResolveExport("??1Serializer@IO@@QEAA@XZ"));
     // Serialize(int count, bool* array, name) — the bool ARRAY overload, distinct
     // from the single-bool slot 0x140152a58 above (AEA_N vs HPEA_N). Seven retail
     // functions call it: ParticleComponent_Shutdown (0x140053270),
@@ -897,8 +862,6 @@ static void RegisterDispatchSlots() {
     // ADDRESS as a raw callee, so every save jumped into .rdata and died with
     // "EXEC of <data address>". A world with a particle emitter — i.e. any world —
     // could not be saved at all.
-    RegisterDispatchSlot(0x140151458,
-        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEA_NPEBD@Z"));
     // Wave 3 (Action) — Math::Vector dispatch slots used by the MoveTo facing helpers
     // (action_base_move.cpp SetFacingDirection 0x14010a060 / UpdateFacing 0x1400c8d20).
     RegisterDispatchSlot(0x1401512c0,   // Math::Vector3::Normalize(this) -> Vector3
@@ -914,8 +877,6 @@ static void RegisterDispatchSlots() {
     // RCX=this, RDX=retVec3, R8=inVec3). Used by the Work walkable-position search
     // (work_base_walkpos.cpp 0x140122be0) and the PF-ROAD cell-quad helpers. Mangled name
     // is the exe's import string at the slot RVA 0x1401b72xx (see tool_base_screenrect.cpp).
-    RegisterDispatchSlot(0x140151470,
-        (uintptr_t)ResolveExport("??DTransform@Math@@QEBA?AVVector3@1@AEBV21@@Z"));
 
     // Phase 3 Keystone D Brick 4b-exec — MoveTo / PlayAnimation ACTION-METHOD dispatch slots.
     // In the original exe these .rdata IAT slots are pre-filled by the loader; moveto.cpp /
@@ -942,10 +903,6 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("??0InternalBasePtr@Object@@QEAA@XZ"));
     RegisterDispatchSlot(0x140152ab8,   // Object::InternalBasePtr::Copy(this, const InternalBasePtr&) [protected, IEAA]
         (uintptr_t)ResolveExport("?Copy@InternalBasePtr@Object@@IEAAXAEBV12@@Z"));
-    RegisterDispatchSlot(0x140152aa0,   // Object::InternalBasePtr::Serialize(this, Serializer&)
-        (uintptr_t)ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z"));
-    RegisterDispatchSlot(0x140152458,   // Math::Vector2::Dot(this, other) const -> Scalar
-        (uintptr_t)ResolveExport("?Dot@Vector2@Math@@QEBA?AVScalar@2@AEBV12@@Z"));
     RegisterDispatchSlot(0x140152a98,   // Object::Base::IsDerivedFrom(this, typeId) const -> bool
         (uintptr_t)ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
     RegisterDispatchSlot(0x140151268,   // Math::Vector3::Vector3(this, Scalar&, Scalar&, Scalar&)
@@ -967,34 +924,10 @@ static void RegisterDispatchSlots() {
         // time a forester organically arrives at a tree and runs its chop precheck.
         (uintptr_t)ResolveExport("?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z"));
 
-    // Achievement::Goal::Serialize — base serialize for StatGoal/TimeGoal/etc.
-    // (virtual, Runtime export `?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z`,
-    //  Runtime addr 0x18009ee20). StatGoal_Slot5/TimeGoal read this slot via
-    //  ResolveAddr(Module::Exe, 0x140152840) and call it FIRST to consume the base
-    //  Goal fields (an External ref at +0x20 + a String at +0x28) from the stream.
-    //  Without it, s_fn_GoalSerialize stays NULL and the base call is SKIPPED, so
-    //  every subsequent field read is shifted early. For goals whose statA is a
-    //  non-empty resource ref (e.g. Achievement/Uneducated_noschool.crs -> stat
-    //  "Template\SchoolHouse.rsc"), the misaligned String::Serialize reads the
-    //  length word from the wrong offset (high bit clear -> WIDE path) and over-reads
-    //  past the 127-byte resource, hanging IO::CompressedStream::Read in a
-    //  zero-progress loop — the standalone menu "100% CPU" loader-thread spin.
-    {
-        uintptr_t goalSerialize =
-            (uintptr_t)ResolveExport("?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z");
-        RegisterDispatchSlot(0x140152840, goalSerialize);
-    }
-
     // Bulk FLOAT array: Serialize(int count, float* data, name) — HPEAM form.
     // Required by ClimateGenerator::Serialize for its 48-float (+0x44) block.
-    RegisterDispatchSlot(0x140151ea8,
-        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAMPEBD@Z"));
     // System::Filename ctor/dtor — used by Terrain/Map generator Serialize for
     // the stack-temp Filename wrappers around filename String reads.
-    RegisterDispatchSlot(0x140151d40,
-        (uintptr_t)ResolveExport("??0Filename@System@@QEAA@XZ"));
-    RegisterDispatchSlot(0x1401529e8,
-        (uintptr_t)ResolveExport("??1Filename@System@@QEAA@XZ"));
     RegisterDispatchSlot(0x1401526b8,
         (uintptr_t)ResolveExport("?Serialize@Vector2@Math@@QEAAXAEAVSerializer@IO@@@Z"));
     // System::String::operator= and ~String. TradeComponent::Setup writes every
@@ -1011,25 +944,11 @@ static void RegisterDispatchSlots() {
     // weather+0x2C). Without it, Weather_Serialize null-derefs s_fn_Vector3_Serialize
     // when MenuScene's +0x80 Weather extPtr loads (intermittent: only on scenes
     // that reference an Environment/*.rsc).
-    RegisterDispatchSlot(0x140152a68,
-        (uintptr_t)ResolveExport("?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z"));
     // MenuScene Slot5 atmospheric block — Vector4 + Color serialize.
     // Slots used at exe 0x1400a3796 (Vector4) and 0x1400a37aa..1400a37c6 (Color x3).
     // Without these, the post-Geometry tail of MenuScene::Serialize hits a
     // NOT_IMPLEMENTED dispatch slot and the menu-scene fog/sky/sun colors
     // stay at MenuScene_Init defaults (or zero for sun yaw/pitch).
-    RegisterDispatchSlot(0x140151ed0,
-        (uintptr_t)ResolveExport("?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z"));
-    RegisterDispatchSlot(0x140151ee0,
-        (uintptr_t)ResolveExport("?Serialize@Color@System@@QEAAXAEAVSerializer@IO@@@Z"));
-    RegisterDispatchSlot(0x140152668,
-        (uintptr_t)ResolveExport("?Create@VertexBuffer@Video@@QEAA_NH_NPEAX@Z"));
-    RegisterDispatchSlot(0x140152690,
-        (uintptr_t)ResolveExport("?Set@VertexBuffer@Video@@QEAA_NHHPEAX@Z"));
-    RegisterDispatchSlot(0x140152660,
-        (uintptr_t)ResolveExport("?Create@IndexBuffer@Video@@QEAA_NH_NPEAX@Z"));
-    RegisterDispatchSlot(0x140152698,
-        (uintptr_t)ResolveExport("?Set@IndexBuffer@Video@@QEAA_NHHPEAX@Z"));
 
     // ----------------------------------------------------------------
     // Terrain-decal / radius-highlight tessellation (BANISHED_LIVE_DECAL, Player wave 5).
@@ -1088,24 +1007,10 @@ static void RegisterDispatchSlots() {
     // restores retail.
     RegisterDispatchSlot(0x1401514a0,                       // MeshInstance copy-ctor
         (uintptr_t)ResolveExport("??0MeshInstance@Graphics@@QEAA@AEBV01@@Z"));
-    RegisterDispatchSlot(0x140151498,                       // MeshInstance::SetMesh
-        (uintptr_t)ResolveExport("?SetMesh@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@VGraphicsMesh@Graphics@@@Object@@@Z"));
     // Material swap — read by ModelComp_SetMaterialSet_125020 (the DestroyComponent
     // state-6 rubble step, destroycomponent_state6.cpp), which re-points a collapsing
     // building's MeshInstance onto the mesh's BURNT material set. Unregistered, the
     // rubble renders with its intact materials and the fire looks like a mesh swap only.
-    RegisterDispatchSlot(0x140152288,                       // GraphicsMesh::GetMaterialList(int) const
-        (uintptr_t)ResolveExport("?GetMaterialList@GraphicsMesh@Graphics@@QEBAAEBV?$Array@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@@Collection@@H@Z"));
-    RegisterDispatchSlot(0x140151408,                       // MeshInstance::SetMaterialInstance
-        (uintptr_t)ResolveExport("?SetMaterialInstance@MeshInstance@Graphics@@QEAAXHV?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@@Z"));
-    RegisterDispatchSlot(0x1401514b0,                       // MeshInstance::IsAnimating
-        (uintptr_t)ResolveExport("?IsAnimating@MeshInstance@Graphics@@QEBA_NXZ"));
-    RegisterDispatchSlot(0x140152990,                       // MeshInstance::Serialize
-        (uintptr_t)ResolveExport("?Serialize@MeshInstance@Graphics@@QEAAXAEAVSerializer@IO@@@Z"));
-    RegisterDispatchSlot(0x140151328,                       // Math::Transform ctor
-        (uintptr_t)ResolveExport("??0Transform@Math@@QEAA@XZ"));
-    RegisterDispatchSlot(0x1401522e0,                       // Math::Transform::Serialize
-        (uintptr_t)ResolveExport("?Serialize@Transform@Math@@QEAAXAEAVSerializer@IO@@@Z"));
     // Math::Transform::FromYawPitchOffset — used by PlacementTool::Serialize to build
     // the ghost-preview transform from cursor yaw + world offset. The exe reaches it via
     // this .rdata slot, empty in standalone; without it the preview mesh gets an all-zero
@@ -1117,24 +1022,16 @@ static void RegisterDispatchSlots() {
     // CreateBar cost dialog). Member fn, returns Transform by value (hidden retbuf).
     RegisterDispatchSlot(0x140151460,                       // Geometry::GetTransform
         (uintptr_t)ResolveExport("?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ"));
-    RegisterDispatchSlot(0x1401512e0,                       // Geometry::SetTransform
-        (uintptr_t)ResolveExport("?SetTransform@Geometry@Graphics@@QEAAXAEBVTransform@Math@@@Z"));
     RegisterDispatchSlot(0x140151370,                       // Scene::AddObject
         (uintptr_t)ResolveExport("?AddObject@Scene@Graphics@@QEAAIPEAVGeometry@2@@Z"));
     RegisterDispatchSlot(0x140151360,                       // Scene::RemoveObject
         (uintptr_t)ResolveExport("?RemoveObject@Scene@Graphics@@QEAAXI@Z"));
-    RegisterDispatchSlot(0x140152468,                       // Serializer::Serialize(short*)
-        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAFPEBD@Z"));
-    RegisterDispatchSlot(0x1401512e8,                       // Random::Rand(range)
-        (uintptr_t)ResolveExport("?Rand@Random@System@@QEAAII@Z"));
     RegisterDispatchSlot(0x140152b00,                       // System::Time::Time(float)
         (uintptr_t)ResolveExport("??0Time@System@@QEAA@M@Z"));
     // System::Time::AsSeconds — CitizenComponent::Update reads this to get dt_sec for
     // hunger/thirst/age accumulation. Unregistered => s_fn_Time_AsSeconds NULL =>
     // dt_sec 0.0f => needs never climb (Phase-3 accumulation bug). Ghidra: first
     // indirect CALL in Update @0x140112eb4 = CALL [0x140151318] -> Time::AsSeconds.
-    RegisterDispatchSlot(0x140151318,                       // System::Time::AsSeconds() const
-        (uintptr_t)ResolveExport("?AsSeconds@Time@System@@QEBAMXZ"));
 
     // Video::Device singleton POINTER VARIABLE, not a function: retail reads it as
     //   MOV RAX,[0x140151a80]   ; RAX = &Video::Device::_singleton
@@ -1154,19 +1051,7 @@ static void RegisterDispatchSlots() {
     // element came back 0, and Element::FindElementType(0, ...) faulted in Runtime.
     // (code/Game/Work/gatherrawmaterials.cpp calls this same slot "iatSerIntBulk" —
     // a misnomer; the retail call site at 0x1400E095A is CreateElement.)
-    RegisterDispatchSlot(0x1401528c0,                       // UI::Dialog::CreateElement
-        (uintptr_t)ResolveExport(
-            "?CreateElement@Dialog@UI@@QEBA?AV?$InternalPtr@VElement@UI@@@Object@@"
-            "V?$ExternalPtr@VElementDescription@UI@@@4@@Z"));
 
-    RegisterDispatchSlot(0x140152738,
-        (uintptr_t)ResolveExport("?CheckMod@SaveLoad@Save@@QEBAHHH@Z"));
-    RegisterDispatchSlot(0x140151650,
-        (uintptr_t)ResolveExport("?SetSaveName@SaveLoad@Save@@QEAAXAEBVString@System@@H@Z"));
-    RegisterDispatchSlot(0x1401514c8,
-        (uintptr_t)ResolveExport("??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@AEBVString@System@@@Z"));
-    RegisterDispatchSlot(0x140152b48,
-        (uintptr_t)ResolveExport("??0Sprite@UI@@QEAA@XZ"));
     // Object::Internal::Internal — the CTOR slot. MUST be registered alongside the
     // ~Internal dtor slot below: without it, fn_ObjectInternal_Ctor stays NULL, so every
     // dynamically-built object (citizen action stack: MoveTo/PlayAnimation/
@@ -1193,8 +1078,6 @@ static void RegisterDispatchSlots() {
     // CharacterComponent::OnAdd + the char spatial-hash manager are live. Names = the
     // exe's own import strings at each slot RVA. All five are value-return / member ABIs:
     //   RootAnimationOffset / Vector3::Dot / Scalar::Max return by hidden retbuf.
-    RegisterDispatchSlot(0x140152960,   // Graphics::MeshInstance::RootAnimationOffset() const -> Vector3
-        (uintptr_t)ResolveExport("?RootAnimationOffset@MeshInstance@Graphics@@QEBA?AVVector3@Math@@XZ"));
     RegisterDispatchSlot(0x140151280,   // Math::Transform::operator=(const Transform&) -> Transform&
         (uintptr_t)ResolveExport("??4Transform@Math@@QEAAAEAV01@AEBV01@@Z"));
     RegisterDispatchSlot(0x140151418,   // Math::Transform::Transform(const Transform&) [copy ctor]
@@ -1207,18 +1090,12 @@ static void RegisterDispatchSlots() {
     // Measured 2026-08-22 — the run logged "MeshPass(ceiling) SKIPPED — Transform/PickingMesh
     // runtime slots unresolved" while FootprintPass in the SAME message converted 21 cells,
     // which is what isolated this one slot rather than the whole component.
-    RegisterDispatchSlot(0x140151478,
-        (uintptr_t)ResolveExport("?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z"));
     // Math::Quaternion::Rotate(const Vector3&) const -> Vector3 (member value-return:
     // RCX=this, RDX=retbuf, R8=vec). Read by the attach-point resolver 0x140123880 to
     // turn a description-local yaw into a world heading, and by action_pf_road.cpp,
     // which has been reading this slot since the road wave and getting NULL — it
     // null-guards, so the miss was silent there. Name is the exe's import string at
     // the slot RVA and matches Runtime export [3589].
-    RegisterDispatchSlot(0x1401525f0,
-        (uintptr_t)ResolveExport("?Rotate@Quaternion@Math@@QEBA?AVVector3@2@AEBV32@@Z"));
-    RegisterDispatchSlot(0x1401529a8,   // Picking::Scene::SetTransform(uint id, const Transform&)
-        (uintptr_t)ResolveExport("?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z"));
     // Picking::Scene::Intersect(start, dir, maxDist, &hitPos, &hitNormal) -> hit id or -1.
     // The ray-cast half of every mesh-precise pick. Read by:
     //   * CharacterComponent_impl_f3e0 (0x14009f534) — the deck/floor height refine that
@@ -1227,22 +1104,16 @@ static void RegisterDispatchSlots() {
     //   * PathTool (0x1400dd710 area) and EditTool — entity picking. EditTool already
     //     resolves it by mangled name; PathTool only ever read this slot, so its mesh
     //     pick has been dead, which is the "buildings are click-the-middle picky" report.
-    RegisterDispatchSlot(0x140152428,
-        (uintptr_t)ResolveExport("?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z"));
     // Picking::Scene::GetUserData(uint hitId) -> void* (the owning entity). Registered
     // alongside Intersect deliberately: a hit id with no way to resolve its owner is a
     // pick that cannot select anything, so Intersect ALONE would leave PathTool exactly
     // as broken (it null-guards this pointer and silently skips the mesh pick).
-    RegisterDispatchSlot(0x140152890,
-        (uintptr_t)ResolveExport("?GetUserData@Scene@Picking@@QEBAPEAXI@Z"));
     // Picking::Scene::SetMeshUserData(uint id, void* userData, int, int, callback*) —
     // re-points an ALREADY-registered pick mesh at a different owner. Exactly two exe
     // callers: BridgeTool::CalcPath (0x1400fab75, re-owns each deck segment to the master
     // bridge entity) and FencedTool_helper_90d0 (0x140129114). Slot RVA read out of the
     // .rdata name table: 0x1401529a0 holds 0x1c0608 -> "?SetMeshUserData@Scene@Picking@@…"
     // (ordinal prefix 0x0f4c = 3916, which is the export's ordinal).
-    RegisterDispatchSlot(0x1401529a0,
-        (uintptr_t)ResolveExport("?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z"));
     RegisterDispatchSlot(0x140151e78,   // Math::Scalar::Max(const Scalar&) const -> Scalar
         (uintptr_t)ResolveExport("?Max@Scalar@Math@@QEBA?AV12@AEBV12@@Z"));
 
@@ -1267,8 +1138,6 @@ static void RegisterDispatchSlots() {
     // Runtime ?Update@AnimationManager@Graphics@@QEAAXAEBVTime@System@@_N@Z @ 0x1800fc240.
     // It iterates the manager's animation-group array (this+0x00, count this+0x08) and
     // advances each AnimationState; no-ops when no MeshInstance has registered a group.
-    RegisterDispatchSlot(0x140152050,
-        (uintptr_t)ResolveExport("?Update@AnimationManager@Graphics@@QEAAXAEBVTime@System@@_N@Z"));
 
     // Application::Application::_singleton — Runtime data variable holding the
     // Application*. The exe normally has a .rdata exref at 0x140152368 that
@@ -1357,20 +1226,14 @@ static void RegisterDispatchSlots() {
     RegisterDispatchSlot(0x140152a60, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_Float));  // Serialize(float&)
     RegisterDispatchSlot(0x140152a58, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_Bool));   // Serialize(bool&)
     RegisterDispatchSlot(0x140152410, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_UChar));  // Serialize(uchar&)
-    RegisterDispatchSlot(0x140152418, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_UChar));  // Serialize(uchar&) (NameDB alias)
-    RegisterDispatchSlot(0x140152a50, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_UInt));   // Serialize(uint&)
     RegisterDispatchSlot(0x140152a48, reinterpret_cast<uintptr_t>(&RtSerializer_GetVersion));       // GetVersion()
     RegisterDispatchSlot(0x140152488, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_UShortArr)); // Serialize(cnt,ushort*)
-    RegisterDispatchSlot(0x140151278, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_IntArr));    // Serialize(cnt,int*)
     RegisterDispatchSlot(0x1401523f8, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_ShortArr));  // Serialize(cnt,short*)
-    RegisterDispatchSlot(0x140152490, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_UCharArr));  // Serialize(cnt,uchar*) (NameDB bulk)
     // PE import table: 0x140152400 is Serialize(int,uchar*,name) -> encoding vtbl
     // +0x60 (an N-iteration one-byte loop), NOT SerializeBytes -> +0xC8 (one
     // N-byte call). Wire-identical under the binary encoding, so this was never a
     // desync, but it dispatched the wrong Encoding virtual.
     RegisterDispatchSlot(0x140152400, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_UCharArr));  // Serialize(cnt,uchar*) -- encoding vtbl +0x60
-    RegisterDispatchSlot(0x140152618, reinterpret_cast<uintptr_t>(&RtSerializer_SerializeBytes));      // SerializeBytes (alt slot)
-    RegisterDispatchSlot(0x140152478, reinterpret_cast<uintptr_t>(&RtSerializer_SerializeBytes));      // SerializeBytes (NameDB alias)
 }
 
 // ============================================================

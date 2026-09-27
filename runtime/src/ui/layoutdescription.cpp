@@ -62,6 +62,7 @@
 // cached in a namespace-scope std::atomic slot, never in a function-local static.
 // ============================================================================
 #include <atomic>
+#include <new>
 #include <cstddef>
 #include <cstdint>
 
@@ -85,20 +86,9 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 
-std::atomic<void*> g_vtBase{nullptr};
-std::atomic<void*> g_vtExternal{nullptr};
-std::atomic<void*> g_vtElementDescription{nullptr};
-std::atomic<void*> g_vtLayoutDescription{nullptr};
-std::atomic<void*> g_vtLayoutElement{nullptr};
 std::atomic<void*> g_typeInfo{nullptr};
 std::atomic<void*> g_memFree{nullptr};
-std::atomic<void*> g_externalDtor{nullptr};
 
-void* VtBase()               { return AtomicExport(g_vtBase, "??_7Base@Object@@6B@"); }
-void* VtExternal()           { return AtomicExport(g_vtExternal, "??_7External@Object@@6B@"); }
-void* VtElementDescription() { return AtomicExport(g_vtElementDescription, "??_7ElementDescription@UI@@6B@"); }
-void* VtLayoutDescription()  { return AtomicExport(g_vtLayoutDescription, "??_7LayoutDescription@UI@@6B@"); }
-void* VtLayoutElement()      { return AtomicExport(g_vtLayoutElement, "??_7LayoutElement@UI@@6B@"); }
 const uint8_t* LayoutDescriptionTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@LayoutDescription@UI@@0VBaseTypeInfo@Object@@A"));
@@ -127,33 +117,6 @@ static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +
 static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
-
-// The inlined constructor, from 0x180043076..0x1800430ea (Construct's copy).
-void ConstructBody(UI::LayoutDescription* self) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(self);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtBase();                                              // 180043076
-    *v = VtExternal();                                          // 180043080
-    *reinterpret_cast<uint64_t*>(p + 0x08) = 0;                 // 180043095
-    *reinterpret_cast<uint64_t*>(p + 0x10) = 0;                 // 180043098
-    *reinterpret_cast<uint64_t*>(p + 0x18) = 0;                 // 18004309c
-    *v = VtElementDescription();                                // 1800430a0
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;                 // 1800430aa
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;                 // 1800430ae
-    *reinterpret_cast<uint64_t*>(p + 0x30) = 0;                 // 1800430b2
-    *reinterpret_cast<int32_t*>(p + 0x38)  = 0;                 // 1800430b6  DWORD
-    *reinterpret_cast<int32_t*>(p + 0x3c)  = -1;                // 1800430b9  DWORD
-    *reinterpret_cast<uint64_t*>(p + 0x40) = 3;                 // 1800430c0  ONE QWORD
-    *reinterpret_cast<uint64_t*>(p + 0x48) = 0;                 // 1800430c8
-    *reinterpret_cast<uint64_t*>(p + 0x50) = 0;                 // 1800430cc
-    *reinterpret_cast<uint64_t*>(p + 0x58) = 0;                 // 1800430d0
-    *reinterpret_cast<uint64_t*>(p + 0x60) = 0;                 // 1800430d4
-    *v = VtLayoutDescription();                                 // 1800430d8
-    self->_entries._data     = nullptr;                         // 1800430e2
-    self->_entries._size     = 0;                               // 1800430e6  one qword
-    self->_entries._capacity = 0;
-}
 
 // Retail's String comparison, inlined at FOUR places in CreateInstance and
 // written once here. It is NOT strcmp: the two cached LENGTHS at `data[-8]` are
@@ -249,23 +212,26 @@ uint32_t LayoutDescription::Type() const {
     const uint8_t* ti = LayoutDescriptionTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t LayoutDescription::TypeId() {
+    const uint8_t* ti = LayoutDescriptionTypeInfo();
+    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
+}
 const char* LayoutDescription::TypeName() const {
     const uint8_t* ti = LayoutDescriptionTypeInfo();
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
 }
 int32_t LayoutDescription::GetFileVersion() const { return 0x304; }
 
-// 0x180043060 — the null test stays in the door; the ctor is INLINED.
+// 0x180043060 — the ctor is INLINED here in retail: placement-new the class
+// (the null test sat in the retired door; a virtual call has a `this`).
 Object::External* LayoutDescription::Construct() {
-    ConstructBody(this);
-    return this;                                               // 1800430ea
+    return ::new (this) LayoutDescription();                   // 180043076 .. 1800430ea
 }
-// 0x180042fc0 — slot 0 (VIRTUAL, the minted row) with flag 0, then the
-// inlined ctor.
+// 0x180042fc0 — slot 0 (VIRTUAL) with flag 0, then the inlined ctor.
 Object::External* LayoutDescription::Reconstruct() {
     DeletingDtor(0);                                           // 180042fd7
-    ConstructBody(this);
-    return this;                                               // 180043052
+    return ::new (this) LayoutDescription();                   // .. 180043052
 }
 // 0x180043100
 void LayoutDescription::Destruct() { DeletingDtor(0); }
@@ -355,16 +321,10 @@ Object::InternalPtr<Element>* LayoutDescription::CreateInstance(
     using MemAllocFn = void* (*)(uint64_t size, int align);
     void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0xd0, 8);   // 1800d33ee (inlined)
 
+    // Retail inlines ??0LayoutElement (0x1800d3421 .. 0x1800d343b): the real ctor.
     LayoutElement* elem = nullptr;
-    if (raw != nullptr) {                                      // 1800d341c
-        using ElementCtorFn = void* (*)(void*);
-        RtAddr<ElementCtorFn>(0x180115e50ull)(raw);            // 1800d3421 ??0Element
-        *reinterpret_cast<void**>(raw) = VtLayoutElement();    // 1800d3427
-        elem = reinterpret_cast<LayoutElement*>(raw);          // B.3.6 bridge
-        elem->_childRecords._data     = nullptr;               // 1800d3434
-        elem->_childRecords._size     = 0;                     // 1800d343b (one qword)
-        elem->_childRecords._capacity = 0;
-    }
+    if (raw != nullptr)                                        // 1800d341c
+        elem = ::new (raw) LayoutElement();                    // 1800d3421 ??0Element + stores
 
     void* slot = elem;                                         // 1800d344e
     UI::ElementDescription::CreateInstance(                   // 1800d3459
@@ -508,115 +468,50 @@ Object::InternalPtr<Element>* LayoutDescription::CreateInstance(
     return ret;
 }
 
+// ??1LayoutDescription@UI@@UEAA@XZ   0x1800d3a10 — retail's body, moved from
+// the retired door (ENDGAME B.3.9 UI-B): destroy the entry Array through
+// 0x180043a00 — the variant that DOES visit the elements (three String
+// releases each) and zeroes the header, so the compiler's `_entries.~Array()`
+// afterwards is a no-op. The restamps, the base's _textName (+0x60) and the
+// tail JMP into ~External are the compiler's chain.
+LayoutDescription::~LayoutDescription() {
+    using ArrayDtorFn = void* (*)(void*);
+    RtAddr<ArrayDtorFn>(0x180043a00ull)(&_entries);           // 1800d3a34
+}
+
+// ?CreateNewObject@LayoutDescription@UI@@SAPEAVBase@Object@@XZ 0x180042e30 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0x78, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* LayoutDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(LayoutDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) LayoutDescription();
+}
+// ?CreateInPlaceObject@LayoutDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x180042f20
+Object::Base* LayoutDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) LayoutDescription();
+}
+
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, each a one-line
-// QUALIFIED delegation onto the member above.
+// ENDGAME B.3.9 UI-B: the slot doors, the ctor / dtor doors and the
+// factory-interpreter row are gone. Their only readers were the minted
+// `??_7LayoutDescription@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
+// LayoutDescription now wears the compiler's table.
 // ============================================================================
-using UI::LayoutDescription;
-
-extern "C" uint32_t RtUi_LayoutDescription_Type(const LayoutDescription* self) {
-    return self->UI::LayoutDescription::Type();
-}
-extern "C" const char* RtUi_LayoutDescription_TypeName(const LayoutDescription* self) {
-    return self->UI::LayoutDescription::TypeName();
-}
-extern "C" int32_t RtUi_LayoutDescription_GetFileVersion(const LayoutDescription* self) {
-    return self->UI::LayoutDescription::GetFileVersion();
-}
-extern "C" void* RtUi_LayoutDescription_Construct(LayoutDescription* self) {
-    if (self == nullptr) return nullptr;                       // 180043071
-    return self->UI::LayoutDescription::Construct();
-}
-extern "C" void* RtUi_LayoutDescription_Reconstruct(LayoutDescription* self) {
-    return self->UI::LayoutDescription::Reconstruct();
-}
-extern "C" void RtUi_LayoutDescription_Destruct(LayoutDescription* self) {
-    self->UI::LayoutDescription::Destruct();
-}
-extern "C" bool RtUi_LayoutDescription_Serialize(LayoutDescription* self, void* stream) {
-    return self->UI::LayoutDescription::Serialize(stream);
-}
-// RDX is the caller's slot; the member writes it and hands it back (B6-2).
-extern "C" void** RtUi_LayoutDescription_CreateInstance(const LayoutDescription* self,
-                                                        void** ret, const void* dialog) {
-    return reinterpret_cast<void**>(self->UI::LayoutDescription::CreateInstance(
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),        // B.3.6 bridge
-        static_cast<const UI::Dialog*>(dialog)));
-}
-
-// ============================================================================
-// ??1LayoutDescription@UI@@UEAA@XZ   0x1800d3a10 — a DOOR (B4b-2)
-// ============================================================================
-// Restamp, destroy the entry Array through 0x180043a00 — the variant that DOES
-// visit the elements (three String releases each) — then the base's _textName
-// at +0x60 under the base vtable, then tail JMP.
-extern "C" void RtUi_LayoutDescription_Dtor(void* selfv) {
-    LayoutDescription* self = reinterpret_cast<LayoutDescription*>(selfv);   // B.3.6 bridge
-    void** v = reinterpret_cast<void**>(selfv);
-
-    *v = VtLayoutDescription();                                // 1800d3a26
-
-    using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x180043a00ull)(&self->_entries);      // 1800d3a34
-
-    *v = VtElementDescription();                               // 1800d3a3a
-
-    char*& text = self->_textName;
-    if (text != nullptr) {                                     // 1800d3a48
-        --*reinterpret_cast<int32_t*>(text - 4);
-        if (*reinterpret_cast<int32_t*>(text - 4) == 0) {
-            text = text - 8;
-            MemFree()(text);
-        } else {
-            text = nullptr;                                    // 1800d3a66
-        }
-    }
-
-    using ExtDtorFn = void (*)(void*);
-    reinterpret_cast<ExtDtorFn>(AtomicExport(
-        g_externalDtor, "??1External@Object@@UEAA@XZ"))(selfv);   // 1800d3a76 JMP
-}
 
 int RtUiLayoutDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@LayoutDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_LayoutDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x180042d20ull, (void*)&RtUi_LayoutDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@LayoutDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_LayoutDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x180042d40ull, (void*)&RtUi_LayoutDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@LayoutDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_LayoutDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x1800d3a00ull, (void*)&RtUi_LayoutDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@LayoutDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_LayoutDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x180043060ull, (void*)&RtUi_LayoutDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@LayoutDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_LayoutDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x180042fc0ull, (void*)&RtUi_LayoutDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@LayoutDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_LayoutDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x180043100ull, (void*)&RtUi_LayoutDescription_Destruct);
-
-    RegisterRuntimeExport("??1LayoutDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_LayoutDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x1800d3a10ull, (void*)&RtUi_LayoutDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@LayoutDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_LayoutDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x1800d3940ull, (void*)&RtUi_LayoutDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@LayoutDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_LayoutDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x1800d33a0ull, (void*)&RtUi_LayoutDescription_CreateInstance);
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@LayoutDescription` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@LayoutDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::LayoutDescription::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x180042e30ull, (void*)&UI::LayoutDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@LayoutDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::LayoutDescription::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x180042f20ull, (void*)&UI::LayoutDescription::CreateInPlaceObject);
 
     // ADDRESS ONLY: the entry-array serializer has no export name.
     RegisterRuntimeAddr(0x180043f50ull,

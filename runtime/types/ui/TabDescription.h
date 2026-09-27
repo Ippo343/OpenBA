@@ -34,6 +34,13 @@
 //   [7] 0x18004c3a0 Destruct        [8] 0x1800da410 CreateInstance RETSLOT (B6-2)
 //   [9] 0x18004c390 Construct — INTRODUCED here (B6-1.1)
 //
+// ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2) -- the paragraph below is
+// HISTORY: the class is now CONCRETE. A real public ctor (retail's stores), its
+// own slot 0 (the vector deleting dtor), a protected non-virtual ~TabDescription holding
+// the retired ??1 door's body, and the factory pair as the class's own statics;
+// every live one wears the COMPILER's table. The minted `??_7TabDescription@UI@@6B@`,
+// its RT_DELDTOR row 0x18004c640 and the ctor / dtor / slot doors are retired
+// (tools/rt_mint_retired/ui-b.txt).
 // ABSTRACT (slot 0 `= 0`), NO real ctor. The destructor is declared only:
 // `??1` (0x1800da8e0) is the registered door.
 // ============================================================================
@@ -47,7 +54,37 @@ namespace UI {
 
 class TabDescription : public ElementDescription {
 public:
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x18004c640
+    // ??0TabDescription@UI@@QEAA@XZ 0x1800daa00 -- the REAL ctor:
+    // ElementDescription's stores (inlined in retail), then +0x68..+0x9f zero
+    // and the tab Array header. +0xa0 (_gap) and +0xa4 are NOT written.
+    TabDescription() : ElementDescription() {
+        _stripBackdropDescription = nullptr;
+        _pageBackdropDescription  = nullptr;
+        _pageFrameDescription     = nullptr;
+        _spriteSheet              = nullptr;
+        _edgeLeftName             = nullptr;
+        _edgeMiddleName           = nullptr;
+        _edgeRightName            = nullptr;
+        _tabsData                 = nullptr;
+        _tabsCount                = 0;
+        _tabsCapacity             = 0;
+    }
+
+    // [0] 0x18004c640 -- MSVC's VECTOR deleting destructor, both arms exactly as the
+    // retired RT_DELDTOR row ran them (`MOV EDX,0xb8` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<TabDescription*>(self + static_cast<int64_t>(i) * 0xb8)->~TabDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~TabDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x18004c1f0
     uint32_t    Type() const override;                            // [2] 0x18004c1d0
     int32_t     GetFileVersion() const override;                  // [3] 0x1800da8d0
@@ -61,13 +98,15 @@ public:
 
     TabDescription(const TabDescription& src);                    // 0x18004c3b0  not ported
     TabDescription& operator=(const TabDescription& src);         // 0x18004c4a0  not ported
-    static uint32_t TypeId();                                     // not ported
-    static Object::Base* CreateNewObject();                       // factory door
-    static Object::Base* CreateInPlaceObject(void* place);        // factory door
+    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
+    static Object::Base* CreateNewObject();                       // (D2) the class's own
+    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
-    TabDescription() = default;   // NOT ??0TabDescription (0x1800daa00, a door)
-    ~TabDescription();            // ??1TabDescription 0x1800da8e0 — the door
+    // `??1TabDescription@UI@@UEAA@XZ` (0x1800da8e0): NON-VIRTUAL (no virtual dtor until
+    // the normal-virtual cutover). Retail's body is in tabdescription.cpp;
+    // the compiler chains the base's.
+    ~TabDescription();
 
 private:
     static const char* _TypeName();                               // 0x18004c1b0

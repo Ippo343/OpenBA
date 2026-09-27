@@ -30,13 +30,8 @@ extern "C" void* Map_RadiusQuery_92990(float* map, void** out, float* pos,
 
 void RegisterCitizenUpdateHealth() {
     RegisterExeAddr(0x1401127d0, reinterpret_cast<uintptr_t>(&CitizenComp_UpdateHealth));
-    RegisterExeAddr(0x1401123b0, reinterpret_cast<uintptr_t>(&CitizenComp_RecoverOrDie));
-    RegisterExeAddr(0x140112470, reinterpret_cast<uintptr_t>(&CitizenComp_SpreadDisease));
-    RegisterExeAddr(0x140112620, reinterpret_cast<uintptr_t>(&CitizenComp_CatchDisease));
     RegisterExeAddr(0x140116b90, reinterpret_cast<uintptr_t>(&CitizenComp_Infect));
     // 0x1400893c0 doubles as engine_funcs' fn_BuildingList_CheckCondition (misnomer;
     // it is the "any citizen sick" scan) — registering it also fills that pointer.
-    RegisterExeAddr(0x1400893c0, reinterpret_cast<uintptr_t>(&CitizenComp_AnyCitizenSick));
-    RegisterExeAddr(0x1400305e0, reinterpret_cast<uintptr_t>(&CitizenComp_IntArrayResize));
     RegisterExeAddr(0x140092990, reinterpret_cast<uintptr_t>(&Map_RadiusQuery_92990));
 }
