@@ -424,8 +424,10 @@ static constexpr DelDtorSpec kSpecs[] = {
     // IO::CompressedMemoryStream) for the reason the two rows above are
     // appended: kProbeSubjects is a list of TABLE INDICES and a mid-table insert
     // silently re-points all twelve Video::*Data probe subjects at wrong rows.
+    //
+    // ENDGAME B.3.9 IO: the IO::CompressedFileStream row (0x180024100) is
+    // retired -- the class's inline DeletingDtor is its slot 0.
     RT_DELDTOR(0x180023fd0, 0x1800aa650, 0x068, "IO::CompressedStream"),
-    RT_DELDTOR(0x180024100, 0x1800a9330, 0x0b8, "IO::CompressedFileStream"),
     // ---- WAVE 25 lane VTIO ----------------------------------------------------
     // Slot 0 of `??_7PackageFile@IO@@6B@` (0x180155700). WAVE23_LANE_IOPORT.md
     // §8 item 2 is the residual this discharges: that lane measured the table at
@@ -1366,12 +1368,6 @@ void* RtDelDtor_ToolTipDialog(void* self, unsigned flags) {
 void* RtDelDtor_CompressedStream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180023fd0>());
 }
-// IO::CompressedFileStream ~CompressedFileStream = 0x1800a9330  (PORTED, Wave 27 IOTEXT
-//                          -- runtime/src/io/file_stream.cpp; this row's address
-//                          door is what made porting it worth doing)
-void* RtDelDtor_CompressedFileStream(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180024100>());
-}
 // IO::PackageFile          ~PackageFile = 0x1800b4540  (PORTED -- Wave 25 lane BODY,
 //                          runtime/src/io/package_file_dtor.cpp:442. This line read
 //                          "NOT ported" until Wave 27 lane IOTEXT; the two waves
@@ -1794,7 +1790,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180038b20, (void*)&RtDelDtor_Dialog);   // Wave 10C DLG8
     RegisterRuntimeAddr(0x18004d270, (void*)&RtDelDtor_ToolTipDialog);  // Wave 10D TIP
     RegisterRuntimeAddr(0x180023fd0, (void*)&RtDelDtor_CompressedStream);      // Wave 19 CSTREAM
-    RegisterRuntimeAddr(0x180024100, (void*)&RtDelDtor_CompressedFileStream);  // Wave 19 CSTREAM
     RegisterRuntimeAddr(0x1800259d0, (void*)&RtDelDtor_PackageFile);           // Wave 25 VTIO
     RegisterRuntimeAddr(0x1800134b0, (void*)&RtDelDtor_EdgeMesh);              // Wave 27 GFXMESH
     RegisterRuntimeAddr(0x1800175d0, (void*)&RtDelDtor_EdgeMeshInstance);      // Wave 27 GFXMESH

@@ -404,14 +404,6 @@ struct VisitorStream {
 static_assert(sizeof(VisitorStream) == 0x18,
               "sizeof(IO::VisitorStream) == 0x18 (eh_vector_dtor stride 0x18002bf80)");
 
-// ---------------------------------------------------------------------------
-// The vtable addresses this family stamps, so a caller reproducing an inlined
-// constructor or destructor names them once rather than spelling a literal at
-// each store. All five are EXPORTED, so a port should reach them by name
-// (RT_VTABLE_ONCE / RtResolveCached) rather than by address.
-// ---------------------------------------------------------------------------
-constexpr uintptr_t kAddrVtblCompressedFileStream = 0x1801555f0;  // ??_7CompressedFileStream@IO@@6B@
-
 // FileStream's slot 7 is Open, NOT Close. Named so a call site cannot repeat
 // the mistake the comment on FileStream warns about; Stream.h's
 // kStreamVtblCloseSlot is 7 as well and means something else on that branch.
@@ -887,22 +879,42 @@ namespace IO {
 // slot 8 `PreCommit` is CompressedStream's (0x1800aa8c0), inherited. That
 // asymmetry with CompressedMemoryStream, which overrides both, is retail's.
 //
-// ⚠ ITS CONSTRUCTION SITES ARE NOT IN THIS BLOCK'S FILE SET. Retail inlines
-// this constructor into `External::Save`, `IsCurrent` and `Load`, and our port
-// reproduces that as a stack local plus a bare vptr stamp in
-// `runtime/src/object/external_load.cpp` — a file block 4 does not own, and one
-// that is itself on the section D loader path. That is the fact that makes
-// section 4.3's "no real constructors" non-negotiable rather than cautious.
+// ENDGAME B.3.9 IO: CONCRETE. Retail inlines this constructor into
+// `External::Load` (our runtime/src/object/external_load.cpp, the section D
+// loader path), which now builds the class with it on stack storage and ends
+// it with a non-virtual DeletingDtor(0) at the same position.
 class CompressedFileStream : public CompressedStream {
 public:
-    Stream* DeletingDtor(unsigned flags) override = 0;   // slot 0  0x180024100
+    // ??0CompressedFileStream@IO@@QEAA@XZ 0x1800a93b0: ??0CompressedStream,
+    // the vptr, ??0BinaryFileStream on +0x68. `_source` is not set.
+    CompressedFileStream() : CompressedStream(), _file() {}
+
+    // slot 0  0x180024100 — MSVC's vector deleting dtor, stride 0xb8.
+    Stream* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<CompressedFileStream*>(self + static_cast<int64_t>(i) * 0xb8)
+                    ->~CompressedFileStream();
+            if (flags & 1u) RtSystem::RtMemFree(self - 8);
+            return reinterpret_cast<Stream*>(self - 8);
+        }
+        this->~CompressedFileStream();
+        if (flags & 1u) RtSystem::RtMemFree(this);
+        return this;
+    }
     void Close() override;                               // slot 7  0x1800a9490
     // slot 8 PreCommit is NOT overridden: 0x1801555f0[8] is 0x1800aa8c0.
 
     BinaryFileStream _file;    // +0x68 — a MEMBER, not a second base
 
 protected:
-    ~CompressedFileStream() = default;
+    // ??1CompressedFileStream@IO@@UEAA@XZ 0x1800a9330: Commit when a header
+    // was written on a WRITING stream, close the member's FileInfo if open;
+    // then the member's ~BinaryFileStream and ~CompressedStream. Out of line
+    // in file_stream.cpp; non-virtual (Decision 2).
+    ~CompressedFileStream();
 };
 
 static_assert(offsetof(CompressedFileStream, _file) == 0x68,

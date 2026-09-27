@@ -16,3 +16,4 @@
 ??_7FileStream@IO@@6B@        IO   base of the two above; ??0FileStream door is ::new FileStream(); SaveText's restamp gone; slot-0 body 0x18000c090 + 6 slot doors deleted
 ??_7ReaderWriter@IO@@6B@   IO   abstract base, stamped only by the three leaves' doors (gone); RT_DELDTOR row 0x180023bd0 + ??1 door 0x1800b9150 deleted
 ??_7MemoryStream@IO@@6B@      IO   ??0MemoryStream door is ::new MemoryStream(); SaveAllSettings + SaveMetaData (foreign sites) use the class; slot-0 body 0x1800242a0 + 6 slot doors deleted
+??_7CompressedFileStream@IO@@6B@  IO   External::Load (foreign site external_load.cpp) builds ::new CompressedFileStream(); RT_DELDTOR 0x180024100, ??1 door 0x1800a9330, ?Close slot door deleted

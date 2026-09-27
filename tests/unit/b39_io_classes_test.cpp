@@ -462,3 +462,51 @@ UNIT_TEST(b39_io_memorystream_shape_ctor_and_both_arms) {
     ::new (block + 8 + 0x30) IO::MemoryStream();
     CHECK(reinterpret_cast<uint8_t*>(m0->DeletingDtor(3)) == block);
 }
+
+// ===========================================================================
+// IO::CompressedFileStream -- row 31. 0x1800a93b0 / slot 0 0x180024100.
+// ===========================================================================
+// ~CompressedFileStream and ~CompressedStream are host stubs (release nothing);
+// the constructors and slot 0 are inline and REAL here.
+UNIT_TEST(b39_io_compressedfilestream_shape_ctor_and_both_arms) {
+    CHECK(!std::is_abstract<IO::CompressedFileStream>::value);
+    CHECK(!std::is_destructible<IO::CompressedFileStream>::value);
+    CHECK(!std::has_virtual_destructor<IO::CompressedFileStream>::value);
+    CHECK_EQ(SlotOffset(&IO::CompressedFileStream::DeletingDtor), (uintptr_t)0x00);
+    CHECK_EQ(SlotOffset(&IO::CompressedFileStream::Close),        (uintptr_t)0x38);
+    CHECK_EQ(SlotOffset(&IO::CompressedFileStream::PreCommit),    (uintptr_t)0x40);
+
+    // 0x1800aa3d0: +0x1c = 0, +0x20 = -1, +0x28..+0x67 = 0, a BINARY encoding;
+    // +0x0c, +0x18, +0x24 never written. 0x1800a93b0 then builds the
+    // BinaryFileStream member at +0x68 (its own Binary encoding, handle -1).
+    alignas(8) uint8_t mem[0xb8];
+    std::memset(mem, 0xCD, sizeof mem);
+    IO::CompressedFileStream* cfs = ::new (mem) IO::CompressedFileStream();
+    CHECK_EQ(cfs->_direction, 0);
+    CHECK_EQ(cfs->_position, 0);
+    CHECK_EQ(cfs->_activeWindow, -1);
+    CHECK(cfs->_source == nullptr);
+    CHECK(cfs->_windowData == nullptr);
+    CHECK_EQ(cfs->_headerSize, 0);
+    CHECK(cfs->_blockData == nullptr);
+    CHECK(cfs->_compression == nullptr);
+    CHECK(cfs->_encoding != nullptr);
+    CHECK(cfs->_encoding->IsBinary());
+    for (int i = 0x0c; i < 0x10; ++i) CHECK_EQ((int)mem[i], 0xCD);
+    for (int i = 0x18; i < 0x1c; ++i) CHECK_EQ((int)mem[i], 0xCD);
+    for (int i = 0x24; i < 0x28; ++i) CHECK_EQ((int)mem[i], 0xCD);
+    CHECK(cfs->_file._encoding != nullptr);
+    CHECK(cfs->_file._encoding != cfs->_encoding);
+    CHECK_EQ(cfs->_file._file.handle, -1);
+    CHECK(VTableOf(cfs) != VTableOf(&cfs->_file));
+    CHECK(cfs->DeletingDtor(0) == cfs);
+
+    IO::CompressedFileStream* heap = ::new (std::malloc(0xb8)) IO::CompressedFileStream();
+    CHECK(heap->DeletingDtor(1) == heap);
+    uint8_t* block = static_cast<uint8_t*>(std::malloc(8 + 2 * 0xb8));
+    const int64_t two = 2;
+    std::memcpy(block, &two, sizeof two);
+    IO::CompressedFileStream* c0 = ::new (block + 8) IO::CompressedFileStream();
+    ::new (block + 8 + 0xb8) IO::CompressedFileStream();
+    CHECK(reinterpret_cast<uint8_t*>(c0->DeletingDtor(3)) == block);
+}

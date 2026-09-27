@@ -2029,7 +2029,6 @@ int RtMintRegisterPromotedRows() {
     // already cites and which a tidy loop here would have reproduced.
     // PromoteVtableGuarded re-checks TRAP==0 against the LIVE registry and
     // refuses loudly rather than publishing abort traps.
-    PromoteVtableGuarded("??_7CompressedFileStream@IO@@6B@",   0x1801555f0ull, &n);
     PromoteVtableGuarded("??_7CompressedMemoryStream@IO@@6B@", 0x180155560ull, &n);
     PromoteVtableGuarded("??_7CompressedStream@IO@@6B@",       0x180155640ull, &n);
 

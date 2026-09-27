@@ -696,7 +696,30 @@ public:
     void*    _compression;    // +0x60  System::Compression*, owned
 
 protected:
-    ~CompressedStream() = default;
+    // ENDGAME B.3.9 IO -- ??0CompressedStream@IO@@QEAA@XZ 0x1800aa3d0, the
+    // base ctor CompressedFileStream's opens with: after the Stream base,
+    // +0x1c = 0, +0x20 = -1, +0x28..+0x67 = 0 (eight qwords), then
+    // MemAlloc(8,4) + the BINARY encoding, the dead free of the previous one,
+    // the store. +0x18 and +0x24 are not written. Protected: abstract class.
+    CompressedStream()
+        : _position(0), _activeWindow(-1), _source(nullptr),
+          _windowData(nullptr), _windowSize(0), _windowCap(0),
+          _headerData(nullptr), _headerSize(0), _headerCap(0),
+          _blockData(nullptr), _blockSize(0), _blockCap(0),
+          _compression(nullptr) {
+        void* enc = RtSystem::RtMemAlloc(8, 4);
+        if (enc) ::new (enc) BinaryEncoding();
+        if (_encoding) RtSystem::RtMemFree(_encoding);
+        _encoding = static_cast<Encoding*>(enc);
+    }
+
+    // ??1CompressedStream@IO@@UEAA@XZ 0x1800aa650 without its two restamps and
+    // the encoding free (that is ~Stream): Release, then the three Array
+    // destructors (+0x50, +0x40, +0x30). Out of line in
+    // compressed_stream_release.cpp; non-virtual (Decision 2). The registered
+    // ??1CompressedStream door still serves the minted CompressedStream /
+    // CompressedMemoryStream rows until they retire (W2).
+    ~CompressedStream();
 };
 
 static_assert(sizeof(CompressedStream) == 0x68, "IO::CompressedStream is 0x68 bytes");
@@ -731,9 +754,9 @@ public:
     void PreCommit() override;                           // slot 8  0x1800a9660
 
     // +0x68 — a MEMBER, not a second base. See B34_BRIEFS section A.3: this is
-    // the by-value containment that forces `IO::MemoryStream` to be concrete
-    // with a public destructor, and that this class must be a `friend` of to
-    // reach its protected default constructor at all.
+    // the by-value containment that forces `IO::MemoryStream` to be concrete,
+    // and that this class must be a `friend` of to reach its protected
+    // destructor (B.3.9 IO).
     MemoryStream _memoryStream;
 
 protected:

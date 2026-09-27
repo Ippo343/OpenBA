@@ -92,7 +92,8 @@ TextFileStream::TextFileStream(const System::String&, const System::String&, int
 TextFileStream::~TextFileStream() {}
 
 // ---- IO::CompressedStream (compressed_stream_{write,read}.cpp) -------------
-// Slot 0 is PURE on all three compressed classes, so none of them needs one.
+// Slot 0 is PURE on CompressedStream / CompressedMemoryStream and inline on
+// CompressedFileStream (B.3.9 IO), so none of them needs one.
 bool     CompressedStream::Write(int, const void*) { StubReached("CompressedStream::Write"); }
 bool     CompressedStream::Read(int, void*)        { StubReached("CompressedStream::Read"); }
 bool     CompressedStream::SetCurrentPos(int)      { StubReached("CompressedStream::SetCurrentPos"); }
@@ -105,6 +106,13 @@ void     CompressedStream::PreCommit()             { StubReached("CompressedStre
 void CompressedMemoryStream::Close()     { StubReached("CompressedMemoryStream::Close"); }
 void CompressedMemoryStream::PreCommit() { StubReached("CompressedMemoryStream::PreCommit"); }
 void CompressedFileStream::Close()       { StubReached("CompressedFileStream::Close"); }
+
+// ENDGAME B.3.9 IO: the two out-of-line destructors (compressed_stream_release.cpp,
+// file_stream.cpp) stand on Release / Commit / the FileSystem singleton and the
+// port registry. No probe writes a header, opens a file or grows an array, so
+// the host bodies have nothing to release; ~Stream still frees the encoding.
+CompressedStream::~CompressedStream() {}
+CompressedFileStream::~CompressedFileStream() {}
 
 // ---- IO::TextFileStream (runtime/src/io/text_file_stream_win.cpp) ----------
 // Slot 0 is PURE on this class. Slots 1 and 7 are FileStream's, above. What is
