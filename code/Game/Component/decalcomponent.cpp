@@ -35,7 +35,6 @@ typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
 
 // Type ID for DecalDescription at DAT_1401c75b8
-static uint32_t* s_TypeId_DecalDesc = nullptr;
 
 // Terrain decal remove: FUN_1400b0d00(terrainDecalSys, decalId)
 typedef void (*fn_TerrainDecalRemove_t)(void* terrainDecalSys, int decalId);
@@ -81,9 +80,9 @@ void DecalComponent_TerrainDecalRemove(void* terrainDecalSys, int decalId) {
 // ============================================================
 static void* GetDecalDescription(void* self) {
     void* obj = *(void**)((uintptr_t)self + 0x18);
-    if (!obj || !s_fn_IsDerivedFrom_dispatch || !s_TypeId_DecalDesc)
+    if (!obj || !s_fn_IsDerivedFrom_dispatch)
         return nullptr;
-    bool derived = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_DecalDesc);
+    bool derived = s_fn_IsDerivedFrom_dispatch(obj, DecalDescription::TypeId());
     return derived ? obj : nullptr;
 }
 
@@ -136,16 +135,13 @@ typedef void (*fn_EntityFlagUpdate_t)(void* entity);
 static fn_EntityFlagUpdate_t s_fn_EntityFlagUpdate = nullptr;
 static bool s_drawHelpersInit = false;
 
-// DecalDescription type-id (DAT_1401c75b8). That .rdata address resolves NULL in the
-// standalone exe, so fall back to the runtime type
-// registry (valid after Object::Factory::Startup) — same approach as StorageDisplayComponent.
+// ENDGAME B.3.9 C1 (B39_RULES.md D5): 0x1401c75b8 is DecalDescription's
+// registered type-id cell (INVENTORY_C Table 1); it always holds
+// DecalDescription's id once Fill* runs, so the old raw-read-with-fallback
+// (kept in history above) is now mechanically equivalent to the direct static
+// call.
 static uint32_t DecalDescTypeId() {
-    if (s_TypeId_DecalDesc && *s_TypeId_DecalDesc != 0 && *s_TypeId_DecalDesc != 0xFFFFFFFF)
-        return *s_TypeId_DecalDesc;
-    static uint32_t cached = 0;
-    if (cached == 0 || cached == 0xFFFFFFFF) cached = DecalDescription::TypeId();
-    if (cached != 0xFFFFFFFF) return cached;
-    return 0;
+    return DecalDescription::TypeId();
 }
 
 static void EnsureDrawHelpers() {
@@ -154,8 +150,6 @@ static void EnsureDrawHelpers() {
     s_fn_FindComp_Model = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003f60));
     s_pGameStateDraw    = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3dd8));
     s_fn_EntityFlagUpdate = reinterpret_cast<fn_EntityFlagUpdate_t>(ResolveAddr(Module::Exe, 0x1400c3470));
-    if (!s_TypeId_DecalDesc)
-        s_TypeId_DecalDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c75b8));
     if (!s_fn_IsDerivedFrom_dispatch) {
         uintptr_t s = ResolveAddr(Module::Exe, 0x140152a98);
         if (s) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(s);
@@ -215,9 +209,6 @@ void DecalComponent_InitFuncs() {
 
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    s_TypeId_DecalDesc = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c75b8));
 
     s_fn_TerrainDecalRemove = reinterpret_cast<fn_TerrainDecalRemove_t>(
         ResolveAddr(Module::Exe, 0x1400b0d00));

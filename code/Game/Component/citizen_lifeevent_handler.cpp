@@ -48,6 +48,9 @@
 #include <cmath>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Component/InteractComponent.h"     // ENDGAME B.3.9 C1: 0x1401c7900 cell class
+#include "Component/TombstoneComponent.h"    // ENDGAME B.3.9 C1: 0x1401c4a30 cell class
+#include "Component/CemeteryDescription.h"   // ENDGAME B.3.9 C1: 0x1401c40c8 cell class
 
 // ---------------------------------------------------------------- resolved deps
 typedef void*    (*fn_FindCompPos_2ed0_t)(uintptr_t comp, void* outIBP);            // 0x140002ed0
@@ -80,11 +83,6 @@ static fn_FindModel_3f60_t      s_findModel      = nullptr;
 static fn_TerrainPos_9f3e0_t    s_terrainPos     = nullptr;
 static fn_PostLifeEvent_t       s_postLifeEvent  = nullptr;
 
-// Type-id .rdata globals (value 0 until FillTypeIdGlobals_* after Engine::Startup).
-static const uint32_t* s_tid_Interact  = nullptr;   // 0x1401c7900 InteractComponent
-static const uint32_t* s_tid_Tombstone = nullptr;   // 0x1401c4a30 TombstoneComponent
-static const uint32_t* s_tid_CemDesc   = nullptr;   // 0x1401c40c8 CemeteryDescription
-
 static bool s_resolved = false;
 static void EnsureResolved() {
     if (s_resolved) return;
@@ -102,9 +100,6 @@ static void EnsureResolved() {
     s_findModel     = reinterpret_cast<fn_FindModel_3f60_t>(ResolveAddr(Module::Exe, 0x140003f60));
     s_terrainPos    = reinterpret_cast<fn_TerrainPos_9f3e0_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
     s_postLifeEvent = reinterpret_cast<fn_PostLifeEvent_t>(ResolveAddr(Module::Exe, 0x140113af0));
-    s_tid_Interact  = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7900));
-    s_tid_Tombstone = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4a30));
-    s_tid_CemDesc   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c40c8));
 }
 
 
@@ -161,7 +156,7 @@ extern "C" uint32_t Cemetery_PickFreeSlot_6c60(void* cemCompV) {
     void* rng = *reinterpret_cast<void**>(world + 0xd8);
     int idx = static_cast<int>(reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(count)));   // B.3.4b bridge
     int64_t map = *reinterpret_cast<int64_t*>(world + 0xf8);
-    uint32_t tid = s_tid_Tombstone ? *s_tid_Tombstone : 0;
+    uint32_t tid = TombstoneComponent::TypeId();
     for (int tries = 0; tries < count; tries++) {
         int cell = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(self + 0x48)
                                            + static_cast<int64_t>(idx) * 4);
@@ -192,7 +187,7 @@ extern "C" void** Cemetery_FindNearestWithSlot_9740(void* listMgrV, void** out, 
     int* map = *reinterpret_cast<int**>(world + 0xf8);
     int best = 0x7fffffff;
     int count = *reinterpret_cast<int*>(listMgr + 0x48);
-    uint32_t tidInteract = s_tid_Interact ? *s_tid_Interact : 0;
+    uint32_t tidInteract = InteractComponent::TypeId();
     for (int i = 0; i < count; i++) {
         void** slot = reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(listMgr + 0x40)
                                                + static_cast<int64_t>(i) * 8);
@@ -236,7 +231,7 @@ extern "C" void** Cemetery_FindNearestWithSlot_9740(void* listMgrV, void** out, 
 extern "C" void** ComponentEntity_FindTombstoneComp_4800(void* entityV, void** outIBP) {
     EnsureResolved();
     void* found = FindComponentByTypeId(reinterpret_cast<uint8_t*>(entityV),
-                                        s_tid_Tombstone ? *s_tid_Tombstone : 0);
+                                        TombstoneComponent::TypeId());
     if (fn_InternalBasePtr_Ctor) new (outIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     else *outIBP = found;
@@ -318,8 +313,8 @@ extern "C" void Cemetery_SpawnTombstone_6a90(void* cemCompV, int cell,
         ? *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(resIBPp) + 0x30) : 0;
     // Tombstone description lives at CemeteryDescription+0x20.
     void* desc = *reinterpret_cast<void**>(cem + 0x18);
-    void* cemDesc = (desc && fn_IsDerivedFrom && s_tid_CemDesc
-                     && fn_IsDerivedFrom(desc, *s_tid_CemDesc)) ? desc : nullptr;
+    void* cemDesc = (desc && fn_IsDerivedFrom
+                     && fn_IsDerivedFrom(desc, CemeteryDescription::TypeId())) ? desc : nullptr;
     // [STANDALONE GUARD] retail trusts the IsDerivedFrom gate then derefs
     // unguarded; type-ids can be unfilled early in standalone, so trust the
     // raw description (mirrors tombstonecomponent.cpp's OnCreate note).

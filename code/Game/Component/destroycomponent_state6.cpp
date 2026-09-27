@@ -104,9 +104,6 @@ static fn_FindIBP_t         s_findStorage   = nullptr;  // 0x140006270 (StorageC
 static fn_FindIBP_t         s_findPicking   = nullptr;  // 0x140026a30 (PickingComponent)
 static fn_ModelNotify_t     s_modelNotify   = nullptr;
 static fn_PickRebuild_t     s_pickRebuild   = nullptr;
-static uint32_t*            s_tidDestroyDesc = nullptr;  // 0x1401c7628
-static uint32_t*            s_tidModelDesc   = nullptr;  // 0x1401c7a88
-static uint32_t*            s_tidDecalComp   = nullptr;  // 0x1401c7580
 
 static bool s_resolved = false;
 static void EnsureResolved() {
@@ -117,9 +114,6 @@ static void EnsureResolved() {
     s_findPicking   = reinterpret_cast<fn_FindIBP_t>(ResolveAddr(Module::Exe, 0x140026a30));
     s_modelNotify   = reinterpret_cast<fn_ModelNotify_t>(ResolveAddr(Module::Exe, 0x1400c2b70));
     s_pickRebuild   = reinterpret_cast<fn_PickRebuild_t>(ResolveAddr(Module::Exe, 0x140128f50));
-    s_tidDestroyDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7628));
-    s_tidModelDesc   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
-    s_tidDecalComp   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7580));
 }
 
 static uint32_t TidDestroyDesc() {

@@ -14,6 +14,7 @@
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
+#include "Component/ConsumeProduceDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7388 cell class
 #include <cstdint>
 #include <cstdio>
 #include <new>
@@ -31,9 +32,6 @@
 // which would zero). (The free ConsumeProduceComponent_ResizeArray copy and its
 // reader-less 0x140023a00 row went at the B.3.8 close.)
 
-// DWORD_1401c7388 — ConsumeProduceDescription type ID
-static uint32_t* s_TypeId_ConsumeProduceDescription = nullptr;
-
 // fn_IsDerivedFrom — dispatch slot at 0x140152a98
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
@@ -44,9 +42,6 @@ static void EnsureHelpers() {
     if (s_initialized) return;
 
     uintptr_t slot;
-    // ConsumeProduceDescription type ID at 0x1401c7388
-    s_TypeId_ConsumeProduceDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7388));
 
     // IsDerivedFrom via dispatch slot
     slot = ResolveAddr(Module::Exe, 0x140152a98);
@@ -95,8 +90,8 @@ static void EnsureHelpers() {
 void ConsumeProduceComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[ConsumeProduceComponent] Funcs resolved: TypeId=%p IsDerived=%p\n",
-           (void*)s_TypeId_ConsumeProduceDescription,
+    printf("[ConsumeProduceComponent] Funcs resolved: TypeId=%u IsDerived=%p\n",
+           ConsumeProduceDescription::TypeId(),
            (void*)s_fn_IsDerivedFrom_dispatch);
 #endif
 }
@@ -206,7 +201,7 @@ void       ConsumeProduceComponent::Persist(void* stream) {
 void       ConsumeProduceComponent::Startup() {
     EnsureHelpers();
 
-    if (!s_fn_IsDerivedFrom_dispatch || !s_TypeId_ConsumeProduceDescription)
+    if (!s_fn_IsDerivedFrom_dispatch)
         return;
 
     void* entity = _entity;
@@ -234,7 +229,7 @@ void       ConsumeProduceComponent::Startup() {
 
     // Find ConsumeProduceDescription in component list
     void* desc = nullptr;
-    uint32_t targetTypeId = *s_TypeId_ConsumeProduceDescription;
+    uint32_t targetTypeId = ConsumeProduceDescription::TypeId();
 
     for (int i = 0; i < compCount; i++) {
         void* comp = compArray[i];

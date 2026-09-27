@@ -30,6 +30,7 @@
 #include "Component/AbsorbResourceComponent.h"
 
 #include "Component/coll_bridge.h"
+#include "Component/RawMaterialComponent.h"   // ENDGAME B.3.9 C1: 0x1401c7c80 cell class
 
 using AbsorbResourceCtrlDispatch = ::ControllerLive::Dispatcher<AbsorbResourceCtrlTag>;
 
@@ -71,7 +72,9 @@ extern "C" char AbsorbResource_State0Tick(void* compV, void* /*sm*/, void* /*tim
     const auto canAdd = reinterpret_cast<fn_AbsorbStorageCanAdd_t>(ResolveAddr(Module::Exe, 0x14012cd80));
     const auto add = reinterpret_cast<fn_AbsorbStorageAdd_t>(ResolveAddr(Module::Exe, 0x14012d000));
     const auto markRemoval = reinterpret_cast<fn_AbsorbMarkRemoval_t>(ResolveAddr(Module::Exe, 0x1400c2ea0));
-    const uint32_t* tidRawMaterial = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7c80));
+    // ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c7c80 is RawMaterialComponent's registered
+    // type-id cell (INVENTORY_C Table 1), read here BY CELL, not by the old local's name.
+    const uint32_t tidRawMaterial = RawMaterialComponent::TypeId();
 
     const int64_t entity = *reinterpret_cast<int64_t*>(comp + 0x10);
     uintptr_t map = 0;
@@ -98,8 +101,8 @@ extern "C" char AbsorbResource_State0Tick(void* compV, void* /*sm*/, void* /*tim
             const int64_t comps = *reinterpret_cast<int64_t*>(cellEntity + 0x30);
             for (int i = 0; i < compCount; ++i) {
                 ::Component* c = *reinterpret_cast<::Component**>(comps + static_cast<int64_t>(i) * 8);
-                if (c->Type() != *tidRawMaterial) continue;
-                if (fn_IsDerivedFrom(c, *tidRawMaterial)) rawMaterial = c;
+                if (c->Type() != tidRawMaterial) continue;
+                if (fn_IsDerivedFrom(c, tidRawMaterial)) rawMaterial = c;
                 break;
             }
             int64_t rmIBP = 0;

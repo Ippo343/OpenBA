@@ -79,6 +79,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CIT (TypeId)
+#include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7cb8 cell class
 
 namespace {
 
@@ -117,9 +118,7 @@ static fn_showTool_t     s_fn_showTool    = nullptr;
 // --- message-id / type-id globals (exe .rdata). Self-contained bricks: 70e8/7158/42c0
 //     are unregistered (read 0); 7cb8 (RawMaterialDescription) is registered+filled. ---
 static const uint32_t* s_pMsgId_70e8 = nullptr;  // DWORD_1401c70e8
-static const uint32_t* s_pMsgId_7158 = nullptr;  // DWORD_1401c7158
 static const uint32_t* s_pMsgId_42c0 = nullptr;  // DAT_1401c42c0 (HappinessComponent id)
-static const uint32_t* s_pTid_7cb8   = nullptr;  // DWORD_1401c7cb8 (RawMaterialDescription/limit)
 
 // --- float consts (exe .rdata) ---
 static const float* s_pf_172124 = nullptr;  // 0.75
@@ -144,9 +143,7 @@ static void EnsureInit() {
     s_fn_pickupStored = reinterpret_cast<fn_pickupStored_t>(ResolveAddr(Module::Exe, 0x1400ca520));
     s_fn_showTool     = reinterpret_cast<fn_showTool_t    >(ResolveAddr(Module::Exe, 0x140042890));
     s_pMsgId_70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
-    s_pMsgId_7158 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
     s_pMsgId_42c0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c42c0));
-    s_pTid_7cb8   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
     s_pf_172124 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172124));
     s_pf_172174 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172174));
     s_pf_172194 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172194));
@@ -159,17 +156,12 @@ static void EnsureInit() {
 // Convenience: guarded reads.
 static inline uint32_t MsgId(const uint32_t* p) { return p ? *p : 0u; }
 
-// c7158 (CitizenComponent) is NOT registered in standalone -> reads 0, so a
-// SendComponentMessage targeting the CitizenComponent can never match a component
-// (SendComponentMessage::AbstractImpl returns 2, message silently dropped) and the
-// need-credit is lost. This starved happiness (msg 1 -> +0xac) so SeekHappiness
-// (candidate prio 5) validated forever. Heal to the live GetTypeIdByName CRC — the
-// same value the CitizenComponent live vtable's GetTypeId returns, so the scan matches.
-// Unambiguous here: every c7158 use in this file targets the CitizenComponent.
+// ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c7158 is CitizenComponent's registered
+// type-id cell (INVENTORY_C Table 1); it always holds CitizenComponent's id after
+// Fill*, so the previous "heal to the class static when the raw read is 0" fallback
+// (kept as history above) is now mechanically equivalent to calling the static
+// directly. Unambiguous here: every c7158 use in this file targets CitizenComponent.
 static inline uint32_t MsgId7158() {
-    uint32_t raw = MsgId(s_pMsgId_7158);
-    if (raw != 0) return raw;
-    // B.3.8 CIT (B6-5): the class's own record, no lazy first-use cache.
     return CitizenComponent::TypeId();
 }
 static inline float    Fc(const float* p, float dflt) { return p ? *p : dflt; }
@@ -248,7 +240,7 @@ static void PushMoveTo(void* param_1, int64_t* stack, uint32_t pathType, float* 
 // null. Used by Ctor5/Ctor10 (the original's pIVar6 scan).
 static void* FindLimitComponent(int64_t listObj) {
     void* found = nullptr;
-    uint32_t want = s_pTid_7cb8 ? *s_pTid_7cb8 : 0;
+    uint32_t want = RawMaterialDescription::TypeId();
     int n = *reinterpret_cast<int*>(listObj + 0x30);
     if (0 < n) {
         int idx = 0; int64_t byteOff = 0;
@@ -259,7 +251,7 @@ static void* FindLimitComponent(int64_t listObj) {
             if (tid == want) {
                 int64_t arr2 = *reinterpret_cast<int64_t*>(listObj + 0x28);
                 void* match = *reinterpret_cast<void**>(arr2 + static_cast<int64_t>(idx) * 8);
-                if (s_pTid_7cb8 && fn_IsDerivedFrom && fn_IsDerivedFrom(match, *s_pTid_7cb8))
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(match, want))
                     found = match;
                 break;
             }

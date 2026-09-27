@@ -19,6 +19,7 @@
 #include "graphics/Scene.h"
 #include "graphics/Geometry.h"
 #include "Component/statusiconcomponent_funcs.h"
+#include "Component/StatusIconDescription.h"
 #include "Component/ModelComponent.h"
 #include "Component/MultiObjectComponent.h"
 #include "scene_watch.h"
@@ -49,10 +50,6 @@ static fn_Time_Ctor_t s_fn_Time_Ctor = nullptr;
 typedef void (*fn_EntityNotify_t)(void* entity);
 static fn_EntityNotify_t s_fn_EntityNotify = nullptr;
 
-// StatusIconDescription type ID at 0x1401c7e40
-static uint32_t* s_TypeId_StatusIconDesc = nullptr;
-
-
 static bool s_helpersResolved = false;
 
 static void EnsureHelpers() {
@@ -71,10 +68,6 @@ static void EnsureHelpers() {
 
     s_fn_EntityNotify = reinterpret_cast<fn_EntityNotify_t>(
         ResolveAddr(Module::Exe, 0x1400c3470));
-
-    // Type ID pointer
-    s_TypeId_StatusIconDesc = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7e40));
 
     s_helpersResolved = true;
 }
@@ -119,12 +112,12 @@ void StatusIconComponent_GeometrySetup(void* geometry, float param2, int spriteC
 // ============================================================
 static void* GetStatusIconDescription(uintptr_t self) {
     EnsureHelpers();
-    if (!fn_IsDerivedFrom || !s_TypeId_StatusIconDesc) return nullptr;
+    if (!fn_IsDerivedFrom) return nullptr;
 
     void* obj = *(void**)(self + 0x18);
     if (!obj) return nullptr;
 
-    bool derived = fn_IsDerivedFrom(obj, *s_TypeId_StatusIconDesc);
+    bool derived = fn_IsDerivedFrom(obj, StatusIconDescription::TypeId());
     return derived ? obj : nullptr;
 }
 
@@ -701,8 +694,8 @@ void StatusIconComponent::Tick(void* /*time*/) {
     }
 
     void* descObj = *(void**)(c + 0x18);
-    void* desc = (fn_IsDerivedFrom && s_TypeId_StatusIconDesc &&
-                  fn_IsDerivedFrom(descObj, *s_TypeId_StatusIconDesc)) ? descObj : nullptr;
+    void* desc = (fn_IsDerivedFrom &&
+                  fn_IsDerivedFrom(descObj, StatusIconDescription::TypeId())) ? descObj : nullptr;
 
     float pos[3];
     pos[0] = 0.0f;

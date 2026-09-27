@@ -74,7 +74,6 @@ static fn_EmitterStartup_t s_fn_EmitterStartup = nullptr;
 
 // The original OnRemove is too complex for clean reimpl — use direct call
 
-static uint32_t* s_pParticleDescTypeId = nullptr;  // DAT_1401c4758
 static float* s_pUVScale = nullptr;  // g_fUVScale (constant 1.0)
 static float PC_UVScale();  // defined with the helper ports below
 
@@ -91,13 +90,11 @@ static bool s_initialized = false;
 // active workplace), so the re-bucket is safe AND required to drive the tick. Always on.
 static bool PC_RebucketEntity() { return true; }
 
-// ParticleDescription type id — the exe .rdata slot ResolveAddr returns NULL
-// (raw .rdata is not registered), so fall back to
-// the runtime type registry (valid after Object::Factory::Startup).
+// ParticleDescription type id — cell 0x1401c4758 was unregistered (ResolveAddr
+// always returned NULL), so the raw read fell back to ParticleDescription::TypeId()
+// unconditionally; converting by cell (D5) is mechanically equivalent to the old
+// fallback path.
 static uint32_t PC_DescTypeId() {
-    if (s_pParticleDescTypeId && *s_pParticleDescTypeId != 0 &&
-        *s_pParticleDescTypeId != 0xFFFFFFFF)
-        return *s_pParticleDescTypeId;
     const uint32_t id = ParticleDescription::TypeId();
     if (id != 0 && id != 0xFFFFFFFF) return id;
     return 0;
@@ -503,8 +500,6 @@ void ParticleComponent_InitFuncs() {
     s_fn_EmitterStartup = reinterpret_cast<fn_EmitterStartup_t>(
         ResolveAddr(Module::Exe, 0x140053660));
 
-    s_pParticleDescTypeId = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c4758));
     s_pUVScale = reinterpret_cast<float*>(
         ResolveAddr(Module::Exe, 0x140172234));  // g_fUVScale
 

@@ -12,6 +12,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/interactcomponent_funcs.h"
+#include "Component/MultiObjectComponent.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -43,9 +44,6 @@ static fn_IBP_Ctor_t s_fn_IBP_Ctor = nullptr;
 typedef void (*fn_FindMultiObjComp_t)(uintptr_t entity, void* retBuf);
 static fn_FindMultiObjComp_t s_fn_FindMultiObjComp = nullptr;
 
-// Type ID: DAT_1401c7900 -- InteractComponent type for IsDerivedFrom
-static uint32_t* s_TypeId_Interact = nullptr;
-
 static bool s_helpersResolved = false;
 
 static void EnsureHelpers() {
@@ -62,9 +60,6 @@ static void EnsureHelpers() {
 
     s_fn_FindMultiObjComp = reinterpret_cast<fn_FindMultiObjComp_t>(
         ResolveAddr(Module::Exe, 0x140004740));
-
-    s_TypeId_Interact = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7900));
 
     s_helpersResolved = true;
 }
@@ -100,21 +95,19 @@ static inline bool SerializerIsLoading(void* serializer) {
 // Shared callee: also used from buildcomponent.cpp (BuildComponent::Draw).
 void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf) {
     EnsureHelpers();
-    static uint32_t* s_pTId_Workplace = nullptr;
-    if (!s_pTId_Workplace)
-        s_pTId_Workplace = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7ac0));
+    const uint32_t tidWorkplace = MultiObjectComponent::TypeId();   // cell 0x1401c7ac0 (D5)
 
     void* found = nullptr;
-    if (s_pTId_Workplace) {
+    {
         int count = *(int*)(entity + 0x38);
         int64_t arr = *(int64_t*)(entity + 0x30);
         for (int i = 0; i < count; i++) {
             int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
             void* comp = (void*)*slot;
             uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
-            if (tid == *s_pTId_Workplace) {
+            if (tid == tidWorkplace) {
                 void* c = (void*)*slot;
-                if (s_fn_IsDerivedFrom_dispatch && s_fn_IsDerivedFrom_dispatch(c, *s_pTId_Workplace))
+                if (s_fn_IsDerivedFrom_dispatch && s_fn_IsDerivedFrom_dispatch(c, tidWorkplace))
                     found = c;
                 break;
             }
@@ -140,9 +133,8 @@ void InteractComponent_InitFuncs() {
 
 #ifdef _DEBUG
     printf("[InteractComponent] Funcs resolved: "
-           "FindWorkplace=%p TypeId=%p\n",
-           (void*)s_fn_FindMultiObjComp,
-           (void*)s_TypeId_Interact);
+           "FindWorkplace=%p\n",
+           (void*)s_fn_FindMultiObjComp);
 #endif
 }
 
@@ -213,8 +205,8 @@ void InteractComponent::Persist(void* stream) {
         // Validate with IsDerivedFrom
         void* ptr = *reinterpret_cast<void**>(element);
         if (ptr != nullptr) {
-            if (s_fn_IsDerivedFrom_dispatch && s_TypeId_Interact) {
-                bool valid = s_fn_IsDerivedFrom_dispatch(ptr, *s_TypeId_Interact);
+            if (s_fn_IsDerivedFrom_dispatch) {
+                bool valid = s_fn_IsDerivedFrom_dispatch(ptr, InteractComponent::TypeId());
                 if (!valid) {
                     *reinterpret_cast<uint64_t*>(element) = 0;
                 }
@@ -251,10 +243,10 @@ void InteractComponent::OnAdded() {
             int64_t* slot = (int64_t*)(harr + (int64_t)k * 8);
             void* comp = (void*)*slot;
             uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
-            if (tid == (s_TypeId_Interact ? *s_TypeId_Interact : 0xffffffff)) {
+            if (tid == InteractComponent::TypeId()) {
                 void* c = (void*)*slot;
-                if (s_fn_IsDerivedFrom_dispatch && s_TypeId_Interact &&
-                    s_fn_IsDerivedFrom_dispatch(c, *s_TypeId_Interact))
+                if (s_fn_IsDerivedFrom_dispatch &&
+                    s_fn_IsDerivedFrom_dispatch(c, InteractComponent::TypeId()))
                     interact = c;
                 break;
             }
