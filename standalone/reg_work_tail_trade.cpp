@@ -24,12 +24,6 @@ extern "C" void  TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2);     
 extern "C" void* TradeWork_Insert_c710(int64_t* param_1, void** param_2, int64_t p3); // 0x14002c710
 extern "C" void* TradeWork_NodeAlloc_c830(void* unused, uint64_t* src, int64_t parent); // 0x14002c830
 
-// TradeWork::Slot4 trade-assignment port (code/Game/Work/tradework.cpp). Its exe callees are
-// all registered (closure verified); dispatched via the TradeWork vtable Execute slot, but
-// registered at its own address too to match the PastureWork::Slot4 precedent.
-struct TradeWork;
-int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t param3, uint64_t param4); // 0x1400f5d40
-
 // Type-id read by the c8a0 IsDerivedFrom. DWORD_1401c7158 = CitizenComponent
 // (CORRECTED 2026-07-19: the slot's [DATA] writer is CitizenComponent_RegisterType
 // @0x14014e7b5 — Object::BaseTypeInfo(&DWORD_1401c7158, "CitizenComponent", ...).
@@ -69,6 +63,5 @@ void RegisterWorkTailTradeBatch() {
     RegisterExeAddr(0x14002c830, reinterpret_cast<uintptr_t>(&TradeWork_NodeAlloc_c830));
     RegisterExeAddr(0x14002c710, reinterpret_cast<uintptr_t>(&TradeWork_Insert_c710));
     RegisterExeAddr(0x14002c8a0, reinterpret_cast<uintptr_t>(&TradeWork_Serialize_c8a0));
-    RegisterExeAddr(0x1400f5d40, reinterpret_cast<uintptr_t>(&TradeWork_Slot4_Impl));
     // NB: 0x1401c7158 is intentionally NOT registered here (see note above).
 }

@@ -24,64 +24,46 @@
 // elements. array1 is a per-element loop (SerializeBytes(4)+Serialize(byte)+
 // Serialize(uint)); arrays 2/3/4 are bulk serializes. GetVersion (vtable +0x18,
 // exe 0x1400a4780) = 0x401 (verified: `mov eax,0x401; ret`).
+//
+// ENDGAME B.3.8 block LOOP: a REAL class (code/Game/Game/NameDatabase.h, field
+// layout and retail slot map there) with a compiler-generated vtable. Gone: the
+// hand-built 9-slot `g_NDB_Vtable`, its stubs, the lazily-resolved resize
+// pointers (a non-atomic first-call cache, B6-5) and the C entry points.
 
+#include "Game/NameDatabase.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "collection/Collection.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
+#include "object/Internal.h" // Object::detail::InternalMemAlloc / InternalMemFree
 #include <cstdint>
 #include <cstdio>
 #include <new>
 
-static constexpr uintptr_t kVtableAddr = 0x14015eea0;
-static constexpr int       kSize       = 0x60;
-
-// Array resize helpers (exe addresses; we register our reimpls for these).
-static constexpr uintptr_t kResizeArr1 = 0x14001c7c0;  // stride 0xc
-static constexpr uintptr_t kResizeArr2 = 0x14001c890;  // stride 0x2
-static constexpr uintptr_t kResizeArr3 = 0x14000a590;  // stride 0x1 (byte)
-static constexpr uintptr_t kResizeArr4 = 0x1400021d0;  // stride 0x4
-
-typedef void  (*Resize_t)(void* arrayHeader, int newCount);
-
-static Resize_t         s_resize1    = nullptr;
-static Resize_t         s_resize2    = nullptr;
-static Resize_t         s_resize3    = nullptr;
-static Resize_t         s_resize4    = nullptr;
-static bool             s_resolved   = false;
-
-static void NameDatabase_ResolveFuncs() {
-    if (s_resolved) return;
-    s_resolved = true;
-
-    s_resize1 = reinterpret_cast<Resize_t>(ResolveAddr(Module::Exe, kResizeArr1));
-    s_resize2 = reinterpret_cast<Resize_t>(ResolveAddr(Module::Exe, kResizeArr2));
-    s_resize3 = reinterpret_cast<Resize_t>(ResolveAddr(Module::Exe, kResizeArr3));
-    s_resize4 = reinterpret_cast<Resize_t>(ResolveAddr(Module::Exe, kResizeArr4));
-}
+// Array resize helpers — the bodies registered at the four exe addresses
+// (address_registry.cpp), called directly. The old lazily-resolved pointers
+// (a non-atomic first-call cache, B6-5) resolved to exactly these.
+extern "C" void Reimpl_Array_Resize_Stride0C(void* arrayHeader, int newCount);  // 0x14001c7c0
+extern "C" void Reimpl_Array_Resize_Stride02(void* arrayHeader, int newCount);  // 0x14001c890
+extern "C" void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount);      // 0x14000a590
+extern "C" void Reimpl_Array_Resize_Stride04(void* arrayHeader, int newCount);  // 0x1400021d0
 
 // ============================================================
-// NameDatabase::Init — base ctor + vtable + zero the four arrays
+// NameDatabase::NameDatabase — factory sub_c660 body
 // ============================================================
-// Mirrors MenuScene_Setup_sub_c660 (0x1400a...c660).
-static void NameDatabase_Init(void* mem) {
-    if (!mem) return;
-    uint8_t* s = reinterpret_cast<uint8_t*>(mem);
-    if (fn_External_External) fn_External_External(mem);     // Object::External base
-    *(void**)mem = (void*)ResolveAddr(Module::Exe, kVtableAddr);
-    // Four {data,count,cap} array headers at +0x20..+0x5F → all zero.
-    for (int off = 0x20; off < 0x60; off += 8)
-        *(uint64_t*)(s + off) = 0;
+// External() and the 0x14015eea0 stamp are the compiler's; the four
+// {data,count,cap} array headers at +0x20..+0x5F are zeroed.
+NameDatabase::NameDatabase() {
+    _array1 = nullptr; _array1Count = 0; _array1Capacity = 0;
+    _array2 = nullptr; _array2Count = 0; _array2Capacity = 0;
+    _array3 = nullptr; _array3Count = 0; _array3Capacity = 0;
+    _array4 = nullptr; _array4Count = 0; _array4Capacity = 0;
 }
 
 // ============================================================
 // NameDatabase::Serialize (vtable +0x28) — faithful port of 0x1400a45e0
 // ============================================================
-extern "C" void NameDatabase_Serialize(void* self, void* stream) {
-    if (!self) return;
-    NameDatabase_ResolveFuncs();
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-
+bool NameDatabase::Serialize(void* stream) {
     alignas(8) uint8_t ser[24];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
@@ -92,11 +74,11 @@ extern "C" void NameDatabase_Serialize(void* self, void* stream) {
     };
 
     // --- array1: stride 0xc (3 fields/elem) ---
-    int c1 = *(int*)(s + 0x28);
+    int c1 = _array1Count;
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(c1, nullptr);   // B.3.4 bridge
-    if (isLoading() && s_resize1) s_resize1(s + 0x20, c1);
+    if (isLoading()) Reimpl_Array_Resize_Stride0C(&_array1, c1);
     if (c1 > 0) {
-        uint8_t* p = *(uint8_t**)(s + 0x20);   // element0
+        uint8_t* p = reinterpret_cast<uint8_t*>(_array1);   // element0
         for (int i = 0; i < c1; ++i) {
             // field0: 4 raw bytes
             reinterpret_cast<IO::Serializer*>(ser)->SerializeBytes(4, p + 0x0, nullptr);   // B.3.4 bridge
@@ -109,98 +91,85 @@ extern "C" void NameDatabase_Serialize(void* self, void* stream) {
     }
 
     // --- array2: stride 0x2 (uint16) — bulk ---
-    int c2 = *(int*)(s + 0x38);
+    int c2 = _array2Count;
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(c2, nullptr);   // B.3.4 bridge
-    if (isLoading() && s_resize2) s_resize2(s + 0x30, c2);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c2, reinterpret_cast<unsigned short*>(*(void**)(s + 0x30)), nullptr);   // B.3.4 bridge
+    if (isLoading()) Reimpl_Array_Resize_Stride02(&_array2, c2);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c2, reinterpret_cast<unsigned short*>(_array2), nullptr);   // B.3.4 bridge
 
     // --- array3: stride 0x1 (byte buffer) — bulk ---
-    int c3 = *(int*)(s + 0x48);
+    int c3 = _array3Count;
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(c3, nullptr);   // B.3.4 bridge
-    if (isLoading() && s_resize3) s_resize3(s + 0x40, c3);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c3, reinterpret_cast<unsigned char*>(*(void**)(s + 0x40)), nullptr);   // B.3.4 bridge
+    if (isLoading()) Reimpl_Array_Resize_Byte(&_array3, c3);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c3, reinterpret_cast<unsigned char*>(_array3), nullptr);   // B.3.4 bridge
 
     // --- array4: stride 0x4 (int) — bulk ---
-    int c4 = *(int*)(s + 0x58);
+    int c4 = _array4Count;
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(c4, nullptr);   // B.3.4 bridge
-    if (isLoading() && s_resize4) s_resize4(s + 0x50, c4);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c4, reinterpret_cast<int*>(*(void**)(s + 0x50)), nullptr);   // B.3.4 bridge
+    if (isLoading()) Reimpl_Array_Resize_Stride04(&_array4, c4);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c4, reinterpret_cast<int*>(_array4), nullptr);   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    return true;
 }
 
 // ============================================================
-// NameDatabase::Dtor (vtable +0x00) — free arrays then base dtor
+// NameDatabase::~NameDatabase / DeletingDtor (vtable +0x00)
 // ============================================================
 // Mirrors 0x14001c790 -> FUN_1400a4790.
-extern "C" void* NameDatabase_Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtableAddr);
-    // ENDGAME B.3.2 step 2: four trivial-element `Collection::Array::~Array`s,
-    // back to front (+0x50 int32, +0x40 byte, +0x30, +0x20). Each was
-    // MemFree(data); data = 0; one qword over size+capacity = 0 —
-    // `rtcoll::ArrayDtorImpl` exactly, with no element step. The int32 and
-    // byte arrays are trait-derived rows; the two at +0x20/+0x30 are not pinned
-    // to an element type here, so the header alias is used for all four.
-    for (int off = 0x50; off >= 0x20; off -= 0x10)
-        reinterpret_cast<rtcoll::ArrayHdr*>(s + off)->~Array();   // B.3.2 bridge
-    if (fn_External_Dtor) fn_External_Dtor(self);            // base dtor
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// ENDGAME B.3.2 step 2: four trivial-element `Collection::Array::~Array`s,
+// back to front (+0x50 int32, +0x40 byte, +0x30, +0x20). Each was
+// MemFree(data); data = 0; one qword over size+capacity = 0 —
+// `rtcoll::ArrayDtorImpl` exactly, with no element step. The header alias is
+// used for all four. External::~External is the compiler's chain.
+NameDatabase::~NameDatabase() {
+    reinterpret_cast<rtcoll::ArrayHdr*>(&_array4)->~Array();   // B.3.2 bridge
+    reinterpret_cast<rtcoll::ArrayHdr*>(&_array3)->~Array();
+    reinterpret_cast<rtcoll::ArrayHdr*>(&_array2)->~Array();
+    reinterpret_cast<rtcoll::ArrayHdr*>(&_array1)->~Array();
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t NameDatabase_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("NameDatabase");
-    return cached;
-}
-static int   NDB_Return0x401(void* /*self*/) { return 0x401; }  // GetVersion
-static int   NDB_Return1(void* /*self*/)     { return 1; }      // vtable +0x20
-static int   NDB_Return0(void* /*self*/)     { return 0; }
-static void* NDB_ReturnNull(void*, ...)      { return nullptr; }
-extern "C" void* NameDatabase_CreateInPlace(void* mem);
-
-// NameDatabase::Cleanup (vtable +0x30, 0x14001c730): dtor(self,0) then re-init.
-static void* NameDatabase_Cleanup(void* self) {
-    if (!self) return self;
-    NameDatabase_Dtor(self, 0);
-    NameDatabase_Init(self);
-    return self;
+Object::Base* NameDatabase::DeletingDtor(unsigned flags) {
+    this->~NameDatabase();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-// vtable @ 0x14015eea0 — 9 slots (+0x00..+0x40); string data follows in .rdata.
-static void* g_NDB_Vtable[9] = {
-    reinterpret_cast<void*>(&NameDatabase_Dtor),        // +0x00 dtor
-    reinterpret_cast<void*>(&NDB_ReturnNull),           // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&NameDatabase_GetTypeId),   // +0x10 GetTypeId
-    reinterpret_cast<void*>(&NDB_Return0x401),          // +0x18 GetVersion=0x401
-    reinterpret_cast<void*>(&NDB_Return1),              // +0x20 (returns 1)
-    reinterpret_cast<void*>(&NameDatabase_Serialize),   // +0x28 Serialize
-    reinterpret_cast<void*>(&NameDatabase_Cleanup),     // +0x30 Cleanup
-    reinterpret_cast<void*>(&NDB_Return0),              // +0x38 GetDesc forwarder
-    reinterpret_cast<void*>(&NameDatabase_CreateInPlace), // +0x40 CreateInPlace
-};
-
-extern "C" void RegisterNameDatabaseVtable() {
-    RegisterExeAddr(kVtableAddr, reinterpret_cast<uintptr_t>(g_NDB_Vtable));
+// NameDatabase::Reconstruct (vtable +0x30, 0x14001c730): dtor(self,0) then re-init.
+Object::External* NameDatabase::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) NameDatabase();
 }
 
-extern "C" void* NameDatabase_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, kSize, 8);
+// [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
+// slot 0 with flags 0 (destroy, no free).
+void NameDatabase::Destruct() { DeletingDtor(0); }
+
+// [8] 0x14001c6d0 — placement-new of the class on `this`.
+Object::External* NameDatabase::Construct() {
+    return ::new (static_cast<void*>(this)) NameDatabase();
+}
+
+// ============================================================
+// Reflection: create / createInPlace, the registration
+// ============================================================
+void* NameDatabase::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(NameDatabase), 8);
     if (!p) return nullptr;
-    NameDatabase_Init(p);
-    return p;
+    return static_cast<Object::Base*>(::new (p) NameDatabase());
 }
-extern "C" void* NameDatabase_CreateInPlace(void* mem) {
-    if (!mem) return nullptr;
-    NameDatabase_Init(mem);
-    return mem;
+void* NameDatabase::CreateInPlaceObject(void* memory) {
+    if (!memory) return nullptr;
+    return static_cast<Object::Base*>(::new (memory) NameDatabase());
 }
 
-REGISTER_TYPE_FULL(NameDatabase, "Object::External", "ndb",
-                   &NameDatabase_Factory, &NameDatabase_CreateInPlace);
+DEFINE_EXE_VTABLE(NameDatabase, "_ZTV12NameDatabase")
+
+// B38_RULES D5: nothing in the tree reads 0x14015eea0 back (swept by hex and
+// owner); this row is reader-less and serves the compiler table only so the
+// coordinator-owned call in address_registry.cpp keeps linking. The closing
+// pass deletes it with the call.
+extern "C" void RegisterNameDatabaseVtable() {
+    RegisterExeAddr(0x14015eea0, reinterpret_cast<uintptr_t>(NameDatabase::Vtable()));
+}
+
+DEFINE_EXE_TYPE_EXT(NameDatabase, "Object::External", "ndb")

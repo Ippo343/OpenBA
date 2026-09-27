@@ -32,6 +32,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CB3: CitizenComponent::TypeId()
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -155,7 +156,7 @@ bool PerformWork_ResolveFuncs() {
     s_tid_CitizenComponent = g_TypeId_CitizenComponent_FC;
     if (!s_tid_CitizenComponent) {
         if (!s_tid_CitizenComponent_storage)
-            s_tid_CitizenComponent_storage = ::Object::GetTypeIdByName("CitizenComponent");
+            s_tid_CitizenComponent_storage = CitizenComponent::TypeId();
         if (s_tid_CitizenComponent_storage)
             s_tid_CitizenComponent = &s_tid_CitizenComponent_storage;
     }
@@ -207,27 +208,19 @@ bool PerformWork_ResolveFuncs() {
 }
 
 // ============================================================
-// PerformWork::BaseDtor (0x140022B70) -- slot 2
-// Returns TypeInfo for PerformWork (tiny, unhookable).
-// ============================================================
-uint32_t PerformWork_BaseDtor_Impl() {
-    return *s_typeInfo_PerformWork;
-}
-
-// ============================================================
 // PerformWork::Serialize (0x1400C9550)
 // Serializes: status(+0x18), entity(+0x20) with CitizenAI type check,
 //   float(+0x28), int(+0x2C), Time(+0x30), Time(+0x38), bool(+0x40), int(+0x44)
 // ============================================================
-void PerformWork_Serialize_Impl(PerformWork* self, void* stream) {
-    PerformWork_ResolveFuncs();   // self-init: action built via exe ctor path, not our factory
-    uint8_t* s = (uint8_t*)self;
+void PerformWork::Persist(void* stream) {
+    PerformWork_ResolveFuncs();   // this-init: action built via exe ctor path, not our factory
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
 
     // First serializer: serialize status byte (+0x18)
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Second serializer: serialize all PerformWork-specific fields
@@ -235,14 +228,14 @@ void PerformWork_Serialize_Impl(PerformWork* self, void* stream) {
 
     // Serialize work target entity ref (+0x20)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (*(void**)(s + 0x20) != nullptr) {
-        if (!fn_IsDerivedFrom(*(void**)(s + 0x20), *s_tid_CitizenComponent)) {
-            *(void**)(s + 0x20) = nullptr;
+    if (workTarget != nullptr) {
+        if (!fn_IsDerivedFrom(workTarget, *s_tid_CitizenComponent)) {
+            workTarget = nullptr;
         }
     }
 
     // Serialize facing yaw (+0x28) as float
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<float*>(s + 0x28), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(facingYaw, nullptr);   // B.3.4 bridge
 
     // Serialize animation ID (+0x2C) as int
     reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x2C), nullptr);   // B.3.4 bridge
@@ -266,12 +259,12 @@ void PerformWork_Serialize_Impl(PerformWork* self, void* stream) {
 // if yaw is in valid range, and optionally decrements tool durability.
 // Always returns 1 (action stays active, Execute checks completion).
 // ============================================================
-int PerformWork_AbstractImpl_Impl(PerformWork* self, void* actionStack) {
-    PerformWork_ResolveFuncs();   // self-init: action built via exe ctor path, not our factory
+int  PerformWork::AbstractImpl(void* actionStack) {
+    PerformWork_ResolveFuncs();   // this-init: action built via exe ctor path, not our factory
     (void)actionStack;
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
-    void* entity = *(void**)(s + 0x20);
+    void* entity = workTarget;
     uint32_t animId = *(uint32_t*)(s + 0x2C);
 
     // Get family component from entity's +0x278 field and set animation
@@ -280,13 +273,13 @@ int PerformWork_AbstractImpl_Impl(PerformWork* self, void* actionStack) {
     s_fn_SetAnimation(familyComp, animId, *s_fConst1, 0.0f);
 
     // If yaw is in valid range [-180, 180], set facing direction
-    float yaw = *(float*)(s + 0x28);
+    float yaw = facingYaw;
     if (yaw >= *s_fYawMin && yaw <= *s_fYawMax) {
         float yawVal = yaw;
         float pitch = 0.0f;
 
         // Get the entity's parent for direction setting
-        void* entity2 = *(void**)(s + 0x20);
+        void* entity2 = workTarget;
         uintptr_t parentEntity = *(uintptr_t*)((uint8_t*)entity2 + 0x10);
         uintptr_t parentIBP = parentEntity;
 
@@ -302,10 +295,10 @@ int PerformWork_AbstractImpl_Impl(PerformWork* self, void* actionStack) {
     }
 
     // If use tool flag is set, decrement tool durability
-    if (*(uint8_t*)(s + 0x40) != 0) {
-        void* ent3 = *(void**)(s + 0x20);
+    if (useTool != 0) {
+        void* ent3 = workTarget;
         if (*(int32_t*)((uint8_t*)ent3 + 0xAC) > 0) {
-            void* ent4 = *(void**)(s + 0x20);
+            void* ent4 = workTarget;
             int32_t* toolDurability = (int32_t*)((uint8_t*)ent4 + 0xAC);
             (*toolDurability)--;
             if (*toolDurability < 0) {
@@ -323,25 +316,24 @@ int PerformWork_AbstractImpl_Impl(PerformWork* self, void* actionStack) {
 // When elapsed >= required, checks if citizen needs a break.
 // Returns: 0 = done, 1 = still working, 2 = needs break
 // ============================================================
-int PerformWork_Execute_Impl(PerformWork* self, void* actionStack, void* deltaTime) {
-    PerformWork_ResolveFuncs();   // self-init: action built via exe ctor path, not our factory
+int  PerformWork::Execute(void* actionStack, void* time) {
+    PerformWork_ResolveFuncs();   // this-init: action built via exe ctor path, not our factory
     (void)actionStack;
-    uint8_t* s = (uint8_t*)self;
 
-    int64_t elapsed = *(int64_t*)(s + 0x38);
-    int64_t required = *(int64_t*)(s + 0x30);
+    int64_t elapsed = elapsedTime;
+    int64_t required = requiredTime;
 
     if (elapsed >= required) {
         // Work time complete -- check if citizen needs a break
-        void* entity = *(void**)(s + 0x20);
+        void* entity = workTarget;
         uint8_t needsBreak = s_fn_CitizenBreakCheck(entity);
         // If needs break, return 2; otherwise return 0 (done)
         return needsBreak ? 2 : 0;
     }
 
     // Still working -- accumulate delta time
-    int64_t dt = *(int64_t*)deltaTime;
-    *(int64_t*)(s + 0x38) = elapsed + dt;
+    int64_t dt = *(int64_t*)time;
+    elapsedTime = elapsed + dt;
     return 1;
 }
 
@@ -349,13 +341,12 @@ int PerformWork_Execute_Impl(PerformWork* self, void* actionStack, void* deltaTi
 // PerformWork::Exit (0x1400C9370) -- slot 7
 // Resets character animation to idle (animation 0, rate 1.0, 1.0).
 // ============================================================
-void PerformWork_Exit_Impl(PerformWork* self, void* actionStack) {
-    PerformWork_ResolveFuncs();   // self-init: action built via exe ctor path, not our factory
+void PerformWork::Exit(void* actionStack) {
+    PerformWork_ResolveFuncs();   // this-init: action built via exe ctor path, not our factory
     (void)actionStack;
-    uint8_t* s = (uint8_t*)self;
 
     // Get work target entity
-    void* entity = *(void**)(s + 0x20);
+    void* entity = workTarget;
 
     // Get family component at entity+0x278, reset animation to idle
     uint8_t* ent = (uint8_t*)entity;
@@ -367,12 +358,11 @@ void PerformWork_Exit_Impl(PerformWork* self, void* actionStack) {
 // PerformWork::CheckEntity (0x1400C9320) -- slot 8
 // Identical to Exit: resets character animation to idle.
 // ============================================================
-void PerformWork_CheckEntity_Impl(PerformWork* self) {
-    PerformWork_ResolveFuncs();   // self-init: action built via exe ctor path, not our factory
-    uint8_t* s = (uint8_t*)self;
+void PerformWork::CheckEntity() {
+    PerformWork_ResolveFuncs();   // this-init: action built via exe ctor path, not our factory
 
     // Get work target entity
-    void* entity = *(void**)(s + 0x20);
+    void* entity = workTarget;
 
     // Get family component at entity+0x278, reset animation to idle
     uint8_t* ent = (uint8_t*)entity;
@@ -384,11 +374,10 @@ void PerformWork_CheckEntity_Impl(PerformWork* self) {
 // PerformWork::GetTarget (0x1400C92D0) -- slot 9
 // Returns true if param matches the work target entity's parent (+0x10).
 // ============================================================
-bool PerformWork_GetTarget_Impl(PerformWork* self, void* param) {
-    PerformWork_ResolveFuncs();   // self-init: action built via exe ctor path, not our factory
-    uint8_t* s = (uint8_t*)self;
+bool PerformWork::GetTarget(void* param) {
+    PerformWork_ResolveFuncs();   // this-init: action built via exe ctor path, not our factory
 
-    void* entity = *(void**)(s + 0x20);
+    void* entity = workTarget;
     // Get parent entity at entity+0x10
     uintptr_t parentEntity = *(uintptr_t*)((uint8_t*)entity + 0x10);
 
@@ -425,17 +414,11 @@ Object::Base* PerformWork::DeletingDtor(unsigned flags) {
 }
 
 // [3] 0x1400c9550
-void PerformWork::Persist(void* stream) { PerformWork_Serialize_Impl(this, stream); }
 // [4] 0x1400c9420
-int  PerformWork::AbstractImpl(void* actionStack) { return PerformWork_AbstractImpl_Impl(this, actionStack); }
 // [5] 0x1400c93c0
-int  PerformWork::Execute(void* actionStack, void* time) { return PerformWork_Execute_Impl(this, actionStack, time); }
 // [7] 0x1400c9370
-void PerformWork::Exit(void* actionStack) { PerformWork_Exit_Impl(this, actionStack); }
 // [8] 0x1400c9320
-void PerformWork::CheckEntity() { PerformWork_CheckEntity_Impl(this); }
 // [9] 0x1400c92d0
-bool PerformWork::GetTarget(void* param) { return PerformWork_GetTarget_Impl(this, param); }
 
 void* PerformWork::CreateNewObject() {
     PerformWork_ResolveFuncs();

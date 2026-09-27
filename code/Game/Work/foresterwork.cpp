@@ -388,10 +388,8 @@ static void* FindComponentInList(uintptr_t entity, uint32_t typeId) {
     for (int i = 0; i < count; i++) {
         uintptr_t* ibpPtr = (uintptr_t*)(arr + (uintptr_t)i * 8);
         uintptr_t obj = *ibpPtr;
-        uintptr_t vtable = *(uintptr_t*)obj;
-        typedef uint32_t (*GetTypeId_t)();
-        auto getTypeId = *(GetTypeId_t*)(vtable + 0x10);
-        if (getTypeId() == typeId) {
+        // slot 2 Type() (the old no-argument typedef never passed `this`)
+        if (reinterpret_cast<Object::Base*>(obj)->Type() == typeId) {   // B.3.8 bridge
             void* comp = (void*)*ibpPtr;
             if (fn_IsDerivedFrom(comp, typeId)) {
                 return comp;
@@ -411,10 +409,8 @@ static void* FindSubComponentInList(uintptr_t subObj, uint32_t typeId) {
     int count = *(int*)(subObj + 0x30);
     for (int i = 0; i < count; i++) {
         uintptr_t obj = *(uintptr_t*)(listBase + (uintptr_t)i * 8);
-        uintptr_t vtable = *(uintptr_t*)obj;
-        typedef uint32_t (*GetTypeId_t)();
-        auto getTypeId = *(GetTypeId_t*)(vtable + 0x10);
-        if (getTypeId() == typeId) {
+        // slot 2 Type() (the old no-argument typedef never passed `this`)
+        if (reinterpret_cast<Object::Base*>(obj)->Type() == typeId) {   // B.3.8 bridge
             void* comp = *(void**)(listBase + (uintptr_t)i * 8);
             if (fn_IsDerivedFrom(comp, typeId)) {
                 return comp;
@@ -435,11 +431,8 @@ static void AssignWorkToEntity(ForesterWork* self, void* citizenIBP, int priorit
     uintptr_t citizen = *(uintptr_t*)citizenIBP;
 
     // Call vtable slot +0x50 (GetWorkEntity) on self
-    uintptr_t vtable = *(uintptr_t*)self;
-    typedef uintptr_t* (*GetWorkEntity_t)(ForesterWork* self, void* outIBP);
-    auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
     uintptr_t workEntityIBP[2] = {0};
-    uintptr_t* result = getWorkEntity(self, workEntityIBP);
+    uintptr_t* result = static_cast<uintptr_t*>(self->GetTarget(workEntityIBP));
     uintptr_t workEntity = *result;
 
     // Set entity flags
@@ -913,11 +906,8 @@ int ForesterWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/)
         uintptr_t citizenEnt2 = *(uintptr_t*)citizenIBP;
 
         // Call vtable slot +0x50 (GetWorkEntity)
-        uintptr_t vtable = *(uintptr_t*)this;
-        typedef uintptr_t* (*GetWorkEntity_t)(ForesterWork*, void*);
-        auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
         uintptr_t workEntIBP[2] = {0};
-        uintptr_t* wResult = getWorkEntity(this, workEntIBP);
+        uintptr_t* wResult = static_cast<uintptr_t*>(GetTarget(workEntIBP));
         uintptr_t workEnt = *wResult;
 
         *(uint32_t*)(citizenEnt2 + 0x54) |= 4;
@@ -1239,11 +1229,9 @@ DEFINE_EXE_VTABLE(ForesterWork, "_ZTV12ForesterWork")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x1401613a0 is still read back BY ADDRESS — ForesterComponent's CreateWork
-// (resourceproduce_creatework.cpp, block MI-B) builds the work by hand and stamps it —
-// so the exe address serves the COMPILER's table.
 extern "C" void RegisterForesterWorkVtable() {
-    RegisterExeAddr(ForesterWorkAddr::Vtable, reinterpret_cast<uintptr_t>(ForesterWork::Vtable()));   // 0x1401613a0
+    // ENDGAME B.3.8 CB3: the retail-table row is gone -- no by-address reader of
+    // it is left. The call in address_registry.cpp is the coordinator's to drop.
 }
 // The factory the forester force harness (forester_force_harness.cpp) names.
 extern "C" void* ForesterWork_Factory(void) { return ForesterWork::CreateNewObject(); }
