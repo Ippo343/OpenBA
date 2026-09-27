@@ -18,6 +18,7 @@
 #include "ui/ImageElement.h"                  // ENDGAME B.3.6 UI callers (K4)
 #include <new>
 #include <cstdint>
+#include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
 
 // ============================================================
 // Construction / destruction (ENDGAME B.3.8 block GOAL)
@@ -160,13 +161,9 @@ void TutorialHighlightDialog::PlaceOnElement() {
     // — one deref short lands on the holder and reads garbage dimensions, which
     // is exactly what mis-sizes and mis-places the glow ring.
     int screenW = 0, screenH = 0;
-    if (g_pSingletonExref_151a80) {
-        if (void* holder = *g_pSingletonExref_151a80) {
-            if (void* device = *reinterpret_cast<void**>(holder)) {
-                screenW = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(device) + 4);
-                screenH = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(device) + 8);
-            }
-        }
+    if (void* device = ::Video::Device::_singleton) {
+        screenW = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(device) + 4);
+        screenH = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(device) + 8);
     }
     float scale = 1.0f;
     uintptr_t ui = *reinterpret_cast<uintptr_t*>(s + 0x10);

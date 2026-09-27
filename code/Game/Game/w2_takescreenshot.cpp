@@ -75,6 +75,8 @@
 #include "io/FileSystem.h"      // ENDGAME B.3.4a closing 4/4
 #include "system/Filename.h"
 #include <new>
+#include "video/Device.h"       // ENDGAME B.3.9 SS2: Video::Device::_singleton
+#include "engine/MainLoop.h"    // ENDGAME B.3.9 SS2: Engine::MainLoop::_singleton
 
 #include <cstdint>
 #include <cstdio>
@@ -136,8 +138,6 @@ FN_CtorString_t       s_Filename_CtorStr  = nullptr;
 FN_AssignString_t     s_Filename_Assign   = nullptr;
 FN_Dtor_t             s_Filename_Dtor     = nullptr;
 
-void** s_pFileSystemSingleton = nullptr;   // ?_singleton@FileSystem@IO@@0PEAV12@EA
-
 bool s_resolved = false;
 bool s_ok       = false;
 
@@ -156,8 +156,6 @@ bool ResolveFuncs() {
     s_Filename_Assign  = (FN_AssignString_t)    ResolveExport("??4Filename@System@@QEAAAEAV01@AEBVString@1@@Z");
     s_Filename_Dtor    = (FN_Dtor_t)            ResolveExport("??1Filename@System@@QEAA@XZ");
 
-    s_pFileSystemSingleton = (void**)ResolveExport("?_singleton@FileSystem@IO@@0PEAV12@EA");
-
     // ENDGAME B.3.5 closing pass: the `Create`, `Generate` and `SaveImageToFile`
     // readiness terms are gone with their caches. Batch K1 converted all three call
     // sites and kept the caches only because this `s_ok` chain and the printf below
@@ -167,25 +165,18 @@ bool ResolveFuncs() {
     // class is real). Every System::String / Filename / MemoryAllocator term, not this step's.
     s_ok = s_MemAlloc && s_MemFree && s_StrPlusCStr &&
            s_StrPlusStr && s_StrFormat && s_StrDtor && s_Filename_Ctor &&
-           s_Filename_CtorStr && s_Filename_Assign && s_Filename_Dtor &&
-           s_pFileSystemSingleton &&
-           // from engine_funcs.h -- both are exref-backed and could be null:
-           // B.3.5: `fn_ImageBuffer_CopyFromTexture`'s readiness term went with its
-           // door in batch K1, and the closing pass took the global and this
-           // printf's `copyFromTex=%p` with it.
-           g_pVideoDeviceSingleton && g_pMainLoopSingleton;
+           s_Filename_CtorStr && s_Filename_Assign && s_Filename_Dtor;
+           // ENDGAME B.3.9 SS2: the FileSystem / Video::Device / MainLoop door
+           // terms went with the doors; those cells are class statics now.
 
     if (!s_ok) {
         printf("[TakeScreenshot] primitives unresolved — screenshot disabled\n"
                     "  alloc=%p free=%p\n"
-                    "  s+c=%p s+s=%p fmt=%p ~str=%p fn()=%p fn(s)=%p fn==%p ~fn=%p fs=%p\n"
-                    "  device=%p mainloop=%p\n",
+                    "  s+c=%p s+s=%p fmt=%p ~str=%p fn()=%p fn(s)=%p fn==%p ~fn=%p\n",
                     (void*)s_MemAlloc, (void*)s_MemFree,
                     (void*)s_StrPlusCStr, (void*)s_StrPlusStr, (void*)s_StrFormat,
                     (void*)s_StrDtor, (void*)s_Filename_Ctor, (void*)s_Filename_CtorStr,
-                    (void*)s_Filename_Assign, (void*)s_Filename_Dtor,
-                    (void*)s_pFileSystemSingleton,
-                    (void*)g_pVideoDeviceSingleton, (void*)g_pMainLoopSingleton);
+                    (void*)s_Filename_Assign, (void*)s_Filename_Dtor);
         std::fflush(stdout);
     }
     return s_ok;
@@ -212,11 +203,11 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
         return;
     }
 
-    void* device   = *g_pVideoDeviceSingleton;                      // Video::Device*
-    void* mainLoop = *g_pMainLoopSingleton;                           // Engine::MainLoop*
+    void* device   = ::Video::Device::_singleton;                   // Video::Device*
+    void* mainLoop = ::Engine::MainLoop::_singleton;                 // Engine::MainLoop*
     void* videoCtx = mainLoop ? *reinterpret_cast<void**>(
                          reinterpret_cast<uintptr_t>(mainLoop) + 0x10) : nullptr;
-    void* fileSys  = *s_pFileSystemSingleton;
+    void* fileSys  = ::IO::FileSystem::_singleton;
 
     const int width  = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(device) + 4);
     const int height = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(device) + 8);

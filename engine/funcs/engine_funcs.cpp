@@ -31,19 +31,6 @@ uint32_t ResolveExeTypeId(uintptr_t rdataAddr, const char* name, uint32_t* cache
 }
 
 // ============================================================
-// Timer globals — addresses in Runtime-x64.dll
-// ============================================================
-// System::Timer::_ticksPerSecond         @ 0x1801fe720
-// System::Timer::_secondsPerTick         @ 0x1801fe728
-// System::Timer::_systemTicksPerSecond   @ 0x1801fe730
-// System::Timer::_systemInitialTick      @ 0x1801fe738
-
-int64_t* g_Timer_systemInitialTick    = nullptr;
-int64_t* g_Timer_ticksPerSecond       = nullptr;
-int64_t* g_Timer_systemTicksPerSecond = nullptr;
-double*  g_Timer_secondsPerTick       = nullptr;
-
-// ============================================================
 // Engine function pointers
 // ============================================================
 
@@ -55,13 +42,9 @@ fn_MemAlloc_t fn_MemAlloc = nullptr;
 fn_MemFree_t fn_MemFree = nullptr;
 void* g_pMemAllocSingleton = nullptr;
 
-// Video::Device singleton
-void** g_pVideoDeviceSingleton = nullptr;
-
 // Video::Device Lock/Unlock
 
 // ExternalFactory
-void** g_pExternalFactorySingleton = nullptr;
 fn_IsDerivedFrom_t fn_IsDerivedFrom = nullptr;
 // Null-safe trampoline installed over the Runtime IsDerivedFrom (see EngineFuncsInit).
 static fn_IsDerivedFrom_t s_fn_IsDerivedFrom_real = nullptr;
@@ -70,9 +53,6 @@ static bool IsDerivedFrom_NullSafe(void* self, uint32_t typeId) {
     return s_fn_IsDerivedFrom_real ? s_fn_IsDerivedFrom_real(self, typeId) : false;
 }
 uint32_t* g_TypeId_Dialog = nullptr;
-
-// Persistence
-void** g_pPersistenceSingleton = nullptr;
 
 fn_MemFreeStatic_t fn_MemFreeStatic = nullptr;
 fn_InternalBasePtr_Ctor_t fn_InternalBasePtr_Ctor = nullptr;
@@ -191,13 +171,9 @@ fn_OrchardGetGrowth_t fn_OrchardGetGrowth = nullptr;
 // ============================================================
 
 fn_SaveLoad_Dtor_t fn_SaveLoad_Dtor = nullptr;
-void** g_pSaveLoadSingleton = nullptr;
 fn_DateTime_AsString_t fn_DateTime_AsString = nullptr;
 // fn_SaveLoadDialog_PopulateFileList — REMOVED, now reimplemented in saveloaddialog.cpp
-void** g_pInputDeviceSingleton = nullptr;
-void** g_pFileSystemSingleton2 = nullptr;
 fn_LoadScenarioFromSave_t fn_LoadScenarioFromSave = nullptr;
-void*** g_ppAchievementManager = nullptr;
 // fn_FollowDialog_Close — inlined in followdialog.cpp Slot7
 
 // UpgradeUI helpers
@@ -292,8 +268,6 @@ fn_InternalBasePtr_DeletePtr_t fn_InternalBasePtr_DeletePtr = nullptr;
 fn_OptionInputBindDialog_Ctor_t fn_OptionInputBindDialog_Ctor = nullptr;
 fn_MessageDialog_Ctor_t fn_MessageDialog_Ctor = nullptr;
 
-void** g_pAudioConfigSingleton = nullptr;
-void** g_pVideoConfigSingleton = nullptr;
 // fn_Element_GetParent — now inline in optionsdialog.cpp (vtable call at +0x48)
 int32_t** g_pGameSettingsPtr = nullptr;
 
@@ -351,7 +325,6 @@ fn_MapParamsDialog_Ctor_t fn_MapParamsDialog_Ctor = nullptr;
 fn_ModDialog_Ctor_t fn_ModDialog_Ctor = nullptr;
 
 // ModDialog support
-void** g_ppModificationSingleton = nullptr;
 // fn_DialogInstance_AddController removed — see engine_funcs.h (Wave 7 lane B)
 // fn_ModDialog_RefreshDisplay — REPLACED with static ModDialog_RefreshDisplay_Impl() in moddialog.cpp
 // fn_ModDialog_ToggleMod — REPLACED with inline impl in moddialog.cpp
@@ -483,19 +456,10 @@ fn_Random_Default_Ctor_t fn_Random_Default_Ctor = nullptr;
 // fn_GetLoadingSoundString — REPLACED with inline GetLoadingSoundString() in engine_funcs.h
 fn_AudioScene_Ctor_t fn_AudioScene_Ctor = nullptr;
 
-void** g_pFileSystemSingleton = nullptr;
-
 // ============================================================
 // Engine globals
 // ============================================================
 
-// Application::Application::_singleton @ 0x1801fc678 (Runtime export
-// ?_singleton@Application@1@0PEAV11@EA -- corrected by Wave 8 lane E; the
-// previous address here was stale and unused by any resolve call).
-void** g_pAppSingleton = nullptr;
-
-void** g_pInputConfigSingleton = nullptr;
-void** g_pMainLoopSingleton = nullptr;
 fn_SaveGameSettings_t fn_SaveGameSettings = nullptr;
 fn_ReadGameSettings_t fn_ReadGameSettings = nullptr;
 fn_ApplyKeyMapToUI_t fn_ApplyKeyMapToUI = nullptr;
@@ -525,7 +489,6 @@ fn_SetEditMode_t fn_SetEditMode = nullptr;
 fn_MapGetTerrainPos_t fn_MapGetTerrainPos = nullptr;
 
 // Phase H: Sub-dependency blockers
-void** g_pFactorySingleton = nullptr;
 fn_IsA_t fn_IsA = nullptr;
 
 // ClearStorage helpers
@@ -583,7 +546,6 @@ fn_ObjectInternal_Ctor_t fn_ObjectInternal_Ctor = nullptr;
 fn_TutorialTreeInsert_t fn_TutorialTreeInsert = nullptr;
 fn_TutorialStepExecute_t fn_TutorialStepExecute = nullptr;
 uint32_t* g_TypeId_FinishTutorialGoal = nullptr;
-void** g_pSingletonExref_151a80 = nullptr;
 
 // ComponentEntity dependencies
 uint32_t* g_TypeId_ComponentBase = nullptr;
@@ -773,12 +735,6 @@ fn_Frustum_MulTransform3_t             fn_Frustum_MulTransform3            = nul
 // ============================================================
 
 bool EngineFuncsInit() {
-    // --- Timer globals (direct memory addresses) ---
-    g_Timer_ticksPerSecond       = reinterpret_cast<int64_t*>(ResolveAddr(Module::Runtime, 0x1801fe720));
-    g_Timer_secondsPerTick       = reinterpret_cast<double*> (ResolveAddr(Module::Runtime, 0x1801fe728));
-    g_Timer_systemTicksPerSecond = reinterpret_cast<int64_t*>(ResolveAddr(Module::Runtime, 0x1801fe730));
-    g_Timer_systemInitialTick    = reinterpret_cast<int64_t*>(ResolveAddr(Module::Runtime, 0x1801fe738));
-
     // --- Function pointers (resolve by mangled name, fall back to RVA) ---
 
     // Video::Context lifecycle — the five resolves that used to sit here are GONE
@@ -790,14 +746,7 @@ bool EngineFuncsInit() {
     fn_MemAlloc = reinterpret_cast<fn_MemAlloc_t>(
         ResolveAddr(Module::Runtime, 0x1800c6e60));
 
-    // Video::Device::_singleton
-    g_pVideoDeviceSingleton = reinterpret_cast<void**>(
-        ResolveAddr(Module::Runtime, 0x1801fe7a8));
-
     // --- ExternalFactory ---
-    g_pExternalFactorySingleton = reinterpret_cast<void**>(
-        ResolveAddr(Module::Runtime, 0x1801fc6c8));
-
     fn_IsDerivedFrom = reinterpret_cast<fn_IsDerivedFrom_t>(
         ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
     // Null-safe trampoline: the Runtime impl derefs obj unguarded. Retail never
@@ -814,10 +763,6 @@ bool EngineFuncsInit() {
     // UI::Dialog type info (?_typeInfo@Dialog@UI@@) — dialog resources
     g_TypeId_Dialog = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Runtime, 0x1801faa88));
-
-    // --- Persistence ---
-    g_pPersistenceSingleton = reinterpret_cast<void**>(
-        ResolveAddr(Module::Runtime, 0x1801fc6b8));
 
     // --- UI infrastructure ---
 
@@ -1022,63 +967,16 @@ bool EngineFuncsInit() {
     fn_SaveLoad_Dtor = reinterpret_cast<fn_SaveLoad_Dtor_t>(
         ResolveExport("??1SaveLoad@Save@@QEAA@XZ"));
 
-    // SaveLoad singleton: exe exref at 0x140151610 -> pointer to _singleton in Runtime
-    {
-        void*** exref = reinterpret_cast<void***>(ResolveAddr(Module::Exe, 0x140151610));
-        if (exref && *exref) {
-            g_pSaveLoadSingleton = *exref;
-        }
-        // Standalone: the 0x140151610 dispatch slot is not registered — resolve
-        // Save::SaveLoad::_singleton straight from the Runtime export. The cell is
-        // written by the SaveLoad ctor (GameUpdateLoop::Load step 25), so the
-        // pointer-to-cell is valid from DLL load even while the cell is still null.
-        if (!g_pSaveLoadSingleton) {
-            g_pSaveLoadSingleton = reinterpret_cast<void**>(
-                ResolveExport("?_singleton@SaveLoad@Save@@0PEAV12@EA"));
-        }
-    }
-
     fn_DateTime_AsString = reinterpret_cast<fn_DateTime_AsString_t>(
         ResolveExport("?AsString@DateTime@System@@QEBA?AVString@2@XZ"));
 
     // SaveLoadDialog::PopulateFileList — REMOVED, now reimplemented in saveloaddialog.cpp
 
-    // Input::Device singleton: exe exref at 0x140151b80 -> pointer to _singleton in Runtime
-    {
-        void*** exref = reinterpret_cast<void***>(ResolveAddr(Module::Exe, 0x140151b80));
-        if (exref && *exref) {
-            g_pInputDeviceSingleton = *exref;
-        } else {
-            // Standalone fallback: the exe exref slot is only populated by Runtime
-            // reflection in retail; standalone never wires it. Resolve the Runtime
-            // DLL export `Input::Device::_singleton` directly.
-            void** p = reinterpret_cast<void**>(
-                ResolveExport("?_singleton@Device@Input@@0PEAV12@EA"));
-            if (p) g_pInputDeviceSingleton = p;
-        }
-    }
-
     // Persistence::GetSavePath and FileSystem::GetDataDirectory resolved here
     // until ENDGAME B.3.4a closing 2d; both were 0-CALL and are gone, resolver,
     // slot fallback and all.
-    // FileSystem singleton: exe dispatch at 0x140151d18 → pointer to Runtime singleton.
-    // Original: MOV RAX,[0x140151d18]; MOV RCX,[RAX] (at 0x140077d5a)
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151d18));
-        g_pFileSystemSingleton2 = exref ? reinterpret_cast<void**>(*exref) : nullptr;
-        // 0x140151d18 is unregistered in standalone, so the line above yields NULL.
-        // The Runtime exports the singleton POINTER itself as data; ResolveExport gives
-        // the address of that pointer variable, which is exactly what this is.
-        if (!g_pFileSystemSingleton2)
-            g_pFileSystemSingleton2 = reinterpret_cast<void**>(
-                ResolveExport("?_singleton@FileSystem@IO@@0PEAV12@EA"));
-    }
     fn_LoadScenarioFromSave = reinterpret_cast<fn_LoadScenarioFromSave_t>(
         ResolveAddr(Module::Exe, 0x1400b49f0));
-
-    // AchievementManager singleton (double-indirect .rdata dispatch at 0x1401514f0)
-    g_ppAchievementManager = reinterpret_cast<void***>(
-        ResolveAddr(Module::Exe, 0x1401514f0));
 
     // fn_FollowDialog_Close — inlined in followdialog.cpp Slot7 (FUN_140068f00)
 
@@ -1219,45 +1117,6 @@ bool EngineFuncsInit() {
     // fn_OptionsDialog_OnInputBindClick — reimplemented
     // fn_Element_GetParent — now inline in optionsdialog.cpp (vtable call)
     g_pGameSettingsPtr = reinterpret_cast<int32_t**>(ResolveAddr(Module::Exe, 0x1401c3de0));
-    // Audio::Configuration singleton: exe exref at 0x140151b78 -> pointer to singleton
-    {
-        void*** exref = reinterpret_cast<void***>(ResolveAddr(Module::Exe, 0x140151b78));
-        if (exref && *exref) {
-            g_pAudioConfigSingleton = *exref;
-        } else {
-            // Standalone fallback: point at Runtime DLL's Audio::Configuration::_singleton
-            // storage (Runtime data var at 0x1801fe758 — set by Audio::Configuration ctor at
-            // 0x1800ddeb0). The exe's exref slot only gets populated by reflection in retail;
-            // standalone never wires it up. The slot may still be NULL here (ctor runs lazily
-            // during Engine::Engine), but it's the right address — saving the slot pointer
-            // means future *g_pAudioConfigSingleton reads see the live singleton.
-            void** runtimeSlot = reinterpret_cast<void**>(
-                ResolveAddr(Module::Runtime, 0x1801fe758));
-            if (runtimeSlot) g_pAudioConfigSingleton = runtimeSlot;
-        }
-    }
-    // Video::Configuration singleton: exe exref at 0x140151b70 -> pointer to singleton
-    {
-        void*** exref = reinterpret_cast<void***>(ResolveAddr(Module::Exe, 0x140151b70));
-        if (exref && *exref) {
-            g_pVideoConfigSingleton = *exref;
-        } else {
-            // Standalone fallback: point at Runtime DLL's Video::Configuration::_singleton
-            // storage (Runtime data var at 0x1801fe7a0 — set by Video::Configuration ctor at
-            // 0x1800f6f10, which initializes refresh num/den to 60/1 by default). The exe's
-            // exref slot only gets populated by reflection in retail; standalone never wires
-            // it up. The slot may still be NULL here (ctor runs lazily during Engine::Engine),
-            // but it's the right address — saving the slot pointer means future
-            // *g_pVideoConfigSingleton reads see the live singleton.
-            //
-            // Without this fallback, OptionsDialog reads savedRefreshNum/Den as 0, then a
-            // resolution change calls Video::Device::ValidateConfiguration which divides
-            // by den => SIGFPE.
-            void** runtimeSlot = reinterpret_cast<void**>(
-                ResolveAddr(Module::Runtime, 0x1801fe7a0));
-            if (runtimeSlot) g_pVideoConfigSingleton = runtimeSlot;
-        }
-    }
 
     // --- StorageUI support ---
     // fn_StorageUI_SortItems — reimplemented in storageui.cpp as StorageUI_SortItems()
@@ -1438,13 +1297,6 @@ bool EngineFuncsInit() {
     }
     // ModDetails_StringArrayPush — now static inline in moddetailsdialog.cpp
 
-    // --- IO::Modification ---
-    // Modification singleton: exe exref at 0x1401519e8 contains a pointer to
-    // IO::Modification::_singleton (in Runtime DLL). Dereference once at init.
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401519e8));
-        g_ppModificationSingleton = exref ? reinterpret_cast<void**>(*exref) : nullptr;
-    }
     // Modification::GetCount / ::GetModification (Runtime 0x18000da90 /
     // 0x18000da80) were resolved here until ENDGAME B.3.4a closing 2d; both
     // reached 0 CALLs. The ported bodies stay registered by address in
@@ -1759,37 +1611,13 @@ bool EngineFuncsInit() {
     fn_AudioScene_Ctor = reinterpret_cast<fn_AudioScene_Ctor_t>(
         ResolveExport("??0Scene@Audio@@QEAA@XZ"));
 
-    // --- Engine globals (direct memory addresses) ---
-    // Application singleton: exe exref at 0x140152368 contains a pointer to
-    // Application::_singleton (in Runtime DLL). Dereference once at init to get
-    // the actual singleton variable, so *g_pAppSingleton yields Application*.
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152368));
-        g_pAppSingleton = exref ? reinterpret_cast<void**>(*exref) : nullptr;
-    }
-
 #ifdef _DEBUG
-    printf("[EngineFuncs] Timer globals:\n");
-    printf("  _ticksPerSecond       @ %p = %lld\n", (void*)g_Timer_ticksPerSecond,
-           g_Timer_ticksPerSecond ? *g_Timer_ticksPerSecond : -1);
-    printf("  _secondsPerTick       @ %p = %f\n", (void*)g_Timer_secondsPerTick,
-           g_Timer_secondsPerTick ? *g_Timer_secondsPerTick : -1.0);
-    printf("  _systemTicksPerSecond @ %p = %lld\n", (void*)g_Timer_systemTicksPerSecond,
-           g_Timer_systemTicksPerSecond ? *g_Timer_systemTicksPerSecond : -1);
-    printf("  _systemInitialTick    @ %p = %lld\n", (void*)g_Timer_systemInitialTick,
-           g_Timer_systemInitialTick ? *g_Timer_systemInitialTick : -1);
     printf("[EngineFuncs] Functions:\n");
     printf("  MemAlloc                  = %p\n", (void*)fn_MemAlloc);
     printf("  MemAllocSingleton         = %p\n", g_pMemAllocSingleton);
-    printf("  VideoDevice::_singleton   = %p -> %p\n", (void*)g_pVideoDeviceSingleton,
-           g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr);
-    printf("  ExtFactory::_singleton    = %p -> %p\n", (void*)g_pExternalFactorySingleton,
-           g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
     printf("  IsDerivedFrom             = %p\n", (void*)fn_IsDerivedFrom);
     printf("  Dialog TypeId             = %p -> 0x%x\n", (void*)g_TypeId_Dialog,
            g_TypeId_Dialog ? *g_TypeId_Dialog : 0);
-    printf("  Persistence::_singleton   = %p -> %p\n", (void*)g_pPersistenceSingleton,
-           g_pPersistenceSingleton ? *g_pPersistenceSingleton : nullptr);
     printf("[EngineFuncs] UI infrastructure:\n");
     printf("  MemFreeStatic             = %p\n", (void*)fn_MemFreeStatic);
     printf("  InternalBasePtr::Ctor     = %p\n", (void*)fn_InternalBasePtr_Ctor);
@@ -1814,42 +1642,16 @@ bool EngineFuncsInit() {
     printf("  CemeteryComponent         = %p -> 0x%x\n", (void*)g_TypeId_CemeteryComponent,
            g_TypeId_CemeteryComponent ? *g_TypeId_CemeteryComponent : 0);
     // DestroyComponent_Reclaim/Rebuild/Destroy: now implemented as statics in destroyui.cpp
-    printf("[EngineFuncs] Globals:\n");
-    printf("  App::_singleton           = %p -> %p\n", (void*)g_pAppSingleton,
-           g_pAppSingleton ? *g_pAppSingleton : nullptr);
 #endif
-
-    // FileSystem singleton: exe exref at 0x140151d18 -> pointer to _singleton in Runtime
-    {
-        void*** exref = reinterpret_cast<void***>(ResolveAddr(Module::Exe, 0x140151d18));
-        if (exref && *exref)
-            g_pFileSystemSingleton = *exref;
-    }
 
     // --- Stage 3: OptionsDialog Runtime exports ---
 
     // Video::Configuration
 
-    // Input::Configuration::_singleton
-    {
-        void** p = reinterpret_cast<void**>(
-            ResolveExport("?_singleton@Configuration@Input@@0PEAV12@EA"));
-        if (p)
-            g_pInputConfigSingleton = p;
-    }
-
     // IO::Persistence WriteSettings / ReadSettings resolved here until
     // ENDGAME B.3.4a closing 2d; both were 0-CALL.
 
     // Video::Device
-
-    // Engine::MainLoop::_singleton (protected, @1)
-    {
-        void** p = reinterpret_cast<void**>(
-            ResolveExport("?_singleton@MainLoop@Engine@@1PEAV12@EA"));
-        if (p)
-            g_pMainLoopSingleton = p;
-    }
 
     // Stage 3: OptionsDialog exe helpers
     fn_SaveGameSettings = reinterpret_cast<fn_SaveGameSettings_t>(
@@ -1918,19 +1720,12 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14009f3e0));
 
     // --- Phase H: Sub-dependency blockers ---
-    // Factory singleton — dispatch table at 0x140152760 (double-indirect)
-    {
-        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152760));
-        if (dispatch) {
-            g_pFactorySingleton = dispatch;
-        }
-    }
     // Object::Base::IsA(uint) — Runtime DLL export
     fn_IsA = reinterpret_cast<fn_IsA_t>(
         ResolveExport("?IsA@Base@Object@@QEBA_NI@Z"));
 #ifdef _DEBUG
-    if (g_pFactorySingleton && fn_IsA) {
-        printf("[EngineFuncs] Phase H: IsA + Factory singleton resolved\n");
+    if (fn_IsA) {
+        printf("[EngineFuncs] Phase H: IsA resolved\n");
     }
     printf("[EngineFuncs] Phase H: FindDialogByName_Impl, Game_TriggerDisasterByType_Impl, "
            "Game_SpawnResources_Impl now available as inline replacements\n");
@@ -2071,10 +1866,6 @@ bool EngineFuncsInit() {
     g_TypeId_FinishTutorialGoal = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c6240));
 
-    // Singleton exref at 0x140151a80
-    g_pSingletonExref_151a80 = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140151a80));
-
 #ifdef _DEBUG
     printf("[EngineFuncs] Phase K: Tutorial goal helpers resolved\n");
     printf("  FindUIElementByPath   = %p\n", (void*)fn_FindUIElementByPath);
@@ -2082,7 +1873,6 @@ bool EngineFuncsInit() {
     printf("  TutorialTreeInsert    = %p\n", (void*)fn_TutorialTreeInsert);
     printf("  TutorialStepExecute   = %p\n", (void*)fn_TutorialStepExecute);
     printf("  TypeId_FTGoal         = %p\n", (void*)g_TypeId_FinishTutorialGoal);
-    printf("  SingletonExref_151a80 = %p\n", (void*)g_pSingletonExref_151a80);
 #endif
 
     // ================================================================

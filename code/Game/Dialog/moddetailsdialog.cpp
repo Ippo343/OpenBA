@@ -169,7 +169,7 @@ void ModDetailsDialog::OnOpened() {
     void* textResourceList  = FindElem(this, "textResourceList");
 
     // --- Get mod data ---
-    void* modification = *g_ppModificationSingleton;
+    void* modification = ::IO::Modification::_singleton;
     int modIndex = *(int*)(s + 0xC0);
     void* mod = const_cast<RtIO::Mod*>(
         &reinterpret_cast<const IO::Modification*>(modification)->GetModification(modIndex));   // B.3.4 bridge
@@ -296,7 +296,7 @@ void ModDetailsDialog::OnOpened() {
                         }
                     }
                     // Restore modification pointer (decompilation shows reload)
-                    modification = *g_ppModificationSingleton;
+                    modification = ::IO::Modification::_singleton;
                 }
             }
 
@@ -357,7 +357,7 @@ static void ModDetailsDialog_OpenDialog_Impl(void* self, const char* rscPath) {
 
     // Load dialog resource
     System::Filename filenameBuf(rscPath);
-    void* extFactory = *(void**)g_pExternalFactorySingleton;
+    void* extFactory = ::Object::ExternalFactory::_singleton;
     void* ext = const_cast<::Object::External*>(
         reinterpret_cast<::Object::ExternalFactory*>(extFactory)   // B.3.3 bridge
             ->FindOrLoad(filenameBuf));

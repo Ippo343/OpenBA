@@ -78,7 +78,7 @@ void EnsureGlobals() {
 // or a null-deref would fault (MinGW has no __try/__except to catch it).
 bool Ready() {
     return g_TypeId_StorageComponent_FC
-        && g_pExternalFactorySingleton && *g_pExternalFactorySingleton;
+        && ::Object::ExternalFactory::_singleton;
 }
 
 static void Trace(const char* what, void* self) {
@@ -128,7 +128,7 @@ void StorageUI::OnCreated() {
 
     // Count resource types via ExternalFactory::FindNext
     uint32_t resourceTypeCount = 0;
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     const ::Object::ExternalFactory* efactory =
         reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
     const ::Object::External* ext =

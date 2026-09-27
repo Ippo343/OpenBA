@@ -28,6 +28,7 @@
 #include "object/TypeInfo.h"    // ENDGAME B.3.7 callers (K2): Object::Base::IsDerivedFrom
 #include <new>
 #include <atomic>
+#include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
 
 // Startup/Update use function pointers from engine_funcs.h (resolved at startup).
 // ENDGAME B.3.8 (B6-5): the one-shot diagnostic counters are namespace-scope
@@ -181,8 +182,8 @@ void FinishTutorialInstance::Startup() {
 
         // Read screen height param from singleton exref
         int heightParam = 0;
-        if (g_pSingletonExref_151a80 && *g_pSingletonExref_151a80) {
-            uintptr_t singletonObj = *(uintptr_t*)*g_pSingletonExref_151a80;
+        {
+            uintptr_t singletonObj = reinterpret_cast<uintptr_t>(::Video::Device::_singleton);
             if (singletonObj) {
                 heightParam = *(int32_t*)(singletonObj + 4) - 0x1d0;
             }

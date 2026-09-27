@@ -28,6 +28,7 @@
 #include "input/Input.h"  // ENDGAME B.3.7 callers (K3)
 #include "runtime/types/ui/ButtonElement.h"  // X::TypeId() (B.3.9 CG2)
 #include "Component/CaptureBoxElement.h"   // X::TypeId() (B.3.9 CG2)
+#include "input/Device.h"   // ENDGAME B.3.9 SS2: Input::Device::_singleton
 
 // ============================================================
 // SpriteCaptureUI::Serialize (vtable +0x20, 0x140079640)
@@ -113,7 +114,7 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
 // ============================================================
 void SpriteCaptureUI_OnCreate(SpriteCaptureUI* self) {
     // Get Input::Device singleton
-    void* inputDevice = g_pInputDeviceSingleton ? *g_pInputDeviceSingleton : nullptr;
+    void* inputDevice = ::Input::Device::_singleton;
     if (!inputDevice) return;
 
     // 1. If currently dragging, check if left mouse button (axis 4) was released
@@ -172,7 +173,7 @@ check_pressed:
             reinterpret_cast<UI::UserInterface*>(ui)->EndSpriteCapture();  // B.3.6 bridge
 
             // b. Get source directory as System::String (non-trivial return: RCX=this, RDX=retval)
-            void* fsInstance = g_pFileSystemSingleton ? *g_pFileSystemSingleton : nullptr;
+            void* fsInstance = ::IO::FileSystem::_singleton;
             System::String sourceDirStr;
             // B.3.4 bridge. The guard stays. The member returns
             // `System::Filename` BY VALUE through MSVC's hidden return slot, and

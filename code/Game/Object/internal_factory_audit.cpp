@@ -4,16 +4,13 @@
 #include "Object/internal_factory_audit.h"
 #include "Game/force_work.h"
 #include "resolve.h"
+#include "object/Internal.h"   // ENDGAME B.3.9 SS2: Object::InternalFactory::_singleton
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
 namespace {
-
-// Object::InternalFactory::_singleton — Runtime-x64.dll global holding the
-// InternalFactory*. (Ghidra: ?_singleton@InternalFactory@Object@@0PEAV12@EA)
-constexpr uintptr_t kInternalFactorySingleton = 0x1801fc6d8;
 
 constexpr int kIdxOff = 0x08;   // Internal::_factoryIndex
 constexpr int kGenOff = 0x0c;   // Internal::_generation
@@ -29,9 +26,8 @@ void* Factory() {
     static void* s_cached = nullptr;
     if (s_cached) return s_cached;
 
-    uintptr_t slot = ResolveAddr(Module::Runtime, kInternalFactorySingleton);
-    if (!slot || !ForceWork::Readable(reinterpret_cast<void*>(slot), 8)) return nullptr;
-    void* f = *reinterpret_cast<void**>(slot);
+    // Object::InternalFactory::_singleton (Runtime 0x1801fc6d8), the class static.
+    void* f = ::Object::InternalFactory::_singleton;
     // factory header is {ptr@+0, count@+8, cap@+0xc} plus a Random at +0x20.
     if (!f || !ForceWork::Readable(f, 0x24)) return nullptr;
     s_cached = f;

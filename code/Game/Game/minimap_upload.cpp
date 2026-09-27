@@ -69,12 +69,12 @@ void* CreateAndUploadOne(uint8_t* map, int dstOff, int srcOff, int width,
 
     // Upload the raw pixel array (mapObj+srcOff) into the texture.
     void* pixels = *reinterpret_cast<void**>(map + srcOff);
-    void* device = *g_pVideoDeviceSingleton;
+    void* device = ::Video::Device::_singleton;
     reinterpret_cast<Video::Device*>(device)->Lock();   // B.3.5 bridge
     if (pixels)
         reinterpret_cast<Video::ImageBuffer*>(img)
             ->CopyToTexture(pixels, width, width);     // B.3.5 bridge
-    reinterpret_cast<Video::Device*>(*g_pVideoDeviceSingleton)
+    ::Video::Device::_singleton
         ->Unlock();                                    // B.3.5 bridge
 
     if (trace)
@@ -100,13 +100,13 @@ extern "C" void Minimap_CreateAndUpload(void* mapObj) {
     // went with their call sites; B.3.9 EXA took the ImageBuffer ctor-door and
     // exe-table terms (the buffer is constructed as the real class).
     if (!fn_MemAlloc || !g_pMemAllocSingleton ||
-        !g_pVideoDeviceSingleton || !*g_pVideoDeviceSingleton) {
+        !::Video::Device::_singleton) {
         static bool warned = false;
         if (!warned) {
             printf("[Minimap] primitives unresolved — skipping upload "
                    "(MemAlloc=%p dev=%p)\n",
                    (void*)fn_MemAlloc,
-                   g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr);
+                   ::Video::Device::_singleton);
             fflush(stdout);
             warned = true;
         }

@@ -25,6 +25,7 @@
 #include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
 #include "input/Input.h"   // ENDGAME B.3.7 callers (K3)
 #include "Dialog/ui_dialogs.h"
+#include "input/Device.h"   // ENDGAME B.3.9 SS2: Input::Device::_singleton
 // ENDGAME B.3.5 batch K1: video/Device.h FIRST. It pulls no Volume.h itself, but the
 // house rule (a runtime type header ahead of anything that reaches <windows.h> through
 // resolve.h, whose <wingdi.h> `Rectangle()` hides Volume.h's global `struct Rectangle`)
@@ -250,7 +251,7 @@ static inline void SetSliderValue(void* elem, float val) {
 static void* LoadStringTable(const char* path) {
     System::Filename filenameObj(path);   // ctor already normalises delimiters
     void* ext = const_cast<::Object::External*>(
-        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+        ::Object::ExternalFactory::_singleton   // B.3.3 bridge
             ->FindOrLoad(filenameObj));
     if (!ext) return nullptr;
 
@@ -287,7 +288,6 @@ static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self);
 // to the Runtime DLL's _singleton slot in EngineFuncsInit, but keep this
 // guard as belt-and-braces so a future regression here can't crash the game.
 static void OptionsDialog_ValidateVideoConfig(OptionsDialog* self) {
-    if (!g_pVideoDeviceSingleton) return;
     if (self->savedRefreshDen == 0) {
         // Defaults from Video::Configuration ctor (Runtime @ 0x1800f6f10): 60/1.
         // Better to pretend "60Hz" than to crash; the next Apply will write
@@ -300,7 +300,7 @@ static void OptionsDialog_ValidateVideoConfig(OptionsDialog* self) {
     // `?ValidateConfiguration@Device@Video@@QEAAXAEAH0000000@Z` (0x1800f7370, the EIGHT
     // `int&` out-parameter one), NOT `…QEAA_NXZ` (0x1800f8830, no arguments). Eight
     // arguments are spelled here so overload resolution cannot pick the sibling.
-    reinterpret_cast<Video::Device*>(*g_pVideoDeviceSingleton)->ValidateConfiguration(
+    ::Video::Device::_singleton->ValidateConfiguration(
         *(int*)&self->savedRenderer, *(int*)&self->savedAdapter,
         *(int*)&self->savedWidth,    *(int*)&self->savedHeight,
         *(int*)&self->savedRefreshNum, *(int*)&self->savedRefreshDen,
@@ -312,7 +312,7 @@ static void OptionsDialog_ValidateVideoConfig(OptionsDialog* self) {
 // ============================================================
 // Fills texture filter combo: "None", "Bilinear", then "Anisotropic Nx" for each level.
 static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self) {
-    void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
+    void* vidDev = ::Video::Device::_singleton;
     if (!vidDev) return;
 
     reinterpret_cast<UI::ComboElement*>(self->comboFilter)->RemoveAllItems();  // B.3.6 bridge
@@ -375,7 +375,7 @@ static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self) {
 // ============================================================
 // Fills antialias combo: "None", then "Nx multisample" for each supported mode.
 static void OptionsDialog_PopulateAntialiasCombo(OptionsDialog* self) {
-    void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
+    void* vidDev = ::Video::Device::_singleton;
     if (!vidDev) return;
 
     reinterpret_cast<UI::ComboElement*>(self->comboAntialias)->RemoveAllItems();  // B.3.6 bridge
@@ -419,7 +419,7 @@ static void OptionsDialog_PopulateAntialiasCombo(OptionsDialog* self) {
 // ============================================================
 // Fills refresh rate combo for the currently selected resolution.
 static void OptionsDialog_PopulateRefreshCombo(OptionsDialog* self) {
-    void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
+    void* vidDev = ::Video::Device::_singleton;
     if (!vidDev) return;
 
     void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(vidDev)
@@ -471,7 +471,7 @@ static void OptionsDialog_PopulateRefreshCombo(OptionsDialog* self) {
 // ============================================================
 // Fills resolution combo with "WxH" entries for the current adapter.
 static void OptionsDialog_PopulateResolutionCombo(OptionsDialog* self) {
-    void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
+    void* vidDev = ::Video::Device::_singleton;
     if (!vidDev) return;
 
     void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(vidDev)
@@ -516,7 +516,7 @@ static void OptionsDialog_PopulateResolutionCombo(OptionsDialog* self) {
 // ============================================================
 // Fills adapter combo for the current renderer, then repopulates dependent combos.
 static void OptionsDialog_PopulateAdapterCombo(OptionsDialog* self) {
-    void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
+    void* vidDev = ::Video::Device::_singleton;
     if (!vidDev) return;
 
     reinterpret_cast<UI::ComboElement*>(self->comboAdapter)->RemoveAllItems();  // B.3.6 bridge
@@ -546,7 +546,7 @@ static void OptionsDialog_PopulateAdapterCombo(OptionsDialog* self) {
 // ============================================================
 // Fills all video combo boxes: renderer, adapter, resolution, refresh, antialias, filter.
 static void OptionsDialog_PopulateVideoComboBoxes(OptionsDialog* self) {
-    void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
+    void* vidDev = ::Video::Device::_singleton;
     if (!vidDev) return;
 
     // --- Renderer combo ---
@@ -602,10 +602,9 @@ void OptionsDialog::OnOpened() {
            (int)s_enableUIScaleSlider, (int)s_enableGameplayChecks,
            (int)s_enableMouseClipCheck, (int)s_enableTabRestore);
 
-    int32_t* audioVol = g_pAudioConfigSingleton
-                        ? reinterpret_cast<int32_t*>(*g_pAudioConfigSingleton) : nullptr;
-    void* vidCfg = g_pVideoConfigSingleton ? *g_pVideoConfigSingleton : nullptr;
-    void* inputCfg = g_pInputConfigSingleton ? *g_pInputConfigSingleton : nullptr;
+    int32_t* audioVol = reinterpret_cast<int32_t*>(::Audio::Configuration::_singleton);
+    void* vidCfg = ::Video::Configuration::_singleton;
+    void* inputCfg = ::Input::Configuration::_singleton;
 
     // --- Buttons: find, assign IDs, set buttonCancel's hidden flag ---
     if (s_enableButtons) {
@@ -784,7 +783,7 @@ void OptionsDialog::OnClosed() {}
 // Input::Configuration singleton, enables/disables mouse clipping,
 // enables cursor, and saves input config.
 static void OptionsDialog_ApplyInputSettings(OptionsDialog* self) {
-    void* inputCfg = g_pInputConfigSingleton ? *g_pInputConfigSingleton : nullptr;
+    void* inputCfg = ::Input::Configuration::_singleton;
     if (!inputCfg) return;
 
     // Read mouse clip checkbox -> Input::Configuration +0x08
@@ -801,7 +800,7 @@ static void OptionsDialog_ApplyInputSettings(OptionsDialog* self) {
 
     // Enable/disable mouse clipping based on checkbox
     bool mouseClip = *(uint8_t*)((uintptr_t)*(void**)&self->checkMouseClip + 0xD8);
-    void* inputDevice = g_pInputDeviceSingleton ? *g_pInputDeviceSingleton : nullptr;
+    void* inputDevice = ::Input::Device::_singleton;
     if (inputDevice)
         reinterpret_cast<Input::Device*>(inputDevice)->EnableMouseClipping(static_cast<uint8_t>(mouseClip));  // B.3.7 bridge
 
@@ -922,8 +921,8 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
     // logic itself is verified correct — see notes: ApplyChangedSettings runs
     // and returns success; the standalone gap is the render backend not
     // recreating the M5 scene targets with the new sample count.
-    void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
-    void* vidCfg = g_pVideoConfigSingleton ? *g_pVideoConfigSingleton : nullptr;
+    void* vidDev = ::Video::Device::_singleton;
+    void* vidCfg = ::Video::Configuration::_singleton;
     if (!vidDev || !vidCfg) return;
 
     // Save current config for potential rollback
@@ -1020,7 +1019,7 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
 
     // If renderer or adapter changed, need full shutdown/startup
     if (needsFullRestart) {
-        void* mainLoop = g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr;
+        void* mainLoop = ::Engine::MainLoop::_singleton;
         if (mainLoop)
             reinterpret_cast<Engine::MainLoop*>(mainLoop)->OnVideoError();  // B.3.7 bridge
         reinterpret_cast<Video::Device*>(vidDev)->ReleaseDynamic();   // B.3.5 bridge
@@ -1056,7 +1055,7 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
         // Full restart
         success = reinterpret_cast<Video::Device*>(vidDev)->Startup();   // B.3.5 bridge
         reinterpret_cast<Video::Device*>(vidDev)->RecreateDynamic();     // B.3.5 bridge
-        void* mainLoop = g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr;
+        void* mainLoop = ::Engine::MainLoop::_singleton;
         if (mainLoop)
             reinterpret_cast<Engine::MainLoop*>(mainLoop)->OnVideoRestart();  // B.3.7 bridge
     }
@@ -1090,7 +1089,7 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
 // restores last tab, and re-applies keymap config to UI.
 static void OptionsDialog_RestoreVideoSettings(OptionsDialog* self) {
     // Re-read all settings from persistence
-    void* persistence = g_pPersistenceSingleton ? *g_pPersistenceSingleton : nullptr;
+    void* persistence = ::IO::Persistence::_singleton;
     if (persistence)
         reinterpret_cast<IO::Persistence*>(persistence)->ReadSettings();   // B.3.4 bridge
 
@@ -1120,14 +1119,14 @@ void OptionsDialog_OnApply(OptionsDialog* self) {
     OptionsDialog_ApplyInputSettings(self);
 
     // Save audio configuration
-    if (g_pAudioConfigSingleton && *g_pAudioConfigSingleton)
-        reinterpret_cast<Audio::Configuration*>(*g_pAudioConfigSingleton)->Save();   // B.3.7 bridge
+    if (::Audio::Configuration::_singleton)
+        ::Audio::Configuration::_singleton->Save();   // B.3.7 bridge
 
     OptionsDialog_ApplyGameSettings(self);
 
     // Write all settings to disk
-    if (g_pPersistenceSingleton && *g_pPersistenceSingleton)
-        reinterpret_cast<const IO::Persistence*>(*g_pPersistenceSingleton)->WriteSettings();   // B.3.4 bridge
+    if (::IO::Persistence::_singleton)
+        ::IO::Persistence::_singleton->WriteSettings();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -1153,31 +1152,31 @@ void OptionsDialog_OnOk(OptionsDialog* self) {
 
 void OptionsDialog_OnCancel(OptionsDialog* self) {
     // Reload persistence settings from disk
-    if (g_pPersistenceSingleton && *g_pPersistenceSingleton)
-        reinterpret_cast<IO::Persistence*>(*g_pPersistenceSingleton)->ReadSettings();   // B.3.4 bridge
+    if (::IO::Persistence::_singleton)
+        ::IO::Persistence::_singleton->ReadSettings();   // B.3.4 bridge
 
     // Re-register default input bindings and load saved config
     if (fn_RegisterDefaultInputBindings)
         fn_RegisterDefaultInputBindings();
 
     // Reload input configuration
-    if (g_pInputConfigSingleton && *g_pInputConfigSingleton)
-        reinterpret_cast<Input::Configuration*>(*g_pInputConfigSingleton)->Load();  // B.3.7 bridge
+    if (::Input::Configuration::_singleton)
+        ::Input::Configuration::_singleton->Load();  // B.3.7 bridge
 
     // Restore mouse clipping from input config byte at +0x08
-    if (g_pInputDeviceSingleton && *g_pInputDeviceSingleton &&
-        g_pInputConfigSingleton && *g_pInputConfigSingleton) {
-        bool clipEnabled = *(bool*)((uintptr_t)*g_pInputConfigSingleton + 0x08);
-        reinterpret_cast<Input::Device*>(*g_pInputDeviceSingleton)->EnableMouseClipping(static_cast<uint8_t>(clipEnabled));  // B.3.7 bridge
+    if (::Input::Device::_singleton &&
+        ::Input::Configuration::_singleton) {
+        bool clipEnabled = *(bool*)((uintptr_t)::Input::Configuration::_singleton + 0x08);
+        ::Input::Device::_singleton->EnableMouseClipping(static_cast<uint8_t>(clipEnabled));  // B.3.7 bridge
     }
 
     // Reload persistence settings again (for audio config)
-    if (g_pPersistenceSingleton && *g_pPersistenceSingleton)
-        reinterpret_cast<IO::Persistence*>(*g_pPersistenceSingleton)->ReadSettings();   // B.3.4 bridge
+    if (::IO::Persistence::_singleton)
+        ::IO::Persistence::_singleton->ReadSettings();   // B.3.4 bridge
 
     // Reinitialize audio from saved config
-    if (g_pAudioConfigSingleton && *g_pAudioConfigSingleton)
-        reinterpret_cast<Audio::Configuration*>(*g_pAudioConfigSingleton)->Startup();   // B.3.7 bridge
+    if (::Audio::Configuration::_singleton)
+        ::Audio::Configuration::_singleton->Startup();   // B.3.7 bridge
 
     // Restore video settings to pre-dialog state
     OptionsDialog_RestoreVideoSettings(self);
@@ -1256,7 +1255,7 @@ void OptionsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
             void* resData = reinterpret_cast<const UI::ComboElement*>(this->comboResolution)->GetItemData(curItem);  // B.3.6 bridge
 
             int adapterIdx = this->savedAdapter;
-            void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(*g_pVideoDeviceSingleton)
+            void* gfxIface = (void*)&::Video::Device::_singleton
                                  ->GetInterface(this->savedRenderer);   // B.3.5 bridge
             int adapterIdx2 = this->savedAdapter;
 
@@ -1266,7 +1265,7 @@ void OptionsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
 
             this->savedWidth = *(uint32_t*)modeEntry;
 
-            gfxIface = (void*)&reinterpret_cast<const Video::Device*>(*g_pVideoDeviceSingleton)
+            gfxIface = (void*)&::Video::Device::_singleton
                                  ->GetInterface(this->savedRenderer);   // B.3.5 bridge
             adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
             displayModes = *(intptr_t*)(adapterArray + (intptr_t)adapterIdx2 * 0x38 + 8);
@@ -1284,7 +1283,7 @@ void OptionsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
             void* refData = reinterpret_cast<const UI::ComboElement*>(this->comboRefresh)->GetItemData(refItem);  // B.3.6 bridge
 
             int adapterIdx = this->savedAdapter;
-            void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(*g_pVideoDeviceSingleton)
+            void* gfxIface = (void*)&::Video::Device::_singleton
                                  ->GetInterface(this->savedRenderer);   // B.3.5 bridge
             int adapterIdx2 = this->savedAdapter;
 
@@ -1296,7 +1295,7 @@ void OptionsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
 
             this->savedRefreshNum = *(uint32_t*)refreshEntry;
 
-            gfxIface = (void*)&reinterpret_cast<const Video::Device*>(*g_pVideoDeviceSingleton)
+            gfxIface = (void*)&::Video::Device::_singleton
                                  ->GetInterface(this->savedRenderer);   // B.3.5 bridge
             adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
             displayMode = adapterArray + (intptr_t)adapterIdx2 * 0x38;
@@ -1326,8 +1325,7 @@ void OptionsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
 
     if (eventType == 0x17) {
         // --- Slider value change ---
-        int32_t* audioVol = g_pAudioConfigSingleton
-                            ? reinterpret_cast<int32_t*>(*g_pAudioConfigSingleton) : nullptr;
+        int32_t* audioVol = reinterpret_cast<int32_t*>(::Audio::Configuration::_singleton);
         if (!audioVol) return;
 
         void** sliderField = nullptr;
@@ -1433,7 +1431,7 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     // Load the input bind dialog resource
     System::Filename filenameObj("Dialog/Options.rsc:inputBind");   // ctor already normalises
     void* extResult = const_cast<::Object::External*>(
-        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+        ::Object::ExternalFactory::_singleton   // B.3.3 bridge
             ->FindOrLoad(filenameObj));
     // Type check the external resource
     void* external = nullptr;
@@ -1512,7 +1510,7 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
         // Load the inputBound dialog resource
         System::Filename fnameObj2("Dialog/Options.rsc:inputBound");   // ctor already normalises
         void* extResult2 = const_cast<::Object::External*>(
-            reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+            ::Object::ExternalFactory::_singleton   // B.3.3 bridge
                 ->FindOrLoad(fnameObj2));
         void* external2 = nullptr;
         if (extResult2) {
@@ -1602,7 +1600,7 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
 
 set_binding:
     reinterpret_cast<Input::KeyMap*>(keyMap)->SetInput(inputId, slot, capturedDevice, capturedKey);  // B.3.7 bridge
-    reinterpret_cast<Input::Device*>(*g_pInputDeviceSingleton)->ResetState();  // B.3.7 bridge
+    ::Input::Device::_singleton->ResetState();  // B.3.7 bridge
 
     // Refresh the entire input bind list
     OptionsDialog_PopulateInputBindList(self);

@@ -20,12 +20,9 @@
 //   - 0x1401529f8 / 0x140151218 / 0x140151220 / 0x140151228: one reader each
 //     (engine_funcs.cpp), and each already falls back to ResolveExport() with
 //     the IDENTICAL mangled name — the fallback is its own proof of the name.
-//   - 0x140151610 / 0x140151d18: same, name-matched ResolveExport fallbacks.
-//   - 0x140151440: ?_singleton@MainLoop@Engine@@1PEAV12@EA, the same symbol
-//     engine_funcs resolves by name into g_pMainLoopSingleton (the second
-//     global for it, g_pEngineSingleton, was folded away at the B.3.7 close).
-//   - 0x1401514f0: one reader, used purely as a data exref; both consumers of
-//     g_ppAchievementManager call fn_AchievementManager_*.
+//   - (0x140151610 / 0x140151d18 / 0x1401514f0, the SaveLoad / FileSystem /
+//     AchievementManager singleton slots: rows deleted at ENDGAME B.3.9 SS2 —
+//     every reader reads the class static.)
 // None of the eleven has a second reader under a conflicting name.
 //
 // WHAT IS **NOT** HERE, and why (read before adding it):
@@ -147,50 +144,9 @@ extern "C" void RegisterUnregLane1Batch() {
     // false in our port, so the "resource first parsed inside the
     // reference-mode window deserializes corrupt" note does not apply here.
 
-    // ------------------------------------------------------------------
-    // Singleton DATA slots. Each import slot holds the ADDRESS of a Runtime
-    // `_singleton` POINTER variable, so the consumer pattern is
-    //     exref = ResolveAddr(...);  pSingleton = (void**)*exref;  obj = *pSingleton;
-    // ResolveExport returns the address of the variable — exactly the value the
-    // real loader writes into the slot. The cell may still be null until the
-    // owning ctor runs; the pointer-to-cell is valid from DLL load.
-    // ------------------------------------------------------------------
-
-    // 0x140151610 — Save::SaveLoad::_singleton.
-    // engine_funcs.cpp:2440 already falls back to ResolveExport with the same
-    // name, so this is a no-op today. Registered for census hygiene.
-    RegisterDispatchSlot(0x140151610,
-        (uintptr_t)ResolveExport("?_singleton@SaveLoad@Save@@0PEAV12@EA"));
-
-    // 0x140151d18 — IO::FileSystem::_singleton.
-    // Read TWICE with different results: engine_funcs.cpp:2608 sets
-    // g_pFileSystemSingleton2 and HAS a ResolveExport fallback, but
-    // engine_funcs.cpp:4257 sets g_pFileSystemSingleton and has NONE — so that
-    // global is NULL today, and code/Game/Dialog/spritecaptureui.cpp:179 gets
-    // a null FileSystem instance. Registering fixes the second read.
-    RegisterDispatchSlot(0x140151d18,
-        (uintptr_t)ResolveExport("?_singleton@FileSystem@IO@@0PEAV12@EA"));
-
-    // 0x140151440 — Engine::MainLoop::_singleton. The exe's exref for the
-    // symbol engine_funcs binds by name into g_pMainLoopSingleton; the tree
-    // no longer reads it through this slot (B.3.7 close folded the second
-    // global, g_pEngineSingleton), the row keeps the slot table faithful.
-
-    // 0x1401514f0 — Achievement::AchievementManager::_singleton.
-    // engine_funcs.cpp:2649 does g_ppAchievementManager = (void***)ResolveAddr(...)
-    // — the SLOT address, so the consumer triple-derefs. Unregistered that is a
-    // flat null: code/Game/Dialog/achievementdialog.cpp:38 and :219 deref it
-    // UNGUARDED (`void* manager = **g_ppAchievementManager;`) and would fault
-    // if that dialog ever opened.
-    // Behaviour note, deliberate: nothing in our port constructs the manager
-    // yet, so **g_ppAchievementManager stays null and every guarded site
-    // (gameupdateloop.cpp:1346 Update, :2594 Shutdown) keeps skipping exactly
-    // as before. The delta only appears once the manager is constructed, at
-    // which point ticking it IS retail. GameUpdateLoop::Load "step 30" is a
-    // comment with no body (gameupdateloop_load.cpp:1310) — this registration
-    // does not resurrect it; that still needs porting.
-    RegisterDispatchSlot(0x1401514f0,
-        (uintptr_t)ResolveExport("?_singleton@AchievementManager@Achievement@@0PEAV12@EA"));
+    // (Singleton DATA slots 0x140151610 SaveLoad, 0x140151d18 FileSystem and
+    // 0x1401514f0 AchievementManager: rows deleted at ENDGAME B.3.9 SS2 — every
+    // reader reads the class static. 0x140151440 MainLoop was never registered.)
 
     // ------------------------------------------------------------------
     // 0x1400192a0 — Object::ExternalPtr<EnvironmentDescription>::Serialize

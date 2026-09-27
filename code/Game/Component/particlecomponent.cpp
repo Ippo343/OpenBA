@@ -36,6 +36,8 @@
 #include <cstring>
 #include <cstdlib>
 #include <new>
+#include "graphics/ParticleInstance.h"   // ENDGAME B.3.9 SS2: ParticleInstance::_frameIndex
+#include "engine/MainLoop.h"   // ENDGAME B.3.9 SS2: Engine::MainLoop::_singleton
 
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
@@ -311,8 +313,8 @@ extern "C" void ParticleComponent_Place(ParticleComponent* self, int index) {
 
     // Prewarm: tick the emitter forward by t0 (elem+0x18) in engine fixed steps
     int64_t t0 = *(int64_t*)(elem + 0x18);
-    if (t0 > 0 && g_pMainLoopSingleton && *g_pMainLoopSingleton && vt && vt[1]) {
-        int64_t step = *(int64_t*)((uintptr_t)*g_pMainLoopSingleton + 0x48);
+    if (t0 > 0 && ::Engine::MainLoop::_singleton && vt && vt[1]) {
+        int64_t step = *(int64_t*)((uintptr_t)::Engine::MainLoop::_singleton + 0x48);
         if (step > 0) {
             typedef void (*fn_geoUpdate_t)(void*, void*);
             for (int64_t acc = step; ; acc += step) {
@@ -563,15 +565,8 @@ void ParticleComponent_InitFuncs() {
 extern "C" int GameUpdateLoop_CurrentFrame();  // per-render-frame token (read-only)
 
 static void PC_UnstampOwnEmitters(ParticleComponent* self) {
-    static int32_t* s_pFrameIndex = nullptr;
-    static bool s_resolved = false;
-    if (!s_resolved) {
-        s_pFrameIndex = reinterpret_cast<int32_t*>(
-            ResolveAddr(Module::Runtime, 0x1801fe77c));
-        s_resolved = true;
-    }
-    if (!s_pFrameIndex || !self) return;
-    int32_t fi = *s_pFrameIndex;
+    if (!self) return;
+    int32_t fi = ::Graphics::ParticleInstance::_frameIndex;
 
     // Per-frame emit dedup. The 6 founding houses share only ~3 POOLED emit-states
     // (verified: emit-diag showed one emit ref'd by 3 houses). Un-stamping a shared

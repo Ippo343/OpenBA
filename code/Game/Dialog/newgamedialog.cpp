@@ -156,10 +156,10 @@ static void GenerateTownName(System::String& retStr, void* random, int maxLen) {
     // walk NULL-faults, while FindOrLoad by exact filename is authoritative
     // (same call shape as citizen_names.cpp's Male.ndb/Female.ndb load).
     void* nameDB = nullptr;
-    if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
+    if (::Object::ExternalFactory::_singleton) {
         System::Filename fn("Game/Names/Cities.ndb");
         nameDB = const_cast<::Object::External*>(
-            reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+            ::Object::ExternalFactory::_singleton   // B.3.3 bridge
                 ->FindOrLoad(fn));
     }
 

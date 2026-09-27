@@ -88,7 +88,7 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
     System::Filename filename("Material/UI/UIMaterialNoBlend.rsc");
 
     void* ext = const_cast<::Object::External*>(
-        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+        ::Object::ExternalFactory::_singleton   // B.3.3 bridge
             ->FindOrLoad(filename));
     void* material = nullptr;
     if (ext) {

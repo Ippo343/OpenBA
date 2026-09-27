@@ -180,23 +180,8 @@ void RegisterUnregLane3() {
     RegisterLane3Slot(0x140151420,
         (uintptr_t)ResolveExport("?_typeInfo@Particle@Graphics@@0VBaseTypeInfo@Object@@A"));
 
-    // Graphics::ParticleInstance::_frameIndex (data slot, protected static int).
-    // Sibling of Graphics::MeshInstance::_rootOnlyUpdates (0x140151f30, already
-    // registered — see address_registry.cpp's RegisterDispatchSlots comment
-    // about the stress-perf fix). code/Game/Game/gameupdateloop.cpp:1298-1299
-    // increments it once per sim tick:
-    //     if (g_pp_frameIndex && *g_pp_frameIndex) { **g_pp_frameIndex += 1; }
-    // Unregistered, that increment never runs, so ParticleInstance's per-class
-    // frame counter is permanently stuck (whatever the Runtime DLL's static
-    // initializer left it at). NOTE: the surrounding comment in
-    // gameupdateloop.cpp calls this "g_frameIndex: global frame counter" — the
-    // PE import name says otherwise (it is ParticleInstance's OWN static, not
-    // an engine-wide counter); we register the address faithfully regardless
-    // of what our comment calls it. No downstream reader of the counter was
-    // found in this pass (see report), so the practical effect of registering
-    // is "the counter now actually counts," faithful to retail either way.
-    RegisterLane3Slot(0x140151f38,
-        (uintptr_t)ResolveExport("?_frameIndex@ParticleInstance@Graphics@@1HA"));
+    // (0x140151f38 Graphics::ParticleInstance::_frameIndex: row deleted at ENDGAME
+    // B.3.9 SS2 — GameUpdateLoop::Update increments the class static.)
 
     // ------------------------------------------------------------------
     // String / Filename operators.

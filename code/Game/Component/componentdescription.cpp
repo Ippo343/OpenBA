@@ -54,11 +54,11 @@ static std::atomic<bool> s_warnedUnwired{false};
 
 extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayBase) {
     if (!serializer || count <= 0 || !arrayBase) return;
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+    if (!::Object::ExternalFactory::_singleton) {
         if (!s_warnedUnwired.exchange(true)) { fprintf(stderr, "[ComponentDescription] sub-array primitives unwired — skip %d\n", count); fflush(stderr); }
         return;
     }
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     ::Object::ExternalFactory* efactory =
         reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
 

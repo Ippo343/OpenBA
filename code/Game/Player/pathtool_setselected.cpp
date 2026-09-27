@@ -562,8 +562,7 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
             if (qIdx < cap &&
                 *(int*)(table + 4 + (int64_t)qIdx * 0x18) == qId &&
                 *(char*)(table + (int64_t)qIdx * 0x18) != '\0') { ready = true; break; }
-            if (g_pAppSingleton) reinterpret_cast< ::Application::Application*>(*g_pAppSingleton)->YieldToThreads();   // B.3.7 bridge
-            else break;
+            ::Application::Application::_singleton->YieldToThreads();   // B.3.7 bridge
         }
         if (!ready) {
             continue;

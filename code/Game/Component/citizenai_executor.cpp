@@ -238,7 +238,6 @@ LAB_e38:
 namespace {
 
 // --- exe .rdata read by the tail ---
-static const uint8_t* s_pRootOnlyUpdates = nullptr;   // _rootOnlyUpdates_exref @ 0x1401bc2e8 (single byte)
 static const float* s_pDAT_172220 = nullptr;
 static const float* s_pDAT_172238 = nullptr;
 static const float* s_pDAT_1720e4 = nullptr;
@@ -337,15 +336,6 @@ static void* ResolveSlot(uintptr_t slotAddr) {
 static bool s_tailInit = false;
 static void EnsureTailInit() {
     if (s_tailInit) return;
-    // Retail reads the dispatch slot 0x140151f30 (-> Runtime MeshInstance::_rootOnlyUpdates);
-    // 0x1401bc2e8 was a mis-read data address with no xrefs, so this was always null (=0).
-    {
-        const uint8_t** slot = reinterpret_cast<const uint8_t**>(ResolveAddr(Module::Exe, 0x140151f30));
-        s_pRootOnlyUpdates = slot ? *slot : nullptr;
-        if (!s_pRootOnlyUpdates)
-            s_pRootOnlyUpdates = reinterpret_cast<const uint8_t*>(
-                ResolveExport("?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA"));
-    }
     s_pDAT_172220 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172220));
     s_pDAT_172238 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172238));
     s_pDAT_1720e4 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401720e4));
@@ -455,7 +445,9 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     // ModelComponent(+0x68)/MeshInstance/Geometry/Picking rendering layer.
     EnsureTailInit();
 
-    uint8_t rootOnly = s_pRootOnlyUpdates ? *s_pRootOnlyUpdates : 0;
+    // Retail reads Graphics::MeshInstance::_rootOnlyUpdates through its import
+    // slot 0x140151f30; the class static is that byte (ENDGAME B.3.9 SS2).
+    uint8_t rootOnly = ::Graphics::MeshInstance::_rootOnlyUpdates ? 1 : 0;
 
     int64_t model = *reinterpret_cast<int64_t*>(self + 0x68);
     float fx = *reinterpret_cast<float*>(model + 0x158);

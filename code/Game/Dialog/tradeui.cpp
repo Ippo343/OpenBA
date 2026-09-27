@@ -1163,7 +1163,7 @@ void TradeUI::OnCreated() {
 
     // --- Phase 3: Count resources and selectable builds via ExternalFactory ---
     int resourceTypeCount = 0;
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     const ::Object::ExternalFactory* etuFactory =
         reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
     void* ext = const_cast<::Object::External*>(

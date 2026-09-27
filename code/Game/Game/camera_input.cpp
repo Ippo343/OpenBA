@@ -41,6 +41,7 @@
 #include <cstdlib>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
+#include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
 
 extern "C" bool StartTown_GetSpawnTile(int* x, int* y);   // starttown.cpp (BANISHED_CAMERA_PIN=town)
 
@@ -93,13 +94,11 @@ fn_GridToWorld_t GridToWorld() {
     return fn;
 }
 
-// Video::Device (screen dims) via the 0x140151a80 exref: **slot, then +4=W, +8=H.
+// Video::Device (screen dims): retail reads **exref 0x140151a80; the class static
+// is that cell (ENDGAME B.3.9 SS2). +4=W, +8=H.
 inline bool ScreenSize(int& w, int& h) {
     w = h = 0;
-    if (!g_pSingletonExref_151a80) return false;
-    void* p = *g_pSingletonExref_151a80;
-    if (!p) return false;
-    void* dev = *(void**)p;
+    void* dev = ::Video::Device::_singleton;
     if (!dev) return false;
     w = *(int*)((uintptr_t)dev + 4);
     h = *(int*)((uintptr_t)dev + 8);

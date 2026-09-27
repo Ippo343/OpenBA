@@ -137,7 +137,7 @@ ComponentEntity::ComponentEntity(ComponentDescription* description)
         if (typeId == 0) continue;
 
         // Create component from factory
-        void* factoryPtr = g_pFactorySingleton ? *(void**)*g_pFactorySingleton : nullptr;
+        void* factoryPtr = ::Object::Factory::_singleton;
         void* newObj = nullptr;
         if (factoryPtr) {
             newObj = reinterpret_cast<const ::Object::Factory*>(factoryPtr)->CreateObject(
@@ -614,7 +614,7 @@ void ComponentEntity::Persist(void* stream) {
                 }
 
                 // Create new component from factory
-                void* factoryPtr = g_pFactorySingleton ? *(void**)*g_pFactorySingleton : nullptr;
+                void* factoryPtr = ::Object::Factory::_singleton;
                 void* newObj = nullptr;
                 if (factoryPtr) {
                     newObj = reinterpret_cast<const ::Object::Factory*>(factoryPtr)->CreateObject(

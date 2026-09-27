@@ -187,7 +187,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
     reinterpret_cast<UI::TableElement*>(tableElem)->SetSize(totalSlots / 3 + 1, 3);  // B.3.6 bridge
 
     float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
-    void* saveLoad = *g_pSaveLoadSingleton;
+    void* saveLoad = ::Save::SaveLoad::_singleton;
 
     // --- Phase 3: Populate save file entries ---
     for (int i = 0; i < saveCount; i++) {
@@ -253,7 +253,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             // Load UIMaterialNoBlend material
             System::Filename matFilename("Material/UI/UIMaterialNoBlend.rsc");
             void* matExternal = const_cast<::Object::External*>(
-                reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)  // B.3.3 bridge
+                ::Object::ExternalFactory::_singleton  // B.3.3 bridge
                     ->FindOrLoad(matFilename));
 
             void* matResource = nullptr;
@@ -473,17 +473,17 @@ void SaveLoadDialog::OnOpened() {
     *(uint32_t*)(spriteCopy + 4)  = *(uint32_t*)(keyMapObj + 0xBC);
     *(uint32_t*)(spriteCopy + 8)  = *(uint32_t*)(keyMapObj + 0xC0);
     *(uint32_t*)(spriteCopy + 12) = *(uint32_t*)(keyMapObj + 0xC4);
-    reinterpret_cast<Save::SaveLoad*>(*g_pSaveLoadSingleton)->SetSaveSprite(reinterpret_cast<const UI::Sprite*>(spriteCopy));  // B.3.7 bridge
+    ::Save::SaveLoad::_singleton->SetSaveSprite(reinterpret_cast<const UI::Sprite*>(spriteCopy));  // B.3.7 bridge
 
     // --- Set minimum operation time (0.75f seconds) ---
     uint8_t timeVal[8];
     fn_Time_Ctor_Float(timeVal, 0.75f);
-    reinterpret_cast<Save::SaveLoad*>(*g_pSaveLoadSingleton)->SetMinOperationTime(*reinterpret_cast<const System::Time*>(timeVal));  // B.3.7 bridge
+    ::Save::SaveLoad::_singleton->SetMinOperationTime(*reinterpret_cast<const System::Time*>(timeVal));  // B.3.7 bridge
 
     // --- Start operation: 1 (list/scan), param = -2 or -3 based on mode ---
     uint8_t mode = *(uint8_t*)(s + 0xB8);
     int opParam = -2 - (int)(mode != 0);
-    reinterpret_cast<Save::SaveLoad*>(*g_pSaveLoadSingleton)->SetOperation(static_cast<Save::SaveLoad::Operation>(1), opParam);  // B.3.7 bridge
+    ::Save::SaveLoad::_singleton->SetOperation(static_cast<Save::SaveLoad::Operation>(1), opParam);  // B.3.7 bridge
 }
 
 // ============================================================
@@ -501,7 +501,7 @@ void SaveLoadDialog::OnUpdateLayout() {
     uintptr_t s = (uintptr_t)this;
 
     uint8_t mode = *(uint8_t*)(s + 0xB8);
-    void* saveLoad = *g_pSaveLoadSingleton;
+    void* saveLoad = ::Save::SaveLoad::_singleton;
     if (!saveLoad) return;
 
     // --- Show/hide load/save labels based on mode ---
@@ -698,7 +698,7 @@ void SaveLoadDialog::OnUpdateLayout() {
 
 void SaveLoadDialog::OnUpdate(const System::Time& time) {
     uintptr_t s = (uintptr_t)this;
-    void* saveLoad = *g_pSaveLoadSingleton;
+    void* saveLoad = ::Save::SaveLoad::_singleton;
 
     // Phase 1: accumulate spinner rotation while I/O is in progress
     int operation = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetOperation();  // B.3.7 bridge
@@ -857,7 +857,7 @@ static int SaveLoad_ShowConfirmDialog(void* self, const char* rscPath) {
     // Load the .rsc External resource
     System::Filename filename(rscPath);
     void* externalRes = const_cast<::Object::External*>(
-        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+        ::Object::ExternalFactory::_singleton   // B.3.3 bridge
             ->FindOrLoad(filename));
 
     // IsDerivedFrom check — ensure it's a valid External (matches original _typeInfo_exref)
@@ -899,7 +899,7 @@ static void SaveLoadDialog_DoDelete(SaveLoadDialog* self) {
     int result = SaveLoad_ShowConfirmDialog(self, "Dialog/SaveLoad.rsc:confirmDelete");
     if (result == 2) {
         *(uint8_t*)(s + 0xBC) = 1;
-        void* saveLoad = *g_pSaveLoadSingleton;
+        void* saveLoad = ::Save::SaveLoad::_singleton;
         reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetOperation(static_cast<Save::SaveLoad::Operation>(5), *(int*)(s + 0xC0));  // B.3.7 bridge
     }
 }
@@ -916,7 +916,7 @@ static void SaveLoadDialog_DoDelete(SaveLoadDialog* self) {
 
 static void SaveLoadDialog_DoSave(SaveLoadDialog* self) {
     uintptr_t s = (uintptr_t)self;
-    void* saveLoad = *g_pSaveLoadSingleton;
+    void* saveLoad = ::Save::SaveLoad::_singleton;
 
     // Set minimum operation time (1.5f seconds — DAT_140172160)
     uint8_t minTime[8] = {};
@@ -963,7 +963,7 @@ static void SaveLoadDialog_DoSave(SaveLoadDialog* self) {
 
 static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
     uintptr_t s = (uintptr_t)self;
-    void* saveLoad = *g_pSaveLoadSingleton;
+    void* saveLoad = ::Save::SaveLoad::_singleton;
 
     // Set minimum operation time (1.5f seconds)
     uint8_t minTime[8] = {};
@@ -986,8 +986,8 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
     fflush(stdout);
     // The list CheckMod matches the save against is IO::Modification::_singleton.
     // Printed alongside so a non-zero CheckMod can be READ rather than guessed at.
-    if (g_ppModificationSingleton && *g_ppModificationSingleton) {
-        void* modSgl = *g_ppModificationSingleton;
+    if (::IO::Modification::_singleton) {
+        void* modSgl = ::IO::Modification::_singleton;
         int installed = reinterpret_cast<const IO::Modification*>(modSgl)->GetCount();   // B.3.4 bridge
         printf("[SaveLoadDialog::DoLoad] installed mod count=%d\n", installed);
         for (int mi = 0; mi < installed; mi++) {
@@ -1041,7 +1041,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
         // Load the warning dialog External resource
         System::Filename warnFilename(warnPath);
         void* warnExt = const_cast<::Object::External*>(
-            reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+            ::Object::ExternalFactory::_singleton   // B.3.3 bridge
                 ->FindOrLoad(warnFilename));
 
         void* checkedWarn = nullptr;

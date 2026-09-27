@@ -352,7 +352,7 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
 
     // Required Runtime primitives. If any are missing, log once and bail.
     if (!fn_IsDerivedFrom ||
-        !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+        !::Object::ExternalFactory::_singleton) {
         static bool s_warned = false;
         if (!s_warned) {
             printf("[Array::Serialize_External<MaterialInstance>] runtime primitives "
@@ -363,7 +363,7 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
         return;
     }
 
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     // ENDGAME B.3.3 step 6A: member calls on the real Object::ExternalFactory.
     // The singleton is still read through the EXISTING door, so the guards
     // above still gate the same cell and the same registered body still runs.

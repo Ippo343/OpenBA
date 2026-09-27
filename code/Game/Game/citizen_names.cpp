@@ -192,7 +192,7 @@ static void GenerateName(uintptr_t db, void* rng, int minLen, int maxLen, char* 
 // .rdata (DWORD_1401c5a60) is NULL in standalone, and FindOrLoad by exact
 // filename is authoritative.
 static uintptr_t LoadNameDb(const char* path) {
-    if (!path || !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton)
+    if (!path || !::Object::ExternalFactory::_singleton)
         return 0;
 
     System::Filename fname(path);
@@ -200,7 +200,7 @@ static uintptr_t LoadNameDb(const char* path) {
     // The singleton is still read through the EXISTING door, so the guard
     // above still gates the same cell and the same registered body still runs.
     void* obj = const_cast<::Object::External*>(
-        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+        ::Object::ExternalFactory::_singleton
             ->FindOrLoad(fname));                                          // B.3.3 bridge
     return (uintptr_t)obj;
 }

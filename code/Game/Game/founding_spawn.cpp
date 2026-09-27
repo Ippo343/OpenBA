@@ -77,6 +77,7 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include "object/External.h"   // ENDGAME B.3.9 SS2: Object::ExternalFactory::_singleton
 
 // Start-config offsets (mirrors of the constants in starttown.cpp).
 static constexpr int SC_JITTER       = 0x40;   // float spawn-jitter radius
@@ -227,7 +228,7 @@ extern "C" float StartTown_FoundingChildAge(void* citizenTemplate) {
 // template pointer the CopyCtor source and the entity-list category are both read from.
 static void* FoundingSpawn_RefreshTemplate(uint8_t* startConfig, void* fallback) {
     if (!startConfig) return fallback;
-    if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton)
+    if (::Object::ExternalFactory::_singleton)
         ResolveExternalByName_Impl(startConfig + SC_CITIZEN_REF);
     void** cache = reinterpret_cast<void**>(startConfig + SC_CITIZEN_TMPL);
     if (*cache == nullptr && fallback != nullptr) {

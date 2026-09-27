@@ -540,8 +540,8 @@ static void* wg_BlendTexture_cf440(int32_t* hf) {
 // Returns the resolved External* (or null -> untextured-but-visible terrain).
 // ============================================================
 static void* wg_ResolveMaterial_fd10(void* triple) {
-    if (!triple || !g_pExternalFactorySingleton) return nullptr;
-    void* factory = *g_pExternalFactorySingleton;
+    if (!triple) return nullptr;
+    void* factory = ::Object::ExternalFactory::_singleton;
     if (!factory) return nullptr;
 
     // String is at +0 of the triple.

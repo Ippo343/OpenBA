@@ -37,23 +37,6 @@
 #include "graphics/Camera.h"   // ::Graphics::Camera
 
 // ============================================================
-// Timer globals (in Runtime-x64.dll .data section)
-// Used by MainLoop for QPC-to-tick conversion.
-// ============================================================
-
-// System::Timer::_systemInitialTick — QPC value at engine init
-extern int64_t* g_Timer_systemInitialTick;
-
-// System::Timer::_ticksPerSecond — engine ticks per second (numerator)
-extern int64_t* g_Timer_ticksPerSecond;
-
-// System::Timer::_systemTicksPerSecond — QPC ticks per second (denominator)
-extern int64_t* g_Timer_systemTicksPerSecond;
-
-// System::Timer::_secondsPerTick — 1.0 / ticksPerSecond (double)
-extern double* g_Timer_secondsPerTick;
-
-// ============================================================
 // Engine function pointers
 // ============================================================
 
@@ -103,8 +86,7 @@ extern void* g_pMemAllocSingleton;
 // Video::Device globals
 // ============================================================
 
-// Video::Device::_singleton
-extern void** g_pVideoDeviceSingleton;
+// Video::Device::_singleton -- read as the class static (ENDGAME B.3.9 SS2).
 
 // Video::Device::Lock / ::Unlock (ordinals 3214 / 4462) are GONE in ENDGAME
 // B.3.5 (b35-close): both are members of the real `Video::Device`. Lock outlived
@@ -119,8 +101,7 @@ extern void** g_pVideoDeviceSingleton;
 // Object::ExternalFactory
 // ============================================================
 
-// ExternalFactory::_singleton — pointer to the global ExternalFactory instance
-extern void** g_pExternalFactorySingleton;
+// ExternalFactory::_singleton -- read as the class static (ENDGAME B.3.9 SS2).
 
 // ENDGAME B.3.3 step 7: the `fn_ExternalFactory_*` and `fn_External_GetPath` /
 // `fn_External_SaveText` pointers are DELETED — every caller is a member call on
@@ -186,8 +167,7 @@ extern uint32_t* g_TypeId_Dialog;
 // IO::Persistence — key/value settings store
 // ============================================================
 
-// Persistence::_singleton pointer
-extern void** g_pPersistenceSingleton;
+// Persistence::_singleton -- read as the class static (ENDGAME B.3.9 SS2).
 
 // ============================================================
 // System::Filename helpers
@@ -201,10 +181,7 @@ extern void** g_pPersistenceSingleton;
 // Engine globals (resolved pointers into Runtime-x64.dll data)
 // ============================================================
 
-// Application::Application::_singleton at 0x1801fc678 (Runtime export
-// ?_singleton@Application@1@0PEAV11@EA -- corrected by Wave 8 lane E; the
-// previous address here was stale and unused by any resolve call).
-extern void** g_pAppSingleton;
+// Application::Application::_singleton -- read as the class static (ENDGAME B.3.9 SS2).
 
 // ============================================================
 // UI infrastructure (DialogController, Element, TextElement)
@@ -618,9 +595,6 @@ extern fn_OrchardGetGrowth_t fn_OrchardGetGrowth;
 typedef void (*fn_SaveLoad_Dtor_t)(void* saveLoad);
 extern fn_SaveLoad_Dtor_t fn_SaveLoad_Dtor;
 
-// SaveLoad singleton — accessed via exe exref at 0x140151610 (double-indirect)
-extern void** g_pSaveLoadSingleton;
-
 // DateTime::AsString(this, retval) -> String — format date+time as string (non-trivial return)
 // ?AsString@DateTime@System@@QEBA?AVString@2@XZ
 typedef void* (*fn_DateTime_AsString_t)(void* dateTime, void* retval);
@@ -634,9 +608,6 @@ extern fn_DateTime_AsString_t fn_DateTime_AsString;
 class SaveLoadDialog;
 void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self);
 
-// Input::Device singleton — accessed via exe exref at 0x140151b80 (double-indirect)
-extern void** g_pInputDeviceSingleton;
-
 // ScenarioDialog helper: loads the selected scenario — NOW REIMPLEMENTED
 // fn_ScenarioDialog_LoadSelected replaced by inline code in scenariodialog.cpp
 
@@ -645,9 +616,6 @@ extern void** g_pInputDeviceSingleton;
 // batches converted; pointer, typedef, definition, resolver and exe-slot
 // fallback all went together. Their exe dispatch slots (0x140151d38 /
 // 0x140151d30) were never registered and the rows stay as they were.
-
-// IO::FileSystem singleton
-extern void** g_pFileSystemSingleton2;  // separate exref for GetDataDirectory calls
 
 // LoadScenarioFromSave: FUN_1400b49f0(worldSetup, savedState, scenarioIdx, retvalPtr)
 // Called from ScenarioDialog_LoadSelected when loading a saved scenario.
@@ -678,14 +646,6 @@ typedef int (*fn_SelectResourceUI_GetResourceCount_t)(void* self);
 // (0x1800f33a0, ordinal 1866) are GONE in ENDGAME B.3.5 (b35-close): both are
 // members of the real `Video::ImageBuffer`. Their last readers were two diagnostic
 // `%p`s (minimap_upload.cpp and w2_takescreenshot.cpp), not calls.
-
-// ============================================================
-// Achievement::AchievementManager singleton storage
-// ============================================================
-
-// AchievementManager singleton — double-indirect via .rdata dispatch at 0x1401514f0
-// Usage: void* manager = **g_ppAchievementManager;
-extern void*** g_ppAchievementManager;
 
 // ============================================================
 // FollowDialog helpers
@@ -928,7 +888,7 @@ extern uint32_t* g_TypeId_ComboElement;
 typedef void (*fn_ResolveExternalByName_t)(void* nameString); // kept for ABI reference
 inline void ResolveExternalByName_Impl(void* nameString) {
     uintptr_t s = (uintptr_t)nameString;
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     if (!factory) return;
 
     // Check generation counter: if matches, cached value is still valid
@@ -1305,15 +1265,8 @@ typedef void (*fn_OptionsDialog_SimpleFunc_t)(void* self);  // kept for Populate
 // typedef void (*fn_OptionsDialog_OnInputBindClick_t)(void* self, void* element, int bindIndex, int slot);
 // extern fn_OptionsDialog_OnInputBindClick_t fn_OptionsDialog_OnInputBindClick;
 
-// Video::Device singleton — needed for video config singletons
-// Already available as g_pVideoDeviceSingleton
-
-// Audio::Configuration singleton — _singleton_exref used in slider handlers
-// Points to int[4] array of volume levels at offsets 0, 4, 8, 0xC
-extern void** g_pAudioConfigSingleton;  // resolved from _singleton_exref in slider code
-
-// Video::Configuration singleton — contains current video settings
-extern void** g_pVideoConfigSingleton;  // resolved from _singleton_exref in Startup
+// Video::Device, Audio::Configuration (int[4] volume levels at 0, 4, 8, 0xC) and
+// Video::Configuration singletons: read as the class statics (ENDGAME B.3.9 SS2).
 
 // fn_Element_GetParent — now inline in optionsdialog.cpp (vtable call at +0x48)
 
@@ -1396,10 +1349,6 @@ extern fn_Configuration_GetVersionString_t fn_Configuration_GetVersionString;
 // ============================================================
 // IO::Modification (mod management singleton)
 // ============================================================
-
-// IO::Modification singleton pointer — exe .rdata at 0x1401519e8
-// Usage: Modification* mod = *(Modification**)g_ppModificationSingleton;
-extern void** g_ppModificationSingleton;
 
 // IO::Modification::GetCount / ::GetModification — REMOVED, ENDGAME B.3.4a
 // closing 2d. Both were 0-CALL doors onto Runtime 0x18000da90 / 0x18000da80;
@@ -2068,9 +2017,6 @@ extern float* g_fUVScale;  // DAT_14017214c
 // SpriteCaptureUI support functions
 // ============================================================
 
-// IO::FileSystem singleton — exref at 0x140151d18 (ordinal 0x161 _singleton)
-extern void** g_pFileSystemSingleton;
-
 // Object::External::SaveText(this, path, subdir) -> bool
 // ?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z (0x1800bb9d0, ordinal 364)
 
@@ -2085,9 +2031,6 @@ extern void** g_pFileSystemSingleton;
 
 // --- Input::Configuration ---
 
-// Input::Configuration::_singleton
-extern void** g_pInputConfigSingleton;
-
 // --- IO::Persistence ---
 // WriteSettings / ReadSettings — REMOVED, ENDGAME B.3.4a closing 2d (0 CALLs).
 
@@ -2097,13 +2040,9 @@ extern void** g_pInputConfigSingleton;
 // section held (`Startup`, `Shutdown`, `ApplyChangedSettings`, `RecreateDynamic`,
 // `ReleaseDynamic`, `ValidateConfiguration`, `GetMultisampleModeCount`,
 // `IsMultisampleModeSupported`, `GetInterface`, `GetInterfaceCount`, `Unlock`) is a
-// member of the real `Video::Device`. `g_pVideoDeviceSingleton` above stays: a
-// static-storage read, not a door (B35_RULES section 9).
+// member of the real `Video::Device`; its singleton is the class static.
 
 // --- Engine::MainLoop ---
-
-// Engine::MainLoop::_singleton (protected)
-extern void** g_pMainLoopSingleton;
 
 // UI::Element type info — exe slot 0x140151660 (?_typeInfo@Element@UI@@).
 // Used for IsDerivedFrom checks before InternalBasePtr wrapping / GetUserData.
@@ -2315,10 +2254,6 @@ extern fn_MapGetTerrainPos_t fn_MapGetTerrainPos;
 // Looks up type name CRC in Factory BST. Returns type ID (uint32) or 0 if not found.
 // RCX=this(Factory*), RDX=name(const char*), R8=includeBase(bool)
 
-// Object::Factory::_singleton — dispatch table pointer at 0x140152760 in exe
-// Double-indirect: *(void**)0x140152760 -> Factory*
-extern void** g_pFactorySingleton;
-
 // Object::Base::IsA(this, typeId) -> bool
 // Runtime DLL export ordinal 3089: ?IsA@Base@Object@@QEBA_NI@Z
 // Compares GetTypeId() against given typeId.
@@ -2514,12 +2449,8 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
         part1[copyLen] = 0;
     }
 
-    // Get type IDs from Factory (double-deref: dispatch slot -> pointer -> Factory*)
-    if (!g_pFactorySingleton || !*g_pFactorySingleton) {
-        *(uintptr_t*)ret = 0;
-        return retval;
-    }
-    void* factoryObj = *(void**)*g_pFactorySingleton;
+    // Get type IDs from Factory (retail: **import slot 0x140152760)
+    void* factoryObj = ::Object::Factory::_singleton;
     if (!factoryObj) {
         *(uintptr_t*)ret = 0;
         return retval;
@@ -2608,10 +2539,10 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
 // finds SelectDescription sub-component (DAT_1401c48a8), checks type match,
 // removes matching entity via Game_RemoveEntity.
 inline void Game_TriggerDisasterByType_Impl(int disasterType) {
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
+    if (!::Object::ExternalFactory::_singleton) return;
     if (!fn_IsDerivedFrom) return;
 
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     void* gameWorld = *g_pGameWorldSingleton;
     if (!gameWorld) return;
     void* entityList = *(void**)((uintptr_t)gameWorld + 0xf0);
@@ -3460,10 +3391,6 @@ extern fn_TutorialStepExecute_t fn_TutorialStepExecute;
 
 // TypeId for FinishTutorialGoal — stored at 0x1401c6240 in exe .rdata
 extern uint32_t* g_TypeId_FinishTutorialGoal;
-
-// Singleton External reference at 0x140151a80 — points to game config/time singleton
-// Deref pattern: *(void**)(*(void**)slot + 4) gives screen height or similar int
-extern void** g_pSingletonExref_151a80;
 
 // FUN_1400e1870(outIBP, elementPath, outDialogPtr) — find UI element by dotted path string.
 // Parses "DialogType.ElementName" (or "DialogType.Controller.ElementName"),

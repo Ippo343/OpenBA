@@ -231,12 +231,6 @@ extern int RtIoTextFileStreamSlotsRegister();   // text_file_stream_win.cpp
 void RtIoPortInit() {
     // ENDGAME B.3.9 IO (B39_RULES D7): the minted storage row IS the class
     // static from here on (name door, address door, manifest publish).
-    RtMintRedirectStorage("?_singleton@FileSystem@IO@@0PEAV12@EA",
-                          &IO::FileSystem::_singleton);
-    RtMintRedirectStorage("?_singleton@Modification@IO@@2PEAV12@EA",
-                          &IO::Modification::_singleton);
-    RtMintRedirectStorage("?_singleton@Persistence@IO@@0PEAV12@EA",
-                          &IO::Persistence::_singleton);
 
     int n = 0;
     n += RtIoSerializerRegister();

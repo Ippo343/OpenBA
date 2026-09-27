@@ -62,6 +62,9 @@
 #include "engine/MainLoop.h"                  // ENDGAME B.3.7 callers (K2)
 #include "audio/Audio.h"                      // ENDGAME B.3.7 callers (K4)
 #include "input/Input.h"                      // ENDGAME B.3.7 callers (K3)
+#include "graphics/Mesh.h"               // ENDGAME B.3.9 SS2: MeshInstance::_rootOnlyUpdates
+#include "graphics/ParticleInstance.h"   // ENDGAME B.3.9 SS2: ParticleInstance::_frameIndex
+#include "io/FileSystem.h"               // ENDGAME B.3.9 SS2: IO::FileSystem::_singleton
 
 // Toolbar HUD standalone bring-up (code/Game/Dialog/toolbar_vtable_standalone.cpp):
 // builds the ToolbarDialog vtable + fills the toolbar type-id globals. Called only
@@ -117,16 +120,9 @@ namespace Object { uint32_t ResolveTypeIdByNameLazy(const char* simpleName); }
 // Exe globals (resolved at init time from .rdata/.data addresses)
 // ============================================================
 
-// g_rootOnlyUpdates: flag set to true when inner sim loop iteration is not the last
-// Controls whether AnimationManager skips non-root bone updates for speed.
-// Referenced as _rootOnlyUpdates_exref in Ghidra decompile.
-// Indirect: exe .rdata at 0x140151f30 points to the actual bool in Runtime .data.
-static bool** g_pp_rootOnlyUpdates = nullptr;
-
-// g_frameIndex: global frame counter incremented each simulation tick.
-// Referenced as _frameIndex_exref in Ghidra decompile.
-// Indirect: exe .rdata at 0x140151f38 points to the actual int in Runtime .data.
-static int32_t** g_pp_frameIndex = nullptr;
+// Graphics::MeshInstance::_rootOnlyUpdates (retail: import slot 0x140151f30) and
+// Graphics::ParticleInstance::_frameIndex (import slot 0x140151f38) are read as
+// their class statics (ENDGAME B.3.9 SS2).
 
 // ============================================================
 // Exe function pointers (not yet in engine_funcs.h)
@@ -442,8 +438,6 @@ static void EnsureInit() {
     // NOTE the Engine::Engine at MainLoop+0x78 is a DIFFERENT object.
 
     // Exe globals (indirect — .rdata dispatch table pointers into Runtime .data)
-    g_pp_rootOnlyUpdates = reinterpret_cast<bool**>(ResolveAddr(Module::Exe, 0x140151f30));
-    g_pp_frameIndex = reinterpret_cast<int32_t**>(ResolveAddr(Module::Exe, 0x140151f38));
     g_pDebugSingleton = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3de0));
 
     // Float constants
@@ -1042,9 +1036,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // 3b. AnimationManager::Update
                 bool rootOnly = (iteration < speedMultiplier - 1);
                 PerfX::SetIteration(iteration, speedMultiplier);   // [PerfX] ANIM_BATCH needs the iteration index
-                if (g_pp_rootOnlyUpdates && *g_pp_rootOnlyUpdates) {
-                    **g_pp_rootOnlyUpdates = rootOnly;
-                }
+                ::Graphics::MeshInstance::_rootOnlyUpdates = rootOnly;
                 TRACE("[GameUpdateLoop::Update] calling AnimationManager::Update (rootOnly=%d)...\n", (int)rootOnly);
                 { PhaseTimer pt(kPhAnimation);
                 // B.3.5 bridge — the exe dispatch slot 0x140152050 read and its
@@ -1104,9 +1096,8 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 }
 
                 // 3h. Global frame index increment
-                if (g_pp_frameIndex && *g_pp_frameIndex) {
-                    **g_pp_frameIndex = **g_pp_frameIndex + 1;
-                }
+                ::Graphics::ParticleInstance::_frameIndex =
+                    ::Graphics::ParticleInstance::_frameIndex + 1;
 
                 iteration++;
                 if (simProf) g_profSimIters++;   // [SIMPROF]
@@ -1151,11 +1142,10 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
             // advances all of them at once (standalone/ach_clock.cpp).
             fn_Time_Ctor_Seconds(scaledTime,
                                  seconds * (float)speedMultiplier * AchClock_TimeScale());
-            // g_ppAchievementManager (exe slot 0x1401514f0) is unregistered in
-            // standalone (M5 first slice) — guard the triple-deref. Re-enable the
-            // AchievementManager tick once that singleton/slot is wired.
-            if (g_ppAchievementManager && *g_ppAchievementManager && **g_ppAchievementManager) {
-                void* achievementMgr = **g_ppAchievementManager;
+            // Achievement::AchievementManager::_singleton (retail: **import slot
+            // 0x1401514f0). The null check on the manager is the M5 first-slice guard.
+            if (::Achievement::AchievementManager::_singleton) {
+                void* achievementMgr = ::Achievement::AchievementManager::_singleton;
 
                 // BANISHED_ACH_IGNORE_MODS=1 -- NON-RETAIL TEST FIXTURE.
                 //
@@ -1182,11 +1172,9 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                     s_ignoreMods = (e && e[0] && e[0] != '0') ? 1 : 0;
                 }
                 if (s_ignoreMods == 1) {
-                    void** s_ppFileSystem = RT_DATA_SLOT(void**,
-        "?_singleton@FileSystem@IO@@0PEAV12@EA");
-                    if (s_ppFileSystem && *s_ppFileSystem) {
+                    if (::IO::FileSystem::_singleton) {
                         modGate = reinterpret_cast<int32_t*>(
-                            static_cast<uint8_t*>(*s_ppFileSystem) + 0x38);
+                            reinterpret_cast<uint8_t*>(::IO::FileSystem::_singleton) + 0x38);
                         savedGate = *modGate;
                         if (savedGate > 0) {
                             *modGate = 0;
@@ -1505,13 +1493,13 @@ post_simulation:
         uint8_t* imageCapture = (uint8_t*)m_imageCapture;
         if (*(int64_t*)(imageCapture + 8) != 0 && *imageCapture != 0) {
             TRACE("[GameUpdateLoop::Update] processing image capture...\n");
-            reinterpret_cast<Video::Device*>(*g_pVideoDeviceSingleton)
+            ::Video::Device::_singleton
                 ->Lock();   // B.3.5 bridge
             reinterpret_cast<Video::ImageBuffer*>(*(void**)(imageCapture + 0x10))
                 ->CopyToTexture(*(void**)(imageCapture + 0x28),
                                 *(int32_t*)(imageCapture + 4),
                                 *(int32_t*)(imageCapture + 4));   // B.3.5 bridge
-            reinterpret_cast<Video::Device*>(*g_pVideoDeviceSingleton)
+            ::Video::Device::_singleton
                 ->Unlock();   // B.3.5 bridge
             *imageCapture = 0;
             TRACE("[GameUpdateLoop::Update] image capture done\n");
@@ -1524,7 +1512,7 @@ post_simulation:
         float fadeProgress = reinterpret_cast<UI::UserInterface*>(m_userInterface)->_fadeVelocity;   // B.3.8 bridge
         if (fadeProgress == 0.0f) {
             TRACE("[GameUpdateLoop::Update] transitioning to next loop %p\n", m_nextLoop);
-            reinterpret_cast<Engine::MainLoop*>(*g_pMainLoopSingleton)->SetNextLoop(   // B.3.7 bridge
+            ::Engine::MainLoop::_singleton->SetNextLoop(   // B.3.7 bridge
                 reinterpret_cast<Engine::UpdateLoop*>(m_nextLoop));
         }
     }
@@ -1611,7 +1599,7 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 2: Set time on video context
     TRACE("[GameUpdateLoop::Draw] setting video context time...\n");
     {
-        void* engine = *g_pMainLoopSingleton;
+        void* engine = ::Engine::MainLoop::_singleton;
         void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
         int64_t engineFrameTime = reinterpret_cast< ::Engine::MainLoop*>(engine)->_frameUpdateTime;   // B.3.8 bridge
 
@@ -1626,7 +1614,7 @@ void GameUpdateLoop::Draw(float alpha) {
     TRACE("[GameUpdateLoop::Draw] checking image capture terrain...\n");
     {
         uint8_t* imageCapture = (uint8_t*)m_imageCapture;
-        void* engine = *g_pMainLoopSingleton;
+        void* engine = ::Engine::MainLoop::_singleton;
         void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
         // fn_ImageCapture_DrawCheck (exe FUN_1400a5140) is our clean port
         // Minimap_PaintTerrain in standalone (see Startup fallback above). It fires
@@ -1658,7 +1646,7 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 5: Weather draw update
     TRACE("[GameUpdateLoop::Draw] calling Weather::DrawUpdate...\n");
     {
-        void* engine = *g_pMainLoopSingleton;
+        void* engine = ::Engine::MainLoop::_singleton;
         void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
         if (fn_Weather_DrawUpdate) fn_Weather_DrawUpdate(m_weather, videoCtx); // [GUARD-M5]
         // Native time-of-day sun/lighting. The original Weather::DrawUpdate
@@ -1730,8 +1718,8 @@ void GameUpdateLoop::Draw(float alpha) {
         // original and read VideoConfig+0x30 so SunLight::DrawShadowMap engages (verified
         // crash-free; terrain + buildings cast/receive). The day cycle is driven by
         // Weather_SunUpdate above.
-        if (g_pVideoConfigSingleton && *g_pVideoConfigSingleton) {
-            shadowMode = *(uint32_t*)((uintptr_t)*g_pVideoConfigSingleton + 0x30);
+        if (::Video::Configuration::_singleton) {
+            shadowMode = *(uint32_t*)((uintptr_t)::Video::Configuration::_singleton + 0x30);
         }
         *(uint32_t*)((uintptr_t)m_renderer + 0x3c) = shadowMode;
     }
@@ -1753,7 +1741,7 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 7: Graphics::Renderer::Draw
     TRACE("[GameUpdateLoop::Draw] calling Renderer::Draw...\n");
     {
-        void* engine = *g_pMainLoopSingleton;
+        void* engine = ::Engine::MainLoop::_singleton;
         void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
         reinterpret_cast<Graphics::Renderer*>(m_renderer)->Draw(
             *reinterpret_cast<Video::Context*>(videoCtx), alpha,
@@ -1770,7 +1758,7 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 8: SaveLoad::Draw if active
     if (m_saveLoad != nullptr) {
         TRACE("[GameUpdateLoop::Draw] calling SaveLoad::Draw...\n");
-        void* engine = *g_pMainLoopSingleton;
+        void* engine = ::Engine::MainLoop::_singleton;
         void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
         // Save::SaveLoad::Draw — the ExternalPtr<Material> is a bare register value (B7-5).
         reinterpret_cast<Save::SaveLoad*>(m_saveLoad)->Draw(   // B.3.7 bridge
@@ -1829,7 +1817,7 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 10: Set camera matrices on video context for UI
     TRACE("[GameUpdateLoop::Draw] setting camera matrices...\n");
     {
-        void* engine = *g_pMainLoopSingleton;
+        void* engine = ::Engine::MainLoop::_singleton;
         void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
         uintptr_t pc = (uintptr_t)m_playerController;
 
@@ -1864,7 +1852,7 @@ void GameUpdateLoop::Draw(float alpha) {
     TRACE("[GameUpdateLoop::Draw] calling EntityUI toolbar draw...\n");
     {
         uintptr_t entityUI = (uintptr_t)m_entityUI;
-        void* engine = *g_pMainLoopSingleton;
+        void* engine = ::Engine::MainLoop::_singleton;
         void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
 
         // Check if UI has input focus or pauses game -> pass as flag
@@ -1888,7 +1876,7 @@ void GameUpdateLoop::Draw(float alpha) {
     // Step 12: UI::UserInterface::Draw
     TRACE("[GameUpdateLoop::Draw] calling UI::UserInterface::Draw...\n");
     {
-        void* engine = *g_pMainLoopSingleton;
+        void* engine = ::Engine::MainLoop::_singleton;
         void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
         reinterpret_cast<UI::UserInterface*>(m_userInterface)->Draw(*reinterpret_cast<Video::Context*>(videoCtx));  // B.3.6 bridge
     }
@@ -2111,10 +2099,10 @@ void GameUpdateLoop::Startup() {
         if (_resourceList && fn_ExternalList_Find)
             fn_ExternalList_Find(_resourceList, &foundBase, &filename, &typeInfo);
         if (foundBase == nullptr &&
-            g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
+            ::Object::ExternalFactory::_singleton) {
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
             foundBase = const_cast<::Object::External*>(
-                reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+                ::Object::ExternalFactory::_singleton
                     ->FindOrLoad(filename));                                 // B.3.3 bridge
         }
 
@@ -2175,10 +2163,10 @@ void GameUpdateLoop::Startup() {
         if (_resourceList && fn_ExternalList_Find)
             fn_ExternalList_Find(_resourceList, &foundBase, &filename, &typeInfo);
         if (foundBase == nullptr &&
-            g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
+            ::Object::ExternalFactory::_singleton) {
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
             foundBase = const_cast<::Object::External*>(
-                reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+                ::Object::ExternalFactory::_singleton
                     ->FindOrLoad(filename));                                 // B.3.3 bridge
         }
         void* dialogRes = nullptr;
@@ -2229,10 +2217,10 @@ void GameUpdateLoop::Startup() {
         if (_resourceList && fn_ExternalList_Find)
             fn_ExternalList_Find(_resourceList, &foundBase, &filename, &typeInfo);
         if (foundBase == nullptr &&
-            g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
+            ::Object::ExternalFactory::_singleton) {
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
             foundBase = const_cast<::Object::External*>(
-                reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+                ::Object::ExternalFactory::_singleton
                     ->FindOrLoad(filename));                                 // B.3.3 bridge
         }
         void* dialogRes = nullptr;
@@ -2312,8 +2300,8 @@ void GameUpdateLoop::Shutdown() {
 
     // Clear achievement event handler
     TRACE("[GameUpdateLoop::Shutdown] clearing achievement event handler...\n");
-    if (g_ppAchievementManager && *g_ppAchievementManager && **g_ppAchievementManager) {
-        void* achievementMgr = **g_ppAchievementManager;
+    if (::Achievement::AchievementManager::_singleton) {
+        void* achievementMgr = ::Achievement::AchievementManager::_singleton;
         reinterpret_cast<Achievement::AchievementManager*>(achievementMgr)->SetEventHandler(nullptr);   // B.3.7 bridge
     }
 

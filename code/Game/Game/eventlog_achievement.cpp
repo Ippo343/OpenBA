@@ -65,11 +65,10 @@ extern "C" void EventLog_OnAchievementAwarded(int achievementId) {
 
     // AchievementManager singleton — exe import slot 0x1401514f0 holds the address
     // of Runtime's ?_singleton@AchievementManager@Achievement@@0PEAV12@EA, so the
-    // manager is **g_ppAchievementManager. Retail derefs it unguarded; we only ever
+    // manager is ::Achievement::AchievementManager::_singleton. Retail derefs it unguarded; we only ever
     // reach here from Runtime's own handler call, so it is always live — the guard
     // below only covers the case where the slot never resolved at all.
-    void* mgr = (g_ppAchievementManager && *g_ppAchievementManager)
-                    ? **g_ppAchievementManager : nullptr;
+    void* mgr = ::Achievement::AchievementManager::_singleton;
     if (!mgr) return;
 
     uint64_t achievement = 0;   // ExternalPtr<Achievement> (8 bytes, trivially destructible)

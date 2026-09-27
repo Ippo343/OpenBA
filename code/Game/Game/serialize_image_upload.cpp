@@ -125,7 +125,7 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
         return;
     }
 
-    if (!g_pVideoDeviceSingleton || !*g_pVideoDeviceSingleton) {
+    if (!::Video::Device::_singleton) {
         static bool s_warned = false;
         if (!s_warned) {
             printf("[sub_c780] Video::Device singleton not yet ready — "
@@ -218,7 +218,7 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
     }
 
     // (7) Lock the device, copy heightmap bytes -> texture, unlock.
-    void* device = *g_pVideoDeviceSingleton;
+    void* device = ::Video::Device::_singleton;
     reinterpret_cast<Video::Device*>(device)->Lock();   // B.3.5 bridge
 
     void* heightmapBytes = *reinterpret_cast<void**>(selfBytes + kHeightmapBytesOffset);
@@ -236,7 +236,7 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
 
     // Re-fetch — original disassembly reads `[0x140151a80]` then `[RAX]` again
     // for the Unlock call; preserves the same indirection level we used above.
-    void* deviceForUnlock = *g_pVideoDeviceSingleton;
+    void* deviceForUnlock = ::Video::Device::_singleton;
     reinterpret_cast<Video::Device*>(deviceForUnlock)->Unlock();   // B.3.5 bridge
 
     {

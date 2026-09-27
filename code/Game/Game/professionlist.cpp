@@ -149,7 +149,7 @@ bool ProfessionList::Serialize(void* stream) {
 extern "C" void ProfessionList_Startup_Impl(void* profList) {
     ProfessionList* const self = static_cast<ProfessionList*>(profList);   // B.3.8 bridge
     if (!self || !fn_IsDerivedFrom ||
-        !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton)
+        !::Object::ExternalFactory::_singleton)
         return;
 
     // B.3.2 bridge: ProfessionList+0x20 is still a raw {data, count|cap} header.
@@ -159,7 +159,7 @@ extern "C" void ProfessionList_Startup_Impl(void* profList) {
     uint32_t profTid = Profession::TypeId();
     if (!profTid) return;
 
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     // ENDGAME B.3.3 step 6A: member calls on the real Object::ExternalFactory.
     // The singleton is still read through the EXISTING door, so the guard
     // above still gates the same cell and the same registered body still runs.

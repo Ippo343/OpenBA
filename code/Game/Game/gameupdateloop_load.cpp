@@ -54,6 +54,7 @@
 #include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K2)
 #include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
 #include "ui/StringTable.h"  // UI::StringTable::TypeId() (D5, ENDGAME B.3.9 CG3)
+#include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
 
 // ============================================================
 // Externs from sibling reimpl TUs (already registered/defined)
@@ -134,15 +135,15 @@ extern "C" void EventLog_OnAchievementAwarded(int achievementId);
 
 static void LoadProfessionList_Step2(GameUpdateLoop* self) {
 
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+    if (!::Object::ExternalFactory::_singleton) {
         self->m_professionList = nullptr;
         fprintf(stderr, "[GUL::ProfList] SKIP — factory unavailable (factory=%p)\n",
-                g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
+                ::Object::ExternalFactory::_singleton);
         fflush(stderr);
         return;
     }
 
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     // The singleton is still read through the EXISTING door, so the guard
     // above still gates the same cell and the same registered body still runs.
@@ -187,13 +188,13 @@ static void LoadProfessionList_Step2(GameUpdateLoop* self) {
 static void LoadUIMaterial_Step3(GameUpdateLoop* self) {
     self->m_uiMaterial = nullptr;
 
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton)
+    if (!::Object::ExternalFactory::_singleton)
         return;
 
     System::Filename fname("Material/UI/UIMaterialNoBlend.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     void* mat = const_cast<::Object::External*>(
-        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+        ::Object::ExternalFactory::_singleton
             ->FindOrLoad(fname));                                          // B.3.3 bridge
 
     // Retail's type gate (exe .rdata Material typeinfo slot is unfilled in SA —
@@ -213,9 +214,9 @@ static void LoadUIMaterial_Step3(GameUpdateLoop* self) {
 static void LoadHelpTopics_Step4(GameUpdateLoop* self) {
     self->m_helpTopics = nullptr;
 
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+    if (!::Object::ExternalFactory::_singleton) {
         fprintf(stderr, "[GUL::Help] SKIP — factory unavailable (factory=%p)\n",
-                g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
+                ::Object::ExternalFactory::_singleton);
         fflush(stderr);
         return;
     }
@@ -223,7 +224,7 @@ static void LoadHelpTopics_Step4(GameUpdateLoop* self) {
     System::Filename fname("Game/Help/HelpTopics.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     void* list = const_cast<::Object::External*>(
-        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+        ::Object::ExternalFactory::_singleton
             ->FindOrLoad(fname));                                          // B.3.3 bridge
 
     // Retail's type gate. Resolve Object::ExternalList's own BaseTypeInfo from the
@@ -269,9 +270,9 @@ static void LoadHelpTopics_Step4(GameUpdateLoop* self) {
 static void LoadDiseaseList_Step1(GameUpdateLoop* self) {
     self->m_diseaseList = nullptr;
 
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+    if (!::Object::ExternalFactory::_singleton) {
         fprintf(stderr, "[GUL::DiseaseList] SKIP — factory unavailable (factory=%p)\n",
-                g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
+                ::Object::ExternalFactory::_singleton);
         fflush(stderr);
         return;
     }
@@ -279,7 +280,7 @@ static void LoadDiseaseList_Step1(GameUpdateLoop* self) {
     System::Filename fname("Game/Disease/Diseases.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     void* list = const_cast<::Object::External*>(
-        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+        ::Object::ExternalFactory::_singleton
             ->FindOrLoad(fname));                                          // B.3.3 bridge
 
     // Retail's type gate (same Runtime-side BaseTypeInfo as the HelpTopics list; the
@@ -734,8 +735,8 @@ static void* Reimpl_FUN_1400182b0(void* selfMem, float param2) {
 // Exposed + registered at 0x140098660 (gameupdateloop.cpp Draw + Load step 33 call it).
 extern "C" void* Reimpl_FUN_140098660(void* camera, float fovY, float nearZ, float farZ) {
     int width = 1920, height = 1080;          // default 16:9 if viewport singleton unavailable
-    if (g_pSingletonExref_151a80 && *g_pSingletonExref_151a80) {
-        uint8_t* vp = *(uint8_t**)(*g_pSingletonExref_151a80);
+    {
+        uint8_t* vp = reinterpret_cast<uint8_t*>(::Video::Device::_singleton);
         if (vp) { width = *(int32_t*)(vp + 4); height = *(int32_t*)(vp + 8); }
     }
     const float kAspectThresh = 1.7777778f, kHalf = 0.5f, kDeg2Rad = 0.017453292f,
@@ -831,8 +832,8 @@ static void BuildSkyMesh_Step28(GameUpdateLoop* self) {
 
     // Load the sky dome resource (the `_clear_`-material mesh) via the global factory.
     void* meshRes = nullptr;
-    if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
-        void* factory = *g_pExternalFactorySingleton;
+    if (::Object::ExternalFactory::_singleton) {
+        void* factory = ::Object::ExternalFactory::_singleton;
         // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
         ::Object::ExternalFactory* efactory =
             reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
@@ -964,8 +965,8 @@ void GameUpdateLoop::Load() {
     // Step 6 — PlayerController/Camera (+0xE0, 0x10c). Initial frustum (overwritten by step 33).
     {
         int width = 1920, height = 1080;
-        if (g_pSingletonExref_151a80 && *g_pSingletonExref_151a80) {
-            uint8_t* vp = *(uint8_t**)(*g_pSingletonExref_151a80);
+        {
+            uint8_t* vp = reinterpret_cast<uint8_t*>(::Video::Device::_singleton);
             if (vp) { width = *(int32_t*)(vp + 8); height = *(int32_t*)(vp + 4); }  // step6 reads +8/+4
         }
         float aspect = (height != 0) ? (float)width / (float)height : 1.7777778f;
@@ -1059,11 +1060,11 @@ void GameUpdateLoop::Load() {
     // sim still runs its temperature/snow half).
     if (m_weather) {
         void* envRes = nullptr;
-        if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
+        if (::Object::ExternalFactory::_singleton) {
             System::Filename fname("Environment/Environment.rsc");
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
             envRes = const_cast<::Object::External*>(
-                reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+                ::Object::ExternalFactory::_singleton
                     ->FindOrLoad(fname));                                    // B.3.3 bridge
             int wxCount = envRes ? *(int*)((uint8_t*)envRes + 0x30) : 0;
             fprintf(stderr, "[GUL::Weather] Environment.rsc envRes=%p weatherDescCount=%d\n",
@@ -1205,8 +1206,8 @@ void GameUpdateLoop::Load() {
     // suffix selects the named sub-resource within Dialog/StringTable.rsc.
     {
         void* evStruct = m_eventNotifier;
-        if (evStruct && g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
-            void* factory = *g_pExternalFactorySingleton;
+        if (evStruct && ::Object::ExternalFactory::_singleton) {
+            void* factory = ::Object::ExternalFactory::_singleton;
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
             ::Object::ExternalFactory* efactory =
                 reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
@@ -1257,8 +1258,7 @@ void GameUpdateLoop::Load() {
     // We call our port directly rather than through ResolveAddr — the address IS
     // registered for any retail-shaped caller, but this is the only call site.
     {
-        void* achMgr = (g_ppAchievementManager && *g_ppAchievementManager)
-                           ? **g_ppAchievementManager : nullptr;
+        void* achMgr = ::Achievement::AchievementManager::_singleton;
         if (achMgr) {
             reinterpret_cast<Achievement::AchievementManager*>(achMgr)->SetEventHandler(&EventLog_OnAchievementAwarded);   // B.3.7 bridge
             fprintf(stderr, "[GUL::Load] step30 AchievementManager::SetEventHandler "
@@ -1299,8 +1299,7 @@ void GameUpdateLoop::Load() {
     // to say why. The dialog looked healthy the whole time because it reads the
     // ACHIEVEMENT list (mgr+0x00), not the instance list.
     if (m_savedState == nullptr /*new game*/) {
-        void* mgr = (g_ppAchievementManager && *g_ppAchievementManager)
-                        ? **g_ppAchievementManager : nullptr;
+        void* mgr = ::Achievement::AchievementManager::_singleton;
         if (mgr) {
             reinterpret_cast<Achievement::AchievementManager*>(mgr)->Reset();   // B.3.7 bridge
             fprintf(stderr, "[GUL::Load] step30b AchievementManager::Reset(mgr=%p) -> "

@@ -97,6 +97,7 @@
 // ============================================================================
 
 #include "modal_driver.h"
+#include "engine/MainLoop.h"   // ENDGAME B.3.9 SS2: Engine::MainLoop::_singleton
 
 #include <cstdio>
 #include <cstdlib>
@@ -114,7 +115,6 @@ namespace ModalDriver {
 namespace {
 
 // --- Layout, all read off the shipped Runtime-x64.dll -----------------------
-constexpr uintptr_t kMainLoop_Singleton   = 0x1801fe750;  // Engine::MainLoop::_singleton (DATA, ord 4813)
 constexpr uintptr_t kUpdateStandAloneUI   = 0x180120310;  // appended to MainLoop+0x90 by ShowDialog
 constexpr uintptr_t kDrawStandAloneUI     = 0x1801203f0;  // appended to MainLoop+0x80 by ShowDialog
 constexpr uintptr_t kShowDialog           = 0x18011fd10;
@@ -160,8 +160,7 @@ void ParseEnv() {
 }
 
 void* MainLoopSingleton() {
-    void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Runtime, kMainLoop_Singleton));
-    return slot ? *slot : nullptr;
+    return ::Engine::MainLoop::_singleton;   // the class static (ENDGAME B.3.9 SS2)
 }
 
 // Append `e` to the (array,count,cap) triple at `base+arrOff`. Reallocates
