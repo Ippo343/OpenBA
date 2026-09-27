@@ -909,9 +909,7 @@ void DiseaseComponent::Persist(void* stream) {
     reinterpret_cast<System::Time*>(&spreadAccum)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     // Version-0 saves predate the registry, so re-run OnAdded (vtable +0x30 = slot 6).
     if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 0 && static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-        void** vt = *reinterpret_cast<void***>(this);
-        typedef void (*fn_slot6_t)(void*);
-        if (vt && vt[6]) reinterpret_cast<fn_slot6_t>(vt[6])(this);
+        OnAdded();   // slot 6, dispatched virtually as retail does
     }
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }

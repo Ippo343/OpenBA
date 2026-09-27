@@ -241,8 +241,7 @@ static char Attendance_State3Enter(void* selfP, void* /*sm*/) {
     AC_Resolve();
     const uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
 
-    void** vt = *reinterpret_cast<void***>(selfP);
-    if (vt && vt[7]) reinterpret_cast<void (*)(void*)>(vt[7])(selfP);
+    reinterpret_cast<AttendanceComponent*>(selfP)->OnRemove();   // B.3.8 bridge (slot 7, dispatched as retail does)
 
     AttendanceComponent_ProcessQueue(selfP);
 

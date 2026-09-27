@@ -29,6 +29,7 @@
 // Faithful offset-by-offset port.
 
 #include "engine_funcs.h"
+#include "Work/Work.h"   // B.3.8 CB1a (Work::GetTarget)
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -406,10 +407,9 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
     //     node holds its own id-keyed inner tree at +0x08 with a count at +0x10.
     //     If the bucket is absent, cb50 inserts a fresh one. ---
     uint8_t* wobj = *reinterpret_cast<uint8_t**>(pWorkIBP);
-    typedef uint64_t* (*Slot50_t)(void*, void*);
-    void* vt = *reinterpret_cast<void**>(wobj);
     uint64_t slot50Buf[2] = {0, 0};
-    uint64_t* targetKey = ((Slot50_t)(*reinterpret_cast<uintptr_t*>((uint8_t*)vt + 0x50)))(wobj, slot50Buf);
+    uint64_t* targetKey = static_cast<uint64_t*>(
+        reinterpret_cast<Work*>(wobj)->GetTarget(slot50Buf));   // B.3.8 bridge (Work slot 10, retslot)
 
     uint8_t* froot = *reinterpret_cast<uint8_t**>(schedB + 0x120);
     uint8_t* found = nullptr;
@@ -425,9 +425,9 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
     if (found == nullptr) {
         // cb50 builds+inserts a fresh bucket node whose key = the work's profession.
         void* wobj2 = *reinterpret_cast<void**>(pWorkIBP);
-        void* vt2 = *reinterpret_cast<void**>(wobj2);
         uint64_t keyBuf[2] = {0, 0};
-        uint64_t* freshKey = ((Slot50_t)(*reinterpret_cast<uintptr_t*>((uint8_t*)vt2 + 0x50)))(wobj2, keyBuf);
+        uint64_t* freshKey = static_cast<uint64_t*>(
+            reinterpret_cast<Work*>(wobj2)->GetTarget(keyBuf));   // B.3.8 bridge (Work slot 10, retslot)
         void* outNode = nullptr;
         void* nullSrc[2] = { nullptr, nullptr };   // {ptr=0, int=0}: no subtree to copy
         WS_cb50(reinterpret_cast<uint64_t*>(schedB + 0x120), &outNode, freshKey, nullSrc);

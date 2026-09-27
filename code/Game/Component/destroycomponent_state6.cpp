@@ -400,11 +400,10 @@ extern "C" void Destroy_RubbleStep_d5d0(void* destroyComp) {
     if (next < rubbleMeshFloor) next = rubbleMeshFloor;
 
     if (next != cur) {
-        void** vt = *reinterpret_cast<void***>(mc);
-        // vtable +0x38 (slot 7) removes the current geometry from Graphics::Scene and
-        // +0x30 (slot 6) adds the new one back — modelcomponent.cpp implements both
-        // (ModelComponent_OnCreate / ModelComponent_Draw).
-        if (cur >= 0 && vt && vt[7]) reinterpret_cast<void (*)(void*)>(vt[7])(modelComp);
+        // Slot 7 (OnRemove) removes the current geometry from Graphics::Scene and
+        // slot 6 (OnAdded) adds the new one back — ModelComponent's members.
+        ::Component* model = reinterpret_cast<::Component*>(modelComp);   // B.3.8 bridge (a ModelComponent find)
+        if (cur >= 0) model->OnRemove();
         *reinterpret_cast<int16_t*>(mc + 0x166) = static_cast<int16_t>(next);
         if (next >= 0) {
             void* modelDesc = AsType(*reinterpret_cast<void**>(mc + 0x18), TidModelDesc());
@@ -413,7 +412,7 @@ extern "C" void Destroy_RubbleStep_d5d0(void* destroyComp) {
                                            static_cast<int16_t>(next));
             reinterpret_cast<Graphics::MeshInstance*>(mc + 0x28)
                 ->SetMesh(Graphics::ExternalPtrHandle{mesh});   // B.3.5 bridge
-            if (vt && vt[6]) reinterpret_cast<void (*)(void*)>(vt[6])(modelComp);
+            model->OnAdded();
         }
         if (Milestone()) {
             std::fprintf(stderr, "[Collapse] rubble step comp=%p mesh variant %d -> %d "
@@ -457,9 +456,9 @@ extern "C" void Destroy_RubbleStep_d5d0(void* destroyComp) {
         if (rubbleDecalState != *reinterpret_cast<int*>(dc + 0x28)) {
             *reinterpret_cast<int*>(dc + 0x28) = rubbleDecalState;
             if (*reinterpret_cast<int*>(dc + 0x2c) >= 0) {
-                void** vt = *reinterpret_cast<void***>(dc);
-                if (vt && vt[7]) reinterpret_cast<void (*)(void*)>(vt[7])(decalIbp);
-                if (vt && vt[6]) reinterpret_cast<void (*)(void*)>(vt[6])(decalIbp);
+                ::Component* decal = reinterpret_cast<::Component*>(decalIbp);   // B.3.8 bridge (the DecalComponent find)
+                decal->OnRemove();
+                decal->OnAdded();
             }
         }
     }

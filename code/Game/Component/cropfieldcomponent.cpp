@@ -543,10 +543,7 @@ void CropFieldComponent::OnMessage(int message, void* /*data*/, uint32_t arg0, u
         int64_t t = 0;
         fn_Time_Ctor_Float(&t, rate * (*s_f300) * mult);
 
-        void** gvt = *reinterpret_cast<void***>(growth);
-        if (gvt && gvt[9])
-            reinterpret_cast<void (*)(void*, void*)>(gvt[9])(
-                reinterpret_cast<void*>(growth), &t);
+        reinterpret_cast<::Component*>(growth)->Update(&t);   // B.3.8 bridge (the GrowthComponent find 0x14000c460; slot 9)
     }
 }
 
