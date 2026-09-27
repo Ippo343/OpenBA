@@ -183,8 +183,6 @@ void HealerComponent::OnRemove() {
 
 // Doors kept for their by-address rows (B.3.8): standalone/reg_cemetery_healer_serialize.cpp
 // (0x14004aeb0) and standalone/reg_town_services.cpp (0x14004ae70).
-void HealerComponent_Shutdown(HealerComponent* self, void* stream) { self->HealerComponent::Persist(stream); }
-void HealerComponent_OnRemove(HealerComponent* self) { self->HealerComponent::OnRemove(); }
 
 DEFINE_EXE_VTABLE(HealerComponent, "_ZTV15HealerComponent")
 DEFINE_EXE_TYPE(HealerComponent, "ControllerComponent")

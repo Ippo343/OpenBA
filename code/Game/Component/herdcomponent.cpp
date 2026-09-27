@@ -769,7 +769,6 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
 // Appends this herd (as an InternalBasePtr) to the town manager's herd list at
 // (GameWorld+0xf0)+0xb0, count at +0xb8.
 // ============================================================
-void HerdComponent_OnAdd(void* selfV) { reinterpret_cast<HerdComponent*>(selfV)->HerdComponent::OnAdded(); }   // B.3.8 bridge
 
 // ============================================================
 // Reimpl of FUN_140121e20 — HerdComponent::OnRemove (vtable slot 7).

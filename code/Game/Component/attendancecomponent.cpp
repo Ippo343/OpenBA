@@ -299,7 +299,6 @@ extern void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting);  // 0
 // ⚠ The `wpc+0x50` deref is UNGUARDED in retail and left unguarded here: retail relies on
 // an attendance building always carrying a WorkPlaceComponent. If this ever faults, the
 // fault is an entity built without a WPC upstream — do not paper over it here.
-extern "C" uint8_t AttendanceComponent_CommandMask(void* selfP, int cmd) { return reinterpret_cast<AttendanceComponent*>(selfP)->AttendanceComponent::CommandMask(cmd); }   // B.3.8 bridge
 
 // ── slot 14 — retail 0x140043e80 — flip the workplace's accepting flag ────────────
 // Retail body:
@@ -315,7 +314,6 @@ extern "C" uint8_t AttendanceComponent_CommandMask(void* selfP, int cmd) { retur
 // is nothing to drain.
 //
 // ⚠ Retail ignores the command id here too.
-extern "C" void AttendanceComponent_Command(void* selfP, int cmd) { reinterpret_cast<AttendanceComponent*>(selfP)->AttendanceComponent::Command(cmd); }   // B.3.8 bridge
 
 // ============================================================
 // Vtable slot 7 — retail 0x1400443d0 — leave the town attendance registry
@@ -329,7 +327,6 @@ extern "C" void AttendanceComponent_Command(void* selfP, int cmd) { reinterpret_
 //
 // It is also called directly by state 3's enter (through the vtable), which is the
 // "close for the night" path — so this is not only teardown.
-extern "C" void AttendanceComponent_Unregister(void* selfP) { reinterpret_cast<AttendanceComponent*>(selfP)->AttendanceComponent::OnRemove(); }   // B.3.8 bridge
 
 // ============================================================
 // Vtable slot 3 — retail 0x140044410 — Shutdown / Serialize
@@ -348,7 +345,6 @@ extern "C" void AttendanceComponent_Unregister(void* selfP) { reinterpret_cast<A
 // The IsDerivedFrom filter is a load-bearing part of load, not a sanity check: a saved
 // queue entry whose citizen no longer exists deserializes to some other object, and
 // retail nulls the slot rather than letting ProcessQueue dispatch on it.
-extern "C" void AttendanceComponent_SerializeSlot(void* selfP, void* stream) { reinterpret_cast<AttendanceComponent*>(selfP)->AttendanceComponent::Persist(stream); }   // B.3.8 bridge
 
 // ============================================================================
 // ENDGAME B.3.8 MI-A — AttendanceComponent as a REAL class (AttendanceComponent.h).

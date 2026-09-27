@@ -72,7 +72,6 @@ void LivestockComponent_InitFuncs() {
 //
 // FUN_140003110 is DynArray8_ResizeFill; called with count+1 it appends.
 
-void LivestockComponent_OnAdd(LivestockComponent* self) { if (!self) return; self->LivestockComponent::OnAdded(); }
 
 // ============================================================
 // LivestockComponent::OnRemove (vtable slot [7], 0x140123c00)
@@ -81,7 +80,6 @@ void LivestockComponent_OnAdd(LivestockComponent* self) { if (!self) return; sel
 // pasture, otherwise its pasture's animal list (pasture+0x30 / count +0x38).
 // FUN_140002cc0 is DynArray8_EraseByValue.
 
-void LivestockComponent_OnRemove(LivestockComponent* self) { if (!self) return; self->LivestockComponent::OnRemove(); }
 
 // ===== ENDGAME B.3.8 CIT — LivestockComponent as a REAL class (LivestockComponent.h) =====
 // Before: a 48-slot hand-built LivestockComponent_LiveVtable filled at every

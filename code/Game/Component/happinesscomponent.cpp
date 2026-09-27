@@ -534,9 +534,6 @@ void HappinessComponent::OnRemove() {
     happinessFlag = 0;
 }
 
-// Door kept for its by-address row (standalone/reg_fruit_happiness_serialize.cpp,
-// 0x14004aa80), B.3.8.
-void HappinessComponent_Shutdown(HappinessComponent* self, void* stream) { self->HappinessComponent::Persist(stream); }
 
 // [15] 0x14004a780 — PORT GAP (HappinessComponent.h): the tree's slot 15 was the
 // inert stub, kept; porting retail's body is its own titled commit.

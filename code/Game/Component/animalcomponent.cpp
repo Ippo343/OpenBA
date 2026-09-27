@@ -248,7 +248,6 @@ constexpr int kTraceCap = 24;
 // This is load-bearing for Update: the inert factory zeroes the body, so an
 // animal that never runs Startup has deathAge == 0 and dies on its first tick.
 // ============================================================
-void AnimalComponent_Startup(AnimalComponent* self) { if (!self) return; self->AnimalComponent::Startup(); }
 
 // ============================================================
 // AnimalComponent_FindHabitat (0x140106020)
@@ -446,10 +445,6 @@ void AnimalComponent_SetWanderTimer(AnimalComponent* self, uint32_t animId, floa
 //     and push a 0x480-byte MoveTo toward the point; on failure, idle via
 //     SetWanderTimer.
 // ============================================================
-void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {   // B.3.8 door (reg_animal_update.cpp)
-    if (!self) return;   // the old body's own test
-    self->AnimalComponent::Update(deltaTime);
-}
 
 // ============================================================
 // AnimalComponent::OnAdded (vtable slot [6], 0x140106c20)
@@ -459,7 +454,6 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {   // B.
 // position, sizes the wander box from desc->wanderSize, then runs a single
 // Update with a zero delta (retail calls vtable+0x48, i.e. slot 9).
 // ============================================================
-void AnimalComponent_OnAdd(AnimalComponent* self) { if (!self) return; self->AnimalComponent::OnAdded(); }
 
 // ============================================================
 // Init: resolve function pointers
@@ -555,10 +549,10 @@ void AnimalComponent::OnAdded() {
     }
 
     // Retail: System::Time::Time(&t, 0.0f) then (*vtable[9])(this, &t). Slot 9 is
-    // this component's own Update, so call it directly.
+    // this component's own Update.
     int64_t zeroTime = 0;
     if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&zeroTime, 0.0f);
-    AnimalComponent_Update(this, &zeroTime);
+    Update(&zeroTime);   // slot 9, virtual as retail
 }
 
 // [9] 0x140106420. RDX is a pointer to the elapsed System::Time (EntityList

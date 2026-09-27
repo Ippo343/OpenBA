@@ -69,7 +69,6 @@ inline uint8_t* At(void* self, ptrdiff_t off) {
 // ============================================================
 // FruitComponent::Serialize (vtable slot [3], 0x14004a070)
 // ============================================================
-extern "C" void FruitComponent_Serialize(void* self, void* stream) { if (!self) return; reinterpret_cast<FruitComponent*>(self)->FruitComponent::Persist(stream); }   // B.3.8 bridge
 
 void FruitComponent::Persist(void* stream) {
     Resolve();

@@ -11,9 +11,6 @@
 // Size: 0x50 bytes
 // ============================================================
 
-// Door onto HappinessComponent::Persist (vtable slot [3], 0x14004aa80), kept for
-// its by-address row (B.3.8).
-void HappinessComponent_Shutdown(HappinessComponent* self, void* stream);
 
 // ------------------------------------------------------------------
 // Controller state machine (retail table 0x14004ac10)

@@ -366,7 +366,6 @@ void* Strat_c5f0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
 // ============================================================================
 // 0x140114000 — CitizenComponent_OnAdd: append the citizen to townMgr+0xa0.
 // ============================================================================
-extern "C" void CitizenComponent_OnAdd(void* citizenComp) { if (!citizenComp) return; reinterpret_cast<CitizenComponent*>(citizenComp)->CitizenComponent::OnAdded(); }   // B.3.8 bridge
 
 // ============================================================================
 // 0x140129de0 — ResidenceDescription_helper_9de0: append a built house's

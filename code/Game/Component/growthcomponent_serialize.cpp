@@ -87,7 +87,6 @@ inline uint8_t* At(void* self, ptrdiff_t off) {
 // ============================================================
 // GrowthComponent::Serialize (vtable slot [3], 0x1401207c0)
 // ============================================================
-extern "C" void GrowthComponent_Serialize2(void* self, void* stream) { if (!self) return; reinterpret_cast<GrowthComponent*>(self)->GrowthComponent::Persist(stream); }   // B.3.8 bridge
 
 void GrowthComponent::Persist(void* stream) {
     Resolve();

@@ -37,7 +37,6 @@
 extern "C" void FireComponent_Ignite_610(void* self);
 extern "C" void FireComponent_Spread_130(void* self);
 extern "C" void FireComponent_Extinguish_4c0(void* self);
-extern "C" void FireComponent_WaterApplied_090(void* self, int msg);
 extern uint32_t g_tid_FireDescription;
 
 namespace {

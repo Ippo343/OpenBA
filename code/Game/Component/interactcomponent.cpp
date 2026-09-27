@@ -131,7 +131,6 @@ void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf) {
 // owner's MultiObject children. For each child's MapComponent (DAT_1401c7900),
 // scan its job hosts for an InteractComponent and append it to the +0x28 list.
 // Faithful port of the Ghidra decompilation.
-void InteractComponent_Draw(InteractComponent* self) { self->InteractComponent::OnAdded(); }
 
 // ============================================================
 // Init: resolve function pointers

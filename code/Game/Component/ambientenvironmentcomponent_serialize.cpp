@@ -45,7 +45,6 @@ inline uint8_t* At(void* self, ptrdiff_t off) {
 // ============================================================
 // AmbientEnvironmentComponent::Serialize (vtable slot [3], 0x1400437e0)
 // ============================================================
-extern "C" void AmbientEnvironmentComponent_Serialize(void* self, void* stream) { if (!self) return; reinterpret_cast<AmbientEnvironmentComponent*>(self)->AmbientEnvironmentComponent::Persist(stream); }   // B.3.8 bridge
 
 // [3] 0x1400437e0.
 void AmbientEnvironmentComponent::Persist(void* stream) {

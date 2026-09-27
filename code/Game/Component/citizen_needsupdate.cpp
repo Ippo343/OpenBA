@@ -217,8 +217,6 @@ void CitizenComp_EatFromStorage(int64_t selfV, void* targetIBP) {
 //   self, msg, param_3 = ptr to the target-entity IBP value,
 //   param_4 = int extra (+0x38 of the action), param_5 = +0x3c (unused in retail).
 // ============================================================
-void CitizenComponent_NeedsUpdate(void* selfV, int msg, uint64_t* param_3,
-                                  int param_4, int param_5) { reinterpret_cast<CitizenComponent*>(selfV)->CitizenComponent::OnMessage(msg, param_3, param_4, param_5); }   // B.3.8 bridge
 
 // [15] 0x140112260 — the component message handler SendComponentMessage
 // (0x1400caef0) dispatches: EDX = message id, R8 = &target entity IBP, R9D =

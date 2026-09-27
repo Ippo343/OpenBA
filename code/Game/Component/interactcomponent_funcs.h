@@ -11,10 +11,6 @@
 // Size: 0x38 bytes
 // ============================================================
 
-// Draw (vtable slot [6], 0x140123110): Rebuilds the interact entity list
-// from scene. Gets multi-object children, iterates component lists,
-// finds matching InteractComponents, builds dynamic array at +0x28/+0x30.
-void InteractComponent_Draw(InteractComponent* self);
 
 // Init: resolve all internal function pointers (called once at startup)
 void InteractComponent_InitFuncs();

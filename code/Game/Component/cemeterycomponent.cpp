@@ -75,7 +75,6 @@ static bool s_initialized = false;
 //   1. Component_Serialize base
 //   2. Empty serializer block (controller compat stub)
 //   3. Serializer(version=0): count from +0x50, resize on load, bulk serialize int array
-void CemeteryComponent_Shutdown(CemeteryComponent* self, void* stream) { self->CemeteryComponent::Persist(stream); }   // B.3.8 door (reg_cemetery_healer_serialize.cpp)
 
 // ============================================================
 // DynArray<int>::Push -- inlined by the plot-grid builder at 0x1400473a2
@@ -139,7 +138,6 @@ static void CemeteryComponent_PushPlot(CemeteryComponent* self, int cell) {
 #define CEM_TRACE(fmt, ...) do { static std::atomic<int> _n{0}; \
     if (_n.fetch_add(1, std::memory_order_relaxed) < 12) { \
     fprintf(stderr, "[CemeteryPlots] " fmt "\n", ##__VA_ARGS__); fflush(stderr); } } while (0)
-void CemeteryComponent_BuildPlotGrid(CemeteryComponent* self) { self->CemeteryComponent::OnAdded(); }
 
 // ============================================================
 // CemeteryComponent::OnRemove (vtable slot [7], 0x1400471C0)
@@ -147,7 +145,6 @@ void CemeteryComponent_BuildPlotGrid(CemeteryComponent* self) { self->CemeteryCo
 // UNregisters from the TownManager cemetery list at *(GameWorld+0xF0)+0x40.
 // Ghidra labels the slot OnCreate; 0x140002cc0 is the ERASE (see the 1:1 port of it
 // further down this file). The matching REGISTER is the state-2 enter at the bottom.
-void CemeteryComponent_OnRemove(CemeteryComponent* self) { self->CemeteryComponent::OnRemove(); }
 
 // ============================================================
 // Reimpl of FUN_140002cc0 (CemeteryComponent list erase-by-pointer)

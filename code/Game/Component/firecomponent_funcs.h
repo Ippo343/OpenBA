@@ -19,7 +19,6 @@ void FireComponent_InitFuncs();
 extern "C" void FireComponent_Ignite_610(void* self);          // 0x140049610
 extern "C" void FireComponent_Spread_130(void* self);          // 0x140049130
 extern "C" void FireComponent_Extinguish_4c0(void* self);      // 0x1400494c0
-extern "C" void FireComponent_WaterApplied_090(void* self, int msg);  // 0x140049090
 extern "C" void FireComp_MarkDanger_99c0(void* self, short delta);    // 0x1400499c0
 extern "C" void FireComp_StampDangerRect_9fa80(int* grid, uint64_t unused,
                                                int xMin, int yMin, int xMax, int yMax,

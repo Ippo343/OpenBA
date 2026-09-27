@@ -829,12 +829,10 @@ extern "C" void DiseaseComp_ActiveDisease(DiseaseComponent* self, int64_t* delta
 // ============================================================
 // Retail is a 16-byte thunk: CMP qword [RCX+0x30],0 / JG ActiveDisease / JMP InfectionTick.
 // +0x30 is the infestation duration remaining on a FIELD or PASTURE (not a citizen).
-extern "C" void DiseaseComponent_Update(DiseaseComponent* self, int64_t* deltaTime) { self->DiseaseComponent::Update(deltaTime); }
 
 // ============================================================
 // 0x140048c50 — Startup (vtable slot 4)
 // ============================================================
-extern "C" void DiseaseComponent_Startup(DiseaseComponent* self) { self->DiseaseComponent::Startup(); }
 
 // ============================================================
 // 0x140048c00 — OnAdded (vtable slot 6): append to the town registry
@@ -842,18 +840,15 @@ extern "C" void DiseaseComponent_Startup(DiseaseComponent* self) { self->Disease
 // town = *(gw+0xF0); registry DynArray at town+0xF0 {data@+0, count@+8, cap@+0xC}.
 // The disassembly reads the count as [RCX+8] off the array base — not a separate
 // town field — and calls 0x140003110 (ResizeFill).
-extern "C" void DiseaseComponent_OnAdded(DiseaseComponent* self) { self->DiseaseComponent::OnAdded(); }
 
 // ============================================================
 // 0x140048bb0 — OnRemoved (vtable slot 7): erase from registry, then Cure
 // ============================================================
 // Retail tail-JMPs into Cure (0x140048320) with RCX still == self.
-extern "C" void DiseaseComponent_OnRemoved(DiseaseComponent* self) { self->DiseaseComponent::OnRemove(); }
 
 // ============================================================
 // 0x140048ca0 — Serialize (vtable slot 3)
 // ============================================================
-extern "C" void DiseaseComponent_Serialize(DiseaseComponent* self, void* stream) { self->DiseaseComponent::Persist(stream); }
 
 // ============================================================
 // Init hook (kept for the existing declaration in diseasecomponent_funcs.h)

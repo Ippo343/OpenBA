@@ -19,8 +19,6 @@ void HerdComponent_Helper7400(int64_t animalComp, void* pos, float yaw, char pos
 // herd with `count` animals and arm its graze timer.
 void HerdComponent_Populate(int64_t herdComp, int count);
 
-// OnAdd (vtable slot 6, 0x140121f40) / OnRemove (slot 7, 0x140121e20).
-void HerdComponent_OnAdd(void* self);
 void HerdComponent_OnRemove(void* self);
 
 // Startup (vtable slot 4): the ctor tail the inert factory can't express.

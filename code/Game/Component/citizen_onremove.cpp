@@ -159,7 +159,6 @@ bool RingProgress(const char* what, int64_t before, int64_t after, int& iteratio
 // ============================================================
 // CitizenComponent::OnRemove (0x140113ca0) — vtable slot 7 (+0x38)
 // ============================================================
-extern "C" void CitizenComponent_OnRemove(void* selfV) { if (!selfV) return; reinterpret_cast<CitizenComponent*>(selfV)->CitizenComponent::OnRemove(); }   // B.3.8 bridge
 
 // [7] 0x140113ca0 — the removed-from-world broadcast (MarkForRemoval 0x1400c2ea0,
 // flags bit 1): leave the town citizen list.

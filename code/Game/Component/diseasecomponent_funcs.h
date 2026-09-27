@@ -24,12 +24,6 @@
 #include "engine/types/DiseaseComponent.h"   // the forwarder: also carries DiseaseDescription
 #include <cstdint>
 
-// --- vtable slots -----------------------------------------------------------
-extern "C" void DiseaseComponent_Update(DiseaseComponent* self, int64_t* deltaTime); // 0x140048b90
-extern "C" void DiseaseComponent_Startup(DiseaseComponent* self);                    // 0x140048c50
-extern "C" void DiseaseComponent_OnAdded(DiseaseComponent* self);                    // 0x140048c00
-extern "C" void DiseaseComponent_OnRemoved(DiseaseComponent* self);                  // 0x140048bb0
-extern "C" void DiseaseComponent_Serialize(DiseaseComponent* self, void* stream);    // 0x140048ca0
 
 // --- behaviour bodies -------------------------------------------------------
 extern "C" bool DiseaseComp_CheckCure(DiseaseComponent* self);                        // 0x1400481b0

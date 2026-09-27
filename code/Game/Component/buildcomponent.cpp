@@ -87,7 +87,6 @@ static void EnsureHelpers() {
 // Forward-declared: fn_FindInQueue at 0x140017550
 int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr);   // 0x140017550, below
 
-void BuildComponent_OnCreate(BuildComponent* self) { self->BuildComponent::OnRemove(); }
 
 
 

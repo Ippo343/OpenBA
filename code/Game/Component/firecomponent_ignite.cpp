@@ -610,7 +610,6 @@ extern "C" void FireComponent_Spread_130(void* self) {
 // ============================================================
 // Reached from SendComponentMessage::AbstractImpl with msg == 0, the last action
 // in the bucket-brigade queue PerformWork_Action_CopyCtor builds.
-extern "C" void FireComponent_WaterApplied_090(void* self, int msg) { reinterpret_cast<FireComponent*>(self)->FireComponent::OnMessage(msg, nullptr, 0, 0); }   // B.3.8 bridge
 
 // [15] 0x140049090 — the water-bucket message (SendComponentMessage +0x78). The
 // body reads only the message id.

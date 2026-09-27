@@ -111,7 +111,6 @@ inline uint8_t* At(void* self, ptrdiff_t off) {
 // Time(+0x50), spawn Time(+0x58), grazing cell(+0x4c), PopulationComponent
 // backref IBP(+0x28), habitability cell(+0x30). Serializer version 0.
 // ============================================================
-extern "C" void HerdComponent_Serialize(void* self, void* stream) { if (!self) return; reinterpret_cast<HerdComponent*>(self)->HerdComponent::Persist(stream); }   // B.3.8 bridge
 
 // ============================================================
 // AnimalComponent::Serialize (vtable slot [3], 0x140106e40)
@@ -120,14 +119,12 @@ extern "C" void HerdComponent_Serialize(void* self, void* stream) { if (!self) r
 // wander box shorts(+0x38/+0x3a/+0x3c/+0x3e). Version 0 additionally read a
 // legacy IBP that is discarded after an IsDerivedFrom probe.
 // ============================================================
-extern "C" void AnimalComponent_Serialize(void* self, void* stream) { if (!self) return; reinterpret_cast<AnimalComponent*>(self)->AnimalComponent::Persist(stream); }   // B.3.8 bridge
 
 // ============================================================
 // LivestockComponent::Serialize (vtable slot [3], 0x140123e10)
 // Stream (version 0): base, assigned-pasture backref IBP(+0x28, validated
 // PastureComponent), production Time(+0x30).
 // ============================================================
-extern "C" void LivestockComponent_Serialize(void* self, void* stream) { if (!self) return; reinterpret_cast<LivestockComponent*>(self)->LivestockComponent::Persist(stream); }   // B.3.8 bridge
 
 // ============================================================
 // PopulationComponent::Serialize (vtable slot [3], 0x1400544a0 — Ghidra
