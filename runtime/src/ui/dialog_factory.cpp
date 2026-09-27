@@ -111,162 +111,48 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include <new>
+
 #include "../../funcs/rt_port.h"
-
-// Forward-declared rather than pulled in from standalone/resolve.h, for the
-// reason rt_port.h gives: resolve.h drags in <windows.h>. Byte-identical to
-// resolve.h's declarations; the linker checks them.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
-// `??0Dialog@UI@@QEAA@XZ` (0x180112db0), ported and VERIFIED by Wave 10 lane
-// DLG2 (runtime/src/ui/dialog_ctor_dtor.cpp). See the faithfulness note on
-// CreateNewObject below for why calling it out-of-line is the right transcription.
-extern "C" void* RtUiDialog_Ctor(void* self);
-
-namespace {
-
-// ---- attendance ------------------------------------------------------------
-uint64_t g_attendNew     = 0;
-uint64_t g_attendInPlace = 0;
-
-// ---- `?MemAlloc@System@@YAPEAX_KH@Z` 0x1800c7a50 ---------------------------
-// BY ADDRESS on purpose, and the address is the LOCKED wrapper, not
-// `?Allocate@` (0x1800c6e60) which retail calls with the lock already held.
-// Retail inlines the whole lock/Allocate/unlock triple here; calling the
-// out-of-line wrapper reproduces it exactly, including the lock order.
-// `ResolveAddr(Module::Runtime, …)` consults the port registry first, so this
-// follows the tree without this file changing
-// (reference_resolveaddr_consults_port_registry_first.md).
-void* MemAllocLocked(uint64_t size, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    // Re-resolve on a miss rather than freezing a null: a caller that ran
-    // before the allocator's arming path supplied this address would otherwise
-    // poison the static for the life of the process.
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn ? fn(size, align) : nullptr;
-}
-
-// THE ALLOCATION SHAPE, read off 0x180038561-0x180038571:
-//     MOV EDX,0x88          ; size
-//     LEA R8D,[RDX + -0x80] ; align = 0x88 - 0x80 = 8   (retail computes it!)
-//     MOV RCX,[_singleton@MemoryAllocator]
-//     CALL ?Allocate@
-// The `LEA R8D,[RDX-0x80]` is a code-size trick for `MOV R8D,8`; it is written
-// as the literal 8 here because that is the value, and the derivation would
-// read as a relationship between size and alignment that does not exist.
-constexpr uint64_t kDialogSize  = 0x88;
-constexpr int      kDialogAlign = 8;
-
-}  // namespace
+#include "../../types/ui/Dialog.h"
 
 // ============================================================================
+// ENDGAME B.3.9 block UI-D (B39_RULES D2): the pair is the class's OWN statics,
+// `UI::Dialog::CreateNewObject` / `CreateInPlaceObject`, building a real
+// `UI::Dialog` with `::new`. The attendance report (`[DlgFactory]`) goes with
+// the two doors it counted.
+// ============================================================================
+namespace UI {
+
 // ?CreateInPlaceObject@Dialog@UI@@SAPEAVBase@Object@@PEAX@Z   0x180038610
-// ============================================================================
-//
-//     Base* Dialog::CreateInPlaceObject(void* p)
-//     { if (!p) return nullptr; new (p) Dialog(); return p; }
-//
-// Retail's body is the `??0Dialog@UI@@` constructor INLINED, and the inlining
-// is complete — 0x180038626..0x180038696 is instruction-for-instruction the
-// same store sequence the out-of-line ctor at 0x180112db0 performs, including
-// the three vtable stamps in order (`??_7Base@Object@@6B@` 0x180154788,
-// immediately overwritten UNREAD by `??_7External@Object@@6B@` 0x1801547a0,
-// then `??_7Dialog@UI@@6B@` 0x1801562a0), the +0x30 = 0xffffffff sentinel, and
-// the +0x44 four-byte hole that no store covers.
-//
-// TRANSCRIPTION CHOICE, stated because it is a choice. This port calls the
-// out-of-line ctor rather than re-transcribing the inlined stores. Behaviour is
-// identical (same stores, same order, same hole) and the alternative would
-// clone a 40-line body that Wave 10 lane DLG2 already verified against the
-// shipped export byte-for-byte over the whole 0x88 extent — cloning it would
-// create a second copy to keep in sync and would not be more faithful, only
-// longer. This is the same move UI3 made in the other direction when it
-// replaced retail's INLINED Dialog temporary with a call to the out-of-line
-// export.
-//
-// THE NULL CHECK IS RETAIL'S, not a guard added here: 0x180038621
-// `TEST RCX,RCX / JZ 0x18003869b`, and the null branch returns 0 in EAX.
-extern "C" void* RtUiDialog_CreateInPlaceObject(void* p) {
-    ++g_attendInPlace;
+// Retail's body is the `??0Dialog@UI@@` constructor INLINED (0x180038626..
+// 0x180038696, the same stores, the +0x44 hole). THE NULL CHECK IS RETAIL'S:
+// 0x180038621 `TEST RCX,RCX / JZ 0x18003869b`, the null branch returns 0.
+Object::Base* Dialog::CreateInPlaceObject(void* p) {
     if (p == nullptr) return nullptr;      // 180038621 / 18003869b
-    RtUiDialog_Ctor(p);
-    return p;                              // 180038696 MOV RAX,RCX
+    return ::new (p) Dialog();             // 180038696 MOV RAX,RCX
 }
 
-// ============================================================================
 // ?CreateNewObject@Dialog@UI@@SAPEAVBase@Object@@XZ           0x180038530
-// ============================================================================
-//
-//     Base* Dialog::CreateNewObject()
-//     { void* p = System::MemAlloc(0x88, 8); if (!p) return nullptr;
-//       new (p) Dialog(); return p; }
-//
-// Same inlined ctor as above, preceded by the inlined `MemAlloc`. The null
-// check at 0x18003858a is retail's and covers an allocation failure.
-//
-// THE `MOV [RSP+0x40]` STORES ARE NOT STATE. 0x180038552 and 0x180038582 write
-// the lock pointer and then the fresh object into a stack slot; that slot is
-// the MSVC exception-unwind frame's live-object record (`MOV [RSP+0x20],-2` at
-// the top is the state index). It is dead in a build with no unwind tables and
-// is deliberately not reproduced — reproducing it would write a local nothing
-// reads and imply state that is not there.
-extern "C" void* RtUiDialog_CreateNewObject() {
-    ++g_attendNew;
-    void* p = MemAllocLocked(kDialogSize, kDialogAlign);
+// The inlined `MemAlloc(0x88, 8)` (0x180038561..0x180038571: `MOV EDX,0x88 ;
+// LEA R8D,[RDX-0x80]`), then the inlined ctor. The null check at 0x18003858a
+// is retail's and covers an allocation failure.
+Object::Base* Dialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(Dialog), 8);
     if (p == nullptr) return nullptr;      // 18003858a / 180038601
-    RtUiDialog_Ctor(p);
-    return p;                              // 1800385fc MOV RAX,RDI
+    return ::new (p) Dialog();             // 1800385fc MOV RAX,RDI
 }
 
-// ============================================================================
-// Registration + the attendance report
-// ============================================================================
-namespace {
-// Printed from a static destructor, exactly as `[DlgTrip]`'s TripReport does,
-// so the reading lands even on a route that exits without reaching a summary
-// hook — and so the two instruments report by the same mechanism.
-void DialogFactoryReport() {
-    printf("[DlgFactory] attendance: CreateNewObject=%llu CreateInPlaceObject=%llu\n",
-                (unsigned long long)g_attendNew,
-                (unsigned long long)g_attendInPlace);
-}
+}  // namespace UI
 
-struct FactoryReport { ~FactoryReport() { DialogFactoryReport(); } };
-FactoryReport g_factoryReport;
-}  // namespace
-
-// ----------------------------------------------------------------------------
-// THE PREDICTION IN THIS FILE'S HEADER IS NOW SETTLED, AND IT WAS RIGHT ABOUT
-// THE DLL-PRESENT ROUTE AND WRONG ABOUT THE ONE THAT MATTERS. (2026-09-12)
-//
-// The header argues that registering these two names cannot redirect anything,
-// because the only reference to either body is `?_typeInfo@Dialog@UI@@`'s
-// `factoryFn` field, written by the DLL's own static initialiser -- not a door.
-// That holds WHILE THE DLL IS PRESENT and nothing below contradicts it.
-//
-// At CUTOVER there is no DLL and no DLL-written `factoryFn`: the BaseTypeInfo
-// the creator walks is the MINTED one (standalone/rt_data_mint.cpp), whose
-// `factoryFn` is filled FROM THE PORT REGISTRY at mint time, by name first and
-// then by address -- exactly the two doors this function opens. So condition 2
-// and condition 3 of the header's three are both satisfied by the mint, and
-// registering here is not merely sufficient, it is REQUIRED.
-//
-// It was required on 2026-09-12: the cutover boot died with
-//     [RtMint] FATAL: minted BaseTypeInfo::factoryFn is not ported
-//     ?_typeInfo@Dialog@UI@@ slot 0 -> ?CreateNewObject@Dialog@UI@@
-// because this registration was behind an opt-in flag the cutover arm did not
-// set. The flag is gone (DIRECTION.md section 2.3: a port registers
-// unconditionally), and with it the in-place "effectiveness control".
 int RtUiDialogFactoryRegister() {
     int n = 0;
     RegisterRuntimeExport("?CreateInPlaceObject@Dialog@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiDialog_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x180038610, (void*)&RtUiDialog_CreateInPlaceObject);  ++n;
+                          (void*)&UI::Dialog::CreateInPlaceObject);
+    RegisterRuntimeAddr(0x180038610, (void*)&UI::Dialog::CreateInPlaceObject);  ++n;
 
     RegisterRuntimeExport("?CreateNewObject@Dialog@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiDialog_CreateNewObject);
-    RegisterRuntimeAddr(0x180038530, (void*)&RtUiDialog_CreateNewObject);      ++n;
+                          (void*)&UI::Dialog::CreateNewObject);
+    RegisterRuntimeAddr(0x180038530, (void*)&UI::Dialog::CreateNewObject);      ++n;
     return n;
 }

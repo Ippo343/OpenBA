@@ -40,10 +40,8 @@ extern int RtUiDrawRegister();             // userinterface_draw.cpp (lane UIDRA
 // Wave 10 lane CLOSEDLG: ?CloseDialog@UserInterface@UI@@, the last of lane C's
 // four UserInterface rows that had a live route.
 extern int RtUiCloseDialogRegister();      // userinterface_close.cpp (lane CLOSEDLG)
-// Wave 10 lane DLG2: ??0Dialog@UI@@ and ??1Dialog@UI@@, the two rows that
-// ENTERED the census when UI3 replaced retail's INLINED UI::Dialog temporary
-// with a call to the out-of-line exports.
-extern int RtUiDialogCtorDtorRegister();   // dialog_ctor_dtor.cpp (lane DLG2)
+// Wave 10 lane DLG2's ??0Dialog@UI@@ / ??1Dialog@UI@@ doors are retired
+// (ENDGAME B.3.9 UI-D): they are UI::Dialog's real ctor and dtor.
 // Wave 10B lane SHOW: ?ShowDialog@UserInterface@UI@@, the last UI CODE row.
 // It is the only body in the namespace that re-enters
 // Engine::MainLoop::Frame and mutates MainLoop's callback arrays.
@@ -217,7 +215,6 @@ void RtUiPortInit() {
     n += RtUiDialogCreateRegister();
     n += RtUiDrawRegister();
     n += RtUiCloseDialogRegister();
-    n += RtUiDialogCtorDtorRegister();
     n += RtUiShowDialogRegister();
     n += RtUiElementVtableRegister();
     n += RtUiDialogControllerRegister();

@@ -266,23 +266,10 @@ void** ElementFindElement(void* self, void** out, const void* nameString) {
     return out;
 }
 
-// ??0Dialog@UI@@QEAA@XZ  0x180112db0 / ??1Dialog@UI@@UEAA@XZ  0x180112e40.
-// The 6-arg AddController builds a default UI::Dialog on its stack with both
-// bodies INLINED; the inlined sequences were diffed against these two exports
-// instruction for instruction and are the same code (lane doc §3). Calling the
-// exports IS retail's body minus the inlining — array.cpp's MemAlloc argument.
-void* DialogCtor(void* self) {
-    using Fn = void* (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveExport("??0Dialog@UI@@QEAA@XZ"));
-    return fn(self);
-}
-void DialogDtor(void* self) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveExport("??1Dialog@UI@@UEAA@XZ"));
-    fn(self);
-}
+// ??0Dialog@UI@@QEAA@XZ 0x180112db0 / ??1Dialog@UI@@UEAA@XZ 0x180112e40: the
+// 6-arg AddController builds a default UI::Dialog on its stack with both
+// bodies INLINED. ENDGAME B.3.9 UI-D: `::new (p) UI::Dialog()` and
+// `DeletingDtor(0)` (the door pair is retired).
 
 // The two `?_typeInfo@…@0VBaseTypeInfo@Object@@A` statics the bodies read a
 // type id out of. Retail loads the FIRST DWORD of the static
@@ -761,7 +748,7 @@ void DialogInstance::AddController(uint32_t typeId, Object::Base* dataSource,
 
         // ---- phase 2: build the element through a UI::Dialog temporary ----
         alignas(16) uint8_t tmpDialog[0x90];
-        DialogCtor(tmpDialog);
+        UI::Dialog* const tmpDlg = ::new (static_cast<void*>(tmpDialog)) UI::Dialog();
 
         void* newEl = nullptr;
         {
@@ -790,7 +777,7 @@ void DialogInstance::AddController(uint32_t typeId, Object::Base* dataSource,
             walk = F<void*>(walk, EL::kParent);
         } while (walk);
 
-        DialogDtor(tmpDialog);
+        tmpDlg->DeletingDtor(0);
     }
 
     // ---- phase 3: id 0 means "element only, no controller" ---------------

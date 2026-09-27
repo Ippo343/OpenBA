@@ -92,6 +92,7 @@
 #include <new>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/ui/Dialog.h"
 #include "../../types/ui/Element.h"
 #include "../../types/ui/ElementDescription.h"
 #include "../../types/ui/TabElement.h"
@@ -104,35 +105,9 @@ constexpr uint32_t kDirtyBit  = 0x8000000u;                       // NeedsSizeCa
 // UI::Dialog, 0x88 bytes — see the store-for-store table in the banner.
 constexpr size_t kDialogSize = 0x88;
 
-// RULE B6-5: AddTab is a member now and UI is built on the loader thread, so
-// the two Dialog doors live in namespace-scope atomics, not RT_EXPORT_ONCE's
-// function-local statics.
-void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-std::atomic<void*> g_dialogCtor{nullptr};
-std::atomic<void*> g_dialogDtor{nullptr};
-
-// ??0Dialog@UI@@QEAA@XZ (0x180112DB0) and ??1Dialog@UI@@UEAA@XZ (0x180112E40) —
-// block B's class, doors. `UEAA` is the VIRTUAL spelling and it is the right one
-// here: retail's inline teardown is the non-deleting destructor's body, and the
-// QEAA spelling of a virtual destructor IS NOT IN THE EXPORT TABLE — it would
-// resolve to null in silence (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
-// Both names were checked against the DLL's export directory.
-using DialogCtorFn = void* (*)(void*);
-using DialogDtorFn = void  (*)(void*);
-DialogCtorFn DialogCtor() {
-    return reinterpret_cast<DialogCtorFn>(AtomicExport(g_dialogCtor, "??0Dialog@UI@@QEAA@XZ"));
-}
-DialogDtorFn DialogDtor() {
-    return reinterpret_cast<DialogDtorFn>(AtomicExport(g_dialogDtor, "??1Dialog@UI@@UEAA@XZ"));
-}
+// ENDGAME B.3.9 UI-D (B9-13 foreign site): the UI::Dialog temporary is a real
+// `UI::Dialog` — `::new (dlg) UI::Dialog()` / `DeletingDtor(0)` — and the two
+// ??0/??1Dialog doors this file resolved are retired.
 
 // Array<InternalPtr<Element>>::SetSize(n, fill) — the kSpec_Fill8Z row
 // (0x180076900) over `Element::_children`.
@@ -166,8 +141,7 @@ namespace UI {
 Object::InternalPtr<Element> TabElement::AddTab(Object::ExternalPtr<ElementDescription> button,
                                                 Object::ExternalPtr<ElementDescription> content) {
     alignas(16) uint8_t dlg[kDialogSize];
-    DialogCtor()(dlg);                                        // 0x1800DA163..1D2
-    const Dialog* dialog = reinterpret_cast<const Dialog*>(dlg);   // B.3.6 bridge
+    Dialog* const dialog = ::new (static_cast<void*>(dlg)) Dialog();   // 0x1800DA163..1D2
 
     Object::InternalPtr<Element> cell;   // retail's [RBP+0x67], the scratch InternalPtr
 
@@ -189,7 +163,7 @@ Object::InternalPtr<Element> TabElement::AddTab(Object::ExternalPtr<ElementDescr
 
     UpdateContainers();                                       // 0x1800DA28F
 
-    DialogDtor()(dlg);                                        // 0x1800DA295..329
+    dialog->DeletingDtor(0);                                  // 0x1800DA295..329
     return result;
 }
 

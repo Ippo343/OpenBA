@@ -29,6 +29,8 @@
 // ============================================================================
 #include "element_common.h"
 #include "../../types/ui/ComboElement.h"
+#include "../../types/ui/Dialog.h"
+#include <new>
 
 using namespace rtuielem;
 
@@ -80,8 +82,6 @@ uint32_t TextElementTypeId() {
 
 
 using IsDerivedFromFn = bool  (*)(const void* self, uint32_t typeId);
-using DialogCtorFn     = void* (*)(void* self);
-using DialogDtorFn     = void  (*)(void* self);
 using StringAssignFn   = void* (*)(void* dst, const void* src);
 using CacheTextFn      = void  (*)(void* textElement);
 using ListAddItemFn    = void  (*)(void* list, void** item, int flags);
@@ -159,8 +159,7 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
 
     if (open) {
         alignas(16) uint8_t dialogBuf[kDialogSize];
-        RtAddr<DialogCtorFn>(0x180112db0ull)(dialogBuf);
-        const Dialog* stackDialog = reinterpret_cast<const Dialog*>(dialogBuf);
+        Dialog* const stackDialog = ::new (static_cast<void*>(dialogBuf)) Dialog();   // ??0Dialog
 
         const auto isDerived = RtAddr<IsDerivedFromFn>(0x1800c0390ull);
 
@@ -229,7 +228,7 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
         RtAddr<DynArrayPushFn>(0x18007a0d0ull)(u + kUiDialogs,
                                                I32(u, kUiDialogCount) + 1, &pushed);
 
-        RtAddr<DialogDtorFn>(0x180112e40ull)(dialogBuf);
+        stackDialog->DeletingDtor(0);                                // ??1Dialog
     }
 
     Object::InternalPtr<DialogInstance> dlgCopy = *dialog;

@@ -389,8 +389,8 @@ UNIT_TEST(rb_ui_bases_shape) {
     CHECK_EQ(sizeof(UI::Element), (size_t)0xc0);
     CHECK_EQ(sizeof(UI::ElementDescription), (size_t)0x68);
     CHECK(!std::is_abstract<UI::DialogInstance>::value);   // the exe instantiates it
-    CHECK(std::is_abstract<UI::DialogController>::value);
-    CHECK(std::is_abstract<UI::DialogControllerConfig>::value);
+    CHECK(!std::is_abstract<UI::DialogController>::value);      // B.3.9 UI-D: own slot 0
+    CHECK(std::is_abstract<UI::DialogControllerConfig>::value);  // retail's _purecall slots
     CHECK(std::is_abstract<UI::Element>::value);
     CHECK(std::is_abstract<UI::ElementDescription>::value);
     CHECK(!std::has_virtual_destructor<UI::DialogInstance>::value);

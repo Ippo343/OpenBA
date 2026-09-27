@@ -853,23 +853,10 @@ void** RtUiDialogController_GetContainer(DialogController* self, void** out) {
     return out;
 }
 
-// ??1DialogController@UI@@UEAA@XZ — retail 0x1800cd2f0, ordinal 572.
-//
-// The whole body is: stamp ??_7DialogController@UI@@6B@ over the vtable slot,
-// then TAIL-JUMP to Object::Internal::~Internal (0x1800bfdb0), which is the
-// handle-table swap-remove. We do not reimplement that swap-remove here — we
-// call the same exported dtor retail's JMP lands in, through the SEAM
-// (ResolveExport), so if Wave 3's ~Internal port is registered we follow it
-// exactly as a cutover build would.
-//
-// The vtable is likewise the DLL's own exported table, resolved by name. This
-// port mints nothing (PLAN §4.3 risk 3).
-void RtUiDialogController_Dtor(DialogController* self) {
-    static void* const vtbl = ResolveExport("??_7DialogController@UI@@6B@");
-    static void* const internalDtor = ResolveExport("??1Internal@Object@@UEAA@XZ");
-    *reinterpret_cast<void**>(self) = vtbl;
-    reinterpret_cast<void (*)(void*)>(internalDtor)(self);
-}
+// ??1DialogController@UI@@UEAA@XZ (0x1800cd2f0): the door is RETIRED (ENDGAME
+// B.3.9 UI-D) — its only reader was the RT_DELDTOR row of the retired minted
+// `??_7DialogController@UI@@6B@`; the empty `UI::DialogController::~DialogController`
+// is retail's body.
 
 
 // ============================================================================
@@ -1446,52 +1433,13 @@ void RtUiDialogInstance_SetUpperLeft(DialogInstance* self, int32_t x, int32_t y,
 
 namespace {
 
-// `??1Dialog@UI@@UEAA@XZ` 0x180112e40 — see fact (a). `UEAA`, the VIRTUAL
-// spelling, is the one the export table carries (checked with pefile;
-// reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
-inline void DialogDtor(void* self) {
-    RT_EXPORT_ONCE(VoidPtrFn, "??1Dialog@UI@@UEAA@XZ")(self);
-}
-
 // `?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z` 0x180002470.
 using GetIndexFromNameFn = int32_t (*)(const void* table, const void* str);
 
-// The retail-inlined `??0Dialog@UI@@QEAA@XZ`, transcribed. Constant stores
-// only, so it adds no callee; the three vtables come out of the DLL's own
-// export table rather than being minted (the `??_7Geometry@Graphics@@6B@` lever
-// — a ported ctor must never put a second vtable in play).
+// The retail-inlined `??0Dialog@UI@@QEAA@XZ` / `??1Dialog@UI@@UEAA@XZ` pair is
+// `::new (p) UI::Dialog()` / `DeletingDtor(0)` since ENDGAME B.3.9 UI-D (the
+// temporary is a real UI::Dialog wearing the class's table).
 constexpr size_t kDialogTempSize = 0x88;
-
-void DialogTempCtor(uint8_t* p) {
-    static void* const vtBase = ResolveExport("??_7Base@Object@@6B@");
-    static void* const vtExt  = ResolveExport("??_7External@Object@@6B@");
-    static void* const vtDlg  = ResolveExport("??_7Dialog@UI@@6B@");
-
-    *reinterpret_cast<void**>(p + 0x00) = vtBase;
-    *reinterpret_cast<void**>(p + 0x00) = vtExt;
-    *reinterpret_cast<uint64_t*>(p + 0x08) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x10) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x18) = 0;
-    // WAVE 10E lane FINAL: the stamp is the row's ONLY consumer here, so it is
-    // the only place an instrument can ask whether anything ever dispatches
-    // through it. Off (the default) `TableOrReal` returns `vtDlg` untouched.
-    *reinterpret_cast<void**>(p + 0x00) = vtDlg;
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;   // the inline's 16-byte MOVDQA
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;   // covers these two together
-    *reinterpret_cast<int32_t*>(p + 0x30)  = -1;
-    *reinterpret_cast<int32_t*>(p + 0x34)  = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x38) = 0;
-    *reinterpret_cast<int32_t*>(p + 0x40)  = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x48) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x50) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x58) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x60) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x68) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x70) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x78) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x80) = 0;
-
-}
 
 // ENDGAME B.3.6 fragment pass F2: the body that stood here (the file-local
 // `EdCreateInstanceBody`) MOVED into UI::ElementDescription::CreateInstance(
@@ -2266,7 +2214,7 @@ void ElementDescription::CreateInstance(Object::InternalPtr<Element>* element) c
 
     // ---- 5. the UI::Dialog temporary and the one virtual call -------------
     alignas(16) uint8_t tempDialog[kDialogTempSize];
-    DialogTempCtor(tempDialog);
+    UI::Dialog* const tempDlg = ::new (static_cast<void*>(tempDialog)) UI::Dialog();
 
     Object::InternalPtr<Element>  slot;
     Object::InternalPtr<Element>* ret = &slot;
@@ -2275,7 +2223,7 @@ void ElementDescription::CreateInstance(Object::InternalPtr<Element>* element) c
         // virtual on this class, dispatched through the child's own table
         // (was a hand-inlined vtable +0x40 call).
         ret = static_cast<const ElementDescription*>(_childDesc)->CreateInstance(
-            &slot, reinterpret_cast<const Dialog*>(tempDialog));    // B.3.6 bridge
+            &slot, tempDlg);
     } else {
         slot = Object::InternalPtr<Element>();
         ret  = &slot;
@@ -2303,7 +2251,7 @@ void ElementDescription::CreateInstance(Object::InternalPtr<Element>* element) c
     #undef ED_ELEM
 
     // ---- the temporary's destructor ---------------------------------------
-    DialogDtor(tempDialog);           // ~Dialog: see fact (a)
+    tempDlg->DeletingDtor(0);         // ~Dialog: see fact (a)
 }
 
 }  // namespace UI
@@ -2384,9 +2332,6 @@ int RtUiDialogRegister() {
         (void*)&RtUiDialogController_GetContainer);
     RegisterRuntimeAddr(0x18003b700, (void*)&RtUiDialogController_GetContainer);       ++n;
 
-    RegisterRuntimeExport("??1DialogController@UI@@UEAA@XZ",
-                          (void*)&RtUiDialogController_Dtor);
-    RegisterRuntimeAddr(0x1800cd2f0, (void*)&RtUiDialogController_Dtor);               ++n;
 
     // ---- UI::ElementDescription ----
     RegisterRuntimeExport("??0ElementDescription@UI@@QEAA@XZ",

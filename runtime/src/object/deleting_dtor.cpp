@@ -305,7 +305,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x1800244a0, 0x1800a9560, 0x098, "IO::CompressedMemoryStream"),
     RT_DELDTOR(0x180031900, 0x1800dddb0, 0x028, "Engine::UpdateLoop"),
     RT_DELDTOR(0x180035c10, 0x1801161a0, 0x0c0, "UI::Element"),
-    RT_DELDTOR(0x18003b800, 0x1800cd2f0, 0x030, "UI::DialogController"),
     RT_DELDTOR(0x1800458c0, 0x180114d40, 0x0b8, "UI::DialogInstance"),
     RT_DELDTOR(0x18004d4f0, 0x1800dc170, 0x048, "Engine::LoaderLoop"),
     RT_DELDTOR(0x18004d670, 0x1800db060, 0x188, "Engine::DialogLoaderLoopT"),
@@ -346,7 +345,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // ten and to ?MemFree@MemoryAllocator@System@@SAXPEAX@Z. Nothing about the
     // port changes; the banner's "per-translation-unit copies" is just an
     // incomplete description of the set.
-    RT_DELDTOR(0x180038b20, 0x180112e40, 0x088, "UI::Dialog"),
     // ---- WAVE 10D lane TIP --------------------------------------------------
     // Slot 0 of `??_7ToolTipDialog@UI@@6B@` (0x180157880), the only one of that
     // vtable's three CODE slots that is not a UI body — the other two,
@@ -867,7 +865,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     //   0x18003b600  LEA R9,[0x18003b4f0]  MOV EDX,0x20   ~DialogControllerConfig
     //     (own body: stamp own vtable, tail into ~External -- already ported,
     //     runtime/src/object/external.cpp)
-    RT_DELDTOR(0x18003b600, 0x18003b4f0, 0x020, "UI::DialogControllerConfig"),
     // (ENDGAME B.3.9: the Object::ExtensionCompiler 0x18002c300 and
     // Object::ExternalCompiler 0x18002c180 rows retired with their minted
     // tables -- retail's factories for both return null, nothing built one.)
@@ -1268,10 +1265,6 @@ void* RtDelDtor_UpdateLoop(void* self, unsigned flags) {
 void* RtDelDtor_Element(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180035c10>());
 }
-// UI::DialogController     ~DialogController = 0x1800cd2f0  (PORTED)
-void* RtDelDtor_DialogController(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003b800>());
-}
 // UI::DialogInstance       ~DialogInstance = 0x180114d40  (PORTED, ui/dialog.cpp; this note was stale)
 void* RtDelDtor_DialogInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x1800458c0>());
@@ -1335,10 +1328,6 @@ void* RtDelDtor_ContextData(void* self, unsigned flags) {
 // Video::DeviceData        ~DeviceData = 0x1800f8cf0  (PORTED)
 void* RtDelDtor_DeviceData(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180058b10>());
-}
-// UI::Dialog               ~Dialog = 0x180112e40  (PORTED, lane DLG2)  [Wave 10C]
-void* RtDelDtor_Dialog(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180038b20>());
 }
 // UI::ToolTipDialog        ~ToolTipDialog = 0x1800dac70  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)  [Wave 10D]
 void* RtDelDtor_ToolTipDialog(void* self, unsigned flags) {
@@ -1436,10 +1425,6 @@ void* RtDelDtor_RenderState(void* self, unsigned flags) {
 // UI::ComboDialog          ~ComboDialog = 0x180111cd0             (PORTED, runtime/src/ui/combodialog.cpp)
 void* RtDelDtor_ComboDialog(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180074a10>());
-}
-// UI::DialogControllerConfig ~DialogControllerConfig = 0x18003b4f0  (PORTED, runtime/src/ui/dialogcontrollerconfig.cpp)
-void* RtDelDtor_DialogControllerConfig(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003b600>());
 }
 // Object::ExternalList      ~ExternalList = 0x1800076c0           (PORTED, runtime/src/object/external_list.cpp)
 void* RtDelDtor_ExternalList(void* self, unsigned flags) {
@@ -1579,7 +1564,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x1800244a0, (void*)&RtDelDtor_CompressedMemoryStream);
     RegisterRuntimeAddr(0x180031900, (void*)&RtDelDtor_UpdateLoop);
     RegisterRuntimeAddr(0x180035c10, (void*)&RtDelDtor_Element);
-    RegisterRuntimeAddr(0x18003b800, (void*)&RtDelDtor_DialogController);
     RegisterRuntimeAddr(0x1800458c0, (void*)&RtDelDtor_DialogInstance);
     RegisterRuntimeAddr(0x18004d4f0, (void*)&RtDelDtor_LoaderLoop);
     RegisterRuntimeAddr(0x18004d670, (void*)&RtDelDtor_DialogLoaderLoopT);
@@ -1596,7 +1580,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180058a10, (void*)&RtDelDtor_ImageBufferData);
     RegisterRuntimeAddr(0x180058a90, (void*)&RtDelDtor_ContextData);
     RegisterRuntimeAddr(0x180058b10, (void*)&RtDelDtor_DeviceData);
-    RegisterRuntimeAddr(0x180038b20, (void*)&RtDelDtor_Dialog);   // Wave 10C DLG8
     RegisterRuntimeAddr(0x18004d270, (void*)&RtDelDtor_ToolTipDialog);  // Wave 10D TIP
     RegisterRuntimeAddr(0x180023fd0, (void*)&RtDelDtor_CompressedStream);      // Wave 19 CSTREAM
     RegisterRuntimeAddr(0x180024100, (void*)&RtDelDtor_CompressedFileStream);  // Wave 19 CSTREAM
@@ -1622,7 +1605,6 @@ void RtObjectDeletingDtorPortInit() {
     // VTABLE BATCH 9
     // Rows 57-60, the UI::*Description four (wrappers above).
     RegisterRuntimeAddr(0x180074a10, (void*)&RtDelDtor_ComboDialog);
-    RegisterRuntimeAddr(0x18003b600, (void*)&RtDelDtor_DialogControllerConfig);
     RegisterRuntimeAddr(0x180007800, (void*)&RtDelDtor_ExternalList);
     RegisterRuntimeAddr(0x1800656b0, (void*)&RtDelDtor_CollisionMesh);       // vtable batch 8 SPATIAL
     RegisterRuntimeAddr(0x180064ea0, (void*)&RtDelDtor_Collision2DSurface);  // vtable batch 8 SPATIAL
