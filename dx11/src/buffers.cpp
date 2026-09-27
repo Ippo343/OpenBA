@@ -167,8 +167,8 @@ bool EnsureDeps() {
     if (g_depsTried) return g_deps.ok;
     g_depsTried = true;
 
-    g_deps.videoDeviceSingleton =
-        reinterpret_cast<void**>(ResolveAddr(Module::Runtime, 0x1801fe7a8));
+    // Video::Device::_singleton (0x1801fe7a8), the class static (ENDGAME B.3.9 VID).
+    g_deps.videoDeviceSingleton = reinterpret_cast<void**>(&::Video::Device::_singleton);
 
     g_deps.MemAlloc = Exp<void* (*)(unsigned long long, int)>(
         "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");

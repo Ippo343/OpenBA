@@ -63,6 +63,7 @@
 #include <new>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
 #include "../../types/system/String.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/video/ShaderProgram.h"
@@ -87,8 +88,8 @@ namespace pdvt = rt::video::programdata_vtbl;
 const uint8_t* PixelProgramTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A");
 }
-void* DeviceData() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+void* ActiveDeviceDataPtr() {
+    void** slot = reinterpret_cast<void**>(&::Video::Device::_singleton);
     void* device = slot ? *slot : nullptr;
     if (!device) return nullptr;
     return *reinterpret_cast<void**>(static_cast<uint8_t*>(device) + 0x100);
@@ -285,7 +286,7 @@ void PixelProgram::Bind(void* context, int32_t permutation) const {
 // the two produces a PixelProgramData behind a VertexProgram's vtable, which
 // fails only on the first Bind.
 void PixelProgram::PlatformConstruct() {
-    void* dd = DeviceData();
+    void* dd = ActiveDeviceDataPtr();
     if (dd == nullptr) { _data = nullptr; return; }
     using CreateFn = void* (*)(void*, void*);
     void** vt = *reinterpret_cast<void***>(dd);

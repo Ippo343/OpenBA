@@ -138,6 +138,7 @@
 #include "../../types/system/String.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/video/ShaderProgram.h"
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
 
 // standalone/resolve.h is DELIBERATELY NOT INCLUDED — it drags in <windows.h>,
 // and <wingdi.h> declares a function called `AlphaBlend`, which would make
@@ -162,7 +163,7 @@ const uint8_t* ShaderProgramTypeInfo() {
 // `?_singleton@Device@Video@@` is the ADDRESS of the Device* static;
 // Device+0xF8 is `activeInterface` (runtime/types/video/Device.h).
 int32_t ActiveInterface() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+    void** slot = reinterpret_cast<void**>(&::Video::Device::_singleton);
     void* device = slot ? *slot : nullptr;
     // Retail derefs the singleton unguarded here (MOV RAX,[0x1801fe7a8] then
     // CMP dword [RAX+0xF8]); the null test exists only because RT_DATA_SLOT can

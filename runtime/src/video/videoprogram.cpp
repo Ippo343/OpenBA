@@ -64,6 +64,7 @@
 #include <new>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
 #include "../../../standalone/resolve.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
@@ -81,8 +82,8 @@ const uint8_t* VideoProgramTypeInfo() {
 }
 // `?_singleton@Device@Video@@` is the ADDRESS of the Device* static; +0x100 of
 // the Device is its DeviceData* (runtime/types/video/Device.h, dx11/src).
-void* DeviceData() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+void* ActiveDeviceDataPtr() {
+    void** slot = reinterpret_cast<void**>(&::Video::Device::_singleton);
     void* device = slot ? *slot : nullptr;
     if (!device) return nullptr;
     return *reinterpret_cast<void**>(static_cast<uint8_t*>(device) + 0x100);
@@ -169,7 +170,7 @@ const void* VideoProgram::GetData() const { return _data; }
 // ?PlatformConstruct@VideoProgram@Video@@AEAAXXZ (0x1800f47a0), also the tail of
 // the ctor and of Construct. DeviceData slot 18 (+0x90).
 void VideoProgram::PlatformConstruct() {
-    void* dd = DeviceData();
+    void* dd = ActiveDeviceDataPtr();
     if (dd == nullptr) { _data = nullptr; return; }
     using CreateFn = void* (*)(void* deviceData, void* program);
     void** vt = *reinterpret_cast<void***>(dd);

@@ -147,7 +147,7 @@ namespace {
 // table — see the banner.
 // ---------------------------------------------------------------------------
 Device** DeviceSlot() {
-    Device** p = RT_DATA_SLOT(Device**, "?_singleton@Device@Video@@0PEAV12@EA");
+    Device** p = reinterpret_cast<Device**>(&::Video::Device::_singleton);
     return p;
 }
 // ENDGAME B.3.5 block VC: typed as the REAL `Video::ImageBuffer` now that the

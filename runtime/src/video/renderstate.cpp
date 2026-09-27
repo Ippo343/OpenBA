@@ -79,6 +79,7 @@
 #include <new>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
 #include "../../types/io/Serializer.h"
 #include "../../types/io/Stream.h"
 #include "../../types/video/RenderState.h"
@@ -123,7 +124,7 @@ const uint8_t* RenderStateTypeInfo() {
 // `RT_DATA_SLOT` read for the whole of step 5 and is OWED a `MintStorageCell()`
 // redirect at the class-static conversion (RULE B4b-4), not here.
 Video::DeviceData* ActiveDeviceData() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+    void** slot = reinterpret_cast<void**>(&::Video::Device::_singleton);
     void* device = slot ? *slot : nullptr;
     if (!device) return nullptr;
     // B.3.5 bridge: `Video::Device` is block D2's class and is still a POD, so

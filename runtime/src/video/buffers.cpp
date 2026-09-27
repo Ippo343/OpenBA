@@ -84,8 +84,7 @@ void* ImageBufferVtable() {
 // read verbatim by Width()/Height(); lane B owns Video::Device's own body,
 // not these two field reads.
 void** DeviceSingletonPtr() {
-    void** p = RT_DATA_SLOT(void**,
-        "?_singleton@Device@Video@@0PEAV12@EA");
+    void** p = reinterpret_cast<void**>(&::Video::Device::_singleton);
     return p;
 }
 void** ConfigurationSingletonPtr() {

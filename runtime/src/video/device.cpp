@@ -145,8 +145,7 @@ constexpr const char* kConfigurationStartup     = "?Startup@Configuration@Video@
 // through ResolveExport is therefore right, and RT_DATA_SLOT makes the late
 // registration reachable by refusing to cache a null.
 Device** DeviceSingletonSlot() {
-    Device** p = RT_DATA_SLOT(Device**,
-        "?_singleton@Device@Video@@0PEAV12@EA");
+    Device** p = reinterpret_cast<Device**>(&::Video::Device::_singleton);
     return p;
 }
 Configuration** ConfigSingletonSlot() {
@@ -161,6 +160,10 @@ void** PersistenceSingletonSlot() {
 }
 
 }  // namespace
+
+// ?_singleton@Device@Video@@0PEAV12@EA (0x1801fe7a8) — the class static
+// (ENDGAME B.3.9 VID, B39_RULES D7; the minted row is redirected onto it).
+Video::Device* Video::Device::_singleton = nullptr;
 
 // ============================================================================
 // Video::Device::GetInterfaceCount  —  retail 0x18000d3b0, ordinal 2729

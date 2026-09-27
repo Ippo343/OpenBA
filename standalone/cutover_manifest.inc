@@ -95,6 +95,6 @@ CUTOVER_ROW("?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA", CUTOVER_REQUIR
 CUTOVER_ROW("?_firstSurface@ImageBuffer@Video@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe780ull, "Video", 3)
 // Video  HARMFUL / DLL-PRESENT  doors=16  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@Configuration@Video@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe7a0ull, "Video", 16)
-// Video  HARMFUL / DLL-PRESENT  doors=37  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_singleton@Device@Video@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe7a8ull, "Video", 37)
+// Video  HARMFUL / DLL-PRESENT  doors=23  -- tag states the verdict inverts at cutover
+CUTOVER_ROW("?_singleton@Device@Video@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe7a8ull, "Video", 23)
 

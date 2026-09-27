@@ -86,6 +86,7 @@
 #include <new>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
 #include "../../types/system/String.h"
 #include "../../../standalone/resolve.h"
 #include "../../types/collection/Collection.h"
@@ -103,8 +104,8 @@ using Video::VertexLayout;
 const uint8_t* VertexLayoutTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A");
 }
-void* DeviceData() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+void* ActiveDeviceDataPtr() {
+    void** slot = reinterpret_cast<void**>(&::Video::Device::_singleton);
     void* device = slot ? *slot : nullptr;
     if (!device) return nullptr;
     return *reinterpret_cast<void**>(static_cast<uint8_t*>(device) + 0x100);
@@ -234,7 +235,7 @@ Object::Base* VertexLayout::CreateInPlaceObject(void* storage) {
 // ?PlatformConstruct@VertexLayout@Video@@AEAAXXZ (0x1800f5f90) — DeviceData slot
 // 14 (+0x70), CreateVertexLayoutData.
 void VertexLayout::PlatformConstruct() {
-    void* dd = DeviceData();
+    void* dd = ActiveDeviceDataPtr();
     if (dd == nullptr) { _data = nullptr; return; }
     using CreateFn = void* (*)(void*, void*);
     void** vt = *reinterpret_cast<void***>(dd);

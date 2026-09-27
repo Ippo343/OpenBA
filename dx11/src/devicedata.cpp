@@ -239,7 +239,6 @@ struct Imports {
     // --- the three singleton slots ---------------------------------------
     void** appSingleton;                               // 0x180013310
     void** configSingleton;                            // 0x180013480
-    void** deviceSingleton;                            // 0x1800134b8
 };
 
 Imports g_im;
@@ -281,7 +280,6 @@ const Imports* GetImports() {
 
         { (void**)&g_im.appSingleton,           "?_singleton@Application@1@0PEAV11@EA",                          0x180013310 },
         { (void**)&g_im.configSingleton,        "?_singleton@Configuration@Video@@0PEAV12@EA",                   0x180013480 },
-        { (void**)&g_im.deviceSingleton,        "?_singleton@Device@Video@@0PEAV12@EA",                          0x1800134b8 },
     };
     g_imOk = true;
     for (const Entry& e : table) {
@@ -1063,7 +1061,7 @@ int __cdecl DeviceData_OnActivate(HWND /*hwnd*/, unsigned /*msg*/,
     if (!im) return 1;
 
     void* cfg = ConfigOf(im);
-    void* dev = *im->deviceSingleton;
+    void* dev = ::Video::Device::_singleton;   // the class static (B.3.9 VID)
     DeviceData* dd = Field<DeviceData*>(dev, Dev::kActiveDeviceData);
 
     if (Field<uint8_t>(cfg, Cfg::kFullscreen) == 0 && dd->wasFullscreen == 0)
@@ -1096,7 +1094,7 @@ int __cdecl DeviceData_OnSetCursor(HWND /*hwnd*/, unsigned /*msg*/,
     const Imports* im = GetImports();
     if (!im) return 1;
 
-    void* dev = *im->deviceSingleton;
+    void* dev = ::Video::Device::_singleton;   // the class static (B.3.9 VID)
     DeviceData* dd = Field<DeviceData*>(dev, Dev::kActiveDeviceData);
 
     SetCursor(static_cast<HCURSOR>(dd->cursor));

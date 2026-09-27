@@ -84,6 +84,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/input/Device.h"   // ENDGAME B.3.9 ENG: the class static
 #include "../../types/application/Application.h"   // ENDGAME B.3.9 ENG: the class static
+#include "../../types/video/Device.h"             // ENDGAME B.3.9 VID: the class statics
 
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/io/Modification.h"
@@ -160,7 +161,7 @@ void** SlotExternalFactory() { return RT_DATA_SLOT(void**, "?_singleton@External
 void** SlotInternalFactory() { return RT_DATA_SLOT(void**, "?_singleton@InternalFactory@Object@@0PEAV12@EA"); }
 void** SlotFileSystem()      { return RT_DATA_SLOT(void**, "?_singleton@FileSystem@IO@@0PEAV12@EA"); }
 void** SlotPersistence()     { return RT_DATA_SLOT(void**, "?_singleton@Persistence@IO@@0PEAV12@EA"); }
-void** SlotVideoDevice()     { return RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA"); }
+void** SlotVideoDevice()     { return reinterpret_cast<void**>(&::Video::Device::_singleton); }
 void** SlotVideoConfig()     { return RT_DATA_SLOT(void**, "?_singleton@Configuration@Video@@0PEAV12@EA"); }
 void** SlotApplication()     { return reinterpret_cast<void**>(&::Application::Application::_singleton); }
 void** SlotInputDevice()     { return reinterpret_cast<void**>(&::Input::Device::_singleton); }
