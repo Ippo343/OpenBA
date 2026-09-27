@@ -96,10 +96,9 @@ extern "C" {
 // ============================================================
 // As you reimplement exe functions in code/Game/, add entries here:
 //   RegisterExeAddr(0x140XXXXXX, (uintptr_t)&YourFunction);
-//
-// Example:
-//   #include "Game/weather_funcs.h"
-//   RegisterExeAddr(0x140025020, (uintptr_t)&Weather_Dtor);
+// A row is for an address something still RESOLVES (ResolveAddr / R<> / a dispatch
+// slot). A converted class's virtuals and vtable need none: the compiler's table
+// reaches them (ENDGAME B.3.8, B38_RULES D5).
 
 // M3.5 — MenuScene::Serialize generic helpers
 // (decompiled bodies live in code/Game/Game/serialize_arrays.cpp +
@@ -1391,16 +1390,17 @@ static void RegisterDispatchSlots() {
     RegisterDispatchSlot(0x140151728, 0);
 
     // Object::External::External — dispatch slot for the External base ctor.
-    // MenuScene_Init reads:
-    //   slot = ResolveAddr(Module::Exe, 0x140151e98);
-    //   fn_External_Ctor = *(fn_t*)slot;
-    // So the slot must hold a pointer to the Runtime DLL's External::External.
+    // engine_funcs.cpp reads it (EngineFuncsInit):
+    //   dispatch = ResolveAddr(Module::Exe, 0x140151e98);
+    //   fn_External_External = *(fn_t*)dispatch;
+    // So the slot must hold a pointer to the Runtime's External::External.
     // Mangled: ??0External@Object@@QEAA@XZ (default ctor, public non-virtual).
     RegisterDispatchSlot(0x140151e98,
         (uintptr_t)ResolveExport("??0External@Object@@QEAA@XZ"));
 
     // Object::External::~External — paired dtor for the same dispatch pattern.
-    // MenuScene_Dtor reads slot 0x140151ea0 the same way.
+    // engine_funcs.cpp (fn_External_Dtor) and controller_live_base.cpp read slot
+    // 0x140151ea0 the same way.
     RegisterDispatchSlot(0x140151ea0,
         (uintptr_t)ResolveExport("??1External@Object@@UEAA@XZ"));
 
@@ -1528,8 +1528,7 @@ extern void RegisterGameUpdateLoopVtable();
 // matching Runtime export. Cascade-risk surface documented in the session 7
 // report. The Runtime exports for the unknown slots can be discovered via
 // Ghidra's `0x14015XXXX` slot pre-loaded values when the Runtime DLL fills
-// them at startup; for now the safe-no-op approach mirrors the
-// "MenuScene_VtblStub_ReturnNull" pattern used elsewhere.
+// them at startup; for now slots [1]..[8] hold a safe no-op.
 static void* g_NoiseUI_ImageBufferVtable_Standalone[10] = {0};
 
 // Forward-decl ImageBuffer dtor type — Runtime exports
@@ -1596,21 +1595,22 @@ static void RegisterVtablesAndTypeIds() {
     RegisterExeAddr(0x1401c3dd8, reinterpret_cast<uintptr_t>(&g_storage_GameWorldSingleton));
     RegisterExeAddr(0x1401c3de0, reinterpret_cast<uintptr_t>(&g_storage_GameSettingsPtr));
 
-    // --- MenuDialogLoopT vtable (0x14015ed00) — stubs for now ---
+    // --- MenuDialogLoopT vtable (0x14015ed00): the real class's table, read back by
+    //     engine_funcs.cpp (g_MenuDialogLoopT_Vtable) ---
     RegisterMenuDialogLoopVtable();
 
-    // --- Splash DialogLoaderLoopT vtable (0x140158800) — stubs for now ---
+    // --- Splash DialogLoaderLoopT vtable (0x140158800): the real class's table,
+    //     read back by engine_funcs.cpp (g_GameLoadDialogLoopT_Vtable) ---
     // Used by both Dialog\Loading.rsc and Dialog\ShiningRock.rsc instances.
     RegisterSplashDialogLoopVtable();
 
-    // --- LoaderLoop vtables (0x140158870 inner + 0x1401588d0 outer) — stubs ---
+    // --- LoaderLoop vtables (0x140158870 inner + 0x1401588d0 outer) ---
     RegisterLoaderLoopVtables();
 
     // --- GameUpdateLoop vtable (0x14015e2f0) — in-game simulation loop ---
-    // NewGameDialog::StartGame writes this onto the freshly-allocated
-    // GameUpdateLoop; without it the loop gets a NULL vptr. Slots 0-4 are the
-    // clean reimpls (Destroy/Startup/Shutdown/Update/Draw); the rest are stubs
-    // (GetResourceFilename returns "Game/Game"; Load logs the Stage-C cliff).
+    // The real class's table (ENDGAME B.3.8 LOOP), still read back by
+    // engine_funcs.cpp (g_GameUpdateLoop_Vtable), which the dialogs that start a
+    // game stamp onto the freshly-allocated GameUpdateLoop.
     RegisterGameUpdateLoopVtable();
 
     // Per-class vtables defined alongside their reimplementation in
@@ -1640,9 +1640,8 @@ static void RegisterVtablesAndTypeIds() {
     // the table row is gone). See professionlist.cpp.
     RegisterProfessionListVtable();
 
-    // Factory cascade (notes/FACTORY_CASCADE_145_BRIEF.md) — Action family.
-    // Object::Internal-derived, 10-slot vtables; shared base helpers in
-    // code/Game/Action/action_base_standalone.cpp.
+    // Action family: real classes (code/Game/Action/<Class>.h). The six rows left
+    // serve tables that callers still stamp by retail address (B38_RULES D5).
     RegisterPlayAnimationVtable();
     RegisterCreateNaturalResourceVtable();
     RegisterPerformWorkVtable();
@@ -1695,21 +1694,6 @@ static void RegisterVtablesAndTypeIds() {
     // M3.5 Path B session 7 — NoiseUI ImageBuffer vtable scaffolding
     // (used by NoiseUI / ModDialog / Geometry::Serialize image upload helper).
     RegisterNoiseUIImageBufferVtable();
-
-    // TODO: Define static vtable arrays for each game class.
-    // Each vtable is an array of function pointers matching the original layout.
-    //
-    // Pattern:
-    //   static void* vtable_Weather[] = {
-    //       (void*)&Weather_Dtor,     // +0x00
-    //       (void*)&Weather_Slot1,    // +0x08
-    //       ...
-    //   };
-    //   RegisterExeAddr(0x140160290, (uintptr_t)vtable_Weather);
-    //
-    // Type IDs are simpler — just static uint32_t storage:
-    //   static uint32_t typeId_WeatherComponent = 0; // filled by RegisterType
-    //   RegisterExeAddr(0x1401c7XXX, (uintptr_t)&typeId_WeatherComponent);
 }
 
 // ============================================================
