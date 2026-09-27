@@ -920,28 +920,18 @@ void GameUpdateLoop::SaveRestoreOut(bool save, Save::SavedState* savedState, int
 // are all out of the picture: a difference here is a Serialize body that does
 // not round-trip its own state. Both raw images are written next to the logs
 // so a difference can be diffed offline.
-typedef bool     (*fn_CS_Read_t)(void* cs, int n, void* dst);
-typedef uint32_t (*fn_CS_GetSize_t)(void* cs);
-
+// ENDGAME B.3.9 IO (W2): the ?Read / ?GetSize@CompressedStream doors it
+// resolved by name are the class's own members now, called non-virtually.
 static bool RoundtripDecompress(void* savedState, uint8_t** outData, uint32_t* outSize) {
-    static fn_CS_Read_t    s_read = nullptr;
-    static fn_CS_GetSize_t s_size = nullptr;
-    if (!s_read) {
-        s_read = reinterpret_cast<fn_CS_Read_t>(
-            ResolveExport("?Read@CompressedStream@IO@@UEAA_NHPEAX@Z"));
-        s_size = reinterpret_cast<fn_CS_GetSize_t>(
-            ResolveExport("?GetSize@CompressedStream@IO@@UEBAIXZ"));
-    }
-    if (!s_read || !s_size) return false;
     alignas(16) uint8_t cmsStorage[sizeof(IO::CompressedMemoryStream)];
     IO::CompressedMemoryStream* const cms =
         ::new (static_cast<void*>(cmsStorage)) IO::CompressedMemoryStream();
     reinterpret_cast<Save::SavedState*>(savedState)->Retrieve(   // B.3.7 bridge
         cms->GetMemoryStream());
     if (!cms->Open()) { cms->IO::CompressedMemoryStream::DeletingDtor(0); return false; }
-    const uint32_t size = s_size(cms);
+    const uint32_t size = cms->IO::CompressedStream::GetSize();
     uint8_t* data = static_cast<uint8_t*>(std::malloc(size ? size : 1));
-    const bool ok = size == 0 || s_read(cms, static_cast<int>(size), data);
+    const bool ok = size == 0 || cms->IO::CompressedStream::Read(static_cast<int>(size), data);
     cms->IO::CompressedMemoryStream::Close();
     cms->IO::CompressedMemoryStream::DeletingDtor(0);
     *outData = data; *outSize = size;

@@ -500,9 +500,10 @@ int RtIoCompressedStreamReadRegister() {
     using namespace RtIo;
     int n = 0;
 
-    RegisterRuntimeExport("?Read@CompressedStream@IO@@UEAA_NHPEAX@Z",
-                          (void*)&RtIo_CompressedStream_Read); ++n;
-    RegisterRuntimeAddr(0x1800aa780, (void*)&RtIo_CompressedStream_Read);
+    // ENDGAME B.3.9 IO (W2): ?Read@CompressedStream's name / address
+    // registration went with the minted CompressedStream-family rows and the
+    // exe roundtrip check's by-name read (both its readers).
+    // RtIo_CompressedStream_Read itself stays: ReadPackfile calls it directly.
 
     RegisterRuntimeExport("?SetWindow@CompressedStream@IO@@AEAA_NH@Z",
                           (void*)&RtIo_CompressedStream_SetWindow); ++n;

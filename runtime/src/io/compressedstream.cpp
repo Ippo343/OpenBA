@@ -151,18 +151,11 @@ namespace {
 // the registry it is instead a named unresolved import if the neighbour is
 // still unported at cutover, which is a work-list row rather than a crash.
 
-using CtorFn      = void*(*)(void*);          // ctor, returns `this` in RAX
-using DtorFn      = void (*)(void*);
 using VoidThisFn  = void (*)(void*);
-using CsCreateFn  = bool (*)(void*, void*, int);
 using StreamVFn   = void (*)(void*);          // vtable slot 7, Close()
 
-// The exported vtable data symbols the remaining ??0CompressedStream door
-// stamps. ENDGAME B.3.9 IO: CompressedMemoryStream's went with its row.
-const void* VtblStream() {
-    static const void* v = ResolveExport("??_7Stream@IO@@6B@");
-    return v;
-}
+// ENDGAME B.3.9 IO (W2): the by-name vtable reads (CompressedMemoryStream,
+// CompressedStream, Stream) went with the ??0 doors that stamped them.
 
 // The embedded MemoryStream's Close(), dispatched through its own vtable at
 // +0x38 exactly as retail does (`MOV RAX,[RDI]; CALL [RAX+0x38]`). Deliberately
@@ -290,7 +283,6 @@ enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module module, uintptr_t ghidraAddr);
 
 using MemAllocFn = void* (*)(uint64_t, int);
-using MemFreeFn  = void  (*)(void*);
 
 // ?Open@MemoryStream@IO@@QEAA_NH@Z — 0x1800ae670.
 //
@@ -507,27 +499,6 @@ extern "C" void RtIo_MemoryStream_Dtor(MemoryStream* self) {
 // 0x1801554a8 table) while ignoring the address.
 // ============================================================================
 
-const void* VtblCompressedStream() {
-    static const void* v = ResolveExport("??_7CompressedStream@IO@@6B@");
-    return v;
-}
-
-// The shared tail of both constructors: allocate the 8-byte IO::Encoding,
-// construct the BINARY encoding in it (ENDGAME B.3.9 IO: the real class, whose
-// ctor is retail's single vptr store of the unexported 0x1801554a8 table),
-// release whatever `_encoding` held, store.
-void ConstructEncoding(Stream* base) {
-    void* enc = RT_EXPORT_ONCE(MemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(8, 4);
-    if (enc != nullptr)
-        ::new (enc) IO::BinaryEncoding();
-    // Retail's dead-but-shipped release of the previous encoding. See the header.
-    if (base->encoding != nullptr)
-        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(base->encoding);
-    base->encoding = enc;
-}
-
-
 // ??0MemoryStream@IO@@QEAA@XZ (0x1800ae710). ENDGAME B.3.9 IO: the body is
 // `IO::MemoryStream`'s real constructor (Stream.h). The door STAYS: it is
 // reached by name on raw storage from CompressedMemoryStream's ctor (above),
@@ -538,27 +509,10 @@ extern "C" MemoryStream* RtIo_MemoryStream_Ctor(MemoryStream* self) {
     return self;
 }
 
-extern "C" CompressedStream* RtIo_CompressedStream_Ctor(CompressedStream* self) {
-
-    unsigned char* p = reinterpret_cast<unsigned char*>(self);
-    Stream* base     = reinterpret_cast<Stream*>(self);
-
-    base->vptr      = VtblStream();               // the inlined IO::Stream ctor
-    base->direction = 0;
-    base->encoding  = nullptr;
-    base->vptr      = VtblCompressedStream();
-
-    // +0x18 and +0x24 are NOT written by retail and are left alone here; they
-    // are two of the gaps this file's CompressedMemoryStream oracle already
-    // excludes, which is the independent confirmation.
-    *reinterpret_cast<int32_t*>(p + 0x1c) = 0;            // _position
-    *reinterpret_cast<int32_t*>(p + 0x20) = -1;           // _activeWindow
-    for (size_t off = 0x28; off <= 0x60; off += 8)
-        *reinterpret_cast<uint64_t*>(p + off) = 0;
-    ConstructEncoding(base);
-
-    return self;
-}
+// ENDGAME B.3.9 IO (W2): the ??0CompressedStream door (0x1800aa3d0) that stood
+// here is gone with its last caller; the body is IO::CompressedStream's real
+// protected ctor (Stream.h), run by every CompressedMemoryStream /
+// CompressedFileStream construction.
 
 // ============================================================================
 // `IO::CompressedMemoryStream::Close` — B.3.4 block 4 (STREAMS)
@@ -618,10 +572,6 @@ int RtIoCompressedStreamRegister() {
     RegisterRuntimeExport("??0MemoryStream@IO@@QEAA@XZ",
                           (void*)&RtIo_MemoryStream_Ctor); ++n;
     RegisterRuntimeAddr(0x1800ae710, (void*)&RtIo_MemoryStream_Ctor);
-
-    RegisterRuntimeExport("??0CompressedStream@IO@@QEAA@XZ",
-                          (void*)&RtIo_CompressedStream_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800aa3d0, (void*)&RtIo_CompressedStream_Ctor);
 
     RegisterRuntimeExport("?Open@MemoryStream@IO@@QEAA_NH@Z",
                           (void*)&RtIo_MemoryStream_Open); ++n;

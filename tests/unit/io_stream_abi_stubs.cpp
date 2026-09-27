@@ -93,8 +93,8 @@ TextFileStream::TextFileStream(const System::String&, const System::String&, int
 TextFileStream::~TextFileStream() {}
 
 // ---- IO::CompressedStream (compressed_stream_{write,read}.cpp) -------------
-// Slot 0 is PURE on CompressedStream / CompressedMemoryStream and inline on
-// CompressedFileStream (B.3.9 IO), so none of them needs one.
+// Slot 0 is PURE on CompressedStream and inline on CompressedFileStream /
+// CompressedMemoryStream (B.3.9 IO), so none of them needs one.
 bool     CompressedStream::Write(int, const void*) { StubReached("CompressedStream::Write"); }
 bool     CompressedStream::Read(int, void*)        { StubReached("CompressedStream::Read"); }
 bool     CompressedStream::SetCurrentPos(int)      { StubReached("CompressedStream::SetCurrentPos"); }
