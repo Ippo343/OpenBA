@@ -11,8 +11,8 @@
 
 // Achievement  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=4  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@AchievementManager@Achievement@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc670ull, "Achievement", 4)
-// Application  HARMFUL (DLL-present) / REQUIRED (cutover) / DLL-PRESENT  doors=5  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_singleton@Application@1@0PEAV11@EA", CUTOVER_REQUIRED, true, 0x1801fc678ull, "Application", 5)
+// Application  HARMFUL (DLL-present) / REQUIRED (cutover) / DLL-PRESENT  doors=3  -- tag states the verdict inverts at cutover
+CUTOVER_ROW("?_singleton@Application@1@0PEAV11@EA", CUTOVER_REQUIRED, true, 0x1801fc678ull, "Application", 3)
 // Audio  HARMFUL (DLL-present) / REQUIRED (cutover) / DLL-PRESENT  doors=2  -- verdict is DLL-PRESENT only and 2 by-name door(s) would resolve NULL at cutover
 CUTOVER_ROW("?_singleton@Configuration@Audio@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe758ull, "Audio", 2)
 // Engine  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=2  -- tag states the verdict inverts at cutover

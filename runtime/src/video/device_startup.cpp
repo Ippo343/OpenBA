@@ -154,7 +154,8 @@ Configuration** ConfigSlot() {
     return reinterpret_cast<Configuration**>(&::Video::Configuration::_singleton);
 }
 void** AppSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Application@1@0PEAV11@EA");
+    // The class static since ENDGAME B.3.9 ENG (the minted row is redirected onto it).
+    return reinterpret_cast<void**>(&::Application::Application::_singleton);
 }
 
 // `?SetText@Error@System@@SAXPEBD_N@Z` — ported in Wave 2
