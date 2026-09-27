@@ -9,12 +9,15 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "Object/factory_registration.h"
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Component/CemeteryComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/TombstoneComponent.h"   // X::TypeId() (B.3.8 callers)
 
 // ============================================================
 // File-local helper: CemeteryGetBurialCount (FUN_140046dd0)
@@ -68,9 +71,7 @@ static int CemeteryGetBurialCount_Impl(void* cemeteryComp) {
             if (!comp) continue;
 
             // Check TypeId via vtable[2]
-            typedef int (*GetTypeId_t)(void* self);
-            uintptr_t* vtbl = *(uintptr_t**)comp;
-            int typeId = ((GetTypeId_t)(vtbl[2]))(comp);
+            int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
             if (typeId == (int)tombTypeId) {
                 bool isTomb = fn_IsDerivedFrom(comp, tombTypeId);
                 if (isTomb) { found = true; break; }
@@ -81,6 +82,35 @@ static int CemeteryGetBurialCount_Impl(void* cemeteryComp) {
     return burials;
 }
 
+// CemeteryUI: PROMOTED from a bare UI_DIALOG_STUB 2026-08-23. The panel bodies in
+// code/Game/Dialog/cemeteryui.cpp were fully ported but wired into NOTHING -- the stub
+// vtable left slots 4 and 7 as no-ops, so neither ProgressElement text parameter was
+// ever set and the panel rendered a literal "  of   graves" with both numbers blank.
+// Same shape as AttendanceUI directly above.
+namespace cemeteryui_sa {
+    static uint32_t s_cemComp = 0, s_tomb = 0;
+    void EnsureTypeIds() {
+        // Both are .rdata globals the faithful bodies dereference unconditionally.
+        // 0x1401c4090 (CemeteryComponent) had no registered storage at all until the
+        // town-service wave; the lazy resolve here is the same belt-and-braces the
+        // AttendanceUI block carries, so a resolve failure is a skip, not a fault.
+        if (!g_TypeId_CemeteryComponent || !*g_TypeId_CemeteryComponent) {
+            s_cemComp = CemeteryComponent::TypeId();
+            if (s_cemComp) g_TypeId_CemeteryComponent = &s_cemComp;
+        }
+        if (!g_TypeId_TombstoneComponent || !*g_TypeId_TombstoneComponent) {
+            s_tomb = TombstoneComponent::TypeId();
+            if (s_tomb) g_TypeId_TombstoneComponent = &s_tomb;
+        }
+    }
+    bool Ready() {
+        return g_TypeId_ProgressElement && *g_TypeId_ProgressElement
+            && g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
+            && g_TypeId_CemeteryComponent && *g_TypeId_CemeteryComponent
+            && g_TypeId_TombstoneComponent && *g_TypeId_TombstoneComponent;
+    }
+}  // namespace uistub_CemeteryUI
+
 // ============================================================
 // CemeteryUI::Slot4 (vtable +0x20) — Setup/refresh
 // ============================================================
@@ -90,8 +120,11 @@ static int CemeteryGetBurialCount_Impl(void* cemeteryComp) {
 //
 // Original: 0x14005F090.
 
-void CemeteryUI_Slot4(CemeteryUI* self) {
-    void* dialogElem = *(void**)((uintptr_t)self + 0x20);
+// [4] 0x14005f090
+void CemeteryUI::OnCreated() {
+    cemeteryui_sa::EnsureTypeIds();
+    if (!cemeteryui_sa::Ready()) return;
+    void* dialogElem = *(void**)((uintptr_t)this + 0x20);
 
     // Find ProgressElement by type
     uint64_t result = 0;
@@ -103,12 +136,12 @@ void CemeteryUI_Slot4(CemeteryUI* self) {
     void* progressPtr = isProgress ? foundElem : nullptr;
     uint8_t basePtrBuf[8];
     new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(progressPtr));   // B.3.3 bridge
-    self->data30 = *(uint64_t*)basePtrBuf;
+    this->data30 = *(uint64_t*)basePtrBuf;
 
     // Setup: bail on a dead / marked-for-removal datasource (see Slot7).
-    if (!SA_DialogEntityAlive(self)) return;
+    if (!SA_DialogEntityAlive(this)) return;
     // Get entity, find CemeteryComponent
-    void* entity = *(void**)((uintptr_t)self + 0x28);
+    void* entity = *(void**)((uintptr_t)this + 0x28);
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
@@ -120,7 +153,7 @@ void CemeteryUI_Slot4(CemeteryUI* self) {
 
     // Set progress maximum from component's max slots field (+0x50)
     int maxSlots = *(int*)((uintptr_t)cemetComp + 0x50);
-    void* progress = (void*)self->data30;
+    void* progress = (void*)this->data30;
     *(float*)((uintptr_t)progress + 0x124) = (float)maxSlots;
 }
 
@@ -132,13 +165,16 @@ void CemeteryUI_Slot4(CemeteryUI* self) {
 //
 // Original: 0x14005EF50.
 
-void CemeteryUI_Slot7(CemeteryUI* self) {
+// [7] 0x14005ef50
+void CemeteryUI::OnUpdateLayout() {
+    cemeteryui_sa::EnsureTypeIds();
+    if (!cemeteryui_sa::Ready()) return;
     // Per-frame (+0x38): bail on a dead / marked-for-removal datasource before the
     // IsDerivedFrom probe (reliable via the one-frame removal deferral, see
     // entitylist.cpp Step 0).
-    if (!SA_DialogEntityAlive(self)) return;
+    if (!SA_DialogEntityAlive(this)) return;
     // Get entity, find CemeteryComponent
-    void* entity = *(void**)((uintptr_t)self + 0x28);
+    void* entity = *(void**)((uintptr_t)this + 0x28);
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
@@ -148,7 +184,7 @@ void CemeteryUI_Slot7(CemeteryUI* self) {
     void* cemetComp = nullptr;
     fn_FindComponent_Cemetery(entityInternal, &cemetComp);
 
-    void* progress = (void*)self->data30;
+    void* progress = (void*)this->data30;
 
     // Get burial count and set as progress current value
     int burialCount = CemeteryGetBurialCount_Impl(cemetComp);

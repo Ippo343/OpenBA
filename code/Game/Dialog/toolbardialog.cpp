@@ -56,6 +56,8 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
+#include "Player/Tool.h"
+#include "Component/UIDescription.h"   // X::TypeId() (B.3.8 callers)
 
 
 #ifdef _DEBUG
@@ -73,8 +75,8 @@ extern void Debug_ImageElement_SetSprite(void* self, void* spriteData);
 // ToolbarDialog_CloseSubDialog (FUN_1400b9730)
 // Closes the active sub-dialog if present, resets radio selection.
 // self+0xE8 = InternalBasePtr to sub-dialog, self+0xF0 = open sub index, self+0xB8 = radio.
-static void ToolbarDialog_CloseSubDialog_Impl(void* self) {
-    uintptr_t s = (uintptr_t)self;
+void ToolbarDialog::CloseSubDialog() {
+    uintptr_t s = (uintptr_t)this;
     uint64_t subDialogPtr = *(uint64_t*)(s + 0xE8);
     if (subDialogPtr != 0) {
         void* ui = *(void**)(s + 0x10);
@@ -151,7 +153,7 @@ void ToolbarDialog::OnOpened() {}
 // ============================================================
 // Thunk to CloseSubDialog: closes any open sub-toolbar dialog.
 void ToolbarDialog::OnClosed() {
-    ToolbarDialog_CloseSubDialog_Impl(this);
+    CloseSubDialog();
 }
 
 // ============================================================
@@ -196,8 +198,7 @@ static void ToolbarDialog_UpdateButtons_Impl(void* self) {
                 void* subItem = *(void**)(*(uintptr_t*)(subData + 0x28) + (int64_t)j * 8);
                 if (!subItem) continue;
                 // vtable[2] (offset 0x10) = GetTypeId, returns uint32_t
-                typedef uint32_t (*GetTypeId_t)(void* self);
-                uint32_t subType = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)subItem + 0x10)))(subItem);
+                uint32_t subType = reinterpret_cast<Object::Base*>(subItem)->Type();  // B.3.8 bridge
                 if (subType == targetType) {
                     bool isDerived = fn_IsDerivedFrom(subItem, targetType);
                     if (isDerived) matchedComponent = subItem;
@@ -354,9 +355,7 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
         // CheckPtr on the InternalBasePtr
         // Call controller->Close() via vtable[5] (offset 0x28)
         void* controller = *(void**)(pc + 0x28);
-        typedef void (*Close_t)(void* self);
-        Close_t closeFn = (Close_t)(*(uintptr_t*)(*(uintptr_t*)controller + 0x28));
-        closeFn(controller);
+        reinterpret_cast<Tool*>(controller)->Shutdown();   // slot 5; B.3.8 bridge
         // DeletePtr releases the reference
         reinterpret_cast< ::Object::InternalBasePtr*>((void*)(pc + 0x28))->DeletePtr();   // B.3.3 bridge
     }
@@ -386,8 +385,7 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
                 for (int i = 0; i < subCount; i++) {
                     void* subItem = *(void**)(*(uintptr_t*)(groupData + 0x28) + (uintptr_t)i * 8);
                     // Call vtable[2] (GetTypeId) on the sub-item
-                    typedef uint32_t (*GetTypeId_t)(void* self);
-                    uint32_t subTypeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)subItem + 0x10)))(subItem);
+                    uint32_t subTypeId = reinterpret_cast<Object::Base*>(subItem)->Type();  // B.3.8 bridge
                     if (subTypeId == nodeTypeId) {
                         // Verify sub-item pointer is non-null (redundant but matches original)
                         if (*(uintptr_t*)(*(uintptr_t*)(groupData + 0x28) + (uintptr_t)i * 8) != 0) {
@@ -481,17 +479,14 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
         // Ask the controller for its tool setting type via vtable[11] (offset 0x58)
         void* ctrl = *(void**)(pc + 0x28);
 
-        typedef int* (*GetSettingTypeId_t)(void* self, void* retBuf);
-        uint64_t settingBuf = 0;
-        GetSettingTypeId_t getSettingFn = (GetSettingTypeId_t)(*(uintptr_t*)(*(uintptr_t*)ctrl + 0x58));
-        int* settingTypePtr = getSettingFn(ctrl, &settingBuf);
+        // slot 11 GetSettingType, retslot shape (RCX this, RDX ret); B.3.8 bridge
+        Object::Type settingBuf(0);
+        const Object::Type* settingTypePtr = reinterpret_cast<Tool*>(ctrl)->GetSettingType(&settingBuf);
 
-        if (*settingTypePtr != 0) {
+        if (settingTypePtr->_type != 0) {
             // Re-query (matches original's double-call pattern)
             ctrl = *(void**)(pc + 0x28);
-            getSettingFn = (GetSettingTypeId_t)(*(uintptr_t*)(*(uintptr_t*)ctrl + 0x58));
-            uint32_t* typeIdPtr = (uint32_t*)getSettingFn(ctrl, &settingBuf);
-            uint32_t settingFactoryId = *typeIdPtr;
+            uint32_t settingFactoryId = reinterpret_cast<Tool*>(ctrl)->GetSettingType(&settingBuf)->_type;
 
             // Create the ToolSetting object
             void* settingObj = reinterpret_cast<const ::Object::Factory*>(*(void**)*g_pFactorySingleton)->CreateObject(
@@ -518,9 +513,7 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
 
     // Call controller->Start() via vtable[4] (offset 0x20)
     ctrl = *(void**)(pc + 0x28);
-    typedef void (*Start_t)(void* self);
-    Start_t startFn = (Start_t)(*(uintptr_t*)(*(uintptr_t*)ctrl + 0x20));
-    startFn(ctrl);
+    reinterpret_cast<Tool*>(ctrl)->Startup();   // slot 4; B.3.8 bridge
 }
 
 // ============================================================
@@ -564,7 +557,7 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
     if (!g_TypeId_UIDescription) {
         static uint32_t s_tid_UIDescription = 0;
         if (s_tid_UIDescription == 0)
-            s_tid_UIDescription = ::Object::GetTypeIdByName("UIDescription");
+            s_tid_UIDescription = UIDescription::TypeId();
         g_TypeId_UIDescription = &s_tid_UIDescription;
     }
 
@@ -610,8 +603,7 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
         if (!subItem) continue;
 
         // Call vtable[2] (+0x10) to get the type ID
-        typedef uint32_t (*GetTypeId_t)(void* obj);
-        uint32_t subType = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)subItem + 0x10)))(subItem);
+        uint32_t subType = reinterpret_cast<Object::Base*>(subItem)->Type();  // B.3.8 bridge
 
         if (subType == *g_TypeId_UIDescription) {
             bool isDerived = fn_IsDerivedFrom(subItem, *g_TypeId_UIDescription);
@@ -1290,8 +1282,7 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
                     for (int j = 0; j < descCount; j++) {
                         void* subItem = *(void**)(*(uintptr_t*)(entityDesc + 0x28) + (int64_t)j * 8);
                         // Virtual call to GetTypeId (vtable[2], offset 0x10)
-                        typedef uint32_t (*GetTypeIdFn)(void*);
-                        uint32_t subType = ((GetTypeIdFn)(*(uintptr_t*)(*(uintptr_t*)subItem + 0x10)))(subItem);
+                        uint32_t subType = reinterpret_cast<Object::Base*>(subItem)->Type();  // B.3.8 bridge
                         if (subType == *g_TypeId_ToolbarDescription_FC) {
                             bool derived = fn_IsDerivedFrom(subItem, *g_TypeId_ToolbarDescription_FC);
                             if (derived) {
@@ -1803,7 +1794,7 @@ void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
             // hand-built ToolbarDialog table's Type slot forwarded to the DialogInstance
             // base, making every ToolbarDialog report as its own base class. Since
             // B.3.8 the compiler table's Type() answers ToolbarDialog's own id.
-            ToolbarDialog_CloseSubDialog_Impl(typedParent);
+            reinterpret_cast<ToolbarDialog*>(typedParent)->CloseSubDialog();   // B.3.8 bridge
             break;
         }
         case 6: {

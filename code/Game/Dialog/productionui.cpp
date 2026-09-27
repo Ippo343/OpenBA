@@ -98,6 +98,56 @@ static void* CastNumber(void* elem) {
     return fn_IsDerivedFrom(elem, ProductionUI_NumberElementTypeId()) ? elem : nullptr;
 }
 
+// ---- ProductionUI: PROMOTED to the real reimpl (production-statistics content) -
+// ProductionUI drives Dialog/Production.rsc:production4 at pageUser — the page
+// PageToggleUI above flips to. Retail bodies:
+//   Slot4 (+0x20, Setup)  0x140075da0 — find "production"/"production3"/"production4",
+//                         take child 0 (consumed) + child 1 (produced), and cache
+//                         each row's {labelStorage, numberCount} pair into the two
+//                         dynamic arrays at +0x30 / +0x40.
+//   Slot7 (+0x38, Update) 0x140075a20 -> helper 0x140075a50 twice (list 0, list 1) —
+//                         reads the entity's TrackerComponent and fills sprite/text/
+//                         count per row, hiding the leftovers.
+//   Slot3 (+0x18)         0x140076300 decompiles to a bare `return;` — left a no-op.
+// The generic stub made both no-ops, so even once the page could be reached it was
+// blank.
+//
+// HAZARD: Slot7 runs EVERY frame, including before Slot4 has populated the caches,
+// and the helper derefs tracker+0x48 unguarded. The tracker id is fixed properly
+// (standalone/reg_tracker_typeid.cpp registers .rdata 0x1401c4b10 and game_main
+// fills it after Object::Factory::Startup); the remaining null-tracker case is
+// guarded inside productionui.cpp with an explicit standalone rationale.
+namespace productionui_sa {
+    // ComponentEntity (.rdata 0x1401c5d70) and RawMaterialDescription (0x1401c7cb8)
+    // are already registered+filled, ungated, by reg_action_child_ctors2, and
+    // TrackerComponent (0x1401c4b10) by reg_tracker_typeid.cpp. The two ELEMENT ids
+    // are resolved privately inside productionui.cpp (ProductionUI_TypeIdsReady) —
+    // deliberately NOT published into g_TypeId_LabelElement / g_TypeId_NumberElement,
+    // which reg_element_typeids.cpp owns and keeps behind BANISHED_LIVE_ELEMENT_TIDS.
+    bool Ready() {
+        bool ok = g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity != 0
+                  && g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription != 0
+                  && g_TypeId_TrackerComponent && *g_TypeId_TrackerComponent != 0
+                  && ProductionUI_TypeIdsReady()
+                  && g_pGameWorldSingleton;
+        static bool s_logged = false;
+        if (!s_logged) {
+            s_logged = true;
+            fprintf(stderr, "[ProductionUI] Ready=%d entity=%u rawmat=%u tracker=%u elementIds=%d\n",
+                    (int)ok,
+                    g_TypeId_ComponentEntity        ? *g_TypeId_ComponentEntity        : 0u,
+                    g_TypeId_RawMaterialDescription ? *g_TypeId_RawMaterialDescription : 0u,
+                    g_TypeId_TrackerComponent       ? *g_TypeId_TrackerComponent       : 0u,
+                    (int)ProductionUI_TypeIdsReady());
+            fflush(stderr);
+        }
+        return ok;
+    }
+    // Standalone-only precondition (see PageToggleUI::Slot7 above): with no cached
+    // rows there is nothing for the retail body to write, and self+0x30/+0x40 are
+    // still null.
+}
+
 // ============================================================
 // ProductionUI::Slot4 (vtable +0x20) -- Setup
 // ============================================================
@@ -108,8 +158,10 @@ static void* CastNumber(void* elem) {
 //
 // Original: 0x140075DA0.
 
-void ProductionUI_Slot4(ProductionUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [4] 0x140075da0
+void ProductionUI::OnCreated() {
+    if (!productionui_sa::Ready()) return;
+    uintptr_t s = (uintptr_t)this;
 
     // Get dialog element from controller base (+0x20)
     void* dialogElem = *(void**)(s + 0x20);
@@ -298,9 +350,7 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
         for (int j = 0; j < subCount; j++) {
             void* subEntry = *(void**)(subArray + (uintptr_t)j * 8);
             // Call GetTypeId virtual (vtable+0x10)
-            typedef int (*fn_GetTypeId_t)(void*);
-            void** vtbl = *(void***)subEntry;
-            int typeId = ((fn_GetTypeId_t)vtbl[2])(subEntry);
+            int typeId = reinterpret_cast<Object::Base*>(subEntry)->Type();  // B.3.8 bridge
             if (typeId == (int)*g_TypeId_RawMaterialDescription) {
                 if (fn_IsDerivedFrom(subEntry, *g_TypeId_RawMaterialDescription)) {
                     resourceDesc = subEntry;
@@ -373,8 +423,15 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
 //
 // Original: 0x140075A20.
 
-void ProductionUI_Slot7(ProductionUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [7] 0x140075a20
+void ProductionUI::OnUpdateLayout() {
+    if (!productionui_sa::Ready()) return;
+    // Standalone-only precondition (see PageToggleUI::OnUpdateLayout): with no cached
+    // rows there is nothing for the retail body to write, and self+0x30/+0x40 are
+    // still null.
+    if (*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(this) + 0x38) == 0 &&
+        *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(this) + 0x48) == 0) return;
+    uintptr_t s = (uintptr_t)this;
     UpdateProductionList(s, 0);
     UpdateProductionList(s, 1);
 }

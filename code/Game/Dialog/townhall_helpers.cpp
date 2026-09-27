@@ -35,7 +35,7 @@
 
 // AssignHousing (0x140111ee0) — sets citizen+0x248 (workplace roster link); ported in
 // citizencomponent.cpp and registered in standalone. Same decl as citizen_employ_cascade.
-struct CitizenComponent;
+class CitizenComponent;
 extern void CitizenComp_AssignHousing(CitizenComponent* self, int64_t* buildingIBPptr);
 
 namespace {
@@ -406,7 +406,7 @@ void* FindWorkPlaceComp(uintptr_t entity) {
         void* slot = (void*)(arr + (uintptr_t)i * 8);
         void* comp = *(void**)slot;
         if (!comp) continue;
-        uint32_t id = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+        uint32_t id = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (id == tid) {
             void* c = *(void**)slot;
             return fn_IsDerivedFrom(c, tid) ? c : nullptr;

@@ -14,6 +14,47 @@
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Object/factory_registration.h"
+#include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
+
+namespace storagecapacityui_sa {
+
+// The exe-.rdata type-id globals Serialize/Startup dereference are null in standalone.
+// Lazy-fill from the live runtime type registry (valid after Object::Factory::Startup).
+void EnsureGlobals() {
+    static uint32_t s_prog = 0, s_ce = 0;
+    if (!g_TypeId_ProgressElement) {
+        s_prog = ::Object::ResolveTypeIdByNameLazy("ProgressElement");
+        if (s_prog) g_TypeId_ProgressElement = &s_prog;
+    }
+    if (!g_TypeId_ComponentEntity) {
+        s_ce = ComponentEntity::TypeId();
+        if (s_ce) g_TypeId_ComponentEntity = &s_ce;
+    }
+    // g_TypeId_StorageComponent_FC (used by fn_FindComponent_Storage) is filled by
+    // engine_funcs init in standalone.
+}
+
+bool Ready() {
+    return g_TypeId_ProgressElement && *g_TypeId_ProgressElement
+        && g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
+        && g_TypeId_StorageComponent_FC && *g_TypeId_StorageComponent_FC;
+}
+
+static void Trace(const char* what, void* self) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    fprintf(stderr, "[StorageCapacityUI] %s self=%p ready=%d data30(+0x30)=%llx\n",
+            what, self, Ready() ? 1 : 0,
+            self ? (unsigned long long)*reinterpret_cast<uint64_t*>(s + 0x30) : 0ull);
+    fflush(stderr);
+}
+
+
+
+}  // namespace storagecapacityui_sa
 
 // ============================================================
 // StorageCapacityUI::Serialize (vtable +0x20) — Find progress element
@@ -23,9 +64,13 @@
 //
 // Original: 0x14007b600.
 
-void StorageCapacityUI_Serialize(StorageCapacityUI* self) {
+// [4] 0x14007b600
+void StorageCapacityUI::OnCreated() {
+    storagecapacityui_sa::EnsureGlobals();
+    if (!storagecapacityui_sa::Ready()) { storagecapacityui_sa::Trace("Serialize SKIP", this); return; }
+    storagecapacityui_sa::Trace("Serialize", this);
     // Get dialog element from controller base (+0x20)
-    void* dialogElem = *(void**)((uintptr_t)self + 0x20);
+    void* dialogElem = *(void**)((uintptr_t)this + 0x20);
 
     // Find ProgressElement by type
     uint32_t typeId = g_TypeId_ProgressElement ? *g_TypeId_ProgressElement : 0;
@@ -39,10 +84,10 @@ void StorageCapacityUI_Serialize(StorageCapacityUI* self) {
 
     uint8_t basePtrBuf[8];
     new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checkedElem));   // B.3.3 bridge
-    self->data30 = *(uint64_t*)basePtrBuf;
+    this->data30 = *(uint64_t*)basePtrBuf;
 
     // Set progress max scale at element +0x124 to 1.0f
-    void* progElem = (void*)self->data30;
+    void* progElem = (void*)this->data30;
     *(float*)((uintptr_t)progElem + 0x124) = 1.0f;
 }
 
@@ -55,14 +100,17 @@ void StorageCapacityUI_Serialize(StorageCapacityUI* self) {
 //
 // Original: 0x14007b4d0.
 
-void StorageCapacityUI_Startup(StorageCapacityUI* self) {
+// [7] 0x14007b4d0
+void StorageCapacityUI::OnUpdateLayout() {
+    storagecapacityui_sa::EnsureGlobals();
+    if (!storagecapacityui_sa::Ready()) return;
     // Per-frame (+0x38): bail on a dead / marked-for-removal datasource before the
     // IsDerivedFrom probe. Reliable now that removals are one-frame-deferred
     // (entitylist.cpp Step 0) — the entity is valid marked-but-alive memory here.
-    if (!SA_DialogEntityAlive(self)) return;
+    if (!SA_DialogEntityAlive(this)) return;
 
     // Get entity from controller data (+0x28)
-    void* entity = *(void**)((uintptr_t)self + 0x28);
+    void* entity = *(void**)((uintptr_t)this + 0x28);
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
 
@@ -96,7 +144,7 @@ void StorageCapacityUI_Startup(StorageCapacityUI* self) {
     float displayVal = ratio * 100.0f + 0.5f;
 
     // Store ratio at progress element +0x128
-    void* progElem = (void*)self->data30;
+    void* progElem = (void*)this->data30;
     // SA safety: Serialize only caches data30 when the dialog template actually
     // contains a ProgressElement. Skip if it did not.
     if (!progElem) return;
@@ -129,84 +177,19 @@ void StorageCapacityUI_Startup(StorageCapacityUI* self) {
 //   +0x40 (idx8)             — base DialogController::OnUpdate (per-frame). We drive
 //                the % refresh here so it stays live as the barn fills/drains: run
 //                Serialize once (until data30 is cached), then Startup every frame.
-#include "Object/factory_registration.h"
-#include <cstddef>
-#include <cstdio>
-#include <cstdlib>
 
-namespace storagecapacityui_sa {
 
-// The exe-.rdata type-id globals Serialize/Startup dereference are null in standalone.
-// Lazy-fill from the live runtime type registry (valid after Object::Factory::Startup).
-void EnsureGlobals() {
-    static uint32_t s_prog = 0, s_ce = 0;
-    if (!g_TypeId_ProgressElement) {
-        s_prog = ::Object::ResolveTypeIdByNameLazy("ProgressElement");
-        if (s_prog) g_TypeId_ProgressElement = &s_prog;
-    }
-    if (!g_TypeId_ComponentEntity) {
-        s_ce = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
-        if (s_ce) g_TypeId_ComponentEntity = &s_ce;
-    }
-    // g_TypeId_StorageComponent_FC (used by fn_FindComponent_Storage) is filled by
-    // engine_funcs init in standalone.
-}
 
-bool Ready() {
-    return g_TypeId_ProgressElement && *g_TypeId_ProgressElement
-        && g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
-        && g_TypeId_StorageComponent_FC && *g_TypeId_StorageComponent_FC;
-}
-
-static void Trace(const char* what, void* self) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    fprintf(stderr, "[StorageCapacityUI] %s self=%p ready=%d data30(+0x30)=%llx\n",
-            what, self, Ready() ? 1 : 0,
-            self ? (unsigned long long)*reinterpret_cast<uint64_t*>(s + 0x30) : 0ull);
-    fflush(stderr);
-}
-
-// idx4 (+0x20): Serialize — locate the ProgressElement, cache it at +0x30.
-void W_Serialize(void* self) {
-    EnsureGlobals();
-    if (!self || !Ready()) { Trace("Serialize SKIP", self); return; }
-    Trace("Serialize", self);
-    StorageCapacityUI_Serialize(reinterpret_cast<StorageCapacityUI*>(self));
-}
-
-// idx7 (+0x38): Startup — compute the fill % and push it to the progress text.
-void W_Startup(void* self) {
-    EnsureGlobals();
-    if (!self || !Ready()) return;
-    StorageCapacityUI_Startup(reinterpret_cast<StorageCapacityUI*>(self));
-}
-
-// idx8 (+0x40): per-frame. Cache the progress element once (data30 == 0), then keep
-// the % live by recomputing every frame.
-void W_OnUpdate(void* self, void* /*time*/) {
-    EnsureGlobals();
-    if (!self || !Ready()) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    if (*reinterpret_cast<uint64_t*>(s + 0x30) == 0) {
-        StorageCapacityUI_Serialize(reinterpret_cast<StorageCapacityUI*>(self));
-    }
-    StorageCapacityUI_Startup(reinterpret_cast<StorageCapacityUI*>(self));
-}
-}  // namespace storagecapacityui_sa
-
-// [4] 0x14007b600
-void StorageCapacityUI::OnCreated() {
-    storagecapacityui_sa::W_Serialize(this);
-}
-
-// [7] 0x14007b4d0
-void StorageCapacityUI::OnUpdateLayout() {
-    storagecapacityui_sa::W_Startup(this);
-}
 
 // [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
-void StorageCapacityUI::OnUpdate(const System::Time& time) {
-    storagecapacityui_sa::W_OnUpdate(this, const_cast<System::Time*>(&time));
+void StorageCapacityUI::OnUpdate(const System::Time& /*time*/) {
+    storagecapacityui_sa::EnsureGlobals();
+    if (!storagecapacityui_sa::Ready()) return;
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+    if (*reinterpret_cast<uint64_t*>(s + 0x30) == 0) {
+        StorageCapacityUI::OnCreated();
+    }
+    StorageCapacityUI::OnUpdateLayout();
 }
 
 // [0] 0x140014450: ~StorageCapacityUI (restamp, ~DialogController, ~Internal — the

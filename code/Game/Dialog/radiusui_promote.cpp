@@ -46,46 +46,17 @@
 #include <cstdio>
 #include <cstdlib>
 
-namespace radiusui_sa {
-
-// idx5 (+0x28) — retail 0x140077650. Needs the DialogInstance (+0x18) the framework
-// seats before dispatch, same precondition orchardui.cpp's idx4 wrapper checks.
-void W_Slot5(void* self) {
-    if (!self) return;
-    if (!SA_DialogEntityAlive(self)) {
-        return;
-    }
-    RadiusUI_Slot5(reinterpret_cast<RadiusUI*>(self));
-}
-
-// idx6 (+0x30) — retail 0x140077600. Unconditional: it resets +0x30 to -1 in both
-// arms, and the manager pointer read is guarded by data30 >= 0 inside the body.
-void W_Slot6(void* self) {
-    if (!self) return;
-    RadiusUI_Slot6(reinterpret_cast<RadiusUI*>(self));
-}
-}  // namespace radiusui_sa
-
 // ~RadiusUI: the tree's own teardown (its hand-built slot 0 ran this, then freed
 // WITHOUT ~DialogController); moved here unchanged. The compiler now chains
 // ~DialogController -> ~Internal after it.
 RadiusUI::~RadiusUI() {
-    void* self = this;
     // Retail's dtor path runs the base DialogController dtor, which for a still-open
     // panel has already had idx6 dispatched. Drop the overlay here too so a destroyed
     // controller cannot leak a highlight slot.
-    RadiusUI_Slot6(reinterpret_cast<RadiusUI*>(self));
+    RadiusUI::OnClosed();
 }
 
-// [5] 0x140077650
-void RadiusUI::OnOpened() {
-    radiusui_sa::W_Slot5(this);
-}
 
-// [6] 0x140077600
-void RadiusUI::OnClosed() {
-    radiusui_sa::W_Slot6(this);
-}
 
 // [0] 0x140013640: ~RadiusUI (restamp, ~DialogController, ~Internal — the
 // compiler's chain), MemFree on &1.

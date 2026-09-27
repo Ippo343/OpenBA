@@ -55,6 +55,7 @@
 // observable. They are the residue of an inlined "find" whose consumer was optimised
 // out. Noted here so the next reader does not go looking for the missing use.
 #include "resolve.h"
+#include "object/Internal.h"   // Object::Base::Type (B.3.8 callers)
 #include "engine_funcs.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
@@ -120,10 +121,7 @@ void* FindComp(const void* entity, uint32_t typeId) {
     for (int32_t i = 0; i < count; ++i) {
         void* comp = arr[i];
         if (!comp) continue;
-        typedef uint32_t (*GetTypeId_t)(void*);
-        GetTypeId_t getId = reinterpret_cast<GetTypeId_t>(
-            *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10));
-        if (!getId || getId(comp) != typeId) continue;
+        if (reinterpret_cast<Object::Base*>(comp)->Type() != typeId) continue;  // B.3.8 bridge
         if (fn_IsDerivedFrom && !fn_IsDerivedFrom(comp, typeId)) return nullptr;
         return comp;
     }

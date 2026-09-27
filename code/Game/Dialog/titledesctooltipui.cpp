@@ -23,11 +23,13 @@
 //
 // Original: 0x14007b730, 50 instructions.
 
-void TitleDescToolTipUI_Serialize(TitleDescToolTipUI* self) {
+// [4] 0x14007b730 — the class's only real slot (every other entry of its 11-slot
+// table is a shared micro-return).
+void TitleDescToolTipUI::OnCreated() {
     // DialogController base field at +0x18 holds a pointer to the parent
     // DialogInstance. At +0x28 is the data source (Base* element).
-    void* dialogInstance = *(void**)((uintptr_t)self + 0x18);
-    void* dataSource = *(void**)((uintptr_t)self + 0x28);
+    void* dialogInstance = *(void**)((uintptr_t)this + 0x18);
+    void* dataSource = *(void**)((uintptr_t)this + 0x28);
 
     if (!dialogInstance || !dataSource)
         return;

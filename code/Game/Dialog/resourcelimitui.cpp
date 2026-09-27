@@ -13,6 +13,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include <cstdio>
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -188,13 +189,73 @@ int ResourceLimitUI_ReadLimit_SA(int resourceIndex) {
     return GetResourceLimitByIdx(resourceIndex);
 }
 
+// ---- ResourceLimitUI: PROMOTED to the real reimpl (resource-limit bring-up) --
+// Each row of the Town Hall "Limits" tab (Log/Stone/Iron/Herbs/Tools/Fuel/Food/
+// Clothing/Alcohol/Coal/Textile) is a ResourceLimitUI child controller bound to a
+// ResourceLimitUIConfig (resource index at config+0x20). Slot4 (+0x20, setup)
+// finds the row's "editLimit" spinner and seeds it from the live per-resource
+// limit at townMgr(gw+0xf0)+0x170[idx*0x20+8]; Slot7 (+0x38) keeps it synced;
+// Slot9 (+0x48) writes an edited value back. The generic stub left every slot a
+// no-op, so all limit spinners showed the .rsc default 0 even though the
+// town-manager ctor (TradeComponent_impl_0a30) seeds real per-resource defaults
+// (200 / 5000 / 100 / 50 / 500 / 1000 ...). Construction stays the stub
+// alloc+zero+vtable; the framework fills the base fields (dialog +0x18,
+// datasource +0x10, element root +0x20) afterward. Same shape as the
+// BuildRequirementUI / MapUI promotions above.
+// The standalone-only entry points (index supplied by dispatch order; see the
+// "Standalone entry points" note in code/Game/Dialog/resourcelimitui.cpp).
+namespace resourcelimitui_sa {
+    // Resource index for this row. PREFERRED source: the bound config's +0x20,
+    // exactly as retail Slot4/7/9 read it — ResourceLimitUIConfig is a real class
+    // as of 2026-07-31 (code/Game/Dialog/resourcelimituiconfig.cpp) and its idx5
+    // deserialize fills that field.
+    //
+    // The dispatch-order fallback below is what we used while the config was a
+    // stub, and it is UNSOUND across dialog rebuilds: it keys on the controller
+    // POINTER, so when reopening the dialog allocates a row controller at an
+    // address reused from the previous build, the loop finds a stale match and
+    // returns that row's old index — desyncing every row after it. That was the
+    // user-visible "the food limit shows a different value each time I open and
+    // close the Town Hall". It is kept only so a row whose config somehow did not
+    // bind still shows plausible data instead of always reading Log, and it now
+    // says so when it fires.
+    static void* g_selves[11];
+    static int   g_count = 0;
+    int IdxForFallback(void* self) {
+        for (int i=0;i<g_count;i++) if (g_selves[i]==self) return i;
+        if (g_count >= 11) { for (int i=0;i<11;i++) g_selves[i]=nullptr; g_count=0; }
+        g_selves[g_count]=self;
+        return g_count++;
+    }
+    int IdxFor(void* self) {
+        void* cfg = self ? *reinterpret_cast<void**>((uintptr_t)self + 0x10) : nullptr;
+        if (cfg) {
+            int idx = *reinterpret_cast<int*>((uintptr_t)cfg + 0x20);
+            if (idx >= 0 && idx < 11) return idx;
+        }
+        int idx = IdxForFallback(self);
+        return idx;
+    }
+    void Trace([[maybe_unused]] const char* slot, void* self, [[maybe_unused]] int idx) {
+        static int n=0; if (n>=24) return; ++n;
+        void* cfg = self ? *reinterpret_cast<void**>((uintptr_t)self+0x10) : nullptr;
+        [[maybe_unused]] int cfgIdx = cfg ? *reinterpret_cast<int*>((uintptr_t)cfg+0x20) : -1;
+        printf("[ResourceLimitUI] %s self=%p cfg=%p cfg+0x20=%d dispIdx=%d liveLimit=%d\n",
+               slot, self, cfg, cfgIdx, idx, ResourceLimitUI_ReadLimit_SA(idx));
+        fflush(stdout);
+    }
+}
+
 // Setup (vtable +0x20): find "editLimit" within this row's element subtree, cache
 // it at self->data30, configure id/min/max, seed it from the live limit.
-void ResourceLimitUI_Setup_SA(ResourceLimitUI* self, int resourceIndex) {
-    void* dialogElem = *(void**)((uintptr_t)self + 0x20);
+// [4] 0x140077970
+void ResourceLimitUI::OnCreated() {
+    int resourceIndex = resourcelimitui_sa::IdxFor(this);
+    resourcelimitui_sa::Trace("Slot4", this, resourceIndex);
+    void* dialogElem = *(void**)((uintptr_t)this + 0x20);
     if (!dialogElem) return;
-    self->data30 = FindElemAsBasePtr(dialogElem, "editLimit");
-    void* spinner = (void*)self->data30;
+    this->data30 = FindElemAsBasePtr(dialogElem, "editLimit");
+    void* spinner = (void*)this->data30;
     if (!spinner) return;
     reinterpret_cast<UI::SpinnerElement*>(spinner)->SetElementId(0x3039);  // B.3.6 bridge
     reinterpret_cast<UI::SpinnerElement*>(spinner)->SetMinMax(0, 999999);  // B.3.6 bridge
@@ -203,8 +264,10 @@ void ResourceLimitUI_Setup_SA(ResourceLimitUI* self, int resourceIndex) {
 
 // Update (vtable +0x38): keep the spinner synced with the live limit unless the
 // user is actively editing it.
-void ResourceLimitUI_Sync_SA(ResourceLimitUI* self, int resourceIndex) {
-    void* spinner = (void*)self->data30;
+// [7] 0x1400778d0
+void ResourceLimitUI::OnUpdateLayout() {
+    int resourceIndex = resourcelimitui_sa::IdxFor(this);
+    void* spinner = (void*)this->data30;
     if (!spinner) return;
     int currentLimit = GetResourceLimitByIdx(resourceIndex);
     int spinnerVal = reinterpret_cast<const UI::SpinnerElement*>(spinner)->GetValue();  // B.3.6 bridge
@@ -214,10 +277,14 @@ void ResourceLimitUI_Sync_SA(ResourceLimitUI* self, int resourceIndex) {
 
 // Event (vtable +0x48): on spinner change (msg 0x15, id 0x3039) write the new
 // value back to the live limit.
-void ResourceLimitUI_Write_SA(ResourceLimitUI* self, void* param2, int msg, int id,
-                              int resourceIndex) {
+// [9] 0x1400777e0
+void ResourceLimitUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t msg, int32_t id,
+                                     int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    void* param2 = element;
+    int resourceIndex = resourcelimitui_sa::IdxFor(this);
+    resourcelimitui_sa::Trace("Slot9", this, resourceIndex);
     if (msg != 0x15 || id != 0x3039) return;
-    void* spinner = (void*)self->data30;
+    void* spinner = (void*)this->data30;
     if (!spinner || !param2) return;
     void* sender = *(void**)param2;
     if (sender != spinner) {

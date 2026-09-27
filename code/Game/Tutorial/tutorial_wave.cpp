@@ -60,6 +60,9 @@
 #include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
 #include "ui/TextElement.h"    // ENDGAME B.3.6 UI callers (K4)
 #include "ui/TableElement.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "Tutorial/TutorialSetup.h"
+#include "Tutorial/TutorialGoal.h"
+#include "Tutorial/TutorialImage.h"
 
 // Port of exe 0x1400E0D70 -- boots the next scenario when a tutorial finishes.
 // Defined in tutorial_next_scenario.cpp.
@@ -521,8 +524,7 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
         for (int i = 0; i < n && data; ++i) {
             void* obj = *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8);
             if (!obj) continue;
-            void** vt = *reinterpret_cast<void***>(obj);
-            if (vt && vt[8]) reinterpret_cast<void (*)(void*)>(vt[8])(obj);
+            reinterpret_cast<TutorialSetup*>(obj)->Begin();   // slot 8; B.3.8 bridge
         }
     }
 
@@ -589,10 +591,9 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
                 if (!img) continue;
                 int32_t col = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(img) + 0x28);
                 int32_t row = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(img) + 0x2C);
-                void** vt = *reinterpret_cast<void***>(img);
-                if (!vt || !vt[9]) continue;
                 uint8_t retbuf[16] = {};
-                void* elemPtr = reinterpret_cast<void* (*)(void*, void*, void*)>(vt[9])(img, retbuf, dialog);
+                // slot 9, retslot shape (RCX this, RDX ret, R8 dialog); B.3.8 bridge
+                void* elemPtr = reinterpret_cast<TutorialImage*>(img)->CreateElement(retbuf, dialog);
                 reinterpret_cast<UI::TableElement*>(table)->SetChild(  // B.3.6 bridge
                     reinterpret_cast<Object::InternalPtr<UI::Element>*>(elemPtr ? elemPtr : retbuf),
                     row, col);
@@ -697,8 +698,7 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
         for (int i = 0; i < n && data; ++i) {
             void* obj = *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8);
             if (!obj) continue;
-            void** vt = *reinterpret_cast<void***>(obj);
-            if (vt && vt[9]) reinterpret_cast<void (*)(void*, void*)>(vt[9])(obj, param2);
+            reinterpret_cast<TutorialSetup*>(obj)->Update(param2);   // slot 9; B.3.8 bridge
         }
     }
 
@@ -710,13 +710,12 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
         for (int i = 0; i < goalCount && data; ++i) {
             void* obj = *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8);
             if (!obj) continue;
-            void** vt = *reinterpret_cast<void***>(obj);
-            if (!vt || !vt[8]) continue;
             uint64_t selfIBP = 0;
             if (fn_InternalBasePtr_Ctor) new (&selfIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
             else selfIBP = reinterpret_cast<uint64_t>(self);
-            char ok = reinterpret_cast<char (*)(void*, void*, void*)>(vt[8])(obj, param2, &selfIBP);
+            // slot 8; B.3.8 bridge
+            bool ok = reinterpret_cast<TutorialGoal*>(obj)->IsComplete(param2, &selfIBP);
             if (ok) ++passed;
         }
     }
@@ -756,16 +755,14 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
             for (int i = 0; i < n && data; ++i) {
                 void* obj = *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8);
                 if (!obj) continue;
-                void** vt = *reinterpret_cast<void***>(obj);
-                if (!vt) continue;
-                uint32_t tid = vt[2] ? reinterpret_cast<uint32_t (*)(void*)>(vt[2])(obj) : 0;
+                uint32_t tid = reinterpret_cast<TutorialSetup*>(obj)->Type();   // B.3.8 bridge
                 const bool isRestrict = (s_restrictTid && tid == s_restrictTid);
                 if ((pass == 0) != isRestrict) continue;
                 // g_TutUndoDepth lets the toolbar trace say out loud when a UI command
                 // is dispatched from inside this loop (see above).
                 ++g_TutUndoDepth;
                 g_TutUndoIndex = i;
-                if (vt[10]) reinterpret_cast<void (*)(void*)>(vt[10])(obj);
+                reinterpret_cast<TutorialSetup*>(obj)->End();   // slot 10; B.3.8 bridge
                 --g_TutUndoDepth;
             }
         }

@@ -25,6 +25,10 @@
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/LabelElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Object/factory_registration.h"
+#include <cstddef>
+#include "Component/WorkPlaceComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 
 // Original FUN_14000d6c0 — FindComponent with type DAT_1401c7008 (guard check only)
 typedef void* (*fn_OrigFindComp_t)(void* entity, void* retval);
@@ -154,399 +158,6 @@ static uint64_t FindElemAsBasePtr(void* dialogElem, const char* name) {
     return *(uint64_t*)basePtrBuf;
 }
 
-// ============================================================
-// WorkplaceUI::Serialize (vtable +0x20) — Setup/refresh
-// ============================================================
-// Finds 6 named elements in the dialog, stores them, sets
-// element IDs on the 4 buttons plus the workPlaceButton.
-// Checks entity component to conditionally hide job count buttons.
-//
-// Original: 0x140087940.
-
-void WorkplaceUI_Serialize(WorkPlaceUI* self) {
-    void* dialogElem = *(void**)((uintptr_t)self + 0x20);
-
-    // --- Find and store named elements ---
-    self->data30 = FindElemAsBasePtr(dialogElem, "workPlaceCount");
-    self->data38 = FindElemAsBasePtr(dialogElem, "maxCount");
-    self->data40 = FindElemAsBasePtr(dialogElem, "workerCountUp");
-    self->data48 = FindElemAsBasePtr(dialogElem, "workerCountDown");
-    self->data50 = FindElemAsBasePtr(dialogElem, "jobCountUp");
-    self->data58 = FindElemAsBasePtr(dialogElem, "jobCountDown");
-
-    // --- Set element IDs on buttons ---
-    reinterpret_cast<UI::Element*>(self->data40)->SetElementId(0x1450);  // B.3.6 bridge
-    reinterpret_cast<UI::Element*>(self->data48)->SetElementId(0x1451);  // B.3.6 bridge
-    reinterpret_cast<UI::Element*>(self->data50)->SetElementId(0x1452);  // B.3.6 bridge
-    reinterpret_cast<UI::Element*>(self->data58)->SetElementId(0x1453);  // B.3.6 bridge
-
-    // Find and set workPlaceButton element ID
-    uint64_t workplaceBtn = FindElemAsBasePtr(dialogElem, "workPlaceButton");
-    reinterpret_cast<UI::Element*>(workplaceBtn)->SetElementId(0x1454);  // B.3.6 bridge
-
-    // --- Check entity component for job count visibility ---
-    void* entity = *(void**)((uintptr_t)self + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
-    void* entityPtr = isEntity ? entity : nullptr;
-    uint8_t entityBuf[8];
-    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
-    void* entityInternal = *(void**)entityBuf;
-
-    // Find the WorkComponent (FUN_140003050 — type DAT_1401c8070)
-    void* workComp = nullptr;
-    fn_FindComponent_Work(entityInternal, &workComp);
-
-    // Check the WorkComponent's WorkDescription at +0x18 (DAT_1401c80a8)
-    //
-    // DECLARED DEVIATION (2026-08-15, when idx4 was first wired into the vtable).
-    // Retail derefs workComp unguarded here because a WorkPlaceUI is only ever built
-    // over an entity that carries a WorkComponent. Ours is not: the workPlace panel is
-    // part of a SHARED dialog template that the framework instantiates for every
-    // selectable building, so this pass also runs over houses, barns and piles that
-    // legitimately have no WorkComponent — the case CLAUDE.md names as the one where a
-    // guard belongs. The buttons found above keep their .rsc default state, which is
-    // exactly what the un-wired idx4 left them at, so skipping here is a strict no-op
-    // for those buildings rather than a behaviour change.
-    if (!workComp) return;
-    void* subComp = *(void**)((uintptr_t)workComp + 0x18);
-    bool isJobType = fn_IsDerivedFrom(subComp, *g_TypeId_WorkDescription);
-
-    if (isJobType && *(uint8_t*)((uintptr_t)subComp + 0x20) == 0) {
-        // Hide job count up/down buttons if sub-component flag is zero
-        reinterpret_cast<UI::Element*>(self->data50)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(self->data58)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
-    }
-}
-
-// ============================================================
-// WorkplaceUI::Startup (vtable +0x38) — Update worker counts
-// ============================================================
-// Queries entity components to display worker count, max count,
-// and enables/disables worker up/down and job up/down buttons
-// based on current state.
-//
-// Original: 0x140087080.
-
-void WorkplaceUI_Startup(WorkPlaceUI* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Get entity from data source
-    void* dataSource = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
-    void* entity = isEntity ? dataSource : nullptr;
-    uint8_t entityBuf[8];
-    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
-    void* entityPtr = *(void**)entityBuf;
-
-    // Find the WorkPlaceComponent (FUN_140002e10 — type DAT_1401c80e0). Retail
-    // also runs a discarded IsDerivedFrom(wpComp+0x18, WorkPlaceDescription) here.
-    void* wpComp = nullptr;
-    fn_FindComponent_WorkPlace(entityPtr, &wpComp);
-
-    // Find the WorkComponent (FUN_140003050 — type DAT_1401c8070)
-    void* workComp = nullptr;
-    fn_FindComponent_Work(entityPtr, &workComp);
-
-    // Get the WorkDescription off the WorkComponent: +0x18
-    void* jobSubComp = *(void**)((uintptr_t)workComp + 0x18);
-    bool isJobType = fn_IsDerivedFrom(jobSubComp, *g_TypeId_WorkDescription);
-    void* jobType = isJobType ? jobSubComp : nullptr;
-
-    // Check if building is complete: wpComp +0x48 (profession ptr) must be non-null
-    if (*(uintptr_t*)((uintptr_t)wpComp + 0x48) == 0) {
-        // Building not complete — hide the entire panel
-#ifdef _DEBUG
-        printf("[WorkPlaceUI] HIDDEN: wpComp=%p profession(+0x48)=NULL entity=%p\n", wpComp, entityPtr);
-#endif
-        reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->SetFlagsOnOff(1, 0);  // B.3.6 bridge
-        return;
-    }
-
-    // Building complete — show the panel
-    reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->SetFlagsOnOff(0, 1);  // B.3.6 bridge
-
-#ifdef _DEBUG
-    printf("[WorkPlaceUI] entity=%p wpComp=%p workComp=%p jobType=%p jt+0x20=%d prof=%p\n",
-        entityPtr, wpComp, workComp, jobType,
-        jobType ? (int)*(uint8_t*)((uintptr_t)jobType + 0x20) : -1,
-        *(void**)((uintptr_t)wpComp + 0x48));
-#endif
-    if (*(uint8_t*)((uintptr_t)jobType + 0x20) == 0) {
-        // Check for laborer profession
-        void* professionId = *(void**)((uintptr_t)wpComp + 0x48);
-        void* profList = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xb0);
-        void* laborerProf = *(void**)((uintptr_t)profList + 0x38);
-
-        if (professionId == laborerProf) {
-            // Guard check: FUN_14000d6c0 (type DAT_1401c7008)
-            EnsureOrigFindComps();
-            uint64_t posCheck = 0;
-            fn_OrigFindCompPosition(*(void**)entityBuf, &posCheck);
-            if (posCheck != 0) goto showUpDown;
-        }
-
-        // Hide job count up/down
-        reinterpret_cast<UI::Element*>(*(void**)(s + 0x50))->SetFlagsOnOff(1, 0);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(*(void**)(s + 0x58))->SetFlagsOnOff(1, 0);  // B.3.6 bridge
-    } else {
-showUpDown:
-        // Show job count up/down
-        reinterpret_cast<UI::Element*>(*(void**)(s + 0x50))->SetFlagsOnOff(0, 1);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(*(void**)(s + 0x58))->SetFlagsOnOff(0, 1);  // B.3.6 bridge
-    }
-
-    // Get worker count and max worker count
-    uint32_t workerCount = *(uint32_t*)((uintptr_t)wpComp + 0x60);
-
-    // Get the WorkComponent from the WorkPlaceComponent's parent entity (+0x10)
-    void* parentEntity = *(void**)((uintptr_t)wpComp + 0x10);
-    void* parentWorkComp = nullptr;
-    fn_FindComponent_Work(parentEntity, &parentWorkComp);
-
-    // Get max count — lazy-init cached value at +0x30
-    if (*(int*)((uintptr_t)parentWorkComp + 0x30) == 0) {
-        int count = fn_StorageCountQuery(parentWorkComp);
-        *(int*)((uintptr_t)parentWorkComp + 0x30) = count;
-    }
-    uint32_t maxCount = *(uint32_t*)((uintptr_t)parentWorkComp + 0x30);
-
-    // Get profession sprite from wpComp +0x48 -> +0x28 (sheet) / +0x30 (name)
-    {
-        uintptr_t profPtr = *(uintptr_t*)((uintptr_t)wpComp + 0x48);
-        uint8_t spriteBuf[16];
-        ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(profPtr + 0x28))),
-                        *reinterpret_cast<const System::String*>(profPtr + 0x30));  // B.3.6 bridge
-        reinterpret_cast<UI::LabelElement*>(*(void**)(s + 0x30))->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
-    }
-
-    // Set worker count text parameter 0 on workPlaceCount
-    {
-        System::String fmtStr = System::String::Format("%d", workerCount);
-        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x30))->SetParameter(0, fmtStr);  // B.3.6 bridge
-    }
-
-    // Set max count text parameter 1 on workPlaceCount
-    {
-        System::String fmtStr = System::String::Format("%d", maxCount);
-        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x30))->SetParameter(1, fmtStr);  // B.3.6 bridge
-    }
-
-    // Iterate citizens to count workers assigned to this workplace
-    void* citizenList = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf0);
-    void* profList = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xb0);
-    void* laborerProf = *(void**)((uintptr_t)profList + 0x30);  // laborer entry
-
-    int workplaceWorkerCount = 0;
-    int laborerCount = 0;
-
-    int citizenCount = *(int*)((uintptr_t)citizenList + 0xa8);
-    for (int i = 0; i < citizenCount; i++) {
-        uintptr_t citizen = *(uintptr_t*)(*(uintptr_t*)((uintptr_t)citizenList + 0xa0) + i * 8);
-
-        // Check if citizen is adult and has profession assigned
-        void* citizenProf = *(void**)((uintptr_t)citizen + 0x288);
-        // Retail 0x1400873d2: COMISS XMM0,[RCX+0x44] / JC — CF is set only when
-        // XMM0 is strictly BELOW, so the skip is `<`, not `<=`. A citizen sitting
-        // exactly on the adulthood threshold counts as an adult in retail and was
-        // being dropped here.
-        const float citAge = *(float*)((uintptr_t)citizen + 0x3c);
-        const float adultAge = *(float*)((uintptr_t)citizenProf + 0x44);
-        const uintptr_t gate208 = *(uintptr_t*)((uintptr_t)citizen + 0x208);
-        if (citAge < adultAge) continue;
-        if (gate208 != 0) continue;
-
-        // Check if assigned to this workplace's profession
-        void* assignedProf = *(void**)((uintptr_t)citizen + 0x1f0);
-        if (assignedProf == *(void**)((uintptr_t)wpComp + 0x48)) {
-            workplaceWorkerCount++;
-        }
-        if (assignedProf == laborerProf) {
-            laborerCount++;
-        }
-    }
-
-    // Set assigned worker count on buttonPrevious (+0x38) text
-    {
-        System::String fmtStr = System::String::Format("%d", workplaceWorkerCount);
-        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x38))->SetParameter(0, fmtStr);  // B.3.6 bridge
-    }
-
-    // Enable/disable workerCountUp (+0x40) based on laborer count > 0
-    {
-        void* btnUp = *(void**)(s + 0x40);
-        reinterpret_cast<UI::Element*>(btnUp)->Enable(laborerCount > 0);  // B.3.6 bridge: Element slot 8 Enable
-    }
-
-    // Enable/disable workerCountDown (+0x48) based on workers assigned > 0
-    {
-        void* btnDown = *(void**)(s + 0x48);
-        reinterpret_cast<UI::Element*>(btnDown)->Enable((int)workplaceWorkerCount > 0);  // B.3.6 bridge: Element slot 8 Enable
-    }
-
-    // Job count up/down enable based on workplace capacity
-    // Use workComp (from main entity), NOT parentWorkComp (from inner entity)
-    if (*(int*)((uintptr_t)workComp + 0x30) == 0) {
-        int count = fn_StorageCountQuery(workComp);
-        *(int*)((uintptr_t)workComp + 0x30) = count;
-    }
-    int wpMaxCount = *(int*)((uintptr_t)workComp + 0x30);
-
-    // stderr, NOT stdout, and no longer _DEBUG-only. stdout stalls in this build (the
-    // debug log froze at 3.5 KB while stderr ran the whole session), so this line has
-    // been invisible for its entire life — a diagnostic that produces nothing is
-    // indistinguishable from one that never ran. It is the discriminator for
-    // "6/6 assigned but no citizens available": `workers` comes from WPC+0x60 while
-    // `assigned`/`laborers` come from the citizen loop, so if the panel shows 6/6 and
-    // this prints assigned=0 laborers=0, the loop is what is broken, not the roster.
-    fprintf(stderr,
-        "[WorkPlaceUI] workers=%u/%u assigned=%d laborers=%d wpMax=%d citizens=%d "
-        "wpProf=%p laborProf30=%p jt+0x28=%d jt+0x2c=%d jt+0x34=%d\n",
-        workerCount, maxCount, workplaceWorkerCount, laborerCount, wpMaxCount,
-        citizenCount, *(void**)((uintptr_t)wpComp + 0x48), laborerProf,
-        jobType ? *(int*)((uintptr_t)jobType + 0x28) : -1,
-        jobType ? *(int*)((uintptr_t)jobType + 0x2c) : -1,
-        jobType ? (int)*(uint8_t*)((uintptr_t)jobType + 0x34) : -1);
-    fflush(stderr);
-
-    // Check if this is a laborer profession
-    if (*(void**)((uintptr_t)wpComp + 0x48) ==
-        *(void**)((uintptr_t)profList + 0x38)) {
-        // Laborer building — check position component for position-based limit
-        // Guard check: FUN_14000d6c0 (type DAT_1401c7008)
-        EnsureOrigFindComps();
-        uint64_t posGuard = 0;
-        fn_OrigFindCompPosition(*(void**)entityBuf, &posGuard);
-        if (posGuard != 0) {
-            int maxCap = *(int*)((uintptr_t)jobType + 0x2c);
-            // Get ResidenceComponent via FUN_140002ed0 (type DAT_1401c7900)
-            uint64_t resIBP = 0;
-            fn_OrigFindCompResidence(*(void**)entityBuf, &resIBP);
-            int posCount = fn_ResidenceComponent_GetOccupantCount((void*)resIBP, 1);
-            // Use min(jobType max, position count) as the real limit
-            if (posCount < maxCap) {
-                uint64_t resIBP2 = 0;
-                fn_OrigFindCompResidence(*(void**)entityBuf, &resIBP2);
-                maxCap = fn_ResidenceComponent_GetOccupantCount((void*)resIBP2, 1);
-            }
-            // Enable up if current max < capacity limit
-            void* btnUp = *(void**)(s + 0x50);
-            reinterpret_cast<UI::Element*>(btnUp)->Enable(wpMaxCount < maxCap);  // B.3.6 bridge: Element slot 8 Enable
-
-            // Enable down if current max > 1
-            void* btnDown = *(void**)(s + 0x58);
-            reinterpret_cast<UI::Element*>(btnDown)->Enable(wpMaxCount > 1);  // B.3.6 bridge: Element slot 8 Enable
-            return;
-        }
-    }
-
-    // Default job count button logic
-    int jobMinCount = *(int*)((uintptr_t)jobType + 0x28);
-
-    // TEMPORARY INSTRUMENTATION (2026-08-15). The hunting cabin's job up-arrow is
-    // greyed out in the UI, so a laborer can never be assigned to the hunt work class
-    // organically -- the lodge is only ever staffed by the FOOD_WORKERS harness. The
-    // up-arrow's ONLY enable condition is wpMaxCount < jobType+0x2c, so a zero (or
-    // wrong-offset) max greys it permanently. Print BOTH sides of that comparison plus
-    // the predicate's outcome, not just the inputs. NOTE engine_funcs.h's
-    // WorkDescription field names are known-wrong, so +0x28/+0x2c may not be min/max.
-    {
-        static long long s_n = 0;
-        if ((++s_n % 120) == 1) {
-            const int jobMax = *(int*)((uintptr_t)jobType + 0x2c);
-            // The predicate measured TRUE (wpMax=3 < max=4) yet the player still sees a
-            // greyed arrow, so the enable VALUE is not the problem -- the next suspect is
-            // the call that carries it. Report the receiver of each arrow's vtable[8] so
-            // an unwired / stub slot 8 (which would swallow the enable and leave every
-            // arrow rendering greyed) is distinguishable from a genuine disable. Symbolize
-            // these with nm against standalone/build/reimpl-x64.exe.
-            void* bU = *(void**)(s + 0x50); void* bD = *(void**)(s + 0x58);
-            void* bWU = *(void**)(s + 0x40); void* bWD = *(void**)(s + 0x48);
-            std::fprintf(stderr, "[JobArrow] jobType=%p wpMaxCount=%d min(+0x28)=%d "
-                         "max(+0x2c)=%d -> upEnabled=%d downEnabled=%d | "
-                         "jobUp=%p vt=%p vt[8]=%p | jobDown=%p vt[8]=%p | "
-                         "wkUp=%p vt[8]=%p | wkDown=%p vt[8]=%p\n",
-                         (void*)jobType, wpMaxCount, jobMinCount, jobMax,
-                         wpMaxCount < jobMax ? 1 : 0,
-                         (wpMaxCount != jobMinCount && wpMaxCount > jobMinCount) ? 1 : 0,
-                         bU, bU ? *(void**)bU : nullptr,
-                         bU ? (*(void***)bU)[8] : nullptr,
-                         bD, bD ? (*(void***)bD)[8] : nullptr,
-                         bWU, bWU ? (*(void***)bWU)[8] : nullptr,
-                         bWD, bWD ? (*(void***)bWD)[8] : nullptr);
-            std::fflush(stderr);
-        }
-    }
-    {
-        void* btnUp = *(void**)(s + 0x50);
-        reinterpret_cast<UI::Element*>(btnUp)->Enable(wpMaxCount < *(int*)((uintptr_t)jobType + 0x2c));  // B.3.6 bridge: Element slot 8 Enable
-    }
-    {
-        void* btnDown = *(void**)(s + 0x58);
-        reinterpret_cast<UI::Element*>(btnDown)->Enable(wpMaxCount != jobMinCount && wpMaxCount > jobMinCount);  // B.3.6 bridge: Element slot 8 Enable
-    }
-}
-
-// NOTE - the older duplicate port of retail 0x1400877e0 that used to live here
-// (WorkplaceUI_OnRemove) has been REMOVED. It was fully written but wired into no
-// vtable, so it never executed: slot 9 is workplaceui_sa::W_OnRemove, further down
-// this file. Keeping both was an active trap - a diagnostic added to the dead copy
-// during the 2026-08-25 seat investigation never fired, which cost a measurement
-// cycle. The live copy is also the CORRECT one: it routes jobCountUp/Down
-// (0x1452/0x1453) to SetMaxWorkers, where the dead copy ran the seat cascade for
-// both spinner pairs. If you need the old body, it is in git history.
-
-// ============================================================
-// STANDALONE promotion — real WorkPlaceUI controller vtable
-// ============================================================
-// The WorkPlaceUI panel (Dialog/Work.rsc:workPlace — the "workers X of Y" label
-// with the up/down worker/job spinners) is listed in the UIDescription of every
-// building that has a WorkPlaceComponent, INCLUDING non-production ones like the
-// WoodHouse/StoneHouse and StorageBarn: those carry a *construction* workplace so
-// citizens can be assigned to build them. Their WorkPlaceDescription has no
-// profession ("no actual work done here once the building is built"), so once the
-// building is complete the workplace's profession (WorkPlaceComponent+0x48) is
-// null and retail's WorkplaceUI::Startup HIDES the whole panel — that is why a
-// finished house / barn / stockpile shows only the center/pin/close chrome plus its
-// residence/storage content, and no worker spinner.
-//
-// In standalone this type was a StubNop (all slots no-op, see ui_dialog_stub_
-// factories.cpp — that stub registration is REMOVED there to avoid a duplicate
-// REGISTER_TYPE), so Startup never ran and the construction-workplace spinner
-// stayed visible on completed houses/barns. This installs a real per-class vtable
-// that drives the exact show/hide decision from Startup's head:
-//     show  ⇔  WorkPlaceComponent found  AND  its profession (+0x48) != 0
-// i.e. hide on a built house/barn/pile (no active profession), show while it is
-// still under construction and on genuine production workplaces.
-//
-// Only the visibility decision is ported here — the heavy worker-count population
-// ⚠ STALE AS OF 2026-08-01 — the tail of Startup USED to be skipped in SA because
-// FUN_14000d6c0 / FUN_140002ed0 "resolve NULL in standalone". Both are registered
-// now (reg_dialog.cpp:22, reg_work_base.cpp:39) and the full Startup runs from
-// W_Startup/W_OnUpdate. Skipping it was what left the worker up/down buttons
-// permanently disabled. Kept here only to record why the gap existed. The user-visible requirement is
-// that the panel disappears on the storage/house dialogs; a shown production panel
-// keeps its .rsc default content exactly as the StubNop already left it (no
-// regression). This mirrors the StorageUI/StorageCapacityUI/ResidenceUI promotions.
-//
-// Vtable offsets (verified from the exe WorkPlaceUI vtable @ 0x14015e030):
-//   +0x00 (idx0) ScalarDtor   +0x10 (idx2) GetTypeId
-//   +0x20 (idx4) Serialize (0x140087940) — element discovery (WIRED 2026-08-15)
-//   +0x38 (idx7) Startup   (0x140087080) — full refresh (visibility subset in SA)
-//   +0x40 (idx8)           — base DialogController::OnUpdate (per-frame). The
-//                framework dispatches ONLY +0x40 each frame, so the visibility
-//                refresh is driven here so it stays live as buildings complete.
-//   +0x48 (idx9) OnRemove  (0x1400877e0) — button dispatch. It reads the element ids
-//                idx4 stamps (0x1450..0x1454), so it only became reachable once idx4
-//                was wired; before that the note here read "no-op in SA".
-#include "Object/factory_registration.h"
-#include <cstddef>
-#include <cstdlib>
-
-// Roster-only guard defined at global scope in workplacecomponent.cpp (suppresses the
-// gameplay-time Scene mesh-visual block in WorkplaceComponent Attach/Detach). Declared here
-// at GLOBAL scope so the reference inside the namespace binds to ::g_wpcRosterOnly.
-extern bool g_wpcRosterOnly;
-
 namespace workplaceui_sa {
 
 // The exe-.rdata type-id globals the visibility check dereferences are NULL in
@@ -556,11 +167,11 @@ namespace workplaceui_sa {
 void EnsureGlobals() {
     static uint32_t s_ce = 0, s_wpc = 0;
     if (!g_TypeId_ComponentEntity) {
-        s_ce = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
+        s_ce = ComponentEntity::TypeId();
         if (s_ce) g_TypeId_ComponentEntity = &s_ce;
     }
     if (!g_TypeId_WorkplaceComponent) {
-        s_wpc = ::Object::ResolveTypeIdByNameLazy("WorkPlaceComponent");
+        s_wpc = WorkPlaceComponent::TypeId();
         if (s_wpc) g_TypeId_WorkplaceComponent = &s_wpc;
     }
 }
@@ -871,90 +482,428 @@ static void SA_AdjustJobCount(void* self, int delta) {
     fflush(stderr);
 }
 
-// idx8 (+0x40): per-frame — keep the panel's visibility in sync as buildings
-// finish construction (profession clears → panel hides), and refresh the live
-// worker/builder counts (roster grows as builders are seated).
-// ── The worker-assignment half, restored 2026-08-01 ──────────────────────────
-// The block comment above (the "Vtable offsets" note) said the tail of Startup was
-// "deliberately skipped in SA" because it calls FUN_14000d6c0 / FUN_140002ed0,
-// "that resolve NULL in standalone". THAT IS NO LONGER TRUE and has not been for a
-// while: 0x14000d6c0 is registered at standalone/reg_dialog.cpp:22 and 0x140002ed0
-// at standalone/reg_work_base.cpp:39. The comment was accurate when written and
-// aged into a lie — the same failure mode as the worldgen river-polyline copy.
+
+
+
+}  // namespace workplaceui_sa
+
+// ============================================================
+// WorkplaceUI::Serialize (vtable +0x20) — Setup/refresh
+// ============================================================
+// Finds 6 named elements in the dialog, stores them, sets
+// element IDs on the 4 buttons plus the workPlaceButton.
+// Checks entity component to conditionally hide job count buttons.
 //
-// The cost of that stale deferral was the user-visible bug: UpdateVisibility +
-// PopulateCounts render the roster ("6/6") but NEVER touch the worker up/down
-// buttons, because the only code that enables them is the citizen loop in the
-// skipped tail (it enables workerCountUp iff laborerCount > 0 and workerCountDown
-// iff this workplace has assigned workers). With the tail skipped, both buttons sit
-// at their .rsc default disabled state forever — which presents exactly as
-// "no citizens are available to work", clicking does nothing, and yet the count
-// still reads 6/6 because that half DID run.
-//
-// So run the full ported Startup. It is a superset: it recomputes the same counts
-// and additionally sets the button enable states.
-void W_OnUpdate(void* self, void* /*time*/) {
-    EnsureGlobals();
-    if (!self || !Ready() || !SA_DialogEntityAlive(self)) return;
-    UpdateVisibility(self);
-    PopulateCounts(self);
-    WorkplaceUI_Startup(reinterpret_cast<WorkPlaceUI*>(self));
+// Original: 0x140087940.
+
+// [4] 0x140087940
+void WorkPlaceUI::OnCreated() {
+    workplaceui_sa::EnsureGlobals();
+    if (!workplaceui_sa::Ready() || !SA_DialogEntityAlive(this)) return;
+    void* dialogElem = *(void**)((uintptr_t)this + 0x20);
+
+    // --- Find and store named elements ---
+    this->data30 = FindElemAsBasePtr(dialogElem, "workPlaceCount");
+    this->data38 = FindElemAsBasePtr(dialogElem, "maxCount");
+    this->data40 = FindElemAsBasePtr(dialogElem, "workerCountUp");
+    this->data48 = FindElemAsBasePtr(dialogElem, "workerCountDown");
+    this->data50 = FindElemAsBasePtr(dialogElem, "jobCountUp");
+    this->data58 = FindElemAsBasePtr(dialogElem, "jobCountDown");
+
+    // --- Set element IDs on buttons ---
+    reinterpret_cast<UI::Element*>(this->data40)->SetElementId(0x1450);  // B.3.6 bridge
+    reinterpret_cast<UI::Element*>(this->data48)->SetElementId(0x1451);  // B.3.6 bridge
+    reinterpret_cast<UI::Element*>(this->data50)->SetElementId(0x1452);  // B.3.6 bridge
+    reinterpret_cast<UI::Element*>(this->data58)->SetElementId(0x1453);  // B.3.6 bridge
+
+    // Find and set workPlaceButton element ID
+    uint64_t workplaceBtn = FindElemAsBasePtr(dialogElem, "workPlaceButton");
+    reinterpret_cast<UI::Element*>(workplaceBtn)->SetElementId(0x1454);  // B.3.6 bridge
+
+    // --- Check entity component for job count visibility ---
+    void* entity = *(void**)((uintptr_t)this + 0x28);
+    bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    void* entityPtr = isEntity ? entity : nullptr;
+    uint8_t entityBuf[8];
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
+    void* entityInternal = *(void**)entityBuf;
+
+    // Find the WorkComponent (FUN_140003050 — type DAT_1401c8070)
+    void* workComp = nullptr;
+    fn_FindComponent_Work(entityInternal, &workComp);
+
+    // Check the WorkComponent's WorkDescription at +0x18 (DAT_1401c80a8)
+    //
+    // DECLARED DEVIATION (2026-08-15, when idx4 was first wired into the vtable).
+    // Retail derefs workComp unguarded here because a WorkPlaceUI is only ever built
+    // over an entity that carries a WorkComponent. Ours is not: the workPlace panel is
+    // part of a SHARED dialog template that the framework instantiates for every
+    // selectable building, so this pass also runs over houses, barns and piles that
+    // legitimately have no WorkComponent — the case CLAUDE.md names as the one where a
+    // guard belongs. The buttons found above keep their .rsc default state, which is
+    // exactly what the un-wired idx4 left them at, so skipping here is a strict no-op
+    // for those buildings rather than a behaviour change.
+    if (!workComp) return;
+    void* subComp = *(void**)((uintptr_t)workComp + 0x18);
+    bool isJobType = fn_IsDerivedFrom(subComp, *g_TypeId_WorkDescription);
+
+    if (isJobType && *(uint8_t*)((uintptr_t)subComp + 0x20) == 0) {
+        // Hide job count up/down buttons if sub-component flag is zero
+        reinterpret_cast<UI::Element*>(this->data50)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(this->data58)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+    }
 }
 
-// idx4 (+0x20): Serialize — retail 0x140087940, the element-discovery pass. Runs once
-// when the dialog framework binds this controller to its element, finding the six named
-// children and stamping the button element ids that idx9 (OnRemove) dispatches on.
-void W_Serialize(void* self) {
-    EnsureGlobals();
-    if (!self || !Ready() || !SA_DialogEntityAlive(self)) return;
-    WorkplaceUI_Serialize(reinterpret_cast<WorkPlaceUI*>(self));
+// ============================================================
+// WorkplaceUI::Startup (vtable +0x38) — Update worker counts
+// ============================================================
+// Queries entity components to display worker count, max count,
+// and enables/disables worker up/down and job up/down buttons
+// based on current state.
+//
+// Original: 0x140087080.
+
+// [7] 0x140087080
+void WorkPlaceUI::OnUpdateLayout() {
+    workplaceui_sa::EnsureGlobals();
+    if (!workplaceui_sa::Ready() || !SA_DialogEntityAlive(this)) return;
+    workplaceui_sa::UpdateVisibility(this);
+    workplaceui_sa::PopulateCounts(this);
+    uintptr_t s = (uintptr_t)this;
+
+    // Get entity from data source
+    void* dataSource = *(void**)(s + 0x28);
+    bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
+    void* entity = isEntity ? dataSource : nullptr;
+    uint8_t entityBuf[8];
+    new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
+    void* entityPtr = *(void**)entityBuf;
+
+    // Find the WorkPlaceComponent (FUN_140002e10 — type DAT_1401c80e0). Retail
+    // also runs a discarded IsDerivedFrom(wpComp+0x18, WorkPlaceDescription) here.
+    void* wpComp = nullptr;
+    fn_FindComponent_WorkPlace(entityPtr, &wpComp);
+
+    // Find the WorkComponent (FUN_140003050 — type DAT_1401c8070)
+    void* workComp = nullptr;
+    fn_FindComponent_Work(entityPtr, &workComp);
+
+    // Get the WorkDescription off the WorkComponent: +0x18
+    void* jobSubComp = *(void**)((uintptr_t)workComp + 0x18);
+    bool isJobType = fn_IsDerivedFrom(jobSubComp, *g_TypeId_WorkDescription);
+    void* jobType = isJobType ? jobSubComp : nullptr;
+
+    // Check if building is complete: wpComp +0x48 (profession ptr) must be non-null
+    if (*(uintptr_t*)((uintptr_t)wpComp + 0x48) == 0) {
+        // Building not complete — hide the entire panel
+#ifdef _DEBUG
+        printf("[WorkPlaceUI] HIDDEN: wpComp=%p profession(+0x48)=NULL entity=%p\n", wpComp, entityPtr);
+#endif
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        return;
+    }
+
+    // Building complete — show the panel
+    reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->SetFlagsOnOff(0, 1);  // B.3.6 bridge
+
+#ifdef _DEBUG
+    printf("[WorkPlaceUI] entity=%p wpComp=%p workComp=%p jobType=%p jt+0x20=%d prof=%p\n",
+        entityPtr, wpComp, workComp, jobType,
+        jobType ? (int)*(uint8_t*)((uintptr_t)jobType + 0x20) : -1,
+        *(void**)((uintptr_t)wpComp + 0x48));
+#endif
+    if (*(uint8_t*)((uintptr_t)jobType + 0x20) == 0) {
+        // Check for laborer profession
+        void* professionId = *(void**)((uintptr_t)wpComp + 0x48);
+        void* profList = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xb0);
+        void* laborerProf = *(void**)((uintptr_t)profList + 0x38);
+
+        if (professionId == laborerProf) {
+            // Guard check: FUN_14000d6c0 (type DAT_1401c7008)
+            EnsureOrigFindComps();
+            uint64_t posCheck = 0;
+            fn_OrigFindCompPosition(*(void**)entityBuf, &posCheck);
+            if (posCheck != 0) goto showUpDown;
+        }
+
+        // Hide job count up/down
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x50))->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x58))->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+    } else {
+showUpDown:
+        // Show job count up/down
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x50))->SetFlagsOnOff(0, 1);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x58))->SetFlagsOnOff(0, 1);  // B.3.6 bridge
+    }
+
+    // Get worker count and max worker count
+    uint32_t workerCount = *(uint32_t*)((uintptr_t)wpComp + 0x60);
+
+    // Get the WorkComponent from the WorkPlaceComponent's parent entity (+0x10)
+    void* parentEntity = *(void**)((uintptr_t)wpComp + 0x10);
+    void* parentWorkComp = nullptr;
+    fn_FindComponent_Work(parentEntity, &parentWorkComp);
+
+    // Get max count — lazy-init cached value at +0x30
+    if (*(int*)((uintptr_t)parentWorkComp + 0x30) == 0) {
+        int count = fn_StorageCountQuery(parentWorkComp);
+        *(int*)((uintptr_t)parentWorkComp + 0x30) = count;
+    }
+    uint32_t maxCount = *(uint32_t*)((uintptr_t)parentWorkComp + 0x30);
+
+    // Get profession sprite from wpComp +0x48 -> +0x28 (sheet) / +0x30 (name)
+    {
+        uintptr_t profPtr = *(uintptr_t*)((uintptr_t)wpComp + 0x48);
+        uint8_t spriteBuf[16];
+        ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(profPtr + 0x28))),
+                        *reinterpret_cast<const System::String*>(profPtr + 0x30));  // B.3.6 bridge
+        reinterpret_cast<UI::LabelElement*>(*(void**)(s + 0x30))->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
+    }
+
+    // Set worker count text parameter 0 on workPlaceCount
+    {
+        System::String fmtStr = System::String::Format("%d", workerCount);
+        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x30))->SetParameter(0, fmtStr);  // B.3.6 bridge
+    }
+
+    // Set max count text parameter 1 on workPlaceCount
+    {
+        System::String fmtStr = System::String::Format("%d", maxCount);
+        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x30))->SetParameter(1, fmtStr);  // B.3.6 bridge
+    }
+
+    // Iterate citizens to count workers assigned to this workplace
+    void* citizenList = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf0);
+    void* profList = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xb0);
+    void* laborerProf = *(void**)((uintptr_t)profList + 0x30);  // laborer entry
+
+    int workplaceWorkerCount = 0;
+    int laborerCount = 0;
+
+    int citizenCount = *(int*)((uintptr_t)citizenList + 0xa8);
+    for (int i = 0; i < citizenCount; i++) {
+        uintptr_t citizen = *(uintptr_t*)(*(uintptr_t*)((uintptr_t)citizenList + 0xa0) + i * 8);
+
+        // Check if citizen is adult and has profession assigned
+        void* citizenProf = *(void**)((uintptr_t)citizen + 0x288);
+        // Retail 0x1400873d2: COMISS XMM0,[RCX+0x44] / JC — CF is set only when
+        // XMM0 is strictly BELOW, so the skip is `<`, not `<=`. A citizen sitting
+        // exactly on the adulthood threshold counts as an adult in retail and was
+        // being dropped here.
+        const float citAge = *(float*)((uintptr_t)citizen + 0x3c);
+        const float adultAge = *(float*)((uintptr_t)citizenProf + 0x44);
+        const uintptr_t gate208 = *(uintptr_t*)((uintptr_t)citizen + 0x208);
+        if (citAge < adultAge) continue;
+        if (gate208 != 0) continue;
+
+        // Check if assigned to this workplace's profession
+        void* assignedProf = *(void**)((uintptr_t)citizen + 0x1f0);
+        if (assignedProf == *(void**)((uintptr_t)wpComp + 0x48)) {
+            workplaceWorkerCount++;
+        }
+        if (assignedProf == laborerProf) {
+            laborerCount++;
+        }
+    }
+
+    // Set assigned worker count on buttonPrevious (+0x38) text
+    {
+        System::String fmtStr = System::String::Format("%d", workplaceWorkerCount);
+        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x38))->SetParameter(0, fmtStr);  // B.3.6 bridge
+    }
+
+    // Enable/disable workerCountUp (+0x40) based on laborer count > 0
+    {
+        void* btnUp = *(void**)(s + 0x40);
+        reinterpret_cast<UI::Element*>(btnUp)->Enable(laborerCount > 0);  // B.3.6 bridge: Element slot 8 Enable
+    }
+
+    // Enable/disable workerCountDown (+0x48) based on workers assigned > 0
+    {
+        void* btnDown = *(void**)(s + 0x48);
+        reinterpret_cast<UI::Element*>(btnDown)->Enable((int)workplaceWorkerCount > 0);  // B.3.6 bridge: Element slot 8 Enable
+    }
+
+    // Job count up/down enable based on workplace capacity
+    // Use workComp (from main entity), NOT parentWorkComp (from inner entity)
+    if (*(int*)((uintptr_t)workComp + 0x30) == 0) {
+        int count = fn_StorageCountQuery(workComp);
+        *(int*)((uintptr_t)workComp + 0x30) = count;
+    }
+    int wpMaxCount = *(int*)((uintptr_t)workComp + 0x30);
+
+    // stderr, NOT stdout, and no longer _DEBUG-only. stdout stalls in this build (the
+    // debug log froze at 3.5 KB while stderr ran the whole session), so this line has
+    // been invisible for its entire life — a diagnostic that produces nothing is
+    // indistinguishable from one that never ran. It is the discriminator for
+    // "6/6 assigned but no citizens available": `workers` comes from WPC+0x60 while
+    // `assigned`/`laborers` come from the citizen loop, so if the panel shows 6/6 and
+    // this prints assigned=0 laborers=0, the loop is what is broken, not the roster.
+    fprintf(stderr,
+        "[WorkPlaceUI] workers=%u/%u assigned=%d laborers=%d wpMax=%d citizens=%d "
+        "wpProf=%p laborProf30=%p jt+0x28=%d jt+0x2c=%d jt+0x34=%d\n",
+        workerCount, maxCount, workplaceWorkerCount, laborerCount, wpMaxCount,
+        citizenCount, *(void**)((uintptr_t)wpComp + 0x48), laborerProf,
+        jobType ? *(int*)((uintptr_t)jobType + 0x28) : -1,
+        jobType ? *(int*)((uintptr_t)jobType + 0x2c) : -1,
+        jobType ? (int)*(uint8_t*)((uintptr_t)jobType + 0x34) : -1);
+    fflush(stderr);
+
+    // Check if this is a laborer profession
+    if (*(void**)((uintptr_t)wpComp + 0x48) ==
+        *(void**)((uintptr_t)profList + 0x38)) {
+        // Laborer building — check position component for position-based limit
+        // Guard check: FUN_14000d6c0 (type DAT_1401c7008)
+        EnsureOrigFindComps();
+        uint64_t posGuard = 0;
+        fn_OrigFindCompPosition(*(void**)entityBuf, &posGuard);
+        if (posGuard != 0) {
+            int maxCap = *(int*)((uintptr_t)jobType + 0x2c);
+            // Get ResidenceComponent via FUN_140002ed0 (type DAT_1401c7900)
+            uint64_t resIBP = 0;
+            fn_OrigFindCompResidence(*(void**)entityBuf, &resIBP);
+            int posCount = fn_ResidenceComponent_GetOccupantCount((void*)resIBP, 1);
+            // Use min(jobType max, position count) as the real limit
+            if (posCount < maxCap) {
+                uint64_t resIBP2 = 0;
+                fn_OrigFindCompResidence(*(void**)entityBuf, &resIBP2);
+                maxCap = fn_ResidenceComponent_GetOccupantCount((void*)resIBP2, 1);
+            }
+            // Enable up if current max < capacity limit
+            void* btnUp = *(void**)(s + 0x50);
+            reinterpret_cast<UI::Element*>(btnUp)->Enable(wpMaxCount < maxCap);  // B.3.6 bridge: Element slot 8 Enable
+
+            // Enable down if current max > 1
+            void* btnDown = *(void**)(s + 0x58);
+            reinterpret_cast<UI::Element*>(btnDown)->Enable(wpMaxCount > 1);  // B.3.6 bridge: Element slot 8 Enable
+            return;
+        }
+    }
+
+    // Default job count button logic
+    int jobMinCount = *(int*)((uintptr_t)jobType + 0x28);
+
+    // TEMPORARY INSTRUMENTATION (2026-08-15). The hunting cabin's job up-arrow is
+    // greyed out in the UI, so a laborer can never be assigned to the hunt work class
+    // organically -- the lodge is only ever staffed by the FOOD_WORKERS harness. The
+    // up-arrow's ONLY enable condition is wpMaxCount < jobType+0x2c, so a zero (or
+    // wrong-offset) max greys it permanently. Print BOTH sides of that comparison plus
+    // the predicate's outcome, not just the inputs. NOTE engine_funcs.h's
+    // WorkDescription field names are known-wrong, so +0x28/+0x2c may not be min/max.
+    {
+        static long long s_n = 0;
+        if ((++s_n % 120) == 1) {
+            const int jobMax = *(int*)((uintptr_t)jobType + 0x2c);
+            // The predicate measured TRUE (wpMax=3 < max=4) yet the player still sees a
+            // greyed arrow, so the enable VALUE is not the problem -- the next suspect is
+            // the call that carries it. Report the receiver of each arrow's vtable[8] so
+            // an unwired / stub slot 8 (which would swallow the enable and leave every
+            // arrow rendering greyed) is distinguishable from a genuine disable. Symbolize
+            // these with nm against standalone/build/reimpl-x64.exe.
+            void* bU = *(void**)(s + 0x50); void* bD = *(void**)(s + 0x58);
+            void* bWU = *(void**)(s + 0x40); void* bWD = *(void**)(s + 0x48);
+            std::fprintf(stderr, "[JobArrow] jobType=%p wpMaxCount=%d min(+0x28)=%d "
+                         "max(+0x2c)=%d -> upEnabled=%d downEnabled=%d | "
+                         "jobUp=%p vt=%p vt[8]=%p | jobDown=%p vt[8]=%p | "
+                         "wkUp=%p vt[8]=%p | wkDown=%p vt[8]=%p\n",
+                         (void*)jobType, wpMaxCount, jobMinCount, jobMax,
+                         wpMaxCount < jobMax ? 1 : 0,
+                         (wpMaxCount != jobMinCount && wpMaxCount > jobMinCount) ? 1 : 0,
+                         bU, bU ? *(void**)bU : nullptr,
+                         bU ? (*(void***)bU)[8] : nullptr,
+                         bD, bD ? (*(void***)bD)[8] : nullptr,
+                         bWU, bWU ? (*(void***)bWU)[8] : nullptr,
+                         bWD, bWD ? (*(void***)bWD)[8] : nullptr);
+            std::fflush(stderr);
+        }
+    }
+    {
+        void* btnUp = *(void**)(s + 0x50);
+        reinterpret_cast<UI::Element*>(btnUp)->Enable(wpMaxCount < *(int*)((uintptr_t)jobType + 0x2c));  // B.3.6 bridge: Element slot 8 Enable
+    }
+    {
+        void* btnDown = *(void**)(s + 0x58);
+        reinterpret_cast<UI::Element*>(btnDown)->Enable(wpMaxCount != jobMinCount && wpMaxCount > jobMinCount);  // B.3.6 bridge: Element slot 8 Enable
+    }
 }
 
-// idx7 (+0x38): Startup — same visibility decision + count refresh on setup.
-void W_Startup(void* self) {
-    EnsureGlobals();
-    if (!self || !Ready() || !SA_DialogEntityAlive(self)) return;
-    UpdateVisibility(self);
-    PopulateCounts(self);
-    WorkplaceUI_Startup(reinterpret_cast<WorkPlaceUI*>(self));
+// NOTE - the older duplicate port of retail 0x1400877e0 that used to live here
+// (WorkplaceUI_OnRemove) has been REMOVED. It was fully written but wired into no
+// vtable, so it never executed: slot 9 is workplaceui_sa::W_OnRemove, further down
+// this file. Keeping both was an active trap - a diagnostic added to the dead copy
+// during the 2026-08-25 seat investigation never fired, which cost a measurement
+// cycle. The live copy is also the CORRECT one: it routes jobCountUp/Down
+// (0x1452/0x1453) to SetMaxWorkers, where the dead copy ran the seat cascade for
+// both spinner pairs. If you need the old body, it is in git history.
+
+// ============================================================
+// STANDALONE promotion — real WorkPlaceUI controller vtable
+// ============================================================
+// The WorkPlaceUI panel (Dialog/Work.rsc:workPlace — the "workers X of Y" label
+// with the up/down worker/job spinners) is listed in the UIDescription of every
+// building that has a WorkPlaceComponent, INCLUDING non-production ones like the
+// WoodHouse/StoneHouse and StorageBarn: those carry a *construction* workplace so
+// citizens can be assigned to build them. Their WorkPlaceDescription has no
+// profession ("no actual work done here once the building is built"), so once the
+// building is complete the workplace's profession (WorkPlaceComponent+0x48) is
+// null and retail's WorkplaceUI::Startup HIDES the whole panel — that is why a
+// finished house / barn / stockpile shows only the center/pin/close chrome plus its
+// residence/storage content, and no worker spinner.
+//
+// In standalone this type was a StubNop (all slots no-op, see ui_dialog_stub_
+// factories.cpp — that stub registration is REMOVED there to avoid a duplicate
+// REGISTER_TYPE), so Startup never ran and the construction-workplace spinner
+// stayed visible on completed houses/barns. This installs a real per-class vtable
+// that drives the exact show/hide decision from Startup's head:
+//     show  ⇔  WorkPlaceComponent found  AND  its profession (+0x48) != 0
+// i.e. hide on a built house/barn/pile (no active profession), show while it is
+// still under construction and on genuine production workplaces.
+//
+// Only the visibility decision is ported here — the heavy worker-count population
+// ⚠ STALE AS OF 2026-08-01 — the tail of Startup USED to be skipped in SA because
+// FUN_14000d6c0 / FUN_140002ed0 "resolve NULL in standalone". Both are registered
+// now (reg_dialog.cpp:22, reg_work_base.cpp:39) and the full Startup runs from
+// W_Startup/W_OnUpdate. Skipping it was what left the worker up/down buttons
+// permanently disabled. Kept here only to record why the gap existed. The user-visible requirement is
+// that the panel disappears on the storage/house dialogs; a shown production panel
+// keeps its .rsc default content exactly as the StubNop already left it (no
+// regression). This mirrors the StorageUI/StorageCapacityUI/ResidenceUI promotions.
+//
+// Vtable offsets (verified from the exe WorkPlaceUI vtable @ 0x14015e030):
+//   +0x00 (idx0) ScalarDtor   +0x10 (idx2) GetTypeId
+//   +0x20 (idx4) Serialize (0x140087940) — element discovery (WIRED 2026-08-15)
+//   +0x38 (idx7) Startup   (0x140087080) — full refresh (visibility subset in SA)
+//   +0x40 (idx8)           — base DialogController::OnUpdate (per-frame). The
+//                framework dispatches ONLY +0x40 each frame, so the visibility
+//                refresh is driven here so it stays live as buildings complete.
+//   +0x48 (idx9) OnRemove  (0x1400877e0) — button dispatch. It reads the element ids
+//                idx4 stamps (0x1450..0x1454), so it only became reachable once idx4
+//                was wired; before that the note here read "no-op in SA".
+
+// Roster-only guard defined at global scope in workplacecomponent.cpp (suppresses the
+// gameplay-time Scene mesh-visual block in WorkplaceComponent Attach/Detach). Declared here
+// at GLOBAL scope so the reference inside the namespace binds to ::g_wpcRosterOnly.
+extern bool g_wpcRosterOnly;
+
+
+
+
+// [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
+void WorkPlaceUI::OnUpdate(const System::Time& /*time*/) {
+    WorkPlaceUI::OnUpdateLayout();
 }
 
-// idx9 (+0x48): OnRemove — per-building worker up/down spinner. Adds/removes ONE worker of
-// this building's profession (WorkPlaceComponent+0x48), the per-building equivalent of the
-// town-hall Professions spinner. Reuses the same registered cascade (RequestWorker =
-// FindAvailableBuilding, then FindIdle/Working/Student/Any = cbf0/ca20/c5f0/c4b0 to convert
-// a laborer; RemoveWorker to pull one).
-//
-// ⚠ THE g_wpcRosterOnly HOLD IS GONE (2026-08-17), and its removal is the fix for the
-// stuck "?" icon. The old note here read "held under g_wpcRosterOnly so the gameplay-time
-// Scene mesh-visual block in WorkplaceComponent Attach/Detach — which faults on inert SA
-// objects (READ of 0x10) — is skipped". Two things were wrong with that:
-//
-//   1. g_wpcRosterOnly is a WORLD-BUILD shim. Its own definition (workplacecomponent.cpp
-//      :221) says so: the mesh toggle calls Graphics::Scene::Remove/AddObject, which
-//      deadlocks when driven mid-build, and "default false -> the per-tick gameplay
-//      AssignHousing path is unchanged (full faithful visual)". A panel click is gameplay
-//      time — exactly when the toggle IS meant to run. This path borrowed a build-time
-//      shim into gameplay.
-//   2. The READ of 0x10 it named was Detach's Getter_e710 on a null accessor, and that is
-//      now guarded at the source (workplacecomponent.cpp:276, "a null accessor means
-//      nothing renderable to toggle"). The premise expired when that guard landed; the
-//      hold outlived it.
-//
-// The cost was not cosmetic-only in appearance: WorkPlaceComponent_SetAccepting raises the
-// "no workers" warning (status bit 4) on an unstaffed workplace, and WorkplaceComponent_
-// Attach's clear of that bit sits inside `if (!g_wpcRosterOnly)`. So EVERY seat a player
-// made left the ? icon up over a fully-staffed building. Measured before: roster 0 -> 4
-// with `icon 0x10 -> 0x10`. After: `icon 0x10 -> 0x0`.
-void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*/) {
-    EnsureGlobals();
-    if (!self || !Ready() || !SA_DialogEntityAlive(self)) return;
+// [9] 0x1400877e0
+void WorkPlaceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t msg, int32_t id,
+                                 int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    workplaceui_sa::EnsureGlobals();
+    if (!workplaceui_sa::Ready() || !SA_DialogEntityAlive(this)) return;
     if (msg != 0x12) return;                        // button click
     if (id < 0x1450 || id > 0x1454) return;         // one of the 5 armed controls
 
     // workPlaceButton (0x1454): cycle through this profession's workplaces / center camera.
     // No roster mutation, so no g_wpcRosterOnly guard needed.
-    if (id == 0x1454) { WorkplaceUI_ToggleWorkplace_Impl(self); return; }
+    if (id == 0x1454) { WorkplaceUI_ToggleWorkplace_Impl(this); return; }
 
     // The panel has TWO spinners, and retail (0x1400877e0) gives them DIFFERENT jobs:
     //
@@ -971,12 +920,12 @@ void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*
     // 0x1400d43b0 genuinely does skip WPC+0x60 == 0 in retail too — its Phase-2 need-table
     // is built under `if (*(int *)(wpc + 0x60) != 0)` — so retail has NO organic first-seat
     // either. The player's 0x1450 click IS the first-seat mechanism, and it is live here.)
-    if (id == 0x1452 || id == 0x1453) { SA_AdjustJobCount(self, id == 0x1452 ? 1 : -1); return; }
+    if (id == 0x1452 || id == 0x1453) { workplaceui_sa::SA_AdjustJobCount(this, id == 0x1452 ? 1 : -1); return; }
 
     // Remaining ids are the worker assign/unassign pair.
     const bool add = (id == 0x1450);
 
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
     void* dataSource = *reinterpret_cast<void**>(s + 0x28);
     if (!fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity)) return;
     uint8_t eb[8];
@@ -1043,28 +992,6 @@ void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*
         if (fn_CitizenList_RemoveWorker) fn_CitizenList_RemoveWorker(citizenList, profId);
     }
 
-}
-}  // namespace workplaceui_sa
-
-// [4] 0x140087940
-void WorkPlaceUI::OnCreated() {
-    workplaceui_sa::W_Serialize(this);
-}
-
-// [7] 0x140087080
-void WorkPlaceUI::OnUpdateLayout() {
-    workplaceui_sa::W_Startup(this);
-}
-
-// [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
-void WorkPlaceUI::OnUpdate(const System::Time& time) {
-    workplaceui_sa::W_OnUpdate(this, const_cast<System::Time*>(&time));
-}
-
-// [9] 0x1400877e0
-void WorkPlaceUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
-                                 int32_t c, int32_t d, int32_t /*e*/, void* /*userData*/) {
-    workplaceui_sa::W_OnRemove(this, element, a, b, c, d);
 }
 
 // [0] 0x140016e90: ~WorkPlaceUI (restamp, ~DialogController, ~Internal — the

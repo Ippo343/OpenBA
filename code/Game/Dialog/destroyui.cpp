@@ -20,6 +20,10 @@
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Object/factory_registration.h"
+#include "Component/Component.h"
+#include "Component/DestroyDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 
 // ============================================================
 // DestroyComponent_CanReclaim (0x14011e690)
@@ -152,9 +156,7 @@ static void DestroyComponent_Reclaim_Impl(void* destroyComp)
     ((fn_StateTransition_t)smVtable[2])(smPtr, smPtrAddr, (int)stateFrom, 0);
 
     // Also call destroyComp->vtable[4](self) — the "Reclaim" notification
-    void** selfVtable = *(void***)destroyComp;
-    typedef void (*fn_SelfNotify_t)(void* self);
-    ((fn_SelfNotify_t)selfVtable[4])(destroyComp);
+    reinterpret_cast<Component*>(destroyComp)->Startup();   // slot 4; B.3.8 bridge
 }
 
 static void DestroyComponent_Rebuild_Impl(void* destroyComp)
@@ -227,6 +229,51 @@ static uint64_t FindElemAsBasePtr(void* dialogElem, const char* name) {
     return *(uint64_t*)basePtrBuf;
 }
 
+namespace destroyui_sa {
+
+// Standalone-local fallbacks for exe-.rdata type-id globals that resolve NULL.
+static uint32_t s_ceTid = 0;
+static uint32_t s_ddTid = 0;   // DestroyDescription (slot 0x1401c7628 — the
+                               // misleadingly-named g_TypeId_DestroyComponent)
+
+void EnsureGlobals() {
+    if (!g_TypeId_ComponentEntity) {
+        s_ceTid = ComponentEntity::TypeId();
+        if (s_ceTid) g_TypeId_ComponentEntity = &s_ceTid;
+    }
+    // CanRebuild_Impl derefs *g_TypeId_DestroyComponent (= DestroyDescription's
+    // slot 0x1401c7628, null in standalone) — crashed live 2026-07-20 once
+    // Slot7 started running per-frame. Point it at the name-resolved id.
+    if (!g_TypeId_DestroyComponent) {
+        s_ddTid = DestroyDescription::TypeId();
+        if (s_ddTid) g_TypeId_DestroyComponent = &s_ddTid;
+    }
+}
+
+bool Ready() {
+    return g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
+        && g_TypeId_DestroyComponent && *g_TypeId_DestroyComponent
+        && fn_IsDerivedFrom && fn_InternalBasePtr_Ctor;
+}
+
+// SA-guard: the data-source entity ref (+0x28) is nulled by entity destruction
+// (upgrade demolishes the house while its panel is open). IsDerivedFrom(null)
+// crashes in Runtime — bail instead; the panel simply stops refreshing.
+bool DataSourceAlive(void* self) {
+    void* e = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x28);
+    if (!e) return false;
+    // Marked-for-removal (entity+0x40 bit 0x400): components may already be
+    // torn down while the entity awaits the EntityList drain.
+    if ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(e) + 0x40) >> 10) & 1)
+        return false;
+    return true;
+}
+
+
+
+
+}  // namespace destroyui_sa
+
 // ============================================================
 // DestroyUI::Slot4 (vtable +0x20) — Setup/refresh
 // ============================================================
@@ -237,29 +284,34 @@ static uint64_t FindElemAsBasePtr(void* dialogElem, const char* name) {
 //
 // Original: 0x140066150.
 
-void DestroyUI_Slot4(DestroyUI* self) {
-    void* dialogElem = *(void**)((uintptr_t)self + 0x20);
+// [4] 0x140066150
+void DestroyUI::OnCreated() {
+    destroyui_sa::EnsureGlobals();
+    if (!destroyui_sa::Ready() || !destroyui_sa::DataSourceAlive(this)) return;
+    if (!*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(this) + 0x20))
+        return;  // dialog element tree not bound yet
+    void* dialogElem = *(void**)((uintptr_t)this + 0x20);
 
     // --- Progress elements (stored as InternalPtr directly) ---
 
     // progressRemove → +0x30
-    self->data30 = FindElemByName(dialogElem, "progressRemove");
+    this->data30 = FindElemByName(dialogElem, "progressRemove");
     // Set progress max at element +0x124 (SA-guard: retail derefs blindly;
     // skip when the element is missing from the bound dialog)
-    if (self->data30) *(float*)(*(uintptr_t*)&self->data30 + 0x124) = 1.0f;
+    if (this->data30) *(float*)(*(uintptr_t*)&this->data30 + 0x124) = 1.0f;
 
     // progressDestruct → +0x38
-    self->data38 = FindElemByName(dialogElem, "progressDestruct");
-    if (self->data38) *(float*)(*(uintptr_t*)&self->data38 + 0x124) = 1.0f;
+    this->data38 = FindElemByName(dialogElem, "progressDestruct");
+    if (this->data38) *(float*)(*(uintptr_t*)&this->data38 + 0x124) = 1.0f;
 
     // --- Text elements (stored as InternalBasePtr) ---
-    self->data40 = FindElemAsBasePtr(dialogElem, "textRemove");
-    self->data48 = FindElemAsBasePtr(dialogElem, "textUpgrade");
-    self->data50 = FindElemAsBasePtr(dialogElem, "textDamage");
-    self->data58 = FindElemAsBasePtr(dialogElem, "textFixing");
+    this->data40 = FindElemAsBasePtr(dialogElem, "textRemove");
+    this->data48 = FindElemAsBasePtr(dialogElem, "textUpgrade");
+    this->data50 = FindElemAsBasePtr(dialogElem, "textDamage");
+    this->data58 = FindElemAsBasePtr(dialogElem, "textFixing");
 
     // --- Get entity for component checks ---
-    void* entity = *(void**)((uintptr_t)self + 0x28);
+    void* entity = *(void**)((uintptr_t)this + 0x28);
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
@@ -269,16 +321,16 @@ void DestroyUI_Slot4(DestroyUI* self) {
     // --- Button elements (stored as InternalBasePtr, with element IDs) ---
 
     // buttonReclaim → +0x60, ID = 0x1771
-    self->data60 = FindElemAsBasePtr(dialogElem, "buttonReclaim");
-    reinterpret_cast<UI::Element*>(self->data60)->SetElementId(0x1771);  // B.3.6 bridge
+    this->data60 = FindElemAsBasePtr(dialogElem, "buttonReclaim");
+    reinterpret_cast<UI::Element*>(this->data60)->SetElementId(0x1771);  // B.3.6 bridge
 
     // buttonDestroy → +0x68, ID = 0x1773
-    self->data68 = FindElemAsBasePtr(dialogElem, "buttonDestroy");
-    reinterpret_cast<UI::Element*>(self->data68)->SetElementId(0x1773);  // B.3.6 bridge
+    this->data68 = FindElemAsBasePtr(dialogElem, "buttonDestroy");
+    reinterpret_cast<UI::Element*>(this->data68)->SetElementId(0x1773);  // B.3.6 bridge
 
     // buttonRebuild → +0x70, ID = 0x1772
-    self->data70 = FindElemAsBasePtr(dialogElem, "buttonRebuild");
-    reinterpret_cast<UI::Element*>(self->data70)->SetElementId(0x1772);  // B.3.6 bridge
+    this->data70 = FindElemAsBasePtr(dialogElem, "buttonRebuild");
+    reinterpret_cast<UI::Element*>(this->data70)->SetElementId(0x1772);  // B.3.6 bridge
 
     // --- Check if reclaim should be hidden ---
     // Find DestroyComponent on entity
@@ -291,7 +343,7 @@ void DestroyUI_Slot4(DestroyUI* self) {
 
     if (canReclaim || compFlag) {
         // Hide the reclaim button (SetFlagsOnOff: set flag 1 = hidden)
-        reinterpret_cast<UI::Element*>(self->data60)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(this->data60)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
     }
 }
 
@@ -308,9 +360,12 @@ void DestroyUI_Slot4(DestroyUI* self) {
 //
 // Original: 0x140065B00.
 
-void DestroyUI_Slot7(DestroyUI* self) {
+// [7] 0x140065b00
+void DestroyUI::OnUpdateLayout() {
+    destroyui_sa::EnsureGlobals();
+    if (!destroyui_sa::Ready() || !destroyui_sa::DataSourceAlive(this)) return;
     // Get entity, wrap in InternalBasePtr
-    void* entity = *(void**)((uintptr_t)self + 0x28);
+    void* entity = *(void**)((uintptr_t)this + 0x28);
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
@@ -330,15 +385,15 @@ void DestroyUI_Slot7(DestroyUI* self) {
     bool canReclaim = DestroyComponent_CanReclaim_Impl(destroyComp);
 
     // Element pointers for convenience
-    void* progressRemove  = (void*)self->data30;
-    void* progressDestruct = (void*)self->data38;
-    void* textRemove      = (void*)self->data40;
-    void* textUpgrade     = (void*)self->data48;
-    void* textDamage      = (void*)self->data50;
-    void* textFixing      = (void*)self->data58;
-    void* buttonReclaim   = (void*)self->data60;
-    void* buttonDestroy   = (void*)self->data68;
-    void* buttonRebuild   = (void*)self->data70;
+    void* progressRemove  = (void*)this->data30;
+    void* progressDestruct = (void*)this->data38;
+    void* textRemove      = (void*)this->data40;
+    void* textUpgrade     = (void*)this->data48;
+    void* textDamage      = (void*)this->data50;
+    void* textFixing      = (void*)this->data58;
+    void* buttonReclaim   = (void*)this->data60;
+    void* buttonDestroy   = (void*)this->data68;
+    void* buttonRebuild   = (void*)this->data70;
 
     // Guard: if critical UI elements aren't initialized yet, bail out
     if (!progressRemove || !progressDestruct || !buttonReclaim || !buttonDestroy) return;
@@ -491,11 +546,15 @@ void DestroyUI_Slot7(DestroyUI* self) {
 //
 // Original: 0x140066080.
 
-void DestroyUI_Slot9(DestroyUI* self, uint64_t /*param2*/, int param3, int param4) {
+// [9] 0x140066080
+void DestroyUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4,
+                               int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    destroyui_sa::EnsureGlobals();
+    if (!destroyui_sa::Ready() || !destroyui_sa::DataSourceAlive(this)) return;
     if (param3 != 0x12) return;
 
     // Get entity, wrap in InternalBasePtr
-    void* entity = *(void**)((uintptr_t)self + 0x28);
+    void* entity = *(void**)((uintptr_t)this + 0x28);
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
@@ -527,107 +586,22 @@ void DestroyUI_Slot9(DestroyUI* self, uint64_t /*param2*/, int param3, int param
 // built once (Slot4, guarded on +0x30 still null), then the visibility state
 // machine (Slot7) runs every frame. Replaces the UI_DIALOG_STUB(DestroyUI, ...)
 // no-op registration in ui_dialog_stub_factories.cpp.
-#include "Object/factory_registration.h"
 
-namespace destroyui_sa {
 
-// Standalone-local fallbacks for exe-.rdata type-id globals that resolve NULL.
-static uint32_t s_ceTid = 0;
-static uint32_t s_ddTid = 0;   // DestroyDescription (slot 0x1401c7628 — the
-                               // misleadingly-named g_TypeId_DestroyComponent)
 
-void EnsureGlobals() {
-    if (!g_TypeId_ComponentEntity) {
-        s_ceTid = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
-        if (s_ceTid) g_TypeId_ComponentEntity = &s_ceTid;
-    }
-    // CanRebuild_Impl derefs *g_TypeId_DestroyComponent (= DestroyDescription's
-    // slot 0x1401c7628, null in standalone) — crashed live 2026-07-20 once
-    // Slot7 started running per-frame. Point it at the name-resolved id.
-    if (!g_TypeId_DestroyComponent) {
-        s_ddTid = ::Object::ResolveTypeIdByNameLazy("DestroyDescription");
-        if (s_ddTid) g_TypeId_DestroyComponent = &s_ddTid;
-    }
-}
-
-bool Ready() {
-    return g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
-        && g_TypeId_DestroyComponent && *g_TypeId_DestroyComponent
-        && fn_IsDerivedFrom && fn_InternalBasePtr_Ctor;
-}
-
-// SA-guard: the data-source entity ref (+0x28) is nulled by entity destruction
-// (upgrade demolishes the house while its panel is open). IsDerivedFrom(null)
-// crashes in Runtime — bail instead; the panel simply stops refreshing.
-bool DataSourceAlive(void* self) {
-    void* e = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x28);
-    if (!e) return false;
-    // Marked-for-removal (entity+0x40 bit 0x400): components may already be
-    // torn down while the entity awaits the EntityList drain.
-    if ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(e) + 0x40) >> 10) & 1)
-        return false;
-    return true;
-}
-
-// idx4 (+0x20): find + cache the named elements, set button ids.
-void W_Slot4(void* self) {
-    EnsureGlobals();
-    if (!self || !Ready() || !DataSourceAlive(self)) return;
-    if (!*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x20))
-        return;  // dialog element tree not bound yet
-    DestroyUI_Slot4(reinterpret_cast<DestroyUI*>(self));
-}
-
-// idx7 (+0x38): visibility/progress state machine.
-void W_Slot7(void* self) {
-    EnsureGlobals();
-    if (!self || !Ready() || !DataSourceAlive(self)) return;
-    DestroyUI_Slot7(reinterpret_cast<DestroyUI*>(self));
-}
-
-// idx8 (+0x40): per-frame. Build the element cache once (+0x30 still 0), then
-// keep the panel visibility/progress live every frame.
-void W_OnUpdate(void* self, void* /*time*/) {
-    EnsureGlobals();
-    if (!self || !Ready() || !DataSourceAlive(self)) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    if (*reinterpret_cast<uint64_t*>(s + 0x30) == 0) {
-        W_Slot4(self);
-        if (*reinterpret_cast<uint64_t*>(s + 0x30) == 0) return;  // build failed
-    }
-    DestroyUI_Slot7(reinterpret_cast<DestroyUI*>(self));
-}
-
-// idx9 (+0x48): button-click dispatch (reclaim 0x1771 / rebuild 0x1772 /
-// destroy 0x1773). Dispatched (self, &elementPtr, msg, id, x, y).
-void W_Slot9(void* self, void* p2, int msg, int id, int /*mx*/, int /*my*/) {
-    EnsureGlobals();
-    if (!self || !Ready() || !DataSourceAlive(self)) return;
-    DestroyUI_Slot9(reinterpret_cast<DestroyUI*>(self),
-                    reinterpret_cast<uint64_t>(p2), msg, id);
-}
-}  // namespace destroyui_sa
-
-// [4] 0x140066150
-void DestroyUI::OnCreated() {
-    destroyui_sa::W_Slot4(this);
-}
-
-// [7] 0x140065b00
-void DestroyUI::OnUpdateLayout() {
-    destroyui_sa::W_Slot7(this);
-}
 
 // [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
-void DestroyUI::OnUpdate(const System::Time& time) {
-    destroyui_sa::W_OnUpdate(this, const_cast<System::Time*>(&time));
+void DestroyUI::OnUpdate(const System::Time& /*time*/) {
+    destroyui_sa::EnsureGlobals();
+    if (!destroyui_sa::Ready() || !destroyui_sa::DataSourceAlive(this)) return;
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+    if (*reinterpret_cast<uint64_t*>(s + 0x30) == 0) {
+        DestroyUI::OnCreated();
+        if (*reinterpret_cast<uint64_t*>(s + 0x30) == 0) return;  // build failed
+    }
+    DestroyUI::OnUpdateLayout();
 }
 
-// [9] 0x140066080
-void DestroyUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
-                               int32_t c, int32_t d, int32_t /*e*/, void* /*userData*/) {
-    destroyui_sa::W_Slot9(this, element, a, b, c, d);
-}
 
 // [0] 0x140011200: ~DestroyUI (restamp, ~DialogController, ~Internal — the
 // compiler's chain), MemFree on &1.

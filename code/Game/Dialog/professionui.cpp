@@ -34,6 +34,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "Object/factory_registration.h"
 #include "system/String.h"
 #include "system/Filename.h"
 #include "Component/coll_bridge.h"
@@ -257,6 +258,72 @@ static void PushToArray8(uintptr_t self, int ptrOffset, uint64_t value) {
     arr.SetSize(arr.GetSize() + 1, GameColl::Bytes<8, 8>(value));
 }
 
+// ---- ProfessionUI: PROMOTED to the real reimpl (profession-assignment bring-up) -
+// The toolbar "professions" overlay (Template\UtilityProfessions.rsc). Its controller
+// lists every profession with a worker-count spinner + a "goto" button. The real
+// reimpl lives in code/Game/Dialog/professionui.cpp; the generic stub left every slot
+// a no-op so the overlay opened empty. Wire the three real slots:
+//   Slot5 (+0x28, setup)  — builds the profession table, spinner/number element
+//                           caches, and the profession→index BST; self-calls Slot8.
+//   Slot8 (+0x40, update) — recounts citizens per profession each frame and refreshes
+//                           the spinner values + worker-slot numbers. DialogInstance::
+//                           OnUpdate dispatches this every frame once the controller is
+//                           attached — INCLUDING before Slot5 has populated the caches,
+//                           at which point the reimpl would deref the null spinner array
+//                           (self+0x40). Guard: skip until setup has run (+0x30 counts
+//                           array + +0x40 spinner array both non-null).
+//   Slot9 (+0x48, event)  — spinner change reassigns citizens between professions
+//                           (uses the CitizenList Find/Request/Remove worker fns already
+//                           registered for the Town Hall profession tab); button click
+//                           centers the camera on a citizen of that profession.
+// The worker-reassignment + type-id deps all resolve in standalone already (see
+// reg_townhallui.cpp / reg_town_workplace_registry_reader.cpp / reg_economy_typeids.cpp);
+// only NumberEditElement's type-id is unregistered — lazy-fill it so Slot5's spinner-
+// child validation runs (the reimpl already guards a null id, so this is optional but
+// tidy). Construction stays the stub alloc+zero+vtable; the framework fills the base
+// dialog/datasource fields afterward — same shape as the MapUI/ImmigrationUI promotions.
+namespace professionui_sa {
+    // NumberEditElement type-id resolves from a double-indirect exref (null in SA).
+    // Slot5 validates a spinner child against it (already guarded, so optional). Fill
+    // it from the live factory tree post-Engine::Startup. Idempotent.
+    void EnsureTypeIds() {
+        static uint32_t s_numEdit=0;
+        if (!g_TypeId_NumberEditElement) {
+            s_numEdit=::Object::ResolveTypeIdByNameLazy("NumberEditElement");
+            if (s_numEdit) g_TypeId_NumberEditElement=&s_numEdit;
+        }
+    }
+    void Trace([[maybe_unused]] const char* slot, void* self) {
+        static int n=0; if (n>=32) return; ++n;
+        uintptr_t s=reinterpret_cast<uintptr_t>(self);
+        uint32_t spinN = self?*reinterpret_cast<uint32_t*>(s+0x48):0;
+        printf("[ProfessionUI] %s self=%p dlg(+0x18)=%p root(+0x20)=%p counts(+0x30)=%p "
+               "spinners(+0x40)=%p n=%u numbers(+0x50)=%p n=%u\n", slot, self,
+               self?*reinterpret_cast<void**>(s+0x18):nullptr,
+               self?*reinterpret_cast<void**>(s+0x20):nullptr,
+               self?*reinterpret_cast<void**>(s+0x30):nullptr,
+               self?*reinterpret_cast<void**>(s+0x40):nullptr, spinN,
+               self?*reinterpret_cast<void**>(s+0x50):nullptr,
+               self?*reinterpret_cast<uint32_t*>(s+0x58):0);
+        // Dump the per-profession citizen counts (+0x30 int array) so we can confirm
+        // Slot8 computes real assignments, not all-zero placeholder rows.
+        int32_t* counts = self?*reinterpret_cast<int32_t**>(s+0x30):nullptr;
+        if (counts && spinN>0 && spinN<=64) {
+            printf("[ProfessionUI]   counts[0..%u]:", spinN-1);
+            for (uint32_t i=0;i<spinN;i++) printf(" %d", counts[i]);
+            printf("\n");
+        }
+        fflush(stdout);
+    }
+    // Has Slot5 populated the caches yet? counts(+0x30) is allocated by the Slot5 tail
+    // (ExeArrayResize2), spinners(+0x40) grown as each profession row is added.
+    bool IsSetUp(void* self) {
+        uintptr_t s=reinterpret_cast<uintptr_t>(self);
+        return *reinterpret_cast<void**>(s+0x30)!=nullptr &&
+               *reinterpret_cast<void**>(s+0x40)!=nullptr;
+    }
+}
+
 // ============================================================
 // ProfessionUI::Slot5 (vtable +0x28) -- Setup/populate
 // ============================================================
@@ -267,8 +334,19 @@ static void PushToArray8(uintptr_t self, int ptrOffset, uint64_t value) {
 //
 // Original: 0x140076CA0.
 
-void ProfessionUI_Slot5(ProfessionUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [5] 0x140076ca0
+void ProfessionUI::OnOpened() {
+    // Idempotent: the framework dispatches Slot5 once during dialog creation, which
+    // populates the table + spinner/number caches + BST. A SECOND run (e.g. the
+    // harness re-drive, or a stray framework re-dispatch) does NOT clear first —
+    // it re-clones the table cells and appends to the +0x40/+0x50 arrays, doubling
+    // them (n=20→40) while the counts array (+0x30) stays sized to profCount. The
+    // subsequent Slot8 then walks 40 half-built spinner IBPs and faults. Skip if
+    // setup already ran.
+    if (professionui_sa::IsSetUp(this)) { professionui_sa::Trace("Slot5-skip(already set up)", this); return; }
+    professionui_sa::EnsureTypeIds();
+    professionui_sa::Trace("Slot5", this);
+    uintptr_t s = (uintptr_t)this;
 
     // Find "professionTable" element
     void* dialogElem = *(void**)(s + 0x20);
@@ -530,9 +608,7 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
     // Call Slot8 (vtable +0x40) with Time(0.0)
     uint8_t timeBuf[8];
     fn_Time_Ctor_Float(timeBuf, 0.0f);
-    typedef void (*fn_VSlot8_t)(void* self, void* time);
-    void** vtbl = *(void***)self;
-    ((fn_VSlot8_t)vtbl[8])(self, timeBuf);
+    OnUpdate(*reinterpret_cast<const System::Time*>(timeBuf));   // slot 8, virtual; B.3.8 bridge
 }
 
 // ============================================================
@@ -544,8 +620,11 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
 //
 // Original: 0x1400765A0.
 
-void ProfessionUI_Slot8(ProfessionUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [8] 0x1400765a0
+void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
+    if (!professionui_sa::IsSetUp(this)) return;   // OnUpdate fires this pre-setup — skip
+    professionui_sa::Trace("Slot8", this);
+    uintptr_t s = (uintptr_t)this;
 
     void* worldSingleton = *g_pGameWorldSingleton;
     uintptr_t citizenMgr = *(uintptr_t*)((uintptr_t)worldSingleton + 0xF0);
@@ -668,9 +747,7 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
                 void** compIBP = (void**)(compArray + (uintptr_t)c * 8);
                 uintptr_t comp = *(uintptr_t*)compIBP;
                 if (!comp) continue;
-                typedef int (*fn_GetTypeId_t)(void*);
-                void** vtbl = *(void***)(comp);
-                int typeId = ((fn_GetTypeId_t)vtbl[2])((void*)comp);
+                int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                 if (typeId == (int)*g_TypeId_WorkplaceComponent) {
                     if (fn_IsDerivedFrom((void*)comp, *g_TypeId_WorkplaceComponent)) {
                         workplaceComp = comp;
@@ -699,9 +776,7 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
                         void** compIBP = (void**)(pCompArray + (uintptr_t)c * 8);
                         uintptr_t comp = *(uintptr_t*)compIBP;
                         if (!comp) continue;
-                        typedef int (*fn_GetTypeId_t)(void*);
-                        void** vtbl = *(void***)(comp);
-                        int typeId = ((fn_GetTypeId_t)vtbl[2])((void*)comp);
+                        int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                         if (typeId == (int)*g_TypeId_WorkComponent) {
                             if (fn_IsDerivedFrom((void*)comp, *g_TypeId_WorkComponent)) {
                                 storageLocComp = comp;
@@ -830,9 +905,7 @@ next_iter:
     // Refresh display: call Slot8 (vtable +0x40) with Time(0.0)
     uint8_t timeBuf[8];
     fn_Time_Ctor_Float(timeBuf, 0.0f);
-    typedef void (*fn_VSlot8_t)(void* self, void* time);
-    void** vtbl = *(void***)self;
-    ((fn_VSlot8_t)vtbl[8])(self, timeBuf);
+    self->OnUpdate(*reinterpret_cast<const System::Time*>(timeBuf));   // slot 8, virtual; B.3.8 bridge
 }
 
 // ============================================================
@@ -954,8 +1027,11 @@ static void ProfessionUI_HandleButton(ProfessionUI* self, int profIndex) {
 //
 // Original: 0x140076C10.
 
-void ProfessionUI_Slot9(ProfessionUI* self, void* param2,
-                         int param3, int param4) {
+// [9] 0x140076c10
+void ProfessionUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4,
+                                  int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    if (!professionui_sa::IsSetUp(this)) return;
+    professionui_sa::Trace("Slot9", this);
     void* worldSingleton = *g_pGameWorldSingleton;
     void* profListPtr = *(void**)((uintptr_t)worldSingleton + 0xB0);
     int profCount = *(int*)((uintptr_t)profListPtr + 0x28);
@@ -967,11 +1043,11 @@ void ProfessionUI_Slot9(ProfessionUI* self, void* param2,
         if (param3 != 0x15) return;
         // msg 0x15: spinner value changed -- reassign citizens
         if (param4 >= 300 && param4 <= profCount + 300) {
-            ProfessionUI_HandleSpinner(self, param4 - 300);
+            ProfessionUI_HandleSpinner(this, param4 - 300);
         }
     }
     // msg 0x12 or 0x15: button clicked -- find and center on citizen
     if (param4 > 499 && param4 <= profCount + 500) {
-        ProfessionUI_HandleButton(self, param4 - 500);
+        ProfessionUI_HandleButton(this, param4 - 500);
     }
 }

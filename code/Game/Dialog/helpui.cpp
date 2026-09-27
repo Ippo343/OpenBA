@@ -20,6 +20,8 @@
 #include "Dialog/ui_panels.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include <cstdio>
+#include "resolve.h"
 #include "system/String.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
@@ -166,6 +168,111 @@ static int HelpUI_FindLinkTarget(System::String searchStr) {
     return -1;
 }
 
+// ---- HelpUI: PROMOTED to the real reimpl (help-dialog bring-up 2026-07-31) ----
+// The toolbar "help" utility dialog (Template\UtilityHelp.rsc -> StandardDialog.rsc,
+// content Dialog/Help.rsc). The whole controller is already reimplemented in
+// code/Game/Dialog/helpui.cpp, but the generic stub below left every slot a no-op,
+// so the dialog opened with an empty topic combo and a blank document — the
+// "controllers render NO content" follow-up recorded in GUI_PLAN.md Phase 4.
+//
+// Slot map, read out of the retail vtable at exe .rdata 0x14015bf30 (qword N =
+// slot N), NOT from our labels:
+//   slot 4 (+0x20) 0x14006a500 Slot4  — setup: find the 4 typed elements + the two
+//                                       named buttons, populate the topic combo from
+//                                       the help ExternalList, tail into LoadPage.
+//   slot 5 (+0x28) 0x14006a4f0        — 3-byte RET no-op (left as StubNop).
+//   slot 7 (+0x38) 0x14006a230 Slot7  — enable/disable back+forward per history index.
+//   slot 9 (+0x48) 0x14006a290 Slot9  — combo change (msg 0x14), document link click
+//                                       and back/forward (msg 0x12).
+// Slot9's 7th parameter is the clicked link index: retail reads it from
+// [RSP+0xb0] at 0x14006a2ed, which is arg 7 in this frame — hence the 7-arg wrapper.
+//
+// ── Construction deviation ───────────────────────────────────────────────────
+// HelpUI_Ctor (0x14006a920) zeroes +0x30..+0x58 and +0x68/+0x70 but writes
+// **-1** to the qword at +0x60, i.e. BOTH the current page index (+0x60) and the
+// history index (+0x64) start at -1. A plain zero-fill is not equivalent: LoadPage
+// truncates the history to (historyIndex + 1) entries, so a 0 index leaves one
+// uninitialised history slot in front of the first real page and the back button
+// then navigates to a garbage page id. Factory/InPlace stamp the -1 explicitly.
+//
+// ── Type-id dependency ───────────────────────────────────────────────────────
+// Slot4 looks its elements up by type (ScrollElement/ComboElement/
+// DocumentTextElement/ContainerElement, plus ButtonElement for the two named
+// buttons) and checks the topic resources against StringTable. Those ids come from
+// exe .rdata dispatch slots that standalone only fills when
+// BANISHED_LIVE_ELEMENT_TIDS is set (standalone/reg_element_typeids.cpp). Rather
+// than make the help dialog depend on that gate, EnsureTypeIds() points the globals
+// straight at the Runtime DLL's own BaseTypeInfo exports — the same objects retail's
+// name resolution would have written into those slots, so this is a no-op when the
+// gate is on and a self-heal when it is off. A type-id that fails to resolve leaves
+// the element null, and the reimpl's standalone guards then degrade to today's
+// empty-panel behaviour instead of faulting.
+namespace helpui_sa {
+    // Fill the element/StringTable type-id globals from the Runtime's BaseTypeInfo
+    // data exports (first dword of each object is the id). These are Runtime-
+    // registered types, so Object::GetTypeIdByName cannot see them — see the
+    // "Why ResolveExport and not GetTypeIdByName" note in reg_element_typeids.cpp.
+    // Idempotent; never overwrites a slot the gate already filled.
+    void EnsureTypeIds() {
+        struct Fill { uint32_t** global; const char* mangled; };
+        const Fill fills[] = {
+            { &g_TypeId_HelpFirstElem,     "?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A" },
+            { &g_TypeId_HelpComboElem,     "?_typeInfo@ComboElement@UI@@0VBaseTypeInfo@Object@@A" },
+            { &g_TypeId_HelpDocTextElem,   "?_typeInfo@DocumentTextElement@UI@@0VBaseTypeInfo@Object@@A" },
+            { &g_TypeId_HelpContainerElem, "?_typeInfo@ContainerElement@UI@@0VBaseTypeInfo@Object@@A" },
+            { &g_TypeId_HelpButtonElem,    "?_typeInfo@ButtonElement@UI@@0VBaseTypeInfo@Object@@A" },
+            { &g_TypeId_StringTable,       "?_typeInfo@StringTable@UI@@0VBaseTypeInfo@Object@@A" },
+        };
+        for (const Fill& f : fills) {
+            if (*f.global) continue;
+            *f.global = reinterpret_cast<uint32_t*>(ResolveExport(f.mangled));
+        }
+    }
+    // Everything the wired slots dereference unconditionally.
+    bool Ready() {
+        return g_TypeId_HelpFirstElem && g_TypeId_HelpComboElem &&
+               g_TypeId_HelpDocTextElem && g_TypeId_HelpContainerElem &&
+               g_TypeId_HelpButtonElem && g_TypeId_StringTable &&
+               fn_IsDerivedFrom && fn_InternalBasePtr_Ctor &&
+               fn_ExternalList_GetResourceCount &&
+               fn_MemAlloc && g_pMemAllocSingleton;
+    }
+    // Report the OUTCOME of the readiness test, once, naming what is missing.
+    bool CheckOnce() {
+        static int s_ok = -1;
+        if (s_ok >= 0) return s_ok != 0;
+        EnsureTypeIds();
+        s_ok = Ready() ? 1 : 0;
+        if (!s_ok) {
+            fprintf(stderr, "[HelpUI] slots stay no-op — unresolved deps:%s%s%s%s%s%s\n",
+                    g_TypeId_HelpFirstElem     ? "" : " ScrollElement",
+                    g_TypeId_HelpComboElem     ? "" : " ComboElement",
+                    g_TypeId_HelpDocTextElem   ? "" : " DocumentTextElement",
+                    g_TypeId_HelpContainerElem ? "" : " ContainerElement",
+                    g_TypeId_HelpButtonElem    ? "" : " ButtonElement",
+                    g_TypeId_StringTable       ? "" : " StringTable");
+            fflush(stderr);
+        }
+        return s_ok != 0;
+    }
+    void Trace([[maybe_unused]] const char* slot, void* self) {
+        static int n=0; if (n>=24) return; ++n;
+        [[maybe_unused]] uintptr_t s=reinterpret_cast<uintptr_t>(self);
+        void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+        [[maybe_unused]] void* topics = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw)+0xa0) : nullptr;
+        printf("[HelpUI] %s self=%p root(+0x20)=%p scroll=%p doc=%p combo=%p back=%p fwd=%p "
+               "cont=%p page=%d hist=%d/%d topics=%p n=%d\n", slot, self,
+               *reinterpret_cast<void**>(s+0x20), *reinterpret_cast<void**>(s+0x30),
+               *reinterpret_cast<void**>(s+0x38), *reinterpret_cast<void**>(s+0x40),
+               *reinterpret_cast<void**>(s+0x48), *reinterpret_cast<void**>(s+0x50),
+               *reinterpret_cast<void**>(s+0x58), *reinterpret_cast<int*>(s+0x60),
+               *reinterpret_cast<int*>(s+0x64), *reinterpret_cast<int*>(s+0x70), topics,
+               (topics && fn_ExternalList_GetResourceCount)
+                   ? fn_ExternalList_GetResourceCount(topics) : -1);
+        fflush(stdout);
+    }
+}
+
 // ============================================================
 // HelpUI::Slot4 (vtable +0x20) — Setup / initialization
 // ============================================================
@@ -182,8 +289,17 @@ static int HelpUI_FindLinkTarget(System::String searchStr) {
 //
 // Original: 0x14006A500.
 
-void HelpUI_Slot4(HelpUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [4] 0x14006a500
+void HelpUI::OnCreated() {
+    if (!helpui_sa::CheckOnce()) return;
+    // Setup is not idempotent: a second run appends every topic to the combo
+    // again and pushes a second history entry. The framework dispatches it once
+    // per dialog build; skip if the element cache is already populated.
+    if (*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(this)+0x40)) {
+        helpui_sa::Trace("Slot4-skip(already set up)", this);
+        return;
+    }
+    uintptr_t s = (uintptr_t)this;
     void* dialogElem = *(void**)(s + 0x20);
 
     // FindElementType calls use different type IDs from _typeInfo_exref.
@@ -291,7 +407,8 @@ void HelpUI_Slot4(HelpUI* self) {
 
     // Select first item and load its content
     reinterpret_cast<UI::ComboElement*>(comboElem)->SetCurrentItem(0);  // B.3.6 bridge
-    HelpUI_LoadPage(self);
+    HelpUI_LoadPage(this);
+    helpui_sa::Trace("Slot4", this);
 }
 
 // ============================================================
@@ -301,20 +418,22 @@ void HelpUI_Slot4(HelpUI* self) {
 //
 // Original: 0x14006A230.
 
-void HelpUI_Slot7(HelpUI* self) {
-    int pageIndex = *(int*)((uintptr_t)self + 0x64);
-    int pageCount = *(int*)((uintptr_t)self + 0x70);
+// [7] 0x14006a230
+void HelpUI::OnUpdateLayout() {
+    if (!helpui_sa::CheckOnce()) return;
+    int pageIndex = *(int*)((uintptr_t)this + 0x64);
+    int pageCount = *(int*)((uintptr_t)this + 0x70);
 
     // Enable prev button if not on first page
     // (standalone guard: a failed "buttonBack"/"buttonForward" lookup leaves the
     // field null, and retail dereferences it unconditionally)
-    void* prevBtn = (void*)self->data48;
+    void* prevBtn = (void*)this->data48;
     if (prevBtn) {
         reinterpret_cast<UI::Element*>(prevBtn)->Enable(pageIndex > 0);  // B.3.6 bridge: Element slot 8 Enable
     }
 
     // Enable next button if not on last page
-    void* nextBtn = (void*)self->data50;
+    void* nextBtn = (void*)this->data50;
     if (nextBtn) {
         reinterpret_cast<UI::Element*>(nextBtn)->Enable(pageIndex < pageCount - 1);  // B.3.6 bridge: Element slot 8 Enable
     }
@@ -343,14 +462,18 @@ static bool HelpUI_NavReady(uintptr_t s) {
            *(void**)(s + 0x58) && *(void**)(s + 0x68);
 }
 
-void HelpUI_Slot9(HelpUI* self, uint64_t param2, int msg, int id,
-                   int param5, int param6, int linkIndex) {
+// [9] 0x14006a290
+void HelpUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t msg, int32_t id,
+                            int32_t param5, int32_t param6, int32_t linkIndex, void* /*userData*/) {
+    uint64_t param2 = reinterpret_cast<uint64_t>(element);
+    if (!helpui_sa::CheckOnce()) return;
+    helpui_sa::Trace("Slot9", this);
     (void)param2; (void)param5; (void)param6;
-    uintptr_t s = (uintptr_t)self;
+    uintptr_t s = (uintptr_t)this;
 
     if (msg == 0x14 && id == 0xE74) {
         // Combo selection changed — reload page
-        HelpUI_LoadPage(self);
+        HelpUI_LoadPage(this);
         return;
     }
 
@@ -385,7 +508,7 @@ void HelpUI_Slot9(HelpUI* self, uint64_t param2, int msg, int id,
             // Navigate to target page
             void* comboElem = *(void**)(s + 0x40);
             reinterpret_cast<UI::ComboElement*>(comboElem)->SetCurrentItem(targetIdx);  // B.3.6 bridge
-            HelpUI_LoadPage(self);
+            HelpUI_LoadPage(this);
         }
 
         return;

@@ -11,6 +11,11 @@
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "address_registry.h"
+#include "resolve.h"
+#include <cstdio>
+#include <cstdlib>
+#include "Component/Component.h"
 
 // ---- Element type ids: UI::ButtonElement and UI::CheckElement ----------------
 // Retail reads these through exe .rdata exrefs 0x1401514f8 (ButtonElement, tested
@@ -52,9 +57,98 @@ static uint32_t ControlUI_CheckElementTypeId() {
     return s_local;
 }
 
+namespace controlui_sa {
+
+// Report Slot4's INPUTS as well as its outputs. The first version of this printed only
+// +0x30/+0x38 — which are Slot4's OUTPUTS — so when the type-id guard rejected every call
+// before writing them, the trace read as "the framework never bound +0x20/+0x28" and sent
+// the investigation at the binding path, which was working fine all along. Always print
+// the thing the guard actually tests.
+static void Trace(const char* what, void* self) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    void* cfg = self ? reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x10)) : nullptr;
+    uint32_t wantTid = g_TypeId_ControlComponent ? *g_TypeId_ControlComponent : 0;
+    std::fprintf(stderr,
+        "[ControlUI] %s self=%p | IN: cfgTid=%s(%u) cfg(+0x10)=%p elem(+0x20)=%p entity(+0x28)=%p"
+        " | OUT: elem(+0x30)=%p target(+0x38)=%p cmd=%d\n",
+        what, self,
+        g_TypeId_ControlComponent ? (wantTid ? "ok" : "ZERO") : "NULLPTR", wantTid, cfg,
+        self ? reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x20)) : nullptr,
+        self ? reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x28)) : nullptr,
+        self ? reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x30)) : nullptr,
+        self ? reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x38)) : nullptr,
+        cfg ? *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(cfg) + 0x20) : -1);
+    std::fflush(stderr);
+}
+
+
+// idx7 (+0x38): per-frame enable / checked sync.
+//
+// Slot7 had NO trace of its own, which is why "is slot 7 even ticked for this
+// panel?" stayed open through two investigations. It is: UI::UserInterface::Update
+// (Runtime 0x1801213c0) -> DialogInstance::ComputeLayout (0x180113d90) -> vtable
+// idx6 OnUpdateLayout (0x1801153a0) walks +0x78 and dispatches controller idx7
+// every frame, with no dirty flag. Report the OUTCOME — the element state read back
+// AFTER the writes — rather than the intent, and print in every arm so that silence
+// can never read as success. Rate-limited because this is a per-frame path.
+// The per-frame trace that used to follow the Slot7 body in the W_Slot7 wrapper.
+void TraceSlot7(void* self) {
+    static int s_left = 12;
+    if (s_left <= 0) return;
+    --s_left;
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    void* cfg = reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x10));
+    void* elem = reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x30));
+    int cmd = cfg ? *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(cfg) + 0x20) : -1;
+    if (!elem) {
+        // The pre-fix state: correct predicates, nothing to apply them to.
+        std::fprintf(stderr, "[ControlUI] Slot7 cmd=%d elem(+0x30)=NULL"
+                     " -> no Enable, no checked write\n", cmd);
+    } else {
+        // elem+0x34 bit 0x800000 = disabled (UI::Element::Enable, Runtime 0x180116910).
+        uint32_t flags = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(elem) + 0x34);
+        // +0xd8 is the checked byte of a CheckElement ONLY (CheckElement::IsChecked,
+        // Runtime 0x180048c80; CheckDescription::CreateInstance allocates 0xe0). The
+        // first version of this trace read it unconditionally and printed checked=50
+        // for the two ButtonElement buttons — a read PAST the end of a plain button,
+        // i.e. heap bytes reported as game state. Only the cmd=2 work button is a
+        // CheckElement here, so gate the read on the same type id Slot7 gates its
+        // write on.
+        if (fn_IsDerivedFrom(elem, ControlUI_CheckElementTypeId())) {
+            unsigned checked =
+                *reinterpret_cast<unsigned char*>(reinterpret_cast<uintptr_t>(elem) + 0xd8);
+            std::fprintf(stderr, "[ControlUI] Slot7 cmd=%d elem=%p disabled=%d checked=%u\n",
+                         cmd, elem, (flags & 0x800000u) ? 1 : 0, checked);
+        } else {
+            std::fprintf(stderr, "[ControlUI] Slot7 cmd=%d elem=%p disabled=%d"
+                         " checked=n/a (ButtonElement, no +0xd8)\n",
+                         cmd, elem, (flags & 0x800000u) ? 1 : 0);
+        }
+    }
+    std::fflush(stderr);
+}
+
+// idx8 (+0x40) is DELIBERATELY NOT OVERRIDDEN, matching retail.
+// An earlier version of this file installed a composite here that re-ran Slot4 every
+// frame until the target resolved. Its justifying comment — "idx8 is the only slot the
+// framework ticks per frame" — was FALSE, and the retry was load-bearing for nothing:
+//   * UI::DialogInstance::OnUpdateLayout (Runtime 0x1801153a0) walks this+0x78 and
+//     dispatches vtable +0x38 = idx7, where W_Slot7 already sits. That is the per-frame
+//     sync path.
+//   * UI::DialogInstance::OnUpdate (Runtime 0x180115400) dispatches +0x40 = idx8 with a
+//     `const Time&` that a void(*)(void*) composite silently dropped. Retail leaves idx8
+//     inherited (a no-op) precisely because it has no per-controller work to do.
+// Slot4 is called ONCE, by UI::DialogInstance::AddController (Runtime 0x1801133b0), which
+// writes +0x10 config / +0x18 dialog / +0x20 element / +0x28 entity in four consecutive
+// stores and then dispatches idx4. With ControlUIConfig's type id registered, that single
+// call now succeeds, so there is nothing left for a retry to heal.
+
+}  // namespace controlui_sa
+
 // Slot4: Find checkbox element, find sub-component by type, set initial state.
-void ControlUI_Slot4(ControlUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [4] 0x14005f9b0
+void ControlUI::OnCreated() {
+    uintptr_t s = (uintptr_t)this;
 
     // Check datasource component type
     void* datasource = (void*)*(uint64_t*)(s + 0x10);
@@ -121,10 +215,8 @@ void ControlUI_Slot4(ControlUI* self) {
     bool isCheckbox = fn_IsDerivedFrom(elemAt30, checkboxTypeId);
     if (isCheckbox) {
         void* subCompPtr = (void*)*(uint64_t*)(s + 0x38);
-        void** vtable = *(void***)subCompPtr;
         // vtable[13] (offset 0x68): query enabled state with key from component+0x20
-        typedef uint32_t (*fn_QueryState_t)(void*, int);
-        uint32_t value = ((fn_QueryState_t)vtable[13])(subCompPtr, *(int*)((uintptr_t)component + 0x20));
+        uint32_t value = reinterpret_cast<Component*>(subCompPtr)->CommandMask(*(int*)((uintptr_t)component + 0x20));  // slot 13; B.3.8 bridge
 
         // Validate element again for safe access
         void* checkboxElem = nullptr;
@@ -134,11 +226,13 @@ void ControlUI_Slot4(ControlUI* self) {
         // Set checkbox state: bit 1 of return value
         *(char*)((uintptr_t)checkboxElem + 0xd8) = (char)((value >> 1) & 1);
     }
+    controlui_sa::Trace("Slot4", this);
 }
 
 // Slot7: Update checkbox state from component, set enabled/disabled.
-void ControlUI_Slot7(ControlUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [7] 0x14005f870
+void ControlUI::OnUpdateLayout() {
+    uintptr_t s = (uintptr_t)this;
 
     // Get datasource component
     void* datasource = (void*)*(uint64_t*)(s + 0x10);
@@ -160,9 +254,7 @@ void ControlUI_Slot7(ControlUI* self) {
     if (isCheckbox) {
         // Query current state from sub-component vtable[13]
         void* subCompPtr = (void*)*(uint64_t*)(s + 0x38);
-        void** subVtable = *(void***)subCompPtr;
-        typedef uint32_t (*fn_QueryState_t)(void*, int);
-        uint32_t value = ((fn_QueryState_t)subVtable[13])(subCompPtr, *(int*)((uintptr_t)component + 0x20));
+        uint32_t value = reinterpret_cast<Component*>(subCompPtr)->CommandMask(*(int*)((uintptr_t)component + 0x20));  // slot 13; B.3.8 bridge
         char newState = (char)((value >> 1) & 1);
 
         // Only update if state changed
@@ -181,21 +273,24 @@ void ControlUI_Slot7(ControlUI* self) {
 
     // Set enabled/disabled via vtable[8] based on component's enabled state
     void* subCompPtr = (void*)*(uint64_t*)(s + 0x38);
-    void** subVtable = *(void***)subCompPtr;
-    typedef uint32_t (*fn_QueryState_t)(void*, int);
-    uint32_t enabledBits = ((fn_QueryState_t)subVtable[13])(subCompPtr, *(int*)((uintptr_t)component + 0x20));
+    uint32_t enabledBits = reinterpret_cast<Component*>(subCompPtr)->CommandMask(*(int*)((uintptr_t)component + 0x20));  // slot 13; B.3.8 bridge
     bool enabled = (enabledBits & 1) != 0;
 
     void* elem = (void*)*(uint64_t*)(s + 0x30);
     if (!elem) return;
     reinterpret_cast<UI::Element*>(elem)->Enable(enabled);  // B.3.6 bridge: Element slot 8 Enable
+    controlui_sa::TraceSlot7(this);
 }
 
 // Slot9: On checkbox click (event 0x12, id 50000), toggle component state.
 // param2 is a POINTER — must deref to compare against stored element ptr.
 // Original asm: CMP [RDI],RAX where RDI=param2, RAX=*(self+0x30)
-void ControlUI_Slot9(ControlUI* self, uint64_t* param2, int param3, int param4) {
-    uintptr_t s = (uintptr_t)self;
+// [9] 0x14005f7f0
+void ControlUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t param3, int32_t param4,
+                               int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    uint64_t* param2 = reinterpret_cast<uint64_t*>(element);
+    if (param3 == 0x12 && param4 == 50000) controlui_sa::Trace("Slot9(click)", this);
+    uintptr_t s = (uintptr_t)this;
 
     if (param3 == 0x12 && param4 == 50000) {
         // CheckPtr on stored element before comparison
@@ -214,9 +309,7 @@ void ControlUI_Slot9(ControlUI* self, uint64_t* param2, int param3, int param4) 
             // Call vtable[14] (offset 0x70) on sub-component to toggle state
             void* subCompPtr = (void*)*(uint64_t*)(s + 0x38);
             if (!subCompPtr) return;  // SA guard: entity lacks the target component
-            void** subVtable = *(void***)subCompPtr;
-            typedef void (*fn_ToggleState_t)(void*, int);
-            ((fn_ToggleState_t)subVtable[14])(subCompPtr, *(int*)((uintptr_t)component + 0x20));
+            reinterpret_cast<Component*>(subCompPtr)->Command(*(int*)((uintptr_t)component + 0x20));  // slot 14; B.3.8 bridge
         }
     }
 }
@@ -246,129 +339,6 @@ void ControlUI_Slot9(ControlUI* self, uint64_t* param2, int param3, int param4) 
 // StorageUI promotions do — idx8 here is a composite that self-heals Slot4 once
 // and then drives Slot7.
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-#include "resolve.h"
-#include <cstdio>
-#include <cstdlib>
-
-namespace controlui_sa {
-
-// Report Slot4's INPUTS as well as its outputs. The first version of this printed only
-// +0x30/+0x38 — which are Slot4's OUTPUTS — so when the type-id guard rejected every call
-// before writing them, the trace read as "the framework never bound +0x20/+0x28" and sent
-// the investigation at the binding path, which was working fine all along. Always print
-// the thing the guard actually tests.
-static void Trace(const char* what, void* self) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    void* cfg = self ? reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x10)) : nullptr;
-    uint32_t wantTid = g_TypeId_ControlComponent ? *g_TypeId_ControlComponent : 0;
-    std::fprintf(stderr,
-        "[ControlUI] %s self=%p | IN: cfgTid=%s(%u) cfg(+0x10)=%p elem(+0x20)=%p entity(+0x28)=%p"
-        " | OUT: elem(+0x30)=%p target(+0x38)=%p cmd=%d\n",
-        what, self,
-        g_TypeId_ControlComponent ? (wantTid ? "ok" : "ZERO") : "NULLPTR", wantTid, cfg,
-        self ? reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x20)) : nullptr,
-        self ? reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x28)) : nullptr,
-        self ? reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x30)) : nullptr,
-        self ? reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x38)) : nullptr,
-        cfg ? *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(cfg) + 0x20) : -1);
-    std::fflush(stderr);
-}
-
-// idx4 (+0x20): setup — stamp element id 50000, resolve the target component.
-void W_Slot4(void* self) {
-    if (!self) return;
-    ControlUI_Slot4(reinterpret_cast<ControlUI*>(self));
-    Trace("Slot4", self);
-}
-
-// idx7 (+0x38): per-frame enable / checked sync.
-//
-// Slot7 had NO trace of its own, which is why "is slot 7 even ticked for this
-// panel?" stayed open through two investigations. It is: UI::UserInterface::Update
-// (Runtime 0x1801213c0) -> DialogInstance::ComputeLayout (0x180113d90) -> vtable
-// idx6 OnUpdateLayout (0x1801153a0) walks +0x78 and dispatches controller idx7
-// every frame, with no dirty flag. Report the OUTCOME — the element state read back
-// AFTER the writes — rather than the intent, and print in every arm so that silence
-// can never read as success. Rate-limited because this is a per-frame path.
-void W_Slot7(void* self) {
-    if (!self) return;
-    ControlUI_Slot7(reinterpret_cast<ControlUI*>(self));
-
-    static int s_left = 12;
-    if (s_left <= 0) return;
-    --s_left;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    void* cfg = reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x10));
-    void* elem = reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x30));
-    int cmd = cfg ? *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(cfg) + 0x20) : -1;
-    if (!elem) {
-        // The pre-fix state: correct predicates, nothing to apply them to.
-        std::fprintf(stderr, "[ControlUI] Slot7 cmd=%d elem(+0x30)=NULL"
-                     " -> no Enable, no checked write\n", cmd);
-    } else {
-        // elem+0x34 bit 0x800000 = disabled (UI::Element::Enable, Runtime 0x180116910).
-        uint32_t flags = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(elem) + 0x34);
-        // +0xd8 is the checked byte of a CheckElement ONLY (CheckElement::IsChecked,
-        // Runtime 0x180048c80; CheckDescription::CreateInstance allocates 0xe0). The
-        // first version of this trace read it unconditionally and printed checked=50
-        // for the two ButtonElement buttons — a read PAST the end of a plain button,
-        // i.e. heap bytes reported as game state. Only the cmd=2 work button is a
-        // CheckElement here, so gate the read on the same type id Slot7 gates its
-        // write on.
-        if (fn_IsDerivedFrom(elem, ControlUI_CheckElementTypeId())) {
-            unsigned checked =
-                *reinterpret_cast<unsigned char*>(reinterpret_cast<uintptr_t>(elem) + 0xd8);
-            std::fprintf(stderr, "[ControlUI] Slot7 cmd=%d elem=%p disabled=%d checked=%u\n",
-                         cmd, elem, (flags & 0x800000u) ? 1 : 0, checked);
-        } else {
-            std::fprintf(stderr, "[ControlUI] Slot7 cmd=%d elem=%p disabled=%d"
-                         " checked=n/a (ButtonElement, no +0xd8)\n",
-                         cmd, elem, (flags & 0x800000u) ? 1 : 0);
-        }
-    }
-    std::fflush(stderr);
-}
-
-// idx8 (+0x40) is DELIBERATELY NOT OVERRIDDEN, matching retail.
-// An earlier version of this file installed a composite here that re-ran Slot4 every
-// frame until the target resolved. Its justifying comment — "idx8 is the only slot the
-// framework ticks per frame" — was FALSE, and the retry was load-bearing for nothing:
-//   * UI::DialogInstance::OnUpdateLayout (Runtime 0x1801153a0) walks this+0x78 and
-//     dispatches vtable +0x38 = idx7, where W_Slot7 already sits. That is the per-frame
-//     sync path.
-//   * UI::DialogInstance::OnUpdate (Runtime 0x180115400) dispatches +0x40 = idx8 with a
-//     `const Time&` that a void(*)(void*) composite silently dropped. Retail leaves idx8
-//     inherited (a no-op) precisely because it has no per-controller work to do.
-// Slot4 is called ONCE, by UI::DialogInstance::AddController (Runtime 0x1801133b0), which
-// writes +0x10 config / +0x18 dialog / +0x20 element / +0x28 entity in four consecutive
-// stores and then dispatches idx4. With ControlUIConfig's type id registered, that single
-// call now succeeds, so there is nothing left for a retry to heal.
-
-// idx9 (+0x48): element events — the actual click.
-void W_Slot9(void* self, uint64_t* p2, int p3, int p4) {
-    if (!self) return;
-    if (p3 == 0x12 && p4 == 50000) Trace("Slot9(click)", self);
-    ControlUI_Slot9(reinterpret_cast<ControlUI*>(self), p2, p3, p4);
-}
-}  // namespace controlui_sa
-
-// [4] 0x14005f9b0
-void ControlUI::OnCreated() {
-    controlui_sa::W_Slot4(this);
-}
-
-// [7] 0x14005f870
-void ControlUI::OnUpdateLayout() {
-    controlui_sa::W_Slot7(this);
-}
-
-// [9] 0x14005f7f0
-void ControlUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
-                               int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    controlui_sa::W_Slot9(this, reinterpret_cast<uint64_t*>(element), a, b);
-}
 
 // [0] 0x140010e20: ~ControlUI (restamp, ~DialogController, ~Internal — the
 // compiler's chain), MemFree on &1.

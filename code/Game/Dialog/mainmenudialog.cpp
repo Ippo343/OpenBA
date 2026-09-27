@@ -1031,10 +1031,11 @@ void* MainMenuDialog::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(MainMenuDialog, "_ZTV14MainMenuDialog")
 
-// B38 D5: engine_funcs.cpp still reads 0x14015f550 back (g_PauseDialog_Vtable),
-// so the exe address serves the compiler table.
+// B38 D5: the vtable row this registered had no by-address reader left and is
+// gone (CB2 caller batch); only the call from standalone keeps the empty body.
 extern "C" void RegisterMainMenuDialogVtable() {
-    RegisterExeAddr(0x14015f550, reinterpret_cast<uintptr_t>(MainMenuDialog::Vtable()));
+    // Emptied by the B.3.8 CB2 caller batch: the row had no by-address reader left
+    // (CALLER_SURFACE section 5). The closing pass deletes this function and its call.
 }
 
 // Public entry called from MenuDLT::CreateDialog (standalone/menudialogloopt_stubs.cpp).

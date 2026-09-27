@@ -18,6 +18,7 @@
 #include "graphics/Material.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "Object/factory_registration.h"
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -251,6 +252,26 @@ void MapUI_HandleClick(void* param1, int clickX, int clickY, int mapWidth, int m
     *(float*)(camCtrl + 0x24) = 0.0f;
 }
 
+// ---- MapUI: PROMOTED to the real reimpl (map-render bring-up) ----------------
+// The minimap dialog's controller. Slot4 (+0x20, SetupImage) builds a
+// MaterialInstance + SpriteSheet from the minimap subsystem's terrain/overlay
+// ImageBuffers (gameWorld+0x148 +0x08/+0x10) and binds them to the "imageMap"/
+// "imageOverlay" elements. Slot9 (+0x48) handles minimap clicks → move camera.
+// The generic stub left both no-ops so the map dialog opened blank. The GPU
+// buffers are created by Minimap_CreateAndUpload (code/Game/Game/minimap_upload.cpp);
+// SetupImage is standalone-guarded (skips if the buffer is null / vtables absent).
+namespace mapui_sa {
+    // SetupImage dereferences g_TypeId_Material / g_TypeId_ImageElement (both
+    // resolve from raw exe .rdata/exref → null in standalone). Lazy-fill from the
+    // live factory tree post-Engine::Startup. g_fUVScale has a 1.0 fallback in
+    // mapui.cpp already. Idempotent.
+    void EnsureTypeIds() {
+        static uint32_t s_mat=0, s_img=0;
+        if (!g_TypeId_Material)     { s_mat=::Object::ResolveTypeIdByNameLazy("Material");     if(s_mat) g_TypeId_Material=&s_mat; }
+        if (!g_TypeId_ImageElement) { s_img=::Object::ResolveTypeIdByNameLazy("ImageElement"); if(s_img) g_TypeId_ImageElement=&s_img; }
+    }
+}
+
 // ============================================================
 // Slot4 (vtable +0x20): Setup map and overlay images
 // ============================================================
@@ -261,20 +282,36 @@ void MapUI_HandleClick(void* param1, int clickX, int clickY, int mapWidth, int m
 // For each, calls the helper to create MaterialInstance + SpriteSheet,
 // find the image element, and set the sprite.
 
-void MapUI_Slot4(MapUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [4] 0x14006ca80
+void MapUI::OnCreated() {
+    mapui_sa::EnsureTypeIds();
+    static bool s_logged = false;
+    if (!s_logged && Opt().mapTrace) {
+        s_logged = true;
+        void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+        [[maybe_unused]] void* mapObj = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x148) : nullptr;
+        printf("[MapUI::Slot4] dispatched self=%p mat_tid=%p img_tid=%p "
+               "matVtbl=%p ssVtbl=%p terrBuf=%p ovrBuf=%p\n", (void*)this,
+               (void*)g_TypeId_Material, (void*)g_TypeId_ImageElement,
+               (void*)g_ModDialog_MaterialInstanceVtable,
+               (void*)g_ModDialog_SpriteSheetVtable,
+               mapObj ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(mapObj) + 0x08) : nullptr,
+               mapObj ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(mapObj) + 0x10) : nullptr);
+        fflush(stdout);
+    }
+    uintptr_t s = (uintptr_t)this;
     void* gameWorld = *g_pGameWorldSingleton;
     void* mapComponent = *(void**)((uintptr_t)gameWorld + 0x148);
 
     // Setup terrain map image (no blend, element "imageMap")
     void* terrainBuffer = *(void**)((uintptr_t)mapComponent + 0x08);
-    MapUI_SetupImage(self, terrainBuffer,
+    MapUI_SetupImage(this, terrainBuffer,
                      (void**)(s + 0x38), (void**)(s + 0x30),
                      '\0', "imageMap");
 
     // Setup overlay image (with blend, element "imageOverlay")
     void* overlayBuffer = *(void**)((uintptr_t)mapComponent + 0x10);
-    MapUI_SetupImage(self, overlayBuffer,
+    MapUI_SetupImage(this, overlayBuffer,
                      (void**)(s + 0x48), (void**)(s + 0x40),
                      '\x01', "imageOverlay");
 }
@@ -288,9 +325,10 @@ void MapUI_Slot4(MapUI* self) {
 // reads the element's position/size from the clicked element,
 // calculates relative click position, and moves the camera.
 
-void MapUI_Slot9(MapUI* self, void* param2, int msg, int id,
-                 int clickX, int clickY) {
-    (void)self;
+// [9] 0x14006c9e0
+void MapUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t msg, int32_t id,
+                           int32_t clickX, int32_t clickY, int32_t /*e*/, void* /*userData*/) {
+    void* param2 = element;
     if (msg != 2 || id != 1000) return;
 
     // param2 is an InternalBasePtr to the clicked element

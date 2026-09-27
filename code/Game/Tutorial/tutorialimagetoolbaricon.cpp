@@ -214,10 +214,7 @@ void* TutorialImageToolbarIcon::CreateElement(void* retIBP, void* dialog) {
                 if (!comp) continue;
 
                 // Call GetTypeId (vtable +0x10)
-                uintptr_t vtbl = *(uintptr_t*)comp;
-                typedef uint32_t (*fn_GetTypeId_t)(void*);
-                fn_GetTypeId_t getTypeId = (fn_GetTypeId_t)(*(void**)(vtbl + 0x10));
-                uint32_t typeId = getTypeId(comp);
+                uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
                 if (g_TypeId_ToolbarDescription_FC &&
                     typeId == *g_TypeId_ToolbarDescription_FC) {

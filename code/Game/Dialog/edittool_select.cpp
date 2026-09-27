@@ -105,8 +105,7 @@ void EntityFindUIComponent(uint64_t entity, uint64_t* outIBP) {
         uint64_t* slot = reinterpret_cast<uint64_t*>(
             *reinterpret_cast<uintptr_t*>(entity + 0x30) + static_cast<int64_t>(i) * 8);
         void* comp = *reinterpret_cast<void**>(slot);
-        uint32_t tid = reinterpret_cast<GetTypeId_t>(
-            *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (tid == tidUIComp) {
             uint64_t* slot2 = reinterpret_cast<uint64_t*>(
                 *reinterpret_cast<uintptr_t*>(entity + 0x30) + static_cast<int64_t>(i) * 8);
@@ -198,8 +197,7 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
         for (int i = 0; i < count; i++) {
             void* item = *reinterpret_cast<void**>(
                 *reinterpret_cast<uintptr_t*>(descList + 0x28) + static_cast<int64_t>(i) * 8);
-            uint32_t tid = reinterpret_cast<GetTypeId_t>(
-                *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(item) + 0x10))(item);
+            uint32_t tid = reinterpret_cast<Object::Base*>(item)->Type();  // B.3.8 bridge
             if (tid != tidUIDesc) continue;
             // Matched: re-fetch, require derived + non-null, else abort the whole select.
             obj = *reinterpret_cast<void**>(

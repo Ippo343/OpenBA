@@ -131,9 +131,7 @@ void* FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
         void* obj = objs[i];
         if (!obj) continue;
         // vtable slot +0x10 = GetTypeId()
-        uint32_t (*getTypeId)(void*) =
-            *reinterpret_cast<uint32_t (**)(void*)>(*reinterpret_cast<uintptr_t*>(obj) + 0x10);
-        if (getTypeId(obj) != typeId) continue;
+        if (reinterpret_cast<Object::Base*>(obj)->Type() != typeId) continue;  // B.3.8 bridge
         return fn_IsDerivedFrom(obj, typeId) ? obj : nullptr;  // match, derived-or-bust
     }
     return nullptr;

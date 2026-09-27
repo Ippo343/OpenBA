@@ -35,6 +35,7 @@
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Component/Component.h"
 
 namespace {
 
@@ -89,8 +90,9 @@ uint32_t ProgressElementTypeId() {
 // If the field currently has none and a real type is picked, retail dispatches the
 // component's own vtable[14](comp, 2) BEFORE storing. Order matters: that handler reads
 // +0x50 as "still unset" to decide this is a fresh planting.
-void CropUI_Slot11(CropUI* self, int64_t newType) {
-    void* comp = FindComp(self);
+// [11] 0x1400b2920
+void CropUI::SetResource(int64_t newType) {
+    void* comp = FindComp(this);
 
     // SA guard (retail unguarded): in retail a combo event can only be routed to an
     // entity that has a CropFieldComponent.
@@ -98,41 +100,42 @@ void CropUI_Slot11(CropUI* self, int64_t newType) {
 
     int64_t cur = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(comp) + 0x50);
     if (cur == 0 && newType != 0) {
-        void** vt = *reinterpret_cast<void***>(comp);
-        typedef void (*StartCycle_t)(void*, int);
-        reinterpret_cast<StartCycle_t>(vt[14])(comp, 2);
+        reinterpret_cast<Component*>(comp)->Command(2);   // slot 14; B.3.8 bridge
     }
     *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(comp) + 0x50) = newType;
 }
 
 // idx12 (+0x60) — retail 0x1400b29d0. Current crop type via out-param.
-void* CropUI_Slot12(CropUI* self, void* out) {
-    void* comp = FindComp(self);
+// [12] 0x1400b29d0
+void* CropUI::GetResource(void* out) {
+    void* comp = FindComp(this);
     *reinterpret_cast<uint64_t*>(out) =
         comp ? *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(comp) + 0x50) : 0;
     return out;
 }
 
 // idx13 (+0x68) — retail 0x1400b29c0 is literally `XOR EAX,EAX; RET`.
-int CropUI_Slot13(CropUI* self) {
-    (void)self;
+// [13] 0x1400b29c0
+int CropUI::GetCategory() {
     return 0;
 }
 
 // ============================================================
 // STANDALONE promotion — real CropUI controller vtable
 // ============================================================
-namespace cropui_sa {
+// idx9 (+0x48) — combo selection -> idx11 — is SelectResourceUI's slot, inherited
+// (retail's CropUI table holds the base's 0x140078d80); it was StubNop in the tree
+// once, the slot that swallowed every pick on the "?" combo.
 
+// [4] 0x1400b2b50
 // idx4 (+0x20) — retail 0x1400b2b50: base idx4 (combo bind + element id 500 +
 // populate), then find "yield" and seat it at +0x38 with progress 1.0f.
-void W_Slot4(void* self) {
-    if (!self) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+void CropUI::OnCreated() {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
     // Needs the DialogInstance (+0x18) the framework seats before dispatch.
     if (!*reinterpret_cast<void**>(s + 0x18)) return;
 
-    CropUI_Slot4(reinterpret_cast<CropUI*>(self));   // = 0x140078be0, the base's idx4
+    CropUI_Slot4(reinterpret_cast<CropUI*>(this));   // = 0x140078be0, the base's idx4
 
     uint64_t found = 0;
     {
@@ -155,20 +158,20 @@ void W_Slot4(void* self) {
 
 }
 
+// [7] 0x1400b2a50
 // idx7 (+0x38) — retail 0x1400b2a50: mean maturity into the yield bar + percent text,
 // then the base's idx7 (enable the combo iff it has items).
-void W_Slot7(void* self) {
-    if (!self) return;
-    if (!SA_DialogEntityAlive(self)) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+void CropUI::OnUpdateLayout() {
+    if (!SA_DialogEntityAlive(this)) return;
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // Self-heal, same as orchardui.cpp: Slot4 may not have run for this instance yet.
     if (!*reinterpret_cast<uint64_t*>(s + 0x38)) {
-        W_Slot4(self);
+        CropUI::OnCreated();
         if (!*reinterpret_cast<uint64_t*>(s + 0x38)) return;
     }
 
-    void* comp = FindComp(self);
+    void* comp = FindComp(this);
     if (!comp) return;
 
     EnsureFuncs();
@@ -185,54 +188,23 @@ void W_Slot7(void* self) {
     }
 
     if (*reinterpret_cast<uint64_t*>(s + 0x30))
-        CropUI_Slot7(reinterpret_cast<CropUI*>(self));   // = 0x140078cb0, the base's idx7
-}
-
-// idx8 (+0x40) — base combo refresh, with the same null-combo self-heal.
-void W_Slot8(void* self) {
-    if (!self) return;
-    if (!SA_DialogEntityAlive(self)) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    if (!*reinterpret_cast<uint64_t*>(s + 0x30)) {
-        W_Slot4(self);
-        if (!*reinterpret_cast<uint64_t*>(s + 0x30)) return;
-    }
-    SelectResourceUI_Slot8(self);
-}
-// idx9 (+0x48) — combo selection -> idx11 — is SelectResourceUI's slot, inherited
-// (retail's CropUI table holds the base's 0x140078d80); it was StubNop in the tree
-// once, the slot that swallowed every pick on the "?" combo.
-}  // namespace cropui_sa
-
-// [4] 0x1400b2b50
-void CropUI::OnCreated() {
-    cropui_sa::W_Slot4(this);
-}
-
-// [7] 0x1400b2a50
-void CropUI::OnUpdateLayout() {
-    cropui_sa::W_Slot7(this);
+        SelectResourceUI::OnUpdateLayout();   // = 0x140078cb0, the base's idx7
 }
 
 // [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
-void CropUI::OnUpdate(const System::Time& /*time*/) {
-    cropui_sa::W_Slot8(this);
+// idx8 (+0x40) — base combo refresh, with the same null-combo self-heal.
+void CropUI::OnUpdate(const System::Time& time) {
+    if (!SA_DialogEntityAlive(this)) return;
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+    if (!*reinterpret_cast<uint64_t*>(s + 0x30)) {
+        CropUI::OnCreated();
+        if (!*reinterpret_cast<uint64_t*>(s + 0x30)) return;
+    }
+    SelectResourceUI::OnUpdate(time);
 }
 
-// [11] 0x1400b2920
-void CropUI::SetResource(int64_t type) {
-    ::CropUI_Slot11(this, type);
-}
 
-// [12] 0x1400b29d0
-void* CropUI::GetResource(void* out) {
-    return ::CropUI_Slot12(this, out);
-}
 
-// [13] 0x1400b29c0
-int CropUI::GetCategory() {
-    return ::CropUI_Slot13(this);
-}
 
 // [0] 0x140020b60: ~CropUI (restamp, ~DialogController, ~Internal — the
 // compiler's chain), MemFree on &1.

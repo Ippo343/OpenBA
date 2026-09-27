@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
+#include "Component/WorkDescription.h"   // X::TypeId() (B.3.8 callers)
 
 // ============================================================
 // Family A — ExternalPtr serialize helpers
@@ -213,7 +214,7 @@ extern "C" int WorkComponent_CalcMaxWorkers(uintptr_t workComp) {
     uintptr_t desc = obj;
     if (obj && fn_IsDerivedFrom) {
         static uint32_t s_wdTid = 0;
-        if (s_wdTid == 0) s_wdTid = ::Object::ResolveTypeIdByNameLazy("WorkDescription");
+        if (s_wdTid == 0) s_wdTid = WorkDescription::TypeId();
         if (s_wdTid != 0) desc = fn_IsDerivedFrom(reinterpret_cast<void*>(obj), s_wdTid) ? obj : 0;
     }
     if (!desc) return 0;   // original would deref null; we no-op instead.

@@ -26,6 +26,7 @@
 #include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "Dialog/ToolUI.h"   // X::TypeId() (B.3.8 callers)
 
 namespace {
 
@@ -80,7 +81,7 @@ void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
     // NULL in standalone; fill from the live factory tree. GetTypeIdByName is a
     // no-op cost after the first hit (cached in the class's own path); cache here.
     static uint32_t s_toolUITid = 0;
-    if (s_toolUITid == 0) s_toolUITid = ::Object::GetTypeIdByName("ToolUI");
+    if (s_toolUITid == 0) s_toolUITid = ToolUI::TypeId();
     const uint32_t toolUITid = s_toolUITid;
 
     // Walk the dialog linked list. `_dialogs.GetFirst()` IS retail's

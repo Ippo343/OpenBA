@@ -124,11 +124,11 @@ void* MessageDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
 
 DEFINE_EXE_VTABLE(MessageDialog, "_ZTV13MessageDialog")
 
-// B38 D5: engine_funcs.cpp:1742 still reads 0x14015c480 back
-// (g_ReloadDialog_Vtable), so the exe address serves the compiler table.
+// B38 D5: the table row 0x14015c480 is gone - its readers (saveloaddialog.cpp's
+// two stamps) build through the real ctor since the CB2 caller batch, and
+// engine_funcs.cpp's g_ReloadDialog_Vtable has no code use. The ctor door stays:
+// engine_funcs.cpp resolves 0x14006d300 into fn_MessageDialog_Ctor.
 extern "C" void RegisterMessageDialogVtable() {
-    RegisterExeAddr(0x14015c480,
-                    reinterpret_cast<uintptr_t>(MessageDialog::Vtable()));
     RegisterExeAddr(0x14006d300,
                     reinterpret_cast<uintptr_t>(&MessageDialog_Ctor_Standalone));
 }

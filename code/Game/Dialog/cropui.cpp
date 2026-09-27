@@ -62,20 +62,12 @@ static int CropUI_IterateResources(CropUI* self, void* combo, int* selectedIndex
     int numTypes = *(int*)(scenarioPtr + 0x128);
     uintptr_t typeArray = *(uintptr_t*)(scenarioPtr + 0x120);
 
-    // Get current resource type via virtual call (vtable +0x60)
-    // Returns the currently selected resource type pointer at local_80
-    typedef void (*fn_GetCurrentResource_t)(void* self, void* outPtr);
-    void** vtable = *(void***)self;
-    fn_GetCurrentResource_t fnGetCurrent =
-        reinterpret_cast<fn_GetCurrentResource_t>(vtable[0x60 / 8]);
+    // Current resource type: slot 12 GetResource (retslot shape, out at local_80)
     uint64_t currentResource = 0;
-    fnGetCurrent(self, &currentResource);
+    self->GetResource(&currentResource);
 
-    // Get category filter via virtual call (vtable +0x68)
-    typedef int (*fn_GetCategoryFilter_t)(void* self);
-    fn_GetCategoryFilter_t fnGetCategory =
-        reinterpret_cast<fn_GetCategoryFilter_t>(vtable[0x68 / 8]);
-    int categoryFilter = fnGetCategory(self);
+    // Category filter: slot 13 GetCategory
+    int categoryFilter = self->GetCategory();
 
     // Bail on a dead / marked-for-removal datasource before probing it (see Slot7);
     // returns "no resources" (0) for this iterate helper.
@@ -101,10 +93,7 @@ static int CropUI_IterateResources(CropUI* self, void* combo, int* selectedIndex
 
             // Check if sub-component's type matches SelectDescription
             // Virtual call at vtable+0x10 returns type ID
-            typedef int (*GetTypeId_t)(void*);
-            void** subVtable = *(void***)subComp;
-            GetTypeId_t fnGetTypeId = reinterpret_cast<GetTypeId_t>(subVtable[0x10 / 8]);
-            int subTypeId = fnGetTypeId((void*)subComp);
+            int subTypeId = reinterpret_cast<Object::Base*>(subComp)->Type();  // B.3.8 bridge
 
             if (subTypeId == (int)*g_TypeId_SelectDescription) {
                 void* subObj = *(void**)(subArray + (uintptr_t)j * 8);
@@ -233,20 +222,22 @@ void CropUI_Slot4(CropUI* self) {
 //
 // Original: 0x140078CB0.
 
-void CropUI_Slot7(CropUI* self) {
+// [7] 0x140078cb0 — SelectResourceUI's own slot 7 body (the tree ported it under
+// CropUI's name; it reads only the base's +0x28/+0x30).
+void SelectResourceUI::OnUpdateLayout() {
     // Per-frame (+0x38): bail on a dead / marked-for-removal datasource before the
     // IsDerivedFrom probe (reliable via the one-frame removal deferral, see
     // entitylist.cpp Step 0).
-    if (!SA_DialogEntityAlive(self)) return;
+    if (!SA_DialogEntityAlive(this)) return;
     // Wrap entity in InternalBasePtr (base class requirement, not used directly)
-    void* entity = *(void**)((uintptr_t)self + 0x28);
+    void* entity = *(void**)((uintptr_t)this + 0x28);
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
 
     // Get selectResource combo element
-    void* combo = (void*)self->internalBasePtr;
+    void* combo = (void*)this->internalBasePtr;
 
     // Enable combo if it has items, disable if empty
     int itemCount = reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount();  // B.3.6 bridge

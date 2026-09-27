@@ -32,8 +32,9 @@
 //
 // Original: 0x140067640.
 
-void EventLogUI_Slot5(EventLogUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [5] 0x140067640
+void EventLogUI::OnOpened() {
+    uintptr_t s = (uintptr_t)this;
     void* dialogElem = *(void**)(s + 0x20);
     void* dialogInst = *(void**)(s + 0x18);
 
@@ -168,8 +169,9 @@ void EventLogUI_Slot5(EventLogUI* self) {
 //
 // Original: 0x140067440.
 
-void EventLogUI_Slot7(EventLogUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [7] 0x140067440
+void EventLogUI::OnUpdateLayout() {
+    uintptr_t s = (uintptr_t)this;
 
     // Event log singleton: g_pGameWorldSingleton -> +0x138
     uintptr_t eventLog = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x138);
@@ -233,11 +235,14 @@ void EventLogUI_Slot7(EventLogUI* self) {
 //
 // Original: 0x1400675D0.
 
-void EventLogUI_Slot9(EventLogUI* self, void* param2, int msg, int id) {
+// [9] 0x1400675d0
+void EventLogUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t msg, int32_t id,
+                                int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    void* param2 = element;
     (void)param2;
     if (msg != 0x12) return;
 
-    uintptr_t s = (uintptr_t)self;
+    uintptr_t s = (uintptr_t)this;
     int* scrollOffset = (int*)(s + 0x48);
 
     if (id == 100) {
@@ -342,37 +347,9 @@ void EventLogUI_Slot9(EventLogUI* self, void* param2, int msg, int id) {
 #include <cstdio>
 #include <cstdlib>
 
-namespace eventlogui_sa {
 
-void W_Slot5(void* self) {
-    if (!self) return;
-    EventLogUI_Slot5(reinterpret_cast<EventLogUI*>(self));
-}
-void W_Slot7(void* self) {
-    if (!self) return;
-    EventLogUI_Slot7(reinterpret_cast<EventLogUI*>(self));
-}
-// (W_OnUpdate removed — idx8 stays inherited, see the vtable note at the top.)
-void W_Slot9(void* self, void* p2, int msg, int id) {
-    if (self) EventLogUI_Slot9(reinterpret_cast<EventLogUI*>(self), p2, msg, id);
-}
-}  // namespace eventlogui_sa
 
-// [5] 0x140067640
-void EventLogUI::OnOpened() {
-    eventlogui_sa::W_Slot5(this);
-}
 
-// [7] 0x140067440
-void EventLogUI::OnUpdateLayout() {
-    eventlogui_sa::W_Slot7(this);
-}
-
-// [9] 0x1400675d0
-void EventLogUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
-                                int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    eventlogui_sa::W_Slot9(this, element, a, b);
-}
 
 // [0] 0x1400114b0: ~EventLogUI (restamp, ~DialogController, ~Internal — the
 // compiler's chain), MemFree on &1.

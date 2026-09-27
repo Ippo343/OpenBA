@@ -32,6 +32,7 @@
 //   +0x158 buttonDelete (InternalBasePtr)
 
 #include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "Dialog/MessageDialog.h"
 #include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/TableElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/PageElement.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -915,11 +916,12 @@ static int SaveLoad_ShowConfirmDialog(void* self, const char* rscPath) {
     // Allocate 0xC0 bytes for a DialogInstance shell
     void* dlg = fn_MemAlloc(g_pMemAllocSingleton, 0xC0, 8);
     if (dlg) {
-        // Construct base DialogInstance(ui, externalRes, nullParent, 0, 0, 0)
-        uint64_t nullParent = 0;
-        fn_DialogInstance_Ctor(dlg, *(void**)(s + 0x10), checkedRes, &nullParent, 0, 0, 0);
-        // Patch vtable to MessageDialog
-        *(void**)dlg = (void*)ResolveAddr(Module::Exe, MessageDialogAddr::Vtable);
+        // MessageDialog's real ctor (0x14006d300: DialogInstance(ui, externalRes, null
+        // parent, 0, 0, 0), its own table, +0xb8 untouched) - the bytes the tree's
+        // DialogInstance ctor door + MessageDialogAddr::Vtable stamp built (B38 B8-5).
+        ::new (dlg) MessageDialog(reinterpret_cast<UI::UserInterface*>(*(void**)(s + 0x10)),
+                                  reinterpret_cast<const UI::Dialog*>(checkedRes),   // B.3.8 bridge
+                                  Object::InternalPtr<UI::DialogInstance>());
     }
 
     // ShowDialog(ui, InternalPtr<DialogInstance>)
@@ -1098,9 +1100,10 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
         // Allocate and construct the warning DialogInstance shell
         void* warnDlg = fn_MemAlloc(g_pMemAllocSingleton, 0xC0, 8);
         if (warnDlg) {
-            uint64_t nullParent = 0;
-            fn_DialogInstance_Ctor(warnDlg, *(void**)(s + 0x10), checkedWarn, &nullParent, 0, 0, 0);
-            *(void**)warnDlg = (void*)ResolveAddr(Module::Exe, MessageDialogAddr::Vtable);
+            // MessageDialog's real ctor (B38 B8-5; see SaveLoad_ShowConfirmDialog).
+            ::new (warnDlg) MessageDialog(reinterpret_cast<UI::UserInterface*>(*(void**)(s + 0x10)),
+                                          reinterpret_cast<const UI::Dialog*>(checkedWarn),   // B.3.8 bridge
+                                          Object::InternalPtr<UI::DialogInstance>());
         }
 
         // Find the TextElement inside the warning dialog and set mod info parameters

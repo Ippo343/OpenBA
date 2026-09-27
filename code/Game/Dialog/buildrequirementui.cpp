@@ -19,6 +19,7 @@
 #include "Dialog/ui_panels.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Object/factory_registration.h"
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -33,6 +34,10 @@
 #include "runtime/types/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "runtime/types/ui/LabelElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Component/BuildComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/BuildDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 #if defined(_DEBUG)
 #include <cstdio>
 #include <cstdlib>
@@ -73,8 +78,7 @@ static void* FindCompInDesc(uintptr_t desc, uint32_t typeId) {
         // or every component gets skipped.
         void** vtable = *(void***)comp;
         if (!SaneHeapPtr(vtable) || vtable[2] == nullptr) continue;
-        typedef int (*fn_GetTypeId_t)(void*);
-        int compTypeId = ((fn_GetTypeId_t)vtable[2])(comp);
+        int compTypeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
         if (compTypeId == (int)typeId) {
             if (fn_IsDerivedFrom(comp, typeId)) {
@@ -109,6 +113,33 @@ static uint64_t FindDialogElemAsBasePtr(void* dialogInst, const char* name) {
 // BuildRequirementUI::Shutdown (vtable +0x18) — No-op
 // ============================================================
 
+// ---- BuildRequirementUI: PROMOTED to the real reimpl (2026-06-28) ------------
+// This dialog is constructed + its Slot4(Update +0x20) dispatched on hover of a
+// build-tool button (verified live: valid dlgInst@+0x18 / datasource@+0x28). The
+// generic stub left Slot4 a no-op, so the build tooltip showed "????????" for the
+// name and "x x x" for the cost. Wiring Slot4 to the real BuildRequirementUI_Slot4
+// composes the title (ToolbarDescription+0x38 name key), the icon, and the
+// cost labels. Construction stays the stub alloc+zero+vtable; the engine fills the
+// base fields afterward.
+
+namespace buildrequirementui_sa {
+    // Lazy-fill the exe-.rdata type-id globals BuildRequirementUI_Slot4 dereferences.
+    // In standalone these resolve from raw exe .rdata addresses → null, so the real
+    // reimpl's first `*g_TypeId_ComponentDescription_FC` would fault. Fill them from the live
+    // Factory tree (post-Engine::Startup), like ToolbarStandalone_Init. Idempotent.
+    // NB: g_TypeId_ResourceComponent's engine_funcs label is misleading — the id at
+    // .rdata 0x1401c7040 is actually "BuildDescription"; and Object::Internal is
+    // registered under the simple name "Internal".
+    void EnsureTypeIds() {
+        static uint32_t s_build=0, s_entity=0, s_internal=0, s_buildDesc=0, s_rawMat=0;
+        if (!g_TypeId_ComponentDescription_FC)        { s_build=BuildComponent::TypeId();        if(s_build) g_TypeId_ComponentDescription_FC=&s_build; }
+        if (!g_TypeId_ComponentEntity)       { s_entity=ComponentEntity::TypeId();      if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
+        if (!g_TypeId_ResourceComponent)     { s_buildDesc=BuildDescription::TypeId();  if(s_buildDesc) g_TypeId_ResourceComponent=&s_buildDesc; }
+        if (!g_TypeId_RawMaterialDescription){ s_rawMat=RawMaterialDescription::TypeId(); if(s_rawMat) g_TypeId_RawMaterialDescription=&s_rawMat; }
+        if (!g_TypeId_Element)        { s_internal=::Object::ResolveTypeIdByNameLazy("Internal");           if(s_internal) g_TypeId_Element=&s_internal; }
+    }
+}  // namespace uistub_BuildRequirementUI
+
 // ============================================================
 // BuildRequirementUI::Slot4 (vtable +0x20) — Setup/populate
 // ============================================================
@@ -119,8 +150,14 @@ static uint64_t FindDialogElemAsBasePtr(void* dialogInst, const char* name) {
 //
 // Original: 0x14005E7C0.
 
-void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [4] 0x14005e7c0. The body unconditionally dereferences these globals;
+// if any failed to resolve, skip rather than fault (standalone-only).
+void BuildRequirementUI::OnCreated() {
+    buildrequirementui_sa::EnsureTypeIds();
+    if (!g_TypeId_ComponentDescription_FC || !g_TypeId_ComponentEntity
+        || !g_TypeId_Element || !g_TypeId_ToolbarDescription_FC
+        || !g_TypeId_ResourceComponent || !g_TypeId_RawMaterialDescription) return;
+    uintptr_t s = (uintptr_t)this;
 
     // --- Resolve description from datasource (+0x28) ---
     // Three possible datasource types:
