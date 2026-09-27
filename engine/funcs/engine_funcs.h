@@ -3300,9 +3300,8 @@ extern fn_TreeRemoveByKey_t fn_TreeRemoveByKey;
 typedef void (*fn_TreeRecursiveFree_t)(void* treeRootPtr, void* node);
 extern fn_TreeRecursiveFree_t fn_TreeRecursiveFree;
 
-// Object::Internal::~Internal — via dispatch slot 0x140152770
-typedef void (*fn_ObjectInternal_Dtor_t)(void* self);
-extern fn_ObjectInternal_Dtor_t fn_ObjectInternal_Dtor;
+// (fn_ObjectInternal_Dtor — the ??1Internal door via slot 0x140152770 — went
+// at ENDGAME B.3.9 EXA: never called, only a readiness conjunct.)
 
 // Citizen state machine release (FUN_1400c5400 @ 0x1400c5400)
 // Walks task list, calls vtable+0x40 on each, clears slots.

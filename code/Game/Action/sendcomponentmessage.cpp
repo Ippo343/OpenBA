@@ -53,7 +53,7 @@ bool SendComponentMessage_ResolveFuncs() {
               s_TypeId_Entity &&
               fn_IsDerivedFrom &&
               fn_InternalBasePtr_DeletePtr && fn_InternalBasePtr_Ctor &&
-              fn_ObjectInternal_Dtor && fn_MemFreeStatic;
+              fn_MemFreeStatic;
 
 #ifdef _DEBUG
     printf("[SendComponentMessage] ResolveFuncs: TypeSer=%p TypeId=%p\n",

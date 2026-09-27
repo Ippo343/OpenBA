@@ -780,7 +780,6 @@ void fn_ModDialog_ArrayPush58_CppImpl(void* arrayHeader, int newCount, void* ele
 // ============================================================
 fn_TreeRemoveByKey_t fn_TreeRemoveByKey = nullptr;
 fn_TreeRecursiveFree_t fn_TreeRecursiveFree = nullptr;
-fn_ObjectInternal_Dtor_t fn_ObjectInternal_Dtor = nullptr;
 fn_StateMachine_ReleaseTasks_t fn_StateMachine_ReleaseTasks = nullptr;
 
 fn_Video_VertexBuffer_Ctor_t fn_Video_VertexBuffer_Ctor = nullptr;
@@ -2090,8 +2089,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140025520));
     fn_TreeRecursiveFree = reinterpret_cast<fn_TreeRecursiveFree_t>(
         ResolveAddr(Module::Exe, 0x140014c30));
-    fn_ObjectInternal_Dtor = reinterpret_cast<fn_ObjectInternal_Dtor_t>(
-        *reinterpret_cast<uintptr_t*>(ResolveAddr(Module::Exe, 0x140152770)));
     fn_StateMachine_ReleaseTasks = reinterpret_cast<fn_StateMachine_ReleaseTasks_t>(
         ResolveAddr(Module::Exe, 0x1400c5400));
     fn_Map_CheckPassable = reinterpret_cast<fn_Map_CheckPassable_t>(

@@ -1178,8 +1178,9 @@ static void RegisterDispatchSlots() {
     //  call the real Object::Internal::Internal directly at load.)
     RegisterDispatchSlot(0x140152768,
         (uintptr_t)ResolveExport("??0Internal@Object@@QEAA@XZ"));
-    RegisterDispatchSlot(0x140152770,
-        (uintptr_t)ResolveExport("??1Internal@Object@@UEAA@XZ"));
+    // (0x140152770 ??1Internal: row deleted at ENDGAME B.3.9 EXA — its readers
+    // were the never-called fn_ObjectInternal_Dtor and five Action-local copies,
+    // used only as readiness conjuncts.)
     RegisterDispatchSlot(0x140152a30,
         (uintptr_t)ResolveExport("??0Vector3@Math@@QEAA@MMM@Z"));
 
