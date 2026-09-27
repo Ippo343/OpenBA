@@ -1,0 +1,11 @@
+# ENDGAME B.3 step 9 -- the rows block TI-REST retired (B39_RULES.md D3, D6 W3).
+# Format: <mangled symbol | 0xVA>   <owner block>   <proof>
+# Every row here is a `?_typeInfo@` record whose class now carries DECLARE_TYPE /
+# DEFINE_TYPE (runtime/src/<ns>/<ns>_type_records.cpp); every reader reads X::TypeId() /
+# GetTypeInfo() / the inline Type() / TypeName().
+
+# -- Picking --
+?_typeInfo@PickingMesh@Picking@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Picking::PickingMesh, "Object::External", nullptr); the RT_DATA_SLOT accessor in pickingmesh.cpp deleted
+
+# -- Pathfinding --
+?_typeInfo@PointList@Pathfinding@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Pathfinding::PointList, "Object::External", nullptr); the RT_DATA_SLOT accessor in pointlist.cpp deleted
