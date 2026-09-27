@@ -434,12 +434,4 @@ void* PerformWork::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(PerformWork, "_ZTV11PerformWork")
 
-// B38 D5: 0x14015fea0 is still read back BY ADDRESS outside this block
-// (work_act_path.cpp:155, work_act_perform.cpp:163, work_base_actionctor.cpp:162, citizenai_actionctors.cpp:145),
-// so the row stays, serving the compiler table (every such reader builds the
-// same bytes the ctor builds: Internal(), +0x10/+0x18 zeroed, the fields).
-extern "C" void RegisterPerformWorkVtable() {
-    RegisterExeAddr(0x14015fea0, reinterpret_cast<uintptr_t>(PerformWork::Vtable()));
-}
-
 DEFINE_EXE_TYPE(PerformWork, "Action")

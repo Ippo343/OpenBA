@@ -28,7 +28,6 @@
 
 #include "Game/PathfinderThread.h"
 #include "engine_funcs.h"
-#include "Component/component_factory_base.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>

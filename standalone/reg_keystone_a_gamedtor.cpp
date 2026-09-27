@@ -20,7 +20,6 @@
 
 extern "C" void Game_Dtor_9ed60(int64_t);                  // 0x14009ed60
 extern "C" void GameDtor_DrainQueue_a6690(int64_t);        // 0x1400a6690
-extern "C" void GameDtor_ThreadDtor_a6720(int64_t);        // 0x1400a6720
 extern "C" void GameDtor_SubObjDtor_a8570(int64_t);        // 0x1400a8570
 extern "C" void GameDtor_TreeArrayDtor_1a450(int64_t);     // 0x14001a450
 extern "C" void GameDtor_FreeListDtor_1a5f0(uint64_t*);    // 0x14001a5f0
@@ -31,7 +30,6 @@ extern "C" void GameDtor_FreeArray20_1e3a0(int64_t*);      // 0x14001e3a0
 void RegisterKeystoneAGameDtorBatch() {
     RegisterExeAddr(0x14009ed60, reinterpret_cast<uintptr_t>(&Game_Dtor_9ed60));
     RegisterExeAddr(0x1400a6690, reinterpret_cast<uintptr_t>(&GameDtor_DrainQueue_a6690));
-    RegisterExeAddr(0x1400a6720, reinterpret_cast<uintptr_t>(&GameDtor_ThreadDtor_a6720));
     RegisterExeAddr(0x1400a8570, reinterpret_cast<uintptr_t>(&GameDtor_SubObjDtor_a8570));
     RegisterExeAddr(0x14001a450, reinterpret_cast<uintptr_t>(&GameDtor_TreeArrayDtor_1a450));
     RegisterExeAddr(0x14001a5f0, reinterpret_cast<uintptr_t>(&GameDtor_FreeListDtor_1a5f0));

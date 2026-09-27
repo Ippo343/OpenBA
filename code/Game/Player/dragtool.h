@@ -75,9 +75,3 @@ static_assert(offsetof(DragTool, singleClick) == 0x29, "DragTool +0x29 singleCli
 static_assert(offsetof(DragTool, startCell)   == 0x2c, "DragTool +0x2c startCell (qword -1 at 0x1400fb8cf)");
 static_assert(offsetof(DragTool, endCell)     == 0x30, "DragTool +0x30 endCell");
 static_assert(offsetof(DragTool, lastEndCell) == 0x34, "DragTool +0x34 lastEndCell (dword -1 at 0x1400fb8d7)");
-
-// The by-name doors onto the members (dragtool.cpp). OnKey (0x1400fc6b0) returns
-// 1 always (event consumed); CancelDrag (0x1400fc640) returns 1 when it
-// cancelled a drag (the tool stays), 0 when idle.
-uint64_t DragTool_OnKey(DragTool* self, char key);
-extern "C" int DragTool_CancelDrag_Impl(void* self);   // self = DragTool*

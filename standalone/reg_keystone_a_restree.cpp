@@ -30,9 +30,6 @@
 
 // Ports (code/Game/Component/keystone_a_restree.cpp).
 extern "C" void*    ResidenceComponent_impl_7230(int64_t* p1, void** p2, uint64_t* p3, int64_t* p4); // 0x140017230
-extern "C" int64_t* ResidenceComponent_helper_5ec0(int64_t* p1, int64_t* p2);                        // 0x140015ec0
-extern "C" void**   ResidenceComponent_helper_72f0(int64_t* p1, void** p2, uint64_t* p3);            // 0x1400172f0
-extern "C" void*    ResidenceComponent_impl_7460(int64_t unused, int64_t* src, int64_t parent);      // 0x140017460
 
 // Shared retrace — 0x140014b40, defined in code/Game/Player/tool_base_highlight.cpp.
 extern "C" void TradeWork_impl_4b40(int64_t* p1, int64_t* p2);                                       // 0x140014b40
@@ -41,9 +38,6 @@ void RegisterKeystoneARestreeBatch() {
     // Bottom-up: retrace + array-copy + node-alloc, then insert, then the wrapper.
     // 0x140014b40 (TradeWork_impl_4b40, AVL retrace) — same symbol, registered by
     // reg_player_highlight.cpp, which runs later. Duplicate removed 2026-08-30.
-    RegisterExeAddr(0x140015ec0, reinterpret_cast<uintptr_t>(&ResidenceComponent_helper_5ec0));
-    RegisterExeAddr(0x140017460, reinterpret_cast<uintptr_t>(&ResidenceComponent_impl_7460));
-    RegisterExeAddr(0x1400172f0, reinterpret_cast<uintptr_t>(&ResidenceComponent_helper_72f0));
     RegisterExeAddr(0x140017230, reinterpret_cast<uintptr_t>(&ResidenceComponent_impl_7230));
     // NB: 0x140015000 / 0x140014ed0 are intentionally NOT registered here — already done
     // by reg_player_trade.cpp (PlayerTrade_Rot_15000 / _14ed0).

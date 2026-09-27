@@ -244,20 +244,4 @@ void* PlayAnimation::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(PlayAnimation, "_ZTV13PlayAnimation")
 
-// B38 D5: 0x140158950 is still read back BY ADDRESS outside this block
-// (work_base_actionctor.cpp:163, citizenai_actionctors.cpp:146, citizenai_handlers.cpp:81),
-// so the row stays, serving the compiler table (every such reader builds the
-// same bytes the ctor builds: Internal(), +0x10/+0x18 zeroed, the fields).
-extern "C" void RegisterActionVtable();   // action.cpp — the Action base table 0x14015faa0
-
-extern "C" void RegisterPlayAnimationVtable() {
-    // B38 D9 #2: serve Action::Vtable() at 0x14015faa0. This is the first
-    // Action-family row of RegisterVtablesAndTypeIds, which runs after the old
-    // `&g_ComponentEntity_StandaloneVtable[5]` row in RegisterCodeFunctions and
-    // so overrides it (last write wins) until the coordinator's address_registry
-    // hunk calls RegisterActionVtable directly.
-    RegisterActionVtable();
-    RegisterExeAddr(0x140158950, reinterpret_cast<uintptr_t>(PlayAnimation::Vtable()));
-}
-
 DEFINE_EXE_TYPE(PlayAnimation, "Action")

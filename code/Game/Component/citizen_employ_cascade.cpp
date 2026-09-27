@@ -37,7 +37,7 @@
 #include "Component/CitizenComponent.h"
 
 // ---- deps ported elsewhere (link to them) ----
-struct CitizenComponent;   // opaque — only for matching the AssignHousing mangled name
+class CitizenComponent;   // opaque — only for matching the AssignHousing mangled name
 extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t professionKey); // 0x14008d100
 extern void  CitizenComp_AssignHousing(CitizenComponent* self, int64_t* buildingIBPptr);    // 0x140111ee0 -> +0x248
 extern void* CitizenComp_Entity_FindComponent_Storage(int64_t entity, void* outIBP);        // 0x140008090 -> c7cf0

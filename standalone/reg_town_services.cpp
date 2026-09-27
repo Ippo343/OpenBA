@@ -29,20 +29,10 @@
 #include "Component/HappinessDescription.h"
 
 // --- CemeteryComponent (code/Game/Component/cemeterycomponent.cpp) ---
-extern "C" char CemeteryComponent_EnterBuilt(void* comp, void* sm);       // 0x140046fc0
-extern "C" char CemeteryComponent_EnterDemolish(void* comp, void* sm);    // 0x140046f80
 
 // --- HealerComponent (code/Game/Component/healercomponent.cpp) ---
-extern "C" char HealerComponent_EnterBuilt(void* comp, void* sm);         // 0x14004ae30
-extern "C" char HealerComponent_EnterDemolish(void* comp, void* sm);      // 0x14004adf0
 
 // --- HappinessComponent (code/Game/Component/happinesscomponent.cpp) ---
-extern "C" bool HappinessComponent_IsActive(void* self);                  // 0x14004a550
-extern "C" void HappinessComponent_Register(void* self);                  // 0x14004a4f0
-extern "C" void HappinessComponent_Unregister(void* self);                // 0x14004a4a0
-extern "C" char HappinessComponent_EnterBuilt(void* comp, void* sm);      // 0x14004a9f0
-extern "C" char HappinessComponent_Tick38(void* comp, void* sm, void* t, int i); // 0x14004a9a0
-extern "C" char HappinessComponent_EnterDemolish(void* comp, void* sm);   // 0x14004a940
 
 // ------------------------------------------------------------------
 // HappinessDescription type-ID .rdata global (DAT_1401c42f8).
@@ -79,21 +69,4 @@ void RegisterTownServices() {
     RegisterExeAddr(0x1401c42f8, reinterpret_cast<uintptr_t>(&g_tid_HappinessDescription));
     RegisterExeAddr(0x1401c4090, reinterpret_cast<uintptr_t>(&g_tid_CemeteryComponent));
 
-    // Graveyard. The lifecycle slots (Cemetery 6/7 = 0x140047200 / 0x1400471c0,
-    // Healer 7 = 0x14004ae70) are real-class virtuals since ENDGAME B.3.8; nothing read
-    // their addresses back, so their rows are gone. The state-table handlers stay.
-    RegisterExeAddr(0x140046fc0, reinterpret_cast<uintptr_t>(&CemeteryComponent_EnterBuilt));
-    RegisterExeAddr(0x140046f80, reinterpret_cast<uintptr_t>(&CemeteryComponent_EnterDemolish));
-
-    // Hospital.
-    RegisterExeAddr(0x14004ae30, reinterpret_cast<uintptr_t>(&HealerComponent_EnterBuilt));
-    RegisterExeAddr(0x14004adf0, reinterpret_cast<uintptr_t>(&HealerComponent_EnterDemolish));
-
-    // Happiness sources.
-    RegisterExeAddr(0x14004a550, reinterpret_cast<uintptr_t>(&HappinessComponent_IsActive));
-    RegisterExeAddr(0x14004a4f0, reinterpret_cast<uintptr_t>(&HappinessComponent_Register));
-    RegisterExeAddr(0x14004a4a0, reinterpret_cast<uintptr_t>(&HappinessComponent_Unregister));
-    RegisterExeAddr(0x14004a9f0, reinterpret_cast<uintptr_t>(&HappinessComponent_EnterBuilt));
-    RegisterExeAddr(0x14004a9a0, reinterpret_cast<uintptr_t>(&HappinessComponent_Tick38));
-    RegisterExeAddr(0x14004a940, reinterpret_cast<uintptr_t>(&HappinessComponent_EnterDemolish));
 }

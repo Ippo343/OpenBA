@@ -5,7 +5,6 @@
 // Work_Slot11_HasActiveTasks, Work_SerializeNop, Work_PureCall) went with the last
 // hand-built leaf table: every leaf is a real class now.
 
-#include "work_base_standalone.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
@@ -54,12 +53,4 @@ int  Work::Slot5(void*, void*) { return 0; }
 void Work::Slot12() {}
 
 DEFINE_EXE_VTABLE(Work, "_ZTV4Work")
-
-// B38 D5: the exe address serves the COMPILER's table while by-address readers
-// remain — the door Work_Ctor25_Impl (work_base_reimpl.cpp) stamps it, and
-// code/Game/Component/clearareacomponent_states.cpp (block MI-A) stamps it while
-// building a ClearArea by hand.
-extern "C" void RegisterWorkBaseVtable() {
-    RegisterExeAddr(WorkAddr::Vtable, reinterpret_cast<uintptr_t>(Work::Vtable()));   // 0x140161a80
-}
 

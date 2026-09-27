@@ -20,7 +20,6 @@
 #include <cstdint>
 #include "Object/factory_registration.h"
 #include "Component/ModelComponent.h"   // ModelComponent::TypeId (scoped find)
-#include "Component/component_factory_base.h" // ComponentFactory::the live gate (default-on gates)
 #include "Component/pickingcomponent_funcs.h" // PickingComponent_RegisterMeshForEntity (mesh-precise picking)
 #include <cstdio>                            // BANISHED_TOOL_DIAG place-model trace
 #include <cstdlib>                           // std::getenv

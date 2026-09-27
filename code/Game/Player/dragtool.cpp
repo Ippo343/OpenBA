@@ -425,15 +425,3 @@ char DragTool::OnCancel() {
     }
     return 1;
 }
-
-// ============================================================
-// By-name doors (ENDGAME B.3.8 callers): standalone/reg_code_lane6.cpp and
-// standalone/reg_player_drag.cpp register these two names at 0x1400fc6b0 and
-// 0x1400fc640, so they stay as one-line doors onto the members.
-// ============================================================
-uint64_t DragTool_OnKey(DragTool* self, char key) {
-    return static_cast<uint8_t>(self->DragTool::OnKey(key));
-}
-extern "C" int DragTool_CancelDrag_Impl(void* self) {
-    return reinterpret_cast<DragTool*>(self)->DragTool::OnCancel();  // B.3.8 bridge
-}

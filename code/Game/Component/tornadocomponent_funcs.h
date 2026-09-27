@@ -42,14 +42,12 @@ bool  Tornado_PathAdvance_a71e0(uint8_t* block, const float* pos,
 // building-ignite / animal-remove / citizen-kill). The third arm is the ANIMAL arm:
 // 0x140005500 matches AnimalComponent (type id 0x1401c6f98), not "loose objects".
 // First parameter is dead in retail; kept.
-void  Tornado_StrikeEntity_583c0(int64_t unusedFirstArg, void* entityIbp);
 // 0x140058040 — countdown + the three strike sets (scatter cell, radius query,
 // square sweep).
 void  Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* dt);
 
 // Leaves owned by other classes that had no port yet:
 // 0x14000cf40 — Vector3 dynamic-array grow+fill {data, count, capacity}.
-void  Tornado_Vec3ArrayGrow_cf40(void* arrayBase, int newCount, const void* fill);
 // 0x140053720 — ParticleComponent: negate instance `index`'s playback rate.
 void  Tornado_ParticleReverse_53720(void* particleComp, int index);
 // 0x140042960 — AudioComponent: move every emitter to `newPos` and cache it.

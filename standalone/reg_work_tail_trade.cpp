@@ -22,8 +22,6 @@
 
 // Ports (code/Game/Work/tradework_serialize.cpp).
 extern "C" void  TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2);          // 0x14002c8a0
-extern "C" void* TradeWork_Insert_c710(int64_t* param_1, void** param_2, int64_t p3); // 0x14002c710
-extern "C" void* TradeWork_NodeAlloc_c830(void* unused, uint64_t* src, int64_t parent); // 0x14002c830
 
 // TradeWork::Slot4 (0x1400f5d40) is a real virtual since ENDGAME B.3.8 and nothing read
 // its address back, so its row is gone.
@@ -64,8 +62,6 @@ extern "C" void FillTypeIdGlobals_worktail_trade() {
 }
 
 void RegisterWorkTailTradeBatch() {
-    RegisterExeAddr(0x14002c830, reinterpret_cast<uintptr_t>(&TradeWork_NodeAlloc_c830));
-    RegisterExeAddr(0x14002c710, reinterpret_cast<uintptr_t>(&TradeWork_Insert_c710));
     RegisterExeAddr(0x14002c8a0, reinterpret_cast<uintptr_t>(&TradeWork_Serialize_c8a0));
     // NB: 0x1401c7158 is intentionally NOT registered here (see note above).
 }

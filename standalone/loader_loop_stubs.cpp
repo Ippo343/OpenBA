@@ -208,8 +208,9 @@ void GameLoaderLoop::Startup() {
 DEFINE_EXE_VTABLE(InnerLoaderLoop, "_ZTV15InnerLoaderLoop")
 DEFINE_EXE_VTABLE(GameLoaderLoop, "_ZTV14GameLoaderLoop")
 
-// Called from address_registry.cpp's RegisterVtablesAndTypeIds().
+// Called from address_registry.cpp's RegisterVtablesAndTypeIds(). (InnerLoaderLoop's
+// 0x140158870 row went at the B.3.8 close: GameMain constructs the class, nothing
+// reads the address back.)
 void RegisterLoaderLoopVtables() {
-    RegisterExeAddr(0x140158870, reinterpret_cast<uintptr_t>(InnerLoaderLoop::Vtable()));
     RegisterExeAddr(0x1401588d0, reinterpret_cast<uintptr_t>(GameLoaderLoop::Vtable()));
 }

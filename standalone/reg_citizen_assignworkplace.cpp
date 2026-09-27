@@ -20,13 +20,9 @@
 #include <cstdint>
 
 extern "C" void CitizenComponent_AssignWorkplace(void* self, void* workplaceIBP, int slotIndex); // 0x1401163d0
-extern "C" void CitizenComponent_helper_a550(int64_t storageComp, int slotIndex, void* selfIBP);  // 0x14012a550
-extern "C" void CitizenComponent_helper_a710(int64_t storageComp, int slotIndex, void* selfIBP);  // 0x14012a710
 extern "C" uint64_t CitizenRoster_CountWorkers_129ff0(int64_t storageComp);                       // 0x140129ff0
 
 void RegisterCitizenAssignWorkplace() {
     RegisterExeAddr(0x1401163d0, reinterpret_cast<uintptr_t>(&CitizenComponent_AssignWorkplace));
-    RegisterExeAddr(0x14012a550, reinterpret_cast<uintptr_t>(&CitizenComponent_helper_a550));
-    RegisterExeAddr(0x14012a710, reinterpret_cast<uintptr_t>(&CitizenComponent_helper_a710));
     RegisterExeAddr(0x140129ff0, reinterpret_cast<uintptr_t>(&CitizenRoster_CountWorkers_129ff0));
 }

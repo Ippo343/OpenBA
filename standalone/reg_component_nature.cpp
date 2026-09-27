@@ -34,8 +34,6 @@ extern void ZoneComponent_ZoneMapAdd(void* zoneMap, void* entityPtr);
 // ---- naturalresourcecomponent.cpp ----
 extern void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP);
 
-// ---- boatcomponent.cpp ----
-extern void BoatComponent_ResizeVec3Array(void* arrayField, int newCount);
 
 // ---- cropfieldcomponent.cpp ----
 extern void CropFieldComponent_ValidateEntityRefs(uintptr_t self);
@@ -117,9 +115,6 @@ void RegisterComponentBatch_nature() {
 
     // naturalresourcecomponent.cpp
     RegisterExeAddr(0x140005200, reinterpret_cast<uintptr_t>(&NaturalResourceComponent_FindComponentByType));
-
-    // boatcomponent.cpp  (0x14000d030 also referenced from terraform/tornado — body lives here)
-    RegisterExeAddr(0x14000d030, reinterpret_cast<uintptr_t>(&BoatComponent_ResizeVec3Array));
 
     // cropfieldcomponent.cpp  (0x1400335b0/0x1400336c0 = corrected from typo'd 0x1400035b0/0x1400036c0)
     RegisterExeAddr(0x14011aa20, reinterpret_cast<uintptr_t>(&CropFieldComponent_ValidateEntityRefs));

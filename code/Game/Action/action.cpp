@@ -37,18 +37,3 @@ void Action::CheckEntity() {}                       // 0x1400c4a30 RET 0
 bool Action::GetTarget(void*) { return false; }     // 0x1400c4a40 XOR AL,AL
 
 DEFINE_EXE_VTABLE(Action, "_ZTV6Action")
-
-// B38 D5 / D9 #2. 0x14015faa0 is read back BY ADDRESS by unconverted builders
-// outside this block (work_act_{clear,hunt,path,perform}.cpp,
-// work_base_actionctor.cpp, citizenai_{actionctors,handlers}.cpp, K1's
-// componententity.cpp:46), each of which stamps it into a fresh action before
-// the leaf's own table. It used to be served by `&g_ComponentEntity_Standalone
-// Vtable[5]` (standalone/address_registry.cpp), a 7-slot run whose slot 2
-// answered ComponentEntity's type id; it now serves the compiler's Action
-// table. Called from RegisterPlayAnimationVtable() (the first Action-family
-// row of RegisterVtablesAndTypeIds, which runs after RegisterCodeFunctions'
-// old row and so overrides it) until the coordinator's address_registry hunk
-// calls it directly.
-extern "C" void RegisterActionVtable() {
-    RegisterExeAddr(0x14015faa0, reinterpret_cast<uintptr_t>(Action::Vtable()));
-}

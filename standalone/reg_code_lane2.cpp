@@ -22,13 +22,6 @@
 extern "C" void* MapParamsDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
                                                  void* parentIBP);
 
-// ---- 0x14005F3D0 — ConsumeProduceUI::Slot4 (code/Game/Dialog/consumeproduceui.cpp)
-class ConsumeProduceUI;
-extern void ConsumeProduceUI_Slot4(ConsumeProduceUI* self);
-
-// ---- 0x140078830 — SelectResourceUI::PopulateCombo (code/Game/Dialog/selectresourceui.cpp)
-extern void SelectResourceUI_PopulateCombo(void* self);
-
 // ---- 0x14005e230 / 0x140068ab0 — AutoSaveDialog / EventNotifyDialog ctors
 extern "C" void* AutoSaveDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);
 extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);
@@ -55,32 +48,6 @@ void RegisterCodeLane2() {
     // ctor verbatim is what made naive registration crash for AutoSaveDialog).
     // ------------------------------------------------------------------
     RegisterExeAddr(0x14006bd80, reinterpret_cast<uintptr_t>(&MapParamsDialog_Ctor_Standalone));
-
-    // ------------------------------------------------------------------
-    // 0x14005F3D0 — ConsumeProduceUI::Slot4 (combo setup with resource sprites)
-    //
-    // HYGIENE, not a fix. Fully reimplemented as ConsumeProduceUI_Slot4
-    // (consumeproduceui.cpp:26) and dispatched through our own vtable at
-    // ui_dialog_stub_factories.cpp:420, so the panel already works. The only reader
-    // of the retail address is `fn_ConsumeProduceUI_Slot4` (engine_funcs.cpp:2724),
-    // a global with zero call sites — a dead resolve. Signatures are identical
-    // (void(*)(self)), so pointing the address at the reimpl is observationally a
-    // no-op today and closes the census row.
-    // ------------------------------------------------------------------
-    RegisterExeAddr(0x14005F3D0, reinterpret_cast<uintptr_t>(&ConsumeProduceUI_Slot4));
-
-    // ------------------------------------------------------------------
-    // 0x140078830 — SelectResourceUI::PopulateCombo (shared by Crop/Orchard/Pasture)
-    //
-    // HYGIENE, not a fix. Reimplemented TWICE — CropUI_PopulateCombo (cropui.cpp:154)
-    // and SelectResourceUI_PopulateCombo (selectresourceui.cpp:171) — each called
-    // directly by its own Slot4, so both panels already populate. The only reader of
-    // the retail address is `fn_SelectResourceUI_PopulateCombo` (engine_funcs.cpp:2626),
-    // a global with zero call sites. Retail's two callers (CropUI Slot4 0x140078be0
-    // and OrchardUI_OnRemove 0x140078d62) are both shared across the three panels, so
-    // the generic SelectResourceUI copy is the right one to publish at the address.
-    // ------------------------------------------------------------------
-    RegisterExeAddr(0x140078830, reinterpret_cast<uintptr_t>(&SelectResourceUI_PopulateCombo));
 
     // ------------------------------------------------------------------
     // 0x14005e230 — AutoSaveDialog::AutoSaveDialog(this, ui, extRes, parentIBP)

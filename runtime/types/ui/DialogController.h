@@ -5,8 +5,10 @@
 //
 // ENDGAME B.3 step 6, block B. The byte evidence for every field is the
 // `RtUI::DialogController` POD's banner in DialogInstance.h (which stays: the
-// engine-side alias `engine/types/ui/DialogController.h` embeds it BY VALUE in
-// 38 exe panel structs, and a member of abstract type is ill-formed).
+// engine-side alias `engine/types/ui/DialogController.h` still names it. The 38
+// exe panel structs that embedded it BY VALUE are gone — ENDGAME B.3.8 block PNL
+// made every panel a real subclass of this class — so the POD retires at the END
+// of B.3 with its alias.)
 //
 // PARENT: `Object::Internal`, proved by
 //   0x18003b6a0  ?_ParentTypeName@DialogController@UI@@CAPEBDXZ -> "Object::Internal"
@@ -34,9 +36,10 @@
 // sizeof 0x30: the deleting dtor's `MOV EDX,0x30` AND all 38 exe panel structs
 // in engine/types/ui/Panels.h start their own members at +0x30.
 //
-// ABSTRACT (RULE B6-3): 38 exe panel classes hand-build tables on this base
-// (code/Game/Dialog/dialog_controller_vtable.cpp fills slots 3..10 from the
-// seven bodies BY ADDRESS) and slot 0 is the mint's `RT_DELDTOR` row. The exe
+// ABSTRACT (RULE B6-3): the exe panel classes derive it as real C++ classes
+// (ENDGAME B.3.8 block PNL; the hand-built tables and
+// code/Game/Dialog/dialog_controller_vtable.cpp are gone) and slot 0 is the
+// mint's `RT_DELDTOR` row until END of B.3. The exe
 // never instantiates the base itself (no exe copy of its table, B38_SLOTS
 // section 4), so slot 0 stays `= 0`. ENDGAME B.3.8 block RB gave it retail's
 // REAL constructor (0x1800cd320) for PNL's converted panels.

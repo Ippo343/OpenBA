@@ -52,13 +52,10 @@ extern "C" void SetStandaloneKeyMap(void* keyMap) {
 // reimplementation in code/Game/<Module>/<Class>.cpp.
 extern "C" {
     void RegisterStatGoalVtable();
-    void RegisterMainMenuDialogVtable();
     void RegisterOptionsDialogVtable();
     void RegisterNewGameDialogVtable();
     void RegisterOptionInputBindDialogVtable();
     void RegisterMessageDialogVtable();
-    void RegisterMenuDialogVtables();
-    void RegisterMenuSceneVtable();
 
     // M5 5c Foundation C — entity description types (template sub-descriptions).
     void RegisterToolbarDescriptionStringArrayResize();   // FUN_140028860 (the table row went with ToolbarDescription's real class, B.3.8 K1)
@@ -69,17 +66,8 @@ extern "C" {
     void RegisterAmbientExternalPtrSerialize();
     void RegisterProfessionListVtable();
 
-    // Factory cascade (notes/FACTORY_CASCADE_145_BRIEF.md) — Action family.
-    void RegisterPlayAnimationVtable();
-    void RegisterPerformWorkVtable();
-
     // Factory cascade — Work family (Object::Internal -> Work, 13-slot vtables).
     void RegisterBuildRoadVtable();
-    void RegisterClearAreaVtable();
-    void RegisterClearStorageVtable();
-    void RegisterFireWorkVtable();
-    void RegisterLocationWorkVtable();
-    void RegisterPastureWorkVtable();
 
     // Tool family: real classes since ENDGAME B.3.8 (code/Game/Player/*Tool.h);
     // no tool vtable is registered at its exe address any more.
@@ -99,7 +87,6 @@ extern "C" {
 // (decompiled bodies live in code/Game/Game/serialize_arrays.cpp +
 //  code/Game/Game/serialize_externals.cpp)
 extern "C" {
-    void Reimpl_Geometry_Init(void* self);
     void Reimpl_Transform_SerializeWrapper(void* transform, void* stream);
     void Reimpl_Array_Resize_Stride20(void* arrayHeader, int newCount);
     void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount);
@@ -164,17 +151,7 @@ extern "C" {
 // M3.5 Path B session 6 — heightmap mesh-build path helpers
 // (decompiled bodies live in code/Game/Game/serialize_heightmap_mesh.cpp)
 extern "C" {
-    void  Reimpl_TradeWork_sub_c1e0(void* self);
-    void  Reimpl_FUN_1400ac880(void* self, int colStart, int rowStart,
-                               int cellSize_x, int cellSize_y, int16_t* vertOut);
     void* Reimpl_TradeWork_helper_e270(void* self, void* retbuf, int col, int row);
-    void  Reimpl_GeometryChunkUpdate(void* self);
-}
-
-// M3.5 Path B session 7 — image-buffer heightmap upload helper
-// (decompiled body lives in code/Game/Game/serialize_image_upload.cpp)
-extern "C" {
-    void Reimpl_TradeWork_sub_c780(void* self);
 }
 
 // M3.5 Path B session 8 — Geometry::Serialize body + version-gated extra
@@ -197,8 +174,6 @@ class ComponentEntity;
 ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void* descriptionPtr);
 void EntityList_RegisterEntity_Impl(void* entityList, void* entityIBP, int category);
 
-// B.3.8 D9 #2: the Action base table 0x14015faa0 (code/Game/Action/action.cpp).
-extern "C" void RegisterActionVtable();
 // M-B (cont.) — removal-side grid occupancy un-mark (impl_4750 standalone body,
 // code/Game/Component/mapcomponent.cpp).
 extern "C" void MapComponent_DetachOccupancy_4750(void* self);
@@ -231,10 +206,6 @@ extern void RegisterHerdLive();
 extern void RegisterPastureLive();
 extern void RegisterAnimalUpdateLive();
 extern void RegisterAnimalSerialize();
-// Terraform wave (2026-08-22) — the tunnel-mouth terrain deformation. reg file:
-// reg_terraform_live.cpp. Live vtable slots gated on BANISHED_LIVE_TERRAFORM.
-extern void RegisterTerraformLive();
-extern void RegisterQuarryLive();
 // Component GAP wave (2026-06-19, branch wave/component-gap) — residual-73 closure-safe
 // helpers + 2 caller-bug literal fixes. reg files: reg_component_gap_{A,B,C,D}.cpp.
 // A: citizencomponent/attendance (4). B: citizenAI setup/fishing/find/serialize +
@@ -256,12 +227,6 @@ extern void RegisterCitizenUpdateHealth();
 // employment path: WorkPlaceComponent/WorkComponent -> townMgr+0x100 -> here).
 extern void RegisterTownWorkplaceReader();
 
-// Construction Phase 3, brick 1 (spawner) — BuildComponent state-1 enter handler +
-// leaves (sub_8630, GatherRawMaterials_Ctor). Bodies: buildcomponent_state1.cpp,
-// buildcomponent_sub8630.cpp, gatherrawmaterials_ctor.cpp.
-extern "C" void RegisterBuildComponentState1();
-extern "C" void RegisterBuildComponentSub8630();
-extern "C" void RegisterGatherRawMaterialsCtor();
 // Construction 2b/2c — CitizenAI work-scheduler AVL insert (ec60 + 88a0), the post
 // chokepoint for gather haul + build labor. Body: code/Game/Component/citizenai_work_scheduler.cpp.
 extern "C" void RegisterCitizenAIWorkScheduler();
@@ -370,7 +335,6 @@ extern void RegisterRegionGraphBuildBatch(); // Keystone A: region graph ctor + 
 extern void RegisterRegionPairCacheBatch();  // Keystone A: region-pair ring-buffer init (1cca0)
 extern void RegisterPfRegionBatch();       // Wave 2: region-graph build/merge/flood-fill (13)
 extern void RegisterPfRoadBatch();         // Wave 2: road-mesh + geometry wrappers (10)
-extern void RegisterPlayerRoadCalcPathBatch();  // RoadTool commit path helpers (3)
 extern void RegisterPlayerBridgeBatch();        // BridgeTool SnapEndCell + ValidatePath (2)
 extern void RegisterPfAstarBatch();        // Wave 2: A* core + thread dispatcher/enqueuers (15)
 extern void RegisterPfRootsRoadBatch();    // Wave 3: road-edit roots (9c480/9f2f0/9e0e0/9c640)
@@ -395,7 +359,6 @@ extern void RegisterUnregLane3();
 extern "C" void RegisterUnregLane1Batch();     // Lane 1: save/load + object core
 extern void RegisterUnregLane4TypeIds();   // Lane 4: 30 exe type-id storage slots + 3 .rdata float consts          // Lane 3: graphics/math gaps — Vector3/Rectangle ctors, RandFloatTol, IsRunning, Material typeid, String/Filename ops
 extern void RegisterGameLeafBatch();       // Game gap: closure-safe leaf dtors/teardown + terrain reimpls
-extern void RegisterDebugMenuBatch();      // Lane 3: built-in DebugUI/Game debug-cheat cluster (11 addrs)
 extern void RegisterPlayerDragBatch();     // Player wave (drag): FindDescription/sounds/CloseDialog/ClearPathEntities (6)
 extern void RegisterPlayerPlaceBatch();    // Player wave (place): FlipVariant (1) + UpdateHierarchy dispatch slot
 extern void RegisterPlayerEditBatch();     // Player wave (edit): EntityAtCell/AvgTerrainHeight/FencedAnchorCalc (3)
@@ -420,11 +383,9 @@ extern void RegisterW2Lane3TypeIds();      // ParticleDescription BaseTypeInfo 0
 extern "C" void RegisterW2Screenshot();    // GameUpdateLoop::TakeScreenshot 0x140095da0
 
 // Code-fn wave 2026-09-04 (unported exe .text functions), six lanes.
-extern "C" void RegisterCodeLane1Batch();  // MapGenerator dtor body 0x14001aea0
 extern void RegisterCodeLane2();           // MapParamsDialog ctor 0x14006bd80 (the Map button) + hygiene
 extern "C" void RegisterCodeLane4();       // TakeScreenshot 0x140095da0 (live quicksave crash) + free ports
 extern "C" void RegisterCodeLane5Batch();  // MusicPlayer::Update 0x1400a40e0 (background music) + hygiene
-extern void RegisterCodeLane6Batch();      // DragTool/EntityUI/Decal/StatusIcon/ToolbarDesc ports
 extern void RegisterControlUIBatch();        // ControlUIConfig type-id cell (reg_controlui.cpp): the generic component-command buttons (pasture work/split/empty, element id 50000, command in cfg+0x20).
 
 static void RegisterCodeFunctions() {
@@ -441,11 +402,9 @@ static void RegisterCodeFunctions() {
     RegisterW2Screenshot();
 
     // Code-fn wave 2026-09-04 — see docs/waves/code_fns_wave.md.
-    RegisterCodeLane1Batch();
     RegisterCodeLane2();
     RegisterCodeLane4();
     RegisterCodeLane5Batch();
-    RegisterCodeLane6Batch();
     RegisterUnregLane1Batch();
     RegisterUnregLane4TypeIds();
     RegisterComponentBatch_people();
@@ -465,8 +424,6 @@ static void RegisterCodeFunctions() {
     RegisterPastureLive();
     RegisterAnimalUpdateLive();
     RegisterAnimalSerialize();
-    RegisterTerraformLive();       // TerraformComponent deformation (tunnels)
-    RegisterQuarryLive();          // QuarryComponent pit carve (terrain heightmap)
     // Component GAP wave — residual-73 closure-safe helpers + caller-bug fixes.
     RegisterComponentGap_A();
     RegisterComponentGap_B();
@@ -476,10 +433,6 @@ static void RegisterCodeFunctions() {
     RegisterTownWorkplaceReader();
     RegisterComponentGap_D();
 
-    // Construction Phase 3, brick 1 — spawner: state-1 enter handler + leaves.
-    RegisterBuildComponentState1();
-    RegisterBuildComponentSub8630();
-    RegisterGatherRawMaterialsCtor();
     RegisterCitizenAIWorkScheduler();
 
     // Work registration wave — shared base helpers (FindComponent family + tree free).
@@ -595,7 +548,6 @@ static void RegisterCodeFunctions() {
     RegisterRegionPairCacheBatch();  // Keystone A — region-pair ring-buffer init (cca0)
     RegisterPfRegionBatch();       // pathfinding closure Wave 2 — region-graph build/merge/flood-fill
     RegisterPfRoadBatch();         // pathfinding closure Wave 2 — road-mesh + geometry wrappers
-    RegisterPlayerRoadCalcPathBatch();  // RoadTool CalcPath helpers (6990 / acd90 / 9c960)
     RegisterPlayerBridgeBatch();        // BridgeTool SnapEndCell (fb710) + ValidatePath (fb2d0)
     RegisterPfAstarBatch();        // pathfinding closure Wave 2 — A* core + thread dispatcher
     RegisterPfRootsRoadBatch();    // Wave 3 roots — road-edit (9c480/9f2f0/9e0e0/9c640)
@@ -699,7 +651,6 @@ static void RegisterCodeFunctions() {
 
     // Lane 3 wave — built-in DebugUI / Game debug-cheat cluster. See
     // notes/wave_remaining/LANE3_DEBUGMENU_REPORT.md.
-    RegisterDebugMenuBatch();
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));
@@ -717,13 +668,6 @@ static void RegisterCodeFunctions() {
     // (0x1400c48a0) resolve to our reimpls (EngineFuncsInit runs after this).
     RegisterExeAddr(0x1400c3720, reinterpret_cast<uintptr_t>(&ComponentEntity_CtorFromDescription));
     RegisterExeAddr(0x1400c48a0, reinterpret_cast<uintptr_t>(&EntityList_RegisterEntity_Impl));
-
-    // B.3.8 D9 #2: ComponentEntity is a real class (its compiler table, stamped
-    // by its own ctors; nothing reads 0x14015fa78 back, so that row is gone).
-    // 0x14015faa0 is Action's base table, served by Action::Vtable(); it used
-    // to be `&g_ComponentEntity_StandaloneVtable[5]`, which answered
-    // ComponentEntity's type id.
-    RegisterActionVtable();
 
     // M-B (cont.) — CreateNaturalResource_impl_4750 = the removal-side occupancy
     // UN-mark (dee0 clear), tail-called from the ported MapComponent_OnCreate
@@ -751,7 +695,6 @@ static void RegisterCodeFunctions() {
     // ============================================================
     // M3.5 — MenuScene::Serialize generic helpers
     // ============================================================
-    RegisterExeAddr(0x1400b00e0, reinterpret_cast<uintptr_t>(&Reimpl_Geometry_Init));
     RegisterExeAddr(0x1400988c0, reinterpret_cast<uintptr_t>(&Reimpl_Transform_SerializeWrapper));
     RegisterExeAddr(0x14001baf0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride20));
     RegisterExeAddr(0x140001bb0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride08));
@@ -819,31 +762,12 @@ static void RegisterCodeFunctions() {
 
     // ============================================================
     // M3.5 Path B session 6 — heightmap mesh-build path helpers
-    //   sub_c1e0     — top-level mesh builder (allocates Vertex/IndexBuffers)
-    //   FUN_ac880    — per-cell vertex compute
-    //   helper_e270  — vertex normal compute via heightmap deltas
+    //   helper_e270  — vertex normal compute via heightmap deltas (read back by
+    //                  action_pf_road.cpp). The sub_c1e0 / FUN_ac880 / sub_c780 and
+    //                  chunk-update 0x1400aad50 / 0x1400aed40 rows went at the B.3.8
+    //                  close with the dead engine_funcs pointers that read them.
     // ============================================================
-    RegisterExeAddr(0x1400ac1e0, reinterpret_cast<uintptr_t>(&Reimpl_TradeWork_sub_c1e0));
-    RegisterExeAddr(0x1400ac880, reinterpret_cast<uintptr_t>(&Reimpl_FUN_1400ac880));
     RegisterExeAddr(0x1400ae270, reinterpret_cast<uintptr_t>(&Reimpl_TradeWork_helper_e270));
-
-    // ============================================================
-    // M3.5 — Geometry chunk-streaming (per-frame dirty-chunk upload)
-    //   0x1400aad50 — body (called via JMP thunk from vtable +0x08)
-    //   0x1400aed40 — JMP thunk (the actual vtable target)
-    // The vtable slot in g_Geometry_Vtable_Standalone already routes to
-    // GeomDraw_ChunkUpdate -> Reimpl_GeometryChunkUpdate, so registering
-    // these addresses is for any out-of-band callers using ResolveAddr.
-    // ============================================================
-    RegisterExeAddr(0x1400aad50, reinterpret_cast<uintptr_t>(&Reimpl_GeometryChunkUpdate));
-    RegisterExeAddr(0x1400aed40, reinterpret_cast<uintptr_t>(&Reimpl_GeometryChunkUpdate));
-
-    // ============================================================
-    // M3.5 Path B session 7 — image-buffer heightmap upload helper
-    //   sub_c780     — alloc ImageBuffer, set NoiseUI vtable, Create + upload
-    //                  (heightmap raw bytes -> Video texture)
-    // ============================================================
-    RegisterExeAddr(0x1400ac780, reinterpret_cast<uintptr_t>(&Reimpl_TradeWork_sub_c780));
 
     // ============================================================
     // M3.5 Path B session 8 — Geometry::Serialize body + version-gated extra
@@ -1611,13 +1535,10 @@ static void RegisterVtablesAndTypeIds() {
     // Per-class vtables defined alongside their reimplementation in
     // code/Game/<Module>/<Class>.cpp — declared at file scope above.
     RegisterStatGoalVtable();
-    RegisterMainMenuDialogVtable();
     RegisterOptionsDialogVtable();
     RegisterNewGameDialogVtable();
     RegisterOptionInputBindDialogVtable();
     RegisterMessageDialogVtable();
-    RegisterMenuDialogVtables();
-    RegisterMenuSceneVtable();   // MenuScene transform-init door 0x140098800 (the table row is gone)
 
     // Description-side helper doors (the description classes are real classes;
     // their tables are the compiler's and no longer registered).
@@ -1635,19 +1556,9 @@ static void RegisterVtablesAndTypeIds() {
     // the table row is gone). See professionlist.cpp.
     RegisterProfessionListVtable();
 
-    // Action family: real classes (code/Game/Action/<Class>.h). The rows left
-    // serve tables that callers still stamp by retail address (B38_RULES D5).
-    RegisterPlayAnimationVtable();
-    RegisterPerformWorkVtable();
-
     // Factory cascade — Work family (Object::Internal -> Work, 13-slot vtables;
     // shared base helpers in code/Game/Work/work_base_standalone.cpp).
     RegisterBuildRoadVtable();
-    RegisterClearAreaVtable();
-    RegisterClearStorageVtable();
-    RegisterFireWorkVtable();
-    RegisterLocationWorkVtable();
-    RegisterPastureWorkVtable();
 
     // Tool family (real classes since ENDGAME B.3.8): only the route-builder door.
     RegisterPathToolSetSelected();

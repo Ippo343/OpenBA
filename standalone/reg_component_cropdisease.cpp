@@ -52,7 +52,6 @@ extern "C" void  DiseaseComp_KillOneAnimal(DiseaseComponent*);               // 
 extern "C" bool  DiseaseComp_SameCropProbe(void*, int, int, int, int, int64_t); // 0x14009fb60
 extern "C" void* DiseaseComp_GrownIdentity(uint64_t*, void*);                // 0x140047f80
 extern "C" void* DiseaseComp_FindSibling(int64_t, void*);                    // 0x1400050a0
-extern "C" void  ParticleComponent_StopEmitterFade(void*);                   // 0x1400537f0
 
 // --- shared event-log leaves (code/Game/Game/eventlog.cpp) -------------------
 extern "C" void EventLog_ArrayGrow_Reg(void*, int, const void*);             // 0x140019b70
@@ -86,7 +85,6 @@ void RegisterCropDiseaseBatch() {
     RegisterExeAddr(0x14009fb60, reinterpret_cast<uintptr_t>(&DiseaseComp_SameCropProbe));
     RegisterExeAddr(0x140047f80, reinterpret_cast<uintptr_t>(&DiseaseComp_GrownIdentity));
     RegisterExeAddr(0x1400050a0, reinterpret_cast<uintptr_t>(&DiseaseComp_FindSibling));
-    RegisterExeAddr(0x1400537f0, reinterpret_cast<uintptr_t>(&ParticleComponent_StopEmitterFade));
 
     // Event-log leaves promoted out of eventlog.cpp's file scope
     RegisterExeAddr(0x140019b70, reinterpret_cast<uintptr_t>(&EventLog_ArrayGrow_Reg));

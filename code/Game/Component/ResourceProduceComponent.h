@@ -87,6 +87,3 @@ static_assert(offsetof(ResourceProduceComponent, _controller) + offsetof(Control
               "RP controller back-pointer at +0x40 (ctor 0x14012b427)");
 static_assert(offsetof(ResourceProduceComponent, produceFlag) == 0x48, "RP +0x48 (ctor 0x14012b42b)");
 
-// The by-address door of slot 3 (0x14012b4a0, standalone/reg_component_economy.cpp):
-// a one-line QUALIFIED delegation to ResourceProduceComponent::Persist.
-void ResourceProduceComponent_BaseShutdown(void* self, void* stream);

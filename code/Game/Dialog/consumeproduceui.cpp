@@ -356,10 +356,3 @@ void ConsumeProduceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*elemen
     // Write to found component at +0x50
     *(uint32_t*)((uintptr_t)component + 0x50) = selection;
 }
-
-// The by-address door: standalone/reg_code_lane2.cpp registers this at 0x14005f3d0
-// (engine_funcs.cpp resolves it into fn_ConsumeProduceUI_Slot4). The slot body is
-// ConsumeProduceUI::OnCreated.
-void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
-    self->ConsumeProduceUI::OnCreated();   // B.3.8 bridge
-}

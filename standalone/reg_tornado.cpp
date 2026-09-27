@@ -37,28 +37,10 @@
 extern uint32_t g_tid_ParticleComponent;
 
 extern "C" void RegisterTornadoLane() {
-    // --- the movement/damage leaves ---
-    RegisterExeAddr(0x140058980, reinterpret_cast<uintptr_t>(&Tornado_PathFractal_58980));
-    // 0x1400a70c0 is DELIBERATELY NOT REGISTERED HERE — the BOAT lane already owns it
-    // (reg_boat_ctrl.cpp:82 -> BoatCtrl_NextRoutePoint, boatcomponent_states.cpp:404).
-    // It is a generic retail helper — "walk forward from the current index for the
-    // first point at least `spacing` from `ref`, -1 when the array runs out" — that
-    // both lanes ported independently and identically: same +0x10 base / +0x18 count /
-    // +0x20 index anchoring, same `dz = ref[2] - 0.0f`, same `>= spacing*spacing`, same
-    // -1 sentinel. (Theirs adds a `!base` guard retail does not have; otherwise equal.)
-    // Registering it here would silently REPLACE the boat lane's body at runtime — last
-    // writer wins — so the older, soak-verified owner keeps it. Tornado_PathFindNext_a70c0
-    // is still built and used: Tornado_PathAdvance_a71e0 calls it DIRECTLY, not through
-    // ResolveAddr, so this lane is unaffected by who owns the address.
-    // Flagged for adjudication: one body should eventually survive for both lanes.
-    RegisterExeAddr(0x1400a71e0, reinterpret_cast<uintptr_t>(&Tornado_PathAdvance_a71e0));
-    RegisterExeAddr(0x1400583c0, reinterpret_cast<uintptr_t>(&Tornado_StrikeEntity_583c0));
-    RegisterExeAddr(0x140058040, reinterpret_cast<uintptr_t>(&Tornado_DamageTick_58040));
 
     // --- leaves owned by other classes that had no port yet ---
     // 0x14000cf40 is the Vector3 sibling of the already-registered 0x14000d030
     // resize; without it every waypoint push is dropped and the path stays empty.
-    RegisterExeAddr(0x14000cf40, reinterpret_cast<uintptr_t>(&Tornado_Vec3ArrayGrow_cf40));
     // ParticleComponent / AudioComponent leaves. First port of each — grepped for
     // 0x140053720 and 0x140042960 across the tree before writing them, so this is
     // not the reference_one_retail_fn_ported_twice_diverges situation.

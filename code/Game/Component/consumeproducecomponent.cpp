@@ -24,14 +24,12 @@
 
 // FUN_140023a00 IS Collection::Array<float>::SetSize (ENDGAME B.3.2 step 2), but
 // with a derived row that DEVIATES from the header's zero-tail assumption: the
-// ported body (ConsumeProduceComponent_ResizeArray below) has NO else-arm write
-// for the new tail at all — it leaves the grown slots holding whatever MemAlloc
-// returned. That is exactly SpecFor<float>'s behaviour for a trivially
-// default-constructible T (init == nullptr), so the call sites below go through
-// GameColl::AsArray<float> (a bare scalar, not GameColl::F32 which would zero).
-// Both resolved-pointer names below pointed at this same address and are gone;
-// the function is KEPT (still registered by reg_component_economy.cpp for
-// other callers) and this file's own two call sites now call it directly.
+// retail body has NO else-arm write for the new tail at all — it leaves the grown
+// slots holding whatever MemAlloc returned. That is exactly SpecFor<float>'s
+// behaviour for a trivially default-constructible T (init == nullptr), so the call
+// sites below go through GameColl::AsArray<float> (a bare scalar, not GameColl::F32
+// which would zero). (The free ConsumeProduceComponent_ResizeArray copy and its
+// reader-less 0x140023a00 row went at the B.3.8 close.)
 
 // DWORD_1401c7388 — ConsumeProduceDescription type ID
 static uint32_t* s_TypeId_ConsumeProduceDescription = nullptr;
@@ -90,41 +88,6 @@ static void EnsureHelpers() {
 //   self->consumeResourceId = *(desc+0x4c)        // resource ID from description
 //   for i in range(self->consumeCount):
 //     consumeRates[i] = 1.0f
-
-// ============================================================
-// Reimpl of FUN_140023a00 (ConsumeProduceComponent_sub_3a00:
-//   grow/shrink a 4-byte-element (int/float) array; copies only the overlap,
-//   new tail elements are left for the caller to initialise)
-// ============================================================
-void ConsumeProduceComponent_ResizeArray(void* arrayFieldPtr, int newCount) {
-    int64_t* field = (int64_t*)arrayFieldPtr;   // [0]=ptr, [1] low=count, high=capacity
-    int oldCount = (int)field[1];
-    if (newCount == oldCount) return;
-
-    int32_t* oldBuf = (int32_t*)field[0];
-    *(int*)((uintptr_t)field + 8) = newCount;
-    if (*(int*)((uintptr_t)field + 0xc) < newCount) {
-        *(int*)((uintptr_t)field + 0xc) = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) {
-            *(int*)((uintptr_t)field + 0xc) = newCount * 3;
-        }
-        void* nb = fn_MemAlloc(g_pMemAllocSingleton,
-                               (uint64_t)((int64_t)*(int*)((uintptr_t)field + 0xc) << 2), 4);
-        field[0] = (int64_t)nb;
-    }
-
-    int start = (oldBuf == (int32_t*)field[0]) ? oldCount : 0;
-    int32_t* dst = (int32_t*)field[0];
-    for (int i = start; i < newCount; i++) {
-        if (i < oldCount && (dst + i) != nullptr) {
-            dst[i] = oldBuf[i];
-        }
-    }
-
-    if (oldBuf != (int32_t*)field[0]) {
-        if (oldBuf) fn_MemFreeStatic(oldBuf);
-    }
-}
 
 // ============================================================
 // Init: resolve function pointers

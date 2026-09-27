@@ -29,23 +29,14 @@ extern "C" void* TradeUI_GetOrderName_15fd0(int64_t tradeState, void* out); // 0
 extern "C" void TradeUI_AddPurchaseOrder_59490(int64_t tradeState,
                                                int64_t resourceEntity,
                                                int8_t  addFlag);            // 0x140059490
-extern "C" void* TradeUI_StorageTreeNodeNew_e2c0(uint64_t key, const uint64_t* entry,
-                                                 void* parent);              // 0x14000e2c0
 extern "C" void* TradeUI_StorageTree_Insert_e1c0(int64_t* tree, void** out,
                                                  const uint64_t* entry);     // 0x14000e1c0
 extern "C" void TradeUI_IntroSort_ByName_162d0(void* array, int count,
                                                void* phantomCtx, int64_t p4); // 0x1400162d0
 extern "C" void TradeUI_IntroSort_ByComponent_165d0(void* array, int count,
                                                     void* ctx);              // 0x1400165d0
-extern "C" void TradeUI_SmallSort_ByName_15ad0(void* first, void* last);      // 0x140015ad0
-extern "C" void TradeUI_SmallSort_ByComponent_16920(void* first, void* last,
-                                                    void* ctx);              // 0x140016920
-extern "C" bool TradeUI_NameLess_845d0(void* self, const void* a, const void* b);   // 0x1400845d0
-extern "C" bool TradeUI_ComponentLess_84430(void* ctx, const void* a, const void* b); // 0x140084430
 extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray); // 0x140059670
 extern "C" int   TradeUI_GetResourcePrice_a520(void* tradeState, void* resourceEntity); // 0x14005a520
-extern "C" void** TradeUI_FindValueDescription_ea80(const void* resourceEntity,
-                                                    void** out);             // 0x14000ea80
 
 void RegisterTradeUILeavesBatch() {
     RegisterExeAddr(0x140016050, reinterpret_cast<uintptr_t>(&TradeUI_DynArrayClear_16050));
@@ -56,7 +47,6 @@ void RegisterTradeUILeavesBatch() {
     // 0x14000e2c0 is registered as well as ported: TradeUI_impl_55a0 (0x1400255a0) is a
     // SECOND caller of the node allocator, so leaving it unregistered would hand that
     // caller a null when it is eventually wired.
-    RegisterExeAddr(0x14000e2c0, reinterpret_cast<uintptr_t>(&TradeUI_StorageTreeNodeNew_e2c0));
     RegisterExeAddr(0x14000e1c0, reinterpret_cast<uintptr_t>(&TradeUI_StorageTree_Insert_e1c0));
 
     // The sort cluster (code/Game/Dialog/tradeui_sort.cpp). The gate names only the
@@ -66,16 +56,11 @@ void RegisterTradeUILeavesBatch() {
     // from the prologues, not the decompile, which invents trailing parameters.
     RegisterExeAddr(0x1400162d0, reinterpret_cast<uintptr_t>(&TradeUI_IntroSort_ByName_162d0));
     RegisterExeAddr(0x1400165d0, reinterpret_cast<uintptr_t>(&TradeUI_IntroSort_ByComponent_165d0));
-    RegisterExeAddr(0x140015ad0, reinterpret_cast<uintptr_t>(&TradeUI_SmallSort_ByName_15ad0));
-    RegisterExeAddr(0x140016920, reinterpret_cast<uintptr_t>(&TradeUI_SmallSort_ByComponent_16920));
-    RegisterExeAddr(0x1400845d0, reinterpret_cast<uintptr_t>(&TradeUI_NameLess_845d0));
-    RegisterExeAddr(0x140084430, reinterpret_cast<uintptr_t>(&TradeUI_ComponentLess_84430));
 
     // The price lookup (code/Game/Dialog/tradeui_price.cpp) and its ValueDescription
     // finder. 0x14000ea80 is registered as well as ported because it is a real exe
     // leaf with its own callers, not just an implementation detail of a520.
     RegisterExeAddr(0x14005a520, reinterpret_cast<uintptr_t>(&TradeUI_GetResourcePrice_a520));
-    RegisterExeAddr(0x14000ea80, reinterpret_cast<uintptr_t>(&TradeUI_FindValueDescription_ea80));
 
     // The last gate leaf (code/Game/Dialog/tradeui_buyentries.cpp).
     RegisterExeAddr(0x140059670, reinterpret_cast<uintptr_t>(&TradeUI_GetBuyEntries_59670));

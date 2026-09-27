@@ -33,7 +33,6 @@ extern "C" void     Citizen_FamilyRingOrFlag_3a70(void*, uint32_t);             
 extern "C" void**   Cemetery_FindNearestWithSlot_9740(void*, void**, uint32_t);      // 0x140089740
 extern "C" uint32_t Cemetery_PickFreeSlot_6c60(void*);                               // 0x140046c60
 extern "C" void     Cemetery_SpawnTombstone_6a90(void*, int, uint64_t, void*);       // 0x140046a90
-extern "C" void**   ComponentEntity_FindTombstoneComp_4800(void*, void**);           // 0x140004800
 extern "C" void     Entity_PlaceAtCell_7b20(void*, int, float);                      // 0x140057b20
 
 // Type-id globals filled after Engine::Startup.
@@ -51,7 +50,6 @@ void RegisterCitizenLifeEventHandler() {
     RegisterExeAddr(0x140089740, reinterpret_cast<uintptr_t>(&Cemetery_FindNearestWithSlot_9740));
     RegisterExeAddr(0x140046c60, reinterpret_cast<uintptr_t>(&Cemetery_PickFreeSlot_6c60));
     RegisterExeAddr(0x140046a90, reinterpret_cast<uintptr_t>(&Cemetery_SpawnTombstone_6a90));
-    RegisterExeAddr(0x140004800, reinterpret_cast<uintptr_t>(&ComponentEntity_FindTombstoneComp_4800));
     RegisterExeAddr(0x140057b20, reinterpret_cast<uintptr_t>(&Entity_PlaceAtCell_7b20));
     // Type-id global storage (values filled later by FillTypeIdGlobals_citizen_lifeevent).
     RegisterExeAddr(0x1401c4a30, reinterpret_cast<uintptr_t>(&g_tid_TombstoneComponent));

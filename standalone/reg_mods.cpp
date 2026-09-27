@@ -8,9 +8,10 @@
 // ([[reference-midfunction-raw-address-resolves]]).
 //
 //   0x14015c870  vtable_ModDialog          (.rdata, 10 slots, next table @0x14015c8c0)
-//   0x14015c670  vtable_ModDetailsDialog   (.rdata, 10 slots)
 //   0x140070030  ModDialog::ModDialog      (Entry 140070030, body ..0x1400700b0)
-//   0x14006eec0  ModDialog::RefreshDisplay (Entry 14006eec0, body ..0x14006f146)
+// (ENDGAME B.3.8 close: the vtable_ModDetailsDialog 0x14015c670 and
+//  ModDialog::RefreshDisplay 0x14006eec0 rows are gone -- their only readers were
+//  dead engine_funcs pointers.)
 //   0x1401519e8  .rdata exref -> IO::Modification::_singleton (Runtime 0x1801fc6b0)
 //
 // The last one is a DISPATCH-SLOT registration, not a code address: engine_funcs.cpp
@@ -49,13 +50,10 @@
 #include <cstdint>
 
 // code/Game/Dialog/mod_dialog_vtables.cpp
-extern "C" void* ModDetailsDialog_GetVtable();
 extern "C" void* ModDialog_Ctor_Standalone(void* self, void* userInterface,
                                            void* externalRes, void* parentIBP,
                                            void* parentMenuIBP);
 extern "C" void ModDialog_CloseAndReload(void* self);          // 0x14006e9b0
-// code/Game/Dialog/moddialog.cpp
-extern "C" void ModDialog_RefreshDisplay(void* self);
 // code/Game/Game/worldsetup_reload.cpp
 extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
                                         void* scenarioIdx, void* retvalIbpPtr);
@@ -72,9 +70,7 @@ void MainMenuDialog_ReturnToMenu(MainMenuDialog* self);
 static uintptr_t g_slot_ModificationSingleton = 0;
 
 void RegisterModsBatch() {
-    RegisterExeAddr(0x14015c670, reinterpret_cast<uintptr_t>(ModDetailsDialog_GetVtable()));
     RegisterExeAddr(0x140070030, reinterpret_cast<uintptr_t>(&ModDialog_Ctor_Standalone));
-    RegisterExeAddr(0x14006eec0, reinterpret_cast<uintptr_t>(&ModDialog_RefreshDisplay));
 
     // --- Apply / reload path (Lane 1's EXEC-of-0 sweep) ----------------------
     // All three sit on the path a user walks EVERY time they enable a mod:

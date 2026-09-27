@@ -39,12 +39,9 @@
 
 // ---- ported bodies ----
 extern "C" void  FireComponent_Ignite_610(void* self);                          // 0x140049610
-extern "C" void  FireComponent_Spread_130(void* self);                          // 0x140049130
-extern "C" void  FireComponent_Extinguish_4c0(void* self);                      // 0x1400494c0
 extern "C" void  FireComp_MarkDanger_99c0(void* self, short delta);             // 0x1400499c0
 extern "C" void  FireComp_StampDangerRect_9fa80(int*, uint64_t, int, int, int, int, short);
 extern "C" void  FireComp_StartAudioEmitter_42c60(void* ambientComp, int idx);  // 0x140042c60
-extern "C" void* FireWork_CtorFull_e9bd0(void* mem, uint64_t* pEntityIBP, uint32_t cap);
 extern "C" bool  FireComponent_IsBeingDemolished_11e690(void* destroyComp);     // 0x14011e690
 extern "C" bool  FireComponent_BeginBurning_11e7b0(void* destroyComp, const int64_t* t);
 extern "C" void  FireComponent_StopBurning_11ea10(void* destroyComp);           // 0x14011ea10
@@ -63,8 +60,6 @@ static const uint32_t g_DAT_1401722c0 = 0x80000000u;
 void RegisterFireBatch() {
     // --- FireComponent leaf bodies ---
     RegisterExeAddr(0x140049610, reinterpret_cast<uintptr_t>(&FireComponent_Ignite_610));
-    RegisterExeAddr(0x140049130, reinterpret_cast<uintptr_t>(&FireComponent_Spread_130));
-    RegisterExeAddr(0x1400494c0, reinterpret_cast<uintptr_t>(&FireComponent_Extinguish_4c0));
     RegisterExeAddr(0x1400499c0, reinterpret_cast<uintptr_t>(&FireComp_MarkDanger_99c0));
     RegisterExeAddr(0x14009fa80, reinterpret_cast<uintptr_t>(&FireComp_StampDangerRect_9fa80));
 
@@ -73,9 +68,6 @@ void RegisterFireBatch() {
     // registers both (reg_tornado.cpp:80-81) and this lane resolves them. One body
     // per retail function.
     RegisterExeAddr(0x140042c60, reinterpret_cast<uintptr_t>(&FireComp_StartAudioEmitter_42c60));
-
-    // --- the FireWork producer (Ignite is its only caller) ---
-    RegisterExeAddr(0x1400e9bd0, reinterpret_cast<uintptr_t>(&FireWork_CtorFull_e9bd0));
 
     // --- shared with the TORNADO lane; registered once, here ---
     RegisterExeAddr(0x14011e690, reinterpret_cast<uintptr_t>(&FireComponent_IsBeingDemolished_11e690));

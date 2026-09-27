@@ -475,11 +475,3 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
 
     return 1;
 }
-
-// By-name door (ENDGAME B.3.8 callers): standalone/reg_player_bridge.cpp registers
-// this name at 0x1400f9cd0. The body is BridgeTool::CalcPath above; the null test is
-// the old entry's (a member cannot test `this`).
-extern "C" uint64_t BridgeTool_CalcPath_Impl(void* selfPtr, int startCell, int endCell) {
-    if (!selfPtr) return 0;
-    return reinterpret_cast<BridgeTool*>(selfPtr)->BridgeTool::CalcPath(startCell, endCell);  // B.3.8 bridge
-}

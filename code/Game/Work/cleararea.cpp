@@ -1184,10 +1184,4 @@ DEFINE_EXE_VTABLE(ClearArea, "_ZTV9ClearArea")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x140161110 is still read back BY ADDRESS — clearareacomponent_states.cpp
-// (block MI-A) builds the parameterised ClearArea (retail 0x1400e6960) by hand and
-// stamps it — so the exe address serves the COMPILER's table.
-extern "C" void RegisterClearAreaVtable() {
-    RegisterExeAddr(ClearAreaAddr::Vtable, reinterpret_cast<uintptr_t>(ClearArea::Vtable()));   // 0x140161110
-}
 DEFINE_EXE_TYPE(ClearArea, "Work")

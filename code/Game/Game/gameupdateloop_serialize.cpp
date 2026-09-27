@@ -1027,11 +1027,9 @@ extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, void* lo
 // Registration (called from standalone/address_registry.cpp)
 // ============================================================
 void RegisterGulSerialize() {
-    RegisterExeAddr(0x140095a90, reinterpret_cast<uintptr_t>(&GameUpdateLoop_Serialize_95a90));
     RegisterExeAddr(0x1400952c0, reinterpret_cast<uintptr_t>(&EventLog_Serialize_952c0));
     RegisterExeAddr(0x1400199a0, reinterpret_cast<uintptr_t>(&EventLog_Resize_199a0));
     RegisterExeAddr(0x140093c90, reinterpret_cast<uintptr_t>(&WeatherSim_Serialize_93c90));
-    RegisterExeAddr(0x140102920, reinterpret_cast<uintptr_t>(&EntityUI_Serialize_102920));
     RegisterExeAddr(0x14002e2e0, reinterpret_cast<uintptr_t>(&GoalRefTree_Serialize_e2e0));
     RegisterExeAddr(0x14002e470, reinterpret_cast<uintptr_t>(&IbpTree_Serialize_e470));
     RegisterExeAddr(0x14002e000, reinterpret_cast<uintptr_t>(&CamViewArray_Resize_e000));

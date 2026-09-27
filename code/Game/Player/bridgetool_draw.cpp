@@ -283,9 +283,3 @@ void BridgeTool::Draw(void* context, char skip) {
     // `tiles` and `empty` are released by ~Array at scope exit — exactly one
     // destruction per path (no return between their declarations and here).
 }
-
-// By-name door (ENDGAME B.3.8 callers): standalone/reg_player_bridge.cpp registers
-// this name at 0x1400fadc0. The body is BridgeTool::Draw above.
-extern "C" void BridgeTool_Draw_Impl(void* selfPtr, void* context, char skip) {
-    reinterpret_cast<BridgeTool*>(selfPtr)->BridgeTool::Draw(context, skip);  // B.3.8 bridge
-}

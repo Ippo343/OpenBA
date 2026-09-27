@@ -22,13 +22,7 @@
 
 // tool_base_highlight.cpp (AVL BST family + slot-manager + HighlightAdd)
 extern "C" void    TradeWork_helper_14b00(int64_t ctx, void* node);
-extern "C" int64_t TradeWork_impl_1f850(int64_t ctx, const void* keySrc, int64_t parent);
 extern "C" void    TradeWork_impl_4b40(int64_t* root, int64_t* startNode);
-extern "C" int64_t TradeWork_impl_1fc00(int64_t* root, int64_t key);
-extern "C" int64_t* TradeWork_impl_1f6b0(int64_t* root, int64_t* outNode, uint32_t* key);
-extern "C" int TradeWork_impl_0d80(int64_t, int, int, int, int, uint8_t, uint32_t, int64_t,
-                                   uint8_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
-                                   char, int, int, uint64_t, uint8_t);
 extern "C" int Player_HighlightAdd_55430(int64_t self, int centerCell);
 // tool_base_highlight_tess.cpp (tile tessellation)
 extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
@@ -36,11 +30,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
 
 void RegisterPlayerHighlightBatch() {
     RegisterExeAddr(0x140014b00, reinterpret_cast<uintptr_t>(&TradeWork_helper_14b00));
-    RegisterExeAddr(0x14001f850, reinterpret_cast<uintptr_t>(&TradeWork_impl_1f850));
     RegisterExeAddr(0x140014b40, reinterpret_cast<uintptr_t>(&TradeWork_impl_4b40));
-    RegisterExeAddr(0x14001fc00, reinterpret_cast<uintptr_t>(&TradeWork_impl_1fc00));
-    RegisterExeAddr(0x14001f6b0, reinterpret_cast<uintptr_t>(&TradeWork_impl_1f6b0));
     RegisterExeAddr(0x1400ace40, reinterpret_cast<uintptr_t>(&TradeWork_impl_ace40));
-    RegisterExeAddr(0x1400b0d80, reinterpret_cast<uintptr_t>(&TradeWork_impl_0d80));
     RegisterExeAddr(0x140055430, reinterpret_cast<uintptr_t>(&Player_HighlightAdd_55430));
 }

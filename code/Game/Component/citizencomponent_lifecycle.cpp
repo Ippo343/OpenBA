@@ -30,7 +30,6 @@
 // 0x140110330 / 0x140030b90 are therefore reimplemented (their shared priority
 // predicate is ProfessionPriorityOf below), not registered.
 
-#include "Component/component_factory_base.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "system/String.h"

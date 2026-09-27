@@ -91,15 +91,6 @@ void ForesterComponent::Command(int cmd) {
         ResourceProduceComponent::Command(cmd);
 }
 
-// The by-address doors of slots 13/14 (standalone/reg_component_economy.cpp:144-145).
-extern "C" uint8_t ForesterComponent_CommandMask(void* self, int cmd) {
-    return static_cast<uint8_t>(
-        reinterpret_cast<ForesterComponent*>(self)->ForesterComponent::CommandMask(cmd));   // B.3.8 bridge
-}
-extern "C" void ForesterComponent_Command(void* self, int cmd) {
-    reinterpret_cast<ForesterComponent*>(self)->ForesterComponent::Command(cmd);   // B.3.8 bridge
-}
-
 // ============================================================================
 // ENDGAME B.3.8 MI-B — ForesterComponent as a REAL class (ForesterComponent.h).
 //

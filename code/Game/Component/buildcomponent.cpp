@@ -185,17 +185,6 @@ static void* BC_FindComponentByType(int64_t compHost, uint32_t typeId) {
 
 void BuildComponent_DrawReimpl(void* selfP);   // body, 0x140108720
 
-// The thunk at 0x140108d40 itself, instruction for instruction:
-//     MOV RAX,[0x1401c3dd8]; TEST byte [RAX+0xd0],0x1; JZ 0x140108720; RET
-// Registered at 0x140108d40; the ungated body is registered separately at 0x140108720.
-// Keeping them distinct matters because State8Enter calls the BODY directly (0x140107bb0),
-// precisely when the instant bit is set — routing it through the gate would no-op it.
-// B.3.8 door (by-address row, reg_component_economy.cpp); keeps the old body's null test.
-extern "C" void BuildComponent_OnAddedThunk(void* selfP) {
-    if (!selfP) return;
-    reinterpret_cast<BuildComponent*>(selfP)->BuildComponent::OnAdded();   // B.3.8 bridge
-}
-
 void BuildComponent_DrawReimpl(void* selfP) {
     EnsureHelpers();
     EnsureDrawHelpers();

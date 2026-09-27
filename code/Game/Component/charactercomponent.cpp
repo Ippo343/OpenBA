@@ -96,7 +96,6 @@ void CharacterComponent_InitFuncs() {
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
 
 // ------------------------------------------------------------------
 // Phase 3 / Keystone D — CharacterComponent Startup-only live-wiring (Brick 4a).

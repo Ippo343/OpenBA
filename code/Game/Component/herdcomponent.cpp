@@ -821,18 +821,6 @@ void HerdComponent_OnRemove(void* selfV) {
 }
 
 // ============================================================
-// Ctor tail (0x140122150), routed through the Startup slot.
-// ============================================================
-// The inert factory zero-fills the body and sets +0x20 = 0x8b, which covers
-// every ctor write except +0x4c = -1. Retail's slot 4 is a base no-op, so this
-// is the one place the standalone build can finish the construction before the
-// herd is seeded.
-void HerdComponent_Startup(void* selfV) {
-    uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
-    *(int32_t*)(self + 0x4c) = -1;
-}
-
-// ============================================================
 // Helper: check if tile at data4C is valid on the map
 // Returns true if the tile's terrain type value is nonzero
 // ============================================================
@@ -943,7 +931,7 @@ void HerdComponent::OnAdded() {
 
 // [7] 0x140121e20. PORT GAP (retail 0x140121e20) — B38 D9: the body is ported
 // (HerdComponent_OnRemove, registered at 0x140121e20 by reg_herd_live.cpp) but
-// the tree's table never installed it; the inert stub is kept here. Installing
+// the tree's old table never installed it; the empty body is kept here. Installing
 // it is its own titled commit.
 void HerdComponent::OnRemove() {}
 

@@ -460,10 +460,3 @@ bool FencedTool::CalcPath(int startCell, int endCell) {
 
     return 1;
 }
-
-// By-name door (ENDGAME B.3.8 callers): standalone/reg_player_edit.cpp registers
-// this name at 0x1400dae00. The body is FencedTool::CalcPath above.
-extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell,
-                                             int64_t endCell) {
-    return self->FencedTool::CalcPath(static_cast<int>(startCell), static_cast<int>(endCell));
-}

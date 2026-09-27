@@ -582,11 +582,4 @@ void* MenuScene::CreateInPlaceObject(void* memory) {
 
 DEFINE_EXE_VTABLE(MenuScene, "_ZTV9MenuScene")
 
-extern "C" void RegisterMenuSceneVtable() {
-    // FUN_140098800 Transform/Camera init — the ctor calls
-    // MenuScene_TransformInit_Standalone directly. Register it so the exe
-    // address resolves to our reimpl too, keeping the Game-gap metric honest.
-    RegisterExeAddr(0x140098800, reinterpret_cast<uintptr_t>(&MenuScene_TransformInit_Standalone));
-}
-
 DEFINE_EXE_TYPE(MenuScene, "Object::External")

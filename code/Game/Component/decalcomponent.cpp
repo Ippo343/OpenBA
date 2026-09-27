@@ -204,8 +204,6 @@ static void* FindModelComponentOnOwner(void* ownerEnt) {
     return nullptr;
 }
 
-void DecalComponent_Draw(DecalComponent* self) { self->DecalComponent::OnAdded(); }
-
 // ============================================================
 // Init: resolve function pointers
 // ============================================================

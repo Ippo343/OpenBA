@@ -31,7 +31,6 @@
 //   pasture ids 0x1401c7ba0 / 0x1401c7bd8, 0x1401c6fd0
 //                                           (reg_work_tail_serialize.cpp)
 #include "resolve.h"
-#include "Component/component_factory_base.h"
 #include <cstdint>
 
 extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP);

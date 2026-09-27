@@ -65,7 +65,6 @@
 // does nothing" symptom, and is the gate working as designed, not a defect.
 
 #include "Dialog/ui_panels.h"
-#include "Component/component_factory_base.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>

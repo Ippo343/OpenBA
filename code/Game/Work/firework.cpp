@@ -689,10 +689,4 @@ DEFINE_EXE_VTABLE(FireWork, "_ZTV8FireWork")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x1401612a0 is still read back BY ADDRESS — firecomponent_ignite.cpp (block
-// CIT) builds the 3-argument FireWork (0x1400e9bd0) by hand and stamps it — so the
-// exe address serves the COMPILER's table.
-extern "C" void RegisterFireWorkVtable() {
-    RegisterExeAddr(FireWorkAddr::Vtable, reinterpret_cast<uintptr_t>(FireWork::Vtable()));   // 0x1401612a0
-}
 DEFINE_EXE_TYPE(FireWork, "Work")
