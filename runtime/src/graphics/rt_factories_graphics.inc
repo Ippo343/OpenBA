@@ -12,20 +12,6 @@
 // ============================================================================
 
 // --------------------------------------------------------------------------
-// Graphics::AnimationEvent
-//   ?CreateNewObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@XZ  0x180011700
-//   ?CreateInPlaceObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@PEAX@Z  0x180011710
-// --------------------------------------------------------------------------
-static uint64_t kCountGraphics_AnimationEvent[3];
-static const RtFactoryClass kClsGraphics_AnimationEvent = {
-    "Graphics::AnimationEvent", 0x0, 0,
-    nullptr, nullptr,
-    0x180011700ull, 0x180011710ull, kCountGraphics_AnimationEvent,
-};
-extern "C" void* RtFactNew_Graphics_AnimationEvent()          { return RtFactoryNew(kClsGraphics_AnimationEvent); }
-extern "C" void* RtFactIP_Graphics_AnimationEvent(void* p)    { return RtFactoryInPlace(kClsGraphics_AnimationEvent, p); }
-
-// --------------------------------------------------------------------------
 // Graphics::AnimationGroup
 //   ?CreateNewObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@XZ  0x180016400
 //   ?CreateInPlaceObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@PEAX@Z  0x1800164d0
@@ -313,8 +299,6 @@ extern "C" void* RtFactIP_Graphics_ReflectionImageBuffer(void* p)    { return Rt
 
 
 static const RtFactoryReg kRegs[] = {
-    { "?CreateNewObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@XZ", 0x180011700ull, (void*)&RtFactNew_Graphics_AnimationEvent,
-      "?CreateInPlaceObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180011710ull, (void*)&RtFactIP_Graphics_AnimationEvent, &kClsGraphics_AnimationEvent },
     { "?CreateNewObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@XZ", 0x180016400ull, (void*)&RtFactNew_Graphics_AnimationGroup,
       "?CreateInPlaceObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x1800164d0ull, (void*)&RtFactIP_Graphics_AnimationGroup, &kClsGraphics_AnimationGroup },
     { "?CreateNewObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@XZ", 0x180012d80ull, (void*)&RtFactNew_Graphics_EdgeMesh,

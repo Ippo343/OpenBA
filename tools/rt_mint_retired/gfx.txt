@@ -7,3 +7,6 @@
 ??_7AmbientLight@Graphics@@6B@         GFX   real ctor + DeletingDtor + ~X; RT_DELDTOR row 0x180059080, ??0/??1 doors, 5 slot doors deleted
 ??_7SpotLight@Graphics@@6B@            GFX   real ctor + DeletingDtor + ~X (door body); RT_DELDTOR row 0x1800642b0, ??0/??1 doors, 5 slot doors deleted
 ??_7Light@Graphics@@6B@                GFX   stamped only by the three leaf ctors (all compiler-built now); RT_DELDTOR row 0x180058dd0 + the ??1 leaves door deleted
+
+# -- W1: AnimationEvent -- slot 0 concrete (the class stays abstract: pure External slots + Construct) --
+??_7AnimationEvent@Graphics@@6B@       GFX   concrete DeletingDtor + TypeId + factory pair (null stubs); FACTREST row, RT_DELDTOR row 0x180011800, ??0/??1 doors, Type/TypeName slot doors deleted

@@ -51,6 +51,8 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <cstring>
+#include <new>
 #include <type_traits>
 
 namespace {
@@ -192,9 +194,12 @@ UNIT_TEST(graphics_animationevent_layout) {
     // vtable and a new slot.
     CHECK_EQ((int)sizeof(Graphics::AnimationEvent), (int)sizeof(Object::External));
 
-    // It is abstract by slot 0, which is what keeps the deleting-dtor row alive
-    // (B35_RULES section 11): `Graphics::AnimationEvent e;` must not compile.
+    // Abstract -- since ENDGAME B.3.9 GFX NOT by slot 0 (concrete now, the
+    // RT_DELDTOR row retired) but by the pure External slots and `Construct`:
+    // `Graphics::AnimationEvent e;` must still not compile.
     CHECK(std::is_abstract<Graphics::AnimationEvent>::value);
+    CHECK(!std::has_virtual_destructor<Graphics::AnimationEvent>::value);
+    CHECK(!std::is_destructible<Graphics::AnimationEvent>::value);
     CHECK(std::is_polymorphic<Graphics::AnimationEvent>::value);
     CHECK((!std::is_base_of<Object::CompiledExternal, Graphics::AnimationEvent>::value));
     CHECK((std::is_base_of<Object::External, Graphics::AnimationEvent>::value));
@@ -235,6 +240,52 @@ UNIT_TEST(graphics_animationgroup_layout) {
         static_cast<Graphics::AnimationGroup*>(&probe));
     CHECK_EQ(*reinterpret_cast<const float*>(bytes + 0x30), 0.1f);
     CHECK_EQ(*reinterpret_cast<const int32_t*>(bytes + 0x28), 7);
+}
+
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.9 block GFX -- AnimationEvent's OWN slot 0 (B39_RULES D1, B9-16).
+// A leaf that overrides every pure slot but NOT slot 0 reaches the class's
+// vector deleting dtor: both arms as the retired RT_DELDTOR row 0x180011800
+// ran them (element size 0x20, count at this-8, downward, free on &1).
+// ---------------------------------------------------------------------------
+int g_aeDtorCount = 0;
+const void* g_aeDtorOrder[4] = {};
+
+struct AnimationEventLeaf final : Graphics::AnimationEvent {
+    int32_t GetFileVersion() const override { return 0; }
+    bool Serialize(void*) override { return true; }
+    Object::External* Reconstruct() override { return this; }
+    void Destruct() override {}
+    Object::External* Construct() override { return this; }
+};
+static_assert(sizeof(AnimationEventLeaf) == 0x20, "the leaf adds nothing");
+
+UNIT_TEST(b39_gfx_animationevent_slot0_is_the_classs_own_both_arms) {
+    alignas(8) uint8_t buf[0x20];
+    std::memset(buf, 0xCD, sizeof buf);
+    AnimationEventLeaf* e = ::new (static_cast<void*>(buf)) AnimationEventLeaf();
+    CHECK_EQ(*reinterpret_cast<const uint64_t*>(buf + 0x08), (uint64_t)0);   // External()
+    g_aeDtorCount = 0;
+    CHECK(static_cast<void*>(e->DeletingDtor(0)) == static_cast<void*>(buf));
+    CHECK_EQ(g_aeDtorCount, 1);
+
+    void* m = Object::detail::InternalMemAlloc(0x20, 8);
+    AnimationEventLeaf* h = ::new (m) AnimationEventLeaf();
+    g_aeDtorCount = 0;
+    CHECK(static_cast<void*>(h->DeletingDtor(1)) == m);
+    CHECK_EQ(g_aeDtorCount, 1);
+
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0x20, 8));
+    const int64_t cookie = 3;
+    std::memcpy(block, &cookie, sizeof cookie);
+    AnimationEventLeaf* el[3];
+    for (int i = 0; i < 3; ++i) el[i] = ::new (block + 8 + i * 0x20) AnimationEventLeaf();
+    g_aeDtorCount = 0;
+    CHECK(reinterpret_cast<uint8_t*>(el[0]->DeletingDtor(3)) == block);
+    CHECK_EQ(g_aeDtorCount, 3);
+    CHECK(g_aeDtorOrder[0] == el[2]);
+    CHECK(g_aeDtorOrder[1] == el[1]);
+    CHECK(g_aeDtorOrder[2] == el[0]);
 }
 
 // ---------------------------------------------------------------------------
@@ -416,7 +467,11 @@ namespace Graphics {
 
 const char* AnimationEvent::TypeName() const { return "AnimationEvent"; }
 uint32_t    AnimationEvent::Type() const { return 0u; }
-AnimationEvent::~AnimationEvent() {}
+// ENDGAME B.3.9 GFX: the marker RECORDS each call (the real body is empty).
+AnimationEvent::~AnimationEvent() {
+    if (g_aeDtorCount < 4) g_aeDtorOrder[g_aeDtorCount] = this;
+    ++g_aeDtorCount;
+}
 
 const char* AnimationGroup::TypeName() const { Note(this, kTypeName / 8); return "AnimationGroup"; }
 uint32_t    AnimationGroup::Type() const { Note(this, kType / 8); return 0u; }

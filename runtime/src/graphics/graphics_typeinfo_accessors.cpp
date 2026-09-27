@@ -104,8 +104,6 @@
 #include "../../types/graphics/Material.h"    // Graphics::MaterialInstance -- ditto
 #include "../../types/graphics/Particle.h"    // Graphics::Particle -- ditto
 
-extern "C" uint32_t    RtGraphics_AnimationEvent_Type(const void*);
-extern "C" const char* RtGraphics_AnimationEvent_TypeName(const void*);
 extern "C" uint32_t    RtGraphics_MaterialInstance_Type(const void*);
 extern "C" const char* RtGraphics_MaterialInstance_TypeName(const void*);
 extern "C" int32_t     RtGraphics_MaterialInstance_GetFileVersion(const void*);
@@ -191,16 +189,6 @@ const char* ReadTypeName(const uint8_t* node) {
 // members are `const` and touch no field.
 // ############################################################################
 
-extern "C" uint32_t RtGraphics_AnimationEvent_Type(const void* self) {
-    return reinterpret_cast<const Graphics::AnimationEvent*>(self)        // B.3.5 bridge
-               ->Graphics::AnimationEvent::Type();
-}
-
-extern "C" const char* RtGraphics_AnimationEvent_TypeName(const void* self) {
-    return reinterpret_cast<const Graphics::AnimationEvent*>(self)        // B.3.5 bridge
-               ->Graphics::AnimationEvent::TypeName();
-}
-
 extern "C" uint32_t RtGraphics_MaterialInstance_Type(const void* self) {
     return reinterpret_cast<const Graphics::MaterialInstance*>(self)      // B.3.5 bridge
                ->Graphics::MaterialInstance::Type();
@@ -245,13 +233,7 @@ extern "C" int32_t RtGraphics_Particle_GetFileVersion(const void* self) {
 int RtGraphicsTypeInfoAccessorsRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("?Type@AnimationEvent@Graphics@@UEBAIXZ",
-                          (void*)&RtGraphics_AnimationEvent_Type); ++n;
-    RegisterRuntimeAddr(0x1800116d0ull, (void*)&RtGraphics_AnimationEvent_Type);
 
-    RegisterRuntimeExport("?TypeName@AnimationEvent@Graphics@@UEBAPEBDXZ",
-                          (void*)&RtGraphics_AnimationEvent_TypeName); ++n;
-    RegisterRuntimeAddr(0x1800116f0ull, (void*)&RtGraphics_AnimationEvent_TypeName);
 
     RegisterRuntimeExport("?Type@MaterialInstance@Graphics@@UEBAIXZ",
                           (void*)&RtGraphics_MaterialInstance_Type); ++n;
@@ -298,6 +280,11 @@ namespace Graphics {
 //     (reference_basetypeinfo_name_is_content_only.md).
 uint32_t    AnimationEvent::Type() const     { return ReadTypeId(AnimationEventTypeInfo()); }
 const char* AnimationEvent::TypeName() const { return ReadTypeName(AnimationEventTypeInfo()); }
+// ?TypeId@AnimationEvent@Graphics@@SAIXZ 0x1800116e0 -- the static twin of slot
+// 2, the same read (ENDGAME B.3.9 GFX, D6 step 1: over the minted record until
+// the W3 fold). The two slot doors are retired with the minted vtable; their
+// only reader was that table.
+uint32_t    AnimationEvent::TypeId()         { return ReadTypeId(AnimationEventTypeInfo()); }
 
 // ---- ??_7MaterialInstance@Graphics@@6B@  slots 2, 1 and 3 ------------------
 // [2] ?Type@     0x1800027f0

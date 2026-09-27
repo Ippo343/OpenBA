@@ -157,9 +157,6 @@ namespace {
 // tools/runtime_census.py (reference_census_cannot_see_nonliteral_registrations.md);
 // kept as named constants here only for the diff-oracle the raw DLL door<> calls.
 // ============================================================================
-const char* const kAnimEventCtor   = "??0AnimationEvent@Graphics@@QEAA@XZ";
-const char* const kAnimEventDtor   = "??1AnimationEvent@Graphics@@UEAA@XZ";
-const char* const kExternalDtor    = "??1External@Object@@UEAA@XZ";
 const char* const kAnimMgrCtor     = "??0AnimationManager@Graphics@@QEAA@XZ";
 const char* const kAnimMgrDtor     = "??1AnimationManager@Graphics@@QEAA@XZ";
 const char* const kParticleCtor    = "??0Particle@Graphics@@QEAA@XZ";
@@ -180,10 +177,6 @@ const char* const kFrameIndexData  = "?_frameIndex@ParticleInstance@Graphics@@1H
 // program="Runtime-x64.dll"), not inferred from the decompile's `_vftable_`
 // symbol name alone.
 // ============================================================================
-void* RtAnimationEventVtable() {
-    static void* v = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180154bf0));
-    return v;
-}
 void* RtParticleVtable() {
     static void* v = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180155130));
     return v;
@@ -246,58 +239,15 @@ void RtGeometryCtor(void* self) {
 }  // namespace
 
 // ============================================================================
-// Graphics::AnimationEvent::AnimationEvent()
-// retail 0x1800a2150, ordinal 41
-//
-// Reduces to four stores. The retail body ALSO stores two intermediate base
-// vtables (Object::Base's, then Object::External's) before its own -- both
-// are Ghidra's rendering of Object::External::External() folded fully
-// inline, and neither survives past the function's last instruction (see
-// Animation.h). Reproducing only the LAST vtable value is therefore
-// byte-exact with retail's observable result, not a shortcut around it.
-//
-// ORACLE: full, scratch-object. Geometry::Geometry-style ctors in this file
-// are proven pure (no external calls, no globals touched -- confirmed by
-// decompile) so a scratch instance can be constructed on the stack, memcmp'd
-// whole, and simply discarded (External's default-constructed state holds no
-// resource, so no dtor call is needed to avoid a leak here).
+// ??0AnimationEvent@Graphics@@QEAA@XZ 0x1800a2150 / ??1AnimationEvent@Graphics@@
+// UEAA@XZ 0x1800a2120 -- the two DOORS are gone (ENDGAME B.3.9 block GFX,
+// B39_RULES D1). Retail's ctor is External() inlined plus the stamps and
+// nothing else; its dtor is the restamp plus a tail jump into ~External. Both
+// are the compiler's work on the real protected `AnimationEvent()` and the
+// empty `~AnimationEvent()` below. Their callers were the retired RT_DELDTOR
+// row 0x180011800 and nothing else (the exe's AnimAudioEvent uses the C++
+// base ctor since B.3.8 VIS).
 // ============================================================================
-extern "C" AnimationEvent* RtGraphics_AnimationEvent_Ctor(AnimationEvent* self) {
-
-    self->vtable = RtAnimationEventVtable();
-    self->_f08 = 0;
-    self->_f10 = 0;
-    self->_f18 = 0;
-
-    return self;
-}
-
-// ============================================================================
-// Graphics::AnimationEvent::~AnimationEvent()
-// retail 0x1800a2120, ordinal 526 (virtual, UEAA)
-//
-// Two instructions: stamp the AnimationEvent vtable, then TAIL-JMP into
-// Object::External::~External (retail 0x1800bc950, EXPORTED, ordinal 588 --
-// found by disassembling this dtor, not guessed). This port calls that same
-// export rather than re-deriving External's teardown, which this lane does
-// not own the layout of.
-//
-// ORACLE: structural, not runtime. The entire computed part of this function
-// is delegation into the identical retail internal both implementations
-// would call; there is no second run to diff without a double-free (External
-// may release a resource), and nothing else in AnimationEvent's own state is
-// owned by this lane to check independently. Registered so calls= is visible
-// in the diff summary, but the verdict is not evidence of anything beyond
-// "did not crash".
-// ============================================================================
-extern "C" void RtGraphics_AnimationEvent_Dtor(AnimationEvent* self) {
-
-    self->vtable = RtAnimationEventVtable();
-    typedef void (*ExternalDtorFn)(AnimationEvent*);
-    RT_EXPORT_ONCE(ExternalDtorFn, kExternalDtor)(self);   // ported; see RtGeometryCtor
-
-}
-
 // ============================================================================
 // Graphics::AnimationManager::AnimationManager()
 // retail 0x1800fc430, ordinal 45
@@ -600,6 +550,10 @@ extern "C" ParticleSystemInstance* RtGraphics_ParticleSystemInstance_Ctor(
 //  * THE CONSTRUCTOR DOOR IS NOT A DELEGATION EITHER (B4b-2). It is called on
 //    raw memory by `code/Game/Component/animaudioevent.cpp:45`, which then
 //    stamps its own subclass table; the class has no real constructor at all.
+//
+// ENDGAME B.3.9 block GFX: the last two bullets are HISTORY. Both doors are
+// retired with the minted table (the exe builds through the real protected
+// ctor since B.3.8), so the empty destructor below is the only one.
 // ############################################################################
 
 namespace Graphics {
@@ -618,6 +572,13 @@ namespace Graphics {
 // `~External` (the chain emits that on exit). Writing either by hand would name
 // the minted table, which is the one thing a converted object must not carry.
 AnimationEvent::~AnimationEvent() {}
+
+// ?CreateNewObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@XZ 0x180011700 and
+// ?CreateInPlaceObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@PEAX@Z
+// 0x180011710: the ABSTRACT factory pair, both `XOR EAX,EAX ; RET` in retail
+// (the FACTREST row they replace carried no steps for exactly that reason).
+Object::Base* AnimationEvent::CreateNewObject() { return nullptr; }
+Object::Base* AnimationEvent::CreateInPlaceObject(void* place) { (void)place; return nullptr; }
 
 // ############################################################################
 // ENDGAME B.3.5 step 5, block H2 — the two NON-CONSTRUCTOR particle bodies this
@@ -705,11 +666,15 @@ void ParticleInstance::IncrementInstanceIndex() {
 int RtGraphicsAnimationRegister() {
     int count = 0;
 
-    RegisterRuntimeExport("??0AnimationEvent@Graphics@@QEAA@XZ", (void*)&RtGraphics_AnimationEvent_Ctor); ++count;
-    RegisterRuntimeAddr(0x1800a2150, (void*)&RtGraphics_AnimationEvent_Ctor);
-
-    RegisterRuntimeExport("??1AnimationEvent@Graphics@@UEAA@XZ", (void*)&RtGraphics_AnimationEvent_Dtor); ++count;
-    RegisterRuntimeAddr(0x1800a2120, (void*)&RtGraphics_AnimationEvent_Dtor);
+    // ENDGAME B.3.9 block GFX: AnimationEvent's factory pair, the class's own
+    // statics (B39_RULES D2), replacing its FACTREST row. The ??0 / ??1 doors
+    // are retired (above).
+    RegisterRuntimeExport("?CreateNewObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@XZ",
+                          (void*)&::Graphics::AnimationEvent::CreateNewObject); ++count;
+    RegisterRuntimeAddr(0x180011700, (void*)&::Graphics::AnimationEvent::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&::Graphics::AnimationEvent::CreateInPlaceObject); ++count;
+    RegisterRuntimeAddr(0x180011710, (void*)&::Graphics::AnimationEvent::CreateInPlaceObject);
 
     RegisterRuntimeExport("??0AnimationManager@Graphics@@QEAA@XZ", (void*)&RtGraphics_AnimationManager_Ctor); ++count;
     RegisterRuntimeAddr(0x1800fc430, (void*)&RtGraphics_AnimationManager_Ctor);
