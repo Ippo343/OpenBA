@@ -23,8 +23,6 @@ confirm against the retail DLL before porting one.
 status paragraph at the end of this file says what the files hold.)
 
 - `pointlist.cpp`
-- `rt_factories_pathfinding.cpp`
-- `rt_factories_pathfinding.inc`
 
 ## Status (ENDGAME B.3.7 closing pass, 2026-09-26)
 

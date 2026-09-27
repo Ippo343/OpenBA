@@ -1,0 +1,6 @@
+# ENDGAME B.3 step 9 -- the rows block ENG (branch b39-ENG) retired.
+# Format (tools/rt_mint_gen.py banner, B39_RULES.md D3):
+#   <mangled symbol | 0xVA>   <owner block>   <proof>
+# One fragment per block; a key appears once across all fragments.
+
+??_7PointList@Pathfinding@@6B@         ENG     real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR row, ??1 door, 8 slot doors deleted

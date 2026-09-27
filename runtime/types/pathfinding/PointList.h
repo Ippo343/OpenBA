@@ -45,11 +45,15 @@
 //   [8] +0x40 0x1800710e0  ?Construct@PointList@Pathfinding@@UEAAPEAVExternal@Object@@XZ
 //                          — INTRODUCED HERE (B7-1.6, the B5-16 resource shape)
 //
-// ABSTRACT (slot 0 `= 0`): nothing holds a PointList by value, and slot 0 is the
-// `RT_DELDTOR` row the mint owns (runtime/src/object/deleting_dtor.cpp). NO
-// REAL CONSTRUCTOR: live objects are built by the factory rows and the
-// Construct/Reconstruct slots and wear the MINTED table (B4b-2). The protected
-// `= default` constructor exists for the unit test's probe subclass only.
+// ENDGAME B.3 step 9 (block ENG, B39_RULES.md D1/D2): CONCRETE. The class has
+// retail's real public constructor (??0PointList 0x18010f980) and its own
+// slot 0, so every live PointList wears the COMPILER's table:
+// `CreateNewObject` / `CreateInPlaceObject` (retail's factory pair, registered
+// by name and address from pointlist.cpp) are MemAlloc + `::new (p)
+// PointList()`, replacing the FACTREST step table that stamped the minted
+// `??_7PointList@Pathfinding@@6B@`. The minted row, its `RT_DELDTOR` row
+// 0x1800713b0, the `??1` door and the eight slot doors are retired
+// (tools/rt_mint_retired/eng.txt).
 // ============================================================================
 
 #include <cstdint>
@@ -58,6 +62,7 @@
 #include "../object/External.h"
 #include "../collection/Collection.h"
 #include "../system/String.h"
+#include "../object/Internal.h"                // Object::detail::InternalMemFree
 
 namespace System { class Filename; }
 
@@ -83,8 +88,32 @@ public:
         float   radius;    // +0x14
     };
 
+    // ??0PointList@Pathfinding@@QEAA@XZ 0x18010f980 -- the REAL constructor.
+    // Its stores are the ones retail's factory pair inlines (0x180070f93..fd4):
+    // Base's and External's vptr (External(), the compiler's), +0x08/+0x10/
+    // +0x18 zero (External()), PointList's vptr (the compiler's), then SIX zero
+    // qwords +0x20..+0x48 -- the two Strings' null and the two Arrays' headers.
+    PointList() : Object::External(), _meshName(), _string28(), _points(), _pathPoints() {}
+
     // ---- the nine slots, in measured order ----
-    Object::Base* DeletingDtor(unsigned flags) override = 0;   // [0] 0x1800713b0
+    // [0] 0x1800713b0 -- MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (DeletingDtorCore, element size
+    // 0x50): `flags & 2` reads the SIGNED int32 count at `this - 8`, destroys
+    // the elements DOWNWARD, frees `this - 8` on `flags & 1` and returns it;
+    // otherwise ~PointList, free on `flags & 1`. Nothing `new[]`s a PointList.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<PointList*>(self + static_cast<int64_t>(i) * 0x50)->~PointList();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~PointList();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char*   TypeName() const override;                   // [1] 0x180070e40
     uint32_t      Type() const override;                       // [2] 0x180070e20
@@ -103,27 +132,28 @@ public:
     // bumps the refcount exactly as retail's `INC [RAX-4]` does.
     System::String GetMeshName() const { return _meshName; }
 
+    // 0x180070e30 -- `MOV EAX,[_typeInfo]`: the id of the (still minted)
+    // `?_typeInfo@PointList@Pathfinding@@` record (B39_RULES D6 step 1).
+    static uint32_t TypeId();
+
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     PointList(const PointList& src);                          // 0x1800711f0
     PointList& operator=(const PointList& src);               // 0x1800712c0
-    static uint32_t TypeId();                                 // 0x180070e30
     static void* operator new(std::size_t bytes);              // 0x180070e50
     static void* operator new(std::size_t bytes, void* place); // 0x180070ec0
     static void  operator delete(void* p);                     // 0x180070ed0
-    // The two factory statics are ported table-driven by
-    // runtime/src/pathfinding/rt_factories_pathfinding.inc (0x180070f30 /
-    // 0x180070ff0); they are not members here.
+    // Retail's factory pair (B39_RULES D2): `MemAlloc(0x50, 8)` + the ctor, and
+    // the null-tested in-place ctor. Defined in pointlist.cpp. The class
+    // declares its own placement `operator new` (0x180070ec0, not ported), so
+    // every placement construction spells `::new (p) PointList()`.
     static Object::Base* CreateNewObject();                    // 0x180070f30
     static Object::Base* CreateInPlaceObject(void* place);     // 0x180070ff0
 
 protected:
-    // NOT retail's `??0PointList@Pathfinding@@QEAA@XZ` (0x18010f980) — see the
-    // banner. It exists only so a probe subclass can be declared.
-    PointList() = default;
-    // `??1PointList@Pathfinding@@UEAA@XZ` 0x18010f8e0. NON-VIRTUAL, DEFINED
-    // EMPTY: the registered dtor door (`RtPathfinding_PointList_Dtor`) releases
-    // both arrays and both strings and chains to ~External by hand for the
-    // minted objects that are the only live ones (the CharacterSet precedent).
+    // `??1PointList@Pathfinding@@UEAA@XZ` 0x18010f8e0. NON-VIRTUAL (no virtual
+    // dtor until the normal-virtual cutover); pointlist.cpp holds retail's body
+    // (both arrays through 0x180071600) and the compiler releases both Strings
+    // and chains ~External, retail's order.
     ~PointList();
 
 public:

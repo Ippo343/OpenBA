@@ -238,7 +238,6 @@ void RtFactoriesPortInit() {
     n += RtFactoriesCollision2DRegister();
     n += RtFactoriesAudioRegister();
     n += RtFactoriesIoRegister();
-    n += RtFactoriesPathfindingRegister();
     // Picking:: has no row left: ENDGAME B.3.9's pilot made Picking::PickingMesh
     // a real class whose own CreateNewObject / CreateInPlaceObject register from
     // runtime/src/picking/pickingmesh.cpp (B39_RULES D2).
