@@ -18,6 +18,8 @@
 
 #include "Component/buildcomponent_funcs.h"
 #include "Component/coll_bridge.h"
+#include "Component/ModelComponent.h"
+#include "Component/PickingComponent.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -50,11 +52,6 @@ static uint32_t* s_TypeId_ModelDesc2 = nullptr;
 // Helper function pointers (resolved once)
 // ============================================================
 
-// Original Draw function — delegated because Draw is 300+ instructions with
-// multi-object hierarchy iteration, worker assignment, and storage management
-typedef void (*fn_BuildComponent_Draw_Original_t)(void*);
-static fn_BuildComponent_Draw_Original_t s_fn_Draw_Original = nullptr;
-
 static bool s_helpersResolved = false;
 
 static void EnsureHelpers() {
@@ -65,10 +62,6 @@ static void EnsureHelpers() {
     s_TypeId_PickingComp = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7c10);
     s_TypeId_MultiObjComp = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7ac0);
     s_TypeId_ModelDesc2 = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7a88);
-
-    // Original Draw (0x140108D40) — delegated due to extreme complexity
-    s_fn_Draw_Original = (fn_BuildComponent_Draw_Original_t)
-        ResolveAddr(Module::Exe, 0x140108D40);
 
     s_helpersResolved = true;
 }
@@ -83,86 +76,6 @@ static void EnsureHelpers() {
 //     entityArray1 (IBP array with IsDerivedFrom check),
 //     entityArray2 (IBP array with IsDerivedFrom check)
 
-void BuildComponent_Shutdown(BuildComponent* self, void* stream) {
-    EnsureHelpers();
-    uintptr_t s = (uintptr_t)self;
-
-    // Base class serialize
-    fn_ComponentBase_Serialize(self, stream);
-
-    // Version 0 block (empty — just opens and closes)
-    alignas(8) uint8_t ser0[24];
-    ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();                                       // B.3.4 bridge
-
-    // Version 1 block
-    alignas(8) uint8_t ser1[24];
-    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
-
-    // Serialize buildState (+0x48), buildProgress (+0x4C), buildFlag (+0x50)
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x48), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x4C), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x50), nullptr);   // B.3.4 bridge
-
-    // Serialize entityArray1 count (+0x60)
-    int count1 = *(int*)(s + 0x60);
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(count1, nullptr);   // B.3.4 bridge
-
-    // On load: resize array
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser1)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8, new tail zeroed.
-        // Element is the 8-byte InternalBasePtr slot serialized below (byte-copy, zeroing).
-        GameColl::ArrayAt<GameColl::Ptr8>(s, 0x58).SetSize(count1);
-    }
-
-    // Serialize each IBP in array1, validate with IsDerivedFrom
-    void** arr1 = *(void***)(s + 0x58);
-    if (count1 > 0) {
-        for (int i = 0; i < count1; i++) {
-            void* ibp = (void*)((uintptr_t)arr1 + i * 8);
-            reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser1));   // B.3.4 bridge
-            // Validate: if non-null but wrong type, clear
-            void* val = *(void**)ibp;
-            if (val != nullptr && s_TypeId_ModelComp2) {
-                bool valid = fn_IsDerivedFrom(val, *s_TypeId_ModelComp2);
-                if (!valid) {
-                    *(uint64_t*)ibp = 0;
-                }
-            }
-        }
-    }
-
-    // Serialize entityArray2 count (+0x70)
-    int count2 = *(int*)(s + 0x70);
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(count2, nullptr);   // B.3.4 bridge
-
-    // On load: resize array2
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser1)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8, new tail zeroed.
-        // Element is the 8-byte InternalBasePtr slot serialized below (byte-copy, zeroing).
-        GameColl::ArrayAt<GameColl::Ptr8>(s, 0x68).SetSize(count2);
-    }
-
-    // Serialize each IBP in array2, validate with IsDerivedFrom
-    void** arr2 = *(void***)(s + 0x68);
-    if (count2 > 0) {
-        for (int i = 0; i < count2; i++) {
-            void* ibp = (void*)((uintptr_t)arr2 + i * 8);
-            reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser1));   // B.3.4 bridge
-            // Validate with PickingComponent type (DAT_1401c7c10)
-            void* val = *(void**)ibp;
-            if (val != nullptr && s_TypeId_PickingComp) {
-                bool valid = fn_IsDerivedFrom(val, *s_TypeId_PickingComp);
-                if (!valid) {
-                    *(uint64_t*)ibp = 0;
-                }
-            }
-        }
-    }
-
-    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();                                       // B.3.4 bridge
-}
-
 // ============================================================
 // BuildComponent::OnCreate (vtable slot [7], 0x140108CB0)
 // ============================================================
@@ -170,75 +83,11 @@ void BuildComponent_Shutdown(BuildComponent* self, void* stream) {
 // from self, searches the removal queue at GameState+0xF0+0xD0.
 
 // Forward-declared: fn_FindInQueue at 0x140017550
-typedef int (*fn_FindInQueue_t)(void* arrayBase, void* entityPtr);
-static fn_FindInQueue_t s_fn_FindInQueue = nullptr;
-static void** s_pGameState = nullptr;
+int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr);   // 0x140017550, below
 
-void BuildComponent_OnCreate(BuildComponent* self) {
-    if (!s_fn_FindInQueue) {
-        s_fn_FindInQueue = (fn_FindInQueue_t)ResolveAddr(Module::Exe, 0x140017550);
-        s_pGameState = (void**)ResolveAddr(Module::Exe, 0x1401c3dd8);
-    }
-    if (!s_fn_FindInQueue || !s_pGameState || !fn_InternalBasePtr_Ctor)
-        return;
+void BuildComponent_OnCreate(BuildComponent* self) { self->BuildComponent::OnRemove(); }
 
-    // Create InternalBasePtr on stack — original passes self (component ptr)
-    uint8_t ptrBuf[8];
-    new (ptrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
 
-    void* gameState = *s_pGameState;
-    void* worldData = *(void**)((uintptr_t)gameState + 0xF0);
-
-    // Find in removal queue
-    int idx = s_fn_FindInQueue((void*)((uintptr_t)worldData + 0xD0), ptrBuf);
-
-    if (idx >= 0) {
-        int count = *(int*)((uintptr_t)worldData + 0xD8);
-
-        // Shift remaining elements down (each is 8 bytes / InternalBasePtr)
-        if (idx < count) {
-            int64_t offset = (int64_t)idx * 8;
-            do {
-                int nextIdx = idx + 1;
-                if (nextIdx < count) {
-                    uint64_t* pSlot = (uint64_t*)(*(uintptr_t*)((uintptr_t)worldData + 0xD0) + offset);
-                    if (pSlot != nullptr) {
-                        *pSlot = 0;
-                        *pSlot = pSlot[1];
-                    }
-                }
-                idx = nextIdx;
-                offset += 8;
-            } while (idx < count);
-        }
-
-        // Decrement count
-        *(int*)((uintptr_t)worldData + 0xD8) = count - 1;
-    }
-}
-
-// ============================================================
-// BuildComponent::Draw (vtable slot [6], 0x140108D40)
-// ============================================================
-// Extremely complex function (300+ Ghidra instructions) that:
-// 1. Checks game debug flags (bit 0 at game+0xD0) — returns if set
-// 2. Gets owner entity, finds MultiObjectComponent children
-// 3. For each child entity, finds BuildComponent and StorageComponent
-// 4. Appends to internal arrays (+0x58/+0x60 and +0x68/+0x70)
-// 5. Iterates BuildComponent array: manages worker assignments via vtable calls
-// 6. Iterates StorageComponent array: calls Entity_impl_8f50
-// 7. Sets buildProgress (+0x4C) to 1, finds WorkplaceComponent, updates progress
-//
-// Delegated to original exe code — too many subsystem interactions and vtable
-// dispatches to safely reimplement without full MultiObjectComponent/WorkplaceComponent
-// type coverage.
-
-void BuildComponent_Draw(BuildComponent* self) {
-    EnsureHelpers();
-    if (s_fn_Draw_Original) {
-        s_fn_Draw_Original(self);
-    }
-}
 
 // ============================================================
 // Reimpl of FUN_140017550 (BuildComponent_helper_7550:
@@ -345,13 +194,10 @@ void BuildComponent_DrawReimpl(void* selfP);   // body, 0x140108720
 // Registered at 0x140108d40; the ungated body is registered separately at 0x140108720.
 // Keeping them distinct matters because State8Enter calls the BODY directly (0x140107bb0),
 // precisely when the instant bit is set — routing it through the gate would no-op it.
+// B.3.8 door (by-address row, reg_component_economy.cpp); keeps the old body's null test.
 extern "C" void BuildComponent_OnAddedThunk(void* selfP) {
     if (!selfP) return;
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
-        if (*(uint8_t*)(gw + 0xd0) & 1) return;   // instant build -> OnAdded does nothing
-    }
-    BuildComponent_DrawReimpl(selfP);
+    reinterpret_cast<BuildComponent*>(selfP)->BuildComponent::OnAdded();   // B.3.8 bridge
 }
 
 void BuildComponent_DrawReimpl(void* selfP) {
@@ -527,9 +373,8 @@ void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf) {
 void BuildComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[BuildComponent] Funcs resolved: DrawOriginal=%p "
+    printf("[BuildComponent] Funcs resolved: "
            "TypeId_Build=%p TypeId_Storage=%p\n",
-           (void*)s_fn_Draw_Original,
            (void*)s_TypeId_ModelComp2, (void*)s_TypeId_PickingComp);
 #endif
 }
@@ -635,7 +480,84 @@ void* BuildComponent::CreateInPlaceObject(void* storage) {
 
 // [3] 0x140108d80 — buildState/buildProgress/buildFlag (+0x48/+0x4c/+0x50) and both
 // entity-IBP lists round-trip (save/load wave 2026-08-27).
-void BuildComponent::Persist(void* stream) { BuildComponent_Shutdown(this, stream); }
+void BuildComponent::Persist(void* stream) {
+    uintptr_t s = (uintptr_t)this;
+
+    // Base class serialize (retail's direct CALL 0x1401189b0)
+    Component::Persist(stream);
+
+    // Version 0 block (empty — just opens and closes)
+    alignas(8) uint8_t ser0[24];
+    ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();                                       // B.3.4 bridge
+
+    // Version 1 block
+    alignas(8) uint8_t ser1[24];
+    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+
+    // Serialize buildState (+0x48), buildProgress (+0x4C), buildFlag (+0x50)
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x48), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x4C), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x50), nullptr);   // B.3.4 bridge
+
+    // Serialize entityArray1 count (+0x60)
+    int count1 = *(int*)(s + 0x60);
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(count1, nullptr);   // B.3.4 bridge
+
+    // On load: resize array
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser1)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+        // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8, new tail zeroed.
+        // Element is the 8-byte InternalBasePtr slot serialized below (byte-copy, zeroing).
+        GameColl::ArrayAt<GameColl::Ptr8>(s, 0x58).SetSize(count1);
+    }
+
+    // Serialize each IBP in array1, validate with IsDerivedFrom
+    void** arr1 = *(void***)(s + 0x58);
+    if (count1 > 0) {
+        for (int i = 0; i < count1; i++) {
+            void* ibp = (void*)((uintptr_t)arr1 + i * 8);
+            reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser1));   // B.3.4 bridge
+            // Validate: if non-null but wrong type, clear
+            void* val = *(void**)ibp;
+            if (val != nullptr) {
+                bool valid = fn_IsDerivedFrom(val, ModelComponent::TypeId());   // ti 0x1401c7a50
+                if (!valid) {
+                    *(uint64_t*)ibp = 0;
+                }
+            }
+        }
+    }
+
+    // Serialize entityArray2 count (+0x70)
+    int count2 = *(int*)(s + 0x70);
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(count2, nullptr);   // B.3.4 bridge
+
+    // On load: resize array2
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser1)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+        // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8, new tail zeroed.
+        // Element is the 8-byte InternalBasePtr slot serialized below (byte-copy, zeroing).
+        GameColl::ArrayAt<GameColl::Ptr8>(s, 0x68).SetSize(count2);
+    }
+
+    // Serialize each IBP in array2, validate with IsDerivedFrom
+    void** arr2 = *(void***)(s + 0x68);
+    if (count2 > 0) {
+        for (int i = 0; i < count2; i++) {
+            void* ibp = (void*)((uintptr_t)arr2 + i * 8);
+            reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser1));   // B.3.4 bridge
+            // Validate with PickingComponent type (DAT_1401c7c10)
+            void* val = *(void**)ibp;
+            if (val != nullptr) {
+                bool valid = fn_IsDerivedFrom(val, PickingComponent::TypeId());   // ti 0x1401c7c10
+                if (!valid) {
+                    *(uint64_t*)ibp = 0;
+                }
+            }
+        }
+    }
+
+    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();                                       // B.3.4 bridge
+}
 
 // [6] 0x140108d40 — the real OnAdded broadcast. It fills the mesh (+0x58/+0x60) and
 // picking (+0x68/+0x70) lists from the site's own ModelComponent and from each
@@ -646,13 +568,58 @@ void BuildComponent::Persist(void* stream) { BuildComponent_Shutdown(this, strea
 // +0x4c from MultiObjectComponent+0x58. The body is also reached by address (the
 // door at 0x140108d40, buildcomponent.cpp's own s_fn_Draw_Original), so it stays a
 // free function.
-void BuildComponent::OnAdded() { BuildComponent_OnAddedThunk(this); }
+void BuildComponent::OnAdded() {
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
+        if (*(uint8_t*)(gw + 0xd0) & 1) return;   // instant build -> OnAdded does nothing
+    }
+    BuildComponent_DrawReimpl(this);
+}
 
 // [7] 0x140108cb0 — the removed-from-world broadcast (NOT OnCreate: misnamed in
 // Ghidra exactly like CitizenComponent's 0x140113ca0). It removes the site from the
 // town's pending-build registry (townMgr+0xd0); the 0x83 capability flags have bit 1
 // set, so the MarkForRemoval broadcast reaches it.
-void BuildComponent::OnRemove() { BuildComponent_OnCreate(this); }
+void BuildComponent::OnRemove() {
+    // 0x140017550 is BuildComponent_FindInQueue (this file) and 0x1401c3dd8 is
+    // g_pGameWorldSingleton: called directly, no first-call cache (B.3.8, B6-5).
+    if (!g_pGameWorldSingleton || !fn_InternalBasePtr_Ctor)
+        return;
+
+    // Create InternalBasePtr on stack — original passes this (component ptr)
+    uint8_t ptrBuf[8];
+    new (ptrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>((void*)this));   // B.3.3 bridge
+
+    void* gameState = *g_pGameWorldSingleton;
+    void* worldData = *(void**)((uintptr_t)gameState + 0xF0);
+
+    // Find in removal queue
+    int idx = BuildComponent_FindInQueue((void*)((uintptr_t)worldData + 0xD0), ptrBuf);
+
+    if (idx >= 0) {
+        int count = *(int*)((uintptr_t)worldData + 0xD8);
+
+        // Shift remaining elements down (each is 8 bytes / InternalBasePtr)
+        if (idx < count) {
+            int64_t offset = (int64_t)idx * 8;
+            do {
+                int nextIdx = idx + 1;
+                if (nextIdx < count) {
+                    uint64_t* pSlot = (uint64_t*)(*(uintptr_t*)((uintptr_t)worldData + 0xD0) + offset);
+                    if (pSlot != nullptr) {
+                        *pSlot = 0;
+                        *pSlot = pSlot[1];
+                    }
+                }
+                idx = nextIdx;
+                offset += 8;
+            } while (idx < count);
+        }
+
+        // Decrement count
+        *(int*)((uintptr_t)worldData + 0xD8) = count - 1;
+    }
+}
 
 // [15] 0x140108710 — THE build-labor +0x48 progress credit. The build action chain
 // (FUN_1400c0690 / BuildStructure_SetupBuildActions) pushes a SendComponentMessage

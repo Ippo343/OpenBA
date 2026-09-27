@@ -5,9 +5,5 @@
 #include "AttendanceComponent.h"
 #include <cstdint>
 
-// Update (vtable slot [9], 0x140044370): Checks attendance queue count,
-// gets building component, processes queue if building is idle.
-void AttendanceComponent_Update(AttendanceComponent* self);
-
 // Init: resolve all internal function pointers (called once at startup)
 void AttendanceComponent_InitFuncs();
