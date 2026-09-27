@@ -473,13 +473,12 @@ inline void fn_FindComponent_MeshInstance(void* entity, void* retval) {
 inline void fn_FindComponent_Character(void* entity, void* retval) {
     Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_ModelComponent_FC);
 }
-// fn_FindComponent_CitizenAI — DAT_1401c70e8 = g_TypeId_CitizenAIComponent,
-// CitizenAIComponent's BaseTypeInfo (writer CitizenAIComponent_RegisterType
-// 0x14014e735); the finder returns the CitizenAIComponent, where profession data lives.
-// Original FUN_140011050.
-inline void fn_FindComponent_CitizenAI(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_CitizenAIComponent);
-}
+// fn_FindComponent_CitizenAI — FUN_140011050, Entity::FindComponent<CitizenAIComponent>
+// (compares against [0x1401c70e8] at 0x140011093, IsDerivedFrom at 0x1400110ec).
+// ENDGAME B.3.9 CB: defined in code/Game/Dialog/citizenui.cpp over
+// CitizenAIComponent::TypeId(); the cell is unregistered, so the old inline over
+// g_TypeId_CitizenAIComponent only worked when a dialog re-pointed that global.
+void fn_FindComponent_CitizenAI(void* entity, void* retval);
 
 // ============================================================
 // Dynamic array helpers — Reimplemented in clean C++
