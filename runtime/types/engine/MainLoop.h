@@ -292,6 +292,11 @@ public:
 
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     static MainLoop* Get();                                        // 0x180031570
+    // ?_singleton@MainLoop@Engine@@1PEAV12@EA (0x1801fe750) — the class static (ENDGAME B.3.9 ENG, B39_RULES D7).
+    // The namespace's *PortInit redirects the minted storage row onto it, so
+    // the name door, the address door and this member are the same bytes.
+    // PUBLIC while foreign readers still reach the row through the doors.
+    static MainLoop* _singleton;
     bool IsRunning(const UpdateLoop* loop) const;                  // 0x1800314b0
     System::Time GetDeltaTime() const;                             // 0x1800314f0  retslot
     System::Time GetFrameTime() const;                             // 0x180031500  retslot

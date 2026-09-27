@@ -19,8 +19,8 @@ CUTOVER_ROW("?_singleton@Configuration@Audio@@0PEAV12@EA", CUTOVER_REQUIRED, tru
 CUTOVER_ROW("?_singleton@Device@Audio@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe760ull, "Audio", 6)
 // Engine  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=2  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_loader@LoaderLoop@Engine@@1VLoader@2@A", CUTOVER_REQUIRED, true, 0x1801fe7b8ull, "Engine", 2)
-// Engine  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=7  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_singleton@MainLoop@Engine@@1PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe750ull, "Engine", 7)
+// Engine  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=4  -- tag states the verdict inverts at cutover
+CUTOVER_ROW("?_singleton@MainLoop@Engine@@1PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe750ull, "Engine", 4)
 // Graphics  HARMFUL / DLL-PRESENT  doors=4  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_frameIndex@ParticleInstance@Graphics@@1HA", CUTOVER_REQUIRED, true, 0x1801fe77cull, "Graphics", 4)
 // Graphics  HARMFUL / DLL-PRESENT  doors=4  -- tag states the verdict inverts at cutover

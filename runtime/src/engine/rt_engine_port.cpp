@@ -47,6 +47,7 @@
 
 #include <cstdio>
 #include "../../funcs/rt_port.h"
+#include "../../types/engine/MainLoop.h"   // ENDGAME B.3.9 ENG: the storage redirect
 #include "../../types/engine/Engine.h"   // ENDGAME B.3.9 ENG: the storage redirect
 
 extern int RtEngineLoopsRegister();     // loops.cpp            (lane A)  — 12
@@ -59,6 +60,9 @@ extern int RtEnginePlatformRegister();  // engine_platform.cpp  (W23 ENGINE)— 
 extern int RtEngineLoadResourcesRegister();// updateloop_loadresources.cpp  — 1
 
 void RtEnginePortInit() {
+    // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
+    // static from here on (name door, address door, manifest publish).
+    RtMintRedirectStorage("?_singleton@MainLoop@Engine@@1PEAV12@EA", &::Engine::MainLoop::_singleton);
     // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
     // static from here on (name door, address door, manifest publish).
     RtMintRedirectStorage("?_singleton@Engine@1@0PEAV11@EA", &::Engine::Engine::_singleton);

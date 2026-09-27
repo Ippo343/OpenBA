@@ -315,8 +315,7 @@ uint8_t* ModificationSingleton() {
 // `RtEngine::UpdateLoop*`, the same type this lane's ports take, so the
 // comparison below is type-checked end to end.
 Engine::MainLoop* MainLoopSingleton() {
-    MainLoopSlot p = RT_DATA_SLOT(MainLoopSlot,
-        "?_singleton@MainLoop@Engine@@1PEAV12@EA");
+    MainLoopSlot p = reinterpret_cast<MainLoopSlot>(&::Engine::MainLoop::_singleton);
     return p ? *p : nullptr;
 }
 // UI::Dialog's BaseTypeInfo. Both Load bodies read its FIRST DWORD as the type
