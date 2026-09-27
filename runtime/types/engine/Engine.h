@@ -144,7 +144,6 @@
 namespace RtEngine {
 
 namespace EngineAddr {
-    constexpr uintptr_t Singleton          = 0x1801fe748;  // Engine* (see note above)
     constexpr uintptr_t AllocatorSingleton = 0x1801fc718;  // same object, +0 view
 
     constexpr uintptr_t Ctor               = 0x1800dbf00;  // ord 174
@@ -189,8 +188,8 @@ namespace EngineAddr {
 // the class is CONCRETE with a PROTECTED defaulted constructor (not retail's:
 // that stays the registered DOOR `RtEngine_Engine_Ctor`, engine_lifecycle.cpp).
 //
-// `?_singleton@Engine@1@0PEAV11@EA` (0x1801fe748) STAYS a data slot until the
-// end of B.3 (carry-over 5). The subsystem fields keep the POD's `void*`
+// `?_singleton@Engine@1@0PEAV11@EA` (0x1801fe748) is the class static below; its
+// minted row is RETIRED (ENDGAME B.3.9 ENG W2). The subsystem fields keep the POD's `void*`
 // spelling; the sixteen exported accessors below give each its retail type.
 // ############################################################################
 
@@ -241,9 +240,8 @@ public:
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     static Engine* Get();                                         // 0x18000c7c0
     // ?_singleton@Engine@1@0PEAV11@EA (0x1801fe748) — the class static (ENDGAME B.3.9 ENG, B39_RULES D7).
-    // The namespace's *PortInit redirects the minted storage row onto it, so
-    // the name door, the address door and this member are the same bytes.
-    // PUBLIC while foreign readers still reach the row through the doors.
+    // Its minted storage row is RETIRED (ENDGAME B.3.9 ENG W2: no reader was
+    // left but the redirect). PUBLIC: foreign files read it directly.
     static Engine* _singleton;
     bool Update(const System::Time& time);                        // 0x1800db4a0
     void NotifyBeginLoad();                                       // 0x1800db480

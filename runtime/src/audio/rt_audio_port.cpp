@@ -49,9 +49,8 @@ extern int RtAudioPlayPlatformRegister();   // audio_play_platform.cpp
 extern "C" int RtAudioBatchCLeavesRegister();
 
 void RtAudioPortInit() {
-    // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
-    // static from here on (name door, address door, manifest publish).
-    RtMintRedirectStorage("?_singleton@Device@Audio@@0PEAV12@EA", &::Audio::Device::_singleton);
+    // ENDGAME B.3.9 ENG W2: `?_singleton@Device@Audio@@` is RETIRED (eng.txt): its
+    // last reader was this redirect; every site reads Audio::Device::_singleton.
     // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
     // static from here on (name door, address door, manifest publish).
     RtMintRedirectStorage("?_singleton@Configuration@Audio@@0PEAV12@EA", &::Audio::Configuration::_singleton);

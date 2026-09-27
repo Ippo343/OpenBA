@@ -43,9 +43,8 @@
 // (runtime/src/engine/singleton_ctors.cpp) stays the door. Member bodies that
 // need the Stream's members reach them through `StreamObject()`, one bridge.
 //
-// `_singleton` (`?_singleton@Device@Audio@@0PEAV12@EA`, 0x1801fe760) STAYS a
-// data slot until the end of B.3 (carry-over 5): the bodies read it through
-// `RT_DATA_SLOT`, never as a C++ static member.
+// `_singleton` (`?_singleton@Device@Audio@@0PEAV12@EA`, 0x1801fe760) is the class
+// static below; its minted row is RETIRED (ENDGAME B.3.9 ENG W2).
 //
 // THREADS (RULE B7-7): main (Play/Stop/Update/OnSoundBufferDeleted), the
 // Stream worker (reads `_channels[i].source` and the PlatformChannel voice
@@ -153,9 +152,8 @@ public:
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     static Device* Get();                                                          // 0x18000c740 (reads _singleton)
     // ?_singleton@Device@Audio@@0PEAV12@EA (0x1801fe760) — the class static (ENDGAME B.3.9 ENG, B39_RULES D7).
-    // The namespace's *PortInit redirects the minted storage row onto it, so
-    // the name door, the address door and this member are the same bytes.
-    // PUBLIC while foreign readers still reach the row through the doors.
+    // Its minted storage row is RETIRED (ENDGAME B.3.9 ENG W2: no reader was
+    // left but the redirect). PUBLIC: foreign files read it directly.
     static Device* _singleton;
     void SetChannelVolume(AudioChannel* channel, float volume);                    // 0x1800de1b0
     AudioChannel* Play(Object::ExternalPtr<SoundBuffer> buffer, const System::Time& start,

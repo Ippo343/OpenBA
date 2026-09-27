@@ -3,8 +3,8 @@
 // harvest of Runtime-x64.dll) re-verified against the DLL at generation
 // time. Regenerate with:
 //   tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py
-// Counts: 21 vtables, 104 BaseTypeInfo, 34 storage symbols.
-// Retired (ENDGAME B.3 step 9): 145 row(s), listed in tools/rt_mint_retired/*.txt.
+// Counts: 21 vtables, 104 BaseTypeInfo, 32 storage symbols.
+// Retired (ENDGAME B.3 step 9): 147 row(s), listed in tools/rt_mint_retired/*.txt.
 
 // ---- Per-slot traps. One function per (vtable, slot) so an unreachable
 // slot that DOES get called names itself instead of aborting anonymously.
@@ -1117,9 +1117,9 @@ static RtMintTypeInfo kMintTypeInfos[] = {
 // ---- Plain storage: the singleton pointers plus the ten other exported
 // .data statics. All are BSS in the DLL — written only at runtime — so
 // there is nothing to copy: minting one means OWNING the bytes.
-alignas(16) static unsigned char kStorageBytes[11264];  // one block, zero-initialised
+alignas(16) static unsigned char kStorageBytes[11232];  // one block, zero-initialised
 static const unsigned char kInit9[] = { 0x8d, 0xed, 0xb5, 0xa0, 0xf7, 0xc6, 0xb0, 0x3e };  // Timer::_secondsPerTick = 1.0/1000000.0 (retail Timer::Startup)
-static const unsigned char kInit33[] = { 0x40, 0x42, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x00 };  // Timer::_ticksPerSecond = 1000000 (retail Timer::Startup)
+static const unsigned char kInit31[] = { 0x40, 0x42, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x00 };  // Timer::_ticksPerSecond = 1000000 (retail Timer::Startup)
 static RtMintStorage kMintStorage[] = {
     { nullptr, 0x1801fc6d0ull, 8, &kStorageBytes[0], "IO::Modification's loaded-DLL HMODULE slot, UNEXPORTED - code/Game/Game/game_main.cpp FreeLibrary's it at shutdown", nullptr, nullptr, 0 },
     { "?_disableHandler@Debug@System@@0_NA", 0x1801fc708ull, 1, &kStorageBytes[16], "bool -- suppresses the Debug top-level exception handler; gap-to-next-export=1 AND all 5 .text accesses are byte-width", nullptr, nullptr, 0 },
@@ -1137,23 +1137,21 @@ static RtMintStorage kMintStorage[] = {
     { "?_singleton@Configuration@Input@@0PEAV12@EA", 0x1801fe768ull, 8, &kStorageBytes[10928], "singleton pointer", nullptr, nullptr, 0 },
     { "?_singleton@Configuration@System@@0PEAV12@EA", 0x1801fc6f8ull, 8, &kStorageBytes[10944], "singleton pointer", nullptr, nullptr, 0 },
     { "?_singleton@Configuration@Video@@0PEAV12@EA", 0x1801fe7a0ull, 8, &kStorageBytes[10960], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@Device@Audio@@0PEAV12@EA", 0x1801fe760ull, 8, &kStorageBytes[10976], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@Device@Input@@0PEAV12@EA", 0x1801fe770ull, 8, &kStorageBytes[10992], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@Device@Video@@0PEAV12@EA", 0x1801fe7a8ull, 8, &kStorageBytes[11008], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@Engine@1@0PEAV11@EA", 0x1801fe748ull, 8, &kStorageBytes[11024], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@ExternalFactory@Object@@0PEAV12@EA", 0x1801fc6c8ull, 8, &kStorageBytes[11040], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@Factory@Object@@0PEAV12@EA", 0x1801fc6e8ull, 8, &kStorageBytes[11056], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@FileSystem@IO@@0PEAV12@EA", 0x1801fc6a8ull, 8, &kStorageBytes[11072], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@InternalFactory@Object@@0PEAV12@EA", 0x1801fc6d8ull, 8, &kStorageBytes[11088], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@MainLoop@Engine@@1PEAV12@EA", 0x1801fe750ull, 8, &kStorageBytes[11104], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@MemoryAllocator@System@@0PEAV12@EA", 0x1801fc718ull, 8, &kStorageBytes[11120], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@Modification@IO@@2PEAV12@EA", 0x1801fc6b0ull, 8, &kStorageBytes[11136], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@Persistence@IO@@0PEAV12@EA", 0x1801fc6b8ull, 8, &kStorageBytes[11152], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@SaveLoad@Save@@0PEAV12@EA", 0x1801fc6f0ull, 8, &kStorageBytes[11168], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_stopApplication@Error@System@@0_NA", 0x1801fc70aull, 1, &kStorageBytes[11184], "bool -- Display() aborts the process when this is set", nullptr, nullptr, 0 },
-    { "?_systemInitialTick@Timer@System@@0_JA", 0x1801fe738ull, 8, &kStorageBytes[11200], "int64", nullptr, nullptr, 0 },
-    { "?_systemSecondsPerTick@Timer@System@@0NA", 0x1801fe740ull, 8, &kStorageBytes[11216], "double -- the QPF reciprocal; sibling of ?_secondsPerTick above", nullptr, nullptr, 0 },
-    { "?_systemTicksPerSecond@Timer@System@@0_JA", 0x1801fe730ull, 8, &kStorageBytes[11232], "int64", nullptr, nullptr, 0 },
-    { "?_ticksPerSecond@Timer@System@@0_JA", 0x1801fe720ull, 8, &kStorageBytes[11248], "int64", nullptr, kInit33, 8 },
+    { "?_singleton@Device@Input@@0PEAV12@EA", 0x1801fe770ull, 8, &kStorageBytes[10976], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@Device@Video@@0PEAV12@EA", 0x1801fe7a8ull, 8, &kStorageBytes[10992], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@ExternalFactory@Object@@0PEAV12@EA", 0x1801fc6c8ull, 8, &kStorageBytes[11008], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@Factory@Object@@0PEAV12@EA", 0x1801fc6e8ull, 8, &kStorageBytes[11024], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@FileSystem@IO@@0PEAV12@EA", 0x1801fc6a8ull, 8, &kStorageBytes[11040], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@InternalFactory@Object@@0PEAV12@EA", 0x1801fc6d8ull, 8, &kStorageBytes[11056], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@MainLoop@Engine@@1PEAV12@EA", 0x1801fe750ull, 8, &kStorageBytes[11072], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@MemoryAllocator@System@@0PEAV12@EA", 0x1801fc718ull, 8, &kStorageBytes[11088], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@Modification@IO@@2PEAV12@EA", 0x1801fc6b0ull, 8, &kStorageBytes[11104], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@Persistence@IO@@0PEAV12@EA", 0x1801fc6b8ull, 8, &kStorageBytes[11120], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@SaveLoad@Save@@0PEAV12@EA", 0x1801fc6f0ull, 8, &kStorageBytes[11136], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_stopApplication@Error@System@@0_NA", 0x1801fc70aull, 1, &kStorageBytes[11152], "bool -- Display() aborts the process when this is set", nullptr, nullptr, 0 },
+    { "?_systemInitialTick@Timer@System@@0_JA", 0x1801fe738ull, 8, &kStorageBytes[11168], "int64", nullptr, nullptr, 0 },
+    { "?_systemSecondsPerTick@Timer@System@@0NA", 0x1801fe740ull, 8, &kStorageBytes[11184], "double -- the QPF reciprocal; sibling of ?_secondsPerTick above", nullptr, nullptr, 0 },
+    { "?_systemTicksPerSecond@Timer@System@@0_JA", 0x1801fe730ull, 8, &kStorageBytes[11200], "int64", nullptr, nullptr, 0 },
+    { "?_ticksPerSecond@Timer@System@@0_JA", 0x1801fe720ull, 8, &kStorageBytes[11216], "int64", nullptr, kInit31, 8 },
 };
 

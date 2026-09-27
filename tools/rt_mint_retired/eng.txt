@@ -18,3 +18,5 @@
 ??_7LoaderLoop@Engine@@6B@             ENG     W2: concrete class, public real ctor + DeletingDtor (vector arms); ??0/??1 doors, RT_DELDTOR row 0x18004d4f0, 6 slot doors deleted
 ??_7UpdateLoop@Engine@@6B@             ENG     W2: concrete DeletingDtor (vector arms); GameUpdateLoop is a real subclass (EXE-1); ??0/??1 doors, RT_DELDTOR row 0x180031900, 6 base slot doors deleted
 ??_7Stream@Audio@@6B@                  ENG     W2: real ctor on System::Thread(0x10000) + public QEAA dtor; Ctor_AudioDevice placement-news it, Engine::Shutdown runs ~Stream; ??0/??1 doors and the ?Run@ slot door deleted (no deleting-dtor slot: slot 0 is Run)
+?_singleton@Engine@1@0PEAV11@EA         ENG     W2: storage -- no reader left but the redirect (class static Engine::Engine::_singleton since W1); redirect call and the unused EngineAddr::Singleton hex constant deleted
+?_singleton@Device@Audio@@0PEAV12@EA    ENG     W2: storage -- no reader left but the redirect (class static Audio::Device::_singleton since W1); redirect call deleted
