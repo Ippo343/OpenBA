@@ -217,17 +217,6 @@ FileSystem* Fs() {
     return slot ? *slot : nullptr;
 }
 
-// `if (p) { <guarded delete> }` — the unexported object free at 0x180006a10 that
-// every Encoding teardown in this family calls. Registered by
-// runtime/src/video/context_lifecycle.cpp:697, so ResolveAddr finds our body
-// first: ResolveAddr(Module::Runtime, …) is REGISTRY-FIRST, not "the DLL"
-// (`reference_resolveaddr_consults_port_registry_first.md`).
-void EncodingDelete(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180006a10));
-    fn(p);
-}
 
 // The String-release idiom on a `char*` slot. FileStream::filename and
 // TextFileStream's two object strings are declared `char*` in FileStream.h (a
@@ -237,74 +226,15 @@ void ReleaseStrSlot(char** slot) {
     reinterpret_cast<System::String*>(slot)->~String();
 }
 
-// ---------------------------------------------------------------------------
-// The inlined `??0FileStream` prologue both constructors below open with.
-//
-// Retail writes +0x00 (twice — Stream's table then FileStream's), +0x08, +0x10,
-// +0x18, then the FileInfo's +0x00 / +0x08 / +0x0c / +0x10, +0x20, +0x28 and
-// +0x18.
-//
-// IT NEVER TOUCHES FileInfo::_unk04 (object +0x24). FileStream.h already
-// records that, and filesystem_openfile_win.cpp's oracle already excludes the
-// same field for the same reason. A `= {}` here would be a behavioural
-// difference from retail, not tidiness.
-// ---------------------------------------------------------------------------
-void FileStreamCtorInline(FileStream* self) {
-    self->base.vptr = RT_DATA_SLOT(const void*, "??_7Stream@IO@@6B@");      // 1800a8219
-    self->base.direction = 0;                                              // 1800a8225
-    self->base.encoding  = nullptr;                                        // 1800a8228
-    self->base.vptr = RT_DATA_SLOT(const void*, "??_7FileStream@IO@@6B@");  // 1800a822c
-    self->filename  = nullptr;                                             // 1800a8236
-
-    FileInfo* fi = &self->file;                                            // 1800a823a
-    fi->handle      = -1;                                                  // 1800a8243
-    fi->size        = 0;                                                   // 1800a8249 (qword)
-    fi->cursor      = 0;                                                   //   covers +0x0c
-    fi->baseOffset  = 0;                                                   // 1800a824d
-    fi->_name0.data = nullptr;                                             // 1800a8259
-    fi->_name1.data = nullptr;                                             // 1800a8265
-    fi->winHandle   = -1;                                                  // 1800a8268
-}
-
-// ??0FileStream@IO@@QEAA@XZ (0x1800aaa10, ordinal per list_exports) is exactly
-// the prologue above and nothing else -- eleven stores, `MOV RAX,RCX`, RET --
-// which is why every caller in this tree that constructs a FileStream on the
-// stack (io/closure_batch2b_win.cpp, the persistence jobs) reaches it by name.
-// Registered so those by-name resolves land here at cutover.
+// ??0FileStream@IO@@QEAA@XZ (0x1800aaa10). ENDGAME B.3.9 IO: the body is
+// `IO::FileStream`'s real constructor (FileStream.h). This door stays because
+// two callers outside the class reach it BY NAME on raw storage --
+// Audio::Stream::Run (vtbatch7b_stream_run_win.cpp) and the persistence loader
+// (closure_batch2b_win.cpp) -- and it is one placement new (B9-6).
 extern "C" FileStream* RtIo_FileStream_Ctor(FileStream* self) {
-    FileStreamCtorInline(self);
+    ::new (static_cast<void*>(self)) IO::FileStream();
     return self;
 }
-
-// ---------------------------------------------------------------------------
-// The Encoding both constructors install at Stream::encoding (+0x10).
-//
-// Retail open-codes `EnterCriticalSection(_singleton+0x640);
-// Allocate(_singleton, 8, 4); LeaveCriticalSection(...)`, which is byte-for-byte
-// `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` (0x1800c7a50) — the same
-// composition runtime/src/system/allocator.cpp:684 documents. So RtMemAlloc IS
-// the faithful transcription, not a paraphrase of it.
-//
-// THE NULL BRANCH IS RETAIL'S, NOT A GUARD. `TEST RSI,RSI / JZ` at 0x1800a82b9
-// stamps the vtable only when the allocation succeeded and otherwise installs a
-// NULL encoding. Reproduced rather than tidied.
-//
-// The old encoding is deleted BEFORE the new one is stored, and the delete is
-// itself conditional (0x1800a82ce). On a fresh object it is always null; the
-// branch is transcribed because it is a statement retail makes.
-//
-// The table goes in BY ADDRESS because neither of the two this family uses has
-// an exported name — see the header note.
-// ---------------------------------------------------------------------------
-void InstallEncoding(Stream* s, uintptr_t vtableAddr) {
-    void* enc = RtSystem::RtMemAlloc(8, 4);                                // 1800a82a5
-    if (enc) *reinterpret_cast<uintptr_t*>(enc) =                          // 1800a82bb
-        ResolveAddr(Module::Runtime, vtableAddr);
-    if (s->encoding) EncodingDelete(s->encoding);                          // 1800a82d3
-    s->encoding = enc;                                                     // 1800a82d8
-}
-
-typedef void (*SetObjectFn)(TextFileStream*, const String*, const String*, int32_t);
 
 }  // namespace
 
@@ -384,114 +314,24 @@ extern "C" void RtIo_FileInfo_Dtor(FileInfo* self) {
 }
 
 // ============================================================================
-// IO::FileStream::~FileStream                            retail 0x1800aaab0
+// ??1FileStream@IO@@UEAA@XZ          retail 0x1800aaab0
+// ??1BinaryFileStream@IO@@UEAA@XZ    retail 0x180023c80 (a bare JMP to the first)
 // ============================================================================
-// Six steps, in retail's order:
-//   1. stamp ??_7FileStream@IO@@6B@                          1800aaacb
-//   2. if (file.handle != -1) FileSystem::CloseFile(_singleton, &file)
-//                                                            1800aaad5..ae6
-//   3. ~FileInfo(&file)                                      1800aaaf0
-//   4. release filename (+0x18)                              1800aaaf6..b1e
-//   5. stamp ??_7Stream@IO@@6B@                              1800aab20
-//   6. if (encoding) <guarded delete>                        1800aab2a..33
-//
-// STEP 2 READS THE SINGLETON, IT DOES NOT USE `this`. Retail loads
-// `MOV RCX,[0x1801fc6a8]` even though the FileInfo it closes belongs to this
-// object — the same shape filesystem_packages.cpp:387 records for LoadPackages.
-// ============================================================================
+// ENDGAME B.3.9 IO: the bodies are `IO::FileStream::~FileStream` (bottom of
+// this file) and the compiler's `~BinaryFileStream`. These two doors STAY
+// because callers outside the classes reach them BY NAME on objects they built
+// through `??0FileStream` / `??0BinaryFileStream`: Audio::Stream::Run, the
+// persistence jobs, Object::External::Load (CompressedFileStream's member,
+// through ??1FileStream exactly as retail's 1800bc8c6) and
+// Video::ImageBuffer::SaveImageToFile. Each is one non-virtual slot-0 call with
+// flags 0 -- the destructor chain, no free (B9-6).
 extern "C" void RtIo_FileStream_Dtor(FileStream* self) {
-    ++g_fsc.fsDtor;
-
-    self->base.vptr = RT_DATA_SLOT(const void*, "??_7FileStream@IO@@6B@");
-
-    if (self->file.handle != -1)                      // 1800aaad5
-        RtIo_FileSystem_CloseFile(Fs(), &self->file); // 1800aaae6
-
-    RtIo_FileInfo_Dtor(&self->file);                  // 1800aaaf0
-    ReleaseStrSlot(&self->filename);                  // 1800aaaf6
-
-    self->base.vptr = RT_DATA_SLOT(const void*, "??_7Stream@IO@@6B@");
-    if (self->base.encoding) EncodingDelete(self->base.encoding);  // 1800aab33
+    reinterpret_cast<IO::FileStream*>(self)->IO::FileStream::DeletingDtor(0);
 }
 
-// ============================================================================
-// IO::BinaryFileStream::~BinaryFileStream                retail 0x180023c80
-// ============================================================================
-// FIVE INSTRUCTIONS: a frame, an SEH cookie, and `JMP 0x1800aaab0`. It is a
-// pure tail-jump onto ~FileStream and adds NOTHING of its own — not even a
-// vtable stamp, which is why ~FileStream's first store puts ??_7FileStream@
-// there and no BinaryFileStream table is ever written on the way down.
-//
-// Compared instruction by instruction before writing this, because Wave 18
-// records a lane that nearly shipped a leak by assuming an exported body
-// matched an inlined one.
-// ============================================================================
 extern "C" void RtIo_BinaryFileStream_Dtor(BinaryFileStream* self) {
     ++g_fsc.binDtor;
-    RtIo_FileStream_Dtor(&self->base);                // 180023c96 JMP
-}
-
-// ============================================================================
-// IO::TextFileStream::~TextFileStream                    retail 0x1800ba490
-//                                                  (WAVE 27 LANE IOTEXT)
-// ============================================================================
-// Four steps then a tail jump, transcribed from the RETAIL disassembly:
-//   1. stamp ??_7TextFileStream@IO@@6B@ (0x180155980)        1800ba4a6/ad
-//   2. if (buffer) MemFree(buffer)          — BARE, +0x70    1800ba4b0..b9
-//   3. release objectType  (+0x60)                           1800ba4bf..e9
-//   4. release objectName  (+0x58)                           1800ba4e9..513
-//   5. JMP ~FileStream(this)                0x1800aaab0      1800ba51b
-//
-// WHY THIS ROW IS WORTH PORTING, and it is NOT the census. The census lists this
-// symbol under INSTRUMENT-SOURCED -- its only *export-name* caller in the tree
-// is runtime/src/io/file_stream_probe.cpp, and a probe's resolve is a dependency
-// but not a port obligation. The REAL caller is not a name at all:
-// runtime/src/object/deleting_dtor.cpp's row 41 ("IO::TextFileStream", slot 0 of
-// `??_7TextFileStream@IO@@6B@`) reaches 0x1800ba490 BY ADDRESS through
-// `ResolveAddr`, and that row's own comment says in as many words that this made
-// the address "newly `called`". With this body absent that edge went to the DLL
-// and, after cutover, to NULL -- so every `delete` of a TextFileStream faults.
-// A census that buckets a row by its NAME callers cannot see an ADDRESS caller
-// in another file, which is why the instrument tag is right about what it
-// measured and wrong as a scoping signal here.
-//
-// THREE THINGS THIS DOES NOT DO, all of them retail's choices and all faithful:
-//   * it does NOT null `buffer` after freeing it (no store follows 1800ba4b9);
-//   * it does NOT stamp ??_7Stream@ or ??_7FileStream@ -- ~FileStream does both;
-//   * step 2 is a BARE MemFree, not the refcounted String idiom. The buffer is
-//     owned memory with no header, which is the independent second pin on
-//     FileStream.h's `void* buffer; // +0x70  owned, bare MemFree`.
-//
-// The release ORDER is DESCENDING (+0x60 before +0x58), like ~PackageFile's five
-// and ~ElementDescription's one. Irrelevant to the result and transcribed anyway.
-//
-// NO ORACLE, for the reason ~ElementDescription and ~Element state and for the
-// same reason: a replay would decrement each refcount a second time and, where
-// our body already took one to zero, free a block twice. `the diff oracle` records
-// whether a call actually released something; `calls=` stays 0 because there is
-// no comparison to report. Liveness, not correctness.
-//
-// ⚠ THE PROBE THAT *LOOKS* LIKE THIS ROW'S ORACLE IS NOT ONE. See the
-// INSTRUMENT DEFECT section of docs/runtime_port/WAVE27_LANE_IOTEXT.md: two of
-// three vptr checks in file_stream_probe.cpp build their subject with retail's
-// constructor and compare against `RT_DATA_SLOT`, which is registry-first, so
-// they compare retail with itself. Not repaired by this lane (Wave 27 §4 #1).
-extern "C" void RtIo_TextFileStream_Dtor(RtIo::TextFileStream* self) {
-    bool didWork = false;
-
-    self->base.base.vptr =
-        RT_DATA_SLOT(const void*, "??_7TextFileStream@IO@@6B@");   // 1800ba4a6
-
-    if (self->buffer) {                                           // 1800ba4b4
-        RtSystem::RtMemFree(self->buffer);                        // 1800ba4b9
-        didWork = true;
-        // No `self->buffer = nullptr;` -- retail leaves the dangling pointer.
-    }
-
-    if (self->objectType) { ReleaseStrSlot(&self->objectType); didWork = true; }  // 1800ba4bf
-    if (self->objectName) { ReleaseStrSlot(&self->objectName); didWork = true; }  // 1800ba4e9
-
-    RtIo_FileStream_Dtor(&self->base);                            // 1800ba51b JMP
+    reinterpret_cast<IO::BinaryFileStream*>(self)->IO::BinaryFileStream::DeletingDtor(0);
 }
 
 // Two callees this file does not otherwise use, declared rather than included:
@@ -500,144 +340,19 @@ extern "C" void RtIo_TextFileStream_Dtor(RtIo::TextFileStream* self) {
 // already makes -- a door would resolve to the same body and add a resolve site
 // the cutover census has to carry (reference_count_the_doors_not_the_calls.md).
 extern "C" void RtIo_CompressedStream_Commit(RtIo::CompressedStream* self);
-extern "C" void RtIo_CompressedStream_Dtor(RtIo::CompressedStream* self);
-
 // ============================================================================
-// IO::CompressedFileStream::~CompressedFileStream        retail 0x1800a9330
-//                                                  (WAVE 27 LANE IOTEXT)
+// ??0BinaryFileStream@IO@@QEAA@XZ                        retail 0x1800a8200
 // ============================================================================
-// Read with objdump against C:/GOG Games/Banished/Runtime-x64.dll — the retail
-// file on disk, addressed by true VA — after the integrator measured TWO Ghidra
-// defects on this wave's session (a program-selection defect serving the profile
-// build, and `disassemble_function` relabelling one body's listing with another
-// body's address). objdump shares no mechanism with Ghidra, and stream classes
-// are the "near-identical sibling" shape the second defect corrupts invisibly.
-//
-// Five steps then a tail jump:
-//   1800a934b  stamp ??_7CompressedFileStream@IO@@6B@ (0x1801555f0)
-//   1800a9355  if (headerSize > 0 && direction == 1) Commit(this)
-//   1800a9366  rdi = &this->file                      (+0x68)
-//   1800a936e  if (file.file.handle != -1) CloseFile(_singleton, &file.file)
-//   1800a9388  ~FileStream(&this->file)
-//   1800a939b  JMP ~CompressedStream(this)
-//
-// STEP 2 IS THE FLUSH, AND ITS GUARD IS TWO CONDITIONS, NOT ONE.
-// `CMPL $0,0x48(%rcx) ; JLE` is `headerSize > 0` (Stream.h names +0x48 the
-// header Array's _size and calls it "the guard" already), and
-// `CMPL $1,0x8(%rcx) ; JNE` is `direction == 1`, i.e. WRITING. So a read-only
-// compressed stream, and a writing one that never produced a header, both skip
-// Commit. Dropping either half would write a block on teardown of a stream that
-// never wrote one.
-//
-// STEP 4 CLOSES THE INNER STREAM'S FileInfo, NOT ITS OWN. `LEA RDX,[RDI+0x20]`
-// with RDI = this+0x68 puts the FileInfo at this+0x88 — FileStream's own
-// `file` member inside the embedded BinaryFileStream. And like ~FileStream it
-// reaches the FileSystem through the exported singleton rather than through
-// `this`, which is the shape filesystem_packages.cpp:387 already records.
-//
-// EVERY CALLEE IS OURS — the row CLOSES rather than deepening. Checked by
-// grepping for each RegisterRuntimeAddr, not assumed:
-//   0x1800a9ee0  CompressedStream::Commit  PORTED  compressed_stream_write.cpp:783
-//   0x1800accc0  FileSystem::CloseFile     PORTED  filesystem_createfile_win.cpp:636
-//   0x1800aaab0  ~FileStream               PORTED  this file, :867
-//   0x1800aa650  ~CompressedStream         PORTED  compressed_stream_release.cpp:196
-//
-// WHY THIS ROW, given the census tags it INSTRUMENT-SOURCED: the same reason as
-// ~TextFileStream above. Its only export-NAME caller is file_stream_probe.cpp,
-// but deleting_dtor.cpp's row 40 ("IO::CompressedFileStream", slot 0 of
-// `??_7CompressedFileStream@IO@@6B@`) reaches 0x1800a9330 BY ADDRESS, and a
-// census that buckets a row by its name callers cannot see that.
-//
-// NO ORACLE, same reason as the two destructors above: a replay would Commit
-// twice, close a closed handle and free the window arrays twice.
-extern "C" void RtIo_CompressedFileStream_Dtor(RtIo::CompressedFileStream* self) {
-    bool didWork = false;
-
-    self->base.base.vptr =
-        RT_DATA_SLOT(const void*, "??_7CompressedFileStream@IO@@6B@");  // 1800a934b
-
-    if (self->base.headerSize > 0 &&                                   // 1800a9355
-        self->base.base.direction == 1) {                               // 1800a935b
-        RtIo_CompressedStream_Commit(&self->base);                      // 1800a9361
-        didWork = true;
-    }
-
-    FileStream* const inner = &self->file.base;                         // 1800a9366
-    if (inner->file.handle != -1) {                                     // 1800a936e
-        RtIo_FileSystem_CloseFile(Fs(), &inner->file);                  // 1800a937a
-        didWork = true;
-    }
-
-    RtIo_FileStream_Dtor(inner);                                        // 1800a9388
-    RtIo_CompressedStream_Dtor(&self->base);                            // 1800a939b JMP
-}
-
-// ============================================================================
-// IO::BinaryFileStream::BinaryFileStream                 retail 0x1800a8200
-// ============================================================================
-// The inlined FileStream prologue, then the class's own vtable, then a fresh
-// Encoding carrying the SHARED table at 0x1801554a8 (unexported — by address).
-// ============================================================================
+// ENDGAME B.3.9 IO: the body is `IO::BinaryFileStream`'s real constructor
+// (FileStream.h). The door STAYS for the callers that reach it by name on raw
+// storage (Object::External::Load's CompressedFileStream member,
+// Video::ImageBuffer::SaveImageToFile, the persistence jobs): one placement
+// new (B9-6). The TextFileStream ctor door went -- its one caller,
+// ?SaveText@External@, now builds the class itself.
 extern "C" BinaryFileStream* RtIo_BinaryFileStream_Ctor(BinaryFileStream* self) {
     ++g_fsc.binCtor;
-
-    FileStreamCtorInline(&self->base);                                   // 1800a8219..70
-    self->base.base.vptr =
-        RT_DATA_SLOT(const void*, "??_7BinaryFileStream@IO@@6B@");        // 1800a8270
-
-    InstallEncoding(&self->base.base, 0x1801554a8);                       // 1800a827a..d8
-
-    return self;                                                          // 1800a82dc
-}
-
-// ============================================================================
-// IO::TextFileStream::TextFileStream(String const&, String const&, int)
-//                                                         retail 0x1800ba340
-// ============================================================================
-// The same inlined FileStream prologue, its own vtable, seven of its own
-// fields, a TEXT Encoding (0x1801559d0 — a DIFFERENT table from the binary
-// one, and also unexported), and then a tail call to `?SetObject@` with the
-// three arguments verbatim.
-//
-// TWO THINGS THIS BODY DOES *NOT* DO, both recorded because they are the
-// difference from the default constructor and from a reasonable guess:
-//
-//   * IT NEVER WRITES +0x50. The DEFAULT ctor (0x1800ba530) writes `+0x50 = 0`;
-//     this one leaves it to SetObject's third argument. So +0x50 is the
-//     VERSION, not a flag — the two constructors write the same slot from two
-//     places. FileStream.h states this; the disassembly confirms it.
-//   * IT NEVER WRITES +0x54. Neither constructor does.
-//
-// `_requestedFormat` (+0x68) and `_activeEncoding` (+0x6c) are BOTH 6 here and
-// are indistinguishable in this body alone. They are distinguished by
-// `?SaveText@External@Object@@`, which writes both to 2 and then branches on
-// +0x6c ALONE for the byte-order mark. Not re-derived — FileStream.h's note.
-// ============================================================================
-extern "C" TextFileStream* RtIo_TextFileStream_Ctor(TextFileStream* self,
-                                                    const String* type,
-                                                    const String* name,
-                                                    int32_t version) {
-    ++g_fsc.textCtor;
-
-    FileStreamCtorInline(&self->base);                                   // 1800ba36f..c6
-    self->base.base.vptr =
-        RT_DATA_SLOT(const void*, "??_7TextFileStream@IO@@6B@");          // 1800ba3c6
-
-    self->objectName      = nullptr;   // 1800ba3d0  +0x58
-    self->objectType      = nullptr;   // 1800ba3d4  +0x60
-    self->requestedFormat = 6;         // 1800ba3d8  +0x68
-    self->activeEncoding  = 6;         // 1800ba3df  +0x6c
-    self->buffer          = nullptr;   // 1800ba3e6  +0x70
-    self->_unk78          = nullptr;   // 1800ba3ea  +0x78
-    // +0x50 and +0x54 deliberately untouched — see the header note.
-
-    InstallEncoding(&self->base.base, 0x1801559d0);                       // 1800ba3ee..4e
-
-    RT_EXPORT_ONCE(SetObjectFn,
-        "?SetObject@TextFileStream@IO@@QEAAXAEBVString@System@@0H@Z")(
-            self, type, name, version);                                   // 1800ba45e
-
-    return self;                                                          // 1800ba464
+    ::new (static_cast<void*>(self)) IO::BinaryFileStream();
+    return self;
 }
 
 // ============================================================================
@@ -851,25 +566,6 @@ int RtIoFileStreamRegister() {
                           (void*)&RtIo_FileStream_Dtor); ++n;
     RegisterRuntimeAddr(0x1800aaab0, (void*)&RtIo_FileStream_Dtor);
 
-    // WAVE 27 lane IOTEXT. `UEAA`, the VIRTUAL spelling -- `??1TextFileStream@
-    // IO@@QEAA@XZ` is a phantom that resolves NULL for ever
-    // (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md). The ADDRESS door is the
-    // one that matters: deleting_dtor.cpp's row 41 asks for 0x1800ba490 by
-    // address and by nothing else.
-    RegisterRuntimeExport("??1TextFileStream@IO@@UEAA@XZ",
-                          (void*)&RtIo_TextFileStream_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800ba490, (void*)&RtIo_TextFileStream_Dtor);
-
-    // WAVE 27 lane IOTEXT. `UEAA` again; deleting_dtor.cpp row 40 asks for
-    // 0x1800a9330 by ADDRESS and that is the door that matters.
-    RegisterRuntimeExport("??1CompressedFileStream@IO@@UEAA@XZ",
-                          (void*)&RtIo_CompressedFileStream_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800a9330, (void*)&RtIo_CompressedFileStream_Dtor);
-
-    RegisterRuntimeExport("??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z",
-                          (void*)&RtIo_TextFileStream_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800ba340, (void*)&RtIo_TextFileStream_Ctor);
-
     RegisterRuntimeExport("?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z",
                           (void*)&RtIo_FileStream_Create); ++n;
     RegisterRuntimeAddr(0x1800aa8f0, (void*)&RtIo_FileStream_Create);
@@ -985,156 +681,10 @@ struct SlotCounters {
 };
 SlotCounters g_fss{};
 
-// ?GetSource@FileStream@IO@@UEBA?AVString@System@@XZ (0x1800aab50) — slot 1.
-extern "C" RtSystem::String* RtIo_FileStream_GetSource(const FileStream* self,
-                                                       RtSystem::String* ret) {
-    // Construct retail's by-value result directly INTO the caller's raw slot:
-    // `ret` is uninitialised memory, so this is a placement construction, not
-    // an assignment over a live String (which would release a string the caller
-    // never owned).
-    new (ret) System::String(
-        reinterpret_cast<const IO::FileStream*>(self)->IO::FileStream::GetSource());
-    return ret;
-}
-
-// ?Read@FileStream@IO@@UEAA_NHPEAX@Z (0x1800aabf0) — slot 3.
-extern "C" bool RtIo_FileStream_Read(FileStream* self, int32_t len, void* buf) {
-    return reinterpret_cast<IO::FileStream*>(self)->IO::FileStream::Read(len, buf);
-}
-
-// ?GetCurrentPos@FileStream@IO@@UEBAIXZ (0x1800aac50) — slot 5.
-// ?GetSize@FileStream@IO@@UEBAIXZ       (0x1800aac60) — slot 6.
-extern "C" uint32_t RtIo_FileStream_GetCurrentPos(const FileStream* self) {
-    return reinterpret_cast<const IO::FileStream*>(self)
-               ->IO::FileStream::GetCurrentPos();
-}
-
-extern "C" uint32_t RtIo_FileStream_GetSize(const FileStream* self) {
-    return reinterpret_cast<const IO::FileStream*>(self)->IO::FileStream::GetSize();
-}
-
 // ?Open@FileStream@IO@@UEAA_NAEBVFilename@System@@@Z (0x1800aac70) — slot 7,
 // and slot 7 on THIS branch is Open, not Close.
 extern "C" bool RtIo_FileStream_Open(FileStream* self, const Filename* path) {
     return reinterpret_cast<IO::FileStream*>(self)->IO::FileStream::Open(Sys(*path));
-}
-
-// ============================================================================
-// The two slot-0 deleting-destructor thunks
-//   FileStream        retail 0x18000c090   (unexported)
-//   BinaryFileStream  retail 0x180023d80   (unexported)
-// ============================================================================
-// Both are MSVC's standard scalar/vector deleting destructor and both are five
-// statements. They differ ONLY in which destructor they name — 0x1800aaab0
-// (`~FileStream`) for the first, 0x180023c80 (`~BinaryFileStream`) for the
-// second — which is the whole reason the two vtable rows are distinct.
-//
-// `0x180006a10`, the unexported guarded free both arms call, is registered
-// (context_lifecycle.cpp) and byte-identical to the exported
-// `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` — binary_writer.cpp compared
-// them instruction for instruction and this lane inherits that rather than
-// re-deriving it.
-//
-// The `flags & 2` arm is a NAMED ABORT. See the header note for why, and for
-// the exact strength of the claim behind it.
-// ============================================================================
-namespace {
-
-void* DeletingDtorCommon(void* self, unsigned flags, void (*dtor)(void*),
-                         const char* which) {
-    if (flags & 2) {                                      // 18000c09f / 180023da2
-        ++g_fss.dtorArrayAbort;
-        printf("[RtPort] FATAL: %s deleting destructor reached its "
-                    "delete[] arm. Retail would call the CRT vector-destructor "
-                    "iterator at 0x18007ec98, which is unexported and unported, "
-                    "so this arm is a declared divergence (see the header note). "
-                    "Reaching it means something ARRAY-ALLOCATED a FileStream, "
-                    "which no caller found in either binary does.\n", which);
-        std::abort();
-    }
-    dtor(self);                                            // 18000c0e1 / 180023dd1
-    if (flags & 1) EncodingDelete(self);                   // 18000c0ef / 180023ddf
-    return self;                                           // 18000c0f4 / 180023de4
-}
-
-}  // namespace
-
-extern "C" void* RtIo_FileStream_DeletingDtor(void* self, unsigned flags) {
-    ++g_fss.dtorScalar;
-    return DeletingDtorCommon(self, flags,
-        [](void* p) { RtIo_FileStream_Dtor(static_cast<FileStream*>(p)); },
-        "IO::FileStream");
-}
-
-extern "C" void* RtIo_BinaryFileStream_DeletingDtor(void* self, unsigned flags) {
-    ++g_fss.dtorScalar;
-    return DeletingDtorCommon(self, flags,
-        [](void* p) { RtIo_BinaryFileStream_Dtor(static_cast<BinaryFileStream*>(p)); },
-        "IO::BinaryFileStream");
-}
-
-// ============================================================================
-// IO::BinaryFileStream::BinaryFileStream(BinaryFileStream const&)
-//                                                         retail 0x180023ca0
-// ============================================================================
-// THE COPY CONSTRUCTOR, AND IT IS HERE FOR ONE REASON: IT IS THE SECOND STAMPER
-// OF `??_7BinaryFileStream@IO@@6B@`.
-//
-// The Wave 19 brief stated that `??0BinaryFileStream@IO@@QEAA@XZ` is that
-// table's ONLY stamper, and that porting it would therefore make the row
-// promotable. **That is not what the binary says.** `get_xrefs_to 0x1801554d0`
-// returns exactly two code sites: 0x1800a8270 (the default ctor, ported above)
-// and **0x180023cfe, inside this function**. Acting on the brief's claim would
-// have declared the row fully owned while a second stamper sat in the DLL
-// putting retail's table into every copied object.
-//
-// The same query also refutes the brief's "nine distinct stampers" for
-// `??_7FileStream@` — there are about seventeen, five of which are already
-// ours. The conclusion the brief drew from that number still holds (Engine::Run
-// and three unexported bodies are not ours, so TRAP=0 there is not a
-// promotion); the number itself does not. `get_xrefs_to` is cheap and neither
-// figure had been run.
-//
-// ---------------------------------------------------------------------------
-// IT COPIES THE ENCODING AS A RAW POINTER, AND THAT IS NOT A BUG TO FIX
-// ---------------------------------------------------------------------------
-// 0x180023cc6 is `MOV RAX,[RDX+0x10] ; MOV [RCX+0x10],RAX` — a shallow copy of
-// `Stream::encoding`. Both objects then point at ONE heap Encoding, and both
-// destructors free it: `~FileStream` ends in `if (encoding) <guarded free>`.
-// **A copy of a BinaryFileStream is a double-free waiting for the second
-// destructor**, which is a plausible reason nothing in either binary calls
-// this.
-//
-// Reproduced exactly. Deep-copying the Encoding here would be a divergence that
-// changes what retail does on a path retail may rely on never taking, and this
-// project's rule is that an unguarded hazard in a faithful body is retail's
-// statement, not ours to correct (CLAUDE.md, "Don't 'fix' a faithful crash").
-// The hazard is recorded here instead.
-//
-// The three vtable stores are Stream -> FileStream -> BinaryFileStream, in that
-// order, exactly as in the default constructor: MSVC emits one per sub-object
-// as each base finishes.
-// ============================================================================
-extern "C" BinaryFileStream* RtIo_BinaryFileStream_CopyCtor(
-        BinaryFileStream* self, const BinaryFileStream* src) {
-    ++g_fss.copyCtor;
-
-    self->base.base.vptr = RT_DATA_SLOT(const void*, "??_7Stream@IO@@6B@");   // 180023cb6
-    self->base.base.direction = src->base.base.direction;                     // 180023cc0
-    self->base.base.encoding  = src->base.base.encoding;                      // 180023cc6 SHALLOW
-    self->base.base.vptr = RT_DATA_SLOT(const void*, "??_7FileStream@IO@@6B@"); // 180023cce
-
-    self->base.filename = nullptr;                                            // 180023cd8
-    if (src->base.filename) {                                                 // 180023ce4
-        self->base.filename = src->base.filename;                             // 180023ce9
-        ++StringRefCount(self->base.filename);                                // 180023ced
-    }
-
-    RtIo_FileInfo_CopyCtor(&self->base.file, &src->base.file);                // 180023cf8
-
-    self->base.base.vptr =
-        RT_DATA_SLOT(const void*, "??_7BinaryFileStream@IO@@6B@");            // 180023cfe
-    return self;                                                              // 180023d08
 }
 
 // Published to the cutover probe alongside the lifecycle counters.
@@ -1299,69 +849,159 @@ bool FileStream::Open(const System::Filename& path) {
 }
 
 // ============================================================================
-// IO::BinaryFileStream slot 0                            retail 0x180023d80
+// IO::FileStream::~FileStream                            retail 0x1800aaab0
 // ============================================================================
-// The BODY is `RtIo_BinaryFileStream_DeletingDtor` above, registered by address
-// at 0x180023d80 and filling slot 0 of the live minted table
-// (rt_data_mint_tables.inc:1662). B34_RULES section 4.2 forbids retiring that
-// row in this step, so the override NAMES the existing door rather than
-// restating the thunk.
-//
-// It exists at all only because `IO::CompressedFileStream` holds a
-// `BinaryFileStream` BY VALUE at +0x68: a member of abstract type is
-// ill-formed, so this one slot cannot stay `= 0` the way `IO::FileStream`'s
-// does. Same shape, same reason, as `IO::MemoryStream`'s.
-Stream* BinaryFileStream::DeletingDtor(unsigned flags) {
-    return static_cast<BinaryFileStream*>(
-        RtIO::RtIo_BinaryFileStream_DeletingDtor(this, flags));
+// ENDGAME B.3.9 IO: the body of the old `??1FileStream` door, now the class's
+// destructor. Retail's six steps, minus the two table stamps (the compiler's
+// own) and with step 6 in ~Stream:
+//   2. if (file.handle != -1) FileSystem::CloseFile(_singleton, &file)
+//   3. ~FileInfo(&file)            4. release `_filename`
+//   6. (~Stream) if (encoding) MemFree(encoding)
+// STEP 2 READS THE SINGLETON, IT DOES NOT USE `this` (`MOV RCX,[0x1801fc6a8]`).
+FileStream::~FileStream() {
+    ++RtIO::g_fsc.fsDtor;
+    if (_file.handle != -1)                                       // 1800aaad5
+        RtIO::RtIo_FileSystem_CloseFile(RtIO::Fs(), &_file);      // 1800aaae6
+    RtIO::RtIo_FileInfo_Dtor(&_file);                             // 1800aaaf0
+    RtIO::ReleaseStrSlot(&_filename);                             // 1800aaaf6
 }
+
+// ============================================================================
+// IO::TextFileStream::TextFileStream(String const&, String const&, int)
+//                                                         retail 0x1800ba340
+// ============================================================================
+// The FileStream prologue (the base ctor), seven of its own fields, a TEXT
+// encoding, then a tail call to `?SetObject@` with the three arguments
+// verbatim. It never writes +0x50 (SetObject's third argument does) nor +0x54.
+// `_requestedFormat` and `_activeEncoding` are both 6 here; `?SaveText@
+// External@` sets both to 2 and branches on +0x6c alone for the BOM.
+TextFileStream::TextFileStream(const System::String& type,
+                               const System::String& name, int version)
+    : _objectName(nullptr),          // 1800ba3d0  +0x58
+      _objectType(nullptr),          // 1800ba3d4  +0x60
+      _requestedFormat(6),           // 1800ba3d8  +0x68
+      _activeEncoding(6),            // 1800ba3df  +0x6c
+      _buffer(nullptr),              // 1800ba3e6  +0x70
+      _bufSize(0),                   // 1800ba3ea  +0x78 (one qword with +0x7c)
+      _bufCursor(0) {
+    ++RtIO::g_fsc.textCtor;
+
+    void* enc = RtSystem::RtMemAlloc(8, 4);                       // 1800ba3ee
+    if (enc) ::new (enc) TextEncoding();
+    if (_encoding) RtSystem::RtMemFree(_encoding);
+    _encoding = static_cast<Encoding*>(enc);                      // ..4e
+
+    RtIO::RtIo_TextFileStream_SetObject(                          // 1800ba45e
+        reinterpret_cast<RtIo::TextFileStream*>(this),
+        reinterpret_cast<char* const*>(&type),
+        reinterpret_cast<char* const*>(&name), version);
+}
+
+// ============================================================================
+// IO::TextFileStream::~TextFileStream                    retail 0x1800ba490
+// ============================================================================
+// Transcribed from the retail disassembly (WAVE 27 LANE IOTEXT), minus the
+// table stamp:
+//   2. if (buffer) MemFree(buffer)  -- BARE, and NOT nulled afterwards
+//   3. release objectType (+0x60)   4. release objectName (+0x58)
+//   5. JMP ~FileStream(this)        -- the compiler's base destructor
+TextFileStream::~TextFileStream() {
+    if (_buffer) RtSystem::RtMemFree(_buffer);                    // 1800ba4b9
+    if (_objectType) RtIO::ReleaseStrSlot(&_objectType);          // 1800ba4bf
+    if (_objectName) RtIO::ReleaseStrSlot(&_objectName);          // 1800ba4e9
+}
+
+// ============================================================================
+// IO::CompressedFileStream::~CompressedFileStream        retail 0x1800a9330
+//                                                  (WAVE 27 LANE IOTEXT)
+// ============================================================================
+// Read with objdump against C:/GOG Games/Banished/Runtime-x64.dll — the retail
+// file on disk, addressed by true VA — after the integrator measured TWO Ghidra
+// defects on this wave's session (a program-selection defect serving the profile
+// build, and `disassemble_function` relabelling one body's listing with another
+// body's address). objdump shares no mechanism with Ghidra, and stream classes
+// are the "near-identical sibling" shape the second defect corrupts invisibly.
+//
+// Five steps then a tail jump:
+//   1800a934b  stamp ??_7CompressedFileStream@IO@@6B@ (0x1801555f0)
+//   1800a9355  if (headerSize > 0 && direction == 1) Commit(this)
+//   1800a9366  rdi = &this->file                      (+0x68)
+//   1800a936e  if (file.file.handle != -1) CloseFile(_singleton, &file.file)
+//   1800a9388  ~FileStream(&this->file)
+//   1800a939b  JMP ~CompressedStream(this)
+//
+// STEP 2 IS THE FLUSH, AND ITS GUARD IS TWO CONDITIONS, NOT ONE.
+// `CMPL $0,0x48(%rcx) ; JLE` is `headerSize > 0` (Stream.h names +0x48 the
+// header Array's _size and calls it "the guard" already), and
+// `CMPL $1,0x8(%rcx) ; JNE` is `direction == 1`, i.e. WRITING. So a read-only
+// compressed stream, and a writing one that never produced a header, both skip
+// Commit. Dropping either half would write a block on teardown of a stream that
+// never wrote one.
+//
+// STEP 4 CLOSES THE INNER STREAM'S FileInfo, NOT ITS OWN. `LEA RDX,[RDI+0x20]`
+// with RDI = this+0x68 puts the FileInfo at this+0x88 — FileStream's own
+// `file` member inside the embedded BinaryFileStream. And like ~FileStream it
+// reaches the FileSystem through the exported singleton rather than through
+// `this`, which is the shape filesystem_packages.cpp:387 already records.
+//
+// EVERY CALLEE IS OURS — the row CLOSES rather than deepening. Checked by
+// grepping for each RegisterRuntimeAddr, not assumed:
+//   0x1800a9ee0  CompressedStream::Commit  PORTED  compressed_stream_write.cpp:783
+//   0x1800accc0  FileSystem::CloseFile     PORTED  filesystem_createfile_win.cpp:636
+//   0x1800aaab0  ~FileStream               PORTED  this file, :867
+//   0x1800aa650  ~CompressedStream         PORTED  compressed_stream_release.cpp:196
+//
+// WHY THIS ROW, given the census tags it INSTRUMENT-SOURCED: the same reason as
+// ~TextFileStream above. Its only export-NAME caller is file_stream_probe.cpp,
+// but deleting_dtor.cpp's row 40 ("IO::CompressedFileStream", slot 0 of
+// `??_7CompressedFileStream@IO@@6B@`) reaches 0x1800a9330 BY ADDRESS, and a
+// census that buckets a row by its name callers cannot see that.
+//
+// NO ORACLE, same reason as the two destructors above: a replay would Commit
+// twice, close a closed handle and free the window arrays twice.
+//
+// ENDGAME B.3.9 IO: this is now `IO::CompressedFileStream`'s own destructor
+// (steps 2 and 4; the stamp is the compiler's). Steps 5 and 6 are the member's
+// ~BinaryFileStream and ~CompressedStream, which the compiler runs after the
+// body. The ??1CompressedFileStream door and its RT_DELDTOR row are gone: the
+// class's inline DeletingDtor is slot 0, and External::Load (the one
+// construction site) ends its stack instance through it.
+IO::CompressedFileStream::~CompressedFileStream() {
+    auto* const self = reinterpret_cast<RtIo::CompressedFileStream*>(this);
+
+    if (self->base.headerSize > 0 &&                                   // 1800a9355
+        self->base.base.direction == 1) {                               // 1800a935b
+        RtIO::RtIo_CompressedStream_Commit(&self->base);                      // 1800a9361
+    }
+
+    RtIO::FileStream* const inner = &self->file.base;                         // 1800a9366
+    if (inner->file.handle != -1) {                                     // 1800a936e
+        RtIO::RtIo_FileSystem_CloseFile(RtIO::Fs(), &inner->file);                  // 1800a937a
+    }
+}                                                                       // 1800a9388 / 1800a939b
 
 }  // namespace IO
 
 
 // ============================================================================
-// Registration for the seven slot bodies in this file.
+// Registration for the slot body in this file that keeps a door.
 // ============================================================================
+// ENDGAME B.3.9 IO: FileStream / BinaryFileStream / TextFileStream objects are
+// built by their real constructors and wear the compiler's tables, so the slot
+// doors whose only caller was a minted table are gone (GetSource, Read,
+// GetCurrentPos, GetSize, the two slot-0 thunks 0x18000c090 / 0x180023d80, the
+// BinaryFileStream copy ctor, and file_stream_win.cpp's Write / SetCurrentPos).
+// `?Open@FileStream@` STAYS: Audio::Stream::Run and the persistence loader call
+// it by name on a FileStream they built through `??0FileStream`.
 int RtIoFileStreamSlotsRegister() {
     using namespace RtIO;
     int n = 0;
-
-    RegisterRuntimeExport("?GetSource@FileStream@IO@@UEBA?AVString@System@@XZ",
-                          (void*)&RtIo_FileStream_GetSource); ++n;
-    RegisterRuntimeAddr(0x1800aab50, (void*)&RtIo_FileStream_GetSource);
-
-    RegisterRuntimeExport("?Read@FileStream@IO@@UEAA_NHPEAX@Z",
-                          (void*)&RtIo_FileStream_Read); ++n;
-    RegisterRuntimeAddr(0x1800aabf0, (void*)&RtIo_FileStream_Read);
-
-    RegisterRuntimeExport("?GetCurrentPos@FileStream@IO@@UEBAIXZ",
-                          (void*)&RtIo_FileStream_GetCurrentPos); ++n;
-    RegisterRuntimeAddr(0x1800aac50, (void*)&RtIo_FileStream_GetCurrentPos);
-
-    RegisterRuntimeExport("?GetSize@FileStream@IO@@UEBAIXZ",
-                          (void*)&RtIo_FileStream_GetSize); ++n;
-    RegisterRuntimeAddr(0x1800aac60, (void*)&RtIo_FileStream_GetSize);
 
     RegisterRuntimeExport("?Open@FileStream@IO@@UEAA_NAEBVFilename@System@@@Z",
                           (void*)&RtIo_FileStream_Open); ++n;
     RegisterRuntimeAddr(0x1800aac70, (void*)&RtIo_FileStream_Open);
 
-    // Both UNEXPORTED — the address is their only door.
-    RegisterRuntimeAddr(0x18000c090, (void*)&RtIo_FileStream_DeletingDtor);
-    RegisterRuntimeAddr(0x180023d80, (void*)&RtIo_BinaryFileStream_DeletingDtor);
-
-    // The SECOND stamper of ??_7BinaryFileStream@. Without it that row keeps a
-    // door onto retail's table and is NOT promotable, whatever its trap count
-    // says -- see the body's header note.
-    RegisterRuntimeExport("??0BinaryFileStream@IO@@QEAA@AEBV01@@Z",
-                          (void*)&RtIo_BinaryFileStream_CopyCtor); ++n;
-    RegisterRuntimeAddr(0x180023ca0, (void*)&RtIo_BinaryFileStream_CopyCtor);
-
-    extern int RtIoFileStreamWinRegister();
-    n += RtIoFileStreamWinRegister();
-
     printf("[RtPort]   IO::FileStream vtable slots (wave 19 lane FILE, post-report): "
-           "%d exports + 2 unexported addresses registered -- "
-           "clears ??_7FileStream@ and ??_7BinaryFileStream@ to TRAP=0\n", n);
+           "%d export registered (the by-name Open door)\n", n);
     return n;
 }

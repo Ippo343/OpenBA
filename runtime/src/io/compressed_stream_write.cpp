@@ -578,26 +578,9 @@ extern "C" void RtIo_CompressedStream_Close(CompressedStream* self) {
     reinterpret_cast<IO::CompressedStream*>(self)->IO::CompressedStream::Close();
 }
 
-// ============================================================================
-// ?Close@CompressedFileStream@IO@@UEAAXXZ                    retail 0x1800a9490
-// ============================================================================
-//     if (headerSize > 0 && direction == 1) Commit(this);
-//     if (*(int*)(this+0x88) != -1)
-//         FileSystem::CloseFile(_singleton, (FileInfo*)(this+0x88));   // TAIL JUMP
-//
-// this+0x88 = 0x68 (the embedded BinaryFileStream, FileStream.h) + 0x20 (its
-// FileInfo, FileStream.h pins that four ways). So this body independently
-// corroborates FileStream.h's +0x20 claim from a class that header does not
-// discuss — and the `!= -1` sentinel at FileInfo+0 is the same one
-// ??1FileStream@IO@@ tests, one class up.
-//
-// CloseFile (0x1800accc0) is LANE FILE'S ROW and is not ported yet. Reached by
-// name; it becomes lane FILE's code the moment they register, with no change
-// here. This is the door §3 of the banner names.
-extern "C" void RtIo_CompressedFileStream_Close(CompressedStream* self) {
-    reinterpret_cast<IO::CompressedFileStream*>(self)
-        ->IO::CompressedFileStream::Close();
-}
+// ?Close@CompressedFileStream@IO@@UEAAXXZ (0x1800a9490): ENDGAME B.3.9 IO --
+// the slot door that stood here is gone with the minted ??_7CompressedFileStream
+// row; the body is the member below.
 
 // ============================================================================
 // ?Create@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z        retail 0x1800aa4b0
@@ -912,10 +895,6 @@ int RtIoCompressedStreamWriteRegister() {
     RegisterRuntimeExport("?Close@CompressedStream@IO@@UEAAXXZ",
                           (void*)&RtIo_CompressedStream_Close); ++n;
     RegisterRuntimeAddr(0x1800aa8d0, (void*)&RtIo_CompressedStream_Close);
-
-    RegisterRuntimeExport("?Close@CompressedFileStream@IO@@UEAAXXZ",
-                          (void*)&RtIo_CompressedFileStream_Close); ++n;
-    RegisterRuntimeAddr(0x1800a9490, (void*)&RtIo_CompressedFileStream_Close);
 
     RegisterRuntimeExport("?Commit@CompressedStream@IO@@QEAAXXZ",
                           (void*)&RtIo_CompressedStream_Commit); ++n;

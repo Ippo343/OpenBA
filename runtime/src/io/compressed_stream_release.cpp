@@ -177,6 +177,22 @@ extern "C" void RtIo_CompressedStream_Dtor(CompressedStream* self) {
 }  // namespace RtIo
 
 // ============================================================================
+// IO::CompressedStream::~CompressedStream -- ENDGAME B.3.9 IO
+// ============================================================================
+// The class's own destructor: the middle of 0x1800aa650 (Release, then the
+// three Array destructors in retail's order). The compiler's epilogue runs
+// ~Stream, which frees the encoding -- the door's tail above. The door itself
+// is unchanged: it still serves raw callers on the minted rows (W2).
+IO::CompressedStream::~CompressedStream() {
+    auto* const pod = reinterpret_cast<RtIo::CompressedStream*>(this);
+    uint8_t* const base = reinterpret_cast<uint8_t*>(this);
+    RtIo::RtIo_CompressedStream_Release(pod);                // 1800aa670
+    RtIo::ArrayDtor(0x180024aa0, base + 0x50);               // 1800aa67a
+    RtIo::ArrayDtor(0x1800249c0, base + 0x40);               // 1800aa684
+    RtIo::ArrayDtor(0x1800248e0, base + 0x30);               // 1800aa68e
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 int RtIoCompressedStreamReleaseRegister() {

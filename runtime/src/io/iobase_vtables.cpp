@@ -111,6 +111,11 @@
 // with `sizeof(T)` = 0x30 (MemoryStream), 0x30 (BinaryReader), 0x28 (Visitor),
 // 0x18 (VisitorStream), matching each type header's `static_assert`.
 //
+// ENDGAME B.3.9 IO: all four are now the classes' own inline `DeletingDtor`
+// overrides (Stream.h, Serializer.h, FileStream.h) and the `flags & 2` arm IS
+// retail's vector delete; the abort below and its helper are gone. The
+// paragraph is kept as the record of what the arm used to be.
+//
 // **THE `flags & 2` ARM IS A NAMED ABORT, NOT A PORT — and that is a declared
 // divergence.** ENC-2 took the same position for BinaryWriter and gave the
 // reason for BinaryWriter only. Re-derived here per class rather than
@@ -258,61 +263,8 @@ uintptr_t ResolveAddr(Module module, uintptr_t ghidraAddr);
 
 namespace RtIo {
 
-using rt::io::BinaryCodec;
-
 namespace {
 
-using MemFreeFn  = void  (*)(void*);
-using MemAllocFn = void* (*)(uint64_t, int);
-using StreamReadFn = bool (*)(void* self, int32_t size, void* buf);
-using VoidThisFn   = void  (*)(void*);
-
-// Slot indices on the IO::Stream family table, in BYTES, as Stream.h numbers
-// them. Spelled here rather than shared, per this directory's house style of
-// self-contained files (binary_writer.cpp:135 does the same for Write/SetPos).
-constexpr int kStreamRead = 0x18;   // [3]
-
-inline void* VSlot(void* obj, int off) {
-    return (*reinterpret_cast<void***>(obj))[off / 8];
-}
-
-inline void MemFree(void* p) {
-    // Null-tested INSIDE the callee in retail; handing it a null is faithful.
-    RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
-}
-
-// The five exported tables this file stamps. Reached BY NAME so a promoted row
-// wins; `RT_DATA_SLOT` never caches a null, which is what lets a table minted
-// later still be picked up.
-inline const void* VtblStream() {
-    return RT_DATA_SLOT(const void*, "??_7Stream@IO@@6B@");
-}
-// The three ReaderWriter-family tables are typed `void**` because
-// `rt::io::ReaderWriter::vtable` is, so the stamp is a plain assignment.
-inline void** VtblBinaryReader() {
-    return RT_DATA_SLOT(void**, "??_7BinaryReader@IO@@6B@");
-}
-inline void** VtblReaderWriter() {
-    return RT_DATA_SLOT(void**, "??_7ReaderWriter@IO@@6B@");
-}
-inline void** VtblVisitor() {
-    return RT_DATA_SLOT(void**, "??_7Visitor@IO@@6B@");
-}
-inline const void* VtblVisitorStream() {
-    return RT_DATA_SLOT(const void*, "??_7VisitorStream@IO@@6B@");
-}
-
-// The Visitor Encoding's vtable — UNEXPORTED, so the address door is the only
-// port-aware one. NOT the shared 0x1801554a8 BinaryEncoding; see header §4.
-inline const void* VtblVisitorEncoding() {
-    static const void* v = nullptr;
-    if (!v) v = reinterpret_cast<const void*>(
-                    ResolveAddr(Module::Runtime, 0x1801559f8ull));
-    return v;
-}
-
-// The one place the `flags & 2` divergence is spelled, so the four call sites
-// cannot drift apart and the message always names its own class.
 // Collection::Array<Mod>::~Array, 0x180010b80. Already ported by lane MOD
 // (modification.cpp:573) and registered BY ADDRESS at :905, so the address
 // door — which is registry-first — reaches our body.
@@ -322,19 +274,6 @@ inline void ArrayModDtor(void* arrayField) {
     if (!fn) fn = reinterpret_cast<ArrayDtorFn>(
                       ResolveAddr(Module::Runtime, 0x180010b80ull));
     fn(arrayField);
-}
-
-[[noreturn]] void ArrayArmUnreachable(const char* cls, const char* producer) {
-    std::fprintf(stderr,
-        "\n[RtIo] FATAL: %s deleting dtor reached with flags&2 (delete[]).\n"
-        "[RtIo] No code path array-allocates a %s: %s\n"
-        "[RtIo] writes no array cookie, so the 8 bytes at this-8 are heap\n"
-        "[RtIo] metadata, not a count. Reaching here means a wrong-typed\n"
-        "[RtIo] pointer arrived, or a producer exists that Wave 19 lane\n"
-        "[RtIo] IOBASE did not find -- see WAVE19_LANE_IOBASE.md.\n\n",
-        cls, cls, producer);
-    std::fflush(stderr);
-    std::abort();
 }
 
 }  // namespace
@@ -375,162 +314,13 @@ extern "C" int32_t RtIo_Stream_GetDirection(const void* self) {
 }
 
 // ===========================================================================
-// MemoryStream vector deleting destructor   0x1800242a0   — vtable slot 0
-// ===========================================================================
-// ~MemoryStream ITSELF WAS ALREADY IN THE TREE and this lane nearly rewrote it.
-// `runtime/src/io/compressedstream.cpp:657` (Wave 9 lane W) holds
-// `RtIo_MemoryStream_Dtor`, registered under BOTH doors at :963-965, and it
-// carries a diff oracle. My duplicate got as far as the LINKER, which reported
-// it as `multiple definition` — the grep did not catch it because I searched
-// for the mangled name and the ADDRESS and found only comments; the body is
-// spelled `RtIo_MemoryStream_Dtor` in a file whose name says CompressedStream.
-// (reference_grep_for_the_port_before_writing_it.md, and the diff table
-// catching it rather than review.)
-//
-// So this is the missing COMPLEMENT, not a rewrite — and lane W said so in
-// advance at compressedstream.cpp:966-971: "??_7MemoryStream@IO@@6B@ slot 0 is
-// the DELETING destructor thunk (0x1800242a0), NOT this body, so registering
-// ??1 does not change what a virtual `delete` dispatches to." This body is what
-// that note was waiting for. It reaches lane W's ~MemoryStream through the
-// EXPORT door, exactly as compressedstream.cpp:330 does, so a future change to
-// that body is picked up here and there is one implementation, not two.
-extern "C" void* RtIo_MemoryStream_DeletingDtor(MemoryStream* self, unsigned int flags) {
-    if (flags & 2u)
-        ArrayArmUnreachable("MemoryStream",
-                            "every producer stack-constructs one or embeds it "
-                            "at CompressedMemoryStream+0x68, which");
-    RT_EXPORT_ONCE(VoidThisFn, "??1MemoryStream@IO@@UEAA@XZ")(self);
-    if (flags & 1u) MemFree(self);
-    return self;
-}
-
-// ===========================================================================
-// ??1BinaryReader@IO@@UEAA@XZ   0x1800a82f0   — swallows the trailer
-// ===========================================================================
-extern "C" void RtIo_BinaryReader_Dtor(BinaryCodec* self) {
-    self->base.vtable = VtblBinaryReader();                    // 1800a8306
-
-    // Read four bytes and DISCARD them: the read-side mirror of
-    // ~BinaryWriter's 0xBBBBBBBB trailer. `scratch` is a real local because
-    // Stream::Read genuinely stores through the pointer.
-    void* s = self->base.stream;
-    int32_t scratch = 0;
-    reinterpret_cast<StreamReadFn>(VSlot(s, kStreamRead))(s, 4, &scratch);
-    (void)scratch;
-
-    self->base.vtable = VtblReaderWriter();                    // 1800a8325
-}
-
-// BinaryReader vector deleting destructor   0x180023a10   — vtable slot 0
-extern "C" void* RtIo_BinaryReader_DeletingDtor(BinaryCodec* self, unsigned int flags) {
-    if (flags & 2u)
-        ArrayArmUnreachable("BinaryReader",
-                            "the only producer is IO::Encoding::CreateReader's "
-                            "MemAlloc(0x30,4), which");
-    RtIo_BinaryReader_Dtor(self);
-    if (flags & 1u) MemFree(self);
-    return self;
-}
-
-// ===========================================================================
-// ??1Visitor@IO@@UEAA@XZ   0x1800bac90   — two stamps, nothing else
-// ===========================================================================
-extern "C" void RtIo_Visitor_Dtor(BinaryCodec* self) {
-    self->base.vtable = VtblVisitor();                         // 1800baca1
-    self->base.vtable = VtblReaderWriter();                    // 1800bacab
-}
-
-// Visitor vector deleting destructor   0x18002b710   — vtable slot 0
-extern "C" void* RtIo_Visitor_DeletingDtor(BinaryCodec* self, unsigned int flags) {
-    if (flags & 2u)
-        ArrayArmUnreachable("Visitor",
-                            "the only producer is the Visitor encoding's "
-                            "MemAlloc(0x28,4), which");
-    RtIo_Visitor_Dtor(self);
-    if (flags & 1u) MemFree(self);
-    return self;
-}
-
-// ===========================================================================
 // IO::VisitorStream — the null sink. Header §4.
 // ===========================================================================
-// ENDGAME B.3.4 STREAMS (4/6): the five stream slots are now members of the
-// REAL `IO::VisitorStream` (runtime/types/io/FileStream.h). The bodies moved
-// verbatim to the `namespace IO` block below; these five stay as the registered
-// doors, at the same addresses, under the same names, and delegate.
-//
-// THE `IO::VisitorStream::` QUALIFICATION IS LOAD-BEARING, not decoration
-// (B34_BRIEFS section A.1). A live VisitorStream wears the MINTED table
-// 0x180155a20, whose slots resolve back to these very doors, so an unqualified
-// virtual call here would dispatch through that table straight into this same
-// door — unbounded recursion, not delegation.
-//
-// NOTHING ELSE IN THIS FILE CHANGES. The constructor (0x1800bb090), the
-// destructor (0x1800bb040), the deleting-dtor thunk (0x18002bf80), the
-// `VtblVisitorStream()` / `RT_DATA_SLOT` stamp and all nine registration lines
-// are byte-identical: section 4.3 forbids a real constructor and section 4.2
-// forbids retiring the registration that fills the minted table's slot 0.
-extern "C" uint32_t RtIo_VisitorStream_GetSize(const VisitorStream* self) {
-    return reinterpret_cast<const IO::VisitorStream*>(self)
-               ->IO::VisitorStream::GetSize();
-}
-extern "C" uint32_t RtIo_VisitorStream_GetCurrentPos(const VisitorStream* self) {
-    return reinterpret_cast<const IO::VisitorStream*>(self)
-               ->IO::VisitorStream::GetCurrentPos();
-}
-extern "C" bool RtIo_VisitorStream_SetCurrentPos(VisitorStream* self, int32_t pos) {
-    return reinterpret_cast<IO::VisitorStream*>(self)
-               ->IO::VisitorStream::SetCurrentPos(pos);
-}
-extern "C" bool RtIo_VisitorStream_Read(VisitorStream* self, int32_t n, void* dst) {
-    return reinterpret_cast<IO::VisitorStream*>(self)
-               ->IO::VisitorStream::Read(n, dst);
-}
-extern "C" bool RtIo_VisitorStream_Write(VisitorStream* self, int32_t n, const void* src) {
-    return reinterpret_cast<IO::VisitorStream*>(self)
-               ->IO::VisitorStream::Write(n, src);
-}
-
-// ??1VisitorStream@IO@@UEAA@XZ   0x1800bb040
-extern "C" void RtIo_VisitorStream_Dtor(VisitorStream* self) {
-    self->base.vptr = VtblVisitorStream();                     // 1800bb052
-    self->base.vptr = VtblStream();                            // 1800bb05c
-    if (self->base.encoding)                                   // 1800bb066
-        MemFree(self->base.encoding);
-}
-
-// VisitorStream vector deleting destructor   0x18002bf80   — vtable slot 0
-extern "C" void* RtIo_VisitorStream_DeletingDtor(VisitorStream* self, unsigned int flags) {
-    if (flags & 2u)
-        ArrayArmUnreachable("VisitorStream",
-                            "its one caller ?Add@ExternalFactory@Object@@ "
-                            "stack-constructs a single instance, which");
-    RtIo_VisitorStream_Dtor(self);
-    if (flags & 1u) MemFree(self);
-    return self;
-}
-
-// ??0VisitorStream@IO@@QEAA@XZ   0x1800bb090
-// The order of the stores is retail's; see header §4 for why `direction` ends
-// at 1 and why the null-encoding free is reproduced although it cannot fire.
-extern "C" VisitorStream* RtIo_VisitorStream_Ctor(VisitorStream* self) {
-    self->base.vptr      = VtblStream();                       // 1800bb0b0
-    self->base.direction = 0;                                  // 1800bb0ba
-    self->base.encoding  = nullptr;                            // 1800bb0c1
-
-    self->base.vptr      = VtblVisitorStream();                // 1800bb0c9
-    self->base.direction = 1;                                  // 1800bb0d3  WRITING
-
-    void* e = RT_EXPORT_ONCE(MemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(8, 4);  // 1800bb107
-    if (e)                                                     // 1800bb118
-        *reinterpret_cast<const void**>(e) = VtblVisitorEncoding();
-
-    if (self->base.encoding)                                   // 1800bb127
-        MemFree(self->base.encoding);
-    self->base.encoding = e;                                   // 1800bb135
-    return self;
-}
+// ENDGAME B.3.9 IO: the class is built by its real constructor
+// (runtime/types/io/FileStream.h -- `?Add@ExternalFactory@`'s stack instance)
+// and wears the compiler's table. The ctor / dtor / slot-0 / five slot doors
+// that stamped and filled the minted ??_7VisitorStream row are deleted with it;
+// the five slot bodies are the members below.
 
 // ===========================================================================
 // ??1Modification@IO@@QEAA@XZ   0x1800b0470   — header §5
@@ -616,53 +406,6 @@ int RtIoBaseVtablesRegister() {
     RegisterRuntimeExport("?GetDirection@Stream@IO@@QEBA?AW4Direction@12@XZ",
                           (void*)&RtIo_Stream_GetDirection); ++n;
     RegisterRuntimeAddr(0x180006200, (void*)&RtIo_Stream_GetDirection);
-
-    // ---- MemoryStream ------------------------------------------------------
-    // ??1MemoryStream is lane W's, registered in compressedstream.cpp:963.
-    RegisterRuntimeAddr(0x1800242a0, (void*)&RtIo_MemoryStream_DeletingDtor); ++n;
-
-    // ---- BinaryReader ------------------------------------------------------
-    RegisterRuntimeExport("??1BinaryReader@IO@@UEAA@XZ",
-                          (void*)&RtIo_BinaryReader_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800a82f0, (void*)&RtIo_BinaryReader_Dtor);
-    RegisterRuntimeAddr(0x180023a10, (void*)&RtIo_BinaryReader_DeletingDtor); ++n;
-
-    // ---- Visitor (a BONUS row: ??_7Visitor@IO@@6B@ is not in the plan's 36)
-    RegisterRuntimeExport("??1Visitor@IO@@UEAA@XZ",
-                          (void*)&RtIo_Visitor_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800bac90, (void*)&RtIo_Visitor_Dtor);
-    RegisterRuntimeAddr(0x18002b710, (void*)&RtIo_Visitor_DeletingDtor); ++n;
-
-    // ---- VisitorStream -----------------------------------------------------
-    RegisterRuntimeExport("?GetSize@VisitorStream@IO@@UEBAIXZ",
-                          (void*)&RtIo_VisitorStream_GetSize); ++n;
-    RegisterRuntimeAddr(0x1800baff0, (void*)&RtIo_VisitorStream_GetSize);
-
-    RegisterRuntimeExport("?GetCurrentPos@VisitorStream@IO@@UEBAIXZ",
-                          (void*)&RtIo_VisitorStream_GetCurrentPos); ++n;
-    RegisterRuntimeAddr(0x1800bb000, (void*)&RtIo_VisitorStream_GetCurrentPos);
-
-    RegisterRuntimeExport("?SetCurrentPos@VisitorStream@IO@@UEAA_NH@Z",
-                          (void*)&RtIo_VisitorStream_SetCurrentPos); ++n;
-    RegisterRuntimeAddr(0x1800bb010, (void*)&RtIo_VisitorStream_SetCurrentPos);
-
-    RegisterRuntimeExport("?Read@VisitorStream@IO@@UEAA_NHPEAX@Z",
-                          (void*)&RtIo_VisitorStream_Read); ++n;
-    RegisterRuntimeAddr(0x1800bb020, (void*)&RtIo_VisitorStream_Read);
-
-    RegisterRuntimeExport("?Write@VisitorStream@IO@@UEAA_NHPEBX@Z",
-                          (void*)&RtIo_VisitorStream_Write); ++n;
-    RegisterRuntimeAddr(0x1800bb030, (void*)&RtIo_VisitorStream_Write);
-
-    RegisterRuntimeExport("??1VisitorStream@IO@@UEAA@XZ",
-                          (void*)&RtIo_VisitorStream_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800bb040, (void*)&RtIo_VisitorStream_Dtor);
-
-    RegisterRuntimeExport("??0VisitorStream@IO@@QEAA@XZ",
-                          (void*)&RtIo_VisitorStream_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800bb090, (void*)&RtIo_VisitorStream_Ctor);
-
-    RegisterRuntimeAddr(0x18002bf80, (void*)&RtIo_VisitorStream_DeletingDtor); ++n;
 
     // ---- IO::Modification ---------------------------------------------------
     RegisterRuntimeExport("??1Modification@IO@@QEAA@XZ",

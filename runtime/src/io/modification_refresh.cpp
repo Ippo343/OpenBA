@@ -629,8 +629,6 @@ using FnStringFormat     = void*    (*)(void*, const char*, ...);       // 0x180
 using FnGetPackDirectory = System::Filename*(*)(const void*, System::Filename*);  // 0x180007c10
 using FnFindFiles        = void     (*)(const void*, const void*, const void*,
                                         bool, void*);                   // 0x1800ad7a0
-using FnPkgCtor          = void*    (*)(void*);                         // 0x1800b4440
-using FnPkgDtor          = void*    (*)(void*);                         // 0x1800b4540 (declined)
 using FnReadPackfile     = bool     (*)(void*, const Filename*);        // 0x1800b46b0
 using FnPkgGetString     = void*    (*)(const void*, void*);            // 0x1800253xx
 using FnPkgGetFileName   = System::Filename*(*)(const void*, System::Filename*, int);  // 0x180025450
@@ -905,8 +903,6 @@ void Modification::RefreshList() {
     static FnStringFormat      fnStringFormat     = nullptr;
     static FnGetPackDirectory  fnGetPackDirectory = nullptr;
     static FnFindFiles         fnFindFiles        = nullptr;
-    static FnPkgCtor           fnPkgCtor          = nullptr;
-    static FnPkgDtor           fnPkgDtor          = nullptr;
     static FnReadPackfile      fnReadPackfile     = nullptr;
     static FnPkgGetString      fnGetName          = nullptr;
     static FnPkgGetString      fnGetAuthor        = nullptr;
@@ -954,10 +950,6 @@ void Modification::RefreshList() {
     }  // ~packDir then ~pattern (reverse declaration order) release here --
        // retail released packDir then pattern too (0x1800af6b4, 0x1800af6ef).
 
-    if (fnPkgCtor == nullptr) fnPkgCtor = reinterpret_cast<decltype(fnPkgCtor)>(
-        ResolveAddr(Module::Runtime, 0x1800b4440));
-    if (fnPkgDtor == nullptr) fnPkgDtor = reinterpret_cast<decltype(fnPkgDtor)>(
-        ResolveAddr(Module::Runtime, 0x1800b4540));
     if (fnReadPackfile == nullptr) fnReadPackfile = reinterpret_cast<decltype(fnReadPackfile)>(
         ResolveAddr(Module::Runtime, 0x1800b46b0));
     if (fnGetName == nullptr) fnGetName = reinterpret_cast<decltype(fnGetName)>(
@@ -1014,25 +1006,25 @@ void Modification::RefreshList() {
         // neither yet converted), reached through the bridge.
         Sys(m->file) = Sys(foundData[i]);
 
-        // 0x1800af830..0x1800af8e6 — the inlined PackageFile constructor. See
-        // the banner for the store-by-store equivalence that lets this call the
-        // exported body instead of transcribing the list twice.
+        // 0x1800af830..0x1800af8e6 — the inlined PackageFile constructor:
+        // ENDGAME B.3.9 IO, the class's real constructor on the same stack
+        // storage (the store list the banner compares, in the same order).
         alignas(16) uint8_t pkgStorage[0xF0];
+        IO::PackageFile* const pkgObj = ::new (static_cast<void*>(pkgStorage)) IO::PackageFile();
         uint8_t* const pkg = pkgStorage;
-        fnPkgCtor(pkg);
 
         const bool read = fnReadPackfile(pkg, &foundData[i]);    // 0x1800b46b0
         // 0x1800af923 — `platform` (+0x74) non-zero means the package is not for
         // this build, and retail CLOSES THE FILE before discarding it. The
         // ReadPackfile-failed path does NOT close: there the file never opened.
         if (!read) {
-            fnPkgDtor(pkg);                                      // 0x1800b4540
+            pkgObj->IO::PackageFile::DeletingDtor(0);           // 0x1800b4540
             RtIo_Mod_Dtor_180011460(m);                          // 0x180011460
             continue;
         }
         if (*reinterpret_cast<const int32_t*>(pkg + 0x74) != 0) {
             fnCloseFile(fs, pkg + 0xC0);                         // 0x1800accc0
-            fnPkgDtor(pkg);
+            pkgObj->IO::PackageFile::DeletingDtor(0);
             RtIo_Mod_Dtor_180011460(m);
             continue;
         }
@@ -1181,7 +1173,7 @@ void Modification::RefreshList() {
         RtColl_ArrayModSetSizeFill_180028610(arr, arr->size + 1, m);
 
         ReleaseInto(&nameRef);                                   // 0x1800b0113
-        fnPkgDtor(pkg);                                          // 0x1800b0172
+        pkgObj->IO::PackageFile::DeletingDtor(0);                // 0x1800b0172 ~PackageFile
         RtIo_Mod_Dtor_180011460(m);                              // 0x1800b017c
     }
 

@@ -424,88 +424,10 @@ static constexpr DelDtorSpec kSpecs[] = {
     // IO::CompressedMemoryStream) for the reason the two rows above are
     // appended: kProbeSubjects is a list of TABLE INDICES and a mid-table insert
     // silently re-points all twelve Video::*Data probe subjects at wrong rows.
+    //
+    // ENDGAME B.3.9 IO: the IO::CompressedFileStream row (0x180024100) is
+    // retired -- the class's inline DeletingDtor is its slot 0.
     RT_DELDTOR(0x180023fd0, 0x1800aa650, 0x068, "IO::CompressedStream"),
-    RT_DELDTOR(0x180024100, 0x1800a9330, 0x0b8, "IO::CompressedFileStream"),
-    // ---- WAVE 21 lane ENC ----------------------------------------------------
-    // Slot 0 of `??_7TextFileStream@IO@@6B@` (0x180155980), Wave 20 §8 item 3's
-    // named expiry: "unblocks when `??1TextFileStream@` lands." It lands here.
-    //
-    // Both constants disassembled at 0x18002ba90 for this lane (pefile byte read
-    // against Runtime-x64.dll, RETAIL — not the profile build):
-    //     4C 8D 0D E1 E9 08 00   LEA R9,[rip+0x8e9e1] -> 0x1800ba490  ~TextFileStream
-    //     BA 80 00 00 00         MOV EDX,0x80          sizeof(IO::TextFileStream)
-    // 0x1800ba490 resolves in the DLL's export directory (checked by VA, not by
-    // name pattern) to `??1TextFileStream@IO@@UEAA@XZ` -- UEAA, matching
-    // reference_phantom_dtor_mangling_qeaa_vs_ueaa.md's warning that this class
-    // is virtual and QEAA would have resolved NULL silently. NOT yet ported —
-    // no RegisterRuntimeExport for that name exists anywhere in the tree at the
-    // time of this row, so ResolveAddr hands back the DLL's own body and this
-    // row makes that address newly `called`
-    // (reference_porting_can_grow_the_cutover_surface.md). 0x80 matches
-    // runtime/types/io/FileStream.h's independent `static_assert(sizeof(TextFileStream)
-    // == 0x80, ...)`.
-    //
-    // The array-branch CALL target (0x18007ec98, the shared `eh vector
-    // destructor iterator`) and the scalar/array MemFree target (0x180006a10,
-    // one of the ten per-TU `operator delete` copies the banner already lists)
-    // were both re-derived from the same disassembly and match the family's
-    // known constants exactly — this row is not a new shape, just a new address.
-    //
-    // NOT added to kProbeSubjects: ~TextFileStream frees `buffer` (+0x70) when
-    // set and calls into `IO::FileStream`'s own teardown, so running it on a
-    // fabricated object would be a manufactured crash, not a measurement.
-    //
-    // APPENDED rather than inserted in address order (it would sort between
-    // Graphics::ParticleSystemInstance and IO::CompressedMemoryStream) for the
-    // same reason every other row above is appended: kProbeSubjects is a list of
-    // TABLE INDICES and a mid-table insert silently re-points all twelve
-    // Video::*Data probe subjects at wrong rows.
-    RT_DELDTOR(0x18002ba90, 0x1800ba490, 0x080, "IO::TextFileStream"),
-    // ---- WAVE 21 lane ENC, item 12 --------------------------------------------
-    // Slot 0 of `??_7ReaderWriter@IO@@6B@` (0x1801553b0) -- the ONE non-purecall
-    // slot of that 26-slot table (25 are `_purecall`, re-verified this lane with
-    // tools/vtable_dump.py against RETAIL Runtime-x64.dll). This is what the
-    // census's "ours 0 / slots 1" line at reg_mint_promoted.cpp:1202 was
-    // waiting on: the `?` numerator was an expiry with no addressee
-    // (reference_expiry_clause_needs_an_addressee.md); Wave 21's kickoff named
-    // lane ENC as that addressee. The answer, re-derived from the shipped
-    // bytes rather than assumed, is 0 BEFORE this row and 1 AFTER it.
-    //
-    // Both constants disassembled at 0x180023bd0 (pefile byte read against
-    // Runtime-x64.dll, RETAIL):
-    //     4C 8D 0D 61 55 09 00   LEA R9,[rip+0x95561] -> 0x1800b9150  ~ReaderWriter
-    //     BA 20 00 00 00         MOV EDX,0x20          sizeof(IO::ReaderWriter)
-    // 0x1800b9150 resolves in the export directory (checked by VA) to
-    // `??1ReaderWriter@IO@@UEAA@XZ` -- UEAA, virtual, matching
-    // reference_phantom_dtor_mangling_qeaa_vs_ueaa.md's warning. NOT ported (no
-    // RegisterRuntimeExport for that name exists in the tree), so this row
-    // makes that address newly `called`
-    // (reference_porting_can_grow_the_cutover_surface.md) -- the same shape as
-    // the UI::ToolTipDialog and IO::CompressedFileStream rows above, where the
-    // deleting-dtor thunk is ported before its callee. 0x20 matches
-    // runtime/types/io/Serializer.h's `struct ReaderWriter` (4 * 8-byte fields,
-    // no static_assert on the whole-struct size there, but every FIELD offset
-    // through +0x18 is asserted and the struct has no members past it).
-    //
-    // The array-branch CALL target (0x18007ec98, the shared iterator) and the
-    // MemFree target (0x180006a10) both match the family's known constants.
-    //
-    // THIS DOES NOT PROMOTE THE ROW. `??_7ReaderWriter@IO@@6B@` is tagged
-    // RT_UNPROMOTABLE | NONE, EVER in reg_mint_promoted.cpp on independent
-    // grounds (20 stampers, all in-DLL RIP-relative LEA, zero calls through the
-    // stamped object across every stamp window) that this row does not touch.
-    // Filling the one real slot moves the "ours" count truthfully; it does not
-    // change the promotion verdict.
-    //
-    // ADDED to kProbeSubjects: ~ReaderWriter's entire body is
-    // `LEA RAX,[??_7ReaderWriter@IO@@6B@]; MOV [RCX],RAX; RET` -- a pure vtable
-    // restamp with no member destroys and no frees, the same shape as the
-    // Object::Base and Video::*Data subjects already in the list.
-    //
-    // APPENDED (would sort between IO::CompressedFileStream and
-    // IO::TextFileStream) for the same reason every other row above is
-    // appended: kProbeSubjects is a list of TABLE INDICES.
-    RT_DELDTOR(0x180023bd0, 0x1800b9150, 0x020, "IO::ReaderWriter"),
     // ---- WAVE 25 lane VTIO ----------------------------------------------------
     // Slot 0 of `??_7PackageFile@IO@@6B@` (0x180155700). WAVE23_LANE_IOPORT.md
     // §8 item 2 is the residual this discharges: that lane measured the table at
@@ -561,7 +483,8 @@ static constexpr DelDtorSpec kSpecs[] = {
     // run, and this one is not.
     //
     // THIS DOES NOT PROMOTE THE ROW, and the table is still 6/9.
-    RT_DELDTOR(0x1800259d0, 0x1800b4540, 0x0f0, "IO::PackageFile"),
+    // ENDGAME B.3.9 IO: the IO::PackageFile row (0x1800259d0) is retired --
+    // the class's inline DeletingDtor is its slot 0.
     // ---- WAVE 27 lane GFXMESH ------------------------------------------------
     // Slot 0 of the three Graphics mesh vtables this lane owns:
     //     ??_7EdgeMesh@Graphics@@6B@          0x180154c70   -> 0x1800134b0
@@ -1352,29 +1275,6 @@ void* RtDelDtor_ToolTipDialog(void* self, unsigned flags) {
 void* RtDelDtor_CompressedStream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180023fd0>());
 }
-// IO::CompressedFileStream ~CompressedFileStream = 0x1800a9330  (PORTED, Wave 27 IOTEXT
-//                          -- runtime/src/io/file_stream.cpp; this row's address
-//                          door is what made porting it worth doing)
-void* RtDelDtor_CompressedFileStream(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180024100>());
-}
-// IO::TextFileStream       ~TextFileStream = 0x1800ba490  (PORTED, Wave 27 IOTEXT --
-//                          runtime/src/io/file_stream.cpp; this row's own
-//                          address door is what made porting it worth doing)
-void* RtDelDtor_TextFileStream(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18002ba90>());
-}
-// IO::ReaderWriter         ~ReaderWriter = 0x1800b9150  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)  [Wave 21 ENC, item 12]
-void* RtDelDtor_ReaderWriter(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180023bd0>());
-}
-// IO::PackageFile          ~PackageFile = 0x1800b4540  (PORTED -- Wave 25 lane BODY,
-//                          runtime/src/io/package_file_dtor.cpp:442. This line read
-//                          "NOT ported" until Wave 27 lane IOTEXT; the two waves
-//                          landed in the same wave and the comment never caught up.)
-void* RtDelDtor_PackageFile(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800259d0>());
-}
 // Graphics::EdgeMesh          ~EdgeMesh = 0x1800a2780          [Wave 27 GFXMESH]
 void* RtDelDtor_EdgeMesh(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x1800134b0>());
@@ -1619,10 +1519,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180038b20, (void*)&RtDelDtor_Dialog);   // Wave 10C DLG8
     RegisterRuntimeAddr(0x18004d270, (void*)&RtDelDtor_ToolTipDialog);  // Wave 10D TIP
     RegisterRuntimeAddr(0x180023fd0, (void*)&RtDelDtor_CompressedStream);      // Wave 19 CSTREAM
-    RegisterRuntimeAddr(0x180024100, (void*)&RtDelDtor_CompressedFileStream);  // Wave 19 CSTREAM
-    RegisterRuntimeAddr(0x18002ba90, (void*)&RtDelDtor_TextFileStream);        // Wave 21 ENC
-    RegisterRuntimeAddr(0x180023bd0, (void*)&RtDelDtor_ReaderWriter);          // Wave 21 ENC item 12
-    RegisterRuntimeAddr(0x1800259d0, (void*)&RtDelDtor_PackageFile);           // Wave 25 VTIO
     RegisterRuntimeAddr(0x1800134b0, (void*)&RtDelDtor_EdgeMesh);              // Wave 27 GFXMESH
     RegisterRuntimeAddr(0x1800175d0, (void*)&RtDelDtor_EdgeMeshInstance);      // Wave 27 GFXMESH
     RegisterRuntimeAddr(0x180017330, (void*)&RtDelDtor_MeshInstance);          // Wave 27 GFXMESH

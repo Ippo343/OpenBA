@@ -88,6 +88,12 @@ namespace {
 namespace rw_vtbl = rt::io::rw_vtbl;
 namespace enc_vtbl = rt::io::encoding_vtbl;
 
+// ENDGAME B.3.9 IO: `IO::ReaderWriter`'s only constructor is retail's inlined
+// base ctor, which takes the owning Serializer. The probes below hand it this
+// zeroed one (stream null); no probe reads the two fields it sets.
+alignas(8) unsigned char g_probeSerBytes[16] = {};
+IO::Serializer& ProbeSer() { return *reinterpret_cast<IO::Serializer*>(g_probeSerBytes); }
+
 // ---------------------------------------------------------------------------
 // Observation channel: every body below records WHICH one ran and on what
 // `this`, so a test can assert the identity of the callee, not merely that
@@ -917,6 +923,7 @@ struct CountingStream final : TestStream {
 // slots overridden, because the base declares all 26 pure. Only slot 0 has
 // behaviour here: it is the 4-byte tail that `~Serializer` triggers.
 struct TailReaderWriter final : IO::ReaderWriter {
+    TailReaderWriter() : IO::ReaderWriter(ProbeSer()) {}
     CountingStream* src = nullptr;
     bool writing = false;
 
@@ -1117,9 +1124,9 @@ UNIT_TEST(constructing_a_Serializer_twice_consumes_two_headers) {
 // Two compiler facts, so the next reader does not fight them:
 //   * `IO::ReaderWriter`'s destructor is protected, so the probe must be a
 //     SUBCLASS (it is) and must give itself a public one.
-//   * `IO::BinaryReader`/`BinaryWriter`/`Visitor` are `final` AND abstract
-//     (slot 0 is left pure; its body is registered by address in
-//     iobase_vtables.cpp), so they can be neither subclassed nor instantiated.
+//   * `IO::BinaryReader`/`BinaryWriter`/`Visitor` are `final` (concrete since
+//     ENDGAME B.3.9 IO; tests/unit/b39_io_classes_test.cpp builds them), so
+//     they cannot be subclassed into a probe.
 //     The BASE is the right thing to probe anyway: it is the table whose order
 //     the 54 `rw_vtbl::` files depend on.
 // ===========================================================================
@@ -1127,6 +1134,7 @@ UNIT_TEST(constructing_a_Serializer_twice_consumes_two_headers) {
 namespace order {
 
 struct OrderProbe final : IO::ReaderWriter {
+    OrderProbe() : IO::ReaderWriter(ProbeSer()) {}
     IO::ReaderWriter* DeletingDtor(unsigned) override { Note(this, 0); return this; }
     int  GetVersion() const override { Note(this, 1); return 0; }
     void Skip() override { Note(this, 2); }

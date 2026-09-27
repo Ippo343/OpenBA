@@ -129,7 +129,6 @@ constexpr uint32_t kCompiledMagic = 0x5412a91fu;
 
 // ---- doors ----------------------------------------------------------------
 // All names except the four addresses called out below.
-using CtorFn        = void* (*)(void*);
 using StreamOpenFn  = bool  (*)(void* self, const Filename* path);   // FileStream vtbl +0x38
 using CompOpenFn    = bool  (*)(RtIo::CompressedStream* self, RtIo::Stream* src, int flag);
 using VoidSelfFn    = void  (*)(void* self);
@@ -175,25 +174,6 @@ using DeleteFn      = void* (*)(void* self, int flags);
 // `.SetSize(n)`. The 0x18002c6a0 row stays registered in array.cpp.
 void ArraySetSize(void* arr, int32_t n) {
     rtcoll::AsArray<&rtcoll::kSpec_ExtArrayElem>(arr)->SetSize(n);
-}
-
-// The three `Collection::Array<T>` destructors ~CompressedStream's caller runs
-// on the stream's own members, reached by address for the same reason
-// compressed_stream_release.cpp reaches them that way: none has an exported
-// name, and all three are already registered by lane Q / lane PKG2, so these
-// resolve to OUR bodies rather than to the DLL's.
-void ArrayDtor(uintptr_t addr, void* arr) {
-    using Fn = void* (*)(void*);
-    Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, addr));
-    fn(arr);
-}
-
-// The Encoding's deleting destructor, 0x180006a10 — the same door
-// external_add.cpp and external_savetext_win.cpp open.
-void EncodingDelete(void* p) {
-    static VoidSelfFn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<VoidSelfFn>(ResolveAddr(Module::Runtime, 0x180006a10));
-    fn(p);
 }
 
 void CloseIfOpen(RtIO::FileInfo* fi) {
@@ -284,10 +264,14 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
     // CompressedStream +0x18/+0x24 are ones nothing writes -- a `= {}` would be
     // a behavioural difference, which is the position saveload_meta.cpp already
     // takes on this very class.
-    RtIo::CompressedFileStream cfs;
-    RT_EXPORT_ONCE(CtorFn, "??0CompressedStream@IO@@QEAA@XZ")(&cfs.base);
-    cfs.base.base.vptr = RT_DATA_SLOT(const void*, "??_7CompressedFileStream@IO@@6B@");
-    RT_EXPORT_ONCE(CtorFn, "??0BinaryFileStream@IO@@QEAA@XZ")(&cfs.file);
+    // ENDGAME B.3.9 IO (foreign site, IO's class): the class's real constructor
+    // (??0CompressedStream, the vptr, ??0BinaryFileStream at +0x68 -- the same
+    // three steps in the same order) on raw stack storage. The body below reads
+    // the object through the RtIo POD view, unchanged.
+    alignas(IO::CompressedFileStream) unsigned char cfsMem[sizeof(IO::CompressedFileStream)];
+    IO::CompressedFileStream* const cfsObj =
+        ::new (static_cast<void*>(cfsMem)) IO::CompressedFileStream();
+    RtIo::CompressedFileStream& cfs = *reinterpret_cast<RtIo::CompressedFileStream*>(cfsObj);
 
     // ---- 1800bc669..1800bc695 -------------------------------------------
     // Slot 7 of a FileStream is `Open`. On the MemoryStream/CompressedStream
@@ -455,26 +439,12 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
     // the destructor -- and both are transcribed rather than collapsed: they
     // are two different statements in retail, and CloseFile is idempotent on a
     // closed FileInfo.
-    cfs.base.base.vptr = RT_DATA_SLOT(const void*, "??_7CompressedFileStream@IO@@6B@");
-    if (cfs.base.headerSize > 0 && cfs.base.base.direction == 1)          // 1800bc890/896
-        RT_EXPORT_ONCE(VoidSelfFn, "?Commit@CompressedStream@IO@@QEAAXXZ")(&cfs.base);
-    CloseIfOpen(&cfs.file.base.file);                                     // 1800bc8a7
-
-    // ~BinaryFileStream: retail calls the exported ??1FileStream DIRECTLY on
-    // the member at +0x68 (1800bc8c6). BinaryFileStream adds no fields and its
-    // own destructor only re-stamps a vtable nothing reads afterwards, so MSVC
-    // elided it -- transcribed as written rather than "corrected" to the
-    // derived destructor.
-    RT_EXPORT_ONCE(CtorFn, "??1FileStream@IO@@UEAA@XZ")(&cfs.file);
-
-    cfs.base.base.vptr = RT_DATA_SLOT(const void*, "??_7CompressedStream@IO@@6B@");  // 1800bc8d0
-    RT_EXPORT_ONCE(VoidSelfFn, "?Release@CompressedStream@IO@@QEAAXXZ")(&cfs.base);  // 1800bc8e1
-    ArrayDtor(0x180024aa0, &cfs.base.blockData);                          // 1800bc8eb, +0x50
-    ArrayDtor(0x1800249c0, &cfs.base.headerData);                         // 1800bc8f5, +0x40
-    ArrayDtor(0x1800248e0, &cfs.base.windowData);                         // 1800bc900, +0x30
-
-    cfs.base.base.vptr = RT_DATA_SLOT(const void*, "??_7Stream@IO@@6B@");  // 1800bc906
-    if (cfs.base.base.encoding) EncodingDelete(cfs.base.base.encoding);    // 1800bc91c
+    // ENDGAME B.3.9 IO: that chain is the class's own destructors -- the
+    // ~CompressedFileStream body (Commit guard, CloseFile), the member's
+    // ~BinaryFileStream (~FileStream, ~Stream), ~CompressedStream (Release, the
+    // three Array dtors +0x50/+0x40/+0x30, ~Stream frees the encoding) -- same
+    // order, same frees, at the same position; no free of the storage.
+    cfsObj->IO::CompressedFileStream::DeletingDtor(0);                    // 1800bc88b..91c
 
     return result;                                                         // 1800bc921
 }

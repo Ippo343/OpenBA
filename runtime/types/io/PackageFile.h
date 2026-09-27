@@ -130,20 +130,71 @@
 
 #include "FileSystem.h"                // RtIO::PackageFileView, RtIO::FileInfo
 #include "../object/External.h"          // Object::External — the base
+#include "../object/Internal.h"          // Object::detail::InternalMemFree
 #include "../system/String.h"
 
 namespace IO {
 
 class PackageFile : public Object::External {
 public:
+    // ---- ENDGAME B.3.9 IO: CONCRETE ------------------------------------------
+    // The two banners above ("NO REAL CONSTRUCTOR", "NO DESTRUCTOR
+    // DECLARATION") describe B.3.4. In B.3.9 the minted ??_7PackageFile row,
+    // its RT_DELDTOR row, the FACTREST replay and the ??0 / ??1 / slot doors
+    // are retired; every PackageFile is built by this constructor
+    // (LoadPackages, CreateNewObject / CreateInPlaceObject, Construct,
+    // Reconstruct) and wears the compiler's table.
+    //
+    // ??0PackageFile@IO@@QEAA@XZ 0x1800b4440: External() (Base's and
+    // External's stores; the vptrs are the compiler's), then retail's stores
+    // in retail's order -- including the FileInfo's out-of-order +0x18 last.
+    // NOT written: +0x78/+0x7c, +0x90/+0x94, +0xad..+0xaf, FileInfo +0x04 and
+    // +0x14 (i.e. +0xc4 and +0xd4).
+    PackageFile() : Object::External() {
+        _stringArray20 = nullptr; _stringArray20Count = 0; _stringArray20Cap = 0;  // 1800b4489/8d
+        _stringArray30 = nullptr; _stringArray30Count = 0; _stringArray30Cap = 0;  // 1800b4491/95
+        _name.data = nullptr;                                   // 1800b4499
+        _author.data = nullptr;                                 // 1800b449d
+        _description.data = nullptr;                            // 1800b44a1
+        _string58.data = nullptr;                               // 1800b44a5
+        _string60.data = nullptr;                               // 1800b44a9
+        _version = 0; _userVersion = 0;                         // 1800b44ad (one qword)
+        _priority = 0x2710; _platform = 0;                      // 1800b44b1 (one qword 0x2710)
+        _iconData = nullptr;                                    // 1800b44b9
+        _iconCount = 0; _iconCapacity = 0;                      // 1800b44c0
+        _previewData = nullptr;                                 // 1800b44c7
+        _previewCount = 0; _previewCapacity = 0;                // 1800b44ce
+        _crc = 0;                                               // 1800b44d5
+        _overridable = 1;                                       // 1800b44dc
+        _entries = nullptr;                                     // 1800b44e3
+        _entryCount = 0; _entryCapacity = 0;                    // 1800b44ea
+        _file.handle = -1;                                      // 1800b44fd
+        _file.size = 0; _file.cursor = 0;                       // 1800b4503 (one qword)
+        _file.baseOffset = 0;                                   // 1800b4507
+        _file._name0.data = nullptr;                            // 1800b4514
+        _file._name1.data = nullptr;                            // 1800b4520
+        _file.winHandle = -1;                                   // 1800b4523
+    }
+
     // ---- the nine slots of ??_7PackageFile@IO@@6B@ (0x180155700) ----------
-    // Slot 0 is left PURE and its body is NOT here: it is
-    // `RT_DELDTOR(0x1800259d0, …, 0x0f0, "IO::PackageFile")` in
-    // runtime/src/object/deleting_dtor.cpp, which is ALSO what fills slot 0 of
-    // the live minted table (B34_RULES §4.2). Declaring it pure is what keeps
-    // this class un-instantiable, which is what keeps our constructor from
-    // taking over from the factory replay (§4.3).
-    Object::Base* DeletingDtor(unsigned flags) override = 0;    // [0] 0x1800259d0
+    // [0] 0x1800259d0 — MSVC's VECTOR deleting destructor (`MOV EDX,0xf0`):
+    // `flags & 2` reads the int32 count at `this - 8`, destroys downward, frees
+    // `this - 8` on `flags & 1` and returns it; otherwise ~PackageFile, then
+    // 0x1800251e0 (PackageFile's operator delete: the locked MemFree) on
+    // `flags & 1`. Nothing `new[]`s a PackageFile.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<PackageFile*>(self + static_cast<int64_t>(i) * 0xf0)->~PackageFile();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~PackageFile();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char*   TypeName() const override;                    // [1] 0x180025150
     uint32_t      Type() const override;                        // [2] 0x180025130
@@ -236,8 +287,15 @@ public:
     System::Filename GetFileName(int index) const;
 
     // The static companion retail's reflection block emits, reading the same
-    // minted `?_typeInfo@PackageFile@IO@@` record `Type()` reads.
+    // minted `?_typeInfo@PackageFile@IO@@` record `Type()` reads (through a
+    // namespace-scope atomic slot, ENDGAME B.3.9 W1; DEFINE_TYPE is W3).
     static uint32_t TypeId();         // 0x180025140
+
+    // Retail's factory pair (B39_RULES D2), replacing the FACTREST replay row:
+    // MemAlloc(0xf0, 8) + the ctor, and the null-tested in-place ctor.
+    // Defined and registered (name + VA) in package_file.cpp.
+    static Object::Base* CreateNewObject();                  // 0x180025240
+    static Object::Base* CreateInPlaceObject(void* place);   // 0x1800252c0
 
     // ---- the 0xd0 bytes PackageFile adds, from +0x20 ----------------------
     // PUBLIC, like `Object::External`'s and `IO::Serializer`'s, because the
@@ -330,17 +388,12 @@ public:
     // +0x18 = -1, the Win32 HANDLE).
     RtIO::FileInfo _file;    // +0xc0 .. +0xef
 
-    // THERE IS DELIBERATELY NO DESTRUCTOR DECLARATION. `??1PackageFile@IO@@UEAA@XZ`
-    // (0x1800b4540) is ported and registered, and its body stays exactly where
-    // it is (runtime/src/io/package_file_dtor.cpp): it performs retail's
-    // base->derived->base vptr RESTAMP by hand and releases the five String
-    // slots in retail's descending order. A C++ destructor here would (a) need
-    // that restamp expressed as a constructor/destructor chain that stamps
-    // GCC's tables instead of the live minted one, and (b) run in addition to
-    // that transcribed body wherever both were reachable. Both are exactly what
-    // B34_RULES §4.3 forbids for a class a factory replay constructs. The
-    // implicit destructor the compiler supplies is never reached — the class is
-    // abstract and nothing instantiates one.
+protected:
+    // ??1PackageFile@IO@@UEAA@XZ 0x1800b4540 — ENDGAME B.3.9 IO: retail's
+    // body, moved from the retired door into package_file_dtor.cpp. Every
+    // member above is a POD, so the compiler adds nothing but the tail into
+    // ~External (retail's JMP at 0x1800b4679). NON-virtual (Decision 2).
+    ~PackageFile();
 };
 
 // ---- the layout pins ------------------------------------------------------
