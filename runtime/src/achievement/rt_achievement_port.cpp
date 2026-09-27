@@ -15,6 +15,7 @@
 
 #include <cstdio>
 #include "../../funcs/rt_port.h"
+#include "../../types/achievement/AchievementManager.h"
 
 extern int RtAchGoalRegister();       // goal.cpp                (lane A)
 extern int RtAchManagerRegister();    // achievement_manager.cpp (lane B)
@@ -22,7 +23,6 @@ extern int RtAchManagerRegister();    // achievement_manager.cpp (lane B)
 // not by a switch of its own: class atomicity (PLAN §4.1 decision 5) means the
 // two stream members must flip together with the ctors/dtors that build the
 // objects they serialize.
-extern int RtAchGoalSerializeRegister();  // goal_serialize.cpp      (Wave 9 P)
 // Wave 23 lane ACHIEVE. Both gated by RT_ACHMGR with
 // achievement_manager.cpp: achievement_state.cpp ports five more members of the
 // SAME three classes (the manager dtor, RemoveAll, ReadAchievements,
@@ -31,16 +31,6 @@ extern int RtAchGoalSerializeRegister();  // goal_serialize.cpp      (Wave 9 P)
 // atomicity (PLAN �4.1 decision 5) puts them on one switch.
 extern int RtAchStateRegister();          // achievement_state.cpp     (Wave 23)
 extern int RtAchSerializeRegister();      // achievement_serialize.cpp (Wave 23)
-// Wave 27 lane ACHIEVE — achievement_typeinfo_accessors.cpp. ONE file, TWO
-// register functions, because its eleven slot bodies span all four Achievement
-// vtable rows and those rows sit on DIFFERENT kill switches. Splitting the
-// registration rather than the file is what keeps class atomicity (PLAN §4.1
-// decision 5) while the eleven bodies — which are the same two-instruction
-// shape — stay together where they can be read side by side.
-extern int RtAchGoalTypeInfoAccessorsRegister();     // Goal + GoalInstance
-extern int RtAchManagerTypeInfoAccessorsRegister();  // Achievement + …Instance
-// Wave 27 lane ACHIEVE — achievement_vtable.cpp (the four non-accessor slots).
-extern int RtAchVtableRegister();
 // Wave 27 lane ACHIEVE — goal_list.cpp (GoalList::Initialize, a BODY gap row).
 extern int RtAchGoalListRegister();
 // NO ??0AchievementManager@Achievement@@ HERE, DELIBERATELY. Wave 27 lane
@@ -61,6 +51,10 @@ extern int RtAchGoalListRegister();
 extern "C" int RtAchBatchCGoalListDtorRegister();
 
 void RtAchievementPortInit() {
+    // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
+    // static from here on (name door, address door, manifest publish).
+    RtMintRedirectStorage("?_singleton@AchievementManager@Achievement@@0PEAV12@EA",
+                          &Achievement::AchievementManager::_singleton);
     // BATCH C — Achievement::GoalList::~GoalList. Unconditional, see
     // DIRECTION.md §2.3.
     {
@@ -70,13 +64,9 @@ void RtAchievementPortInit() {
     }
     int n = 0;
     n += RtAchGoalRegister();
-    n += RtAchGoalSerializeRegister();
-    n += RtAchGoalTypeInfoAccessorsRegister();
     n += RtAchGoalListRegister();
     n += RtAchManagerRegister();
     n += RtAchStateRegister();
     n += RtAchSerializeRegister();
-    n += RtAchManagerTypeInfoAccessorsRegister();
-    n += RtAchVtableRegister();
     printf("[RtPort] Achievement: %d exports registered\n", n);
 }

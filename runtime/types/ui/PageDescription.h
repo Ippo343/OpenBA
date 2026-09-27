@@ -17,7 +17,7 @@
 // opens with GroupDescription::Serialize (0x180117d00).
 //
 // `??_7PageDescription@UI@@6B@` @ 0x1801570e0, TEN slots:
-//   [0] 0x1800471a0  (unexported) vector deleting dtor — RT_DELDTOR row, kept
+//   [0] 0x1800471a0  (unexported) vector deleting dtor — the class's own (B.3.9)
 //   [1] 0x180046ee0  TypeName
 //   [2] 0x180046ec0  Type
 //   [3] 0x1800d54a0  GetFileVersion  (`return 0x1104`)
@@ -42,9 +42,16 @@
 //                       the name is that member's.
 //   +0x7c  _pad7c       written by nothing (alignment tail).
 //
-// ABSTRACT (slot 0 `= 0`), no real ctor: `??0PageDescription` (0x1800d54e0)
+// (Until ENDGAME B.3.9:) ABSTRACT (slot 0 `= 0`), no real ctor: `??0PageDescription` (0x1800d54e0)
 // is the door `RtUi_PageDescription_Ctor`, which `Construct`/`Reconstruct`
 // call and ui_factory_wave28.cpp's factory steps reach.
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0PageDescription@UI@@QEAA@XZ` (0x1800d54e0) minus its vptr stores;
+// slot 0 is the class's own vector deleting dtor; ~PageDescription is protected and
+// non-virtual. The factory pair is the class's own; the minted
+// `??_7PageDescription@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
+// the doors are retired.
 // ============================================================================
 
 #include <cstdint>
@@ -52,6 +59,7 @@
 #include <type_traits>
 
 #include "GroupDescription.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI {
 
@@ -60,8 +68,30 @@ class Element;
 
 class PageDescription : public GroupDescription {
 public:
+    // ??0PageDescription@UI@@QEAA@XZ 0x1800d54e0 — the REAL constructor:
+    // GroupDescription's nineteen stores (inlined in retail), then
+    // `MOV dword [RCX+0x78],EDX` with EDX zero (0x1800d556f). +0x7c NOT written.
+    PageDescription() : GroupDescription() {
+        _activePage = 0;
+    }
+
     // ---- the ten slots, in measured order ---------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x1800471a0
+    // [0] 0x1800471a0 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x80`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<PageDescription*>(self + static_cast<int64_t>(i) * 0x80)
+                    ->~PageDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~PageDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180046ee0
     uint32_t    Type() const override;                            // [2] 0x180046ec0
     int32_t     GetFileVersion() const override;                  // [3] 0x1800d54a0
@@ -77,15 +107,14 @@ public:
     // ---- exported, NOT PORTED as members ----------------------------------
     PageDescription(const PageDescription& src);                  // 0x1800470a0  not ported
     PageDescription& operator=(const PageDescription& src);       // 0x180047110  not ported
-    static uint32_t TypeId();                                     // 0x180046ed0  not ported
-    static Object::Base* CreateNewObject();                       // 0x180046fd0  factory door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180047050  factory door
+    static uint32_t TypeId();                                     // 0x180046ed0  ported over the minted record
+    static Object::Base* CreateNewObject();                       // 0x180046fd0  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x180047050  the class's own (B39 D2)
 
 protected:
-    // NOT retail's `??0PageDescription@UI@@QEAA@XZ` (0x1800d54e0, a door).
-    PageDescription() = default;
-    // `??1PageDescription@UI@@UEAA@XZ` (0x1800d54b0). NON-VIRTUAL, NOT defined
-    // in the real build; the retail body is the door `RtUi_PageDescription_Dtor`.
+    // `??1PageDescription@UI@@UEAA@XZ` (0x1800d54b0). NON-VIRTUAL and EMPTY
+    // (pagedescription.cpp): restamp, then the tail JMP to ~GroupDescription,
+    // which the compiler chains.
     ~PageDescription();
 
 private:
@@ -102,6 +131,7 @@ static_assert(sizeof(PageDescription) == 0x80,
               "UI::PageDescription is 0x80 bytes (MOV EDX,0x80 at 0x1800471d2)");
 static_assert(alignof(PageDescription) == 8, "UI::PageDescription aligns to 8");
 static_assert(!std::has_virtual_destructor<PageDescription>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<PageDescription>::value, "B39 D1: concrete");
 static_assert(offsetof(PageDescription, _activePage) == sizeof(GroupDescription),
               "PageDescription's own field begins at the end of GroupDescription");
 static_assert(offsetof(PageDescription, _activePage) == 0x78, "");

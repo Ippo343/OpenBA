@@ -33,7 +33,7 @@
 // `??_7PageElement@UI@@6B@` @ 0x180157080, TWELVE slots. Only 0/1/2 are its
 // own; 4/5/6 are GroupElement's (0x180117f00 / 0x180118050 / 0x1801181c0) and
 // 3, 7..11 are Element's — Page inherits ALL of GroupElement's 4..11:
-//   [0] 0x180047540  (unexported) vector deleting dtor — RT_DELDTOR row, kept
+//   [0] 0x180047540  (unexported) vector deleting dtor — the class's own (B.3.9)
 //   [1] 0x180047270  TypeName
 //   [2] 0x180047250  Type
 //
@@ -44,9 +44,16 @@
 //   +0xc0  _activePage  ctor 0; `?GetActivePage@` / `?SetActivePage@` name it
 //   +0xc4  _padC4       written by nothing (alignment tail)
 //
-// ABSTRACT (slot 0 `= 0`); no real ctor — the `??0PageElement` door in
+// (Until ENDGAME B.3.9:) ABSTRACT (slot 0 `= 0`); no real ctor — the `??0PageElement` door in
 // pageelement.cpp and PageDescription::CreateInstance's inlined copy build
 // every live one, wearing the MINTED table.
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0PageElement@UI@@QEAA@XZ` (0x1800d5260) minus its vptr stores;
+// slot 0 is the class's own vector deleting dtor; ~PageElement is protected and
+// non-virtual. The factory pair is the class's own; the minted
+// `??_7PageElement@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
+// the doors are retired.
 // ============================================================================
 
 #include <cstdint>
@@ -55,6 +62,7 @@
 
 #include "Element.h"
 #include "GroupElement.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI { namespace PageElementOffsets {
 
@@ -72,8 +80,30 @@ namespace UI {
 
 class PageElement : public GroupElement {
 public:
+    // ??0PageElement@UI@@QEAA@XZ 0x1800d5260 — the REAL constructor: ??0Element,
+    // the GroupElement stamp (GroupElement()), its own stamp and ONE
+    // `MOV dword [RBX+0xc0],0`. +0xc4 NOT written.
+    PageElement() : GroupElement() {
+        _activePage = 0;
+    }
+
     // ---- the slots it owns ------------------------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180047540
+    // [0] 0x180047540 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0xc8`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<PageElement*>(self + static_cast<int64_t>(i) * 0xc8)
+                    ->~PageElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~PageElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180047270
     uint32_t    Type() const override;                            // [2] 0x180047250
     // [3..11] GroupElement's / Element's, inherited.
@@ -88,15 +118,14 @@ public:
     // ---- exported, NOT PORTED as members ----------------------------------
     PageElement(const PageElement& src);                          // 0x180047450  not ported
     PageElement& operator=(const PageElement& src);               // 0x1800474b0  not ported
-    static uint32_t TypeId();                                     // 0x180047260  not ported
-    static Object::Base* CreateNewObject();                       // 0x180047360  factory door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180047400  factory door
+    static uint32_t TypeId();                                     // 0x180047260  ported over the minted record
+    static Object::Base* CreateNewObject();                       // 0x180047360  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x180047400  the class's own (B39 D2)
 
 protected:
-    // NOT retail's `??0PageElement@UI@@QEAA@XZ` (0x1800d5260, a door).
-    PageElement() = default;
-    // `??1PageElement@UI@@UEAA@XZ` (0x1800d5220). NON-VIRTUAL, NOT defined in
-    // the real build; the retail body is the door `RtUi_PageElement_Dtor`.
+    // `??1PageElement@UI@@UEAA@XZ` (0x1800d5220). NON-VIRTUAL and EMPTY
+    // (pageelement.cpp): two restamps, then ~Element -- the compiler's chain
+    // through ~GroupElement.
     ~PageElement();
 
 private:
@@ -113,6 +142,7 @@ static_assert(sizeof(PageElement) == 0xc8,
               "UI::PageElement is 0xc8 bytes (MOV EDX,0xc8 in 0x180047540)");
 static_assert(alignof(PageElement) == 8, "UI::PageElement aligns to 8");
 static_assert(!std::has_virtual_destructor<PageElement>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<PageElement>::value, "B39 D1: concrete");
 static_assert(offsetof(PageElement, _activePage) == sizeof(GroupElement),
               "PageElement's own field begins at the end of GroupElement");
 static_assert(offsetof(PageElement, _activePage) == PageElementOffsets::kActivePage, "");

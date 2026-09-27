@@ -24,6 +24,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <new>
+#include "Component/CropFieldComponent.h"   // ENDGAME B.3.9 D5: CropFieldComponent::TypeId()
+#include "Component/OrchardComponent.h"     // ENDGAME B.3.9 D5: OrchardComponent::TypeId()
 
 // ============================================================
 // Local function pointers (resolved once by TendArea_ResolveFuncs)
@@ -101,8 +103,6 @@ static TAW_FindComp_Storage_t        s_fn_FindComp_Storage = nullptr;
 static TAW_StorageQueryCount_t       s_fn_StorageQueryCount = nullptr;
 
 // Type ID constants
-static uint32_t* s_typeId_CropAreaComponent = nullptr;    // DAT_1401c7510
-static uint32_t* s_typeId_OrchardAreaComponent = nullptr;  // DWORD_1401c46b0
 
 // Float constants
 static float* s_fHalfCellOffset = nullptr;  // DAT_140172114 = 0.5f
@@ -174,12 +174,6 @@ bool TendArea_ResolveFuncs() {
 
     // fn_MemFreeStatic from engine_funcs
     s_fn_MemFreeStatic = reinterpret_cast<TAW_MemFreeStatic_t>(fn_MemFreeStatic);
-
-    // Type ID pointers
-    s_typeId_CropAreaComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7510));
-    s_typeId_OrchardAreaComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c46b0));
 
     // Float constants
     s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
@@ -315,7 +309,7 @@ int TendArea::Execute(void* citizenIBP, void* /*context*/, uint64_t /*arg3*/) {
 
         workFlag = 1;
         targetCell = *(int*)((int64_t)(int)randIdx * 0x20 + *(int64_t*)(areaCompIBP + 0x58));
-        typeId = *s_typeId_CropAreaComponent;
+        typeId = CropFieldComponent::TypeId();  // DAT_1401c7510
     } else {
         // Orchard mode: find OrchardAreaComponent
         s_fn_FindComp_AreaOrchard(*(uintptr_t*)(selfAddr + 0x10), &areaCompIBP);
@@ -325,7 +319,7 @@ int TendArea::Execute(void* citizenIBP, void* /*context*/, uint64_t /*arg3*/) {
 
         workFlag = 2;
         targetCell = *(int*)(*(int64_t*)(areaCompIBP + 0x50) + (int64_t)(int)randIdx * 0x28);
-        typeId = *s_typeId_OrchardAreaComponent;
+        typeId = OrchardComponent::TypeId();  // DWORD_1401c46b0
     }
 
     // Step 5: Find nearest passable cell and check pathability

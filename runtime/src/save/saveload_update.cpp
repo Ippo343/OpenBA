@@ -51,6 +51,7 @@
 #include "../../funcs/rt_sink.h"
 #include "saveload_internal.h"
 #include "../../types/io/Persistence.h"
+#include "../../types/engine/MainLoop.h"   // ENDGAME B.3.9 ENG: the class static
 #include "../../types/io/Modification.h"   // UpdateLoad reorders the mod list
 #include "../../types/collection/Collection.h"
 #include "../../types/video/CompanionData.h"  // ENDGAME B.3.5: Video::ImageBufferData
@@ -1141,7 +1142,7 @@ void Save::SaveLoad::UpdateSave() {
         // manufacturing garbage to be faithful to garbage would be worse than
         // useless, so this passes nullptr and says so here.
         using SaveRestoreFn = void (*)(void* self, char save, void* savedState, int* outParam);
-        uint8_t** mainLoopSlot = RtDataExport<uint8_t*>("?_singleton@MainLoop@Engine@@1PEAV12@EA");
+        uint8_t** mainLoopSlot = reinterpret_cast<uint8_t**>(&::Engine::MainLoop::_singleton);
         if (mainLoopSlot != nullptr && *mainLoopSlot != nullptr) {
             void*  loop = *reinterpret_cast<void**>(*mainLoopSlot + 0x20);
             void** vtbl = *reinterpret_cast<void***>(loop);

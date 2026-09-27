@@ -42,11 +42,19 @@
 // The scalar names are the ported file's (`_u80`/`_b84`/`_b85`/`_i88`/`_i8c`):
 // Serialize proves the widths, nothing proves a meaning. Not invented here.
 //
-// ABSTRACT (slot 0 `= 0`); no real ctor (B4b-2): every live one is built by the
+// (Until ENDGAME B.3.9:) ABSTRACT (slot 0 `= 0`); no real ctor (B4b-2): every live one is built by the
 // `??0TextDescription` DOOR (textdescription.cpp) and wears the MINTED table,
 // so every door delegates with a QUALIFIED call.
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0TextDescription@UI@@QEAA@XZ` (0x18011ea20) minus its vptr stores;
+// slot 0 is the class's own vector deleting dtor; ~TextDescription is protected and
+// non-virtual. The factory pair is the class's own; the minted
+// `??_7TextDescription@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
+// the doors are retired.
 // ============================================================================
 
+#include <type_traits>
 #include <cstdint>
 #include <cstddef>
 
@@ -63,8 +71,39 @@ class TextElement;
 
 class TextDescription : public ElementDescription {
 public:
+    // ??0TextDescription@UI@@QEAA@XZ 0x18011ea20 — the REAL constructor
+    // (out of line in retail; Construct / Reconstruct tail-jump to it):
+    // ElementDescription()'s stores, then +0x68/+0x70/+0x78 QWORD zero, +0x80
+    // DWORD 0, ONE WORD 0 over +0x84/+0x85, +0x88 DWORD 0xc8, +0x8c DWORD -1.
+    // +0x86..+0x87 are NOT written.
+    TextDescription() : ElementDescription() {
+        _font         = nullptr;
+        _stringTable2 = nullptr;
+        _name         = nullptr;
+        _u80 = 0;
+        _b84 = 0;
+        _b85 = 0;
+        _i88 = 0xc8;
+        _i8c = -1;
+    }
+
     // ---- the ten slots, in measured order ---------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;     // [0] 0x180041e30
+    // [0] 0x180041e30 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x90`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<TextDescription*>(self + static_cast<int64_t>(i) * 0x90)
+                    ->~TextDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~TextDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                       // [1] 0x180041ad0
     uint32_t    Type() const override;                           // [2] 0x180041ab0
     int32_t     GetFileVersion() const override;                 // [3] 0x18011ee20
@@ -92,20 +131,18 @@ public:
     TextDescription& operator=(const TextDescription& src);      // 0x180041d40  not ported
 
     // Reflection statics / allocation. `_typeInfo` is the MINTED record.
-    static uint32_t TypeId();                                    // 0x180041ac0  not ported
-    static Object::Base* CreateNewObject();                      // 0x180041bc0  ui_factory_wave28.cpp door
-    static Object::Base* CreateInPlaceObject(void* place);       // 0x180041c40  ui_factory_wave28.cpp door
+    static uint32_t TypeId();                                    // 0x180041ac0  ported over the minted record
+    static Object::Base* CreateNewObject();                      // 0x180041bc0  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);       // 0x180041c40  the class's own (B39 D2)
     static void* operator new(std::size_t bytes);                // 0x180041ae0  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x180041b50  not ported
     static void  operator delete(void* p);                       // 0x180041b60  not ported
 
 protected:
-    // NOT retail's `??0TextDescription@UI@@QEAA@XZ` (0x18011ea20 — the door
-    // `RtUi_TextDescription_Ctor`, textdescription.cpp).
-    TextDescription() = default;
-    // `??1TextDescription@UI@@UEAA@XZ` (0x18011eae0). NON-VIRTUAL and NOT
-    // defined (a body would chain to ~ElementDescription, undefined in the real
-    // build); the retail body is the door `RtUi_TextDescription_Dtor`.
+    // `??1TextDescription@UI@@UEAA@XZ` (0x18011eae0). NON-VIRTUAL
+    // (textdescription.cpp): releases the name String at +0x78; the compiler
+    // chains ~ElementDescription (+0x60) and ~External. +0x68 / +0x70 are NOT
+    // released (retail's).
     ~TextDescription();
 
 private:
@@ -130,6 +167,8 @@ public:
 static_assert(sizeof(TextDescription) == 0x90,
               "UI::TextDescription is 0x90 (MOV EDX,0x90 in 0x180041e30)");
 static_assert(alignof(TextDescription) == 8, "UI::TextDescription aligns to 8");
+static_assert(!std::has_virtual_destructor<TextDescription>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<TextDescription>::value, "B39 D1: concrete");
 static_assert(offsetof(TextDescription, _font) == sizeof(ElementDescription),
               "TextDescription's own fields begin at the end of ElementDescription");
 static_assert(offsetof(TextDescription, _font)         == 0x68, "");

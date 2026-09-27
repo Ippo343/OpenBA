@@ -101,8 +101,6 @@ extern int RtIoFileSystemFindRegister();     // filesystem_find_win.cpp (lane FI
 // removes both halves; if the probe is the problem, it is already gated on the
 // diff harness and a normal run does not run it.
 extern int RtIoPackageFileRegister();        // package_file.cpp (lane PKG2)
-extern int RtIoPackageFileDtorRegister();    // package_file_dtor.cpp (W25 BODY)
-extern int RtIoPackageFileSerializeRegister(); // package_file_serialize.cpp (W27 IOTEXT)
 // Wave 9 lane PKG2 rung 2: the IO::CompressedStream READ path (Read, SetWindow,
 // GetAvailableWindow, DecompressFromSource) — the stack ?ReadPackfile@ stands
 // on, and the thing that gives rung 1's Compression::Decompress its first real
@@ -120,7 +118,6 @@ extern int RtIoFileSystemOpenFileRegister();  // filesystem_openfile_win.cpp (la
 // switch because it sits UNDER CompressedStream::Open -- every stream read in
 // the packfile header path goes through it, so the integrator must be able to
 // remove exactly it if a boot regresses.
-extern int RtIoMemoryStreamRegister();        // memory_stream.cpp (lane PKG2)
 // Wave 9 lane PKG2 rung 4b-iii: CompressedStream::Release and ~CompressedStream.
 // LANE W'S ROWS. ~CompressedStream is a LIVE blocker today, not just at
 // cutover: lane W's ported ~CompressedMemoryStream tail-jumps into it.
@@ -146,27 +143,10 @@ namespace RtIO { void RtIo_CompressedStreamReadProbe(); }
 // registry behaves the same as one that falls through to the DLL.
 namespace RtIO { int RtIoModificationRegister(); }   // modification.cpp (lane MOD)
 
-// Wave 9 lane ENC: the two IO::Encoding factories (slots 3 and 4 of the shared
-// vtable 0x1801554a8, both UNEXPORTED) and the two BinaryReader/BinaryWriter
-// constructors they call. Its own switch because it is the first lane to make
-// the shared Encoding vtable partly FUNCTIONAL rather than merely minted, and
-// an A/B on it isolates the save/load header path from every other IO row.
-extern int RtIoEncodingRegister();          // encoding.cpp (lane ENC)
-extern int RtIoVisitorTextEncodingRegister();  // encoding_visitor_text.cpp
-
-// Wave 9 lane ENC-2: the four BinaryWriter bodies SaveSettings dispatches into
-// on the write path (two Serialize slots, the back-patching destructor, and the
-// unexported deleting destructor at vtable slot 0). Separate switch from ENC so
-// the framing tail can be A/B tested without turning the factories off.
-extern int RtIoBinaryWriterRegister();      // binary_writer.cpp (lane ENC-2)
-
-// Wave 9 lane SERIAL: the other 73 slots of the IO scalar-serialization
-// dispatch family -- IO::BinaryReader (25), IO::BinaryWriter (23; the two
-// ENC-2 owns are excluded) and IO::Visitor (25). Its own switch so the family
-// can be turned off without turning off ENC-2's framing tail underneath it and
-// vice versa: the two files register DISJOINT slots of the SAME vtables, so an
-// A/B that could only move both together could not attribute anything.
-extern int RtIoSerializeFamilyRegister();   // serialize_family.cpp (lane SERIAL)
+// ENDGAME B.3.9 IO: encoding.cpp (lane ENC), binary_writer.cpp (lane ENC-2,
+// deleted) and serialize_family.cpp (lane SERIAL) register nothing any more.
+// Their doors filled the minted Encoding / ReaderWriter-family tables, which
+// were retired once the objects were built by the classes' real constructors.
 
 // Wave 19 lane CSTREAM: the IO::CompressedStream WRITE path -- the twelve
 // bodies compressed_stream_read.cpp explicitly listed as owed (?Commit,
@@ -262,28 +242,12 @@ void RtIoPortInit() {
     n += RtIoFileSystemPackagesRegister();
     n += RtIoFileSystemFindRegister();
     n += RtIoPackageFileRegister();
-    // Wave 25 lane BODY. ~PackageFile on its OWN switch, NOT folded into PKG2:
-    // it is the first body in this class that FREES, so a defect here is a
-    // double free or a leak rather than a wrong value, and the integrator must
-    // be able to A/B it while keeping the ctor and the twenty accessors.
-    n += RtIoPackageFileDtorRegister();
-    // Wave 27 lane IOTEXT. Its OWN switch, not folded into PKG2, for the reason
-    // above and one more: it is the only PackageFile body that decides a FILE
-    // FORMAT, so a defect is a desynced .pkg rather than a wrong value, and it
-    // opens one new unported address door (0x180029bb0). The integrator must be
-    // able to take the table's ninth slot out without losing the other eight.
-    n += RtIoPackageFileSerializeRegister();
     n += RtIoCompressedStreamReadRegister();
     n += RtIoFileSystemOpenFileRegister();
-    n += RtIoMemoryStreamRegister();
     n += RtIoCompressedStreamReleaseRegister();
     n += RtIoCompressedStreamOpenRegister();
     n += RtIoPackageFileReadRegister();
     n += RtIO::RtIoModificationRegister();
-    n += RtIoEncodingRegister();
-    n += RtIoVisitorTextEncodingRegister();   // unconditional (DIRECTION.md 2)
-    n += RtIoBinaryWriterRegister();
-    n += RtIoSerializeFamilyRegister();
     n += RtIoCompressedStreamWriteRegister();
 
     n += RtIoBaseVtablesRegister();

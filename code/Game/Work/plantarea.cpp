@@ -29,6 +29,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <new>
+#include "Component/CropFieldComponent.h"   // ENDGAME B.3.9 D5: CropFieldComponent::TypeId()
 
 // ============================================================
 // Local function pointers (resolved once by PlantArea_ResolveFuncs)
@@ -119,7 +120,6 @@ static PAW_CropDescComplete_t s_fn_CropDescComplete = nullptr;  // 0x14011b390
 static float* s_fHalfCellOffset = nullptr;  // DAT_140172114 = 0.5f
 
 // Type constant (DAT_1401c7510)
-static uint32_t* s_typeConst = nullptr;
 
 // Vtable pointers for dtor chain
 
@@ -179,9 +179,6 @@ bool PlantArea_ResolveFuncs() {
     // Float constant
     s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
 
-    // Type constant (DAT_1401c7510 -- used as action type marker)
-    s_typeConst = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7510));
-
     // Vtable pointers for dtor
 
     // Verify critical pointers
@@ -196,8 +193,7 @@ bool PlantArea_ResolveFuncs() {
               s_fn_ExternalRef_Serialize &&
               s_fn_CropDescComplete &&
               fn_MemFreeStatic &&
-              g_pGameWorldSingleton && s_fHalfCellOffset &&
-              s_typeConst;
+              g_pGameWorldSingleton && s_fHalfCellOffset;
 
     s_pa_funcs_resolved = ok;
 
@@ -368,7 +364,7 @@ int PlantArea::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
                 continue;
             }
 
-            uint32_t typeConstVal = *s_typeConst;
+            uint32_t typeConstVal = CropFieldComponent::TypeId();  // DAT_1401c7510
             uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
             // Pack cell indices: primary in low 16 bits, paired in high 16 bits

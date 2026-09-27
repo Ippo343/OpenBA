@@ -26,22 +26,24 @@
 //
 // THE EXE SUBCLASSES ALL OF Goal/GoalInstance (BuildingGoal, PopulationGoal,
 // StatGoal, TimeGoal, FinishTutorialGoal; TimeGoalInstance,
-// FinishTutorialInstance — engine/types/AchievementGoals.h, code/Game/Goal/,
-// code/Game/Tutorial/), with HAND-BUILT tables. So both classes are
-// ABSTRACT-BY-POLICY (RULE B7-13): slot 0 `DeletingDtor(unsigned) = 0` with
-// the `deleting_dtor.cpp` row untouched, NO real constructor (the ctor doors in
-// runtime/src/achievement/goal.cpp stamp the MINTED tables), and every call
-// from an exe slot body to a VIRTUAL of these bases is QUALIFIED
+// FinishTutorialInstance — code/Game/Goal/, code/Game/Tutorial/) as real C++
+// subclasses whose constructors chain these bases' real constructors. Every
+// call from an exe slot body to a VIRTUAL of these bases is QUALIFIED
 // (`->Achievement::Goal::Serialize(stream)`), because an unqualified call
-// dispatches through the exe table back into the calling slot.
+// dispatches back into the calling slot.
+//
+// ENDGAME B.3 step 9, block ENG (B39_RULES.md D1/D2): both bases have their
+// own slot 0 (retail's VECTOR deleting destructors) and real constructors, and
+// no door stamps a MINTED table any more: the minted rows, their RT_DELDTOR
+// rows, the ??0 / ??1 doors and the slot doors are retired
+// (tools/rt_mint_retired/eng.txt). `GoalInstance` is concrete (retail's
+// factory builds it); `Goal` stays abstract (slots 6-8 are `_purecall` in
+// retail) and its factory pair returns null, as retail's does.
 //
 // NO VIRTUAL DESTRUCTOR (ENDGAME B.1 decision 2). The destructors are
-// NON-virtual and PUBLIC: public because the exe subclasses' slot-0 bodies —
-// which are free functions over hand-built tables, not C++ subclasses yet
-// (step 8) — run them explicitly as QUALIFIED member calls
-// (`->Achievement::Goal::~Goal()`), which is retail's own shape (each exe
-// slot 0 CALLs `??1Goal@Achievement@@UEAA@XZ`). Deletion of a whole object is
-// still `Object::Destroy(p)` (slot 0), never `delete p`.
+// NON-virtual and PROTECTED: a whole object is destroyed through slot 0
+// (`Object::Destroy(p)`), never `delete p`; the exe subclasses' destructors
+// chain them.
 //
 // PORTABILITY: no <windows.h>, per PLAN.md §4.1.
 // ============================================================================
@@ -147,9 +149,22 @@ public:
     };
 
     // ---- the ten slots, in retail order ------------------------------------
-    // [0] 0x180001d70 — pure on purpose (B7-13); the RT_DELDTOR row fills the
-    //     minted table's slot 0 and is not retired.
-    Object::Base* DeletingDtor(unsigned flags) override = 0;
+    // [0] 0x180001d70 — MSVC's VECTOR deleting destructor (MOV EDX,0x30), both
+    //     arms as the retired RT_DELDTOR row ran them. The exe subclasses
+    //     declare their own (their tables' slot 0 is the exe's).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<Goal*>(self + static_cast<int64_t>(i) * 0x30)->~Goal();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~Goal();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180001b60
     uint32_t    Type() const override;                            // [2] 0x180001b40
     int32_t     GetFileVersion() const override;                  // [3] 0x18009ee10 — 0x10000
@@ -174,34 +189,27 @@ public:
     // ?GetText@Goal@Achievement@@QEBA?AVString@System@@XZ  0x180001ba0
     System::String GetText() const;
 
-    static uint32_t TypeId();                                     // 0x180001b50 — not ported
-    static Object::Base* CreateNewObject();                       // 0x180001b70 — not ported
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180001b80 — not ported
+    // 0x180001b50 — `MOV EAX,[_typeInfo]` over the (still minted)
+    // `?_typeInfo@Goal@Achievement@@` record (B39_RULES D6 step 1).
+    static uint32_t TypeId();
+    // 0x180001b70 / 0x180001b80 — retail's factory pair for an ABSTRACT class:
+    // `XOR EAX,EAX ; RET` both (goal.cpp; registered by name and VA).
+    static Object::Base* CreateNewObject();
+    static Object::Base* CreateInPlaceObject(void* place);
     Goal(const Goal& other);                                      // 0x180001be0 — not ported
     Goal& operator=(const Goal& other);                           // 0x180001c80 — not ported
 
-    // ??1Goal@Achievement@@UEAA@XZ  0x18009edb0. NON-virtual, PUBLIC (banner).
+protected:
+    // ??0Goal@Achievement@@QEAA@XZ 0x18009ed50 — the REAL constructor:
+    // External() and the stamps are the compiler's, then the two zero stores
+    // (+0x20 the StringTable pointer, +0x28 the String).
+    Goal() : Object::External(), _stringTable(), _text() {}
+
+    // ??1Goal@Achievement@@UEAA@XZ  0x18009edb0. NON-virtual (banner).
     // Retail: re-stamp Goal's vptr, release `_text`, tail-jump ~External. The
     // body is EMPTY because the compiler emits all three: the vptr store on
     // entry, `~String` on `_text` (a class member), then `~External()`.
     ~Goal();
-
-    // The door's way onto the shared body (ENDGAME B.3.8 block RB, B38_RULES
-    // D1): `RtAch_Goal_Ctor` stamps the MINTED tables, then runs this.
-    struct DoorBody { static void Init(Goal* g) { g->InitFields(); } };
-
-protected:
-    // ??0Goal@Achievement@@QEAA@XZ 0x18009ed50 — the REAL constructor (ENDGAME
-    // B.3.8 block RB, RULE B8-1): External() and the stamps are the
-    // compiler's; the two zero stores are ONE body with the door.
-    Goal() { InitFields(); }
-
-private:
-    // Raw member writes: the door runs this over raw storage.
-    void InitFields() {
-        _stringTable._ptr = nullptr;                    // +0x20
-        *reinterpret_cast<void**>(&_text) = nullptr;    // +0x28
-    }
 
 private:
     // RULE B5-15 / B7-2, COPIED from B37_SLOTS.md §3 — recorded, not DEFINE_TYPE'd:
@@ -253,8 +261,28 @@ public:
     static constexpr uint32_t kFlagMet    = 0x1;   // set when CheckGoalState returns kMet
     static constexpr uint32_t kFlagFailed = 0x2;   // set on kFailed; LATCHES
 
+    // ??0GoalInstance@Achievement@@QEAA@XZ 0x18009ef00 — the REAL constructor,
+    // PUBLIC (retail's factory builds the class): Internal() (CALL ??0Internal)
+    // and the stamp are the compiler's; then a DWORD at +0x10 (+0x14 is never
+    // written) and the Goal pointer at +0x18.
+    GoalInstance() : Object::Internal(), _flags(0), _goal() {}
+
     // ---- the seven slots, in retail order ----------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x1800020c0 — pure (B7-13)
+    // [0] 0x1800020c0 — MSVC's VECTOR deleting destructor (MOV EDX,0x20), both
+    //     arms as the retired RT_DELDTOR row ran them.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<GoalInstance*>(self + static_cast<int64_t>(i) * 0x20)->~GoalInstance();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~GoalInstance();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180001e60
     uint32_t    Type() const override;                            // [2] 0x180001e40
     void        Persist(void* stream) override;                   // [3] 0x18009ef70 (IO::Stream&)
@@ -271,32 +299,24 @@ public:
     // ExternalPtr arrives BARE in RDX (B7-5); not ported (no caller).
     void SetGoal(Object::ExternalPtr<Goal> goal);
 
-    static uint32_t TypeId();                                     // 0x180001e50 — not ported
+    // 0x180001e50 — `MOV EAX,[_typeInfo]` over the (still minted)
+    // `?_typeInfo@GoalInstance@Achievement@@` record (B39_RULES D6 step 1).
+    static uint32_t TypeId();
     static void* operator new(std::size_t bytes);                 // 0x180001e70 — not ported
     static void* operator new(std::size_t bytes, void* place);    // 0x180001ee0 — not ported
     static void  operator delete(void* p);                        // 0x180001ef0 — not ported
-    static Object::Base* CreateNewObject();                       // 0x180001f50 — not ported
+    // 0x180001f50 — MemAlloc(0x20, 8) + the ctor (goal.cpp, B39_RULES D2). The
+    // in-place half is the SHARED `?CreateInPlaceObject@Internal@Object@@`.
+    // The class declares its own placement new: placement spells `::new (p)`.
+    static Object::Base* CreateNewObject();
     GoalInstance(const GoalInstance& other);                      // 0x180001ff0 — not ported
     GoalInstance& operator=(const GoalInstance& other);           // 0x180002050 — not ported
 
-    // ??1GoalInstance@Achievement@@UEAA@XZ  0x18009ef40. NON-virtual, PUBLIC.
+protected:
+    // ??1GoalInstance@Achievement@@UEAA@XZ  0x18009ef40. NON-virtual.
     // Retail: re-stamp, tail-jump ~Internal. EMPTY body — the compiler emits
     // the stamp and the `~Internal()` (InternalFactory swap-remove) itself.
     ~GoalInstance();
-
-    // The door's way onto the shared body (ENDGAME B.3.8 block RB).
-    struct DoorBody { static void Init(GoalInstance* g) { g->InitFields(); } };
-
-protected:
-    // ??0GoalInstance@Achievement@@QEAA@XZ 0x18009ef00 — the REAL constructor
-    // (ENDGAME B.3.8 block RB, RULE B8-1); ONE body with `RtAch_GoalInstance_Ctor`.
-    GoalInstance() { InitFields(); }
-
-private:
-    void InitFields() {
-        _flags     = 0;         // +0x10 a DWORD — +0x14 is never written
-        _goal._ptr = nullptr;   // +0x18
-    }
 
 private:
     //   0x180001e20  ?_TypeName@GoalInstance@Achievement@@       -> "GoalInstance"

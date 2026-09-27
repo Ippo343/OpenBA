@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <new>
+#include "Component/OrchardComponent.h"   // ENDGAME B.3.9 D5: OrchardComponent::TypeId()
 
 // Diagnostics-only counters (standalone/orchard_diag.cpp). No-op unless
 // BANISHED_ORCHARD_DIAG is set; never change behaviour.
@@ -113,7 +114,6 @@ static POW_OrchardRefresh_t s_fn_OrchardRefresh = nullptr;  // 0x140051830
 static float* s_fHalfCellOffset = nullptr;
 
 // Type constant (DWORD_1401c46b0 -- orchard type marker)
-static uint32_t* s_typeConst = nullptr;
 
 // Vtable pointers
 
@@ -168,8 +168,6 @@ bool PlantOrchard_ResolveFuncs() {
     s_fn_MemAlloc = &POW_MemAllocViaSingleton;
 
     s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
-    s_typeConst = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c46b0));
-
 
     bool ok = s_fn_FindComp_MatDesc && s_fn_FindComp_OrchardDesc &&
               s_fn_CalcMaxWorkers && s_fn_Map_FindNearestPassable &&
@@ -180,8 +178,7 @@ bool PlantOrchard_ResolveFuncs() {
               s_fn_ValidateTask && s_fn_TaskCancel &&
               s_fn_FindSubEntity && s_fn_ExternalRef_Serialize && s_fn_OrchardRefresh &&
               fn_MemFreeStatic &&
-              g_pGameWorldSingleton && s_fHalfCellOffset &&
-              s_typeConst;
+              g_pGameWorldSingleton && s_fHalfCellOffset;
 
     s_po_funcs_resolved = ok;
 
@@ -210,7 +207,6 @@ bool PlantOrchard_ResolveFuncs() {
         if (!fn_MemFreeStatic) printf("  MISSING: MemFreeStatic\n");
         if (!g_pGameWorldSingleton) printf("  MISSING: g_pGameWorldSingleton\n");
         if (!s_fHalfCellOffset) printf("  MISSING: fHalfCellOffset (0x140172114)\n");
-        if (!s_typeConst) printf("  MISSING: typeConst (0x1401c46b0 OrchardComponent type id)\n");
     }
 #endif
 
@@ -331,7 +327,7 @@ int PlantOrchard::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/)
             }
 
             // Valid spot found -- create orchard planting action
-            uint32_t typeConstVal = *s_typeConst;
+            uint32_t typeConstVal = OrchardComponent::TypeId();  // DAT_1401c46b0
             uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
             float halfOffset = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;

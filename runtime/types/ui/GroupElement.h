@@ -14,7 +14,7 @@
 //     ?_ParentTypeName@GroupElement@UI@@CAPEBDXZ  @0x180046b80 -> "Element"
 //
 // `??_7GroupElement@UI@@6B@` @ 0x180157130, TWELVE slots:
-//   [ 0] 0x180046e10  (unexported) vector deleting dtor — RT_DELDTOR row, kept
+//   [ 0] 0x180046e10  (unexported) vector deleting dtor — the class's own (B.3.9)
 //   [ 1] 0x180046bb0  TypeName
 //   [ 2] 0x180046b90  Type
 //   [ 3] 0x180116870  Element::Persist        INHERITED
@@ -31,9 +31,16 @@
 // `sizeof(UI::Element)`. `??0GroupElement@UI@@QEAA@XZ` (0x180117c80) is
 // `??0Element` plus one vtable stamp and nothing else. The class adds NO data.
 //
-// ABSTRACT: slot 0 `= 0`; no real ctor (the `??0GroupElement` door in
+// (Until ENDGAME B.3.9:) ABSTRACT: slot 0 `= 0`; no real ctor (the `??0GroupElement` door in
 // groupelement.cpp and the inlined copies in the three Descriptions'
 // CreateInstance build every live one, wearing the MINTED table).
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0GroupElement@UI@@QEAA@XZ` (0x180117c80) minus its vptr stores;
+// slot 0 is the class's own vector deleting dtor; ~GroupElement is protected and
+// non-virtual. The factory pair is the class's own; the minted
+// `??_7GroupElement@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
+// the doors are retired.
 // ============================================================================
 
 #include <cstdint>
@@ -41,13 +48,33 @@
 #include <type_traits>
 
 #include "Element.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI {
 
 class GroupElement : public Element {
 public:
+    // ??0GroupElement@UI@@QEAA@XZ 0x180117c80 — the REAL constructor: CALL
+    // ??0Element (Element()) and the stamp. The class adds no data.
+    GroupElement() : Element() {}
+
     // ---- the twelve slots, in measured order ------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180046e10
+    // [0] 0x180046e10 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0xc0`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<GroupElement*>(self + static_cast<int64_t>(i) * 0xc0)
+                    ->~GroupElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~GroupElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180046bb0
     uint32_t    Type() const override;                            // [2] 0x180046b90
     // [3] Persist — Element's, inherited.
@@ -58,19 +85,15 @@ public:
     // [7..11] Element's, inherited.
 
     // ---- exported, NOT PORTED as members ----------------------------------
-    GroupElement(const GroupElement& src);                        // 0x180046d70  door (groupelement.cpp)
+    GroupElement(const GroupElement& src);                        // 0x180046d70  not ported (door retired: no caller)
     GroupElement& operator=(const GroupElement& src);             // 0x180046da0  not ported
-    static uint32_t TypeId();                                     // 0x180046ba0  not ported
-    static Object::Base* CreateNewObject();                       // 0x180046ca0  factory door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180046d30  factory door
+    static uint32_t TypeId();                                     // 0x180046ba0  ported over the minted record
+    static Object::Base* CreateNewObject();                       // 0x180046ca0  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x180046d30  the class's own (B39 D2)
 
 protected:
-    // NOT retail's `??0GroupElement@UI@@QEAA@XZ` (0x180117c80, the door
-    // `RtUi_GroupElement_Ctor`).
-    GroupElement() = default;
-    // `??1GroupElement@UI@@UEAA@XZ` (0x180117cc0). NON-VIRTUAL, declared and
-    // NOT defined in the real build; the retail body is the door
-    // `RtUi_GroupElement_Dtor`.
+    // `??1GroupElement@UI@@UEAA@XZ` (0x180117cc0). NON-VIRTUAL and EMPTY
+    // (groupelement.cpp): restamp, then ~Element, which the compiler chains.
     ~GroupElement();
 
 private:
@@ -84,5 +107,6 @@ static_assert(sizeof(GroupElement) == 0xc0,
               "it adds nothing to UI::Element");
 static_assert(alignof(GroupElement) == 8, "UI::GroupElement aligns to 8 (the vptr)");
 static_assert(!std::has_virtual_destructor<GroupElement>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<GroupElement>::value, "B39 D1: concrete");
 
 }  // namespace UI

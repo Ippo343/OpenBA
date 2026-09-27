@@ -29,6 +29,8 @@
 #include <cstring>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/RawMaterialComponent.h"   // ENDGAME B.3.9 D5
+#include "Component/WorkComponent.h"          // ENDGAME B.3.9 D5
 
 // Diagnostic trace for the harvest-completion investigation. Gated by
 // BANISHED_CLEAR_TRACE (shared with clearareacomponent_states.cpp); default off.
@@ -439,10 +441,13 @@ static fn_GatherWork_Attempt_t fn_GatherWork_Attempt = nullptr;
 typedef void (*fn_MemFreeDispatch_t)(void* ptr);
 static fn_MemFreeDispatch_t fn_MemFreeDispatch = nullptr;
 
-// NaturalResourceDescription type ID — DAT_1401c7c80
-static uint32_t* g_TypeId_NaturalResourceDesc = nullptr;
+// RawMaterialComponent type ID — DAT_1401c7c80 (ENDGAME B.3.9 D5: the old local
+// variable name "NaturalResourceDesc" named a different class than the cell held;
+// read directly through RawMaterialComponent::TypeId() below).
 
-// StorageLocationComponent type ID — DAT_1401c8070 (already in engine_funcs.h)
+// WorkComponent type ID — DAT_1401c8070 (already in engine_funcs.h as
+// g_TypeId_WorkComponent; the comment here used to say "StorageLocationComponent",
+// which was also wrong).
 
 // Float constant: half-cell offset (DAT_140172114)
 static float* g_pHalfCellOffset = nullptr;
@@ -487,10 +492,6 @@ static bool ResolveClearAreaFuncs() {
         void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152b68));
         if (slot) fn_MemFreeDispatch = reinterpret_cast<fn_MemFreeDispatch_t>(*slot);
     }
-
-    // Type IDs
-    g_TypeId_NaturalResourceDesc = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7c80));
 
     // Float constant
     g_pHalfCellOffset = reinterpret_cast<float*>(
@@ -889,7 +890,8 @@ int ClearArea::Execute(void* actionStack, void* time, uint64_t /*arg3*/) {
                 int compCount = *(int*)(te + 0x38);
                 uintptr_t compArray = *(uintptr_t*)(te + 0x30);
 
-                // Find NaturalResourceDescription component
+                // Find RawMaterialComponent (DAT_1401c7c80; ENDGAME B.3.9 D5: by cell,
+                // not the legacy local name "NaturalResourceDesc")
                 void* natResComp = nullptr;
                 for (int j = 0; j < compCount; j++) {
                     void** compIBP = reinterpret_cast<void**>(compArray + (uintptr_t)j * 8);
@@ -900,12 +902,12 @@ int ClearArea::Execute(void* actionStack, void* time, uint64_t /*arg3*/) {
                     uint32_t typeId = reinterpret_cast<GetTypeId_t>(
                         *(void**)((*(uintptr_t*)comp) + 0x10))(comp);
 
-                    if (typeId == *g_TypeId_NaturalResourceDesc) {
+                    if (typeId == RawMaterialComponent::TypeId()) {
                         // Verify with IsDerivedFrom
                         void** compIBP2 = reinterpret_cast<void**>(
                             *(uintptr_t*)(te + 0x30) + (uintptr_t)j * 8);
                         void* comp2 = *compIBP2;
-                        if (fn_IsDerivedFrom(comp2, *g_TypeId_NaturalResourceDesc)) {
+                        if (fn_IsDerivedFrom(comp2, RawMaterialComponent::TypeId())) {
                             natResComp = comp2;
                         }
                         break;  // goto LAB_1400e6532
@@ -934,11 +936,11 @@ int ClearArea::Execute(void* actionStack, void* time, uint64_t /*arg3*/) {
                     uint32_t typeId = reinterpret_cast<GetTypeId_t>(
                         *(void**)((*(uintptr_t*)comp) + 0x10))(comp);
 
-                    if (typeId == *g_TypeId_WorkComponent) {
+                    if (typeId == WorkComponent::TypeId()) {
                         void** compIBP2 = reinterpret_cast<void**>(
                             *(uintptr_t*)(te + 0x30) + (uintptr_t)j * 8);
                         void* comp2 = *compIBP2;
-                        if (fn_IsDerivedFrom(comp2, *g_TypeId_WorkComponent)) {
+                        if (fn_IsDerivedFrom(comp2, WorkComponent::TypeId())) {
                             storageLocComp = comp2;
                         }
                         break;

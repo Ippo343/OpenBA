@@ -327,6 +327,11 @@ public:
 
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     static Configuration* Get();                                 // 0x18000d490 (reads _singleton)
+    // ?_singleton@Configuration@Audio@@0PEAV12@EA (0x1801fe758) — the class static (ENDGAME B.3.9 ENG, B39_RULES D7).
+    // The namespace's *PortInit redirects the minted storage row onto it, so
+    // the name door, the address door and this member are the same bytes.
+    // PUBLIC while foreign readers still reach the row through the doors.
+    static Configuration* _singleton;
     void Shutdown();                                             // 0x1800ddea0
     Configuration& operator=(const Configuration& src);          // 0x18000d470
 

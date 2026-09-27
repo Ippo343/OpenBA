@@ -7,7 +7,7 @@
 //
 //   slot  method                       retail       where
 //   ----  ---------------------------  -----------  --------------------------
-//    0    vector deleting dtor         0x180075390  deleting_dtor.cpp row
+//    0    vector deleting dtor         0x180075390  ComboElement.h (the class's own)
 //    1    TypeName                     0x180074f30  here
 //    2    Type                         0x180074f10  here
 //    4    ButtonElement::ComputeSize   0x180110d10  buttonelement.cpp
@@ -16,9 +16,9 @@
 //    7    Update                       0x1801125d0  here
 //    8    ButtonElement::Enable        0x180110cc0  buttonelement.cpp
 //
-// plus ??0ComboElement@UI@@QEAA@AEBV01@@Z  0x1800751e0
-//      ??1ComboElement@UI@@UEAA@XZ         0x180112490
-// (`??0ComboElement@UI@@QEAA@XZ` 0x1801123f0 is factory_ui1.cpp's door.)
+// plus ??1ComboElement@UI@@UEAA@XZ 0x180112490 and the factory pair (ENDGAME
+// B.3.9 UI-A: the real ctor ??0 0x1801123f0 is in the header; the copy-ctor
+// door is retired).
 //
 // ENDGAME B.3.6 block C1: the three slot bodies are MEMBERS of
 // `UI::ComboElement` (runtime/types/ui/ComboElement.h, which now owns the
@@ -78,9 +78,6 @@ uint32_t TextElementTypeId() {
     return p ? *p : 0u;
 }
 
-// The ctor/dtor doors only.
-void* VtComboElement()      { return RT_DATA_SLOT(void*, "??_7ComboElement@UI@@6B@"); }
-void* VtButtonElementBase() { return RT_DATA_SLOT(void*, "??_7ButtonElement@UI@@6B@"); }
 
 using IsDerivedFromFn = bool  (*)(const void* self, uint32_t typeId);
 using DialogCtorFn     = void* (*)(void* self);
@@ -97,16 +94,15 @@ using CloseDialogFn    = void  (*)(void* ui, void** dlgInstance);
 // UI::DialogInstance vtable slot 4 (+0x20) is OnOpened (RULE B6-1.2) — block
 // B's class, reached through its table.
 using DialogOnOpenedFn = void  (*)(void* self);
-using ButtonCopyCtorFn = void* (*)(void* self, const void* other);
-using ElementDtorFn    = void  (*)(void* self);
 using ArrayDtorFn      = void* (*)(void* array);
-using ArrayCopyFn      = void* (*)(void* dst, const void* src);
 
 }  // namespace
 
 namespace UI {
 
-uint32_t ComboElement::Type() const { return TypeIdOf(ComboElementTypeInfo()); }
+// ?TypeId@ComboElement@UI@@SAIXZ 0x180074f20 — the record's first dword.
+uint32_t ComboElement::TypeId() { return TypeIdOf(ComboElementTypeInfo()); }
+uint32_t ComboElement::Type() const { return TypeId(); }
 const char* ComboElement::TypeName() const { return TypeNameOf(ComboElementTypeInfo()); }
 
 // ============================================================================
@@ -243,109 +239,59 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
 }  // namespace UI
 
 // ============================================================================
-// The DOORS
+// ??1ComboElement@UI@@UEAA@XZ   0x180112490 -- retail's body, moved here from
+// the retired door (ENDGAME B.3.9 UI-A)
 // ============================================================================
-extern "C" uint32_t RtUi_ComboElement_Type(const void* self) {
-    return reinterpret_cast<const UI::ComboElement*>(self)->UI::ComboElement::Type();   // B.3.6 bridge
-}
-extern "C" const char* RtUi_ComboElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::ComboElement*>(self)->UI::ComboElement::TypeName();   // B.3.6 bridge
-}
-extern "C" void RtUi_ComboElement_Update(void* selfv, const void* time, void* ui,
-                                         void** dlg, const void* statev) {
-    reinterpret_cast<UI::ComboElement*>(selfv)->UI::ComboElement::Update(   // B.3.6 bridge
-        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlg),   // B.3.6 bridge
-        *static_cast<const UI::Element::UpdateState*>(statev));
-}
-
-// ============================================================================
-// Constructors / destructor — DOORS (B4b-2), unchanged
-// ============================================================================
-// ??0ComboElement@UI@@QEAA@AEBV01@@Z  0x1800751e0 — chains to the out-of-line
-// ??0ButtonElement copy ctor, copies the two description handles, then
-// deep-copies the three parallel arrays onto zeroed targets.
-extern "C" void* RtUi_ComboElement_CopyCtor(void* selfv, const void* otherv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    const uint8_t* other = static_cast<const uint8_t*>(otherv);
-    constexpr int kListDesc = 0xd8, kItemDesc = 0xe0, kStrings = 0xe8, kItemCount = 0xf0,
-                  kSprites = 0xf8, kUserData = 0x108, kCurrentItem = 0x118,
-                  kOpenDialog = 0x120;
-    RtAddr<ButtonCopyCtorFn>(0x180048460ull)(self, other);
-    P(self, 0x00) = VtComboElement();
-    P(self, kListDesc) = Pc(other, kListDesc);
-    P(self, kItemDesc) = Pc(other, kItemDesc);
-
-    *reinterpret_cast<uint64_t*>(self + kStrings)   = 0;
-    *reinterpret_cast<uint64_t*>(self + kItemCount) = 0;
-    RtAddr<ArrayCopyFn>(0x180010040ull)(self + kStrings, other + kStrings);
-
-    *reinterpret_cast<uint64_t*>(self + kSprites)  = 0;
-    *reinterpret_cast<uint64_t*>(self + 0x100)     = 0;
-    RtAddr<ArrayCopyFn>(0x180037020ull)(self + kSprites, other + kSprites);
-
-    *reinterpret_cast<uint64_t*>(self + kUserData) = 0;
-    *reinterpret_cast<uint64_t*>(self + 0x110)     = 0;
-    RtAddr<ArrayCopyFn>(0x180024840ull)(self + kUserData, other + kUserData);
-
-    I32(self, kCurrentItem) = I32c(other, kCurrentItem);
-    P(self, kOpenDialog) = nullptr;
-    P(self, kOpenDialog) = Pc(other, kOpenDialog);
-    return self;
-}
-static_assert(offsetof(UI::ComboElement, _listDesc) == 0xd8 &&
-              offsetof(UI::ComboElement, _openDialog) == 0x120,
-              "the copy-ctor door's offsets are the class's");
-
-// ============================================================================
-// ??1ComboElement@UI@@UEAA@XZ   0x180112490
-// ============================================================================
-// Close the popup if it is still open — through the UserInterface the
+// Close the popup if it is still open -- through the UserInterface the
 // DialogInstance itself points at (`_openDialog->[+0x10]`), NOT through any
-// cached manager — then destroy the three arrays and chain to ~Element.
-extern "C" void RtUi_ComboElement_Dtor(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    P(self, 0x00) = VtComboElement();
-
-    void* open = P(self, 0x120);                            // _openDialog
+// cached manager -- then destroy the three arrays with their element
+// destructors (by address, retail's three instantiations: Strings released,
+// Sprites and user data trivially). Each of those ZEROES the array header, so
+// the compiler-emitted member `~Array`s that run after this body see an empty
+// array (no element destroy, MemFree(null)). Then the compiler restamps and
+// chains ~ButtonElement / ~Element.
+namespace UI {
+ComboElement::~ComboElement() {
+    uint8_t* self = reinterpret_cast<uint8_t*>(this);
+    void* open = _openDialog;
     if (open != nullptr) {
         void* slot = open;
         RtAddr<CloseDialogFn>(0x180120f20ull)(Pc(open, 0x10), &slot);
     }
-
-    RtAddr<ArrayDtorFn>(0x180024aa0ull)(self + 0x108);      // _userData
-    RtAddr<ArrayDtorFn>(0x180037310ull)(self + 0xf8);       // _sprites
-    RtAddr<ArrayDtorFn>(0x180010ab0ull)(self + 0xe8);       // _strings
-
-    P(self, 0x00) = VtButtonElementBase();
-    RtAddr<ElementDtorFn>(0x1801161a0ull)(self);
+    RtAddr<ArrayDtorFn>(0x180024aa0ull)(self + offsetof(ComboElement, _userData));
+    RtAddr<ArrayDtorFn>(0x180037310ull)(self + offsetof(ComboElement, _sprites));
+    RtAddr<ArrayDtorFn>(0x180010ab0ull)(self + offsetof(ComboElement, _strings));
 }
+}  // namespace UI
+
+namespace UI {
+// ?CreateNewObject@ComboElement@UI@@SAPEAVBase@Object@@XZ  0x180075020
+// The factory-interpreter row this replaces: MemAlloc(0x128, 8), retail's
+// null branch, then the out-of-line ctor ??0ComboElement (0x1801123f0).
+Object::Base* ComboElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ComboElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) ComboElement();
+}
+// ?CreateInPlaceObject@ComboElement@UI@@SAPEAVBase@Object@@PEAX@Z  0x1800750a0
+Object::Base* ComboElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) ComboElement();
+}
+}  // namespace UI
 
 // ============================================================================
-// Registration — slots 4/5/6/8 are ButtonElement's addresses, not re-registered.
+// Registration. ENDGAME B.3.9 UI-A: the slot doors and the copy / ??1 doors
+// (and FACTUI1's ??0 door), read only by the retired minted table, its
+// RT_DELDTOR row and the interpreter row, are gone.
 // ============================================================================
 int RtUiComboElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?TypeName@ComboElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_ComboElement_TypeName);      ++n;
-    RegisterRuntimeAddr(0x180074f30ull, (void*)&RtUi_ComboElement_TypeName);
-
-    RegisterRuntimeExport("?Type@ComboElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_ComboElement_Type);          ++n;
-    RegisterRuntimeAddr(0x180074f10ull, (void*)&RtUi_ComboElement_Type);
-
-    RegisterRuntimeExport(
-        "?Update@ComboElement@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@"
-        "V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@Element@2@@Z",
-        (void*)&RtUi_ComboElement_Update);                          ++n;
-    RegisterRuntimeAddr(0x1801125d0ull, (void*)&RtUi_ComboElement_Update);
-
-    RegisterRuntimeExport("??0ComboElement@UI@@QEAA@AEBV01@@Z",
-                          (void*)&RtUi_ComboElement_CopyCtor);      ++n;
-    RegisterRuntimeAddr(0x1800751e0ull, (void*)&RtUi_ComboElement_CopyCtor);
-
-    RegisterRuntimeExport("??1ComboElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_ComboElement_Dtor);          ++n;
-    RegisterRuntimeAddr(0x180112490ull, (void*)&RtUi_ComboElement_Dtor);
+    RegisterRuntimeExport("?CreateNewObject@ComboElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::ComboElement::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x180075020ull, (void*)&UI::ComboElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@ComboElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::ComboElement::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x1800750a0ull, (void*)&UI::ComboElement::CreateInPlaceObject);
     return n;
 }

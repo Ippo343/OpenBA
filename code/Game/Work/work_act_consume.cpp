@@ -25,6 +25,7 @@
 #include "Component/coll_bridge.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/ConsumeProduceDescription.h"   // ENDGAME B.3.9 D5
 
 // ============================================================
 // Sub-callee typedefs (all exe code, resolved via ResolveAddr)
@@ -109,8 +110,9 @@ static WCP_fn_TimeCtor_t      s_wcp_TimeCtor       = nullptr;
 static WCP_fn_IsDerivedFrom_t s_wcp_IsDerivedFrom  = nullptr;
 
 // Runtime-filled globals (read live via pointer; read 0 at static-link time).
-static const uint32_t* s_wcp_pMsgId_c70e8 = nullptr;  // 0x1401c70e8 (SendComponentMessage #1 target type-id = CitizenAIComponent)
-static const uint32_t* s_wcp_pTid_c7388   = nullptr;  // 0x1401c7388 (component type id for the two search loops)
+static const uint32_t* s_wcp_pMsgId_c70e8 = nullptr;  // 0x1401c70e8 (SendComponentMessage #1 target type-id = CitizenAIComponent -- UNREGISTERED, left for a behaviour commit)
+// 0x1401c7388 = ConsumeProduceDescription (ENDGAME B.3.9 D5: by cell, not "component
+// type id" -- read directly below).
 // Float .rdata constants.
 static const float* s_wcp_pf_17214c = nullptr;        // 0x14017214c == 1.0f (CreateRawMaterial XMM2)
 static const float* s_wcp_pf_172280 = nullptr;        // 0x140172280 == -1.0f (MoveTo speed)
@@ -144,7 +146,6 @@ static void WCP_ResolveAll() {
     if (!s_wcp_IsDerivedFrom) s_wcp_IsDerivedFrom = reinterpret_cast<WCP_fn_IsDerivedFrom_t>(fn_IsDerivedFrom);
 
     s_wcp_pMsgId_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
-    s_wcp_pTid_c7388   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7388));
     s_wcp_pf_17214c    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
     s_wcp_pf_172280    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172280));
 }
@@ -165,7 +166,7 @@ static inline void WCP_Append(void* list, void* ibp){ if (s_wcp_TaskListAppend) 
 // null. Mirrors the two identical loops at 0x1400bf2a7.. and 0x1400bf3a4..
 //   listBase: ptr to a struct with { +0x28 = element-ptr array base, +0x30 = count }.
 static void* WCP_FindComponentDerived(uintptr_t listBase) {
-    uint32_t typeId = s_wcp_pTid_c7388 ? *s_wcp_pTid_c7388 : 0;  // DWORD_1401c7388 (runtime-filled)
+    uint32_t typeId = ConsumeProduceDescription::TypeId();  // DWORD_1401c7388
     void* result = nullptr;
     int count = *reinterpret_cast<int*>(listBase + 0x30);        // [list+0x30]
     if (count > 0) {

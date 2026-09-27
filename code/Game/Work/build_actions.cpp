@@ -73,6 +73,11 @@ fn_perform_t  s_perform  = nullptr;
 fn_moveto_t   s_moveto   = nullptr;
 uint32_t s_msg70e8 = 0, s_msg7008 = 0, s_msg75f0 = 0;
 bool s_init = false;
+// ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c7008 and 0x1401c75f0 are registered type-id
+// cells (BuildComponent, DestroyComponent) that always hold that class's id once
+// Fill* runs, so reading them via the cell is behaviour-neutral with a direct
+// Class::TypeId() call. 0x1401c70e8 (CitizenAIComponent) is UNREGISTERED and reads 0
+// -- left alone (behaviour site, not converted here).
 
 void EnsureInit() {
     if (s_init) return;
@@ -91,16 +96,11 @@ void EnsureInit() {
         return p ? *reinterpret_cast<uint32_t*>(p) : 0;
     };
     s_msg70e8 = rd(0x1401c70e8);
-    s_msg7008 = rd(0x1401c7008);
-    s_msg75f0 = rd(0x1401c75f0);
-    // c7008 = BuildComponent type-id (the state-8 message target); heal it so the message
-    // routes to the site's BuildComponent (the raw .rdata id is 0 in standalone).
-    if (s_msg7008 == 0) s_msg7008 = BuildComponent::TypeId();
-    // c75f0 = DestroyComponent type-id (Ghidra: written by DestroyComponent_RegisterType
-    // 0x14014ee75) — the altAnim/demolition variant of the same state-8 message. Without
-    // this heal the destroy-mode SendComponentMessage carries id 0, matches no component,
-    // and DestroyComponent+0x54 demolition progress never advances.
-    if (s_msg75f0 == 0) s_msg75f0 = DestroyComponent::TypeId();
+    // c7008 = BuildComponent type-id (the state-8 message target).
+    s_msg7008 = BuildComponent::TypeId();
+    // c75f0 = DestroyComponent type-id -- the altAnim/demolition variant of the same
+    // state-8 message.
+    s_msg75f0 = DestroyComponent::TypeId();
     s_init = true;
 }
 

@@ -18,7 +18,7 @@
 // ImageDescription::Serialize first.
 //
 // `??_7AnimatedImageDescription@UI@@6B@` @ 0x180156060, TEN slots:
-//   [0] 0x1800369e0  (unexported) vector deleting dtor — RT_DELDTOR row, kept
+//   [0] 0x1800369e0  (unexported) vector deleting dtor — the class's own (B.3.9)
 //   [1] 0x1800366d0  TypeName
 //   [2] 0x1800366b0  Type
 //   [3] 0x1800cb6a0  GetFileVersion  (`return 0x10204`)
@@ -49,8 +49,15 @@
 //                            that member's name.
 //   +0x94  _pad94            written by nothing.
 //
-// ABSTRACT (slot 0 `= 0`); no real ctor — `??0AnimatedImageDescription` is
+// (Until ENDGAME B.3.9:) ABSTRACT (slot 0 `= 0`); no real ctor — `??0AnimatedImageDescription` is
 // factory_ui1.cpp's door, which `Construct` and `Reconstruct` tail-jump into.
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0AnimatedImageDescription@UI@@QEAA@XZ` (0x1800cb6f0) minus its vptr stores;
+// slot 0 is the class's own vector deleting dtor; ~AnimatedImageDescription is protected and
+// non-virtual. The factory pair is the class's own; the minted
+// `??_7AnimatedImageDescription@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
+// the doors are retired.
 // ============================================================================
 
 #include <cstdint>
@@ -59,6 +66,7 @@
 
 #include "ImageDescription.h"
 #include "../collection/Collection.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI {
 
@@ -67,8 +75,31 @@ class Element;
 
 class AnimatedImageDescription : public ImageDescription {
 public:
+    // ??0AnimatedImageDescription@UI@@QEAA@XZ 0x1800cb6f0 — the REAL
+    // constructor: ImageDescription's stores (inlined in retail), then the
+    // frame-name array's two QWORD zeros (Collection::Array's own default ctor)
+    // and `MOV dword [+0x90],0x1e`. +0x94 is NOT written.
+    AnimatedImageDescription() : ImageDescription() {
+        _framesPerSecond = 0x1e;
+    }
+
     // ---- the ten slots, in measured order ---------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x1800369e0
+    // [0] 0x1800369e0 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x98`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<AnimatedImageDescription*>(self + static_cast<int64_t>(i) * 0x98)
+                    ->~AnimatedImageDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~AnimatedImageDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x1800366d0
     uint32_t    Type() const override;                            // [2] 0x1800366b0
     int32_t     GetFileVersion() const override;                  // [3] 0x1800cb6a0
@@ -84,16 +115,14 @@ public:
     // ---- exported, NOT PORTED as members ----------------------------------
     AnimatedImageDescription(const AnimatedImageDescription& src);            // 0x180036890
     AnimatedImageDescription& operator=(const AnimatedImageDescription& src); // 0x180036930
-    static uint32_t TypeId();                                     // 0x1800366c0  not ported
-    static Object::Base* CreateNewObject();                       // 0x1800367c0  factory door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180036840  factory door
+    static uint32_t TypeId();                                     // 0x1800366c0  ported over the minted record
+    static Object::Base* CreateNewObject();                       // 0x1800367c0  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x180036840  the class's own (B39 D2)
 
 protected:
-    // NOT retail's `??0AnimatedImageDescription@UI@@QEAA@XZ` (0x1800cb6f0, a door).
-    AnimatedImageDescription() = default;
-    // `??1AnimatedImageDescription@UI@@UEAA@XZ` (0x1800cb6b0). NON-VIRTUAL, NOT
-    // defined in the real build; the retail body is the door
-    // `RtUi_AnimatedImageDescription_Dtor`.
+    // `??1AnimatedImageDescription@UI@@UEAA@XZ` (0x1800cb6b0). NON-VIRTUAL
+    // (animatedimagedescription.cpp): destroys the frame names through retail's
+    // element-destroying Array dtor; the compiler chains ~ImageDescription.
     ~AnimatedImageDescription();
 
 private:
@@ -111,6 +140,7 @@ static_assert(sizeof(AnimatedImageDescription) == 0x98,
               "UI::AnimatedImageDescription is 0x98 bytes (MOV EDX,0x98 at 0x180036a12)");
 static_assert(alignof(AnimatedImageDescription) == 8, "aligns to 8");
 static_assert(!std::has_virtual_destructor<AnimatedImageDescription>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<AnimatedImageDescription>::value, "B39 D1: concrete");
 static_assert(offsetof(AnimatedImageDescription, _frameNames) == sizeof(ImageDescription),
               "AnimatedImageDescription's own fields begin at the end of ImageDescription");
 static_assert(offsetof(AnimatedImageDescription, _frameNames)      == 0x80, "");

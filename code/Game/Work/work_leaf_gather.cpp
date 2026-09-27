@@ -39,6 +39,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include "Component/GrowthDescription.h"   // ENDGAME B.3.9 D5: GrowthDescription::TypeId()
 
 // ============================================================
 // 0x140116540 — gatherrawmaterials.cpp helper
@@ -95,31 +96,19 @@ int WorkLeaf_FreeStorageCapacity_116540(intptr_t self) {
 //   slot 0x140152a98 IsDerivedFrom                      [engine dispatch]
 //   DAT_1401c77e8 type-ID global                        [runtime-filled by RegisterType]
 // ============================================================
-namespace {
-const uint32_t* s_pTid_c3c0 = nullptr;  // 0x1401c77e8
-bool            s_init_c3c0 = false;
-void Ensure_c3c0() {
-    if (s_init_c3c0) return;
-    s_pTid_c3c0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c77e8));
-    s_init_c3c0 = true;
-}
-} // namespace
-
 void* WorkLeaf_FindGrowthDescription_c3c0(intptr_t entity, void* retOut) {
-    Ensure_c3c0();
+    const uint32_t typeId = GrowthDescription::TypeId();  // 0x1401c77e8
     void* found = nullptr;
-    if (s_pTid_c3c0) {
-        int n = *reinterpret_cast<int*>(entity + 0x30);
-        uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(entity + 0x28);
-        for (int i = 0; i < n; i++) {
-            void* comp = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-            // GetTypeId is component vtable slot +0x10.
-            uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
-            if (t == *s_pTid_c3c0) {
-                void* c = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-                found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_pTid_c3c0)) ? c : nullptr;
-                break;
-            }
+    int n = *reinterpret_cast<int*>(entity + 0x30);
+    uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(entity + 0x28);
+    for (int i = 0; i < n; i++) {
+        void* comp = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
+        // GetTypeId is component vtable slot +0x10.
+        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        if (t == typeId) {
+            void* c = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
+            found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
+            break;
         }
     }
     *reinterpret_cast<void**>(retOut) = found;
@@ -149,12 +138,10 @@ void* WorkLeaf_FindGrowthDescription_c3c0(intptr_t entity, void* retOut) {
 namespace {
 typedef void* (*OwnerResolve_t)(intptr_t cell, void* retIBP);
 OwnerResolve_t  s_OwnerResolve_c460 = nullptr;
-const uint32_t* s_pTid_120c30 = nullptr; // 0x1401c77e8
 bool            s_init_120c30 = false;
 void Ensure_120c30() {
     if (s_init_120c30) return;
     s_OwnerResolve_c460 = reinterpret_cast<OwnerResolve_t>(ResolveAddr(Module::Exe, 0x14000c460));
-    s_pTid_120c30 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c77e8));
     s_init_120c30 = true;
 }
 } // namespace
@@ -191,7 +178,7 @@ long long WorkLeaf_FootprintOwnerCheck_120c30(intptr_t self, int col, int row) {
                         if (outIBP != nullptr) {
                             void* obj = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(outIBP) + 0x18);
                             void* owner = nullptr;
-                            if (s_pTid_120c30 && fn_IsDerivedFrom && fn_IsDerivedFrom(obj, *s_pTid_120c30))
+                            if (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, GrowthDescription::TypeId()))
                                 owner = obj;
                             if (owner == reinterpret_cast<void*>(self))
                                 owned++;

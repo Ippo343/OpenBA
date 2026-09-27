@@ -193,6 +193,11 @@ public:
     void SetMouseDisplay(bool enable);               // 0x18000d860  not ported
     Configuration& operator=(const Configuration& other);  // 0x18000d870  not ported
     static Configuration* Get();                     // 0x18000d890  not ported
+    // ?_singleton@Configuration@Input@@0PEAV12@EA (0x1801fe768) — the class static (ENDGAME B.3.9 ENG, B39_RULES D7).
+    // The namespace's *PortInit redirects the minted storage row onto it, so
+    // the name door, the address door and this member are the same bytes.
+    // PUBLIC while foreign readers still reach the row through the doors.
+    static Configuration* _singleton;
     void Shutdown();                                 // 0x1800e0d00  not ported
 
     // ---- lifetime: DOORS, declared, deliberately undefined -----------------

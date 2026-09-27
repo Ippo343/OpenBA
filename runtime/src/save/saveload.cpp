@@ -1191,3 +1191,7 @@ int RtSaveLoadRegister() {
     RegisterRuntimeExport("?Update@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z", (void*)&RtSave_SaveLoad_Update); ++n;
     return n;
 }
+
+// ?_singleton@SaveLoad@Save@@0PEAV12@EA (0x1801fc6f0) -- the class static (ENDGAME B.3.9 ENG, B39_RULES D7);
+// RtSavePortInit redirects the minted storage row onto it.
+::Save::SaveLoad* ::Save::SaveLoad::_singleton = nullptr;

@@ -29,6 +29,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <new>
+#include "Component/OrchardDescription.h"   // ENDGAME B.3.9 D5: OrchardDescription::TypeId()
+#include "Component/FruitDescription.h"     // ENDGAME B.3.9 D5: FruitDescription::TypeId()
 
 // Diagnostics-only counters (standalone/orchard_diag.cpp). No-op unless
 // BANISHED_ORCHARD_DIAG is set; never change behaviour.
@@ -106,8 +108,6 @@ static void* HO_MemAllocViaSingleton(int64_t size, int align) {
 }
 
 // Type IDs
-static uint32_t* s_typeId_OrchardDesc = nullptr;  // DAT_1401c46e8
-static uint32_t* s_typeId_DescComp = nullptr;      // DAT_1401c4288
 
 // Float constants
 static float* s_fHalfCellOffset = nullptr;
@@ -171,12 +171,6 @@ bool HarvestOrchard_ResolveFuncs() {
     // allocator singleton instead; fn_MemFreeStatic pairs with it.
     s_fn_MemAlloc = &HO_MemAllocViaSingleton;
 
-    // Type IDs
-    s_typeId_OrchardDesc = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c46e8));
-    s_typeId_DescComp = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c4288));
-
     // Float constants
     s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
 
@@ -201,8 +195,7 @@ bool HarvestOrchard_ResolveFuncs() {
               s_fn_ValidateTask && s_fn_TaskCancel && s_fn_FindPosComp &&
               s_fn_BST_RecursiveFree &&
               fn_InternalBasePtr_Ctor &&
-              fn_IsDerivedFrom && g_pGameWorldSingleton &&
-              s_typeId_OrchardDesc && s_typeId_DescComp && s_fHalfCellOffset;
+              fn_IsDerivedFrom && g_pGameWorldSingleton && s_fHalfCellOffset;
 
     s_ho_funcs_resolved = ok;
 
@@ -236,8 +229,6 @@ bool HarvestOrchard_ResolveFuncs() {
         HO_MISS(fn_InternalBasePtr_Ctor, "fn_InternalBasePtr_Ctor");
         HO_MISS(fn_IsDerivedFrom, "fn_IsDerivedFrom");
         HO_MISS(g_pGameWorldSingleton, "g_pGameWorldSingleton");
-        HO_MISS(s_typeId_OrchardDesc, "typeId_OrchardDesc (0x1401c46e8)");
-        HO_MISS(s_typeId_DescComp, "typeId_DescComp (0x1401c4288)");
         HO_MISS(s_fHalfCellOffset, "fHalfCellOffset (0x140172114)");
         #undef HO_MISS
     }
@@ -301,7 +292,7 @@ int HarvestOrchard::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*
 
     // Get OrchardDescription object
     void* descObj = *(void**)(orchardDescIBP[0] + 0x18);
-    bool isDerived = fn_IsDerivedFrom(descObj, *s_typeId_OrchardDesc);
+    bool isDerived = fn_IsDerivedFrom(descObj, OrchardDescription::TypeId());
     void* orchardDesc = isDerived ? descObj : nullptr;
 
     // Check tree count vs max workers
@@ -401,7 +392,9 @@ int HarvestOrchard::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*
                                 s_fn_FindComp_DescComp(entityAtCell, &descCompIBP);
 
                                 void* descCompObj = *(void**)(descCompIBP + 0x18);
-                                bool isDescDerived = fn_IsDerivedFrom(descCompObj, *s_typeId_DescComp);
+                                // DAT_1401c4288 = FruitDescription (ENDGAME B.3.9 D5: by
+                                // cell, not the legacy variable name "DescComp").
+                                bool isDescDerived = fn_IsDerivedFrom(descCompObj, FruitDescription::TypeId());
                                 void* descComp = isDescDerived ? descCompObj : nullptr;
 
                                 // Get raw material reference

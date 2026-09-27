@@ -3,7 +3,7 @@
 // ============================================================================
 //
 // ??_7ButtonDescription@UI@@6B@ (retail 0x180157370), ten slots:
-//   0  deleting dtor      0x1800481a0  runtime/src/object/deleting_dtor.cpp row
+//   0  deleting dtor      0x1800481a0  ButtonDescription.h (the class's own)
 //   1  TypeName           0x180047e30  here
 //   2  Type               0x180047e10  here
 //   3  GetFileVersion     0x1801113d0  here  (returns 0x104)
@@ -31,8 +31,9 @@
 // owned by the base class rather than copied into each subclass file.
 //
 // The constructor is OUT OF LINE (`??0ButtonDescription@UI@@QEAA@XZ`,
-// 0x180110b10) and is ALREADY ported by runtime/src/ui/factory_ui1.cpp, with
-// the two factory steps. `Construct` and `Reconstruct` tail-jump into it.
+// 0x180110b10). ENDGAME B.3.9 UI-A: it is the real ctor (ButtonDescription.h),
+// `Construct` and `Reconstruct` placement-construct with it, and the factory
+// pair is the class's own (the FACTUI1 row and the slot doors are retired).
 //
 // Layout: runtime/types/ui/ButtonDescription.h (class) over
 // DescriptionsBatch1.h (POD). sizeof 0xa0.
@@ -68,28 +69,12 @@ void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 
-std::atomic<void*> g_vtButtonElement{nullptr};
 std::atomic<void*> g_buttonTypeInfo{nullptr};
-std::atomic<void*> g_buttonCtor{nullptr};
 
-void* VtButtonElement() {
-    return AtomicResolve(g_vtButtonElement, RtUI::kVtblButtonElement);
-}
 const uint8_t* ButtonTypeInfo() {
     return static_cast<const uint8_t*>(AtomicResolve(
         g_buttonTypeInfo, "?_typeInfo@ButtonDescription@UI@@0VBaseTypeInfo@Object@@A"));
 }
-// ??0ButtonDescription@UI@@QEAA@XZ — ported by factory_ui1.cpp (a ctor door,
-// not retired in step 6), reached through the port-aware name lookup.
-void* ButtonCtor(void* self) {
-    using CtorFn = void* (*)(void*);
-    return reinterpret_cast<CtorFn>(AtomicResolve(
-        g_buttonCtor, "??0ButtonDescription@UI@@QEAA@XZ"))(self);
-}
-
-// Doors only (the dtor door is not a member).
-void* VtButtonDescription() { return RT_DATA_SLOT(void*, RtUI::kVtblButtonDescription); }
-
 }  // namespace
 
 // ============================================================================
@@ -99,7 +84,9 @@ namespace UI {
 
 // `Type` returns the FIRST DWORD of the BaseTypeInfo static (0x1801fa900) and
 // `TypeName` the pointer at +0x08.
-uint32_t ButtonDescription::Type() const {
+uint32_t ButtonDescription::Type() const { return TypeId(); }
+// ?TypeId@ButtonDescription@UI@@SAIXZ 0x180047e20 — the record's first dword.
+uint32_t ButtonDescription::TypeId() {
     const uint8_t* ti = ButtonTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
@@ -109,16 +96,16 @@ const char* ButtonDescription::TypeName() const {
 }
 int32_t ButtonDescription::GetFileVersion() const { return 0x104; }
 
-// 0x180047fd0: the null test is the DOOR's (a member cannot test `this`);
-// then a tail jump into the constructor, whose return value is this one's.
+// 0x180047fd0: the null test sat in the retired door (a virtual call always
+// has a `this`); then a tail jump into the constructor.
 Object::External* ButtonDescription::Construct() {
-    return static_cast<Object::External*>(ButtonCtor(this));   // 180047fc8 JMP
+    return ::new (this) ButtonDescription();                  // 180047fc8 JMP
 }
-// 0x180047fb0: slot 0 with flag 0 (destroy WITHOUT freeing — through the
-// object's own table, i.e. the minted row), then the ctor again. No null test.
+// 0x180047fb0: slot 0 with flag 0 (destroy WITHOUT freeing, through the
+// object's own table), then the ctor again. No null test.
 Object::External* ButtonDescription::Reconstruct() {
     DeletingDtor(0);                                          // 180047fbe
-    return static_cast<Object::External*>(ButtonCtor(this));  // 180047fc8 JMP
+    return ::new (this) ButtonDescription();                  // 180047fc8 JMP
 }
 void ButtonDescription::Destruct() { DeletingDtor(0); }
 
@@ -231,21 +218,15 @@ void ButtonDescription::CreateInstance(Object::InternalPtr<ButtonElement>* eleme
 // (RULE B6-2: the slot is the first declared parameter).
 // ButtonElement is 0xd8 bytes and its constructor is INLINED here rather than
 // called: ??0Element (0x180115e50), then the ButtonElement vtable, then two
-// DWORD stores (+0xc0 = -1, +0xc4 = 0). Note the widths: both are `MOV dword`,
-// not one qword, because the values differ.
+// DWORD stores (+0xc0 = -1, +0xc4 = 0) -- exactly the real ctor's
+// (ButtonElement.h), which is what this spells now.
 Object::InternalPtr<Element>* ButtonDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
     void* raw = MemAlloc(0xd8, 8);                         // 180111552
 
     ButtonElement* elem = nullptr;
-    if (raw != nullptr) {                                  // 18011157d
-        ElementCtor(raw);                                  // 180111582
-        ButtonElement* e = reinterpret_cast<ButtonElement*>(raw);   // B.3.6 bridge
-        *reinterpret_cast<void**>(e) = VtButtonElement();  // 18011158f
-        e->_keyIndex = -1;                                 // 180111592
-        e->_state    = 0;                                  // 18011159c
-        elem = e;
-    }
+    if (raw != nullptr)                                    // 18011157d
+        elem = ::new (raw) ButtonElement();                // 180111582..18011159c inlined ctor
 
     Object::InternalPtr<ButtonElement> slot(elem);         // 1801115a6
     ButtonDescription::CreateInstance(&slot, dialog);      // 1801115b6
@@ -257,62 +238,35 @@ Object::InternalPtr<Element>* ButtonDescription::CreateInstance(
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, each a one-line
-// QUALIFIED delegation onto the member above.
+// ??1ButtonDescription@UI@@UEAA@XZ   0x180110bd0
 // ============================================================================
-extern "C" uint32_t RtUi_ButtonDescription_Type(const void* self) {
-    return reinterpret_cast<const UI::ButtonDescription*>(self)          // B.3.6 bridge
-        ->UI::ButtonDescription::Type();
-}
-extern "C" const char* RtUi_ButtonDescription_TypeName(const void* self) {
-    return reinterpret_cast<const UI::ButtonDescription*>(self)          // B.3.6 bridge
-        ->UI::ButtonDescription::TypeName();
-}
-extern "C" int32_t RtUi_ButtonDescription_GetFileVersion(const void* self) {
-    return reinterpret_cast<const UI::ButtonDescription*>(self)          // B.3.6 bridge
-        ->UI::ButtonDescription::GetFileVersion();
-}
+// TWO vtable stamps back to back -- own, then ElementDescription's -- then the
+// base's _textName and the tail JMP into ~External. ENDGAME B.3.9 UI-A: the
+// body is EMPTY; the restamps and the chain into ~ElementDescription and
+// ~External are the compiler's.
+namespace UI {
+ButtonDescription::~ButtonDescription() {}
 
-// 0x180047fd0: `TEST RCX,RCX ; JNZ <ctor> ; XOR EAX,EAX ; RET` — retail's null
-// test stays in the door.
-extern "C" void* RtUi_ButtonDescription_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                  // 180047fd3
-    return reinterpret_cast<UI::ButtonDescription*>(selfv)               // B.3.6 bridge
-        ->UI::ButtonDescription::Construct();
+// ?CreateNewObject@ButtonDescription@UI@@SAPEAVBase@Object@@XZ  0x180047f20
+// The FACTUI1 row this replaces: MemAlloc(0xa0, 8), retail's null branch, then
+// the out-of-line ctor.
+Object::Base* ButtonDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ButtonDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) ButtonDescription();
 }
-extern "C" void* RtUi_ButtonDescription_Reconstruct(void* selfv) {
-    return reinterpret_cast<UI::ButtonDescription*>(selfv)               // B.3.6 bridge
-        ->UI::ButtonDescription::Reconstruct();
+// ?CreateInPlaceObject@ButtonDescription@UI@@SAPEAVBase@Object@@PEAX@Z  0x180047fa0
+Object::Base* ButtonDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) ButtonDescription();
 }
-extern "C" void RtUi_ButtonDescription_Destruct(void* selfv) {
-    reinterpret_cast<UI::ButtonDescription*>(selfv)                      // B.3.6 bridge
-        ->UI::ButtonDescription::Destruct();
-}
+}  // namespace UI
 
 // ============================================================================
-// ??1ButtonDescription@UI@@UEAA@XZ   0x180110bd0   — a DTOR DOOR (B4b-2), kept
+// The shared applier's door (a non-slot member, kept). ENDGAME B.3.9 UI-A: the
+// slot doors and the ??1 door, read only by the retired minted table and
+// RT_DELDTOR row, are gone.
 // ============================================================================
-// TWO vtable stamps back to back — own, then ElementDescription's — with
-// nothing between them. Both are kept: a port that writes only the second is a
-// different function under any interruption (the reason
-// runtime/src/graphics/wave24_lane_gfxmat.cpp gives for the same choice).
-extern "C" void RtUi_ButtonDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtButtonDescription();                            // 180110bed
-    *v = VtElementDescription();                           // 180110bf7
-    ReleaseStringField(p, 0x60);                           // 180110bfa
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 180110c2c JMP
-}
-
-extern "C" bool RtUi_ButtonDescription_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<UI::ButtonDescription*>(selfv)               // B.3.6 bridge
-        ->UI::ButtonDescription::Serialize(streamv);
-}
-
 // 0x1801108d0: RCX = this, RDX = &caller's InternalPtr<ButtonElement>, R8 = Dialog*.
 extern "C" void RtUi_ButtonDescription_ApplyToElement(const void* selfv,
                                                       void** elemPtr,
@@ -323,55 +277,14 @@ extern "C" void RtUi_ButtonDescription_ApplyToElement(const void* selfv,
             static_cast<const UI::Dialog*>(dialog));
 }
 
-// Slot 8: RCX = this, RDX = the caller's slot, R8 = Dialog*; the slot comes back in RAX.
-extern "C" void** RtUi_ButtonDescription_CreateInstance(const void* selfv,
-                                                        void** ret,
-                                                        const void* dialog) {
-    return reinterpret_cast<void**>(
-        reinterpret_cast<const UI::ButtonDescription*>(selfv)            // B.3.6 bridge
-            ->UI::ButtonDescription::CreateInstance(
-                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
-                static_cast<const UI::Dialog*>(dialog)));
-}
-
 int RtUiButtonDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@ButtonDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_ButtonDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x180047e10ull, (void*)&RtUi_ButtonDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@ButtonDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_ButtonDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x180047e30ull, (void*)&RtUi_ButtonDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@ButtonDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_ButtonDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x1801113d0ull, (void*)&RtUi_ButtonDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@ButtonDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_ButtonDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x180047fd0ull, (void*)&RtUi_ButtonDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@ButtonDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_ButtonDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x180047fb0ull, (void*)&RtUi_ButtonDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@ButtonDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_ButtonDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x180047fe0ull, (void*)&RtUi_ButtonDescription_Destruct);
-
-    RegisterRuntimeExport("??1ButtonDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_ButtonDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x180110bd0ull, (void*)&RtUi_ButtonDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@ButtonDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_ButtonDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x1801113e0ull, (void*)&RtUi_ButtonDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@ButtonDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_ButtonDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x180111510ull, (void*)&RtUi_ButtonDescription_CreateInstance);
+    RegisterRuntimeExport("?CreateNewObject@ButtonDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::ButtonDescription::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x180047f20ull, (void*)&UI::ButtonDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@ButtonDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::ButtonDescription::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x180047fa0ull, (void*)&UI::ButtonDescription::CreateInPlaceObject);
 
     // ADDRESS ONLY, as before: the export name resolves to this address.
     RegisterRuntimeAddr(0x1801108d0ull, (void*)&RtUi_ButtonDescription_ApplyToElement); ++n;

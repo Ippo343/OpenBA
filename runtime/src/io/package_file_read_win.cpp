@@ -232,7 +232,6 @@ extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem*, FileInfo*,
 extern "C" bool      RtIo_FileSystem_ReadFile(FileSystem*, FileInfo*,
                                               int32_t, void*);              // 0x1800ace00
 extern "C" FileInfo* RtIo_FileInfo_Assign(FileInfo*, const FileInfo*);      // 0x18000c200
-extern "C" PackageFileView* RtIo_PackageFile_Ctor(PackageFileView*);        // 0x1800b4440
 }  // namespace RtIO
 
 namespace RtIo {

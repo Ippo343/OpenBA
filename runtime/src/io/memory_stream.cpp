@@ -37,77 +37,17 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Stream.h"
 
-// NO INLINE REPLAY IN THESE BODIES, deliberately. the diff oracle works by
-// running the shipped body a second time on the same object and comparing the
-// two answers -- which is exactly wrong for four of the six here, because Read,
-// Write and SetCurrentPos MUTATE _cursor: a replay would advance it twice and
-// manufacture a divergence in a correct port. So the bodies only declare that
-// they did work, and the verification lives in memory_stream_probe.cpp, which
-// gives each side its OWN stream and steps them in lockstep. The two const
-// getters could safely replay, but they are covered by the same probe and are
-// left uniform with their siblings rather than opening a raw door for two
-// two-instruction functions.
 // ============================================================================
-// ENDGAME B.3.4 block 4 (STREAMS): THE BODIES ARE NOW `IO::MemoryStream`'s.
+// ENDGAME B.3.9 IO: THE CLASS IS CONCRETE.
 // ============================================================================
 //
-// The six virtuals below moved, unchanged instruction for instruction, onto the
-// real class declared in runtime/types/io/Stream.h. What stays here is the six
-// registered DOORS: same names, same by-name AND by-address registrations, same
-// addresses. Each is now one line.
-//
-// THE `IO::MemoryStream::` QUALIFICATION IN EACH DOOR IS LOAD-BEARING, not
-// decoration (B34_BRIEFS section A.1). A live MemoryStream in this build wears
-// the MINTED table 0x1801555b0, whose slots resolve back to these very doors.
-// A plain virtual call in a door would therefore dispatch through the minted
-// table into itself — infinite recursion, not delegation. The qualification
-// suppresses virtual dispatch and lands on the member body directly.
-//
-// NO CONSTRUCTOR CONVERTED, and none may (B34_RULES section 4.3): every
-// construction site keeps stamping `RT_DATA_SLOT("??_7MemoryStream@IO@@6B@")`,
-// and the ported ctor/dtor pair in compressedstream.cpp (0x1800ae710 /
-// 0x1800ae890) is untouched.
-// The slot-0 thunk `iobase_vtables.cpp` already defines and registers by
-// address (0x1800242a0). `IO::MemoryStream::DeletingDtor` names it rather than
-// restating it: section 4.2 keeps that registration alive for the whole step,
-// and the class must not be abstract because CompressedMemoryStream embeds one
-// by value. Declared at GLOBAL scope so the `namespace IO` bodies below can
-// reach it without qualifying a C-linkage name.
-extern "C" void* RtIo_MemoryStream_DeletingDtor(RtIo::MemoryStream* self,
-                                                unsigned int flags);
-
-namespace RtIo {
-
-extern "C" bool RtIo_MemoryStream_Read(MemoryStream* self, int32_t count, void* dst) {
-    return reinterpret_cast<IO::MemoryStream*>(self)->IO::MemoryStream::Read(count, dst);
-}
-
-extern "C" bool RtIo_MemoryStream_Write(MemoryStream* self, int32_t count, const void* src) {
-    return reinterpret_cast<IO::MemoryStream*>(self)->IO::MemoryStream::Write(count, src);
-}
-
-extern "C" bool RtIo_MemoryStream_SetCurrentPos(MemoryStream* self, int32_t pos) {
-    return reinterpret_cast<IO::MemoryStream*>(self)->IO::MemoryStream::SetCurrentPos(pos);
-}
-
-extern "C" uint32_t RtIo_MemoryStream_GetCurrentPos(const MemoryStream* self) {
-    return reinterpret_cast<const IO::MemoryStream*>(self)->IO::MemoryStream::GetCurrentPos();
-}
-
-extern "C" uint32_t RtIo_MemoryStream_GetSize(const MemoryStream* self) {
-    return reinterpret_cast<const IO::MemoryStream*>(self)->IO::MemoryStream::GetSize();
-}
-
-extern "C" void RtIo_MemoryStream_Close(MemoryStream* self) {
-    reinterpret_cast<IO::MemoryStream*>(self)->IO::MemoryStream::Close();
-}
-
-}  // namespace RtIo
-
-// A member of `IO::X` cannot be defined inside `namespace RtIo` — `IO` and
-// `RtIo` are siblings, and C++ requires a member definition to appear in a
-// namespace ENCLOSING the class (B34_BRIEFS section A.2). So the bodies open
-// their own `namespace IO` block after the doors close.
+// `??_7MemoryStream@IO@@6B@` is the compiler's table now: `IO::MemoryStream`'s
+// real constructor (Stream.h) stores it, so the six slot doors that used to sit
+// here -- one qualified call each into the members below, registered by name
+// and by address so the minted table could name them -- have no reader and are
+// gone, with their registration. Slot 0 (0x1800242a0) is the inline
+// `MemoryStream::DeletingDtor` in Stream.h. The by-name ??0/??1/Open/Create
+// doors stay in compressedstream.cpp for their callers outside the class.
 namespace IO {
 
 // ============================================================================
@@ -218,83 +158,4 @@ void MemoryStream::Close() {
     // 1800ae9e0: RET — deliberately empty.
 }
 
-// ============================================================================
-// MemoryStream vector deleting destructor    retail 0x1800242a0 — vtable slot 0
-// ============================================================================
-// The BODY is `RtIo_MemoryStream_DeletingDtor` in iobase_vtables.cpp, which is
-// registered by address at 0x1800242a0 and fills slot 0 of the live minted
-// table (rt_data_mint_tables.inc:2884). B34_RULES section 4.2 forbids retiring
-// that row in this step, and iobase_vtables.cpp is not block 4's file, so this
-// override NAMES the existing door instead of restating the thunk.
-//
-// It exists at all only because `IO::CompressedMemoryStream` holds a
-// `MemoryStream` BY VALUE at +0x68: a member of abstract type is ill-formed, so
-// this one slot cannot stay `= 0` the way every other stream class's does.
-Stream* MemoryStream::DeletingDtor(unsigned flags) {
-    return static_cast<MemoryStream*>(::RtIo_MemoryStream_DeletingDtor(
-        reinterpret_cast<RtIo::MemoryStream*>(this), flags));
-}
-
 }  // namespace IO
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtIoMemoryStreamRegister() {
-    using namespace RtIo;
-    int n = 0;
-
-    RegisterRuntimeExport("?Read@MemoryStream@IO@@UEAA_NHPEAX@Z",
-                          (void*)&RtIo_MemoryStream_Read); ++n;
-    RegisterRuntimeAddr(0x1800ae950, (void*)&RtIo_MemoryStream_Read);
-
-    RegisterRuntimeExport("?Write@MemoryStream@IO@@UEAA_NHPEBX@Z",
-                          (void*)&RtIo_MemoryStream_Write); ++n;
-    RegisterRuntimeAddr(0x1800ae8f0, (void*)&RtIo_MemoryStream_Write);
-
-    RegisterRuntimeExport("?SetCurrentPos@MemoryStream@IO@@UEAA_NH@Z",
-                          (void*)&RtIo_MemoryStream_SetCurrentPos); ++n;
-    RegisterRuntimeAddr(0x1800ae9b0, (void*)&RtIo_MemoryStream_SetCurrentPos);
-
-    RegisterRuntimeExport("?GetCurrentPos@MemoryStream@IO@@UEBAIXZ",
-                          (void*)&RtIo_MemoryStream_GetCurrentPos); ++n;
-    RegisterRuntimeAddr(0x1800ae9c0, (void*)&RtIo_MemoryStream_GetCurrentPos);
-
-    RegisterRuntimeExport("?GetSize@MemoryStream@IO@@UEBAIXZ",
-                          (void*)&RtIo_MemoryStream_GetSize); ++n;
-    RegisterRuntimeAddr(0x1800ae9d0, (void*)&RtIo_MemoryStream_GetSize);
-
-    RegisterRuntimeExport("?Close@MemoryStream@IO@@UEAAXXZ",
-                          (void*)&RtIo_MemoryStream_Close); ++n;
-    RegisterRuntimeAddr(0x1800ae9e0, (void*)&RtIo_MemoryStream_Close);
-
-    printf("[RtPort]   IO::MemoryStream virtuals (lane PKG2 rung 4b-ii): "
-                "%d exports registered\n", n);
-
-    // THE CTOR AND DTOR ARE NOT HERE BECAUSE LANE W ALREADY PORTED THEM, not
-    // because they are left over. I nearly shipped a comment saying they were
-    // "4b-ii's next step" — the run's own diff table is what corrected it, by
-    // listing IO::MemoryStream::~MemoryStream sites this file never declared:
-    //   0x1800ae710  ??0MemoryStream@IO@@QEAA@XZ   -> RtIo_MemoryStream_Ctor
-    //   0x1800ae890  ??1MemoryStream@IO@@UEAA@XZ   -> RtIo_MemoryStream_Dtor
-    // both in runtime/src/io/compressedstream.cpp. So with the six bodies above,
-    // IO::MemoryStream IS NOW COMPLETE across the two lanes.
-    //
-    // That is the same transport failure 4b-i hit with Stream.h, twice in one
-    // rung: the answer was already in the tree and I went to the binary first.
-    // The rule earned in 4b-i — grep the types header before opening the PE —
-    // needs its sibling: GREP FOR THE PORT BEFORE PLANNING TO WRITE IT.
-    //
-    // ONE THING LANE W'S CTOR DOES NOT GIVE US, and it is a live cutover
-    // blocker owned by them, not by this rung: the IO::Encoding it allocates
-    // carries vtable 0x1801554a8, whose five slots are all unexported .text
-    // internals that mint as NAMED TRAPS. Construction no longer calls through
-    // null, but the first VIRTUAL call on that Encoding still traps. Nothing in
-    // the six bodies above touches the Encoding, so this rung neither fixes nor
-    // worsens it.
-    //
-    // The VTABLE IS NOT REPOINTED by this file either: these register as
-    // bodies, so retail's own vtable still names retail's copies and only OUR
-    // callers are redirected.
-    return n;
-}

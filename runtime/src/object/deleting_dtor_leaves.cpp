@@ -103,11 +103,6 @@ extern "C" void RtUi_ToolTipDialog_Dtor(void* self) {
     RT_EXPORT_ONCE(DtorFn, "??1DialogInstance@UI@@UEAA@XZ")(self);
 }
 
-// ??1ReaderWriter@IO@@UEAA@XZ   0x1800b9150
-extern "C" void RtIo_ReaderWriter_Dtor(void* self) {
-    STAMP(self, "??_7ReaderWriter@IO@@6B@");
-}
-
 // ??1SunLight@Graphics@@UEAA@XZ 0x180108160 -- REMOVED (ENDGAME B.3.9 pilot):
 // the name and address were registered TWICE, here and by block RB's one-body
 // door `Graphics_SunLight_Dtor` (runtime/src/graphics/sunlight.cpp), and this
@@ -115,21 +110,7 @@ extern "C" void RtIo_ReaderWriter_Dtor(void* self) {
 // -- `~SunLight`'s ReleaseFields, shared with the real destructor -- is THE body.
 // (Pilot c2 then retired RB's door too: ~SunLight is the only destructor.)
 
-// ??1SoundEffect@Audio@@UEAA@XZ   0x1800e0880
-extern "C" void RtAudio_SoundEffect_Dtor(void* self) {
-    STAMP(self, "??_7SoundEffect@Audio@@6B@");
-    ByAddr(0x1800516c0ull)(static_cast<uint8_t*>(self) + 0x30);
-    RT_EXPORT_ONCE(DtorFn, "??1External@Object@@UEAA@XZ")(self);
-}
 
-// ??1AchievementInstance@Achievement@@UEAA@XZ   0x18009e400
-extern "C" void RtAchievement_AchievementInstance_Dtor(void* self) {
-    STAMP(self, "??_7AchievementInstance@Achievement@@6B@");
-    // GoalList is a VALUE type with a real dtor (B37_RULES B7-8), held at +0x10.
-    reinterpret_cast< ::Achievement::GoalList*>(static_cast<uint8_t*>(self) + 0x10)
-        ->Achievement::GoalList::~GoalList();  // B.3.7 bridge
-    RT_EXPORT_ONCE(DtorFn, "??1Internal@Object@@UEAA@XZ")(self);
-}
 
 // ??1MaterialInstance@Graphics@@UEAA@XZ   0x180103a00
 extern "C" void RtGraphics_MaterialInstance_Dtor(void* self) {
@@ -161,8 +142,6 @@ extern "C" void RtGraphics_ParticleInstance_Dtor(void* self) {
 }
 
 int RtObjectDeletingDtorLeavesRegister() {
-    RegisterRuntimeExport("??1AchievementInstance@Achievement@@UEAA@XZ", (void*)&RtAchievement_AchievementInstance_Dtor);
-    RegisterRuntimeAddr  (0x18009e400ull,                                  (void*)&RtAchievement_AchievementInstance_Dtor);
     RegisterRuntimeExport("??1MaterialInstance@Graphics@@UEAA@XZ",        (void*)&RtGraphics_MaterialInstance_Dtor);
     RegisterRuntimeAddr  (0x180103a00ull,                                  (void*)&RtGraphics_MaterialInstance_Dtor);
     RegisterRuntimeExport("??1Base@Object@@UEAA@XZ",                      (void*)&RtObject_Base_Dtor);
@@ -173,9 +152,5 @@ int RtObjectDeletingDtorLeavesRegister() {
     RegisterRuntimeAddr  (0x1801041f0ull,                                  (void*)&RtGraphics_ParticleInstance_Dtor);
     RegisterRuntimeExport("??1ToolTipDialog@UI@@UEAA@XZ",        (void*)&RtUi_ToolTipDialog_Dtor);
     RegisterRuntimeAddr  (0x1800dac70ull,                          (void*)&RtUi_ToolTipDialog_Dtor);
-    RegisterRuntimeExport("??1ReaderWriter@IO@@UEAA@XZ",         (void*)&RtIo_ReaderWriter_Dtor);
-    RegisterRuntimeAddr  (0x1800b9150ull,                          (void*)&RtIo_ReaderWriter_Dtor);
-    RegisterRuntimeExport("??1SoundEffect@Audio@@UEAA@XZ",       (void*)&RtAudio_SoundEffect_Dtor);
-    RegisterRuntimeAddr  (0x1800e0880ull,                          (void*)&RtAudio_SoundEffect_Dtor);
-    return 8;
+    return 5;
 }

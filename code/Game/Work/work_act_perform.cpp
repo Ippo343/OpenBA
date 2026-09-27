@@ -22,6 +22,7 @@
 #include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
+#include "Component/FireComponent.h"   // ENDGAME B.3.9 D5
 
 // ============================================================
 // Sub-callee / dispatch-slot resolution (self-contained, s_wap_* prefix)
@@ -117,8 +118,8 @@ static WAP_fn_MemAlloc_t            s_wap_MemAlloc        = nullptr;
 static WAP_fn_TimeCtor_t            s_wap_TimeCtor        = nullptr;
 
 // Inline-object vtables (exe .rdata) + .rdata float/dword constants.
-static const uint32_t* s_wap_pDword_c70e8 = nullptr; // 0x1401c70e8 (SendComponentMessage #1 target type-id = CitizenAIComponent)
-static const uint32_t* s_wap_pDword_c41e0 = nullptr; // 0x1401c41e0 (ba9f0 SendComponentMessage #2 target type-id = FireComponent)
+static const uint32_t* s_wap_pDword_c70e8 = nullptr; // 0x1401c70e8 (SendComponentMessage #1 target type-id = CitizenAIComponent -- UNREGISTERED, left for a behaviour commit)
+// 0x1401c41e0 = FireComponent (ENDGAME B.3.9 D5: read directly below).
 static const float*    s_wap_pf_172124    = nullptr; // 0x140172124 = 0.75f  (PerformWork Time #1)
 static const float*    s_wap_pf_172188    = nullptr; // 0x140172188 = 3.5f   (ba9f0 MoveTo speed)
 static const float*    s_wap_pf_172194    = nullptr; // 0x140172194 = 4.0f   (bffd0 PerformWork_Ctor7 Time)
@@ -155,7 +156,6 @@ static void ResolveAll() {
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b00)) s_wap_TimeCtor        = *reinterpret_cast<WAP_fn_TimeCtor_t*>(s);
 
     s_wap_pDword_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
-    s_wap_pDword_c41e0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c41e0));
     s_wap_pf_172124    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172124));
     s_wap_pf_172188    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172188));
     s_wap_pf_172194    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172194));
@@ -282,7 +282,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(void* citizenIBP, uint32_t workId,
     if (obj) {
         uintptr_t innerIbp = 0;
         WAP_IbpCtor(&innerIbp, nullptr);
-        uint32_t msgId = s_wap_pDword_c41e0 ? *s_wap_pDword_c41e0 : 0; // 0x1401c41e0
+        uint32_t msgId = FireComponent::TypeId(); // 0x1401c41e0
         uintptr_t entityInner = srcEntity6 ? static_cast<uintptr_t>(*srcEntity6) : 0; // 0x1400baccf: MOV RCX,[R13]
         if (s_wap_SendCompMsg) sm2 = s_wap_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0);
     }

@@ -59,9 +59,10 @@
 // ENDGAME B.3.7 block B3: every body below is a MEMBER of
 // `Achievement::AchievementManager`, `AchievementInstance` or `Achievement`
 // (runtime/types/achievement/AchievementManager.h); every registered door is a
-// one-line QUALIFIED delegation. The two CONSTRUCTOR doors (`??0Achievement`,
-// `??0AchievementInstance`) stay free functions: both classes have exe
-// subclasses and every construction must stamp the MINTED table (B4b-2, B7-13).
+// one-line QUALIFIED delegation. ENDGAME B.3.9 ENG: the two CONSTRUCTOR doors
+// (`??0Achievement`, `??0AchievementInstance`), which stamped the MINTED
+// tables, are gone with those rows -- the classes' real constructors are the
+// only bodies, and the factory pairs are the classes' own statics below.
 //
 // The callers inside this file that used to reach sibling members through
 // ResolveExport name doors (`ReadAchievements`, `SetAchievementMet`,
@@ -74,39 +75,13 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-// ---- ??0Internal@Object@@QEAA@XZ — retail 0x1800bfd10 ----------------------
-// Enters the object into the InternalFactory handle table. A name door onto
-// Object's ported constructor DOOR (Object::Internal has no public real
-// constructor either — B4b-2). RT_EXPORT_ONCE is the RtResolveCached slot
-// (B6-5: AchievementInstances are constructed on the LOADER thread).
-using InternalCtorFn = void* (*)(void* self);
-InternalCtorFn InternalCtor() {
-    return RT_EXPORT_ONCE(InternalCtorFn, "??0Internal@Object@@QEAA@XZ");
-}
-
-// ---- The vtables the two constructor doors stamp ---------------------------
-// EXPORTED data symbols, resolved by name so the door installs the MINTED
-// table. Cross-check addresses: 0x180154788 / 0x1801547a0 / 0x180154740 /
-// 0x180154700 (the ctors' own LEA operands).
-void* VtableObjectBase()          { return RT_EXPORT_ONCE(void*, "??_7Base@Object@@6B@"); }
-void* VtableObjectExternal()      { return RT_EXPORT_ONCE(void*, "??_7External@Object@@6B@"); }
-void* VtableAchievement()         { return RT_EXPORT_ONCE(void*, "??_7Achievement@0@6B@"); }
-void* VtableAchievementInstance() { return RT_EXPORT_ONCE(void*, "??_7AchievementInstance@Achievement@@6B@"); }
-
-// ?_singleton@AchievementManager@Achievement@@0PEAV12@EA  (0x1801fc670) — stays a
-// data slot until the class-static conversion at the end of B.3 (carry-over 5).
-Achievement::AchievementManager** ManagerSingletonCell() {
-    return RT_DATA_SLOT(Achievement::AchievementManager**,
-        "?_singleton@AchievementManager@Achievement@@0PEAV12@EA");
-}
+// (`?_singleton@AchievementManager@Achievement@@0PEAV12@EA` is the class
+// static `AchievementManager::_singleton` since ENDGAME B.3.9 ENG.)
 
 // ?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A  (0x1801f9898). The FIRST
-// DWORD is the type id — GetAchievement's own `MOV EDX,dword ptr [0x1801f9898]`.
-uint32_t AchievementTypeId() {
-    const uint32_t* p = RT_DATA_SLOT(const uint32_t*,
-        "?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A");
-    return *p;
-}
+// DWORD is the type id — GetAchievement's own `MOV EDX,dword ptr [0x1801f9898]`
+// — i.e. retail's static accessor `Achievement::TypeId()` (0x180001030).
+uint32_t AchievementTypeId() { return Achievement::Achievement::TypeId(); }
 
 // ?_singleton@FileSystem@IO@@0PEAV12@EA  (0x1801fc6a8)
 RtIO::FileSystem** FileSystemSingletonCell() {
@@ -129,8 +104,10 @@ namespace Achievement {
 // ############################################################################
 
 // static AchievementManager* Get()  retail 0x1800079d0 — `return _singleton;`
+AchievementManager* AchievementManager::_singleton = nullptr;   // 0x1801fc670
+
 AchievementManager* AchievementManager::Get() {
-    return *ManagerSingletonCell();
+    return _singleton;
 }
 
 // int GetAchievementCount() const  retail 0x1800079b0 — `_achievements->_count`,
@@ -323,6 +300,31 @@ void AchievementInstance::SetAchievement(Object::ExternalPtr<Achievement> achiev
 // `_description`, `_title`) is retail's, then ~External().
 Achievement::~Achievement() {}
 
+// ?CreateNewObject@Achievement@1@SAPEAVBase@Object@@XZ  0x180001130
+// The FACTREST row this replaces: MemAlloc of 0x58 bytes, align 8 (the locked
+// `?MemAlloc@MemoryAllocator@System@@` Object::detail::InternalMemAlloc
+// reaches); retail's null branch; then the inlined constructor.
+Object::Base* Achievement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(Achievement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) Achievement();
+}
+// ?CreateInPlaceObject@Achievement@1@SAPEAVBase@Object@@PEAX@Z  0x1800011f0
+Object::Base* Achievement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) Achievement();
+}
+
+// ?CreateNewObject@AchievementInstance@Achievement@@SAPEAVBase@Object@@XZ
+// 0x1800018b0 — MemAlloc(0x28, 8); retail's null branch; the inlined ctor
+// (CALL ??0Internal, the stamp, three zero qwords). The in-place half is the
+// shared `?CreateInPlaceObject@Internal@Object@@`.
+Object::Base* AchievementInstance::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(AchievementInstance), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) AchievementInstance();
+}
+
 // int GetFileVersion() const  retail 0x18009e170 — `return 3;` Scenario's
 // override ORs 0x600 onto it (Scenario_Slot3, exe 0x1400a9460).
 int32_t Achievement::GetFileVersion() const { return 3; }
@@ -335,53 +337,6 @@ System::String Achievement::GetDescription() const { return _description; }
 System::String Achievement::GetSpriteName() const  { return _spriteName; }
 
 }  // namespace Achievement
-
-// ############################################################################
-// The CONSTRUCTOR doors — NOT members (B4b-2, B7-13).
-// ############################################################################
-
-// ============================================================================
-// ??0AchievementInstance@Achievement@@QEAA@XZ  retail 0x18009e3b0
-// CALL ??0Internal; stamp the MINTED 0x180154700; zero the GoalList (+0x10,
-// two qwords) and +0x20. Returns `this` (fn_AchievementInstance_Ctor_t).
-// ============================================================================
-Achievement::AchievementInstance* RtAch_AchievementInstance_Ctor(Achievement::AchievementInstance* self) {
-    InternalCtor()(self);
-    *reinterpret_cast<void**>(self) = VtableAchievementInstance();   // B.3.7 bridge — the minted vptr
-    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with `AchievementInstance()`.
-    Achievement::AchievementInstance::DoorBody::Init(self);
-    return self;
-}
-
-// ============================================================================
-// ??0Achievement@0@QEAA@XZ  retail 0x18009e240 — thirteen stores, nothing else:
-//     [this] = ??_7Base; [this] = ??_7External;       (dead: inlined bases)
-//     [+0x08] = [+0x10] = [+0x18] = 0
-//     [this] = ??_7Achievement@0@6B@
-//     [+0x20 .. +0x50] = 0
-// Reached BY ADDRESS from code/Game/Game/scenario.cpp, and by Construct /
-// Reconstruct (achievement_vtable.cpp). Over raw storage: nothing here is a
-// constructed C++ object yet, so every field is written as its bytes.
-// ============================================================================
-void* RtAch_Achievement_Ctor(void* selfRaw) {
-    uint8_t* self = static_cast<uint8_t*>(selfRaw);
-    auto qword = [](uint8_t* p, size_t off) -> void*& {
-        return *reinterpret_cast<void**>(p + off);
-    };
-
-    qword(self, 0x00) = VtableObjectBase();
-    qword(self, 0x00) = VtableObjectExternal();
-    qword(self, 0x08) = nullptr;
-    qword(self, 0x10) = nullptr;
-    qword(self, 0x18) = nullptr;
-    qword(self, 0x00) = VtableAchievement();
-    // ENDGAME B.3.8 block RB (RULE B8-1): the seven zero stores +0x20..+0x50
-    // are ONE body with the real constructor `Achievement()` (InitFields).
-    ::Achievement::Achievement::DoorBody::Init(
-        reinterpret_cast< ::Achievement::Achievement*>(self));   // B.3.8 bridge
-
-    return self;
-}
 
 // ############################################################################
 // The registered doors — one-line QUALIFIED delegations. Retslot doors keep
@@ -471,14 +426,6 @@ void* RtAch_Achievement_GetSpriteName(const Achievement::Achievement* self, void
     return retval;
 }
 
-void RtAch_Achievement_Dtor(Achievement::Achievement* self) {
-    self->Achievement::Achievement::~Achievement();
-}
-
-int RtAch_Achievement_GetFileVersion(const Achievement::Achievement* self) {
-    return self->Achievement::Achievement::GetFileVersion();
-}
-
 // ============================================================================
 // Registration (unchanged). Every name is ONE string literal on ONE line —
 // the census sees no other spelling. Address rows registered alongside every
@@ -517,8 +464,16 @@ int RtAchManagerRegister() {
     RegisterRuntimeAddr(0x18009e6c0, (void*)&RtAch_AchievementManager_Update);
 
     // ---- AchievementInstance ------------------------------------------------
-    RegisterRuntimeExport("??0AchievementInstance@Achievement@@QEAA@XZ", (void*)&RtAch_AchievementInstance_Ctor); ++n;
-    RegisterRuntimeAddr(0x18009e3b0, (void*)&RtAch_AchievementInstance_Ctor);
+    // ---- the factory pairs (B39_RULES D2): the classes' OWN statics. The
+    // minted `?_typeInfo@` records resolve them by name (MintTypeInfos runs
+    // after every *PortInit). AchievementInstance's in-place half is the shared
+    // `?CreateInPlaceObject@Internal@Object@@` (Object::Internal's).
+    RegisterRuntimeExport("?CreateNewObject@Achievement@1@SAPEAVBase@Object@@XZ", (void*)&Achievement::Achievement::CreateNewObject); ++n;
+    RegisterRuntimeAddr(0x180001130, (void*)&Achievement::Achievement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@Achievement@1@SAPEAVBase@Object@@PEAX@Z", (void*)&Achievement::Achievement::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr(0x1800011f0, (void*)&Achievement::Achievement::CreateInPlaceObject);
+    RegisterRuntimeExport("?CreateNewObject@AchievementInstance@Achievement@@SAPEAVBase@Object@@XZ", (void*)&Achievement::AchievementInstance::CreateNewObject); ++n;
+    RegisterRuntimeAddr(0x1800018b0, (void*)&Achievement::AchievementInstance::CreateNewObject);
 
     RegisterRuntimeExport("?SetAchievement@AchievementInstance@Achievement@@QEAAXV?$ExternalPtr@VAchievement@1@@Object@@@Z", (void*)&RtAch_AchievementInstance_SetAchievement); ++n;
     RegisterRuntimeAddr(0x18009e440, (void*)&RtAch_AchievementInstance_SetAchievement);
@@ -545,17 +500,7 @@ int RtAchManagerRegister() {
     RegisterRuntimeExport("?GetSpriteName@Achievement@1@QEBA?AVString@System@@XZ", (void*)&RtAch_Achievement_GetSpriteName); ++n;
     RegisterRuntimeAddr(0x1800013a0, (void*)&RtAch_Achievement_GetSpriteName);
 
-    // ---- Achievement lifecycle, reached from scenario.cpp BY ADDRESS ---------
-    RegisterRuntimeExport("??0Achievement@0@QEAA@XZ", (void*)&RtAch_Achievement_Ctor); ++n;
-    RegisterRuntimeAddr(0x18009e240, (void*)&RtAch_Achievement_Ctor);
-
-    RegisterRuntimeExport("??1Achievement@0@UEAA@XZ", (void*)&RtAch_Achievement_Dtor); ++n;
-    RegisterRuntimeAddr(0x18009e180, (void*)&RtAch_Achievement_Dtor);
-
-    RegisterRuntimeExport("?GetFileVersion@Achievement@1@UEBAHXZ", (void*)&RtAch_Achievement_GetFileVersion); ++n;
-    RegisterRuntimeAddr(0x18009e170, (void*)&RtAch_Achievement_GetFileVersion);
-
-    printf("[RtPort]   Achievement::AchievementManager/Instance/Achievement: %d/23 exports "
+    printf("[RtPort]   Achievement::AchievementManager/Instance/Achievement: %d exports "
            "registered here\n", n);
     return n;
 }

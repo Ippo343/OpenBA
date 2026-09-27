@@ -24,9 +24,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <new>
-#include "Object/factory_registration.h"  // Object::GetTypeIdByName (.rdata tid fallback)
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.8 CB3: RawMaterialDescription::TypeId()
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
 
 
 // ============================================================
@@ -53,9 +53,6 @@ static PiW_ArraySerialize_t            s_fn_ArraySerialize = nullptr;
 static PiW_ValidateEntity_t            s_fn_ValidateEntity = nullptr;
 static PiW_CancelAllWork_t             s_fn_CancelAllWork = nullptr;
 static PiW_MemFreeStatic_t             s_fn_MemFreeStatic = nullptr;
-
-// Type ID for validation (Pickup type at DAT_1401c7158)
-static uint32_t s_typeId_Pickup = 0;
 
 // Type index constant at DAT_1401c6be8 (for Slot1)
 
@@ -85,11 +82,6 @@ bool Pickup_ResolveFuncs() {
 
     // fn_MemFreeStatic from engine_funcs
     s_fn_MemFreeStatic = reinterpret_cast<PiW_MemFreeStatic_t>(fn_MemFreeStatic);
-
-    // Type ID -- read uint32 value at 0x1401c7158
-    uintptr_t typeIdAddr = ResolveAddr(Module::Exe, 0x1401c7158);
-    if (typeIdAddr)
-        s_typeId_Pickup = *reinterpret_cast<uint32_t*>(typeIdAddr);
 
     // Type index constant at DAT_1401c6be8 (for Slot1)
 
@@ -143,7 +135,9 @@ void Pickup::Persist(void* stream) {
 
     // Validate the deserialized ptr against Pickup type
     if (citizenIBP != nullptr) {
-        if (!fn_IsDerivedFrom(citizenIBP, s_typeId_Pickup)) {
+        // DAT_1401c7158 = CitizenComponent (ENDGAME B.3.9 D5: by cell, not the legacy
+        // variable name "s_typeId_Pickup" -- this is not Pickup's own cell).
+        if (!fn_IsDerivedFrom(citizenIBP, CitizenComponent::TypeId())) {
             citizenIBP = nullptr;
         }
     }
@@ -275,9 +269,6 @@ static PiX_MemFree_t         s_x_memFree      = nullptr;
 //     NOTE: it is NOT the file-level s_typeId_Pickup, which reads 0x1401c7158 --
 //     that global is the *CitizenComponent* type id, used by Pickup::Serialize to
 //     validate the citizen at +0x50. The name there is misleading; do not reuse it.
-static const uint32_t* s_x_pTid_RawMatDesc = nullptr;  // 0x1401c7cb8
-static const uint32_t* s_x_pTid_Pickup     = nullptr;  // 0x1401c6be0
-
 static bool s_x_resolved = false;
 
 static void Pickup_ResolveExecFuncs() {
@@ -315,11 +306,6 @@ static void Pickup_ResolveExecFuncs() {
     if (!s_x_memFree) s_x_memFree = reinterpret_cast<PiX_MemFree_t>(
         ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
 
-    s_x_pTid_RawMatDesc = reinterpret_cast<const uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7cb8));
-    s_x_pTid_Pickup = reinterpret_cast<const uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c6be0));
-
 }
 
 // DAT_140172114 = 0x3f000000 = 0.5f. Raw .rdata -> NULL in standalone; real-value
@@ -329,12 +315,6 @@ static float Pickup_CellCenterHalf() {
     static const float* p = reinterpret_cast<const float*>(
         ResolveAddr(Module::Exe, 0x140172114));
     return p ? *p : 0.5f;
-}
-
-// Type-id read with runtime-name fallback (raw .rdata is NULL in standalone).
-static uint32_t Pickup_Tid(const uint32_t* p, uint32_t classTypeId) {
-    if (p && *p) return *p;
-    return classTypeId;   // ENDGAME B.3.8 CB3: X::TypeId() (was the by-name lookup)
 }
 
 // Inlined Array<PickupCandidate>::Add. Mirrors the exe growth idiom byte-for-byte
@@ -389,8 +369,11 @@ int Pickup::Execute(void* citizenIBP, void* time, uint64_t /*arg3*/) {
         return 1;
     }
 
-    const uint32_t tidRawMatDesc = Pickup_Tid(s_x_pTid_RawMatDesc, RawMaterialDescription::TypeId());
-    const uint32_t tidPickup     = Pickup_Tid(s_x_pTid_Pickup, Pickup::TypeId());
+    const uint32_t tidRawMatDesc = RawMaterialDescription::TypeId();
+    // 0x1401c6be0 (Pickup's own cell) is UNREGISTERED -- Pickup_Tid's raw-.rdata read
+    // always failed and fell through to this same Pickup::TypeId() call, so calling
+    // it directly is not a behaviour change (ENDGAME B.3.9 D5 note).
+    const uint32_t tidPickup     = Pickup::TypeId();
 
     const uintptr_t S = reinterpret_cast<uintptr_t>(this);
     void* targetIBP = reinterpret_cast<void*>(S + 0x10);  // RSI: Work's target entity IBP

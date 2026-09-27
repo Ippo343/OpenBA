@@ -101,9 +101,5 @@ size_t RtFactoryRoster(const RtFactoryReg** out, size_t cap);
 int RtFactoriesObjectRegister();
 int RtFactoriesGraphicsRegister();
 int RtFactoriesVideoRegister();
-int RtFactoriesAchievementRegister();
-int RtFactoriesCollision2DRegister();
-int RtFactoriesAudioRegister();
-int RtFactoriesIoRegister();
-int RtFactoriesPathfindingRegister();
+// (RtFactoriesIoRegister retired with its last row, ENDGAME B.3.9 IO.)
 // (RtFactoriesPickingRegister retired with its last row, ENDGAME B.3.9 pilot.)

@@ -28,7 +28,7 @@
 #include <cstring>
 #include "Component/BuildDescription.h"   // ENDGAME B.3.8 CB3: BuildDescription::TypeId()
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.8 CB3: RawMaterialDescription::TypeId()
-#include "Component/MapDescription.h"   // ENDGAME B.3.8 CB3: MapDescription::TypeId()
+#include "Component/InteractDescription.h"   // ENDGAME B.3.9 D5: InteractDescription::TypeId()
 
 namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_registration.h
 
@@ -135,10 +135,6 @@ static GRM_PathfindingFindPath_t s_fn_PathfindingFindPath = nullptr;
 typedef void (*GRM_RegisterWork_t)(void* citizenAISub, void* entityIBP, void* citizenIBP);
 static GRM_RegisterWork_t s_fn_RegisterWork = nullptr;
 
-// Type IDs
-static uint32_t* s_typeId_GatherDesc = nullptr;    // DWORD_1401c7040
-static uint32_t* s_typeId_RawMatComp = nullptr;     // DWORD_1401c7cb8
-static uint32_t* s_typeId_PosDesc = nullptr;        // DAT_1401c7938
 
 // Vtable pointers for dtor chain
 //
@@ -231,29 +227,11 @@ bool GatherRawMaterials_ResolveFuncs() {
         if (iatMemFree) s_fn_MemFree = *reinterpret_cast<GRM_MemFree_t*>(iatMemFree);
     }
 
-    // Type IDs. In standalone the .rdata
-    // globals are never seeded (ResolveAddr(Exe,.rdata)==NULL) so we fall back to the
-    // runtime type registry by name — otherwise Execute derefs *s_typeId_* (NULL) and
-    // crashes the moment a citizen claims the gather work.
-    s_typeId_GatherDesc = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7040));
-    s_typeId_RawMatComp = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7cb8));
-    s_typeId_PosDesc = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7938));
-    static uint32_t s_tidGatherDescVal = 0, s_tidRawMatCompVal = 0, s_tidPosDescVal = 0;
-    if (!s_typeId_GatherDesc) {
-        if (!s_tidGatherDescVal) s_tidGatherDescVal = BuildDescription::TypeId();
-        s_typeId_GatherDesc = &s_tidGatherDescVal;
-    }
-    if (!s_typeId_RawMatComp) {
-        if (!s_tidRawMatCompVal) s_tidRawMatCompVal = RawMaterialDescription::TypeId();
-        s_typeId_RawMatComp = &s_tidRawMatCompVal;
-    }
-    if (!s_typeId_PosDesc) {
-        if (!s_tidPosDescVal) s_tidPosDescVal = MapDescription::TypeId();
-        s_typeId_PosDesc = &s_tidPosDescVal;
-    }
+    // ENDGAME B.3.9 D5: 0x1401c7040 (BuildDescription), 0x1401c7cb8
+    // (RawMaterialDescription) and 0x1401c7938 (InteractDescription -- the healing
+    // fallback here used to read MapDescription::TypeId(), a pre-existing bug this
+    // batch also fixes) are registered type-id cells; each class's own TypeId() is
+    // always available, no separate resolve/heal to gate on.
 
     bool ok = s_fn_TreeSerialize &&
               s_fn_TreeRemoveByKey && s_fn_TreeRemoveNode &&
@@ -267,8 +245,7 @@ bool GatherRawMaterials_ResolveFuncs() {
               s_fn_RegisterWork && s_fn_MemAlloc && s_fn_MemFree &&
               s_fn_TreeNodeCleanup &&
               fn_IsDerivedFrom &&
-              g_pGameWorldSingleton &&
-              s_typeId_GatherDesc && s_typeId_RawMatComp && s_typeId_PosDesc;
+              g_pGameWorldSingleton;
 
 #ifdef _DEBUG
     printf("[GatherRawMaterials] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
@@ -441,7 +418,7 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context, uint64_t /*arg3*
 
     // Get GatherDescription from desc component +0x18
     void* descBase = *(void**)(descCompIBP + 0x18);
-    bool isDerived = fn_IsDerivedFrom(descBase, *s_typeId_GatherDesc);
+    bool isDerived = fn_IsDerivedFrom(descBase, BuildDescription::TypeId());
     void* gatherDesc = isDerived ? descBase : nullptr;
 
     // --- Check workplace enable flag via WpExt component ---
@@ -500,7 +477,7 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context, uint64_t /*arg3*
         {
             // --- Find RawMaterialComponent in the material description ---
             uintptr_t matDescEntity = *(uintptr_t*)(slotOffset + matDescBase);
-            void* rawMatComp = FindRawMaterialInList(matDescEntity, *s_typeId_RawMatComp);
+            void* rawMatComp = FindRawMaterialInList(matDescEntity, RawMaterialDescription::TypeId());
 
             // --- Search for a storage entity with this resource ---
             uintptr_t foundEntity = 0;
@@ -576,15 +553,11 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context, uint64_t /*arg3*
                 void* posDescBase = *(void**)((uintptr_t)posCompIBP + 0x18);
                 int bestDist = 0x7fffffff;
 
-                bool isDerivedPos = s_typeId_PosDesc && *s_typeId_PosDesc &&
-                                    fn_IsDerivedFrom(posDescBase, *s_typeId_PosDesc);
+                // DAT_1401c7938 = InteractDescription (ENDGAME B.3.9 D5: by cell -- the
+                // registered cell's own class, not the legacy healing fallback which used
+                // to read MapDescription::TypeId()).
+                bool isDerivedPos = fn_IsDerivedFrom(posDescBase, InteractDescription::TypeId());
                 void* posDesc = isDerivedPos ? posDescBase : nullptr;
-
-                // [STANDALONE GUARD] posDesc may be null if the position-description
-                // type-id (0x1401c7938) does not resolve by name in standalone. The real
-                // game always resolves it. Skip the primary target-pos calc when null
-                // (the child-target loop below still contributes a position); never pass
-                // null+0x38 into CalcBestTargetPos (it would read from 0x38).
                 uint8_t found = posDesc ? s_fn_CalcBestTargetPos(posCompIBP,
                     (uintptr_t)posDesc + 0x38, searchPos, targetPos, &bestDist) : 0;
 
@@ -1061,6 +1034,5 @@ extern "C" bool GatherRawMaterials_DepsReady() {
            s_fn_StorageQueryCount && s_fn_GetRemainingCapacity && s_fn_LongTermPlan &&
            s_fn_CalcBestTargetPos && s_fn_CalcChildTargetPos && s_fn_ValidateWorkAssign &&
            s_fn_PathfindingFindPath && s_fn_RegisterWork && s_fn_MemAlloc && s_fn_MemFree &&
-           s_fn_TreeNodeCleanup && fn_IsDerivedFrom && g_pGameWorldSingleton &&
-           s_typeId_GatherDesc && s_typeId_RawMatComp && s_typeId_PosDesc;
+           s_fn_TreeNodeCleanup && fn_IsDerivedFrom && g_pGameWorldSingleton;
 }

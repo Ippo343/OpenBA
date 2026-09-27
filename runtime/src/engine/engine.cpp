@@ -228,8 +228,7 @@ using SecToTicksFn = int64_t (*)(float);
 // Data globals — resolved by exported name, never through the registry.
 // See "HOW THE DEPENDENCIES ARE RESOLVED" above.
 MainLoop** MainLoopSingletonSlot() {
-    MainLoop** p = RT_DATA_SLOT(MainLoop**,
-        "?_singleton@MainLoop@Engine@@1PEAV12@EA");
+    MainLoop** p = reinterpret_cast<MainLoop**>(&::Engine::MainLoop::_singleton);
     return p;
 }
 
@@ -672,3 +671,7 @@ int RtEngineCoreRegister() {
     //   ?_singleton@MainLoop@Engine@@1PE…    0x1801fe750  DATA symbol, nothing to port
     return n;
 }
+
+// ?_singleton@MainLoop@Engine@@1PEAV12@EA (0x1801fe750) -- the class static (ENDGAME B.3.9 ENG, B39_RULES D7);
+// RtEnginePortInit redirects the minted storage row onto it.
+::Engine::MainLoop* ::Engine::MainLoop::_singleton = nullptr;

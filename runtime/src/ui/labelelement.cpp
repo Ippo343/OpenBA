@@ -8,7 +8,7 @@
 //
 //   slot  method                retail       where
 //   ----  --------------------  -----------  ---------------------------------
-//    0    vector deleting dtor  0x180042bb0  deleting_dtor.cpp row
+//    0    vector deleting dtor  0x180042bb0  LabelElement.h (the class's own)
 //    1    TypeName              0x1800427f0  here
 //    2    Type                  0x1800427d0  here
 //    4    ComputeSize           0x1800d2490  here
@@ -16,14 +16,9 @@
 //    6    Draw                  0x1800d1c80  here
 //   10    SetColor              0x180042970  here
 //
-// plus ??0LabelElement@UI@@QEAA@XZ         0x1800d2620
-//      ??0LabelElement@UI@@QEAA@AEBV01@@Z  0x180042a00
-//      ??1LabelElement@UI@@UEAA@XZ         0x1800d25f0
-//
-// UI::TextElement itself (its ctor, dtor and three slots) is batch 4's; this
-// file reaches `??0TextElement@UI@@` (0x18011eb80), its copy constructor
-// (0x1800420d0) and `??1TextElement@UI@@` (0x18011eda0) BY ADDRESS, so a later
-// port of them is picked up with no change here.
+// plus ??1LabelElement@UI@@UEAA@XZ 0x1800d25f0 and the factory pair (ENDGAME
+// B.3.9 UI-A: the real ctor ??0 0x1800d2620 is in the header; the copy-ctor
+// door is retired).
 //
 // LAYOUT — 0x130 bytes (`MOV EDX,0x130` at 0x180042be2), TextElement's 0x100
 // plus twelve dwords. Every one is a constructor store at 0x1800d2620 or a read
@@ -45,9 +40,9 @@
 // `UI::Font*`, +0xe8/+0xe9 two byte flags, +0xec/+0xf0/+0xf4 three ints and
 // +0xf8 the `System::String`.
 //
-// `??0LabelElement@UI@@QEAA@XZ` (0x1800d2620) is NOT here: it is already
-// ported and registered, table-driven, by runtime/src/ui/ui_factory_wave28.cpp
-// (the factory roster). One address, one owner.
+// ENDGAME B.3.9 block UI-A: the class is CONCRETE; the slot doors and the copy
+// / ??1 doors (and ui_factory_wave28.cpp's ??0 row), read only by the retired
+// minted table, its RT_DELDTOR row and the interpreter, are gone.
 //
 // ENDGAME B.3.6 block C3: the six slot bodies are `UI::LabelElement` members
 // (runtime/types/ui/LabelElement.h — the layout above, now asserted; the
@@ -72,11 +67,6 @@ const uint8_t* LabelElementTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfoSlot, "?_typeInfo@LabelElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
-void* VtLabelElement() { return RT_DATA_SLOT(void*, "??_7LabelElement@UI@@6B@"); }
-
-using TextCopyCtorFn = void* (*)(void* self, const void* other);
-using TextDtorFn     = void  (*)(void* self);
-
 const System::String& AsString(char* const& field) {
     return *reinterpret_cast<const System::String*>(&field);
 }
@@ -85,10 +75,13 @@ const System::String& AsString(char* const& field) {
 
 namespace UI {
 
-uint32_t LabelElement::Type() const { return TypeIdOf(LabelElementTypeInfo()); }
+uint32_t LabelElement::Type() const { return TypeId(); }
+// ?TypeId@LabelElement@UI@@SAIXZ 0x1800427e0 — the record's first dword.
+uint32_t LabelElement::TypeId() { return TypeIdOf(LabelElementTypeInfo()); }
 const char* LabelElement::TypeName() const { return TypeNameOf(LabelElementTypeInfo()); }
 
-// Non-virtual, EMPTY: the dtor door keeps retail's body.
+// ??1LabelElement@UI@@UEAA@XZ   0x1800d25f0 -- restamp, then TAIL JMP to
+// ~TextElement. ENDGAME B.3.9 UI-A: EMPTY; the compiler's chain.
 LabelElement::~LabelElement() {}
 
 // The icon's drawn size: the override when positive, else the sprite's own.
@@ -336,92 +329,31 @@ void LabelElement::SetColor(uint32_t color) {
     _color     = color;
 }
 
+// ?CreateNewObject@LabelElement@UI@@SAPEAVBase@Object@@XZ  0x1800428e0
+// The factory-interpreter row this replaces: MemAlloc(0x130, 8), retail's
+// null branch, then the out-of-line ctor ??0LabelElement (0x1800d2620).
+Object::Base* LabelElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(LabelElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) LabelElement();
+}
+// ?CreateInPlaceObject@LabelElement@UI@@SAPEAVBase@Object@@PEAX@Z  0x180042960
+Object::Base* LabelElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) LabelElement();
+}
 }  // namespace UI
 
 // ============================================================================
-// Constructor / destructor — DOOR BODIES (no real ctor/dtor, B4b-2)
-// ============================================================================
-extern "C" void* RtUi_LabelElement_CopyCtor(void* selfv, const void* otherv) {
-    UI::LabelElement* self = reinterpret_cast<UI::LabelElement*>(selfv);               // B.3.6 bridge
-    const UI::LabelElement* other = reinterpret_cast<const UI::LabelElement*>(otherv); // B.3.6 bridge
-    RtAddr<TextCopyCtorFn>(0x1800420d0ull)(selfv, otherv);
-    *reinterpret_cast<void**>(selfv) = VtLabelElement();
-    // The sprite goes over as two raw qwords (pad included).
-    __builtin_memcpy(&self->_sprite, &other->_sprite, sizeof(UI::Sprite));
-    self->_align        = other->_align;
-    self->_mode         = other->_mode;
-    self->_minTextWidth = other->_minTextWidth;
-    self->_gap          = other->_gap;
-    self->_iconWidth    = other->_iconWidth;
-    self->_iconHeight   = other->_iconHeight;
-    self->_iconColor    = other->_iconColor;
-    self->_textWidth    = other->_textWidth;
-    return selfv;
-}
-
-extern "C" void RtUi_LabelElement_Dtor(void* selfv) {
-    *reinterpret_cast<void**>(selfv) = VtLabelElement();
-    RtAddr<TextDtorFn>(0x18011eda0ull)(selfv);
-}
-
-// ============================================================================
-// The registered doors — one QUALIFIED delegation each.
-// ============================================================================
-extern "C" uint32_t RtUi_LabelElement_Type(const void* self) {
-    return reinterpret_cast<const UI::LabelElement*>(self)->UI::LabelElement::Type();   // B.3.6 bridge
-}
-extern "C" const char* RtUi_LabelElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::LabelElement*>(self)->UI::LabelElement::TypeName();   // B.3.6 bridge
-}
-extern "C" void RtUi_LabelElement_ComputeSize(void* self) {
-    reinterpret_cast<UI::LabelElement*>(self)->UI::LabelElement::ComputeSize();   // B.3.6 bridge
-}
-extern "C" void RtUi_LabelElement_ComputeLayout(void* self, int x, int y, int w, int h) {
-    reinterpret_cast<UI::LabelElement*>(self)->UI::LabelElement::ComputeLayout(x, y, w, h);   // B.3.6 bridge
-}
-extern "C" void RtUi_LabelElement_Draw(const void* self, void* ctx, uint8_t alpha) {
-    reinterpret_cast<const UI::LabelElement*>(self)->UI::LabelElement::Draw(   // B.3.6 bridge
-        *static_cast<UI::SpriteContext*>(ctx), alpha);
-}
-extern "C" void RtUi_LabelElement_SetColor(void* self, uint32_t color) {
-    reinterpret_cast<UI::LabelElement*>(self)->UI::LabelElement::SetColor(color);   // B.3.6 bridge
-}
-
-// ============================================================================
-// Registration
+// Registration: the factory pair only (B39_RULES D2).
 // ============================================================================
 int RtUiLabelElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?TypeName@LabelElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_LabelElement_TypeName);      ++n;
-    RegisterRuntimeAddr(0x1800427f0ull, (void*)&RtUi_LabelElement_TypeName);
-
-    RegisterRuntimeExport("?Type@LabelElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_LabelElement_Type);          ++n;
-    RegisterRuntimeAddr(0x1800427d0ull, (void*)&RtUi_LabelElement_Type);
-
-    RegisterRuntimeExport("?ComputeSize@LabelElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_LabelElement_ComputeSize);   ++n;
-    RegisterRuntimeAddr(0x1800d2490ull, (void*)&RtUi_LabelElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@LabelElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_LabelElement_ComputeLayout); ++n;
-    RegisterRuntimeAddr(0x1800d2330ull, (void*)&RtUi_LabelElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@LabelElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_LabelElement_Draw);          ++n;
-    RegisterRuntimeAddr(0x1800d1c80ull, (void*)&RtUi_LabelElement_Draw);
-
-    RegisterRuntimeExport("?SetColor@LabelElement@UI@@UEAAXI@Z",
-                          (void*)&RtUi_LabelElement_SetColor);      ++n;
-    RegisterRuntimeAddr(0x180042970ull, (void*)&RtUi_LabelElement_SetColor);
-
-    RegisterRuntimeExport("??0LabelElement@UI@@QEAA@AEBV01@@Z",
-                          (void*)&RtUi_LabelElement_CopyCtor);      ++n;
-    RegisterRuntimeAddr(0x180042a00ull, (void*)&RtUi_LabelElement_CopyCtor);
-
-    RegisterRuntimeExport("??1LabelElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_LabelElement_Dtor);          ++n;
-    RegisterRuntimeAddr(0x1800d25f0ull, (void*)&RtUi_LabelElement_Dtor);
+    RegisterRuntimeExport("?CreateNewObject@LabelElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::LabelElement::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x1800428e0ull, (void*)&UI::LabelElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@LabelElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::LabelElement::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x180042960ull, (void*)&UI::LabelElement::CreateInPlaceObject);
     return n;
 }

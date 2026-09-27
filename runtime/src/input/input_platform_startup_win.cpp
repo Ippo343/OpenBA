@@ -89,6 +89,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/input/Device.h"   // ENDGAME B.3.9 ENG: the class static
 #include "../../types/application/Application.h"
 #include "../../types/input/Input.h"
 
@@ -105,10 +106,10 @@ namespace {
 // `?_singleton@Application@1@0PEAV11@EA` @ 0x1801fc678, both through the
 // port-aware door.
 Input::Configuration** InputConfigSlot() {
-    return RT_DATA_SLOT(Input::Configuration**, "?_singleton@Configuration@Input@@0PEAV12@EA");
+    return reinterpret_cast<Input::Configuration**>(&::Input::Configuration::_singleton);
 }
 Application::Application** AppSingletonSlot() {
-    return RT_DATA_SLOT(Application::Application**, "?_singleton@Application@1@0PEAV11@EA");
+    return reinterpret_cast<Application::Application**>(&::Application::Application::_singleton);
 }
 
 void ErrorSetText(const char* text, bool flag) {
@@ -163,7 +164,7 @@ using AcquireFn = HRESULT (STDMETHODCALLTYPE*)(void*);
 // focus bookkeeping.
 namespace {
 Input::Device** InputDeviceSlot() {
-    return RT_DATA_SLOT(Input::Device**, "?_singleton@Device@Input@@0PEAV12@EA");
+    return reinterpret_cast<Input::Device**>(&::Input::Device::_singleton);
 }
 }  // namespace
 

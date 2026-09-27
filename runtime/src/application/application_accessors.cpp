@@ -45,9 +45,11 @@ using App = Application::Application;
 // exported slot through its own RT_DATA_SLOT call instead of depending on
 // that file's internal linkage).
 // ============================================================================
+Application::Application* Application::Application::_singleton = nullptr;   // 0x1801fc678
+
 Application::Application* Application::Application::Get() {
     App** slot =
-        RT_DATA_SLOT(App**, "?_singleton@Application@1@0PEAV11@EA");
+        reinterpret_cast<App**>(&::Application::Application::_singleton);
     App* ours = slot ? *slot : nullptr;
     return ours;
 }

@@ -3,7 +3,7 @@
 // ============================================================================
 //
 // ??_7BorderDescription@UI@@6B@ (retail 0x180156980), ten slots:
-//   0  deleting dtor      0x180040ff0  runtime/src/object/deleting_dtor.cpp row
+//   0  deleting dtor      0x180040ff0  BorderDescription.h (the class's own)
 //   1  TypeName           0x1800409e0  here
 //   2  Type               0x1800409c0  here
 //   3  GetFileVersion     0x18010fe10  here  (returns 0x104)
@@ -13,20 +13,15 @@
 //   7  Destruct           0x180040b90  here
 //   8  CreateInstance     0x18010ff40  here
 //   9  Construct          0x180040b80  here
-// plus ??1BorderDescription@UI@@UEAA@XZ (0x18010fb20).
+// plus ??1BorderDescription@UI@@UEAA@XZ (0x18010fb20) and the factory pair.
 //
-// ENDGAME B.3.6 block C1: the bodies are MEMBERS of `UI::BorderDescription`
-// (runtime/types/ui/BorderDescription.h); the doors are one-line QUALIFIED
-// delegations.
-//
-// NOT HERE, and deliberately: `??0BorderDescription@UI@@QEAA@XZ` (0x18010fa50)
-// and the two factory steps `?CreateNewObject@` (0x180040ad0) /
-// `?CreateInPlaceObject@` (0x180040b50) are ALREADY ported and registered,
-// table-driven, by runtime/src/ui/factory_ui1.cpp (the kBorderDescription row
-// in factory_ui1_tables.inc). Unlike GroupDescription, whose constructor is
-// inlined everywhere and has no out-of-line `??0`, this class HAS one and both
-// `Construct` and `Reconstruct` tail-jump straight into it — so there is no
-// ctor body to transcribe here at all, only the two wrappers.
+// ENDGAME B.3.9 block UI-A (B39_RULES D1/D2): the class is CONCRETE and every
+// live BorderDescription wears the COMPILER's table. The real ctor
+// (`??0BorderDescription@UI@@QEAA@XZ` 0x18010fa50) is in the header; the
+// factory pair `?CreateNewObject@` (0x180040ad0) / `?CreateInPlaceObject@`
+// (0x180040b50) is defined and registered here, replacing the FACTUI1 row.
+// The slot doors and the ??1 door, whose only reader was the minted
+// `??_7BorderDescription@UI@@6B@`, are retired with it.
 //
 // Layout: runtime/types/ui/BorderDescription.h over DescriptionsBatch1.h.
 // sizeof 0xb8.
@@ -39,6 +34,7 @@
 #include <new>
 
 #include "description_common.h"
+#include "../../types/system/String.h"
 #include "../../types/ui/BorderDescription.h"
 #include "../../types/ui/BorderElement.h"
 
@@ -59,22 +55,11 @@ void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
 }
 
 std::atomic<void*> g_borderTypeInfo{nullptr};
-std::atomic<void*> g_borderCtor{nullptr};
 
 const uint8_t* BorderTypeInfo() {
     return static_cast<const uint8_t*>(AtomicResolve(
         g_borderTypeInfo, "?_typeInfo@BorderDescription@UI@@0VBaseTypeInfo@Object@@A"));
 }
-// ??0BorderDescription@UI@@QEAA@XZ — ported by factory_ui1.cpp, reached here
-// through the port-aware door so `Construct`'s tail jump lands on OUR copy.
-void* BorderCtor(void* self) {
-    using CtorFn = void* (*)(void*);
-    return reinterpret_cast<CtorFn>(AtomicResolve(
-        g_borderCtor, "??0BorderDescription@UI@@QEAA@XZ"))(self);
-}
-
-// The dtor door only.
-void* VtBorderDescription() { return RT_DATA_SLOT(void*, RtUI::kVtblBorderDescription); }
 
 }  // namespace
 
@@ -86,7 +71,9 @@ namespace UI {
 // `Type` returns the FIRST DWORD of the BaseTypeInfo static (0x1801fa890) and
 // `TypeName` the pointer at +0x08 — retail reads them as two separate globals,
 // which are the same two fields runtime/types/object/TypeInfo.h pins.
-uint32_t BorderDescription::Type() const {
+uint32_t BorderDescription::Type() const { return TypeId(); }
+// ?TypeId@BorderDescription@UI@@SAIXZ 0x1800409d0 — the same first dword.
+uint32_t BorderDescription::TypeId() {
     const uint8_t* ti = BorderTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
@@ -101,21 +88,52 @@ int32_t BorderDescription::GetFileVersion() const { return 0x104; }
 // ============================================================================
 // Construct / Reconstruct / Destruct
 // ============================================================================
-// 0x180040b80: `TEST RCX,RCX ; JNZ <ctor> ; XOR EAX,EAX ; RET` — the null test
-// is the DOOR's; then a TAIL JUMP into the constructor, whose return value
-// (this) is this function's.
+// 0x180040b80: `TEST RCX,RCX ; JNZ <ctor> ; XOR EAX,EAX ; RET` — then a TAIL
+// JUMP into the constructor, whose return value (this) is this function's.
+// (The null test sat in the retired door; a virtual call always has a `this`.)
 Object::External* BorderDescription::Construct() {
-    return static_cast<Object::External*>(BorderCtor(this));    // 180040b78 JMP
+    return ::new (this) BorderDescription();                    // 180040b78 JMP
 }
 // 0x180040b60: slot 0 with flag 0 (destroy WITHOUT freeing), then the ctor
 // again, with NO null test — retail derefs `this` to reach the vtable before it
 // could test it, so a null here faults in retail too.
 Object::External* BorderDescription::Reconstruct() {
     DeletingDtor(0);                                            // 180040b6e
-    return static_cast<Object::External*>(BorderCtor(this));    // 180040b78 JMP
+    return ::new (this) BorderDescription();                    // 180040b78 JMP
 }
 // 0x180040b90: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
 void BorderDescription::Destruct() { DeletingDtor(0); }
+
+// ??1BorderDescription@UI@@UEAA@XZ   0x18010fb20 — retail's body, moved here
+// from the retired `RtUi_BorderDescription_Dtor` door (ENDGAME B.3.9 UI-A):
+// the NINE sprite names released in DESCENDING order (+0xb0 down to +0x70).
+// The entry restamp is the compiler's; so is the chain into
+// ~ElementDescription (which releases `_textName` at +0x60) and ~External
+// (retail's tail JMP at 0x18010fd2d). The +0x68 ExternalPtr is NOT released —
+// retail's, see the banner.
+// Each release is System::String's own (?Release@String@System@@ 0x1800c9870,
+// the idiom inlined here), with retail's asymmetry: the freeing branch leaves
+// the field at `data - 8`, the sharing branch nulls it.
+BorderDescription::~BorderDescription() {
+    for (int i = 8; i >= 0; --i)                              // 18010fb45 .. 18010fcca
+        System::StringPrivateAccess::Release(
+            *reinterpret_cast<System::String*>(&_spriteName[i]));
+}
+
+// ?CreateNewObject@BorderDescription@UI@@SAPEAVBase@Object@@XZ  0x180040ad0
+// The FACTUI1 row this replaces: `?MemAlloc@MemoryAllocator@System@@`
+// (0x1800c7a50, the locked wrapper Object::detail::InternalMemAlloc reaches) of
+// 0xb8 bytes, align 8; retail's null branch; then the constructor.
+Object::Base* BorderDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(BorderDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) BorderDescription();
+}
+// ?CreateInPlaceObject@BorderDescription@UI@@SAPEAVBase@Object@@PEAX@Z  0x180040b50
+Object::Base* BorderDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) BorderDescription();
+}
 
 // ============================================================================
 // ?Serialize@BorderDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x18010fe20
@@ -178,11 +196,8 @@ Object::InternalPtr<Element>* BorderDescription::CreateInstance(
     void* raw = MemAlloc(0x150, 8);                        // 18010ff80
 
     BorderElement* elem = static_cast<BorderElement*>(raw);
-    if (raw != nullptr) {                                  // 18010ffaa
-        using BorderElementCtorFn = void* (*)(void*);
-        elem = static_cast<BorderElement*>(
-            RtAddr<BorderElementCtorFn>(0x18010fd40ull)(raw));   // 18010ffaf
-    }
+    if (raw != nullptr)                                    // 18010ffaa
+        elem = ::new (raw) BorderElement();                // 18010ffaf ??0BorderElement
 
     void* slot = static_cast<Element*>(elem);              // 18010ffb7  [RBP+0x20]
     UI::ElementDescription::CreateInstance(                   // 18010ffc2
@@ -203,124 +218,22 @@ Object::InternalPtr<Element>* BorderDescription::CreateInstance(
 }  // namespace UI
 
 // ============================================================================
-// The DOORS. Both registrations for every row: the mangled name (which is
-// what the minted BaseTypeInfo and the minted vtable ask for first) and the
-// address (which is what a ported caller's `ResolveAddr` literal asks for).
-// ============================================================================
-extern "C" uint32_t RtUi_BorderDescription_Type(const void* self) {
-    return reinterpret_cast<const UI::BorderDescription*>(self)          // B.3.6 bridge
-        ->UI::BorderDescription::Type();
-}
-extern "C" const char* RtUi_BorderDescription_TypeName(const void* self) {
-    return reinterpret_cast<const UI::BorderDescription*>(self)          // B.3.6 bridge
-        ->UI::BorderDescription::TypeName();
-}
-extern "C" int32_t RtUi_BorderDescription_GetFileVersion(const void* self) {
-    return reinterpret_cast<const UI::BorderDescription*>(self)          // B.3.6 bridge
-        ->UI::BorderDescription::GetFileVersion();
-}
-
-extern "C" void* RtUi_BorderDescription_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                  // 180040b83
-    return reinterpret_cast<UI::BorderDescription*>(selfv)               // B.3.6 bridge
-        ->UI::BorderDescription::Construct();
-}
-extern "C" void* RtUi_BorderDescription_Reconstruct(void* selfv) {
-    return reinterpret_cast<UI::BorderDescription*>(selfv)               // B.3.6 bridge
-        ->UI::BorderDescription::Reconstruct();
-}
-extern "C" void RtUi_BorderDescription_Destruct(void* selfv) {
-    reinterpret_cast<UI::BorderDescription*>(selfv)                      // B.3.6 bridge
-        ->UI::BorderDescription::Destruct();
-}
-
-// ============================================================================
-// ??1BorderDescription@UI@@UEAA@XZ   0x18010fb20   — a DTOR DOOR (B4b-2), kept
-// ============================================================================
-// Re-stamp own vtable, release the NINE sprite names in DESCENDING order
-// (+0xb0 down to +0x70 — the order matters only as a transcription fact, the
-// releases are independent), re-stamp the BASE vtable, release
-// `ElementDescription::_textName` at +0x60 and TAIL-JUMP to
-// `??1External@Object@@` (0x1800bc950 — `JMP`, not `CALL`, at 0x18010fd2d).
-extern "C" void RtUi_BorderDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtBorderDescription();                            // 18010fb42
-
-    ReleaseStringField(p, 0xb0);                           // 18010fb45
-    ReleaseStringField(p, 0xa8);                           // 18010fb78
-    ReleaseStringField(p, 0xa0);                           // 18010fbaa
-    ReleaseStringField(p, 0x98);                           // 18010fbdc
-    ReleaseStringField(p, 0x90);                           // 18010fc0e
-    ReleaseStringField(p, 0x88);                           // 18010fc40
-    ReleaseStringField(p, 0x80);                           // 18010fc72
-    ReleaseStringField(p, 0x78);                           // 18010fca4
-    ReleaseStringField(p, 0x70);                           // 18010fcca
-
-    *v = VtElementDescription();                           // 18010fcf0
-    ReleaseStringField(p, 0x60);                           // 18010fcfa
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 18010fd2d JMP
-}
-
-extern "C" bool RtUi_BorderDescription_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<UI::BorderDescription*>(selfv)               // B.3.6 bridge
-        ->UI::BorderDescription::Serialize(streamv);
-}
-
-extern "C" void** RtUi_BorderDescription_CreateInstance(const void* selfv,
-                                                        void** ret,
-                                                        const void* dialog) {
-    return reinterpret_cast<void**>(
-        reinterpret_cast<const UI::BorderDescription*>(selfv)            // B.3.6 bridge
-            ->UI::BorderDescription::CreateInstance(
-                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
-                static_cast<const UI::Dialog*>(dialog)));
-}
-
-// ============================================================================
-// Registration.
+// Registration. ENDGAME B.3.9 UI-A: the eight slot doors (Type / TypeName /
+// GetFileVersion / Construct / Reconstruct / Destruct / Serialize /
+// CreateInstance) and the ??1 door are gone -- their only reader was the minted
+// `??_7BorderDescription@UI@@6B@` (and, for ??1, its RT_DELDTOR row). What is
+// left is the factory pair (B39_RULES D2): the class's OWN statics, by name
+// and address, so the minted `?_typeInfo@BorderDescription@UI@@` record
+// (MintTypeInfos resolves its factory pointers by name, after every
+// *PortInit) builds a real BorderDescription.
 // ============================================================================
 int RtUiBorderDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@BorderDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_BorderDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x1800409c0ull, (void*)&RtUi_BorderDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@BorderDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_BorderDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x1800409e0ull, (void*)&RtUi_BorderDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@BorderDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_BorderDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x18010fe10ull, (void*)&RtUi_BorderDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@BorderDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_BorderDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x180040b80ull, (void*)&RtUi_BorderDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@BorderDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_BorderDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x180040b60ull, (void*)&RtUi_BorderDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@BorderDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_BorderDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x180040b90ull, (void*)&RtUi_BorderDescription_Destruct);
-
-    RegisterRuntimeExport("??1BorderDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_BorderDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x18010fb20ull, (void*)&RtUi_BorderDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@BorderDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_BorderDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x18010fe20ull, (void*)&RtUi_BorderDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@BorderDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_BorderDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x18010ff40ull, (void*)&RtUi_BorderDescription_CreateInstance);
-
+    RegisterRuntimeExport("?CreateNewObject@BorderDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::BorderDescription::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x180040ad0ull, (void*)&UI::BorderDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@BorderDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::BorderDescription::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x180040b50ull, (void*)&UI::BorderDescription::CreateInPlaceObject);
     return n;
 }

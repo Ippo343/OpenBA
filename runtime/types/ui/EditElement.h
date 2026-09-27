@@ -45,11 +45,20 @@
 // with the same fields, and keeps its legacy names (`base`, `_text`, `_flagE0`)
 // for widgets_input.cpp, which still reaches EditElement / NumberEditElement /
 // SpinnerElement's child through the PODs.
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0EditElement@UI@@QEAA@XZ` (0x1800d0f10) minus its vptr stores;
+// slot 0 is the class's own vector deleting dtor; ~EditElement is protected and
+// non-virtual. The factory pair is the class's own; the minted
+// `??_7EditElement@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
+// the doors are retired.
 // ============================================================================
 
+#include <type_traits>
 #include <cstdint>
 #include <cstddef>
 #include "Element.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace RtUI {
 
@@ -92,8 +101,8 @@ static_assert(sizeof(EditElement) == 0xF8,
 // Draw · [7] 0x1800d0220 Update · [8..11] Element's · [12] 0x1800d0da0
 // FinalizeText — INTRODUCED here (`virtual`, RULE B6-1.6).
 //
-// ABSTRACT in C++; no real ctor: live ones are built by the `??0EditElement`
-// door (factory_ui1.cpp) and wear the MINTED table.
+// CONCRETE since ENDGAME B.3.9 UI-A: the real ctor is ??0EditElement
+// (0x1800d0f10); live ones wear the compiler's table.
 // ############################################################################
 namespace UI {
 
@@ -101,7 +110,38 @@ class Font;
 
 class EditElement : public Element {
 public:
-    Object::Base* DeletingDtor(unsigned flags) override = 0;     // [0] 0x18003fed0
+    // ??0EditElement@UI@@QEAA@XZ 0x1800d0f10 — the REAL constructor: CALL
+    // ??0Element (Element()), then 0x1800d0f38..0x1800d0f6b: +0xc0/+0xc8 QWORD
+    // 0, +0xd0 DWORD 0, +0xd4 BYTE 0, +0xd8 QWORD 0, +0xe0 BYTE 0, +0xe4 DWORD
+    // 0, +0xe8 BYTE 0, +0xf0 QWORD 0. The pad bytes stay unwritten.
+    EditElement() : Element() {
+        _font             = nullptr;
+        _text             = nullptr;
+        _maxLength        = 0;
+        _password         = 0;
+        _filter           = nullptr;
+        _active           = 0;
+        _caret            = 0;
+        _blinkOn          = 0;
+        _blinkAccumulator = 0;
+    }
+
+    // [0] 0x18003fed0 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0xf8`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<EditElement*>(self + static_cast<int64_t>(i) * 0xf8)
+                    ->~EditElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~EditElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                       // [1] 0x18003fae0
     uint32_t    Type() const override;                           // [2] 0x18003fac0
     void ComputeSize() override;                                 // [4] 0x1800d0c10
@@ -127,18 +167,20 @@ public:
     int32_t GetMaxLength() const { return _maxLength; }          // 0x18003fc70
     bool    IsActive() const     { return _active != 0; }        // 0x18003fc80
 
-    EditElement(const EditElement& src);                         // 0x18003fc90  editelement.cpp door
+    EditElement(const EditElement& src);                         // 0x18003fc90  not ported (door retired: no caller)
     EditElement& operator=(const EditElement& src);              // 0x18003fd70  not ported
-    static uint32_t TypeId();                                    // 0x18003fad0  not ported
-    static Object::Base* CreateNewObject();                      // 0x18003fbd0  factory door
-    static Object::Base* CreateInPlaceObject(void* place);       // 0x18003fc50  factory door
+    static uint32_t TypeId();                                    // 0x18003fad0  ported over the minted record
+    static Object::Base* CreateNewObject();                      // 0x18003fbd0  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);       // 0x18003fc50  the class's own (B39 D2)
     static void* operator new(std::size_t bytes);                // 0x18003faf0  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x18003fb60  not ported
     static void  operator delete(void* p);                       // 0x18003fb70  not ported
 
 protected:
-    EditElement() = default;   // NOT retail's 0x1800d0f10 (factory_ui1.cpp door)
-    ~EditElement();            // 0x1800d0e50 — empty; the door keeps the body
+    // `??1EditElement@UI@@UEAA@XZ` (0x1800d0e50). NON-VIRTUAL; editelement.cpp
+    // holds retail's body (drop the text-input latch if held, release the
+    // filter and the text); the compiler chains ~Element.
+    ~EditElement();
 
 private:
     static const char* _TypeName();                              // 0x18003faa0 -> "EditElement"
@@ -164,6 +206,8 @@ public:
 static_assert(sizeof(EditElement) == 0xf8,
               "UI::EditElement is 0xf8 (MOV EDX,0xf8 in 0x18003fed0) — NOT 0xe8");
 static_assert(alignof(EditElement) == 8, "UI::EditElement aligns to 8");
+static_assert(!std::has_virtual_destructor<EditElement>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<EditElement>::value, "B39 D1: concrete");
 static_assert(offsetof(EditElement, _font) == sizeof(Element),
               "EditElement's own fields begin at the end of Element");
 static_assert(offsetof(EditElement, _font)             == 0xc0, "");

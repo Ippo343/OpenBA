@@ -3,7 +3,7 @@
 // ============================================================================
 //
 // ??_7CheckDescription@UI@@6B@ (retail 0x1801572c0), ten slots:
-//   0  deleting dtor      0x1800489c0  runtime/src/object/deleting_dtor.cpp row
+//   0  deleting dtor      0x1800489c0  CheckDescription.h (the class's own)
 //   1  TypeName           0x180048680  here
 //   2  Type               0x180048660  here
 //   3  GetFileVersion     0x180111920  here  (returns 0x1104 — NOT 0x104)
@@ -63,34 +63,20 @@ void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 
-std::atomic<void*> g_vtCheckDescription{nullptr};
-std::atomic<void*> g_vtButtonElement{nullptr};
-std::atomic<void*> g_vtCheckElement{nullptr};
 std::atomic<void*> g_checkTypeInfo{nullptr};
-std::atomic<void*> g_buttonCtor{nullptr};
 
-void* VtCheckDescription() { return AtomicResolve(g_vtCheckDescription, RtUI::kVtblCheckDescription); }
-void* VtButtonElement()    { return AtomicResolve(g_vtButtonElement, RtUI::kVtblButtonElement); }
-void* VtCheckElement()     { return AtomicResolve(g_vtCheckElement, RtUI::kVtblCheckElement); }
 const uint8_t* CheckTypeInfo() {
     return static_cast<const uint8_t*>(AtomicResolve(
         g_checkTypeInfo, "?_typeInfo@CheckDescription@UI@@0VBaseTypeInfo@Object@@A"));
 }
 
-void* ButtonCtor(void* self) {
-    using CtorFn = void* (*)(void*);
-    return reinterpret_cast<CtorFn>(AtomicResolve(
-        g_buttonCtor, "??0ButtonDescription@UI@@QEAA@XZ"))(self);
-}
-
-// The dtor door only.
-void* VtButtonDescription() { return RT_DATA_SLOT(void*, RtUI::kVtblButtonDescription); }
-
 }  // namespace
 
 namespace UI {
 
-uint32_t CheckDescription::Type() const {
+uint32_t CheckDescription::Type() const { return TypeId(); }
+// ?TypeId@CheckDescription@UI@@SAIXZ 0x180048670 — the record's first dword.
+uint32_t CheckDescription::TypeId() {
     const uint8_t* ti = CheckTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
@@ -104,19 +90,14 @@ int32_t CheckDescription::GetFileVersion() const { return 0x1104; }
 // The two stores are transcribed from 0x1800488c2..0x1800488cc (and
 // identically from 0x180048877..0x180048881 inside Reconstruct); the vtable
 // stamp is retail's own store over the one ??0ButtonDescription just made.
+// ENDGAME B.3.9 UI-A: that construction is the real ctor (CheckDescription.h).
 Object::External* CheckDescription::Construct() {
-    ButtonCtor(this);                                          // 1800488bc
-    *reinterpret_cast<void**>(this) = VtCheckDescription();    // 1800488c9
-    _checkDesc = nullptr;                                      // 1800488cc
-    return this;                                               // 1800488d7
+    return ::new (this) CheckDescription();                    // 1800488bc..1800488d7
 }
 // 0x180048850: slot 0 with flag 0, then the same construction, NO null test.
 Object::External* CheckDescription::Reconstruct() {
     DeletingDtor(0);                                           // 180048867
-    ButtonCtor(this);                                          // 180048871
-    *reinterpret_cast<void**>(this) = VtCheckDescription();    // 18004887e
-    _checkDesc = nullptr;                                      // 180048881
-    return this;                                               // 18004888c
+    return ::new (this) CheckDescription();                    // 180048871..18004888c
 }
 void CheckDescription::Destruct() { DeletingDtor(0); }
 
@@ -149,7 +130,8 @@ bool CheckDescription::Serialize(void* streamv) {
 //     ??0Element (0x180115e50)
 //     ButtonElement vtable, +0xc0 = -1 (dword), +0xc4 = 0 (dword)
 //     CheckElement vtable, +0xd8 = 0 (BYTE — `MOV byte`, not dword)
-// so the ButtonElement vtable is written and then overwritten. Kept.
+// so the ButtonElement vtable is written and then overwritten -- the real
+// CheckElement ctor's stores (CheckElement.h), which is what this spells now.
 //
 // Then the shared ButtonDescription applier (0x1801108d0), then ONE more child
 // from `_checkDesc`, attached to the element retail still holds in RDI —
@@ -160,16 +142,8 @@ Object::InternalPtr<Element>* CheckDescription::CreateInstance(
     void* raw = MemAlloc(0xe0, 8);                         // 180111a02
 
     CheckElement* elem = nullptr;
-    if (raw != nullptr) {                                  // 180111a2d
-        ElementCtor(raw);                                  // 180111a32
-        CheckElement* e = reinterpret_cast<CheckElement*>(raw);   // B.3.6 bridge
-        *reinterpret_cast<void**>(e) = VtButtonElement();  // 180111a3f
-        e->_keyIndex = -1;                                 // 180111a42
-        e->_state    = 0;                                  // 180111a4c
-        *reinterpret_cast<void**>(e) = VtCheckElement();   // 180111a5d
-        e->_checked  = 0;                                  // 180111a60 BYTE
-        elem = e;
-    }
+    if (raw != nullptr)                                    // 180111a2d
+        elem = ::new (raw) CheckElement();                 // 180111a32..180111a60 inlined ctor
 
     Object::InternalPtr<ButtonElement> slot(elem);         // 180111a67
     ButtonDescription::CreateInstance(&slot, dialog);      // 180111a77
@@ -185,109 +159,43 @@ Object::InternalPtr<Element>* CheckDescription::CreateInstance(
 }  // namespace UI
 
 // ============================================================================
-// The DOORS
+// ??1CheckDescription@UI@@UEAA@XZ   0x180111620
 // ============================================================================
-extern "C" uint32_t RtUi_CheckDescription_Type(const void* self) {
-    return reinterpret_cast<const UI::CheckDescription*>(self)           // B.3.6 bridge
-        ->UI::CheckDescription::Type();
-}
-extern "C" const char* RtUi_CheckDescription_TypeName(const void* self) {
-    return reinterpret_cast<const UI::CheckDescription*>(self)           // B.3.6 bridge
-        ->UI::CheckDescription::TypeName();
-}
-extern "C" int32_t RtUi_CheckDescription_GetFileVersion(const void* self) {
-    return reinterpret_cast<const UI::CheckDescription*>(self)           // B.3.6 bridge
-        ->UI::CheckDescription::GetFileVersion();
-}
+// THREE vtable stamps back to back -- own, ButtonDescription's, then
+// ElementDescription's -- then the base's _textName and the tail JMP into
+// ~External. ENDGAME B.3.9 UI-A: EMPTY; all of it is the compiler's chain. The
+// +0xa0 child description is NOT released.
+namespace UI {
+CheckDescription::~CheckDescription() {}
+}  // namespace UI
 
-// 0x1800488a0: the retail null test stays in the door (1800488ba).
-extern "C" void* RtUi_CheckDescription_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;
-    return reinterpret_cast<UI::CheckDescription*>(selfv)                // B.3.6 bridge
-        ->UI::CheckDescription::Construct();
+namespace UI {
+// ?CreateNewObject@CheckDescription@UI@@SAPEAVBase@Object@@XZ  0x180048770
+// The factory-interpreter row this replaces: MemAlloc(0xa8, 8), retail's
+// null branch, then ??0ButtonDescription and the +0xa0 store.
+Object::Base* CheckDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(CheckDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) CheckDescription();
 }
-extern "C" void* RtUi_CheckDescription_Reconstruct(void* selfv) {
-    return reinterpret_cast<UI::CheckDescription*>(selfv)                // B.3.6 bridge
-        ->UI::CheckDescription::Reconstruct();
+// ?CreateInPlaceObject@CheckDescription@UI@@SAPEAVBase@Object@@PEAX@Z  0x180048800
+Object::Base* CheckDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) CheckDescription();
 }
-extern "C" void RtUi_CheckDescription_Destruct(void* selfv) {
-    reinterpret_cast<UI::CheckDescription*>(selfv)                       // B.3.6 bridge
-        ->UI::CheckDescription::Destruct();
-}
+}  // namespace UI
 
 // ============================================================================
-// ??1CheckDescription@UI@@UEAA@XZ   0x180111620   — a DTOR DOOR (B4b-2), kept
+// Registration: the factory pair only (B39_RULES D2). The slot doors and the
+// ??1 door, read only by the retired minted table / RT_DELDTOR row, are gone.
 // ============================================================================
-// THREE vtable stamps back to back — own, ButtonDescription's, then
-// ElementDescription's — with nothing between them, then the base's _textName.
-// All three are kept; see buttondescription.cpp's ~ButtonDescription note.
-// The +0xa0 child description is NOT released.
-extern "C" void RtUi_CheckDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtCheckDescription();                             // 18011163d
-    *v = VtButtonDescription();                            // 180111647
-    *v = VtElementDescription();                           // 180111651
-    ReleaseStringField(p, 0x60);                           // 180111654
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 180111686 JMP
-}
-
-extern "C" bool RtUi_CheckDescription_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<UI::CheckDescription*>(selfv)                // B.3.6 bridge
-        ->UI::CheckDescription::Serialize(streamv);
-}
-
-extern "C" void** RtUi_CheckDescription_CreateInstance(const void* selfv,
-                                                       void** ret,
-                                                       const void* dialog) {
-    return reinterpret_cast<void**>(
-        reinterpret_cast<const UI::CheckDescription*>(selfv)             // B.3.6 bridge
-            ->UI::CheckDescription::CreateInstance(
-                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
-                static_cast<const UI::Dialog*>(dialog)));
-}
-
 int RtUiCheckDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@CheckDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_CheckDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x180048660ull, (void*)&RtUi_CheckDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@CheckDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_CheckDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x180048680ull, (void*)&RtUi_CheckDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@CheckDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_CheckDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x180111920ull, (void*)&RtUi_CheckDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@CheckDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_CheckDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x1800488a0ull, (void*)&RtUi_CheckDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@CheckDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_CheckDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x180048850ull, (void*)&RtUi_CheckDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@CheckDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_CheckDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x1800488f0ull, (void*)&RtUi_CheckDescription_Destruct);
-
-    RegisterRuntimeExport("??1CheckDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_CheckDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x180111620ull, (void*)&RtUi_CheckDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@CheckDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_CheckDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x180111930ull, (void*)&RtUi_CheckDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@CheckDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_CheckDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x1801119c0ull, (void*)&RtUi_CheckDescription_CreateInstance);
-
+    RegisterRuntimeExport("?CreateNewObject@CheckDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::CheckDescription::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x180048770ull, (void*)&UI::CheckDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@CheckDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::CheckDescription::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x180048800ull, (void*)&UI::CheckDescription::CreateInPlaceObject);
     return n;
 }

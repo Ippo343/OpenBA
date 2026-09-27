@@ -73,18 +73,10 @@ uint64_t g_fsSeek = 0, g_fsSeekPlatform = 0;
 // called from both bodies below. It died WHOLE with `IO::BinaryFileStream` —
 // B34_RULES section 4.1, and file_stream.cpp says why.)
 
-// ?Write@FileStream@IO@@UEAA_NHPEBX@Z (0x1800aab90) — slot 2. The body is
-// `IO::FileStream::Write` below; the QUALIFIED call is what stops a live
-// object's minted slot 2 from dispatching back into this door.
-extern "C" bool RtIo_FileStream_Write(FileStream* self, int32_t len, const void* buf) {
-    return reinterpret_cast<IO::FileStream*>(self)->IO::FileStream::Write(len, buf);
-}
-
-// ?SetCurrentPos@FileStream@IO@@UEAA_NH@Z (0x1800aac10) — slot 4.
-extern "C" bool RtIo_FileStream_SetCurrentPos(FileStream* self, int32_t pos) {
-    return reinterpret_cast<IO::FileStream*>(self)
-               ->IO::FileStream::SetCurrentPos(pos);
-}
+// ENDGAME B.3.9 IO: the ?Write@ / ?SetCurrentPos@FileStream@ slot doors
+// (0x1800aab90 / 0x1800aac10) had the minted FileStream / BinaryFileStream /
+// TextFileStream tables as their only callers and were deleted with them; the
+// bodies are the members below.
 
 }  // namespace RtIO
 
@@ -166,19 +158,3 @@ bool FileStream::SetCurrentPos(int pos) {
 }
 
 }  // namespace IO
-
-
-int RtIoFileStreamWinRegister() {
-    using namespace RtIO;
-    int n = 0;
-
-    RegisterRuntimeExport("?Write@FileStream@IO@@UEAA_NHPEBX@Z",
-                          (void*)&RtIo_FileStream_Write); ++n;
-    RegisterRuntimeAddr(0x1800aab90, (void*)&RtIo_FileStream_Write);
-
-    RegisterRuntimeExport("?SetCurrentPos@FileStream@IO@@UEAA_NH@Z",
-                          (void*)&RtIo_FileStream_SetCurrentPos); ++n;
-    RegisterRuntimeAddr(0x1800aac10, (void*)&RtIo_FileStream_SetCurrentPos);
-
-    return n;
-}
