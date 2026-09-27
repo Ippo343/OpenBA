@@ -34,6 +34,15 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
+#include "Component/MarketComponent.h"   // ENDGAME B.3.8 CB3: MarketComponent::TypeId()
+#include "Component/MarketDescription.h"   // ENDGAME B.3.8 CB3: MarketDescription::TypeId()
+#include "Component/RawMaterialDescription.h"   // ENDGAME B.3.8 CB3: RawMaterialDescription::TypeId()
+#include "Component/StorageComponent.h"   // ENDGAME B.3.8 CB3: StorageComponent::TypeId()
+#include "Component/ConsumeProduceComponent.h"   // ENDGAME B.3.8 CB3: ConsumeProduceComponent::TypeId()
+#include "Component/InteractComponent.h"   // ENDGAME B.3.8 CB3: InteractComponent::TypeId()
+#include "Component/InteractDescription.h"   // ENDGAME B.3.8 CB3: InteractDescription::TypeId()
+#include "Component/MapComponent.h"   // ENDGAME B.3.8 CB3: MapComponent::TypeId()
+#include "Component/StorageLocationComponent.h"   // ENDGAME B.3.8 CB3: StorageLocationComponent::TypeId()
 
 // ============================================================
 // Local function pointers (resolved once by MarketWork_ResolveFuncs)
@@ -541,7 +550,6 @@ typedef void*    (*MW_FindStorage_t)(uintptr_t entity, void* outIBP);       // 0
 typedef int      (*MW_StorageQueryCount_t)(void* storage);                  // 0x14012cf10
 typedef void     (*MW_LongTermPlan_t)(uintptr_t citizen);                   // 0x140115e60
 typedef int      (*MW_FreeCarryCapacity_t)(uintptr_t citizen);              // 0x140116540
-typedef uint32_t (*MW_GetTypeId_t)(void* obj);                              // vtable +0x10
 // stage 2 (see the STAGE 2 dependencies block further down for what they are)
 typedef void     (*MW_ArrayGrow_t)(int64_t* arrDesc, int32_t newCount);     // 0x14002afb0
 typedef void     (*MW_AvlRetrace_t)(int64_t* treeDesc, int64_t* cursor);    // 0x140014b40
@@ -559,7 +567,6 @@ typedef void     (*MW_FindPath_t)(void* outResult, void* citizenIBP, int pathTyp
                                   void* destEntityIBP, float* destPos, void* srcEntityIBP,
                                   float* srcPos, int64_t materialTypeEntity, int itemCount,
                                   int flags, int p11, char p12, int p13, int p14); // 0x1400bf790
-typedef void*    (*MW_GetTargetSlot10_t)(void* self, void* outIBP);            // vtable +0x50
 
 static MW_ArrayGrow_t         s_fn_ArrayGrow         = nullptr;
 static MW_AvlRetrace_t        s_fn_AvlRetrace        = nullptr;
@@ -618,13 +625,13 @@ namespace Object { uint32_t GetTypeIdByName(const char* name); }
 // So: read the .rdata slot, and if it is absent or zero fall back to a by-name
 // lookup. 0xFFFFFFFF is BaseTypeInfo's pre-Factory::Startup sentinel, so it is
 // treated as "not resolved yet" and is deliberately NOT cached.
-static uint32_t MW_TypeId(const char* name, uintptr_t rdataAddr, uint32_t& cache) {
+static uint32_t MW_TypeId(uint32_t classTypeId, uintptr_t rdataAddr, uint32_t& cache) {
     if (cache != 0 && cache != 0xFFFFFFFFu) return cache;
     uint32_t v = 0;
     if (uintptr_t p = ResolveAddr(Module::Exe, rdataAddr))
         v = *reinterpret_cast<uint32_t*>(p);
     if (v == 0 || v == 0xFFFFFFFFu)
-        v = ::Object::GetTypeIdByName(name);
+        v = classTypeId;   // ENDGAME B.3.8 CB3: X::TypeId() (was the by-name lookup)
     if (v != 0 && v != 0xFFFFFFFFu) cache = v;
     return v;
 }
@@ -696,9 +703,7 @@ static void* MW_FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
         void** slot = reinterpret_cast<void**>(
             *reinterpret_cast<uintptr_t*>(entity + 0x30) + static_cast<int64_t>(i) * 8);
         void* comp = *slot;
-        MW_GetTypeId_t getTypeId =
-            *reinterpret_cast<MW_GetTypeId_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10);
-        if (getTypeId(comp) == typeId) {
+        if (reinterpret_cast<Object::Base*>(comp)->Type() == typeId) {   // B.3.8 bridge
             slot = reinterpret_cast<void**>(
                 *reinterpret_cast<uintptr_t*>(entity + 0x30) + static_cast<int64_t>(i) * 8);
             comp = *slot;
@@ -821,9 +826,7 @@ static void* MW_FindChildByTypeId(uintptr_t obj, uint32_t typeId) {
     for (int i = 0; i < count; ++i) {
         void* child = *reinterpret_cast<void**>(
             *reinterpret_cast<uintptr_t*>(obj + 0x28) + static_cast<int64_t>(i) * 8);
-        MW_GetTypeId_t getTypeId =
-            *reinterpret_cast<MW_GetTypeId_t*>(*reinterpret_cast<uintptr_t*>(child) + 0x10);
-        if (getTypeId(child) == typeId) {
+        if (reinterpret_cast<Object::Base*>(child)->Type() == typeId) {   // B.3.8 bridge
             child = *reinterpret_cast<void**>(
                 *reinterpret_cast<uintptr_t*>(obj + 0x28) + static_cast<int64_t>(i) * 8);
             return fn_IsDerivedFrom(child, typeId) ? child : nullptr;
@@ -930,27 +933,27 @@ int MarketWork::Execute(void* citizenHolder, void* ctx, uint64_t /*arg3*/) {
     static uint32_t s_tid_MarketComponent = 0;
     static uint32_t s_tid_MarketDescription = 0;
     const uint32_t tidMarketComponent =
-        MW_TypeId("MarketComponent", 0x1401c44f0, s_tid_MarketComponent);
+        MW_TypeId(MarketComponent::TypeId(), 0x1401c44f0, s_tid_MarketComponent);
     const uint32_t tidMarketDescription =
-        MW_TypeId("MarketDescription", 0x1401c4528, s_tid_MarketDescription);
+        MW_TypeId(MarketDescription::TypeId(), 0x1401c4528, s_tid_MarketDescription);
     // Stage 2's three type-ids. Unlike the two above, all three ARE in the
     // address registry, so MW_TypeId takes them straight from exe .rdata.
     static uint32_t s_tid_RawMaterialDescription = 0;
     static uint32_t s_tid_StorageComponent = 0;
     static uint32_t s_tid_ConsumeProduceComponent = 0;
     const uint32_t tidRawMaterialDescription =
-        MW_TypeId("RawMaterialDescription", 0x1401c7cb8, s_tid_RawMaterialDescription);
+        MW_TypeId(RawMaterialDescription::TypeId(), 0x1401c7cb8, s_tid_RawMaterialDescription);
     const uint32_t tidStorageComponent =
-        MW_TypeId("StorageComponent", 0x1401c7e78, s_tid_StorageComponent);
+        MW_TypeId(StorageComponent::TypeId(), 0x1401c7e78, s_tid_StorageComponent);
     const uint32_t tidConsumeProduceComponent =
-        MW_TypeId("ConsumeProduceComponent", 0x1401c7350, s_tid_ConsumeProduceComponent);
+        MW_TypeId(ConsumeProduceComponent::TypeId(), 0x1401c7350, s_tid_ConsumeProduceComponent);
     // Stage 3's two, both already registered.
     static uint32_t s_tid_InteractComponent = 0;
     static uint32_t s_tid_InteractDescription = 0;
     const uint32_t tidInteractComponent =
-        MW_TypeId("InteractComponent", 0x1401c7900, s_tid_InteractComponent);
+        MW_TypeId(InteractComponent::TypeId(), 0x1401c7900, s_tid_InteractComponent);
     const uint32_t tidInteractDescription =
-        MW_TypeId("InteractDescription", 0x1401c7938, s_tid_InteractDescription);
+        MW_TypeId(InteractDescription::TypeId(), 0x1401c7938, s_tid_InteractDescription);
     // Stage 4/5. ⚠ 0x1401c7ee8 (StorageLocationComponent) is NOT in the address
     // registry -- same situation the two market type-ids were in before. The name
     // is not a guess: action_pf_roots_route.cpp already resolves this exact global
@@ -960,9 +963,9 @@ int MarketWork::Execute(void* citizenHolder, void* ctx, uint64_t /*arg3*/) {
     static uint32_t s_tid_MapComponent = 0;
     static uint32_t s_tid_StorageLocationComponent = 0;
     const uint32_t tidMapComponent =
-        MW_TypeId("MapComponent", 0x1401c79e0, s_tid_MapComponent);
+        MW_TypeId(MapComponent::TypeId(), 0x1401c79e0, s_tid_MapComponent);
     const uint32_t tidStorageLocationComponent =
-        MW_TypeId("StorageLocationComponent", 0x1401c7ee8, s_tid_StorageLocationComponent);
+        MW_TypeId(StorageLocationComponent::TypeId(), 0x1401c7ee8, s_tid_StorageLocationComponent);
 
     const uintptr_t marketEntity = *reinterpret_cast<uintptr_t*>(a + 0x10);
     void* marketComp = MW_FindComponentByTypeId(marketEntity, tidMarketComponent);
@@ -1387,9 +1390,7 @@ int MarketWork::Execute(void* citizenHolder, void* ctx, uint64_t /*arg3*/) {
             // 0x1400f0de1..0x1400f0e2a: stamp the citizen.
             const int pathTypeAfter = *reinterpret_cast<int32_t*>(a + 0x20);
             const uintptr_t citizen3 = *reinterpret_cast<uintptr_t*>(citizenHolder);
-            MW_GetTargetSlot10_t getTarget = *reinterpret_cast<MW_GetTargetSlot10_t*>(
-                *reinterpret_cast<uintptr_t*>(this) + 0x50);
-            int64_t* tgt = reinterpret_cast<int64_t*>(getTarget(this, &pathSrc));
+            int64_t* tgt = reinterpret_cast<int64_t*>(GetTarget(&pathSrc));
             const int64_t tgtVal = *tgt;               // 0x1400f0e03 MOV RAX,[RAX]
             *reinterpret_cast<int32_t*>(citizen3 + 0x30)   = pathTypeAfter;
             *reinterpret_cast<uint32_t*>(citizen3 + 0x54) |= 4;
@@ -1742,9 +1743,7 @@ int MarketWork::Execute(void* citizenHolder, void* ctx, uint64_t /*arg3*/) {
                           pathWinner, winnerPos, 0, -1, 0, 1, '\0', 0, 1);
 
             const uintptr_t citizen5 = *reinterpret_cast<uintptr_t*>(citizenHolder);
-            MW_GetTargetSlot10_t getTarget2 = *reinterpret_cast<MW_GetTargetSlot10_t*>(
-                *reinterpret_cast<uintptr_t*>(this) + 0x50);
-            int64_t* tgt2 = reinterpret_cast<int64_t*>(getTarget2(this, pathWinner));
+            int64_t* tgt2 = reinterpret_cast<int64_t*>(GetTarget(pathWinner));
             const int64_t tgtVal2 = *tgt2;
             *reinterpret_cast<int32_t*>(citizen5 + 0x30)   = pathType2;
             *reinterpret_cast<uint32_t*>(citizen5 + 0x54) |= 4;
@@ -1872,10 +1871,8 @@ DEFINE_EXE_VTABLE(MarketWork, "_ZTV10MarketWork")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x140161710 is still read back BY ADDRESS — MarketComponent's CreateWork
-// (resourceproduce_creatework.cpp, block MI-B) builds the work by hand and stamps it —
-// so the exe address serves the COMPILER's table.
 extern "C" void RegisterMarketWorkVtable() {
-    RegisterExeAddr(MarketWorkAddr::Vtable, reinterpret_cast<uintptr_t>(MarketWork::Vtable()));   // 0x140161710
+    // ENDGAME B.3.8 CB3: the retail-table row is gone -- no by-address reader of
+    // it is left. The call in address_registry.cpp is the coordinator's to drop.
 }
 DEFINE_EXE_TYPE(MarketWork, "Work")

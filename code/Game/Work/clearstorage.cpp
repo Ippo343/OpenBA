@@ -154,10 +154,8 @@ int ClearStorage::Execute(void* citizenAI, void* time, uint64_t /*arg3*/) {
             for (int j = 0; j < *(int*)(itemEntity + 0x30); j++) {
                 uintptr_t compArray = *(uintptr_t*)(itemEntity + 0x28);
                 void* comp = *(void**)(compArray + (uintptr_t)j * 8);
-                // Check type via vtable +0x10
-                typedef uint32_t (*fn_GetTypeId_t)(void*);
-                fn_GetTypeId_t getTypeId = *(fn_GetTypeId_t*)(*(uintptr_t*)comp + 0x10);
-                uint32_t typeId = getTypeId(comp);
+                // slot 2 Type() of the description's component description
+                uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
                 if (typeId == *g_TypeId_RawMaterialDescription) {
                     // Verify via IsDerivedFrom
                     comp = *(void**)(*(uintptr_t*)(itemEntity + 0x28) + (uintptr_t)j * 8);
@@ -178,9 +176,7 @@ int ClearStorage::Execute(void* citizenAI, void* time, uint64_t /*arg3*/) {
             for (int64_t k = 0; k < *(int*)(citizenBuilding + 0x38); k++) {
                 void* compIBP = (void*)(*(uintptr_t*)(citizenBuilding + 0x30) + k * 8);
                 void* comp = *(void**)compIBP;
-                typedef uint32_t (*fn_GetTypeId_t)(void*);
-                fn_GetTypeId_t getTypeId = *(fn_GetTypeId_t*)(*(uintptr_t*)comp + 0x10);
-                uint32_t typeId = getTypeId(comp);
+                uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
                 if (typeId == *g_TypeId_StorageComponent_FC) {
                     compIBP = (void*)(*(uintptr_t*)(citizenBuilding + 0x30) + k * 8);
                     void* compVal = *(void**)compIBP;
@@ -307,10 +303,8 @@ found_dest_storage:
         // Get the Slot10 result (vtable +0x50)
         uintptr_t citizenPtr = *(uintptr_t*)citizenAI;
 
-        typedef void* (*fn_Slot10_t)(void* self, void* entityIBPOut);
         uint64_t entityRefOut = 0;
-        fn_Slot10_t slot10 = *(fn_Slot10_t*)(*(uintptr_t*)this + 0x50);
-        void* resultPtr = slot10(this, &entityRefOut);
+        void* resultPtr = GetTarget(&entityRefOut);
         uintptr_t resultVal = *(uintptr_t*)resultPtr;
 
         // Update citizen state

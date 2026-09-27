@@ -18,6 +18,7 @@
 //
 
 #include "engine_funcs.h"
+#include "Action/PerformWork.h"   // ENDGAME B.3.8 CB3
 #include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
@@ -118,8 +119,6 @@ static WAP_fn_ObjInternalCtor_t     s_wap_ObjInternalCtor = nullptr;
 static WAP_fn_TimeCtor_t            s_wap_TimeCtor        = nullptr;
 
 // Inline-object vtables (exe .rdata) + .rdata float/dword constants.
-static void* s_wap_vtable_Action      = nullptr;  // 0x14015faa0
-static void* s_wap_vtable_PerformWork = nullptr;  // 0x14015fea0
 static const uint32_t* s_wap_pDword_c70e8 = nullptr; // 0x1401c70e8 (SendComponentMessage #1 target type-id = CitizenAIComponent)
 static const uint32_t* s_wap_pDword_c41e0 = nullptr; // 0x1401c41e0 (ba9f0 SendComponentMessage #2 target type-id = FireComponent)
 static const float*    s_wap_pf_172124    = nullptr; // 0x140172124 = 0.75f  (PerformWork Time #1)
@@ -159,8 +158,6 @@ static void ResolveAll() {
     if (!s_wap_ObjInternalCtor) s_wap_ObjInternalCtor = reinterpret_cast<WAP_fn_ObjInternalCtor_t>(fn_ObjectInternal_Ctor);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b00)) s_wap_TimeCtor        = *reinterpret_cast<WAP_fn_TimeCtor_t*>(s);
 
-    s_wap_vtable_Action      = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14015faa0));
-    s_wap_vtable_PerformWork = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14015fea0));
     s_wap_pDword_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
     s_wap_pDword_c41e0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c41e0));
     s_wap_pf_172124    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172124));
@@ -188,20 +185,8 @@ static inline void  WAP_Append(void* list, void* ibp) { if (s_wap_TaskAppend) s_
 //   [o+0x44]     = 0xffffffff
 static void WAP_BuildInlinePerformWork(void* o, uintptr_t entityInner, float heading,
                                        int actionType, int64_t timeVal) {
-    if (s_wap_ObjInternalCtor) s_wap_ObjInternalCtor(o);          // 0x140152768
-    uintptr_t p = reinterpret_cast<uintptr_t>(o);
-    *reinterpret_cast<void**>(p)           = s_wap_vtable_Action;      // 0x14015faa0
-    *reinterpret_cast<uint64_t*>(p + 0x10) = 0;
-    *reinterpret_cast<uint8_t*>(p + 0x18)  = 0;
-    *reinterpret_cast<void**>(p)           = s_wap_vtable_PerformWork; // 0x14015fea0
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;
-    *reinterpret_cast<uintptr_t*>(p + 0x20) = entityInner;
-    *reinterpret_cast<float*>(p + 0x28)    = heading;
-    *reinterpret_cast<int*>(p + 0x2c)      = actionType;
-    *reinterpret_cast<int64_t*>(p + 0x30)  = timeVal;
-    *reinterpret_cast<uint64_t*>(p + 0x38) = 0;
-    *reinterpret_cast<uint8_t*>(p + 0x40)  = 0;
-    *reinterpret_cast<uint32_t*>(p + 0x44) = 0xffffffffu;
+    // The inlined PerformWork ctor 0x1400c9720 with useTool = 0, +0x44 = -1: the real ctor.
+    new (o) PerformWork(&entityInner, heading, static_cast<uint32_t>(actionType), timeVal, 0, -1);
 }
 
 // ============================================================

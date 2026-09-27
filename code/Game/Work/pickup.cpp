@@ -26,6 +26,7 @@
 #include <new>
 #include "Object/factory_registration.h"  // Object::GetTypeIdByName (.rdata tid fallback)
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/RawMaterialDescription.h"   // ENDGAME B.3.8 CB3: RawMaterialDescription::TypeId()
 
 
 // ============================================================
@@ -47,13 +48,11 @@ typedef void  (*PiW_Internal_Dtor_t)(void* self);
 // fn_MemFreeStatic
 typedef void  (*PiW_MemFreeStatic_t)(void* ptr);
 // Slot4/CreateWork -- original function (called through for complex logic)
-typedef int   (*PiW_Slot4_Original_t)(void* self, void* entityIBP, uint64_t param3, uint64_t param4);
 
 static PiW_ArraySerialize_t            s_fn_ArraySerialize = nullptr;
 static PiW_ValidateEntity_t            s_fn_ValidateEntity = nullptr;
 static PiW_CancelAllWork_t             s_fn_CancelAllWork = nullptr;
 static PiW_MemFreeStatic_t             s_fn_MemFreeStatic = nullptr;
-static PiW_Slot4_Original_t            s_fn_Slot4_Original = nullptr;
 
 // Type ID for validation (Pickup type at DAT_1401c7158)
 static uint32_t s_typeId_Pickup = 0;
@@ -83,8 +82,6 @@ bool Pickup_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x1400f7100));
     s_fn_CancelAllWork = reinterpret_cast<PiW_CancelAllWork_t>(
         ResolveAddr(Module::Exe, 0x1400c5400));
-    s_fn_Slot4_Original = reinterpret_cast<PiW_Slot4_Original_t>(
-        ResolveAddr(Module::Exe, 0x1400f2f00));
 
     // fn_MemFreeStatic from engine_funcs
     s_fn_MemFreeStatic = reinterpret_cast<PiW_MemFreeStatic_t>(fn_MemFreeStatic);
@@ -101,7 +98,6 @@ bool Pickup_ResolveFuncs() {
     // Verify critical pointers
     bool ok = s_fn_ArraySerialize &&
               s_fn_ValidateEntity && s_fn_CancelAllWork &&
-              s_fn_Slot4_Original &&
               fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && g_pGameWorldSingleton;
 
@@ -113,7 +109,6 @@ bool Pickup_ResolveFuncs() {
         if (!s_fn_ArraySerialize) printf("  MISSING: ArraySerialize\n");
         if (!s_fn_ValidateEntity) printf("  MISSING: ValidateEntity\n");
         if (!s_fn_CancelAllWork) printf("  MISSING: CancelAllWork\n");
-        if (!s_fn_Slot4_Original) printf("  MISSING: Slot4_Original\n");
         if (!fn_InternalBasePtr_Ctor) printf("  MISSING: InternalBasePtr_Ctor\n");
         if (!fn_IsDerivedFrom) printf("  MISSING: IsDerivedFrom\n");
         if (!g_pGameWorldSingleton) printf("  MISSING: g_pGameWorldSingleton\n");
@@ -337,9 +332,9 @@ static float Pickup_CellCenterHalf() {
 }
 
 // Type-id read with runtime-name fallback (raw .rdata is NULL in standalone).
-static uint32_t Pickup_Tid(const uint32_t* p, const char* name) {
+static uint32_t Pickup_Tid(const uint32_t* p, uint32_t classTypeId) {
     if (p && *p) return *p;
-    return ::Object::GetTypeIdByName(name);
+    return classTypeId;   // ENDGAME B.3.8 CB3: X::TypeId() (was the by-name lookup)
 }
 
 // Inlined Array<PickupCandidate>::Add. Mirrors the exe growth idiom byte-for-byte
@@ -369,11 +364,15 @@ static void Pickup_CandAdd(PickupCandidate*& buf, int& count, int& capacity,
     if (oldBuf != buf && oldBuf && s_x_memFree) s_x_memFree(oldBuf);
 }
 
-// The port proper. Kept separate from Pickup::Execute so the dispatcher can
-// fall back to the original when it resolves.
-static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
+// ============================================================
+// Pickup::Execute [4] 0x1400f2f00. (It used to be a dispatcher that first
+// tried `ResolveAddr(Exe, 0x1400f2f00)` -- this very slot, never registered, so
+// always null -- and fell back to this body; CALLER_SURFACE section 9 defect 3.)
+// Retail reads RCX/RDX/R8 only.
+// ============================================================
+int Pickup::Execute(void* citizenIBP, void* time, uint64_t /*arg3*/) {
     // 0x1400f2f37: CMP [RCX+0x48],0 -> anything but "unassigned" means no work.
-    if (self->status != 0) return 1;
+    if (status != 0) return 1;
 
     Pickup_ResolveExecFuncs();
 
@@ -390,10 +389,10 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
         return 1;
     }
 
-    const uint32_t tidRawMatDesc = Pickup_Tid(s_x_pTid_RawMatDesc, "RawMaterialDescription");
-    const uint32_t tidPickup     = Pickup_Tid(s_x_pTid_Pickup, "Pickup");
+    const uint32_t tidRawMatDesc = Pickup_Tid(s_x_pTid_RawMatDesc, RawMaterialDescription::TypeId());
+    const uint32_t tidPickup     = Pickup_Tid(s_x_pTid_Pickup, Pickup::TypeId());
 
-    const uintptr_t S = reinterpret_cast<uintptr_t>(self);
+    const uintptr_t S = reinterpret_cast<uintptr_t>(this);
     void* targetIBP = reinterpret_cast<void*>(S + 0x10);  // RSI: Work's target entity IBP
 
     // --- pile's RawMaterialComponent + its RawMaterialDescription ---------------
@@ -466,7 +465,7 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
         return 1;
 
     void* assignIBP = *reinterpret_cast<void**>(citizenIBP);
-    if (!s_x_checkAssign(self, &assignIBP, static_cast<uint32_t>(selfAccess),
+    if (!s_x_checkAssign(this, &assignIBP, static_cast<uint32_t>(selfAccess),
                          static_cast<uint32_t>(citizenCell), time))
         return 0;
 
@@ -672,10 +671,7 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
     // RDX=hidden retbuf (the exe reuses its own `self` home slot as the buffer).
     void* targetOut = nullptr;
     {
-        typedef void* (*GetTarget_t)(void*, void*);
-        auto getTarget = *reinterpret_cast<GetTarget_t*>(
-            *reinterpret_cast<uintptr_t*>(S) + 0x50);
-        void* ret = getTarget(self, &targetOut);
+        void* ret = GetTarget(&targetOut);   // slot 10, virtual in retail
         targetOut = ret ? *reinterpret_cast<void**>(ret) : nullptr;
     }
 
@@ -691,22 +687,6 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
     s_x_memFree(buf);
     return result;
 }
-
-// ============================================================
-// Pickup::Execute [4] 0x1400f2f00 — the dispatcher.
-//
-// When s_fn_Slot4_Original resolves (address registered) the dispatcher calls it;
-// otherwise the port runs — the address is unregistered and the old fallback
-// silently returned 1 ("no work") forever.
-// ============================================================
-int Pickup::Execute(void* entityIBP, void* context, uint64_t arg3) {
-    // exe reads only RCX/RDX/R8; arg3 is not part of the ABI here
-    if (s_fn_Slot4_Original) {
-        return s_fn_Slot4_Original(this, entityIBP, reinterpret_cast<uint64_t>(context), arg3);
-    }
-    return Pickup_Execute_Port(this, entityIBP, context);
-}
-
 
 // ============================================================
 // Pickup::Slot5 [5] 0x1400f38f0 (re-target)
@@ -742,13 +722,14 @@ int Pickup::Slot5(void* entityIBP, void* param3) {
         uintptr_t local_buf[1] = { newCitizenRef };
 
         // Call Slot4 via vtable (guard against freed self after CancelAllWork)
-        uintptr_t vtable = *(uintptr_t*)this;
-        if (vtable == 0) {
-            return 0;  // self was freed during CancelAllWork
+        // (port guard, not retail: a zeroed vptr means self was freed during
+        // CancelAllWork)
+        if (*reinterpret_cast<uintptr_t*>(this) == 0) {
+            return 0;
         }
-        typedef int (*Slot4_fn)(void*, void*, void*);
-        auto slot4 = *reinterpret_cast<Slot4_fn*>(vtable + 0x20);
-        int result = slot4(this, local_buf, param3);
+        // retail 0x1400f3991: CALL [RAX+0x20] with RCX/RDX/R8 only (slot 4
+        // reads no R9), a virtual dispatch
+        int result = Execute(local_buf, param3, 0);
 
         if (result == 2) {
             return 1;  // Successfully re-targeted
@@ -756,7 +737,7 @@ int Pickup::Slot5(void* entityIBP, void* param3) {
 
         // Try again with stored citizen
         uintptr_t storedBuf[1] = { storedCitizen };
-        slot4(this, storedBuf, param3);
+        Execute(storedBuf, param3, 0);
     }
 
     return 0;

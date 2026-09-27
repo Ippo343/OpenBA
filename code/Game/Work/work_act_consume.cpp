@@ -20,6 +20,7 @@
 // Every non-obvious offset/constant cites its disasm address.
 
 #include "engine_funcs.h"
+#include "Action/Action.h"   // ENDGAME B.3.8 CB3
 #include "resolve.h"
 #include "Component/coll_bridge.h"
 #include <cstdint>
@@ -172,10 +173,8 @@ static void* WCP_FindComponentDerived(uintptr_t listBase) {
         int idx = 0;
         for (;;) {
             void* elem = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(idx) * 8);
-            // vcall GetTypeId at vtable+0x10
-            uintptr_t vt = *reinterpret_cast<uintptr_t*>(elem);
-            typedef uint32_t (*GetTypeId_t)(void*);
-            uint32_t tid = (*reinterpret_cast<GetTypeId_t*>(vt + 0x10))(elem);
+            // slot 2 Type() (vtable +0x10) on a description-array element
+            uint32_t tid = reinterpret_cast<Object::Base*>(elem)->Type();   // B.3.8 bridge
             if (tid == typeId) {
                 void* comp = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(idx) * 8);
                 if (s_wcp_IsDerivedFrom && s_wcp_IsDerivedFrom(comp, typeId))
@@ -218,9 +217,8 @@ static void WCP_AppendInline(uintptr_t list, uintptr_t ibpVal) {
         while (node != 0) {
             if (*reinterpret_cast<uint8_t*>(node + 0x18) != 0) {
                 *reinterpret_cast<uint8_t*>(node + 0x18) = 0;
-                uintptr_t vt = *reinterpret_cast<uintptr_t*>(node);
-                typedef void (*Detach_t)(uintptr_t, void*);
-                (*reinterpret_cast<Detach_t*>(vt + 0x38))(node, reinterpret_cast<void*>(list));
+                // slot 7 (vtable +0x38) Action::Exit(list) on an action-stack node
+                reinterpret_cast<Action*>(node)->Exit(reinterpret_cast<void*>(list));   // B.3.8 bridge
             }
             node = *reinterpret_cast<uintptr_t*>(node + 0x10);
         }

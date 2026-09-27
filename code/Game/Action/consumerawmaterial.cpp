@@ -98,19 +98,19 @@ bool ConsumeRawMaterial_ResolveFuncs() {
 //   v1+: entity ref(+0x20), material count(+0x30), material list(+0x28)
 //   v2+: consume mode flag(+0x38)
 // ============================================================
-void ConsumeRawMaterial_Serialize_Impl(ConsumeRawMaterial* self, void* stream) {
+void ConsumeRawMaterial::Persist(void* stream) {
     // Lazy-resolve like every other method on this exe-ctor-built action. Serialize
     // was the one that never got it, so a save taken while one of these actions was
     // in flight called a null serializer pointer (EXEC of 0). Found live on
     // CompleteRoad once roads started being built; these four are the same shape.
     ConsumeRawMaterial_ResolveFuncs();
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
 
     // Serialize status byte (+0x18)
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Versioned serializer (version 2)
@@ -118,9 +118,9 @@ void ConsumeRawMaterial_Serialize_Impl(ConsumeRawMaterial* self, void* stream) {
 
     // Serialize target entity (+0x20) with ComponentEntity type check
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (*(void**)(s + 0x20) != nullptr) {
-        if (!fn_IsDerivedFrom(*(void**)(s + 0x20), *g_TypeId_ComponentEntity)) {
-            *(void**)(s + 0x20) = nullptr;
+    if (_field20 != nullptr) {
+        if (!fn_IsDerivedFrom(_field20, *g_TypeId_ComponentEntity)) {
+            _field20 = nullptr;
         }
     }
 
@@ -177,10 +177,10 @@ void ConsumeRawMaterial_Serialize_Impl(ConsumeRawMaterial* self, void* stream) {
 //   Then: SubtractItem from storage, update global resource tracker.
 // Returns 0 on success, 2 on failure.
 // ============================================================
-int ConsumeRawMaterial_AbstractImpl_Impl(ConsumeRawMaterial* self, void* actionStack) {
+int  ConsumeRawMaterial::AbstractImpl(void* actionStack) {
     ConsumeRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     int matCount = *(int*)(s + 0x30);
     if (matCount == 0) {
@@ -189,7 +189,7 @@ int ConsumeRawMaterial_AbstractImpl_Impl(ConsumeRawMaterial* self, void* actionS
 
     // Find StorageComponent on target entity (+0x20)
     uintptr_t storageIBP = 0;
-    fn_FindComponent_Storage(*(void**)(s + 0x20), &storageIBP);
+    fn_FindComponent_Storage(_field20, &storageIBP);
 
     int matIdx = 0;
     int64_t matOffset = 0;
@@ -203,7 +203,7 @@ int ConsumeRawMaterial_AbstractImpl_Impl(ConsumeRawMaterial* self, void* actionS
         int64_t* matEntry = (int64_t*)(matList + matOffset);
         int requestedCount = (int)matEntry[1];
 
-        if (*(uint8_t*)(s + 0x38) == 0) {
+        if (_field38 == 0) {
             // Check mode: verify sufficient availability
             int availableCount = 0;
             int slotCount = *(int*)(storageIBP + 0x30);
@@ -271,18 +271,18 @@ int ConsumeRawMaterial_AbstractImpl_Impl(ConsumeRawMaterial* self, void* actionS
 // Undoes consumption when entity is removed (only if consume mode is true).
 // Iterates material list, subtracts reserved amounts from storage.
 // ============================================================
-void ConsumeRawMaterial_CheckEntity_Impl(ConsumeRawMaterial* self) {
+void ConsumeRawMaterial::CheckEntity() {
     ConsumeRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     // Only undo if consume mode is active
-    if (*(uint8_t*)(s + 0x38) == 0) {
+    if (_field38 == 0) {
         return;
     }
 
     // Find StorageComponent on target entity (+0x20)
     uintptr_t storageIBP = 0;
-    fn_FindComponent_Storage(*(void**)(s + 0x20), &storageIBP);
+    fn_FindComponent_Storage(_field20, &storageIBP);
 
     int matCount = *(int*)(s + 0x30);
     if (matCount <= 0) return;
@@ -316,9 +316,9 @@ void ConsumeRawMaterial_CheckEntity_Impl(ConsumeRawMaterial* self) {
 // ConsumeRawMaterial::GetTarget (0x1400c5f10) -- slot 9
 // Simple compare: returns true if param matches entity at +0x20.
 // ============================================================
-bool ConsumeRawMaterial_GetTarget_Impl(ConsumeRawMaterial* self, void* param) {
+bool ConsumeRawMaterial::GetTarget(void* param) {
     ConsumeRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     return *(uintptr_t*)param == *(uintptr_t*)(s + 0x20);
 }
@@ -359,13 +359,9 @@ Object::Base* ConsumeRawMaterial::DeletingDtor(unsigned flags) {
 }
 
 // [3] 0x1400c6120
-void ConsumeRawMaterial::Persist(void* stream) { ConsumeRawMaterial_Serialize_Impl(this, stream); }
 // [4] 0x1400c5f50
-int  ConsumeRawMaterial::AbstractImpl(void* actionStack) { return ConsumeRawMaterial_AbstractImpl_Impl(this, actionStack); }
 // [8] 0x1400c5e30
-void ConsumeRawMaterial::CheckEntity() { ConsumeRawMaterial_CheckEntity_Impl(this); }
 // [9] 0x1400c5f10
-bool ConsumeRawMaterial::GetTarget(void* param) { return ConsumeRawMaterial_GetTarget_Impl(this, param); }
 
 void* ConsumeRawMaterial::CreateNewObject() {
     ConsumeRawMaterial_ResolveFuncs();

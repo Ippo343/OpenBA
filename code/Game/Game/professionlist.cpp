@@ -5,12 +5,17 @@
 // Extends Object::External (0x20 base).
 // Vtable at 0x14015ef50.
 //
+// ENDGAME B.3.8 block LOOP: a REAL class (code/Game/Game/ProfessionList.h, field
+// layout and retail slot map there) with a compiler-generated vtable. Gone: the
+// hand-built 9-slot `g_PL_Vtable`, its stubs, the lazy vtable resolve in the old
+// Init, the lazily-resolved ExternalPtr door and the C entry points.
+//
 // Contains a dynamic array at +0x20/+0x28 and four ExternalPtr<Profession>
 // references at +0x30, +0x38, +0x40, +0x48.
 //
 // Decompiled from Application-x64.exe.
 
-#include "Game/professionlist_funcs.h"
+#include "Game/ProfessionList.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "collection/Collection.h"
@@ -18,120 +23,75 @@
                                 // `namespace Object { ... }` forward decl below
                                 // (NAMESPACE HAZARD: spell ::Object::X everywhere)
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
+#include "object/Internal.h" // Object::detail::InternalMemAlloc / InternalMemFree
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <new>
 
-// ============================================================
-// Local function pointers resolved at init time
-// ============================================================
-
-// FUN_140018020(ExternalPtr<Profession>*, Serializer*) -- typed ExternalPtr serialize
-// This is a specialized serializer that checks IsDerivedFrom(TypeInfo_Profession).
-static void (*s_fn_ExternalPtrProf_Serialize)(void* field, void* serializer) = nullptr;
-
-static bool s_funcsInited = false;
+// FUN_140018020(ExternalPtr<Profession>*, Serializer*) -- typed ExternalPtr
+// serialize. The address is registered to this body (address_registry.cpp); it
+// is called directly (the old lazily-resolved pointer, a non-atomic first-call
+// cache on the loader thread, B6-5, resolved to it).
+extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);
 
 // ============================================================
-// ProfessionList_InitFuncs -- resolve local pointers
-// ============================================================
-void ProfessionList_InitFuncs() {
-    if (s_funcsInited) return;
-    s_funcsInited = true;
-
-    // FUN_140018020 -- specialized ExternalPtr<Profession> serialize (direct exe function)
-    s_fn_ExternalPtrProf_Serialize = reinterpret_cast<void(*)(void*, void*)>(
-        ResolveAddr(Module::Exe, 0x140018020));
-
-    // Standalone fallback: the exe door resolves to NULL when the original exe
-    // isn't mapped.
-    if (!s_fn_ExternalPtrProf_Serialize) s_fn_ExternalPtrProf_Serialize = reinterpret_cast<void(*)(void*, void*)>((uintptr_t)fn_ExternalPtr_BuildSerialize);
-
-#ifdef _DEBUG
-    printf("[ProfessionList] InitFuncs: ExtPtrProfSer=%p\n",
-           (void*)s_fn_ExternalPtrProf_Serialize);
-#endif
-}
-
-// ============================================================
-// ProfessionList::Init -- Initialize all fields to defaults
+// ProfessionList::ProfessionList
 // ============================================================
 // Mirrors the inline ctor from ProfessionList_Factory (0x14001e5c0).
-// Calls Object::External::External for base init, then zeros all fields.
-void ProfessionList_Init(ProfessionList* self) {
-    // Initialize External base class
-    if (fn_External_External) {
-        fn_External_External(self);
-    }
-
-    // Set ProfessionList vtable
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, ProfessionListAddr::Vtable);
-    self->vtable = s_vtable;
-
-    // Zero all ProfessionList-specific fields
-    self->arrayData = nullptr;
-    self->arraySize = 0;
-    self->profRef1 = nullptr;
-    self->profRef2 = nullptr;
-    self->profRef3 = nullptr;
-    self->profRef4 = nullptr;
+// External() and the 0x14015ef50 stamp are the compiler's; then zero all fields.
+ProfessionList::ProfessionList() {
+    arrayData = nullptr;
+    arraySize = 0;
+    profRef1 = nullptr;
+    profRef2 = nullptr;
+    profRef3 = nullptr;
+    profRef4 = nullptr;
 }
 
 // ============================================================
-// ProfessionList::Dtor (vtable +0x00) -- Scalar deleting destructor
+// ProfessionList::~ProfessionList / DeletingDtor (vtable +0x00)
 // ============================================================
 // Original: 0x14001e760
-// Frees the dynamic array at +0x20, zeros +0x20 and +0x28,
-// then calls External::~External. Conditionally frees self.
+// Frees the dynamic array at +0x20, zeros +0x20 and +0x28; External::~External
+// is the compiler's chain. Conditionally frees self.
 //
 // ENDGAME B.3.2 step 2: the array free is `Collection::Array<void*>::~Array`
 // (re-decompiled 2026-09-13: MemFree(+0x20); +0x20 = 0; one qword over +0x28 —
 // ArrayDtorImpl exactly; Profession* is trivially destructible so there is no
 // element step). Trait-derived row: byteCopy, no init, no destroy, align 8 —
 // the same row Startup's append below uses.
-void* ProfessionList_Dtor(ProfessionList* self, uint32_t flags) {
-    // B.3.2 bridge: ProfessionList (engine/types) still spells the header as
-    // `arrayData` + a 64-bit `arraySize` covering count and capacity.
-    reinterpret_cast<Collection::Array<void*>*>(&self->arrayData)->~Array();
+ProfessionList::~ProfessionList() {
+    // B.3.2 bridge: the header is still spelled `arrayData` + a 64-bit
+    // `arraySize` covering count and capacity.
+    reinterpret_cast<Collection::Array<void*>*>(&arrayData)->~Array();
+}
 
-    // Call External::~External for base cleanup
-    if (fn_External_Dtor) {
-        fn_External_Dtor(self);
-    }
-
-    // Conditional free
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
+Object::Base* ProfessionList::DeletingDtor(unsigned flags) {
+    this->~ProfessionList();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
-// ProfessionList::Cleanup (vtable +0x30, Slot6) -- Reset to defaults
+// ProfessionList::Reconstruct (vtable +0x30, Slot6) -- Reset to defaults
 // ============================================================
-// Original: 0x14001e690
-// Calls Dtor via vtable with flags=0, then re-inits.
-void ProfessionList_Cleanup(ProfessionList* self) {
-    // Call Dtor with flags=0 (don't free memory)
-    typedef void* (*fn_VtableDtor_t)(void* self, uint32_t flags);
-    fn_VtableDtor_t dtor = *(fn_VtableDtor_t*)(*(uintptr_t*)self);
-    dtor(self, 0);
-
-    // Re-construct in place
-    ProfessionList_Init(self);
+// Original: 0x14001e690. Destroys (slot 0, flags 0) then re-constructs in place.
+Object::External* ProfessionList::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) ProfessionList();
 }
 
+// [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
+// slot 0 with flags 0 (destroy, no free).
+void ProfessionList::Destruct() { DeletingDtor(0); }
+
 // ============================================================
-// ProfessionList::Slot8 (vtable +0x40) -- Reset/reinit with null check
+// ProfessionList::Construct (vtable +0x40)
 // ============================================================
-// Original: 0x14001e630
-// If self is null, returns null. Otherwise re-inits to defaults.
-void* ProfessionList_Slot8(ProfessionList* self) {
-    if (!self) return nullptr;
-    ProfessionList_Init(self);
-    return self;
+// Original: 0x14001e630 — placement-new of the class on `this`.
+Object::External* ProfessionList::Construct() {
+    return ::new (static_cast<void*>(this)) ProfessionList();
 }
 
 // ============================================================
@@ -140,29 +100,20 @@ void* ProfessionList_Slot8(ProfessionList* self) {
 // Original: 0x1400a8e30
 // Creates a Serializer(stream, version=0), then serializes four
 // ExternalPtr<Profession> refs at +0x30, +0x38, +0x40, +0x48
-// using FUN_140018020 (typed ExternalPtr serialize).
-// Returns 1 — matching the original Slot5 (0x1400a8e30) which returns `undefined1`
-// (1). The vtable slot is invoked by the engine's External::Load; a `void` return
-// here leaves garbage in the upper bytes of EAX (trampoline bug class #7), which
-// External::Load may read as the Serialize result. Return a full int so EAX is
-// fully defined.
-int ProfessionList_Serialize(ProfessionList* self, void* stream) {
-    ProfessionList_InitFuncs();   // idempotent; ensures the ExternalPtr door is resolved
-
+// using FUN_140018020 (typed ExternalPtr serialize). Returns AL=1.
+bool ProfessionList::Serialize(void* stream) {
     // Stack-allocated serializer (24 bytes)
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize four ExternalPtr<Profession> references
-    if (s_fn_ExternalPtrProf_Serialize) {
-        s_fn_ExternalPtrProf_Serialize(&self->profRef1, serializer);  // +0x30
-        s_fn_ExternalPtrProf_Serialize(&self->profRef2, serializer);  // +0x38
-        s_fn_ExternalPtrProf_Serialize(&self->profRef3, serializer);  // +0x40
-        s_fn_ExternalPtrProf_Serialize(&self->profRef4, serializer);  // +0x48
-    }
+    Reimpl_ExternalPtr_Serialize_StringTable(&profRef1, serializer);  // +0x30
+    Reimpl_ExternalPtr_Serialize_StringTable(&profRef2, serializer);  // +0x38
+    Reimpl_ExternalPtr_Serialize_StringTable(&profRef3, serializer);  // +0x40
+    Reimpl_ExternalPtr_Serialize_StringTable(&profRef4, serializer);  // +0x48
 
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    return 1;
+    return true;
 }
 
 // ============================================================
@@ -250,39 +201,27 @@ extern "C" void ProfessionList_Startup_Impl(void* profList) {
 }
 
 // ============================================================
-// Standalone factory scaffolding
+// Reflection: create / createInPlace, the registration
 // ============================================================
 // ProfessionList (Object::External, 0x50) is loaded from Profession.rsc during the
-// in-game world build (GameUpdateLoop::Load step 1-4 / climate setup). In standalone
-// it was a NullFactory stub → IsDerivedFrom(NULL) crash @Runtime+0xC039A. Real factory
-// + the reimpl'd Serialize above (loads the 4 Profession refs) make it loadable.
-// vtable @ 0x14015ef50 (9 slots); GetVersion=2, Serialize +0x28, factory 0x14001e5c0.
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t ProfessionList_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("ProfessionList");
-    return cached;
+// in-game world build (GameUpdateLoop::Load step 2).
+void* ProfessionList::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ProfessionList), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) ProfessionList());
 }
-static int   PL_Return2(void* /*self*/) { return 2; }   // GetVersion = 2
-static int   PL_Return0(void* /*self*/) { return 0; }
-static void* PL_ReturnNull(void*, ...)  { return nullptr; }
+void* ProfessionList::CreateInPlaceObject(void* memory) {
+    if (!memory) return nullptr;
+    return static_cast<Object::Base*>(::new (memory) ProfessionList());
+}
 
-static void* g_PL_Vtable[9] = {
-    reinterpret_cast<void*>(&ProfessionList_Dtor),      // +0x00 Dtor
-    reinterpret_cast<void*>(&PL_ReturnNull),            // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&ProfessionList_GetTypeId), // +0x10 GetTypeId (used by IsDerivedFrom)
-    reinterpret_cast<void*>(&PL_Return2),               // +0x18 GetVersion=2
-    reinterpret_cast<void*>(&PL_Return0),               // +0x20 Compile thunk
-    reinterpret_cast<void*>(&ProfessionList_Serialize), // +0x28 Serialize
-    reinterpret_cast<void*>(&ProfessionList_Cleanup),   // +0x30 Cleanup
-    reinterpret_cast<void*>(&PL_Return0),               // +0x38
-    reinterpret_cast<void*>(&ProfessionList_Slot8),     // +0x40 CreateInPlace
-};
+DEFINE_EXE_VTABLE(ProfessionList, "_ZTV14ProfessionList")
 
 extern "C" void RegisterProfessionListVtable() {
-    RegisterExeAddr(ProfessionListAddr::Vtable, reinterpret_cast<uintptr_t>(g_PL_Vtable));
+    // B38_RULES D5: nothing in the tree reads 0x14015ef50 back (swept by hex
+    // and owner); this row is reader-less and serves the compiler table only.
+    // The closing pass deletes it with the call.
+    RegisterExeAddr(0x14015ef50, reinterpret_cast<uintptr_t>(ProfessionList::Vtable()));
     // ProfessionList::Startup (array populate + sort) — GameUpdateLoop::Startup
     // resolves exe 0x1400a90a0 (fn_ProfessionList_Startup) and calls it when the
     // profession list is live; unregistered it was NULL and the call was skipped,
@@ -290,18 +229,4 @@ extern "C" void RegisterProfessionListVtable() {
     RegisterExeAddr(0x1400a90a0, reinterpret_cast<uintptr_t>(&ProfessionList_Startup_Impl));
 }
 
-extern "C" void* ProfessionList_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x50, 8);
-    if (!p) return nullptr;
-    ProfessionList_Init(reinterpret_cast<ProfessionList*>(p));
-    return p;
-}
-extern "C" void* ProfessionList_CreateInPlace(void* mem) {
-    if (!mem) return nullptr;
-    ProfessionList_Init(reinterpret_cast<ProfessionList*>(mem));
-    return mem;
-}
-
-REGISTER_TYPE(ProfessionList, "Object::External",
-              &ProfessionList_Factory, &ProfessionList_CreateInPlace);
+DEFINE_EXE_TYPE(ProfessionList, "Object::External")
