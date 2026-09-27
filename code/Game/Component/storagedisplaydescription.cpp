@@ -15,6 +15,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/StorageDisplayDescription.h"
+#include "Component/StorageDisplayComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -46,7 +47,7 @@ void StorageDisplayDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x14000c8d0: StorageDisplayComponent's type id through the hidden return slot.
 Object::Type* StorageDisplayDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("StorageDisplayComponent");
+    ret->_type = StorageDisplayComponent::TypeId();
     return ret;
 }
 

@@ -38,6 +38,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/UIDescription.h"
+#include "Component/UIComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -191,7 +192,7 @@ void UIDescription::Destruct() { DeletingDtor(0); }
 // The tree read the id through a first-call cache over the exe cell 0x1401c7fc8;
 // the by-name lookup is the same registered id, without the lazy static (B6-5).
 Object::Type* UIDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = (_valTail > 0) ? ::Object::GetTypeIdByName("UIComponent") : 0u;
+    ret->_type = (_valTail > 0) ? UIComponent::TypeId() : 0u;
     return ret;
 }
 

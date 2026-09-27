@@ -27,8 +27,7 @@
 // registered below; only the vtable address 0x14015f5a0 stays unregistered (see the
 // RESOLVED note).
 extern "C" void* ToolUI_OpenToolDialog_ff9e0(void*, void*, uint64_t);  // 0x1400ff9e0
-extern void* g_ToolUI_ChildDialog_Vtable_Standalone[10];              // 0x14015f5a0
-extern "C" void ToolUI_InitChildDialogVtable();                       // eager slot-fill
+extern "C" uintptr_t ToolUI_ChildDialogVtable();   // the compiler's UI::DialogInstance table (B.3.8 CB4)
 
 // engine_funcs global (engine_funcs.h:1464). Declared here to avoid pulling the full
 // engine_funcs.h into this lightweight registration TU. Set directly (not via the
@@ -50,8 +49,8 @@ extern uintptr_t g_ToolUI_ChildDialog_Vtable;
 //     -> ACCESS_VIOLATION at startup (the documented A/B-bisected crash).
 //   - g_ToolUI_ChildDialog_Vtable — used only by the (gated-off) ToolbarDialog path.
 // But OpenToolDialog's reimpl (ToolUI_OpenToolDialog_ff9e0) NEVER reads either global
-// or ResolveAddr(Exe,0x14015f5a0): it writes &g_ToolUI_ChildDialog_Vtable_Standalone
-// (the static C++ array in tool_base_toolui.cpp) directly into the new dialog's slot 0.
+// or ResolveAddr(Exe,0x14015f5a0): it constructs the real UI::DialogInstance (ENDGAME
+// B.3.8 CB4; it used to write a static copied table into the new dialog's slot 0).
 // So it is fully self-sufficient. Registering 0x14015f5a0 was only ever a gap-metric
 // nicety — and it is exactly what poisons the menu. By NOT registering it, the menu
 // stays byte-identical to its current working state (BuildId child keeps the default
@@ -68,13 +67,6 @@ extern uintptr_t g_ToolUI_ChildDialog_Vtable;
 // standalone menu to use.
 // ============================================================================
 void RegisterPlayerToolUIBatch() {
-    // Eagerly fill the static child-dialog vtable slots 1..9 with the base Runtime
-    // DialogInstance virtuals. MUST be eager (not lazy in OpenToolDialog): this batch
-    // runs in AddressRegistryInit, AFTER ResolveInit has loaded Runtime-x64.dll, so
-    // ResolveAddr(Module::Runtime) is valid; a lazy fill would leave slots null if the
-    // table were ever dispatched before the first tool dialog opens.
-    ToolUI_InitChildDialogVtable();
-
     // Register ONLY the OpenToolDialog helper. dragtool.cpp / placementtool.cpp resolve
     // g_fn_OpenToolDialog = ResolveAddr(Exe, 0x1400ff9e0) -> this reimpl.
     RegisterExeAddr(0x1400ff9e0, reinterpret_cast<uintptr_t>(&ToolUI_OpenToolDialog_ff9e0));
@@ -82,6 +74,7 @@ void RegisterPlayerToolUIBatch() {
     // Give the (gated-off) ToolbarDialog path a valid child vtable WITHOUT registering
     // 0x14015f5a0 in the address registry (which would poison the menu). Direct global
     // assignment — separate from g_MainMenuDialog_BuildIdVtable.
-    g_ToolUI_ChildDialog_Vtable =
-        reinterpret_cast<uintptr_t>(g_ToolUI_ChildDialog_Vtable_Standalone);
+    // ENDGAME B.3.8 CB4: the compiler's UI::DialogInstance table (the slot-copy
+    // array g_ToolUI_ChildDialog_Vtable_Standalone is gone).
+    g_ToolUI_ChildDialog_Vtable = ToolUI_ChildDialogVtable();
 }

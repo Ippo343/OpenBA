@@ -19,6 +19,8 @@
 // Disasm references cite Application-x64.exe addresses (base 0x140000000).
 
 #include "engine_funcs.h"
+#include "Action/CreateNaturalResource.h"   // ENDGAME B.3.8 CB3
+#include "Action/ShowTool.h"   // ENDGAME B.3.8 CB3
 #include "resolve.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -93,9 +95,6 @@ static WAH_fn_ObjInternalCtor_t      s_wah_ObjInternalCtor = nullptr;
 static WAH_fn_TimeCtor_t             s_wah_TimeCtor        = nullptr;
 
 // Inline-object vtables + globals (exe .rdata).
-static void* s_wah_vtable_Action               = nullptr;  // 0x14015faa0
-static void* s_wah_vtable_CreateNaturalResource = nullptr; // 0x14015fca0
-static void* s_wah_vtable_ShowTool             = nullptr;   // 0x1401589b0
 static const uint32_t* s_wah_pDword_c70e8 = nullptr;        // 0x1401c70e8 (SendComponentMessage target type-id = CitizenAIComponent)
 static const float* s_wah_pf_172280  = nullptr;            // 0x140172280 = -1.0f  (MoveTo speed)
 static const float* s_wah_pf_172178  = nullptr;            // 0x140172178 =  2.1f  (PerformWork time, bdd20)
@@ -123,9 +122,6 @@ static void ResolveAll() {
     if (!s_wah_ObjInternalCtor) s_wah_ObjInternalCtor = reinterpret_cast<WAH_fn_ObjInternalCtor_t>(fn_ObjectInternal_Ctor);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b00)) s_wah_TimeCtor        = *reinterpret_cast<WAH_fn_TimeCtor_t*>(s);
 
-    s_wah_vtable_Action                = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14015faa0));
-    s_wah_vtable_CreateNaturalResource = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14015fca0));
-    s_wah_vtable_ShowTool              = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x1401589b0));
     s_wah_pDword_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
     s_wah_pf_172280    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172280));
     s_wah_pf_172178    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172178));
@@ -353,17 +349,11 @@ void WorkAct_ShowToolCtor3_bdd20(void* citizenIBP, uint32_t workId, uint32_t* cr
             obj = WAH_Alloc(0x38, 8);
             void* cnr = nullptr;
             if (obj) {
-                int64_t  gateVal = *gatePtr9;        // lVar11 = *param_9
+                uint64_t gateVal = static_cast<uint64_t>(*gatePtr9);   // lVar11 = *param_9
                 uint32_t baseVal = *curBase;         // uVar1 = *param_7 (current)
-                if (s_wah_ObjInternalCtor) s_wah_ObjInternalCtor(obj);
-                uintptr_t o = reinterpret_cast<uintptr_t>(obj);
-                *reinterpret_cast<void**>(o)           = s_wah_vtable_Action;
-                *reinterpret_cast<uint64_t*>(o + 0x10) = 0;
-                *reinterpret_cast<uint8_t*>(o + 0x18)  = 0;
-                *reinterpret_cast<void**>(o)           = s_wah_vtable_CreateNaturalResource;  // 0x14015fca0
-                *reinterpret_cast<void**>(o + 0x20)    = createParam3;     // param_3 (dword*) -> +0x20
-                *reinterpret_cast<int64_t*>(o + 0x28)  = gateVal;          // *param_9      -> +0x28
-                *reinterpret_cast<uint32_t*>(o + 0x30) = baseVal;          // *param_7      -> +0x30
+                // the inlined CreateNaturalResource ctor (+0x20 param_3 raw, +0x28 *param_9,
+                // +0x30 *param_7) — the real ctor.
+                new (obj) CreateNaturalResource(reinterpret_cast<uint64_t>(createParam3), &gateVal, baseVal);
                 cnr = obj;
             }
             WAH_IbpCtor(&ibpA, cnr);
@@ -410,14 +400,8 @@ void WorkAct_ShowToolCtor3_bdd20(void* citizenIBP, uint32_t workId, uint32_t* cr
     void* st2 = nullptr;
     if (obj) {
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);  // *param_1 -> RBX
-        if (s_wah_ObjInternalCtor) s_wah_ObjInternalCtor(obj);
-        uintptr_t o = reinterpret_cast<uintptr_t>(obj);
-        *reinterpret_cast<void**>(o)           = s_wah_vtable_Action;
-        *reinterpret_cast<uint64_t*>(o + 0x10) = 0;
-        *reinterpret_cast<uint8_t*>(o + 0x18)  = 0;
-        *reinterpret_cast<void**>(o)           = s_wah_vtable_ShowTool;   // 0x1401589b0
-        *reinterpret_cast<uintptr_t*>(o + 0x20) = entityInner;           // *param_1 -> +0x20
-        *reinterpret_cast<uint32_t*>(o + 0x28) = 3;                      // Shovel   -> +0x28
+        // the inlined ShowTool ctor (+0x20 *param_1, +0x28 Shovel = 3) — the real ctor.
+        new (obj) ShowTool(&entityInner, 3);
         st2 = obj;
     }
     WAH_IbpCtor(&ibpA, st2);

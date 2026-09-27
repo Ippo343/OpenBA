@@ -41,6 +41,7 @@
 // For standalone bring-up (no pasture dialog yet) BANISHED_PASTURE_AUTOTYPE lets the
 // pasture pick its type itself. That is NOT retail behaviour, so it is opt-in only.
 
+#include "Component/PastureComponent.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -137,8 +138,7 @@ extern "C" void* Pasture_FindLivestockComp(int64_t entity, void* retIBP) {
             void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
             void* comp = *slot;
             if (!comp) continue;
-            uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(
-                *reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
             if (t == *pTid) {
                 found = (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *pTid)) ? comp : nullptr;
                 break;
@@ -339,9 +339,7 @@ extern "C" void Pasture_SetLivestockType(void* pasture, void* newTypeTemplate) {
     void* prev = PastureType(pasture);
     if (prev == nullptr && newTypeTemplate != nullptr) {
         PastureType(pasture) = newTypeTemplate;
-        void** vt = *reinterpret_cast<void***>(pasture);
-        void* cmd = vt ? vt[14] : nullptr;              // vtable +0x70
-        if (cmd) reinterpret_cast<void(*)(void*, int)>(cmd)(pasture, 2);
+        reinterpret_cast<PastureComponent*>(pasture)->Command(2);   // B.3.8 bridge (slot 14, +0x70)
     }
     PastureType(pasture) = newTypeTemplate;
     if (s_Capacity) PastureCap(pasture) = static_cast<int>(s_Capacity((uintptr_t)pasture));
@@ -433,8 +431,7 @@ extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centr
                 void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(c) * 8);
                 void* comp = *slot;
                 if (!comp) continue;
-                uint32_t tid = (*reinterpret_cast<uint32_t (**)(void*)>(
-                                    *reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+                uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
                 if (tid != *pAnimalTid) continue;
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *pAnimalTid)) animal = comp;
                 break;

@@ -34,6 +34,7 @@
 #include "Work/ForesterWork.h"
 #include "Work/MarketWork.h"
 #include "Work/ConsumeProduce.h"
+#include "Component/MarketComponent.h"
 #include <new>
 
 // ENDGAME B.3.8 MI-B: each work is now built as its REAL class (code/Game/Work/<X>.h):
@@ -224,19 +225,23 @@ extern "C" uintptr_t* ForesterComponent_CreateWork(void* self, uintptr_t* out) {
 // ever minted: state 13's enter (0x14012ae60) calls slot 18 to create the work and post
 // it to the citizen reservation ledger, so a stubbed slot silently means "market never
 // offers a job".
-extern "C" uintptr_t* MarketComponent_CreateWork(void* self, uintptr_t* out) {
+uintptr_t* MarketComponent::CreateWork(uintptr_t* out) {
     Resolve();
     void* mem = AllocWork(0x58);
     if (!mem) return WrapIBP(out, nullptr);
 
-    uintptr_t entity = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(self) + 0x10);
+    uintptr_t entity = reinterpret_cast<uintptr_t>(_entity);
 
     // The ctor zeroes +0x48/+0x50 and runs MarketWork_ResolveFuncs.
     new (mem) MarketWork();
     static_cast<MarketWork*>(mem)->InitFromEntity(&entity);
 
     return WrapIBP(out, mem);
+}
+
+// 0x14004ea40 door: registered by address (standalone/reg_component_economy.cpp).
+extern "C" uintptr_t* MarketComponent_CreateWork(void* self, uintptr_t* out) {
+    return reinterpret_cast<MarketComponent*>(self)->MarketComponent::CreateWork(out);   // B.3.8 bridge
 }
 
 // ── ConsumeProduceComponent::CreateWork — retail 0x140118d00 ──────────────────

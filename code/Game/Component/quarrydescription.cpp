@@ -18,6 +18,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/QuarryDescription.h"
+#include "Component/QuarryComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -63,7 +64,7 @@ void QuarryDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x14000b560: QuarryComponent's type id through the hidden return slot.
 Object::Type* QuarryDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("QuarryComponent");
+    ret->_type = QuarryComponent::TypeId();
     return ret;
 }
 

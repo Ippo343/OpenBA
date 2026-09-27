@@ -26,6 +26,10 @@
 #include "resolve.h"
 #include <cstdint>
 #include "Object/factory_registration.h"  // ::Object::GetTypeIdByName (SA type-id fallback)
+#include "Component/StorageLocationDescription.h"   // ENDGAME B.3.8 CB3: StorageLocationDescription::TypeId()
+#include "Component/RawMaterialDescription.h"   // ENDGAME B.3.8 CB3: RawMaterialDescription::TypeId()
+#include "Component/StorageLocationComponent.h"   // ENDGAME B.3.8 CB3: StorageLocationComponent::TypeId()
+#include "Component/StorageComponent.h"   // ENDGAME B.3.8 CB3: StorageComponent::TypeId()
 
 namespace {
 
@@ -33,7 +37,6 @@ typedef void*    (*PG_IbpCtor_t)(void* ibp, void* obj);
 typedef bool     (*PG_IsDerivedFrom_t)(void* obj, uint32_t tid);
 typedef void*    (*PG_FindStorage_t)(int64_t entityInner, void* retIBP);      // 0x140006270
 typedef char     (*PG_CanAdd_t)(void* storageComp, int64_t resEntity, int qty); // 0x14012cd80
-typedef uint32_t (*PG_GetTypeId_t)(void* comp);                                // vtable +0x10
 
 PG_IbpCtor_t       s_pg_IbpCtor     = nullptr;
 PG_IsDerivedFrom_t s_pg_IsDerived   = nullptr;
@@ -61,9 +64,9 @@ void Ensure_PickupGate() {
     s_pg_pTid_RawDsc = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
 }
 
-uint32_t PG_Tid(const uint32_t* p, const char* name) {
+static uint32_t PG_Tid(const uint32_t* p, uint32_t classTypeId) {
     if (p && *p) return *p;
-    return ::Object::GetTypeIdByName(name);
+    return classTypeId;   // ENDGAME B.3.8 CB3: X::TypeId() (was the by-name lookup)
 }
 
 // ⚠️ THE TWO SEARCHES BELOW WALK DIFFERENT STRUCTURES WITH DIFFERENT LAYOUTS. They look
@@ -85,9 +88,7 @@ void* PG_FindCompByTid(uintptr_t entity, uint32_t tid) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
         void* comp = *slot;
         if (!comp) continue;
-        PG_GetTypeId_t getTid =
-            *reinterpret_cast<PG_GetTypeId_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10);
-        if (!getTid || getTid(comp) != tid) continue;
+        if (reinterpret_cast<Object::Base*>(comp)->Type() != tid) continue;   // B.3.8 bridge
         void* c = *slot;
         return (s_pg_IsDerived && s_pg_IsDerived(c, tid)) ? c : nullptr;
     }
@@ -103,9 +104,7 @@ void* PG_FindDescByTid(uintptr_t descObj, uint32_t tid) {
     for (int i = 0; i < count; ++i) {
         void* d = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
         if (!d) continue;
-        PG_GetTypeId_t getTid =
-            *reinterpret_cast<PG_GetTypeId_t*>(*reinterpret_cast<uintptr_t*>(d) + 0x10);
-        if (!getTid || getTid(d) != tid) continue;
+        if (reinterpret_cast<Object::Base*>(d)->Type() != tid) continue;   // B.3.8 bridge
         void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
         return (s_pg_IsDerived && s_pg_IsDerived(c, tid)) ? c : nullptr;
     }
@@ -127,7 +126,7 @@ int PickupGate_AcceptMask_12d560(int64_t self) {
     uintptr_t s = static_cast<uintptr_t>(self);
 
     void* obj = *reinterpret_cast<void**>(s + 0x18);
-    uint32_t tidDesc = PG_Tid(s_pg_pTid_SLDesc, "StorageLocationDescription");
+    uint32_t tidDesc = PG_Tid(s_pg_pTid_SLDesc, StorageLocationDescription::TypeId());
     void* desc = (s_pg_IsDerived && s_pg_IsDerived(obj, tidDesc)) ? obj : nullptr;
 
     int mask = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x20);
@@ -152,7 +151,7 @@ int PickupGate_AcceptMask_12d560(int64_t self) {
 uint64_t PickupGate_Accepts_12d990(int64_t slComp, int64_t resEntity) {
     Ensure_PickupGate();
 
-    uint32_t tidRawDsc = PG_Tid(s_pg_pTid_RawDsc, "RawMaterialDescription");
+    uint32_t tidRawDsc = PG_Tid(s_pg_pTid_RawDsc, RawMaterialDescription::TypeId());
     // NOTE: description-list layout (+0x28/+0x30), NOT the component layout — see the
     // warning above PG_FindCompByTid. `resEntity` here is the entity's description object.
     void* rawDesc = PG_FindDescByTid(static_cast<uintptr_t>(resEntity), tidRawDsc);
@@ -183,8 +182,8 @@ uint64_t PickupGate_TownWants_8d3c0(int64_t townMgr, int64_t resEntity, int amou
     int count = static_cast<int>(*reinterpret_cast<int64_t*>(tm + 0x08));
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(tm + 0x00);
 
-    uint32_t tidSLComp = PG_Tid(s_pg_pTid_SLComp, "StorageLocationComponent");
-    uint32_t tidStor   = PG_Tid(s_pg_pTid_Stor,   "StorageComponent");
+    uint32_t tidSLComp = PG_Tid(s_pg_pTid_SLComp, StorageLocationComponent::TypeId());
+    uint32_t tidStor   = PG_Tid(s_pg_pTid_Stor, StorageComponent::TypeId());
 
     for (int i = 0; i < count; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);

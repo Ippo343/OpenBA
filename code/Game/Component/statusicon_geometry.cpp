@@ -61,31 +61,30 @@ struct SIVertex {
 };
 static_assert(sizeof(SIVertex) == 32, "SIVertex must be 32 bytes");
 
+
+
 // ============================================================
-// slot 3 — AddDrawItems  (port of FUN_1400a9b90)
+// StatusIconGeometry — the billboard as a real Graphics::Geometry subclass
 // ============================================================
-// Registers the billboard with the renderer if it has any active sprite bits AND
-// the game-settings icon-visibility byte (settings+0xc) is set.
-static void StatusIconGeom_AddDrawItems(void* geometry, void* /*scene*/, void* renderer) {
-    uint8_t* g = reinterpret_cast<uint8_t*>(geometry);
 
-    int32_t activeMask = *reinterpret_cast<int32_t*>(g + 0xc8);
-    if (activeMask == 0) return;
+// Inlined in StatusIconComponent's ctor 0x14012c0c0: `??0Geometry@Graphics@@`
+// (Geometry() — the vptr stores are the compiler's), then +0xc0 (qword) =
+// +0xc8 = +0xcc (byte) = +0xd0 = 0.
+StatusIconGeometry::StatusIconGeometry()
+    : iconSize(0.0f), spriteCount(0), activeMask(0), constantSize(0), _padCD{},
+      spriteSheet(nullptr) {}
 
-    void* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
-    if (!settings || reinterpret_cast<uint8_t*>(settings)[0xc] == 0) return;
-
-    void* sheet = *reinterpret_cast<void**>(g + 0xd0);
-    void* material = sheet ? *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(sheet) + 0x30)
-                           : nullptr;
-    if (material) {
-        // AddDrawItem(geom, material, 0x8000, 0, 0.0, uvScale, 1, null, 0)
-        reinterpret_cast<Graphics::Renderer*>(renderer)->AddDrawItem(
-            reinterpret_cast<const Graphics::Geometry*>(geometry),
-            reinterpret_cast<const Graphics::MaterialInstance*>(material),
-            0x8000, 0, 0.0f, kUVScale, 1, nullptr, 0);   // B.3.5 bridge
-    }
+// [0] 0x14001ebb0: ~Geometry (import 0x1401525a0), MemFree (0x140152b68) on &1.
+// Never reached for the embedded member (the component's dtor chains the
+// member dtor directly), kept for the slot.
+Graphics::Geometry* StatusIconGeometry::DeletingDtor(unsigned flags) {
+    this->~StatusIconGeometry();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
+
+// [1] 0x1400aa430 — `RET`.
+void StatusIconGeometry::Update(const System::Time&) {}
 
 // ============================================================
 // slot 2 — Draw  (port of FUN_1400a9c10)
@@ -93,8 +92,13 @@ static void StatusIconGeom_AddDrawItems(void* geometry, void* /*scene*/, void* r
 // Emits a camera-facing billboard quad per active sprite, stacked vertically in the
 // geometry's local frame. param order matches the original vtable Draw:
 //   (geometry, Context*, camera, p4, lerpT)
-static void StatusIconGeom_Draw(void* geometry, void* ctx, void* camera,
-                                void* /*p4*/, float t) {
+void StatusIconGeometry::Draw(Video::Context& context, const Graphics::Camera& cameraRef,
+                              Graphics::ExternalPtrHandle /*material*/, float t,
+                              int, int, int) const {
+    // B.3.8 CB1b fold: the body kept its untyped locals.
+    void* geometry = const_cast<StatusIconGeometry*>(this);
+    void* ctx = &context;
+    void* camera = const_cast<Graphics::Camera*>(&cameraRef);
     uint8_t* g = reinterpret_cast<uint8_t*>(geometry);
 
     // 1) Model transform = Lerp(state, t) -> AsMatrix -> Context::SetTransform(0, M).
@@ -239,39 +243,31 @@ static void StatusIconGeom_Draw(void* geometry, void* ctx, void* camera,
 }
 
 // ============================================================
-// StatusIconGeometry — the billboard as a real Graphics::Geometry subclass
+// slot 3 — AddDrawItems  (port of FUN_1400a9b90)
 // ============================================================
+// Registers the billboard with the renderer if it has any active sprite bits AND
+// the game-settings icon-visibility byte (settings+0xc) is set.
+void StatusIconGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
+                                      Graphics::Renderer& rendererRef) const {
+    // B.3.8 CB1b fold: the body kept its untyped locals.
+    void* geometry = const_cast<StatusIconGeometry*>(this);
+    void* renderer = &rendererRef;
+    uint8_t* g = reinterpret_cast<uint8_t*>(geometry);
 
-// Inlined in StatusIconComponent's ctor 0x14012c0c0: `??0Geometry@Graphics@@`
-// (Geometry() — the vptr stores are the compiler's), then +0xc0 (qword) =
-// +0xc8 = +0xcc (byte) = +0xd0 = 0.
-StatusIconGeometry::StatusIconGeometry()
-    : iconSize(0.0f), spriteCount(0), activeMask(0), constantSize(0), _padCD{},
-      spriteSheet(nullptr) {}
+    int32_t activeMask = *reinterpret_cast<int32_t*>(g + 0xc8);
+    if (activeMask == 0) return;
 
-// [0] 0x14001ebb0: ~Geometry (import 0x1401525a0), MemFree (0x140152b68) on &1.
-// Never reached for the embedded member (the component's dtor chains the
-// member dtor directly), kept for the slot.
-Graphics::Geometry* StatusIconGeometry::DeletingDtor(unsigned flags) {
-    this->~StatusIconGeometry();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
+    void* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
+    if (!settings || reinterpret_cast<uint8_t*>(settings)[0xc] == 0) return;
 
-// [1] 0x1400aa430 — `RET`.
-void StatusIconGeometry::Update(const System::Time&) {}
-
-// [2] 0x1400a9c10 — the parameter the port calls `t` is the float fifth argument.
-void StatusIconGeometry::Draw(Video::Context& context, const Graphics::Camera& camera,
-                              Graphics::ExternalPtrHandle material, float t,
-                              int, int, int) const {
-    StatusIconGeom_Draw(const_cast<StatusIconGeometry*>(this), &context,
-                        const_cast<Graphics::Camera*>(&camera), material.p, t);
-}
-
-// [3] 0x1400a9b90
-void StatusIconGeometry::AddDrawItems(const Graphics::Scene& scene,
-                                      Graphics::Renderer& renderer) const {
-    StatusIconGeom_AddDrawItems(const_cast<StatusIconGeometry*>(this),
-                                const_cast<Graphics::Scene*>(&scene), &renderer);
+    void* sheet = *reinterpret_cast<void**>(g + 0xd0);
+    void* material = sheet ? *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(sheet) + 0x30)
+                           : nullptr;
+    if (material) {
+        // AddDrawItem(geom, material, 0x8000, 0, 0.0, uvScale, 1, null, 0)
+        reinterpret_cast<Graphics::Renderer*>(renderer)->AddDrawItem(
+            reinterpret_cast<const Graphics::Geometry*>(geometry),
+            reinterpret_cast<const Graphics::MaterialInstance*>(material),
+            0x8000, 0, 0.0f, kUVScale, 1, nullptr, 0);   // B.3.5 bridge
+    }
 }

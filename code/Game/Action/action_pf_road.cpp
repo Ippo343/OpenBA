@@ -37,6 +37,7 @@
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (M-D scoped finder fallback)
 #include "Component/coll_bridge.h"
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
+#include "Component/ModelComponent.h"   // ENDGAME B.3.8 CB3: ModelComponent::TypeId()
 
 namespace {
 
@@ -658,8 +659,7 @@ void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float
     // entity; if it still has no ModelComponent, return a zero vec instead of
     // the retail unguarded `null+0x148` transform read.
     if (ibp == 0) {
-        static uint32_t s_tidModel = 0;
-        if (s_tidModel == 0) s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
+        const uint32_t s_tidModel = ModelComponent::TypeId();   // B.3.8: no lazy cache (B6-5)
         int64_t ownEnt = *reinterpret_cast<int64_t*>(s + 0x10);
         if (ownEnt && s_tidModel) {
             int n = *reinterpret_cast<int*>(ownEnt + 0x38);
@@ -667,9 +667,7 @@ void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float
             for (int k = 0; k < n && arr; ++k) {
                 void* c = *reinterpret_cast<void**>(arr + (int64_t)k * 8);
                 if (!c) continue;
-                uintptr_t vt = *reinterpret_cast<uintptr_t*>(c);
-                typedef uint32_t (*getTid_t)(void*);
-                if ((*reinterpret_cast<getTid_t*>(vt + 0x10))(c) == s_tidModel) {
+                if (reinterpret_cast<Object::Base*>(c)->Type() == s_tidModel) {   // B.3.8 bridge
                     ibp = reinterpret_cast<uintptr_t>(c);
                     break;
                 }

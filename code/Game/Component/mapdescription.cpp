@@ -31,6 +31,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/MapDescription.h"
+#include "Component/MapComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -80,7 +81,7 @@ void MapDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x1400357d0: MapComponent's type id through the hidden return slot.
 Object::Type* MapDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("MapComponent");
+    ret->_type = MapComponent::TypeId();
     return ret;
 }
 

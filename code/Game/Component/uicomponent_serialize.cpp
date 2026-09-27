@@ -30,61 +30,34 @@
 // is not behind any BANISHED_LIVE_* gate. Standalone has no save/load driver
 // yet (GameUpdateLoop::SaveRestore is a no-op stub), so this is unreachable
 // today; it brings the class to parity with the rest of the save/load wave.
-#include "resolve.h"
+#include "Component/UIComponent.h"
 #include "Component/coll_bridge.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
-#include <new>
-
-namespace {
-
-typedef void (*fn_ComponentSerialize_t)(void* self, void* stream);
-
-fn_ComponentSerialize_t s_Base     = nullptr;  // 0x1401189b0
-
-bool s_resolved = false;
-
-// Resolved unconditionally at the top of every call — this can be the very
-// first call into the class on load-from-save, so lazy/cached resolution
-// elsewhere is not safe (see animalwave_serialize.cpp's header note).
-void Resolve() {
-    if (s_resolved) return;
-    s_Base = reinterpret_cast<fn_ComponentSerialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-
-    s_resolved = true;
-}
-
-// True when the serializer is READING (retail: *(int*)(stream + 8) == 0,
-// reached through the serializer's first field).
-inline bool Loading(void* ser) {
-    return static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-}
-
-inline uint8_t* At(void* self, ptrdiff_t off) {
-    return reinterpret_cast<uint8_t*>(self) + off;
-}
-
-}  // namespace
 
 // ============================================================
-// UIComponent::Serialize (vtable slot [3], 0x14012dd00)
+// UIComponent::Persist (vtable slot [3], 0x14012dd00)
 // ============================================================
-extern "C" void UIComponent_Serialize(void* self, void* stream) {
-    Resolve();
-    if (!self || !stream) return;
-    if (s_Base) s_Base(self, stream);
+// B.3.8 CB1b: the body moved here from the free UIComponent_Serialize.
+void UIComponent::Persist(void* stream) {
+    if (!stream) return;
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
 
-    int count = *reinterpret_cast<int*>(At(self, 0x30));
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
+    int count = *reinterpret_cast<int*>(&uiData1);   // +0x30 count
+    ser.Serialize(count, nullptr);
     // B.3.2 bridge: FUN_14000a590 is Collection::Array<uint8_t>::SetSize(n)
-    if (Loading(ser)) GameColl::AsArray<GameColl::U8>(At(self, 0x28)).SetSize(count);
+    // True when the serializer is READING (retail: *(int*)(stream + 8) == 0).
+    if (static_cast<int>(ser.GetDirection()) == 0)   // IO::Serializer::GetDirection, retail 0x180006210
+        GameColl::AsArray<GameColl::U8>(&uiData0).SetSize(count);
 
-    uint8_t* ptr = *reinterpret_cast<uint8_t**>(At(self, 0x28));
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, ptr, nullptr);   // B.3.4 bridge
+    uint8_t* ptr = static_cast<uint8_t*>(uiData0);
+    ser.Serialize(count, ptr, nullptr);
+}
 
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+// 0x14012dd00 door: registered by address (standalone/reg_ambientenv_ui_serialize.cpp).
+extern "C" void UIComponent_Serialize(void* self, void* stream) {
+    if (!self) return;
+    reinterpret_cast<UIComponent*>(self)->UIComponent::Persist(stream);   // B.3.8 bridge
 }

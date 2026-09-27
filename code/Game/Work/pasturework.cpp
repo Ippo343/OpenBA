@@ -162,8 +162,6 @@ static float* s_fHalfCellOffset = nullptr;  // DAT_140172114 = 0.5f
 // (0x140161320) vtables, and Ghidra reports ZERO xrefs to either.
 
 // Original Slot4 exe function pointer for fallback (complex function)
-typedef int (*PW_OrigSlot4_t)(void* self, void* param2, uint64_t param3, uint64_t param4);
-static PW_OrigSlot4_t s_fn_OrigSlot4 = nullptr;
 
 static bool s_pasture_funcs_resolved = false;
 
@@ -241,10 +239,6 @@ bool PastureWork_ResolveFuncs() {
     s_fn_UpdateParentEntity = reinterpret_cast<PW_UpdateParentEntity_t>(
         ResolveAddr(Module::Exe, 0x1400c3470));
 
-    // Original Slot4 for fallback (very complex function)
-    s_fn_OrigSlot4 = reinterpret_cast<PW_OrigSlot4_t>(
-        ResolveAddr(Module::Exe, 0x1400F2370));
-
     // Static MemAlloc/MemFree. These previously read exe dispatch slots 0x140151460 /
     // 0x140151468; 0x140151460 is NOT MemAlloc, it is Graphics::Geometry::GetTransform
     // (see placementtool.cpp:78). Since that slot is registered, the pointer was
@@ -292,7 +286,7 @@ bool PastureWork_ResolveFuncs() {
               g_pGameWorldSingleton &&
               s_typeId_PastureComponent && s_typeId_ComponentEntity &&
               s_typeId_NatResComponent &&
-              s_fHalfCellOffset && s_fn_OrigSlot4;
+              s_fHalfCellOffset;
 
     s_pasture_funcs_resolved = ok;
 
@@ -328,7 +322,6 @@ bool PastureWork_ResolveFuncs() {
         if (!s_fn_Entity_GetPosition) printf("  MISSING: Entity_GetPosition\n");
         if (!s_fn_PositionCount) printf("  MISSING: PositionCount\n");
         if (!s_fn_StorageOverflowCheck) printf("  MISSING: StorageOverflowCheck\n");
-        if (!s_fn_OrigSlot4) printf("  MISSING: OrigSlot4\n");
     }
 #endif
 
@@ -519,10 +512,7 @@ int PastureWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) 
                             uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
 
                             // Call vtable slot +0x50 (GetWorkEntity)
-                            typedef uintptr_t* (*GetWorkEntity_t)(PastureWork*, void*);
-                            uintptr_t vtable = *(uintptr_t*)this;
-                            auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
-                            uintptr_t* wResult = getWorkEntity(this, &local_90);
+                            uintptr_t* wResult = static_cast<uintptr_t*>(GetTarget(&local_90));
                             uintptr_t workEnt = *wResult;
 
                             *(uint32_t*)(citizenEnt + 0x54) |= 4;
@@ -663,10 +653,7 @@ int PastureWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) 
                 void* savedCitizenIBP = local_res10;
 
                 // Call vtable slot +0x50 (GetWorkEntity — returns the profession key)
-                typedef uintptr_t* (*GetWorkEntity_t)(PastureWork*, void*);
-                uintptr_t vtable = *(uintptr_t*)this;
-                auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
-                uintptr_t* wResult = getWorkEntity(this, &local_res10);
+                uintptr_t* wResult = static_cast<uintptr_t*>(GetTarget(&local_res10));
                 uintptr_t workEnt = *wResult;
 
                 *(uint32_t*)(citizenEnt + 0x54) |= 4;
@@ -1036,11 +1023,6 @@ extern "C" void* PastureWork_CreateForEntity(void* entityRefSlot) {
     return p ? static_cast<Object::Base*>(new (p) PastureWork(entityRefSlot)) : nullptr;
 }
 
-// The by-address door for slot 4 (0x1400f2370), registered in
-// standalone/reg_work_tail_serialize.cpp.
-int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, uint64_t param4) {
-    return self->PastureWork::Execute(entityIBP, reinterpret_cast<void*>(param3), param4);
-}
 
 // ============================================================
 // Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)

@@ -65,7 +65,7 @@ static void* FindComponentByTypeId(uintptr_t entity, void* retIBP, const uint32_
         for (; i < n; i++) {
             void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
             void* comp = *slot;
-            uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
             if (t == *pTypeId) {
                 void* c = *slot;
                 found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTypeId)) ? c : nullptr;
@@ -319,7 +319,7 @@ uint64_t PlayerPath_Sub_48a0(uintptr_t param_1, void* param_2, int param_3, int 
             uintptr_t cur = 0;
             while (idx < n) {
                 void* comp = *reinterpret_cast<void**>(cur + *reinterpret_cast<int64_t*>(lst + 0x28));
-                uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+                uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                 if (t == *s_pTid_7430) {
                     void* c = *reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(lst + 0x28) + (int64_t)idx * 8);
                     if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_pTid_7430)) matched = c;

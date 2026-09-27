@@ -10,6 +10,8 @@
 //
 
 #include "Component/pickingcomponent_funcs.h"
+#include "Component/ModelComponent.h"
+#include "Component/MapComponent.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -25,9 +27,6 @@
 // Resolved helpers
 // ============================================================
 
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
 // IsDerivedFrom
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
@@ -36,51 +35,7 @@ static uint32_t* s_pComponentEntityTypeId = nullptr;
 
 static bool s_initialized = false;
 
-// ============================================================
-// PickingComponent::Shutdown (0x140128bb0)
-// ============================================================
-void PickingComponent_Shutdown(PickingComponent* self, void* stream) {
-    // resolver call added at top, save/load wave 2026-08-28: Shutdown never resolved
-    // its own helpers (only DetachVSlot/RegisterMesh did), so on a load-from-save path
-    // where Shutdown fires first every s_fn_* below could still be null.
-    PickingComponent_InitFuncs();
-    uintptr_t selfAddr = (uintptr_t)self;
 
-    if (s_fn_Component_Serialize)
-        s_fn_Component_Serialize(self, stream);
-
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // Serialize IBP at +0x30
-    reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-
-    // Validate: if not ComponentEntity, null it out
-    void* ibpVal = *(void**)(selfAddr + 0x30);
-    if (ibpVal != nullptr && s_fn_IsDerivedFrom_d && s_pComponentEntityTypeId) {
-        if (!s_fn_IsDerivedFrom_d(ibpVal, *s_pComponentEntityTypeId)) {
-            *(uintptr_t*)(selfAddr + 0x30) = 0;
-        }
-    }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-}
-
-// ============================================================
-// PickingComponent::OnCreate (0x140128b50)
-// ============================================================
-// If pickingId >= 0, calls Picking::Scene::RemoveMesh and resets to -1.
-
-void PickingComponent_OnCreate(PickingComponent* self) {
-    if ((int)self->pickingId >= 0) {
-        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-            void* pickingScene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x70);
-            // Picking::Scene::RemoveMesh (import slot 0x140152438, Runtime 0x180125290).
-            reinterpret_cast<Picking::Scene*>(pickingScene)->RemoveMesh((uint32_t)self->pickingId);   // B.3.7 bridge
-        }
-        self->pickingId = -1;
-    }
-}
 
 // ============================================================
 // PickingComponent::OnAdded (0x140128f50) — register the picking mesh
@@ -102,19 +57,13 @@ void PickingComponent_OnCreate(PickingComponent* self) {
 
 // This registration path depends on the standalone type registry (GetTypeIdByName)
 // and is only exercised from the SA start-town spawn.
-namespace Object { uint32_t GetTypeIdByName(const char* name); }
-
-static uint32_t s_tidModelComponent = 0;
-
-// forward decl
-namespace { uint32_t PC_ModelTypeId(); }
 
 // Self-contained ModelComponent find over the entity's component array (entity+0x30
 // array ptr / +0x38 count; each slot is an IBP). Mirrors ComponentEntity::FindComponent
 // (the mislabeled Entity_ClearPathQueue, 0x140003f60).
 static void* PC_FindModelComponent(void* entity) {
     if (!entity) return nullptr;
-    uint32_t tid = PC_ModelTypeId();
+    uint32_t tid = ModelComponent::TypeId();
     if (tid == 0) return nullptr;
     uint8_t* e = (uint8_t*)entity;
     int count = *(int32_t*)(e + 0x38);
@@ -123,9 +72,7 @@ static void* PC_FindModelComponent(void* entity) {
         void** slot = (void**)(arr + (uintptr_t)i * 8);
         void* comp = *slot;
         if (!comp) continue;
-        uintptr_t vt = *(uintptr_t*)comp;
-        typedef uint32_t (*gt_t)(void*);
-        if ((*(gt_t*)(vt + 0x10))(comp) == tid) return comp;
+        if (reinterpret_cast<Object::Base*>(comp)->Type() == tid) return comp;   // B.3.8 bridge (slot 2)
     }
     return nullptr;
 }
@@ -166,7 +113,7 @@ void PickingComponent_RegisterMesh(void* pc) {
     //
     // Doing the teardown here also subsumes the double-registration concern that motivated
     // the bad guard: a second call removes the first mesh before adding its own.
-    PickingComponent_OnCreate(reinterpret_cast<PickingComponent*>(pc));
+    reinterpret_cast<PickingComponent*>(pc)->OnRemove();   // B.3.8 bridge (retail: its own vtable +0x38)
     if (*(int32_t*)(p + 0x28) >= 0) return;   // retail: `(int)param_1[5] < 0`
 
     // --- OnAdded body (0x140128f50) ---
@@ -215,16 +162,14 @@ void PickingComponent_RegisterMesh(void* pc) {
         const float* f = reinterpret_cast<const float*>(xform);
         int fx = -1, fy = -1, fw = -1, fh = -1;
         {   // owner's MapComponent, for the footprint rect
-            static uint32_t s_tidMapPC = 0;
-            if (!s_tidMapPC) s_tidMapPC = ::Object::GetTypeIdByName("MapComponent");
+            const uint32_t s_tidMapPC = MapComponent::TypeId();
             uint8_t* e = (uint8_t*)entity;
             int n = *(int32_t*)(e + 0x38);
             uintptr_t arr = *(uintptr_t*)(e + 0x30);
             for (int i = 0; i < n && arr; ++i) {
                 void** slot = (void**)(arr + (uintptr_t)i * 8);
                 void* c = *slot; if (!c) continue;
-                typedef uint32_t (*gt_t)(void*);
-                if ((*(gt_t*)(*(uintptr_t*)c + 0x10))(c) == s_tidMapPC) {
+                if (reinterpret_cast<Object::Base*>(c)->Type() == s_tidMapPC) {   // B.3.8 bridge (slot 2)
                     uint8_t* m2 = (uint8_t*)c;
                     fx = *(int16_t*)(m2 + 0x28); fy = *(int16_t*)(m2 + 0x2a);
                     fw = *(int16_t*)(m2 + 0x2c); fh = *(int16_t*)(m2 + 0x2e);
@@ -242,21 +187,11 @@ void PickingComponent_RegisterMesh(void* pc) {
     }
 }
 
-namespace {
-uint32_t PC_ModelTypeId() {
-    if (s_tidModelComponent == 0 || s_tidModelComponent == 0xFFFFFFFF)
-        s_tidModelComponent = ::Object::GetTypeIdByName("ModelComponent");
-    return s_tidModelComponent;
-}
-}
-
 // Entity-level convenience: find the entity's PickingComponent and register its mesh.
 // Used by callers that hold an entity rather than the component (player placement, etc.).
-static uint32_t s_tidPickComponent = 0;
 void PickingComponent_RegisterMeshForEntity(void* entity) {
     if (!entity) return;
-    if (s_tidPickComponent == 0 || s_tidPickComponent == 0xFFFFFFFF)
-        s_tidPickComponent = ::Object::GetTypeIdByName("PickingComponent");
+    const uint32_t s_tidPickComponent = PickingComponent::TypeId();
     if (s_tidPickComponent == 0) return;
     uint8_t* e = (uint8_t*)entity;
     int count = *(int32_t*)(e + 0x38);
@@ -265,9 +200,7 @@ void PickingComponent_RegisterMeshForEntity(void* entity) {
         void** slot = (void**)(arr + (uintptr_t)i * 8);
         void* comp = *slot;
         if (!comp) continue;
-        uintptr_t vt = *(uintptr_t*)comp;
-        typedef uint32_t (*gt_t)(void*);
-        if ((*(gt_t*)(vt + 0x10))(comp) == s_tidPickComponent) {
+        if (reinterpret_cast<Object::Base*>(comp)->Type() == s_tidPickComponent) {   // B.3.8 bridge (slot 2)
             PickingComponent_RegisterMesh(comp);
             return;
         }
@@ -280,8 +213,6 @@ void PickingComponent_RegisterMeshForEntity(void* entity) {
 void PickingComponent_InitFuncs() {
     if (s_initialized) return;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
     s_pComponentEntityTypeId = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c72e8));
 
@@ -312,8 +243,34 @@ PickingComponent::PickingComponent() : pickingId(-1), _pad2C{}, field30(nullptr)
     OrFlagsInCtor(0xc3);
 }
 
-// [3] 0x140128bb0
-void PickingComponent::Persist(void* stream) { PickingComponent_Shutdown(this, stream); }
+// ============================================================
+// PickingComponent::Persist (vtable slot [3], 0x140128bb0)
+// ============================================================
+void PickingComponent::Persist(void* stream) {
+    // resolver call added at top, save/load wave 2026-08-28: Shutdown never resolved
+    // its own helpers (only DetachVSlot/RegisterMesh did), so on a load-from-save path
+    // where Shutdown fires first every s_fn_* below could still be null.
+    PickingComponent_InitFuncs();
+    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
+
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    // Serialize IBP at +0x30
+    reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+
+    // Validate: if not ComponentEntity, null it out
+    void* ibpVal = *(void**)(selfAddr + 0x30);
+    if (ibpVal != nullptr && s_fn_IsDerivedFrom_d && s_pComponentEntityTypeId) {
+        if (!s_fn_IsDerivedFrom_d(ibpVal, *s_pComponentEntityTypeId)) {
+            *(uintptr_t*)(selfAddr + 0x30) = 0;
+        }
+    }
+
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+}
 
 // [4] 0x140128c30. PORT GAP (retail 0x140128c30) — B38 D9: retail's 9-byte
 // Startup body was never ported or installed (inert stub); kept inert here.
@@ -331,9 +288,21 @@ void PickingComponent::OnAdded() { PickingComponent_RegisterMesh(this); }
 // every component whose flags have bit 1 BEFORE the entity is freed; the body
 // removes the picking mesh from Picking::Scene (gw+0x70) and resets pickingId.
 // Without it a removed building's mesh dangles with userData = the freed entity.
+// ============================================================
+// PickingComponent::OnRemove (vtable slot [7], 0x140128b50; Ghidra "OnCreate")
+// ============================================================
+// If pickingId >= 0, calls Picking::Scene::RemoveMesh and resets to -1.
+
 void PickingComponent::OnRemove() {
     PickingComponent_InitFuncs();   // the file's exe-slot/type-id statics (RemoveMesh is a member call)
-    PickingComponent_OnCreate(this);
+    if ((int)pickingId >= 0) {
+        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+            void* pickingScene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x70);
+            // Picking::Scene::RemoveMesh (import slot 0x140152438, Runtime 0x180125290).
+            reinterpret_cast<Picking::Scene*>(pickingScene)->RemoveMesh((uint32_t)pickingId);   // B.3.7 bridge
+        }
+        pickingId = -1;
+    }
 }
 
 // [11] 0x140128ba0. PORT GAP (retail 0x140128ba0, `JMP 0x140128f50`, the same

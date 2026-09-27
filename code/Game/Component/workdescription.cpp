@@ -31,6 +31,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/WorkDescription.h"
+#include "Component/WorkComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -80,7 +81,7 @@ void WorkDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140039f40: WorkComponent's type id through the hidden return slot.
 Object::Type* WorkDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("WorkComponent");
+    ret->_type = WorkComponent::TypeId();
     return ret;
 }
 

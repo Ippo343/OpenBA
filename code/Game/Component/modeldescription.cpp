@@ -30,6 +30,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/ModelDescription.h"
+#include "Component/ModelComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -139,7 +140,7 @@ void ModelDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140035a60: ModelComponent's type id through the hidden return slot.
 Object::Type* ModelDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("ModelComponent");
+    ret->_type = ModelComponent::TypeId();
     return ret;
 }
 

@@ -9,7 +9,7 @@
 //   Shutdown (0x140059130) — Serialize two paired (IBP+int) arrays + trackerId
 //
 
-#include "Component/trackercomponent_funcs.h"
+#include "Component/TrackerComponent.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -22,9 +22,6 @@
 // Resolved helpers
 // ============================================================
 
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
 // FUN_14000da70 — resize paired (IBP+int) array
 typedef void (*fn_ResizePairedArray_t)(void* arrayPtr, int newCount);
 static fn_ResizePairedArray_t s_fn_ResizePairedArray = nullptr;
@@ -36,20 +33,52 @@ static fn_SerializeIBPEntry_t s_fn_SerializeIBPEntry = nullptr;
 static bool s_initialized = false;
 
 // ============================================================
-// TrackerComponent::Shutdown (0x140059130)
+// Init: resolve function pointers
+// ============================================================
+static void TrackerComponent_InitFuncs() {
+    if (s_initialized) return;
+
+    s_fn_ResizePairedArray = reinterpret_cast<fn_ResizePairedArray_t>(
+        ResolveAddr(Module::Exe, 0x14000da70));
+    s_fn_SerializeIBPEntry = reinterpret_cast<fn_SerializeIBPEntry_t>(
+        ResolveAddr(Module::Exe, 0x140002340));
+
+    s_initialized = true;
+}
+
+// ============================================================================
+// ENDGAME B.3.8 VIS — TrackerComponent as a REAL class (TrackerComponent.h).
+//
+// Before: a 48-slot TrackerComponent_InertVtable filled per create, Inert_ScalarDtor
+// in slot 0 (only ~Internal), +0x48 = -1 patched in after the zero-fill.
+// After: the compiler's 16-slot vtable and a real ctor/dtor chain
+// (B38_RULES D1, D2); slot bodies are the ones the old table installed.
+// ============================================================================
+#include "Object/factory_registration.h"
+
+// The retail ctor (inlined in TrackerComponent_Factory 0x14000d7a0) writes
+// +0x48 = -1. +0x48 is the "game-world item-count generation" stamp, and 0 is a
+// LEGAL generation value: with 0 ProductionUI's per-frame update (0x140075a50)
+// would compare gameWorld item count 0 == stamp 0 on the very first frame of a
+// fresh world and SKIP the one-shot array rebuild the -1 sentinel forces.
+TrackerComponent::TrackerComponent()
+    : field28(nullptr), field30(nullptr), field38(nullptr), field40(nullptr),
+      trackerId(-1), _pad4C{} {}
+
+// [3] ============================================================
+// TrackerComponent::Persist (vtable slot [3], 0x140059130)
 // ============================================================
 // Serialize two paired arrays of (InternalBasePtr, int) entries
 // at +0x28/+0x30 and +0x38/+0x40, plus trackerId at +0x48.
 
-void TrackerComponent_Shutdown(TrackerComponent* self, void* stream) {
+void TrackerComponent::Persist(void* stream) {
     // resolver call added at top, save/load wave 2026-08-28: InitFuncs was declared
     // but never called anywhere, so every s_fn_* below stayed null and load silently
     // skipped this component's fields.
     TrackerComponent_InitFuncs();
-    uintptr_t selfAddr = (uintptr_t)self;
+    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
 
-    if (s_fn_Component_Serialize)
-        s_fn_Component_Serialize(self, stream);
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
@@ -97,49 +126,10 @@ void TrackerComponent_Shutdown(TrackerComponent* self, void* stream) {
     }
 
     // Serialize trackerId at +0x48
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x48), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(trackerId, nullptr);   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void TrackerComponent_InitFuncs() {
-    if (s_initialized) return;
-
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-    s_fn_ResizePairedArray = reinterpret_cast<fn_ResizePairedArray_t>(
-        ResolveAddr(Module::Exe, 0x14000da70));
-    s_fn_SerializeIBPEntry = reinterpret_cast<fn_SerializeIBPEntry_t>(
-        ResolveAddr(Module::Exe, 0x140002340));
-
-    s_initialized = true;
-}
-
-// ============================================================================
-// ENDGAME B.3.8 VIS — TrackerComponent as a REAL class (TrackerComponent.h).
-//
-// Before: a 48-slot TrackerComponent_InertVtable filled per create, Inert_ScalarDtor
-// in slot 0 (only ~Internal), +0x48 = -1 patched in after the zero-fill.
-// After: the compiler's 16-slot vtable and a real ctor/dtor chain
-// (B38_RULES D1, D2); slot bodies are the ones the old table installed.
-// ============================================================================
-#include "Object/factory_registration.h"
-#include "Component/TrackerComponent.h"
-
-// The retail ctor (inlined in TrackerComponent_Factory 0x14000d7a0) writes
-// +0x48 = -1. +0x48 is the "game-world item-count generation" stamp, and 0 is a
-// LEGAL generation value: with 0 ProductionUI's per-frame update (0x140075a50)
-// would compare gameWorld item count 0 == stamp 0 on the very first frame of a
-// fresh world and SKIP the one-shot array rebuild the -1 sentinel forces.
-TrackerComponent::TrackerComponent()
-    : field28(nullptr), field30(nullptr), field38(nullptr), field40(nullptr),
-      trackerId(-1), _pad4C{} {}
-
-// [3] 0x140059130
-void TrackerComponent::Persist(void* stream) { TrackerComponent_Shutdown(this, stream); }
 
 // [0] 0x14000d9a0: ~TrackerComponent (0x140059280; its array frees are a PORT GAP, see the header), MemFree on &1.
 Object::Base* TrackerComponent::DeletingDtor(unsigned flags) {

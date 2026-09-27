@@ -19,6 +19,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
+#include "Component/GrowthComponent.h"   // ENDGAME B.3.8 CB3: GrowthComponent::TypeId()
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -147,19 +148,19 @@ bool CreateNaturalResource_ResolveFuncs() {
 // Serialize (0x1400c6890)
 // Serializes: status(+0x18), typeRef(+0x20), int(+0x30), versioned entity(+0x28)
 // ============================================================
-void CreateNaturalResource_Serialize_Impl(CreateNaturalResource* self, void* stream) {
+void CreateNaturalResource::Persist(void* stream) {
     // Lazy-resolve like every other method on this exe-ctor-built action. Serialize
     // was the one that never got it, so a save taken while one of these actions was
     // in flight called a null serializer pointer (EXEC of 0). Found live on
     // CompleteRoad once roads started being built; these four are the same shape.
     CreateNaturalResource_ResolveFuncs();
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
 
     // Serialize status (version 0)
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Serialize resource data (version 1)
@@ -170,9 +171,9 @@ void CreateNaturalResource_Serialize_Impl(CreateNaturalResource* self, void* str
     int version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
     if (version > 0) {
         reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-        if (*(void**)(s + 0x28) != nullptr) {
-            if (!fn_IsDerivedFrom(*(void**)(s + 0x28), *s_typeId_ComponentEntity)) {
-                *(void**)(s + 0x28) = nullptr;
+        if (parentEntity != nullptr) {
+            if (!fn_IsDerivedFrom(parentEntity, *s_typeId_ComponentEntity)) {
+                parentEntity = nullptr;
             }
         }
     }
@@ -186,14 +187,14 @@ void CreateNaturalResource_Serialize_Impl(CreateNaturalResource* self, void* str
 // sets up model/NR/growth components, randomizes variant, registers entity.
 // Returns 0 on success, 2 on failure (cell occupied or invalid).
 // ============================================================
-int CreateNaturalResource_AbstractImpl_Impl(CreateNaturalResource* self, void* actionStack) {
+int  CreateNaturalResource::AbstractImpl(void* actionStack) {
     CreateNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
     uintptr_t mapGrid = *(uintptr_t*)(gameWorld + 0xf8);
 
-    int32_t cellIndex = *(int32_t*)(s + 0x30);
+    const int32_t cellIndex = this->cellIndex;
     uintptr_t cellArrayBase = *(uintptr_t*)(mapGrid + 0x80);
 
     // The four early-outs below all return the same failure code, so a caller can only see
@@ -235,7 +236,7 @@ int CreateNaturalResource_AbstractImpl_Impl(CreateNaturalResource* self, void* a
     }
 
     // Allocate a new ComponentEntity copied from description at +0x20
-    void* desc = *(void**)(s + 0x20);
+    void* desc = descEntity;
     void* newEntityMem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
     void* newEntity = nullptr;
     if (newEntityMem != nullptr) {
@@ -271,7 +272,7 @@ int CreateNaturalResource_AbstractImpl_Impl(CreateNaturalResource* self, void* a
             // no GrowthComponent, or the finder's type-id .rdata slot is unregistered/zero so
             // it misses on every entity (reference_registered_but_filled_with_zero). Separate
             // them by re-scanning with the by-NAME id, which does not depend on that slot.
-            const uint32_t tidByName = ::Object::GetTypeIdByName("GrowthComponent");
+            const uint32_t tidByName = GrowthComponent::TypeId();
             const uint32_t* pSlot = reinterpret_cast<const uint32_t*>(
                 ResolveAddr(Module::Exe, 0x1401c77b0));
             int compN = newEntity ? *(int32_t*)((uint8_t*)newEntity + 0x38) : 0;
@@ -330,10 +331,9 @@ int CreateNaturalResource_AbstractImpl_Impl(CreateNaturalResource* self, void* a
 // GetTarget (0x1400c6610)
 // Returns true if param matches entity at +0x28.
 // ============================================================
-int CreateNaturalResource_GetTarget_Impl(CreateNaturalResource* self, void* param) {
+bool CreateNaturalResource::GetTarget(void* param) {
     CreateNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
-    uint8_t* s = (uint8_t*)self;
-    return (*(void**)param == *(void**)(s + 0x28)) ? 1 : 0;
+    return (*(void**)param == parentEntity) ? 1 : 0;
 }
 
 // ============================================================
@@ -361,11 +361,8 @@ Object::Base* CreateNaturalResource::DeletingDtor(unsigned flags) {
 }
 
 // [3] 0x1400c6890
-void CreateNaturalResource::Persist(void* stream) { CreateNaturalResource_Serialize_Impl(this, stream); }
 // [4] 0x1400c6650
-int  CreateNaturalResource::AbstractImpl(void* actionStack) { return CreateNaturalResource_AbstractImpl_Impl(this, actionStack); }
 // [9] 0x1400c6610
-bool CreateNaturalResource::GetTarget(void* param) { return CreateNaturalResource_GetTarget_Impl(this, param) != 0; }
 
 void* CreateNaturalResource::CreateNewObject() {
     CreateNaturalResource_ResolveFuncs();
@@ -381,12 +378,9 @@ void* CreateNaturalResource::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(CreateNaturalResource, "_ZTV21CreateNaturalResource")
 
-// B38 D5: 0x14015fca0 is still read back BY ADDRESS outside this block
-// (work_act_hunt.cpp:127),
-// so the row stays, serving the compiler table (every such reader builds the
-// same bytes the ctor builds: Internal(), +0x10/+0x18 zeroed, the fields).
 extern "C" void RegisterCreateNaturalResourceVtable() {
-    RegisterExeAddr(0x14015fca0, reinterpret_cast<uintptr_t>(CreateNaturalResource::Vtable()));
+    // ENDGAME B.3.8 CB3: the retail-table row is gone -- no by-address reader of
+    // it is left. The call in address_registry.cpp is the coordinator's to drop.
 }
 
 DEFINE_EXE_TYPE(CreateNaturalResource, "Action")

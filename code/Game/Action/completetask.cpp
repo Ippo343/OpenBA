@@ -17,6 +17,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <new>
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CB3: CitizenComponent::TypeId()
+#include "Entity/ComponentEntity.h"   // ENDGAME B.3.8 CB3: ComponentEntity::TypeId()
 
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (heal .rdata type-ids)
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -68,11 +70,11 @@ bool CompleteTask_ResolveFuncs() {
     s_TypeId_ComponentEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5d70));
     static uint32_t s_healCitizen = 0, s_healCompEntity = 0;
     if (!s_TypeId_1401c7158) {
-        s_healCitizen = ::Object::GetTypeIdByName("CitizenComponent");   // workEntity (+0x20)
+        s_healCitizen = CitizenComponent::TypeId();   // workEntity (+0x20)
         s_TypeId_1401c7158 = &s_healCitizen;
     }
     if (!s_TypeId_ComponentEntity) {
-        s_healCompEntity = ::Object::GetTypeIdByName("ComponentEntity"); // targetEntity (+0x28)
+        s_healCompEntity = ComponentEntity::TypeId(); // targetEntity (+0x28)
         s_TypeId_ComponentEntity = &s_healCompEntity;
     }
 
@@ -109,7 +111,7 @@ bool CompleteTask_ResolveFuncs() {
 // Serialize (0x1400c5be0, vtable slot 3)
 // Serializes status, entity refs with type checks, task fields.
 // ============================================================
-void CompleteTask_Serialize_Impl(CompleteTask* self, void* stream) {
+void CompleteTask::Persist(void* stream) {
     // Reached through the registered vtable, which the factory path never
     // has to touch — an exe-ctor-built action arrives here with the file
     // statics still null. Lazy-resolve like the other entry points do.
@@ -119,7 +121,7 @@ void CompleteTask_Serialize_Impl(CompleteTask* self, void* stream) {
 
     // Serialize status (version 0)
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(&self->_status), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(&this->_status), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Serialize entity refs + task fields (version 1)
@@ -128,28 +130,28 @@ void CompleteTask_Serialize_Impl(CompleteTask* self, void* stream) {
     // Work entity ref (+0x20) with type validation. The .rdata type-id may be unavailable
     // in the standalone exe (a Serialize-only dep, not part of the exec gate) — validation
     // is simply skipped when the type-id can't be resolved.
-    reinterpret_cast<Object::InternalBasePtr*>(&self->workEntity)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (self->workEntity != nullptr && s_TypeId_1401c7158 && *s_TypeId_1401c7158) {
-        if (!fn_IsDerivedFrom(self->workEntity, *s_TypeId_1401c7158)) {
-            self->workEntity = nullptr;
+    reinterpret_cast<Object::InternalBasePtr*>(&this->workEntity)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
+    if (this->workEntity != nullptr && s_TypeId_1401c7158 && *s_TypeId_1401c7158) {
+        if (!fn_IsDerivedFrom(this->workEntity, *s_TypeId_1401c7158)) {
+            this->workEntity = nullptr;
         }
     }
 
     // Target entity ref (+0x28) with type validation
-    reinterpret_cast<Object::InternalBasePtr*>(&self->targetEntity)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (self->targetEntity != nullptr && s_TypeId_ComponentEntity && *s_TypeId_ComponentEntity) {
-        if (!fn_IsDerivedFrom(self->targetEntity, *s_TypeId_ComponentEntity)) {
-            self->targetEntity = nullptr;
+    reinterpret_cast<Object::InternalBasePtr*>(&this->targetEntity)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
+    if (this->targetEntity != nullptr && s_TypeId_ComponentEntity && *s_TypeId_ComponentEntity) {
+        if (!fn_IsDerivedFrom(this->targetEntity, *s_TypeId_ComponentEntity)) {
+            this->targetEntity = nullptr;
         }
     }
 
     // Task param (+0x34)
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&self->taskParam), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&this->taskParam), nullptr);   // B.3.4 bridge
 
     // Task index (+0x30) — versioned, only in version >= 1
     int version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
     if (version > 0) {
-        reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&self->taskIndex), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&this->taskIndex), nullptr);   // B.3.4 bridge
     }
 
     reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
@@ -161,7 +163,7 @@ void CompleteTask_Serialize_Impl(CompleteTask* self, void* stream) {
 // Returns 0 (action complete).
 // ============================================================
 
-int CompleteTask_AbstractImpl_Impl(CompleteTask* self, void* actionStack) {
+int  CompleteTask::AbstractImpl(void* actionStack) {
     (void)actionStack;
     // Lazy resolve (action built via exe ctor path -> ResolveFuncs never ran -> s_fn_* null).
     if (!CompleteTask_ResolveFuncs()) return 0;
@@ -171,9 +173,9 @@ int CompleteTask_AbstractImpl_Impl(CompleteTask* self, void* actionStack) {
         !*(void**)((uint8_t*)*s_pGameState + 0x118)) return 0;
 
     // Lazy-resolve task index from work entity
-    if (self->taskIndex == 0x7FFFFFFF) {
-        uint8_t* workEnt = (uint8_t*)self->workEntity;
-        self->taskIndex = *(int32_t*)(workEnt + 0x30);
+    if (this->taskIndex == 0x7FFFFFFF) {
+        uint8_t* workEnt = static_cast<uint8_t*>(workEntity);
+        this->taskIndex = *(int32_t*)(workEnt + 0x30);
     }
 
     // taskIdx < 0 is EXPECTED, not a gap. The build-material haul tree
@@ -185,14 +187,14 @@ int CompleteTask_AbstractImpl_Impl(CompleteTask* self, void* actionStack) {
     // citizen +0x88 flag, and citizenai_gather stamps citizen+0x30 = -1). Delivery is
     // credited via the BUILDCTRL MsgReceive path, not this manager completion. Verified
     // 2026-07-22 against the live BUILD_TRACE (taskIdx=-1, taskMgr live) — do not "fix".
-    int32_t taskIdx = self->taskIndex;
+    int32_t taskIdx = this->taskIndex;
     if (taskIdx >= 0) {
-        void* entityRef28 = self->targetEntity;
-        void* entityRef20 = self->workEntity;
+        void* entityRef28 = this->targetEntity;
+        void* entityRef20 = this->workEntity;
         void* gameState = *s_pGameState;
         void* taskMgr = *(void**)((uint8_t*)gameState + 0x118);
 
-        bool completed = s_fn_TryCompleteTask(taskMgr, &entityRef20, taskIdx, &entityRef28, (uint32_t)self->taskParam);
+        bool completed = s_fn_TryCompleteTask(taskMgr, &entityRef20, taskIdx, &entityRef28, (uint32_t)this->taskParam);
         if (completed) {
             s_fn_TaskCleanup(taskMgr, taskIdx);
         }
@@ -204,39 +206,39 @@ int CompleteTask_AbstractImpl_Impl(CompleteTask* self, void* actionStack) {
 // CheckEntity (0x1400c5ac0, vtable slot 8)
 // Resolves task index, calls task reassignment.
 // ============================================================
-void CompleteTask_CheckEntity_Impl(CompleteTask* self) {
+void CompleteTask::CheckEntity() {
     if (!CompleteTask_ResolveFuncs()) return;   // lazy resolve (exe-ctor-built action)
     if (!s_pGameState || !*s_pGameState ||
         !*(void**)((uint8_t*)*s_pGameState + 0x118)) return;   // inert task mgr -> no-op
     // Lazy-resolve task index
-    if (self->taskIndex == 0x7FFFFFFF) {
-        uint8_t* workEnt = (uint8_t*)self->workEntity;
-        self->taskIndex = *(int32_t*)(workEnt + 0x30);
+    if (this->taskIndex == 0x7FFFFFFF) {
+        uint8_t* workEnt = static_cast<uint8_t*>(workEntity);
+        this->taskIndex = *(int32_t*)(workEnt + 0x30);
     }
 
-    void* entityRef28 = self->targetEntity;
-    void* entityRef20 = self->workEntity;
+    void* entityRef28 = this->targetEntity;
+    void* entityRef20 = this->workEntity;
     void* gameState = *s_pGameState;
     void* taskMgr = *(void**)((uint8_t*)gameState + 0x118);
 
-    s_fn_TaskReassign(taskMgr, &entityRef20, self->taskIndex, &entityRef28, (uint32_t)self->taskParam);
+    s_fn_TaskReassign(taskMgr, &entityRef20, this->taskIndex, &entityRef28, (uint32_t)this->taskParam);
 }
 
 // ============================================================
 // GetTarget (0x1400c5a50, vtable slot 9)
 // Returns true if param matches entity at +0x28 or parent entity at +0x20.
 // ============================================================
-bool CompleteTask_GetTarget_Impl(CompleteTask* self, void* param) {
+bool CompleteTask::GetTarget(void* param) {
     if (!CompleteTask_ResolveFuncs()) return false;   // lazy resolve (exe-ctor-built action)
     void* paramVal = *(void**)param;
 
     // Check direct match with target entity
-    if (self->targetEntity == paramVal) {
+    if (this->targetEntity == paramVal) {
         return true;
     }
 
     // Check parent entity of work entity
-    void* parentEntity = *(void**)((uint8_t*)self->workEntity + 0x10);
+    void* parentEntity = *(void**)(static_cast<uint8_t*>(workEntity) + 0x10);
     return parentEntity == *(void**)param;
 }
 
@@ -265,13 +267,9 @@ Object::Base* CompleteTask::DeletingDtor(unsigned flags) {
 }
 
 // [3] 0x1400c5be0
-void CompleteTask::Persist(void* stream) { CompleteTask_Serialize_Impl(this, stream); }
 // [4] 0x1400c5b40
-int  CompleteTask::AbstractImpl(void* actionStack) { return CompleteTask_AbstractImpl_Impl(this, actionStack); }
 // [8] 0x1400c5ac0
-void CompleteTask::CheckEntity() { CompleteTask_CheckEntity_Impl(this); }
 // [9] 0x1400c5a50
-bool CompleteTask::GetTarget(void* param) { return CompleteTask_GetTarget_Impl(this, param); }
 
 void* CompleteTask::CreateNewObject() {
     CompleteTask_ResolveFuncs();

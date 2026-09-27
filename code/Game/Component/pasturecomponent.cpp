@@ -25,10 +25,6 @@
 // Resolved helpers
 // ============================================================
 
-// Component_Serialize at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
 // fn_IsDerivedFrom — dispatch slot at 0x140152a98
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
@@ -68,9 +64,6 @@ static bool s_initialized = false;
 
 static void EnsureHelpers() {
     if (s_initialized) return;
-
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
 
     uintptr_t slot;
 
@@ -199,7 +192,7 @@ uint64_t PastureComponent_ComputeCapacity(uintptr_t self) {
     int idx = 0;
     for (int i = 0; i < n; i++) {
         void* comp = *(void**)(list + (int64_t)i * 8);
-        uint32_t t = (*(uint32_t(**)(void*))(*(uintptr_t*)comp + 0x10))(comp);
+        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (s_pTypeId_1c6fd0 && t == *s_pTypeId_1c6fd0) {
             void* cand = *(void**)(list + (int64_t)idx * 8);
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(cand, *s_pTypeId_1c6fd0)) found = cand;
@@ -257,7 +250,7 @@ void PastureComponent_Helper5ed0(void* entityRef) {
     uint8_t t[8] = {0};
     if (s_fn_Time_CtorF) s_fn_Time_CtorF(t, 0.0f);
     // Immediate Update tick (vtable slot +0x48).
-    (*(void(**)(void*, void*))(*(uintptr_t*)p + 0x48))(p, t);
+    reinterpret_cast<Component*>(p)->Update(t);   // B.3.8 bridge (slot 9, +0x48)
 }
 
 // Reimpl of FUN_1401240a0 (reassign animal ref's pasture tile after re-parenting)
@@ -294,90 +287,12 @@ void PastureComponent_ReassignEntityRef(uintptr_t entityPtr) {
     *(uint16_t*)(model + 0x3e) = r3;
 }
 
-// ============================================================
-// PastureComponent::Shutdown (vtable slot [3], 0x140127f40)
-// ============================================================
-// Component_Serialize + empty serializer(v0) + main serializer(v0) with:
-//   - IBP array serialization at +0x28
-//   - Entity count at +0x38, entity array at +0x30
-//   - IsDerivedFrom validation on each entity (type 0x1401c7970)
-//   - Int fields at +0x40 and +0x44
-
+// 0x140127f40 door: registered by address (standalone/reg_animal_serialize.cpp).
 void PastureComponent_Shutdown(PastureComponent* self, void* stream) {
-    EnsureHelpers();
-
-    // Base Component serialization
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
-
-    // Empty serializer block (version 0, immediately destroyed)
-    alignas(8) uint8_t emptySerializer[24];
-    ::new (static_cast<void*>(emptySerializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(emptySerializer)->~Serializer();                                       // B.3.4 bridge
-
-    // Main serializer block (version 0)
-    alignas(8) uint8_t serializer[16];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // Serialize InternalBasePtr array at +0x28
-    if (s_fn_SerializeIBPArray) {
-        s_fn_SerializeIBPArray((void*)&self->field28, serializer);
-    }
-
-    // Serialize entity count from +0x38
-    int entityCount = *(int*)((uintptr_t)self + 0x38);
-    int countBuf = entityCount;
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(countBuf, nullptr);   // B.3.4 bridge
-
-    // On load, resize entity array. Retail reads the direction flag from the
-    // STREAM (+8) through the serializer's first field — `*(int*)(ser[0] + 8)`
-    // — not from serializer+8 (that's the version int, 0 here, which made the
-    // old check pass on save too; benign only because resize-to-same-count is
-    // a no-op).
-    // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        GameColl::AsArray<GameColl::Ptr8>((void*)&self->field30).SetSize(countBuf);
-    }
-
-    // Serialize each entity InternalBasePtr and validate type
-    void* entityArray = *(void**)((uintptr_t)self + 0x30);
-    int64_t count = (int64_t)countBuf;
-    if (count > 0 && entityArray) {
-        uintptr_t ptr = (uintptr_t)entityArray;
-        for (int64_t i = 0; i < count; i++) {
-            reinterpret_cast<Object::InternalBasePtr*>((void*)ptr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            void* obj = *(void**)ptr;
-            if (obj != nullptr && s_fn_IsDerivedFrom_dispatch && s_TypeId_PastureAnimal) {
-                bool valid = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_PastureAnimal);
-                if (!valid) {
-                    *(uint64_t*)ptr = 0;
-                }
-            }
-            ptr += 8;
-        }
-    }
-
-    // Serialize int fields at +0x40 and +0x44
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(int*)((uintptr_t)self + 0x40), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(int*)&self->field44, nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
+    self->PastureComponent::Persist(stream);
 }
 
-// ============================================================
-// PastureComponent::Draw (vtable slot [6], 0x140127a30)
-// ============================================================
-// Compute pasture capacity via FUN_140128570, store at +0x40.
 
-void PastureComponent_Draw(PastureComponent* self) {
-    EnsureHelpers();
-
-    if (s_fn_ComputePastureCapacity) {
-        uint64_t capacity = s_fn_ComputePastureCapacity((uintptr_t)self);
-        *(int*)((uintptr_t)self + 0x40) = (int)capacity;
-    }
-}
 
 // ============================================================
 // PastureComponent vtable slot [7] (0x1401277e0) — RELEASE, not "OnCreate"
@@ -397,10 +312,6 @@ void PastureComponent_Draw(PastureComponent* self) {
 
 extern "C" void Pasture_ReleaseAllAnimals(void* pasture);
 
-void PastureComponent_OnCreate(PastureComponent* self) {
-    EnsureHelpers();
-    Pasture_ReleaseAllAnimals(self);
-}
 
 // ============================================================
 // Init: resolve function pointers
@@ -408,9 +319,9 @@ void PastureComponent_OnCreate(PastureComponent* self) {
 void PastureComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[PastureComponent] Funcs resolved: Component_Serialize=%p ComputeCapacity=%p "
+    printf("[PastureComponent] Funcs resolved: ComputeCapacity=%p "
            "AddToList=%p PastureHelper=%p ReassignEntityRef=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_ComputePastureCapacity,
+           (void*)s_fn_ComputePastureCapacity,
            (void*)s_fn_EraseByValue,
            (void*)s_fn_PastureHelper5ed0, (void*)s_fn_ReassignEntityRef);
 #endif
@@ -422,86 +333,7 @@ void PastureComponent_InitFuncs() {
 // the slot-12 body below through its members, at the bottom of this file.
 #include "Object/factory_registration.h"
 
-extern "C" void   Pasture_MsgReceive(void* pasture, int msg);  // slot 15 breed tag
-extern "C" uint64_t Pasture_CanCommand(void* pasture, int cmd); // slot 13 capability query
-extern "C" void   Pasture_Command(void* pasture, int cmd);      // slot 14 execute command
 
-// ── slot 12 — retail 0x140127540 — claim the pasture's gate cells ─────────────────
-// Only acts on message id 4. For each kind-2 child attach point of the pasture's
-// position component it converts the point to a map cell, forces that cell's terrain
-// byte (+0x29) to 2, clears the cell's entity slot (+0x08) to a null IBP, and notifies
-// the two map subsystems:
-//     if (1 << terrain & 0x1e0) map+0xa2 |= 1, and FUN_1400a8c90(map+0x70, x, y)
-//     FUN_1400a6fe0(map+0x68, cell, 2, index)
-// The 0x1e0 mask is the "was this a resource/rough tile" test the orchard and
-// ResourceProduce paths use too; the |= records that at least one such tile changed so
-// the caller can refresh.
-//
-// This is the pasture's gate/entrance claim — the cells a herder walks through. With
-// the slot stubbed the terrain there was never converted, which is the same class of
-// omission as the MapComponent occupancy gap already recorded for this wave.
-extern "C" void PastureComponent_Slot12VSlot(void* selfV, int msgId) {
-    if (msgId != 4) return;
-    const uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-
-    static void (*s_findPos)(int64_t, void*)            = nullptr;  // 0x140002ed0
-    static int  (*s_childCount)(int64_t, int)           = nullptr;  // 0x140123070
-    static void (*s_spotPos)(int64_t, float*, int, int, float*) = nullptr; // 0x140122e20
-    static void (*s_mapNotifyA)(int64_t, int, int)      = nullptr;  // 0x1400a8c90
-    static void (*s_mapNotifyB)(void*, int, int, uint64_t) = nullptr; // 0x1400a6fe0
-    static bool s_r = false;
-    if (!s_r) {
-        s_findPos    = reinterpret_cast<void(*)(int64_t, void*)>(ResolveAddr(Module::Exe, 0x140002ed0));
-        s_childCount = reinterpret_cast<int(*)(int64_t, int)>(ResolveAddr(Module::Exe, 0x140123070));
-        s_spotPos    = reinterpret_cast<void(*)(int64_t, float*, int, int, float*)>(
-            ResolveAddr(Module::Exe, 0x140122e20));
-        s_mapNotifyA = reinterpret_cast<void(*)(int64_t, int, int)>(ResolveAddr(Module::Exe, 0x1400a8c90));
-        s_mapNotifyB = reinterpret_cast<void(*)(void*, int, int, uint64_t)>(
-            ResolveAddr(Module::Exe, 0x1400a6fe0));
-        s_r = true;
-    }
-    if (!s_findPos || !s_childCount || !s_spotPos) return;
-
-    int64_t posIbp = 0;
-    s_findPos(*reinterpret_cast<int64_t*>(self + 0x10), &posIbp);
-    if (!posIbp) return;
-
-    int* map = *reinterpret_cast<int**>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
-    if (!map) return;
-    const int width = *map;
-    const uintptr_t grid = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(map) + 0x80);
-    if (!grid || width <= 0) return;
-
-    for (uint32_t i = 0; (int)i < s_childCount(posIbp, 2); ++i) {
-        float p[3] = {0, 0, 0};
-        s_spotPos(posIbp, p, 2, (int)i, nullptr);
-        int x = (int)(p[0] + (float)(width >> 1));
-        int y = (int)(p[1] + (float)(width >> 1));
-        if (x < 0) x = 0; if (x >= width) x = width - 1;
-        if (y < 0) y = 0; if (y >= width) y = width - 1;
-        const int cell = width * y + x;
-
-        uintptr_t nullIbp = 0;
-        if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-
-        uint8_t* terrain = reinterpret_cast<uint8_t*>(grid + 0x29 + (uintptr_t)cell * 0x30);
-        const uint8_t was = *terrain;
-        const bool wasRough = ((1u << (was & 0x1f)) & 0x1e0u) != 0;
-        uint8_t* flag = reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(map) + 0xa2);
-        *flag = static_cast<uint8_t>(*flag | (wasRough ? 1 : 0));
-        *terrain = 2;
-        if (wasRough && s_mapNotifyA)
-            s_mapNotifyA(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(map) + 0x70),
-                         cell % width, cell / width);
-        if (s_mapNotifyB)
-            s_mapNotifyB(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(map) + 0x68),
-                         cell, 2, i);
-        *reinterpret_cast<uintptr_t*>(grid + 8 + (uintptr_t)cell * 0x30) = nullIbp;
-    }
-}
 
 // ============================================================================
 // ENDGAME B.3.8 MI-B — PastureComponent as a REAL class (PastureComponent.h).
@@ -553,27 +385,176 @@ void* PastureComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) PastureComponent());
 }
 
-// [3] 0x140127f40 (the body resolves at its top; also registered by address from
-// standalone/reg_animal_serialize.cpp).
-void PastureComponent::Persist(void* stream) { PastureComponent_Shutdown(this, stream); }
+// ============================================================
+// PastureComponent::Persist (vtable slot [3], 0x140127f40)
+// ============================================================
+// Component_Serialize + empty serializer(v0) + main serializer(v0) with:
+//   - IBP array serialization at +0x28
+//   - Entity count at +0x38, entity array at +0x30
+//   - IsDerivedFrom validation on each entity (type 0x1401c7970)
+//   - Int fields at +0x40 and +0x44
+
+void PastureComponent::Persist(void* stream) {
+    EnsureHelpers();
+
+    // Base Component serialization
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    // Empty serializer block (version 0, immediately destroyed)
+    alignas(8) uint8_t emptySerializer[24];
+    ::new (static_cast<void*>(emptySerializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(emptySerializer)->~Serializer();                                       // B.3.4 bridge
+
+    // Main serializer block (version 0)
+    alignas(8) uint8_t serializer[16];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    // Serialize InternalBasePtr array at +0x28
+    if (s_fn_SerializeIBPArray) {
+        s_fn_SerializeIBPArray((void*)&field28, serializer);
+    }
+
+    // Serialize entity count from +0x38
+    int entityCount = *(int*)(reinterpret_cast<uintptr_t>(this) + 0x38);
+    int countBuf = entityCount;
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(countBuf, nullptr);   // B.3.4 bridge
+
+    // On load, resize entity array. Retail reads the direction flag from the
+    // STREAM (+8) through the serializer's first field — `*(int*)(ser[0] + 8)`
+    // — not from serializer+8 (that's the version int, 0 here, which made the
+    // old check pass on save too; benign only because resize-to-same-count is
+    // a no-op).
+    // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+        GameColl::AsArray<GameColl::Ptr8>((void*)&field30).SetSize(countBuf);
+    }
+
+    // Serialize each entity InternalBasePtr and validate type
+    void* entityArray = *(void**)(reinterpret_cast<uintptr_t>(this) + 0x30);
+    int64_t count = (int64_t)countBuf;
+    if (count > 0 && entityArray) {
+        uintptr_t ptr = (uintptr_t)entityArray;
+        for (int64_t i = 0; i < count; i++) {
+            reinterpret_cast<Object::InternalBasePtr*>((void*)ptr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+            void* obj = *(void**)ptr;
+            if (obj != nullptr && s_fn_IsDerivedFrom_dispatch && s_TypeId_PastureAnimal) {
+                bool valid = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_PastureAnimal);
+                if (!valid) {
+                    *(uint64_t*)ptr = 0;
+                }
+            }
+            ptr += 8;
+        }
+    }
+
+    // Serialize int fields at +0x40 and +0x44
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(int*)(reinterpret_cast<uintptr_t>(this) + 0x40), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(int*)&field44, nullptr);   // B.3.4 bridge
+
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
+}
 // [4] 0x140127a50: `MOV qword [RCX+0x28],0` — one store.
 void PastureComponent::Startup() { field28 = nullptr; }
-// [6] 0x140127a30 (Ghidra "Draw") — compute the +0x40 capacity.
-void PastureComponent::OnAdded() { PastureComponent_Draw(this); }
-// [7] 0x1401277e0 — release every pastured animal.
-void PastureComponent::OnRemove() { PastureComponent_OnCreate(this); }
-// [12] 0x140127540 — claim the gate cells on event 4 (the body above).
-void PastureComponent::OnEvent(int eventId) { PastureComponent_Slot12VSlot(this, eventId); }
-// [13] 0x140127dd0 / [14] 0x140127a60 — the herder command pair.
-uint32_t PastureComponent::CommandMask(int command) {
-    return static_cast<uint32_t>(Pasture_CanCommand(this, command));
+// ============================================================
+// PastureComponent::OnAdded (vtable slot [6], 0x140127a30; Ghidra "Draw")
+// ============================================================
+// Compute pasture capacity via FUN_140128570, store at +0x40.
+
+void PastureComponent::OnAdded() {
+    EnsureHelpers();
+
+    if (s_fn_ComputePastureCapacity) {
+        uint64_t capacity = s_fn_ComputePastureCapacity(reinterpret_cast<uintptr_t>(this));
+        *(int*)(reinterpret_cast<uintptr_t>(this) + 0x40) = (int)capacity;
+    }
 }
-void PastureComponent::Command(int command) { Pasture_Command(this, command); }
-// [15] 0x140127720 — the herder's work-complete message tags one random pastured
-// animal breed-eligible (flag bit 23); ABI = (self, msgCode, rest unused).
-void PastureComponent::OnMessage(int message, void* /*data*/, uint32_t /*arg0*/, uint32_t /*arg1*/) {
-    Pasture_MsgReceive(this, message);
+void PastureComponent::OnRemove() {
+    EnsureHelpers();
+    Pasture_ReleaseAllAnimals(this);
 }
+// ── slot 12 — retail 0x140127540 — claim the pasture's gate cells ─────────────────
+// Only acts on message id 4. For each kind-2 child attach point of the pasture's
+// position component it converts the point to a map cell, forces that cell's terrain
+// byte (+0x29) to 2, clears the cell's entity slot (+0x08) to a null IBP, and notifies
+// the two map subsystems:
+//     if (1 << terrain & 0x1e0) map+0xa2 |= 1, and FUN_1400a8c90(map+0x70, x, y)
+//     FUN_1400a6fe0(map+0x68, cell, 2, index)
+// The 0x1e0 mask is the "was this a resource/rough tile" test the orchard and
+// ResourceProduce paths use too; the |= records that at least one such tile changed so
+// the caller can refresh.
+//
+// This is the pasture's gate/entrance claim — the cells a herder walks through. With
+// the slot stubbed the terrain there was never converted, which is the same class of
+// omission as the MapComponent occupancy gap already recorded for this wave.
+// The slot-12 helpers (were function-local statics of the body; B6-5).
+static void (*s_findPos)(int64_t, void*)            = nullptr;  // 0x140002ed0
+static int  (*s_childCount)(int64_t, int)           = nullptr;  // 0x140123070
+static void (*s_spotPos)(int64_t, float*, int, int, float*) = nullptr; // 0x140122e20
+static void (*s_mapNotifyA)(int64_t, int, int)      = nullptr;  // 0x1400a8c90
+static void (*s_mapNotifyB)(void*, int, int, uint64_t) = nullptr; // 0x1400a6fe0
+static bool s_slot12Resolved = false;
+static void PastureSlot12_Resolve() {
+    if (s_slot12Resolved) return;
+    s_findPos    = reinterpret_cast<void(*)(int64_t, void*)>(ResolveAddr(Module::Exe, 0x140002ed0));
+    s_childCount = reinterpret_cast<int(*)(int64_t, int)>(ResolveAddr(Module::Exe, 0x140123070));
+    s_spotPos    = reinterpret_cast<void(*)(int64_t, float*, int, int, float*)>(
+        ResolveAddr(Module::Exe, 0x140122e20));
+    s_mapNotifyA = reinterpret_cast<void(*)(int64_t, int, int)>(ResolveAddr(Module::Exe, 0x1400a8c90));
+    s_mapNotifyB = reinterpret_cast<void(*)(void*, int, int, uint64_t)>(
+        ResolveAddr(Module::Exe, 0x1400a6fe0));
+    s_slot12Resolved = true;
+}
+
+void PastureComponent::OnEvent(int msgId) {
+    if (msgId != 4) return;
+    const uintptr_t self = reinterpret_cast<uintptr_t>(this);
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+
+    PastureSlot12_Resolve();
+    if (!s_findPos || !s_childCount || !s_spotPos) return;
+
+    int64_t posIbp = 0;
+    s_findPos(*reinterpret_cast<int64_t*>(self + 0x10), &posIbp);
+    if (!posIbp) return;
+
+    int* map = *reinterpret_cast<int**>(
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+    if (!map) return;
+    const int width = *map;
+    const uintptr_t grid = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(map) + 0x80);
+    if (!grid || width <= 0) return;
+
+    for (uint32_t i = 0; (int)i < s_childCount(posIbp, 2); ++i) {
+        float p[3] = {0, 0, 0};
+        s_spotPos(posIbp, p, 2, (int)i, nullptr);
+        int x = (int)(p[0] + (float)(width >> 1));
+        int y = (int)(p[1] + (float)(width >> 1));
+        if (x < 0) x = 0; if (x >= width) x = width - 1;
+        if (y < 0) y = 0; if (y >= width) y = width - 1;
+        const int cell = width * y + x;
+
+        uintptr_t nullIbp = 0;
+        if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+
+        uint8_t* terrain = reinterpret_cast<uint8_t*>(grid + 0x29 + (uintptr_t)cell * 0x30);
+        const uint8_t was = *terrain;
+        const bool wasRough = ((1u << (was & 0x1f)) & 0x1e0u) != 0;
+        uint8_t* flag = reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(map) + 0xa2);
+        *flag = static_cast<uint8_t>(*flag | (wasRough ? 1 : 0));
+        *terrain = 2;
+        if (wasRough && s_mapNotifyA)
+            s_mapNotifyA(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(map) + 0x70),
+                         cell % width, cell / width);
+        if (s_mapNotifyB)
+            s_mapNotifyB(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(map) + 0x68),
+                         cell, 2, i);
+        *reinterpret_cast<uintptr_t*>(grid + 8 + (uintptr_t)cell * 0x30) = nullIbp;
+    }
+}
+
+// [13] 0x140127dd0 CommandMask / [14] 0x140127a60 Command / [15] 0x140127720 OnMessage
+// live in pasturecomponent_states.cpp next to their helpers.
 
 DEFINE_EXE_VTABLE(PastureComponent, "_ZTV16PastureComponent")
 DEFINE_EXE_TYPE(PastureComponent, "ControllerComponent")

@@ -45,18 +45,6 @@
 #include <cstddef>
 #include "Component.h"
 
-namespace FireComponentAddr {
-    constexpr uintptr_t Vtable      = 0x140159380;   // 16 slots
-    constexpr uintptr_t Ctor        = 0x140049b80;
-    constexpr uintptr_t Update      = 0x140048fb0;   // slot 9
-    constexpr uintptr_t Shutdown    = 0x140049a90;   // slot 3
-    constexpr uintptr_t WaterHook   = 0x140049090;   // slot 15
-    constexpr uintptr_t Ignite      = 0x140049610;
-    constexpr uintptr_t Spread      = 0x140049130;
-    constexpr uintptr_t Extinguish  = 0x1400494c0;
-    constexpr uintptr_t MarkDanger  = 0x1400499c0;   // sub_99c0
-}
-
 // ENDGAME B.3.8 CIT: the POD is gone — `FireComponent` is a real class now
 // (code/Game/Component/FireComponent.h, compiler vtable). This forwarder keeps the
 // old include spelling working until the closing pass deletes it (B8-4).
