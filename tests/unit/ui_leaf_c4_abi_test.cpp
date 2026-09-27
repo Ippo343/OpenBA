@@ -231,12 +231,12 @@ UNIT_TEST(ui_c4_classes_are_abstract_single_base_no_virtual_dtor) {
     C4_CONCRETE(LayoutDescription, ElementDescription)
     C4_CONCRETE(ListDescription,   ElementDescription)
     C4_CONCRETE(ScrollDescription, ElementDescription)
-    C4_SHAPE(TableDescription,     ElementDescription)
+    C4_CONCRETE(TableDescription,  ElementDescription)
     C4_CONCRETE(ContainerElement,  Element)
     C4_CONCRETE(LayoutElement,     Element)
     C4_CONCRETE(ListElement,       Element)
     C4_CONCRETE(ScrollElement,     Element)
-    C4_SHAPE(TableElement,         Element)
+    C4_CONCRETE(TableElement,      Element)
 #undef C4_SHAPE
 #undef C4_CONCRETE
 }
@@ -670,4 +670,42 @@ UNIT_TEST(b39_uib_c4_scroll) {
     B39CheckDeletingDtorArms<UI::ScrollDescription, 0xc8>(VTableOf(&dp));
     ScrollEProbe ep;
     B39CheckDeletingDtorArms<UI::ScrollElement, 0x178>(VTableOf(&ep));
+}
+
+// ---- Table (ENDGAME B.3.9 UI-B) --------------------------------------------
+UNIT_TEST(b39_uib_c4_table) {
+    B39CheckDescriptionPmf<UI::TableDescription>();
+    B39CheckElementPmf<UI::TableElement>();
+
+    FactoryScope scope;
+    // ??0TableDescription 0x18011e7a0: +0x74 not written.
+    alignas(8) uint8_t d[0x98];
+    std::memset(d, 0xCD, sizeof d);
+    auto* td = ::new (static_cast<void*>(d)) UI::TableDescription();
+    CHECK_EQ(td->_columnCount, 1);
+    CHECK_EQ(td->_rowCount, 1);
+    CHECK_EQ(td->_spacing, 0);
+    CHECK_EQ((int)d[0x74], 0xCD);
+    CHECK(td->_cells._data == nullptr);
+    CHECK_EQ(td->_cells._size, 0);
+    CHECK_EQ(td->_unknown88, 0ull);
+    CHECK(td->_unknown90 == nullptr);
+    td->DeletingDtor(0);
+    // ??0TableElement 0x18011e2f0: +0xcc not written.
+    alignas(8) uint8_t e[0xf0];
+    std::memset(e, 0xCD, sizeof e);
+    auto* te = ::new (static_cast<void*>(e)) UI::TableElement();
+    CHECK_EQ(te->_rowCount, 0);
+    CHECK_EQ(te->_columnCount, 0);
+    CHECK_EQ(te->_spacing, 0);
+    CHECK_EQ((int)e[0xcc], 0xCD);
+    CHECK(te->_rowSizes._data == nullptr);
+    CHECK(te->_columnSizes._data == nullptr);
+    CHECK_EQ(te->_columnSizes._capacity, 0);
+    te->DeletingDtor(0);
+
+    TableDProbe dp;
+    B39CheckDeletingDtorArms<UI::TableDescription, 0x98>(VTableOf(&dp));
+    TableEProbe ep;
+    B39CheckDeletingDtorArms<UI::TableElement, 0xf0>(VTableOf(&ep));
 }

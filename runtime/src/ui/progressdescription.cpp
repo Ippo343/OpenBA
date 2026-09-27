@@ -124,8 +124,7 @@ uint32_t ProgressDescription::TypeId() {
 }
 int32_t ProgressDescription::GetFileVersion() const { return 0x204; }
 
-// [9] 0x180077910 — the null-`this` test stays in the door; the member is the
-// jump into the (door) ctor.
+// [9] 0x180077910 — the ctor, placement (the null test sat in the retired door).
 Object::External* ProgressDescription::Construct() {
     return ::new (this) ProgressDescription();       // ENDGAME B.3.9: the real ctor
 }

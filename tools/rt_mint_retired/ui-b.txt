@@ -22,3 +22,9 @@
 ??_7ScrollElement@UI@@6B@              UI-B   real ctor + DeletingDtor + ~X; FACTUI2 row, RT_DELDTOR row 0x18003adc0, ??0/??1 doors, 6 slot doors deleted; CreateInstance builds ::new ScrollElement()
 ??_7SliderDescription@UI@@6B@          UI-B   real ctor + DeletingDtor + ~X (door body); FACTUI2 row, RT_DELDTOR row 0x180049c60, ??0/??1 doors, 8 slot doors deleted
 ??_7SliderElement@UI@@6B@              UI-B   real ctor + DeletingDtor + ~X (bare tail); FACTUI2 row, RT_DELDTOR row 0x18004a180, ??0/??1 doors, 6 slot doors deleted; CreateInstance builds ::new SliderElement()
+??_7SpinnerDescription@UI@@6B@         UI-B   real ctor + DeletingDtor + ~X; FACTUI2 row, RT_DELDTOR row 0x18004b050, ??0/??1 doors, 8 slot doors deleted; CreateInstance builds ::new SpinnerElement()
+??_7SpinnerElement@UI@@6B@             UI-B   real ctor + DeletingDtor + ~X; FACTUI2 row, RT_DELDTOR row 0x18004b3b0, ??0/??1 doors, 6 slot doors deleted
+??_7TabDescription@UI@@6B@             UI-B   real ctor + DeletingDtor + ~X (door body); FACTUI2 row, RT_DELDTOR row 0x18004c640, ??0/??1 doors, 8 slot doors deleted
+??_7TabElement@UI@@6B@                 UI-B   real ctor + DeletingDtor + ~X; FACTUI2 row, RT_DELDTOR row 0x18004ca90, ??0/??1 doors, 6 slot doors deleted (UpdateContainers door stays); CreateInstance builds ::new TabElement()
+??_7TableDescription@UI@@6B@           UI-B   real ctor + DeletingDtor + ~X (door body); FACTUI2 row, RT_DELDTOR row 0x180079210, ??0/??1 doors, 8 slot doors deleted
+??_7TableElement@UI@@6B@               UI-B   real ctor + DeletingDtor + ~X (door body); FACTUI2 row, RT_DELDTOR row 0x180079600, ??0/??1 doors, 5 slot doors deleted; CreateInstance builds ::new TableElement()

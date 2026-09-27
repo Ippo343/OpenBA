@@ -399,8 +399,8 @@ struct SpinnerElementProbe final : UI::SpinnerElement {
 }  // namespace
 
 UNIT_TEST(ui_c5_spinner_layout) {
-    CheckShape<UI::SpinnerDescription, UI::ElementDescription>(0x88);   // 0x18004b050
-    CheckShape<UI::SpinnerElement, UI::Element>(0xc8);                  // 0x18004b3b0
+    CheckShape<UI::SpinnerDescription, UI::ElementDescription>(0x88, true);   // 0x18004b050
+    CheckShape<UI::SpinnerElement, UI::Element>(0xc8, true);                  // 0x18004b3b0
     CHECK_EQ(offsetof(UI::SpinnerDescription, _editDescription), sizeof(UI::ElementDescription));
     CHECK_EQ(offsetof(UI::SpinnerDescription, _increment), (size_t)0x80);
     CHECK_EQ(offsetof(UI::SpinnerElement, _increment), sizeof(UI::Element));
@@ -509,8 +509,8 @@ struct TabElementProbe final : UI::TabElement {
 }  // namespace
 
 UNIT_TEST(ui_c5_tab_layout) {
-    CheckShape<UI::TabDescription, UI::ElementDescription>(0xb8);   // 0x18004c640
-    CheckShape<UI::TabElement, UI::Element>(0x108);                 // 0x18004ca90
+    CheckShape<UI::TabDescription, UI::ElementDescription>(0xb8, true);   // 0x18004c640
+    CheckShape<UI::TabElement, UI::Element>(0x108, true);                 // 0x18004ca90
     CHECK_EQ(offsetof(UI::TabDescription, _stripBackdropDescription), sizeof(UI::ElementDescription));
     CHECK_EQ(offsetof(UI::TabDescription, _gap), (size_t)0xa0);
     CHECK_EQ(offsetof(UI::TabDescription, _tabsCount), (size_t)0xb0);
@@ -786,4 +786,66 @@ UNIT_TEST(b39_uib_c5_slider) {
     B39CheckDeletingDtorArms<UI::SliderDescription, 0xb8>(VTableOf(&dp));
     SliderElementProbe ep{};
     B39CheckDeletingDtorArms<UI::SliderElement, 0x130>(VTableOf(&ep));
+}
+
+// ---- Spinner / Tab (ENDGAME B.3.9 UI-B) ------------------------------------
+UNIT_TEST(b39_uib_c5_spinner_tab) {
+    B39CheckDescriptionPmf<UI::SpinnerDescription>();
+    B39CheckElementPmf<UI::SpinnerElement>();
+    B39CheckDescriptionPmf<UI::TabDescription>();
+    B39CheckElementPmf<UI::TabElement>();
+
+    FactoryScope scope;
+    // ??0SpinnerDescription 0x1800d89c0: +0x84 not written.
+    alignas(8) uint8_t sd[0x88];
+    std::memset(sd, 0xCD, sizeof sd);
+    auto* s = ::new (static_cast<void*>(sd)) UI::SpinnerDescription();
+    CHECK(s->_editDescription == nullptr);
+    CHECK(s->_upDescription == nullptr);
+    CHECK(s->_downDescription == nullptr);
+    CHECK_EQ(s->_increment, 1);
+    CHECK_EQ((int)sd[0x84], 0xCD);
+    s->DeletingDtor(0);
+    // ??0SpinnerElement 0x1800d8670: +0xc4 not written.
+    alignas(8) uint8_t se[0xc8];
+    std::memset(se, 0xCD, sizeof se);
+    auto* sp = ::new (static_cast<void*>(se)) UI::SpinnerElement();
+    CHECK_EQ(sp->_increment, 1);
+    CHECK_EQ((int)se[0xc4], 0xCD);
+    sp->DeletingDtor(0);
+
+    // ??0TabDescription 0x1800daa00: +0xa0 (_gap) and +0xa4 NOT written.
+    alignas(8) uint8_t td[0xb8];
+    std::memset(td, 0xCD, sizeof td);
+    auto* t = ::new (static_cast<void*>(td)) UI::TabDescription();
+    CHECK(t->_stripBackdropDescription == nullptr);
+    CHECK(t->_spriteSheet == nullptr);
+    CHECK(t->_edgeRightName == nullptr);
+    CHECK_EQ((int)td[0xa0], 0xCD);
+    CHECK_EQ((int)td[0xa4], 0xCD);
+    CHECK(t->_tabsData == nullptr);
+    CHECK_EQ(t->_tabsCount, 0);
+    t->DeletingDtor(0);
+    // ??0TabElement 0x1800da390: +0x104 not written.
+    alignas(8) uint8_t te[0x108];
+    std::memset(te, 0xCD, sizeof te);
+    auto* tb = ::new (static_cast<void*>(te)) UI::TabElement();
+    CHECK_EQ(tb->_tabCount, 0);
+    CHECK_EQ(tb->_gap, 0);
+    CHECK(tb->_edgeLeft.spriteSheet == nullptr);
+    CHECK_EQ(tb->_edgeRight.spriteIndex, -1);
+    CHECK_EQ(tb->_activeTab, 0);
+    CHECK_EQ(tb->_tabBarHeight, 0);
+    CHECK_EQ(tb->_tabBarWidth, 0);
+    CHECK_EQ((int)te[0x104], 0xCD);
+    tb->DeletingDtor(0);
+
+    SpinnerDescriptionProbe sdp;
+    B39CheckDeletingDtorArms<UI::SpinnerDescription, 0x88>(VTableOf(&sdp));
+    SpinnerElementProbe sep{};
+    B39CheckDeletingDtorArms<UI::SpinnerElement, 0xc8>(VTableOf(&sep));
+    TabDescriptionProbe tdp;
+    B39CheckDeletingDtorArms<UI::TabDescription, 0xb8>(VTableOf(&tdp));
+    TabElementProbe tep{};
+    B39CheckDeletingDtorArms<UI::TabElement, 0x108>(VTableOf(&tep));
 }

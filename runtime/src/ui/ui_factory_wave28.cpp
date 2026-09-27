@@ -613,52 +613,6 @@ extern "C" void* RtUiFact_RadioElement_CreateInPlaceObject(void* p) {
 }
 
 // --------------------------------------------------------------------------
-// UI::SpinnerDescription   allocation 0x88, align 8
-//   ?CreateNewObject@SpinnerDescription@UI@@SAPEAVBase@Object@@XZ  0x18004ae50 ord 2112
-//   ?CreateInPlaceObject@SpinnerDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x18004aed0 ord 1975
-//   ??0SpinnerDescription@UI@@QEAA@XZ                              0x1800d89c0 ord 393
-// SHAPE C: the factory pair is a bare `alloc / null test / call the
-// exported ctor`. The whole body lives in ??0SpinnerDescription@UI@@QEAA@XZ.
-// That ctor IS ported below, so this row does not merely move the wall.
-extern "C" void* RtUi_SpinnerDescription_Ctor(void* self);
-void* Ctor_SpinnerDescription(void* p) { return RtUi_SpinnerDescription_Ctor(p); }
-
-extern "C" void* RtUiFact_SpinnerDescription_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0x88, &Ctor_SpinnerDescription);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_SpinnerDescription_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_SpinnerDescription);
-}
-
-// --------------------------------------------------------------------------
-// UI::SpinnerElement   allocation 0xc8, align 8
-//   ?CreateNewObject@SpinnerElement@UI@@SAPEAVBase@Object@@XZ      0x18004b200 ord 2113
-//   ?CreateInPlaceObject@SpinnerElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x18004b290 ord 1976
-//   ??0SpinnerElement@UI@@QEAA@XZ                                  0x1800d8670 ord 395
-extern "C" void* RtUi_SpinnerElement_Ctor(void* self);   // runtime/src/ui/spinnerelement.cpp
-// The inlined stores that used to live here were a second copy of
-// ??0SpinnerElement@UI@@QEAA@XZ; the class file owns the body since vtable
-// batch 4 (2026-09-12) and this factory pair forwards to it.
-void* Ctor_SpinnerElement(void* p) { return RtUi_SpinnerElement_Ctor(p); }
-
-extern "C" void* RtUiFact_SpinnerElement_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0xc8, &Ctor_SpinnerElement);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_SpinnerElement_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_SpinnerElement);
-}
-
-// --------------------------------------------------------------------------
 // UI::SpriteCapture   allocation 0x58, align 8
 //   ?CreateNewObject@SpriteCapture@UI@@SAPEAVBase@Object@@XZ       0x18003c900 ord 2114
 //   ?CreateInPlaceObject@SpriteCapture@UI@@SAPEAVBase@Object@@PEAX@Z 0x18003c9c0 ord 1977
@@ -687,104 +641,6 @@ extern "C" void* RtUiFact_SpriteCapture_CreateInPlaceObject(void* p) {
     ++g_inplace;
     if (!p) { ++g_inplaceNull; return nullptr; }
     return FactoryInPlace(p, &Ctor_SpriteCapture);
-}
-
-// --------------------------------------------------------------------------
-// UI::TabDescription   allocation 0xb8, align 8
-//   ?CreateNewObject@TabDescription@UI@@SAPEAVBase@Object@@XZ      0x18004c2e0 ord 2118
-//   ?CreateInPlaceObject@TabDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x18004c360 ord 1981
-//   ??0TabDescription@UI@@QEAA@XZ                                  0x1800daa00 ord 427
-// SHAPE C: the factory pair is a bare `alloc / null test / call the
-// exported ctor`. The whole body lives in ??0TabDescription@UI@@QEAA@XZ.
-// That ctor IS ported below, so this row does not merely move the wall.
-extern "C" void* RtUi_TabDescription_Ctor(void* self);
-void* Ctor_TabDescription(void* p) { return RtUi_TabDescription_Ctor(p); }
-
-extern "C" void* RtUiFact_TabDescription_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0xb8, &Ctor_TabDescription);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_TabDescription_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_TabDescription);
-}
-
-// --------------------------------------------------------------------------
-// UI::TabElement   allocation 0x108, align 8
-//   ?CreateNewObject@TabElement@UI@@SAPEAVBase@Object@@XZ          0x18004c7f0 ord 2119
-//   ?CreateInPlaceObject@TabElement@UI@@SAPEAVBase@Object@@PEAX@Z  0x18004c870 ord 1982
-//   ??0TabElement@UI@@QEAA@XZ                                      0x1800da390 ord 429
-// SHAPE C: the factory pair is a bare `alloc / null test / call the
-// exported ctor`. The whole body lives in ??0TabElement@UI@@QEAA@XZ.
-// That ctor IS ported below, so this row does not merely move the wall.
-extern "C" void* RtUi_TabElement_Ctor(void* self);   // runtime/src/ui/tabelement.cpp
-// The inlined stores that used to live here were a second copy of
-// ??0TabElement@UI@@QEAA@XZ; the class file owns the body since vtable
-// batch 4 (2026-09-12) and this factory pair forwards to it.
-void* Ctor_TabElement(void* p) { return RtUi_TabElement_Ctor(p); }
-
-extern "C" void* RtUiFact_TabElement_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0x108, &Ctor_TabElement);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_TabElement_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_TabElement);
-}
-
-// --------------------------------------------------------------------------
-// UI::TableDescription   allocation 0x98, align 8
-//   ?CreateNewObject@TableDescription@UI@@SAPEAVBase@Object@@XZ    0x180078fc0 ord 2120
-//   ?CreateInPlaceObject@TableDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x180079040 ord 1983
-//   ??0TableDescription@UI@@QEAA@XZ                                0x18011e7a0 ord 431
-// SHAPE C: the factory pair is a bare `alloc / null test / call the
-// exported ctor`. The whole body lives in ??0TableDescription@UI@@QEAA@XZ.
-// That ctor IS ported below, so this row does not merely move the wall.
-extern "C" void* RtUi_TableDescription_Ctor(void* self);
-void* Ctor_TableDescription(void* p) { return RtUi_TableDescription_Ctor(p); }
-
-extern "C" void* RtUiFact_TableDescription_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0x98, &Ctor_TableDescription);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_TableDescription_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_TableDescription);
-}
-
-// --------------------------------------------------------------------------
-// UI::TableElement   allocation 0xf0, align 8
-//   ?CreateNewObject@TableElement@UI@@SAPEAVBase@Object@@XZ        0x1800793c0 ord 2121
-//   ?CreateInPlaceObject@TableElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180079440 ord 1984
-//   ??0TableElement@UI@@QEAA@XZ                                    0x18011e2f0 ord 433
-// SHAPE C: the factory pair is a bare `alloc / null test / call the
-// exported ctor`. The whole body lives in ??0TableElement@UI@@QEAA@XZ.
-// That ctor IS ported below, so this row does not merely move the wall.
-extern "C" void* RtUi_TableElement_Ctor(void* self);   // runtime/src/ui/tableelement.cpp
-// The inlined stores that used to live here were a second copy of
-// ??0TableElement@UI@@QEAA@XZ; the class file owns the body since vtable
-// batch 4 (2026-09-12) and this factory pair forwards to it.
-void* Ctor_TableElement(void* p) { return RtUi_TableElement_Ctor(p); }
-
-extern "C" void* RtUiFact_TableElement_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0xf0, &Ctor_TableElement);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_TableElement_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_TableElement);
 }
 
 // --------------------------------------------------------------------------
@@ -976,20 +832,6 @@ int RtUiFactory2Register() {
                           (void*)&RtUiFact_RadioElement_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180047ba0ull, (void*)&RtUiFact_RadioElement_CreateInPlaceObject); ++n;
 
-    RegisterRuntimeExport("?CreateNewObject@SpinnerDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_SpinnerDescription_CreateNewObject);
-    RegisterRuntimeAddr(0x18004ae50ull, (void*)&RtUiFact_SpinnerDescription_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@SpinnerDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_SpinnerDescription_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x18004aed0ull, (void*)&RtUiFact_SpinnerDescription_CreateInPlaceObject); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@SpinnerElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_SpinnerElement_CreateNewObject);
-    RegisterRuntimeAddr(0x18004b200ull, (void*)&RtUiFact_SpinnerElement_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@SpinnerElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_SpinnerElement_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x18004b290ull, (void*)&RtUiFact_SpinnerElement_CreateInPlaceObject); ++n;
-
     RegisterRuntimeExport("?CreateNewObject@SpriteCapture@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_SpriteCapture_CreateNewObject);
     RegisterRuntimeAddr(0x18003c900ull, (void*)&RtUiFact_SpriteCapture_CreateNewObject); ++n;
@@ -998,34 +840,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeAddr(0x18003c9c0ull, (void*)&RtUiFact_SpriteCapture_CreateInPlaceObject); ++n;
     RegisterRuntimeExport("??0SpriteCapture@UI@@QEAA@XZ", (void*)&Ctor_SpriteCapture);
     RegisterRuntimeAddr(0x1800d9140ull, (void*)&Ctor_SpriteCapture); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@TabDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_TabDescription_CreateNewObject);
-    RegisterRuntimeAddr(0x18004c2e0ull, (void*)&RtUiFact_TabDescription_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@TabDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_TabDescription_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x18004c360ull, (void*)&RtUiFact_TabDescription_CreateInPlaceObject); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@TabElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_TabElement_CreateNewObject);
-    RegisterRuntimeAddr(0x18004c7f0ull, (void*)&RtUiFact_TabElement_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@TabElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_TabElement_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x18004c870ull, (void*)&RtUiFact_TabElement_CreateInPlaceObject); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@TableDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_TableDescription_CreateNewObject);
-    RegisterRuntimeAddr(0x180078fc0ull, (void*)&RtUiFact_TableDescription_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@TableDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_TableDescription_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x180079040ull, (void*)&RtUiFact_TableDescription_CreateInPlaceObject); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@TableElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_TableElement_CreateNewObject);
-    RegisterRuntimeAddr(0x1800793c0ull, (void*)&RtUiFact_TableElement_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@TableElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_TableElement_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x180079440ull, (void*)&RtUiFact_TableElement_CreateInPlaceObject); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@TextDescription@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_TextDescription_CreateNewObject);

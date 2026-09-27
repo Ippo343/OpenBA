@@ -929,10 +929,7 @@ static constexpr DelDtorSpec kSpecs[] = {
     //     0x1800489c0  LEA R9,[0x180111620]  MOV EDX,0xa8   CheckDescription
     //     0x180037eb0  LEA R9,[0x1800cc0d0]  MOV EDX,0x78   ClipRegionDescription
     //     0x180074e70  LEA R9,[0x180112370]  MOV EDX,0xb8   ComboDescription
-    //     0x180039c00  LEA R9,[0x1800ccff0]  MOV EDX,0x90   ContainerDescription
-    //     0x18003bd90  LEA R9,[0x1800cfb30]  MOV EDX,0xe8   DocumentTextDescription
     //     0x18003fa20  LEA R9,[0x1800d11f0]  MOV EDX,0x88   EditDescription
-    //     0x1800403a0  LEA R9,[0x1800d1b30]  MOV EDX,0x88   GraphDescription
     //     0x180042730  LEA R9,[0x1800d2960]  MOV EDX,0xb8   LabelDescription
     //
     // None of the ten is a probe subject: every one of these destructors
@@ -1009,19 +1006,10 @@ static constexpr DelDtorSpec kSpecs[] = {
     // and the `MOV EDX,sizeof` that the shared `eh vector destructor iterator`
     // at 0x18007ec98 is handed:
     //
-    //   0x180043570  LEA R9,[0x1800d32a0]  MOV EDX,0xd0    UI::LayoutElement
-    //   0x180045320  LEA R9,[0x1800d4530]  MOV EDX,0x100   UI::ListElement
     //   0x180046540  LEA R9,[0x1800d4c40]  MOV EDX,0x100   UI::NumberEditElement
     //   0x18004ab80  LEA R9,[0x180118ce0]  MOV EDX,0xe8    UI::NumberElement
     //   0x180047540  LEA R9,[0x1800d5220]  MOV EDX,0xc8    UI::PageElement
-    //   0x180078150  LEA R9,[0x180077ef0]  MOV EDX,0x130   UI::ProgressElement
     //   0x180047d50  LEA R9,[0x1800d5820]  MOV EDX,0xd8    UI::RadioElement
-    //   0x180044ac0  LEA R9,[0x1800d5d70]  MOV EDX,0xd8    UI::RibbonElement
-    //   0x18003adc0  LEA R9,[0x18011a900]  MOV EDX,0x178   UI::ScrollElement
-    //   0x18004a180  LEA R9,[0x180049ee0]  MOV EDX,0x130   UI::SliderElement
-    //   0x18004b3b0  LEA R9,[0x1800d8640]  MOV EDX,0xc8    UI::SpinnerElement
-    //   0x18004ca90  LEA R9,[0x1800da360]  MOV EDX,0x108   UI::TabElement
-    //   0x180079600  LEA R9,[0x18011e2a0]  MOV EDX,0xf0    UI::TableElement
     //   0x1800422f0  LEA R9,[0x18011eda0]  MOV EDX,0x100   UI::TextElement
     //
     // ALL FOURTEEN ~Class bodies are PORTED by that batch and registered by
@@ -1048,9 +1036,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x18004ab80, 0x180118ce0, 0x0e8, "UI::NumberElement"),
     RT_DELDTOR(0x180047540, 0x1800d5220, 0x0c8, "UI::PageElement"),
     RT_DELDTOR(0x180047d50, 0x1800d5820, 0x0d8, "UI::RadioElement"),
-    RT_DELDTOR(0x18004b3b0, 0x1800d8640, 0x0c8, "UI::SpinnerElement"),
-    RT_DELDTOR(0x18004ca90, 0x1800da360, 0x108, "UI::TabElement"),
-    RT_DELDTOR(0x180079600, 0x18011e2a0, 0x0f0, "UI::TableElement"),
     RT_DELDTOR(0x1800422f0, 0x18011eda0, 0x100, "UI::TextElement"),
     // ---- Vtable batch 6 (2026-09-12): graphics buffers, meshes and lights ----
     // INDICES 103-108, appended after batch 4 elem_B's 89-102. The table is
@@ -1103,10 +1088,7 @@ static constexpr DelDtorSpec kSpecs[] = {
     //   0x180048d80  LEA R9,[0x180111700]  MOV EDX,0x0e0  UI::CheckElement
     //   0x180038370  LEA R9,[0x1800cbe30]  MOV EDX,0x0d8  UI::ClipRegionElement
     //   0x180075390  LEA R9,[0x180112490]  MOV EDX,0x128  UI::ComboElement
-    //   0x18003a050  LEA R9,[0x1800ccb10]  MOV EDX,0x0d8  UI::ContainerElement
-    //   0x18003c650  LEA R9,[0x1800cf320]  MOV EDX,0x1c8  UI::DocumentTextElement
     //   0x18003fed0  LEA R9,[0x1800d0e50]  MOV EDX,0x0f8  UI::EditElement
-    //   0x1800408b0  LEA R9,[0x1800d1840]  MOV EDX,0x100  UI::GraphElement
     //   0x180046e10  LEA R9,[0x180117cc0]  MOV EDX,0x0c0  UI::GroupElement
     //   0x180036600  LEA R9,[0x180118470]  MOV EDX,0x0e0  UI::ImageElement
     //   0x180042bb0  LEA R9,[0x1800d25f0]  MOV EDX,0x130  UI::LabelElement
@@ -1149,9 +1131,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180046190, 0x1800d4fe0, 0x088, "UI::NumberEditDescription"),
     RT_DELDTOR(0x1800471a0, 0x1800d54b0, 0x080, "UI::PageDescription"),
     RT_DELDTOR(0x180047930, 0x1800d5b20, 0x080, "UI::RadioDescription"),
-    RT_DELDTOR(0x18004b050, 0x1800d8950, 0x088, "UI::SpinnerDescription"),
-    RT_DELDTOR(0x18004c640, 0x1800da8e0, 0x0b8, "UI::TabDescription"),
-    RT_DELDTOR(0x180079210, 0x18011e6f0, 0x098, "UI::TableDescription"),
     RT_DELDTOR(0x180041e30, 0x18011eae0, 0x090, "UI::TextDescription"),
 };
 // ENDGAME B.3 step 9 (B39_RULES.md D4): the count is the table's, and every
@@ -1696,9 +1675,6 @@ void* RtDelDtor_NumberEditElement(void* self, unsigned flags) { return DeletingD
 void* RtDelDtor_NumberElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x18004ab80>()); }
 void* RtDelDtor_PageElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, Row<0x180047540>()); }
 void* RtDelDtor_RadioElement(void* self, unsigned flags)      { return DeletingDtorCore(self, flags, Row<0x180047d50>()); }
-void* RtDelDtor_SpinnerElement(void* self, unsigned flags)    { return DeletingDtorCore(self, flags, Row<0x18004b3b0>()); }
-void* RtDelDtor_TabElement(void* self, unsigned flags)        { return DeletingDtorCore(self, flags, Row<0x18004ca90>()); }
-void* RtDelDtor_TableElement(void* self, unsigned flags)      { return DeletingDtorCore(self, flags, Row<0x180079600>()); }
 void* RtDelDtor_TextElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, Row<0x1800422f0>()); }
 
 // ---------------------------------------------------------------------------
@@ -1721,18 +1697,6 @@ void* RtDelDtor_PageDescription(void* self, unsigned flags) {
 // UI::RadioDescription        ~RadioDescription = 0x1800d5b20
 void* RtDelDtor_RadioDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180047930>());
-}
-// UI::SpinnerDescription      ~SpinnerDescription = 0x1800d8950
-void* RtDelDtor_SpinnerDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004b050>());
-}
-// UI::TabDescription          ~TabDescription = 0x1800da8e0
-void* RtDelDtor_TabDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004c640>());
-}
-// UI::TableDescription        ~TableDescription = 0x18011e6f0
-void* RtDelDtor_TableDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180079210>());
 }
 // UI::TextDescription         ~TextDescription = 0x18011eae0  (PORTED, textdescription.cpp)
 void* RtDelDtor_TextDescription(void* self, unsigned flags) {
@@ -1874,9 +1838,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18004ab80, (void*)&RtDelDtor_NumberElement);
     RegisterRuntimeAddr(0x180047540, (void*)&RtDelDtor_PageElement);
     RegisterRuntimeAddr(0x180047d50, (void*)&RtDelDtor_RadioElement);
-    RegisterRuntimeAddr(0x18004b3b0, (void*)&RtDelDtor_SpinnerElement);
-    RegisterRuntimeAddr(0x18004ca90, (void*)&RtDelDtor_TabElement);
-    RegisterRuntimeAddr(0x180079600, (void*)&RtDelDtor_TableElement);
     RegisterRuntimeAddr(0x1800422f0, (void*)&RtDelDtor_TextElement);
 
     // VTABLE BATCH 3 (2026-09-12), UI::*Element first half.
@@ -1895,9 +1856,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180046190, (void*)&RtDelDtor_NumberEditDescription);
     RegisterRuntimeAddr(0x1800471a0, (void*)&RtDelDtor_PageDescription);
     RegisterRuntimeAddr(0x180047930, (void*)&RtDelDtor_RadioDescription);
-    RegisterRuntimeAddr(0x18004b050, (void*)&RtDelDtor_SpinnerDescription);
-    RegisterRuntimeAddr(0x18004c640, (void*)&RtDelDtor_TabDescription);
-    RegisterRuntimeAddr(0x180079210, (void*)&RtDelDtor_TableDescription);
     RegisterRuntimeAddr(0x180041e30, (void*)&RtDelDtor_TextDescription);
 
     // The count is taken from kSpecCount rather than typed, so a row added

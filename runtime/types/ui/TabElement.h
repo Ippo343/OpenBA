@@ -63,6 +63,13 @@ constexpr int kChildrenCount = kChildrenData + 8; // Collection::Array<T>::_size
 // `LEA EAX,[0x3 + RDX*0x2]` and `?GetContainerIndex@` 0x1800da110 is
 // `LEA EAX,[0x4 + RDX*0x2]`.
 //
+// ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2) -- the paragraph below is
+// HISTORY: the class is now CONCRETE. A real public ctor (retail's stores), its
+// own slot 0 (the vector deleting dtor), a protected non-virtual ~TabElement holding
+// the retired ??1 door's body, and the factory pair as the class's own statics;
+// every live one wears the COMPILER's table. The minted `??_7TabElement@UI@@6B@`,
+// its RT_DELDTOR row 0x18004ca90 and the ctor / dtor / slot doors are retired
+// (tools/rt_mint_retired/ui-b.txt).
 // ABSTRACT (slot 0 `= 0`), NO real ctor (the `??0TabElement` door builds every
 // live one; it wears the MINTED table).
 // ############################################################################
@@ -72,7 +79,32 @@ namespace UI {
 
 class TabElement : public Element {
 public:
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x18004ca90
+    // ??0TabElement@UI@@QEAA@XZ 0x1800da390 -- the REAL ctor: `CALL
+    // ??0Element`; the three UI::Sprite members' own ctors make {null, -1};
+    // then retail's zero stores. +0x104 is written by nothing.
+    TabElement() : Element() {
+        _tabCount     = 0;       // one qword store with +0xc4
+        _gap          = 0;
+        _activeTab    = 0;       // one qword store with +0xfc
+        _tabBarHeight = 0;
+        _tabBarWidth  = 0;
+    }
+
+    // [0] 0x18004ca90 -- MSVC's VECTOR deleting destructor, both arms exactly as the
+    // retired RT_DELDTOR row ran them (`MOV EDX,0x108` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<TabElement*>(self + static_cast<int64_t>(i) * 0x108)->~TabElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~TabElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x18004c700
     uint32_t    Type() const override;                            // [2] 0x18004c6e0
     void ComputeSize() override;                                  // [4] 0x1800d9ea0
@@ -98,17 +130,19 @@ public:
 
     TabElement(const TabElement& src);                            // 0x18004c8b0  not ported
     TabElement& operator=(const TabElement& src);                 // 0x18004c980  not ported
-    static uint32_t TypeId();                                     // not ported
-    static Object::Base* CreateNewObject();                       // factory door
-    static Object::Base* CreateInPlaceObject(void* place);        // factory door
+    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
+    static Object::Base* CreateNewObject();                       // (D2) the class's own
+    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
     // Private in retail (`AEAA`); public here only because the registered door
     // in tabelement.cpp and widgets_layout.cpp's forwarder reach it.
     void UpdateContainers();                                      // 0x1800d9710 (tabelement.cpp)
 
 protected:
-    TabElement() = default;   // NOT ??0TabElement (0x1800da390, a door)
-    ~TabElement();            // ??1TabElement 0x1800da360 — the door; declared only
+    // `??1TabElement@UI@@UEAA@XZ` (0x1800da360): NON-VIRTUAL (no virtual dtor until
+    // the normal-virtual cutover). Retail's body is in tabelement.cpp;
+    // the compiler chains the base's.
+    ~TabElement();
 
 private:
     int32_t GetContainerIndex(int32_t tab) const { return 4 + tab * 2; }  // 0x1800da110

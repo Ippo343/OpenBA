@@ -33,9 +33,8 @@
 // block C4; cross-asserted against DescriptionsBatch1.h's POD). sizeof 0x90.
 //
 // ENDGAME B.3.6 block C4: every body below is a MEMBER of
-// UI::ContainerDescription; each registered door is a one-line QUALIFIED
-// delegation (a live description wears the MINTED table, whose slots resolve
-// back to these doors). RULE B6-5: the vtables, the type-info record and the
+// UI::ContainerDescription. (ENDGAME B.3.9 UI-B: the class is concrete; the
+// doors and the minted table are retired.) RULE B6-5: the vtables, the type-info record and the
 // ctor door the members reach are cached in namespace-scope std::atomic slots,
 // never in a function-local static.
 // ============================================================================

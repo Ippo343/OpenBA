@@ -40,6 +40,7 @@
 // ============================================================================
 
 #include <atomic>
+#include <new>
 
 #include "widget_common.h"
 #include "../../types/ui/SpinnerElement.h"
@@ -84,7 +85,6 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_vtable{nullptr};
 std::atomic<void*> g_numberEditTypeInfo{nullptr};
 std::atomic<void*> g_buttonTypeInfo{nullptr};
 
@@ -92,7 +92,6 @@ const uint8_t* SpinnerTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@SpinnerElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
-void* VtSpinnerElement() { return AtomicExport(g_vtable, "??_7SpinnerElement@UI@@6B@"); }
 
 // The two type ids the IsDerivedFrom calls pass, each the FIRST DWORD of the
 // named BaseTypeInfo static (0x1801fa190 and 0x1801fa938 in retail).
@@ -118,6 +117,10 @@ const char* SpinnerElement::TypeName() const {
     const char* v = nullptr; __builtin_memcpy(&v, SpinnerTypeInfo() + 8, sizeof v); return v;
 }
 uint32_t SpinnerElement::Type() const {
+    uint32_t v = 0; __builtin_memcpy(&v, SpinnerTypeInfo(), sizeof v); return v;
+}
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t SpinnerElement::TypeId() {
     uint32_t v = 0; __builtin_memcpy(&v, SpinnerTypeInfo(), sizeof v); return v;
 }
 
@@ -274,87 +277,42 @@ void SpinnerElement::Update(const System::Time& time, UserInterface* ui,
         B(ui, kUiEvents), I32(ui, kUiEventCount) + 1, &ev);
 }
 
+// ??1SpinnerElement@UI@@UEAA@XZ   0x1800d8640 — retail's body is the restamp
+// and the tail into ~Element: the compiler's chain is all of it.
+SpinnerElement::~SpinnerElement() {}
+
+// ?CreateNewObject@SpinnerElement@UI@@SAPEAVBase@Object@@XZ 0x18004b200 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0xc8, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* SpinnerElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(SpinnerElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) SpinnerElement();
+}
+// ?CreateInPlaceObject@SpinnerElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x18004b290
+Object::Base* SpinnerElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) SpinnerElement();
+}
+
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
+// ENDGAME B.3.9 UI-B: the slot doors, the ctor / dtor doors and the
+// factory-interpreter row are gone. Their only readers were the minted
+// `??_7SpinnerElement@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
+// SpinnerElement now wears the compiler's table.
 // ============================================================================
-extern "C" uint32_t RtUi_SpinnerElement_Type(const void* self) {
-    return reinterpret_cast<const UI::SpinnerElement*>(self)->UI::SpinnerElement::Type();
-}
-extern "C" const char* RtUi_SpinnerElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::SpinnerElement*>(self)->UI::SpinnerElement::TypeName();
-}
-extern "C" void RtUi_SpinnerElement_ComputeSize(void* self) {
-    reinterpret_cast<UI::SpinnerElement*>(self)->UI::SpinnerElement::ComputeSize();
-}
-extern "C" void RtUi_SpinnerElement_ComputeLayout(void* self, int32_t x, int32_t y,
-                                                  int32_t right, int32_t bottom) {
-    reinterpret_cast<UI::SpinnerElement*>(self)->UI::SpinnerElement::ComputeLayout(
-        x, y, right, bottom);
-}
-extern "C" void RtUi_SpinnerElement_Draw(const void* self, void* ctx, uint8_t alpha) {
-    reinterpret_cast<const UI::SpinnerElement*>(self)->UI::SpinnerElement::Draw(
-        *static_cast<UI::SpriteContext*>(ctx), alpha);
-}
-extern "C" void RtUi_SpinnerElement_Update(void* self, const void* time, void* ui,
-                                           void** dlgPtr, const void* state) {
-    reinterpret_cast<UI::SpinnerElement*>(self)->UI::SpinnerElement::Update(
-        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr),   // B.3.6 bridge
-        *static_cast<const UI::Element::UpdateState*>(state));
-}
 
-// ??0SpinnerElement@UI@@QEAA@XZ   0x1800d8670 — a DOOR (B4b-2), unchanged.
-extern "C" void* RtUi_SpinnerElement_Ctor(void* self) {   // returns this in RAX, as every MSVC ctor does
-    ElementCtor(self);
-    PTR(self, 0x00) = VtSpinnerElement();
-    I32(self, kIncrement) = 1;
-    return self;
-}
-
-// ??1SpinnerElement@UI@@UEAA@XZ   0x1800d8640 — a DOOR (B4b-2), unchanged.
-extern "C" void RtUi_SpinnerElement_Dtor(void* self) {
-    PTR(self, 0x00) = VtSpinnerElement();
-    ElementDtor(self);
-}
-
-// ============================================================================
 int RtUiSpinnerElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@SpinnerElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_SpinnerElement_Type);          ++n;
-    RegisterRuntimeAddr(0x18004b0f0ull, (void*)&RtUi_SpinnerElement_Type);
-
-    RegisterRuntimeExport("?TypeName@SpinnerElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_SpinnerElement_TypeName);      ++n;
-    RegisterRuntimeAddr(0x18004b110ull, (void*)&RtUi_SpinnerElement_TypeName);
-
-    RegisterRuntimeExport("??0SpinnerElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_SpinnerElement_Ctor);          ++n;
-    RegisterRuntimeAddr(0x1800d8670ull, (void*)&RtUi_SpinnerElement_Ctor);
-
-    RegisterRuntimeExport("??1SpinnerElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_SpinnerElement_Dtor);          ++n;
-    RegisterRuntimeAddr(0x1800d8640ull, (void*)&RtUi_SpinnerElement_Dtor);
-
-    RegisterRuntimeExport("?ComputeSize@SpinnerElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_SpinnerElement_ComputeSize);   ++n;
-    RegisterRuntimeAddr(0x1800d83b0ull, (void*)&RtUi_SpinnerElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@SpinnerElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_SpinnerElement_ComputeLayout); ++n;
-    RegisterRuntimeAddr(0x1800d80c0ull, (void*)&RtUi_SpinnerElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@SpinnerElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_SpinnerElement_Draw);          ++n;
-    RegisterRuntimeAddr(0x1800d8030ull, (void*)&RtUi_SpinnerElement_Draw);
-
-    RegisterRuntimeExport(
-        "?Update@SpinnerElement@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@"
-        "V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@Element@2@@Z",
-        (void*)&RtUi_SpinnerElement_Update);                          ++n;
-    RegisterRuntimeAddr(0x1800d7e70ull, (void*)&RtUi_SpinnerElement_Update);
-
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@SpinnerElement` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@SpinnerElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::SpinnerElement::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x18004b200ull, (void*)&UI::SpinnerElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@SpinnerElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::SpinnerElement::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x18004b290ull, (void*)&UI::SpinnerElement::CreateInPlaceObject);
     return n;
 }

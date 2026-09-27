@@ -146,7 +146,7 @@ uint32_t SliderDescription::TypeId() {
 }
 int32_t SliderDescription::GetFileVersion() const { return 0x304; }
 
-// [9] 0x1800498f0 — the null-`this` test stays in the door.
+// [9] 0x1800498f0 — the ctor, placement (the null test sat in the retired door).
 Object::External* SliderDescription::Construct() {
     return ::new (this) SliderDescription();
 }

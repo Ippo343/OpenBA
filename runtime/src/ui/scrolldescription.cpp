@@ -128,11 +128,11 @@ const char* ScrollDescription::TypeName() const {
 }
 int32_t ScrollDescription::GetFileVersion() const { return 0x104; }
 
-// 0x18003a2c0 — the null test stays in the door.
+// 0x18003a2c0 — the ctor, placement (the null test sat in the retired door).
 Object::External* ScrollDescription::Construct() {
     return ::new (this) ScrollDescription();
 }
-// 0x18003a2a0 — slot 0 (VIRTUAL, the minted row) with flag 0, then the ctor.
+// 0x18003a2a0 — slot 0 (VIRTUAL) with flag 0, then the ctor.
 Object::External* ScrollDescription::Reconstruct() {
     DeletingDtor(0);
     return ::new (this) ScrollDescription();
