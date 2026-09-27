@@ -214,7 +214,6 @@ fn_OrchardGetGrowth_t fn_OrchardGetGrowth = nullptr;
 // ============================================================
 // Video::ImageBuffer (Runtime DLL exports)
 // ============================================================
-fn_ImageBuffer_Ctor_t fn_ImageBuffer_Ctor = nullptr;
 
 fn_SaveLoad_Dtor_t fn_SaveLoad_Dtor = nullptr;
 void** g_pSaveLoadSingleton = nullptr;
@@ -461,7 +460,6 @@ fn_StorageTree_Insert_t fn_StorageTree_Insert = nullptr;
 fn_Building_RemoveBuyOrder_t fn_Building_RemoveBuyOrder = nullptr;
 fn_Building_AddBuyToStorage_t fn_Building_AddBuyToStorage = nullptr;
 fn_Building_AddPurchaseOrder_t fn_Building_AddPurchaseOrder = nullptr;
-uintptr_t g_NoiseUI_ImageBufferVtable = 0;
 // fn_NoiseUI_SetupImage — REIMPLEMENTED in code/Game/Dialog/noiseui.cpp
 // fn_NoiseUI_GenerateNoise — REIMPLEMENTED in code/Game/Dialog/noiseui.cpp
 // NoiseUI runtime dependencies
@@ -1118,8 +1116,8 @@ bool EngineFuncsInit() {
     // ================================================================
     // Video::ImageBuffer (Runtime DLL exports — by mangled name, fallback to RVA)
     // ================================================================
-    fn_ImageBuffer_Ctor = reinterpret_cast<fn_ImageBuffer_Ctor_t>(
-        ResolveExport("??0ImageBuffer@Video@@QEAA@XZ"));
+    // ENDGAME B.3.9 EXA: `fn_ImageBuffer_Ctor` is gone — every exe builder
+    // writes `::new (p) Video::ImageBuffer()`.
 
     fn_SaveLoad_Dtor = reinterpret_cast<fn_SaveLoad_Dtor_t>(
         ResolveExport("??1SaveLoad@Save@@QEAA@XZ"));
@@ -1801,7 +1799,8 @@ bool EngineFuncsInit() {
 
 
     // --- NoiseUI helpers ---
-    g_NoiseUI_ImageBufferVtable = ResolveAddr(Module::Exe, 0x14015c8c0);
+    // (g_NoiseUI_ImageBufferVtable, the exe's copy 0x14015c8c0 of ImageBuffer's
+    // own table, went at ENDGAME B.3.9 EXA with its hand-built registration.)
     // fn_NoiseUI_SetupImage — REIMPLEMENTED in code/Game/Dialog/noiseui.cpp
     // fn_NoiseUI_GenerateNoise — REIMPLEMENTED in code/Game/Dialog/noiseui.cpp
     // NoiseUI runtime dependencies
@@ -1988,8 +1987,6 @@ bool EngineFuncsInit() {
     printf("  CemeteryComponent         = %p -> 0x%x\n", (void*)g_TypeId_CemeteryComponent,
            g_TypeId_CemeteryComponent ? *g_TypeId_CemeteryComponent : 0);
     // DestroyComponent_Reclaim/Rebuild/Destroy: now implemented as statics in destroyui.cpp
-    printf("[EngineFuncs] Video::ImageBuffer:\n");
-    printf("  ImageBuffer::Ctor         = %p\n", (void*)fn_ImageBuffer_Ctor);
     printf("[EngineFuncs] Globals:\n");
     printf("  _loader                   = %p\n", g_pLoader);
     printf("  _loader.m_flags           = %p -> 0x%x\n", (void*)g_pLoaderFlags,

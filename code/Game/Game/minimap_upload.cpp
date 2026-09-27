@@ -27,8 +27,8 @@
 //            filterMode=1, addrU=1, addrV=1, addrW=1, mipData=null)
 // (Note filterMode=1 here vs 2 in TradeWork_sub_c780 — matched to the minimap.)
 //
-// All primitives (ImageBuffer ctor/CopyToTexture, Device Lock/Unlock, the shared
-// NoiseUI ImageBuffer vtable @ 0x14015c8c0) are already wired in engine_funcs;
+// The buffer is a real Video::ImageBuffer (the exe's table 0x14015c8c0 is the
+// class's own); CopyToTexture and Device Lock/Unlock are members;
 // see code/Game/Game/serialize_image_upload.cpp for the sibling single-buffer
 // upload this mirrors.
 
@@ -60,16 +60,9 @@ void* CreateAndUploadOne(uint8_t* map, int dstOff, int srcOff, int width,
     void* img = fn_MemAlloc(g_pMemAllocSingleton, kImageBufferSize, kImageBufferAlign);
     if (!img) { if (trace) printf("[Minimap] %s: MemAlloc(0x68) failed\n", tag); return nullptr; }
 
-    fn_ImageBuffer_Ctor(img);
-    *reinterpret_cast<uintptr_t*>(img) = g_NoiseUI_ImageBufferVtable;  // override vtable
+    ::new (img) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
     *reinterpret_cast<void**>(map + dstOff) = img;
 
-    // B.3.5 bridge — kCreateSlot (0x48) / 8 == slot 9 of `Video::ImageBuffer`, which IS
-    // `Create` (B35_RULES 2.3 item 5). PROVED receiver: 0x68 bytes (== sizeof) out of
-    // MemAlloc, run through `??0ImageBuffer@Video@@`, then stamped with the exe's own
-    // NoiseUI ImageBuffer vtable — so the virtual call reads that live table at exactly
-    // the +0x48 the slot read did. The `fnCreate == null` test was a read of the SLOT,
-    // not an object test, and goes with the slot read.
     bool ok = reinterpret_cast<Video::ImageBuffer*>(img)->Create(
         /*imageType*/0, /*usage*/2, /*format*/5, /*mip*/0u,
         width, width, /*filterMode*/1, 1, 1, 1, nullptr);   // B.3.5 bridge
@@ -104,18 +97,15 @@ extern "C" void Minimap_CreateAndUpload(void* mapObj) {
     static bool s_trace = Opt().mapTrace != nullptr;
 
     // ENDGAME B.3.5 batch K1: the CopyToTexture / Device::Lock / Device::Unlock terms
-    // went with their call sites; the closing pass took their two remaining `%p`s
-    // below and the three globals themselves, which those `%p`s were the last thing
-    // reading. `fn_ImageBuffer_Ctor` is a CTOR door and stays.
-    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_ImageBuffer_Ctor ||
-        g_NoiseUI_ImageBufferVtable == 0 ||
+    // went with their call sites; B.3.9 EXA took the ImageBuffer ctor-door and
+    // exe-table terms (the buffer is constructed as the real class).
+    if (!fn_MemAlloc || !g_pMemAllocSingleton ||
         !g_pVideoDeviceSingleton || !*g_pVideoDeviceSingleton) {
         static bool warned = false;
         if (!warned) {
             printf("[Minimap] primitives unresolved — skipping upload "
-                   "(MemAlloc=%p Ctor=%p vtbl=%p dev=%p)\n",
-                   (void*)fn_MemAlloc, (void*)fn_ImageBuffer_Ctor,
-                   (void*)g_NoiseUI_ImageBufferVtable,
+                   "(MemAlloc=%p dev=%p)\n",
+                   (void*)fn_MemAlloc,
                    g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr);
             fflush(stdout);
             warned = true;

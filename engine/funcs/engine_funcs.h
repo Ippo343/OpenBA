@@ -758,10 +758,7 @@ typedef int (*fn_SelectResourceUI_GetResourceCount_t)(void* self);
 // Video::ImageBuffer (Runtime DLL exports, used by MapUI/NoiseUI/SpriteCaptureUI)
 // ============================================================
 
-// ImageBuffer::ImageBuffer() — default ctor
-// ??0ImageBuffer@Video@@QEAA@XZ (0x1800f2580, ordinal 227)
-typedef void* (*fn_ImageBuffer_Ctor_t)(void* self);
-extern fn_ImageBuffer_Ctor_t fn_ImageBuffer_Ctor;
+// (fn_ImageBuffer_Ctor went at ENDGAME B.3.9 EXA: `::new (p) Video::ImageBuffer()`.)
 
 // ENDGAME B.3.5 (b35-K2): `fn_ImageBuffer_Dtor`
 // (??1ImageBuffer@Video@@UEAA@XZ, 0x1800f2610) is GONE — zero callers tree-wide.
@@ -1864,9 +1861,8 @@ extern fn_Building_AddPurchaseOrder_t fn_Building_AddPurchaseOrder;  // 0x140059
 // NoiseUI helpers (Application-x64.exe)
 // ============================================================
 
-// NoiseUI ImageBuffer vtable (0x14015c8c0 in exe .rdata) — custom vtable
-// set on ImageBuffer after construction. Resolved at runtime.
-extern uintptr_t g_NoiseUI_ImageBufferVtable;
+// (g_NoiseUI_ImageBufferVtable went at ENDGAME B.3.9 EXA: 0x14015c8c0 is the
+// exe's copy of Video::ImageBuffer's own table; the builders construct the class.)
 
 // NoiseUI helpers — REIMPLEMENTED in code/Game/Dialog/noiseui.cpp
 // fn_NoiseUI_SetupImage (0x140071890) — now NoiseUI_SetupImage()

@@ -290,9 +290,7 @@ void NoiseUI_Slot4(NoiseUI* self) {
     void* imgBuf = fn_MemAlloc(g_pMemAllocSingleton, 0x68, 8);
     void* imageBuffer = nullptr;
     if (imgBuf != nullptr) {
-        fn_ImageBuffer_Ctor(imgBuf);
-        // Set vtable to NoiseUI-specific ImageBuffer vtable
-        *(uintptr_t*)imgBuf = g_NoiseUI_ImageBufferVtable;
+        ::new (imgBuf) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
         imageBuffer = imgBuf;
     }
     *(void**)(s + 0x30) = imageBuffer;
