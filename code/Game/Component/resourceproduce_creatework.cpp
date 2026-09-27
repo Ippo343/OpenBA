@@ -22,6 +22,7 @@
 // class of misnomer as "HerbalistComponent_Slot13" (which is really the shared base's).
 
 #include "Component/coll_bridge.h"
+#include "Component/ConsumeProduceDescription.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -344,11 +345,10 @@ extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void* self, uintptr_t* 
     // confuse the two; the search below is over DESCRIPTIONS).
     const uintptr_t descRoot = *reinterpret_cast<uintptr_t*>(entity + 0x28);
     void* cpDesc = nullptr;
-    if (descRoot && g_TypeId_ConsumeProduceComponent) {
-        const uint32_t want = *g_TypeId_ConsumeProduceComponent;   // 0x1401c7388 = the
-                                                                   // ConsumeProduce*Description*
-                                                                   // id; the global name is a
-                                                                   // documented misnomer.
+    if (descRoot) {
+        const uint32_t want = ConsumeProduceDescription::TypeId();   // cell 0x1401c7388 (D5);
+                                                                      // g_TypeId_ConsumeProduceComponent
+                                                                      // is a documented misnomer.
         const int    n   = *reinterpret_cast<int32_t*>(descRoot + 0x30);
         void** const arr = *reinterpret_cast<void***>(descRoot + 0x28);
         for (int i = 0; i < n && arr; ++i) {

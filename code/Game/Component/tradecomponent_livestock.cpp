@@ -56,6 +56,7 @@
 // machine. The flag clear itself is real and load-bearing; only the call is unreachable.
 // "Repairing" it to TEST ECX,ECX would fire a visual-refresh call retail never makes.
 
+#include "Component/AnimalComponent.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -82,7 +83,6 @@ fn_RegisterEntity_t  s_RegEntity     = nullptr;
 fn_HerdPlace_t       s_HerdPlace     = nullptr;
 fn_AnimalBehaviour_t s_AnimalBehav   = nullptr;
 fn_ModelRefresh_t    s_ModelRefresh  = nullptr;
-const uint32_t*      s_pAnimalTid    = nullptr;   // 0x1401c6f98
 const float*         s_pYawSpread    = nullptr;   // 0x140172220
 const float*         s_pPhaseScale   = nullptr;   // 0x140172114
 bool                 s_resolved      = false;
@@ -99,7 +99,6 @@ void Resolve() {
     s_HerdPlace     = R<fn_HerdPlace_t>(0x140107400);
     s_AnimalBehav   = R<fn_AnimalBehaviour_t>(0x140107320);
     s_ModelRefresh  = R<fn_ModelRefresh_t>(0x1400c3470);
-    s_pAnimalTid    = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6f98));
     s_pYawSpread    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172220));
     s_pPhaseScale   = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
 }
@@ -191,11 +190,11 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
     // Guard the VALUE, not just the pointer: a type-id slot that is registered but
     // filled with zero matches nothing, and would silently spawn `qty` entities with no
     // AnimalComponent attached (reference_registered_but_filled_with_zero).
-    if (!s_pAnimalTid || !*s_pAnimalTid || !s_EntityCopy || !fn_MemAlloc) {
+    if (!s_EntityCopy || !fn_MemAlloc) {
         std::fprintf(stderr, "[TradeLivestock] cannot spawn %u animal(s): animalTid=%u "
                      "copyCtor=%p memAlloc=%p — purchase is committed but no animals "
                      "will appear\n",
-                     qty, s_pAnimalTid ? *s_pAnimalTid : 0u,
+                     qty, AnimalComponent::TypeId(),
                      reinterpret_cast<void*>(s_EntityCopy),
                      reinterpret_cast<void*>(fn_MemAlloc));
         std::fflush(stderr);
@@ -223,8 +222,8 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
                 void* cc = *slot;
                 if (!cc) continue;
                 const uint32_t tid = reinterpret_cast<Object::Base*>(cc)->Type();   // B.3.8 bridge
-                if (tid != *s_pAnimalTid) continue;
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(cc, *s_pAnimalTid)) animal = cc;
+                if (tid != AnimalComponent::TypeId()) continue;
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(cc, AnimalComponent::TypeId())) animal = cc;
                 break;
             }
         }

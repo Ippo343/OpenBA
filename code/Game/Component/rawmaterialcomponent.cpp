@@ -13,6 +13,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/rawmaterialcomponent_funcs.h"
+#include "Component/RawMaterialDescription.h"
 #include "Work/Pickup.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
@@ -321,8 +322,8 @@ void RawMaterialComponent::Startup() {
     // Get building data via IsDerivedFrom check on _unk18
     void* baseObj = _description;
     void* buildingData = nullptr;
-    if (fn_IsDerivedFrom && g_TypeId_RawMaterialDescription) {
-        bool isDerived = fn_IsDerivedFrom(baseObj, *g_TypeId_RawMaterialDescription);
+    if (fn_IsDerivedFrom) {
+        bool isDerived = fn_IsDerivedFrom(baseObj, RawMaterialDescription::TypeId());
         if (isDerived) {
             buildingData = baseObj;
         }
@@ -383,8 +384,8 @@ void RawMaterialComponent::OnAdded() {
     // Get RawMaterialDescription via IsDerivedFrom
     void* baseObj = _description;
     void* rawMatDesc = nullptr;
-    if (fn_IsDerivedFrom && g_TypeId_RawMaterialDescription) {
-        if (fn_IsDerivedFrom(baseObj, *g_TypeId_RawMaterialDescription)) {
+    if (fn_IsDerivedFrom) {
+        if (fn_IsDerivedFrom(baseObj, RawMaterialDescription::TypeId())) {
             rawMatDesc = baseObj;
         }
     }
