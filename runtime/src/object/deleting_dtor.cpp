@@ -1063,7 +1063,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // incremented and hand the driver a garbage handle.
     RT_DELDTOR(0x18001eee0, 0x1800a3e40, 0x070, "Graphics::GeneratedImageBuffer"),
     RT_DELDTOR(0x18001f260, 0x1800a3c80, 0x088, "Graphics::FrameCopyImageBuffer"),
-    RT_DELDTOR(0x180022600, 0x1800a70b0, 0x090, "Graphics::ReflectionImageBuffer"),
     // VTABLE BATCH 3 (2026-09-12): the UI::*Element widget runtime, first
     // half. Thirteen slot-0 rows, appended AFTER every batch on main at
     // merge time -- the table is POSITIONAL and each wrapper below passes
@@ -1576,9 +1575,6 @@ void* RtDelDtor_GeneratedImageBuffer(void* self, unsigned flags) {
 void* RtDelDtor_FrameCopyImageBuffer(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18001f260>());
 }
-void* RtDelDtor_ReflectionImageBuffer(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180022600>());
-}
 
 // UI::AnimatedImageElement  ~AnimatedImageElement = 0x1800cb3a0  (PORTED, runtime/src/ui/)
 void* RtDelDtor_AnimatedImageElement(void* self, unsigned flags) {
@@ -1774,7 +1770,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18003ccf0, (void*)&RtDelDtor_SpriteCapture);
     RegisterRuntimeAddr(0x18001eee0, (void*)&RtDelDtor_GeneratedImageBuffer);  // vtable batch 6
     RegisterRuntimeAddr(0x18001f260, (void*)&RtDelDtor_FrameCopyImageBuffer);  // vtable batch 6
-    RegisterRuntimeAddr(0x180022600, (void*)&RtDelDtor_ReflectionImageBuffer); // vtable batch 6
 
     // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12) --------------------
     RegisterRuntimeAddr(0x180046540, (void*)&RtDelDtor_NumberEditElement);

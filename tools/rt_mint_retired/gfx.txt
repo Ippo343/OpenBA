@@ -21,3 +21,6 @@
 # -- W1: Material concrete (D1), factory pair the class own (D2) --
 ??_7Material@Graphics@@6B@             GFX   real ctor + DeletingDtor + ~X (door body) + TypeId; FACTREST row, RT_DELDTOR row 0x180011d20, ??1 door, 7 slot doors deleted; Construct/Reconstruct placement-new
 ??_7GraphicsMesh@Graphics@@6B@         GFX   real ctor + DeletingDtor + ~X (door body) + TypeId; FACTREST row, RT_DELDTOR row 0x180012bd0, ??0/??1 doors, 7 slot doors deleted; Construct/Reconstruct placement-new
+
+# -- W1: ReflectionImageBuffer concrete (D1), factory pair the class own (D2) --
+??_7ReflectionImageBuffer@Graphics@@6B@  GFX   real ctor + DeletingDtor + ~X (door body); FACTREST row, RT_DELDTOR row 0x180022600, ??0/??1 doors, 9 slot doors deleted; Construct/Reconstruct placement-new
