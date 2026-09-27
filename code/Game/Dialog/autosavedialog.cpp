@@ -133,10 +133,10 @@ void AutoSaveDialog::OnElementEvent(Object::InternalPtr<UI::Element>* param2,
 void AutoSaveDialog::OnUpdateLayout() {
     uintptr_t s = (uintptr_t)this;
 
-    if (!g_pSaveLoadSingleton || !*g_pSaveLoadSingleton)
+    if (!::Save::SaveLoad::_singleton)
         return;
 
-    void* saveLoad = *g_pSaveLoadSingleton;
+    void* saveLoad = ::Save::SaveLoad::_singleton;
     int operation = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetOperation();  // B.3.7 bridge
 
     // operation==4 means "load"; otherwise it's a save

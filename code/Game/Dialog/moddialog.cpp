@@ -64,6 +64,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "engine/MainLoop.h"   // ENDGAME B.3.9 SS2: Engine::MainLoop::_singleton
 
 
 // ============================================================
@@ -113,7 +114,7 @@ static void ModDialog_RefreshDisplay_Impl(ModDialog* self);
 
 static void ModDialog_RefreshDisplay_Impl(ModDialog* self) {
     uintptr_t s = (uintptr_t)self;
-    void* modSingleton = *(void**)g_ppModificationSingleton;
+    void* modSingleton = ::IO::Modification::_singleton;
     if (!modSingleton) return;
 
     int modCount = reinterpret_cast<const IO::Modification*>(modSingleton)->GetCount();   // B.3.4 bridge
@@ -209,7 +210,7 @@ conflict_done:
 
         // Copy thumbnail texture (48x48)
         {
-            void* videoDevice = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
+            void* videoDevice = ::Video::Device::_singleton;
             if (videoDevice) {
                 reinterpret_cast<Video::Device*>(videoDevice)->Lock();   // B.3.5 bridge
                 void* imageBuffer = *(void**)(entry + 0x40);
@@ -271,7 +272,7 @@ void ModDialog::OnOpened() {
             reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
     }
 
-    void* modSingleton = *(void**)g_ppModificationSingleton;
+    void* modSingleton = ::IO::Modification::_singleton;
     int modCount = reinterpret_cast<const IO::Modification*>(modSingleton)->GetCount();   // B.3.4 bridge
     float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
 
@@ -414,7 +415,7 @@ void ModDialog::OnOpened() {
         // Load "Material/UI/UIMaterial.rsc", IsDerivedFrom Material, SetMaterial
         {
             System::Filename filenameBuf("Material/UI/UIMaterial.rsc");
-            void* extFactory = *(void**)g_pExternalFactorySingleton;
+            void* extFactory = ::Object::ExternalFactory::_singleton;
             void* ext = const_cast<::Object::External*>(
                 reinterpret_cast<::Object::ExternalFactory*>(extFactory)   // B.3.3 bridge
                     ->FindOrLoad(filenameBuf));
@@ -492,7 +493,7 @@ void ModDialog::OnOpened() {
     // (cell 0x1401c5210; the g_TypeId_BrowserController name lies -- see Table 1/3)
     {
         System::Filename filenameBuf("Dialog/Mod.rsc:browser");
-        void* extFactory = *(void**)g_pExternalFactorySingleton;
+        void* extFactory = ::Object::ExternalFactory::_singleton;
         void* ext = const_cast<::Object::External*>(
             reinterpret_cast<::Object::ExternalFactory*>(extFactory)   // B.3.3 bridge
                 ->FindOrLoad(filenameBuf));
@@ -549,7 +550,7 @@ void ModDialog::OnOpened() {
 // ============================================================
 static void ModDialog_ToggleMod_Impl(ModDialog* self, int index) {
     uintptr_t s = (uintptr_t)self;
-    void* modSingleton = *(void**)g_ppModificationSingleton;
+    void* modSingleton = ::IO::Modification::_singleton;
 
     uintptr_t entry = *(uintptr_t*)(s + 0xB8) + (uintptr_t)(int64_t)index * 0x58;
     uintptr_t checkElem = *(uintptr_t*)(entry + 0x28);
@@ -566,7 +567,7 @@ static void ModDialog_ToggleMod_Impl(ModDialog* self, int index) {
 // Then does a full refresh display (same as ModDialog_RefreshDisplay_Impl).
 // ============================================================
 static void ModDialog_MoveToTop_Impl(ModDialog* self, int index) {
-    void* modSingleton = *(void**)g_ppModificationSingleton;
+    void* modSingleton = ::IO::Modification::_singleton;
 
     // Swap up to top
     while (index > 0) {
@@ -590,7 +591,7 @@ static void ModDialog_ShowDetails_Impl(ModDialog* self, int index) {
 
     // Load dialog resource
     System::Filename filenameBuf("Dialog/ModDetails.rsc");
-    void* extFactory = *(void**)g_pExternalFactorySingleton;
+    void* extFactory = ::Object::ExternalFactory::_singleton;
     void* ext = const_cast<::Object::External*>(
         reinterpret_cast<::Object::ExternalFactory*>(extFactory)   // B.3.3 bridge
             ->FindOrLoad(filenameBuf));
@@ -642,7 +643,7 @@ static void ModDialog_ShowDetails_Impl(ModDialog* self, int index) {
 // ============================================================
 static void ModDialog_Apply_Impl(ModDialog* self) {
     uintptr_t s = (uintptr_t)self;
-    void* modSingleton = *(void**)g_ppModificationSingleton;
+    void* modSingleton = ::IO::Modification::_singleton;
 
     // Check dirty flag — first byte of Modification singleton
     if (*(uint8_t*)modSingleton != 0) {
@@ -651,7 +652,7 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
         // Load reload dialog resource based on context (menu vs in-game)
         System::Filename filenameBuf(gameWorld == nullptr ? "Dialog/Reload.rsc:menu"
                                                             : "Dialog/Reload.rsc:game");
-        void* extFactory = *(void**)g_pExternalFactorySingleton;
+        void* extFactory = ::Object::ExternalFactory::_singleton;
         void* ext = const_cast<::Object::External*>(
             reinterpret_cast<::Object::ExternalFactory*>(extFactory)   // B.3.3 bridge
                 ->FindOrLoad(filenameBuf));
@@ -704,7 +705,7 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
 
                 // Call vtable[7] on Engine singleton sub-object at +0x20
                 // to prepare the game for reload (dispatch slot 0x140151440)
-                void* engine = g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr;
+                void* engine = ::Engine::MainLoop::_singleton;
                 if (engine) {
                     uintptr_t inner = *(uintptr_t*)((uintptr_t)engine + 0x20);
                     if (inner) {
@@ -753,7 +754,7 @@ void ModDialog::OnElementEvent(Object::InternalPtr<UI::Element>* param2, int32_t
     uintptr_t s = (uintptr_t)this;
 
     if (msg == 0x12) {  // Button click event
-        void* modSingleton = *(void**)g_ppModificationSingleton;
+        void* modSingleton = ::IO::Modification::_singleton;
 
         if (id == 100) {
             // Cancel — refresh list and close

@@ -46,6 +46,7 @@
 #include "Component/CitizenDescription.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Game/Disease.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Component/PopulationDescription.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "engine/MainLoop.h"   // ENDGAME B.3.9 SS2: Engine::MainLoop::_singleton
 
 // ============================================================
 // Static inline implementations (replaces fn_* exe pointer calls)
@@ -382,7 +383,7 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
 // If found, destroys the entity via Game_DestroyEntity.
 // ============================================================
 static void Game_DestroyAllRawMaterials_Impl() {
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     const ::Object::ExternalFactory* efactoryRaw =
         reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
 
@@ -569,7 +570,7 @@ found_residence:
 
                             // Load citizen template
                             System::Filename filenameBuf("Template/Citizen.rsc");
-                            void* factory = *g_pExternalFactorySingleton;
+                            void* factory = ::Object::ExternalFactory::_singleton;
                             void* extTemplate = const_cast<::Object::External*>(
                                 reinterpret_cast<::Object::ExternalFactory*>(factory)   // B.3.3 bridge
                                     ->FindOrLoad(filenameBuf));
@@ -751,7 +752,7 @@ static void Game_SpawnTornado_Impl() {
 
     // Load tornado template
     System::Filename filenameBuf("Template/Tornado.rsc");
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     void* extTemplate = const_cast<::Object::External*>(
         reinterpret_cast<::Object::ExternalFactory*>(factory)   // B.3.3 bridge
             ->FindOrLoad(filenameBuf));
@@ -854,8 +855,7 @@ void DebugUI::OnUpdate(const System::Time& /*time*/) {
         // g_pMainLoopSingleton = &Engine::MainLoop::_singleton (retail: *exref 0x140151440)
         // So: *g_pMainLoopSingleton = the MainLoop, then +0x10 = its video context
         // Disasm: MOV RAX,[slot] / MOV RDX,[RAX] / MOV RSI,[RDX+0x10]
-        if (!g_pMainLoopSingleton) return;
-        uintptr_t engineObj = (uintptr_t)*g_pMainLoopSingleton;
+        uintptr_t engineObj = (uintptr_t)::Engine::MainLoop::_singleton;
         if (!engineObj) return;
         uintptr_t engineState = *(uintptr_t*)(engineObj + 0x10);
         if (!engineState) return;

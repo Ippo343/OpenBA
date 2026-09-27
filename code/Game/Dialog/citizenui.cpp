@@ -670,7 +670,7 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
         // Load Dialog/Follow.rsc resource
         System::Filename filename("Dialog/Follow.rsc");
         void* extResource = const_cast<::Object::External*>(
-            reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+            ::Object::ExternalFactory::_singleton   // B.3.3 bridge
                 ->FindOrLoad(filename));
 
         // Type-check the resource

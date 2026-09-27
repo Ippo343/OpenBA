@@ -65,6 +65,7 @@
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "io/Modification.h"   // ENDGAME B.3.4a closing: the hoisted GetCount()
+#include "engine/MainLoop.h"   // ENDGAME B.3.9 SS2: Engine::MainLoop::_singleton
 
 #include <cstdint>
 #include <cstdio>
@@ -90,21 +91,20 @@ namespace {
 // Local copy of MainMenuDialog's Dialog/*.rsc loader (that one is file-static).
 // ---------------------------------------------------------------------------
 void* ModDlg_LoadDialogResource(const char* rscPath) {
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+    if (!::Object::ExternalFactory::_singleton) {
         printf("[ModDialog] LoadDialogResource('%s'): loader fns unresolved\n", rscPath);
         return nullptr;
     }
     System::Filename filenameObj(rscPath);
     void* resource = const_cast<::Object::External*>(
-        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+        ::Object::ExternalFactory::_singleton   // B.3.3 bridge
             ->FindOrLoad(filenameObj));
     void* extRes = nullptr;
     if (resource) {
         uint32_t* slot = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x140151728));
         uint32_t typeId = slot ? *slot : 0;
-        if (typeId == 0 &&
-            g_pFactorySingleton && *g_pFactorySingleton) {
-            void* factoryObj = *reinterpret_cast<void**>(*g_pFactorySingleton);
+        if (typeId == 0) {
+            void* factoryObj = ::Object::Factory::_singleton;
             if (factoryObj) {
                 typeId = reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(
                     "Dialog", true);   // B.3.3 bridge
@@ -267,10 +267,9 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
     // does too — it is created by Engine::Startup). If our .rdata exref slot for
     // it never got registered the very first read is a null deref, so say so
     // here rather than faulting inside a byte-faithful body.
-    if (!g_ppModificationSingleton || !*g_ppModificationSingleton) {
+    if (!::IO::Modification::_singleton) {
         printf("[ModDialog] open: IO::Modification singleton unavailable "
-                    "(g_pp=%p) — mod list cannot be built\n",
-                    (void*)g_ppModificationSingleton);
+                    "— mod list cannot be built\n");
         return;
     }
 
@@ -303,7 +302,7 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
     // local is read only in the debug build. The CALL stays either way — that is
     // the whole point of hoisting it out of the argument list.
     [[maybe_unused]] const int modCount =
-        reinterpret_cast<const IO::Modification*>(*g_ppModificationSingleton)->GetCount();   // B.3.4 bridge
+        ::IO::Modification::_singleton->GetCount();   // B.3.4 bridge
     printf("[ModDialog] opened + AddDialog'd (dlg=%p mods=%d)\n", dlg, modCount);
 }
 
@@ -343,7 +342,7 @@ extern "C" void ModDialog_CloseAndReload(void* self) {
     void* savedState = fn_MemAlloc(g_pMemAllocSingleton, 0x10, 4);
     if (savedState && fn_SavedState_Ctor) statePtr = fn_SavedState_Ctor(savedState);
 
-    void* engine = g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr;
+    void* engine = ::Engine::MainLoop::_singleton;
     if (engine) {
         uintptr_t inner = *reinterpret_cast<uintptr_t*>(
             reinterpret_cast<uintptr_t>(engine) + 0x20);

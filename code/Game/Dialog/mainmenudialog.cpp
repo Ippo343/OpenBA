@@ -81,7 +81,7 @@ static uint32_t* g_dialogTypeIdSlot = nullptr;
 static void* LoadDialogResource(const char* rscPath) {
     System::Filename filenameBuf(rscPath);
     void* resource = const_cast<::Object::External*>(
-        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+        ::Object::ExternalFactory::_singleton   // B.3.3 bridge
             ->FindOrLoad(filenameBuf));
     printf("[LoadDialogResource] '%s' -> FindOrLoad=%p\n", rscPath, resource);
     void* extRes = nullptr;
@@ -92,13 +92,11 @@ static void* LoadDialogResource(const char* rscPath) {
                 ResolveAddr(Module::Exe, 0x140151728));
         }
         uint32_t typeId = (g_dialogTypeIdSlot ? *g_dialogTypeIdSlot : 0);
-        if (typeId == 0 &&
-            g_pFactorySingleton && *g_pFactorySingleton) {
+        if (typeId == 0) {
             // Standalone: slot wasn't filled by an exe loader, so look up
-            // UI::Dialog via the Runtime factory. g_pFactorySingleton is a
-            // void** pointing into the slot storage; *g points at the
-            // Runtime DLL's _singleton variable; **g is the actual Factory*.
-            void* factoryObj = *(void**)*g_pFactorySingleton;
+            // UI::Dialog via the Runtime factory (Object::Factory::_singleton,
+            // the cell retail reaches through import slot 0x140152760).
+            void* factoryObj = ::Object::Factory::_singleton;
             if (factoryObj) {
                 typeId = reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(
                     "Dialog", true);   // B.3.3 bridge
@@ -454,7 +452,7 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
         printf("[BuildId] missing engine fns, skipping\n");
         return false;
     }
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
+    if (!::Object::ExternalFactory::_singleton ||
         !g_pMemAllocSingleton) {
         printf("[BuildId] missing engine singletons, skipping\n");
         return false;
@@ -465,7 +463,7 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
     // separate AdjustDelimiters call is needed here.
     System::Filename filenameStr("Dialog/BuildId.rsc");
     void* resource = const_cast<::Object::External*>(
-        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+        ::Object::ExternalFactory::_singleton   // B.3.3 bridge
             ->FindOrLoad(filenameStr));
     void* dialogResource = nullptr;
     if (resource && fn_IsDerivedFrom(resource, UI::Dialog::TypeId())) {
@@ -733,7 +731,7 @@ void MainMenuDialog_Slot8(MainMenuDialog* self, void* param2, int param3, int pa
         break;
 
     case kButton_Quit:
-        reinterpret_cast<Application::Application*>(*g_pAppSingleton)->Quit();  // B.3.7 bridge
+        ::Application::Application::_singleton->Quit();  // B.3.7 bridge
         break;
 
     case kButton_Mod:
@@ -852,12 +850,11 @@ void MainMenuDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*
         break;
     }
     case kButton_Quit:
-        printf("[MainMenuDialog::OnCommand] Quit: g_pAppSingleton=%p *g=%p\n",
-               (void*)g_pAppSingleton,
-               g_pAppSingleton ? *g_pAppSingleton : nullptr);
-        if (g_pAppSingleton && *g_pAppSingleton) {
+        printf("[MainMenuDialog::OnCommand] Quit: Application::_singleton=%p\n",
+               (void*)::Application::Application::_singleton);
+        if (::Application::Application::_singleton) {
             printf("[MainMenuDialog::OnCommand] -> App::Quit\n");
-            reinterpret_cast<Application::Application*>(*g_pAppSingleton)->Quit();  // B.3.7 bridge
+            ::Application::Application::_singleton->Quit();  // B.3.7 bridge
         } else {
             printf("[MainMenuDialog::OnCommand] WARN: App::Quit not resolved — falling back to PostQuitMessage\n");
             // Last resort — close the window so the user isn't stuck

@@ -104,8 +104,8 @@ void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) {
     if ((gwFlags >> 10) & 1) { AsBail("gameWorld+0xd0 bit10 set", (long)gwFlags); return; }
 
     // Only when no operation is already in progress (Operation::None == 0).
-    if (!g_pSaveLoadSingleton || !*g_pSaveLoadSingleton) { AsBail("no SaveLoad singleton", 0); return; }
-    void* saveLoad = *g_pSaveLoadSingleton;
+    if (!::Save::SaveLoad::_singleton) { AsBail("no SaveLoad singleton", 0); return; }
+    void* saveLoad = ::Save::SaveLoad::_singleton;
     { int op = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetOperation();  // B.3.7 bridge
       if (op != 0) { AsBail("SaveLoad busy, Operation", (long)op); return; } }
 
@@ -163,7 +163,7 @@ void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) {
 // newgamedialog.cpp's original note). Idempotent: each slot is loaded at most once.
 void GameContainer_EnsureLists() {
     if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return;
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
+    if (!::Object::ExternalFactory::_singleton) return;
 
     char* container = reinterpret_cast<char*>(*g_pKeyMapSingleton);
 
@@ -181,7 +181,7 @@ void GameContainer_EnsureLists() {
         if (*slot) continue;                       // already loaded
         System::Filename fnameObj(e.path);   // ctor already normalises delimiters
         void* ext = const_cast<::Object::External*>(
-            reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+            ::Object::ExternalFactory::_singleton   // B.3.3 bridge
                 ->FindOrLoad(fnameObj));
         *slot = ext;
         fprintf(stderr, "[GameContainer] +0x%02zx '%s' -> %p\n", e.off, e.path, ext);
@@ -199,8 +199,7 @@ void GameContainer_EnsureLists() {
     static bool s_achievementsSet = false;
     if (!s_achievementsSet) {
         void* achievementList = *reinterpret_cast<void**>(container + 0x00);
-        void* mgr = (g_ppAchievementManager && *g_ppAchievementManager)
-                        ? **g_ppAchievementManager : nullptr;
+        void* mgr = ::Achievement::AchievementManager::_singleton;
         if (mgr && achievementList) {
             reinterpret_cast<Achievement::AchievementManager*>(mgr)->SetAchievements(  // B.3.7 bridge
                 Object::ExternalPtr<Object::ExternalList>(reinterpret_cast<Object::ExternalList*>(achievementList)));
