@@ -910,10 +910,8 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
         for (int i = 0; i < compCount; i++) {
             void* comp = compArray[i];
             if (!comp) continue;
-            // vtable slot +0x10 (index 2) returns type ID
-            void** vtable = *reinterpret_cast<void***>(comp);
-            typedef int (*fn_GetTypeId_t)(void*);
-            int compTypeId = reinterpret_cast<fn_GetTypeId_t>(vtable[2])(comp);
+            // virtual slot 2 (+0x10): Type()
+            int compTypeId = static_cast<int>(reinterpret_cast<Object::Base*>(comp)->Type());  // B.3.8 bridge
             if (static_cast<uint32_t>(compTypeId) == targetId) {
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, targetId)) {
                     return comp;
@@ -1043,9 +1041,7 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
                     void* subComp = *reinterpret_cast<void**>(
                         *reinterpret_cast<int64_t*>(itemEntity + 0x28) + k * 8);
                     if (!subComp) continue;
-                    void** vtable = *reinterpret_cast<void***>(subComp);
-                    typedef int (*fn_GetTypeId_t)(void*);
-                    int compTypeId = reinterpret_cast<fn_GetTypeId_t>(vtable[2])(subComp);
+                    int compTypeId = static_cast<int>(reinterpret_cast<Object::Base*>(subComp)->Type());  // B.3.8 bridge
                     if (static_cast<uint32_t>(compTypeId) == rawMatTypeId) {
                         if (fn_IsDerivedFrom && fn_IsDerivedFrom(subComp, rawMatTypeId)) {
                             rawMat = subComp;
@@ -1131,9 +1127,7 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
                     void* subComp = *reinterpret_cast<void**>(
                         *reinterpret_cast<int64_t*>(itemEntity + 0x28) + k * 8);
                     if (!subComp) continue;
-                    void** vtable = *reinterpret_cast<void***>(subComp);
-                    typedef int (*fn_GetTypeId_t)(void*);
-                    int compTypeId = reinterpret_cast<fn_GetTypeId_t>(vtable[2])(subComp);
+                    int compTypeId = static_cast<int>(reinterpret_cast<Object::Base*>(subComp)->Type());  // B.3.8 bridge
                     if (static_cast<uint32_t>(compTypeId) == rawMatTypeId) {
                         if (fn_IsDerivedFrom && fn_IsDerivedFrom(subComp, rawMatTypeId)) {
                             rawMat = subComp;
@@ -1698,12 +1692,8 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
             void** compArray = *(void***)(building + 0x30);
             void* compIBP = compArray[ci];
 
-            // Call vtable[+0x10] (GetTypeId) on the component
-            uintptr_t comp = (uintptr_t)compIBP;
-            uintptr_t vtable = *(uintptr_t*)comp;
-            typedef uint32_t (*GetTypeId_t)(void*);
-            GetTypeId_t getTypeId = *(GetTypeId_t*)(vtable + 0x10);
-            uint32_t typeId = getTypeId(compIBP);
+            // virtual slot 2 (+0x10): Type()
+            uint32_t typeId = reinterpret_cast<Object::Base*>(compIBP)->Type();  // B.3.8 bridge
 
             if (typeId == *g_TypeId_ResidenceComponent) {
                 // Confirm with IsDerivedFrom
@@ -1931,12 +1921,8 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
             void** compArray = *(void***)(school + 0x30);
             void* compIBP = compArray[ci];
 
-            // Call vtable[+0x10] (GetTypeId) on the component
-            uintptr_t comp = (uintptr_t)compIBP;
-            uintptr_t vtable = *(uintptr_t*)comp;
-            typedef uint32_t (*GetTypeId_t)(void*);
-            GetTypeId_t getTypeId = *(GetTypeId_t*)(vtable + 0x10);
-            uint32_t typeId = getTypeId(compIBP);
+            // virtual slot 2 (+0x10): Type()
+            uint32_t typeId = reinterpret_cast<Object::Base*>(compIBP)->Type();  // B.3.8 bridge
 
             if (typeId == *g_TypeId_ResidenceComponent) {
                 // Re-read and confirm with IsDerivedFrom
@@ -2015,11 +2001,7 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
             void** compArray = *(void***)(school + 0x30);
             void* compIBP = compArray[ci];
 
-            uintptr_t comp = (uintptr_t)compIBP;
-            uintptr_t vtable = *(uintptr_t*)comp;
-            typedef uint32_t (*GetTypeId_t)(void*);
-            GetTypeId_t getTypeId = *(GetTypeId_t*)(vtable + 0x10);
-            uint32_t typeId = getTypeId(compIBP);
+            uint32_t typeId = reinterpret_cast<Object::Base*>(compIBP)->Type();  // B.3.8 bridge
 
             if (typeId == *g_TypeId_ResidenceComponent) {
                 compArray = *(void***)(school + 0x30);
