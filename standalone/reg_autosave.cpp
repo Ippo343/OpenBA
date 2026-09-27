@@ -23,6 +23,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "Dialog/AutoSaveDialog.h"
+#include "Game/Scenario.h"
 
 static uint32_t g_tid_AutoSaveDialog = 0;   // storage for 0x1401c4d08
 
@@ -37,8 +39,8 @@ static uint32_t g_tid_AutoSaveDialog = 0;   // storage for 0x1401c4d08
 static uint32_t g_tid_Scenario = 0;         // storage for 0x1401c5b08
 
 extern "C" void FillTypeIdGlobals_autosave() {
-    g_tid_AutoSaveDialog = ::Object::GetTypeIdByName("AutoSaveDialog");
-    g_tid_Scenario       = ::Object::GetTypeIdByName("Scenario");
+    g_tid_AutoSaveDialog = AutoSaveDialog::TypeId();
+    g_tid_Scenario       = Scenario::TypeId();
 }
 
 void RegisterAutoSaveTypeIds() {

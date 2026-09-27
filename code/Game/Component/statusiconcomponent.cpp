@@ -396,12 +396,6 @@ static inline bool SI_Initialised(uintptr_t c) {
     return *(void**)(c + 0x28) != nullptr;
 }
 
-// Component-vtable +0x40 (idx 8, OnRemove = positioning) routed for standalone. The
-// occupancy toggle FUN_14012c3f0 (ported below as StatusIcon_Toggle) calls this slot
-// directly to position the icon after AddObject. Original signature is (self, Time*);
-// the Time arg is ignored by the body (0x14012bbd0). Forward-decl; defined further down.
-void StatusIconComponent_OnRemove_Standalone(StatusIconComponent* self);
-
 
 // Removed-from-world handler (component vtable +0x38, idx 7). Entity teardown
 // dispatches this via MarkForRemoval (0x1400c2ea0: every component with
@@ -489,11 +483,6 @@ static void* StatusIcon_FindCompByName(uintptr_t entity, uint32_t want, const ch
             return fn_IsDerivedFrom(comp, want) ? comp : nullptr;
     }
     return nullptr;
-}
-
-// 0x14012bbd0 door: registered by address (standalone/reg_code_lane6.cpp).
-void StatusIconComponent_OnRemove_Standalone(StatusIconComponent* self) {
-    self->StatusIconComponent::Tick(nullptr);
 }
 
 

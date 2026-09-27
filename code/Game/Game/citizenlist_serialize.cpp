@@ -98,6 +98,7 @@
 // exercises them, verify against Ghidra before trusting the result.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include <cstdio>
 #include "resolve.h"
 #include "address_registry.h"
@@ -107,6 +108,7 @@
 #include <cstring>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "object/TypeInfo.h"   // caller batch CB6: Object::Base::Type()
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
@@ -771,7 +773,7 @@ extern "C" void CitizenList_PostLoad_8f580(void* self) {
 
     if (*reinterpret_cast<int32_t*>(base + 0x148) >= 1) return;   // already populated
 
-    int* mapGrid = *reinterpret_cast<int**>(reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf8);
+    int* mapGrid = static_cast<int*>(reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_game);   // B.3.8 bridge
     int side = *mapGrid >> 3;
     ResizeStride0x10(base + 0x140, side * side);
     std::fprintf(stderr, "[CitPostLoad] mapGrid=%p mapWidth=%d side=%d cells=%d "
@@ -825,9 +827,8 @@ extern "C" void CitizenList_PostLoad_8f580(void* self) {
                 void** slotPtr = reinterpret_cast<void**>(*reinterpret_cast<uint64_t*>(comp + 0x30) + static_cast<int64_t>(j) * 8);
                 void* cand = *slotPtr;
                 if (!cand) continue;
-                void** vt = *reinterpret_cast<void***>(cand);
-                typedef uint32_t (*fn_GetTypeId_t)(void*);
-                uint32_t tid = reinterpret_cast<fn_GetTypeId_t>(vt[2])(cand);
+                // Slot 2 on an entity component-array element (proved Object::Base).
+                uint32_t tid = reinterpret_cast<const Object::Base*>(cand)->Type();   // B.3.8 bridge
                 if (tid == DWORD_1401c79e0_TypeId()) {
                     slotPtr = reinterpret_cast<void**>(*reinterpret_cast<uint64_t*>(comp + 0x30) + static_cast<int64_t>(j) * 8);
                     void* obj = *slotPtr;

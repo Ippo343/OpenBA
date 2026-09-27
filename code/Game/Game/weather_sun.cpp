@@ -34,6 +34,7 @@
 #include "graphics/SunLight.h"
 #include "video/Context.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
@@ -109,15 +110,17 @@ inline void LerpColor(uint32_t a, uint32_t b, float t, float out[4]) {
 extern "C" void Weather_SunUpdate(void* self, void* ctx) {
     if (!self) return;
 
-    uint8_t* p = reinterpret_cast<uint8_t*>(self);
-    void* sun = *reinterpret_cast<void**>(p + 0x100);
+    // Caller batch CB6: `self` is the GameUpdateLoop (its one caller is Draw's
+    // `this`); its fields are read by name.
+    GameUpdateLoop* const gul = static_cast<GameUpdateLoop*>(self);   // B.3.8 bridge
+    void* sun = gul->m_sunLight;   // +0x100
     // B.3.5: the `!fn_Graphics_SunLight_Set` term is gone with the door call;
     // the `!sun` object test is retail's and stays.
     if (!sun) return;
 
     // Game time in seconds (the sim clock). +0x128 -> Time struct, time @ +8.
     float seconds = 0.0f;
-    void* timeObj = *reinterpret_cast<void**>(p + 0x128);
+    void* timeObj = gul->m_dayCounter;   // +0x128
     if (timeObj)
         seconds = reinterpret_cast<const System::Time*>(reinterpret_cast<uint8_t*>(timeObj) + 8)->AsSeconds();   // B.3.4b bridge
 
@@ -141,7 +144,7 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
     // layout (ambient@0, light@4, fog@8, fogNear@c, fogFar@10, fogMax@14,
     // heading@18, pitch@1c), so the table is a direct reinterpret.
     const EnvKeyframe* table = kKeyframes;
-    void* wsim = *reinterpret_cast<void**>(p + 0x130);   // weather sim (gameWorld+0x130)
+    void* wsim = gul->m_weather;   // weather sim (gameWorld+0x130)
     if (wsim) {
         void* envRes = *reinterpret_cast<void**>(wsim);  // *(weatherSim+0) == envRes
         if (envRes)

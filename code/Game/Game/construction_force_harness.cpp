@@ -35,6 +35,7 @@
 
 #include "options.h"
 #include "engine_funcs.h"
+#include "Component/BuildComponent.h"   // caller batch CB6: TypeId()
 #include "resolve.h"
 #include "force_work.h"
 #include <cstdint>
@@ -42,7 +43,6 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
-namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_registration.h
 
 // The demo foundation's OWNER entity (starttown.cpp, set alongside g_pConstructionDemoSite).
 extern "C" void* g_pConstructionDemoEntity;
@@ -129,8 +129,7 @@ extern "C" bool StartTown_ForcePushConstructionWork(void* citizen) {
     // ============================================================================
     static void* s_buildComp = nullptr;
     if (!s_buildComp) {
-        static uint32_t tidBuild = 0;
-        if (!tidBuild) tidBuild = ::Object::GetTypeIdByName("BuildComponent");
+        const uint32_t tidBuild = BuildComponent::TypeId();   // caller batch CB6: was a lazy by-name cache
         s_buildComp = ForceWork::FindComp(site, tidBuild);
     }
     static int s_buildPhase = 0;

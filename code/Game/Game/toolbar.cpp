@@ -161,11 +161,4 @@ void* Toolbar::CreateInPlaceObject(void* memory) {
 
 DEFINE_EXE_VTABLE(Toolbar, "_ZTV7Toolbar")
 
-// B38_RULES D5: nothing in the tree reads 0x140160120 back (swept by hex and
-// owner); this row is reader-less and serves the compiler table only so the
-// coordinator-owned call keeps linking. The closing pass deletes it with the call.
-extern "C" void RegisterToolbarVtable() {
-    RegisterExeAddr(0x140160120, reinterpret_cast<uintptr_t>(Toolbar::Vtable()));
-}
-
 DEFINE_EXE_TYPE(Toolbar, "Object::External")

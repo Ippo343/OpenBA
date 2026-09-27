@@ -87,10 +87,11 @@
 //   citizenai_* files resolve; see code/Game/Component/citizenai_gather.cpp:63)
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "system/Filename.h"
 #include "system/String.h"
 #include "resolve.h"
-#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
+#include "Component/CitizenDescription.h"   // caller batch CB6: TypeId()
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
@@ -126,7 +127,7 @@ uint32_t CitizenDescriptionTypeId() {
             uint32_t v = *reinterpret_cast<uint32_t*>(g);
             if (v != 0 && v != 0xFFFFFFFFu) cached = v;
         }
-        if (cached == 0) cached = ::Object::GetTypeIdByName("CitizenDescription");
+        if (cached == 0) cached = CitizenDescription::TypeId();   // caller batch CB6: was by name
     }
     return cached;
 }
@@ -169,7 +170,7 @@ extern "C" void MusicPlayer_Update(void* musicPlayer) {
 
     uint8_t* mp = reinterpret_cast<uint8_t*>(musicPlayer);
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
-    void*    audioScene = *reinterpret_cast<void**>(gw + 0x78);
+    void*    audioScene = reinterpret_cast<GameUpdateLoop*>(gw)->m_audioScene;   // B.3.8 bridge
 
     // --- Early-out: a track is still playing on our handle. -----------------
     if (!audioScene) return;
@@ -182,7 +183,7 @@ extern "C" void MusicPlayer_Update(void* musicPlayer) {
 
     // --- Town mood: average health and happiness over the citizen list, -----
     // each normalised by the corresponding max on citizen[0]'s description.
-    uint8_t* citizens   = *reinterpret_cast<uint8_t**>(gw + 0xf0);
+    uint8_t* citizens   = static_cast<uint8_t*>(reinterpret_cast<GameUpdateLoop*>(gw)->m_citizenList);   // B.3.8 bridge
     float    moodA = 0.0f, moodB = 0.0f;
     if (citizens) {
         int      count = *reinterpret_cast<int32_t*>(citizens + 0xa8);
@@ -210,7 +211,7 @@ extern "C" void MusicPlayer_Update(void* musicPlayer) {
 
     // --- Current month from the accumulated day-counter time. ---------------
     int month = 0;
-    if (void* dayCounter = *reinterpret_cast<void**>(gw + 0x128)) {
+    if (void* dayCounter = reinterpret_cast<GameUpdateLoop*>(gw)->m_dayCounter) {   // B.3.8 bridge
         float secs = reinterpret_cast<const System::Time*>(reinterpret_cast<uint8_t*>(dayCounter) + 8)->AsSeconds();   // B.3.4b bridge
         int m = static_cast<int>((secs / kSecondsPerYear) * kMonthsPerYear);
         month = (m > 11) ? 0 : m;   // faithful: >11 wraps to 0, not to 11
@@ -241,7 +242,7 @@ extern "C" void MusicPlayer_Update(void* musicPlayer) {
     } else if (n < 2) {
         return;                       // nothing eligible this month/mood
     } else {
-        void* rng = *reinterpret_cast<void**>(gw + 0xd8);
+        void* rng = reinterpret_cast<GameUpdateLoop*>(gw)->m_random;   // B.3.8 bridge
         if (!rng) return;
         pick = static_cast<int>(reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(n)));   // B.3.4b bridge
         // Don't immediately repeat the last track: step one past it, wrapping.

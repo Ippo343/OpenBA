@@ -249,10 +249,11 @@ MenuDialogLoopT::MenuDialogLoopT(const System::String& filename)
     : Engine::DialogLoopT(filename) {
     fn_Random_Default_Ctor(&_random);     // System::Random at +0x168
     fn_AudioScene_Ctor(_audioScene);      // Audio::Scene at +0xb30
-    // Zero-init the MenuDialogLoopT-specific fields (+0xb68..+0xbf8).
-    uint8_t* const s = reinterpret_cast<uint8_t*>(this);
-    for (uintptr_t off = 0xb68; off <= 0xbf8; off += 8)
-        *reinterpret_cast<uint64_t*>(s + off) = 0;
+    // Zero-init the MenuDialogLoopT-specific fields (+0xb68..+0xbf8): every
+    // field from _pendingLoop to the end of the class, pad included (retail's
+    // qword stores).
+    std::memset(&_pendingLoop, 0,
+                sizeof(MenuDialogLoopT) - offsetof(MenuDialogLoopT, _pendingLoop));
 }
 
 // 0x14001a310 (read from the disassembly): MemFree the data of the three
@@ -439,12 +440,9 @@ void MenuDialogLoopT::Shutdown() {
     //   0x140151bf8 ?EnableCursor@UserInterface@UI@@ (tail JMP)
     // Retail re-reads every field from `this` at each use and NEVER nulls one
     // after freeing it; both are reproduced. Unguarded where retail is.
-    uint8_t* const base = reinterpret_cast<uint8_t*>(this);
-    auto field = [base](uint32_t off) -> void* {
-        return *reinterpret_cast<void**>(base + off);
-    };
-    auto scene = [&field]() {                        // MOV RCX,[RBX+0xba0], re-read
-        return static_cast<Graphics::Scene*>(field(0xba0));
+    // Caller batch CB6: the fields are the class's named members.
+    auto scene = [this]() {                          // MOV RCX,[RBX+0xba0], re-read
+        return static_cast<Graphics::Scene*>(_scene);
     };
     auto deleteObject = [](void* o) {                // MOV RAX,[RCX]; MOV EDX,1; CALL [RAX]
         reinterpret_cast<Object::Base*>(o)->DeletingDtor(1);
@@ -458,31 +456,34 @@ void MenuDialogLoopT::Shutdown() {
         ResolveExport("??1SaveLoad@Save@@QEAA@XZ"));
 
     // 1. +0xbc0: the menu scene's first Geometry -- REMOVED, not owned (no delete).
-    if (field(0xbc0))
-        scene()->RemoveGlobalObject(static_cast<Graphics::Geometry*>(field(0xbc0)));
+    if (_sceneGeometry)
+        scene()->RemoveGlobalObject(static_cast<Graphics::Geometry*>(_sceneGeometry));
     // 2-4. +0xbb0 (SunLight), +0xba8 (main mesh), +0xbc8 (DLC ship): removed
     //      from the scene's global list, then deleted through slot 0.
-    for (uint32_t off : {0xbb0u, 0xba8u, 0xbc8u}) {
-        if (field(off)) {
-            scene()->RemoveGlobalObject(static_cast<Graphics::Geometry*>(field(off)));
-            if (void* o = field(off)) deleteObject(o);
+    for (void* MenuDialogLoopT::* field : {&MenuDialogLoopT::_sunLight,
+                                           &MenuDialogLoopT::_mainMesh,
+                                           &MenuDialogLoopT::_dlcShip}) {
+        if (this->*field) {
+            scene()->RemoveGlobalObject(static_cast<Graphics::Geometry*>(this->*field));
+            if (void* o = this->*field) deleteObject(o);
         }
     }
     // 5. every scene-grid instance: RemoveObject(id[i]) then delete object[i].
-    //    Count from +0xbe8, ids from +0xbf0 (uint32), objects from +0xbe0.
-    for (int32_t i = 0; i < *reinterpret_cast<int32_t*>(base + 0xbe8); ++i) {
-        const uint32_t id = static_cast<const uint32_t*>(field(0xbf0))[i];
+    //    Count from +0xbe8, ids from +0xbf0 (uint32), objects from +0xbe0: the
+    //    {data, count|cap} headers _instanceArray (+0xbe0) and _sceneIdArray (+0xbf0).
+    for (int32_t i = 0; i < *reinterpret_cast<int32_t*>(_instanceArray + 8); ++i) {
+        const uint32_t id = (*reinterpret_cast<const uint32_t* const*>(_sceneIdArray))[i];
         scene()->RemoveObject(id);
-        if (void* o = static_cast<void**>(field(0xbe0))[i]) deleteObject(o);
+        if (void* o = (*reinterpret_cast<void* const* const*>(_instanceArray))[i]) deleteObject(o);
     }
     // 6. +0xbb8 (the Transform block): freed.
-    if (void* t = field(0xbb8)) fn_MemFreeStatic(t);
+    if (void* t = _transform) fn_MemFreeStatic(t);
     // 7. +0xba0 Graphics::Scene: ~Scene then freed.
-    if (void* g = field(0xba0)) { s_sceneDtor(g); fn_MemFreeStatic(g); }
+    if (void* g = _scene) { s_sceneDtor(g); fn_MemFreeStatic(g); }
     // 8. +0xb98 Graphics::Renderer: ~Renderer then freed.
-    if (void* r = field(0xb98)) { s_rendererDtor(r); fn_MemFreeStatic(r); }
+    if (void* r = _renderer) { s_rendererDtor(r); fn_MemFreeStatic(r); }
     // 9. +0xb70 the menu's Save::SaveLoad: ~SaveLoad then freed.
-    if (void* sl = field(0xb70)) { s_saveLoadDtor(sl); fn_MemFreeStatic(sl); }
+    if (void* sl = _saveLoad) { s_saveLoadDtor(sl); fn_MemFreeStatic(sl); }
     // 10. `CALL [0x1401523a0]` -- Engine::DialogLoopT::Shutdown, QUALIFIED.
     Engine::DialogLoopT::Shutdown();
     // 11. Audio::Scene::StopAll(this+0xb30). NOT skippable: it parks the
@@ -624,7 +625,7 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // state the prior tick's UI::Update settled).
     {
         void* pendingLoop = _pendingLoop;
-        float fadeRate    = *(float*)(reinterpret_cast<uintptr_t>(this) + 0x130);
+        float fadeRate    = _ui._fadeVelocity;   // +0x130 = UI (+0x40) + 0xF0
         if (pendingLoop && fadeRate == 0.0f) {
             void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
             fprintf(stderr, "[MenuDLT::Update] STAGE C entry: pendingLoop=%p "
@@ -688,7 +689,7 @@ void MenuDialogLoopT::Draw(float alpha) {
     // unchanged for the run.
     void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
     void* context = mainLoop
-        ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(mainLoop) + 0x10)
+        ? reinterpret_cast< ::Engine::MainLoop*>(mainLoop)->_context   // B.3.8 bridge
         : nullptr;
     void* ui = &_ui;
 

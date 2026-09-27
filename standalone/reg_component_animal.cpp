@@ -27,6 +27,12 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"      // Object::GetTypeIdByName
 #include <cstdint>
+#include "Component/AnimalComponent.h"
+#include "Component/HerdComponent.h"
+#include "Component/HerdDescription.h"
+#include "Component/LivestockComponent.h"
+#include "Component/LivestockDescription.h"
+#include "Component/WildAnimalComponent.h"
 
 static uint32_t g_tid_HerdDescription      = 0;  // 0x1401c7858
 static uint32_t g_tid_HerdComponent        = 0;  // 0x1401c7820
@@ -37,12 +43,12 @@ static uint32_t g_tid_LivestockDescription = 0;  // 0x1401c79a8
 static float    g_f_HerdSpawnSpread        = 180.0f;  // 0x140172220
 
 extern "C" void FillComponentTypeIdGlobals_animal() {
-    g_tid_HerdDescription      = ::Object::GetTypeIdByName("HerdDescription");
-    g_tid_HerdComponent        = ::Object::GetTypeIdByName("HerdComponent");
-    g_tid_AnimalComponent      = ::Object::GetTypeIdByName("AnimalComponent");
-    g_tid_WildAnimalComponent  = ::Object::GetTypeIdByName("WildAnimalComponent");
-    g_tid_LivestockComponent   = ::Object::GetTypeIdByName("LivestockComponent");
-    g_tid_LivestockDescription = ::Object::GetTypeIdByName("LivestockDescription");
+    g_tid_HerdDescription      = HerdDescription::TypeId();
+    g_tid_HerdComponent        = HerdComponent::TypeId();
+    g_tid_AnimalComponent      = AnimalComponent::TypeId();
+    g_tid_WildAnimalComponent  = WildAnimalComponent::TypeId();
+    g_tid_LivestockComponent   = LivestockComponent::TypeId();
+    g_tid_LivestockDescription = LivestockDescription::TypeId();
 }
 
 void RegisterComponentBatch_animal() {

@@ -9,8 +9,9 @@
 // Both classes were UI_DIALOG_STUBs (all-no-op) until 2026-07-31, so the whole
 // chain was dead even though ControlUI's three slots were ported and the
 // PastureComponent end (slots 13/14 -> Pasture_CanCommand / Pasture_Command) has
-// been live all along. Registering the vtables is what lets the framework find
-// our promoted classes at the retail addresses.
+// been live all along. ControlUI / ControlUIConfig / ResourceLimitUIConfig are real
+// classes since ENDGAME B.3.8 (compiler vtables, reflected by DEFINE_EXE_TYPE); their
+// reader-less vtable rows are gone, and only the ControlUIConfig type-id cell is left.
 //
 // Hook: address_registry.cpp calls RegisterControlUIBatch().
 
@@ -18,6 +19,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
+#include "Dialog/ControlUIConfig.h"
 
 // ControlUIConfig's TYPE ID — exe .rdata slot 0x1401c4e20, whose retail DATA writer is
 // ControlUIConfig_Register @ 0x14014be40 (standalone/factory_registrations.csv:76).
@@ -36,19 +38,9 @@ static uint32_t g_tid_ControlUIConfig = 0;
 // Must run AFTER Engine::Startup assigns the real CRC ids — called from game_main.cpp
 // alongside the other Fill* hooks.
 extern "C" void FillControlUITypeIds() {
-    g_tid_ControlUIConfig = ::Object::GetTypeIdByName("ControlUIConfig");
+    g_tid_ControlUIConfig = ControlUIConfig::TypeId();
 }
 
-extern "C" void RegisterControlUIVtable();        // code/Game/Dialog/controlui.cpp
-extern "C" void RegisterControlUIConfigVtable();  // code/Game/Dialog/controluiconfig.cpp
-extern "C" void RegisterResourceLimitUIConfigVtable();  // code/Game/Dialog/resourcelimituiconfig.cpp
-
 void RegisterControlUIBatch() {
-    RegisterControlUIVtable();        // 0x14015b380
-    RegisterControlUIConfigVtable();  // 0x14015b3e0
-    // Same wave, same lesson: ResourceLimitUIConfig was a stub for the same reason,
-    // and the dispatch-order workaround that stood in for it desynced the Town Hall
-    // resource limits across dialog open/close.
-    RegisterResourceLimitUIConfigVtable();  // 0x14015d250
     RegisterExeAddr(0x1401c4e20, reinterpret_cast<uintptr_t>(&g_tid_ControlUIConfig));
 }

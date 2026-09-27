@@ -6,7 +6,9 @@
 //
 // VERIFIED addresses (disasm-verified against the retail CitizenComponent vtable
 // 0x140162580 slot +0x78 = 0x140112260 and its case table):
-//   0x140112260  CitizenComponent_NeedsUpdate  (switch(msg) dispatcher, vtable+0x78)
+//   0x140112260  CitizenComponent_NeedsUpdate  (switch(msg) dispatcher, vtable+0x78) -- the
+//                row went in ENDGAME B.3.8: CitizenComponent is a real class and nothing
+//                read the address back
 //   0x1401121e0  CitizenComp_helper_21e0       (msg 0: warm-house thirst-zero)
 //
 // Closure: sub-callees are already registered — 0x140008090 (reg_component_people),
@@ -24,7 +26,6 @@
 #include "resolve.h"
 #include <cstdint>
 
-extern void CitizenComponent_NeedsUpdate(void*, int, uint64_t*, int, int);  // 0x140112260
 extern void CitizenComp_helper_21e0(int64_t, void*);                        // 0x1401121e0
 
 // rdata float-const storage (filled with the real exe values).
@@ -32,7 +33,6 @@ static const float k_rdata_172114 = 0.5f;
 static const float k_rdata_172234 = 300.0f;
 
 extern "C" void RegisterCitizenNeedsUpdate() {
-    RegisterExeAddr(0x140112260, reinterpret_cast<uintptr_t>(&CitizenComponent_NeedsUpdate));
     RegisterExeAddr(0x1401121e0, reinterpret_cast<uintptr_t>(&CitizenComp_helper_21e0));
     // rdata float consts (real exe values; not registered elsewhere).
     RegisterExeAddr(0x140172114, reinterpret_cast<uintptr_t>(&k_rdata_172114));

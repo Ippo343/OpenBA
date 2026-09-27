@@ -16,6 +16,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
+#include "Component/TombstoneDescription.h"
 
 // ------------------------------------------------------------------
 // TombstoneDescription type-ID .rdata global (DAT_1401c4a68).
@@ -34,7 +35,7 @@ static uint32_t g_tid_TombstoneDescription = 0;  // 0x1401c4a68
 
 extern "C" void FillComponentTypeIdGlobals_tombstone() {
     g_tid_TombstoneDescription =
-        ::Object::GetTypeIdByName("TombstoneDescription");
+        TombstoneDescription::TypeId();
 }
 
 void RegisterComponentBatch_tombstone() {

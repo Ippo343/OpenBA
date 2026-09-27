@@ -41,6 +41,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "Component/MapComponent.h"
+#include "Component/StateMachineComponent.h"
+#include "Component/WorkPlaceComponent.h"
 
 
 namespace {
@@ -158,9 +161,7 @@ void* FindComp(void* ent, uint32_t tid) {
         void** cs = reinterpret_cast<void**>(a + static_cast<uintptr_t>(i) * 8);
         void* c = *cs;
         if (!c) continue;
-        void** vt = *reinterpret_cast<void***>(c);
-        if (!vt || !vt[2]) continue;
-        if (reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c) == tid) return c;
+        if (reinterpret_cast<Object::Base*>(c)->Type() == tid) return c;   // B.3.8 bridge
     }
     return nullptr;
 }
@@ -197,7 +198,7 @@ void ProbeClass(const FoodClass& fc) {
 
     // ── placement facts ───────────────────────────────────────────────────────────
     int tx = -1, ty = -1, fw = -1, fh = -1;
-    if (void* mc = FindComp(ent, Tid("MapComponent"))) {
+    if (void* mc = FindComp(ent, MapComponent::TypeId())) {
         uintptr_t m = reinterpret_cast<uintptr_t>(mc);
         tx = *reinterpret_cast<int16_t*>(m + 0x28);
         ty = *reinterpret_cast<int16_t*>(m + 0x2a);
@@ -205,13 +206,13 @@ void ProbeClass(const FoodClass& fc) {
         fh = *reinterpret_cast<int16_t*>(m + 0x2e);
     }
     int state = -1;
-    const bool hasSM = (FindComp(ent, Tid("StateMachineComponent")) != nullptr);
-    if (void* smc = FindComp(ent, Tid("StateMachineComponent")))
+    const bool hasSM = (FindComp(ent, StateMachineComponent::TypeId()) != nullptr);
+    if (void* smc = FindComp(ent, StateMachineComponent::TypeId()))
         state = *reinterpret_cast<int8_t*>(reinterpret_cast<uintptr_t>(smc) + 0x51);
     int staffed = -1, accepting = -1;
     unsigned long long profKey = 0;
     bool haveWpc = false;
-    if (void* wpc = FindComp(ent, Tid("WorkPlaceComponent"))) {
+    if (void* wpc = FindComp(ent, WorkPlaceComponent::TypeId())) {
         uintptr_t w = reinterpret_cast<uintptr_t>(wpc);
         haveWpc   = true;
         staffed   = *reinterpret_cast<int32_t*>(w + 0x60);

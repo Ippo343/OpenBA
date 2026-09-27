@@ -40,6 +40,7 @@
 // ExternalPtr + an index, no owned heap String). Kept faithful.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "system/String.h"
 #include "resolve.h"
 #include <cstdint>
@@ -59,7 +60,7 @@ extern "C" void EventLog_AddEventWithName(void* eventLog, int eventType, int sev
 extern "C" void EventLog_OnAchievementAwarded(int achievementId) {
     void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gameWorld) return;
-    void* eventLog = *(void**)((uintptr_t)gameWorld + 0x138);
+    void* eventLog = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_eventNotifier;   // B.3.8 bridge
     if (!eventLog) return;
 
     // AchievementManager singleton — exe import slot 0x1401514f0 holds the address

@@ -164,12 +164,4 @@ void* NameDatabase::CreateInPlaceObject(void* memory) {
 
 DEFINE_EXE_VTABLE(NameDatabase, "_ZTV12NameDatabase")
 
-// B38_RULES D5: nothing in the tree reads 0x14015eea0 back (swept by hex and
-// owner); this row is reader-less and serves the compiler table only so the
-// coordinator-owned call in address_registry.cpp keeps linking. The closing
-// pass deletes it with the call.
-extern "C" void RegisterNameDatabaseVtable() {
-    RegisterExeAddr(0x14015eea0, reinterpret_cast<uintptr_t>(NameDatabase::Vtable()));
-}
-
 DEFINE_EXE_TYPE_EXT(NameDatabase, "Object::External", "ndb")

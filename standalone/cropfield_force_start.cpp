@@ -21,6 +21,9 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"
+#include "Component/CropFieldComponent.h"
+#include "Component/NaturalResourceDescription.h"
+#include "Component/StateMachineComponent.h"
 #include "options.h"
 #include <cstdint>
 #include <cstdio>
@@ -67,9 +70,7 @@ void* FindComp(void* ent, uint32_t tid) {
         void** cs = reinterpret_cast<void**>(a + static_cast<uintptr_t>(i) * 8);
         void* c = *cs;
         if (!c) continue;
-        void** vt = *reinterpret_cast<void***>(c);
-        if (!vt || !vt[2]) continue;
-        if (reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c) == tid) return c;
+        if (reinterpret_cast<Object::Base*>(c)->Type() == tid) return c;   // B.3.8 bridge
     }
     return nullptr;
 }
@@ -99,8 +100,8 @@ void Fire(int frame) {
     if (!el) return;
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(el + 0x08);
     const int n = *reinterpret_cast<int32_t*>(el + 0x10);
-    const uint32_t tidCrop = ::Object::GetTypeIdByName("CropFieldComponent");
-    const uint32_t tidSM   = ::Object::GetTypeIdByName("StateMachineComponent");
+    const uint32_t tidCrop = CropFieldComponent::TypeId();
+    const uint32_t tidSM   = StateMachineComponent::TypeId();
     if (!arr || n <= 0 || !tidCrop) return;
 
     int found = 0;
@@ -128,7 +129,7 @@ void Fire(int frame) {
         // contains a NaturalResourceDescription and write it in — the same value a
         // player's combo pick would produce.
         if (*reinterpret_cast<uintptr_t*>(c + 0x50) == 0) {
-            const uint32_t tidNatRes = ::Object::GetTypeIdByName("NaturalResourceDescription");
+            const uint32_t tidNatRes = NaturalResourceDescription::TypeId();
             void* gw2 = *g_pGameWorldSingleton;
             uintptr_t town = gw2 ? *reinterpret_cast<uintptr_t*>(
                 reinterpret_cast<uintptr_t>(gw2) + 0xf0) : 0;

@@ -29,6 +29,20 @@
 #include <new>
 #include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "ui/ComboElement.h"                  // ENDGAME B.3.6 UI callers (K4)
+#include "Component/MapComponent.h"
+#include "Component/OrchardComponent.h"
+#include "Dialog/OrchardUI.h"
+#include "Component/PastureComponent.h"
+#include "Dialog/PastureUI.h"
+#include "Component/PickingComponent.h"
+#include "Component/TradeComponent.h"
+#include "Dialog/TradeUI.h"
+#include "Component/UIComponent.h"
+#include "Dialog/EntityUI.h"
+#include "Dialog/ToolUI.h"
+#include "Dialog/UpgradeUI.h"
+#include "Player/RemovalTool.h"
+#include "Player/Tool.h"
 
 // Standalone factory from code/Game/Player/removaltool.cpp (extern "C").
 // Returns a freshly MemAlloc'd RemovalTool (0x40 bytes) with its standalone
@@ -157,12 +171,13 @@ void FireRemovalTool(void* entityUI) {
     fprintf(stderr, "[ToolHarness] RemovalTool=%p startCell=%d endCell=%d (8x8 @ ~centre)\n",
            tool, startCell, endCell);
 
-    void** vt = *reinterpret_cast<void***>(tool);
+    // RemovalTool_Factory_SA is RemovalTool::CreateNewObject: the receiver is proved.
+    RemovalTool* rt = reinterpret_cast<RemovalTool*>(tool);   // B.3.8 bridge
 
     // Startup (+0x20): finds RemovalDescription on description entity (+0x20,
     // null here) -> removalDesc=null. Safe, guarded downstream.
     fprintf(stderr, "[ToolHarness] calling Startup (vtable[%d])...\n", kSlot_Startup);
-    reinterpret_cast<void(*)(void*)>(vt[kSlot_Startup])(tool);
+    rt->Startup();
 
     // CalcCost (+0x70): already reimplemented — computes the removal-area dims.
     // Validates the harness pipeline live (breakpoint here in the debugger).
@@ -170,8 +185,8 @@ void FireRemovalTool(void* entityUI) {
     int outB = -1, outA = -1;
     uint32_t outLen = 0xbeef;
     fprintf(stderr, "[ToolHarness] calling CalcCost (vtable[%d])...\n", kSlot_CalcCost);
-    uint64_t cc = reinterpret_cast<uint64_t(*)(void*, int, int, uint32_t*, int*, int*, uint32_t*)>(
-        vt[kSlot_CalcCost])(tool, startCell, endCell, &outValid, &outB, &outA, &outLen);
+    uint64_t cc = static_cast<uint64_t>(rt->CalcCost(startCell, endCell, &outValid, &outB, &outA,
+                                                     reinterpret_cast<int*>(&outLen)));
     fprintf(stderr, "[ToolHarness] CalcCost -> ret=%llu valid=%u widthB=%d heightA=%d len=%u "
            "(expect width=8 height=8 valid=0 ret=0)\n",
            (unsigned long long)cc, outValid, outB, outA, outLen);
@@ -186,8 +201,7 @@ void FireRemovalTool(void* entityUI) {
     if (removalDesc) {
         fprintf(stderr, "[ToolHarness] calling CalcPath (vtable[%d]) = RemovalCalc_Slot13...\n",
                kSlot_CalcPath);
-        int cp = reinterpret_cast<int(*)(void*, int, int)>(
-            vt[kSlot_CalcPath])(tool, startCell, endCell);
+        int cp = rt->CalcPath(startCell, endCell) ? 1 : 0;
         fprintf(stderr, "[ToolHarness] CalcPath -> ret=%d\n", cp);
     } else {
         fprintf(stderr, "[ToolHarness] SKIP CalcPath: removalDesc(+0x38) null (no description entity "
@@ -438,7 +452,7 @@ void FireRoadTool(void* entityUI) {
     // can walk there".
     int roadTownCol = gridSize / 2, roadTownRow = gridSize / 2;
     {
-        const uint32_t tidMap = ::Object::GetTypeIdByName("MapComponent");
+        const uint32_t tidMap = MapComponent::TypeId();
         long sumCol = 0, sumRow = 0; int n = 0;
         const int houses = StartTown_GetFoundingHouseCount();
         for (int i = 0; i < houses && tidMap; ++i) {
@@ -450,8 +464,7 @@ void FireRoadTool(void* entityUI) {
                 void** slot = reinterpret_cast<void**>(ca + static_cast<uintptr_t>(k) * 8);
                 void* comp = *slot;
                 if (!comp) continue;
-                typedef uint32_t (*gt_t)(void*);
-                if ((*reinterpret_cast<gt_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp)
+                if (reinterpret_cast<Object::Base*>(comp)->Type() /* B.3.8 bridge */
                         != tidMap) continue;
                 sumCol += *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x28);
                 sumRow += *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x2a);
@@ -628,7 +641,7 @@ void FirePastureTool(void* entityUI) {
     // houses' MapComponent cells, exactly as the bridge harness does.
     int fencedTownCol = gridSize / 2, fencedTownRow = gridSize / 2;
     {
-        const uint32_t tidMap = ::Object::GetTypeIdByName("MapComponent");
+        const uint32_t tidMap = MapComponent::TypeId();
         long sumCol = 0, sumRow = 0; int nh = 0;
         const int houses = StartTown_GetFoundingHouseCount();
         for (int i = 0; i < houses && tidMap; ++i) {
@@ -640,8 +653,7 @@ void FirePastureTool(void* entityUI) {
                 void** hs = reinterpret_cast<void**>(ca + static_cast<uintptr_t>(k) * 8);
                 void* comp = *hs;
                 if (!comp) continue;
-                typedef uint32_t (*gt_t)(void*);
-                if ((*reinterpret_cast<gt_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp)
+                if (reinterpret_cast<Object::Base*>(comp)->Type() /* B.3.8 bridge */
                         != tidMap) continue;
                 sumCol += *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x28);
                 sumRow += *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x2a);
@@ -738,9 +750,8 @@ void FirePreviewPlacement(void* entityUI) {
         uint8_t* t = static_cast<uint8_t*>(tool);
         void* controller = *reinterpret_cast<void**>(t + 0x10);   // = EntityUI (dialog controller)
         uint64_t before = controller ? *reinterpret_cast<uint64_t*>(controller) : 0;
-        void** vt = *reinterpret_cast<void***>(tool);
-        typedef char (*OnKey_t)(void*, char);
-        ((OnKey_t)vt[6])(tool, 1);   // vt[6] = +0x30 OnKey; param2=1 -> open CreateBar
+        // EntityUI+0x28 is the active Tool; slot 6 (+0x30) is Tool::OnKey; param 1 -> open CreateBar.
+        reinterpret_cast<Tool*>(tool)->OnKey(1);   // B.3.8 bridge
         uint64_t after = controller ? *reinterpret_cast<uint64_t*>(controller) : 0;
         fprintf(stderr, "[ToolHarness] CreateBar open probe: controller(tool+0x10)=%p dialogIBP(+0x00) "
                "before=%llx after=%llx -> %s\n", controller,
@@ -993,9 +1004,7 @@ uint32_t Comp0TypeId(uintptr_t entity) {
     if (cnt <= 0 || !arr || !arr[0]) return 0;
     void* comp = arr[0];
     if (!comp) return 0;
-    void** cvt = *reinterpret_cast<void***>(comp);
-    if (!cvt || !cvt[2]) return 0;                 // vtable +0x10 = GetTypeId
-    return reinterpret_cast<uint32_t(*)(void*)>(cvt[2])(comp);
+    return reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
 }
 
 void FireMarkRemoval() {
@@ -1101,9 +1110,8 @@ void FireMarkRemoval() {
 // current guard would deref freed memory and (b) a CheckPtr at the top of
 // SA_DialogEntityAlive is the correct, sufficient fix. The Tick never derefs rawDS
 // past +0x28, so the observation itself stays crash-free.
-void* GetControllerByName(void* dialog, const char* name) {
+void* GetControllerByType(void* dialog, uint32_t tid) {
     if (!dialog) return nullptr;
-    uint32_t tid = ::Object::GetTypeIdByName(name);
     if (tid == 0 || tid == 0xFFFFFFFFu) return nullptr;
     uintptr_t buf[2] = {};
     ::new (buf) Object::InternalPtr<UI::DialogController>(
@@ -1130,8 +1138,8 @@ void FirePinPanel(void* entityUI) {
     void* dialog = *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x28);
 
     // 3. Grab the EntityUI (guard target) + ToolUI (pin flag) controllers.
-    void* entCtrl  = GetControllerByName(dialog, "EntityUI");
-    void* toolCtrl = GetControllerByName(dialog, "ToolUI");
+    void* entCtrl  = GetControllerByType(dialog, EntityUI::TypeId());
+    void* toolCtrl = GetControllerByType(dialog, ToolUI::TypeId());
     void* ds = entCtrl ? *reinterpret_cast<void**>(static_cast<uint8_t*>(entCtrl) + 0x28) : nullptr;
     fprintf(stderr, "[PinPanel] house=%p dialog=%p EntityUIctrl=%p(+0x28 ds=%p) ToolUIctrl=%p\n",
            house, dialog, entCtrl, ds, toolCtrl);
@@ -1248,7 +1256,7 @@ static void DlgSettings_InstallBuffer(void* entity, int idx) {
     // repeated here rather than de-anonymising a file this lane does not own.
     // Entity+0x30 is the component-IBP array, +0x38 the count; a component's
     // type id is its vtable slot +0x10.
-    const uint32_t tidUIComp = ::Object::ResolveTypeIdByNameLazy("UIComponent");
+    const uint32_t tidUIComp = UIComponent::TypeId();
     uint64_t uiCompIBP = 0;
     if (tidUIComp) {
         const uint64_t ent = reinterpret_cast<uint64_t>(entity);
@@ -1257,8 +1265,7 @@ static void DlgSettings_InstallBuffer(void* entity, int idx) {
             void* comp = *reinterpret_cast<void**>(
                 *reinterpret_cast<uintptr_t*>(ent + 0x30) + static_cast<int64_t>(i) * 8);
             if (!comp) continue;
-            const uint32_t tid = reinterpret_cast<uint32_t (*)(void*)>(
-                *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            const uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type() /* B.3.8 bridge */;
             if (tid == tidUIComp) { uiCompIBP = reinterpret_cast<uint64_t>(comp); break; }
         }
     }
@@ -1278,8 +1285,7 @@ static void DlgSettings_InstallBuffer(void* entity, int idx) {
             void* comp = *reinterpret_cast<void**>(
                 *reinterpret_cast<uintptr_t*>(ent + 0x30) + static_cast<int64_t>(i) * 8);
             if (!comp) { fprintf(stderr, " <null>"); continue; }
-            const uint32_t tid = reinterpret_cast<uint32_t (*)(void*)>(
-                *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            const uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type() /* B.3.8 bridge */;
             const char* nm = ::Object::GetTypeNameById(tid);
             fprintf(stderr, " %s(0x%08x)", nm ? nm : "?", tid);
         }
@@ -1408,7 +1414,7 @@ static void FireUIComponentCensus() {
     uintptr_t arr = entityList ? *reinterpret_cast<uintptr_t*>(entityList + 0x08) : 0;
     int       en  = entityList ? *reinterpret_cast<int32_t*>(entityList + 0x10) : 0;
 
-    const uint32_t tidUIComp = ::Object::ResolveTypeIdByNameLazy("UIComponent");
+    const uint32_t tidUIComp = UIComponent::TypeId();
 
     int entities = 0, compsWalked = 0, withUI = 0, withBuffer = 0, shown = 0;
     int maxShow = 40;
@@ -1431,9 +1437,7 @@ static void FireUIComponentCensus() {
             void* comp = *cs;
             if (!comp) continue;
             ++compsWalked;
-            const uint32_t tid = reinterpret_cast<uint32_t (*)(void*)>(
-                *reinterpret_cast<uintptr_t*>(
-                    *reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            const uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type() /* B.3.8 bridge */;
             if (!firstName) firstName = ::Object::GetTypeNameById(tid);
             if (tidUIComp && tid == tidUIComp) { uiComp = comp; break; }
         }
@@ -1514,7 +1518,7 @@ static void FireDlgSettingsRoute(void* entityUI) {
         reinterpret_cast<uintptr_t>(gw) + 0xe8);
     uintptr_t arr = entityList ? *reinterpret_cast<uintptr_t*>(entityList + 0x08) : 0;
     int       en  = entityList ? *reinterpret_cast<int32_t*>(entityList + 0x10) : 0;
-    const uint32_t tidUIComp = ::Object::ResolveTypeIdByNameLazy("UIComponent");
+    const uint32_t tidUIComp = UIComponent::TypeId();
 
     void* A = nullptr; int aIdx = -1;
     for (int i = 0; i < en && arr && !A; ++i) {
@@ -1527,9 +1531,7 @@ static void FireDlgSettingsRoute(void* entityUI) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
             void* comp = *cs;
             if (!comp) continue;
-            const uint32_t tid = reinterpret_cast<uint32_t (*)(void*)>(
-                *reinterpret_cast<uintptr_t*>(
-                    *reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            const uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type() /* B.3.8 bridge */;
             if (tidUIComp && tid == tidUIComp) { A = ent; aIdx = i; break; }
         }
     }
@@ -1584,9 +1586,7 @@ static void FireDlgSettingsRoute(void* entityUI) {
         for (int c = 0; c < cN && cA; ++c) {
             void* comp = *reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
             if (!comp) continue;
-            const uint32_t tid = reinterpret_cast<uint32_t (*)(void*)>(
-                *reinterpret_cast<uintptr_t*>(
-                    *reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            const uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type() /* B.3.8 bridge */;
             if (tid != tidUIComp) continue;
             uint8_t* u = static_cast<uint8_t*>(comp);
             void* buf = *reinterpret_cast<void**>(u + 0x28);
@@ -1636,7 +1636,7 @@ void FirePasturePanel(void* entityUI) {
         uintptr_t entityList = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
         uintptr_t arr = entityList ? *reinterpret_cast<uintptr_t*>(entityList + 0x08) : 0;
         int       en  = entityList ? *reinterpret_cast<int32_t*>(entityList + 0x10) : 0;
-        const uint32_t tidPastureComp = ::Object::GetTypeIdByName("PastureComponent");
+        const uint32_t tidPastureComp = PastureComponent::TypeId();
         for (int i = 0; i < en && arr && !pastureComp; ++i) {
             void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
             void* ent = *slot;
@@ -1647,9 +1647,7 @@ void FirePasturePanel(void* entityUI) {
                 void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
                 void* comp = *cs;
                 if (!comp) continue;
-                void** vt = *reinterpret_cast<void***>(comp);
-                typedef uint32_t (*G)(void*);
-                if (vt && vt[2] && reinterpret_cast<G>(vt[2])(comp) == tidPastureComp) {
+                if (reinterpret_cast<Object::Base*>(comp)->Type() == tidPastureComp) {   // B.3.8 bridge
                     pastureComp = comp; break;
                 }
             }
@@ -1683,16 +1681,14 @@ void FirePasturePanel(void* entityUI) {
     const char* selEnv = Opt().pasturePanelSelect;
     if (selEnv && *selEnv && dialog) {
         int wantItem = std::atoi(selEnv);
-        uint32_t tidPUI = ::Object::GetTypeIdByName("PastureUI");
+        uint32_t tidPUI = PastureUI::TypeId();
         void** ctrlArr = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(dialog) + 0x78);
         int cnt = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dialog) + 0x80);
         void* pui = nullptr;
         for (int i = 0; ctrlArr && i < cnt; i++) {
             void* c = ctrlArr[i];
             if (!c) continue;
-            void** vt = *reinterpret_cast<void***>(c);
-            typedef uint32_t (*G)(void*);
-            if (vt && vt[2] && reinterpret_cast<G>(vt[2])(c) == tidPUI) { pui = c; break; }
+            if (reinterpret_cast<Object::Base*>(c)->Type() == tidPUI) { pui = c; break; }   // B.3.8 bridge
         }
         if (!pui) {
             fprintf(stderr, "[PasturePanel] SELECT: no PastureUI controller among %d "
@@ -1706,9 +1702,9 @@ void FirePasturePanel(void* entityUI) {
             if (combo && items > 0) {
                 if (wantItem >= items) wantItem = items - 1;
                 reinterpret_cast<UI::ComboElement*>(combo)->SetCurrentItem(wantItem);  // B.3.6 bridge
-                void** vt = *reinterpret_cast<void***>(pui);
-                typedef void (*Slot9_t)(void*, void*, int, int);
-                reinterpret_cast<Slot9_t>(vt[9])(pui, combo, 0x14, 500);
+                reinterpret_cast<PastureUI*>(pui)->OnElementEvent(                        // B.3.8 bridge
+                    reinterpret_cast<Object::InternalPtr<UI::Element>*>(combo), 0x14, 500,  // B.3.8 bridge
+                    0, 0, 0, nullptr);
                 fprintf(stderr, "[PasturePanel] SELECT fired: item=%d -> pasture type(+0x28)=%p "
                        "max(+0x40)=%d\n", wantItem,
                        *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(pastureComp) + 0x28),
@@ -1765,7 +1761,7 @@ void FireOrchardPanel(void* entityUI) {
     if (!entityList) { fprintf(stderr, "[OrchardPanel] EntityList (gw+0xe8) null\n"); return; }
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(entityList + 0x08);   // masterArray.data
     int       n   = *reinterpret_cast<int32_t*>(entityList + 0x10);     // masterArray.count
-    const uint32_t tidOrchardComp = ::Object::GetTypeIdByName("OrchardComponent");
+    const uint32_t tidOrchardComp = OrchardComponent::TypeId();
     if (!arr || n <= 0 || !tidOrchardComp) {
         fprintf(stderr, "[OrchardPanel] cannot scan (arr=%p n=%d tidOrchardComponent=%u)\n",
                reinterpret_cast<void*>(arr), n, tidOrchardComp);
@@ -1784,9 +1780,7 @@ void FireOrchardPanel(void* entityUI) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
             void* comp = *cs;
             if (!comp) continue;
-            void** vt = *reinterpret_cast<void***>(comp);
-            typedef uint32_t (*G)(void*);
-            if (vt && vt[2] && reinterpret_cast<G>(vt[2])(comp) == tidOrchardComp) {
+            if (reinterpret_cast<Object::Base*>(comp)->Type() == tidOrchardComp) {   // B.3.8 bridge
                 orchEnt = ent; orchComp = comp; break;
             }
         }
@@ -1811,16 +1805,14 @@ void FireOrchardPanel(void* entityUI) {
     // supposed to fill: +0x30 combo IBP and +0x38 yield ProgressElement IBP. A null
     // +0x38 with a good +0x30 is the ProgressElement type-id trap; both null means
     // Slot4 never ran at all.
-    const uint32_t tidOUI = ::Object::GetTypeIdByName("OrchardUI");
+    const uint32_t tidOUI = OrchardUI::TypeId();
     void** ctrlArr = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(dialog) + 0x78);
     int cnt = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dialog) + 0x80);
     void* oui = nullptr;
     for (int i = 0; ctrlArr && i < cnt; i++) {
         void* c = ctrlArr[i];
         if (!c) continue;
-        void** vt = *reinterpret_cast<void***>(c);
-        typedef uint32_t (*G)(void*);
-        if (vt && vt[2] && reinterpret_cast<G>(vt[2])(c) == tidOUI) { oui = c; break; }
+        if (reinterpret_cast<Object::Base*>(c)->Type() == tidOUI) { oui = c; break; }   // B.3.8 bridge
     }
     if (!oui) {
         fprintf(stderr, "[OrchardPanel] no OrchardUI controller among %d controllers "
@@ -1851,9 +1843,9 @@ void FireOrchardPanel(void* entityUI) {
         if (combo && items > 0) {
             if (wantItem >= items) wantItem = items - 1;
             reinterpret_cast<UI::ComboElement*>(combo)->SetCurrentItem(wantItem);  // B.3.6 bridge
-            void** vt = *reinterpret_cast<void***>(oui);
-            typedef void (*Slot9_t)(void*, void*, int, int);
-            reinterpret_cast<Slot9_t>(vt[9])(oui, combo, 0x14, 500);
+            reinterpret_cast<OrchardUI*>(oui)->OnElementEvent(                        // B.3.8 bridge
+                reinterpret_cast<Object::InternalPtr<UI::Element>*>(combo), 0x14, 500,  // B.3.8 bridge
+                0, 0, 0, nullptr);
             fprintf(stderr, "[OrchardPanel] SELECT fired: item=%d -> orchard type(+0x60)=%llx "
                    "(%s)\n", wantItem, orchType(),
                    orchType() ? "TYPED" : "STILL UNTYPED - Slot11 did not take");
@@ -1879,7 +1871,7 @@ void FireTradePanel(void* entityUI) {
     if (!entityList) { fprintf(stderr, "[TradePanel] EntityList (gw+0xe8) null\n"); return; }
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(entityList + 0x08);   // masterArray.data
     int       n   = *reinterpret_cast<int32_t*>(entityList + 0x10);     // masterArray.count
-    const uint32_t tidTradeComp = ::Object::GetTypeIdByName("TradeComponent");
+    const uint32_t tidTradeComp = TradeComponent::TypeId();
     if (!arr || n <= 0 || !tidTradeComp) {
         fprintf(stderr, "[TradePanel] cannot scan (arr=%p n=%d tidTradeComponent=%u)\n",
                reinterpret_cast<void*>(arr), n, tidTradeComp);
@@ -1897,9 +1889,7 @@ void FireTradePanel(void* entityUI) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
             void* comp = *cs;
             if (!comp) continue;
-            void** vt = *reinterpret_cast<void***>(comp);
-            typedef uint32_t (*G)(void*);
-            if (vt && vt[2] && reinterpret_cast<G>(vt[2])(comp) == tidTradeComp) {
+            if (reinterpret_cast<Object::Base*>(comp)->Type() == tidTradeComp) {   // B.3.8 bridge
                 postEnt = ent; break;
             }
         }
@@ -1922,7 +1912,7 @@ void FireTradePanel(void* entityUI) {
 
     // Enumerate the dialog's controllers and look for TradeUI. Reporting ALL of them
     // distinguishes "TradeUI stayed stubbed" from "no controller was created at all".
-    const uint32_t tidTradeUI = ::Object::GetTypeIdByName("TradeUI");
+    const uint32_t tidTradeUI = TradeUI::TypeId();
     void** ctrlArr = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(dialog) + 0x78);
     int cnt = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dialog) + 0x80);
     fprintf(stderr, "[TradePanel] dialog has %d controller(s) (TradeUI tid=%u)\n", cnt, tidTradeUI);
@@ -1930,9 +1920,7 @@ void FireTradePanel(void* entityUI) {
     for (int i = 0; ctrlArr && i < cnt; ++i) {
         void* c = ctrlArr[i];
         if (!c) { fprintf(stderr, "[TradePanel]   ctrl[%d] = <null>\n", i); continue; }
-        void** vt = *reinterpret_cast<void***>(c);
-        typedef uint32_t (*G)(void*);
-        uint32_t id = (vt && vt[2]) ? reinterpret_cast<G>(vt[2])(c) : 0;
+        uint32_t id = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge
         fprintf(stderr, "[TradePanel]   ctrl[%d] = %p tid=%u%s\n", i, c, id,
                id == tidTradeUI ? "   <== TradeUI" : "");
         if (id == tidTradeUI) tui = c;
@@ -2378,20 +2366,20 @@ bool UpgradeOpenDialog() {
 void FireUpgradeClick() {
     void* dialog = s_up_tool
         ? *reinterpret_cast<void**>(static_cast<uint8_t*>(s_up_tool) + 0x28) : nullptr;
-    void* ctrl = dialog ? GetControllerByName(dialog, "UpgradeUI") : nullptr;
-    fprintf(stderr, "[Upgrade] dialog=%p UpgradeUI controller=%p\n", dialog, ctrl);
+    UpgradeUI* ctrl = dialog ? reinterpret_cast<UpgradeUI*>(                    // B.3.8 bridge
+        GetControllerByType(dialog, UpgradeUI::TypeId())) : nullptr;
+    fprintf(stderr, "[Upgrade] dialog=%p UpgradeUI controller=%p\n", dialog, static_cast<void*>(ctrl));
     if (!ctrl) {
         fprintf(stderr, "[Upgrade] FAILED: no UpgradeUI controller in the panel — this building's "
                "UI has no upgrade page (check the template's UIDescription).\n");
         return;
     }
     uintptr_t c = reinterpret_cast<uintptr_t>(ctrl);
-    void** vt = *reinterpret_cast<void***>(ctrl);
 
-    // Slot 4 (Serialize) binds the button into +0x30 and sets its element id. The
+    // Slot 4 (OnCreated) binds the button into +0x30 and sets its element id. The
     // slot-8 self-heal normally does this; drive it directly if it hasn't run.
-    if (*reinterpret_cast<uint64_t*>(c + 0x30) == 0 && vt[4])
-        reinterpret_cast<void(*)(void*)>(vt[4])(ctrl);
+    if (*reinterpret_cast<uint64_t*>(c + 0x30) == 0)
+        ctrl->OnCreated();
 
     void* button = *reinterpret_cast<void**>(c + 0x30);
     void* ds     = *reinterpret_cast<void**>(c + 0x28);
@@ -2402,12 +2390,10 @@ void FireUpgradeClick() {
                "was blocked (run with BANISHED_DESTROY_TRACE=1 for the reason).\n");
         return;
     }
-    if (!vt[9]) { fprintf(stderr, "[Upgrade] FAILED: UpgradeUI vtable slot 9 null\n"); return; }
-
     void* src = button;   // p2 points at the source-element pointer
     fprintf(stderr, "[Upgrade] >>> firing UpgradeUI slot 9 (msg=0x12 id=33000) <<<\n");
-    reinterpret_cast<void(*)(void*, void*, int, int, int, int)>(vt[9])(
-        ctrl, &src, 0x12, 33000, 0, 0);
+    ctrl->OnElementEvent(reinterpret_cast<Object::InternalPtr<UI::Element>*>(&src),   // B.3.8 bridge
+                         0x12, 33000, 0, 0, 0, nullptr);
     fprintf(stderr, "[Upgrade] click delivered — follow [DestroySM] for state 3 -> 4 -> 5 "
            "and the UPGRADE SPAWN.\n");
 }
@@ -2573,7 +2559,7 @@ const char* BridgeComponentName(uint32_t tid) {
 
 void BridgeDumpEntity(const char* what, void* ent) {
     if (!ent) { fprintf(stderr, "[Bridge] %s = null\n", what); return; }
-    const uint32_t tidPicking = ::Object::GetTypeIdByName("PickingComponent");
+    const uint32_t tidPicking = PickingComponent::TypeId();
 
     uint8_t* e = static_cast<uint8_t*>(ent);
     const int count = *reinterpret_cast<int32_t*>(e + 0x38);
@@ -2583,8 +2569,7 @@ void BridgeDumpEntity(const char* what, void* ent) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
         void* comp = *slot;
         if (!comp) continue;
-        typedef uint32_t (*gt_t)(void*);
-        uint32_t tid = (*reinterpret_cast<gt_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type() /* B.3.8 bridge */;
         fprintf(stderr, " %s(%u)", BridgeComponentName(tid), tid);
         // Picking: report the user data we seated — this is the SetMeshUserData fix.
         if (tidPicking && tid == tidPicking)
@@ -2656,7 +2641,7 @@ void FireBridgeTool(void* entityUI) {
     // cells; fall back to the map centre if the start town is not up yet.
     int townCol = W / 2, townRow = W / 2;
     {
-        const uint32_t tidMap = ::Object::GetTypeIdByName("MapComponent");
+        const uint32_t tidMap = MapComponent::TypeId();
         long sumCol = 0, sumRow = 0; int n = 0;
         const int houses = StartTown_GetFoundingHouseCount();
         for (int i = 0; i < houses && tidMap; ++i) {
@@ -2668,8 +2653,7 @@ void FireBridgeTool(void* entityUI) {
                 void** slot = reinterpret_cast<void**>(ca + static_cast<uintptr_t>(k) * 8);
                 void* comp = *slot;
                 if (!comp) continue;
-                typedef uint32_t (*gt_t)(void*);
-                if ((*reinterpret_cast<gt_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp)
+                if (reinterpret_cast<Object::Base*>(comp)->Type() /* B.3.8 bridge */
                         != tidMap) continue;
                 sumCol += *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x28);
                 sumRow += *reinterpret_cast<int16_t*>(reinterpret_cast<uintptr_t>(comp) + 0x2a);

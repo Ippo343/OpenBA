@@ -359,7 +359,7 @@ void MG_ReadRefPool(void* serializer, void* header, void* countField) {
 } // namespace
 
 bool MapGenerator::Serialize(void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(this);
+    // Caller batch CB6: the fields are read by name (was `s + off` over `this`).
     alignas(8) uint8_t serializer[24];
     if (!fn_ExternalPtr_Serialize2) {
         return true;  // missing the ExternalPtr exe door — can't proceed
@@ -368,18 +368,18 @@ bool MapGenerator::Serialize(void* stream) {
 
     // --- scalar header (order matches Easy.rsc: _stringTable,_name,_description,
     //     _exposed,_startAreaSize,_citizenRadius,_citizen) ---
-    fn_ExternalPtr_Serialize2(s + 0x20, serializer);   // +0x20 _stringTable ref
-    reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer);       // +0x28 _name
-    reinterpret_cast<System::String*>(s + 0x30)->Serialize(serializer);       // +0x30 _description
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x38), nullptr);   // B.3.4 bridge  +0x38 _exposed
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x3c), nullptr);   // B.3.4 bridge  +0x3c _startAreaSize (townSize)
+    fn_ExternalPtr_Serialize2(&_field20, serializer);   // +0x20 _stringTable ref
+    reinterpret_cast<System::String*>(&_field28)->Serialize(serializer);       // +0x28 _name
+    reinterpret_cast<System::String*>(&_field30)->Serialize(serializer);       // +0x30 _description
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&enabled), nullptr);   // B.3.4 bridge  +0x38 _exposed
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(subdivisions, nullptr);   // B.3.4 bridge  +0x3c _startAreaSize (townSize)
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(scale, nullptr);   // B.3.4 bridge (cast dropped: scale is float)  +0x40 _citizenRadius
-    reinterpret_cast<System::String*>(s + 0x48)->Serialize(serializer);       // +0x48 _citizen template ref
+    reinterpret_cast<System::String*>(&templateRef.strPtr)->Serialize(serializer);       // +0x48 _citizen template ref
 
     // --- _citizens: InitialFamily[] (stride 8: bool _educated@0, int _maxChildCount@4) ---
     {
-        const int n = MG_SerializeCount(serializer, s + 0x60, s + 0x68, 8);
-        uint8_t* e = *(uint8_t**)(s + 0x60);
+        const int n = MG_SerializeCount(serializer, &boolIntArray, &boolIntCount, 8);
+        uint8_t* e = static_cast<uint8_t*>(boolIntArray);
         for (int i = 0; e && i < n; ++i, e += 8) {
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(e), nullptr);        // B.3.4 bridge  _educated
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 4), nullptr);     // B.3.4 bridge  _maxChildCount
@@ -387,13 +387,13 @@ bool MapGenerator::Serialize(void* stream) {
     }
 
     // --- refArray1 (+0x70): ExternalRef pool ---
-    MG_ReadRefPool(serializer, s + 0x70, s + 0x78);
+    MG_ReadRefPool(serializer, &refArray1, &refArray1.count);
 
     // --- _structures: InitialStructure[] (stride 0x30: String@0, gen@8, ptr@0x10,
     //     int _offsetX@0x18, _offsetY@0x1c, _width@0x20, _height@0x24, _rotation@0x28) ---
     {
-        const int n = MG_SerializeCount(serializer, s + 0x80, s + 0x88, 0x30);
-        uint8_t* e = *(uint8_t**)(s + 0x80);
+        const int n = MG_SerializeCount(serializer, &refArray2, &refArray2.count, 0x30);
+        uint8_t* e = static_cast<uint8_t*>(refArray2.data);
         for (int i = 0; e && i < n; ++i, e += 0x30) {   // FUN_14001b6c0, in place
             reinterpret_cast<System::String*>(e)->Serialize(serializer);            // _structure ref name
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 0x18), nullptr);  // B.3.4 bridge  _offsetX
@@ -405,35 +405,35 @@ bool MapGenerator::Serialize(void* stream) {
     }
 
     // --- refArray3..refArray7 (+0x90,+0xA0,+0xB0,+0xC0,+0xD0): ExternalRef pools ---
-    MG_ReadRefPool(serializer, s + 0x90, s + 0x98);
-    MG_ReadRefPool(serializer, s + 0xa0, s + 0xa8);
-    MG_ReadRefPool(serializer, s + 0xb0, s + 0xb8);
-    MG_ReadRefPool(serializer, s + 0xc0, s + 0xc8);
-    MG_ReadRefPool(serializer, s + 0xd0, s + 0xd8);
+    MG_ReadRefPool(serializer, &refArray3, &refArray3.count);
+    MG_ReadRefPool(serializer, &refArray4, &refArray4.count);
+    MG_ReadRefPool(serializer, &refArray5, &refArray5.count);
+    MG_ReadRefPool(serializer, &refArray6, &refArray6.count);
+    MG_ReadRefPool(serializer, &refArray7, &refArray7.count);
 
     // --- scalar tail (cull counts, initial resource counts, livestock params) ---
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0xe0), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0xe4), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0xe8), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0xec), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0xf0), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0xf4), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0xf8), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0xfc), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x100), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x104), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x108), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x10c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x110), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x114), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(paramE0, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(paramE4, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(paramE8, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(paramEC, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(paramF0, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(paramF4, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(paramF8, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(paramFC, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(param100, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(param104, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(param108, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(param10C, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(param110, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(param114, nullptr);   // B.3.4 bridge
 
     // --- env template refs + interleaved scalars (EXACT stream order) ---
-    reinterpret_cast<System::String*>(s + 0x118)->Serialize(serializer);       // descRef1 (terrain)
-    reinterpret_cast<System::String*>(s + 0x138)->Serialize(serializer);       // descRef2 (climate)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x130), nullptr);   // B.3.4 bridge  terrainAmplitude
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x150), nullptr);   // B.3.4 bridge  chunkSize
-    reinterpret_cast<System::String*>(s + 0x158)->Serialize(serializer);       // descRef3 (vegetation)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x170), nullptr);   // B.3.4 bridge
+    reinterpret_cast<System::String*>(&descRef1.strPtr)->Serialize(serializer);       // descRef1 (terrain)
+    reinterpret_cast<System::String*>(&descRef2.strPtr)->Serialize(serializer);       // descRef2 (climate)
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(terrainAmplitude, nullptr);   // B.3.4 bridge  terrainAmplitude
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(chunkSize, nullptr);   // B.3.4 bridge  chunkSize
+    reinterpret_cast<System::String*>(&descRef3.strPtr)->Serialize(serializer);       // descRef3 (vegetation)
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(param170, nullptr);   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     return true;   // retail returns AL=1
@@ -469,13 +469,5 @@ void* MapGenerator::CreateInPlaceObject(void* memory) {
 }
 
 DEFINE_EXE_VTABLE(MapGenerator, "_ZTV12MapGenerator")
-
-// B38_RULES D5: nothing in the tree reads 0x14015ed80 back (swept by hex and
-// owner); this row is reader-less and serves the compiler table only so the
-// coordinator-owned call in address_registry.cpp keeps linking. The closing
-// pass deletes it with the call.
-extern "C" void RegisterMapGeneratorVtable() {
-    RegisterExeAddr(0x14015ed80, reinterpret_cast<uintptr_t>(MapGenerator::Vtable()));
-}
 
 DEFINE_EXE_TYPE(MapGenerator, "Object::External")

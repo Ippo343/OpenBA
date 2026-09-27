@@ -23,9 +23,10 @@
 //   From then on HerdComponent::Update (slot 9) grazes/migrates and grows the
 //   herd through AdjustSize.
 //
-// The vtable slot wiring itself lives in the COMPONENT_LIVE_FACTORY_* macros in
-// herdcomponent.cpp / populationcomponent.cpp — registering an address here only
-// makes it reachable for OTHER callers that still go through ResolveAddr.
+// HerdComponent / PopulationComponent are real classes (ENDGAME B.3.8): their
+// vtable slots (Herd 6/7, Population 4/6/7) are the compiler's, and nothing read
+// those addresses back, so their rows and thunks are gone. What is left here are
+// the helper doors the ports resolve by address.
 //
 // Gate: BANISHED_LIVE_HERD or BANISHED_LIVE_POPULATION. Both halves of the chain
 // need the same helper bodies, and the useful recipe turns on both anyway.
@@ -56,13 +57,6 @@ static void Herd_Helper7400_Thunk(void* animalComp, void* pos, float yaw, char p
 static void Herd_Populate_Thunk(void* herdComp, int count) {
     HerdComponent_Populate(reinterpret_cast<int64_t>(herdComp), count);
 }
-static void Herd_OnAdd_Thunk(void* self)    { HerdComponent_OnAdd(self); }
-static void Herd_OnRemove_Thunk(void* self) { HerdComponent_OnRemove(self); }
-static void Pop_Startup_Thunk(void* self) {
-    PopulationComponent_Startup(reinterpret_cast<PopulationComponent*>(self));
-}
-static void Pop_OnAdd_Thunk(void* self)    { PopulationComponent_OnAdd(self); }
-static void Pop_OnRemove_Thunk(void* self) { PopulationComponent_OnRemove(self); }
 
 void RegisterHerdLive() {
     // Storage first — the ports below read these through ResolveAddr.
@@ -75,18 +69,4 @@ void RegisterHerdLive() {
 
     // HerdComponent::Populate — the per-herd initial seeding pass.
     RegisterExeAddr(0x140120f50, reinterpret_cast<uintptr_t>(&Herd_Populate_Thunk));
-
-    // HerdComponent vtable slots 6 / 7.
-    RegisterExeAddr(0x140121f40, reinterpret_cast<uintptr_t>(&Herd_OnAdd_Thunk));
-    RegisterExeAddr(0x140121e20, reinterpret_cast<uintptr_t>(&Herd_OnRemove_Thunk));
-
-    // PopulationComponent vtable slot 4 — the herd-creation entry point.
-    RegisterExeAddr(0x140054220, reinterpret_cast<uintptr_t>(&Pop_Startup_Thunk));
-
-    // PopulationComponent vtable slots 6 / 7 — the TownManager population-registry
-    // append/erase at (GameWorld+0xF0)+0xC0. That array is what DebugUI::Slot4 walks
-    // to build the debug panel's "deer population" combo; with slot 6 never installed
-    // it stayed empty and the combo had no rows.
-    RegisterExeAddr(0x1400541c0, reinterpret_cast<uintptr_t>(&Pop_OnAdd_Thunk));
-    RegisterExeAddr(0x140054180, reinterpret_cast<uintptr_t>(&Pop_OnRemove_Thunk));
 }

@@ -464,9 +464,4 @@ void* PickupStoredRawMaterial::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(PickupStoredRawMaterial, "_ZTV23PickupStoredRawMaterial")
 
-// B38 D5: every by-address reader of 0x14015ff80 was inside this block and now
-// builds the object with the real ctor, so the row is gone. The function stays
-// until the coordinator's address_registry hunk drops its call.
-extern "C" void RegisterPickupStoredRawMaterialVtable() {}
-
 DEFINE_EXE_TYPE(PickupStoredRawMaterial, "Action")

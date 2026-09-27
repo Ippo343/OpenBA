@@ -275,14 +275,6 @@ void* TerrainGenerator::CreateInPlaceObject(void* memory) {
 
 DEFINE_EXE_VTABLE(TerrainGenerator, "_ZTV16TerrainGenerator")
 
-// B38_RULES D5: nothing in the tree reads 0x14015f170 back (swept by hex and
-// owner); this row is reader-less and serves the compiler table only so the
-// coordinator-owned call in address_registry.cpp keeps linking. The closing
-// pass deletes it with the call.
-extern "C" void RegisterTerrainGeneratorVtable() {
-    RegisterExeAddr(0x14015f170, reinterpret_cast<uintptr_t>(TerrainGenerator::Vtable()));
-}
-
 // Register the two terrain-data-array helpers to the faithful reimpls above
 // (FUN_1400206b0 resize / FUN_140020870 serialize), so the ResolveAddr call
 // sites resolve them.

@@ -997,9 +997,3 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
     (void)uVar16ret;
     return true;
 }
-
-// By-name door (ENDGAME B.3.8 callers): standalone/reg_keystone_a_removal.cpp registers
-// this name at 0x1401035e0. The body is RemovalTool::CalcPath above.
-extern "C" uint64_t RemovalCalc_Slot13(int64_t param_1, int param_2, int param_3) {
-    return reinterpret_cast<RemovalTool*>(param_1)->RemovalTool::CalcPath(param_2, param_3);  // B.3.8 bridge
-}

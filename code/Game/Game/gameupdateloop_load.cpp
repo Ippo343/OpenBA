@@ -31,6 +31,7 @@
 #include "graphics/Mesh.h"        // MeshInstance
 #include "graphics/SunLight.h"
 #include "GameUpdateLoop.h"
+#include "WorldGeometry.h"      // caller batch CB6: m_worldGeometry's class
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "system/Filename.h"
@@ -57,7 +58,6 @@
 // ============================================================
 // Externs from sibling reimpl TUs (already registered/defined)
 // ============================================================
-extern "C" void* Reimpl_Geometry_Init(void* self);            // FUN_1400b00e0 (serialize_arrays.cpp)
 extern "C" void  Reimpl_Array_Resize_Stride04(void*, int);    // FUN_1400021d0 (serialize_resize_helpers.cpp)
 extern "C" void  WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t seed); // worldgen.cpp (M5 5b)
 extern "C" void  MapTileGrid_Build(void* game, int dim);  // maptilegrid.cpp (M5 5c — tile grid Game+0x80)
@@ -102,11 +102,9 @@ static fn_SaveLoad_Ctor_t s_fn_SaveLoad_Ctor = nullptr;             // ??0SaveLo
 typedef void (*fn_SavedState_Dtor_t)(void* self);
 static fn_SavedState_Dtor_t s_fn_SavedState_Dtor = nullptr;         // ??1SavedState@Save@@QEAA@XZ
 
-// code/Game/Game/gameupdateloop_serialize.cpp — the ported vtable +0x38 slot
-// (SaveRestore); the LOAD-FROM-SAVE branch below calls it directly.
-extern "C" void GameUpdateLoop_SaveRestore(void* self, char save,
-                                           void* savedState, int* outParam);
-extern "C" void GameUpdateLoop_SaveRoundtripCheck(void* self, void* loadedState);
+// code/Game/Game/gameupdateloop_serialize.cpp — the serializer roundtrip check;
+// the LOAD-FROM-SAVE branch below calls SaveRestoreOut (slot 7's body) directly.
+extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, void* loadedState);
 
 // code/Game/Game/eventlog_achievement.cpp — the achievement award TOAST (exe
 // 0x140096960). Installed on the AchievementManager at step 30 below.
@@ -134,10 +132,10 @@ extern "C" void EventLog_OnAchievementAwarded(int achievementId);
 // professionlist.cpp). gw+0xb0 carries the default profession (+0x30) + profRef2
 // (+0x38) the citizen-economy finders key on.
 
-static void LoadProfessionList_Step2(uint8_t* p) {
+static void LoadProfessionList_Step2(GameUpdateLoop* self) {
 
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
-        *(void**)(p + 0xB0) = nullptr;
+        self->m_professionList = nullptr;
         fprintf(stderr, "[GUL::ProfList] SKIP — factory unavailable (factory=%p)\n",
                 g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
         fflush(stderr);
@@ -153,7 +151,7 @@ static void LoadProfessionList_Step2(uint8_t* p) {
     System::Filename fname("Game/Profession/Profession.rsc");
     void* profList = const_cast<::Object::External*>(
         efactory->FindOrLoad(fname));                                       // B.3.3 bridge
-    *(void**)(p + 0xB0) = profList;
+    self->m_professionList = profList;
 
     void* defProf  = profList ? *(void**)((uint8_t*)profList + 0x30) : nullptr;
     void* profRef2 = profList ? *(void**)((uint8_t*)profList + 0x38) : nullptr;
@@ -186,8 +184,8 @@ static void LoadProfessionList_Step2(uint8_t* p) {
 // which only runs while a save/load operation is active; with the slot null,
 // SaveLoad::Draw crashed in SpriteContext::Flush -> MaterialInstance::Setup
 // (read of 0+0x28) the frame after an autosave started (2026-08-27).
-static void LoadUIMaterial_Step3(uint8_t* p) {
-    *(void**)(p + 0xB8) = nullptr;
+static void LoadUIMaterial_Step3(GameUpdateLoop* self) {
+    self->m_uiMaterial = nullptr;
 
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton)
         return;
@@ -205,15 +203,15 @@ static void LoadUIMaterial_Step3(uint8_t* p) {
     bool isMat = false;
     if (mat && s_matTypeInfo && fn_IsDerivedFrom)
         isMat = fn_IsDerivedFrom(mat, *s_matTypeInfo);
-    if (isMat) *(void**)(p + 0xB8) = mat;
+    if (isMat) self->m_uiMaterial = mat;
 
     fprintf(stderr, "[GUL::UIMat] gw+0xb8=%p (loaded=%p isMaterial=%d)\n",
-            *(void**)(p + 0xB8), mat, (int)isMat);
+            self->m_uiMaterial, mat, (int)isMat);
     fflush(stderr);
 }
 
-static void LoadHelpTopics_Step4(uint8_t* p) {
-    *(void**)(p + 0xA0) = nullptr;
+static void LoadHelpTopics_Step4(GameUpdateLoop* self) {
+    self->m_helpTopics = nullptr;
 
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         fprintf(stderr, "[GUL::Help] SKIP — factory unavailable (factory=%p)\n",
@@ -235,10 +233,10 @@ static void LoadHelpTopics_Step4(uint8_t* p) {
     bool isList = false;
     if (list && s_extListTypeInfo && fn_IsDerivedFrom)
         isList = fn_IsDerivedFrom(list, *s_extListTypeInfo);
-    if (isList) *(void**)(p + 0xA0) = list;
+    if (isList) self->m_helpTopics = list;
 
     fprintf(stderr, "[GUL::Help] gw+0xa0=%p (loaded=%p isExternalList=%d topics=%d)\n",
-            *(void**)(p + 0xA0), list, (int)isList,
+            self->m_helpTopics, list, (int)isList,
             (isList && fn_ExternalList_GetResourceCount)
                 ? fn_ExternalList_GetResourceCount(list) : -1);
     fflush(stderr);
@@ -268,8 +266,8 @@ static void LoadHelpTopics_Step4(uint8_t* p) {
 // ExternalList::GetResourceCount(null-guarded to 0), so the debug panel's Disaster tab
 // showed an EMPTY disease dropdown with no error anywhere.
 
-static void LoadDiseaseList_Step1(uint8_t* p) {
-    *(void**)(p + 0xA8) = nullptr;
+static void LoadDiseaseList_Step1(GameUpdateLoop* self) {
+    self->m_diseaseList = nullptr;
 
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         fprintf(stderr, "[GUL::DiseaseList] SKIP — factory unavailable (factory=%p)\n",
@@ -291,7 +289,7 @@ static void LoadDiseaseList_Step1(uint8_t* p) {
     bool isList = false;
     if (list && s_extListTypeInfo && fn_IsDerivedFrom)
         isList = fn_IsDerivedFrom(list, *s_extListTypeInfo);
-    if (isList) *(void**)(p + 0xA8) = list;
+    if (isList) self->m_diseaseList = list;
 
     // The `fn_ExternalList_GetResourceCount` test is KEPT even though the call
     // is now a member call: it is an existing behavioural gate and the pointer
@@ -301,7 +299,7 @@ static void LoadDiseaseList_Step1(uint8_t* p) {
                           ->GetResourceCount()
                     : -1;
     fprintf(stderr, "[GUL::DiseaseList] gw+0xa8=%p (loaded=%p isExternalList=%d diseases=%d)\n",
-            *(void**)(p + 0xA8), list, (int)isList, count);
+            self->m_diseaseList, list, (int)isList, count);
 
     // Per-entry tuning dump. Disease+0x40 is the RECIPROCAL mortality — RecoverOrDie
     // computes (1/x)/careMult, so a zero here is an infinite death chance (every sick
@@ -821,9 +819,9 @@ static inline void* AllocSub(uint64_t size, int align) {
 // LOADER THREAD: no function-local resolve cache (B6-5) — the ctor is the
 // class's, and Time(float) is engine_funcs' boot-resolved fn_Time_Ctor_Float
 // (the same export, `??0Time@System@@QEAA@M@Z`).
-static void BuildSkyMesh_Step28(uint8_t* p) {
+static void BuildSkyMesh_Step28(GameUpdateLoop* self) {
     void* mem = AllocSub(0x120, 8);
-    *(void**)(p + 0x108) = mem;
+    self->m_skyMesh = mem;
     if (!mem) {
         fprintf(stderr, "[GUL::SkyMesh] SKIP — mem=%p\n", mem);
         fflush(stderr);
@@ -861,7 +859,7 @@ static void BuildSkyMesh_Step28(uint8_t* p) {
         reinterpret_cast<Graphics::Geometry*>(mem)->Update(
             *reinterpret_cast<const System::Time*>(&timeObj));   // B.3.5 bridge
     }
-    *(uint32_t*)((uint8_t*)mem + 0x28) = 0;
+    reinterpret_cast<Graphics::MeshInstance*>(mem)->_detailId = 0;   // +0x28  B.3.5 bridge
 
     fprintf(stderr, "[GUL::SkyMesh] built skyMesh=%p meshRes=%p (TimeCtor=%p)\n",
             mem, meshRes, (void*)fn_Time_Ctor_Float);
@@ -888,7 +886,8 @@ extern "C" bool GameUpdateLoop_IsWorldBuilt(void* loop) {
 }
 
 // ENDGAME B.3.8 LOOP: slot 6 of the real class (was the hand-built table's
-// GameUpdateLoop_Load). The body still addresses the loop through `loopVoid`.
+// GameUpdateLoop_Load). Caller batch CB6: the fields are the class's named
+// members; `loopVoid` is only the build guard's / log's pointer value.
 void GameUpdateLoop::Load() {
     void* const loopVoid = this;
     // Single-owner build guard — NOW AN ASSERTION, NOT A RACE FIX.
@@ -922,11 +921,10 @@ void GameUpdateLoop::Load() {
     fflush(stderr);
 
     LoadEnsureInit();
-    uint8_t* p = (uint8_t*)loopVoid;
 
     fprintf(stderr, "[GUL::Load] ENTER self=%p seed=%d mapSize=%d climateGen=%p terrainGen=%p saved=%p\n",
-            loopVoid, *(int32_t*)(p + 0x30), *(int32_t*)(p + 0x34),
-            *(void**)(p + 0x50), *(void**)(p + 0x48), *(void**)(p + 0x58));
+            loopVoid, m_seed, m_mapSize,
+            m_climateConfig, m_terrainConfig, m_savedState);
     fflush(stderr);
 
     // g_pGameWorldSingleton = this loop (read by AddGlobalObject / Audio::Pause at the tail).
@@ -937,10 +935,10 @@ void GameUpdateLoop::Load() {
     //   step 1 Diseases    → +0xA8, opt-in BANISHED_LIVE_DISEASELIST (unblocks citizen illness)
     //   step 2 Professions  → +0xB0, the citizen-economy keystone (BANISHED_LIVE_PROFESSIONLIST)
     //   step 4 HelpTopics   → +0xA0, consumed only by the help dialog
-    LoadDiseaseList_Step1(p);       // step 1 → +0xA8 (diseases); env-gated, else null
-    LoadProfessionList_Step2(p);    // step 2 → +0xB0 (professions); env-gated, else null
-    LoadUIMaterial_Step3(p);        // step 3 → +0xB8 (UI material — SaveLoad::Draw overlay)
-    LoadHelpTopics_Step4(p);        // step 4 → +0xA0 (help topics)
+    LoadDiseaseList_Step1(this);       // step 1 → +0xA8 (diseases); env-gated, else null
+    LoadProfessionList_Step2(this);    // step 2 → +0xB0 (professions); env-gated, else null
+    LoadUIMaterial_Step3(this);        // step 3 → +0xB8 (UI material — SaveLoad::Draw overlay)
+    LoadHelpTopics_Step4(this);        // step 4 → +0xA0 (help topics)
 
     // Step 5 — the gameplay Random (+0xD8, 0x9c4) seeded from gameLoop+0x30.
     //
@@ -959,8 +957,8 @@ void GameUpdateLoop::Load() {
     // POINTERS (the profession BST is confirmed pointer-keyed), which ASLR reorders.
     {
         void* mem = AllocSub(0x9c4, 4);
-        if (mem && s_fn_Random_Seeded_Ctor) s_fn_Random_Seeded_Ctor(mem, *(uint32_t*)(p + 0x30));
-        *(void**)(p + 0xD8) = mem;
+        if (mem && s_fn_Random_Seeded_Ctor) s_fn_Random_Seeded_Ctor(mem, static_cast<uint32_t>(m_seed));
+        m_random = mem;
     }
 
     // Step 6 — PlayerController/Camera (+0xE0, 0x10c). Initial frustum (overwritten by step 33).
@@ -978,56 +976,56 @@ void GameUpdateLoop::Load() {
             if (fn_Volume_Frustum_Ctor) fn_Volume_Frustum_Ctor(frustum, &nearZ, &farZ, &fovX, &fovY);
             Reimpl_FUN_1400985b0(mem, frustum, 0.0f, -40.0f, 25.0f);
         }
-        *(void**)(p + 0xE0) = mem;
+        m_playerController = mem;
     }
 
     // Step 7 — Renderer (+0x90, 0x50).
     {
         void* mem = AllocSub(0x50, 4);
         if (mem && fn_Graphics_Renderer_Ctor) fn_Graphics_Renderer_Ctor(mem);
-        *(void**)(p + 0x90) = mem;
+        m_renderer = mem;
     }
 
     // Step 8 — EntityList (+0xE8, 0xe8).
     {
         void* mem = AllocSub(0xe8, 4);
         if (mem) Reimpl_FUN_1400c3f90(mem);
-        *(void**)(p + 0xE8) = mem;
+        m_entityList = mem;
     }
 
     // Step 9 — UserInterface (+0x98, 0x128).
     {
         void* mem = AllocSub(0x128, 4);
         if (mem && s_fn_UI_Ctor) s_fn_UI_Ctor(mem);
-        *(void**)(p + 0x98) = mem;
+        m_userInterface = mem;
     }
 
     // Step 10 — town/trade manager (+0xF0, 0x1c0) — exe ctor 0x140090a30.
     {
         void* mem = AllocSub(0x1c0, 4);
         if (mem) Reimpl_TradeComponent_impl_0a30(mem);
-        *(void**)(p + 0xF0) = mem;
+        m_citizenList = mem;
     }
 
     // Step 11 — Game (+0xF8, 0xf8) — CRITICAL: clears the m_game==null Stage-C guards.
     {
         void* mem = AllocSub(0xf8, 8);
         if (mem) Reimpl_FUN_14009ee70(mem);
-        *(void**)(p + 0xF8) = mem;
+        m_game = mem;
     }
 
     // Step 12 — Tutorial-ish (+0x118, 0x138).
     {
         void* mem = AllocSub(0x138, 4);
         if (mem) Reimpl_FUN_1400f9180(mem);
-        *(void**)(p + 0x118) = mem;
+        m_tutorial = mem;
     }
 
     // Step 13 — EntityUI (+0x120, 0xb0).
     {
         void* mem = AllocSub(0xb0, 4);
         if (mem) Reimpl_FUN_1401025c0(mem);
-        *(void**)(p + 0x120) = mem;
+        m_entityUI = mem;
     }
 
     // Step 14 — DayCounter Time struct (+0x128, 0x18): flag=1, Time(+8,0.0), Time(+0x10,3600.0).
@@ -1041,14 +1039,14 @@ void GameUpdateLoop::Load() {
                 fn_Time_Ctor_Float(d + 0x10, 3600.0f);
             }
         }
-        *(void**)(p + 0x128) = mem;
+        m_dayCounter = mem;
     }
 
     // Step 15 — Weather sim (+0x130, 0x78).
     {
         void* mem = AllocSub(0x78, 8);
         if (mem) Reimpl_FUN_140093f60(mem);
-        *(void**)(p + 0x130) = mem;
+        m_weather = mem;
     }
 
     // Step 16 — env config: bind (envRes, climateGen) into the weather sim.
@@ -1059,7 +1057,7 @@ void GameUpdateLoop::Load() {
     // GameUpdateLoop::Load FindOrLoads it and passes it to FUN_140093e30; we do
     // the same. A partial/failed load degrades gracefully to null (the weather
     // sim still runs its temperature/snow half).
-    if (*(void**)(p + 0x130)) {
+    if (m_weather) {
         void* envRes = nullptr;
         if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
             System::Filename fname("Environment/Environment.rsc");
@@ -1072,7 +1070,7 @@ void GameUpdateLoop::Load() {
                     envRes, wxCount);
             fflush(stderr);
         }
-        Reimpl_FUN_140093e30(*(void**)(p + 0x130), envRes, /*climateGen*/*(void**)(p + 0x50));
+        Reimpl_FUN_140093e30(m_weather, envRes, /*climateGen*/m_climateConfig);
     }
 
     // Step 17 — StringTable-pair struct (+0x138, 0x28) zero + flag bytes.
@@ -1085,49 +1083,51 @@ void GameUpdateLoop::Load() {
             *(uint16_t*)(d + 0x14) = 0x0101;
             *(uint8_t*)(d + 0x10) = 0;   // clear low byte (matches exe)
         }
-        *(void**)(p + 0x138) = mem;
+        m_eventNotifier = mem;
     }
 
     // Step 18 — Graphics::Scene (+0x60, 0x78).
     {
         void* mem = AllocSub(0x78, 8);
         if (mem && fn_Graphics_Scene_Ctor) fn_Graphics_Scene_Ctor(mem);
-        *(void**)(p + 0x60) = mem;
+        m_graphicsScene = mem;
     }
 
     // Step 19 — Audio::Scene (+0x78, 0x38).
     {
         void* mem = AllocSub(0x38, 8);
         if (mem && fn_AudioScene_Ctor) fn_AudioScene_Ctor(mem);
-        *(void**)(p + 0x78) = mem;
+        m_audioScene = mem;
     }
 
     // Step 20 — Picking::Scene (+0x70, 0x60).
     {
         void* mem = AllocSub(0x60, 8);
         if (mem && s_fn_Picking_Scene_Ctor) s_fn_Picking_Scene_Ctor(mem);
-        *(void**)(p + 0x70) = mem;
+        m_pickingScene = mem;
     }
 
     // Step 21 - CharacterGrid: loose Morton quadtree over characters (+0x88, 0x60).
     {
         void* mem = AllocSub(0x60, 8);
         if (mem) Reimpl_FUN_1400182b0(mem, 2048.0f);
-        *(void**)(p + 0x88) = mem;
+        m_characterGrid = mem;
     }
 
     // Step 22 — AnimationManager (+0x68, 0x9d8).
     {
         void* mem = AllocSub(0x9d8, 8);
         if (mem && s_fn_AnimMgr_Ctor) s_fn_AnimMgr_Ctor(mem);
-        *(void**)(p + 0x68) = mem;
+        m_animationManager = mem;
     }
 
-    // Step 23 — WorldGeometry (+0x110, 0x230) via the registered Reimpl_Geometry_Init.
+    // Step 23 — WorldGeometry (+0x110, 0x230): the real ctor (0x1400b00e0).
+    // Caller batch CB6: was the Reimpl_Geometry_Init door (kept for its
+    // address-registry row), which placement-news the same class.
     {
         void* mem = AllocSub(0x230, 8);
-        if (mem) Reimpl_Geometry_Init(mem);
-        *(void**)(p + 0x110) = mem;
+        if (mem) ::new (mem) WorldGeometry();
+        m_worldGeometry = mem;
     }
 
     // Step 24 — SunLight (+0x100, 0x108): ctor + Set(dir,col1,col2). No exe vtable override
@@ -1155,24 +1155,25 @@ void GameUpdateLoop::Load() {
                 *reinterpret_cast<const Math::Vector3*>(dir),
                 *reinterpret_cast<const Math::Vector4*>(col1),
                 *reinterpret_cast<const Math::Vector4*>(col2));   // B.3.5 bridge
-            *(uint32_t*)((uint8_t*)mem + 0x28) = 0;
+            reinterpret_cast<Graphics::SunLight*>(mem)->_detailId = 0;   // +0x28  B.3.5 bridge
         }
-        *(void**)(p + 0x100) = mem;
+        m_sunLight = mem;
     }
-    if (*(void**)(p + 0x110)) *(uint32_t*)(*(uint8_t**)(p + 0x110) + 0x28) = 1;  // worldGeom +0x28 = 1
+    if (m_worldGeometry)   // worldGeom +0x28 = 1
+        static_cast<WorldGeometry*>(m_worldGeometry)->_detailId = 1;   // B.3.8 bridge
 
     // Step 25 — SaveLoad (+0x140, 0x90).
     {
         void* mem = AllocSub(0x90, 4);
         if (mem && s_fn_SaveLoad_Ctor) s_fn_SaveLoad_Ctor(mem);
-        *(void**)(p + 0x140) = mem;
+        m_saveLoad = mem;
     }
 
     // Step 26 — KeyState/map-input struct (+0x148, 0x38) zero-init.
     {
         void* mem = AllocSub(0x38, 4);
         if (mem) memset(mem, 0, 0x38);
-        *(void**)(p + 0x148) = mem;
+        m_imageCapture = mem;
     }
 
     // Step 27 — MusicTracks struct (+0x80, 0x18): {idx=-1, res=null (Find deferred), 0}.
@@ -1188,11 +1189,11 @@ void GameUpdateLoop::Load() {
             // Find("Game/MusicTracks.rsc") is done. See LANE1 report row 39.
             *(uint64_t*)(d + 0x10) = 0;
         }
-        *(void**)(p + 0x80) = mem;
+        m_musicPlayer = mem;
     }
 
     // Step 28 — SkyMesh MeshInstance (+0x108): the sky `_clear_` dome (helper above).
-    BuildSkyMesh_Step28(p);
+    BuildSkyMesh_Step28(this);
 
     // Step 29 — Seasons/Events StringTables. Fill the +0x138 event-log struct's
     // StringTable slots: +0x00 = events (message templates, indexed by eventType),
@@ -1203,7 +1204,7 @@ void GameUpdateLoop::Load() {
     // mirroring the Environment/SkyMesh finds above. The ":events"/":seasons"
     // suffix selects the named sub-resource within Dialog/StringTable.rsc.
     {
-        void* evStruct = *(void**)(p + 0x138);
+        void* evStruct = m_eventNotifier;
         if (evStruct && g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
             void* factory = *g_pExternalFactorySingleton;
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
@@ -1283,7 +1284,7 @@ void GameUpdateLoop::Load() {
     // restore-from-save path: GameUpdateLoop's own serializer round-trips +0x15C
     // (gameupdateloop_serialize.cpp), so the SaveRestore below overwrites the field
     // with whatever the .sav held — the id the SCENARIO DIALOG chose has to survive.
-    const int achievementId = *(int32_t*)(p + 0x15C);
+    const int achievementId = m_scenarioIndex;
 
     // Step 31 — worldgen (new-game branch, savedState==0). M5 5b first-light:
     // build the terrain mesh (base perlin island) + the gameplay tile-grid map
@@ -1306,7 +1307,7 @@ void GameUpdateLoop::Load() {
     // was unreachable, and all 36 achievements sat at 0% forever with nothing in the log
     // to say why. The dialog looked healthy the whole time because it reads the
     // ACHIEVEMENT list (mgr+0x00), not the instance list.
-    if (*(void**)(p + 0x58) == nullptr /*new game*/) {
+    if (m_savedState == nullptr /*new game*/) {
         void* mgr = (g_ppAchievementManager && *g_ppAchievementManager)
                         ? **g_ppAchievementManager : nullptr;
         if (mgr) {
@@ -1322,11 +1323,11 @@ void GameUpdateLoop::Load() {
     }
 
     static const bool kEnableWorldgen = true;
-    if (kEnableWorldgen && *(void**)(p + 0x58) == nullptr /*new game*/) {
-        void* worldGeom  = *(void**)(p + 0x110);
-        void* terrainGen = *(void**)(p + 0x48);
-        int   sizeIdx    = *(int32_t*)(p + 0x34);
-        uint32_t seed    = *(uint32_t*)(p + 0x30);
+    if (kEnableWorldgen && m_savedState == nullptr /*new game*/) {
+        void* worldGeom  = m_worldGeometry;
+        void* terrainGen = m_terrainConfig;
+        int   sizeIdx    = m_mapSize;
+        uint32_t seed    = static_cast<uint32_t>(m_seed);
         if (worldGeom && terrainGen) {
             WorldGen_BuildTerrain(worldGeom, terrainGen, sizeIdx, seed);
 
@@ -1350,7 +1351,7 @@ void GameUpdateLoop::Load() {
             // the first ring probe faulted reading 0x2510 (= coarse cell 593 * 0x10).
             // This was the "TradeComponent trade-map resize" deferred at Step 31.
             {
-                uint8_t* townMgr = *(uint8_t**)(p + 0xF0);
+                uint8_t* townMgr = static_cast<uint8_t*>(m_citizenList);
                 if (townMgr && dim > 0) {
                     const int coarse = (int)dim >> 3;
                     Reimpl_FUN_140017640(townMgr + 0x140, coarse * coarse);
@@ -1365,7 +1366,7 @@ void GameUpdateLoop::Load() {
 
             // Gameplay tile-grid arrays at the map struct (+0x148): store dim,
             // allocate two dim*dim arrays (+0x18/+0x28), zero the +0x28 one.
-            void* mapStruct = *(void**)(p + 0x148);
+            void* mapStruct = m_imageCapture;
             if (mapStruct && dim > 0) {
                 *(uint32_t*)((uint8_t*)mapStruct + 4) = dim;
                 int n = (int)(dim * dim);
@@ -1379,7 +1380,7 @@ void GameUpdateLoop::Load() {
             // CreateNaturalResource): classify every cell into a terrain type
             // (buildable / shore / water / mountain). Prerequisite for the
             // start-town spiral spawn-finder. See code/Game/Game/maptilegrid.cpp.
-            void* game = *(void**)(p + 0xf8);
+            void* game = m_game;
             if (game && dim > 0)
                 MapTileGrid_Build(game, (int)dim);
 
@@ -1412,8 +1413,8 @@ void GameUpdateLoop::Load() {
             // FUN_1400a3300 (call site 0x14009761d). The ECS spawn at the same
             // tile is deferred. See code/Game/Game/starttown.cpp.
             {
-                void* startCfg   = *(void**)(p + 0x40);   // mapGen
-                void* playerCtrl = *(void**)(p + 0xe0);
+                void* startCfg   = m_mapConfig;   // mapGen
+                void* playerCtrl = m_playerController;
                 if (startCfg && playerCtrl && game && dim > 0) {
                     float camPos[3] = { 0, 0, 0 };
                     StartTown_ComputeCamera(startCfg, game, camPos);
@@ -1427,7 +1428,7 @@ void GameUpdateLoop::Load() {
                     // M5 5c increment #3 — ECS spawn (FUN_1400a3300 steps 4-7).
                     // world base = the GameUpdateLoop (= g_pGameWorldSingleton):
                     // world+0xf8 = Game, world+0xe8 = entity list.
-                    StartTown_SpawnEntities(startCfg, p);
+                    StartTown_SpawnEntities(startCfg, this);
                 }
             }
 
@@ -1436,10 +1437,10 @@ void GameUpdateLoop::Load() {
             // and the camera target, WITHOUT calling FUN_1400a3300 yet. Remove once
             // start-town is implemented. See project_newgame_path_roadmap / task #6/#7.
             {
-                uint8_t* mapGen = *(uint8_t**)(p + 0x40);   // startConfig (MapGenerator rsc)
-                uint8_t* game   = *(uint8_t**)(p + 0xf8);
-                uint8_t* wgeom  = *(uint8_t**)(p + 0x110);
-                uint8_t* pctrl  = *(uint8_t**)(p + 0xe0);
+                uint8_t* mapGen = static_cast<uint8_t*>(m_mapConfig);   // startConfig (MapGenerator rsc)
+                uint8_t* game   = static_cast<uint8_t*>(m_game);
+                uint8_t* wgeom  = static_cast<uint8_t*>(m_worldGeometry);
+                uint8_t* pctrl  = static_cast<uint8_t*>(m_playerController);
                 fprintf(stderr, "[startTown::DIAG] mapGen(loop+0x40)=%p game=%p worldGeom=%p playerCtrl=%p\n",
                         mapGen, game, wgeom, pctrl);
                 if (mapGen) {
@@ -1498,8 +1499,8 @@ void GameUpdateLoop::Load() {
     // 0x14009754c) — the ENTIRE world state deserializes here instead of the
     // worldgen/StartTown branch above. We call the ported SaveRestore directly
     // (it IS our vtable +0x38 slot).
-    if (*(void**)(p + 0x58) != nullptr) {
-        void* savedState = *(void**)(p + 0x58);
+    if (m_savedState != nullptr) {
+        void* savedState = m_savedState;
         SetUnregPhase("load");
         fprintf(stderr, "[GUL::Load] LOAD-FROM-SAVE branch: SaveRestore(load) state=%p\n",
                 savedState);
@@ -1510,13 +1511,13 @@ void GameUpdateLoop::Load() {
         // it before the citizen spawn for the same reason).
         CharManager_Seed();
         int loadOut = 0;
-        GameUpdateLoop_SaveRestore(loopVoid, 0, savedState, &loadOut);
+        SaveRestoreOut(false, static_cast<Save::SavedState*>(savedState), &loadOut);
         // BANISHED_SAVE_TEST=roundtrip: serialize the just-restored world again
         // and compare the raw bytes (gameupdateloop_serialize.cpp). No-op otherwise.
-        GameUpdateLoop_SaveRoundtripCheck(loopVoid, savedState);
+        GameUpdateLoop_SaveRoundtripCheck(this, savedState);
         if (s_fn_SavedState_Dtor) s_fn_SavedState_Dtor(savedState);
         if (fn_MemFreeStatic) fn_MemFreeStatic(savedState);
-        *(void**)(p + 0x58) = nullptr;
+        m_savedState = nullptr;
         SetUnregPhase("postload");
         fprintf(stderr, "[GUL::Load] LOAD-FROM-SAVE done (out=%d)\n", loadOut);
         fflush(stderr);
@@ -1529,7 +1530,7 @@ void GameUpdateLoop::Load() {
         // + same order as the worldgen branch above; dim comes from the
         // deserialized map object itself (+0x00, what e8c0's *param_1 reads).
         {
-            void* game = *(void**)(p + 0xf8);
+            void* game = m_game;
             int dim = game ? *(int32_t*)game : 0;
             fprintf(stderr, "[GUL::Load] post-load rebuild: game=%p dim=%d\n", game, dim);
             fflush(stderr);
@@ -1590,7 +1591,7 @@ void GameUpdateLoop::Load() {
     //
     // The block is inert on a new game (id == -1), which is why it is default-on;
     // BANISHED_LIVE_SCENARIO_GOALS=0 is the kill switch for an A/B run.
-    *(void**)(p + 0x150) = nullptr;
+    m_scenarioInstance = nullptr;
     if (achievementId >= 0) {
         const uint32_t* const achTypeId = AchievementTypeId();
         if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_InternalBasePtr_Ctor ||
@@ -1620,7 +1621,7 @@ void GameUpdateLoop::Load() {
             }
             uint64_t ibp = 0;
             new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(instance));   // B.3.3 bridge
-            *(uint64_t*)(p + 0x150) = ibp;
+            m_scenarioInstance = reinterpret_cast<void*>(ibp);
 
             // scenario = resourceList->data[achievementId]
             //   MOV RAX,[0x1401c3de8] / MOV RCX,[RAX+8] / MOV RAX,[RCX+0x20] / [RAX+idx*8]
@@ -1637,7 +1638,7 @@ void GameUpdateLoop::Load() {
             if (scenario && fn_IsDerivedFrom && achTypeId)
                 checked = fn_IsDerivedFrom(scenario, *achTypeId) ? scenario : nullptr;
 
-            void* inst = *(void**)(p + 0x150);
+            void* inst = m_scenarioInstance;
             fprintf(stderr, "[GUL::Load] step32 achievementId=%d instance=%p scenario=%p "
                             "derived=%p achTid=%u\n",
                     achievementId, inst, scenario, checked,
@@ -1646,21 +1647,21 @@ void GameUpdateLoop::Load() {
             // ExternalPtr<Achievement> arrives as a bare register value (B7-5).
             if (inst) reinterpret_cast<Achievement::AchievementInstance*>(inst)->SetAchievement(   // B.3.7 bridge
                 Object::ExternalPtr<Achievement::Achievement>(reinterpret_cast<Achievement::Achievement*>(checked)));
-            *(int32_t*)(p + 0x15C) = achievementId;
+            m_scenarioIndex = achievementId;
         }
     }
 
     // Step 33 — finalize camera + add scene globals + unpause audio channels.
-    if (*(void**)(p + 0xE0))
-        Reimpl_FUN_140098660(*(void**)(p + 0xE0), 40.0f, 2.0f, 512.0f);
+    if (m_playerController)
+        Reimpl_FUN_140098660(m_playerController, 40.0f, 2.0f, 512.0f);
     {
-        void* gScene = *(void**)(p + 0x60);   // g_pGameWorld+0x60
+        void* gScene = m_graphicsScene;   // g_pGameWorld+0x60
         // B.3.5: the `fn_Graphics_Scene_AddGlobalObject` readiness term went with
         // the door; `gScene` is an object test and stays.
         if (gScene) {
             Graphics::Scene* gs = reinterpret_cast<Graphics::Scene*>(gScene);   // B.3.5 bridge
-            if (*(void**)(p + 0x110))
-                gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(*(void**)(p + 0x110))); // WorldGeom  B.3.5 bridge
+            if (m_worldGeometry)
+                gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_worldGeometry)); // WorldGeom  B.3.5 bridge
             // M5 5b lighting: add the SunLight so the directional light + ambient
             // light the terrain in the main render pass (Renderer::Draw dispatches the
             // light's vtable+0x50 SunLight::Draw → Context::SetLight + DrawItemList).
@@ -1672,15 +1673,15 @@ void GameUpdateLoop::Load() {
             // decompiles (Renderer::Draw 0x180104bb0, SunLight::Draw 0x1801067b0,
             // DrawShadowMap 0x180106bc0, AddScene 0x180105700).
             static const bool kAddSunLight = true;
-            if (kAddSunLight && *(void**)(p + 0x100))
-                gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(*(void**)(p + 0x100))); // SunLight  B.3.5 bridge
+            if (kAddSunLight && m_sunLight)
+                gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_sunLight)); // SunLight  B.3.5 bridge
             // SkyMesh: add as a Scene global object so the reflection + main passes
             // both draw the `_clear_` sky dome (the dark-water fix; see BuildSkyMesh_Step28).
             static const bool kAddSkyMesh = true;
-            if (kAddSkyMesh && *(void**)(p + 0x108))
-                gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(*(void**)(p + 0x108))); // SkyMesh  B.3.5 bridge
+            if (kAddSkyMesh && m_skyMesh)
+                gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_skyMesh)); // SkyMesh  B.3.5 bridge
         }
-        void* aScene = *(void**)(p + 0x78);   // g_pGameWorld+0x78
+        void* aScene = m_audioScene;   // g_pGameWorld+0x78
         if (aScene) {
             reinterpret_cast<Audio::Scene*>(aScene)->Pause(4, false);   // B.3.7 bridge
             reinterpret_cast<Audio::Scene*>(aScene)->Pause(3, false);   // B.3.7 bridge
@@ -1695,8 +1696,8 @@ void GameUpdateLoop::Load() {
     s_worldBuiltLoop.store(loopVoid, std::memory_order_release);
 
     fprintf(stderr, "[GUL::Load] EXIT — world built: game=%p ui=%p entityList=%p scene=%p sun=%p\n",
-            *(void**)(p + 0xF8), *(void**)(p + 0x98), *(void**)(p + 0xE8),
-            *(void**)(p + 0x60), *(void**)(p + 0x100));
+            m_game, m_userInterface, m_entityList,
+            m_graphicsScene, m_sunLight);
     fflush(stderr);
 }
 

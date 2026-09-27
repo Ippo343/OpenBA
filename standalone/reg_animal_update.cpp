@@ -1,11 +1,10 @@
 // Animal spawn wave — AnimalComponent per-animal simulation (deer/livestock
 // wander + aging + death). Owned by the animal-update lane.
 //
-// animalcomponent.cpp no longer delegates to 0x140106420 through ResolveAddr —
-// it carries the genuine 452-instruction body — so registering that address here
-// is safe (the reg_component_nature.cpp:57-59 recursion warning no longer
-// applies). Everything below is gated on BANISHED_LIVE_ANIMAL_UPDATE; a default
-// run resolves none of it and stays byte-for-byte unchanged.
+// AnimalComponent is a real class (ENDGAME B.3.8): its Update / Startup / OnAdded
+// slots (0x140106420 / 0x140106d50 / 0x140106c20) are reached through the compiler
+// vtable and nothing reads those addresses back, so their rows are gone. What is
+// left are the helper doors the Update body's callees resolve by address.
 //
 // Hook: address_registry.cpp calls RegisterAnimalUpdateLive().
 // Shared animal type-id globals (0x1401c6f98 / 0x1401c8000 / herd + livestock
@@ -14,6 +13,8 @@
 #include "Object/factory_registration.h"      // Object::GetTypeIdByName
 #include "Component/animalcomponent_funcs.h"
 #include <cstdint>
+#include "Component/CharacterComponent.h"
+#include "Component/CharacterDescription.h"
 
 // ---------------------------------------------------------------------------
 // Type-id globals this lane needs that NOTHING else registers.
@@ -42,9 +43,9 @@ static uint32_t g_tid_CharacterDescription = 0;  // 0x1401c70b0
 // FillComponentTypeIdGlobals_* calls for deterministic ordering.
 extern "C" void FillComponentTypeIdGlobals_animal_update() {
     if (g_tid_CharacterComponent == 0)
-        g_tid_CharacterComponent = ::Object::GetTypeIdByName("CharacterComponent");
+        g_tid_CharacterComponent = CharacterComponent::TypeId();
     if (g_tid_CharacterDescription == 0)
-        g_tid_CharacterDescription = ::Object::GetTypeIdByName("CharacterDescription");
+        g_tid_CharacterDescription = CharacterDescription::TypeId();
 }
 
 void RegisterAnimalUpdateLive() {
@@ -53,9 +54,6 @@ void RegisterAnimalUpdateLive() {
     // 0x140105e20 SetBounds is intentionally NOT registered here: it already has
     // a faithful port (PastureComponent_AnimalSetBounds) registered by
     // reg_component_gap_D.cpp:71, and this lane calls it through ResolveAddr.
-    RegisterExeAddr(0x140106420, reinterpret_cast<uintptr_t>(&AnimalComponent_Update));         // vtable[9]
-    RegisterExeAddr(0x140106d50, reinterpret_cast<uintptr_t>(&AnimalComponent_Startup));        // vtable[4]
-    RegisterExeAddr(0x140106c20, reinterpret_cast<uintptr_t>(&AnimalComponent_OnAdd));          // vtable[6]
     RegisterExeAddr(0x140106020, reinterpret_cast<uintptr_t>(&AnimalComponent_FindHabitat));
     RegisterExeAddr(0x140107320, reinterpret_cast<uintptr_t>(&AnimalComponent_UpdateBehavior));
     RegisterExeAddr(0x140106250, reinterpret_cast<uintptr_t>(&AnimalComponent_SetWanderTimer));

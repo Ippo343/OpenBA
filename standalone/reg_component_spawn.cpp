@@ -22,6 +22,8 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"     // Object::GetTypeIdByName
 #include <cstdint>
+#include "Component/GrowthDescription.h"
+#include "Component/SpawnDescription.h"
 
 // Backing storage for the SpawnComponent type-id .rdata globals (filled after
 // InvokeAllRegistrations/Engine::Startup — see FillComponentTypeIdGlobals_spawn).
@@ -30,8 +32,8 @@ static uint32_t g_tid_GrowthDescription = 0;  // 0x1401c77e8
 
 extern "C" void FillComponentTypeIdGlobals_spawn() {
     // No-op unless the storage was registered (live mode); harmless otherwise.
-    g_tid_SpawnDescription  = ::Object::GetTypeIdByName("SpawnDescription");
-    g_tid_GrowthDescription = ::Object::GetTypeIdByName("GrowthDescription");
+    g_tid_SpawnDescription  = SpawnDescription::TypeId();
+    g_tid_GrowthDescription = GrowthDescription::TypeId();
 }
 
 void RegisterComponentBatch_spawn() {

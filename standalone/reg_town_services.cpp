@@ -25,19 +25,16 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
+#include "Component/CemeteryComponent.h"
+#include "Component/HappinessDescription.h"
 
 // --- CemeteryComponent (code/Game/Component/cemeterycomponent.cpp) ---
 extern "C" char CemeteryComponent_EnterBuilt(void* comp, void* sm);       // 0x140046fc0
 extern "C" char CemeteryComponent_EnterDemolish(void* comp, void* sm);    // 0x140046f80
-struct CemeteryComponent;
-void CemeteryComponent_BuildPlotGrid(CemeteryComponent* self);            // 0x140047200
-void CemeteryComponent_OnRemove(CemeteryComponent* self);                 // 0x1400471c0
 
 // --- HealerComponent (code/Game/Component/healercomponent.cpp) ---
 extern "C" char HealerComponent_EnterBuilt(void* comp, void* sm);         // 0x14004ae30
 extern "C" char HealerComponent_EnterDemolish(void* comp, void* sm);      // 0x14004adf0
-struct HealerComponent;
-void HealerComponent_OnRemove(HealerComponent* self);                     // 0x14004ae70
 
 // --- HappinessComponent (code/Game/Component/happinesscomponent.cpp) ---
 extern "C" bool HappinessComponent_IsActive(void* self);                  // 0x14004a550
@@ -74,26 +71,23 @@ static uint32_t g_tid_HappinessDescription = 0;   // 0x1401c42f8
 static uint32_t g_tid_CemeteryComponent = 0;      // 0x1401c4090
 
 extern "C" void FillTypeIdGlobals_town_services() {
-    g_tid_HappinessDescription = ::Object::GetTypeIdByName("HappinessDescription");
-    g_tid_CemeteryComponent    = ::Object::GetTypeIdByName("CemeteryComponent");
+    g_tid_HappinessDescription = HappinessDescription::TypeId();
+    g_tid_CemeteryComponent    = CemeteryComponent::TypeId();
 }
 
 void RegisterTownServices() {
     RegisterExeAddr(0x1401c42f8, reinterpret_cast<uintptr_t>(&g_tid_HappinessDescription));
     RegisterExeAddr(0x1401c4090, reinterpret_cast<uintptr_t>(&g_tid_CemeteryComponent));
 
-    // Graveyard. 0x140047200 was explicitly DEFERRED by reg_component_gap_B ("self-
-    // resolving passthrough -> recursion") -- that passthrough is exactly why the plot
-    // array stayed empty; it is a real port now, so the address can be registered.
+    // Graveyard. The lifecycle slots (Cemetery 6/7 = 0x140047200 / 0x1400471c0,
+    // Healer 7 = 0x14004ae70) are real-class virtuals since ENDGAME B.3.8; nothing read
+    // their addresses back, so their rows are gone. The state-table handlers stay.
     RegisterExeAddr(0x140046fc0, reinterpret_cast<uintptr_t>(&CemeteryComponent_EnterBuilt));
     RegisterExeAddr(0x140046f80, reinterpret_cast<uintptr_t>(&CemeteryComponent_EnterDemolish));
-    RegisterExeAddr(0x140047200, reinterpret_cast<uintptr_t>(&CemeteryComponent_BuildPlotGrid));
-    RegisterExeAddr(0x1400471c0, reinterpret_cast<uintptr_t>(&CemeteryComponent_OnRemove));
 
     // Hospital.
     RegisterExeAddr(0x14004ae30, reinterpret_cast<uintptr_t>(&HealerComponent_EnterBuilt));
     RegisterExeAddr(0x14004adf0, reinterpret_cast<uintptr_t>(&HealerComponent_EnterDemolish));
-    RegisterExeAddr(0x14004ae70, reinterpret_cast<uintptr_t>(&HealerComponent_OnRemove));
 
     // Happiness sources.
     RegisterExeAddr(0x14004a550, reinterpret_cast<uintptr_t>(&HappinessComponent_IsActive));

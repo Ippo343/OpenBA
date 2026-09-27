@@ -27,7 +27,6 @@ extern "C" void     RemovalCalc_helper_e4d0(int64_t);                         //
 extern "C" void     RemovalCalc_StateMachine_dfa0(int64_t);                   // 0x14011dfa0
 extern "C" uint64_t RemovalCalc_helper_c700(uint32_t*, int);                  // 0x14009c700
 extern "C" void     RemovalCalc_CitizenAI_9ad0(int64_t, int);                // 0x1400f9ad0
-extern "C" uint64_t RemovalCalc_Slot13(int64_t, int, int);                   // 0x1401035e0
 
 void RegisterKeystoneARemovalBatch() {
     // bottom-up: leaf helpers first
@@ -37,6 +36,6 @@ void RegisterKeystoneARemovalBatch() {
     RegisterExeAddr(0x14011dfa0, reinterpret_cast<uintptr_t>(&RemovalCalc_StateMachine_dfa0));
     RegisterExeAddr(0x14009c700, reinterpret_cast<uintptr_t>(&RemovalCalc_helper_c700));
     RegisterExeAddr(0x1400f9ad0, reinterpret_cast<uintptr_t>(&RemovalCalc_CitizenAI_9ad0));
-    // the CalcPath itself (full closure now covered)
-    RegisterExeAddr(0x1401035e0, reinterpret_cast<uintptr_t>(&RemovalCalc_Slot13));
+    // The CalcPath itself (0x1401035e0) is RemovalTool's slot 13, a real virtual since
+    // ENDGAME B.3.8; removaltool.cpp no longer reads the address back, so its row is gone.
 }

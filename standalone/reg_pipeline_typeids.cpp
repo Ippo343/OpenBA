@@ -35,6 +35,14 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"     // Object::GetTypeIdByName
 #include <cstdint>
+#include "Component/CreateFencedDescription.h"
+#include "Component/CreatePlacedDescription.h"
+#include "Component/DecalComponent.h"
+#include "Component/MapDescription.h"
+#include "Component/ModelComponent.h"
+#include "Component/ModelDescription.h"
+#include "Player/RotationSetting.h"
+#include "Component/SelectDescription.h"
 
 // Backing storage for the pipeline type-id .rdata globals (filled after
 // Engine::Startup — see FillPipelineTypeIds).
@@ -74,14 +82,14 @@ static uint32_t g_tid_SelectDescription       = 0;  // 0x1401c48a8
 // Fill from the real-CRC type tree — call AFTER Engine::Startup.
 extern "C" void FillPipelineTypeIds() {
     // No-op unless the storage was registered (live mode); harmless otherwise.
-    g_tid_CreatePlacedDescription = ::Object::GetTypeIdByName("CreatePlacedDescription");
-    g_tid_ModelComponent          = ::Object::GetTypeIdByName("ModelComponent");
-    g_tid_ModelDescription        = ::Object::GetTypeIdByName("ModelDescription");
-    g_tid_DecalComponent          = ::Object::GetTypeIdByName("DecalComponent");
-    g_tid_CreateFencedDescription = ::Object::GetTypeIdByName("CreateFencedDescription");
-    g_tid_MapDescription          = ::Object::GetTypeIdByName("MapDescription");
-    g_tid_RotationSetting         = ::Object::GetTypeIdByName("RotationSetting");
-    g_tid_SelectDescription       = ::Object::GetTypeIdByName("SelectDescription");
+    g_tid_CreatePlacedDescription = CreatePlacedDescription::TypeId();
+    g_tid_ModelComponent          = ModelComponent::TypeId();
+    g_tid_ModelDescription        = ModelDescription::TypeId();
+    g_tid_DecalComponent          = DecalComponent::TypeId();
+    g_tid_CreateFencedDescription = CreateFencedDescription::TypeId();
+    g_tid_MapDescription          = MapDescription::TypeId();
+    g_tid_RotationSetting         = RotationSetting::TypeId();
+    g_tid_SelectDescription       = SelectDescription::TypeId();
 }
 
 void RegisterPipelineTypeIds() {

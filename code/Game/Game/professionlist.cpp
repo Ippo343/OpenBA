@@ -16,6 +16,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Game/ProfessionList.h"
+#include "Game/Profession.h"   // caller batch CB6: Profession::TypeId(), its fields
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "collection/Collection.h"
@@ -143,23 +144,24 @@ bool ProfessionList::Serialize(void* stream) {
 // (byteCopy, no init, no destroy, align 8). The previous port's
 // `if (!buf) { count restore; continue; }` was an out-of-memory-only guard
 // retail does not have (SetSizeCore skips a null element address instead).
-namespace Object { uint32_t GetTypeIdByName(const char* name); }  // fwd (full header below)
+// Caller batch CB6: the list's and each Profession's fields are read by name;
+// the by-name fallback for the Profession type id is Profession::TypeId().
 extern "C" void ProfessionList_Startup_Impl(void* profList) {
-    uintptr_t pl = (uintptr_t)profList;
-    if (!pl || !fn_IsDerivedFrom ||
+    ProfessionList* const self = static_cast<ProfessionList*>(profList);   // B.3.8 bridge
+    if (!self || !fn_IsDerivedFrom ||
         !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton)
         return;
 
-    // B.3.2 bridge: ProfessionList+0x20 is still a raw header in the exe struct.
-    auto* profArray = reinterpret_cast<Collection::Array<void*>*>(pl + 0x20);
+    // B.3.2 bridge: ProfessionList+0x20 is still a raw {data, count|cap} header.
+    auto* profArray = reinterpret_cast<Collection::Array<void*>*>(&self->arrayData);
 
-    // Profession type id: raw .rdata dword when the exe is mapped, else live type tree.
+    // Profession type id: raw .rdata dword when the exe is mapped, else the class's.
     uint32_t profTid = 0;
     {
         uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5a98));
         if (p && *p) profTid = *p;
     }
-    if (!profTid) profTid = ::Object::GetTypeIdByName("Profession");
+    if (!profTid) profTid = Profession::TypeId();
     if (!profTid) return;
 
     void* factory = *g_pExternalFactorySingleton;
@@ -172,21 +174,21 @@ extern "C" void ProfessionList_Startup_Impl(void* profList) {
     for (; found; found = efactory->FindNext(profTid, found)) {
         void* it = const_cast<::Object::External*>(found);   // B.3.3 bridge
         if (!fn_IsDerivedFrom(it, profTid)) continue;
-        if (*(uint8_t*)((uintptr_t)it + 0x4e) == 0) continue;  // not player-selectable
+        if (static_cast<Profession*>(it)->isAvailable == 0) continue;  // +0x4e: not player-selectable
 
         // Growable push into +0x20 (buf) / +0x28 (count) / +0x2c (cap).
         profArray->SetSize(profArray->GetSize() + 1, it);
     }
 
     // Sort ascending by sort priority (Profession+0x48) — FUN_14001e7c0 semantics.
-    int n = *(int*)(pl + 0x28);
-    uintptr_t* arr = *(uintptr_t**)(pl + 0x20);
+    int n = static_cast<int32_t>(self->arraySize);               // +0x28 count
+    uintptr_t* arr = static_cast<uintptr_t*>(self->arrayData);  // +0x20
     if (n > 1 && arr) {
         for (int i = 1; i < n; i++) {
             uintptr_t key = arr[i];
-            int keyPri = *(int*)(key + 0x48);
+            int keyPri = reinterpret_cast<const Profession*>(key)->field48;   // +0x48
             int j = i - 1;
-            while (j >= 0 && *(int*)(arr[j] + 0x48) > keyPri) {
+            while (j >= 0 && reinterpret_cast<const Profession*>(arr[j])->field48 > keyPri) {
                 arr[j + 1] = arr[j];
                 j--;
             }
@@ -196,7 +198,7 @@ extern "C" void ProfessionList_Startup_Impl(void* profList) {
 
 #ifdef _DEBUG
     printf("[ProfessionList] Startup: %d professions in array (tid=0x%08x)\n",
-           *(int*)(pl + 0x28), profTid);
+           static_cast<int32_t>(self->arraySize), profTid);
 #endif
 }
 
@@ -218,10 +220,6 @@ void* ProfessionList::CreateInPlaceObject(void* memory) {
 DEFINE_EXE_VTABLE(ProfessionList, "_ZTV14ProfessionList")
 
 extern "C" void RegisterProfessionListVtable() {
-    // B38_RULES D5: nothing in the tree reads 0x14015ef50 back (swept by hex
-    // and owner); this row is reader-less and serves the compiler table only.
-    // The closing pass deletes it with the call.
-    RegisterExeAddr(0x14015ef50, reinterpret_cast<uintptr_t>(ProfessionList::Vtable()));
     // ProfessionList::Startup (array populate + sort) — GameUpdateLoop::Startup
     // resolves exe 0x1400a90a0 (fn_ProfessionList_Startup) and calls it when the
     // profession list is live; unregistered it was NULL and the call was skipped,

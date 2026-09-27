@@ -105,11 +105,4 @@ void* ResourceLimitUIConfig::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(ResourceLimitUIConfig, "_ZTV21ResourceLimitUIConfig")
 
-// D5: no by-address reader of 0x14015d250 remains in the tree; the row is kept
-// (serving the compiler table) only because reg_controlui.cpp calls this function —
-// the closing pass deletes both.
-extern "C" void RegisterResourceLimitUIConfigVtable() {
-    RegisterExeAddr(0x14015d250, reinterpret_cast<uintptr_t>(ResourceLimitUIConfig::Vtable()));
-}
-
 DEFINE_EXE_TYPE(ResourceLimitUIConfig, "UI::DialogControllerConfig")

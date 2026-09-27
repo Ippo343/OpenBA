@@ -18,7 +18,10 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
-#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
+#include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
+#include "object/TypeInfo.h"                 // caller batch CB6: Object::Base::Type()
+#include "Component/WorkPlaceComponent.h"   // caller batch CB6: TypeId()
+#include "Component/WorkComponent.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -62,14 +65,14 @@ void EnsureFns() {
 // FUN_14008d100's two inline scan loops exactly: it stops at the first GetTypeId
 // match and returns it only if IsDerivedFrom(comp, typeId) also holds — otherwise
 // null (it does NOT keep scanning past a GetTypeId hit).
-typedef uint32_t (*GetTypeId_t)(void*);
 void* FindComponentByTypeId(int64_t entity, uint32_t typeId) {
     int i = 0;
     while (i < *reinterpret_cast<int*>(entity + 0x38)) {           // count re-read (faithful)
         void* elem = reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(entity + 0x30) + (int64_t)i * 8);
         void* comp = *reinterpret_cast<void**>(elem);
         if (comp == nullptr) { ++i; continue; }
-        uint32_t tid = ((GetTypeId_t)(*reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10)))(comp);
+        // Slot 2 on an entity component-array element (proved Object::Base).
+        uint32_t tid = reinterpret_cast<const Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (tid == typeId) {
             void* elem2 = reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(entity + 0x30) + (int64_t)i * 8);
             void* compVal = *reinterpret_cast<void**>(elem2);
@@ -186,8 +189,7 @@ extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t pro
     uint32_t count = static_cast<uint32_t>(found[2]);        // +0x10 count (low dword)
     if (static_cast<int>(count) < 2) return;                 // 0/1 entries -> nothing to do
 
-    void* rng = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
+    void* rng = reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_random;   // B.3.8 bridge
     if (!rng) return;
 
     for (int64_t i = 0; i < static_cast<int>(count); ++i) {
@@ -215,11 +217,10 @@ extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t pro
 extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t professionKey) {
     EnsureFns();
 
-    // Type-ids resolved self-contained (do NOT read the shared .rdata DWORDs).
-    static uint32_t s_tidWorkPlace = 0;   // DWORD_1401c80e0 = WorkPlaceComponent
-    static uint32_t s_tidWork      = 0;   // DWORD_1401c8070 = WorkComponent
-    if (s_tidWorkPlace == 0) s_tidWorkPlace = ::Object::GetTypeIdByName("WorkPlaceComponent");
-    if (s_tidWork      == 0) s_tidWork      = ::Object::GetTypeIdByName("WorkComponent");
+    // Type-ids resolved self-contained (do NOT read the shared .rdata DWORDs):
+    // the classes' TypeId() (caller batch CB6; was a lazy by-name cache).
+    const uint32_t s_tidWorkPlace = WorkPlaceComponent::TypeId();   // DWORD_1401c80e0
+    const uint32_t s_tidWork      = WorkComponent::TypeId();        // DWORD_1401c8070
 
     // Step 1: optimize/sort the profession node's building list (OPTIONAL — guard).
     if (s_optimize89470) s_optimize89470(townMgr, professionKey);

@@ -912,8 +912,4 @@ DEFINE_EXE_VTABLE(TradeWork, "_ZTV9TradeWork")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-extern "C" void RegisterTradeWorkVtable() {
-    // ENDGAME B.3.8 CB3: the retail-table row is gone -- no by-address reader of
-    // it is left. The call in address_registry.cpp is the coordinator's to drop.
-}
 DEFINE_EXE_TYPE(TradeWork, "Work")

@@ -66,8 +66,12 @@
 //      SetCitizenSpawnTransform already applied. The field is read raw from the .rsc.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "object/TypeInfo.h"                 // caller batch CB6: Object::Base::Type()
+#include "Component/CitizenComponent.h"     // caller batch CB6: TypeId()
+#include "Component/CitizenDescription.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -102,25 +106,18 @@ static bool TraceOn() { return s_trace < 24; }   // first-N
 // Type ids — exe global first (retail's DWORD_), name lookup as the standalone
 // fallback (deviation (a)/(b)).
 // ---------------------------------------------------------------------------
+// Caller batch CB6: the name lookup is the class's TypeId() (a plain read), and
+// the function-local first-use cache is gone (B6-5): both answers are stable
+// once Factory::Startup has run, so reading them each call returns the same id.
 static uint32_t TidCitizenComponent() {
-    static uint32_t tid = 0;
-    if (tid == 0) {
-        if (g_TypeId_CitizenComponent_FC && *g_TypeId_CitizenComponent_FC)
-            tid = *g_TypeId_CitizenComponent_FC;
-        else
-            tid = ::Object::GetTypeIdByName("CitizenComponent");
-    }
-    return tid;
+    if (g_TypeId_CitizenComponent_FC && *g_TypeId_CitizenComponent_FC)
+        return *g_TypeId_CitizenComponent_FC;
+    return CitizenComponent::TypeId();
 }
 static uint32_t TidCitizenDescription() {
-    static uint32_t tid = 0;
-    if (tid == 0) {
-        if (g_TypeId_CitizenDescription && *g_TypeId_CitizenDescription)
-            tid = *g_TypeId_CitizenDescription;
-        else
-            tid = ::Object::GetTypeIdByName("CitizenDescription");
-    }
-    return tid;
+    if (g_TypeId_CitizenDescription && *g_TypeId_CitizenDescription)
+        return *g_TypeId_CitizenDescription;
+    return CitizenDescription::TypeId();
 }
 
 // Entity_FindComponent_Citizen (0x140009790), reimplemented — see deviation (a).
@@ -137,9 +134,8 @@ static void FoundingSpawn_FindCitizenComp(void* entity, uintptr_t* outIBP) {
             void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
             void* comp = *slot;
             if (!comp) continue;
-            uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
-            typedef uint32_t (*fn_GetTypeId_t)(void*);
-            if ((*reinterpret_cast<fn_GetTypeId_t*>(vt + 0x10))(comp) == want) {
+            // Slot 2 on an entity component-array element (proved Object::Base).
+            if (reinterpret_cast<const Object::Base*>(comp)->Type() == want) {   // B.3.8 bridge
                 found = comp;
                 break;
             }
@@ -168,9 +164,8 @@ extern "C" void* StartTown_FoundingCitizenDescription(void* citizenTemplate) {
         for (int i = 0; i < count && arr; ++i) {
             void* desc = *reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
             if (!desc) continue;
-            uintptr_t vt = *reinterpret_cast<uintptr_t*>(desc);
-            typedef uint32_t (*fn_GetTypeId_t)(void*);
-            if ((*reinterpret_cast<fn_GetTypeId_t*>(vt + 0x10))(desc) == want) {
+            // Slot 2 on a template description-array element (proved Object::Base).
+            if (reinterpret_cast<const Object::Base*>(desc)->Type() == want) {   // B.3.8 bridge
                 // Retail keeps the hit only if IsDerivedFrom agrees; standalone trusts
                 // the GetTypeId match when the derive check can't run (deviation (b)).
                 found = desc;
@@ -202,7 +197,7 @@ extern "C" void* StartTown_FoundingCitizenDescription(void* citizenTemplate) {
 
 static void* FoundingSpawn_Rng() {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return nullptr;
-    return *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xd8);
+    return reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_random;   // B.3.8 bridge
 }
 
 // ---------------------------------------------------------------------------
@@ -338,8 +333,7 @@ extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfig, void* citiz
     // 6. the Laborer profession key (ProfessionList at gw+0xb0, +0x30)
     int64_t laborerProf = 0;
     if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        int64_t profList = *reinterpret_cast<int64_t*>(
-            reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xb0);
+        int64_t profList = reinterpret_cast<int64_t>(reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_professionList);   // B.3.8 bridge
         if (profList) laborerProf = *reinterpret_cast<int64_t*>(profList + 0x30);
     }
 

@@ -148,13 +148,12 @@ Graphics::Geometry* WorldGeometry::DeletingDtor(unsigned flags) {
 // chunk's vertices via FUN_1400ac880, and uploads them into the master
 // VertexBuffer at self+0x100 via Video::VertexBuffer::Set.
 //
-// Body lives in serialize_heightmap_mesh.cpp next to the related helpers
-// (FUN_1400ac880, helper_e270, sub_c1e0) and shares its lazy Runtime
-// resolution machinery.
-extern "C" void Reimpl_GeometryChunkUpdate(void* self);
-
+// Body: WorldGeometry::RebuildDirtyChunks (0x1400aad50), in
+// serialize_heightmap_mesh.cpp next to the related helpers (FUN_1400ac880,
+// helper_e270, sub_c1e0). Caller batch CB6: the slot calls the member (it went
+// through the Reimpl_GeometryChunkUpdate door, which now delegates to it).
 void WorldGeometry::Update(const System::Time& /*time*/) {
-    Reimpl_GeometryChunkUpdate(this);
+    RebuildDirtyChunks();
 }
 
 // ============================================================

@@ -154,7 +154,6 @@ struct Options {
     // ── opt-in LIVE_* gates deliberately NOT in the default-on table ──────────────
     // (ENDGAME C.2 decides these: graduate with the run that proves them, or delete.)
     bool        liveSeatShuffle      = false;  // standalone/reg_town_workplace_registry.cpp
-    bool        liveTutorialInstVt   = false;  // standalone/reg_w2_lane2.cpp
 
 
     // ── code/Game readers migrated off getenv (ENDGAME C.2/C.4 close) ────────

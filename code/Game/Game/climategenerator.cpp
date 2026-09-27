@@ -150,12 +150,4 @@ void* ClimateGenerator::CreateInPlaceObject(void* memory) {
 
 DEFINE_EXE_VTABLE(ClimateGenerator, "_ZTV16ClimateGenerator")
 
-// B38_RULES D5: nothing in the tree reads 0x14015e140 back (swept by hex and
-// owner); this row is reader-less and serves the compiler table only so the
-// coordinator-owned call in address_registry.cpp keeps linking. The closing
-// pass deletes it with the call.
-extern "C" void RegisterClimateGeneratorVtable() {
-    RegisterExeAddr(0x14015e140, reinterpret_cast<uintptr_t>(ClimateGenerator::Vtable()));
-}
-
 DEFINE_EXE_TYPE(ClimateGenerator, "Object::External")

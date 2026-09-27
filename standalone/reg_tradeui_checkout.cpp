@@ -23,7 +23,7 @@
 #include "resolve.h"
 #include <cstdint>
 
-struct TradeUI;
+class TradeUI;
 
 extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* p2, void* p3, int64_t p4); // 0x140081420
 extern "C" void TradeComponent_RemoveBuyOrder(void* tradeComp, void* resourceEntity,

@@ -44,6 +44,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "Component/OrchardComponent.h"
 
 namespace {
 
@@ -87,7 +88,7 @@ extern "C" void OrchardGrowthHarness_Tick(int frameNum) {
     if (!entityList) return;
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(entityList + 0x08);
     int       n   = *reinterpret_cast<int32_t*>(entityList + 0x10);
-    const uint32_t tidOrchardComp = ::Object::GetTypeIdByName("OrchardComponent");
+    const uint32_t tidOrchardComp = OrchardComponent::TypeId();
     if (!arr || n <= 0 || !tidOrchardComp) return;
 
     int orchards = 0, grown = 0, ripened = 0, mature = 0, slotsSeen = 0;
@@ -105,9 +106,7 @@ extern "C" void OrchardGrowthHarness_Tick(int frameNum) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
             void* comp = *cs;
             if (!comp) continue;
-            void** vt = *reinterpret_cast<void***>(comp);
-            typedef uint32_t (*GetTypeId_t)(void*);
-            if (vt && vt[2] && reinterpret_cast<GetTypeId_t>(vt[2])(comp) == tidOrchardComp) {
+            if (reinterpret_cast<Object::Base*>(comp)->Type() == tidOrchardComp) {   // B.3.8 bridge
                 orchComp = comp;
                 break;
             }

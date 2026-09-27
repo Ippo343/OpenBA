@@ -54,6 +54,7 @@
 // `Volume::Rectangle`'s class name in Volume.h's own static_asserts.
 #include "graphics/Scene.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "resolve.h"
 #include <cstdint>
 #include <cstdlib>
@@ -127,7 +128,7 @@ void SpawnAmbientEntity(uint8_t* w, uint8_t* gw) {
     void* ibp = nullptr;                                 // Object::InternalBasePtr (8 bytes)
     new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
     int typeId = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(templateDesc) + 0x20);
-    void* entityList = *reinterpret_cast<void**>(gw + 0xe8);
+    void* entityList = reinterpret_cast<GameUpdateLoop*>(gw)->m_entityList;   // B.3.8 bridge
     if (entityList)
         s_fnEntityRegister(entityList, &ibp, typeId);
 
@@ -139,7 +140,7 @@ void SpawnAmbientEntity(uint8_t* w, uint8_t* gw) {
 // months x 4 types) and steps the intensity level (w+0x14, clamped 0..5).
 void WeatherTypeStateMachine(uint8_t* w, uint8_t* gw, float sec) {
     void* climate = *reinterpret_cast<void**>(w + 0x08);
-    void* rng = *reinterpret_cast<void**>(gw + 0xd8);
+    void* rng = reinterpret_cast<GameUpdateLoop*>(gw)->m_random;   // B.3.8 bridge
     if (!climate || !rng) return;
     uint8_t* c = reinterpret_cast<uint8_t*>(climate);
     EnsureSimResolved();
@@ -214,7 +215,7 @@ extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
     //     exactly like the original helper_3810 / FUN_140093420. ---
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gw) return;
-    void* timeObj = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(gw) + 0x128);
+    void* timeObj = reinterpret_cast<GameUpdateLoop*>(gw)->m_dayCounter;   // B.3.8 bridge
     if (!timeObj) return;
     float sec = reinterpret_cast<const System::Time*>(reinterpret_cast<uint8_t*>(timeObj) + 8)->AsSeconds();   // B.3.4b bridge
 
@@ -241,7 +242,7 @@ extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
                 float intensity = *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(geo) + 0xc0);
                 if (intensity == 0.0f || weatherSetting == 0) {
                     {
-                        void* scene = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(gw) + 0x60);
+                        void* scene = reinterpret_cast<GameUpdateLoop*>(gw)->m_graphicsScene;   // B.3.8 bridge
                         if (scene)
                             reinterpret_cast<Graphics::Scene*>(scene)->RemoveGlobalObject(
                                 reinterpret_cast<Graphics::Geometry*>(geo));   // B.3.5 bridge
@@ -358,8 +359,8 @@ extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
     //     when the roll fires in warm clear weather. ---
     {
         void* climate = *reinterpret_cast<void**>(w + 0x08);
-        uint32_t disasterBits = *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(gw) + 0xd0);
-        void* rng = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(gw) + 0xd8);
+        uint32_t disasterBits = reinterpret_cast<GameUpdateLoop*>(gw)->m_gameFlags;   // B.3.8 bridge
+        void* rng = reinterpret_cast<GameUpdateLoop*>(gw)->m_random;   // B.3.8 bridge
 
         if (*reinterpret_cast<float*>(w + 0x18) > kColdThresh &&
             *reinterpret_cast<int*>(w + 0x10) == 0 &&
