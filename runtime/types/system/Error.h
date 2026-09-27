@@ -58,6 +58,16 @@ public:
     // ?Display@Error@System@@SAXXZ        0x1800c6060
     // The fatal MessageBoxW, suppressed when `_hideDisplay` is set.
     static void Display();
+
+    // ---- the three statics (`0…A`: PRIVATE STATIC DATA in retail) ---------
+    // ENDGAME B.3.9 SYS (B39_RULES D7): class statics, defined zero in
+    // error.cpp; RtSystemPortInit redirects the three minted rows onto them
+    // TOGETHER. `_errorString` is the 0x2000-byte BUFFER itself (MSVC decays
+    // the member to `PAD` in the mangling), so the redirect hands the ARRAY's
+    // address. PUBLIC while foreign readers remain.
+    static char _errorString[0x2000];   // ?_errorString@Error@System@@0PADA     0x1801fc720
+    static bool _hideDisplay;           // ?_hideDisplay@Error@System@@0_NA      0x1801fc709
+    static bool _stopApplication;       // ?_stopApplication@Error@System@@0_NA  0x1801fc70a
 };
 
 }  // namespace System

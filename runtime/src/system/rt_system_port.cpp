@@ -9,6 +9,7 @@
 #include <cstdio>
 #include "../../funcs/rt_port.h"
 #include "../../types/system/Timer.h"
+#include "../../types/system/Error.h"
 
 extern int RtSystemStringRegister();      // string.cpp
 extern int RtSystemFilenameRegister();    // filename.cpp
@@ -56,6 +57,11 @@ void RtSystemPortInit() {
     RtMintRedirectStorage("?_systemTicksPerSecond@Timer@System@@0_JA", &System::Timer::_systemTicksPerSecond);
     RtMintRedirectStorage("?_systemInitialTick@Timer@System@@0_JA",    &System::Timer::_systemInitialTick);
     RtMintRedirectStorage("?_systemSecondsPerTick@Timer@System@@0NA",  &System::Timer::_systemSecondsPerTick);
+    // Error's three, together (B39_RULES 1.5). `_errorString` is the 0x2000-byte
+    // BUFFER: the cell is the array's own address.
+    RtMintRedirectStorage("?_errorString@Error@System@@0PADA",     System::Error::_errorString);
+    RtMintRedirectStorage("?_hideDisplay@Error@System@@0_NA",      &System::Error::_hideDisplay);
+    RtMintRedirectStorage("?_stopApplication@Error@System@@0_NA",  &System::Error::_stopApplication);
 
     int n = 0;
     n += RtSystemStringRegister();

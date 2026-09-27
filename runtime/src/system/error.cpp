@@ -123,7 +123,9 @@
 // the shape SYSTEM (3) adopted.
 //
 // NOT MOVED, AND NEITHER IS AN OVERSIGHT:
-//   * the THREE statics (`_errorString`, `_stopApplication`, `_hideDisplay`)
+//   * [SUPERSEDED by ENDGAME B.3.9 SYS: the three are class statics now,
+//     defined just below, redirected together in RtSystemPortInit.]
+//     the THREE statics (`_errorString`, `_stopApplication`, `_hideDisplay`)
 //     stay `RT_DATA_SLOT` reads -- rule B4b-4. All three are CUTOVER_REQUIRED
 //     rows answered by a minted cell, and making one a real `static` member
 //     needs a redirect at `standalone/rt_data_mint.cpp`'s `MintStorageCell()`,
@@ -137,6 +139,12 @@
 //   * `?HideErrorDisplay@Error@System@@SAX_N@Z` (0x1800c5f90) is documented
 //     dead by a prior four-binary sweep and stays unported.
 #include "../../types/system/Error.h"
+
+// ENDGAME B.3.9 SYS (B39_RULES D7): the three statics. Zero, as the DLL's
+// .data/.bss starts; RtSystemPortInit redirects the minted rows onto them.
+char System::Error::_errorString[0x2000] = {};   // 0x1801fc720
+bool System::Error::_hideDisplay         = false; // 0x1801fc709
+bool System::Error::_stopApplication     = false; // 0x1801fc70a
 
 // ---- Wave 22 lane ERRCFG ---------------------------------------------------
 // `ResolveAddr` for the one address-keyed callee ?Display@ has (retail's CRT
@@ -185,21 +193,12 @@ constexpr int kErrorStringCapacity = 0x2000;
 // `0A 00`, read with read_memory. A newline, not a formatting string.
 const char kNewline[] = "\n";
 
-// The two exported DATA symbols, through the PORT-AWARE door.
+// The three exported DATA symbols are CLASS STATICS since ENDGAME B.3.9 SYS
+// (defined below this namespace; RtSystemPortInit redirects the minted rows
+// onto them), so their three RT_DATA_SLOT accessors are gone.
 //   ?_errorString@Error@System@@0PADA      ord 4782, 0x1801fc720 -- THE BUFFER
 //   ?_stopApplication@Error@System@@0_NA   ord 4818, 0x1801fc70a
-char* ErrorStringBuffer() {
-    return RT_DATA_SLOT(char*, "?_errorString@Error@System@@0PADA");
-}
-bool* StopApplicationSlot() {
-    return RT_DATA_SLOT(bool*, "?_stopApplication@Error@System@@0_NA");
-}
-
-// ---- Wave 22 lane ERRCFG: the pieces ?Display@ needs ------------------------
-//   ?_hideDisplay@Error@System@@0_NA   ord 4791, 0x1801fc709
-bool* HideDisplaySlot() {
-    return RT_DATA_SLOT(bool*, "?_hideDisplay@Error@System@@0_NA");
-}
+//   ?_hideDisplay@Error@System@@0_NA       ord 4791, 0x1801fc709
 
 // The two literals, read out of Runtime-x64.dll with read_memory rather than
 // retyped from a decompiler's rendering. 0x180155dc0 is 64 bytes ending in a
@@ -220,8 +219,7 @@ const char kCaption[9] = { 'B','a','n','i','s','h','e','d','\0' };
 // this file where cutover behaviour differs from retail's and the difference is
 // deliberate rather than overlooked.
 void DisplayStopIfRequested() {
-    const bool* stop = StopApplicationSlot();
-    if (!stop || !*stop) return;
+    if (!System::Error::_stopApplication) return;
     typedef void (*ExitFn)(unsigned);
     if (ExitFn rtExit = reinterpret_cast<ExitFn>(
             ResolveAddr(Module::Runtime, 0x18007f8a8))) {
@@ -312,17 +310,10 @@ extern "C" char* RtSystem_String_StrAppend(char* dst, int capacity, const char* 
 // caller that fills the buffer still gets the stop behaviour.
 void System::Error::SetText(const char* text, bool stopApplication) {
 
-    char* buf = ErrorStringBuffer();
-    bool* stop = StopApplicationSlot();
-
-    // Our difference from retail, not a guard over its logic: retail's buffer is
-    // a fixed address in its own .data and always exists. With no DLL it exists
-    // only if lane C2's mint provides it -- and see §2, today that row is the
-    // wrong SIZE, which is why this whole file has its own kill switch.
-    if (buf == nullptr) {
-        if (stop) *stop = stopApplication;
-        return;
-    }
+    // ENDGAME B.3.9 SYS: the buffer and the flag are the class statics, which
+    // always exist -- so the old null-cell branch (our difference, for a DLL /
+    // mint that might not provide the cell) is gone and the body is retail's.
+    char* buf = _errorString;
 
     RtSystem_String_StrAppend(buf, kErrorStringCapacity, text);
 
@@ -333,10 +324,10 @@ void System::Error::SetText(const char* text, bool stopApplication) {
         const int n = RetailStrLen(kNewline) + 1;
         const int cnt = (room < n) ? room : n;
         std::memmove(end, kNewline, static_cast<size_t>(cnt));
-        if (stop) *stop = stopApplication;
+        _stopApplication = stopApplication;
         if (n > room) end[room - 1] = '\0';
     } else {
-        if (stop) *stop = stopApplication;
+        _stopApplication = stopApplication;
     }
 
 }
@@ -522,9 +513,7 @@ void System::Error::Display() {
 
     // 0x1800c6077 — retail's own kill switch, tested FIRST and skipping the
     // whole box. `_stopApplication` is still honoured below.
-    if (const bool* hide = HideDisplaySlot()) {
-        if (*hide) { DisplayStopIfRequested(); return; }
-    }
+    if (_hideDisplay) { DisplayStopIfRequested(); return; }
 
     // RBP-0x40 and RBP+0x7c0 in retail: 0x800 bytes of text followed by 0x800
     // UTF-16 code units. Both zeroed up front (0x1800c60b0 / 0x1800c60d2).
@@ -534,7 +523,7 @@ void System::Error::Display() {
     std::memset(wtext, 0, sizeof(wtext));
 
     AppendClamped(text, 0x800, kFatalPrefix);
-    if (const char* err = ErrorStringBuffer()) AppendClamped(text, 0x800, err);
+    AppendClamped(text, 0x800, _errorString);
 
     Utf8ToUtf16Clamped(reinterpret_cast<uint8_t*>(wtext), 0x800, text);
 

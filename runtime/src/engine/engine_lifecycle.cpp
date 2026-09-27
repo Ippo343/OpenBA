@@ -207,6 +207,7 @@
 #include "../../types/audio/Audio.h"       // ENDGAME B.3.7 callers (K4): Audio::Configuration / Device
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/system/String.h"
+#include "../../types/system/Error.h"      // ENDGAME B.3.9 SYS: Error::_hideDisplay
 
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
 // — same reasoning engine.cpp gives (resolve.h drags in <windows.h>, and
@@ -293,9 +294,6 @@ EngineT** EngineSingletonSlot() {
 }
 void** ConfigurationSingletonSlot() {
     return RT_DATA_SLOT(void**, "?_singleton@Configuration@System@@0PEAV12@EA");
-}
-bool* ErrorHideDisplaySlot() {
-    return RT_DATA_SLOT(bool*, "?_hideDisplay@Error@System@@0_NA");
 }
 
 // Effectiveness counters. Read by RtEngineLifecycleSummary(); the four bodies
@@ -684,7 +682,7 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     if (!_noConfigure) {
         // ENDGAME B.3.7: a member call (was the name door).
         if (!PlatformConfigure(true, _platformHandle)) {
-            if (bool* hide = ErrorHideDisplaySlot()) *hide = true;
+            System::Error::_hideDisplay = true;   // class static (B.3.9 SYS)
             g_startupFailAt = 10;
             return 0;
         }
