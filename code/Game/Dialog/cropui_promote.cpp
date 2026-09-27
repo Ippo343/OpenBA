@@ -36,6 +36,7 @@
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Component/Component.h"
+#include "Entity/ComponentEntity.h"   // X::TypeId() (ENDGAME B.3.9)
 
 namespace {
 
@@ -60,7 +61,7 @@ void* FindComp(void* self) {
     if (!s_findCropComp || !self) return nullptr;
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* entity = *reinterpret_cast<void**>(s + 0x28);
-    uint32_t entTid = g_TypeId_ComponentEntity ? *g_TypeId_ComponentEntity : 0;
+    uint32_t entTid = ComponentEntity::TypeId();
     void* checked = fn_IsDerivedFrom(entity, entTid) ? entity : nullptr;
     uint64_t entIbp = 0;
     new (&entIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
@@ -69,17 +70,10 @@ void* FindComp(void* self) {
     return reinterpret_cast<void*>(comp);
 }
 
-// Retail filters the "yield" FindElement result through *g_TypeId_ProgressElement, an
-// .rdata slot that is null unless BANISHED_LIVE_ELEMENT_TIDS is on. Same private
-// by-name resolve orchardui.cpp uses, for the same reason: IsDerivedFrom(elem, 0) is
-// always false, which would leave +0x38 null and turn the +0x124 write into a
-// null-deref. See reference_gated_element_typeid_disables_controller.
+// ENDGAME B.3.9: UI::ProgressElement now has a ported TypeId() (a class static, always
+// populated), so the gated-global-vs-private-resolve split collapses to the static.
 uint32_t ProgressElementTypeId() {
-    if (g_TypeId_ProgressElement && *g_TypeId_ProgressElement)
-        return *g_TypeId_ProgressElement;
-    static uint32_t s_local = 0;
-    if (!s_local) s_local = ::Object::ResolveTypeIdByNameLazy("ProgressElement");
-    return s_local;
+    return UI::ProgressElement::TypeId();
 }
 
 }  // namespace

@@ -30,6 +30,7 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Entity/ComponentEntity.h"   // X::TypeId() (ENDGAME B.3.9)
 
 // ============================================================
 // AchievementDialog::Slot4 (vtable +0x20) — Setup/populate achievement table
@@ -256,7 +257,7 @@ void AchievementDialog_Slot14(AchievementDialog* self) {
     // Find ProgressElement by type in parent element at +0x20
     void* parentElem = (void*)*(uint64_t*)(s + 0x20);
     uint64_t findResult = 0;
-    ::new (&findResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parentElem)->FindElementType(*g_TypeId_ProgressElement));  // B.3.6 bridge
+    ::new (&findResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parentElem)->FindElementType(UI::ProgressElement::TypeId()));  // B.3.6 bridge
 
     // Store at +0x30 (skip IsDerivedFrom, null check only)
     void* rawElem = (void*)findResult;
@@ -267,7 +268,7 @@ void AchievementDialog_Slot14(AchievementDialog* self) {
 
     // Get entity at +0x28, check ComponentEntity
     void* entity = (void*)*(uint64_t*)(s + 0x28);
-    uint32_t entityTypeId = g_TypeId_ComponentEntity ? *g_TypeId_ComponentEntity : 0;
+    uint32_t entityTypeId = ComponentEntity::TypeId();
     void* checkedEntity = nullptr;
     if (fn_IsDerivedFrom(entity, entityTypeId)) {
         checkedEntity = entity;
@@ -301,7 +302,7 @@ void AchievementDialog_Slot17(AchievementDialog* self) {
 
     // Get entity at +0x28, check ComponentEntity
     void* entity = (void*)*(uint64_t*)(s + 0x28);
-    uint32_t entityTypeId = g_TypeId_ComponentEntity ? *g_TypeId_ComponentEntity : 0;
+    uint32_t entityTypeId = ComponentEntity::TypeId();
     void* checkedEntity = nullptr;
     if (fn_IsDerivedFrom(entity, entityTypeId)) {
         checkedEntity = entity;

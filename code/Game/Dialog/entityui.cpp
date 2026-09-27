@@ -26,6 +26,8 @@
 #include "Component/UIDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Dialog/ToolUI.h"   // X::TypeId() (B.3.8 callers)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/BuildDescription.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "Player/EditTool.h"   // X::TypeId() (ENDGAME B.3.9)
 
 // ============================================================
 // EntityTrackingSet_Remove (0x14002c690)
@@ -84,8 +86,8 @@ static void GetDescPage_Impl(void* entityDesc, void* retval)
         // vtable[2] = GetTypeId (returns int typeId)
         int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
-        if (typeId == (int)*g_TypeId_UIDescription) {
-            if (fn_IsDerivedFrom(comp, *g_TypeId_UIDescription)) {
+        if (typeId == (int)UIDescription::TypeId()) {
+            if (fn_IsDerivedFrom(comp, UIDescription::TypeId())) {
                 result = comp;
             }
             break;
@@ -105,12 +107,9 @@ static void GetDescPage_Impl(void* entityDesc, void* retval)
 static bool BuildComplete_Impl(void* posComp)
 {
     if (!posComp) return false;
-    // In SA the exe .rdata type-id global can be null (raw .rdata not resolvable);
-    // treat "can't classify" as not-complete rather than dereferencing null.
-    if (!g_TypeId_ResourceComponent) return false;
 
     void* desc = *(void**)((uintptr_t)posComp + 0x18);
-    bool isResource = fn_IsDerivedFrom(desc, *g_TypeId_ResourceComponent);
+    bool isResource = fn_IsDerivedFrom(desc, BuildDescription::TypeId());
     void* resourceComp = isResource ? desc : nullptr;
 
     if (!resourceComp) return false;
@@ -319,53 +318,23 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
 // creates DialogInstance if entity doesn't have one yet.
 // Kept as passthrough via fn_EditTool_SelectEntity.
 
-namespace entityui_sa {
-
-void EnsureGlobals() {
-    static uint32_t s_ce = 0, s_tool = 0, s_uidesc = 0;
-    if (!g_TypeId_ComponentEntity) { s_ce   = ComponentEntity::TypeId(); if (s_ce)   g_TypeId_ComponentEntity = &s_ce; }
-    if (!g_TypeId_ToolUI)          { s_tool = ToolUI::TypeId();          if (s_tool) g_TypeId_ToolUI = &s_tool; }
-    // EntityUI::Slot7 (page switching) reads the entity description's UIDescription
-    // component (+0x40 = default page index) via GetDescPage_Impl, which derefs
-    // *g_TypeId_UIDescription. In SA that exe .rdata global is null, so resolve the
-    // type-id from the live factory tree. Without it, Slot7 can't pick the citizen's
-    // content page and the panel stays on the empty default page (blank body).
-    if (!g_TypeId_UIDescription)   { s_uidesc = UIDescription::TypeId(); if (s_uidesc) g_TypeId_UIDescription = &s_uidesc; }
-    // Building panels reach BuildComplete_Impl (page selection for in-progress
-    // construction), which classifies the position component's ResourceComponent.
-    static uint32_t s_res = 0;
-    if (!g_TypeId_ResourceComponent) { s_res = ::Object::ResolveTypeIdByNameLazy("ResourceComponent"); if (s_res) g_TypeId_ResourceComponent = &s_res; }
-
-    // EntityUI::Slot9's buttonCenter (id 0x65) finds the entity's ModelComponent
-    // (single object -> use its Transform) or, failing that, its MapComponent grid
-    // footprint (multi-object building). Those finders read exe .rdata type-id
-    // globals that ResolveAddr leaves NULL in standalone, so fill them from the live
-    // factory tree. The type-ids used here: g_TypeId_ModelComponent_FC is
-    // DAT_1401c7a50 = ModelComponent, and g_TypeId_MapComponent_FC is DAT_1401c79e0
-    // = MapComponent (written by MapComponent_RegisterType) — verified via Ghidra
-    // DATA xrefs. Without these the center button would find no component and
-    // (build path) null-deref.
-    static uint32_t s_model = 0, s_multi = 0, s_mapc = 0;
-    if (!g_TypeId_ModelComponent_FC)    { s_model = ModelComponent::TypeId();       if (s_model) g_TypeId_ModelComponent_FC = &s_model; }
-    if (!g_TypeId_MultiObjectComponent)  { s_multi = MultiObjectComponent::TypeId(); if (s_multi) g_TypeId_MultiObjectComponent = &s_multi; }
-    if (!g_TypeId_MapComponent_FC)  { s_mapc  = MapComponent::TypeId();         if (s_mapc)  g_TypeId_MapComponent_FC = &s_mapc; }
-
-}
-
-
-}  // namespace entityui_sa
+// ENDGAME B.3.9: ComponentEntity / ToolUI / UIDescription / BuildDescription (was
+// g_TypeId_ResourceComponent, itself healed here under the WRONG by-name guess
+// "ResourceComponent" -- Table 1's authority for cell 0x1401c7040 is BuildDescription;
+// the heal never actually ran, since the pointer is set unconditionally at
+// EngineFuncsInit before this ever fires) / ModelComponent / MultiObjectComponent /
+// MapComponent / EditTool all have a ported TypeId() now, so the entityui_sa::EnsureGlobals()
+// lazy-cache namespace is dead and its call sites below are removed.
 
 // Slot4 (0x1400670D0): Startup — find elements, get entity, reset ToolUI flags.
 // [4] 0x1400670d0
 void EntityUI::OnCreated() {
-    entityui_sa::EnsureGlobals();
-    if (!g_TypeId_ComponentEntity || !g_TypeId_ToolUI) return;
     if (!SA_DialogEntityAlive(this)) return;
     uintptr_t s = (uintptr_t)this;
 
     // Get entity from data source (+0x28), check if it's a ComponentEntity
     void* dataSource = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
     void* entity = isEntity ? dataSource : nullptr;
     new ((void*)(s + 0x30)) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -394,12 +363,12 @@ void EntityUI::OnCreated() {
     {
         void* dialogInst = *(void**)(s + 0x18);
         uint8_t ctrlBuf[16];
-        ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialogInst)->GetController(*g_TypeId_ToolUI));  // B.3.6 bridge
+        ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialogInst)->GetController(ToolUI::TypeId()));  // B.3.6 bridge
         void* controller = *(void**)ctrlBuf;
 
         void* toolUI = nullptr;
         if (controller) {
-            bool isTool = fn_IsDerivedFrom(controller, *g_TypeId_ToolUI);
+            bool isTool = fn_IsDerivedFrom(controller, ToolUI::TypeId());
             if (isTool) toolUI = controller;
         }
 
@@ -453,8 +422,6 @@ void EntityUI::OnClosed() {
 
 // [7] 0x140066d80
 void EntityUI::OnUpdateLayout() {
-    entityui_sa::EnsureGlobals();
-    if (!g_TypeId_UIDescription) return;
     if (!SA_DialogEntityAlive(this)) return;
     uintptr_t s = (uintptr_t)this;
 
@@ -581,12 +548,12 @@ void EntityUI_Slot8(EntityUI* self) {
     // Get ToolUI controller from dialog
     dialogInst = *(void**)(s + 0x18);
     uint8_t ctrlBuf[16];
-    ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialogInst)->GetController(*g_TypeId_ToolUI));  // B.3.6 bridge
+    ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialogInst)->GetController(ToolUI::TypeId()));  // B.3.6 bridge
     void* controller = *(void**)ctrlBuf;
 
     void* toolUI = nullptr;
     if (controller) {
-        bool isTool = fn_IsDerivedFrom(controller, *g_TypeId_ToolUI);
+        bool isTool = fn_IsDerivedFrom(controller, ToolUI::TypeId());
         if (isTool) toolUI = controller;
     }
     uint8_t toolBuf[8];
@@ -626,7 +593,7 @@ void EntityUI_Slot8(EntityUI* self) {
     void* currentTool = *(void**)((uintptr_t)playerController + 0x28);
 
     // Check if current tool is EditTool
-    bool isEditTool = fn_IsDerivedFrom(currentTool, *g_TypeId_EditTool);
+    bool isEditTool = fn_IsDerivedFrom(currentTool, EditTool::TypeId());
     void* editTool = isEditTool ? currentTool : nullptr;
 
     uint8_t editToolBuf[8];
@@ -638,7 +605,7 @@ void EntityUI_Slot8(EntityUI* self) {
 
         // Re-read current tool after deselect (with CheckPtr)
         currentTool = *(void**)((uintptr_t)playerController + 0x28);
-        isEditTool = fn_IsDerivedFrom(currentTool, *g_TypeId_EditTool);
+        isEditTool = fn_IsDerivedFrom(currentTool, EditTool::TypeId());
         void* newEditTool = isEditTool ? currentTool : nullptr;
 
         new (editToolBuf) ::Object::InternalBasePtr(
@@ -670,10 +637,8 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
     if (msg != 0x12) return;
     if (id == 1) return;              // close -> handled by ToolUI::Slot9
     if (id != 0x65 && id != 100) return;
-    entityui_sa::EnsureGlobals();
     // pin (id 100) needs the ToolUI type-id to fetch the sibling controller; center
     // (id 0x65) tolerates null component type-ids (finders just return "not found").
-    if (id == 100 && !g_TypeId_ToolUI) return;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     // Gate the entity read like every other EntityUI slot (4/6/7): this body reads
     // the cached datasource copy (s+0x30) for center (0x65) and toggles tracking on
@@ -774,12 +739,12 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
         // Get ToolUI controller
         void* dialogInst = *(void**)(s + 0x18);
         uint8_t ctrlBuf[16];
-        ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialogInst)->GetController(*g_TypeId_ToolUI));  // B.3.6 bridge
+        ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialogInst)->GetController(ToolUI::TypeId()));  // B.3.6 bridge
         void* controller = *(void**)ctrlBuf;
 
         void* toolUI = nullptr;
         if (controller) {
-            bool isTool = fn_IsDerivedFrom(controller, *g_TypeId_ToolUI);
+            bool isTool = fn_IsDerivedFrom(controller, ToolUI::TypeId());
             if (isTool) toolUI = controller;
         }
         uint8_t toolBuf[8];

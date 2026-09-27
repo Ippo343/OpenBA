@@ -92,7 +92,7 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
             ->FindOrLoad(filename));
     void* material = nullptr;
     if (ext) {
-        if (g_TypeId_Material && fn_IsDerivedFrom(ext, *g_TypeId_Material)) {
+        if (fn_IsDerivedFrom(ext, Graphics::Material::TypeId())) {
             material = ext;
         }
     }
@@ -159,8 +159,7 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
     void* rawElem = (void*)foundElem;
 
     void* imageElem = nullptr;
-    if (rawElem && g_TypeId_ImageElement &&
-        fn_IsDerivedFrom(rawElem, *g_TypeId_ImageElement)) {
+    if (rawElem && fn_IsDerivedFrom(rawElem, UI::ImageElement::TypeId())) {
         imageElem = rawElem;
     }
     uint64_t imageElemPtr = 0;

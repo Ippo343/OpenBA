@@ -39,6 +39,13 @@
 #include "Object/factory_registration.h"
 #include <cstddef>
 #include "Component/CitizenComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/ComponentDescription.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "Component/RawMaterialDescription.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "Component/InteractComponent.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "Component/InteractDescription.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "Component/CitizenDescription.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "Game/Disease.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "Component/PopulationDescription.h"   // X::TypeId() (ENDGAME B.3.9)
 
 // ============================================================
 // Static inline implementations (replaces fn_* exe pointer calls)
@@ -381,10 +388,10 @@ static void Game_DestroyAllRawMaterials_Impl() {
 
     // Iterate all entities with ComponentDescription type
     void* entity = const_cast<::Object::External*>(
-        efactoryRaw->FindNext(*g_TypeId_ComponentDescription_FC, nullptr));  // B.3.3 bridge
+        efactoryRaw->FindNext(ComponentDescription::TypeId(), nullptr));  // B.3.3 bridge
     while (entity) {
         // IsDerivedFrom check against ComponentDescription
-        bool isBuild = fn_IsDerivedFrom(entity, *g_TypeId_ComponentDescription_FC);
+        bool isBuild = fn_IsDerivedFrom(entity, ComponentDescription::TypeId());
         void* buildEntity = isBuild ? entity : nullptr;
 
         // Search entity's components for RawMaterialDescription
@@ -396,10 +403,10 @@ static void Game_DestroyAllRawMaterials_Impl() {
             void* comp = compArray[i];
             // Get component type via vtable[2] (+0x10)
             uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-            if (typeId == *g_TypeId_RawMaterialDescription) {
+            if (typeId == RawMaterialDescription::TypeId()) {
                 // Re-read component pointer from array and confirm with IsDerivedFrom
                 void* rawComp = compArray[i];
-                bool isRawMat = fn_IsDerivedFrom(rawComp, *g_TypeId_RawMaterialDescription);
+                bool isRawMat = fn_IsDerivedFrom(rawComp, RawMaterialDescription::TypeId());
                 if (isRawMat && rawComp != nullptr) {
                     // Destroy the entity (re-read entityList from global each time)
                     uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
@@ -411,7 +418,7 @@ static void Game_DestroyAllRawMaterials_Impl() {
         }
 
         entity = const_cast<::Object::External*>(
-            efactoryRaw->FindNext(*g_TypeId_ComponentDescription_FC,
+            efactoryRaw->FindNext(ComponentDescription::TypeId(),
                                   reinterpret_cast<const ::Object::External*>(entity)));  // B.3.3 bridge
     }
 }
@@ -487,11 +494,11 @@ static void Game_SpawnCitizens_Impl() {
                             void** pComp = (void**)(compArrayBase + cOffset * 8);
                             void* comp = *pComp;
                             uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-                            if (typeId == *g_TypeId_InteractComponent_FC) {
+                            if (typeId == InteractComponent::TypeId()) {
                                 // Re-read and CheckPtr on the array slot
                                 pComp = (void**)(compArrayBase + cOffset * 8);
                                 comp = *pComp;
-                                bool isRes = fn_IsDerivedFrom(comp, *g_TypeId_InteractComponent_FC);
+                                bool isRes = fn_IsDerivedFrom(comp, InteractComponent::TypeId());
                                 residenceComp = isRes ? comp : nullptr;
                                 goto found_residence;
                             }
@@ -515,7 +522,7 @@ found_residence:
 
                             // Get ResidenceDescription from component+0x18
                             void* desc = *(void**)(resComp + 0x18);
-                            bool isResDesc = fn_IsDerivedFrom(desc, *g_TypeId_InteractDescription_FC);
+                            bool isResDesc = fn_IsDerivedFrom(desc, InteractDescription::TypeId());
                             void* resDesc = isResDesc ? desc : nullptr;
 
                             // Read capacity value from desc+0x30 (maxOccupants)
@@ -574,7 +581,7 @@ found_residence:
                             if (extTemplate == nullptr) {
                                 entityDesc = nullptr;
                             } else {
-                                bool isBuildDesc = fn_IsDerivedFrom(extTemplate, *g_TypeId_ComponentDescription_FC);
+                                bool isBuildDesc = fn_IsDerivedFrom(extTemplate, ComponentDescription::TypeId());
                                 entityDesc = isBuildDesc ? extTemplate : nullptr;
                             }
 
@@ -602,10 +609,10 @@ found_residence:
                                     void** pComp = (void**)(compArrayBase + cOffset * 8);
                                     void* comp = *pComp;
                                     uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-                                    if (typeId == *g_TypeId_CitizenComponent_FC) {
+                                    if (typeId == CitizenComponent::TypeId()) {
                                         pComp = (void**)(compArrayBase + cOffset * 8);
                                         comp = *pComp;
-                                        bool isAI = fn_IsDerivedFrom(comp, *g_TypeId_CitizenComponent_FC);
+                                        bool isAI = fn_IsDerivedFrom(comp, CitizenComponent::TypeId());
                                         aiComp = isAI ? comp : nullptr;
                                         goto found_ai;
                                     }
@@ -625,7 +632,7 @@ found_ai:
 
                             // Get CitizenDescription (DAT_1401c7190) from AI component
                             void* citDescRaw = *(void**)((uintptr_t)citizenAI + 0x18);
-                            bool isCitDesc = fn_IsDerivedFrom(citDescRaw, *g_TypeId_CitizenDescription);
+                            bool isCitDesc = fn_IsDerivedFrom(citDescRaw, CitizenDescription::TypeId());
                             void* citDesc = isCitDesc ? citDescRaw : nullptr;
 
                             // Get profession list from game (re-read global)
@@ -697,7 +704,7 @@ static void DebugUI_TriggerDisasterOnBuilding_Impl(DebugUI* self) {
     if (!externalList) return;
     void* diseaseEntry = *(void**)(*(uintptr_t*)((uintptr_t)externalList + 0x20) +
                                    (int64_t)diseaseIdx * 8);
-    bool isDisease = fn_IsDerivedFrom(diseaseEntry, *g_TypeId_DiseaseDescription);
+    bool isDisease = fn_IsDerivedFrom(diseaseEntry, Disease::TypeId());
     void* diseaseDesc = isDisease ? diseaseEntry : nullptr;
     if (!diseaseDesc) return;
 
@@ -752,7 +759,7 @@ static void Game_SpawnTornado_Impl() {
     // Cast to entity description (must be derived from ComponentDescription type)
     void* entityDesc = nullptr;
     if (extTemplate) {
-        bool isEntityDesc = fn_IsDerivedFrom(extTemplate, *g_TypeId_ComponentDescription_FC);
+        bool isEntityDesc = fn_IsDerivedFrom(extTemplate, ComponentDescription::TypeId());
         if (isEntityDesc) {
             entityDesc = extTemplate;
         }
@@ -800,45 +807,17 @@ static void Game_InfectRandomCitizen_Impl() {
     fn_DiseaseComponent_Infect(citizen);
 }
 
-namespace debugui_sa {
-
-// Idempotent heal of the exe-.rdata type-id globals. Safe to call on every slot
-// entry; each `if (*global)` short-circuits once filled.
-void EnsureGlobals() {
-    struct Heal { uint32_t** g; uint32_t* s; const char* name; };
-    static uint32_t s_build = 0, s_rawmat = 0, s_interactC = 0, s_interactD = 0,
-                    s_citDesc = 0, s_disease = 0, s_drawable = 0, s_internal = 0;
-    static const Heal heals[] = {
-        { &g_TypeId_ComponentDescription_FC,         &s_build,     "ComponentDescription"   },
-        { &g_TypeId_RawMaterialDescription, &s_rawmat,    "RawMaterialDescription" },
-        { &g_TypeId_InteractComponent_FC,  &s_interactC, "InteractComponent"      },
-        { &g_TypeId_InteractDescription_FC,   &s_interactD, "InteractDescription"    },
-        { &g_TypeId_CitizenDescription,     &s_citDesc,   "CitizenDescription"     },
-        { &g_TypeId_DiseaseDescription,     &s_disease,   "Disease"                },
-        { &g_TypeId_DrawableType,           &s_drawable,  "PopulationDescription"  },
-        { &g_TypeId_Element,         &s_internal,  "Internal"               },
-    };
-    for (const Heal& h : heals) {
-        // A non-null global is not necessarily a USABLE one: some of these .rdata
-        // cells now resolve to real standalone storage (e.g. 0x1401c47c8 is backed by
-        // reg_herd_live.cpp) that is only filled lazily by whichever port gets there
-        // first. Heal a registered-but-still-zero id too, or IsDerivedFrom(x, 0) fails
-        // for every candidate and the combo it gates comes up empty.
-        if (*h.g && **h.g) continue;
-        if (*h.s == 0) *h.s = ::Object::ResolveTypeIdByNameLazy(h.name);
-        if (!*h.s) continue;
-        if (*h.g) **h.g = *h.s;   // fill the real .rdata cell in place
-        else      *h.g = h.s;
-    }
-    // CitizenComponent id resolves via GetTypeIdByName (the proven CitizenUI choice).
-    if (!g_TypeId_CitizenComponent_FC) {
-        static uint32_t s_cai = 0;
-        if (s_cai == 0) s_cai = CitizenComponent::TypeId();
-        if (s_cai) g_TypeId_CitizenComponent_FC = &s_cai;
-    }
-}
-
-}  // namespace debugui_sa
+// ENDGAME B.3.9: every global the old debugui_sa::EnsureGlobals() healed now has a
+// ported TypeId(): ComponentDescription (cell 0x1401c7318), RawMaterialDescription
+// (0x1401c7cb8), InteractComponent (0x1401c7900), InteractDescription (0x1401c7938),
+// CitizenDescription (0x1401c7190), Disease (was g_TypeId_DiseaseDescription, cell
+// 0x1401c5948 -- Table 1's authority, not the name), PopulationDescription (was
+// g_TypeId_DrawableType, cell 0x1401c47c8 -- Table 1's authority), CitizenComponent
+// (0x1401c7158), and UI::Element (was g_TypeId_Element, healed here under the WRONG
+// by-name guess "Internal" -- the cell is exref 0x140151660, UI::Element's own
+// _typeInfo per Table 1 / standalone/reg_element_typeids.cpp, matching this file's
+// OWN correct comment on the FindElemBase guard further down). The lazy-cache
+// namespace is dead.
 
 // ============================================================
 // DebugUI::Slot8 (vtable +0x40) -- Update performance counters
@@ -866,7 +845,6 @@ void EnsureGlobals() {
 // Original: 0x1400610C0
 // [8] 0x1400610c0
 void DebugUI::OnUpdate(const System::Time& /*time*/) {
-    debugui_sa::EnsureGlobals();
     // perf counters (self-guarded), then keep swatches/day live (the tree's
     // per-frame drive of slot 7, a standalone deviation).
     [this] {
@@ -925,8 +903,7 @@ void DebugUI::OnUpdate(const System::Time& /*time*/) {
         void* numTotalMS = *(void**)(s + 0x70);
         if (numTotalMS) reinterpret_cast<UI::NumberElement*>(numTotalMS)->SetValue(static_cast<float>(*smoothedTotalMS * 1000.0f));  // B.3.6 bridge
     }();
-    if (g_TypeId_Element)
-        DebugUI::OnUpdateLayout();
+    DebugUI::OnUpdateLayout();
 }
 
 // ============================================================
@@ -948,8 +925,6 @@ void DebugUI::OnUpdate(const System::Time& /*time*/) {
 // Original: 0x140061280
 // [7] 0x140061280
 void DebugUI::OnUpdateLayout() {
-    debugui_sa::EnsureGlobals();
-    if (!g_TypeId_Element) return;  // FindElemBase / child deref
     uintptr_t s = (uintptr_t)this;
 
     // --- Day slider text update ---
@@ -961,7 +936,7 @@ void DebugUI::OnUpdateLayout() {
         ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(sliderDay)->Child(0));  // B.3.6 bridge
         void* childRaw = *(void**)childBuf;
         // IsDerivedFrom check + IBP wrap (matches original)
-        bool isText = childRaw && fn_IsDerivedFrom(childRaw, *g_TypeId_Element);
+        bool isText = childRaw && fn_IsDerivedFrom(childRaw, UI::Element::TypeId());
         void* textChild = isText ? childRaw : nullptr;
         uint8_t textIBP[8];
         new (textIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(textChild));   // B.3.3 bridge
@@ -1192,10 +1167,9 @@ static void* DebugUI_FindElemBase(void* parentElem, const char* name) {
     if (!rawElem) printf("[DebugUI::Slot4] FindElemBase('%s') = NULL\n", name);
     else printf("[DebugUI::Slot4] FindElemBase('%s') = %p\n", name, rawElem);
 #endif
-    // Original uses g_TypeId_Element (exe slot 0x140151660 = UI::Element;
-    // the lazy heal below fills it with Object::Internal's id when unfilled),
-    // NOT g_TypeId_ButtonElement which excludes sliders/images/numbers.
-    if (!rawElem || !fn_IsDerivedFrom(rawElem, *g_TypeId_Element)) {
+    // Original uses UI::Element's own id (exe slot 0x140151660), NOT
+    // g_TypeId_ButtonElement which excludes sliders/images/numbers.
+    if (!rawElem || !fn_IsDerivedFrom(rawElem, UI::Element::TypeId())) {
         rawElem = nullptr;
     }
     uint8_t basePtrBuf[8];
@@ -1213,14 +1187,11 @@ static void* DebugUI_FindAndSetId(void* parentElem, const char* name, int id) {
 
 // [4] 0x1400619e0
 void DebugUI::OnCreated() {
-    debugui_sa::EnsureGlobals();
     // Slot4 unconditionally dereferences ObjectInternal (every FindElemBase),
     // DiseaseDescription (diseaseCombo populate) and DrawableType (drawCombo
     // populate). Skip the whole setup rather than fault if any failed to
     // resolve; all three reliably resolve post-Engine::Startup.
-    if (!g_TypeId_Element || !*g_TypeId_Element
-        || !g_TypeId_DiseaseDescription || !*g_TypeId_DiseaseDescription
-        || !g_TypeId_DrawableType || !*g_TypeId_DrawableType) {
+    if (!UI::Element::TypeId() || !Disease::TypeId() || !PopulationDescription::TypeId()) {
         return;
     }
     uintptr_t s = (uintptr_t)this;
@@ -1289,7 +1260,7 @@ void DebugUI::OnCreated() {
                 // entry, so the row index stays a direct index into the list, which is
                 // exactly how DebugUI::TriggerDisasterOnBuilding (0x14005ff30) reads
                 // the selection back.
-                bool isDisease = fn_IsDerivedFrom(resource, *g_TypeId_DiseaseDescription);
+                bool isDisease = fn_IsDerivedFrom(resource, Disease::TypeId());
                 void* disease = isDisease ? resource : nullptr;
                 if (!disease) continue;
 
@@ -1370,7 +1341,7 @@ void DebugUI::OnCreated() {
                 void* entry = *(void**)((uintptr_t)i * 8 +
                     *(uintptr_t*)(drawableList + 0xC0));
                 void* inner = *(void**)((uintptr_t)entry + 0x18);
-                bool isDrawable = fn_IsDerivedFrom(inner, *g_TypeId_DrawableType);
+                bool isDrawable = fn_IsDerivedFrom(inner, PopulationDescription::TypeId());
                 void* drawableDesc = isDrawable ? inner : nullptr;
 
                 uint8_t spriteBuf[16];
@@ -1595,7 +1566,6 @@ void DebugUI::OnCreated() {
 // [9] 0x140060bc0
 void DebugUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                              int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    debugui_sa::EnsureGlobals();
     // Resource-spawn buttons use no type-ids; the entity-manipulation buttons
     // (raw-material purge, spawn citizens, disasters, tornado) do, and those ids
     // reliably resolve above. The body stays the free DebugUI_Slot9: it is reached
