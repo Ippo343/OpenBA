@@ -20,7 +20,6 @@ extern void     Pf_RemoveAnimalCtor_bbea0(void*, uint32_t, uint32_t*, uint32_t,
                                           void*, int64_t, uint32_t);          // 0x1400bbea0
 
 void RegisterPfRootsDropBatch() {
-    RegisterExeAddr(0x1400c78c0, reinterpret_cast<uintptr_t>(&Pf_SpawnRawMaterialOnCell_78c0));
     RegisterExeAddr(0x1400c7570, reinterpret_cast<uintptr_t>(&Pf_SpillAllStorage_7570));
     RegisterExeAddr(0x1400c7620, reinterpret_cast<uintptr_t>(&Pf_DropOffExec_7620));
     RegisterExeAddr(0x1400bbea0, reinterpret_cast<uintptr_t>(&Pf_RemoveAnimalCtor_bbea0));

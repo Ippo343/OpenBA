@@ -69,17 +69,6 @@ extern double* g_Timer_secondsPerTick;
 // context_lifecycle.cpp, and B.3.2's rules say a comment is not a caller. The
 // registered doors in runtime/src/video/ are untouched.
 
-// Generic dynamic array push (FUN_18007a0d0) — used for dialog pending lists.
-// The generic `fn_DynArrayPush` itself went with the B.3.2 closing pass (zero
-// callers); the typedef stays for the two callback-list pushes below.
-typedef void (*fn_DynArrayPush_t)(void* arrayBase, int newCount, void* elementPtr);
-
-// PostDraw callback array push (FUN_18004f790) — 16-byte element
-extern fn_DynArrayPush_t fn_PostDrawPush;
-
-// PostUpdate callback array push (FUN_18004f8e0) — 16-byte element
-extern fn_DynArrayPush_t fn_PostUpdatePush;
-
 // ============================================================
 // Video::Context lifecycle — RETIRED (ENDGAME B.3.5, batch b35-K2)
 // ============================================================
@@ -189,46 +178,9 @@ extern fn_IsDerivedFrom_t fn_IsDerivedFrom;
 // g_pExternalTypeId until the ENDGAME B.3.6 closing pass (rename only).
 extern uint32_t* g_TypeId_Dialog;
 
-// Internal list cleanup (used by UpdateLoop dtor)
-typedef void (*fn_ListCleanup_t)(void* listBase);
-extern fn_ListCleanup_t fn_ListCleanup;
-
 // ============================================================
 // Mod entry lifecycle (for Modification::Swap)
 // ============================================================
-
-// ============================================================
-// Collection::Map (AVL tree) — for Configuration command-line accessors
-// ============================================================
-
-// Map::Find(this, key) -> node* (returns nullptr if not found)
-// AVL tree lookup: compares String keys, returns pointer to node
-// Node layout: +0x00 key(String), +0x08 value(String), +0x10 parent, +0x18 left, +0x20 right
-// RCX=this(Map*), RDX=key(String const&), returns node pointer or nullptr
-typedef void* (*fn_Map_Find_t)(const void* self, const void* key);
-extern fn_Map_Find_t fn_Map_Find;
-
-// Map::Insert(map, outNode, key, value) — BST insert/update
-// RCX=map*, RDX=outNode*, R8=key(String*), R9=value(String*)
-// Returns pointer to outNode
-typedef void* (*fn_Map_Insert_t)(void* map, void* outNode, const void* key, const void* value);
-extern fn_Map_Insert_t fn_Map_Insert;
-
-// ============================================================
-// Configuration helpers (for SetCommandLine reimpl)
-// ============================================================
-
-// Configuration::ParseCommand(retval, pos, cmdLine) — static, non-trivial return
-// Extracts "/command" token from command line string.
-// RCX=retval(String*), RDX=pos(int*), R8=cmdLine(const String*)
-typedef void* (*fn_ParseCommand_t)(void* retval, int* pos, const void* cmdLine);
-extern fn_ParseCommand_t fn_ParseCommand;
-
-// Configuration::ParseValue(retval, pos, cmdLine) — static, non-trivial return
-// Extracts value token after command.
-// RCX=retval(String*), RDX=pos(int*), R8=cmdLine(const String*)
-typedef void* (*fn_ParseValue_t)(void* retval, int* pos, const void* cmdLine);
-extern fn_ParseValue_t fn_ParseValue;
 
 // ============================================================
 // IO::Persistence — key/value settings store
@@ -292,14 +244,6 @@ extern fn_InternalBasePtr_Ctor_t fn_InternalBasePtr_Ctor;
 // fn_ElementDescription_Ctor/_Dtor, fn_SpriteSheet_Ctor) stay — B36_RULES 7.
 // ============================================================
 
-// --- Input key name helper (exe 0x140099c20) ---
-
-// GetInputKeyName(keyMapContainer, retUIString, deviceType, inputIndex)
-// Member function with hidden retval. Container is *g_pKeyMapSingleton.
-// Returns ptr to retUIString (16-byte UI::String).
-typedef void* (*fn_GetInputKeyName_t)(void* keyMapContainer, void* retUIString, int deviceType, int inputIndex);
-extern fn_GetInputKeyName_t fn_GetInputKeyName;
-
 // ============================================================
 // Exe Type IDs (Phase A2 — .rdata pointers in Application-x64.exe)
 // ============================================================
@@ -312,17 +256,6 @@ extern uint32_t* g_TypeId_RadiusComponent;        // DAT_1401c4870
 extern uint32_t* g_TypeId_ToolbarDescription_FC;// DAT_1401c7f58
 extern uint32_t* g_TypeId_ResourceComponent;      // DAT_1401c7040
 extern uint32_t* g_TypeId_RawMaterialDescription;           // DAT_1401c7cb8
-// ⚠ BOTH NAMES BELOW ARE WRONG — kept only so existing declarations keep compiling.
-// Verified via get_xrefs_to on each slot, checking which *_Register writes it:
-//   0x1401c56e0 <- StatusIconUIConfig_Register (0x14014c865)  => StatusIconUIConfig
-//   0x1401c4f00 <- RegisterType_EntityUI       (0x14014bf65)  => EntityUI
-// Neither slot is RegisterExeAddr'd, so both globals are NULL in standalone and nothing
-// should read them. `g_TypeId_DialogController` now has zero readers tree-wide. Do not
-// add new consumers — use ResolveTypeId(<slot>, "<RealName>", &cache) instead, which
-// guards the VALUE rather than the pointer.
-extern uint32_t* g_TypeId_DialogController;       // DAT_1401c56e0 — really StatusIconUIConfig
-extern uint32_t* g_TypeId_PageToggleUI;           // DAT_1401c4f00 — really EntityUI
-
 // Prefer the raw .rdata DWORD; if that slot is unregistered or filled with 0, fall back to
 // the live factory tree by name. Caches into *cache. Defined in engine_funcs.cpp.
 // (edittool_select.cpp has an identical private helper in an anonymous namespace — this is
@@ -332,8 +265,6 @@ extern uint32_t* g_TypeId_MeshInstanceComponent;  // DAT_1401c7e40
 extern uint32_t* g_TypeId_DestroyComponent;       // DAT_1401c7628
 extern uint32_t* g_TypeId_WorkplaceComponent;     // DAT_1401c80e0
 extern uint32_t* g_TypeId_WorkComponent;// DAT_1401c8070
-extern uint32_t* g_TypeId_StorageComponent;       // (TBD)
-extern uint32_t* g_TypeId_StateMachineComponent;  // (TBD)
 extern uint32_t* g_TypeId_WorkDescription;       // DAT_1401c80a8
 extern uint32_t* g_TypeId_AttendanceDescription;      // DAT_1401c3f78
 extern uint32_t* g_TypeId_ResourceLimitType;      // DAT_1401c5520
@@ -346,8 +277,6 @@ extern uint32_t* g_TypeId_CreateBridgeDescription; // DAT_1401c73f8 (Startup com
 extern uint32_t* g_TypeId_RemovalDescription;      // DAT_1401c74a0 (RemovalTool::Startup component lookup)
 // g_TypeId_MapComponent_FC (DAT_1401c79e0 = MapComponent) — declared with the FindComponent type-ids below
 // g_TypeId_MultiObjectComponent (DAT_1401c7ac0) — already declared below (~line 1448)
-extern uint32_t* g_TypeId_ModelComponent;          // DAT_1401c7a50
-extern uint32_t* g_TypeId_PickingComponent;        // DAT_1401c7c10
 
 // BridgeTool helper functions (internal to exe)
 // BridgeTool_SnapEndCell (0x1400fb710): snaps end cell to same row or column as drag start
@@ -836,11 +765,6 @@ extern fn_WorkplaceComp_SetMaxWorkers_t fn_WorkplaceComp_SetMaxWorkers;
 typedef void (*fn_CitizenList_RequestWorker_t)(void* citizenList, void* retval, uint64_t professionId);
 extern fn_CitizenList_RequestWorker_t fn_CitizenList_RequestWorker;
 
-// CitizenList::AssignWorker(citizenList, retval, workerSlot, professionId) — assign worker
-// FUN_14008c3d0: called after requesting worker
-typedef void (*fn_CitizenList_AssignWorker_t)(void* citizenList, void* retval, void* workerSlot, uint64_t professionId);
-extern fn_CitizenList_AssignWorker_t fn_CitizenList_AssignWorker;
-
 // CitizenList::RemoveWorker(citizenList, professionId) — removes worker assignment
 // FUN_140091180: called for workerCountDown (ID 0x1451)
 typedef void (*fn_CitizenList_RemoveWorker_t)(void* citizenList, uint64_t professionId);
@@ -1137,7 +1061,6 @@ extern uint32_t* g_TypeId_StatusIconComponent;  // DAT_1401c7e08
 // (writer CitizenAIComponent_RegisterType) — see reg_citizenai_typeids.cpp. Null unless
 // BANISHED_LIVE_CITIZENAI_TIDS/_AIID registers it.
 extern uint32_t* g_TypeId_CitizenAIComponent;  // DAT_1401c70e8
-extern uint32_t* g_TypeId_ProfessionDescription;  // DAT_1401c5a98 (profession type in TutorialGoalCount)
 
 // StatusBarUI_StatusIconHandler (FUN_14007a120) — status icon click handler
 // REPLACED: now static StatusBarUI_StatusIconHandler_Impl() in code/Game/Dialog/statusbarui.cpp
@@ -1607,17 +1530,6 @@ void TownHallUI_UpdateAll(TownHallUI* self);             // was FUN_14007d590
 void TownHallUI_OnProfessionButton(TownHallUI* self, int index); // was FUN_14007dca0
 void TownHallUI_OnProfessionSpinner(TownHallUI* self, int index); // was FUN_14007dd10
 
-// --- Still exe-resolved TownHallUI helpers (thin wrappers in townhallui.cpp) ---
-typedef void (*fn_TownHallUI_SubFunc_t)(void* self);
-// fn_TownHallUI_UpdateProduction — reimplemented in townhallui.cpp (FUN_14007c7f0)
-// fn_TownHallUI_UpdateAgriculture — reimplemented in townhallui.cpp (FUN_14007c220)
-// fn_TownHallUI_UpdateInventory — reimplemented in townhallui.cpp (FUN_14007def0)
-// fn_TownHallUI_UpdateAll — reimplemented in townhallui.cpp (FUN_14007d590)
-extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateProduction;   // kept for reference, nullptr
-extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateAgriculture;  // kept for reference, nullptr
-extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateInventory;    // kept for reference, nullptr
-extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateAll;          // kept for reference, nullptr
-
 // --- GroupRating helpers (hearts/stars display) ---
 // FUN_14006abf0: Init group rating element — iterates children of a group element,
 // finds "whole" and "half" sub-elements in each child, stores them in two dynamic arrays.
@@ -1832,11 +1744,6 @@ extern fn_Building_GetSellableCount_t fn_Building_GetSellableCount;  // 0x14005a
 typedef void* (*fn_StorageTree_Insert_t)(void* tree, void* retval, void* entry);
 extern fn_StorageTree_Insert_t fn_StorageTree_Insert;  // 0x14000e1c0
 
-// FUN_14005baa0: Building_RemoveBuyOrder(building, resource_entity, qty) — remove buy order
-// Used by OnStorageSpinner when removing an item from buy list.
-typedef void (*fn_Building_RemoveBuyOrder_t)(void* building, void* resourceEntity, int qty);
-extern fn_Building_RemoveBuyOrder_t fn_Building_RemoveBuyOrder;  // 0x14005baa0
-
 // FUN_14005ace0: Building_AddBuyToStorage(building, resource_entity, qty)
 // Used by OnStorageSpinner when a storage resource is assigned for buying.
 typedef void (*fn_Building_AddBuyToStorage_t)(void* building, void* resourceEntity, int qty);
@@ -1893,12 +1800,6 @@ extern uint32_t* g_TypeId_DrawableType;
 // ============================================================
 // DebugUI Slot9 sub-functions (Application-x64.exe)
 // ============================================================
-
-// Game_SpawnResources (0x140091660) — REPLACED with Game_SpawnResources_Impl (Phase H)
-// See inline Game_SpawnResources_Impl() near end of this file.
-// Old fn_* pointer kept for backward compat; callers should use Game_SpawnResources_Impl().
-typedef void (*fn_Game_SpawnResources_t)(void* citizenList, uint32_t resourceFlag, int count);
-extern fn_Game_SpawnResources_t fn_Game_SpawnResources;
 
 // DebugUI_OnDrawComboChanged — now reimplemented in code/Game/Dialog/debugui.cpp
 // Sub-functions needed by the reimplementation:
@@ -2006,11 +1907,6 @@ extern fn_Graphics_Camera_Ctor_t fn_Graphics_Camera_Ctor;
 // (biome wind/nature beds, per-building loops). All are Runtime-x64.dll exports;
 // resolved by mangled name so both DLL and standalone builds share the pointer.
 
-// Game_GetMonthFromTime (0x1400932A0) — converts game time to month index (0-11)
-// RCX=weatherMgr(void*)
-typedef int (*fn_Game_GetMonthFromTime_t)(void* weatherMgr);
-extern fn_Game_GetMonthFromTime_t fn_Game_GetMonthFromTime;
-
 // ============================================================
 // DebugUI deep-reimpl helper functions (exe sub-functions)
 // ============================================================
@@ -2097,10 +1993,6 @@ extern fn_CitizenComponent_Setup_t fn_CitizenComponent_Setup;
 // RCX=building, RDX=diseaseDescription
 typedef void (*fn_DisasterComponent_Infect_t)(void* building, void* diseaseDesc);
 extern fn_DisasterComponent_Infect_t fn_DisasterComponent_Infect;
-
-// FUN_1400893c0 — checks if building list has a condition (used by TriggerDisasterOnBuilding)
-typedef bool (*fn_BuildingList_CheckCondition_t)(void* buildingList);
-extern fn_BuildingList_CheckCondition_t fn_BuildingList_CheckCondition;
 
 // ============================================================
 // SaveLoadDialog::Load — game load loop construction helpers
@@ -3650,18 +3542,6 @@ extern uint32_t* g_TypeId_ComponentBase;
 // CitizenBehavior dependencies
 // ============================================================
 
-// CitizenBehavior::CountResources (0x140089ed0) — count resources per profession.
-typedef void (*fn_CitizenBehavior_CountResources_t)(void* self);
-extern fn_CitizenBehavior_CountResources_t fn_CitizenBehavior_CountResources;
-
-// CitizenBehavior::CheckThresholds (0x14008c100) — check resource shortage thresholds.
-typedef void (*fn_CitizenBehavior_CheckThresholds_t)(void* self, void* deltaTime);
-extern fn_CitizenBehavior_CheckThresholds_t fn_CitizenBehavior_CheckThresholds;
-
-// CitizenBehavior::CollectStats (0x14008a730) — collect population statistics.
-typedef void (*fn_CitizenBehavior_CollectStats_t)(void* self);
-extern fn_CitizenBehavior_CollectStats_t fn_CitizenBehavior_CollectStats;
-
 // CitizenBehavior::ProcessPaths (0x1400d6f00) — process pending path calculations.
 typedef uint64_t (*fn_CitizenBehavior_ProcessPaths_t)(void* pathGraph);
 
@@ -3950,12 +3830,6 @@ typedef void (*fn_ExternalPtr_Serialize_Generic_t)(void* refField, void* seriali
 //
 // On dtor: only the two embedded sub-arrays at +0x08 and +0x18 own heap memory
 // (MemAlloc'd via fn_MemAlloc); the rest of the struct is plain bytes.
-
-// Resize helper for the 0x60-byte struct array at +0x200 — FUN_14001f250.
-// arrayHeader layout: { void* data; int32 count; int32 cap }
-// Calls Struct60B_CopyCtor on grow (per-element), Struct60B_DtorRange on shrink.
-typedef void (*fn_Struct60B_Resize_t)(void* arrayHeader, unsigned int newCount);
-extern fn_Struct60B_Resize_t fn_Struct60B_Resize;  // 0x14001f250
 
 // Copy-ctor for one 0x60B element — FUN_14001f5e0.
 // Returns dst (param_1). Deep-copies the two embedded sub-arrays via

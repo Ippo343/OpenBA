@@ -26,7 +26,6 @@ int   Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2);
 void  Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2);
 
 void RegisterPfRoadBatch() {
-    RegisterExeAddr(0x1400acaa0, reinterpret_cast<uintptr_t>(&Pf_RoadVtxFill_caa0));
     RegisterExeAddr(0x1400acc10, reinterpret_cast<uintptr_t>(&Pf_RoadQuad_cc10));
     RegisterExeAddr(0x1400aaa20, reinterpret_cast<uintptr_t>(&Pf_CellQuadRay_aa20));
     RegisterExeAddr(0x1400b0f90, reinterpret_cast<uintptr_t>(&Pf_CellQuadRayWrap_0f90));

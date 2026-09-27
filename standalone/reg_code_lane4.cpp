@@ -109,9 +109,6 @@ static int Lane4_Game_GetMonthFromTime(void* weatherMgr) {
 }
 
 extern "C" void RegisterCodeLane4() {
-    RegisterExeAddr(0x140089ed0, reinterpret_cast<uintptr_t>(&CitizenBehavior_CountResources));
-    RegisterExeAddr(0x14008c100, reinterpret_cast<uintptr_t>(&CitizenBehavior_CheckThresholds));
-    RegisterExeAddr(0x14008a730, reinterpret_cast<uintptr_t>(&CitizenBehavior_CollectStats));
     RegisterExeAddr(0x140099c20, reinterpret_cast<uintptr_t>(&Lane4_KeyMap_BuildKeyName));
     RegisterExeAddr(0x1400932a0, reinterpret_cast<uintptr_t>(&Lane4_Game_GetMonthFromTime));
 }

@@ -1,0 +1,12 @@
+# ENDGAME B.3 step 9 -- the rows block COORD-0 (wave 0) retired.
+# Format (tools/rt_mint_gen.py banner, B39_RULES.md D3):
+#   <mangled symbol | 0xVA>   <owner block>   <proof>
+# One fragment per block; a key appears once across all fragments.
+
+# -- the five no-reader storage cells (INVENTORY_D A.1 rows A1/A2/A3/A18/A23,
+#    B39_RULES D7 "the five no-reader cells: retired in W0") --
+?_crcTable@CRC@System@@0PAIA                                               COORD-0   no reader: crc.cpp builds its own table; minted only by the all-exported-data union
+?_lkeyMap@Device@Input@@0PAEA                                              COORD-0   no reader in the tree; minted only by the all-exported-data union
+?_keyMap@Device@Input@@0PAEA                                               COORD-0   no reader in the tree (Input unported it); minted only by the all-exported-data union
+?_exceptionCallback@Debug@System@@0P6A?AW4ErrorResponse@12@PEAXPEADH@ZEA   COORD-0   no reader (System::Debug unported); minted only by the all-exported-data union
+?_exceptionHandler@Debug@System@@0PEAXEA                                   COORD-0   no reader (System::Debug unported); minted only by the all-exported-data union

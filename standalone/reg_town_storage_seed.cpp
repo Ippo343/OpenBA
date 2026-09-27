@@ -24,8 +24,4 @@ extern "C" void TownStorage_SpawnResources_91660(void* townMgr, uint32_t mask, i
 extern "C" void StartTown_SeedStartingResources(void* startConfig);                // 0x1400a1f00
 
 extern "C" void RegisterTownStorageSeed() {
-    RegisterExeAddr(0x14012d230, reinterpret_cast<uintptr_t>(&TownRegistry_RegisterStorageLocation));
-    RegisterExeAddr(0x140107ff0, reinterpret_cast<uintptr_t>(&TownStorage_BuildCompleteInit_7ff0));
-    RegisterExeAddr(0x140091660, reinterpret_cast<uintptr_t>(&TownStorage_SpawnResources_91660));
-    RegisterExeAddr(0x1400a1f00, reinterpret_cast<uintptr_t>(&StartTown_SeedStartingResources));
 }

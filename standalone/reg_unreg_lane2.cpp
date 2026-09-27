@@ -20,27 +20,6 @@
 
 #include "resolve.h"
 #include <cstdint>
-#include <unordered_map>
-
-namespace {
-
-// Local copy of address_registry.cpp's RegisterDispatchSlot pattern (that helper is
-// file-static there, so it isn't reachable from here). Same mechanism: park the
-// resolved function pointer in our own storage, then register the ADDRESS of that
-// storage cell as the exe .rdata slot, because every consumer dereferences the slot
-// as `fn = *(fn_t*)ResolveAddr(Module::Exe, addr)`.
-std::unordered_map<uintptr_t, uintptr_t>& Lane2SlotStorage() {
-    static std::unordered_map<uintptr_t, uintptr_t> slots;
-    return slots;
-}
-
-void RegisterLane2DispatchSlot(uintptr_t ghidra_addr, uintptr_t fn_ptr) {
-    auto& slots = Lane2SlotStorage();
-    slots[ghidra_addr] = fn_ptr;
-    RegisterExeAddr(ghidra_addr, reinterpret_cast<uintptr_t>(&slots[ghidra_addr]));
-}
-
-} // namespace
 
 void RegisterUnregLane2() {
     // ------------------------------------------------------------------
@@ -56,8 +35,6 @@ void RegisterUnregLane2() {
     // fix for whoever calls fn_UIString_Ctor_Entry next; it changes nothing observable
     // today because there is no such caller yet.
     // ------------------------------------------------------------------
-    RegisterLane2DispatchSlot(0x140151300,
-        (uintptr_t)ResolveExport("??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@AEBV0System@@@Z"));
 
     // ------------------------------------------------------------------
     // DialogInstance::GetController — restores nomadcomponent.cpp's dead branch.
@@ -78,8 +55,6 @@ void RegisterUnregLane2() {
     // restores retail (a null-guard-and-skip case, not a fallback-changes-behaviour
     // case — safe).
     // ------------------------------------------------------------------
-    RegisterLane2DispatchSlot(0x140151768,
-        (uintptr_t)ResolveExport("?GetController@DialogInstance@UI@@QEBA?AV?$InternalPtr@VDialogController@UI@@@Object@@I@Z"));
 
     // ------------------------------------------------------------------
     // UI::SpriteSheet::SpriteSheet() / AddSpriteInfo / SetSpriteInfo, and
@@ -105,12 +80,6 @@ void RegisterUnregLane2() {
     // ------------------------------------------------------------------
     // (0x140151848 ??0SpriteSheet: row deleted at ENDGAME B.3.9 EXA — its one
     // reader, engine_funcs' fn_SpriteSheet_Ctor, went with the thumbnail builders.)
-    RegisterLane2DispatchSlot(0x140151898,
-        (uintptr_t)ResolveExport("??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@H@Z"));
-    RegisterLane2DispatchSlot(0x140151970,
-        (uintptr_t)ResolveExport("?SetSpriteInfo@SpriteSheet@UI@@QEAAXHHHMMMM@Z"));
-    RegisterLane2DispatchSlot(0x140151978,
-        (uintptr_t)ResolveExport("?AddSpriteInfo@SpriteSheet@UI@@QEAAXAEBVString@System@@0HHHH@Z"));
 
     // ------------------------------------------------------------------
     // The remaining 17 lane-2 addresses were audited and found to already resolve

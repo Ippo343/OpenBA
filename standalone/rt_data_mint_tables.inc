@@ -3,8 +3,8 @@
 // harvest of Runtime-x64.dll) re-verified against the DLL at generation
 // time. Regenerate with:
 //   tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py
-// Counts: 122 vtables, 104 BaseTypeInfo, 48 storage symbols.
-// Retired (ENDGAME B.3 step 9): 30 row(s), listed in tools/rt_mint_retired/*.txt.
+// Counts: 122 vtables, 104 BaseTypeInfo, 43 storage symbols.
+// Retired (ENDGAME B.3 step 9): 35 row(s), listed in tools/rt_mint_retired/*.txt.
 
 // ---- Per-slot traps. One function per (vtable, slot) so an unreachable
 // slot that DOES get called names itself instead of aborting anonymously.
@@ -3852,57 +3852,52 @@ static RtMintTypeInfo kMintTypeInfos[] = {
 // ---- Plain storage: the singleton pointers plus the ten other exported
 // .data statics. All are BSS in the DLL — written only at runtime — so
 // there is nothing to copy: minting one means OWNING the bytes.
-alignas(16) static unsigned char kStorageBytes[14160];  // one block, zero-initialised
-static const unsigned char kInit22[] = { 0x8d, 0xed, 0xb5, 0xa0, 0xf7, 0xc6, 0xb0, 0x3e };  // Timer::_secondsPerTick = 1.0/1000000.0 (retail Timer::Startup)
-static const unsigned char kInit47[] = { 0x40, 0x42, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x00 };  // Timer::_ticksPerSecond = 1000000 (retail Timer::Startup)
+alignas(16) static unsigned char kStorageBytes[12736];  // one block, zero-initialised
+static const unsigned char kInit17[] = { 0x8d, 0xed, 0xb5, 0xa0, 0xf7, 0xc6, 0xb0, 0x3e };  // Timer::_secondsPerTick = 1.0/1000000.0 (retail Timer::Startup)
+static const unsigned char kInit42[] = { 0x40, 0x42, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x00 };  // Timer::_ticksPerSecond = 1000000 (retail Timer::Startup)
 static RtMintStorage kMintStorage[] = {
     { nullptr, 0x1801fc69cull, 4, &kStorageBytes[0], "Graphics::GraphicsMesh serialize TriangleList counter (int), UNEXPORTED - runtime/src/graphics/graphicsmesh_vtable.cpp SerializeCounter()", nullptr, nullptr, 0 },
     { nullptr, 0x1801fc6a0ull, 8, &kStorageBytes[16], "Graphics::GraphicsMesh 'current mesh' static (GraphicsMesh*), UNEXPORTED - runtime/src/graphics/graphicsmesh_vtable.cpp SerializeCurrentMesh()", nullptr, nullptr, 0 },
     { nullptr, 0x1801fc6d0ull, 8, &kStorageBytes[32], "IO::Modification's loaded-DLL HMODULE slot, UNEXPORTED - code/Game/Game/game_main.cpp FreeLibrary's it at shutdown", nullptr, nullptr, 0 },
     { nullptr, 0x1801ff30cull, 4, &kStorageBytes[48], "Graphics::MeshInstance::Update static-init guard (bit 0), UNEXPORTED - runtime/src/graphics/wave29_lane_slots.cpp UpdateInitGuard()", nullptr, nullptr, 0 },
     { nullptr, 0x1801ff310ull, 1344, &kStorageBytes[64], "Graphics::MeshInstance::Update 48-entry identity Transform table, UNEXPORTED - runtime/src/graphics/wave29_lane_slots.cpp IdentityTable()", nullptr, nullptr, 0 },
-    { "?_crcTable@CRC@System@@0PAIA", 0x1801f9080ull, 1024, &kStorageBytes[1408], "uint32[256] -- the CRC32 table (bytes at 0x1801f9080 are 00000000 77073096 ee0e612c ...); adjacent-export gap to ?_lkeyMap@ is exactly 0x400. runtime/src/system/crc.cpp builds its own table, so this minted copy is never read and is left zeroed", nullptr, nullptr, 0 },
-    { "?_disableHandler@Debug@System@@0_NA", 0x1801fc708ull, 1, &kStorageBytes[2432], "bool -- suppresses the Debug top-level exception handler; gap-to-next-export=1 AND all 5 .text accesses are byte-width", nullptr, nullptr, 0 },
-    { "?_errorString@Error@System@@0PADA", 0x1801fc720ull, 8192, &kStorageBytes[2448], "char[0x2000] -- the error text BUFFER; PAD in the mangling is MSVC's array-as-pointer encoding, see ?SetText@ 0x1800c5fa0", nullptr, nullptr, 0 },
-    { "?_exceptionCallback@Debug@System@@0P6A?AW4ErrorResponse@12@PEAXPEADH@ZEA", 0x1801fc700ull, 8, &kStorageBytes[10640], "function pointer (P6A...@Z); adjacent-export gap to ?_disableHandler@ is 8", nullptr, nullptr, 0 },
-    { "?_exceptionHandler@Debug@System@@0PEAXEA", 0x1801fc710ull, 8, &kStorageBytes[10656], "void* (PEAX); adjacent-export gap to ?_singleton@MemoryAllocator@ is 8", nullptr, nullptr, 0 },
-    { "?_firstBuffer@IndexBuffer@Video@@0PEAV12@EA", 0x1801fe788ull, 8, &kStorageBytes[10672], "IndexBuffer* -- head of the live-index-buffer list", nullptr, nullptr, 0 },
-    { "?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA", 0x1801fe798ull, 8, &kStorageBytes[10688], "VertexBuffer* -- head of the live-vertex-buffer list", nullptr, nullptr, 0 },
-    { "?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA", 0x1801fe790ull, 8, &kStorageBytes[10704], "RenderBuffer* -- head of the live-render-buffer list", nullptr, nullptr, 0 },
-    { "?_firstSurface@ImageBuffer@Video@@0PEAV12@EA", 0x1801fe780ull, 8, &kStorageBytes[10720], "ImageBuffer* -- head of the live-surface list (Video_ImageBuffer_PlatformConstruct)", nullptr, nullptr, 0 },
-    { "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA", 0x1801fc6e0ull, 8, &kStorageBytes[10736], "BaseTypeInfo* — head of the reflection chain", "0x1801477b0 (+103 more)", nullptr, 0 },
-    { "?_frameIndex@ParticleInstance@Graphics@@1HA", 0x1801fe77cull, 4, &kStorageBytes[10752], "int", nullptr, nullptr, 0 },
-    { "?_hideDisplay@Error@System@@0_NA", 0x1801fc709ull, 1, &kStorageBytes[10768], "bool -- suppresses the Error message box", nullptr, nullptr, 0 },
-    { "?_keyMap@Device@Input@@0PAEA", 0x1801f94f0ull, 256, &kStorageBytes[10784], "uint8[256] -- VK -> DIK map. adjacent-export gap is 0x3a8 but the 0x68 filler run stops at +0xff and +0x100 begins a different unexported table (00 01 00 05 06 ...), so 256 is the extent", nullptr, nullptr, 0 },
-    { "?_lkeyMap@Device@Input@@0PAEA", 0x1801f9480ull, 112, &kStorageBytes[11040], "uint8[0x70] -- adjacent-export gap to ?_keyMap@ is exactly 0x70; PAE is MSVC's array-as-pointer encoding", nullptr, nullptr, 0 },
-    { "?_loader@LoaderLoop@Engine@@1VLoader@2@A", 0x1801fe7b8ull, 56, &kStorageBytes[11152], "Engine::Loader OBJECT, CONSTRUCTED at load — reproduced by ConstructLoader()", "0x180148fe0", nullptr, 0 },
-    { "?_rng@Particle@Graphics@@1VRandom@System@@A", 0x1801fe7f0ull, 2500, &kStorageBytes[11216], "System::Random OBJECT (MT19937), SEEDED FROM time() at load by 0x180149650", "0x180149650", nullptr, 0 },
-    { "?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA", 0x1801fc70bull, 1, &kStorageBytes[13728], "bool", nullptr, nullptr, 0 },
-    { "?_secondsPerTick@Timer@System@@0NA", 0x1801fe728ull, 8, &kStorageBytes[13744], "double", nullptr, kInit22, 8 },
-    { "?_singleton@AchievementManager@Achievement@@0PEAV12@EA", 0x1801fc670ull, 8, &kStorageBytes[13760], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@AnimationManager@Graphics@@0PEAV12@EA", 0x1801fe7b0ull, 8, &kStorageBytes[13776], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@Application@1@0PEAV11@EA", 0x1801fc678ull, 8, &kStorageBytes[13792], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@Configuration@Audio@@0PEAV12@EA", 0x1801fe758ull, 8, &kStorageBytes[13808], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@Configuration@Input@@0PEAV12@EA", 0x1801fe768ull, 8, &kStorageBytes[13824], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@Configuration@System@@0PEAV12@EA", 0x1801fc6f8ull, 8, &kStorageBytes[13840], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@Configuration@Video@@0PEAV12@EA", 0x1801fe7a0ull, 8, &kStorageBytes[13856], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@Device@Audio@@0PEAV12@EA", 0x1801fe760ull, 8, &kStorageBytes[13872], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@Device@Input@@0PEAV12@EA", 0x1801fe770ull, 8, &kStorageBytes[13888], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@Device@Video@@0PEAV12@EA", 0x1801fe7a8ull, 8, &kStorageBytes[13904], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@Engine@1@0PEAV11@EA", 0x1801fe748ull, 8, &kStorageBytes[13920], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@ExternalFactory@Object@@0PEAV12@EA", 0x1801fc6c8ull, 8, &kStorageBytes[13936], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@Factory@Object@@0PEAV12@EA", 0x1801fc6e8ull, 8, &kStorageBytes[13952], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@FileSystem@IO@@0PEAV12@EA", 0x1801fc6a8ull, 8, &kStorageBytes[13968], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@InternalFactory@Object@@0PEAV12@EA", 0x1801fc6d8ull, 8, &kStorageBytes[13984], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@MainLoop@Engine@@1PEAV12@EA", 0x1801fe750ull, 8, &kStorageBytes[14000], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@MemoryAllocator@System@@0PEAV12@EA", 0x1801fc718ull, 8, &kStorageBytes[14016], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@Modification@IO@@2PEAV12@EA", 0x1801fc6b0ull, 8, &kStorageBytes[14032], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@Persistence@IO@@0PEAV12@EA", 0x1801fc6b8ull, 8, &kStorageBytes[14048], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_singleton@SaveLoad@Save@@0PEAV12@EA", 0x1801fc6f0ull, 8, &kStorageBytes[14064], "singleton pointer", nullptr, nullptr, 0 },
-    { "?_stopApplication@Error@System@@0_NA", 0x1801fc70aull, 1, &kStorageBytes[14080], "bool -- Display() aborts the process when this is set", nullptr, nullptr, 0 },
-    { "?_systemInitialTick@Timer@System@@0_JA", 0x1801fe738ull, 8, &kStorageBytes[14096], "int64", nullptr, nullptr, 0 },
-    { "?_systemSecondsPerTick@Timer@System@@0NA", 0x1801fe740ull, 8, &kStorageBytes[14112], "double -- the QPF reciprocal; sibling of ?_secondsPerTick above", nullptr, nullptr, 0 },
-    { "?_systemTicksPerSecond@Timer@System@@0_JA", 0x1801fe730ull, 8, &kStorageBytes[14128], "int64", nullptr, nullptr, 0 },
-    { "?_ticksPerSecond@Timer@System@@0_JA", 0x1801fe720ull, 8, &kStorageBytes[14144], "int64", nullptr, kInit47, 8 },
+    { "?_disableHandler@Debug@System@@0_NA", 0x1801fc708ull, 1, &kStorageBytes[1408], "bool -- suppresses the Debug top-level exception handler; gap-to-next-export=1 AND all 5 .text accesses are byte-width", nullptr, nullptr, 0 },
+    { "?_errorString@Error@System@@0PADA", 0x1801fc720ull, 8192, &kStorageBytes[1424], "char[0x2000] -- the error text BUFFER; PAD in the mangling is MSVC's array-as-pointer encoding, see ?SetText@ 0x1800c5fa0", nullptr, nullptr, 0 },
+    { "?_firstBuffer@IndexBuffer@Video@@0PEAV12@EA", 0x1801fe788ull, 8, &kStorageBytes[9616], "IndexBuffer* -- head of the live-index-buffer list", nullptr, nullptr, 0 },
+    { "?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA", 0x1801fe798ull, 8, &kStorageBytes[9632], "VertexBuffer* -- head of the live-vertex-buffer list", nullptr, nullptr, 0 },
+    { "?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA", 0x1801fe790ull, 8, &kStorageBytes[9648], "RenderBuffer* -- head of the live-render-buffer list", nullptr, nullptr, 0 },
+    { "?_firstSurface@ImageBuffer@Video@@0PEAV12@EA", 0x1801fe780ull, 8, &kStorageBytes[9664], "ImageBuffer* -- head of the live-surface list (Video_ImageBuffer_PlatformConstruct)", nullptr, nullptr, 0 },
+    { "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA", 0x1801fc6e0ull, 8, &kStorageBytes[9680], "BaseTypeInfo* — head of the reflection chain", "0x1801477b0 (+103 more)", nullptr, 0 },
+    { "?_frameIndex@ParticleInstance@Graphics@@1HA", 0x1801fe77cull, 4, &kStorageBytes[9696], "int", nullptr, nullptr, 0 },
+    { "?_hideDisplay@Error@System@@0_NA", 0x1801fc709ull, 1, &kStorageBytes[9712], "bool -- suppresses the Error message box", nullptr, nullptr, 0 },
+    { "?_loader@LoaderLoop@Engine@@1VLoader@2@A", 0x1801fe7b8ull, 56, &kStorageBytes[9728], "Engine::Loader OBJECT, CONSTRUCTED at load — reproduced by ConstructLoader()", "0x180148fe0", nullptr, 0 },
+    { "?_rng@Particle@Graphics@@1VRandom@System@@A", 0x1801fe7f0ull, 2500, &kStorageBytes[9792], "System::Random OBJECT (MT19937), SEEDED FROM time() at load by 0x180149650", "0x180149650", nullptr, 0 },
+    { "?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA", 0x1801fc70bull, 1, &kStorageBytes[12304], "bool", nullptr, nullptr, 0 },
+    { "?_secondsPerTick@Timer@System@@0NA", 0x1801fe728ull, 8, &kStorageBytes[12320], "double", nullptr, kInit17, 8 },
+    { "?_singleton@AchievementManager@Achievement@@0PEAV12@EA", 0x1801fc670ull, 8, &kStorageBytes[12336], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@AnimationManager@Graphics@@0PEAV12@EA", 0x1801fe7b0ull, 8, &kStorageBytes[12352], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@Application@1@0PEAV11@EA", 0x1801fc678ull, 8, &kStorageBytes[12368], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@Configuration@Audio@@0PEAV12@EA", 0x1801fe758ull, 8, &kStorageBytes[12384], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@Configuration@Input@@0PEAV12@EA", 0x1801fe768ull, 8, &kStorageBytes[12400], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@Configuration@System@@0PEAV12@EA", 0x1801fc6f8ull, 8, &kStorageBytes[12416], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@Configuration@Video@@0PEAV12@EA", 0x1801fe7a0ull, 8, &kStorageBytes[12432], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@Device@Audio@@0PEAV12@EA", 0x1801fe760ull, 8, &kStorageBytes[12448], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@Device@Input@@0PEAV12@EA", 0x1801fe770ull, 8, &kStorageBytes[12464], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@Device@Video@@0PEAV12@EA", 0x1801fe7a8ull, 8, &kStorageBytes[12480], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@Engine@1@0PEAV11@EA", 0x1801fe748ull, 8, &kStorageBytes[12496], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@ExternalFactory@Object@@0PEAV12@EA", 0x1801fc6c8ull, 8, &kStorageBytes[12512], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@Factory@Object@@0PEAV12@EA", 0x1801fc6e8ull, 8, &kStorageBytes[12528], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@FileSystem@IO@@0PEAV12@EA", 0x1801fc6a8ull, 8, &kStorageBytes[12544], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@InternalFactory@Object@@0PEAV12@EA", 0x1801fc6d8ull, 8, &kStorageBytes[12560], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@MainLoop@Engine@@1PEAV12@EA", 0x1801fe750ull, 8, &kStorageBytes[12576], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@MemoryAllocator@System@@0PEAV12@EA", 0x1801fc718ull, 8, &kStorageBytes[12592], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@Modification@IO@@2PEAV12@EA", 0x1801fc6b0ull, 8, &kStorageBytes[12608], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@Persistence@IO@@0PEAV12@EA", 0x1801fc6b8ull, 8, &kStorageBytes[12624], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_singleton@SaveLoad@Save@@0PEAV12@EA", 0x1801fc6f0ull, 8, &kStorageBytes[12640], "singleton pointer", nullptr, nullptr, 0 },
+    { "?_stopApplication@Error@System@@0_NA", 0x1801fc70aull, 1, &kStorageBytes[12656], "bool -- Display() aborts the process when this is set", nullptr, nullptr, 0 },
+    { "?_systemInitialTick@Timer@System@@0_JA", 0x1801fe738ull, 8, &kStorageBytes[12672], "int64", nullptr, nullptr, 0 },
+    { "?_systemSecondsPerTick@Timer@System@@0NA", 0x1801fe740ull, 8, &kStorageBytes[12688], "double -- the QPF reciprocal; sibling of ?_secondsPerTick above", nullptr, nullptr, 0 },
+    { "?_systemTicksPerSecond@Timer@System@@0_JA", 0x1801fe730ull, 8, &kStorageBytes[12704], "int64", nullptr, nullptr, 0 },
+    { "?_ticksPerSecond@Timer@System@@0_JA", 0x1801fe720ull, 8, &kStorageBytes[12720], "int64", nullptr, kInit42, 8 },
 };
 

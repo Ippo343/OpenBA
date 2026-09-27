@@ -88,10 +88,6 @@ extern "C" void FillComponentTypeIdGlobals_animal();
 // idempotent, also self-fills lazily on the first live animal tick).
 extern "C" void FillComponentTypeIdGlobals_animal_update();
 extern "C" void FillComponentTypeIdGlobals_animal_serialize();
-// Tornado lane — ParticleComponent type-id global 0x1401c4720. Root cause of the
-// 2026-08-22 fire-arm crash: unregistered, so the shared finder 0x140005200 missed
-// on every entity and FireComponent::Ignite faulted on the null. See reg_tornado.cpp.
-extern "C" void FillTypeIdGlobals_tornado();
 // Phase 2 Keystone B3 — RawMaterialDescription type-id global (0x1401c7cb8) for ca520.
 extern "C" void FillTypeIdGlobals_actionchild();
 // Phase 2 Keystone B tail — Work-tail type-id globals (trade=private CitizenAIComponent;
@@ -512,7 +508,6 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillComponentTypeIdGlobals_fruit();
     FillComponentTypeIdGlobals_spawn();
     FillComponentTypeIdGlobals_tombstone();
-    FillTypeIdGlobals_tornado();           // ParticleComponent id 0x1401c4720 (fire + tornado both depend on it)
     FillComponentTypeIdGlobals_animal();   // herd/animal/livestock ids (self-gated)
     FillComponentTypeIdGlobals_animal_update(); // Character comp/desc ids (self-gated)
     FillComponentTypeIdGlobals_animal_serialize(); // serialize-only PopulationComponent/Component ids

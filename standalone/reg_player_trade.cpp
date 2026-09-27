@@ -43,12 +43,9 @@ extern "C" void PlayerTrade_EditTool_66800(int64_t);           // 0x140066800
 
 void RegisterPlayerTradeBatch() {
     // Bottom-up: leaves first, then the structures that call them.
-    RegisterExeAddr(0x140015000, reinterpret_cast<uintptr_t>(&PlayerTrade_Rot_15000));
-    RegisterExeAddr(0x140014ed0, reinterpret_cast<uintptr_t>(&PlayerTrade_Rot_14ed0));
     RegisterExeAddr(0x140025920, reinterpret_cast<uintptr_t>(&PlayerTrade_Retrace_25920));
     RegisterExeAddr(0x140025740, reinterpret_cast<uintptr_t>(&PlayerTrade_BSTRemove_25740));
     RegisterExeAddr(0x14002c690, reinterpret_cast<uintptr_t>(&PlayerTrade_BSTFindRemove_2c690));
-    RegisterExeAddr(0x140102e30, reinterpret_cast<uintptr_t>(&PlayerTrade_BSTInsert_102e30));
     RegisterExeAddr(0x1400666b0, reinterpret_cast<uintptr_t>(&PlayerTrade_EntityUI_66b0));
     RegisterExeAddr(0x140066800, reinterpret_cast<uintptr_t>(&PlayerTrade_EditTool_66800));
 }

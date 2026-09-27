@@ -100,8 +100,6 @@ extern "C" void RegisterUnregLane1Batch() {
     // is three bytes — `C2 00 00` = RET 0. Object::Internal::Persist is an
     // empty virtual; it moves ZERO stream bytes. Registered here anyway so the
     // call is byte-faithful and nobody re-opens this as a suspect.
-    RegisterDispatchSlot(0x1401515e0,
-        (uintptr_t)ResolveExport("?Persist@Internal@Object@@UEAAXAEAVStream@IO@@@Z"));
 
     // ------------------------------------------------------------------
     // 0x140152870 — Object::External::_typeInfo  (DATA, not a function)
@@ -148,14 +146,6 @@ extern "C" void RegisterUnregLane1Batch() {
     // does not re-audit them. Explicitly: reference mode is NOT stubbed to
     // false in our port, so the "resource first parsed inside the
     // reference-mode window deserializes corrupt" note does not apply here.
-    RegisterDispatchSlot(0x1401529f8,
-        (uintptr_t)ResolveExport("?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ"));
-    RegisterDispatchSlot(0x140151218,
-        (uintptr_t)ResolveExport("?IsReferenceModeEnabled@ExternalFactory@Object@@QEBA_NXZ"));
-    RegisterDispatchSlot(0x140151220,
-        (uintptr_t)ResolveExport("?GetReferenceId@ExternalFactory@Object@@QEBAIPEBVExternal@2@@Z"));
-    RegisterDispatchSlot(0x140151228,
-        (uintptr_t)ResolveExport("?GetPathForReferenceId@ExternalFactory@Object@@QEBA?AVFilename@System@@I@Z"));
 
     // ------------------------------------------------------------------
     // Singleton DATA slots. Each import slot holds the ADDRESS of a Runtime
@@ -185,8 +175,6 @@ extern "C" void RegisterUnregLane1Batch() {
     // symbol engine_funcs binds by name into g_pMainLoopSingleton; the tree
     // no longer reads it through this slot (B.3.7 close folded the second
     // global, g_pEngineSingleton), the row keeps the slot table faithful.
-    RegisterDispatchSlot(0x140151440,
-        (uintptr_t)ResolveExport("?_singleton@MainLoop@Engine@@1PEAV12@EA"));
 
     // 0x1401514f0 — Achievement::AchievementManager::_singleton.
     // engine_funcs.cpp:2649 does g_ppAchievementManager = (void***)ResolveAddr(...)

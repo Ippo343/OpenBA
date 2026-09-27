@@ -39,7 +39,6 @@ namespace BuildRoadAddr {
     constexpr uintptr_t GetTarget    = 0x1400e4960;
     constexpr uintptr_t GetPriority  = 0x1400295a0;
     constexpr uintptr_t WorkVtable   = 0x140161a80;
-    constexpr uintptr_t TypeInfo     = 0x1401c6860;
 }
 
 class BuildRoad final : public Work {

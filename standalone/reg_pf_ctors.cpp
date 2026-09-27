@@ -28,7 +28,6 @@ extern void  Pf_StorageDropOff_116760(int64_t, int64_t, int);                // 
 extern int   Pf_StorageCountDelta_1167c0(int64_t, int64_t);                  // 0x1401167c0
 
 void RegisterPfCtorsBatch() {
-    RegisterExeAddr(0x1400c4f10, reinterpret_cast<uintptr_t>(&Pf_ActStackWalkClear_4f10));
     RegisterExeAddr(0x1400c54e0, reinterpret_cast<uintptr_t>(&Pf_ActStackPush_54e0));
     RegisterExeAddr(0x1400c5da0, reinterpret_cast<uintptr_t>(&Pf_CompleteTaskCopyCtor_5da0));
     RegisterExeAddr(0x1400c71a0, reinterpret_cast<uintptr_t>(&Pf_CreateRawMaterialCopyCtor_71a0));

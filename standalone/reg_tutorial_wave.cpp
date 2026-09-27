@@ -56,13 +56,9 @@ void RegisterTutorialWaveBatch() {
     RegisterExeAddr(0x1400262b0, reinterpret_cast<uintptr_t>(&TutWave_SerializeTutorialRef));
     RegisterExeAddr(0x140028650, reinterpret_cast<uintptr_t>(&TutWave_SerializeDialogRef));
     RegisterExeAddr(0x1401001f0, reinterpret_cast<uintptr_t>(&TutWave_TutorialTreeInsert));
-    RegisterExeAddr(0x1400e2250, reinterpret_cast<uintptr_t>(&TutWave_SetElementFlagsRecursive));
     RegisterExeAddr(0x1400e2330, reinterpret_cast<uintptr_t>(&TutWave_SetAllDialogFlags));
     RegisterExeAddr(0x1400e24f0, reinterpret_cast<uintptr_t>(&TutWave_FindHighlightDialog));
     RegisterExeAddr(0x1400e2700, reinterpret_cast<uintptr_t>(&TutWave_OpenHighlightDialog));
     RegisterExeAddr(0x1400e29f0, reinterpret_cast<uintptr_t>(&TutWave_ShowListedElements));
-    RegisterExeAddr(0x14001af90, reinterpret_cast<uintptr_t>(&TutWave_ExternalRefCopy));
-    RegisterExeAddr(0x14001afe0, reinterpret_cast<uintptr_t>(&TutWave_ExternalRefResolve));
-    RegisterExeAddr(0x1400e1260, reinterpret_cast<uintptr_t>(&TutWave_RefreshStepUI));
     RegisterExeAddr(0x1400e1db0, reinterpret_cast<uintptr_t>(&TutWave_StepExecute));
 }

@@ -51,8 +51,6 @@ void RegisterMarketWorkBstBatch() {
     // a9f0 takes FOUR args (tree, out, key, vec) — the old typedef in marketwork.cpp
     // declared two, leaving R8/R9 garbage. Fixed alongside this wave.
     RegisterExeAddr(0x14002a9f0, reinterpret_cast<uintptr_t>(&MarketBst_a9f0));
-    RegisterExeAddr(0x14002ab60, reinterpret_cast<uintptr_t>(&MarketBst_ab60));
-    RegisterExeAddr(0x14002ae50, reinterpret_cast<uintptr_t>(&MarketBst_ae50));
 
     // ── genuine AVL tree: erase cluster ──────────────────────────────────────────
     // ⚠ aaa0 is ERASE-BY-KEY, not insert. Retail vtable slot 6 (0x1400eff60) AND
@@ -61,19 +59,16 @@ void RegisterMarketWorkBstBatch() {
     // InternalBasePtr and unlinked garbage. Fixed alongside this wave.
     RegisterExeAddr(0x14002aaa0, reinterpret_cast<uintptr_t>(&MarketBst_aaa0));
     RegisterExeAddr(0x14002ac40, reinterpret_cast<uintptr_t>(&MarketBst_ac40));
-    RegisterExeAddr(0x14002aee0, reinterpret_cast<uintptr_t>(&MarketBst_aee0));
 
     // ── v1 save format (slot 3 Serialize, 0x1400f1d70, takes this arm when
     //    IO::Serializer::GetVersion() != 0; v0 streams migrate via a9f0 instead) ──
     RegisterExeAddr(0x14002b290, reinterpret_cast<uintptr_t>(&MarketBst_b290));
-    RegisterExeAddr(0x14002b5f0, reinterpret_cast<uintptr_t>(&MarketBst_b5f0));
 
     // ── NOT tree code: dynamic-array grow, 0x20-byte elements ────────────────────
     RegisterExeAddr(0x14002afb0, reinterpret_cast<uintptr_t>(&MarketBst_afb0));
 
     // ── NOT tree code: qsort over 0x20-byte records, key = float at +0x14 ─────────
     RegisterExeAddr(0x14002b680, reinterpret_cast<uintptr_t>(&MarketBst_b680));
-    RegisterExeAddr(0x14002bd80, reinterpret_cast<uintptr_t>(&MarketBst_bd80));
 
     // ── NOT tree code: qsort over 0x18-byte records, key = int32 at +0x08 ─────────
     RegisterExeAddr(0x14002ba70, reinterpret_cast<uintptr_t>(&MarketBst_ba70));
