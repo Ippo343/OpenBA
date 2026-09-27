@@ -148,9 +148,10 @@ Transform28* IdentityTable()   { return g_identityTable; }
 //   CONDITION:   live whenever the DLL is present; at cutover it must be minted.
 //   CONSEQUENCE: null ⇒ retail's byte is unreachable, and this body would have
 //                to invent arg7. It declines instead.
+// ENDGAME B.3.9 GFX (D7 row A22): the class static (redirected onto the
+// mint's row), not the by-address door.
 const bool* RootOnlyUpdates() {
-    return reinterpret_cast<const bool*>(
-        ResolveAddr(Module::Runtime, 0x1801fc70b));
+    return &Graphics::MeshInstance::_rootOnlyUpdates;
 }
 
 // ?Update@AnimationState@Graphics@@ — retail 0x1800fdb20, ordinal 4474, PORTED

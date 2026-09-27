@@ -3120,3 +3120,8 @@ void EdgeMesh::SetMaterials(Object::ExternalPtr<MaterialInstance> mask,
 }
 
 }  // namespace Graphics
+
+// ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA  retail 0x1801fc70b -- the
+// class static (ENDGAME B.3.9 block GFX, B39_RULES D7 row A22), redirected onto
+// the mint's storage row by RtGraphicsPortInit (foreign readers remain).
+bool Graphics::MeshInstance::_rootOnlyUpdates = false;

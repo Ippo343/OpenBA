@@ -167,7 +167,6 @@ const char* const kPSIctor         = "??0ParticleSystemInstance@Graphics@@QEAA@X
 const char* const kGeometryCtor    = "??0Geometry@Graphics@@QEAA@XZ";
 // ENDGAME B.3.5 caller batch: `kSetBounds` is gone with its door — the member call
 // spells the name it no longer needs.
-const char* const kFrameIndexData  = "?_frameIndex@ParticleInstance@Graphics@@1HA";
 
 // ============================================================================
 // Retail vtable constants -- resolved once through ResolveAddr(Module::Runtime,
@@ -190,15 +189,10 @@ void* RtParticleSystemInstanceVtable() {
 // by-address cache of 0x1801fe7b0) is gone -- the cell is the class static
 // `Graphics::AnimationManager::_singleton`, defined at the end of this file.
 
-// Graphics::ParticleInstance::_frameIndex, a protected STATIC int (mangling
-// code `1`), not an instance field -- see Particle.h. Resolved once via
-// the raw DLL door (a real export, unlike the .rdata data slot addresses this
-// project has elsewhere found to resolve NULL -- checked present in the
-// export table before this file was written).
-int* RtFrameIndexSlot() {
-    static int* p = reinterpret_cast<int*>(ResolveExport(kFrameIndexData));
-    return p;
-}
+// ENDGAME B.3.9 block GFX (D7 row A37): `RtFrameIndexSlot` (a lazy
+// function-local ResolveExport cache) is gone -- the cell is the class static
+// `Graphics::ParticleInstance::_frameIndex`, defined at the end of this file
+// and redirected onto the mint's row by RtGraphicsPortInit.
 
 // ============================================================================
 // Graphics::Geometry::Geometry(void) -- retail 0x1800a4270, ordinal 205,
@@ -582,10 +576,9 @@ Object::Base* AnimationEvent::CreateInPlaceObject(void* place) { (void)place; re
 //    in this step either (B35_RULES section 11). They keep the POD spelling and
 //    their diff oracles' byte ranges unchanged.
 //
-//  * `?_frameIndex@ParticleInstance@Graphics@@1HA` (0x1801fe77c) STAYS AN
-//    `RT_DATA_SLOT`-style read through `RtFrameIndexSlot()` and does NOT become
-//    a real `static int` member — B35_RULES section 9 / RULE B4b-4: the redirect
-//    is owed at the class-static conversion, the END of B.3, not in step 5.
+//  * `?_frameIndex@ParticleInstance@Graphics@@1HA` (0x1801fe77c) is the class
+//    static `ParticleInstance::_frameIndex` since ENDGAME B.3.9 block GFX (D7),
+//    redirected onto the mint's row.
 // ############################################################################
 
 // ?Update@ParticleInstance@Graphics@@QEAA_NXZ  retail 0x180104180.
@@ -606,9 +599,8 @@ bool ParticleInstance::Update() {
         _boundsPtr = resource->_boxes[_index];               // +0x38 array, +0xd0 index
     }
 
-    int* frameIndex = RtFrameIndexSlot();
     bool needsUpdate;
-    if (resource->_active != 0 && _boundsPtr->frameTag == *frameIndex) {
+    if (resource->_active != 0 && _boundsPtr->frameTag == _frameIndex) {
         // `Geometry::SetBounds(const Volume::Box&)`, exactly as retail does —
         // a QUALIFIED non-virtual member call since the ENDGAME B.3.5 caller
         // batch. `this` IS the Geometry base (offset zero), so the cast the POD
@@ -617,7 +609,7 @@ bool ParticleInstance::Update() {
             *reinterpret_cast<const ::Box*>(_boundsPtr));
         needsUpdate = false;
     } else {
-        _boundsPtr->frameTag = *frameIndex;                  // unguarded, faithful
+        _boundsPtr->frameTag = _frameIndex;                  // unguarded, faithful
         needsUpdate = true;
     }
 
@@ -625,11 +617,10 @@ bool ParticleInstance::Update() {
 }
 
 // ?IncrementInstanceIndex@ParticleInstance@Graphics@@SAXXZ  retail 0x1800201f0.
-// One line: `_frameIndex += 1`, on the SAME live static the DLL itself reads.
+// One line: `_frameIndex += 1` (ENDGAME B.3.9 GFX: the class static; the
+// null-tolerant slot read went with the lazy cache -- the cell always exists).
 void ParticleInstance::IncrementInstanceIndex() {
-    int* slot = RtFrameIndexSlot();
-    const int before = slot ? *slot : 0;
-    if (slot) *slot = before + 1;
+    ++_frameIndex;
 }
 
 }  // namespace Graphics
@@ -724,3 +715,8 @@ void Graphics::Particle::ReleaseFields() {
 // storage row is retired (rt_mint_retired/gfx.txt): every reader is in this
 // block's files.
 Graphics::AnimationManager* Graphics::AnimationManager::_singleton = nullptr;
+
+// ?_frameIndex@ParticleInstance@Graphics@@1HA  retail 0x1801fe77c -- the class
+// static (ENDGAME B.3.9 block GFX, B39_RULES D7 row A37), redirected onto the
+// mint's storage row by RtGraphicsPortInit (foreign readers remain).
+int Graphics::ParticleInstance::_frameIndex = 0;

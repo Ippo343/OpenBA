@@ -561,12 +561,19 @@ public:
     int      GetBones(float t, const Math::Transform& xf,
                       Math::Matrix* out) const;              // 0x180100070
 
-    // The two CLASS STATICS over `?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA`
-    // (0x1801fc70b). Exported, not ported, no caller as members — the flag
-    // itself is read through `RT_DATA_SLOT` in `wave29_lane_slots.cpp` and owes
-    // a `MintStorageCell()` redirect at the END of B.3 (RULE B4b-4).
+    // The two CLASS STATIC accessors over `_rootOnlyUpdates`. Exported, not
+    // ported, no caller as members.
     static void EnableRootOnlyUpdates(bool enable);          // 0x180017040
     static bool AreRootOnlyUpdateEnabled();                  // 0x180017050
+
+    // ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA  0x1801fc70b — retail's
+    // PRIVATE static bool (`0`). ENDGAME B.3.9 block GFX (B39_RULES D7 row A22):
+    // the class static, defined in mesh.cpp and REDIRECTED onto the mint's
+    // storage row by RtGraphicsPortInit, so the name / address doors the
+    // foreign readers use (citizenai_executor.cpp, address_registry.cpp,
+    // perf_experimental.cpp) and this member are ONE byte. Public because its
+    // reader in this block is a free-function body (wave29_lane_slots.cpp).
+    static bool _rootOnlyUpdates;
 
     // `??2MeshInstance@Graphics@@SAPEAX_K@Z` (0x180016940),
     // `??2…@SAPEAX_KPEAX@Z` (0x1800169b0) and `??3…@SAXPEAX@Z` (0x1800169c0) are
