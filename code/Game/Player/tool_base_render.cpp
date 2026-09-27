@@ -74,6 +74,9 @@
 #include "math/Math.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "Component/HighlightComponent.h"
+#include "Component/HighlightDescription.h"
+#include "Component/ModelComponent.h"
 #include "collection/Collection.h"
 #include <cstdint>
 #include <cstring>
@@ -104,18 +107,10 @@ fn_ibp_out_t  s_4740  = nullptr;   // 0x140004740 -> entity component container 
 fn_ibp_out_t  s_3f60  = nullptr;   // 0x140003f60 Entity_ClearPathQueue (misnomer: FindComponent)
 fn_void1_t    s_c3470 = nullptr;   // 0x1400c3470 (flag-change notify)
 
-uint32_t s_tid_Highlight = 0;      // DAT_1401c4410 HighlightComponent
-uint32_t s_tid_HighlightDesc = 0;  // DAT_1401c4448 HighlightDescription
-uint32_t s_tid_Model = 0;          // DWORD_1401c7a50 ModelComponent (c4a0 variant find)
+// ENDGAME B.3.8 callers: DAT_1401c4410 / DAT_1401c4448 / DWORD_1401c7a50 are
+// HighlightComponent / HighlightDescription / ModelComponent's type ids, read through
+// the classes (the ResolveTid ti-cell + by-name cache is gone).
 bool     s_resolved = false;
-
-uint32_t ResolveTid(uintptr_t rdataAddr, const char* name, uint32_t* cache) {
-    if (*cache) return *cache;
-    uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, rdataAddr));
-    if (p && *p) { *cache = *p; return *cache; }
-    *cache = ::Object::GetTypeIdByName(name);
-    return *cache;
-}
 
 void EnsureFuncs() {
     if (s_resolved) return;
@@ -174,15 +169,14 @@ using EdgeVtxArray = Collection::Array<EdgeVertex16>;
 //   entity+0x30 (array) / +0x38 (count). Writes it (or null) into *outIBP.
 // ===========================================================================
 void Sub7080(int64_t container, void* outIBP) {
-    const uint32_t tid = ResolveTid(0x1401c4410, "HighlightComponent", &s_tid_Highlight);
+    const uint32_t tid = HighlightComponent::TypeId();
     void* found = nullptr;
     int count = *reinterpret_cast<int32_t*>(container + 0x38);
     for (int i = 0; i < count; i++) {
         uint64_t* slot = reinterpret_cast<uint64_t*>(
             *reinterpret_cast<uintptr_t*>(container + 0x30) + (int64_t)i * 8);
         void* comp = *reinterpret_cast<void**>(slot);
-        uint32_t ct = reinterpret_cast<uint32_t(*)(void*)>(
-            *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        uint32_t ct = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (ct == tid) {
             uint64_t* slot2 = reinterpret_cast<uint64_t*>(
                 *reinterpret_cast<uintptr_t*>(container + 0x30) + (int64_t)i * 8);
@@ -207,15 +201,14 @@ void Sub7080(int64_t container, void* outIBP) {
 //   citizens / other model-variant entities that have no terrain footprint).
 // ===========================================================================
 void FindModelComp(int64_t container, void* outIBP) {
-    const uint32_t tid = ResolveTid(0x1401c7a50, "ModelComponent", &s_tid_Model);
+    const uint32_t tid = ModelComponent::TypeId();
     void* found = nullptr;
     int count = *reinterpret_cast<int32_t*>(container + 0x38);
     for (int i = 0; i < count; i++) {
         uint64_t* slot = reinterpret_cast<uint64_t*>(
             *reinterpret_cast<uintptr_t*>(container + 0x30) + (int64_t)i * 8);
         void* comp = *reinterpret_cast<void**>(slot);
-        uint32_t ct = reinterpret_cast<uint32_t(*)(void*)>(
-            *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        uint32_t ct = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (ct == tid) {
             void* comp2 = *reinterpret_cast<void**>(slot);
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp2, tid)) found = comp2;
@@ -472,7 +465,7 @@ void Impl_b930(int64_t self) {
 
     // Materials from the HighlightDescription (self+0x18): +0x30, +0x38 (yellow).
     void* obj = *reinterpret_cast<void**>(self + 0x18);
-    const uint32_t tidDesc = ResolveTid(0x1401c4448, "HighlightDescription", &s_tid_HighlightDesc);
+    const uint32_t tidDesc = HighlightDescription::TypeId();
     void* desc = (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, tidDesc)) ? obj : nullptr;
     // B.3.5 bridge — the four parameters are `Object::ExternalPtr<MaterialInstance>`
     // BY VALUE, and constructing them from the raw pointers the HighlightDescription
@@ -549,7 +542,7 @@ void Impl_c4a0(int64_t self) {
     if (s_4740) s_4740(*reinterpret_cast<int64_t*>(self + 0x10), &compIBP);
 
     void* ownerObj = *reinterpret_cast<void**>(self + 0x18);
-    const uint32_t tidDesc = ResolveTid(0x1401c4448, "HighlightDescription", &s_tid_HighlightDesc);
+    const uint32_t tidDesc = HighlightDescription::TypeId();
     void* desc = (fn_IsDerivedFrom && fn_IsDerivedFrom(ownerObj, tidDesc)) ? ownerObj : nullptr;
 
     int iVar10 = -1, iVar11 = -1;
@@ -972,6 +965,6 @@ extern "C" void HighlightRepaint_Impl(void* self)   { Impl_c4a0(reinterpret_cast
 extern "C" void HighlightDeselect_Impl(void* self)  { Impl_cc90(reinterpret_cast<int64_t>(self)); }  // 0x1400fcc90
 
 // Per-frame follow re-sync (NOT an exe address). Called directly from
-// EditTool_Startup_Impl (edittool.cpp) every frame; self-gates on
+// EditTool::Update (edittool.cpp) every frame; self-gates on
 // BANISHED_SELECTION_OUTLINE so it is a no-op unless the outline is enabled.
 extern "C" void HighlightFollow_Impl(void* self)    { Impl_HighlightFollow(reinterpret_cast<int64_t>(self)); }

@@ -27,14 +27,6 @@
 #include <cstdint>
 #include <cstddef>
 
-namespace RawMaterialDescriptionAddr {
-    constexpr uintptr_t RegisterType = 0x14014f790;
-    constexpr uintptr_t Factory      = 0x1400372d0;
-    constexpr uintptr_t Ctor         = 0x1401296a0;
-    constexpr uintptr_t Vtable       = 0x1401641f0;
-    constexpr uintptr_t TypeIdGlobal = 0x1401c7cb8;  // DAT_1401c7cb8
-}
-
 // RawMaterialFlags bitfield — field +0x5C, tested via bitwise AND.
 //
 // [CORRECTED 2026-07-19 — binary-verified] The old table here naively followed the

@@ -11,7 +11,7 @@
 //
 // Decompiled from Application-x64.exe.
 
-#include "Player/removaltool_funcs.h"
+#include "Player/RemovalTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -49,12 +49,12 @@ Object::Base* RemovalTool::DeletingDtor(unsigned flags) {
 // After finding a match by type ID, fn_IsDerivedFrom confirms the cast.
 //
 // Original: 0x140104bd0
-void RemovalTool_Startup(RemovalTool* self) {
-    uintptr_t entity = (uintptr_t)self->descriptionPtr;
+void RemovalTool::Startup() {
+    uintptr_t entity = (uintptr_t)descriptionPtr;
     void* result = nullptr;
 
     if (!entity || !g_TypeId_RemovalDescription || !fn_IsDerivedFrom) {
-        self->removalDesc = nullptr;
+        removalDesc = nullptr;
         return;
     }
 
@@ -66,10 +66,8 @@ void RemovalTool_Startup(RemovalTool* self) {
         void* comp = components[i];
         if (!comp) continue;
 
-        // Call vtable slot +0x10: GetTypeId() -> uint32_t
-        typedef uint32_t (*fn_GetTypeId_t)(void* self);
-        fn_GetTypeId_t getTypeId = *(fn_GetTypeId_t*)(*(uintptr_t*)comp + 0x10);
-        uint32_t typeId = getTypeId(comp);
+        // Virtual slot 2 (+0x10): Type()
+        uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
         if (typeId == targetTypeId) {
             // Verify with IsDerivedFrom before casting
@@ -80,7 +78,7 @@ void RemovalTool_Startup(RemovalTool* self) {
         }
     }
 
-    self->removalDesc = result;
+    removalDesc = result;
 }
 
 // ============================================================
@@ -106,8 +104,8 @@ void RemovalTool_Startup(RemovalTool* self) {
 //   3 = failure (selection doesn't match constrained area)
 //
 // Original: 0x140103ef0
-uint64_t RemovalTool_CalcCost(RemovalTool* self, int startCell, int endCell,
-                              uint32_t* outValid, int* outCostB, int* outCostA, uint32_t* outLength) {
+int RemovalTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
+                          int* outCostB, int* outCostA, int* outLength) {
     // Get map grid size from GameWorld
     int gridSize = **(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
 
@@ -137,7 +135,7 @@ uint64_t RemovalTool_CalcCost(RemovalTool* self, int startCell, int endCell,
     *outValid = 0;
 
     // Check constraints from description entity at +0x10
-    uintptr_t descEntity = *(uintptr_t*)((uintptr_t)self + 0x10);
+    uintptr_t descEntity = (uintptr_t)dialogPtr;
     if (*(char*)(descEntity + 0x80) != '\0') {
         // Constrained removal — verify selection matches the constrained area exactly
         int cGridSize = **(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
@@ -251,10 +249,10 @@ static void ResolveDrawFuncs() {
 //   2. Drag selection rectangle with per-tile removability check
 //
 // Original: 0x140104050
-void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
+void RemovalTool::Draw(void* context, char param3) {
     ResolveDrawFuncs();
 
-    uintptr_t descEntity = *(uintptr_t*)((uintptr_t)self + 0x10);
+    uintptr_t descEntity = (uintptr_t)dialogPtr;
     int* mapGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
 
     // ---- Phase 1: Constrained entity tiles ----
@@ -297,7 +295,7 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
     if (param3 == '\0') {
         int startCell, endCell;
 
-        if (*(char*)((uintptr_t)self + 0x28) == '\0') {
+        if (dragState == '\0') {
             // Not dragging — pick cell under cursor
             int cell = -1;
             if (s_fn_ScreenToCell) {
@@ -306,8 +304,8 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
             startCell = cell;
             endCell   = cell;
         } else {
-            startCell = *(int*)((uintptr_t)self + 0x2c);
-            endCell   = *(int*)((uintptr_t)self + 0x30);
+            startCell = this->startCell;
+            endCell   = this->endCell;
         }
 
         if (startCell < 0) return;
@@ -337,7 +335,7 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
         TileArray selTiles;
         mapGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
 
-        uintptr_t removalDesc = (uintptr_t)self->removalDesc;
+        uintptr_t removalDesc = (uintptr_t)this->removalDesc;
 
         for (uint32_t r = minRow; r <= maxRow; r++) {
             for (uint32_t c = minCol; c <= maxCol; c++) {
@@ -368,7 +366,7 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
                 bool canRemove = false;
 
                 if (s_fn_RemovalSub48a0) {
-                    canRemove = s_fn_RemovalSub48a0((uintptr_t)self, &entity, c, r);
+                    canRemove = s_fn_RemovalSub48a0((uintptr_t)this, &entity, c, r);
                 }
 
                 if (!canRemove) {
@@ -408,7 +406,7 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
                         // Check road removal sub_4770
                         void* entityCopy1 = entity;
                         if (s_fn_RemovalSub4770) {
-                            canRemove = s_fn_RemovalSub4770((uintptr_t)self, &entityCopy1);
+                            canRemove = s_fn_RemovalSub4770((uintptr_t)this, &entityCopy1);
                         }
                     }
 
@@ -416,7 +414,7 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
                         // Check building removal sub_4670
                         void* entityCopy2 = entity;
                         if (s_fn_RemovalSub4670) {
-                            canRemove = (bool)s_fn_RemovalSub4670((uintptr_t)self, &entityCopy2);
+                            canRemove = (bool)s_fn_RemovalSub4670((uintptr_t)this, &entityCopy2);
                         }
                     }
 
@@ -467,8 +465,6 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
 // ============================================================
 // RemovalTool::CalcPath (vtable +0x68, Slot13)
 // ============================================================
-// Resolved as a direct exe function pointer call.
-//
 // This function is extremely complex (~300 lines of decompiled output):
 //   - Iterates a rectangular grid of cells
 //   - For each cell, checks removability via RemovalTool_sub_48a0
@@ -484,23 +480,10 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
 //   - Calls FUN_1400c48a0 (EntityList_RegisterEntity) to register removal markers
 //   - Calls TradeWork_impl_f370 for road count updates
 //
-// Full reimplementation would require typing ~15 sub-functions and 4+ type IDs.
-// Deferring to a future pass when those dependencies are resolved.
-//
 // Original: 0x1401035e0
-typedef bool (*fn_RemovalToolCalcPath_Exe_t)(void* self, int startCell, int endCell);
-static fn_RemovalToolCalcPath_Exe_t s_fn_RemovalToolCalcPath_Exe = nullptr;
-
-bool RemovalTool_CalcPath(RemovalTool* self, int startCell, int endCell) {
-    if (!s_fn_RemovalToolCalcPath_Exe) {
-        s_fn_RemovalToolCalcPath_Exe = reinterpret_cast<fn_RemovalToolCalcPath_Exe_t>(
-            ResolveAddr(Module::Exe, 0x1401035e0));
-    }
-    if (s_fn_RemovalToolCalcPath_Exe) {
-        return s_fn_RemovalToolCalcPath_Exe(self, startCell, endCell);
-    }
-    return false;
-}
+// ENDGAME B.3.8 callers: PORTED as RemovalTool::CalcPath in
+// keystone_a_removalcalcpath.cpp; the own-address read of 0x1401035e0 that used to
+// reach it through the registry is now the member itself.
 
 // ============================================================
 // RemovalTool members (RemovalTool.h) — ENDGAME B.3.8 TOOL.
@@ -515,19 +498,8 @@ bool RemovalTool_CalcPath(RemovalTool* self, int startCell, int endCell) {
 #include "Object/factory_registration.h"
 #include <new>
 
-void RemovalTool::Startup() { RemovalTool_Startup(this); }                     // [4]
-void RemovalTool::Draw(void* context, char active) {                           // [8]
-    RemovalTool_Draw(this, context, active);
-}
-bool RemovalTool::CalcPath(int startCell, int endCell) {                       // [13]
-    return RemovalTool_CalcPath(this, startCell, endCell);
-}
-int RemovalTool::CalcCost(int startCell, int endCell, uint32_t* outValid,     // [14]
-                          int* outCostB, int* outCostA, int* outLength) {
-    return static_cast<int>(RemovalTool_CalcCost(this, startCell, endCell, outValid,
-                                                 outCostB, outCostA,
-                                                 reinterpret_cast<uint32_t*>(outLength)));
-}
+// [4] Startup, [8] Draw and [14] CalcCost are defined above, [13] CalcPath in
+// keystone_a_removalcalcpath.cpp.
 
 // create 0x14002e7a0: MemAlloc(0x40, 8), then the ctor 0x140104cc0.
 void* RemovalTool::CreateNewObject() {

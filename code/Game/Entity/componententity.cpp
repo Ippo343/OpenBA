@@ -21,6 +21,8 @@
 
 #include "Entity/componententity_funcs.h"
 #include "Component/ComponentDescription.h"
+#include "Component/Component.h"
+#include "Component/Description.h"
 #include "Component/coll_bridge.h"
 #include "options.h"
 #include <windows.h>
@@ -53,11 +55,8 @@ bool     s_traceDumped   = false;
 
 // Each component template's GetComponentType (Description slot 8, a retslot).
 uint32_t TemplateComponentType(void* compTemplate) {
-    uintptr_t compVtable = *(uintptr_t*)compTemplate;
-    typedef void (*fn_GetTypeId_t)(void* self, uint32_t* outTypeId);
-    fn_GetTypeId_t getTypeId = *(fn_GetTypeId_t*)(compVtable + 0x40);
-    uint32_t typeId = 0;
-    getTypeId(compTemplate, &typeId);
+    Object::Type typeId(0);
+    reinterpret_cast<const Description*>(compTemplate)->GetComponentType(&typeId);  // B.3.8 bridge
     return typeId;
 }
 }  // namespace
@@ -302,11 +301,8 @@ void ComponentEntity::ShutdownComponents() {
         if (((compFlags >> 8) & 1) != 0) {
             // Re-check after potential lazy resolve
             compPtr = *(uintptr_t*)ibpAddr;
-            // Call vtable+0x28 (Shutdown)
-            uintptr_t compVtable = *(uintptr_t*)compPtr;
-            typedef void (*fn_CompShutdown_t)(void* self);
-            fn_CompShutdown_t shutdown = *(fn_CompShutdown_t*)(compVtable + 0x28);
-            shutdown((void*)compPtr);
+            // Virtual slot 5 (+0x28, the shutdown slot)
+            reinterpret_cast<Component*>(compPtr)->Slot5();  // B.3.8 bridge
         }
     }
 }
@@ -332,11 +328,8 @@ void ComponentEntity::StartupComponents() {
         uint32_t compFlags = *(uint32_t*)(compPtr + 0x20);
         if (((compFlags >> 7) & 1) != 0) {
             compPtr = *(uintptr_t*)ibpAddr;
-            // Call vtable+0x20 (Startup)
-            uintptr_t compVtable = *(uintptr_t*)compPtr;
-            typedef void (*fn_CompStartup_t)(void* self);
-            fn_CompStartup_t startup = *(fn_CompStartup_t*)(compVtable + 0x20);
-            startup((void*)compPtr);
+            // Virtual slot 4 (+0x20): Startup
+            reinterpret_cast<Component*>(compPtr)->Startup();  // B.3.8 bridge
         }
     }
 }
@@ -483,8 +476,7 @@ void ComponentEntity::Persist(void* stream) {
                 void* c = *(void**)ibpAddr;
                 uint32_t tid = 0;
                 if (c) {
-                    typedef uint32_t (*fn_gtid_t)(void*);
-                    tid = (*(fn_gtid_t*)(*(uintptr_t*)c + 0x10))(c);
+                    tid = reinterpret_cast<Object::Base*>(c)->Type();  // B.3.8 bridge
                 }
                 // Stream cursor (CompressedMemoryStream + 0x8C — see
                 // engine/types/io_serializer.h). Logged on BOTH save and load:
@@ -612,10 +604,7 @@ void ComponentEntity::Persist(void* stream) {
                     uintptr_t existIBPAddr = (uintptr_t)_components + insertPos * 8;
                     uintptr_t existComp = *(uintptr_t*)existIBPAddr;
                     // Get existing component's type ID via vtable+0x10
-                    uintptr_t existVtable = *(uintptr_t*)existComp;
-                    typedef uint32_t (*fn_GetId_t)(void*);
-                    fn_GetId_t getId = *(fn_GetId_t*)(existVtable + 0x10);
-                    uint32_t existTypeId = getId((void*)existComp);
+                    uint32_t existTypeId = reinterpret_cast<Object::Base*>(existComp)->Type();  // B.3.8 bridge
                     if (existTypeId == typeId) {
                         // Already have this component -- skip
                         insertIdx++;
@@ -662,12 +651,9 @@ void ComponentEntity::Persist(void* stream) {
                 *(uintptr_t*)((uintptr_t)compPtr + 0x10) = ownerIBP;
                 *(void**)((uintptr_t)compPtr + 0x18) = descTemplate;
 
-                // Call component's vtable+0x20 (Serialize/Startup from description)
+                // Component's virtual slot 4 (+0x20): Startup
                 compPtr = (void*)newIBP;
-                uintptr_t cVtable = *(uintptr_t*)compPtr;
-                typedef void (*fn_CompInit_t)(void*);
-                fn_CompInit_t compInit = *(fn_CompInit_t*)(cVtable + 0x20);
-                compInit(compPtr);
+                reinterpret_cast<Component*>(compPtr)->Startup();  // B.3.8 bridge
 
                 // Resize component array to make room
                 int oldCount = _componentCount;
@@ -755,9 +741,7 @@ void ComponentEntity::OnAddedPass() {
         const bool armed = (*(uint8_t*)(compPtr + 0x20) & 1) != 0;
         if (armed) {
             compPtr = *(uintptr_t*)ibpAddr;
-            uintptr_t vt = *(uintptr_t*)compPtr;
-            typedef void (*fn_t)(void*);
-            (*(fn_t*)(vt + 0x30))((void*)compPtr);
+            reinterpret_cast<Component*>(compPtr)->OnAdded();  // B.3.8 bridge (slot 6, +0x30)
         }
     }
 }

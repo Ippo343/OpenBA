@@ -23,11 +23,10 @@
 //   [12] 0x1400fc9d0 `MOV EAX,5; RET` (cursor)
 //   [13], [14] _purecall — CalcPath (commit) / CalcCost (preview), introduced
 //
-// DOORS (B38 D5 (b) rows): 0x1400fc6b0 and 0x1400fc640 are also reached BY
-// ADDRESS (engine_funcs.cpp:1078/:1080 through reg_code_lane6.cpp /
-// reg_player_drag.cpp), so the free functions `DragTool_OnKey` and
-// `DragTool_CancelDrag_Impl` stay registered and the members delegate to them
-// (one body).
+// DOORS (B38 D5 (b) rows): reg_code_lane6.cpp / reg_player_drag.cpp register
+// the names `DragTool_OnKey` (0x1400fc6b0) and `DragTool_CancelDrag_Impl`
+// (0x1400fc640), so those two stay as one-line doors onto the members, which
+// hold the bodies (ENDGAME B.3.8 callers CB4).
 // ============================================================================
 
 #include <cstdint>
@@ -77,7 +76,7 @@ static_assert(offsetof(DragTool, startCell)   == 0x2c, "DragTool +0x2c startCell
 static_assert(offsetof(DragTool, endCell)     == 0x30, "DragTool +0x30 endCell");
 static_assert(offsetof(DragTool, lastEndCell) == 0x34, "DragTool +0x34 lastEndCell (dword -1 at 0x1400fb8d7)");
 
-// The by-address doors (bodies in dragtool.cpp). OnKey (0x1400fc6b0) returns
+// The by-name doors onto the members (dragtool.cpp). OnKey (0x1400fc6b0) returns
 // 1 always (event consumed); CancelDrag (0x1400fc640) returns 1 when it
 // cancelled a drag (the tool stays), 0 when idle.
 uint64_t DragTool_OnKey(DragTool* self, char key);
