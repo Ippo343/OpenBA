@@ -1452,17 +1452,11 @@ namespace {
 // first-call cache the rule removes.
 std::atomic<void*> g_vtIoStreamSlot{nullptr};
 std::atomic<void*> g_vtIoMemStreamSlot{nullptr};
-std::atomic<void*> g_vtIoEncodingSlot{nullptr};
 inline const void* VtblIoStream() {
     return rtuielem::AtomicExport(g_vtIoStreamSlot, "??_7Stream@IO@@6B@");        // 0x1801549a0
 }
 inline const void* VtblIoMemoryStream() {
     return rtuielem::AtomicExport(g_vtIoMemStreamSlot, "??_7MemoryStream@IO@@6B@"); // 0x1801555b0
-}
-// The shared IO::Encoding vtable. UNEXPORTED — the address door is the only
-// one, and it is PORT-AWARE, so lane C2's mint satisfies it at cutover.
-inline void* VtblIoEncoding() {
-    return rtuielem::AtomicAddr(g_vtIoEncodingSlot, 0x1801554a8ull);
 }
 
 inline void* UiMemAllocA(size_t n, int align) {
@@ -1487,7 +1481,6 @@ void UI::UserInterface::SaveAllSettings() {
 
     const void* vtStream = VtblIoStream();
     const void* vtMem    = VtblIoMemoryStream();
-    void*       vtEnc    = VtblIoEncoding();
 
     do {
         uint8_t* dlg = *reinterpret_cast<uint8_t**>(node);
@@ -1505,7 +1498,7 @@ void UI::UserInterface::SaveAllSettings() {
 
             // ---- 2. the 8-byte IO::Encoding -------------------------------
             void* enc = UiMemAllocA(8, 4);
-            if (enc) *reinterpret_cast<void**>(enc) = vtEnc;
+            if (enc) ::new (enc) IO::BinaryEncoding();   // B.3.9 IO: the real class
             // Retail frees the PREVIOUS encoding before installing this one.
             // It is always null at this point; the store order is retail's.
             if (void* oldEnc = st.base.encoding) UiMemFree(oldEnc);

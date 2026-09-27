@@ -293,13 +293,14 @@ extern "C" FileStream* RtIo_FileStream_Ctor(FileStream* self) {
 // itself conditional (0x1800a82ce). On a fresh object it is always null; the
 // branch is transcribed because it is a statement retail makes.
 //
-// The table goes in BY ADDRESS because neither of the two this family uses has
-// an exported name — see the header note.
+// ENDGAME B.3.9 IO: the encoding is the REAL class (`IO::BinaryEncoding` /
+// `IO::TextEncoding`), constructed in place; its ctor is retail's single vptr
+// store, so the 8-byte object is what the old by-address stamp produced.
 // ---------------------------------------------------------------------------
-void InstallEncoding(Stream* s, uintptr_t vtableAddr) {
+template <class EncodingT>
+void InstallEncoding(Stream* s) {
     void* enc = RtSystem::RtMemAlloc(8, 4);                                // 1800a82a5
-    if (enc) *reinterpret_cast<uintptr_t*>(enc) =                          // 1800a82bb
-        ResolveAddr(Module::Runtime, vtableAddr);
+    if (enc) ::new (enc) EncodingT();                                      // 1800a82bb
     if (s->encoding) EncodingDelete(s->encoding);                          // 1800a82d3
     s->encoding = enc;                                                     // 1800a82d8
 }
@@ -585,7 +586,7 @@ extern "C" BinaryFileStream* RtIo_BinaryFileStream_Ctor(BinaryFileStream* self) 
     self->base.base.vptr =
         RT_DATA_SLOT(const void*, "??_7BinaryFileStream@IO@@6B@");        // 1800a8270
 
-    InstallEncoding(&self->base.base, 0x1801554a8);                       // 1800a827a..d8
+    InstallEncoding<IO::BinaryEncoding>(&self->base.base);                    // 1800a827a..d8
 
     return self;                                                          // 1800a82dc
 }
@@ -631,7 +632,7 @@ extern "C" TextFileStream* RtIo_TextFileStream_Ctor(TextFileStream* self,
     self->_unk78          = nullptr;   // 1800ba3ea  +0x78
     // +0x50 and +0x54 deliberately untouched — see the header note.
 
-    InstallEncoding(&self->base.base, 0x1801559d0);                       // 1800ba3ee..4e
+    InstallEncoding<IO::TextEncoding>(&self->base.base);                    // 1800ba3ee..4e
 
     RT_EXPORT_ONCE(SetObjectFn,
         "?SetObject@TextFileStream@IO@@QEAAXAEBVString@System@@0H@Z")(

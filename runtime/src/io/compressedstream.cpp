@@ -117,6 +117,7 @@
 #include <cstdio>
 #include <cstring>
 #include <initializer_list>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Stream.h"
@@ -702,27 +703,20 @@ extern "C" void RtIo_MemoryStream_Dtor(MemoryStream* self) {
 // 0x1801554a8 table) while ignoring the address.
 // ============================================================================
 
-// The shared IO::Encoding vtable, 0x1801554a8. UNEXPORTED, so it is reached by
-// ADDRESS through the port-aware address door — which is precisely the door
-// lane C2's address-keyed mint registers, so this is the DLL's table today and
-// the minted one at cutover, with no change here.
-const void* VtblBinaryEncoding() {
-    static const void* v = reinterpret_cast<const void*>(
-        ResolveAddr(Module::Runtime, 0x1801554a8ull));
-    return v;
-}
 const void* VtblCompressedStream() {
     static const void* v = ResolveExport("??_7CompressedStream@IO@@6B@");
     return v;
 }
 
-// The shared tail of both constructors: allocate the 8-byte IO::Encoding, stamp
-// the shared vtable into it, release whatever `_encoding` held, store.
+// The shared tail of both constructors: allocate the 8-byte IO::Encoding,
+// construct the BINARY encoding in it (ENDGAME B.3.9 IO: the real class, whose
+// ctor is retail's single vptr store of the unexported 0x1801554a8 table),
+// release whatever `_encoding` held, store.
 void ConstructEncoding(Stream* base) {
     void* enc = RT_EXPORT_ONCE(MemAllocFn,
         "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(8, 4);
     if (enc != nullptr)
-        *reinterpret_cast<const void**>(enc) = VtblBinaryEncoding();
+        ::new (enc) IO::BinaryEncoding();
     // Retail's dead-but-shipped release of the previous encoding. See the header.
     if (base->encoding != nullptr)
         RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(base->encoding);

@@ -152,7 +152,6 @@ namespace RtIO { int RtIoModificationRegister(); }   // modification.cpp (lane M
 // the shared Encoding vtable partly FUNCTIONAL rather than merely minted, and
 // an A/B on it isolates the save/load header path from every other IO row.
 extern int RtIoEncodingRegister();          // encoding.cpp (lane ENC)
-extern int RtIoVisitorTextEncodingRegister();  // encoding_visitor_text.cpp
 
 // Wave 9 lane ENC-2: the four BinaryWriter bodies SaveSettings dispatches into
 // on the write path (two Serialize slots, the back-patching destructor, and the
@@ -281,7 +280,6 @@ void RtIoPortInit() {
     n += RtIoPackageFileReadRegister();
     n += RtIO::RtIoModificationRegister();
     n += RtIoEncodingRegister();
-    n += RtIoVisitorTextEncodingRegister();   // unconditional (DIRECTION.md 2)
     n += RtIoBinaryWriterRegister();
     n += RtIoSerializeFamilyRegister();
     n += RtIoCompressedStreamWriteRegister();

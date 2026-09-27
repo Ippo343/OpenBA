@@ -302,15 +302,6 @@ inline const void* VtblVisitorStream() {
     return RT_DATA_SLOT(const void*, "??_7VisitorStream@IO@@6B@");
 }
 
-// The Visitor Encoding's vtable — UNEXPORTED, so the address door is the only
-// port-aware one. NOT the shared 0x1801554a8 BinaryEncoding; see header §4.
-inline const void* VtblVisitorEncoding() {
-    static const void* v = nullptr;
-    if (!v) v = reinterpret_cast<const void*>(
-                    ResolveAddr(Module::Runtime, 0x1801559f8ull));
-    return v;
-}
-
 // The one place the `flags & 2` divergence is spelled, so the four call sites
 // cannot drift apart and the message always names its own class.
 // Collection::Array<Mod>::~Array, 0x180010b80. Already ported by lane MOD
@@ -524,7 +515,7 @@ extern "C" VisitorStream* RtIo_VisitorStream_Ctor(VisitorStream* self) {
     void* e = RT_EXPORT_ONCE(MemAllocFn,
         "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(8, 4);  // 1800bb107
     if (e)                                                     // 1800bb118
-        *reinterpret_cast<const void**>(e) = VtblVisitorEncoding();
+        ::new (e) IO::VisitorEncoding();                       // the VISITOR table
 
     if (self->base.encoding)                                   // 1800bb127
         MemFree(self->base.encoding);

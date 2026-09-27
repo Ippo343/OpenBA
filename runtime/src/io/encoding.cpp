@@ -278,113 +278,18 @@ extern "C" BinaryCodec* RtIo_BinaryWriter_Ctor(BinaryCodec* self, Serializer* se
 }
 
 // ---------------------------------------------------------------------------
-// THE FIVE BINARY-ENCODING SLOTS ARE NOW `IO::BinaryEncoding`'s METHODS.
+// THE FIVE BINARY-ENCODING SLOTS ARE `IO::BinaryEncoding`'s METHODS.
 // ---------------------------------------------------------------------------
-// ENDGAME B.3.4 block 1. The bodies moved into the class (declared in
-// runtime/types/io/Serializer.h, defined at the bottom of this file for the two
-// factories; the three constants are inline in the header). The five `extern
-// "C"` doors below KEEP their addresses and their registrations and now
-// DELEGATE — the two-step shim pattern from B31_RULES.
+// ENDGAME B.3.9 IO: every stream constructor now builds the encoding as the
+// real class (`::new (p) IO::BinaryEncoding()`), so a live encoding wears the
+// compiler's table and its five slots reach the members below directly. The
+// five by-address slot doors (0x1800a81e0 / d0 / c0 / 0x1800a8120 / 0x1800a8080)
+// had the minted unexported table 0x1801554a8 as their only caller; they were
+// deleted with that row.
 //
-// THE DELEGATION IS A **QUALIFIED**, NON-VIRTUAL CALL, AND IT HAS TO BE.
-// A live `IO::Encoding` in this build is 8 bytes allocated by a stream
-// constructor (`Allocate(8,4)`) and stamped with the MINTED table 0x1801554a8,
-// whose five slots resolve back to these very doors. So a door that made a
-// VIRTUAL call on that object would dispatch through the minted table straight
-// back into itself — an infinite recursion, not a delegation. Every door
-// therefore calls `g_binaryEncoding.IO::BinaryEncoding::Method(...)`: the
-// `Class::` qualification suppresses virtual dispatch, and the file-scope
-// instance exists only to give the non-static member a `this` it never reads.
-//
-// That `this` really is never read: all five retail bodies overwrite RCX before
-// first use (see the CreateReader/CreateWriter notes below), which is why
-// routing every door through ONE shared instance changes no behaviour.
-//
-// WHAT B.3.4 DELIBERATELY DOES NOT DO HERE (B34_RULES §4.3): nothing in this
-// commit changes WHO constructs an Encoding or WHICH vtable it wears. The
-// stream constructors still stamp the minted 0x1801554a8 through
-// `ResolveAddr(Module::Runtime, 0x1801554a8ull)`. The doors die, and the class
-// becomes the only route, when the last reader of that minted table converts —
-// which is the end of B.3, not this step.
-//
-// ---------------------------------------------------------------------------
-// Slots 0, 1 and 2 of the shared BINARY encoding vtable 0x1801554a8 — Wave 21
-// lane ENC, item 1. NONE of the three is exported; no debug string names them,
-// so the SLOT names are DESCRIPTIVE (behaviour-derived), not attested. The
-// CLASS names, however, now are: `IO\BinaryEncoding.cpp` / `IO\TextEncoding.cpp`
-// / `IO\VisitorEncoding.cpp` are source-path strings in
-// Runtime-x64-profile.dll (0x1801a0040 / 0x1801a2d50 / 0x1801a4d18) and rows in
-// docs/runtime_port/original_source_tree.txt. So the paragraph below is now
-// half-superseded: the return VALUES and the CLASS names are attested; only the
-// three member names remain this project's reading.
-//
-// Transcribed straight from the shipped bytes (read via pefile against
-// Runtime-x64.dll, RETAIL, not the profile build — this table has no
-// counterpart in the profile export list to cross-check against, and the
-// project's own trap says profile OFFSETS must never be trusted for this
-// vtable family):
-//
-//   0x1800a81e0  slot 0   B0 01 C3          MOV AL,1  ; RET   -> true
-//   0x1800a81d0  slot 1   32 C0 C3          XOR AL,AL ; RET   -> false
-//   0x1800a81c0  slot 2   B8 02 00 00 00 C3 MOV EAX,2 ; RET   -> 2
-//
-// All three ignore `self` completely (never read RCX) — the same "self
-// accepted and ignored" shape as CreateReader/CreateWriter below, consistent
-// with Encoding being a stateless policy tag.
-//
-// THE SEMANTICS ARE INFERRED FROM A SIBLING TABLE, NOT GUESSED FROM NOTHING.
-// The unexported TEXT encoding vtable at 0x1801559d0 (see file_stream.cpp)
-// has the SAME SHAPE at the SAME three slots, with slot 0/1 EXACTLY INVERTED
-// and slot 2 holding a DIFFERENT small constant:
-//
-//   0x1801559d0  slot 0   0x1800b9ab0   32 C0 C3          -> false
-//   0x1801559d0  slot 1   0x1800b9aa0   B0 01 C3          -> true
-//   0x1801559d0  slot 2   0x1800b9a90   B8 01 00 00 00 C3 -> 1
-//
-// A predicate pair that flips between the binary and text tables and a third
-// slot that varies 2-vs-1 reads as {IsBinary, IsText, EncodingKind} — but that
-// reading is NOT proven by a string or an export; it is this lane's naming
-// choice, called out so a later lane does not mistake the names for an
-// attested fact.
-// ---------------------------------------------------------------------------
-// The one shared instance the doors delegate through. Stateless, 8 bytes, and
-// never handed to anything outside this file — a live Encoding is still the
-// minted-vtable object a stream constructor allocated.
-IO::BinaryEncoding g_binaryEncoding;
-
-extern "C" bool RtIo_Encoding_IsBinary(void* self) {
-    (void)self;   // retail never reads RCX
-    return g_binaryEncoding.IO::BinaryEncoding::IsBinary();
-}
-extern "C" bool RtIo_Encoding_IsText(void* self) {
-    (void)self;
-    return g_binaryEncoding.IO::BinaryEncoding::IsText();
-}
-extern "C" int32_t RtIo_Encoding_GetKind(void* self) {
-    (void)self;
-    return g_binaryEncoding.IO::BinaryEncoding::GetKind();
-}
-
-// ---------------------------------------------------------------------------
-// IO::Encoding::CreateReader   0x1800a8120   (vtable 0x1801554a8 slot +0x18)
-// IO::Encoding::CreateWriter   0x1800a8080   (vtable 0x1801554a8 slot +0x20)
-// ---------------------------------------------------------------------------
-// "self" is the IO::Encoding and is deliberately unused — retail never reads it.
-extern "C" BinaryCodec* RtIo_Encoding_CreateReader(void* self, Serializer* ser,
-                                                   int32_t version) {
-    (void)self;
-    return reinterpret_cast<BinaryCodec*>(
-        g_binaryEncoding.IO::BinaryEncoding::CreateReader(
-            reinterpret_cast<IO::Serializer&>(*ser), version));   // B.3.4 bridge
-}
-
-extern "C" BinaryCodec* RtIo_Encoding_CreateWriter(void* self, Serializer* ser,
-                                                   int32_t version) {
-    (void)self;
-    return reinterpret_cast<BinaryCodec*>(
-        g_binaryEncoding.IO::BinaryEncoding::CreateWriter(
-            reinterpret_cast<IO::Serializer&>(*ser), version));   // B.3.4 bridge
-}
+// Slots 0, 1 and 2 are inline in Serializer.h, transcribed from the shipped
+// bytes (`MOV AL,1; RET` / `XOR AL,AL; RET` / `MOV EAX,2; RET`); every body
+// ignores `this` -- an Encoding is a stateless policy tag.
 
 }  // namespace RtIo
 
@@ -431,24 +336,11 @@ ReaderWriter* BinaryEncoding::CreateWriter(Serializer& ser, int version) {
 // ============================================================================
 // The two CONSTRUCTORS are exported, so they get both doors: the name flips
 // every ResolveExport call site, the address covers anything reaching them by
-// Ghidra address (which is how the factories in the DLL reach them today).
+// Ghidra address.
 //
-// The two FACTORIES are NOT exported and get the ADDRESS door only. That is
-// also the door lane C2's mint uses: an RT_MINT_UNNAMED slot resolves through
-// RtPortLookupAddr on its dllVa, so registering these two addresses is exactly
-// what turns slots 3 and 4 of the minted 0x1801554a8 table from named traps
-// into our bodies. Wave 21 lane ENC closes the same door for the remaining
-// three: slots 0, 1 and 2 (0x1800a81e0, 0x1800a81d0, 0x1800a81c0) are now
-// registered too, so all FIVE slots of the shared BINARY encoding vtable are
-// our bodies. The table itself stays permanently address-keyed (unexported),
-// so it can never move into the "promoted" bucket a `??_7` export can — see
-// the mint-vtable census comment in tools/runtime_census.py — but every
-// dispatch that reaches it now runs OUR code, which is the thing that
-// actually matters. Our own ctors are the stampers (RtIo_CompressedMemoryStream_Ctor,
-// RtIo_MemoryStream_Ctor, RtIo_CompressedStream_Ctor, RtIo_TextFileStream_Ctor
-// et al. all read this exact pointer through `ResolveAddr(Module::Runtime,
-// 0x1801554a8ull)` before storing it), so we own the route, not merely the
-// slots.
+// The encoding's own five slots are no longer registered: the only caller of
+// those addresses was the minted unexported table 0x1801554a8, retired in
+// ENDGAME B.3.9 IO once every stream constructor built `IO::BinaryEncoding`.
 int RtIoEncodingRegister() {
     using namespace RtIo;
     int n = 0;
@@ -460,13 +352,6 @@ int RtIoEncodingRegister() {
     RegisterRuntimeExport("??0BinaryWriter@IO@@QEAA@AEAVSerializer@1@H@Z",
                           (void*)&RtIo_BinaryWriter_Ctor); ++n;
     RegisterRuntimeAddr(0x1800a8a30, (void*)&RtIo_BinaryWriter_Ctor);
-
-    RegisterRuntimeAddr(0x1800a8120, (void*)&RtIo_Encoding_CreateReader); ++n;
-    RegisterRuntimeAddr(0x1800a8080, (void*)&RtIo_Encoding_CreateWriter); ++n;
-
-    RegisterRuntimeAddr(0x1800a81e0, (void*)&RtIo_Encoding_IsBinary); ++n;
-    RegisterRuntimeAddr(0x1800a81d0, (void*)&RtIo_Encoding_IsText);   ++n;
-    RegisterRuntimeAddr(0x1800a81c0, (void*)&RtIo_Encoding_GetKind);  ++n;
 
     return n;
 }

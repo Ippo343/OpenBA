@@ -1,0 +1,7 @@
+# ENDGAME B.3 step 9 -- the rows block IO retired (B39_RULES.md D3).
+# Format: <mangled symbol | 0xVA>   <owner block>   <proof>
+
+# -- the three unexported IO::Encoding tables (rows 0/2/3) --
+0x1801554a8   IO   IO::BinaryEncoding: every stamper (4 stream ctors + UI SaveAllSettings) is ::new (p) IO::BinaryEncoding(); 5 slot doors deleted
+0x1801559d0   IO   IO::TextEncoding: TextFileStream ctor is ::new (p) IO::TextEncoding(); 5 slot doors deleted
+0x1801559f8   IO   IO::VisitorEncoding: VisitorStream ctor is ::new (p) IO::VisitorEncoding(); 5 slot doors deleted
