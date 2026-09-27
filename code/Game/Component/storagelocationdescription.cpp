@@ -15,6 +15,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/StorageLocationDescription.h"
+#include "Component/StorageLocationComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -54,7 +55,7 @@ void StorageLocationDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140038f50: StorageLocationComponent's type id through the hidden return slot.
 Object::Type* StorageLocationDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("StorageLocationComponent");
+    ret->_type = StorageLocationComponent::TypeId();
     return ret;
 }
 

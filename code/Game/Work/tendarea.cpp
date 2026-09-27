@@ -375,11 +375,8 @@ int TendArea::Execute(void* citizenIBP, void* /*context*/, uint64_t /*arg3*/) {
     uintptr_t citEnt = *(uintptr_t*)citizenIBP;
 
     // Call vtable Slot10 (GetWorkEntity) to get work entity
-    uintptr_t vtable = *(uintptr_t*)this;
-    typedef uintptr_t* (*GetWorkEntity_t)(TendArea*, void*);
-    auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
     uintptr_t workEntIBP[2] = {0};
-    uintptr_t* wResult = getWorkEntity(this, workEntIBP);
+    uintptr_t* wResult = static_cast<uintptr_t*>(GetTarget(workEntIBP));
     uintptr_t workEnt = *wResult;
 
     *(uint32_t*)(citEnt + 0x54) |= 4;

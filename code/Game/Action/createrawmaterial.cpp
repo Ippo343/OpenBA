@@ -174,10 +174,8 @@ static void* FindRawMaterialDesc(void* descEntity) {
 
     for (int i = 0; i < count; i++) {
         void* comp = *(void**)(compArray + (int64_t)i * 8);
-        // Get type ID via vtable slot +0x10 (GetType)
-        uintptr_t vtable = *(uintptr_t*)comp;
-        typedef uint32_t (*GetType_t)();
-        uint32_t typeId = ((GetType_t)(*(void**)(vtable + 0x10)))();
+        // slot 2 Type()
+        uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (typeId == *s_typeId_RawMatDesc) {
             // Verify with IsDerivedFrom
             if (fn_IsDerivedFrom(comp, *s_typeId_RawMatDesc)) {
@@ -201,10 +199,8 @@ static void* FindComponentOnEntity(int64_t entity, uint32_t typeId) {
         void* compIBP = (void*)(compArray + (int64_t)i * 8);
         void* comp = *(void**)compIBP;
 
-        // Get type ID via vtable slot +0x10
-        uintptr_t vtable = *(uintptr_t*)comp;
-        typedef uint32_t (*GetType_t)();
-        uint32_t compTypeId = ((GetType_t)(*(void**)(vtable + 0x10)))();
+        // slot 2 Type()
+        uint32_t compTypeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (compTypeId == typeId) {
             comp = *(void**)compIBP;
             if (fn_IsDerivedFrom(comp, typeId)) {
@@ -220,19 +216,19 @@ static void* FindComponentOnEntity(int64_t entity, uint32_t typeId) {
 // Versioned serialization with version 3 serializer.
 // Version gates at 0, 1, 2, and 3 control which fields are serialized.
 // ============================================================
-void CreateRawMaterial_Serialize_Impl(CreateRawMaterial* self, void* stream) {
+void CreateRawMaterial::Persist(void* stream) {
     // Lazy-resolve like every other method on this exe-ctor-built action. Serialize
     // was the one that never got it, so a save taken while one of these actions was
     // in flight called a null serializer pointer (EXEC of 0). Found live on
     // CompleteRoad once roads started being built; these four are the same shape.
     CreateRawMaterial_ResolveFuncs();
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
 
     // Serialize status (version 0)
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Serialize resource data (version 3)
@@ -243,9 +239,9 @@ void CreateRawMaterial_Serialize_Impl(CreateRawMaterial* self, void* stream) {
 
     // Source building IBP (+0x28)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (*(void**)(s + 0x28) != nullptr) {
-        if (!fn_IsDerivedFrom(*(void**)(s + 0x28), *s_typeId_1401c7158)) {
-            *(void**)(s + 0x28) = nullptr;
+    if (sourceBuilding != nullptr) {
+        if (!fn_IsDerivedFrom(sourceBuilding, *s_typeId_1401c7158)) {
+            sourceBuilding = nullptr;
         }
     }
 
@@ -253,7 +249,7 @@ void CreateRawMaterial_Serialize_Impl(CreateRawMaterial* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x44), nullptr);   // B.3.4 bridge
 
     // Yield multiplier (+0x4c) as float
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<float*>(s + 0x4c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(yieldMultiplier, nullptr);   // B.3.4 bridge
 
     // Natural resource flag (+0x50) as bool
     reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<bool*>(s + 0x50), nullptr);   // B.3.4 bridge
@@ -268,9 +264,9 @@ void CreateRawMaterial_Serialize_Impl(CreateRawMaterial* self, void* stream) {
     int version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
     if (version > 0) {
         reinterpret_cast<Object::InternalBasePtr*>(s + 0x30)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-        if (*(void**)(s + 0x30) != nullptr) {
-            if (!fn_IsDerivedFrom(*(void**)(s + 0x30), *s_typeId_ComponentEntity)) {
-                *(void**)(s + 0x30) = nullptr;
+        if (secondaryEntity != nullptr) {
+            if (!fn_IsDerivedFrom(secondaryEntity, *s_typeId_ComponentEntity)) {
+                secondaryEntity = nullptr;
             }
         }
     }
@@ -278,7 +274,7 @@ void CreateRawMaterial_Serialize_Impl(CreateRawMaterial* self, void* stream) {
     // Version < 2: default placement flags; >= 2: serialize uint (+0x48)
     version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
     if (version < 2) {
-        *(uint32_t*)(s + 0x48) = 4;
+        placementFlags = 4;
     } else {
         reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x48), nullptr);   // B.3.4 bridge
     }
@@ -287,9 +283,9 @@ void CreateRawMaterial_Serialize_Impl(CreateRawMaterial* self, void* stream) {
     version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
     if (version > 2) {
         reinterpret_cast<Object::InternalBasePtr*>(s + 0x38)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-        if (*(void**)(s + 0x38) != nullptr) {
-            if (!fn_IsDerivedFrom(*(void**)(s + 0x38), *s_typeId_ComponentEntity)) {
-                *(void**)(s + 0x38) = nullptr;
+        if (tertiaryEntity != nullptr) {
+            if (!fn_IsDerivedFrom(tertiaryEntity, *s_typeId_ComponentEntity)) {
+                tertiaryEntity = nullptr;
             }
         }
     }
@@ -298,10 +294,10 @@ void CreateRawMaterial_Serialize_Impl(CreateRawMaterial* self, void* stream) {
 }
 
 
-int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionStack) {
+int  CreateRawMaterial::AbstractImpl(void* actionStack) {
     (void)actionStack;
     CreateRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
 
     // Get description entity at +0x20
@@ -328,7 +324,7 @@ int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionSta
     }
 
     // Apply yield multiplier
-    float yieldMul = *(float*)(s + 0x4c);
+    float yieldMul = yieldMultiplier;
     int totalItems = (int)((float)yield * yieldMul);
 
     if (totalItems == 0) {
@@ -337,7 +333,7 @@ int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionSta
 
     // Max items per PILE = the carrier's volume capacity / this material's per-unit volume.
     // Retail 0x1400c6c22-2c, verified at instruction level:
-    //     MOV EAX,[R15+0x40]     ; R15 = self, +0x40 = ctor arg7
+    //     MOV EAX,[R15+0x40]     ; R15 = this, +0x40 = ctor arg7
     //     CDQ
     //     IDIV dword ptr [RBX+0x48]  ; RBX = rawMatDesc, +0x48 = per-unit VOLUME
     //     MOV ECX,EAX            ; ECX = cap, loop-invariant
@@ -382,24 +378,24 @@ int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionSta
 
         // Check if natural resource flag needs to be set
         if (*(char*)(s + 0x50) == '\0') {
-            int32_t matIdx = *(int32_t*)(s + 0x44);
+            int32_t matIdx = materialCellIdx;
             uintptr_t mapGrid = *(uintptr_t*)(gameWorld + 0xf8);
             uintptr_t cellArrayBase = *(uintptr_t*)(mapGrid + 0x80);
             int64_t existingEntity = *(int64_t*)(cellArrayBase + 8 + (int64_t)matIdx * 0x30);
             if (existingEntity != 0) {
-                *(uint8_t*)(s + 0x50) = 1;
+                naturalResFlag = 1;
             }
         }
 
         // Find placement cell
-        int32_t matIdx = *(int32_t*)(s + 0x44);
+        int32_t matIdx = materialCellIdx;
         int cellIndex;
         if (*(char*)(s + 0x50) != '\0') {
             // Natural resource placement: use helper
-            void* thirdEntity = *(void**)(s + 0x38);
+            void* thirdEntity = tertiaryEntity;
             cellIndex = s_fn_FindPlacementCell(
                 *(int**)(gameWorld + 0xf8), matIdx, '\x01',
-                (int64_t*)&thirdEntity, *(uint32_t*)(s + 0x48));
+                (int64_t*)&thirdEntity, placementFlags);
         } else {
             cellIndex = matIdx;
         }
@@ -441,9 +437,7 @@ int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionSta
                 int secCount = *(int*)(secDesc + 0x30);
                 for (int i = 0; i < secCount; i++) {
                     void* secComp = *(void**)(*(uintptr_t*)(secDesc + 0x28) + (int64_t)i * 8);
-                    uintptr_t secVtable = *(uintptr_t*)secComp;
-                    typedef uint32_t (*GetType_t)();
-                    uint32_t secTypeId = ((GetType_t)(*(void**)(secVtable + 0x10)))();
+                    uint32_t secTypeId = reinterpret_cast<Object::Base*>(secComp)->Type();   // B.3.8 bridge
                     if (secTypeId == *s_typeId_1401c8118) {
                         fn_IsDerivedFrom(secComp, *s_typeId_1401c8118);
                         break;
@@ -499,9 +493,9 @@ int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionSta
 // GetTarget (0x1400c6aa0)
 // Returns true if param matches entity at +0x28->+0x10, or +0x30, or +0x38.
 // ============================================================
-int CreateRawMaterial_GetTarget_Impl(CreateRawMaterial* self, void* param) {
+bool CreateRawMaterial::GetTarget(void* param) {
     CreateRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     // Check +0x28 -> building entity -> +0x10 (the actual target entity)
     uintptr_t building = *(uintptr_t*)(s + 0x28);
@@ -559,11 +553,8 @@ Object::Base* CreateRawMaterial::DeletingDtor(unsigned flags) {
 }
 
 // [3] 0x1400c6f30
-void CreateRawMaterial::Persist(void* stream) { CreateRawMaterial_Serialize_Impl(this, stream); }
 // [4] 0x1400c6b40
-int  CreateRawMaterial::AbstractImpl(void* actionStack) { return CreateRawMaterial_AbstractImpl_Impl(this, actionStack); }
 // [9] 0x1400c6aa0
-bool CreateRawMaterial::GetTarget(void* param) { return CreateRawMaterial_GetTarget_Impl(this, param) != 0; }
 
 void* CreateRawMaterial::CreateNewObject() {
     CreateRawMaterial_ResolveFuncs();

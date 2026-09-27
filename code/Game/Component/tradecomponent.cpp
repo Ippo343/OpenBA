@@ -50,77 +50,17 @@ static void EnsureHelpers() {
     s_initialized = true;
 }
 
-// ============================================================
-// TradeComponent::Draw (vtable slot [6], 0x14005c1d0)
-// ============================================================
-// Adds the owning entity to the world trade pending list, then
-// calls TradeSetup to initialize trade state.
-//
-// Original disassembly:
-//   MOV RAX,[RCX+0x10]          ; entity ptr from owner
-//   MOV RBX,RCX                 ; save self
-//   LEA RDX,[RSP+0x20]          ; stack InternalBasePtr
-//   MOV [RSP+0x20],RAX          ; store entity ptr
-//   MOV RAX,[DAT_1401c3dd8]     ; game state singleton
-//   MOV RCX,[RAX+0xf0]          ; world manager
-//   MOV EDX,[RCX+0x38]          ; current count
-//   ADD EDX,1                   ; newCount = count + 1
-//   ADD RCX,0x30                ; trade pending list
-//   LEA R8,[RSP+0x20]           ; entity ptr
-//   CALL FUN_140003110           ; add to pending list
-//   MOV RCX,RBX                 ; self
-//   CALL FUN_14005c220           ; trade setup
-
+// 0x14005c1d0 door: registered by address (standalone/reg_component_economy.cpp).
 void TradeComponent_Draw(TradeComponent* self) {
-    EnsureHelpers();
-
-    if (!s_fn_TradeSetup ||
-        !g_pGameWorldSingleton || !*g_pGameWorldSingleton)
-        return;
-
-    uint64_t entityPtr = (uint64_t)(uintptr_t)self->_entity;
-
-    uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
-    uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
-
-    // Add to trade pending list at worldMgr+0x30
-    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-    int currentCount = *(int*)(worldMgr + 0x38);
-    GameColl::AsArray<GameColl::Ptr8>((void*)(worldMgr + 0x30))
-        .SetSizeFill(currentCount + 1, &entityPtr);
-
-    // Call trade setup
-    s_fn_TradeSetup(self);
+    self->TradeComponent::OnAdded();
 }
 
-// ============================================================
-// TradeComponent::OnCreate (vtable slot [7], 0x14005c190)
-// ============================================================
-// Registers the owning entity with the world trade entity list.
-//
-// Original disassembly:
-//   MOV RAX,[RCX+0x10]          ; entity ptr from owner
-//   LEA RDX,[RSP+0x08]          ; stack InternalBasePtr
-//   MOV [RSP+0x08],RAX          ; store entity ptr
-//   MOV RAX,[DAT_1401c3dd8]     ; game state singleton
-//   MOV RCX,[RAX+0xf0]          ; world manager
-//   ADD RCX,0x30                ; trade entity list
-//   CALL FUN_140002cc0           ; register entity
 
+// 0x14005c190 door: registered by address (standalone/reg_component_economy.cpp).
 void TradeComponent_OnCreate(TradeComponent* self) {
-    EnsureHelpers();
-
-    if (!s_fn_RegisterEntity || !g_pGameWorldSingleton || !*g_pGameWorldSingleton)
-        return;
-
-    uint64_t entityPtr = (uint64_t)(uintptr_t)self->_entity;
-
-    uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
-    uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
-
-    // Register entity at worldMgr+0x30 (trade entity list)
-    s_fn_RegisterEntity((void*)(worldMgr + 0x30), &entityPtr);
+    self->TradeComponent::OnRemove();
 }
+
 
 // ============================================================
 // TradeComponent slots 13 and 14 — the work-enable pair
@@ -181,75 +121,17 @@ static void EnsureTradeWorkHelpers() {
     fflush(stderr);
 }
 
-// TradeComponent::Slot13 (vtable index 13, 0x14005c140) — work-state query.
-//   return -(WPC[0x50] != 0) & 2 | 1   =>  3 when accepting, 1 when not.
+// 0x14005c140 door: registered by address (standalone/reg_component_economy.cpp).
 uint8_t TradeComponent_Slot13(TradeComponent* selfP) {
-    EnsureTradeWorkHelpers();
-    uintptr_t self = (uintptr_t)selfP;
-    if (!s_tc_FindWorkPlace) return 1;
-
-    uint64_t wpc[2] = {0, 0};
-    s_tc_FindWorkPlace(*(int64_t*)(self + 0x10), &wpc);
-    if (!wpc[0]) return 1;
-
-    return (*(char*)(wpc[0] + 0x50) != 0) ? 3 : 1;
+    return static_cast<uint8_t>(selfP->TradeComponent::CommandMask(0));
 }
 
-// TradeComponent::Slot14 (vtable index 14, 0x14005c000) — work-state toggle.
-// Reads the workplace's CURRENT accepting flag (+0x50) and inverts it:
-//   currently OFF -> allocate a TradeWork, post it, commit accepting = 1
-//   currently ON  -> cancel the posted work,          commit accepting = 0
-// TradeComponent+0x70 caches the new state for the panel.
+
+// 0x14005c000 door: registered by address (standalone/reg_component_economy.cpp).
 void TradeComponent_Slot14(TradeComponent* selfP) {
-    EnsureTradeWorkHelpers();
-    uintptr_t self = (uintptr_t)selfP;
-    if (!s_tc_FindWorkPlace || !s_tc_FindWorkSched || !s_tc_SetAccepting) return;
-
-    int64_t sched = 0;
-    s_tc_FindWorkSched(*(int64_t*)(self + 0x10), &sched);
-
-    int64_t wpc = 0;
-    s_tc_FindWorkPlace(*(int64_t*)(self + 0x10), &wpc);
-
-    if (!wpc) return;
-
-    // enable == "the workplace is NOT currently accepting", i.e. this is a toggle.
-    bool enable = (*(char*)(wpc + 0x50) == '\0');
-    *(bool*)(self + 0x70) = enable;
-
-    char newState;
-    if (enable) {
-        void* work = nullptr;
-        // MemAlloc(0x58, 8) + the from-entity TradeWork ctor 0x1400f6ea0, as retail.
-        // ENDGAME B.3.8 MI-B: the REAL TradeWork (Work/TradeWork.h) — its default ctor
-        // runs TradeWork_ResolveFuncs (the reason the hand build had to call it) and
-        // zeroes +0x48/+0x50, the compiler stamps its table, and Work::InitFromEntity is
-        // Work_Ctor25's body (0x1400f72e0). No more read-back of 0x140161a10.
-        if (fn_MemAlloc && g_pMemAllocSingleton) {
-            void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
-            if (mem) {
-                int64_t entityIBP = *(int64_t*)(self + 0x10);
-                TradeWork* tw = new (mem) TradeWork();
-                tw->InitFromEntity(&entityIBP);
-                work = mem;
-            }
-        }
-        uint64_t workIBP[1] = {0};
-        if (fn_InternalBasePtr_Ctor) new (workIBP) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
-        if (s_tc_PostWork) s_tc_PostWork(sched, 1, '\0', workIBP);
-        newState = '\x01';
-    } else {
-        if (s_tc_CancelWork) s_tc_CancelWork(sched);
-        newState = '\0';
-    }
-
-    s_tc_SetAccepting(wpc, newState);
-
-    fprintf(stderr, "[TradeComp] Slot14 toggle: wpc=%p was=%d now=%d\n",
-            (void*)wpc, !enable, (int)newState);
-    fflush(stderr);
+    selfP->TradeComponent::Command(0);
 }
+
 
 // ============================================================
 // Reimpl of FUN_14005c220 (TradeComponent_impl_c220: build the trade name list
@@ -522,7 +404,6 @@ void TradeComponent_InitFuncs() {
 // (B38_RULES D1, D2, D6).
 #include "Object/factory_registration.h"
 
-extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream);   // tradecomponent_serialize.cpp
 void WorkBase_TreeNodeFree_e320(void* root, void* node);                       // work_base_reimpl.cpp, 0x14000e320
 
 // 0x14005c430. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
@@ -588,18 +469,148 @@ void* TradeComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) TradeComponent());
 }
 
-// [3] 0x14005bd50 — the merchant table / item lists (tradecomponent_serialize.cpp).
-void TradeComponent::Persist(void* stream) { TradeComponent_Serialize(this, stream); }
-// [6] 0x14005c1d0 — Ghidra's "Draw"; it is OnAdded, dispatched by
-// ComponentEntity_OnAddedPass at register time because +0x20 bit 0 is set (0x83).
-void TradeComponent::OnAdded() { TradeComponent_Draw(this); }
-// [7] 0x14005c190 — Ghidra's "OnCreate"; it is the removal hook (erase-by-value).
-void TradeComponent::OnRemove() { TradeComponent_OnCreate(this); }
+// [3] 0x14005bd50 — TradeComponent::Persist lives in tradecomponent_serialize.cpp.
+// ============================================================
+// TradeComponent::OnAdded (vtable slot [6]; Ghidra "Draw", 0x14005c1d0)
+// ============================================================
+// Adds the owning entity to the world trade pending list, then
+// calls TradeSetup to initialize trade state.
+//
+// Original disassembly:
+//   MOV RAX,[RCX+0x10]          ; entity ptr from owner
+//   MOV RBX,RCX                 ; save self
+//   LEA RDX,[RSP+0x20]          ; stack InternalBasePtr
+//   MOV [RSP+0x20],RAX          ; store entity ptr
+//   MOV RAX,[DAT_1401c3dd8]     ; game state singleton
+//   MOV RCX,[RAX+0xf0]          ; world manager
+//   MOV EDX,[RCX+0x38]          ; current count
+//   ADD EDX,1                   ; newCount = count + 1
+//   ADD RCX,0x30                ; trade pending list
+//   LEA R8,[RSP+0x20]           ; entity ptr
+//   CALL FUN_140003110           ; add to pending list
+//   MOV RCX,RBX                 ; self
+//   CALL FUN_14005c220           ; trade setup
+
+void TradeComponent::OnAdded() {
+    EnsureHelpers();
+
+    if (!s_fn_TradeSetup ||
+        !g_pGameWorldSingleton || !*g_pGameWorldSingleton)
+        return;
+
+    uint64_t entityPtr = (uint64_t)(uintptr_t)_entity;
+
+    uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
+
+    // Add to trade pending list at worldMgr+0x30
+    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
+    int currentCount = *(int*)(worldMgr + 0x38);
+    GameColl::AsArray<GameColl::Ptr8>((void*)(worldMgr + 0x30))
+        .SetSizeFill(currentCount + 1, &entityPtr);
+
+    // Call trade setup
+    s_fn_TradeSetup(this);
+}
+// ============================================================
+// TradeComponent::OnRemove (vtable slot [7]; Ghidra "OnCreate", 0x14005c190)
+// ============================================================
+// Registers the owning entity with the world trade entity list.
+//
+// Original disassembly:
+//   MOV RAX,[RCX+0x10]          ; entity ptr from owner
+//   LEA RDX,[RSP+0x08]          ; stack InternalBasePtr
+//   MOV [RSP+0x08],RAX          ; store entity ptr
+//   MOV RAX,[DAT_1401c3dd8]     ; game state singleton
+//   MOV RCX,[RAX+0xf0]          ; world manager
+//   ADD RCX,0x30                ; trade entity list
+//   CALL FUN_140002cc0           ; register entity
+
+void TradeComponent::OnRemove() {
+    EnsureHelpers();
+
+    if (!s_fn_RegisterEntity || !g_pGameWorldSingleton || !*g_pGameWorldSingleton)
+        return;
+
+    uint64_t entityPtr = (uint64_t)(uintptr_t)_entity;
+
+    uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
+
+    // Register entity at worldMgr+0x30 (trade entity list)
+    s_fn_RegisterEntity((void*)(worldMgr + 0x30), &entityPtr);
+}
 // [13] 0x14005c140 / [14] 0x14005c000 — the work-enable pair; they go together (a
 // live query over a stub toggle reports a state nothing can change). Neither
 // reads its command id.
-uint32_t TradeComponent::CommandMask(int /*command*/) { return TradeComponent_Slot13(this); }
-void     TradeComponent::Command(int /*command*/)     { TradeComponent_Slot14(this); }
+// TradeComponent::Slot13 (vtable index 13, 0x14005c140) — work-state query.
+//   return -(WPC[0x50] != 0) & 2 | 1   =>  3 when accepting, 1 when not.
+uint32_t TradeComponent::CommandMask(int /*command*/) {
+    EnsureTradeWorkHelpers();
+    uintptr_t self = reinterpret_cast<uintptr_t>(this);
+    if (!s_tc_FindWorkPlace) return 1;
+
+    uint64_t wpc[2] = {0, 0};
+    s_tc_FindWorkPlace(*(int64_t*)(self + 0x10), &wpc);
+    if (!wpc[0]) return 1;
+
+    return (*(char*)(wpc[0] + 0x50) != 0) ? 3 : 1;
+}
+// TradeComponent::Slot14 (vtable index 14, 0x14005c000) — work-state toggle.
+// Reads the workplace's CURRENT accepting flag (+0x50) and inverts it:
+//   currently OFF -> allocate a TradeWork, post it, commit accepting = 1
+//   currently ON  -> cancel the posted work,          commit accepting = 0
+// TradeComponent+0x70 caches the new state for the panel.
+void TradeComponent::Command(int /*command*/) {
+    EnsureTradeWorkHelpers();
+    uintptr_t self = reinterpret_cast<uintptr_t>(this);
+    if (!s_tc_FindWorkPlace || !s_tc_FindWorkSched || !s_tc_SetAccepting) return;
+
+    int64_t sched = 0;
+    s_tc_FindWorkSched(*(int64_t*)(self + 0x10), &sched);
+
+    int64_t wpc = 0;
+    s_tc_FindWorkPlace(*(int64_t*)(self + 0x10), &wpc);
+
+    if (!wpc) return;
+
+    // enable == "the workplace is NOT currently accepting", i.e. this is a toggle.
+    bool enable = (*(char*)(wpc + 0x50) == '\0');
+    *(bool*)(self + 0x70) = enable;
+
+    char newState;
+    if (enable) {
+        void* work = nullptr;
+        // MemAlloc(0x58, 8) + the from-entity TradeWork ctor 0x1400f6ea0, as retail.
+        // ENDGAME B.3.8 MI-B: the REAL TradeWork (Work/TradeWork.h) — its default ctor
+        // runs TradeWork_ResolveFuncs (the reason the hand build had to call it) and
+        // zeroes +0x48/+0x50, the compiler stamps its table, and Work::InitFromEntity is
+        // Work_Ctor25's body (0x1400f72e0). No more read-back of 0x140161a10.
+        if (fn_MemAlloc && g_pMemAllocSingleton) {
+            void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
+            if (mem) {
+                int64_t entityIBP = *(int64_t*)(self + 0x10);
+                TradeWork* tw = new (mem) TradeWork();
+                tw->InitFromEntity(&entityIBP);
+                work = mem;
+            }
+        }
+        uint64_t workIBP[1] = {0};
+        if (fn_InternalBasePtr_Ctor) new (workIBP) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(work));   // B.3.3 bridge
+        if (s_tc_PostWork) s_tc_PostWork(sched, 1, '\0', workIBP);
+        newState = '\x01';
+    } else {
+        if (s_tc_CancelWork) s_tc_CancelWork(sched);
+        newState = '\0';
+    }
+
+    s_tc_SetAccepting(wpc, newState);
+
+    fprintf(stderr, "[TradeComp] Slot14 toggle: wpc=%p was=%d now=%d\n",
+            (void*)wpc, !enable, (int)newState);
+    fflush(stderr);
+}
 
 DEFINE_EXE_VTABLE(TradeComponent, "_ZTV14TradeComponent")
 DEFINE_EXE_TYPE(TradeComponent, "ControllerComponent")

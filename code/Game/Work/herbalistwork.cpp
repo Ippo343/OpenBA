@@ -288,10 +288,8 @@ static void* FindComponentInList(uintptr_t entity, uint32_t typeId) {
     for (int i = 0; i < count; i++) {
         uintptr_t* ibpPtr = (uintptr_t*)(arr + (uintptr_t)i * 8);
         uintptr_t obj = *ibpPtr;
-        uintptr_t vtable = *(uintptr_t*)obj;
-        typedef uint32_t (*GetTypeId_t)();
-        auto getTypeId = *(GetTypeId_t*)(vtable + 0x10);
-        if (getTypeId() == typeId) {
+        // slot 2 Type() (the old no-argument typedef never passed `this`)
+        if (reinterpret_cast<Object::Base*>(obj)->Type() == typeId) {   // B.3.8 bridge
             ibpPtr = (uintptr_t*)(arr + (uintptr_t)i * 8);
             void* comp = (void*)*ibpPtr;
             if (fn_IsDerivedFrom(comp, typeId)) {
@@ -312,10 +310,8 @@ static void* FindSubComponentInList(uintptr_t subObj, uint32_t typeId) {
     int count = *(int*)(subObj + 0x30);
     for (int i = 0; i < count; i++) {
         uintptr_t obj = *(uintptr_t*)(listBase + (uintptr_t)i * 8);
-        uintptr_t vtable = *(uintptr_t*)obj;
-        typedef uint32_t (*GetTypeId_t)();
-        auto getTypeId = *(GetTypeId_t*)(vtable + 0x10);
-        if (getTypeId() == typeId) {
+        // slot 2 Type() (the old no-argument typedef never passed `this`)
+        if (reinterpret_cast<Object::Base*>(obj)->Type() == typeId) {   // B.3.8 bridge
             void* comp = *(void**)(listBase + (uintptr_t)i * 8);
             if (fn_IsDerivedFrom(comp, typeId)) {
                 return comp;
@@ -334,11 +330,8 @@ static void AssignWorkToEntity(HerbalistWork* self, void* citizenIBP, int priori
     uintptr_t citizen = *(uintptr_t*)citizenIBP;
 
     // Call vtable slot +0x50 (GetWorkEntity) on self
-    uintptr_t vtable = *(uintptr_t*)self;
-    typedef uintptr_t* (*GetWorkEntity_t)(HerbalistWork* self, void* outIBP);
-    auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
     uintptr_t workEntityIBP[2] = {0};
-    uintptr_t* result = getWorkEntity(self, workEntityIBP);
+    uintptr_t* result = static_cast<uintptr_t*>(self->GetTarget(workEntityIBP));
     uintptr_t workEntity = *result;
 
     // Set entity flags
@@ -652,11 +645,8 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/
         uintptr_t citizenEnt2 = *(uintptr_t*)citizenIBP;
 
         // Call vtable slot +0x50 (GetWorkEntity)
-        uintptr_t vtable = *(uintptr_t*)this;
-        typedef uintptr_t* (*GetWorkEntity_t)(HerbalistWork*, void*);
-        auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
         uintptr_t workEntIBP[2] = {0};
-        uintptr_t* wResult = getWorkEntity(this, workEntIBP);
+        uintptr_t* wResult = static_cast<uintptr_t*>(GetTarget(workEntIBP));
         uintptr_t workEnt = *wResult;
 
         *(uint32_t*)(citizenEnt2 + 0x54) |= 4;

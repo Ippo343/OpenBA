@@ -21,7 +21,7 @@
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
 #include "graphics/Scene.h"
 #include "graphics/Mesh.h"
-#include "Player/fencedtool_funcs.h"
+#include "Player/FencedTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
 #include "math/Math.h"
@@ -61,20 +61,20 @@ Object::Base* FencedTool::DeletingDtor(unsigned flags) {
 // ============================================================
 // Removes the fence preview from the scene and destroys the mesh instance.
 // Original: 0x1400dccc0
-void FencedTool_Shutdown2(FencedTool* self) {
+void FencedTool::Shutdown() {
     EnsureSceneFuncs();
 
     // Remove scene object if added
-    if ((int)self->sceneObjectId >= 0) {
+    if ((int)sceneObjectId >= 0) {
         void* scene = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x60);
         if (scene) {
             reinterpret_cast<Graphics::Scene*>(scene)
-                ->RemoveObject(self->sceneObjectId);   // B.3.5 bridge
+                ->RemoveObject(sceneObjectId);   // B.3.5 bridge
         }
     }
 
     // Destroy mesh instance via vtable dtor if allocated
-    void* mesh = self->meshInstance;
+    void* mesh = meshInstance;
     if (mesh) {
         // Call scalar deleting destructor: vtable[0](mesh, 1)
         typedef void* (*fn_MeshDtor_t)(void* self, uint32_t flags);
@@ -112,9 +112,9 @@ static inline void* GetKeyMap() {
 // and the preview stayed a single cursor-cell box (found 2026-07-30 manual test).
 #include "Player/dragtool.h"
 
-uint64_t FencedTool_OnKey(FencedTool* self, char key) {
+char FencedTool::OnKey(char key) {
     // Call base DragTool::OnKey
-    DragTool_OnKey(reinterpret_cast<DragTool*>(self), key);
+    DragTool::OnKey(key);
 
     void* keyMap = GetKeyMap();
 
@@ -122,7 +122,7 @@ uint64_t FencedTool_OnKey(FencedTool* self, char key) {
     bool rotLeft = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x13);  // B.3.7 bridge
     if (rotLeft) {
         // Access rotationSetting IBP at self+0x50
-        void* rotSettingIBP = (void*)((uintptr_t)self + 0x50);
+        void* rotSettingIBP = (void*)&rotationSetting;
         uintptr_t rotSetting = *(uintptr_t*)rotSettingIBP;
         if (!rotSetting) return 0;   // SA guard: no RotationSetting wired
         *(int*)(rotSetting + 0x10) = *(int*)(rotSetting + 0x10) - 1;
@@ -136,7 +136,7 @@ uint64_t FencedTool_OnKey(FencedTool* self, char key) {
         // Check rotate clockwise (key 0x14)
         bool rotRight = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x14);  // B.3.7 bridge
         if (rotRight) {
-            void* rotSettingIBP = (void*)((uintptr_t)self + 0x50);
+            void* rotSettingIBP = (void*)&rotationSetting;
             uintptr_t rotSetting = *(uintptr_t*)rotSettingIBP;
             if (!rotSetting) return 0;   // SA guard: no RotationSetting wired
             *(int*)(rotSetting + 0x10) = *(int*)(rotSetting + 0x10) + 1;
@@ -152,8 +152,6 @@ uint64_t FencedTool_OnKey(FencedTool* self, char key) {
     return 1;
 }
 
-extern "C" int DragTool_CancelDrag_Impl(void* self);  // 0x1400fc640 (dragtool.cpp)
-
 // ============================================================
 // FencedTool::Shutdown (vtable +0x48, Slot9)
 // ============================================================
@@ -166,24 +164,23 @@ extern "C" int DragTool_CancelDrag_Impl(void* self);  // 0x1400fc640 (dragtool.c
 // mid-drag the fence drag was never cancelled, the CreateBar dialog was never closed,
 // and the caller read a garbage EAX for the keep-alive decision.
 // Original: 0x1400dcd10
-int FencedTool_Shutdown(FencedTool* self) {
+char FencedTool::OnCancel() {
     EnsureSceneFuncs();
 
     // Remove scene object if added
-    if ((int)self->sceneObjectId >= 0) {
+    if ((int)sceneObjectId >= 0) {
         void* scene = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x60);
         if (scene) {
             reinterpret_cast<Graphics::Scene*>(scene)
-                ->RemoveObject(self->sceneObjectId);   // B.3.5 bridge
+                ->RemoveObject(sceneObjectId);   // B.3.5 bridge
         }
-        self->sceneObjectId = (uint32_t)-1;
+        sceneObjectId = (uint32_t)-1;
     }
 
     // Tail-call the shared DragTool cancel-drag (retail `JMP 0x1400fc640`) and return
-    // its result. Called by symbol, not through the exe-address pointer: our port of
-    // 0x1400fc640 is DragTool_CancelDrag_Impl, and the address is now registered to it
-    // too (standalone/reg_player_drag.cpp) for callers that do go by address.
-    return DragTool_CancelDrag_Impl(self);
+    // its result: the qualified (direct) call to DragTool::OnCancel, the body at
+    // 0x1400fc640.
+    return DragTool::OnCancel();
 }
 
 // ============================================================
@@ -199,13 +196,13 @@ int FencedTool_Shutdown(FencedTool* self) {
 //   3. If invalid: remove mesh from scene
 // When inactive: remove mesh from scene if present.
 // Original: 0x1400dcad0
-void FencedTool_Serialize_Impl(FencedTool* self, void* /*param2*/, char param3) {
+void FencedTool::Update(void* /*param2*/, char param3) {
     EnsureSceneFuncs();
 
     // Initialize local offset vector to {0, 0, 0}
     float offset[3] = {0.0f, 0.0f, 0.0f};
 
-    if (param3 != 0 && self->dragState != 0) {
+    if (param3 != 0 && dragState != 0) {
         // Placement parameters — outputs from FencedPlacementParams
         uint32_t outParam2[2] = {0, 0};
         uint32_t outParam3 = 0;
@@ -217,15 +214,15 @@ void FencedTool_Serialize_Impl(FencedTool* self, void* /*param2*/, char param3) 
         if (!fn_FencedPlacementParams) goto remove;
 
         bool valid = fn_FencedPlacementParams(
-            self, outParam2, &outParam3, &outParam4, outParam5, offset, outYaw);
+            this, outParam2, &outParam3, &outParam4, outParam5, offset, outYaw);
 
         if (valid) {
             // Add mesh to scene if not already added
-            if ((int)self->sceneObjectId < 0) {
+            if ((int)sceneObjectId < 0) {
                 void* scene = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x60);
-                if (scene && self->meshInstance) {
-                    self->sceneObjectId = (int32_t)reinterpret_cast<Graphics::Scene*>(scene)
-                        ->AddObject(reinterpret_cast<Graphics::Geometry*>(self->meshInstance));   // B.3.5 bridge
+                if (scene && meshInstance) {
+                    sceneObjectId = (int32_t)reinterpret_cast<Graphics::Scene*>(scene)
+                        ->AddObject(reinterpret_cast<Graphics::Geometry*>(meshInstance));   // B.3.5 bridge
                 }
             }
 
@@ -258,14 +255,14 @@ void FencedTool_Serialize_Impl(FencedTool* self, void* /*param2*/, char param3) 
             }
 
             // Set transform on mesh
-            if (self->meshInstance) {
-                reinterpret_cast<Graphics::Geometry*>(self->meshInstance)
+            if (meshInstance) {
+                reinterpret_cast<Graphics::Geometry*>(meshInstance)
                     ->SetTransform(*reinterpret_cast<const Math::Transform*>(localTransform));   // B.3.5 bridge
             }
 
             // Update mesh hierarchy
-            if (self->meshInstance) {
-                reinterpret_cast<Graphics::MeshInstance*>(self->meshInstance)
+            if (meshInstance) {
+                reinterpret_cast<Graphics::MeshInstance*>(meshInstance)
                     ->UpdateHierarchy();   // B.3.5 bridge
             }
 
@@ -275,13 +272,13 @@ void FencedTool_Serialize_Impl(FencedTool* self, void* /*param2*/, char param3) 
 
 remove:
     // Remove mesh from scene if present
-    if ((int32_t)self->sceneObjectId >= 0) {
+    if ((int32_t)sceneObjectId >= 0) {
         void* scene = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x60);
         if (scene) {
             reinterpret_cast<Graphics::Scene*>(scene)
-                ->RemoveObject((uint32_t)self->sceneObjectId);   // B.3.5 bridge
+                ->RemoveObject((uint32_t)sceneObjectId);   // B.3.5 bridge
         }
-        self->sceneObjectId = -1;
+        sceneObjectId = -1;
     }
 }
 
@@ -318,12 +315,11 @@ static constexpr float HEIGHT_TOLERANCE = 100.0f;
 // Validates a rectangular fence region between startCell and endCell.
 // Returns: 0=valid, 1=too small, 2=too large, 3=blocked
 // Original: 0x1400db490
-int FencedTool_CalcCost_Impl(FencedTool* self, int startCell, int endCell,
-                              uint32_t* outWidth, int* outHeight, int* outDepth,
-                              int* outFenceSegments) {
+int FencedTool::CalcCost(int startCell, int endCell,
+                         uint32_t* outWidth, int* outHeight, int* outDepth,
+                         int* outFenceSegments) {
     EnsureCalcCostHelpers();
 
-    uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
 
     int* mapGrid = *(int**)(gameWorld + 0xf8);
@@ -353,7 +349,7 @@ int FencedTool_CalcCost_Impl(FencedTool* self, int startCell, int endCell,
     *outFenceSegments = (height + width) * 2 - 4;
 
     // Read size constraints from description
-    uintptr_t desc = *(uintptr_t*)(selfAddr + 0x38);
+    uintptr_t desc = (uintptr_t)fencedDesc;
     int minW = *(int*)(desc + 0x60);
     int minH = *(int*)(desc + 0x64);
     if (width < minW || height < minH) return 1;  // Too small
@@ -432,12 +428,12 @@ int FencedTool_CalcCost_Impl(FencedTool* self, int startCell, int endCell,
     float anchorPos[3] = {0};
 
     uint64_t anchorResult = s_fn_FencedTool_AnchorCalc(
-        self, &anchorMinCol, &anchorMinRow, &anchorMaxCol, &anchorMaxRow,
+        this, &anchorMinCol, &anchorMinRow, &anchorMaxCol, &anchorMaxRow,
         anchorPos, &anchorMinCol);
     if ((char)anchorResult == '\0') return 3;
 
     // Check anchor constraints if in edit mode
-    uintptr_t toolState = *(uintptr_t*)(selfAddr + 0x10);
+    uintptr_t toolState = (uintptr_t)dialogPtr;
     if (*(char*)(toolState + 0x80) != '\0') {
         int mw = *(*(int**)(gameWorld + 0xf8));
         int storedStart = *(int*)(toolState + 0x98);
@@ -548,11 +544,10 @@ static void EnsureDrawHelpers() {
 //
 // Both phases build arrays of 0x14-byte TileRecords and call fn_TileRender.
 // Original: 0x1400dc440
-void FencedTool_Draw_Impl(FencedTool* self, void* context, char param3) {
+void FencedTool::Draw(void* context, char param3) {
     EnsureDrawHelpers();
 
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t dialog = *(uintptr_t*)(selfAddr + 0x10);
+    uintptr_t dialog = (uintptr_t)dialogPtr;
     int* mapGrid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
     int mapWidth = *mapGrid;
 
@@ -596,9 +591,9 @@ void FencedTool_Draw_Impl(FencedTool* self, void* context, char param3) {
     if (param3 != '\0') return;
 
     int startCell, endCell;
-    if (self->dragState != 0) {
-        startCell = self->startCell;
-        endCell   = self->endCell;
+    if (dragState != 0) {
+        startCell = this->startCell;
+        endCell   = this->endCell;
     } else {
         // Get cell under cursor
         if (s_fn_GetCursorCell) {
@@ -628,7 +623,7 @@ void FencedTool_Draw_Impl(FencedTool* self, void* context, char param3) {
     int height = maxRow - minRow + 1;
 
     // Check size constraints from description
-    uintptr_t desc = *(uintptr_t*)(selfAddr + 0x38);
+    uintptr_t desc = (uintptr_t)fencedDesc;
     bool tooLarge = false;
     if (width > *(int*)(desc + 0x58) || height > *(int*)(desc + 0x5c)) {
         tooLarge = true;
@@ -779,10 +774,8 @@ static void* FencedFindComponent(uintptr_t entity, uint32_t targetTypeId) {
         void* comp = components[i];
         if (!comp) continue;
 
-        // vtable slot +0x10: GetTypeId() -> uint32_t
-        typedef uint32_t (*fn_GetTypeId_t)(void* self);
-        fn_GetTypeId_t getTypeId = *(fn_GetTypeId_t*)(*(uintptr_t*)comp + 0x10);
-        uint32_t typeId = getTypeId(comp);
+        // virtual slot 2 (+0x10): Type()
+        uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
         if (typeId == targetTypeId) {
             if (fn_IsDerivedFrom(comp, targetTypeId)) {
@@ -809,18 +802,17 @@ static void* FencedFindComponent(uintptr_t entity, uint32_t targetTypeId) {
 //
 // Also resolves RotationSetting IBP from toolSetting and allocates MeshInstance.
 // Original: 0x1400dcd50
-void FencedTool_Startup_Impl(FencedTool* self) {
+void FencedTool::Startup() {
     EnsureStartupHelpers();
 
-    uintptr_t selfAddr = (uintptr_t)self;
 
     // 1. Find CreateFencedDescription on self->entity (+0x20)
-    uintptr_t entity = *(uintptr_t*)(selfAddr + 0x20);
+    uintptr_t entity = (uintptr_t)descriptionPtr;
     void* fencedDesc = nullptr;
     if (g_TypeId_CreateFencedDescription) {
         fencedDesc = FencedFindComponent(entity, *g_TypeId_CreateFencedDescription);
     }
-    self->fencedDesc = fencedDesc;
+    this->fencedDesc = fencedDesc;
     // SA guard (retail would fault): without the CreateFencedDescription every
     // later step derefs null+0x28. Reachable when the 0x1401c4100 type-id
     // storage is unseeded (reg_pipeline_typeids.cpp) or the template lacks a
@@ -833,26 +825,26 @@ void FencedTool_Startup_Impl(FencedTool* self) {
     }
 
     // 2. Find AreaDescription on self->entity (+0x20)
-    entity = *(uintptr_t*)(selfAddr + 0x20);
+    entity = (uintptr_t)descriptionPtr;
     void* areaDesc = nullptr;
     // Value-check, not just pointer: a registered-but-zero slot would make this search
     // for type-id 0 and match nothing forever (see reg_pipeline_typeids.cpp 0x1401c7a18).
     if (g_TypeId_AreaDescription && *g_TypeId_AreaDescription) {
         areaDesc = FencedFindComponent(entity, *g_TypeId_AreaDescription);
     }
-    self->areaDesc = areaDesc;
+    this->areaDesc = areaDesc;
 
     // 3. Find FenceDescription on fencedDesc->entity (+0x28)
-    uintptr_t fencedDescEntity = *(uintptr_t*)((uintptr_t)self->fencedDesc + 0x28);
+    uintptr_t fencedDescEntity = *(uintptr_t*)((uintptr_t)this->fencedDesc + 0x28);
     void* fenceDesc = nullptr;
     if (g_TypeId_FenceDescription) {
         fenceDesc = FencedFindComponent(fencedDescEntity, *g_TypeId_FenceDescription);
     }
-    self->fenceDesc = fenceDesc;
+    this->fenceDesc = fenceDesc;
 
     // 4. Resolve RotationSetting from toolSetting IBP (+0x18)
     //    CheckPtr on the IBP first, then IsDerivedFrom, then construct new IBP at +0x50
-    void* toolSettingVal = *(void**)(selfAddr + 0x18);
+    void* toolSettingVal = toolSetting;
     void* rotSetting = nullptr;
     if (s_TypeId_RotationSetting && fn_IsDerivedFrom && toolSettingVal) {
         bool isDerived = fn_IsDerivedFrom(toolSettingVal, *s_TypeId_RotationSetting);
@@ -865,26 +857,26 @@ void FencedTool_Startup_Impl(FencedTool* self) {
         void* localIBP = nullptr;
         new (&localIBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(rotSetting));   // B.3.3 bridge
-        *(void**)(selfAddr + 0x50) = localIBP;
+        rotationSetting = localIBP;
     }
 
     // 5. Find SizeDescription on fencedDesc->entity -> read +0x44 and +0x48
-    uintptr_t fencedDescEntity2 = *(uintptr_t*)((uintptr_t)self->fencedDesc + 0x28);
+    uintptr_t fencedDescEntity2 = *(uintptr_t*)((uintptr_t)this->fencedDesc + 0x28);
     void* sizeDesc1 = nullptr;
     if (g_TypeId_SizeDescription) {
         sizeDesc1 = FencedFindComponent(fencedDescEntity2, *g_TypeId_SizeDescription);
     }
     // Read field +0x44 from SizeDescription -> self->_field5C
-    self->_field5C = *(uint32_t*)((uintptr_t)sizeDesc1 + 0x44);
+    _field5C = *(uint32_t*)((uintptr_t)sizeDesc1 + 0x44);
 
     // Find SizeDescription again for +0x48 (original code does two separate lookups)
-    uintptr_t fencedDescEntity3 = *(uintptr_t*)((uintptr_t)self->fencedDesc + 0x28);
+    uintptr_t fencedDescEntity3 = *(uintptr_t*)((uintptr_t)this->fencedDesc + 0x28);
     void* sizeDesc2 = nullptr;
     if (g_TypeId_SizeDescription) {
         sizeDesc2 = FencedFindComponent(fencedDescEntity3, *g_TypeId_SizeDescription);
     }
     // Read field +0x48 from SizeDescription -> self->_field60
-    self->_field60 = *(uint32_t*)((uintptr_t)sizeDesc2 + 0x48);
+    _field60 = *(uint32_t*)((uintptr_t)sizeDesc2 + 0x48);
 
     // 6. Allocate MeshInstance (0x120 bytes, alignment 8)
     void* meshMem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x120, 8) : nullptr;
@@ -900,11 +892,11 @@ void FencedTool_Startup_Impl(FencedTool* self) {
         }
         meshInst = meshMem;
     }
-    self->meshInstance = meshInst;
+    meshInstance = meshInst;
 
     // 7. Set mesh from FenceDescription's model list (last entry)
     //    fenceDesc->+0x20 is a model array: +0x08 = data ptr, +0x10 = count
-    uintptr_t modelArray = *(uintptr_t*)((uintptr_t)self->fenceDesc + 0x20);
+    uintptr_t modelArray = *(uintptr_t*)((uintptr_t)this->fenceDesc + 0x20);
     int modelCount = *(int*)(modelArray + 0x10);
     void** modelData = *(void***)(modelArray + 0x08);
     void* lastMesh = modelData[modelCount - 1];  // last entry
@@ -915,8 +907,8 @@ void FencedTool_Startup_Impl(FencedTool* self) {
     }
 
     // 8. UpdateHierarchy — tail call in original (JMP to dispatch slot)
-    if (self->meshInstance) {
-        reinterpret_cast<Graphics::MeshInstance*>(self->meshInstance)
+    if (meshInstance) {
+        reinterpret_cast<Graphics::MeshInstance*>(meshInstance)
             ->UpdateHierarchy();   // B.3.5 bridge
     }
 }
@@ -949,13 +941,7 @@ void FencedTool_Startup_Impl(FencedTool* self) {
 // so committing a fenced drag was a silent no-op.
 //
 // Original: 0x1400dae00
-extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell,
-                                             int64_t endCell);
-
-uint64_t FencedTool_CalcPath_Impl(FencedTool* self, uint64_t startCell, uint64_t endCell) {
-    return FencedTool_CalcPath_Port(self, static_cast<int64_t>(startCell),
-                                    static_cast<int64_t>(endCell));
-}
+// ENDGAME B.3.8 callers: the body is FencedTool::CalcPath (fencedtool_calcpath.cpp).
 
 // ============================================================
 // FencedTool members (FencedTool.h) — ENDGAME B.3.8 TOOL.
@@ -968,18 +954,8 @@ uint64_t FencedTool_CalcPath_Impl(FencedTool* self, uint64_t startCell, uint64_t
 #include "Player/RotationSetting.h"
 #include <new>
 
-void FencedTool::Startup() { FencedTool_Startup_Impl(this); }                  // [4]
-void FencedTool::Shutdown() { FencedTool_Shutdown2(this); }                    // [5]
-char FencedTool::OnKey(char active) {                                          // [6]
-    return static_cast<char>(FencedTool_OnKey(this, active));
-}
-void FencedTool::Update(void* time, char active) {                             // [7]
-    FencedTool_Serialize_Impl(this, time, active);
-}
-void FencedTool::Draw(void* context, char active) {                            // [8]
-    FencedTool_Draw_Impl(this, context, active);
-}
-char FencedTool::OnCancel() { return static_cast<char>(FencedTool_Shutdown(this)); }  // [9]
+// [4] Startup, [5] Shutdown, [6] OnKey, [7] Update, [8] Draw, [9] OnCancel and
+// [14] CalcCost are defined above; [13] CalcPath is in fencedtool_calcpath.cpp.
 
 // [11] 0x140026920 `MOV EAX,[TypeInfo_RotationSetting]; MOV [RDX],EAX; MOV
 // RAX,RDX; RET`: FencedTool HAS a tool setting — the rotation the shelter edge
@@ -989,16 +965,6 @@ char FencedTool::OnCancel() { return static_cast<char>(FencedTool_Shutdown(this)
 Object::Type* FencedTool::GetSettingType(Object::Type* ret) const {
     *ret = Object::Type(RotationSetting::TypeId());
     return ret;
-}
-
-bool FencedTool::CalcPath(int startCell, int endCell) {                        // [13]
-    return static_cast<uint8_t>(FencedTool_CalcPath_Impl(this, static_cast<uint64_t>(startCell),
-                                                         static_cast<uint64_t>(endCell))) != 0;
-}
-int FencedTool::CalcCost(int startCell, int endCell, uint32_t* outWidth,      // [14]
-                         int* outHeight, int* outDepth, int* outFenceSegments) {
-    return FencedTool_CalcCost_Impl(this, startCell, endCell, outWidth, outHeight,
-                                    outDepth, outFenceSegments);
 }
 
 // create 0x1400268d0: MemAlloc(0x70, 8), then the ctor 0x1400dd070. The ctor

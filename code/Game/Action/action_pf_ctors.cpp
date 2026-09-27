@@ -42,6 +42,8 @@
 #include <new>
 #include <cstdio>
 #include <cstdlib>
+#include "Component/CharacterDescription.h"   // ENDGAME B.3.8 CB3: CharacterDescription::TypeId()
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CB3: CitizenComponent::TypeId()
 // For the BANISHED_LIVE_STORAGE eat-message typeid heal in the
 // SendComponentMessage copy-ctor (see Pf_SendComponentMessageCopyCtor_b1d0).
 #include "Object/factory_registration.h"           // ::Object::GetTypeIdByName
@@ -253,7 +255,7 @@ MoveTo::MoveTo(void* param_2, uint32_t pathType, int param_4, float* destination
     } else {
         // ENDGAME B.3.8 ACT (B8-10): no function-local cache in a ctor — a plain
         // registry read per construction (the record is written once at boot).
-        const uint32_t fallbackTid = ::Object::GetTypeIdByName("CharacterDescription");
+        const uint32_t fallbackTid = CharacterDescription::TypeId();
         if (fallbackTid != 0xFFFFFFFF) charDescTid = fallbackTid;
     }
     bool derived = charDescTid && fn_IsDerivedFrom && fn_IsDerivedFrom(obj, charDescTid);
@@ -354,7 +356,7 @@ SendComponentMessage::SendComponentMessage(uint64_t* param_2, uint32_t* param_3,
     // unhealed: a zero-typeid msg 0 is ambiguous (CitizenAIComponent 0x1401c70e8
     // completion lead vs CitizenComponent warm-house), deferred.
     if (compTypeId == 0 && param_4 == 2) {
-        compTypeId = ::Object::GetTypeIdByName("CitizenComponent");
+        compTypeId = CitizenComponent::TypeId();
     }
     *reinterpret_cast<uint32_t*>(s + 0x30) = compTypeId;
     *reinterpret_cast<uint32_t*>(s + 0x34) = param_4;

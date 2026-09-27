@@ -127,22 +127,21 @@ void EnsureFuncs() {
 // ============================================================
 // BridgeTool::Draw (vtable +0x40, Slot8) — 0x1400fadc0
 // ============================================================
-extern "C" void BridgeTool_Draw_Impl(void* selfPtr, void* context, char skip) {
+void BridgeTool::Draw(void* context, char skip) {
     if (skip != '\0') return;
 
     EnsureFuncs();
-    const uintptr_t self = reinterpret_cast<uintptr_t>(selfPtr);
 
     // ---- 1. Resolve the span being previewed -------------------------------
     int startCell, endCell;
-    if (*reinterpret_cast<char*>(self + 0x28) == '\0') {
+    if (dragState == '\0') {
         // Not dragging: preview the single cell under the cursor.
-        startCell = s_fn_ScreenToCell ? s_fn_ScreenToCell(selfPtr) : -1;
+        startCell = s_fn_ScreenToCell ? s_fn_ScreenToCell(this) : -1;
         endCell   = startCell;
     } else {
-        startCell = *reinterpret_cast<int*>(self + 0x2c);
+        startCell = this->startCell;
         endCell   = fn_BridgeTool_SnapEndCell
-                  ? fn_BridgeTool_SnapEndCell(selfPtr, *reinterpret_cast<int*>(self + 0x30))
+                  ? fn_BridgeTool_SnapEndCell(this, this->endCell)
                   : -1;
     }
     if (startCell < 0) return;
@@ -155,7 +154,7 @@ extern "C" void BridgeTool_Draw_Impl(void* selfPtr, void* context, char skip) {
     const int64_t terrainBase = TerrainBase(mapGrid);
     if (!terrainBase) return;
 
-    const uintptr_t desc = *reinterpret_cast<uintptr_t*>(self + 0x38);
+    const uintptr_t desc = reinterpret_cast<uintptr_t>(bridgeDesc);
     if (!desc) return;
 
     const uint32_t maskBody      = *reinterpret_cast<uint32_t*>(desc + 0x20);
@@ -176,7 +175,7 @@ extern "C" void BridgeTool_Draw_Impl(void* selfPtr, void* context, char skip) {
 
     // Does the whole span validate? Drives the base color of every body cell.
     const bool pathValid = fn_BridgeTool_ValidatePath
-        ? (fn_BridgeTool_ValidatePath(selfPtr, startCell, endCell, nullptr) != 0)
+        ? (fn_BridgeTool_ValidatePath(this, startCell, endCell, nullptr) != 0)
         : false;
 
     const bool isDrag = (startCell != endCell);
@@ -283,4 +282,10 @@ extern "C" void BridgeTool_Draw_Impl(void* selfPtr, void* context, char skip) {
 
     // `tiles` and `empty` are released by ~Array at scope exit — exactly one
     // destruction per path (no return between their declarations and here).
+}
+
+// By-name door (ENDGAME B.3.8 callers): standalone/reg_player_bridge.cpp registers
+// this name at 0x1400fadc0. The body is BridgeTool::Draw above.
+extern "C" void BridgeTool_Draw_Impl(void* selfPtr, void* context, char skip) {
+    reinterpret_cast<BridgeTool*>(selfPtr)->BridgeTool::Draw(context, skip);  // B.3.8 bridge
 }

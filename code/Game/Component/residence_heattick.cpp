@@ -149,8 +149,7 @@ extern "C" char ResidenceComponent_HeatTick(void* selfV, void* /*sm*/, void* dtP
             for (int j = 0; j < compCount; ++j) {
                 void* comp = *reinterpret_cast<void**>(comps + static_cast<uintptr_t>(j) * 8);
                 if (!comp) continue;
-                typedef uint32_t (*GetTypeId_t)(void*);
-                uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+                uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
                 if (tid == *g_TypeId_RawMaterialDescription) {
                     if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription)) mat = comp;
                     break;

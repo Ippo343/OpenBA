@@ -33,6 +33,8 @@
 // 0x14004f420 .. 0x14004fb60 and 0x1400c49d0.
 
 #include "engine_funcs.h"
+#include "Component/CharacterComponent.h"
+#include "Component/ControllerComponent.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "Component/controller_state_table.h"
@@ -76,7 +78,7 @@ void Resolve() {
     s_resolved = true;
 }
 
-uint32_t TidCharacter() { static uint32_t t = 0; if (!t) t = ::Object::ResolveTypeIdByNameLazy("CharacterComponent"); return t; }
+uint32_t TidCharacter() { return CharacterComponent::TypeId(); }
 
 
 inline uint8_t* GW() { return (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr; }
@@ -94,8 +96,7 @@ uintptr_t FindCharacter(void* entity) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
         void* c = *slot;
         if (!c) continue;
-        void** vt = *reinterpret_cast<void***>(c);
-        if (reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c) != tid) continue;
+        if (reinterpret_cast<Object::Base*>(c)->Type() != tid) continue;   // B.3.8 bridge (slot 2)
         c = *slot;
         return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? reinterpret_cast<uintptr_t>(c) : 0;
     }
@@ -180,10 +181,10 @@ extern "C" char Nomad_State0_Tick(void* data, void* sm, void* /*time*/) {
     if (smc) {
         void* node = *reinterpret_cast<void**>(smc + 0x48);
         if (node) {
-            void** vt = *reinterpret_cast<void***>(node);
-            typedef char (*PostEvent_t)(void*, void*, int, int);
-            reinterpret_cast<PostEvent_t>(vt[2])(node, reinterpret_cast<void*>(smc + 0x48),
-                                                static_cast<int>(*reinterpret_cast<int8_t*>(smc + 0x51)), 6);
+            // node = the controller member the StateMachineComponent linked (D6); slot 2.
+            reinterpret_cast<ControllerComponent::Controller*>(node)->PostEvent(   // B.3.8 bridge
+                reinterpret_cast<void*>(smc + 0x48),
+                static_cast<int>(*reinterpret_cast<int8_t*>(smc + 0x51)), 6);
         }
     }
     ::ControllerLive::RequestStateTransition(sm, 1);

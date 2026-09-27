@@ -42,9 +42,7 @@ Object::Base* DragTool::DeletingDtor(unsigned flags) {
 const char* DragTool::TypeName() const { return "DragTool"; }
 uint32_t    DragTool::Type() const { return ::Object::GetTypeIdByName("DragTool"); }
 
-// [6] 0x1400fc6b0 / [9] 0x1400fc640: the by-address doors hold the bodies.
-char DragTool::OnKey(char active) { return static_cast<char>(DragTool_OnKey(this, active)); }
-char DragTool::OnCancel() { return static_cast<char>(DragTool_CancelDrag_Impl(this)); }
+// [6] 0x1400fc6b0 OnKey and [9] 0x1400fc640 OnCancel: bodies below.
 
 // ============================================================
 // Resolved exe-internal function pointers (set once on first call)
@@ -197,7 +195,7 @@ static inline void* GetUserInterface() {
 //
 //   key==0: close dialog if open, if Released(0,5): reset dragState+singleClick
 //
-uint64_t DragTool_OnKey(DragTool* self, char key) {
+char DragTool::OnKey(char key) {
     ResolveDragToolFuncs();
 
     void* keyMap = GetKeyMap();
@@ -205,7 +203,7 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
     // IMPORTANT: The original code re-reads [self+0x10] at each use site, NOT cached.
     // CalcPath/entity creation can trigger memory operations that invalidate cached pointers.
     // Use DIALOG_IBP() macro to always re-read fresh from the struct.
-#define DIALOG_IBP() ((uint64_t*)self->dialogPtr)
+#define DIALOG_IBP() ((uint64_t*)dialogPtr)
     // (no cached variable — always use DIALOG_IBP() to re-read fresh)
 
     if (key == 0) {
@@ -227,28 +225,28 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
         // call restores retail's key-up path (CALLER_SURFACE.md 6, defect 1).
         if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Released(0, 5)) {  // B.3.7 bridge
             // Reset both dragState and singleClick (original does MOV word [self+0x28], 0)
-            self->dragState = 0;
-            self->singleClick = 0;
+            dragState = 0;
+            singleClick = 0;
         }
     }
-    else if (self->dragState == 0) {
+    else if (dragState == 0) {
         // ---- Idle state: check for drag start ----
         // fn_KeyMap_Pressed at dispatch 0x140151758 — checks if button newly pressed
         bool pressed = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 5);  // B.3.7 bridge
         if (pressed) {
             int cell = g_fn_ScreenToCell((uint64_t)keyMap);
-            self->startCell = cell;
-            self->endCell = cell;
+            startCell = cell;
+            endCell = cell;
 
             if (cell >= 0) {
                 // Begin dragging: set state, open placement dialog
-                self->dragState = 1;
-                self->singleClick = 0;
+                dragState = 1;
+                singleClick = 0;
                 uint64_t retval;
                 // Original: FUN_1400ff9e0(*(longlong**)(self+0x10), &retval, *(self+0x20))
                 // Passes self->dialogPtr (pointer to IBP), not &self->dialogPtr
                 g_fn_OpenToolDialog(DIALOG_IBP(), &retval,
-                    (uint64_t)self->descriptionPtr);
+                    (uint64_t)descriptionPtr);
             }
         }
     }
@@ -260,35 +258,29 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
         if (*DIALOG_IBP() == 0) {
             uint64_t tempStr;
             g_fn_OpenToolDialog(DIALOG_IBP(), &tempStr,
-                (uint64_t)self->descriptionPtr);
+                (uint64_t)descriptionPtr);
         }
 
         // Pick current cell under cursor
         int currentCell = g_fn_ScreenToCell((uint64_t)DIALOG_IBP());
         if (currentCell >= 0) {
-            self->endCell = currentCell;
+            endCell = currentCell;
         }
 
         // If endCell changed, play tick sound and update lastEndCell
-        if (self->lastEndCell != self->endCell) {
-            self->lastEndCell = self->endCell;
+        if (lastEndCell != endCell) {
+            lastEndCell = endCell;
             g_fn_PlayTickSound((uint64_t)DIALOG_IBP());
         }
 
-        // ---- Call virtual BuildPath (vtable slot 14 = +0x70) ----
-        // Signature: (self, startCell, endCell, &pathType, &tileH, &tileW, &extraParam) -> int
+        // ---- Virtual CalcCost (slot 14, +0x70) ----
+        // (startCell, endCell, &pathType, &tileH, &tileW, &extraParam) -> segment count
         // pathType: 0=normal, 1=single, 2=invalid
-        typedef int (*fn_BuildPath_t)(void* self, int startCell, int endCell,
-            int* pathType, uint32_t* tileH, uint32_t* tileW, uint64_t* extraParam);
-        void** vtable = *(void***)self;
-        fn_BuildPath_t buildPath = (fn_BuildPath_t)vtable[14]; // +0x70
-
-        int pathType[2] = {0};
-        uint32_t tileH[2] = {0};
-        uint32_t tileW[2] = {0};
-        uint64_t extraParam = 0;
-        int segmentCount = buildPath(self, self->startCell, self->endCell,
-            pathType, tileH, tileW, &extraParam);
+        uint32_t pathType[2] = {0};
+        int tileH[2] = {0};
+        int tileW[2] = {0};
+        int extraParam = 0;
+        int segmentCount = CalcCost(startCell, endCell, pathType, tileH, tileW, &extraParam);
 
         // ---- Cost tooltip (FindDescription -> cost string -> UpdateToolUI) ----
         // g_fn_UpdateToolUI (exe code 0x1400ffc60) may still resolve null in the standalone
@@ -297,7 +289,7 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
         System::String costString;
         if (g_fn_FindDescription && g_fn_UpdateToolUI) {
             uint64_t descResult = 0;
-            g_fn_FindDescription((uint64_t)self->descriptionPtr, &descResult);
+            g_fn_FindDescription((uint64_t)descriptionPtr, &descResult);
 
             if (descResult != 0) {
                 // Description has a string array at +0x50 (ptr) and +0x58 (count).
@@ -332,8 +324,8 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
                     (pathType[0] == 2) ? 1 : 0,            // param_6: isInvalid
                     (pathType[0] == 1) ? 1 : 0,            // param_7: isSingle
                     (uint32_t)extraParam,                   // param_8
-                    self->startCell,                        // param_9
-                    self->endCell,                          // param_10
+                    startCell,                        // param_9
+                    endCell,                          // param_10
                     box,                                    // param_11
                     &transform                              // param_12
                 );
@@ -341,7 +333,7 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
         }
 
         // ---- Handle mouse release / commit ----
-        if (self->singleClick != 0) {
+        if (singleClick != 0) {
             // Single-click mode: waiting for second click to confirm placement.
             // Original uses fn_KeyMap_Pressed (dispatch 0x140151758).
             bool pressed = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 5);  // B.3.7 bridge
@@ -350,10 +342,8 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
                     // Invalid target cell
                     g_fn_PlayErrorSound(0);
                 } else {
-                    // Call virtual Validate (vtable slot 13 = +0x68)
-                    typedef bool (*fn_Validate_t)(void* self, int startCell, int endCell);
-                    fn_Validate_t validate = (fn_Validate_t)vtable[13];
-                    bool valid = validate(self, self->startCell, self->endCell);
+                    // Virtual CalcPath (slot 13, +0x68): validate + commit
+                    bool valid = CalcPath(startCell, endCell);
 
                     if (valid) {
                         g_fn_PlayPlaceSound(0);
@@ -364,8 +354,8 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
 
                 // Reset both dragState and singleClick, close dialog
                 // Original: MOV word ptr [RDI + 0x28], 0x0
-                self->dragState = 0;
-                self->singleClick = 0;
+                dragState = 0;
+                singleClick = 0;
                 g_fn_CloseToolDialog(DIALOG_IBP());
             }
         } else {
@@ -380,19 +370,17 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
             }
 
             if (released) {
-                if (self->startCell == self->endCell) {
+                if (startCell == endCell) {
                     // User clicked without dragging — enter single-click mode
                     // (will commit on next click)
-                    self->singleClick = 1;
+                    singleClick = 1;
                 } else if (currentCell < 0) {
                     // Dragged to invalid cell — play error but do NOT close dialog
                     // (user can keep dragging to a valid cell)
                     g_fn_PlayErrorSound(0);
                 } else {
-                    // Valid drag release — validate and commit
-                    typedef bool (*fn_Validate_t)(void* self, int startCell, int endCell);
-                    fn_Validate_t validate = (fn_Validate_t)vtable[13];
-                    bool valid = validate(self, self->startCell, self->endCell);
+                    // Valid drag release — virtual CalcPath (slot 13): validate and commit
+                    bool valid = CalcPath(startCell, endCell);
 
                     if (valid) {
                         g_fn_PlayPlaceSound(0);
@@ -403,7 +391,7 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
                     // Close dialog and reset dragState
                     // Original: MOV byte ptr [RDI + 0x28], 0x0 (only dragState, keeps singleClick)
                     g_fn_CloseToolDialog(DIALOG_IBP());
-                    self->dragState = 0;
+                    dragState = 0;
                 }
             }
         }
@@ -422,13 +410,12 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
 // dialog) and returns 1 so the tool STAYS; idle it returns 0 and teardown proceeds.
 // The Tool_Ret0 stub in that slot meant a right-click mid-drag tore the tool down
 // with the cost dialog still open — the "icon left on screen" dismiss bug.
-extern "C" int DragTool_CancelDrag_Impl(void* selfRaw) {
-    DragTool* self = static_cast<DragTool*>(selfRaw);
+char DragTool::OnCancel() {
     ResolveDragToolFuncs();
-    if (self->dragState == 0) return 0;
-    self->dragState = 0;
-    self->singleClick = 0;   // retail: MOV word ptr [self+0x28], 0
-    uint64_t* ibp = (uint64_t*)self->dialogPtr;
+    if (dragState == 0) return 0;
+    dragState = 0;
+    singleClick = 0;   // retail: MOV word ptr [self+0x28], 0
+    uint64_t* ibp = (uint64_t*)dialogPtr;
     if (ibp && *ibp && fn_InternalBasePtr_Ctor) {
         uint64_t tempIBP = *ibp;
         reinterpret_cast<UI::UserInterface*>(GetUserInterface())->CloseDialog(  // B.3.6 bridge
@@ -437,4 +424,16 @@ extern "C" int DragTool_CancelDrag_Impl(void* selfRaw) {
         *ibp = tempIBP;
     }
     return 1;
+}
+
+// ============================================================
+// By-name doors (ENDGAME B.3.8 callers): standalone/reg_code_lane6.cpp and
+// standalone/reg_player_drag.cpp register these two names at 0x1400fc6b0 and
+// 0x1400fc640, so they stay as one-line doors onto the members.
+// ============================================================
+uint64_t DragTool_OnKey(DragTool* self, char key) {
+    return static_cast<uint8_t>(self->DragTool::OnKey(key));
+}
+extern "C" int DragTool_CancelDrag_Impl(void* self) {
+    return reinterpret_cast<DragTool*>(self)->DragTool::OnCancel();  // B.3.8 bridge
 }

@@ -63,6 +63,12 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
+#include "Component/TornadoDescription.h"
+#include "Component/ParticleDescription.h"
+#include <atomic>
+
+// "[Tornado] STRUCK a building" trace budget (was a function-local static; B6-5).
+static std::atomic<int> s_tornadoStruckTraced{0};
 
 // EventLog::AddEvent (0x140095580) — already ported in code/Game/Game/eventlog.cpp.
 // Reused rather than re-inlined: retail's Startup builds the same 0x28-byte record
@@ -98,7 +104,6 @@ constexpr int kPathNodes = kPathLast + 1;   // 129
 // Resolved helpers
 // ============================================================
 
-typedef void  (*fn_ComponentSerialize_t)(void* self, void* stream);
 
 // Entity component finders. All take (entity, InternalBasePtr* out) and write the
 // component pointer (or null) into *out.
@@ -121,8 +126,6 @@ typedef void* (*fn_Map_RadiusQuery_t)(float* map, void** out, float* pos, float*
 // Graphics leaf reached through the exe's own .rdata dispatch slot.
 
 struct Helpers {
-    fn_ComponentSerialize_t   componentSerialize   = nullptr;
-
     fn_Finder_t               findParticle         = nullptr;  // 0x140005200
     fn_Finder_t               findAudio            = nullptr;  // 0x140002280
     fn_Finder_t               findNaturalResource  = nullptr;  // 0x1400052c0
@@ -186,13 +189,11 @@ void* GameWorld() {
 // and then dereferences `desc` unguarded. The type-id global (0x1401c4aa0) has no
 // storage in standalone, so the id comes from the runtime type registry instead —
 // the standard substitution here (see tornadodescription.cpp).
-void* Description(void* self) {
+void* TornadoDesc(void* self) {
     void* obj = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x18);
     // GetTypeIdByName returns 0xFFFFFFFF before Object::Factory::Startup has run, so
     // only latch a real id — otherwise the sentinel gets cached forever.
-    static uint32_t typeId = 0;
-    if (typeId == 0 || typeId == 0xFFFFFFFFu)
-        typeId = ::Object::GetTypeIdByName("TornadoDescription");
+    const uint32_t typeId = TornadoDescription::TypeId();
     if (!fn_IsDerivedFrom || typeId == 0 || typeId == 0xFFFFFFFFu) return obj;
     return fn_IsDerivedFrom(obj, typeId) ? obj : nullptr;
 }
@@ -206,9 +207,6 @@ void* Description(void* self) {
 void TornadoComponent_InitFuncs() {
     if (g_helpersReady) return;
     g_helpersReady = true;
-
-    g_h.componentSerialize = reinterpret_cast<fn_ComponentSerialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
 
     g_h.findParticle        = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140005200));
     g_h.findAudio           = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140002280));
@@ -273,44 +271,11 @@ void TornadoComponent_InitFuncs() {
                   (g_h.fireIgnite && g_h.fireIgniteFinish) ? "live" : "INERT");
 }
 
-// ============================================================
-// TornadoComponent::Serialize — vtable slot 3 (+0x18), 0x140058b80
-// ============================================================
-// Stream order: Vector3 waypoint(+0x30), int pathIndex(+0x50), int pathCount(+0x48),
-// [on load: resize the Vector3 array], each waypoint, Time(+0x28), Vector3 pos(+0x58).
+// 0x140058b80 door: registered by address (standalone/reg_tornado.cpp).
 void TornadoComponent_Shutdown(TornadoComponent* self, void* stream) {
-    TornadoComponent_InitFuncs();
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-
-    if (g_h.componentSerialize) g_h.componentSerialize(self, stream);
-
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    reinterpret_cast<Math::Vector3*>(s + 0x30)->Serialize(serializer);   // B.3.1 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x50), nullptr);   // B.3.4 bridge
-
-    int pathCount = *reinterpret_cast<int*>(s + 0x48);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(pathCount, nullptr);   // B.3.4 bridge
-
-    // stream+8 == 0 means "loading": grow the array before reading the waypoints.
-    // B.3.2 bridge: FUN_14000d030 is Collection::Array<Vector3>::SetSize(n)
-    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0)   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-        GameColl::AsArray<GameColl::Vec3>(reinterpret_cast<void*>(s + 0x40)).SetSize(pathCount);
-
-    uint8_t* pVec = *reinterpret_cast<uint8_t**>(s + 0x40);
-    if (pathCount > 0 && pVec) {
-        for (int i = 0; i < pathCount; i++) {
-            reinterpret_cast<Math::Vector3*>(pVec)->Serialize(serializer);   // B.3.1 bridge
-            pVec += 0xC;  // sizeof(Math::Vector3)
-        }
-    }
-
-    reinterpret_cast<System::Time*>(reinterpret_cast<void*>(s + 0x28))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
-    reinterpret_cast<Math::Vector3*>(s + 0x58)->Serialize(serializer);   // B.3.1 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    self->TornadoComponent::Persist(stream);
 }
+
 
 // ============================================================
 // Tornado_PathFractal — 0x140058980
@@ -442,8 +407,7 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
     // building's cell and the arm is merely untested — a fact `building=0` cannot
     // convey on its own. See the arm-viability report in TornadoComponent_InitFuncs.
     if (buildComp) {
-        static int n = 0;
-        if (n++ < 4) {
+        if (s_tornadoStruckTraced.fetch_add(1, std::memory_order_relaxed) < 4) {
             std::fprintf(stderr, "[Tornado] STRUCK a building: entity=%p build=%llx fire=%llx"
                                  " -> arm %s\n",
                          entity, (unsigned long long)buildComp, (unsigned long long)fireComp,
@@ -566,7 +530,7 @@ extern "C" void Tornado_StrikeEntity_583c0(int64_t unusedFirstArg, void* entityI
 // not the cell+0 zone raster.
 extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* dt) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    void* desc = Description(self);
+    void* desc = TornadoDesc(self);
     uintptr_t d = reinterpret_cast<uintptr_t>(desc);
 
     *reinterpret_cast<int64_t*>(s + 0x28) -= *dt;
@@ -699,268 +663,17 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
                   hitCitizen, queryState, found.count);
 }
 
-// ============================================================
-// TornadoComponent::Startup — vtable slot 4 (+0x20), 0x1400585a0
-// ============================================================
+// 0x1400585a0 door: registered by address (standalone/reg_tornado.cpp).
 void TornadoComponent_Serialize(TornadoComponent* self) {
-    TornadoComponent_InitFuncs();
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    void* desc = Description(self);
-    uintptr_t d = reinterpret_cast<uintptr_t>(desc);
-
-    void* gw = GameWorld();
-    if (!gw) return;
-    uintptr_t g = reinterpret_cast<uintptr_t>(gw);
-    void* rng = *reinterpret_cast<void**>(g + 0xd8);
-    uint32_t* map = *reinterpret_cast<uint32_t**>(g + 0xf8);
-
-    // --- pick two cells at least desc+0x24 apart (at most 100 tries) ---
-    const int minSep = *reinterpret_cast<int32_t*>(d + 0x24);
-    uint32_t ax = 0, ay = 0, bx = 0, by = 0;
-    int tries = 0;
-    do {
-        ax = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(*map));   // B.3.4b bridge
-        ay = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(*map));   // B.3.4b bridge
-        bx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(*map));   // B.3.4b bridge
-        by = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(*map));   // B.3.4b bridge
-        if (tries > 99) break;
-        ++tries;
-    } while (static_cast<int>((bx - ax) * (bx - ax) + (by - ay) * (by - ay)) < minSep * minSep);
-
-    // --- terrain-clamp both endpoints and fractal-fill between them ---
-    float path[kPathNodes * 3];
-    std::memset(path, 0, sizeof(path));
-
-    const float half = static_cast<float>(static_cast<int>(*map) >> 1) - kHalf;
-
-    auto seedEndpoint = [&](uint32_t cx, uint32_t cy, float* out) {
-        const int n = static_cast<int>(*map);
-        const int lin = static_cast<int>(n * cy + cx);
-        float in[3] = { static_cast<float>(lin % n) - half,
-                        static_cast<float>(lin / n) - half,
-                        0.0f };
-        float clamped[3] = { in[0], in[1], 0.0f };
-        if (g_h.terrainClamp) {
-            float* r = g_h.terrainClamp(map, clamped, in, 0, nullptr);
-            if (r) { clamped[0] = r[0]; clamped[1] = r[1]; clamped[2] = r[2]; }
-        }
-        out[0] = clamped[0]; out[1] = clamped[1]; out[2] = clamped[2];
-    };
-
-    seedEndpoint(ax, ay, &path[0]);
-
-    float endB[3];
-    seedEndpoint(bx, by, endB);
-    // The tornado STARTS at the first endpoint: retail copies it into +0x58 before
-    // overwriting the scratch with the second endpoint.
-    *reinterpret_cast<float*>(s + 0x58) = path[0];
-    *reinterpret_cast<float*>(s + 0x5c) = path[1];
-    *reinterpret_cast<float*>(s + 0x60) = path[2];
-    path[2] = 0.0f;
-    path[kPathLast * 3 + 0] = endB[0];
-    path[kPathLast * 3 + 1] = endB[1];
-    path[kPathLast * 3 + 2] = 0.0f;
-
-    Tornado_PathFractal_58980(self, path, 0, kPathLast);
-
-    // --- push the waypoints; the first one seeds the current target ---
-    for (int i = 0; i < kPathNodes; i++) {
-        float* p = &path[i * 3];
-        if (*reinterpret_cast<int*>(s + 0x48) == 0) {
-            *reinterpret_cast<float*>(s + 0x30) = p[0];
-            *reinterpret_cast<float*>(s + 0x34) = p[1];
-            *reinterpret_cast<float*>(s + 0x38) = p[2];
-            *reinterpret_cast<int32_t*>(s + 0x50) = 0;
-        }
-        // B.3.2 bridge: FUN_14000cf40 is Collection::Array<Vector3>::SetSize(n, fill)
-        GameColl::AsArray<GameColl::Vec3>(reinterpret_cast<void*>(s + 0x40))
-            .SetSizeFill(*reinterpret_cast<int*>(s + 0x48) + 1, p);
-    }
-
-    // --- post the warning to the event log, and pause if the setting says so ---
-    void* eventLog = *reinterpret_cast<void**>(g + 0x138);
-    int64_t nullIbp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    EventLog_AddEvent(eventLog, 0x1e, 3, &nullIbp);
-
-    if (g_pGameSettingsPtr && *g_pGameSettingsPtr &&
-        *(reinterpret_cast<const char*>(*g_pGameSettingsPtr) + 0x17) != 0) {
-        void* speedObj = *reinterpret_cast<void**>(g + 0x120);
-        if (speedObj) *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(speedObj) + 0x34) = 1;
-    }
-
-    // Diagnostic only: whether the fractal actually bent the path. Straight would
-    // mean the `* 0.0` reading had been right after all.
-    float maxDev = 0.0f;
-    {
-        const float sx = path[0], sy = path[1];
-        const float ex = path[kPathLast * 3], ey = path[kPathLast * 3 + 1];
-        const float vx = ex - sx, vy = ey - sy;
-        const float vlen = vx * vx + vy * vy;
-        for (int i = 1; i < kPathLast; i++) {
-            const float wx = path[i * 3] - sx, wy = path[i * 3 + 1] - sy;
-            const float cross = (vlen > 0.0f) ? (wx * vy - wy * vx) : 0.0f;
-            const float dev = (vlen > 0.0f) ? (cross < 0 ? -cross : cross) : 0.0f;
-            if (dev > maxDev) maxDev = dev;
-        }
-        if (vlen > 0.0f) maxDev /= (vlen > 0.0f ? __builtin_sqrtf(vlen) : 1.0f);
-    }
-
-    int64_t particleIbp = 0;
-    if (g_h.findParticle) {
-        void* owner = *reinterpret_cast<void**>(s + 0x10);
-        g_h.findParticle(owner, &particleIbp);
-    }
-
-    TORNADO_TRACE("spawn: start=(%.1f,%.1f) end=(%.1f,%.1f) waypoints=%d "
-                  "endpointTries=%d path=%s (maxLateralDeviation=%.2f) "
-                  "speed=%.2f damageRadius=%d scatterRadius=%d particleComponent=%s\n",
-                  path[0], path[1], path[kPathLast * 3], path[kPathLast * 3 + 1],
-                  *reinterpret_cast<int*>(s + 0x48), tries,
-                  (maxDev > 0.01f) ? "FRACTAL" : "STRAIGHT", maxDev,
-                  *reinterpret_cast<float*>(d + 0x20),
-                  *reinterpret_cast<int32_t*>(d + 0x30),
-                  *reinterpret_cast<int32_t*>(d + 0x34),
-                  particleIbp ? "found" : "MISSING (Update will fault on it, as retail would)");
+    self->TornadoComponent::Startup();
 }
 
-// ============================================================
-// TornadoComponent::Update — vtable slot 8 (+0x40), 0x140057cd0
-// ============================================================
-// Every frame: check the particle is still alive (else self-destruct), advance
-// along the path, integrate the position, damage, then push the new transform and
-// audio position out.
+
+// 0x140057cd0 door: registered by address (standalone/reg_tornado.cpp).
 void TornadoComponent_OnRemove(TornadoComponent* self, void* time) {
-    TornadoComponent_InitFuncs();
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    const int64_t* dt = reinterpret_cast<const int64_t*>(time);
-    void* desc = Description(self);
-
-    void* gw = GameWorld();
-    if (!gw) return;
-    uintptr_t g = reinterpret_cast<uintptr_t>(gw);
-
-    void* owner = *reinterpret_cast<void**>(s + 0x10);
-    int64_t particleIbp = 0;
-    if (g_h.findParticle) g_h.findParticle(owner, &particleIbp);
-    int* map = *reinterpret_cast<int**>(g + 0xf8);
-
-    // FAITHFUL: retail dereferences the ParticleComponent unguarded — Tornado.rsc
-    // always has one, so a null here is an upstream problem, not something to paper
-    // over. Startup already logged whether the finder found it.
-    uintptr_t pc = static_cast<uintptr_t>(particleIbp);
-    const bool particleAlive =
-        (*reinterpret_cast<int*>(pc + 0x40) > 0) &&
-        (*reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(pc + 0x38) + 8) >= 0);
-
-    if (!particleAlive) {
-        // --- the funnel is gone: queue the tornado entity for destruction ---
-        int64_t entity = *reinterpret_cast<int64_t*>(s + 0x10);
-        uintptr_t entityMgr = *reinterpret_cast<uintptr_t*>(g + 0xe8);
-        if (entity != 0) {
-            const uint32_t f = *reinterpret_cast<uint32_t*>(static_cast<uintptr_t>(entity) + 0x40);
-            if (((f >> 10) & 1) == 0) {
-                if (g_h.markForRemoval)
-                    g_h.markForRemoval(reinterpret_cast<void*>(static_cast<uintptr_t>(entity)));
-                // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-                GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(entityMgr + 0xd0))
-                    .SetSizeFill(*reinterpret_cast<int*>(entityMgr + 0xd8) + 1, &entity);
-                TORNADO_TRACE("expired: particle finished, entity queued for destruction "
-                              "(pathIndex=%d of %d)\n",
-                              *reinterpret_cast<int32_t*>(s + 0x50),
-                              *reinterpret_cast<int*>(s + 0x48));
-            }
-        }
-        return;
-    }
-
-    // --- advance along the path ---
-    float pos[3] = { *reinterpret_cast<float*>(s + 0x58),
-                     *reinterpret_cast<float*>(s + 0x5c),
-                     0.0f };
-    const int idxBefore = *reinterpret_cast<int32_t*>(s + 0x50);
-    const bool stillOnPath = Tornado_PathAdvance_a71e0(reinterpret_cast<uint8_t*>(s + 0x30), pos,
-                                                       kSkipRadius, kArriveRadius);
-    const int idxAfter = *reinterpret_cast<int32_t*>(s + 0x50);
-
-    Math::Vector3 dir(*reinterpret_cast<float*>(s + 0x30) - *reinterpret_cast<float*>(s + 0x58),
-                      *reinterpret_cast<float*>(s + 0x34) - *reinterpret_cast<float*>(s + 0x5c),
-                      *reinterpret_cast<float*>(s + 0x38) - *reinterpret_cast<float*>(s + 0x60));
-    Math::Vector3 unit = dir.Normalize();
-
-    if (!stillOnPath) {
-        // Path exhausted: reverse the particle's playback so the funnel winds down.
-        if (g_h.particleReverse) g_h.particleReverse(reinterpret_cast<void*>(pc), 0);
-        TORNADO_TRACE("path exhausted at waypoint %d of %d — funnel winding down\n",
-                      idxAfter, *reinterpret_cast<int*>(s + 0x48));
-    } else {
-        Tornado_DamageTick_58040(self, dt);
-        if (idxAfter != idxBefore && (idxAfter % 16) == 0)
-            TORNADO_TRACE("waypoint %d of %d at (%.1f,%.1f)\n",
-                          idxAfter, *reinterpret_cast<int*>(s + 0x48),
-                          *reinterpret_cast<float*>(s + 0x58),
-                          *reinterpret_cast<float*>(s + 0x5c));
-    }
-
-    // --- integrate the position ---
-    const float secs = reinterpret_cast<const System::Time*>(const_cast<int64_t*>(dt))->AsSeconds();   // B.3.4b bridge
-    const float step = secs * *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x20);
-    // Math::Vector3::operator+= (slot 0x1401514b8), inlined: a componentwise add
-    // with no side effects.
-    *reinterpret_cast<float*>(s + 0x58) += unit.x * step;
-    *reinterpret_cast<float*>(s + 0x5c) += unit.y * step;
-    *reinterpret_cast<float*>(s + 0x60) += unit.z * step;
-
-    if (g_h.terrainClamp) {
-        float out[3] = { 0.0f, 0.0f, 0.0f };
-        float* r = g_h.terrainClamp(map, out, reinterpret_cast<float*>(s + 0x58), 1, nullptr);
-        if (r) {
-            *reinterpret_cast<float*>(s + 0x58) = r[0];
-            *reinterpret_cast<float*>(s + 0x5c) = r[1];
-            *reinterpret_cast<float*>(s + 0x60) = r[2];
-        }
-    }
-
-    // --- push the transform to the particle geometry ---
-    {
-        // Transform = { Quaternion(0,0,0,1), Vector3 position }.
-        Math::Transform transform;
-        transform.rotation = Math::Quaternion(0.0f, 0.0f, 0.0f, 1.0f);
-        transform.translation.x = *reinterpret_cast<float*>(s + 0x58);
-        transform.translation.y = *reinterpret_cast<float*>(s + 0x5c);
-        transform.translation.z = *reinterpret_cast<float*>(s + 0x60);
-        void* geometry = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(pc + 0x38));
-        reinterpret_cast<Graphics::Geometry*>(geometry)->SetTransform(transform);   // B.3.5 bridge
-    }
-
-    // --- move the audio emitters and refresh the volume ---
-    {
-        int64_t audioIbp = 0;
-        if (g_h.findAudio) g_h.findAudio(owner, &audioIbp);
-        if (audioIbp && g_h.audioMoveEmitters)
-            g_h.audioMoveEmitters(reinterpret_cast<void*>(static_cast<uintptr_t>(audioIbp)),
-                                  reinterpret_cast<void*>(s + 0x58));
-
-        const float volume =
-            *reinterpret_cast<float*>(*reinterpret_cast<uintptr_t*>(pc + 0x38) + 0x7c);
-
-        int64_t audioIbp2 = 0;
-        if (g_h.findAudio) g_h.findAudio(owner, &audioIbp2);
-        if (audioIbp2) {
-            uintptr_t a = static_cast<uintptr_t>(audioIbp2);
-            uint32_t* emitter = *reinterpret_cast<uint32_t**>(a + 0x38);
-            if (emitter) {
-                if (*emitter == 0) {
-                    emitter[1] = *reinterpret_cast<const uint32_t*>(&volume);
-                } else if (*reinterpret_cast<float*>(&emitter[1]) != volume) {
-                    emitter[1] = *reinterpret_cast<const uint32_t*>(&volume);
-                    reinterpret_cast<Audio::Scene*>(*reinterpret_cast<void**>(g + 0x78))->SetEmitterVolume(
-                        *emitter, *reinterpret_cast<const Vector3*>(a + 0x28), volume);   // B.3.7 bridge
-                }
-            }
-        }
-    }
+    self->TornadoComponent::Tick(time);
 }
+
 
 // ============================================================
 // Ported leaves that belong to other classes but had no owner yet
@@ -1016,9 +729,7 @@ extern "C" void Tornado_Vec3ArrayGrow_cf40(void* arrayBase, int newCount, const 
 extern "C" void Tornado_ParticleReverse_53720(void* particleComp, int index) {
     uintptr_t p = reinterpret_cast<uintptr_t>(particleComp);
     void* obj = *reinterpret_cast<void**>(p + 0x18);
-    static uint32_t typeId = 0;
-    if (typeId == 0 || typeId == 0xFFFFFFFFu)
-        typeId = ::Object::GetTypeIdByName("ParticleDescription");
+    const uint32_t typeId = ParticleDescription::TypeId();
     void* desc = obj;
     if (fn_IsDerivedFrom && typeId != 0 && typeId != 0xFFFFFFFFu)
         desc = fn_IsDerivedFrom(obj, typeId) ? obj : nullptr;
@@ -1087,14 +798,305 @@ Object::Base* TornadoComponent::DeletingDtor(unsigned flags) {
     return this;
 }
 
-// [3] 0x140058b80 (Ghidra "_Shutdown").
-void TornadoComponent::Persist(void* stream) { TornadoComponent_Shutdown(this, stream); }
-// [4] 0x1400585a0 (Ghidra "_Serialize") — the path build.
-void TornadoComponent::Startup() { TornadoComponent_Serialize(this); }
-// [8] 0x140057cd0 (Ghidra "_OnRemove") — the per-frame tick. RDX is the
-// EntityList_Update time pointer, passed through unchanged by the tree walk
-// (0x1400c2e5d: `MOV RDX,RBP; CALL [RAX+0x40]`).
-void TornadoComponent::Tick(void* time) { TornadoComponent_OnRemove(this, time); }
+// ============================================================
+// TornadoComponent::Serialize — vtable slot 3 (+0x18), 0x140058b80
+// ============================================================
+// Stream order: Vector3 waypoint(+0x30), int pathIndex(+0x50), int pathCount(+0x48),
+// [on load: resize the Vector3 array], each waypoint, Time(+0x28), Vector3 pos(+0x58).
+void TornadoComponent::Persist(void* stream) {
+    TornadoComponent_InitFuncs();
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    reinterpret_cast<Math::Vector3*>(s + 0x30)->Serialize(serializer);   // B.3.1 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x50), nullptr);   // B.3.4 bridge
+
+    int pathCount = *reinterpret_cast<int*>(s + 0x48);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(pathCount, nullptr);   // B.3.4 bridge
+
+    // stream+8 == 0 means "loading": grow the array before reading the waypoints.
+    // B.3.2 bridge: FUN_14000d030 is Collection::Array<Vector3>::SetSize(n)
+    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0)   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
+        GameColl::AsArray<GameColl::Vec3>(reinterpret_cast<void*>(s + 0x40)).SetSize(pathCount);
+
+    uint8_t* pVec = *reinterpret_cast<uint8_t**>(s + 0x40);
+    if (pathCount > 0 && pVec) {
+        for (int i = 0; i < pathCount; i++) {
+            reinterpret_cast<Math::Vector3*>(pVec)->Serialize(serializer);   // B.3.1 bridge
+            pVec += 0xC;  // sizeof(Math::Vector3)
+        }
+    }
+
+    reinterpret_cast<System::Time*>(reinterpret_cast<void*>(s + 0x28))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
+    reinterpret_cast<Math::Vector3*>(s + 0x58)->Serialize(serializer);   // B.3.1 bridge
+
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+}
+// ============================================================
+// TornadoComponent::Startup — vtable slot 4 (+0x20), 0x1400585a0
+// ============================================================
+void TornadoComponent::Startup() {
+    TornadoComponent_InitFuncs();
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+    void* desc = TornadoDesc(this);
+    uintptr_t d = reinterpret_cast<uintptr_t>(desc);
+
+    void* gw = GameWorld();
+    if (!gw) return;
+    uintptr_t g = reinterpret_cast<uintptr_t>(gw);
+    void* rng = *reinterpret_cast<void**>(g + 0xd8);
+    uint32_t* map = *reinterpret_cast<uint32_t**>(g + 0xf8);
+
+    // --- pick two cells at least desc+0x24 apart (at most 100 tries) ---
+    const int minSep = *reinterpret_cast<int32_t*>(d + 0x24);
+    uint32_t ax = 0, ay = 0, bx = 0, by = 0;
+    int tries = 0;
+    do {
+        ax = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(*map));   // B.3.4b bridge
+        ay = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(*map));   // B.3.4b bridge
+        bx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(*map));   // B.3.4b bridge
+        by = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(*map));   // B.3.4b bridge
+        if (tries > 99) break;
+        ++tries;
+    } while (static_cast<int>((bx - ax) * (bx - ax) + (by - ay) * (by - ay)) < minSep * minSep);
+
+    // --- terrain-clamp both endpoints and fractal-fill between them ---
+    float path[kPathNodes * 3];
+    std::memset(path, 0, sizeof(path));
+
+    const float half = static_cast<float>(static_cast<int>(*map) >> 1) - kHalf;
+
+    auto seedEndpoint = [&](uint32_t cx, uint32_t cy, float* out) {
+        const int n = static_cast<int>(*map);
+        const int lin = static_cast<int>(n * cy + cx);
+        float in[3] = { static_cast<float>(lin % n) - half,
+                        static_cast<float>(lin / n) - half,
+                        0.0f };
+        float clamped[3] = { in[0], in[1], 0.0f };
+        if (g_h.terrainClamp) {
+            float* r = g_h.terrainClamp(map, clamped, in, 0, nullptr);
+            if (r) { clamped[0] = r[0]; clamped[1] = r[1]; clamped[2] = r[2]; }
+        }
+        out[0] = clamped[0]; out[1] = clamped[1]; out[2] = clamped[2];
+    };
+
+    seedEndpoint(ax, ay, &path[0]);
+
+    float endB[3];
+    seedEndpoint(bx, by, endB);
+    // The tornado STARTS at the first endpoint: retail copies it into +0x58 before
+    // overwriting the scratch with the second endpoint.
+    *reinterpret_cast<float*>(s + 0x58) = path[0];
+    *reinterpret_cast<float*>(s + 0x5c) = path[1];
+    *reinterpret_cast<float*>(s + 0x60) = path[2];
+    path[2] = 0.0f;
+    path[kPathLast * 3 + 0] = endB[0];
+    path[kPathLast * 3 + 1] = endB[1];
+    path[kPathLast * 3 + 2] = 0.0f;
+
+    Tornado_PathFractal_58980(this, path, 0, kPathLast);
+
+    // --- push the waypoints; the first one seeds the current target ---
+    for (int i = 0; i < kPathNodes; i++) {
+        float* p = &path[i * 3];
+        if (*reinterpret_cast<int*>(s + 0x48) == 0) {
+            *reinterpret_cast<float*>(s + 0x30) = p[0];
+            *reinterpret_cast<float*>(s + 0x34) = p[1];
+            *reinterpret_cast<float*>(s + 0x38) = p[2];
+            *reinterpret_cast<int32_t*>(s + 0x50) = 0;
+        }
+        // B.3.2 bridge: FUN_14000cf40 is Collection::Array<Vector3>::SetSize(n, fill)
+        GameColl::AsArray<GameColl::Vec3>(reinterpret_cast<void*>(s + 0x40))
+            .SetSizeFill(*reinterpret_cast<int*>(s + 0x48) + 1, p);
+    }
+
+    // --- post the warning to the event log, and pause if the setting says so ---
+    void* eventLog = *reinterpret_cast<void**>(g + 0x138);
+    int64_t nullIbp = 0;
+    if (fn_InternalBasePtr_Ctor) new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    EventLog_AddEvent(eventLog, 0x1e, 3, &nullIbp);
+
+    if (g_pGameSettingsPtr && *g_pGameSettingsPtr &&
+        *(reinterpret_cast<const char*>(*g_pGameSettingsPtr) + 0x17) != 0) {
+        void* speedObj = *reinterpret_cast<void**>(g + 0x120);
+        if (speedObj) *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(speedObj) + 0x34) = 1;
+    }
+
+    // Diagnostic only: whether the fractal actually bent the path. Straight would
+    // mean the `* 0.0` reading had been right after all.
+    float maxDev = 0.0f;
+    {
+        const float sx = path[0], sy = path[1];
+        const float ex = path[kPathLast * 3], ey = path[kPathLast * 3 + 1];
+        const float vx = ex - sx, vy = ey - sy;
+        const float vlen = vx * vx + vy * vy;
+        for (int i = 1; i < kPathLast; i++) {
+            const float wx = path[i * 3] - sx, wy = path[i * 3 + 1] - sy;
+            const float cross = (vlen > 0.0f) ? (wx * vy - wy * vx) : 0.0f;
+            const float dev = (vlen > 0.0f) ? (cross < 0 ? -cross : cross) : 0.0f;
+            if (dev > maxDev) maxDev = dev;
+        }
+        if (vlen > 0.0f) maxDev /= (vlen > 0.0f ? __builtin_sqrtf(vlen) : 1.0f);
+    }
+
+    int64_t particleIbp = 0;
+    if (g_h.findParticle) {
+        void* owner = *reinterpret_cast<void**>(s + 0x10);
+        g_h.findParticle(owner, &particleIbp);
+    }
+
+    TORNADO_TRACE("spawn: start=(%.1f,%.1f) end=(%.1f,%.1f) waypoints=%d "
+                  "endpointTries=%d path=%s (maxLateralDeviation=%.2f) "
+                  "speed=%.2f damageRadius=%d scatterRadius=%d particleComponent=%s\n",
+                  path[0], path[1], path[kPathLast * 3], path[kPathLast * 3 + 1],
+                  *reinterpret_cast<int*>(s + 0x48), tries,
+                  (maxDev > 0.01f) ? "FRACTAL" : "STRAIGHT", maxDev,
+                  *reinterpret_cast<float*>(d + 0x20),
+                  *reinterpret_cast<int32_t*>(d + 0x30),
+                  *reinterpret_cast<int32_t*>(d + 0x34),
+                  particleIbp ? "found" : "MISSING (Update will fault on it, as retail would)");
+}
+// ============================================================
+// TornadoComponent::Update — vtable slot 8 (+0x40), 0x140057cd0
+// ============================================================
+// Every frame: check the particle is still alive (else self-destruct), advance
+// along the path, integrate the position, damage, then push the new transform and
+// audio position out.
+void TornadoComponent::Tick(void* time) {
+    TornadoComponent_InitFuncs();
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+    const int64_t* dt = reinterpret_cast<const int64_t*>(time);
+    void* desc = TornadoDesc(this);
+
+    void* gw = GameWorld();
+    if (!gw) return;
+    uintptr_t g = reinterpret_cast<uintptr_t>(gw);
+
+    void* owner = *reinterpret_cast<void**>(s + 0x10);
+    int64_t particleIbp = 0;
+    if (g_h.findParticle) g_h.findParticle(owner, &particleIbp);
+    int* map = *reinterpret_cast<int**>(g + 0xf8);
+
+    // FAITHFUL: retail dereferences the ParticleComponent unguarded — Tornado.rsc
+    // always has one, so a null here is an upstream problem, not something to paper
+    // over. Startup already logged whether the finder found it.
+    uintptr_t pc = static_cast<uintptr_t>(particleIbp);
+    const bool particleAlive =
+        (*reinterpret_cast<int*>(pc + 0x40) > 0) &&
+        (*reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(pc + 0x38) + 8) >= 0);
+
+    if (!particleAlive) {
+        // --- the funnel is gone: queue the tornado entity for destruction ---
+        int64_t entity = *reinterpret_cast<int64_t*>(s + 0x10);
+        uintptr_t entityMgr = *reinterpret_cast<uintptr_t*>(g + 0xe8);
+        if (entity != 0) {
+            const uint32_t f = *reinterpret_cast<uint32_t*>(static_cast<uintptr_t>(entity) + 0x40);
+            if (((f >> 10) & 1) == 0) {
+                if (g_h.markForRemoval)
+                    g_h.markForRemoval(reinterpret_cast<void*>(static_cast<uintptr_t>(entity)));
+                // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
+                GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(entityMgr + 0xd0))
+                    .SetSizeFill(*reinterpret_cast<int*>(entityMgr + 0xd8) + 1, &entity);
+                TORNADO_TRACE("expired: particle finished, entity queued for destruction "
+                              "(pathIndex=%d of %d)\n",
+                              *reinterpret_cast<int32_t*>(s + 0x50),
+                              *reinterpret_cast<int*>(s + 0x48));
+            }
+        }
+        return;
+    }
+
+    // --- advance along the path ---
+    float pos[3] = { *reinterpret_cast<float*>(s + 0x58),
+                     *reinterpret_cast<float*>(s + 0x5c),
+                     0.0f };
+    const int idxBefore = *reinterpret_cast<int32_t*>(s + 0x50);
+    const bool stillOnPath = Tornado_PathAdvance_a71e0(reinterpret_cast<uint8_t*>(s + 0x30), pos,
+                                                       kSkipRadius, kArriveRadius);
+    const int idxAfter = *reinterpret_cast<int32_t*>(s + 0x50);
+
+    Math::Vector3 dir(*reinterpret_cast<float*>(s + 0x30) - *reinterpret_cast<float*>(s + 0x58),
+                      *reinterpret_cast<float*>(s + 0x34) - *reinterpret_cast<float*>(s + 0x5c),
+                      *reinterpret_cast<float*>(s + 0x38) - *reinterpret_cast<float*>(s + 0x60));
+    Math::Vector3 unit = dir.Normalize();
+
+    if (!stillOnPath) {
+        // Path exhausted: reverse the particle's playback so the funnel winds down.
+        if (g_h.particleReverse) g_h.particleReverse(reinterpret_cast<void*>(pc), 0);
+        TORNADO_TRACE("path exhausted at waypoint %d of %d — funnel winding down\n",
+                      idxAfter, *reinterpret_cast<int*>(s + 0x48));
+    } else {
+        Tornado_DamageTick_58040(this, dt);
+        if (idxAfter != idxBefore && (idxAfter % 16) == 0)
+            TORNADO_TRACE("waypoint %d of %d at (%.1f,%.1f)\n",
+                          idxAfter, *reinterpret_cast<int*>(s + 0x48),
+                          *reinterpret_cast<float*>(s + 0x58),
+                          *reinterpret_cast<float*>(s + 0x5c));
+    }
+
+    // --- integrate the position ---
+    const float secs = reinterpret_cast<const System::Time*>(const_cast<int64_t*>(dt))->AsSeconds();   // B.3.4b bridge
+    const float step = secs * *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x20);
+    // Math::Vector3::operator+= (slot 0x1401514b8), inlined: a componentwise add
+    // with no side effects.
+    *reinterpret_cast<float*>(s + 0x58) += unit.x * step;
+    *reinterpret_cast<float*>(s + 0x5c) += unit.y * step;
+    *reinterpret_cast<float*>(s + 0x60) += unit.z * step;
+
+    if (g_h.terrainClamp) {
+        float out[3] = { 0.0f, 0.0f, 0.0f };
+        float* r = g_h.terrainClamp(map, out, reinterpret_cast<float*>(s + 0x58), 1, nullptr);
+        if (r) {
+            *reinterpret_cast<float*>(s + 0x58) = r[0];
+            *reinterpret_cast<float*>(s + 0x5c) = r[1];
+            *reinterpret_cast<float*>(s + 0x60) = r[2];
+        }
+    }
+
+    // --- push the transform to the particle geometry ---
+    {
+        // Transform = { Quaternion(0,0,0,1), Vector3 position }.
+        Math::Transform transform;
+        transform.rotation = Math::Quaternion(0.0f, 0.0f, 0.0f, 1.0f);
+        transform.translation.x = *reinterpret_cast<float*>(s + 0x58);
+        transform.translation.y = *reinterpret_cast<float*>(s + 0x5c);
+        transform.translation.z = *reinterpret_cast<float*>(s + 0x60);
+        void* geometry = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(pc + 0x38));
+        reinterpret_cast<Graphics::Geometry*>(geometry)->SetTransform(transform);   // B.3.5 bridge
+    }
+
+    // --- move the audio emitters and refresh the volume ---
+    {
+        int64_t audioIbp = 0;
+        if (g_h.findAudio) g_h.findAudio(owner, &audioIbp);
+        if (audioIbp && g_h.audioMoveEmitters)
+            g_h.audioMoveEmitters(reinterpret_cast<void*>(static_cast<uintptr_t>(audioIbp)),
+                                  reinterpret_cast<void*>(s + 0x58));
+
+        const float volume =
+            *reinterpret_cast<float*>(*reinterpret_cast<uintptr_t*>(pc + 0x38) + 0x7c);
+
+        int64_t audioIbp2 = 0;
+        if (g_h.findAudio) g_h.findAudio(owner, &audioIbp2);
+        if (audioIbp2) {
+            uintptr_t a = static_cast<uintptr_t>(audioIbp2);
+            uint32_t* emitter = *reinterpret_cast<uint32_t**>(a + 0x38);
+            if (emitter) {
+                if (*emitter == 0) {
+                    emitter[1] = *reinterpret_cast<const uint32_t*>(&volume);
+                } else if (*reinterpret_cast<float*>(&emitter[1]) != volume) {
+                    emitter[1] = *reinterpret_cast<const uint32_t*>(&volume);
+                    reinterpret_cast<Audio::Scene*>(*reinterpret_cast<void**>(g + 0x78))->SetEmitterVolume(
+                        *emitter, *reinterpret_cast<const Vector3*>(a + 0x28), volume);   // B.3.7 bridge
+                }
+            }
+        }
+    }
+}
 
 // create 0x14000d500: MemAlloc(0x68, 8), then the ctor.
 void* TornadoComponent::CreateNewObject() {

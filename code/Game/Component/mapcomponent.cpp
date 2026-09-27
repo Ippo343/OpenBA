@@ -29,10 +29,6 @@
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
 
-// Component_Serialize (base class) — at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
 // MapComponent_sub_41b0 — map overlay update helper (0x1401241b0)
 typedef void (*fn_MapUpdateOverlay_t)(void* self);
 static fn_MapUpdateOverlay_t s_fn_MapUpdateOverlay = nullptr;
@@ -60,8 +56,6 @@ static void EnsureHelpers() {
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
 
     // Direct exe addresses
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
 
     s_fn_MapUpdateOverlay = reinterpret_cast<fn_MapUpdateOverlay_t>(
         ResolveAddr(Module::Exe, 0x1401241b0));
@@ -116,42 +110,6 @@ static void* GetMapDescription(MapComponent* self) {
     return derived ? obj : nullptr;
 }
 
-// ============================================================
-// MapComponent::Shutdown (vtable slot [3], 0x1401243e0)
-// ============================================================
-// Serializes tile coordinates and extra int field.
-//
-// Original disassembly:
-//   CALL Component_Serialize (0x1401189b0)
-//   CALL Serializer_Ctor(local, stream, 0)
-//   CALL Serialize_Short(&tileX0, nullptr) x4
-//   CALL Serialize_Int(&extraField, nullptr)
-//   CALL Serializer_Dtor(local)
-
-void MapComponent_Shutdown(MapComponent* self, void* stream) {
-    EnsureHelpers();
-
-    // Call base Component_Serialize
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
-
-    // Create local IO::Serializer (24 bytes on stack)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // Serialize 4 uint16 tile coords as shorts
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileX0), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileY0), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileX1), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileY1), nullptr);   // B.3.4 bridge
-
-    // Serialize extra int at +0x30
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->extraField, nullptr);   // B.3.4 bridge
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-}
 
 // ============================================================
 // MapComponent::Draw (vtable slot [6], 0x140124370)
@@ -182,52 +140,6 @@ void MapComponent_Draw(MapComponent* self) {
     }
 }
 
-// ============================================================
-// MapComponent::OnCreate (vtable slot [7], 0x1401242f0)
-// ============================================================
-// Sets up map tiles. If building[0x32] != 0, clears terrain for the tile area.
-// Always calls map initialization at the end.
-//
-// Original disassembly:
-//   Get building via IsDerivedFrom
-//   CMP byte [RDX+0x32],0
-//   JZ skip_clear
-//   MOVSX sign-extend tile coords from int16 to int32
-//   MOV RCX,[g_pGameWorldSingleton]
-//   MOV RCX,[RCX+0x148]            ; terrain subsystem pointer
-//   XOR EDX,EDX                    ; param2 = 0
-//   CALL 0x1400a4d30               ; terrain clear helper
-// skip_clear:
-//   JMP CreateNaturalResource_impl_4750  ; tail call to map init
-
-void MapComponent_OnCreate(MapComponent* self) {
-    EnsureHelpers();
-
-    void* building = GetMapDescription(self);
-    if (building) {
-        // Check building[0x32] != 0 (byte flag: needsTerrainClear)
-        uint8_t clearFlag = *(uint8_t*)((uintptr_t)building + 0x32);
-        if (clearFlag != 0) {
-            // Get terrain subsystem from game world singleton
-            if (g_pGameWorldSingleton && *g_pGameWorldSingleton && s_fn_TerrainClear) {
-                uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
-                void* terrainPtr = *(void**)(gameWorld + 0x148);
-                if (terrainPtr) {
-                    s_fn_TerrainClear(terrainPtr, 0,
-                        (int)(int16_t)self->tileX0,
-                        (int)(int16_t)self->tileY0,
-                        (int)(int16_t)self->tileX1,
-                        (int)(int16_t)self->tileY1);
-                }
-            }
-        }
-    }
-
-    // Always call map initialization (tail call in original)
-    if (s_fn_MapInit) {
-        s_fn_MapInit(self);
-    }
-}
 
 // ============================================================
 // Init: resolve function pointers
@@ -435,8 +347,38 @@ MapComponent::MapComponent()
     OrFlagsInCtor(0x3);
 }
 
-// [3] 0x1401243e0
-void MapComponent::Persist(void* stream) { MapComponent_Shutdown(this, stream); }
+// ============================================================
+// MapComponent::Persist (vtable slot [3], 0x1401243e0)
+// ============================================================
+// Serializes tile coordinates and extra int field.
+//
+// Original disassembly:
+//   CALL Component_Serialize (0x1401189b0)
+//   CALL Serializer_Ctor(local, stream, 0)
+//   CALL Serialize_Short(&tileX0, nullptr) x4
+//   CALL Serialize_Int(&extraField, nullptr)
+//   CALL Serializer_Dtor(local)
+
+void MapComponent::Persist(void* stream) {
+    // Call base Component_Serialize
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    // Create local IO::Serializer (24 bytes on stack)
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    // Serialize 4 uint16 tile coords as shorts
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&tileX0), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&tileY0), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&tileX1), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&tileY1), nullptr);   // B.3.4 bridge
+
+    // Serialize extra int at +0x30
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(extraField, nullptr);   // B.3.4 bridge
+
+    // Destroy serializer
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+}
 
 // [6] 0x140124370
 void MapComponent::OnAdded() {
@@ -487,6 +429,24 @@ void MapComponent::OnAdded() {
     if (desc[0x30] == 0) return;                 // retail: MapComponent::Draw's gate
     MapComponent_ApplyOccupancy_41b0(s);         // 41b0's occupancy half (+ the 0x100000 bit)
 }
+// ============================================================
+// MapComponent::OnRemove (vtable slot [7], 0x1401242f0)
+// ============================================================
+// Sets up map tiles. If building[0x32] != 0, clears terrain for the tile area.
+// Always calls map initialization at the end.
+//
+// Original disassembly:
+//   Get building via IsDerivedFrom
+//   CMP byte [RDX+0x32],0
+//   JZ skip_clear
+//   MOVSX sign-extend tile coords from int16 to int32
+//   MOV RCX,[g_pGameWorldSingleton]
+//   MOV RCX,[RCX+0x148]            ; terrain subsystem pointer
+//   XOR EDX,EDX                    ; param2 = 0
+//   CALL 0x1400a4d30               ; terrain clear helper
+// skip_clear:
+//   JMP CreateNaturalResource_impl_4750  ; tail call to map init
+
 // [7] 0x1401242f0
 void MapComponent::OnRemove() {
     void* s = this;
@@ -495,7 +455,36 @@ void MapComponent::OnRemove() {
     // ported MapComponent_OnCreate is dead in standalone (IsDerivedFrom
     // landmine), so do it here trusting the linked description.
     MapComponent_PaintMinimapRect(reinterpret_cast<uint8_t*>(s), /*clear=*/true);
-    MapComponent_OnCreate(this);
+
+    // B.3.8 CB1b: the ported retail removal body (0x1401242f0), folded in from the
+    // free MapComponent_OnCreate.
+
+    EnsureHelpers();
+
+    void* building = GetMapDescription(this);
+    if (building) {
+        // Check building[0x32] != 0 (byte flag: needsTerrainClear)
+        uint8_t clearFlag = *(uint8_t*)((uintptr_t)building + 0x32);
+        if (clearFlag != 0) {
+            // Get terrain subsystem from game world singleton
+            if (g_pGameWorldSingleton && *g_pGameWorldSingleton && s_fn_TerrainClear) {
+                uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+                void* terrainPtr = *(void**)(gameWorld + 0x148);
+                if (terrainPtr) {
+                    s_fn_TerrainClear(terrainPtr, 0,
+                        (int)(int16_t)tileX0,
+                        (int)(int16_t)tileY0,
+                        (int)(int16_t)tileX1,
+                        (int)(int16_t)tileY1);
+                }
+            }
+        }
+    }
+
+    // Always call map initialization (tail call in original)
+    if (s_fn_MapInit) {
+        s_fn_MapInit(this);
+    }
 }
 // Slot 12 (+0x60) — the per-component MESSAGE slot, retail `MapComponent_Slot12`
 // (0x1401243c0), which is only three instructions:

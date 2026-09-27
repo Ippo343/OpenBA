@@ -75,21 +75,21 @@ bool PlayAnimation_ResolveFuncs() {
 // Serializes: status(+0x18), entity(+0x20) ComponentEntity, int(+0x28),
 //   Time(+0x30), Time(+0x38)
 // ============================================================
-void PlayAnimation_Serialize_Impl(void* self, void* stream) {
+void PlayAnimation::Persist(void* stream) {
     PlayAnimation_ResolveFuncs();   // lazy-resolve: action may be built inline by ba6b0, not our ctor
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
 
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (*(void**)(s + 0x20) != nullptr) {
-        if (!fn_IsDerivedFrom(*(void**)(s + 0x20), *s_TypeInfo_ComponentEntity)) {
-            *(void**)(s + 0x20) = nullptr;
+    if (_field20 != nullptr) {
+        if (!fn_IsDerivedFrom(_field20, *s_TypeInfo_ComponentEntity)) {
+            _field20 = nullptr;
         }
     }
     reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
@@ -154,16 +154,16 @@ static bool PlayAnim_TargetLooksLive(void* target) {
     return true;
 }
 
-int PlayAnimation_AbstractImpl_Impl(void* self, void* actionStack) {
+int  PlayAnimation::AbstractImpl(void* actionStack) {
     PlayAnimation_ResolveFuncs();
     (void)actionStack;
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     void* localIBP;
 
-    if (*(void**)(s + 0x20) == nullptr) {
+    if (_field20 == nullptr) {
         return 0;
     }
-    void* target = *(void**)(s + 0x20);
+    void* target = _field20;
     if (!PlayAnim_TargetLooksLive(target)) {
         return 0;   // stale/unregistered target — abort like retail's invalidated-null path
     }
@@ -181,11 +181,11 @@ int PlayAnimation_AbstractImpl_Impl(void* self, void* actionStack) {
 //   self->_field38 += *time;
 //   return (self->_field38 < self->_field30);
 // ============================================================
-int PlayAnimation_Execute_Impl(void* self, void* actionStack, void* time_ptr) {
+int  PlayAnimation::Execute(void* actionStack, void* time) {
     PlayAnimation_ResolveFuncs();
     (void)actionStack;
-    uint8_t* s = (uint8_t*)self;
-    int64_t elapsed = *(int64_t*)time_ptr;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
+    int64_t elapsed = *(int64_t*)time;
     *(int64_t*)(s + 0x38) += elapsed;
     return (*(int64_t*)(s + 0x38) < *(int64_t*)(s + 0x30)) ? 1 : 0;
 }
@@ -194,10 +194,9 @@ int PlayAnimation_Execute_Impl(void* self, void* actionStack, void* time_ptr) {
 // PlayAnimation::GetTarget (0x1400423b0)
 // Returns true if param matches entity at +0x20.
 // ============================================================
-bool PlayAnimation_GetTarget_Impl(void* self, void* param) {
+bool PlayAnimation::GetTarget(void* param) {
     PlayAnimation_ResolveFuncs();
-    uint8_t* s = (uint8_t*)self;
-    return *(void**)(s + 0x20) == *(void**)param;
+    return _field20 == *(void**)param;
 }
 
 // ============================================================
@@ -225,15 +224,11 @@ Object::Base* PlayAnimation::DeletingDtor(unsigned flags) {
 }
 
 // [3] 0x140042480
-void PlayAnimation::Persist(void* stream) { PlayAnimation_Serialize_Impl(this, stream); }
 // [4] 0x140042420
-int  PlayAnimation::AbstractImpl(void* actionStack) { return PlayAnimation_AbstractImpl_Impl(this, actionStack); }
 // [5] 0x140042400
-int  PlayAnimation::Execute(void* actionStack, void* time) { return PlayAnimation_Execute_Impl(this, actionStack, time); }
 // [8] 0x1400423f0 — the leaf's own `RET 0` (same bytes as the base body)
 void PlayAnimation::CheckEntity() {}
 // [9] 0x1400423b0
-bool PlayAnimation::GetTarget(void* param) { return PlayAnimation_GetTarget_Impl(this, param); }
 
 void* PlayAnimation::CreateNewObject() {
     PlayAnimation_ResolveFuncs();

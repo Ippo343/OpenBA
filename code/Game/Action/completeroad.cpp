@@ -55,7 +55,7 @@ bool CompleteRoad_ResolveFuncs() {
 // CompleteRoad::Serialize (0x1400c5880)
 // Serializes: status(+0x18), int(+0x20), uchar(+0x28), int(+0x24)
 // ============================================================
-void CompleteRoad_Serialize_Impl(void* self, void* stream) {
+void CompleteRoad::Persist(void* stream) {
     // Lazy-resolve, same reason AbstractImpl does it. Every in-flight CompleteRoad is
     // built by the COPY CTOR (0x1400c59d0, from work_act_perform.cpp), which bypasses
     // both the factory and CompleteRoad_ResolveFuncs -- so on the save path these
@@ -64,13 +64,13 @@ void CompleteRoad_Serialize_Impl(void* self, void* stream) {
     // until roads started actually being built, the work item never got that far.
     // Same hole BuildRoad_ScalarDtor_Impl documents for the BuildRoad ctor path.
     CompleteRoad_ResolveFuncs();
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
 
     // Serialize status
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Serialize road fields
@@ -87,16 +87,16 @@ void CompleteRoad_Serialize_Impl(void* self, void* stream) {
 // Returns 0 (action complete).
 // ============================================================
 
-int CompleteRoad_AbstractImpl_Impl(void* self, void* actionStack) {
+int CompleteRoad::AbstractImpl(void* actionStack) {                     // [4] 0x1400c5850
     CompleteRoad_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     void* gameState = *s_pGameState;
     void* terrain = *(void**)((uint8_t*)gameState + 0xf8);
 
     s_fn_CompleteRoadTile(terrain,
-                          *(int32_t*)(s + 0x20),
-                          *(uint8_t*)(s + 0x28),
+                          roadTileIndex,
+                          roadDirection,
                           *(uint32_t*)(s + 0x24));
     return 0;
 }
@@ -127,11 +127,6 @@ Object::Base* CompleteRoad::DeletingDtor(unsigned flags) {
     this->~CompleteRoad();
     if (flags & 1) Object::detail::InternalMemFree(this);
     return this;
-}
-
-void CompleteRoad::Persist(void* stream) { CompleteRoad_Serialize_Impl(this, stream); }        // [3] 0x1400c5880
-int  CompleteRoad::AbstractImpl(void* actionStack) {                                           // [4] 0x1400c5850
-    return CompleteRoad_AbstractImpl_Impl(this, actionStack);
 }
 
 void* CompleteRoad::CreateNewObject() {

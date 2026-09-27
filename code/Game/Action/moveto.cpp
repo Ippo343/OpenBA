@@ -243,15 +243,15 @@ static inline int WorldToCell(int mapSize, float worldX, float worldY) {
 //   +0x46c walkAnimId, +0x470 bridgeFlag (version>0), +0x474 roadFlag,
 //   +0x478 speedMultiplier
 // ============================================================
-void MoveTo_Serialize_Impl(void* self, void* stream) {
+void MoveTo::Persist(void* stream) {
     MoveTo_ResolveFuncs();
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser0[24];
     alignas(8) uint8_t ser1[24];
 
     // Version 0: serialize status byte at +0x18
     ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser0)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser0)->Serialize(_status, nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();   // B.3.4 bridge
 
     // Version 1: serialize all movement data
@@ -259,10 +259,10 @@ void MoveTo_Serialize_Impl(void* self, void* stream) {
 
     // Target entity IBP (+0x28)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser1));   // B.3.4 bridge
-    if (*(void**)(s + 0x28) != nullptr) {
-        bool valid = s_fn_IsDerivedFrom(*(void**)(s + 0x28), *s_typeId_1401c7078);
+    if (_field28 != nullptr) {
+        bool valid = s_fn_IsDerivedFrom(_field28, *s_typeId_1401c7078);
         if (!valid) {
-            *(void**)(s + 0x28) = nullptr;
+            _field28 = nullptr;
         }
     }
 
@@ -309,7 +309,7 @@ void MoveTo_Serialize_Impl(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x474), nullptr);   // B.3.4 bridge
 
     // Speed multiplier (+0x478) as float
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<float*>(s + 0x478), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(speedMultiplier, nullptr);   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 }
@@ -319,10 +319,10 @@ void MoveTo_Serialize_Impl(void* self, void* stream) {
 // Checks distance to destination. If close enough (< 0.05), returns 0 (arrived).
 // Otherwise sets up A* path and returns 1 (moving) or 2 (no path).
 // ============================================================
-int MoveTo_AbstractImpl_Impl(void* self, void* actionStack) {
+int  MoveTo::AbstractImpl(void* actionStack) {
     MoveTo_ResolveFuncs();   // lazy-resolve: action may be built by Pf_MoveToCtor_9170 (pf_ctors), which never calls our ctor's ResolveFuncs
     (void)actionStack;
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     // Get target entity's character component position
     uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
@@ -340,7 +340,7 @@ int MoveTo_AbstractImpl_Impl(void* self, void* actionStack) {
     float dx = curX - destX;
     float dy = curY - destY;
     Math::Vector2 vec2(dx, dy);
-    float dotResult = vec2.Dot(vec2).v;        // self-dot → dx²+dy²
+    float dotResult = vec2.Dot(vec2).v;        // this-dot → dx²+dy²
     float dist = s_fn_Sqrtf(dotResult);
 
     // If already close enough, return 0 (arrived)
@@ -359,12 +359,12 @@ int MoveTo_AbstractImpl_Impl(void* self, void* actionStack) {
 
     // Set up A* path from current position to destination
     // param3 reuses the vec2 pointer, param4 comes from actionStack (R9 in original)
-    s_fn_PathSetup(self, worldPos, &vec2, actionStack);
+    s_fn_PathSetup(this, worldPos, &vec2, actionStack);
 
     // Check path setup result
     int32_t pathVersion = *(int32_t*)(s + 0x24);
-    int32_t pathSlotId = *(int32_t*)(s + 0x20);
-    int32_t pathIndex = *(int32_t*)(s + 0x60);
+    int32_t pathSlotId = targetId;
+    int32_t pathIndex = _field60;
 
 
     if (pathVersion == 0 || pathSlotId < 0) {
@@ -380,7 +380,7 @@ int MoveTo_AbstractImpl_Impl(void* self, void* actionStack) {
     }
 
     // Path is ready -- update facing direction toward first waypoint
-    s_fn_UpdateFacing(self);
+    s_fn_UpdateFacing(this);
 
     // Set walk animation on the target entity
     targetEntity = *(uintptr_t*)(s + 0x28);
@@ -420,10 +420,10 @@ static inline bool InlBoxIsect(const void* a, const void* b) {
     return p[0] <= q[3] && q[0] <= p[3] && p[1] <= q[4] && q[1] <= p[4] && p[2] <= q[5] && q[2] <= p[5];
 }
 
-int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
+int  MoveTo::Execute(void* actionStack, void* time) {
     MoveTo_ResolveFuncs();
     (void)time;
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     int* mapGrid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
 
@@ -435,7 +435,7 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
     float curY = *(float*)(charComp + 0x15c);
     float curZ = *(float*)(charComp + 0x160);
 
-    int32_t pathIndex = *(int32_t*)(s + 0x60);
+    int32_t pathIndex = _field60;
 
     // ---- CASE 1: No active path segment (pathIndex == -1) ----
     if (pathIndex == -1) {
@@ -443,7 +443,7 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
 
         if (pathVersion != 0) {
             // Have a cached path version -- try to retrieve from pathfinder
-            int32_t slotId = *(int32_t*)(s + 0x20);
+            int32_t slotId = targetId;
             if (slotId >= 0) {
                 // Access pathfinder data structure
                 uintptr_t pathfinder = *(uintptr_t*)((uintptr_t)mapGrid + 0x68);
@@ -476,10 +476,10 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
                 }
 
                 // Start traversal at index 1 (skip start cell)
-                *(int32_t*)(s + 0x60) = 1;
+                _field60 = 1;
 
                 // Update facing direction
-                s_fn_UpdateFacing(self);
+                s_fn_UpdateFacing(this);
 
                 // Set walk animation
                 targetEntity = *(uintptr_t*)(s + 0x28);
@@ -489,11 +489,9 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
             }
         }
 
-        // No cached path or invalid slot -- call AbstractImpl (vtable slot +0x20)
-        uintptr_t vtable = *(uintptr_t*)s;
-        typedef int (*AbstractImpl_t)(void* self, void* actionStack);
-        AbstractImpl_t abstractImpl = *(AbstractImpl_t*)(vtable + 0x20);
-        int result = abstractImpl(self, actionStack);
+        // No cached path or invalid slot -- call AbstractImpl (vtable slot +0x20,
+        // a virtual dispatch in retail)
+        int result = AbstractImpl(actionStack);
         if (result != 2) {
             return 1;
         }
@@ -520,7 +518,7 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
         Math::Vector3 diffVec(dx2, dy2, dz);
 
         Math::Vector2 dotVec(diffVec.x, diffVec.y);
-        float dotOut = dotVec.Dot(dotVec).v;   // self-dot → dx²+dy²
+        float dotOut = dotVec.Dot(dotVec).v;   // this-dot → dx²+dy²
         float distToGoal = s_fn_Sqrtf(dotOut);
 
         if (distToGoal < *s_fMinDistSq) {
@@ -575,7 +573,7 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
         targetEntity = *(uintptr_t*)(s + 0x28);
         uint32_t idleAnimId = *(uint32_t*)(s + 0x46c);
         s_fn_SetAnimation((void*)targetEntity, idleAnimId, *g_fUVScale, *g_fUVScale);
-        *(int32_t*)(s + 0x60) = -1;
+        _field60 = -1;
         return 1;
     }
 
@@ -590,7 +588,7 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
                                             *(int32_t*)((uintptr_t)mapGrid + 0x88), curCell);
 
     float speed;
-    bool onRoad = *(uint8_t*)(s + 0x474) != 0;
+    bool onRoad = _field474 != 0;
 
     if (onRoad) {
         // On road -- use road speed from path data (+0x30)
@@ -615,7 +613,7 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
 
     // Apply speed multiplier and set on character
     targetEntity = *(uintptr_t*)(s + 0x28);
-    *(float*)(targetEntity + 0x38) = speed * *(float*)(s + 0x478);
+    *(float*)(targetEntity + 0x38) = speed * speedMultiplier;
 
     // Check if the citizen's CURRENT cell has reached the current waypoint cell.
     // Verified vs the real MoveTo::Execute (0x1400c8570): the comparison is
@@ -631,10 +629,10 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
     }
 
     // Reached the waypoint -- advance to next
-    *(int32_t*)(s + 0x60) = pathIndex + 1;
+    _field60 = pathIndex + 1;
 
     // Update facing direction for next segment
-    s_fn_UpdateFacing(self);
+    s_fn_UpdateFacing(this);
 
     return 1;
 }
@@ -644,9 +642,9 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
 // Bridge detection: queries nearby entities for bridges. If a bridge
 // is found facing the same direction, sets the road flag (+0x474).
 // ============================================================
-void MoveTo_Enter_Impl(void* self) {
+void MoveTo::Enter() {
     MoveTo_ResolveFuncs();
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     // Get target entity's character component position
     uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
@@ -688,24 +686,24 @@ void MoveTo_Enter_Impl(void* self) {
             float dotOut = bridgeFacing.Dot(myFacing).v;
             if (dotOut > 0.0f) {
                 // Facing same direction as bridge -- set road flag
-                *(uint8_t*)(s + 0x474) = 1;
+                _field474 = 1;
                 return;
             }
         }
     }
 
     // No bridge or wrong direction -- clear road flag
-    *(uint8_t*)(s + 0x474) = 0;
+    _field474 = 0;
 }
 
 // ============================================================
 // MoveTo::Exit (0x1400c8520)
 // Reset character animation to idle (walk anim at +0x46c).
 // ============================================================
-void MoveTo_Exit_Impl(void* self, void* actionStack) {
+void MoveTo::Exit(void* actionStack) {
     MoveTo_ResolveFuncs();
     (void)actionStack;
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
     uint32_t idleAnimId = *(uint32_t*)(s + 0x46c);
@@ -716,9 +714,9 @@ void MoveTo_Exit_Impl(void* self, void* actionStack) {
 // MoveTo::CheckEntity (0x1400c84d0)
 // Same body as Exit -- reset character animation to idle.
 // ============================================================
-void MoveTo_CheckEntity_Impl(void* self) {
+void MoveTo::CheckEntity() {
     MoveTo_ResolveFuncs();
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
     uint32_t idleAnimId = *(uint32_t*)(s + 0x46c);
@@ -730,9 +728,9 @@ void MoveTo_CheckEntity_Impl(void* self) {
 // Returns true if the given param (InternalBasePtr) matches
 // the entity at target->+0x10.
 // ============================================================
-bool MoveTo_GetTarget_Impl(void* self, void* param) {
+bool MoveTo::GetTarget(void* param) {
     MoveTo_ResolveFuncs();
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     uintptr_t targetEntity = *(uintptr_t*)(s + 0x28);
 
@@ -780,19 +778,12 @@ Object::Base* MoveTo::DeletingDtor(unsigned flags) {
 }
 
 // [3] 0x1400c8ec0
-void MoveTo::Persist(void* stream) { MoveTo_Serialize_Impl(this, stream); }
 // [4] 0x1400c8ab0
-int  MoveTo::AbstractImpl(void* actionStack) { return MoveTo_AbstractImpl_Impl(this, actionStack); }
 // [5] 0x1400c8570
-int  MoveTo::Execute(void* actionStack, void* time) { return MoveTo_Execute_Impl(this, actionStack, time); }
 // [6] 0x1400c8970
-void MoveTo::Enter() { MoveTo_Enter_Impl(this); }
 // [7] 0x1400c8520
-void MoveTo::Exit(void* actionStack) { MoveTo_Exit_Impl(this, actionStack); }
 // [8] 0x1400c84d0
-void MoveTo::CheckEntity() { MoveTo_CheckEntity_Impl(this); }
 // [9] 0x1400c8480
-bool MoveTo::GetTarget(void* param) { return MoveTo_GetTarget_Impl(this, param); }
 
 void* MoveTo::CreateNewObject() {
     MoveTo_ResolveFuncs();

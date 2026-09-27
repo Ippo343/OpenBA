@@ -24,6 +24,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/PopulationDescription.h"
+#include "Component/PopulationComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -84,7 +85,7 @@ void PopulationDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x14000b020: PopulationComponent's type id through the hidden return slot.
 Object::Type* PopulationDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("PopulationComponent");
+    ret->_type = PopulationComponent::TypeId();
     return ret;
 }
 

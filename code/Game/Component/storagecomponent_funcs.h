@@ -11,15 +11,6 @@
 // Size: 0x40 bytes
 // ============================================================
 
-// Shutdown (vtable slot [3], 0x14012c730): Versioned serialization of storage slots.
-// Serializes slot count, iterates slots serializing type info and item refs,
-// plus IsDerivedFrom checks and version-0 migration logic.
-void StorageComponent_Shutdown(StorageComponent* self, void* stream);
-
-// Draw (vtable slot [6], 0x14012c640): Rebuild storage slot data from building template.
-// Gets StorageDescription via IsDerivedFrom, reads template entries, populates slots.
-void StorageComponent_Draw(StorageComponent* self);
-
 // QueryCount (0x14012cf10): Count total items in storage (O(n*m) perf hotspot).
 // Iterates storage slots, for each slot iterates items checking type via IsDerivedFrom.
 // Null-safe version — guards against missing RawMaterialDescription component.

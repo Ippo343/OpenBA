@@ -116,38 +116,22 @@ bool RemoveAnimal_ResolveFuncs() {
 }
 
 // ============================================================
-// Slot 1: VectorDeletingDtor (0x140022e60) -- unhookable (7 bytes, RIP-relative)
-// Returns DAT_1401c6088 (type factory pointer).
-// ============================================================
-uint64_t RemoveAnimal_VectorDtor_Impl() {
-    return *s_dat_VectorDtorReturn;
-}
-
-// ============================================================
-// Slot 2: BaseDtor (0x140022e50) -- unhookable (7 bytes, RIP-relative)
-// Returns TypeInfo for RemoveAnimal (DAT_1401c6080).
-// ============================================================
-uint32_t RemoveAnimal_BaseDtor_Impl() {
-    return *s_typeInfo_RemoveAnimal;
-}
-
-// ============================================================
 // Slot 3: Serialize (0x1400ca870)
 // Serializes status byte (+0x18) and entity ref at +0x20 with ComponentEntity
 // type validation on deserialization.
 // ============================================================
-void RemoveAnimal_Serialize_Impl(RemoveAnimal* self, void* stream) {
+void RemoveAnimal::Persist(void* stream) {
     // Reached through the registered vtable, which the factory path never
     // has to touch — an exe-ctor-built action arrives here with the file
     // statics still null. Lazy-resolve like the other entry points do.
     RemoveAnimal_ResolveFuncs();
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t localSerializer1[16];
     alignas(8) uint8_t localSerializer2[24];
 
     // Serialize status byte (+0x18)
     ::new (static_cast<void*>(localSerializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(localSerializer1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(localSerializer1)->Serialize(_status, nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(localSerializer1)->~Serializer();   // B.3.4 bridge
 
     // Serialize entity ref at +0x20
@@ -155,10 +139,10 @@ void RemoveAnimal_Serialize_Impl(RemoveAnimal* self, void* stream) {
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(localSerializer2));   // B.3.4 bridge
 
     // Type-check: if the deserialized ptr is not a ComponentEntity, null it
-    void* entityRef = *(void**)(s + 0x20);
+    void* entityRef = _field20;
     if (entityRef != nullptr) {
         if (!fn_IsDerivedFrom(entityRef, *s_typeId_ComponentEntity)) {
-            *(void**)(s + 0x20) = nullptr;
+            _field20 = nullptr;
         }
     }
 
@@ -170,11 +154,10 @@ void RemoveAnimal_Serialize_Impl(RemoveAnimal* self, void* stream) {
 // Marks the animal entity at +0x20 for removal, queues to cleanup list.
 // Returns 0 (action complete).
 // ============================================================
-int RemoveAnimal_AbstractImpl_Impl(RemoveAnimal* self, void* actionStack) {
+int  RemoveAnimal::AbstractImpl(void* actionStack) {
     RemoveAnimal_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
-    uint8_t* s = (uint8_t*)self;
-    void* entityRef = *(void**)(s + 0x20);
+    void* entityRef = _field20;
 
     // ~310 kills produced ZERO component dumps below, and the dump sits inside the
     // `entityRef != nullptr` arm — so "RemoveAnimal never ran" and "RemoveAnimal ran with
@@ -217,12 +200,11 @@ int RemoveAnimal_AbstractImpl_Impl(RemoveAnimal* self, void* actionStack) {
 // Clears "in use" bit (bit 20) on entity's model component flags.
 // If the low 16 bits of flags changed, notifies parent entity.
 // ============================================================
-void RemoveAnimal_CheckEntity_Impl(RemoveAnimal* self) {
+void RemoveAnimal::CheckEntity() {
     RemoveAnimal_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
-    uint8_t* s = (uint8_t*)self;
     void* localIBP[4];
 
-    void* entity20 = *(void**)(s + 0x20);
+    void* entity20 = _field20;
     s_fn_GetModelComp(entity20, localIBP);
 
     uint8_t* modelComp = (uint8_t*)(localIBP[0]);
@@ -247,10 +229,9 @@ void RemoveAnimal_CheckEntity_Impl(RemoveAnimal* self) {
 // Slot 9: GetTarget (0x1400ca720)
 // Returns true if *param matches the entity at +0x20.
 // ============================================================
-bool RemoveAnimal_GetTarget_Impl(RemoveAnimal* self, void* param) {
+bool RemoveAnimal::GetTarget(void* param) {
     RemoveAnimal_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
-    uint8_t* s = (uint8_t*)self;
-    return *(void**)param == *(void**)(s + 0x20);
+    return *(void**)param == _field20;
 }
 
 // ============================================================
@@ -280,13 +261,9 @@ Object::Base* RemoveAnimal::DeletingDtor(unsigned flags) {
 }
 
 // [3] 0x1400ca870
-void RemoveAnimal::Persist(void* stream) { RemoveAnimal_Serialize_Impl(this, stream); }
 // [4] 0x1400ca7f0
-int  RemoveAnimal::AbstractImpl(void* actionStack) { return RemoveAnimal_AbstractImpl_Impl(this, actionStack); }
 // [8] 0x1400ca760
-void RemoveAnimal::CheckEntity() { RemoveAnimal_CheckEntity_Impl(this); }
 // [9] 0x1400ca720
-bool RemoveAnimal::GetTarget(void* param) { return RemoveAnimal_GetTarget_Impl(this, param); }
 
 void* RemoveAnimal::CreateNewObject() {
     RemoveAnimal_ResolveFuncs();

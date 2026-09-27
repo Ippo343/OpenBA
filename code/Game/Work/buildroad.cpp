@@ -279,10 +279,7 @@ static Math::Vector3 CellToWorldVec3(int* mapGrid, int cellIndex) {
 static int FinalizeAction(BuildRoad* self, void* entityIBP, void* actionIBP, int priority) {
     uintptr_t citizenEntity = *(uintptr_t*)entityIBP;
 
-    uintptr_t vtable = *(uintptr_t*)self;
-    typedef uint64_t* (*VtSlot50_t)(BuildRoad*, void*);
-    VtSlot50_t vtShared = *(VtSlot50_t*)(vtable + 0x50);
-    uint64_t* result = vtShared(self, actionIBP);
+    uint64_t* result = static_cast<uint64_t*>(self->GetTarget(actionIBP));
 
     uint64_t actionPtr = *result;
     *(int32_t*)(citizenEntity + 0x30) = priority;

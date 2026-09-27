@@ -22,7 +22,7 @@
 //
 // Decompiled from Application-x64.exe.
 
-#include "Player/dragplacementtool_funcs.h"
+#include "Player/DragPlacementTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -58,10 +58,8 @@ static void* FindComponentByTypeId(uintptr_t entity, uint32_t targetTypeId) {
         void* comp = components[i];
         if (!comp) continue;
 
-        // vtable slot +0x10: GetTypeId() -> uint32_t
-        typedef uint32_t (*fn_GetTypeId_t)(void* self);
-        fn_GetTypeId_t getTypeId = *(fn_GetTypeId_t*)(*(uintptr_t*)comp + 0x10);
-        uint32_t typeId = getTypeId(comp);
+        // virtual slot 2 (+0x10): Type()
+        uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
         if (typeId == targetTypeId) {
             if (fn_IsDerivedFrom(comp, targetTypeId)) {
@@ -81,8 +79,8 @@ static void* FindComponentByTypeId(uintptr_t entity, uint32_t targetTypeId) {
 //   2. AreaDescription (DAT_1401c7a18)            -> self->areaDesc (+0x40)
 //
 // Original: 0x1400fc3e0
-void DragPlacementTool_Startup(DragPlacementTool* self) {
-    uintptr_t entity = (uintptr_t)self->descriptionPtr;
+void DragPlacementTool::Startup() {
+    uintptr_t entity = (uintptr_t)descriptionPtr;
 
     // Find CreatePlacementDescription
     void* foundPlacement = nullptr;
@@ -91,8 +89,8 @@ void DragPlacementTool_Startup(DragPlacementTool* self) {
     }
 
     // Original re-reads entity pointer after first search
-    entity = (uintptr_t)self->descriptionPtr;
-    self->placementDesc = foundPlacement;
+    entity = (uintptr_t)descriptionPtr;
+    placementDesc = foundPlacement;
 
     // Find AreaDescription
     void* foundArea = nullptr;
@@ -100,7 +98,7 @@ void DragPlacementTool_Startup(DragPlacementTool* self) {
     if (g_TypeId_AreaDescription && *g_TypeId_AreaDescription) {
         foundArea = FindComponentByTypeId(entity, *g_TypeId_AreaDescription);
     }
-    self->areaDesc = foundArea;
+    areaDesc = foundArea;
 }
 
 // ============================================================
@@ -144,9 +142,8 @@ static void EnsureHelpers() {
 //
 // Return: 0=success, 1=too small, 2=too big, 3=invalid terrain/overlap
 // Original: 0x1400fbae0
-uint64_t DragPlacementTool_CalcCost(DragPlacementTool* self, int startCell, int endCell,
-                                     uint32_t* outValid, int* outCostA, int* outCostB,
-                                     uint32_t* outLength) {
+int DragPlacementTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
+                                int* outCostA, int* outCostB, int* outLength) {
     EnsureHelpers();
 
     // Get map grid size pointer
@@ -186,7 +183,7 @@ uint64_t DragPlacementTool_CalcCost(DragPlacementTool* self, int startCell, int 
     float heightTol = s_pHeightTolerance ? *s_pHeightTolerance : 0.5f;
 
     // Read placement description fields
-    uintptr_t desc = (uintptr_t)self->placementDesc;
+    uintptr_t desc = (uintptr_t)placementDesc;
 
     // Check min size (desc +0x30 = minWidth, +0x34 = minHeight)
     if (width < *(int*)(desc + 0x30) || height < *(int*)(desc + 0x34)) {
@@ -225,7 +222,7 @@ uint64_t DragPlacementTool_CalcCost(DragPlacementTool* self, int startCell, int 
         //   +0x80: bool hasExistingPlacement
         //   +0x98: int existingStartCell
         //   +0x9c: int existingEndCell
-        uintptr_t dlg = *(uintptr_t*)((uintptr_t)self + 0x10);
+        uintptr_t dlg = (uintptr_t)dialogPtr;
         if (dlg && *(char*)(dlg + 0x80) != '\0') {
             int existGridSize = **(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
             int existStartCol = *(int*)(dlg + 0x98) % existGridSize;
@@ -320,17 +317,16 @@ using TileArray = Collection::Array<TileRecord>;
 //       dialog controller (+0x10) for existing placement info
 //
 // Original: 0x1400fbe40
-void DragPlacementTool_Draw_Impl(DragPlacementTool* self, void* context, char param3) {
+void DragPlacementTool::Draw(void* context, char param3) {
     EnsureHelpers();
     EnsureDrawFuncs();
 
     if (!fn_TileRender) return;
 
-    uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
 
     // --- Section 1: Existing placement overlay (yellow tiles) ---
-    uintptr_t dialogCtrl = *(uintptr_t*)(selfAddr + 0x10);
+    uintptr_t dialogCtrl = (uintptr_t)dialogPtr;
     if (*(char*)(dialogCtrl + 0x80) != 0) {
         int gridSize = **(int**)(gameWorld + 0xf8);
 
@@ -371,7 +367,7 @@ void DragPlacementTool_Draw_Impl(DragPlacementTool* self, void* context, char pa
         int startCell, endCell;
 
         // Get start/end cells based on drag state
-        if (self->dragState == 0) {
+        if (dragState == 0) {
             // Not dragging: use ScreenToCell for both
             int cell = -1;
             if (s_fn_ScreenToCell) {
@@ -381,8 +377,8 @@ void DragPlacementTool_Draw_Impl(DragPlacementTool* self, void* context, char pa
             endCell = cell;
         } else {
             // Dragging: start from stored field, end from stored field
-            startCell = self->startCell;
-            endCell = self->endCell;
+            startCell = this->startCell;
+            endCell = this->endCell;
         }
 
         float heightTol = s_pHeightTolerance ? *s_pHeightTolerance : 0.5f;
@@ -414,7 +410,7 @@ void DragPlacementTool_Draw_Impl(DragPlacementTool* self, void* context, char pa
         int height = (int)(maxRow - minRow) + 1;
 
         // Check area constraints from placement description
-        uintptr_t desc = (uintptr_t)self->placementDesc;
+        uintptr_t desc = (uintptr_t)placementDesc;
         bool tooBig = false;
         if (desc) {
             if (*(int*)(desc + 0x28) < width || *(int*)(desc + 0x2C) < height) {
@@ -528,26 +524,20 @@ static void EnsureCalcPathFuncs() {
 // Rotation: 0x5a (90 degrees) if height >= width, else 0.
 //
 // Original: 0x1400fb900
-bool DragPlacementTool_CalcPath(DragPlacementTool* self, int startCell, int endCell) {
+bool DragPlacementTool::CalcPath(int startCell, int endCell) {
     EnsureCalcPathFuncs();
 
-    // Call CalcCost via vtable+0x70 to validate
-    // CalcCost takes 7 params: (self, start, end, &outValid, &outCostA, &outCostB, &outLength)
-    // We use local variables for the output params
-    typedef uint64_t (*fn_CalcCost_vt_t)(void* self, int start, int end,
-        uint32_t* outValid, int* outCostA, int* outCostB, uint32_t* outLength);
-    fn_CalcCost_vt_t calcCostFn = *(fn_CalcCost_vt_t*)(*(uintptr_t*)self + 0x70);
+    // Virtual CalcCost (slot 14, +0x70) to validate, into local out-values
 
     uint32_t outValid = 0;
     int outCostA = 0;   // width
     int outCostB = 0;   // height
-    uint32_t outLength = 0;
+    int outLength = 0;
 
-    uint64_t calcResult = calcCostFn(self, startCell, endCell,
-        &outValid, &outCostA, &outCostB, &outLength);
+    int calcResult = CalcCost(startCell, endCell, &outValid, &outCostA, &outCostB, &outLength);
 
 
-    if ((int)calcResult != 0) {
+    if (calcResult != 0) {
         return false;
     }
 
@@ -573,7 +563,7 @@ bool DragPlacementTool_CalcPath(DragPlacementTool* self, int startCell, int endC
     }
 
     // Check constraints from dialog (+0x10)
-    uintptr_t dlg = (uintptr_t)self->dialogPtr;
+    uintptr_t dlg = (uintptr_t)dialogPtr;
     if (*(char*)(dlg + 0x80) != '\0') {
         int cGridSize = **(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
         int cStartCol = *(int*)(dlg + 0x98) % cGridSize;
@@ -590,18 +580,18 @@ bool DragPlacementTool_CalcPath(DragPlacementTool* self, int startCell, int endC
     }
 
     // Clear existing path entities
-    uintptr_t placementDesc = (uintptr_t)self->placementDesc;
+    uintptr_t placementDesc = (uintptr_t)this->placementDesc;
     int64_t entityTemplate = *(int64_t*)(placementDesc + 0x38);
 
     if (s_fn_ClearPathEntities) {
-        s_fn_ClearPathEntities(self, minCol, minRow, maxCol, maxRow, entityTemplate);
+        s_fn_ClearPathEntities(this, minCol, minRow, maxCol, maxRow, entityTemplate);
     }
 
     // Allocate and clone a ComponentEntity from description
     void* newEntityMem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
     void* newEntity = nullptr;
     if (newEntityMem && s_fn_ComponentEntity_CopyCtor) {
-        newEntity = s_fn_ComponentEntity_CopyCtor(newEntityMem, (void*)self->descriptionPtr);
+        newEntity = s_fn_ComponentEntity_CopyCtor(newEntityMem, (void*)descriptionPtr);
     }
 
     // Wrap in InternalBasePtr
@@ -634,7 +624,7 @@ bool DragPlacementTool_CalcPath(DragPlacementTool* self, int startCell, int endC
 
     // Register entity with entity list
     void* entityList = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xe8);
-    int categoryId = *(int*)((uintptr_t)self->descriptionPtr + 0x20);
+    int categoryId = *(int*)((uintptr_t)descriptionPtr + 0x20);
 
     if (fn_EntityList_RegisterEntity) {
         fn_EntityList_RegisterEntity(entityList, &entityIBP, categoryId);
@@ -656,19 +646,7 @@ bool DragPlacementTool_CalcPath(DragPlacementTool* self, int startCell, int endC
 #include "Object/factory_registration.h"
 #include <new>
 
-void DragPlacementTool::Startup() { DragPlacementTool_Startup(this); }        // [4]
-void DragPlacementTool::Draw(void* context, char active) {                     // [8]
-    DragPlacementTool_Draw_Impl(this, context, active);
-}
-bool DragPlacementTool::CalcPath(int startCell, int endCell) {                 // [13]
-    return DragPlacementTool_CalcPath(this, startCell, endCell);
-}
-int DragPlacementTool::CalcCost(int startCell, int endCell, uint32_t* outValid, // [14]
-                                int* outCostA, int* outCostB, int* outLength) {
-    return static_cast<int>(DragPlacementTool_CalcCost(this, startCell, endCell, outValid,
-                                                       outCostA, outCostB,
-                                                       reinterpret_cast<uint32_t*>(outLength)));
-}
+// [4] Startup, [8] Draw, [13] CalcPath and [14] CalcCost are defined above.
 
 // create 0x14002d8b0: MemAlloc(0x48, 8), then the ctor 0x1400fc530.
 void* DragPlacementTool::CreateNewObject() {

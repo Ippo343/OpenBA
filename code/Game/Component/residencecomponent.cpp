@@ -26,10 +26,6 @@
 // Resolved helpers
 // ============================================================
 
-// Component_Serialize (base Shutdown) at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
 // ResidenceComponent_Controller_sub_7ad0 — resize resident array at +0x50
 // Takes (longlong* arrayField, int newCount)
 typedef void (*fn_ResizeResidentArray_t)(void* arrayFieldPtr, int newCount);
@@ -60,9 +56,6 @@ static bool s_initialized = false;
 static void EnsureHelpers() {
     if (s_initialized) return;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-
     uintptr_t slot;
 
     s_fn_ResizeResidentArray = reinterpret_cast<fn_ResizeResidentArray_t>(
@@ -88,101 +81,7 @@ static void EnsureHelpers() {
     s_initialized = true;
 }
 
-// ============================================================
-// ResidenceComponent::Shutdown (vtable slot [3], 0x14012a170)
-// ============================================================
-// Serializes Component base + empty serializer block + versioned
-// serializer with: resident count (+0x58), resident array resize on load,
-// resident array serialize, and Time::Serialize at +0x48.
-//
-// Original decompilation:
-//   Component_Serialize(self, stream)
-//   Serializer_Ctor(local1, stream, 0); Serializer_Dtor(local1)    // empty block
-//   Serializer_Ctor(local2, stream, 0)
-//   local_res8 = *(int*)(self+0x58)
-//   Serialize_Int(local2, &local_res8, null)
-//   if loading: ResizeResidentArray(self+0x50, local_res8)
-//   SerializeResidentArray(local2, local_res8, *(self+0x50))
-//   Time::Serialize(self+0x48, local2)
-//   Serializer_Dtor(local2)
 
-void ResidenceComponent_Shutdown(ResidenceComponent* self, void* stream) {
-    EnsureHelpers();
-
-    // Call base Component_Serialize
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
-
-    // Empty serializer block (version 0)
-    alignas(8) uint8_t serBuf1[24];
-    ::new (static_cast<void*>(serBuf1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serBuf1)->~Serializer();                                       // B.3.4 bridge
-
-    // Versioned serializer block (version 0) with resident data
-    alignas(8) uint8_t serBuf2[24];
-    int64_t* pSerData = (int64_t*)serBuf2;
-
-    ::new (static_cast<void*>(serBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // Serialize resident count via local copy
-    // (same pattern as ConsumeProduceComponent — local copy needed so resize
-    // sees old vs new count correctly)
-    int localCount = *(int*)((uintptr_t)self + 0x58);
-    reinterpret_cast<IO::Serializer*>(serBuf2)->Serialize(localCount, nullptr);   // B.3.4 bridge
-
-    // On load (direction == 0): resize resident array
-    if (*(int*)(pSerData[0] + 8) == 0) {
-        if (s_fn_ResizeResidentArray) {
-            s_fn_ResizeResidentArray((void*)((uintptr_t)self + 0x50), localCount);
-        }
-    }
-
-    // Serialize resident array
-    if (s_fn_SerializeResidentArray) {
-        void* arrayPtr = *(void**)((uintptr_t)self + 0x50);
-        s_fn_SerializeResidentArray(serBuf2, localCount, arrayPtr);
-    }
-
-    // Serialize Time at +0x48
-    reinterpret_cast<System::Time*>((void*)((uintptr_t)self + 0x48))->Serialize(*reinterpret_cast<IO::Serializer*>(serBuf2));   // B.3.4b bridge
-
-    reinterpret_cast<IO::Serializer*>(serBuf2)->~Serializer();                                       // B.3.4 bridge
-}
-
-// ============================================================
-// ResidenceComponent::Serialize (vtable slot [4], 0x14012a120)
-// ============================================================
-// Checks IsDerivedFrom on +0x18 with ResidenceDescription type,
-// reads resident capacity from description at +0x20, resizes
-// resident array at +0x50 to that capacity.
-//
-// Original decompilation:
-//   obj = *(self+0x18)
-//   derived = IsDerivedFrom(obj, DAT_1401c7d28)
-//   pvVar2 = derived ? obj : nullptr
-//   ResizeResidentArray(self+0x50, *(pvVar2+0x20))
-
-void ResidenceComponent_Serialize(ResidenceComponent* self) {
-    EnsureHelpers();
-
-    if (!s_fn_IsDerivedFrom_dispatch || !s_TypeId_ResidenceDescription ||
-        !s_fn_ResizeResidentArray)
-        return;
-
-    void* obj = self->_description;
-    if (!obj) return;
-
-    bool derived = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_ResidenceDescription);
-    void* desc = derived ? obj : nullptr;
-    if (!desc) return;
-
-    // Read resident capacity from description at +0x20
-    int capacity = *(int*)((uintptr_t)desc + 0x20);
-
-    // Resize resident array at +0x50
-    s_fn_ResizeResidentArray((void*)((uintptr_t)self + 0x50), capacity);
-}
 
 // ============================================================
 // ResidenceComponent::OnCreate (vtable slot [7], 0x14012a0e0)
@@ -429,20 +328,6 @@ void ResidenceComponent_ResidenceInit(void* selfP) {
     }
 }
 
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void ResidenceComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[ResidenceComponent] Funcs resolved: Component_Serialize=%p "
-           "ResizeArray=%p SerializeArray=%p Init=%p Register=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_ResizeResidentArray,
-           (void*)s_fn_SerializeResidentArray,
-           (void*)s_fn_ResidenceInit, (void*)s_fn_RegisterEntity);
-#endif
-}
-
 // ===== Standalone factory (Foundation D → Keystone D states) =====
 // Inert-but-valid ResidenceComponent: size 0x60 + Object::Internal base + capability
 // flags +0x20=0x82 (from ResidenceComponent_Ctor) + zeroed body.
@@ -597,14 +482,99 @@ void* ResidenceComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ResidenceComponent());
 }
 
-// [3] 0x14012a170 — the resident array (+0x50/+0x58) and the heat timer round-trip
-// (save/load wave 2026-08-28).
-void ResidenceComponent::Persist(void* stream) { ResidenceComponent_Shutdown(this, stream); }
+// ============================================================
+// ResidenceComponent::Persist (vtable slot [3], 0x14012a170)
+// ============================================================
+// Serializes Component base + empty serializer block + versioned
+// serializer with: resident count (+0x58), resident array resize on load,
+// resident array serialize, and Time::Serialize at +0x48.
+//
+// Original decompilation:
+//   Component_Serialize(self, stream)
+//   Serializer_Ctor(local1, stream, 0); Serializer_Dtor(local1)    // empty block
+//   Serializer_Ctor(local2, stream, 0)
+//   local_res8 = *(int*)(self+0x58)
+//   Serialize_Int(local2, &local_res8, null)
+//   if loading: ResizeResidentArray(self+0x50, local_res8)
+//   SerializeResidentArray(local2, local_res8, *(self+0x50))
+//   Time::Serialize(self+0x48, local2)
+//   Serializer_Dtor(local2)
 
-// [4] 0x14012a120 — resize the resident array at +0x50 from the description
-// capacity (desc+0x20); dispatched at spawn by the ComponentEntity StartupComponents
-// pass (FUN_1400c30a0), gated on entity flag 0x80 + comp flag bit 7 (0x82 has it).
-void ResidenceComponent::Startup() { ResidenceComponent_Serialize(this); }
+void ResidenceComponent::Persist(void* stream) {
+    EnsureHelpers();
+
+    // Call base Component_Serialize
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    // Empty serializer block (version 0)
+    alignas(8) uint8_t serBuf1[24];
+    ::new (static_cast<void*>(serBuf1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serBuf1)->~Serializer();                                       // B.3.4 bridge
+
+    // Versioned serializer block (version 0) with resident data
+    alignas(8) uint8_t serBuf2[24];
+    int64_t* pSerData = (int64_t*)serBuf2;
+
+    ::new (static_cast<void*>(serBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    // Serialize resident count via local copy
+    // (same pattern as ConsumeProduceComponent — local copy needed so resize
+    // sees old vs new count correctly)
+    int localCount = *(int*)(reinterpret_cast<uintptr_t>(this) + 0x58);
+    reinterpret_cast<IO::Serializer*>(serBuf2)->Serialize(localCount, nullptr);   // B.3.4 bridge
+
+    // On load (direction == 0): resize resident array
+    if (*(int*)(pSerData[0] + 8) == 0) {
+        if (s_fn_ResizeResidentArray) {
+            s_fn_ResizeResidentArray((void*)(reinterpret_cast<uintptr_t>(this) + 0x50), localCount);
+        }
+    }
+
+    // Serialize resident array
+    if (s_fn_SerializeResidentArray) {
+        void* arrayPtr = *(void**)(reinterpret_cast<uintptr_t>(this) + 0x50);
+        s_fn_SerializeResidentArray(serBuf2, localCount, arrayPtr);
+    }
+
+    // Serialize Time at +0x48
+    reinterpret_cast<System::Time*>((void*)(reinterpret_cast<uintptr_t>(this) + 0x48))->Serialize(*reinterpret_cast<IO::Serializer*>(serBuf2));   // B.3.4b bridge
+
+    reinterpret_cast<IO::Serializer*>(serBuf2)->~Serializer();                                       // B.3.4 bridge
+}
+
+// ============================================================
+// ResidenceComponent::Startup (vtable slot [4], 0x14012a120)
+// ============================================================
+// Checks IsDerivedFrom on +0x18 with ResidenceDescription type,
+// reads resident capacity from description at +0x20, resizes
+// resident array at +0x50 to that capacity.
+//
+// Original decompilation:
+//   obj = *(self+0x18)
+//   derived = IsDerivedFrom(obj, DAT_1401c7d28)
+//   pvVar2 = derived ? obj : nullptr
+//   ResizeResidentArray(self+0x50, *(pvVar2+0x20))
+
+void ResidenceComponent::Startup() {
+    EnsureHelpers();
+
+    if (!s_fn_IsDerivedFrom_dispatch || !s_TypeId_ResidenceDescription ||
+        !s_fn_ResizeResidentArray)
+        return;
+
+    void* obj = _description;
+    if (!obj) return;
+
+    bool derived = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_ResidenceDescription);
+    void* desc = derived ? obj : nullptr;
+    if (!desc) return;
+
+    // Read resident capacity from description at +0x20
+    int capacity = *(int*)((uintptr_t)desc + 0x20);
+
+    // Resize resident array at +0x50
+    s_fn_ResizeResidentArray((void*)(reinterpret_cast<uintptr_t>(this) + 0x50), capacity);
+}
 
 // [7] 0x14012a0e0 — helper_9ef0 (re-assign resident workplaces / evict) + remove the
 // owner entity from the townMgr+0x20 residence list, dispatched by FUN_1400c2ea0 at

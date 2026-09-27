@@ -37,6 +37,22 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "Player/Tool.h"
+#include "Player/BridgeTool.h"
+#include "Player/DragPlacementTool.h"
+#include "Player/EditTool.h"
+#include "Player/FencedTool.h"
+#include "Player/PathTool.h"
+#include "Player/PlacementTool.h"
+#include "Player/RemovalTool.h"
+#include "Player/RoadTool.h"
+#include "Component/CreateBridgeDescription.h"
+#include "Component/CreateDragDescription.h"
+#include "Component/CreateFencedDescription.h"
+#include "Component/CreatePathDescription.h"
+#include "Component/CreatePlacedDescription.h"
+#include "Component/CreateRemovalDescription.h"
+#include "Component/CreateRoadDescription.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -196,8 +212,8 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     if (!g_TypeId_ToolController) g_TypeId_ToolController = &s_tid_Tool;
     if (!g_TypeId_ToolSetting)    g_TypeId_ToolSetting    = &s_tid_ToolSetting;
 
-    uint32_t tid_CreatePlaced  = ::Object::ResolveTypeIdByNameLazy("CreatePlacedDescription");
-    uint32_t tid_PlacementTool = ::Object::ResolveTypeIdByNameLazy("PlacementTool");
+    uint32_t tid_CreatePlaced  = CreatePlacedDescription::TypeId();
+    uint32_t tid_PlacementTool = PlacementTool::TypeId();
     if (tid_CreatePlaced && tid_PlacementTool)
         Tree_Insert(tree, tid_CreatePlaced, tid_PlacementTool);
 
@@ -205,7 +221,7 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     // as node key=0 (the very first insert) — SetEditMode(pc, 0) resolves this node to
     // install EditTool as the idle tool, whose OnKey (+0x30) picks the entity under the
     // cursor and opens its info dialog. Without this node the select path is dead in SA.
-    uint32_t tid_EditTool = ::Object::ResolveTypeIdByNameLazy("EditTool");
+    uint32_t tid_EditTool = EditTool::TypeId();
     if (tid_EditTool)
         Tree_Insert(tree, 0, tid_EditTool);
 
@@ -213,11 +229,11 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     // CreateRemovalDescription (0x1401c74a0). The preloaded Dialog/Toolbar.rsc "Remove"
     // button carries that component at item+0x58, so SetEditMode's component-scan matches
     // this node and creates a RemovalTool. RemovalTool extends DragTool, so DragTool_OnKey
-    // drives the drag and calls slot 13 (RemovalTool_CalcPath -> ported RemovalCalc_Slot13)
+    // drives the drag and calls slot 13 (RemovalTool::CalcPath, keystone_a_removalcalcpath.cpp)
     // on drag-release — the whole clearance path. CalcPath cluster is registered
     // (reg_keystone_a_removal.cpp); the 74a0 type-id is wired (reg_economy_typeids.cpp).
-    uint32_t tid_CreateRemoval = ::Object::ResolveTypeIdByNameLazy("CreateRemovalDescription");
-    uint32_t tid_RemovalTool   = ::Object::ResolveTypeIdByNameLazy("RemovalTool");
+    uint32_t tid_CreateRemoval = CreateRemovalDescription::TypeId();
+    uint32_t tid_RemovalTool   = RemovalTool::TypeId();
     if (tid_CreateRemoval && tid_RemovalTool)
         Tree_Insert(tree, tid_CreateRemoval, tid_RemovalTool);
 
@@ -227,8 +243,8 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     // the node so a Paths click resolves+activates a PathTool. PathTool extends Tool
     // directly (no ToolSetting; its +0x58 GetSettingType returns ptr-to-0). Vtable/factory
     // registered in pathtool.cpp; type-ids resolve from the live factory tree.
-    uint32_t tid_CreatePath = ::Object::ResolveTypeIdByNameLazy("CreatePathDescription");
-    uint32_t tid_PathTool   = ::Object::ResolveTypeIdByNameLazy("PathTool");
+    uint32_t tid_CreatePath = CreatePathDescription::TypeId();
+    uint32_t tid_PathTool   = PathTool::TypeId();
     if (tid_CreatePath && tid_PathTool)
         Tree_Insert(tree, tid_CreatePath, tid_PathTool);
 
@@ -240,8 +256,8 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     // dead-ended (no tool, no cursor, no preview). RoadTool extends DragTool, so
     // DragTool_OnKey drives the drag and dispatches slot 14 (CalcCost, ported) for the
     // per-frame cost/validity preview and slot 13 (CalcPath) on release to commit.
-    uint32_t tid_CreateRoad = ::Object::ResolveTypeIdByNameLazy("CreateRoadDescription");
-    uint32_t tid_RoadTool   = ::Object::ResolveTypeIdByNameLazy("RoadTool");
+    uint32_t tid_CreateRoad = CreateRoadDescription::TypeId();
+    uint32_t tid_RoadTool   = RoadTool::TypeId();
     if (tid_CreateRoad && tid_RoadTool)
         Tree_Insert(tree, tid_CreateRoad, tid_RoadTool);
 
@@ -253,8 +269,8 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     // BridgeTool extends DragTool, so DragTool_OnKey (retail 0x1400fc6b0, its real slot-6)
     // drives the drag and dispatches slot 14 (CalcCost) per frame and slot 13 (CalcPath)
     // on release. NOTE: slot 11 had to be un-stubbed first — SetEditMode derefs its return.
-    uint32_t tid_CreateBridge = ::Object::ResolveTypeIdByNameLazy("CreateBridgeDescription");
-    uint32_t tid_BridgeTool   = ::Object::ResolveTypeIdByNameLazy("BridgeTool");
+    uint32_t tid_CreateBridge = CreateBridgeDescription::TypeId();
+    uint32_t tid_BridgeTool   = BridgeTool::TypeId();
     if (tid_CreateBridge && tid_BridgeTool)
         Tree_Insert(tree, tid_CreateBridge, tid_BridgeTool);
     fprintf(stderr, "[Tools]   bridge node: CreateBridge=%u -> BridgeTool=%u\n",
@@ -274,8 +290,8 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     // the next reader looking for a crop-field bug in the wrong tool. FencedTool extends DragTool; slot 14 (CalcCost,
     // ported) previews the rect, slot 13 (CalcPath, ported in fencedtool_calcpath.cpp)
     // commits the master entity + shelter + fence pieces on drag-release.
-    uint32_t tid_CreateFenced = ::Object::ResolveTypeIdByNameLazy("CreateFencedDescription");
-    uint32_t tid_FencedTool   = ::Object::ResolveTypeIdByNameLazy("FencedTool");
+    uint32_t tid_CreateFenced = CreateFencedDescription::TypeId();
+    uint32_t tid_FencedTool   = FencedTool::TypeId();
     if (tid_CreateFenced && tid_FencedTool)
         Tree_Insert(tree, tid_CreateFenced, tid_FencedTool);
     fprintf(stderr, "[Tools]   fenced node: CreateFenced=%u -> FencedTool=%u\n",
@@ -292,8 +308,8 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     // DragTool_OnKey drives the drag, slot 14 (CalcCost) previews and slot 13 (CalcPath)
     // commits. Slots 9/11/12 had to be un-stubbed first — SetEditMode derefs slot 11's
     // return, exactly as it did for BridgeTool.
-    uint32_t tid_CreateDrag      = ::Object::ResolveTypeIdByNameLazy("CreateDragDescription");
-    uint32_t tid_DragPlacement   = ::Object::ResolveTypeIdByNameLazy("DragPlacementTool");
+    uint32_t tid_CreateDrag      = CreateDragDescription::TypeId();
+    uint32_t tid_DragPlacement   = DragPlacementTool::TypeId();
     if (tid_CreateDrag && tid_DragPlacement)
         Tree_Insert(tree, tid_CreateDrag, tid_DragPlacement);
     fprintf(stderr, "[Tools]   drag node: CreateDrag=%u -> DragPlacementTool=%u\n",
@@ -351,12 +367,11 @@ extern "C" int EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time
     // IsA is an EXACT type match (not IsDerivedFrom): a live PlacementTool/RemovalTool
     // must not be torn down and rebuilt every frame, only the idle EditTool is replaced.
     if (*(char*)(pc + 0x80) != 0 && *(void**)(pc + 0x88) != nullptr) {
-        static uint32_t s_tid_EditTool = 0;
-        if (!s_tid_EditTool) s_tid_EditTool = ::Object::ResolveTypeIdByNameLazy("EditTool");
+        const uint32_t tidEditTool = EditTool::TypeId();
 
         void* cur = *(void**)toolSlot;
         bool replaceable = (cur == nullptr) ||
-                           (fn_IsA && s_tid_EditTool && fn_IsA(cur, s_tid_EditTool));
+                           (fn_IsA && tidEditTool && fn_IsA(cur, tidEditTool));
         if (replaceable) {
             EntityUI_SetEditMode_Impl(entityUI, *(uint64_t*)(pc + 0x88));
             if (*(void**)toolSlot == nullptr) return -1;
@@ -366,12 +381,7 @@ extern "C" int EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time
     // (1) OnKey (+0x30): open/close CreateBar dialog, rotate/flip, left-click confirm.
     void* tool = *(void**)toolSlot;
     if (!tool) return -1;
-    char onKeyResult;
-    {
-        void** vt = *(void***)tool;
-        typedef char (*OnKey_t)(void*, char);
-        onKeyResult = ((OnKey_t)vt[6])(tool, (char)activeFlag);   // vt[6] = +0x30
-    }
+    char onKeyResult = reinterpret_cast<Tool*>(tool)->OnKey((char)activeFlag);  // B.3.8 bridge (slot 6, +0x30)
 
     // Right-click cancel (action 6 = MouseRight) when active and not tool-locked
     // (EntityUI+0x80 == 0): tool +0x48 "can-deactivate?" (our stub returns 0) -> clear.
@@ -394,7 +404,7 @@ extern "C" int EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time
         if (km && reinterpret_cast<const Input::KeyMap*>(km)->Pressed(0, 6)) {  // B.3.7 bridge
             void* t2 = *(void**)toolSlot;
             int canStay = 1;
-            if (t2) { void** vt2 = *(void***)t2; typedef int (*Slot9_t)(void*); canStay = ((Slot9_t)vt2[9])(t2); }
+            if (t2) canStay = reinterpret_cast<Tool*>(t2)->OnCancel();  // B.3.8 bridge (slot 9, +0x48)
             if (canStay == 0) {
                 EntityUI_SetEditMode_Impl(entityUI, 0);
                 return -1;  // tool gone this frame
@@ -406,20 +416,14 @@ extern "C" int EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time
     tool = *(void**)toolSlot;
     if (!tool) return -1;
     {
-        void** vt = *(void***)tool;
-        typedef void (*Serialize_t)(void*, void*, char);
         int64_t timeLocal = time;
-        ((Serialize_t)vt[7])(tool, &timeLocal, (char)activeFlag);   // vt[7] = +0x38
+        reinterpret_cast<Tool*>(tool)->Update(&timeLocal, (char)activeFlag);  // B.3.8 bridge (slot 7, +0x38)
     }
 
     // (3) cursor (+0x60): id used for SetCursor.
     tool = *(void**)toolSlot;
     if (!tool) return -1;
-    {
-        void** vt = *(void***)tool;
-        typedef int (*Cursor_t)(void*);
-        return ((Cursor_t)vt[12])(tool);   // vt[12] = +0x60
-    }
+    return reinterpret_cast<Tool*>(tool)->GetCursor();  // B.3.8 bridge (slot 12, +0x60)
 }
 
 // ============================================================
@@ -432,8 +436,6 @@ extern "C" void EntityUI_ToolDraw_SA(void* entityUI, void* context, int activeFl
     if (*(void**)toolSlot == nullptr) return;
     void* tool = *(void**)toolSlot;
     if (!tool) return;
-    void** vt = *(void***)tool;
-    typedef void (*Draw_t)(void*, void*, char);
-    ((Draw_t)vt[8])(tool, context, (char)activeFlag);   // vt[8] = +0x40
+    reinterpret_cast<Tool*>(tool)->Draw(context, (char)activeFlag);  // B.3.8 bridge (slot 8, +0x40)
 }
 

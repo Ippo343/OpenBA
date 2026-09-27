@@ -16,6 +16,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/MultiObjectDescription.h"
+#include "Component/MultiObjectComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -47,7 +48,7 @@ void MultiObjectDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140036050: MultiObjectComponent's type id through the hidden return slot.
 Object::Type* MultiObjectDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("MultiObjectComponent");
+    ret->_type = MultiObjectComponent::TypeId();
     return ret;
 }
 

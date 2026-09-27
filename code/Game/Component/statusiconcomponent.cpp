@@ -19,6 +19,8 @@
 #include "graphics/Scene.h"
 #include "graphics/Geometry.h"
 #include "Component/statusiconcomponent_funcs.h"
+#include "Component/ModelComponent.h"
+#include "Component/MultiObjectComponent.h"
 #include "scene_watch.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -50,9 +52,6 @@ static fn_EntityNotify_t s_fn_EntityNotify = nullptr;
 // StatusIconDescription type ID at 0x1401c7e40
 static uint32_t* s_TypeId_StatusIconDesc = nullptr;
 
-// Original function pointers for complex delegation
-typedef void (*fn_OnRemove_Original_t)(void*);
-static fn_OnRemove_Original_t s_fn_OnRemove_Original = nullptr;
 
 static bool s_helpersResolved = false;
 
@@ -72,12 +71,6 @@ static void EnsureHelpers() {
 
     s_fn_EntityNotify = reinterpret_cast<fn_EntityNotify_t>(
         ResolveAddr(Module::Exe, 0x1400c3470));
-
-    // Original OnRemove — delegated because it's 160+ instructions with complex
-    // entity positioning, bounding box calculations, map coordinate conversions,
-    // and multiple subsystem interactions (too risky to fully reimplement)
-    s_fn_OnRemove_Original = reinterpret_cast<fn_OnRemove_Original_t>(
-        ResolveAddr(Module::Exe, 0x14012bbd0));
 
     // Type ID pointer
     s_TypeId_StatusIconDesc = reinterpret_cast<uint32_t*>(
@@ -135,36 +128,6 @@ static void* GetStatusIconDescription(uintptr_t self) {
     return derived ? obj : nullptr;
 }
 
-// ============================================================
-// StatusIconComponent::Shutdown (vtable slot [3], 0x14012bff0)
-// ============================================================
-// Serializes the fieldF0 icon state. Simple: Component_Serialize base,
-// then one uint via IO::Serializer(version 0). On load, writes back to +0xF0.
-
-void StatusIconComponent_Shutdown(StatusIconComponent* self, void* stream) {
-    EnsureHelpers();
-    uintptr_t s = (uintptr_t)self;
-
-    // Base class serialize
-    fn_ComponentBase_Serialize(self, stream);
-
-    // Create IO::Serializer (version 0)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // Serialize fieldF0 as uint (copy to local, serialize, write back on load)
-    uint32_t iconVal = *(uint32_t*)(s + 0xF0);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(iconVal, nullptr);   // B.3.4 bridge
-
-    // On load: write value back to field
-    // Check serializer direction: *(int*)(serializer[0] + 8) == 0 means loading
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        *(uint32_t*)(s + 0xF0) = iconVal;
-    }
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-}
 
 // ============================================================
 // StatusIconComponent::Serialize (vtable slot [4], 0x14012bed0)
@@ -199,28 +162,6 @@ void StatusIconComponent_Serialize(StatusIconComponent* self) {
     }
 }
 
-// ============================================================
-// StatusIconComponent::OnRemove (vtable slot [8], 0x14012bbd0)
-// ============================================================
-// Manages Scene add/remove based on game settings icon visibility flag,
-// scales icon based on game settings, positions based on entity's model
-// bounding box or map coordinates.
-//
-// This function is extremely complex (160+ instructions) with deep coupling to:
-// - Game settings byte at +0xC (icon visibility toggle)
-// - Graphics::Scene add/remove
-// - Entity bounding box calculations (Volume::Box)
-// - Map coordinate to world position conversion
-// - Graphics::Geometry::SetTransform
-//
-// Delegated to original exe code to avoid incorrect reimplementation.
-
-void StatusIconComponent_OnRemove(StatusIconComponent* self) {
-    EnsureHelpers();
-    if (s_fn_OnRemove_Original) {
-        s_fn_OnRemove_Original(self);
-    }
-}
 
 // ============================================================
 // StatusIcon_EnsureSprite — retail's lazy sprite setup (component vtable slot 4)
@@ -323,11 +264,7 @@ void StatusIconComponent_OnUpdate2(StatusIconComponent* self) {
                 if (s_fn_Time_Ctor) {
                     uint8_t timeObj[8];
                     s_fn_Time_Ctor(timeObj, 0.0f);
-                    typedef void (*fn_Vtable40_t)(void*, void*);
-                    fn_Vtable40_t onRemoveFn = *(fn_Vtable40_t*)(*(uintptr_t*)s + 0x40);
-                    if (onRemoveFn) {
-                        onRemoveFn(self, timeObj);
-                    }
+                    self->Tick(timeObj);   // vtable +0x40 (slot 8), a virtual dispatch in retail
                 }
             }
         }
@@ -342,9 +279,8 @@ void StatusIconComponent_InitFuncs() {
 #ifdef _DEBUG
     // Scene::AddObject/RemoveObject are members now (B.3.5 caller batch I2).
     printf("[StatusIconComponent] Funcs resolved: "
-           "Helper_a440=%p OnRemoveOrig=%p\n",
-           (void*)s_fn_StatusIconHelper_a440,
-           (void*)s_fn_OnRemove_Original);
+           "Helper_a440=%p\n",
+           (void*)s_fn_StatusIconHelper_a440);
 #endif
 }
 
@@ -502,27 +438,6 @@ void StatusIconComponent::OnRemove() {
 // RefreshEntityFlags — vtable +0x20 (Startup) is NEVER dispatched for it. See
 // [[reference_ctor_scalars_in_startup_are_unset_after_load]].
 
-// StatusIconComponent_StartupInit — the STARTUP half: the description-driven geometry
-// sprite setup the inert factory skips. Routed to the component's Startup slot
-// (vtable +0x20 / index 4) so it runs during ComponentEntity::StartupComponents, exactly
-// where the original dispatches the real Serialize.
-// ⚠ A LOAD never dispatches this slot — anything that must hold for a stream-restored
-// component belongs in the ctor (StatusIconComponent::StatusIconComponent), not here.
-void StatusIconComponent_StartupInit(StatusIconComponent* self) {
-    EnsureHelpers();
-
-    // The ctor half runs at CONSTRUCTION (the real ctor). It used to be re-run here
-    // too (Geometry door + the table stamp + sceneObjId = -1 a second time, on a
-    // component nothing had touched since construction); a C++ member cannot be
-    // re-constructed in place, and retail's slot 4 is the sprite setup alone.
-
-    // Real geometry-sprite setup from the StatusIconDescription's SpriteSheet (guarded
-    // — no-ops if desc/spriteSheet absent). The icon's warning bit is now raised/cleared
-    // by genuine events (WorkPlaceComponent_SetAccepting / _Attach for building warnings;
-    // CitizenComponent Update for citizen health icons) — no per-frame occupancy poll.
-    StatusIconComponent_Serialize(self);
-
-}
 
 
 // Resolve a component on the owner entity BY NAME (Object::GetTypeIdByName), mirroring
@@ -537,22 +452,15 @@ void StatusIconComponent_StartupInit(StatusIconComponent* self) {
 // [STANDALONE GUARD D2]: entries that cannot be a live component are SKIPPED instead of
 // dereferenced, so a half-torn-down entity yields "component not found" rather than a
 // fault. Retail would have had a fully-consistent array here.
-static void* StatusIcon_FindCompByName(uintptr_t entity, const char* typeName) {
+// [StatusIcon] GUARD trace budgets (were function-local statics; B6-5).
+static int s_siBadEntryBudget = 8;
+static int s_siUninitBudget = 4;
+
+// B.3.8 CB1b: the caller passes the class's TypeId() (a plain read), which replaces
+// the per-name first-use cache this helper used to keep (B6-5); `typeName` is only
+// for the guard trace.
+static void* StatusIcon_FindCompByName(uintptr_t entity, uint32_t want, const char* typeName) {
     if (!entity || !fn_IsDerivedFrom) return nullptr;
-    // PERF (2026-09-05): this ran per icon per sim iteration (~10k/frame at 800x10) and
-    // GetTypeIdByName is a strcmp walk of the whole factory list -- 9% of the EntityList
-    // phase in the sampler. Type ids never change after startup; cache the two names.
-    static const char* s_cName[4] = {};
-    static uint32_t    s_cId[4]   = {};
-    uint32_t want = 0;
-    {
-        int slot = -1;
-        for (int i = 0; i < 4; ++i) {
-            if (s_cName[i] == typeName) { slot = i; break; }
-            if (s_cName[i] == nullptr) { slot = i; s_cName[i] = typeName; s_cId[i] = ::Object::GetTypeIdByName(typeName); break; }
-        }
-        want = (slot >= 0) ? s_cId[slot] : ::Object::GetTypeIdByName(typeName);
-    }
     if (want == 0 || want == 0xFFFFFFFFu) return nullptr;
 
     int count = 0;
@@ -568,8 +476,7 @@ static void* StatusIcon_FindCompByName(uintptr_t entity, const char* typeName) {
         // genuinely bad array entry — see the header note: it must NOT be extended to
         // test the vtable's function pointers.
         if (!SI_Plausible(comp)) {
-            static int budget = 8;
-            if (SI_LogOnce(&budget)) {
+            if (SI_LogOnce(&s_siBadEntryBudget)) {
                 fprintf(stderr, "[StatusIcon] GUARD: entity=%p component[%d/%d]=%p is not a "
                         "plausible pointer (arr=%p) — skipping it during the %s lookup\n",
                         (void*)entity, i, count, comp, (void*)arr, typeName);
@@ -577,141 +484,18 @@ static void* StatusIcon_FindCompByName(uintptr_t entity, const char* typeName) {
             }
             continue;
         }
-        typedef uint32_t (*GetTypeId_t)(void*);
-        uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (tid == want)
             return fn_IsDerivedFrom(comp, want) ? comp : nullptr;
     }
     return nullptr;
 }
 
-// ============================================================
-// Standalone faithful port of StatusIconComponent::OnRemove (0x14012bbd0)
-// ============================================================
-// Manages Scene add/remove on the game-settings icon-visibility byte (settings+0xc),
-// then positions the icon. Buildings take the MODEL-BOUNDS path (icon centred above
-// the model's bounding box); the map-cell fallback mirrors the original for entities
-// without a model. Verified line-by-line against the disassembly.
+// 0x14012bbd0 door: registered by address (standalone/reg_code_lane6.cpp).
 void StatusIconComponent_OnRemove_Standalone(StatusIconComponent* self) {
-    EnsureHelpers();
-    EnsureDrawHelpers();
-    uintptr_t c = (uintptr_t)self;
-
-    // [STANDALONE GUARD D4] never-initialised component: the inert factory's zero-fill left
-    // the geometry vtable (+0x28) null, so +0x100 == 0 is "not registered", not scene
-    // object 0. Touching the scene from here would either add a null-vtable geometry to
-    // the draw list or RemoveObject an id that was never handed out (which spins forever).
-    if (!SI_Initialised(c)) {
-        static int budget = 4;
-        if (SI_LogOnce(&budget)) {
-            fprintf(stderr, "[StatusIcon] GUARD: comp=%p never ran StartupInit "
-                    "(geom vtable +0x28 == 0, sceneId=%d) — icon refresh skipped\n",
-                    (void*)self, *(int32_t*)(c + 0x100));
-            fflush(stderr);
-        }
-        return;
-    }
-
-    void* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
-    if (!settings || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
-    void* scene = *(void**)(gw + 0x60);
-    uint8_t iconVisible = reinterpret_cast<uint8_t*>(settings)[0xc];
-
-    int32_t sceneId = *(int32_t*)(c + 0x100);
-    if (iconVisible == 0) {
-        if (sceneId >= 0 && scene) {
-            reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject((uint32_t)sceneId);   // B.3.5 bridge
-            *(int32_t*)(c + 0x100) = -1;
-        }
-    } else if (sceneId < 0) {
-        if (scene) {
-            uint32_t id = reinterpret_cast<Graphics::Scene*>(scene)
-                ->AddObject(reinterpret_cast<Graphics::Geometry*>(c + 0x28));   // B.3.5 bridge
-            *(int32_t*)(c + 0x100) = (int32_t)id;
-            SceneWatch_Note(id, (void*)(c + 0x28), "StatusIconComponent::Update");
-        }
-    }
-    if (*(int32_t*)(c + 0x100) < 0) return;
-
-    // Icon scale (settings+8 / 100) cached at +0xa4/+0xa8; flag bit 2 on change.
-    float scaleVal = (float)(*(int32_t*)((uint8_t*)settings + 8)) / 100.0f;
-    if (scaleVal != *(float*)(c + 0xa4)) {
-        *(uint32_t*)(c + 0x54) |= 4u;
-        *(float*)(c + 0xa4) = scaleVal;
-        *(float*)(c + 0xa8) = scaleVal;
-    }
-
-    void* descObj = *(void**)(c + 0x18);
-    void* desc = (fn_IsDerivedFrom && s_TypeId_StatusIconDesc &&
-                  fn_IsDerivedFrom(descObj, *s_TypeId_StatusIconDesc)) ? descObj : nullptr;
-
-    float pos[3];
-    pos[0] = 0.0f;
-    pos[1] = 0.0f;
-    pos[2] = desc ? *(float*)((uintptr_t)desc + 0x2c) : 0.0f;   // base height offset
-
-    uintptr_t entity = *(uintptr_t*)(c + 0x10);
-
-    // Resolve Model + MultiObject by NAME (the exe finders key off unfilled .rdata globals
-    // c7a50/c7ac0 → null for every entity in standalone; see StatusIcon_FindCompByName).
-    // The MODEL-BOUNDS path then resolves for citizens (model = CharacterComponent's sibling
-    // ModelComponent, +0x158 = live move-tick position) AND faithfully preserves the original's
-    // branch for buildings that carry a MultiObjectComponent (→ map-cell). Map fallback below
-    // still uses the exe finder (its c79e0 global IS filled, so it works).
-    // [PerfX ICON_LASTONLY -- NON-RETAIL] the positioning below is pure presentation
-    // (Geometry::SetTransform on the icon sprite); on intermediate speed iterations the
-    // result is overwritten before anything draws it, so only the last iteration runs it.
-    if (PerfX::IconLastOnly() && PerfX::RootOnlyNow()) {
-        PerfX::Count(PerfX::kCntIconSkipped);
-        return;
-    }
-    void* modelIBP[2] = { nullptr, nullptr };
-    void* multiIBP[2] = { nullptr, nullptr };
-    modelIBP[0] = StatusIcon_FindCompByName(entity, "ModelComponent");
-    // [PerfX ICON_CULL -- NON-RETAIL] an icon whose owner model is off-screen is not
-    // repositioned; the tick is replayed (root-only flag clear) if the sim pauses.
-    if (modelIBP[0] && PerfX::IconCull() && PerfX::ModelCulled(modelIBP[0])) {
-        PerfX::Count(PerfX::kCntIconCulled);
-        PerfX::NoteDeferred(self, [](void* o) {
-            StatusIconComponent_OnRemove_Standalone(reinterpret_cast<StatusIconComponent*>(o));
-        });
-        return;
-    }
-    multiIBP[0] = StatusIcon_FindCompByName(entity, "MultiObjectComponent");
-
-    if (multiIBP[0] == nullptr && modelIBP[0] != nullptr) {
-        // MODEL-BOUNDS path: Box at model+0x5c = {min(3), max(3)}; size.z = max.z-min.z.
-        uintptr_t model = (uintptr_t)modelIBP[0];
-        float sizeZ = *(float*)(model + 0x5c + 0x14) - *(float*)(model + 0x5c + 0x08);
-        pos[0] = *(float*)(model + 0x158);
-        pos[1] = *(float*)(model + 0x15c);
-        pos[2] = *(float*)(model + 0x160) + sizeZ;
-    } else {
-        // MAP-CELL fallback.
-        void* mapIBP[2] = { nullptr, nullptr };
-        if (s_fn_FindMap) s_fn_FindMap(entity, mapIBP);
-        if (mapIBP[0] && s_fn_GridToWorld) {
-            uintptr_t mc = (uintptr_t)mapIBP[0];
-            int* widthPtr = *(int**)(gw + 0xf8);
-            int w = *widthPtr;
-            int idx = ((int)*(int16_t*)(mc + 0x2a) + ((int)*(int16_t*)(mc + 0x2e) >> 1)) * w
-                      + ((int)*(int16_t*)(mc + 0x2c) >> 1) + (int)*(int16_t*)(mc + 0x28);
-            float f = (float)(w >> 1) - 0.5f;
-            float in[3]  = { (float)(idx % w) - f, (float)(idx / w) - f, 0.0f };
-            float out[3] = { 0.0f, 0.0f, 0.0f };
-            s_fn_GridToWorld(widthPtr, out, in, 0, nullptr);
-            pos[0] += out[0];
-            pos[1] += out[1];
-            pos[2] += out[2];
-        }
-    }
-
-    // Transform (0x1C bytes): {0,0,0, 1.0(cos), pos.x, pos.y, pos.z} — pure translation.
-    float xf[7] = { 0.0f, 0.0f, 0.0f, 1.0f, pos[0], pos[1], pos[2] };
-    reinterpret_cast<Graphics::Geometry*>(c + 0x28)
-        ->SetTransform(*reinterpret_cast<const Math::Transform*>(xf));   // B.3.5 bridge
+    self->StatusIconComponent::Tick(nullptr);
 }
+
 
 // ============================================================
 // StatusIcon_Toggle — faithful standalone port of FUN_14012c3f0 (0x14012c3f0)
@@ -778,9 +562,7 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
         if (s_fn_Time_Ctor) {
             uint8_t timeObj[8];
             s_fn_Time_Ctor(timeObj, 0.0f);
-            typedef void (*fn_V40_t)(void*, void*);
-            fn_V40_t v40 = *(fn_V40_t*)(*(uintptr_t*)c + 0x40);
-            if (v40) v40(selfC, timeObj);
+            selfC->Tick(timeObj);   // vtable +0x40 (slot 8), a virtual dispatch in retail
         }
         new20 = old20 | 4u;
     }
@@ -818,16 +600,187 @@ StatusIconComponent::StatusIconComponent() : _geometry(), iconId(-1), _pad104{} 
     OrFlagsInCtor(0xc2);
 }
 
-// [3] 0x14012bff0 — the icon bits (+0xf0) round-trip here.
-void StatusIconComponent::Persist(void* stream) { StatusIconComponent_Shutdown(this, stream); }
-// [4] 0x14012bed0 — the description-driven sprite setup.
-void StatusIconComponent::Startup() { StatusIconComponent_StartupInit(this); }
+// ============================================================
+// StatusIconComponent::Persist (vtable slot [3], 0x14012bff0)
+// ============================================================
+// Serializes the fieldF0 icon state. Simple: Component_Serialize base,
+// then one uint via IO::Serializer(version 0). On load, writes back to +0xF0.
+
+void StatusIconComponent::Persist(void* stream) {
+    EnsureHelpers();
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+
+    // Base class serialize
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    // Create IO::Serializer (version 0)
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    // Serialize fieldF0 as uint (copy to local, serialize, write back on load)
+    uint32_t iconVal = *(uint32_t*)(s + 0xF0);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(iconVal, nullptr);   // B.3.4 bridge
+
+    // On load: write value back to field
+    // Check serializer direction: *(int*)(serializer[0] + 8) == 0 means loading
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+        *(uint32_t*)(s + 0xF0) = iconVal;
+    }
+
+    // Destroy serializer
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+}
+// StatusIconComponent_StartupInit — the STARTUP half: the description-driven geometry
+// sprite setup the inert factory skips. Routed to the component's Startup slot
+// (vtable +0x20 / index 4) so it runs during ComponentEntity::StartupComponents, exactly
+// where the original dispatches the real Serialize.
+// ⚠ A LOAD never dispatches this slot — anything that must hold for a stream-restored
+// component belongs in the ctor (StatusIconComponent::StatusIconComponent), not here.
+void StatusIconComponent::Startup() {
+    EnsureHelpers();
+
+    // The ctor half runs at CONSTRUCTION (the real ctor). It used to be re-run here
+    // too (Geometry door + the table stamp + sceneObjId = -1 a second time, on a
+    // component nothing had touched since construction); a C++ member cannot be
+    // re-constructed in place, and retail's slot 4 is the sprite setup alone.
+
+    // Real geometry-sprite setup from the StatusIconDescription's SpriteSheet (guarded
+    // — no-ops if desc/spriteSheet absent). The icon's warning bit is now raised/cleared
+    // by genuine events (WorkPlaceComponent_SetAccepting / _Attach for building warnings;
+    // CitizenComponent Update for citizen health icons) — no per-frame occupancy poll.
+    StatusIconComponent_Serialize(this);
+
+}
 // [7] TREE DIVERGENCE (retail 0x14012beb0, 15 B): the removed-from-world handler
 // above (StatusIconComponent::OnRemove) — MarkForRemoval (0x1400c2ea0) dispatches
 // it for capability bit 1 (0xc2 has it); it removes the icon's scene object so
 // the renderer never holds freed geometry.
-// [8] 0x14012bbd0 — positioning (Time arg ignored by the body).
-void StatusIconComponent::Tick(void*) { StatusIconComponent_OnRemove_Standalone(this); }
+// ============================================================
+// Standalone faithful port of StatusIconComponent::OnRemove (0x14012bbd0)
+// ============================================================
+// Manages Scene add/remove on the game-settings icon-visibility byte (settings+0xc),
+// then positions the icon. Buildings take the MODEL-BOUNDS path (icon centred above
+// the model's bounding box); the map-cell fallback mirrors the original for entities
+// without a model. Verified line-by-line against the disassembly.
+void StatusIconComponent::Tick(void* /*time*/) {
+    EnsureHelpers();
+    EnsureDrawHelpers();
+    uintptr_t c = reinterpret_cast<uintptr_t>(this);
+
+    // [STANDALONE GUARD D4] never-initialised component: the inert factory's zero-fill left
+    // the geometry vtable (+0x28) null, so +0x100 == 0 is "not registered", not scene
+    // object 0. Touching the scene from here would either add a null-vtable geometry to
+    // the draw list or RemoveObject an id that was never handed out (which spins forever).
+    if (!SI_Initialised(c)) {
+        if (SI_LogOnce(&s_siUninitBudget)) {
+            fprintf(stderr, "[StatusIcon] GUARD: comp=%p never ran StartupInit "
+                    "(geom vtable +0x28 == 0, sceneId=%d) — icon refresh skipped\n",
+                    static_cast<void*>(this), *(int32_t*)(c + 0x100));
+            fflush(stderr);
+        }
+        return;
+    }
+
+    void* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
+    if (!settings || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
+    void* scene = *(void**)(gw + 0x60);
+    uint8_t iconVisible = reinterpret_cast<uint8_t*>(settings)[0xc];
+
+    int32_t sceneId = *(int32_t*)(c + 0x100);
+    if (iconVisible == 0) {
+        if (sceneId >= 0 && scene) {
+            reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject((uint32_t)sceneId);   // B.3.5 bridge
+            *(int32_t*)(c + 0x100) = -1;
+        }
+    } else if (sceneId < 0) {
+        if (scene) {
+            uint32_t id = reinterpret_cast<Graphics::Scene*>(scene)
+                ->AddObject(reinterpret_cast<Graphics::Geometry*>(c + 0x28));   // B.3.5 bridge
+            *(int32_t*)(c + 0x100) = (int32_t)id;
+            SceneWatch_Note(id, (void*)(c + 0x28), "StatusIconComponent::Update");
+        }
+    }
+    if (*(int32_t*)(c + 0x100) < 0) return;
+
+    // Icon scale (settings+8 / 100) cached at +0xa4/+0xa8; flag bit 2 on change.
+    float scaleVal = (float)(*(int32_t*)((uint8_t*)settings + 8)) / 100.0f;
+    if (scaleVal != *(float*)(c + 0xa4)) {
+        *(uint32_t*)(c + 0x54) |= 4u;
+        *(float*)(c + 0xa4) = scaleVal;
+        *(float*)(c + 0xa8) = scaleVal;
+    }
+
+    void* descObj = *(void**)(c + 0x18);
+    void* desc = (fn_IsDerivedFrom && s_TypeId_StatusIconDesc &&
+                  fn_IsDerivedFrom(descObj, *s_TypeId_StatusIconDesc)) ? descObj : nullptr;
+
+    float pos[3];
+    pos[0] = 0.0f;
+    pos[1] = 0.0f;
+    pos[2] = desc ? *(float*)((uintptr_t)desc + 0x2c) : 0.0f;   // base height offset
+
+    uintptr_t entity = *(uintptr_t*)(c + 0x10);
+
+    // Resolve Model + MultiObject by NAME (the exe finders key off unfilled .rdata globals
+    // c7a50/c7ac0 → null for every entity in standalone; see StatusIcon_FindCompByName).
+    // The MODEL-BOUNDS path then resolves for citizens (model = CharacterComponent's sibling
+    // ModelComponent, +0x158 = live move-tick position) AND faithfully preserves the original's
+    // branch for buildings that carry a MultiObjectComponent (→ map-cell). Map fallback below
+    // still uses the exe finder (its c79e0 global IS filled, so it works).
+    // [PerfX ICON_LASTONLY -- NON-RETAIL] the positioning below is pure presentation
+    // (Geometry::SetTransform on the icon sprite); on intermediate speed iterations the
+    // result is overwritten before anything draws it, so only the last iteration runs it.
+    if (PerfX::IconLastOnly() && PerfX::RootOnlyNow()) {
+        PerfX::Count(PerfX::kCntIconSkipped);
+        return;
+    }
+    void* modelIBP[2] = { nullptr, nullptr };
+    void* multiIBP[2] = { nullptr, nullptr };
+    modelIBP[0] = StatusIcon_FindCompByName(entity, ModelComponent::TypeId(), "ModelComponent");
+    // [PerfX ICON_CULL -- NON-RETAIL] an icon whose owner model is off-screen is not
+    // repositioned; the tick is replayed (root-only flag clear) if the sim pauses.
+    if (modelIBP[0] && PerfX::IconCull() && PerfX::ModelCulled(modelIBP[0])) {
+        PerfX::Count(PerfX::kCntIconCulled);
+        PerfX::NoteDeferred(this, [](void* o) {
+            reinterpret_cast<StatusIconComponent*>(o)->StatusIconComponent::Tick(nullptr);   // B.3.8 bridge
+        });
+        return;
+    }
+    multiIBP[0] = StatusIcon_FindCompByName(entity, MultiObjectComponent::TypeId(), "MultiObjectComponent");
+
+    if (multiIBP[0] == nullptr && modelIBP[0] != nullptr) {
+        // MODEL-BOUNDS path: Box at model+0x5c = {min(3), max(3)}; size.z = max.z-min.z.
+        uintptr_t model = (uintptr_t)modelIBP[0];
+        float sizeZ = *(float*)(model + 0x5c + 0x14) - *(float*)(model + 0x5c + 0x08);
+        pos[0] = *(float*)(model + 0x158);
+        pos[1] = *(float*)(model + 0x15c);
+        pos[2] = *(float*)(model + 0x160) + sizeZ;
+    } else {
+        // MAP-CELL fallback.
+        void* mapIBP[2] = { nullptr, nullptr };
+        if (s_fn_FindMap) s_fn_FindMap(entity, mapIBP);
+        if (mapIBP[0] && s_fn_GridToWorld) {
+            uintptr_t mc = (uintptr_t)mapIBP[0];
+            int* widthPtr = *(int**)(gw + 0xf8);
+            int w = *widthPtr;
+            int idx = ((int)*(int16_t*)(mc + 0x2a) + ((int)*(int16_t*)(mc + 0x2e) >> 1)) * w
+                      + ((int)*(int16_t*)(mc + 0x2c) >> 1) + (int)*(int16_t*)(mc + 0x28);
+            float f = (float)(w >> 1) - 0.5f;
+            float in[3]  = { (float)(idx % w) - f, (float)(idx / w) - f, 0.0f };
+            float out[3] = { 0.0f, 0.0f, 0.0f };
+            s_fn_GridToWorld(widthPtr, out, in, 0, nullptr);
+            pos[0] += out[0];
+            pos[1] += out[1];
+            pos[2] += out[2];
+        }
+    }
+
+    // Transform (0x1C bytes): {0,0,0, 1.0(cos), pos.x, pos.y, pos.z} — pure translation.
+    float xf[7] = { 0.0f, 0.0f, 0.0f, 1.0f, pos[0], pos[1], pos[2] };
+    reinterpret_cast<Graphics::Geometry*>(c + 0x28)
+        ->SetTransform(*reinterpret_cast<const Math::Transform*>(xf));   // B.3.5 bridge
+}
 // [11] 0x14012bf40. PORT GAP (retail 0x14012bf40) — B38 D9: the body is ported
 // above (StatusIconComponent_OnUpdate2) but the tree's table never installed it;
 // the inert stub is kept here.

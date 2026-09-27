@@ -512,10 +512,8 @@ int BuildStructure::Execute(void* citizenPtr, void* /*context*/, uint64_t /*arg3
                     uintptr_t bldgEntity = *(uintptr_t*)citizenPtr;
 
                     // Get target via vtable slot 10 (GetTarget, +0x50)
-                    typedef void* (*fn_GetTarget_t)(void*, void*);
-                    void** vtbl = *(void***)this;
                     uintptr_t targetIBP = 0;
-                    void* targetResult = ((fn_GetTarget_t)vtbl[10])(this, &targetIBP);
+                    void* targetResult = GetTarget(&targetIBP);
                     uintptr_t targetVal = *(uintptr_t*)targetResult;
 
                     *(uint32_t*)(bldgEntity + 0x54) |= 4;
