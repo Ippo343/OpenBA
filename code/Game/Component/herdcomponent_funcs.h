@@ -21,8 +21,5 @@ void HerdComponent_Populate(int64_t herdComp, int count);
 
 void HerdComponent_OnRemove(void* self);
 
-// Startup (vtable slot 4): the ctor tail the inert factory can't express.
-void HerdComponent_Startup(void* self);
-
 // Init: resolve all internal function pointers (called once at startup)
 void HerdComponent_InitFuncs();

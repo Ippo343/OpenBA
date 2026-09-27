@@ -54,7 +54,6 @@
 #include "resolve.h"
 #include "perf_experimental.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
-#include "component_factory_base.h"        // ::ComponentFactory::the live gate
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>

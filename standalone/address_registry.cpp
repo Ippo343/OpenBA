@@ -56,7 +56,6 @@ extern "C" {
     void RegisterNewGameDialogVtable();
     void RegisterOptionInputBindDialogVtable();
     void RegisterMessageDialogVtable();
-    void RegisterMenuSceneVtable();
 
     // M5 5c Foundation C — entity description types (template sub-descriptions).
     void RegisterToolbarDescriptionStringArrayResize();   // FUN_140028860 (the table row went with ToolbarDescription's real class, B.3.8 K1)
@@ -67,17 +66,8 @@ extern "C" {
     void RegisterAmbientExternalPtrSerialize();
     void RegisterProfessionListVtable();
 
-    // Factory cascade (notes/FACTORY_CASCADE_145_BRIEF.md) — Action family.
-    void RegisterPlayAnimationVtable();
-    void RegisterPerformWorkVtable();
-
     // Factory cascade — Work family (Object::Internal -> Work, 13-slot vtables).
     void RegisterBuildRoadVtable();
-    void RegisterClearAreaVtable();
-    void RegisterClearStorageVtable();
-    void RegisterFireWorkVtable();
-    void RegisterLocationWorkVtable();
-    void RegisterPastureWorkVtable();
 
     // Tool family: real classes since ENDGAME B.3.8 (code/Game/Player/*Tool.h);
     // no tool vtable is registered at its exe address any more.
@@ -184,8 +174,6 @@ class ComponentEntity;
 ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void* descriptionPtr);
 void EntityList_RegisterEntity_Impl(void* entityList, void* entityIBP, int category);
 
-// B.3.8 D9 #2: the Action base table 0x14015faa0 (code/Game/Action/action.cpp).
-extern "C" void RegisterActionVtable();
 // M-B (cont.) — removal-side grid occupancy un-mark (impl_4750 standalone body,
 // code/Game/Component/mapcomponent.cpp).
 extern "C" void MapComponent_DetachOccupancy_4750(void* self);
@@ -218,10 +206,6 @@ extern void RegisterHerdLive();
 extern void RegisterPastureLive();
 extern void RegisterAnimalUpdateLive();
 extern void RegisterAnimalSerialize();
-// Terraform wave (2026-08-22) — the tunnel-mouth terrain deformation. reg file:
-// reg_terraform_live.cpp. Live vtable slots gated on BANISHED_LIVE_TERRAFORM.
-extern void RegisterTerraformLive();
-extern void RegisterQuarryLive();
 // Component GAP wave (2026-06-19, branch wave/component-gap) — residual-73 closure-safe
 // helpers + 2 caller-bug literal fixes. reg files: reg_component_gap_{A,B,C,D}.cpp.
 // A: citizencomponent/attendance (4). B: citizenAI setup/fishing/find/serialize +
@@ -243,12 +227,6 @@ extern void RegisterCitizenUpdateHealth();
 // employment path: WorkPlaceComponent/WorkComponent -> townMgr+0x100 -> here).
 extern void RegisterTownWorkplaceReader();
 
-// Construction Phase 3, brick 1 (spawner) — BuildComponent state-1 enter handler +
-// leaves (sub_8630, GatherRawMaterials_Ctor). Bodies: buildcomponent_state1.cpp,
-// buildcomponent_sub8630.cpp, gatherrawmaterials_ctor.cpp.
-extern "C" void RegisterBuildComponentState1();
-extern "C" void RegisterBuildComponentSub8630();
-extern "C" void RegisterGatherRawMaterialsCtor();
 // Construction 2b/2c — CitizenAI work-scheduler AVL insert (ec60 + 88a0), the post
 // chokepoint for gather haul + build labor. Body: code/Game/Component/citizenai_work_scheduler.cpp.
 extern "C" void RegisterCitizenAIWorkScheduler();
@@ -357,7 +335,6 @@ extern void RegisterRegionGraphBuildBatch(); // Keystone A: region graph ctor + 
 extern void RegisterRegionPairCacheBatch();  // Keystone A: region-pair ring-buffer init (1cca0)
 extern void RegisterPfRegionBatch();       // Wave 2: region-graph build/merge/flood-fill (13)
 extern void RegisterPfRoadBatch();         // Wave 2: road-mesh + geometry wrappers (10)
-extern void RegisterPlayerRoadCalcPathBatch();  // RoadTool commit path helpers (3)
 extern void RegisterPlayerBridgeBatch();        // BridgeTool SnapEndCell + ValidatePath (2)
 extern void RegisterPfAstarBatch();        // Wave 2: A* core + thread dispatcher/enqueuers (15)
 extern void RegisterPfRootsRoadBatch();    // Wave 3: road-edit roots (9c480/9f2f0/9e0e0/9c640)
@@ -406,11 +383,9 @@ extern void RegisterW2Lane3TypeIds();      // ParticleDescription BaseTypeInfo 0
 extern "C" void RegisterW2Screenshot();    // GameUpdateLoop::TakeScreenshot 0x140095da0
 
 // Code-fn wave 2026-09-04 (unported exe .text functions), six lanes.
-extern "C" void RegisterCodeLane1Batch();  // MapGenerator dtor body 0x14001aea0
 extern void RegisterCodeLane2();           // MapParamsDialog ctor 0x14006bd80 (the Map button) + hygiene
 extern "C" void RegisterCodeLane4();       // TakeScreenshot 0x140095da0 (live quicksave crash) + free ports
 extern "C" void RegisterCodeLane5Batch();  // MusicPlayer::Update 0x1400a40e0 (background music) + hygiene
-extern void RegisterCodeLane6Batch();      // DragTool/EntityUI/Decal/StatusIcon/ToolbarDesc ports
 extern void RegisterControlUIBatch();        // ControlUIConfig type-id cell (reg_controlui.cpp): the generic component-command buttons (pasture work/split/empty, element id 50000, command in cfg+0x20).
 
 static void RegisterCodeFunctions() {
@@ -427,11 +402,9 @@ static void RegisterCodeFunctions() {
     RegisterW2Screenshot();
 
     // Code-fn wave 2026-09-04 — see docs/waves/code_fns_wave.md.
-    RegisterCodeLane1Batch();
     RegisterCodeLane2();
     RegisterCodeLane4();
     RegisterCodeLane5Batch();
-    RegisterCodeLane6Batch();
     RegisterUnregLane1Batch();
     RegisterUnregLane4TypeIds();
     RegisterComponentBatch_people();
@@ -451,8 +424,6 @@ static void RegisterCodeFunctions() {
     RegisterPastureLive();
     RegisterAnimalUpdateLive();
     RegisterAnimalSerialize();
-    RegisterTerraformLive();       // TerraformComponent deformation (tunnels)
-    RegisterQuarryLive();          // QuarryComponent pit carve (terrain heightmap)
     // Component GAP wave — residual-73 closure-safe helpers + caller-bug fixes.
     RegisterComponentGap_A();
     RegisterComponentGap_B();
@@ -462,10 +433,6 @@ static void RegisterCodeFunctions() {
     RegisterTownWorkplaceReader();
     RegisterComponentGap_D();
 
-    // Construction Phase 3, brick 1 — spawner: state-1 enter handler + leaves.
-    RegisterBuildComponentState1();
-    RegisterBuildComponentSub8630();
-    RegisterGatherRawMaterialsCtor();
     RegisterCitizenAIWorkScheduler();
 
     // Work registration wave — shared base helpers (FindComponent family + tree free).
@@ -581,7 +548,6 @@ static void RegisterCodeFunctions() {
     RegisterRegionPairCacheBatch();  // Keystone A — region-pair ring-buffer init (cca0)
     RegisterPfRegionBatch();       // pathfinding closure Wave 2 — region-graph build/merge/flood-fill
     RegisterPfRoadBatch();         // pathfinding closure Wave 2 — road-mesh + geometry wrappers
-    RegisterPlayerRoadCalcPathBatch();  // RoadTool CalcPath helpers (6990 / acd90 / 9c960)
     RegisterPlayerBridgeBatch();        // BridgeTool SnapEndCell (fb710) + ValidatePath (fb2d0)
     RegisterPfAstarBatch();        // pathfinding closure Wave 2 — A* core + thread dispatcher
     RegisterPfRootsRoadBatch();    // Wave 3 roots — road-edit (9c480/9f2f0/9e0e0/9c640)
@@ -702,13 +668,6 @@ static void RegisterCodeFunctions() {
     // (0x1400c48a0) resolve to our reimpls (EngineFuncsInit runs after this).
     RegisterExeAddr(0x1400c3720, reinterpret_cast<uintptr_t>(&ComponentEntity_CtorFromDescription));
     RegisterExeAddr(0x1400c48a0, reinterpret_cast<uintptr_t>(&EntityList_RegisterEntity_Impl));
-
-    // B.3.8 D9 #2: ComponentEntity is a real class (its compiler table, stamped
-    // by its own ctors; nothing reads 0x14015fa78 back, so that row is gone).
-    // 0x14015faa0 is Action's base table, served by Action::Vtable(); it used
-    // to be `&g_ComponentEntity_StandaloneVtable[5]`, which answered
-    // ComponentEntity's type id.
-    RegisterActionVtable();
 
     // M-B (cont.) — CreateNaturalResource_impl_4750 = the removal-side occupancy
     // UN-mark (dee0 clear), tail-called from the ported MapComponent_OnCreate
@@ -1580,7 +1539,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterNewGameDialogVtable();
     RegisterOptionInputBindDialogVtable();
     RegisterMessageDialogVtable();
-    RegisterMenuSceneVtable();   // MenuScene transform-init door 0x140098800 (the table row is gone)
 
     // Description-side helper doors (the description classes are real classes;
     // their tables are the compiler's and no longer registered).
@@ -1598,19 +1556,9 @@ static void RegisterVtablesAndTypeIds() {
     // the table row is gone). See professionlist.cpp.
     RegisterProfessionListVtable();
 
-    // Action family: real classes (code/Game/Action/<Class>.h). The rows left
-    // serve tables that callers still stamp by retail address (B38_RULES D5).
-    RegisterPlayAnimationVtable();
-    RegisterPerformWorkVtable();
-
     // Factory cascade — Work family (Object::Internal -> Work, 13-slot vtables;
     // shared base helpers in code/Game/Work/work_base_standalone.cpp).
     RegisterBuildRoadVtable();
-    RegisterClearAreaVtable();
-    RegisterClearStorageVtable();
-    RegisterFireWorkVtable();
-    RegisterLocationWorkVtable();
-    RegisterPastureWorkVtable();
 
     // Tool family (real classes since ENDGAME B.3.8): only the route-builder door.
     RegisterPathToolSetSelected();

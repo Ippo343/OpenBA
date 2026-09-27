@@ -35,7 +35,6 @@
 #include <cstring>
 
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"   // ComponentFactory::the live gate (default-on gates)
 #include "Component/controller_state_table.h"   // ControllerLive::RequestStateTransition
 #include "Component/clearareacomponent_funcs.h" // ClearArea_Finalize8270 (port of ModelComponent_impl_8270)
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -486,8 +485,4 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
 
 
     return 1;
-}
-
-extern "C" void RegisterBuildComponentState1() {
-    RegisterExeAddr(0x140108290, reinterpret_cast<uintptr_t>(&BuildComponent_State1Enter));
 }

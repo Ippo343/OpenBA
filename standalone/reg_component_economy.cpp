@@ -17,7 +17,6 @@ extern uint64_t RawMaterialComponent_GetPickupCategory(uintptr_t rawMatDesc);
 extern void     ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount);
 extern void     ResidenceComponent_SerializeResidentArray(void* serializer, int count, void* arrayPtr);
 extern void     ResidenceComponent_ResidenceInit(void* self);
-extern "C" char ResidenceComponent_HeatTick(void* comp, void* sm, void* dt);
 
 extern void     StorageDisplayComponent_MeshArrayResize(void* arrayBase, int newCount);
 extern void     StorageDisplayComponent_SetDisplayMesh(uintptr_t self, int index, float fraction,
@@ -25,23 +24,17 @@ extern void     StorageDisplayComponent_SetDisplayMesh(uintptr_t self, int index
 
 extern void     StorageComponent_DynArrayResize(void* arrayBase, int newCount);
 
-extern void     ConsumeProduceComponent_ResizeArray(void* arrayFieldPtr, int newCount);
 
 extern bool     WorkComponent_CheckWorkSlot(void* self);
 extern void     WorkComponent_RegisterWorkSlot(void* self);
 
 extern int      BuildComponent_FindInQueue(void* arrayBase, void* entityPtr);
-extern void     BuildComponent_DrawReimpl(void* self);          // body  0x140108720
-extern "C" void BuildComponent_OnAddedThunk(void* self);        // thunk 0x140108d40
 
 extern void     WorkPlaceComponent_OnCreateInit(void* self);
 extern void     WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting);
 
 extern void     AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr);
 extern void     AttendanceComponent_ProcessQueue(void* self);
-extern "C" void* ConsumeProduceAction_Ctor(void* mem, uintptr_t* entityIbp,
-                                          const int* productIdx, int second); // 0x1400e9200
-extern "C" char    AttendanceComponent_AllFull(void* self);                // 0x140043db0
 
 extern void     InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf);
 
@@ -65,7 +58,6 @@ void RegisterComponentBatch_economy() {
     RegisterExeAddr(0x140037c50, reinterpret_cast<uintptr_t>(&ResidenceComponent_SerializeResidentArray));
     RegisterExeAddr(0x140129ef0, reinterpret_cast<uintptr_t>(&ResidenceComponent_ResidenceInit));
     // residence_heattick.cpp — state-2 per-frame heat/firewood-burn tick
-    RegisterExeAddr(0x140129970, reinterpret_cast<uintptr_t>(&ResidenceComponent_HeatTick));
 
     // storagedisplaycomponent.cpp
     RegisterExeAddr(0x14000ca10, reinterpret_cast<uintptr_t>(&StorageDisplayComponent_MeshArrayResize));
@@ -73,9 +65,6 @@ void RegisterComponentBatch_economy() {
 
     // storagecomponent.cpp
     RegisterExeAddr(0x14000f090, reinterpret_cast<uintptr_t>(&StorageComponent_DynArrayResize));
-
-    // consumeproducecomponent.cpp
-    RegisterExeAddr(0x140023a00, reinterpret_cast<uintptr_t>(&ConsumeProduceComponent_ResizeArray));
 
     // workcomponent.cpp
     RegisterExeAddr(0x14012ead0, reinterpret_cast<uintptr_t>(&WorkComponent_CheckWorkSlot));
@@ -87,8 +76,6 @@ void RegisterComponentBatch_economy() {
     // (gameWorld+0xd0 bit 0) and either falls through to the body at 0x140108720 or
     // returns. Register BOTH: State8Enter calls the body directly (from 0x140107bb0),
     // and it does so exactly when the bit is set, so it must not go through the gate.
-    RegisterExeAddr(0x140108d40, reinterpret_cast<uintptr_t>(&BuildComponent_OnAddedThunk));
-    RegisterExeAddr(0x140108720, reinterpret_cast<uintptr_t>(&BuildComponent_DrawReimpl));
 
     // workplacecomponent.cpp
     RegisterExeAddr(0x14012ee60, reinterpret_cast<uintptr_t>(&WorkPlaceComponent_OnCreateInit));
@@ -105,15 +92,6 @@ void RegisterComponentBatch_economy() {
     RegisterExeAddr(0x140043f60, reinterpret_cast<uintptr_t>(&AttendanceComponent_ProcessQueue));
     // helper_3db0 is the per-description "every building of my kind is full" test that
     // drives the closed/full mesh flag (attendancecomponent_states.cpp).
-    RegisterExeAddr(0x140043db0, reinterpret_cast<uintptr_t>(&AttendanceComponent_AllFull));
-
-    // resourceproduce_creatework.cpp -- ConsumeProduceComponent's slot-18 CreateWork
-    // calls the 4-argument work ctor 0x1400e9200 (NOT the plain 0x1400e9340 ctor the
-    // Work factory uses). The component vtable slots themselves (Attendance 3/7/13/14,
-    // Forester 13/14/18, Market 18, ConsumeProduce 18, Interact 6, Trade 6/7/13/14,
-    // ResourceProduce 3) are real-class virtuals since ENDGAME B.3.8; nothing read
-    // their addresses back, so their rows are gone.
-    RegisterExeAddr(0x1400e9200, reinterpret_cast<uintptr_t>(&ConsumeProduceAction_Ctor));
 
     // interactcomponent.cpp
     RegisterExeAddr(0x140004740, reinterpret_cast<uintptr_t>(&InteractComponent_FindWorkplaceComponent));

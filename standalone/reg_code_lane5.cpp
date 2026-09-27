@@ -69,16 +69,11 @@ extern "C" void RegisterCodeLane5Batch() {
 
     // ---------------------------------------------------------------------
     // NOT registered, deliberately — see the lane report for the full argument:
-    //   0x1400a2980  MapGenerator::Serialize   — our port is installed in the
-    //                standalone vtable slot 0x14015eda8 by
-    //                RegisterMapGeneratorVtable(); the address's only consumer
-    //                is the dead `s_fn_OrigSerialize` in mapgenerator.cpp:51.
-    //   0x1400a3630  MenuScene::Serialize      — same shape (vtable slot
-    //                0x14015ee08); dead consumer `s_fn_Serialize_Orig`
-    //                (menuscene.cpp:88). Our MenuScene_Serialize is a
-    //                deliberately PARTIAL port; publishing the address would
-    //                not change that and would imply a completeness we do not
-    //                have.
+    //   0x1400a2980  MapGenerator::Serialize   — both are virtuals of real
+    //   0x1400a3630  MenuScene::Serialize        classes since ENDGAME B.3.8
+    //                (block LOOP: MapGenerator.h / MenuScene.h, compiler
+    //                tables); nothing in the tree reads either address back.
+    //                MenuScene's body is still a deliberately PARTIAL port.
     //   0x1400d6f00  CitizenBehavior::ProcessPaths     — both are called
     //   0x1400d70c0  CitizenBehavior::BuildPathGraph     DIRECTLY by our
     //                CitizenBehavior_Update (citizenbehavior.cpp:353/359). The

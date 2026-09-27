@@ -31,7 +31,6 @@
 // Gate: BANISHED_LIVE_HERD or BANISHED_LIVE_POPULATION. Both halves of the chain
 // need the same helper bodies, and the useful recipe turns on both anyway.
 #include "resolve.h"
-#include "Component/component_factory_base.h"
 #include "Component/herdcomponent_funcs.h"
 #include "Component/populationcomponent_funcs.h"
 #include "Object/factory_registration.h"

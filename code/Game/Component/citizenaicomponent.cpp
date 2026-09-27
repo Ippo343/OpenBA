@@ -656,7 +656,6 @@ void CitizenAIComponent_InitFuncs() {
 // size 0xd0 (CitizenAIComponent_Factory MemAlloc), flags 0x89 (Ctor 0x14010fb70:
 // Component base sets +0x20=0x80, leaf OR 0x89 => 0x89).
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
 #include <cstdlib>
 #include <cstring>
 

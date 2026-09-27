@@ -306,31 +306,6 @@ extern "C" void TradeUI_IntroSort_ByComponent_165d0(void* array, int count,
     IntroSort(static_cast<Elem>(array), count, ctx, &ComponentLess, &SmallSort);
 }
 
-// 0x140015ad0 / 0x140016920 — the small-range sorts, registered so anything else
-// that reaches them resolves rather than EXEC-of-0'ing.
-extern "C" void TradeUI_SmallSort_ByName_15ad0(void* first, void* last) {
-    if (!first || !last) return;
-    SmallSort(static_cast<Elem>(first), static_cast<Elem>(last), nullptr, &NameLess);
-}
-
-extern "C" void TradeUI_SmallSort_ByComponent_16920(void* first, void* last,
-                                                    void* ctx) {
-    if (!first || !last) return;
-    SmallSort(static_cast<Elem>(first), static_cast<Elem>(last), ctx, &ComponentLess);
-}
-
 // The BANISHED_TRADE_SORT_SELFTEST introsort self-test was deleted with the flag
 // (ENDGAME C). standalone/reg_tradeui_leaves.cpp still calls it; the stub goes with it.
 
-
-// 0x1400845d0 / 0x140084430 — the comparators, likewise registered.
-extern "C" bool TradeUI_NameLess_845d0(void* self, const void* a, const void* b) {
-    (void)self;                              // retail homes RCX and never reads it
-    if (!a || !b) return false;
-    return NameLess(nullptr, a, b);
-}
-
-extern "C" bool TradeUI_ComponentLess_84430(void* ctx, const void* a, const void* b) {
-    if (!a || !b) return false;
-    return ComponentLess(ctx, a, b);
-}

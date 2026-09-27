@@ -246,11 +246,14 @@ static_assert(offsetof(DialogLoaderLoopT, _ui)             == 0x60, "DialogLoade
 // `Engine::DialogLoaderLoopT` and `Engine::Loader` under retail's names. The
 // `RtEngine::` PODs above STAY, field-identical and cross-asserted below
 // (B37_RULES B7-6): `UI::UserInterface` names the two dialog PODs as friends,
-// `tests/unit/ui_userinterface_abi_test.cpp` pins them, the exe-side headers in
-// engine/types mirror them, and the ctor / dtor DOORS in
-// runtime/src/engine/loops.cpp stamp vtables through them. An abstract class
+// `tests/unit/ui_userinterface_abi_test.cpp` pins them, and the ctor / dtor DOORS
+// in runtime/src/engine/loops.cpp stamp vtables through them. An abstract class
 // cannot be the alias target of a POD that is embedded or stamped (B36_RULES
-// section 10 correction).
+// section 10 correction). ENDGAME B.3.8 (block LOOP, B38_RULES D8): the exe-side
+// mirrors are gone — engine/types/{UpdateLoop,LoaderLoop,DialogLoaderLoopT}.h are
+// forwarders to these classes and the five exe loops are real subclasses
+// (code/Game/Game/*Loop*.h) — but the PODs themselves STAY on the runtime side
+// for the three readers above; they retire at the END of B.3.
 //
 // THE FOUR LOOPS ARE THEIR OWN ROOT (RULE B7-1). No `Object::Base`: slot 1 is
 // `Startup`, not `TypeName`; there is no `_typeInfo`, no type-name literal and

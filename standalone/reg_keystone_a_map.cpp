@@ -17,20 +17,10 @@
 #include <cstdint>
 
 // Forward declarations of the ported helpers (defined in code/Game/Component/keystone_a_map.cpp).
-int  CreateNaturalResource_helper_e2c0(int* param_1, int param_2);
-void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
-                               int param_4, int param_5, int param_6, int param_7,
-                               int64_t* param_8, int param_9);
-void CreateNaturalResource_impl_dee0(int* param_1, void* param_2, int param_3,
-                                     int param_4, int param_5, int param_6,
-                                     int64_t* param_7, int param_8);
 void MapComponent_sub_41b0(int64_t param_1);
 void CreateNaturalResource_impl_4750(int64_t param_1);
 
 void RegisterKeystoneAMapBatch() {
-    RegisterExeAddr(0x14009e2c0, reinterpret_cast<uintptr_t>(&CreateNaturalResource_helper_e2c0));
-    RegisterExeAddr(0x14009dc20, reinterpret_cast<uintptr_t>(&MapComponent_overlay_dc20));
-    RegisterExeAddr(0x14009dee0, reinterpret_cast<uintptr_t>(&CreateNaturalResource_impl_dee0));
     RegisterExeAddr(0x1401241b0, reinterpret_cast<uintptr_t>(&MapComponent_sub_41b0));
     // 0x140124750 is ported twice and the two bodies DIVERGE: this file's
     // CreateNaturalResource_impl_4750 is the strict transcription (IsDerivedFrom guard +

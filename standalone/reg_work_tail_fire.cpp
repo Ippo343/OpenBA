@@ -22,8 +22,6 @@
 #include "Component/InteractComponent.h"
 
 // Forward declarations of the ported helpers (code/Game/Work/firework_search.cpp).
-extern void    FireWork_SpiralCell_8730(int64_t, int*, int, int, int, uint32_t,
-                                        int*, int*, uint64_t*);                       // 0x140088730
 extern int64_t FireWork_SpiralSearch_81d0(int64_t, uint32_t, int, float*, float*);   // 0x1400881d0
 
 // Type-id global filled after Engine::Startup.
@@ -37,7 +35,6 @@ extern "C" void FillTypeIdGlobals_worktail_fire() {
 }
 
 void RegisterWorkTailFireBatch() {
-    RegisterExeAddr(0x140088730, reinterpret_cast<uintptr_t>(&FireWork_SpiralCell_8730));
     RegisterExeAddr(0x1400881d0, reinterpret_cast<uintptr_t>(&FireWork_SpiralSearch_81d0));
     // type-id global storage (value filled later by FillTypeIdGlobals_worktail_fire)
     RegisterExeAddr(0x1401c7900, reinterpret_cast<uintptr_t>(&g_tid_InteractComponent));

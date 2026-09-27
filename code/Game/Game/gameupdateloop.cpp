@@ -36,7 +36,6 @@
 #include "Object/exe_type.h"        // DEFINE_EXE_VTABLE
 #include "address_registry.h"       // RegisterExeAddr
 #include "Entity/entitylist_funcs.h"
-#include "Component/component_factory_base.h"
 #include "Object/internal_factory_audit.h"
 #include "engine_funcs.h"
 #include "math/Math.h"

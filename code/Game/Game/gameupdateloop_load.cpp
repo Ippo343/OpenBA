@@ -37,7 +37,6 @@
 #include "system/Filename.h"
 #include "system/String.h"
 #include "resolve.h"
-#include "Component/component_factory_base.h"  // ComponentFactory::the live gate
 #include "collection/Collection.h"
 #include "Component/coll_bridge.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A

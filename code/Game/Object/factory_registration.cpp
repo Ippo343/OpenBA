@@ -2,7 +2,6 @@
 #include "engine_funcs.h"
 #include <cstdio>
 #include <cstdlib>
-#include "Component/component_factory_base.h"
 #include <cstring>
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 

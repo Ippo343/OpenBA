@@ -60,7 +60,4 @@ void RegisterAutoSaveTypeIds() {
     RegisterExeAddr(0x14005e120,
                     reinterpret_cast<uintptr_t>(
                         static_cast<void (*)(AutoSaveDialog*)>(&AutoSaveDialog_Slot4)));
-    RegisterExeAddr(0x14005e110,
-                    reinterpret_cast<uintptr_t>(
-                        static_cast<void (*)(AutoSaveDialog*)>(&AutoSaveDialog_Slot4)));
 }

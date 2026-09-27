@@ -59,7 +59,6 @@
 #include <cstring>
 
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
@@ -509,15 +508,6 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
     }
 }
 
-// Retail-shaped entry point for 0x1400583c0 (the two-argument form the binary
-// exports). The counted variant above is the same body with per-arm tallies threaded
-// through for the [Tornado] trace; this wrapper exists so the exe address can be
-// registered with its real signature for any other caller.
-extern "C" void Tornado_StrikeEntity_583c0(int64_t unusedFirstArg, void* entityIbp) {
-    Tornado_StrikeEntityCounted(unusedFirstArg, entityIbp,
-                                nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
-}
-
 // ============================================================
 // Tornado_DamageTick — 0x140058040
 // ============================================================
@@ -678,38 +668,6 @@ void TornadoComponent_OnRemove(TornadoComponent* self, void* time) {
 // ============================================================
 // Ported leaves that belong to other classes but had no owner yet
 // ============================================================
-
-// 0x14000cf40 — ParticleComponent/TornadoComponent shared Vector3 dynamic-array
-// grow+fill. Header {void* data; int count; int capacity} — capacity is a SEPARATE
-// 4-byte field, and the incremental-push case trebles it.
-extern "C" void Tornado_Vec3ArrayGrow_cf40(void* arrayBase, int newCount, const void* fill) {
-    struct Hdr { uintptr_t data; int count; int cap; };
-    Hdr* h = reinterpret_cast<Hdr*>(arrayBase);
-    const int oldCount = h->count;
-    if (newCount == oldCount) return;
-
-    const uintptr_t oldData = h->data;
-    h->count = newCount;
-    if (h->cap < newCount) {
-        h->cap = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) h->cap = newCount * 3;
-        h->data = reinterpret_cast<uintptr_t>(
-            fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton,
-                                      static_cast<uint64_t>(h->cap) * 0xc, 4)
-                        : nullptr);
-    }
-    const int start = (oldData == h->data) ? oldCount : 0;
-    for (int i = start; i < newCount; i++) {
-        uint32_t* dst = reinterpret_cast<uint32_t*>(h->data + static_cast<uintptr_t>(i) * 0xc);
-        if (!dst) continue;
-        const uint32_t* src = (i < oldCount)
-            ? reinterpret_cast<const uint32_t*>(oldData + static_cast<uintptr_t>(i) * 0xc)
-            : reinterpret_cast<const uint32_t*>(fill);
-        dst[0] = src[0]; dst[1] = src[1]; dst[2] = src[2];
-    }
-    if (oldData != h->data && oldData && fn_MemFreeStatic)
-        fn_MemFreeStatic(reinterpret_cast<void*>(oldData));
-}
 
 // 0x140053720 — ParticleComponent: flip instance `index`'s playback rate negative
 // so the effect winds down. rate = -(1.0 / desc->entries[index].duration).

@@ -659,10 +659,4 @@ DEFINE_EXE_VTABLE(ClearStorage, "_ZTV12ClearStorage")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x1401611a0 is still read back BY ADDRESS — destroycomponent_states.cpp
-// (block MI-A) builds a ClearStorage by hand and stamps it — so the exe address serves
-// the COMPILER's table.
-extern "C" void RegisterClearStorageVtable() {
-    RegisterExeAddr(ClearStorageAddr::Vtable, reinterpret_cast<uintptr_t>(ClearStorage::Vtable()));   // 0x1401611a0
-}
 DEFINE_EXE_TYPE(ClearStorage, "Work")

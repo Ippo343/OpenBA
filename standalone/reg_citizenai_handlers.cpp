@@ -17,7 +17,6 @@
 #include <cstdint>
 
 // --- reimpl bodies (defined in citizenai_handlers.cpp) ---
-extern void CitizenAI_PlayAnimationActionCtor5(void* selfIBP, float* dest, float animTime);
 extern bool CitizenAI_State_Wander(int64_t param_1);
 
 // --- exe .rdata float constants (values read directly from Ghidra) ---
@@ -36,7 +35,6 @@ static const float k_rdata_172184 =  3.14159274f;
 static const float k_rdata_1721d4 = 33.0f;
 
 void RegisterCitizenAIHandlers() {
-    RegisterExeAddr(0x1400c26c0, reinterpret_cast<uintptr_t>(&CitizenAI_PlayAnimationActionCtor5));
     RegisterExeAddr(0x14010a2b0, reinterpret_cast<uintptr_t>(&CitizenAI_State_Wander));
     RegisterExeAddr(0x140172180, reinterpret_cast<uintptr_t>(&k_rdata_172180));
     RegisterExeAddr(0x1401721a0, reinterpret_cast<uintptr_t>(&k_rdata_1721a0));

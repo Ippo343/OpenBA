@@ -60,7 +60,6 @@
 #include "Dialog/ModDetailsDialog.h"
 #include "Dialog/ui_dialogs.h"
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "system/Filename.h"

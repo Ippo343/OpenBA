@@ -508,10 +508,4 @@ DEFINE_EXE_VTABLE(LocationWork, "_ZTV12LocationWork")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x1401616a0 is still read back BY ADDRESS — AttendanceComponent's state-2
-// enter (attendancecomponent_states.cpp, block MI-A) builds the work by hand and
-// stamps it — so the exe address serves the COMPILER's table.
-extern "C" void RegisterLocationWorkVtable() {
-    RegisterExeAddr(LocationWorkAddr::Vtable, reinterpret_cast<uintptr_t>(LocationWork::Vtable()));   // 0x1401616a0
-}
 DEFINE_EXE_TYPE(LocationWork, "Work")

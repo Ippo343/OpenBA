@@ -47,7 +47,6 @@
 #include <cstring>
 
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"   // ComponentFactory::the live gate (default-on gates)
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp);   // sub_8630 (ported)

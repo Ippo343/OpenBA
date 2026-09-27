@@ -54,9 +54,7 @@ void RegisterAnimalUpdateLive() {
     // 0x140105e20 SetBounds is intentionally NOT registered here: it already has
     // a faithful port (PastureComponent_AnimalSetBounds) registered by
     // reg_component_gap_D.cpp:71, and this lane calls it through ResolveAddr.
-    RegisterExeAddr(0x140106020, reinterpret_cast<uintptr_t>(&AnimalComponent_FindHabitat));
     RegisterExeAddr(0x140107320, reinterpret_cast<uintptr_t>(&AnimalComponent_UpdateBehavior));
-    RegisterExeAddr(0x140106250, reinterpret_cast<uintptr_t>(&AnimalComponent_SetWanderTimer));
 
     // --- type-id storage (values filled post-Startup, see above) ---
     RegisterExeAddr(0x1401c7078, reinterpret_cast<uintptr_t>(&g_tid_CharacterComponent));

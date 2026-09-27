@@ -24,7 +24,6 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"          // GetTypeIdByName
-#include "Component/component_factory_base.h"     // the live gate + inert factory helpers
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>

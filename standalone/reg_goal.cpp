@@ -46,7 +46,6 @@ static void RegisterGoalSlot(uintptr_t ghidra_addr, uintptr_t fn_ptr) {
 
 void RegisterGoalBatch() {
     RegisterExeAddr(0x1400265b0, reinterpret_cast<uintptr_t>(&StatGoal_ResolveExternalPtr));
-    RegisterExeAddr(0x1400da4e0, reinterpret_cast<uintptr_t>(&StatGoal_StatValueDispatch));
     RegisterExeAddr(0x14001b340, reinterpret_cast<uintptr_t>(&Goal_RefArray_Resize));
 
     // --- GoalInstance dispatch slots (all three were UNREGISTERED) -----------

@@ -11,7 +11,6 @@
 // Original: 0x140055ad0 (114 instructions)
 
 #include "Component/spawncomponent_funcs.h"
-#include "Component/component_factory_base.h"   // ComponentFactory::the live gate
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"

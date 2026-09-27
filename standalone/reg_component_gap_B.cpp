@@ -43,8 +43,6 @@ extern void FishingComponent_BrushTile(int* mgr, int state, int cx, int cy, int 
 // ---- storagedisplaycomponent.cpp (entity find-by-type) ----
 extern void* StorageDisplay_EntityFindByType_cbd0(void* host, void* retbuf);
 
-// ---- absorbresourcecomponent.cpp (ExternalPtr<Description>::Serialize) ----
-extern void Component_Helper1d10_Reimpl(void* extRefField, void* serializer);
 
 // ---- residencecomponent.cpp (per-slot inner pointer-array deep copy; true callee
 //      of the corrected 0x140035ec0 -> 0x140007960 literal) ----
@@ -55,8 +53,6 @@ extern void WellComp_UnregisterEntity_91ba0(int64_t manager, void* ibp);
 extern void WellComp_RemoveCellEntry_889e0(int64_t manager, int x, int y, int value);
 extern void WellComp_RegisterEntity_91cb0(int64_t manager, void* ibp);
 extern void WellComp_AddCellEntry_88a80(int64_t manager, int x, int y, int value);
-extern "C" char WellComponent_EnterBuilt(void* comp, void* sm);
-extern "C" char WellComponent_EnterDemolish(void* comp, void* sm);
 
 // ---- 0x140102b60 — tool-group activation (EntityUI::SetTool spelling) ----
 // The old deferral note here has EXPIRED. It was written when the only body was
@@ -85,9 +81,6 @@ void RegisterComponentGap_B() {
     // storagedisplaycomponent.cpp
     RegisterExeAddr(0x14000cbd0, reinterpret_cast<uintptr_t>(&StorageDisplay_EntityFindByType_cbd0));
 
-    // absorbresourcecomponent.cpp
-    RegisterExeAddr(0x140031d10, reinterpret_cast<uintptr_t>(&Component_Helper1d10_Reimpl));
-
     // residencecomponent.cpp  (CALLER-BUG FIX: 0x140035ec0 -> 0x140007960)
     RegisterExeAddr(0x140007960, reinterpret_cast<uintptr_t>(&ResidenceComponent_CopyInnerArray));
 
@@ -99,8 +92,6 @@ void RegisterComponentGap_B() {
     // never written, so every fire reports buckets=0.
     RegisterExeAddr(0x140088a80, reinterpret_cast<uintptr_t>(&WellComp_AddCellEntry_88a80));
     RegisterExeAddr(0x140091cb0, reinterpret_cast<uintptr_t>(&WellComp_RegisterEntity_91cb0));
-    RegisterExeAddr(0x14005cf20, reinterpret_cast<uintptr_t>(&WellComponent_EnterBuilt));
-    RegisterExeAddr(0x14005cee0, reinterpret_cast<uintptr_t>(&WellComponent_EnterDemolish));
     // 0x140102b60 — the live port is Toolbar_ShowGroup_Impl (see note above).
     RegisterExeAddr(0x140102b60, reinterpret_cast<uintptr_t>(&Toolbar_ShowGroup_Impl));
 }

@@ -36,7 +36,6 @@
 #include "engine_funcs.h"
 #include "options.h"
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -233,16 +232,15 @@ void ProbeClass(const FoodClass& fc) {
                           : (profKey == 0 ? "  <-- RIBBON HIDDEN (no worker spinner)" : ""));
 
     // ── slot coverage ─────────────────────────────────────────────────────────────
-    // A slot still equal to the shared inert stub is NOT reimplemented. This is the
-    // measurement behind "every slot": the source tree can look complete while
-    // FillTypedVtable has quietly left a slot holding the stub.
+    // A null slot is NOT reimplemented. (The shared inert stub this used to compare
+    // against went with the last hand-built component table at the ENDGAME B.3.8
+    // close: every component vtable is the compiler's, so no slot can hold it.)
     void** vt = *reinterpret_cast<void***>(comp);
     if (!vt) { std::fprintf(stderr, "[FoodPlace]   no vtable?!\n"); return; }
-    void* stub = ::ComponentFactory::InertStubSlot();
     char map[kSlots + 1];
     int live = 0, equiv = 0, gap = 0;
     for (int i = 0; i < kSlots; ++i) {
-        const bool isStub = (vt[i] == stub) || (vt[i] == nullptr);
+        const bool isStub = (vt[i] == nullptr);
         if (!isStub)                        { map[i] = 'W'; ++live;  }
         else if (IsRetailNoOp(fc.retail[i])){ map[i] = '='; ++equiv; }   // retail no-op too
         else                                { map[i] = '.'; ++gap;   }

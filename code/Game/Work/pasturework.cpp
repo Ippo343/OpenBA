@@ -1007,13 +1007,6 @@ PastureWork::PastureWork(void* entityIBP) : AutoPickupWork(), _field48(nullptr),
     }
 }
 
-// The by-address door for 0x1400f2d80 (registered below): the real ctor on caller
-// memory (B8-5).
-extern "C" void* PastureWork_Ctor_Impl(void* mem, void* entityIBP) {
-    if (!mem) return nullptr;
-    return static_cast<Object::Base*>(new (mem) PastureWork(entityIBP));
-}
-
 // Convenience for PastureComponent Slot14 (pasturecomponent_states.cpp, block MI-B):
 // MemAlloc(0x58,8) + the faithful ctor. `entityRefSlot` points at an 8-byte entity ref
 // (the pasture's owner entity).
@@ -1050,9 +1043,4 @@ DEFINE_EXE_VTABLE(PastureWork, "_ZTV11PastureWork")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// The ctor door 0x1400f2d80 stays registered (the function keeps its name because
-// address_registry.cpp calls it by name).
-extern "C" void RegisterPastureWorkVtable() {
-    RegisterExeAddr(0x1400f2d80, reinterpret_cast<uintptr_t>(&PastureWork_Ctor_Impl));
-}
 DEFINE_EXE_TYPE(PastureWork, "AutoPickupWork")

@@ -2938,7 +2938,6 @@ void CitizenComponent_InitFuncs() {
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
 #include <cstdlib>
 #include <cstring>
 
