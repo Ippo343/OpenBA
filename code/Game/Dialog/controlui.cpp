@@ -16,6 +16,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include "Component/Component.h"
+#include "Entity/ComponentEntity.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "Dialog/ControlUIConfig.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "runtime/types/ui/ButtonElement.h"
+#include "runtime/types/ui/CheckElement.h"
 
 // ---- Element type ids: UI::ButtonElement and UI::CheckElement ----------------
 // Retail reads these through exe .rdata exrefs 0x1401514f8 (ButtonElement, tested
@@ -36,25 +40,15 @@
 // which is why work/split/empty all sat at the element ctor default (enabled,
 // unchecked) and read as "highlighted".
 //
-// Resolve PRIVATE copies by name rather than publishing into the shared globals:
-// those are read by other dialogs that currently rely on the null as a no-op, and
-// filling them on the default path is exactly the broad change that table put
-// behind its gate. Prefer the registry value when the gate IS on so the two paths
-// can never disagree. Same idiom as pagetoggleui.cpp / productionui.cpp.
+// ENDGAME B.3.9: UI::ButtonElement / UI::CheckElement now have a ported TypeId() (a
+// class static, always populated), so the private-copy-vs-gated-global split above
+// collapses to the static: both arms already answered the same id.
 static uint32_t ControlUI_ButtonElementTypeId() {
-    if (g_TypeId_ButtonElement && *g_TypeId_ButtonElement)
-        return *g_TypeId_ButtonElement;            // gate on: use the real slot
-    static uint32_t s_local = 0;
-    if (!s_local) s_local = ::Object::ResolveTypeIdByNameLazy("ButtonElement");
-    return s_local;
+    return UI::ButtonElement::TypeId();
 }
 
 static uint32_t ControlUI_CheckElementTypeId() {
-    if (g_TypeId_CheckboxElement && *g_TypeId_CheckboxElement)
-        return *g_TypeId_CheckboxElement;          // gate on: use the real slot
-    static uint32_t s_local = 0;
-    if (!s_local) s_local = ::Object::ResolveTypeIdByNameLazy("CheckElement");
-    return s_local;
+    return UI::CheckElement::TypeId();
 }
 
 namespace controlui_sa {
@@ -67,12 +61,12 @@ namespace controlui_sa {
 static void Trace(const char* what, void* self) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* cfg = self ? reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x10)) : nullptr;
-    uint32_t wantTid = g_TypeId_ControlComponent ? *g_TypeId_ControlComponent : 0;
+    uint32_t wantTid = ControlUIConfig::TypeId();
     std::fprintf(stderr,
         "[ControlUI] %s self=%p | IN: cfgTid=%s(%u) cfg(+0x10)=%p elem(+0x20)=%p entity(+0x28)=%p"
         " | OUT: elem(+0x30)=%p target(+0x38)=%p cmd=%d\n",
         what, self,
-        g_TypeId_ControlComponent ? (wantTid ? "ok" : "ZERO") : "NULLPTR", wantTid, cfg,
+        wantTid ? "ok" : "ZERO", wantTid, cfg,
         self ? reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x20)) : nullptr,
         self ? reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x28)) : nullptr,
         self ? reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x30)) : nullptr,
@@ -152,7 +146,7 @@ void ControlUI::OnCreated() {
 
     // Check datasource component type
     void* datasource = (void*)*(uint64_t*)(s + 0x10);
-    uint32_t controlTypeId = g_TypeId_ControlComponent ? *g_TypeId_ControlComponent : 0;
+    uint32_t controlTypeId = ControlUIConfig::TypeId();
     void* component = nullptr;
     if (fn_IsDerivedFrom(datasource, controlTypeId)) {
         component = datasource;
@@ -181,7 +175,7 @@ void ControlUI::OnCreated() {
     // Get entity, find sub-component via component type array search
     void* entity = (void*)*(uint64_t*)(s + 0x28);
     int subTypeKey = *(int*)((uintptr_t)component + 0x24);
-    uint32_t entityTypeId = g_TypeId_ComponentEntity ? *g_TypeId_ComponentEntity : 0;
+    uint32_t entityTypeId = ComponentEntity::TypeId();
     void* entityChecked = nullptr;
     if (fn_IsDerivedFrom(entity, entityTypeId)) {
         entityChecked = entity;
@@ -236,7 +230,7 @@ void ControlUI::OnUpdateLayout() {
 
     // Get datasource component
     void* datasource = (void*)*(uint64_t*)(s + 0x10);
-    uint32_t controlTypeId = g_TypeId_ControlComponent ? *g_TypeId_ControlComponent : 0;
+    uint32_t controlTypeId = ControlUIConfig::TypeId();
     void* component = nullptr;
     if (fn_IsDerivedFrom(datasource, controlTypeId)) {
         component = datasource;
@@ -298,7 +292,7 @@ void ControlUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_
         if (*param2 == *(uint64_t*)(s + 0x30)) {
             // Get datasource component
             void* datasource = (void*)*(uint64_t*)(s + 0x10);
-            uint32_t controlTypeId = g_TypeId_ControlComponent ? *g_TypeId_ControlComponent : 0;
+            uint32_t controlTypeId = ControlUIConfig::TypeId();
             void* component = nullptr;
             if (fn_IsDerivedFrom(datasource, controlTypeId)) {
                 component = datasource;

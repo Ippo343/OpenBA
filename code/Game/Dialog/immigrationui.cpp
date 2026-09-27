@@ -63,16 +63,11 @@ namespace immigrationui_sa {
     // engine_funcs label now matches, see
     // [[project_townhallui_promoted]]). Fill from the live factory tree post-Engine::
     // Startup; Entity_FindComponentByExeTypeId derefs the id ptr, so it must be live.
-    void EnsureGlobals() {
-        static uint32_t s_entity=0, s_immig=0, s_bstate=0;
-        if (!g_TypeId_ComponentEntity)      { s_entity=ComponentEntity::TypeId();        if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
-        if (!g_TypeId_ImmigrationComponent) { s_immig =ImmigrationComponent::TypeId();   if(s_immig)  g_TypeId_ImmigrationComponent=&s_immig; }
-        if (!g_TypeId_StateMachineComponent_FC)  { s_bstate=StateMachineComponent::TypeId();  if(s_bstate) g_TypeId_StateMachineComponent_FC=&s_bstate; }
-    }
+    // ENDGAME B.3.9: ComponentEntity / ImmigrationComponent / StateMachineComponent (was
+    // g_TypeId_StateMachineComponent_FC) all have a ported TypeId() now, so the
+    // EnsureGlobals() lazy-cache is dead; only the game-world singleton check stays.
     bool Ready() {
-        return g_TypeId_ComponentEntity && g_TypeId_ImmigrationComponent &&
-               g_TypeId_StateMachineComponent_FC &&
-               g_pGameWorldSingleton && *g_pGameWorldSingleton;
+        return g_pGameWorldSingleton && *g_pGameWorldSingleton;
     }
     // stderr, not stdout: the perf build strips printf, and the Immigrants wave's
     // harness runs (tools/stress_run.sh) only keep standalone_error.log.
@@ -123,14 +118,13 @@ void ImmigrationUI::OnCreated() {
 
 // [7] 0x14006b130
 void ImmigrationUI::OnUpdateLayout() {
-    immigrationui_sa::EnsureGlobals();
     if (!immigrationui_sa::Ready()) return;
     immigrationui_sa::Trace("Slot7", this);
     uintptr_t s = (uintptr_t)this;
 
     // Get entity at +0x28, check IsA ComponentEntity
     void* entity = (void*)*(uint64_t*)(s + 0x28);
-    uint32_t entityTypeId = g_TypeId_ComponentEntity ? *g_TypeId_ComponentEntity : 0;
+    uint32_t entityTypeId = ComponentEntity::TypeId();
     void* checkedEntity = nullptr;
     if (fn_IsDerivedFrom(entity, entityTypeId)) {
         checkedEntity = entity;
@@ -219,7 +213,6 @@ void ImmigrationUI::OnUpdateLayout() {
 // [9] 0x14006b300
 void ImmigrationUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t msg, int32_t id,
                                    int32_t /*param5*/, int32_t /*param6*/, int32_t /*e*/, void* /*userData*/) {
-    immigrationui_sa::EnsureGlobals();
     if (!immigrationui_sa::Ready()) return;
     immigrationui_sa::Trace("Slot9", this);
     uintptr_t s = (uintptr_t)this;
@@ -238,7 +231,7 @@ void ImmigrationUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/
 
     // Get entity from +0x28, check IsA ComponentEntity
     void* entity = (void*)*(uint64_t*)(s + 0x28);
-    uint32_t entityTypeId = g_TypeId_ComponentEntity ? *g_TypeId_ComponentEntity : 0;
+    uint32_t entityTypeId = ComponentEntity::TypeId();
     void* checkedEntity = nullptr;
     if (fn_IsDerivedFrom(entity, entityTypeId)) {
         checkedEntity = entity;

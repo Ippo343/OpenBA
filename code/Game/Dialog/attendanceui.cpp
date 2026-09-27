@@ -43,50 +43,9 @@
 // these two is full behavioural coverage for this class.
 
 
-namespace attendanceui_sa {
-    // ProgressElement's type-id .rdata slot is null unless BANISHED_LIVE_ELEMENT_TIDS
-    // is on, and IsDerivedFrom(elem, 0) is always false — which would leave +0x30 null
-    // and turn Slot4's +0x124 write into a null-deref. Same private by-name resolve
-    // orchardui.cpp and cropui_promote.cpp use, for the same reason. See
-    // reference_gated_element_typeid_disables_controller.
-    static uint32_t s_progress = 0;
-    void EnsureTypeIds() {
-        static uint32_t s_entity=0, s_attDesc=0, s_attComp=0;
-        if (!g_TypeId_ProgressElement || !*g_TypeId_ProgressElement) {
-            if (!s_progress) s_progress = ::Object::ResolveTypeIdByNameLazy("ProgressElement");
-            if (s_progress) g_TypeId_ProgressElement = &s_progress;
-        }
-        if (!g_TypeId_ComponentEntity) {
-            s_entity = ComponentEntity::TypeId();
-            if (s_entity) g_TypeId_ComponentEntity = &s_entity;
-        }
-        if (!g_TypeId_AttendanceDescription || !*g_TypeId_AttendanceDescription) {
-            s_attDesc = AttendanceDescription::TypeId();
-            if (s_attDesc) g_TypeId_AttendanceDescription = &s_attDesc;
-        }
-        // fn_FindComponent_Attendance searches by this one. Its .rdata slot
-        // (0x1401c3f40) went unregistered until 2026-08-15 — the 2026-07-19 audit
-        // registered the Description 0x38 bytes later and missed the Component — so
-        // the finder ran with a null id, matched nothing, and Slot4's faithful
-        // `attendComp+0x18` read [0+0x18] the first time anyone clicked a school.
-        // reg_economy_typeids.cpp now supplies the storage; this keeps a resolve
-        // failure a skip rather than a repeat of that crash.
-        if (!g_TypeId_AttendanceComponent || !*g_TypeId_AttendanceComponent) {
-            s_attComp = AttendanceComponent::TypeId();
-            if (s_attComp) g_TypeId_AttendanceComponent = &s_attComp;
-        }
-    }
-    // Both reimpls dereference these globals unconditionally, as retail does. Skip
-    // rather than fault if any failed to resolve — a standalone-only failure mode
-    // (retail's .rdata is always populated), so the guard is here at the boundary
-    // rather than inside the faithful bodies.
-    bool Ready() {
-        return g_TypeId_ProgressElement && *g_TypeId_ProgressElement
-            && g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
-            && g_TypeId_AttendanceDescription && *g_TypeId_AttendanceDescription
-            && g_TypeId_AttendanceComponent && *g_TypeId_AttendanceComponent;
-    }
-}  // namespace uistub_AttendanceUI
+// ENDGAME B.3.9: ProgressElement/ComponentEntity/AttendanceDescription/AttendanceComponent
+// all have a ported TypeId() now, so the old EnsureTypeIds()/Ready() lazy-cache over the
+// exe .rdata globals (g_TypeId_ProgressElement etc.) is dead — the static always answers.
 
 // ============================================================
 // AttendanceUI::Slot4 (vtable +0x20) — Setup/refresh
@@ -99,17 +58,15 @@ namespace attendanceui_sa {
 
 // [4] 0x14005dd40 — find the ProgressElement, set its maximum (capacity).
 void AttendanceUI::OnCreated() {
-    attendanceui_sa::EnsureTypeIds();
-    if (!attendanceui_sa::Ready()) return;
     void* dialogElem = *(void**)((uintptr_t)this + 0x20);
 
     // Find ProgressElement by type
     uint64_t result = 0;
-    ::new (&result) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElementType(*g_TypeId_ProgressElement));  // B.3.6 bridge
+    ::new (&result) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElementType(UI::ProgressElement::TypeId()));  // B.3.6 bridge
     void* foundElem = (void*)result;
 
     // Type-check and wrap as InternalBasePtr
-    bool isProgress = fn_IsDerivedFrom(foundElem, *g_TypeId_ProgressElement);
+    bool isProgress = fn_IsDerivedFrom(foundElem, UI::ProgressElement::TypeId());
     void* progressPtr = isProgress ? foundElem : nullptr;
     uint8_t basePtrBuf[8];
     new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(progressPtr));   // B.3.3 bridge
@@ -117,7 +74,7 @@ void AttendanceUI::OnCreated() {
 
     // Get entity, find AttendanceComponent
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
@@ -128,7 +85,7 @@ void AttendanceUI::OnCreated() {
 
     // Get sub-component at +0x18, check type
     void* subComp = *(void**)((uintptr_t)attendComp + 0x18);
-    bool isType = fn_IsDerivedFrom(subComp, *g_TypeId_AttendanceDescription);
+    bool isType = fn_IsDerivedFrom(subComp, AttendanceDescription::TypeId());
     void* typedComp = isType ? subComp : nullptr;
 
     // Set progress maximum from sub-component's capacity field (+0x20)
@@ -147,11 +104,9 @@ void AttendanceUI::OnCreated() {
 
 // [7] 0x14005dc50 — per-frame: current value + text parameter 0.
 void AttendanceUI::OnUpdateLayout() {
-    attendanceui_sa::EnsureTypeIds();
-    if (!attendanceui_sa::Ready()) return;
     // Get entity, find AttendanceComponent
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge

@@ -37,6 +37,7 @@
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/NumberElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/Dialog.h"   // X::TypeId() (ENDGAME B.3.9)
 #if defined(_DEBUG)
 #include <cstdio>
 #include <cstdlib>
@@ -185,30 +186,14 @@ namespace citizenui_sa {
 // just avoids a null-deref in the age line.
 static float s_ageMul = 1.0f;
 
+// ENDGAME B.3.9: ComponentEntity / CitizenDescription / CitizenComponent (was
+// g_TypeId_CitizenComponent_FC) / EditTool all have a ported TypeId() now, and
+// g_TypeId_Dialog is UI::Dialog's own _typeInfo (engine_funcs.cpp:828, a Runtime
+// address, always resolved) — not "External" as this file's old heal guessed (that
+// heal never ran: the pointer is set at EngineFuncsInit before this ever fires).
+// Only the age-multiplier fallback (a different, non-type-id singleton) is left.
 void EnsureGlobals() {
-    static uint32_t s_ce = 0, s_cd = 0, s_cai = 0, s_ext = 0;
-    if (!g_TypeId_ComponentEntity)        { s_ce  = ComponentEntity::TypeId();    if (s_ce)   g_TypeId_ComponentEntity = &s_ce; }
-    if (!g_TypeId_CitizenDescription)     { s_cd  = CitizenDescription::TypeId(); if (s_cd)   g_TypeId_CitizenDescription = &s_cd; }
-    // g_TypeId_CitizenComponent_FC is DAT_1401c7158 — its name says "CitizenComponent"
-    // now, but the finder that reads it (fn_FindComponent_Citizen) is what the AI panel
-    // actually needs: the name at +0x28, age +0x3c, profession +0x1f0, housing +0x248,
-    // desc +0x288 all live on the CitizenComponent it resolves (the same component the
-    // founding path writes the generated name to). Resolving the literal
-    // "CitizenAIComponent" here finds a DIFFERENT sibling component whose +0x28 is
-    // unset, so the dialog read the wrong object. Resolve "CitizenComponent" (matching
-    // the founding writer's TypeId lookup) so the dialog reads the citizen data that
-    // was actually filled in.
-    if (!g_TypeId_CitizenComponent_FC)    { s_cai = CitizenComponent::TypeId(); if (s_cai)  g_TypeId_CitizenComponent_FC = &s_cai; }
-    if (!g_TypeId_Dialog)               { s_ext = ::Object::ResolveTypeIdByNameLazy("External");           if (s_ext)  g_TypeId_Dialog = &s_ext; }
-    // The Home/Profession(workplace) buttons call Toolbar_CenterOnEntity_Impl, whose
-    // EditTool re-select derefs *g_TypeId_EditTool — NULL in standalone (raw exe .rdata).
-    // Resolve it here so the camera snap AND the EditTool re-highlight both work; the
-    // inline also guards the deref, so an unresolved id degrades to camera-move only
-    // instead of faulting.
-    static uint32_t s_edit = 0;
-    if (!g_TypeId_EditTool)               { s_edit = EditTool::TypeId();          if (s_edit) g_TypeId_EditTool = &s_edit; }
     if (!g_pAgeMultiplier) g_pAgeMultiplier = &s_ageMul;
-
 }
 
 }  // namespace citizenui_sa
@@ -315,14 +300,12 @@ void CitizenUI::OnClosed() {
 // [7] 0x140064ae0
 void CitizenUI::OnUpdateLayout() {
     citizenui_sa::EnsureGlobals();
-    if (!g_TypeId_ComponentEntity || !g_TypeId_CitizenDescription
-        || !g_TypeId_CitizenComponent_FC) return;
     if (!SA_DialogEntityAlive(this)) return;
     uintptr_t s = (uintptr_t)this;
 
     // Get entity from data source (+0x28), cast to ComponentEntity
     void* entityBase = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entityBase, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(entityBase, ComponentEntity::TypeId());
     void* entity = isEntity ? entityBase : nullptr;
     uint64_t entityRef = 0;
     new (&entityRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -335,7 +318,7 @@ void CitizenUI::OnUpdateLayout() {
 
     // Get CitizenDescription from CitizenAI (+0x18), check IsDerivedFrom
     void* descBase = *(void**)(ai + 0x18);
-    bool isDesc = fn_IsDerivedFrom(descBase, *g_TypeId_CitizenDescription);
+    bool isDesc = fn_IsDerivedFrom(descBase, CitizenDescription::TypeId());
     void* citizenDesc = isDesc ? descBase : nullptr;
     if (!CitUI_OkPtr((uintptr_t)citizenDesc)) citizenDesc = nullptr;
 
@@ -424,7 +407,7 @@ void CitizenUI::OnUpdateLayout() {
     } else {
         int toolItem = *(int*)(ai + 0xA8);
         void* descBase2 = *(void**)(ai + 0x18);
-        bool isDesc2 = fn_IsDerivedFrom(descBase2, *g_TypeId_CitizenDescription);
+        bool isDesc2 = fn_IsDerivedFrom(descBase2, CitizenDescription::TypeId());
         void* desc2 = isDesc2 ? descBase2 : nullptr;
         if (!CitUI_OkPtr((uintptr_t)desc2)) desc2 = nullptr;
         // desc2 (CitizenDescription) may be null on a partially-initialized standalone
@@ -623,7 +606,7 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
     if (param4 == 0x227) {
         // --- buttonProfession: go to workplace/job ---
         void* entityBase = *(void**)(s + 0x28);
-        bool isEntity = fn_IsDerivedFrom(entityBase, *g_TypeId_ComponentEntity);
+        bool isEntity = fn_IsDerivedFrom(entityBase, ComponentEntity::TypeId());
         void* entity = isEntity ? entityBase : nullptr;
         uint64_t entityRef = 0;
         new (&entityRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -653,7 +636,7 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
     else if (param4 == 0x226) {
         // --- buttonHome: go to home building ---
         void* entityBase = *(void**)(s + 0x28);
-        bool isEntity = fn_IsDerivedFrom(entityBase, *g_TypeId_ComponentEntity);
+        bool isEntity = fn_IsDerivedFrom(entityBase, ComponentEntity::TypeId());
         void* entity = isEntity ? entityBase : nullptr;
         uint64_t entityRef = 0;
         new (&entityRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -675,7 +658,7 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
         // Creates a FollowDialog (0xD8 bytes) from Dialog/Follow.rsc and adds it to the UI.
         // Manually constructs the object: DialogInstance base ctor + FollowDialog vtable + fields.
         void* entityBase = *(void**)(s + 0x28);
-        bool isEntity = fn_IsDerivedFrom(entityBase, *g_TypeId_ComponentEntity);
+        bool isEntity = fn_IsDerivedFrom(entityBase, ComponentEntity::TypeId());
         void* entity = isEntity ? entityBase : nullptr;
         uint64_t entityRef = 0;
         new (&entityRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -693,7 +676,7 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
         // Type-check the resource
         void* checkedRes = nullptr;
         if (extResource) {
-            bool isExternal = fn_IsDerivedFrom(extResource, *g_TypeId_Dialog);
+            bool isExternal = fn_IsDerivedFrom(extResource, UI::Dialog::TypeId());
             if (isExternal) checkedRes = extResource;
         }
 

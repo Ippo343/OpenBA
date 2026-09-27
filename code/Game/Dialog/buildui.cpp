@@ -126,32 +126,12 @@ static uint64_t BuildUI_FindElemAsBasePtr(void* parentElem, const char* name) {
 // alloc+zero+vtable; the engine fills the base fields (dialog +0x20 / datasource
 // +0x28) afterward. Same shape as the BuildRequirementUI promotion above.
 namespace buildui_sa {
-    // Dtor: free the Slot4-allocated row array at self+0x30 (MemAlloc'd fresh on
-    // every open), then the standard vtable-restore + conditional self-free.
-    // Lazy-fill the exe-.rdata type-id globals the reimpl + its FindComponent
-    // helpers key off. In standalone these resolve from raw exe .rdata → null;
-    // fill from the live Factory tree (post-Engine::Startup), idempotent. The
-    // FindComponent helpers null-check their type-id pointer (a still-null one is
-    // a safe no-match, not a crash — Entity_FindComponentByExeTypeId:1139), so the
-    // only HARD requirements are the three ids the reimpl derefs directly:
-    // ComponentEntity / BuildDescription (g_TypeId_ResourceComponent) /
-    // RawMaterialDescription. Position=BuildComponent (0x1401c7008) and
-    // SM=ClearAreaComponent (0x1401c71c8) drive the resource/progress finds; the
-    // rest (MapComponent/WorkPlaceComponent/WorkComponent/StorageComponent) are
-    // already registered+filled by FillEconomyTypeIdGlobals.
-    void EnsureTypeIds() {
-        static uint32_t s_entity=0, s_buildDesc=0, s_rawMat=0, s_build=0, s_clear=0;
-        if (!g_TypeId_ComponentEntity)        { s_entity=ComponentEntity::TypeId();        if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
-        if (!g_TypeId_ResourceComponent)      { s_buildDesc=BuildDescription::TypeId();    if(s_buildDesc) g_TypeId_ResourceComponent=&s_buildDesc; }
-        if (!g_TypeId_RawMaterialDescription) { s_rawMat=RawMaterialDescription::TypeId(); if(s_rawMat) g_TypeId_RawMaterialDescription=&s_rawMat; }
-        if (!g_TypeId_BuildComponent_FC)      { s_build=BuildComponent::TypeId();         if(s_build) g_TypeId_BuildComponent_FC=&s_build; }
-        if (!g_TypeId_ClearAreaComponent_FC)            { s_clear=ClearAreaComponent::TypeId();      if(s_clear) g_TypeId_ClearAreaComponent_FC=&s_clear; }
-    }
+    // ENDGAME B.3.9: ComponentEntity / BuildDescription (was g_TypeId_ResourceComponent,
+    // a misnamed alias) / RawMaterialDescription / BuildComponent / ClearAreaComponent
+    // all have a ported TypeId() now, so the EnsureTypeIds()/HardIdsReady() lazy-cache
+    // over the exe .rdata globals is dead — the statics always answer.
     // Slot4 has run once self+0x40 (the "progress" element IBP) is populated.
     inline bool IsSetUp(void* self) { return self && *reinterpret_cast<uint64_t*>((uintptr_t)self + 0x40) != 0; }
-    bool HardIdsReady() {
-        return g_TypeId_ComponentEntity && g_TypeId_ResourceComponent && g_TypeId_RawMaterialDescription;
-    }
 }
 
 // ============================================================
@@ -166,8 +146,7 @@ namespace buildui_sa {
 
 // [4] 0x1400b1f40
 void BuildUI::OnCreated() {
-    buildui_sa::EnsureTypeIds();
-    if (!buildui_sa::HardIdsReady() || !SA_DialogEntityAlive(this)) return;
+    if (!SA_DialogEntityAlive(this)) return;
     // Idempotent: the framework dispatches setup on attach; a re-drive would
     // append a second copy of the storage rows to self+0x30 (count never reset)
     // — exactly the ProfessionUI double-populate class. Skip if already set up.
@@ -187,7 +166,7 @@ void BuildUI::OnCreated() {
 
     // Get entity from data source +0x28, check ComponentEntity
     void* entityRaw = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entityRaw, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(entityRaw, ComponentEntity::TypeId());
     void* entity = isEntity ? entityRaw : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -220,7 +199,7 @@ void BuildUI::OnCreated() {
     int resourceCount = 0;
     if (posComp != 0) {
         void* desc = *(void**)(posComp + 0x18);
-        bool isResource = fn_IsDerivedFrom(desc, *g_TypeId_ResourceComponent);
+        bool isResource = fn_IsDerivedFrom(desc, BuildDescription::TypeId());
         if (isResource) {
             resourceComp = desc;
         }
@@ -288,8 +267,8 @@ void BuildUI::OnCreated() {
                 void* comp = *(void**)(*(uintptr_t*)(resEntry + 0x28) + c * 8);
                 // Get TypeId via vtable[2] and compare with RawMaterialDescription
                 int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-                if (typeId == (int)*g_TypeId_RawMaterialDescription) {
-                    if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription)) {
+                if (typeId == (int)RawMaterialDescription::TypeId()) {
+                    if (fn_IsDerivedFrom(comp, RawMaterialDescription::TypeId())) {
                         resType = comp;
                     }
                     break;
@@ -396,16 +375,15 @@ void BuildUI::OnCreated() {
 
 // [7] 0x1400b1a50
 void BuildUI::OnUpdateLayout() {
-    buildui_sa::EnsureTypeIds();
     // Per-frame update: the framework fires this every tick, including before
     // Slot4 populates (self+0x40 progress / self+0x30 rows still null). Guard.
-    if (!buildui_sa::IsSetUp(this) || !buildui_sa::HardIdsReady()) return;
+    if (!buildui_sa::IsSetUp(this)) return;
     if (!SA_DialogEntityAlive(this)) return;
     uintptr_t s = (uintptr_t)this;
 
     // Get entity, check ComponentEntity
     void* entityRaw = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entityRaw, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(entityRaw, ComponentEntity::TypeId());
     void* entity = isEntity ? entityRaw : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -419,7 +397,7 @@ void BuildUI::OnUpdateLayout() {
     void* resourceComp = nullptr;
     if (posComp != 0) {
         void* desc = *(void**)(posComp + 0x18);
-        bool isResource = fn_IsDerivedFrom(desc, *g_TypeId_ResourceComponent);
+        bool isResource = fn_IsDerivedFrom(desc, BuildDescription::TypeId());
         if (isResource) {
             resourceComp = desc;
         }
@@ -545,14 +523,13 @@ void BuildUI::OnUpdateLayout() {
 // [9] 0x1400b1ea0
 void BuildUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4,
                              int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    buildui_sa::EnsureTypeIds();
-    if (!g_TypeId_ComponentEntity || !SA_DialogEntityAlive(this)) return;
+    if (!SA_DialogEntityAlive(this)) return;
     uintptr_t s = (uintptr_t)this;
 
     if (param3 == 0x12 && param4 == 6000) {
         // Get entity at +0x28, check IsA ComponentEntity
         void* entity = (void*)*(uint64_t*)(s + 0x28);
-        uint32_t entityTypeId = g_TypeId_ComponentEntity ? *g_TypeId_ComponentEntity : 0;
+        uint32_t entityTypeId = ComponentEntity::TypeId();
         void* checkedEntity = nullptr;
         if (fn_IsDerivedFrom(entity, entityTypeId)) {
             checkedEntity = entity;
