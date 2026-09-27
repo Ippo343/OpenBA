@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/CharacterComponent.h"   // ENDGAME B.3.8 CB3: CharacterComponent::TypeId()
 
 // ============================================================
 // Locally-resolved dispatch-slot / math helpers
@@ -71,7 +72,7 @@ void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP) {
     // pattern. Without this the family scan never matches → null entity IBP → MoveTo ctor
     // null-deref when a citizen state (Leisure/Wander/...) builds a MoveTo action.
     if (wantId == 0 || wantId == 0xFFFFFFFFu)
-        wantId = ::Object::GetTypeIdByName("CharacterComponent");
+        wantId = CharacterComponent::TypeId();
     int n = *reinterpret_cast<int*>(entity + 0x38);
     if (n > 0 && wantId != 0 && wantId != 0xFFFFFFFFu) {
         uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);

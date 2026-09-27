@@ -32,6 +32,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CB3: CitizenComponent::TypeId()
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -155,7 +156,7 @@ bool PerformWork_ResolveFuncs() {
     s_tid_CitizenComponent = g_TypeId_CitizenComponent_FC;
     if (!s_tid_CitizenComponent) {
         if (!s_tid_CitizenComponent_storage)
-            s_tid_CitizenComponent_storage = ::Object::GetTypeIdByName("CitizenComponent");
+            s_tid_CitizenComponent_storage = CitizenComponent::TypeId();
         if (s_tid_CitizenComponent_storage)
             s_tid_CitizenComponent = &s_tid_CitizenComponent_storage;
     }

@@ -36,6 +36,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/RawMaterialComponent.h"   // ENDGAME B.3.8 CB3: RawMaterialComponent::TypeId()
 
 namespace {
 // Type-ID globals (resolved lazily from the exe .rdata).
@@ -319,9 +320,7 @@ void* ActRm_FindComponent_223c0(uintptr_t entity, void* retIBP) {
     // crashing the produce's downstream PositionEntity. Self-resolve via GetTypeIdByName
     // (the proven citizen-brick pattern; verified c7c80 <- RawMaterialComponent_RegisterType).
     if (typeId == 0 || typeId == 0xFFFFFFFFu) {
-        static uint32_t s_c7c80 = 0;
-        if (s_c7c80 == 0) s_c7c80 = ::Object::GetTypeIdByName("RawMaterialComponent");
-        typeId = s_c7c80;
+        typeId = RawMaterialComponent::TypeId();   // B.3.8: no lazy cache (B6-5)
     }
     void* found = nullptr;
     int n = *reinterpret_cast<int*>(entity + 0x38);

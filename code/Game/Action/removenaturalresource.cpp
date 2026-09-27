@@ -322,12 +322,9 @@ void* RemoveNaturalResource::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(RemoveNaturalResource, "_ZTV21RemoveNaturalResource")
 
-// B38 D5: 0x140160050 is still read back BY ADDRESS outside this block
-// (work_act_clear.cpp:140),
-// so the row stays, serving the compiler table (every such reader builds the
-// same bytes the ctor builds: Internal(), +0x10/+0x18 zeroed, the fields).
 extern "C" void RegisterRemoveNaturalResourceVtable() {
-    RegisterExeAddr(0x140160050, reinterpret_cast<uintptr_t>(RemoveNaturalResource::Vtable()));
+    // ENDGAME B.3.8 CB3: the retail-table row is gone -- no by-address reader of
+    // it is left. The call in address_registry.cpp is the coordinator's to drop.
 }
 
 DEFINE_EXE_TYPE(RemoveNaturalResource, "Action")

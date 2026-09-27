@@ -270,12 +270,9 @@ void* PickupRawMaterial::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(PickupRawMaterial, "_ZTV17PickupRawMaterial")
 
-// B38 D5: 0x14015ff10 is still read back BY ADDRESS outside this block
-// (work_base_actionctor.cpp:164),
-// so the row stays, serving the compiler table (every such reader builds the
-// same bytes the ctor builds: Internal(), +0x10/+0x18 zeroed, the fields).
 extern "C" void RegisterPickupRawMaterialVtable() {
-    RegisterExeAddr(0x14015ff10, reinterpret_cast<uintptr_t>(PickupRawMaterial::Vtable()));
+    // ENDGAME B.3.8 CB3: the retail-table row is gone -- no by-address reader of
+    // it is left. The call in address_registry.cpp is the coordinator's to drop.
 }
 
 DEFINE_EXE_TYPE(PickupRawMaterial, "Action")

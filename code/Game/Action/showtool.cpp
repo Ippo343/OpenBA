@@ -9,6 +9,9 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "ShowTool.h"
+#include "Component/ModelDescription.h"   // ENDGAME B.3.8 CB3: ModelDescription::TypeId()
+#include "Component/RawMaterialDescription.h"   // ENDGAME B.3.8 CB3: RawMaterialDescription::TypeId()
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CB3: CitizenComponent::TypeId()
 // The runtime type headers come FIRST: they reach runtime/types/volume/Volume.h,
 // whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch K1.
@@ -69,8 +72,7 @@ static fn_MIDefCtor_t    s_slot_MI_DefCtor = nullptr;
 static uint32_t ShowTool_ModelDescTid() {
     uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
     if (p && *p && *p != 0xFFFFFFFF) return *p;
-    static uint32_t c = 0;
-    if (!c || c == 0xFFFFFFFF) c = ::Object::GetTypeIdByName("ModelDescription");
+    const uint32_t c = ModelDescription::TypeId();   // B.3.8: no lazy cache (B6-5)
     if (c != 0xFFFFFFFF) return c;
     return 0;
 }
@@ -81,8 +83,7 @@ static uint32_t ShowTool_RawMatTid() {
         return *g_TypeId_RawMaterialDescription;
     uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
     if (p && *p && *p != 0xFFFFFFFF) return *p;
-    static uint32_t c = 0;
-    if (!c || c == 0xFFFFFFFF) c = ::Object::GetTypeIdByName("RawMaterialDescription");
+    const uint32_t c = RawMaterialDescription::TypeId();   // B.3.8: no lazy cache (B6-5)
     if (c != 0xFFFFFFFF) return c;
     return 0;
 }
@@ -98,9 +99,7 @@ static void* ShowTool_FindComponentByTid(void* hostP, uint32_t tid) {
     for (int i = 0; i < count; i++) {
         void* comp = *reinterpret_cast<void**>(arr + (int64_t)i * 8);
         if (!comp) continue;
-        int64_t vt = *reinterpret_cast<int64_t*>(comp);
-        typedef uint32_t (*getType_t)(void*);
-        uint32_t got = (*reinterpret_cast<getType_t*>(vt + 0x10))(comp);
+        uint32_t got = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (got == tid)
             return fn_IsDerivedFrom(comp, tid) ? comp : nullptr;
     }
@@ -126,7 +125,7 @@ bool ShowTool_ResolveFuncs() {
     if (!s_TypeInfo_ShowToolEntity || !*s_TypeInfo_ShowToolEntity
         || *s_TypeInfo_ShowToolEntity == 0xFFFFFFFF) {
         static uint32_t s_citizenTid = 0;
-        uint32_t tid = ::Object::GetTypeIdByName("CitizenComponent");
+        uint32_t tid = CitizenComponent::TypeId();
         if (tid && tid != 0xFFFFFFFF) {
             s_citizenTid = tid;
             s_TypeInfo_ShowToolEntity = &s_citizenTid;
@@ -424,12 +423,9 @@ void* ShowTool::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(ShowTool, "_ZTV8ShowTool")
 
-// B38 D5: 0x1401589b0 is still read back BY ADDRESS outside this block
-// (work_act_clear.cpp:141, work_act_hunt.cpp:128),
-// so the row stays, serving the compiler table (every such reader builds the
-// same bytes the ctor builds: Internal(), +0x10/+0x18 zeroed, the fields).
 extern "C" void RegisterShowToolVtable() {
-    RegisterExeAddr(0x1401589b0, reinterpret_cast<uintptr_t>(ShowTool::Vtable()));
+    // ENDGAME B.3.8 CB3: the retail-table row is gone -- no by-address reader of
+    // it is left. The call in address_registry.cpp is the coordinator's to drop.
 }
 
 DEFINE_EXE_TYPE(ShowTool, "Action")

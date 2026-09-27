@@ -174,10 +174,8 @@ static void* FindRawMaterialDesc(void* descEntity) {
 
     for (int i = 0; i < count; i++) {
         void* comp = *(void**)(compArray + (int64_t)i * 8);
-        // Get type ID via vtable slot +0x10 (GetType)
-        uintptr_t vtable = *(uintptr_t*)comp;
-        typedef uint32_t (*GetType_t)();
-        uint32_t typeId = ((GetType_t)(*(void**)(vtable + 0x10)))();
+        // slot 2 Type()
+        uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (typeId == *s_typeId_RawMatDesc) {
             // Verify with IsDerivedFrom
             if (fn_IsDerivedFrom(comp, *s_typeId_RawMatDesc)) {
@@ -201,10 +199,8 @@ static void* FindComponentOnEntity(int64_t entity, uint32_t typeId) {
         void* compIBP = (void*)(compArray + (int64_t)i * 8);
         void* comp = *(void**)compIBP;
 
-        // Get type ID via vtable slot +0x10
-        uintptr_t vtable = *(uintptr_t*)comp;
-        typedef uint32_t (*GetType_t)();
-        uint32_t compTypeId = ((GetType_t)(*(void**)(vtable + 0x10)))();
+        // slot 2 Type()
+        uint32_t compTypeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (compTypeId == typeId) {
             comp = *(void**)compIBP;
             if (fn_IsDerivedFrom(comp, typeId)) {
@@ -441,9 +437,7 @@ int  CreateRawMaterial::AbstractImpl(void* actionStack) {
                 int secCount = *(int*)(secDesc + 0x30);
                 for (int i = 0; i < secCount; i++) {
                     void* secComp = *(void**)(*(uintptr_t*)(secDesc + 0x28) + (int64_t)i * 8);
-                    uintptr_t secVtable = *(uintptr_t*)secComp;
-                    typedef uint32_t (*GetType_t)();
-                    uint32_t secTypeId = ((GetType_t)(*(void**)(secVtable + 0x10)))();
+                    uint32_t secTypeId = reinterpret_cast<Object::Base*>(secComp)->Type();   // B.3.8 bridge
                     if (secTypeId == *s_typeId_1401c8118) {
                         fn_IsDerivedFrom(secComp, *s_typeId_1401c8118);
                         break;

@@ -129,9 +129,8 @@ static void* FindComponentByTypeId(void* entity, uint32_t* typeIdPtr,
         void** compIBP = (void**)(compArray + (uintptr_t)i * 8);
 
         void* comp = *compIBP;
-        // Call vtable+0x10 (GetTypeId)
-        typedef uint32_t (*GetTypeId_t)(void*);
-        uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+        // slot 2 Type()
+        uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
 
         if (typeId == *typeIdPtr) {
             void* found = *compIBP;

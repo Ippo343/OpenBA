@@ -17,6 +17,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <new>
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CB3: CitizenComponent::TypeId()
+#include "Entity/ComponentEntity.h"   // ENDGAME B.3.8 CB3: ComponentEntity::TypeId()
 
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (heal .rdata type-ids)
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -68,11 +70,11 @@ bool CompleteTask_ResolveFuncs() {
     s_TypeId_ComponentEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5d70));
     static uint32_t s_healCitizen = 0, s_healCompEntity = 0;
     if (!s_TypeId_1401c7158) {
-        s_healCitizen = ::Object::GetTypeIdByName("CitizenComponent");   // workEntity (+0x20)
+        s_healCitizen = CitizenComponent::TypeId();   // workEntity (+0x20)
         s_TypeId_1401c7158 = &s_healCitizen;
     }
     if (!s_TypeId_ComponentEntity) {
-        s_healCompEntity = ::Object::GetTypeIdByName("ComponentEntity"); // targetEntity (+0x28)
+        s_healCompEntity = ComponentEntity::TypeId(); // targetEntity (+0x28)
         s_TypeId_ComponentEntity = &s_healCompEntity;
     }
 

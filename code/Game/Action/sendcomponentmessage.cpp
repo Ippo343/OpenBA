@@ -19,6 +19,8 @@
 #include <cstdint>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/Component.h"          // ENDGAME B.3.8 CB3: slot 15 OnMessage
+#include "Component/OrchardComponent.h"   // ENDGAME B.3.8 CB3: OrchardComponent::TypeId()
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -190,10 +192,7 @@ int  SendComponentMessage::AbstractImpl(void* actionStack) {
         if (comp < 0x10000 || comp > 0x00007FFFFFFFFFFFULL) continue;
 
         // Get component type ID via vtable+0x10
-        uintptr_t compVtable = *(uintptr_t*)comp;
-        typedef int (*GetTypeId_t)(void*);
-        GetTypeId_t getTypeId = *(GetTypeId_t*)(compVtable + 0x10);
-        int typeId = getTypeId((void*)comp);
+        int typeId = static_cast<int>(reinterpret_cast<Object::Base*>(comp)->Type());   // B.3.8 bridge
 
         if (typeId == (int)componentTypeId) {
             // Found matching component
@@ -210,11 +209,10 @@ int  SendComponentMessage::AbstractImpl(void* actionStack) {
         // happened — so "zero msg=1 sends" read as a missing message when the message was
         // simply unloggable. A saturating diagnostic reports its own budget, not the
         // system. See reference_diagnostics_must_report_outcomes.
-        static uint32_t s_tidOrchard = ::Object::GetTypeIdByName("OrchardComponent");
         static int s_seen[8] = {0};
         const int msgId = _field34;
         const int bucket = (msgId >= 0 && msgId < 8) ? msgId : 7;
-        if (componentTypeId == s_tidOrchard && s_seen[bucket]++ < 8) {
+        if (componentTypeId == OrchardComponent::TypeId() && s_seen[bucket]++ < 8) {
             std::fprintf(stderr, "[SendCompMsg] entity=%p compType=%u msg=%d p1=%u -> "
                          "scanned %d components, found=%p\n",
                          reinterpret_cast<void*>(entity), componentTypeId,
@@ -238,10 +236,9 @@ int  SendComponentMessage::AbstractImpl(void* actionStack) {
 
     // Build call args: component, msgId, &sourceEntity, param1, param2
     uintptr_t sourceEntityRef = *(uintptr_t*)(s + 0x28);
-    uintptr_t compVtable = *(uintptr_t*)compObj;
-    typedef void (*MsgHandler_t)(void* comp, int32_t msgId, void* sourceEntityRef, uint32_t param1, uint32_t param2);
-    MsgHandler_t handler = *(MsgHandler_t*)(compVtable + 0x78);
-    handler((void*)compObj, _field34, &sourceEntityRef, *(uint32_t*)(s + 0x38), *(uint32_t*)(s + 0x3c));
+    // slot 15 (vtable +0x78) Component::OnMessage on the component the type scan found
+    reinterpret_cast<Component*>(compObj)->OnMessage(_field34, &sourceEntityRef,   // B.3.8 bridge
+                                                     *(uint32_t*)(s + 0x38), *(uint32_t*)(s + 0x3c));
 
     return 0;
 }

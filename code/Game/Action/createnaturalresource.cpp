@@ -19,6 +19,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
+#include "Component/GrowthComponent.h"   // ENDGAME B.3.8 CB3: GrowthComponent::TypeId()
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -271,7 +272,7 @@ int  CreateNaturalResource::AbstractImpl(void* actionStack) {
             // no GrowthComponent, or the finder's type-id .rdata slot is unregistered/zero so
             // it misses on every entity (reference_registered_but_filled_with_zero). Separate
             // them by re-scanning with the by-NAME id, which does not depend on that slot.
-            const uint32_t tidByName = ::Object::GetTypeIdByName("GrowthComponent");
+            const uint32_t tidByName = GrowthComponent::TypeId();
             const uint32_t* pSlot = reinterpret_cast<const uint32_t*>(
                 ResolveAddr(Module::Exe, 0x1401c77b0));
             int compN = newEntity ? *(int32_t*)((uint8_t*)newEntity + 0x38) : 0;
@@ -377,12 +378,9 @@ void* CreateNaturalResource::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(CreateNaturalResource, "_ZTV21CreateNaturalResource")
 
-// B38 D5: 0x14015fca0 is still read back BY ADDRESS outside this block
-// (work_act_hunt.cpp:127),
-// so the row stays, serving the compiler table (every such reader builds the
-// same bytes the ctor builds: Internal(), +0x10/+0x18 zeroed, the fields).
 extern "C" void RegisterCreateNaturalResourceVtable() {
-    RegisterExeAddr(0x14015fca0, reinterpret_cast<uintptr_t>(CreateNaturalResource::Vtable()));
+    // ENDGAME B.3.8 CB3: the retail-table row is gone -- no by-address reader of
+    // it is left. The call in address_registry.cpp is the coordinator's to drop.
 }
 
 DEFINE_EXE_TYPE(CreateNaturalResource, "Action")
