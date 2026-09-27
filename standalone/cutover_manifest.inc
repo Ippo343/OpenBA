@@ -7,7 +7,7 @@
 // REASON CLASS and a measured by-name-door count -- never asserted
 // here.  standalone/cutover_manifest.cpp consumes this.
 
-// REQUIRED 34   (of 34 rows)
+// REQUIRED 32   (of 32 rows)
 
 // Achievement  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=4  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@AchievementManager@Achievement@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc670ull, "Achievement", 4)
@@ -37,26 +37,22 @@ CUTOVER_ROW("?_singleton@Persistence@IO@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x
 CUTOVER_ROW("?_singleton@Configuration@Input@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe768ull, "Input", 7)
 // Input  HARMFUL (DLL-present) / REQUIRED (cutover) / DLL-PRESENT  doors=9  -- verdict is DLL-PRESENT only and 9 by-name door(s) would resolve NULL at cutover
 CUTOVER_ROW("?_singleton@Device@Input@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe770ull, "Input", 9)
-// Object  NO-OP / DLL-PRESENT  doors=13  -- verdict is DLL-PRESENT only and 13 by-name door(s) would resolve NULL at cutover
-CUTOVER_ROW("??_7Base@Object@@6B@", CUTOVER_REQUIRED, true, 0x180154788ull, "Object", 13)
+// Object  NO-OP / DLL-PRESENT  doors=11  -- verdict is DLL-PRESENT only and 11 by-name door(s) would resolve NULL at cutover
+CUTOVER_ROW("??_7Base@Object@@6B@", CUTOVER_REQUIRED, true, 0x180154788ull, "Object", 11)
 // Object  NO-OP / DLL-PRESENT  doors=3  -- verdict is DLL-PRESENT only and 3 by-name door(s) would resolve NULL at cutover
 CUTOVER_ROW("??_7CompiledExternal@Object@@6B@", CUTOVER_REQUIRED, true, 0x180154a30ull, "Object", 3)
-// Object  NO-OP / DLL-PRESENT  doors=11  -- verdict is DLL-PRESENT only and 11 by-name door(s) would resolve NULL at cutover
-CUTOVER_ROW("??_7External@Object@@6B@", CUTOVER_REQUIRED, true, 0x1801547a0ull, "Object", 11)
+// Object  NO-OP / DLL-PRESENT  doors=9  -- verdict is DLL-PRESENT only and 9 by-name door(s) would resolve NULL at cutover
+CUTOVER_ROW("??_7External@Object@@6B@", CUTOVER_REQUIRED, true, 0x1801547a0ull, "Object", 9)
 // Object  NO-OP / DLL-PRESENT  doors=3  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("??_7Internal@Object@@6B@", CUTOVER_REQUIRED, true, 0x180154720ull, "Object", 3)
 // Object  HARMFUL / DLL-PRESENT  doors=1  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6e0ull, "Object", 1)
-// Object  HARMFUL / DLL-PRESENT  doors=8  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_singleton@ExternalFactory@Object@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6c8ull, "Object", 8)
-// Object  HARMFUL / DLL-PRESENT  doors=11  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_singleton@Factory@Object@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6e8ull, "Object", 11)
-// Object  HARMFUL / DLL-PRESENT  doors=4  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_singleton@InternalFactory@Object@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6d8ull, "Object", 4)
-// Object  NO-OP / DLL-PRESENT  doors=3  -- verdict is DLL-PRESENT only and 3 by-name door(s) would resolve NULL at cutover
-CUTOVER_ROW("?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A", CUTOVER_REQUIRED, true, 0x1801f9b00ull, "Object", 3)
-// Object  NO-OP / DLL-PRESENT  doors=3  -- verdict is DLL-PRESENT only and 3 by-name door(s) would resolve NULL at cutover
-CUTOVER_ROW("?_typeInfo@Internal@Object@@0VBaseTypeInfo@2@A", CUTOVER_REQUIRED, true, 0x1801f9c18ull, "Object", 3)
+// Object  HARMFUL / DLL-PRESENT  doors=6  -- tag states the verdict inverts at cutover
+CUTOVER_ROW("?_singleton@ExternalFactory@Object@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6c8ull, "Object", 6)
+// Object  HARMFUL / DLL-PRESENT  doors=7  -- tag states the verdict inverts at cutover
+CUTOVER_ROW("?_singleton@Factory@Object@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6e8ull, "Object", 7)
+// Object  HARMFUL / DLL-PRESENT  doors=3  -- tag states the verdict inverts at cutover
+CUTOVER_ROW("?_singleton@InternalFactory@Object@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6d8ull, "Object", 3)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=2  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_disableHandler@Debug@System@@0_NA", CUTOVER_REQUIRED, true, 0x1801fc708ull, "System", 2)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=3  -- tag states the verdict inverts at cutover

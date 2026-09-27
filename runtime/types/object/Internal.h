@@ -613,6 +613,14 @@ public:
     // `?_singleton@InternalFactory@Object@@0PEAV12@EA` read straight out.
     static InternalFactory* Get();
 
+    // ?_singleton@InternalFactory@Object@@0PEAV12@EA — retail 0x1801fc6d8. The
+    // CLASS STATIC since ENDGAME B.3.9 OBJ (B39_RULES D7): defined in
+    // internal_class.cpp, and RtObjectPortInit redirects the minted row onto
+    // it, so the name door, the address door and this member are the same
+    // eight bytes. Written by the ctor door (engine/singleton_ctors.cpp).
+    // PUBLIC while foreign readers still reach the cell through the doors.
+    static InternalFactory* _singleton;
+
     // ?Startup@InternalFactory@Object@@QEAA_NXZ  retail 0x1800c0020 —
     // `MOV AL,1; RET`. It really does nothing but succeed.
     bool Startup();

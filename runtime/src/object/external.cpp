@@ -477,14 +477,11 @@ Filename* RtObject_ExternalFactory_GetPathForReferenceId(const ExternalFactory* 
 // finds nothing — a wrong answer with a healthy-looking pointer, which is the
 // failure mode this file's own header warns about one section down.
 //
-// RtResolveCached caches a HIT and RETRIES a miss, naming it once, so the mint
-// registering later is picked up. Deliberately NOT resolved at registration
-// time: nothing here may assume an init ordering it does not control.
-static void* g_factorySingletonCache = nullptr;   // Runtime 0x1801fc6e8
-
+// ENDGAME B.3.9 OBJ (B39_RULES D7): the cell is the class static
+// `Object::Factory::_singleton` (Runtime 0x1801fc6e8), onto which the minted
+// row is redirected -- no resolve, no cache, no init ordering to assume.
 static void** FactorySingletonSlot() {
-    return reinterpret_cast<void**>(RtResolveCached(
-        "?_singleton@Factory@Object@@0PEAV12@EA", &g_factorySingletonCache));
+    return reinterpret_cast<void**>(&::Object::Factory::_singleton);
 }
 
 const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
@@ -673,10 +670,8 @@ ExternalPtr<External>* RtObject_ExternalList_Find(const ExternalList* self,
 int RtObjectExternalRegister() {
     using namespace RtObject;
 
-    // Object::Factory::_singleton is NOT resolved here any more — see
-    // FactorySingletonSlot() above. Resolving it at registration time froze a
-    // null at cutover, because the mint that supplies it registers 80 lines of
-    // init later.
+    // Object::Factory::_singleton is the class static (FactorySingletonSlot()
+    // above); nothing here resolves it.
 
     int n = 0;
 

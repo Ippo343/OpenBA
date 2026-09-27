@@ -329,25 +329,17 @@ void ArrayIntSetSize(Collection::Array<int32_t>* a, int newSize) {
 // dereferences the result unguarded, so a save naming "Internal" itself faults
 // exactly where retail faults.
 //
-// A SECOND RECORD FOR THIS TYPE NOW EXISTS, AND IT IS HARMLESS — say it out loud
-// rather than let the next reader find it. `standalone/rt_data_mint_tables.inc`
-// mints `?_typeInfo@Internal@Object@@0VBaseTypeInfo@2@A` at 0x1801f9c18
-// (kTypeInfoStorage[52]) and `standalone/rt_data_mint.cpp`'s `MintStorage()`
-// SPLICES the minted nodes in FRONT of whatever CRT-init left in
-// `BaseTypeInfo::_firstTypeInfo` — it was written that way, by name, so that a
-// `DEFINE_TYPE` static could exist one day (B33_RULES §9.3). So:
-//   * the minted record is walked FIRST by `Factory::Startup`, is the one that
-//     wins the AVL insert, and stays the one behind the `_typeInfo@Internal`
-//     name door that internalfactory_persist.cpp reads;
-//   * the record below is also walked, also gets `typeId = CRC("Internal")` in
-//     pass 1, and its `Insert` finds the existing key and returns that node — so
-//     it adds NO node, NO child link and NO second type id;
-//   * `Internal::Type()`/`TypeId()` therefore answer the same value as the
-//     minted `?Type@Internal@Object@@UEBAIXZ` does, 0xFFFFFFFF before Startup
-//     and CRC("Internal") after it.
-// The one difference is the two factory pointers: the minted row carries
-// `RtMintTiTrapStub_52_*`, this one carries the real `return nullptr` bodies,
-// which is what retail has. Nothing reads them for this type.
+// THE ONE RECORD (ENDGAME B.3.9 OBJ, B39_RULES D6 "the duplicate"). Until this
+// block the mint ALSO minted `?_typeInfo@Internal@Object@@0VBaseTypeInfo@2@A`
+// (0x1801f9c18) and spliced it in front of this one, so `Factory::Startup` saw
+// the name twice and its `Insert` silently kept the minted node. That row is
+// retired (tools/rt_mint_retired/obj.txt): this CRT-init record is the only
+// `Internal` in `_firstTypeInfo`, `Factory::Startup` inserts it, and every
+// reader of the type id -- `Internal::TypeId()`/`Type()`, the minted
+// `??_7Internal@Object@@6B@` slot doors (object_typeinfo_accessors.cpp),
+// `PersistObject` and `Clone` below -- reads it. Its factory pointers are the
+// real `return nullptr` bodies, which is what retail has.
+// tests/unit/b39_obj_typeinfo_unique_test.cpp keeps it the only one.
 DEFINE_TYPE(Object::Internal, "Base", nullptr)
 
 // 0x18002fc80 / 0x1800070c0 — `XOR EAX,EAX; RET`, both of them.
@@ -566,15 +558,15 @@ Internal* Internal::Clone() {
 // Object::InternalFactory
 // ============================================================================
 
+// ?_singleton@InternalFactory@Object@@0PEAV12@EA — retail 0x1801fc6d8. The
+// class static (ENDGAME B.3.9 OBJ, B39_RULES D7); the minted row is redirected
+// onto it in RtObjectPortInit, so the name and address doors answer these
+// bytes. The mint never zeroes or re-seeds it; the language zero-initialises
+// it and the ctor door publishes into it.
+InternalFactory* InternalFactory::_singleton = nullptr;
+
 // ?Get@InternalFactory@Object@@SAPEAV12@XZ   retail 0x18002f850 —
 // `MOV RAX,[0x1801fc6d8]; RET`.
-//
-// The cell is `?_singleton@InternalFactory@Object@@0PEAV12@EA`, reached through
-// the port door for the same reason `Object::Factory::Get()` is (B33_RULES
-// §9.3): it is only ever read at RUNTIME, never from a static initialiser, so
-// the door answers it and no second cell is created. `reg_mint_promoted.cpp`
-// records that row as UNPROMOTABLE while the DLL is present and REQUIRED at
-// cutover; nothing here changes that.
 #if defined(BANISHED_UNIT_TEST)
 namespace detail {
 // A unit test builds its own factory and installs it for the duration of a
@@ -583,11 +575,7 @@ InternalFactory* g_unitInternalFactory = nullptr;
 }  // namespace detail
 InternalFactory* InternalFactory::Get() { return detail::g_unitInternalFactory; }
 #else
-InternalFactory* InternalFactory::Get() {
-    InternalFactory** slot = RT_DATA_SLOT(InternalFactory**,
-        "?_singleton@InternalFactory@Object@@0PEAV12@EA");
-    return slot ? *slot : nullptr;
-}
+InternalFactory* InternalFactory::Get() { return _singleton; }
 #endif
 
 // ?Startup@InternalFactory@Object@@QEAA_NXZ   retail 0x1800c0020 — `MOV AL,1; RET`.
@@ -751,28 +739,17 @@ void InternalFactory::ResetPersistState(void* stream) {
 //     That asymmetry is the function.
 namespace {
 
-// `?_singleton@Factory@Object@@0PEAV12@EA` — note the `0PEAV12@EA` spelling; the
-// obvious `1PEAV12@A` is a phantom that resolves NULL silently
-// (reference_resolveexport_phantom_names.md).
-void* g_factorySingletonCache = nullptr;                 // Runtime 0x1801fc6e8
-
+// `?_singleton@Factory@Object@@0PEAV12@EA` (Runtime 0x1801fc6e8) is the class
+// static `Object::Factory::_singleton` since ENDGAME B.3.9 OBJ (B39_RULES D7).
 RtObject::Factory** FactorySingletonSlot() {
-    return reinterpret_cast<RtObject::Factory**>(RtResolveCached(
-        "?_singleton@Factory@Object@@0PEAV12@EA", &g_factorySingletonCache));
+    return reinterpret_cast<RtObject::Factory**>(&Factory::_singleton);   // B.3.3 bridge
 }
 
-// `Object::Internal`'s own BaseTypeInfo node, read through the NAME door so a
-// promotion of the minted row is followed. Field +0x00 is the type id.
-//
-// NOT `Internal::TypeId()`. The two agree after `Factory::Startup` (both are
-// CRC("Internal")) and both are 0xFFFFFFFF before it, but this is a LOAD path
-// and the door is what five in-DLL readers and reg_mint_promoted.cpp's row set
-// are keyed on. Swapping it for the class's own record would be a change to what
-// a load reads with no measurement behind it.
-const uint8_t* InternalTypeInfoNode() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@Internal@Object@@0VBaseTypeInfo@2@A");
-}
+// (`Object::Internal`'s type id is `Internal::TypeId()`, the class record's
+// +0x00, since ENDGAME B.3.9 OBJ retired the minted duplicate
+// `?_typeInfo@Internal@Object@@` -- the one record. The coordinator measured
+// that either record winning gives the same type tree and the same resave,
+// b39_session/ORDER_MEASUREMENT.md variant C.)
 
 // `?IsDerivedFrom@Base@Object@@QEBA_NI@Z` (0x1800c0390), ported and registered
 // by runtime/src/object/type_system.cpp. Reached through the registry so this
@@ -840,8 +817,7 @@ Internal* InternalFactory::PersistObject(void* stream, uint32_t generation,
             void* const created =
                 reinterpret_cast<void* (*)()>(info->factoryFn)();     // CALL [RCX+0x20]
 
-            const uint32_t internalTypeId =
-                *reinterpret_cast<const uint32_t*>(InternalTypeInfoNode());
+            const uint32_t internalTypeId = Internal::TypeId();       // [0x1801f9c18]
             Internal* obj = PersistIsDerivedFrom(created, internalTypeId)
                                 ? static_cast<Internal*>(created)
                                 : nullptr;                            // CMOVNZ RSI,RBX
