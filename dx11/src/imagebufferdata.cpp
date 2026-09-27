@@ -196,7 +196,6 @@ struct Imports {
     // The Runtime base is a real class now; see `Destructor` below.
     void* (*MemAlloc)(uint64_t, int);// ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z
     void  (*MemFree)(void*);         // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
-    void** configSingleton;          // ?_singleton@Configuration@Video@@0PEAV12@EA
 };
 
 Imports  g_im;
@@ -213,7 +212,6 @@ const Imports* GetImports() {
 
         g_im.MemAlloc       = (void* (*)(uint64_t, int))ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
         g_im.MemFree        = (void  (*)(void*))ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
-        g_im.configSingleton = (void**)ResolveExport("?_singleton@Configuration@Video@@0PEAV12@EA");
 
         const void* const* p = reinterpret_cast<const void* const*>(&g_im);
         g_imOk = true;
@@ -347,7 +345,8 @@ void CreateSamplerState(ImageBufferData* self, const Imports* im) {
                             D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT, // 0x14
                             D3D11_FILTER_ANISOTROPIC };       // 0x55
 
-    int aniso = *reinterpret_cast<int*>(static_cast<uint8_t*>(*im->configSingleton) + 0x28);
+    int aniso = *reinterpret_cast<int*>(
+        reinterpret_cast<uint8_t*>(::Video::Configuration::_singleton) + 0x28);   // B.3.9 VID: the class static
     const uint32_t flags = IbU32(ib, 0x34);
     const bool comparison = ((flags >> 6) & 1) != 0;
 

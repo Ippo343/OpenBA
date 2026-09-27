@@ -88,8 +88,7 @@ void** DeviceSingletonPtr() {
     return p;
 }
 void** ConfigurationSingletonPtr() {
-    void** p = RT_DATA_SLOT(void**,
-        "?_singleton@Configuration@Video@@0PEAV12@EA");
+    void** p = reinterpret_cast<void**>(&::Video::Configuration::_singleton);
     return p;
 }
 

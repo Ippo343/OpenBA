@@ -238,7 +238,6 @@ struct Imports {
 
     // --- the three singleton slots ---------------------------------------
     void** appSingleton;                               // 0x180013310
-    void** configSingleton;                            // 0x180013480
 };
 
 Imports g_im;
@@ -279,7 +278,6 @@ const Imports* GetImports() {
 
 
         { (void**)&g_im.appSingleton,           "?_singleton@Application@1@0PEAV11@EA",                          0x180013310 },
-        { (void**)&g_im.configSingleton,        "?_singleton@Configuration@Video@@0PEAV12@EA",                   0x180013480 },
     };
     g_imOk = true;
     for (const Entry& e : table) {
@@ -451,7 +449,9 @@ inline ::Video::Device* VDev(void* device) {
 inline ::Video::ImageBuffer* VImg(void* imageBuffer) {
     return reinterpret_cast< ::Video::ImageBuffer*>(imageBuffer);  // B.3.5 bridge
 }
-inline void* ConfigOf(const Imports* im) { return *im->configSingleton; }
+// ENDGAME B.3.9 VID: Video::Configuration::_singleton is the class static; the
+// import row that resolved it by name is gone.
+inline void* ConfigOf(const Imports*)    { return ::Video::Configuration::_singleton; }
 inline void* AppOf(const Imports* im)    { return *im->appSingleton; }
 
 // ============================================================

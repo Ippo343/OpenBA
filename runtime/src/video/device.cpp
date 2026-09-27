@@ -149,8 +149,7 @@ Device** DeviceSingletonSlot() {
     return p;
 }
 Configuration** ConfigSingletonSlot() {
-    Configuration** p = RT_DATA_SLOT(Configuration**,
-        "?_singleton@Configuration@Video@@0PEAV12@EA");
+    Configuration** p = reinterpret_cast<Configuration**>(&::Video::Configuration::_singleton);
     return p;
 }
 void** PersistenceSingletonSlot() {
@@ -164,6 +163,8 @@ void** PersistenceSingletonSlot() {
 // ?_singleton@Device@Video@@0PEAV12@EA (0x1801fe7a8) — the class static
 // (ENDGAME B.3.9 VID, B39_RULES D7; the minted row is redirected onto it).
 Video::Device* Video::Device::_singleton = nullptr;
+// ?_singleton@Configuration@Video@@0PEAV12@EA (0x1801fe7a0) — likewise.
+Video::Configuration* Video::Configuration::_singleton = nullptr;
 
 // ============================================================================
 // Video::Device::GetInterfaceCount  —  retail 0x18000d3b0, ordinal 2729

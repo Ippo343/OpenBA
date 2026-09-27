@@ -151,7 +151,7 @@ void MemFree(void* p) {
 // between working on the device you were handed and working on whichever one is
 // current.
 Configuration** ConfigSlot() {
-    return RT_DATA_SLOT(Configuration**, "?_singleton@Configuration@Video@@0PEAV12@EA");
+    return reinterpret_cast<Configuration**>(&::Video::Configuration::_singleton);
 }
 void** AppSlot() {
     return RT_DATA_SLOT(void**, "?_singleton@Application@1@0PEAV11@EA");

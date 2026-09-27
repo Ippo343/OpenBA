@@ -617,8 +617,8 @@ public:
 //   ??4Configuration@Video@@QEAAAEAV01@AEBV01@@Z    0x18000d520  UNPORTED
 //
 // STATIC DATA — `?_singleton@Configuration@Video@@0PEAV12@EA` @ 0x1801fe7a0
-// stays an `RT_DATA_SLOT` read (RULE B4b-4 / B35_RULES §9, 16 by-name doors and
-// dx11 reads it by name too). Not a C++ static member yet.
+// is the class static `Configuration::_singleton` (ENDGAME B.3.9 VID, B39_RULES
+// D7): the minted row is redirected onto it.
 // ----------------------------------------------------------------------------
 class Configuration {
 public:
@@ -632,6 +632,14 @@ public:
 
     // ?Get@Configuration@Video@@SAPEAV12@XZ    0x18000d590  NOT PORTED
     static Configuration* Get();
+
+    // ?_singleton@Configuration@Video@@0PEAV12@EA (0x1801fe7a0) — the class
+    // static (ENDGAME B.3.9 VID, B39_RULES D7). RtVideoPortInit redirects the
+    // minted storage row onto it, so the name door, the address door and this
+    // member are the same bytes. Written by the ctor door (singleton_ctors.cpp)
+    // and cleared by Engine's platform shutdown. PUBLIC while foreign readers
+    // remain.
+    static Configuration* _singleton;
 
     // ---- the eighteen accessor pairs, 0x18000d5a0..0x18000d7f0 -------------
     // Sixteen-byte stubs, each a single `MOV EAX,[RCX+off]` / `MOVZX EAX,byte

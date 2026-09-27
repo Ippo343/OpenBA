@@ -44,7 +44,7 @@ uint8_t* VideoDevice() {
     return slot ? static_cast<uint8_t*>(*slot) : nullptr;
 }
 uint8_t* VideoConfig() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Configuration@Video@@0PEAV12@EA");
+    void** slot = reinterpret_cast<void**>(&::Video::Configuration::_singleton);
     return slot ? static_cast<uint8_t*>(*slot) : nullptr;
 }
 }  // namespace
