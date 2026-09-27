@@ -95,6 +95,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/object/External.h"   // the Object record accessors (D6 step 1)
 
 // Forward declarations: the positive control at the bottom of the anonymous
 // namespace calls these, and they are defined below it.
@@ -109,14 +110,10 @@ extern "C" const char* RtObject_Internal_TypeName(const void*);
 namespace {
 
 // ---- the exported BaseTypeInfo nodes these bodies read ----------------------
-const uint8_t* CompiledExternalTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A");
-}
-const uint8_t* ExternalTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A");
-}
+// ENDGAME B.3.9 OBJ (B39_RULES D6 step 1): External's and CompiledExternal's
+// records are read through the Object accessor slots in external_class.cpp
+// (`Object::External::TypeId()`, `Object::CompiledExternal::TypeId()`, and the
+// `*TypeInfoRecord()->name` beside them), not through RT_DATA_SLOT caches.
 const uint8_t* InternalTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*,
                         "?_typeInfo@Internal@Object@@0VBaseTypeInfo@2@A");
@@ -218,26 +215,20 @@ extern "C" uint32_t RtObject_Base_Type(const void* self) {
 // ?Type@CompiledExternal@Object@@UEBAIXZ  0x18000b690  MOV EAX,[node+0x00].
 extern "C" uint32_t RtObject_CompiledExternal_Type(const void* self) {
     Attend(1, self);
-    uint32_t ours = 0;
-    std::memcpy(&ours, CompiledExternalTypeInfo(), sizeof ours);
-    return ours;
+    return ::Object::CompiledExternal::TypeId();
 }
 
 // ?TypeName@CompiledExternal@Object@@UEBAPEBDXZ  0x18000b6b0  MOV RAX,[node+8].
 extern "C" const char* RtObject_CompiledExternal_TypeName(const void* self) {
     Attend(1, self);
-    const char* ours = nullptr;
-    std::memcpy(&ours, CompiledExternalTypeInfo() + 8, sizeof ours);
-    return ours;
+    return ::Object::CompiledExternalTypeInfoRecord()->name;
 }
 
 // ---- ??_7External@Object@@6B@  slots 2 and 1 -------------------------------
 // ?Type@External@Object@@UEBAIXZ  0x1800066d0  MOV EAX,[node+0x00].
 extern "C" uint32_t RtObject_External_Type(const void* self) {
     Attend(2, self);
-    uint32_t ours = 0;
-    std::memcpy(&ours, ExternalTypeInfo(), sizeof ours);
-    return ours;
+    return ::Object::External::TypeId();
 }
 
 // ?TypeName@External@Object@@UEBAPEBDXZ  0x1800066c0  MOV RAX,[node+0x08].
@@ -245,9 +236,7 @@ extern "C" uint32_t RtObject_External_Type(const void* self) {
 // ?_typeInfo@External@Object@@ is promoted — see the banner.
 extern "C" const char* RtObject_External_TypeName(const void* self) {
     Attend(2, self);
-    const char* ours = nullptr;
-    std::memcpy(&ours, ExternalTypeInfo() + 8, sizeof ours);
-    return ours;
+    return ::Object::ExternalTypeInfoRecord()->name;
 }
 
 // ---- ??_7Internal@Object@@6B@  slots 2 and 1 -------------------------------

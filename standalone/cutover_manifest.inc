@@ -7,7 +7,7 @@
 // REASON CLASS and a measured by-name-door count -- never asserted
 // here.  standalone/cutover_manifest.cpp consumes this.
 
-// REQUIRED 54 | WITHHELD 1   (of 55 rows)
+// REQUIRED 53 | WITHHELD 1   (of 54 rows)
 
 // Achievement  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=4  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@AchievementManager@Achievement@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc670ull, "Achievement", 4)
@@ -53,8 +53,6 @@ CUTOVER_ROW("?_singleton@ExternalFactory@Object@@0PEAV12@EA", CUTOVER_REQUIRED, 
 CUTOVER_ROW("?_singleton@Factory@Object@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6e8ull, "Object", 11)
 // Object  HARMFUL / DLL-PRESENT  doors=4  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@InternalFactory@Object@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6d8ull, "Object", 4)
-// Object  NO-OP / DLL-PRESENT  doors=3  -- verdict is DLL-PRESENT only and 3 by-name door(s) would resolve NULL at cutover
-CUTOVER_ROW("?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A", CUTOVER_REQUIRED, true, 0x1801f9b00ull, "Object", 3)
 // Object  NO-OP / DLL-PRESENT  doors=3  -- verdict is DLL-PRESENT only and 3 by-name door(s) would resolve NULL at cutover
 CUTOVER_ROW("?_typeInfo@Internal@Object@@0VBaseTypeInfo@2@A", CUTOVER_REQUIRED, true, 0x1801f9c18ull, "Object", 3)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=2  -- tag states the verdict inverts at cutover

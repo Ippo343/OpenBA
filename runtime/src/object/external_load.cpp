@@ -347,10 +347,12 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
                           reinterpret_cast<FactoryFn>(info->factoryFn)());   // 1800bc742
                 ++g_lc.created;
 
-                const BaseTypeInfo* extInfo = RT_DATA_SLOT(const BaseTypeInfo*,
-                    "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A");
+                // `External::TypeId()` (0x180029350): the record's +0x00,
+                // through the Object accessor slot (external_class.cpp,
+                // ENDGAME B.3.9 OBJ D6 step 1) -- no lazy RT_DATA_SLOT cache
+                // on the loader thread.
                 const bool isExternal = RT_EXPORT_ONCE(IsDerivedFn,
-                    "?IsDerivedFrom@Base@Object@@QEBA_NI@Z")(obj, extInfo->typeId);
+                    "?IsDerivedFrom@Base@Object@@QEBA_NI@Z")(obj, ::Object::External::TypeId());
                 if (!isExternal || obj == nullptr) {              // 1800bc758/761
                     ++g_lc.notAnExternal;
                     bad = true;
