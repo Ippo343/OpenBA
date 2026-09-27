@@ -684,7 +684,10 @@ public:
     // are deliberately not declared; see MeshInstance's note above.
 
 protected:
-    ~EdgeMeshInstance();    // 0x1800174d0  exported, NOT PORTED, no caller
+    // 0x1800174d0 -- PORTED (ENDGAME B.3.9 GFX, mesh.cpp): retail's body is a
+    // bare tail into ~Geometry, so the member is empty and the chain is the
+    // compiler's; its ??1 door is registered by name and address.
+    ~EdgeMeshInstance();
 
 public:
     RtGraphics::ExternalPtr _mesh;      // +0xc0  ExternalPtr<EdgeMesh>; ctor 0
