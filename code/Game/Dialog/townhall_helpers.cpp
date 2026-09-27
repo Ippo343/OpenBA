@@ -35,7 +35,7 @@
 
 // AssignHousing (0x140111ee0) — sets citizen+0x248 (workplace roster link); ported in
 // citizencomponent.cpp and registered in standalone. Same decl as citizen_employ_cascade.
-struct CitizenComponent;
+class CitizenComponent;
 extern void CitizenComp_AssignHousing(CitizenComponent* self, int64_t* buildingIBPptr);
 
 namespace {
