@@ -314,14 +314,10 @@ inline uint32_t TypeIdGroupElement() {
                           &g_tidGroupElement);
 }
 
-// ?_singleton@Factory@Object@@0PEAV12@EA  — an exported DATA symbol (the cell,
-// not the Factory). PLAN.md §2.3 calls 0x1801fc6e8 a global that "has no
-// export"; both halves of that are wrong, and type_system.cpp already says so.
+// ?_singleton@Factory@Object@@0PEAV12@EA — the class static now (ENDGAME
+// B.3.9 SS1, B39_RULES D7): read fresh, no lazy cache (B9-10).
 RtObject::Factory* FactorySingleton() {
-    static RtObject::Factory** cell = nullptr;
-    if (!cell) cell = reinterpret_cast<RtObject::Factory**>(
-        ResolveExport("?_singleton@Factory@Object@@0PEAV12@EA"));
-    return cell ? *cell : nullptr;
+    return reinterpret_cast<RtObject::Factory*>(::Object::Factory::_singleton);
 }
 
 // ============================================================================
