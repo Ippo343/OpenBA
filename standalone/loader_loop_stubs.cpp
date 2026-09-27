@@ -93,9 +93,9 @@ bool SyncEngineLoader() {
 }
 
 void WaitForEngineLoader() {
-    if (!SyncEngineLoader() || !g_pLoader) return;
+    if (!SyncEngineLoader()) return;
     printf("[EngineLoader] waiting for loader thread to finish (sync)...\n");
-    reinterpret_cast<System::Thread*>(g_pLoader)->WaitForFinish();   // B.3.4 bridge
+    Engine::LoaderLoop::_loader.WaitForFinish();   // ENDGAME B.3.9 ENG W2: the class static
     printf("[EngineLoader] loader thread finished\n");
 }
 
@@ -135,19 +135,18 @@ Engine::UpdateLoop* InnerLoaderLoop::DeletingDtor(unsigned flags) {
 void InnerLoaderLoop::Startup() {
     StallDebug::Phase phase("InnerLL::Startup");
     printf("[InnerLL::Startup] self=%p next=%p loader=%p\n",
-           (void*)this, (void*)_nextLoop, g_pLoader);
+           (void*)this, (void*)_nextLoop, (void*)&Engine::LoaderLoop::_loader);
     if (SkipEngineLoader()) {
         printf("[InnerLL::Startup] BANISHED_SKIP_ENGINE_LOADER set — skipping "
                "Engine::Loader::Load (background loader pegs a core, but boot "
                "depends on Game/Global; expect a crash).\n");
-    } else if (g_pLoader) {
-        // ENDGAME B.3.7: `Engine::Loader::Load` is a (non-virtual) member of
-        // the real class; the `fn_Loader_Load` name door is no longer needed.
-        reinterpret_cast<Engine::Loader*>(g_pLoader)->Load(_nextLoop);        // B.3.7 bridge
+    } else {
+        // ENDGAME B.3.9 ENG W2: `_loader` is the class static (the minted
+        // DLL-data slot and its engine_funcs address globals are gone), so the
+        // old "g_pLoader null" branch cannot happen and went with them.
+        Engine::LoaderLoop::_loader.Load(_nextLoop);
         printf("[InnerLL::Startup] Loader::Load returned\n");
         WaitForEngineLoader();
-    } else {
-        printf("[InnerLL::Startup] WARN: skipping Loader::Load (g_pLoader null)\n");
     }
 }
 
@@ -186,18 +185,17 @@ Engine::UpdateLoop* GameLoaderLoop::DeletingDtor(unsigned flags) {
 void GameLoaderLoop::Startup() {
     StallDebug::Phase phase("OuterLL::Startup");
     printf("[OuterLL::Startup] self=%p next=%p loader=%p\n",
-           (void*)this, (void*)_nextLoop, g_pLoader);
+           (void*)this, (void*)_nextLoop, (void*)&Engine::LoaderLoop::_loader);
     if (SkipEngineLoader()) {
         printf("[OuterLL::Startup] BANISHED_SKIP_ENGINE_LOADER set — skipping "
                "Engine::Loader::Load (see InnerLL note; expect a crash).\n");
-    } else if (g_pLoader) {
-        // ENDGAME B.3.7: `Engine::Loader::Load` is a (non-virtual) member of
-        // the real class; the `fn_Loader_Load` name door is no longer needed.
-        reinterpret_cast<Engine::Loader*>(g_pLoader)->Load(_nextLoop);        // B.3.7 bridge
+    } else {
+        // ENDGAME B.3.9 ENG W2: `_loader` is the class static (the minted
+        // DLL-data slot and its engine_funcs address globals are gone), so the
+        // old "g_pLoader null" branch cannot happen and went with them.
+        Engine::LoaderLoop::_loader.Load(_nextLoop);
         printf("[OuterLL::Startup] Loader::Load returned\n");
         WaitForEngineLoader();
-    } else {
-        printf("[OuterLL::Startup] WARN: skipping Loader::Load (g_pLoader null)\n");
     }
 }
 

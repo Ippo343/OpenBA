@@ -142,19 +142,19 @@ static const int kStorageCount  = (int)(sizeof(kMintStorage)   / sizeof(kMintSto
 static bool g_minted = false;
 static RtMintRedirect::Table<64> g_redirects;
 
-static const char kLoaderSym[] = "?_loader@LoaderLoop@Engine@@1VLoader@2@A";
 static const char kFirstTiSym[] = "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA";
 
 static bool SymIs(const char* sym, const char* want) {
     return sym && strcmp(sym, want) == 0;
 }
 
-// The static MintConstructedStatics() BUILDS (a Thread object). `_firstTypeInfo`
-// also carries a ctorInit but is only spliced, not constructed, so it may be
-// redirected. (The seeded MT19937, ?_rng@Particle@Graphics@@, is a class static
-// since ENDGAME B.3.9 GFX; its row is retired.)
+// Nothing is BUILT by the mint any more: `?_rng@Particle@Graphics@@` (ENDGAME B.3.9
+// GFX) and `?_loader@LoaderLoop@Engine@@` (ENDGAME B.3.9 ENG W2) are class statics
+// the CRT constructs, their rows retired. `_firstTypeInfo` carries a ctorInit but is
+// only spliced, not constructed, so it may be redirected.
 static bool MintConstructs(const RtMintStorage& s) {
-    return SymIs(s.symbol, kLoaderSym);
+    (void)s;
+    return false;
 }
 
 // The cell the row lives in: the owner's redirected static, else the mint's.
@@ -188,10 +188,6 @@ static_assert(offsetof(RtObject::BaseTypeInfo, fileExtension) == 0x18, "BaseType
 static_assert(offsetof(RtObject::BaseTypeInfo, factoryFn) == 0x20, "BaseTypeInfo::factoryFn");
 static_assert(offsetof(RtObject::BaseTypeInfo, inPlaceFactoryFn) == 0x28, "BaseTypeInfo::inPlaceFactoryFn");
 static_assert(offsetof(RtObject::BaseTypeInfo, next) == 0x30, "BaseTypeInfo::next");
-// ConstructLoader writes Loader::_loop at +0x30 by hand. That offset is only
-// correct while the Thread base is exactly 0x30 bytes.
-static_assert(sizeof(System::Thread) == 0x30,
-              "Engine::Loader::_loop is at +0x30 because the Thread base is 0x30");
 
 // ============================================================
 // Trap bodies
@@ -425,71 +421,15 @@ static void MintTypeInfos() {
 //   * 14 ?_typeInfo@ + ?_firstTypeInfo@ -- constructed, and MintTypeInfos()
 //     already reproduces them.
 //   * ?_loader@LoaderLoop@Engine@@ -- constructed by ONE initialiser
-//     (0x180148fe0), reproduced here.
+//     (0x180148fe0). ENDGAME B.3.9 ENG W2: no longer reproduced here -- the
+//     class static Engine::LoaderLoop::_loader is built by its own ctor at CRT
+//     init (runtime/src/engine/loops.cpp), as retail's is at DLL load.
 //   * ?_rng@Particle@Graphics@@ -- NOT constructed by anything. This corrects
 //     lane C2's own first-pass claim that it needed a seed: retail never seeds
 //     it, so the mint's zeroed storage is exactly the loaded DLL's state, and
 //     ADDING a seed would be the divergence. See WAVE9_LANE_C2.md.
 //   * every singleton and every other .data static -- not constructed.
 //
-// Gated, because constructing ?_loader starts a real OS thread and three
-// events.
-// ============================================================
-static void* g_loaderStorage = nullptr;
-
-static void RtMintLoaderTeardown() {
-    // Retail's own atexit (0x18014a580) is ??1Thread with the Thread vtable
-    // restamped first -- which is precisely what our ported dtor does.
-    typedef void (*ThreadDtorFn)(void*);
-    ThreadDtorFn dtor = (ThreadDtorFn)RtPortLookupExport("??1Thread@System@@QEAA@XZ");
-    if (dtor && g_loaderStorage) dtor(g_loaderStorage);
-    g_loaderStorage = nullptr;
-}
-
-// FUN_180148fe0, transcribed:
-//     System::Thread::Thread(&_loader, 0x40000);   // 256 KB stack
-//     _loader.vtable = ??_7Loader@Engine@@6B@;
-//     _loader._loop  = nullptr;                    // +0x30
-//     atexit(FUN_18014a580);
-static bool ConstructLoader(const RtMintStorage& s, void* cell) {
-    typedef void* (*ThreadCtorFn)(void*, unsigned int);
-    ThreadCtorFn ctor = (ThreadCtorFn)RtPortLookupExport("??0Thread@System@@QEAA@I@Z");
-    if (!ctor) {
-        fprintf(stderr, "[RtMint] CANNOT construct %s: ??0Thread@System@@QEAA@I@Z "
-                        "is not ported. Left zeroed -- its vtable is NULL.\n", s.symbol);
-        return false;
-    }
-    void** vt = nullptr;
-    for (int i = 0; i < kVtableCount; ++i)
-        // `symbol &&` is NOT optional: a vtable row carried by ADDRESS has a
-        // NULL symbol by design (lane C2, c77b26f -- the IO::Encoding table at
-        // 0x1801554a8 is unexported, so contents+address is all it has).  This
-        // was the tree's ONLY unguarded strcmp on a .symbol field; every other
-        // site in this file already wrote `s.symbol && strcmp(...)`.  The
-        // second controlled DLL-absent boot faulted here in ucrtbase with
-        // RCX=0, and nothing before it could: the last run down this path
-        // predated the first null-symbol row.
-        if (kMintVtables[i].symbol &&
-            strcmp(kMintVtables[i].symbol, "??_7Loader@Engine@@6B@") == 0)
-            vt = kMintVtables[i].table;
-    if (!vt) {
-        fprintf(stderr, "[RtMint] CANNOT construct %s: ??_7Loader@Engine@@6B@ was "
-                        "not minted.\n", s.symbol);
-        return false;
-    }
-    ctor(cell, 0x40000);
-    *(void**)cell = (void*)vt;                            // +0x00
-    // _loop is a void* (UpdateLoop*), 8 bytes -- this was *(int*)0 until
-    // Wave 9, which zeroed only the LOW HALF.  Harmless in practice only
-    // because the storage is BSS and already zero, so nothing ever
-    // depended on it; but a 4-byte write to an 8-byte pointer field is
-    // this project's wild-write family in miniature, and it would have
-    // become real the moment this object was ever reconstructed in place.
-    *(void**)((char*)cell + 0x30) = nullptr;              // Loader::_loop
-    g_loaderStorage = cell;
-    atexit(&RtMintLoaderTeardown);
-    return true;
-}
 
 // (ConstructParticleRng, the transcription of initialiser 0x180149650 that
 // seeded ?_rng@Particle@Graphics@@, is gone: ENDGAME B.3.9 GFX. The row is
@@ -503,8 +443,6 @@ static void MintConstructedStatics() {
         if (!s.ctorInit) continue;
         if (SymIs(s.symbol, kFirstTiSym)) {
             ++g_constructed;              // MintTypeInfos() already built it
-        } else if (SymIs(s.symbol, kLoaderSym)) {
-            if (ConstructLoader(s, MintStorageCell(i))) ++g_constructed;
         } else {
             // Unreachable via the generator, which refuses to emit an
             // unhandled ctorInit. Kept because "unreachable" is exactly the
@@ -655,20 +593,11 @@ static bool FindMintRow(const char* symbol, RtMintRow* out) {
     return false;
 }
 
-// Register ONE row through both doors. `?_loader@` carries two interior
-// offsets that an exact-match address registry cannot cover, so they travel
-// with their row rather than living in a second loop that could be forgotten.
+// Register ONE row through both doors.
 static int RegisterOneMintRow(const RtMintRow& r) {
     int doors = 0;
     if (r.symbol) { RegisterRuntimeExport(r.symbol, r.storage); ++doors; }
     RegisterRuntimeAddr((uintptr_t)r.dllVa, r.storage); ++doors;
-    if (r.symbol && strcmp(r.symbol, "?_loader@LoaderLoop@Engine@@1VLoader@2@A") == 0) {
-        // engine/funcs/engine_funcs.cpp reads Loader::runFlags at +0x08 and
-        // Loader::hFinished at +0x28 by their own addresses.
-        RegisterRuntimeAddr((uintptr_t)r.dllVa + 0x08, (char*)r.storage + 0x08);
-        RegisterRuntimeAddr((uintptr_t)r.dllVa + 0x28, (char*)r.storage + 0x28);
-        doors += 2;
-    }
     return doors;
 }
 
@@ -696,22 +625,6 @@ static void RegisterMintedData() {
         void* cell = MintStorageCell(i);
         if (s.symbol) { RegisterRuntimeExport(s.symbol, cell); ++names; }
         RegisterRuntimeAddr((uintptr_t)s.dllVa, cell); ++addrs;
-    }
-    // Interior fields our tree resolves by address. A minted object's BASE
-    // address is registered above, but `engine/funcs/engine_funcs.cpp` reads
-    // Loader::runFlags at _loader+0x08 and Loader::hFinished at +0x28 by their
-    // own addresses, and an exact-match address registry does not cover an
-    // interior offset. Registering the two it actually asks for is the whole
-    // fix; a new interior read would need a row here, which is why the audit
-    // reports them.
-    for (int i = 0; i < kStorageCount; ++i) {
-        const RtMintStorage& s = kMintStorage[i];
-        if (!SymIs(s.symbol, kLoaderSym))
-            continue;
-        char* cell = (char*)MintStorageCell(i);
-        RegisterRuntimeAddr((uintptr_t)s.dllVa + 0x08, cell + 0x08);
-        RegisterRuntimeAddr((uintptr_t)s.dllVa + 0x28, cell + 0x28);
-        addrs += 2;
     }
     printf("[RtMint] registered %d by name, %d by address\n", names, addrs);
 }

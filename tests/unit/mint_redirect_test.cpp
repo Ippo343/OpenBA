@@ -13,7 +13,7 @@ const RtMintRedirect::RowView kRows[] = {
     { "?_singleton@Foo@NS@@0PEAV12@EA", 0x1801fc670ull, 8, nullptr, 0, false },
     { nullptr,                          0x1801fc6d0ull, 8, nullptr, 0, false },   // by address
     { "?_ticks@Timer@NS@@0_JA",         0x1801fe720ull, 8, kSeed,   8, false },   // kInit row
-    { "?_loader@X@@1VLoader@2@A",       0x1801fe7b8ull, 8, nullptr, 0, true  },   // constructed
+    { "?_loader@X@@1VLoader@2@A",       0x190000000ull, 8, nullptr, 0, true  },   // constructed (synthetic VA: the real _loader row is retired)
 };
 const int kN = (int)(sizeof(kRows) / sizeof(kRows[0]));
 

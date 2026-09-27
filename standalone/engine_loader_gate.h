@@ -45,8 +45,8 @@
 // synchronously ON THE CALLER THREAD inside `Loader::Load`, so from the instant
 // `Loader::Load` returns until the work is done, the event is reliably
 // non-signalled. Same signal, no race, no new primitive, no lock. The HANDLE is
-// `_loader._thread.hFinished` (Runtime 0x1801fe7e0), already resolved into
-// `g_pLoaderCompletionEvent` (engine/funcs/engine_funcs.h), and it is
+// `_loader._thread.hFinished` (Runtime 0x1801fe7e0), read off the class static
+// `Engine::LoaderLoop::_loader` (ENDGAME B.3.9 ENG W2), and it is
 // manual-reset so a zero-timeout wait observes it without consuming it.
 //
 // The `NoteKicked` latch covers the other end: before the first kick of a run

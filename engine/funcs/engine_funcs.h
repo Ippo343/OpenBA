@@ -201,21 +201,6 @@ extern void** g_pPersistenceSingleton;
 // Engine globals (resolved pointers into Runtime-x64.dll data)
 // ============================================================
 
-// Engine::Loader global instance (_loader) at 0x1801fe7b8
-extern void* g_pLoader;
-
-// _loader's System::Thread::runFlags at 0x1801fe7c0 (= _loader + 0x08; bit 0 =
-// thread running). Engine::Loader derives from System::Thread
-// (runtime/types/system/Thread.h), so this is that base's field, not a Loader
-// one — and bit 0 is the ONLY completion signal LoaderLoop::IsFinished
-// (0x1800dc150) and LoaderLoop::Update (0x1800dc2a0) consult.
-extern uint32_t* g_pLoaderFlags;
-
-// _loader's System::Thread::hFinished at 0x1801fe7e0 (= _loader + 0x28;
-// HANDLE, manual-reset). Loader::Load ResetEvents it and SetEvents hStart
-// (_loader + 0x18) — that pair IS System::Thread::Start, inlined.
-extern HANDLE* g_pLoaderCompletionEvent;
-
 // Application::Application::_singleton at 0x1801fc678 (Runtime export
 // ?_singleton@Application@1@0PEAV11@EA -- corrected by Wave 8 lane E; the
 // previous address here was stale and unused by any resolve call).
