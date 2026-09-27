@@ -35,6 +35,7 @@
 #include "engine/UpdateLoop.h"                // ENDGAME B.3.7 callers (K2)
 #include "audio/Audio.h"                      // ENDGAME B.3.7 callers (K4)
 #include "input/Input.h"                      // ENDGAME B.3.7 callers (K3)
+#include "system/Error.h"                  // ENDGAME B.3.9 SS2: System::Error::_errorString
 // ENDGAME B.3.5 Video/Graphics caller batch: Video::Device and
 // Video::Configuration are real classes. Device.h pulls no Volume.h, so it is
 // safe after <windows.h> here.
@@ -352,12 +353,11 @@ static void ShutdownEngineStaged(void* engineP) {
         reinterpret_cast< ::Application::Application*>(app)->PlatformShutdown();   // B.3.7 bridge
     }
 
-    // 10. FreeLibrary on the Modification DLL slot (Runtime 0x1801fc6d0).
-    if (HMODULE* slot = reinterpret_cast<HMODULE*>(
-            ResolveAddr(Module::Runtime, 0x1801fc6d0))) {
-        if (*slot) FreeLibrary(*slot);
-        *slot = nullptr;
-    }
+    // 10. FreeLibrary on Object::Factory's compiler-plugin module (Runtime
+    // 0x1801fc6d0, the class static Object::Factory::_compilerModule).
+    if (::Object::Factory::_compilerModule)
+        FreeLibrary(static_cast<HMODULE>(::Object::Factory::_compilerModule));
+    ::Object::Factory::_compilerModule = nullptr;
 
     // 11. Modification::SaveList
     if (void* mod = load_ptr(0x680)) {
@@ -459,9 +459,8 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     // System::Error::SetText with a unique tag (e.g., "VideoDevice: ..."),
     // so the string identifies exactly which step bombed.
     if (ok == 0) {
-        const char* err = reinterpret_cast<const char*>(
-            ResolveAddr(Module::Runtime, 0x1801fc720));
-        if (err && err[0]) {
+        const char* err = ::System::Error::_errorString;
+        if (err[0]) {
             printf("[GameMain] System::Error string after Startup failure:\n");
             for (int i = 0; i < 1024 && err[i]; i++) {
                 if (i == 0) printf("    | ");

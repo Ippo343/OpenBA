@@ -267,8 +267,8 @@ void Game_WeatherDtor(void* self) {
 // without IsDerivedFrom validation rather than dereferencing a null BaseTypeInfo.
 void Game_TerrainResolveMaterial(void* refTriple) {
     if (!refTriple) return;
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
-    void* factory = *g_pExternalFactorySingleton;
+    if (!::Object::ExternalFactory::_singleton) return;
+    void* factory = ::Object::ExternalFactory::_singleton;
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     // The singleton is still read through the EXISTING door, so the guard
     // above still gates the same cell and the same registered body still runs.

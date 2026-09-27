@@ -68,6 +68,7 @@
 #include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K2)
 #include "save/SaveLoad.h"                    // ENDGAME B.3.7 callers (K2)
 #include "audio/Audio.h"                      // ENDGAME B.3.7 callers (K4)
+#include "object/External.h"   // ENDGAME B.3.9 SS2: Object::ExternalFactory::_singleton
 
 // code/Game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
 extern "C" void Minimap_CreateAndUpload(void* mapObj);
@@ -98,8 +99,6 @@ static fn_SerializeRefTable_t   s_fn_SerializeRefTable = nullptr;
 static fn_ResetPersist_t        s_fn_ResetPersist = nullptr;
 static fn_ClearPersist_t        s_fn_ClearPersist = nullptr;
 
-static void**                   s_ppIntFactory = nullptr;   // InternalFactory::_singleton cell
-static void**                   s_ppAchMgr = nullptr;       // AchievementManager::_singleton cell
 static const uint32_t*          s_pAchInstTypeId = nullptr; // AchievementInstance BaseTypeInfo (typeId at +0)
 
 // ------------------------------------------------------------
@@ -147,10 +146,6 @@ void EnsureResolved() {
     s_fn_ClearPersist = reinterpret_cast<fn_ClearPersist_t>(
         ResolveExport("?ClearPersistState@InternalFactory@Object@@QEAAXXZ"));
 
-    s_ppIntFactory = reinterpret_cast<void**>(
-        ResolveExport("?_singleton@InternalFactory@Object@@0PEAV12@EA"));
-    s_ppAchMgr = reinterpret_cast<void**>(
-        ResolveExport("?_singleton@AchievementManager@Achievement@@0PEAV12@EA"));
     s_pAchInstTypeId = reinterpret_cast<const uint32_t*>(
         ResolveExport("?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A"));
 
@@ -699,8 +694,8 @@ extern "C" void GameUpdateLoop_Serialize_95a90(GameUpdateLoop* self, void* strea
                                                void* p3, int* outParam) {
     (void)p3;
     EnsureResolved();
-    void* extFactory = *g_pExternalFactorySingleton;
-    void* intFactory = s_ppIntFactory ? *s_ppIntFactory : nullptr;
+    void* extFactory = ::Object::ExternalFactory::_singleton;
+    void* intFactory = ::Object::InternalFactory::_singleton;
 
     fprintf(stderr, "[GUL::Serialize] %s ENTER self=%p stream=%p\n",
             IsSaving(stream) ? "SAVE" : "LOAD", (void*)self, stream);
@@ -816,7 +811,7 @@ extern "C" void GameUpdateLoop_Serialize_95a90(GameUpdateLoop* self, void* strea
     }
 
     // Retail calls AchievementManager::Persist UNCONDITIONALLY (0x140095a90).
-    // Our `if (s_ppAchMgr && *s_ppAchMgr)` guard is a real deviation: if the
+    // Our `if (AchievementManager::_singleton)` guard is a real deviation: if the
     // manager is null we skip a section retail always writes/reads, which would
     // desync every byte after it. Report when that happens instead of hiding it.
     // Do NOT try to peek the achievement count through `ser`'s encoding:
@@ -825,8 +820,8 @@ extern "C" void GameUpdateLoop_Serialize_95a90(GameUpdateLoop* self, void* strea
     // a different object and returns 0xAAAAAAAA even on a save that loads
     // perfectly. That false reading cost a full detour of this investigation;
     // the PersistObject probe measures the real arguments instead.
-    if (s_ppAchMgr && *s_ppAchMgr) {
-        reinterpret_cast<Achievement::AchievementManager*>(*s_ppAchMgr)->Persist(   // B.3.7 bridge
+    if (::Achievement::AchievementManager::_singleton) {
+        ::Achievement::AchievementManager::_singleton->Persist(
             *reinterpret_cast<IO::Stream*>(stream));
     }
     // B.3.5 bridge — ?Serialize@AnimationManager@Graphics@@QEAAXAEAVSerializer@IO@@@Z.
