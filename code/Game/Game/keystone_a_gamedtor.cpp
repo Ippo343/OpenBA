@@ -25,7 +25,8 @@
 // name table behind exe IAT dispatch slots 0x14015252x/253x/255x/256x):
 //   ?YieldToThreads@Application@1@QEAAXXZ             (slot 0x140152560)
 //   ??1CriticalSection@System@@QEAA@XZ               (slot 0x140152530, a6720 inner dtor)
-//   ??1Thread@System@@QEAA@XZ                         (slot 0x140152520, a6720 tail-call)
+//   (the a6720 tail-call, ??1Thread@System@@ via slot 0x140152520, is the
+//    compiler's base chain since ENDGAME B.3.9 VS: a6720 is ~PathfinderThread)
 //   ??1Scene@Picking@@QEAA@XZ                         (slot 0x140151fb8, ed60 tail-call)
 //
 // NOTE on the StackCriticalSection in 0x1400a6690: the original uses a stack-scoped
@@ -65,11 +66,9 @@ namespace {
 
 // ---- Runtime-DLL exports (resolved by mangled name; same strings as keystone_a_zone.cpp).
 typedef void (*fn_CSDtor_t)(void* cs);
-typedef void (*fn_ThreadDtor_t)(void* thread);
 typedef void (*fn_SceneDtor_t)(void* scene);
 
 static fn_CSDtor_t        s_fn_CSDtor       = nullptr;
-static fn_ThreadDtor_t    s_fn_ThreadDtor   = nullptr;
 static fn_SceneDtor_t     s_fn_SceneDtor    = nullptr;
 
 // ---- Already-registered exe sub-callees (resolved via the standalone registry). ----
@@ -89,7 +88,6 @@ static bool s_init = false;
 static void EnsureFns() {
     if (s_init) return;
     s_fn_CSDtor      = reinterpret_cast<fn_CSDtor_t>(ResolveExport("??1CriticalSection@System@@QEAA@XZ"));
-    s_fn_ThreadDtor  = reinterpret_cast<fn_ThreadDtor_t>(ResolveExport("??1Thread@System@@QEAA@XZ"));
     s_fn_SceneDtor   = reinterpret_cast<fn_SceneDtor_t>(ResolveExport("??1Scene@Picking@@QEAA@XZ"));
 
     s_fn_TreeFreeE320 = reinterpret_cast<fn_TreeFreeE320_t>(ResolveAddr(Module::Exe, 0x14000e320));
@@ -314,11 +312,17 @@ extern "C" void GameDtor_SubObjDtor_a8570(int64_t param_1) {
 // ENDGAME B.3.8 LOOP: the restamp stores PathfinderThread's table (0x14015ef18 is
 // that class). Nothing reads it before the Thread/CS dtors run (they don't touch
 // +0x00); it was a null store while 0x14015ef18 was unregistered.
+//
+// ENDGAME B.3.9 VS (B9-13 foreign site, SYS W3): 0x1400a6720 IS
+// `PathfinderThread::~PathfinderThread` and is now that member. The table store
+// on entry is the compiler's, and the tail call is the compiler's chain into
+// `System::Thread::~Thread()` -- it was the `??1Thread@System@@QEAA@XZ` door,
+// which re-stamped the minted base table and ran the same body; the door and
+// the minted row are retired.
 // ============================================================================
-extern "C" void GameDtor_ThreadDtor_a6720(int64_t thread) {
+PathfinderThread::~PathfinderThread() {
     EnsureFns();
-    // [thread] = &PTR_FUN_14015ef18: PathfinderThread's table.
-    *reinterpret_cast<const void**>(thread) = PathfinderThread::Vtable();
+    const int64_t thread = reinterpret_cast<int64_t>(this);
 
     GameDtor_FreeArray18_1dac0(reinterpret_cast<int64_t*>(thread + 0x160));
 
@@ -343,7 +347,7 @@ extern "C" void GameDtor_ThreadDtor_a6720(int64_t thread) {
     *reinterpret_cast<int*>(rsi + 0x10) = 0;                 // [thread + 0x70] = 0
 
     if (s_fn_CSDtor) s_fn_CSDtor(reinterpret_cast<void*>(thread + 0x30));
-    if (s_fn_ThreadDtor) s_fn_ThreadDtor(reinterpret_cast<void*>(thread)); // tail-call
+    // tail-call: System::Thread::~Thread() -- the compiler's base chain.
 }
 
 // ============================================================================
@@ -410,7 +414,7 @@ extern "C" void Game_Dtor_9ed60(int64_t param_1) {
         GameDtor_DrainQueue_a6690(queue);
         queue = *reinterpret_cast<int64_t*>(param_1 + 0x68);   // re-read [RBX + 0x68]
         if (queue != 0) {
-            GameDtor_ThreadDtor_a6720(queue);
+            reinterpret_cast<PathfinderThread*>(queue)->~PathfinderThread();   // 0x1400a6720
             MemFree(reinterpret_cast<void*>(queue));
         }
     }

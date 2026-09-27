@@ -3,8 +3,8 @@
 // harvest of Runtime-x64.dll) re-verified against the DLL at generation
 // time. Regenerate with:
 //   tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py
-// Counts: 6 vtables, 103 BaseTypeInfo, 30 storage symbols.
-// Retired (ENDGAME B.3 step 9): 165 row(s), listed in tools/rt_mint_retired/*.txt.
+// Counts: 5 vtables, 103 BaseTypeInfo, 30 storage symbols.
+// Retired (ENDGAME B.3 step 9): 166 row(s), listed in tools/rt_mint_retired/*.txt.
 
 // ---- Per-slot traps. One function per (vtable, slot) so an unreachable
 // slot that DOES get called names itself instead of aborting anonymously.
@@ -41,8 +41,6 @@ RT_MINT_TRAP(4,0)
 RT_MINT_TRAP(4,1)
 RT_MINT_TRAP(4,2)
 RT_MINT_TRAP(4,3)
-RT_MINT_TRAP(5,0)
-RT_MINT_TRAP(5,1)
 
 // ??_7Base@Object@@6B@  DLL 0x180154788  3 slots  [adjacent-export:??_7External@Object@@6B@]
 static const RtMintVSlot kVSlots0[] = {
@@ -107,21 +105,12 @@ static const RtMintVSlot kVSlots4[] = {
 static void* kVTable4[4];
 static const RtMintTrapFn kVTraps4[] = { &RtMintTrapStub_4_0, &RtMintTrapStub_4_1, &RtMintTrapStub_4_2, &RtMintTrapStub_4_3 };
 
-// ??_7Thread@System@@6B@  DLL 0x180155f20  2 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots5[] = {
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { "?OnCompleted@Thread@System@@UEAAXXZ", 0x18000c590ull, RT_MINT_NAMED },
-};
-static void* kVTable5[2];
-static const RtMintTrapFn kVTraps5[] = { &RtMintTrapStub_5_0, &RtMintTrapStub_5_1 };
-
 static RtMintVtable kMintVtables[] = {
     { "??_7Base@Object@@6B@", 0x180154788ull, 3, kVSlots0, kVTable0, kVTraps0, "adjacent-export:??_7External@Object@@6B@" },
     { "??_7CompiledExternal@Object@@6B@", 0x180154a30ull, 8, kVSlots1, kVTable1, kVTraps1, "tail-not-a-pointer" },
     { "??_7External@Object@@6B@", 0x1801547a0ull, 8, kVSlots2, kVTable2, kVTraps2, "tail-not-a-pointer" },
     { "??_7ImageBuffer@Video@@6B@", 0x180154fc0ull, 10, kVSlots3, kVTable3, kVTraps3, "tail-not-a-pointer" },
     { "??_7Internal@Object@@6B@", 0x180154720ull, 4, kVSlots4, kVTable4, kVTraps4, "adjacent-export:??_7Achievement@0@6B@" },
-    { "??_7Thread@System@@6B@", 0x180155f20ull, 2, kVSlots5, kVTable5, kVTraps5, "tail-not-a-pointer" },
 };
 
 // ---- Object::BaseTypeInfo. Fields are link-time constants copied from

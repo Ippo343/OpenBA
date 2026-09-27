@@ -178,12 +178,16 @@ static_assert(std::is_trivially_destructible<CriticalSection>::value,
 // (retail's slot 0 is `_purecall`) and has NO `DeletingDtor`: its table has
 // two slots, `Run` and `OnCompleted`, and no deleting-dtor slot at all, like
 // both subclasses' (UpdateLoop.h / Stream.h "NO deleting dtor").
+//
+// *** ENDGAME B.3.9 VS (SYS W3) — THE DOORS ARE GONE, THE MINTED ROW RETIRED. ***
+// ----------------------------------------------------------------------------
+// Every subclass is a real class on this ctor now (Engine::Loader,
+// Audio::Stream, IO::PersistenceWorker, the exe PathfinderThread), so the
+// `??0Thread` / `??1Thread` doors lost their last callers and are deleted with
+// the minted `??_7Thread@System@@6B@` (row 140). A `System::Thread` base wears
+// the compiler's table while its ctor / dtor body runs, exactly where retail's
+// wears 0x180155f20.
 // ============================================================================
-
-// The two registered doors (runtime/src/system/thread_win.cpp) — declared here
-// only so the class can befriend them: they reach the shared bodies.
-RtSystem::Thread* RtSystem_Thread_Ctor(RtSystem::Thread* self, unsigned int stackSize);
-void RtSystem_Thread_Dtor(RtSystem::Thread* self);
 
 namespace System {
 
@@ -230,11 +234,10 @@ static_assert(std::is_trivially_destructible<CriticalSection>::value,
 // System::Thread — vtable ??_7Thread@System@@6B@ 0x180155f20, 2 slots, 0x30.
 // ----------------------------------------------------------------------------
 // B.3.9: a subclass builds its base with `: System::Thread(stackSize)` and wears
-// the compiler's tables; an object still built by the ctor DOOR wears the MINTED
-// table (the door stamps it, then runs the same InitFields). The class stays
+// the compiler's tables (no door and no minted row remain). The class stays
 // ABSTRACT, so `System::Thread t;` is still a hard compile error.
 //
-// The two slots, from `standalone/rt_data_mint_tables.inc:3711-3717`:
+// The two slots of retail's 0x180155f20:
 //   [0] +0x00  0x18007ec28 `_purecall`  -> pure here, see below
 //   [1] +0x08  0x18000c590  RT_MINT_NAMED ?OnCompleted@Thread@System@@UEAAXXZ
 class Thread {
@@ -312,13 +315,12 @@ protected:
     ~Thread() { ReleaseFields(); }
 
 private:
-    // The door bodies MINUS their vptr stores (RULE B8-1): one body, two entry
-    // points. Defined in runtime/src/system/thread_win.cpp.
+    // Retail's ctor / dtor bodies MINUS their vptr stores. Defined in
+    // runtime/src/system/thread_win.cpp; kept out of line (not folded into the
+    // ctor / dtor) because the unit tests link RECORDING stand-ins for them
+    // (tests/unit/system_abi_stubs.cpp) so no OS thread starts in a test.
     void InitFields(unsigned int stackSize);
     void ReleaseFields();
-
-    friend RtSystem::Thread* ::RtSystem_Thread_Ctor(RtSystem::Thread* self, unsigned int stackSize);
-    friend void ::RtSystem_Thread_Dtor(RtSystem::Thread* self);
 };
 
 static_assert(sizeof(Thread) == 0x30, "System::Thread is 0x30 bytes");

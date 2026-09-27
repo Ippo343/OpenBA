@@ -34,10 +34,13 @@ public:
     // compiler's). ENDGAME B.3.9 ENG W2; the field stores stay in pathfinder_seed.cpp.
     explicit PathfinderThread(unsigned int stackSize) : System::Thread(stackSize) {}
 
-protected:
-    ~PathfinderThread() = default;                        // torn down by GameDtor_ThreadDtor_a6720
+    // Retail's dtor 0x1400a6720 (keystone_a_gamedtor.cpp): the field teardown,
+    // then `??1CriticalSection` on +0x30, then System::Thread's dtor (the
+    // compiler's chain; it was the `??1Thread` door until ENDGAME B.3.9 VS).
+    // PUBLIC and non-virtual: retail's Game::~Game (0x14009ed60) calls it by
+    // name on the Game+0x68 pointer, then MemFrees it.
+    ~PathfinderThread();
 
-public:
     // +0x30 CriticalSection, +0x58 result-slot generation, +0x5c sync flag,
     // +0x60/+0x68/+0x70 command queue (tail, head, count), +0x78 cell grid
     // (0xe8 bytes), +0x160 result slots, +0x170 staged cost table (0x20 ints),
