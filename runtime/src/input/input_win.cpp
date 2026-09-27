@@ -67,6 +67,7 @@
 
 #include <cstdint>
 #include "../../funcs/rt_port.h"
+#include "../../types/application/Application.h"   // ENDGAME B.3.9 ENG: the class static
 #include "../../types/input/Input.h"
 
 // ENDGAME B.3.7 B5: `Device::Update` (input_device_update.cpp) ends in this
@@ -126,7 +127,7 @@ void Device::PlatformUpdate() {
         return;
     }
 
-    void** appSlot = RT_DATA_SLOT(void**, "?_singleton@Application@1@0PEAV11@EA");
+    void** appSlot = reinterpret_cast<void**>(&::Application::Application::_singleton);
     void*  app     = appSlot ? *appSlot : nullptr;
     HWND   hwnd    = *reinterpret_cast<HWND*>(app);   // Application +0x00
 

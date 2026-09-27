@@ -124,6 +124,11 @@ public:
 
     // ---- the 27 exports (B37_SLOTS.md sec. 6), ALL PORTED -----------------
     static Application* Get();                                      // 0x18000a2f0  application_accessors.cpp
+    // ?_singleton@Application@1@0PEAV11@EA (0x1801fc678) — the class static (ENDGAME B.3.9 ENG, B39_RULES D7).
+    // The namespace's *PortInit redirects the minted storage row onto it, so
+    // the name door, the address door and this member are the same bytes.
+    // PUBLIC while foreign readers still reach the row through the doors.
+    static Application* _singleton;
     bool Startup();                                                 // 0x18009f510  application_thunks.cpp
     void Shutdown();                                                // 0x18009f500  application_thunks.cpp
     bool Update();                                                  // 0x18009f4f0  application_thunks.cpp

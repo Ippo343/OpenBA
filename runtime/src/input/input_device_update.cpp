@@ -158,6 +158,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/application/Application.h"   // ENDGAME B.3.9 ENG: the class static
 #include "../../types/input/Input.h"
 #include "../../types/system/Value.h"   // System::Time
 
@@ -170,7 +171,7 @@ using State = Input::Device::State;
 // sites in the tree using the FROZEN form, where the first caller fixes a null
 // for the whole process; these three use the correct one deliberately.
 inline void** ApplicationSingleton() {
-    return RT_DATA_SLOT(void**, "?_singleton@Application@1@0PEAV11@EA");
+    return reinterpret_cast<void**>(&::Application::Application::_singleton);
 }
 inline Input::Configuration** InputConfigSingleton() {
     return RT_DATA_SLOT(Input::Configuration**, "?_singleton@Configuration@Input@@0PEAV12@EA");

@@ -108,7 +108,7 @@ Input::Configuration** InputConfigSlot() {
     return RT_DATA_SLOT(Input::Configuration**, "?_singleton@Configuration@Input@@0PEAV12@EA");
 }
 Application::Application** AppSingletonSlot() {
-    return RT_DATA_SLOT(Application::Application**, "?_singleton@Application@1@0PEAV11@EA");
+    return reinterpret_cast<Application::Application**>(&::Application::Application::_singleton);
 }
 
 void ErrorSetText(const char* text, bool flag) {

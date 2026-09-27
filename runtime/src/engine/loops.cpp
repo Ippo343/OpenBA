@@ -195,7 +195,6 @@ std::atomic<void*> g_vtLoaderLoop{nullptr};
 std::atomic<void*> g_vtDialogLoopT{nullptr};
 std::atomic<void*> g_vtDialogLoaderLoopT{nullptr};
 std::atomic<void*> g_loaderLoopLoader{nullptr};
-std::atomic<void*> g_applicationSingleton{nullptr};
 
 FindOrLoadFn FindOrLoad() {
     return reinterpret_cast<FindOrLoadFn>(rtengine::AtomicExport(g_findOrLoad,
@@ -1144,12 +1143,10 @@ inline Video::ContextData* CtxDataOf(RtVideo::Context* ctx) {
 // reg_mint_promoted.cpp, so it necessarily reads the DLL's own slot — which is
 // what every body below needs, because retail's MainLoop ctor wrote it.
 
-// `?_singleton@Application@1@0PEAV11@EA` -- the DATA slot (carry-over 5),
-// through a namespace-scope atomic cache.
+// `?_singleton@Application@1@0PEAV11@EA` -- the class static since ENDGAME
+// B.3.9 ENG (the minted row is redirected onto it).
 Application::Application* ApplicationSingleton() {
-    void** slot = static_cast<void**>(rtengine::AtomicExport(g_applicationSingleton,
-        "?_singleton@Application@1@0PEAV11@EA"));
-    return slot ? static_cast<Application::Application*>(*slot) : nullptr;
+    return ::Application::Application::_singleton;
 }
 
 // `mov 0x1801fc678,%rcx ; mov $0xe,%edx ; call Application::SleepThread` — the
