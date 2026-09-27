@@ -9,6 +9,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "Object/factory_registration.h"
 #include "system/String.h"
 #include <cstdint>
 #include <cstdio>
@@ -23,6 +24,50 @@
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ComboElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Component/ConsumeProduceDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.8 callers)
+
+// ConsumeProduceUI: PROMOTED from a bare UI_DIALOG_STUB 2026-08-24. The Tavern panel
+// rendered its authored layout -- worker spinner, Inventory, "Alcohol Limit 500",
+// "Potato 300" and a Product combo -- but the combo was ALWAYS EMPTY, so no product
+// could ever be selected and the tavern brewed nothing. The three slot bodies in
+// code/Game/Dialog/consumeproduceui.cpp were fully ported and wired into NOTHING: the
+// stub vtable left 4/7/9 as no-ops, so the combo was never populated (Slot4), the
+// progress bar never moved (Slot7) and a selection could never be written back to the
+// component (Slot9). Same shape as CemeteryUI directly above.
+//
+// This is also what kept HappinessComponent's GOODS arm untestable: a tavern with no
+// product makes no ale, IsActive's desc+0x25 arm never finds a matching good, and the
+// source can never register. Wiring the panel is the prerequisite for that A/B.
+namespace consumeproduceui_sa {
+    static uint32_t s_cpDesc = 0, s_combo = 0, s_rawMat = 0;
+    void EnsureTypeIds() {
+        // .rdata globals the faithful bodies dereference unconditionally. Note
+        // g_TypeId_ConsumeProduceComponent is MISNAMED: it is bound to 0x1401c7388,
+        // which is the ConsumeProduce*Description* id -- and that is correct, because
+        // the object it guards is the description at component+0x18. Retail reads the
+        // same global at 0x14005f445. Do not "fix" the cast to the component id.
+        if (!g_TypeId_ConsumeProduceComponent || !*g_TypeId_ConsumeProduceComponent) {
+            s_cpDesc = ConsumeProduceDescription::TypeId();
+            if (s_cpDesc) g_TypeId_ConsumeProduceComponent = &s_cpDesc;
+        }
+        if (!g_TypeId_ComboElement || !*g_TypeId_ComboElement) {
+            s_combo = ::Object::ResolveTypeIdByNameLazy("ComboElement");
+            if (s_combo) g_TypeId_ComboElement = &s_combo;
+        }
+        if (!g_TypeId_RawMaterialDescription || !*g_TypeId_RawMaterialDescription) {
+            s_rawMat = RawMaterialDescription::TypeId();
+            if (s_rawMat) g_TypeId_RawMaterialDescription = &s_rawMat;
+        }
+    }
+    bool Ready() {
+        return g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
+            && g_TypeId_ComboElement && *g_TypeId_ComboElement
+            && g_TypeId_ProgressElement && *g_TypeId_ProgressElement
+            && g_TypeId_ConsumeProduceComponent && *g_TypeId_ConsumeProduceComponent
+            && g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription;
+    }
+}  // namespace uistub_ConsumeProduceUI
 
 // ============================================================
 // ConsumeProduceUI::Slot4 (vtable +0x20) — Setup/refresh
@@ -34,11 +79,14 @@
 //
 // Original: 0x14005F3D0.
 
-void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [4] 0x14005f3d0
+void ConsumeProduceUI::OnCreated() {
+    consumeproduceui_sa::EnsureTypeIds();
+    if (!consumeproduceui_sa::Ready()) return;
+    uintptr_t s = (uintptr_t)this;
 
     // Bail on a dead / marked-for-removal datasource before probing it (see Slot7).
-    if (!SA_DialogEntityAlive(self)) return;
+    if (!SA_DialogEntityAlive(this)) return;
 
     // Get entity from controller data (+0x28)
     void* entity = *(void**)(s + 0x28);
@@ -221,19 +269,22 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
 //
 // Original: 0x14005F1F0.
 
-void ConsumeProduceUI_Slot7(ConsumeProduceUI* self) {
+// [7] 0x14005f1f0
+void ConsumeProduceUI::OnUpdateLayout() {
+    consumeproduceui_sa::EnsureTypeIds();
+    if (!consumeproduceui_sa::Ready()) return;
     // Bail if the datasource entity is gone or marked-for-removal — otherwise the
     // IsDerivedFrom below runs on a dying entity (crash class 2026-07-21). Reliable
     // now that removals are one-frame-deferred (entitylist.cpp Step 0): the entity
     // is valid marked-but-alive memory whenever this per-frame slot fires.
-    if (!SA_DialogEntityAlive(self)) return;
+    if (!SA_DialogEntityAlive(this)) return;
 
     // data38 = progress element InternalPtr
-    void* progressElem = (void*)self->data38;
+    void* progressElem = (void*)this->data38;
     if (!progressElem) return;
 
     // Get entity from controller data (+0x28)
-    void* entity = *(void**)((uintptr_t)self + 0x28);
+    void* entity = *(void**)((uintptr_t)this + 0x28);
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
 
@@ -257,7 +308,7 @@ void ConsumeProduceUI_Slot7(ConsumeProduceUI* self) {
     float ratio = 1.0f - (float)currentTicks / (float)totalTicks;
 
     // Store ratio at progress element +0x128
-    void* progPtr = (void*)self->data38;
+    void* progPtr = (void*)this->data38;
     *(float*)((uintptr_t)progPtr + 0x128) = ratio;
 
     // Format as integer percentage: (int)(ratio * 100.0 + 0.5)
@@ -277,12 +328,15 @@ void ConsumeProduceUI_Slot7(ConsumeProduceUI* self) {
 //
 // Original: 0x14005F330.
 
-void ConsumeProduceUI_Slot9(ConsumeProduceUI* self, uint64_t /*param2*/,
-                            int param3, int param4) {
+// [9] 0x14005f330
+void ConsumeProduceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4,
+                                      int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    consumeproduceui_sa::EnsureTypeIds();
+    if (!consumeproduceui_sa::Ready()) return;
     if (param3 != 0x14 || param4 != 22000) return;
 
     // Get entity from controller data (+0x28)
-    void* entity = *(void**)((uintptr_t)self + 0x28);
+    void* entity = *(void**)((uintptr_t)this + 0x28);
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
 
@@ -296,9 +350,16 @@ void ConsumeProduceUI_Slot9(ConsumeProduceUI* self, uint64_t /*param2*/,
     fn_FindComponent_ConsumeProduce(entityInternal, &component);
 
     // Read selection from combo element (data30 InternalPtr) at +0x118
-    void* comboElem = (void*)self->data30;
+    void* comboElem = (void*)this->data30;
     uint32_t selection = *(uint32_t*)((uintptr_t)comboElem + 0x118);
 
     // Write to found component at +0x50
     *(uint32_t*)((uintptr_t)component + 0x50) = selection;
+}
+
+// The by-address door: standalone/reg_code_lane2.cpp registers this at 0x14005f3d0
+// (engine_funcs.cpp resolves it into fn_ConsumeProduceUI_Slot4). The slot body is
+// ConsumeProduceUI::OnCreated.
+void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
+    self->ConsumeProduceUI::OnCreated();   // B.3.8 bridge
 }

@@ -17,23 +17,12 @@
 // BuildRequirementUI
 // ============================================================
 
-// Slot4 (vtable +0x20): Resolves description, finds ToolbarDescription,
-// sets icon sprite and title text, populates label elements with resource requirements.
-void BuildRequirementUI_Slot4(BuildRequirementUI* self);
-
 // ============================================================
 // ConsumeProduceUI
 // ============================================================
 
 // Slot4 (vtable +0x20): Setup — finds combo/progress elements, populates combo with products.
 void ConsumeProduceUI_Slot4(ConsumeProduceUI* self);
-
-// Slot7 (vtable +0x38): Updates production progress bar with ratio and percentage.
-void ConsumeProduceUI_Slot7(ConsumeProduceUI* self);
-
-// Slot9 (vtable +0x48): Handles combo selection — writes product index to component.
-void ConsumeProduceUI_Slot9(ConsumeProduceUI* self, uint64_t param2,
-                            int param3, int param4);
 
 // ============================================================
 // StorageCapacityUI
@@ -80,21 +69,9 @@ void CropUI_Slot8(CropUI* self);
 // AttendanceUI
 // ============================================================
 
-// Slot4 (vtable +0x20): Finds ProgressElement, reads attendance capacity, sets progress max.
-void AttendanceUI_Slot4(AttendanceUI* self);
-
-// Slot7 (vtable +0x38): Updates progress bar with current attendance count.
-void AttendanceUI_Slot7(AttendanceUI* self);
-
 // ============================================================
 // CemeteryUI
 // ============================================================
-
-// Slot4 (vtable +0x20): Finds ProgressElement, reads cemetery max slots, sets progress max.
-void CemeteryUI_Slot4(CemeteryUI* self);
-
-// Slot7 (vtable +0x38): Updates progress bar with burial count and max slots text.
-void CemeteryUI_Slot7(CemeteryUI* self);
 
 // ============================================================
 // ResourceLimitUI

@@ -71,53 +71,9 @@
 #include "Dialog/GoalDialog.h"
 #include "Dialog/AchievementDialog.h"
 #include "Dialog/MapParamsDialog.h"
-#include "Component/AttendanceComponent.h"   // X::TypeId() (B.3.8 callers)
-#include "Component/AttendanceDescription.h"   // X::TypeId() (B.3.8 callers)
-#include "Component/BuildComponent.h"   // X::TypeId() (B.3.8 callers)
-#include "Component/BuildDescription.h"   // X::TypeId() (B.3.8 callers)
-#include "Component/CemeteryComponent.h"   // X::TypeId() (B.3.8 callers)
-#include "Component/ConsumeProduceDescription.h"   // X::TypeId() (B.3.8 callers)
-#include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.8 callers)
-#include "Component/TombstoneComponent.h"   // X::TypeId() (B.3.8 callers)
-#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 
-// ---- BuildRequirementUI: PROMOTED to the real reimpl (2026-06-28) ------------
-// This dialog is constructed + its Slot4(Update +0x20) dispatched on hover of a
-// build-tool button (verified live: valid dlgInst@+0x18 / datasource@+0x28). The
-// generic stub left Slot4 a no-op, so the build tooltip showed "????????" for the
-// name and "x x x" for the cost. Wiring Slot4 to the real BuildRequirementUI_Slot4
-// composes the title (ToolbarDescription+0x38 name key), the icon, and the
-// cost labels. Construction stays the stub alloc+zero+vtable; the engine fills the
-// base fields afterward.
+// ---- BuildRequirementUI: the slot body and its standalone guards live in buildrequirementui.cpp.
 
-extern void BuildRequirementUI_Slot4(BuildRequirementUI* self);
-namespace uistub_BuildRequirementUI {
-    // Lazy-fill the exe-.rdata type-id globals BuildRequirementUI_Slot4 dereferences.
-    // In standalone these resolve from raw exe .rdata addresses → null, so the real
-    // reimpl's first `*g_TypeId_ComponentDescription_FC` would fault. Fill them from the live
-    // Factory tree (post-Engine::Startup), like ToolbarStandalone_Init. Idempotent.
-    // NB: g_TypeId_ResourceComponent's engine_funcs label is misleading — the id at
-    // .rdata 0x1401c7040 is actually "BuildDescription"; and Object::Internal is
-    // registered under the simple name "Internal".
-    void EnsureTypeIds() {
-        static uint32_t s_build=0, s_entity=0, s_internal=0, s_buildDesc=0, s_rawMat=0;
-        if (!g_TypeId_ComponentDescription_FC)        { s_build=BuildComponent::TypeId();        if(s_build) g_TypeId_ComponentDescription_FC=&s_build; }
-        if (!g_TypeId_ComponentEntity)       { s_entity=ComponentEntity::TypeId();      if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
-        if (!g_TypeId_ResourceComponent)     { s_buildDesc=BuildDescription::TypeId();  if(s_buildDesc) g_TypeId_ResourceComponent=&s_buildDesc; }
-        if (!g_TypeId_RawMaterialDescription){ s_rawMat=RawMaterialDescription::TypeId(); if(s_rawMat) g_TypeId_RawMaterialDescription=&s_rawMat; }
-        if (!g_TypeId_Element)        { s_internal=::Object::ResolveTypeIdByNameLazy("Internal");           if(s_internal) g_TypeId_Element=&s_internal; }
-    }
-}  // namespace uistub_BuildRequirementUI
-
-// [4] 0x14005e7c0. The real reimpl unconditionally dereferences these globals;
-// if any failed to resolve, skip rather than fault (standalone-only).
-void BuildRequirementUI::OnCreated() {
-    uistub_BuildRequirementUI::EnsureTypeIds();
-    if (!g_TypeId_ComponentDescription_FC || !g_TypeId_ComponentEntity
-        || !g_TypeId_Element || !g_TypeId_ToolbarDescription_FC
-        || !g_TypeId_ResourceComponent || !g_TypeId_RawMaterialDescription) return;
-    BuildRequirementUI_Slot4(this);
-}
 
 // [0] 0x140010860: ~BuildRequirementUI (restamp, ~DialogController, ~Internal — the
 // compiler's chain), MemFree on &1.
@@ -144,37 +100,8 @@ void* BuildRequirementUI::CreateInPlaceObject(void* storage) {
 DEFINE_EXE_VTABLE(BuildRequirementUI, "_ZTV18BuildRequirementUI")
 DEFINE_EXE_TYPE(BuildRequirementUI, "UI::DialogController")
 
-// ---- HotKeyToolTipUI: PROMOTED to the real reimpl (2026-06-28) ---------------
-// This controller is bound to the "textHotKey"/"textToolTip" TextElements of
-// every toolbar button. Its Slot4 (Serialize, +0x20) reads the button's
-// auto-assigned shortcut id (element+0xC0), resolves it through Input::KeyMap +
-// the keyNames StringTable, and fills the hotkey text. The generic stub left
-// Slot4 a no-op, so the buttons showed the .rsc placeholder "[]" (empty
-// brackets). Wiring Slot4 to the real HotKeyToolTipUI_Slot4 restores the key
-// display. Construction stays the stub alloc+zero+vtable; the engine fills the
-// base fields (dialog +0x18, datasource +0x28) afterward. Same shape as the
-// BuildRequirementUI promotion above.
-namespace Game { void HotKeyToolTipUI_Slot4(void* self); }
-namespace uistub_HotKeyToolTipUI {
-    // The reimpl unconditionally dereferences g_TypeId_Element; in
-    // standalone it resolves from a raw exe .rdata addr -> null. Lazy-fill it
-    // from the live Factory tree (post-Engine::Startup). NB: Object::Internal is
-    // registered under the simple name "Internal". Idempotent.
-    void EnsureTypeIds() {
-        static uint32_t s_internal=0;
-        if (!g_TypeId_Element) {
-            s_internal=::Object::ResolveTypeIdByNameLazy("Internal");
-            if (s_internal) g_TypeId_Element=&s_internal;
-        }
-    }
-}  // namespace uistub_HotKeyToolTipUI
+// ---- HotKeyToolTipUI: the slot body and its standalone guard live in hotkeytooltipui.cpp.
 
-// [4] 0x14006a980.
-void HotKeyToolTipUI::OnCreated() {
-    uistub_HotKeyToolTipUI::EnsureTypeIds();
-    if (!g_TypeId_Element) return;
-    Game::HotKeyToolTipUI_Slot4(this);
-}
 
 // [0] 0x140011e70: ~HotKeyToolTipUI (restamp, ~DialogController, ~Internal — the
 // compiler's chain), MemFree on &1.
@@ -201,93 +128,8 @@ void* HotKeyToolTipUI::CreateInPlaceObject(void* storage) {
 DEFINE_EXE_VTABLE(HotKeyToolTipUI, "_ZTV15HotKeyToolTipUI")
 DEFINE_EXE_TYPE(HotKeyToolTipUI, "UI::DialogController")
 
-// ---- AttendanceUI: PROMOTED to the real reimpl (2026-08-15) ------------------
-// Symptom: the school panel read "students" with no number in front of it.
-//
-// Both bodies have been ported in code/Game/Dialog/attendanceui.cpp since that
-// file was written, and both were wired into NOTHING — the generic stub's 48
-// no-op slots. This is the "stub sweep is a WIRING job" shape again
-// (project_next_stub_controller_sweep): a ported body is not a reached body.
-//
-// The count is not a label of its own; it is TEXT PARAMETER 0 of the panel's
-// ProgressElement ("{0} students" in the .rsc). With idx7 a no-op the parameter
-// was never set, so the element rendered its literal remainder — the number was
-// not wrong, it was absent, which is exactly what "students" with nothing in
-// front of it looks like.
-//
-// Slot indices verified from the vtable BYTES at 0x14015b070 (11 slots wide; the
-// RTTI name string "Attendan..." starts immediately after idx10):
-//   idx4 (+0x20) 0x14005dd40 Slot4 — find the ProgressElement, set its MAXIMUM
-//                                    from AttendanceDescription+0x20 (capacity)
-//   idx7 (+0x38) 0x14005dc50 Slot7 — per-frame: set current value + text param 0
-// Every other slot is one of the shared 0x14003a9xx no-op thunks, so wiring
-// these two is full behavioural coverage for this class.
+// ---- AttendanceUI: the slot bodies and their standalone guards live in attendanceui.cpp.
 
-extern void ConsumeProduceUI_Slot4(ConsumeProduceUI* self);
-extern void ConsumeProduceUI_Slot7(ConsumeProduceUI* self);
-extern void ConsumeProduceUI_Slot9(ConsumeProduceUI* self, uint64_t p2, int p3, int p4);
-
-extern void CemeteryUI_Slot4(CemeteryUI* self);
-extern void CemeteryUI_Slot7(CemeteryUI* self);
-extern void AttendanceUI_Slot4(AttendanceUI* self);
-extern void AttendanceUI_Slot7(AttendanceUI* self);
-namespace uistub_AttendanceUI {
-    // ProgressElement's type-id .rdata slot is null unless BANISHED_LIVE_ELEMENT_TIDS
-    // is on, and IsDerivedFrom(elem, 0) is always false — which would leave +0x30 null
-    // and turn Slot4's +0x124 write into a null-deref. Same private by-name resolve
-    // orchardui.cpp and cropui_promote.cpp use, for the same reason. See
-    // reference_gated_element_typeid_disables_controller.
-    static uint32_t s_progress = 0;
-    void EnsureTypeIds() {
-        static uint32_t s_entity=0, s_attDesc=0, s_attComp=0;
-        if (!g_TypeId_ProgressElement || !*g_TypeId_ProgressElement) {
-            if (!s_progress) s_progress = ::Object::ResolveTypeIdByNameLazy("ProgressElement");
-            if (s_progress) g_TypeId_ProgressElement = &s_progress;
-        }
-        if (!g_TypeId_ComponentEntity) {
-            s_entity = ComponentEntity::TypeId();
-            if (s_entity) g_TypeId_ComponentEntity = &s_entity;
-        }
-        if (!g_TypeId_AttendanceDescription || !*g_TypeId_AttendanceDescription) {
-            s_attDesc = AttendanceDescription::TypeId();
-            if (s_attDesc) g_TypeId_AttendanceDescription = &s_attDesc;
-        }
-        // fn_FindComponent_Attendance searches by this one. Its .rdata slot
-        // (0x1401c3f40) went unregistered until 2026-08-15 — the 2026-07-19 audit
-        // registered the Description 0x38 bytes later and missed the Component — so
-        // the finder ran with a null id, matched nothing, and Slot4's faithful
-        // `attendComp+0x18` read [0+0x18] the first time anyone clicked a school.
-        // reg_economy_typeids.cpp now supplies the storage; this keeps a resolve
-        // failure a skip rather than a repeat of that crash.
-        if (!g_TypeId_AttendanceComponent || !*g_TypeId_AttendanceComponent) {
-            s_attComp = AttendanceComponent::TypeId();
-            if (s_attComp) g_TypeId_AttendanceComponent = &s_attComp;
-        }
-    }
-    // Both reimpls dereference these globals unconditionally, as retail does. Skip
-    // rather than fault if any failed to resolve — a standalone-only failure mode
-    // (retail's .rdata is always populated), so the guard is here at the boundary
-    // rather than inside the faithful bodies.
-    bool Ready() {
-        return g_TypeId_ProgressElement && *g_TypeId_ProgressElement
-            && g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
-            && g_TypeId_AttendanceDescription && *g_TypeId_AttendanceDescription
-            && g_TypeId_AttendanceComponent && *g_TypeId_AttendanceComponent;
-    }
-}  // namespace uistub_AttendanceUI
-
-// [4] 0x14005dd40 — find the ProgressElement, set its maximum (capacity).
-void AttendanceUI::OnCreated() {
-    uistub_AttendanceUI::EnsureTypeIds();
-    if (!uistub_AttendanceUI::Ready()) return;
-    AttendanceUI_Slot4(this);
-}
-// [7] 0x14005dc50 — per-frame: current value + text parameter 0.
-void AttendanceUI::OnUpdateLayout() {
-    uistub_AttendanceUI::EnsureTypeIds();
-    if (!uistub_AttendanceUI::Ready()) return;
-    AttendanceUI_Slot7(this);
-}
 
 // [0] 0x140010560: ~AttendanceUI (restamp, ~DialogController, ~Internal — the
 // compiler's chain), MemFree on &1.
@@ -315,47 +157,8 @@ DEFINE_EXE_VTABLE(AttendanceUI, "_ZTV12AttendanceUI")
 DEFINE_EXE_TYPE(AttendanceUI, "UI::DialogController")
 
 // ---- DialogController family ------------------------------------------------
-// CemeteryUI: PROMOTED from a bare UI_DIALOG_STUB 2026-08-23. The panel bodies in
-// code/Game/Dialog/cemeteryui.cpp were fully ported but wired into NOTHING -- the stub
-// vtable left slots 4 and 7 as no-ops, so neither ProgressElement text parameter was
-// ever set and the panel rendered a literal "  of   graves" with both numbers blank.
-// Same shape as AttendanceUI directly above.
-namespace uistub_CemeteryUI {
-    static uint32_t s_cemComp = 0, s_tomb = 0;
-    void EnsureTypeIds() {
-        // Both are .rdata globals the faithful bodies dereference unconditionally.
-        // 0x1401c4090 (CemeteryComponent) had no registered storage at all until the
-        // town-service wave; the lazy resolve here is the same belt-and-braces the
-        // AttendanceUI block carries, so a resolve failure is a skip, not a fault.
-        if (!g_TypeId_CemeteryComponent || !*g_TypeId_CemeteryComponent) {
-            s_cemComp = CemeteryComponent::TypeId();
-            if (s_cemComp) g_TypeId_CemeteryComponent = &s_cemComp;
-        }
-        if (!g_TypeId_TombstoneComponent || !*g_TypeId_TombstoneComponent) {
-            s_tomb = TombstoneComponent::TypeId();
-            if (s_tomb) g_TypeId_TombstoneComponent = &s_tomb;
-        }
-    }
-    bool Ready() {
-        return g_TypeId_ProgressElement && *g_TypeId_ProgressElement
-            && g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
-            && g_TypeId_CemeteryComponent && *g_TypeId_CemeteryComponent
-            && g_TypeId_TombstoneComponent && *g_TypeId_TombstoneComponent;
-    }
-}  // namespace uistub_CemeteryUI
+// ---- CemeteryUI: the slot bodies and their standalone guards live in cemeteryui.cpp.
 
-// [4] 0x14005f090.
-void CemeteryUI::OnCreated() {
-    uistub_CemeteryUI::EnsureTypeIds();
-    if (!uistub_CemeteryUI::Ready()) return;
-    CemeteryUI_Slot4(this);
-}
-// [7] 0x14005ef50.
-void CemeteryUI::OnUpdateLayout() {
-    uistub_CemeteryUI::EnsureTypeIds();
-    if (!uistub_CemeteryUI::Ready()) return;
-    CemeteryUI_Slot7(this);
-}
 
 // [0] 0x1400109b0: ~CemeteryUI (restamp, ~DialogController, ~Internal — the
 // compiler's chain), MemFree on &1.
@@ -381,69 +184,8 @@ void* CemeteryUI::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(CemeteryUI, "_ZTV10CemeteryUI")
 DEFINE_EXE_TYPE(CemeteryUI, "UI::DialogController")
-// ConsumeProduceUI: PROMOTED from a bare UI_DIALOG_STUB 2026-08-24. The Tavern panel
-// rendered its authored layout -- worker spinner, Inventory, "Alcohol Limit 500",
-// "Potato 300" and a Product combo -- but the combo was ALWAYS EMPTY, so no product
-// could ever be selected and the tavern brewed nothing. The three slot bodies in
-// code/Game/Dialog/consumeproduceui.cpp were fully ported and wired into NOTHING: the
-// stub vtable left 4/7/9 as no-ops, so the combo was never populated (Slot4), the
-// progress bar never moved (Slot7) and a selection could never be written back to the
-// component (Slot9). Same shape as CemeteryUI directly above.
-//
-// This is also what kept HappinessComponent's GOODS arm untestable: a tavern with no
-// product makes no ale, IsActive's desc+0x25 arm never finds a matching good, and the
-// source can never register. Wiring the panel is the prerequisite for that A/B.
-namespace uistub_ConsumeProduceUI {
-    static uint32_t s_cpDesc = 0, s_combo = 0, s_rawMat = 0;
-    void EnsureTypeIds() {
-        // .rdata globals the faithful bodies dereference unconditionally. Note
-        // g_TypeId_ConsumeProduceComponent is MISNAMED: it is bound to 0x1401c7388,
-        // which is the ConsumeProduce*Description* id -- and that is correct, because
-        // the object it guards is the description at component+0x18. Retail reads the
-        // same global at 0x14005f445. Do not "fix" the cast to the component id.
-        if (!g_TypeId_ConsumeProduceComponent || !*g_TypeId_ConsumeProduceComponent) {
-            s_cpDesc = ConsumeProduceDescription::TypeId();
-            if (s_cpDesc) g_TypeId_ConsumeProduceComponent = &s_cpDesc;
-        }
-        if (!g_TypeId_ComboElement || !*g_TypeId_ComboElement) {
-            s_combo = ::Object::ResolveTypeIdByNameLazy("ComboElement");
-            if (s_combo) g_TypeId_ComboElement = &s_combo;
-        }
-        if (!g_TypeId_RawMaterialDescription || !*g_TypeId_RawMaterialDescription) {
-            s_rawMat = RawMaterialDescription::TypeId();
-            if (s_rawMat) g_TypeId_RawMaterialDescription = &s_rawMat;
-        }
-    }
-    bool Ready() {
-        return g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
-            && g_TypeId_ComboElement && *g_TypeId_ComboElement
-            && g_TypeId_ProgressElement && *g_TypeId_ProgressElement
-            && g_TypeId_ConsumeProduceComponent && *g_TypeId_ConsumeProduceComponent
-            && g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription;
-    }
-}  // namespace uistub_ConsumeProduceUI
+// ---- ConsumeProduceUI: the slot bodies and their standalone guards live in consumeproduceui.cpp.
 
-// [4] 0x14005f3d0 — also reached BY ADDRESS (engine_funcs.cpp:1306 through the
-// reg_code_lane2.cpp door), which calls ConsumeProduceUI_Slot4 directly.
-void ConsumeProduceUI::OnCreated() {
-    uistub_ConsumeProduceUI::EnsureTypeIds();
-    if (!uistub_ConsumeProduceUI::Ready()) return;
-    ConsumeProduceUI_Slot4(this);
-}
-// [7] 0x14005f1f0.
-void ConsumeProduceUI::OnUpdateLayout() {
-    uistub_ConsumeProduceUI::EnsureTypeIds();
-    if (!uistub_ConsumeProduceUI::Ready()) return;
-    ConsumeProduceUI_Slot7(this);
-}
-// [9] 0x14005f330. The body takes the element pointer's ADDRESS as a qword.
-void ConsumeProduceUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a,
-                                      int32_t b, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/,
-                                      void* /*userData*/) {
-    uistub_ConsumeProduceUI::EnsureTypeIds();
-    if (!uistub_ConsumeProduceUI::Ready()) return;
-    ConsumeProduceUI_Slot9(this, reinterpret_cast<uint64_t>(element), a, b);
-}
 
 // [0] 0x140010b90: ~ConsumeProduceUI (restamp, ~DialogController, ~Internal — the
 // compiler's chain), MemFree on &1.

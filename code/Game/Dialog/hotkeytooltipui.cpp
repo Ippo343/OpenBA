@@ -25,6 +25,8 @@
 // already used by optionsdialog.cpp in standalone.
 
 #include "engine_funcs.h"
+#include "Dialog/HotKeyToolTipUI.h"
+#include "Object/factory_registration.h"
 #include "system/String.h"
 #include <cstdint>
 #include <cstdlib>
@@ -117,16 +119,44 @@ static void FillHotKeyText(void* self, const char* elemName, int paramIndex,
     reinterpret_cast<UI::TextElement*>(textElem)->SetParameter(paramIndex, sysStr);  // B.3.6 bridge
 }
 
+}  // namespace Game
+
+// ---- HotKeyToolTipUI: PROMOTED to the real reimpl (2026-06-28) ---------------
+// This controller is bound to the "textHotKey"/"textToolTip" TextElements of
+// every toolbar button. Its Slot4 (Serialize, +0x20) reads the button's
+// auto-assigned shortcut id (element+0xC0), resolves it through Input::KeyMap +
+// the keyNames StringTable, and fills the hotkey text. The generic stub left
+// Slot4 a no-op, so the buttons showed the .rsc placeholder "[]" (empty
+// brackets). Wiring Slot4 to the real HotKeyToolTipUI_Slot4 restores the key
+// display. Construction stays the stub alloc+zero+vtable; the engine fills the
+// base fields (dialog +0x18, datasource +0x28) afterward. Same shape as the
+// BuildRequirementUI promotion above.
+namespace hotkeytooltipui_sa {
+    // The reimpl unconditionally dereferences g_TypeId_Element; in
+    // standalone it resolves from a raw exe .rdata addr -> null. Lazy-fill it
+    // from the live Factory tree (post-Engine::Startup). NB: Object::Internal is
+    // registered under the simple name "Internal". Idempotent.
+    void EnsureTypeIds() {
+        static uint32_t s_internal=0;
+        if (!g_TypeId_Element) {
+            s_internal=::Object::ResolveTypeIdByNameLazy("Internal");
+            if (s_internal) g_TypeId_Element=&s_internal;
+        }
+    }
+}  // namespace uistub_HotKeyToolTipUI
+
 // HotKeyToolTipUI::Serialize — Slot4 (+0x20). self = the controller.
-void HotKeyToolTipUI_Slot4(void* self) {
-    if (!self) return;
+// [4] 0x14006a980.
+void HotKeyToolTipUI::OnCreated() {
+    hotkeytooltipui_sa::EnsureTypeIds();
+    if (!g_TypeId_Element) return;
     if (!fn_InternalBasePtr_Ctor || !fn_IsDerivedFrom
         || !g_TypeId_Element) {
         return;
     }
 
     // Resolve the controlled element (the button) and read its shortcut id.
-    void* obj = *(void**)((uintptr_t)self + 0x28);
+    void* obj = *(void**)((uintptr_t)this + 0x28);
     void* elem = (obj && fn_IsDerivedFrom(obj, *g_TypeId_Element)) ? obj : nullptr;
 
     uint64_t elemIbp = 0;
@@ -136,12 +166,10 @@ void HotKeyToolTipUI_Slot4(void* self) {
     int shortcutId = *(int*)((uintptr_t)elemIbp + 0xC0);
     if (shortcutId < 0) return;  // no shortcut assigned -> leave default
 
-    void* keyMap = GetActualKeyMap();
+    void* keyMap = Game::GetActualKeyMap();
     if (!keyMap) return;
 
 
-    FillHotKeyText(self, "textToolTip", 1, keyMap, shortcutId);
-    FillHotKeyText(self, "textHotKey",  0, keyMap, shortcutId);
+    Game::FillHotKeyText(this, "textToolTip", 1, keyMap, shortcutId);
+    Game::FillHotKeyText(this, "textHotKey",  0, keyMap, shortcutId);
 }
-
-}  // namespace Game
