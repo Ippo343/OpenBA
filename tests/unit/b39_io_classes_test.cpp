@@ -338,3 +338,85 @@ UNIT_TEST(b39_io_visitorstream_ctor_and_both_arms) {
     ::new (block + 8 + 0x18) IO::VisitorStream();
     CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3)) == block);
 }
+
+// ===========================================================================
+// IO::FileStream / BinaryFileStream / TextFileStream -- rows 58 / 13 / 139.
+// ===========================================================================
+// ~FileStream / ~TextFileStream and the TextFileStream ctor are file_stream.cpp's
+// (host stubs in io_stream_abi_stubs.cpp); the FileStream and BinaryFileStream
+// constructors and all three slot-0 bodies are inline and REAL here.
+UNIT_TEST(b39_io_filestream_family_shape) {
+    CHECK(!std::is_abstract<IO::FileStream>::value);
+    CHECK(!std::is_abstract<IO::BinaryFileStream>::value);
+    CHECK(!std::is_abstract<IO::TextFileStream>::value);
+    CHECK(!std::is_destructible<IO::FileStream>::value);
+    CHECK(!std::is_destructible<IO::BinaryFileStream>::value);
+    CHECK(!std::is_destructible<IO::TextFileStream>::value);
+    CHECK(!std::has_virtual_destructor<IO::FileStream>::value);
+    CHECK(!std::has_virtual_destructor<IO::TextFileStream>::value);
+    CHECK_EQ(SlotOffset(&IO::FileStream::DeletingDtor),        (uintptr_t)0x00);
+    CHECK_EQ(SlotOffset(&IO::FileStream::GetSource),           (uintptr_t)0x08);
+    CHECK_EQ(SlotOffset(&IO::FileStream::Open),                (uintptr_t)0x38);   // NOT Close
+    CHECK_EQ(SlotOffset(&IO::BinaryFileStream::DeletingDtor),  (uintptr_t)0x00);
+    CHECK_EQ(SlotOffset(&IO::TextFileStream::DeletingDtor),    (uintptr_t)0x00);
+    CHECK_EQ(SlotOffset(&IO::TextFileStream::OpenWithFormat),  (uintptr_t)0x40);
+    CHECK_EQ(SlotOffset(&IO::TextFileStream::Create),          (uintptr_t)0x48);
+}
+
+// 0x1800aaa10: Stream base, `_filename` null, FileInfo handle -1, size/cursor
+// 0, baseOffset 0, both names null, winHandle -1; +0x24 (_unk04), +0x34
+// (_pad14) and +0x0c never written; NO encoding. 0x1800a8200 adds the BINARY
+// encoding and nothing else.
+UNIT_TEST(b39_io_filestream_and_binaryfilestream_ctor_stores) {
+    alignas(8) uint8_t mem[0x50];
+    std::memset(mem, 0xCD, sizeof mem);
+    IO::FileStream* fs = ::new (mem) IO::FileStream();
+    CHECK_EQ(fs->_direction, 0);
+    CHECK(fs->_encoding == nullptr);
+    CHECK(fs->_filename == nullptr);
+    CHECK_EQ(fs->_file.handle, -1);
+    CHECK_EQ(fs->_file.size, 0);
+    CHECK_EQ(fs->_file.cursor, 0);
+    CHECK_EQ(fs->_file.baseOffset, 0);
+    CHECK_EQ(fs->_file.winHandle, (int64_t)-1);
+    CHECK(fs->_file._name0.data == nullptr);
+    CHECK(fs->_file._name1.data == nullptr);
+    for (int i = 0x0c; i < 0x10; ++i) CHECK_EQ((int)mem[i], 0xCD);
+    for (int i = 0x24; i < 0x28; ++i) CHECK_EQ((int)mem[i], 0xCD);   // FileInfo::_unk04
+    for (int i = 0x34; i < 0x38; ++i) CHECK_EQ((int)mem[i], 0xCD);   // FileInfo::_pad14
+    CHECK(fs->DeletingDtor(0) == fs);
+
+    alignas(8) uint8_t mem2[0x50];
+    IO::BinaryFileStream* bfs = ::new (mem2) IO::BinaryFileStream();
+    CHECK(bfs->_encoding != nullptr);
+    CHECK(bfs->_encoding->IsBinary());
+    CHECK_EQ(bfs->_encoding->GetKind(), 2);
+    CHECK_EQ(bfs->_file.handle, -1);
+    CHECK(VTableOf(bfs) != VTableOf(fs));               // slot 0 differs, one table per class
+    CHECK(bfs->DeletingDtor(0) == bfs);                 // ~Stream frees the encoding
+}
+
+// Both arms of the three slot-0 bodies (0x18000c090 / 0x180023d80 stride 0x50,
+// 0x18002ba90 stride 0x80): flags 1 frees `this`, flags 3 frees `this - 8` and
+// returns it.
+UNIT_TEST(b39_io_filestream_family_deletingdtor_arms) {
+    IO::FileStream* fs = ::new (std::malloc(0x50)) IO::FileStream();
+    CHECK(fs->DeletingDtor(1) == fs);
+    IO::BinaryFileStream* bfs = ::new (std::malloc(0x50)) IO::BinaryFileStream();
+    CHECK(bfs->DeletingDtor(1) == bfs);
+
+    uint8_t* block = static_cast<uint8_t*>(std::malloc(8 + 2 * 0x50));
+    const int64_t two = 2;
+    std::memcpy(block, &two, sizeof two);
+    IO::BinaryFileStream* b0 = ::new (block + 8) IO::BinaryFileStream();
+    ::new (block + 8 + 0x50) IO::BinaryFileStream();
+    CHECK(reinterpret_cast<uint8_t*>(b0->DeletingDtor(3)) == block);
+
+    uint8_t* tblock = static_cast<uint8_t*>(std::malloc(8 + 2 * 0x80));
+    std::memcpy(tblock, &two, sizeof two);
+    IO::TextFileStream* t0 =
+        ::new (tblock + 8) IO::TextFileStream(System::String(), System::String(), 0);
+    ::new (tblock + 8 + 0x80) IO::TextFileStream(System::String(), System::String(), 0);
+    CHECK_EQ(t0->_requestedFormat, 6);
+    CHECK(reinterpret_cast<uint8_t*>(t0->DeletingDtor(3)) == tblock);
+}

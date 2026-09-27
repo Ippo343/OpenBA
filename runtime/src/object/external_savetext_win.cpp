@@ -89,6 +89,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 
 #include <windows.h>
 
@@ -126,29 +127,11 @@ namespace {
 // name; reference_aeaa_is_private_not_unexported.md).
 // ---------------------------------------------------------------------------
 
-// `??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z` (0x1800ba340).
-// (type, name, version) — the FIRST String lands at +0x60 and the SECOND at
-// +0x58, which is the way round retail's own `?GetObjectType@`/`?GetObjectName@`
-// accessors say and NOT the way round the argument order suggests.
-using TextCtorFn = void* (*)(RtIo::TextFileStream* self, const String* type,
-                             const String* name, int version);
-
 // `?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z` (0x1800aa8f0).
 using FsCreateFn = bool (*)(RtIo::TextFileStream* self, const Filename* path);
 
 // `?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z` (0x1800accc0).
 using CloseFileFn = void (*)(RtIO::FileSystem* self, RtIO::FileInfo* fi);
-
-// The Encoding's deleting destructor at 0x180006a10 — the same guarded object
-// free ~MemoryStream, ~CompressedStream and ~VisitorStream all tail into, and
-// the same door external_add.cpp opens. Already registered by lane E, so this
-// resolves to our own body rather than to the DLL's.
-void EncodingDelete(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180006a10));
-    fn(p);
-}
 
 // External's virtuals, by BYTE offset into the vtable, as External.h names them.
 //   +0x10  GetTypeId() -> uint32
@@ -169,17 +152,6 @@ bool ExternalSerialize(External* self, void* stream) {
     void** vtbl = *reinterpret_cast<void***>(self);
     using Fn = bool (*)(External*, void*);
     return reinterpret_cast<Fn>(vtbl[0x28 / sizeof(void*)])(self, stream);
-}
-
-// The String release idiom on a `char*` slot. TextFileStream's two String
-// fields are declared as `char*` in FileStream.h (a System::String is exactly
-// that one pointer), so the cast is the same one every Filename port in this
-// tree makes.
-// ENDGAME B.3.1 step 2: the idiom IS `~String` (0x180006c80), retail's release
-// asymmetry included. The fields stay `char*` because `IO::TextFileStream` and
-// `IO::FileStream` are not converted classes yet (B31_RULES).
-void ReleaseStrSlot(char** slot) {
-    reinterpret_cast<System::String*>(slot)->~String();
 }
 
 // `if (fi->handle != -1) FileSystem::CloseFile(_singleton, fi);`
@@ -278,12 +250,11 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
     // ---- 1800bba50..1800bba85 -------------------------------------------
     // `IO::TextFileStream ts(typeStr, *name, 0);`
     //
-    // DELIBERATELY NOT ZERO-INITIALISED. The constructor writes every field
-    // this body reads, and TextFileStream+0x54 is one it never touches — a
-    // `= {}` here would be a behavioural difference from retail, not tidiness
-    // (the position saveload_meta.cpp takes on CompressedStream +0x18/+0x24 and
-    // external_add.cpp takes on VisitorStream).
-    RtIo::TextFileStream ts;
+    // ENDGAME B.3.9 IO: 0x80 bytes of stack and the REAL constructor (retail's
+    // ??0TextFileStream 0x1800ba340). It writes every field this body reads;
+    // TextFileStream+0x54 is one it never touches, as in retail.
+    alignas(8) unsigned char tsMem[sizeof(IO::TextFileStream)];
+    IO::TextFileStream* ts;
     {
         // ENDGAME B.3.1 step 2: 1800bba4a is a null-init followed by
         // `String::Set`, which is the `const char*` constructor (0x18000b630)
@@ -296,19 +267,21 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
         int           ctorVer  = 0;
         if (g_stCtl == 1) { ++g_stAtt; const String* t = ctorType; ctorType = ctorName; ctorName = t; }
         if (g_stCtl == 2) { ++g_stAtt; ctorVer = 1; }
-        RT_EXPORT_ONCE(TextCtorFn, "??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z")(
-            &ts, ctorType, ctorName, ctorVer);
+        ts = ::new (tsMem) IO::TextFileStream(
+            *reinterpret_cast<const System::String*>(ctorType),
+            *reinterpret_cast<const System::String*>(ctorName), ctorVer);
     }                                                // 1800bba64
 
     // ---- 1800bba85..1800bba9f -------------------------------------------
     bool result = false;                             // 1800bba85: XOR DIL,DIL
     int32_t bomLen = 2;                              // 1800bba88: MOV EBX,2
-    ts.requestedFormat = 2;                          // 1800bba8d: [+0x68] = 2
-    ts.activeEncoding  = 2;                          // 1800bba90: [+0x6c] = 2
-    if (g_stCtl == 3) { ++g_stAtt; ts.activeEncoding = 3; }  // see the control note
+    ts->_requestedFormat = 2;                        // 1800bba8d: [+0x68] = 2
+    ts->_activeEncoding  = 2;                        // 1800bba90: [+0x6c] = 2
+    if (g_stCtl == 3) { ++g_stAtt; ts->_activeEncoding = 3; }  // see the control note
 
     if (RT_EXPORT_ONCE(FsCreateFn,
-            "?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z")(&ts, path)) {
+            "?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z")(
+                reinterpret_cast<RtIo::TextFileStream*>(ts), path)) {
 
         // ---- 1800bbaa3..1800bbb05 ---------------------------------------
         // The byte-order mark. `_activeEncoding` ALONE selects it — not
@@ -321,7 +294,7 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
         bom[0] = 0; bom[1] = 0; bom[2] = 0;
         bool haveBom = false;
 
-        switch (ts.activeEncoding) {
+        switch (ts->_activeEncoding) {
             case 3:  bom[0] = 0xEF; bom[1] = 0xBB; bom[2] = 0xBF;   // 1800bbaca
                      bomLen = 3; haveBom = true; break;
             case 4:  bom[0] = 0xFF; bom[1] = 0xFE;                  // 1800bbac2
@@ -337,42 +310,29 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
             // count is added to FileInfo::cursor by hand.
             ++g_st.bomWritten;
             DWORD written = 0;
-            ::WriteFile(reinterpret_cast<HANDLE>(ts.base.file.winHandle),
+            ::WriteFile(reinterpret_cast<HANDLE>(ts->_file.winHandle),
                         bom, static_cast<DWORD>(bomLen), &written, nullptr);
-            ts.base.file.cursor += static_cast<int32_t>(written);
+            ts->_file.cursor += static_cast<int32_t>(written);
         }
 
         // ---- 1800bbb08..1800bbb15 ---------------------------------------
         // The object writes itself into the stream, and ITS answer is
         // SaveText's answer.
         ++g_st.serialized;
-        result = ExternalSerialize(self, &ts);
+        result = ExternalSerialize(self, ts);
         if (result) ++g_st.serializeTrue;
     } else {
         ++g_st.createFailed;
     }
 
     // ---- 1800bbb18..1800bbc09 -------------------------------------------
-    // The inlined ~TextFileStream -> ~FileStream -> ~Stream chain, in retail's
-    // order. THE THREE POINTERS ARE FREED THREE DIFFERENT WAYS and that is the
-    // point: +0x70 is a bare MemFree, +0x60 and +0x58 are refcounted Strings,
-    // and +0x78 is touched by neither. One idiom for all three would leak two
-    // strings and double-free a buffer.
-    CloseIfOpen(&ts.base.file);                                          // 1800bbb18
-    ts.base.base.vptr = RT_DATA_SLOT(const void*, "??_7TextFileStream@IO@@6B@");  // 1800bbb2f
-    if (ts.buffer) RtSystem::RtMemFree(ts.buffer);                       // 1800bbb43
-    ReleaseStrSlot(&ts.objectType);                                      // 1800bbb49  +0x60
-    ReleaseStrSlot(&ts.objectName);                                      // 1800bbb72  +0x58
-
-    ts.base.base.vptr = RT_DATA_SLOT(const void*, "??_7FileStream@IO@@6B@");      // 1800bbb9b
-    CloseIfOpen(&ts.base.file);                                          // 1800bbba6
-    // ~FileInfo (0x18000c180), transcribed -- see the header note.
-    RtSystem::Sys(ts.base.file._name1).~String();                        // 18000c19f  +0x28
-    RtSystem::Sys(ts.base.file._name0).~String();                        // 18000c1ce  +0x20
-    ReleaseStrSlot(&ts.base.filename);                                   // 1800bbbc7  +0x18
-
-    ts.base.base.vptr = RT_DATA_SLOT(const void*, "??_7Stream@IO@@6B@");          // 1800bbbf0
-    if (ts.base.base.encoding) EncodingDelete(ts.base.base.encoding);    // 1800bbc04
+    // The inlined ~TextFileStream -> ~FileStream -> ~Stream chain. Retail's
+    // inlined copy opens with a close of the file (1800bbb18); the rest --
+    // bare MemFree of +0x70, release +0x60 then +0x58, ~FileStream's close,
+    // ~FileInfo, release +0x18, free the encoding -- is the class's destructor
+    // chain, run by a non-virtual slot 0 with flags 0 at the same position.
+    CloseIfOpen(&ts->_file);                                             // 1800bbb18
+    ts->IO::TextFileStream::DeletingDtor(0);                             // 1800bbb2f..c04
 
     return result;                                                       // 1800bbc09
 }

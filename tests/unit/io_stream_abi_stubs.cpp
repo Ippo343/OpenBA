@@ -81,7 +81,18 @@ bool     FileStream::Open(const System::Filename&) { StubReached("FileStream::Op
 // ---- IO::BinaryFileStream --------------------------------------------------
 // Its ONE override, slot 0, whose real body is the registered thunk at
 // 0x180023d80 in file_stream.cpp.
-Stream* BinaryFileStream::DeletingDtor(unsigned) { StubReached("BinaryFileStream::DeletingDtor"); }
+// ENDGAME B.3.9 IO: BinaryFileStream::DeletingDtor is inline now (retail's
+// vector deleting dtor). The three out-of-line lifecycle bodies below are
+// file_stream.cpp's, which stands on the FileSystem singleton and the port
+// registry; the host versions touch no file. ~FileStream's host body releases
+// nothing because no probe opens a file or names one. The TextFileStream
+// ctor makes retail's own-field stores but installs NO encoding and skips
+// SetObject (the probes read neither).
+FileStream::~FileStream() {}
+TextFileStream::TextFileStream(const System::String&, const System::String&, int)
+    : _objectName(nullptr), _objectType(nullptr), _requestedFormat(6),
+      _activeEncoding(6), _buffer(nullptr), _bufSize(0), _bufCursor(0) {}
+TextFileStream::~TextFileStream() {}
 
 // ---- IO::CompressedStream (compressed_stream_{write,read}.cpp) -------------
 // Slot 0 is PURE on all three compressed classes, so none of them needs one.

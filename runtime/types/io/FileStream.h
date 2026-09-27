@@ -410,10 +410,7 @@ static_assert(sizeof(VisitorStream) == 0x18,
 // each store. All five are EXPORTED, so a port should reach them by name
 // (RT_VTABLE_ONCE / RtResolveCached) rather than by address.
 // ---------------------------------------------------------------------------
-constexpr uintptr_t kAddrVtblFileStream           = 0x180154960;  // ??_7FileStream@IO@@6B@
-constexpr uintptr_t kAddrVtblBinaryFileStream     = 0x1801554d0;  // ??_7BinaryFileStream@IO@@6B@
 constexpr uintptr_t kAddrVtblCompressedFileStream = 0x1801555f0;  // ??_7CompressedFileStream@IO@@6B@
-constexpr uintptr_t kAddrVtblTextFileStream       = 0x180155980;  // ??_7TextFileStream@IO@@6B@
 
 // FileStream's slot 7 is Open, NOT Close. Named so a call site cannot repeat
 // the mistake the comment on FileStream warns about; Stream.h's
@@ -472,8 +469,36 @@ namespace IO {
 // value. `IO::BinaryFileStream` is the one that must be concrete.
 class FileStream : public Stream {
 public:
-    // slot 0  +0x00  0x18000c090 — PURE, body registered by address.
-    Stream* DeletingDtor(unsigned flags) override = 0;
+    // ENDGAME B.3.9 IO -- ??0FileStream@IO@@QEAA@XZ 0x1800aaa10, eleven
+    // stores and nothing else (no encoding): the Stream base, `_filename`
+    // null, then the FileInfo's handle -1, size/cursor (one qword) 0,
+    // baseOffset 0, both names null, winHandle -1. FileInfo::_unk04 (+0x24)
+    // and _pad14 are NOT written -- a `= {}` would be a divergence.
+    FileStream() : _filename(nullptr) {
+        _file.handle      = -1;                                  // 1800a8243
+        _file.size        = 0;                                   // 1800a8249 (qword)
+        _file.cursor      = 0;
+        _file.baseOffset  = 0;                                   // 1800a824d
+        _file._name0.data = nullptr;                             // 1800a8259
+        _file._name1.data = nullptr;                             // 1800a8265
+        _file.winHandle   = -1;                                  // 1800a8268
+    }
+
+    // slot 0  +0x00  0x18000c090 — MSVC's vector deleting dtor, stride 0x50.
+    // A plain FileStream IS built (the persistence loader, Audio::Stream::Run).
+    Stream* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<FileStream*>(self + static_cast<int64_t>(i) * 0x50)->~FileStream();
+            if (flags & 1u) RtSystem::RtMemFree(self - 8);
+            return reinterpret_cast<Stream*>(self - 8);
+        }
+        this->~FileStream();
+        if (flags & 1u) RtSystem::RtMemFree(this);
+        return this;
+    }
     // slot 1  +0x08  0x1800aab50 — an ADD-REF of `_filename`, not a copy.
     System::String GetSource() const override;
     bool     Write(int n, const void* src) override;   // slot 2 +0x10  0x1800aab90
@@ -489,7 +514,10 @@ public:
     RtIO::FileInfo _file;       // +0x20  0x30 bytes, RtIO::FileInfo
 
 protected:
-    ~FileStream() = default;    // decision 2's base shape: non-virtual
+    // ??1FileStream@IO@@UEAA@XZ 0x1800aaab0 (file_stream.cpp): close the file
+    // if open (through the FileSystem singleton), ~FileInfo, release
+    // `_filename`; then ~Stream frees the encoding. Non-virtual.
+    ~FileStream();
 };
 
 static_assert(sizeof(FileStream) == 0x50,
@@ -523,27 +551,46 @@ static_assert(offsetof(FileStream, _file) + offsetof(RtIO::FileInfo, winHandle) 
 // `NoteSlotDispatch`, all seven call sites and `RtIoBfsPromoteCounters`) in
 // this commit rather than leaving it counting a constant.
 //
-// ⚠⚠ NOT CONSTRUCTIBLE IN B.3.4 — live objects are built by the ported ctor
-// doors and wear the MINTED table; see B34_RULES section 4.3. ⚠⚠
-//
-// It is CONCRETE because `IO::CompressedFileStream` holds one BY VALUE at
-// +0x68, and a member of abstract type is ill-formed. Concrete would otherwise
-// mean an implicit PUBLIC default constructor and therefore a silent
-// `IO::BinaryFileStream bfs;` stamping GCC's vtable, so the default constructor
-// is PROTECTED — exactly as `IO::MemoryStream`'s is, and for the same reason.
-// A probe subclass reaches it through inheritance; `CompressedFileStream`
-// reaches it as a FRIEND.
+// ENDGAME B.3.9 IO: built by its REAL public constructor (retail's
+// 0x1800a8200) and wearing the compiler's table; the minted ??_7FileStream /
+// ??_7BinaryFileStream / ??_7TextFileStream rows are retired. The destructor
+// is protected and non-virtual (slot 0 only); `CompressedFileStream`, which
+// holds one BY VALUE at +0x68, reaches it as a FRIEND.
 class BinaryFileStream : public FileStream {
 public:
-    // slot 0 +0x00  0x180023d80 — the ONLY difference from FileStream's table.
-    Stream* DeletingDtor(unsigned flags) override;
-    // PUBLIC and non-virtual (B34_BRIEFS section A.3): CompressedFileStream
-    // holds one by value and its implicit destructor must be able to run this.
-    ~BinaryFileStream() = default;
+    // ENDGAME B.3.9 IO -- ??0BinaryFileStream@IO@@QEAA@XZ 0x1800a8200: the
+    // FileStream prologue, then MemAlloc(8,4) and the BINARY encoding (null on
+    // a failed allocation, retail's branch), the dead free of the previous
+    // encoding, the store.
+    BinaryFileStream() {
+        void* enc = RtSystem::RtMemAlloc(8, 4);                  // 1800a82a5
+        if (enc) ::new (enc) BinaryEncoding();                   // 1800a82bb
+        if (_encoding) RtSystem::RtMemFree(_encoding);           // 1800a82d3
+        _encoding = static_cast<Encoding*>(enc);                 // 1800a82d8
+    }
+
+    // slot 0 +0x00  0x180023d80 — the ONLY difference from FileStream's table:
+    // the vector deleting dtor naming ~BinaryFileStream, stride 0x50.
+    Stream* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<BinaryFileStream*>(self + static_cast<int64_t>(i) * 0x50)->~BinaryFileStream();
+            if (flags & 1u) RtSystem::RtMemFree(self - 8);
+            return reinterpret_cast<Stream*>(self - 8);
+        }
+        this->~BinaryFileStream();
+        if (flags & 1u) RtSystem::RtMemFree(this);
+        return this;
+    }
 
 protected:
-    BinaryFileStream() = default;          // see the banner — NOT public
-    friend class CompressedFileStream;     // the by-value holder, +0x68
+    // ??1BinaryFileStream@IO@@UEAA@XZ 0x180023c80 is a bare JMP to
+    // ~FileStream: nothing of its own. Non-virtual; the by-value holder
+    // (CompressedFileStream +0x68) reaches it as a friend.
+    ~BinaryFileStream() = default;
+    friend class CompressedFileStream;
 };
 
 static_assert(sizeof(BinaryFileStream) == 0x50,
@@ -615,10 +662,27 @@ static_assert(std::is_trivially_destructible<RtIo::BinaryFileStream>::value,
 // cross-assert below pins the class's pair against the POD's single field.
 class TextFileStream : public FileStream {
 public:
-    // slot 0  +0x00  0x18002ba90 — PURE. Its body is deleting_dtor.cpp's row 41,
-    // filling slot 0 of the LIVE minted table (rt_data_mint_tables.inc:3697);
-    // section 4.2 keeps that registration for the whole step.
-    Stream* DeletingDtor(unsigned flags) override = 0;
+    // ENDGAME B.3.9 IO -- ??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z
+    // 0x1800ba340 (file_stream.cpp): the FileStream prologue, +0x58/+0x60
+    // null, both formats 6, +0x70 null, +0x78 (one qword) 0, the TEXT
+    // encoding, then `SetObject(type, name, version)`. +0x50/+0x54 are left to
+    // SetObject / never written.
+    TextFileStream(const System::String& type, const System::String& name, int version);
+
+    // slot 0  +0x00  0x18002ba90 — the vector deleting dtor, stride 0x80.
+    Stream* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<TextFileStream*>(self + static_cast<int64_t>(i) * 0x80)->~TextFileStream();
+            if (flags & 1u) RtSystem::RtMemFree(self - 8);
+            return reinterpret_cast<Stream*>(self - 8);
+        }
+        this->~TextFileStream();
+        if (flags & 1u) RtSystem::RtMemFree(this);
+        return this;
+    }
     // slot 1  +0x08  0x1800aab50 — IO::FileStream::GetSource, NOT overridden.
     bool     Write(int n, const void* src) override;   // slot 2 +0x10  0x1800ba9f0
     bool     Read(int n, void* dst) override;          // slot 3 +0x18  0x1800ba900
@@ -653,7 +717,10 @@ public:
     int32_t _bufCursor;        // +0x7c  position IN _buffer
 
 protected:
-    ~TextFileStream() = default;
+    // ??1TextFileStream@IO@@UEAA@XZ 0x1800ba490 (file_stream.cpp): bare
+    // MemFree of `_buffer` (not nulled), release `_objectType` then
+    // `_objectName`, then ~FileStream. Non-virtual.
+    ~TextFileStream();
 };
 
 static_assert(sizeof(TextFileStream) == 0x80,

@@ -426,41 +426,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // silently re-points all twelve Video::*Data probe subjects at wrong rows.
     RT_DELDTOR(0x180023fd0, 0x1800aa650, 0x068, "IO::CompressedStream"),
     RT_DELDTOR(0x180024100, 0x1800a9330, 0x0b8, "IO::CompressedFileStream"),
-    // ---- WAVE 21 lane ENC ----------------------------------------------------
-    // Slot 0 of `??_7TextFileStream@IO@@6B@` (0x180155980), Wave 20 §8 item 3's
-    // named expiry: "unblocks when `??1TextFileStream@` lands." It lands here.
-    //
-    // Both constants disassembled at 0x18002ba90 for this lane (pefile byte read
-    // against Runtime-x64.dll, RETAIL — not the profile build):
-    //     4C 8D 0D E1 E9 08 00   LEA R9,[rip+0x8e9e1] -> 0x1800ba490  ~TextFileStream
-    //     BA 80 00 00 00         MOV EDX,0x80          sizeof(IO::TextFileStream)
-    // 0x1800ba490 resolves in the DLL's export directory (checked by VA, not by
-    // name pattern) to `??1TextFileStream@IO@@UEAA@XZ` -- UEAA, matching
-    // reference_phantom_dtor_mangling_qeaa_vs_ueaa.md's warning that this class
-    // is virtual and QEAA would have resolved NULL silently. NOT yet ported —
-    // no RegisterRuntimeExport for that name exists anywhere in the tree at the
-    // time of this row, so ResolveAddr hands back the DLL's own body and this
-    // row makes that address newly `called`
-    // (reference_porting_can_grow_the_cutover_surface.md). 0x80 matches
-    // runtime/types/io/FileStream.h's independent `static_assert(sizeof(TextFileStream)
-    // == 0x80, ...)`.
-    //
-    // The array-branch CALL target (0x18007ec98, the shared `eh vector
-    // destructor iterator`) and the scalar/array MemFree target (0x180006a10,
-    // one of the ten per-TU `operator delete` copies the banner already lists)
-    // were both re-derived from the same disassembly and match the family's
-    // known constants exactly — this row is not a new shape, just a new address.
-    //
-    // NOT added to kProbeSubjects: ~TextFileStream frees `buffer` (+0x70) when
-    // set and calls into `IO::FileStream`'s own teardown, so running it on a
-    // fabricated object would be a manufactured crash, not a measurement.
-    //
-    // APPENDED rather than inserted in address order (it would sort between
-    // Graphics::ParticleSystemInstance and IO::CompressedMemoryStream) for the
-    // same reason every other row above is appended: kProbeSubjects is a list of
-    // TABLE INDICES and a mid-table insert silently re-points all twelve
-    // Video::*Data probe subjects at wrong rows.
-    RT_DELDTOR(0x18002ba90, 0x1800ba490, 0x080, "IO::TextFileStream"),
     // ---- WAVE 25 lane VTIO ----------------------------------------------------
     // Slot 0 of `??_7PackageFile@IO@@6B@` (0x180155700). WAVE23_LANE_IOPORT.md
     // §8 item 2 is the residual this discharges: that lane measured the table at
@@ -1407,12 +1372,6 @@ void* RtDelDtor_CompressedStream(void* self, unsigned flags) {
 void* RtDelDtor_CompressedFileStream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180024100>());
 }
-// IO::TextFileStream       ~TextFileStream = 0x1800ba490  (PORTED, Wave 27 IOTEXT --
-//                          runtime/src/io/file_stream.cpp; this row's own
-//                          address door is what made porting it worth doing)
-void* RtDelDtor_TextFileStream(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18002ba90>());
-}
 // IO::PackageFile          ~PackageFile = 0x1800b4540  (PORTED -- Wave 25 lane BODY,
 //                          runtime/src/io/package_file_dtor.cpp:442. This line read
 //                          "NOT ported" until Wave 27 lane IOTEXT; the two waves
@@ -1836,7 +1795,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18004d270, (void*)&RtDelDtor_ToolTipDialog);  // Wave 10D TIP
     RegisterRuntimeAddr(0x180023fd0, (void*)&RtDelDtor_CompressedStream);      // Wave 19 CSTREAM
     RegisterRuntimeAddr(0x180024100, (void*)&RtDelDtor_CompressedFileStream);  // Wave 19 CSTREAM
-    RegisterRuntimeAddr(0x18002ba90, (void*)&RtDelDtor_TextFileStream);        // Wave 21 ENC
     RegisterRuntimeAddr(0x1800259d0, (void*)&RtDelDtor_PackageFile);           // Wave 25 VTIO
     RegisterRuntimeAddr(0x1800134b0, (void*)&RtDelDtor_EdgeMesh);              // Wave 27 GFXMESH
     RegisterRuntimeAddr(0x1800175d0, (void*)&RtDelDtor_EdgeMeshInstance);      // Wave 27 GFXMESH

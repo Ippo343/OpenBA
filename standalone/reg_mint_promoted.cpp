@@ -1173,7 +1173,6 @@ int RtMintRegisterPromotedRows() {
     // oracle is runtime/src/io/file_stream_slots_probe.cpp and it is a separate
     // tier. This promotion says our table is installed and dispatched; that
     // probe says the bodies agree with retail's.
-    PromoteVtableGuarded("??_7BinaryFileStream@IO@@6B@", 0x1801554d0ull, &n);
 
     // ========================================================================
     // WAVE 29 LANE IOLANE — ??_7PackageFile@IO@@6B@
@@ -2034,7 +2033,6 @@ int RtMintRegisterPromotedRows() {
     PromoteVtableGuarded("??_7CompressedFileStream@IO@@6B@",   0x1801555f0ull, &n);
     PromoteVtableGuarded("??_7CompressedMemoryStream@IO@@6B@", 0x180155560ull, &n);
     PromoteVtableGuarded("??_7CompressedStream@IO@@6B@",       0x180155640ull, &n);
-    PromoteVtableGuarded("??_7FileStream@IO@@6B@",             0x180154960ull, &n);
 
     // ========================================================================
     // RT_UNPROMOTABLE — rows that are PORTED IN FULL and can NEVER be promoted

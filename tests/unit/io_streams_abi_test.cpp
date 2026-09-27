@@ -306,6 +306,9 @@ UNIT_TEST(the_compressed_classes_are_layout_identical_to_their_PODs) {
 // if the two ever swapped, a caller asking for the formatted open would get the
 // plain one and silently read the file with the wrong codec.
 struct TextFileStreamProbe final : IO::TextFileStream {
+    // ENDGAME B.3.9 IO: the class's one constructor is retail's (type, name,
+    // version); the host stub (io_stream_abi_stubs.cpp) makes its own stores.
+    TextFileStreamProbe() : IO::TextFileStream(System::String(), System::String(), 0) {}
     STREAM_PROBE_SEVEN
     bool Open(const System::Filename&) override { Note(this, 7); return true; }
     bool OpenWithFormat(const System::Filename&, int32_t) override {
