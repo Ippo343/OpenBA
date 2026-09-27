@@ -15,7 +15,7 @@
 //
 // `??_7AnimatedImageElement@UI@@6B@` @ 0x180156000, TWELVE slots; it
 // overrides ONLY Update:
-//   [0] 0x180036db0  (unexported) vector deleting dtor — RT_DELDTOR row, kept
+//   [0] 0x180036db0  (unexported) vector deleting dtor — the class's own (B.3.9)
 //   [1] 0x180036ab0  TypeName
 //   [2] 0x180036a90  Type
 //   [4..6]           ImageElement's (0x180118650 / 0x1801186f0 / 0x180118850)
@@ -42,8 +42,15 @@
 //                            ticks to it (`ADD qword [RBX+0xf8],RAX` at
 //                            0x1800cb2c2) and rewinds it on wrap.
 //
-// ABSTRACT (slot 0 `= 0`); no real ctor — `??0AnimatedImageElement` is
+// (Until ENDGAME B.3.9:) ABSTRACT (slot 0 `= 0`); no real ctor — `??0AnimatedImageElement` is
 // factory_ui1.cpp's door.
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0AnimatedImageElement@UI@@QEAA@XZ` (0x1800cb3f0) minus its vptr stores;
+// slot 0 is the class's own vector deleting dtor; ~AnimatedImageElement is protected and
+// non-virtual. The factory pair is the class's own; the minted
+// `??_7AnimatedImageElement@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
+// the doors are retired.
 // ============================================================================
 
 #include <cstdint>
@@ -53,6 +60,7 @@
 #include "ImageElement.h"
 #include "Sprite.h"
 #include "../collection/Collection.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace System { class Time; }
 
@@ -60,8 +68,33 @@ namespace UI {
 
 class AnimatedImageElement : public ImageElement {
 public:
+    // ??0AnimatedImageElement@UI@@QEAA@XZ 0x1800cb3f0 — the REAL constructor:
+    // ImageElement's stores (inlined in retail; ImageElement() makes the same
+    // ones), then the frame array's two QWORD zeros (Collection::Array's own
+    // default ctor), `MOV dword [+0xf0],0x1e`, `MOV qword [+0xf8],0`. +0xf4 is
+    // NOT written.
+    AnimatedImageElement() : ImageElement() {
+        _framesPerSecond = 0x1e;
+        _accumTicks      = 0;
+    }
+
     // ---- the slots it owns ------------------------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180036db0
+    // [0] 0x180036db0 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x100`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<AnimatedImageElement*>(self + static_cast<int64_t>(i) * 0x100)
+                    ->~AnimatedImageElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~AnimatedImageElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180036ab0
     uint32_t    Type() const override;                            // [2] 0x180036a90
     // [4..6] ImageElement's, inherited.
@@ -73,18 +106,16 @@ public:
     // [3], [8..11] Element's, inherited.
 
     // ---- exported, NOT PORTED as members ----------------------------------
-    AnimatedImageElement(const AnimatedImageElement& src);        // 0x180036c30  door (animatedimageelement.cpp)
+    AnimatedImageElement(const AnimatedImageElement& src);        // 0x180036c30  not ported (door retired: no caller)
     AnimatedImageElement& operator=(const AnimatedImageElement& src); // 0x180036cb0  not ported
-    static uint32_t TypeId();                                     // 0x180036aa0  not ported
-    static Object::Base* CreateNewObject();                       // 0x180036ba0  factory door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180036c20  factory door
+    static uint32_t TypeId();                                     // 0x180036aa0  ported over the minted record
+    static Object::Base* CreateNewObject();                       // 0x180036ba0  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x180036c20  the class's own (B39 D2)
 
 protected:
-    // NOT retail's `??0AnimatedImageElement@UI@@QEAA@XZ` (0x1800cb3f0, a door).
-    AnimatedImageElement() = default;
-    // `??1AnimatedImageElement@UI@@UEAA@XZ` (0x1800cb3a0). NON-VIRTUAL, NOT
-    // defined in the real build; the retail body is the door
-    // `RtUi_AnimatedImageElement_Dtor`.
+    // `??1AnimatedImageElement@UI@@UEAA@XZ` (0x1800cb3a0). NON-VIRTUAL
+    // (animatedimageelement.cpp): destroys the frame array through retail's
+    // Array<Sprite> dtor; the compiler restamps and chains ~ImageElement.
     ~AnimatedImageElement();
 
 private:
@@ -103,6 +134,7 @@ static_assert(sizeof(AnimatedImageElement) == 0x100,
               "UI::AnimatedImageElement is 0x100 bytes (MOV EDX,0x100 at 0x180036de2)");
 static_assert(alignof(AnimatedImageElement) == 8, "aligns to 8");
 static_assert(!std::has_virtual_destructor<AnimatedImageElement>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<AnimatedImageElement>::value, "B39 D1: concrete");
 static_assert(offsetof(AnimatedImageElement, _frames) == sizeof(ImageElement),
               "AnimatedImageElement's own fields begin at the end of ImageElement");
 static_assert(offsetof(AnimatedImageElement, _frames)          == 0xE0, "");

@@ -12,7 +12,7 @@
 //     both CreateInstance bodies call the shared applier 0x180118570
 //
 // ??_7ImageDescription@UI@@6B@ (retail 0x180156110), ten slots:
-//   0  deleting dtor      0x1800361f0  deleting_dtor.cpp row (sizeof 0x80)
+//   0  deleting dtor      0x1800361f0  ImageDescription.h (the class's own)
 //   1  TypeName           0x180035cd0  here
 //   2  Type               0x180035cb0  here
 //   3  GetFileVersion     0x1801184a0  here  (returns 0x204)
@@ -22,7 +22,7 @@
 //   7  Destruct           0x1800360c0  here
 //   8  CreateInstance     0x180118910  here
 //   9  Construct          0x180036010  here
-// plus ??1ImageDescription@UI@@UEAA@XZ 0x180118370 (a DOOR, B4b-2) and the
+// plus ??1ImageDescription@UI@@UEAA@XZ 0x180118370, the factory pair, and the
 // applier 0x180118570 — the NON-VIRTUAL
 // `?CreateInstance@ImageDescription@UI@@QEBAXV?$InternalPtr@VImageElement@UI@@@Object@@@Z`.
 // It IS EXPORTED (B36_SLOTS.md section 6); this file called it "unexported"
@@ -42,6 +42,13 @@
 // qualified member `ElementDescription::Serialize`; the applier's
 // `GetSpriteIndexFromName` (RT_EXPORT_ONCE before) is the real
 // `UI::SpriteSheet` member.
+//
+// ENDGAME B.3.9 block UI-A (B39_RULES D1/D2): the class is CONCRETE. The real
+// ctor (`??0ImageDescription@UI@@QEAA@XZ` 0x1801182d0, the stores this file's
+// ConstructBody transcribed) is in the header; the factory pair is defined and
+// registered here, replacing the ui_factory_wave28.cpp row. The slot doors and
+// the ??1 door, read only by the retired minted table and its RT_DELDTOR row,
+// are gone. The applier's door (non-slot) stays.
 // ============================================================================
 #include <atomic>
 #include <cstddef>
@@ -49,6 +56,7 @@
 #include <new>
 
 #include "description_common.h"
+#include "../../types/system/String.h"
 #include "../../types/ui/ImageDescription.h"
 #include "../../types/ui/ImageElement.h"
 #include "../../types/ui/SpriteSheet.h"
@@ -68,58 +76,12 @@ void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 
-std::atomic<void*> g_vtBase{nullptr};
-std::atomic<void*> g_vtExternal{nullptr};
-std::atomic<void*> g_vtElementDescription{nullptr};
-std::atomic<void*> g_vtImageDescription{nullptr};
-std::atomic<void*> g_vtImageElement{nullptr};
 std::atomic<void*> g_imageDescriptionTypeInfo{nullptr};
 
-void* AtVtBase()     { return AtomicResolve(g_vtBase, "??_7Base@Object@@6B@"); }
-void* AtVtExternal() { return AtomicResolve(g_vtExternal, "??_7External@Object@@6B@"); }
-void* AtVtElementDescription() {
-    return AtomicResolve(g_vtElementDescription, "??_7ElementDescription@UI@@6B@");
-}
-void* AtVtImageDescription() { return AtomicResolve(g_vtImageDescription, "??_7ImageDescription@UI@@6B@"); }
-void* AtVtImageElement()     { return AtomicResolve(g_vtImageElement, "??_7ImageElement@UI@@6B@"); }
 const uint8_t* ImageDescriptionTypeInfo() {
     return static_cast<const uint8_t*>(AtomicResolve(
         g_imageDescriptionTypeInfo,
         "?_typeInfo@ImageDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
-// Door-only (the dtor door is not a member).
-void* VtImageDescription() { return RT_DATA_SLOT(void*, "??_7ImageDescription@UI@@6B@"); }
-
-// The inlined constructor, transcribed from 0x18003602a..0x18003609e. Identical
-// to every other ElementDescription subclass through +0x60, then three stores
-// of its own. It appears in FOUR places in the shipped DLL (Construct,
-// Reconstruct, the two factory steps, and again inside
-// ??0AnimatedImageDescription) and is written once here.
-void ConstructBody(void* selfv) {
-    uint8_t* p = static_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = AtVtBase();                                            // 18003602a
-    *v = AtVtExternal();                                        // 180036034
-    *reinterpret_cast<uint64_t*>(p + 0x08) = 0;                 // 180036049
-    *reinterpret_cast<uint64_t*>(p + 0x10) = 0;                 // 18003604c
-    *reinterpret_cast<uint64_t*>(p + 0x18) = 0;                 // 180036050
-    *v = AtVtElementDescription();                              // 180036054
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;                 // 18003605e
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;                 // 180036062
-    *reinterpret_cast<uint64_t*>(p + 0x30) = 0;                 // 180036066
-    *reinterpret_cast<int32_t*>(p + 0x38)  = 0;                 // 18003606a  DWORD
-    *reinterpret_cast<int32_t*>(p + 0x3c)  = -1;                // 18003606d  DWORD
-    *reinterpret_cast<uint64_t*>(p + 0x40) = 3;                 // 180036074  ONE QWORD
-    *reinterpret_cast<uint64_t*>(p + 0x48) = 0;                 // 18003607c
-    *reinterpret_cast<uint64_t*>(p + 0x50) = 0;                 // 180036080
-    *reinterpret_cast<uint64_t*>(p + 0x58) = 0;                 // 180036084
-    *reinterpret_cast<uint64_t*>(p + 0x60) = 0;                 // 180036088
-    *v = AtVtImageDescription();                                // 18003608c
-    *reinterpret_cast<uint64_t*>(p + 0x68) = 0;                 // 180036096
-    *reinterpret_cast<uint64_t*>(p + 0x70) = 0;                 // 18003609a
-    *reinterpret_cast<int64_t*>(p + 0x78)  = -1;                // 18003609e  ONE QWORD
 }
 
 }  // namespace
@@ -129,7 +91,9 @@ void ConstructBody(void* selfv) {
 // ============================================================================
 namespace UI {
 
-uint32_t ImageDescription::Type() const {                      // 0x180035cb0
+uint32_t ImageDescription::Type() const { return TypeId(); }  // 0x180035cb0
+// ?TypeId@ImageDescription@UI@@SAIXZ 0x180035cc0 — the record's first dword.
+uint32_t ImageDescription::TypeId() {
     const uint8_t* ti = ImageDescriptionTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
@@ -140,17 +104,16 @@ const char* ImageDescription::TypeName() const {               // 0x180035cd0
 }
 int32_t ImageDescription::GetFileVersion() const { return 0x204; }   // 0x1801184a0
 
-// 0x180036010: the null test (180036021) is the DOOR's; then the inlined ctor.
+// 0x180036010: the null test (180036021) sat in the retired door; then the
+// inlined ctor (0x18003602a..0x18003609e) -- the real ctor (ENDGAME B.3.9 UI-A).
 Object::External* ImageDescription::Construct() {
-    ConstructBody(this);
-    return this;
+    return ::new (this) ImageDescription();
 }
 // 0x180035f60: slot 0 with flag 0 through the object's own table, then the
 // inlined ctor. No null test.
 Object::External* ImageDescription::Reconstruct() {
     DeletingDtor(0);                                           // 180035f77
-    ConstructBody(this);
-    return this;
+    return ::new (this) ImageDescription();
 }
 // 0x1800360c0: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
 void ImageDescription::Destruct() { DeletingDtor(0); }
@@ -252,7 +215,8 @@ void ImageDescription::CreateInstance(Object::InternalPtr<ImageElement>* element
 // the base.
 //
 // ImageElement is 0xe0 bytes (`MOV EDX,0xe0` at 0x180118951). Its constructor is
-// INLINED here rather than called: ??0Element (0x180115e50), then the
+// INLINED here rather than called -- the real ImageElement ctor's stores
+// (ImageElement.h, ENDGAME B.3.9 UI-A): ??0Element (0x180115e50), then the
 // ImageElement vtable, then four stores whose widths are not uniform:
 //     0x180118991  MOV qword  [RDI+0xc0],0
 //     0x18011899c  MOV dword  [RDI+0xc8],0xffffffff
@@ -264,16 +228,8 @@ Object::InternalPtr<Element>* ImageDescription::CreateInstance(
     void* raw = rtdesc::MemAlloc(0xe0, 8);                     // 180118951
 
     ImageElement* elem = nullptr;
-    if (raw != nullptr) {                                      // 180118979
-        rtdesc::ElementCtor(raw);                              // 180118981 ??0Element
-        uint8_t* e = static_cast<uint8_t*>(raw);
-        *reinterpret_cast<void**>(e) = AtVtImageElement();     // 18011898e
-        *reinterpret_cast<uint64_t*>(e + 0xc0) = 0;            // 180118991
-        *reinterpret_cast<int32_t*>(e + 0xc8)  = -1;           // 18011899c  DWORD
-        *reinterpret_cast<int32_t*>(e + 0xd0)  = 0;            // 1801189a6  DWORD
-        __builtin_memcpy(e + 0xd4, "\xff\xff\xff\xff\xff\xff\xff\xff", 8);  // 1801189b0
-        elem = reinterpret_cast<ImageElement*>(raw);           // B.3.6 bridge
-    }
+    if (raw != nullptr)                                        // 180118979
+        elem = ::new (raw) ImageElement();                     // 180118981..1801189b0 inlined ctor
 
     Object::InternalPtr<ImageElement> slot(elem);              // 1801189bb
     ImageDescription::CreateInstance(&slot);                   // 1801189c8
@@ -285,110 +241,61 @@ Object::InternalPtr<Element>* ImageDescription::CreateInstance(
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — each a one-line QUALIFIED delegation.
+// ??1ImageDescription@UI@@UEAA@XZ   0x180118370 -- retail's body, moved here
+// from the retired door (ENDGAME B.3.9 UI-A)
 // ============================================================================
-extern "C" uint32_t RtUi_ImageDescription_Type(const void* self) {
-    return reinterpret_cast<const UI::ImageDescription*>(self)          // B.3.6 bridge
-        ->UI::ImageDescription::Type();
+// The sprite name at +0x70 under this class's own vtable (the entry restamp is
+// the compiler's), through System::String's own Release (the idiom retail
+// inlines at 0x180118394..0x1801183b2, with its asymmetry: the freeing branch
+// leaves the field at `data - 8`, the sharing branch nulls it). Then the
+// compiler chains ~ElementDescription (the base stamp and _textName at +0x60)
+// and ~External (retail's tail JMP at 0x1801183f6). +0x68 is NOT released.
+namespace UI {
+ImageDescription::~ImageDescription() {
+    System::StringPrivateAccess::Release(
+        *reinterpret_cast<System::String*>(&_spriteName));     // 180118394
 }
-extern "C" const char* RtUi_ImageDescription_TypeName(const void* self) {
-    return reinterpret_cast<const UI::ImageDescription*>(self)          // B.3.6 bridge
-        ->UI::ImageDescription::TypeName();
+}  // namespace UI
+
+namespace UI {
+// ?CreateNewObject@ImageDescription@UI@@SAPEAVBase@Object@@XZ  0x180035dc0
+// The factory-interpreter row this replaces: MemAlloc(0x80, 8), retail's
+// null branch, then the inlined ctor (ElementDescription's stores, then +0x68/+0x70 zero and +0x78 QWORD -1).
+Object::Base* ImageDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ImageDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) ImageDescription();
 }
-extern "C" int32_t RtUi_ImageDescription_GetFileVersion(const void* self) {
-    return reinterpret_cast<const UI::ImageDescription*>(self)          // B.3.6 bridge
-        ->UI::ImageDescription::GetFileVersion();
+// ?CreateInPlaceObject@ImageDescription@UI@@SAPEAVBase@Object@@PEAX@Z  0x180035eb0
+Object::Base* ImageDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) ImageDescription();
 }
-extern "C" void* RtUi_ImageDescription_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                      // 180036021
-    return reinterpret_cast<UI::ImageDescription*>(selfv)               // B.3.6 bridge
-        ->UI::ImageDescription::Construct();
-}
-extern "C" void* RtUi_ImageDescription_Reconstruct(void* selfv) {
-    return reinterpret_cast<UI::ImageDescription*>(selfv)               // B.3.6 bridge
-        ->UI::ImageDescription::Reconstruct();
-}
-extern "C" void RtUi_ImageDescription_Destruct(void* selfv) {
-    reinterpret_cast<UI::ImageDescription*>(selfv)                      // B.3.6 bridge
-        ->UI::ImageDescription::Destruct();
-}
-extern "C" bool RtUi_ImageDescription_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<UI::ImageDescription*>(selfv)               // B.3.6 bridge
-        ->UI::ImageDescription::Serialize(streamv);
-}
-// 0x180118570: RCX = this, RDX = &caller's InternalPtr<ImageElement>.
+}  // namespace UI
+
+// ============================================================================
+// The applier's door -- 0x180118570, NON-VIRTUAL (not a slot of the retired
+// table), so it stays: RCX = this, RDX = &caller's InternalPtr<ImageElement>.
+// ============================================================================
 extern "C" void RtUi_ImageDescription_ApplyToElement(const void* selfv, void** elemPtr) {
     reinterpret_cast<const UI::ImageDescription*>(selfv)                // B.3.6 bridge
         ->UI::ImageDescription::CreateInstance(
             reinterpret_cast<Object::InternalPtr<UI::ImageElement>*>(elemPtr));
 }
-// Slot 8: RCX = this, RDX = the caller's slot (R8, the Dialog*, is unread).
-extern "C" void** RtUi_ImageDescription_CreateInstance(const void* selfv, void** ret,
-                                                       const void* dialog) {
-    return reinterpret_cast<void**>(
-        reinterpret_cast<const UI::ImageDescription*>(selfv)            // B.3.6 bridge
-            ->UI::ImageDescription::CreateInstance(
-                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
-                static_cast<const UI::Dialog*>(dialog)));
-}
 
 // ============================================================================
-// ??1ImageDescription@UI@@UEAA@XZ   0x180118370   — a DTOR DOOR (B4b-2)
+// Registration: the factory pair (B39_RULES D2) and the applier. The eight slot
+// doors and the ??1 door, read only by the retired minted table / RT_DELDTOR
+// row, are gone; so is ui_factory_wave28.cpp's ??0 door.
 // ============================================================================
-// TWO String releases, both with retail's asymmetry: the sprite name at +0x70
-// under this class's own vtable, then ElementDescription's _textName at +0x60
-// under the base vtable. Tail JMP to ??1External@Object@@ at 0x1801183f6.
-extern "C" void RtUi_ImageDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtImageDescription();                                 // 18011838d
-    ReleaseStringField(p, 0x70);                               // 180118394..1801183b2
-    *v = VtElementDescription();                               // 1801183c1
-    ReleaseStringField(p, 0x60);                               // 1801183c8..1801183e6
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1801183f6 JMP
-}
-
 int RtUiImageDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@ImageDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_ImageDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x180035cb0ull, (void*)&RtUi_ImageDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@ImageDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_ImageDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x180035cd0ull, (void*)&RtUi_ImageDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@ImageDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_ImageDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x1801184a0ull, (void*)&RtUi_ImageDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@ImageDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_ImageDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x180036010ull, (void*)&RtUi_ImageDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@ImageDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_ImageDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x180035f60ull, (void*)&RtUi_ImageDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@ImageDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_ImageDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x1800360c0ull, (void*)&RtUi_ImageDescription_Destruct);
-
-    RegisterRuntimeExport("??1ImageDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_ImageDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x180118370ull, (void*)&RtUi_ImageDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@ImageDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_ImageDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x1801184b0ull, (void*)&RtUi_ImageDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@ImageDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_ImageDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x180118910ull, (void*)&RtUi_ImageDescription_CreateInstance);
+    RegisterRuntimeExport("?CreateNewObject@ImageDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::ImageDescription::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x180035dc0ull, (void*)&UI::ImageDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@ImageDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::ImageDescription::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x180035eb0ull, (void*)&UI::ImageDescription::CreateInPlaceObject);
 
     // ADDRESS ONLY, as before: the export name resolves to this address.
     RegisterRuntimeAddr(0x180118570ull, (void*)&RtUi_ImageDescription_ApplyToElement); ++n;

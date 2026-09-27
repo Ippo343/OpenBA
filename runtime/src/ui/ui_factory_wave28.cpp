@@ -266,76 +266,6 @@ extern "C" void* RtUiFact_SpriteSheet_CreateInPlaceObject(void* p) {
 
 
 // --------------------------------------------------------------------------
-// UI::ImageDescription   allocation 0x80, align 8
-//   ?CreateNewObject@ImageDescription@UI@@SAPEAVBase@Object@@XZ    0x180035dc0 ord 2074
-//   ?CreateInPlaceObject@ImageDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x180035eb0 ord 1937
-//   ??0ImageDescription@UI@@QEAA@XZ                                0x1801182d0 ord 231
-void* Ctor_ImageDescription(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    VPTR(self, "??_7Base@Object@@6B@");
-    VPTR(self, "??_7External@Object@@6B@");
-    U64(self, 0x08, 0);
-    U64(self, 0x10, 0);
-    U64(self, 0x18, 0);
-    VPTR(self, "??_7ElementDescription@UI@@6B@");
-    U64(self, 0x20, 0);
-    U64(self, 0x28, 0);
-    U64(self, 0x30, 0);
-    U32(self, 0x38, 0);
-    U32(self, 0x3c, 0xffffffffu);
-    U64(self, 0x40, 0x3ull);
-    U64(self, 0x48, 0);
-    U64(self, 0x50, 0);
-    U64(self, 0x58, 0);
-    U64(self, 0x60, 0);
-    VPTR(self, "??_7ImageDescription@UI@@6B@");
-    U64(self, 0x68, 0);
-    U64(self, 0x70, 0);
-    U64(self, 0x78, 0xffffffffffffffffull);
-    return p;
-}
-
-extern "C" void* RtUiFact_ImageDescription_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0x80, &Ctor_ImageDescription);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_ImageDescription_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_ImageDescription);
-}
-
-// --------------------------------------------------------------------------
-// UI::ImageElement   allocation 0xe0, align 8
-//   ?CreateNewObject@ImageElement@UI@@SAPEAVBase@Object@@XZ        0x1800363a0 ord 2075
-//   ?CreateInPlaceObject@ImageElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180036450 ord 1938
-//   ??0ImageElement@UI@@QEAA@XZ                                    0x180118410 ord 233
-void* Ctor_ImageElement(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    BASE("??0Element@UI@@QEAA@XZ", self);
-    VPTR(self, "??_7ImageElement@UI@@6B@");
-    U64(self, 0xc0, 0);
-    U32(self, 0xc8, 0xffffffffu);
-    U32(self, 0xd0, 0);
-    U64(self, 0xd4, 0xffffffffffffffffull);
-    return p;
-}
-
-extern "C" void* RtUiFact_ImageElement_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0xe0, &Ctor_ImageElement);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_ImageElement_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_ImageElement);
-}
-
-// --------------------------------------------------------------------------
 // UI::LabelDescription   allocation 0xb8, align 8
 //   ?CreateNewObject@LabelDescription@UI@@SAPEAVBase@Object@@XZ    0x1800424a0 ord 2077
 //   ?CreateInPlaceObject@LabelDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x180042520 ord 1940
@@ -1099,24 +1029,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@SpriteSheet@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_SpriteSheet_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180003000ull, (void*)&RtUiFact_SpriteSheet_CreateInPlaceObject); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@ImageDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_ImageDescription_CreateNewObject);
-    RegisterRuntimeAddr(0x180035dc0ull, (void*)&RtUiFact_ImageDescription_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@ImageDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_ImageDescription_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x180035eb0ull, (void*)&RtUiFact_ImageDescription_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0ImageDescription@UI@@QEAA@XZ", (void*)&Ctor_ImageDescription);
-    RegisterRuntimeAddr(0x1801182d0ull, (void*)&Ctor_ImageDescription); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@ImageElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_ImageElement_CreateNewObject);
-    RegisterRuntimeAddr(0x1800363a0ull, (void*)&RtUiFact_ImageElement_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@ImageElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_ImageElement_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x180036450ull, (void*)&RtUiFact_ImageElement_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0ImageElement@UI@@QEAA@XZ", (void*)&Ctor_ImageElement);
-    RegisterRuntimeAddr(0x180118410ull, (void*)&Ctor_ImageElement); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@LabelDescription@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_LabelDescription_CreateNewObject);

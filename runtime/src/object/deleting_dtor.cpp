@@ -871,17 +871,8 @@ static constexpr DelDtorSpec kSpecs[] = {
     // Same two-arm shape as the GroupDescription row above; not a probe
     // subject, for the same reason.
     RT_DELDTOR(0x180044620, 0x1800d5c90, 0x080, "UI::RibbonDescription"),
-    // 2026-09-12: UI::ImageDescription and its subclass
-    // UI::AnimatedImageDescription. Each row's two constants read from the
-    // deleting destructor's own bytes:
-    //     0x1800361f0  LEA R9,[0x180118370]  MOV EDX,0x80   ImageDescription
-    //     0x1800369e0  LEA R9,[0x1800cb6b0]  MOV EDX,0x98   AnimatedImageDescription
-    // Both destructors are ported in runtime/src/ui/. Neither is a probe
-    // subject: ~ImageDescription releases TWO refcounted Strings (+0x70 and
-    // the base's +0x60) and ~AnimatedImageDescription destroys an
-    // Array<String> whose buffer came from the Runtime heap.
-    RT_DELDTOR(0x1800361f0, 0x180118370, 0x080, "UI::ImageDescription"),
-    RT_DELDTOR(0x1800369e0, 0x1800cb6b0, 0x098, "UI::AnimatedImageDescription"),
+    // (UI::ImageDescription / UI::AnimatedImageDescription's two rows were
+    // retired by ENDGAME B.3.9 UI-A: slot 0 is each class's own.)
     // MERGE 2026-09-12: batch 9's six rows come FIRST so their indices
     // (61..66), already baked into their entry points below, are unchanged;
     // VTABLE BATCH 1's ten were renumbered 67..76 after the merge, exactly as
@@ -1127,12 +1118,10 @@ static constexpr DelDtorSpec kSpecs[] = {
     // entry -- the same disqualification runtime/types/ui/Element.h records.
     // All thirteen ~Class bodies ARE ported (runtime/src/ui/<class>element.cpp),
     // so ResolveAddr hands this file OUR code for every row.
-    RT_DELDTOR(0x180036db0, 0x1800cb3a0, 0x100, "UI::AnimatedImageElement"),
     RT_DELDTOR(0x18003a050, 0x1800ccb10, 0x0d8, "UI::ContainerElement"),
     RT_DELDTOR(0x18003c650, 0x1800cf320, 0x1c8, "UI::DocumentTextElement"),
     RT_DELDTOR(0x1800408b0, 0x1800d1840, 0x100, "UI::GraphElement"),
     RT_DELDTOR(0x180046e10, 0x180117cc0, 0x0c0, "UI::GroupElement"),
-    RT_DELDTOR(0x180036600, 0x180118470, 0x0e0, "UI::ImageElement"),
     RT_DELDTOR(0x180042bb0, 0x1800d25f0, 0x130, "UI::LabelElement"),
     // 2026-09-12, VTABLE BATCH 2 (the UI::*Description second half), rows
     // 103..115 -- APPENDED AFTER every row main already had, and the entry
@@ -1518,12 +1507,6 @@ void* RtDelDtor_GroupDescription(void* self, unsigned flags) {
 void* RtDelDtor_RibbonDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180044620>());
 }
-void* RtDelDtor_ImageDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800361f0>());
-}
-void* RtDelDtor_AnimatedImageDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800369e0>());
-}
 
 // VTABLE BATCH 9 (2026-09-12). Indices 61-66, appended after rows 57-60
 // (wired above, after this batch's merge found them without wrappers).
@@ -1648,10 +1631,6 @@ void* RtDelDtor_SpotLight(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x1800642b0>());
 }
 
-// UI::AnimatedImageElement  ~AnimatedImageElement = 0x1800cb3a0  (PORTED, runtime/src/ui/)
-void* RtDelDtor_AnimatedImageElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180036db0>());
-}
 // UI::ContainerElement  ~ContainerElement = 0x1800ccb10  (PORTED, runtime/src/ui/)
 void* RtDelDtor_ContainerElement(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18003a050>());
@@ -1667,10 +1646,6 @@ void* RtDelDtor_GraphElement(void* self, unsigned flags) {
 // UI::GroupElement  ~GroupElement = 0x180117cc0  (PORTED, runtime/src/ui/)
 void* RtDelDtor_GroupElement(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180046e10>());
-}
-// UI::ImageElement  ~ImageElement = 0x180118470  (PORTED, runtime/src/ui/)
-void* RtDelDtor_ImageElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180036600>());
 }
 // UI::LabelElement  ~LabelElement = 0x1800d25f0  (PORTED, runtime/src/ui/)
 void* RtDelDtor_LabelElement(void* self, unsigned flags) {
@@ -1834,8 +1809,6 @@ void RtObjectDeletingDtorPortInit() {
     // Rows 57-60, the UI::*Description four (wrappers above).
     RegisterRuntimeAddr(0x180046af0, (void*)&RtDelDtor_GroupDescription);
     RegisterRuntimeAddr(0x180044620, (void*)&RtDelDtor_RibbonDescription);
-    RegisterRuntimeAddr(0x1800361f0, (void*)&RtDelDtor_ImageDescription);
-    RegisterRuntimeAddr(0x1800369e0, (void*)&RtDelDtor_AnimatedImageDescription);
     RegisterRuntimeAddr(0x180074a10, (void*)&RtDelDtor_ComboDialog);
     RegisterRuntimeAddr(0x18003b600, (void*)&RtDelDtor_DialogControllerConfig);
     RegisterRuntimeAddr(0x180007800, (void*)&RtDelDtor_ExternalList);
@@ -1886,12 +1859,10 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x1800422f0, (void*)&RtDelDtor_TextElement);
 
     // VTABLE BATCH 3 (2026-09-12), UI::*Element first half.
-    RegisterRuntimeAddr(0x180036db0, (void*)&RtDelDtor_AnimatedImageElement);
     RegisterRuntimeAddr(0x18003a050, (void*)&RtDelDtor_ContainerElement);
     RegisterRuntimeAddr(0x18003c650, (void*)&RtDelDtor_DocumentTextElement);
     RegisterRuntimeAddr(0x1800408b0, (void*)&RtDelDtor_GraphElement);
     RegisterRuntimeAddr(0x180046e10, (void*)&RtDelDtor_GroupElement);
-    RegisterRuntimeAddr(0x180036600, (void*)&RtDelDtor_ImageElement);
     RegisterRuntimeAddr(0x180042bb0, (void*)&RtDelDtor_LabelElement);
     // ---- VTABLE BATCH 2 (the UI::*Description second half), rows 103..115 --
     RegisterRuntimeAddr(0x1800431d0, (void*)&RtDelDtor_LayoutDescription);

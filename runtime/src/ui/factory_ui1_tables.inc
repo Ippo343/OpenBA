@@ -16,44 +16,6 @@
 // are UNALIGNED or OVERLAP their neighbours and that is what retail does.
 // ============================================================================
 
-const Store kAnimatedImageDescription[] = {
-    { 0x000, 8, SK_VTABLE, 0, "??_7Base@Object@@6B@", 0x1800cb708 },
-    { 0x000, 8, SK_VTABLE, 0, "??_7External@Object@@6B@", 0x1800cb712 },
-    { 0x008, 8, SK_IMM, 0x0ull, nullptr, 0x1800cb720 },
-    { 0x010, 8, SK_IMM, 0x0ull, nullptr, 0x1800cb723 },
-    { 0x018, 8, SK_IMM, 0x0ull, nullptr, 0x1800cb727 },
-    { 0x000, 8, SK_VTABLE, 0, "??_7ElementDescription@UI@@6B@", 0x1800cb732 },
-    { 0x020, 8, SK_IMM, 0x0ull, nullptr, 0x1800cb735 },
-    { 0x028, 8, SK_IMM, 0x0ull, nullptr, 0x1800cb739 },
-    { 0x030, 8, SK_IMM, 0x0ull, nullptr, 0x1800cb73d },
-    { 0x038, 4, SK_IMM, 0x0ull, nullptr, 0x1800cb741 },
-    { 0x03c, 4, SK_IMM, 0xffffffffull, nullptr, 0x1800cb744 },
-    { 0x040, 8, SK_IMM, 0x3ull, nullptr, 0x1800cb74b },
-    { 0x048, 8, SK_IMM, 0x0ull, nullptr, 0x1800cb753 },
-    { 0x050, 8, SK_IMM, 0x0ull, nullptr, 0x1800cb757 },
-    { 0x058, 8, SK_IMM, 0x0ull, nullptr, 0x1800cb75b },
-    { 0x060, 8, SK_IMM, 0x0ull, nullptr, 0x1800cb75f },
-    { 0x000, 8, SK_VTABLE, 0, "??_7ImageDescription@UI@@6B@", 0x1800cb76a },
-    { 0x068, 8, SK_IMM, 0x0ull, nullptr, 0x1800cb76d },
-    { 0x070, 8, SK_IMM, 0x0ull, nullptr, 0x1800cb771 },
-    { 0x078, 8, SK_IMM, 0xffffffffffffffffull, nullptr, 0x1800cb775 },
-    { 0x000, 8, SK_VTABLE, 0, "??_7AnimatedImageDescription@UI@@6B@", 0x1800cb784 },
-    { 0x080, 8, SK_IMM, 0x0ull, nullptr, 0x1800cb787 },
-    { 0x088, 8, SK_IMM, 0x0ull, nullptr, 0x1800cb78e },
-    { 0x090, 4, SK_IMM, 0x1eull, nullptr, 0x1800cb795 },
-};
-const Store kAnimatedImageElement[] = {
-    { 0x000, 8, SK_VTABLE, 0, "??_7ImageElement@UI@@6B@", 0x1800cb413 },
-    { 0x0c0, 8, SK_IMM, 0x0ull, nullptr, 0x1800cb418 },
-    { 0x0c8, 4, SK_IMM, 0xffffffffull, nullptr, 0x1800cb41f },
-    { 0x0d0, 4, SK_IMM, 0x0ull, nullptr, 0x1800cb429 },
-    { 0x0d4, 8, SK_IMM, 0xffffffffffffffffull, nullptr, 0x1800cb42f },
-    { 0x000, 8, SK_VTABLE, 0, "??_7AnimatedImageElement@UI@@6B@", 0x1800cb441 },
-    { 0x0e0, 8, SK_IMM, 0x0ull, nullptr, 0x1800cb444 },
-    { 0x0e8, 8, SK_IMM, 0x0ull, nullptr, 0x1800cb44b },
-    { 0x0f0, 4, SK_IMM, 0x1eull, nullptr, 0x1800cb452 },
-    { 0x0f8, 8, SK_IMM, 0x0ull, nullptr, 0x1800cb45c },
-};
 const Store kCharacterSet[] = {
     { 0x000, 8, SK_VTABLE, 0, "??_7Base@Object@@6B@", 0x1800375a3 },
     { 0x000, 8, SK_VTABLE, 0, "??_7External@Object@@6B@", 0x1800375ad },
@@ -286,18 +248,6 @@ const Store kGroupElement[] = {
 };
 
 const Spec kSpecs[] = {
-    { "AnimatedImageDescription", 0x98ull, 8,
-      nullptr, kAnimatedImageDescription,
-      (uint16_t)(sizeof(kAnimatedImageDescription)/sizeof(Store)),
-      "?CreateNewObject@AnimatedImageDescription@UI@@SAPEAVBase@Object@@XZ", 0x1800367c0ull,
-      "?CreateInPlaceObject@AnimatedImageDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180036840ull,
-      "??0AnimatedImageDescription@UI@@QEAA@XZ", 0x1800cb6f0ull },
-    { "AnimatedImageElement", 0x100ull, 8,
-      "??0Element@UI@@QEAA@XZ", kAnimatedImageElement,
-      (uint16_t)(sizeof(kAnimatedImageElement)/sizeof(Store)),
-      "?CreateNewObject@AnimatedImageElement@UI@@SAPEAVBase@Object@@XZ", 0x180036ba0ull,
-      "?CreateInPlaceObject@AnimatedImageElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180036c20ull,
-      "??0AnimatedImageElement@UI@@QEAA@XZ", 0x1800cb3f0ull },
     { "CharacterSet", 0x28ull, 8,
       nullptr, kCharacterSet,
       (uint16_t)(sizeof(kCharacterSet)/sizeof(Store)),
