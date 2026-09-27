@@ -20,6 +20,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include "Component/GrowthComponent.h"   // ENDGAME B.3.8 CB3: GrowthComponent::TypeId()
+#include "Entity/ComponentEntity.h"
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -61,9 +62,6 @@ static void (*s_fn_NR_SetVariant)(int64_t* comp, uint16_t variant, int16_t subVa
 
 // FUN_1400c48a0 -- register entity with entity list
 static void (*s_fn_RegisterEntity)(void** entityList, void* entityIBP, int typeGroup) = nullptr;
-
-// TypeId for ComponentEntity validation (0x1401c5d70)
-static uint32_t* s_typeId_ComponentEntity = nullptr;
 
 static bool s_cnr_funcs_resolved = false;
 
@@ -109,16 +107,12 @@ bool CreateNaturalResource_ResolveFuncs() {
     s_fn_RegisterEntity = reinterpret_cast<void(*)(void**, void*, int)>(
         ResolveAddr(Module::Exe, 0x1400c48a0));
 
-    s_typeId_ComponentEntity = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c5d70));
-
     bool ok = s_fn_SerializeTypeRef && s_fn_ComponentEntity_CopyCtor &&
               s_fn_CheckTerrain && s_fn_FindComponent_Model &&
               s_fn_SetupModelAtCell && s_fn_FindComponent_Growth &&
               s_fn_SetGrowthProgress && s_fn_FindComponent_NR &&
               s_fn_NR_GetVariantCount && s_fn_NR_GetSubVariantCount &&
               s_fn_NR_SetVariant && s_fn_RegisterEntity &&
-              s_typeId_ComponentEntity &&
               fn_InternalBasePtr_DeletePtr &&
               fn_MemFreeStatic &&
               fn_InternalBasePtr_Ctor && fn_IsDerivedFrom &&
@@ -134,9 +128,8 @@ bool CreateNaturalResource_ResolveFuncs() {
     printf("[CreateNaturalResource]   FindNR=%p NRVarCount=%p NRSubVar=%p NRSetVar=%p\n",
            (void*)s_fn_FindComponent_NR, (void*)s_fn_NR_GetVariantCount,
            (void*)s_fn_NR_GetSubVariantCount, (void*)s_fn_NR_SetVariant);
-    printf("[CreateNaturalResource]   Register=%p TypeId=%p\n",
-           (void*)s_fn_RegisterEntity,
-           (void*)s_typeId_ComponentEntity);
+    printf("[CreateNaturalResource]   Register=%p\n",
+           (void*)s_fn_RegisterEntity);
     if (!ok) printf("[CreateNaturalResource] ERROR: some function pointers not resolved!\n");
 #endif
 
@@ -172,7 +165,7 @@ void CreateNaturalResource::Persist(void* stream) {
     if (version > 0) {
         reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
         if (parentEntity != nullptr) {
-            if (!fn_IsDerivedFrom(parentEntity, *s_typeId_ComponentEntity)) {
+            if (!fn_IsDerivedFrom(parentEntity, ComponentEntity::TypeId())) {
                 parentEntity = nullptr;
             }
         }

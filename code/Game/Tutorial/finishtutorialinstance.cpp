@@ -74,15 +74,10 @@ void FinishTutorialInstance::Persist(void* stream) {
     void* obj = *(void**)(s + 0x20);
     if (obj != nullptr) {
         // Object::Base::IsDerivedFrom (import slot 0x140152a98) against the id in
-        // TypeInfo_TutorialInstance (dword 0x1401c6668), exactly retail's
-        // 0x1400d7c3a `MOV EDX,[0x1401c6668]` / 0x1400d7c40 `CALL [0x140152a98]`.
-        // This used to resolve import slot 0x140151c08 — which is
-        // `?Save@Configuration@Audio@@QEAAXXZ`, not IsDerivedFrom, and unregistered —
-        // and the unrelated storage 0x1401c67e0, so the check silently never ran
-        // (CALLER_SURFACE.md 6.2, B37_RULES 6.3). 0x1401c6668 is registered and
-        // filled after Factory::Startup by standalone/reg_tutorial_typeid.cpp.
-        const uint32_t tidTutorialInstance =
-            *reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6668));
+        // TypeInfo_TutorialInstance (dword 0x1401c6668, TutorialInstance's cell —
+        // Table 1), exactly retail's 0x1400d7c3a `MOV EDX,[0x1401c6668]` /
+        // 0x1400d7c40 `CALL [0x140152a98]`.
+        const uint32_t tidTutorialInstance = TutorialInstance::TypeId();
         bool isDerived = reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(tidTutorialInstance);   // B.3.7 bridge
         if (!isDerived) {
             *(uint64_t*)(s + 0x20) = 0;

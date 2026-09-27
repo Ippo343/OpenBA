@@ -16,6 +16,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/ToolbarDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "ui/DialogInstance.h"  // ENDGAME B.3.8 CB4: the real UI::DialogInstance
 #include <new>
 
@@ -153,23 +154,19 @@ extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint6
     *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(param_1) + 0x0c) = 0xbf800000u;
 
     // (6) Probe the description's component list for the CreateBar type id.
+    // 0x1401c7f58 is ToolbarDescription's cell (Table 1).
     {
-        static const uint32_t* s_pTid = nullptr;
-        static bool s_init = false;
-        if (!s_init) {
-            s_pTid = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7f58));
-            s_init = true;
-        }
-        if (s_pTid && param_3) {
+        const uint32_t tid = ToolbarDescription::TypeId();
+        if (param_3) {
             int n = *reinterpret_cast<int*>(param_3 + 0x30);
             uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(param_3 + 0x28);
             for (int i = 0; i < n; i++) {
                 void* comp = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
                 uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(
                     *reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
-                if (t == *s_pTid) {
+                if (t == tid) {
                     void* c = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-                    if (fn_IsDerivedFrom) fn_IsDerivedFrom(c, *s_pTid);  // probe; result discarded
+                    if (fn_IsDerivedFrom) fn_IsDerivedFrom(c, tid);  // probe; result discarded
                     break;
                 }
             }

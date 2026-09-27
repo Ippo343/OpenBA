@@ -38,11 +38,6 @@ static void (*s_fn_TaskCleanup)(void* taskMgr, int taskIdx) = nullptr;
 // FUN_1400f8800 — task reassignment (used by CheckEntity)
 static void (*s_fn_TaskReassign)(void* taskMgr, void* entityRef, int taskIdx, void* targetRef, uint32_t taskParam) = nullptr;
 
-// TypeInfo addresses
-static uint32_t* s_TypeId_1401c7158 = nullptr;       // DAT_1401c7158 — work entity type
-static uint32_t* s_TypeId_ComponentEntity = nullptr;  // DAT_1401c5d70 — ComponentEntity
-    // (was mistranscribed 0x1401c4218 = FireDescription; retail CompleteTask serialize reads c5d70)
-
 // Game state singleton
 static void** s_pGameState = nullptr;  // DAT_1401c3dd8
 
@@ -62,22 +57,6 @@ bool CompleteTask_ResolveFuncs() {
     s_fn_TaskReassign = reinterpret_cast<void(*)(void*, void*, int, void*, uint32_t)>(
         ResolveAddr(Module::Exe, 0x1400f8800));
 
-    // TypeInfo globals used ONLY by Serialize (defensive ref-type validation on load).
-    // These are raw .rdata addresses -> NULL in the standalone exe. Heal them by name so
-    // save/load validation still works, and — crucially — so they do NOT gate the exec
-    // paths below (AbstractImpl/CheckEntity/GetTarget never touch them).
-    s_TypeId_1401c7158 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
-    s_TypeId_ComponentEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5d70));
-    static uint32_t s_healCitizen = 0, s_healCompEntity = 0;
-    if (!s_TypeId_1401c7158) {
-        s_healCitizen = CitizenComponent::TypeId();   // workEntity (+0x20)
-        s_TypeId_1401c7158 = &s_healCitizen;
-    }
-    if (!s_TypeId_ComponentEntity) {
-        s_healCompEntity = ComponentEntity::TypeId(); // targetEntity (+0x28)
-        s_TypeId_ComponentEntity = &s_healCompEntity;
-    }
-
     // Game state singleton (== g_pGameWorldSingleton; the task manager is *(this+0x118)).
     s_pGameState = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3dd8));
 
@@ -93,12 +72,10 @@ bool CompleteTask_ResolveFuncs() {
                   fn_InternalBasePtr_DeletePtr && fn_MemFreeStatic;
 
 #ifdef _DEBUG
-    bool serializeOk = s_TypeId_1401c7158 && s_TypeId_ComponentEntity;
-    printf("[CompleteTask] ResolveFuncs: execOk=%d serializeOk=%d TryComplete=%p TaskCleanup=%p TaskReassign=%p\n",
-           (int)execOk, (int)serializeOk, (void*)s_fn_TryCompleteTask,
+    printf("[CompleteTask] ResolveFuncs: execOk=%d TryComplete=%p TaskCleanup=%p TaskReassign=%p\n",
+           (int)execOk, (void*)s_fn_TryCompleteTask,
            (void*)s_fn_TaskCleanup, (void*)s_fn_TaskReassign);
-    printf("[CompleteTask]   TypeId1=%p TypeIdCE=%p GameState=%p\n",
-           (void*)s_TypeId_1401c7158, (void*)s_TypeId_ComponentEntity,
+    printf("[CompleteTask]   GameState=%p\n",
            s_pGameState ? *s_pGameState : nullptr);
     if (!execOk) printf("[CompleteTask] ERROR: exec-critical pointers not resolved!\n");
 #endif
@@ -131,16 +108,16 @@ void CompleteTask::Persist(void* stream) {
     // in the standalone exe (a Serialize-only dep, not part of the exec gate) — validation
     // is simply skipped when the type-id can't be resolved.
     reinterpret_cast<Object::InternalBasePtr*>(&this->workEntity)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (this->workEntity != nullptr && s_TypeId_1401c7158 && *s_TypeId_1401c7158) {
-        if (!fn_IsDerivedFrom(this->workEntity, *s_TypeId_1401c7158)) {
+    if (this->workEntity != nullptr) {
+        if (!fn_IsDerivedFrom(this->workEntity, CitizenComponent::TypeId())) {
             this->workEntity = nullptr;
         }
     }
 
     // Target entity ref (+0x28) with type validation
     reinterpret_cast<Object::InternalBasePtr*>(&this->targetEntity)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (this->targetEntity != nullptr && s_TypeId_ComponentEntity && *s_TypeId_ComponentEntity) {
-        if (!fn_IsDerivedFrom(this->targetEntity, *s_TypeId_ComponentEntity)) {
+    if (this->targetEntity != nullptr) {
+        if (!fn_IsDerivedFrom(this->targetEntity, ComponentEntity::TypeId())) {
             this->targetEntity = nullptr;
         }
     }

@@ -83,19 +83,12 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
-// Type-ids (raw .rdata preferred, GetTypeIdByName fallback)
+// Type-ids: 0x1401c7cb8/7e78/7eb0/79e0 are these four classes' cells (Table 1).
 // ============================================================
-// Caller batch CB6: the by-name fallback is the class's TypeId() (a plain read).
-static uint32_t Tid(uintptr_t rdataAddr, uint32_t classTypeId) {
-    const uint32_t* p =
-        reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, rdataAddr));
-    if (p && *p) return *p;
-    return classTypeId;
-}
-static uint32_t TidRawMaterialDescription() { return Tid(0x1401c7cb8, RawMaterialDescription::TypeId()); }
-static uint32_t TidStorageComponent()       { return Tid(0x1401c7e78, StorageComponent::TypeId()); }
-static uint32_t TidStorageDescription()     { return Tid(0x1401c7eb0, StorageDescription::TypeId()); }
-static uint32_t TidMapComponent()           { return Tid(0x1401c79e0, MapComponent::TypeId()); }
+static uint32_t TidRawMaterialDescription() { return RawMaterialDescription::TypeId(); }
+static uint32_t TidStorageComponent()       { return StorageComponent::TypeId(); }
+static uint32_t TidStorageDescription()     { return StorageDescription::TypeId(); }
+static uint32_t TidMapComponent()           { return MapComponent::TypeId(); }
 
 // ============================================================
 // Resolved exe helpers (all already registered in standalone)

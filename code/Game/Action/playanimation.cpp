@@ -18,6 +18,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
+#include "Entity/ComponentEntity.h"
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -33,9 +34,6 @@ static void (*s_fn_SetAnimation)(void* familyComp, uint32_t animId, float p1, fl
 // DAT_14017214c -- float constant used in animation setup
 static float* s_AnimFloat = nullptr;
 
-// DAT_1401c4218 -- TypeInfo for ComponentEntity type check
-static uint32_t* s_TypeInfo_ComponentEntity = nullptr;
-
 static bool s_playanimation_funcs_resolved = false;
 
 // ============================================================
@@ -44,16 +42,13 @@ static bool s_playanimation_funcs_resolved = false;
 bool PlayAnimation_ResolveFuncs() {
     if (s_playanimation_funcs_resolved) return true;
 
-    // 0x1401c5d70 = ComponentEntity (retail PlayAnimation serialize reads TypeInfo_ComponentEntity
-    // there). Was mistranscribed as 0x1401c4218 — that slot is FireDescription's BaseTypeInfo.
-    s_TypeInfo_ComponentEntity = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c5d70);
     s_AnimFloat = (float*)ResolveAddr(Module::Exe, 0x14017214c);
     s_fn_FindFamily = reinterpret_cast<void(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x1400012d0));
     s_fn_SetAnimation = reinterpret_cast<void(*)(void*, uint32_t, float, float)>(
         ResolveAddr(Module::Exe, 0x14010a1f0));
 
-    bool ok = s_TypeInfo_ComponentEntity && s_AnimFloat &&
+    bool ok = s_AnimFloat &&
               s_fn_FindFamily && s_fn_SetAnimation &&
               fn_IsDerivedFrom;
 
@@ -61,8 +56,6 @@ bool PlayAnimation_ResolveFuncs() {
     printf("[PlayAnimation] ResolveFuncs: FindFamily=%p SetAnim=%p AnimFloat=%p\n",
            (void*)s_fn_FindFamily,
            (void*)s_fn_SetAnimation, (void*)s_AnimFloat);
-    printf("[PlayAnimation]   TypeInfo=%p\n",
-           (void*)s_TypeInfo_ComponentEntity);
     if (!ok) printf("[PlayAnimation] ERROR: some function pointers not resolved!\n");
 #endif
 
@@ -88,7 +81,7 @@ void PlayAnimation::Persist(void* stream) {
     ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field20 != nullptr) {
-        if (!fn_IsDerivedFrom(_field20, *s_TypeInfo_ComponentEntity)) {
+        if (!fn_IsDerivedFrom(_field20, ComponentEntity::TypeId())) {
             _field20 = nullptr;
         }
     }
