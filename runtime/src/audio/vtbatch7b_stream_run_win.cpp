@@ -259,7 +259,7 @@ template <typename T> inline void Store(void* p, int off, T v) {
 void* AudioDeviceSingleton() {
     // The export address IS the pointer slot, so this is ONE deref — retail's
     // `MOV RDX,qword ptr [0x1801fe760]` (audio.cpp says the same).
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Audio@@0PEAV12@EA");
+    void** slot = reinterpret_cast<void**>(&::Audio::Device::_singleton);
     return slot ? *slot : nullptr;
 }
 void* FileSystemSingleton() {

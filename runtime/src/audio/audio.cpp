@@ -798,8 +798,7 @@ static void* AudioDeviceSingleton() {
     // ?_singleton@Device@Audio@@0PEAV12@EA (ord 4805) is an exported DATA
     // symbol: the export address IS the pointer slot, so this is one deref,
     // matching retail's `MOV RBX,qword ptr [0x1801fe760]`.
-    void** slot = RT_DATA_SLOT(void**,
-        "?_singleton@Device@Audio@@0PEAV12@EA");
+    void** slot = reinterpret_cast<void**>(&::Audio::Device::_singleton);
     return slot ? *slot : nullptr;
 }
 

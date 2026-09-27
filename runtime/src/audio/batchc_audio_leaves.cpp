@@ -60,7 +60,7 @@ using VoidThisFn = void (*)(void*);
 // OnSoundBufferDeleted as `this`; the null test below exists only because
 // RT_DATA_SLOT can return a slot the mint has not filled.
 void* AudioDeviceSingleton() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Audio@@0PEAV12@EA");
+    void** slot = reinterpret_cast<void**>(&::Audio::Device::_singleton);
     return slot ? *slot : nullptr;
 }
 

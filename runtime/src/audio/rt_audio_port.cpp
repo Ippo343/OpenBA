@@ -11,6 +11,7 @@
 
 #include <cstdio>
 #include "../../funcs/rt_port.h"
+#include "../../types/audio/Device.h"   // ENDGAME B.3.9 ENG: the storage redirect
 #include "../../types/audio/Audio.h"   // ENDGAME B.3.9 ENG: the storage redirect
 
 extern int RtAudioSceneRegister();          // audio.cpp
@@ -49,6 +50,9 @@ extern int RtAudioPlayPlatformRegister();   // audio_play_platform.cpp
 extern "C" int RtAudioBatchCLeavesRegister();
 
 void RtAudioPortInit() {
+    // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
+    // static from here on (name door, address door, manifest publish).
+    RtMintRedirectStorage("?_singleton@Device@Audio@@0PEAV12@EA", &::Audio::Device::_singleton);
     // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
     // static from here on (name door, address door, manifest publish).
     RtMintRedirectStorage("?_singleton@Configuration@Audio@@0PEAV12@EA", &::Audio::Configuration::_singleton);

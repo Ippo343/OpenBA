@@ -164,7 +164,7 @@ void** SlotVideoConfig()     { return RT_DATA_SLOT(void**, "?_singleton@Configur
 void** SlotApplication()     { return reinterpret_cast<void**>(&::Application::Application::_singleton); }
 void** SlotInputDevice()     { return RT_DATA_SLOT(void**, "?_singleton@Device@Input@@0PEAV12@EA"); }
 void** SlotInputConfig()     { return RT_DATA_SLOT(void**, "?_singleton@Configuration@Input@@0PEAV12@EA"); }
-void** SlotAudioDevice()     { return RT_DATA_SLOT(void**, "?_singleton@Device@Audio@@0PEAV12@EA"); }
+void** SlotAudioDevice()     { return reinterpret_cast<void**>(&::Audio::Device::_singleton); }
 void** SlotAudioConfig()     { return reinterpret_cast<void**>(&::Audio::Configuration::_singleton); }
 
 // The one store this whole lane is about. Written once, called fourteen times,

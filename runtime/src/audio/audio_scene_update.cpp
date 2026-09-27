@@ -297,7 +297,7 @@ void* DeviceSingleton() {
     // same read audio.cpp's AudioDeviceSingleton() already does, repeated here
     // rather than shared so this file carries no dependency on audio.cpp's
     // internal linkage.
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Audio@@0PEAV12@EA");
+    void** slot = reinterpret_cast<void**>(&::Audio::Device::_singleton);
     return slot ? *slot : nullptr;
 }
 
