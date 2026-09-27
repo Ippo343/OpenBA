@@ -19,7 +19,7 @@
 //   | ?ValidateConfiguration@Device@Video@@...  | 0x1800f7370 | 4532 | FULL (scratch args) |
 //   | ?ApplyChangedSettings@Device@Video@@...   | 0x1800f8110 | 1604 | FULL (scratch this) |
 //   | ?Create@RenderBuffer@Video@@...           | 0x1800f3f10 | 1882 | FULL (scratch this) |
-//   | ??1RenderStateData@Video@@UEAA@XZ         | 0x1800f8d70 |  662 | FULL (scratch this) |
+//   | ??1RenderStateData@Video@@UEAA@XZ         | 0x1800f8d70 |  662 | RETIRED (B.3.9 VID) |
 //   | ?Save@Configuration@Video@@QEAAXXZ        | 0x1800f6d10 | 3605 | poison + readback   |
 //
 // HELD BACK (reasons in full in WAVE6_LANE_B.md §2):
@@ -127,7 +127,6 @@ constexpr const char* kIsMultisampleSupported   = "?IsMultisampleModeSupported@D
 constexpr const char* kValidateConfiguration    = "?ValidateConfiguration@Device@Video@@QEAAXAEAH0000000@Z";
 constexpr const char* kApplyChangedSettings     = "?ApplyChangedSettings@Device@Video@@QEAA_NXZ";
 constexpr const char* kRenderBufferCreate       = "?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z";
-constexpr const char* kRenderStateDataDtor      = "??1RenderStateData@Video@@UEAA@XZ";
 constexpr const char* kConfigurationSave        = "?Save@Configuration@Video@@QEAAXXZ";
 constexpr const char* kConfigurationStartup     = "?Startup@Configuration@Video@@QEAA_NXZ";
 // `?GetDefaultResolution@Device@Video@@QEBAHAEBUAdapter@12@@Z` used to be spelled
@@ -468,41 +467,10 @@ bool Video_RenderBuffer_Create(RenderBuffer* self,
         reinterpret_cast<const Video::ImageBuffer*>(depth));
 }
 
-// ============================================================================
-// Video::RenderStateData::~RenderStateData  —  retail 0x1800f8d70, ordinal 662
-//
-//   1800f8d70  LEA RAX,[0x180158a60]      ; ??_7RenderStateData@Video@@6B@
-//   1800f8d77  MOV qword ptr [RCX],RAX
-//   1800f8d7a  RET
-//
-// The entire body is the base-class vtable re-stamp. The vtable is an EXPORTED
-// symbol (ordinal 1490), so the port resolves it by name rather than hardcoding
-// 0x180158a60 — PLAN §4.3 risk 3's caveat applies but is satisfied here for the
-// narrowest possible reason: this is not us CHOOSING to stamp a DLL vtable on
-// an object we built, it is us reproducing the one store retail's own dtor
-// makes on an object VideoDX11 built (dx11/src/renderstatedata.cpp calls this
-// as `d.baseDtor(self)` from its subclass dtor).
-//
-// Registered by NAME and by ADDRESS: dx11/src/renderstatedata.cpp:317-322
-// falls back to ResolveAddr(Module::Runtime, 0x1800f8d70) when the name does
-// not resolve, and a name-only registration would leave that fallback on the
-// DLL (WAVE3_LANE_A.md §6's lesson).
-// ============================================================================
-// ENDGAME B.3.5 block VC — THE SECOND OF THE TWO DOORS block A LEFT BEHIND (the
-// other was `??1ImageBufferData@Video@@` in `buffers.cpp`). All twelve `~XData()`
-// bodies live in `runtime/src/video/companion_data.cpp`; ten of the twelve doors
-// became one-line delegations there and these two were left because their doors
-// are in other blocks' files. The duplicate vptr store and the duplicate
-// `ResolveExport("??_7RenderStateData@Video@@6B@")` are gone with it.
-//
-// The QUALIFICATION is load-bearing: a live `RenderStateData` wears dx11's
-// vtable, whose slot 0 is `dx11/src/renderstatedata.cpp`'s scalar deleting
-// destructor — the very function that CALLS this door as its base-dtor step. An
-// unqualified virtual call would dispatch straight back into it (RULE B5-3).
-void Video_RenderStateData_Dtor(void* self) {
-    reinterpret_cast<Video::RenderStateData*>(self)
-        ->Video::RenderStateData::~RenderStateData();               // B.3.5 bridge
-}
+// (The `??1RenderStateData@Video@@UEAA@XZ` door, retail 0x1800f8d70, is GONE:
+// ENDGAME B.3.9 VID retired it with the RT_DELDTOR row that was its one caller.
+// dx11/src/renderstatedata.cpp calls `Video::RenderStateData::~RenderStateData()`
+// directly, RULE B5-3.)
 
 // ============================================================================
 // Video::Configuration::Save  —  retail 0x1800f6d10, ordinal 3605
@@ -700,8 +668,6 @@ int RtVideoDeviceRegister() {
                           (void*)&Video_Device_ApplyChangedSettings); ++n;
     RegisterRuntimeExport("?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z",
                           (void*)&Video_RenderBuffer_Create); ++n;
-    RegisterRuntimeExport("??1RenderStateData@Video@@UEAA@XZ",
-                          (void*)&Video_RenderStateData_Dtor); ++n;
     RegisterRuntimeExport("?Save@Configuration@Video@@QEAAXXZ",
                           (void*)&Video_Configuration_Save); ++n;
 
@@ -711,12 +677,6 @@ int RtVideoDeviceRegister() {
     // other nine registrations down with it.
     RegisterRuntimeExport("?Startup@Configuration@Video@@QEAA_NXZ",
                           (void*)&Video_Configuration_Startup); ++n;
-
-    // Address door for the one call site that has an address FALLBACK:
-    // dx11/src/renderstatedata.cpp:317-322. Not counted again — it is the same
-    // function reached through the other registry
-    // (reference_census_three_blind_spots.md: counting both doors double-counts).
-    RegisterRuntimeAddr(0x1800f8d70, (void*)&Video_RenderStateData_Dtor);
 
     return n;
 }

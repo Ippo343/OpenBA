@@ -485,28 +485,10 @@ bool Video_ImageBuffer_Create(ImageBuffer* self, int32_t imageType, int32_t usag
                                             levels);                        // B.3.5 bridge
 }
 
-// ============================================================================
-// Video::ImageBufferData::~ImageBufferData() — 0x1800f8e10, ordinal 609.
-// This is Runtime's OWN abstract base (runtime/types/video/ImageBuffer.h),
-// distinct from dx11::ImageBufferData. Trivial: reset the vptr to this base
-// class's own vtable. dx11's derived dtor (ImageBufferData_ScalarDeletingDtor,
-// dx11/src/imagebufferdata.cpp) tail-calls this exact export as its
-// `im->BaseDtor(self)` — porting it here is what makes that tail call land on
-// us instead of the DLL, with no change to dx11's own file.
-// ============================================================================
-// ENDGAME B.3.5 block VC — ONE OF THE TWO DOORS block A LEFT BEHIND. All twelve
-// `~XData()` member bodies live in `runtime/src/video/companion_data.cpp`; ten of
-// the twelve doors were converted there and these two (`ImageBufferData` here,
-// `RenderStateData` in `device.cpp`) were left because their doors are in other
-// blocks' files. That duplicate of the three-instruction vptr store is gone: this
-// is a one-line QUALIFIED non-virtual delegation like the other ten, and the
-// qualification is load-bearing for the same reason (a live `*Data` wears dx11's
-// vtable, whose slot 0 is the derived deleting dtor that CALLS this door — an
-// unqualified virtual call would dispatch straight back into it).
-void Video_ImageBufferData_Dtor(ImageBufferData* self) {
-    reinterpret_cast<Video::ImageBufferData*>(self)
-        ->Video::ImageBufferData::~ImageBufferData();               // B.3.5 bridge
-}
+// (The `??1ImageBufferData@Video@@UEAA@XZ` door, retail 0x1800f8e10, is GONE:
+// ENDGAME B.3.9 VID retired it with the RT_DELDTOR row that was its one caller.
+// dx11/src/imagebufferdata.cpp calls `Video::ImageBufferData::~ImageBufferData()`
+// directly, RULE B5-3.)
 
 // ============================================================================
 // Wave 9 lane W — Video::{Image,Index,Vertex}Buffer::Platform{Construct,Destruct}
@@ -1136,10 +1118,6 @@ int RtVideoBuffersRegister() {
         "W4AddressMode@12@44PEAV?$Array@V?$Array@E@Collection@@@Collection@@@Z",
         (void*)&Video_ImageBuffer_Create);
     RegisterRuntimeAddr(0x1800f2680, (void*)&Video_ImageBuffer_Create);
-    n++;
-
-    RegisterRuntimeExport("??1ImageBufferData@Video@@UEAA@XZ", (void*)&Video_ImageBufferData_Dtor);
-    RegisterRuntimeAddr(0x1800f8e10, (void*)&Video_ImageBufferData_Dtor);
     n++;
 
     RegisterRuntimeExport("??0IndexBuffer@Video@@QEAA@XZ", (void*)&Video_IndexBuffer_Ctor);

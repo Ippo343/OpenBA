@@ -306,18 +306,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x18004d4f0, 0x1800dc170, 0x048, "Engine::LoaderLoop"),
     RT_DELDTOR(0x18004d670, 0x1800db060, 0x188, "Engine::DialogLoaderLoopT"),
     RT_DELDTOR(0x18004d8b0, 0x1800db340, 0x168, "Engine::DialogLoopT"),
-    RT_DELDTOR(0x180058590, 0x1800f8db0, 0x010, "Video::RenderBufferData"),   // probe subject
-    RT_DELDTOR(0x180058610, 0x1800f8d90, 0x010, "Video::VideoProgramData"),   // probe subject
-    RT_DELDTOR(0x180058690, 0x1800f8d70, 0x010, "Video::RenderStateData"),   // probe subject
-    RT_DELDTOR(0x180058710, 0x1800f8dd0, 0x010, "Video::PixelProgramData"),   // probe subject
-    RT_DELDTOR(0x180058790, 0x1800f8d10, 0x010, "Video::VertexProgramData"),   // probe subject
-    RT_DELDTOR(0x180058810, 0x1800f8d30, 0x010, "Video::VertexLayoutData"),   // probe subject
-    RT_DELDTOR(0x180058890, 0x1800f8d50, 0x010, "Video::VertexBufferData"),   // probe subject
-    RT_DELDTOR(0x180058910, 0x1800f8df0, 0x010, "Video::IndexBufferData"),   // probe subject
-    RT_DELDTOR(0x180058990, 0x1800f8e50, 0x010, "Video::ConstantBufferData"),   // probe subject
-    RT_DELDTOR(0x180058a10, 0x1800f8e10, 0x010, "Video::ImageBufferData"),   // probe subject
-    RT_DELDTOR(0x180058a90, 0x1800f8e30, 0x010, "Video::ContextData"),   // probe subject
-    RT_DELDTOR(0x180058b10, 0x1800f8cf0, 0x010, "Video::DeviceData"),   // probe subject
     // ---- WAVE 10C lane DLG8 -------------------------------------------------
     // Slot 0 of `??_7Dialog@UI@@6B@`, the last of that vtable's eight abort
     // traps and the only one that is not a UI body. It is this family's shape
@@ -1170,54 +1158,6 @@ void* RtDelDtor_DialogLoaderLoopT(void* self, unsigned flags) {
 void* RtDelDtor_DialogLoopT(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18004d8b0>());
 }
-// Video::RenderBufferData  ~RenderBufferData = 0x1800f8db0  (PORTED)
-void* RtDelDtor_RenderBufferData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058590>());
-}
-// Video::VideoProgramData  ~VideoProgramData = 0x1800f8d90  (PORTED)
-void* RtDelDtor_VideoProgramData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058610>());
-}
-// Video::RenderStateData   ~RenderStateData = 0x1800f8d70  (PORTED)
-void* RtDelDtor_RenderStateData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058690>());
-}
-// Video::PixelProgramData  ~PixelProgramData = 0x1800f8dd0  (PORTED)
-void* RtDelDtor_PixelProgramData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058710>());
-}
-// Video::VertexProgramData ~VertexProgramData = 0x1800f8d10  (PORTED)
-void* RtDelDtor_VertexProgramData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058790>());
-}
-// Video::VertexLayoutData  ~VertexLayoutData = 0x1800f8d30  (PORTED)
-void* RtDelDtor_VertexLayoutData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058810>());
-}
-// Video::VertexBufferData  ~VertexBufferData = 0x1800f8d50  (PORTED)
-void* RtDelDtor_VertexBufferData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058890>());
-}
-// Video::IndexBufferData   ~IndexBufferData = 0x1800f8df0  (PORTED)
-void* RtDelDtor_IndexBufferData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058910>());
-}
-// Video::ConstantBufferData ~ConstantBufferData = 0x1800f8e50  (PORTED)
-void* RtDelDtor_ConstantBufferData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058990>());
-}
-// Video::ImageBufferData   ~ImageBufferData = 0x1800f8e10  (PORTED)
-void* RtDelDtor_ImageBufferData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058a10>());
-}
-// Video::ContextData       ~ContextData = 0x1800f8e30  (PORTED)
-void* RtDelDtor_ContextData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058a90>());
-}
-// Video::DeviceData        ~DeviceData = 0x1800f8cf0  (PORTED)
-void* RtDelDtor_DeviceData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058b10>());
-}
 // UI::Dialog               ~Dialog = 0x180112e40  (PORTED, lane DLG2)  [Wave 10C]
 void* RtDelDtor_Dialog(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180038b20>());
@@ -1409,18 +1349,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18004d4f0, (void*)&RtDelDtor_LoaderLoop);
     RegisterRuntimeAddr(0x18004d670, (void*)&RtDelDtor_DialogLoaderLoopT);
     RegisterRuntimeAddr(0x18004d8b0, (void*)&RtDelDtor_DialogLoopT);
-    RegisterRuntimeAddr(0x180058590, (void*)&RtDelDtor_RenderBufferData);
-    RegisterRuntimeAddr(0x180058610, (void*)&RtDelDtor_VideoProgramData);
-    RegisterRuntimeAddr(0x180058690, (void*)&RtDelDtor_RenderStateData);
-    RegisterRuntimeAddr(0x180058710, (void*)&RtDelDtor_PixelProgramData);
-    RegisterRuntimeAddr(0x180058790, (void*)&RtDelDtor_VertexProgramData);
-    RegisterRuntimeAddr(0x180058810, (void*)&RtDelDtor_VertexLayoutData);
-    RegisterRuntimeAddr(0x180058890, (void*)&RtDelDtor_VertexBufferData);
-    RegisterRuntimeAddr(0x180058910, (void*)&RtDelDtor_IndexBufferData);
-    RegisterRuntimeAddr(0x180058990, (void*)&RtDelDtor_ConstantBufferData);
-    RegisterRuntimeAddr(0x180058a10, (void*)&RtDelDtor_ImageBufferData);
-    RegisterRuntimeAddr(0x180058a90, (void*)&RtDelDtor_ContextData);
-    RegisterRuntimeAddr(0x180058b10, (void*)&RtDelDtor_DeviceData);
     RegisterRuntimeAddr(0x180038b20, (void*)&RtDelDtor_Dialog);   // Wave 10C DLG8
     RegisterRuntimeAddr(0x18004d270, (void*)&RtDelDtor_ToolTipDialog);  // Wave 10D TIP
     RegisterRuntimeAddr(0x180023fd0, (void*)&RtDelDtor_CompressedStream);      // Wave 19 CSTREAM

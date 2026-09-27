@@ -7,7 +7,7 @@
 // REASON CLASS and a measured by-name-door count -- never asserted
 // here.  standalone/cutover_manifest.cpp consumes this.
 
-// REQUIRED 55 | WITHHELD 1   (of 56 rows)
+// REQUIRED 43 | WITHHELD 1   (of 44 rows)
 
 // Achievement  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=4  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@AchievementManager@Achievement@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc670ull, "Achievement", 4)
@@ -85,30 +85,6 @@ CUTOVER_ROW("?_ticksPerSecond@Timer@System@@0_JA", CUTOVER_REQUIRED, true, 0x180
 CUTOVER_ROW("??_7Dialog@UI@@6B@", CUTOVER_WITHHELD, true, 0x1801562a0ull, "UI", 5)
 // UI  NO-OP / PERMANENT  doors=2  -- NO-OP is permanent, but 2 by-name door(s) resolve NULL with no DLL loaded
 CUTOVER_ROW("??_7DialogController@UI@@6B@", CUTOVER_REQUIRED, true, 0x1801565f0ull, "UI", 2)
-// Video  NO-OP / PERMANENT  doors=2  -- NO-OP is permanent, but 2 by-name door(s) resolve NULL with no DLL loaded
-CUTOVER_ROW("??_7ConstantBufferData@Video@@6B@", CUTOVER_REQUIRED, true, 0x180158b30ull, "Video", 2)
-// Video  NO-OP / PERMANENT  doors=2  -- NO-OP is permanent, but 2 by-name door(s) resolve NULL with no DLL loaded
-CUTOVER_ROW("??_7ContextData@Video@@6B@", CUTOVER_REQUIRED, true, 0x180158b90ull, "Video", 2)
-// Video  NO-OP / PERMANENT  doors=2  -- NO-OP is permanent, but 2 by-name door(s) resolve NULL with no DLL loaded
-CUTOVER_ROW("??_7DeviceData@Video@@6B@", CUTOVER_REQUIRED, true, 0x180158c30ull, "Video", 2)
-// Video  NO-OP / PERMANENT  doors=2  -- NO-OP is permanent, but 2 by-name door(s) resolve NULL with no DLL loaded
-CUTOVER_ROW("??_7ImageBufferData@Video@@6B@", CUTOVER_REQUIRED, true, 0x180158b50ull, "Video", 2)
-// Video  NO-OP / PERMANENT  doors=2  -- NO-OP is permanent, but 2 by-name door(s) resolve NULL with no DLL loaded
-CUTOVER_ROW("??_7IndexBufferData@Video@@6B@", CUTOVER_REQUIRED, true, 0x180158af8ull, "Video", 2)
-// Video  NO-OP / PERMANENT  doors=2  -- NO-OP is permanent, but 2 by-name door(s) resolve NULL with no DLL loaded
-CUTOVER_ROW("??_7PixelProgramData@Video@@6B@", CUTOVER_REQUIRED, true, 0x180158a78ull, "Video", 2)
-// Video  NO-OP / PERMANENT  doors=2  -- NO-OP is permanent, but 2 by-name door(s) resolve NULL with no DLL loaded
-CUTOVER_ROW("??_7RenderBufferData@Video@@6B@", CUTOVER_REQUIRED, true, 0x180158a28ull, "Video", 2)
-// Video  NO-OP / PERMANENT  doors=3  -- NO-OP is permanent, but 3 by-name door(s) resolve NULL with no DLL loaded
-CUTOVER_ROW("??_7RenderStateData@Video@@6B@", CUTOVER_REQUIRED, true, 0x180158a60ull, "Video", 3)
-// Video  NO-OP / PERMANENT  doors=2  -- NO-OP is permanent, but 2 by-name door(s) resolve NULL with no DLL loaded
-CUTOVER_ROW("??_7VertexBufferData@Video@@6B@", CUTOVER_REQUIRED, true, 0x180158ac0ull, "Video", 2)
-// Video  NO-OP / PERMANENT  doors=2  -- NO-OP is permanent, but 2 by-name door(s) resolve NULL with no DLL loaded
-CUTOVER_ROW("??_7VertexLayoutData@Video@@6B@", CUTOVER_REQUIRED, true, 0x180158aa8ull, "Video", 2)
-// Video  NO-OP / PERMANENT  doors=2  -- NO-OP is permanent, but 2 by-name door(s) resolve NULL with no DLL loaded
-CUTOVER_ROW("??_7VertexProgramData@Video@@6B@", CUTOVER_REQUIRED, true, 0x180158a90ull, "Video", 2)
-// Video  NO-OP / PERMANENT  doors=2  -- NO-OP is permanent, but 2 by-name door(s) resolve NULL with no DLL loaded
-CUTOVER_ROW("??_7VideoProgramData@Video@@6B@", CUTOVER_REQUIRED, true, 0x180158a48ull, "Video", 2)
 // Video  HARMFUL / DLL-PRESENT  doors=3  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_firstBuffer@IndexBuffer@Video@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe788ull, "Video", 3)
 // Video  HARMFUL / DLL-PRESENT  doors=3  -- tag states the verdict inverts at cutover
