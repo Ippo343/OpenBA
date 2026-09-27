@@ -18,6 +18,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/growthcomponent_funcs.h"
+#include "Component/ModelComponent.h"   // B.3.8 CB1a (TypeId)
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (standalone sibling-id fallback)
@@ -168,286 +169,6 @@ static void DoHarvestReset(uint8_t* comp, uintptr_t resourceMgr, float harvestAm
 
 // Step-2 body-init (vtable slot [4], +0x20, original 0x1401206f0). Forward-declared
 // here so the Update guard can lazily invoke it if StartupComponents did not run.
-void GrowthComponent_Startup(GrowthComponent* self);
-
-void GrowthComponent_Update(GrowthComponent* self, int64_t* deltaTime) {
-    EnsureHelpers();
-
-    uint8_t* comp = reinterpret_cast<uint8_t*>(self);
-
-    // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
-    // body is zeroed unless Startup ran. config(+0x38) and the resource
-    // sub-component(+0x28) are populated by GrowthComponent_Startup (step 2 of the
-    // recipe), which the entity-spawn pipeline invokes via vtable+0x20 in
-    // ComponentEntity_StartupComponents. As a belt-and-suspenders, if the body is
-    // still zero but the description(+0x18) is present, run the body-init now
-    // (idempotent). If it is still incomplete afterward, bail safely — everything
-    // below derefs config/resource (and .rdata float constants) unconditionally.
-    // See notes/STANDALONE_REG_WAVES_PLAN.md "Recipe to bring a component to life".
-    //
-    // ⚠ A STREAM-RESTORED component must NOT take the full Startup path. Retail's
-    // GrowthComponent::Serialize (0x1401207c0) persists exactly +0x28 (resource IBP),
-    // +0x30 (model IBP), +0x48 (displayed scale), +0x4c (growthScale) and +0x40 (timer)
-    // — everything Startup computes EXCEPT +0x38, which is just a copy of the
-    // description already sitting at +0x18. So after a load the one genuinely missing
-    // field is +0x38, and running the whole body-init to get it RE-ROLLS +0x4c from the
-    // RNG (see GrowthComponent_Startup), throwing away the per-instance harvest
-    // threshold the save restored. That is a silent load-fidelity bug: the plant keeps
-    // its growth but changes when it becomes harvestable, differently on every load.
-    //
-    // A non-null +0x28 is the tell: only the stream puts a resource IBP there before
-    // Startup has ever run. Fill +0x38 and leave every restored field alone.
-    if (*(uintptr_t*)(comp + 0x38) == 0 || *(uintptr_t*)(comp + 0x28) == 0) {
-        if (*(uintptr_t*)(comp + 0x38) == 0 && *(uintptr_t*)(comp + 0x28) != 0) {
-            *(uintptr_t*)(comp + 0x38) = *(uintptr_t*)(comp + 0x18);
-        } else if (*(uintptr_t*)(comp + 0x18) != 0) {
-            GrowthComponent_Startup(self);
-        }
-        if (*(uintptr_t*)(comp + 0x38) == 0 || *(uintptr_t*)(comp + 0x28) == 0)
-            return;
-    }
-
-    float fOne = *s_fOne;       // 1.0f
-    float fSixty = *s_fSixty;  // 60.0f
-
-    // config = comp->field38 (component config/description pointer)
-    uintptr_t config = *reinterpret_cast<uintptr_t*>(comp + 0x38);
-
-    // Base growth rate: 1.0 / (config+0x28 * 60.0)
-    float configGrowthTime = *reinterpret_cast<float*>(config + 0x28);
-    float growthRate = fOne / (configGrowthTime * fSixty);
-
-    // Get current growth value from resource component at +0x28
-    uintptr_t resourceComp = *reinterpret_cast<uintptr_t*>(comp + 0x28);
-    float currentGrowth = *reinterpret_cast<float*>(resourceComp + 0x28);
-
-    // Apply seasonal temperature modulation
-    float tempModifier = fOne;
-    if (*reinterpret_cast<char*>(config + 0x2C) != '\0') {
-        // Get current temperature from world singleton
-        // world->weather(+0x130)->temp(+0x18)
-        uintptr_t world = reinterpret_cast<uintptr_t>(*s_pWorldSingleton);
-        uintptr_t weatherPtr = *reinterpret_cast<uintptr_t*>(world + 0x130);
-        float currentTemp = *reinterpret_cast<float*>(weatherPtr + 0x18);
-
-        // Compute temperature distance from optimal
-        float optimalTemp = *reinterpret_cast<float*>(config + 0x30);
-        float tempRange = *reinterpret_cast<float*>(config + 0x34);
-
-        // fabsf via double abs with bitmask (matches original bitwise pattern)
-        double diff = static_cast<double>(currentTemp - optimalTemp);
-        uint64_t rawBits;
-        __builtin_memcpy(&rawBits, &diff, sizeof(rawBits));
-        rawBits &= *s_dblAbsMask;
-        __builtin_memcpy(&diff, &rawBits, sizeof(diff));
-        tempModifier = static_cast<float>(diff) / tempRange;
-
-        if (tempModifier < 0.0f || fOne < tempModifier) {
-            // Out of range: check freeze
-            tempModifier = 0.0f;
-            if (currentTemp <= *s_fFreezeTemp) {
-                tempModifier = *s_fFreezeGrowth;
-            }
-        } else {
-            // Parabolic falloff: 1 - dist^2
-            tempModifier = fOne - tempModifier * tempModifier;
-        }
-    }
-
-    // Get resource manager from world
-    uintptr_t world = reinterpret_cast<uintptr_t>(*s_pWorldSingleton);
-    uintptr_t resourceMgr = *reinterpret_cast<uintptr_t*>(world + 0xF8);
-
-    // Compute time delta in seconds
-    float dtSeconds = reinterpret_cast<const System::Time*>(deltaTime)->AsSeconds();   // B.3.4b bridge
-
-    // Accumulate growth
-    float newGrowth = currentGrowth + dtSeconds * growthRate * tempModifier;
-
-    if (newGrowth >= 0.0f ||
-        ((*reinterpret_cast<uint32_t*>(*reinterpret_cast<uintptr_t*>(comp + 0x28) + 0x20) >> 0x14 & 1) != 0)) {
-        // Growth is positive OR entity has special flag (bit 20)
-
-        // Store new growth value
-        *reinterpret_cast<float*>(*reinterpret_cast<uintptr_t*>(comp + 0x28) + 0x28) = newGrowth;
-
-        // Set flag bit 0x10 (growth active)
-        uint32_t oldFlags = *reinterpret_cast<uint32_t*>(comp + 0x20);
-        uint32_t newFlags = oldFlags | 0x10;
-        *reinterpret_cast<uint32_t*>(comp + 0x20) = newFlags;
-
-        // Notify entity if flags changed
-        if (((newFlags ^ oldFlags) & 0xFFFF) != 0 &&
-            *reinterpret_cast<void**>(comp + 0x10) != nullptr) {
-            if (s_fn_FlagNotify) {
-                s_fn_FlagNotify(*reinterpret_cast<void**>(comp + 0x10));
-            }
-        }
-
-        // Sub-resource spawning check
-        if (*reinterpret_cast<char*>(config + 0x44) != '\0') {
-            float spawnThreshold = *reinterpret_cast<float*>(config + 0x54);
-            if (spawnThreshold <= newGrowth && newGrowth != spawnThreshold) {
-                // Accumulate spawn timer at comp+0x40
-                *reinterpret_cast<int64_t*>(comp + 0x40) += *deltaTime;
-
-                float spawnTimerSec = reinterpret_cast<const System::Time*>(reinterpret_cast<int64_t*>(comp + 0x40))->AsSeconds();   // B.3.4b bridge
-                float spawnInterval = static_cast<float>(
-                    *reinterpret_cast<int32_t*>(config + 0x50)) * fSixty;
-
-                if (spawnInterval < spawnTimerSec) {
-                    do {
-                        if (s_fn_SpawnSubResource) {
-                            s_fn_SpawnSubResource(comp, reinterpret_cast<void*>(config));
-                        }
-                        spawnTimerSec -= spawnInterval;
-                    } while (spawnInterval < spawnTimerSec);
-
-                    // Reset spawn timer to remainder
-                    int64_t remainderTime;
-                    fn_Time_Ctor_Float(&remainderTime, spawnTimerSec);
-                    *reinterpret_cast<int64_t*>(comp + 0x40) = remainderTime;
-                }
-            }
-        }
-
-        // Harvest check: growthScale threshold
-        float growthScale = *reinterpret_cast<float*>(comp + 0x4C);
-        if (growthScale > 0.0f && growthScale < newGrowth) {
-            // Check entity doesn't have bit 20 set
-            if ((*reinterpret_cast<uint32_t*>(*reinterpret_cast<uintptr_t*>(comp + 0x28) + 0x20) >> 0x14 & 1) == 0) {
-                // Check world flag (bit 10 of world+0xD0)
-                if ((*reinterpret_cast<uint32_t*>(
-                    reinterpret_cast<uintptr_t>(*s_pWorldSingleton) + 0xD0) >> 10 & 1) == 0) {
-                    // Clamp growth to 1.0
-                    float harvestAmount = (newGrowth <= fOne) ? newGrowth : fOne;
-
-                    // Set resource amount scaled by config+0x40
-                    float configResourceScale = *reinterpret_cast<float*>(config + 0x40);
-                    DoHarvestReset(comp, resourceMgr, harvestAmount * configResourceScale);
-
-                    // Clear flags bits 3,4 via ModifyFlags(self, 0, 0x18)
-                    if (s_fn_ModifyFlags) {
-                        s_fn_ModifyFlags(comp, 0, 0x18);
-                    }
-                }
-            }
-        }
-    } else {
-        // Growth went negative -- do full harvest/reset
-        float configResourceScale = *reinterpret_cast<float*>(config + 0x40);
-        DoHarvestReset(comp, resourceMgr, configResourceScale);
-
-        // Clear flags bits 3,4 directly
-        uint32_t oldFlags = *reinterpret_cast<uint32_t*>(comp + 0x20);
-        uint32_t newFlags = oldFlags & 0xFFFFFFE7;
-        *reinterpret_cast<uint32_t*>(comp + 0x20) = newFlags;
-
-        // Notify entity if flags changed
-        if (((newFlags ^ oldFlags) & 0xFFFF) != 0 &&
-            *reinterpret_cast<void**>(comp + 0x10) != nullptr) {
-            if (s_fn_FlagNotify) {
-                s_fn_FlagNotify(*reinterpret_cast<void**>(comp + 0x10));
-            }
-        }
-    }
-}
-
-// ============================================================
-// GrowthComponent::ApplyVisualScale (vtable slot [10], +0x50, original 0x14011fea0)
-// ============================================================
-// THE per-frame link between a resource's growth value and how big it is drawn.
-// EntityList::PostUpdateNodeHandler (0x1400c2c70) dispatches component slot 10 on every
-// component whose flags carry bit 4, and GrowthComponent::Update is what sets that bit
-// each time growth advances. Without this body the bit was set, the dispatch happened,
-// and the inert stub returned — so the MeshInstance visual scale stayed at the engine
-// ctor default of (1,1,1,1) and EVERY tree/crop rendered full-grown from the frame it
-// was planted. Measured before the fix: a just-spawned crop at growth 0.000 already had
-// visualScale=(1,1,1,1) with a mesh bound and a live scene id.
-//
-// Shape (1:1 with the disassembly):
-//   target = min(resource+0x28 growth, 1.0), then raised to the description floor
-//            (desc+0x60) so a resource never draws smaller than its minimum.
-//   self+0x48 is the SMOOTHED displayed scale: snap when already within 0.001, else
-//            ease 1% per tick (0.99*cur + 0.01*target) — this is what makes a tree grow
-//            visibly rather than pop between sizes.
-//   desc+0x64 selects the CROP form: x/y spread to full within the first 15% of growth
-//            (0x1401720f4 = 0.15f) while z carries the height, versus the uniform
-//            Vector4-broadcast form used by trees and every other natural resource.
-//   The flag-4 clear only happens once the scale has CONVERGED, which is what keeps the
-//   component in the post-update list across the whole ramp.
-void GrowthComponent_ApplyVisualScale(GrowthComponent* self) {
-    EnsureHelpers();
-    uintptr_t c = reinterpret_cast<uintptr_t>(self);
-
-    // Retail derefs +0x28/+0x38/+0x30 unguarded — they are populated by
-    // GrowthComponent::Startup, which runs on every spawned resource before the first
-    // post-update pass. A null here means Startup did not run, which is the bug to fix.
-    const bool gated = (*reinterpret_cast<uintptr_t*>(c + 0x28) == 0 ||
-                        *reinterpret_cast<uintptr_t*>(c + 0x38) == 0 ||
-                        *reinterpret_cast<uintptr_t*>(c + 0x30) == 0);
-    if (gated) return;
-
-    const float kOne          = s_fOne ? *s_fOne : 1.0f;
-    const float kEpsilon      = s_fScaleEps ? *s_fScaleEps : 0.001f;
-    const float kSmoothOld    = s_fScaleOldW ? *s_fScaleOldW : 0.99f;
-    const float kSmoothNew    = s_fScaleNewW ? *s_fScaleNewW : 0.01f;
-    const float kCropSpreadDiv = s_fCropSpreadDiv ? *s_fCropSpreadDiv : 0.15f;
-
-    uintptr_t resource = *reinterpret_cast<uintptr_t*>(c + 0x28);
-    float target = *reinterpret_cast<float*>(resource + 0x28);   // growth 0..n
-    if (target > kOne) target = kOne;
-
-    uintptr_t desc = *reinterpret_cast<uintptr_t*>(c + 0x38);
-    float descFloor = *reinterpret_cast<float*>(desc + 0x60);
-    if (descFloor > target) target = descFloor;
-
-    float cur = *reinterpret_cast<float*>(c + 0x48);
-    const float diff = std::fabs(target - cur);
-    const bool converged = (kEpsilon > diff);
-    if (converged) {
-        *reinterpret_cast<float*>(c + 0x48) = target;
-    } else {
-        *reinterpret_cast<float*>(c + 0x48) = cur * kSmoothOld + target * kSmoothNew;
-    }
-
-    const float scale = *reinterpret_cast<float*>(c + 0x48);
-
-    uintptr_t model = *reinterpret_cast<uintptr_t*>(c + 0x30);
-
-    if (*reinterpret_cast<int8_t*>(desc + 0x64) != 0) {
-        // Crop form: spread (x,y) reaches full early, height (z) tracks growth.
-        float spread = scale / kCropSpreadDiv;
-        if (spread < 0.0f)      spread = 0.0f;
-        else if (spread > kOne) spread = kOne;
-        *reinterpret_cast<float*>(model + 0x134) = spread;
-        *reinterpret_cast<float*>(model + 0x138) = spread;
-        *reinterpret_cast<float*>(model + 0x13c) = scale;
-        *reinterpret_cast<float*>(model + 0x140) = kOne;
-    } else {
-        // Uniform form: Math::Vector4(const Scalar&) broadcasts the scale into 4 lanes.
-        float scalar = scale;
-        uint8_t vec4[16];
-        if (s_fn_Vec4FromScalar) {
-            s_fn_Vec4FromScalar(vec4, &scalar);
-            const uint32_t* v = reinterpret_cast<const uint32_t*>(vec4);
-            *reinterpret_cast<uint32_t*>(model + 0x134) = v[0];
-            *reinterpret_cast<uint32_t*>(model + 0x138) = v[1];
-            *reinterpret_cast<uint32_t*>(model + 0x13c) = v[2];
-            *reinterpret_cast<uint32_t*>(model + 0x140) = v[3];
-        }
-    }
-
-    if (!converged) return;   // stay registered until the ease-in finishes
-
-    uint32_t oldFlags = *reinterpret_cast<uint32_t*>(c + 0x20);
-    uint32_t newFlags = oldFlags & ~0x10u;
-    *reinterpret_cast<uint32_t*>(c + 0x20) = newFlags;
-    if (((newFlags ^ oldFlags) & 0xffff) != 0 &&
-        *reinterpret_cast<uintptr_t*>(c + 0x10) != 0) {
-        if (s_fn_FlagNotify) s_fn_FlagNotify(*reinterpret_cast<void**>(c + 0x10));
-    }
-}
 
 // ============================================================
 // Reimplemented exe helpers (callee bodies for the guarded call sites above)
@@ -531,89 +252,6 @@ static void EnsureSubHelpers() {
 
 static uintptr_t WorldSingleton() {
     return s_pWorldSingleton ? reinterpret_cast<uintptr_t>(*s_pWorldSingleton) : 0;
-}
-
-// ============================================================
-// GrowthComponent::Startup (vtable slot [4], +0x20, original 0x1401206f0)
-// ============================================================
-// Body-init: populate the component fields from the owning entity (+0x10) and
-// the GrowthDescription template (+0x18). Called at spawn time by
-// ComponentEntity_StartupComponents (which dispatches vtable+0x20 on every
-// component whose capability flags have bit 7 — GrowthComponent's 0xcb does).
-//
-//   resource@+0x28 = first sibling component of the natural-resource type
-//                    (FUN_1400052c0, by type id DAT_1401c7b30).
-//   +0x30          = sibling of type DAT_1401c7a50 (FUN_140003f60).
-//   config@+0x38   = the GrowthDescription (comp+0x18). The original validates
-//                    IsDerivedFrom(desc, GrowthDescription typeId 0x1401c77e8);
-//                    in standalone the factory tree is incomplete so IsDerivedFrom
-//                    is unreliable (see ComponentEntity_CtorFromDescription's
-//                    IsDerivedFromOrTrust note) — trust comp+0x18, which the
-//                    copy-ctor set to this component's own GrowthDescription.
-//   growthScale@+0x4c = config+0x20 <= 0 ? -1.0 (never harvest)
-//                       : RandFloatTol(rng) * config+0x24 + config+0x20.
-void GrowthComponent_Startup(GrowthComponent* self) {
-    EnsureHelpers();
-    EnsureSubHelpers();
-    uint8_t* comp = reinterpret_cast<uint8_t*>(self);
-
-    void* owner = *reinterpret_cast<void**>(comp + 0x10);
-    if (!owner) return;   // not yet wired into an entity
-
-    // resource@+0x28 — sibling natural-resource component.
-    int64_t resIBP = 0;
-    if (s_fn_IBPAccessor_52c0) s_fn_IBPAccessor_52c0(owner, &resIBP);
-    *reinterpret_cast<void**>(comp + 0x28) = reinterpret_cast<void*>(resIBP);
-
-    // +0x30 — sibling ModelComponent (type DAT_1401c7a50), used by FUN_140120db0 to
-    // write the growth-staged mesh scale. The shared FUN_140003f60 reimpl finds it via
-    // the raw .rdata ModelComponent type-id (0x1401c7a50), which resolves NULL in
-    // standalone → it returned null, so +0x30 never linked and tree growth-staging was a
-    // no-op (BANISHED_MATURE_TREES stood in). Prefer the shared finder; if it yields
-    // null, fall back to a
-    // SELF-CONTAINED ModelComponent scan via GetTypeIdByName. Scoped here so it cannot
-    // change the shared produce/animation callers of 3f60 (verified paths).
-    int64_t res30IBP = 0;
-    if (s_fn_FindSibling_3f60)
-        s_fn_FindSibling_3f60(reinterpret_cast<uintptr_t>(owner), &res30IBP);
-    if (res30IBP == 0 && fn_InternalBasePtr_Ctor) {
-        static uint32_t s_tidModel = 0;
-        if (!s_tidModel) s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
-        if (s_tidModel) {
-            int n = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(owner) + 0x38);
-            uintptr_t arr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uint8_t*>(owner) + 0x30);
-            for (int i = 0; i < n && arr; ++i) {
-                void** slot = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
-                void* c = *slot;
-                if (!c) continue;
-                uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(c) + 0x10))(c);
-                if (t == s_tidModel) { new (&res30IBP) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(c)); break; }   // B.3.3 bridge
-            }
-        }
-    }
-    *reinterpret_cast<void**>(comp + 0x30) = reinterpret_cast<void*>(res30IBP);
-
-    // config@+0x38 — trust the description the copy-ctor stored at +0x18.
-    void* config = *reinterpret_cast<void**>(comp + 0x18);
-    *reinterpret_cast<void**>(comp + 0x38) = config;
-
-    // growthScale@+0x4c.
-    float minScale = config
-        ? *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(config) + 0x20)
-        : -1.0f;
-    if (minScale <= 0.0f) {
-        *reinterpret_cast<float*>(comp + 0x4c) = -1.0f;   // 0xbf800000
-    } else {
-        float range = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(config) + 0x24);
-        float r = 0.0f;
-        uintptr_t world = WorldSingleton();
-        if (world) {
-            void* rng = *reinterpret_cast<void**>(world + 0xd8);
-            r = reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
-        }
-        *reinterpret_cast<float*>(comp + 0x4c) = r * range + minScale;
-    }
 }
 
 // Reimpl of FUN_140118950 (GrowthComponent flag modify: comp+0x20 = (f|or)&~andNot; notify)
@@ -791,8 +429,6 @@ void GrowthComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/GrowthComponent.h"
 
-// Retail 0x1401207c0 (growthcomponent_serialize.cpp).
-extern "C" void GrowthComponent_Serialize2(void* self, void* stream);
 
 // 0x1401208f0. Component() is the CALL 0x1401188b0; the 0x140163590 stamp is
 // the compiler's; +0x28..+0x40 = 0; +0x48 (the smoothed displayed scale) =
@@ -810,8 +446,87 @@ Object::Base* GrowthComponent::DeletingDtor(unsigned flags) {
     return this;
 }
 
-void GrowthComponent::Persist(void* stream) { GrowthComponent_Serialize2(this, stream); }   // [3] 0x1401207c0
-void GrowthComponent::Startup() { GrowthComponent_Startup(this); }                           // [4] 0x1401206f0
+// ============================================================
+// GrowthComponent::Startup (vtable slot [4], +0x20, original 0x1401206f0)
+// ============================================================
+// Body-init: populate the component fields from the owning entity (+0x10) and
+// the GrowthDescription template (+0x18). Called at spawn time by
+// ComponentEntity_StartupComponents (which dispatches vtable+0x20 on every
+// component whose capability flags have bit 7 — GrowthComponent's 0xcb does).
+//
+//   resource@+0x28 = first sibling component of the natural-resource type
+//                    (FUN_1400052c0, by type id DAT_1401c7b30).
+//   +0x30          = sibling of type DAT_1401c7a50 (FUN_140003f60).
+//   config@+0x38   = the GrowthDescription (comp+0x18). The original validates
+//                    IsDerivedFrom(desc, GrowthDescription typeId 0x1401c77e8);
+//                    in standalone the factory tree is incomplete so IsDerivedFrom
+//                    is unreliable (see ComponentEntity_CtorFromDescription's
+//                    IsDerivedFromOrTrust note) — trust comp+0x18, which the
+//                    copy-ctor set to this component's own GrowthDescription.
+//   growthScale@+0x4c = config+0x20 <= 0 ? -1.0 (never harvest)
+//                       : RandFloatTol(rng) * config+0x24 + config+0x20.
+void GrowthComponent::Startup() {
+    EnsureHelpers();
+    EnsureSubHelpers();
+    uint8_t* comp = reinterpret_cast<uint8_t*>(this);
+
+    void* owner = *reinterpret_cast<void**>(comp + 0x10);
+    if (!owner) return;   // not yet wired into an entity
+
+    // resource@+0x28 — sibling natural-resource component.
+    int64_t resIBP = 0;
+    if (s_fn_IBPAccessor_52c0) s_fn_IBPAccessor_52c0(owner, &resIBP);
+    *reinterpret_cast<void**>(comp + 0x28) = reinterpret_cast<void*>(resIBP);
+
+    // +0x30 — sibling ModelComponent (type DAT_1401c7a50), used by FUN_140120db0 to
+    // write the growth-staged mesh scale. The shared FUN_140003f60 reimpl finds it via
+    // the raw .rdata ModelComponent type-id (0x1401c7a50), which resolves NULL in
+    // standalone → it returned null, so +0x30 never linked and tree growth-staging was a
+    // no-op (BANISHED_MATURE_TREES stood in). Prefer the shared finder; if it yields
+    // null, fall back to a
+    // SELF-CONTAINED ModelComponent scan via GetTypeIdByName. Scoped here so it cannot
+    // change the shared produce/animation callers of 3f60 (verified paths).
+    int64_t res30IBP = 0;
+    if (s_fn_FindSibling_3f60)
+        s_fn_FindSibling_3f60(reinterpret_cast<uintptr_t>(owner), &res30IBP);
+    if (res30IBP == 0 && fn_InternalBasePtr_Ctor) {
+        const uint32_t s_tidModel = ModelComponent::TypeId();   // B.3.8: was a lazy by-name cache (B6-5)
+        if (s_tidModel) {
+            int n = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(owner) + 0x38);
+            uintptr_t arr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uint8_t*>(owner) + 0x30);
+            for (int i = 0; i < n && arr; ++i) {
+                void** slot = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
+                void* c = *slot;
+                if (!c) continue;
+                uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(c) + 0x10))(c);
+                if (t == s_tidModel) { new (&res30IBP) ::Object::InternalBasePtr(
+                    reinterpret_cast<RtObject::Internal*>(c)); break; }   // B.3.3 bridge
+            }
+        }
+    }
+    *reinterpret_cast<void**>(comp + 0x30) = reinterpret_cast<void*>(res30IBP);
+
+    // config@+0x38 — trust the description the copy-ctor stored at +0x18.
+    void* config = *reinterpret_cast<void**>(comp + 0x18);
+    *reinterpret_cast<void**>(comp + 0x38) = config;
+
+    // growthScale@+0x4c.
+    float minScale = config
+        ? *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(config) + 0x20)
+        : -1.0f;
+    if (minScale <= 0.0f) {
+        *reinterpret_cast<float*>(comp + 0x4c) = -1.0f;   // 0xbf800000
+    } else {
+        float range = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(config) + 0x24);
+        float r = 0.0f;
+        uintptr_t world = WorldSingleton();
+        if (world) {
+            void* rng = *reinterpret_cast<void**>(world + 0xd8);
+            r = reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
+        }
+        *reinterpret_cast<float*>(comp + 0x4c) = r * range + minScale;
+    }
+}
 void GrowthComponent::OnAdded() {}                                  // [6] 0x140120690: retail's own `RET`
 
 // [7] 0x140120560 (283 B). PORT GAP (retail 0x140120560) — B38 D9: not ported;
@@ -821,12 +536,286 @@ void GrowthComponent::OnRemove() {}
 // [9] 0x140120050. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).
 void GrowthComponent::Update(void* time) {
-    GrowthComponent_Update(this, static_cast<int64_t*>(time));
+    int64_t* deltaTime = static_cast<int64_t*>(time);
+    EnsureHelpers();
+
+    uint8_t* comp = reinterpret_cast<uint8_t*>(this);
+
+    // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
+    // body is zeroed unless Startup ran. config(+0x38) and the resource
+    // sub-component(+0x28) are populated by GrowthComponent_Startup (step 2 of the
+    // recipe), which the entity-spawn pipeline invokes via vtable+0x20 in
+    // ComponentEntity_StartupComponents. As a belt-and-suspenders, if the body is
+    // still zero but the description(+0x18) is present, run the body-init now
+    // (idempotent). If it is still incomplete afterward, bail safely — everything
+    // below derefs config/resource (and .rdata float constants) unconditionally.
+    // See notes/STANDALONE_REG_WAVES_PLAN.md "Recipe to bring a component to life".
+    //
+    // ⚠ A STREAM-RESTORED component must NOT take the full Startup path. Retail's
+    // GrowthComponent::Serialize (0x1401207c0) persists exactly +0x28 (resource IBP),
+    // +0x30 (model IBP), +0x48 (displayed scale), +0x4c (growthScale) and +0x40 (timer)
+    // — everything Startup computes EXCEPT +0x38, which is just a copy of the
+    // description already sitting at +0x18. So after a load the one genuinely missing
+    // field is +0x38, and running the whole body-init to get it RE-ROLLS +0x4c from the
+    // RNG (see GrowthComponent_Startup), throwing away the per-instance harvest
+    // threshold the save restored. That is a silent load-fidelity bug: the plant keeps
+    // its growth but changes when it becomes harvestable, differently on every load.
+    //
+    // A non-null +0x28 is the tell: only the stream puts a resource IBP there before
+    // Startup has ever run. Fill +0x38 and leave every restored field alone.
+    if (*(uintptr_t*)(comp + 0x38) == 0 || *(uintptr_t*)(comp + 0x28) == 0) {
+        if (*(uintptr_t*)(comp + 0x38) == 0 && *(uintptr_t*)(comp + 0x28) != 0) {
+            *(uintptr_t*)(comp + 0x38) = *(uintptr_t*)(comp + 0x18);
+        } else if (*(uintptr_t*)(comp + 0x18) != 0) {
+            GrowthComponent::Startup();
+        }
+        if (*(uintptr_t*)(comp + 0x38) == 0 || *(uintptr_t*)(comp + 0x28) == 0)
+            return;
+    }
+
+    float fOne = *s_fOne;       // 1.0f
+    float fSixty = *s_fSixty;  // 60.0f
+
+    // config = comp->field38 (component config/description pointer)
+    uintptr_t config = *reinterpret_cast<uintptr_t*>(comp + 0x38);
+
+    // Base growth rate: 1.0 / (config+0x28 * 60.0)
+    float configGrowthTime = *reinterpret_cast<float*>(config + 0x28);
+    float growthRate = fOne / (configGrowthTime * fSixty);
+
+    // Get current growth value from resource component at +0x28
+    uintptr_t resourceComp = *reinterpret_cast<uintptr_t*>(comp + 0x28);
+    float currentGrowth = *reinterpret_cast<float*>(resourceComp + 0x28);
+
+    // Apply seasonal temperature modulation
+    float tempModifier = fOne;
+    if (*reinterpret_cast<char*>(config + 0x2C) != '\0') {
+        // Get current temperature from world singleton
+        // world->weather(+0x130)->temp(+0x18)
+        uintptr_t world = reinterpret_cast<uintptr_t>(*s_pWorldSingleton);
+        uintptr_t weatherPtr = *reinterpret_cast<uintptr_t*>(world + 0x130);
+        float currentTemp = *reinterpret_cast<float*>(weatherPtr + 0x18);
+
+        // Compute temperature distance from optimal
+        float optimalTemp = *reinterpret_cast<float*>(config + 0x30);
+        float tempRange = *reinterpret_cast<float*>(config + 0x34);
+
+        // fabsf via double abs with bitmask (matches original bitwise pattern)
+        double diff = static_cast<double>(currentTemp - optimalTemp);
+        uint64_t rawBits;
+        __builtin_memcpy(&rawBits, &diff, sizeof(rawBits));
+        rawBits &= *s_dblAbsMask;
+        __builtin_memcpy(&diff, &rawBits, sizeof(diff));
+        tempModifier = static_cast<float>(diff) / tempRange;
+
+        if (tempModifier < 0.0f || fOne < tempModifier) {
+            // Out of range: check freeze
+            tempModifier = 0.0f;
+            if (currentTemp <= *s_fFreezeTemp) {
+                tempModifier = *s_fFreezeGrowth;
+            }
+        } else {
+            // Parabolic falloff: 1 - dist^2
+            tempModifier = fOne - tempModifier * tempModifier;
+        }
+    }
+
+    // Get resource manager from world
+    uintptr_t world = reinterpret_cast<uintptr_t>(*s_pWorldSingleton);
+    uintptr_t resourceMgr = *reinterpret_cast<uintptr_t*>(world + 0xF8);
+
+    // Compute time delta in seconds
+    float dtSeconds = reinterpret_cast<const System::Time*>(deltaTime)->AsSeconds();   // B.3.4b bridge
+
+    // Accumulate growth
+    float newGrowth = currentGrowth + dtSeconds * growthRate * tempModifier;
+
+    if (newGrowth >= 0.0f ||
+        ((*reinterpret_cast<uint32_t*>(*reinterpret_cast<uintptr_t*>(comp + 0x28) + 0x20) >> 0x14 & 1) != 0)) {
+        // Growth is positive OR entity has special flag (bit 20)
+
+        // Store new growth value
+        *reinterpret_cast<float*>(*reinterpret_cast<uintptr_t*>(comp + 0x28) + 0x28) = newGrowth;
+
+        // Set flag bit 0x10 (growth active)
+        uint32_t oldFlags = *reinterpret_cast<uint32_t*>(comp + 0x20);
+        uint32_t newFlags = oldFlags | 0x10;
+        *reinterpret_cast<uint32_t*>(comp + 0x20) = newFlags;
+
+        // Notify entity if flags changed
+        if (((newFlags ^ oldFlags) & 0xFFFF) != 0 &&
+            *reinterpret_cast<void**>(comp + 0x10) != nullptr) {
+            if (s_fn_FlagNotify) {
+                s_fn_FlagNotify(*reinterpret_cast<void**>(comp + 0x10));
+            }
+        }
+
+        // Sub-resource spawning check
+        if (*reinterpret_cast<char*>(config + 0x44) != '\0') {
+            float spawnThreshold = *reinterpret_cast<float*>(config + 0x54);
+            if (spawnThreshold <= newGrowth && newGrowth != spawnThreshold) {
+                // Accumulate spawn timer at comp+0x40
+                *reinterpret_cast<int64_t*>(comp + 0x40) += *deltaTime;
+
+                float spawnTimerSec = reinterpret_cast<const System::Time*>(reinterpret_cast<int64_t*>(comp + 0x40))->AsSeconds();   // B.3.4b bridge
+                float spawnInterval = static_cast<float>(
+                    *reinterpret_cast<int32_t*>(config + 0x50)) * fSixty;
+
+                if (spawnInterval < spawnTimerSec) {
+                    do {
+                        if (s_fn_SpawnSubResource) {
+                            s_fn_SpawnSubResource(comp, reinterpret_cast<void*>(config));
+                        }
+                        spawnTimerSec -= spawnInterval;
+                    } while (spawnInterval < spawnTimerSec);
+
+                    // Reset spawn timer to remainder
+                    int64_t remainderTime;
+                    fn_Time_Ctor_Float(&remainderTime, spawnTimerSec);
+                    *reinterpret_cast<int64_t*>(comp + 0x40) = remainderTime;
+                }
+            }
+        }
+
+        // Harvest check: growthScale threshold
+        float growthScale = *reinterpret_cast<float*>(comp + 0x4C);
+        if (growthScale > 0.0f && growthScale < newGrowth) {
+            // Check entity doesn't have bit 20 set
+            if ((*reinterpret_cast<uint32_t*>(*reinterpret_cast<uintptr_t*>(comp + 0x28) + 0x20) >> 0x14 & 1) == 0) {
+                // Check world flag (bit 10 of world+0xD0)
+                if ((*reinterpret_cast<uint32_t*>(
+                    reinterpret_cast<uintptr_t>(*s_pWorldSingleton) + 0xD0) >> 10 & 1) == 0) {
+                    // Clamp growth to 1.0
+                    float harvestAmount = (newGrowth <= fOne) ? newGrowth : fOne;
+
+                    // Set resource amount scaled by config+0x40
+                    float configResourceScale = *reinterpret_cast<float*>(config + 0x40);
+                    DoHarvestReset(comp, resourceMgr, harvestAmount * configResourceScale);
+
+                    // Clear flags bits 3,4 via ModifyFlags(this, 0, 0x18)
+                    if (s_fn_ModifyFlags) {
+                        s_fn_ModifyFlags(comp, 0, 0x18);
+                    }
+                }
+            }
+        }
+    } else {
+        // Growth went negative -- do full harvest/reset
+        float configResourceScale = *reinterpret_cast<float*>(config + 0x40);
+        DoHarvestReset(comp, resourceMgr, configResourceScale);
+
+        // Clear flags bits 3,4 directly
+        uint32_t oldFlags = *reinterpret_cast<uint32_t*>(comp + 0x20);
+        uint32_t newFlags = oldFlags & 0xFFFFFFE7;
+        *reinterpret_cast<uint32_t*>(comp + 0x20) = newFlags;
+
+        // Notify entity if flags changed
+        if (((newFlags ^ oldFlags) & 0xFFFF) != 0 &&
+            *reinterpret_cast<void**>(comp + 0x10) != nullptr) {
+            if (s_fn_FlagNotify) {
+                s_fn_FlagNotify(*reinterpret_cast<void**>(comp + 0x10));
+            }
+        }
+    }
 }
 
 // [10] 0x14011fea0 — dispatched by EntityList::PostUpdateNodeHandler (flags bit
 // 4): ease the model's visual scale toward the accumulated growth.
-void GrowthComponent::PostUpdate() { GrowthComponent_ApplyVisualScale(this); }
+// ============================================================
+// GrowthComponent::ApplyVisualScale (vtable slot [10], +0x50, original 0x14011fea0)
+// ============================================================
+// THE per-frame link between a resource's growth value and how big it is drawn.
+// EntityList::PostUpdateNodeHandler (0x1400c2c70) dispatches component slot 10 on every
+// component whose flags carry bit 4, and GrowthComponent::Update is what sets that bit
+// each time growth advances. Without this body the bit was set, the dispatch happened,
+// and the inert stub returned — so the MeshInstance visual scale stayed at the engine
+// ctor default of (1,1,1,1) and EVERY tree/crop rendered full-grown from the frame it
+// was planted. Measured before the fix: a just-spawned crop at growth 0.000 already had
+// visualScale=(1,1,1,1) with a mesh bound and a live scene id.
+//
+// Shape (1:1 with the disassembly):
+//   target = min(resource+0x28 growth, 1.0), then raised to the description floor
+//            (desc+0x60) so a resource never draws smaller than its minimum.
+//   self+0x48 is the SMOOTHED displayed scale: snap when already within 0.001, else
+//            ease 1% per tick (0.99*cur + 0.01*target) — this is what makes a tree grow
+//            visibly rather than pop between sizes.
+//   desc+0x64 selects the CROP form: x/y spread to full within the first 15% of growth
+//            (0x1401720f4 = 0.15f) while z carries the height, versus the uniform
+//            Vector4-broadcast form used by trees and every other natural resource.
+//   The flag-4 clear only happens once the scale has CONVERGED, which is what keeps the
+//   component in the post-update list across the whole ramp.
+void GrowthComponent::PostUpdate() {
+    EnsureHelpers();
+    uintptr_t c = reinterpret_cast<uintptr_t>(this);
+
+    // Retail derefs +0x28/+0x38/+0x30 unguarded — they are populated by
+    // GrowthComponent::Startup, which runs on every spawned resource before the first
+    // post-update pass. A null here means Startup did not run, which is the bug to fix.
+    const bool gated = (*reinterpret_cast<uintptr_t*>(c + 0x28) == 0 ||
+                        *reinterpret_cast<uintptr_t*>(c + 0x38) == 0 ||
+                        *reinterpret_cast<uintptr_t*>(c + 0x30) == 0);
+    if (gated) return;
+
+    const float kOne          = s_fOne ? *s_fOne : 1.0f;
+    const float kEpsilon      = s_fScaleEps ? *s_fScaleEps : 0.001f;
+    const float kSmoothOld    = s_fScaleOldW ? *s_fScaleOldW : 0.99f;
+    const float kSmoothNew    = s_fScaleNewW ? *s_fScaleNewW : 0.01f;
+    const float kCropSpreadDiv = s_fCropSpreadDiv ? *s_fCropSpreadDiv : 0.15f;
+
+    uintptr_t resource = *reinterpret_cast<uintptr_t*>(c + 0x28);
+    float target = *reinterpret_cast<float*>(resource + 0x28);   // growth 0..n
+    if (target > kOne) target = kOne;
+
+    uintptr_t desc = *reinterpret_cast<uintptr_t*>(c + 0x38);
+    float descFloor = *reinterpret_cast<float*>(desc + 0x60);
+    if (descFloor > target) target = descFloor;
+
+    float cur = *reinterpret_cast<float*>(c + 0x48);
+    const float diff = std::fabs(target - cur);
+    const bool converged = (kEpsilon > diff);
+    if (converged) {
+        *reinterpret_cast<float*>(c + 0x48) = target;
+    } else {
+        *reinterpret_cast<float*>(c + 0x48) = cur * kSmoothOld + target * kSmoothNew;
+    }
+
+    const float scale = *reinterpret_cast<float*>(c + 0x48);
+
+    uintptr_t model = *reinterpret_cast<uintptr_t*>(c + 0x30);
+
+    if (*reinterpret_cast<int8_t*>(desc + 0x64) != 0) {
+        // Crop form: spread (x,y) reaches full early, height (z) tracks growth.
+        float spread = scale / kCropSpreadDiv;
+        if (spread < 0.0f)      spread = 0.0f;
+        else if (spread > kOne) spread = kOne;
+        *reinterpret_cast<float*>(model + 0x134) = spread;
+        *reinterpret_cast<float*>(model + 0x138) = spread;
+        *reinterpret_cast<float*>(model + 0x13c) = scale;
+        *reinterpret_cast<float*>(model + 0x140) = kOne;
+    } else {
+        // Uniform form: Math::Vector4(const Scalar&) broadcasts the scale into 4 lanes.
+        float scalar = scale;
+        uint8_t vec4[16];
+        if (s_fn_Vec4FromScalar) {
+            s_fn_Vec4FromScalar(vec4, &scalar);
+            const uint32_t* v = reinterpret_cast<const uint32_t*>(vec4);
+            *reinterpret_cast<uint32_t*>(model + 0x134) = v[0];
+            *reinterpret_cast<uint32_t*>(model + 0x138) = v[1];
+            *reinterpret_cast<uint32_t*>(model + 0x13c) = v[2];
+            *reinterpret_cast<uint32_t*>(model + 0x140) = v[3];
+        }
+    }
+
+    if (!converged) return;   // stay registered until the ease-in finishes
+
+    uint32_t oldFlags = *reinterpret_cast<uint32_t*>(c + 0x20);
+    uint32_t newFlags = oldFlags & ~0x10u;
+    *reinterpret_cast<uint32_t*>(c + 0x20) = newFlags;
+    if (((newFlags ^ oldFlags) & 0xffff) != 0 &&
+        *reinterpret_cast<uintptr_t*>(c + 0x10) != 0) {
+        if (s_fn_FlagNotify) s_fn_FlagNotify(*reinterpret_cast<void**>(c + 0x10));
+    }
+}
 
 // [11] 0x1401206a0 (64 B). PORT GAP (retail 0x1401206a0) — B38 D9: not ported;
 // the tree's table held the inert stub here, kept.

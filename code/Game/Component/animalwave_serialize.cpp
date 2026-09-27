@@ -42,6 +42,8 @@
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/AnimalComponent.h"
+#include "Component/HerdComponent.h"
+#include "Component/LivestockComponent.h"
 
 namespace {
 
@@ -109,32 +111,7 @@ inline uint8_t* At(void* self, ptrdiff_t off) {
 // Time(+0x50), spawn Time(+0x58), grazing cell(+0x4c), PopulationComponent
 // backref IBP(+0x28), habitability cell(+0x30). Serializer version 0.
 // ============================================================
-extern "C" void HerdComponent_Serialize(void* self, void* stream) {
-    Resolve();
-    if (!self || !stream) return;
-    if (s_Base) s_Base(self, stream);
-
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    int count = *reinterpret_cast<int*>(At(self, 0x40));
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
-    // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
-    if (Loading(ser)) GameColl::AsArray<GameColl::Ptr8>(At(self, 0x38)).SetSize(count);
-
-    uint8_t* member = *reinterpret_cast<uint8_t**>(At(self, 0x38));
-    for (int i = 0; i < count && member; ++i, member += 8)
-        SerializeValidatedIBP(member, ser, s_tidWildAnimal);
-
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(At(self, 0x50))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<System::Time*>(At(self, 0x58))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x4c)), nullptr);   // B.3.4 bridge
-    SerializeValidatedIBP(At(self, 0x28), ser, s_tidPopulation);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x30)), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
-}
+extern "C" void HerdComponent_Serialize(void* self, void* stream) { if (!self) return; reinterpret_cast<HerdComponent*>(self)->HerdComponent::Persist(stream); }   // B.3.8 bridge
 
 // ============================================================
 // AnimalComponent::Serialize (vtable slot [3], 0x140106e40)
@@ -150,17 +127,7 @@ extern "C" void AnimalComponent_Serialize(void* self, void* stream) { if (!self)
 // Stream (version 0): base, assigned-pasture backref IBP(+0x28, validated
 // PastureComponent), production Time(+0x30).
 // ============================================================
-extern "C" void LivestockComponent_Serialize(void* self, void* stream) {
-    Resolve();
-    if (!self || !stream) return;
-    if (s_Base) s_Base(self, stream);
-
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    SerializeValidatedIBP(At(self, 0x28), ser, s_tidPasture);
-    reinterpret_cast<System::Time*>(At(self, 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
-}
+extern "C" void LivestockComponent_Serialize(void* self, void* stream) { if (!self) return; reinterpret_cast<LivestockComponent*>(self)->LivestockComponent::Persist(stream); }   // B.3.8 bridge
 
 // ============================================================
 // PopulationComponent::Serialize (vtable slot [3], 0x1400544a0 — Ghidra
@@ -239,5 +206,44 @@ void AnimalComponent::Persist(void* stream) {
             s_IsDerived(reinterpret_cast<void*>(legacy), *s_tidPopulation);
     }
 
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+}
+
+void HerdComponent::Persist(void* stream) {
+    Resolve();
+    if (!stream) return;
+    Component::Persist(stream);   // retail's direct CALL 0x1401189b0
+
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    int count = *reinterpret_cast<int*>(At(this, 0x40));
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
+    // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
+    if (Loading(ser)) GameColl::AsArray<GameColl::Ptr8>(At(this, 0x38)).SetSize(count);
+
+    uint8_t* member = *reinterpret_cast<uint8_t**>(At(this, 0x38));
+    for (int i = 0; i < count && member; ++i, member += 8)
+        SerializeValidatedIBP(member, ser, s_tidWildAnimal);
+
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(this, 0x48)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<System::Time*>(At(this, 0x50))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(At(this, 0x58))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x4c)), nullptr);   // B.3.4 bridge
+    SerializeValidatedIBP(At(this, 0x28), ser, s_tidPopulation);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x30)), nullptr);   // B.3.4 bridge
+
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+}
+
+void LivestockComponent::Persist(void* stream) {
+    Resolve();
+    if (!stream) return;
+    Component::Persist(stream);   // retail's direct CALL 0x1401189b0
+
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    SerializeValidatedIBP(At(this, 0x28), ser, s_tidPasture);
+    reinterpret_cast<System::Time*>(At(this, 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }

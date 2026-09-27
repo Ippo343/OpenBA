@@ -46,13 +46,13 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Component/GrowthComponent.h"
 
 namespace {
 
-typedef void (*fn_ComponentSerialize_t)(void* self, void* stream);
 typedef bool (*fn_IsDerived_t)(void* obj, uint32_t typeId);
 
-fn_ComponentSerialize_t s_Base   = nullptr;  // 0x1401189b0
+// (The base serialize 0x1401189b0 is Component::Persist, called qualified.)
 fn_IsDerived_t           s_IsDerived = nullptr; // slot 0x140152a98
 
 const uint32_t* s_tidResource = nullptr;  // 0x1401c7b30  natural-resource sibling
@@ -62,9 +62,6 @@ bool s_resolved = false;
 
 void Resolve() {
     if (s_resolved) return;
-    s_Base = reinterpret_cast<fn_ComponentSerialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-
     uintptr_t slot;
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_IsDerived = *reinterpret_cast<fn_IsDerived_t*>(slot);
@@ -90,19 +87,21 @@ inline uint8_t* At(void* self, ptrdiff_t off) {
 // ============================================================
 // GrowthComponent::Serialize (vtable slot [3], 0x1401207c0)
 // ============================================================
-extern "C" void GrowthComponent_Serialize2(void* self, void* stream) {
+extern "C" void GrowthComponent_Serialize2(void* self, void* stream) { if (!self) return; reinterpret_cast<GrowthComponent*>(self)->GrowthComponent::Persist(stream); }   // B.3.8 bridge
+
+void GrowthComponent::Persist(void* stream) {
     Resolve();
-    if (!self || !stream) return;
-    if (s_Base) s_Base(self, stream);
+    if (!stream) return;
+    Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
     alignas(8) uint8_t ser[24];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    SerializeValidatedIBP(At(self, 0x28), ser, s_tidResource);
-    SerializeValidatedIBP(At(self, 0x30), ser, s_tidModel);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x4c)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(At(self, 0x40))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    SerializeValidatedIBP(At(this, 0x28), ser, s_tidResource);
+    SerializeValidatedIBP(At(this, 0x30), ser, s_tidModel);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x48)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x4c)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<System::Time*>(At(this, 0x40))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
 
     // Everything above is retail 0x1401207c0 field-for-field. What follows is a
     // deliberate, load-only repair -- see below for why it cannot be avoided.
@@ -129,7 +128,7 @@ extern "C" void GrowthComponent_Serialize2(void* self, void* stream) {
     // crop field can message a restored plant BEFORE that plant's first Update tick.
     // That was a null deref a few hundred frames into a loaded tutorial 4. Doing it
     // here means no reader can ever observe +0x38 null on a loaded plant.
-    if (loading && *reinterpret_cast<uintptr_t*>(At(self, 0x38)) == 0)
-        *reinterpret_cast<uintptr_t*>(At(self, 0x38)) =
-            *reinterpret_cast<uintptr_t*>(At(self, 0x18));
+    if (loading && *reinterpret_cast<uintptr_t*>(At(this, 0x38)) == 0)
+        *reinterpret_cast<uintptr_t*>(At(this, 0x38)) =
+            *reinterpret_cast<uintptr_t*>(At(this, 0x18));
 }
