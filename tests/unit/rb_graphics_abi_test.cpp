@@ -270,16 +270,34 @@ UNIT_TEST(rb_meshinstance_and_sunlight_are_concrete_with_the_exe_slot0) {
     CHECK_EQ(g_log[2].ev, (int)kSlRel);   CHECK(g_log[2].vptr == &g_rbSlVtGroup[2]);
     CHECK_EQ(g_log[3].ev, (int)kGeoRel);  CHECK(g_log[3].vptr == GeoVt());
 
-    // The doors reach the same bodies under the minted table.
-    alignas(8) unsigned char raw[sizeof(Graphics::SunLight)] = {};
+    // The MeshInstance doors reach the same bodies under the minted table.
+    // (SunLight's doors are retired -- ENDGAME B.3.9 pilot c2.)
+    alignas(8) unsigned char raw[sizeof(Graphics::MeshInstance)] = {};
     *reinterpret_cast<const void**>(raw) = kFakeMinted;
     g_n = 0;
     Graphics::MeshInstance::DoorBody::Init(reinterpret_cast<Graphics::MeshInstance*>(raw));
     Graphics::MeshInstance::DoorBody::Release(reinterpret_cast<Graphics::MeshInstance*>(raw));
-    Graphics::SunLight::DoorBody::Init(reinterpret_cast<Graphics::SunLight*>(raw));
-    Graphics::SunLight::DoorBody::Release(reinterpret_cast<Graphics::SunLight*>(raw));
+    CHECK_EQ(g_n, 2);
+    for (int i = 0; i < 2; ++i) CHECK(g_log[i].vptr == static_cast<const void*>(kFakeMinted));
+}
+
+// ENDGAME B.3.9 pilot c2: with the ??0/??1 doors gone, the exe's builder
+// `::new (p) Graphics::SunLight()` and the table's slot 0 are the only way in
+// and out. Slot 0 with flags 0 runs ~SunLight and frees nothing.
+UNIT_TEST(b39_sunlight_real_ctor_is_the_only_builder) {
+    using Slot0 = void* (*)(void*, unsigned);
+    alignas(8) unsigned char buf[sizeof(Graphics::SunLight)] = {};
+    g_n = 0;
+    Graphics::SunLight* sl = ::new (static_cast<void*>(buf)) Graphics::SunLight();
+    CHECK(VptrOf(sl) == &g_rbSlVtGroup[2]);
+    CHECK_EQ(g_n, 2);
+    CHECK_EQ(g_log[0].ev, (int)kGeoInit); CHECK(g_log[0].vptr == GeoVt());
+    CHECK_EQ(g_log[1].ev, (int)kSlInit);  CHECK(g_log[1].vptr == &g_rbSlVtGroup[2]);
+    Slot0 s0 = reinterpret_cast<Slot0>(const_cast<void*>(g_rbSlVtGroup[2]));
+    CHECK(s0(sl, 0u) == static_cast<void*>(buf));
     CHECK_EQ(g_n, 4);
-    for (int i = 0; i < 4; ++i) CHECK(g_log[i].vptr == static_cast<const void*>(kFakeMinted));
+    CHECK_EQ(g_log[2].ev, (int)kSlRel);   CHECK(g_log[2].vptr == &g_rbSlVtGroup[2]);
+    CHECK_EQ(g_log[3].ev, (int)kGeoRel);  CHECK(g_log[3].vptr == GeoVt());
 }
 
 UNIT_TEST(rb_materialinstance_ctor_is_retail_0x180103980_and_concrete) {

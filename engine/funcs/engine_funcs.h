@@ -1990,13 +1990,10 @@ extern fn_Graphics_Renderer_Ctor_t fn_Graphics_Renderer_Ctor;
 typedef void* (*fn_Graphics_Scene_Ctor_t)(void* self);
 extern fn_Graphics_Scene_Ctor_t fn_Graphics_Scene_Ctor;
 
-// Graphics::SunLight::SunLight() — default ctor. Object size 0x108, alignment 8.
-typedef void* (*fn_Graphics_SunLight_Ctor_t)(void* self);
-extern fn_Graphics_SunLight_Ctor_t fn_Graphics_SunLight_Ctor;
-
 // ENDGAME B.3.5 (b35-K2): `fn_Graphics_SunLight_Set` (?Set@SunLight@Graphics@@)
-// is GONE — zero callers. `fn_Graphics_SunLight_Ctor` above it STAYS: it is a
-// ctor door with live callers (B4b-2 / B35_RULES section 11).
+// is GONE — zero callers. ENDGAME B.3.9 pilot: `fn_Graphics_SunLight_Ctor`
+// (the ??0SunLight door) is GONE too — its one caller,
+// MenuDialogLoopT_LoadSceneA1, builds `::new (p) Graphics::SunLight()`.
 
 // Graphics::MeshInstance::MeshInstance() — default ctor. Object size 0x120, alignment 8.
 typedef void* (*fn_Graphics_MeshInstance_Ctor_t)(void* self);

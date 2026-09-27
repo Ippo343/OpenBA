@@ -641,7 +641,7 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     // Required Runtime functions
     if (!fn_MemAlloc || !g_pMemAllocSingleton ||
         !fn_Graphics_Renderer_Ctor || !fn_Graphics_Scene_Ctor ||
-        !fn_Graphics_SunLight_Ctor || !fn_Graphics_MeshInstance_Ctor ||
+        !fn_Graphics_MeshInstance_Ctor ||
         // B.3.5: SetMesh and Scene::AddGlobalObject are members now.
         !fn_Time_Ctor_Float) {
         printf("[MenuDLT::LoadScene] missing required fn pointers — bailing out\n");
@@ -729,13 +729,13 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     Loop(self)->_scene = gScene;
 
     // --- Allocate SunLight (0x108 bytes, alignment 8) ---
+    // Retail: the imported ??0SunLight, then the exe's own copy of the table
+    // (0x14015e290, slot 0 = the exe's scalar deleting dtor 0x140019e40) --
+    // i.e. `new Graphics::SunLight()` compiled in the exe. ENDGAME B.3.9 pilot:
+    // the real class's constructor does both (SunLight.h, B38 D1 / B39 D1); the
+    // ??0SunLight door and its engine_funcs global are gone.
     void* sunLight = fn_MemAlloc(g_pMemAllocSingleton, 0x108, 8);
-    if (sunLight) {
-        fn_Graphics_SunLight_Ctor(sunLight);
-        // Original writes vtable override at +0x00:
-        //   *(SunLight*)sunLight = PTR_FUN_14015e290
-        // We skip this — using the Runtime default vtable is fine for Phase A.
-    }
+    if (sunLight) ::new (sunLight) Graphics::SunLight();
     Loop(self)->_sunLight = sunLight;
 
     // --- Allocate Transform (0x10C bytes, alignment 4) ---

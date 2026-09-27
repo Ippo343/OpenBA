@@ -493,7 +493,6 @@ fn_Graphics_Particle_Ctor_t fn_Graphics_Particle_Ctor = nullptr;
 // --- MenuScene 3D rendering (Phase A) ---
 fn_Graphics_Renderer_Ctor_t      fn_Graphics_Renderer_Ctor      = nullptr;
 fn_Graphics_Scene_Ctor_t         fn_Graphics_Scene_Ctor         = nullptr;
-fn_Graphics_SunLight_Ctor_t      fn_Graphics_SunLight_Ctor      = nullptr;
 fn_Graphics_MeshInstance_Ctor_t  fn_Graphics_MeshInstance_Ctor  = nullptr;
 fn_Volume_Frustum_Ctor_t         fn_Volume_Frustum_Ctor         = nullptr;
 fn_Graphics_Camera_Ctor_t        fn_Graphics_Camera_Ctor        = nullptr;
@@ -1891,8 +1890,6 @@ bool EngineFuncsInit() {
         ResolveExport("??0Renderer@Graphics@@QEAA@XZ"));
     fn_Graphics_Scene_Ctor = reinterpret_cast<fn_Graphics_Scene_Ctor_t>(
         ResolveExport("??0Scene@Graphics@@QEAA@XZ"));
-    fn_Graphics_SunLight_Ctor = reinterpret_cast<fn_Graphics_SunLight_Ctor_t>(
-        ResolveExport("??0SunLight@Graphics@@QEAA@XZ"));
     fn_Graphics_MeshInstance_Ctor = reinterpret_cast<fn_Graphics_MeshInstance_Ctor_t>(
         ResolveExport("??0MeshInstance@Graphics@@QEAA@XZ"));
     fn_Volume_Frustum_Ctor = reinterpret_cast<fn_Volume_Frustum_Ctor_t>(

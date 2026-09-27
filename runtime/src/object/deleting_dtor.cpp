@@ -779,7 +779,10 @@ static constexpr DelDtorSpec kSpecs[] = {
     // the defect is filed in WAVE27_LANE_GFXPART.md under INSTRUMENT DEFECT
     // OBSERVED, NOT FIXED, with this file:line. ADDRESSEE for the fix: Wave 28.
     RT_DELDTOR(0x180058dd0, 0x180058d20, 0x0c0, "Graphics::Light"),
-    RT_DELDTOR(0x180064620, 0x180108160, 0x108, "Graphics::SunLight"),
+    // (Graphics::SunLight's row 0x180064620 is RETIRED -- ENDGAME B.3.9 pilot
+    // c2: every SunLight is exe-built by `::new (p) Graphics::SunLight()` and
+    // wears the class's own table, whose slot 0 is the exe's scalar deleting
+    // dtor; the minted ??_7SunLight row this filled is retired with it.)
 
     // ---- WAVE 27 lane IOTEXT --------------------------------------------------
     // Slot 0 of `??_7ElementDescription@UI@@6B@` (0x1801561c0). This is the row
@@ -1483,10 +1486,6 @@ void* RtDelDtor_MeshInstance(void* self, unsigned flags) {
 void* RtDelDtor_Light(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180058dd0>());
 }
-// Graphics::SunLight       ~SunLight = 0x180108160  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)  [Wave 27 GFXPART]
-void* RtDelDtor_SunLight(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180064620>());
-}
 
 // UI::ElementDescription   ~ElementDescription = 0x180116100  (PORTED)  [Wave 27 IOTEXT]
 void* RtDelDtor_ElementDescription(void* self, unsigned flags) {
@@ -1894,7 +1893,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180017330, (void*)&RtDelDtor_MeshInstance);          // Wave 27 GFXMESH
 
     RegisterRuntimeAddr(0x180058dd0, (void*)&RtDelDtor_Light);                 // Wave 27 GFXPART
-    RegisterRuntimeAddr(0x180064620, (void*)&RtDelDtor_SunLight);              // Wave 27 GFXPART
 
     RegisterRuntimeAddr(0x180035350, (void*)&RtDelDtor_ElementDescription);    // Wave 27 IOTEXT
     RegisterRuntimeAddr(0x180011d20, (void*)&RtDelDtor_Material);

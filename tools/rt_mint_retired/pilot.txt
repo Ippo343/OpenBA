@@ -12,3 +12,6 @@
 # -- pilot (b): an abstract Runtime class made concrete (D1), its factory pair
 #    the class's own statics (D2) --
 ??_7PickingMesh@Picking@@6B@           PILOT   real ctor + DeletingDtor; FACTREST row, RT_DELDTOR row, ??1 door, 8 slot doors deleted
+
+# -- pilot (c): a door -> real-ctor row (INVENTORY_A "retire after door") --
+??_7SunLight@Graphics@@6B@             PILOT   exe builds ::new SunLight(); ??0/??1 doors + DoorBody + RT_DELDTOR row deleted; double ??1 registration gone

@@ -134,17 +134,16 @@ public:
     // (ENDGAME B.3.8 block RB, B38_RULES D1), PUBLIC: the exe instantiates the
     // class itself (table copy 0x14015e290, MenuScene / MainMenuDialog,
     // `MemAlloc(0x108)`). Geometry(), the Light stamp and the SunLight stamp
-    // are the compiler's; the rest is ONE body with `Graphics_SunLight_Ctor`.
+    // are the compiler's; InitFields is the rest of retail's body. ENDGAME
+    // B.3.9 pilot: the ??0/??1 doors and `DoorBody` are gone -- the exe's one
+    // builder spells `::new (p) Graphics::SunLight()` (B39_RULES D1).
     SunLight() { InitFields(); }
 
-    struct DoorBody {   // the doors' way onto the shared bodies
-        static void Init(SunLight* s)    { s->InitFields(); }
-        static void Release(SunLight* s) { s->ReleaseFields(); }
-    };
-
     // [0] CONCRETE: the exe copy's slot 0 is its scalar deleting dtor
-    // 0x140019e40 (~SunLight, MemFree on flags & 1). The DLL's 0x180064620
-    // stays the mint's RT_DELDTOR row for the doors.
+    // 0x140019e40 (~SunLight, MemFree on flags & 1) -- the table every SunLight
+    // retail builds actually wears (only the exe calls ??0SunLight), so the
+    // arms are the SCALAR ones (B39_RULES D1: the arms of the table the object
+    // wore). The DLL's vector row 0x180064620 is retired with the mint row.
     Geometry* DeletingDtor(unsigned flags) override {
         this->~SunLight();
         if (flags & 1) Object::detail::InternalMemFree(this);
@@ -187,8 +186,8 @@ public:
 
 protected:
     // 0x180108160: restamp (the compiler's), the two image buffers and the
-    // render buffer (ONE body with `Graphics_SunLight_Dtor`), then ~Light
-    // (empty) and ~Geometry — the compiler's chain, retail's tail call.
+    // render buffer (ReleaseFields), then ~Light (empty) and ~Geometry — the
+    // compiler's chain, retail's tail call.
     ~SunLight() { ReleaseFields(); }
 
 private:

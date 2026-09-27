@@ -121,8 +121,6 @@
 
 using RtGraphics::SunLight;
 
-void  Graphics_SunLight_Dtor(SunLight* self);
-
 namespace {
 
 // ---------------------------------------------------------------------------
@@ -131,20 +129,12 @@ namespace {
 // and must keep working with the DLL absent
 // (reference_converting_a_door_is_not_satisfying_it.md).
 // ---------------------------------------------------------------------------
-using GeometryCtorFn      = void* (*)(void*);
-using GeometryDtorFn      = void  (*)(void*);   // ~Geometry is UEAA@XZ: VOID. Our port (scene.cpp:622) is void too.
 using ImageBufferCtorFn   = void* (*)(void*);
 using MemAllocFn          = void* (*)(size_t, int);
 using MemFreeFn           = void  (*)(void*);
 using PlatformFn          = void  (*)(void*);
 using DeletingDtorFn      = void  (*)(void*, int);
 
-GeometryCtorFn GeometryCtor() {
-    return RT_EXPORT_ONCE(GeometryCtorFn, "??0Geometry@Graphics@@QEAA@XZ");
-}
-GeometryDtorFn GeometryDtor() {
-    return RT_EXPORT_ONCE(GeometryDtorFn, "??1Geometry@Graphics@@UEAA@XZ");
-}
 ImageBufferCtorFn ImageBufferCtor() {
     return RT_EXPORT_ONCE(ImageBufferCtorFn, "??0ImageBuffer@Video@@QEAA@XZ");
 }
@@ -172,16 +162,8 @@ void RenderBufferPlatformDestructPort(void* rb) {
     reinterpret_cast<Video::RenderBuffer*>(rb)->PlatformDestruct();    // B.3.5 bridge
 }
 
-// The two vtables the ctor stamps, and the one the dtor restores. Exported
-// DATA; ResolveExport is port-aware and the mint owns them at cutover.
-void* LightVtable() {
-    static void* v = ResolveExport("??_7Light@Graphics@@6B@");
-    return v;
-}
-void* SunLightVtable() {
-    static void* v = ResolveExport("??_7SunLight@Graphics@@6B@");
-    return v;
-}
+// (ENDGAME B.3.9 pilot: the LightVtable / SunLightVtable accessors -- the MINTED
+// tables the retired doors stamped -- are gone; the compiler stamps both.)
 
 RtVideo::Device** DeviceSlot() {
     return RT_DATA_SLOT(RtVideo::Device**, "?_singleton@Device@Video@@0PEAV12@EA");
@@ -393,59 +375,16 @@ void SunLight::Set(const Math::Vector3& direction, const Math::Vector4& sun,
 }  // namespace Graphics
 
 // ============================================================================
-// Graphics::SunLight::SunLight()   — 0x1801081f0
-//
-// Base ctor, two vtable stamps into one slot, eleven scalar defaults, three null
-// pointers, the material-type flag, the capability-gated colour target, the
-// unconditional depth target, the render buffer, and an INLINED
-// `Geometry::SetBounds(Box(-1e6,-1e6,-1e6, +1e6,+1e6,+1e6))`.
-//
-// The SetBounds tail is transcribed as an inline because that is what the
-// shipped bytes are — six UCOMISS/JP/JNZ pairs against the two constants,
-// falling through to six MOVSS and `_dirtyFlags |= 2` when any of the six
-// differs. NaN takes the write path in retail (JP), and `!(a == b)` in C++ is
-// true for NaN, so the two agree without a special case.
+// ??0SunLight@Graphics@@QEAA@XZ 0x1801081f0 / ??1SunLight@Graphics@@UEAA@XZ
+// 0x180108160 -- the two DOORS are gone (ENDGAME B.3.9 pilot, B39_RULES D1).
+// Their one exe caller (MenuDialogLoopT_LoadSceneA1) builds
+// `::new (p) Graphics::SunLight()`, whose compiler-emitted prologue is
+// Geometry() and the Light / SunLight stamps; the only other reader of the
+// ??1 door was the retired RT_DELDTOR row 0x180064620. The retail bodies
+// live on unchanged in InitFields / ReleaseFields below, run by the real
+// constructor and destructor (SunLight.h); ~Light and ~Geometry are the
+// compiler's chain, retail's tail call 0x1801081db.
 // ============================================================================
-void* Graphics_SunLight_Ctor(SunLight* self) {
-
-    GeometryCtor()(self);
-
-    // TWO stores into the SAME slot, in this order. Kept as two, not folded:
-    // retail writes Light's vtable and then overwrites it with SunLight's, and
-    // an intervening throw would be observed with Light's installed.
-    self->_base._vtable = LightVtable();
-    self->_base._vtable = SunLightVtable();
-
-    // ENDGAME B.3.8 block RB (RULE B8-1): everything after the two stamps is
-    // ONE body with the real constructor `Graphics::SunLight()` — below.
-    ::Graphics::SunLight::DoorBody::Init(reinterpret_cast<::Graphics::SunLight*>(self));   // B.3.8 bridge
-
-    return self;
-}
-
-// ============================================================================
-// Graphics::SunLight::~SunLight()   — 0x180108160
-//
-// Restore this class's own vtable, release the two image buffers through their
-// slot-0 deleting destructors, tear the render buffer out of the global list
-// and free it, then TAIL-CALL ~Geometry. The tail call matters: ~Geometry frees
-// the `_attached` array, so skipping it leaks on every teardown
-// (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md is the same family).
-//
-// No oracle: it frees. It IS executed on both sides of the ctor probe below,
-// which is what stops it being wholly unexercised code.
-// ============================================================================
-void Graphics_SunLight_Dtor(SunLight* self) {
-    self->_base._vtable = SunLightVtable();
-    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with `~SunLight()`.
-    ::Graphics::SunLight::DoorBody::Release(reinterpret_cast<::Graphics::SunLight*>(self));   // B.3.8 bridge
-    // Retail TAIL-JUMPS here (0x1801081db JMP 0x1800a41c0), so whatever ~Geometry
-    // leaves in RAX is ~SunLight's result. Both are `UEAA@XZ`, i.e. void, and the
-    // only caller is the vtable's slot-0 deleting destructor, which discards it —
-    // so a plain call and a void return are faithful. Spelled out because the
-    // NewImageBuffer note above is the same hazard read the other way round.
-    GeometryDtor()(self);
-}
 
 // ============================================================================
 // Graphics::SunLight::InitFields / ReleaseFields (ENDGAME B.3.8 block RB,
@@ -506,17 +445,10 @@ void Graphics::SunLight::ReleaseFields() {
 int RtGraphicsSunLightRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("??0SunLight@Graphics@@QEAA@XZ", (void*)&Graphics_SunLight_Ctor);
-    RegisterRuntimeAddr(0x1801081f0, (void*)&Graphics_SunLight_Ctor);
-    n++;
-
+    // (ENDGAME B.3.9 pilot: the ??0 / ??1 SunLight doors are retired -- see above.)
     RegisterRuntimeExport("?Set@SunLight@Graphics@@QEAAXAEBVVector3@Math@@AEBVVector4@4@1@Z",
                           (void*)&Graphics_SunLight_Set);
     RegisterRuntimeAddr(0x180107f10, (void*)&Graphics_SunLight_Set);
-    n++;
-
-    RegisterRuntimeExport("??1SunLight@Graphics@@UEAA@XZ", (void*)&Graphics_SunLight_Dtor);
-    RegisterRuntimeAddr(0x180108160, (void*)&Graphics_SunLight_Dtor);
     n++;
 
     printf("[RtPort] Graphics::SunLight (lane GFX2): %d exports registered\n", n);

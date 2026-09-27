@@ -118,6 +118,7 @@ extern "C" void RtGraphics_Light_Dtor(void* self) {
 // door `Graphics_SunLight_Dtor` (runtime/src/graphics/sunlight.cpp), and this
 // older transcription won by running later (INVENTORY_B finding 1). RB's body
 // -- `~SunLight`'s ReleaseFields, shared with the real destructor -- is THE body.
+// (Pilot c2 then retired RB's door too: ~SunLight is the only destructor.)
 
 // ??1AnimationGroup@Graphics@@UEAA@XZ   0x1800fb620
 extern "C" void RtGraphics_AnimationGroup_Dtor(void* self) {
