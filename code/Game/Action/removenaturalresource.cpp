@@ -125,29 +125,21 @@ bool RemoveNaturalResource_ResolveFuncs() {
 }
 
 // ============================================================
-// BaseDtor (0x140022f50) — slot 2
-// Returns TypeInfo for RemoveNaturalResource (tiny, unhookable).
-// ============================================================
-uint32_t RemoveNaturalResource_BaseDtor_Impl() {
-    return *s_typeInfo_RemoveNaturalResource;
-}
-
-// ============================================================
 // Serialize (0x1400cac50)
 // Serializes: status(+0x18), entity(+0x20) with type check, entity(+0x28) with type check, bool(+0x30)
 // ============================================================
-void RemoveNaturalResource_Serialize_Impl(RemoveNaturalResource* self, void* stream) {
+void RemoveNaturalResource::Persist(void* stream) {
     // Reached through the registered vtable, which the factory path never
     // has to touch — an exe-ctor-built action arrives here with the file
     // statics still null. Lazy-resolve like the other entry points do.
     RemoveNaturalResource_ResolveFuncs();
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
 
     // Serialize status byte (+0x18)
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Serialize entity refs and harvest flag
@@ -155,17 +147,17 @@ void RemoveNaturalResource_Serialize_Impl(RemoveNaturalResource* self, void* str
 
     // Serialize citizen entity ref (+0x20)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (*(void**)(s + 0x20) != nullptr) {
-        if (!fn_IsDerivedFrom(*(void**)(s + 0x20), *s_typeId_1401c7158)) {
-            *(void**)(s + 0x20) = nullptr;
+    if (_field20 != nullptr) {
+        if (!fn_IsDerivedFrom(_field20, *s_typeId_1401c7158)) {
+            _field20 = nullptr;
         }
     }
 
     // Serialize resource entity ref (+0x28)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (*(void**)(s + 0x28) != nullptr) {
-        if (!fn_IsDerivedFrom(*(void**)(s + 0x28), *g_TypeId_ComponentEntity)) {
-            *(void**)(s + 0x28) = nullptr;
+    if (_field28 != nullptr) {
+        if (!fn_IsDerivedFrom(_field28, *g_TypeId_ComponentEntity)) {
+            _field28 = nullptr;
         }
     }
 
@@ -180,14 +172,14 @@ void RemoveNaturalResource_Serialize_Impl(RemoveNaturalResource* self, void* str
 // Checks resource ownership, sets harvest flags, calls removal helper.
 // Returns 0 (action complete).
 // ============================================================
-int RemoveNaturalResource_AbstractImpl_Impl(RemoveNaturalResource* self, void* actionStack) {
+int  RemoveNaturalResource::AbstractImpl(void* actionStack) {
     RemoveNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     void* nrCompIBP = nullptr;
 
     // Get NaturalResourceComponent from resource entity at +0x28
-    s_fn_FindNRComp(*(void**)(s + 0x28), &nrCompIBP);
+    s_fn_FindNRComp(_field28, &nrCompIBP);
 
     // Standalone-safety: the NR component find can resolve null when the action's target
     // (+0x28) is not wired to a live tree entity. In retail it is always a valid natural
@@ -249,12 +241,11 @@ int RemoveNaturalResource_AbstractImpl_Impl(RemoveNaturalResource* self, void* a
 // CheckEntity (0x1400caaa0) — slot 8
 // Clears "in use" bit (bit 20) on entity's model component at +0x28.
 // ============================================================
-void RemoveNaturalResource_CheckEntity_Impl(RemoveNaturalResource* self) {
+void RemoveNaturalResource::CheckEntity() {
     RemoveNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
-    uint8_t* s = (uint8_t*)self;
     void* localIBP[4];
 
-    s_fn_FindNRComp(*(void**)(s + 0x28), localIBP);
+    s_fn_FindNRComp(_field28, localIBP);
 
     uint8_t* modelComp = (uint8_t*)(localIBP[0]);
     if (!modelComp) return;   // [standalone] NR component not found -> nothing to clear
@@ -274,11 +265,11 @@ void RemoveNaturalResource_CheckEntity_Impl(RemoveNaturalResource* self) {
 // GetTarget (0x1400caa20) — slot 9
 // Returns true if param matches entity at +0x28 or entity at +0x20's parent.
 // ============================================================
-bool RemoveNaturalResource_GetTarget_Impl(RemoveNaturalResource* self, void* param) {
+bool RemoveNaturalResource::GetTarget(void* param) {
     RemoveNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
-    void* entity28 = *(void**)(s + 0x28);
+    void* entity28 = _field28;
 
     if (*(void**)param == entity28) {
         return true;
@@ -313,13 +304,9 @@ Object::Base* RemoveNaturalResource::DeletingDtor(unsigned flags) {
 }
 
 // [3] 0x1400cac50
-void RemoveNaturalResource::Persist(void* stream) { RemoveNaturalResource_Serialize_Impl(this, stream); }
 // [4] 0x1400cab10
-int  RemoveNaturalResource::AbstractImpl(void* actionStack) { return RemoveNaturalResource_AbstractImpl_Impl(this, actionStack); }
 // [8] 0x1400caaa0
-void RemoveNaturalResource::CheckEntity() { RemoveNaturalResource_CheckEntity_Impl(this); }
 // [9] 0x1400caa20
-bool RemoveNaturalResource::GetTarget(void* param) { return RemoveNaturalResource_GetTarget_Impl(this, param); }
 
 void* RemoveNaturalResource::CreateNewObject() {
     RemoveNaturalResource_ResolveFuncs();

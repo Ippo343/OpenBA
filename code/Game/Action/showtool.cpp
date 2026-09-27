@@ -169,24 +169,24 @@ bool ShowTool_ResolveFuncs() {
 // ShowTool::Serialize (0x140042780)
 // Serializes: status(+0x18), entity ptr(+0x20) with type check, int(+0x28)
 // ============================================================
-void ShowTool_Serialize_Impl(void* self, void* stream) {
+void ShowTool::Persist(void* stream) {
     // Reached through the registered vtable, which the factory path never
     // has to touch — an exe-ctor-built action arrives here with the file
     // statics still null. Lazy-resolve like the other entry points do.
     ShowTool_ResolveFuncs();
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
 
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (*(void**)(s + 0x20) != nullptr) {
-        if (!fn_IsDerivedFrom(*(void**)(s + 0x20), *s_TypeInfo_ShowToolEntity)) {
-            *(void**)(s + 0x20) = nullptr;
+    if (_field20 != nullptr) {
+        if (!fn_IsDerivedFrom(_field20, *s_TypeInfo_ShowToolEntity)) {
+            _field20 = nullptr;
         }
     }
     reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
@@ -321,25 +321,25 @@ static void ShowTool_ShowCarried(void* entityV) {
 // Always returns 1.
 // ============================================================
 
-int ShowTool_AbstractImpl_Impl(void* self, void* actionStack) {
+int  ShowTool::AbstractImpl(void* actionStack) {
     (void)actionStack;
     // Lazy resolve: when this action is built via the exe action-ctor path (not our
     // factory) ShowTool_ResolveFuncs never ran, so s_fn_* are null -> EXEC-of-null when
     // the executor runs it (e.g. a forester's PerformWork cut sequence shows the axe).
     // Same fix as the PerformWork vtable methods. Bail "done" if deps still missing.
     if (!ShowTool_ResolveFuncs()) return 1;
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     uint32_t toolId = *(uint32_t*)(s + 0x28);
 
 
     if (toolId > 10 && toolId != 0xFFFFFFFE) {
-        void* entity = *(void**)(s + 0x20);
+        void* entity = _field20;
         if (!entity) return 1;  // entity removed, nothing to do
         s_fn_HideTool(entity);
         return 1;
     }
 
-    void* entity = *(void**)(s + 0x20);
+    void* entity = _field20;
     if (!entity) return 1;  // entity removed, nothing to do
 
     // toolId < 0 (e.g. 0xFFFFFFFE = -2) is the "carry" path: show the model of the
@@ -360,10 +360,9 @@ int ShowTool_AbstractImpl_Impl(void* self, void* actionStack) {
 // ShowTool::CheckEntity (0x1400426d0)
 // Hides tool on the entity at +0x20.
 // ============================================================
-void ShowTool_CheckEntity_Impl(void* self) {
+void ShowTool::CheckEntity() {
     if (!ShowTool_ResolveFuncs()) return;   // lazy resolve (exe-ctor-built action)
-    uint8_t* s = (uint8_t*)self;
-    void* entity = *(void**)(s + 0x20);
+    void* entity = _field20;
     if (!entity) return;  // entity already gone
     s_fn_HideTool(entity);
 }
@@ -372,12 +371,11 @@ void ShowTool_CheckEntity_Impl(void* self) {
 // ShowTool::GetTarget (0x140042680)
 // Returns true if entity at +0x20's parent (+0x10) matches the param.
 // ============================================================
-bool ShowTool_GetTarget_Impl(void* self, void* param) {
+bool ShowTool::GetTarget(void* param) {
     if (!ShowTool_ResolveFuncs()) return false;   // lazy resolve (exe-ctor-built action)
-    uint8_t* s = (uint8_t*)self;
-    void* entity = *(void**)(s + 0x20);
+    void* entity = _field20;
     if (!entity) return false;  // entity gone, no match
-    void* entityParent = *(void**)(entity + 0x10);
+    void* entityParent = *(void**)((uint8_t*)entity + 0x10);
     return entityParent == *(void**)param;
 }
 
@@ -406,15 +404,11 @@ Object::Base* ShowTool::DeletingDtor(unsigned flags) {
 }
 
 // [3] 0x140042780
-void ShowTool::Persist(void* stream) { ShowTool_Serialize_Impl(this, stream); }
 // [4] 0x140042710
-int  ShowTool::AbstractImpl(void* actionStack) { return ShowTool_AbstractImpl_Impl(this, actionStack); }
 // [7] 0x140042700 — the leaf's own `RET 0` (same bytes as the base body)
 void ShowTool::Exit(void*) {}
 // [8] 0x1400426d0
-void ShowTool::CheckEntity() { ShowTool_CheckEntity_Impl(this); }
 // [9] 0x140042680
-bool ShowTool::GetTarget(void* param) { return ShowTool_GetTarget_Impl(this, param); }
 
 void* ShowTool::CreateNewObject() {
     ShowTool_ResolveFuncs();
