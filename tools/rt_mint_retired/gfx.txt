@@ -24,3 +24,9 @@
 
 # -- W1: ReflectionImageBuffer concrete (D1), factory pair the class own (D2) --
 ??_7ReflectionImageBuffer@Graphics@@6B@  GFX   real ctor + DeletingDtor + ~X (door body); FACTREST row, RT_DELDTOR row 0x180022600, ??0/??1 doors, 9 slot doors deleted; Construct/Reconstruct placement-new
+
+# -- W1 storage (D7): the four unexported by-address cells, one site each -> file statics --
+0x1801fc69c                            GFX   GraphicsMesh serialize counter -> g_serializeCounter (graphicsmesh_vtable.cpp), the only site
+0x1801fc6a0                            GFX   GraphicsMesh current mesh -> g_serializeCurrentMesh (graphicsmesh_vtable.cpp), the only site
+0x1801ff30c                            GFX   MeshInstance::Update init guard -> g_updateInitGuard (wave29_lane_slots.cpp), the only site
+0x1801ff310                            GFX   MeshInstance::Update identity table -> g_identityTable (wave29_lane_slots.cpp), the only site

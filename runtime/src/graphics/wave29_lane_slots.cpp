@@ -127,16 +127,18 @@ uint64_t g_miSSIDskip = 0;       // ... early-outs on the non-negative flag
 // the two bodies ran first while the other's table stayed zero — the
 // two-owners-one-object shape this project has recorded on singleton rows.
 //
-// Each address below is a LITERAL inside its own ResolveAddr call, deliberately:
-// runtime_census.py and addr_door_audit.py both find doors by grepping for that
-// literal and a door reached through a variable is invisible to both
-// (reference_literal_grep_blind_to_variables.md).
-uint32_t* UpdateInitGuard() {
-    return reinterpret_cast<uint32_t*>(ResolveAddr(Module::Runtime, 0x1801ff30c));
-}
-Transform28* IdentityTable() {
-    return reinterpret_cast<Transform28*>(ResolveAddr(Module::Runtime, 0x1801ff310));
-}
+// ENDGAME B.3.9 block GFX (B39_RULES D7, rows A47 / A48): FILE STATICS. With
+// no DLL there are no "retail's own other readers"; this body is the ONE site
+// of both, so the two objects live here and the mint's two by-address storage
+// rows are retired (rt_mint_retired/gfx.txt). Zero-initialised by the
+// language, as retail's .data is: the guard's bit 0 starts clear and the first
+// Update fills the table, exactly as before. Namespace-scope, not
+// function-local (loader thread: no lazy statics).
+uint32_t    g_updateInitGuard = 0;           // retail 0x1801ff30c
+Transform28 g_identityTable[48] = {};        // retail 0x1801ff310 .. 0x1801ff850
+static_assert(sizeof(g_identityTable) == 1344, "0x540 bytes, the mint row's size");
+uint32_t*    UpdateInitGuard() { return &g_updateInitGuard; }
+Transform28* IdentityTable()   { return g_identityTable; }
 
 //   SYMBOL:      ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA, retail
 //                0x1801fc70b, ordinal 4796 — a DATA export, a single static

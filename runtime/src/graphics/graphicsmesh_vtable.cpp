@@ -184,22 +184,18 @@ void ByAddrSerN(uintptr_t va, Serializer* ser, int n, void* data) {
 //                        by the same two functions and by nothing else
 //                        (get_xrefs_to, both addresses, retail).
 //
-// Both are UNEXPORTED DATA and are therefore reached BY ADDRESS. That keeps
-// one copy shared with `PlatformVersion`, which is still the DLL's — declaring
-// our own statics would split the pair while the DLL half is live, which is the
-// split-brain shape. AT CUTOVER these two words need a minted home; there is
-// none today, and this comment is the record of that, not a claim otherwise.
+// ENDGAME B.3.9 block GFX (B39_RULES D7, rows A6 / A7): FILE STATICS. Both
+// were UNEXPORTED DATA reached by address through the mint's by-address
+// storage rows; this file holds every site (`PlatformVersion`, the third
+// retail writer, is unported and has no caller), so the two words live here
+// and the two mint rows are retired (rt_mint_retired/gfx.txt). Zero-initialised
+// by the language, as retail's .data words are. The lazy function-local
+// ResolveAddr caches are gone with them.
 // ---------------------------------------------------------------------------
-int32_t* SerializeCounter() {
-    static int32_t* p = nullptr;
-    if (!p) p = reinterpret_cast<int32_t*>(ResolveAddr(Module::Runtime, 0x1801fc69c));
-    return p;
-}
-void** SerializeCurrentMesh() {
-    static void** p = nullptr;
-    if (!p) p = reinterpret_cast<void**>(ResolveAddr(Module::Runtime, 0x1801fc6a0));
-    return p;
-}
+int32_t g_serializeCounter     = 0;         // retail 0x1801fc69c
+void*   g_serializeCurrentMesh = nullptr;   // retail 0x1801fc6a0
+int32_t* SerializeCounter()     { return &g_serializeCounter; }
+void**   SerializeCurrentMesh() { return &g_serializeCurrentMesh; }
 
 // `?_singleton@Device@Video@@0PEAV12@EA` — 0x1801fe7a8, a POINTER to the
 // Device, so reading +0xf8 is a double indirection.
