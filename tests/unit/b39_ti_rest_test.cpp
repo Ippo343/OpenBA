@@ -45,6 +45,7 @@
 #include "../../runtime/types/object/Internal.h"
 #include "../../runtime/types/picking/PickingMesh.h"
 #include "../../runtime/types/pathfinding/PointList.h"
+#include "../../runtime/types/io/PackageFile.h"
 
 // ===========================================================================
 // Factory-pair markers (see the banner).
@@ -55,6 +56,7 @@
 
 TIR_FACTORY_MARKERS(Picking::PickingMesh)
 TIR_FACTORY_MARKERS(Pathfinding::PointList)
+TIR_FACTORY_MARKERS(IO::PackageFile)
 
 namespace {
 
@@ -79,6 +81,8 @@ std::vector<Expect> Rows() {
         TIR_ROW(Picking::PickingMesh,   "PickingMesh", "External", 0x9C2301F9u),
         // ---- Pathfinding ----
         TIR_ROW(Pathfinding::PointList, "PointList",   "External", 0x3BC4D9A5u),
+        // ---- IO ----
+        TIR_ROW(IO::PackageFile,        "PackageFile", "External", 0x3C81C678u),
     };
 }
 

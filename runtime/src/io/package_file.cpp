@@ -306,21 +306,10 @@ constexpr size_t kPackageFileSize = 0xF0;
 
 // ---- the type-info record -------------------------------------------------
 // ?Type@ (0x180025130) reads `dword ptr [0x1801f9ac8]` and ?TypeName@
-// (0x180025150) reads `qword ptr [0x1801f9ad0]` — the same exported
-// BaseTypeInfo, at +0x00 and +0x08. ENDGAME B.3.9 W1: the record's address
-// lives in a namespace-scope atomic slot (B9-10: no function-local cache),
-// resolved through the never-caches-a-null door; the record itself stays
-// minted until DEFINE_TYPE (W3).
-std::atomic<const uint8_t*> g_packageFileTypeInfo{nullptr};
-const uint8_t* PackageFileTypeInfo() {
-    const uint8_t* ti = g_packageFileTypeInfo.load(std::memory_order_acquire);
-    if (ti == nullptr) {
-        ti = static_cast<const uint8_t*>(
-            ResolveExport("?_typeInfo@PackageFile@IO@@0VBaseTypeInfo@Object@@A"));
-        if (ti != nullptr) g_packageFileTypeInfo.store(ti, std::memory_order_release);
-    }
-    return ti;
-}
+// (0x180025150) reads `qword ptr [0x1801f9ad0]` — the class's own
+// BaseTypeInfo, at +0x00 and +0x08. ENDGAME B.3.9 TI-REST: that record is the
+// class's `DEFINE_TYPE` static (io_type_records.cpp) and the three accessors
+// are DECLARE_TYPE's; the atomic slot over the minted record is gone.
 
 // ENDGAME B.3.9 IO: the PutQ/PutD/PutB transcription of ??0PackageFile
 // (`PackageFileCtorBody`, with its three minted vptr stamps) is gone; the
@@ -575,8 +564,8 @@ int RtIoPackageFileRegister() {
 
     // ---- the factory pair (B39_RULES D2): the class's OWN statics, both
     // doors, replacing the FACTREST row (rt_factories_io.{cpp,inc}, deleted).
-    // The minted `?_typeInfo@PackageFile@IO@@` record's factory pointers
-    // resolve these by name (MintTypeInfos runs after every *PortInit).
+    // The class's own `DEFINE_TYPE` record (io_type_records.cpp) carries
+    // both as its factory pointers.
     RegisterRuntimeExport("?CreateNewObject@PackageFile@IO@@SAPEAVBase@Object@@XZ",
                           (void*)&IO::PackageFile::CreateNewObject); ++n;
     RegisterRuntimeAddr(0x180025240, (void*)&IO::PackageFile::CreateNewObject);
@@ -635,32 +624,9 @@ int RtIoPackageFileRegister() {
 namespace IO {
 
 // ---- the reflection triple, slots 1 and 2 plus the static companion --------
-// All three read the MINTED `?_typeInfo@PackageFile@IO@@` record at 0x1801f9ac8
-// through a namespace-scope atomic slot (B.3.9 W1). The row stays minted in this step -- the class does NOT
-// take DECLARE_TYPE/DEFINE_TYPE here, for the same reason B.3.3's closing pass
-// left the five Object `?_typeInfo@` rows minted (B34_RULES section 1.4).
-//
-// `?Type@` (0x180025130) and `?TypeId@` (0x180025140) are the SAME two
-// instructions at two addresses -- the virtual and the static spelling -- so
-// the virtual is written as a call to the static, which is what keeps the two
-// from drifting. Neither reads RCX.
-uint32_t PackageFile::TypeId() {
-    const uint8_t* const ti = RtIO::PackageFileTypeInfo();
-    uint32_t ours = 0;
-    std::memcpy(&ours, ti, sizeof ours);
-    return ours;
-}
-
-uint32_t PackageFile::Type() const {          // slot 2, 0x180025130
-    return PackageFile::TypeId();
-}
-
-const char* PackageFile::TypeName() const {   // slot 1, 0x180025150
-    const uint8_t* const ti = RtIO::PackageFileTypeInfo();
-    const char* ours = nullptr;
-    std::memcpy(&ours, ti + 8, sizeof ours);  // BaseTypeInfo::name @ +0x08
-    return ours;
-}
+// `?Type@` (0x180025130), `?TypeId@` (0x180025140) and `?TypeName@`
+// (0x180025150) are DECLARE_TYPE's bodies over the class's own record
+// (ENDGAME B.3.9 TI-REST; io_type_records.cpp). Neither reads RCX.
 
 // ---- slots 3 and 4: the two constant-returning slots -----------------------
 // 0x1800b6080: MOV EAX,0x5 ; RET. The .pkg format version this build writes and

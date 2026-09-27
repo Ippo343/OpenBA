@@ -9,3 +9,6 @@
 
 # -- Pathfinding --
 ?_typeInfo@PointList@Pathfinding@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Pathfinding::PointList, "Object::External", nullptr); the RT_DATA_SLOT accessor in pointlist.cpp deleted
+
+# -- IO --
+?_typeInfo@PackageFile@IO@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(IO::PackageFile, "Object::External", nullptr); the atomic-slot ResolveExport accessor in package_file.cpp deleted

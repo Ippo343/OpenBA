@@ -305,3 +305,4 @@ UNIT_TREE_SRCS +=
 # runs a Factory::Startup over them; the factory statics are its markers).
 UNIT_TREE_SRCS += runtime/src/picking/picking_type_records.cpp \
                   runtime/src/pathfinding/pathfinding_type_records.cpp
+UNIT_TREE_SRCS += runtime/src/io/io_type_records.cpp
