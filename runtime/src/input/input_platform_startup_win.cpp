@@ -89,6 +89,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/input/Device.h"   // ENDGAME B.3.9 ENG: the class static
 #include "../../types/application/Application.h"
 #include "../../types/input/Input.h"
 
@@ -163,7 +164,7 @@ using AcquireFn = HRESULT (STDMETHODCALLTYPE*)(void*);
 // focus bookkeeping.
 namespace {
 Input::Device** InputDeviceSlot() {
-    return RT_DATA_SLOT(Input::Device**, "?_singleton@Device@Input@@0PEAV12@EA");
+    return reinterpret_cast<Input::Device**>(&::Input::Device::_singleton);
 }
 }  // namespace
 

@@ -82,6 +82,7 @@
 #include <new>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/input/Device.h"   // ENDGAME B.3.9 ENG: the class static
 #include "../../types/application/Application.h"   // ENDGAME B.3.9 ENG: the class static
 
 #include "../../types/system/MemoryAllocator.h"
@@ -162,7 +163,7 @@ void** SlotPersistence()     { return RT_DATA_SLOT(void**, "?_singleton@Persiste
 void** SlotVideoDevice()     { return RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA"); }
 void** SlotVideoConfig()     { return RT_DATA_SLOT(void**, "?_singleton@Configuration@Video@@0PEAV12@EA"); }
 void** SlotApplication()     { return reinterpret_cast<void**>(&::Application::Application::_singleton); }
-void** SlotInputDevice()     { return RT_DATA_SLOT(void**, "?_singleton@Device@Input@@0PEAV12@EA"); }
+void** SlotInputDevice()     { return reinterpret_cast<void**>(&::Input::Device::_singleton); }
 void** SlotInputConfig()     { return reinterpret_cast<void**>(&::Input::Configuration::_singleton); }
 void** SlotAudioDevice()     { return reinterpret_cast<void**>(&::Audio::Device::_singleton); }
 void** SlotAudioConfig()     { return reinterpret_cast<void**>(&::Audio::Configuration::_singleton); }
