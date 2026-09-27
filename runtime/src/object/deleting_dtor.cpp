@@ -1051,8 +1051,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // "restamps then inlines"), so it declines to classify. The two constants
     // it DOES check -- dtor VA and sizeof -- are re-derived and correct for
     // both rows.
-    RT_DELDTOR(0x180043570, 0x1800d32a0, 0x0d0, "UI::LayoutElement"),
-    RT_DELDTOR(0x180045320, 0x1800d4530, 0x100, "UI::ListElement"),
     RT_DELDTOR(0x180046540, 0x1800d4c40, 0x100, "UI::NumberEditElement"),
     RT_DELDTOR(0x18004ab80, 0x180118ce0, 0x0e8, "UI::NumberElement"),
     RT_DELDTOR(0x180047540, 0x1800d5220, 0x0c8, "UI::PageElement"),
@@ -1158,8 +1156,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // came from the Runtime heap (most do both), so a fabricated subject would
     // decrement a refcount nothing incremented and free a garbage pointer —
     // the same test the UI::ElementDescription row applies.
-    RT_DELDTOR(0x1800431d0, 0x1800d3a10, 0x078, "UI::LayoutDescription"),
-    RT_DELDTOR(0x180044ed0, 0x1800d4910, 0x090, "UI::ListDescription"),
     RT_DELDTOR(0x18004a760, 0x180118c00, 0x088, "UI::NumberDescription"),
     RT_DELDTOR(0x180046190, 0x1800d4fe0, 0x088, "UI::NumberEditDescription"),
     RT_DELDTOR(0x1800471a0, 0x1800d54b0, 0x080, "UI::PageDescription"),
@@ -1713,8 +1709,6 @@ void* RtDelDtor_LabelElement(void* self, unsigned flags) {
 
 // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12), rows 85..98 ------------
 // All fourteen ~Class bodies are PORTED (runtime/src/ui/<class>element.cpp).
-void* RtDelDtor_LayoutElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x180043570>()); }
-void* RtDelDtor_ListElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, Row<0x180045320>()); }
 void* RtDelDtor_NumberEditElement(void* self, unsigned flags) { return DeletingDtorCore(self, flags, Row<0x180046540>()); }
 void* RtDelDtor_NumberElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x18004ab80>()); }
 void* RtDelDtor_PageElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, Row<0x180047540>()); }
@@ -1734,14 +1728,6 @@ void* RtDelDtor_TextElement(void* self, unsigned flags)       { return DeletingD
 // from the branch: main had grown the table to 103 rows in the meantime and
 // a stale index dispatches the WRONG destructor with no diagnostic.
 // RtDelDtor_RibbonDescription is NOT here -- main wired it (index 58).
-// UI::LayoutDescription       ~LayoutDescription = 0x1800d3a10
-void* RtDelDtor_LayoutDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800431d0>());
-}
-// UI::ListDescription         ~ListDescription = 0x1800d4910
-void* RtDelDtor_ListDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180044ed0>());
-}
 // UI::NumberDescription       ~NumberDescription = 0x180118c00
 void* RtDelDtor_NumberDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18004a760>());
@@ -1919,8 +1905,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x1800642b0, (void*)&RtDelDtor_SpotLight);             // vtable batch 6
 
     // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12) --------------------
-    RegisterRuntimeAddr(0x180043570, (void*)&RtDelDtor_LayoutElement);
-    RegisterRuntimeAddr(0x180045320, (void*)&RtDelDtor_ListElement);
     RegisterRuntimeAddr(0x180046540, (void*)&RtDelDtor_NumberEditElement);
     RegisterRuntimeAddr(0x18004ab80, (void*)&RtDelDtor_NumberElement);
     RegisterRuntimeAddr(0x180047540, (void*)&RtDelDtor_PageElement);
@@ -1946,8 +1930,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180036600, (void*)&RtDelDtor_ImageElement);
     RegisterRuntimeAddr(0x180042bb0, (void*)&RtDelDtor_LabelElement);
     // ---- VTABLE BATCH 2 (the UI::*Description second half), rows 103..115 --
-    RegisterRuntimeAddr(0x1800431d0, (void*)&RtDelDtor_LayoutDescription);
-    RegisterRuntimeAddr(0x180044ed0, (void*)&RtDelDtor_ListDescription);
     RegisterRuntimeAddr(0x18004a760, (void*)&RtDelDtor_NumberDescription);
     RegisterRuntimeAddr(0x180046190, (void*)&RtDelDtor_NumberEditDescription);
     RegisterRuntimeAddr(0x1800471a0, (void*)&RtDelDtor_PageDescription);

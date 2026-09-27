@@ -228,13 +228,13 @@ UNIT_TEST(ui_c4_classes_are_abstract_single_base_no_virtual_dtor) {
     CHECK(B39IsConcreteShape<UI::CLS>());                                   \
     CHECK((std::is_base_of<UI::BASE, UI::CLS>::value));
     C4_CONCRETE(ContainerDescription, ElementDescription)
-    C4_SHAPE(LayoutDescription,    ElementDescription)
-    C4_SHAPE(ListDescription,      ElementDescription)
+    C4_CONCRETE(LayoutDescription, ElementDescription)
+    C4_CONCRETE(ListDescription,   ElementDescription)
     C4_SHAPE(ScrollDescription,    ElementDescription)
     C4_SHAPE(TableDescription,     ElementDescription)
     C4_CONCRETE(ContainerElement,  Element)
-    C4_SHAPE(LayoutElement,        Element)
-    C4_SHAPE(ListElement,          Element)
+    C4_CONCRETE(LayoutElement,     Element)
+    C4_CONCRETE(ListElement,       Element)
     C4_SHAPE(ScrollElement,        Element)
     C4_SHAPE(TableElement,         Element)
 #undef C4_SHAPE
@@ -249,6 +249,70 @@ UNIT_TEST(ui_c4_classes_are_abstract_single_base_no_virtual_dtor) {
 UNIT_TEST(b39_uib_c4_slot_order_by_pmf) {
     B39CheckDescriptionPmf<UI::ContainerDescription>();
     B39CheckElementPmf<UI::ContainerElement>();
+    B39CheckDescriptionPmf<UI::LayoutDescription>();
+    B39CheckElementPmf<UI::LayoutElement>();
+    B39CheckDescriptionPmf<UI::ListDescription>();
+    B39CheckElementPmf<UI::ListElement>();
+}
+
+UNIT_TEST(b39_uib_c4_layout_list_ctor_stores) {
+    FactoryScope scope;
+    // ??0LayoutDescription 0x1800d3a90 / ??0LayoutElement 0x1800d32e0: the
+    // array headers zero.
+    alignas(8) uint8_t ld[0x78];
+    std::memset(ld, 0xCD, sizeof ld);
+    auto* lds = ::new (static_cast<void*>(ld)) UI::LayoutDescription();
+    CHECK(lds->_entries._data == nullptr);
+    CHECK_EQ(lds->_entries._size, 0);
+    CHECK_EQ(lds->_entries._capacity, 0);
+    CHECK_EQ(lds->_id, -1);
+    lds->DeletingDtor(0);
+    alignas(8) uint8_t le[0xd0];
+    std::memset(le, 0xCD, sizeof le);
+    auto* les = ::new (static_cast<void*>(le)) UI::LayoutElement();
+    CHECK(les->_childRecords._data == nullptr);
+    CHECK_EQ(les->_childRecords._size, 0);
+    CHECK_EQ(les->_childRecords._capacity, 0);
+    les->DeletingDtor(0);
+
+    // ??0ListDescription 0x1800d49b0.
+    alignas(8) uint8_t d[0x90];
+    std::memset(d, 0xCD, sizeof d);
+    auto* lsd = ::new (static_cast<void*>(d)) UI::ListDescription();
+    CHECK(lsd->_partDescs[0] == nullptr);
+    CHECK(lsd->_partDescs[1] == nullptr);
+    CHECK(lsd->_spriteSheet == nullptr);
+    CHECK(lsd->_spriteName == nullptr);
+    CHECK_EQ(lsd->_hoverColor, 0xff808080u);
+    CHECK_EQ(lsd->_selectColor, 0xffffffffu);
+    lsd->DeletingDtor(0);
+    // ??0ListElement 0x1800d4570.
+    alignas(8) uint8_t e[0x100];
+    std::memset(e, 0xCD, sizeof e);
+    auto* lse = ::new (static_cast<void*>(e)) UI::ListElement();
+    CHECK(lse->_highlight.spriteSheet == nullptr);
+    CHECK_EQ(lse->_highlight.spriteIndex, -1);
+    CHECK_EQ(lse->_hoverColor, 0xff808080u);
+    CHECK_EQ(lse->_selectColor, 0xffffffffu);
+    CHECK_EQ(lse->_selectedIndex, -1);
+    CHECK_EQ(lse->_hoverIndex, -1);
+    CHECK(lse->_userData._data == nullptr);
+    CHECK_EQ(lse->_userData._size, 0);
+    CHECK(lse->_ribbon == nullptr);
+    CHECK(lse->_clip == nullptr);
+    lse->DeletingDtor(0);
+}
+
+UNIT_TEST(b39_uib_c4_layout_list_deletingdtor_arms) {
+    FactoryScope scope;
+    LayoutDProbe ldp;
+    B39CheckDeletingDtorArms<UI::LayoutDescription, 0x78>(VTableOf(&ldp));
+    LayoutEProbe lep;
+    B39CheckDeletingDtorArms<UI::LayoutElement, 0xd0>(VTableOf(&lep));
+    ListDProbe sdp;
+    B39CheckDeletingDtorArms<UI::ListDescription, 0x90>(VTableOf(&sdp));
+    ListEProbe sep;
+    B39CheckDeletingDtorArms<UI::ListElement, 0x100>(VTableOf(&sep));
 }
 
 UNIT_TEST(b39_uib_c4_container_ctor_stores) {
