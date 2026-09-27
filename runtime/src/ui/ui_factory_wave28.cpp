@@ -456,52 +456,6 @@ extern "C" void* RtUiFact_ListElement_CreateInPlaceObject(void* p) {
 }
 
 // --------------------------------------------------------------------------
-// UI::PageDescription   allocation 0x80, align 8
-//   ?CreateNewObject@PageDescription@UI@@SAPEAVBase@Object@@XZ     0x180046fd0 ord 2090
-//   ?CreateInPlaceObject@PageDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x180047050 ord 1953
-//   ??0PageDescription@UI@@QEAA@XZ                                 0x1800d54e0 ord 291
-// SHAPE C: the factory pair is a bare `alloc / null test / call the
-// exported ctor`. The whole body lives in ??0PageDescription@UI@@QEAA@XZ.
-// That ctor IS ported below, so this row does not merely move the wall.
-extern "C" void* RtUi_PageDescription_Ctor(void* self);
-void* Ctor_PageDescription(void* p) { return RtUi_PageDescription_Ctor(p); }
-
-extern "C" void* RtUiFact_PageDescription_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0x80, &Ctor_PageDescription);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_PageDescription_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_PageDescription);
-}
-
-// --------------------------------------------------------------------------
-// UI::PageElement   allocation 0xc8, align 8
-//   ?CreateNewObject@PageElement@UI@@SAPEAVBase@Object@@XZ         0x180047360 ord 2091
-//   ?CreateInPlaceObject@PageElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180047400 ord 1954
-//   ??0PageElement@UI@@QEAA@XZ                                     0x1800d5260 ord 293
-extern "C" void* RtUi_PageElement_Ctor(void* self);   // runtime/src/ui/pageelement.cpp
-// The inlined stores that used to live here were a second copy of
-// ??0PageElement@UI@@QEAA@XZ; the class file owns the body since vtable
-// batch 4 (2026-09-12) and this factory pair forwards to it.
-void* Ctor_PageElement(void* p) { return RtUi_PageElement_Ctor(p); }
-
-extern "C" void* RtUiFact_PageElement_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0xc8, &Ctor_PageElement);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_PageElement_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_PageElement);
-}
-
-// --------------------------------------------------------------------------
 // UI::ProgressDescription   allocation 0xb0, align 8
 //   ?CreateNewObject@ProgressDescription@UI@@SAPEAVBase@Object@@XZ 0x180077860 ord 2097
 //   ?CreateInPlaceObject@ProgressDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x1800778e0 ord 1960
@@ -548,52 +502,6 @@ extern "C" void* RtUiFact_ProgressElement_CreateInPlaceObject(void* p) {
     ++g_inplace;
     if (!p) { ++g_inplaceNull; return nullptr; }
     return FactoryInPlace(p, &Ctor_ProgressElement);
-}
-
-// --------------------------------------------------------------------------
-// UI::RadioDescription   allocation 0x80, align 8
-//   ?CreateNewObject@RadioDescription@UI@@SAPEAVBase@Object@@XZ    0x180047760 ord 2099
-//   ?CreateInPlaceObject@RadioDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x1800477e0 ord 1962
-//   ??0RadioDescription@UI@@QEAA@XZ                                0x1800d5b50 ord 331
-// SHAPE C: the factory pair is a bare `alloc / null test / call the
-// exported ctor`. The whole body lives in ??0RadioDescription@UI@@QEAA@XZ.
-// That ctor IS ported below, so this row does not merely move the wall.
-extern "C" void* RtUi_RadioDescription_Ctor(void* self);
-void* Ctor_RadioDescription(void* p) { return RtUi_RadioDescription_Ctor(p); }
-
-extern "C" void* RtUiFact_RadioDescription_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0x80, &Ctor_RadioDescription);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_RadioDescription_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_RadioDescription);
-}
-
-// --------------------------------------------------------------------------
-// UI::RadioElement   allocation 0xd8, align 8
-//   ?CreateNewObject@RadioElement@UI@@SAPEAVBase@Object@@XZ        0x180047af0 ord 2100
-//   ?CreateInPlaceObject@RadioElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180047ba0 ord 1963
-//   ??0RadioElement@UI@@QEAA@XZ                                    0x1800d5870 ord 333
-extern "C" void* RtUi_RadioElement_Ctor(void* self);   // runtime/src/ui/radioelement.cpp
-// The inlined stores that used to live here were a second copy of
-// ??0RadioElement@UI@@QEAA@XZ; the class file owns the body since vtable
-// batch 4 (2026-09-12) and this factory pair forwards to it.
-void* Ctor_RadioElement(void* p) { return RtUi_RadioElement_Ctor(p); }
-
-extern "C" void* RtUiFact_RadioElement_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0xd8, &Ctor_RadioElement);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_RadioElement_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_RadioElement);
 }
 
 // --------------------------------------------------------------------------
@@ -1078,20 +986,6 @@ int RtUiFactory2Register() {
                           (void*)&RtUiFact_ListElement_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180045100ull, (void*)&RtUiFact_ListElement_CreateInPlaceObject); ++n;
 
-    RegisterRuntimeExport("?CreateNewObject@PageDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_PageDescription_CreateNewObject);
-    RegisterRuntimeAddr(0x180046fd0ull, (void*)&RtUiFact_PageDescription_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@PageDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_PageDescription_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x180047050ull, (void*)&RtUiFact_PageDescription_CreateInPlaceObject); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@PageElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_PageElement_CreateNewObject);
-    RegisterRuntimeAddr(0x180047360ull, (void*)&RtUiFact_PageElement_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@PageElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_PageElement_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x180047400ull, (void*)&RtUiFact_PageElement_CreateInPlaceObject); ++n;
-
     RegisterRuntimeExport("?CreateNewObject@ProgressDescription@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_ProgressDescription_CreateNewObject);
     RegisterRuntimeAddr(0x180077860ull, (void*)&RtUiFact_ProgressDescription_CreateNewObject); ++n;
@@ -1105,20 +999,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@ProgressElement@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_ProgressElement_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180077eb0ull, (void*)&RtUiFact_ProgressElement_CreateInPlaceObject); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@RadioDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_RadioDescription_CreateNewObject);
-    RegisterRuntimeAddr(0x180047760ull, (void*)&RtUiFact_RadioDescription_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@RadioDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_RadioDescription_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x1800477e0ull, (void*)&RtUiFact_RadioDescription_CreateInPlaceObject); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@RadioElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_RadioElement_CreateNewObject);
-    RegisterRuntimeAddr(0x180047af0ull, (void*)&RtUiFact_RadioElement_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@RadioElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_RadioElement_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x180047ba0ull, (void*)&RtUiFact_RadioElement_CreateInPlaceObject); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@RibbonDescription@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_RibbonDescription_CreateNewObject);

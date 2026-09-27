@@ -847,28 +847,15 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x18004e810, 0x1800f61b0, 0x058, "Video::VertexProgram"),
     RT_DELDTOR(0x18004eb90, 0x1800f3a00, 0x058, "Video::PixelProgram"),
     RT_DELDTOR(0x18004b9d0, 0x1800f4c30, 0x080, "Video::RenderState"),
-    // 2026-09-12: slot 0 of ??_7GroupDescription@UI@@6B@ (0x180157190), the
-    // vtable the cutover boot stopped on. Both constants read from the shipped
-    // bytes of 0x180046af0, not from the class header:
-    //     0x180046b08  LEA R9,[0x180117c00]     ~GroupDescription
-    //     0x180046b0f  MOV EDX,0x78             sizeof
-    // The SCALAR arm calls ~GroupDescription out of line (0x180046b41) and then
-    // a CLASS-SPECIFIC operator delete, ??3GroupDescription@UI@@SAXPEAX@Z
-    // (0x1800466f0). That one was disassembled for this row and is the same
-    // `if (p) { Enter(cs); Free(_singleton, p); Leave(cs); }` as the other
-    // copies this file's banner enumerates, so DeletingDtorCore's single
-    // MemFree IS retail's body here too.
-    //
-    // NOT ADDED to kProbeSubjects, on the UI::ElementDescription row's test:
-    // ~GroupDescription releases a refcounted String at +0x60 and destroys an
-    // Array whose buffer came from the Runtime heap. A fabricated subject would
-    // decrement a refcount nothing incremented and free a garbage pointer.
-    RT_DELDTOR(0x180046af0, 0x180117c00, 0x078, "UI::GroupDescription"),
+    // (UI::GroupDescription's row -- 0x180046af0: LEA R9,[0x180117c00]
+    // ~GroupDescription, MOV EDX,0x78; a scalar arm whose class-specific
+    // ??3GroupDescription (0x1800466f0) is the same single MemFree -- was retired
+    // by ENDGAME B.3.9 UI-A: slot 0 is the class's own.)
     // 2026-09-12: slot 0 of ??_7RibbonDescription@UI@@6B@ (0x180156ed0), the
     // wall after GroupDescription. Read from 0x180044620's own bytes:
     //     0x180044638  LEA R9,[0x1800d5c90]     ~RibbonDescription
     //     0x18004463f  MOV EDX,0x80             sizeof
-    // Same two-arm shape as the GroupDescription row above; not a probe
+    // Same two-arm shape as the (retired) GroupDescription row; not a probe
     // subject, for the same reason.
     RT_DELDTOR(0x180044620, 0x1800d5c90, 0x080, "UI::RibbonDescription"),
     // (UI::ImageDescription / UI::AnimatedImageDescription's two rows were
@@ -1041,9 +1028,7 @@ static constexpr DelDtorSpec kSpecs[] = {
     // both rows.
     RT_DELDTOR(0x180043570, 0x1800d32a0, 0x0d0, "UI::LayoutElement"),
     RT_DELDTOR(0x180045320, 0x1800d4530, 0x100, "UI::ListElement"),
-    RT_DELDTOR(0x180047540, 0x1800d5220, 0x0c8, "UI::PageElement"),
     RT_DELDTOR(0x180078150, 0x180077ef0, 0x130, "UI::ProgressElement"),
-    RT_DELDTOR(0x180047d50, 0x1800d5820, 0x0d8, "UI::RadioElement"),
     RT_DELDTOR(0x180044ac0, 0x1800d5d70, 0x0d8, "UI::RibbonElement"),
     RT_DELDTOR(0x18003adc0, 0x18011a900, 0x178, "UI::ScrollElement"),
     RT_DELDTOR(0x18004a180, 0x180049ee0, 0x130, "UI::SliderElement"),
@@ -1121,7 +1106,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x18003a050, 0x1800ccb10, 0x0d8, "UI::ContainerElement"),
     RT_DELDTOR(0x18003c650, 0x1800cf320, 0x1c8, "UI::DocumentTextElement"),
     RT_DELDTOR(0x1800408b0, 0x1800d1840, 0x100, "UI::GraphElement"),
-    RT_DELDTOR(0x180046e10, 0x180117cc0, 0x0c0, "UI::GroupElement"),
     RT_DELDTOR(0x180042bb0, 0x1800d25f0, 0x130, "UI::LabelElement"),
     // 2026-09-12, VTABLE BATCH 2 (the UI::*Description second half), rows
     // 103..115 -- APPENDED AFTER every row main already had, and the entry
@@ -1141,9 +1125,7 @@ static constexpr DelDtorSpec kSpecs[] = {
     // the same test the UI::ElementDescription row applies.
     RT_DELDTOR(0x1800431d0, 0x1800d3a10, 0x078, "UI::LayoutDescription"),
     RT_DELDTOR(0x180044ed0, 0x1800d4910, 0x090, "UI::ListDescription"),
-    RT_DELDTOR(0x1800471a0, 0x1800d54b0, 0x080, "UI::PageDescription"),
     RT_DELDTOR(0x180077c80, 0x18011a080, 0x0b0, "UI::ProgressDescription"),
-    RT_DELDTOR(0x180047930, 0x1800d5b20, 0x080, "UI::RadioDescription"),
     RT_DELDTOR(0x18003a790, 0x18011a5d0, 0x0c8, "UI::ScrollDescription"),
     RT_DELDTOR(0x180049c60, 0x1800d7a00, 0x0b8, "UI::SliderDescription"),
     RT_DELDTOR(0x18004b050, 0x1800d8950, 0x088, "UI::SpinnerDescription"),
@@ -1501,9 +1483,6 @@ void* RtDelDtor_RenderState(void* self, unsigned flags) {
 // walked that afternoon. Their table rows landed with the class ports but the
 // wrapper + RegisterRuntimeAddr pair did not, so slot 0 of each minted vtable
 // stayed a trap; wired here by the coordinator when batch 9's merge exposed it.
-void* RtDelDtor_GroupDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180046af0>());
-}
 void* RtDelDtor_RibbonDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180044620>());
 }
@@ -1643,10 +1622,6 @@ void* RtDelDtor_DocumentTextElement(void* self, unsigned flags) {
 void* RtDelDtor_GraphElement(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x1800408b0>());
 }
-// UI::GroupElement  ~GroupElement = 0x180117cc0  (PORTED, runtime/src/ui/)
-void* RtDelDtor_GroupElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180046e10>());
-}
 // UI::LabelElement  ~LabelElement = 0x1800d25f0  (PORTED, runtime/src/ui/)
 void* RtDelDtor_LabelElement(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180042bb0>());
@@ -1656,9 +1631,7 @@ void* RtDelDtor_LabelElement(void* self, unsigned flags) {
 // All fourteen ~Class bodies are PORTED (runtime/src/ui/<class>element.cpp).
 void* RtDelDtor_LayoutElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x180043570>()); }
 void* RtDelDtor_ListElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, Row<0x180045320>()); }
-void* RtDelDtor_PageElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, Row<0x180047540>()); }
 void* RtDelDtor_ProgressElement(void* self, unsigned flags)   { return DeletingDtorCore(self, flags, Row<0x180078150>()); }
-void* RtDelDtor_RadioElement(void* self, unsigned flags)      { return DeletingDtorCore(self, flags, Row<0x180047d50>()); }
 void* RtDelDtor_RibbonElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x180044ac0>()); }
 void* RtDelDtor_ScrollElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x18003adc0>()); }
 void* RtDelDtor_SliderElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x18004a180>()); }
@@ -1681,17 +1654,9 @@ void* RtDelDtor_LayoutDescription(void* self, unsigned flags) {
 void* RtDelDtor_ListDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180044ed0>());
 }
-// UI::PageDescription         ~PageDescription = 0x1800d54b0
-void* RtDelDtor_PageDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800471a0>());
-}
 // UI::ProgressDescription     ~ProgressDescription = 0x18011a080
 void* RtDelDtor_ProgressDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180077c80>());
-}
-// UI::RadioDescription        ~RadioDescription = 0x1800d5b20
-void* RtDelDtor_RadioDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180047930>());
 }
 // UI::ScrollDescription       ~ScrollDescription = 0x18011a5d0
 void* RtDelDtor_ScrollDescription(void* self, unsigned flags) {
@@ -1807,7 +1772,6 @@ void RtObjectDeletingDtorPortInit() {
 
     // VTABLE BATCH 9
     // Rows 57-60, the UI::*Description four (wrappers above).
-    RegisterRuntimeAddr(0x180046af0, (void*)&RtDelDtor_GroupDescription);
     RegisterRuntimeAddr(0x180044620, (void*)&RtDelDtor_RibbonDescription);
     RegisterRuntimeAddr(0x180074a10, (void*)&RtDelDtor_ComboDialog);
     RegisterRuntimeAddr(0x18003b600, (void*)&RtDelDtor_DialogControllerConfig);
@@ -1847,9 +1811,7 @@ void RtObjectDeletingDtorPortInit() {
     // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12) --------------------
     RegisterRuntimeAddr(0x180043570, (void*)&RtDelDtor_LayoutElement);
     RegisterRuntimeAddr(0x180045320, (void*)&RtDelDtor_ListElement);
-    RegisterRuntimeAddr(0x180047540, (void*)&RtDelDtor_PageElement);
     RegisterRuntimeAddr(0x180078150, (void*)&RtDelDtor_ProgressElement);
-    RegisterRuntimeAddr(0x180047d50, (void*)&RtDelDtor_RadioElement);
     RegisterRuntimeAddr(0x180044ac0, (void*)&RtDelDtor_RibbonElement);
     RegisterRuntimeAddr(0x18003adc0, (void*)&RtDelDtor_ScrollElement);
     RegisterRuntimeAddr(0x18004a180, (void*)&RtDelDtor_SliderElement);
@@ -1862,14 +1824,11 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18003a050, (void*)&RtDelDtor_ContainerElement);
     RegisterRuntimeAddr(0x18003c650, (void*)&RtDelDtor_DocumentTextElement);
     RegisterRuntimeAddr(0x1800408b0, (void*)&RtDelDtor_GraphElement);
-    RegisterRuntimeAddr(0x180046e10, (void*)&RtDelDtor_GroupElement);
     RegisterRuntimeAddr(0x180042bb0, (void*)&RtDelDtor_LabelElement);
     // ---- VTABLE BATCH 2 (the UI::*Description second half), rows 103..115 --
     RegisterRuntimeAddr(0x1800431d0, (void*)&RtDelDtor_LayoutDescription);
     RegisterRuntimeAddr(0x180044ed0, (void*)&RtDelDtor_ListDescription);
-    RegisterRuntimeAddr(0x1800471a0, (void*)&RtDelDtor_PageDescription);
     RegisterRuntimeAddr(0x180077c80, (void*)&RtDelDtor_ProgressDescription);
-    RegisterRuntimeAddr(0x180047930, (void*)&RtDelDtor_RadioDescription);
     RegisterRuntimeAddr(0x18003a790, (void*)&RtDelDtor_ScrollDescription);
     RegisterRuntimeAddr(0x180049c60, (void*)&RtDelDtor_SliderDescription);
     RegisterRuntimeAddr(0x18004b050, (void*)&RtDelDtor_SpinnerDescription);

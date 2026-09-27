@@ -8,16 +8,16 @@
 //
 //   slot  method                retail       where
 //   ----  --------------------  -----------  ---------------------------------
-//    0    vector deleting dtor  0x180046e10  deleting_dtor.cpp row
+//    0    vector deleting dtor  0x180046e10  GroupElement.h (the class's own)
 //    1    TypeName              0x180046bb0  here
 //    2    Type                  0x180046b90  here
 //    4    ComputeSize           0x180117f00  here
 //    5    ComputeLayout         0x180118050  here
 //    6    Draw                  0x1801181c0  here
 //
-// plus ??0GroupElement@UI@@QEAA@XZ         0x180117c80
-//      ??0GroupElement@UI@@QEAA@AEBV01@@Z  0x180046d70
-//      ??1GroupElement@UI@@UEAA@XZ         0x180117cc0
+// plus ??1GroupElement@UI@@UEAA@XZ 0x180117cc0 and the factory pair (ENDGAME
+// B.3.9 UI-A: the real ctor ??0 0x180117c80 is in the header; the copy-ctor
+// door is retired).
 //
 // Slots 4/5/6 are ALSO PageElement's and RadioElement's — both repeat these
 // three addresses in their own tables. Registered once, here; in C++ the two
@@ -29,8 +29,11 @@
 // ENDGAME B.3.6 block C2: every slot body is a MEMBER of `UI::GroupElement`;
 // the registered doors are one-line QUALIFIED delegations. The raw slot reads
 // on the border and the children (`VSlot<…>(p, kSlot…)`) are VIRTUAL member
-// calls now — they must dispatch, since each child is its own class. The three
-// ctor/dtor doors stay doors (B4b-2).
+// calls now — they must dispatch, since each child is its own class.
+//
+// ENDGAME B.3.9 block UI-A: the class is CONCRETE; the slot doors (4/5/6 were
+// also Page's and Radio's) and the three ctor/dtor doors, read only by the
+// retired minted tables and RT_DELDTOR rows, are gone.
 // ============================================================================
 #include "element_common.h"
 #include "../../types/ui/GroupElement.h"
@@ -46,19 +49,14 @@ const uint8_t* GroupElementTypeInfoAtomic() {
         g_groupElementTypeInfo, "?_typeInfo@GroupElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
 
-// Door-only.
-void* VtGroupElement() { return RT_DATA_SLOT(void*, "??_7GroupElement@UI@@6B@"); }
-
-using ElementCtorFn     = void* (*)(void* self);
-using ElementCopyCtorFn = void* (*)(void* self, const void* other);
-using ElementDtorFn     = void  (*)(void* self);
-
 }  // namespace
 
 namespace UI {
 
 // ---- slots 1/2: the class's BaseTypeInfo, first dword and the name at +8 ---
-uint32_t GroupElement::Type() const {                           // 0x180046b90
+uint32_t GroupElement::Type() const { return TypeId(); }       // 0x180046b90
+// ?TypeId@GroupElement@UI@@SAIXZ 0x180046ba0 — the record's first dword.
+uint32_t GroupElement::TypeId() {
     return rtuielem::TypeIdOf(GroupElementTypeInfoAtomic());
 }
 // The key function: GCC emits `vtable for UI::GroupElement` here.
@@ -169,81 +167,39 @@ void GroupElement::Draw(SpriteContext& context, uint8_t alpha) const {
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — each a one-line QUALIFIED delegation.
+// ??1GroupElement@UI@@UEAA@XZ   0x180117cc0 -- restamp, then ~Element.
+// ENDGAME B.3.9 UI-A: EMPTY; the compiler restamps and chains ~Element.
 // ============================================================================
-extern "C" uint32_t RtUi_GroupElement_Type(const void* self) {
-    return reinterpret_cast<const UI::GroupElement*>(self)->UI::GroupElement::Type();       // B.3.6 bridge
+namespace UI {
+GroupElement::~GroupElement() {}
+}  // namespace UI
+
+namespace UI {
+// ?CreateNewObject@GroupElement@UI@@SAPEAVBase@Object@@XZ  0x180046ca0
+// The factory-interpreter row this replaces: MemAlloc(0xc0, 8), retail's
+// null branch, then ??0Element and the stamp.
+Object::Base* GroupElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(GroupElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) GroupElement();
 }
-extern "C" const char* RtUi_GroupElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::GroupElement*>(self)->UI::GroupElement::TypeName();   // B.3.6 bridge
+// ?CreateInPlaceObject@GroupElement@UI@@SAPEAVBase@Object@@PEAX@Z  0x180046d30
+Object::Base* GroupElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) GroupElement();
 }
-extern "C" void RtUi_GroupElement_ComputeSize(void* selfv) {
-    reinterpret_cast<UI::GroupElement*>(selfv)->UI::GroupElement::ComputeSize();           // B.3.6 bridge
-}
-extern "C" void RtUi_GroupElement_ComputeLayout(void* selfv, int x, int y, int w, int h) {
-    reinterpret_cast<UI::GroupElement*>(selfv)                                             // B.3.6 bridge
-        ->UI::GroupElement::ComputeLayout(x, y, w, h);
-}
-extern "C" void RtUi_GroupElement_Draw(const void* selfv, void* ctx, uint8_t alpha) {
-    reinterpret_cast<const UI::GroupElement*>(selfv)                                       // B.3.6 bridge
-        ->UI::GroupElement::Draw(*static_cast<UI::SpriteContext*>(ctx), alpha);
-}
+}  // namespace UI
 
 // ============================================================================
-// Constructors / destructor — DOORS (B4b-2): the base call plus one stamp.
-// ============================================================================
-extern "C" void* RtUi_GroupElement_Ctor(void* selfv) {
-    RtAddr<ElementCtorFn>(0x180115e50ull)(selfv);
-    P(selfv, 0x00) = VtGroupElement();
-    return selfv;
-}
-
-extern "C" void* RtUi_GroupElement_CopyCtor(void* selfv, const void* otherv) {
-    RtAddr<ElementCopyCtorFn>(0x1800358c0ull)(selfv, otherv);
-    P(selfv, 0x00) = VtGroupElement();
-    return selfv;
-}
-
-extern "C" void RtUi_GroupElement_Dtor(void* selfv) {
-    P(selfv, 0x00) = VtGroupElement();
-    RtAddr<ElementDtorFn>(0x1801161a0ull)(selfv);
-}
-
-// ============================================================================
-// Registration
+// Registration: the factory pair only (B39_RULES D2).
 // ============================================================================
 int RtUiGroupElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?TypeName@GroupElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_GroupElement_TypeName);      ++n;
-    RegisterRuntimeAddr(0x180046bb0ull, (void*)&RtUi_GroupElement_TypeName);
-
-    RegisterRuntimeExport("?Type@GroupElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_GroupElement_Type);          ++n;
-    RegisterRuntimeAddr(0x180046b90ull, (void*)&RtUi_GroupElement_Type);
-
-    RegisterRuntimeExport("?ComputeSize@GroupElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_GroupElement_ComputeSize);   ++n;
-    RegisterRuntimeAddr(0x180117f00ull, (void*)&RtUi_GroupElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@GroupElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_GroupElement_ComputeLayout); ++n;
-    RegisterRuntimeAddr(0x180118050ull, (void*)&RtUi_GroupElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@GroupElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_GroupElement_Draw);          ++n;
-    RegisterRuntimeAddr(0x1801181c0ull, (void*)&RtUi_GroupElement_Draw);
-
-    RegisterRuntimeExport("??0GroupElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_GroupElement_Ctor);          ++n;
-    RegisterRuntimeAddr(0x180117c80ull, (void*)&RtUi_GroupElement_Ctor);
-
-    RegisterRuntimeExport("??0GroupElement@UI@@QEAA@AEBV01@@Z",
-                          (void*)&RtUi_GroupElement_CopyCtor);      ++n;
-    RegisterRuntimeAddr(0x180046d70ull, (void*)&RtUi_GroupElement_CopyCtor);
-
-    RegisterRuntimeExport("??1GroupElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_GroupElement_Dtor);          ++n;
-    RegisterRuntimeAddr(0x180117cc0ull, (void*)&RtUi_GroupElement_Dtor);
+    RegisterRuntimeExport("?CreateNewObject@GroupElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::GroupElement::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x180046ca0ull, (void*)&UI::GroupElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@GroupElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::GroupElement::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x180046d30ull, (void*)&UI::GroupElement::CreateInPlaceObject);
     return n;
 }

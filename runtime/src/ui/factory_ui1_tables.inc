@@ -222,30 +222,6 @@ const Store kGraphElement[] = {
     { 0x0f0, 8, SK_IMM, 0x0ull, nullptr, 0x1800d18ff },
     { 0x0f8, 8, SK_IMM, 0x0ull, nullptr, 0x1800d1906 },
 };
-const Store kGroupDescription[] = {
-    { 0x000, 8, SK_VTABLE, 0, "??_7Base@Object@@6B@", 0x1800467b3 },
-    { 0x000, 8, SK_VTABLE, 0, "??_7External@Object@@6B@", 0x1800467bd },
-    { 0x008, 8, SK_IMM, 0x0ull, nullptr, 0x1800467cb },
-    { 0x010, 8, SK_IMM, 0x0ull, nullptr, 0x1800467ce },
-    { 0x018, 8, SK_IMM, 0x0ull, nullptr, 0x1800467d2 },
-    { 0x000, 8, SK_VTABLE, 0, "??_7ElementDescription@UI@@6B@", 0x1800467dd },
-    { 0x020, 8, SK_IMM, 0x0ull, nullptr, 0x1800467e0 },
-    { 0x028, 8, SK_IMM, 0x0ull, nullptr, 0x1800467e4 },
-    { 0x030, 8, SK_IMM, 0x0ull, nullptr, 0x1800467e8 },
-    { 0x038, 4, SK_IMM, 0x0ull, nullptr, 0x1800467ec },
-    { 0x03c, 4, SK_IMM, 0xffffffffull, nullptr, 0x1800467ef },
-    { 0x040, 8, SK_IMM, 0x3ull, nullptr, 0x1800467f6 },
-    { 0x048, 8, SK_IMM, 0x0ull, nullptr, 0x1800467fe },
-    { 0x050, 8, SK_IMM, 0x0ull, nullptr, 0x180046802 },
-    { 0x058, 8, SK_IMM, 0x0ull, nullptr, 0x180046806 },
-    { 0x060, 8, SK_IMM, 0x0ull, nullptr, 0x18004680a },
-    { 0x000, 8, SK_VTABLE, 0, "??_7GroupDescription@UI@@6B@", 0x180046815 },
-    { 0x068, 8, SK_IMM, 0x0ull, nullptr, 0x180046818 },
-    { 0x070, 8, SK_IMM, 0x0ull, nullptr, 0x18004681c },
-};
-const Store kGroupElement[] = {
-    { 0x000, 8, SK_VTABLE, 0, "??_7GroupElement@UI@@6B@", 0x180046d0e },
-};
 
 const Spec kSpecs[] = {
     { "CharacterSet", 0x28ull, 8,
@@ -338,17 +314,5 @@ const Spec kSpecs[] = {
       "?CreateNewObject@GraphElement@UI@@SAPEAVBase@Object@@XZ", 0x180040550ull,
       "?CreateInPlaceObject@GraphElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x1800405d0ull,
       "??0GraphElement@UI@@QEAA@XZ", 0x1800d1880ull },
-    { "GroupDescription", 0x78ull, 8,
-      nullptr, kGroupDescription,
-      (uint16_t)(sizeof(kGroupDescription)/sizeof(Store)),
-      "?CreateNewObject@GroupDescription@UI@@SAPEAVBase@Object@@XZ", 0x180046750ull,
-      "?CreateInPlaceObject@GroupDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180046840ull,
-      nullptr, 0ull },
-    { "GroupElement", 0xc0ull, 8,
-      "??0Element@UI@@QEAA@XZ", kGroupElement,
-      (uint16_t)(sizeof(kGroupElement)/sizeof(Store)),
-      "?CreateNewObject@GroupElement@UI@@SAPEAVBase@Object@@XZ", 0x180046ca0ull,
-      "?CreateInPlaceObject@GroupElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180046d30ull,
-      nullptr, 0ull },
 };
 // END GENERATED SECTION
