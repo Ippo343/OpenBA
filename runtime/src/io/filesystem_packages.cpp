@@ -363,7 +363,7 @@ struct FoundArray {
 // `MOV RCX,qword ptr [0x1801fc6a8]` at 0x1800abaef even though `this` is in
 // RDI and is almost certainly the same object. Reproduced literally.
 FileSystem** FileSystemSingletonSlot() {
-    return RT_DATA_SLOT(FileSystem**, "?_singleton@FileSystem@IO@@0PEAV12@EA");
+    return reinterpret_cast<FileSystem**>(&::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
 }
 
 // ---- the array-growth idiom, inlined TWICE by retail ----------------------

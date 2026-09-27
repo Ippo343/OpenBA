@@ -80,6 +80,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Persistence.h"
+#include "../../types/io/FileSystem.h"   // ENDGAME B.3.9 IO: the class static
 #include "../../types/system/String.h"
 #include "../system/pod_bridge.h"
 
@@ -96,7 +97,7 @@ typedef String* (*GetSaveDirFn)(void* self, String* ret);
 // Written by `??0FileSystem@IO@@QEAA@XZ`, which Wave 9 lane X ported; read here
 // through the PORT-AWARE door so it follows lane C2's mint at cutover.
 void** FileSystemSingletonSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@FileSystem@IO@@0PEAV12@EA");
+    return reinterpret_cast<void**>(&::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
 }
 
 }  // namespace

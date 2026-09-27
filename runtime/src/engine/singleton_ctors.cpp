@@ -160,7 +160,7 @@ void** SlotModification()    { return RT_DATA_SLOT(void**, "?_singleton@Modifica
 void** SlotFactory()         { return RT_DATA_SLOT(void**, "?_singleton@Factory@Object@@0PEAV12@EA"); }
 void** SlotExternalFactory() { return RT_DATA_SLOT(void**, "?_singleton@ExternalFactory@Object@@0PEAV12@EA"); }
 void** SlotInternalFactory() { return RT_DATA_SLOT(void**, "?_singleton@InternalFactory@Object@@0PEAV12@EA"); }
-void** SlotFileSystem()      { return RT_DATA_SLOT(void**, "?_singleton@FileSystem@IO@@0PEAV12@EA"); }
+void** SlotFileSystem()      { return reinterpret_cast<void**>(&::IO::FileSystem::_singleton); }   // B.3.9 IO: class static
 void** SlotPersistence()     { return RT_DATA_SLOT(void**, "?_singleton@Persistence@IO@@0PEAV12@EA"); }
 void** SlotVideoDevice()     { return reinterpret_cast<void**>(&::Video::Device::_singleton); }
 void** SlotVideoConfig()     { return reinterpret_cast<void**>(&::Video::Configuration::_singleton); }

@@ -100,7 +100,7 @@ using CloseFileFn   = void (*)(void*, FileInfo*);
 using CtorFn        = void* (*)(void*);
 
 void* FileSystemSingleton() {
-    return *RT_DATA_SLOT(void**, "?_singleton@FileSystem@IO@@0PEAV12@EA");
+    return ::IO::FileSystem::_singleton;   // ENDGAME B.3.9 IO (D7): the class static.
 }
 
 }  // namespace

@@ -212,9 +212,7 @@ namespace {
 // mangling means PRIVATE, not unexported
 // (`reference_aeaa_is_private_not_unexported.md`).
 FileSystem* Fs() {
-    FileSystem** slot = RT_DATA_SLOT(FileSystem**,
-                                     "?_singleton@FileSystem@IO@@0PEAV12@EA");
-    return slot ? *slot : nullptr;
+    return reinterpret_cast<FileSystem*>(::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
 }
 
 

@@ -273,7 +273,7 @@ constexpr size_t kOutCap        = 0x800;    // = 0x860 - 0x60
 // `?_singleton@FileSystem@IO@@0PEAV12@EA`  (0x1801fc6a8) — the global retail
 // loads into RSI at 0x1800b46e8 and RELOADS at 0x1800b478b.
 FileSystem** FileSystemSingletonCell() {
-    return RT_DATA_SLOT(FileSystem**, "?_singleton@FileSystem@IO@@0PEAV12@EA");
+    return reinterpret_cast<FileSystem**>(&::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
 }
 
 // `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` / `?MemFree@`. Retail inlines

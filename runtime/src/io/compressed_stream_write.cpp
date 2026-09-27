@@ -813,8 +813,7 @@ void CompressedFileStream::Close() {
 
     RtIO::FileInfo* const fileInfo = &_file._file;       // 1800a94aa  (== this+0x88)
     if (fileInfo->handle != -1) {                        // 1800a94b1/b4
-        void* const fs = *RT_DATA_SLOT(void**,
-            "?_singleton@FileSystem@IO@@0PEAV12@EA");               // 1800a94b6
+        void* const fs = ::IO::FileSystem::_singleton;             // 1800a94b6  // ENDGAME B.3.9 IO (D7): the class static.
         RT_EXPORT_ONCE(RtIo::CloseFileFn,
             "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z")(fs, fileInfo);  // 1800a94c2
         return;

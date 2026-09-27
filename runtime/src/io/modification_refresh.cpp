@@ -917,7 +917,7 @@ void Modification::RefreshList() {
     // The two singletons retail loads at 0x1800af648 / 0x1800af64f. Read through
     // the exported data slots rather than the raw addresses so a standalone run
     // sees the objects Engine::Startup actually constructed.
-    void** const fsSlot = RT_DATA_SLOT(void**, "?_singleton@FileSystem@IO@@0PEAV12@EA");
+    void** const fsSlot = reinterpret_cast<void**>(&::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
     void** const psSlot = RT_DATA_SLOT(void**, "?_singleton@Persistence@IO@@0PEAV12@EA");
     void* const fs   = fsSlot ? *fsSlot : nullptr;
     void* const pers = psSlot ? *psSlot : nullptr;

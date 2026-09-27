@@ -178,9 +178,7 @@ static_assert(offsetof(BlockDescArray, size) == 0x08, "Array::_size @ +0x08");
 typedef uint32_t (*CrcComputeFn)(const void*, int, uint32_t);       // 0x1800c5490
 
 RtIO::FileSystem* Fs() {
-    RtIO::FileSystem** slot = RT_DATA_SLOT(RtIO::FileSystem**,
-                                           "?_singleton@FileSystem@IO@@0PEAV12@EA");
-    return slot ? *slot : nullptr;
+    return reinterpret_cast<RtIO::FileSystem*>(::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
 }
 
 // ---- CRC-32, reflected table (polynomial 0xEDB88320) ------------------------
