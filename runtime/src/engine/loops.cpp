@@ -106,6 +106,7 @@
 #include "../../types/application/Application.h"  // ENDGAME B.3.7: SleepThread
 #include "../../types/ui/DialogInstance.h" // ENDGAME B.3.7: slot 4 OnOpened
 #include "../../types/object/External.h"
+#include "../../types/io/Modification.h"    // ENDGAME B.3.9 SS1: Modification::_singleton
 #include "../../types/system/Value.h"
 // WAVE 27 lane LOOPS: the three Draw slots and MainLoop::Draw reach into the
 // render context (Clear, the shader-time constants, the viewport, _frameIndex),
@@ -276,20 +277,19 @@ ModArrayCopyFn ModArrayCopy() {
 // freeze a pre-init answer (rt_resolve_cache.cpp §6). All three names are Wave
 // 15 rows. (`DataExport` went with its last users, the four `??_7` vtable reads
 // of the retired loop ctor / dtor doors, ENDGAME B.3.9 ENG W2.)
-using ExternalFactorySlot = RtObject::ExternalFactory**;
 using MainLoopSlot        = Engine::MainLoop**;
+// ENDGAME B.3.9 SS1 (B39_RULES D7): `?_singleton@ExternalFactory@Object@@` and
+// `?_singleton@Modification@IO@@` are class statics now (redirect in their
+// namespace's *PortInit) -- read fresh, no lazy RT_DATA_SLOT cache.
 RtObject::ExternalFactory* Factory() {
-    ExternalFactorySlot p = RT_DATA_SLOT(ExternalFactorySlot,
-        "?_singleton@ExternalFactory@Object@@0PEAV12@EA");
-    return p ? *p : nullptr;
+    return reinterpret_cast<RtObject::ExternalFactory*>(::Object::ExternalFactory::_singleton);
 }
 // IO::Modification::_singleton. Note the `2PEAV12@EA` spelling — a PUBLIC
 // static, where every neighbouring singleton is `0PEAV12@EA`; the other
 // spelling is a phantom that resolves NULL in silence
 // (reference_resolveexport_phantom_names.md).
 uint8_t* ModificationSingleton() {
-    uint8_t** p = RT_DATA_SLOT(uint8_t**, "?_singleton@Modification@IO@@2PEAV12@EA");
-    return p ? *p : nullptr;
+    return reinterpret_cast<uint8_t*>(::IO::Modification::_singleton);
 }
 // Engine::MainLoop::_singleton — the DLL data symbol holding a MainLoop*.
 //     IsRunning:          MOV RAX,[0x1801fe750]; CMP RCX,[RAX+0x20]
@@ -1079,24 +1079,18 @@ void Engine::DialogLoopT::Draw(float /*interpolation*/) {
 // below and WAVE8_LANE_A.md §3. This body reaches it through ResolveExport, so
 // it gets the DLL's implementation today and will pick up a port the moment one
 // is registered, with no edit here.
-namespace {
-std::atomic<void*> g_factorySingletonSlot{nullptr};
-}  // namespace
-
 void Engine::Loader::Run() {
     // LOADER THREAD. ENDGAME B.3.7 (RULE B7-7.1): the two singleton reads were
     // uncached ResolveExport calls and `LoadResources` a function-local `static`
-    // export cache; the slots are namespace-scope atomics now and LoadResources
-    // is a direct member call. The ORDER of the calls below is unchanged
-    // (B7-7.4: the device-lost / loader race is the user's decision, and this
-    // conversion neither moves nor adds a call in the bracket).
-    void** engineSlot = static_cast<void**>(static_cast<void*>(&::Engine::Engine::_singleton));
-    void** factorySlot = static_cast<void**>(rtengine::AtomicExport(
-        g_factorySingletonSlot, "?_singleton@ExternalFactory@Object@@0PEAV12@EA"));
-    if (!engineSlot || !factorySlot) return;
-
-    ::Engine::Engine* engine = static_cast< ::Engine::Engine*>(*engineSlot);
-    uint8_t* factory = reinterpret_cast<uint8_t*>(*factorySlot);
+    // export cache; `LoadResources` is a direct member call. ENDGAME B.3.9 SS1
+    // (B39_RULES D7): `?_singleton@ExternalFactory@Object@@` is the class
+    // static too now, so the AtomicExport cache and the door-existence guard
+    // (both slots are addresses of statics -- never null) are gone; the ORDER
+    // of the reads below is unchanged (B7-7.4: the device-lost / loader race
+    // is the user's decision, and this conversion neither moves nor adds a
+    // call in the bracket).
+    ::Engine::Engine* engine = ::Engine::Engine::_singleton;
+    uint8_t* factory = reinterpret_cast<uint8_t*>(::Object::ExternalFactory::_singleton);
 
     // `mov 0x6c0(%rsi),%rax ; mov 0x100(%rax),%rcx` — two plain loads, no null
     // test in retail. Left unguarded: retail relies on both being live for the

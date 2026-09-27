@@ -66,6 +66,10 @@
 #include "../../types/engine/UpdateLoop.h"
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
+#include "../../types/system/Configuration.h"   // ENDGAME B.3.9 SS1: Configuration::_singleton
+#include "../../types/object/External.h"        // ENDGAME B.3.9 SS1: ExternalFactory::_singleton
+#include "../../types/io/FileSystem.h"          // ENDGAME B.3.9 SS1: FileSystem::_singleton
+#include "../../types/io/Modification.h"        // ENDGAME B.3.9 SS1: Modification::_singleton
 #include "../system/string.h"
 #include "../system/widestring.h"
 
@@ -100,23 +104,25 @@ typedef bool        (*ExistsInPackfileFn)(const void* fs,
 typedef System::String* (*GetCommandLineStringFn)(const void*, System::String*,
                                                   const System::String*);
 
-// ---- the exported DATA this body reads, all through the port-aware door ----
+// ---- the exported DATA this body reads ----
+// ENDGAME B.3.9 SS1 (B39_RULES D7): all four cells are class statics with a
+// redirect in their namespace's *PortInit; the RT_DATA_SLOT lazy-cache doors
+// they used to read through are gone (B9-10 — this body runs on the LOADER
+// THREAD, exactly the surface the rule calls out).
 void* ExternalFactorySingleton() {
-    void** s = RT_DATA_SLOT(void**, "?_singleton@ExternalFactory@Object@@0PEAV12@EA");
-    return s ? *s : nullptr;
+    return ::Object::ExternalFactory::_singleton;
 }
 uint8_t* ModificationSingleton() {
-    uint8_t** s = RT_DATA_SLOT(uint8_t**, "?_singleton@Modification@IO@@2PEAV12@EA");
-    return s ? *s : nullptr;
+    return reinterpret_cast<uint8_t*>(::IO::Modification::_singleton);
 }
 uint8_t* FileSystemSingleton() {
-    uint8_t** s = RT_DATA_SLOT(uint8_t**, "?_singleton@FileSystem@IO@@0PEAV12@EA");
-    return s ? *s : nullptr;
+    return reinterpret_cast<uint8_t*>(::IO::FileSystem::_singleton);
 }
-// THE ROW THIS FILE IS ABOUT. Through RT_DATA_SLOT on purpose.
+// THE ROW THIS FILE IS ABOUT: `?_singleton@Configuration@System@@` is now the
+// class static, read fresh every call (no cache) — this is the "one of the two
+// remaining readers" the file banner discusses; the other is Configuration::Get.
 void* ConfigurationSingleton() {
-    void** s = RT_DATA_SLOT(void**, "?_singleton@Configuration@System@@0PEAV12@EA");
-    return s ? *s : nullptr;
+    return ::System::Configuration::_singleton;
 }
 // `MOV EDX,dword ptr [0x1801f9be0]` — BaseTypeInfo's FIRST dword is the typeId.
 // Retail reads +0x00 and nothing else, which is the whole content of
