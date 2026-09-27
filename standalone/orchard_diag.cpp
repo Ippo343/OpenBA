@@ -57,6 +57,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "Component/OrchardComponent.h"
+#include "Component/StateMachineComponent.h"
+#include "Component/StorageComponent.h"
+#include "Component/WorkPlaceComponent.h"
 
 namespace {
 
@@ -116,7 +120,7 @@ uint64_t s_harvestExecuted    = 0; // Slot4 successfully created a harvest actio
 //
 // This is a HARNESS probe, not a port: it reads published fields and writes nothing.
 void DumpTownStorage(int frameNum, uintptr_t arr, int n) {
-    const uint32_t tidStorage = ::Object::GetTypeIdByName("StorageComponent");
+    const uint32_t tidStorage = StorageComponent::TypeId();
     if (!tidStorage || !arr || n <= 0) {
         fprintf(stderr, "[OrchardDiag] frame=%d: town storage — cannot scan "
                         "(tidStorageComponent=%u entities=%d)\n", frameNum, tidStorage, n);
@@ -140,9 +144,7 @@ void DumpTownStorage(int frameNum, uintptr_t arr, int n) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
             void* comp = *cs;
             if (!comp) continue;
-            void** vt = *reinterpret_cast<void***>(comp);
-            if (!vt || !vt[2]) continue;
-            if (reinterpret_cast<uint32_t(*)(void*)>(vt[2])(comp) != tidStorage) continue;
+            if (reinterpret_cast<Object::Base*>(comp)->Type() != tidStorage) continue;   // B.3.8 bridge
             ++storages;
 
             uintptr_t st = reinterpret_cast<uintptr_t>(comp);
@@ -183,9 +185,9 @@ void DumpOrchards(int frameNum) {
     }
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(entityList + 0x08);   // masterArray.data
     int       n   = *reinterpret_cast<int32_t*>(entityList + 0x10);     // masterArray.count
-    const uint32_t tidOrchardComp = ::Object::GetTypeIdByName("OrchardComponent");
-    const uint32_t tidWorkPlaceComp = ::Object::GetTypeIdByName("WorkPlaceComponent");
-    const uint32_t tidStateMachineComp = ::Object::GetTypeIdByName("StateMachineComponent");
+    const uint32_t tidOrchardComp = OrchardComponent::TypeId();
+    const uint32_t tidWorkPlaceComp = WorkPlaceComponent::TypeId();
+    const uint32_t tidStateMachineComp = StateMachineComponent::TypeId();
     if (!arr || n <= 0 || !tidOrchardComp) {
         fprintf(stderr, "[OrchardDiag] frame=%d: cannot scan (arr=%p n=%d tidOrchardComponent=%u) — "
                         "no entities or type-id unresolved\n", frameNum, reinterpret_cast<void*>(arr), n,
@@ -206,9 +208,7 @@ void DumpOrchards(int frameNum) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
             void* comp = *cs;
             if (!comp) continue;
-            void** vt = *reinterpret_cast<void***>(comp);
-            typedef uint32_t (*GetTypeId_t)(void*);
-            if (vt && vt[2] && reinterpret_cast<GetTypeId_t>(vt[2])(comp) == tidOrchardComp) {
+            if (reinterpret_cast<Object::Base*>(comp)->Type() == tidOrchardComp) {   // B.3.8 bridge
                 orchComp = comp;
                 break;
             }
@@ -254,9 +254,7 @@ void DumpOrchards(int frameNum) {
                 void** cs = reinterpret_cast<void**>(wA + static_cast<uintptr_t>(c) * 8);
                 void* wc = *cs;
                 if (!wc) continue;
-                void** vt = *reinterpret_cast<void***>(wc);
-                typedef uint32_t (*GetTypeId_t)(void*);
-                uint32_t wtid = (vt && vt[2]) ? reinterpret_cast<GetTypeId_t>(vt[2])(wc) : 0;
+                uint32_t wtid = reinterpret_cast<Object::Base*>(wc)->Type();   // B.3.8 bridge
                 if (!wpc && tidWorkPlaceComp && wtid == tidWorkPlaceComp) wpc = wc;
                 if (!smc && tidStateMachineComp && wtid == tidStateMachineComp) smc = wc;
                 if (wpc && smc) break;

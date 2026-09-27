@@ -33,20 +33,16 @@
 // already filled: 0x140151418 Transform copy-ctor, 0x140151470 Transform::operator*,
 // 0x140151478 Picking::PickingMesh::Vertices.
 //
-// The live vtable slots are gated on BANISHED_LIVE_QUARRY (opt-in until a positive run);
-// these RegisterExeAddr entries are unconditional, matching every other wave —
-// registering an address only makes it resolvable, it does not make it run.
+// QuarryComponent is a real class (ENDGAME B.3.8): slots 12 (0x1400550f0) and 15
+// (0x140054b80) are compiler-vtable virtuals, and nothing read their addresses back,
+// so their rows are gone. The ApplyDepth helper keeps its door.
 
 #include "resolve.h"
 #include "address_registry.h"
 #include <cstdint>
 
 extern "C" void QuarryComponent_ApplyDepth(void* self, float depth);   // 0x1400549c0
-extern "C" void QuarryComponent_Slot12(void* self, int msgId);         // 0x1400550f0
-extern "C" void QuarryComponent_Slot15(void* self);                    // 0x140054b80
 
 void RegisterQuarryLive() {
     RegisterExeAddr(0x1400549c0, reinterpret_cast<uintptr_t>(&QuarryComponent_ApplyDepth));
-    RegisterExeAddr(0x1400550f0, reinterpret_cast<uintptr_t>(&QuarryComponent_Slot12));
-    RegisterExeAddr(0x140054b80, reinterpret_cast<uintptr_t>(&QuarryComponent_Slot15));
 }

@@ -43,6 +43,8 @@
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
 #include <cstdio>
+#include "Component/OrchardComponent.h"
+#include "Component/OrchardDescription.h"
 
 static uint32_t g_tid_OrchardComponent = 0;   // 0x1401c46b0
 // OrchardDescription (DAT_1401c46e8, writer OrchardDescription_Register 0x14014b440). Also
@@ -53,8 +55,8 @@ static uint32_t g_tid_OrchardComponent = 0;   // 0x1401c46b0
 static uint32_t g_tid_OrchardDescription = 0; // 0x1401c46e8
 
 extern "C" void FillTypeIdGlobals_orchard() {
-    g_tid_OrchardComponent = ::Object::GetTypeIdByName("OrchardComponent");
-    g_tid_OrchardDescription = ::Object::GetTypeIdByName("OrchardDescription");
+    g_tid_OrchardComponent = OrchardComponent::TypeId();
+    g_tid_OrchardDescription = OrchardDescription::TypeId();
     if (g_tid_OrchardDescription == 0)
         std::fprintf(stderr, "[OrchardTypeId] ERROR: GetTypeIdByName(\"OrchardDescription\") "
                              "returned 0 — slot 0x1401c46e8 is live but EMPTY\n");

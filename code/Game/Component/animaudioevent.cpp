@@ -86,10 +86,5 @@ void* AnimAudioEvent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) AnimAudioEvent());
 }
 
-// The 0x14015e0c0 row had no by-address reader (B38 D5): it is gone with the
-// hand-built table. The registration function stays (address_registry.cpp,
-// coordinator-owned, calls it) with no row left to register.
-extern "C" void RegisterAnimAudioEventVtable() {}
-
 DEFINE_EXE_VTABLE(AnimAudioEvent, "_ZTV14AnimAudioEvent")
 DEFINE_EXE_TYPE(AnimAudioEvent, "Graphics::AnimationEvent")

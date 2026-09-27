@@ -37,6 +37,9 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
+#include "Component/AnimalDescription.h"
+#include "Component/PastureComponent.h"
+#include "Component/PastureDescription.h"
 
 // Type-id global storage (values filled later by FillTypeIdGlobals_worktail_serialize).
 static uint32_t g_tid_PastureDescription = 0;  // 0x1401c7bd8
@@ -44,9 +47,9 @@ static uint32_t g_tid_AnimalDescription  = 0;  // 0x1401c6fd0
 static uint32_t g_tid_PastureComponent   = 0;  // 0x1401c7ba0
 
 extern "C" void FillTypeIdGlobals_worktail_serialize() {
-    g_tid_PastureDescription = ::Object::GetTypeIdByName("PastureDescription");
-    g_tid_AnimalDescription  = ::Object::GetTypeIdByName("AnimalDescription");
-    g_tid_PastureComponent   = ::Object::GetTypeIdByName("PastureComponent");
+    g_tid_PastureDescription = PastureDescription::TypeId();
+    g_tid_AnimalDescription  = AnimalDescription::TypeId();
+    g_tid_PastureComponent   = PastureComponent::TypeId();
 }
 
 void RegisterWorkTailSerializeBatch() {

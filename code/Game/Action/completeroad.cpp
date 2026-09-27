@@ -143,9 +143,4 @@ void* CompleteRoad::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(CompleteRoad, "_ZTV12CompleteRoad")
 
-// B38 D5: 0x14015fb70 had one by-address reader, action_child_ctors2.cpp's
-// door, which now builds the object with the real ctor — so the row is gone.
-// The function stays until the coordinator's address_registry hunk drops its call.
-extern "C" void RegisterCompleteRoadVtable() {}
-
 DEFINE_EXE_TYPE(CompleteRoad, "Action")

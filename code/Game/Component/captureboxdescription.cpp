@@ -109,11 +109,6 @@ Object::External* CaptureBoxDescription::Construct() {
     return new (static_cast<void*>(this)) CaptureBoxDescription();
 }
 
-// The 0x14015d4a0 row had no by-address reader (B38 D5): it is gone with the
-// hand-built table. The registration function stays (address_registry.cpp,
-// coordinator-owned, calls it) with no row left to register.
-extern "C" void RegisterCaptureBoxDescriptionVtable() {}
-
 // create 0x140013d90: MemAlloc(0x78, 8), then the ctor.
 void* CaptureBoxDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CaptureBoxDescription), 8);

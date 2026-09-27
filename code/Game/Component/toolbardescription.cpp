@@ -232,13 +232,6 @@ void* ToolbarDescription::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ToolbarDescription());
 }
 
-// The complete-object teardown door: standalone/reg_code_lane6.cpp registers a
-// one-arg adapter over this at retail's cleanup 0x14012db70 (flags 0 = do not
-// free). Kept as a one-line delegation (B38 D5: reached by address).
-void* ToolbarDescription_Dtor(void* self, uint32_t flags) {
-    return reinterpret_cast<ToolbarDescription*>(self)->DeletingDtor(flags);   // B.3.8 bridge
-}
-
 // FUN_140028860 String-array resize — register for resolve-by-address callers
 // (TutorialSetupDialog_Slot5, and fn_StringArray_Resize if resolved after this).
 // The ToolbarDescription table row (0x140164980) that this function also carried

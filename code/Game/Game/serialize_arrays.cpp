@@ -112,15 +112,6 @@ extern "C" void Reimpl_Geometry_Init(void* self) {
     ::new (self) WorldGeometry();
 }
 
-// B38_RULES D5: nothing in the tree reads 0x14015f110 back any more (the old
-// Init above was the only ResolveAddr of it); this row is reader-less and
-// serves the compiler table only so the coordinator-owned call in
-// address_registry.cpp keeps linking. The closing pass deletes it with the call.
-extern "C" void RegisterGeometryVtable() {
-    extern void RegisterExeAddr(uintptr_t exeAddr, uintptr_t standaloneAddr);
-    RegisterExeAddr(0x14015f110, reinterpret_cast<uintptr_t>(WorldGeometry::Vtable()));
-}
-
 // ============================================================
 // Helper #2 — Transform::Serialize wrapper (FUN_1400988c0)
 // ============================================================

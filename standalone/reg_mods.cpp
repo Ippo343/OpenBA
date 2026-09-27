@@ -49,7 +49,6 @@
 #include <cstdint>
 
 // code/Game/Dialog/mod_dialog_vtables.cpp
-extern "C" void* ModDialog_GetVtable();
 extern "C" void* ModDetailsDialog_GetVtable();
 extern "C" void* ModDialog_Ctor_Standalone(void* self, void* userInterface,
                                            void* externalRes, void* parentIBP,
@@ -65,7 +64,7 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
 // registered at that address, so fn_MainMenu_Reload stayed NULL. Declared here by
 // hand because mainmenudialog.cpp has no header; the pointer parameter makes the
 // C++ mangling independent of MainMenuDialog's definition.
-struct MainMenuDialog;
+class MainMenuDialog;
 void MainMenuDialog_ReturnToMenu(MainMenuDialog* self);
 
 // Backing storage for the IO::Modification singleton exref slot. Must outlive the
@@ -73,7 +72,6 @@ void MainMenuDialog_ReturnToMenu(MainMenuDialog* self);
 static uintptr_t g_slot_ModificationSingleton = 0;
 
 void RegisterModsBatch() {
-    RegisterExeAddr(0x14015c870, reinterpret_cast<uintptr_t>(ModDialog_GetVtable()));
     RegisterExeAddr(0x14015c670, reinterpret_cast<uintptr_t>(ModDetailsDialog_GetVtable()));
     RegisterExeAddr(0x140070030, reinterpret_cast<uintptr_t>(&ModDialog_Ctor_Standalone));
     RegisterExeAddr(0x14006eec0, reinterpret_cast<uintptr_t>(&ModDialog_RefreshDisplay));

@@ -41,7 +41,6 @@
 extern "C" void  FireComponent_Ignite_610(void* self);                          // 0x140049610
 extern "C" void  FireComponent_Spread_130(void* self);                          // 0x140049130
 extern "C" void  FireComponent_Extinguish_4c0(void* self);                      // 0x1400494c0
-extern "C" void  FireComponent_WaterApplied_090(void* self, int msg);           // 0x140049090
 extern "C" void  FireComp_MarkDanger_99c0(void* self, short delta);             // 0x1400499c0
 extern "C" void  FireComp_StampDangerRect_9fa80(int*, uint64_t, int, int, int, int, short);
 extern "C" void  FireComp_StartAudioEmitter_42c60(void* ambientComp, int idx);  // 0x140042c60
@@ -66,7 +65,6 @@ void RegisterFireBatch() {
     RegisterExeAddr(0x140049610, reinterpret_cast<uintptr_t>(&FireComponent_Ignite_610));
     RegisterExeAddr(0x140049130, reinterpret_cast<uintptr_t>(&FireComponent_Spread_130));
     RegisterExeAddr(0x1400494c0, reinterpret_cast<uintptr_t>(&FireComponent_Extinguish_4c0));
-    RegisterExeAddr(0x140049090, reinterpret_cast<uintptr_t>(&FireComponent_WaterApplied_090));
     RegisterExeAddr(0x1400499c0, reinterpret_cast<uintptr_t>(&FireComp_MarkDanger_99c0));
     RegisterExeAddr(0x14009fa80, reinterpret_cast<uintptr_t>(&FireComp_StampDangerRect_9fa80));
 

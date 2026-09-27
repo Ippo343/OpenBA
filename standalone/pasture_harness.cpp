@@ -12,6 +12,7 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "options.h"
+#include "Component/PastureComponent.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -36,9 +37,7 @@ static void PastureTendHarness_Tick(int frameNum) {
     }
     if (s_interval < 0 || frameNum == 0 || (frameNum % s_interval) != 0) return;
 
-    typedef void (*fn_MsgReceive_t)(void* pasture, int msg);
-    uintptr_t addr = ResolveAddr(Module::Exe, 0x140127720);
-    if (!addr || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     uintptr_t gs = *reinterpret_cast<uintptr_t*>(
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
     if (!gs) return;
@@ -49,7 +48,10 @@ static void PastureTendHarness_Tick(int frameNum) {
         void* pasture = *reinterpret_cast<void**>(list + (uintptr_t)i * 8);
         if (!pasture) continue;
         if (*reinterpret_cast<void**>((uintptr_t)pasture + 0x28) == nullptr) continue;
-        reinterpret_cast<fn_MsgReceive_t>(addr)(pasture, 0);
+        // gameState+0x90 is the world pasture registry (pasture state 2 adds the
+        // component, state 3 / slot 7 erase it): every entry is a PastureComponent.
+        // Slot 15 OnMessage; the body reads only the message id.
+        reinterpret_cast<PastureComponent*>(pasture)->OnMessage(0, nullptr, 0, 0);   // B.3.8 bridge
     }
 }
 

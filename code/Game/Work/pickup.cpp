@@ -906,10 +906,4 @@ DEFINE_EXE_VTABLE(Pickup, "_ZTV6Pickup")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x140161810 is still read back BY ADDRESS — RawMaterialComponent's Draw
-// (rawmaterialcomponent.cpp) builds the work by hand and stamps it — so the exe address
-// serves the COMPILER's table.
-extern "C" void RegisterPickupVtable() {
-    RegisterExeAddr(PickupAddr::Vtable, reinterpret_cast<uintptr_t>(Pickup::Vtable()));   // 0x140161810
-}
 DEFINE_EXE_TYPE(Pickup, "Work")

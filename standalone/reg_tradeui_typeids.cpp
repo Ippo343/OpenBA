@@ -54,6 +54,11 @@
 #include "Object/factory_registration.h"      // Object::GetTypeIdByName
 #include <cstdint>
 #include <cstdio>
+#include "Component/BoatComponent.h"
+#include "Component/ComponentDescription.h"
+#include "Component/TradeComponent.h"
+#include "Component/TradeDescription.h"
+#include "Component/ValueDescription.h"
 
 // Backing storage for the .rdata slot. Stays 0 unless the gate is on AND the
 // post-Startup fill has run.
@@ -99,11 +104,11 @@ static uint32_t g_tid_BoatComponent = 0;         // 0x1401c4020
 extern "C" void FillTypeIdGlobals_tradeui() {
     // No-op in effect unless the storage was registered above (gate on); writing it
     // when unregistered is harmless because nothing reads this static directly.
-    g_tid_TradeComponent = ::Object::GetTypeIdByName("TradeComponent");
-    g_tid_TradeDescription = ::Object::GetTypeIdByName("TradeDescription");
-    g_tid_ValueDescription = ::Object::GetTypeIdByName("ValueDescription");
-    g_tid_ComponentDescription = ::Object::GetTypeIdByName("ComponentDescription");
-    g_tid_BoatComponent = ::Object::GetTypeIdByName("BoatComponent");
+    g_tid_TradeComponent = TradeComponent::TypeId();
+    g_tid_TradeDescription = TradeDescription::TypeId();
+    g_tid_ValueDescription = ValueDescription::TypeId();
+    g_tid_ComponentDescription = ComponentDescription::TypeId();
+    g_tid_BoatComponent = BoatComponent::TypeId();
 
     // Report the OUTCOME. A 0 here means the type never registered exe-side and the
     // reader will silently match nothing rather than fault — the failure mode that

@@ -109,6 +109,7 @@
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "Dialog/ui_panels.h"          // DebugUI, DebugUI_Slot9
 #include "Component/diseasecomponent_funcs.h"  // DiseaseComp_CheckCure (0x1400481b0)
+#include "Game/Disease.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -257,10 +258,7 @@ void* ComponentByName(void* entity, const char* typeName) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
         void* comp = *slot;
         if (!comp) continue;
-        typedef uint32_t (*gt_t)(void*);
-        uint32_t tid = (*reinterpret_cast<gt_t*>(
-                            *reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
-        if (tid == want) return comp;
+        if (reinterpret_cast<Object::Base*>(comp)->Type() == want) return comp;   // B.3.8 bridge
     }
     return nullptr;
 }
@@ -467,16 +465,15 @@ void ForceTornado(int frameNum, int want) {
 //     lazy heal - because ResolveAddr(Exe, 0x1401c5948) returns 0 in standalone.
 // So in a run that never builds a DebugUI the global is NULL, FindDiseaseDescription
 // returned early with found=0, and the log blamed BANISHED_LIVE_DISEASELIST for a
-// resource list that had in fact loaded fine. Resolve "Disease" BY NAME here instead:
+// resource list that had in fact loaded fine. Read Disease's own type id here instead:
 // same id the DebugUI heal would install, minus the ordering dependency.
 
-// The "Disease" external type id, resolved BY NAME so this arm does not depend on a
-// DebugUI ever existing. 0 = never registered, 0xFFFFFFFF = the pre-Startup sentinel;
-// both are reported as distinct outcomes by the caller, never silently filtered on.
+// The "Disease" external type id (the real class's record, ENDGAME B.3.8), so this arm
+// does not depend on a DebugUI ever existing. 0 = never registered, 0xFFFFFFFF = the
+// pre-Startup sentinel; both are reported as distinct outcomes by the caller, never
+// silently filtered on.
 uint32_t DiseaseExternalTypeId() {
-    static uint32_t id = 0;
-    if (!id || id == 0xFFFFFFFFu) id = ::Object::GetTypeIdByName("Disease");
-    return id;
+    return Disease::TypeId();
 }
 
 void* FindDiseaseDescription(int wantIdx, int* outFound, int* outScanned,

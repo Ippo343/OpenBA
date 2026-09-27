@@ -70,14 +70,3 @@ void* WellDescription::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(WellDescription, "_ZTV15WellDescription")
 DEFINE_EXE_TYPE(WellDescription, "Description")
-
-// B38_RULES D5 — the registration shape a converted class uses while an
-// unconverted reader may still stamp its retail table by address: the exe
-// address serves the COMPILER's vtable. Nothing in the tree reads 0x14015af20
-// back today (SEAM_AND_FILEMAP §1.3), so this row is reader-less; it is kept as
-// the pilot's exemplar of the seam and goes with the other reader-less rows in
-// the closing pass.
-#include "resolve.h"
-extern "C" void RegisterWellDescriptionVtable() {
-    RegisterExeAddr(0x14015af20, reinterpret_cast<uintptr_t>(WellDescription::Vtable()));
-}

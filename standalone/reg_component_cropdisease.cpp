@@ -6,8 +6,10 @@
 // sickness — see the header comment in code/Game/Component/diseasecomponent.cpp.
 //
 // Closure: every 0x140xxxxxx leaf these bodies call was already ported+registered by
-// an earlier wave, so this file only adds the DiseaseComponent bodies themselves plus
-// four genuinely-new leaves:
+// an earlier wave, so this file only adds the DiseaseComponent behaviour bodies plus
+// four genuinely-new leaves (the five vtable-slot rows -- Update/Startup/OnAdded/
+// OnRemoved/Serialize -- went in ENDGAME B.3.8: DiseaseComponent is a real class and
+// nothing read those addresses back):
 //     0x1400050a0  DiseaseComponent sibling finder   (no prior port)
 //     0x1400537f0  ParticleComponent fade-out        (sibling of 0x140053660)
 //     0x140019b70  EventArray_Grow                   (was static in eventlog.cpp)
@@ -34,15 +36,12 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
+#include "Component/DiseaseComponent.h"
+#include "Component/DiseaseDescription.h"
 
-struct DiseaseComponent;
+class DiseaseComponent;
 
 // --- ported bodies (code/Game/Component/diseasecomponent.cpp) ----------------
-extern "C" void  DiseaseComponent_Update(DiseaseComponent*, int64_t*);       // 0x140048b90
-extern "C" void  DiseaseComponent_Startup(DiseaseComponent*);                // 0x140048c50
-extern "C" void  DiseaseComponent_OnAdded(DiseaseComponent*);                // 0x140048c00
-extern "C" void  DiseaseComponent_OnRemoved(DiseaseComponent*);              // 0x140048bb0
-extern "C" void  DiseaseComponent_Serialize(DiseaseComponent*, void*);       // 0x140048ca0
 extern "C" bool  DiseaseComp_CheckCure(DiseaseComponent*);                   // 0x1400481b0
 extern "C" void  DiseaseComp_Cure(DiseaseComponent*);                        // 0x140048320
 extern "C" void  DiseaseComp_Infect(DiseaseComponent*);                      // 0x1400483a0
@@ -69,18 +68,11 @@ static uint32_t g_tid_DiseaseComponent   = 0;   // 0x1401c4170
 static uint32_t g_tid_DiseaseDescription = 0;   // 0x1401c41a8
 
 extern "C" void FillTypeIdGlobals_cropdisease() {
-    g_tid_DiseaseComponent   = ::Object::GetTypeIdByName("DiseaseComponent");
-    g_tid_DiseaseDescription = ::Object::GetTypeIdByName("DiseaseDescription");
+    g_tid_DiseaseComponent   = DiseaseComponent::TypeId();
+    g_tid_DiseaseDescription = DiseaseDescription::TypeId();
 }
 
 void RegisterCropDiseaseBatch() {
-    // DiseaseComponent vtable bodies
-    RegisterExeAddr(0x140048b90, reinterpret_cast<uintptr_t>(&DiseaseComponent_Update));
-    RegisterExeAddr(0x140048c50, reinterpret_cast<uintptr_t>(&DiseaseComponent_Startup));
-    RegisterExeAddr(0x140048c00, reinterpret_cast<uintptr_t>(&DiseaseComponent_OnAdded));
-    RegisterExeAddr(0x140048bb0, reinterpret_cast<uintptr_t>(&DiseaseComponent_OnRemoved));
-    RegisterExeAddr(0x140048ca0, reinterpret_cast<uintptr_t>(&DiseaseComponent_Serialize));
-
     // Behaviour bodies
     RegisterExeAddr(0x1400481b0, reinterpret_cast<uintptr_t>(&DiseaseComp_CheckCure));
     RegisterExeAddr(0x140048320, reinterpret_cast<uintptr_t>(&DiseaseComp_Cure));

@@ -423,9 +423,4 @@ void* ShowTool::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(ShowTool, "_ZTV8ShowTool")
 
-extern "C" void RegisterShowToolVtable() {
-    // ENDGAME B.3.8 CB3: the retail-table row is gone -- no by-address reader of
-    // it is left. The call in address_registry.cpp is the coordinator's to drop.
-}
-
 DEFINE_EXE_TYPE(ShowTool, "Action")

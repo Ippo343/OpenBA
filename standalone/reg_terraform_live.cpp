@@ -24,9 +24,10 @@
 // 0x140151478. That slot had NO reader anywhere in the port, so it was never registered and
 // ResolveAddr returned 0 — RegisterDispatchSlots() in address_registry.cpp now fills it.
 //
-// The live vtable slots are gated on BANISHED_LIVE_TERRAFORM (opt-in until a positive
-// run); these RegisterExeAddr entries are unconditional, matching every other wave —
-// registering an address only makes it resolvable, it does not make it run.
+// TerraformComponent and MultiObjectComponent are real classes (ENDGAME B.3.8): the
+// Persist / OnRemove / slot-12 rows (0x140057500 / 0x140057350 / 0x140057310, and
+// MultiObjectComponent's slot-12 forwarder 0x140125490) went with them -- nothing read
+// those addresses back. The two carve helpers keep their doors.
 
 #include "resolve.h"
 #include "address_registry.h"
@@ -34,11 +35,8 @@
 
 class TerraformComponent;
 
-extern void TerraformComponent_Shutdown(TerraformComponent* self, void* stream);   // 0x140057500
-extern void TerraformComponent_OnRemove(TerraformComponent* self);                 // 0x140057350
 extern void TerraformComponent_MeshPass(TerraformComponent* self, bool ceiling);   // 0x140056b50
 extern void TerraformComponent_FootprintPass(TerraformComponent* self);            // 0x140057120
-extern "C" void TerraformComponent_Slot12(void* self, int msgId);                  // 0x140057310
 
 // Retail passes the ceiling/floor selector as a `char`, not a `bool`; keep the exe
 // signature exact at the registry boundary so any retail-side caller lands correctly.
@@ -47,20 +45,8 @@ static void TerraformComponent_MeshPass_Thunk(void* self, char ceiling) {
 }
 
 void RegisterTerraformLive() {
-    RegisterExeAddr(0x140057500, reinterpret_cast<uintptr_t>(
-        static_cast<void(*)(TerraformComponent*, void*)>(&TerraformComponent_Shutdown)));
-    RegisterExeAddr(0x140057350, reinterpret_cast<uintptr_t>(
-        static_cast<void(*)(TerraformComponent*)>(&TerraformComponent_OnRemove)));
     RegisterExeAddr(0x140056b50, reinterpret_cast<uintptr_t>(&TerraformComponent_MeshPass_Thunk));
     RegisterExeAddr(0x140057120, reinterpret_cast<uintptr_t>(
         static_cast<void(*)(TerraformComponent*)>(&TerraformComponent_FootprintPass)));
-    RegisterExeAddr(0x140057310, reinterpret_cast<uintptr_t>(&TerraformComponent_Slot12));
 }
 
-// MultiObjectComponent slot 12 (retail 0x140125490) — the child-entity message forwarder
-// this wave had to bring live as well; body in code/Game/Component/multiobjectcomponent.cpp.
-extern "C" void MultiObjectComponent_Slot12(void* self, int msgId);
-
-void RegisterMultiObjectForwarder() {
-    RegisterExeAddr(0x140125490, reinterpret_cast<uintptr_t>(&MultiObjectComponent_Slot12));
-}

@@ -254,8 +254,6 @@ void ControlUI_Slot9(ControlUI* self, uint64_t* param2, int param3, int param4) 
 
 namespace controlui_sa {
 
-constexpr uintptr_t kVtable = 0x14015b380;
-
 // Report Slot4's INPUTS as well as its outputs. The first version of this printed only
 // +0x30/+0x38 — which are Slot4's OUTPUTS — so when the type-id guard rejected every call
 // before writing them, the trace read as "the framework never bound +0x20/+0x28" and sent
@@ -355,14 +353,6 @@ void W_Slot9(void* self, uint64_t* p2, int p3, int p4) {
     ControlUI_Slot9(reinterpret_cast<ControlUI*>(self), p2, p3, p4);
 }
 }  // namespace controlui_sa
-
-// D5: no by-address reader of 0x14015b380 remains in the tree; the row serves
-// the compiler table and stays only because reg_controlui.cpp calls this
-// function — the closing pass deletes both.
-extern "C" void RegisterControlUIVtable() {
-    RegisterExeAddr(controlui_sa::kVtable,
-                    reinterpret_cast<uintptr_t>(ControlUI::Vtable()));
-}
 
 // [4] 0x14005f9b0
 void ControlUI::OnCreated() {

@@ -188,11 +188,4 @@ void* Weather::CreateInPlaceObject(void* memory) {
 
 DEFINE_EXE_VTABLE(Weather, "_ZTV7Weather")
 
-// B38_RULES D5: nothing in the tree reads 0x140160290 back (swept by hex and
-// owner); this row is reader-less and serves the compiler table only so the
-// coordinator-owned call keeps linking. The closing pass deletes it with the call.
-extern "C" void RegisterWeatherVtable() {
-    RegisterExeAddr(0x140160290, reinterpret_cast<uintptr_t>(Weather::Vtable()));
-}
-
 DEFINE_EXE_TYPE(Weather, "Object::External")

@@ -30,11 +30,12 @@
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
 #include <cstdio>
+#include "Component/TrackerComponent.h"
 
 static uint32_t g_tid_TrackerComponent = 0;   // 0x1401c4b10
 
 extern "C" void FillTypeIdGlobals_tracker() {
-    g_tid_TrackerComponent = ::Object::GetTypeIdByName("TrackerComponent");
+    g_tid_TrackerComponent = TrackerComponent::TypeId();
     // VERIFY THE VALUE, not just the pointer: a registered slot holding 0 is
     // indistinguishable from an unregistered one at every call site, and this
     // project has been bitten by exactly that (a GetTypeIdByName on a type name

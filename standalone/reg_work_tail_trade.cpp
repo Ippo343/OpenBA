@@ -18,11 +18,15 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
+#include "Component/CitizenComponent.h"
 
 // Ports (code/Game/Work/tradework_serialize.cpp).
 extern "C" void  TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2);          // 0x14002c8a0
 extern "C" void* TradeWork_Insert_c710(int64_t* param_1, void** param_2, int64_t p3); // 0x14002c710
 extern "C" void* TradeWork_NodeAlloc_c830(void* unused, uint64_t* src, int64_t parent); // 0x14002c830
+
+// TradeWork::Slot4 (0x1400f5d40) is a real virtual since ENDGAME B.3.8 and nothing read
+// its address back, so its row is gone.
 
 // Type-id read by the c8a0 IsDerivedFrom. DWORD_1401c7158 = CitizenComponent
 // (CORRECTED 2026-07-19: the slot's [DATA] writer is CitizenComponent_RegisterType
@@ -56,7 +60,7 @@ extern "C" void FillTypeIdGlobals_worktail_trade() {
     // "CitizenComponent", matching the retail slot value (see corrected note above);
     // was "CitizenAIComponent" — a latent wrong-id in the (autostart-unexercised)
     // c8a0 serialize validation.
-    g_tid_TradeWork_CitizenComponent = ::Object::GetTypeIdByName("CitizenComponent");
+    g_tid_TradeWork_CitizenComponent = CitizenComponent::TypeId();
 }
 
 void RegisterWorkTailTradeBatch() {

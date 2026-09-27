@@ -286,12 +286,4 @@ void* MusicList::CreateInPlaceObject(void* memory) {
 
 DEFINE_EXE_VTABLE(MusicList, "_ZTV9MusicList")
 
-// B38_RULES D5: nothing in the tree reads 0x14015ee40 back (swept by hex and
-// owner); this row is reader-less and serves the compiler table only so the
-// coordinator-owned call in address_registry.cpp keeps linking. The closing
-// pass deletes it with the call.
-extern "C" void RegisterMusicListVtable() {
-    RegisterExeAddr(0x14015ee40, reinterpret_cast<uintptr_t>(MusicList::Vtable()));
-}
-
 DEFINE_EXE_TYPE(MusicList, "Object::External")

@@ -48,6 +48,10 @@
 #include "resolve.h"
 #include "options.h"
 #include "Object/factory_registration.h"
+#include "Component/MarketComponent.h"
+#include "Component/MarketDescription.h"
+#include "Component/RawMaterialDescription.h"
+#include "Component/StorageComponent.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -81,21 +85,12 @@ static int OverstockPeriod() {
     do { fprintf(stderr, "[MarketOverstock] " __VA_ARGS__);     \
          fprintf(stderr, "\n"); fflush(stderr); } while (0)
 
-// ============================================================
-// Type-ids — raw .rdata preferred, GetTypeIdByName fallback
-// (the documented project pattern; both market ids are registered since
-//  standalone/reg_market_typeid.cpp, the rest were already there)
-// ============================================================
-static uint32_t Tid(uintptr_t rdataAddr, const char* name) {
-    const uint32_t* p =
-        reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, rdataAddr));
-    if (p && *p) return *p;
-    return ::Object::GetTypeIdByName(name);
-}
-
+// Type-ids: each class's own record (real classes, ENDGAME B.3.8) -- the same value
+// the .rdata cells 0x1401c44f0 / 0x1401c4528 / 0x1401c7e78 / 0x1401c7cb8 are filled with.
+// Every object scanned below is an entity's component or a template's description
+// (Object::Base), so slot 2 is Type().
 static inline uint32_t GetTypeIdOf(void* obj) {
-    typedef uint32_t (*fn_GetTypeId_t)(void*);
-    return (*reinterpret_cast<fn_GetTypeId_t*>(*reinterpret_cast<uintptr_t*>(obj) + 0x10))(obj);
+    return reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.8 bridge
 }
 
 // Component scan over a LIVE entity (+0x30 IBP array / +0x38 count).
@@ -178,10 +173,10 @@ static void DoOverstock(int frameNum) {
     uintptr_t town = reinterpret_cast<uintptr_t>(TownMgr());
     if (!town) { MO_LOG("no town manager yet (frame %d)", frameNum); return; }
 
-    const uint32_t tidMarketComp   = Tid(0x1401c44f0, "MarketComponent");
-    const uint32_t tidMarketDesc   = Tid(0x1401c4528, "MarketDescription");
-    const uint32_t tidStorageComp  = Tid(0x1401c7e78, "StorageComponent");
-    const uint32_t tidRawMat       = Tid(0x1401c7cb8, "RawMaterialDescription");
+    const uint32_t tidMarketComp   = MarketComponent::TypeId();
+    const uint32_t tidMarketDesc   = MarketDescription::TypeId();
+    const uint32_t tidStorageComp  = StorageComponent::TypeId();
+    const uint32_t tidRawMat       = RawMaterialDescription::TypeId();
     if (!tidMarketComp || !tidMarketDesc || !tidStorageComp || !tidRawMat) {
         MO_LOG("type-id resolve failed (market=%u desc=%u storage=%u rawmat=%u)",
                tidMarketComp, tidMarketDesc, tidStorageComp, tidRawMat);

@@ -424,12 +424,6 @@ extern "C" void Reimpl_WeatherArray_Resize(void* hdr, int newCount) {
 #include "address_registry.h"
 
 extern "C" void RegisterWeatherParticleVtable() {
-    // B38_RULES D5: nothing in the tree reads 0x140160240 back any more (the old
-    // ctor/dtor were its only ResolveAddr readers); reader-less, kept so the
-    // coordinator-owned call links. The closing pass deletes it with the call.
-    RegisterExeAddr(0x140160240,
-                    reinterpret_cast<uintptr_t>(WeatherParticleGeometry::Vtable()));
-
     // The debug-UI draw combo (DebugUI_OnDrawComboChanged) constructs the very
     // same weather-particle Geometry via exe helpers DrawGeometry_Ctor
     // (0x1400d3f10) and DrawGeometry_Init (0x1400d3f80). Those are exactly our

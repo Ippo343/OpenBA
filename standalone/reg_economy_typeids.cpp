@@ -61,6 +61,35 @@
 #include <cstdio>
 #include "Object/factory_registration.h"
 #include <cstdint>
+#include "Component/AttendanceComponent.h"
+#include "Component/AttendanceDescription.h"
+#include "Work/BuildRoad.h"
+#include "Component/CitizenDescription.h"
+#include "Component/CreateBridgeDescription.h"
+#include "Component/CreateDragDescription.h"
+#include "Component/CreateRemovalDescription.h"
+#include "Component/DestroyComponent.h"
+#include "Component/DestroyDescription.h"
+#include "Component/ForesterComponent.h"
+#include "Component/ForesterDescription.h"
+#include "Component/InteractDescription.h"
+#include "Component/MapComponent.h"
+#include "Component/MultiObjectComponent.h"
+#include "Component/NaturalResourceDescription.h"
+#include "Component/RadiusDescription.h"
+#include "Component/RawMaterialComponent.h"
+#include "Component/ResidenceComponent.h"
+#include "Component/ResidenceDescription.h"
+#include "Component/StateMachineComponent.h"
+#include "Component/StatusIconComponent.h"
+#include "Component/StatusIconDescription.h"
+#include "Component/StorageComponent.h"
+#include "Component/TerraformDescription.h"
+#include "Dialog/ToolbarDialog.h"
+#include "Component/WorkComponent.h"
+#include "Component/WorkDescription.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Component/WorkPlaceDescription.h"
 
 static uint32_t g_tid_InteractDescription = 0;   // 0x1401c7938
 static uint32_t g_tid_MapComponent        = 0;   // 0x1401c79e0
@@ -309,35 +338,35 @@ void RegisterEconomyTypeIds() {
 
 // Fill from the real-CRC type tree — call AFTER Engine::Startup.
 extern "C" void FillEconomyTypeIdGlobals() {
-    g_tid_InteractDescription  = ::Object::GetTypeIdByName("InteractDescription");
-    g_tid_MapComponent         = ::Object::GetTypeIdByName("MapComponent");
-    g_tid_WorkPlaceComponent   = ::Object::GetTypeIdByName("WorkPlaceComponent");
-    g_tid_WorkPlaceDescription = ::Object::GetTypeIdByName("WorkPlaceDescription");
-    g_tid_StatusIconComponent  = ::Object::GetTypeIdByName("StatusIconComponent");
-    g_tid_StatusIconDescription = ::Object::GetTypeIdByName("StatusIconDescription");
-    g_tid_ResidenceComponent   = ::Object::GetTypeIdByName("ResidenceComponent");
-    g_tid_ForesterComponent    = ::Object::GetTypeIdByName("ForesterComponent");
-    g_tid_ForesterDescription  = ::Object::GetTypeIdByName("ForesterDescription");
-    g_tid_RadiusDescription    = ::Object::GetTypeIdByName("RadiusDescription");
-    g_tid_NaturalResourceDescription = ::Object::GetTypeIdByName("NaturalResourceDescription");
-    g_tid_WorkDescription      = ::Object::GetTypeIdByName("WorkDescription");
-    g_tid_WorkComponent        = ::Object::GetTypeIdByName("WorkComponent");
-    g_tid_StorageComponent     = ::Object::GetTypeIdByName("StorageComponent");
-    g_tid_CitizenDescription   = ::Object::GetTypeIdByName("CitizenDescription");
-    g_tid_RawMaterialComponent = ::Object::GetTypeIdByName("RawMaterialComponent");
-    g_tid_CreateBridgeDescription  = ::Object::GetTypeIdByName("CreateBridgeDescription");
-    g_tid_MultiObjectComponent     = ::Object::GetTypeIdByName("MultiObjectComponent");
-    g_tid_CreateRemovalDescription = ::Object::GetTypeIdByName("CreateRemovalDescription");
-    g_tid_DestroyComponent         = ::Object::GetTypeIdByName("DestroyComponent");
-    g_tid_BuildRoad                = ::Object::GetTypeIdByName("BuildRoad");
-    g_tid_CreateDragDescription    = ::Object::GetTypeIdByName("CreateDragDescription");
-    g_tid_AttendanceDescription    = ::Object::GetTypeIdByName("AttendanceDescription");
-    g_tid_AttendanceComponent      = ::Object::GetTypeIdByName("AttendanceComponent");
-    g_tid_ResidenceDescription     = ::Object::GetTypeIdByName("ResidenceDescription");
-    g_tid_StateMachineComponent    = ::Object::GetTypeIdByName("StateMachineComponent");
-    g_tid_DestroyDescription       = ::Object::GetTypeIdByName("DestroyDescription");
-    g_tid_ToolbarDialog            = ::Object::GetTypeIdByName("ToolbarDialog");
-    g_tid_TerraformDescription     = ::Object::GetTypeIdByName("TerraformDescription");
+    g_tid_InteractDescription  = InteractDescription::TypeId();
+    g_tid_MapComponent         = MapComponent::TypeId();
+    g_tid_WorkPlaceComponent   = WorkPlaceComponent::TypeId();
+    g_tid_WorkPlaceDescription = WorkPlaceDescription::TypeId();
+    g_tid_StatusIconComponent  = StatusIconComponent::TypeId();
+    g_tid_StatusIconDescription = StatusIconDescription::TypeId();
+    g_tid_ResidenceComponent   = ResidenceComponent::TypeId();
+    g_tid_ForesterComponent    = ForesterComponent::TypeId();
+    g_tid_ForesterDescription  = ForesterDescription::TypeId();
+    g_tid_RadiusDescription    = RadiusDescription::TypeId();
+    g_tid_NaturalResourceDescription = NaturalResourceDescription::TypeId();
+    g_tid_WorkDescription      = WorkDescription::TypeId();
+    g_tid_WorkComponent        = WorkComponent::TypeId();
+    g_tid_StorageComponent     = StorageComponent::TypeId();
+    g_tid_CitizenDescription   = CitizenDescription::TypeId();
+    g_tid_RawMaterialComponent = RawMaterialComponent::TypeId();
+    g_tid_CreateBridgeDescription  = CreateBridgeDescription::TypeId();
+    g_tid_MultiObjectComponent     = MultiObjectComponent::TypeId();
+    g_tid_CreateRemovalDescription = CreateRemovalDescription::TypeId();
+    g_tid_DestroyComponent         = DestroyComponent::TypeId();
+    g_tid_BuildRoad                = BuildRoad::TypeId();
+    g_tid_CreateDragDescription    = CreateDragDescription::TypeId();
+    g_tid_AttendanceDescription    = AttendanceDescription::TypeId();
+    g_tid_AttendanceComponent      = AttendanceComponent::TypeId();
+    g_tid_ResidenceDescription     = ResidenceDescription::TypeId();
+    g_tid_StateMachineComponent    = StateMachineComponent::TypeId();
+    g_tid_DestroyDescription       = DestroyDescription::TypeId();
+    g_tid_ToolbarDialog            = ToolbarDialog::TypeId();
+    g_tid_TerraformDescription     = TerraformDescription::TypeId();
     // Graduation check: a registered-but-ZERO slot is invisible to every
     // null-POINTER guard downstream (IsDerivedFrom would just match nothing and the
     // sub-toolbar would silently stay open). Say so loudly if the name ever moves.

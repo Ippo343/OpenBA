@@ -33,7 +33,7 @@
 #include <cstdint>
 
 // Reimpl bodies live in code/Game/Component/citizencomponent.cpp (non-static).
-struct CitizenComponent;
+class CitizenComponent;
 extern char     CitizenComp_CheckWorkplaceValid(CitizenComponent* self, void* ibp);
 extern int64_t* CitizenComp_Entity_impl_ef40(void* a, int64_t* outRes, void* ibp, int cat);
 // Re-verify pass (snapshot2): these two were KNOWN-defers but are actually closure-safe.

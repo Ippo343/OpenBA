@@ -1229,10 +1229,6 @@ DEFINE_EXE_VTABLE(ForesterWork, "_ZTV12ForesterWork")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-extern "C" void RegisterForesterWorkVtable() {
-    // ENDGAME B.3.8 CB3: the retail-table row is gone -- no by-address reader of
-    // it is left. The call in address_registry.cpp is the coordinator's to drop.
-}
 // The factory the forester force harness (forester_force_harness.cpp) names.
 extern "C" void* ForesterWork_Factory(void) { return ForesterWork::CreateNewObject(); }
 DEFINE_EXE_TYPE(ForesterWork, "AutoPickupWork")

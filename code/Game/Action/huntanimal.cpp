@@ -502,9 +502,4 @@ void* HuntAnimal::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(HuntAnimal, "_ZTV10HuntAnimal")
 
-// B38 D5: every by-address reader of 0x14015fde0 was inside this block and now
-// builds the object with the real ctor, so the row is gone. The function stays
-// until the coordinator's address_registry hunk drops its call.
-extern "C" void RegisterHuntAnimalVtable() {}
-
 DEFINE_EXE_TYPE(HuntAnimal, "Action")

@@ -470,12 +470,4 @@ void* MapGenerator::CreateInPlaceObject(void* memory) {
 
 DEFINE_EXE_VTABLE(MapGenerator, "_ZTV12MapGenerator")
 
-// B38_RULES D5: nothing in the tree reads 0x14015ed80 back (swept by hex and
-// owner); this row is reader-less and serves the compiler table only so the
-// coordinator-owned call in address_registry.cpp keeps linking. The closing
-// pass deletes it with the call.
-extern "C" void RegisterMapGeneratorVtable() {
-    RegisterExeAddr(0x14015ed80, reinterpret_cast<uintptr_t>(MapGenerator::Vtable()));
-}
-
 DEFINE_EXE_TYPE(MapGenerator, "Object::External")

@@ -38,6 +38,9 @@
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
 #include <cstdio>
+#include "Component/MarketComponent.h"
+#include "Component/MarketDescription.h"
+#include "Component/StorageLocationComponent.h"
 
 static uint32_t g_tid_MarketComponent   = 0;  // 0x1401c44f0
 static uint32_t g_tid_MarketDescription = 0;  // 0x1401c4528
@@ -52,9 +55,9 @@ static uint32_t g_tid_MarketDescription = 0;  // 0x1401c4528
 static uint32_t g_tid_StorageLocationComponent = 0;  // 0x1401c7ee8
 
 extern "C" void FillTypeIdGlobals_market() {
-    g_tid_MarketComponent   = ::Object::GetTypeIdByName("MarketComponent");
-    g_tid_MarketDescription = ::Object::GetTypeIdByName("MarketDescription");
-    g_tid_StorageLocationComponent = ::Object::GetTypeIdByName("StorageLocationComponent");
+    g_tid_MarketComponent   = MarketComponent::TypeId();
+    g_tid_MarketDescription = MarketDescription::TypeId();
+    g_tid_StorageLocationComponent = StorageLocationComponent::TypeId();
 
     if (g_tid_MarketComponent == 0)
         std::fprintf(stderr, "[MarketTypeId] ERROR: GetTypeIdByName(\"MarketComponent\") "

@@ -136,9 +136,7 @@ void Fire(int frameNum) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
             void* comp = *cs;
             if (!comp) continue;
-            void** vt = *reinterpret_cast<void***>(comp);
-            if (!vt || !vt[2]) continue;
-            const uint32_t t = reinterpret_cast<uint32_t(*)(void*)>(vt[2])(comp);
+            const uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
             for (int k = 0; k < kClassCount; ++k)
                 if (tids[k] && t == tids[k]) { foodComp = comp; foodName = kClasses[k]; break; }
         }

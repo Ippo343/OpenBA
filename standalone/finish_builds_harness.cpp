@@ -31,6 +31,8 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"
+#include "Component/BuildComponent.h"
+#include "Component/StateMachineComponent.h"
 #include "options.h"
 #include <cstdint>
 #include <cstdio>
@@ -53,8 +55,6 @@ void Init() {
     std::fflush(stderr);
 }
 
-uint32_t Tid(const char* n) { return n ? ::Object::GetTypeIdByName(n) : 0; }
-
 void* FindComp(void* ent, uint32_t tid) {
     if (!ent || !tid) return nullptr;
     const int n = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
@@ -63,8 +63,7 @@ void* FindComp(void* ent, uint32_t tid) {
         void** cs = reinterpret_cast<void**>(a + static_cast<uintptr_t>(i) * 8);
         void* c = *cs;
         if (!c) continue;
-        void** vt = *reinterpret_cast<void***>(c);
-        if (vt && vt[2] && reinterpret_cast<uint32_t (*)(void*)>(vt[2])(c) == tid) return c;
+        if (reinterpret_cast<Object::Base*>(c)->Type() == tid) return c;   // B.3.8 bridge
     }
     return nullptr;
 }
@@ -83,8 +82,8 @@ extern "C" void FinishBuildsHarness_Tick(int frameNum) {
     const int n = entityList ? *reinterpret_cast<int32_t*>(entityList + 0x10) : 0;
     if (!arr || n <= 0) return;
 
-    const uint32_t tidBuild = Tid("BuildComponent");
-    const uint32_t tidSM    = Tid("StateMachineComponent");
+    const uint32_t tidBuild = BuildComponent::TypeId();
+    const uint32_t tidSM    = StateMachineComponent::TypeId();
     if (!tidBuild || !tidSM) return;
 
     int scanned = 0, stamped = 0, alreadyBuilt = 0;
