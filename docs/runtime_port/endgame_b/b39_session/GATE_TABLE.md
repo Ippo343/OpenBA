@@ -33,3 +33,12 @@ INJECT=1, COMPLETE>=1, crash log 0.
 | b39-C45 (caller batches C4+C5: Action / Goal / Entity / Dialog / Player / Tutorial / Game type-id cells) | 5f13d9b1 | ok | 0 | 836 | 5683/0 · 5773/12 · 4758 | 5/5 | 58/104/38 | 53 | tools x3 exit 0; Mods, Quit / Options / Achievements exit 0; GoalDialog opens | 0 |
 | b39-VID (W1: 18 Video classes concrete incl. the 12 *Data; Device / Configuration class statics; 4 list heads retired) | a7868c1e | ok | 0 | 867 | 5683/0 · 5773/12 · 4767 | 5/5 | 40/104/34 | 35 | forced device-lost in game (Present #40000): round trip COMPLETE, crash log 0 | 0 (1 coordinator error: stale generated manifest after the merge, regenerated in a7868c1e) |
 | b39-UID (W1+W2: UI resources, dialog family, SpriteSheet, DialogInstance, Element bases; FACTUI1 / FACTUI2 deleted) | 8fd88b17 | ok | 0 | 888 | 5683/0 · 5773/12 · 4763 | 5/5 | 26/104/34 | 22 | Mods exit 0; Quit / Options / Achievements exit 0; GoalDialog opens; tools x3 exit 0 | 0 (1 coordinator error: the merge commit 760d51c2 did not build — a line-matching conflict resolver broke deleting_dtor.cpp; repaired structurally in 8fd88b17, resolver replaced) |
+| b39-OBJ (W1: ExternalList concrete; the ONE Internal type record is the class's (behaviour); ExternalFactory / InternalFactory / Factory singletons + compiler-module handle class statics) | 37533866 | ok | 0 | 894 | 5683/0 · 5773/12 · 4787 | 5/5 | 25/103/34 | 21 | — | 0 after the re-cut below |
+
+**Typetable baseline RE-CUT (2026-09-27, with the OBJ merge 37533866), in writing.** The gate reported 1
+problem: the pointer-free type table differed from the baseline in exactly ONE line,
+`[GameMain] Post-Startup _firstTypeInfo: 416 entries, 416 have non-FF typeId` → `415 entries, 415 …`. That is
+the retired duplicate: the minted `?_typeInfo@Internal@Object@@` record is gone and
+`DEFINE_TYPE(Object::Internal)` is the one `Internal` record (OBJ commit 14769fe2, B39_RULES D6;
+`ORDER_MEASUREMENT.md` variant C measured that either winner gives the same tree and resave). Every id/name
+line, the registered count (311) and the resave (5/5) are unchanged. New baseline: 32 lines, md5 201d7aa7.
