@@ -115,16 +115,6 @@ extern "C" void RtIo_ReaderWriter_Dtor(void* self) {
 // -- `~SunLight`'s ReleaseFields, shared with the real destructor -- is THE body.
 // (Pilot c2 then retired RB's door too: ~SunLight is the only destructor.)
 
-// ??1AnimationGroup@Graphics@@UEAA@XZ   0x1800fb620
-extern "C" void RtGraphics_AnimationGroup_Dtor(void* self) {
-    STAMP(self, "??_7AnimationGroup@Graphics@@6B@");
-    uint8_t* d = static_cast<uint8_t*>(self);
-    ByAddr(0x18001c3b0ull)(d + 0x48);
-    ByAddr(0x18001c2d0ull)(d + 0x38);
-    ByAddr(0x18001c1e0ull)(d + 0x20);
-    RT_EXPORT_ONCE(DtorFn, "??1External@Object@@UEAA@XZ")(self);
-}
-
 // ??1SoundEffect@Audio@@UEAA@XZ   0x1800e0880
 extern "C" void RtAudio_SoundEffect_Dtor(void* self) {
     STAMP(self, "??_7SoundEffect@Audio@@6B@");
@@ -185,9 +175,7 @@ int RtObjectDeletingDtorLeavesRegister() {
     RegisterRuntimeAddr  (0x1800dac70ull,                          (void*)&RtUi_ToolTipDialog_Dtor);
     RegisterRuntimeExport("??1ReaderWriter@IO@@UEAA@XZ",         (void*)&RtIo_ReaderWriter_Dtor);
     RegisterRuntimeAddr  (0x1800b9150ull,                          (void*)&RtIo_ReaderWriter_Dtor);
-    RegisterRuntimeExport("??1AnimationGroup@Graphics@@UEAA@XZ", (void*)&RtGraphics_AnimationGroup_Dtor);
-    RegisterRuntimeAddr  (0x1800fb620ull,                          (void*)&RtGraphics_AnimationGroup_Dtor);
     RegisterRuntimeExport("??1SoundEffect@Audio@@UEAA@XZ",       (void*)&RtAudio_SoundEffect_Dtor);
     RegisterRuntimeAddr  (0x1800e0880ull,                          (void*)&RtAudio_SoundEffect_Dtor);
-    return 9;
+    return 8;
 }

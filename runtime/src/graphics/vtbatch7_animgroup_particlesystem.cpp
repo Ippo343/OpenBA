@@ -144,6 +144,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../../standalone/resolve.h"
@@ -243,32 +244,14 @@ namespace {
 using AnimationClip  = ::Graphics::Animation;
 using AnimationGroup = ::Graphics::AnimationGroup;
 
-void* AnimGroupVTable() { return RT_DATA_SLOT(void*, "??_7AnimationGroup@Graphics@@6B@"); }
 const uint8_t* AnimGroupTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@AnimationGroup@Graphics@@0VBaseTypeInfo@Object@@A");
 }
 
-// The three vtable stamps STAY HAND-WRITTEN and they stay pointed at the MINT.
-// This is not a missed conversion: `Construct` and `Reconstruct` run on an
-// object that ALREADY EXISTS and that the rest of the tree expects to be wearing
-// `??_7AnimationGroup@Graphics@@6B@` out of `rt_data_mint_tables.inc`. A member
-// constructor here would stamp GCC's tables instead, which is exactly the
-// question B34_RULES section 4.3 answers NO to. The fields are spelled through
-// `Graphics::AnimationGroup` now; the STORES are byte for byte batch 7's.
-void ConstructBody(AnimationGroup* self) {
-    void** vp = reinterpret_cast<void**>(self);
-    *vp = BaseVTable();
-    *vp = ExternalVTable();
-    self->_path.data      = nullptr;
-    self->_refs._data     = nullptr;
-    self->_refs._size     = 0;
-    self->_refs._capacity = 0;
-    *vp = AnimGroupVTable();
-    self->_clips._data = nullptr; self->_clips._size = 0; self->_clips._capacity = 0;
-    self->_defaultBlend = 0.1f;
-    self->_tags._data = nullptr; self->_tags._size = 0; self->_tags._capacity = 0;
-    self->_blendTimes._data = nullptr; self->_blendTimes._size = 0; self->_blendTimes._capacity = 0;
-}
+// ENDGAME B.3.9 block GFX: batch 7's `ConstructBody` (the Base / External /
+// AnimationGroup stamps out of the MINT plus the field stores) is gone. The
+// stores are the real `AnimationGroup()` (AnimationGroup.h) and the stamps the
+// compiler's; Construct / Reconstruct placement-new the class.
 
 // 0x1800594a0 — Object::ExternalPtr<AnimationEvent>::Serialize, ported as an
 // appended thunk in external_ptr_serialize.cpp (shared 748-byte template).
@@ -366,12 +349,10 @@ extern "C" void RtGraphics_AnimationGroup_SerializeClips(Serializer* ser, int co
 // `IsReading`, `RtAddr` — are reachable from here unqualified: they are members
 // of the global namespace's unnamed namespace, in this same translation unit.
 //
-// ALL EIGHT NON-DESTRUCTOR SLOT BODIES MOVED. Every registered door below keeps
-// its mangled name AND its retail address and is now a one-line QUALIFIED,
-// non-virtual delegation. THE QUALIFICATION IS LOAD-BEARING (B34_BRIEFS A.1): a
-// live `AnimationGroup` wears the MINTED `??_7AnimationGroup@Graphics@@6B@`,
-// whose slots resolve back to these very doors, so an unqualified virtual call
-// inside a door would dispatch into itself instead of delegating.
+// ALL EIGHT NON-DESTRUCTOR SLOT BODIES MOVED. ENDGAME B.3.9 block GFX: the
+// class is concrete and every live AnimationGroup wears the compiler's table,
+// so the eight slot doors that delegated into these members are gone with the
+// minted `??_7AnimationGroup@Graphics@@6B@`.
 // ############################################################################
 
 namespace Graphics {
@@ -403,9 +384,11 @@ AnimationGroup::CompileResult AnimationGroup::Compile(const System::Filename& /*
 }
 
 // [8] ?Construct@AnimationGroup@Graphics@@UEAAPEAVExternal@Object@@XZ 0x1800165d0
+//     the inlined constructor, i.e. placement construction. (Retail's null test
+//     sat in the retired door; a virtual call always has a `this`.) `::new`:
+//     the class declares its own, undefined, placement operator new.
 Object::External* AnimationGroup::Construct() {
-    ConstructBody(this);
-    return this;
+    return ::new (this) AnimationGroup();
 }
 
 // [6] ?Reconstruct@AnimationGroup@Graphics@@UEAAPEAVExternal@Object@@XZ 0x180016550
@@ -413,13 +396,13 @@ Object::External* AnimationGroup::Construct() {
 //     VIRTUALLY on purpose — retail dispatches it, and a subclass's deleting
 //     destructor is what has to run.
 Object::External* AnimationGroup::Reconstruct() {
-    CallSlot0(this, 0);
-    ConstructBody(this);
-    return this;
+    DeletingDtor(0);
+    return ::new (this) AnimationGroup();
 }
 
-// [7] ?Destruct@AnimationGroup@Graphics@@UEAAXXZ  0x180016650
-void AnimationGroup::Destruct() { CallSlot0(this, 0); }
+// [7] ?Destruct@AnimationGroup@Graphics@@UEAAXXZ  0x180016650 -- `MOV RAX,[RCX]
+//     ; XOR EDX,EDX ; JMP [RAX]`: slot 0, dispatched.
+void AnimationGroup::Destruct() { DeletingDtor(0); }
 
 // [5] ?Serialize@AnimationGroup@Graphics@@UEAA_NAEAVStream@IO@@@Z  0x1800fb6a0
 //
@@ -486,61 +469,51 @@ bool AnimationGroup::Serialize(void* streamv) {
     return true;
 }
 
-// ??1AnimationGroup@Graphics@@UEAA@XZ  0x1800fb620.
-//
-// EMPTY, AND THE EXISTING DOOR IS UNTOUCHED. `RtGraphics_AnimationGroup_Dtor`
-// in `runtime/src/object/deleting_dtor_leaves.cpp` (NOT block H1's file set)
-// stamps the MINTED table and releases the three Arrays, which is right for the
-// minted objects that are the only ones alive today. A real destructor chain
-// emits the stamps naming GCC's tables; hand-writing them here would name the
-// minted one, which is the one thing a converted object must not carry. The two
-// spellings coexist exactly as `Object::External`'s do
-// (`external_class.cpp:152` beside `external.cpp`'s `RtObject_External_Dtor`).
-AnimationGroup::~AnimationGroup() {}
+// ??1AnimationGroup@Graphics@@UEAA@XZ  0x1800fb620 -- retail's body, moved here
+// from the retired `RtGraphics_AnimationGroup_Dtor` door
+// (deleting_dtor_leaves.cpp, ENDGAME B.3.9 block GFX). The entry restamp is the
+// compiler's, and so is the tail into ~External. The three Arrays go in
+// retail's order, each through its own ~Array<T> instantiation BY ADDRESS
+// (registry-first, the ported bodies in runtime/src/collection/):
+//   0x18001c3b0(+0x48)  ~Array<float>                         (J1)
+//   0x18001c2d0(+0x38)  ~Array<{String,String,float}>         (J2, two Strings each)
+//   0x18001c1e0(+0x20)  ~Array<Graphics::Animation>           (each clip's ~Animation)
+// Each frees AND zeroes its header, so the compiler-emitted ~Array<uint8_t> of
+// the three members that runs after this body sees an empty header: no
+// element destroy and MemFree(null) -- a no-op.
+AnimationGroup::~AnimationGroup() {
+    using ArrayDtorFn = void* (*)(void*);
+    RtAddr<ArrayDtorFn>(0x18001c3b0ull)(&_blendTimes);
+    RtAddr<ArrayDtorFn>(0x18001c2d0ull)(&_tags);
+    RtAddr<ArrayDtorFn>(0x18001c1e0ull)(&_clips);
+}
+
+// ?TypeId@AnimationGroup@Graphics@@SAIXZ 0x180016300 -- the static twin of
+// slot 2: the minted record's +0x00 until the W3 fold (B39_RULES D6 step 1).
+uint32_t AnimationGroup::TypeId() {
+    uint32_t v = 0; std::memcpy(&v, AnimGroupTypeInfo(), sizeof v); return v;
+}
+
+// ?CreateNewObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@XZ 0x180016400
+// -- `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0x58, align 8; retail's null
+// branch; the inlined ctor. Replaces the FACTREST row (B39_RULES D2).
+Object::Base* AnimationGroup::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(AnimationGroup), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) AnimationGroup();
+}
+// ?CreateInPlaceObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@PEAX@Z 0x1800164d0
+Object::Base* AnimationGroup::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) AnimationGroup();
+}
 
 }  // namespace Graphics
 
-// ============================================================================
-// The registered doors. Same mangled names, same retail addresses, same
-// registrations — each is now a one-line QUALIFIED delegation.
-// ============================================================================
-
-extern "C" uint32_t RtGraphics_AnimationGroup_Type(const void* selfv) {
-    return reinterpret_cast<const Graphics::AnimationGroup*>(selfv)        // B.3.5 bridge
-               ->Graphics::AnimationGroup::Type();
-}
-extern "C" const char* RtGraphics_AnimationGroup_TypeName(const void* selfv) {
-    return reinterpret_cast<const Graphics::AnimationGroup*>(selfv)        // B.3.5 bridge
-               ->Graphics::AnimationGroup::TypeName();
-}
-extern "C" int32_t RtGraphics_AnimationGroup_GetFileVersion(const void* selfv) {
-    return reinterpret_cast<const Graphics::AnimationGroup*>(selfv)        // B.3.5 bridge
-               ->Graphics::AnimationGroup::GetFileVersion();
-}
-extern "C" int32_t RtGraphics_AnimationGroup_Compile(void* selfv, const void* path) {
-    return static_cast<int32_t>(
-        reinterpret_cast<Graphics::AnimationGroup*>(selfv)                 // B.3.5 bridge
-            ->Graphics::AnimationGroup::Compile(
-                *reinterpret_cast<const System::Filename*>(path)));
-}
-extern "C" void* RtGraphics_AnimationGroup_Construct(void* selfv) {
-    // The retail null test stays IN THE DOOR (B35 class-block brief).
-    if (!selfv) return nullptr;
-    return reinterpret_cast<Graphics::AnimationGroup*>(selfv)              // B.3.5 bridge
-               ->Graphics::AnimationGroup::Construct();
-}
-extern "C" void* RtGraphics_AnimationGroup_Reconstruct(void* selfv) {
-    return reinterpret_cast<Graphics::AnimationGroup*>(selfv)              // B.3.5 bridge
-               ->Graphics::AnimationGroup::Reconstruct();
-}
-extern "C" void RtGraphics_AnimationGroup_Destruct(void* selfv) {
-    reinterpret_cast<Graphics::AnimationGroup*>(selfv)                     // B.3.5 bridge
-        ->Graphics::AnimationGroup::Destruct();
-}
-extern "C" bool RtGraphics_AnimationGroup_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<Graphics::AnimationGroup*>(selfv)              // B.3.5 bridge
-               ->Graphics::AnimationGroup::Serialize(streamv);
-}
+// ENDGAME B.3.9 block GFX: AnimationGroup's eight slot doors
+// (`RtGraphics_AnimationGroup_Type` .. `_Serialize`) are gone -- their only
+// reader was the minted table. The Array<Animation>::Serialize helper
+// 0x18005a040 stays registered (a by-address callee, not a slot).
 
 // ============================================================================
 // Graphics::ParticleSystem
@@ -958,24 +931,16 @@ bool ParticleSystem::Serialize(void* streamv) {
 
 int RtGraphicsBatch7AnimGroupParticleSystemRegister() {
     int n = 0;
-    RegisterRuntimeExport("?TypeName@AnimationGroup@Graphics@@UEBAPEBDXZ", (void*)&RtGraphics_AnimationGroup_TypeName); ++n;
-    RegisterRuntimeAddr  (0x180016310ull, (void*)&RtGraphics_AnimationGroup_TypeName);
-    RegisterRuntimeExport("?Type@AnimationGroup@Graphics@@UEBAIXZ", (void*)&RtGraphics_AnimationGroup_Type); ++n;
-    RegisterRuntimeAddr  (0x1800162f0ull, (void*)&RtGraphics_AnimationGroup_Type);
-    RegisterRuntimeExport("?GetFileVersion@AnimationGroup@Graphics@@UEBAHXZ", (void*)&RtGraphics_AnimationGroup_GetFileVersion); ++n;
-    RegisterRuntimeAddr  (0x1800fb680ull, (void*)&RtGraphics_AnimationGroup_GetFileVersion);
-    RegisterRuntimeExport("?Compile@AnimationGroup@Graphics@@UEAA?AW4CompileResult@External@Object@@AEBVFilename@System@@@Z",
-                          (void*)&RtGraphics_AnimationGroup_Compile); ++n;
-    RegisterRuntimeAddr  (0x1800fb690ull, (void*)&RtGraphics_AnimationGroup_Compile);
-    RegisterRuntimeExport("?Serialize@AnimationGroup@Graphics@@UEAA_NAEAVStream@IO@@@Z", (void*)&RtGraphics_AnimationGroup_Serialize); ++n;
-    RegisterRuntimeAddr  (0x1800fb6a0ull, (void*)&RtGraphics_AnimationGroup_Serialize);
+    // AnimationGroup: the factory pair (B39_RULES D2), the class's own statics,
+    // by name AND address; the minted `?_typeInfo@AnimationGroup` record
+    // resolves them. The slot doors are retired (above).
+    RegisterRuntimeExport("?CreateNewObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@XZ",
+                          (void*)&::Graphics::AnimationGroup::CreateNewObject); ++n;
+    RegisterRuntimeAddr  (0x180016400ull, (void*)&::Graphics::AnimationGroup::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&::Graphics::AnimationGroup::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr  (0x1800164d0ull, (void*)&::Graphics::AnimationGroup::CreateInPlaceObject);
     RegisterRuntimeAddr  (0x18005a040ull, (void*)&RtGraphics_AnimationGroup_SerializeClips); ++n;
-    RegisterRuntimeExport("?Reconstruct@AnimationGroup@Graphics@@UEAAPEAVExternal@Object@@XZ", (void*)&RtGraphics_AnimationGroup_Reconstruct); ++n;
-    RegisterRuntimeAddr  (0x180016550ull, (void*)&RtGraphics_AnimationGroup_Reconstruct);
-    RegisterRuntimeExport("?Destruct@AnimationGroup@Graphics@@UEAAXXZ", (void*)&RtGraphics_AnimationGroup_Destruct); ++n;
-    RegisterRuntimeAddr  (0x180016650ull, (void*)&RtGraphics_AnimationGroup_Destruct);
-    RegisterRuntimeExport("?Construct@AnimationGroup@Graphics@@UEAAPEAVExternal@Object@@XZ", (void*)&RtGraphics_AnimationGroup_Construct); ++n;
-    RegisterRuntimeAddr  (0x1800165d0ull, (void*)&RtGraphics_AnimationGroup_Construct);
 
     RegisterRuntimeExport("?TypeName@ParticleSystem@Graphics@@UEBAPEBDXZ", (void*)&RtGraphics_ParticleSystem_TypeName); ++n;
     RegisterRuntimeAddr  (0x1800203e0ull, (void*)&RtGraphics_ParticleSystem_TypeName);

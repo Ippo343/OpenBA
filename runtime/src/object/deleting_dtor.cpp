@@ -952,7 +952,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     //   0x180050820  LEA R9,[0x1800e0880]  MOV EDX,0x40   Audio::SoundEffect
     // None of the four ~Class bodies is ported by this batch; all four reach
     // the DLL through ResolveAddr, exactly like most of the rows above.
-    RT_DELDTOR(0x1800167f0, 0x1800fb620, 0x058, "Graphics::AnimationGroup"),
     RT_DELDTOR(0x180020a70, 0x1800a51c0, 0x108, "Graphics::ParticleSystem"),
     RT_DELDTOR(0x18000bef0, 0x1800e03b0, 0x080, "Audio::SoundBuffer"),
     RT_DELDTOR(0x180050820, 0x1800e0880, 0x040, "Audio::SoundEffect"),
@@ -1571,10 +1570,6 @@ void* RtDelDtor_LabelDescription(void* self, unsigned flags) {
 // VTABLE BATCH 7 (2026-09-12). Indices 81-84 (renumbered at this merge: batch
 // 8 took 67-70 on main first, concurrently with this batch's own claim on the
 // same range on this branch).
-// Graphics::AnimationGroup  ~AnimationGroup = 0x1800fb620  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
-void* RtDelDtor_AnimationGroup(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800167f0>());
-}
 // Graphics::ParticleSystem  ~ParticleSystem = 0x1800a51c0  (PORTED, BATCH C
 //                          2026-09-12, graphics/batchc_gfx_leaves.cpp; was
 //                          "NOT ported")
@@ -1793,7 +1788,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180042730, (void*)&RtDelDtor_LabelDescription);
 
     // VTABLE BATCH 7 (2026-09-12).
-    RegisterRuntimeAddr(0x1800167f0, (void*)&RtDelDtor_AnimationGroup);
     RegisterRuntimeAddr(0x180020a70, (void*)&RtDelDtor_ParticleSystem);
     RegisterRuntimeAddr(0x18000bef0, (void*)&RtDelDtor_SoundBuffer);
     RegisterRuntimeAddr(0x180050820, (void*)&RtDelDtor_SoundEffect);

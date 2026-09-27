@@ -12,52 +12,6 @@
 // ============================================================================
 
 // --------------------------------------------------------------------------
-// Graphics::AnimationGroup
-//   ?CreateNewObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@XZ  0x180016400
-//   ?CreateInPlaceObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@PEAX@Z  0x1800164d0
-// --------------------------------------------------------------------------
-static const RtCtorStep kStepsGraphics_AnimationGroup_New[] = {
-    { RtFactOp::Vptr, 8, 0x00, 0, "??_7Base@Object@@6B@", 0x180016463ull },
-    { RtFactOp::Vptr, 8, 0x00, 0, "??_7External@Object@@6B@", 0x18001646dull },
-    { RtFactOp::Imm, 8, 0x08, 0x0ull, nullptr, 0x18001647bull },
-    { RtFactOp::Imm, 8, 0x10, 0x0ull, nullptr, 0x18001647eull },
-    { RtFactOp::Imm, 8, 0x18, 0x0ull, nullptr, 0x180016482ull },
-    { RtFactOp::Vptr, 8, 0x00, 0, "??_7AnimationGroup@Graphics@@6B@", 0x18001648dull },
-    { RtFactOp::Imm, 8, 0x20, 0x0ull, nullptr, 0x180016490ull },
-    { RtFactOp::Imm, 8, 0x28, 0x0ull, nullptr, 0x180016494ull },
-    { RtFactOp::Imm, 4, 0x30, 0x3dcccccdull, nullptr, 0x180016498ull },
-    { RtFactOp::Imm, 8, 0x38, 0x0ull, nullptr, 0x18001649full },
-    { RtFactOp::Imm, 8, 0x40, 0x0ull, nullptr, 0x1800164a3ull },
-    { RtFactOp::Imm, 8, 0x48, 0x0ull, nullptr, 0x1800164a7ull },
-    { RtFactOp::Imm, 8, 0x50, 0x0ull, nullptr, 0x1800164abull },
-    { RtFactOp::End, 0, 0, 0, nullptr, 0 },
-};
-static const RtCtorStep kStepsGraphics_AnimationGroup_IP[] = {
-    { RtFactOp::Vptr, 8, 0x00, 0, "??_7Base@Object@@6B@", 0x1800164edull },
-    { RtFactOp::Vptr, 8, 0x00, 0, "??_7External@Object@@6B@", 0x1800164f7ull },
-    { RtFactOp::Imm, 8, 0x08, 0x0ull, nullptr, 0x180016505ull },
-    { RtFactOp::Imm, 8, 0x10, 0x0ull, nullptr, 0x180016508ull },
-    { RtFactOp::Imm, 8, 0x18, 0x0ull, nullptr, 0x18001650cull },
-    { RtFactOp::Vptr, 8, 0x00, 0, "??_7AnimationGroup@Graphics@@6B@", 0x180016517ull },
-    { RtFactOp::Imm, 8, 0x20, 0x0ull, nullptr, 0x18001651aull },
-    { RtFactOp::Imm, 8, 0x28, 0x0ull, nullptr, 0x18001651eull },
-    { RtFactOp::Imm, 4, 0x30, 0x3dcccccdull, nullptr, 0x180016522ull },
-    { RtFactOp::Imm, 8, 0x38, 0x0ull, nullptr, 0x180016529ull },
-    { RtFactOp::Imm, 8, 0x40, 0x0ull, nullptr, 0x18001652dull },
-    { RtFactOp::Imm, 8, 0x48, 0x0ull, nullptr, 0x180016531ull },
-    { RtFactOp::Imm, 8, 0x50, 0x0ull, nullptr, 0x180016535ull },
-    { RtFactOp::End, 0, 0, 0, nullptr, 0 },
-};
-static uint64_t kCountGraphics_AnimationGroup[3];
-static const RtFactoryClass kClsGraphics_AnimationGroup = {
-    "Graphics::AnimationGroup", 0x58, 8,
-    kStepsGraphics_AnimationGroup_New, kStepsGraphics_AnimationGroup_IP,
-    0x180016400ull, 0x1800164d0ull, kCountGraphics_AnimationGroup,
-};
-extern "C" void* RtFactNew_Graphics_AnimationGroup()          { return RtFactoryNew(kClsGraphics_AnimationGroup); }
-extern "C" void* RtFactIP_Graphics_AnimationGroup(void* p)    { return RtFactoryInPlace(kClsGraphics_AnimationGroup, p); }
-
-// --------------------------------------------------------------------------
 // Graphics::EdgeMesh
 //   ?CreateNewObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@XZ  0x180012d80
 //   ?CreateInPlaceObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z  0x180012e00
@@ -299,8 +253,6 @@ extern "C" void* RtFactIP_Graphics_ReflectionImageBuffer(void* p)    { return Rt
 
 
 static const RtFactoryReg kRegs[] = {
-    { "?CreateNewObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@XZ", 0x180016400ull, (void*)&RtFactNew_Graphics_AnimationGroup,
-      "?CreateInPlaceObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x1800164d0ull, (void*)&RtFactIP_Graphics_AnimationGroup, &kClsGraphics_AnimationGroup },
     { "?CreateNewObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@XZ", 0x180012d80ull, (void*)&RtFactNew_Graphics_EdgeMesh,
       "?CreateInPlaceObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180012e00ull, (void*)&RtFactIP_Graphics_EdgeMesh, &kClsGraphics_EdgeMesh },
     { "?CreateNewObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@XZ", 0x18001f0a0ull, (void*)&RtFactNew_Graphics_FrameCopyImageBuffer,

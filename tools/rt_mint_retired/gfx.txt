@@ -10,3 +10,6 @@
 
 # -- W1: AnimationEvent -- slot 0 concrete (the class stays abstract: pure External slots + Construct) --
 ??_7AnimationEvent@Graphics@@6B@       GFX   concrete DeletingDtor + TypeId + factory pair (null stubs); FACTREST row, RT_DELDTOR row 0x180011800, ??0/??1 doors, Type/TypeName slot doors deleted
+
+# -- W1: AnimationGroup concrete (D1), factory pair the class own (D2) --
+??_7AnimationGroup@Graphics@@6B@       GFX   real ctor + DeletingDtor + ~X (door body) + TypeId; FACTREST row, RT_DELDTOR row 0x1800167f0, ??1 leaves door, 8 slot doors deleted; Construct/Reconstruct placement-new
