@@ -21,3 +21,6 @@
 ??_7CompressedMemoryStream@IO@@6B@  IO   every builder (SaveMetaData, LoadMetaData, ReadPackfile, the exe SaveRestore + roundtrip check) is ::new (p) CompressedMemoryStream(); RT_DELDTOR 0x1800244a0, 6 CMS doors (??0/??1/Open/Create/Close/GetMemoryStream) + ?PreCommit slot door deleted
 ??_7CompressedStream@IO@@6B@  IO   abstract base, stamped only by the ??0 / ??1CompressedStream doors (last callers gone with CompressedMemoryStream); RT_DELDTOR 0x180023fd0, both doors, 6 slot doors (Write/SetCurrentPos/GetCurrentPos/GetSize/PreCommit/Close) + the ?Read registration deleted
 ??_7Stream@IO@@6B@  IO   abstract base of every IO stream; its last stampers (??0/??1CompressedStream doors, the ??1Stream door) are gone; RT_DELDTOR 0x18000c610, ??1Stream door (deleting_dtor_leaves.cpp), ?GetSource@Stream slot door deleted
+
+# -- W2: the unexported PersistenceWorker table (row 1) --
+0x180155860   IO   IO::PersistenceWorker (System::Thread subclass): ??0Persistence (foreign site singleton_ctors.cpp) is ::new (p+0x10) PersistenceWorker(); ~Persistence ends it directly; the Run (0x1800b7260) and dtor (0x1800b7740) address doors deleted

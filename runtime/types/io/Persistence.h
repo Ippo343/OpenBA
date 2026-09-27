@@ -298,11 +298,11 @@ static_assert(sizeof(SaveGameInfo) == 0x10, "sizeof(IO::Persistence::SaveGameInf
 // worker table 0x180155860 over `this+0x10` — the field comment above says so
 // and pins it. So `IO::Persistence` EMBEDS a `System::Thread`-derived save/load
 // worker at +0x10; it does not derive from one, and +0x00 is a tree root, not a
-// vptr. `_workerVtable` therefore stays a plain `void*` FIELD, and
-// `persistence_worker_win.cpp`'s teardown re-stamp of the BASE `System::Thread`
-// vtable 0x180155f20 BY ADDRESS (:585-589) stays exactly as it is, as does
-// `engine/singleton_ctors.cpp`'s construction of the object: `System::Thread` is
-// B.3 step 4b and `singleton_ctors.cpp` is outside this block's file set.
+// vptr. `_workerVtable` therefore stays a plain `void*` FIELD. ENDGAME B.3.9
+// IO (W2): the worker is a real class, `IO::PersistenceWorker`
+// (PersistenceWorker.h) -- `engine/singleton_ctors.cpp` placement-constructs it
+// at +0x10 and `~Persistence` ends it directly; the by-address vtable stamps
+// (0x180155860, 0x180155f20) are the compiler's own stores now.
 //
 // *** THIS DECLARATION IS DELIBERATELY PARTIAL AND CARRIES NO `sizeof` ASSERT
 // *** AGAINST A LITERAL, AND THAT IS THIS HEADER'S OWN STANDING RULE. *** The

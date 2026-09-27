@@ -615,3 +615,21 @@ UNIT_TEST(b39_io_compressedmemorystream_shape_ctor_and_both_arms) {
     ::new (block + 8 + 0x98) IO::CompressedMemoryStream();
     CHECK(reinterpret_cast<uint8_t*>(c0->DeletingDtor(3)) == block);
 }
+
+// ===========================================================================
+// IO::PersistenceWorker -- unexported row 1 (0x180155860, W2).
+// ===========================================================================
+// Shape only: constructing one starts a real thread (??0Thread's
+// _beginthreadex), which a host test must not do. The layout pins and the
+// POD cross-asserts are static_asserts in the header.
+#include "runtime/types/io/PersistenceWorker.h"
+UNIT_TEST(b39_io_persistenceworker_shape) {
+    CHECK(!std::is_abstract<IO::PersistenceWorker>::value);
+    CHECK(!std::is_destructible<IO::PersistenceWorker>::value);
+    CHECK(!std::has_virtual_destructor<IO::PersistenceWorker>::value);
+    CHECK((std::is_base_of<System::Thread, IO::PersistenceWorker>::value));
+    CHECK_EQ(SlotOffset(&IO::PersistenceWorker::Run),         (uintptr_t)0x00);
+    CHECK_EQ(SlotOffset(&IO::PersistenceWorker::OnCompleted), (uintptr_t)0x08);
+    CHECK_EQ(sizeof(IO::PersistenceWorker), (size_t)0x80);
+    CHECK_EQ(offsetof(IO::PersistenceWorker, _command), (size_t)0x3c);
+}

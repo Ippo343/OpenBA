@@ -90,6 +90,7 @@
 #include "../../types/io/Modification.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/io/Persistence.h"
+#include "../../types/io/PersistenceWorker.h"   // ENDGAME B.3.9 IO (W2)
 #include "../../types/object/External.h"
 #include "../../types/object/Internal.h"
 #include "../../types/video/Device.h"
@@ -444,24 +445,12 @@ void* Ctor_FileSystem(void* self) {
 // something this body can fix, and a silent `if (v)` here would only hide it.
 // ===========================================================================
 void* Ctor_Persistence(void* self) {
-    using ThreadCtorFn = void* (*)(void*, uint32_t);
-    static const void* baseVtable =
-        reinterpret_cast<const void*>(ResolveAddr(Module::Runtime, 0x180155860));
-
     W64(self, 0x00, 0);
     W32(self, 0x08, 0);
-    RT_EXPORT_ONCE(ThreadCtorFn, "??0Thread@System@@QEAA@I@Z")(
-        static_cast<uint8_t*>(self) + 0x10, 0x10000);
-    WP (self, 0x10, baseVtable);
-    W64(self, 0x40, 0);
-    W64(self, 0x48, 1);
-    W32(self, 0x50, 0);
-    W64(self, 0x60, 0);
-    W64(self, 0x68, 0);
-    W64(self, 0x70, 0);
-    W64(self, 0x78, 0);
-    W64(self, 0x80, 0);
-    W64(self, 0x88, 0);
+    // ENDGAME B.3.9 IO (W2, foreign site): the embedded worker is the REAL
+    // class -- ??0Thread(0x10000), its vptr, the +0x40..+0x88 stores
+    // (runtime/types/io/PersistenceWorker.h), the same steps in the same order.
+    ::new (static_cast<uint8_t*>(self) + 0x10) IO::PersistenceWorker();
     W64(self, 0x90, 0);
     Publish(SlotPersistence(), self);
     return self;
