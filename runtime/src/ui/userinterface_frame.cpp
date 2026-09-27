@@ -150,6 +150,10 @@
 // (the address door lives in standalone/), and the RULE B6-5 atomic door
 // caches.
 #include "element_common.h"
+#include "../../types/video/Device.h"    // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "../../types/input/Device.h"    // ENDGAME B.3.9 SS1: Input::Device::_singleton
+#include "../../types/input/Input.h"     // ENDGAME B.3.9 SS1: Input::Configuration::_singleton
+#include "../../types/system/Timer.h"    // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 
 #include <atomic>
 
@@ -165,28 +169,22 @@ inline uint8_t* B(void* p, size_t off) { return static_cast<uint8_t*>(p) + off; 
 // for the process. ENDGAME B.3.6 (RULE B6-5): namespace-scope atomics rather
 // than RT_DATA_SLOT / RT_EXPORT_ONCE function-local statics — `Update` runs on
 // UI objects the loader thread constructs, every frame.
-std::atomic<void*> g_sptSlot{nullptr};
-std::atomic<void*> g_videoDeviceSlot{nullptr};
-std::atomic<void*> g_inputDeviceSlot{nullptr};
-std::atomic<void*> g_inputConfigSlot{nullptr};
 std::atomic<void*> g_memAllocSlot{nullptr};
 std::atomic<void*> g_memFreeSlot{nullptr};
 std::atomic<void*> g_eventsSetSizeSlot{nullptr};
+// ENDGAME B.3.9 SS1 (B39_RULES D7): all four are class statics now, no lazy
+// AtomicExport cache (B9-10).
 inline const double* TimerSecondsPerTick() {
-    return static_cast<const double*>(
-        rtuielem::AtomicExport(g_sptSlot, "?_secondsPerTick@Timer@System@@0NA"));
+    return &::System::Timer::_secondsPerTick;
 }
 inline void** VideoDeviceSingleton() {
-    return static_cast<void**>(
-        rtuielem::AtomicExport(g_videoDeviceSlot, "?_singleton@Device@Video@@0PEAV12@EA"));
+    return reinterpret_cast<void**>(&::Video::Device::_singleton);
 }
 inline void** InputDeviceSingleton() {
-    return static_cast<void**>(
-        rtuielem::AtomicExport(g_inputDeviceSlot, "?_singleton@Device@Input@@0PEAV12@EA"));
+    return reinterpret_cast<void**>(&::Input::Device::_singleton);
 }
 inline void** InputConfigSingleton() {
-    return static_cast<void**>(
-        rtuielem::AtomicExport(g_inputConfigSlot, "?_singleton@Configuration@Input@@0PEAV12@EA"));
+    return reinterpret_cast<void**>(&::Input::Configuration::_singleton);
 }
 
 // ---- the callees ------------------------------------------------------------

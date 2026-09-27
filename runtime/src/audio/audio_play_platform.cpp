@@ -208,6 +208,7 @@
 #include "../../types/audio/Device.h"
 #include "../../types/audio/SoundBuffer.h"
 #include "../../types/system/Value.h"          // System::Time
+#include "../../types/system/Timer.h"          // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "../engine/mainloop_internal.h"       // rtengine::AtomicResolve (B6-5)
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
@@ -264,8 +265,8 @@ template <typename T> inline void Store(void* p, int off, T v) {
 }
 
 double SecondsPerTick() {
-    double* slot = RT_DATA_SLOT(double*, "?_secondsPerTick@Timer@System@@0NA");
-    return slot ? *slot : 0.0;
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+    return ::System::Timer::_secondsPerTick;
 }
 
 // FUN_180127560 -- a plain CRT powf(base, exponent). Out of this batch's

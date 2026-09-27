@@ -177,6 +177,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/Goal.h"
 #include "../../types/object/Internal.h"
+#include "../../types/object/TypeInfo.h"     // ENDGAME B.3.9 SS1: Object::Factory::_singleton
 
 // runtime/src/collection/array.cpp — `rtcoll::MemFree` (declared in
 // Collection.h): `if (p) { Enter(alloc+0x640); Free(alloc, p); Leave; }`,
@@ -194,12 +195,11 @@ uint32_t GoalInstanceTypeId() {
     return v;
 }
 
-// `?_singleton@Factory@Object@@0PEAV12@EA` @ 0x1801fc6e8. RT_DATA_SLOT yields
-// the ADDRESS of the pointer variable; retail's `MOV RBX,[RIP+…]` dereferences
-// it once.
+// `?_singleton@Factory@Object@@0PEAV12@EA` @ 0x1801fc6e8. ENDGAME B.3.9 SS1
+// (B39_RULES D7): the class static now -- read fresh, no lazy cache (this body
+// runs on the LOADER thread, B9-10).
 void* FactorySingleton() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Factory@Object@@0PEAV12@EA");
-    return *slot;
+    return ::Object::Factory::_singleton;
 }
 
 using CreateObjectFn   = void* (*)(const void* factory, uint32_t typeId);

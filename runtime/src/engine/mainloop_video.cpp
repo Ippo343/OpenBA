@@ -193,6 +193,8 @@
 #include "../../types/engine/MainLoop.h"
 #include "../../types/engine/UpdateLoop.h"   // ENDGAME B.3.7: slots 8/9 as virtual calls
 #include "../../types/save/SaveLoad.h"       // ENDGAME B.3.7 callers (K5): Save::SaveLoad
+#include "../../types/object/External.h"     // ENDGAME B.3.9 SS1: ExternalFactory::_singleton
+#include "../../types/object/TypeInfo.h"     // ENDGAME B.3.9 SS1: Object::Factory::_singleton
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
 #include "../collection/array_internal.h"
@@ -345,13 +347,13 @@ uint32_t TypeIdExternal() {
     return *RT_DATA_SLOT(const uint32_t*, "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A");
 }
 
-// The four singletons. All four ARE already in the mint — checked by address
-// against standalone/rt_data_mint_tables.inc, not assumed.
+// The four singletons — all four class statics now (ENDGAME B.3.9 SS1,
+// B39_RULES D7): the address-of IS the redirected cell.
 void** ExternalFactorySlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@ExternalFactory@Object@@0PEAV12@EA");
+    return reinterpret_cast<void**>(&::Object::ExternalFactory::_singleton);
 }
 void** ObjectFactorySlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Factory@Object@@0PEAV12@EA");
+    return reinterpret_cast<void**>(&::Object::Factory::_singleton);
 }
 void** SaveLoadSlot() {
     return reinterpret_cast<void**>(&::Save::SaveLoad::_singleton);

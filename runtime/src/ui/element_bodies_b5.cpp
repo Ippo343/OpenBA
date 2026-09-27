@@ -121,6 +121,8 @@
 #include "../../types/ui/SliderElement.h"
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/ui/SpriteSheet.h"
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "../../types/input/Device.h"   // ENDGAME B.3.9 SS1: Input::Device::_singleton
 #include "../../types/ui/StringTable.h"
 #include "../../types/ui/TableElement.h"
 #include "../../types/ui/TextDescription.h"
@@ -192,17 +194,12 @@ void SetNeedsSizeCalcChain(void* elem) {
 // ---- the DLL singletons these bodies read ---------------------------------
 // RULE B6-5: member bodies read them, so the slot caches are namespace-scope
 // atomics (a miss is retried), not RT_DATA_SLOT's function-local statics.
-std::atomic<void*> g_videoDeviceSlot{nullptr};
-std::atomic<void*> g_inputDeviceSlot{nullptr};
+// ENDGAME B.3.9 SS1 (B39_RULES D7): both class statics now, no lazy cache.
 void* VideoDeviceSingleton() {            // 0x1801fe7a8
-    void** slot = static_cast<void**>(rtuielem::AtomicExport(
-        g_videoDeviceSlot, "?_singleton@Device@Video@@0PEAV12@EA"));
-    return slot ? *slot : nullptr;
+    return ::Video::Device::_singleton;
 }
 void* InputDeviceSingleton() {            // 0x1801fe770
-    void** slot = static_cast<void**>(rtuielem::AtomicExport(
-        g_inputDeviceSlot, "?_singleton@Device@Input@@0PEAV12@EA"));
-    return slot ? *slot : nullptr;
+    return ::Input::Device::_singleton;
 }
 // 0x1801facb8 — the FIRST DWORD of `?_typeInfo@NumberElement@UI@@0VBaseTypeInfo
 // @Object@@A`, i.e. BaseTypeInfo::typeId, which is what retail loads with a

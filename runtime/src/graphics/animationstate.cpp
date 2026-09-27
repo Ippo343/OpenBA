@@ -72,6 +72,7 @@
 #include "../../types/graphics/Animation.h"
 #include "../../types/graphics/AnimationState.h"
 #include "../../types/system/Value.h"
+#include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "../../types/io/Serializer.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
@@ -147,8 +148,8 @@ AnimationManagerView* AnimationManagerSingleton() {
 // conversion in this file goes through it, exactly as retail's inlined
 // `CVTSI2SD / MULSD [rip+_secondsPerTick]` does.
 double SecondsPerTick() {
-    double* p = RT_DATA_SLOT(double*, "?_secondsPerTick@Timer@System@@0NA");
-    return p ? *p : 0.0;
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+    return ::System::Timer::_secondsPerTick;
 }
 
 // ---------------------------------------------------------------------------

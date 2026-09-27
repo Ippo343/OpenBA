@@ -44,7 +44,10 @@
 #include "../../types/ui/EditElement.h"
 #include "../../types/ui/Font.h"
 #include "../../types/ui/SpriteContext.h"
+#include "../../types/input/Device.h"   // ENDGAME B.3.9 SS1: Input::Device::_singleton
+#include "../../types/input/Input.h"    // ENDGAME B.3.9 SS1: Input::Configuration::_singleton
 #include "../../types/system/String.h"
+#include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 
 using namespace rtuielem;
 
@@ -74,9 +77,6 @@ constexpr int32_t kEventEditFinished = 0x15;
 
 // RULE B6-5: namespace-scope atomic slots, never a first-call static.
 std::atomic<void*> g_typeInfoSlot{nullptr};
-std::atomic<void*> g_inputDeviceSlot{nullptr};
-std::atomic<void*> g_inputConfigSlot{nullptr};
-std::atomic<void*> g_secondsPerTickSlot{nullptr};
 std::atomic<void*> g_memFreeSlot{nullptr};
 
 const uint8_t* EditElementTypeInfo() {
@@ -84,18 +84,16 @@ const uint8_t* EditElementTypeInfo() {
         g_typeInfoSlot, "?_typeInfo@EditElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
 
+// ENDGAME B.3.9 SS1 (B39_RULES D7): both class statics now, no lazy cache.
 void** InputDeviceSlot() {
-    return static_cast<void**>(AtomicExport(
-        g_inputDeviceSlot, "?_singleton@Device@Input@@0PEAV12@EA"));
+    return reinterpret_cast<void**>(&::Input::Device::_singleton);
 }
 void** InputConfigSlot() {
-    return static_cast<void**>(AtomicExport(
-        g_inputConfigSlot, "?_singleton@Configuration@Input@@0PEAV12@EA"));
+    return reinterpret_cast<void**>(&::Input::Configuration::_singleton);
 }
 double SecondsPerTick() {
-    double* p = static_cast<double*>(AtomicExport(
-        g_secondsPerTickSlot, "?_secondsPerTick@Timer@System@@0NA"));
-    return p ? *p : 0.0;
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, no lazy cache.
+    return ::System::Timer::_secondsPerTick;
 }
 
 using MemFreeFn     = void  (*)(void* p);

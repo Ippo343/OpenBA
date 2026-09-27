@@ -30,6 +30,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/graphics/GraphicsMesh.h"   // the real Graphics::GraphicsMesh
+#include "../../types/video/Device.h"            // ENDGAME B.3.9 SS1: Video::Device::_singleton
 
 using rt::io::Encoding;
 using rt::io::ReaderWriter;
@@ -200,7 +201,8 @@ void**   SerializeCurrentMesh() { return &g_serializeCurrentMesh; }
 // `?_singleton@Device@Video@@0PEAV12@EA` — 0x1801fe7a8, a POINTER to the
 // Device, so reading +0xf8 is a double indirection.
 const uint8_t* VideoDevice() {
-    return *RT_DATA_SLOT(const uint8_t* const*, "?_singleton@Device@Video@@0PEAV12@EA");
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+    return reinterpret_cast<const uint8_t*>(::Video::Device::_singleton);
 }
 
 // ---------------------------------------------------------------------------

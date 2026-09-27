@@ -57,6 +57,7 @@
 #include "../../types/system/String.h"
 #include "../../types/ui/ToolTipDialog.h"
 #include "../../types/ui/String.h"
+#include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 // ResolveAddr lives in standalone/resolve.h, which drags in <windows.h> and so
 // must not be included from runtime/src (rt_port.h explains why).
 // ENDGAME B.3.6 block E: element_common.h carries the declaration exactly as
@@ -86,7 +87,6 @@ using OperatorNewFn  = void* (*)(uint64_t size);
 // loader thread constructs.
 std::atomic<void*> g_eventsSetSizeSlot{nullptr};
 std::atomic<void*> g_addDialogsSetSizeSlot{nullptr};
-std::atomic<void*> g_sptSlot{nullptr};
 std::atomic<void*> g_tipOperatorNewSlot{nullptr};
 
 SetSizeFn EventsSetSize() {
@@ -322,9 +322,8 @@ void UI::DialogInstance::EndHover(UserInterface* ui) {
     }
 
     // 0x180113d5f: XORPS XMM0,XMM0 / DIVSD XMM0,[0x1801fe728] / CVTTSD2SI
-    const double* const spt = static_cast<const double*>(
-        rtuielem::AtomicExport(g_sptSlot, "?_secondsPerTick@Timer@System@@0NA"));
-    _hoverTime = static_cast<int64_t>(0.0 / *spt);                    // 0x180113d6f
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+    _hoverTime = static_cast<int64_t>(0.0 / ::System::Timer::_secondsPerTick);   // 0x180113d6f
 }
 
 extern "C" void RtUi_DialogInstance_EndHover(UI::DialogInstance* self, UserInterface* ui) {

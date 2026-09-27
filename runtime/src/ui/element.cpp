@@ -116,6 +116,7 @@
 #include "../../types/system/String.h"
 #include "../../types/ui/Element.h"
 #include "../../types/ui/ContainerElement.h"   // fragment pass F2: SetOffsets
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
 // `enum class Module` + `ResolveAddr` (declared once there, byte-identical to
 // standalone/resolve.h) and `rtuielem::AtomicExport`, the B6-5 door cache.
 #include "element_common.h"
@@ -259,13 +260,10 @@ uint32_t ScrollTypeId() {
 }
 
 // Video::Device::_singleton (exported, 0x1801fe7a8). GetPaddedSize reads the
-// screen size out of the pointed-to Device at +0x04 / +0x08. B6-5: an atomic
-// slot, not a first-call static — GetPaddedSize is a member.
-std::atomic<void*> g_deviceSingletonSlot{nullptr};
+// screen size out of the pointed-to Device at +0x04 / +0x08. ENDGAME B.3.9
+// SS1 (B39_RULES D7): the class static now, read fresh (B9-10).
 void* VideoDeviceSingleton() {
-    void** p = static_cast<void**>(rtuielem::AtomicExport(
-        g_deviceSingletonSlot, "?_singleton@Device@Video@@0PEAV12@EA"));
-    return p ? *p : nullptr;
+    return ::Video::Device::_singleton;
 }
 
 } // namespace

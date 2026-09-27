@@ -37,6 +37,7 @@
 // ============================================================================
 #include "element_common.h"
 #include "../../types/ui/AnimatedImageElement.h"
+#include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 
 using namespace rtuielem;
 
@@ -44,7 +45,6 @@ namespace {
 
 // RULE B6-5: namespace-scope atomic caches for the member bodies.
 std::atomic<void*> g_animatedImageElementTypeInfo{nullptr};
-std::atomic<void*> g_secondsPerTick{nullptr};
 const uint8_t* AnimatedImageElementTypeInfoAtomic() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_animatedImageElementTypeInfo,
@@ -52,11 +52,10 @@ const uint8_t* AnimatedImageElementTypeInfoAtomic() {
 }
 // `System::Timer::_secondsPerTick`, an exported DOUBLE (ordinal 4797, read at
 // 0x1800cb2d2 as `MOVSD XMM3,[0x1801fe728]`). The same slot
-// runtime/src/audio/audio_scene_update.cpp reads.
+// runtime/src/audio/audio_scene_update.cpp reads. ENDGAME B.3.9 SS1
+// (B39_RULES D7): the class static now, no lazy AtomicExport cache (B9-10).
 double SecondsPerTick() {
-    const double* p = static_cast<const double*>(
-        AtomicExport(g_secondsPerTick, "?_secondsPerTick@Timer@System@@0NA"));
-    return p ? *p : 0.0;
+    return ::System::Timer::_secondsPerTick;
 }
 
 using ArrayDtorFn     = void* (*)(void* array);

@@ -36,6 +36,7 @@
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
 
 // ResolveAddr lives in standalone/resolve.h, which drags in <windows.h>; PLAN
 // §4.1 keeps that out of runtime/src. Declared here exactly as ~30 sibling
@@ -277,20 +278,11 @@ inline int32_t SpriteHeight(const void* self, int spriteOff) {
 // screen size is two loads: [singleton] then +4 / +8.
 // ---------------------------------------------------------------------------
 //
-// RULE B6-5 (closing pass): InlineGetPaddedSize below reaches this from member
-// bodies that run on the loader thread, so the slot is a namespace-scope atomic
-// (was RT_DATA_SLOT's function-local static). Filled only when RtResolveCached
-// would itself have cached the hit (rt_resolve_cache.cpp section 6).
-inline std::atomic<void*> g_widgetVideoDeviceSlot{nullptr};
+// ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh every
+// call -- InlineGetPaddedSize below reaches this from member bodies that run
+// on the LOADER THREAD (B9-10: no lazy cache).
 inline void* VideoDevice() {
-    void* s = g_widgetVideoDeviceSlot.load(std::memory_order_acquire);
-    if (s == nullptr) {
-        void* scratch = nullptr;
-        s = RtResolveCached("?_singleton@Device@Video@@0PEAV12@EA", &scratch);
-        if (scratch != nullptr) g_widgetVideoDeviceSlot.store(scratch, std::memory_order_release);
-    }
-    void** slot = static_cast<void**>(s);
-    return slot ? *slot : nullptr;
+    return ::Video::Device::_singleton;
 }
 inline int32_t ScreenWidth()  { return I32(VideoDevice(), 4); }
 inline int32_t ScreenHeight() { return I32(VideoDevice(), 8); }
