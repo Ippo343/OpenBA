@@ -33,6 +33,14 @@
 #include "engine_funcs.h"
 #include "options.h"
 #include "Object/factory_registration.h"
+#include "Component/AttendanceComponent.h"
+#include "Component/Component.h"
+#include "Component/WorkComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Component/WorkPlaceDescription.h"
+#include "Dialog/RadiusUI.h"
+#include "Dialog/ToolUI.h"
+#include "Dialog/WorkPlaceUI.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -128,9 +136,7 @@ void* FindCompOnEntity(void* ent, uint32_t tid) {
         void** cs = reinterpret_cast<void**>(a + static_cast<uintptr_t>(i) * 8);
         void* c = *cs;
         if (!c) continue;
-        void** vt = *reinterpret_cast<void***>(c);
-        if (!vt || !vt[2]) continue;
-        if (reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c) == tid) return c;
+        if (reinterpret_cast<Object::Base*>(c)->Type() == tid) return c;   // B.3.8 bridge
     }
     return nullptr;
 }
@@ -165,15 +171,13 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
     }
 
     // ── the command slots, before opening anything ────────────────────────────────
-    // Slots 13/14 are CanCommand/Command. A live component with nulls here has a panel
-    // whose buttons cannot even be evaluated, let alone clicked.
-    void** cvt = *reinterpret_cast<void***>(comp);
-    void* canCmd = cvt ? cvt[13] : nullptr;
-    void* doCmd  = cvt ? cvt[14] : nullptr;
-    std::fprintf(stderr, "[FoodPanel] %-19s ent=%p comp=%p CanCommand(13)=%p Command(14)=%p\n",
-                 fc.component, ent, comp, canCmd, doCmd);
+    // Slots 13/14 are CommandMask/Command, Component virtuals (real classes since
+    // ENDGAME B.3.8, so neither slot can be null any more). `comp` is an element of the
+    // entity's component array matched by Type().
+    Component* ccomp = reinterpret_cast<Component*>(comp);   // B.3.8 bridge
+    std::fprintf(stderr, "[FoodPanel] %-19s ent=%p comp=%p\n", fc.component, ent, comp);
 
-    if (canCmd) {
+    {
         // Slot 13 does NOT have one signature across the family. Orchard/Pasture/CropField
         // implement CanCommand(self, id) and answer per command; the ResourceProduce base
         // (0x14012b520, shared by Fishing/Hunt/Herbalist) takes only `self` and returns a
@@ -184,7 +188,7 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
         int enabled = 0;
         bool uniform = true;
         for (int id = 0; id < 8; ++id) {
-            r[id] = reinterpret_cast<uint8_t (*)(void*, int)>(canCmd)(comp, id);
+            r[id] = static_cast<uint8_t>(ccomp->CommandMask(id));
             if (r[id]) ++enabled;
             if (r[id] != r[0]) uniform = false;
         }
@@ -235,10 +239,10 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
         // Attendance, but the Forester override reads it, so send id 1 (its "plant"
         // toggle) rather than 0 — id 0 would be a no-op on the forester and would make
         // a working slot 14 look dead.
-        if (doCmd && ValOn(Opt().foodPanelClick)) {
+        if (ValOn(Opt().foodPanelClick)) {
             const uint8_t was = r[1];
-            reinterpret_cast<void (*)(void*, int)>(doCmd)(comp, 1);
-            const uint8_t now = reinterpret_cast<uint8_t (*)(void*, int)>(canCmd)(comp, 1);
+            ccomp->Command(1);
+            const uint8_t now = static_cast<uint8_t>(ccomp->CommandMask(1));
             std::fprintf(stderr, "[FoodPanel]   CLICK cmd=1 -> mask 0x%02X -> 0x%02X  %s\n",
                          (unsigned)was, (unsigned)now,
                          (now != was) ? "OK — the command changed state"
@@ -271,9 +275,7 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
     for (int i = 0; ctrlArr && i < cnt; ++i) {
         void* c = ctrlArr[i];
         if (!c) { std::fprintf(stderr, " [null]"); continue; }
-        void** vt = *reinterpret_cast<void***>(c);
-        const uint32_t t = (vt && vt[2])
-            ? reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c) : 0;
+        const uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge
         std::fprintf(stderr, " %08X", t);
         if (wantUi && t == wantUi) sawWanted = true;
     }
@@ -316,8 +318,8 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
     // report the roster DELTA. Everything downstream ("no teacher" -> "no students")
     // hangs off this one dispatch.
     if (ValOn(Opt().foodPanelSeat)) {
-        void* wpc = FindCompOnEntity(ent, Tid("WorkPlaceComponent"));
-        void* wc  = FindCompOnEntity(ent, Tid("WorkComponent"));
+        void* wpc = FindCompOnEntity(ent, WorkPlaceComponent::TypeId());
+        void* wc  = FindCompOnEntity(ent, WorkComponent::TypeId());
         if (!wpc) {
             std::fprintf(stderr, "[FoodPanel]   seat: no WorkPlaceComponent on this entity — "
                          "not an employer, nothing to seat\n");
@@ -351,12 +353,9 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
             // wrong field of the wrong object and the key matches nothing. Check the type.
             {
                 void* wpDesc = *reinterpret_cast<void**>(w + 0x18);
-                const uint32_t tidWpd = Tid("WorkPlaceDescription");
+                const uint32_t tidWpd = WorkPlaceDescription::TypeId();
                 uint32_t got = 0;
-                if (wpDesc) {
-                    void** dvt = *reinterpret_cast<void***>(wpDesc);
-                    if (dvt && dvt[2]) got = reinterpret_cast<uint32_t(*)(void*)>(dvt[2])(wpDesc);
-                }
+                if (wpDesc) got = reinterpret_cast<Object::Base*>(wpDesc)->Type();   // B.3.8 bridge
                 std::fprintf(stderr, "[FoodPanel]   seat PRE: WPC+0x18 desc=%p typeId=%08X "
                              "(WorkPlaceDescription=%08X) desc+0x20=0x%llx  %s\n",
                              wpDesc, got, tidWpd,
@@ -377,29 +376,23 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
             // Find the WorkPlaceUI controller on the dialog and dispatch ITS slot 9 —
             // dispatching through the controller's own vtable is the honest test (it
             // proves the slot is filled, not merely that a body exists somewhere).
-            const uint32_t tidWpUi = Tid("WorkPlaceUI");
-            void* wpUi = nullptr;
+            const uint32_t tidWpUi = WorkPlaceUI::TypeId();
+            WorkPlaceUI* wpUi = nullptr;
             for (int i = 0; ctrlArr && i < cnt; ++i) {
                 void* c = ctrlArr[i];
                 if (!c) continue;
-                void** vt = *reinterpret_cast<void***>(c);
-                if (vt && vt[2] && reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c) == tidWpUi) {
-                    wpUi = c; break;
+                if (reinterpret_cast<Object::Base*>(c)->Type() == tidWpUi) {   // B.3.8 bridge
+                    wpUi = reinterpret_cast<WorkPlaceUI*>(c); break;           // B.3.8 bridge
                 }
             }
             if (!wpUi) {
                 std::fprintf(stderr, "[FoodPanel]   seat: WorkPlaceUI (tid=%08X) ABSENT from this "
                              "dialog — the worker spinner does not exist here\n", tidWpUi);
             } else {
-                void** uvt = *reinterpret_cast<void***>(wpUi);
-                void* slot9 = uvt ? uvt[9] : nullptr;
-                if (!slot9) {
-                    std::fprintf(stderr, "[FoodPanel]   seat: WorkPlaceUI vtable slot 9 is NULL — "
-                                 "the click handler was never installed\n");
-                } else {
-                    // msg 0x12 = button command, id 0x1450 = workerCountUp.
-                    reinterpret_cast<void (*)(void*, void*, int, int, int, int)>(slot9)(
-                        wpUi, nullptr, 0x12, 0x1450, 0, 0);
+                {
+                    // msg 0x12 = button command, id 0x1450 = workerCountUp. WorkPlaceUI is a
+                    // real class (ENDGAME B.3.8): slot 9 is its OnElementEvent override.
+                    wpUi->OnElementEvent(nullptr, 0x12, 0x1450, 0, 0, 0, nullptr);
                     const int rosterNow = *reinterpret_cast<int32_t*>(w + 0x60);
                     const int capNow = wc ? *reinterpret_cast<int32_t*>(
                                            reinterpret_cast<uintptr_t>(wc) + 0x30) : -1;
@@ -440,14 +433,13 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
     // Pair with BANISHED_DIALOG_TRACE=1 to see the `[RadiusUI] Slot6 ... overlay=N` lines.
     if (!ValOn(Opt().foodPanelClose)) return;
 
-    const uint32_t tidRadius = Tid("RadiusUI");
-    void* radius = nullptr;
+    const uint32_t tidRadius = RadiusUI::TypeId();
+    RadiusUI* radius = nullptr;
     for (int i = 0; ctrlArr && i < cnt; ++i) {
         void* c = ctrlArr[i];
         if (!c) continue;
-        void** vt = *reinterpret_cast<void***>(c);
-        if (vt && vt[2] && reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c) == tidRadius) {
-            radius = c; break;
+        if (reinterpret_cast<Object::Base*>(c)->Type() == tidRadius) {   // B.3.8 bridge
+            radius = reinterpret_cast<RadiusUI*>(c); break;              // B.3.8 bridge
         }
     }
     if (!radius) {
@@ -456,17 +448,12 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
     } else {
         const int before = *reinterpret_cast<int32_t*>(
             reinterpret_cast<uintptr_t>(radius) + 0x30);
-        void** rvt = *reinterpret_cast<void***>(radius);
-        void* slot6 = rvt ? rvt[6] : nullptr;
-        if (!slot6) {
-            std::fprintf(stderr, "[FoodPanel]   teardown: RadiusUI idx6 is NULL — the "
-                         "controller is still stubbed\n");
-        } else {
-            reinterpret_cast<void(*)(void*)>(slot6)(radius);
+        {
+            radius->OnClosed();   // slot 6, RadiusUI's override (real class, ENDGAME B.3.8)
             const int after = *reinterpret_cast<int32_t*>(
                 reinterpret_cast<uintptr_t>(radius) + 0x30);
             std::fprintf(stderr, "[FoodPanel]   teardown: RadiusUI=%p overlay %d -> %d  %s\n",
-                         radius, before, after,
+                         static_cast<void*>(radius), before, after,
                          (after == -1)
                              ? ((before >= 0) ? "OK (had a live overlay, released + reset)"
                                               : "OK but VACUOUS — no overlay was ever built, so "
@@ -482,14 +469,14 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
     // reaches Impl_cb40 through the ACTIVE tool it looks up itself, instead of the
     // tool the caller already holds.
     if (Opt().foodPanelClose && Opt().foodPanelClose[0] == '2') {
-        const uint32_t tidToolUI = Tid("ToolUI");
-        void* toolUi = nullptr;
+        const uint32_t tidToolUI = ToolUI::TypeId();
+        ToolUI* toolUi = nullptr;
         for (int i = 0; ctrlArr && i < cnt; ++i) {
             void* c = ctrlArr[i];
             if (!c) continue;
-            void** vt = *reinterpret_cast<void***>(c);
-            if (vt && vt[2] && fn_IsDerivedFrom &&
-                fn_IsDerivedFrom(c, tidToolUI)) { toolUi = c; break; }
+            if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidToolUI)) {
+                toolUi = reinterpret_cast<ToolUI*>(c); break;   // B.3.8 bridge
+            }
         }
         // BANISHED_FOOD_PANEL_ARM_BUILDTOOL=1 — arm a BUILD tool while the panel is
         // still open, then click close. That is the player sequence the HighlightClear
@@ -513,14 +500,10 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
             std::fprintf(stderr, "[FoodPanel]   teardown: no ToolUI-derived controller on "
                          "this panel — cannot drive the close button\n");
         } else {
-            void** uvt = *reinterpret_cast<void***>(toolUi);
-            void* slot9 = uvt ? uvt[9] : nullptr;
-            std::fprintf(stderr, "[FoodPanel]   teardown: close BUTTON via ToolUI=%p slot9=%p\n",
-                         toolUi, slot9);
+            std::fprintf(stderr, "[FoodPanel]   teardown: close BUTTON via ToolUI=%p\n",
+                         static_cast<void*>(toolUi));
             std::fflush(stderr);
-            if (slot9)
-                reinterpret_cast<void (*)(void*, void*, int, int, int, int)>(slot9)(
-                    toolUi, nullptr, 0x12, 1, 0, 0);
+            toolUi->OnElementEvent(nullptr, 0x12, 1, 0, 0, 0, nullptr);   // slot 9
             // Re-read the CURRENT active tool: with ARM_BUILDTOOL the EditTool we
             // opened with has been destroyed by SetEditMode, so the captured `tool`
             // pointer is dangling and must not be dereferenced.
@@ -555,7 +538,7 @@ void FollowUp(int frameNum) {
 
     // AttendanceComponent, when present: queue count at +0x30, capacity at desc+0x20.
     int queued = -1, capacity = -1;
-    if (void* att = FindCompOnEntity(s_seatEntity, Tid("AttendanceComponent"))) {
+    if (void* att = FindCompOnEntity(s_seatEntity, AttendanceComponent::TypeId())) {
         const uintptr_t a = reinterpret_cast<uintptr_t>(att);
         queued = *reinterpret_cast<int32_t*>(a + 0x30);
         if (void* d = *reinterpret_cast<void**>(a + 0x18))
@@ -643,7 +626,7 @@ void FollowUp(int frameNum) {
                         }
                     }
                 }
-                const uint32_t tidWpc = Tid("WorkPlaceComponent");
+                const uint32_t tidWpc = WorkPlaceComponent::TypeId();
                 // Dump the registry itself. sub_1930 (0x140111930) scans townMgr+0x60
                 // (count +0x68) — the ATTENDANCE component list, not the entity list:
                 // FindStorage appends the citizen into `found+0x28` with count
@@ -686,7 +669,7 @@ void FollowUp(int frameNum) {
                         if (*reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(c) + 0x48) != want[k])
                             continue;
                         owner = "a building exists with this key";
-                        if (FindCompOnEntity(sub, Tid("AttendanceComponent")))
+                        if (FindCompOnEntity(sub, AttendanceComponent::TypeId()))
                             owner = "an ATTENDANCE building (school/hospital) has this key";
                         break;
                     }

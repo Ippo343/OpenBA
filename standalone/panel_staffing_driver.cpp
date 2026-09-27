@@ -47,6 +47,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "Component/StatusIconComponent.h"
+#include "Component/WorkComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Dialog/WorkPlaceUI.h"
 
 extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
 extern "C" void* EditTool_HarnessAcquire(void* entityUI);
@@ -106,8 +110,6 @@ void Init() {
     }
 }
 
-uint32_t Tid(const char* n) { return n ? ::Object::GetTypeIdByName(n) : 0; }
-
 void* FindComp(void* ent, uint32_t tid);
 
 // The building's status-icon bitfield (StatusIconComponent+0xF0). Bit 4 (0x10) is the
@@ -116,9 +118,7 @@ void* FindComp(void* ent, uint32_t tid);
 // click so a seat that fills the roster while leaving the icon up is legible as such
 // rather than being reported as a working seat. -1 = no StatusIconComponent.
 int IconMask(void* ent) {
-    static uint32_t tid = 0;
-    if (!tid) tid = Tid("StatusIconComponent");
-    void* si = FindComp(ent, tid);
+    void* si = FindComp(ent, StatusIconComponent::TypeId());
     return si ? (int)*reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(si) + 0xF0) : -1;
 }
 
@@ -130,9 +130,7 @@ void* FindComp(void* ent, uint32_t tid) {
         void** cs = reinterpret_cast<void**>(a + static_cast<uintptr_t>(i) * 8);
         void* c = *cs;
         if (!c) continue;
-        void** vt = *reinterpret_cast<void***>(c);
-        if (!vt || !vt[2]) continue;
-        if (reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c) == tid) return c;
+        if (reinterpret_cast<Object::Base*>(c)->Type() == tid) return c;   // B.3.8 bridge
     }
     return nullptr;
 }
@@ -155,18 +153,17 @@ int SeatViaPanel(void* entityUI, void* ent, uintptr_t wpc, int want) {
     int gained = 0;
     void** ctrlArr = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(dialog) + 0x78);
     const int cnt  = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dialog) + 0x80);
-    const uint32_t tidWpUi = Tid("WorkPlaceUI");
-    void* wpUi = nullptr;
+    const uint32_t tidWpUi = WorkPlaceUI::TypeId();
+    WorkPlaceUI* wpUi = nullptr;
     for (int i = 0; ctrlArr && i < cnt && !wpUi; ++i) {
         void* c = ctrlArr[i];
         if (!c) continue;
-        void** vt = *reinterpret_cast<void***>(c);
-        if (vt && vt[2] && reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c) == tidWpUi) wpUi = c;
+        if (reinterpret_cast<Object::Base*>(c)->Type() == tidWpUi)   // B.3.8 bridge
+            wpUi = reinterpret_cast<WorkPlaceUI*>(c);                // B.3.8 bridge
     }
     if (wpUi) {
-        void** uvt = *reinterpret_cast<void***>(wpUi);
-        void* slot9 = uvt ? uvt[9] : nullptr;
-        if (slot9) {
+        // slot 9: WorkPlaceUI's OnElementEvent override (real class, ENDGAME B.3.8).
+        {
             // BANISHED_AUTOSTAFF_UNSEAT=1 — click workerCountDown (0x1451) once on a
             // staffed workplace before seating. The DOWN click is the path the old
             // g_wpcRosterOnly guards were justified by ("READ of 0x10 in Detach's e710
@@ -176,8 +173,7 @@ int SeatViaPanel(void* entityUI, void* ent, uintptr_t wpc, int want) {
             static const int unseat = EnvOnValue(Opt().autoStaffUnseat) ? 1 : 0;
             if (unseat && *reinterpret_cast<int32_t*>(wpc + 0x60) > 0) {
                 const int b = *reinterpret_cast<int32_t*>(wpc + 0x60);
-                reinterpret_cast<void (*)(void*, void*, int, int, int, int)>(slot9)(
-                    wpUi, nullptr, 0x12, 0x1451, 0, 0);
+                wpUi->OnElementEvent(nullptr, 0x12, 0x1451, 0, 0, 0, nullptr);
                 std::fprintf(stderr, "[AutoStaff] UNSEAT click: roster %d -> %d\n",
                              b, *reinterpret_cast<int32_t*>(wpc + 0x60));
                 std::fflush(stderr);
@@ -186,8 +182,7 @@ int SeatViaPanel(void* entityUI, void* ent, uintptr_t wpc, int want) {
             for (int i = 0; i < want; ++i) {
                 const int before = *reinterpret_cast<int32_t*>(wpc + 0x60);
                 // msg 0x12 = button command, id 0x1450 = workerCountUp.
-                reinterpret_cast<void (*)(void*, void*, int, int, int, int)>(slot9)(
-                    wpUi, nullptr, 0x12, 0x1450, 0, 0);
+                wpUi->OnElementEvent(nullptr, 0x12, 0x1450, 0, 0, 0, nullptr);
                 const int after = *reinterpret_cast<int32_t*>(wpc + 0x60);
                 if (after <= before) break;      // nobody left to seat — stop asking
                 gained += after - before;
@@ -212,8 +207,8 @@ extern "C" void PanelStaffingDriver_Tick(void* entityUI, int frameNum) {
     if (!el) return;
     const uintptr_t arr = *reinterpret_cast<uintptr_t*>(el + 0x08);
     const int n = *reinterpret_cast<int32_t*>(el + 0x10);
-    const uint32_t tidWpc = Tid("WorkPlaceComponent");
-    const uint32_t tidWc  = Tid("WorkComponent");
+    const uint32_t tidWpc = WorkPlaceComponent::TypeId();
+    const uint32_t tidWc  = WorkComponent::TypeId();
     if (!tidWpc || !arr) return;
 
     for (int i = 0; i < n; ++i) {

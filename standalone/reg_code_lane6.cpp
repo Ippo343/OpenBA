@@ -36,6 +36,7 @@
 #include "Player/dragtool.h"                       // DragTool_OnKey
 #include "Component/decalcomponent_funcs.h"        // DecalComponent_Draw
 #include "Component/statusiconcomponent_funcs.h"   // StatusIconComponent type
+#include "Component/ToolbarDescription.h"
 
 // central live-feature gate (default-on table + env kill-switch)
 
@@ -49,13 +50,13 @@ extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys);
 // (ignored) Time* and is a separate thunk in that file.
 void StatusIconComponent_OnRemove_Standalone(StatusIconComponent* self);
 
-// The SCALAR-dtor shape (code/Game/Component/toolbardescription.cpp): (self, flags),
-// MemFree'ing self when flags&1. Retail 0x14012db70 is the CLEANUP half only and takes
-// ONE argument — calling our two-arg form directly from a one-arg retail call site
-// would read a stale RDX and could MemFree a stack/embedded object. Adapt explicitly.
-void* ToolbarDescription_Dtor(void* self, uint32_t flags);
+// ToolbarDescription is a real class (code/Game/Component/ToolbarDescription.h): its
+// slot 0 is the SCALAR-deleting dtor (flags&1 = MemFree self). Retail 0x14012db70 is
+// the CLEANUP half only and takes ONE argument — calling a two-arg form directly from
+// a one-arg retail call site would read a stale RDX and could MemFree a stack/embedded
+// object. Adapt explicitly: flags 0 = do NOT free the storage.
 static void ToolbarDescription_Cleanup_Adapter(void* self) {
-    ToolbarDescription_Dtor(self, 0u);   // 0 = do NOT free the storage
+    reinterpret_cast<ToolbarDescription*>(self)->ToolbarDescription::DeletingDtor(0u);   // B.3.8 bridge
 }
 
 void RegisterCodeLane6Batch() {
@@ -98,9 +99,9 @@ void RegisterCodeLane6Batch() {
 
     // 0x14012db70 — ToolbarDescription::~ToolbarDescription (the cleanup half: destroy
     // the String array at +0x50 and free it, destroy the four Strings at +0x48/+0x40/
-    // +0x38/+0x28, restore the base vtable, chain to External::~External). Ported as
-    // the scalar-dtor ToolbarDescription_Dtor(self, flags); registered through the
-    // one-arg adapter above because retail's signature has no flags word.
+    // +0x38/+0x28, restore the base vtable, chain to External::~External). The class's
+    // DeletingDtor; registered through the one-arg adapter above because retail's
+    // signature has no flags word.
     // engine_funcs.cpp's fn_ToolbarDescription_cleanup has no callers.
     RegisterExeAddr(0x14012db70,
                     reinterpret_cast<uintptr_t>(&ToolbarDescription_Cleanup_Adapter));

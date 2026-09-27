@@ -27,6 +27,9 @@
 #include <cstdlib>
 #include <cstring>
 #include "ui/ComboElement.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "Component/OrchardComponent.h"
+#include "Dialog/OrchardUI.h"
+#include "Player/EditTool.h"
 
 // EntityUI::SetEditMode (code/Game/Dialog/entityui.cpp) — C++ linkage, matches the
 // declaration tool_harness.cpp already uses for the same function.
@@ -36,8 +39,6 @@ void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
 // entity's info dialog exactly like a real click, returns 1 if a dialog opened.
 extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
 extern "C" void* EditTool_HarnessAcquire(void* entityUI);
-class EditTool;
-void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr);   // code/Game/Player/edittool.cpp
 
 namespace {
 
@@ -93,16 +94,14 @@ bool TryAssignRealTreeType(void* entityUI, void* orchEnt, void* orchComp) {
         return false;
     }
 
-    const uint32_t tidOUI = ::Object::GetTypeIdByName("OrchardUI");
+    const uint32_t tidOUI = OrchardUI::TypeId();
     void** ctrlArr = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(dialog) + 0x78);
     int cnt = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dialog) + 0x80);
     void* oui = nullptr;
     for (int i = 0; ctrlArr && i < cnt; i++) {
         void* c = ctrlArr[i];
         if (!c) continue;
-        void** vt = *reinterpret_cast<void***>(c);
-        typedef uint32_t (*GetTypeId_t)(void*);
-        if (vt && vt[2] && reinterpret_cast<GetTypeId_t>(vt[2])(c) == tidOUI) { oui = c; break; }
+        if (reinterpret_cast<Object::Base*>(c)->Type() == tidOUI) { oui = c; break; }   // B.3.8 bridge
     }
     if (!oui) {
         fprintf(stderr, "[OrchardForceStart]     cannot assign tree type: no OrchardUI controller "
@@ -127,9 +126,12 @@ bool TryAssignRealTreeType(void* entityUI, void* orchEnt, void* orchComp) {
     const int wantItem = s_treeTurn % items;
     ++s_treeTurn;
     reinterpret_cast<UI::ComboElement*>(combo)->SetCurrentItem(wantItem);  // B.3.6 bridge
-    void** vt = *reinterpret_cast<void***>(oui);
-    typedef void (*Slot9_t)(void*, void*, int, int);
-    reinterpret_cast<Slot9_t>(vt[9])(oui, combo, 0x14, 500);   // real combo-change event, msg 0x14 elem 500
+    // Slot 9, OrchardUI's OnElementEvent (real class, ENDGAME B.3.8): the real
+    // combo-change event, msg 0x14 elem 500. The combo element pointer goes in the
+    // element argument exactly as the raw dispatch passed it.
+    reinterpret_cast<OrchardUI*>(oui)->OnElementEvent(                        // B.3.8 bridge
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(combo), 0x14, 500,  // B.3.8 bridge
+        0, 0, 0, nullptr);
 
     uintptr_t comp = reinterpret_cast<uintptr_t>(orchComp);
     uintptr_t treeTypeAfter = *reinterpret_cast<uintptr_t*>(comp + 0x60);
@@ -152,7 +154,7 @@ void FireForceStart(void* entityUI, int frameNum) {
     }
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(entityList + 0x08);
     int       n   = *reinterpret_cast<int32_t*>(entityList + 0x10);
-    const uint32_t tidOrchardComp = ::Object::GetTypeIdByName("OrchardComponent");
+    const uint32_t tidOrchardComp = OrchardComponent::TypeId();
     if (!arr || n <= 0 || !tidOrchardComp) {
         fprintf(stderr, "[OrchardForceStart] frame=%d: cannot scan (arr=%p n=%d "
                         "tidOrchardComponent=%u)\n", frameNum, reinterpret_cast<void*>(arr), n, tidOrchardComp);
@@ -172,9 +174,7 @@ void FireForceStart(void* entityUI, int frameNum) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
             void* comp = *cs;
             if (!comp) continue;
-            void** vt = *reinterpret_cast<void***>(comp);
-            typedef uint32_t (*GetTypeId_t)(void*);
-            if (vt && vt[2] && reinterpret_cast<GetTypeId_t>(vt[2])(comp) == tidOrchardComp) {
+            if (reinterpret_cast<Object::Base*>(comp)->Type() == tidOrchardComp) {   // B.3.8 bridge
                 orchComp = comp;
                 break;
             }
@@ -247,7 +247,9 @@ void FireForceStart(void* entityUI, int frameNum) {
         if (void* tool = EditTool_HarnessAcquire(entityUI)) {
             uintptr_t dlg = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(tool) + 0x28);
             if (dlg) {
-                EditTool_CloseInfoDialog(reinterpret_cast<EditTool*>(tool), dlg);
+                // EditTool::Shutdown is CloseInfoDialog(this, this->entityRef), and
+                // entityRef (+0x28) is the dlg just read.
+                reinterpret_cast<EditTool*>(tool)->EditTool::Shutdown();   // B.3.8 bridge
                 fprintf(stderr, "[OrchardForceStart] frame=%d: closed the last orchard panel (%p)\n",
                         frameNum, reinterpret_cast<void*>(dlg));
             }

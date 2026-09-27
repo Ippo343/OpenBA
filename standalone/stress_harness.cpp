@@ -35,6 +35,8 @@
 #include <cstring>
 #include <algorithm>
 #include <vector>
+#include "Component/CitizenAIComponent.h"
+#include "Component/CitizenComponent.h"
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <intrin.h>
@@ -548,8 +550,8 @@ extern "C" void StressHarness_DrawEnd() {
 static void CompProf_WatchBegin(void* comp, uint32_t tid) {
     if (!s_tidResolved) {
         s_tidResolved = true;
-        s_tidCitizen   = ::Object::GetTypeIdByName("CitizenComponent");
-        s_tidCitizenAI = ::Object::GetTypeIdByName("CitizenAIComponent");
+        s_tidCitizen   = CitizenComponent::TypeId();
+        s_tidCitizenAI = CitizenAIComponent::TypeId();
     }
     s_curComp = comp; s_curTid = tid; s_curCitizen = 0; s_curHome = 0;
     uintptr_t cz = 0;
@@ -570,9 +572,7 @@ extern "C" int CompProf_BeginKind(void* comp, int kind) {
         if (s.vtbl == vtbl && s.kind == kind) { if (!kind && s_homeWatch) CompProf_WatchBegin(comp, s.typeId); return idx; }
         if (!s.vtbl) {
             s.vtbl = vtbl; s.kind = kind;
-            typedef uint32_t (*GetTypeId_t)(void*);
-            void** vt = reinterpret_cast<void**>(vtbl);
-            s.typeId = vt[2] ? reinterpret_cast<GetTypeId_t>(vt[2])(comp) : 0;
+            s.typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
             s.ticks = 0; s.calls = 0;
             if (!kind && s_homeWatch) CompProf_WatchBegin(comp, s.typeId);
             return idx;

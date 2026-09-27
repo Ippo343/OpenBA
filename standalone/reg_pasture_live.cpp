@@ -17,7 +17,7 @@
 //
 // PastureComponent slots 7/13/14 and LivestockComponent slots 6/7 are real-class
 // virtuals since ENDGAME B.3.8; nothing read their addresses back, so their rows
-// are gone (slot 15 OnMessage keeps its row: pasture_harness.cpp resolves it).
+// are gone, and so is slot 15 OnMessage's (pasture_harness.cpp now calls the member).
 //
 // Already registered elsewhere and deliberately NOT duplicated here:
 //   0x140128570 / 0x140105ed0 / 0x1401240a0  (reg_component_nature.cpp)
@@ -42,7 +42,6 @@ extern "C" void Pasture_Reproduce(void* pasture);
 extern "C" char Pasture_State2Enter(void* data, void* sm);
 extern "C" char Pasture_State3Enter(void* data, void* sm);
 extern "C" char Pasture_State2PerFrame(void* data, void* sm, void* time);
-extern "C" void Pasture_MsgReceive(void* pasture, int msg);
 extern "C" void* Pasture_FindLivestockComp(int64_t entity, void* retIBP);
 extern "C" uint64_t MapGrid_StampCellRefs_9f770(void* grid, int x, int y, int w, int h,
                                                 void* ref);
@@ -65,9 +64,6 @@ void RegisterPastureLive() {
     RegisterExeAddr(0x1401270c0, reinterpret_cast<uintptr_t>(&Pasture_State2Enter));
     RegisterExeAddr(0x140126e40, reinterpret_cast<uintptr_t>(&Pasture_State3Enter));
     RegisterExeAddr(0x1401267e0, reinterpret_cast<uintptr_t>(&Pasture_State2PerFrame));
-    // Slot 15 OnMessage — the breed tag (herder work-complete -> random animal
-    // gets flag bit 23; sole setter of the bit in the exe).
-    RegisterExeAddr(0x140127720, reinterpret_cast<uintptr_t>(&Pasture_MsgReceive));
     // Map-cell footprint stamp (shared leaf; also called by HarvestOrchard_impl_0800).
     // Un-no-ops the state-2 per-frame footprint stamp (deferred since the animal wave).
     RegisterExeAddr(0x14009f770, reinterpret_cast<uintptr_t>(&MapGrid_StampCellRefs_9f770));
