@@ -25,6 +25,10 @@
 #include <cmath>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/ForesterComponent.h"             // ENDGAME B.3.9 D5
+#include "Component/ForesterDescription.h"           // ENDGAME B.3.9 D5
+#include "Component/RadiusDescription.h"             // ENDGAME B.3.9 D5
+#include "Component/NaturalResourceDescription.h"    // ENDGAME B.3.9 D5
 
 // ============================================================
 // Local function pointers (resolved once by ForesterWork_ResolveFuncs)
@@ -130,14 +134,13 @@ static FW_TreeNodeCleanup_t           s_fn_TreeNodeCleanup = nullptr;
 // all from engine_funcs.h (no local copies needed)
 
 // Type ID constants
-static uint32_t* s_typeId_WorkplaceComponent = nullptr;  // DAT_1401c7740
-static uint32_t* s_typeId_RadiusComponent = nullptr;      // DAT_1401c7778
-static uint32_t* s_typeId_MaterialComponent = nullptr;     // DAT_1401c4870
-static uint32_t* s_typeId_NatResComponent = nullptr;       // DAT_1401c7b30
-static uint32_t* s_typeId_NatResDescription = nullptr;     // DAT_1401c7b68
-static uint32_t* s_typeId_RawMaterialComp = nullptr;       // DAT_1401c7cb8
-static uint32_t* s_typeId_NatResDesc2 = nullptr;           // DAT_1401c77e8
-static uint32_t* s_typeId_MatDesc = nullptr;               // DAT_1401c80a8 (used by CalcMaxWorkers)
+// ENDGAME B.3.9 D5: the cell caches above are gone -- every site below calls the
+// class's TypeId() directly (BY CELL: DAT_1401c7740=ForesterComponent,
+// DAT_1401c7778=ForesterDescription, DAT_1401c4870=RadiusDescription,
+// DAT_1401c7b30=NaturalResourceComponent, DAT_1401c7b68=NaturalResourceDescription,
+// DAT_1401c7cb8=RawMaterialDescription, DAT_1401c77e8=GrowthDescription,
+// DAT_1401c80a8=WorkDescription; several legacy variable names above named a
+// different class than the cell actually held).
 
 // Float constants from .rdata
 static float* s_fPI = nullptr;             // DAT_140172184 = 3.14159265f (PI)
@@ -238,24 +241,6 @@ bool ForesterWork_ResolveFuncs() {
     s_fn_MemFreeFunc = reinterpret_cast<FW_MemFreeFunc_t>(
         ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));        // static (ptr)
 
-    // Type ID pointers
-    s_typeId_WorkplaceComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7740));
-    s_typeId_RadiusComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7778));
-    s_typeId_MaterialComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c4870));
-    s_typeId_NatResComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7b30));
-    s_typeId_NatResDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7b68));
-    s_typeId_RawMaterialComp = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7cb8));
-    s_typeId_NatResDesc2 = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c77e8));
-    s_typeId_MatDesc = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c80a8));
-
     // Float constants from .rdata. In the standalone exe ResolveAddr(Module::Exe,...) on a
     // raw .rdata constant returns NULL (the exe's .rdata isn't mapped at the ghidra VA), so
     // fall back to a static holding the real value (reference_standalone_rdata_null_fallback).
@@ -291,18 +276,13 @@ bool ForesterWork_ResolveFuncs() {
               s_fn_CancelAllWork && s_fn_FindSubEntity && s_fn_TreeNodeCleanup &&
               fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && g_pGameWorldSingleton &&
-              s_typeId_WorkplaceComponent && s_typeId_RadiusComponent &&
-              s_typeId_MaterialComponent && s_typeId_NatResComponent &&
-              s_typeId_NatResDescription && s_typeId_RawMaterialComp &&
-              s_typeId_MatDesc &&
               s_fPI && s_fMaxHeight && s_fMinGrowth && s_fHalfCellOffset;
 
     // The parent vtables (AutoPickupWork/Work) are only WRITTEN by the Dtor (never called
-    // through) and NatResDesc2 (c77e8) is a serialize-only id — Execute derefs none of them,
-    // and all three are unregistered across the whole standalone build. Gate the force-driver
-    // on execReady (Execute-critical only); keep `ok`/`s_forester_funcs_resolved` strict so
-    // the complete set is still verified.
-    bool ok = execReady && s_typeId_NatResDesc2;
+    // through) -- Execute derefs none of them. GrowthDescription's cell (c77e8) is a
+    // registered type-id cell (ENDGAME B.3.9 D5: GrowthDescription::TypeId() is always
+    // available, no separate resolve to gate on).
+    bool ok = execReady;
 
     s_forester_exec_ready = execReady;
     s_forester_funcs_resolved = ok;
@@ -343,14 +323,6 @@ bool ForesterWork_ResolveFuncs() {
         if (!s_fn_CancelAllWork) printf("  MISSING: s_fn_CancelAllWork\n");
         if (!s_fn_FindSubEntity) printf("  MISSING: s_fn_FindSubEntity\n");
         if (!s_fn_TreeNodeCleanup) printf("  MISSING: s_fn_TreeNodeCleanup\n");
-        if (!s_typeId_WorkplaceComponent) printf("  MISSING: s_typeId_WorkplaceComponent (c7740)\n");
-        if (!s_typeId_RadiusComponent) printf("  MISSING: s_typeId_RadiusComponent (c7778)\n");
-        if (!s_typeId_MaterialComponent) printf("  MISSING: s_typeId_MaterialComponent (c4870)\n");
-        if (!s_typeId_NatResComponent) printf("  MISSING: s_typeId_NatResComponent (c7b30)\n");
-        if (!s_typeId_NatResDescription) printf("  MISSING: s_typeId_NatResDescription (c7b68)\n");
-        if (!s_typeId_RawMaterialComp) printf("  MISSING: s_typeId_RawMaterialComp (c7cb8)\n");
-        if (!s_typeId_NatResDesc2) printf("  MISSING: s_typeId_NatResDesc2 (c77e8)\n");
-        if (!s_typeId_MatDesc) printf("  MISSING: s_typeId_MatDesc (c80a8)\n");
         if (!s_fPI) printf("  MISSING: s_fPI\n");
         if (!s_fMaxHeight) printf("  MISSING: s_fMaxHeight\n");
         if (!s_fMinGrowth) printf("  MISSING: s_fMinGrowth\n");
@@ -501,25 +473,28 @@ int ForesterWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/)
     uintptr_t matDescIBP = 0;
     s_fn_FindComp_MatDesc(selfQ[2], &matDescIBP);
 
-    // Find WorkplaceComponent on workplace entity
+    // Find ForesterComponent on workplace entity (DAT_1401c7740, ENDGAME B.3.9 D5:
+    // by cell -- not the legacy variable name "WorkplaceComponent").
     uintptr_t entity = selfQ[2];
-    void* workplaceComp = FindComponentInList(entity, *s_typeId_WorkplaceComponent);
+    void* workplaceComp = FindComponentInList(entity, ForesterComponent::TypeId());
 
     // Wrap in InternalBasePtr
     uintptr_t workplaceIBP = 0;
     new (&workplaceIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(workplaceComp));   // B.3.3 bridge
 
-    // Get RadiusComponent from workplace description (+0x18)
+    // Get ForesterDescription from workplace description (+0x18) (DAT_1401c7778,
+    // ENDGAME B.3.9 D5: by cell -- not the legacy variable name "RadiusComponent").
     void* workplaceDesc = *(void**)(workplaceIBP + 0x18);
     void* radiusComp = nullptr;
-    if (fn_IsDerivedFrom(workplaceDesc, *s_typeId_RadiusComponent)) {
+    if (fn_IsDerivedFrom(workplaceDesc, ForesterDescription::TypeId())) {
         radiusComp = workplaceDesc;
     }
 
-    // Find MaterialComponent on workplace's sub-object (+0x28)
+    // Find RadiusDescription on workplace's sub-object (+0x28) (DAT_1401c4870,
+    // ENDGAME B.3.9 D5: by cell -- not the legacy variable name "MaterialComponent").
     uintptr_t entitySub = *(uintptr_t*)(selfQ[2] + 0x28);
-    void* materialComp = FindSubComponentInList(entitySub, *s_typeId_MaterialComponent);
+    void* materialComp = FindSubComponentInList(entitySub, RadiusDescription::TypeId());
 
     // -------------------------------------------------------
     // Step 3: Check capacity — is material count at limit?
@@ -762,7 +737,7 @@ int ForesterWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/)
 
                             void* natResDescObj = *(void**)(*(uintptr_t*)natResCompIBP2 + 0x18);
                             void* natResDescFound = nullptr;
-                            if (fn_IsDerivedFrom(natResDescObj, *s_typeId_NatResDescription)) {
+                            if (fn_IsDerivedFrom(natResDescObj, NaturalResourceDescription::TypeId())) {
                                 natResDescFound = natResDescObj;
                             }
 

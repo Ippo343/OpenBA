@@ -30,6 +30,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <new>
+#include "Component/PastureDescription.h"   // ENDGAME B.3.9 D5
+#include "Component/AnimalDescription.h"    // ENDGAME B.3.9 D5
+#include "Component/PastureComponent.h"     // ENDGAME B.3.9 D5
 
 
 // ============================================================
@@ -144,9 +147,6 @@ static PW_UpdateParentEntity_t         s_fn_UpdateParentEntity = nullptr;
 // minimum. (Wrong names of exactly this kind caused two separate bugs today: a
 // GetTypeIdByName("AreaDescription") that matched nothing, and a whole investigation
 // misdirected by a finder named for the wrong component.)
-static uint32_t* s_typeId_PastureComponent = nullptr;  // DAT_1401c7bd8  = PastureDescription
-static uint32_t* s_typeId_ComponentEntity = nullptr;    // DAT_1401c6fd0  = AnimalDescription
-static uint32_t* s_typeId_NatResComponent = nullptr;    // DWORD_1401c7ba0 = PastureComponent
 
 // Float constants from .rdata
 static float* s_fHalfCellOffset = nullptr;  // DAT_140172114 = 0.5f
@@ -251,14 +251,6 @@ bool PastureWork_ResolveFuncs() {
     // fn_MemFreeStatic from engine_funcs
     s_fn_MemFreeStatic = reinterpret_cast<PW_MemFreeStatic_t>(fn_MemFreeStatic);
 
-    // Type ID pointers
-    s_typeId_PastureComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7bd8));
-    s_typeId_ComponentEntity = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c6fd0));
-    s_typeId_NatResComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7ba0));
-
     // Float constants from .rdata
     s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
 
@@ -284,8 +276,6 @@ bool PastureWork_ResolveFuncs() {
               s_fn_StorageOverflowCheck && s_fn_FindComp_Family2 &&
               fn_IsDerivedFrom &&
               g_pGameWorldSingleton &&
-              s_typeId_PastureComponent && s_typeId_ComponentEntity &&
-              s_typeId_NatResComponent &&
               s_fHalfCellOffset;
 
     s_pasture_funcs_resolved = ok;
@@ -374,7 +364,7 @@ int PastureWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) 
     // Step 3: Get pasture description and worker count
     // -------------------------------------------------------
     void* pvVar20 = *(void**)(local_a8 + 0x18);  // pasture component description
-    bool bVar8 = fn_IsDerivedFrom(pvVar20, *s_typeId_PastureComponent);  // DAT_1401c7bd8
+    bool bVar8 = fn_IsDerivedFrom(pvVar20, PastureDescription::TypeId());  // DAT_1401c7bd8
     uintptr_t lVar18 = selfQ[10];  // worker count at self+0x50
     void* pvVar19 = nullptr;
     if (bVar8) {
@@ -480,7 +470,7 @@ int PastureWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) 
                         if ((char)uVar16 != '\0') {
                             // Get description from natRes for RemoveAnimal action
                             void* descPtr = *(void**)(natResIBP + 0x18);
-                            bool isDerived = fn_IsDerivedFrom(descPtr, *s_typeId_ComponentEntity);
+                            bool isDerived = fn_IsDerivedFrom(descPtr, AnimalDescription::TypeId());
                             pvVar20 = nullptr;
                             if (isDerived) {
                                 pvVar20 = descPtr;
@@ -604,7 +594,7 @@ int PastureWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) 
         int nearCell = s_fn_Map_FindNearestPassable(piVar4, randCell, uVar23, 0xe1f);
         if (nearCell >= 0) {
             uint64_t canPath = (uint64_t)s_fn_Map_CanPathTo(piVar4, 0xe1f, uVar23, nearCell);
-            uint32_t dVar7 = *s_typeId_NatResComponent;  // DWORD_1401c7ba0
+            uint32_t dVar7 = PastureComponent::TypeId();  // DWORD_1401c7ba0
 
             if ((char)canPath != '\0') {
                 float halfOff = (float)(*piVar4 >> 1) - *s_fHalfCellOffset;
@@ -711,7 +701,7 @@ int PastureWork::OnCancel(void* param2, void* param3, int /*arg3*/) {
     uintptr_t entity = *(uintptr_t*)param3;
 
     // Check if derived from ComponentEntity
-    if (!fn_IsDerivedFrom((void*)entity, *s_typeId_ComponentEntity)) {
+    if (!fn_IsDerivedFrom((void*)entity, AnimalDescription::TypeId())) {
         return 0;
     }
 

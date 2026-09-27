@@ -607,35 +607,12 @@ static MW_FreeCarryCapacity_t s_fn_FreeCarryCapacity = nullptr;
 static void**                 s_pGameWorldSingleton  = nullptr;  // DAT_1401c3dd8
 static bool                   s_slot4_resolved       = false;
 
-// GetTypeIdByName lives in Object/factory_registration.h, which this file only
-// includes further down (it is pulled in for REGISTER_TYPE). Forward-declare it
-// so the type-id fallback below can sit next to the code that needs it.
-namespace Object { uint32_t GetTypeIdByName(const char* name); }
-
-// Slot 4 reads two exe .rdata type-id constants:
-//   DAT_1401c44f0 = MarketComponent      (xref: MarketComponent_RegisterType 0x14014b0e5)
-//   DAT_1401c4528 = MarketDescription    (xref: MarketDescription_Register    0x14014b125)
-// ⚠ NEITHER is in the standalone address registry today (they appear only in
-// standalone/factory_registrations.csv). An unregistered .rdata constant resolves
-// to 0, and a zero type id deletes the test it guards: the MarketComponent scan
-// would match nothing, local_b8 (the MarketDescription) would stay null, and the
-// fill-ratio early-out below would deref null instead of comparing anything.
-// See reference_unresolved_rdata_const_deletes_guarded_test /
-// reference_registered_but_filled_with_zero -- guard the VALUE, not the pointer.
-// So: read the .rdata slot, and if it is absent or zero fall back to a by-name
-// lookup. 0xFFFFFFFF is BaseTypeInfo's pre-Factory::Startup sentinel, so it is
-// treated as "not resolved yet" and is deliberately NOT cached.
-static uint32_t MW_TypeId(uint32_t classTypeId, uintptr_t rdataAddr, uint32_t& cache) {
-    if (cache != 0 && cache != 0xFFFFFFFFu) return cache;
-    uint32_t v = 0;
-    if (uintptr_t p = ResolveAddr(Module::Exe, rdataAddr))
-        v = *reinterpret_cast<uint32_t*>(p);
-    if (v == 0 || v == 0xFFFFFFFFu)
-        v = classTypeId;   // ENDGAME B.3.8 CB3: X::TypeId() (was the by-name lookup)
-    if (v != 0 && v != 0xFFFFFFFFu) cache = v;
-    return v;
-}
-
+// ENDGAME B.3.9 D5: every type-id cell Slot4 reads (DAT_1401c44f0 = MarketComponent,
+// DAT_1401c4528 = MarketDescription, and the rest below) is read BY CELL through the
+// class's own TypeId() -- the old MW_TypeId() wrapper (read the exe .rdata cell,
+// fall back to the class static if the cell was 0 or the pre-Startup sentinel
+// 0xFFFFFFFF) is gone: the class static IS that cell's value once Factory::Startup
+// has run, and nothing here runs before Startup.
 static void MarketWork_Slot4_ResolveFuncs() {
     if (s_slot4_resolved) return;
     s_slot4_resolved = true;
@@ -930,42 +907,15 @@ int MarketWork::Execute(void* citizenHolder, void* ctx, uint64_t /*arg3*/) {
     //   +0x20 float  global fill ratio (defaults to 1.0)
     //   +0x28 array  per-resource {enum @+0, float ratio @+4}, stride 8
     //   +0x30 int32  element count
-    static uint32_t s_tid_MarketComponent = 0;
-    static uint32_t s_tid_MarketDescription = 0;
-    const uint32_t tidMarketComponent =
-        MW_TypeId(MarketComponent::TypeId(), 0x1401c44f0, s_tid_MarketComponent);
-    const uint32_t tidMarketDescription =
-        MW_TypeId(MarketDescription::TypeId(), 0x1401c4528, s_tid_MarketDescription);
-    // Stage 2's three type-ids. Unlike the two above, all three ARE in the
-    // address registry, so MW_TypeId takes them straight from exe .rdata.
-    static uint32_t s_tid_RawMaterialDescription = 0;
-    static uint32_t s_tid_StorageComponent = 0;
-    static uint32_t s_tid_ConsumeProduceComponent = 0;
-    const uint32_t tidRawMaterialDescription =
-        MW_TypeId(RawMaterialDescription::TypeId(), 0x1401c7cb8, s_tid_RawMaterialDescription);
-    const uint32_t tidStorageComponent =
-        MW_TypeId(StorageComponent::TypeId(), 0x1401c7e78, s_tid_StorageComponent);
-    const uint32_t tidConsumeProduceComponent =
-        MW_TypeId(ConsumeProduceComponent::TypeId(), 0x1401c7350, s_tid_ConsumeProduceComponent);
-    // Stage 3's two, both already registered.
-    static uint32_t s_tid_InteractComponent = 0;
-    static uint32_t s_tid_InteractDescription = 0;
-    const uint32_t tidInteractComponent =
-        MW_TypeId(InteractComponent::TypeId(), 0x1401c7900, s_tid_InteractComponent);
-    const uint32_t tidInteractDescription =
-        MW_TypeId(InteractDescription::TypeId(), 0x1401c7938, s_tid_InteractDescription);
-    // Stage 4/5. ⚠ 0x1401c7ee8 (StorageLocationComponent) is NOT in the address
-    // registry -- same situation the two market type-ids were in before. The name
-    // is not a guess: action_pf_roots_route.cpp already resolves this exact global
-    // as "StorageLocationComponent" by name for its own port of 0x14008d590, which
-    // reads the same constant at 0x14008d764. MW_TypeId's by-name fallback covers
-    // it, but registering the slot would be cleaner.
-    static uint32_t s_tid_MapComponent = 0;
-    static uint32_t s_tid_StorageLocationComponent = 0;
-    const uint32_t tidMapComponent =
-        MW_TypeId(MapComponent::TypeId(), 0x1401c79e0, s_tid_MapComponent);
-    const uint32_t tidStorageLocationComponent =
-        MW_TypeId(StorageLocationComponent::TypeId(), 0x1401c7ee8, s_tid_StorageLocationComponent);
+    const uint32_t tidMarketComponent = MarketComponent::TypeId();
+    const uint32_t tidMarketDescription = MarketDescription::TypeId();
+    const uint32_t tidRawMaterialDescription = RawMaterialDescription::TypeId();
+    const uint32_t tidStorageComponent = StorageComponent::TypeId();
+    const uint32_t tidConsumeProduceComponent = ConsumeProduceComponent::TypeId();
+    const uint32_t tidInteractComponent = InteractComponent::TypeId();
+    const uint32_t tidInteractDescription = InteractDescription::TypeId();
+    const uint32_t tidMapComponent = MapComponent::TypeId();
+    const uint32_t tidStorageLocationComponent = StorageLocationComponent::TypeId();
 
     const uintptr_t marketEntity = *reinterpret_cast<uintptr_t*>(a + 0x10);
     void* marketComp = MW_FindComponentByTypeId(marketEntity, tidMarketComponent);

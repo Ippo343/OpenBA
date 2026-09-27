@@ -16,6 +16,9 @@
 #include "resolve.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/CropFieldComponent.h"       // ENDGAME B.3.9 D5
+#include "Component/OrchardComponent.h"         // ENDGAME B.3.9 D5
+#include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 D5
 
 // ============================================================
 // FindComponent family (clones of the WorkBase_FindComponent_* set in
@@ -29,7 +32,10 @@
 //   void* fn(uintptr_t entity, void* retIBP)
 //
 // pTypeId points at the exe's type-ID storage global (a uint32_t filled in by the
-// component's RegisterType at startup).
+// component's RegisterType at startup). Kept pointer-based for the one remaining
+// UNREGISTERED cell below (AutoPickupComponent, 0x1401c3fb0) -- its cell always
+// resolves null, so converting it to a direct TypeId() call would be a behaviour
+// change (D5), left for a titled behaviour commit.
 static void* FindComponentByTypeId(uintptr_t entity, void* retIBP, const uint32_t* pTypeId) {
     void* found = nullptr;
     if (pTypeId) {
@@ -52,30 +58,45 @@ static void* FindComponentByTypeId(uintptr_t entity, void* retIBP, const uint32_
     return retIBP;
 }
 
-// Lazily-resolved type-ID storage globals (exe .rdata, filled by RegisterType).
-static const uint32_t* s_pTid_5380 = nullptr;  // 0x1401c7510  (CropFieldComponent)
-static const uint32_t* s_pTid_5440 = nullptr;  // 0x1401c46b0  (OrchardComponent)
+// ENDGAME B.3.9 D5: same scan, but the type-id is a class's own TypeId() value
+// (registered cell, always available -- no resolve/null-gate needed).
+static void* FindComponentByTypeIdVal(uintptr_t entity, void* retIBP, uint32_t typeId) {
+    void* found = nullptr;
+    int n = *reinterpret_cast<int*>(entity + 0x38);
+    uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
+    for (int i = 0; i < n; i++) {
+        void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
+        void* comp = *slot;
+        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        if (t == typeId) {
+            void* c = *slot;
+            found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
+            break;
+        }
+    }
+    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
+    return retIBP;
+}
+
+// AutoPickupComponent's cell (0x1401c3fb0) is UNREGISTERED -- left pointer-based.
 static const uint32_t* s_pTid_22520 = nullptr; // 0x1401c3fb0  (AutoPickupComponent)
 static bool s_tidInit = false;
 
 static void EnsureTypeIds() {
     if (s_tidInit) return;
-    s_pTid_5380  = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7510));
-    s_pTid_5440  = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c46b0));
     s_pTid_22520 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c3fb0));
     s_tidInit = true;
 }
 
-// Reimpl of FUN_140005380 — FindComponent (type-ID DAT_1401c7510, AreaCrop/CropDescription)
+// Reimpl of FUN_140005380 — FindComponent (type-ID DAT_1401c7510, CropFieldComponent)
 void* WorkAcc_FindComponent_5380(uintptr_t entity, void* retIBP) {
-    EnsureTypeIds();
-    return FindComponentByTypeId(entity, retIBP, s_pTid_5380);
+    return FindComponentByTypeIdVal(entity, retIBP, CropFieldComponent::TypeId());
 }
 
-// Reimpl of FUN_140005440 — FindComponent (type-ID DWORD_1401c46b0, AreaOrchard/OrchardDescription)
+// Reimpl of FUN_140005440 — FindComponent (type-ID DWORD_1401c46b0, OrchardComponent)
 void* WorkAcc_FindComponent_5440(uintptr_t entity, void* retIBP) {
-    EnsureTypeIds();
-    return FindComponentByTypeId(entity, retIBP, s_pTid_5440);
+    return FindComponentByTypeIdVal(entity, retIBP, OrchardComponent::TypeId());
 }
 
 // Reimpl of FUN_140022520 — FindComponent (type-ID DAT_1401c3fb0, AutoPickupComponent)
@@ -92,26 +113,18 @@ void* WorkAcc_FindComponent_22520(uintptr_t entity, void* retIBP) {
 // NO InternalBasePtr_CheckPtr calls; the match is written straight into *retOut
 // (a plain undefined8* slot, not an IBP ctor). Type-ID global DWORD_1401c7cb8.
 // Caller signature: void* fn(uintptr_t compList, void* retOut)
-static const uint32_t* s_pTid_6330 = nullptr;  // 0x1401c7cb8  (RawMaterial)
-static bool s_tid6330Init = false;
-
 void* WorkAcc_FindComponent_6330(uintptr_t compList, void* retOut) {
-    if (!s_tid6330Init) {
-        s_pTid_6330 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
-        s_tid6330Init = true;
-    }
+    const uint32_t typeId = RawMaterialDescription::TypeId();  // 0x1401c7cb8
     void* found = nullptr;
-    if (s_pTid_6330) {
-        int n = *reinterpret_cast<int*>(compList + 0x30);
-        uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(compList + 0x28);
-        for (int i = 0; i < n; i++) {
-            void* comp = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-            uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
-            if (t == *s_pTid_6330) {
-                void* c = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-                found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_pTid_6330)) ? c : nullptr;
-                break;
-            }
+    int n = *reinterpret_cast<int*>(compList + 0x30);
+    uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(compList + 0x28);
+    for (int i = 0; i < n; i++) {
+        void* comp = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
+        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        if (t == typeId) {
+            void* c = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
+            found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
+            break;
         }
     }
     *reinterpret_cast<void**>(retOut) = found;

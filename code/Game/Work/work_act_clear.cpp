@@ -34,6 +34,7 @@
 #include "Action/ShowTool.h"   // ENDGAME B.3.8 CB3
 #include "resolve.h"
 #include "Component/coll_bridge.h"
+#include "Component/NaturalResourceDescription.h"   // ENDGAME B.3.9 D5
 #include <cstdint>
 
 // ============================================================
@@ -99,8 +100,8 @@ static s_wac_DeletePtr_t       s_wac_DeletePtr      = nullptr;
 static s_wac_MemFree_t         s_wac_MemFree        = nullptr;
 
 // Inline-object vtables + globals (exe .rdata).
-static const uint32_t* s_wac_pTid_c7b68 = nullptr;         // 0x1401c7b68 (target derive type id)
-static const uint32_t* s_wac_pMsgId_c70e8 = nullptr;       // 0x1401c70e8 (SendComponentMessage target type-id = CitizenAIComponent)
+// 0x1401c7b68 = NaturalResourceDescription (ENDGAME B.3.9 D5: read directly below).
+static const uint32_t* s_wac_pMsgId_c70e8 = nullptr;       // 0x1401c70e8 (SendComponentMessage target type-id = CitizenAIComponent -- UNREGISTERED, left for a behaviour commit)
 static const float*    s_wac_pf_172280 = nullptr;          // 0x140172280 (MoveTo speed = -1.0f)
 
 static bool s_wac_resolved = false;
@@ -132,7 +133,6 @@ static void s_wac_ResolveAll() {
     if (!s_wac_DeletePtr && fn_InternalBasePtr_DeletePtr) s_wac_DeletePtr = reinterpret_cast<s_wac_DeletePtr_t>(fn_InternalBasePtr_DeletePtr);
     if (!s_wac_IsDerivedFrom   && fn_IsDerivedFrom)       s_wac_IsDerivedFrom   = reinterpret_cast<s_wac_IsDerivedFrom_t>(fn_IsDerivedFrom);
 
-    s_wac_pTid_c7b68   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7b68));
     s_wac_pMsgId_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
     s_wac_pf_172280    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172280));
 }
@@ -224,8 +224,8 @@ void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3,
     void* targetComp = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(param_4) + 0x18);
     uintptr_t local_60 = 0; // derived target (the "pIVar8 = local_60" used post-loop)
     bool derived = false;
-    if (s_wac_pTid_c7b68 && s_wac_IsDerivedFrom)
-        derived = s_wac_IsDerivedFrom(targetComp, *s_wac_pTid_c7b68);
+    if (s_wac_IsDerivedFrom)
+        derived = s_wac_IsDerivedFrom(targetComp, NaturalResourceDescription::TypeId());
     if (derived) local_60 = reinterpret_cast<uintptr_t>(targetComp);
 
     // --- list base = (*(citizen)+0x278) + 0x48 ; cleanup (0x1400c15ba..0x1400c15e2) ---

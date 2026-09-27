@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
 
 // ============================================================
 // Helpers this file reaches (ENDGAME B.3.8, B38_RULES D7)
@@ -121,10 +122,8 @@ void BuildRoad::Persist(void* stream) {
 
     // Validate entity ref type after deserialize
     if (field_48 != nullptr) {
-        // TypeId at DAT_1401c7158 (CitizenComponent), read through the registry cell.
-        const uint32_t* typeId_1401c7158 = reinterpret_cast<const uint32_t*>(
-            ResolveAddr(Module::Exe, 0x1401c7158));
-        bool valid = fn_IsDerivedFrom(field_48, *typeId_1401c7158);
+        // TypeId at DAT_1401c7158 = CitizenComponent (ENDGAME B.3.9 D5: by cell).
+        bool valid = fn_IsDerivedFrom(field_48, CitizenComponent::TypeId());
         if (!valid) {
             field_48 = nullptr;
         }

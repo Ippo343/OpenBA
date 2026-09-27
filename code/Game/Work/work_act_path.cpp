@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5
 
 // ============================================================
 // Sub-callee / dispatch-slot typedefs
@@ -111,8 +112,7 @@ static WAP2_TimeCtor_t            s_wap2_TimeCtor          = nullptr;
 
 // Runtime CRC type-id / message-id globals — read LIVE (these are 0 at static-init, the
 // engine fills them with real CRC ids after Object::Factory::Startup).
-static const uint32_t* s_wap2_pMsgId_c70e8 = nullptr; // DWORD_1401c70e8 (0xbf81e)
-static const uint32_t* s_wap2_pMsgId_c7158 = nullptr; // DWORD_1401c7158 (0xbf8b8)
+static const uint32_t* s_wap2_pMsgId_c70e8 = nullptr; // DWORD_1401c70e8 (0xbf81e) -- CitizenAIComponent, UNREGISTERED, left for a behaviour commit
 
 // Float .rdata constants (bit-exact).
 static const float* s_wap2_pf_172124 = nullptr; // DAT_140172124 = 0.75f (0xbf962)
@@ -147,7 +147,6 @@ static void ResolveAll() {
     if (!s_wap2_IbpDelete)       s_wap2_IbpDelete       = reinterpret_cast<WAP2_IbpDelete_t>(fn_InternalBasePtr_DeletePtr);
 
     s_wap2_pMsgId_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
-    s_wap2_pMsgId_c7158 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
     s_wap2_pf_172124    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172124));
     s_wap2_pf_172280    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172280));
 }
@@ -235,7 +234,7 @@ extern "C" void* WorkAct_GatherRawMatCtor_bf790(
         void* sm2 = nullptr;
         if (obj) {
             uint64_t innerSlot = srcLoc ? *srcLoc : 0;                  // local_res8 = *srcLoc (0xbf8b0)
-            uint32_t msgId = s_wap2_pMsgId_c7158 ? *s_wap2_pMsgId_c7158 : 0; // DWORD_1401c7158 (0xbf8b8)
+            uint32_t msgId = CitizenComponent::TypeId(); // DWORD_1401c7158 (0xbf8b8)
             void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(entity) + 0x10);
             if (s_wap2_SendCompMsg) sm2 = s_wap2_SendCompMsg(obj, &entityInner, &msgId, 0, &innerSlot, 0);
         }

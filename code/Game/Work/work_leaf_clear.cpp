@@ -30,6 +30,8 @@
 #include <cstdint>
 #include <cstdlib>   // qsort
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Entity/ComponentEntity.h"       // ENDGAME B.3.9 D5: ComponentEntity::TypeId()
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
 
 // 0x140003ea0 — entity-resolve behind an action IBP (registered).
 typedef void* (*fn_FindEntity_3ea0_t)(uintptr_t actionIBP, void* retIBP);
@@ -232,10 +234,9 @@ void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, void* ser) {
     // serializer mode lives at *(*ser + 8); 0 => reading.
     int mode = static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 
-    const uint32_t* tidEntity =
-        g_TypeId_ComponentEntity;          // DAT_1401c5d70
-    const uint32_t* tidCitizenAI =
-        g_TypeId_CitizenComponent_FC;    // DAT_1401c7158
+    // ENDGAME B.3.9 D5: read directly through the class's own TypeId().
+    const uint32_t tidEntity = ComponentEntity::TypeId();       // DAT_1401c5d70
+    const uint32_t tidCitizenAI = CitizenComponent::TypeId();   // DAT_1401c7158
 
     if (mode == 0) {
         // ---- reading ----
@@ -245,13 +246,13 @@ void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, void* ser) {
             void* ibpA = nullptr;
             void* ibpB = nullptr;
             reinterpret_cast<Object::InternalBasePtr*>(&ibpA)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-            if (ibpA != nullptr && tidEntity && fn_IsDerivedFrom &&
-                !fn_IsDerivedFrom(ibpA, *tidEntity)) {
+            if (ibpA != nullptr && fn_IsDerivedFrom &&
+                !fn_IsDerivedFrom(ibpA, tidEntity)) {
                 ibpA = nullptr;
             }
             reinterpret_cast<Object::InternalBasePtr*>(&ibpB)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-            if (ibpB != nullptr && tidCitizenAI && fn_IsDerivedFrom &&
-                !fn_IsDerivedFrom(ibpB, *tidCitizenAI)) {
+            if (ibpB != nullptr && fn_IsDerivedFrom &&
+                !fn_IsDerivedFrom(ibpB, tidCitizenAI)) {
                 ibpB = nullptr;
             }
             // pair {ibpA, ibpB} laid out contiguously for the insert key.
@@ -273,15 +274,15 @@ void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, void* ser) {
             // IBP A at node+0x00
             reinterpret_cast<Object::InternalBasePtr*>(node)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
             void* a = *reinterpret_cast<void**>(node);
-            if (a != nullptr && tidEntity && fn_IsDerivedFrom &&
-                !fn_IsDerivedFrom(a, *tidEntity)) {
+            if (a != nullptr && fn_IsDerivedFrom &&
+                !fn_IsDerivedFrom(a, tidEntity)) {
                 *reinterpret_cast<void**>(node) = nullptr;
             }
             // IBP B at node+0x08
             reinterpret_cast<Object::InternalBasePtr*>(node + 8)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
             void* b = *reinterpret_cast<void**>(node + 8);
-            if (b != nullptr && tidCitizenAI && fn_IsDerivedFrom &&
-                !fn_IsDerivedFrom(b, *tidCitizenAI)) {
+            if (b != nullptr && fn_IsDerivedFrom &&
+                !fn_IsDerivedFrom(b, tidCitizenAI)) {
                 *reinterpret_cast<void**>(node + 8) = nullptr;
             }
             // in-order successor

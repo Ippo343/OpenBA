@@ -36,6 +36,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <new>
+#include "Component/CropFieldDescription.h"   // ENDGAME B.3.9 D5: CropFieldDescription::TypeId()
 
 // ============================================================
 // Local function pointers (resolved once by HarvestArea_ResolveFuncs)
@@ -126,7 +127,6 @@ static void* HA_MemAllocViaSingleton(int64_t size, int align) {
 }
 
 // Type IDs
-static uint32_t* s_typeId_CropDesc = nullptr;    // DAT_1401c7548 (FindComp_CropDesc type)
 // (s_typeId_NatResComp not needed -- NatRes lookup done via s_fn_FindComp_NatRes)
 
 // Float constants
@@ -187,10 +187,6 @@ bool HarvestArea_ResolveFuncs() {
     // allocator singleton instead; fn_MemFreeStatic pairs with it.
     s_fn_MemAlloc = &HA_MemAllocViaSingleton;
 
-    // Type IDs
-    s_typeId_CropDesc = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7548));
-
     // Float constants
     s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
 
@@ -210,8 +206,7 @@ bool HarvestArea_ResolveFuncs() {
               s_fn_ValidateTask && s_fn_TaskCancel && s_fn_FindPosComp &&
               s_fn_BST_RecursiveFree &&
               fn_InternalBasePtr_Ctor &&
-              fn_IsDerivedFrom && g_pGameWorldSingleton &&
-              s_typeId_CropDesc && s_fHalfCellOffset;
+              fn_IsDerivedFrom && g_pGameWorldSingleton && s_fHalfCellOffset;
 
     s_ha_funcs_resolved = ok;
 
@@ -315,7 +310,7 @@ int HarvestArea::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) 
 
     // Check CropDescription -> get description object
     void* descObj = *(void**)(cropDescIBP + 0x18);
-    bool isDerived = fn_IsDerivedFrom(descObj, *s_typeId_CropDesc);
+    bool isDerived = fn_IsDerivedFrom(descObj, CropFieldDescription::TypeId());
     void* cropDesc = isDerived ? descObj : nullptr;
 
     // Material index for resource tracking

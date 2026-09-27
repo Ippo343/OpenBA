@@ -25,6 +25,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <new>
+#include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 D5
+#include "Component/StorageComponent.h"         // ENDGAME B.3.9 D5
+#include "Component/InteractDescription.h"      // ENDGAME B.3.9 D5
 
 // ============================================================
 // Local function pointers (resolved once by TradeWork_ResolveFuncs)
@@ -196,9 +199,6 @@ static TrW_EntityPos_t    s_s4_EntityPos        = nullptr;  // 0x140122e20
 static TrW_ChildSum_t     s_s4_ChildSum         = nullptr;  // 0x140123070
 static TrW_FindPath_t     s_s4_FindPath         = nullptr;  // 0x1400bf790
 static TrW_LongTermPlan_t s_s4_LongTermPlan     = nullptr;  // 0x140115e60
-static const uint32_t*    s_s4_pTidRawMat       = nullptr;  // 0x1401c7cb8 RawMaterialDescription
-static const uint32_t*    s_s4_pTidStorage      = nullptr;  // 0x1401c7e78 StorageComponent
-static const uint32_t*    s_s4_pTidInteract     = nullptr;  // 0x1401c7938 InteractDescription
 static bool               s_s4_resolved         = false;
 
 // The already-ported AVL insert (code/Game/Work/tradework_serialize.cpp), registered at
@@ -218,15 +218,11 @@ static void TradeWork_Slot4_Resolve() {
     s_s4_ChildSum         = reinterpret_cast<TrW_ChildSum_t>(ResolveAddr(Module::Exe, 0x140123070));
     s_s4_FindPath         = reinterpret_cast<TrW_FindPath_t>(ResolveAddr(Module::Exe, 0x1400bf790));
     s_s4_LongTermPlan     = reinterpret_cast<TrW_LongTermPlan_t>(ResolveAddr(Module::Exe, 0x140115e60));
-    s_s4_pTidRawMat       = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
-    s_s4_pTidStorage      = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7e78));
-    s_s4_pTidInteract     = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7938));
     s_s4_resolved = true;
 }
 
 namespace {
 
-inline uint32_t TW_Tid(const uint32_t* p) { return p ? *p : 0; }  // deref .rdata type-id, 0 if unfilled
 
 // 16-byte list entry: {u64 resType, int qty, int pad}. Matches the exe stack record.
 struct TWEntry { uint64_t key; int32_t qty; int32_t pad; };
@@ -377,9 +373,9 @@ int TradeWork::Execute(void* citizenIBP, void* /*context*/, uint64_t /*arg3*/) {
         return 2;
     }
 
-    uint32_t rawMatTid   = TW_Tid(s_s4_pTidRawMat);
-    uint32_t storageTid  = TW_Tid(s_s4_pTidStorage);
-    uint32_t interactTid = TW_Tid(s_s4_pTidInteract);
+    uint32_t rawMatTid   = RawMaterialDescription::TypeId();
+    uint32_t storageTid  = StorageComponent::TypeId();
+    uint32_t interactTid = InteractDescription::TypeId();
 
     // ---- 2. PASS 1: build import/export lists over all resource types --------
     int resCount = resList ? *reinterpret_cast<int*>(resList + 0x118) : 0;   // pplVar30[0x23]
