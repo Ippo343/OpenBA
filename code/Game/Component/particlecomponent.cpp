@@ -1045,5 +1045,4 @@ extern "C" void RegisterParticleComponentAddrs() {
     RegisterExeAddr(0x140052a50, reinterpret_cast<uintptr_t>(&ParticleComponent_StartEmitter));
     RegisterExeAddr(0x140053660, reinterpret_cast<uintptr_t>(&ParticleComponent_StartEmitterFade));
     RegisterExeAddr(0x140052b30, reinterpret_cast<uintptr_t>(&ParticleComponent_UpdateTick));
-    RegisterExeAddr(0x140053090, reinterpret_cast<uintptr_t>(&ParticleComponent_Event));
 }

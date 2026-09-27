@@ -26,24 +26,16 @@
 #include "Object/factory_registration.h"
 #include <cstdio>
 
-// The three real vtable bodies.
-extern void TornadoComponent_Shutdown(TornadoComponent* self, void* stream);
-extern void TornadoComponent_Serialize(TornadoComponent* self);
-extern void TornadoComponent_OnRemove(TornadoComponent* self, void* time);
-
 // ENDGAME B.3.8 CIT: the 16-slot copy of the retail vtable that used to live here
 // (g_TornadoComponent_Vtable, registered at 0x14015aa80) is gone. TornadoComponent
 // is a real class with a compiler vtable (code/Game/Component/TornadoComponent.h),
-// and nothing in the tree reads the retail table address back (B38 D5).
+// and nothing in the tree reads the retail table address back (B38 D5). The rows
+// for its three overridden slots (0x140058b80 / 0x1400585a0 / 0x140057cd0) went too
+// (caller batch CB5): nothing read those addresses back either.
 
 extern uint32_t g_tid_ParticleComponent;
 
 extern "C" void RegisterTornadoLane() {
-    // --- the three overridden slots, by their own addresses ---
-    RegisterExeAddr(0x140058b80, reinterpret_cast<uintptr_t>(&TornadoComponent_Shutdown));
-    RegisterExeAddr(0x1400585a0, reinterpret_cast<uintptr_t>(&TornadoComponent_Serialize));
-    RegisterExeAddr(0x140057cd0, reinterpret_cast<uintptr_t>(&TornadoComponent_OnRemove));
-
     // --- the movement/damage leaves ---
     RegisterExeAddr(0x140058980, reinterpret_cast<uintptr_t>(&Tornado_PathFractal_58980));
     // 0x1400a70c0 is DELIBERATELY NOT REGISTERED HERE — the BOAT lane already owns it

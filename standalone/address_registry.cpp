@@ -237,15 +237,9 @@ extern void RegisterHerdLive();
 extern void RegisterPastureLive();
 extern void RegisterAnimalUpdateLive();
 extern void RegisterAnimalSerialize();
-extern void RegisterTradeSerialize();
-extern void RegisterAmbientEnvAndUISerialize();
-extern void RegisterGrowthSpawnSerialize();
-extern void RegisterCemeteryHealerSerialize();
-extern void RegisterFruitHappinessSerialize();
 // Terraform wave (2026-08-22) — the tunnel-mouth terrain deformation. reg file:
 // reg_terraform_live.cpp. Live vtable slots gated on BANISHED_LIVE_TERRAFORM.
 extern void RegisterTerraformLive();
-extern void RegisterMultiObjectForwarder();
 extern void RegisterQuarryLive();
 // Component GAP wave (2026-06-19, branch wave/component-gap) — residual-73 closure-safe
 // helpers + 2 caller-bug literal fixes. reg files: reg_component_gap_{A,B,C,D}.cpp.
@@ -371,9 +365,7 @@ extern void RegisterTownServices();            // Cemetery/Healer/Happiness cont
 extern void RegisterCitizenLifeEventHandler(); // step 2.5 defer close — HandleLifeEvent 116dd0 death chain (cemetery/tombstone/mourning, 7 fns)
 extern "C" void RegisterCitizen25Tick();      // openfuncs step 2.5(b) — behavior-tick group + EventLog_AddEvent
 extern "C" void RegisterEventLogCitizen();    // citizen life-event chain: PostLifeEvent (ex-"AssignState") + AddCitizenEvent + TileIndex
-extern void RegisterCitizenEmployCascade();   // Economy M-C: townMgr+0xa0 registrar (CitizenComponent_OnAdd 0x140114000)
 extern void RegisterModsBatch();              // Lane 4: local mod list (ModDialog/ModDetailsDialog vtables + ctor + Modification singleton exref)
-extern void RegisterCitizenOnRemove();        // the matching de-registrar: CitizenComponent_OnRemove 0x140113ca0 (vtable slot 7)
 extern void RegisterDestroyWorkersBatch();    // Upgrade path: WorkPlaceComponent builder re-seat / worker release (reg_destroy_workers.cpp; 0x14012f520 + 0x14012f670 + 0x14012fb00). REGISTERED UNCONDITIONALLY — there is no env gate in the batch; the former "opt-in BANISHED_LIVE_DESTROY_WORKERS" note here was stale and caused a wrong risk assessment (2026-07-30).
 extern "C" void RegisterCitizenBehaviorTick(); // Town-manager tick: CitizenBehavior_Update 0x14008c2b0 (stock recompute for status/town-hall dialogs) + 0x1401721fc=75.0f
 extern "C" void RegisterCitizenAssignCitizens(); // Town employment allocator: CitizenComponent_impl_43b0 0x1400d43b0 (assigns idle laborers to needy workplaces nearest-first)
@@ -479,13 +471,7 @@ static void RegisterCodeFunctions() {
     RegisterPastureLive();
     RegisterAnimalUpdateLive();
     RegisterAnimalSerialize();
-    RegisterTradeSerialize();
-    RegisterAmbientEnvAndUISerialize();
-    RegisterGrowthSpawnSerialize();
-    RegisterCemeteryHealerSerialize();
-    RegisterFruitHappinessSerialize();
     RegisterTerraformLive();       // TerraformComponent deformation (tunnels)
-    RegisterMultiObjectForwarder();  // msg relay to multi-part child entities
     RegisterQuarryLive();          // QuarryComponent pit carve (terrain heightmap)
     // Component GAP wave — residual-73 closure-safe helpers + caller-bug fixes.
     RegisterComponentGap_A();
@@ -604,9 +590,7 @@ static void RegisterCodeFunctions() {
     RegisterCitizen25();             // openfuncs step 2.5 — needs-msg helpers (fde0/17a0/1540) + lifecycle quartet (2040/68a0/302a0/117080)
     RegisterCitizen25Tick();         // openfuncs step 2.5(b) — behavior-tick group (25a10/25b30/d6c60/d62a0) + EventLog_AddEvent (95580)
     RegisterEventLogCitizen();       // citizen life-event chain — PostLifeEvent 113af0 (ex-"AssignState") + AddCitizenEvent 94e00 + TileIndex 95030
-    RegisterCitizenEmployCascade();  // Economy M-C — townMgr+0xa0 citizen-list registrar (CitizenComponent_OnAdd)
     RegisterModsBatch();             // Lane 4 — local mod list (see standalone/reg_mods.cpp)
-    RegisterCitizenOnRemove();       // the matching de-registrar — CitizenComponent_OnRemove (vtable slot 7)
     RegisterDestroyWorkersBatch();   // Upgrade path — WorkPlaceComponent 12f520/12f670 worker release
     RegisterCitizenBehaviorTick();   // Town-manager tick — CitizenBehavior_Update (townMgr+0x170 stock recompute + 75s stats recorder)
     RegisterCitizenAssignCitizens(); // Town employment allocator — CitizenComponent_impl_43b0 (idle laborers -> needy workplaces, nearest-first)

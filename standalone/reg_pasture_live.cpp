@@ -14,9 +14,10 @@
 //   0x1401270c0  PastureDescription_helper_70c0      -> Pasture_State2Enter
 //   0x140126e40  PastureDescription_helper_6e40      -> Pasture_State3Enter
 //   0x1401267e0  ..._helper_81a0_sub_67e0            -> Pasture_State2PerFrame
-//   0x1401277e0  PastureComponent slot 7 (release)   -> Pasture_ReleaseAllAnimals
-//   0x140123c70  LivestockComponent_OnAdd
-//   0x140123c00  LivestockComponent_OnRemove
+//
+// PastureComponent slots 7/13/14 and LivestockComponent slots 6/7 are real-class
+// virtuals since ENDGAME B.3.8; nothing read their addresses back, so their rows
+// are gone (slot 15 OnMessage keeps its row: pasture_harness.cpp resolves it).
 //
 // Already registered elsewhere and deliberately NOT duplicated here:
 //   0x140128570 / 0x140105ed0 / 0x1401240a0  (reg_component_nature.cpp)
@@ -33,27 +34,18 @@
 #include "Component/component_factory_base.h"
 #include <cstdint>
 
-struct PastureComponent;
-struct LivestockComponent;
-
 extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP);
 extern "C" int  Pasture_FillAllPastures();
 extern "C" void Pasture_BindAnimal(void* animalComp, void* pastureIBP);
 extern "C" void Pasture_AdoptWanderers(void* pasture);
 extern "C" void Pasture_Reproduce(void* pasture);
-extern "C" void Pasture_ReleaseAllAnimals(void* pasture);
 extern "C" char Pasture_State2Enter(void* data, void* sm);
 extern "C" char Pasture_State3Enter(void* data, void* sm);
 extern "C" char Pasture_State2PerFrame(void* data, void* sm, void* time);
 extern "C" void Pasture_MsgReceive(void* pasture, int msg);
 extern "C" void* Pasture_FindLivestockComp(int64_t entity, void* retIBP);
-extern "C" uint64_t Pasture_CanCommand(void* pasture, int cmd);
-extern "C" void Pasture_Command(void* pasture, int cmd);
 extern "C" uint64_t MapGrid_StampCellRefs_9f770(void* grid, int x, int y, int w, int h,
                                                 void* ref);
-
-void LivestockComponent_OnAdd(LivestockComponent* self);
-void LivestockComponent_OnRemove(LivestockComponent* self);
 
 // 0x140172204 (.rdata) = 90.0f — the quarter-turn CreateRawMaterial_helper_9760
 // rotates a dropped produce pile by. Nothing else in standalone registers it.
@@ -73,22 +65,13 @@ void RegisterPastureLive() {
     RegisterExeAddr(0x1401270c0, reinterpret_cast<uintptr_t>(&Pasture_State2Enter));
     RegisterExeAddr(0x140126e40, reinterpret_cast<uintptr_t>(&Pasture_State3Enter));
     RegisterExeAddr(0x1401267e0, reinterpret_cast<uintptr_t>(&Pasture_State2PerFrame));
-    RegisterExeAddr(0x1401277e0, reinterpret_cast<uintptr_t>(&Pasture_ReleaseAllAnimals));
     // Slot 15 OnMessage — the breed tag (herder work-complete -> random animal
     // gets flag bit 23; sole setter of the bit in the exe).
     RegisterExeAddr(0x140127720, reinterpret_cast<uintptr_t>(&Pasture_MsgReceive));
-    // Slots 13/14 — pasture command pair. Slot 14 cmd 2 is the organic herder
-    // start (WPC toggle + PastureWork post); retires the PASTURE_TEND stand-in.
-    RegisterExeAddr(0x140127dd0, reinterpret_cast<uintptr_t>(&Pasture_CanCommand));
-    RegisterExeAddr(0x140127a60, reinterpret_cast<uintptr_t>(&Pasture_Command));
     // Map-cell footprint stamp (shared leaf; also called by HarvestOrchard_impl_0800).
     // Un-no-ops the state-2 per-frame footprint stamp (deferred since the animal wave).
     RegisterExeAddr(0x14009f770, reinterpret_cast<uintptr_t>(&MapGrid_StampCellRefs_9f770));
     // LivestockComponent finder (FUN_14002f1d0) — previously unregistered, which
     // silently skipped the spawn-path bind for every spawned/born livestock.
     RegisterExeAddr(0x14002f1d0, reinterpret_cast<uintptr_t>(&Pasture_FindLivestockComp));
-
-    // Livestock lifecycle
-    RegisterExeAddr(0x140123c70, reinterpret_cast<uintptr_t>(&LivestockComponent_OnAdd));
-    RegisterExeAddr(0x140123c00, reinterpret_cast<uintptr_t>(&LivestockComponent_OnRemove));
 }
