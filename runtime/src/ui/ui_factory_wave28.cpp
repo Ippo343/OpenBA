@@ -567,55 +567,6 @@ extern "C" void* RtUiFact_PageElement_CreateInPlaceObject(void* p) {
 }
 
 // --------------------------------------------------------------------------
-// UI::ProgressDescription   allocation 0xb0, align 8
-//   ?CreateNewObject@ProgressDescription@UI@@SAPEAVBase@Object@@XZ 0x180077860 ord 2097
-//   ?CreateInPlaceObject@ProgressDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x1800778e0 ord 1960
-//   ??0ProgressDescription@UI@@QEAA@XZ                             0x18011a210 ord 320
-// SHAPE C: the factory pair is a bare `alloc / null test / call the
-// exported ctor`. The whole body lives in ??0ProgressDescription@UI@@QEAA@XZ.
-// That ctor IS ported below, so this row does not merely move the wall.
-extern "C" void* RtUi_ProgressDescription_Ctor(void* self);
-void* Ctor_ProgressDescription(void* p) { return RtUi_ProgressDescription_Ctor(p); }
-
-extern "C" void* RtUiFact_ProgressDescription_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0xb0, &Ctor_ProgressDescription);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_ProgressDescription_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_ProgressDescription);
-}
-
-// --------------------------------------------------------------------------
-// UI::ProgressElement   allocation 0x130, align 8
-//   ?CreateNewObject@ProgressElement@UI@@SAPEAVBase@Object@@XZ     0x180077e30 ord 2098
-//   ?CreateInPlaceObject@ProgressElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180077eb0 ord 1961
-//   ??0ProgressElement@UI@@QEAA@XZ                                 0x180119c40 ord 322
-// SHAPE C: the factory pair is a bare `alloc / null test / call the
-// exported ctor`. The whole body lives in ??0ProgressElement@UI@@QEAA@XZ.
-// That ctor IS ported below, so this row does not merely move the wall.
-extern "C" void* RtUi_ProgressElement_Ctor(void* self);   // runtime/src/ui/progresselement.cpp
-// The inlined stores that used to live here were a second copy of
-// ??0ProgressElement@UI@@QEAA@XZ; the class file owns the body since vtable
-// batch 4 (2026-09-12) and this factory pair forwards to it.
-void* Ctor_ProgressElement(void* p) { return RtUi_ProgressElement_Ctor(p); }
-
-extern "C" void* RtUiFact_ProgressElement_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0x130, &Ctor_ProgressElement);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_ProgressElement_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_ProgressElement);
-}
-
-// --------------------------------------------------------------------------
 // UI::RadioDescription   allocation 0x80, align 8
 //   ?CreateNewObject@RadioDescription@UI@@SAPEAVBase@Object@@XZ    0x180047760 ord 2099
 //   ?CreateInPlaceObject@RadioDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x1800477e0 ord 1962
@@ -659,72 +610,6 @@ extern "C" void* RtUiFact_RadioElement_CreateInPlaceObject(void* p) {
     ++g_inplace;
     if (!p) { ++g_inplaceNull; return nullptr; }
     return FactoryInPlace(p, &Ctor_RadioElement);
-}
-
-// --------------------------------------------------------------------------
-// UI::RibbonDescription   allocation 0x80, align 8
-//   ?CreateNewObject@RibbonDescription@UI@@SAPEAVBase@Object@@XZ   0x180044220 ord 2103
-//   ?CreateInPlaceObject@RibbonDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x180044310 ord 1966
-//   ??0RibbonDescription@UI@@QEAA@XZ                               0x1800d5bf0 ord 356
-void* Ctor_RibbonDescription(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    VPTR(self, "??_7Base@Object@@6B@");
-    VPTR(self, "??_7External@Object@@6B@");
-    U64(self, 0x08, 0);
-    U64(self, 0x10, 0);
-    U64(self, 0x18, 0);
-    VPTR(self, "??_7ElementDescription@UI@@6B@");
-    U64(self, 0x20, 0);
-    U64(self, 0x28, 0);
-    U64(self, 0x30, 0);
-    U32(self, 0x38, 0);
-    U32(self, 0x3c, 0xffffffffu);
-    U64(self, 0x40, 0x3ull);
-    U64(self, 0x48, 0);
-    U64(self, 0x50, 0);
-    U64(self, 0x58, 0);
-    U64(self, 0x60, 0);
-    VPTR(self, "??_7RibbonDescription@UI@@6B@");
-    U16(self, 0x68, 0);
-    U32(self, 0x6c, 0);
-    U64(self, 0x70, 0);
-    U64(self, 0x78, 0);
-    return p;
-}
-
-extern "C" void* RtUiFact_RibbonDescription_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0x80, &Ctor_RibbonDescription);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_RibbonDescription_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_RibbonDescription);
-}
-
-// --------------------------------------------------------------------------
-// UI::RibbonElement   allocation 0xd8, align 8
-//   ?CreateNewObject@RibbonElement@UI@@SAPEAVBase@Object@@XZ       0x1800447d0 ord 2104
-//   ?CreateInPlaceObject@RibbonElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180044880 ord 1967
-//   ??0RibbonElement@UI@@QEAA@XZ                                   0x1800d5d10 ord 358
-extern "C" void* RtUi_RibbonElement_Ctor(void* self);   // runtime/src/ui/ribbonelement.cpp
-// The inlined stores that used to live here were a second copy of
-// ??0RibbonElement@UI@@QEAA@XZ; the class file owns the body since vtable
-// batch 4 (2026-09-12) and this factory pair forwards to it.
-void* Ctor_RibbonElement(void* p) { return RtUi_RibbonElement_Ctor(p); }
-
-extern "C" void* RtUiFact_RibbonElement_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0xd8, &Ctor_RibbonElement);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_RibbonElement_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_RibbonElement);
 }
 
 // --------------------------------------------------------------------------
@@ -1175,20 +1060,6 @@ int RtUiFactory2Register() {
                           (void*)&RtUiFact_PageElement_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180047400ull, (void*)&RtUiFact_PageElement_CreateInPlaceObject); ++n;
 
-    RegisterRuntimeExport("?CreateNewObject@ProgressDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_ProgressDescription_CreateNewObject);
-    RegisterRuntimeAddr(0x180077860ull, (void*)&RtUiFact_ProgressDescription_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@ProgressDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_ProgressDescription_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x1800778e0ull, (void*)&RtUiFact_ProgressDescription_CreateInPlaceObject); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@ProgressElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_ProgressElement_CreateNewObject);
-    RegisterRuntimeAddr(0x180077e30ull, (void*)&RtUiFact_ProgressElement_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@ProgressElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_ProgressElement_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x180077eb0ull, (void*)&RtUiFact_ProgressElement_CreateInPlaceObject); ++n;
-
     RegisterRuntimeExport("?CreateNewObject@RadioDescription@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_RadioDescription_CreateNewObject);
     RegisterRuntimeAddr(0x180047760ull, (void*)&RtUiFact_RadioDescription_CreateNewObject); ++n;
@@ -1202,22 +1073,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@RadioElement@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_RadioElement_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180047ba0ull, (void*)&RtUiFact_RadioElement_CreateInPlaceObject); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@RibbonDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_RibbonDescription_CreateNewObject);
-    RegisterRuntimeAddr(0x180044220ull, (void*)&RtUiFact_RibbonDescription_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@RibbonDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_RibbonDescription_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x180044310ull, (void*)&RtUiFact_RibbonDescription_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0RibbonDescription@UI@@QEAA@XZ", (void*)&Ctor_RibbonDescription);
-    RegisterRuntimeAddr(0x1800d5bf0ull, (void*)&Ctor_RibbonDescription); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@RibbonElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_RibbonElement_CreateNewObject);
-    RegisterRuntimeAddr(0x1800447d0ull, (void*)&RtUiFact_RibbonElement_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@RibbonElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_RibbonElement_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x180044880ull, (void*)&RtUiFact_RibbonElement_CreateInPlaceObject); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@ScrollDescription@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_ScrollDescription_CreateNewObject);

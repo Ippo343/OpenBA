@@ -864,13 +864,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // Array whose buffer came from the Runtime heap. A fabricated subject would
     // decrement a refcount nothing incremented and free a garbage pointer.
     RT_DELDTOR(0x180046af0, 0x180117c00, 0x078, "UI::GroupDescription"),
-    // 2026-09-12: slot 0 of ??_7RibbonDescription@UI@@6B@ (0x180156ed0), the
-    // wall after GroupDescription. Read from 0x180044620's own bytes:
-    //     0x180044638  LEA R9,[0x1800d5c90]     ~RibbonDescription
-    //     0x18004463f  MOV EDX,0x80             sizeof
-    // Same two-arm shape as the GroupDescription row above; not a probe
-    // subject, for the same reason.
-    RT_DELDTOR(0x180044620, 0x1800d5c90, 0x080, "UI::RibbonDescription"),
     // 2026-09-12: UI::ImageDescription and its subclass
     // UI::AnimatedImageDescription. Each row's two constants read from the
     // deleting destructor's own bytes:
@@ -1054,9 +1047,7 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180046540, 0x1800d4c40, 0x100, "UI::NumberEditElement"),
     RT_DELDTOR(0x18004ab80, 0x180118ce0, 0x0e8, "UI::NumberElement"),
     RT_DELDTOR(0x180047540, 0x1800d5220, 0x0c8, "UI::PageElement"),
-    RT_DELDTOR(0x180078150, 0x180077ef0, 0x130, "UI::ProgressElement"),
     RT_DELDTOR(0x180047d50, 0x1800d5820, 0x0d8, "UI::RadioElement"),
-    RT_DELDTOR(0x180044ac0, 0x1800d5d70, 0x0d8, "UI::RibbonElement"),
     RT_DELDTOR(0x18003adc0, 0x18011a900, 0x178, "UI::ScrollElement"),
     RT_DELDTOR(0x18004a180, 0x180049ee0, 0x130, "UI::SliderElement"),
     RT_DELDTOR(0x18004b3b0, 0x1800d8640, 0x0c8, "UI::SpinnerElement"),
@@ -1159,7 +1150,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x18004a760, 0x180118c00, 0x088, "UI::NumberDescription"),
     RT_DELDTOR(0x180046190, 0x1800d4fe0, 0x088, "UI::NumberEditDescription"),
     RT_DELDTOR(0x1800471a0, 0x1800d54b0, 0x080, "UI::PageDescription"),
-    RT_DELDTOR(0x180077c80, 0x18011a080, 0x0b0, "UI::ProgressDescription"),
     RT_DELDTOR(0x180047930, 0x1800d5b20, 0x080, "UI::RadioDescription"),
     RT_DELDTOR(0x18003a790, 0x18011a5d0, 0x0c8, "UI::ScrollDescription"),
     RT_DELDTOR(0x180049c60, 0x1800d7a00, 0x0b8, "UI::SliderDescription"),
@@ -1521,9 +1511,6 @@ void* RtDelDtor_RenderState(void* self, unsigned flags) {
 void* RtDelDtor_GroupDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180046af0>());
 }
-void* RtDelDtor_RibbonDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180044620>());
-}
 void* RtDelDtor_ImageDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x1800361f0>());
 }
@@ -1712,9 +1699,7 @@ void* RtDelDtor_LabelElement(void* self, unsigned flags) {
 void* RtDelDtor_NumberEditElement(void* self, unsigned flags) { return DeletingDtorCore(self, flags, Row<0x180046540>()); }
 void* RtDelDtor_NumberElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x18004ab80>()); }
 void* RtDelDtor_PageElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, Row<0x180047540>()); }
-void* RtDelDtor_ProgressElement(void* self, unsigned flags)   { return DeletingDtorCore(self, flags, Row<0x180078150>()); }
 void* RtDelDtor_RadioElement(void* self, unsigned flags)      { return DeletingDtorCore(self, flags, Row<0x180047d50>()); }
-void* RtDelDtor_RibbonElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x180044ac0>()); }
 void* RtDelDtor_ScrollElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x18003adc0>()); }
 void* RtDelDtor_SliderElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x18004a180>()); }
 void* RtDelDtor_SpinnerElement(void* self, unsigned flags)    { return DeletingDtorCore(self, flags, Row<0x18004b3b0>()); }
@@ -1727,7 +1712,6 @@ void* RtDelDtor_TextElement(void* self, unsigned flags)       { return DeletingD
 // The indices below were RE-DERIVED after merging main, not carried over
 // from the branch: main had grown the table to 103 rows in the meantime and
 // a stale index dispatches the WRONG destructor with no diagnostic.
-// RtDelDtor_RibbonDescription is NOT here -- main wired it (index 58).
 // UI::NumberDescription       ~NumberDescription = 0x180118c00
 void* RtDelDtor_NumberDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18004a760>());
@@ -1739,10 +1723,6 @@ void* RtDelDtor_NumberEditDescription(void* self, unsigned flags) {
 // UI::PageDescription         ~PageDescription = 0x1800d54b0
 void* RtDelDtor_PageDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x1800471a0>());
-}
-// UI::ProgressDescription     ~ProgressDescription = 0x18011a080
-void* RtDelDtor_ProgressDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180077c80>());
 }
 // UI::RadioDescription        ~RadioDescription = 0x1800d5b20
 void* RtDelDtor_RadioDescription(void* self, unsigned flags) {
@@ -1863,7 +1843,6 @@ void RtObjectDeletingDtorPortInit() {
     // VTABLE BATCH 9
     // Rows 57-60, the UI::*Description four (wrappers above).
     RegisterRuntimeAddr(0x180046af0, (void*)&RtDelDtor_GroupDescription);
-    RegisterRuntimeAddr(0x180044620, (void*)&RtDelDtor_RibbonDescription);
     RegisterRuntimeAddr(0x1800361f0, (void*)&RtDelDtor_ImageDescription);
     RegisterRuntimeAddr(0x1800369e0, (void*)&RtDelDtor_AnimatedImageDescription);
     RegisterRuntimeAddr(0x180074a10, (void*)&RtDelDtor_ComboDialog);
@@ -1908,9 +1887,7 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180046540, (void*)&RtDelDtor_NumberEditElement);
     RegisterRuntimeAddr(0x18004ab80, (void*)&RtDelDtor_NumberElement);
     RegisterRuntimeAddr(0x180047540, (void*)&RtDelDtor_PageElement);
-    RegisterRuntimeAddr(0x180078150, (void*)&RtDelDtor_ProgressElement);
     RegisterRuntimeAddr(0x180047d50, (void*)&RtDelDtor_RadioElement);
-    RegisterRuntimeAddr(0x180044ac0, (void*)&RtDelDtor_RibbonElement);
     RegisterRuntimeAddr(0x18003adc0, (void*)&RtDelDtor_ScrollElement);
     RegisterRuntimeAddr(0x18004a180, (void*)&RtDelDtor_SliderElement);
     RegisterRuntimeAddr(0x18004b3b0, (void*)&RtDelDtor_SpinnerElement);
@@ -1933,7 +1910,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18004a760, (void*)&RtDelDtor_NumberDescription);
     RegisterRuntimeAddr(0x180046190, (void*)&RtDelDtor_NumberEditDescription);
     RegisterRuntimeAddr(0x1800471a0, (void*)&RtDelDtor_PageDescription);
-    RegisterRuntimeAddr(0x180077c80, (void*)&RtDelDtor_ProgressDescription);
     RegisterRuntimeAddr(0x180047930, (void*)&RtDelDtor_RadioDescription);
     RegisterRuntimeAddr(0x18003a790, (void*)&RtDelDtor_ScrollDescription);
     RegisterRuntimeAddr(0x180049c60, (void*)&RtDelDtor_SliderDescription);

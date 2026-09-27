@@ -359,8 +359,8 @@ struct ProgressElementProbe final : UI::ProgressElement {
 }  // namespace
 
 UNIT_TEST(ui_c5_progress_layout) {
-    CheckShape<UI::ProgressDescription, UI::ElementDescription>(0xb0);   // 0x180077c80
-    CheckShape<UI::ProgressElement, UI::Element>(0x130);                 // 0x180078150
+    CheckShape<UI::ProgressDescription, UI::ElementDescription>(0xb0, true);   // 0x180077c80
+    CheckShape<UI::ProgressElement, UI::Element>(0x130, true);                 // 0x180078150
     CHECK_EQ(offsetof(UI::ProgressDescription, _unknown68), sizeof(UI::ElementDescription));
     CHECK_EQ(offsetof(UI::ProgressDescription, _spriteSheet), (size_t)0x70);
     CHECK_EQ(offsetof(UI::ProgressDescription, _childDescription), (size_t)0xa8);
@@ -474,8 +474,8 @@ struct RibbonElementProbe final : UI::RibbonElement {
 }  // namespace
 
 UNIT_TEST(ui_c5_ribbon_layout) {
-    CheckShape<UI::RibbonDescription, UI::ElementDescription>(0x80);   // 0x180044620
-    CheckShape<UI::RibbonElement, UI::Element>(0xd8);                  // 0x180044ac0
+    CheckShape<UI::RibbonDescription, UI::ElementDescription>(0x80, true);   // 0x180044620
+    CheckShape<UI::RibbonElement, UI::Element>(0xd8, true);                  // 0x180044ac0
     CHECK_EQ(offsetof(UI::RibbonDescription, _vertical), sizeof(UI::ElementDescription));
     CHECK_EQ(offsetof(UI::RibbonDescription, _itemsData), (size_t)0x70);
     CHECK_EQ(offsetof(UI::RibbonElement, _vertical), sizeof(UI::Element));
@@ -677,4 +677,74 @@ UNIT_TEST(b39_uib_c5_deletingdtor_arms) {
     B39CheckDeletingDtorArms<UI::DocumentTextDescription, 0xe8>(VTableOf(&ddp));
     DocumentTextElementProbe dep{};
     B39CheckDeletingDtorArms<UI::DocumentTextElement, 0x1c8>(VTableOf(&dep));
+}
+
+// ---- Progress / Ribbon (ENDGAME B.3.9 UI-B) --------------------------------
+UNIT_TEST(b39_uib_c5_progress_ribbon_pmf_and_ctors) {
+    B39CheckDescriptionPmf<UI::ProgressDescription>();
+    B39CheckElementPmf<UI::ProgressElement>();
+    B39CheckDescriptionPmf<UI::RibbonDescription>();
+    B39CheckElementPmf<UI::RibbonElement>();
+
+    FactoryScope scope;
+    // ??0ProgressDescription 0x18011a210: +0x68 ONE dword, +0x6c untouched.
+    alignas(8) uint8_t pd[0xb0];
+    std::memset(pd, 0xCD, sizeof pd);
+    auto* p = ::new (static_cast<void*>(pd)) UI::ProgressDescription();
+    CHECK_EQ(p->_unknown68, 0u);
+    CHECK_EQ((int)pd[0x6c], 0xCD);
+    CHECK(p->_spriteSheet == nullptr);
+    CHECK(p->_fillLeftName == nullptr);
+    CHECK(p->_trackRightName == nullptr);
+    CHECK(p->_childDescription == nullptr);
+    p->DeletingDtor(0);
+    // ??0ProgressElement 0x180119c40: six {null, -1} sprites, the three tail
+    // stores, +0x12c untouched.
+    alignas(8) uint8_t pe[0x130];
+    std::memset(pe, 0xCD, sizeof pe);
+    auto* e = ::new (static_cast<void*>(pe)) UI::ProgressElement();
+    CHECK(e->_fillLeft.spriteSheet == nullptr);
+    CHECK_EQ(e->_fillLeft.spriteIndex, -1);
+    CHECK_EQ(e->_trackRight.spriteIndex, -1);
+    CHECK_EQ(e->_backgroundColor, 0xffffffffu);
+    CHECK(e->_maxValue == 1.0f);
+    CHECK(e->_currentValue == 0.25f);
+    CHECK_EQ((int)pe[0x12c], 0xCD);
+    e->DeletingDtor(0);
+
+    // ??0RibbonDescription 0x1800d5bf0: +0x6a/+0x6b never written.
+    alignas(8) uint8_t rd[0x80];
+    std::memset(rd, 0xCD, sizeof rd);
+    auto* r = ::new (static_cast<void*>(rd)) UI::RibbonDescription();
+    CHECK_EQ((int)r->_vertical, 0);
+    CHECK_EQ((int)r->_uniform, 0);
+    CHECK_EQ((int)rd[0x6a], 0xCD);
+    CHECK_EQ((int)rd[0x6b], 0xCD);
+    CHECK_EQ(r->_spacing, 0);
+    CHECK(r->_itemsData == nullptr);
+    CHECK_EQ(r->_itemsCount, 0);
+    r->DeletingDtor(0);
+    // ??0RibbonElement 0x1800d5d10: +0xc2/+0xc3 never written.
+    alignas(8) uint8_t re[0xd8];
+    std::memset(re, 0xCD, sizeof re);
+    auto* q = ::new (static_cast<void*>(re)) UI::RibbonElement();
+    CHECK_EQ((int)q->_vertical, 0);
+    CHECK_EQ((int)q->_uniform, 0);
+    CHECK_EQ((int)re[0xc2], 0xCD);
+    CHECK_EQ(q->_spacing, 0);
+    CHECK(q->_extentsData == nullptr);
+    CHECK_EQ(q->_extentsCapacity, 0);
+    q->DeletingDtor(0);
+}
+
+UNIT_TEST(b39_uib_c5_progress_ribbon_deletingdtor_arms) {
+    FactoryScope scope;
+    ProgressDescriptionProbe pdp;
+    B39CheckDeletingDtorArms<UI::ProgressDescription, 0xb0>(VTableOf(&pdp));
+    ProgressElementProbe pep{};
+    B39CheckDeletingDtorArms<UI::ProgressElement, 0x130>(VTableOf(&pep));
+    RibbonDescriptionProbe rdp;
+    B39CheckDeletingDtorArms<UI::RibbonDescription, 0x80>(VTableOf(&rdp));
+    RibbonElementProbe rep{};
+    B39CheckDeletingDtorArms<UI::RibbonElement, 0xd8>(VTableOf(&rep));
 }

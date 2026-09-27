@@ -14,3 +14,7 @@
 ??_7LayoutElement@UI@@6B@              UI-B   real ctor + DeletingDtor + ~X (door body); FACTUI2 row, RT_DELDTOR row 0x180043570, ??0/??1 doors, 5 slot doors deleted; CreateInstance builds ::new LayoutElement()
 ??_7ListDescription@UI@@6B@            UI-B   real ctor + DeletingDtor + ~X (door body); FACTUI2 row, RT_DELDTOR row 0x180044ed0, ??0/??1 doors, 8 slot doors deleted
 ??_7ListElement@UI@@6B@                UI-B   real ctor + DeletingDtor + ~X (door body); FACTUI2 row, RT_DELDTOR row 0x180045320, ??0/??1 doors, 6 slot doors deleted; CreateInstance builds ::new ListElement()
+??_7ProgressDescription@UI@@6B@        UI-B   real ctor + DeletingDtor + ~X (door body); FACTUI2 row, RT_DELDTOR row 0x180077c80, ??0/??1 doors, 8 slot doors deleted
+??_7ProgressElement@UI@@6B@            UI-B   real ctor + DeletingDtor + ~X (bare tail); FACTUI2 row, RT_DELDTOR row 0x180078150, ??0/??1 doors, 5 slot doors deleted; CreateInstance builds ::new ProgressElement()
+??_7RibbonDescription@UI@@6B@          UI-B   real ctor + DeletingDtor + ~X (door body); FACTUI2 row + Ctor_RibbonDescription, RT_DELDTOR row 0x180044620, ??1 door, ConstructBody, 8 slot doors deleted
+??_7RibbonElement@UI@@6B@              UI-B   real ctor + DeletingDtor + ~X (door body); FACTUI2 row, RT_DELDTOR row 0x180044ac0, ??0/??1 doors, 5 slot doors deleted; CreateInstance builds ::new RibbonElement()

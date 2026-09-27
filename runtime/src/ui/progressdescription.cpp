@@ -46,10 +46,6 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-void* VtBase()                { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* VtExternal()            { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* VtElementDescription()  { return RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@"); }
-void* VtProgressDescription() { return RT_DATA_SLOT(void*, "??_7ProgressDescription@UI@@6B@"); }
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
@@ -83,64 +79,6 @@ void ReleaseStringField(char** field) {
 }
 
 }  // namespace
-
-// ??0ProgressDescription@UI@@QEAA@XZ  retail 0x18011a210
-extern "C" void* RtUi_ProgressDescription_Ctor(void* selfv) {
-    uint8_t* p = static_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtBase();                                              // 18011a221
-    *v = VtExternal();                                          // 18011a22b
-    *reinterpret_cast<uint64_t*>(p + 0x08) = 0;                 // 18011a240
-    *reinterpret_cast<uint64_t*>(p + 0x10) = 0;                 // 18011a243
-    *reinterpret_cast<uint64_t*>(p + 0x18) = 0;                 // 18011a247
-    *v = VtElementDescription();                                // 18011a24b
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;                 // 18011a255
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;                 // 18011a259
-    *reinterpret_cast<uint64_t*>(p + 0x30) = 0;                 // 18011a25d
-    *reinterpret_cast<int32_t*>(p + 0x38)  = 0;                 // 18011a261  DWORD
-    *reinterpret_cast<int32_t*>(p + 0x3c)  = -1;                // 18011a264  DWORD
-    *reinterpret_cast<uint64_t*>(p + 0x40) = 3;                 // 18011a26b  ONE QWORD
-    *reinterpret_cast<uint64_t*>(p + 0x48) = 0;                 // 18011a273
-    *reinterpret_cast<uint64_t*>(p + 0x50) = 0;                 // 18011a277
-    *reinterpret_cast<uint64_t*>(p + 0x58) = 0;                 // 18011a27b
-    *reinterpret_cast<uint64_t*>(p + 0x60) = 0;                 // 18011a27f
-    *v = VtProgressDescription();                               // 18011a283
-    *reinterpret_cast<int32_t*>(p + 0x68)  = 0;                 // 18011a28d  DWORD — +0x6c
-                                                                //            stays untouched
-    *reinterpret_cast<uint64_t*>(p + 0x70) = 0;                 // 18011a290
-    *reinterpret_cast<uint64_t*>(p + 0x78) = 0;                 // 18011a294
-    *reinterpret_cast<uint64_t*>(p + 0x80) = 0;                 // 18011a298
-    *reinterpret_cast<uint64_t*>(p + 0x88) = 0;                 // 18011a29f
-    *reinterpret_cast<uint64_t*>(p + 0x90) = 0;                 // 18011a2a6
-    *reinterpret_cast<uint64_t*>(p + 0x98) = 0;                 // 18011a2ad
-    *reinterpret_cast<uint64_t*>(p + 0xa0) = 0;                 // 18011a2b4
-    *reinterpret_cast<uint64_t*>(p + 0xa8) = 0;                 // 18011a2bb
-    return p;                                                   // 18011a2c2
-}
-
-// ??1ProgressDescription@UI@@UEAA@XZ  0x18011a080 — the six Strings in REVERSE
-// order under this class's vtable, then the base's _textName at +0x60. Neither
-// ExternalPtr is released.
-extern "C" void RtUi_ProgressDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtProgressDescription();                              // 18011a09b
-
-    ReleaseStringField(reinterpret_cast<char**>(p + 0xa0));    // 18011a0a5
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x98));    // 18011a0d8
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x90));    // 18011a10a
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x88));    // 18011a13c
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x80));    // 18011a16e
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x78));    // 18011a1a0
-
-    *v = VtElementDescription();                               // 18011a1c6
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x60));    // 18011a1d0
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 18011a203 JMP
-}
 
 // ============================================================================
 // The MEMBERS
@@ -180,17 +118,21 @@ const char* ProgressDescription::TypeName() const {
 uint32_t ProgressDescription::Type() const {
     uint32_t v = 0; __builtin_memcpy(&v, ProgressTypeInfo(), sizeof v); return v;
 }
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t ProgressDescription::TypeId() {
+    uint32_t v = 0; __builtin_memcpy(&v, ProgressTypeInfo(), sizeof v); return v;
+}
 int32_t ProgressDescription::GetFileVersion() const { return 0x204; }
 
 // [9] 0x180077910 — the null-`this` test stays in the door; the member is the
 // jump into the (door) ctor.
 Object::External* ProgressDescription::Construct() {
-    return reinterpret_cast<Object::External*>(RtUi_ProgressDescription_Ctor(this));
+    return ::new (this) ProgressDescription();       // ENDGAME B.3.9: the real ctor
 }
 // [6] 0x1800778f0 — destroy in place through slot 0 (flag 0), re-run the ctor.
 Object::External* ProgressDescription::Reconstruct() {
     DeletingDtor(0);
-    return reinterpret_cast<Object::External*>(RtUi_ProgressDescription_Ctor(this));
+    return ::new (this) ProgressDescription();
 }
 // [7] 0x180077920
 void ProgressDescription::Destruct() { DeletingDtor(0); }
@@ -254,11 +196,8 @@ Object::InternalPtr<Element>* ProgressDescription::CreateInstance(
     void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0x130, 8);          // 180119d49 (inlined)
 
     ProgressElement* elem = static_cast<ProgressElement*>(raw);
-    if (raw != nullptr) {                                               // 180119d73
-        using ProgressElementCtorFn = void* (*)(void*);
-        elem = static_cast<ProgressElement*>(
-            RtAddr<ProgressElementCtorFn>(0x180119c40ull)(raw));        // 180119d78
-    }
+    if (raw != nullptr)                                                 // 180119d73
+        elem = ::new (raw) ProgressElement();                           // 180119d78 ??0 (out of line)
 
     void* slot = elem;                                                  // 180119d80
     // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
@@ -308,85 +247,52 @@ Object::InternalPtr<Element>* ProgressDescription::CreateInstance(
     return ret;
 }
 
+// ??1ProgressDescription@UI@@UEAA@XZ  0x18011a080 — retail's body, moved from
+// the retired door (ENDGAME B.3.9 UI-B): the six Strings in REVERSE order. The
+// restamps, the base's _textName (+0x60) and the tail JMP into ~External are
+// the compiler's chain. Neither ExternalPtr is released.
+ProgressDescription::~ProgressDescription() {
+    uint8_t* p = reinterpret_cast<uint8_t*>(this);
+    ReleaseStringField(reinterpret_cast<char**>(p + 0xa0));    // 18011a0a5
+    ReleaseStringField(reinterpret_cast<char**>(p + 0x98));    // 18011a0d8
+    ReleaseStringField(reinterpret_cast<char**>(p + 0x90));    // 18011a10a
+    ReleaseStringField(reinterpret_cast<char**>(p + 0x88));    // 18011a13c
+    ReleaseStringField(reinterpret_cast<char**>(p + 0x80));    // 18011a16e
+    ReleaseStringField(reinterpret_cast<char**>(p + 0x78));    // 18011a1a0
+}
+
+// ?CreateNewObject@ProgressDescription@UI@@SAPEAVBase@Object@@XZ 0x180077860 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0xb0, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* ProgressDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ProgressDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) ProgressDescription();
+}
+// ?CreateInPlaceObject@ProgressDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x1800778e0
+Object::Base* ProgressDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) ProgressDescription();
+}
+
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
+// ENDGAME B.3.9 UI-B: the slot doors, the ctor / dtor doors and the
+// factory-interpreter row are gone. Their only readers were the minted
+// `??_7ProgressDescription@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
+// ProgressDescription now wears the compiler's table.
 // ============================================================================
-extern "C" uint32_t RtUi_ProgressDescription_Type(const void* self) {
-    return reinterpret_cast<const UI::ProgressDescription*>(self)->UI::ProgressDescription::Type();
-}
-extern "C" const char* RtUi_ProgressDescription_TypeName(const void* self) {
-    return reinterpret_cast<const UI::ProgressDescription*>(self)->UI::ProgressDescription::TypeName();
-}
-extern "C" int32_t RtUi_ProgressDescription_GetFileVersion(const void* self) {
-    return reinterpret_cast<const UI::ProgressDescription*>(self)
-        ->UI::ProgressDescription::GetFileVersion();
-}
-extern "C" void* RtUi_ProgressDescription_Construct(void* self) {
-    if (self == nullptr) return nullptr;                                // 180077910 (retail null test)
-    return reinterpret_cast<UI::ProgressDescription*>(self)->UI::ProgressDescription::Construct();
-}
-extern "C" void* RtUi_ProgressDescription_Reconstruct(void* self) {
-    return reinterpret_cast<UI::ProgressDescription*>(self)->UI::ProgressDescription::Reconstruct();
-}
-extern "C" void RtUi_ProgressDescription_Destruct(void* self) {
-    reinterpret_cast<UI::ProgressDescription*>(self)->UI::ProgressDescription::Destruct();
-}
-extern "C" bool RtUi_ProgressDescription_Serialize(void* self, void* stream) {
-    return reinterpret_cast<UI::ProgressDescription*>(self)->UI::ProgressDescription::Serialize(stream);
-}
-extern "C" void** RtUi_ProgressDescription_CreateInstance(const void* self, void** ret,
-                                                          const void* dialog) {
-    return reinterpret_cast<void**>(
-        reinterpret_cast<const UI::ProgressDescription*>(self)
-            ->UI::ProgressDescription::CreateInstance(
-                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
-                static_cast<const UI::Dialog*>(dialog)));
-}
 
 int RtUiProgressDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@ProgressDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_ProgressDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x180077750ull, (void*)&RtUi_ProgressDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@ProgressDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_ProgressDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x180077770ull, (void*)&RtUi_ProgressDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@ProgressDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_ProgressDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x18011a070ull, (void*)&RtUi_ProgressDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@ProgressDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_ProgressDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x180077910ull, (void*)&RtUi_ProgressDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@ProgressDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_ProgressDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x1800778f0ull, (void*)&RtUi_ProgressDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@ProgressDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_ProgressDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x180077920ull, (void*)&RtUi_ProgressDescription_Destruct);
-
-    RegisterRuntimeExport("??0ProgressDescription@UI@@QEAA@XZ",
-                          (void*)&RtUi_ProgressDescription_Ctor);            ++n;
-    RegisterRuntimeAddr(0x18011a210ull, (void*)&RtUi_ProgressDescription_Ctor);
-
-    RegisterRuntimeExport("??1ProgressDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_ProgressDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x18011a080ull, (void*)&RtUi_ProgressDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@ProgressDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_ProgressDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x180119f60ull, (void*)&RtUi_ProgressDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@ProgressDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_ProgressDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x180119d00ull, (void*)&RtUi_ProgressDescription_CreateInstance);
-
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@ProgressDescription` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@ProgressDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::ProgressDescription::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x180077860ull, (void*)&UI::ProgressDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@ProgressDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::ProgressDescription::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x1800778e0ull, (void*)&UI::ProgressDescription::CreateInPlaceObject);
     return n;
 }
