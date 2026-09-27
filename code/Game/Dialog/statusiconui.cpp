@@ -18,6 +18,8 @@
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "Object/factory_registration.h"
+#include <cstddef>
 
 // By-name StatusIconComponent finder, defined in the STANDALONE promotion block at the
 // bottom of this file. StatusIconUI_Startup calls it as a fallback because the exe
@@ -44,6 +46,38 @@ static void* StatusIconUI_FindStatusIconComp(void* entity);
 static uint32_t s_tidStatusIconUIConfig = 0;
 static uint32_t s_tidEntityUI = 0;
 
+namespace statusiconui_sa {
+
+void EnsureGlobals() {
+    static uint32_t s_ce = 0, s_dc = 0, s_pt = 0;
+    // ComponentEntity is required — Startup casts the panel's data source (+0x28) to it.
+    if (!g_TypeId_ComponentEntity) { s_ce = ::Object::ResolveTypeIdByNameLazy("ComponentEntity"); if (s_ce) g_TypeId_ComponentEntity = &s_ce; }
+    // These two are the REAL types the page gate needs (see the note at the top of this
+    // file). The gate is not cosmetic: without it the title-bar mount of the icons ribbon
+    // draws on the main info page and the stop-work icon appears twice.
+    if (!s_tidStatusIconUIConfig) s_tidStatusIconUIConfig = ::Object::ResolveTypeIdByNameLazy("StatusIconUIConfig");
+    if (!s_tidEntityUI)           s_tidEntityUI           = ::Object::ResolveTypeIdByNameLazy("EntityUI");
+
+    // REMOVED — these two lazy by-name fills were actively harmful, not merely redundant.
+    // Neither 0x1401c56e0 nor 0x1401c4f00 is RegisterExeAddr'd, so engine_funcs.cpp's
+    // ResolveAddr leaves both globals null; THIS was the only code in the tree that ever
+    // made them non-null, and it filled them by NAME with genuinely different classes than
+    // the .rdata slots they are documented as. `*g_TypeId_DialogController` now has no
+    // readers at all, and the sole reader of `*g_TypeId_PageToggleUI`
+    // (engine_funcs.h, Toolbar_CenterOnEntity_Impl) actually wants **EntityUI** — retail
+    // FUN_140103040 compares against DWORD_1401c4f00, whose registrar is
+    // RegisterType_EntityUI. Feeding it the real PageToggleUI id (a different class, whose
+    // own slot is 0x1401c5408) made its IsDerivedFrom always fail, silently disabling
+    // camera-follow for every "go to entity" click. That consumer now resolves EntityUI
+    // for itself, so filling these globals here would only re-poison it.
+    (void)s_dc; (void)s_pt;
+
+}
+
+
+
+}  // namespace statusiconui_sa
+
 // ============================================================
 // StatusIconUI::Serialize (vtable +0x20) — Cache icon child elements
 // ============================================================
@@ -53,9 +87,12 @@ static uint32_t s_tidEntityUI = 0;
 //
 // Original: 0x14007b270.
 
-void StatusIconUI_Serialize(StatusIconUI* self) {
+// [4] 0x14007b270
+void StatusIconUI::OnCreated() {
+    statusiconui_sa::EnsureGlobals();
+    if (!SA_DialogEntityAlive(this)) return;
     // Get dialog element from controller base (+0x20)
-    void* dialogElem = *(void**)((uintptr_t)self + 0x20);
+    void* dialogElem = *(void**)((uintptr_t)this + 0x20);
 
     // Find "icons" container element by name
     System::String nameBuf("icons");
@@ -78,17 +115,17 @@ void StatusIconUI_Serialize(StatusIconUI* self) {
     // Resize the array at self+0x30 to hold childCount entries.
     // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
     // new tail zeroed. Element is the 8-byte InternalPtr<Element> copied in below.
-    GameColl::ArrayAt<GameColl::Ptr8>(self, 0x30).SetSize(childCount);
+    GameColl::ArrayAt<GameColl::Ptr8>(this, 0x30).SetSize(childCount);
 
     // Copy each child's InternalPtr (8 bytes) into the array
-    int storedCount = *(int*)((uintptr_t)self + 0x38);
+    int storedCount = *(int*)((uintptr_t)this + 0x38);
     for (int i = 0; i < storedCount; i++) {
         // Element::Child returns InternalPtr<Element> via non-trivial return
         uint64_t childResult = 0;
         ::new (&childResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(iconsElem)->Child(i));  // B.3.6 bridge
 
         // Copy 8-byte InternalPtr into array slot
-        uint64_t* arrayBase = *(uint64_t**)((uintptr_t)self + 0x30);
+        uint64_t* arrayBase = *(uint64_t**)((uintptr_t)this + 0x30);
         arrayBase[i] = childResult;
     }
 }
@@ -102,9 +139,14 @@ void StatusIconUI_Serialize(StatusIconUI* self) {
 //
 // Original: 0x14007b0a0.
 
-void StatusIconUI_Startup(StatusIconUI* self) {
+// [7] 0x14007b0a0
+void StatusIconUI::OnUpdateLayout() {
+    statusiconui_sa::EnsureGlobals();
+    if (!g_TypeId_ComponentEntity || !SA_DialogEntityAlive(this)) return;
+    if (*reinterpret_cast<uint64_t*>((char*)this + 0x30) == 0)
+        StatusIconUI::OnCreated();
     // Get entity from controller data (+0x28)
-    void* entity = *(void**)((uintptr_t)self + 0x28);
+    void* entity = *(void**)((uintptr_t)this + 0x28);
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
 
@@ -134,7 +176,7 @@ void StatusIconUI_Startup(StatusIconUI* self) {
     bool iconsActive = true;
 
     // self+0x10 is the optional per-mount StatusIconUIConfig, NOT a DialogController.
-    void* config = *(void**)((uintptr_t)self + 0x10);
+    void* config = *(void**)((uintptr_t)this + 0x10);
     if (config != nullptr) {
         bool isCfg = s_tidStatusIconUIConfig &&
                      fn_IsDerivedFrom(config, s_tidStatusIconUIConfig);
@@ -144,7 +186,7 @@ void StatusIconUI_Startup(StatusIconUI* self) {
         // page restriction when it is FALSE. (This was previously coded as a
         // *pointer*-null test on +0x20, which is a different question entirely.)
         if (cfgPtr && *(uint8_t*)((uintptr_t)cfgPtr + 0x20) == 0) {
-            void* dialogInst = *(void**)((uintptr_t)self + 0x18);
+            void* dialogInst = *(void**)((uintptr_t)this + 0x18);
             uint64_t ctrlResult = 0;
             // Third arg is a TYPE FILTER. Retail (0x14007b14b) is
             //   MOV R8D,[0x1401c4f00]   ; EntityUI type id
@@ -188,8 +230,8 @@ void StatusIconUI_Startup(StatusIconUI* self) {
     }
 
     // Loop through icon elements, show/hide based on bitfield
-    int iconCount = *(int*)((uintptr_t)self + 0x38);
-    uint64_t* iconArray = *(uint64_t**)((uintptr_t)self + 0x30);
+    int iconCount = *(int*)((uintptr_t)this + 0x38);
+    uint64_t* iconArray = *(uint64_t**)((uintptr_t)this + 0x30);
     uint32_t bitMask = 1;
 
     for (int i = 0; i < iconCount; i++) {
@@ -238,11 +280,6 @@ void StatusIconUI_Startup(StatusIconUI* self) {
 // live the panel reflects real status; when they are all clear (a healthy citizen, or a
 // standalone entity whose status logic hasn't populated them) the guarded read yields 0 and
 // every icon is hidden — the correct "no active warnings" appearance, and never "all shown".
-#include "Object/factory_registration.h"
-#include <cstdint>
-#include <cstddef>
-#include <cstdlib>
-#include <cstdio>
 
 // By-name StatusIconComponent finder (forward-declared at the top of this file). The exe
 // finder Entity_FindComponent_MeshInstance (0x140002f90) compares each component's GetTypeId
@@ -270,69 +307,12 @@ static void* StatusIconUI_FindStatusIconComp(void* entity) {
     return nullptr;
 }
 
-namespace statusiconui_sa {
 
-void EnsureGlobals() {
-    static uint32_t s_ce = 0, s_dc = 0, s_pt = 0;
-    // ComponentEntity is required — Startup casts the panel's data source (+0x28) to it.
-    if (!g_TypeId_ComponentEntity) { s_ce = ::Object::ResolveTypeIdByNameLazy("ComponentEntity"); if (s_ce) g_TypeId_ComponentEntity = &s_ce; }
-    // These two are the REAL types the page gate needs (see the note at the top of this
-    // file). The gate is not cosmetic: without it the title-bar mount of the icons ribbon
-    // draws on the main info page and the stop-work icon appears twice.
-    if (!s_tidStatusIconUIConfig) s_tidStatusIconUIConfig = ::Object::ResolveTypeIdByNameLazy("StatusIconUIConfig");
-    if (!s_tidEntityUI)           s_tidEntityUI           = ::Object::ResolveTypeIdByNameLazy("EntityUI");
 
-    // REMOVED — these two lazy by-name fills were actively harmful, not merely redundant.
-    // Neither 0x1401c56e0 nor 0x1401c4f00 is RegisterExeAddr'd, so engine_funcs.cpp's
-    // ResolveAddr leaves both globals null; THIS was the only code in the tree that ever
-    // made them non-null, and it filled them by NAME with genuinely different classes than
-    // the .rdata slots they are documented as. `*g_TypeId_DialogController` now has no
-    // readers at all, and the sole reader of `*g_TypeId_PageToggleUI`
-    // (engine_funcs.h, Toolbar_CenterOnEntity_Impl) actually wants **EntityUI** — retail
-    // FUN_140103040 compares against DWORD_1401c4f00, whose registrar is
-    // RegisterType_EntityUI. Feeding it the real PageToggleUI id (a different class, whose
-    // own slot is 0x1401c5408) made its IsDerivedFrom always fail, silently disabling
-    // camera-follow for every "go to entity" click. That consumer now resolves EntityUI
-    // for itself, so filling these globals here would only re-poison it.
-    (void)s_dc; (void)s_pt;
-
-}
-
-// +0x20 setup: cache the "icons" group child elements into self+0x30 (array) / +0x38 (count).
-void W_Serialize(void* self) {
-    EnsureGlobals();
-    if (!self || !SA_DialogEntityAlive(self)) return;
-    StatusIconUI_Serialize(reinterpret_cast<StatusIconUI*>(self));
-}
-
-// +0x38: the visibility update. Lazily runs Serialize once if the setup slot didn't populate
-// the icon array (self+0x30 null), so the per-frame path is robust even if idx4 never fired.
-void W_Startup(void* self) {
-    EnsureGlobals();
-    if (!self || !g_TypeId_ComponentEntity || !SA_DialogEntityAlive(self)) return;
-    if (*reinterpret_cast<uint64_t*>((char*)self + 0x30) == 0)
-        StatusIconUI_Serialize(reinterpret_cast<StatusIconUI*>(self));
-    StatusIconUI_Startup(reinterpret_cast<StatusIconUI*>(self));
-}
-
-// +0x40 per-frame (the only slot DialogInstance::OnUpdate dispatches each frame) → drive the
-// visibility update so the icons continuously track the entity's live StatusIconComponent bits.
-void W_OnUpdate(void* self, void* /*time*/) { W_Startup(self); }
-}  // namespace statusiconui_sa
-
-// [4] 0x14007b270
-void StatusIconUI::OnCreated() {
-    statusiconui_sa::W_Serialize(this);
-}
-
-// [7] 0x14007b0a0
-void StatusIconUI::OnUpdateLayout() {
-    statusiconui_sa::W_Startup(this);
-}
 
 // [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
-void StatusIconUI::OnUpdate(const System::Time& time) {
-    statusiconui_sa::W_OnUpdate(this, const_cast<System::Time*>(&time));
+void StatusIconUI::OnUpdate(const System::Time& /*time*/) {
+    StatusIconUI::OnUpdateLayout();
 }
 
 // [0] 0x140014370: ~StatusIconUI (restamp, ~DialogController, ~Internal — the

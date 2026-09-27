@@ -73,8 +73,8 @@ extern void Debug_ImageElement_SetSprite(void* self, void* spriteData);
 // ToolbarDialog_CloseSubDialog (FUN_1400b9730)
 // Closes the active sub-dialog if present, resets radio selection.
 // self+0xE8 = InternalBasePtr to sub-dialog, self+0xF0 = open sub index, self+0xB8 = radio.
-static void ToolbarDialog_CloseSubDialog_Impl(void* self) {
-    uintptr_t s = (uintptr_t)self;
+void ToolbarDialog::CloseSubDialog() {
+    uintptr_t s = (uintptr_t)this;
     uint64_t subDialogPtr = *(uint64_t*)(s + 0xE8);
     if (subDialogPtr != 0) {
         void* ui = *(void**)(s + 0x10);
@@ -151,7 +151,7 @@ void ToolbarDialog::OnOpened() {}
 // ============================================================
 // Thunk to CloseSubDialog: closes any open sub-toolbar dialog.
 void ToolbarDialog::OnClosed() {
-    ToolbarDialog_CloseSubDialog_Impl(this);
+    CloseSubDialog();
 }
 
 // ============================================================
@@ -1803,7 +1803,7 @@ void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
             // hand-built ToolbarDialog table's Type slot forwarded to the DialogInstance
             // base, making every ToolbarDialog report as its own base class. Since
             // B.3.8 the compiler table's Type() answers ToolbarDialog's own id.
-            ToolbarDialog_CloseSubDialog_Impl(typedParent);
+            reinterpret_cast<ToolbarDialog*>(typedParent)->CloseSubDialog();   // B.3.8 bridge
             break;
         }
         case 6: {

@@ -9,11 +9,6 @@
 // TitleDescToolTipUI
 // ============================================================
 
-// Serialize (vtable +0x20): Finds "textTitle" and "textDesc" elements in the
-// parent dialog, reads user data from the controller's data source (+0x28),
-// and sets them as text parameters on the respective elements.
-void TitleDescToolTipUI_Serialize(TitleDescToolTipUI* self);
-
 // ============================================================
 // RadiusUI
 // ============================================================
@@ -44,21 +39,9 @@ void ConsumeProduceUI_Slot9(ConsumeProduceUI* self, uint64_t param2,
 // StorageCapacityUI
 // ============================================================
 
-// Serialize (vtable +0x20): Finds ProgressElement by type, stores at +0x30.
-void StorageCapacityUI_Serialize(StorageCapacityUI* self);
-
-// Startup (vtable +0x38): Queries storage count, calculates fill ratio, updates progress.
-void StorageCapacityUI_Startup(StorageCapacityUI* self);
-
 // ============================================================
 // StatusIconUI
 // ============================================================
-
-// Serialize (vtable +0x20): Finds "icons" container, caches child element pointers.
-void StatusIconUI_Serialize(StatusIconUI* self);
-
-// Startup (vtable +0x38): Updates icon visibility based on MeshInstance bitfield and page state.
-void StatusIconUI_Startup(StatusIconUI* self);
 
 // ============================================================
 // CropUI
@@ -82,27 +65,12 @@ void CropUI_Slot8(CropUI* self);
 // WorkplaceUI
 // ============================================================
 
-// Serialize (vtable +0x20): Finds worker/job count elements, sets IDs, checks job visibility.
-void WorkplaceUI_Serialize(WorkPlaceUI* self);
-
-// Startup (vtable +0x38): Queries components, displays worker count/max,
-// enables/disables up/down buttons based on state.
-void WorkplaceUI_Startup(WorkPlaceUI* self);
-
 // OnRemove (vtable +0x48): Dispatches worker count up/down, job count up/down,
 // and workplace toggle button clicks.
 
 // ============================================================
 // UpgradeUI
 // ============================================================
-
-// Serialize (vtable +0x20): Finds button element, creates sprite from
-// ToolbarDescription, sets on button's child image element.
-void UpgradeUI_Serialize(UpgradeUI* self);
-
-// OnRemove (vtable +0x48): On button click (ID 33000), finds DestroyComponent,
-// copies upgrade description reference, and starts upgrade.
-void UpgradeUI_OnRemove(UpgradeUI* self, void* p2, int eventType, int eventId);
 
 // ============================================================
 // HelpUI
@@ -198,14 +166,6 @@ void EntityUI_Slot8(EntityUI* self);
 // StorageUI
 // ============================================================
 
-// Serialize (vtable +0x20): Finds storage table, counts resource types via
-// ExternalFactory, resizes table, clones template elements, caches row elements.
-void StorageUI_Serialize(StorageUI* self);
-
-// Startup (vtable +0x38): Queries StorageComponent entries, builds sorted
-// resource list, populates table rows with sprite/name/count, hides unused rows.
-void StorageUI_Startup(StorageUI* self);
-
 // ============================================================
 // ToolUI
 // ============================================================
@@ -241,20 +201,6 @@ void TradeUI_RefreshOrderDisplay(TradeUI* self);
 // StatusBarUI
 // ============================================================
 
-// Draw (vtable +0x28): Finds all named UI elements (~35), builds icon arrays
-// for hearts/stars, sets element IDs on status icons, loads initial map name.
-void StatusBarUI_Draw(StatusBarUI* self);
-
-// Startup (vtable +0x38): Main HUD update — iterates citizens for status counts,
-// updates health/happiness icons, resource amounts, weather, temperature, date.
-void StatusBarUI_Startup(StatusBarUI* self);
-
-// OnRemove (vtable +0x48): Status icon click handler — cycles to next citizen
-// with the clicked status problem (home/food/cold/job/tool/disease),
-// navigates camera and opens CitizenUI for them.
-// Icon IDs 100-105 map to statusBit (1<<0)..(1<<5).
-void StatusBarUI_OnRemove(StatusBarUI* self, void* param2, int eventType, int eventId);
-
 // ============================================================
 // NoiseUI
 // ============================================================
@@ -273,24 +219,6 @@ void NoiseUI_Slot9(NoiseUI* self, void* param2, int msg, int id,
 // ============================================================
 // TownHallUI
 // ============================================================
-
-// Serialize (vtable +0x20): Finds "tabs" TabElement, stores at +0x30,
-// then calls 6 sub-functions to initialize each tab's UI elements.
-void TownHallUI_Serialize(TownHallUI* self);
-
-// Startup (vtable +0x38): Updates General/Professions/Production/Agriculture tabs.
-void TownHallUI_Startup(TownHallUI* self);
-
-// OnCreate (vtable +0x40): Checks game tick, updates graph + inventory.
-void TownHallUI_OnCreate(TownHallUI* self);
-
-// OnRemove (vtable +0x48): Event dispatcher — profession buttons/spinners, graph combos.
-void TownHallUI_OnRemove(TownHallUI* self, void* param2, int msg, int id);
-
-// Update (vtable +0x50): IO::Serializer save/load of tab index and
-// 5 combo box selections. On load, restores tab/combo states and
-// triggers graph update.
-void TownHallUI_Update(TownHallUI* self, void* stream);
 
 // ============================================================
 // SpriteCaptureUI

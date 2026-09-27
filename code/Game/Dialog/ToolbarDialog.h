@@ -41,6 +41,10 @@ public:
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x1400b92a0
 
+    // FUN_1400b9730: close the open sub-toolbar dialog and reset the radio. Not a
+    // slot: slot 5 is a JMP to it and button case 5 calls it on the parent.
+    void CloseSubDialog();
+
 protected:
     ~ToolbarDialog();
 

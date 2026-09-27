@@ -878,14 +878,7 @@ DEFINE_EXE_TYPE(SpriteCaptureUI, "UI::DialogController")
 // (datasource) before use — which is why this was chosen as the first wire of the
 // sweep: if the wiring mechanism itself is wrong, this class fails visibly without
 // being able to fault.
-// Forward-declared rather than including ui_panels.h: this file deliberately does
-// not pull in the panel headers (the other promotions forward-declare too), and a
-// pointer to an incomplete type is all the call needs.
 
-void TitleDescToolTipUI_Serialize(TitleDescToolTipUI* self);
-
-// [4] 0x14007b730.
-void TitleDescToolTipUI::OnCreated() { ::TitleDescToolTipUI_Serialize(this); }
 
 // [0] 0x140014510: ~TitleDescToolTipUI (restamp, ~DialogController, ~Internal — the
 // compiler's chain), MemFree on &1.

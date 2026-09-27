@@ -33,6 +33,8 @@
 #include "runtime/types/ui/TableElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "runtime/types/ui/ElementDescription.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Object/factory_registration.h"
+#include <cstddef>
 
 // StorageUI::Startup is the per-frame content refresh (driven via the +0x40
 // W_OnUpdate hack in standalone). Its _DEBUG bring-up logs used to fire every
@@ -60,6 +62,45 @@ static uint64_t StorageUI_FindElemAsBasePtr(void* parentElem, const char* name) 
     return *(uint64_t*)bpBuf;
 }
 
+namespace storageui_sa {
+
+void EnsureGlobals() {
+    static uint32_t s_ce = 0, s_raw = 0;
+    if (!g_TypeId_ComponentEntity) {
+        s_ce = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
+        if (s_ce) g_TypeId_ComponentEntity = &s_ce;
+    }
+    // RawMaterialDescription (0x1401c7cb8) is normally registered in standalone
+    // (reg_action_child_ctors2.cpp), but lazy-resolve as a belt-and-braces fallback.
+    if (!g_TypeId_RawMaterialDescription) {
+        s_raw = ::Object::ResolveTypeIdByNameLazy("RawMaterialDescription");
+        if (s_raw) g_TypeId_RawMaterialDescription = &s_raw;
+    }
+    // g_TypeId_StorageComponent_FC (0x1401c7e78, used by fn_FindComponent_Storage)
+    // and g_pExternalFactorySingleton are filled by engine_funcs init in standalone.
+}
+
+// All globals StorageUI_Serialize/Startup dereference must be live before we run,
+// or a null-deref would fault (MinGW has no __try/__except to catch it).
+bool Ready() {
+    return g_TypeId_ComponentEntity
+        && g_TypeId_RawMaterialDescription
+        && g_TypeId_StorageComponent_FC
+        && g_pExternalFactorySingleton && *g_pExternalFactorySingleton;
+}
+
+static void Trace(const char* what, void* self) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    fprintf(stderr, "[StorageUI] %s self=%p ready=%d rows(+0x38)=%d\n",
+            what, self, Ready() ? 1 : 0,
+            self ? *reinterpret_cast<int*>(s + 0x38) : -1);
+    fflush(stderr);
+}
+
+
+
+}  // namespace storageui_sa
+
 // ============================================================
 // StorageUI::Serialize (vtable +0x20) — Setup storage table
 // ============================================================
@@ -71,8 +112,12 @@ static uint64_t StorageUI_FindElemAsBasePtr(void* parentElem, const char* name) 
 //
 // Original: 0x1400b8820.
 
-void StorageUI_Serialize(StorageUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [4] 0x1400b8820
+void StorageUI::OnCreated() {
+    storageui_sa::EnsureGlobals();
+    if (!storageui_sa::Ready() || !SA_DialogEntityAlive(this)) { storageui_sa::Trace("Serialize SKIP", this); return; }
+    storageui_sa::Trace("Serialize", this);
+    uintptr_t s = (uintptr_t)this;
     void* dialogElem = *(void**)(s + 0x20);
 
     // Find "storageTable", fallback to "storageTable2"
@@ -169,8 +214,8 @@ void StorageUI_Serialize(StorageUI* self) {
 
     // Call Startup via vtable +0x38
     typedef void (*fn_Startup_t)(void*);
-    void** vtable = *(void***)self;
-    ((fn_Startup_t)vtable[7])(self);  // vtable +0x38 = index 7
+    void** vtable = *(void***)this;
+    ((fn_Startup_t)vtable[7])(this);  // vtable +0x38 = index 7
 }
 
 // ============================================================
@@ -184,8 +229,11 @@ void StorageUI_Serialize(StorageUI* self) {
 //
 // Original: 0x1400b8450.
 
-void StorageUI_Startup(StorageUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [7] 0x1400b8450
+void StorageUI::OnUpdateLayout() {
+    storageui_sa::EnsureGlobals();
+    if (!storageui_sa::Ready() || !SA_DialogEntityAlive(this)) return;
+    uintptr_t s = (uintptr_t)this;
 
     // Get entity, check ComponentEntity
     void* entityRaw = *(void**)(s + 0x28);
@@ -579,76 +627,7 @@ void StorageUI_SortItems(void* items, int count, void* /*scratch*/, void* /*unus
 // factory tree (RawMaterialDescription/StorageComponent are already registered in
 // standalone; ComponentEntity is lazy-resolved here). W_* skip (not fault) if a
 // critical id or the ExternalFactory singleton has not resolved yet.
-#include "Object/factory_registration.h"
-#include <cstddef>
-#include <cstdlib>
-#include <cstdio>
 
-namespace storageui_sa {
-
-void EnsureGlobals() {
-    static uint32_t s_ce = 0, s_raw = 0;
-    if (!g_TypeId_ComponentEntity) {
-        s_ce = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
-        if (s_ce) g_TypeId_ComponentEntity = &s_ce;
-    }
-    // RawMaterialDescription (0x1401c7cb8) is normally registered in standalone
-    // (reg_action_child_ctors2.cpp), but lazy-resolve as a belt-and-braces fallback.
-    if (!g_TypeId_RawMaterialDescription) {
-        s_raw = ::Object::ResolveTypeIdByNameLazy("RawMaterialDescription");
-        if (s_raw) g_TypeId_RawMaterialDescription = &s_raw;
-    }
-    // g_TypeId_StorageComponent_FC (0x1401c7e78, used by fn_FindComponent_Storage)
-    // and g_pExternalFactorySingleton are filled by engine_funcs init in standalone.
-}
-
-// All globals StorageUI_Serialize/Startup dereference must be live before we run,
-// or a null-deref would fault (MinGW has no __try/__except to catch it).
-bool Ready() {
-    return g_TypeId_ComponentEntity
-        && g_TypeId_RawMaterialDescription
-        && g_TypeId_StorageComponent_FC
-        && g_pExternalFactorySingleton && *g_pExternalFactorySingleton;
-}
-
-static void Trace(const char* what, void* self) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    fprintf(stderr, "[StorageUI] %s self=%p ready=%d rows(+0x38)=%d\n",
-            what, self, Ready() ? 1 : 0,
-            self ? *reinterpret_cast<int*>(s + 0x38) : -1);
-    fflush(stderr);
-}
-
-// idx4 (+0x20): setup — build+size the table, cache row ptrs, then Startup.
-void W_Serialize(void* self) {
-    EnsureGlobals();
-    if (!self || !Ready() || !SA_DialogEntityAlive(self)) { Trace("Serialize SKIP", self); return; }
-    Trace("Serialize", self);
-    StorageUI_Serialize(reinterpret_cast<StorageUI*>(self));
-}
-
-// idx7 (+0x38): populate rows from the entity's StorageComponent (also called by
-// StorageUI_Serialize via vtable[7]).
-void W_Startup(void* self) {
-    EnsureGlobals();
-    if (!self || !Ready() || !SA_DialogEntityAlive(self)) return;
-    StorageUI_Startup(reinterpret_cast<StorageUI*>(self));
-}
-
-// idx8 (+0x40): per-frame. Self-heal — if the table hasn't been built yet
-// (+0x38 row count still 0), run Serialize once; otherwise just re-populate so
-// the item counts stay live.
-void W_OnUpdate(void* self, void* /*time*/) {
-    EnsureGlobals();
-    if (!self || !Ready() || !SA_DialogEntityAlive(self)) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    if (*reinterpret_cast<int*>(s + 0x38) == 0) {
-        StorageUI_Serialize(reinterpret_cast<StorageUI*>(self));
-    } else {
-        StorageUI_Startup(reinterpret_cast<StorageUI*>(self));
-    }
-}
-}  // namespace storageui_sa
 
 // ~StorageUI: the tree's own teardown (its hand-built slot 0 ran this, then freed
 // WITHOUT ~DialogController); moved here unchanged. The compiler now chains
@@ -663,19 +642,18 @@ StorageUI::~StorageUI() {
     *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
 }
 
-// [4] 0x1400b8820
-void StorageUI::OnCreated() {
-    storageui_sa::W_Serialize(this);
-}
 
-// [7] 0x1400b8450
-void StorageUI::OnUpdateLayout() {
-    storageui_sa::W_Startup(this);
-}
 
 // [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
-void StorageUI::OnUpdate(const System::Time& time) {
-    storageui_sa::W_OnUpdate(this, const_cast<System::Time*>(&time));
+void StorageUI::OnUpdate(const System::Time& /*time*/) {
+    storageui_sa::EnsureGlobals();
+    if (!storageui_sa::Ready() || !SA_DialogEntityAlive(this)) return;
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+    if (*reinterpret_cast<int*>(s + 0x38) == 0) {
+        StorageUI::OnCreated();
+    } else {
+        StorageUI::OnUpdateLayout();
+    }
 }
 
 // [0] 0x140021390: ~StorageUI (restamp, ~DialogController, ~Internal — the

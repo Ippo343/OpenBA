@@ -20,6 +20,47 @@
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Object/factory_registration.h"
+
+namespace upgradeui_sa {
+
+// Standalone-local fallbacks for type-id globals that resolve NULL.
+static uint32_t s_cfgTid = 0;   // UpgradeUIConfig
+static uint32_t s_ceTid  = 0;   // ComponentEntity
+
+void EnsureGlobals() {
+    if (!g_TypeId_UpgradeUIConfig || !*g_TypeId_UpgradeUIConfig) {
+        s_cfgTid = ::Object::ResolveTypeIdByNameLazy("UpgradeUIConfig");
+        if (s_cfgTid) g_TypeId_UpgradeUIConfig = &s_cfgTid;
+    }
+    if (!g_TypeId_ComponentEntity) {
+        s_ceTid = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
+        if (s_ceTid) g_TypeId_ComponentEntity = &s_ceTid;
+    }
+}
+
+bool Ready() {
+    return g_TypeId_UpgradeUIConfig && *g_TypeId_UpgradeUIConfig
+        && g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
+        && g_TypeId_HelpButtonElem && *g_TypeId_HelpButtonElem
+        && g_TypeId_ImageElement && *g_TypeId_ImageElement
+        && g_TypeId_ToolbarDescription_FC && *g_TypeId_ToolbarDescription_FC
+        && fn_IsDerivedFrom && fn_InternalBasePtr_Ctor;
+}
+
+// Serialize is only safe when the bound config is an UpgradeUIConfig with a
+// non-null target template at +0x20 (the stub config zero-fills it until the
+// real UpgradeUIConfig port lands).
+bool ConfigOk(void* self) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    void* cfg = *reinterpret_cast<void**>(s + 0x10);
+    if (!cfg || !fn_IsDerivedFrom(cfg, *g_TypeId_UpgradeUIConfig)) return false;
+    return *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(cfg) + 0x20) != nullptr;
+}
+
+
+
+}  // namespace upgradeui_sa
 
 // ============================================================
 // UpgradeUI::Serialize (vtable +0x20) — Slot4
@@ -29,8 +70,14 @@
 // and sets the sprite on the button's child image element.
 //
 // Original: 0x140086d90
-void UpgradeUI_Serialize(UpgradeUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [4] 0x140086d90
+void UpgradeUI::OnCreated() {
+    upgradeui_sa::EnsureGlobals();
+    if (!upgradeui_sa::Ready()) return;
+    if (!upgradeui_sa::ConfigOk(this)) {
+        return;
+    }
+    uintptr_t s = (uintptr_t)this;
 
     // Get config from DialogController +0x10
     void* desc = *(void**)(s + 0x10);
@@ -122,8 +169,13 @@ void UpgradeUI_Serialize(UpgradeUI* self) {
 // copies the UpgradeDescription reference to it, and starts the upgrade.
 //
 // Original: 0x140086c90
-void UpgradeUI_OnRemove(UpgradeUI* self, void* p2, int eventType, int eventId) {
-    uintptr_t s = (uintptr_t)self;
+// [9] 0x140086c90
+void UpgradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t eventType, int32_t eventId,
+                               int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    void* p2 = element;
+    upgradeui_sa::EnsureGlobals();
+    if (!p2 || !upgradeui_sa::Ready()) return;
+    uintptr_t s = (uintptr_t)this;
 
     // Only handle button clicks (msg 0x12) with ID 33000
     if (eventType != 0x12 || eventId != 33000)
@@ -143,7 +195,7 @@ void UpgradeUI_OnRemove(UpgradeUI* self, void* p2, int eventType, int eventId) {
     // Don't start an upgrade on a building that is already dead / marked-for-removal
     // (the panel can linger one marked-but-alive frame under the removal deferral —
     // entitylist.cpp Step 0 — during which a click must not re-arm its DestroyComponent).
-    if (!SA_DialogEntityAlive(self))
+    if (!SA_DialogEntityAlive(this))
         return;
 
     // Check if data source is a ComponentEntity
@@ -200,87 +252,17 @@ void UpgradeUI_OnRemove(UpgradeUI* self, void* p2, int eventType, int eventId) {
 // click handler (eventType 0x12, element id 33000 → write the upgrade target
 // template into DestroyComponent+0x60 and pump the state machine).
 // Replaces the UI_DIALOG_STUB(UpgradeUI, ...) no-op registration.
-#include "Object/factory_registration.h"
 
-namespace upgradeui_sa {
 
-// Standalone-local fallbacks for type-id globals that resolve NULL.
-static uint32_t s_cfgTid = 0;   // UpgradeUIConfig
-static uint32_t s_ceTid  = 0;   // ComponentEntity
-
-void EnsureGlobals() {
-    if (!g_TypeId_UpgradeUIConfig || !*g_TypeId_UpgradeUIConfig) {
-        s_cfgTid = ::Object::ResolveTypeIdByNameLazy("UpgradeUIConfig");
-        if (s_cfgTid) g_TypeId_UpgradeUIConfig = &s_cfgTid;
-    }
-    if (!g_TypeId_ComponentEntity) {
-        s_ceTid = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
-        if (s_ceTid) g_TypeId_ComponentEntity = &s_ceTid;
-    }
-}
-
-bool Ready() {
-    return g_TypeId_UpgradeUIConfig && *g_TypeId_UpgradeUIConfig
-        && g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
-        && g_TypeId_HelpButtonElem && *g_TypeId_HelpButtonElem
-        && g_TypeId_ImageElement && *g_TypeId_ImageElement
-        && g_TypeId_ToolbarDescription_FC && *g_TypeId_ToolbarDescription_FC
-        && fn_IsDerivedFrom && fn_InternalBasePtr_Ctor;
-}
-
-// Serialize is only safe when the bound config is an UpgradeUIConfig with a
-// non-null target template at +0x20 (the stub config zero-fills it until the
-// real UpgradeUIConfig port lands).
-bool ConfigOk(void* self) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    void* cfg = *reinterpret_cast<void**>(s + 0x10);
-    if (!cfg || !fn_IsDerivedFrom(cfg, *g_TypeId_UpgradeUIConfig)) return false;
-    return *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(cfg) + 0x20) != nullptr;
-}
-
-// idx4 (+0x20): bind the upgrade button, set its icon from the target
-// template's ToolbarDescription.
-void W_Serialize(void* self) {
-    EnsureGlobals();
-    if (!self || !Ready()) return;
-    if (!ConfigOk(self)) {
-        return;
-    }
-    UpgradeUI_Serialize(reinterpret_cast<UpgradeUI*>(self));
-}
-
-// idx8 (+0x40): per-frame self-heal — run Serialize once if the button ref at
-// +0x30 was never populated.
-void W_OnUpdate(void* self, void* /*time*/) {
-    EnsureGlobals();
-    if (!self || !Ready()) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    if (*reinterpret_cast<uint64_t*>(s + 0x30) == 0) W_Serialize(self);
-}
-
-// idx9 (+0x48): click dispatch (self, &elementPtr, msg, id, x, y).
-void W_OnRemove(void* self, void* p2, int msg, int id, int /*mx*/, int /*my*/) {
-    EnsureGlobals();
-    if (!self || !p2 || !Ready()) return;
-    UpgradeUI_OnRemove(reinterpret_cast<UpgradeUI*>(self), p2, msg, id);
-}
-}  // namespace upgradeui_sa
-
-// [4] 0x140086d90
-void UpgradeUI::OnCreated() {
-    upgradeui_sa::W_Serialize(this);
-}
 
 // [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
-void UpgradeUI::OnUpdate(const System::Time& time) {
-    upgradeui_sa::W_OnUpdate(this, const_cast<System::Time*>(&time));
+void UpgradeUI::OnUpdate(const System::Time& /*time*/) {
+    upgradeui_sa::EnsureGlobals();
+    if (!upgradeui_sa::Ready()) return;
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+    if (*reinterpret_cast<uint64_t*>(s + 0x30) == 0) UpgradeUI::OnCreated();
 }
 
-// [9] 0x140086c90
-void UpgradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
-                               int32_t c, int32_t d, int32_t /*e*/, void* /*userData*/) {
-    upgradeui_sa::W_OnRemove(this, element, a, b, c, d);
-}
 
 // [0] 0x140016d50: ~UpgradeUI (restamp, ~DialogController, ~Internal — the
 // compiler's chain), MemFree on &1.

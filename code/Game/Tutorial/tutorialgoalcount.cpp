@@ -244,12 +244,13 @@ void TutorialGoalCount::Destruct() { DeletingDtor(0); }
 // from it, so with CheckPtr deleted (B.3.3 step 6D) nothing here reads it. The
 // PARAMETER stays: this is retail's signature and the caller still passes it.
 //
-// Uses int return type (bug class 7 — upper EAX bits matter). File-static
-// since ENDGAME B.3.8: the member IsComplete below is the slot.
-static int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
+// Each int result is answered as `!= 0` (the bool return), exactly as the
+// member delegate did before this fold.
+// [8] 0x1400df290 — the 11-mode count switch; StepExecute reads the result.
+bool TutorialGoalCount::IsComplete(void* param2, void* param3) {
     (void)param3;
 
-    uintptr_t s = (uintptr_t)self;
+    uintptr_t s = (uintptr_t)this;
     uint32_t mode = *(uint32_t*)(s + 0x20);
     int count = 0;
 
@@ -610,13 +611,6 @@ compare:
     return (count == *(int32_t*)(s + 0x24)) ? 1 : 0;
 }
 
-// ============================================================
-// TutorialGoalCount::IsComplete (vtable +0x40, 0x1400df290) / Construct [9]
-// ============================================================
-// The 11-mode switch above answers 0/1; StepExecute reads AL.
-bool TutorialGoalCount::IsComplete(void* time, void* instance) {
-    return TutorialGoalCount_Check(this, time, instance) != 0;
-}
 
 // [9] 0x1400277f0: null-check, then the ctor (0x1400dfa60) on `this`.
 Object::External* TutorialGoalCount::Construct() {
