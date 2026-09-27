@@ -472,10 +472,12 @@ namespace Graphics {
 // ============================================================================
 class MeshInstance : public Geometry {
 public:
-    // `??0MeshInstance@Graphics@@QEAA@AEBV01@@Z` @ 0x1800170c0 — PORTED, body in
-    // `runtime/src/graphics/mesh.cpp`. Declared, NOT `= default`: it zeroes each
-    // of the three nested Array headers and then runs retail's deep
-    // `Array<T>::operator=` over it, which a bitwise copy would not.
+    // `??0MeshInstance@Graphics@@QEAA@AEBV01@@Z` @ 0x1800170c0 — the REAL member
+    // copy constructor (ENDGAME B.3.9 GFX, mesh.cpp: Geometry's copy ctor in the
+    // init list, then retail's stores). NOT `= default`: it zeroes each of the
+    // three nested Array headers and then runs retail's deep
+    // `Array<T>::operator=` over it, which a bitwise copy would not. The exe's
+    // StorageDisplayComponent array resize copy-constructs through it.
     MeshInstance(const MeshInstance& src);
     MeshInstance& operator=(const MeshInstance& src);   // 0x1800171e0  not ported
 
@@ -483,20 +485,16 @@ public:
     // ??0MeshInstance@Graphics@@QEAA@XZ 0x1800fffc0 — the REAL constructor,
     // PUBLIC: the exe instantiates the class itself (its table copy
     // 0x14015e240; MenuScene, MainMenuDialog, PlacementTool, TimeGoalInstance).
-    // Geometry() and the stamp are the compiler's; the field stores are ONE
-    // body with the door `RtGraphics_MeshInstance_Ctor` (mesh.cpp).
-    MeshInstance() { InitFields(); }
-
-    // The doors' way onto the shared bodies.
-    struct DoorBody {
-        static void Init(MeshInstance* m)    { m->InitFields(); }
-        static void Release(MeshInstance* m) { m->ReleaseFields(); }
-    };
+    // Geometry() and the stamp are the compiler's; the field stores are the
+    // body (mesh.cpp). ENDGAME B.3.9 GFX: the ??0 door and `DoorBody` are
+    // retired; every builder spells `::new (p) MeshInstance()`.
+    MeshInstance();
 
     // ---- the nine slots ---------------------------------------------------
     // [0] CONCRETE: the exe copy's slot 0 is its scalar deleting dtor
-    // 0x140019e80 (`CALL [??1MeshInstance]; if (flags & 1) MemFree`). The
-    // DLL's 0x180017330 stays the mint's RT_DELDTOR row for the doors.
+    // 0x140019e80 (`CALL [??1MeshInstance]; if (flags & 1) MemFree`). ENDGAME
+    // B.3.9 GFX: the minted table and its RT_DELDTOR row 0x180017330 are
+    // retired; the class keeps the exe's SCALAR arm (D1.2).
     Geometry* DeletingDtor(unsigned flags) override {
         this->~MeshInstance();
         if (flags & 1) Object::detail::InternalMemFree(this);
@@ -587,11 +585,10 @@ public:
     // `??1MeshInstance@Graphics@@UEAA@XZ` @ 0x180017060, `UEAA` because retail's
     // is virtual — the non-virtual `QEAA` spelling is a name the DLL does not
     // contain (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md). NON-VIRTUAL
-    // here (ENDGAME decision 2). ENDGAME B.3.8 block RB: the body (the three
-    // retail `~Array` calls, nodes / layers / materials) is ONE body with the
-    // door `RtGraphics_MeshInstance_Dtor`; each of those zeroes its header, so
-    // the compiler's implicit member ~Arrays after it are no-ops, and then
-    // ~Geometry runs — retail's order.
+    // here (ENDGAME decision 2). The body (mesh.cpp: the three retail `~Array`
+    // calls, nodes / layers / materials) zeroes each header, so the compiler's
+    // implicit member ~Arrays after it are no-ops, and then ~Geometry runs —
+    // retail's order. (ENDGAME B.3.9 GFX: its door is retired.)
     //
     // PUBLIC since ENDGAME B.3.9 block GFX (coordinator ruling 4): retail's is
     // public (`U` = public virtual) and the exe calls it DIRECTLY on MeshInstance
@@ -599,11 +596,7 @@ public:
     // 0x140124cd0; StorageDisplayComponent's 0x128-stride array) through import
     // slot 0x1401514a8 -- a plain destructor call, never a delete. The C++
     // spelling of that call is `mi->~MeshInstance()`, which needs it public.
-    ~MeshInstance() { ReleaseFields(); }
-
-private:
-    void InitFields();      // 0x1800fffc0 minus Geometry() and the stamp (mesh.cpp)
-    void ReleaseFields();   // 0x180017060 minus ~Geometry (mesh.cpp)
+    ~MeshInstance();
 
 public:
     RtGraphics::ExternalPtr                        _mesh;         // +0xc0  ExternalPtr<GraphicsMesh>

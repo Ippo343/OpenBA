@@ -44,3 +44,6 @@
 # -- W2: ParticleSystemInstance concrete + ParticleInstance slot 0 concrete (abstract, as retail) --
 ??_7ParticleSystemInstance@Graphics@@6B@  GFX   real ctor + DeletingDtor + ~X (door body); RT_DELDTOR row 0x180020ce0, ??0/??1 doors, Update/SetParticle slot doors deleted; CreateSystem + exe menu scene placement-new; fn_Graphics_ParticleSystemInstance_Ctor deleted
 ??_7ParticleInstance@Graphics@@6B@      GFX   stamped only by PSI / TornadoInstance ctors (compiler-built now); RT_DELDTOR row 0x180020310, ??0 door, ??1 leaves door, 4 slot doors deleted
+
+# -- W2: MeshInstance -- the ctor / copy ctor / dtor bodies are the members; exe builders converted (EXA + storagedisplay) --
+??_7MeshInstance@Graphics@@6B@          GFX   real ctor + member copy ctor + public ~X (door bodies); RT_DELDTOR row 0x180017330, ??0/copy ??0/??1 doors deleted; exe slots 0x140151490/4a0/4a8 rows deleted after MeshArrayResize converted

@@ -101,8 +101,9 @@ void        ParticleSystem::Destruct() {}
 ParticleInstance* ParticleSystem::CreateSystem() const { return nullptr; }
 Object::External* ParticleSystem::Construct() { return this; }
 
-void MeshInstance::InitFields()    { Log(kMiInit, this); _sortBias = 0; }
-void MeshInstance::ReleaseFields() { Log(kMiRel, this); }
+// ENDGAME B.3.9 GFX: the ctor / dtor are the members themselves (mesh.cpp).
+MeshInstance::MeshInstance()  { Log(kMiInit, this); _sortBias = 0; }
+MeshInstance::~MeshInstance() { Log(kMiRel, this); }
 void MeshInstance::Update(const System::Time&) {}
 void MeshInstance::Draw(Video::Context&, const Camera&, ExternalPtrHandle, float, int, int, int) const {}
 void MeshInstance::AddDrawItems(const Scene&, Renderer&) const {}
@@ -293,15 +294,7 @@ UNIT_TEST(rb_meshinstance_and_sunlight_are_concrete_with_the_exe_slot0) {
     CHECK_EQ(g_log[2].ev, (int)kSlRel);   CHECK(g_log[2].vptr == &g_rbSlVtGroup[2]);
     CHECK_EQ(g_log[3].ev, (int)kGeoRel);  CHECK(g_log[3].vptr == GeoVt());
 
-    // The MeshInstance doors reach the same bodies under the minted table.
-    // (SunLight's doors are retired -- ENDGAME B.3.9 pilot c2.)
-    alignas(8) unsigned char raw[sizeof(Graphics::MeshInstance)] = {};
-    *reinterpret_cast<const void**>(raw) = kFakeMinted;
-    g_n = 0;
-    Graphics::MeshInstance::DoorBody::Init(reinterpret_cast<Graphics::MeshInstance*>(raw));
-    Graphics::MeshInstance::DoorBody::Release(reinterpret_cast<Graphics::MeshInstance*>(raw));
-    CHECK_EQ(g_n, 2);
-    for (int i = 0; i < 2; ++i) CHECK(g_log[i].vptr == static_cast<const void*>(kFakeMinted));
+    // (MeshInstance's and SunLight's doors are retired -- ENDGAME B.3.9.)
 }
 
 // ENDGAME B.3.9 pilot c2: with the ??0/??1 doors gone, the exe's builder

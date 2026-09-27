@@ -619,7 +619,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // equals the call set of the named ~Class.]
     RT_DELDTOR(0x1800134b0, 0x1800a2780, 0x180, "Graphics::EdgeMesh"),
     RT_DELDTOR(0x1800175d0, 0x1800174d0, 0x0d0, "Graphics::EdgeMeshInstance"),
-    RT_DELDTOR(0x180017330, 0x180017060, 0x120, "Graphics::MeshInstance"),
 
     // ---- WAVE 27 lane GFXPART -------------------------------------------------
     // Slot 0 of `??_7Light@Graphics@@6B@` (0x180158d30) and slot 0 of
@@ -1217,10 +1216,6 @@ void* RtDelDtor_EdgeMesh(void* self, unsigned flags) {
 void* RtDelDtor_EdgeMeshInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x1800175d0>());
 }
-// Graphics::MeshInstance      ~MeshInstance = 0x180017060      [Wave 27 GFXMESH]
-void* RtDelDtor_MeshInstance(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180017330>());
-}
 
 
 // UI::ElementDescription   ~ElementDescription = 0x180116100  (PORTED)  [Wave 27 IOTEXT]
@@ -1391,7 +1386,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180023fd0, (void*)&RtDelDtor_CompressedStream);      // Wave 19 CSTREAM
     RegisterRuntimeAddr(0x1800134b0, (void*)&RtDelDtor_EdgeMesh);              // Wave 27 GFXMESH
     RegisterRuntimeAddr(0x1800175d0, (void*)&RtDelDtor_EdgeMeshInstance);      // Wave 27 GFXMESH
-    RegisterRuntimeAddr(0x180017330, (void*)&RtDelDtor_MeshInstance);          // Wave 27 GFXMESH
 
 
     RegisterRuntimeAddr(0x180035350, (void*)&RtDelDtor_ElementDescription);    // Wave 27 IOTEXT

@@ -325,10 +325,6 @@ GeometryDtorFn RtGeometryDtor() {
 // cutover. Audited by tools/rt_data_door_audit.py.
 void* RtVtable(const char* mangled) { return ResolveExport(mangled); }
 
-void* RtMeshInstanceVtable() {
-    static void* v = RtVtable("??_7MeshInstance@Graphics@@6B@");        // 0x180154dc0
-    return v;
-}
 void* RtEdgeMeshInstanceVtable() {
     static void* v = RtVtable("??_7EdgeMeshInstance@Graphics@@6B@");    // 0x180154d70
     return v;
@@ -795,18 +791,10 @@ static void RtGraphics_MeshInstance_PlayAnimation(void* self, ExternalPtr group,
 // uninitialised bytes is comparing whatever two different stacks happened to
 // hold.
 // ============================================================================
-static void* RtGraphics_MeshInstance_Ctor(void* self) {
-
-    MeshInstance* mi = reinterpret_cast<MeshInstance*>(self);
-    RtGeometryCtor()(self);
-    mi->_base._vtable = RtMeshInstanceVtable();
-
-    // ENDGAME B.3.8 block RB (RULE B8-1): the field stores are ONE body with
-    // the real constructor `Graphics::MeshInstance()` — `InitFields`, below.
-    ::Graphics::MeshInstance::DoorBody::Init(reinterpret_cast<::Graphics::MeshInstance*>(self));   // B.3.8 bridge
-
-    return self;
-}
+//
+// ENDGAME B.3.9 block GFX: the door is RETIRED. Geometry() and the stamp are the
+// compiler's chain of the real `Graphics::MeshInstance()`, whose body (the field
+// stores) is defined below; every builder spells `::new (p) MeshInstance()`.
 
 // ============================================================================
 // Graphics::MeshInstance::MeshInstance(const MeshInstance&)
@@ -831,13 +819,16 @@ static void* RtGraphics_MeshInstance_Ctor(void* self) {
 // port itself writes equals the source's, plus that the three copied arrays
 // have the source's element counts.
 // ============================================================================
-static void* RtGraphics_MeshInstance_CopyCtor(void* self, const void* other) {
-
-    MeshInstance* mi = reinterpret_cast<MeshInstance*>(self);
-    const MeshInstance* src = reinterpret_cast<const MeshInstance*>(other);
-
-    RtGeometryCopyCtor()(self, other);
-    mi->_base._vtable = RtMeshInstanceVtable();
+//
+// ENDGAME B.3.9 block GFX: the door is RETIRED; its body is the real member copy
+// constructor, re-read against retail 0x1800170c0's listing: `CALL 0x180015b60`
+// (Geometry's copy ctor -- the base in the init list), the MeshInstance stamp
+// (the compiler's), then the stores below in retail's order.
+Graphics::MeshInstance::MeshInstance(const MeshInstance& other) : Geometry(other) {
+    RtGraphics::MeshInstance* const mi =
+        reinterpret_cast<RtGraphics::MeshInstance*>(this);                  // B.3.9 bridge (the POD view)
+    const RtGraphics::MeshInstance* const src =
+        reinterpret_cast<const RtGraphics::MeshInstance*>(&other);          // B.3.9 bridge (the POD view)
 
     mi->_mesh = src->_mesh;
 
@@ -864,8 +855,6 @@ static void* RtGraphics_MeshInstance_CopyCtor(void* self, const void* other) {
     mi->_color[2] = src->_color[2];
     mi->_color[3] = src->_color[3];
     mi->_sortBias = src->_sortBias;
-
-    return self;
 }
 
 // ============================================================================
@@ -898,23 +887,19 @@ static void* RtGraphics_MeshInstance_CopyCtor(void* self, const void* other) {
 // which is the observable the DLL's own ~Array guarantees and the thing a
 // wrong-offset port would get wrong.
 // ============================================================================
-static void RtGraphics_MeshInstance_Dtor(void* self) {
-
-    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with the real destructor
-    // `Graphics::MeshInstance::~MeshInstance()` — `ReleaseFields`, below.
-    ::Graphics::MeshInstance::DoorBody::Release(reinterpret_cast<::Graphics::MeshInstance*>(self));   // B.3.8 bridge
-    RtGeometryDtor()(self);
-}
+//
+// ENDGAME B.3.9 block GFX: the door is RETIRED with the RT_DELDTOR row
+// 0x180017330 it served (and the exe import slot 0x1401514a8 it filled); the
+// real public `~MeshInstance()` below is the body, ~Geometry the compiler's.
 
 // ============================================================================
-// Graphics::MeshInstance::InitFields / ReleaseFields (ENDGAME B.3.8 block RB,
-// RULE B8-1): the bodies of ??0MeshInstance 0x1800fffc0 after Geometry() and
-// the stamp, and of ??1MeshInstance 0x180017060 before ~Geometry. Shared by
-// the real ctor/dtor (Mesh.h) and the two doors above; MOVED VERBATIM through
-// the field-identical `RtGraphics::MeshInstance` POD view (cross-asserted in
-// Mesh.h).
+// Graphics::MeshInstance::MeshInstance() / ~MeshInstance(): the bodies of
+// ??0MeshInstance 0x1800fffc0 after Geometry() and the stamp, and of
+// ??1MeshInstance 0x180017060 before ~Geometry -- the B.3.8 `InitFields` /
+// `ReleaseFields` split, now the members themselves, through the
+// field-identical `RtGraphics::MeshInstance` POD view (cross-asserted in Mesh.h).
 // ============================================================================
-void Graphics::MeshInstance::InitFields() {
+Graphics::MeshInstance::MeshInstance() {
     RtGraphics::MeshInstance* const mi = reinterpret_cast<RtGraphics::MeshInstance*>(this);   // B.3.8 bridge (the POD view)
     mi->_mesh.p = nullptr;
     mi->_materials._data = nullptr;
@@ -937,7 +922,7 @@ void Graphics::MeshInstance::InitFields() {
     mi->_sortBias = 0;
 }
 
-void Graphics::MeshInstance::ReleaseFields() {
+Graphics::MeshInstance::~MeshInstance() {
     RtGraphics::MeshInstance* const mi = reinterpret_cast<RtGraphics::MeshInstance*>(this);   // B.3.8 bridge (the POD view)
     RtNodeArrayFree()(&mi->_nodes);
     RtLayerArrayFree()(&mi->_animation._layers);
@@ -2142,26 +2127,8 @@ int RtGraphicsMeshRegister() {
     int count = 0;
 
     // ---- Graphics::MeshInstance ----
-    RegisterRuntimeExport("??0MeshInstance@Graphics@@QEAA@XZ",
-                          (void*)&RtGraphics_MeshInstance_Ctor); ++count;
-    RegisterRuntimeExport("??0MeshInstance@Graphics@@QEAA@AEBV01@@Z",
-                          (void*)&RtGraphics_MeshInstance_CopyCtor); ++count;
-    RegisterRuntimeExport("??1MeshInstance@Graphics@@UEAA@XZ",
-                          (void*)&RtGraphics_MeshInstance_Dtor); ++count;
-    // WAVE 27 lane GFXMESH -- the ADDRESS door for a body that had only a NAME
-    // door.
-    //   SYMBOL:      ??1MeshInstance@Graphics@@UEAA@XZ, retail 0x180017060,
-    //                ordinal 632 (confirmed by VA against the export directory
-    //                with pefile, not by name pattern).
-    //   CONDITION:   runtime/src/object/deleting_dtor.cpp row 46 -- slot 0 of
-    //                ??_7MeshInstance@Graphics@@6B@ -- reaches ~Class through
-    //                ResolveAddr(Module::Runtime, 0x180017060), BY ADDRESS.
-    //                A RegisterRuntimeExport does not satisfy that door.
-    //   CONSEQUENCE: without this line the deleting-destructor row runs the
-    //                DLL's ~MeshInstance while this file's port sits unreached
-    //                on that path -- correct behaviour, but not ours, and
-    //                invisible to any check that asks "is it ported?".
-    RegisterRuntimeAddr(0x180017060ull, (void*)&RtGraphics_MeshInstance_Dtor);
+    // ENDGAME B.3.9 GFX: the ??0 / copy ??0 / ??1 doors (and ??1's address row
+    // 0x180017060) are retired; the members are the only ctors and dtor.
     RegisterRuntimeExport("?IsAnimating@MeshInstance@Graphics@@QEBA_NXZ",
                           (void*)&RtGraphics_MeshInstance_IsAnimating); ++count;
     RegisterRuntimeExport("?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@H@Z",
@@ -2216,7 +2183,7 @@ int RtGraphicsMeshRegister() {
                           (void*)&RtGraphics_EdgeMeshInstance_Dtor); ++count;
     RegisterRuntimeAddr(0x1800174d0ull, (void*)&RtGraphics_EdgeMeshInstance_Dtor);
 
-    return count;   // 21
+    return count;   // 18
 }
 
 // ============================================================================

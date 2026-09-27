@@ -286,29 +286,12 @@ fill_remaining:
 // Reimpl of FUN_14000ca10 (StorageDisplayComponent mesh-array resize:
 //   grow/shrink an array of 0x128-byte Graphics::MeshInstance entries)
 // ============================================================
-// Dispatch slots (exe .rdata): copy-ctor 0x1401514a0, default-ctor 0x140151490,
-// dtor 0x1401514a8. New tail entries get default-constructed with sceneId(+0x120)=-1.
-typedef void (*fn_MI_CopyCtor_t)(void* dst, void* src);
-typedef void (*fn_MI_DefCtor_t)(void* dst);
-typedef void (*fn_MI_Dtor_t)(void* self);
-static fn_MI_CopyCtor_t s_fn_MI_CopyCtor = nullptr;
-static fn_MI_DefCtor_t  s_fn_MI_DefCtor  = nullptr;
-static fn_MI_Dtor_t     s_fn_MI_Dtor     = nullptr;
-static bool s_meshArrayHelpersResolved = false;
-static void EnsureMeshArrayHelpers() {
-    if (s_meshArrayHelpersResolved) return;
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x1401514a0);
-    if (slot) s_fn_MI_CopyCtor = *reinterpret_cast<fn_MI_CopyCtor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140151490);
-    if (slot) s_fn_MI_DefCtor = *reinterpret_cast<fn_MI_DefCtor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x1401514a8);
-    if (slot) s_fn_MI_Dtor = *reinterpret_cast<fn_MI_Dtor_t*>(slot);
-    s_meshArrayHelpersResolved = true;
-}
-
+// Retail calls the three MeshInstance members through its import slots
+// (copy-ctor 0x1401514a0, default-ctor 0x140151490, dtor 0x1401514a8).
+// ENDGAME B.3.9 GFX (B9-13): those are the real class's copy ctor, ctor and
+// public dtor, spelled as C++ below; the slot resolutions are gone. New tail
+// entries get default-constructed with sceneId(+0x120)=-1.
 void StorageDisplayComponent_MeshArrayResize(void* arrayBase, int newCount) {
-    EnsureMeshArrayHelpers();
     const int64_t STRIDE = 0x128;
     int64_t* field = (int64_t*)arrayBase;     // [0]=ptr, [1] low=count, high=capacity
     int oldCount = (int)field[1];
@@ -333,10 +316,11 @@ void StorageDisplayComponent_MeshArrayResize(void* arrayBase, int newCount) {
             void* dst = (void*)(field[0] + off);
             if (dst) {
                 if (i < oldCount) {
-                    if (s_fn_MI_CopyCtor) s_fn_MI_CopyCtor(dst, (void*)((uintptr_t)oldBuf + off));
+                    ::new (dst) Graphics::MeshInstance(*reinterpret_cast<const Graphics::MeshInstance*>(
+                        (uintptr_t)oldBuf + off));
                     *(uint32_t*)((uintptr_t)dst + 0x120) = *(uint32_t*)((uintptr_t)oldBuf + off + 0x120);
                 } else {
-                    if (s_fn_MI_DefCtor) s_fn_MI_DefCtor(dst);
+                    ::new (dst) Graphics::MeshInstance();
                     *(uint32_t*)((uintptr_t)dst + 0x120) = 0xffffffff;
                 }
             }
@@ -348,14 +332,14 @@ void StorageDisplayComponent_MeshArrayResize(void* arrayBase, int newCount) {
         if (newCount < oldCount) {
             uintptr_t p = (uintptr_t)oldBuf + (uintptr_t)newCount * STRIDE;
             for (int i = 0; i < oldCount - newCount; i++) {
-                if (s_fn_MI_Dtor) s_fn_MI_Dtor((void*)p);
+                reinterpret_cast<Graphics::MeshInstance*>(p)->~MeshInstance();
                 p += STRIDE;
             }
         }
     } else {
         uintptr_t p = (uintptr_t)oldBuf;
         for (int i = 0; i < oldCount; i++) {
-            if (s_fn_MI_Dtor) s_fn_MI_Dtor((void*)p);
+            reinterpret_cast<Graphics::MeshInstance*>(p)->~MeshInstance();
             p += STRIDE;
         }
         if (oldBuf) fn_MemFreeStatic(oldBuf);
