@@ -27,6 +27,8 @@
 #include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Object/factory_registration.h"
 #include <cstddef>
+#include "Component/WorkPlaceComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 
 // Original FUN_14000d6c0 — FindComponent with type DAT_1401c7008 (guard check only)
 typedef void* (*fn_OrigFindComp_t)(void* entity, void* retval);
@@ -165,11 +167,11 @@ namespace workplaceui_sa {
 void EnsureGlobals() {
     static uint32_t s_ce = 0, s_wpc = 0;
     if (!g_TypeId_ComponentEntity) {
-        s_ce = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
+        s_ce = ComponentEntity::TypeId();
         if (s_ce) g_TypeId_ComponentEntity = &s_ce;
     }
     if (!g_TypeId_WorkplaceComponent) {
-        s_wpc = ::Object::ResolveTypeIdByNameLazy("WorkPlaceComponent");
+        s_wpc = WorkPlaceComponent::TypeId();
         if (s_wpc) g_TypeId_WorkplaceComponent = &s_wpc;
     }
 }

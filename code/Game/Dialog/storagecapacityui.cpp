@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 
 namespace storagecapacityui_sa {
 
@@ -30,7 +31,7 @@ void EnsureGlobals() {
         if (s_prog) g_TypeId_ProgressElement = &s_prog;
     }
     if (!g_TypeId_ComponentEntity) {
-        s_ce = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
+        s_ce = ComponentEntity::TypeId();
         if (s_ce) g_TypeId_ComponentEntity = &s_ce;
     }
     // g_TypeId_StorageComponent_FC (used by fn_FindComponent_Storage) is filled by

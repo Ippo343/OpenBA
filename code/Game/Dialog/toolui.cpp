@@ -39,6 +39,11 @@
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "input/Input.h"  // ENDGAME B.3.7 callers (K3)
+#include "Component/ComponentDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/ToolbarDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/UIDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Dialog/EntityUI.h"   // X::TypeId() (B.3.8 callers)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 
 // code/Game/Object/factory_registration.cpp
 namespace Object { uint32_t ResolveTypeIdByNameLazy(const char* simpleName); }
@@ -239,13 +244,13 @@ namespace toolui_sa {
         // ToolUI::Slot4 branch-1 tests the datasource against
         // THIS id (a utility dialog's datasource is a ComponentDescription), so it
         // must be filled with the ComponentDescription type-id.
-        if (!g_TypeId_ComponentDescription_FC)            { s_build =::Object::ResolveTypeIdByNameLazy("ComponentDescription");      if(s_build)  g_TypeId_ComponentDescription_FC=&s_build; }
-        if (!g_TypeId_ComponentEntity)           { s_entity=::Object::ResolveTypeIdByNameLazy("ComponentEntity");           if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
+        if (!g_TypeId_ComponentDescription_FC)            { s_build =ComponentDescription::TypeId();      if(s_build)  g_TypeId_ComponentDescription_FC=&s_build; }
+        if (!g_TypeId_ComponentEntity)           { s_entity=ComponentEntity::TypeId();           if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
         // CORRECTED 2026-07-19: slot 0x1401c7f58's writer is ToolbarDescription_RegisterType;
         // the old resolve string "BuildRequirementComponent" (an invented name) is not in the
         // type registry, so this heal always returned 0 and silently never fired.
-        if (!g_TypeId_ToolbarDescription_FC) { s_breq  =::Object::ResolveTypeIdByNameLazy("ToolbarDescription"); if(s_breq)   g_TypeId_ToolbarDescription_FC=&s_breq; }
-        if (!g_TypeId_UIDescription)             { s_uidesc=::Object::ResolveTypeIdByNameLazy("UIDescription");             if(s_uidesc) g_TypeId_UIDescription=&s_uidesc; }
+        if (!g_TypeId_ToolbarDescription_FC) { s_breq  =ToolbarDescription::TypeId(); if(s_breq)   g_TypeId_ToolbarDescription_FC=&s_breq; }
+        if (!g_TypeId_UIDescription)             { s_uidesc=UIDescription::TypeId();             if(s_uidesc) g_TypeId_UIDescription=&s_uidesc; }
         if (!g_TypeId_TabElement)                { s_tab   =::Object::ResolveTypeIdByNameLazy("TabElement");                if(s_tab)    g_TypeId_TabElement=&s_tab; }
     }
     // Per-frame update (+0x40). Runtime DialogInstance::OnUpdate dispatches
@@ -420,7 +425,7 @@ void ToolUI::OnCreated() {
 // dialogs. This helper reproduces that scoping dialog-side, entity untouched.
 static bool ToolUI_DialogHasEntityUI(uintptr_t s) {
     static uint32_t s_tidEntityUI = 0;
-    if (!s_tidEntityUI) s_tidEntityUI = ::Object::ResolveTypeIdByNameLazy("EntityUI");
+    if (!s_tidEntityUI) s_tidEntityUI = EntityUI::TypeId();
     if (!s_tidEntityUI) return false;
     uintptr_t di = *(uintptr_t*)(s + 0x18);
     if (di < 0x10000 || di > 0x00007FFFFFFFFFFFULL) return false;

@@ -18,6 +18,9 @@
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Component/ImmigrationComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/StateMachineComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 
 // Helper: Find element by name in dialog, return InternalPtr value (8 bytes)
 static uint64_t FindElemByName(void* dialogElem, const char* name) {
@@ -62,9 +65,9 @@ namespace immigrationui_sa {
     // Startup; Entity_FindComponentByExeTypeId derefs the id ptr, so it must be live.
     void EnsureGlobals() {
         static uint32_t s_entity=0, s_immig=0, s_bstate=0;
-        if (!g_TypeId_ComponentEntity)      { s_entity=::Object::ResolveTypeIdByNameLazy("ComponentEntity");        if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
-        if (!g_TypeId_ImmigrationComponent) { s_immig =::Object::ResolveTypeIdByNameLazy("ImmigrationComponent");   if(s_immig)  g_TypeId_ImmigrationComponent=&s_immig; }
-        if (!g_TypeId_StateMachineComponent_FC)  { s_bstate=::Object::ResolveTypeIdByNameLazy("StateMachineComponent");  if(s_bstate) g_TypeId_StateMachineComponent_FC=&s_bstate; }
+        if (!g_TypeId_ComponentEntity)      { s_entity=ComponentEntity::TypeId();        if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
+        if (!g_TypeId_ImmigrationComponent) { s_immig =ImmigrationComponent::TypeId();   if(s_immig)  g_TypeId_ImmigrationComponent=&s_immig; }
+        if (!g_TypeId_StateMachineComponent_FC)  { s_bstate=StateMachineComponent::TypeId();  if(s_bstate) g_TypeId_StateMachineComponent_FC=&s_bstate; }
     }
     bool Ready() {
         return g_TypeId_ComponentEntity && g_TypeId_ImmigrationComponent &&

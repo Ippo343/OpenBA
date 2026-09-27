@@ -18,6 +18,14 @@
 #include "runtime/types/ui/PageElement.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "input/Input.h"  // ENDGAME B.3.7 callers (K3)
+#include "Object/factory_registration.h"
+#include <cstddef>
+#include "Component/MapComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/ModelComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/MultiObjectComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/UIDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Dialog/ToolUI.h"   // X::TypeId() (B.3.8 callers)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 
 // ============================================================
 // EntityTrackingSet_Remove (0x14002c690)
@@ -315,14 +323,14 @@ namespace entityui_sa {
 
 void EnsureGlobals() {
     static uint32_t s_ce = 0, s_tool = 0, s_uidesc = 0;
-    if (!g_TypeId_ComponentEntity) { s_ce   = ::Object::ResolveTypeIdByNameLazy("ComponentEntity"); if (s_ce)   g_TypeId_ComponentEntity = &s_ce; }
-    if (!g_TypeId_ToolUI)          { s_tool = ::Object::ResolveTypeIdByNameLazy("ToolUI");          if (s_tool) g_TypeId_ToolUI = &s_tool; }
+    if (!g_TypeId_ComponentEntity) { s_ce   = ComponentEntity::TypeId(); if (s_ce)   g_TypeId_ComponentEntity = &s_ce; }
+    if (!g_TypeId_ToolUI)          { s_tool = ToolUI::TypeId();          if (s_tool) g_TypeId_ToolUI = &s_tool; }
     // EntityUI::Slot7 (page switching) reads the entity description's UIDescription
     // component (+0x40 = default page index) via GetDescPage_Impl, which derefs
     // *g_TypeId_UIDescription. In SA that exe .rdata global is null, so resolve the
     // type-id from the live factory tree. Without it, Slot7 can't pick the citizen's
     // content page and the panel stays on the empty default page (blank body).
-    if (!g_TypeId_UIDescription)   { s_uidesc = ::Object::ResolveTypeIdByNameLazy("UIDescription"); if (s_uidesc) g_TypeId_UIDescription = &s_uidesc; }
+    if (!g_TypeId_UIDescription)   { s_uidesc = UIDescription::TypeId(); if (s_uidesc) g_TypeId_UIDescription = &s_uidesc; }
     // Building panels reach BuildComplete_Impl (page selection for in-progress
     // construction), which classifies the position component's ResourceComponent.
     static uint32_t s_res = 0;
@@ -338,9 +346,9 @@ void EnsureGlobals() {
     // DATA xrefs. Without these the center button would find no component and
     // (build path) null-deref.
     static uint32_t s_model = 0, s_multi = 0, s_mapc = 0;
-    if (!g_TypeId_ModelComponent_FC)    { s_model = ::Object::ResolveTypeIdByNameLazy("ModelComponent");       if (s_model) g_TypeId_ModelComponent_FC = &s_model; }
-    if (!g_TypeId_MultiObjectComponent)  { s_multi = ::Object::ResolveTypeIdByNameLazy("MultiObjectComponent"); if (s_multi) g_TypeId_MultiObjectComponent = &s_multi; }
-    if (!g_TypeId_MapComponent_FC)  { s_mapc  = ::Object::ResolveTypeIdByNameLazy("MapComponent");         if (s_mapc)  g_TypeId_MapComponent_FC = &s_mapc; }
+    if (!g_TypeId_ModelComponent_FC)    { s_model = ModelComponent::TypeId();       if (s_model) g_TypeId_ModelComponent_FC = &s_model; }
+    if (!g_TypeId_MultiObjectComponent)  { s_multi = MultiObjectComponent::TypeId(); if (s_multi) g_TypeId_MultiObjectComponent = &s_multi; }
+    if (!g_TypeId_MapComponent_FC)  { s_mapc  = MapComponent::TypeId();         if (s_mapc)  g_TypeId_MapComponent_FC = &s_mapc; }
 
 }
 
@@ -838,11 +846,6 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
 // input handler) remains a no-op — its +0x40 slot is reused to drive Slot7 per-frame,
 // and clicking entities works via EditTool::OnKey. The panel's close/drag come from
 // the ToolUI controller (already wired).
-#include "Object/factory_registration.h"
-#include <cstdint>
-#include <cstddef>
-#include <cstdlib>
-#include <cstdio>
 
 
 

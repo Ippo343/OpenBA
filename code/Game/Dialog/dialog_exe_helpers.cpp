@@ -25,6 +25,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/BuildComponent.h"   // X::TypeId() (B.3.8 callers)
 
 namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_registration.h
 
@@ -47,7 +48,7 @@ void* Dialog_FindComponent_d6c0(void* entity, void* retIBP) {
         // standalone -> fall back to the runtime type registry so the gather Execute's
         // FindComp_Unk actually locates the build component (else null deref at +0x18).
         static uint32_t v_d6c0;
-        if (!s_pTid_d6c0) { v_d6c0 = ::Object::GetTypeIdByName("BuildComponent"); s_pTid_d6c0 = &v_d6c0; }
+        if (!s_pTid_d6c0) { v_d6c0 = BuildComponent::TypeId(); s_pTid_d6c0 = &v_d6c0; }
         s_tidInit = true;
     }
     void* found = nullptr;

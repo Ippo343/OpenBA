@@ -391,6 +391,7 @@ void FollowDialog::OnUpdate(const System::Time& /*time*/) {
 // this vtable is only bound to the manually-constructed instance.
 
 #include "Object/factory_registration.h"
+#include "Component/ModelComponent.h"   // X::TypeId() (B.3.8 callers)
 
 // ENDGAME B.3.8 block DLG: FollowDialog is a real class (Dialog/FollowDialog.h);
 // the hand-built table above is gone. Since the CB2 caller batch CitizenUI's
@@ -409,7 +410,7 @@ uint32_t s_followModelTypeId = 0;
 void EnsureFollowGlobals() {
     uint32_t* g = g_TypeId_ModelComponent_FC;
     if (!g || *g == 0 || *g == 0xFFFFFFFFu) {
-        if (!s_followModelTypeId) s_followModelTypeId = ::Object::GetTypeIdByName("ModelComponent");
+        if (!s_followModelTypeId) s_followModelTypeId = ModelComponent::TypeId();
         if (s_followModelTypeId) g_TypeId_ModelComponent_FC = &s_followModelTypeId;
     }
 }

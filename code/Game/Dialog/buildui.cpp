@@ -31,6 +31,11 @@
 #include "runtime/types/ui/LabelElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Component/BuildComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/BuildDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/ClearAreaComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
@@ -136,11 +141,11 @@ namespace buildui_sa {
     // already registered+filled by FillEconomyTypeIdGlobals.
     void EnsureTypeIds() {
         static uint32_t s_entity=0, s_buildDesc=0, s_rawMat=0, s_build=0, s_clear=0;
-        if (!g_TypeId_ComponentEntity)        { s_entity=::Object::ResolveTypeIdByNameLazy("ComponentEntity");        if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
-        if (!g_TypeId_ResourceComponent)      { s_buildDesc=::Object::ResolveTypeIdByNameLazy("BuildDescription");    if(s_buildDesc) g_TypeId_ResourceComponent=&s_buildDesc; }
-        if (!g_TypeId_RawMaterialDescription) { s_rawMat=::Object::ResolveTypeIdByNameLazy("RawMaterialDescription"); if(s_rawMat) g_TypeId_RawMaterialDescription=&s_rawMat; }
-        if (!g_TypeId_BuildComponent_FC)      { s_build=::Object::ResolveTypeIdByNameLazy("BuildComponent");         if(s_build) g_TypeId_BuildComponent_FC=&s_build; }
-        if (!g_TypeId_ClearAreaComponent_FC)            { s_clear=::Object::ResolveTypeIdByNameLazy("ClearAreaComponent");      if(s_clear) g_TypeId_ClearAreaComponent_FC=&s_clear; }
+        if (!g_TypeId_ComponentEntity)        { s_entity=ComponentEntity::TypeId();        if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
+        if (!g_TypeId_ResourceComponent)      { s_buildDesc=BuildDescription::TypeId();    if(s_buildDesc) g_TypeId_ResourceComponent=&s_buildDesc; }
+        if (!g_TypeId_RawMaterialDescription) { s_rawMat=RawMaterialDescription::TypeId(); if(s_rawMat) g_TypeId_RawMaterialDescription=&s_rawMat; }
+        if (!g_TypeId_BuildComponent_FC)      { s_build=BuildComponent::TypeId();         if(s_build) g_TypeId_BuildComponent_FC=&s_build; }
+        if (!g_TypeId_ClearAreaComponent_FC)            { s_clear=ClearAreaComponent::TypeId();      if(s_clear) g_TypeId_ClearAreaComponent_FC=&s_clear; }
     }
     // Slot4 has run once self+0x40 (the "progress" element IBP) is populated.
     inline bool IsSetUp(void* self) { return self && *reinterpret_cast<uint64_t*>((uintptr_t)self + 0x40) != 0; }

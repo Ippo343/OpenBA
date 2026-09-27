@@ -44,6 +44,12 @@
 
 #include "Object/factory_registration.h"
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include <cstddef>
+#include "Component/CitizenAIComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/CitizenComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/CitizenDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
+#include "Player/EditTool.h"   // X::TypeId() (B.3.8 callers)
 
 // #6a: g_TypeId_CitizenAIComponent (exe .rdata DAT_1401c70e8) is the CitizenAIComponent
 // type id — the component whose +0x28 holds the citizen's current action-state index
@@ -55,7 +61,7 @@ static void CitizenUI_EnsureProfessionTypeId() {
     if (g_TypeId_CitizenAIComponent) return;  // already wired
     static uint32_t s_profTid = 0;
     if (s_profTid == 0)
-        s_profTid = ::Object::ResolveTypeIdByNameLazy("CitizenAIComponent");
+        s_profTid = CitizenAIComponent::TypeId();
     if (s_profTid) g_TypeId_CitizenAIComponent = &s_profTid;
 }
 
@@ -183,8 +189,8 @@ static float s_ageMul = 1.0f;
 void EnsureGlobals() {
     static uint32_t s_ce = 0, s_cd = 0, s_cai = 0, s_prof = 0, s_ext = 0;
     static uint32_t s_profZero = 0;  // safe no-op type-id for fn_FindComponent_CitizenAI
-    if (!g_TypeId_ComponentEntity)        { s_ce  = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");    if (s_ce)   g_TypeId_ComponentEntity = &s_ce; }
-    if (!g_TypeId_CitizenDescription)     { s_cd  = ::Object::ResolveTypeIdByNameLazy("CitizenDescription"); if (s_cd)   g_TypeId_CitizenDescription = &s_cd; }
+    if (!g_TypeId_ComponentEntity)        { s_ce  = ComponentEntity::TypeId();    if (s_ce)   g_TypeId_ComponentEntity = &s_ce; }
+    if (!g_TypeId_CitizenDescription)     { s_cd  = CitizenDescription::TypeId(); if (s_cd)   g_TypeId_CitizenDescription = &s_cd; }
     // g_TypeId_CitizenComponent_FC is DAT_1401c7158 — its name says "CitizenComponent"
     // now, but the finder that reads it (fn_FindComponent_Citizen) is what the AI panel
     // actually needs: the name at +0x28, age +0x3c, profession +0x1f0, housing +0x248,
@@ -194,7 +200,7 @@ void EnsureGlobals() {
     // unset, so the dialog read the wrong object. Resolve "CitizenComponent" (matching
     // the founding writer's TypeId lookup) so the dialog reads the citizen data that
     // was actually filled in.
-    if (!g_TypeId_CitizenComponent_FC)    { s_cai = ::Object::GetTypeIdByName("CitizenComponent"); if (s_cai)  g_TypeId_CitizenComponent_FC = &s_cai; }
+    if (!g_TypeId_CitizenComponent_FC)    { s_cai = CitizenComponent::TypeId(); if (s_cai)  g_TypeId_CitizenComponent_FC = &s_cai; }
     if (!g_TypeId_CitizenAIComponent)     { s_prof= ::Object::ResolveTypeIdByNameLazy("ProfessionComponent");if (s_prof) g_TypeId_CitizenAIComponent = &s_prof; }
     // ProfessionComponent's registered name doesn't resolve in the standalone factory
     // tree (0x1401c70e8 is settled as CitizenAIComponent's BaseTypeInfo — writer
@@ -210,7 +216,7 @@ void EnsureGlobals() {
     // inline also guards the deref, so an unresolved id degrades to camera-move only
     // instead of faulting.
     static uint32_t s_edit = 0;
-    if (!g_TypeId_EditTool)               { s_edit = ::Object::ResolveTypeIdByNameLazy("EditTool");          if (s_edit) g_TypeId_EditTool = &s_edit; }
+    if (!g_TypeId_EditTool)               { s_edit = EditTool::TypeId();          if (s_edit) g_TypeId_EditTool = &s_edit; }
     if (!g_pAgeMultiplier) g_pAgeMultiplier = &s_ageMul;
 
 }
@@ -772,11 +778,6 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
 // standalone (raw .rdata addr → ResolveAddr returns null). EnsureGlobals lazy-fills
 // them from the live factory tree (post-Engine::Startup); Slot7 is guarded to skip
 // (not fault) if any critical id failed to resolve.
-#include "Object/factory_registration.h"
-#include <cstdint>
-#include <cstddef>
-#include <cstdlib>
-#include <cstdio>
 
 
 

@@ -35,6 +35,8 @@
 #include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Object/factory_registration.h"
 #include <cstddef>
+#include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 
 // StorageUI::Startup is the per-frame content refresh (driven via the +0x40
 // W_OnUpdate hack in standalone). Its _DEBUG bring-up logs used to fire every
@@ -67,13 +69,13 @@ namespace storageui_sa {
 void EnsureGlobals() {
     static uint32_t s_ce = 0, s_raw = 0;
     if (!g_TypeId_ComponentEntity) {
-        s_ce = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
+        s_ce = ComponentEntity::TypeId();
         if (s_ce) g_TypeId_ComponentEntity = &s_ce;
     }
     // RawMaterialDescription (0x1401c7cb8) is normally registered in standalone
     // (reg_action_child_ctors2.cpp), but lazy-resolve as a belt-and-braces fallback.
     if (!g_TypeId_RawMaterialDescription) {
-        s_raw = ::Object::ResolveTypeIdByNameLazy("RawMaterialDescription");
+        s_raw = RawMaterialDescription::TypeId();
         if (s_raw) g_TypeId_RawMaterialDescription = &s_raw;
     }
     // g_TypeId_StorageComponent_FC (0x1401c7e78, used by fn_FindComponent_Storage)

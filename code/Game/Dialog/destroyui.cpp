@@ -22,6 +22,8 @@
 #include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Object/factory_registration.h"
 #include "Component/Component.h"
+#include "Component/DestroyDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 
 // ============================================================
 // DestroyComponent_CanReclaim (0x14011e690)
@@ -236,14 +238,14 @@ static uint32_t s_ddTid = 0;   // DestroyDescription (slot 0x1401c7628 — the
 
 void EnsureGlobals() {
     if (!g_TypeId_ComponentEntity) {
-        s_ceTid = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
+        s_ceTid = ComponentEntity::TypeId();
         if (s_ceTid) g_TypeId_ComponentEntity = &s_ceTid;
     }
     // CanRebuild_Impl derefs *g_TypeId_DestroyComponent (= DestroyDescription's
     // slot 0x1401c7628, null in standalone) — crashed live 2026-07-20 once
     // Slot7 started running per-frame. Point it at the name-resolved id.
     if (!g_TypeId_DestroyComponent) {
-        s_ddTid = ::Object::ResolveTypeIdByNameLazy("DestroyDescription");
+        s_ddTid = DestroyDescription::TypeId();
         if (s_ddTid) g_TypeId_DestroyComponent = &s_ddTid;
     }
 }

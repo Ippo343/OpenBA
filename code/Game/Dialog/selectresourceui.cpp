@@ -24,6 +24,8 @@
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ComboElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Component/SelectDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 
 // ============================================================
 // SelectDescription layout (from Ghidra analysis):
@@ -66,11 +68,11 @@ static int SelectResourceUI_IterateResources(void* self, void* combo, int* selec
     // pattern).
     static uint32_t s_sd = 0, s_ce = 0;
     if (!g_TypeId_SelectDescription) {
-        s_sd = ::Object::ResolveTypeIdByNameLazy("SelectDescription");
+        s_sd = SelectDescription::TypeId();
         if (s_sd) g_TypeId_SelectDescription = &s_sd;
     }
     if (!g_TypeId_ComponentEntity) {
-        s_ce = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
+        s_ce = ComponentEntity::TypeId();
         if (s_ce) g_TypeId_ComponentEntity = &s_ce;
     }
     if (!g_TypeId_SelectDescription || !g_TypeId_ComponentEntity) return 0;

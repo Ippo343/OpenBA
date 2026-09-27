@@ -57,6 +57,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 #include "Player/Tool.h"
+#include "Component/UIDescription.h"   // X::TypeId() (B.3.8 callers)
 
 
 #ifdef _DEBUG
@@ -556,7 +557,7 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
     if (!g_TypeId_UIDescription) {
         static uint32_t s_tid_UIDescription = 0;
         if (s_tid_UIDescription == 0)
-            s_tid_UIDescription = ::Object::GetTypeIdByName("UIDescription");
+            s_tid_UIDescription = UIDescription::TypeId();
         g_TypeId_UIDescription = &s_tid_UIDescription;
     }
 

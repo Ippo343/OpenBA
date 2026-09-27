@@ -21,6 +21,7 @@
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
+#include "Component/ToolbarDescription.h"   // X::TypeId() (B.3.8 callers)
 
 // Idempotent: fill the toolbar type-id globals. Called from GameUpdateLoop::Startup
 // before the toolbar is built. Must run AFTER Engine::Startup (the type ids are the
@@ -42,7 +43,7 @@ extern "C" void ToolbarStandalone_Init() {
     static uint32_t s_tid_Toolbar = 0, s_tid_ToolbarDesc = 0, s_tid_Button = 0,
                     s_tid_Image = 0, s_tid_Check = 0, s_tid_Text = 0;
     s_tid_Toolbar     = ::Object::ResolveTypeIdByNameLazy("Toolbar");
-    s_tid_ToolbarDesc = ::Object::ResolveTypeIdByNameLazy("ToolbarDescription");
+    s_tid_ToolbarDesc = ToolbarDescription::TypeId();
     s_tid_Button      = ::Object::ResolveTypeIdByNameLazy("ButtonElement");
     s_tid_Image       = ::Object::ResolveTypeIdByNameLazy("ImageElement");
     s_tid_Check       = ::Object::ResolveTypeIdByNameLazy("CheckElement");

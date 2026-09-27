@@ -63,6 +63,23 @@
 #include "Dialog/TitleDescToolTipUI.h"
 #include "Dialog/ToolUI.h"
 #include "Dialog/TradeUI.h"
+#include "Dialog/ToolbarDialog.h"
+#include "Dialog/ModUploadDialog.h"
+#include "Dialog/SaveLoadDialog.h"
+#include "Dialog/FollowDialog.h"
+#include "Dialog/ScenarioDialog.h"
+#include "Dialog/GoalDialog.h"
+#include "Dialog/AchievementDialog.h"
+#include "Dialog/MapParamsDialog.h"
+#include "Component/AttendanceComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/AttendanceDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/BuildComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/BuildDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/CemeteryComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/ConsumeProduceDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/TombstoneComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 
 // ---- BuildRequirementUI: PROMOTED to the real reimpl (2026-06-28) ------------
 // This dialog is constructed + its Slot4(Update +0x20) dispatched on hover of a
@@ -84,10 +101,10 @@ namespace uistub_BuildRequirementUI {
     // registered under the simple name "Internal".
     void EnsureTypeIds() {
         static uint32_t s_build=0, s_entity=0, s_internal=0, s_buildDesc=0, s_rawMat=0;
-        if (!g_TypeId_ComponentDescription_FC)        { s_build=::Object::ResolveTypeIdByNameLazy("BuildComponent");        if(s_build) g_TypeId_ComponentDescription_FC=&s_build; }
-        if (!g_TypeId_ComponentEntity)       { s_entity=::Object::ResolveTypeIdByNameLazy("ComponentEntity");      if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
-        if (!g_TypeId_ResourceComponent)     { s_buildDesc=::Object::ResolveTypeIdByNameLazy("BuildDescription");  if(s_buildDesc) g_TypeId_ResourceComponent=&s_buildDesc; }
-        if (!g_TypeId_RawMaterialDescription){ s_rawMat=::Object::ResolveTypeIdByNameLazy("RawMaterialDescription"); if(s_rawMat) g_TypeId_RawMaterialDescription=&s_rawMat; }
+        if (!g_TypeId_ComponentDescription_FC)        { s_build=BuildComponent::TypeId();        if(s_build) g_TypeId_ComponentDescription_FC=&s_build; }
+        if (!g_TypeId_ComponentEntity)       { s_entity=ComponentEntity::TypeId();      if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
+        if (!g_TypeId_ResourceComponent)     { s_buildDesc=BuildDescription::TypeId();  if(s_buildDesc) g_TypeId_ResourceComponent=&s_buildDesc; }
+        if (!g_TypeId_RawMaterialDescription){ s_rawMat=RawMaterialDescription::TypeId(); if(s_rawMat) g_TypeId_RawMaterialDescription=&s_rawMat; }
         if (!g_TypeId_Element)        { s_internal=::Object::ResolveTypeIdByNameLazy("Internal");           if(s_internal) g_TypeId_Element=&s_internal; }
     }
 }  // namespace uistub_BuildRequirementUI
@@ -228,11 +245,11 @@ namespace uistub_AttendanceUI {
             if (s_progress) g_TypeId_ProgressElement = &s_progress;
         }
         if (!g_TypeId_ComponentEntity) {
-            s_entity = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
+            s_entity = ComponentEntity::TypeId();
             if (s_entity) g_TypeId_ComponentEntity = &s_entity;
         }
         if (!g_TypeId_AttendanceDescription || !*g_TypeId_AttendanceDescription) {
-            s_attDesc = ::Object::ResolveTypeIdByNameLazy("AttendanceDescription");
+            s_attDesc = AttendanceDescription::TypeId();
             if (s_attDesc) g_TypeId_AttendanceDescription = &s_attDesc;
         }
         // fn_FindComponent_Attendance searches by this one. Its .rdata slot
@@ -243,7 +260,7 @@ namespace uistub_AttendanceUI {
         // reg_economy_typeids.cpp now supplies the storage; this keeps a resolve
         // failure a skip rather than a repeat of that crash.
         if (!g_TypeId_AttendanceComponent || !*g_TypeId_AttendanceComponent) {
-            s_attComp = ::Object::ResolveTypeIdByNameLazy("AttendanceComponent");
+            s_attComp = AttendanceComponent::TypeId();
             if (s_attComp) g_TypeId_AttendanceComponent = &s_attComp;
         }
     }
@@ -311,11 +328,11 @@ namespace uistub_CemeteryUI {
         // town-service wave; the lazy resolve here is the same belt-and-braces the
         // AttendanceUI block carries, so a resolve failure is a skip, not a fault.
         if (!g_TypeId_CemeteryComponent || !*g_TypeId_CemeteryComponent) {
-            s_cemComp = ::Object::ResolveTypeIdByNameLazy("CemeteryComponent");
+            s_cemComp = CemeteryComponent::TypeId();
             if (s_cemComp) g_TypeId_CemeteryComponent = &s_cemComp;
         }
         if (!g_TypeId_TombstoneComponent || !*g_TypeId_TombstoneComponent) {
-            s_tomb = ::Object::ResolveTypeIdByNameLazy("TombstoneComponent");
+            s_tomb = TombstoneComponent::TypeId();
             if (s_tomb) g_TypeId_TombstoneComponent = &s_tomb;
         }
     }
@@ -385,7 +402,7 @@ namespace uistub_ConsumeProduceUI {
         // the object it guards is the description at component+0x18. Retail reads the
         // same global at 0x14005f445. Do not "fix" the cast to the component id.
         if (!g_TypeId_ConsumeProduceComponent || !*g_TypeId_ConsumeProduceComponent) {
-            s_cpDesc = ::Object::ResolveTypeIdByNameLazy("ConsumeProduceDescription");
+            s_cpDesc = ConsumeProduceDescription::TypeId();
             if (s_cpDesc) g_TypeId_ConsumeProduceComponent = &s_cpDesc;
         }
         if (!g_TypeId_ComboElement || !*g_TypeId_ComboElement) {
@@ -393,7 +410,7 @@ namespace uistub_ConsumeProduceUI {
             if (s_combo) g_TypeId_ComboElement = &s_combo;
         }
         if (!g_TypeId_RawMaterialDescription || !*g_TypeId_RawMaterialDescription) {
-            s_rawMat = ::Object::ResolveTypeIdByNameLazy("RawMaterialDescription");
+            s_rawMat = RawMaterialDescription::TypeId();
             if (s_rawMat) g_TypeId_RawMaterialDescription = &s_rawMat;
         }
     }
@@ -965,14 +982,6 @@ DEFINE_EXE_TYPE(BuildUI, "UI::DialogController")
 
 // ENDGAME B.3.8 DLG: the real DialogInstance classes whose reflection record
 // stays at this TU position (B38_RULES D4).
-#include "Dialog/ToolbarDialog.h"
-#include "Dialog/ModUploadDialog.h"
-#include "Dialog/SaveLoadDialog.h"
-#include "Dialog/FollowDialog.h"
-#include "Dialog/ScenarioDialog.h"
-#include "Dialog/GoalDialog.h"
-#include "Dialog/AchievementDialog.h"
-#include "Dialog/MapParamsDialog.h"
 // ---- DialogInstance family --------------------------------------------------
 DEFINE_EXE_TYPE(AchievementDialog, "UI::DialogInstance")   // was a UI_DIALOG_STUB twin (D4)
 // AutoSaveDialog: its UI_DIALOG_STUB twin was a DUPLICATE registration of the name

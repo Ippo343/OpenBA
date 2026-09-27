@@ -30,6 +30,8 @@
 #include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Time
 #include "Object/factory_registration.h"
 #include <cstddef>
+#include "Component/CitizenDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/StatusIconComponent.h"   // X::TypeId() (B.3.8 callers)
 
 // CitizenUI_UpdateIconDisplay_Impl and CitizenUI_BuildIconArray_Impl
 // are now in the shared header: Dialog/citizen_icon_helpers.h
@@ -73,13 +75,13 @@ void EnsureGlobals() {
     if (!g_TypeId_StatusIconComponent || *g_TypeId_StatusIconComponent == 0 ||
         *g_TypeId_StatusIconComponent == 0xFFFFFFFFu) {
         if (!s_statusIconTid)
-            s_statusIconTid = ::Object::ResolveTypeIdByNameLazy("StatusIconComponent");
+            s_statusIconTid = StatusIconComponent::TypeId();
         if (s_statusIconTid) g_TypeId_StatusIconComponent = &s_statusIconTid;
     }
     static uint32_t s_citDescTid = 0;
     if (!g_TypeId_CitizenDescription) {
         if (!s_citDescTid)
-            s_citDescTid = ::Object::ResolveTypeIdByNameLazy("CitizenDescription");
+            s_citDescTid = CitizenDescription::TypeId();
         if (s_citDescTid) g_TypeId_CitizenDescription = &s_citDescTid;
     }
 }

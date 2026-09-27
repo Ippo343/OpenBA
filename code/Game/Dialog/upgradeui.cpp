@@ -21,6 +21,8 @@
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Object/factory_registration.h"
+#include "Dialog/UpgradeUIConfig.h"   // X::TypeId() (B.3.8 callers)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 
 namespace upgradeui_sa {
 
@@ -30,11 +32,11 @@ static uint32_t s_ceTid  = 0;   // ComponentEntity
 
 void EnsureGlobals() {
     if (!g_TypeId_UpgradeUIConfig || !*g_TypeId_UpgradeUIConfig) {
-        s_cfgTid = ::Object::ResolveTypeIdByNameLazy("UpgradeUIConfig");
+        s_cfgTid = UpgradeUIConfig::TypeId();
         if (s_cfgTid) g_TypeId_UpgradeUIConfig = &s_cfgTid;
     }
     if (!g_TypeId_ComponentEntity) {
-        s_ceTid = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
+        s_ceTid = ComponentEntity::TypeId();
         if (s_ceTid) g_TypeId_ComponentEntity = &s_ceTid;
     }
 }

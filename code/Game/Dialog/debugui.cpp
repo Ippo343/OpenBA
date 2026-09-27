@@ -36,6 +36,9 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Time / System::Random
 #include "audio/Audio.h"       // ENDGAME B.3.7 callers (K4)
+#include "Object/factory_registration.h"
+#include <cstddef>
+#include "Component/CitizenComponent.h"   // X::TypeId() (B.3.8 callers)
 
 // ============================================================
 // Static inline implementations (replaces fn_* exe pointer calls)
@@ -830,7 +833,7 @@ void EnsureGlobals() {
     // CitizenComponent id resolves via GetTypeIdByName (the proven CitizenUI choice).
     if (!g_TypeId_CitizenComponent_FC) {
         static uint32_t s_cai = 0;
-        if (s_cai == 0) s_cai = ::Object::GetTypeIdByName("CitizenComponent");
+        if (s_cai == 0) s_cai = CitizenComponent::TypeId();
         if (s_cai) g_TypeId_CitizenComponent_FC = &s_cai;
     }
 }
@@ -1678,10 +1681,6 @@ void DebugUI_SetDayLighting(DebugUI* self, int month) {
     DebugUI_SetDayLighting_Impl(self, month);
 }
 
-#include "Object/factory_registration.h"
-#include <cstddef>
-#include <cstdlib>
-#include <cstdio>
 
 
 

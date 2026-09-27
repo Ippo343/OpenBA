@@ -31,6 +31,8 @@
 #include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Object/factory_registration.h"
 #include <cstddef>
+#include "Component/ResidenceComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 
 // ResidenceUI::Slot7 is the per-frame roster refresh (driven via the +0x40 W_OnUpdate
 // hack in standalone). Its _DEBUG bring-up logs used to fflush an unbuffered log once
@@ -76,11 +78,11 @@ static float    s_ageMul = 1.0f;    // matches citizenui.cpp's SA age-multiplier
 
 void EnsureGlobals() {
     if (!g_TypeId_ComponentEntity) {
-        s_ceTid = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
+        s_ceTid = ComponentEntity::TypeId();
         if (s_ceTid) g_TypeId_ComponentEntity = &s_ceTid;
     }
     if (!g_TypeId_ResidenceComponent) {
-        s_resTid = ::Object::ResolveTypeIdByNameLazy("ResidenceComponent");
+        s_resTid = ResidenceComponent::TypeId();
         if (s_resTid) g_TypeId_ResidenceComponent = &s_resTid;
     }
     // g_pAgeMultiplier (0x140172198) is zero-fill in standalone; point it at the same

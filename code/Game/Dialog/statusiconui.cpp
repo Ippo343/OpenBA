@@ -20,6 +20,10 @@
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "Object/factory_registration.h"
 #include <cstddef>
+#include "Component/StatusIconComponent.h"   // X::TypeId() (B.3.8 callers)
+#include "Dialog/EntityUI.h"   // X::TypeId() (B.3.8 callers)
+#include "Dialog/StatusIconUIConfig.h"   // X::TypeId() (B.3.8 callers)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 
 // By-name StatusIconComponent finder, defined in the STANDALONE promotion block at the
 // bottom of this file. StatusIconUI_Startup calls it as a fallback because the exe
@@ -51,12 +55,12 @@ namespace statusiconui_sa {
 void EnsureGlobals() {
     static uint32_t s_ce = 0, s_dc = 0, s_pt = 0;
     // ComponentEntity is required — Startup casts the panel's data source (+0x28) to it.
-    if (!g_TypeId_ComponentEntity) { s_ce = ::Object::ResolveTypeIdByNameLazy("ComponentEntity"); if (s_ce) g_TypeId_ComponentEntity = &s_ce; }
+    if (!g_TypeId_ComponentEntity) { s_ce = ComponentEntity::TypeId(); if (s_ce) g_TypeId_ComponentEntity = &s_ce; }
     // These two are the REAL types the page gate needs (see the note at the top of this
     // file). The gate is not cosmetic: without it the title-bar mount of the icons ribbon
     // draws on the main info page and the stop-work icon appears twice.
-    if (!s_tidStatusIconUIConfig) s_tidStatusIconUIConfig = ::Object::ResolveTypeIdByNameLazy("StatusIconUIConfig");
-    if (!s_tidEntityUI)           s_tidEntityUI           = ::Object::ResolveTypeIdByNameLazy("EntityUI");
+    if (!s_tidStatusIconUIConfig) s_tidStatusIconUIConfig = StatusIconUIConfig::TypeId();
+    if (!s_tidEntityUI)           s_tidEntityUI           = EntityUI::TypeId();
 
     // REMOVED — these two lazy by-name fills were actively harmful, not merely redundant.
     // Neither 0x1401c56e0 nor 0x1401c4f00 is RegisterExeAddr'd, so engine_funcs.cpp's
@@ -290,7 +294,7 @@ void StatusIconUI::OnUpdateLayout() {
 // each slot an InternalBasePtr. Returns null if the entity carries no StatusIconComponent.
 static void* StatusIconUI_FindStatusIconComp(void* entity) {
     if (!entity || !fn_IsDerivedFrom) return nullptr;
-    uint32_t want = ::Object::GetTypeIdByName("StatusIconComponent");
+    uint32_t want = StatusIconComponent::TypeId();
     if (want == 0 || want == 0xFFFFFFFFu) return nullptr;
     uintptr_t e = (uintptr_t)entity;
     int count = *(int*)(e + 0x38);
