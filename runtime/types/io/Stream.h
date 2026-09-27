@@ -414,22 +414,19 @@ public:
     // `GetSource` is: two transcriptions of one load is not a divergence risk.
     Direction GetDirection() const { return static_cast<Direction>(_direction); }
 
-    // slot 0  +0x00  0x18000c610 — PURE ON PURPOSE. The body is the registered
-    // `RT_DELDTOR` row in `deleting_dtor.cpp` that fills slot 0 of the LIVE
-    // minted table 0x1801549a0; section 4.2 keeps it until the last stamper of
-    // that table converts, which is the end of B.3.
+    // slot 0  +0x00  0x18000c610 — PURE: the class is abstract and every
+    // concrete stream declares its own (B9-4). ENDGAME B.3.9 IO (W2): the
+    // minted table 0x1801549a0 and the `RT_DELDTOR` row that filled its slot 0
+    // are retired -- nothing stamps an IO::Stream table any more.
     virtual Stream* DeletingDtor(unsigned flags) = 0;
 
     // slot 1  +0x08  0x18000c6a0 — `String GetSource() const { return String(); }`
     //
     // The nine shipped instructions read NOTHING from `this`: RCX is never
     // touched, and the whole body is `*ret = nullptr`, i.e. a default
-    // `System::String`. `iobase_vtables.cpp` carries the registered door
-    // (`RtIo_Stream_GetSource`, hidden return slot spelled out because that is
-    // the shape a raw slot caller uses) and that file is not block 4's to edit,
-    // so the class states the same one-line body rather than reaching for it.
-    // Two transcriptions of `return String()` is not a divergence risk; a
-    // reference across a file boundary we may not touch would be.
+    // `System::String`. (ENDGAME B.3.9 IO, W2: the registered door
+    // `RtIo_Stream_GetSource` went with the minted Stream row; this member is
+    // the one body.)
     //
     // ⚠ NEVER VIRTUAL-CALL THIS ON AN OBJECT WEARING A MINTED TABLE. MinGW GCC
     // passes the hidden return pointer as the FIRST argument and `this` second;
@@ -465,9 +462,8 @@ protected:
     // direct MemFree (an Encoding has no destructor slot -- Serializer.h).
     // Decision 2's base shape: non-virtual (Itanium spends TWO slots on a
     // virtual destructor, which would shift every slot after it) and protected,
-    // because nothing deletes a Stream through this type. The registered
-    // `??1Stream` door (deleting_dtor_leaves.cpp) still serves the minted
-    // Stream row until it retires (W2).
+    // because nothing deletes a Stream through this type. ENDGAME B.3.9 IO
+    // (W2): the `??1Stream` door and the minted Stream row are retired.
     ~Stream() {
         if (_encoding) RtSystem::RtMemFree(_encoding);
     }

@@ -281,18 +281,10 @@ inline void ArrayModDtor(void* arrayField) {
 // ===========================================================================
 // ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ   0x18000c6a0
 // ===========================================================================
-// `ret` is the HIDDEN RETURN SLOT (RDX in the shipped ABI). `self` is never
-// read — see header §1 for the nine instructions this replaces.
-extern "C" void* RtIo_Stream_GetSource(const void* self, void** ret) {
-    (void)self;
-    // ENDGAME B.3.1 step 2: the signature stays void** -- it is a registered
-    // entry point another file (compressed_stream_write_probe.cpp) declares
-    // and calls -- but `ret` is the same raw, uninitialised hidden return
-    // slot either way, so the default ctor is constructed into it rather than
-    // hand-written as a null-qword store.
-    new (ret) System::String();
-    return ret;
-}
+// ENDGAME B.3.9 IO (W2): the slot door that stood here went with the minted
+// ??_7Stream@IO row, its last reader. The body is `IO::Stream::GetSource`
+// (runtime/types/io/Stream.h: `return System::String();`), slot 1 of every
+// stream class's compiler table.
 
 // ===========================================================================
 // ?GetDirection@Stream@IO@@QEBA?AW4Direction@12@XZ   0x180006200
@@ -397,9 +389,8 @@ int RtIoBaseVtablesRegister() {
     int n = 0;
 
     // ---- the six-row prerequisite -----------------------------------------
-    RegisterRuntimeExport("?GetSource@Stream@IO@@UEBA?AVString@System@@XZ",
-                          (void*)&RtIo_Stream_GetSource); ++n;
-    RegisterRuntimeAddr(0x18000c6a0, (void*)&RtIo_Stream_GetSource);
+    // ENDGAME B.3.9 IO (W2): ?GetSource@Stream@IO@@ (0x18000c6a0) went with the
+    // minted ??_7Stream@IO row, its last reader; the class's slot 1 is the member.
 
     // ENDGAME B.3.4 callers batch H — by NAME (what runtime_census.py reads)
     // and by ADDRESS, the same pair the GetSource row above uses.

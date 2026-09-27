@@ -3,8 +3,8 @@
 // harvest of Runtime-x64.dll) re-verified against the DLL at generation
 // time. Regenerate with:
 //   tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py
-// Counts: 24 vtables, 104 BaseTypeInfo, 34 storage symbols.
-// Retired (ENDGAME B.3 step 9): 142 row(s), listed in tools/rt_mint_retired/*.txt.
+// Counts: 23 vtables, 104 BaseTypeInfo, 34 storage symbols.
+// Retired (ENDGAME B.3 step 9): 143 row(s), listed in tools/rt_mint_retired/*.txt.
 
 // ---- Per-slot traps. One function per (vtable, slot) so an unreachable
 // slot that DOES get called names itself instead of aborting anonymously.
@@ -185,25 +185,18 @@ RT_MINT_TRAP(20,0)
 RT_MINT_TRAP(20,1)
 RT_MINT_TRAP(21,0)
 RT_MINT_TRAP(21,1)
-RT_MINT_TRAP(21,2)
-RT_MINT_TRAP(21,3)
-RT_MINT_TRAP(21,4)
-RT_MINT_TRAP(21,5)
-RT_MINT_TRAP(21,6)
 RT_MINT_TRAP(22,0)
 RT_MINT_TRAP(22,1)
-RT_MINT_TRAP(23,0)
-RT_MINT_TRAP(23,1)
-RT_MINT_TRAP(23,2)
-RT_MINT_TRAP(23,3)
-RT_MINT_TRAP(23,4)
-RT_MINT_TRAP(23,5)
-RT_MINT_TRAP(23,6)
-RT_MINT_TRAP(23,7)
-RT_MINT_TRAP(23,8)
-RT_MINT_TRAP(23,9)
-RT_MINT_TRAP(23,10)
-RT_MINT_TRAP(23,11)
+RT_MINT_TRAP(22,2)
+RT_MINT_TRAP(22,3)
+RT_MINT_TRAP(22,4)
+RT_MINT_TRAP(22,5)
+RT_MINT_TRAP(22,6)
+RT_MINT_TRAP(22,7)
+RT_MINT_TRAP(22,8)
+RT_MINT_TRAP(22,9)
+RT_MINT_TRAP(22,10)
+RT_MINT_TRAP(22,11)
 
 // (unexported, carried by address)  DLL 0x180155860  2 slots  [tail-not-a-pointer]
 static const RtMintVSlot kVSlots0[] = {
@@ -506,29 +499,16 @@ static const RtMintVSlot kVSlots20[] = {
 static void* kVTable20[2];
 static const RtMintTrapFn kVTraps20[] = { &RtMintTrapStub_20_0, &RtMintTrapStub_20_1 };
 
-// ??_7Stream@IO@@6B@  DLL 0x1801549a0  7 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots21[] = {
-    { nullptr, 0x18000c610ull, RT_MINT_UNNAMED },
-    { "?GetSource@Stream@IO@@UEBA?AVString@System@@XZ", 0x18000c6a0ull, RT_MINT_NAMED },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-};
-static void* kVTable21[7];
-static const RtMintTrapFn kVTraps21[] = { &RtMintTrapStub_21_0, &RtMintTrapStub_21_1, &RtMintTrapStub_21_2, &RtMintTrapStub_21_3, &RtMintTrapStub_21_4, &RtMintTrapStub_21_5, &RtMintTrapStub_21_6 };
-
 // ??_7Thread@System@@6B@  DLL 0x180155f20  2 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots22[] = {
+static const RtMintVSlot kVSlots21[] = {
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { "?OnCompleted@Thread@System@@UEAAXXZ", 0x18000c590ull, RT_MINT_NAMED },
 };
-static void* kVTable22[2];
-static const RtMintTrapFn kVTraps22[] = { &RtMintTrapStub_22_0, &RtMintTrapStub_22_1 };
+static void* kVTable21[2];
+static const RtMintTrapFn kVTraps21[] = { &RtMintTrapStub_21_0, &RtMintTrapStub_21_1 };
 
 // ??_7UpdateLoop@Engine@@6B@  DLL 0x180155ba0  12 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots23[] = {
+static const RtMintVSlot kVSlots22[] = {
     { nullptr, 0x180031900ull, RT_MINT_UNNAMED },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
@@ -542,8 +522,8 @@ static const RtMintVSlot kVSlots23[] = {
     { "?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ", 0x180031780ull, RT_MINT_NAMED },
     { "?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ", 0x180031790ull, RT_MINT_NAMED },
 };
-static void* kVTable23[12];
-static const RtMintTrapFn kVTraps23[] = { &RtMintTrapStub_23_0, &RtMintTrapStub_23_1, &RtMintTrapStub_23_2, &RtMintTrapStub_23_3, &RtMintTrapStub_23_4, &RtMintTrapStub_23_5, &RtMintTrapStub_23_6, &RtMintTrapStub_23_7, &RtMintTrapStub_23_8, &RtMintTrapStub_23_9, &RtMintTrapStub_23_10, &RtMintTrapStub_23_11 };
+static void* kVTable22[12];
+static const RtMintTrapFn kVTraps22[] = { &RtMintTrapStub_22_0, &RtMintTrapStub_22_1, &RtMintTrapStub_22_2, &RtMintTrapStub_22_3, &RtMintTrapStub_22_4, &RtMintTrapStub_22_5, &RtMintTrapStub_22_6, &RtMintTrapStub_22_7, &RtMintTrapStub_22_8, &RtMintTrapStub_22_9, &RtMintTrapStub_22_10, &RtMintTrapStub_22_11 };
 
 static RtMintVtable kMintVtables[] = {
     { nullptr, 0x180155860ull, 2, kVSlots0, kVTable0, kVTraps0, "tail-not-a-pointer" },
@@ -567,9 +547,8 @@ static RtMintVtable kMintVtables[] = {
     { "??_7ParticleInstance@Graphics@@6B@", 0x1801550e0ull, 10, kVSlots18, kVTable18, kVTraps18, "adjacent-export:??_7Particle@Graphics@@6B@" },
     { "??_7ParticleSystemInstance@Graphics@@6B@", 0x180155040ull, 10, kVSlots19, kVTable19, kVTraps19, "adjacent-export:??_7ParticleSystem@Graphics@@6B@" },
     { "??_7Stream@Audio@@6B@", 0x180154950ull, 2, kVSlots20, kVTable20, kVTraps20, "adjacent-export:??_7FileStream@IO@@6B@" },
-    { "??_7Stream@IO@@6B@", 0x1801549a0ull, 7, kVSlots21, kVTable21, kVTraps21, "tail-not-a-pointer" },
-    { "??_7Thread@System@@6B@", 0x180155f20ull, 2, kVSlots22, kVTable22, kVTraps22, "tail-not-a-pointer" },
-    { "??_7UpdateLoop@Engine@@6B@", 0x180155ba0ull, 12, kVSlots23, kVTable23, kVTraps23, "tail-not-a-pointer" },
+    { "??_7Thread@System@@6B@", 0x180155f20ull, 2, kVSlots21, kVTable21, kVTraps21, "tail-not-a-pointer" },
+    { "??_7UpdateLoop@Engine@@6B@", 0x180155ba0ull, 12, kVSlots22, kVTable22, kVTraps22, "tail-not-a-pointer" },
 };
 
 // ---- Object::BaseTypeInfo. Fields are link-time constants copied from
