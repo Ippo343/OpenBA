@@ -200,7 +200,6 @@ public:
     ::Box AABB(int32_t i) const;
     PickingMesh(const PickingMesh& src);                      // 0x180071ea0
     PickingMesh& operator=(const PickingMesh& src);           // 0x180071f60
-    static uint32_t TypeId();                                 // 0x180071aa0
     static void* operator new(std::size_t bytes);              // 0x180071ac0
     static void* operator new(std::size_t bytes, void* place); // 0x180071b30
     static void  operator delete(void* p);                     // 0x180071b40
@@ -208,6 +207,9 @@ public:
     // the null-tested in-place ctor. Defined in pickingmesh.cpp. NOTE the class
     // declares its own placement `operator new` (0x180071b30, not ported), so
     // every placement construction in the tree spells `::new (p) PickingMesh()`.
+    // 0x180071aa0 -- `MOV EAX,[_typeInfo]` over the (still minted)
+    // `?_typeInfo@PickingMesh@Picking@@` record (B39_RULES D6 step 1).
+    static uint32_t TypeId();
     static Object::Base* CreateNewObject();                    // 0x180071ba0
     static Object::Base* CreateInPlaceObject(void* place);     // 0x180071c60
 
