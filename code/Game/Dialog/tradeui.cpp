@@ -56,6 +56,12 @@
 #include "runtime/types/ui/SpinnerElement.h"    // ENDGAME B.3.6 UI callers round 2 (K1)
 #include "runtime/types/ui/TableElement.h"      // ENDGAME B.3.6 UI callers round 2 (K1)
 #include "runtime/types/ui/TabElement.h"        // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "runtime/types/ui/ButtonElement.h"      // X::TypeId() (B.3.9 CG2)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/StateMachineComponent.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/ComponentDescription.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/SelectDescription.h"   // X::TypeId() (B.3.9 CG2)
 
 
 // Retail's sell/buy tables call the min/max setter through exe .rdata dispatch slot
@@ -197,7 +203,7 @@ void TradeUI::OnOpened() {
 
     // Get owning entity and find BuildingComponent
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -224,7 +230,7 @@ void TradeUI::OnClosed() {
     uintptr_t s = (uintptr_t)this;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -396,7 +402,7 @@ void TradeUI_RefreshSellTable(TradeUI* self)
 
     // Get entity, BuildingComponent, StateMachineComponent
     void* entityRaw = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entityRaw, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(entityRaw, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entityRaw : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -449,8 +455,8 @@ void TradeUI_RefreshSellTable(TradeUI* self)
                         for (int d = 0; d < descCount; d++) {
                             void* comp = descArray[d];
                             int tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-                            if ((uint32_t)tid == *g_TypeId_RawMaterialDescription) {
-                                if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription))
+                            if ((uint32_t)tid == RawMaterialDescription::TypeId()) {
+                                if (fn_IsDerivedFrom(comp, RawMaterialDescription::TypeId()))
                                     resTypeComp = comp;
                                 break;
                             }
@@ -497,8 +503,8 @@ void TradeUI_RefreshSellTable(TradeUI* self)
         for (int i = 0; i < compCount; i++) {
             void* comp = compArr[i];
             int tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-            if ((uint32_t)tid == *g_TypeId_StateMachineComponent_FC) {
-                if (fn_IsDerivedFrom(comp, *g_TypeId_StateMachineComponent_FC))
+            if ((uint32_t)tid == StateMachineComponent::TypeId()) {
+                if (fn_IsDerivedFrom(comp, StateMachineComponent::TypeId()))
                     buildStateComp = comp;
                 break;
             }
@@ -656,7 +662,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
 
     // Get entity, BuildingComponent, TradeDescription
     void* entityRaw = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entityRaw, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(entityRaw, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entityRaw : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -682,7 +688,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
         // IsDerivedFrom TextElement
         void* textElem = nullptr;
         if (*(void**)foundBuf) {
-            bool isText = fn_IsDerivedFrom(*(void**)foundBuf, *g_TypeId_TextElement);
+            bool isText = fn_IsDerivedFrom(*(void**)foundBuf, UI::TextElement::TypeId());
             if (isText) textElem = *(void**)foundBuf;
         }
         uint64_t textIbp[1] = {0};
@@ -877,7 +883,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
                 // IsDerivedFrom TextElement check
                 void* childElem = nullptr;
                 if (*(void**)childBuf) {
-                    bool isText = fn_IsDerivedFrom(*(void**)childBuf, *g_TypeId_TextElement);
+                    bool isText = fn_IsDerivedFrom(*(void**)childBuf, UI::TextElement::TypeId());
                     if (isText) childElem = *(void**)childBuf;
                 }
                 uint64_t childIbp[2] = {0, 0};
@@ -939,7 +945,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
 
                 void* childElem = nullptr;
                 if (*(void**)childBuf) {
-                    bool isText = fn_IsDerivedFrom(*(void**)childBuf, *g_TypeId_TextElement);
+                    bool isText = fn_IsDerivedFrom(*(void**)childBuf, UI::TextElement::TypeId());
                     if (isText) childElem = *(void**)childBuf;
                 }
                 uint64_t childIbp[2] = {0, 0};
@@ -1012,7 +1018,7 @@ void TradeUI::OnCreated() {
 
     // --- Get entity and find BuildingComponent ---
     void* entityRaw = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entityRaw, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(entityRaw, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entityRaw : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -1024,55 +1030,67 @@ void TradeUI::OnCreated() {
     // --- Phase 1: Find all 15 named elements ---
     void* dialogElemPtr = (void*)(s + 0x20);
 
+    // ENDGAME B.3.9 CG2: g_TypeId_TableElement/NumberElement/TextElement ->
+    // UI::TableElement/NumberElement/TextElement::TypeId(); g_TypeId_HelpButtonElem
+    // shares its initialiser exref (0x1401514f8) with g_TypeId_ButtonElement ->
+    // UI::ButtonElement::TypeId(); g_TypeId_HelpComboElem shares its initialiser
+    // exref (0x140151690) with g_TypeId_ComboElement -> UI::ComboElement::TypeId()
+    // (Table 3 name lies — neither is a distinct "help" element class).
+    uint32_t tableElementTypeId = UI::TableElement::TypeId();
+    uint32_t numberElementTypeId = UI::NumberElement::TypeId();
+    uint32_t buttonElementTypeId = UI::ButtonElement::TypeId();
+    uint32_t textElementTypeId = UI::TextElement::TypeId();
+    uint32_t comboElementTypeId = UI::ComboElement::TypeId();
+
     // Tables (IsDerivedFrom TableElement)
     *(uintptr_t*)(s + 0xC8) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "tableSell", g_TypeId_TableElement);
+        dialogElemPtr, "tableSell", &tableElementTypeId);
     *(uintptr_t*)(s + 0xD0) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "tableBuy", g_TypeId_TableElement);
+        dialogElemPtr, "tableBuy", &tableElementTypeId);
     *(uintptr_t*)(s + 0xD8) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "tableStorage", g_TypeId_TableElement);
+        dialogElemPtr, "tableStorage", &tableElementTypeId);
     *(uintptr_t*)(s + 0xE0) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "tablePurchase", g_TypeId_TableElement);
+        dialogElemPtr, "tablePurchase", &tableElementTypeId);
     *(uintptr_t*)(s + 0xE8) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "tableOrder", g_TypeId_TableElement);
+        dialogElemPtr, "tableOrder", &tableElementTypeId);
 
     // Number elements (IsDerivedFrom SpinnerElement/NumberElement)
     *(uintptr_t*)(s + 0x100) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "numberSellTotal", g_TypeId_NumberElement);
+        dialogElemPtr, "numberSellTotal", &numberElementTypeId);
     *(uintptr_t*)(s + 0x108) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "numberBuyTotal", g_TypeId_NumberElement);
+        dialogElemPtr, "numberBuyTotal", &numberElementTypeId);
 
     // Buttons (IsDerivedFrom ButtonElement)
     *(uintptr_t*)(s + 0xF0) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "buttonTrade", g_TypeId_HelpButtonElem);
+        dialogElemPtr, "buttonTrade", &buttonElementTypeId);
     reinterpret_cast<UI::Element*>(*(void**)(s + 0xF0))->SetElementId(0x4e20);  // B.3.6 bridge
 
     *(uintptr_t*)(s + 0xF8) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "buttonDismiss", g_TypeId_HelpButtonElem);
+        dialogElemPtr, "buttonDismiss", &buttonElementTypeId);
     reinterpret_cast<UI::Element*>(*(void**)(s + 0xF8))->SetElementId(0x4e21);  // B.3.6 bridge
 
     // Text elements (IsDerivedFrom TextElement)
     *(uintptr_t*)(s + 0x110) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "textNoStorage", g_TypeId_TextElement);
+        dialogElemPtr, "textNoStorage", &textElementTypeId);
     *(uintptr_t*)(s + 0x118) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "textTooMuch", g_TypeId_TextElement);
+        dialogElemPtr, "textTooMuch", &textElementTypeId);
     *(uintptr_t*)(s + 0x120) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "textNotEnough", g_TypeId_TextElement);
+        dialogElemPtr, "textNotEnough", &textElementTypeId);
 
     // Combo elements (IsDerivedFrom ComboElement)
     *(uintptr_t*)(s + 0x138) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "comboPurchase", g_TypeId_HelpComboElem);
+        dialogElemPtr, "comboPurchase", &comboElementTypeId);
     // Set comboPurchase current item from building component field
     int purchaseIdx = *(int*)(buildingPtr[0] + 0x28);
     reinterpret_cast<UI::ComboElement*>(*(void**)(s + 0x138))->SetCurrentItem(purchaseIdx);  // B.3.6 bridge
     reinterpret_cast<UI::Element*>(*(void**)(s + 0x138))->SetElementId(0x4e22);  // B.3.6 bridge
 
     *(uintptr_t*)(s + 0xC0) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "comboOrder", g_TypeId_HelpComboElem);
+        dialogElemPtr, "comboOrder", &comboElementTypeId);
     reinterpret_cast<UI::Element*>(*(void**)(s + 0xC0))->SetElementId(0x4e23);  // B.3.6 bridge
 
     *(uintptr_t*)(s + 0x140) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "sortCombo", g_TypeId_HelpComboElem);
+        dialogElemPtr, "sortCombo", &comboElementTypeId);
     reinterpret_cast<UI::Element*>(*(void**)(s + 0x140))->SetElementId(199);  // B.3.6 bridge — 0xC7
     reinterpret_cast<UI::ComboElement*>(*(void**)(s + 0x140))->SetCurrentItem(0);  // B.3.6 bridge
 
@@ -1149,20 +1167,20 @@ void TradeUI::OnCreated() {
     const ::Object::ExternalFactory* etuFactory =
         reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
     void* ext = const_cast<::Object::External*>(
-        etuFactory->FindNext(*g_TypeId_RawMaterialDescription, nullptr));  // B.3.3 bridge
+        etuFactory->FindNext(RawMaterialDescription::TypeId(), nullptr));  // B.3.3 bridge
     while (ext != nullptr) {
         resourceTypeCount++;
         ext = const_cast<::Object::External*>(
-            etuFactory->FindNext(*g_TypeId_RawMaterialDescription,
+            etuFactory->FindNext(RawMaterialDescription::TypeId(),
                                  reinterpret_cast<const ::Object::External*>(ext)));  // B.3.3 bridge
     }
 
     int selectableCount = 0;
     void* buildExt = const_cast<::Object::External*>(
-        etuFactory->FindNext(*g_TypeId_ComponentDescription_FC, nullptr)); // B.3.3 bridge
+        etuFactory->FindNext(ComponentDescription::TypeId(), nullptr)); // B.3.3 bridge
     while (buildExt != nullptr) {
         // Check if this ComponentDescription external has a SelectDescription sub-component
-        bool isDerivedBuild = fn_IsDerivedFrom(buildExt, *g_TypeId_ComponentDescription_FC);
+        bool isDerivedBuild = fn_IsDerivedFrom(buildExt, ComponentDescription::TypeId());
         void* buildComp = isDerivedBuild ? buildExt : nullptr;
         if (buildComp) {
             int compCount = *(int*)((uintptr_t)buildComp + 0x30);
@@ -1170,9 +1188,9 @@ void TradeUI::OnCreated() {
             for (int c = 0; c < compCount; c++) {
                 void* comp = compArray[c];
                 int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-                if (typeId == (int)*g_TypeId_SelectDescription) {
+                if (typeId == (int)SelectDescription::TypeId()) {
                     void* selectComp = nullptr;
-                    if (fn_IsDerivedFrom(comp, *g_TypeId_SelectDescription))
+                    if (fn_IsDerivedFrom(comp, SelectDescription::TypeId()))
                         selectComp = comp;
                     if (selectComp) selectableCount++;
                     break;
@@ -1180,7 +1198,7 @@ void TradeUI::OnCreated() {
             }
         }
         buildExt = const_cast<::Object::External*>(
-            etuFactory->FindNext(*g_TypeId_ComponentDescription_FC,
+            etuFactory->FindNext(ComponentDescription::TypeId(),
                                  reinterpret_cast<const ::Object::External*>(buildExt))); // B.3.3 bridge
     }
 
@@ -1429,7 +1447,7 @@ static inline void Element_SetEnabled(void* element, bool enabled) {
 // Find resource value for a given resource entity ptr by searching its component array
 // Returns 0 if not found. Resource type identified via vtable+0x10 == g_TypeId_RawMaterialDescription.
 static int FindResourceValue(void* resourceEntity) {
-    if (!resourceEntity || !g_TypeId_RawMaterialDescription) return 0;
+    if (!resourceEntity) return 0;
     uintptr_t entity = (uintptr_t)resourceEntity;
     int compCount = *(int*)(entity + 0x30);
     void** compArray = *(void***)(entity + 0x28);
@@ -1438,9 +1456,9 @@ static int FindResourceValue(void* resourceEntity) {
         if (!comp) continue;
         // Call vtable+0x10 to get type ID
         int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-        if (typeId == (int)*g_TypeId_RawMaterialDescription) {
+        if (typeId == (int)RawMaterialDescription::TypeId()) {
             // Verify with IsDerivedFrom, then return value at +0x48
-            bool isRes = fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription);
+            bool isRes = fn_IsDerivedFrom(comp, RawMaterialDescription::TypeId());
             if (isRes) return *(int*)((uintptr_t)comp + 0x48);
             break;
         }
@@ -1456,7 +1474,7 @@ void TradeUI::OnUpdateLayout() {
 
     // Find BuildingComponent and StateMachineComponent
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -1585,7 +1603,7 @@ void TradeUI::OnUpdate(const System::Time& /*time*/) {
 
     // Get owning entity and find BuildingComponent
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -1783,9 +1801,8 @@ void TradeUI::OnSerializeSettings(void* stream) {
 
     // Cast to TabElement via IsDerivedFrom
     void* tabElement = nullptr;
-    if (element && g_TypeId_TabElement) {
-        bool isDerived = fn_IsDerivedFrom(element, *g_TypeId_TabElement);
-        if (isDerived) tabElement = element;
+    if (element && fn_IsDerivedFrom(element, UI::TabElement::TypeId())) {
+        tabElement = element;
     }
 
     uint64_t tabIBP = 0;
@@ -1835,7 +1852,7 @@ void TradeUI_UpdateBuyTotals(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -1890,7 +1907,7 @@ void TradeUI_UpdateSellTotals(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -1974,7 +1991,7 @@ void TradeUI_OnComboPurchase(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2001,7 +2018,7 @@ void TradeUI_OnComboOrder(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2030,7 +2047,7 @@ void TradeUI_OnOrderAmountSpinner(TradeUI* self, int idx) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2060,7 +2077,7 @@ void TradeUI_OnOrderSpinner(TradeUI* self, int idx, int idx2) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2106,7 +2123,7 @@ void TradeUI_OnDismissButton(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2147,7 +2164,7 @@ void TradeUI_OnPurchaseButton(TradeUI* self, int idx) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2190,7 +2207,7 @@ void TradeUI_OnStorageSpinner(TradeUI* self, int idx, void* /*reserved*/) {
     int newVal = reinterpret_cast<const UI::SpinnerElement*>(*(void**)(storageEntries + 0x08 + entryOffset))->GetValue();  // B.3.6 bridge
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2237,7 +2254,7 @@ void TradeUI_RefreshOrderQuantityDisplay(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2300,7 +2317,7 @@ void TradeUI_RefreshSellSpinnerValues(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2398,7 +2415,7 @@ void TradeUI_RefreshOrderDisplay(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2539,7 +2556,8 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
     for (int i = 0; i < entityCount; i++) {
         uintptr_t entity = *(uintptr_t*)(*(uintptr_t*)(tradeList + 0x110) + (uintptr_t)i * 8);
 
-        void* resourceComp = FindDescSubObject((void*)entity, g_TypeId_RawMaterialDescription);
+        uint32_t rawMaterialDescriptionTypeId = RawMaterialDescription::TypeId();
+        void* resourceComp = FindDescSubObject((void*)entity, &rawMaterialDescriptionTypeId);
         void* valueComp = FindDescSubObject((void*)entity, g_TypeInfo_ValueDescription);
 
         // Push 0x18-byte entry {entity, resourceComp, valueComp} into the display
@@ -2554,7 +2572,7 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
 
     // Get owning entity -> TradeComponent + StorageComponent
     void* ownerEntity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(ownerEntity, *g_TypeId_ComponentEntity);
+    bool isDerived = fn_IsDerivedFrom(ownerEntity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? ownerEntity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};

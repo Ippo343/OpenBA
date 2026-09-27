@@ -297,9 +297,7 @@ void FollowDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
 //
 // Original: 0x140069250.
 
-namespace { void EnsureFollowGlobals(); }
 void FollowDialog::OnUpdate(const System::Time& /*time*/) {
-    EnsureFollowGlobals();
     uintptr_t s = (uintptr_t)this;
 
     // Get the followed entity from InternalBasePtr at +0xB8
@@ -400,21 +398,9 @@ void FollowDialog::OnUpdate(const System::Time& /*time*/) {
 // Vtable getter) are gone. 0x14015be00 stays unregistered; engine_funcs.cpp's
 // g_FollowDialog_Vtable has no reader left.
 
-// The ModelComponent type id the follow camera's fn_FindComponent_Character needs.
-// g_TypeId_ModelComponent_FC is DAT_1401c7a50 (documented misnomer,
-// engine_funcs.h); its raw exe .rdata slot is never registered in the standalone
-// build, so it is resolved by name from the live factory tree into namespace-scope
-// storage (no function-local static, B6-5) on each tick until it holds a real id.
-namespace {
-uint32_t s_followModelTypeId = 0;
-void EnsureFollowGlobals() {
-    uint32_t* g = g_TypeId_ModelComponent_FC;
-    if (!g || *g == 0 || *g == 0xFFFFFFFFu) {
-        if (!s_followModelTypeId) s_followModelTypeId = ModelComponent::TypeId();
-        if (s_followModelTypeId) g_TypeId_ModelComponent_FC = &s_followModelTypeId;
-    }
-}
-}  // namespace
+// ENDGAME B.3.9: ModelComponent (cell 0x1401c7a50, the class g_TypeId_ModelComponent_FC
+// is really bound to -- Table 1's authority) has a ported TypeId() now, so the
+// EnsureFollowGlobals() lazy-cache is dead.
 
 FollowDialog::FollowDialog() : dataB8(0), dataC0(0), dataC8(0), dataD0(0) {}
 

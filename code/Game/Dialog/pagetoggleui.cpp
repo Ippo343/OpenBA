@@ -15,6 +15,7 @@
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/PageElement.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/CheckElement.h"  // X::TypeId() (B.3.9 CG2)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // ---- UI::CheckElement type id -----------------------------------------------
@@ -28,17 +29,18 @@
 // FindElementType(root, 0) can never match, leaving +0x30 null for Slot7 to fault on.
 // The private-resolve below is what keeps that arm safe, so it stays.
 //
-// We deliberately do NOT publish into g_TypeId_CheckboxElement: that global is
-// shared with ControlUI, and filling the shared element-id globals on the default
-// path is exactly the broad change reg_element_typeids.cpp put behind its gate.
-// Instead resolve a PRIVATE copy of the same id by name. Prefer the registry
-// value whenever the gate is on, so the two paths can never disagree.
+// ENDGAME B.3.9 CG2: g_TypeId_CheckboxElement's initialiser (engine_funcs.cpp)
+// binds it to the SAME exref (0x1401516a8) as g_TypeId_CheckElement — there is
+// no separate "CheckboxElement" Runtime class (no CheckboxElement.h under
+// runtime/types/ui/); both globals are UI::CheckElement's id (Table 3 name
+// lie). UI::CheckElement::TypeId() is the ported static over that class's own
+// record (D6 W1) — a source independent of the exe-side reflection cell this
+// file used to read through the shared global, so it answers correctly with
+// BANISHED_LIVE_ELEMENT_TIDS off too. The private ResolveTypeIdByNameLazy
+// fallback and its gate-dependent guard were scaffolding for that exe-side
+// global's unresolved/gated state; they retire with this read.
 static uint32_t PageToggleUI_CheckElementTypeId() {
-    if (g_TypeId_CheckboxElement && *g_TypeId_CheckboxElement)
-        return *g_TypeId_CheckboxElement;          // gate on: use the real slot
-    static uint32_t s_local = 0;
-    if (!s_local) s_local = ::Object::ResolveTypeIdByNameLazy("CheckElement");
-    return s_local;
+    return UI::CheckElement::TypeId();
 }
 
 // True once the id is known. The promotion gate in ui_dialog_stub_factories.cpp

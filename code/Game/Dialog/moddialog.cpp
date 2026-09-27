@@ -50,6 +50,7 @@
 #include "ui/Dialogs.h"
 #include "options.h"
 #include "Dialog/ModDialog.h"
+#include "Dialog/ModBrowseUI.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Dialog/ModDetailsDialog.h"
 #include "Dialog/MessageDialog.h"
 #include "Dialog/ui_dialogs.h"
@@ -419,7 +420,7 @@ void ModDialog::OnOpened() {
                     ->FindOrLoad(filenameBuf));
             void* material = nullptr;
             if (ext) {
-                bool derived = fn_IsDerivedFrom(ext, g_TypeId_Material ? *g_TypeId_Material : 0);
+                bool derived = fn_IsDerivedFrom(ext, Graphics::Material::TypeId());
                 if (derived) material = ext;
             }
             reinterpret_cast<Graphics::MaterialInstance*>(matInst)->SetMaterial(
@@ -487,7 +488,8 @@ void ModDialog::OnOpened() {
     // --- Post-loop: refresh display, add browser controller, hide browse UI ---
     ModDialog_RefreshDisplay_Impl(this);
 
-    // Load "Dialog/Mod.rsc:browser", add as controller with type g_TypeId_BrowserController
+    // Load "Dialog/Mod.rsc:browser", add as controller with type ModBrowseUI::TypeId()
+    // (cell 0x1401c5210; the g_TypeId_BrowserController name lies -- see Table 1/3)
     {
         System::Filename filenameBuf("Dialog/Mod.rsc:browser");
         void* extFactory = *(void**)g_pExternalFactorySingleton;
@@ -502,7 +504,7 @@ void ModDialog::OnOpened() {
 
         // AddController(this, typeId, 0, 0, browserExt, "groupBrowse")
         System::String groupStr("groupBrowse");
-        uint32_t typeId = g_TypeId_BrowserController ? *g_TypeId_BrowserController : 0;
+        uint32_t typeId = ModBrowseUI::TypeId();
         AddController(  // B.3.6 bridge
             typeId, static_cast<Object::Base*>(nullptr),
             Object::ExternalPtr<UI::DialogControllerConfig>(nullptr),

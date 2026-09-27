@@ -12,6 +12,9 @@
 #include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/ComboElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/TabElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ButtonElement.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "ui/Dialog.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "Dialog/AutoSaveDialog.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -219,7 +222,7 @@ static void SetInputBindButtonText(void* elementPtr, int deviceType, uint32_t ke
 
     // Check it's a TextElement
     void* foundObj = (void*)found;
-    if (g_TypeId_TextElement && !fn_IsDerivedFrom(foundObj, *g_TypeId_TextElement))
+    if (!fn_IsDerivedFrom(foundObj, UI::TextElement::TypeId()))
         return;
 
     // Get the key name as UI::String, then set as text
@@ -239,36 +242,11 @@ static inline void SetSliderValue(void* elem, float val) {
     if (elem) *(float*)((uintptr_t)elem + 0x128) = val;
 }
 
-// Helper: lazy-resolve g_TypeId_TextElement in standalone mode.
-//
-// In standalone the exe exref slot at 0x140151508 isn't populated by Runtime
-// reflection, so g_TypeId_TextElement starts NULL and every IsDerivedFrom
-// check fails — silently dropping every TextElement::SetText / SetParameter
-// call (resulting in placeholder text from the .rsc surviving on screen).
-// Same pattern as LoadStringTable's StringTable type-id lazy-resolve.
-static void EnsureTextElementTypeId() {
-    if (g_TypeId_TextElement) return;
-    if (!g_pFactorySingleton || !*g_pFactorySingleton)
-        return;
-    static uint32_t s_lazyId = 0;
-    if (s_lazyId == 0) {
-        void* factoryObj = *(void**)*g_pFactorySingleton;
-        if (factoryObj) {
-            s_lazyId = reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(
-                "TextElement", true);   // B.3.3 bridge
-            printf("[OptionsDialog] Lazy-resolved TextElement typeId = %u\n", s_lazyId);
-        }
-    }
-    if (s_lazyId != 0) g_TypeId_TextElement = &s_lazyId;
-}
+// ENDGAME B.3.9: UI::TextElement / UI::StringTable both have a ported TypeId() now
+// (class statics, always populated), so the EnsureTextElementTypeId() lazy-resolve
+// and LoadStringTable's inline lazy-resolve are dead.
 
 // Helper: load a StringTable resource by path.
-//
-// In standalone mode the .rdata exref slot at 0x140151488 is never written by
-// Runtime reflection, so g_TypeId_StringTable starts NULL and the type-check
-// gate would silently drop every result. We lazy-resolve the type ID on first
-// use via Object::Factory::GetTypeIdFromName ("StringTable", true) — Factory
-// has already populated its tree by Engine::Startup, so this hits a real id.
 static void* LoadStringTable(const char* path) {
     System::Filename filenameObj(path);   // ctor already normalises delimiters
     void* ext = const_cast<::Object::External*>(
@@ -276,23 +254,7 @@ static void* LoadStringTable(const char* path) {
             ->FindOrLoad(filenameObj));
     if (!ext) return nullptr;
 
-    if (!g_TypeId_StringTable
-            && g_pFactorySingleton && *g_pFactorySingleton) {
-        static uint32_t s_lazyStringTableTypeId = 0;
-        if (s_lazyStringTableTypeId == 0) {
-            void* factoryObj = *(void**)*g_pFactorySingleton;
-            if (factoryObj) {
-                s_lazyStringTableTypeId =
-                    reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(
-                        "StringTable", true);   // B.3.3 bridge
-                printf("[OptionsDialog] Lazy-resolved StringTable typeId = %u\n",
-                       s_lazyStringTableTypeId);
-            }
-        }
-        if (s_lazyStringTableTypeId != 0) g_TypeId_StringTable = &s_lazyStringTableTypeId;
-    }
-
-    if (g_TypeId_StringTable && fn_IsDerivedFrom(ext, *g_TypeId_StringTable))
+    if (fn_IsDerivedFrom(ext, UI::StringTable::TypeId()))
         return ext;
     return nullptr;
 }
@@ -900,13 +862,12 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
 
     // Iterate all open dialogs and update autosave timer on each
     UI::UserInterface* userInterface = *(UI::UserInterface**)((uintptr_t)self + 0x10);
-    fprintf(stderr, "[AutoSave] Options ApplySettings: newIntervalIdx=%d isA=%p isDerived=%p restartFn=%p tidSlot=%p\n",
+    fprintf(stderr, "[AutoSave] Options ApplySettings: newIntervalIdx=%d isA=%p isDerived=%p restartFn=%p tid=%u\n",
             gs[1], (void*)fn_IsA, (void*)fn_IsDerivedFrom,
-            (void*)fn_UpdateAutoSaveTimer, (void*)g_TypeId_AutoSaveDialogType);
+            (void*)fn_UpdateAutoSaveTimer, AutoSaveDialog::TypeId());
     fflush(stderr);
-    if (fn_IsA && fn_IsDerivedFrom && fn_UpdateAutoSaveTimer &&
-        g_TypeId_AutoSaveDialogType) {
-        uint32_t typeId = *g_TypeId_AutoSaveDialogType;
+    if (fn_IsA && fn_IsDerivedFrom && fn_UpdateAutoSaveTimer) {
+        uint32_t typeId = AutoSaveDialog::TypeId();
         // `_dialogs.GetFirst()` IS retail's GetFirstDialog (0x180031150, whose
         // whole body is `*retval = this->_dialogs._head`); the iterator is the
         // bare node pointer, so `it.node` is what retail hands to CheckPtr.
@@ -1252,7 +1213,7 @@ void OptionsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
         if (eventData >= kInputBind_Base) {
             // FUN_140010460: IsDerivedFrom(elem, UIElementBase type) — returns elem if valid, else null
             void* clickedElem = *(void**)element;
-            bool isUIElement = g_TypeId_ButtonElement && fn_IsDerivedFrom(clickedElem, *g_TypeId_ButtonElement);
+            bool isUIElement = fn_IsDerivedFrom(clickedElem, UI::ButtonElement::TypeId());
             void* parent = isUIElement ? clickedElem : nullptr;
             uint8_t parentPtr[16];
             new (parentPtr) ::Object::InternalBasePtr(
@@ -1393,7 +1354,6 @@ void OptionsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
 // Sets label text from KeyMap string table, sets button key name text,
 // assigns element IDs starting at kInputBind_Base (13).
 void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
-    EnsureTextElementTypeId();
     void* keyMapContainer = GetKeyMapContainer();
     if (!keyMapContainer) return;
     void* keyMap = GetActualKeyMap();  // for method calls (GetDeviceForId, etc.)
@@ -1421,7 +1381,7 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
 
             if (textElem) {
                 void* textObj = (void*)textElem;
-                if (g_TypeId_TextElement && fn_IsDerivedFrom(textObj, *g_TypeId_TextElement)) {
+                if (fn_IsDerivedFrom(textObj, UI::TextElement::TypeId())) {
                     // Get input name from KeyMap container's name table at +0xC8
                     uint64_t nameTable = *(uint64_t*)((uintptr_t)keyMapContainer + 0xC8);
                     uint8_t uiStr[16];
@@ -1463,7 +1423,6 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
 // 6. If result=1 (bound), checks for conflicts and handles them
 // 7. Refreshes the input bind list
 void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bindIndex, int slot) {
-    EnsureTextElementTypeId();
     void* keyMapContainer = GetKeyMapContainer();
     if (!keyMapContainer) return;
     void* keyMap = GetActualKeyMap();  // for method calls
@@ -1478,8 +1437,8 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
             ->FindOrLoad(filenameObj));
     // Type check the external resource
     void* external = nullptr;
-    if (extResult && g_TypeId_Dialog) {
-        bool isDerived = fn_IsDerivedFrom(extResult, *g_TypeId_Dialog);
+    if (extResult) {
+        bool isDerived = fn_IsDerivedFrom(extResult, UI::Dialog::TypeId());
         if (isDerived) external = extResult;
     }
 
@@ -1509,9 +1468,9 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     ::new (&inputNameStr) System::String(reinterpret_cast<const UI::String*>(inputNameUI)->operator System::String());  // B.3.6 bridge
 
     // Find TextElement in dialog and set parameter 0
-    if (g_TypeId_TextElement) {
+    {
         uint64_t textElem = 0;
-        ::new (&textElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialogPtr)->FindElementType(*g_TypeId_TextElement));  // B.3.6 bridge
+        ::new (&textElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialogPtr)->FindElementType(UI::TextElement::TypeId()));  // B.3.6 bridge
         if (textElem) {
             reinterpret_cast<UI::TextElement*>((void*)textElem)->SetParameter(0, inputNameStr);  // B.3.6 bridge
         }
@@ -1556,8 +1515,8 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
             reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
                 ->FindOrLoad(fnameObj2));
         void* external2 = nullptr;
-        if (extResult2 && g_TypeId_Dialog) {
-            if (fn_IsDerivedFrom(extResult2, *g_TypeId_Dialog)) external2 = extResult2;
+        if (extResult2) {
+            if (fn_IsDerivedFrom(extResult2, UI::Dialog::TypeId())) external2 = extResult2;
         }
 
         // Allocate and construct MessageDialog (0xC0 bytes)
@@ -1603,21 +1562,21 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
         if (!sameBinding) {
             // Set parameters on the confirmation dialog:
             // param 0 = new key name, param 1 = conflicting binding name, param 2 = current input name
-            if (g_TypeId_TextElement) {
+            {
                 uint64_t textElem2 = 0;
-                ::new (&textElem2) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialog2Ptr)->FindElementType(*g_TypeId_TextElement));  // B.3.6 bridge
+                ::new (&textElem2) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialog2Ptr)->FindElementType(UI::TextElement::TypeId()));  // B.3.6 bridge
                 if (textElem2) {
                     reinterpret_cast<UI::TextElement*>((void*)textElem2)->SetParameter(0, newKeyStr);  // B.3.6 bridge
                 }
 
                 uint64_t textElem3 = 0;
-                ::new (&textElem3) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialog2Ptr)->FindElementType(*g_TypeId_TextElement));  // B.3.6 bridge
+                ::new (&textElem3) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialog2Ptr)->FindElementType(UI::TextElement::TypeId()));  // B.3.6 bridge
                 if (textElem3) {
                     reinterpret_cast<UI::TextElement*>((void*)textElem3)->SetParameter(1, conflictNameStr);  // B.3.6 bridge
                 }
 
                 uint64_t textElem4 = 0;
-                ::new (&textElem4) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialog2Ptr)->FindElementType(*g_TypeId_TextElement));  // B.3.6 bridge
+                ::new (&textElem4) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialog2Ptr)->FindElementType(UI::TextElement::TypeId()));  // B.3.6 bridge
                 if (textElem4) {
                     reinterpret_cast<UI::TextElement*>((void*)textElem4)->SetParameter(2, inputNameStr);  // B.3.6 bridge
                 }

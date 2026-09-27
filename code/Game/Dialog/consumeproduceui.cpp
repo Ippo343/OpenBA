@@ -26,6 +26,7 @@
 #include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Component/ConsumeProduceDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (ENDGAME B.3.9)
 
 // ConsumeProduceUI: PROMOTED from a bare UI_DIALOG_STUB 2026-08-24. The Tavern panel
 // rendered its authored layout -- worker spinner, Inventory, "Alcohol Limit 500",
@@ -39,35 +40,11 @@
 // This is also what kept HappinessComponent's GOODS arm untestable: a tavern with no
 // product makes no ale, IsActive's desc+0x25 arm never finds a matching good, and the
 // source can never register. Wiring the panel is the prerequisite for that A/B.
-namespace consumeproduceui_sa {
-    static uint32_t s_cpDesc = 0, s_combo = 0, s_rawMat = 0;
-    void EnsureTypeIds() {
-        // .rdata globals the faithful bodies dereference unconditionally. Note
-        // g_TypeId_ConsumeProduceComponent is MISNAMED: it is bound to 0x1401c7388,
-        // which is the ConsumeProduce*Description* id -- and that is correct, because
-        // the object it guards is the description at component+0x18. Retail reads the
-        // same global at 0x14005f445. Do not "fix" the cast to the component id.
-        if (!g_TypeId_ConsumeProduceComponent || !*g_TypeId_ConsumeProduceComponent) {
-            s_cpDesc = ConsumeProduceDescription::TypeId();
-            if (s_cpDesc) g_TypeId_ConsumeProduceComponent = &s_cpDesc;
-        }
-        if (!g_TypeId_ComboElement || !*g_TypeId_ComboElement) {
-            s_combo = ::Object::ResolveTypeIdByNameLazy("ComboElement");
-            if (s_combo) g_TypeId_ComboElement = &s_combo;
-        }
-        if (!g_TypeId_RawMaterialDescription || !*g_TypeId_RawMaterialDescription) {
-            s_rawMat = RawMaterialDescription::TypeId();
-            if (s_rawMat) g_TypeId_RawMaterialDescription = &s_rawMat;
-        }
-    }
-    bool Ready() {
-        return g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
-            && g_TypeId_ComboElement && *g_TypeId_ComboElement
-            && g_TypeId_ProgressElement && *g_TypeId_ProgressElement
-            && g_TypeId_ConsumeProduceComponent && *g_TypeId_ConsumeProduceComponent
-            && g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription;
-    }
-}  // namespace uistub_ConsumeProduceUI
+// ENDGAME B.3.9: ComponentEntity / UI::ComboElement / UI::ProgressElement /
+// ConsumeProduceDescription (was g_TypeId_ConsumeProduceComponent, bound to 0x1401c7388
+// which really is ConsumeProduceDescription's cell -- the guarded object at
+// component+0x18 is that description, matching Table 1's authority) / RawMaterialDescription
+// all have a ported TypeId() now, so the EnsureTypeIds()/Ready() lazy-cache is dead.
 
 // ============================================================
 // ConsumeProduceUI::Slot4 (vtable +0x20) — Setup/refresh
@@ -81,8 +58,6 @@ namespace consumeproduceui_sa {
 
 // [4] 0x14005f3d0
 void ConsumeProduceUI::OnCreated() {
-    consumeproduceui_sa::EnsureTypeIds();
-    if (!consumeproduceui_sa::Ready()) return;
     uintptr_t s = (uintptr_t)this;
 
     // Bail on a dead / marked-for-removal datasource before probing it (see Slot7).
@@ -90,7 +65,7 @@ void ConsumeProduceUI::OnCreated() {
 
     // Get entity from controller data (+0x28)
     void* entity = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
 
     // Wrap entity in InternalBasePtr
@@ -104,7 +79,7 @@ void ConsumeProduceUI::OnCreated() {
 
     // Get Description at component+0x18, check ConsumeProduceComponent
     void* desc = *(void**)((uintptr_t)component + 0x18);
-    bool isCPComp = fn_IsDerivedFrom(desc, *g_TypeId_ConsumeProduceComponent);
+    bool isCPComp = fn_IsDerivedFrom(desc, ConsumeProduceDescription::TypeId());
     void* cpComp = isCPComp ? desc : nullptr;
 
     // Find "comboProduct" element via DialogInstance
@@ -135,7 +110,7 @@ void ConsumeProduceUI::OnCreated() {
         void* foundElem = *(void**)elemBuf;
 
         // IsDerivedFrom ComboElement type check
-        bool isCombo = fn_IsDerivedFrom(foundElem, *g_TypeId_ComboElement);
+        bool isCombo = fn_IsDerivedFrom(foundElem, UI::ComboElement::TypeId());
         void* comboRaw = isCombo ? foundElem : nullptr;
         uint64_t comboBP = 0;
         new (&comboBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(comboRaw));   // B.3.3 bridge
@@ -186,9 +161,9 @@ void ConsumeProduceUI::OnCreated() {
                 void* subEntry = *(void**)(subArray + (uintptr_t)j * 8);
                 // Call GetTypeId virtual (vtable+0x10) and compare
                 int typeId = reinterpret_cast<Object::Base*>(subEntry)->Type();  // B.3.8 bridge
-                if (typeId == (int)*g_TypeId_RawMaterialDescription) {
+                if (typeId == (int)RawMaterialDescription::TypeId()) {
                     // Verify with IsDerivedFrom
-                    if (fn_IsDerivedFrom((void*)subEntry, *g_TypeId_RawMaterialDescription)) {
+                    if (fn_IsDerivedFrom((void*)subEntry, RawMaterialDescription::TypeId())) {
                         resourceDesc = subEntry;
                     }
                     break;
@@ -248,7 +223,7 @@ void ConsumeProduceUI::OnCreated() {
         void* progElem = *(void**)elemBuf2;
 
         // Check ProgressElement type
-        bool isProgress = fn_IsDerivedFrom(progElem, *g_TypeId_ProgressElement);
+        bool isProgress = fn_IsDerivedFrom(progElem, UI::ProgressElement::TypeId());
         void* progRaw = isProgress ? progElem : nullptr;
         uint64_t progBP = 0;
         new (&progBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(progRaw));   // B.3.3 bridge
@@ -271,8 +246,6 @@ void ConsumeProduceUI::OnCreated() {
 
 // [7] 0x14005f1f0
 void ConsumeProduceUI::OnUpdateLayout() {
-    consumeproduceui_sa::EnsureTypeIds();
-    if (!consumeproduceui_sa::Ready()) return;
     // Bail if the datasource entity is gone or marked-for-removal — otherwise the
     // IsDerivedFrom below runs on a dying entity (crash class 2026-07-21). Reliable
     // now that removals are one-frame-deferred (entitylist.cpp Step 0): the entity
@@ -285,7 +258,7 @@ void ConsumeProduceUI::OnUpdateLayout() {
 
     // Get entity from controller data (+0x28)
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
 
     // Wrap entity in InternalBasePtr
@@ -299,7 +272,7 @@ void ConsumeProduceUI::OnUpdateLayout() {
 
     // Get sub-component at +0x18 of found component, check if ConsumeProduceComponent
     void* subComp = *(void**)((uintptr_t)component + 0x18);
-    bool isCPComp = fn_IsDerivedFrom(subComp, *g_TypeId_ConsumeProduceComponent);
+    bool isCPComp = fn_IsDerivedFrom(subComp, ConsumeProduceDescription::TypeId());
     void* cpComp = isCPComp ? subComp : nullptr;
 
     // Calculate production ratio: 1.0 - currentTicks / totalTicks
@@ -331,13 +304,11 @@ void ConsumeProduceUI::OnUpdateLayout() {
 // [9] 0x14005f330
 void ConsumeProduceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4,
                                       int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    consumeproduceui_sa::EnsureTypeIds();
-    if (!consumeproduceui_sa::Ready()) return;
     if (param3 != 0x14 || param4 != 22000) return;
 
     // Get entity from controller data (+0x28)
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
 
     // Wrap entity in InternalBasePtr

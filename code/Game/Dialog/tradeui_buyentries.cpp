@@ -58,6 +58,9 @@
 #include "object/Internal.h"   // Object::Base::Type (B.3.8 callers)
 #include "engine_funcs.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
+#include "Component/ComponentDescription.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/SelectDescription.h"   // X::TypeId() (B.3.9 CG2)
 #include <cstdint>
 
 namespace {
@@ -163,9 +166,8 @@ extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray) {
 
     // ── 2 & 3. Walk every ComponentDescription the ExternalFactory knows ──────
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
-    if (!g_TypeId_ComponentDescription_FC) return;
     void* factory = *g_pExternalFactorySingleton;
-    const uint32_t tidComponentDesc = *g_TypeId_ComponentDescription_FC;
+    const uint32_t tidComponentDesc = ComponentDescription::TypeId();
 
     const uint32_t rawMatMask = *reinterpret_cast<const uint32_t*>(M + 0x10);
     const int32_t* selectIds  = *reinterpret_cast<const int32_t* const*>(M + 0x30);
@@ -181,8 +183,7 @@ extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray) {
 
         if (desc) {
             // 2. Raw-material category match against the merchant's M+0x10 mask.
-            void* rawMat = g_TypeId_RawMaterialDescription
-                ? FindComp(desc, *g_TypeId_RawMaterialDescription) : nullptr;
+            void* rawMat = FindComp(desc, RawMaterialDescription::TypeId());
             if (rawMat) {
                 const uint32_t flags = *reinterpret_cast<const uint32_t*>(
                     reinterpret_cast<uint8_t*>(rawMat) + 0x5c);
@@ -202,8 +203,7 @@ extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray) {
             // 3. Select-type id match. Note the append is INSIDE the id loop, so an
             // entity whose id appears more than once in the merchant's list is added
             // more than once — retail behaviour, deliberately not de-duplicated.
-            void* sel = g_TypeId_SelectDescription
-                ? FindComp(desc, *g_TypeId_SelectDescription) : nullptr;
+            void* sel = FindComp(desc, SelectDescription::TypeId());
             if (sel) {
                 const int32_t selId = *reinterpret_cast<const int32_t*>(
                     reinterpret_cast<uint8_t*>(sel) + 0x40);

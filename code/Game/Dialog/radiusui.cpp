@@ -12,6 +12,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/RadiusDescription.h"   // X::TypeId() (B.3.9 CG2)
 
 // ============================================================
 // RadiusUI::Slot6 (vtable +0x30) — Remove radius overlay
@@ -39,7 +41,7 @@ void RadiusUI::OnOpened() {
 
     // Get entity at +0x28, check IsA ComponentEntity
     void* entity = (void*)*(uint64_t*)(s + 0x28);
-    uint32_t entityTypeId = g_TypeId_ComponentEntity ? *g_TypeId_ComponentEntity : 0;
+    uint32_t entityTypeId = ComponentEntity::TypeId();
     void* checkedEntity = nullptr;
     if (fn_IsDerivedFrom(entity, entityTypeId)) {
         checkedEntity = entity;
@@ -59,7 +61,10 @@ void RadiusUI::OnOpened() {
     uint64_t subObj = *(uint64_t*)(entityBasePtr + 0x28);
 
     // Search sub-object's component array (+0x28 base, +0x30 count) for RadiusComponent
-    uint32_t radiusTypeId = g_TypeId_RadiusComponent ? *g_TypeId_RadiusComponent : 0;
+    // ENDGAME B.3.9 CG2: g_TypeId_RadiusComponent binds cell 0x1401c4870, whose retail
+    // class is RadiusDescription (Table 1 NAME LIE — the global's name says
+    // RadiusComponent).
+    uint32_t radiusTypeId = RadiusDescription::TypeId();
     void* radiusComp = nullptr;
     int count = *(int*)(subObj + 0x30);
     uint64_t arrayBase = *(uint64_t*)(subObj + 0x28);
