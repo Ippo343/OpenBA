@@ -106,11 +106,11 @@ void* ControlUIConfig::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(ControlUIConfig, "_ZTV15ControlUIConfig")
 
-// D5: no by-address reader of 0x14015b3e0 remains in the tree; the row is kept
-// (serving the compiler table) only because reg_controlui.cpp calls this
-// function — the closing pass deletes both.
+// B38 D5: the vtable row this registered had no by-address reader left and is
+// gone (CB2 caller batch); only the call from standalone keeps the empty body.
 extern "C" void RegisterControlUIConfigVtable() {
-    RegisterExeAddr(0x14015b3e0, reinterpret_cast<uintptr_t>(ControlUIConfig::Vtable()));
+    // Emptied by the B.3.8 CB2 caller batch: the row had no by-address reader left
+    // (CALLER_SURFACE section 5). The closing pass deletes this function and its call.
 }
 
 DEFINE_EXE_TYPE(ControlUIConfig, "UI::DialogControllerConfig")

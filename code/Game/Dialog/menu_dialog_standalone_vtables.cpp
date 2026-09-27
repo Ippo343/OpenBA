@@ -64,8 +64,6 @@
 #include <cstdint>
 
 extern "C" void RegisterMenuDialogVtables() {
-    RegisterExeAddr(0x14015b020,
-                    reinterpret_cast<uintptr_t>(AchievementDialog::Vtable()));
-    RegisterExeAddr(0x14015beb0,
-                    reinterpret_cast<uintptr_t>(GoalDialog::Vtable()));
+    // Emptied by the B.3.8 CB2 caller batch: the row had no by-address reader left
+    // (CALLER_SURFACE section 5). The closing pass deletes this function and its call.
 }
