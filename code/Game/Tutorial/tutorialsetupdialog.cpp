@@ -120,7 +120,7 @@ bool TutorialSetupDialog::Serialize(void* stream) {
     // the factory generation moved, Find the name and keep it if it IsDerivedFrom
     // the building description type.
     if (static_cast<int>(ser->GetDirection()) == 0) {
-        void* factory = *g_pExternalFactorySingleton;
+        void* factory = ::Object::ExternalFactory::_singleton;
         if (toolbarStamp != *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(factory) + 8)) {
             System::Filename filenameBuf(*reinterpret_cast<const System::String*>(&toolbarName));   // B.3.1 bridge
             ::Object::ExternalFactory* efactory =

@@ -36,8 +36,8 @@
 // strategy as ResolveExternalByName_Impl's g_TypeId_ComponentDescription_FC guard.
 void StatGoal_ResolveExternalPtr(void* externalRef) {
     uintptr_t s = reinterpret_cast<uintptr_t>(externalRef);
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
-    void* factory = *g_pExternalFactorySingleton;
+    if (!::Object::ExternalFactory::_singleton) return;
+    void* factory = ::Object::ExternalFactory::_singleton;
     ::Object::ExternalFactory* efactory =
         reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
 

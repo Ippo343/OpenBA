@@ -74,8 +74,8 @@ static void TutRestrict_ResolveRefOrLoad(void* ref) {
     uintptr_t r = (uintptr_t)ref;
     if (*(void**)(r + 0x10)) return;            // hit — nothing to do
 
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
-    void* factory = *g_pExternalFactorySingleton;
+    if (!::Object::ExternalFactory::_singleton) return;
+    void* factory = ::Object::ExternalFactory::_singleton;
 
     const char* name = *(const char* const*)r;
     if (!name || !name[0]) return;

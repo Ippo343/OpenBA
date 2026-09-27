@@ -26,6 +26,7 @@
 #include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "Player/Tool.h"          // Tool::TypeId()        (ENDGAME B.3.9 RF, cell 0x1401c6eb8)
 #include "Player/ToolSetting.h"   // ToolSetting::TypeId() (ENDGAME B.3.9 RF, cell 0x1401c6ef0)
+#include "object/TypeInfo.h"   // ENDGAME B.3.9 SS2: Object::Factory::_singleton
 
 // ============================================================
 // Resolved helpers
@@ -89,7 +90,6 @@ typedef void* (*fn_b60_CreateObject_t)(void* factory, uint32_t typeId);
 typedef bool  (*fn_b60_IsDerived_t)(void* obj, uint32_t typeId);
 typedef void  (*fn_b60_IBPCtor_t)(void* dst, void* src);
 typedef void  (*fn_b60_DeletePtr_t)(void* ibp);
-static void**            s_b60_pFactoryHolder = nullptr; // [0x140152760] -> &factory
 static fn_b60_CreateObject_t s_b60_CreateObject = nullptr; // slot 0x140152778
 static fn_b60_IsDerived_t    s_b60_IsDerived = nullptr;    // slot 0x140152a98
 static fn_b60_IBPCtor_t      s_b60_IBPCtor = nullptr;      // slot 0x140152a90
@@ -100,8 +100,6 @@ static bool s_b60Resolved = false;
 static void EnsureB60() {
     if (s_b60Resolved) return;
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152760);
-    if (slot) s_b60_pFactoryHolder = *reinterpret_cast<void***>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152778);
     if (slot) s_b60_CreateObject = *reinterpret_cast<fn_b60_CreateObject_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152a98);
@@ -196,7 +194,7 @@ void NomadComp_RebuildController_b60(int64_t param_1, int64_t param_2) {
     }
     if (found == nullptr) return;  // defensive (orig assumes a node)
 
-    void* factory = s_b60_pFactoryHolder ? *s_b60_pFactoryHolder : nullptr;
+    void* factory = ::Object::Factory::_singleton;   // retail: **[0x140152760]
 
     // --- CreateObject(node->key2) validated against controller type ---
     void* obj = (factory && s_b60_CreateObject) ? s_b60_CreateObject(factory, found[2]) : nullptr;

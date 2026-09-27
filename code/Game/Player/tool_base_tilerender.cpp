@@ -194,8 +194,7 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
     void* material = nullptr;
     {
         System::Filename fname("Terrain/Selection.rsc");
-        void* factory = (g_pExternalFactorySingleton && *g_pExternalFactorySingleton)
-                            ? *g_pExternalFactorySingleton : nullptr;
+        void* factory = ::Object::ExternalFactory::_singleton;
         ::Object::ExternalFactory* efactory =
             reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
         void* obj = (factory)

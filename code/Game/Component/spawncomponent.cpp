@@ -24,6 +24,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <new>
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "system/Timer.h"   // ENDGAME B.3.9 SS2: System::Timer::_secondsPerTick
 
 // ============================================================
 // Resolved helpers
@@ -593,7 +594,7 @@ void SpawnComponent::Update(void* timeV) {
 
         // Convert spawn interval to ticks
         float intervalSecs = *(float*)((uintptr_t)spawnIntervalComp + 0x28) * SECS_PER_SEASON;
-        int64_t intervalTicks = (int64_t)((double)intervalSecs / *g_Timer_secondsPerTick);
+        int64_t intervalTicks = (int64_t)((double)intervalSecs / ::System::Timer::_secondsPerTick);
 
         pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)this + 0x28) + byteOffset);
         while (intervalTicks > 0 && *pTimer >= intervalTicks) {

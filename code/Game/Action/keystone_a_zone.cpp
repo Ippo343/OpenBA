@@ -154,7 +154,7 @@ int RoadTool_helper_6e30(int64_t param_1, uint param_2, uint64_t param_3,
             }
         }
         // Application::Application::YieldToThreads(*g_pAppSingleton)
-        if (g_pAppSingleton) reinterpret_cast< ::Application::Application*>(*g_pAppSingleton)->YieldToThreads();   // B.3.7 bridge
+        ::Application::Application::_singleton->YieldToThreads();   // B.3.7 bridge
         reinterpret_cast<System::CriticalSection*>(param_1 + 0x30)->Lock();   // B.3.4b bridge
         if (*reinterpret_cast<int*>(param_1 + 0x70) > 0 &&
             (*reinterpret_cast<uint8_t*>(param_1 + 8) & 1) == 0) {

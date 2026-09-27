@@ -110,10 +110,9 @@ extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint6
     {
         System::Filename fname("Dialog/CreateBar.rsc");
         void* obj = nullptr;
-        if (g_pExternalFactorySingleton &&
-            *g_pExternalFactorySingleton) {
+        if (::Object::ExternalFactory::_singleton) {
             ::Object::ExternalFactory* efactory =
-                reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton);  // B.3.3 bridge
+                ::Object::ExternalFactory::_singleton;  // B.3.3 bridge
             obj = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fname)));
         }
         if (obj && fn_IsDerivedFrom &&

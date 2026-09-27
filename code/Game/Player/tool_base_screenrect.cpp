@@ -38,6 +38,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
 // One-shot screen-rect projection diagnostics (BANISHED_TOOL_DIAG). A/B-safe: only
 // emits when the placement pick chain is active + the env is set. Bounded line count.
 
@@ -81,16 +82,10 @@ static inline uintptr_t GameWorld() {
 }
 
 // Display object = Video::Device; +4=width, +8=height.
-// The original exe reads it via **g_pSingletonExref_151a80 (slot -> ptr -> Device),
-// but that exref is unresolved in standalone, so prefer *g_pVideoDeviceSingleton, the
-// same Device instance the working GetMouseRay path uses. Fall back to the exref
-// double-deref.
+// The original exe reads it via **exref 0x140151a80 (slot -> cell -> Device); the
+// cell is the class static Video::Device::_singleton (ENDGAME B.3.9 SS2).
 static inline void* Display() {
-    if (g_pVideoDeviceSingleton && *g_pVideoDeviceSingleton)
-        return *g_pVideoDeviceSingleton;
-    if (!g_pSingletonExref_151a80) return nullptr;
-    void* p = *g_pSingletonExref_151a80;
-    return p ? *reinterpret_cast<void**>(p) : nullptr;
+    return ::Video::Device::_singleton;
 }
 
 // CharacterComponent_impl_f3e0 (0x14009f3e0, registered) = grid->world conversion.
