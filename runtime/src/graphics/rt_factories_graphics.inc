@@ -70,66 +70,6 @@ extern "C" void* RtFactNew_Graphics_GeneratedImageBuffer()          { return RtF
 extern "C" void* RtFactIP_Graphics_GeneratedImageBuffer(void* p)    { return RtFactoryInPlace(kClsGraphics_GeneratedImageBuffer, p); }
 
 // --------------------------------------------------------------------------
-// Graphics::GraphicsMesh
-//   ?CreateNewObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@XZ  0x180012480
-//   ?CreateInPlaceObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z  0x180012500
-// --------------------------------------------------------------------------
-static const RtCtorStep kStepsGraphics_GraphicsMesh_New[] = {
-    { RtFactOp::Call, 8, 0, 0, "??0GraphicsMesh@Graphics@@QEAA@XZ", 0x1800124e1ull },
-    { RtFactOp::End, 0, 0, 0, nullptr, 0 },
-};
-static const RtCtorStep kStepsGraphics_GraphicsMesh_IP[] = {
-    { RtFactOp::Call, 8, 0, 0, "??0GraphicsMesh@Graphics@@QEAA@XZ", 0x180012503ull },
-    { RtFactOp::End, 0, 0, 0, nullptr, 0 },
-};
-static uint64_t kCountGraphics_GraphicsMesh[3];
-static const RtFactoryClass kClsGraphics_GraphicsMesh = {
-    "Graphics::GraphicsMesh", 0x98, 8,
-    kStepsGraphics_GraphicsMesh_New, kStepsGraphics_GraphicsMesh_IP,
-    0x180012480ull, 0x180012500ull, kCountGraphics_GraphicsMesh,
-};
-extern "C" void* RtFactNew_Graphics_GraphicsMesh()          { return RtFactoryNew(kClsGraphics_GraphicsMesh); }
-extern "C" void* RtFactIP_Graphics_GraphicsMesh(void* p)    { return RtFactoryInPlace(kClsGraphics_GraphicsMesh, p); }
-
-// --------------------------------------------------------------------------
-// Graphics::Material
-//   ?CreateNewObject@Material@Graphics@@SAPEAVBase@Object@@XZ  0x1800119c0
-//   ?CreateInPlaceObject@Material@Graphics@@SAPEAVBase@Object@@PEAX@Z  0x180011a70
-// --------------------------------------------------------------------------
-static const RtCtorStep kStepsGraphics_Material_New[] = {
-    { RtFactOp::Vptr, 8, 0x00, 0, "??_7Base@Object@@6B@", 0x180011a23ull },
-    { RtFactOp::Vptr, 8, 0x00, 0, "??_7External@Object@@6B@", 0x180011a2dull },
-    { RtFactOp::Imm, 8, 0x08, 0x0ull, nullptr, 0x180011a3bull },
-    { RtFactOp::Imm, 8, 0x10, 0x0ull, nullptr, 0x180011a3eull },
-    { RtFactOp::Imm, 8, 0x18, 0x0ull, nullptr, 0x180011a42ull },
-    { RtFactOp::Vptr, 8, 0x00, 0, "??_7Material@Graphics@@6B@", 0x180011a4dull },
-    { RtFactOp::Imm, 4, 0x20, 0x0ull, nullptr, 0x180011a50ull },
-    { RtFactOp::Imm, 8, 0x28, 0x0ull, nullptr, 0x180011a53ull },
-    { RtFactOp::Imm, 8, 0x30, 0x0ull, nullptr, 0x180011a57ull },
-    { RtFactOp::End, 0, 0, 0, nullptr, 0 },
-};
-static const RtCtorStep kStepsGraphics_Material_IP[] = {
-    { RtFactOp::Vptr, 8, 0x00, 0, "??_7Base@Object@@6B@", 0x180011a8dull },
-    { RtFactOp::Vptr, 8, 0x00, 0, "??_7External@Object@@6B@", 0x180011a97ull },
-    { RtFactOp::Imm, 8, 0x08, 0x0ull, nullptr, 0x180011aa5ull },
-    { RtFactOp::Imm, 8, 0x10, 0x0ull, nullptr, 0x180011aa8ull },
-    { RtFactOp::Imm, 8, 0x18, 0x0ull, nullptr, 0x180011aacull },
-    { RtFactOp::Vptr, 8, 0x00, 0, "??_7Material@Graphics@@6B@", 0x180011ab7ull },
-    { RtFactOp::Imm, 4, 0x20, 0x0ull, nullptr, 0x180011abaull },
-    { RtFactOp::Imm, 8, 0x28, 0x0ull, nullptr, 0x180011abdull },
-    { RtFactOp::Imm, 8, 0x30, 0x0ull, nullptr, 0x180011ac1ull },
-    { RtFactOp::End, 0, 0, 0, nullptr, 0 },
-};
-static uint64_t kCountGraphics_Material[3];
-static const RtFactoryClass kClsGraphics_Material = {
-    "Graphics::Material", 0x38, 8,
-    kStepsGraphics_Material_New, kStepsGraphics_Material_IP,
-    0x1800119c0ull, 0x180011a70ull, kCountGraphics_Material,
-};
-extern "C" void* RtFactNew_Graphics_Material()          { return RtFactoryNew(kClsGraphics_Material); }
-extern "C" void* RtFactIP_Graphics_Material(void* p)    { return RtFactoryInPlace(kClsGraphics_Material, p); }
-
-// --------------------------------------------------------------------------
 // Graphics::MaterialInstance
 //   ?CreateNewObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@XZ  0x180002900
 //   ?CreateInPlaceObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@PEAX@Z  0x1800029d0
@@ -223,10 +163,6 @@ static const RtFactoryReg kRegs[] = {
       "?CreateInPlaceObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x18001f120ull, (void*)&RtFactIP_Graphics_FrameCopyImageBuffer, &kClsGraphics_FrameCopyImageBuffer },
     { "?CreateNewObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@XZ", 0x18001edf0ull, (void*)&RtFactNew_Graphics_GeneratedImageBuffer,
       "?CreateInPlaceObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x18001ee00ull, (void*)&RtFactIP_Graphics_GeneratedImageBuffer, &kClsGraphics_GeneratedImageBuffer },
-    { "?CreateNewObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@XZ", 0x180012480ull, (void*)&RtFactNew_Graphics_GraphicsMesh,
-      "?CreateInPlaceObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180012500ull, (void*)&RtFactIP_Graphics_GraphicsMesh, &kClsGraphics_GraphicsMesh },
-    { "?CreateNewObject@Material@Graphics@@SAPEAVBase@Object@@XZ", 0x1800119c0ull, (void*)&RtFactNew_Graphics_Material,
-      "?CreateInPlaceObject@Material@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180011a70ull, (void*)&RtFactIP_Graphics_Material, &kClsGraphics_Material },
     { "?CreateNewObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@XZ", 0x180002900ull, (void*)&RtFactNew_Graphics_MaterialInstance,
       "?CreateInPlaceObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x1800029d0ull, (void*)&RtFactIP_Graphics_MaterialInstance, &kClsGraphics_MaterialInstance },
     { "?CreateNewObject@ReflectionImageBuffer@Graphics@@SAPEAVBase@Object@@XZ", 0x1800222c0ull, (void*)&RtFactNew_Graphics_ReflectionImageBuffer,

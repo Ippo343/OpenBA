@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
@@ -69,27 +70,10 @@ namespace {
 // ---------------------------------------------------------------------------
 using Graphics::GraphicsMesh;
 
-// The two constants the ctor writes as raw bit patterns. Spelled as bits and
-// then bit-cast, not as decimal floats: 0x461c4000 and 0x4cbebc20 are what the
-// listing holds, and a decimal spelling invites a rounding argument.
-constexpr uint32_t kBits_1_0     = 0x3f800000u;   //  1.0f
-constexpr uint32_t kBits_neg1_0  = 0xbf800000u;   // -1.0f
-constexpr uint32_t kBits_10000   = 0x461c4000u;   //  10000.0f
-constexpr uint32_t kBits_1e8     = 0x4cbebc20u;   //  1e8f
-constexpr uint32_t kBits_neg1e8  = 0xccbebc20u;   // -1e8f
-
-// The four vtables the ctor stamps in sequence, and the two the dtor restores.
-// MSVC emits one store per level of the hierarchy even though only the last of
-// them survives; all four are transcribed (see imagebuffer_derived.cpp's note
-// on the same idiom).
-constexpr uintptr_t kVtBase             = 0x180154788ull;  // ??_7Base@Object@@6B@
-constexpr uintptr_t kVtExternal         = 0x1801547a0ull;  // ??_7External@Object@@6B@
-constexpr uintptr_t kVtCompiledExternal = 0x180154a30ull;  // ??_7CompiledExternal@Object@@6B@
-constexpr uintptr_t kVtGraphicsMesh     = 0x180154cc0ull;  // ??_7GraphicsMesh@Graphics@@6B@
-
-void* Vt(uintptr_t va) {
-    return reinterpret_cast<void*>(ResolveAddr(Module::Runtime, va));
-}
+// ENDGAME B.3.9 block GFX: the ctor's bit-pattern constants and the four
+// minted vtable addresses the ctor / dtor doors stamped are gone with those
+// doors; the real `GraphicsMesh()` (GraphicsMesh.h) writes the same bits and
+// the compiler stamps the tables.
 
 // ---------------------------------------------------------------------------
 // `?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A` — 0x1801fa708,
@@ -107,12 +91,6 @@ const uint8_t* TypeInfoGraphicsMesh() {
 using VoidThisFn  = void  (*)(void*);
 using PtrThisFn   = void* (*)(void*);
 using SerMemberFn = void  (*)(void*, Serializer*);
-
-// `??1CompiledExternal@Object@@UEAA@XZ` — retail 0x1800bc950, the dtor's tail
-// jump. PORTED (runtime/src/object/), reached by NAME.
-void CompiledExternalDtor(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "??1CompiledExternal@Object@@UEAA@XZ")(p);
-}
 
 // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` — retail 0x1800c9930,
 // PORTED (system/string.cpp). ASKED FOR BY ADDRESS DELIBERATELY: string.cpp
@@ -290,129 +268,18 @@ void CodecSkip(ReaderWriter* rw) {
 struct ArrayHdrView { uint8_t* data; int32_t size; int32_t capacity; };
 static_assert(sizeof(ArrayHdrView) == 0x10, "Array<T> header is 0x10 bytes");
 
-// The ctor's immediates are spelled as BIT PATTERNS (see kBits_* above) and
-// bit-cast, never as decimal floats, so no rounding argument can arise.
-float FromBits(uint32_t bits) {
-    float f; std::memcpy(&f, &bits, sizeof f); return f;
-}
-::Vector3 Bits3(uint32_t bits) {
-    const float f = FromBits(bits);
-    ::Vector3 v; v.x = f; v.y = f; v.z = f; return v;
-}
-
-// Slot 0 of Object::Base is the deleting destructor: flag 0 destroys IN PLACE,
-// flag 1 destroys and frees. Dispatched virtually on purpose.
-void CallSlot0(void* self, unsigned flags) {
-    void** const vt = *reinterpret_cast<void***>(self);
-    reinterpret_cast<void* (*)(void*, unsigned)>(vt[0])(self, flags);
-}
-
 // ============================================================================
 // ??0GraphicsMesh@Graphics@@QEAA@XZ                  retail 0x1800ff170
 // ============================================================================
 // Four vptr stamps, three zeroed External qwords, and twenty-odd immediates.
-// The FIRST THREE STAMPS ARE DEAD — each is overwritten by the next with no
-// virtual dispatch in between — and all four are transcribed for the reason
-// wave23_lane_gfxbody.cpp gives: they are what the bytes do.
-//
-// *** THE ctor DOES NOT CALL A BASE CONSTRUCTOR. *** It open-codes the whole
-// chain (`Object::Base`, `Object::External`, `Object::CompiledExternal`) as the
-// four stamps plus three zero stores. A transcription that "helpfully" called
-// `??0CompiledExternal@Object@@` instead would run that body's OWN stores,
-// which are not these.
-//
-// AND THAT IS WHY THIS IS NOT A MEMBER (B4b-2, ENDGAME section B.1 decision 3):
-// the four stamps name the MINTED tables, which is right for every object that
-// reaches this body, and a real constructor would stamp GCC's instead.
-// `Graphics::GraphicsMesh::Construct()` and `Reconstruct()` call it.
-//
-// `MOV RAX,RCX` at the end: it returns `this`.
+// It open-codes the whole chain (`Object::Base`, `Object::External`,
+// `Object::CompiledExternal`) as the four stamps plus three zero stores.
+// ENDGAME B.3.9 block GFX: that IS the real `GraphicsMesh()` now (the stamps
+// and External's stores the compiler's, the immediates in GraphicsMesh.h); the
+// batch-6 `ConstructBody` and its ??0 door are gone.
 // ============================================================================
-void ConstructBody(GraphicsMesh* self) {
-    void** const vp = reinterpret_cast<void**>(self);
-
-    *vp = Vt(kVtBase);                                        // 0x1800ff181
-    *vp = Vt(kVtExternal);                                    // 0x1800ff18b
-    self->_path.data      = nullptr;                          // LEA RAX,[RCX+8]; [RAX]=0
-    self->_refs._data     = nullptr;                          // +0x10
-    self->_refs._size     = 0;                                // +0x18 (one qword with cap)
-    self->_refs._capacity = 0;
-    *vp = Vt(kVtCompiledExternal);                            // 0x1800ff1ab
-    *vp = Vt(kVtGraphicsMesh);                                // 0x1800ff1b5
-
-    self->_name.data = nullptr;                               // +0x20, the String
-
-    self->_vector28 = Bits3(kBits_1_0);                       // +0x28  ( 1, 1, 1)
-    self->_vector34 = Bits3(kBits_neg1_0);                    // +0x34  (-1,-1,-1)
-    self->_field40         = 1;                               // +0x40
-    self->_scale           = FromBits(kBits_1_0);             // +0x44  1.0f
-    self->_maxDepthDistance = FromBits(kBits_10000);          // +0x48  10000.0f
-
-    self->_detailLevels._data     = nullptr;                  // three Array headers,
-    self->_detailLevels._size     = 0;                        // six qword zero stores
-    self->_detailLevels._capacity = 0;
-    self->_nodes._data     = nullptr;
-    self->_nodes._size     = 0;
-    self->_nodes._capacity = 0;
-    self->_skinMaterials._data     = nullptr;
-    self->_skinMaterials._size     = 0;
-    self->_skinMaterials._capacity = 0;
-
-    self->_aabb.min = Bits3(kBits_1e8);                       // +0x80   1e8f x3
-    self->_aabb.max = Bits3(kBits_neg1e8);                    // +0x8c  -1e8f x3
-}
 
 }  // namespace
-
-// ============================================================================
-// ??1GraphicsMesh@Graphics@@UEAA@XZ                  retail 0x1800ff270
-// ============================================================================
-// Restamp to GraphicsMesh's own table, destroy the three arrays IN RETAIL'S
-// ORDER (+0x70, then +0x60, then +0x50 — the REVERSE of declaration order, as a
-// destructor should be, and the order is transcribed rather than re-derived),
-// release the name String, restamp to CompiledExternal and tail-jump its dtor.
-//
-// THIS STAYS A HAND-WRITTEN DOOR AND `~GraphicsMesh()` IS EMPTY — the
-// `Object::External` / `AnimationGroup` precedent. The two restamps name the
-// MINTED tables, which is right for the minted objects that are the only ones
-// alive today, and the three explicit `~Array` calls plus the `str-8` release
-// are retail's own decomposition: a compiler-emitted destructor chain would
-// stamp GCC's tables and run each `~Array` a SECOND time.
-//
-// THE STRING RELEASE IS THE `str-4` / `str-8` IDIOM and its two arms leave the
-// slot holding DIFFERENT THINGS — the asymmetry array_destroy.cpp's Body B
-// documents:
-//     if (p) { if (--p[-1] == 0) { slot = p - 8; MemFree(slot); }
-//              else               slot = nullptr; }
-// Retail really does store `this+0x20 -= 8` and then free THAT (0x1800ff2c0 ..
-// 0x1800ff2c9), and really does store 0 on the surviving arm (0x1800ff2d0).
-// Writing `slot = nullptr` on both arms would leave a freed block's address
-// nowhere and would not match; writing neither would leave a dangling pointer.
-// ============================================================================
-extern "C" void RtGraphics_GraphicsMesh_Dtor(void* selfv) {
-    GraphicsMesh* const self = reinterpret_cast<GraphicsMesh*>(selfv);  // B.3.5 bridge
-
-    *reinterpret_cast<void**>(self) = Vt(kVtGraphicsMesh);     // 0x1800ff286
-
-    ByAddr1(0x180014160ull, &self->_skinMaterials);            // ~Array<Array<T>>
-    ByAddr1(0x180014090ull, &self->_nodes);                    // ~Array<Node>
-    ByAddr1(0x180013fb0ull, &self->_detailLevels);             // ~Array<DetailLevel>
-
-    char* const name = self->_name.data;
-    if (name != nullptr) {
-        int32_t* const refs = reinterpret_cast<int32_t*>(name) - 1;
-        --*refs;
-        if (*refs == 0) {
-            self->_name.data = name - 8;                       // ADD qword [RBX+0x20],-8
-            MemFree(self->_name.data);
-        } else {
-            self->_name.data = nullptr;                        // MOV qword [RBX+0x20],0
-        }
-    }
-
-    *reinterpret_cast<void**>(self) = Vt(kVtCompiledExternal); // 0x1800ff2d8
-    CompiledExternalDtor(self);                                // JMP 0x1800bc950
-}
 
 // ############################################################################
 // `Graphics::GraphicsMesh`'s member bodies. Their own `namespace Graphics { }`
@@ -447,73 +314,96 @@ int32_t GraphicsMesh::GetFileVersion() const { return 0x3415; }
 // [7] ?Destruct@GraphicsMesh@Graphics@@UEAAXXZ  0x180012540
 //     `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]` — slot 0 with flags 0, dispatched
 //     VIRTUALLY on purpose: a subclass's deleting destructor is what has to run.
-void GraphicsMesh::Destruct() { CallSlot0(this, 0u); }
+void GraphicsMesh::Destruct() { DeletingDtor(0u); }
 
 // [8] ?Construct@GraphicsMesh@Graphics@@UEAAPEAVExternal@Object@@XZ 0x180012530
-//     `TEST RCX,RCX; JNZ 0x1800ff170; XOR EAX,EAX`. The null test lives in the
-//     DOOR, which is where retail put it.
+//     `TEST RCX,RCX; JNZ 0x1800ff170; XOR EAX,EAX` -- the constructor in place.
+//     (The null test sat in the retired door; a virtual call always has a
+//     `this`.) `::new`: the class declares its own, undefined, placement new.
 Object::External* GraphicsMesh::Construct() {
-    ConstructBody(this);
-    return this;
+    return ::new (this) GraphicsMesh();
 }
 
 // [6] ?Reconstruct@GraphicsMesh@Graphics@@UEAAPEAVExternal@Object@@XZ 0x180012510
 //     Slot 0 with flags 0 (destroy IN PLACE, not free), then the ctor on the
-//     same storage. NO null test, unlike Construct one slot over; that asymmetry
-//     is retail's and is kept.
+//     same storage.
 Object::External* GraphicsMesh::Reconstruct() {
-    CallSlot0(this, 0u);
-    ConstructBody(this);
-    return this;
+    DeletingDtor(0u);
+    return ::new (this) GraphicsMesh();
 }
 
-// ??1GraphicsMesh@Graphics@@UEAA@XZ  0x1800ff270 — EMPTY; see the door above.
-GraphicsMesh::~GraphicsMesh() {}
+// ============================================================================
+// ??1GraphicsMesh@Graphics@@UEAA@XZ                  retail 0x1800ff270
+// ============================================================================
+// Restamp to GraphicsMesh's own table, destroy the three arrays IN RETAIL'S
+// ORDER (+0x70, then +0x60, then +0x50 — the REVERSE of declaration order, as a
+// destructor should be, and the order is transcribed rather than re-derived),
+// release the name String, restamp to CompiledExternal and tail-jump its dtor.
+//
+// ENDGAME B.3.9 block GFX: the body moved here from the retired
+// `RtGraphics_GraphicsMesh_Dtor` door. The two restamps are the compiler's, and
+// so is the tail into ~CompiledExternal / ~External. The three explicit
+// `~Array` calls are retail's own decomposition; each frees AND zeroes its
+// header, so the members' implicit ~Array that runs after this body is a
+// no-op (no element destroy, MemFree(null)) -- nothing runs twice.
+//
+// THE STRING RELEASE IS THE `str-4` / `str-8` IDIOM and its two arms leave the
+// slot holding DIFFERENT THINGS — the asymmetry array_destroy.cpp's Body B
+// documents:
+//     if (p) { if (--p[-1] == 0) { slot = p - 8; MemFree(slot); }
+//              else               slot = nullptr; }
+// Retail really does store `this+0x20 -= 8` and then free THAT (0x1800ff2c0 ..
+// 0x1800ff2c9), and really does store 0 on the surviving arm (0x1800ff2d0).
+// Writing `slot = nullptr` on both arms would leave a freed block's address
+// nowhere and would not match; writing neither would leave a dangling pointer.
+// ============================================================================
+GraphicsMesh::~GraphicsMesh() {
+    GraphicsMesh* const self = this;
+
+    ByAddr1(0x180014160ull, &self->_skinMaterials);            // ~Array<Array<T>>
+    ByAddr1(0x180014090ull, &self->_nodes);                    // ~Array<Node>
+    ByAddr1(0x180013fb0ull, &self->_detailLevels);             // ~Array<DetailLevel>
+
+    char* const name = self->_name.data;
+    if (name != nullptr) {
+        int32_t* const refs = reinterpret_cast<int32_t*>(name) - 1;
+        --*refs;
+        if (*refs == 0) {
+            self->_name.data = name - 8;                       // ADD qword [RBX+0x20],-8
+            MemFree(self->_name.data);
+        } else {
+            self->_name.data = nullptr;                        // MOV qword [RBX+0x20],0
+        }
+    }
+    // 0x1800ff2d8 restamp + `JMP 0x1800bc950`: the compiler's chain.
+}
+
+// ?TypeId@GraphicsMesh@Graphics@@SAIXZ 0x180012380 -- the static twin of slot
+// 2: the minted record's +0x00 until the W3 fold (B39_RULES D6 step 1).
+uint32_t GraphicsMesh::TypeId() {
+    uint32_t v = 0; std::memcpy(&v, TypeInfoGraphicsMesh(), sizeof v); return v;
+}
+
+// ?CreateNewObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@XZ 0x180012480 --
+// the FACTREST row it replaces called ??0GraphicsMesh after the locked
+// MemAlloc(0x98, 8); retail's null branch (B39_RULES D2).
+Object::Base* GraphicsMesh::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(GraphicsMesh), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) GraphicsMesh();
+}
+// ?CreateInPlaceObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z 0x180012500
+Object::Base* GraphicsMesh::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) GraphicsMesh();
+}
 
 }  // namespace Graphics
 
-// ============================================================================
-// THE DOORS. Each keeps its registered name and address and delegates with a
-// QUALIFIED non-virtual call. THE QUALIFICATION IS LOAD-BEARING (B34_BRIEFS
-// A.1): a live `GraphicsMesh` wears the MINTED `??_7GraphicsMesh@Graphics@@6B@`,
-// whose slots resolve back to these very doors, so an unqualified virtual call
-// inside a door would dispatch into itself instead of delegating.
-// ============================================================================
-extern "C" void* RtGraphics_GraphicsMesh_Ctor(void* selfv) {
-    ConstructBody(reinterpret_cast<GraphicsMesh*>(selfv));     // B.3.5 bridge
-    return selfv;                                              // MOV RAX,RCX
-}
-
-extern "C" uint32_t RtGraphics_GraphicsMesh_Type(const void* selfv) {
-    return reinterpret_cast<const GraphicsMesh*>(selfv)         // B.3.5 bridge
-               ->Graphics::GraphicsMesh::Type();
-}
-
-extern "C" const char* RtGraphics_GraphicsMesh_TypeName(const void* selfv) {
-    return reinterpret_cast<const GraphicsMesh*>(selfv)         // B.3.5 bridge
-               ->Graphics::GraphicsMesh::TypeName();
-}
-
-extern "C" int32_t RtGraphics_GraphicsMesh_GetFileVersion(const void* selfv) {
-    return reinterpret_cast<const GraphicsMesh*>(selfv)         // B.3.5 bridge
-               ->Graphics::GraphicsMesh::GetFileVersion();
-}
-
-extern "C" void RtGraphics_GraphicsMesh_Destruct(void* selfv) {
-    reinterpret_cast<GraphicsMesh*>(selfv)                      // B.3.5 bridge
-        ->Graphics::GraphicsMesh::Destruct();
-}
-
-extern "C" void* RtGraphics_GraphicsMesh_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                       // retail's null test
-    return reinterpret_cast<GraphicsMesh*>(selfv)               // B.3.5 bridge
-               ->Graphics::GraphicsMesh::Construct();
-}
-
-extern "C" void* RtGraphics_GraphicsMesh_Reconstruct(void* selfv) {
-    return reinterpret_cast<GraphicsMesh*>(selfv)               // B.3.5 bridge
-               ->Graphics::GraphicsMesh::Reconstruct();
-}
+// ENDGAME B.3.9 block GFX: the ctor door and the six slot doors (Type,
+// TypeName, GetFileVersion, Destruct, Construct, Reconstruct) are gone -- their
+// only readers were FACTREST, the minted `??_7GraphicsMesh@Graphics@@6B@` and its
+// RT_DELDTOR row.
 
 // ============================================================================
 // §T  the DETAIL LEVEL's inline-geometry pass        retail 0x1800a4670
@@ -759,10 +649,7 @@ bool GraphicsMesh::Serialize(void* streamv) {
 
 }  // namespace Graphics
 
-extern "C" bool RtGraphics_GraphicsMesh_Serialize(void* selfv, Stream* stream) {
-    return reinterpret_cast<GraphicsMesh*>(selfv)              // B.3.5 bridge
-               ->Graphics::GraphicsMesh::Serialize(stream);
-}
+// (ENDGAME B.3.9 block GFX: the slot-5 door is gone with the minted table.)
 
 // ============================================================================
 // Registration — name AND address for every body that has a name, address only
@@ -772,41 +659,14 @@ extern "C" bool RtGraphics_GraphicsMesh_Serialize(void* selfv, Stream* stream) {
 int RtGraphicsMeshVtableBatch6Register() {
     int n = 0;
 
-    RegisterRuntimeExport("??0GraphicsMesh@Graphics@@QEAA@XZ",
-                          (void*)&RtGraphics_GraphicsMesh_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800ff170ull, (void*)&RtGraphics_GraphicsMesh_Ctor);
-
-    RegisterRuntimeExport("??1GraphicsMesh@Graphics@@UEAA@XZ",
-                          (void*)&RtGraphics_GraphicsMesh_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800ff270ull, (void*)&RtGraphics_GraphicsMesh_Dtor);
-
-    RegisterRuntimeExport("?Type@GraphicsMesh@Graphics@@UEBAIXZ",
-                          (void*)&RtGraphics_GraphicsMesh_Type); ++n;
-    RegisterRuntimeAddr(0x180012370ull, (void*)&RtGraphics_GraphicsMesh_Type);
-
-    RegisterRuntimeExport("?TypeName@GraphicsMesh@Graphics@@UEBAPEBDXZ",
-                          (void*)&RtGraphics_GraphicsMesh_TypeName); ++n;
-    RegisterRuntimeAddr(0x180012390ull, (void*)&RtGraphics_GraphicsMesh_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@GraphicsMesh@Graphics@@UEBAHXZ",
-                          (void*)&RtGraphics_GraphicsMesh_GetFileVersion); ++n;
-    RegisterRuntimeAddr(0x1800ff3a0ull, (void*)&RtGraphics_GraphicsMesh_GetFileVersion);
-
-    RegisterRuntimeExport("?Serialize@GraphicsMesh@Graphics@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtGraphics_GraphicsMesh_Serialize); ++n;
-    RegisterRuntimeAddr(0x1800ff3b0ull, (void*)&RtGraphics_GraphicsMesh_Serialize);
-
-    RegisterRuntimeExport("?Reconstruct@GraphicsMesh@Graphics@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtGraphics_GraphicsMesh_Reconstruct); ++n;
-    RegisterRuntimeAddr(0x180012510ull, (void*)&RtGraphics_GraphicsMesh_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@GraphicsMesh@Graphics@@UEAAXXZ",
-                          (void*)&RtGraphics_GraphicsMesh_Destruct); ++n;
-    RegisterRuntimeAddr(0x180012540ull, (void*)&RtGraphics_GraphicsMesh_Destruct);
-
-    RegisterRuntimeExport("?Construct@GraphicsMesh@Graphics@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtGraphics_GraphicsMesh_Construct); ++n;
-    RegisterRuntimeAddr(0x180012530ull, (void*)&RtGraphics_GraphicsMesh_Construct);
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address. The ctor / dtor / slot doors are retired (above).
+    RegisterRuntimeExport("?CreateNewObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@XZ",
+                          (void*)&::Graphics::GraphicsMesh::CreateNewObject); ++n;
+    RegisterRuntimeAddr(0x180012480ull, (void*)&::Graphics::GraphicsMesh::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&::Graphics::GraphicsMesh::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr(0x180012500ull, (void*)&::Graphics::GraphicsMesh::CreateInPlaceObject);
 
     RegisterRuntimeAddr(0x1800a4670ull,
                         (void*)&RtGraphics_GraphicsMeshTriangleList_Serialize); ++n;

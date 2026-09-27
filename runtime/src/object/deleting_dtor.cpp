@@ -816,10 +816,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // decrements a refcount that was never incremented and frees a garbage
     // pointer. A probe subject must be SAFE TO RUN; this one is not.
     RT_DELDTOR(0x180035350, 0x180116100, 0x068, "UI::ElementDescription"),
-    // 2026-09-12: slot 0 of ??_7Material@Graphics@@6B@. ~Material 0x180102a00 is
-    // ported in runtime/src/graphics/material.cpp; sizeof from the
-    // eh_vector_destructor_iterator call in 0x180011d20 (0x38).
-    RT_DELDTOR(0x180011d20, 0x180102a00, 0x038, "Graphics::Material"),
     // 2026-09-12: slot 0 of ??_7VideoProgram@Video@@6B@ (videoprogram.cpp); 0x48 from
     // CreateNewObject's Allocate(0x48, 8) and the eh_vector iterator stride.
     RT_DELDTOR(0x18004efb0, 0x1800f4650, 0x048, "Video::VideoProgram"),
@@ -1068,7 +1064,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x18001eee0, 0x1800a3e40, 0x070, "Graphics::GeneratedImageBuffer"),
     RT_DELDTOR(0x18001f260, 0x1800a3c80, 0x088, "Graphics::FrameCopyImageBuffer"),
     RT_DELDTOR(0x180022600, 0x1800a70b0, 0x090, "Graphics::ReflectionImageBuffer"),
-    RT_DELDTOR(0x180012bd0, 0x1800ff270, 0x098, "Graphics::GraphicsMesh"),
     // VTABLE BATCH 3 (2026-09-12): the UI::*Element widget runtime, first
     // half. Thirteen slot-0 rows, appended AFTER every batch on main at
     // merge time -- the table is POSITIONAL and each wrapper below passes
@@ -1427,10 +1422,6 @@ void* RtDelDtor_ElementDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180035350>());
 }
 
-// Graphics::Material        ~Material = 0x180102a00  (PORTED, material.cpp)
-void* RtDelDtor_Material(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180011d20>());
-}
 
 // Video::VideoProgram       ~VideoProgram = 0x1800f4650  (PORTED, videoprogram.cpp)
 void* RtDelDtor_VideoProgram(void* self, unsigned flags) {
@@ -1588,9 +1579,6 @@ void* RtDelDtor_FrameCopyImageBuffer(void* self, unsigned flags) {
 void* RtDelDtor_ReflectionImageBuffer(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180022600>());
 }
-void* RtDelDtor_GraphicsMesh(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180012bd0>());
-}
 
 // UI::AnimatedImageElement  ~AnimatedImageElement = 0x1800cb3a0  (PORTED, runtime/src/ui/)
 void* RtDelDtor_AnimatedImageElement(void* self, unsigned flags) {
@@ -1742,7 +1730,6 @@ void RtObjectDeletingDtorPortInit() {
 
 
     RegisterRuntimeAddr(0x180035350, (void*)&RtDelDtor_ElementDescription);    // Wave 27 IOTEXT
-    RegisterRuntimeAddr(0x180011d20, (void*)&RtDelDtor_Material);
     RegisterRuntimeAddr(0x18004efb0, (void*)&RtDelDtor_VideoProgram);
     RegisterRuntimeAddr(0x18004e000, (void*)&RtDelDtor_VertexLayout);
     RegisterRuntimeAddr(0x18004e360, (void*)&RtDelDtor_ShaderProgram);
@@ -1788,7 +1775,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18001eee0, (void*)&RtDelDtor_GeneratedImageBuffer);  // vtable batch 6
     RegisterRuntimeAddr(0x18001f260, (void*)&RtDelDtor_FrameCopyImageBuffer);  // vtable batch 6
     RegisterRuntimeAddr(0x180022600, (void*)&RtDelDtor_ReflectionImageBuffer); // vtable batch 6
-    RegisterRuntimeAddr(0x180012bd0, (void*)&RtDelDtor_GraphicsMesh);          // vtable batch 6
 
     // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12) --------------------
     RegisterRuntimeAddr(0x180046540, (void*)&RtDelDtor_NumberEditElement);
