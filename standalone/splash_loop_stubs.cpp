@@ -51,6 +51,7 @@
 #include "ui/UserInterface.h"                // ENDGAME B.3.6 UI callers (K4)
 #include <new>
 #include <windows.h>
+#include "system/Timer.h"   // ENDGAME B.3.9 SS2: System::Timer::_ticksPerSecond
 
 // Defined in code/Game/Game/gameupdateloop_load.cpp. Returns true once the
 // new-game world build for `loop` (a GameUpdateLoop) has fully completed.
@@ -300,13 +301,13 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     // so the fade animates frame-by-frame.
     int64_t origTicks = 0;
     bool clamped = false;
-    if (_elapsedTicks == 0 && dt && g_Timer_ticksPerSecond &&
-        *g_Timer_ticksPerSecond > 0) {
+    if (_elapsedTicks == 0 && dt &&
+        ::System::Timer::_ticksPerSecond > 0) {
         origTicks = dt->ticks;
-        double dtMs = (double)origTicks * 1000.0 / (double)*g_Timer_ticksPerSecond;
+        double dtMs = (double)origTicks * 1000.0 / (double)::System::Timer::_ticksPerSecond;
         printf("[SplashDLT::Update] self=%p first-tick dt=%lld (%.2fms)\n",
                (void*)this, (long long)origTicks, dtMs);
-        int64_t maxTicks = *g_Timer_ticksPerSecond / 60;
+        int64_t maxTicks = ::System::Timer::_ticksPerSecond / 60;
         if (origTicks > maxTicks) {
             dt->ticks = maxTicks;
             clamped = true;
@@ -354,8 +355,8 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     if (!EngineLoader::IsBusy()) {
         if (ChunkedSceneLoader::IsArmed()) {
             void* ui = &_ui;
-            int64_t revealCap = (g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0)
-                ? *g_Timer_ticksPerSecond / 4 : 0;
+            int64_t revealCap = (::System::Timer::_ticksPerSecond > 0)
+                ? ::System::Timer::_ticksPerSecond / 4 : 0;
             float revealAlpha = UIFade::GetCurrentAlpha(ui);
             if (revealAlpha < 0.5f || (revealCap && _elapsedTicks >= revealCap)) {
                 printf("[SplashDLT::Update] self=%p reveal-alpha=%.2f "
@@ -410,10 +411,10 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     // nothing else (exe 0x140098e0d: MOV RAX,[RSI+0x28]; MOV ECX,[RAX+0x24];
     // TEST ECX,ECX; JZ). The extra `g_loadKickedFor == self` term that used to
     // be here was an artefact of our deferred load kick, which is gone.
-    if (g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0 &&
+    if (::System::Timer::_ticksPerSecond > 0 &&
         _nextLoop && _nextLoop->GetLoadProgress() != 0) {
         _tipTimer += dt->ticks;
-        if (_tipTimer >= *g_Timer_ticksPerSecond * 2) {   // 2.0s
+        if (_tipTimer >= ::System::Timer::_ticksPerSecond * 2) {   // 2.0s
             _tipTimer = 0;
             // [diag] measure the ACTUAL interval and the retail gate value.
             // Retail cycles only while nextLoop->_loadProgress (UpdateLoop+0x24)
@@ -423,7 +424,7 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
             double sinceMs = s_prevTip ? 1000.0 * (double)(qn.QuadPart - s_prevTip) / (double)qf.QuadPart : -1.0;
             s_prevTip = qn.QuadPart;
             printf("[SplashDLT] tip cycle: wall=%.0fms tps=%lld loadProgress=%d\n",
-                   sinceMs, (long long)*g_Timer_ticksPerSecond,
+                   sinceMs, (long long)::System::Timer::_ticksPerSecond,
                    _nextLoop ? _nextLoop->GetLoadProgress() : -1);
             SetRandomLoadingTip(this);
         }
@@ -495,7 +496,7 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
         }
 
         Engine::UpdateLoop* next = _nextLoop;
-        void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
+        void* mainLoop = ::Engine::MainLoop::_singleton;
         printf("[SplashDLT::Update] self=%p elapsed=%lld delay=%lld "
                "fade-alpha=%.3f -> transition next=%p\n",
                (void*)this, (long long)_elapsedTicks,

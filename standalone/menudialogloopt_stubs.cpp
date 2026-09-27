@@ -37,6 +37,7 @@
 #include "mouse_inject.h"
 #include "common.h"
 #include "Object/factory_registration.h"
+#include "system/Timer.h"   // ENDGAME B.3.9 SS2: System::Timer::_ticksPerSecond
 
 // WAVE 11 LANE OBJLIFE — the synthesised factory-dtor oracle, called from
 // Stub_Draw. Declared at FILE SCOPE on purpose: a block-scope `extern` inside
@@ -84,13 +85,13 @@ static void EnsureCursorsLoaded() {
         printf("[CursorLoad] WARN: g_pKeyMapSingleton not populated, skipping\n");
         return;
     }
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+    if (!::Object::ExternalFactory::_singleton) {
         printf("[CursorLoad] WARN: ExternalFactory singleton not populated, skipping\n");
         return;
     }
 
     void* keyMap = *g_pKeyMapSingleton;
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     ::Object::ExternalFactory* efactory =
         reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
 
@@ -137,13 +138,13 @@ static void EnsureUISoundsLoaded() {
         printf("[UISoundLoad] WARN: g_pKeyMapSingleton not populated, skipping\n");
         return;
     }
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+    if (!::Object::ExternalFactory::_singleton) {
         printf("[UISoundLoad] WARN: ExternalFactory singleton not populated, skipping\n");
         return;
     }
 
     void* keyMap = *g_pKeyMapSingleton;
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     ::Object::ExternalFactory* efactory =
         reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
     uintptr_t kmBase = reinterpret_cast<uintptr_t>(keyMap);
@@ -191,9 +192,9 @@ static void EnsureUISoundsLoaded() {
 // fade triggers find a populated KeyMap+0xa8 too, not just MenuDLT).
 extern "C" void StandaloneEnsureSpriteSheetLoaded() {
     if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return;
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
+    if (!::Object::ExternalFactory::_singleton) return;
     void* keyMap = *g_pKeyMapSingleton;
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     ::Object::ExternalFactory* efactory =
         reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
     uintptr_t kmBase = reinterpret_cast<uintptr_t>(keyMap);
@@ -563,17 +564,17 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // normal small dt because the load is done.
     int64_t origTicks = 0;
     bool clamped = false;
-    if (tick <= 1 && time && g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0) {
+    if (tick <= 1 && time && ::System::Timer::_ticksPerSecond > 0) {
         Time* tm = reinterpret_cast<Time*>(time);
         origTicks = tm->ticks;
-        int64_t maxTicks = *g_Timer_ticksPerSecond / 60;  // ~16.67ms
+        int64_t maxTicks = ::System::Timer::_ticksPerSecond / 60;  // ~16.67ms
         if (origTicks > maxTicks) {
             tm->ticks = maxTicks;
             clamped = true;
             printf("[MenuDLT::Update] tick=%d dt clamped from %lld to %lld "
                    "(%.2fms) — was post-LoadScene_PhaseA stall accumulator\n",
                    tick, (long long)origTicks, (long long)maxTicks,
-                   (double)maxTicks * 1000.0 / (double)*g_Timer_ticksPerSecond);
+                   (double)maxTicks * 1000.0 / (double)::System::Timer::_ticksPerSecond);
         }
     }
 
@@ -626,7 +627,7 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
         void* pendingLoop = _pendingLoop;
         float fadeRate    = _ui._fadeVelocity;   // +0x130 = UI (+0x40) + 0xF0
         if (pendingLoop && fadeRate == 0.0f) {
-            void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
+            void* mainLoop = ::Engine::MainLoop::_singleton;
             fprintf(stderr, "[MenuDLT::Update] STAGE C entry: pendingLoop=%p "
                     "fade settled (rate=0) -> MainLoop::SetNextLoop\n", pendingLoop);
             fflush(stderr);
@@ -686,7 +687,7 @@ void MenuDialogLoopT::Draw(float alpha) {
 
     // Use MainLoop singleton's m_context — populated by MainLoop ctor and
     // unchanged for the run.
-    void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
+    void* mainLoop = ::Engine::MainLoop::_singleton;
     void* context = mainLoop
         ? reinterpret_cast< ::Engine::MainLoop*>(mainLoop)->_context   // B.3.8 bridge
         : nullptr;

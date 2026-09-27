@@ -110,6 +110,7 @@
 // ===========================================================================
 
 #include "mouse_inject.h"
+#include "input/Device.h"   // ENDGAME B.3.9 SS2: Input::Device::_singleton
 
 #include <cstdio>
 #include <cstdlib>
@@ -344,12 +345,7 @@ Report g_report;
 // made the unqualified call at MouseInject::PreUpdate ambiguous. The helper is
 // file-local; only its two call sites move.
 uint8_t* InputDeviceSingleton() {
-    static void** slot = nullptr;
-    if (!slot)
-        slot = reinterpret_cast<void**>(
-            ResolveExport("?_singleton@Device@Input@@0PEAV12@EA"));
-    if (!slot) return nullptr;
-    return static_cast<uint8_t*>(*slot);
+    return reinterpret_cast<uint8_t*>(::Input::Device::_singleton);
 }
 
 RtInput::State* MouseState(uint8_t* dev, int index) {

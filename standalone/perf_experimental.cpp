@@ -1,5 +1,6 @@
 // standalone/perf_experimental.cpp — see perf_experimental.h.
 #include "perf_experimental.h"
+#include "graphics/Mesh.h"   // ENDGAME B.3.9 SS2: MeshInstance::_rootOnlyUpdates
 // ENDGAME B.3.5: Graphics::Camera / Renderer / Geometry, ahead of the
 // <windows.h> that "resolve.h" pulls in — <wingdi.h> declares a FUNCTION named
 // Rectangle, which breaks Volume.h's Volume::Rectangle (the <windows.h> trap).
@@ -102,11 +103,9 @@ long s_cntBatchSkipped = 0;
 void ResolveRootOnly() {
     if (s_rootOnlyResolved) return;
     s_rootOnlyResolved = true;
-    uintptr_t slot = ResolveAddr(Module::Exe, 0x140151f30);
-    s_rootOnly = slot ? *reinterpret_cast<uint8_t**>(slot) : nullptr;
-    if (!s_rootOnly)
-        s_rootOnly = reinterpret_cast<uint8_t*>(
-            ResolveExport("?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA"));
+    // Graphics::MeshInstance::_rootOnlyUpdates (retail: import slot 0x140151f30),
+    // the class static (ENDGAME B.3.9 SS2).
+    s_rootOnly = reinterpret_cast<uint8_t*>(&::Graphics::MeshInstance::_rootOnlyUpdates);
     g_rootOnlyPtr = s_rootOnly;
 }
 
