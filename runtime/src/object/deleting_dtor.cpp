@@ -284,7 +284,7 @@ namespace rtdtor {
 // ---------------------------------------------------------------------------
 #define RT_DELDTOR(ADDR, DTOR, SIZE, NAME) { (ADDR), (DTOR), (SIZE), NAME }
 
-static const DelDtorSpec kSpecs[] = {
+static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180001680, 0x18009e180, 0x058, "Achievement::Achievement"),
     RT_DELDTOR(0x180001a90, 0x18009e400, 0x028, "Achievement::AchievementInstance"),
     RT_DELDTOR(0x180001d70, 0x18009edb0, 0x030, "Achievement::Goal"),
@@ -1182,10 +1182,33 @@ static const DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180079210, 0x18011e6f0, 0x098, "UI::TableDescription"),
     RT_DELDTOR(0x180041e30, 0x18011eae0, 0x090, "UI::TextDescription"),
 };
-static DtorFn g_dtorCache[kSpecCount];
+// ENDGAME B.3 step 9 (B39_RULES.md D4): the count is the table's, and every
+// wrapper finds its row BY ADDRESS at compile time -- deleting a row renumbers
+// nothing, and a wrapper whose row is gone does not compile.
+constexpr int kSpecCount = static_cast<int>(sizeof(kSpecs) / sizeof(kSpecs[0]));
 
-static_assert(sizeof(kSpecs) / sizeof(kSpecs[0]) == kSpecCount,
-              "kSpecCount must match the table -- the dtor cache is sized from it");
+constexpr int RowOf(uintptr_t addr) {
+    for (int i = 0; i < kSpecCount; ++i)
+        if (kSpecs[i].addr == addr) return i;
+    return -1;
+}
+constexpr bool RowsAreUnique() {
+    for (int i = 0; i < kSpecCount; ++i)
+        for (int j = i + 1; j < kSpecCount; ++j)
+            if (kSpecs[i].addr == kSpecs[j].addr) return false;
+    return true;
+}
+static_assert(RowsAreUnique(), "two RT_DELDTOR rows share a deleting-destructor address");
+
+template <uintptr_t Addr>
+constexpr int Row() {
+    constexpr int i = RowOf(Addr);
+    static_assert(i >= 0, "this wrapper's RT_DELDTOR row is gone: delete the wrapper "
+                          "and its RegisterRuntimeAddr line with it");
+    return i;
+}
+
+static DtorFn g_dtorCache[kSpecCount];
 
 // ---------------------------------------------------------------------------
 // The allocator boundary. ONE call, reusing lane Q's, so lane E has one place
@@ -1266,247 +1289,247 @@ void* DeletingDtorCore(void* self, unsigned flags, int i) {
 
 // Achievement::Achievement ~Achievement = 0x18009e180  (PORTED)
 void* RtDelDtor_Achievement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 0);
+    return DeletingDtorCore(self, flags, Row<0x180001680>());
 }
 // Achievement::AchievementInstance ~AchievementInstance = 0x18009e400  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
 void* RtDelDtor_AchievementInstance(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 1);
+    return DeletingDtorCore(self, flags, Row<0x180001a90>());
 }
 // Achievement::Goal        ~Goal = 0x18009edb0  (PORTED)
 void* RtDelDtor_Goal(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 2);
+    return DeletingDtorCore(self, flags, Row<0x180001d70>());
 }
 // Achievement::GoalInstance ~GoalInstance = 0x18009ef40  (PORTED)
 void* RtDelDtor_GoalInstance(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 3);
+    return DeletingDtorCore(self, flags, Row<0x1800020c0>());
 }
 // Graphics::MaterialInstance ~MaterialInstance = 0x180103a00  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
 void* RtDelDtor_MaterialInstance(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 4);
+    return DeletingDtorCore(self, flags, Row<0x180002d60>());
 }
 // UI::SpriteSheet          ~SpriteSheet = 0x18011d670  (PORTED, ui/spritesheet_new.cpp; this note was stale)
 void* RtDelDtor_SpriteSheet(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 5);
+    return DeletingDtorCore(self, flags, Row<0x1800037b0>());
 }
 // Object::Internal         ~Internal = 0x1800bfdb0  (PORTED)
 void* RtDelDtor_Internal(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 6);
+    return DeletingDtorCore(self, flags, Row<0x180006440>());
 }
 // Object::Base             ~Base = 0x1800c0360  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
 void* RtDelDtor_Base(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 7);
+    return DeletingDtorCore(self, flags, Row<0x1800065b0>());
 }
 // Object::External         ~External = 0x1800bc950  (PORTED)
 void* RtDelDtor_External(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 8);
+    return DeletingDtorCore(self, flags, Row<0x180006640>());
 }
 // Object::CompiledExternal ~CompiledExternal = 0x1800bb980  (PORTED, batch D2)
 void* RtDelDtor_CompiledExternal(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 9);
+    return DeletingDtorCore(self, flags, Row<0x18000b7e0>());
 }
 // IO::Stream               ~Stream = 0x1800b9a40  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
 void* RtDelDtor_Stream(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 10);
+    return DeletingDtorCore(self, flags, Row<0x18000c610>());
 }
 // Graphics::AnimationEvent ~AnimationEvent = 0x1800a2120  (PORTED)
 void* RtDelDtor_AnimationEvent(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 11);
+    return DeletingDtorCore(self, flags, Row<0x180011800>());
 }
 // Graphics::Geometry       ~Geometry = 0x1800a41c0  (PORTED)
 void* RtDelDtor_Geometry(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 12);
+    return DeletingDtorCore(self, flags, Row<0x180015e90>());
 }
 // Video::ImageBuffer       ~ImageBuffer = 0x1800f2610  (PORTED)
 void* RtDelDtor_ImageBuffer(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 13);
+    return DeletingDtorCore(self, flags, Row<0x18001ed20>());
 }
 // Graphics::Particle       ~Particle = 0x180103c70  (PORTED, BATCH C 2026-09-12,
 //                          graphics/batchc_gfx_leaves.cpp; was "still the DLL's")
 void* RtDelDtor_Particle(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 14);
+    return DeletingDtorCore(self, flags, Row<0x180020160>());
 }
 // Graphics::ParticleInstance ~ParticleInstance = 0x1801041f0  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
 void* RtDelDtor_ParticleInstance(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 15);
+    return DeletingDtorCore(self, flags, Row<0x180020310>());
 }
 // Graphics::ParticleSystemInstance ~ParticleSystemInstance = 0x1800a5520  (PORTED,
 //                          BATCH C 2026-09-12, graphics/batchc_gfx_leaves.cpp;
 //                          was "still the DLL's")
 void* RtDelDtor_ParticleSystemInstance(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 16);
+    return DeletingDtorCore(self, flags, Row<0x180020ce0>());
 }
 // IO::CompressedMemoryStream ~CompressedMemoryStream = 0x1800a9560  (PORTED)
 void* RtDelDtor_CompressedMemoryStream(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 17);
+    return DeletingDtorCore(self, flags, Row<0x1800244a0>());
 }
 // Engine::UpdateLoop       ~UpdateLoop = 0x1800dddb0  (PORTED)
 void* RtDelDtor_UpdateLoop(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 18);
+    return DeletingDtorCore(self, flags, Row<0x180031900>());
 }
 // UI::Element              ~Element = 0x1801161a0  (PORTED, ui/element.cpp; this note was stale)
 void* RtDelDtor_Element(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 19);
+    return DeletingDtorCore(self, flags, Row<0x180035c10>());
 }
 // UI::DialogController     ~DialogController = 0x1800cd2f0  (PORTED)
 void* RtDelDtor_DialogController(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 20);
+    return DeletingDtorCore(self, flags, Row<0x18003b800>());
 }
 // UI::DialogInstance       ~DialogInstance = 0x180114d40  (PORTED, ui/dialog.cpp; this note was stale)
 void* RtDelDtor_DialogInstance(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 21);
+    return DeletingDtorCore(self, flags, Row<0x1800458c0>());
 }
 // Engine::LoaderLoop       ~LoaderLoop = 0x1800dc170  (PORTED, BATCH 8)
 void* RtDelDtor_LoaderLoop(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 22);
+    return DeletingDtorCore(self, flags, Row<0x18004d4f0>());
 }
 // Engine::DialogLoaderLoopT ~DialogLoaderLoopT = 0x1800db060  (PORTED, BATCH 8)
 void* RtDelDtor_DialogLoaderLoopT(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 23);
+    return DeletingDtorCore(self, flags, Row<0x18004d670>());
 }
 // Engine::DialogLoopT      ~DialogLoopT = 0x1800db340  (PORTED, BATCH 8)
 void* RtDelDtor_DialogLoopT(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 24);
+    return DeletingDtorCore(self, flags, Row<0x18004d8b0>());
 }
 // Video::RenderBufferData  ~RenderBufferData = 0x1800f8db0  (PORTED)
 void* RtDelDtor_RenderBufferData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 25);
+    return DeletingDtorCore(self, flags, Row<0x180058590>());
 }
 // Video::VideoProgramData  ~VideoProgramData = 0x1800f8d90  (PORTED)
 void* RtDelDtor_VideoProgramData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 26);
+    return DeletingDtorCore(self, flags, Row<0x180058610>());
 }
 // Video::RenderStateData   ~RenderStateData = 0x1800f8d70  (PORTED)
 void* RtDelDtor_RenderStateData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 27);
+    return DeletingDtorCore(self, flags, Row<0x180058690>());
 }
 // Video::PixelProgramData  ~PixelProgramData = 0x1800f8dd0  (PORTED)
 void* RtDelDtor_PixelProgramData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 28);
+    return DeletingDtorCore(self, flags, Row<0x180058710>());
 }
 // Video::VertexProgramData ~VertexProgramData = 0x1800f8d10  (PORTED)
 void* RtDelDtor_VertexProgramData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 29);
+    return DeletingDtorCore(self, flags, Row<0x180058790>());
 }
 // Video::VertexLayoutData  ~VertexLayoutData = 0x1800f8d30  (PORTED)
 void* RtDelDtor_VertexLayoutData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 30);
+    return DeletingDtorCore(self, flags, Row<0x180058810>());
 }
 // Video::VertexBufferData  ~VertexBufferData = 0x1800f8d50  (PORTED)
 void* RtDelDtor_VertexBufferData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 31);
+    return DeletingDtorCore(self, flags, Row<0x180058890>());
 }
 // Video::IndexBufferData   ~IndexBufferData = 0x1800f8df0  (PORTED)
 void* RtDelDtor_IndexBufferData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 32);
+    return DeletingDtorCore(self, flags, Row<0x180058910>());
 }
 // Video::ConstantBufferData ~ConstantBufferData = 0x1800f8e50  (PORTED)
 void* RtDelDtor_ConstantBufferData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 33);
+    return DeletingDtorCore(self, flags, Row<0x180058990>());
 }
 // Video::ImageBufferData   ~ImageBufferData = 0x1800f8e10  (PORTED)
 void* RtDelDtor_ImageBufferData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 34);
+    return DeletingDtorCore(self, flags, Row<0x180058a10>());
 }
 // Video::ContextData       ~ContextData = 0x1800f8e30  (PORTED)
 void* RtDelDtor_ContextData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 35);
+    return DeletingDtorCore(self, flags, Row<0x180058a90>());
 }
 // Video::DeviceData        ~DeviceData = 0x1800f8cf0  (PORTED)
 void* RtDelDtor_DeviceData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 36);
+    return DeletingDtorCore(self, flags, Row<0x180058b10>());
 }
 // UI::Dialog               ~Dialog = 0x180112e40  (PORTED, lane DLG2)  [Wave 10C]
 void* RtDelDtor_Dialog(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 37);
+    return DeletingDtorCore(self, flags, Row<0x180038b20>());
 }
 // UI::ToolTipDialog        ~ToolTipDialog = 0x1800dac70  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)  [Wave 10D]
 void* RtDelDtor_ToolTipDialog(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 38);
+    return DeletingDtorCore(self, flags, Row<0x18004d270>());
 }
 // IO::CompressedStream     ~CompressedStream = 0x1800aa650  (PORTED, lane PKG2)  [Wave 19]
 void* RtDelDtor_CompressedStream(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 39);
+    return DeletingDtorCore(self, flags, Row<0x180023fd0>());
 }
 // IO::CompressedFileStream ~CompressedFileStream = 0x1800a9330  (PORTED, Wave 27 IOTEXT
 //                          -- runtime/src/io/file_stream.cpp; this row's address
 //                          door is what made porting it worth doing)
 void* RtDelDtor_CompressedFileStream(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 40);
+    return DeletingDtorCore(self, flags, Row<0x180024100>());
 }
 // IO::TextFileStream       ~TextFileStream = 0x1800ba490  (PORTED, Wave 27 IOTEXT --
 //                          runtime/src/io/file_stream.cpp; this row's own
 //                          address door is what made porting it worth doing)
 void* RtDelDtor_TextFileStream(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 41);
+    return DeletingDtorCore(self, flags, Row<0x18002ba90>());
 }
 // IO::ReaderWriter         ~ReaderWriter = 0x1800b9150  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)  [Wave 21 ENC, item 12]
 void* RtDelDtor_ReaderWriter(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 42);
+    return DeletingDtorCore(self, flags, Row<0x180023bd0>());
 }
 // IO::PackageFile          ~PackageFile = 0x1800b4540  (PORTED -- Wave 25 lane BODY,
 //                          runtime/src/io/package_file_dtor.cpp:442. This line read
 //                          "NOT ported" until Wave 27 lane IOTEXT; the two waves
 //                          landed in the same wave and the comment never caught up.)
 void* RtDelDtor_PackageFile(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 43);
+    return DeletingDtorCore(self, flags, Row<0x1800259d0>());
 }
 // Graphics::EdgeMesh          ~EdgeMesh = 0x1800a2780          [Wave 27 GFXMESH]
 void* RtDelDtor_EdgeMesh(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 44);
+    return DeletingDtorCore(self, flags, Row<0x1800134b0>());
 }
 // Graphics::EdgeMeshInstance  ~EdgeMeshInstance = 0x1800174d0  [Wave 27 GFXMESH]
 void* RtDelDtor_EdgeMeshInstance(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 45);
+    return DeletingDtorCore(self, flags, Row<0x1800175d0>());
 }
 // Graphics::MeshInstance      ~MeshInstance = 0x180017060      [Wave 27 GFXMESH]
 void* RtDelDtor_MeshInstance(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 46);
+    return DeletingDtorCore(self, flags, Row<0x180017330>());
 }
 
 // Graphics::Light          ~Light = 0x180058d20  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)  [Wave 27 GFXPART]
 void* RtDelDtor_Light(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 47);
+    return DeletingDtorCore(self, flags, Row<0x180058dd0>());
 }
 // Graphics::SunLight       ~SunLight = 0x180108160  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)  [Wave 27 GFXPART]
 void* RtDelDtor_SunLight(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 48);
+    return DeletingDtorCore(self, flags, Row<0x180064620>());
 }
 
 // UI::ElementDescription   ~ElementDescription = 0x180116100  (PORTED)  [Wave 27 IOTEXT]
 void* RtDelDtor_ElementDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 49);
+    return DeletingDtorCore(self, flags, Row<0x180035350>());
 }
 
 // Graphics::Material        ~Material = 0x180102a00  (PORTED, material.cpp)
 void* RtDelDtor_Material(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 50);
+    return DeletingDtorCore(self, flags, Row<0x180011d20>());
 }
 
 // Video::VideoProgram       ~VideoProgram = 0x1800f4650  (PORTED, videoprogram.cpp)
 void* RtDelDtor_VideoProgram(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 51);
+    return DeletingDtorCore(self, flags, Row<0x18004efb0>());
 }
 
 // Video::VertexLayout       ~VertexLayout = 0x1800f5df0  (PORTED, vertexlayout.cpp)
 void* RtDelDtor_VertexLayout(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 52);
+    return DeletingDtorCore(self, flags, Row<0x18004e000>());
 }
 
 // Video::ShaderProgram      ~ShaderProgram = 0x1800f50b0  (PORTED, shaderprogram.cpp)
 void* RtDelDtor_ShaderProgram(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 53);
+    return DeletingDtorCore(self, flags, Row<0x18004e360>());
 }
 // Video::VertexProgram      ~VertexProgram = 0x1800f61b0  (PORTED, vertexprogram.cpp)
 void* RtDelDtor_VertexProgram(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 54);
+    return DeletingDtorCore(self, flags, Row<0x18004e810>());
 }
 // Video::PixelProgram       ~PixelProgram = 0x1800f3a00   (PORTED, pixelprogram.cpp)
 void* RtDelDtor_PixelProgram(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 55);
+    return DeletingDtorCore(self, flags, Row<0x18004eb90>());
 }
 // Video::RenderState        ~RenderState = 0x1800f4c30    (PORTED, renderstate.cpp)
 void* RtDelDtor_RenderState(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 56);
+    return DeletingDtorCore(self, flags, Row<0x18004b9d0>());
 }
 
 // Rows 57-60 (2026-09-12): the four UI::*Description classes the cutover boot
@@ -1514,77 +1537,77 @@ void* RtDelDtor_RenderState(void* self, unsigned flags) {
 // wrapper + RegisterRuntimeAddr pair did not, so slot 0 of each minted vtable
 // stayed a trap; wired here by the coordinator when batch 9's merge exposed it.
 void* RtDelDtor_GroupDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 57);
+    return DeletingDtorCore(self, flags, Row<0x180046af0>());
 }
 void* RtDelDtor_RibbonDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 58);
+    return DeletingDtorCore(self, flags, Row<0x180044620>());
 }
 void* RtDelDtor_ImageDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 59);
+    return DeletingDtorCore(self, flags, Row<0x1800361f0>());
 }
 void* RtDelDtor_AnimatedImageDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 60);
+    return DeletingDtorCore(self, flags, Row<0x1800369e0>());
 }
 
 // VTABLE BATCH 9 (2026-09-12). Indices 61-66, appended after rows 57-60
 // (wired above, after this batch's merge found them without wrappers).
 // UI::ComboDialog          ~ComboDialog = 0x180111cd0             (PORTED, runtime/src/ui/combodialog.cpp)
 void* RtDelDtor_ComboDialog(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 61);
+    return DeletingDtorCore(self, flags, Row<0x180074a10>());
 }
 // UI::DialogControllerConfig ~DialogControllerConfig = 0x18003b4f0  (PORTED, runtime/src/ui/dialogcontrollerconfig.cpp)
 void* RtDelDtor_DialogControllerConfig(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 62);
+    return DeletingDtorCore(self, flags, Row<0x18003b600>());
 }
 // Object::ExtensionCompiler ~ExtensionCompiler = 0x1800bcac0      (PORTED, runtime/src/object/ext_compilers.cpp)
 void* RtDelDtor_ExtensionCompiler(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 63);
+    return DeletingDtorCore(self, flags, Row<0x18002c300>());
 }
 // Object::ExternalCompiler  ~ExternalCompiler = 0x1800bca90       (PORTED, runtime/src/object/ext_compilers.cpp)
 void* RtDelDtor_ExternalCompiler(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 64);
+    return DeletingDtorCore(self, flags, Row<0x18002c180>());
 }
 // Object::ExternalList      ~ExternalList = 0x1800076c0           (PORTED, runtime/src/object/external_list.cpp)
 void* RtDelDtor_ExternalList(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 65);
+    return DeletingDtorCore(self, flags, Row<0x180007800>());
 }
 // IO::CompressedCopyFileStream ~CompressedCopyFileStream = 0x1800a92a0 (PORTED, runtime/src/io/compressedcopyfilestream.cpp)
 void* RtDelDtor_CompressedCopyFileStream(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 66);
+    return DeletingDtorCore(self, flags, Row<0x1800245f0>());
 }
 // Vtable batch 8 (2026-09-12): Collision2D::CollisionMesh/Surface,
 // Pathfinding::PointList, Picking::PickingMesh. Indices 67-70 (renumbered at
 // the merge: batch 9 took 61-66 on main first).
 void* RtDelDtor_CollisionMesh(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 67);
+    return DeletingDtorCore(self, flags, Row<0x1800656b0>());
 }
 void* RtDelDtor_Collision2DSurface(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 68);
+    return DeletingDtorCore(self, flags, Row<0x180064ea0>());
 }
 void* RtDelDtor_PointList(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 69);
+    return DeletingDtorCore(self, flags, Row<0x1800713b0>());
 }
 void* RtDelDtor_PickingMesh(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 70);
+    return DeletingDtorCore(self, flags, Row<0x180072050>());
 }
 // UI TEXT PIPELINE batch (2026-09-12). Indices 71-74, counted off the MERGED
 // table rather than assumed: this is the fourth batch to append here today and
 // the previous three each started at the same index on their own branch.
 // UI::Font          ~Font          = 0x1801175a0  (PORTED, runtime/src/ui/font.cpp)
 void* RtDelDtor_Font(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 85);
+    return DeletingDtorCore(self, flags, Row<0x180032130>());
 }
 // UI::CharacterSet  ~CharacterSet  = 0x1800cb840  (PORTED, runtime/src/ui/characterset.cpp)
 void* RtDelDtor_CharacterSet(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 86);
+    return DeletingDtorCore(self, flags, Row<0x1800378a0>());
 }
 // UI::Cursor        ~Cursor        = 0x1800cd1c0  (PORTED, runtime/src/ui/cursor.cpp)
 void* RtDelDtor_Cursor(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 87);
+    return DeletingDtorCore(self, flags, Row<0x18003b3a0>());
 }
 // UI::SpriteCapture ~SpriteCapture = 0x1800d91b0  (PORTED, runtime/src/ui/spritecapture_class.cpp)
 void* RtDelDtor_SpriteCapture(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 88);
+    return DeletingDtorCore(self, flags, Row<0x18003ccf0>());
 }
 
 // ---------------------------------------------------------------------------
@@ -1601,43 +1624,43 @@ void* RtDelDtor_SpriteCapture(void* self, unsigned flags) {
 // ---------------------------------------------------------------------------
 // UI::BorderDescription     ~ = 0x18010fb20   (PORTED, borderdescription.cpp)
 void* RtDelDtor_BorderDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 71);
+    return DeletingDtorCore(self, flags, Row<0x180040ff0>());
 }
 // UI::ButtonDescription     ~ = 0x180110bd0   (PORTED, buttondescription.cpp)
 void* RtDelDtor_ButtonDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 72);
+    return DeletingDtorCore(self, flags, Row<0x1800481a0>());
 }
 // UI::CheckDescription      ~ = 0x180111620   (PORTED, checkdescription.cpp)
 void* RtDelDtor_CheckDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 73);
+    return DeletingDtorCore(self, flags, Row<0x1800489c0>());
 }
 // UI::ClipRegionDescription ~ = 0x1800cc0d0   (PORTED, clipregiondescription.cpp)
 void* RtDelDtor_ClipRegionDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 74);
+    return DeletingDtorCore(self, flags, Row<0x180037eb0>());
 }
 // UI::ComboDescription      ~ = 0x180112370   (PORTED, combodescription.cpp)
 void* RtDelDtor_ComboDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 75);
+    return DeletingDtorCore(self, flags, Row<0x180074e70>());
 }
 // UI::ContainerDescription  ~ = 0x1800ccff0   (PORTED, containerdescription.cpp)
 void* RtDelDtor_ContainerDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 76);
+    return DeletingDtorCore(self, flags, Row<0x180039c00>());
 }
 // UI::DocumentTextDescription ~ = 0x1800cfb30 (PORTED, documenttextdescription.cpp)
 void* RtDelDtor_DocumentTextDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 77);
+    return DeletingDtorCore(self, flags, Row<0x18003bd90>());
 }
 // UI::EditDescription       ~ = 0x1800d11f0   (PORTED, editdescription.cpp)
 void* RtDelDtor_EditDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 78);
+    return DeletingDtorCore(self, flags, Row<0x18003fa20>());
 }
 // UI::GraphDescription      ~ = 0x1800d1b30   (PORTED, graphdescription.cpp)
 void* RtDelDtor_GraphDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 79);
+    return DeletingDtorCore(self, flags, Row<0x1800403a0>());
 }
 // UI::LabelDescription      ~ = 0x1800d2960   (PORTED, labeldescription.cpp)
 void* RtDelDtor_LabelDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 80);
+    return DeletingDtorCore(self, flags, Row<0x180042730>());
 }
 
 // VTABLE BATCH 7 (2026-09-12). Indices 81-84 (renumbered at this merge: batch
@@ -1645,23 +1668,23 @@ void* RtDelDtor_LabelDescription(void* self, unsigned flags) {
 // same range on this branch).
 // Graphics::AnimationGroup  ~AnimationGroup = 0x1800fb620  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
 void* RtDelDtor_AnimationGroup(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 81);
+    return DeletingDtorCore(self, flags, Row<0x1800167f0>());
 }
 // Graphics::ParticleSystem  ~ParticleSystem = 0x1800a51c0  (PORTED, BATCH C
 //                          2026-09-12, graphics/batchc_gfx_leaves.cpp; was
 //                          "NOT ported")
 void* RtDelDtor_ParticleSystem(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 82);
+    return DeletingDtorCore(self, flags, Row<0x180020a70>());
 }
 // Audio::SoundBuffer        ~SoundBuffer = 0x1800e03b0     (PORTED, BATCH C
 //                          2026-09-12, audio/batchc_audio_leaves.cpp; was
 //                          "NOT ported")
 void* RtDelDtor_SoundBuffer(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 83);
+    return DeletingDtorCore(self, flags, Row<0x18000bef0>());
 }
 // Audio::SoundEffect        ~SoundEffect = 0x1800e0880     (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
 void* RtDelDtor_SoundEffect(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 84);
+    return DeletingDtorCore(self, flags, Row<0x180050820>());
 }
 // Vtable batch 6 (2026-09-12): the graphics buffer / mesh / light slot-0 rows.
 // INDICES 103-108, RE-COUNTED OFF THE TABLE AFTER THE THIRD MERGE OF main.
@@ -1670,93 +1693,93 @@ void* RtDelDtor_SoundEffect(void* self, unsigned flags) {
 // is the positional-merge hazard the banner and kSpecCount describe, and it has
 // now bitten this one batch twice. RE-COUNT after every merge, never before.
 void* RtDelDtor_AmbientLight(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 103);
+    return DeletingDtorCore(self, flags, Row<0x180059080>());
 }
 void* RtDelDtor_GeneratedImageBuffer(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 104);
+    return DeletingDtorCore(self, flags, Row<0x18001eee0>());
 }
 void* RtDelDtor_FrameCopyImageBuffer(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 105);
+    return DeletingDtorCore(self, flags, Row<0x18001f260>());
 }
 void* RtDelDtor_ReflectionImageBuffer(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 106);
+    return DeletingDtorCore(self, flags, Row<0x180022600>());
 }
 void* RtDelDtor_GraphicsMesh(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 107);
+    return DeletingDtorCore(self, flags, Row<0x180012bd0>());
 }
 void* RtDelDtor_SpotLight(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 108);
+    return DeletingDtorCore(self, flags, Row<0x1800642b0>());
 }
 
 // UI::AnimatedImageElement  ~AnimatedImageElement = 0x1800cb3a0  (PORTED, runtime/src/ui/)
 void* RtDelDtor_AnimatedImageElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 109);
+    return DeletingDtorCore(self, flags, Row<0x180036db0>());
 }
 // UI::BorderElement  ~BorderElement = 0x180041230  (PORTED, runtime/src/ui/)
 void* RtDelDtor_BorderElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 110);
+    return DeletingDtorCore(self, flags, Row<0x1800414f0>());
 }
 // UI::ButtonElement  ~ButtonElement = 0x180110c90  (PORTED, runtime/src/ui/)
 void* RtDelDtor_ButtonElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 111);
+    return DeletingDtorCore(self, flags, Row<0x1800485b0>());
 }
 // UI::CheckElement  ~CheckElement = 0x180111700  (PORTED, runtime/src/ui/)
 void* RtDelDtor_CheckElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 112);
+    return DeletingDtorCore(self, flags, Row<0x180048d80>());
 }
 // UI::ClipRegionElement  ~ClipRegionElement = 0x1800cbe30  (PORTED, runtime/src/ui/)
 void* RtDelDtor_ClipRegionElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 113);
+    return DeletingDtorCore(self, flags, Row<0x180038370>());
 }
 // UI::ComboElement  ~ComboElement = 0x180112490  (PORTED, runtime/src/ui/)
 void* RtDelDtor_ComboElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 114);
+    return DeletingDtorCore(self, flags, Row<0x180075390>());
 }
 // UI::ContainerElement  ~ContainerElement = 0x1800ccb10  (PORTED, runtime/src/ui/)
 void* RtDelDtor_ContainerElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 115);
+    return DeletingDtorCore(self, flags, Row<0x18003a050>());
 }
 // UI::DocumentTextElement  ~DocumentTextElement = 0x1800cf320  (PORTED, runtime/src/ui/)
 void* RtDelDtor_DocumentTextElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 116);
+    return DeletingDtorCore(self, flags, Row<0x18003c650>());
 }
 // UI::EditElement  ~EditElement = 0x1800d0e50  (PORTED, runtime/src/ui/)
 void* RtDelDtor_EditElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 117);
+    return DeletingDtorCore(self, flags, Row<0x18003fed0>());
 }
 // UI::GraphElement  ~GraphElement = 0x1800d1840  (PORTED, runtime/src/ui/)
 void* RtDelDtor_GraphElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 118);
+    return DeletingDtorCore(self, flags, Row<0x1800408b0>());
 }
 // UI::GroupElement  ~GroupElement = 0x180117cc0  (PORTED, runtime/src/ui/)
 void* RtDelDtor_GroupElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 119);
+    return DeletingDtorCore(self, flags, Row<0x180046e10>());
 }
 // UI::ImageElement  ~ImageElement = 0x180118470  (PORTED, runtime/src/ui/)
 void* RtDelDtor_ImageElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 120);
+    return DeletingDtorCore(self, flags, Row<0x180036600>());
 }
 // UI::LabelElement  ~LabelElement = 0x1800d25f0  (PORTED, runtime/src/ui/)
 void* RtDelDtor_LabelElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 121);
+    return DeletingDtorCore(self, flags, Row<0x180042bb0>());
 }
 
 // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12), rows 85..98 ------------
 // All fourteen ~Class bodies are PORTED (runtime/src/ui/<class>element.cpp).
-void* RtDelDtor_LayoutElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, 89); }
-void* RtDelDtor_ListElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, 90); }
-void* RtDelDtor_NumberEditElement(void* self, unsigned flags) { return DeletingDtorCore(self, flags, 91); }
-void* RtDelDtor_NumberElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, 92); }
-void* RtDelDtor_PageElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, 93); }
-void* RtDelDtor_ProgressElement(void* self, unsigned flags)   { return DeletingDtorCore(self, flags, 94); }
-void* RtDelDtor_RadioElement(void* self, unsigned flags)      { return DeletingDtorCore(self, flags, 95); }
-void* RtDelDtor_RibbonElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, 96); }
-void* RtDelDtor_ScrollElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, 97); }
-void* RtDelDtor_SliderElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, 98); }
-void* RtDelDtor_SpinnerElement(void* self, unsigned flags)    { return DeletingDtorCore(self, flags, 99); }
-void* RtDelDtor_TabElement(void* self, unsigned flags)        { return DeletingDtorCore(self, flags, 100); }
-void* RtDelDtor_TableElement(void* self, unsigned flags)      { return DeletingDtorCore(self, flags, 101); }
-void* RtDelDtor_TextElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, 102); }
+void* RtDelDtor_LayoutElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x180043570>()); }
+void* RtDelDtor_ListElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, Row<0x180045320>()); }
+void* RtDelDtor_NumberEditElement(void* self, unsigned flags) { return DeletingDtorCore(self, flags, Row<0x180046540>()); }
+void* RtDelDtor_NumberElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x18004ab80>()); }
+void* RtDelDtor_PageElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, Row<0x180047540>()); }
+void* RtDelDtor_ProgressElement(void* self, unsigned flags)   { return DeletingDtorCore(self, flags, Row<0x180078150>()); }
+void* RtDelDtor_RadioElement(void* self, unsigned flags)      { return DeletingDtorCore(self, flags, Row<0x180047d50>()); }
+void* RtDelDtor_RibbonElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x180044ac0>()); }
+void* RtDelDtor_ScrollElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x18003adc0>()); }
+void* RtDelDtor_SliderElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x18004a180>()); }
+void* RtDelDtor_SpinnerElement(void* self, unsigned flags)    { return DeletingDtorCore(self, flags, Row<0x18004b3b0>()); }
+void* RtDelDtor_TabElement(void* self, unsigned flags)        { return DeletingDtorCore(self, flags, Row<0x18004ca90>()); }
+void* RtDelDtor_TableElement(void* self, unsigned flags)      { return DeletingDtorCore(self, flags, Row<0x180079600>()); }
+void* RtDelDtor_TextElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, Row<0x1800422f0>()); }
 
 // ---------------------------------------------------------------------------
 // VTABLE BATCH 2 (the UI::*Description second half), table rows 103..115.
@@ -1766,55 +1789,55 @@ void* RtDelDtor_TextElement(void* self, unsigned flags)       { return DeletingD
 // RtDelDtor_RibbonDescription is NOT here -- main wired it (index 58).
 // UI::LayoutDescription       ~LayoutDescription = 0x1800d3a10
 void* RtDelDtor_LayoutDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 122);
+    return DeletingDtorCore(self, flags, Row<0x1800431d0>());
 }
 // UI::ListDescription         ~ListDescription = 0x1800d4910
 void* RtDelDtor_ListDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 123);
+    return DeletingDtorCore(self, flags, Row<0x180044ed0>());
 }
 // UI::NumberDescription       ~NumberDescription = 0x180118c00
 void* RtDelDtor_NumberDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 124);
+    return DeletingDtorCore(self, flags, Row<0x18004a760>());
 }
 // UI::NumberEditDescription   ~NumberEditDescription = 0x1800d4fe0
 void* RtDelDtor_NumberEditDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 125);
+    return DeletingDtorCore(self, flags, Row<0x180046190>());
 }
 // UI::PageDescription         ~PageDescription = 0x1800d54b0
 void* RtDelDtor_PageDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 126);
+    return DeletingDtorCore(self, flags, Row<0x1800471a0>());
 }
 // UI::ProgressDescription     ~ProgressDescription = 0x18011a080
 void* RtDelDtor_ProgressDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 127);
+    return DeletingDtorCore(self, flags, Row<0x180077c80>());
 }
 // UI::RadioDescription        ~RadioDescription = 0x1800d5b20
 void* RtDelDtor_RadioDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 128);
+    return DeletingDtorCore(self, flags, Row<0x180047930>());
 }
 // UI::ScrollDescription       ~ScrollDescription = 0x18011a5d0
 void* RtDelDtor_ScrollDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 129);
+    return DeletingDtorCore(self, flags, Row<0x18003a790>());
 }
 // UI::SliderDescription       ~SliderDescription = 0x1800d7a00
 void* RtDelDtor_SliderDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 130);
+    return DeletingDtorCore(self, flags, Row<0x180049c60>());
 }
 // UI::SpinnerDescription      ~SpinnerDescription = 0x1800d8950
 void* RtDelDtor_SpinnerDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 131);
+    return DeletingDtorCore(self, flags, Row<0x18004b050>());
 }
 // UI::TabDescription          ~TabDescription = 0x1800da8e0
 void* RtDelDtor_TabDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 132);
+    return DeletingDtorCore(self, flags, Row<0x18004c640>());
 }
 // UI::TableDescription        ~TableDescription = 0x18011e6f0
 void* RtDelDtor_TableDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 133);
+    return DeletingDtorCore(self, flags, Row<0x180079210>());
 }
 // UI::TextDescription         ~TextDescription = 0x18011eae0  (PORTED, textdescription.cpp)
 void* RtDelDtor_TextDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 134);
+    return DeletingDtorCore(self, flags, Row<0x180041e30>());
 }
 
 const DelDtorSpec* Specs() { return kSpecs; }

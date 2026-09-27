@@ -48,6 +48,30 @@ for the rest of the wave; this one cannot.
 The harvest CSV is still read, but only as an independent CROSS-CHECK of the
 slot bytes for the symbols it covers — never as the source of the set.
 
+RETIREMENT (ENDGAME B.3 step 9, B39_RULES.md D3)
+
+The population rule above can only GROW: every exported ??_7 / ?_typeInfo@ /
+?_singleton@ is minted whether or not anything still reads it. Step 9 retires
+rows as their classes become real C++ classes, so the generator subtracts a
+RETIRED set LAST -- after the census, the source scan, the all-exported-data
+union and both ?_typeInfo@ closures -- read from every `*.txt` fragment in
+tools/rt_mint_retired/ (one fragment per block, so parallel blocks never edit
+the same file). One row per line:
+
+    <mangled symbol | 0xVA>   <owner block>   <free-text proof>
+
+`#` starts a comment. A key may appear once across all fragments.
+
+A retired row that STILL HAS A READER is REFUSED (exit 2, in --check too, so
+the static gate fails if a reader comes back): a literal of the name anywhere
+in code/ runtime/ standalone/ engine/ dx11/ tests/unit/ (comments stripped;
+the mint's own .cpp/.h, the cutover manifest and the dead promotion file
+COUNT -- only the two generated tables do not), a stringizing macro expansion
+that builds the name, a hex literal inside the row's extent, a census
+consumer, or -- for a vtable -- an RT_DELDTOR row that still fills its slot 0
+(retire the row and the table in one commit). An empty set changes nothing:
+the emitted file is byte-identical to the pre-retirement generator's.
+
 USAGE
     tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py
 """
@@ -569,6 +593,129 @@ def scan_source_for_data_symbols(repo):
     return out
 
 
+# ---------------------------------------------------------------------------
+# RETIREMENT (step 9). See the banner.
+# ---------------------------------------------------------------------------
+RETIRED_DIR = os.path.join(REPO, "tools", "rt_mint_retired")
+
+# Where a READER of a retired row can live. Wider than SCAN_DIRS on purpose:
+# a unit test that asks for a minted name is a reader too.
+READER_DIRS = SCAN_DIRS + ("tests/unit",)
+# Only the GENERATED tables are not readers: they name every row by
+# construction. rt_data_mint.cpp (ConstructLoader's strcmp), the cutover
+# manifest and reg_mint_promoted.cpp DO count -- each is a binding that would
+# resolve NULL or go dead once the row is gone.
+READER_SKIP = ("standalone/rt_data_mint_tables.inc", "standalone/rt_export_addrs.inc")
+DELDTOR_FILES = ("runtime/src/object/deleting_dtor.cpp",)
+HEX_LITERAL = re.compile(r"\b0[xX]0*([0-9a-fA-F]{1,16})(?:[uU]?[lL]{0,2}|[lL]{1,2}[uU]?)\b")
+STRINGIZE = re.compile(r'"((?:\?\?_7|\?_)[^"]*)"\s*#\s*([A-Za-z_]\w*)\s*"([^"]*)"')
+MACRO_DEF = re.compile(r"^[ \t]*#[ \t]*define[ \t]+([A-Za-z_]\w*)\(([^)]*)\)", re.M)
+
+
+def load_retired():
+    """{key: (fragment, lineno, owner, proof)}; key is a mangled name or an int VA."""
+    out, errors = {}, []
+    if not os.path.isdir(RETIRED_DIR):
+        return out, errors
+    for f in sorted(os.listdir(RETIRED_DIR)):
+        if not f.endswith(".txt"):
+            continue
+        rel = "tools/rt_mint_retired/" + f
+        for n, line in enumerate(open(os.path.join(RETIRED_DIR, f), encoding="utf-8"), 1):
+            line = line.split("#", 1)[0].strip()
+            if not line:
+                continue
+            parts = line.split(None, 2)
+            if len(parts) < 2:
+                errors.append(f"{rel}:{n}: a retired row needs '<key> <owner> [proof]'")
+                continue
+            key = int(parts[0], 16) if parts[0].lower().startswith("0x") else parts[0]
+            if key in out:
+                errors.append(f"{rel}:{n}: {parts[0]} is already retired at "
+                              f"{out[key][0]}:{out[key][1]}")
+                continue
+            out[key] = (rel, n, parts[1], parts[2] if len(parts) > 2 else "")
+    return out, errors
+
+
+def blank_strings(text):
+    """Comment-stripped text with string-literal CONTENTS blanked, so a hex
+    number inside a printf format or a message is never read as a binding."""
+    return re.sub(r'"(?:[^"\\\n]|\\.)*"', lambda m: '"' + " " * (len(m.group(0)) - 2) + '"', text)
+
+
+def scan_readers(repo, retired_names, ranges):
+    """Every reader of a retired row, by binding: [(key, 'file:line how')].
+
+    retired_names: set of mangled names; ranges: [(lo, hi, key)] of VAs."""
+    hits = []
+    files = []
+    for d in READER_DIRS:
+        for root, dirs, fs in os.walk(os.path.join(repo, d)):
+            dirs[:] = [x for x in dirs if not (x.startswith("build") or x == "obj")]
+            for f in fs:
+                if f.endswith((".cpp", ".h", ".inc", ".hpp", ".c")):
+                    files.append(os.path.join(root, f))
+    macros = {}           # name -> [(prefix, param_index, suffix)]
+    texts = {}
+    for path in files:
+        rel = os.path.relpath(path, repo).replace(os.sep, "/")
+        if rel in READER_SKIP:
+            continue
+        text = strip_comments(open(path, encoding="utf-8", errors="replace").read())
+        texts[rel] = text
+        for m in MACRO_DEF.finditer(text):
+            params = [p.strip() for p in m.group(2).split(",")]
+            end = m.end()
+            while True:                      # the body runs to the first unescaped newline
+                nl = text.find("\n", end)
+                if nl < 0 or text[nl - 1] != "\\":
+                    break
+                end = nl + 1
+            body = text[m.end():nl if nl >= 0 else len(text)]
+            for s in STRINGIZE.finditer(body):
+                if s.group(2) in params:
+                    macros.setdefault(m.group(1), []).append(
+                        (s.group(1), params.index(s.group(2)), s.group(3)))
+
+    def line_of(text, pos):
+        return text.count("\n", 0, pos) + 1
+
+    for rel, text in texts.items():
+        for m in DATA_LITERAL.finditer(text):
+            if m.group(1) in retired_names:
+                hits.append((m.group(1), f"{rel}:{line_of(text, m.start())} literal"))
+        for name, shapes in macros.items():
+            for m in re.finditer(r"\b" + re.escape(name) + r"\s*\(([^()]*)\)", text):
+                args = [a.strip() for a in m.group(1).split(",")]
+                for pre, idx, suf in shapes:
+                    if idx < len(args):
+                        built = pre + args[idx] + suf
+                        if built in retired_names:
+                            hits.append((built, f"{rel}:{line_of(text, m.start())} "
+                                                f"expansion of {name}"))
+        if ranges:
+            bare = blank_strings(text)
+            for m in HEX_LITERAL.finditer(bare):
+                v = int(m.group(1), 16)
+                for lo, hi, key in ranges:
+                    if lo <= v < hi:
+                        hits.append((key, f"{rel}:{line_of(bare, m.start())} "
+                                          f"address {hex(v)}"))
+    return hits
+
+
+def deldtor_rows(repo):
+    """{deleting-dtor VA: 'file:line'} for every RT_DELDTOR row."""
+    out = {}
+    for rel in DELDTOR_FILES:
+        text = strip_comments(open(os.path.join(repo, rel), encoding="utf-8",
+                                   errors="replace").read())
+        for m in re.finditer(r"^\s*RT_DELDTOR\(\s*0x([0-9a-fA-F]+)", text, re.M):
+            out[int(m.group(1), 16)] = f"{rel}:{text.count(chr(10), 0, m.start()) + 1}"
+    return out
+
+
 def run_census(csv_path):
     """Run tools/runtime_census.py and return its unported 'export' rows.
 
@@ -822,6 +969,84 @@ def main():
         for sym in chain_added:
             print("      " + sym)
 
+    # ---- RETIREMENT, subtracted LAST (step 9; see the banner) ---------------
+    # After every union and closure, so no rule above can bring a retired row
+    # back. A retired row that still has a reader is REFUSED here, in --check
+    # too: the static gate then fails the commit that re-adds a reader.
+    retired, rerrs = load_retired()
+    errors.extend(rerrs)
+    retired_rows = []                   # (key, symbol-or-None, rva)
+    retired_vt_starts = []              # kept in the overlap test below
+    if retired:
+        for key in retired:
+            match = [d for d in data_syms
+                     if (d[0] == key if isinstance(key, str) else (d[0] is None and ib + d[2] == key))]
+            if not match:
+                frag, n, _o, _p = retired[key]
+                errors.append(f"{frag}:{n}: {key if isinstance(key, str) else hex(key)} is "
+                              f"not a row the population rules mint (a typo, or not "
+                              f"exported DATA) -- nothing to retire")
+                continue
+            retired_rows.append((key, match[0][0], match[0][2]))
+        rkeys = {r[0] for r in retired_rows}
+        data_syms = [d for d in data_syms
+                     if not ((d[0] is not None and d[0] in rkeys)
+                             or (d[0] is None and (ib + d[2]) in rkeys))]
+
+        # The extent of each retired row, for the by-address reader test.
+        def vt_extent(rva):
+            j = bisect.bisect_right(sorted_rvas, rva)
+            nxt = sorted_rvas[j] if j < len(sorted_rvas) else None
+            n = 0
+            for i in range(min(64, ((nxt - rva) // 8) if nxt else 64)):
+                qw = int.from_bytes(pe.get_data(rva + 8 * i, 8), "little")
+                if qw == 0 or not (ib <= qw < ib + isize):
+                    break
+                n += 1
+            ovr = VTABLE_EXTENT.get(ib + rva)
+            return 8 * (ovr[0] if ovr else max(n, 1))
+        ranges, names = [], set()
+        retired_slot0 = {}
+        for key, sym, rva in retired_rows:
+            label = sym or hex(ib + rva)
+            if sym:
+                names.add(sym)
+            if sym is None:
+                size = (EXTRA_STORAGE_BY_ADDR[ib + rva][0] if (ib + rva) in EXTRA_STORAGE_BY_ADDR
+                        else vt_extent(rva))
+            elif sym.startswith("??_7"):
+                size = vt_extent(rva)
+            elif sym.startswith("?_typeInfo@"):
+                size = 0x38
+            elif sym.startswith("?_singleton@"):
+                size = 8
+            else:
+                size = EXTRA_SIZES.get(sym, (8, ""))[0]
+            ranges.append((ib + rva, ib + rva + size, label))
+            if (sym and sym.startswith("??_7")) or (sym is None and (ib + rva) in EXTRA_VTABLES_BY_ADDR):
+                retired_vt_starts.append(ib + rva)
+                retired_slot0[int.from_bytes(pe.get_data(rva, 8), "little")] = label
+        readers = scan_readers(REPO, names, ranges)
+        for row in unported:            # the census's own consumers
+            if row["key"] in names:
+                readers.append((row["key"], "census consumer: " + (row.get("callers") or "?")))
+        dd = deldtor_rows(REPO)
+        for va, label in retired_slot0.items():
+            if va in dd:
+                readers.append((label, f"{dd[va]} RT_DELDTOR row {hex(va)} still fills slot 0 "
+                                       f"(retire the row with the table)"))
+        by_row = {}
+        for key, where in readers:
+            by_row.setdefault(key, []).append(where)
+        for key, wheres in sorted(by_row.items()):
+            errors.append(f"RETIRED ROW STILL READ: {key} -- {len(wheres)} reader(s):")
+            for w_ in wheres[:12]:
+                errors.append(f"      {w_}")
+            if len(wheres) > 12:
+                errors.append(f"      ... +{len(wheres) - 12} more")
+        print(f"retired {len(retired_rows)} row(s) listed in tools/rt_mint_retired/",
+              file=sys.stderr)
+
     data_syms.sort(key=lambda d: (d[0] or "", d[2]))
 
     # ---- the construction sweep (see find_crt_init_table) -------------------
@@ -932,7 +1157,9 @@ def main():
     # else mints (??_7TextFileStream@'s 0x1801559d0) is invisible here and needs
     # the constructor evidence in VTABLE_EXTENT. Stated so the green is not read
     # as "no over-sized rows remain".
-    starts = sorted(v["va"] for v in vtables)
+    # A RETIRED table still occupies its bytes in .rdata: keep its start in the
+    # test so retiring a row can never hide a neighbour that swallows it.
+    starts = sorted([v["va"] for v in vtables] + retired_vt_starts)
     for v in vtables:
         lo, hi = v["va"], v["va"] + 8 * len(v["slots"])
         for s in starts:
@@ -1058,6 +1285,9 @@ def main():
     w("//   tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py")
     w(f"// Counts: {len(vtables)} vtables, {len(typeinfos)} BaseTypeInfo, "
       f"{len(storage)} storage symbols.")
+    if retired_rows:
+        w(f"// Retired (ENDGAME B.3 step 9): {len(retired_rows)} row(s), listed in "
+          f"tools/rt_mint_retired/*.txt.")
     w("")
 
     # per-slot trap stubs

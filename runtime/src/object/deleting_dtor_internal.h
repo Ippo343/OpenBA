@@ -47,53 +47,15 @@ struct DelDtorSpec {
     const char* name;
 };
 
-// 37 as surveyed by Wave 9 lane K; the 38th (UI::Dialog, 0x180038b20) was added
-// by Wave 10C lane DLG8 when it closed `??_7Dialog@UI@@6B@`, and the 39th
-// (UI::ToolTipDialog, 0x18004d270) by Wave 10D lane TIP for the same reason on
-// `??_7ToolTipDialog@UI@@6B@`. Wave 19 lane CSTREAM added the 40th and 41st
-// (IO::CompressedStream 0x180023fd0, IO::CompressedFileStream 0x180024100) on
-// `??_7CompressedStream@IO@@6B@` and `??_7CompressedFileStream@IO@@6B@` --
-// making that four lanes now that have appended, which is the whole reason this
-// constant exists. Wave 21 lane ENC added the 42nd (IO::TextFileStream,
-// 0x18002ba90) closing slot 0 of `??_7TextFileStream@IO@@6B@`, and the 43rd
-// (IO::ReaderWriter, 0x180023bd0) closing the single non-purecall slot of
-// `??_7ReaderWriter@IO@@6B@` (Wave 21 §8 item 12 — that row stays
-// RT_UNPROMOTABLE regardless; see reg_mint_promoted.cpp). Prose in
-// deleting_dtor.cpp that says "37" is describing lane K's original survey and
-// stays true of it; the TABLE is the authority and this constant tracks it,
-// and the static_assert next to the table is what forces an appender to
-// notice (it caught CSTREAM's addition, at 41 vs 39).
-constexpr int kSpecCount = 135;  // 122-134: VTABLE BATCH 2 desc_B (13 UI::*Description);   // 109-121: VTABLE BATCH 3 elem_A (13 UI::*Element); 103-108: VTABLE BATCH 6 (Graphics::AmbientLight,
-                                 //     GeneratedImageBuffer, FrameCopyImageBuffer,
-                                 //     ReflectionImageBuffer, GraphicsMesh, SpotLight;
-                                 //     2026-09-12). RE-COUNTED TWICE: these six were
-                                 //     71-76 on their own branch, then 89-94, and are
-                                 //     103-108 now that batches 1/5/7 (71-88) and
-                                 //     batch 4 elem_B (89-102) reached main first.
-                                 //     The hazard below, met twice by one batch.
-                                 // 89-102: VTABLE BATCH 4 elem_B (14 UI::*Element); 85-88: VTABLE BATCH 5 (Font, CharacterSet, Cursor, SpriteCapture); 81-84: VTABLE BATCH 7 (AnimationGroup, ParticleSystem, SoundBuffer, SoundEffect); 71-80: VTABLE BATCH 1 -- UI::{Border,Button,Check,
-                                 //     ClipRegion,Combo,Container,DocumentText,Edit,Graph,
-                                 //     Label}Description (2026-09-12); renumbered at the
-                                 //     merge, batch 9 keeps 61-66 and batch 8 67-70
-                                 // 67-70: Collision2D::CollisionMesh/Surface, Pathfinding::PointList,
-                                 //     Picking::PickingMesh (vtable batch 8, 2026-09-12); 61-66 batch 9
-                                 // 61: UI::ImageDescription + AnimatedImageDescription (2026-09-12)   // 59: UI::RibbonDescription (2026-09-12)   // 58: UI::GroupDescription (2026-09-12)   // 57: Video::ShaderProgram + VertexProgram + PixelProgram + RenderState (2026-09-12)   // 53: Video::VertexLayout (2026-09-12)   // 52: Video::VideoProgram (2026-09-12)   // 51: Graphics::Material (2026-09-12)
-                                 // (was 50)   // 45-47: Graphics::EdgeMesh / EdgeMeshInstance /
-                                 // MeshInstance (Wave 27 lane GFXMESH)
-                                 // 48-49: Graphics::Light / SunLight (Wave 27 lane GFXPART)
-                                 // 50:    UI::ElementDescription (Wave 27 lane IOTEXT)
-                                 //
-                                 // *** MERGE HAZARD, PAID FOR AT WAVE 27 INTEGRATION ***
-                                 // The table is POSITIONAL: DeletingDtorCore(self,
-                                 // flags, N) indexes kSpecs[N]. THREE Wave 27 lanes
-                                 // each appended starting at index 44 on their own
-                                 // branch. A keep-both merge silently gave two of
-                                 // them the FIRST lane's rows. The static_assert
-                                 // below checks the COUNT ONLY -- it cannot see an
-                                 // index collision, and a wrong index dispatches
-                                 // THE WRONG DESTRUCTOR with no diagnostic.
-                                 // If you append here, re-derive every appended
-                                 // lane's index after the merge, not before.
+// THE TABLE IS NO LONGER POSITIONAL (ENDGAME B.3 step 9, B39_RULES.md D4).
+// Until step 9 every wrapper indexed kSpecs[N] by a literal N, and three
+// waves paid for it at merge time (a keep-both merge gave two lanes the first
+// lane's rows and dispatched THE WRONG DESTRUCTOR with no diagnostic). Step 9
+// DELETES rows from many blocks at once, so each wrapper now names its row by
+// the deleting destructor's own address -- `Row<0xADDR>()` in deleting_dtor.cpp,
+// a compile-time lookup that fails the build when the row is missing -- and
+// kSpecCount is sizeof(kSpecs) there. Deleting a row is: the row, its wrapper,
+// its RegisterRuntimeAddr line. Nothing is renumbered.
 
 // The body and the table.
 void* DeletingDtorCore(void* self, unsigned flags, int i);
