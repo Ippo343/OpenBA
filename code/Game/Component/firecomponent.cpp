@@ -32,12 +32,12 @@
 #include <cstdio>
 #include <new>
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Component/FireDescription.h"
 
 // Leaf bodies (firecomponent_ignite.cpp).
 extern "C" void FireComponent_Ignite_610(void* self);
 extern "C" void FireComponent_Spread_130(void* self);
 extern "C" void FireComponent_Extinguish_4c0(void* self);
-extern uint32_t g_tid_FireDescription;
 
 namespace {
 
@@ -151,7 +151,7 @@ void FireComponent::Update(void* time) {
         // UNCONDITIONALLY with the description pointer, which retail always has.
         // No `if (desc)` here: that guard is what used to delete this roll.
         void* obj = *reinterpret_cast<void**>(s + 0x18);
-        void* desc = (obj && ::Object::IsDerivedFromOrTrust(obj, g_tid_FireDescription))
+        void* desc = (obj && ::Object::IsDerivedFromOrTrust(obj, FireDescription::TypeId()))
                    ? obj : nullptr;
         if (!s_probCheck) return;
         void* rng = *reinterpret_cast<void**>(gw + 0xD8);

@@ -44,12 +44,10 @@
 
 
 
-// RawMaterialDescription type-id (DAT_1401c7cb8, exposed as g_TypeId_RawMaterialDescription)
-// — used by Update to size each material's pile. Same fallback as above.
+// RawMaterialDescription type-id (cell 0x1401c7cb8) — used by Update to size each
+// material's pile. TypeId() carries the ctor sentinel 0xFFFFFFFF until
+// Factory::Startup runs (D6); treat that the same as unresolved.
 static uint32_t SDD_RawMatDescTypeId() {
-    if (g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription != 0
-        && *g_TypeId_RawMaterialDescription != 0xFFFFFFFF)
-        return *g_TypeId_RawMaterialDescription;
     const uint32_t id = RawMaterialDescription::TypeId();
     if (id != 0xFFFFFFFF) return id;
     return 0;
