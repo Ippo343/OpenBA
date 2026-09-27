@@ -40,6 +40,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
 
 namespace {
 
@@ -71,9 +72,6 @@ inline int64_t&  NodeRight(int64_t n)  { return *reinterpret_cast<int64_t*>(n + 
 // registered there; declare it for direct reuse from c710's insert.
 extern "C" void PlayerTrade_Retrace_25920(int64_t* root, int64_t* cursor); // 0x140025920
 
-// Type-id global storage — defined in reg_work_tail_trade.cpp (standalone), filled
-// after Engine::Startup. The IsDerivedFrom in c8a0 reads the *value* at DWORD_1401c7158.
-extern "C" uint32_t g_tid_TradeWork_CitizenComponent; // DWORD_1401c7158
 
 // ============================================================
 // 0x14002c830 — c710 node-alloc sub-helper. Allocates a 0x38-byte AVL node, copies
@@ -197,11 +195,10 @@ extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2) {
             rec[0] = 0; rec[1] = 0; rec[2] = 0;
 
             reinterpret_cast<Object::InternalBasePtr*>(&rec[0])->Serialize(*reinterpret_cast<IO::Serializer*>(param_2));   // B.3.4 bridge
-            // Validate the deserialized object against CitizenAIComponent; null on fail.
-            // Skip when the type-id is unresolved (0) — cascade-safe (keep the object).
-            if (rec[0] != 0 && g_tid_TradeWork_CitizenComponent != 0 && fn_IsDerivedFrom &&
-                !fn_IsDerivedFrom(reinterpret_cast<void*>(rec[0]),
-                                  g_tid_TradeWork_CitizenComponent)) {
+            // Validate the deserialized object against CitizenComponent (DWORD_1401c7158,
+            // ENDGAME B.3.9 D5: by cell, read directly).
+            if (rec[0] != 0 && fn_IsDerivedFrom &&
+                !fn_IsDerivedFrom(reinterpret_cast<void*>(rec[0]), CitizenComponent::TypeId())) {
                 rec[0] = 0;
             }
             // int payload at record +0x10.
@@ -228,10 +225,8 @@ extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2) {
         while (node != 0) {
             // Serialize this node's IBP (+0x00), int (+0x10), ExternalPtr (+0x08).
             reinterpret_cast<Object::InternalBasePtr*>(reinterpret_cast<void*>(node))->Serialize(*reinterpret_cast<IO::Serializer*>(param_2));   // B.3.4 bridge
-            if (*reinterpret_cast<int64_t*>(node) != 0 && g_tid_TradeWork_CitizenComponent != 0 &&
-                fn_IsDerivedFrom &&
-                !fn_IsDerivedFrom(*reinterpret_cast<void**>(node),
-                                  g_tid_TradeWork_CitizenComponent)) {
+            if (*reinterpret_cast<int64_t*>(node) != 0 && fn_IsDerivedFrom &&
+                !fn_IsDerivedFrom(*reinterpret_cast<void**>(node), CitizenComponent::TypeId())) {
                 *reinterpret_cast<int64_t*>(node) = 0;
             }
             reinterpret_cast<IO::Serializer*>(param_2)->Serialize(*reinterpret_cast<int*>(node + 0x10), nullptr);   // B.3.4 bridge
