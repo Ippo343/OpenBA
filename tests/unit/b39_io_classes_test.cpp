@@ -566,3 +566,52 @@ UNIT_TEST(b39_io_packagefile_shape_ctor_and_both_arms) {
     ::new (block + 8 + 0xf0) IO::PackageFile();
     CHECK(reinterpret_cast<uint8_t*>(p0->DeletingDtor(3)) == block);
 }
+
+// ===========================================================================
+// IO::CompressedMemoryStream -- row 32 (W2). ??0 0x1800a9520 / slot 0 0x1800244a0.
+// ===========================================================================
+// ~CompressedMemoryStream / ~CompressedStream are host stubs (release nothing);
+// the constructors and slot 0 are inline and REAL here.
+UNIT_TEST(b39_io_compressedmemorystream_shape_ctor_and_both_arms) {
+    CHECK(!std::is_abstract<IO::CompressedMemoryStream>::value);
+    CHECK(!std::is_destructible<IO::CompressedMemoryStream>::value);
+    CHECK(!std::has_virtual_destructor<IO::CompressedMemoryStream>::value);
+    CHECK_EQ(SlotOffset(&IO::CompressedMemoryStream::DeletingDtor), (uintptr_t)0x00);
+    CHECK_EQ(SlotOffset(&IO::CompressedMemoryStream::Close),        (uintptr_t)0x38);
+    CHECK_EQ(SlotOffset(&IO::CompressedMemoryStream::PreCommit),    (uintptr_t)0x40);
+
+    // 0x1800a9520 = 0x1800aa3d0 (the base) + the vptr + 0x1800ae710 at +0x68.
+    alignas(8) uint8_t mem[0x98];
+    std::memset(mem, 0xCD, sizeof mem);
+    IO::CompressedMemoryStream* cms = ::new (mem) IO::CompressedMemoryStream();
+    CHECK_EQ(cms->_direction, 0);
+    CHECK_EQ(cms->_position, 0);
+    CHECK_EQ(cms->_activeWindow, -1);
+    CHECK(cms->_source == nullptr);
+    CHECK(cms->_headerData == nullptr);
+    CHECK_EQ(cms->_headerSize, 0);
+    CHECK(cms->_compression == nullptr);
+    CHECK(cms->_encoding != nullptr);
+    CHECK(cms->_encoding->IsBinary());
+    for (int i = 0x18; i < 0x1c; ++i) CHECK_EQ((int)mem[i], 0xCD);
+    for (int i = 0x24; i < 0x28; ++i) CHECK_EQ((int)mem[i], 0xCD);
+    // the member: its own Binary encoding, data null, ownsData 0, cursor/size 0
+    CHECK(cms->_memoryStream._encoding != nullptr);
+    CHECK(cms->_memoryStream._encoding != cms->_encoding);
+    CHECK(cms->_memoryStream._data == nullptr);
+    CHECK_EQ((int)cms->_memoryStream._ownsData, 0);
+    CHECK_EQ(cms->_memoryStream._size, 0u);
+    CHECK(&cms->GetMemoryStream() == &cms->_memoryStream);
+    CHECK_EQ((int)(reinterpret_cast<uint8_t*>(&cms->GetMemoryStream()) - mem), 0x68);
+    CHECK(VTableOf(cms) != VTableOf(&cms->_memoryStream));
+    CHECK(cms->DeletingDtor(0) == cms);
+
+    IO::CompressedMemoryStream* heap = ::new (std::malloc(0x98)) IO::CompressedMemoryStream();
+    CHECK(heap->DeletingDtor(1) == heap);
+    uint8_t* block = static_cast<uint8_t*>(std::malloc(8 + 2 * 0x98));
+    const int64_t two = 2;
+    std::memcpy(block, &two, sizeof two);
+    IO::CompressedMemoryStream* c0 = ::new (block + 8) IO::CompressedMemoryStream();
+    ::new (block + 8 + 0x98) IO::CompressedMemoryStream();
+    CHECK(reinterpret_cast<uint8_t*>(c0->DeletingDtor(3)) == block);
+}

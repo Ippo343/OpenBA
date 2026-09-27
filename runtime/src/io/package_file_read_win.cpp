@@ -235,11 +235,8 @@ extern "C" FileInfo* RtIo_FileInfo_Assign(FileInfo*, const FileInfo*);      // 0
 }  // namespace RtIO
 
 namespace RtIo {
-extern "C" CompressedStream* RtIo_CompressedStream_Ctor(CompressedStream*);   // 0x1800aa3d0
-extern "C" MemoryStream*     RtIo_MemoryStream_Ctor(MemoryStream*);           // 0x1800ae710
 extern "C" bool RtIo_CompressedStream_Open(CompressedStream*, Stream*, int32_t); // 0x1800aa560
 extern "C" bool RtIo_CompressedStream_Read(CompressedStream*, int32_t, void*);   // 0x1800aa780
-extern "C" void RtIo_CompressedMemoryStream_Dtor(CompressedMemoryStream*);       // 0x1800a9560
 }  // namespace RtIo
 
 namespace RtIO {
@@ -277,15 +274,6 @@ constexpr size_t kOutCap        = 0x800;    // = 0x860 - 0x60
 // loads into RSI at 0x1800b46e8 and RELOADS at 0x1800b478b.
 FileSystem** FileSystemSingletonCell() {
     return RT_DATA_SLOT(FileSystem**, "?_singleton@FileSystem@IO@@0PEAV12@EA");
-}
-
-// ??_7CompressedMemoryStream@IO@@6B@ (0x180155560, ordinal 1409, verified in
-// the DLL's own export directory). Through the data door, never the literal VA:
-// at cutover a raw 0x180155560 would be a pointer into a module that is not
-// loaded, stamped into the stack object every mount goes through.
-const void* VtblCompressedMemoryStream() {
-    static const void* v = ResolveExport("??_7CompressedMemoryStream@IO@@6B@");
-    return v;
 }
 
 // `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` / `?MemFree@`. Retail inlines
@@ -629,10 +617,14 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
     // Not two objects: the CompressedStream base ctor, then the class's own
     // vtable stamped over it, then the EMBEDDED MemoryStream's ctor at +0x68,
     // then four raw field stores, then Open with the embedded stream as source.
-    RtIo::CompressedMemoryStream cms;   // the POD, by name: a bare name here binds IO::CompressedMemoryStream (B34_RULES 7.2)
-    RtIo::RtIo_CompressedStream_Ctor(&cms.base);               // 1800b482a
-    *reinterpret_cast<const void**>(&cms) = VtblCompressedMemoryStream();  // 1800b4837
-    RtIo::RtIo_MemoryStream_Ctor(&cms.memoryStream);           // 1800b4840
+    // ENDGAME B.3.9 IO (W2): the REAL class, built on the frame's raw storage
+    // -- base ctor, vptr, member ctor, the same three steps (1800b482a..4840);
+    // the body below keeps reading it through the RtIo POD view.
+    alignas(16) unsigned char cmsStorage[sizeof(IO::CompressedMemoryStream)];
+    IO::CompressedMemoryStream* const cmsObj =
+        ::new (static_cast<void*>(cmsStorage)) IO::CompressedMemoryStream();
+    RtIo::CompressedMemoryStream& cms =
+        *reinterpret_cast<RtIo::CompressedMemoryStream*>(cmsObj);
     cms.memoryStream.data           = blob;                    // 1800b4846
     cms.memoryStream.size   = static_cast<uint32_t>(blobLen);  // 1800b484d
     cms.memoryStream.cursor         = 0;                       // 1800b4850
@@ -816,7 +808,7 @@ bool PackageFile::ReadPackfile(const RtSystem::Filename& nameRef) {
     }
     CallStreamClose(&cms.memoryStream);                        // 1800b603a  slot 7
     MemFree(blob);                                             // 1800b6045
-    RtIo::RtIo_CompressedMemoryStream_Dtor(&cms);              // 1800b604f
+    cmsObj->IO::CompressedMemoryStream::DeletingDtor(0);       // 1800b604f  ~CompressedMemoryStream
     const bool ours = true;                                    // 1800b6059  MOV AL,1
 
     return ours;

@@ -114,6 +114,12 @@ void CompressedFileStream::Close()       { StubReached("CompressedFileStream::Cl
 // the host bodies have nothing to release; ~Stream still frees the encoding.
 CompressedStream::~CompressedStream() {}
 CompressedFileStream::~CompressedFileStream() {}
+// ENDGAME B.3.9 IO (W2): CompressedMemoryStream is concrete; its destructor
+// (the Close guard + Commit, the member's virtual Close) and the two
+// non-virtual Open / Create live in compressedstream.cpp on the port registry.
+CompressedMemoryStream::~CompressedMemoryStream() {}
+bool CompressedMemoryStream::Open()   { StubReached("CompressedMemoryStream::Open"); }
+bool CompressedMemoryStream::Create() { StubReached("CompressedMemoryStream::Create"); }
 
 // ---- IO::TextFileStream (runtime/src/io/text_file_stream_win.cpp) ----------
 // Slot 0 is PURE on this class. Slots 1 and 7 are FileStream's, above. What is

@@ -215,9 +215,6 @@ using ModArray = Collection::Array<ModInfo>;
 // none of them returns a class by value — so not one has a hidden return slot
 // (tools/abi_retslot_audit.py agrees; a typedef that omits one is a wild write
 // that still returns the right answer, reference_hidden_retslot_wild_write).
-using CmsCtorFn   = CompressedMemoryStream* (*)(CompressedMemoryStream*);
-using CmsVoidFn   = void (*)(CompressedMemoryStream*);
-using CmsBoolFn   = bool (*)(CompressedMemoryStream*);
 using MsOpenFn    = bool (*)(MemoryStream*, int);
 // ENDGAME B.3.1 step 2: the String::Serialize door typedef is gone with its
 // three call sites — all three are `System::String::Serialize` now.
@@ -288,9 +285,10 @@ void Save::SaveLoad::LoadMetaData(System::String& description, void** pixels,
     // fields it writes and leaves the documented gaps alone. Zeroing them first
     // would be a normalisation of retail's bytes.
     alignas(16) unsigned char cmsStorage[sizeof(CompressedMemoryStream)];
-    CompressedMemoryStream* cms =
-        reinterpret_cast<CompressedMemoryStream*>(cmsStorage);
-    RT_EXPORT_ONCE(CmsCtorFn, "??0CompressedMemoryStream@IO@@QEAA@XZ")(cms);
+    // ENDGAME B.3.9 IO (W2, foreign site): the REAL class on that storage.
+    IO::CompressedMemoryStream* const cmsObj =
+        ::new (static_cast<void*>(cmsStorage)) IO::CompressedMemoryStream();
+    CompressedMemoryStream* cms = reinterpret_cast<CompressedMemoryStream*>(cmsObj);
 
     // ---- 0x1800c1b90 / 0x1800c1ba1 : fill the embedded MemoryStream --------
     // Open allocates the buffer and sets _size/_ownsData; the copy that follows
@@ -309,7 +307,7 @@ void Save::SaveLoad::LoadMetaData(System::String& description, void** pixels,
     // bool result is DISCARDED here, exactly as retail discards it — a save whose
     // window table does not check out produces garbage metadata rather than an
     // error, and that is the shipped behaviour.
-    RT_EXPORT_ONCE(CmsBoolFn, "?Open@CompressedMemoryStream@IO@@QEAA_NXZ")(cms);
+    cmsObj->Open();
 
     // ---- 0x1800c1bba..0x1800c1bea : IO::Serializer ser(cms, 0), INLINED ----
     // Field for field with ??0Serializer@IO@@ (0x1800b9960): store the stream,
@@ -402,7 +400,7 @@ void Save::SaveLoad::LoadMetaData(System::String& description, void** pixels,
     // Retail inlines CompressedMemoryStream::Close (guard + Commit + the
     // embedded stream's virtual Close); runtime/src/io/compressedstream.cpp
     // holds that transcription and this reaches it.
-    RT_EXPORT_ONCE(CmsVoidFn, "?Close@CompressedMemoryStream@IO@@UEAAXXZ")(cms);
+    cmsObj->IO::CompressedMemoryStream::Close();
 
     // ---- 0x1800c1d98 : release the consumed image --------------------------
     // THE WRITER Wave 13's UpdateList note went looking for. See the header.
@@ -422,7 +420,7 @@ void Save::SaveLoad::LoadMetaData(System::String& description, void** pixels,
     _embeddedState._size = 0;
 
     // ---- 0x1800c1db6 : ~CompressedMemoryStream, inlined by retail ----------
-    RT_EXPORT_ONCE(CmsVoidFn, "??1CompressedMemoryStream@IO@@UEAA@XZ")(cms);
+    cmsObj->IO::CompressedMemoryStream::DeletingDtor(0);   // flags 0: no free of the stack object
 
 }
 

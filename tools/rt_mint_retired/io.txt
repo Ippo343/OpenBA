@@ -18,3 +18,4 @@
 ??_7MemoryStream@IO@@6B@      IO   ??0MemoryStream door is ::new MemoryStream(); SaveAllSettings + SaveMetaData (foreign sites) use the class; slot-0 body 0x1800242a0 + 6 slot doors deleted
 ??_7CompressedFileStream@IO@@6B@  IO   External::Load (foreign site external_load.cpp) builds ::new CompressedFileStream(); RT_DELDTOR 0x180024100, ??1 door 0x1800a9330, ?Close slot door deleted
 ??_7PackageFile@IO@@6B@       IO   LoadPackages / RefreshList / the class's own factory pair + Construct/Reconstruct build ::new PackageFile(); FACTREST pair, RT_DELDTOR 0x1800259d0, ??0/??1 doors, 8 slot doors deleted
+??_7CompressedMemoryStream@IO@@6B@  IO   every builder (SaveMetaData, LoadMetaData, ReadPackfile, the exe SaveRestore + roundtrip check) is ::new (p) CompressedMemoryStream(); RT_DELDTOR 0x1800244a0, 6 CMS doors (??0/??1/Open/Create/Close/GetMemoryStream) + ?PreCommit slot door deleted

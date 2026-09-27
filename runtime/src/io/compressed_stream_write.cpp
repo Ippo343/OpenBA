@@ -487,10 +487,8 @@ extern "C" void RtIo_CompressedStream_PreCommit(CompressedStream* self) {
 //
 // The tail jump means the bool is this function's return value even though the
 // slot is typed `void` — harmless, and reproduced by simply discarding it.
-extern "C" void RtIo_CompressedMemoryStream_PreCommit(CompressedStream* self) {
-    reinterpret_cast<IO::CompressedMemoryStream*>(self)
-        ->IO::CompressedMemoryStream::PreCommit();
-}
+// ENDGAME B.3.9 IO (W2): the slot door that stood here went with the minted
+// ??_7CompressedMemoryStream row; the class's table carries the member.
 
 // ============================================================================
 // ?Commit@CompressedStream@IO@@QEAAXXZ                       retail 0x1800a9ee0
@@ -887,10 +885,6 @@ int RtIoCompressedStreamWriteRegister() {
     RegisterRuntimeExport("?PreCommit@CompressedStream@IO@@UEAAXXZ",
                           (void*)&RtIo_CompressedStream_PreCommit); ++n;
     RegisterRuntimeAddr(0x1800aa8c0, (void*)&RtIo_CompressedStream_PreCommit);
-
-    RegisterRuntimeExport("?PreCommit@CompressedMemoryStream@IO@@UEAAXXZ",
-                          (void*)&RtIo_CompressedMemoryStream_PreCommit); ++n;
-    RegisterRuntimeAddr(0x1800a9660, (void*)&RtIo_CompressedMemoryStream_PreCommit);
 
     RegisterRuntimeExport("?Close@CompressedStream@IO@@UEAAXXZ",
                           (void*)&RtIo_CompressedStream_Close); ++n;

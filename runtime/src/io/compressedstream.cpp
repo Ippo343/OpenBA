@@ -157,12 +157,8 @@ using VoidThisFn  = void (*)(void*);
 using CsCreateFn  = bool (*)(void*, void*, int);
 using StreamVFn   = void (*)(void*);          // vtable slot 7, Close()
 
-// The three exported vtable data symbols. Resolved once each; the value is the
-// address the retail ctor/dtor store, i.e. slot 0, not the RTTI word before it.
-const void* VtblCompressedMemoryStream() {
-    static const void* v = ResolveExport("??_7CompressedMemoryStream@IO@@6B@");
-    return v;
-}
+// The exported vtable data symbols the remaining ??0CompressedStream door
+// stamps. ENDGAME B.3.9 IO: CompressedMemoryStream's went with its row.
 const void* VtblStream() {
     static const void* v = ResolveExport("??_7Stream@IO@@6B@");
     return v;
@@ -181,189 +177,59 @@ void CallStreamCloseVirtual(MemoryStream* ms) {
 }  // namespace
 
 // ============================================================================
-// ??0CompressedMemoryStream@IO@@QEAA@XZ   retail 0x1800a9520, profile 0x18005c240
+// IO::CompressedMemoryStream -- ENDGAME B.3.9 IO (W2)
 // ============================================================================
-// Retail, disassembled:
-//     CALL 0x1800aa3d0            ; CompressedStream::CompressedStream(this)
-//     LEA  RAX,[0x180155560]      ; &CompressedMemoryStream::_vftable_
-//     MOV  [RBX],RAX
-//     LEA  RCX,[RBX+0x68]
-//     CALL 0x1800ae710            ; MemoryStream::MemoryStream(this+0x68)
-//     MOV  RAX,RBX                ; MSVC ctors return `this`
-//
-// The order is load-bearing: the base ctor stamps CompressedStream's vtable,
-// we overwrite it with ours, and only THEN is the member constructed — so a
-// hypothetical virtual call out of MemoryStream's ctor would see the derived
-// vtable. The profile build (0x18005c240) has the identical three steps with
-// nothing inlined, which is the independent witness for the +0x68 offset.
-//
-// No new state is introduced here; every field this object owns is written by
-// one of the two base/member constructors.
-extern "C" CompressedMemoryStream*
-RtIo_CompressedMemoryStream_Ctor(CompressedMemoryStream* self) {
+// The six doors that stood here (??0 / ??1 / ?Create / ?Open / ?Close /
+// ?GetMemoryStream) are the class's own members now: the constructor and
+// GetMemoryStream are inline in Stream.h, Close is below, and every builder
+// (Save::SaveLoad::SaveMetaData / LoadMetaData, PackageFile::ReadPackfile,
+// the exe's GameUpdateLoop::SaveRestoreOut and its roundtrip check) spells
+// `::new (p) IO::CompressedMemoryStream()` and ends the object with a
+// non-virtual `DeletingDtor(0)` at the position the door call had.
+namespace RtIo {
+extern "C" bool RtIo_CompressedStream_Open(CompressedStream*, Stream*, int32_t);    // 0x1800aa560
+extern "C" bool RtIo_CompressedStream_Create(CompressedStream*, Stream*, int32_t);  // 0x1800aa4b0
+extern "C" void RtIo_CompressedStream_Commit(CompressedStream*);                   // 0x1800a9ee0
+}  // namespace RtIo
 
-    RT_EXPORT_ONCE(CtorFn, "??0CompressedStream@IO@@QEAA@XZ")(&self->base);
-    *reinterpret_cast<const void**>(self) = VtblCompressedMemoryStream();
-    RT_EXPORT_ONCE(CtorFn, "??0MemoryStream@IO@@QEAA@XZ")(&self->memoryStream);
+namespace IO {
 
-    // ---- FULL ORACLE ------------------------------------------------------
-    // Construction is the one member of this family that CAN be diffed against
-    // the original for real: build theirs into a private scratch buffer, compare
-    // all 0x98 bytes, then destroy the scratch. Nothing live is touched.
-    //
-    // The two IO::Encoding pointers (+0x10 on the CompressedStream base and
-    // +0x78 on the embedded MemoryStream) are fresh heap allocations and CANNOT
-    // match, so each is replaced in the comparison copies by the first qword of
-    // the object it points at — the Encoding vtable. That still catches the
-    // failure that matters (a stream whose encoding is null, or is not the
-    // shared 0x1801554a8 BinaryEncoding) while ignoring the address.
-    return self;
-}
-
-// ============================================================================
-// ??1CompressedMemoryStream@IO@@UEAA@XZ   retail 0x1800a9560, profile 0x18005c280
-// ============================================================================
-// The profile build gives the SOURCE shape, with everything out of line:
-//
-//     vptr = &CompressedMemoryStream::_vftable_;
-//     CompressedStream::Close();          // the base's Close, not ours
-//     _memoryStream.Close();              // virtual, vtable +0x38
-//     _memoryStream.~MemoryStream();
-//     ~CompressedStream();
-//
-// Retail (0x1800a9560) is the same five steps with two things inlined:
-//
-//   * `CompressedStream::Close()` (0x1800aa8d0) is exactly
-//     `if (_headerSize > 0 && _direction == Writing) <Commit body>`, so MSVC
-//     collapsed it to the guard plus a CALL to the out-of-line copy of that
-//     body, ?Commit@CompressedStream (0x1800a9ee0). We reproduce retail's
-//     literal form — the guard, then Commit — rather than calling the exported
-//     Close, so the two fields the guard reads stay visible and asserted.
-//
-//   * `~MemoryStream` (exported at 0x1800ae890) is inlined. Its four steps are
-//     byte-for-byte the sequence at 0x1800a95a4..0x1800a95e0, so calling the
-//     exported copy is behaviour-identical.
-//
-// ONE DELIBERATE DEVIATION, and it is not a behavioural one. Retail frees the
-// two IO::Encoding objects through FUN_180006a10, and the MemoryStream buffer
-// through 0x1800c7ad0 = ?MemFree@MemoryAllocator@System@@SAXPEAX@Z. Those two
-// addresses hold the SAME FUNCTION: 96 bytes read out of each differ only in
-// the RIP-relative displacements (`4885c97456574883ec3048c7442420feffffff...`
-// at both). FUN_180006a10 is a second, un-exported copy of MemFree that the
-// linker did not fold. Since we reach both through the exported ~MemoryStream
-// and ~CompressedStream, nothing in this file has to name either address.
-//
-// NO NULL GUARDS ADDED. Retail dereferences self and self->memoryStream's vptr
-// unconditionally and so do we (CLAUDE.md: a faithful crash is upstream's bug).
-extern "C" void RtIo_CompressedMemoryStream_Dtor(CompressedMemoryStream* self) {
-
-    *reinterpret_cast<const void**>(self) = VtblCompressedMemoryStream();
-
-    // Inlined CompressedStream::Close(): flush the pending windows if this
-    // stream was written to at all. headerSize is Array<Header>::_size at +0x48.
-    if (self->base.headerSize > 0 && self->base.base.direction == 1)
-        RT_EXPORT_ONCE(VoidThisFn, "?Commit@CompressedStream@IO@@QEAAXXZ")(&self->base);
-
-    CallStreamCloseVirtual(&self->memoryStream);
-    RT_EXPORT_ONCE(DtorFn, "??1MemoryStream@IO@@UEAA@XZ")(&self->memoryStream);
-    RT_EXPORT_ONCE(DtorFn, "??1CompressedStream@IO@@UEAA@XZ")(&self->base);
-
-    // ---- PARTIAL (shadow) --------------------------------------------------
-    // A destructor cannot be diffed by running both: the second run would free
-    // the same blocks twice. What IS checkable is the post-state the two base
-    // destructors are supposed to leave behind — both sub-objects downgraded to
-    // IO::Stream's vtable. That verifies the teardown ran to the end; it does
-    // NOT verify the Commit decision, which reads the same two fields in our
-    // code and retail's and is therefore tautological here.
-}
-
-// ============================================================================
-// ?Create@CompressedMemoryStream@IO@@QEAA_NXZ    retail 0x1800a9600
-// ============================================================================
-// Whole body: `return CompressedStream::Create(*this, this->_memoryStream, 2);`
-// — a tail call to 0x1800aa4b0 with the embedded MemoryStream as the sink and a
-// window count of 2. That base routine sets _direction = 1 (writing), stores
-// _source, news up a System::Compression and calls SetWindowCount(2).
-extern "C" bool RtIo_CompressedMemoryStream_Create(CompressedMemoryStream* self) {
-
-    const bool ok = RT_EXPORT_ONCE(
-        CsCreateFn, "?Create@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z")(
-        &self->base, &self->memoryStream, 2);
-
-    // ---- PARTIAL (shadow) --------------------------------------------------
-    // Calling the original a second time would allocate a second Compression
-    // object, leak the first and re-run SetWindowCount, so there is no
-    // call-both oracle here. What the shadow proves is that we handed the base
-    // routine the arguments retail hands it: the post-state pins the direction
-    // (1 == writing), the sink (the embedded MemoryStream, not some other
-    // stream) and the literal window count of 2, which is the only number in
-    // this function.
-    return ok;
-}
-
-// ============================================================================
 // ?Open@CompressedMemoryStream@IO@@QEAA_NXZ      retail 0x1800a9500
-// ============================================================================
-// Whole body: `return CompressedStream::Open(*this, this->_memoryStream, 1);`
-// — 0x1800aa560, window count 1. That routine sets _direction = 0 (reading),
-// stores _source, calls SetWindowCount(1) and then parses the window header
-// table out of the source stream, returning false if the totals do not add up.
-//
-// Note the asymmetry with Create and DO NOT "fix" it: writing uses two windows,
-// reading one. Both literals are read straight off the two call sites.
-extern "C" bool RtIo_CompressedMemoryStream_Open(CompressedMemoryStream* self) {
-
-    const bool ok = RT_EXPORT_ONCE(
-        CsCreateFn, "?Open@CompressedStream@IO@@QEAA_NAEAVStream@2@H@Z")(
-        &self->base, &self->memoryStream, 1);
-
-    // ---- PARTIAL (shadow) --------------------------------------------------
-    // Same reason as Create: the base routine consumes bytes from the source
-    // stream, so a second call would read from a moved cursor. `ok` is
-    // deliberately NOT asserted — Open legitimately returns false on a stream
-    // whose header table does not check out, and the caller (SaveRestore) does
-    // not test it either. _direction, _source and the window count are set
-    // before any early return, so they hold on both outcomes.
-    return ok;
+// Whole body: `return CompressedStream::Open(_memoryStream, 1);` -- 0x1800aa560
+// sets _direction = 0 (reading), stores _source, SetWindowCount(1), then parses
+// the window header table out of the source; false when the totals disagree.
+bool CompressedMemoryStream::Open() {
+    return RtIo::RtIo_CompressedStream_Open(
+        reinterpret_cast<RtIo::CompressedStream*>(this),
+        reinterpret_cast<RtIo::Stream*>(&_memoryStream), 1);
 }
 
-// ============================================================================
-// ?Close@CompressedMemoryStream@IO@@UEAAXXZ      retail 0x1800a9620
-// ============================================================================
-// The first two lines of the destructor, and nothing else:
-//     if (_headerSize > 0 && _direction == Writing) Commit();   // inlined
-//                                                               // CompressedStream::Close
-//     _memoryStream.Close();                                    // virtual, +0x38
-// Retail tail-JMPs the virtual call, which is why Ghidra reports "could not
-// recover jumptable" at 0x1800a9647; it is an ordinary tail call, not a switch.
-//
-// This is the function that turns the written windows into the compressed byte
-// image sitting in _memoryStream, so SaveRestore must call it before Store.
-extern "C" void RtIo_CompressedMemoryStream_Close(CompressedMemoryStream* self) {
-    reinterpret_cast<IO::CompressedMemoryStream*>(self)
-        ->IO::CompressedMemoryStream::Close();
+// ?Create@CompressedMemoryStream@IO@@QEAA_NXZ    retail 0x1800a9600
+// Whole body: `return CompressedStream::Create(_memoryStream, 2);` -- 0x1800aa4b0
+// sets _direction = 1 (writing), stores _source, news a System::Compression and
+// SetWindowCount(2). Writing uses two windows, reading one: both literals are
+// read off the two call sites.
+bool CompressedMemoryStream::Create() {
+    return RtIo::RtIo_CompressedStream_Create(
+        reinterpret_cast<RtIo::CompressedStream*>(this),
+        reinterpret_cast<RtIo::Stream*>(&_memoryStream), 2);
 }
 
-// ============================================================================
-// ?GetMemoryStream@CompressedMemoryStream@IO@@QEAAAEAVMemoryStream@2@XZ
-//                                                retail 0x180024350
-// ============================================================================
-// `LEA RAX,[RCX+0x68]; RET`. The mangling is AEAV — a REFERENCE return, which on
-// the MSVC x64 ABI is a plain pointer in RAX. It is NOT a by-value class return,
-// so there is no hidden return slot in RDX and the fn_* typedef takes exactly
-// one argument. (Checked against the mangled name rather than assumed:
-// reference_hidden_retval_and_int_pointer_args.md.)
-extern "C" MemoryStream*
-RtIo_CompressedMemoryStream_GetMemoryStream(CompressedMemoryStream* self) {
-
-    MemoryStream* ours = &self->memoryStream;
-
-    // ---- FULL ORACLE -------------------------------------------------------
-    // Pure: no reads of mutable state, no writes, no allocation. Calling the
-    // original on the live object is free of side effects.
-    using GetMsFn = MemoryStream*(*)(CompressedMemoryStream*);
-    return ours;
+// ??1CompressedMemoryStream@IO@@UEAA@XZ          retail 0x1800a9560
+// The profile build (0x18005c280) gives the source shape:
+//     CompressedStream::Close();          // inlined in retail: guard + Commit
+//     _memoryStream.Close();              // virtual, vtable +0x38
+//     _memoryStream.~MemoryStream();      // the compiler's member dtor
+//     ~CompressedStream();                // the compiler's base dtor
+// The member's Close is dispatched through ITS OWN vptr (a different object at
+// +0x68), exactly as retail's `CALL [RAX+0x38]`. No guard added.
+CompressedMemoryStream::~CompressedMemoryStream() {
+    if (_headerSize > 0 && _direction == 1)
+        RtIo::RtIo_CompressedStream_Commit(reinterpret_cast<RtIo::CompressedStream*>(this));
+    ::CallStreamCloseVirtual(reinterpret_cast<RtIo::MemoryStream*>(&_memoryStream));
 }
+
+}  // namespace IO
 
 // ============================================================================
 // Registration — called from RtIoPortInit() under the old DLL-era switch.
@@ -744,29 +610,9 @@ void CompressedMemoryStream::Close() {
 int RtIoCompressedStreamRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("??0CompressedMemoryStream@IO@@QEAA@XZ",
-                          (void*)&RtIo_CompressedMemoryStream_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800a9520, (void*)&RtIo_CompressedMemoryStream_Ctor);
-
-    RegisterRuntimeExport("??1CompressedMemoryStream@IO@@UEAA@XZ",
-                          (void*)&RtIo_CompressedMemoryStream_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800a9560, (void*)&RtIo_CompressedMemoryStream_Dtor);
-
-    RegisterRuntimeExport("?Create@CompressedMemoryStream@IO@@QEAA_NXZ",
-                          (void*)&RtIo_CompressedMemoryStream_Create); ++n;
-    RegisterRuntimeAddr(0x1800a9600, (void*)&RtIo_CompressedMemoryStream_Create);
-
-    RegisterRuntimeExport("?Open@CompressedMemoryStream@IO@@QEAA_NXZ",
-                          (void*)&RtIo_CompressedMemoryStream_Open); ++n;
-    RegisterRuntimeAddr(0x1800a9500, (void*)&RtIo_CompressedMemoryStream_Open);
-
-    RegisterRuntimeExport("?Close@CompressedMemoryStream@IO@@UEAAXXZ",
-                          (void*)&RtIo_CompressedMemoryStream_Close); ++n;
-    RegisterRuntimeAddr(0x1800a9620, (void*)&RtIo_CompressedMemoryStream_Close);
-
-    RegisterRuntimeExport("?GetMemoryStream@CompressedMemoryStream@IO@@QEAAAEAVMemoryStream@2@XZ",
-                          (void*)&RtIo_CompressedMemoryStream_GetMemoryStream); ++n;
-    RegisterRuntimeAddr(0x180024350, (void*)&RtIo_CompressedMemoryStream_GetMemoryStream);
+    // ENDGAME B.3.9 IO (W2): the six CompressedMemoryStream doors (??0 / ??1 /
+    // ?Create / ?Open / ?Close / ?GetMemoryStream) are gone -- the class's own
+    // members, reached directly by every builder.
 
     // ---- Wave 9 lane W ----
     RegisterRuntimeExport("??0MemoryStream@IO@@QEAA@XZ",

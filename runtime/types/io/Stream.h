@@ -749,9 +749,43 @@ static_assert(offsetof(CompressedStream, _compression)  == 0x60, "System::Compre
 // object at two different offsets, each sub-object carrying its own.
 class CompressedMemoryStream : public CompressedStream {
 public:
-    Stream* DeletingDtor(unsigned flags) override = 0;   // slot 0  0x1800244a0
+    // ENDGAME B.3.9 IO (W2) -- ??0CompressedMemoryStream@IO@@QEAA@XZ
+    // 0x1800a9520: the CompressedStream base ctor (0x1800aa3d0), then this
+    // class's vptr, then the embedded MemoryStream's ctor at +0x68 (0x1800ae710)
+    // -- the compiler's order for a base, the vptr and one member. No store of
+    // its own. CONSTRUCTIBLE: the minted ??_7CompressedMemoryStream row is
+    // retired; every builder (the save path, the metadata reader, ReadPackfile,
+    // the exe's SaveRestore) spells `::new (p) IO::CompressedMemoryStream()`.
+    CompressedMemoryStream() {}
+
+    // slot 0  +0x00  0x1800244a0 -- MSVC's vector deleting dtor, stride 0x98.
+    Stream* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<CompressedMemoryStream*>(
+                    self + static_cast<int64_t>(i) * 0x98)->~CompressedMemoryStream();
+            if (flags & 1u) RtSystem::RtMemFree(self - 8);
+            return reinterpret_cast<Stream*>(self - 8);
+        }
+        this->~CompressedMemoryStream();
+        if (flags & 1u) RtSystem::RtMemFree(this);
+        return this;
+    }
     void Close() override;                               // slot 7  0x1800a9620
     void PreCommit() override;                           // slot 8  0x1800a9660
+
+    // ?Open@CompressedMemoryStream@IO@@QEAA_NXZ   0x1800a9500 -- the whole body
+    // is `CompressedStream::Open(_memoryStream, 1)` (reading: ONE window).
+    bool Open();
+    // ?Create@CompressedMemoryStream@IO@@QEAA_NXZ 0x1800a9600 -- the whole body
+    // is `CompressedStream::Create(_memoryStream, 2)` (writing: TWO windows).
+    // The asymmetry is retail's; do not "fix" it.
+    bool Create();
+    // ?GetMemoryStream@CompressedMemoryStream@IO@@QEAAAEAVMemoryStream@2@XZ
+    // 0x180024350 -- `LEA RAX,[RCX+0x68]; RET`.
+    MemoryStream& GetMemoryStream() { return _memoryStream; }
 
     // +0x68 — a MEMBER, not a second base. See B34_BRIEFS section A.3: this is
     // the by-value containment that forces `IO::MemoryStream` to be concrete,
@@ -760,7 +794,13 @@ public:
     MemoryStream _memoryStream;
 
 protected:
-    ~CompressedMemoryStream() = default;
+    // ??1CompressedMemoryStream@IO@@UEAA@XZ 0x1800a9560 without its restamps:
+    // CompressedStream::Close inlined (the guard, then Commit), then the
+    // member's Close dispatched VIRTUALLY (+0x38). The compiler then runs
+    // ~MemoryStream on the member and ~CompressedStream on the base -- retail's
+    // two remaining steps, in retail's order. Out of line in
+    // compressedstream.cpp; non-virtual (Decision 2).
+    ~CompressedMemoryStream();
 };
 
 static_assert(offsetof(CompressedMemoryStream, _memoryStream) == 0x68,
