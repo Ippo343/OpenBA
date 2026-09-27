@@ -41,6 +41,16 @@
 #include "runtime/types/ui/SpinnerElement.h"    // ENDGAME B.3.6 UI callers round 2 (K1)
 #include "runtime/types/ui/TableElement.h"      // ENDGAME B.3.6 UI callers round 2 (K1)
 #include "runtime/types/ui/TabElement.h"        // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "runtime/types/ui/ButtonElement.h"      // X::TypeId() (B.3.9 CG2)
+#include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/CitizenDescription.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/SelectDescription.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/ComponentDescription.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/StateMachineComponent.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/TradeComponent.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/StorageComponent.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/WorkPlaceComponent.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/WorkComponent.h"   // X::TypeId() (B.3.9 CG2)
 #include "Object/factory_registration.h"
 #include <cstddef>
 
@@ -150,14 +160,14 @@ void TownHallUI_InitGraph(TownHallUI* self) {
         void* ext = const_cast<::Object::External*>(
             reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
                 ->FindOrLoad(filenameBuf));
-        self->graphYearsTable = (ext && fn_IsDerivedFrom(ext, *g_TypeId_StringTable)) ? (uint64_t)ext : 0;
+        self->graphYearsTable = (ext && fn_IsDerivedFrom(ext, UI::StringTable::TypeId())) ? (uint64_t)ext : 0;
     }
     {
         System::Filename filenameBuf("Dialog/StringTable.rsc:graphTypes");
         void* ext = const_cast<::Object::External*>(
             reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
                 ->FindOrLoad(filenameBuf));
-        self->graphTypesTable = (ext && fn_IsDerivedFrom(ext, *g_TypeId_StringTable)) ? (uint64_t)ext : 0;
+        self->graphTypesTable = (ext && fn_IsDerivedFrom(ext, UI::StringTable::TypeId())) ? (uint64_t)ext : 0;
     }
 
     // Populate time combo
@@ -199,9 +209,9 @@ void TownHallUI_InitGraph(TownHallUI* self) {
 // ============================================================
 // Helper: cast element via IsDerivedFrom check
 // ============================================================
-static void* CastElement(void* elem, uint32_t* typeIdPtr) {
-    if (!elem || !typeIdPtr) return nullptr;
-    if (fn_IsDerivedFrom(elem, *typeIdPtr)) return elem;
+static void* CastElement(void* elem, uint32_t typeId) {
+    if (!elem) return nullptr;
+    if (fn_IsDerivedFrom(elem, typeId)) return elem;
     return nullptr;
 }
 
@@ -222,7 +232,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
     uint64_t foundBuf[2] = {0, 0};
     ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->FindElement(strBuf));  // B.3.6 bridge
     void* foundElem = *(void**)foundBuf;
-    void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
+    void* tableElem = CastElement(foundElem, UI::TableElement::TypeId());
     uint64_t tablePtr = 0;
     new (&tablePtr) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>((void*)tableElem));   // B.3.3 bridge
@@ -283,7 +293,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         // Row child 0: LabelElement (profession icon/name)
         uint64_t c0Buf[2] = {0, 0};
         ::new (static_cast<void*>(c0Buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(0));  // B.3.6 bridge
-        void* c0Elem = CastElement(*(void**)c0Buf, g_TypeId_LabelElement);
+        void* c0Elem = CastElement(*(void**)c0Buf, UI::LabelElement::TypeId());
         uint64_t labelIBP = 0;
         new (&labelIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c0Elem));   // B.3.3 bridge
         *(uint64_t*)(profEntry + 0x08) = labelIBP;
@@ -291,7 +301,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         // Content child 0: NumberEditElement (desired worker count spinner)
         uint64_t c1Buf[2] = {0, 0};
         ::new (static_cast<void*>(c1Buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(contentElem)->Child(0));  // B.3.6 bridge
-        void* c1Elem = CastElement(*(void**)c1Buf, g_TypeId_NumberEditElement);
+        void* c1Elem = CastElement(*(void**)c1Buf, UI::NumberEditElement::TypeId());
         uint64_t numEditIBP = 0;
         new (&numEditIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c1Elem));   // B.3.3 bridge
         *(uint64_t*)(profEntry + 0x10) = numEditIBP;
@@ -299,7 +309,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         // Row child 2: NumberElement (current count display)
         uint64_t c2Buf[2] = {0, 0};
         ::new (static_cast<void*>(c2Buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(2));  // B.3.6 bridge
-        void* c2Elem = CastElement(*(void**)c2Buf, g_TypeId_NumberElement);
+        void* c2Elem = CastElement(*(void**)c2Buf, UI::NumberElement::TypeId());
         uint64_t numIBP = 0;
         new (&numIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c2Elem));   // B.3.3 bridge
         *(uint64_t*)(profEntry + 0x18) = numIBP;
@@ -307,7 +317,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         // Row child 3: NumberElement (another counter)
         uint64_t c3Buf[2] = {0, 0};
         ::new (static_cast<void*>(c3Buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(3));  // B.3.6 bridge
-        void* c3Elem = CastElement(*(void**)c3Buf, g_TypeId_NumberElement);
+        void* c3Elem = CastElement(*(void**)c3Buf, UI::NumberElement::TypeId());
         uint64_t spinIBP = 0;
         new (&spinIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c3Elem));   // B.3.3 bridge
         *(uint64_t*)(profEntry + 0x20) = spinIBP;
@@ -315,7 +325,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         // Row child 4: ButtonElement (go-to button)
         uint64_t c4Buf[2] = {0, 0};
         ::new (static_cast<void*>(c4Buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(4));  // B.3.6 bridge
-        void* c4Elem = CastElement(*(void**)c4Buf, g_TypeId_HelpButtonElem);
+        void* c4Elem = CastElement(*(void**)c4Buf, UI::ButtonElement::TypeId());
         uint64_t btnIBP = 0;
         new (&btnIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c4Elem));   // B.3.3 bridge
         *(uint64_t*)(profEntry + 0x28) = btnIBP;
@@ -454,7 +464,7 @@ void TownHallUI_InitProduction(TownHallUI* self) {
     uint64_t foundBuf[2] = {0, 0};
     ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->FindElement(strBuf));  // B.3.6 bridge
     void* foundElem = *(void**)foundBuf;
-    void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
+    void* tableElem = CastElement(foundElem, UI::TableElement::TypeId());
     uint64_t tablePtr = 0;
     new (&tablePtr) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>((void*)tableElem));   // B.3.3 bridge
@@ -480,7 +490,7 @@ void TownHallUI_InitProduction(TownHallUI* self) {
         for (int col = 0; col < 5; col++) {
             uint64_t cBuf[2] = {0, 0};
             ::new (static_cast<void*>(cBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tablePtr)->Child(indices[col]));  // B.3.6 bridge
-            void* cElem = CastElement(*(void**)cBuf, g_TypeId_NumberElement);
+            void* cElem = CastElement(*(void**)cBuf, UI::NumberElement::TypeId());
             uint64_t ibp = 0;
             new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(cElem));   // B.3.3 bridge
             *(uint64_t*)(entry + col * 8) = ibp;
@@ -494,15 +504,15 @@ void TownHallUI_InitProduction(TownHallUI* self) {
 
     // Find "productionCombo" ComboElement
     self->productionCombo = TownHall_FindElem(
-        *(void**)(s + 0x20), "productionCombo", *g_TypeId_ComboElement);
+        *(void**)(s + 0x20), "productionCombo", UI::ComboElement::TypeId());
 
     // Find "limitPrevUsedHeader" TextElement
     self->limitPrevUsedHdr = TownHall_FindElem(
-        *(void**)(s + 0x20), "limitPrevUsedHeader", *g_TypeId_TextElement);
+        *(void**)(s + 0x20), "limitPrevUsedHeader", UI::TextElement::TypeId());
 
     // Find "limitPrevProducedHeader" TextElement
     self->limitPrevProdHdr = TownHall_FindElem(
-        *(void**)(s + 0x20), "limitPrevProducedHeader", *g_TypeId_TextElement);
+        *(void**)(s + 0x20), "limitPrevProducedHeader", UI::TextElement::TypeId());
 
     // Load graphYears string table and populate combo
     System::Filename fnameBuf("Dialog/StringTable.rsc:graphYears");
@@ -510,7 +520,7 @@ void TownHallUI_InitProduction(TownHallUI* self) {
         reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
             ->FindOrLoad(fnameBuf));
     uint64_t yearsTable = 0;
-    if (ext && fn_IsDerivedFrom(ext, *g_TypeId_StringTable)) {
+    if (ext && fn_IsDerivedFrom(ext, UI::StringTable::TypeId())) {
         yearsTable = (uint64_t)ext;
     }
 
@@ -543,7 +553,7 @@ void TownHallUI_InitInventory(TownHallUI* self) {
     uint64_t foundBuf[2] = {0, 0};
     ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->FindElement(strBuf));  // B.3.6 bridge
     void* foundElem = *(void**)foundBuf;
-    void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
+    void* tableElem = CastElement(foundElem, UI::TableElement::TypeId());
     uint64_t tablePtr = 0;
     new (&tablePtr) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>((void*)tableElem));   // B.3.3 bridge
@@ -551,7 +561,7 @@ void TownHallUI_InitInventory(TownHallUI* self) {
     // Count resource types via ExternalFactory::FindNext
     int resourceCount = 0;
     void* factory = *g_pExternalFactorySingleton;
-    uint32_t resTypeId = *(uint32_t*)g_TypeId_RawMaterialDescription;
+    uint32_t resTypeId = RawMaterialDescription::TypeId();
     const ::Object::ExternalFactory* efactory =
         reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
     const ::Object::External* extIter = efactory->FindNext(resTypeId, nullptr);
@@ -598,7 +608,7 @@ void TownHallUI_InitInventory(TownHallUI* self) {
         // Get cell->child(0)->child(0) = LabelElement
         uint64_t sub0[2] = {0, 0};
         ::new (static_cast<void*>(sub0)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)cellBuf)->Child(0));  // B.3.6 bridge
-        void* labelElem = CastElement(*(void**)sub0, g_TypeId_LabelElement);
+        void* labelElem = CastElement(*(void**)sub0, UI::LabelElement::TypeId());
         uint64_t labelIBP = 0;
         new (&labelIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(labelElem));   // B.3.3 bridge
 
@@ -607,7 +617,7 @@ void TownHallUI_InitInventory(TownHallUI* self) {
         ::new (static_cast<void*>(cellBuf2)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tablePtr)->Child(i));  // B.3.6 bridge
         uint64_t sub1[2] = {0, 0};
         ::new (static_cast<void*>(sub1)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)cellBuf2)->Child(1));  // B.3.6 bridge
-        void* numElem = CastElement(*(void**)sub1, g_TypeId_NumberElement);
+        void* numElem = CastElement(*(void**)sub1, UI::NumberElement::TypeId());
         uint64_t numIBP = 0;
         new (&numIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(numElem));   // B.3.3 bridge
 
@@ -625,13 +635,13 @@ void TownHallUI_InitInventory(TownHallUI* self) {
         reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
             ->FindOrLoad(fnameBuf));
     uint64_t invTypeTable = 0;
-    if (extST && fn_IsDerivedFrom(extST, *g_TypeId_StringTable)) {
+    if (extST && fn_IsDerivedFrom(extST, UI::StringTable::TypeId())) {
         invTypeTable = (uint64_t)extST;
     }
 
     // Find "inventoryCombo" ComboElement
     self->inventoryCombo = TownHall_FindElem(
-        *(void**)(s + 0x20), "inventoryCombo", *g_TypeId_ComboElement);
+        *(void**)(s + 0x20), "inventoryCombo", UI::ComboElement::TypeId());
 
     // Populate inventory combo with 3 items
     for (int i = 0; i < 3; i++) {
@@ -647,7 +657,7 @@ void TownHallUI_InitInventory(TownHallUI* self) {
 
     // Find "sortCombo" ComboElement
     self->sortCombo = TownHall_FindElem(
-        *(void**)(s + 0x20), "sortCombo", *g_TypeId_ComboElement);
+        *(void**)(s + 0x20), "sortCombo", UI::ComboElement::TypeId());
     reinterpret_cast<UI::ComboElement*>(self->sortCombo)->SetCurrentItem(0);  // B.3.6 bridge
 }
 
@@ -667,15 +677,15 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
     uint64_t foundBuf[2] = {0, 0};
     ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->FindElement(strBuf));  // B.3.6 bridge
     void* foundElem = *(void**)foundBuf;
-    void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
+    void* tableElem = CastElement(foundElem, UI::TableElement::TypeId());
     uint64_t tablePtr = 0;
     new (&tablePtr) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>((void*)tableElem));   // B.3.3 bridge
 
     // Iterate ExternalFactory for ComponentDescription entities
     void* factory = *g_pExternalFactorySingleton;
-    uint32_t buildTypeId = *g_TypeId_ComponentDescription_FC;
-    uint32_t selectDescId = *g_TypeId_SelectDescription;
+    uint32_t buildTypeId = ComponentDescription::TypeId();
+    uint32_t selectDescId = SelectDescription::TypeId();
 
     const ::Object::ExternalFactory* efactoryAgri =
         reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
@@ -812,7 +822,7 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
         ::new (static_cast<void*>(cellBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tablePtr)->Child(i));  // B.3.6 bridge
 
         // Cast child to LabelElement
-        void* labelElem = CastElement(*(void**)cellBuf, g_TypeId_LabelElement);
+        void* labelElem = CastElement(*(void**)cellBuf, UI::LabelElement::TypeId());
         uint64_t labelIBP = 0;
         new (&labelIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(labelElem));   // B.3.3 bridge
 
@@ -1066,7 +1076,7 @@ void TownHallUI_UpdateGeneral(TownHallUI* self) {
     } else {
         uintptr_t firstCitizen = **(uintptr_t**)(gameData + 0xa0);
         void* desc = *(void**)(firstCitizen + 0x18);
-        void* citizenDesc = fn_IsDerivedFrom(desc, *g_TypeId_CitizenDescription) ? desc : nullptr;
+        void* citizenDesc = fn_IsDerivedFrom(desc, CitizenDescription::TypeId()) ? desc : nullptr;
 
         fn_GroupRating_Update((void*)(s + 0xb0), happinessSum * perCitizen,
                               *(float*)((uintptr_t)citizenDesc + 0x70));
@@ -1074,7 +1084,7 @@ void TownHallUI_UpdateGeneral(TownHallUI* self) {
         // Re-read first citizen for health max
         firstCitizen = **(uintptr_t**)(gameData + 0xa0);
         desc = *(void**)(firstCitizen + 0x18);
-        citizenDesc = fn_IsDerivedFrom(desc, *g_TypeId_CitizenDescription) ? desc : nullptr;
+        citizenDesc = fn_IsDerivedFrom(desc, CitizenDescription::TypeId()) ? desc : nullptr;
 
         fn_GroupRating_Update((void*)(s + 0xd0), healthAvg,
                               *(float*)((uintptr_t)citizenDesc + 0xa4));
@@ -1377,7 +1387,7 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
             uint64_t entityPtr = *(uint64_t*)n;
 
             // Find ResourceType component on entity
-            void* resourceComp = TownHall_FindComponentByTypeId(entityPtr, *g_TypeId_RawMaterialDescription);
+            void* resourceComp = TownHall_FindComponentByTypeId(entityPtr, RawMaterialDescription::TypeId());
 
             // Read counter value at selected index
             int counterVal = *(int*)(n + counterOffset);
@@ -1574,7 +1584,7 @@ next_entity: ;
 
             if (found) {
                 // Find SelectDescription component (DAT_1401c48a8) on entity
-                void* selectDesc = TownHall_FindComponentByTypeId(entityPtr, *g_TypeId_SelectDescription);
+                void* selectDesc = TownHall_FindComponentByTypeId(entityPtr, SelectDescription::TypeId());
 
                 // Original always sets sprite/text when found in BST (even if selectDesc is NULL)
                 // Create sprite from SelectDescription+0x20/+0x28
@@ -1686,7 +1696,7 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
             uintptr_t entity = entityPtr;
 
             // Find WorkplaceComponent (DAT_1401c80e0) — ComponentEntity layout
-            void* workplaceComp = TownHall_FindComponentByTypeId_CE(entity, *g_TypeId_WorkplaceComponent);
+            void* workplaceComp = TownHall_FindComponentByTypeId_CE(entity, WorkPlaceComponent::TypeId());
 
             uint64_t wpBP = 0;
             new (&wpBP) ::Object::InternalBasePtr(
@@ -1698,7 +1708,7 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
                 uintptr_t entity2 = entityPtr;
 
                 // Find WorkplaceComponent again to get StorageLocationComponent
-                void* workplaceComp2 = TownHall_FindComponentByTypeId_CE(entity2, *g_TypeId_WorkplaceComponent);
+                void* workplaceComp2 = TownHall_FindComponentByTypeId_CE(entity2, WorkPlaceComponent::TypeId());
 
                 uint64_t wpBP2 = 0;
                 new (&wpBP2) ::Object::InternalBasePtr(
@@ -1708,7 +1718,7 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
                 uintptr_t parentEntity = *(uintptr_t*)(wpBP2 + 0x10);
 
                 // Find StorageLocationComponent (DAT_1401c8070) — ComponentEntity layout
-                void* storageLocComp = TownHall_FindComponentByTypeId_CE(parentEntity, *g_TypeId_WorkComponent);
+                void* storageLocComp = TownHall_FindComponentByTypeId_CE(parentEntity, WorkComponent::TypeId());
 
                 uint64_t slBP = 0;
                 new (&slBP) ::Object::InternalBasePtr(
@@ -1848,13 +1858,13 @@ void TownHallUI_UpdateAll(TownHallUI* self) {
         uint64_t entityPtr = entities[i];
 
         // Find StorageComponent_FC (DAT_1401c7e78) — ComponentEntity layout
-        void* storageComp = TownHall_FindComponentByTypeId_CE(entityPtr, *g_TypeId_StorageComponent_FC);
+        void* storageComp = TownHall_FindComponentByTypeId_CE(entityPtr, StorageComponent::TypeId());
         uint64_t storageBP = 0;
         new (&storageBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
 
         // Find StateMachineComponent (DAT_1401c7d98) — ComponentEntity layout
-        void* buildStateComp = TownHall_FindComponentByTypeId_CE(entityPtr, *g_TypeId_StateMachineComponent_FC);
+        void* buildStateComp = TownHall_FindComponentByTypeId_CE(entityPtr, StateMachineComponent::TypeId());
         uint64_t buildStateBP = 0;
         new (&buildStateBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(buildStateComp));   // B.3.3 bridge
@@ -1864,7 +1874,7 @@ void TownHallUI_UpdateAll(TownHallUI* self) {
             counterIndex = 2; // under construction
         } else {
             // Check for TradeComponent (DAT_1401c4b80) — ComponentEntity layout
-            void* buildingComp = TownHall_FindComponentByTypeId_CE(entityPtr, *g_TypeId_TradeComponent_FC);
+            void* buildingComp = TownHall_FindComponentByTypeId_CE(entityPtr, TradeComponent::TypeId());
             uint64_t buildingBP = 0;
             new (&buildingBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(buildingComp));   // B.3.3 bridge
@@ -1991,58 +2001,31 @@ void TownHallUI_OnProfessionSpinner(TownHallUI* self, int index) {
 
 namespace townhallui_sa {
 
-// ---- exe-.rdata type-id globals the TownHallUI paths dereference ----
-// All lazily filled from the live runtime type registry (valid after
-// Object::Factory::Startup). Registered names Ghidra-verified this session via the
-// .rdata name-table / RegisterType writers (the engine_funcs labels now match):
+// ---- exe-.rdata type-id globals the TownHallUI paths used to dereference ----
+// ENDGAME B.3.9 CG2: every one of the 19 g_TypeId_* globals this lazy-fill
+// serviced is now read through its class static (X::TypeId() — either the
+// ported Runtime static for the UI:: widget/element classes, or the exe
+// DECLARE_EXE_TYPE static for the Component/Description classes), which
+// always answers, so EnsureGlobals retires. g_TypeInfo_ValueDescription is
+// a different (non-g_TypeId_) global, out of this batch's scope; it keeps its
+// own by-name resolve below. Registered names Ghidra-verified this session via
+// the .rdata name-table / RegisterType writers (the engine_funcs labels match):
 //   exref 0x1401516c8 "g_TypeId_NumberElement"      -> UI::NumberElement
 //   DAT   0x1401c7d98 "g_TypeId_StateMachineComponent_FC" -> StateMachineComponent
 //   DAT   0x1401c4b80 "g_TypeId_TradeComponent_FC"   -> TradeComponent
 //   DAT   0x1401c7318 "g_TypeId_ComponentDescription_FC"      -> ComponentDescription
 void EnsureGlobals() {
-    struct Entry { uint32_t** global; const char* name; };
-    static uint32_t storage[20] = {0};
-    static const Entry entries[] = {
-        { &g_TypeId_TabElement,               "TabElement" },
-        { &g_TypeId_TableElement,             "TableElement" },
-        { &g_TypeId_LabelElement,             "LabelElement" },
-        { &g_TypeId_TextElement,              "TextElement" },
-        { &g_TypeId_NumberElement,           "NumberElement" },
-        { &g_TypeId_NumberEditElement,        "NumberEditElement" },
-        { &g_TypeId_ComboElement,             "ComboElement" },
-        { &g_TypeId_HelpButtonElem,           "ButtonElement" },
-        { &g_TypeId_ImageElement,             "ImageElement" },
-        { &g_TypeId_StringTable,              "StringTable" },
-        { &g_TypeId_CitizenDescription,       "CitizenDescription" },
-        { &g_TypeInfo_ValueDescription,       "ValueDescription" },
-        { &g_TypeId_SelectDescription,        "SelectDescription" },
-        { &g_TypeId_ComponentDescription_FC,           "ComponentDescription" },
-        { &g_TypeId_StateMachineComponent_FC,      "StateMachineComponent" },
-        { &g_TypeId_TradeComponent_FC,        "TradeComponent" },
-        // belt-and-braces: normally filled via the economy type-id registry
-        { &g_TypeId_RawMaterialDescription,   "RawMaterialDescription" },
-        { &g_TypeId_StorageComponent_FC,      "StorageComponent" },
-        { &g_TypeId_WorkplaceComponent,       "WorkPlaceComponent" },
-        { &g_TypeId_WorkComponent, "WorkComponent" },
-    };
-    for (size_t i = 0; i < sizeof(entries) / sizeof(entries[0]); ++i) {
-        if (*entries[i].global) continue;
-        if (!storage[i]) storage[i] = ::Object::ResolveTypeIdByNameLazy(entries[i].name);
-        if (storage[i]) *entries[i].global = &storage[i];
+    if (!g_TypeInfo_ValueDescription) {
+        static uint32_t s_valueDesc = 0;
+        if (!s_valueDesc) s_valueDesc = ::Object::ResolveTypeIdByNameLazy("ValueDescription");
+        if (s_valueDesc) g_TypeInfo_ValueDescription = &s_valueDesc;
     }
 }
 
 // Every global/function the Serialize+Startup+per-frame paths dereference
 // unguarded must be live, or a null-deref faults (no SEH under MinGW).
 bool Ready() {
-    if (!(g_TypeId_TabElement && g_TypeId_TableElement && g_TypeId_LabelElement &&
-          g_TypeId_TextElement && g_TypeId_NumberElement && g_TypeId_NumberEditElement &&
-          g_TypeId_ComboElement && g_TypeId_HelpButtonElem && g_TypeId_ImageElement &&
-          g_TypeId_StringTable && g_TypeId_CitizenDescription && g_TypeInfo_ValueDescription &&
-          g_TypeId_SelectDescription && g_TypeId_ComponentDescription_FC && g_TypeId_StateMachineComponent_FC &&
-          g_TypeId_TradeComponent_FC && g_TypeId_RawMaterialDescription &&
-          g_TypeId_StorageComponent_FC && g_TypeId_WorkplaceComponent &&
-          g_TypeId_WorkComponent))
+    if (!g_TypeInfo_ValueDescription)
         return false;
     if (!(fn_GroupRating_Init && fn_GroupRating_Update && fn_ProfArrayPush &&
           fn_ProdArrayPush && fn_BST_Rebalance_0x30 && fn_BST_Rebalance_0x28 &&
@@ -2107,22 +2090,12 @@ void DiagPrint(const char* where, void* self) {
         {"fn_InventorySort_Desc", (void*)fn_InventorySort_Desc},
         {"fn_DynArray_Resize",    (void*)fn_DynArray_Resize},
     };
+    // ENDGAME B.3.9 CG2: the 19 g_TypeId_* entries this diagnostic used to list
+    // retired — their class statics always answer, so "MISSING typeId" could
+    // never fire for them again. g_TypeInfo_ValueDescription is the one
+    // remaining (non-g_TypeId_) global still genuinely lazy-filled.
     const N tids[] = {
-        {"TabElement", g_TypeId_TabElement}, {"TableElement", g_TypeId_TableElement},
-        {"LabelElement", g_TypeId_LabelElement}, {"TextElement", g_TypeId_TextElement},
-        {"NumberElement", g_TypeId_NumberElement}, {"NumberEditElement", g_TypeId_NumberEditElement},
-        {"ComboElement", g_TypeId_ComboElement}, {"ButtonElement", g_TypeId_HelpButtonElem},
-        {"ImageElement", g_TypeId_ImageElement}, {"StringTable", g_TypeId_StringTable},
-        {"CitizenDescription", g_TypeId_CitizenDescription},
         {"ValueDescription", g_TypeInfo_ValueDescription},
-        {"SelectDescription", g_TypeId_SelectDescription},
-        {"ComponentDescription", g_TypeId_ComponentDescription_FC},
-        {"StateMachineComponent", g_TypeId_StateMachineComponent_FC},
-        {"TradeComponent", g_TypeId_TradeComponent_FC},
-        {"RawMaterialDescription", g_TypeId_RawMaterialDescription},
-        {"StorageComponent", g_TypeId_StorageComponent_FC},
-        {"WorkPlaceComponent", g_TypeId_WorkplaceComponent},
-        {"WorkComponent", g_TypeId_WorkComponent},
     };
     fprintf(stderr, "[TownHallSA] %s: self=%p bound=%d built=%d ready=%d town=%d extFactory=%d\n",
             where, self,
@@ -2202,9 +2175,8 @@ void TownHallUI::OnCreated() {
     void* element = *(void**)foundBuf;
 
     void* tabElement = nullptr;
-    if (element && g_TypeId_TabElement) {
-        if (fn_IsDerivedFrom(element, *g_TypeId_TabElement))
-            tabElement = element;
+    if (element && fn_IsDerivedFrom(element, UI::TabElement::TypeId())) {
+        tabElement = element;
     }
 
     uint64_t tempIBP = 0;
