@@ -151,6 +151,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Modification.h"
+#include "../../types/io/Persistence.h"   // ENDGAME B.3.9 IO: the class static
 #include "../../types/system/Filename.h"
 #include "../../types/collection/Collection.h"   // ENDGAME B.3.2 step 2 — see below
 #include "../system/string.h"
@@ -916,11 +917,8 @@ void Modification::SaveList() {
     // filesystem_setupdirs_win.cpp's exemplar treatment of local Fn typedefs).
     using GetPathFilenameFn = System::Filename* (*)(const System::Filename*,
                                                      System::Filename*, bool);
-    using PersistenceSlot = void**;
 
-    void** pslot = RT_DATA_SLOT(PersistenceSlot,
-                                "?_singleton@Persistence@IO@@0PEAV12@EA");
-    void* p = pslot ? *pslot : nullptr;
+    void* p = ::IO::Persistence::_singleton;   // ENDGAME B.3.9 IO (D7): the class static
 
     for (int i = 0; i < _count; ++i) {
         RtIO::Mod* m = _mods + i;

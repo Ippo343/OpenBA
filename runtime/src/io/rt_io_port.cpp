@@ -38,6 +38,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/FileSystem.h"   // ENDGAME B.3.9 IO: the storage class statics
 #include "../../types/io/Modification.h"
+#include "../../types/io/Persistence.h"
 
 extern int RtIoSerializerRegister();    // serializer.cpp    (lane A)
 extern int RtIoPersistenceRegister();   // persistence.cpp   (lane C)
@@ -235,6 +236,8 @@ void RtIoPortInit() {
                           &IO::FileSystem::_singleton);
     RtMintRedirectStorage("?_singleton@Modification@IO@@2PEAV12@EA",
                           &IO::Modification::_singleton);
+    RtMintRedirectStorage("?_singleton@Persistence@IO@@0PEAV12@EA",
+                          &IO::Persistence::_singleton);
 
     int n = 0;
     n += RtIoSerializerRegister();

@@ -189,6 +189,10 @@ void* RtIo_Persistence_GetSavePath(void* self, void* retval) {
 // `RtIo`, LOWERCASE o.
 namespace IO {
 
+// ?_singleton@Persistence@IO@@0PEAV12@EA (0x1801fc6b8) -- the class static
+// (ENDGAME B.3.9 IO, D7); RtIoPortInit redirects the minted row onto it.
+Persistence* Persistence::_singleton = nullptr;
+
 bool Persistence::Get(const char* section, const char* key, int& outRef) const {
     int* const out = &outRef;
 

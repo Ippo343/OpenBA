@@ -438,6 +438,14 @@ public:
     int32_t             _saveCount;          // +0x88
     uint8_t             _pad8c[0x04];        // +0x8C — NOT pinned
     RtSystem::String    _savePath;           // +0x90 — POD; ~Persistence frees it
+
+    // ?_singleton@Persistence@IO@@0PEAV12@EA (0x1801fc6b8) -- the class static
+    // (ENDGAME B.3.9 IO, B39_RULES D7). Defined in persistence.cpp;
+    // RtIoPortInit redirects the minted row onto it, so the name door, the
+    // address door, the manifest publish and this member are the same eight
+    // bytes. Written by the ??0Persistence door (engine/singleton_ctors.cpp).
+    // PUBLIC while foreign readers still reach it (retail: private `0`).
+    static Persistence* _singleton;
 };
 
 // The `sizeof` assert is an EQUALITY WITH THE POD, never a literal: nothing in
