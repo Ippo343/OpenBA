@@ -155,7 +155,6 @@ namespace RtUI {
 constexpr const char* kVtblContainerDescription    = "??_7ContainerDescription@UI@@6B@";     // 0x180156510
 constexpr const char* kVtblDocumentTextDescription = "??_7DocumentTextDescription@UI@@6B@";  // 0x180156750
 constexpr const char* kVtblGraphDescription        = "??_7GraphDescription@UI@@6B@";         // 0x180156a30
-constexpr const char* kVtblLabelDescription        = "??_7LabelDescription@UI@@6B@";         // 0x180156b30
 
 constexpr const char* kVtblContainerElement   = "??_7ContainerElement@UI@@6B@";   // 0x1801564b0
 

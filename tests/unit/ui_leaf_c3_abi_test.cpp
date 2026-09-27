@@ -220,6 +220,10 @@ C3_ELEM_LAYOUT_MARKERS(NumberElement, kNE)
 // ??0NumberElement 0x180118c70 does), so the host needs a body: a marker.
 int g_numberCacheTextCalls = 0;
 void NumberElement::CacheText() { ++g_numberCacheTextCalls; }
+// Likewise the real TextElement ctor (retail ??0TextElement 0x18011eb80) ends
+// in its private CacheText: a marker.
+int g_textCacheTextCalls = 0;
+void TextElement::CacheText() { ++g_textCacheTextCalls; }
 #undef C3_ELEM_TYPE_MARKERS
 #undef C3_ELEM_LAYOUT_MARKERS
 
@@ -259,8 +263,15 @@ UNIT_TEST(ui_c3_sizes_and_parents_match_retail) {
     CHECK(!(std::is_base_of<UI::TextElement, UI::NumberElement>::value));
 
     // Abstract, no virtual destructor (ENDGAME decision 2).
-    CHECK(std::is_abstract<UI::TextDescription>::value);
-    CHECK(std::is_abstract<UI::LabelElement>::value);
+    CHECK(!std::is_abstract<UI::TextDescription>::value);    // B.3.9 UI-A: concrete
+    CHECK(!std::is_abstract<UI::LabelElement>::value);       // B.3.9 UI-A: concrete
+    CHECK(!std::is_abstract<UI::TextElement>::value);
+    CHECK(!std::is_abstract<UI::LabelDescription>::value);
+    for (bool destructible : { std::is_destructible<UI::TextDescription>::value,
+                               std::is_destructible<UI::TextElement>::value,
+                               std::is_destructible<UI::LabelDescription>::value,
+                               std::is_destructible<UI::LabelElement>::value })
+        CHECK(!destructible);                                  // protected non-virtual dtors
     CHECK(!std::is_abstract<UI::NumberEditElement>::value);   // B.3.9 UI-A: concrete
     for (bool destructible : { std::is_destructible<UI::EditDescription>::value,
                                std::is_destructible<UI::EditElement>::value,
@@ -645,4 +656,112 @@ UNIT_TEST(b39_uia_edit_number_deletingdtor_both_arms) {
     B39ExpectBothArms<UI::NumberDescription>(0x88, [](void* p) { return ::new (p) UI::NumberDescription(); });
     B39ExpectBothArms<UI::EditElement>(0xf8, [](void* p) { return ::new (p) UI::EditElement(); });
     B39ExpectBothArms<UI::NumberElement>(0xe8, [](void* p) { return ::new (p) UI::NumberElement(); });
+}
+
+UNIT_TEST(b39_uia_text_label_slot0_by_pmf) {
+    CHECK_EQ(SlotOffset(&UI::TextDescription::DeletingDtor),  (uintptr_t)0x00);   // 0x180041e30
+    CHECK_EQ(SlotOffset(&UI::TextDescription::Construct),     (uintptr_t)0x48);
+    CHECK_EQ(SlotOffset(&UI::LabelDescription::DeletingDtor), (uintptr_t)0x00);   // 0x180042730
+    CHECK_EQ(SlotOffset(&UI::LabelDescription::Construct),    (uintptr_t)0x48);
+    CHECK_EQ(SlotOffset(&UI::TextElement::DeletingDtor),      (uintptr_t)0x00);   // 0x1800422f0
+    CHECK_EQ(SlotOffset(&UI::TextElement::Draw),              (uintptr_t)0x30);
+    CHECK_EQ(SlotOffset(&UI::LabelElement::DeletingDtor),     (uintptr_t)0x00);   // 0x180042bb0
+    CHECK_EQ(SlotOffset(&UI::LabelElement::SetColor),         (uintptr_t)0x50);
+}
+
+UNIT_TEST(b39_uia_text_label_ctors_make_retails_stores) {
+    FactoryScope scope;
+    {
+        alignas(8) uint8_t buf[0x90];
+        std::memset(buf, 0xCD, sizeof buf);
+        UI::TextDescription* d = ::new (buf) UI::TextDescription();
+        CHECK_EQ(d->_id, -1);                         // ElementDescription() ran
+        CHECK(d->_font == nullptr);
+        CHECK(d->_stringTable2 == nullptr);
+        CHECK(d->_name == nullptr);
+        CHECK_EQ(d->_u80, 0u);
+        CHECK_EQ((int)d->_b84, 0);
+        CHECK_EQ((int)d->_b85, 0);
+        CHECK_EQ((int)d->_pad86[0], 0xCD);            // NOT written
+        CHECK_EQ((int)d->_pad86[1], 0xCD);
+        CHECK_EQ(d->_i88, 0xc8);
+        CHECK_EQ(d->_i8c, -1);
+        TextDescriptionProbe probe;
+        CHECK(VTableOf(d) != VTableOf(&probe));
+        g_b39DtorCount = 0;
+        CHECK(d->DeletingDtor(0) == d);
+        CHECK_EQ(g_b39DtorCount, 1);
+    }
+    {
+        alignas(8) uint8_t buf[0xb8];
+        std::memset(buf, 0xCD, sizeof buf);
+        UI::LabelDescription* d = ::new (buf) UI::LabelDescription();
+        CHECK_EQ(d->_i88, 0xc8);                      // TextDescription() ran
+        CHECK_EQ(d->_word90, 3u);
+        CHECK_EQ(d->_word94, 1u);
+        CHECK_EQ(d->_word98, 0);
+        CHECK_EQ(d->_word9c, 2);
+        CHECK_EQ(d->_worda0, -1);
+        CHECK_EQ(d->_worda4, -1);
+        CHECK(d->_spriteSheet == nullptr);
+        CHECK(d->_spriteName == nullptr);
+        g_b39DtorCount = 0;
+        CHECK(d->DeletingDtor(0) == d);
+        CHECK_EQ(g_b39DtorCount, 2);                  // ~LabelDescription, ~TextDescription
+    }
+    {
+        alignas(8) uint8_t buf[0x100];
+        std::memset(buf, 0xCD, sizeof buf);
+        UI::g_textCacheTextCalls = 0;
+        UI::TextElement* e = ::new (buf) UI::TextElement();
+        CHECK_EQ(UI::g_textCacheTextCalls, 1);            // retail's ctor ends in CacheText
+        CHECK_EQ(e->_alignment, 3);                   // Element() ran
+        CHECK(e->_font == nullptr);
+        CHECK(e->_params._data == nullptr);
+        CHECK_EQ(e->_params._size, 0);
+        CHECK_EQ(e->_params._capacity, 0);
+        CHECK(e->_text.table == nullptr);
+        CHECK_EQ(e->_text.index, -1);
+        CHECK_EQ((int)buf[0xe4], 0xCD);               // NOT written
+        CHECK_EQ((int)e->_drawShadow, 0);
+        CHECK_EQ((int)e->_wrap, 0);
+        CHECK_EQ((int)e->_padEA[0], 0xCD);            // NOT written
+        CHECK_EQ(e->_lineSpacing, 100);
+        CHECK_EQ(e->_maxWidth, -1);
+        CHECK_EQ(e->_justify, 0);
+        CHECK(e->_cachedText == nullptr);
+        g_b39DtorCount = 0;
+        CHECK(e->DeletingDtor(0) == e);
+        CHECK_EQ(g_b39DtorCount, 1);
+    }
+    {
+        alignas(8) uint8_t buf[0x130];
+        std::memset(buf, 0xCD, sizeof buf);
+        UI::g_textCacheTextCalls = 0;
+        UI::LabelElement* e = ::new (buf) UI::LabelElement();
+        CHECK_EQ(UI::g_textCacheTextCalls, 1);            // through TextElement()
+        CHECK_EQ(e->_lineSpacing, 100);
+        CHECK(e->_sprite.spriteSheet == nullptr);
+        CHECK_EQ(e->_sprite.spriteIndex, -1);
+        CHECK_EQ((uint32_t)e->_sprite.pad0C, 0xCDCDCDCDu);   // NOT written
+        CHECK_EQ(e->_align, 3);
+        CHECK_EQ(e->_mode, 1u);
+        CHECK_EQ(e->_minTextWidth, 0);
+        CHECK_EQ(e->_gap, 2);
+        CHECK_EQ(e->_iconWidth, -1);
+        CHECK_EQ(e->_iconHeight, -1);
+        CHECK_EQ(e->_iconColor, 0xffffffffu);
+        CHECK_EQ(e->_textWidth, 0);
+        LabelElementProbe probe{};
+        CHECK(VTableOf(e) != VTableOf(&probe));
+        g_b39DtorCount = 0;
+        CHECK(e->DeletingDtor(0) == e);
+        CHECK_EQ(g_b39DtorCount, 2);                  // ~LabelElement, ~TextElement
+    }
+}
+
+UNIT_TEST(b39_uia_text_label_deletingdtor_both_arms) {
+    FactoryScope scope;
+    B39ExpectBothArms<UI::TextDescription>(0x90, [](void* p) { return ::new (p) UI::TextDescription(); });
+    B39ExpectBothArms<UI::TextElement>(0x100, [](void* p) { return ::new (p) UI::TextElement(); });
 }

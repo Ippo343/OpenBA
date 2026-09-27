@@ -32,13 +32,22 @@
 //     +0xb0 qword 0     _spriteName   System::String (0x1800c9930)
 // The field names are the POD's (DescriptionsBatch1.h); where each one lands on
 // the element is CreateInstance's copy (labeldescription.cpp), recorded above.
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0LabelDescription@UI@@QEAA@XZ` (0x1800d29d0) minus its vptr stores;
+// slot 0 is the class's own vector deleting dtor; ~LabelDescription is protected and
+// non-virtual. The factory pair is the class's own; the minted
+// `??_7LabelDescription@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
+// the doors are retired.
 // ============================================================================
 
+#include <type_traits>
 #include <cstdint>
 #include <cstddef>
 
 #include "TextDescription.h"
 #include "DescriptionsBatch1.h"   // kVtbl* names; RtUI::LabelDescription aliases this class
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI {
 
@@ -46,7 +55,37 @@ class SpriteSheet;
 
 class LabelDescription : public TextDescription {
 public:
-    Object::Base* DeletingDtor(unsigned flags) override = 0;     // [0] 0x180042730
+    // ??0LabelDescription@UI@@QEAA@XZ 0x1800d29d0 — the REAL constructor: CALL
+    // ??0TextDescription (TextDescription()), then +0x90 DWORD 3, ONE QWORD 1
+    // over +0x94/+0x98, +0x9c DWORD 2, ONE QWORD -1 over +0xa0/+0xa4, +0xa8
+    // and +0xb0 QWORD zero.
+    LabelDescription() : TextDescription() {
+        _word90 = 3;
+        _word94 = 1;
+        _word98 = 0;
+        _word9c = 2;
+        _worda0 = -1;
+        _worda4 = -1;
+        _spriteSheet = nullptr;
+        _spriteName  = nullptr;
+    }
+
+    // [0] 0x180042730 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0xb8`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<LabelDescription*>(self + static_cast<int64_t>(i) * 0xb8)
+                    ->~LabelDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~LabelDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                       // [1] 0x1800423b0
     uint32_t    Type() const override;                           // [2] 0x180042390
     int32_t     GetFileVersion() const override;                 // [3] 0x1800d2950
@@ -60,18 +99,17 @@ public:
 
     LabelDescription(const LabelDescription& src);               // 0x180042570  not ported
     LabelDescription& operator=(const LabelDescription& src);    // 0x180042630  not ported
-    static uint32_t TypeId();                                    // 0x1800423a0  not ported
-    static Object::Base* CreateNewObject();                      // 0x1800424a0  ui_factory_wave28.cpp door
-    static Object::Base* CreateInPlaceObject(void* place);       // 0x180042520  ui_factory_wave28.cpp door
+    static uint32_t TypeId();                                    // 0x1800423a0  ported over the minted record
+    static Object::Base* CreateNewObject();                      // 0x1800424a0  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);       // 0x180042520  the class's own (B39 D2)
     static void* operator new(std::size_t bytes);                // 0x1800423c0  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x180042430  not ported
     static void  operator delete(void* p);                       // 0x180042440  not ported
 
 protected:
-    // NOT retail's 0x1800d29d0 (ui_factory_wave28.cpp's `Ctor_LabelDescription` door).
-    LabelDescription() = default;
-    // 0x1800d2960. NON-VIRTUAL, NOT defined (its base's is not); the retail body
-    // is the door `RtUi_LabelDescription_Dtor` (labeldescription.cpp).
+    // `??1LabelDescription@UI@@UEAA@XZ` (0x1800d2960). NON-VIRTUAL
+    // (labeldescription.cpp): releases the sprite name at +0xb0; the compiler
+    // chains ~TextDescription. +0xa8 is NOT released.
     ~LabelDescription();
 
 private:
@@ -93,6 +131,8 @@ public:
 static_assert(sizeof(LabelDescription) == 0xb8,
               "UI::LabelDescription is 0xb8 (MOV EDX,0xb8 in 0x180042730)");
 static_assert(alignof(LabelDescription) == 8, "UI::LabelDescription aligns to 8");
+static_assert(!std::has_virtual_destructor<LabelDescription>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<LabelDescription>::value, "B39 D1: concrete");
 static_assert(offsetof(LabelDescription, _word90) == sizeof(TextDescription),
               "LabelDescription's own fields begin at the end of TextDescription");
 static_assert(offsetof(LabelDescription, _word90)      == 0x90, "");

@@ -927,7 +927,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180039c00, 0x1800ccff0, 0x090, "UI::ContainerDescription"),
     RT_DELDTOR(0x18003bd90, 0x1800cfb30, 0x0e8, "UI::DocumentTextDescription"),
     RT_DELDTOR(0x1800403a0, 0x1800d1b30, 0x088, "UI::GraphDescription"),
-    RT_DELDTOR(0x180042730, 0x1800d2960, 0x0b8, "UI::LabelDescription"),
 
     // VTABLE BATCH 7 (2026-09-12), appended AFTER batch 8's four rows above --
     // indices 71-74. Four more classes' slot0, read the same way as every row
@@ -1035,7 +1034,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x18004b3b0, 0x1800d8640, 0x0c8, "UI::SpinnerElement"),
     RT_DELDTOR(0x18004ca90, 0x1800da360, 0x108, "UI::TabElement"),
     RT_DELDTOR(0x180079600, 0x18011e2a0, 0x0f0, "UI::TableElement"),
-    RT_DELDTOR(0x1800422f0, 0x18011eda0, 0x100, "UI::TextElement"),
     // ---- Vtable batch 6 (2026-09-12): graphics buffers, meshes and lights ----
     // INDICES 103-108, appended after batch 4 elem_B's 89-102. The table is
     // POSITIONAL and these six have been RE-COUNTED TWICE: 71-76 -> 89-94 ->
@@ -1106,7 +1104,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x18003a050, 0x1800ccb10, 0x0d8, "UI::ContainerElement"),
     RT_DELDTOR(0x18003c650, 0x1800cf320, 0x1c8, "UI::DocumentTextElement"),
     RT_DELDTOR(0x1800408b0, 0x1800d1840, 0x100, "UI::GraphElement"),
-    RT_DELDTOR(0x180042bb0, 0x1800d25f0, 0x130, "UI::LabelElement"),
     // 2026-09-12, VTABLE BATCH 2 (the UI::*Description second half), rows
     // 103..115 -- APPENDED AFTER every row main already had, and the entry
     // points below were renumbered to match at the merge (the table is
@@ -1131,7 +1128,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x18004b050, 0x1800d8950, 0x088, "UI::SpinnerDescription"),
     RT_DELDTOR(0x18004c640, 0x1800da8e0, 0x0b8, "UI::TabDescription"),
     RT_DELDTOR(0x180079210, 0x18011e6f0, 0x098, "UI::TableDescription"),
-    RT_DELDTOR(0x180041e30, 0x18011eae0, 0x090, "UI::TextDescription"),
 };
 // ENDGAME B.3 step 9 (B39_RULES.md D4): the count is the table's, and every
 // wrapper finds its row BY ADDRESS at compile time -- deleting a row renumbers
@@ -1557,10 +1553,6 @@ void* RtDelDtor_DocumentTextDescription(void* self, unsigned flags) {
 void* RtDelDtor_GraphDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x1800403a0>());
 }
-// UI::LabelDescription      ~ = 0x1800d2960   (PORTED, labeldescription.cpp)
-void* RtDelDtor_LabelDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180042730>());
-}
 
 // VTABLE BATCH 7 (2026-09-12). Indices 81-84 (renumbered at this merge: batch
 // 8 took 67-70 on main first, concurrently with this batch's own claim on the
@@ -1622,10 +1614,6 @@ void* RtDelDtor_DocumentTextElement(void* self, unsigned flags) {
 void* RtDelDtor_GraphElement(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x1800408b0>());
 }
-// UI::LabelElement  ~LabelElement = 0x1800d25f0  (PORTED, runtime/src/ui/)
-void* RtDelDtor_LabelElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180042bb0>());
-}
 
 // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12), rows 85..98 ------------
 // All fourteen ~Class bodies are PORTED (runtime/src/ui/<class>element.cpp).
@@ -1638,7 +1626,6 @@ void* RtDelDtor_SliderElement(void* self, unsigned flags)     { return DeletingD
 void* RtDelDtor_SpinnerElement(void* self, unsigned flags)    { return DeletingDtorCore(self, flags, Row<0x18004b3b0>()); }
 void* RtDelDtor_TabElement(void* self, unsigned flags)        { return DeletingDtorCore(self, flags, Row<0x18004ca90>()); }
 void* RtDelDtor_TableElement(void* self, unsigned flags)      { return DeletingDtorCore(self, flags, Row<0x180079600>()); }
-void* RtDelDtor_TextElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, Row<0x1800422f0>()); }
 
 // ---------------------------------------------------------------------------
 // VTABLE BATCH 2 (the UI::*Description second half), table rows 103..115.
@@ -1677,10 +1664,6 @@ void* RtDelDtor_TabDescription(void* self, unsigned flags) {
 // UI::TableDescription        ~TableDescription = 0x18011e6f0
 void* RtDelDtor_TableDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180079210>());
-}
-// UI::TextDescription         ~TextDescription = 0x18011eae0  (PORTED, textdescription.cpp)
-void* RtDelDtor_TextDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180041e30>());
 }
 
 const DelDtorSpec* Specs() { return kSpecs; }
@@ -1785,7 +1768,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180039c00, (void*)&RtDelDtor_ContainerDescription);
     RegisterRuntimeAddr(0x18003bd90, (void*)&RtDelDtor_DocumentTextDescription);
     RegisterRuntimeAddr(0x1800403a0, (void*)&RtDelDtor_GraphDescription);
-    RegisterRuntimeAddr(0x180042730, (void*)&RtDelDtor_LabelDescription);
 
     // VTABLE BATCH 7 (2026-09-12).
     RegisterRuntimeAddr(0x1800167f0, (void*)&RtDelDtor_AnimationGroup);
@@ -1818,13 +1800,11 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18004b3b0, (void*)&RtDelDtor_SpinnerElement);
     RegisterRuntimeAddr(0x18004ca90, (void*)&RtDelDtor_TabElement);
     RegisterRuntimeAddr(0x180079600, (void*)&RtDelDtor_TableElement);
-    RegisterRuntimeAddr(0x1800422f0, (void*)&RtDelDtor_TextElement);
 
     // VTABLE BATCH 3 (2026-09-12), UI::*Element first half.
     RegisterRuntimeAddr(0x18003a050, (void*)&RtDelDtor_ContainerElement);
     RegisterRuntimeAddr(0x18003c650, (void*)&RtDelDtor_DocumentTextElement);
     RegisterRuntimeAddr(0x1800408b0, (void*)&RtDelDtor_GraphElement);
-    RegisterRuntimeAddr(0x180042bb0, (void*)&RtDelDtor_LabelElement);
     // ---- VTABLE BATCH 2 (the UI::*Description second half), rows 103..115 --
     RegisterRuntimeAddr(0x1800431d0, (void*)&RtDelDtor_LayoutDescription);
     RegisterRuntimeAddr(0x180044ed0, (void*)&RtDelDtor_ListDescription);
@@ -1834,7 +1814,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18004b050, (void*)&RtDelDtor_SpinnerDescription);
     RegisterRuntimeAddr(0x18004c640, (void*)&RtDelDtor_TabDescription);
     RegisterRuntimeAddr(0x180079210, (void*)&RtDelDtor_TableDescription);
-    RegisterRuntimeAddr(0x180041e30, (void*)&RtDelDtor_TextDescription);
 
     // The count is taken from kSpecCount rather than typed, so a row added
     // without touching this line cannot make the log say the wrong number --

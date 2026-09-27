@@ -266,74 +266,6 @@ extern "C" void* RtUiFact_SpriteSheet_CreateInPlaceObject(void* p) {
 
 
 // --------------------------------------------------------------------------
-// UI::LabelDescription   allocation 0xb8, align 8
-//   ?CreateNewObject@LabelDescription@UI@@SAPEAVBase@Object@@XZ    0x1800424a0 ord 2077
-//   ?CreateInPlaceObject@LabelDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x180042520 ord 1940
-//   ??0LabelDescription@UI@@QEAA@XZ                                0x1800d29d0 ord 246
-// SHAPE C: the factory pair is a bare `alloc / null test / call the
-// exported ctor`. The whole body lives in ??0LabelDescription@UI@@QEAA@XZ.
-// That ctor IS ported below, so this row does not merely move the wall.
-void* Ctor_LabelDescription(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    BASE("??0TextDescription@UI@@QEAA@XZ", self);
-    VPTR(self, "??_7LabelDescription@UI@@6B@");
-    U32(self, 0x90, 0x3u);
-    U64(self, 0x94, 0x1ull);
-    U32(self, 0x9c, 0x2u);
-    U64(self, 0xa0, 0xffffffffffffffffull);
-    U64(self, 0xa8, 0);
-    U64(self, 0xb0, 0);
-    return p;
-}
-
-extern "C" void* RtUiFact_LabelDescription_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0xb8, &Ctor_LabelDescription);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_LabelDescription_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_LabelDescription);
-}
-
-// --------------------------------------------------------------------------
-// UI::LabelElement   allocation 0x130, align 8
-//   ?CreateNewObject@LabelElement@UI@@SAPEAVBase@Object@@XZ        0x1800428e0 ord 2078
-//   ?CreateInPlaceObject@LabelElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180042960 ord 1941
-//   ??0LabelElement@UI@@QEAA@XZ                                    0x1800d2620 ord 248
-// SHAPE C: the factory pair is a bare `alloc / null test / call the
-// exported ctor`. The whole body lives in ??0LabelElement@UI@@QEAA@XZ.
-// That ctor IS ported below, so this row does not merely move the wall.
-void* Ctor_LabelElement(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    BASE("??0TextElement@UI@@QEAA@XZ", self);
-    VPTR(self, "??_7LabelElement@UI@@6B@");
-    U64(self, 0x100, 0);
-    U32(self, 0x108, 0xffffffffu);
-    U32(self, 0x110, 0x3u);
-    U64(self, 0x114, 0x1ull);
-    U32(self, 0x11c, 0x2u);
-    U64(self, 0x120, 0xffffffffffffffffull);
-    U32(self, 0x128, 0xffffffffu);
-    U32(self, 0x12c, 0);
-    return p;
-}
-
-extern "C" void* RtUiFact_LabelElement_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0x130, &Ctor_LabelElement);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_LabelElement_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_LabelElement);
-}
-
-// --------------------------------------------------------------------------
 // UI::LayoutDescription   allocation 0x78, align 8
 //   ?CreateNewObject@LayoutDescription@UI@@SAPEAVBase@Object@@XZ   0x180042e30 ord 2079
 //   ?CreateInPlaceObject@LayoutDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x180042f20 ord 1942
@@ -844,67 +776,6 @@ extern "C" void* RtUiFact_TableElement_CreateInPlaceObject(void* p) {
 }
 
 // --------------------------------------------------------------------------
-// UI::TextDescription   allocation 0x90, align 8
-//   ?CreateNewObject@TextDescription@UI@@SAPEAVBase@Object@@XZ     0x180041bc0 ord 2122
-//   ?CreateInPlaceObject@TextDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x180041c40 ord 1985
-//   ??0TextDescription@UI@@QEAA@XZ                                 0x18011ea20 ord 435
-// SHAPE C: the factory pair is a bare `alloc / null test / call the
-// exported ctor`. The whole body lives in ??0TextDescription@UI@@QEAA@XZ.
-// That ctor IS ported below, so this row does not merely move the wall.
-extern "C" void* RtUi_TextDescription_Ctor(void* self);
-void* Ctor_TextDescription(void* p) { return RtUi_TextDescription_Ctor(p); }
-
-extern "C" void* RtUiFact_TextDescription_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0x90, &Ctor_TextDescription);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_TextDescription_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_TextDescription);
-}
-
-// --------------------------------------------------------------------------
-// UI::TextElement   allocation 0x100, align 8
-//   ?CreateNewObject@TextElement@UI@@SAPEAVBase@Object@@XZ         0x180041fe0 ord 2123
-//   ?CreateInPlaceObject@TextElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180042060 ord 1986
-//   ??0TextElement@UI@@QEAA@XZ                                     0x18011eb80 ord 437
-// SHAPE C: the factory pair is a bare `alloc / null test / call the
-// exported ctor`. The whole body lives in ??0TextElement@UI@@QEAA@XZ.
-// *** THIS "NOT PORTED" NOTE WAS WRONG WHEN WRITTEN AND IS CORRECTED
-// *** 2026-09-12. ***
-// It used to read: "The ctor is NOT ported: it calls
-// ?CacheText@TextElement@UI@@AEAAXXZ, a private member this lane does not own
-// and did not read. The factory pair below therefore MOVES the cutover wall
-// from the factory to the ctor rather than clearing it."
-// Both halves fail. `?CacheText@TextElement@UI@@AEAAXXZ` (0x18011ec10) has
-// been ported and registered since Wave 10, in
-// runtime/src/ui/textelement_cachetext.cpp, alongside
-// `?SetParameterCount@TextElement@UI@@AEAAXXZ` (0x18011e8e0) — so the named
-// blocker was already gone. And `AEAA` means PRIVATE, not unexported; this DLL
-// exports its private members (reference_aeaa_is_private_not_unexported.md),
-// so "does not own" was never a reason either.
-// `??0TextElement@UI@@QEAA@XZ` IS NOW PORTED, in
-// runtime/src/ui/element_bodies_b5.cpp, registered under this exact name and
-// at 0x18011eb80, so the `BASE(...)` below reaches OUR body. This row clears
-// the wall; it does not move it.
-void* Ctor_TextElement(void* p) { BASE("??0TextElement@UI@@QEAA@XZ", p); return p; }
-
-extern "C" void* RtUiFact_TextElement_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0x100, &Ctor_TextElement);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_TextElement_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_TextElement);
-}
-
-// --------------------------------------------------------------------------
 // UI::ToolTipDialog   allocation 0xc0, align 8
 //   ?CreateNewObject@ToolTipDialog@UI@@SAPEAVBase@Object@@XZ       0x18004d0b0 ord 2124
 //   ?CreateInPlaceObject@ToolTipDialog@UI@@SAPEAVBase@Object@@PEAX@Z 0x18004d140 ord 1987
@@ -937,24 +808,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@SpriteSheet@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_SpriteSheet_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180003000ull, (void*)&RtUiFact_SpriteSheet_CreateInPlaceObject); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@LabelDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_LabelDescription_CreateNewObject);
-    RegisterRuntimeAddr(0x1800424a0ull, (void*)&RtUiFact_LabelDescription_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@LabelDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_LabelDescription_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x180042520ull, (void*)&RtUiFact_LabelDescription_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0LabelDescription@UI@@QEAA@XZ", (void*)&Ctor_LabelDescription);
-    RegisterRuntimeAddr(0x1800d29d0ull, (void*)&Ctor_LabelDescription); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@LabelElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_LabelElement_CreateNewObject);
-    RegisterRuntimeAddr(0x1800428e0ull, (void*)&RtUiFact_LabelElement_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@LabelElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_LabelElement_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x180042960ull, (void*)&RtUiFact_LabelElement_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0LabelElement@UI@@QEAA@XZ", (void*)&Ctor_LabelElement);
-    RegisterRuntimeAddr(0x1800d2620ull, (void*)&Ctor_LabelElement); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@LayoutDescription@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_LayoutDescription_CreateNewObject);
@@ -1094,20 +947,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@TableElement@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_TableElement_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180079440ull, (void*)&RtUiFact_TableElement_CreateInPlaceObject); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@TextDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_TextDescription_CreateNewObject);
-    RegisterRuntimeAddr(0x180041bc0ull, (void*)&RtUiFact_TextDescription_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@TextDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_TextDescription_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x180041c40ull, (void*)&RtUiFact_TextDescription_CreateInPlaceObject); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@TextElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_TextElement_CreateNewObject);
-    RegisterRuntimeAddr(0x180041fe0ull, (void*)&RtUiFact_TextElement_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@TextElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_TextElement_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x180042060ull, (void*)&RtUiFact_TextElement_CreateInPlaceObject); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@ToolTipDialog@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_ToolTipDialog_CreateNewObject);

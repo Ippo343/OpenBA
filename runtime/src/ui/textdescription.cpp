@@ -5,7 +5,7 @@
 // The cutover boot's wall after the UI::*Description first half landed.
 //
 // ??_7TextDescription@UI@@6B@ (retail 0x180156be0), ten slots:
-//   0  deleting dtor      0x180041e30  deleting_dtor.cpp row (sizeof 0x90)
+//   0  deleting dtor      0x180041e30  TextDescription.h (the class's own)
 //   1  TypeName           0x180041ad0  here
 //   2  Type               0x180041ab0  here
 //   3  GetFileVersion     0x18011ee20  here  (returns 0x304 — per class)
@@ -27,21 +27,20 @@
 // TextDescription wears the MINTED table. The ctor and dtor stay door bodies
 // (no real ctor on a polymorphic class, B4b-2).
 //
-// ??0TextElement@UI@@QEAA@XZ (0x18011eb80) is owned by
-// runtime/src/ui/element_bodies_b5.cpp and reached here by its export name so
-// there is exactly one registration per address. The applier 0x18011ef70 is
-// owned by element_bodies_b5.cpp too (declared on the class, undefined until
-// the fragment pass) and reached by address.
+// The applier 0x18011ef70 is element_bodies_b5.cpp's (a non-slot member body
+// and its door), reached here by address.
 //
-// THE CONSTRUCTOR IS OUT OF LINE HERE. Unlike Group/Ribbon/Image, whose ctor
-// bodies are inlined into Construct/Reconstruct, TextDescription's is a real
-// function at 0x18011ea20 that both Construct (`JNZ 0x18011ea20`, a TAIL jump)
-// and Reconstruct (`JMP 0x18011ea20`) reach, and it IS exported
-// (??0TextDescription@UI@@QEAA@XZ), so it is registered here by both doors.
-// runtime/src/ui/ui_factory_wave28.cpp's Ctor_ forwards to the body below.
+// THE CONSTRUCTOR IS OUT OF LINE IN RETAIL. Unlike Group/Ribbon/Image, whose
+// ctor bodies are inlined into Construct/Reconstruct, TextDescription's is a
+// real function at 0x18011ea20 that both Construct (`JNZ 0x18011ea20`, a TAIL
+// jump) and Reconstruct (`JMP 0x18011ea20`) reach.
 //
-// NOT HERE: `?CreateNewObject@TextDescription@UI@@` / `?CreateInPlaceObject@`
-// are ported and registered, table-driven, by runtime/src/ui/ui_factory_wave28.cpp.
+// ENDGAME B.3.9 block UI-A (B39_RULES D1/D2): the class is CONCRETE. That ctor
+// is the real one (TextDescription.h); the factory pair is defined and
+// registered here, replacing the ui_factory_wave28.cpp row. The ??0 / ??1
+// doors and the slot doors, read only by the retired minted table, its
+// RT_DELDTOR row and the interpreter rows, are gone; so is element_bodies_b5.cpp's
+// ??0TextElement door (TextElement's real ctor is spelled below).
 // ============================================================================
 #include <atomic>
 #include <cstddef>
@@ -49,19 +48,15 @@
 
 #include "element_common.h"   // rtuielem::AtomicExport (RULE B6-5), ResolveAddr
 #include "../../types/ui/TextDescription.h"
+#include "../../types/ui/TextElement.h"
+#include "../../types/system/String.h"
 #include "../../types/io/Serializer.h"
 
 namespace {
 
-void* VtBase()               { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* VtExternal()           { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* VtElementDescription() { return RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@"); }
-void* VtTextDescription()    { return RT_DATA_SLOT(void*, "??_7TextDescription@UI@@6B@"); }
-
 // RULE B6-5: the members below resolve through namespace-scope atomics, never
 // a function-local first-call cache (UI is built on the loader thread).
 std::atomic<void*> g_typeInfoSlot{nullptr};
-std::atomic<void*> g_textElementCtorSlot{nullptr};
 
 const uint8_t* TextDescriptionTypeInfo() {
     return static_cast<const uint8_t*>(rtuielem::AtomicExport(
@@ -93,52 +88,14 @@ void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
 }  // namespace
 
-// ============================================================================
-// ??0TextDescription@UI@@QEAA@XZ   retail 0x18011ea20 — the out-of-line ctor
-// ============================================================================
-// A DOOR BODY, not a member (B4b-2: no real ctor on a polymorphic class).
-// Transcribed instruction for instruction from 0x18011ea31..0x18011eaca.
-// Identical to every other ElementDescription subclass through +0x60, then
-// seven stores of its own whose WIDTHS are not uniform.
-//
-// +0x86..+0x87 IS NEVER WRITTEN. Zeroing it would be a divergence.
-extern "C" void* RtUi_TextDescription_Ctor(void* selfv) {
-    uint8_t* p = static_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtBase();                                              // 18011ea31
-    *v = VtExternal();                                          // 18011ea3b
-    *reinterpret_cast<uint64_t*>(p + 0x08) = 0;                 // 18011ea50
-    *reinterpret_cast<uint64_t*>(p + 0x10) = 0;                 // 18011ea53
-    *reinterpret_cast<uint64_t*>(p + 0x18) = 0;                 // 18011ea57
-    *v = VtElementDescription();                                // 18011ea5b
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;                 // 18011ea65
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;                 // 18011ea69
-    *reinterpret_cast<uint64_t*>(p + 0x30) = 0;                 // 18011ea6d
-    *reinterpret_cast<int32_t*>(p + 0x38)  = 0;                 // 18011ea71  DWORD
-    *reinterpret_cast<int32_t*>(p + 0x3c)  = -1;                // 18011ea74  DWORD
-    *reinterpret_cast<uint64_t*>(p + 0x40) = 3;                 // 18011ea7b  ONE QWORD
-    *reinterpret_cast<uint64_t*>(p + 0x48) = 0;                 // 18011ea83
-    *reinterpret_cast<uint64_t*>(p + 0x50) = 0;                 // 18011ea87
-    *reinterpret_cast<uint64_t*>(p + 0x58) = 0;                 // 18011ea8b
-    *reinterpret_cast<uint64_t*>(p + 0x60) = 0;                 // 18011ea8f
-    *v = VtTextDescription();                                   // 18011ea93
-    *reinterpret_cast<uint64_t*>(p + 0x68) = 0;                 // 18011ea9d  _font
-    *reinterpret_cast<uint64_t*>(p + 0x70) = 0;                 // 18011eaa1  _stringTable2
-    *reinterpret_cast<uint64_t*>(p + 0x78) = 0;                 // 18011eaa5  _name
-    *reinterpret_cast<int32_t*>(p + 0x80)  = 0;                 // 18011eaa9  _u80 DWORD
-    *reinterpret_cast<uint16_t*>(p + 0x84) = 0;                 // 18011eaaf  _b84/_b85 WORD
-    *reinterpret_cast<int32_t*>(p + 0x88)  = 0xc8;              // 18011eab6  _i88
-    *reinterpret_cast<int32_t*>(p + 0x8c)  = -1;                // 18011eac0  _i8c
-    return p;                                                   // 18011eaca
-}
-
 namespace UI {
 
 // 0x180041ab0 / 0x180041ad0: the first dword and the +8 qword of the minted
 // BaseTypeInfo. TypeName is the KEY FUNCTION, so GCC emits this class's table
-// here; nothing stamps it (every live one wears the minted table).
-uint32_t TextDescription::Type() const {
+// here.
+uint32_t TextDescription::Type() const { return TypeId(); }
+// ?TypeId@TextDescription@UI@@SAIXZ 0x180041ac0 — the record's first dword.
+uint32_t TextDescription::TypeId() {
     uint32_t v = 0; __builtin_memcpy(&v, TextDescriptionTypeInfo(), sizeof v); return v;
 }
 const char* TextDescription::TypeName() const {
@@ -149,25 +106,32 @@ const char* TextDescription::TypeName() const {
 int32_t TextDescription::GetFileVersion() const { return 0x304; }
 
 // 0x180041c70: `TEST RCX,RCX ; JNZ ctor ; XOR EAX,EAX ; RET` — a TAIL jump, so
-// the ctor's return value (this) is Construct's. The null test is in the DOOR.
+// the ctor's return value (this) is Construct's. The null test sat in the
+// retired door.
 Object::External* TextDescription::Construct() {
-    RtUi_TextDescription_Ctor(this);
-    return this;
+    return ::new (this) TextDescription();
 }
 // 0x180041c50: slot 0 with flag 0, then a TAIL jump to the ctor.
 Object::External* TextDescription::Reconstruct() {
     DeletingDtor(0);                                           // 180041c5e
-    RtUi_TextDescription_Ctor(this);                           // 180041c68
-    return this;
+    return ::new (this) TextDescription();                     // 180041c68
 }
 // 0x180041c80 is three instructions: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
 void TextDescription::Destruct() { DeletingDtor(0); }
 
-// ~TextDescription is declared and deliberately NOT defined: an empty body
-// would chain to `~ElementDescription`, which block A leaves undefined in the
-// real build (its body is a dialog.cpp door). Nothing destroys a
-// TextDescription as a C++ object; the registered dtor door below keeps
-// retail's two releases and the chain to ~External.
+// ??1TextDescription@UI@@UEAA@XZ   0x18011eae0 — retail's body, moved here
+// from the retired door (ENDGAME B.3.9 UI-A). TWO String releases in retail,
+// both with its asymmetry (field moved to `data-8` and freed on the last
+// reference, NULLED otherwise): this class's own name at +0x78 under its own
+// vtable -- here, through System::String's own Release -- then
+// ElementDescription's _textName at +0x60 under the base vtable, which is the
+// compiler's chain into ~ElementDescription, as is the tail JMP to ~External
+// (0x18011eb66). THE TWO ExternalPtrs AT +0x68 AND +0x70 ARE NOT RELEASED --
+// retail's, the same asymmetry ~ImageDescription has.
+TextDescription::~TextDescription() {
+    System::StringPrivateAccess::Release(
+        *reinterpret_cast<System::String*>(&_name));           // 18011eb04..18011eb22
+}
 
 // ============================================================================
 // ?Serialize@TextDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x18011ee30
@@ -260,13 +224,9 @@ Object::InternalPtr<Element>* TextDescription::CreateInstance(
     using MemAllocFn = void* (*)(uint64_t size, int align);
     void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0x100, 8);  // 18011f412 (inlined)
 
-    void* elem = nullptr;
-    if (raw != nullptr) {                                      // 18011f43d
-        // ??0TextElement@UI@@QEAA@XZ — a ctor DOOR (element_bodies_b5.cpp).
-        using TextElementCtorFn = void* (*)(void*);
-        elem = reinterpret_cast<TextElementCtorFn>(rtuielem::AtomicExport(
-            g_textElementCtorSlot, "??0TextElement@UI@@QEAA@XZ"))(raw);
-    }
+    TextElement* elem = nullptr;
+    if (raw != nullptr)                                        // 18011f43d
+        elem = ::new (raw) TextElement();                      // ??0TextElement 0x18011eb80
 
     void* slot = elem;                                         // 18011f44e
     using ApplyFn = void (*)(const void* self, void** elemPtr, const void* dlg);
@@ -278,129 +238,32 @@ Object::InternalPtr<Element>* TextDescription::CreateInstance(
 
 }  // namespace UI
 
-// ============================================================================
-// ??1TextDescription@UI@@UEAA@XZ   0x18011eae0 — a DOOR BODY (no real dtor)
-// ============================================================================
-// TWO String releases, both with retail's asymmetry (field moved to `data-8`
-// and freed on the last reference, NULLED otherwise): this class's own name
-// String at +0x78 under its own vtable, then ElementDescription's _textName at
-// +0x60 under the base vtable. Tail JMP to ??1External@Object@@ at 0x18011eb66.
-//
-// THE TWO ExternalPtrs AT +0x68 AND +0x70 ARE NOT RELEASED. That is retail's,
-// transcribed, not an omission — the same asymmetry ~ImageDescription has.
-extern "C" void RtUi_TextDescription_Dtor(void* selfv) {
-    UI::TextDescription* self = reinterpret_cast<UI::TextDescription*>(selfv);   // B.3.6 bridge
-    void** v = reinterpret_cast<void**>(selfv);
-
-    using MemFreeFn = void (*)(void*);
-
-    *v = VtTextDescription();                                  // 18011eaf6
-
-    char*& name = self->_name;
-    if (name != nullptr) {                                     // 18011eb04
-        --*reinterpret_cast<int32_t*>(name - 4);               // 18011eb09
-        if (*reinterpret_cast<int32_t*>(name - 4) == 0) {      // 18011eb0c
-            name = name - 8;                                   // 18011eb12
-            RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(name);
-        } else {
-            name = nullptr;                                    // 18011eb22
-        }
-    }
-
-    *v = VtElementDescription();                               // 18011eb2a
-
-    char*& text = self->_textName;
-    if (text != nullptr) {                                     // 18011eb38
-        --*reinterpret_cast<int32_t*>(text - 4);               // 18011eb3d
-        if (*reinterpret_cast<int32_t*>(text - 4) == 0) {      // 18011eb40
-            text = text - 8;                                   // 18011eb46
-            RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(text);
-        } else {
-            text = nullptr;                                    // 18011eb56
-        }
-    }
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(selfv);   // 18011eb66 JMP
+namespace UI {
+// ?CreateNewObject@TextDescription@UI@@SAPEAVBase@Object@@XZ  0x180041bc0
+// The factory-interpreter row this replaces: MemAlloc(0x90, 8), retail's
+// null branch, then the out-of-line ctor ??0TextDescription (0x18011ea20).
+Object::Base* TextDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TextDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) TextDescription();
 }
+// ?CreateInPlaceObject@TextDescription@UI@@SAPEAVBase@Object@@PEAX@Z  0x180041c40
+Object::Base* TextDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) TextDescription();
+}
+}  // namespace UI
 
 // ============================================================================
-// The registered doors: one QUALIFIED delegation each (a live TextDescription
-// wears the MINTED table, so an unqualified call would re-enter the door).
+// Registration: the factory pair only (B39_RULES D2).
 // ============================================================================
-extern "C" uint32_t RtUi_TextDescription_Type(const void* self) {
-    return reinterpret_cast<const UI::TextDescription*>(self)->UI::TextDescription::Type();   // B.3.6 bridge
-}
-extern "C" const char* RtUi_TextDescription_TypeName(const void* self) {
-    return reinterpret_cast<const UI::TextDescription*>(self)->UI::TextDescription::TypeName();   // B.3.6 bridge
-}
-extern "C" int32_t RtUi_TextDescription_GetFileVersion(const void* self) {
-    return reinterpret_cast<const UI::TextDescription*>(self)->UI::TextDescription::GetFileVersion();   // B.3.6 bridge
-}
-extern "C" void* RtUi_TextDescription_Construct(void* self) {
-    if (self == nullptr) return nullptr;                       // 180041c70
-    return reinterpret_cast<UI::TextDescription*>(self)->UI::TextDescription::Construct();   // B.3.6 bridge
-}
-extern "C" void* RtUi_TextDescription_Reconstruct(void* self) {
-    return reinterpret_cast<UI::TextDescription*>(self)->UI::TextDescription::Reconstruct();   // B.3.6 bridge
-}
-extern "C" void RtUi_TextDescription_Destruct(void* self) {
-    reinterpret_cast<UI::TextDescription*>(self)->UI::TextDescription::Destruct();   // B.3.6 bridge
-}
-extern "C" bool RtUi_TextDescription_Serialize(void* self, void* stream) {
-    return reinterpret_cast<UI::TextDescription*>(self)->UI::TextDescription::Serialize(stream);   // B.3.6 bridge
-}
-// RDX is the caller's slot; the member writes it and hands it back (B6-2).
-extern "C" void** RtUi_TextDescription_CreateInstanceElement(const void* self, void** ret,
-                                                             const void* dialog) {
-    return reinterpret_cast<void**>(
-        reinterpret_cast<const UI::TextDescription*>(self)->UI::TextDescription::CreateInstance(   // B.3.6 bridge
-            reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
-            static_cast<const UI::Dialog*>(dialog)));
-}
-
 int RtUiTextDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@TextDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_TextDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x180041ab0ull, (void*)&RtUi_TextDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@TextDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_TextDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x180041ad0ull, (void*)&RtUi_TextDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@TextDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_TextDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x18011ee20ull, (void*)&RtUi_TextDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@TextDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_TextDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x180041c70ull, (void*)&RtUi_TextDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@TextDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_TextDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x180041c50ull, (void*)&RtUi_TextDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@TextDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_TextDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x180041c80ull, (void*)&RtUi_TextDescription_Destruct);
-
-    RegisterRuntimeExport("??0TextDescription@UI@@QEAA@XZ",
-                          (void*)&RtUi_TextDescription_Ctor);            ++n;
-    RegisterRuntimeAddr(0x18011ea20ull, (void*)&RtUi_TextDescription_Ctor);
-
-    RegisterRuntimeExport("??1TextDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_TextDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x18011eae0ull, (void*)&RtUi_TextDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@TextDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_TextDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x18011ee30ull, (void*)&RtUi_TextDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@TextDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_TextDescription_CreateInstanceElement);             ++n;
-    RegisterRuntimeAddr(0x18011f3d0ull, (void*)&RtUi_TextDescription_CreateInstanceElement);
-
+    RegisterRuntimeExport("?CreateNewObject@TextDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::TextDescription::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x180041bc0ull, (void*)&UI::TextDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@TextDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::TextDescription::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x180041c40ull, (void*)&UI::TextDescription::CreateInPlaceObject);
     return n;
 }
