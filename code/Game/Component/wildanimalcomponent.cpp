@@ -34,10 +34,6 @@
 // Resolved helpers
 // ============================================================
 
-// Component_Serialize (base class) -- at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
 // IsDerivedFrom -- dispatch slot at 0x140152a98
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
@@ -63,9 +59,6 @@ static void EnsureHelpers() {
 
     uintptr_t slot;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-
     // Dispatch slots
 
     slot = ResolveAddr(Module::Exe, 0x140152a98);
@@ -86,50 +79,11 @@ static void EnsureHelpers() {
     s_helpersResolved = true;
 }
 
-// ============================================================
-// WildAnimalComponent::Serialize (vtable slot [3], 0x14012e300)
-// ============================================================
-// Serializes Component base, then the InternalBasePtr at +0x28.
-// After deserialization, validates the pointer with IsDerivedFrom against the
-// HerdComponent id and nulls it out if the check fails (save compatibility).
-//
-// Original pseudocode:
-//   Component_Serialize(self, stream)
-//   IO::Serializer::Serializer(local, stream, 0)
-//   Object::InternalBasePtr::Serialize(&self->data28, local)
-//   if (self->data28 != 0 && !IsDerivedFrom(self->data28, HerdComponentTypeId))
-//       self->data28 = 0
-//   IO::Serializer::~Serializer(local)
-
+// 0x14012e300 door: registered by address (standalone/reg_animal_serialize.cpp).
 void WildAnimalComponent_Serialize(WildAnimalComponent* self, void* stream) {
-    EnsureHelpers();
-
-    // Call base Component_Serialize
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
-
-    // Create local IO::Serializer (24 bytes on stack)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // Serialize InternalBasePtr at +0x28
-    reinterpret_cast<Object::InternalBasePtr*>(reinterpret_cast<uint8_t*>(self) + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-
-    // Post-deserialize type validation
-    if (self->data28 != 0) {
-        if (s_fn_IsDerivedFrom_dispatch && s_TypeId_HerdComponent) {
-            bool valid = s_fn_IsDerivedFrom_dispatch(
-                reinterpret_cast<void*>(self->data28), *s_TypeId_HerdComponent);
-            if (!valid) {
-                self->data28 = 0;
-            }
-        }
-    }
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    self->WildAnimalComponent::Persist(stream);
 }
+
 
 // ============================================================
 // WildAnimalComponent::OnRemove (vtable slot [7], 0x14012e2b0)
@@ -154,40 +108,6 @@ void WildAnimalComponent_Serialize(WildAnimalComponent* self, void* stream) {
 // drains with no regrowth. "OnRemove is installed" is not evidence it is
 // dispatched; count both arms.
 static long long g_war_calls = 0, g_war_noHerd = 0;
-void WildAnimalComponent_OnRemove(WildAnimalComponent* self) {
-    EnsureHelpers();
-
-    if (self->data28 == 0) ++g_war_noHerd;
-    ++g_war_calls;
-    const bool trace = (g_war_calls % 10) == 1;
-    const uintptr_t herdDbg = static_cast<uintptr_t>(self->data28);
-    const int before = herdDbg ? *reinterpret_cast<int*>(herdDbg + 0x40) : -1;
-
-    if (self->data28 != 0) {
-        // Create InternalBasePtr from self (the component)
-        uint64_t ibp = 0;
-        if (s_fn_IBP_Ctor) {
-            s_fn_IBP_Ctor(&ibp, self);
-        }
-
-        // CheckPtr on entity reference
-
-        // Erase self from the herd entity's component list at entity+0x38
-        if (s_fn_EraseFromComponentList) {
-            uintptr_t entity = static_cast<uintptr_t>(self->data28);
-            s_fn_EraseFromComponentList(
-                reinterpret_cast<void*>(entity + 0x38), &ibp);
-        }
-    }
-
-    if (trace) {
-        const int after = herdDbg ? *reinterpret_cast<int*>(herdDbg + 0x40) : -1;
-        fprintf(stderr, "[WildAnimalRm] calls=%lld noHerd=%lld herd=%p members %d -> %d%s\n",
-                g_war_calls, g_war_noHerd, reinterpret_cast<void*>(herdDbg),
-                before, after, (before == after) ? "  ERASE-NO-OP" : "");
-        fflush(stderr);
-    }
-}
 
 // ============================================================
 // Init: resolve function pointers
@@ -195,9 +115,8 @@ void WildAnimalComponent_OnRemove(WildAnimalComponent* self) {
 void WildAnimalComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[WildAnimalComponent] Funcs resolved: Serialize=%p "
+    printf("[WildAnimalComponent] Funcs resolved: "
            "EraseFromList=%p HerdTypeId=%p\n",
-           (void*)s_fn_Component_Serialize,
            (void*)s_fn_EraseFromComponentList,
            (void*)s_TypeId_HerdComponent);
 #endif
@@ -225,8 +144,82 @@ Object::Base* WildAnimalComponent::DeletingDtor(unsigned flags) {
     return this;
 }
 
-void WildAnimalComponent::Persist(void* stream) { WildAnimalComponent_Serialize(this, stream); }   // [3] 0x14012e300
-void WildAnimalComponent::OnRemove() { WildAnimalComponent_OnRemove(this); }                        // [7] 0x14012e2b0
+// ============================================================
+// WildAnimalComponent::Serialize (vtable slot [3], 0x14012e300)
+// ============================================================
+// Serializes Component base, then the InternalBasePtr at +0x28.
+// After deserialization, validates the pointer with IsDerivedFrom against the
+// HerdComponent id and nulls it out if the check fails (save compatibility).
+//
+// Original pseudocode:
+//   Component_Serialize(self, stream)
+//   IO::Serializer::Serializer(local, stream, 0)
+//   Object::InternalBasePtr::Serialize(&self->data28, local)
+//   if (self->data28 != 0 && !IsDerivedFrom(self->data28, HerdComponentTypeId))
+//       self->data28 = 0
+//   IO::Serializer::~Serializer(local)
+
+void WildAnimalComponent::Persist(void* stream) {
+    EnsureHelpers();
+
+    // Call base Component_Serialize
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    // Create local IO::Serializer (24 bytes on stack)
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    // Serialize InternalBasePtr at +0x28
+    reinterpret_cast<Object::InternalBasePtr*>(&data28)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+
+    // Post-deserialize type validation
+    if (data28 != 0) {
+        if (s_fn_IsDerivedFrom_dispatch && s_TypeId_HerdComponent) {
+            bool valid = s_fn_IsDerivedFrom_dispatch(
+                reinterpret_cast<void*>(data28), *s_TypeId_HerdComponent);
+            if (!valid) {
+                data28 = 0;
+            }
+        }
+    }
+
+    // Destroy serializer
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+}
+void WildAnimalComponent::OnRemove() {
+    EnsureHelpers();
+
+    if (data28 == 0) ++g_war_noHerd;
+    ++g_war_calls;
+    const bool trace = (g_war_calls % 10) == 1;
+    const uintptr_t herdDbg = static_cast<uintptr_t>(data28);
+    const int before = herdDbg ? *reinterpret_cast<int*>(herdDbg + 0x40) : -1;
+
+    if (data28 != 0) {
+        // Create InternalBasePtr from self (the component)
+        uint64_t ibp = 0;
+        if (s_fn_IBP_Ctor) {
+            s_fn_IBP_Ctor(&ibp, this);
+        }
+
+        // CheckPtr on entity reference
+
+        // Erase self from the herd entity's component list at entity+0x38
+        if (s_fn_EraseFromComponentList) {
+            uintptr_t entity = static_cast<uintptr_t>(data28);
+            s_fn_EraseFromComponentList(
+                reinterpret_cast<void*>(entity + 0x38), &ibp);
+        }
+    }
+
+    if (trace) {
+        const int after = herdDbg ? *reinterpret_cast<int*>(herdDbg + 0x40) : -1;
+        fprintf(stderr, "[WildAnimalRm] calls=%lld noHerd=%lld herd=%p members %d -> %d%s\n",
+                g_war_calls, g_war_noHerd, reinterpret_cast<void*>(herdDbg),
+                before, after, (before == after) ? "  ERASE-NO-OP" : "");
+        fflush(stderr);
+    }
+}
 
 // create 0x140039c20: MemAlloc(0x30, 8), then the ctor.
 void* WildAnimalComponent::CreateNewObject() {

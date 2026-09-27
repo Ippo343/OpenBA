@@ -324,20 +324,17 @@ void EdgeRun_db8c0(FencedTool* self, int x0, int y0, int x1, int y1,
 // ============================================================
 // 0x1400dae00 — FencedTool::CalcPath (Slot13). Returns 1 on commit, 0 on abort.
 // ============================================================
-extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell,
-                                             int64_t endCell) {
+bool FencedTool::CalcPath(int startCell, int endCell) {
     EnsureFuncs();
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
-    if (!gw || !s_ctorFromDesc || !s_anchorCalc || !fn_MemAlloc || !self->fencedDesc) {
+    if (!gw || !s_ctorFromDesc || !s_anchorCalc || !fn_MemAlloc || !fencedDesc) {
         return 0;
     }
 
-    // 1. Validate through vtable slot 14 (CalcCost).
-    typedef int (*fn_calcCost_t)(FencedTool*, int, int, uint32_t*, int*, int*, int*);
-    fn_calcCost_t calcCost = reinterpret_cast<fn_calcCost_t>((*reinterpret_cast<void***>(self))[14]);
+    // 1. Validate through the virtual CalcCost (slot 14).
     uint32_t dummyW = 0;
     int rectW = 0, rectH = 0, segCount = 0;
-    int rc = calcCost(self, static_cast<int>(startCell), static_cast<int>(endCell),
+    int rc = CalcCost(static_cast<int>(startCell), static_cast<int>(endCell),
                       &dummyW, &rectW, &rectH, &segCount);
     if (rc != 0) {
         return 0;
@@ -353,7 +350,7 @@ extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell
     // 2. Edit-mode guard (re-fence must match the stored rect). Retail reads
     //    tool+0x10 unconditionally; null-guarded here (SA: the placement dialog
     //    object may be absent in harness flows — treated as "not editing").
-    uint8_t* editObj = reinterpret_cast<uint8_t*>(self->dialogPtr);
+    uint8_t* editObj = reinterpret_cast<uint8_t*>(dialogPtr);
     if (editObj && *(editObj + 0x80) != 0) {
         int sc = *reinterpret_cast<int32_t*>(editObj + 0x98);
         int ec = *reinterpret_cast<int32_t*>(editObj + 0x9c);
@@ -366,12 +363,12 @@ extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell
     uint32_t shMinX = 0, shMinY = 0, shMaxX = 0, shMaxY = 0;
     float shelterPos[3] = { 0.f, 0.f, 0.f };
     float yawF = 0.f;
-    s_anchorCalc(self, &shMinX, &shMinY, &shMaxX, &shMaxY, shelterPos, &yawF);
+    s_anchorCalc(this, &shMinX, &shMinY, &shMaxX, &shMaxY, shelterPos, &yawF);
     const int yawI = static_cast<int>(yawF);
 
     // 4. Master entity from the tool's description template (tool+0x20).
     void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
-    void* master = mem ? s_ctorFromDesc(mem, self->descriptionPtr) : nullptr;
+    void* master = mem ? s_ctorFromDesc(mem, descriptionPtr) : nullptr;
     int64_t masterIBP = 0;
     if (fn_InternalBasePtr_Ctor) new (&masterIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(master));   // B.3.3 bridge
@@ -387,13 +384,13 @@ extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell
 
     if (s_clearEnts) {
         int64_t clearTmpl = *reinterpret_cast<int64_t*>(
-            reinterpret_cast<uintptr_t>(self->fencedDesc) + 0x70);
+            reinterpret_cast<uintptr_t>(fencedDesc) + 0x70);
         s_clearEnts(masterIBP, minCol, minRow, maxCol, maxRow, clearTmpl);
     }
 
     // 5. Shelter entity from sections[0].
     void* shelterTmpl = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(self->fencedDesc) + 0x28);
+        reinterpret_cast<uintptr_t>(fencedDesc) + 0x28);
     void* smem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
     void* shelter = (smem && shelterTmpl) ? s_ctorFromDesc(smem, shelterTmpl) : nullptr;
     int64_t shelterIBP = 0;
@@ -435,31 +432,38 @@ extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell
 
     // 7. Corners (skip any the shelter covers) + 4 edge runs.
     if (minCol < sMinX || sMaxX < minCol || minRow < sMinY || sMaxY < minRow)
-        SpawnFencePiece_dbc80(self, 2, minCol, minRow, 1, 1, 0x5a, &multiVal);
+        SpawnFencePiece_dbc80(this, 2, minCol, minRow, 1, 1, 0x5a, &multiVal);
     if (minCol < sMinX || sMaxX < minCol || maxRow < sMinY || sMaxY < maxRow)
-        SpawnFencePiece_dbc80(self, 2, minCol, maxRow, 1, 1, 0, &multiVal);
+        SpawnFencePiece_dbc80(this, 2, minCol, maxRow, 1, 1, 0, &multiVal);
     if (maxCol < sMinX || sMaxX < maxCol || maxRow < sMinY || sMaxY < maxRow)
-        SpawnFencePiece_dbc80(self, 2, maxCol, maxRow, 1, 1, -0x5a, &multiVal);
+        SpawnFencePiece_dbc80(this, 2, maxCol, maxRow, 1, 1, -0x5a, &multiVal);
     if (maxCol < sMinX || sMaxX < maxCol || minRow < sMinY || sMaxY < minRow)
-        SpawnFencePiece_dbc80(self, 2, maxCol, minRow, 1, 1, 0xb4, &multiVal);
+        SpawnFencePiece_dbc80(this, 2, maxCol, minRow, 1, 1, 0xb4, &multiVal);
 
-    EdgeRun_db8c0(self, minCol + 1, minRow, maxCol - 1, minRow,
+    EdgeRun_db8c0(this, minCol + 1, minRow, maxCol - 1, minRow,
                   sMinX, sMinY, sMaxX, sMaxY, 0, &multiVal);
-    EdgeRun_db8c0(self, minCol + 1, maxRow, maxCol - 1, maxRow,
+    EdgeRun_db8c0(this, minCol + 1, maxRow, maxCol - 1, maxRow,
                   sMinX, sMinY, sMaxX, sMaxY, 0, &multiVal);
-    EdgeRun_db8c0(self, minCol, minRow + 1, minCol, maxRow - 1,
+    EdgeRun_db8c0(this, minCol, minRow + 1, minCol, maxRow - 1,
                   sMinX, sMinY, sMaxX, sMaxY, 0x5a, &multiVal);
-    EdgeRun_db8c0(self, maxCol, minRow + 1, maxCol, maxRow - 1,
+    EdgeRun_db8c0(this, maxCol, minRow + 1, maxCol, maxRow - 1,
                   sMinX, sMinY, sMaxX, sMaxY, 0x5a, &multiVal);
 
     // 8. Register the master entity (priority from the tool's own template).
     if (s_registerEnt) {
         int64_t val = masterIBP;
         int prio = *reinterpret_cast<int32_t*>(
-            reinterpret_cast<uintptr_t>(self->descriptionPtr) + 0x20);
+            reinterpret_cast<uintptr_t>(descriptionPtr) + 0x20);
         s_registerEnt(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xe8),
                       &val, prio);
     }
 
     return 1;
+}
+
+// By-name door (ENDGAME B.3.8 callers): standalone/reg_player_edit.cpp registers
+// this name at 0x1400dae00. The body is FencedTool::CalcPath above.
+extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell,
+                                             int64_t endCell) {
+    return self->FencedTool::CalcPath(static_cast<int>(startCell), static_cast<int>(endCell));
 }

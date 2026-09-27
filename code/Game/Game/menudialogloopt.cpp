@@ -29,6 +29,7 @@
 #include "graphics/GraphicsMesh.h"
 #include "graphics/SunLight.h"
 #include "graphics/ParticleInstance.h"    // ParticleSystemInstance
+#include "Game/MenuDialogLoopT.h"         // _loadBit (LoadSceneA1)
 #include "video/Context.h"
 #include "options.h"
 #include "MenuScene.h"
@@ -713,6 +714,25 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     // Filename(const String&) is what retail builds here: Format gave us a String.
     System::Filename fnBuf(stringBuf);
 
+    // THE MENU'S RESOURCES CARRY THE MENU'S BIT. Retail loads the scene inside
+    // MenuDialogLoopT::Load on the loader thread, where Loader::Run has just
+    // published THIS loop's _loadBit as the factory's _cleanBitIndex, so every
+    // External the scene pulls in (the scene, its meshes, particles, geometry
+    // materials) is marked with the menu's usage bit. The standalone runs this
+    // load from the splash (ChunkedSceneLoader, main thread) while the index
+    // still holds the Loading splash's bit — so the scene belonged to the splash,
+    // and the splash's retirement (~UpdateLoop -> ExternalFactory::Clean) evicted
+    // it under the live menu: MenuScene freed, its WorldGeometry freed (D9 #12),
+    // the menu's Graphics::Scene still holding it. Publish the menu's bit for
+    // the load, as Loader::Run would, and hand the index back afterwards (the
+    // loader thread is idle here: the splash waits for EngineLoader::IsBusy()).
+    struct PublishLoadBit {
+        ::Object::ExternalFactory* f;
+        int32_t saved;
+        PublishLoadBit(::Object::ExternalFactory* factory, int32_t bit)
+            : f(factory), saved(factory->_cleanBitIndex) { f->_cleanBitIndex = bit; }
+        ~PublishLoadBit() { f->_cleanBitIndex = saved; }
+    } publish(efactory, static_cast<MenuDialogLoopT*>(self)->_loadBit);   // bridge: self is the menu loop
     void* obj = const_cast<::Object::External*>(efactory->FindOrLoad(fnBuf));  // B.3.3 bridge
 
     // Original validates via IsDerivedFrom against TypeInfo_MenuScene at exe 0x1401c59f0.

@@ -365,11 +365,8 @@ int PlantOrchard::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/)
             int priority = (int)selfQ[4];
             uintptr_t citizenEnt = *(uintptr_t*)entityIBP;
 
-            uintptr_t vtable = *(uintptr_t*)this;
-            typedef uintptr_t* (*GetTarget_t)(PlantOrchard*, void*);
-            auto getTarget = *(GetTarget_t*)(vtable + 0x50);
             uint32_t resultBuf[4] = {0};
-            uintptr_t* wResult = getTarget(this, resultBuf);
+            uintptr_t* wResult = static_cast<uintptr_t*>(GetTarget(resultBuf));
             uintptr_t workEnt = *wResult;
 
             *(uint32_t*)(citizenEnt + 0x54) |= 4;

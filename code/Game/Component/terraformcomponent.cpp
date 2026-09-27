@@ -25,9 +25,6 @@
 // Resolved helpers
 // ============================================================
 
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
 // Terrain helpers for the OnRemove restore + the completion passes
 // CitizenAI_impl_b150 (0x1400ab150) — terrain region-dirty recalc around (x,y).
 // NOTE: the literal was previously 0x1400a4b50 (a dropped/transposed digit) which
@@ -56,131 +53,17 @@ static bool s_initialized = false;
 // Resolves the deformation-pass helpers (defined with those passes further down).
 static void TerraformDeformResolve();
 
-// ============================================================
-// TerraformComponent::Shutdown (0x140057500)
-// ============================================================
-
+// 0x140057500 door: registered by address (standalone/reg_terraform_live.cpp).
 void TerraformComponent_Shutdown(TerraformComponent* self, void* stream) {
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    if (s_fn_Component_Serialize)
-        s_fn_Component_Serialize(self, stream);
-
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // Serialize Vector3 count from +0x30
-    uint32_t count = *(uint32_t*)(selfAddr + 0x30);
-    uint32_t localCount = count;
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
-
-    // If loading, resize the Vector3 array
-    // B.3.2 bridge: FUN_14000d030 is Collection::Array<Vector3>::SetSize(n)
-    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-        GameColl::AsArray<GameColl::Vec3>((void*)(selfAddr + 0x28))
-            .SetSize(static_cast<int>(localCount));
-    }
-
-    // Serialize each Vector3 (12 bytes each)
-    void* vecArray = *(void**)(selfAddr + 0x28);
-    if ((int)localCount > 0) {
-        uint8_t* pVec = (uint8_t*)vecArray;
-        for (uint32_t i = 0; i < localCount; i++) {
-            reinterpret_cast<Math::Vector3*>(pVec)->Serialize(serializer);   // B.3.1 bridge
-            pVec += 0xC;  // sizeof(Vector3) = 12
-        }
-    }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    self->TerraformComponent::Persist(stream);
 }
 
-// ============================================================
-// TerraformComponent OnRemove — vtable slot 7 (0x140057350)
-// ============================================================
-// Ghidra labels this OnCreate; it is the TEARDOWN half. It REPLAYS the undo record
-// this component built at build-complete: it writes the ORIGINAL terrain heights back
-// from the Vector3 array at +0x28, and puts every recorded map cell's terrain type
-// back to 10 (the value the footprint pass converted to 6). Applying it at creation
-// would restore terrain that was never deformed; the "OnCreate/OnRemove off by one"
-// Ghidra mislabel is a known trap in this project, and the direction of the writes
-// (10 here vs 10 -> 6 in the completion pass) is what settles it.
+
+// 0x140057350 door: registered by address (standalone/reg_terraform_live.cpp).
 void TerraformComponent_OnRemove(TerraformComponent* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
-
-    float heightScale = s_pHeightScale ? *s_pHeightScale : 256.0f;
-
-    // Phase 1: Apply Vector3 terrain heights
-    uintptr_t terrainGrid = *(uintptr_t*)(gameWorld + 0x110);
-    int vecCount = *(int*)(selfAddr + 0x30);
-
-    if (vecCount > 0 && terrainGrid) {
-        uintptr_t vecArray = *(uintptr_t*)(selfAddr + 0x28);
-        float halfSize = (float)(*(int*)(terrainGrid + 0xC0) >> 1);
-
-        for (int i = 0; i < vecCount; i++) {
-            uintptr_t vec = vecArray + (uintptr_t)i * 0xC;
-            float vx = *(float*)vec;
-            float vy = *(float*)(vec + 4);
-            float vz = *(float*)(vec + 8);
-
-            // Offset by half grid size
-            float mapX = halfSize + vx;
-            float mapY = halfSize + vy;
-
-            // Convert Z to height index
-            uint32_t heightIdx = (uint32_t)(vz * heightScale);
-
-            // Write height to terrain height array
-            uintptr_t heightArray = *(uintptr_t*)(terrainGrid + 0xD8);
-            int stride = *(int*)(terrainGrid + 0xD0);
-            int64_t offset = ((int64_t)stride * (int64_t)(int)mapY + (int64_t)(int)mapX) * 2;
-            *(int16_t*)(heightArray + offset) = (int16_t)heightIdx;
-
-            // Recalculate terrain at this position
-            if (s_fn_TerrainRecalc)
-                s_fn_TerrainRecalc((void*)terrainGrid, (int)mapX, (int)mapY);
-        }
-    }
-
-    // Phase 2: Update tile types from tile index array at +0x38/+0x40
-    int* tileGrid = *(int**)(gameWorld + 0xF8);
-    int tileCount = *(int*)(selfAddr + 0x40);
-
-    if (tileCount > 0 && tileGrid) {
-        uintptr_t tileArray = *(uintptr_t*)(selfAddr + 0x38);
-        int gridWidth = *tileGrid;
-
-        for (int i = 0; i < tileCount; i++) {
-            int tileIndex = *(int*)(tileArray + (uintptr_t)i * 4);
-
-            // Read current terrain type
-            uintptr_t tileData = *(uintptr_t*)((uintptr_t)tileGrid + 0x80);
-            uint8_t oldType = *(uint8_t*)(tileData + 0x29 + (int64_t)tileIndex * 0x30);
-
-            // Update buildable flag
-            bool isBuildable = ((1 << (oldType & 0x1F)) & 0x1E0) != 0;
-            *(uint8_t*)((uintptr_t)tileGrid + 0xA2) |= (isBuildable ? 1 : 0);
-
-            // Set tile type to 10 (terraformed)
-            *(uint8_t*)(tileData + 0x29 + (int64_t)tileIndex * 0x30) = 10;
-
-            // Update terrain visuals if was buildable
-            if (isBuildable && s_fn_TerrainVisualUpdate) {
-                uintptr_t visualPtr = *(uintptr_t*)((uintptr_t)tileGrid + 0x70);
-                s_fn_TerrainVisualUpdate((void*)visualPtr, tileIndex % gridWidth, tileIndex / gridWidth);
-            }
-
-            // Set terrain type
-            if (s_fn_TerrainTypeSet) {
-                uintptr_t threadPtr = *(uintptr_t*)((uintptr_t)tileGrid + 0x68);
-                s_fn_TerrainTypeSet((void*)threadPtr, tileIndex, 10, 0);
-            }
-        }
-    }
+    self->TerraformComponent::OnRemove();
 }
+
 
 // ============================================================
 // Init: resolve function pointers
@@ -188,8 +71,6 @@ void TerraformComponent_OnRemove(TerraformComponent* self) {
 void TerraformComponent_InitFuncs() {
     if (s_initialized) return;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
     s_fn_TerrainRecalc = reinterpret_cast<fn_TerrainRecalc_t>(
         ResolveAddr(Module::Exe, 0x1400ab150));
     s_fn_RegionDirty = reinterpret_cast<fn_RegionDirty_t>(
@@ -543,19 +424,12 @@ void TerraformComponent_FootprintPass(TerraformComponent* self) {
 
 }
 
-// ------------------------------------------------------------
-// 0x140057310 — vtable slot 12, the per-component MESSAGE slot.
-// Message id 4 is the build-complete broadcast (the same one PastureComponent's
-// slot 12 gates on). Everything else is ignored.
-// ------------------------------------------------------------
+// 0x140057310 door: registered by address (standalone/reg_terraform_live.cpp).
 extern "C" void TerraformComponent_Slot12(void* selfV, int msgId) {
-    if (msgId != 4 || !selfV) return;
-    TerraformComponent_InitFuncs();
-    TerraformComponent* self = reinterpret_cast<TerraformComponent*>(selfV);
-    TerraformComponent_MeshPass(self, /*ceiling=*/true);
-    TerraformComponent_MeshPass(self, /*ceiling=*/false);
-    TerraformComponent_FootprintPass(self);
+    if (!selfV) return;
+    reinterpret_cast<TerraformComponent*>(selfV)->TerraformComponent::OnEvent(msgId);   // B.3.8 bridge
 }
+
 
 // ============================================================================
 // ENDGAME B.3.8 VIS — TerraformComponent as a REAL class (TerraformComponent.h).
@@ -578,21 +452,148 @@ TerraformComponent::TerraformComponent()
     OrFlagsInCtor(0x3);
 }
 
+// ============================================================
+// TerraformComponent::Persist (0x140057500)
+// ============================================================
+
 // [3] 0x140057500 — the body resolves its helpers first (slot 3 is the first
 // call into the class on a load-from-save).
 void TerraformComponent::Persist(void* stream) {
     TerraformComponent_InitFuncs();
-    TerraformComponent_Shutdown(this, stream);
+    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
+
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    // Serialize Vector3 count from +0x30
+    uint32_t count = *(uint32_t*)(selfAddr + 0x30);
+    uint32_t localCount = count;
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
+
+    // If loading, resize the Vector3 array
+    // B.3.2 bridge: FUN_14000d030 is Collection::Array<Vector3>::SetSize(n)
+    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
+        GameColl::AsArray<GameColl::Vec3>((void*)(selfAddr + 0x28))
+            .SetSize(static_cast<int>(localCount));
+    }
+
+    // Serialize each Vector3 (12 bytes each)
+    void* vecArray = *(void**)(selfAddr + 0x28);
+    if ((int)localCount > 0) {
+        uint8_t* pVec = (uint8_t*)vecArray;
+        for (uint32_t i = 0; i < localCount; i++) {
+            reinterpret_cast<Math::Vector3*>(pVec)->Serialize(serializer);   // B.3.1 bridge
+            pVec += 0xC;  // sizeof(Vector3) = 12
+        }
+    }
+
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 // [6] 0x1400574f0 — the class's own `RET` body.
 void TerraformComponent::OnAdded() {}
+// ============================================================
+// TerraformComponent OnRemove — vtable slot 7 (0x140057350)
+// ============================================================
+// Ghidra labels this OnCreate; it is the TEARDOWN half. It REPLAYS the undo record
+// this component built at build-complete: it writes the ORIGINAL terrain heights back
+// from the Vector3 array at +0x28, and puts every recorded map cell's terrain type
+// back to 10 (the value the footprint pass converted to 6). Applying it at creation
+// would restore terrain that was never deformed; the "OnCreate/OnRemove off by one"
+// Ghidra mislabel is a known trap in this project, and the direction of the writes
+// (10 here vs 10 -> 6 in the completion pass) is what settles it.
 // [7] 0x140057350
 void TerraformComponent::OnRemove() {
     TerraformComponent_InitFuncs();
-    TerraformComponent_OnRemove(this);
+    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
+
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+
+    float heightScale = s_pHeightScale ? *s_pHeightScale : 256.0f;
+
+    // Phase 1: Apply Vector3 terrain heights
+    uintptr_t terrainGrid = *(uintptr_t*)(gameWorld + 0x110);
+    int vecCount = *(int*)(selfAddr + 0x30);
+
+    if (vecCount > 0 && terrainGrid) {
+        uintptr_t vecArray = *(uintptr_t*)(selfAddr + 0x28);
+        float halfSize = (float)(*(int*)(terrainGrid + 0xC0) >> 1);
+
+        for (int i = 0; i < vecCount; i++) {
+            uintptr_t vec = vecArray + (uintptr_t)i * 0xC;
+            float vx = *(float*)vec;
+            float vy = *(float*)(vec + 4);
+            float vz = *(float*)(vec + 8);
+
+            // Offset by half grid size
+            float mapX = halfSize + vx;
+            float mapY = halfSize + vy;
+
+            // Convert Z to height index
+            uint32_t heightIdx = (uint32_t)(vz * heightScale);
+
+            // Write height to terrain height array
+            uintptr_t heightArray = *(uintptr_t*)(terrainGrid + 0xD8);
+            int stride = *(int*)(terrainGrid + 0xD0);
+            int64_t offset = ((int64_t)stride * (int64_t)(int)mapY + (int64_t)(int)mapX) * 2;
+            *(int16_t*)(heightArray + offset) = (int16_t)heightIdx;
+
+            // Recalculate terrain at this position
+            if (s_fn_TerrainRecalc)
+                s_fn_TerrainRecalc((void*)terrainGrid, (int)mapX, (int)mapY);
+        }
+    }
+
+    // Phase 2: Update tile types from tile index array at +0x38/+0x40
+    int* tileGrid = *(int**)(gameWorld + 0xF8);
+    int tileCount = *(int*)(selfAddr + 0x40);
+
+    if (tileCount > 0 && tileGrid) {
+        uintptr_t tileArray = *(uintptr_t*)(selfAddr + 0x38);
+        int gridWidth = *tileGrid;
+
+        for (int i = 0; i < tileCount; i++) {
+            int tileIndex = *(int*)(tileArray + (uintptr_t)i * 4);
+
+            // Read current terrain type
+            uintptr_t tileData = *(uintptr_t*)((uintptr_t)tileGrid + 0x80);
+            uint8_t oldType = *(uint8_t*)(tileData + 0x29 + (int64_t)tileIndex * 0x30);
+
+            // Update buildable flag
+            bool isBuildable = ((1 << (oldType & 0x1F)) & 0x1E0) != 0;
+            *(uint8_t*)((uintptr_t)tileGrid + 0xA2) |= (isBuildable ? 1 : 0);
+
+            // Set tile type to 10 (terraformed)
+            *(uint8_t*)(tileData + 0x29 + (int64_t)tileIndex * 0x30) = 10;
+
+            // Update terrain visuals if was buildable
+            if (isBuildable && s_fn_TerrainVisualUpdate) {
+                uintptr_t visualPtr = *(uintptr_t*)((uintptr_t)tileGrid + 0x70);
+                s_fn_TerrainVisualUpdate((void*)visualPtr, tileIndex % gridWidth, tileIndex / gridWidth);
+            }
+
+            // Set terrain type
+            if (s_fn_TerrainTypeSet) {
+                uintptr_t threadPtr = *(uintptr_t*)((uintptr_t)tileGrid + 0x68);
+                s_fn_TerrainTypeSet((void*)threadPtr, tileIndex, 10, 0);
+            }
+        }
+    }
 }
-// [12] 0x140057310
-void TerraformComponent::OnEvent(int eventId) { TerraformComponent_Slot12(this, eventId); }
+// ------------------------------------------------------------
+// 0x140057310 — vtable slot 12, the per-component MESSAGE slot.
+// Message id 4 is the build-complete broadcast (the same one PastureComponent's
+// slot 12 gates on). Everything else is ignored.
+// ------------------------------------------------------------
+void TerraformComponent::OnEvent(int msgId) {
+    if (msgId != 4) return;
+    TerraformComponent_InitFuncs();
+    TerraformComponent_MeshPass(this, /*ceiling=*/true);
+    TerraformComponent_MeshPass(this, /*ceiling=*/false);
+    TerraformComponent_FootprintPass(this);
+}
 
 // [0] 0x14000ce90: ~TerraformComponent (0x1400575b0; its array frees are a PORT GAP, see the header), MemFree on &1.
 Object::Base* TerraformComponent::DeletingDtor(unsigned flags) {

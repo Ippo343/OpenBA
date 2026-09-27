@@ -16,6 +16,9 @@
 #include "options.h"
 #include "EditTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
+#include "Component/ModelComponent.h"
+#include "Dialog/EntityUI.h"
+#include "Dialog/ToolUI.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -73,11 +76,11 @@ Object::Base* EditTool::DeletingDtor(unsigned flags) {
 // left RDX holding stale garbage and faulted here on every citizen death.
 //
 // Original: 0x1400fd290
-bool EditTool_IsSelectedEntity(EditTool* self, uint64_t* entityRef) {
+bool EditTool::IsSelected(uint64_t* ref) {
     // CheckPtr on self->lastEntityRef to resolve lazy/weak pointers
 
-    // Compare: does *entityRef match self->lastEntityRef?
-    return *entityRef == self->lastEntityRef;
+    // Compare: does *ref match self->lastEntityRef?
+    return *ref == lastEntityRef;
 }
 
 // ============================================================
@@ -192,11 +195,11 @@ static void EnsureEditFuncs() {
     static uint32_t s_tid_ToolUI_sa = 0, s_tid_EntityUI_sa = 0;
     auto validTid = [](uint32_t v) { return v != 0 && v != 0xFFFFFFFFu; };
     if (!s_pTypeId_ToolUI || !validTid(s_tid_ToolUI_sa)) {
-        if (!validTid(s_tid_ToolUI_sa)) s_tid_ToolUI_sa = ::Object::GetTypeIdByName("ToolUI");
+        if (!validTid(s_tid_ToolUI_sa)) s_tid_ToolUI_sa = ToolUI::TypeId();
         s_pTypeId_ToolUI = &s_tid_ToolUI_sa;
     }
     if (!s_pTypeId_PageToggleUI || !validTid(s_tid_EntityUI_sa)) {
-        if (!validTid(s_tid_EntityUI_sa)) s_tid_EntityUI_sa = ::Object::GetTypeIdByName("EntityUI");
+        if (!validTid(s_tid_EntityUI_sa)) s_tid_EntityUI_sa = EntityUI::TypeId();
         s_pTypeId_PageToggleUI = &s_tid_EntityUI_sa;
     }
 
@@ -220,13 +223,7 @@ extern "C" void HighlightFollow_Impl(void* self);
 // standalone exe that constant is null, so fall back to the live factory tree by
 // name (the same reason 0x140003f60's registered reimpl finds nothing in SA).
 static uint32_t ModelComponentTypeId() {
-    static uint32_t cached = 0;
-    if (cached) return cached;
-    uint32_t* p = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7a50);
-    if (p && *p) { cached = *p; return cached; }
-    uint32_t v = ::Object::GetTypeIdByName("ModelComponent");
-    if (v && v != 0xFFFFFFFFu) cached = v;
-    return cached;
+    return ModelComponent::TypeId();   // ENDGAME B.3.8 callers: the class's record
 }
 
 // Project a dynamic entity's (e.g. a citizen's) live world position to a screen point.
@@ -253,8 +250,7 @@ static bool TryProjectEntityModelPos(uintptr_t entityObj, float* outX, float* ou
         uint64_t* slot = (uint64_t*)(arr + (int64_t)i * 8);
         void* comp = *(void**)slot;
         if (!comp) continue;
-        typedef uint32_t (*GetTid_t)(void*);
-        uint32_t tid = ((GetTid_t)(*(uintptr_t**)comp)[2])(comp);
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (tid == modelTid) {
             if (!s_fn_IsDerived || s_fn_IsDerived(comp, modelTid)) modelComp = (uintptr_t)comp;
             break;
@@ -291,7 +287,7 @@ static bool TryProjectEntityModelPos(uintptr_t entityObj, float* outX, float* ou
 // DELIBERATELY NOT registered at 0x1400fcc90 — that address doubles as the
 // EditTool per-frame deactivate vtable slot, which would wipe the selection
 // outline every frame (see standalone/reg_player_render.cpp). Direct callers
-// only: the per-frame tick's dead-entity branch in EditTool_Startup_Impl.
+// only: the per-frame tick's dead-entity branch in EditTool::Update.
 void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr) {
     // (1) clear selection highlight — resolves only when BANISHED_SELECTION_OUTLINE
     // registered the cb40 port; NULL -> no outline to clear (same as toolui.cpp).
@@ -357,21 +353,19 @@ static bool RepoDiag() {
 }
 #define REPO_DIAG(...) do { if (RepoDiag()) { printf(__VA_ARGS__); fflush(stdout); } } while (0)
 
-void EditTool_Startup_Impl(EditTool* self) {
+void EditTool::Update(void*, char) {
     EnsureEditFuncs();
-
-    uintptr_t selfAddr = (uintptr_t)self;
 
     // Re-sync the selection outline to the (possibly moving) selected entity every
     // frame BEFORE the dialog-positioning early-outs below — the follow reads the
     // selected-entity ref at +0x30 and is independent of the info dialog at +0x28.
-    HighlightFollow_Impl(self);
+    HighlightFollow_Impl(this);
 
     // Early out: if entity IBP at +0x28 is null, nothing to do
-    if (self->entityRef == 0)
+    if (entityRef == 0)
         return;
 
-    void* entityIBP = (void*)&self->entityRef;  // &self+0x28
+    void* entityIBP = (void*)&entityRef;  // &self+0x28
 
     // Resolve lazy/weak pointer
 
@@ -387,11 +381,11 @@ void EditTool_Startup_Impl(EditTool* self) {
     {
         uintptr_t resolved = *(uintptr_t*)entityIBP;
         if (resolved < 0x10000 || resolved > 0x00007FFFFFFFFFFFULL) {
-            self->entityRef = 0;
+            entityRef = 0;
             // Drop the selected-entity ref too: leaving +0x30 set blocks re-selecting
             // the same building (EditTool::OnKey's `lastEntityRef != foundEntity`
             // guard and d3b0's step-1 early-out both see it as still selected).
-            self->lastEntityRef = 0;
+            lastEntityRef = 0;
             return;
         }
     }
@@ -437,7 +431,7 @@ void EditTool_Startup_Impl(EditTool* self) {
     if (s_fn_IBPCtor) s_fn_IBPCtor(&pageToggleIBP, (void*)pageToggleObj);
 
     REPO_DIAG("[Repos] entityRef(dialog)=%p toolUIIBP=%p pageToggleIBP=%p\n",
-              (void*)self->entityRef, (void*)toolUIIBP, (void*)pageToggleIBP);
+              (void*)entityRef, (void*)toolUIIBP, (void*)pageToggleIBP);
 
     // Standalone safety: this reposition only runs once an entity's info dialog is open, a
     // path never exercised until GUI select landed. If either controller came back null (a
@@ -468,7 +462,7 @@ void EditTool_Startup_Impl(EditTool* self) {
     // SA_DialogEntityAlive wrapper guards papered over; those guards stay as the
     // backstop for PINNED panels, which retail also leaves open).
     if (!SA_DialogEntityAlive((void*)pageToggleIBP)) {
-        EditTool_CloseInfoDialog(self, dialogPtr);
+        EditTool_CloseInfoDialog(this, dialogPtr);
         return;
     }
 
@@ -515,7 +509,7 @@ void EditTool_Startup_Impl(EditTool* self) {
         // Intentionally null in standalone (see the s_fn_Entity_impl_cc90 decl) so we
         // don't wipe the selection outline every frame 0380 fails for citizens.
         REPO_DIAG("[Repos] BAIL: no screen rect (0380 failed for this entity)\n");
-        if (s_fn_Entity_impl_cc90) s_fn_Entity_impl_cc90(selfAddr);
+        if (s_fn_Entity_impl_cc90) s_fn_Entity_impl_cc90((uintptr_t)this);
         return;
     }
 
@@ -613,10 +607,8 @@ void EditTool_Startup_Impl(EditTool* self) {
 // select/deselect the found entity.
 //
 // Original: 0x1400fd030
-uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
+char EditTool::OnKey(char param2) {
     EnsureEditFuncs();
-
-    uintptr_t selfAddr = (uintptr_t)self;
 
     if (SelDiagOn()) {
         static int calls = 0;
@@ -632,7 +624,7 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
     if (param2 == 0) return 1;
 
     // Check tool state: self+0x10 -> state struct
-    uintptr_t statePtr = *(uintptr_t*)(selfAddr + 0x10);
+    uintptr_t statePtr = (uintptr_t)dialogPtr;
     bool flag80 = *(char*)(statePtr + 0x80) != 0;
     if (flag80 && *(uintptr_t*)(statePtr + 0x90) == 0) {
         return 1;
@@ -787,22 +779,22 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
                 return 1;
             }
             uintptr_t entityTypeRef = *(uintptr_t*)(foundEntity + 0x28);
-            uintptr_t expectedType = *(uintptr_t*)(*(uintptr_t*)(selfAddr + 0x10) + 0x90);
+            uintptr_t expectedType = *(uintptr_t*)((uintptr_t)dialogPtr + 0x90);
             if (entityTypeRef != expectedType) {
                 return 1;  // type mismatch, skip
             }
         }
 
         // Check if entity is different from last selected
-        if (self->lastEntityRef != foundEntity) {
+        if (lastEntityRef != foundEntity) {
             // Call EditTool_SelectEntity (0x1400fd3b0)
             uintptr_t entityParam = foundEntity;
             if (fn_EditTool_SelectEntity) {
-                fn_EditTool_SelectEntity((void*)selfAddr, &entityParam);
+                fn_EditTool_SelectEntity(this, &entityParam);
             }
             if (SelDiagOn())
                 printf("[SelDiag] SELECT entity=%p -> dialog(self+0x28)=%p\n",
-                       (void*)foundEntity, *(void**)(selfAddr + 0x28));
+                       (void*)foundEntity, (void*)entityRef);
         }
     } else if (SelDiagOn()) {
         printf("[SelDiag] no entity under cursor — nothing selected\n");
@@ -831,15 +823,10 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
 // from +0x28 itself.
 void EditTool::Shutdown() { EditTool_CloseInfoDialog(this, static_cast<uintptr_t>(entityRef)); }
 
-char EditTool::OnKey(char active) {                                            // [6] 0x1400fd030
-    return static_cast<char>(EditTool_OnKey_Impl(this, active));
-}
-void EditTool::Update(void*, char) { EditTool_Startup_Impl(this); }            // [7] 0x1400fcda0
-
-// [10] 0x1400fd290 — `bool(self, uint64_t* entityRef)`: "is *entityRef the
-// entity I have selected?". Callers MUST pass the second argument (a one-arg
-// call site once left RDX stale and faulted inside it — nomadcomponent.cpp).
-bool EditTool::IsSelected(uint64_t* ref) { return EditTool_IsSelectedEntity(this, ref); }
+// [6] OnKey (0x1400fd030), [7] Update (0x1400fcda0) and [10] IsSelected
+// (0x1400fd290: "is *ref the entity I have selected?" — callers MUST pass the
+// second argument; a one-arg call site once left RDX stale and faulted inside it,
+// nomadcomponent.cpp) are defined above.
 
 // Cursor-free select harness (BANISHED_TOOL_HARNESS=select). The live pick needs the OS
 // cursor over an entity, which the headless settle-frame lacks. This mirrors OnKey's

@@ -20,13 +20,10 @@
 //   +0x58  AllowsModChanges(self)         — exe 0x14001A2C0  -> true
 //   +0x60  CreateDialog(self, retptr)     — exe 0x14009BA30
 //
-// First-pass implementation: everything except GetResourceFilename, AllowsModChanges,
-// and Destroy is a stub that prints and returns a safe default. Update returns false
-// so MainLoop::Run exits immediately after the first tick. This lets standalone drive
-// MenuDialogLoopT_Ctor end-to-end without yet implementing all 11 game-specific slots.
-//
-// As real reimplementations land in code/Game/Game/menudialogloopt.cpp, replace the
-// matching stub entry with the real function and remove the stub here.
+// ENDGAME B.3.8 block LOOP: the hand-built table is gone. This file now holds
+// the MEMBER bodies of the real class `MenuDialogLoopT`
+// (code/Game/Game/MenuDialogLoopT.h), whose compiler vtable 0x14015ed00 serves
+// (B38_RULES D5), plus the standalone resource-loading helpers they call.
 
 
 #include "address_registry.h"
@@ -46,9 +43,10 @@
 // Stub_Draw is declared in the enclosing ANONYMOUS namespace, which links
 // against a symbol that does not exist rather than the real one.
 void DlgCtrlRoute_Arm();                  // standalone/dlgctrl_route.cpp
-#include "UpdateLoop.h"
 #include "Game/menudialogloopt_funcs.h"
 #include "Game/uifade.h"
+#include "Game/MenuDialogLoopT.h"   // ENDGAME B.3.8 LOOP
+#include "Object/exe_type.h"      // DEFINE_EXE_VTABLE
 #include "autostart.h"
 #include <cstdio>
 #include <cstdint>
@@ -61,6 +59,7 @@ void DlgCtrlRoute_Arm();                  // standalone/dlgctrl_route.cpp
 #include "engine/MainLoop.h"     // -Iruntime/types: ENDGAME B.3.7 Engine::MainLoop
 #include "graphics/Scene.h"     // ENDGAME B.3.7: MenuDLT::Shutdown (carry-over 11)
 #include "save/SaveLoad.h"      // -Iruntime/types: ENDGAME B.3.7 callers (K5)
+#include "audio/Audio.h"        // ENDGAME B.3.8 LOOP: ~MenuDialogLoopT runs ~Audio::Scene
 #include <new>
 #include <cstring>
 #include <initializer_list>   // ENDGAME B.3.7: MenuDLT::Shutdown field list
@@ -237,19 +236,69 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded() {
     buildSprite(0xb8, "SaveLoadEmpty");   // save/load placeholder sprite
 }
 
-namespace {
+// ============================================================================
+// MenuDialogLoopT (vtable @ 0x14015ed00) — code/Game/Game/MenuDialogLoopT.h
+// ============================================================================
+// ENDGAME B.3.8 block LOOP: the old hand-built `g_menuDialogLoopVtable[13]`'s
+// stub bodies, moved into the real class's members unchanged.
 
-void Stub_Destroy(UpdateLoop* self, int flags) {
-    printf("[MenuDLT::Destroy] self=%p flags=%d\n", (void*)self, flags);
-    // Skip the real cleanup chain for now (Audio::Scene dtor, Engine::DialogLoopT dtor,
-    // UI::UserInterface dtor, String dtor). Those will leak on this run but are safe to
-    // skip because the process exits immediately after MainLoop::Run returns.
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
+// 0x14009bb00 — was the inline `MenuDialogLoopT_Ctor` (engine_funcs.h), which
+// the two unconverted construction sites (mainmenudialog.cpp, tutorialui.cpp)
+// still use; this is the same body with the vtable store the compiler's.
+MenuDialogLoopT::MenuDialogLoopT(const System::String& filename)
+    : Engine::DialogLoopT(filename) {
+    fn_Random_Default_Ctor(&_random);     // System::Random at +0x168
+    fn_AudioScene_Ctor(_audioScene);      // Audio::Scene at +0xb30
+    // Zero-init the MenuDialogLoopT-specific fields (+0xb68..+0xbf8).
+    uint8_t* const s = reinterpret_cast<uint8_t*>(this);
+    for (uintptr_t off = 0xb68; off <= 0xbf8; off += 8)
+        *reinterpret_cast<uint64_t*>(s + off) = 0;
 }
 
-void Stub_Startup(UpdateLoop* self, int64_t remainder) {
+// 0x14001a310 (read from the disassembly): MemFree the data of the three
+// arrays +0xbf0, +0xbe0, +0xbd0 (in that order) and zero each {data, size|cap},
+// then ??1Scene@Audio@@ on +0xb30 (import 0x140151fb0), then the tail JMP to
+// ??1DialogLoopT@Engine@@ (import 0x140152378) — the compiler's base chain
+// (~UserInterface, ~String, ~UpdateLoop). The elements the arrays point at were
+// deleted by Shutdown (0x14009b280), as in retail.
+MenuDialogLoopT::~MenuDialogLoopT() {
+    for (uint8_t* arr : {_sceneIdArray, _instanceArray, _particleArray}) {
+        fn_MemFreeStatic(*reinterpret_cast<void**>(arr));   // MemFree(null) returns
+        *reinterpret_cast<uint64_t*>(arr)     = 0;          // _data
+        *reinterpret_cast<uint64_t*>(arr + 8) = 0;          // _size, _capacity
+    }
+    AudioScene()->~Scene();
+
+    // STANDALONE DIVERGENCE (the one thing retail's 0x14001a310 does not do):
+    // hand ~UpdateLoop a -1 bit so it does NOT run ExternalFactory::Clean for
+    // the menu's bit. The menu is the first loop GameMain builds, so it owns
+    // bit 0, the bit every standalone boot-time FindOrLoad is tagged with
+    // (Dialog/SpriteSheet.rsc and its White sprite, the two splash .rsc files)
+    // and MenuDialogLoopT::Startup's lazy loads carry the menu's bit too (the
+    // six cursors, the nine UI SoundEffects: KeyMap+0x28..+0xc0). Retail loads
+    // all of those in PlacementTool_Ctor from the INNER LoaderLoop's Load
+    // (0x140001120), which then drops that loop's bit (_loadBit = -1) so they
+    // stay resident for the life of the process. Our InnerLoaderLoop::Load does
+    // not build the PlacementTool (PORT GAP), so a faithful Clean here would
+    // evict resources whose raw pointers KeyMap still holds, and the game's
+    // Hand cursor / fade sprite would dangle. Dropping the bit keeps them
+    // resident exactly as the old skipped dtor did; the rest of the teardown
+    // (UI, filename, arrays, Audio::Scene) is retail's. Remove when Inner Load
+    // loads the PlacementTool resources under its own dropped bit.
+    _loadBit = -1;
+}
+
+Engine::UpdateLoop* MenuDialogLoopT::DeletingDtor(unsigned flags) {
+    printf("[MenuDLT::Destroy] self=%p flags=%d\n", (void*)this, (int)flags);
+    // Retail 0x14001a2e0: ~MenuDialogLoopT (0x14001a310, below), MemFree on &1.
+    this->~MenuDialogLoopT();
+    if (flags & 1) {
+        fn_MemFreeStatic(this);
+    }
+    return this;
+}
+
+void MenuDialogLoopT::Startup() {
     StallDebug::Phase startupPhase("MenuDLT::Stub_Startup");
 
     // Menu-side Save::SaveLoad (+0xb70) — retail MenuDLT keeps its own SaveLoad
@@ -259,31 +308,30 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
     // also publishes Save::SaveLoad::_singleton, which SaveLoadDialog and the
     // autosave path read. (Save/load wave 2026-08-27.)
     {
-        uintptr_t s = reinterpret_cast<uintptr_t>(self);
-        if (*reinterpret_cast<void**>(s + 0xb70) == nullptr) {
+        if (_saveLoad == nullptr) {
             typedef void* (*fn_slctor_t)(void* self);
             static fn_slctor_t s_slCtor = reinterpret_cast<fn_slctor_t>(
                 ResolveExport("??0SaveLoad@Save@@QEAA@XZ"));
             void* mem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x90, 4) : nullptr;
             if (mem && s_slCtor) {
                 s_slCtor(mem);
-                *reinterpret_cast<void**>(s + 0xb70) = mem;
+                _saveLoad = mem;
                 printf("[MenuDLT::Startup] menu SaveLoad created at +0xb70 = %p\n", mem);
             }
         }
     }
 
-    void* dialogExt = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x30);
-    printf("[MenuDLT::Startup] self=%p remainder=%lld m_dialogExternal=%p\n",
-           (void*)self, (long long)remainder, dialogExt);
+    void* dialogExt = _dialogExternal;
+    printf("[MenuDLT::Startup] self=%p m_dialogExternal=%p\n",
+           (void*)this, dialogExt);
     // Original MenuDLT::Startup (exe 0x14009B930) chains Engine::DialogLoopT::Startup
     // (Runtime 0x1800db2f0) which:
-    //   1. Calls vtable[+0x60] CreateDialog → MainMenuDialog_FromMenuDLT.
-    //   2. Stores the InternalPtr at self+0x38 (m_dialogInstance).
+    //   1. Calls slot 12 CreateLoopDialog → MainMenuDialog_FromMenuDLT.
+    //   2. Stores the InternalPtr at self+0x38 (_dialogInstance).
     //   3. Invokes the dialog's Slot4 (OnOpened/Setup).
     //   4. Pushes the IBP into the UI's pending-open dialog list.
     // M2 wiring (SplashDLT → Loader::Load → MenuDLT::Load → DialogLoopT::Load)
-    // populates m_dialogExternal before this fires, so DialogInstance::DialogInstance
+    // populates _dialogExternal before this fires, so DialogInstance::DialogInstance
     // and the UI list iteration both have valid data to read.
     if (!dialogExt) {
         printf("[MenuDLT::Startup] WARN: m_dialogExternal is NULL, skipping Startup "
@@ -293,19 +341,18 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
 
     // Phase A: by the time MenuDLT activates, the Loading splash's
     // ChunkedSceneLoader has already run LoadSceneA1 + chunked PhaseB +
-    // LoadSceneA3 (driven from splash_loop_stubs.cpp Stub_Startup +
-    // Stub_Update across the splash's display period). MenuDLT::Stub_Startup
+    // LoadSceneA3 (driven from GameLoadDialogLoopT::Startup / ::Update
+    // across the splash's display period). MenuDLT::Startup
     // just confirms the work was done and falls back to synchronous
     // LoadScene_PhaseA recovery if some boot path skipped the splash chain
     // (e.g. direct MenuDLT entry from a debug harness).
-    void* menuSceneExt = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(self) + 0xb90);
+    void* menuSceneExt = _menuScene;
     if (!menuSceneExt) {
         printf("[MenuDLT::Startup] WARN: scene fields empty (Loading splash "
                "didn't run ChunkedSceneLoader) — falling back to synchronous "
                "LoadScene_PhaseA\n");
         StallDebug::Phase phaseA("MenuDLT LoadScene_PhaseA fallback");
-        bool sceneOk = MenuDialogLoopT_LoadScene_PhaseA(self);
+        bool sceneOk = MenuDialogLoopT_LoadScene_PhaseA(this);
         printf("[MenuDLT::Startup] fallback LoadScene_PhaseA returned %s\n",
                sceneOk ? "true" : "false");
     } else {
@@ -316,14 +363,11 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
 
     {
         StallDebug::Phase dialogPhase("MenuDLT DialogLoopT::Startup");
-        // ENDGAME B.3.7: QUALIFIED (slot 1 is VIRTUAL on the base; this is the
-        // exe table's own Startup).
-        reinterpret_cast<Engine::DialogLoopT*>(self)                         // B.3.7 bridge
-            ->Engine::DialogLoopT::Startup();
+        // QUALIFIED (slot 1 is VIRTUAL on the base; this is the class's own Startup).
+        Engine::DialogLoopT::Startup();
     }
-    void* dialogInst = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x38);
     printf("[MenuDLT::Startup] DialogLoopT::Startup returned, m_dialogInstance=%p\n",
-           dialogInst);
+           _dialogInstance);
 
     // Mirror the cursor block from original MenuDLT::Startup (exe 0x14009B930):
     //   UI::SetCursor(ui, *(KeyMap+0x28))    — engine cursor sprite (Cursor/Arrow)
@@ -340,19 +384,18 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
     // the UserInterface's sound table.
     EnsureUISoundsLoaded();
 
-    void* ui = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x40);
+    void* ui = &_ui;
     void* keyMap = (g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
     void* arrowCursor = keyMap
         ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(keyMap) + 0x28)
         : nullptr;
     if (arrowCursor) {
-        reinterpret_cast<UI::UserInterface*>(ui)->SetCursor(  // B.3.6 bridge
-            Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(arrowCursor)));
+        _ui.SetCursor(Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(arrowCursor)));  // B.3.6 bridge
         printf("[MenuDLT::Startup] UI::SetCursor(ui=%p, arrow=%p)\n", ui, arrowCursor);
     } else {
         printf("[MenuDLT::Startup] WARN: skipping SetCursor (arrow=%p)\n", arrowCursor);
     }
-    reinterpret_cast<UI::UserInterface*>(ui)->EnableCursor(true);  // B.3.6 bridge
+    _ui.EnableCursor(true);
     printf("[MenuDLT::Startup] UI::EnableCursor(true) called on ui=%p\n", ui);
 
     // Trigger Startup-reveal fade — instant black -> animated reveal over ~0.25s.
@@ -366,29 +409,29 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
     // Start the menu music. Mirrors the Audio::Scene::PlayEffect block near the
     // end of the original MenuDLT::Startup (exe 0x14009b930): registers the
     // loop's Audio::Scene (self+0xb30) at the DialogInstance base (self+0xd0) and
-    // plays Audio/Music/Menu.rsc (loaded into self+0xb88 by Stub_Load) on the
-    // music channel. Per-frame Audio::Scene::Update (Stub_Update) advances it.
-    MenuDialogLoopT_StartMusic(self);
+    // plays Audio/Music/Menu.rsc (loaded into self+0xb88 by Load) on the
+    // music channel. Per-frame Audio::Scene::Update (Update) advances it.
+    MenuDialogLoopT_StartMusic(this);
 
     // Bind the UI hover/press/click sounds onto the embedded UserInterface
     // (self+0x40), mirroring OptionsDialog_helper_9260's sound block. Must run
     // after StartMusic wired the audio scene at self+0xd0 (== UI+0x90) and
     // after EnsureUISoundsLoaded populated the KeyMap container. The element
-    // framework (ButtonElement/Element::Update, driven by fn_DialogLoopT_Update
-    // in Stub_Update) then plays these automatically on hover/click.
-    MenuDialogLoopT_BindUISounds(self);
+    // framework (ButtonElement/Element::Update, driven by DialogLoopT::Update
+    // in Update) then plays these automatically on hover/click.
+    MenuDialogLoopT_BindUISounds(this);
 }
 
-void Stub_Shutdown(UpdateLoop* self) {
-    printf("[MenuDLT::Shutdown] self=%p\n", (void*)self);
+void MenuDialogLoopT::Shutdown() {
+    printf("[MenuDLT::Shutdown] self=%p\n", (void*)this);
     // ENDGAME B.3.7 CARRY-OVER 11: retail MenuDialogLoopT::Shutdown
     // (Application-x64.exe 0x14009b280), transcribed from its DISASSEMBLY, whole.
     // This stub used to run only step 11 (the StopAll) and skip the rest -- in
     // particular the call to `DialogLoopT::Shutdown`, which retail makes
     // DIRECTLY through import 0x1401523a0 (`?Shutdown@DialogLoopT@Engine@@`),
     // and which closes the menu dialog. Now that the base member is callable
-    // it is called QUALIFIED (slot 2 is VIRTUAL on the base; this stub IS the
-    // exe table's slot 2). Import names read from the exe's IAT with pefile:
+    // it is called QUALIFIED (slot 2 is VIRTUAL on the base; this IS the
+    // class's slot 2). Import names read from the exe's IAT with pefile:
     //   0x140151eb8 ?RemoveGlobalObject@Scene@Graphics@@   0x140151360 ?RemoveObject@Scene@Graphics@@
     //   0x140152b68 ?MemFree@MemoryAllocator@System@@       0x140151fa8 ??1Scene@Graphics@@
     //   0x1401521f0 ??1Renderer@Graphics@@                 0x140151f88 ??1SaveLoad@Save@@
@@ -396,7 +439,7 @@ void Stub_Shutdown(UpdateLoop* self) {
     //   0x140151bf8 ?EnableCursor@UserInterface@UI@@ (tail JMP)
     // Retail re-reads every field from `this` at each use and NEVER nulls one
     // after freeing it; both are reproduced. Unguarded where retail is.
-    uint8_t* const base = reinterpret_cast<uint8_t*>(self);
+    uint8_t* const base = reinterpret_cast<uint8_t*>(this);
     auto field = [base](uint32_t off) -> void* {
         return *reinterpret_cast<void**>(base + off);
     };
@@ -441,17 +484,20 @@ void Stub_Shutdown(UpdateLoop* self) {
     // 9. +0xb70 the menu's Save::SaveLoad: ~SaveLoad then freed.
     if (void* sl = field(0xb70)) { s_saveLoadDtor(sl); fn_MemFreeStatic(sl); }
     // 10. `CALL [0x1401523a0]` -- Engine::DialogLoopT::Shutdown, QUALIFIED.
-    reinterpret_cast<Engine::DialogLoopT*>(self)->Engine::DialogLoopT::Shutdown();  // B.3.7 bridge
+    Engine::DialogLoopT::Shutdown();
     // 11. Audio::Scene::StopAll(this+0xb30). NOT skippable: it parks the
     //     streamed menu music's thread before the next LoaderLoop's
     //     Loader::Load remounts the packages under it (open defect (c)).
-    MenuDialogLoopT_StopMusic(self);
+    MenuDialogLoopT_StopMusic(this);
     // 12. The tail `JMP UI::UserInterface::EnableCursor(this+0x40, false)`.
-    reinterpret_cast<UI::UserInterface*>(base + 0x40)->EnableCursor(false);  // B.3.6 bridge
+    _ui.EnableCursor(false);
 }
 
-bool Stub_Update(UpdateLoop* self, void* time) {
+bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     StallDebug::Tick("MenuDLT::Update");
+    // The first-tick clamp below writes the caller's Time and restores it
+    // before returning (MainLoop owns it); retail's slot takes it by const&.
+    void* time = const_cast<System::Time*>(&timeRef);   // B.3.8 bridge
     // Wave 10C lane ROUTES: install the DialogController inherited-slot route
     // (BANISHED_DLGCTRL_ROUTE=1|probe, else a silent no-op). Same placement
     // rationale as the line above -- Object::Factory::Startup has run, and no
@@ -475,16 +521,15 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     ++tick;
     if (tick <= 4 || (tick % 300) == 0) {
         printf("[MenuDLT::Update] self=%p time=%p tick=%d -> UpdateCamera + DialogLoopT::Update\n",
-               (void*)self, time, tick);
+               (void*)this, time, tick);
     }
 
     // Retail step 1 also ticks the menu-side Save::SaveLoad (+0xb70, created in
-    // Stub_Startup): `if (*(self+0xb70)) SaveLoad::Update(*(self+0xb70), time)`
+    // Startup): `if (*(self+0xb70)) SaveLoad::Update(*(self+0xb70), time)`
     // at 0x14009b71f. Without this the menu Load button's list-scan and load
     // operations never progress. (Save/load wave 2026-08-27.)
     {
-        void* menuSaveLoad = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(self) + 0xb70);
+        void* menuSaveLoad = _saveLoad;
         if (menuSaveLoad)
             reinterpret_cast<Save::SaveLoad*>(menuSaveLoad)->Update(  // B.3.7 bridge
                 *reinterpret_cast<const System::Time*>(time));
@@ -496,7 +541,7 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // Runs before the DialogLoopT::Update tail-call below so the injected click
     // is processed in the same frame, and its queued next-loop is picked up by
     // the Stage C poll on a subsequent tick.
-    AutoStart::TickMenu(self);
+    AutoStart::TickMenu(this);
 
     // Wave 10B lane SHOW: arm the MainLoop+0x90 nested-pump callback (no-op
     // unless BANISHED_MODAL_DRIVER is set). Armed here because this is the
@@ -507,10 +552,10 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     if (ModalDriver::Enabled())
         ModalDriver::Poll();
 
-    // Clamp the first tick's dt to ~16ms. Stub_Startup blocks for ~540ms while
+    // Clamp the first tick's dt to ~16ms. Startup blocks for ~540ms while
     // LoadScene_PhaseA runs synchronously on the main thread; the first
     // Update tick post-Startup gets all that accumulated time as `dt`. If we
-    // forward it as-is to fn_DialogLoopT_Update, fn_UI_Update advances the
+    // forward it as-is to DialogLoopT::Update, UI::Update advances the
     // fade alpha by `dt * rate * 4 = 0.54 * -1.0 * 4 = -2.16` in a single
     // tick, which clamps to alpha=0 immediately and skips the entire fade-in
     // animation — the menu pops in instantly instead of revealing smoothly
@@ -535,14 +580,14 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // Run the per-frame camera derivation (orbit + FromLookAt + SetCameraToWorld).
     if (time) {
         float dt = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4 bridge
-        MenuDialogLoopT_UpdateCamera_PhaseA(self, dt);
+        MenuDialogLoopT_UpdateCamera_PhaseA(this, dt);
     }
 
     // Per-frame particle simulation tick (chimney smoke, etc). Without this
     // particles are added to the scene at Load but never simulate — emitters
     // don't spawn sprites, so smokestacks render empty.
     if (time) {
-        MenuDialogLoopT_TickParticles(self, time);
+        MenuDialogLoopT_TickParticles(this, time);
     }
 
     // Per-frame Audio::Scene::Update — advances the menu music stream (and any
@@ -552,7 +597,7 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // Without this, StartMusic's PlayEffect starts the music but it never
     // progresses (no new sample buffers get queued).
     if (time) {
-        MenuDialogLoopT_TickAudioScene(self, time);
+        MenuDialogLoopT_TickAudioScene(this, time);
     }
 
     // Per-frame Audio::Device::Update. Original MainLoop::Run only fires
@@ -578,8 +623,8 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // DialogLoopT::Update tail-call, matching retail ordering (reads the fade
     // state the prior tick's UI::Update settled).
     {
-        void* pendingLoop = *(void**)(reinterpret_cast<uintptr_t>(self) + 0xb68);
-        float fadeRate    = *(float*)(reinterpret_cast<uintptr_t>(self) + 0x130);
+        void* pendingLoop = _pendingLoop;
+        float fadeRate    = *(float*)(reinterpret_cast<uintptr_t>(this) + 0x130);
         if (pendingLoop && fadeRate == 0.0f) {
             void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
             fprintf(stderr, "[MenuDLT::Update] STAGE C entry: pendingLoop=%p "
@@ -601,17 +646,14 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // ModalDriver::RunSelfTest uses above. No-op unless BANISHED_MOUSE_INJECT.
     void* menuUI = nullptr;
     if (MouseInject::Enabled()) {
-        void* menuDlg = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(self) + 0x38);
+        void* menuDlg = _dialogInstance;
         if (menuDlg)
             menuUI = *reinterpret_cast<void**>(
                 reinterpret_cast<uintptr_t>(menuDlg) + 0x10);
         MouseInject::PreUpdate(menuUI);
     }
-    // ENDGAME B.3.7: QUALIFIED (slot 3 is VIRTUAL on the base; this is the
-    // exe table's own Update).
-    bool result = reinterpret_cast<Engine::DialogLoopT*>(self)               // B.3.7 bridge
-        ->Engine::DialogLoopT::Update(*reinterpret_cast<const System::Time*>(time));
+    // QUALIFIED (slot 3 is VIRTUAL on the base; this is the class's own Update).
+    bool result = Engine::DialogLoopT::Update(*reinterpret_cast<const System::Time*>(time));
     if (menuUI) MouseInject::PostUpdate(menuUI);
 
     // Restore the original dt so MainLoop's frame accounting stays correct.
@@ -621,7 +663,7 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     return result;
 }
 
-void Stub_Draw(UpdateLoop* self, float alpha) {
+void MenuDialogLoopT::Draw(float alpha) {
     StallDebug::Tick("MenuDLT::Draw");
     // Frame-rate ceiling. The Runtime main loop (MainLoop::Frame) is uncapped —
     // it only SwitchToThread()s, so the menu otherwise spins one core to 100%.
@@ -648,13 +690,12 @@ void Stub_Draw(UpdateLoop* self, float alpha) {
     void* context = mainLoop
         ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(mainLoop) + 0x10)
         : nullptr;
-    void* ui = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x40);
+    void* ui = &_ui;
 
     if (trace) {
-        void* menuScene = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(self) + 0xb90);
+        void* menuScene = _menuScene;
         printf("[MenuDLT::Draw] self=%p frameAlpha=%f mainLoop=%p ctx=%p ui=%p menuScene=%p\n",
-               (void*)self, alpha, mainLoop, context, ui, menuScene);
+               (void*)this, alpha, mainLoop, context, ui, menuScene);
         printf("[MenuDLT::Draw] fps=%.1f (cap=%.1f)\n",
                FrameLimiter::GetFps(), FrameLimiter::GetCapFps());
     }
@@ -672,11 +713,11 @@ void Stub_Draw(UpdateLoop* self, float alpha) {
 
     // Phase A: render the 3D menu scene before the UI overlay.
     if (context) {
-        MenuDialogLoopT_DrawScene_PhaseA(self, alpha, context);
+        MenuDialogLoopT_DrawScene_PhaseA(this, alpha, context);
     }
 
     if (context) {
-        reinterpret_cast<UI::UserInterface*>(ui)->Draw(*reinterpret_cast<Video::Context*>(context));  // B.3.6 bridge
+        _ui.Draw(*reinterpret_cast<Video::Context*>(context));  // B.3.6 bridge
     } else if (trace) {
         printf("[MenuDLT::Draw] WARN: skipping UI::Draw (ctx=%p)\n", context);
     }
@@ -691,114 +732,79 @@ void Stub_Draw(UpdateLoop* self, float alpha) {
     }
 }
 
-void Stub_DrawFailed(UpdateLoop* self) {
-    // Fired by Engine::MainLoop::Draw when BeginFrame (vtable+0x08 of
-    // Video::Context+0x2160) returns false — i.e. the window is occluded,
-    // minimized, or the DX11 swap chain is in a Reset-needed state. After
-    // this returns, MainLoop::Draw calls Video::Context::Reset which is
-    // the recovery path. Log the first few + every 100th so we can tell
-    // whether Reset is succeeding (Draw resumes) or stuck.
-    static int n = 0;
-    ++n;
-    if (n <= 5 || (n % 100) == 0) {
-        printf("[MenuDLT::DrawFailed] self=%p count=%d\n", (void*)self, n);
-        fflush(stdout);
-    }
-}
-
-void Stub_Load(UpdateLoop* self) {
+void MenuDialogLoopT::Load() {
     // Original MenuDLT::Load (exe 0x14009A930) tail-calls Engine::DialogLoopT::Load
-    // first to populate self+0x30 (m_dialogExternal) from m_dialogFilename
+    // first to populate self+0x30 (_dialogExternal) from _dialogFilename
     // ("Dialog\MainMenu.rsc"), then loads companion resources (Audio/Music/Menu.rsc,
     // Game/MenuScene/SceneN.rsc) for the 3D menu background.
     //
-    // This Stub_Load runs on the single Runtime Engine::Loader thread (kicked by
-    // the Loading splash's Stub_Startup, as in retail). Only thread-safe work
+    // This runs on the single Runtime Engine::Loader thread (kicked by
+    // the Loading splash's Startup, as in retail). Only thread-safe work
     // goes here:
-    // fn_DialogLoopT_Load is safe (it's a single-call resource load with internal
+    // DialogLoopT::Load is safe (it's a single-call resource load with internal
     // refcounting). MenuDialogLoopT_LoadScene_PhaseA is NOT — it iterates 15K+
     // calls to Graphics_Scene_AddGlobalObject which mutates global scene state in
     // a way that produced corrupted vtable reads on first Update tick when run on
-    // a worker thread. The PhaseA scene allocation has been moved to Stub_Startup
+    // a worker thread. The PhaseA scene allocation has been moved to Startup
     // (main thread, runs while screen is fully faded to black so the freeze is
-    // invisible to the user — see Stub_Startup below).
-    void* dialogExtBefore = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x30);
-    printf("[MenuDLT::Load] self=%p m_dialogExternal(before)=%p\n", (void*)self, dialogExtBefore);
-    // ENDGAME B.3.7: QUALIFIED (slot 6 is VIRTUAL on the base; this is the exe
-    // table's own Load, dispatched by Loader::Run on the loader thread).
-    reinterpret_cast<Engine::DialogLoopT*>(self)->Engine::DialogLoopT::Load();  // B.3.7 bridge
-    void* dialogExtAfter = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x30);
+    // invisible to the user — see Startup above).
+    void* dialogExtBefore = _dialogExternal;
+    printf("[MenuDLT::Load] self=%p m_dialogExternal(before)=%p\n", (void*)this, dialogExtBefore);
+    // QUALIFIED (slot 6 is VIRTUAL on the base; this is the class's own Load,
+    // dispatched by Loader::Run on the loader thread).
+    Engine::DialogLoopT::Load();
+    void* dialogExtAfter = _dialogExternal;
     printf("[MenuDLT::Load] m_dialogExternal(after)=%p (PhaseA deferred to Startup)\n",
            dialogExtAfter);
 
     // Load the menu music (Audio/Music/Menu.rsc -> self+0xb88). Mirrors the
     // music-load block at the top of the original MenuDLT::Load (exe 0x14009a930).
-    // Like fn_DialogLoopT_Load this is a plain refcounted ExternalFactory load,
+    // Like DialogLoopT::Load this is a plain refcounted ExternalFactory load,
     // safe to run on the Engine::Loader thread (no scene-graph mutation).
-    // Playback is started later from Stub_Startup (main thread).
-    MenuDialogLoopT_LoadMusic(self);
+    // Playback is started later from Startup (main thread).
+    MenuDialogLoopT_LoadMusic(this);
 }
 
-void Stub_SaveRestore(UpdateLoop* self, bool save, void* state) {
-    printf("[MenuDLT::SaveRestore] self=%p save=%d state=%p\n", (void*)self, save, state);
+void MenuDialogLoopT::OnVideoError() {
+    printf("[MenuDLT::OnVideoError] self=%p\n", (void*)this);
 }
 
-void Stub_OnVideoError(UpdateLoop* self) {
-    printf("[MenuDLT::OnVideoError] self=%p\n", (void*)self);
+void MenuDialogLoopT::OnVideoRestart() {
+    printf("[MenuDLT::OnVideoRestart] self=%p\n", (void*)this);
 }
 
-void Stub_OnVideoRestart(UpdateLoop* self) {
-    printf("[MenuDLT::OnVideoRestart] self=%p\n", (void*)self);
-}
-
-const char* Stub_GetResourceFilename(UpdateLoop* self) {
-    (void)self;
+const char* MenuDialogLoopT::GetResourceFilename() {
     // Original exe slot 10 returns the literal "Game/Menu" via LEA RAX,[rip+...].
     return "Game/Menu";
 }
 
-bool Stub_AllowsModChanges(UpdateLoop* self) {
-    (void)self;
+bool MenuDialogLoopT::AllowsModChanges() {
     // Original exe slot 11 = MOV AL,1; RET — i.e. always true.
     return true;
 }
 
 extern "C" void* MainMenuDialog_FromMenuDLT(void* loop, void* retInternalBasePtr);
 
-void* Stub_CreateDialog(UpdateLoop* self, void* retPtr) {
-    void* rsc = self ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x30) : nullptr;
+Object::InternalPtr<UI::DialogInstance>* MenuDialogLoopT::CreateLoopDialog(
+        Object::InternalPtr<UI::DialogInstance>* retPtr) {
     printf("[MenuDLT::CreateDialog] self=%p retPtr=%p rsc=%p -> MainMenuDialog_FromMenuDLT\n",
-           (void*)self, retPtr, rsc);
+           (void*)this, (void*)retPtr, _dialogExternal);
     // M2 wired Loader::Load → MenuDLT::Load → DialogLoopT::Load, so self+0x30
-    // (m_dialogExternal) is populated with Dialog/MainMenu.rsc by the time
+    // (_dialogExternal) is populated with Dialog/MainMenu.rsc by the time
     // DialogLoopT::Startup invokes this slot. Delegate to the standalone
     // MainMenuDialog factory which mirrors the exe ctor at 0x14009BA30:
     // builds the DialogInstance + patches our 20-slot vtable + writes the
     // resulting IBP into retPtr.
-    return MainMenuDialog_FromMenuDLT(self, retPtr);
+    return static_cast<Object::InternalPtr<UI::DialogInstance>*>(
+        MainMenuDialog_FromMenuDLT(this, retPtr));
 }
 
-// 13-slot vtable — exposed via RegisterMenuDialogLoopVtable() to the address registry.
-void* g_menuDialogLoopVtable[13] = {
-    reinterpret_cast<void*>(&Stub_Destroy),               // +0x00
-    reinterpret_cast<void*>(&Stub_Startup),               // +0x08
-    reinterpret_cast<void*>(&Stub_Shutdown),              // +0x10
-    reinterpret_cast<void*>(&Stub_Update),                // +0x18
-    reinterpret_cast<void*>(&Stub_Draw),                  // +0x20
-    reinterpret_cast<void*>(&Stub_DrawFailed),            // +0x28
-    reinterpret_cast<void*>(&Stub_Load),                  // +0x30
-    reinterpret_cast<void*>(&Stub_SaveRestore),           // +0x38
-    reinterpret_cast<void*>(&Stub_OnVideoError),          // +0x40
-    reinterpret_cast<void*>(&Stub_OnVideoRestart),        // +0x48
-    reinterpret_cast<void*>(&Stub_GetResourceFilename),   // +0x50
-    reinterpret_cast<void*>(&Stub_AllowsModChanges),      // +0x58
-    reinterpret_cast<void*>(&Stub_CreateDialog),          // +0x60
-};
-
-} // namespace
+// B38_RULES D5: `Vtable()` is the COMPILER's table; 0x14015ed00 keeps serving
+// it while the inline `MenuDialogLoopT_Ctor` (engine_funcs.h, used by
+// mainmenudialog.cpp and tutorialui.cpp) stamps g_MenuDialogLoopT_Vtable.
+DEFINE_EXE_VTABLE(MenuDialogLoopT, "_ZTV15MenuDialogLoopT")
 
 // Called from address_registry.cpp's RegisterVtablesAndTypeIds().
 void RegisterMenuDialogLoopVtable() {
-    RegisterExeAddr(0x14015ed00, reinterpret_cast<uintptr_t>(g_menuDialogLoopVtable));
+    RegisterExeAddr(0x14015ed00, reinterpret_cast<uintptr_t>(MenuDialogLoopT::Vtable()));
 }
-

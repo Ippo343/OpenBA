@@ -31,6 +31,7 @@
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include <cstdint>
+#include "Component/ModelDescription.h"   // ENDGAME B.3.8 CB3: ModelDescription::TypeId()
 
 // ============================================================
 // FUN_1400a9290 — task-due / break probability check.
@@ -125,8 +126,7 @@ void ActMvDep_AnimHelper_50f0(uintptr_t self, uint32_t animId, float p3, float p
     // factories use). Without this the gate fails → animHolder null → PlayAnimation
     // skipped → the citizen never registers an animation group → AnimationManager::Update
     // no-ops → the skinned bone palette stays frozen (RenderDoc-verified).
-    static uint32_t s_tidModelDesc = 0;
-    if (s_tidModelDesc == 0) s_tidModelDesc = ::Object::GetTypeIdByName("ModelDescription");
+    const uint32_t s_tidModelDesc = ModelDescription::TypeId();   // B.3.8: no lazy cache (B6-5)
     bool derived = (fn_IsDerivedFrom && s_tidModelDesc) ? fn_IsDerivedFrom(obj, s_tidModelDesc) : false;
     void* animHolder = derived ? obj : nullptr;
 

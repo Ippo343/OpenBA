@@ -26,6 +26,9 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
+#include "Component/BuildDescription.h"   // ENDGAME B.3.8 CB3: BuildDescription::TypeId()
+#include "Component/RawMaterialDescription.h"   // ENDGAME B.3.8 CB3: RawMaterialDescription::TypeId()
+#include "Component/MapDescription.h"   // ENDGAME B.3.8 CB3: MapDescription::TypeId()
 
 namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_registration.h
 
@@ -240,15 +243,15 @@ bool GatherRawMaterials_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x1401c7938));
     static uint32_t s_tidGatherDescVal = 0, s_tidRawMatCompVal = 0, s_tidPosDescVal = 0;
     if (!s_typeId_GatherDesc) {
-        if (!s_tidGatherDescVal) s_tidGatherDescVal = ::Object::GetTypeIdByName("BuildDescription");
+        if (!s_tidGatherDescVal) s_tidGatherDescVal = BuildDescription::TypeId();
         s_typeId_GatherDesc = &s_tidGatherDescVal;
     }
     if (!s_typeId_RawMatComp) {
-        if (!s_tidRawMatCompVal) s_tidRawMatCompVal = ::Object::GetTypeIdByName("RawMaterialDescription");
+        if (!s_tidRawMatCompVal) s_tidRawMatCompVal = RawMaterialDescription::TypeId();
         s_typeId_RawMatComp = &s_tidRawMatCompVal;
     }
     if (!s_typeId_PosDesc) {
-        if (!s_tidPosDescVal) s_tidPosDescVal = ::Object::GetTypeIdByName("MapDescription");
+        if (!s_tidPosDescVal) s_tidPosDescVal = MapDescription::TypeId();
         s_typeId_PosDesc = &s_tidPosDescVal;
     }
 
@@ -307,10 +310,8 @@ static void* FindRawMaterialInList(uintptr_t entity, uint32_t typeId) {
     uintptr_t arr = *(uintptr_t*)(entity + 0x28);
     for (int i = 0; i < count; i++) {
         uintptr_t obj = *(uintptr_t*)(arr + (uintptr_t)i * 8);
-        uintptr_t vtable = *(uintptr_t*)obj;
-        typedef uint32_t (*GetTypeId_t)();
-        auto getTypeId = *(GetTypeId_t*)(vtable + 0x10);
-        if (getTypeId() == typeId) {
+        // slot 2 Type() (the old no-argument typedef never passed `this`)
+        if (reinterpret_cast<Object::Base*>(obj)->Type() == typeId) {   // B.3.8 bridge
             void* comp = *(void**)(arr + (uintptr_t)i * 8);
             if (fn_IsDerivedFrom(comp, typeId)) {
                 return comp;
@@ -655,11 +656,8 @@ int GatherRawMaterials::Execute(void* entityIBP, void* context, uint64_t /*arg3*
                 uintptr_t citizenFinal = *(uintptr_t*)entityIBP;
 
                 // Call vtable slot +0x50 (GetWorkEntity)
-                uintptr_t vtable = *(uintptr_t*)this;
-                typedef uintptr_t* (*VtSlot50_t)(GatherRawMaterials*, void*);
-                VtSlot50_t getWorkEntity = *(VtSlot50_t*)(vtable + 0x50);
                 uintptr_t workEntIBP[2] = {0};
-                uintptr_t* wResult = getWorkEntity(this, workEntIBP);
+                uintptr_t* wResult = static_cast<uintptr_t*>(GetTarget(workEntIBP));
                 uintptr_t workEntity = *wResult;
 
                 *(uint32_t*)(citizenFinal + 0x54) |= 4;
@@ -905,11 +903,7 @@ int GatherRawMaterials::Validate(void* param2) {
 
         // If any were removed, call vtable slot +0x40 (Cleanup) and reset build counts
         if ((int)invalidCount > 0) {
-            // Call vtable slot +0x40
-            uintptr_t vtable = *(uintptr_t*)this;
-            typedef void (*VtSlot40_t)(GatherRawMaterials*);
-            VtSlot40_t cleanupSlot = *(VtSlot40_t*)(vtable + 0x40);
-            cleanupSlot(this);
+            Cleanup();   // slot 8 (vtable +0x40), a virtual dispatch in retail
 
             // Reset all build counts to 0
             int numSlots = (int)selfQ[0xc]; // field_60 count

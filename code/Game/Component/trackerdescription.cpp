@@ -16,6 +16,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/TrackerDescription.h"
+#include "Component/TrackerComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -47,7 +48,7 @@ void TrackerDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x14000d930: TrackerComponent's type id through the hidden return slot.
 Object::Type* TrackerDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("TrackerComponent");
+    ret->_type = TrackerComponent::TypeId();
     return ret;
 }
 

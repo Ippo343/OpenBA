@@ -18,7 +18,12 @@
 #include "graphics/Scene.h"
 #include "graphics/Mesh.h"
 #include <new>
-#include "Player/placementtool_funcs.h"
+#include "Player/PlacementTool.h"
+#include "Player/RotationSetting.h"
+#include "Component/CreatePlacedDescription.h"
+#include "Component/MapDescription.h"
+#include "Component/ModelDescription.h"
+#include "Component/RadiusDescription.h"
 #include "PlacementTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
@@ -204,28 +209,28 @@ Object::Base* PlacementTool::DeletingDtor(unsigned flags) {
 // Removes placement preview from the scene, destroys the mesh instance,
 // and closes the associated dialog.
 // Original: 0x1400fe4e0
-void PlacementTool_Shutdown2_Impl(PlacementTool* self) {
+void PlacementTool::Shutdown() {
     EnsureFuncs();
 
     // Remove scene object if added (sceneObjectIdx >= 0)
-    if ((int)self->sceneObjectIdx >= 0) {
+    if ((int)sceneObjectIdx >= 0) {
         void* scene = *(void**)(GetGameWorld() + 0x60);
         if (scene) {
             reinterpret_cast<Graphics::Scene*>(scene)
-                ->RemoveObject(self->sceneObjectIdx);   // B.3.5 bridge
+                ->RemoveObject(sceneObjectIdx);   // B.3.5 bridge
         }
     }
 
     // Remove radius display highlight if active (radiusDisplayIdx >= 0)
-    if (self->radiusDisplayIdx >= 0) {
+    if (radiusDisplayIdx >= 0) {
         void* highlightMgr = *(void**)(GetGameWorld() + 0x110);
         if (s_fn_HighlightRemove && highlightMgr) {
-            s_fn_HighlightRemove(highlightMgr, self->radiusDisplayIdx);
+            s_fn_HighlightRemove(highlightMgr, radiusDisplayIdx);
         }
     }
 
     // Destroy mesh instance via vtable dtor if allocated
-    void* mesh = self->meshInstance;
+    void* mesh = meshInstance;
     if (mesh) {
         typedef void* (*fn_MeshDtor_t)(void* self, uint32_t flags);
         void** vtable = *(void***)mesh;
@@ -234,7 +239,7 @@ void PlacementTool_Shutdown2_Impl(PlacementTool* self) {
     }
 
     // Close dialog if open: dialogPtr (+0x10) points to an InternalBasePtr
-    uintptr_t* ibpPtr = (uintptr_t*)self->dialogPtr;
+    uintptr_t* ibpPtr = (uintptr_t*)dialogPtr;
     uintptr_t ibpVal = *ibpPtr;
     if (ibpVal != 0) {
         // Close the dialog via UI::UserInterface
@@ -283,13 +288,12 @@ void PlacementTool_Shutdown2_Impl(PlacementTool* self) {
 //   0x140100140 = placement failure handler
 //
 // Original: 0x1400fe2a0
-uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
+char PlacementTool::OnKey(char param2) {
     EnsureFuncs();
 
-    uintptr_t selfAddr = (uintptr_t)self;
 
     // dialogPtr at +0x10 points to an InternalBasePtr value (8 bytes)
-    uintptr_t* dialogIBP = (uintptr_t*)self->dialogPtr;
+    uintptr_t* dialogIBP = (uintptr_t*)dialogPtr;
 
     // --- Dialog open/close logic ---
     if (param2 == 0) {
@@ -312,7 +316,7 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
         if (*dialogIBP == 0) {
             uintptr_t localResult = 0;
             if (s_fn_FUN_1400ff9e0) {
-                s_fn_FUN_1400ff9e0(dialogIBP, &localResult, self->descriptionPtr);
+                s_fn_FUN_1400ff9e0(dialogIBP, &localResult, descriptionPtr);
             }
         }
     }
@@ -325,28 +329,28 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
     bool rotCCW = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x13);  // B.3.7 bridge
     if (rotCCW) {
         // Access rotationIBP at self+0x48, CheckPtr, then decrement value at +0x10
-        uintptr_t rotSetting = *(uintptr_t*)(selfAddr + 0x48);
+        uintptr_t rotSetting = (uintptr_t)rotationIBP;
         int* pRot = (int*)(rotSetting + 0x10);
         *pRot = *pRot - 1;
 
         // Wrap: if < 0, set to 3
-        rotSetting = *(uintptr_t*)(selfAddr + 0x48);
+        rotSetting = (uintptr_t)rotationIBP;
         if (*(int*)(rotSetting + 0x10) < 0) {
-            rotSetting = *(uintptr_t*)(selfAddr + 0x48);
+            rotSetting = (uintptr_t)rotationIBP;
             *(int*)(rotSetting + 0x10) = 3;
         }
     } else {
         // Key 0x14: Rotate clockwise
         bool rotCW = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x14);  // B.3.7 bridge
         if (rotCW) {
-            uintptr_t rotSetting = *(uintptr_t*)(selfAddr + 0x48);
+            uintptr_t rotSetting = (uintptr_t)rotationIBP;
             int* pRot = (int*)(rotSetting + 0x10);
             *pRot = *pRot + 1;
 
             // Wrap: if > 3, set to 0
-            rotSetting = *(uintptr_t*)(selfAddr + 0x48);
+            rotSetting = (uintptr_t)rotationIBP;
             if (*(int*)(rotSetting + 0x10) > 3) {
-                rotSetting = *(uintptr_t*)(selfAddr + 0x48);
+                rotSetting = (uintptr_t)rotationIBP;
                 *(int*)(rotSetting + 0x10) = 0;
             }
         } else {
@@ -354,7 +358,7 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
             bool flip = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x15);  // B.3.7 bridge
             if (flip) {
                 if (s_fn_sub_d960) {
-                    s_fn_sub_d960(self);
+                    s_fn_sub_d960(this);
                 }
             }
         }
@@ -370,24 +374,24 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
             float yaw[2] = {0.0f, 0.0f};
 
             if (s_fn_sub_da00) {
-                bool valid = s_fn_sub_da00(self, &startCol, &startRow,
+                bool valid = s_fn_sub_da00(this, &startCol, &startRow,
                                             &endCol, &endRow, pos, yaw);
                 if (valid) {
                     // Try to place via helper_d650
                     if (s_fn_helper_d650) {
-                        bool placed = s_fn_helper_d650(self, startCol, startRow,
+                        bool placed = s_fn_helper_d650(this, startCol, startRow,
                                                         endCol, endRow, pos, yaw[0]);
                         if (placed) {
                             // Placement success — finalize
                             if (s_fn_FUN_1401000f0) {
-                                s_fn_FUN_1401000f0(self);
+                                s_fn_FUN_1401000f0(this);
                             }
                             return 1;
                         }
                     }
                     // Placement failed — run failure handler
                     if (s_fn_FUN_140100140) {
-                        s_fn_FUN_140100140(self);
+                        s_fn_FUN_140100140(this);
                     }
                 }
             }
@@ -431,10 +435,9 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
 //   0x1400ffbf0 = cell change notify (tick sound)
 //
 // Original: 0x1400fdee0
-void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char param3) {
+void PlacementTool::Update(void* /*param2*/, char param3) {
     EnsureFuncs();
 
-    uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t gameWorld = GetGameWorld();
 
     float pos[3] = {0.0f, 0.0f, 0.0f};
@@ -443,26 +446,26 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
 
     bool valid = false;
     if (param3 != 0 && s_fn_sub_da00) {
-        valid = s_fn_sub_da00(self, &startCol, &startRow, &endCol, &endRow, pos, yaw);
+        valid = s_fn_sub_da00(this, &startCol, &startRow, &endCol, &endRow, pos, yaw);
     }
 
 
     if (!valid || param3 == 0) {
         // --- Invalid / inactive: remove scene object and highlight ---
-        if ((int)self->sceneObjectIdx >= 0) {
+        if ((int)sceneObjectIdx >= 0) {
             void* scene = *(void**)(gameWorld + 0x60);
             if (scene) {
                 reinterpret_cast<Graphics::Scene*>(scene)
-                    ->RemoveObject(self->sceneObjectIdx);   // B.3.5 bridge
+                    ->RemoveObject(sceneObjectIdx);   // B.3.5 bridge
             }
-            self->sceneObjectIdx = -1;
+            sceneObjectIdx = -1;
         }
-        if (self->radiusDisplayIdx >= 0) {
+        if (radiusDisplayIdx >= 0) {
             void* highlightMgr = *(void**)(gameWorld + 0x110);
             if (s_fn_HighlightRemove && highlightMgr) {
-                s_fn_HighlightRemove(highlightMgr, self->radiusDisplayIdx);
+                s_fn_HighlightRemove(highlightMgr, radiusDisplayIdx);
             }
-            self->radiusDisplayIdx = -1;
+            radiusDisplayIdx = -1;
         }
         return;
     }
@@ -471,34 +474,34 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
     int* mapSize = *(int**)(gameWorld + 0xf8);
 
     // Update radius display if center cell changed (only if radiusComponent exists)
-    if (self->radiusComponent != nullptr) {
+    if (radiusComponent != nullptr) {
         // Calculate center cell from placement bounds
         int centerRow = ((endRow - startRow) >> 1) + startRow;
         int centerCol = ((endCol - startCol) >> 1) + startCol;
         int centerCell = *mapSize * centerRow + centerCol;
 
-        if (centerCell != self->lastCenterCell) {
+        if (centerCell != lastCenterCell) {
             // Remove old highlight
-            if (self->radiusDisplayIdx >= 0) {
+            if (radiusDisplayIdx >= 0) {
                 void* highlightMgr = *(void**)(gameWorld + 0x110);
                 if (s_fn_HighlightRemove && highlightMgr) {
-                    s_fn_HighlightRemove(highlightMgr, self->radiusDisplayIdx);
+                    s_fn_HighlightRemove(highlightMgr, radiusDisplayIdx);
                 }
             }
             // Add new highlight
             if (s_fn_HighlightAdd) {
-                self->radiusDisplayIdx = s_fn_HighlightAdd(self->radiusComponent, centerCell);
+                radiusDisplayIdx = s_fn_HighlightAdd(radiusComponent, centerCell);
             }
-            self->lastCenterCell = centerCell;
+            lastCenterCell = centerCell;
         }
     }
 
     // Add scene object if not yet added
-    if ((int)self->sceneObjectIdx < 0) {
+    if ((int)sceneObjectIdx < 0) {
         void* scene = *(void**)(gameWorld + 0x60);
-        if (scene && self->meshInstance) {
-            self->sceneObjectIdx = (int)reinterpret_cast<Graphics::Scene*>(scene)
-                ->AddObject(reinterpret_cast<Graphics::Geometry*>(self->meshInstance));   // B.3.5 bridge
+        if (scene && meshInstance) {
+            sceneObjectIdx = (int)reinterpret_cast<Graphics::Scene*>(scene)
+                ->AddObject(reinterpret_cast<Graphics::Geometry*>(meshInstance));   // B.3.5 bridge
         }
     }
 
@@ -527,24 +530,24 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
             fprintf(stderr, "[Preview] ghost transform: pos=(%.2f, %.2f, %.2f) yaw=%.2f "
                             "cells=(%d,%d)..(%d,%d) mesh=%p\n",
                     pos[0], pos[1], pos[2], yaw[0], startCol, startRow, endCol, endRow,
-                    self->meshInstance);
+                    meshInstance);
             fflush(stderr);
         }
     }
 
-    if (self->meshInstance) {
-        reinterpret_cast<Graphics::Geometry*>(self->meshInstance)
+    if (meshInstance) {
+        reinterpret_cast<Graphics::Geometry*>(meshInstance)
             ->SetTransform(*reinterpret_cast<const Math::Transform*>(localTransform));   // B.3.5 bridge
     }
 
-    if (self->meshInstance) {
-        reinterpret_cast<Graphics::MeshInstance*>(self->meshInstance)
+    if (meshInstance) {
+        reinterpret_cast<Graphics::MeshInstance*>(meshInstance)
             ->UpdateHierarchy();   // B.3.5 bridge
     }
 
     // Tile validity check via helper at 0x14009d580
     // Uses PlacementDescription component fields at +0x28
-    uintptr_t descComp = (uintptr_t)self->descComponent;  // +0x28
+    uintptr_t descComp = (uintptr_t)descComponent;  // +0x28
     int width = (endCol - startCol) + 1;
     int height = (endRow - startRow) + 1;
     int yawInt = (int)yaw[0];  // CVTTSS2SI EDI, XMM6
@@ -555,7 +558,7 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
         // RCX=mapSize, EDX=startCol, R8D=startRow, R9D=width
         // stack: height, flags(+0x20), ptr(+0x30), ptr(+0x28), 0.0, DAT_140172248, 0.0,
         //        0, mapComp+0x28, yawInt, desc+0x50
-        uintptr_t mapComp = (uintptr_t)self->mapComponent;  // +0x30
+        uintptr_t mapComp = (uintptr_t)mapComponent;  // +0x30
         tileValid = (char)s_fn_TileValidityCheck(
             mapSize,
             startCol,       // R14D (from disasm)
@@ -575,7 +578,7 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
     }
 
     // Check dialog constraint (if dialogPtr has constraint flag at +0x80)
-    uintptr_t dialogCtrl = *(uintptr_t*)(selfAddr + 0x10);
+    uintptr_t dialogCtrl = (uintptr_t)dialogPtr;
     if (*(char*)(dialogCtrl + 0x80) != 0) {
         int mapSz = **(int**)(gameWorld + 0xf8);
         // Original checks: startCol vs (lVar2+0x98)%mapSz, startRow vs (lVar2+0x98)/mapSz,
@@ -593,7 +596,7 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
     // Get cost/status strings from description entity
     uintptr_t costResult = 0;
     if (s_fn_FUN_140005160) {
-        s_fn_FUN_140005160(self->descriptionPtr, &costResult);
+        s_fn_FUN_140005160(descriptionPtr, &costResult);
     }
 
     // Build cost string: index into string array at (costResult+0x50)
@@ -617,7 +620,7 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
     }
 
     // Get bounding box from mesh instance (+0x34 to +0x48 = 6 floats)
-    void* mesh = self->meshInstance;
+    void* mesh = meshInstance;
     float bbox[6];
     if (mesh) {
         memcpy(bbox, (void*)((uintptr_t)mesh + 0x34), 24);
@@ -653,7 +656,7 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
     //   [RSP+0x58] = transform*
     if (s_fn_operator_fc60) {
         s_fn_operator_fc60(
-            self->dialogPtr,        // RCX: dialogPtr at +0x10
+            dialogPtr,        // RCX: dialogPtr at +0x10
             0, 0,                   // EDX, R8D
             &costString,            // R9: pointer to cost string
             tileValid,              // [RSP+0x20]
@@ -667,11 +670,11 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
     }
 
     // Check if cell position changed (triggers tick sound)
-    if (self->lastStartCol != startCol || self->lastStartRow != startRow) {
-        self->lastStartCol = startCol;
-        self->lastStartRow = startRow;
+    if (lastStartCol != startCol || lastStartRow != startRow) {
+        lastStartCol = startCol;
+        lastStartRow = startRow;
         if (s_fn_FUN_1400ffbf0) {
-            s_fn_FUN_1400ffbf0(self->dialogPtr);
+            s_fn_FUN_1400ffbf0(dialogPtr);
         }
     }
 }
@@ -700,13 +703,12 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
 //   descComponent (+0x28), mapComponent (+0x30)
 //
 // Original: 0x1400fdcc0
-void PlacementTool_Draw_Impl(PlacementTool* self, void* context, char param3) {
+void PlacementTool::Draw(void* context, char param3) {
     EnsureFuncs();
 
     if (!s_fn_sub_1380) return;
 
     float halfCell = s_pFloat_halfCell ? *s_pFloat_halfCell : 0.5f;
-    uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t gameWorld = GetGameWorld();
 
     // --- Section 1: Active placement preview (param3 == 0) ---
@@ -719,22 +721,22 @@ void PlacementTool_Draw_Impl(PlacementTool* self, void* context, char param3) {
 
         bool valid = false;
         if (s_fn_sub_da00) {
-            valid = s_fn_sub_da00(self, &startCol, &startRow,
+            valid = s_fn_sub_da00(this, &startCol, &startRow,
                                   (int*)&endCol, &endRow, pos, &yaw);
         }
 
         if (valid) {
             // Read descComponent before CheckPtr (used for yawAngle and entityTemplate)
-            uintptr_t descComp1 = (uintptr_t)self->descComponent;  // +0x28
+            uintptr_t descComp1 = (uintptr_t)descComponent;  // +0x28
 
             // CheckPtr on rotation IBP at +0x48
 
             // Re-read descComponent after CheckPtr (used for terrainMask, ptrs)
-            uintptr_t descComp2 = (uintptr_t)self->descComponent;  // +0x28
-            uintptr_t mapComp = (uintptr_t)self->mapComponent;     // +0x30
+            uintptr_t descComp2 = (uintptr_t)descComponent;  // +0x28
+            uintptr_t mapComp = (uintptr_t)mapComponent;     // +0x30
 
             // Read rotation value: *(*(self+0x48) + 0x10) * 0x5a
-            uintptr_t rotIBP = *(uintptr_t*)(selfAddr + 0x48);
+            uintptr_t rotIBP = (uintptr_t)rotationIBP;
             int yawInt = *(int*)(rotIBP + 0x10) * 0x5a;  // rotation * 90 degrees
 
             // yawAngle from first descComponent read (+0x40)
@@ -765,9 +767,9 @@ void PlacementTool_Draw_Impl(PlacementTool* self, void* context, char param3) {
     }
 
     // --- Section 2: Existing placement marker (if hasExistingPlacement) ---
-    uintptr_t dialogCtrl = *(uintptr_t*)(selfAddr + 0x10);
+    uintptr_t dialogCtrl = (uintptr_t)dialogPtr;
     if (*(char*)(dialogCtrl + 0x80) != 0) {
-        uintptr_t descComp = (uintptr_t)self->descComponent;  // +0x28
+        uintptr_t descComp = (uintptr_t)descComponent;  // +0x28
         int mapSz1 = **(int**)(gameWorld + 0xf8);
         int mapSz2 = **(int**)(gameWorld + 0xf8);  // re-read (matches original)
 
@@ -790,7 +792,7 @@ void PlacementTool_Draw_Impl(PlacementTool* self, void* context, char param3) {
             0.0f,                                // param12
             0,                                   // param13: forceRed = false
             0,                                   // param14: allowOverlap = false
-            (void*)(*(uintptr_t*)(selfAddr + 0x30) + 0x28), // param15: mapComp+0x28
+            (void*)((uintptr_t)mapComponent + 0x28), // param15: mapComp+0x28
             existYaw,                            // param16: yawInt
             *(int*)(descComp + 0x40),           // param17: yaw angle from desc
             1,                                   // param18: isExisting = true
@@ -864,7 +866,7 @@ static void EnsureStartupFuncs() {
     // factory tree, same as the *Description type-ids above.
     if (!s_pTypeId_RotationSetting) {
         static uint32_t s_tid_RotationSetting = 0;
-        s_tid_RotationSetting = ::Object::ResolveTypeIdByNameLazy("RotationSetting");
+        s_tid_RotationSetting = RotationSetting::TypeId();
         s_pTypeId_RotationSetting = &s_tid_RotationSetting;
     }
 
@@ -886,10 +888,10 @@ static void EnsureStartupFuncs() {
     //         Startup derefs createComponent+0x28 (mesh count) UNGUARDED — MUST be present.
     //   +0x40 radiusComponent = DWORD_1401c4870 = RadiusDescription     (NOT "RadiusComponent")
     static uint32_t s_tid_CreatePlaced = 0, s_tid_Map = 0, s_tid_Model = 0, s_tid_Radius = 0;
-    s_tid_CreatePlaced = ::Object::ResolveTypeIdByNameLazy("CreatePlacedDescription");
-    s_tid_Map          = ::Object::ResolveTypeIdByNameLazy("MapDescription");
-    s_tid_Model        = ::Object::ResolveTypeIdByNameLazy("ModelDescription");
-    s_tid_Radius       = ::Object::ResolveTypeIdByNameLazy("RadiusDescription");
+    s_tid_CreatePlaced = CreatePlacedDescription::TypeId();
+    s_tid_Map          = MapDescription::TypeId();
+    s_tid_Model        = ModelDescription::TypeId();
+    s_tid_Radius       = RadiusDescription::TypeId();
     // Test the VALUE, not just the pointer. A pointer-only test (`if (!g_TypeId_X)`)
     // cannot see a slot that IS registered but was filled with 0, and that is exactly
     // what happened to +0x30 until 2026-07-31: reg_pipeline_typeids.cpp seeded
@@ -919,10 +921,10 @@ static void EnsureStartupFuncs() {
     s_startupFuncsResolved = true;
 }
 
-void PlacementTool_Startup_Impl(PlacementTool* self) {
+void PlacementTool::Startup() {
     EnsureStartupFuncs();
 
-    uintptr_t entity = (uintptr_t)self->descriptionPtr;  // +0x20
+    uintptr_t entity = (uintptr_t)descriptionPtr;  // +0x20
 
     // --- Find 4 components via GetTypeId + IsDerivedFrom ---
     // Component list is at entity+0x28 (pointer array), count at entity+0x30.
@@ -937,9 +939,7 @@ void PlacementTool_Startup_Impl(PlacementTool* self) {
         for (int i = 0; i < count; i++) {
             void* comp = components[i];
             if (!comp) continue;
-            typedef uint32_t (*fn_GetTypeId_t)(void* self);
-            fn_GetTypeId_t getTypeId = *(fn_GetTypeId_t*)(*(uintptr_t*)comp + 0x10);
-            uint32_t typeId = getTypeId(comp);
+            uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
             if (typeId == targetTypeId) {
                 if (fn_IsDerivedFrom(comp, targetTypeId)) {
                     return comp;
@@ -951,22 +951,22 @@ void PlacementTool_Startup_Impl(PlacementTool* self) {
     };
 
     // 1. SizeDescription (DAT_1401c7468) -> descComponent (+0x28)
-    self->descComponent = findComp(*g_TypeId_SizeDescription);
+    descComponent = findComp(*g_TypeId_SizeDescription);
 
     // 2. AreaDescription (DAT_1401c7a18) -> mapComponent (+0x30)
-    self->mapComponent = findComp(*g_TypeId_AreaDescription);
+    mapComponent = findComp(*g_TypeId_AreaDescription);
 
     // 3. FenceDescription (DAT_1401c7a88) -> createComponent (+0x38)
-    self->createComponent = findComp(*g_TypeId_FenceDescription);
+    createComponent = findComp(*g_TypeId_FenceDescription);
 
     // 4. RadiusComponent (DWORD_1401c4870) -> radiusComponent (+0x40)
-    self->radiusComponent = findComp(*g_TypeId_RadiusComponent);
+    radiusComponent = findComp(*g_TypeId_RadiusComponent);
 
     // --- Resolve RotationSetting IBP ---
     // CheckPtr on IBP at +0x18
 
     // Read resolved pointer, check IsDerivedFrom RotationSetting
-    void* ibpVal = self->toolSetting;
+    void* ibpVal = toolSetting;
     void* rotSetting = nullptr;
     if (fn_IsDerivedFrom && s_pTypeId_RotationSetting && ibpVal) {
         bool isDerived = fn_IsDerivedFrom(ibpVal, *s_pTypeId_RotationSetting);
@@ -980,7 +980,7 @@ void PlacementTool_Startup_Impl(PlacementTool* self) {
     if (s_fn_IBP_Ctor) {
         s_fn_IBP_Ctor(&localIBP, rotSetting);
     }
-    self->rotationIBP = localIBP;
+    rotationIBP = localIBP;
 
     // --- Allocate and construct MeshInstance (0x120 bytes) ---
     void* meshMem = nullptr;
@@ -999,11 +999,11 @@ void PlacementTool_Startup_Impl(PlacementTool* self) {
         }
         meshInst = meshMem;
     }
-    self->meshInstance = meshInst;
+    meshInstance = meshInst;
 
     // --- Pick random mesh variant ---
     // createComponent (+0x38) has mesh count at +0x28
-    uintptr_t modelComp = (uintptr_t)self->createComponent;
+    uintptr_t modelComp = (uintptr_t)createComponent;
     uint32_t meshCount = *(uint32_t*)(modelComp + 0x28);
 
     // Get game world's Random at +0xd8
@@ -1029,31 +1029,31 @@ void PlacementTool_Startup_Impl(PlacementTool* self) {
     uintptr_t subArray = *(uintptr_t*)(entryBase + 0x8);
     void* mesh = *(void**)(subArray + (int64_t)(subCount - 1) * 8);
 
-    if (self->meshInstance) {
-        reinterpret_cast<Graphics::MeshInstance*>(self->meshInstance)
+    if (meshInstance) {
+        reinterpret_cast<Graphics::MeshInstance*>(meshInstance)
             ->SetMesh(Graphics::ExternalPtrHandle{mesh});   // B.3.5 bridge
     }
 
     // --- Update hierarchy ---
-    if (self->meshInstance) {
-        reinterpret_cast<Graphics::MeshInstance*>(self->meshInstance)
+    if (meshInstance) {
+        reinterpret_cast<Graphics::MeshInstance*>(meshInstance)
             ->UpdateHierarchy();   // B.3.5 bridge
     }
 
     // Store variant index
-    self->meshVariant = (int32_t)variant;
+    meshVariant = (int32_t)variant;
 
     // Diagnostic: dump the built preview mesh's state so we can see why it may not
     // render. s_pMeshInstanceVtable is NULL in standalone (0x14015e240 is a raw .rdata
     // vtable → ResolveAddr(Exe, .rdata)=0), so the exe's vtable override is SKIPPED and
     // the mesh keeps the base Graphics::MeshInstance vtable. Log the bounds (mesh+0x34,
     // 6 floats) — if zero, the renderer frustum-culls it → invisible.
-    if (self->meshInstance) {
-        uintptr_t m = (uintptr_t)self->meshInstance;
+    if (meshInstance) {
+        uintptr_t m = (uintptr_t)meshInstance;
         const float* b = (const float*)(m + 0x34);
         fprintf(stderr, "[Placement] mesh built: mesh=%p vtable=%p (override %s) meshPtr=%p "
                 "count=%u variant=%u bounds=[%.2f %.2f %.2f .. %.2f %.2f %.2f]\n",
-                self->meshInstance, *(void**)m,
+                meshInstance, *(void**)m,
                 s_pMeshInstanceVtable ? "APPLIED" : "SKIPPED(null in SA!)",
                 mesh, meshCount, variant, b[0], b[1], b[2], b[3], b[4], b[5]);
         fflush(stderr);
@@ -1073,17 +1073,7 @@ void PlacementTool_Startup_Impl(PlacementTool* self) {
 #include "Player/RotationSetting.h"
 #include <new>
 
-void PlacementTool::Startup() { PlacementTool_Startup_Impl(this); }            // [4]
-void PlacementTool::Shutdown() { PlacementTool_Shutdown2_Impl(this); }         // [5]
-char PlacementTool::OnKey(char active) {                                       // [6]
-    return static_cast<char>(PlacementTool_OnKey_Impl(this, active));
-}
-void PlacementTool::Update(void* time, char active) {                          // [7]
-    PlacementTool_Serialize_Impl(this, time, active);
-}
-void PlacementTool::Draw(void* context, char active) {                         // [8]
-    PlacementTool_Draw_Impl(this, context, active);
-}
+// [4] Startup, [5] Shutdown, [6] OnKey, [7] Update and [8] Draw are defined above.
 
 // [11] 0x140026920 (shared with FencedTool): `*ret = TypeInfo_RotationSetting`.
 // SetEditMode builds the RotationSetting from this id on first activation and
@@ -1148,9 +1138,7 @@ extern "C" int PlacementTool_HarnessStartupProbe(void* toolSelf) {
         for (int i = 0; i < count; i++) {
             void* c = comps[i];
             if (!c) continue;
-            typedef uint32_t (*getid_t)(void*);
-            getid_t gid = *(getid_t*)(*(uintptr_t*)c + 0x10);
-            uint32_t id = gid(c);
+            uint32_t id = reinterpret_cast<Object::Base*>(c)->Type();  // B.3.8 bridge
             if (id == tCreate) haveCreate = true;
             if (id == tMap)    haveMap = true;
             if (id == tModel)  haveModel = true;
@@ -1172,7 +1160,7 @@ extern "C" int PlacementTool_HarnessStartupProbe(void* toolSelf) {
 
     fprintf(stderr, "[Placement] PROBE: Model present — calling faithful Startup...\n");
     fflush(stderr);
-    PlacementTool_Startup_Impl(self);
+    self->PlacementTool::Startup();
     fprintf(stderr, "[Placement] PROBE: Startup returned (meshInstance=%p variant=%d)\n",
             self->meshInstance, self->meshVariant);
     fflush(stderr);
@@ -1194,7 +1182,7 @@ extern "C" int PlacementTool_HarnessStartupProbe(void* toolSelf) {
 // point it at a zeroed controller buffer so +0x80 == 0 and the constraint block is
 // skipped (a fresh, unconstrained placement).
 //
-// Requires PlacementTool_Startup_Impl to have run first (descComponent/mapComponent/
+// Requires PlacementTool::Startup to have run first (descComponent/mapComponent/
 // createComponent/meshInstance/meshVariant populated) — the probe above does that.
 //
 // The per-cell footprint validity (helper_d650 → d580 → f5d0) rejects any cell that

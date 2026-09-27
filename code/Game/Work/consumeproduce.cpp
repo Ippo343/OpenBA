@@ -376,10 +376,7 @@ static int FinalizeAction(ConsumeProduce* self, void* entityIBP, void* actionIBP
     uintptr_t citizenEntity = *(uintptr_t*)entityIBP;
 
     // Call vtable slot +0x50 (Shared method)
-    uintptr_t vtable = *(uintptr_t*)self;
-    typedef uint64_t* (*VtSlot50_t)(ConsumeProduce*, void*);
-    VtSlot50_t vtShared = *(VtSlot50_t*)(vtable + 0x50);
-    uint64_t* result = vtShared(self, actionIBP);
+    uint64_t* result = static_cast<uint64_t*>(self->GetTarget(actionIBP));
 
     uint64_t actionPtr = *result;
     *(uint32_t*)(citizenEntity + 0x54) |= 4;
@@ -1098,15 +1095,13 @@ int ConsumeProduce::OnComplete(void* /*param2*/, void* /*param3*/, int arg3) {
 // ============================================================
 int ConsumeProduce::OnCancel(void* param2, void* param3, int arg3) {
     const uint32_t param4 = static_cast<uint32_t>(arg3);
-    // Copy params, clear bit 16, call OnComplete (slot 6)
-    // In original: reads vtable slot +0x30 (OnComplete) and calls it
+    // Retail (disassembly): copy *R8 and *RDX to stack slots, BTR R9D,0x10, then
+    // dispatch vtable +0x30 = slot 6 OnComplete(&copy2, &copy3, R9) and return
+    // its result.
     uint32_t modifiedParam4 = param4 & 0xFFFEFFFF;  // clear bit 16
-
-    typedef int (*OnComplete_t)(void* self, void* p2, void* p3, uint32_t p4);
-    void* vtable = *reinterpret_cast<void**>(this);
-    OnComplete_t onComplete = *(OnComplete_t*)((uintptr_t)vtable + 0x30);
-    onComplete(this, param2, param3, modifiedParam4);
-    return 0;
+    uintptr_t copy3 = *(uintptr_t*)param3;
+    uintptr_t copy2 = *(uintptr_t*)param2;
+    return OnComplete(&copy2, &copy3, static_cast<int>(modifiedParam4));
 }
 
 // ============================================================
@@ -1288,10 +1283,8 @@ DEFINE_EXE_VTABLE(ConsumeProduce, "_ZTV14ConsumeProduce")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x140161220 is still read back BY ADDRESS — ConsumeProduceComponent's
-// CreateWork (resourceproduce_creatework.cpp, block MI-B) builds the work by hand and
-// stamps it — so the exe address serves the COMPILER's table.
 extern "C" void RegisterConsumeProduceVtable() {
-    RegisterExeAddr(ConsumeProduceAddr::Vtable, reinterpret_cast<uintptr_t>(ConsumeProduce::Vtable()));   // 0x140161220
+    // ENDGAME B.3.8 CB3: the retail-table row is gone -- no by-address reader of
+    // it is left. The call in address_registry.cpp is the coordinator's to drop.
 }
 DEFINE_EXE_TYPE(ConsumeProduce, "Work")

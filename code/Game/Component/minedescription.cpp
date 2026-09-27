@@ -15,6 +15,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/MineDescription.h"
+#include "Component/MineComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -46,7 +47,7 @@ void MineDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140008f30: MineComponent's type id through the hidden return slot.
 Object::Type* MineDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("MineComponent");
+    ret->_type = MineComponent::TypeId();
     return ret;
 }
 

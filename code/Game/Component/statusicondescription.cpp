@@ -22,6 +22,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/StatusIconDescription.h"
+#include "Component/StatusIconComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -69,7 +70,7 @@ void StatusIconDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140038a50: StatusIconComponent's type id through the hidden return slot.
 Object::Type* StatusIconDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("StatusIconComponent");
+    ret->_type = StatusIconComponent::TypeId();
     return ret;
 }
 

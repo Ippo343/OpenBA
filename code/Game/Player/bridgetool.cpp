@@ -16,7 +16,7 @@
 //
 // Decompiled from Application-x64.exe.
 
-#include "Player/bridgetool_funcs.h"
+#include "Player/BridgeTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -51,12 +51,12 @@ Object::Base* BridgeTool::DeletingDtor(unsigned flags) {
 // After finding a match by type ID, fn_IsDerivedFrom confirms the cast.
 //
 // Original: 0x1400fb7a0
-void BridgeTool_Startup(BridgeTool* self) {
-    uintptr_t entity = (uintptr_t)self->descriptionPtr;
+void BridgeTool::Startup() {
+    uintptr_t entity = (uintptr_t)descriptionPtr;
     void* result = nullptr;
 
     if (!entity || !g_TypeId_CreateBridgeDescription || !fn_IsDerivedFrom) {
-        self->bridgeDesc = nullptr;
+        bridgeDesc = nullptr;
         return;
     }
 
@@ -68,10 +68,8 @@ void BridgeTool_Startup(BridgeTool* self) {
         void* comp = components[i];
         if (!comp) continue;
 
-        // Call vtable slot +0x10: GetTypeId() -> uint32_t
-        typedef uint32_t (*fn_GetTypeId_t)(void* self);
-        fn_GetTypeId_t getTypeId = *(fn_GetTypeId_t*)(*(uintptr_t*)comp + 0x10);
-        uint32_t typeId = getTypeId(comp);
+        // Virtual slot 2 (+0x10): Type()
+        uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
         if (typeId == targetTypeId) {
             // Verify with IsDerivedFrom before casting
@@ -82,7 +80,7 @@ void BridgeTool_Startup(BridgeTool* self) {
         }
     }
 
-    self->bridgeDesc = result;
+    bridgeDesc = result;
 }
 
 // ============================================================
@@ -103,8 +101,8 @@ void BridgeTool_Startup(BridgeTool* self) {
 //   3 = failure (invalid cells or path validation failed)
 //
 // Original: 0x1400facf0
-uint64_t BridgeTool_CalcCost(BridgeTool* self, int startCell, int endCell,
-                              uint32_t* outValid, int* outCostB, int* outCostA, int* outLength) {
+int BridgeTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
+                         int* outCostB, int* outCostA, int* outLength) {
     // Initialize outputs to defaults
     *outCostA = 0;
     *outCostB = 0;
@@ -118,12 +116,12 @@ uint64_t BridgeTool_CalcCost(BridgeTool* self, int startCell, int endCell,
 
     // Snap end cell to same row or column as drag start
     if (!fn_BridgeTool_SnapEndCell) return 3;
-    int snappedEnd = fn_BridgeTool_SnapEndCell(self, endCell);
+    int snappedEnd = fn_BridgeTool_SnapEndCell(this, endCell);
 
     // Validate the bridge path
     if (!fn_BridgeTool_ValidatePath) return 3;
     int bridgeLength = 0;
-    int valid = fn_BridgeTool_ValidatePath(self, startCell, snappedEnd, &bridgeLength);
+    int valid = fn_BridgeTool_ValidatePath(this, startCell, snappedEnd, &bridgeLength);
 
     // Diagnostics: confirm the two helpers are bound to the ports (they resolved to 0 before
     // reg_player_bridge.cpp existed, which made every drag return 3 = invalid). Logs the
@@ -136,7 +134,7 @@ uint64_t BridgeTool_CalcCost(BridgeTool* self, int startCell, int endCell,
             if (!s_first) s_first = true;
             if (isDrag)   s_drag  = true;
             if (valid)    s_valid = true;
-            uintptr_t d = (uintptr_t)self->bridgeDesc;
+            uintptr_t d = (uintptr_t)bridgeDesc;
             fprintf(stderr, "[Bridge] CalcCost: start=%d end=%d snapped=%d -> valid=%d len=%d"
                     "  (Snap=%p Validate=%p desc=%p body=%08x approach=%08x req=%08x "
                     "neigh=%08x radius=%d)\n",
@@ -199,20 +197,8 @@ uint64_t BridgeTool_CalcCost(BridgeTool* self, int startCell, int endCell,
 //   - FUN_140003110 (append to internal list)
 //   - FUN_1400c48a0 (register entity with world entity list)
 //
-// Delegates to the original exe function via a resolved function pointer.
+// PORTED 2026-07-26 — the body is BridgeTool::CalcPath in bridgetool_calcpath.cpp.
 // Original: 0x1400f9cd0
-typedef uint64_t (*fn_BridgeTool_CalcPath_t)(void* self, int startCell, int endCell);
-static fn_BridgeTool_CalcPath_t s_fn_BridgeTool_CalcPath = nullptr;
-
-// PORTED 2026-07-26 — bridgetool_calcpath.cpp. The delegation below was a leftover from
-// the removed proxy-DLL mode: in the standalone exe ResolveAddr(Exe, 0x1400f9cd0) has no
-// original to point at, so it returned 0 and every released bridge drag logged
-// "CalcPath function pointer is NULL" and built nothing.
-extern "C" uint64_t BridgeTool_CalcPath_Impl(void* self, int startCell, int endCell);
-
-uint64_t BridgeTool_CalcPath(BridgeTool* self, int startCell, int endCell) {
-    return BridgeTool_CalcPath_Impl(self, startCell, endCell);
-}
 
 // ============================================================
 // BridgeTool members (BridgeTool.h) — ENDGAME B.3.8 TOOL.
@@ -228,24 +214,9 @@ uint64_t BridgeTool_CalcPath(BridgeTool* self, int startCell, int endCell) {
 #include "Object/factory_registration.h"
 #include <new>
 
-// [4] 0x1400fb7a0.
-void BridgeTool::Startup() { BridgeTool_Startup(this); }
-
-// [8] 0x1400fadc0 — the red/green drag preview, ported in bridgetool_draw.cpp.
-extern "C" void BridgeTool_Draw_Impl(void* self, void* context, char skip);
-void BridgeTool::Draw(void* context, char active) { BridgeTool_Draw_Impl(this, context, active); }
-
-// [13] 0x1400f9cd0. AL is the result (DragTool::OnKey tests it).
-bool BridgeTool::CalcPath(int startCell, int endCell) {
-    return static_cast<uint8_t>(BridgeTool_CalcPath(this, startCell, endCell)) != 0;
-}
-
-// [14] 0x1400facf0.
-int BridgeTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
-                         int* outCostB, int* outCostA, int* outLength) {
-    return static_cast<int>(BridgeTool_CalcCost(this, startCell, endCell,
-                                                outValid, outCostB, outCostA, outLength));
-}
+// [4] 0x1400fb7a0 Startup and [14] 0x1400facf0 CalcCost are above; [8] 0x1400fadc0
+// Draw (the red/green drag preview) is in bridgetool_draw.cpp and [13] 0x1400f9cd0
+// CalcPath in bridgetool_calcpath.cpp.
 
 // create 0x14002d7a0: MemAlloc(0x40, 8), then the ctor 0x1400fb890.
 void* BridgeTool::CreateNewObject() {

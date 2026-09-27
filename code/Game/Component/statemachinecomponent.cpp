@@ -19,6 +19,8 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/statemachinecomponent_funcs.h"
+#include "Component/ControllerComponent.h"
+#include "Component/DestroyComponent.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (state-2 workplace hand-off)
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -53,30 +55,6 @@ void StateMachineComponent_ResolveHelpers() {
     s_resolved = true;
 }
 
-// ============================================================
-// Shutdown (vtable slot [3], 0x14012b940)
-// ============================================================
-void StateMachineComponent_Shutdown(StateMachineComponent* self, void* stream) {
-    // Component::Persist first (0x1401189b0, a direct call in retail too). It
-    // used to go through a lazily resolved pointer whose null state desynced the
-    // stream on the load path (save/load wave 2026-08-28); the qualified member
-    // call has no such state.
-    self->Component::Persist(stream);
-
-    // Create IO::Serializer with version 0
-    alignas(8) uint8_t serializer[24]; // IO::Serializer is 24 bytes (stack local)
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // Serialize 4 individual bytes from stateFlags at +0x50, +0x51, +0x52, +0x53
-    uint8_t* base = reinterpret_cast<uint8_t*>(self);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x50), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x51), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x52), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x53), nullptr);   // B.3.4 bridge
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-}
 
 // ============================================================
 // Serialize (vtable slot [4], 0x14012b6a0)
@@ -139,20 +117,15 @@ void StateMachineComponent_Serialize(StateMachineComponent* self) {
         if (ibpValue != nullptr) {
             if (!gotDefaultState) {
                 // First ControllerComponent: call virtual +0x80 (GetDefaultState)
-                uintptr_t vtbl = *reinterpret_cast<uintptr_t*>(ibpValue);
-                typedef uint8_t (*GetDefaultState_t)(void*);
-                auto fn = *reinterpret_cast<GetDefaultState_t*>(vtbl + 0x80);
-                uint8_t defaultState = fn(ibpValue);
+                uint8_t defaultState = static_cast<uint8_t>(
+                    reinterpret_cast<ControllerComponent*>(ibpValue)->GetDefaultState());   // B.3.8 bridge (slot 16)
                 gotDefaultState = true;
                 // Store default state at +0x52
                 *(base + 0x52) = defaultState;
             }
 
             // Call virtual +0x88 (CreateState) to get a state node
-            uintptr_t vtbl = *reinterpret_cast<uintptr_t*>(ibpValue);
-            typedef void* (*CreateState_t)(void*);
-            auto fn = *reinterpret_cast<CreateState_t*>(vtbl + 0x88);
-            void* stateNode = fn(ibpValue);
+            void* stateNode = reinterpret_cast<ControllerComponent*>(ibpValue)->GetController();   // B.3.8 bridge (slot 17)
 
             // Link the state node into the controller chain:
             // stateNode + 0x08 = pointer to controller sub-object
@@ -247,10 +220,7 @@ void StateMachineComponent_OnUpdate2(StateMachineComponent* self) {
 
             if (ibpValue != nullptr) {
                 // Call virtual +0x88 (CreateState) to get a state node
-                uintptr_t vtbl = *reinterpret_cast<uintptr_t*>(ibpValue);
-                typedef void* (*CreateState_t)(void*);
-                auto fn = *reinterpret_cast<CreateState_t*>(vtbl + 0x88);
-                void* stateNode = fn(ibpValue);
+                void* stateNode = reinterpret_cast<ControllerComponent*>(ibpValue)->GetController();   // B.3.8 bridge (slot 17)
 
                 // Link into chain
                 *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(stateNode) + 0x08) =
@@ -556,7 +526,7 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
         gotDefault = true;
     }
     bool sawEarlierController = false;      // any ControllerComponent-derived comp seen
-    uint32_t tidDestroy = ::Object::GetTypeIdByName("DestroyComponent");
+    uint32_t tidDestroy = DestroyComponent::TypeId();
     int linked = 0;
 
     for (int i = 0; i < cnt; ++i) {
@@ -567,10 +537,7 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
         void* comp = *ibp;
         if (!comp) continue;
 
-        uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
-        typedef uint32_t (*GetTypeId_t)(void*);
-        auto gt = *reinterpret_cast<GetTypeId_t*>(vt + 0x10);
-        uint32_t tid = gt ? gt(comp) : 0;
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         bool isController =
             ::Object::IsTypeDerivedFromByName(tid, "ControllerComponent");
         // Slots 16/17 exist only on ControllerComponent's table (18 slots); a plain
@@ -581,9 +548,7 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
         // returned null), so skipping it is the same behaviour.
         if (!isController) continue;
 
-        typedef void* (*CreateState_t)(void*);
-        auto cs = *reinterpret_cast<CreateState_t*>(vt + 0x88);
-        void* node = cs ? cs(comp) : nullptr;
+        void* node = reinterpret_cast<ControllerComponent*>(comp)->GetController();   // B.3.8 bridge (slot 17)
         bool isLive = (node != nullptr && node != comp);
 
 
@@ -594,9 +559,7 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
             bool destroyOutOfOrder =
                 (tidDestroy != 0 && tid == tidDestroy && sawEarlierController);
             if (!destroyOutOfOrder) {
-                typedef int (*GetDefaultState_t)(void*);
-                auto gd = *reinterpret_cast<GetDefaultState_t*>(vt + 0x80);
-                int d = gd ? gd(comp) : 0;
+                int d = reinterpret_cast<ControllerComponent*>(comp)->GetDefaultState();   // B.3.8 bridge (slot 16)
                 // A ZERO default is indistinguishable from the BodyInit value already
                 // sitting in +0x52 — writing it changes nothing, and CLAIMING it would
                 // only block a later live controller's real default. That bites the
@@ -619,10 +582,7 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
                 // still cannot rob a fresh foundation of Build's 1).
                 bool ownsZero = false;
                 if (d == 0) {
-                    typedef int (*Step_t)(void*, int);
-                    uintptr_t nvt = *reinterpret_cast<uintptr_t*>(node);
-                    auto stepFn = *reinterpret_cast<Step_t*>(nvt + 0x00);
-                    ownsZero = stepFn && stepFn(node, 0) >= 0;
+                    ownsZero = reinterpret_cast<ControllerComponent::Controller*>(node)->FindState(0) >= 0;   // B.3.8 bridge (slot 0)
                 }
                 if (d != 0 || ownsZero) {
                     *(base + 0x52) = static_cast<uint8_t>(d);
@@ -643,39 +603,52 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
 
 
 }
-// Recipe step 1 (Update), routed to slot +0x48 (the per-tick slot the EntityList
-// bucket round-robin calls). Signature matches COMPONENT_LIVE_FACTORY's
-// UpdateVSlot adapter: (self, int64_t* time). The Time pointer is forwarded
-// opaquely to Tick (which never derefs it — it only passes it on to the
-// Transition virtuals), matching the original StateMachineComponent::Update.
-static void StateMachineComponent_UpdateAdapter(StateMachineComponent* self,
-                                                int64_t* time) {
-    if (!self) return;
-    uint8_t* base = reinterpret_cast<uint8_t*>(self);
-
-    // Belt-and-suspenders body-init if StartupComponents did not dispatch +0x20.
-    if (*reinterpret_cast<void**>(base + 0x48) == nullptr)
-        StateMachineComponent_BodyInit(self);
-
-    // Lazy controller-link: until a state node is linked, try to link live
-    // ControllerComponents on this entity (runs after all components are
-    // constructed; idempotent once linked since firstChild then != 0).
-    if (*reinterpret_cast<void**>(base + 0x38) == nullptr)
-        StateMachineComponent_LinkControllers_Standalone(self);
-
-    void* firstChild = *reinterpret_cast<void**>(base + 0x38);
 
 
 
-    if (firstChild == nullptr) return;
 
+// ============================================================================
+// The members.
+// ============================================================================
 
-    // Forward the Time pointer opaquely as the int64 param (Tick passes it
-    // straight through to the Transition virtuals; nothing in this path derefs
-    // it as a value).
-    StateMachineComponent_Update(self, reinterpret_cast<int64_t>(time));
+// 0x14012ba30: Component() is the CALL 0x1401188b0; the 0x140164520 stamp and
+// the member's 0x14015f070 / 0x1401644d0 stamps are the compiler's; the member
+// gets +0x30 = +0x38 = 0 and +0x40 = this (retail); flags |= 0xcd.
+// PORT GAP (retail 0x14012ba86 / 0x14012ba8a) — B38 D1: retail also writes
+// +0x48 = this+0x28 and +0x50 = 0xff00ffff here. The tree's factory zero-filled
+// both, and BodyInit (slot 4, or lazily from the first tick) writes them — with
+// the stream-restore rule that an all-zero state quad means "fresh". That lazy
+// shape is kept unchanged; moving the two stores into the ctor is its own
+// titled commit.
+StateMachineComponent::StateMachineComponent()
+    : _controller(this), controllerSelf(nullptr), stateFlags(0), _pad54{} {
+    OrFlagsInCtor(0xcd);
 }
 
+// ============================================================
+// Shutdown (vtable slot [3], 0x14012b940)
+// ============================================================
+void StateMachineComponent::Persist(void* stream) {
+    // Component::Persist first (0x1401189b0, a direct call in retail too). It
+    // used to go through a lazily resolved pointer whose null state desynced the
+    // stream on the load path (save/load wave 2026-08-28); the qualified member
+    // call has no such state.
+    Component::Persist(stream);
+
+    // Create IO::Serializer with version 0
+    alignas(8) uint8_t serializer[24]; // IO::Serializer is 24 bytes (stack local)
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    // Serialize 4 individual bytes from stateFlags at +0x50, +0x51, +0x52, +0x53
+    uint8_t* base = reinterpret_cast<uint8_t*>(this);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x50), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x51), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x52), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(base + 0x53), nullptr);   // B.3.4 bridge
+
+    // Destroy serializer
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+}
 // ------------------------------------------------------------------
 // Slot 4 (+0x20) — retail StateMachineComponent::Startup (0x14012b6a0). Retail's
 // slot-4 handler is EXACTLY the controller-linker; the field init lives in the ctor
@@ -691,15 +664,13 @@ static void StateMachineComponent_UpdateAdapter(StateMachineComponent* self,
 // Together with the slot-6 tick: on its own, earlier
 // linking only moves the +0x52 default-state write earlier, but that write is what the
 // 2026-07-20 stockpile regression turned on, so it does not go live independently.
-static void StateMachineComponent_StartupSlot(StateMachineComponent* self) {
-    if (!self) return;
-    StateMachineComponent_BodyInit(self);
+void StateMachineComponent::Startup() {
+    StateMachineComponent_BodyInit(this);
     if (
-        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(self) + 0x38) == nullptr) {
-        StateMachineComponent_LinkControllers_Standalone(self);
+        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(this) + 0x38) == nullptr) {
+        StateMachineComponent_LinkControllers_Standalone(this);
     }
 }
-
 // ------------------------------------------------------------------
 // Slot 6 (+0x30) — retail 0x14012b660: StateMachine::Tick(sm, Time(0.0f), 0, 0).
 // Verified slot: its only vtable xref is 0x140164550 == vtable(0x140164520) + 0x30.
@@ -711,19 +682,17 @@ static void StateMachineComponent_StartupSlot(StateMachineComponent* self) {
 // StartTown's instant-build bracket that means 1 (State1Enter -> req 8) -> 8
 // (State8Enter INSTANT: meshes to final frame, delivered = target -> req 2) -> 2, all
 // before RegisterEntity returns and the bit is cleared.
-static void StateMachineComponent_OnAddedSlot(StateMachineComponent* self) {
-    if (!self) return;
-    uint8_t* base = reinterpret_cast<uint8_t*>(self);
+void StateMachineComponent::OnAdded() {
+    uint8_t* base = reinterpret_cast<uint8_t*>(this);
     if (*reinterpret_cast<void**>(base + 0x48) == nullptr)
-        StateMachineComponent_BodyInit(self);
+        StateMachineComponent_BodyInit(this);
     if (*reinterpret_cast<void**>(base + 0x38) == nullptr)
-        StateMachineComponent_LinkControllers_Standalone(self);
+        StateMachineComponent_LinkControllers_Standalone(this);
     // Same guard as the Update adapter: an unlinked chain would drive Tick's
     // parent-walk through the bare root's Step(-1).
     if (*reinterpret_cast<void**>(base + 0x38) == nullptr) return;
-    StateMachineComponent_Draw(self);   // Tick(sm, Time(0.0f), 0, 0)
+    StateMachineComponent_Draw(this);   // Tick(sm, Time(0.0f), 0, 0)
 }
-
 // ------------------------------------------------------------------
 // Slot 8 (+0x40) — retail 0x14012b640: StateMachine::Tick(sm, time, 0, 1).
 // THE SECOND PER-FRAME TICK, and until now the missing half of the dispatcher.
@@ -748,49 +717,45 @@ static void StateMachineComponent_OnAddedSlot(StateMachineComponent* self) {
 // null handler and returns 0 — the same graceful no-op retail performs for an
 // unregistered slot. It is gated anyway, on the boat controller's own flag, so an A/B
 // run can isolate it.
-static void StateMachineComponent_TreeTickVSlot(void* s, void* t) {
-    StateMachineComponent* self = reinterpret_cast<StateMachineComponent*>(s);
-    if (!self) return;
-    uint8_t* base = reinterpret_cast<uint8_t*>(self);
+void StateMachineComponent::Tick(void* t) {
+    uint8_t* base = reinterpret_cast<uint8_t*>(this);
     if (*reinterpret_cast<void**>(base + 0x48) == nullptr)
-        StateMachineComponent_BodyInit(self);
+        StateMachineComponent_BodyInit(this);
     // Same guard as the Update adapter: an unlinked chain would drive Tick's parent-walk
     // through the bare root's Step(-1).
     if (*reinterpret_cast<void**>(base + 0x38) == nullptr) return;
-    StateMachineComponent_OnRemove(self, reinterpret_cast<int64_t>(t));   // Tick(...,0,1)
+    StateMachineComponent_OnRemove(this, reinterpret_cast<int64_t>(t));   // Tick(...,0,1)
 }
+// Recipe step 1 (Update), routed to slot +0x48 (the per-tick slot the EntityList
+// bucket round-robin calls). Signature matches COMPONENT_LIVE_FACTORY's
+// UpdateVSlot adapter: (self, int64_t* time). The Time pointer is forwarded
+// opaquely to Tick (which never derefs it — it only passes it on to the
+// Transition virtuals), matching the original StateMachineComponent::Update.
+void StateMachineComponent::Update(void* timeV) {
+    int64_t* time = static_cast<int64_t*>(timeV);
+    uint8_t* base = reinterpret_cast<uint8_t*>(this);
 
-// ============================================================================
-// The members.
-// ============================================================================
+    // Belt-and-suspenders body-init if StartupComponents did not dispatch +0x20.
+    if (*reinterpret_cast<void**>(base + 0x48) == nullptr)
+        StateMachineComponent_BodyInit(this);
 
-// 0x14012ba30: Component() is the CALL 0x1401188b0; the 0x140164520 stamp and
-// the member's 0x14015f070 / 0x1401644d0 stamps are the compiler's; the member
-// gets +0x30 = +0x38 = 0 and +0x40 = this (retail); flags |= 0xcd.
-// PORT GAP (retail 0x14012ba86 / 0x14012ba8a) — B38 D1: retail also writes
-// +0x48 = this+0x28 and +0x50 = 0xff00ffff here. The tree's factory zero-filled
-// both, and BodyInit (slot 4, or lazily from the first tick) writes them — with
-// the stream-restore rule that an all-zero state quad means "fresh". That lazy
-// shape is kept unchanged; moving the two stores into the ctor is its own
-// titled commit.
-StateMachineComponent::StateMachineComponent()
-    : _controller(this), controllerSelf(nullptr), stateFlags(0), _pad54{} {
-    OrFlagsInCtor(0xcd);
-}
+    // Lazy controller-link: until a state node is linked, try to link live
+    // ControllerComponents on this entity (runs after all components are
+    // constructed; idempotent once linked since firstChild then != 0).
+    if (*reinterpret_cast<void**>(base + 0x38) == nullptr)
+        StateMachineComponent_LinkControllers_Standalone(this);
 
-// [3] 0x14012b940 — the four state bytes +0x50..+0x53.
-void StateMachineComponent::Persist(void* stream) { StateMachineComponent_Shutdown(this, stream); }
-// [4] 0x14012b6a0 — body-init + the controller linker.
-void StateMachineComponent::Startup() { StateMachineComponent_StartupSlot(this); }
-// [6] 0x14012b660 — the register-time Tick(sm, Time(0.0f), 0, 0).
-void StateMachineComponent::OnAdded() { StateMachineComponent_OnAddedSlot(this); }
-// [8] 0x14012b640 — Tick(sm, time, 0, 1), dispatched by EntityList::TreeNodeHandler.
-// (Before this class it was patched into the shared table on the first SM call
-// of the process; a compiler table carries it from the start.)
-void StateMachineComponent::Tick(void* time) { StateMachineComponent_TreeTickVSlot(this, time); }
-// [9] 0x14012b620 — Tick(sm, time, 1, 1), the EntityList bucket round-robin.
-void StateMachineComponent::Update(void* time) {
-    StateMachineComponent_UpdateAdapter(this, static_cast<int64_t*>(time));
+    void* firstChild = *reinterpret_cast<void**>(base + 0x38);
+
+
+
+    if (firstChild == nullptr) return;
+
+
+    // Forward the Time pointer opaquely as the int64 param (Tick passes it
+    // straight through to the Transition virtuals; nothing in this path derefs
+    // it as a value).
+    StateMachineComponent_Update(this, reinterpret_cast<int64_t>(time));
 }
 // [11] 0x14012b7d0. PORT GAP (retail 0x14012b7d0) — B38 D9: the body is ported
 // above (StateMachineComponent_OnUpdate2) but the tree's table never installed

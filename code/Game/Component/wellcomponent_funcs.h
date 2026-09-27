@@ -5,13 +5,6 @@
 #include "Component/WellComponent.h"
 #include <cstdint>
 
-// Shutdown (vtable slot [3], 0x14005cfa0): Component_Serialize + two empty serializer blocks.
-void WellComponent_Shutdown(WellComponent* self, void* stream);
-
-// OnRemove (vtable slot [7], 0x14005cf60): UNregisters the owning entity from the
-// TownManager water-source list. (Ghidra calls this OnCreate; the body is a removal.)
-void WellComponent_OnRemove(WellComponent* self);
-
 // The matching REGISTER half: state-2 "built" enter (0x14005cf20) and the two
 // TownManager leaves it drives.
 extern "C" char WellComponent_EnterBuilt(void* comp, void* sm);

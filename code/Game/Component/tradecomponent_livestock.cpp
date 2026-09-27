@@ -222,8 +222,7 @@ extern "C" void TradeComponent_SpawnPurchasedLivestock(void* selfV, void* tmpl,
                 void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(c) * 8);
                 void* cc = *slot;
                 if (!cc) continue;
-                const uint32_t tid = (*reinterpret_cast<uint32_t (**)(void*)>(
-                                          *reinterpret_cast<uintptr_t*>(cc) + 0x10))(cc);
+                const uint32_t tid = reinterpret_cast<Object::Base*>(cc)->Type();   // B.3.8 bridge
                 if (tid != *s_pAnimalTid) continue;
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(cc, *s_pAnimalTid)) animal = cc;
                 break;

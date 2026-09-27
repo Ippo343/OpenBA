@@ -24,8 +24,13 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Work/Work.h"         // ENDGAME B.3.8 (WRK): Work::Persist / Work::InitFromEntity
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
+#include "Component/InteractComponent.h"   // ENDGAME B.3.8 CB3: InteractComponent::TypeId()
+#include "Component/WorkComponent.h"   // ENDGAME B.3.8 CB3: WorkComponent::TypeId()
+#include "Component/StorageComponent.h"   // ENDGAME B.3.8 CB3: StorageComponent::TypeId()
+#include "Component/TradeComponent.h"   // ENDGAME B.3.8 CB3: TradeComponent::TypeId()
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CB3: CitizenComponent::TypeId()
+#include "Action/CompleteTask.h"   // ENDGAME B.3.8 CB3: CompleteTask::TypeId()
 
-namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_registration.h
 
 // ============================================================
 // FindComponent family
@@ -85,10 +90,10 @@ static void EnsureTypeIds() {
     // registry so these FindComponent helpers actually match (else they return null and
     // callers deref null). Names verified from decomp/application.md TypeInfo column.
     static uint32_t v_2ed0, v_3050, v_6270, v_15140;
-    if (!s_pTid_2ed0) { v_2ed0 = ::Object::GetTypeIdByName("InteractComponent"); s_pTid_2ed0 = &v_2ed0; }
-    if (!s_pTid_3050) { v_3050 = ::Object::GetTypeIdByName("WorkComponent");      s_pTid_3050 = &v_3050; }
-    if (!s_pTid_6270) { v_6270 = ::Object::GetTypeIdByName("StorageComponent");   s_pTid_6270 = &v_6270; }
-    if (!s_pTid_15140){ v_15140 = ::Object::GetTypeIdByName("TradeComponent");    s_pTid_15140 = &v_15140; }
+    if (!s_pTid_2ed0) { v_2ed0 = InteractComponent::TypeId(); s_pTid_2ed0 = &v_2ed0; }
+    if (!s_pTid_3050) { v_3050 = WorkComponent::TypeId();      s_pTid_3050 = &v_3050; }
+    if (!s_pTid_6270) { v_6270 = StorageComponent::TypeId();   s_pTid_6270 = &v_6270; }
+    if (!s_pTid_15140){ v_15140 = TradeComponent::TypeId();    s_pTid_15140 = &v_15140; }
     s_tidInit = true;
 }
 
@@ -157,8 +162,8 @@ void* Work_Ctor25_Impl(void* self, void* pEntityIBP) {
     // string sits), i.e. FireWork vtable + 0x40 = slot 8. Ghidra reports ZERO xrefs to
     // 0x1401612e0; every Work-hierarchy ctor/dtor LEAs 0x140161a80 instead
     // (0x1400f730a LEA RAX,[0x140161a80] right here in retail's Work_Ctor25).
-    uintptr_t vtWork = ResolveAddr(Module::Exe, 0x140161a80);
-    if (vtWork) *reinterpret_cast<uintptr_t*>(self) = vtWork;
+    // Work is abstract (no ctor to run on a raw object): stamp the compiler table.
+    *reinterpret_cast<const void**>(self) = Work::Vtable();
     reinterpret_cast<Work*>(self)->InitFromEntity(pEntityIBP);   // B.3.8 bridge (door onto a raw object)
     return self;
 }
@@ -316,12 +321,6 @@ void Work::Persist(void* stream) {
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
-// The by-address door (B38 D5 (b), 22 leaf Serialize bodies reach 0x1400f7400):
-// one QUALIFIED delegation, so a leaf calling it never re-enters its own slot 3.
-void WorkBase_Serialize_f7400(void* self, void* stream) {
-    reinterpret_cast<Work*>(self)->Work::Persist(stream);   // B.3.8 bridge (door onto a raw object)
-}
-
 uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskIBP, void** out) {
     if (*reinterpret_cast<uintptr_t*>(taskIBP) == 0) return 0;
     void* obj = *reinterpret_cast<void**>(taskIBP);
@@ -332,7 +331,7 @@ uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskI
     // healed it, so heal it here too — otherwise ciTid==0 makes CanStartWork bail (return 0)
     // and every registered haul task is judged invalid, driving the enqueue↔invalidate reset
     // loop that stops any construction haul from completing.
-    if (!ciTid) { static uint32_t v = 0; if (!v) v = ::Object::GetTypeIdByName("CitizenComponent"); ciTid = v; }
+    if (!ciTid) ciTid = CitizenComponent::TypeId();
     if (!fn_IsA || !ciTid || !fn_IsA(obj, ciTid)) return 0;
 
     uintptr_t ci = *reinterpret_cast<uintptr_t*>(taskIBP);
@@ -348,7 +347,7 @@ uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskI
     // the haul chain pushed onto the citizen — CanStartWork then returns 0 for a citizen
     // that IS validly hauling, and GatherRawMaterials::Update invalidates+removes it every
     // tick (the enqueue↔reset loop). Heal via the runtime type registry by name.
-    if (!completeTaskTid) { static uint32_t v = 0; if (!v) v = ::Object::GetTypeIdByName("CompleteTask"); completeTaskTid = v; }
+    if (!completeTaskTid) completeTaskTid = CompleteTask::TypeId();
     int wantId = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(self) + 0x20);
 
     for (int i = 0; i < count; i++) {
