@@ -98,36 +98,25 @@ void** ConfigurationSingletonPtr() {
 // Video_ImageBuffer_PlatformConstruct.
 // ----------------------------------------------------------------------------
 
-// PORT-AWARE (ResolveExport), and it must be. These are exported DATA in the
-// shipped DLL; while it is loaded and the mint is disarmed this resolves to the
-// DLL's own storage, so our linkage and the DLL's still-unported
-// ImageBuffer::RecreateDynamic / ReleaseDynamic (0x1800f2d90 / 0x1800f2e80,
-// which walk the same list) agree on ONE list. At cutover the mint owns the
-// bytes and the walkers are ours. the raw DLL door would be null at cutover and
-// every link write would land at offset 0 of nothing.
+// ENDGAME B.3.9 VID: the four heads are the class statics (defined in
+// dynamic_resources.cpp beside the walkers), so the links written here and the
+// lists the device-lost sweeps walk are the same four cells by construction.
+// The function-local ResolveExport caches went with the mint rows (B9-10).
 void** ImageBufferFirstSurface() {
-    static void** p = reinterpret_cast<void**>(
-        ResolveExport("?_firstSurface@ImageBuffer@Video@@0PEAV12@EA"));
-    return p;
+    return reinterpret_cast<void**>(&::Video::ImageBuffer::_firstSurface);
 }
 void** IndexBufferFirstBuffer() {
-    static void** p = reinterpret_cast<void**>(
-        ResolveExport("?_firstBuffer@IndexBuffer@Video@@0PEAV12@EA"));
-    return p;
+    return reinterpret_cast<void**>(&::Video::IndexBuffer::_firstBuffer);
 }
 void** VertexBufferFirstBuffer() {
-    static void** p = reinterpret_cast<void**>(
-        ResolveExport("?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA"));
-    return p;
+    return reinterpret_cast<void**>(&::Video::VertexBuffer::_firstBuffer);
 }
 // Wave 9 lane GFX2. Minted (standalone/rt_data_mint_tables.inc, 0x1801fe790,
 // 8 bytes) and already read PORT-AWARE by runtime/src/video/dynamic_resources.cpp
 // so our linkage and lane VID's walkers agree on ONE list on both sides of the
 // cutover.
 void** RenderBufferFirstRenderBuffer() {
-    static void** p = reinterpret_cast<void**>(
-        ResolveExport("?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA"));
-    return p;
+    return reinterpret_cast<void**>(&::Video::RenderBuffer::_firstRenderBuffer);
 }
 
 // Video::Device's recursive render lock, in runtime/src/video/buffers_win.cpp

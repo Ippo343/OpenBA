@@ -27,3 +27,10 @@
 ??_7PixelProgramData@Video@@6B@     VID   concrete (_purecall bodies, own slot 0); ??0 door stays (dx11 import struct) as ::new; RT_DELDTOR 0x180058710 + ??1 door deleted
 ??_7RenderStateData@Video@@6B@      VID   concrete (_purecall bodies, own slot 0); ??0 door stays (dx11 import struct) as ::new; RT_DELDTOR 0x180058690 + ??1 door deleted
 ??_7VideoProgramData@Video@@6B@     VID   concrete (_purecall bodies, own slot 0); ??0 door stays (dx11 import struct) as ::new; RT_DELDTOR 0x180058610 + ??1 door deleted
+
+# -- storage: the four Video list heads, together (device-lost recovery walks them); every reader
+#    was in VID's files (buffers.cpp links, dynamic_resources.cpp sweeps) and is the class static now --
+?_firstSurface@ImageBuffer@Video@@0PEAV12@EA             VID   class static Video::ImageBuffer::_firstSurface; readers buffers.cpp + dynamic_resources.cpp converted
+?_firstBuffer@IndexBuffer@Video@@0PEAV12@EA              VID   class static Video::IndexBuffer::_firstBuffer; readers converted
+?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA       VID   class static Video::RenderBuffer::_firstRenderBuffer; readers converted
+?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA             VID   class static Video::VertexBuffer::_firstBuffer; readers converted

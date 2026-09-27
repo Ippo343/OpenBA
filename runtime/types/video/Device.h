@@ -775,6 +775,10 @@ public:
     static void RecreateDynamic();
     // ?ReleaseDynamic@RenderBuffer@Video@@SAXXZ   0x1800f40c0  dynamic_resources.cpp
     static void ReleaseDynamic();
+    // ?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA (0x1801fe790) — the
+    // list head (ENDGAME B.3.9 VID class static, B39_RULES D7;
+    // dynamic_resources.cpp).
+    static RenderBuffer* _firstRenderBuffer;
 
     // ---- the two class allocation operators --------------------------------
     // ENDGAME B.3.5 block VC. Both are STATIC members and neither changes a

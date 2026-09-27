@@ -7,7 +7,7 @@
 // REASON CLASS and a measured by-name-door count -- never asserted
 // here.  standalone/cutover_manifest.cpp consumes this.
 
-// REQUIRED 43 | WITHHELD 1   (of 44 rows)
+// REQUIRED 39 | WITHHELD 1   (of 40 rows)
 
 // Achievement  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=4  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@AchievementManager@Achievement@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc670ull, "Achievement", 4)
@@ -85,14 +85,6 @@ CUTOVER_ROW("?_ticksPerSecond@Timer@System@@0_JA", CUTOVER_REQUIRED, true, 0x180
 CUTOVER_ROW("??_7Dialog@UI@@6B@", CUTOVER_WITHHELD, true, 0x1801562a0ull, "UI", 5)
 // UI  NO-OP / PERMANENT  doors=2  -- NO-OP is permanent, but 2 by-name door(s) resolve NULL with no DLL loaded
 CUTOVER_ROW("??_7DialogController@UI@@6B@", CUTOVER_REQUIRED, true, 0x1801565f0ull, "UI", 2)
-// Video  HARMFUL / DLL-PRESENT  doors=3  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_firstBuffer@IndexBuffer@Video@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe788ull, "Video", 3)
-// Video  HARMFUL / DLL-PRESENT  doors=3  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe798ull, "Video", 3)
-// Video  HARMFUL / DLL-PRESENT  doors=3  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe790ull, "Video", 3)
-// Video  HARMFUL / DLL-PRESENT  doors=3  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_firstSurface@ImageBuffer@Video@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe780ull, "Video", 3)
 // Video  HARMFUL / DLL-PRESENT  doors=6  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@Configuration@Video@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe7a0ull, "Video", 6)
 // Video  HARMFUL / DLL-PRESENT  doors=23  -- tag states the verdict inverts at cutover
