@@ -418,7 +418,6 @@ void Modification::SetupFileSystem() {
     // right door and the three addresses in the listing (0x1801fc6a8,
     // 0x1801fc6c8, 0x1801fc6e8) need no address doors. Each is a POINTER CELL,
     // not the object, hence the extra dereference.
-    static void* fsSingletonCache      = nullptr;
     static void* extFactorySingCache   = nullptr;
     static void* factorySingletonCache = nullptr;
 
@@ -429,8 +428,8 @@ void Modification::SetupFileSystem() {
     // That is B34_RULES section 7.2's grep hazard; it presents as a build error
     // rather than a silent rebind, which is exactly why the rule says to spell
     // the POD namespace out.
-    RtIO::FileSystem* const fs = *reinterpret_cast<RtIO::FileSystem**>(RtResolveCached(
-        "?_singleton@FileSystem@IO@@0PEAV12@EA", &fsSingletonCache));
+    RtIO::FileSystem* const fs =
+        reinterpret_cast<RtIO::FileSystem*>(::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
     void* const extFactory = *reinterpret_cast<void**>(RtResolveCached(
         "?_singleton@ExternalFactory@Object@@0PEAV12@EA", &extFactorySingCache));
     // `Object::Factory::_singleton` is captured HERE, at 0x1800aebef, and used

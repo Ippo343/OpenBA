@@ -93,14 +93,11 @@ inline void WideRelease(WideStr* w) {
 }
 
 // ---- the exported engine functions both bodies call -------------------------
-using VoidThisFn    = void (*)(void*);
-using OpenFn        = bool (*)(void*, const System::Filename*);
 using ReadFileFn    = bool (*)(void*, FileInfo*, int, void*);
 using CloseFileFn   = void (*)(void*, FileInfo*);
-using CtorFn        = void* (*)(void*);
 
 void* FileSystemSingleton() {
-    return *RT_DATA_SLOT(void**, "?_singleton@FileSystem@IO@@0PEAV12@EA");
+    return ::IO::FileSystem::_singleton;   // ENDGAME B.3.9 IO (D7): the class static.
 }
 
 }  // namespace
@@ -207,13 +204,12 @@ extern "C" void RtIo_PersistenceWorker_Load(void* worker) {
     // Storage only; the ctor below is what makes it a FileStream.
     alignas(8) uint8_t storage[sizeof(FileStream)];
     FileStream* st = reinterpret_cast<FileStream*>(storage);
-    RT_EXPORT_ONCE(CtorFn, "??0FileStream@IO@@QEAA@XZ")(st);
+    ::new (static_cast<void*>(storage)) IO::FileStream();   // ENDGAME B.3.9 IO: the class
 
     // Filename(const String&), 0x18000c780, as the DELETE job above.
     System::Filename f(SysFile(p->pendingFilename));
 
-    const bool opened = RT_EXPORT_ONCE(OpenFn,
-        "?Open@FileStream@IO@@UEAA_NAEBVFilename@System@@@Z")(st, &f);
+    const bool opened = reinterpret_cast<IO::FileStream*>(st)->IO::FileStream::Open(f);
 
     // ~f is retail's release, right after Open returns.
 
@@ -253,7 +249,7 @@ extern "C" void RtIo_PersistenceWorker_Load(void* worker) {
         p->status = 2;
     }
 
-    RT_EXPORT_ONCE(VoidThisFn, "??1FileStream@IO@@UEAA@XZ")(st);
+    reinterpret_cast<IO::FileStream*>(st)->IO::FileStream::DeletingDtor(0);
     fs->platformExistsGate = savedGate;
 }
 

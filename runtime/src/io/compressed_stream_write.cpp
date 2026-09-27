@@ -225,7 +225,6 @@ typedef void* (*MemAllocFn)(uint64_t, int32_t);
 typedef void  (*MemFreeFn)(void*);
 typedef void* (*CompressionCtorFn)(void*);
 typedef int   (*CompressFn)(void*, const void*, uint32_t, void*, uint32_t);
-typedef bool  (*MemStreamCreateFn)(void*, int32_t);
 typedef void  (*CloseFileFn)(void*, void*);
 
 }  // namespace
@@ -304,10 +303,9 @@ typedef void  (*CloseFileFn)(void*, void*);
 // The LOGICAL position in the DECOMPRESSED stream, not the source cursor. The
 // two differ and Stream.h says so explicitly (+0x1c vs the embedded
 // MemoryStream's +0x8c); both are right for what they measure.
-extern "C" uint32_t RtIo_CompressedStream_GetCurrentPos(const CompressedStream* self) {
-    return reinterpret_cast<const IO::CompressedStream*>(self)
-               ->IO::CompressedStream::GetCurrentPos();
-}
+// ENDGAME B.3.9 IO (W2): the slot door RtIo_CompressedStream_GetCurrentPos went with the minted
+// CompressedStream / CompressedMemoryStream rows, its last readers; the
+// class table carries the member.
 
 // ============================================================================
 // ?SetCurrentPos@CompressedStream@IO@@UEAA_NH@Z              retail 0x1800aa830
@@ -316,10 +314,9 @@ extern "C" uint32_t RtIo_CompressedStream_GetCurrentPos(const CompressedStream* 
 // A tail-ish call into SetWindow with RCX and RDX untouched, and the return
 // value is DISCARDED: this returns true unconditionally even when SetWindow
 // failed. That is retail's behaviour and it is reproduced, not corrected.
-extern "C" bool RtIo_CompressedStream_SetCurrentPos(CompressedStream* self, int32_t pos) {
-    return reinterpret_cast<IO::CompressedStream*>(self)
-               ->IO::CompressedStream::SetCurrentPos(pos);
-}
+// ENDGAME B.3.9 IO (W2): the slot door RtIo_CompressedStream_SetCurrentPos went with the minted
+// CompressedStream / CompressedMemoryStream rows, its last readers; the
+// class table carries the member.
 
 // ============================================================================
 // ?GetSize@CompressedStream@IO@@UEBAIXZ                      retail 0x1800aa860
@@ -336,10 +333,9 @@ extern "C" bool RtIo_CompressedStream_SetCurrentPos(CompressedStream* self, int3
 //  2. The directory length is `((headerSize-1) << 15) + lastUncompressedSize`,
 //     spelled by retail as `(headerSize<<15) - 0x8000 + last`. Same value; the
 //     shift is on the SIGNED count, which is why headerSize is read MOVSXD.
-extern "C" uint32_t RtIo_CompressedStream_GetSize(const CompressedStream* self) {
-    return reinterpret_cast<const IO::CompressedStream*>(self)
-               ->IO::CompressedStream::GetSize();
-}
+// ENDGAME B.3.9 IO (W2): the slot door RtIo_CompressedStream_GetSize went with the minted
+// CompressedStream / CompressedMemoryStream rows, its last readers; the
+// class table carries the member.
 
 // ============================================================================
 // ?Write@CompressedStream@IO@@UEAA_NHPEBX@Z                  retail 0x1800aa6c0
@@ -374,11 +370,9 @@ extern "C" uint32_t RtIo_CompressedStream_GetSize(const CompressedStream* self) 
 // takes its GROW branch whenever `position >> 15 >= headerSize`, i.e. on the
 // first write into every new block, and that branch is DELEGATED to the DLL by
 // compressed_stream_read.cpp §4. See §3 of this file's banner.
-extern "C" bool RtIo_CompressedStream_Write(CompressedStream* self, int32_t n,
-                                            const void* src) {
-    return reinterpret_cast<IO::CompressedStream*>(self)
-               ->IO::CompressedStream::Write(n, src);
-}
+// ENDGAME B.3.9 IO (W2): the slot door RtIo_CompressedStream_Write went with the minted
+// CompressedStream / CompressedMemoryStream rows, its last readers; the
+// class table carries the member.
 
 // ============================================================================
 // ?CompressWindow@CompressedStream@IO@@AEAAXH@Z              retail 0x1800a9810
@@ -466,9 +460,9 @@ extern "C" void RtIo_CompressedStream_CompressWindow(CompressedStream* self, int
 // two trap slots. It is not a purecall and it is not a stub: Commit dispatches
 // slot 8 virtually and the base genuinely has nothing to do, because a plain
 // CompressedStream writes onto a source that is already the right size.
-extern "C" void RtIo_CompressedStream_PreCommit(CompressedStream* self) {
-    reinterpret_cast<IO::CompressedStream*>(self)->IO::CompressedStream::PreCommit();
-}
+// ENDGAME B.3.9 IO (W2): the slot door RtIo_CompressedStream_PreCommit went with the minted
+// CompressedStream / CompressedMemoryStream rows, its last readers; the
+// class table carries the member.
 
 // ============================================================================
 // ?PreCommit@CompressedMemoryStream@IO@@UEAAXXZ              retail 0x1800a9660
@@ -487,10 +481,8 @@ extern "C" void RtIo_CompressedStream_PreCommit(CompressedStream* self) {
 //
 // The tail jump means the bool is this function's return value even though the
 // slot is typed `void` — harmless, and reproduced by simply discarding it.
-extern "C" void RtIo_CompressedMemoryStream_PreCommit(CompressedStream* self) {
-    reinterpret_cast<IO::CompressedMemoryStream*>(self)
-        ->IO::CompressedMemoryStream::PreCommit();
-}
+// ENDGAME B.3.9 IO (W2): the slot door that stood here went with the minted
+// ??_7CompressedMemoryStream row; the class's table carries the member.
 
 // ============================================================================
 // ?Commit@CompressedStream@IO@@QEAAXXZ                       retail 0x1800a9ee0
@@ -574,9 +566,9 @@ extern "C" void RtIo_CompressedStream_Commit(CompressedStream* self) {
 // opened for READING and closed writes nothing back, which is what makes Close
 // safe to call unconditionally — and the `headerSize > 0` guard is Stream.h's
 // "has anything been written yet".
-extern "C" void RtIo_CompressedStream_Close(CompressedStream* self) {
-    reinterpret_cast<IO::CompressedStream*>(self)->IO::CompressedStream::Close();
-}
+// ENDGAME B.3.9 IO (W2): the slot door RtIo_CompressedStream_Close went with the minted
+// CompressedStream / CompressedMemoryStream rows, its last readers; the
+// class table carries the member.
 
 // ?Close@CompressedFileStream@IO@@UEAAXXZ (0x1800a9490): ENDGAME B.3.9 IO --
 // the slot door that stood here is gone with the minted ??_7CompressedFileStream
@@ -781,12 +773,9 @@ void CompressedMemoryStream::PreCommit() {
             total += RtIo::StoredLength(h[k]);           // 1800a9683..93
     }
 
-    // `this + 0x68` is the embedded MemoryStream, and it is now a real member
-    // rather than an offset — but ?Create@MemoryStream is NOT part of this
-    // block's conversion (it keeps its free-function door), so the call stays
-    // the door it was. Same target, same argument, one fewer literal offset.
-    RT_EXPORT_ONCE(RtIo::MemStreamCreateFn, "?Create@MemoryStream@IO@@QEAA_NH@Z")(
-        &_memoryStream, static_cast<int32_t>(total));    // 1800a969b..a2  ADD RCX,0x68 ; JMP
+    // `this + 0x68` is the embedded MemoryStream; ENDGAME B.3.9 IO (W2):
+    // ?Create@MemoryStream is its member now (the door is gone).
+    _memoryStream.Create(static_cast<int32_t>(total));  // 1800a969b..a2  ADD RCX,0x68 ; JMP
 }
 
 // ?Close@CompressedStream@IO@@UEAAXXZ                        retail 0x1800aa8d0
@@ -824,8 +813,7 @@ void CompressedFileStream::Close() {
 
     RtIO::FileInfo* const fileInfo = &_file._file;       // 1800a94aa  (== this+0x88)
     if (fileInfo->handle != -1) {                        // 1800a94b1/b4
-        void* const fs = *RT_DATA_SLOT(void**,
-            "?_singleton@FileSystem@IO@@0PEAV12@EA");               // 1800a94b6
+        void* const fs = ::IO::FileSystem::_singleton;             // 1800a94b6  // ENDGAME B.3.9 IO (D7): the class static.
         RT_EXPORT_ONCE(RtIo::CloseFileFn,
             "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z")(fs, fileInfo);  // 1800a94c2
         return;
@@ -867,34 +855,6 @@ int RtIoCompressedStreamWriteRegister() {
     // structurally blind to RegisterRuntimeExport. Use
     // tools/dup_runtime_export.py, which is the tool for this subject.
     // ?GetSource@ registration removed -- lane IOBASE owns it (see above).
-
-    RegisterRuntimeExport("?Write@CompressedStream@IO@@UEAA_NHPEBX@Z",
-                          (void*)&RtIo_CompressedStream_Write); ++n;
-    RegisterRuntimeAddr(0x1800aa6c0, (void*)&RtIo_CompressedStream_Write);
-
-    RegisterRuntimeExport("?SetCurrentPos@CompressedStream@IO@@UEAA_NH@Z",
-                          (void*)&RtIo_CompressedStream_SetCurrentPos); ++n;
-    RegisterRuntimeAddr(0x1800aa830, (void*)&RtIo_CompressedStream_SetCurrentPos);
-
-    RegisterRuntimeExport("?GetCurrentPos@CompressedStream@IO@@UEBAIXZ",
-                          (void*)&RtIo_CompressedStream_GetCurrentPos); ++n;
-    RegisterRuntimeAddr(0x1800aa850, (void*)&RtIo_CompressedStream_GetCurrentPos);
-
-    RegisterRuntimeExport("?GetSize@CompressedStream@IO@@UEBAIXZ",
-                          (void*)&RtIo_CompressedStream_GetSize); ++n;
-    RegisterRuntimeAddr(0x1800aa860, (void*)&RtIo_CompressedStream_GetSize);
-
-    RegisterRuntimeExport("?PreCommit@CompressedStream@IO@@UEAAXXZ",
-                          (void*)&RtIo_CompressedStream_PreCommit); ++n;
-    RegisterRuntimeAddr(0x1800aa8c0, (void*)&RtIo_CompressedStream_PreCommit);
-
-    RegisterRuntimeExport("?PreCommit@CompressedMemoryStream@IO@@UEAAXXZ",
-                          (void*)&RtIo_CompressedMemoryStream_PreCommit); ++n;
-    RegisterRuntimeAddr(0x1800a9660, (void*)&RtIo_CompressedMemoryStream_PreCommit);
-
-    RegisterRuntimeExport("?Close@CompressedStream@IO@@UEAAXXZ",
-                          (void*)&RtIo_CompressedStream_Close); ++n;
-    RegisterRuntimeAddr(0x1800aa8d0, (void*)&RtIo_CompressedStream_Close);
 
     RegisterRuntimeExport("?Commit@CompressedStream@IO@@QEAAXXZ",
                           (void*)&RtIo_CompressedStream_Commit); ++n;

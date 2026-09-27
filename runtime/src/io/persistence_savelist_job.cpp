@@ -162,11 +162,8 @@ typedef void      (*MemFreeFn)(void*);                                  // 0x180
 
 // `IO::FileSystem::_singleton` — an exported DATA symbol, so the NAME door is
 // the right door and the `0x1801fc6a8` in the listing needs no address door.
-void* g_fsSingletonCache = nullptr;
 void* FileSystemSingleton() {
-    void** slot = reinterpret_cast<void**>(RtResolveCached(
-        "?_singleton@FileSystem@IO@@0PEAV12@EA", &g_fsSingletonCache));
-    return slot ? *slot : nullptr;
+    return ::IO::FileSystem::_singleton;   // ENDGAME B.3.9 IO (D7): the class static.
 }
 
 void MemFree(void* p) {   // the null test is INSIDE 0x1800c7ad0

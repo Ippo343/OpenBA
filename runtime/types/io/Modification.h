@@ -241,6 +241,14 @@ public:
     RtIO::Mod* _savedMods;     // +0x18
     int32_t  _savedCount;      // +0x20
     int32_t  _savedCapacity;   // +0x24
+
+    // ?_singleton@Modification@IO@@2PEAV12@EA (0x1801fc6b0) -- the class
+    // static (ENDGAME B.3.9 IO, B39_RULES D7; retail's `2` = public). Defined
+    // in modification.cpp; RtIoPortInit redirects the minted row onto it, so
+    // the name door, the address door, the manifest publish and this member
+    // are the same eight bytes. Written by the ??0Modification door
+    // (engine/singleton_ctors.cpp) and ??1Modification (iobase_vtables.cpp).
+    static Modification* _singleton;
 };
 
 static_assert(sizeof(Modification) == 0x28, "ctor 0x1800b04b0 zeroes +0x08..+0x27");

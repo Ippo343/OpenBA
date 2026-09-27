@@ -324,7 +324,7 @@ void Stream::Run() {
     // ---- IO::FileStream st;  st.Open(FileSystem::GetDataDirectory() + buf->path)
     alignas(8) uint8_t storage[sizeof(FileStream)];
     FileStream* const st = reinterpret_cast<FileStream*>(storage);
-    RT_EXPORT_ONCE(CtorFn, "??0FileStream@IO@@QEAA@XZ")(st);            // 1800a100c..6a
+    ::new (static_cast<void*>(storage)) IO::FileStream();              // 1800a100c..6a  (B.3.9 IO: the class)
 
     void* const fsys = FileSystemSingleton();
 
@@ -351,8 +351,7 @@ void Stream::Run() {
         }
         System::FilenamePrivateAccess::AdjustDelimiters(path);
 
-        opened = RT_EXPORT_ONCE(OpenFn,
-            "?Open@FileStream@IO@@UEAA_NAEBVFilename@System@@@Z")(st, &path);// 1800a10bc
+        opened = reinterpret_cast<IO::FileStream*>(st)->IO::FileStream::Open(path);  // 1800a10bc  (B.3.9 IO)
     }
 
     if (opened) {                                                       // 1800a1147
@@ -523,7 +522,7 @@ void Stream::Run() {
                 "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z")(fsys, &st->file);
     }
 
-    RT_EXPORT_ONCE(VoidThisFn, "??1FileStream@IO@@UEAA@XZ")(st);        // 1800a14b3..1654
+    reinterpret_cast<IO::FileStream*>(st)->IO::FileStream::DeletingDtor(0);  // 1800a14b3..1654  (B.3.9 IO)
 
 }
 

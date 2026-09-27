@@ -571,6 +571,14 @@ public:
     // wears. There is deliberately NO constructor: 0x1800ac7c0 is unported.
     ~FileSystem();
 
+    // ?_singleton@FileSystem@IO@@0PEAV12@EA (0x1801fc6a8) -- the class static
+    // (ENDGAME B.3.9 IO, B39_RULES D7). Defined in filesystem.cpp;
+    // RtIoPortInit redirects the minted row onto it, so the name door, the
+    // address door, the manifest publish and this member are the same eight
+    // bytes. Written by the ??0FileSystem door (engine/singleton_ctors.cpp).
+    // PUBLIC while foreign readers still reach it (retail: private `0`).
+    static FileSystem* _singleton;
+
     // ---- the pinned fields, at retail's offsets ---------------------------
     // PUBLIC for the same reason `IO::Serializer`'s two are: the fifteen
     // unconverted bodies across `runtime/src/io/` and the exe-side probes reach

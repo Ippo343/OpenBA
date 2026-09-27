@@ -290,12 +290,10 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x1800065b0, 0x1800c0360, 0x008, "Object::Base"),   // probe subject
     RT_DELDTOR(0x180006640, 0x1800bc950, 0x020, "Object::External"),
     RT_DELDTOR(0x18000b7e0, 0x1800bb980, 0x020, "Object::CompiledExternal"),
-    RT_DELDTOR(0x18000c610, 0x1800b9a40, 0x018, "IO::Stream"),
     RT_DELDTOR(0x180015e90, 0x1800a41c0, 0x0c0, "Graphics::Geometry"),
     RT_DELDTOR(0x18001ed20, 0x1800f2610, 0x068, "Video::ImageBuffer"),
     RT_DELDTOR(0x180020310, 0x1801041f0, 0x0d8, "Graphics::ParticleInstance"),
     RT_DELDTOR(0x180020ce0, 0x1800a5520, 0x0e0, "Graphics::ParticleSystemInstance"),
-    RT_DELDTOR(0x1800244a0, 0x1800a9560, 0x098, "IO::CompressedMemoryStream"),
     RT_DELDTOR(0x180031900, 0x1800dddb0, 0x028, "Engine::UpdateLoop"),
     RT_DELDTOR(0x18004d4f0, 0x1800dc170, 0x048, "Engine::LoaderLoop"),
     RT_DELDTOR(0x18004d670, 0x1800db060, 0x188, "Engine::DialogLoaderLoopT"),
@@ -403,7 +401,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     //
     // ENDGAME B.3.9 IO: the IO::CompressedFileStream row (0x180024100) is
     // retired -- the class's inline DeletingDtor is its slot 0.
-    RT_DELDTOR(0x180023fd0, 0x1800aa650, 0x068, "IO::CompressedStream"),
     // ---- WAVE 25 lane VTIO ----------------------------------------------------
     // Slot 0 of `??_7PackageFile@IO@@6B@` (0x180155700). WAVE23_LANE_IOPORT.md
     // §8 item 2 is the residual this discharges: that lane measured the table at
@@ -1075,10 +1072,6 @@ void* RtDelDtor_External(void* self, unsigned flags) {
 void* RtDelDtor_CompiledExternal(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18000b7e0>());
 }
-// IO::Stream               ~Stream = 0x1800b9a40  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
-void* RtDelDtor_Stream(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18000c610>());
-}
 // Graphics::Geometry       ~Geometry = 0x1800a41c0  (PORTED)
 void* RtDelDtor_Geometry(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180015e90>());
@@ -1097,10 +1090,6 @@ void* RtDelDtor_ParticleInstance(void* self, unsigned flags) {
 void* RtDelDtor_ParticleSystemInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180020ce0>());
 }
-// IO::CompressedMemoryStream ~CompressedMemoryStream = 0x1800a9560  (PORTED)
-void* RtDelDtor_CompressedMemoryStream(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800244a0>());
-}
 // Engine::UpdateLoop       ~UpdateLoop = 0x1800dddb0  (PORTED)
 void* RtDelDtor_UpdateLoop(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180031900>());
@@ -1116,10 +1105,6 @@ void* RtDelDtor_DialogLoaderLoopT(void* self, unsigned flags) {
 // Engine::DialogLoopT      ~DialogLoopT = 0x1800db340  (PORTED, BATCH 8)
 void* RtDelDtor_DialogLoopT(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18004d8b0>());
-}
-// IO::CompressedStream     ~CompressedStream = 0x1800aa650  (PORTED, lane PKG2)  [Wave 19]
-void* RtDelDtor_CompressedStream(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180023fd0>());
 }
 // Graphics::EdgeMesh          ~EdgeMesh = 0x1800a2780          [Wave 27 GFXMESH]
 void* RtDelDtor_EdgeMesh(void* self, unsigned flags) {
@@ -1225,17 +1210,14 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x1800065b0, (void*)&RtDelDtor_Base);
     RegisterRuntimeAddr(0x180006640, (void*)&RtDelDtor_External);
     RegisterRuntimeAddr(0x18000b7e0, (void*)&RtDelDtor_CompiledExternal);
-    RegisterRuntimeAddr(0x18000c610, (void*)&RtDelDtor_Stream);
     RegisterRuntimeAddr(0x180015e90, (void*)&RtDelDtor_Geometry);
     RegisterRuntimeAddr(0x18001ed20, (void*)&RtDelDtor_ImageBuffer);
     RegisterRuntimeAddr(0x180020310, (void*)&RtDelDtor_ParticleInstance);
     RegisterRuntimeAddr(0x180020ce0, (void*)&RtDelDtor_ParticleSystemInstance);
-    RegisterRuntimeAddr(0x1800244a0, (void*)&RtDelDtor_CompressedMemoryStream);
     RegisterRuntimeAddr(0x180031900, (void*)&RtDelDtor_UpdateLoop);
     RegisterRuntimeAddr(0x18004d4f0, (void*)&RtDelDtor_LoaderLoop);
     RegisterRuntimeAddr(0x18004d670, (void*)&RtDelDtor_DialogLoaderLoopT);
     RegisterRuntimeAddr(0x18004d8b0, (void*)&RtDelDtor_DialogLoopT);
-    RegisterRuntimeAddr(0x180023fd0, (void*)&RtDelDtor_CompressedStream);      // Wave 19 CSTREAM
     RegisterRuntimeAddr(0x1800134b0, (void*)&RtDelDtor_EdgeMesh);              // Wave 27 GFXMESH
     RegisterRuntimeAddr(0x1800175d0, (void*)&RtDelDtor_EdgeMeshInstance);      // Wave 27 GFXMESH
     RegisterRuntimeAddr(0x180017330, (void*)&RtDelDtor_MeshInstance);          // Wave 27 GFXMESH

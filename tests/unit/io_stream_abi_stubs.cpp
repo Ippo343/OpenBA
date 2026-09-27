@@ -93,8 +93,8 @@ TextFileStream::TextFileStream(const System::String&, const System::String&, int
 TextFileStream::~TextFileStream() {}
 
 // ---- IO::CompressedStream (compressed_stream_{write,read}.cpp) -------------
-// Slot 0 is PURE on CompressedStream / CompressedMemoryStream and inline on
-// CompressedFileStream (B.3.9 IO), so none of them needs one.
+// Slot 0 is PURE on CompressedStream and inline on CompressedFileStream /
+// CompressedMemoryStream (B.3.9 IO), so none of them needs one.
 bool     CompressedStream::Write(int, const void*) { StubReached("CompressedStream::Write"); }
 bool     CompressedStream::Read(int, void*)        { StubReached("CompressedStream::Read"); }
 bool     CompressedStream::SetCurrentPos(int)      { StubReached("CompressedStream::SetCurrentPos"); }
@@ -114,6 +114,12 @@ void CompressedFileStream::Close()       { StubReached("CompressedFileStream::Cl
 // the host bodies have nothing to release; ~Stream still frees the encoding.
 CompressedStream::~CompressedStream() {}
 CompressedFileStream::~CompressedFileStream() {}
+// ENDGAME B.3.9 IO (W2): CompressedMemoryStream is concrete; its destructor
+// (the Close guard + Commit, the member's virtual Close) and the two
+// non-virtual Open / Create live in compressedstream.cpp on the port registry.
+CompressedMemoryStream::~CompressedMemoryStream() {}
+bool CompressedMemoryStream::Open()   { StubReached("CompressedMemoryStream::Open"); }
+bool CompressedMemoryStream::Create() { StubReached("CompressedMemoryStream::Create"); }
 
 // ---- IO::TextFileStream (runtime/src/io/text_file_stream_win.cpp) ----------
 // Slot 0 is PURE on this class. Slots 1 and 7 are FileStream's, above. What is

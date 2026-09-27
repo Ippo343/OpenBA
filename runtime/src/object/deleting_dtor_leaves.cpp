@@ -121,12 +121,9 @@ extern "C" void RtObject_Base_Dtor(void* self) {
     STAMP(self, "??_7Base@Object@@6B@");
 }
 
-// ??1Stream@IO@@UEAA@XZ   0x1800b9a40
-extern "C" void RtIo_Stream_Dtor(void* self) {
-    STAMP(self, "??_7Stream@IO@@6B@");
-    if (void* enc = Field(self, 0x10))
-        RT_EXPORT_ONCE(DtorFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(enc);
-}
+// ??1Stream@IO@@UEAA@XZ 0x1800b9a40: ENDGAME B.3.9 IO (W2) -- the door went
+// with the minted ??_7Stream@IO row and its RT_DELDTOR row, its only callers;
+// the body is IO::Stream::~Stream (runtime/types/io/Stream.h).
 
 // ??1ParticleInstance@Graphics@@UEAA@XZ   0x1801041f0
 extern "C" void RtGraphics_ParticleInstance_Dtor(void* self) {
@@ -140,9 +137,7 @@ int RtObjectDeletingDtorLeavesRegister() {
     RegisterRuntimeAddr  (0x180103a00ull,                                  (void*)&RtGraphics_MaterialInstance_Dtor);
     RegisterRuntimeExport("??1Base@Object@@UEAA@XZ",                      (void*)&RtObject_Base_Dtor);
     RegisterRuntimeAddr  (0x1800c0360ull,                                  (void*)&RtObject_Base_Dtor);
-    RegisterRuntimeExport("??1Stream@IO@@UEAA@XZ",                        (void*)&RtIo_Stream_Dtor);
-    RegisterRuntimeAddr  (0x1800b9a40ull,                                  (void*)&RtIo_Stream_Dtor);
     RegisterRuntimeExport("??1ParticleInstance@Graphics@@UEAA@XZ",        (void*)&RtGraphics_ParticleInstance_Dtor);
     RegisterRuntimeAddr  (0x1801041f0ull,                                  (void*)&RtGraphics_ParticleInstance_Dtor);
-    return 4;
+    return 3;
 }

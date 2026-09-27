@@ -400,6 +400,10 @@ int Modification::Find(const RtSystem::Filename& path) const {
     return ours;
 }
 
+// ?_singleton@FileSystem@IO@@0PEAV12@EA (0x1801fc6a8) -- the class static
+// (ENDGAME B.3.9 IO, D7); RtIoPortInit redirects the minted row onto it.
+FileSystem* FileSystem::_singleton = nullptr;
+
 }  // namespace IO
 
 // ============================================================================

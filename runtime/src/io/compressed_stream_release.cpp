@@ -56,15 +56,6 @@ void ArrayDtor(uintptr_t addr, void* arr) {
     fn(arr);
 }
 
-// The Encoding's deleting destructor, 0x180006a10 — the same one
-// ~MemoryStream uses at its own +0x10.
-void EncodingDelete(void* enc) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180006a10));
-    fn(enc);
-}
-
 inline uint8_t* U8(void* p) { return static_cast<uint8_t*>(p); }
 
 }  // namespace
@@ -140,39 +131,11 @@ extern "C" void RtIo_CompressedStream_Release(CompressedStream* self) {
 
 }
 
-// ============================================================================
-// ??1CompressedStream@IO@@UEAA@XZ                            retail 0x1800aa650
-// ============================================================================
-// NOTE THE VTABLE: this stamps **0x180155640**, not the 0x180155560 that
-// `ReadPackfile` stamps onto its stack object. That is a third, independent
-// confirmation of §48 — 0x180155560 is the CompressedMemoryStream table and
-// 0x180155640 is CompressedStream's own. Had they been one object, one of the
-// two stamps would have to be wrong.
-//
-// The tail `if (_encoding) delete _encoding` is a TAIL JUMP in retail
-// (0x1800aa6ac `JMP 0x180006a10`), so the Encoding delete happens after this
-// frame is gone. Reproduced as a call, which is observationally identical here
-// because nothing follows it.
-extern "C" void RtIo_CompressedStream_Dtor(CompressedStream* self) {
-
-    uint8_t* const base = reinterpret_cast<uint8_t*>(self);
-
-    *reinterpret_cast<uintptr_t*>(base) =
-        ResolveAddr(Module::Runtime, 0x180155640);           // 1800aa666/66d
-
-    RtIo_CompressedStream_Release(self);                     // 1800aa670
-
-    ArrayDtor(0x180024aa0, base + 0x50);                     // 1800aa67a
-    ArrayDtor(0x1800249c0, base + 0x40);                     // 1800aa684
-    ArrayDtor(0x1800248e0, base + 0x30);                     // 1800aa68e
-
-    *reinterpret_cast<uintptr_t*>(base) =
-        ResolveAddr(Module::Runtime, 0x1801549a0);           // 1800aa694/69b
-
-    void* const enc = *reinterpret_cast<void**>(base + 0x10);
-    if (enc) EncodingDelete(enc);                            // 1800aa69e..6ac
-
-}
+// ENDGAME B.3.9 IO (W2): the ??1CompressedStream door (0x1800aa650) that
+// stood here -- vptr stamps of 0x180155640 and 0x1801549a0 by address around
+// the body below -- is gone with the minted CompressedStream row and its
+// RT_DELDTOR row, its last callers. The body is the class destructor below
+// plus ~Stream (the encoding free), run by the compiler.
 
 }  // namespace RtIo
 
@@ -181,8 +144,7 @@ extern "C" void RtIo_CompressedStream_Dtor(CompressedStream* self) {
 // ============================================================================
 // The class's own destructor: the middle of 0x1800aa650 (Release, then the
 // three Array destructors in retail's order). The compiler's epilogue runs
-// ~Stream, which frees the encoding -- the door's tail above. The door itself
-// is unchanged: it still serves raw callers on the minted rows (W2).
+// ~Stream, which frees the encoding.
 IO::CompressedStream::~CompressedStream() {
     auto* const pod = reinterpret_cast<RtIo::CompressedStream*>(this);
     uint8_t* const base = reinterpret_cast<uint8_t*>(this);
@@ -202,10 +164,6 @@ int RtIoCompressedStreamReleaseRegister() {
     RegisterRuntimeExport("?Release@CompressedStream@IO@@QEAAXXZ",
                           (void*)&RtIo_CompressedStream_Release); ++n;
     RegisterRuntimeAddr(0x1800aa100, (void*)&RtIo_CompressedStream_Release);
-
-    RegisterRuntimeExport("??1CompressedStream@IO@@UEAA@XZ",
-                          (void*)&RtIo_CompressedStream_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800aa650, (void*)&RtIo_CompressedStream_Dtor);
 
     printf("[RtPort]   IO::CompressedStream Release/dtor (lane PKG2 rung 4b-iii, "
                 "lane W's rows): %d exports registered\n", n);
