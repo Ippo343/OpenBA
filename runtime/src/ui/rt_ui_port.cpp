@@ -147,15 +147,10 @@ extern int RtUiStringTableFactoryRegister(); // stringtable_factory.cpp (FACTORY
 // passes above -- one class, one cutover wall. These are not vtable slots; the
 // row was already 9/9 before this wave.
 extern int RtUiStringTableLifecycleDtorRegister(); // stringtable_lifecycle.cpp (MISC)
-// WAVE 28 lane FACTUI1: the `?CreateNewObject@`/`?CreateInPlaceObject@` pair for
-// the 31 UI classes of the absent-factory roster sorting strictly before
-// `ImageDescription`, plus the 14 out-of-line constructors they call. It must
-// register BEFORE RtDataMintInit(), which is
-// why it lives here: standalone/resolve_standalone.cpp:333 (RtUiPortInit)
-// precedes :406 (the mint). See docs/runtime_port/WAVE28_LANE_FACTUI1.md.
-extern int RtUiFactory1Register();         // factory_ui1.cpp (lane FACTUI1)
-// (WAVE 28 lane FACTUI2's ui_factory_wave28.cpp is gone: ENDGAME B.3.9 UI-D
-// moved its last row, SpriteSheet's, onto the class's own statics.)
+// (WAVE 28 lanes FACTUI1 / FACTUI2 -- factory_ui1.cpp + factory_ui1_tables.inc
+// and ui_factory_wave28.cpp -- are gone: ENDGAME B.3.9 moved every row onto
+// the class's own CreateNewObject / CreateInPlaceObject statics, registered by
+// each class's file from RtUiPortInit, still before RtDataMintInit().)
 
 // 2026-09-12, VTABLE BATCH 3 - the UI::*Element widget runtime, first half.
 // Thirteen classes, one file each (runtime/src/ui/<class>element.cpp), each
@@ -258,7 +253,6 @@ void RtUiPortInit() {
     n += RtUiLabelDescriptionRegister();
     n += RtUiStringTableFactoryRegister();
     n += RtUiStringTableLifecycleDtorRegister();  // same switch (MISC)
-    n += RtUiFactory1Register();
     n += RtUiImageElementRegister();          // vtable batch 3 (UI::*Element)
     n += RtUiAnimatedImageElementRegister();
     n += RtUiBorderElementRegister();
@@ -284,7 +278,6 @@ void RtUiPortInit() {
     extern int RtUiCursorRegister();               // cursor.cpp
     extern int RtUiSpriteCaptureClassRegister();   // spritecapture_class.cpp
     extern int RtUiFontRegister();                 // font.cpp
-    extern int RtUiDescriptionDtorsRegister();     // description_dtors.cpp
     extern int RtUiDocumentTextRegister();         // documenttext.cpp
     extern int RtUiSpriteContextAddRegister();     // spritecontext_add.cpp
     extern int RtUiElementBodiesB5Register();      // element_bodies_b5.cpp
@@ -297,7 +290,6 @@ void RtUiPortInit() {
     n += RtUiCursorRegister();               // UI::Cursor, whole class
     n += RtUiSpriteCaptureClassRegister();   // UI::SpriteCapture vtable + Draw
     n += RtUiFontRegister();                 // UI::Font, whole class + metrics
-    n += RtUiDescriptionDtorsRegister();     // 26 ??1<Class>@UI@@ destructors
     n += RtUiDocumentTextRegister();         // UI::DocumentTextElement pipeline
     n += RtUiSpriteContextAddRegister();     // SpriteContext AddSprite x3 + AddFont
     n += RtUiElementBodiesB5Register();      // assorted *Element / *Description

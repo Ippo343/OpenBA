@@ -2,10 +2,9 @@
 // tests/unit/rb_ui_abi_test.cpp — ENDGAME B.3.8 block RB, the UI Runtime bases
 //
 // B38_RULES D1 / RULE B8-1: a Runtime base that an exe class derives from gets
-// a REAL constructor whose body is ONE body with its ctor DOOR (`InitFields`,
-// reached by the door through `X::DoorBody::Init` after the door stamped the
-// MINTED table), and a destructor sharing `ReleaseFields` with its dtor door.
-// What this file pins, on the shipped headers:
+// a REAL constructor whose body is `InitFields`, and a destructor whose body is
+// `ReleaseFields` (the ctor / dtor doors that shared them were retired by
+// ENDGAME B.3.9 UI-D). What this file pins, on the shipped headers:
 //
 // PART A — STAMP ORDER. A test subclass's construction runs the shared body
 //   while the object carries the BASE's compiler table (the compiler stamped
@@ -13,10 +12,8 @@
 //   subclass's table; destruction runs `ReleaseFields` with the base's table
 //   restamped. That is retail's order: `CALL ??0Internal`, `MOV [RBX],??_7X`,
 //   body; and on the way out `MOV [RBX],??_7X`, body, `~Internal`.
-// PART B — THE DOOR REACHES THE SAME BODY. A raw buffer stamped with a stand-in
-//   "minted" table and handed to `DoorBody::Init` / `::Release` runs the very
-//   same member with that table in place, with the same arguments, and leaves
-//   the same bytes as the constructor.
+// PART B — (ENDGAME B.3.9 UI-D) the doors are retired; Element's and
+//   ElementDescription's own slot 0, both arms.
 // PART C — RETAIL BODIES THAT ARE INLINE, checked byte for byte: the
 //   DialogInstance default ctor (0x180114ca0), DialogController's
 //   (0x1800cd320, three zero stores, +0x28 untouched), DialogControllerConfig's
@@ -85,9 +82,6 @@ struct Seen {
     int32_t     flags = 0;
 };
 Seen g_di, g_el, g_ed;
-
-// A stand-in for a MINTED table: any address that is not a compiler table.
-const void* const kFakeMinted[4] = {};
 
 }  // namespace
 
@@ -257,32 +251,64 @@ UNIT_TEST(rb_elementdescription_ctor_dtor_run_shared_bodies_under_base_table) {
 }
 
 // ===========================================================================
-// PART B — the door reaches the same body with the MINTED table in place
+// PART B — ENDGAME B.3.9 UI-D: the ctor / dtor doors of DialogInstance,
+// Element and ElementDescription are retired with their minted tables, so the
+// door-vs-ctor comparisons went with them. What replaces them for the two
+// abstract bases: their OWN slot 0 (the retired RT_DELDTOR rows), both arms,
+// through a probe that declares no DeletingDtor of its own.
 // ===========================================================================
-// (ENDGAME B.3.9 UI-D: DialogInstance's ctor / dtor doors are retired, so
-// its door-vs-ctor comparison went with them; PART A still pins the body's
-// stamp order through the real constructor.)
+struct B39ElProbe final : UI::Element {
+    void ComputeSize() override {}
+};
+struct B39EdProbe final : UI::ElementDescription {
+    Object::External* Reconstruct() override { return this; }
+    void Destruct() override {}
+    Object::InternalPtr<UI::Element>* CreateInstance(
+            Object::InternalPtr<UI::Element>* ret, const UI::Dialog*) const override {
+        return ret;
+    }
+};
+static_assert(sizeof(B39ElProbe) == 0xc0, "the vector arm's stride is sizeof(Element)");
+static_assert(sizeof(B39EdProbe) == 0x68, "the vector arm's stride is sizeof(ElementDescription)");
 
-UNIT_TEST(rb_element_and_description_doors_reach_the_same_body) {
-    alignas(8) unsigned char raw[sizeof(UI::Element)] = {};
-    *reinterpret_cast<const void**>(raw) = kFakeMinted;
+UNIT_TEST(b39_uid_element_slot0_both_arms) {
+    FactoryScope scope;
+    // scalar arm, flag 0: destruct only
+    alignas(8) unsigned char one[sizeof(B39ElProbe)];
+    B39ElProbe* e = ::new (static_cast<void*>(one)) B39ElProbe();
     g_el = Seen{};
-    UI::Element::DoorBody::Init(reinterpret_cast<UI::Element*>(raw));
-    CHECK_EQ(g_el.initCalls, 1);
-    CHECK(g_el.initVptr == static_cast<const void*>(kFakeMinted));
-    UI::Element::DoorBody::Release(reinterpret_cast<UI::Element*>(raw));
+    CHECK(e->UI::Element::DeletingDtor(0) == e);
     CHECK_EQ(g_el.releaseCalls, 1);
-    CHECK(g_el.releaseVptr == static_cast<const void*>(kFakeMinted));
+    CHECK(g_el.releaseVptr == ElVt());
 
-    alignas(8) unsigned char rawD[sizeof(UI::ElementDescription)] = {};
-    *reinterpret_cast<const void**>(rawD) = kFakeMinted;
+    // vector arm, flag 2: the count at this-8, destroyed from the top down
+    alignas(8) unsigned char arr[8 + 2 * sizeof(B39ElProbe)];
+    std::memset(arr, 0, sizeof arr);
+    *reinterpret_cast<int32_t*>(arr) = 2;
+    B39ElProbe* a0 = ::new (static_cast<void*>(arr + 8)) B39ElProbe();
+    ::new (static_cast<void*>(arr + 8 + sizeof(B39ElProbe))) B39ElProbe();
+    g_el = Seen{};
+    CHECK(static_cast<void*>(a0->UI::Element::DeletingDtor(2)) == static_cast<void*>(arr));
+    CHECK_EQ(g_el.releaseCalls, 2);
+}
+
+UNIT_TEST(b39_uid_elementdescription_slot0_both_arms) {
+    alignas(8) unsigned char one[sizeof(B39EdProbe)];
+    B39EdProbe* d = ::new (static_cast<void*>(one)) B39EdProbe();
     g_ed = Seen{};
-    UI::ElementDescription::DoorBody::Init(reinterpret_cast<UI::ElementDescription*>(rawD));
-    CHECK_EQ(g_ed.initCalls, 1);
-    CHECK(g_ed.initVptr == static_cast<const void*>(kFakeMinted));
-    CHECK_EQ(D(reinterpret_cast<UI::ElementDescription*>(rawD), 0x3c), 0xFFFFFFFFu);
-    UI::ElementDescription::DoorBody::Release(reinterpret_cast<UI::ElementDescription*>(rawD));
+    CHECK(d->UI::ElementDescription::DeletingDtor(0) == d);
     CHECK_EQ(g_ed.releaseCalls, 1);
+    CHECK(g_ed.releaseVptr == EdVt());
+
+    alignas(8) unsigned char arr[8 + 3 * sizeof(B39EdProbe)];
+    std::memset(arr, 0, sizeof arr);
+    *reinterpret_cast<int32_t*>(arr) = 3;
+    B39EdProbe* a0 = ::new (static_cast<void*>(arr + 8)) B39EdProbe();
+    for (int i = 1; i < 3; ++i)
+        ::new (static_cast<void*>(arr + 8 + i * sizeof(B39EdProbe))) B39EdProbe();
+    g_ed = Seen{};
+    CHECK(static_cast<void*>(a0->UI::ElementDescription::DeletingDtor(2)) == static_cast<void*>(arr));
+    CHECK_EQ(g_ed.releaseCalls, 3);
 }
 
 // ===========================================================================

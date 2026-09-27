@@ -303,7 +303,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180020ce0, 0x1800a5520, 0x0e0, "Graphics::ParticleSystemInstance"),
     RT_DELDTOR(0x1800244a0, 0x1800a9560, 0x098, "IO::CompressedMemoryStream"),
     RT_DELDTOR(0x180031900, 0x1800dddb0, 0x028, "Engine::UpdateLoop"),
-    RT_DELDTOR(0x180035c10, 0x1801161a0, 0x0c0, "UI::Element"),
     RT_DELDTOR(0x18004d4f0, 0x1800dc170, 0x048, "Engine::LoaderLoop"),
     RT_DELDTOR(0x18004d670, 0x1800db060, 0x188, "Engine::DialogLoaderLoopT"),
     RT_DELDTOR(0x18004d8b0, 0x1800db340, 0x168, "Engine::DialogLoopT"),
@@ -813,7 +812,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // at +0x60 and chains to ~External. Run over a fabricated subject that
     // decrements a refcount that was never incremented and frees a garbage
     // pointer. A probe subject must be SAFE TO RUN; this one is not.
-    RT_DELDTOR(0x180035350, 0x180116100, 0x068, "UI::ElementDescription"),
     // 2026-09-12: slot 0 of ??_7Material@Graphics@@6B@. ~Material 0x180102a00 is
     // ported in runtime/src/graphics/material.cpp; sizeof from the
     // eh_vector_destructor_iterator call in 0x180011d20 (0x38).
@@ -1253,10 +1251,6 @@ void* RtDelDtor_CompressedMemoryStream(void* self, unsigned flags) {
 void* RtDelDtor_UpdateLoop(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180031900>());
 }
-// UI::Element              ~Element = 0x1801161a0  (PORTED, ui/element.cpp; this note was stale)
-void* RtDelDtor_Element(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180035c10>());
-}
 // Engine::LoaderLoop       ~LoaderLoop = 0x1800dc170  (PORTED, BATCH 8)
 void* RtDelDtor_LoaderLoop(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18004d4f0>());
@@ -1362,10 +1356,6 @@ void* RtDelDtor_Light(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180058dd0>());
 }
 
-// UI::ElementDescription   ~ElementDescription = 0x180116100  (PORTED)  [Wave 27 IOTEXT]
-void* RtDelDtor_ElementDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180035350>());
-}
 
 // Graphics::Material        ~Material = 0x180102a00  (PORTED, material.cpp)
 void* RtDelDtor_Material(void* self, unsigned flags) {
@@ -1542,7 +1532,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180020ce0, (void*)&RtDelDtor_ParticleSystemInstance);
     RegisterRuntimeAddr(0x1800244a0, (void*)&RtDelDtor_CompressedMemoryStream);
     RegisterRuntimeAddr(0x180031900, (void*)&RtDelDtor_UpdateLoop);
-    RegisterRuntimeAddr(0x180035c10, (void*)&RtDelDtor_Element);
     RegisterRuntimeAddr(0x18004d4f0, (void*)&RtDelDtor_LoaderLoop);
     RegisterRuntimeAddr(0x18004d670, (void*)&RtDelDtor_DialogLoaderLoopT);
     RegisterRuntimeAddr(0x18004d8b0, (void*)&RtDelDtor_DialogLoopT);
@@ -1569,7 +1558,6 @@ void RtObjectDeletingDtorPortInit() {
 
     RegisterRuntimeAddr(0x180058dd0, (void*)&RtDelDtor_Light);                 // Wave 27 GFXPART
 
-    RegisterRuntimeAddr(0x180035350, (void*)&RtDelDtor_ElementDescription);    // Wave 27 IOTEXT
     RegisterRuntimeAddr(0x180011d20, (void*)&RtDelDtor_Material);
     RegisterRuntimeAddr(0x18004efb0, (void*)&RtDelDtor_VideoProgram);
     RegisterRuntimeAddr(0x18004e000, (void*)&RtDelDtor_VertexLayout);

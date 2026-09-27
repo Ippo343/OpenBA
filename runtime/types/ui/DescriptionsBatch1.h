@@ -17,9 +17,10 @@
 //
 //   (a) `MOV EDX,<size>` in the class's vector deleting destructor, the
 //       eh_vector_destructor_iterator stride;
-//   (b) the `Allocate(<size>, 8)` in `?CreateNewObject@<Class>@UI@@`, already
-//       transcribed in runtime/src/ui/factory_ui1_tables.inc (and, for
-//       LabelDescription, runtime/src/ui/ui_factory_wave28.cpp).
+//   (b) the `Allocate(<size>, 8)` in `?CreateNewObject@<Class>@UI@@`, first
+//       transcribed by the FACTUI1 / FACTUI2 rows (factory_ui1_tables.inc,
+//       ui_factory_wave28.cpp; both deleted by ENDGAME B.3.9 UI-D) and now
+//       each class's own `CreateNewObject` (`sizeof(X)`).
 //
 //   class                      deldtor            (a)    factory row  (b)
 //   BorderDescription          0x180040ff0 +0x1f  0xb8   0x180040ad0  0xb8

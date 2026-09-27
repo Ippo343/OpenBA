@@ -111,9 +111,6 @@ inline void CallSlot0(void* self, unsigned flag) {
 // published the symbol is retried rather than frozen as null.
 inline void* VtBase()     { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
 inline void* VtExternal() { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-inline void* VtElementDescription() {
-    return RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@");
-}
 // A class's OWN vtable and BaseTypeInfo are resolved in that class's own file,
 // through RT_DATA_SLOT. They are deliberately NOT wrapped in a helper here:
 // RT_DATA_SLOT's cache is one static per EXPANSION, so a single shared helper
@@ -191,11 +188,7 @@ inline void AttachAndPushChild(uint8_t* parent, void** made) {
     MarkNeedsSizeCalc(parent);
 }
 
-// ---- the two base-class entry points every CreateInstance goes through -----
-inline void* ElementCtor(void* raw) {
-    using ElementCtorFn = void* (*)(void*);
-    return RtAddr<ElementCtorFn>(0x180115e50ull)(raw);   // ??0Element@UI@@QEAA@XZ
-}
+// ---- the base-class entry point every CreateInstance goes through ---------
 // ?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z
 // (0x180115ad0). Fragment pass F2 defined the member (dialog.cpp): a direct
 // QUALIFIED call instead of the by-address door. Kept for the callers whose

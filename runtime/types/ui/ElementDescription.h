@@ -177,11 +177,8 @@ static_assert(sizeof(ElementDescription) == 0x68,
 // the ctor, so a full-buffer comparison is legitimate here.
 constexpr size_t kElementDescriptionSize = sizeof(ElementDescription);
 
-// The three vtables the ctor stamps, in the order it stamps them. Exported, so
-// the port resolves them by name instead of minting a table (WAVE7.md fact 2).
-constexpr const char* kVtblBase               = "??_7Base@Object@@6B@";               // 0x180154788
-constexpr const char* kVtblExternal           = "??_7External@Object@@6B@";           // 0x1801547a0
-constexpr const char* kVtblElementDescription = "??_7ElementDescription@UI@@6B@";     // 0x1801561c0
+// (The three vtable-name constants the ctor door stamped -- Base, External,
+// ElementDescription -- were retired with that door, ENDGAME B.3.9 UI-D.)
 
 }  // namespace RtUI
 
@@ -216,23 +213,19 @@ constexpr const char* kVtblElementDescription = "??_7ElementDescription@UI@@6B@"
 // There is NO `Construct` on this class: the 27 leaves introduce it at slot 9,
 // BEHIND `CreateInstance` (RULE B6-1.1).
 //
-// ABSTRACT (slots 0, 6, 7, 8 pure). Nothing holds one by value as a C++
-// member — `DescriptionsBatch1.h` / `GroupDescription.h` embed the
-// `RtUI::ElementDescription` POD above, which is why the POD stays (B4b-1) —
-// and every live one is built by the `??0ElementDescription` DOOR
-// (dialog.cpp) and wears the MINTED table. Hence qualified delegation in
-// every door. ENDGAME B.3.8 block RB gave the class its REAL protected ctor
-// and non-virtual dtor, each ONE body with its door (`InitFields` /
-// `ReleaseFields`), for the two exe subclasses of step 8.
+// ABSTRACT (slots 6, 7, 8 pure). Every live one is a leaf description built
+// by its real constructor and wearing its COMPILER table (ENDGAME B.3.9 UI-D
+// retired the minted `??_7ElementDescription@UI@@6B@`, its RT_DELDTOR row,
+// the ??0 / ??1 doors and the slot doors). The REAL protected ctor and
+// non-virtual dtor (B.3.8 block RB) have the private `InitFields` /
+// `ReleaseFields` as bodies. Slot 0 is the class's own vector deleting dtor.
 //
 // WHERE THE BODIES ARE. `Serialize` moved into the member
 // (elementdescription_serialize.cpp). `TypeName`, `Type`, `GetFileVersion`,
 // `InitFields`/`ReleaseFields` and the non-virtual `CreateInstance(InternalPtr<Element>*)`
-// are members defined in `runtime/src/ui/dialog.cpp` (fragment pass F2); the
-// registered doors there delegate QUALIFIED. The ctor/dtor doors stay doors
-// (B4b-2). Defining `TypeName` (the key function) emits this class's vtable
-// in dialog.cpp; nothing constructs one with it (every live description wears
-// the minted table).
+// are members defined in `runtime/src/ui/dialog.cpp` (fragment pass F2).
+// Defining `TypeName` (the key function) emits this class's vtable in
+// dialog.cpp.
 //
 // A NAME-HIDING TRAP FOR THE LEAF BLOCKS. Retail has TWO `CreateInstance`s on
 // this class: the pure slot-8 virtual and the non-virtual
@@ -260,7 +253,21 @@ public:
     enum Alignment : int32_t {};
 
     // ---- the nine slots, in measured order ---------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180035350
+    // [0] 0x180035350 — MSVC's VECTOR deleting destructor, both arms exactly
+    // as the retired RT_DELDTOR row ran them (`MOV EDX,0x68`).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<ElementDescription*>(self + static_cast<int64_t>(i) * 0x68)->~ElementDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~ElementDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x1800350f0  dialog.cpp
     uint32_t    Type() const override;                            // [2] 0x1800350d0  dialog.cpp
     int32_t     GetFileVersion() const override;                  // [3] 0x180116af0  dialog.cpp
@@ -282,30 +289,21 @@ public:
     ElementDescription(const ElementDescription& src);            // 0x180035120  not ported
     ElementDescription& operator=(const ElementDescription& src); // 0x180035210  not ported
 
-    // Reflection statics. `_typeInfo` is the MINTED record; none is defined here.
-    static uint32_t TypeId();                                     // 0x1800350e0  not ported
-    static Object::Base* CreateNewObject();                       // 0x180035100  not ported
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180035110  not ported
-
-    // The doors' way onto the shared bodies (ENDGAME B.3.8 block RB, B38_RULES
-    // D1): `RtUiElementDescription_Ctor` / `_Dtor` (dialog.cpp) stamp the
-    // MINTED tables and run the External halves themselves, for the
-    // still-unconverted subclasses, then call these. Nothing else may.
-    struct DoorBody {
-        static void Init(ElementDescription* d)    { d->InitFields(); }
-        static void Release(ElementDescription* d) { d->ReleaseFields(); }
-    };
+    // Reflection statics. `_typeInfo` is the MINTED record TypeId reads.
+    static uint32_t TypeId();                                     // 0x1800350e0  dialog.cpp
+    // Abstract: retail's pair is `xor eax,eax; ret` (dialog.cpp).
+    static Object::Base* CreateNewObject();                       // 0x180035100  dialog.cpp
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x180035110  dialog.cpp
 
 protected:
     // `??0ElementDescription@UI@@QEAA@XZ` (0x180115a40) — the REAL constructor
     // (ENDGAME B.3.8 block RB, RULE B8-1): the compiler stamps Base ->
     // External -> ElementDescription where retail's three inlined stores are
     // and runs External() (retail inlines its three zero stores); the body is
-    // ONE body with the door `RtUiElementDescription_Ctor`.
+    // `InitFields`.
     ElementDescription() { InitFields(); }
     // `??1ElementDescription@UI@@UEAA@XZ` (0x180116100). NON-VIRTUAL; the
     // compiler restamps on entry and chains ~External (retail's tail JMP).
-    // ONE body with the door `RtUiElementDescription_Dtor`.
     ~ElementDescription() { ReleaseFields(); }
 
 private:

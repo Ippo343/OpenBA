@@ -150,8 +150,6 @@ constexpr size_t kElementSize = sizeof(Element);   // 0xC0, static_assert'd in t
 // under-count the lane, which is how Wave 3's Object count stood at 21/41 when
 // it was really 27/41 (reference_census_cannot_see_nonliteral_registrations.md).
 // ============================================================================
-const char* const kCtor         = "??0Element@UI@@QEAA@XZ";
-const char* const kDtor         = "??1Element@UI@@UEAA@XZ";
 const char* const kAddChild     = "?AddChild@Element@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@@Z";
 const char* const kChild        = "?Child@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@H@Z";
 const char* const kChildCount   = "?ChildCount@Element@UI@@QEBAHXZ";
@@ -204,17 +202,6 @@ const char* const kAdjustUL     = "?AdjustUpperLeft@Element@UI@@QEAAXHH@Z";
 // profilers (reference_rtoriginal_is_getprocaddress.md).
 // ============================================================================
 
-// ??0Internal@Object@@QEAA@XZ — the base ctor Element::Element calls first
-// (retail 0x1800bfd10). It stamps ??_7Base@Object@@6B@ then
-// ??_7Internal@Object@@6B@, writes the handle pair at +0x08/+0x0c, and
-// REGISTERS the object in Object::InternalFactory::_singleton.
-using InternalCtorFn = void* (*)(void*);
-InternalCtorFn ObjectInternalCtor() {
-    static InternalCtorFn fn =
-        reinterpret_cast<InternalCtorFn>(ResolveExport("??0Internal@Object@@QEAA@XZ"));
-    return fn;
-}
-
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z (0x1800c7ad0) — the static,
 // null-safe free the String release path calls. Resolved by name, so the
 // allocator port is what runs.
@@ -222,14 +209,9 @@ InternalCtorFn ObjectInternalCtor() {
 // B.3.6 (RULE B6-5): the MEMBER bodies below reach it through a namespace-
 // scope std::atomic slot (`rtuielem::AtomicExport`) rather than a function-
 // local static, because UI is constructed on the loader thread while the main
-// thread draws. `MemFree()` itself keeps its old static for the two DOORS
-// (ctor/dtor) that are not moved in step 6.
+// thread draws. (ENDGAME B.3.9 UI-D: the static-cached `MemFree()` went with
+// the ctor / dtor doors; ~Element uses the atomic slot too.)
 using MemFreeFn = void (*)(void*);
-MemFreeFn MemFree() {
-    static MemFreeFn fn =
-        reinterpret_cast<MemFreeFn>(ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-    return fn;
-}
 std::atomic<void*> g_memFreeSlot{nullptr};
 MemFreeFn MemFreeAtomic() {
     return reinterpret_cast<MemFreeFn>(rtuielem::AtomicExport(
@@ -262,13 +244,6 @@ const char* const kGetAlignedStatic =
 // (Element.h, +0xa0), and 0x180076900 is `kSpec_Fill8Z`, trait-equivalent for
 // `Element*` (dialog_create.cpp's banner has the full spec comparison), so
 // `AddChild` below calls `.SetSizeFill()` on the member directly.
-
-// The exported data symbol the ctor stamps. Resolved by NAME, so our objects
-// and the DLL's carry the identical vtable pointer.
-void* ElementVTable() {
-    static void* vt = ResolveExport("??_7Element@UI@@6B@");
-    return vt;
-}
 
 // The two Object::BaseTypeInfo statics SetOffsets reads. Their FIRST DWORD is
 // the type id; retail loads it as `MOV EDX,[0x1801f9d68]`.
@@ -331,70 +306,11 @@ void Element::SetNeedsSizeCalc() {
 // restoring it.
 
 // ---- ??0Element@UI@@QEAA@XZ  0x180115e50 -----------------------------------
-// Returns `this` in RAX, as MSVC ctors do.
-//
-// The base ctor is CALLED, not reimplemented. `Object::Internal::Internal`
-// registers the object in the global handle table; reproducing that here would
-// mean this lane owned the handle-table protocol, which is Wave 3's. Calling it
-// also keeps the vtable stamping ORDER retail has: ??_7Base, then ??_7Internal,
-// then ??_7Element.
-//
-// FIELDS THE CTOR DOES NOT WRITE: +0x54, +0x60, +0x64, +0x7c, +0x8c. Retail
-// leaves them holding whatever the allocator returned, and so do we — writing
-// them would be a divergence, and comparing them would be the Wave 6 mistake of
-// diffing bytes neither side wrote
-// (reference_oracle_must_not_compare_unwritten_bytes.md).
-void* RtUi_Element_Ctor(Element* self) {
-
-    InternalCtorFn base = ObjectInternalCtor();
-    if (base) base(self);
-
-    // The vptr store. `UI::Element` is a real polymorphic class now, so the
-    // pointer has no field name; the door stamps the MINTED table exactly as
-    // before (B4b-2: this stays a door, it is not a C++ constructor).
-    *reinterpret_cast<void**>(self) = ElementVTable();
-    // ENDGAME B.3.8 block RB (RULE B8-1): the field stores are ONE body with
-    // the real constructor `UI::Element::Element()` — `InitFields`, in the
-    // member section below.
-    UI::Element::DoorBody::Init(self);
-
-    // ---- BUILD ORACLE ------------------------------------------------------
-    // A ctor cannot be replayed onto a copy of the object it just built: the
-    // second run would register a SECOND handle in
-    // Object::InternalFactory::_singleton pointing at our scratch buffer, and
-    // that entry would dangle the moment the buffer is reused.
-    //
-    // So instead: let the DLL BUILD ITS OWN object in the scratch, compare the
-    // two byte for byte, and then DESTROY the scratch with the DLL's own dtor
-    // so its handle is unregistered again. On a freshly constructed Element
-    // that dtor is a sequence of no-ops (no name, no tooltip string, no border,
-    // empty child array), so it cleans up the handle and nothing else.
-    //
-    // Excluded from the comparison, with the reason for each:
-    //   +0x00        the VTABLE POINTER. WAVE 10B LANE ELEM. Both ctors write
-    //                it and they write DIFFERENT VALUES ON PURPOSE the moment
-    //                `??_7Element@UI@@6B@` is a promoted mint row: ours writes
-    //                the table our tree publishes, theirs writes the DLL's.
-    //                That disagreement IS the promotion, so comparing the field
-    //                reports a permanent divergence for a correct port — the
-    //                shape reference_oracle_must_not_compare_unwritten_bytes.md
-    //                warns about, one step over (a field both sides write, that
-    //                they are *required* to write differently).
-    //                Measured, not predicted: with the minted
-    //                ??_7Element@UI@@6B@ row this site reported exactly one
-    //                DIVERGENCE, at +0x0, ours=<exe .data> theirs=<Runtime
-    //                .rdata>, and nothing else in the run changed.
-    //                NOTHING IS LOST BY EXCLUDING IT: the field is checked
-    //                immediately below by its own predicate. That check is a
-    //                SELF-CHECK, not an oracle — it asks "did the ctor write
-    //                the table this tree publishes", which is the invariant —
-    //                and it still catches the two ways this field actually
-    //                breaks (a null resolve, and a stale cached pointer).
-    //   +0x08, +0x0c  the handle index/id — necessarily different for two
-    //                distinct live objects; that they differ is correct.
-    //   +0x54, +0x60, +0x64, +0x7c, +0x8c  never written by either ctor.
-    return self;
-}
+// ENDGAME B.3.9 UI-D: the ctor door `RtUi_Element_Ctor` and its build
+// oracle are retired with the minted table. The real constructor
+// (Element.h) runs ??0Internal through the compiler's chain and stamps the
+// class's own table; its body is `InitFields` below. +0x54, +0x60, +0x64,
+// +0x7c and +0x8c stay unwritten, as retail leaves them.
 
 // ============================================================================
 // Member bodies, moved from their doors by ENDGAME B.3.6 block A
@@ -775,9 +691,9 @@ void Element::SetUserData(Object::Base* userData) {
 }
 
 // ---- ??0Element@UI@@QEAA@XZ 0x180115e50 MINUS ??0Internal and the vptr store
-// ENDGAME B.3.8 block RB (RULE B8-1): shared by `Element::Element()` (Element.h)
-// and the door `RtUi_Element_Ctor` above. Moved verbatim (`self->x` -> `x`);
-// +0x54, +0x60, +0x64, +0x7c, +0x8c stay unwritten, as the door's banner says.
+// The body of `Element::Element()` (Element.h); moved verbatim from the
+// retired door (`self->x` -> `x`). +0x54, +0x60, +0x64, +0x7c, +0x8c stay
+// unwritten.
 void Element::InitFields() {
     _name             = nullptr;
     _leftPad          = 0;
@@ -811,9 +727,9 @@ void Element::InitFields() {
 }
 
 // ---- ??1Element@UI@@UEAA@XZ 0x1801161a0 MINUS the restamp and the ~Internal tail
-// ENDGAME B.3.8 block RB (RULE B8-1): shared by `Element::~Element()`
-// (Element.h) and the door `RtUi_Element_Dtor`. Moved verbatim (`self->x` ->
-// `x`); the evidence is the door's banner.
+// The body of `Element::~Element()` (Element.h); moved verbatim from the
+// retired door `RtUi_Element_Dtor` (`self->x` -> `x`); the evidence is the
+// banner that stands where that door was.
 void Element::ReleaseFields() {
 
     // 0x180115570 RemoveChildren — a member since fragment pass F1 (body in
@@ -853,7 +769,7 @@ void Element::ReleaseFields() {
     if (char* p = reinterpret_cast<char*>(_toolTipString)) {
         if (--RtSystem::StringRefCount(p) == 0) {
             _toolTipString = p - 8;
-            MemFreeFn freeFn = MemFree();
+            MemFreeFn freeFn = MemFreeAtomic();
             if (freeFn) freeFn(_toolTipString);
         } else {
             _toolTipString = nullptr;
@@ -862,7 +778,7 @@ void Element::ReleaseFields() {
     if (char* p = reinterpret_cast<char*>(_name)) {
         if (--RtSystem::StringRefCount(p) == 0) {
             _name = p - 8;
-            MemFreeFn freeFn = MemFree();
+            MemFreeFn freeFn = MemFreeAtomic();
             if (freeFn) freeFn(_name);
         } else {
             _name = nullptr;
@@ -926,13 +842,8 @@ int RtUi_Element_ChildCount(const Element* self) {
     return self->UI::Element::ChildCount();
 }
 
-void RtUi_Element_ComputeLayout(Element* self, int x, int y, int w, int h) {
-    self->UI::Element::ComputeLayout(x, y, w, h);
-}
-
-void RtUi_Element_Draw(const Element* self, void* spriteContext, unsigned char alpha) {
-    self->UI::Element::Draw(*static_cast<UI::SpriteContext*>(spriteContext), alpha);
-}
+// (ENDGAME B.3.9 UI-D: the ComputeLayout / Draw slot doors are retired with
+// the minted table.)
 
 void* RtUi_Element_FindElement(Element* self, void** ret, const char* const* name) {
     new (static_cast<void*>(ret)) Object::InternalPtr<Element>(
@@ -1163,25 +1074,10 @@ void RtUi_ContainerElement_SetOffsets(Element* self, int x, int y) {
 //
 // Nothing in this file is evidence that the body is right; the evidence is the
 // disassembly transcribed above.
-void RtUi_Element_Dtor(Element* self) {
-    // Retail's vtable restamp. Resolved by name so our objects and the DLL's
-    // carry the identical pointer (the argument at the top of this file).
-    if (void* vt = ElementVTable()) *reinterpret_cast<void**>(self) = vt;
-
-    // ENDGAME B.3.8 block RB (RULE B8-1): everything between the restamp and
-    // the ~Internal tail is ONE body with the real destructor
-    // `UI::Element::~Element()` — `ReleaseFields`, in the member section.
-    UI::Element::DoorBody::Release(self);
-
-    // 0x1800bfdb0 ~Internal — a TAIL CALL in retail, a normal call here. That
-    // is the one deliberate departure: it costs a stack frame and changes
-    // nothing the object can observe.
-    {
-        using Fn = void (*)(void*);
-        static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800bfdb0));
-        if (fn) fn(self);
-    }
-}
+// ENDGAME B.3.9 UI-D: the door `RtUi_Element_Dtor` that stood here is
+// retired with the minted table and its RT_DELDTOR row. The body above is
+// `UI::Element::~Element` (ReleaseFields); the restamp and the ~Internal
+// tail are the compiler's.
 
 // ---- ?AdjustUpperLeft@Element@UI@@QEAAXHH@Z  0x180115840  ord 1596 ---------
 //                                                        WAVE 9 LANE UIC
@@ -1236,6 +1132,10 @@ void Element::AdjustUpperLeft(int32_t dx, int32_t dy) {
 }
 }  // namespace UI
 
+// ?CreateNewObject@Element@UI@@SAPEAVBase@Object@@XZ  0x180035450
+// `xor eax,eax; ret`: the class is abstract, so its factory makes nothing.
+Object::Base* UI::Element::CreateNewObject() { return nullptr; }
+
 void RtUi_Element_AdjustUpperLeft(Element* self, int32_t dx, int32_t dy) {
     self->UI::Element::AdjustUpperLeft(dx, dy);
 }
@@ -1243,8 +1143,12 @@ void RtUi_Element_AdjustUpperLeft(Element* self, int32_t dx, int32_t dy) {
 int RtUiElementRegister() {
     int count = 0;
 
-    RegisterRuntimeExport("??0Element@UI@@QEAA@XZ", (void*)&RtUi_Element_Ctor); ++count;
-    RegisterRuntimeAddr(0x180115e50, (void*)&RtUi_Element_Ctor);
+    // ENDGAME B.3.9 UI-D: the ??0 / ??1 doors and the ComputeLayout / Draw
+    // slot doors went with the minted table. The factory is the class's own
+    // (abstract: `xor eax,eax; ret`).
+    RegisterRuntimeExport("?CreateNewObject@Element@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::Element::CreateNewObject); ++count;
+    RegisterRuntimeAddr(0x180035450, (void*)&UI::Element::CreateNewObject);
 
     RegisterRuntimeExport("?AddChild@Element@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@@Z", (void*)&RtUi_Element_AddChild); ++count;
     RegisterRuntimeAddr(0x180115df0, (void*)&RtUi_Element_AddChild);
@@ -1254,12 +1158,6 @@ int RtUiElementRegister() {
 
     RegisterRuntimeExport("?ChildCount@Element@UI@@QEBAHXZ", (void*)&RtUi_Element_ChildCount); ++count;
     RegisterRuntimeAddr(0x180035530, (void*)&RtUi_Element_ChildCount);
-
-    RegisterRuntimeExport("?ComputeLayout@Element@UI@@UEAAXHHHH@Z", (void*)&RtUi_Element_ComputeLayout); ++count;
-    RegisterRuntimeAddr(0x1801168d0, (void*)&RtUi_Element_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@Element@UI@@UEBAXAEAVSpriteContext@2@E@Z", (void*)&RtUi_Element_Draw); ++count;
-    RegisterRuntimeAddr(0x1801168f0, (void*)&RtUi_Element_Draw);
 
     RegisterRuntimeExport("?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z", (void*)&RtUi_Element_FindElement); ++count;
     RegisterRuntimeAddr(0x180115650, (void*)&RtUi_Element_FindElement);
@@ -1310,12 +1208,6 @@ int RtUiElementRegister() {
 
     RegisterRuntimeExport("?SetOffsets@ContainerElement@UI@@QEAAXHH@Z", (void*)&RtUi_ContainerElement_SetOffsets); ++count;
     RegisterRuntimeAddr(0x1800cc1e0, (void*)&RtUi_ContainerElement_SetOffsets);
-
-    // WAVE 9 LANE UIF: both Wave 7 hold-backs are now landed. RemoveChildren
-    // went in with Wave 9 lane B3 (runtime/src/ui/widgets_layout.cpp); the
-    // destructor is directly below.
-    RegisterRuntimeExport("??1Element@UI@@UEAA@XZ", (void*)&RtUi_Element_Dtor); ++count;
-    RegisterRuntimeAddr(0x1801161a0, (void*)&RtUi_Element_Dtor);
 
     // WAVE 9 LANE UIC: the enabling port for ?SetUpperLeft@DialogInstance@.
     // Exported (checked against the shipped export directory before this line
