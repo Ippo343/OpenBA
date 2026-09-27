@@ -26,8 +26,6 @@
 // Resolved helpers
 // ============================================================
 
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
 // FUN_1400019a0(InternalBasePtr*, serializer) -- serialize InternalBasePtr
 typedef void (*fn_IBP_Serialize_t)(void* ibp, void* serializer);
@@ -122,79 +120,6 @@ extern "C" void AmbientEmitterResize_Reimpl(void* arrayBase, int newCount) {
 }
 
 // ============================================================
-// AmbientEmitterComponent::Shutdown (vtable slot [3], 0x140042f30)
-// ============================================================
-// Serializes:
-//   1. Base Component_Serialize
-//   2. Serializer(version=1):
-//      - Vector3 at +0x28 (position)
-//      - count from +0x40, serialize it
-//      - If loading: resize array at +0x38
-//      - Loop: serialize (InternalBasePtr + uint + float) per entry (16 bytes each)
-//      - If version==0: resize from building data +0x30
-//   3. ~Serializer
-void AmbientEmitterComponent_Shutdown(AmbientEmitterComponent* self, void* stream) {
-    // InitFuncs had NO callers anywhere in the tree, so every pointer below was
-    // null for the whole process lifetime and this entire body was a silent
-    // no-op — it read ZERO bytes of a record the save does contain. That is a
-    // stream desync, and it stayed invisible because the save leg wrote nothing
-    // either. Resolve on entry, the way every other component's serialize does.
-    AmbientEmitterComponent_InitFuncs();
-    if (s_fn_Component_Serialize)
-        s_fn_Component_Serialize(self, stream);
-
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
-
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    // Serialize Vector3 at +0x28
-    reinterpret_cast<Math::Vector3*>(selfAddr + 0x28)->Serialize(serializer);   // B.3.1 bridge
-
-    // Read count from +0x40 into local, serialize it
-    uint32_t localCount = *(uint32_t*)(selfAddr + 0x40);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
-
-    // If loading (stream mode == 0), resize emitter array
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        if (s_fn_ResizeEmitterArray)
-            s_fn_ResizeEmitterArray((void*)(selfAddr + 0x38), (int)localCount);
-    }
-
-    // Serialize each emitter entry: InternalBasePtr(8) + uint(4) + float(4) = 16 bytes per entry
-    // Array base at +0x38 (ptr). Entries: float* pfVar4 starts at array+4
-    if ((int)localCount > 0 && s_fn_IBP_Serialize) {
-        void* arrayBase = *(void**)(selfAddr + 0x38);
-        // Each entry is 16 bytes. Loop pointer starts at +4 (the float field).
-        // Layout per entry: [uint(4)][InternalBasePtr(8, at +4)][float(4, at +12)]...
-        // Actually from decomp: pfVar4 starts at array+4, pfVar4+1 = IBP, pfVar4-1 = uint, pfVar4 = float
-        // pfVar4 = (float*)(array + 4), stride = 4 floats = 16 bytes
-        float* pfVar4 = (float*)((uintptr_t)arrayBase + 4);
-        for (uint32_t i = 0; i < localCount; i++) {
-            // Serialize InternalBasePtr at pfVar4+1 (offset +4 from pfVar4)
-            s_fn_IBP_Serialize((void*)(pfVar4 + 1), serializer);
-            // Serialize uint at pfVar4-1 (offset -4 from pfVar4)
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(pfVar4 - 1), nullptr);   // B.3.4 bridge
-            // Serialize float at pfVar4
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*pfVar4, nullptr);   // B.3.4 bridge
-            pfVar4 += 4; // advance 16 bytes
-        }
-    }
-
-    // Version-gated: if version==0, resize from building data
-    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
-    if (version == 0) {
-        void* building = GetBuildingData(self);
-        if (building && s_fn_ResizeEmitterArray) {
-            int buildingCount = *(int*)((uintptr_t)building + 0x30);
-            s_fn_ResizeEmitterArray((void*)(selfAddr + 0x38), buildingCount);
-        }
-    }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-}
-
-// ============================================================
 // Building ambient audio setup — clean reimpl of FUN_140042e10.
 // ============================================================
 // For each emitter entry (count at self+0x40, 0x10-byte entries in the array at
@@ -247,40 +172,11 @@ extern "C" void AmbientEmitterAudioSetup_Reimpl(void* self) {
 }
 
 // ============================================================
-// AmbientEmitterComponent::Draw (vtable slot [6], 0x140042ba0)
-// ============================================================
-// Gets building data via IsDerivedFrom(+0x18, DAT_1401c3e98).
-// Resizes emitter list from building[0x30].
-// If building[0x20] != 0, calls audio setup FUN_140042e10(self).
-void AmbientEmitterComponent_Draw(AmbientEmitterComponent* self) {
-    AmbientEmitterComponent_InitFuncs();
-    void* building = GetBuildingData(self);
-    if (!building) return;
-
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    // Resize emitter list to the building description's emitter count. Use the
-    // ported AmbientEmitterResize_Reimpl (not the resolved FUN_140001770) so this
-    // works in standalone, where 0x140001770 is not in the address registry.
-    int count = *(int*)((uintptr_t)building + 0x30);
-    AmbientEmitterResize_Reimpl((void*)(selfAddr + 0x38), count);
-
-    // If building has audio flag at +0x20, set up the 3D ambient emitters.
-    bool audioFlag = *(char*)((uintptr_t)building + 0x20) != '\0';
-
-    if (audioFlag) {
-        AmbientEmitterAudioSetup_Reimpl(self);
-    }
-}
-
-// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void AmbientEmitterComponent_InitFuncs() {
     if (s_initialized) return;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
 
     // Math::Vector3::Serialize is now the class member (was a Runtime export here;
     // before that it was wrongly pointed at exe 0x14014efd0 = FloorComponent_RegisterType,
@@ -302,8 +198,7 @@ void AmbientEmitterComponent_InitFuncs() {
     s_initialized = true;
 
 #ifdef _DEBUG
-    printf("[AmbientEmitterComponent] Funcs resolved: CompSerialize=%p\n",
-           (void*)s_fn_Component_Serialize);
+    printf("[AmbientEmitterComponent] Funcs resolved\n");
 #endif
 }
 
@@ -335,11 +230,105 @@ Object::Base* AmbientEmitterComponent::DeletingDtor(unsigned flags) {
 }
 
 // [3] 0x140042f30 — the body resolves its own helpers first.
-void AmbientEmitterComponent::Persist(void* stream) { AmbientEmitterComponent_Shutdown(this, stream); }
+// ============================================================
+// AmbientEmitterComponent::Shutdown (vtable slot [3], 0x140042f30)
+// ============================================================
+// Serializes:
+//   1. Base Component_Serialize
+//   2. Serializer(version=1):
+//      - Vector3 at +0x28 (position)
+//      - count from +0x40, serialize it
+//      - If loading: resize array at +0x38
+//      - Loop: serialize (InternalBasePtr + uint + float) per entry (16 bytes each)
+//      - If version==0: resize from building data +0x30
+//   3. ~Serializer
+void AmbientEmitterComponent::Persist(void* stream) {
+    // InitFuncs had NO callers anywhere in the tree, so every pointer below was
+    // null for the whole process lifetime and this entire body was a silent
+    // no-op — it read ZERO bytes of a record the save does contain. That is a
+    // stream desync, and it stayed invisible because the save leg wrote nothing
+    // either. Resolve on entry, the way every other component's serialize does.
+    AmbientEmitterComponent_InitFuncs();
+    Component::Persist(stream);   // retail's direct CALL 0x1401189b0
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+
+    uintptr_t selfAddr = (uintptr_t)this;
+
+    // Serialize Vector3 at +0x28
+    reinterpret_cast<Math::Vector3*>(selfAddr + 0x28)->Serialize(serializer);   // B.3.1 bridge
+
+    // Read count from +0x40 into local, serialize it
+    uint32_t localCount = *(uint32_t*)(selfAddr + 0x40);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
+
+    // If loading (stream mode == 0), resize emitter array
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+        if (s_fn_ResizeEmitterArray)
+            s_fn_ResizeEmitterArray((void*)(selfAddr + 0x38), (int)localCount);
+    }
+
+    // Serialize each emitter entry: InternalBasePtr(8) + uint(4) + float(4) = 16 bytes per entry
+    // Array base at +0x38 (ptr). Entries: float* pfVar4 starts at array+4
+    if ((int)localCount > 0 && s_fn_IBP_Serialize) {
+        void* arrayBase = *(void**)(selfAddr + 0x38);
+        // Each entry is 16 bytes. Loop pointer starts at +4 (the float field).
+        // Layout per entry: [uint(4)][InternalBasePtr(8, at +4)][float(4, at +12)]...
+        // Actually from decomp: pfVar4 starts at array+4, pfVar4+1 = IBP, pfVar4-1 = uint, pfVar4 = float
+        // pfVar4 = (float*)(array + 4), stride = 4 floats = 16 bytes
+        float* pfVar4 = (float*)((uintptr_t)arrayBase + 4);
+        for (uint32_t i = 0; i < localCount; i++) {
+            // Serialize InternalBasePtr at pfVar4+1 (offset +4 from pfVar4)
+            s_fn_IBP_Serialize((void*)(pfVar4 + 1), serializer);
+            // Serialize uint at pfVar4-1 (offset -4 from pfVar4)
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(pfVar4 - 1), nullptr);   // B.3.4 bridge
+            // Serialize float at pfVar4
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*pfVar4, nullptr);   // B.3.4 bridge
+            pfVar4 += 4; // advance 16 bytes
+        }
+    }
+
+    // Version-gated: if version==0, resize from building data
+    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
+    if (version == 0) {
+        void* building = GetBuildingData(this);
+        if (building && s_fn_ResizeEmitterArray) {
+            int buildingCount = *(int*)((uintptr_t)building + 0x30);
+            s_fn_ResizeEmitterArray((void*)(selfAddr + 0x38), buildingCount);
+        }
+    }
+
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+}
 
 // [6] 0x140042ba0 — dispatched by ComponentEntity_OnAddedPass at register time
 // (flags bit 0): size the emitter array and start the building's ambient sounds.
-void AmbientEmitterComponent::OnAdded() { AmbientEmitterComponent_Draw(this); }
+// ============================================================
+// AmbientEmitterComponent::Draw (vtable slot [6], 0x140042ba0)
+// ============================================================
+// Gets building data via IsDerivedFrom(+0x18, DAT_1401c3e98).
+// Resizes emitter list from building[0x30].
+// If building[0x20] != 0, calls audio setup FUN_140042e10(self).
+void AmbientEmitterComponent::OnAdded() {
+    AmbientEmitterComponent_InitFuncs();
+    void* building = GetBuildingData(this);
+    if (!building) return;
+
+    uintptr_t selfAddr = (uintptr_t)this;
+
+    // Resize emitter list to the building description's emitter count. Use the
+    // ported AmbientEmitterResize_Reimpl (not the resolved FUN_140001770) so this
+    // works in standalone, where 0x140001770 is not in the address registry.
+    int count = *(int*)((uintptr_t)building + 0x30);
+    AmbientEmitterResize_Reimpl((void*)(selfAddr + 0x38), count);
+
+    // If building has audio flag at +0x20, set up the 3D ambient emitters.
+    bool audioFlag = *(char*)((uintptr_t)building + 0x20) != '\0';
+
+    if (audioFlag) {
+        AmbientEmitterAudioSetup_Reimpl(this);
+    }
+}
 
 // [7] 0x140042b90 (`JMP 0x140042d70`). PORT GAP (retail 0x140042b90) — B38 D9:
 // not ported; the tree's table held the inert stub here, kept.

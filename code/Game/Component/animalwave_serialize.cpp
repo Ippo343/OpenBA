@@ -41,6 +41,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Component/AnimalComponent.h"
 
 namespace {
 
@@ -142,35 +143,7 @@ extern "C" void HerdComponent_Serialize(void* self, void* stream) {
 // wander box shorts(+0x38/+0x3a/+0x3c/+0x3e). Version 0 additionally read a
 // legacy IBP that is discarded after an IsDerivedFrom probe.
 // ============================================================
-extern "C" void AnimalComponent_Serialize(void* self, void* stream) {
-    Resolve();
-    if (!self || !stream) return;
-    if (s_Base) s_Base(self, stream);
-
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
-
-    reinterpret_cast<System::Time*>(At(self, 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x28)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x44)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x40)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(At(self, 0x50))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(self, 0x38)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(self, 0x3a)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(self, 0x3c)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(self, 0x3e)), nullptr);   // B.3.4 bridge
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 0) {   // B.3.4 bridge
-        // v0 compatibility: read-and-discard one IBP (retail probes the type
-        // and drops the value; the local never leaves the frame).
-        uint64_t legacy = 0;
-        reinterpret_cast<Object::InternalBasePtr*>(&legacy)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-        if (legacy && s_IsDerived && s_tidPopulation && *s_tidPopulation)
-            s_IsDerived(reinterpret_cast<void*>(legacy), *s_tidPopulation);
-    }
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
-}
+extern "C" void AnimalComponent_Serialize(void* self, void* stream) { if (!self) return; reinterpret_cast<AnimalComponent*>(self)->AnimalComponent::Persist(stream); }   // B.3.8 bridge
 
 // ============================================================
 // LivestockComponent::Serialize (vtable slot [3], 0x140123e10)
@@ -235,6 +208,36 @@ extern "C" void PopulationComponent_Serialize_Real(void* self, void* stream) {
     reinterpret_cast<System::Time*>(At(self, 0x60))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x68)), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x6c)), nullptr);   // B.3.4 bridge
+
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+}
+
+void AnimalComponent::Persist(void* stream) {
+    Resolve();
+    if (!stream) return;
+    Component::Persist(stream);   // retail's direct CALL 0x1401189b0
+
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+
+    reinterpret_cast<System::Time*>(At(this, 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x28)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x44)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x48)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(this, 0x40)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<System::Time*>(At(this, 0x50))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(this, 0x38)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(this, 0x3a)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(this, 0x3c)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(this, 0x3e)), nullptr);   // B.3.4 bridge
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 0) {   // B.3.4 bridge
+        // v0 compatibility: read-and-discard one IBP (retail probes the type
+        // and drops the value; the local never leaves the frame).
+        uint64_t legacy = 0;
+        reinterpret_cast<Object::InternalBasePtr*>(&legacy)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
+        if (legacy && s_IsDerived && s_tidPopulation && *s_tidPopulation)
+            s_IsDerived(reinterpret_cast<void*>(legacy), *s_tidPopulation);
+    }
 
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
