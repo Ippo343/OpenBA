@@ -35,6 +35,8 @@
 #include <cstdint>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
+#include "Component/CitizenComponent.h"
+#include "Component/NaturalResourceDescription.h"
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -57,10 +59,6 @@ static void (*s_fn_NotifyEntityChanged)(void* entity) = nullptr;
 // Params: natResComp, citizenEntity IBP, harvestFlag
 typedef void (*s_fn_RemoveNatRes_t)(void* natResComp, void* citizenIBP, char harvestFlag);
 static s_fn_RemoveNatRes_t s_fn_RemoveNatRes = nullptr;
-
-// Type IDs for IsDerivedFrom checks
-static uint32_t* s_typeId_1401c7158 = nullptr;  // entity type (CitizenAI/entity ref)
-static uint32_t* s_typeId_NatResDescription = nullptr;  // DAT_1401c7b68
 
 // TypeInfo for BaseDtor (slot 2)
 static uint32_t* s_typeInfo_RemoveNaturalResource = nullptr;  // DAT_1401c60c0
@@ -86,12 +84,6 @@ bool RemoveNaturalResource_ResolveFuncs() {
     // FUN_1401260f0 — remove natural resource
     s_fn_RemoveNatRes = (s_fn_RemoveNatRes_t)ResolveAddr(Module::Exe, 0x1401260f0);
 
-    // Type IDs
-    s_typeId_1401c7158 = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7158));
-    s_typeId_NatResDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7b68));
-
     // TypeInfo for BaseDtor
     s_typeInfo_RemoveNaturalResource = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c60c0));
@@ -99,8 +91,7 @@ bool RemoveNaturalResource_ResolveFuncs() {
     bool ok = s_fn_IBP_DeletePtr &&
               s_fn_FindNRComp &&
               s_fn_NotifyEntityChanged && s_fn_RemoveNatRes &&
-              s_typeId_1401c7158 && g_TypeId_ComponentEntity &&
-              s_typeId_NatResDescription &&
+              g_TypeId_ComponentEntity &&
               s_typeInfo_RemoveNaturalResource &&
               fn_IsDerivedFrom &&
               fn_MemFreeStatic && g_pGameWorldSingleton;
@@ -109,9 +100,8 @@ bool RemoveNaturalResource_ResolveFuncs() {
     printf("[RemoveNaturalResource] ResolveFuncs: IBPDel=%p FindNR=%p\n",
            (void*)s_fn_IBP_DeletePtr,
            (void*)s_fn_FindNRComp);
-    printf("[RemoveNaturalResource]   NotifyChanged=%p RemoveNR=%p typeId7158=%p NRDesc=%p\n",
-           (void*)s_fn_NotifyEntityChanged, (void*)s_fn_RemoveNatRes,
-           (void*)s_typeId_1401c7158, (void*)s_typeId_NatResDescription);
+    printf("[RemoveNaturalResource]   NotifyChanged=%p RemoveNR=%p\n",
+           (void*)s_fn_NotifyEntityChanged, (void*)s_fn_RemoveNatRes);
     if (!ok) printf("[RemoveNaturalResource] ERROR: some function pointers not resolved!\n");
 #endif
 
@@ -143,7 +133,7 @@ void RemoveNaturalResource::Persist(void* stream) {
     // Serialize citizen entity ref (+0x20)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field20 != nullptr) {
-        if (!fn_IsDerivedFrom(_field20, *s_typeId_1401c7158)) {
+        if (!fn_IsDerivedFrom(_field20, CitizenComponent::TypeId())) {
             _field20 = nullptr;
         }
     }
@@ -191,7 +181,7 @@ int  RemoveNaturalResource::AbstractImpl(void* actionStack) {
     void* descObj = *(void**)(nrComp + 0x18);
 
     // Check if description is NaturalResourceDescription type
-    bool isNatResDesc = fn_IsDerivedFrom(descObj, *s_typeId_NatResDescription);
+    bool isNatResDesc = fn_IsDerivedFrom(descObj, NaturalResourceDescription::TypeId());
     void* natResDesc = isNatResDesc ? descObj : nullptr;
 
     // Check if the resource has an owner and it's not the town owner
