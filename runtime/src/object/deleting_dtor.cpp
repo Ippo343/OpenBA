@@ -966,8 +966,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // the DLL through ResolveAddr, exactly like most of the rows above.
     RT_DELDTOR(0x1800167f0, 0x1800fb620, 0x058, "Graphics::AnimationGroup"),
     RT_DELDTOR(0x180020a70, 0x1800a51c0, 0x108, "Graphics::ParticleSystem"),
-    RT_DELDTOR(0x18000bef0, 0x1800e03b0, 0x080, "Audio::SoundBuffer"),
-    RT_DELDTOR(0x180050820, 0x1800e0880, 0x040, "Audio::SoundEffect"),
     // 2026-09-12, the UI TEXT PIPELINE batch. APPENDED AFTER the batch-8 and
     // batch-9 rows above at merge time: kSpecs is POSITIONAL and three batches
     // each started appending at the same index on their own branch, so the
@@ -1641,16 +1639,6 @@ void* RtDelDtor_AnimationGroup(void* self, unsigned flags) {
 void* RtDelDtor_ParticleSystem(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180020a70>());
 }
-// Audio::SoundBuffer        ~SoundBuffer = 0x1800e03b0     (PORTED, BATCH C
-//                          2026-09-12, audio/batchc_audio_leaves.cpp; was
-//                          "NOT ported")
-void* RtDelDtor_SoundBuffer(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18000bef0>());
-}
-// Audio::SoundEffect        ~SoundEffect = 0x1800e0880     (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
-void* RtDelDtor_SoundEffect(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180050820>());
-}
 // Vtable batch 6 (2026-09-12): the graphics buffer / mesh / light slot-0 rows.
 // INDICES 103-108, RE-COUNTED OFF THE TABLE AFTER THE THIRD MERGE OF main.
 // These six were 71-76, then 89-94, and are now 103-108: batches 1, 5 and 7
@@ -1918,8 +1906,6 @@ void RtObjectDeletingDtorPortInit() {
     // VTABLE BATCH 7 (2026-09-12).
     RegisterRuntimeAddr(0x1800167f0, (void*)&RtDelDtor_AnimationGroup);
     RegisterRuntimeAddr(0x180020a70, (void*)&RtDelDtor_ParticleSystem);
-    RegisterRuntimeAddr(0x18000bef0, (void*)&RtDelDtor_SoundBuffer);
-    RegisterRuntimeAddr(0x180050820, (void*)&RtDelDtor_SoundEffect);
     // 2026-09-12 cutover walk: the six scalar dtors this table still resolved
     // to NULL (deleting_dtor_leaves.cpp). Registered here so the address door
     // is closed before the first Dtor(i) lookup can cache a null.

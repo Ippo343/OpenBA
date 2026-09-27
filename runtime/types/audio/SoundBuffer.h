@@ -42,10 +42,11 @@
 //   +0x54 WAVEFORMATEX Format `LEA RAX,[RCX+0x54]`; Serialize streams 0x28 of
 //                the 0x2c bytes up to the end of the object
 //
-// ABSTRACT (slot 0 `= 0`), NO REAL CONSTRUCTOR, empty non-virtual destructor:
-// the PickingMesh.h / PointList.h shape and reasons (B4b-2). Live objects are
-// built by the factory rows (rt_factories_audio.inc) and wear the MINTED table,
-// whose slots resolve back to the doors in vtbatch7_soundbuffer_soundeffect.cpp.
+// ENDGAME B.3 step 9, block ENG (B39_RULES.md D1/D2): CONCRETE. Retail's real
+// public constructor (??0SoundBuffer 0x1800e0320), its own slot 0, and the
+// factory pair as its own statics: every live SoundBuffer wears the COMPILER's
+// table. The minted row, its RT_DELDTOR row 0x18000bef0, the ??1 door and the
+// eight slot doors are retired (tools/rt_mint_retired/eng.txt).
 //
 // THREADS (B7-7): owned by the main thread; the Stream worker reads +0x20,
 // +0x30, +0x48 and +0x50 of the one being streamed.
@@ -57,6 +58,7 @@
 #include <cstddef>
 
 #include "../object/External.h"
+#include "../object/Internal.h"                // Object::detail::InternalMemFree
 #include "../system/String.h"
 
 namespace System { class Filename; class String; }
@@ -66,8 +68,42 @@ namespace Audio {
 
 class SoundBuffer : public Object::CompiledExternal {
 public:
+    // ??0SoundBuffer@Audio@@QEAA@XZ 0x1800e0320 -- the REAL constructor. Its
+    // stores are the ones retail's factory pair inlines (0x18000ba03..a6a):
+    // CompiledExternal() (Base's, External's and CompiledExternal's vptr and
+    // External's zero stores), SoundBuffer's vptr (the compiler's), then a
+    // WORD at +0x20, a dword at +0x24, the two Strings' null, 0x28 zero bytes
+    // at +0x54 (the last four of `_format` and the pads at +0x22 / +0x44 /
+    // +0x4c are NOT written), a qword +0x38, a dword +0x40, a qword +0x48 and a
+    // dword +0x50.
+    SoundBuffer() : Object::CompiledExternal(), _string28(), _streamPath() {
+        _loopForever = 0;
+        _streamed = 0;
+        _durationSeconds = 0.0f;
+        for (int i = 0; i < 0x28; ++i) _format[i] = 0;
+        _data = nullptr;
+        _length = 0;
+        _wmaData = nullptr;
+        _wmaLength = 0;
+    }
+
     // ---- the nine slots, in measured order ----
-    Object::Base* DeletingDtor(unsigned flags) override = 0;   // [0] 0x18000bef0
+    // [0] 0x18000bef0 -- MSVC's VECTOR deleting destructor (`TEST DL,2`,
+    // `MOV EDX,0x80`, the eh-vector dtor over ~SoundBuffer 0x1800e03b0), both
+    // arms as the retired RT_DELDTOR row ran them. Nothing `new[]`s one.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<SoundBuffer*>(self + static_cast<int64_t>(i) * 0x80)->~SoundBuffer();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~SoundBuffer();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char*   TypeName() const override;                   // [1] 0x18000b8b0
     uint32_t      Type() const override;                       // [2] 0x18000b890
@@ -97,13 +133,17 @@ public:
     float GetLengthSeconds() const;                            // 0x1800e06c0
     SoundBuffer(const SoundBuffer& src);                       // 0x18000bd00
     SoundBuffer& operator=(const SoundBuffer& src);            // 0x18000bdc0
-    static uint32_t TypeId();                                  // 0x18000b8a0
     static void* operator new(std::size_t bytes);              // 0x18000b8c0
     static void* operator new(std::size_t bytes, void* place); // 0x18000b930
     static void  operator delete(void* p);                     // 0x18000b940
-    // Ported table-driven by runtime/src/audio/rt_factories_audio.inc.
+    // Retail's factory pair (B39_RULES D2), defined in
+    // vtbatch7_soundbuffer_soundeffect.cpp. The class declares its own
+    // placement `operator new` (not ported): placement spells `::new (p)`.
     static Object::Base* CreateNewObject();                    // 0x18000b9a0
     static Object::Base* CreateInPlaceObject(void* place);     // 0x18000ba90
+    // 0x18000b8a0 -- `MOV EAX,[_typeInfo]` over the (still minted)
+    // `?_typeInfo@SoundBuffer@Audio@@` record (B39_RULES D6 step 1).
+    static uint32_t TypeId();
 
 private:
     static const char* _TypeName();                            // 0x18000b870 "SoundBuffer"
@@ -112,12 +152,10 @@ private:
     void PlatformDestruct();                                   // 0x1800e0580
 
 protected:
-    // NOT retail's `??0SoundBuffer@Audio@@QEAA@XZ` (0x1800e0320) — the probe
-    // subclass in the unit test is its only user.
-    SoundBuffer() = default;
-    // `??1SoundBuffer@Audio@@UEAA@XZ` 0x1800e03b0. NON-VIRTUAL (ENDGAME B.2),
-    // DEFINED EMPTY: the registered dtor door (`RtAudio_SoundBuffer_Dtor`,
-    // batchc_audio_leaves.cpp) does retail's work on the minted objects.
+    // `??1SoundBuffer@Audio@@UEAA@XZ` 0x1800e03b0. NON-VIRTUAL (no virtual dtor
+    // until the normal-virtual cutover). batchc_audio_leaves.cpp holds retail's
+    // body (the Device callback, the two buffer frees); the compiler releases
+    // both Strings and chains ~CompiledExternal -> ~External, retail's order.
     ~SoundBuffer();
 
 public:

@@ -6,3 +6,5 @@
 ??_7PointList@Pathfinding@@6B@         ENG     real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR row, ??1 door, 8 slot doors deleted
 ??_7CollisionMesh@Collision2D@@6B@     ENG     class defined (was a file-local POD); real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR row, ??1 door, 8 slot doors deleted
 ??_7Surface@Collision2D@@6B@           ENG     class defined (was a file-local POD); real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR row, ??1 door, 7 slot doors deleted
+??_7SoundBuffer@Audio@@6B@             ENG     real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR row, ??1 door, 7 slot doors deleted
+??_7SoundEffect@Audio@@6B@             ENG     real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR row, ??1 door (deleting_dtor_leaves), 8 slot doors deleted

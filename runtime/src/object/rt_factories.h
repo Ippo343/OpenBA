@@ -102,6 +102,5 @@ int RtFactoriesObjectRegister();
 int RtFactoriesGraphicsRegister();
 int RtFactoriesVideoRegister();
 int RtFactoriesAchievementRegister();
-int RtFactoriesAudioRegister();
 int RtFactoriesIoRegister();
 // (RtFactoriesPickingRegister retired with its last row, ENDGAME B.3.9 pilot.)

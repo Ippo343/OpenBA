@@ -41,6 +41,7 @@
 #include <cstddef>
 #include <cstring>
 #include <type_traits>
+#include <new>
 
 namespace {
 
@@ -48,6 +49,14 @@ const void* g_lastSelf = nullptr;
 int         g_lastMark = -1;
 void Note(const void* self, int mark) { g_lastSelf = self; g_lastMark = mark; }
 void Reset() { g_lastSelf = nullptr; g_lastMark = -1; }
+// ENDGAME B.3.9 ENG: the destructor markers RECORD each call, so the real
+// inline `DeletingDtor`s can be seen running the dtor per element, downward.
+int         g_dtorCount = 0;
+const void* g_dtorOrder[8] = {};
+void NoteDtor(const void* self) {
+    if (g_dtorCount < 8) g_dtorOrder[g_dtorCount] = self;
+    ++g_dtorCount;
+}
 
 template <typename Fn>
 Fn SlotAt(void* obj, int byteOffset) {
@@ -94,7 +103,7 @@ bool SoundBuffer::Serialize(void*) { Note(this, 5); return true; }
 Object::External* SoundBuffer::Reconstruct() { Note(this, 6); return this; }
 void SoundBuffer::Destruct() { Note(this, 7); }
 Object::External* SoundBuffer::Construct() { Note(this, 8); return this; }
-SoundBuffer::~SoundBuffer() {}
+SoundBuffer::~SoundBuffer() { NoteDtor(this); }
 
 const char* SoundEffect::TypeName() const { Note(this, 1); return "SoundEffect"; }
 uint32_t SoundEffect::Type() const { Note(this, 2); return 0x5e0fu; }
@@ -104,7 +113,7 @@ bool SoundEffect::Serialize(void*) { Note(this, 5); return true; }
 Object::External* SoundEffect::Reconstruct() { Note(this, 6); return this; }
 void SoundEffect::Destruct() { Note(this, 7); }
 Object::External* SoundEffect::Construct() { Note(this, 8); return this; }
-SoundEffect::~SoundEffect() {}
+SoundEffect::~SoundEffect() { NoteDtor(this); }
 
 void Stream::Run() { Note(this, 50); }
 
@@ -176,8 +185,10 @@ UNIT_TEST(audio_soundbuffer_layout) {
     CHECK_EQ((int)sizeof(Audio::SoundBuffer), 0x80);
     CHECK_EQ((int)alignof(Audio::SoundBuffer), 8);
     CHECK((std::is_base_of<Object::CompiledExternal, Audio::SoundBuffer>::value));  // B7-2
-    CHECK(std::is_abstract<Audio::SoundBuffer>::value);
-    CHECK(!std::is_default_constructible<Audio::SoundBuffer>::value);
+    // ENDGAME B.3.9 ENG: concrete, protected non-virtual dtor.
+    CHECK(!std::is_abstract<Audio::SoundBuffer>::value);
+    CHECK(!std::is_destructible<Audio::SoundBuffer>::value);
+    CHECK(!std::has_virtual_destructor<Audio::SoundBuffer>::value);
     CHECK_EQ((int)offsetof(Audio::SoundBuffer, _loopForever),     0x20);
     CHECK_EQ((int)offsetof(Audio::SoundBuffer, _streamed),        0x21);
     CHECK_EQ((int)offsetof(Audio::SoundBuffer, _durationSeconds), 0x24);
@@ -195,8 +206,9 @@ UNIT_TEST(audio_soundeffect_layout) {
     CHECK_EQ((int)alignof(Audio::SoundEffect), 8);
     CHECK((std::is_base_of<Object::External, Audio::SoundEffect>::value));
     CHECK(!(std::is_base_of<Object::CompiledExternal, Audio::SoundEffect>::value));
-    CHECK(std::is_abstract<Audio::SoundEffect>::value);
-    CHECK(!std::is_default_constructible<Audio::SoundEffect>::value);
+    CHECK(!std::is_abstract<Audio::SoundEffect>::value);
+    CHECK(!std::is_destructible<Audio::SoundEffect>::value);
+    CHECK(!std::has_virtual_destructor<Audio::SoundEffect>::value);
     CHECK_EQ((int)offsetof(Audio::SoundEffect, _radius),      0x20);
     CHECK_EQ((int)offsetof(Audio::SoundEffect, _innerRadius), 0x24);
     CHECK_EQ((int)offsetof(Audio::SoundEffect, _maxLength),   0x28);
@@ -395,4 +407,117 @@ UNIT_TEST(audio_accessors_read_retails_offsets) {
     cfg.SetMusicVolume(50);
     CHECK_EQ(*reinterpret_cast<int32_t*>(cfgStorage + 4), 50);                    // 0x18000d4f0
     CHECK_EQ(cfg.GetMusicVolume(), 50);
+}
+
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.9 ENG (B39_RULES D1/D2, rule B9-16) -- the concrete classes.
+// ---------------------------------------------------------------------------
+namespace {
+template <typename PMF>
+uintptr_t PmfSlot(PMF pmf) {
+    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
+    uintptr_t words[2];
+    std::memcpy(words, &pmf, sizeof words);
+    if ((words[0] & 1u) == 0) return ~uintptr_t(0);
+    if (words[1] != 0) return ~uintptr_t(0);
+    return words[0] - 1;
+}
+template <class T, int kSize>
+void CheckBothArms() {
+    void* m = Object::detail::InternalMemAlloc(kSize, 8);
+    CHECK(m != nullptr);
+    T* p = ::new (m) T();
+    g_dtorCount = 0;
+    CHECK(p->DeletingDtor(1) == p);
+    CHECK_EQ(g_dtorCount, 1);
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * kSize, 8));
+    CHECK(block != nullptr);
+    const int64_t cookie = 3;
+    std::memcpy(block, &cookie, sizeof cookie);
+    T* e[3];
+    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * kSize) T();
+    g_dtorCount = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
+    CHECK_EQ(g_dtorCount, 3);
+    CHECK(g_dtorOrder[0] == e[2]);
+    CHECK(g_dtorOrder[1] == e[1]);
+    CHECK(g_dtorOrder[2] == e[0]);
+}
+}  // namespace
+
+UNIT_TEST(b39_eng_soundbuffer_slot_order_by_pmf) {
+    using B = Audio::SoundBuffer;
+    CHECK_EQ(PmfSlot(&B::DeletingDtor),   (uintptr_t)0x00);   // 0x18000bef0
+    CHECK_EQ(PmfSlot(&B::TypeName),       (uintptr_t)0x08);   // 0x18000b8b0
+    CHECK_EQ(PmfSlot(&B::Type),           (uintptr_t)0x10);   // 0x18000b890
+    CHECK_EQ(PmfSlot(&B::GetFileVersion), (uintptr_t)0x18);   // 0x1800e0470
+    CHECK_EQ(PmfSlot(&B::Compile),        (uintptr_t)0x20);   // External's 0x1800066e0
+    CHECK_EQ(PmfSlot(&B::Serialize),      (uintptr_t)0x28);   // 0x1800e0480
+    CHECK_EQ(PmfSlot(&B::Reconstruct),    (uintptr_t)0x30);   // 0x18000bb30
+    CHECK_EQ(PmfSlot(&B::Destruct),       (uintptr_t)0x38);   // 0x18000bc70
+    CHECK_EQ(PmfSlot(&B::Construct),      (uintptr_t)0x40);   // 0x18000bbd0
+}
+UNIT_TEST(b39_eng_soundeffect_slot_order_by_pmf) {
+    using E = Audio::SoundEffect;
+    CHECK_EQ(PmfSlot(&E::DeletingDtor),   (uintptr_t)0x00);   // 0x180050820
+    CHECK_EQ(PmfSlot(&E::TypeName),       (uintptr_t)0x08);   // 0x180050340
+    CHECK_EQ(PmfSlot(&E::Type),           (uintptr_t)0x10);   // 0x180050320
+    CHECK_EQ(PmfSlot(&E::GetFileVersion), (uintptr_t)0x18);   // 0x1800e0990
+    CHECK_EQ(PmfSlot(&E::Compile),        (uintptr_t)0x20);   // 0x1800e09a0
+    CHECK_EQ(PmfSlot(&E::Serialize),      (uintptr_t)0x28);   // 0x1800e0aa0
+    CHECK_EQ(PmfSlot(&E::Reconstruct),    (uintptr_t)0x30);   // 0x180050560
+    CHECK_EQ(PmfSlot(&E::Destruct),       (uintptr_t)0x38);   // 0x180050640
+    CHECK_EQ(PmfSlot(&E::Construct),      (uintptr_t)0x40);   // 0x1800505d0
+}
+
+// SoundBuffer's factory stores (0x18000ba03..a6a): word +0x20, dword +0x24,
+// qwords +0x28/+0x30, 0x28 bytes from +0x54, qword +0x38, dword +0x40, qword
+// +0x48, dword +0x50. +0x22, +0x44, +0x4c and +0x7c..+0x7f are NOT written.
+UNIT_TEST(b39_eng_soundbuffer_ctor_makes_retails_stores) {
+    alignas(8) uint8_t buf[0x80];
+    std::memset(buf, 0xCD, sizeof buf);
+    Audio::SoundBuffer* b = ::new (buf) Audio::SoundBuffer();
+    CHECK(static_cast<void*>(b) == static_cast<void*>(buf));
+    auto zero = [&](int lo, int hi) { for (int i = lo; i < hi; ++i) CHECK_EQ((int)buf[i], 0); };
+    auto kept = [&](int lo, int hi) { for (int i = lo; i < hi; ++i) CHECK_EQ((int)buf[i], 0xCD); };
+    zero(0x08, 0x22); kept(0x22, 0x24); zero(0x24, 0x44); kept(0x44, 0x48);
+    zero(0x48, 0x54); zero(0x54, 0x7c); kept(0x7c, 0x80);
+    alignas(8) uint8_t buf2[0x80];
+    Audio::SoundBuffer* b2 = ::new (buf2) Audio::SoundBuffer();
+    SoundBufferProbe probe;
+    CHECK(VTableOf(b) == VTableOf(b2));
+    CHECK(VTableOf(b) != VTableOf(&probe));
+    g_dtorCount = 0;
+    CHECK(b->DeletingDtor(0) == b);
+    CHECK(b2->DeletingDtor(0) == b2);
+    CHECK_EQ(g_dtorCount, 2);
+}
+
+// SoundEffect's factory stores (0x180050493..4d0): one qword 0x3f800000 over
+// +0x20/+0x24, zero +0x28, the Array header +0x30/+0x38.
+UNIT_TEST(b39_eng_soundeffect_ctor_makes_retails_stores) {
+    alignas(8) uint8_t buf[0x40];
+    std::memset(buf, 0xCD, sizeof buf);
+    Audio::SoundEffect* e = ::new (buf) Audio::SoundEffect();
+    uint64_t q = 0;
+    std::memcpy(&q, buf + 0x20, sizeof q);
+    CHECK_EQ(q, (uint64_t)0x3f800000ull);
+    for (int off = 0x28; off < 0x40; off += 8) {
+        std::memcpy(&q, buf + off, sizeof q);
+        CHECK_EQ(q, (uint64_t)0);
+    }
+    for (int off = 0x08; off < 0x20; off += 8) {
+        std::memcpy(&q, buf + off, sizeof q);
+        CHECK_EQ(q, (uint64_t)0);
+    }
+    g_dtorCount = 0;
+    CHECK(e->DeletingDtor(0) == e);
+    CHECK_EQ(g_dtorCount, 1);
+}
+
+UNIT_TEST(b39_eng_soundbuffer_deletingdtor_frees_both_arms) {
+    CheckBothArms<Audio::SoundBuffer, 0x80>();
+}
+UNIT_TEST(b39_eng_soundeffect_deletingdtor_frees_both_arms) {
+    CheckBothArms<Audio::SoundEffect, 0x40>();
 }
