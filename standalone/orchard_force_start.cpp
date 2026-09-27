@@ -36,7 +36,7 @@ void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
 // entity's info dialog exactly like a real click, returns 1 if a dialog opened.
 extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
 extern "C" void* EditTool_HarnessAcquire(void* entityUI);
-struct EditTool;
+class EditTool;
 void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr);   // code/Game/Player/edittool.cpp
 
 namespace {

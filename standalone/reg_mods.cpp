@@ -64,7 +64,7 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
 // registered at that address, so fn_MainMenu_Reload stayed NULL. Declared here by
 // hand because mainmenudialog.cpp has no header; the pointer parameter makes the
 // C++ mangling independent of MainMenuDialog's definition.
-struct MainMenuDialog;
+class MainMenuDialog;
 void MainMenuDialog_ReturnToMenu(MainMenuDialog* self);
 
 // Backing storage for the IO::Modification singleton exref slot. Must outlive the

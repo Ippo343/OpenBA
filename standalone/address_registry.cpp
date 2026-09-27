@@ -199,7 +199,7 @@ extern "C" void RegisterMapQueryAddrs();
 // M5 5c Foundation B — ECS spawn primitives (bodies in
 // code/Game/Entity/componententity.cpp). C++ linkage: declared with the exact
 // signatures so the mangled names match the definitions.
-struct ComponentEntity;
+class ComponentEntity;
 ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void* descriptionPtr);
 void EntityList_RegisterEntity_Impl(void* entityList, void* entityIBP, int category);
 

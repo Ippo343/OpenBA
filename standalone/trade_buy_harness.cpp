@@ -38,7 +38,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-struct TradeUI;
+class TradeUI;
 void TradeUI_UpdateBuyTotals(TradeUI* self);
 // The sell/buy tables are built ONCE when the panel opens. Seeding the trade
 // stock afterwards leaves the rows as they were, so the refresh has to be

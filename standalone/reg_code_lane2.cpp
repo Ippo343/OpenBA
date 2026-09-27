@@ -23,7 +23,7 @@ extern "C" void* MapParamsDialog_Ctor_Standalone(void* self, void* ui, void* ext
                                                  void* parentIBP);
 
 // ---- 0x14005F3D0 — ConsumeProduceUI::Slot4 (code/Game/Dialog/consumeproduceui.cpp)
-struct ConsumeProduceUI;
+class ConsumeProduceUI;
 extern void ConsumeProduceUI_Slot4(ConsumeProduceUI* self);
 
 // ---- 0x140078830 — SelectResourceUI::PopulateCombo (code/Game/Dialog/selectresourceui.cpp)
