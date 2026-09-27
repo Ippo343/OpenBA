@@ -24,16 +24,6 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-// ??_7Geometry@Graphics@@6B@, 0x180154e60, ordinal 1439 — the same door
-// runtime/src/graphics/scene.cpp:211 opens for the default constructor. Spelled
-// again here rather than shared, because scene.cpp's accessor is file-local and
-// a second `extern` declaration of a file-local is the kind of link-time
-// coincidence this tree has been bitten by.
-void* GeometryVtable() {
-    static void* vt = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180154e60));
-    return vt;
-}
-
 // `Array<Geometry*>::operator=` — retail 0x18001b1a0, the CALL at 0x180015b8b.
 // By address, registry-first: batch 2 ported it in
 // runtime/src/collection/array_destroy.cpp, so this lands on our body.
@@ -113,11 +103,17 @@ static_assert(sizeof(RtGraphics::Geometry) == 0xC0,
 static_assert(offsetof(RtGraphics::Geometry, _attached) == 0x18,
               "the nested Array<Geometry*> the copy ctor zeroes and assigns");
 
-extern "C" void* RtGraphics_Geometry_CopyCtor(void* self, const void* src) {
-    uint8_t* d = static_cast<uint8_t*>(self);
-    const uint8_t* s = static_cast<const uint8_t*>(src);
+// ENDGAME B.3.9 GFX: this is the MEMBER now. The vptr store (retail's
+// `LEA RAX,[0x180154e60]`) is the compiler's; the ??0 copy door
+// (`RtGraphics_Geometry_CopyCtor`, which stamped the minted table), its
+// registrations (name + 0x180015b60) and `GeometryVtable()` are retired.
+// `_attached` is default-initialised first (Array()'s three zero stores), which
+// the body then repeats before the deep assign, so the final bytes are retail's.
+namespace Graphics {
+Geometry::Geometry(const Geometry& src) {
+    uint8_t* d = reinterpret_cast<uint8_t*>(this);
+    const uint8_t* s = reinterpret_cast<const uint8_t*>(&src);
 
-    *reinterpret_cast<void**>(d) = GeometryVtable();
     *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);
     *reinterpret_cast<uint32_t*>(d + 0x10) = *reinterpret_cast<const uint32_t*>(s + 0x10);
 
@@ -133,9 +129,8 @@ extern "C" void* RtGraphics_Geometry_CopyCtor(void* self, const void* src) {
 
     for (uint32_t o = 0x84; o <= 0xb8; o += 4)
         *reinterpret_cast<uint32_t*>(d + o) = *reinterpret_cast<const uint32_t*>(s + o);
-
-    return self;   // MOV RAX,RDI — retail returns `this`
 }
+}  // namespace Graphics
 
 // ############################################################################
 // ENDGAME B.3 step 5 (block E) — the real `Graphics::Geometry`'s C++ surface
@@ -200,37 +195,11 @@ extern "C" void* RtGraphics_Geometry_CopyCtor(void* self, const void* src) {
 // argument, one level down).
 // ############################################################################
 
-// The two remaining doors. `RtGraphics_Geometry_Dtor` is defined in
-// `runtime/src/graphics/scene.cpp` and declared here rather than in a shared
-// header for the reason this file's `GeometryVtable` banner gives: a second
-// `extern` of something file-local is the link-time coincidence this tree has
-// been bitten by, and this one is `extern "C"` and global, so the linker checks
-// the declaration against the definition.
-extern "C" void RtGraphics_Geometry_Dtor(RtGraphics::Geometry* self);
-
 namespace Graphics {
 
-// ---------------------------------------------------------------------------
-// RULE B5-10 — `??0Geometry@Graphics@@QEAA@AEBV01@@Z`, 0x180015b60.
-//
-// Declared explicitly in Geometry.h and NEVER `= default`: the registered body
-// above zeroes the nested `Array<Geometry*>` header and then runs retail's DEEP
-// `Array<Geometry*>::operator=` over it, where `= default` would bitwise-copy a
-// heap pointer and give one buffer two owners. Four POD mirrors embed these
-// bytes by value and `Collection::Array` copies of MeshInstance /
-// EdgeMeshInstance / the particle instances / SunLight all reach it.
-//
-// GCC stores `vtable for Graphics::Geometry` on entry to this constructor and
-// the door's first statement then stores `??_7Geometry@Graphics@@6B@` over it —
-// which is retail's own store, in retail's own position (its first instruction
-// after the prologue is `LEA RAX,[0x180154e60]; MOV [RDI],RAX`). The members
-// not named in an initialiser list are default-initialised first; for
-// `_attached` that is `Array()`'s three zero stores, which the door then repeats
-// before the deep assign, so the final bytes are identical either way.
-// ---------------------------------------------------------------------------
-Geometry::Geometry(const Geometry& src) {
-    RtGraphics_Geometry_CopyCtor(this, &src);   // B.3.5 bridge
-}
+// RULE B5-10 — `??0Geometry@Graphics@@QEAA@AEBV01@@Z`, 0x180015b60: declared
+// explicitly in Geometry.h and NEVER `= default` (the deep Array assign above
+// is the reason). Its body is the member defined above (ENDGAME B.3.9 GFX).
 
 // Slots 4, 5, 6, 7 and 8 — `UpdateAttached`, `GetSubTransform`,
 // `GetInstanceTransform`, `SetSharedInstanceData` and `Clean` — USED TO BE
@@ -247,8 +216,7 @@ Geometry::Geometry(const Geometry& src) {
 // class's destructor CANNOT avoid — and a missing definition would surface as an
 // undefined reference in whichever later block defines one, a long way from the
 // cause.
-// ENDGAME B.3.8 block RB: `~Geometry()` is inline in Geometry.h now, ONE body
-// (`ReleaseFields`, scene.cpp) with the door `RtGraphics_Geometry_Dtor`.
+// ENDGAME B.3.9 GFX: `~Geometry()` is the member in scene.cpp; its door is retired.
 
 }  // namespace Graphics
 
@@ -349,9 +317,7 @@ extern "C" void RtGraphics_EdgeMesh_SerializeTriangleListArray(void* ctx, int co
 // ============================================================================
 int RtClosure2bGraphicsRegister() {
     int n = 0;
-    RegisterRuntimeExport("??0Geometry@Graphics@@QEAA@AEBV01@@Z",
-                          (void*)&RtGraphics_Geometry_CopyCtor);              ++n;
-    RegisterRuntimeAddr(0x180015b60, (void*)&RtGraphics_Geometry_CopyCtor);
+    // (??0Geometry copy, 0x180015b60: retired with its door, ENDGAME B.3.9 GFX.)
     RegisterRuntimeAddr(0x18001be60, (void*)&RtGraphics_DrawGroup_CopyCtor);  ++n;
     RegisterRuntimeAddr(0x180014850,
                         (void*)&RtGraphics_EdgeMesh_SerializeTriangleListArray); ++n;

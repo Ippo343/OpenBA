@@ -291,7 +291,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180006640, 0x1800bc950, 0x020, "Object::External"),
     RT_DELDTOR(0x18000b7e0, 0x1800bb980, 0x020, "Object::CompiledExternal"),
     RT_DELDTOR(0x18000c610, 0x1800b9a40, 0x018, "IO::Stream"),
-    RT_DELDTOR(0x180015e90, 0x1800a41c0, 0x0c0, "Graphics::Geometry"),
     RT_DELDTOR(0x18001ed20, 0x1800f2610, 0x068, "Video::ImageBuffer"),
     RT_DELDTOR(0x1800244a0, 0x1800a9560, 0x098, "IO::CompressedMemoryStream"),
     RT_DELDTOR(0x180031900, 0x1800dddb0, 0x028, "Engine::UpdateLoop"),
@@ -969,10 +968,6 @@ void* RtDelDtor_CompiledExternal(void* self, unsigned flags) {
 void* RtDelDtor_Stream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18000c610>());
 }
-// Graphics::Geometry       ~Geometry = 0x1800a41c0  (PORTED)
-void* RtDelDtor_Geometry(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180015e90>());
-}
 // Video::ImageBuffer       ~ImageBuffer = 0x1800f2610  (PORTED)
 void* RtDelDtor_ImageBuffer(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18001ed20>());
@@ -1212,7 +1207,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180006640, (void*)&RtDelDtor_External);
     RegisterRuntimeAddr(0x18000b7e0, (void*)&RtDelDtor_CompiledExternal);
     RegisterRuntimeAddr(0x18000c610, (void*)&RtDelDtor_Stream);
-    RegisterRuntimeAddr(0x180015e90, (void*)&RtDelDtor_Geometry);
     RegisterRuntimeAddr(0x18001ed20, (void*)&RtDelDtor_ImageBuffer);
     RegisterRuntimeAddr(0x1800244a0, (void*)&RtDelDtor_CompressedMemoryStream);
     RegisterRuntimeAddr(0x180031900, (void*)&RtDelDtor_UpdateLoop);

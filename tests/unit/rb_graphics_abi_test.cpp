@@ -15,7 +15,7 @@
 //   ParticleInstance's body under its own table BEFORE Geometry's.
 // PART B — the doors reach the same bodies with a stand-in minted table.
 //
-// MARKERS: Geometry's InitFields/ReleaseFields (scene.cpp), Particle's
+// MARKERS: Geometry's ctor / dtor (scene.cpp), Particle's
 // ReleaseFields (animation.cpp), RemoveState and the classes' virtuals do not
 // link here; the inline InitFields of Particle / ParticleInstance are REAL.
 // ============================================================================
@@ -59,15 +59,14 @@ Entry g_log[16];
 int   g_n = 0;
 void Log(int ev, const void* self) { if (g_n < 16) g_log[g_n++] = Entry{ev, VptrOf(self)}; }
 
-const void* const kFakeMinted[4] = {};
 }  // namespace
 
 // ===========================================================================
 // Markers (see the banner).
 // ===========================================================================
 namespace Graphics {
-void Geometry::InitFields()    { Log(kGeoInit, this); _attachNode = -1; _detailId = 2; }
-void Geometry::ReleaseFields() { Log(kGeoRel, this); }
+Geometry::Geometry()  { Log(kGeoInit, this); _attachNode = -1; _detailId = 2; }
+Geometry::~Geometry() { Log(kGeoRel, this); }
 void Geometry::UpdateAttached() {}
 Math::Transform* Geometry::GetSubTransform(Math::Transform* ret, int) const { return ret; }
 Math::Matrix* Geometry::GetInstanceTransform(Math::Matrix* ret, int, float) const { return ret; }
@@ -250,15 +249,9 @@ UNIT_TEST(rb_graphics_doors_reach_the_same_bodies) {
     // Particle: (ENDGAME B.3.9 GFX) the ??0 door and its DoorBody are retired;
     // the real ctor is the only builder (rb_particle_ctor_is_retail_* above).
 
-    // Geometry: the door's calls run under the minted table.
-    alignas(8) unsigned char g[sizeof(Graphics::Geometry)] = {};
-    *reinterpret_cast<const void**>(g) = kFakeMinted;
-    g_n = 0;
-    Graphics::Geometry::DoorBody::Init(reinterpret_cast<Graphics::Geometry*>(g));
-    Graphics::Geometry::DoorBody::Release(reinterpret_cast<Graphics::Geometry*>(g));
-    CHECK_EQ(g_n, 2);
-    CHECK(g_log[0].vptr == static_cast<const void*>(kFakeMinted));
-    CHECK(g_log[1].vptr == static_cast<const void*>(kFakeMinted));
+    // Geometry: (ENDGAME B.3.9 GFX) the ??0 / ??1 doors and DoorBody are
+    // retired; the real ctor / dtor are the only bodies
+    // (b39_gfx_geometry_slot0_is_the_classs_own_both_arms below).
 }
 
 // ===========================================================================
@@ -927,6 +920,59 @@ UNIT_TEST(b39_gfx_edgemeshinstance_concrete_ctor_and_both_slot0_arms) {
     CHECK_EQ(g_emiDtor, 3);
     CHECK(g_emiDtorOrder[0] == e[2]);
     CHECK(g_emiDtorOrder[2] == e[0]);
+}
+
+}  // namespace
+
+// ===========================================================================
+// ENDGAME B.3.9 block GFX -- Graphics::Geometry slot 0 is the class's own
+// VECTOR deleting destructor (retail 0x180015e90, element 0xc0, dtor
+// 0x1800a41c0). The class stays abstract; a leaf that does not override
+// slot 0 reaches it.
+// ===========================================================================
+namespace {
+
+struct RbGeoLeaf final : Graphics::Geometry {   // slot 0 NOT overridden
+    void Update(const System::Time&) override {}
+    void Draw(Video::Context&, const Graphics::Camera&, Graphics::ExternalPtrHandle,
+              float, int, int, int) const override {}
+    void AddDrawItems(const Graphics::Scene&, Graphics::Renderer&) const override {}
+};
+
+UNIT_TEST(b39_gfx_geometry_slot0_is_the_classs_own_both_arms) {
+    using G = Graphics::Geometry;
+    CHECK(std::is_abstract<G>::value);
+    CHECK(!std::is_destructible<G>::value);
+    CHECK(!std::has_virtual_destructor<G>::value);
+    CHECK_EQ(GfxSlotOffset(&G::DeletingDtor), (uintptr_t)0x00);   // 0x180015e90
+    CHECK_EQ(sizeof(RbGeoLeaf), (size_t)0xc0);
+
+    // Scalar arm, flags 1: ~Geometry under Geometry's table, freed, returns this.
+    void* m = Object::detail::InternalMemAlloc(sizeof(RbGeoLeaf), 8);
+    RbGeoLeaf* p = ::new (m) RbGeoLeaf();
+    g_n = 0;
+    CHECK(static_cast<void*>(p->DeletingDtor(1u)) == m);
+    CHECK_EQ(g_n, 1);
+    CHECK_EQ(g_log[0].ev, (int)kGeoRel); CHECK(g_log[0].vptr == GeoVt());
+
+    // Scalar arm, flags 0: nothing freed.
+    alignas(8) unsigned char buf[sizeof(RbGeoLeaf)];
+    RbGeoLeaf* q = ::new (static_cast<void*>(buf)) RbGeoLeaf();
+    g_n = 0;
+    CHECK(static_cast<void*>(q->DeletingDtor(0u)) == static_cast<void*>(buf));
+    CHECK_EQ(g_n, 1);
+
+    // Vector arm: stride 0xc0, count at block, block freed, returns block.
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 2 * 0xc0, 8));
+    const int64_t cookie = 2;
+    std::memcpy(block, &cookie, sizeof cookie);
+    RbGeoLeaf* e0 = ::new (block + 8) RbGeoLeaf();
+    ::new (block + 8 + 0xc0) RbGeoLeaf();
+    g_n = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3u)) == block);
+    CHECK_EQ(g_n, 2);
+    CHECK_EQ(g_log[0].ev, (int)kGeoRel);
+    CHECK_EQ(g_log[1].ev, (int)kGeoRel);
 }
 
 }  // namespace
