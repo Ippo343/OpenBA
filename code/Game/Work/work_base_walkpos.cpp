@@ -28,6 +28,8 @@
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include <cstdint>
 #include <cmath>
+#include "Component/InteractDescription.h"   // ENDGAME B.3.9 D5
+#include "Component/CitizenDescription.h"    // ENDGAME B.3.9 D5
 
 // ============================================================
 // Lazily-resolved exe sub-helpers
@@ -126,9 +128,8 @@ bool WorkImpl_WalkablePos_122be0(uintptr_t param_1, uintptr_t param_2,
 uint8_t WorkImpl_WalkablePosRecursive_122b00(uintptr_t param_1, int param_2,
                                              float* param_3, float* param_4, int* param_5) {
     void* buildRaw = *reinterpret_cast<void**>(param_1 + 0x18);
-    uint32_t* pTid7938 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7938));
     void* build = nullptr;
-    if (pTid7938 && fn_IsDerivedFrom && fn_IsDerivedFrom(buildRaw, *pTid7938))
+    if (fn_IsDerivedFrom && fn_IsDerivedFrom(buildRaw, InteractDescription::TypeId()))
         build = buildRaw;
 
     uint8_t result = WorkImpl_WalkablePos_122be0(
@@ -174,8 +175,7 @@ uint64_t WorkImpl_BuildStructureStep_6ef0(uintptr_t param_1, void* param_2IBP,
                 : -1;
 
             void* obj = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(param_2IBP) + 0x18);
-            uint32_t* pTid7190 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7190));
-            void* stage = (pTid7190 && fn_IsDerivedFrom && fn_IsDerivedFrom(obj, *pTid7190)) ? obj : nullptr;
+            void* stage = (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, CitizenDescription::TypeId())) ? obj : nullptr;
             uintptr_t st = reinterpret_cast<uintptr_t>(stage);
 
             int   field108 = *reinterpret_cast<int*>(st + 0x108);

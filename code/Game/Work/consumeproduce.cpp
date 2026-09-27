@@ -36,6 +36,7 @@
 #include "Component/StorageComponent.h"            // ENDGAME B.3.9 D5
 #include "Component/RawMaterialDescription.h"      // ENDGAME B.3.9 D5
 #include "Component/WorkComponent.h"               // ENDGAME B.3.9 D5
+#include "Component/CitizenComponent.h"            // ENDGAME B.3.9 D5
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -65,9 +66,6 @@ static void (*s_fn_TaskListCleanup)(void* taskList) = nullptr;
 // FUN_140002e10 -- FindComponent (type DWORD_1401c80e0) on entity, returns IBP
 // Signature: (entity, outIBP*) -> outIBP* (member function ABI: RCX=entity, RDX=outIBP)
 static void* (*s_fn_FindPositionComponent)(void* entity, void* outIBP) = nullptr;
-
-// TypeId at DAT_1401c7158 -- used for IsDerivedFrom check in Serialize
-static uint32_t* s_typeId_1401c7158 = nullptr;
 
 // Cached vtable addresses
 
@@ -123,10 +121,6 @@ bool ConsumeProduce_ResolveFuncs() {
     s_fn_FindPositionComponent = reinterpret_cast<void*(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x140002e10));
 
-    // TypeId for IsDerivedFrom check in Serialize
-    s_typeId_1401c7158 = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7158));
-
     // Execute-specific helpers
     s_fn_ModelComp_SetActiveState = reinterpret_cast<s_fn_ModelComp_SetActiveState_t>(
         ResolveAddr(Module::Exe, 0x14012c3f0));
@@ -146,7 +140,6 @@ bool ConsumeProduce_ResolveFuncs() {
     bool ok = s_fn_Type_Serialize &&
               s_fn_Work_ValidateTask && s_fn_TaskListCleanup &&
               s_fn_FindPositionComponent &&
-              s_typeId_1401c7158 &&
               s_fn_ModelComp_SetActiveState && s_fn_CheckProduceThreshold &&
               s_fn_ResetProductionState && s_fn_Map_RecalcZones &&
               s_fn_SetupWorkChain &&
@@ -171,8 +164,8 @@ bool ConsumeProduce_ResolveFuncs() {
            (void*)s_fn_Type_Serialize);
     printf("[ConsumeProduce]   ValidateTask=%p TaskClean=%p\n",
            (void*)s_fn_Work_ValidateTask, (void*)s_fn_TaskListCleanup);
-    printf("[ConsumeProduce]   FindPos=%p typeId=%p\n",
-           (void*)s_fn_FindPositionComponent, (void*)s_typeId_1401c7158);
+    printf("[ConsumeProduce]   FindPos=%p\n",
+           (void*)s_fn_FindPositionComponent);
     printf("[ConsumeProduce]   SetActiveState=%p CheckThresh=%p ResetProd=%p\n",
            (void*)s_fn_ModelComp_SetActiveState, (void*)s_fn_CheckProduceThreshold,
            (void*)s_fn_ResetProductionState);
@@ -290,8 +283,8 @@ void ConsumeProduce::Persist(void* stream) {
         // destroy live state — strictly worse than skipping a check we cannot perform.
         // Same both-pointer-and-value shape as completetask.cpp's reader.
         void* ptr = (void*)ibpArray[i];
-        if (ptr != nullptr && s_typeId_1401c7158 && *s_typeId_1401c7158) {
-            bool valid = fn_IsDerivedFrom(ptr, *s_typeId_1401c7158);
+        if (ptr != nullptr) {
+            bool valid = fn_IsDerivedFrom(ptr, CitizenComponent::TypeId());  // DAT_1401c7158
             if (!valid) {
                 ibpArray[i] = 0;  // null out invalid refs
             }

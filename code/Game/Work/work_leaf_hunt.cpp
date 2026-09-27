@@ -22,6 +22,13 @@
 #include "resolve.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/HuntComponent.h"                // ENDGAME B.3.9 D5
+#include "Component/FruitComponent.h"                // ENDGAME B.3.9 D5
+#include "Component/PastureComponent.h"              // ENDGAME B.3.9 D5
+#include "Component/RadiusDescription.h"             // ENDGAME B.3.9 D5
+#include "Component/ConsumeProduceDescription.h"     // ENDGAME B.3.9 D5
+#include "Component/AnimalComponent.h"               // ENDGAME B.3.9 D5
+#include "Component/AnimalDescription.h"             // ENDGAME B.3.9 D5
 
 // ============================================================
 // FindComponent-by-typeId family
@@ -38,12 +45,10 @@
 // ---- 0x14002a730  HuntWork_Serialize_sub_a730 ----------------------------------
 // FindComponent (+0x30/+0x38, WITH CheckPtr), typeId @0x1401c7890.
 // ABI: InternalBasePtr* fn(longlong entity, InternalBasePtr* retIBP)  (member value-return).
-static const uint32_t* s_tid_a730 = nullptr; // 0x1401c7890
 void* WorkLeaf_FindComp_a730(uintptr_t entity, void* retIBP) {
-    if (!s_tid_a730)
-        s_tid_a730 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7890));
+    const uint32_t tid = HuntComponent::TypeId(); // 0x1401c7890
     void* found = nullptr;
-    if (s_tid_a730 && *reinterpret_cast<int*>(entity + 0x38) > 0) {
+    if (*reinterpret_cast<int*>(entity + 0x38) > 0) {
         uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
         int n = *reinterpret_cast<int*>(entity + 0x38);
         int i = 0;
@@ -52,10 +57,10 @@ void* WorkLeaf_FindComp_a730(uintptr_t entity, void* retIBP) {
             void** slot = reinterpret_cast<void**>(list + off);
             void* comp = *slot;
             uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
-            if (t == *s_tid_a730) {
+            if (t == tid) {
                 void** slot2 = reinterpret_cast<void**>(list + (int64_t)i * 8);
                 void* c = *slot2;
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_tid_a730)) found = c;
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) found = c;
                 break;
             }
             ++i;
@@ -70,12 +75,10 @@ void* WorkLeaf_FindComp_a730(uintptr_t entity, void* retIBP) {
 
 // ---- 0x14000a0b0  FindComponent (+0x30/+0x38, WITH CheckPtr) -------------------
 // typeId @0x1401c4250. (HarvestOrchard "DescComp" finder.)
-static const uint32_t* s_tid_a0b0 = nullptr; // 0x1401c4250
 void* WorkLeaf_FindComp_a0b0(uintptr_t entity, void* retIBP) {
-    if (!s_tid_a0b0)
-        s_tid_a0b0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4250));
+    const uint32_t tid = FruitComponent::TypeId(); // 0x1401c4250
     void* found = nullptr;
-    if (s_tid_a0b0 && *reinterpret_cast<int*>(entity + 0x38) > 0) {
+    if (*reinterpret_cast<int*>(entity + 0x38) > 0) {
         uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
         int n = *reinterpret_cast<int*>(entity + 0x38);
         int i = 0;
@@ -84,10 +87,10 @@ void* WorkLeaf_FindComp_a0b0(uintptr_t entity, void* retIBP) {
             void** slot = reinterpret_cast<void**>(list + off);
             void* comp = *slot;
             uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
-            if (t == *s_tid_a0b0) {
+            if (t == tid) {
                 void** slot2 = reinterpret_cast<void**>(list + (int64_t)i * 8);
                 void* c = *slot2;
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_tid_a0b0)) found = c;
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) found = c;
                 break;
             }
             ++i;
@@ -102,12 +105,10 @@ void* WorkLeaf_FindComp_a0b0(uintptr_t entity, void* retIBP) {
 
 // ---- 0x140004fe0  FindComponent (+0x30/+0x38, WITH CheckPtr) -------------------
 // typeId @0x1401c7ba0. (PastureComponent finder.)
-static const uint32_t* s_tid_4fe0 = nullptr; // 0x1401c7ba0
 void* WorkLeaf_FindComp_4fe0(uintptr_t entity, void* retIBP) {
-    if (!s_tid_4fe0)
-        s_tid_4fe0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7ba0));
+    const uint32_t tid = PastureComponent::TypeId(); // 0x1401c7ba0
     void* found = nullptr;
-    if (s_tid_4fe0 && *reinterpret_cast<int*>(entity + 0x38) > 0) {
+    if (*reinterpret_cast<int*>(entity + 0x38) > 0) {
         uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
         int n = *reinterpret_cast<int*>(entity + 0x38);
         int i = 0;
@@ -116,10 +117,10 @@ void* WorkLeaf_FindComp_4fe0(uintptr_t entity, void* retIBP) {
             void** slot = reinterpret_cast<void**>(list + off);
             void* comp = *slot;
             uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
-            if (t == *s_tid_4fe0) {
+            if (t == tid) {
                 void** slot2 = reinterpret_cast<void**>(list + (int64_t)i * 8);
                 void* c = *slot2;
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_tid_4fe0)) found = c;
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) found = c;
                 break;
             }
             ++i;
@@ -136,12 +137,10 @@ void* WorkLeaf_FindComp_4fe0(uintptr_t entity, void* retIBP) {
 // FindComponent (+0x28/+0x30, NO CheckPtr), typeId @0x1401c4870.
 // Returns the raw component pointer directly via *retval (NOT an IBP Ctor).
 // ABI: undefined8* fn(longlong entity, undefined8* retval).
-static const uint32_t* s_tid_63d0 = nullptr; // 0x1401c4870
 void* WorkLeaf_FindComp_63d0(uintptr_t entity, void** retval) {
-    if (!s_tid_63d0)
-        s_tid_63d0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4870));
+    const uint32_t tid = RadiusDescription::TypeId(); // 0x1401c4870
     void* found = nullptr;
-    if (s_tid_63d0 && *reinterpret_cast<int*>(entity + 0x30) > 0) {
+    if (*reinterpret_cast<int*>(entity + 0x30) > 0) {
         uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x28);
         int n = *reinterpret_cast<int*>(entity + 0x30);
         int i = 0;
@@ -150,9 +149,9 @@ void* WorkLeaf_FindComp_63d0(uintptr_t entity, void** retval) {
             // No CheckPtr in this variant.
             void* comp = *reinterpret_cast<void**>(off + *reinterpret_cast<uintptr_t*>(entity + 0x28));
             uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
-            if (t == *s_tid_63d0) {
+            if (t == tid) {
                 void* c = *reinterpret_cast<void**>(list + (int64_t)i * 8);
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_tid_63d0)) found = c;
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) found = c;
                 break;
             }
             ++i;
@@ -174,13 +173,11 @@ void* WorkLeaf_FindComp_63d0(uintptr_t entity, void** retval) {
 // (matches FUN_1401193a0 disasm: tail compares dword[R15+0x68] with dword[found+0x48])
 // ABI: bool fn(longlong self).
 bool WorkLeaf_ConsumeProduce_93a0(uintptr_t self) {
-    static const uint32_t* s_tid = nullptr; // 0x1401c7388
-    if (!s_tid)
-        s_tid = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7388));
+    const uint32_t tid = ConsumeProduceDescription::TypeId(); // 0x1401c7388
 
     void* found = nullptr;
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(self + 0x10) + 0x28);
-    if (s_tid && *reinterpret_cast<int*>(entity + 0x30) > 0) {
+    if (*reinterpret_cast<int*>(entity + 0x30) > 0) {
         uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x28);
         int n = *reinterpret_cast<int*>(entity + 0x30);
         int i = 0;
@@ -188,9 +185,9 @@ bool WorkLeaf_ConsumeProduce_93a0(uintptr_t self) {
         for (;;) {
             void* comp = *reinterpret_cast<void**>(off + *reinterpret_cast<uintptr_t*>(entity + 0x28));
             uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
-            if (t == *s_tid) {
+            if (t == tid) {
                 void* c = *reinterpret_cast<void**>(list + (int64_t)i * 8);
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_tid)) found = c;
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) found = c;
                 break;
             }
             ++i;
@@ -215,12 +212,8 @@ bool WorkLeaf_ConsumeProduce_93a0(uintptr_t self) {
 // Returns the best outer index, or -1 if none.
 // ABI: int fn(longlong self).
 int WorkLeaf_Pasture_8350(uintptr_t self) {
-    static const uint32_t* s_tidInner = nullptr; // 0x1401c6f98
-    static const uint32_t* s_tidThresh = nullptr; // 0x1401c6fd0
-    if (!s_tidInner)
-        s_tidInner = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6f98));
-    if (!s_tidThresh)
-        s_tidThresh = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6fd0));
+    const uint32_t tidInner = AnimalComponent::TypeId();   // 0x1401c6f98
+    const uint32_t tidThresh = AnimalDescription::TypeId(); // 0x1401c6fd0
 
     int bestIndex = -1;
     float bestScore = 0.0f;
@@ -234,19 +227,19 @@ int WorkLeaf_Pasture_8350(uintptr_t self) {
         // Nested entity IBP at component+0x10.
         uintptr_t innerEnt = *reinterpret_cast<uintptr_t*>(*compSlot + 0x10);
 
-        // Find sub-component of type s_tidInner in innerEnt's list (+0x30/+0x38).
+        // Find sub-component of type tidInner in innerEnt's list (+0x30/+0x38).
         void* sub = nullptr;
         int innerCount = *reinterpret_cast<int*>(innerEnt + 0x38);
-        if (s_tidInner && innerCount > 0) {
+        if (innerCount > 0) {
             int64_t innerOff = 0;
             for (int j = 0; j < innerCount; ++j, innerOff += 8) {
                 uintptr_t* slot = reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(innerEnt + 0x30) + innerOff);
                 void* comp = reinterpret_cast<void*>(*slot);
                 uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
-                if (t == *s_tidInner) {
+                if (t == tidInner) {
                     uintptr_t* slot2 = reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(innerEnt + 0x30) + innerOff);
                     void* c = reinterpret_cast<void*>(*slot2);
-                    sub = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_tidInner)) ? c : nullptr;
+                    sub = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidInner)) ? c : nullptr;
                     break;
                 }
             }
@@ -264,7 +257,7 @@ int WorkLeaf_Pasture_8350(uintptr_t self) {
                 float score = *reinterpret_cast<float*>(subIBP + 0x44);
                 void* obj = *reinterpret_cast<void**>(subIBP + 0x18);
                 void* derived = nullptr;
-                if (s_tidThresh && fn_IsDerivedFrom && fn_IsDerivedFrom(obj, *s_tidThresh)) derived = obj;
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, tidThresh)) derived = obj;
                 // Keep only if score strictly exceeds derived+0x30 (threshold).
                 float threshold = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(derived) + 0x30);
                 if (threshold <= score && score != threshold) {
