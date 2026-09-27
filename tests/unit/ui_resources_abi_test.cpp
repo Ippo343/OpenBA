@@ -41,6 +41,7 @@
 #include <cstddef>
 #include <cstring>
 #include <type_traits>
+#include <new>
 
 namespace {
 
@@ -48,6 +49,17 @@ const void* g_lastSelf = nullptr;
 int         g_lastMark = -1;
 void Note(const void* self, int mark) { g_lastSelf = self; g_lastMark = mark; }
 void Reset() { g_lastSelf = nullptr; g_lastMark = -1; }
+
+// ENDGAME B.3.9 UI-D: the destructor markers of the CONCRETE classes RECORD
+// each call, so the real `DeletingDtor` (inline in each header, the one under
+// test) can be seen running ~X once per element and in retail's DESCENDING
+// order.
+int         g_b39DtorCount = 0;
+const void* g_b39DtorOrder[8] = {};
+void B39NoteDtor(const void* self) {
+    if (g_b39DtorCount < 8) g_b39DtorOrder[g_b39DtorCount] = self;
+    ++g_b39DtorCount;
+}
 
 template <typename Fn>
 Fn SlotAt(void* obj, int byteOffset) {
@@ -127,7 +139,9 @@ UNIT_TEST(ui_characterset_layout) {
     CHECK_EQ((int)offsetof(UI::CharacterSet, _string20), 0x20);
     CHECK_EQ((int)offsetof(UI::CharacterSet, _string20), (int)sizeof(Object::External));
     CHECK((std::is_base_of<Object::External, UI::CharacterSet>::value));
-    CHECK(std::is_abstract<UI::CharacterSet>::value);
+    CHECK(!std::is_abstract<UI::CharacterSet>::value);      // B.3.9 UI-D: concrete
+    CHECK(!std::is_destructible<UI::CharacterSet>::value);  // protected non-virtual dtor
+    CHECK(!std::has_virtual_destructor<UI::CharacterSet>::value);
     CHECK(!std::is_default_constructible<UI::CharacterSet>::value);
 }
 
@@ -184,7 +198,9 @@ UNIT_TEST(ui_cursor_layout) {
     CHECK_EQ((int)offsetof(UI::Cursor, _spriteSheet), 0x28);
     CHECK_EQ((int)offsetof(UI::Cursor, _hotSpotX), (int)sizeof(Object::External));
     CHECK((std::is_base_of<Object::External, UI::Cursor>::value));
-    CHECK(std::is_abstract<UI::Cursor>::value);
+    CHECK(!std::is_abstract<UI::Cursor>::value);       // B.3.9 UI-D: concrete
+    CHECK(!std::is_destructible<UI::Cursor>::value);   // protected non-virtual dtor
+    CHECK(!std::has_virtual_destructor<UI::Cursor>::value);
 
     // The three getters read exactly the bytes retail's do (0x18003b250/260/270).
     CursorProbe probe;
@@ -221,7 +237,9 @@ UNIT_TEST(ui_stringtable_layout) {
     CHECK_EQ((int)sizeof(UI::StringTable::TextEntry), 0x10);
     CHECK_EQ((int)offsetof(UI::StringTable::TextEntry, text), 0x08);
     CHECK((std::is_base_of<Object::External, UI::StringTable>::value));
-    CHECK(std::is_abstract<UI::StringTable>::value);
+    CHECK(!std::is_abstract<UI::StringTable>::value);       // B.3.9 UI-D: concrete
+    CHECK(!std::is_destructible<UI::StringTable>::value);   // protected non-virtual dtor
+    CHECK(!std::has_virtual_destructor<UI::StringTable>::value);
     // The B6-4.2 transition aliases name the class and its row.
     CHECK((std::is_same<::UiStringTable, UI::StringTable>::value));
     CHECK((std::is_same<::StringTable, UI::StringTable>::value));
@@ -341,7 +359,9 @@ UNIT_TEST(ui_font_layout) {
     CHECK_EQ((int)sizeof(UI::Font::Kerning), 0x10);
     CHECK_EQ((int)sizeof(UI::Font::Layout), 0x28);
     CHECK((std::is_base_of<Object::External, UI::Font>::value));
-    CHECK(std::is_abstract<UI::Font>::value);
+    CHECK(!std::is_abstract<UI::Font>::value);       // B.3.9 UI-D: concrete
+    CHECK(!std::is_destructible<UI::Font>::value);   // protected non-virtual dtor
+    CHECK(!std::has_virtual_destructor<UI::Font>::value);
 }
 
 // The getters read exactly the bytes retail's do (read this pass).
@@ -392,6 +412,172 @@ UNIT_TEST(ui_block_d_resources_construct_at_slot8) {
     }
 }
 
+// ===========================================================================
+// ENDGAME B.3.9 UI-D (B39_RULES D1/D2, rule B9-16) — the CONCRETE classes.
+// ===========================================================================
+// Itanium PMF -> vtable byte offset: 1 + offset for a virtual, adjustment 0.
+template <typename PMF>
+uintptr_t SlotOffset(PMF pmf) {
+    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
+    uintptr_t words[2];
+    std::memcpy(words, &pmf, sizeof words);
+    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
+    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
+    return words[0] - 1;
+}
+
+// Build one real object and run the SCALAR arm with a free; then three behind
+// an array cookie, run the ARRAY arm of slot 0 and check it destroys downward,
+// frees and returns the block. `Make` placement-constructs one real object.
+template <typename T, typename Make>
+void B39ExpectBothArms(size_t elemSize, Make make) {
+    void* p = Object::detail::InternalMemAlloc(elemSize, 8);
+    CHECK(p != nullptr);
+    T* one = make(p);
+    g_b39DtorCount = 0;
+    CHECK(one->DeletingDtor(1) == one);
+    CHECK_EQ(g_b39DtorCount, 1);
+
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * elemSize, 8));
+    CHECK(block != nullptr);
+    const int64_t cookie = 3;
+    std::memcpy(block, &cookie, sizeof cookie);
+    T* e[3];
+    for (int i = 0; i < 3; ++i) e[i] = make(block + 8 + i * elemSize);
+    g_b39DtorCount = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
+    CHECK_EQ(g_b39DtorCount, 3);
+    CHECK(g_b39DtorOrder[0] == e[2]);
+    CHECK(g_b39DtorOrder[1] == e[1]);
+    CHECK(g_b39DtorOrder[2] == e[0]);
+}
+
+// The nine slots of the six resources, by PMF (adjustment 0).
+template <typename C>
+void B39ExpectNineSlots() {
+    CHECK_EQ(SlotOffset(&C::DeletingDtor),   (uintptr_t)kDeletingDtor);
+    CHECK_EQ(SlotOffset(&C::TypeName),       (uintptr_t)kTypeName);
+    CHECK_EQ(SlotOffset(&C::Type),           (uintptr_t)kType);
+    CHECK_EQ(SlotOffset(&C::GetFileVersion), (uintptr_t)kGetFileVersion);
+    CHECK_EQ(SlotOffset(&C::Serialize),      (uintptr_t)kSerialize);
+    CHECK_EQ(SlotOffset(&C::Reconstruct),    (uintptr_t)kReconstruct);
+    CHECK_EQ(SlotOffset(&C::Destruct),       (uintptr_t)kDestruct);
+    CHECK_EQ(SlotOffset(&C::Construct),      (uintptr_t)kConstruct);
+}
+
+UNIT_TEST(b39_uid_characterset_slot_order_by_pmf) {
+    B39ExpectNineSlots<UI::CharacterSet>();
+}
+
+// The inlined constructor (Construct 0x1800376b0): External's three words and
+// +0x20 zeroed; the compiler's table, one per class, not the probe's.
+UNIT_TEST(b39_uid_characterset_ctor_makes_retails_stores) {
+    alignas(8) uint8_t buf[0x28];
+    std::memset(buf, 0xCD, sizeof buf);
+    UI::CharacterSet* c = ::new (buf) UI::CharacterSet();
+    CHECK(static_cast<void*>(c) == static_cast<void*>(buf));
+    for (int off = 0x08; off < 0x28; off += 8)
+        CHECK(*reinterpret_cast<void**>(buf + off) == nullptr);
+    alignas(8) uint8_t buf2[0x28];
+    UI::CharacterSet* c2 = ::new (buf2) UI::CharacterSet();
+    CharacterSetProbe probe;
+    CHECK(VTableOf(c) == VTableOf(c2));
+    CHECK(VTableOf(c) != VTableOf(&probe));
+    g_b39DtorCount = 0;
+    CHECK(c->DeletingDtor(0) == c);
+    CHECK(c2->DeletingDtor(0) == c2);
+    CHECK_EQ(g_b39DtorCount, 2);
+}
+
+UNIT_TEST(b39_uid_characterset_deleting_dtor_both_arms) {
+    B39ExpectBothArms<UI::CharacterSet>(0x28, [](void* p) { return ::new (p) UI::CharacterSet(); });
+}
+
+UNIT_TEST(b39_uid_cursor_slot_order_by_pmf) {
+    B39ExpectNineSlots<UI::Cursor>();
+}
+
+// The inlined constructor (Construct 0x18003b1e0): External's three words and
+// +0x28 zeroed; +0x20 / +0x24 LEFT ALONE (retail's).
+UNIT_TEST(b39_uid_cursor_ctor_makes_retails_stores) {
+    alignas(8) uint8_t buf[0x30];
+    std::memset(buf, 0xCD, sizeof buf);
+    UI::Cursor* c = ::new (buf) UI::Cursor();
+    CHECK(static_cast<void*>(c) == static_cast<void*>(buf));
+    for (int off = 0x08; off < 0x20; off += 8)
+        CHECK(*reinterpret_cast<void**>(buf + off) == nullptr);
+    CHECK_EQ(*reinterpret_cast<uint32_t*>(buf + 0x20), 0xCDCDCDCDu);
+    CHECK_EQ(*reinterpret_cast<uint32_t*>(buf + 0x24), 0xCDCDCDCDu);
+    CHECK(*reinterpret_cast<void**>(buf + 0x28) == nullptr);
+    CursorProbe probe;
+    CHECK(VTableOf(c) != VTableOf(&probe));
+    g_b39DtorCount = 0;
+    CHECK(c->DeletingDtor(0) == c);
+    CHECK_EQ(g_b39DtorCount, 1);
+}
+
+UNIT_TEST(b39_uid_cursor_deleting_dtor_both_arms) {
+    B39ExpectBothArms<UI::Cursor>(0x30, [](void* p) { return ::new (p) UI::Cursor(); });
+}
+
+UNIT_TEST(b39_uid_spritecapture_slot_order_by_pmf) {
+    B39ExpectNineSlots<UI::SpriteCapture>();
+    CHECK(!std::is_destructible<UI::SpriteCapture>::value);   // protected non-virtual dtor
+    CHECK(!std::has_virtual_destructor<UI::SpriteCapture>::value);
+}
+
+UNIT_TEST(b39_uid_stringtable_slot_order_by_pmf) {
+    B39ExpectNineSlots<UI::StringTable>();
+}
+
+// ??0StringTable 0x18011d890: External's three words, +0x20 and +0x28 zeroed.
+UNIT_TEST(b39_uid_stringtable_ctor_makes_retails_stores) {
+    alignas(8) uint8_t buf[0x30];
+    std::memset(buf, 0xCD, sizeof buf);
+    UI::StringTable* t = ::new (buf) UI::StringTable();
+    CHECK(static_cast<void*>(t) == static_cast<void*>(buf));
+    for (int off = 0x08; off < 0x30; off += 8)
+        CHECK(*reinterpret_cast<void**>(buf + off) == nullptr);
+    StringTableProbe probe;
+    CHECK(VTableOf(t) != VTableOf(&probe));
+    g_b39DtorCount = 0;
+    CHECK(t->DeletingDtor(0) == t);
+    CHECK_EQ(g_b39DtorCount, 1);
+}
+
+UNIT_TEST(b39_uid_stringtable_deleting_dtor_both_arms) {
+    B39ExpectBothArms<UI::StringTable>(0x30, [](void* p) { return ::new (p) UI::StringTable(); });
+}
+
+UNIT_TEST(b39_uid_font_slot_order_by_pmf) {
+    B39ExpectNineSlots<UI::Font>();
+    CHECK_EQ(SlotOffset(&UI::Font::Compile), (uintptr_t)kCompile);   // the override
+}
+
+// The inlined constructor (Construct 0x180031ce0, 21 stores): +0x08..+0x58
+// zero, +0x5c NEVER written, +0x60..+0x88 zero.
+UNIT_TEST(b39_uid_font_ctor_makes_retails_stores) {
+    alignas(8) uint8_t buf[0x90];
+    std::memset(buf, 0xCD, sizeof buf);
+    UI::Font* f = ::new (buf) UI::Font();
+    CHECK(static_cast<void*>(f) == static_cast<void*>(buf));
+    for (int off = 0x08; off < 0x58; off += 8)
+        CHECK(*reinterpret_cast<void**>(buf + off) == nullptr);
+    CHECK_EQ(*reinterpret_cast<uint32_t*>(buf + 0x58), 0u);
+    CHECK_EQ(*reinterpret_cast<uint32_t*>(buf + 0x5c), 0xCDCDCDCDu);
+    for (int off = 0x60; off < 0x90; off += 8)
+        CHECK(*reinterpret_cast<void**>(buf + off) == nullptr);
+    FontProbe probe;
+    CHECK(VTableOf(f) != VTableOf(&probe));
+    g_b39DtorCount = 0;
+    CHECK(f->DeletingDtor(0) == f);
+    CHECK_EQ(g_b39DtorCount, 1);
+}
+
+UNIT_TEST(b39_uid_font_deleting_dtor_both_arms) {
+    B39ExpectBothArms<UI::Font>(0x90, [](void* p) { return ::new (p) UI::Font(); });
+}
+
 }  // namespace
 
 // ############################################################################
@@ -406,7 +592,7 @@ bool        CharacterSet::Serialize(void*) { Note(this, kSerialize / 8); return 
 Object::External* CharacterSet::Reconstruct() { Note(this, kReconstruct / 8); return this; }
 void        CharacterSet::Destruct() { Note(this, kDestruct / 8); }
 Object::External* CharacterSet::Construct() { Note(this, kConstruct / 8); return this; }
-CharacterSet::~CharacterSet() {}
+CharacterSet::~CharacterSet() { B39NoteDtor(this); }
 
 const char* Cursor::TypeName() const { Note(this, kTypeName / 8); return "Cursor"; }
 uint32_t    Cursor::Type() const { Note(this, kType / 8); return 0u; }
@@ -415,7 +601,7 @@ bool        Cursor::Serialize(void*) { Note(this, kSerialize / 8); return true; 
 Object::External* Cursor::Reconstruct() { Note(this, kReconstruct / 8); return this; }
 void        Cursor::Destruct() { Note(this, kDestruct / 8); }
 Object::External* Cursor::Construct() { Note(this, kConstruct / 8); return this; }
-Cursor::~Cursor() {}
+Cursor::~Cursor() { B39NoteDtor(this); }
 
 const char* StringTable::TypeName() const { Note(this, kTypeName / 8); return "StringTable"; }
 uint32_t    StringTable::Type() const { Note(this, kType / 8); return 0u; }
@@ -424,7 +610,7 @@ bool        StringTable::Serialize(void*) { Note(this, kSerialize / 8); return t
 Object::External* StringTable::Reconstruct() { Note(this, kReconstruct / 8); return this; }
 void        StringTable::Destruct() { Note(this, kDestruct / 8); }
 Object::External* StringTable::Construct() { Note(this, kConstruct / 8); return this; }
-StringTable::~StringTable() {}
+StringTable::~StringTable() { B39NoteDtor(this); }
 
 const char* SpriteSheet::TypeName() const { Note(this, kTypeName / 8); return "SpriteSheet"; }
 uint32_t    SpriteSheet::Type() const { Note(this, kType / 8); return 0u; }
@@ -459,6 +645,6 @@ bool        Font::Serialize(void*) { Note(this, kSerialize / 8); return true; }
 Object::External* Font::Reconstruct() { Note(this, kReconstruct / 8); return this; }
 void        Font::Destruct() { Note(this, kDestruct / 8); }
 Object::External* Font::Construct() { Note(this, kConstruct / 8); return this; }
-Font::~Font() {}
+Font::~Font() { B39NoteDtor(this); }
 
 }  // namespace UI

@@ -218,35 +218,9 @@ int RtUi_Sprite_Height(const void* spriteRaw) {
 // is runtime/types/ui/SpriteSheet.h; its slots are in spritesheet_vtable.cpp.
 // ============================================================================
 
-// SpriteSheet::SpriteSheet() — retail 0x18011d600. THE CTOR DOOR, KEPT (B6-3:
-// the exe's thumb_vtables.cpp constructs bare SpriteSheets through it; the
-// class has no real ctor). Stamps Object::Base's vtable, then Object::External's,
-// zeroes External's three fields, stamps SpriteSheet's own (EXPORTED,
-// ??_7SpriteSheet@UI@@6B@ — PLAN §2.2 item D), then zeroes the rest of the
-// object. The two intermediate vtable stores are dead by the time the ctor
-// returns but are kept, matching the Achievement::Achievement precedent
-// (runtime/src/achievement/achievement_manager.cpp): they ARE the body.
-void* RtUi_SpriteSheet_Ctor(void* selfRaw) {
-    auto* self = static_cast<uint8_t*>(selfRaw);
-    auto qword = [](uint8_t* p, size_t off) -> void*& {
-        return *reinterpret_cast<void**>(p + off);
-    };
-    static void* vtableBase     = ResolveExport("??_7Base@Object@@6B@");
-    static void* vtableExternal = ResolveExport("??_7External@Object@@6B@");
-    static void* vtableSheet    = ResolveExport("??_7SpriteSheet@UI@@6B@");
-
-    qword(self, 0x00) = vtableBase;
-    qword(self, 0x00) = vtableExternal;
-    qword(self, 0x08) = nullptr;
-    qword(self, 0x10) = nullptr;
-    qword(self, 0x18) = nullptr;
-    qword(self, 0x00) = vtableSheet;
-    // ENDGAME B.3.8 block RB (RULE B8-1): the +0x20..+0x50 stores are ONE body
-    // with the real constructor `UI::SpriteSheet()` (SpriteSheet.h, InitFields).
-    UI::SpriteSheet::DoorBody::Init(reinterpret_cast<UI::SpriteSheet*>(selfRaw));   // B.3.8 bridge
-
-    return selfRaw;
-}
+// SpriteSheet::SpriteSheet() — retail 0x18011d600: the REAL constructor
+// (SpriteSheet.h). ENDGAME B.3.9 UI-D retired its door `RtUi_SpriteSheet_Ctor`;
+// every construction spells `::new (p) UI::SpriteSheet()`.
 
 namespace UI {
 
@@ -706,7 +680,6 @@ int RtUiSpriteRegister() {
     RegisterRuntimeExport("?Width@Sprite@UI@@QEBAHXZ", (void*)&RtUi_Sprite_Width); ++n;
     RegisterRuntimeExport("?Height@Sprite@UI@@QEBAHXZ", (void*)&RtUi_Sprite_Height); ++n;
 
-    RegisterRuntimeExport("??0SpriteSheet@UI@@QEAA@XZ", (void*)&RtUi_SpriteSheet_Ctor); ++n;
     RegisterRuntimeExport("?GetSpriteCount@SpriteSheet@UI@@QEBAHXZ", (void*)&RtUi_SpriteSheet_GetSpriteCount); ++n;
     RegisterRuntimeExport("?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z",
                           (void*)&RtUi_SpriteSheet_GetSpriteIndexFromName); ++n;

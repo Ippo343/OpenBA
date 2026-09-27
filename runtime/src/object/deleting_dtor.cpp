@@ -285,7 +285,6 @@ namespace rtdtor {
 #define RT_DELDTOR(ADDR, DTOR, SIZE, NAME) { (ADDR), (DTOR), (SIZE), NAME }
 
 static constexpr DelDtorSpec kSpecs[] = {
-    RT_DELDTOR(0x1800037b0, 0x18011d670, 0x058, "UI::SpriteSheet"),
     RT_DELDTOR(0x180006440, 0x1800bfdb0, 0x010, "Object::Internal"),
     RT_DELDTOR(0x1800065b0, 0x1800c0360, 0x008, "Object::Base"),   // probe subject
     RT_DELDTOR(0x180006640, 0x1800bc950, 0x020, "Object::External"),
@@ -294,24 +293,9 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x18001ed20, 0x1800f2610, 0x068, "Video::ImageBuffer"),
     RT_DELDTOR(0x1800244a0, 0x1800a9560, 0x098, "IO::CompressedMemoryStream"),
     RT_DELDTOR(0x180031900, 0x1800dddb0, 0x028, "Engine::UpdateLoop"),
-    RT_DELDTOR(0x180035c10, 0x1801161a0, 0x0c0, "UI::Element"),
-    RT_DELDTOR(0x18003b800, 0x1800cd2f0, 0x030, "UI::DialogController"),
-    RT_DELDTOR(0x1800458c0, 0x180114d40, 0x0b8, "UI::DialogInstance"),
     RT_DELDTOR(0x18004d4f0, 0x1800dc170, 0x048, "Engine::LoaderLoop"),
     RT_DELDTOR(0x18004d670, 0x1800db060, 0x188, "Engine::DialogLoaderLoopT"),
     RT_DELDTOR(0x18004d8b0, 0x1800db340, 0x168, "Engine::DialogLoopT"),
-    RT_DELDTOR(0x180058590, 0x1800f8db0, 0x010, "Video::RenderBufferData"),   // probe subject
-    RT_DELDTOR(0x180058610, 0x1800f8d90, 0x010, "Video::VideoProgramData"),   // probe subject
-    RT_DELDTOR(0x180058690, 0x1800f8d70, 0x010, "Video::RenderStateData"),   // probe subject
-    RT_DELDTOR(0x180058710, 0x1800f8dd0, 0x010, "Video::PixelProgramData"),   // probe subject
-    RT_DELDTOR(0x180058790, 0x1800f8d10, 0x010, "Video::VertexProgramData"),   // probe subject
-    RT_DELDTOR(0x180058810, 0x1800f8d30, 0x010, "Video::VertexLayoutData"),   // probe subject
-    RT_DELDTOR(0x180058890, 0x1800f8d50, 0x010, "Video::VertexBufferData"),   // probe subject
-    RT_DELDTOR(0x180058910, 0x1800f8df0, 0x010, "Video::IndexBufferData"),   // probe subject
-    RT_DELDTOR(0x180058990, 0x1800f8e50, 0x010, "Video::ConstantBufferData"),   // probe subject
-    RT_DELDTOR(0x180058a10, 0x1800f8e10, 0x010, "Video::ImageBufferData"),   // probe subject
-    RT_DELDTOR(0x180058a90, 0x1800f8e30, 0x010, "Video::ContextData"),   // probe subject
-    RT_DELDTOR(0x180058b10, 0x1800f8cf0, 0x010, "Video::DeviceData"),   // probe subject
     // ---- WAVE 10C lane DLG8 -------------------------------------------------
     // Slot 0 of `??_7Dialog@UI@@6B@`, the last of that vtable's eight abort
     // traps and the only one that is not a UI body. It is this family's shape
@@ -336,7 +320,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // ten and to ?MemFree@MemoryAllocator@System@@SAXPEAX@Z. Nothing about the
     // port changes; the banner's "per-translation-unit copies" is just an
     // incomplete description of the set.
-    RT_DELDTOR(0x180038b20, 0x180112e40, 0x088, "UI::Dialog"),
     // ---- WAVE 10D lane TIP --------------------------------------------------
     // Slot 0 of `??_7ToolTipDialog@UI@@6B@` (0x180157880), the only one of that
     // vtable's three CODE slots that is not a UI body — the other two,
@@ -375,7 +358,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // UI::Dialog row above is appended: kProbeSubjects is a list of TABLE
     // INDICES and a mid-table insert silently re-points all twelve
     // Video::*Data probe subjects at the wrong rows.
-    RT_DELDTOR(0x18004d270, 0x1800dac70, 0x0c0, "UI::ToolTipDialog"),
     // ---- WAVE 19 lane CSTREAM -----------------------------------------------
     // Slot 0 of `??_7CompressedStream@IO@@6B@` (0x180155640) and of
     // `??_7CompressedFileStream@IO@@6B@` (0x1801555f0). The THIRD member of that
@@ -475,10 +457,147 @@ static constexpr DelDtorSpec kSpecs[] = {
     // THIS DOES NOT PROMOTE THE ROW, and the table is still 6/9.
     // ENDGAME B.3.9 IO: the IO::PackageFile row (0x1800259d0) is retired --
     // the class's inline DeletingDtor is its slot 0.
-    // ---- WAVE 27 lane GFXMESH (retired) -------------------------------------
-    // ENDGAME B.3.9 GFX: the three Graphics mesh rows (EdgeMesh 0x1800134b0,
-    // EdgeMeshInstance 0x1800175d0, MeshInstance 0x180017330) are retired --
-    // each class's own DeletingDtor is its slot 0 (runtime/types/graphics/Mesh.h).
+    // ---- WAVE 27 lane GFXMESH ------------------------------------------------
+    // Slot 0 of the three Graphics mesh vtables this lane owns:
+    //     ??_7EdgeMesh@Graphics@@6B@          0x180154c70   -> 0x1800134b0
+    //     ??_7EdgeMeshInstance@Graphics@@6B@  0x180154d70   -> 0x1800175d0
+    //     ??_7MeshInstance@Graphics@@6B@      0x180154dc0   -> 0x180017330
+    // All three are the family's exact shape and none is a new one; they are
+    // three ADDRESSES, not three bodies, which is the whole point of this table.
+    //
+    // Every constant below was disassembled from the RETAIL Runtime-x64.dll for
+    // this lane, and EVERY ~Class VA was then confirmed against the export
+    // directory BY VA with pefile -- not by name pattern, and not against the
+    // profile build:
+    //
+    //   0x1800134b0  LEA R9,[0x1800a2780]   ~EdgeMesh
+    //                MOV EDX,0x180          sizeof(Graphics::EdgeMesh)
+    //     0x1800a2780 = ordinal 580, ??1EdgeMesh@Graphics@@UEAA@XZ. UEAA, the
+    //     VIRTUAL spelling -- QEAA would have resolved NULL silently
+    //     (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
+    //
+    //   0x1800175d0  LEA R9,[0x1800174d0]   ~EdgeMeshInstance
+    //                MOV EDX,0xd0           sizeof(Graphics::EdgeMeshInstance)
+    //     0x1800174d0 = ordinal 581, ??1EdgeMeshInstance@Graphics@@UEAA@XZ.
+    //
+    //   0x180017330  LEA R9,[0x180017060]   ~MeshInstance
+    //                MOV EDX,0x120          sizeof(Graphics::MeshInstance)
+    //     0x180017060 = ordinal 632, ??1MeshInstance@Graphics@@UEAA@XZ.
+    //
+    // ALL THREE SIZES ARE INDEPENDENTLY PINNED, by a witness that is not this
+    // thunk: runtime/types/graphics/Mesh.h carries static_assert(sizeof(EdgeMesh)
+    // == 0x180), (sizeof(EdgeMeshInstance) == 0xd0) and (sizeof(MeshInstance)
+    // == 0x120), each derived from that class's CONSTRUCTOR store pattern in
+    // Wave 6 lane E, years of waves before this row existed. Two independent
+    // derivations, same three numbers.
+    //
+    // THE SCALAR BRANCH INLINES ~Class IN ALL THREE, and all three were checked
+    // against the destructor their own array branch names, which is the check
+    // the banner says was done for the original 22 of 37:
+    //   * 0x1800174d0 (~EdgeMeshInstance) is 0x1a bytes and is a bare tail
+    //     `JMP 0x1800a41c0` (~Geometry) with NO vtable restamp -- and the
+    //     scalar branch at 0x180017621 is exactly `CALL 0x1800a41c0`. Identical.
+    //   * 0x180017060 (~MeshInstance) destroys the node array (+0xf0), the
+    //     animation layer array (+0xd8+8) and the material array (+0xc8), then
+    //     tail-jumps ~Geometry -- and the scalar branch at 0x180017381 emits
+    //     those same four calls on those same four offsets, in that same order.
+    //   * 0x1800a2780 (~EdgeMesh) restamps ??_7EdgeMesh@ , destroys the two
+    //     lists (+0x158, +0x148) and the eight Video buffers in DESCENDING
+    //     address order, then tail-jumps ~External -- and the EdgeMesh thunk's
+    //     scalar branch is a plain `CALL 0x1800a2780`, so nothing is inlined
+    //     there at all. It is a K1 "call the dtor" row.
+    // So calling ~Class in both branches -- this family's one deliberate
+    // departure -- costs one extra call on two of the three and nothing on the
+    // third, and changes no byte.
+    //
+    // THREE MORE `operator delete` COPIES, and the banner's list of ten is
+    // therefore incomplete rather than wrong. The scalar branches free through
+    // 0x180012d20 (EdgeMesh), 0x180017460 (EdgeMeshInstance) and 0x1800169c0
+    // (MeshInstance); the array branches all use 0x180006a10, which IS on the
+    // banner's list. All three new addresses were disassembled and all three are
+    // instruction-for-instruction `if (p) { Enter(cs); Free(_singleton, p);
+    // Leave(cs); }` -- the same per-translation-unit copy, and Ghidra names all
+    // three `operator_delete`. Nothing about the port changes: `operator delete`
+    // is a CONSTANT in this family, not a parameter, and these three confirm
+    // that rather than complicate it.
+    //
+    // ONE OF THE THREE ~Class BODIES IS OURS, TWO ARE THE DLL'S, and the split
+    // is stated rather than glossed. Dtor(i) above resolves BY ADDRESS, and
+    // ResolveAddr consults the port registry first, so what each row reaches is
+    // decided by whether that ADDRESS is registered -- a name registration is
+    // not enough:
+    //   * ??1MeshInstance@Graphics@@UEAA@XZ IS ported
+    //     (mesh.cpp, RtGraphics_MeshInstance_Dtor) but was registered BY NAME
+    //     ONLY, so ResolveAddr(0x180017060) handed back the DLL's. This lane
+    //     adds the matching RegisterRuntimeAddr in mesh.cpp; row 46 is now ours.
+    //     That is reference_half_registered_port_reads_as_absent.md seen from
+    //     the other side: the body existed, the door did not.
+    //   * ??1EdgeMesh@ (0x1800a2780) and ??1EdgeMeshInstance@ (0x1800174d0) are
+    //     NOT ported anywhere in this tree -- grepped by mangled name and by
+    //     address before this row was written. Rows 44 and 45 therefore make
+    //     those two addresses newly `called`
+    //     (reference_porting_can_grow_the_cutover_surface.md). Neither is
+    //     claimed as ported by this lane; both are named in
+    //     docs/runtime_port/WAVE27_LANE_GFXMESH.md §6 as inherited cutover work,
+    //     so the next census does not have to rediscover them.
+    //
+    // NOT added to kProbeSubjects. ~MeshInstance frees three arrays and
+    // ~EdgeMesh frees two lists and tears down eight Video buffer objects;
+    // running either over a fabricated subject frees garbage pointers. A probe
+    // subject must be safe to run and neither is. ~EdgeMeshInstance would be
+    // safe on its own (it is a bare tail call) but its callee ~Geometry is not
+    // read by this lane, so it is left out rather than assumed.
+    //
+    // APPENDED rather than inserted in address order (all three would sort into
+    // the middle of the table) for the reason every row since Wave 10C gives:
+    // kProbeSubjects is a list of TABLE INDICES and a mid-table insert silently
+    // re-points all twelve Video::*Data probe subjects at wrong rows.
+    //
+    // THESE ROWS DO NOT PROMOTE ANYTHING. They make slot 0 of each of the three
+    // tables ported, which is what lets ??_7EdgeMesh@ reach 9/9 COMPLETE; see
+    // docs/runtime_port/WAVE27_LANE_GFXMESH.md §5 for the promotion verdicts.
+    //
+    // *** tools/rt_deleting_dtor_verify.py PRINTS `BAD` FOR THE SECOND AND THIRD
+    // *** OF THESE THREE ROWS. THE ROWS ARE RIGHT AND THE TOOL HAS A BLIND SPOT.
+    // Read this before "fixing" the rows, because its verdict is the first thing
+    // the next person will see:
+    //
+    //     BAD 0x1800175d0 ... scalar branch neither calls 0x1800174d0 nor
+    //                         restamps a vtable
+    //     BAD 0x180017330 ... scalar branch neither calls 0x180017060 nor
+    //                         restamps a vtable
+    //
+    // The checker (tools/rt_deleting_dtor_verify.py:260-273) knows exactly TWO
+    // shapes for the scalar branch -- K1, it CALLS ~Class; K2/K3, it INLINES a
+    // ~Class that begins with a vtable RESTAMP, which the tool matches on -- and
+    // its third arm is a bare `else` that reports anything else as a problem.
+    // These two rows are a THIRD shape: the scalar branch inlines a ~Class whose
+    // own body contains NO restamp at all, so there is nothing for the tool to
+    // match and it cannot tell an inlined-correct row from a wrong one. It
+    // announces a verdict without being able to examine its subject
+    // (reference_a_screen_that_cannot_name_its_subject.md), and it INFLATES:
+    // two false positives, no false negatives.
+    //
+    // BOTH WERE THEREFORE CHECKED BY HAND, instruction by instruction, which is
+    // the check the tool is standing in for:
+    //   0x1800175d0 scalar branch (at 0x180017621) is `CALL 0x1800a41c0` and
+    //       nothing else, and ~EdgeMeshInstance (0x1800174d0) is 0x1a bytes
+    //       whose whole body is `JMP 0x1800a41c0`. Identical.
+    //   0x180017330 scalar branch (at 0x180017381) is, in order,
+    //       CALL 0x18001c550 on this+0xf0, CALL 0x18001c480 on this+0xd8+8,
+    //       CALL 0x180014d00 on this+0xc8, CALL 0x1800a41c0 on this -- and
+    //       ~MeshInstance (0x180017060) is those same four calls on those same
+    //       four offsets in that same order, the last as a tail JMP. Identical.
+    // The row's `dtor` field is what DeletingDtorCore CALLS, and calling ~Class
+    // in both branches is this family's one documented deliberate departure, so
+    // both rows compute what retail computes.
+    //
+    // NOT FIXED IN THE TOOL, deliberately: WAVE27_KICKOFF.md §4 #1 forbids this
+    // wave's lanes from touching instruments. Recorded with file and line in
+    // docs/runtime_port/WAVE27_LANE_GFXMESH.md under "INSTRUMENT DEFECT
+    // OBSERVED, NOT FIXED". [ADDRESSEE: whoever scopes a Wave 28 instruments
+    // lane -- the fix is a K4 arm that accepts a scalar branch whose call set
+    // equals the call set of the named ~Class.]
 
     // ---- WAVE 27 lane GFXPART -------------------------------------------------
     // Slot 0 of `??_7Light@Graphics@@6B@` (0x180158d30) and slot 0 of
@@ -590,11 +709,8 @@ static constexpr DelDtorSpec kSpecs[] = {
     // at +0x60 and chains to ~External. Run over a fabricated subject that
     // decrements a refcount that was never incremented and frees a garbage
     // pointer. A probe subject must be SAFE TO RUN; this one is not.
-    RT_DELDTOR(0x180035350, 0x180116100, 0x068, "UI::ElementDescription"),
     // 2026-09-12: slot 0 of ??_7VideoProgram@Video@@6B@ (videoprogram.cpp); 0x48 from
     // CreateNewObject's Allocate(0x48, 8) and the eh_vector iterator stride.
-    RT_DELDTOR(0x18004efb0, 0x1800f4650, 0x048, "Video::VideoProgram"),
-    RT_DELDTOR(0x18004e000, 0x1800f5df0, 0x048, "Video::VertexLayout"),   // vertexlayout.cpp (2026-09-12)
     // 2026-09-12: the Video shader family, all four slot-0 entries. Each row's two
     // constants were read from the shipped bytes, not from the class header:
     //   0x18004e360  LEA R9,[0x1800f50b0]  MOV EDX,0x50   Video::ShaderProgram
@@ -611,10 +727,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // copies this file's banner enumerates, so DeletingDtorCore's single MemFree
     // is retail's body. The `LEA R9` in each VECTOR arm still names the real
     // destructor, which is what tools/rt_deleting_dtor_verify.py reads.
-    RT_DELDTOR(0x18004e360, 0x1800f50b0, 0x050, "Video::ShaderProgram"),
-    RT_DELDTOR(0x18004e810, 0x1800f61b0, 0x058, "Video::VertexProgram"),
-    RT_DELDTOR(0x18004eb90, 0x1800f3a00, 0x058, "Video::PixelProgram"),
-    RT_DELDTOR(0x18004b9d0, 0x1800f4c30, 0x080, "Video::RenderState"),
     // (UI::GroupDescription's row -- 0x180046af0: LEA R9,[0x180117c00]
     // ~GroupDescription, MOV EDX,0x78; a scalar arm whose class-specific
     // ??3GroupDescription (0x1800466f0) is the same single MemFree -- was retired
@@ -631,18 +743,12 @@ static constexpr DelDtorSpec kSpecs[] = {
     //   0x180074a10  LEA R9,[0x180111cd0]  MOV EDX,0xd0   ~ComboDialog
     //     (own body: stamp own vtable, tail into ~DialogInstance -- already
     //     ported, runtime/src/ui/dialog.cpp)
-    RT_DELDTOR(0x180074a10, 0x180111cd0, 0x0d0, "UI::ComboDialog"),
     //   0x18003b600  LEA R9,[0x18003b4f0]  MOV EDX,0x20   ~DialogControllerConfig
     //     (own body: stamp own vtable, tail into ~External -- already ported,
     //     runtime/src/object/external.cpp)
-    RT_DELDTOR(0x18003b600, 0x18003b4f0, 0x020, "UI::DialogControllerConfig"),
     // (ENDGAME B.3.9: the Object::ExtensionCompiler 0x18002c300 and
     // Object::ExternalCompiler 0x18002c180 rows retired with their minted
     // tables -- retail's factories for both return null, nothing built one.)
-    //   0x180007800  LEA R9,[0x1800076c0]  MOV EDX,0x30   ~ExternalList
-    //     (own body: Array<ExternalPtr<External>>::~Array at +0x20 (0x180009460,
-    //     already ported), then ~External -- already ported)
-    RT_DELDTOR(0x180007800, 0x1800076c0, 0x030, "Object::ExternalList"),
     // (ENDGAME B.3.9: the IO::CompressedCopyFileStream 0x1800245f0 row retired
     // with its minted table: no class, no stamper, and its ~Class 0x1800a92a0
     // was never registered, so the row called a NULL dtor -- INVENTORY_B
@@ -724,10 +830,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // three Arrays whose buffers came from the Runtime heap, and ~Font does
     // both. A fabricated subject would decrement a refcount nothing
     // incremented and free garbage pointers.
-    RT_DELDTOR(0x180032130, 0x1801175a0, 0x090, "UI::Font"),
-    RT_DELDTOR(0x1800378a0, 0x1800cb840, 0x028, "UI::CharacterSet"),
-    RT_DELDTOR(0x18003b3a0, 0x1800cd1c0, 0x030, "UI::Cursor"),
-    RT_DELDTOR(0x18003ccf0, 0x1800d91b0, 0x058, "UI::SpriteCapture"),
     // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12), rows 85..98 ---------
     // Slot 0 of the fourteen UI widget vtables ported by
     // runtime/src/ui/<class>element.cpp. APPENDED, never inserted: the table is
@@ -944,10 +1046,6 @@ void* DeletingDtorCore(void* self, unsigned flags, int i) {
     return DeletingDtorCoreWith(self, flags, i, Dtor(i));
 }
 
-// UI::SpriteSheet          ~SpriteSheet = 0x18011d670  (PORTED, ui/spritesheet_new.cpp; this note was stale)
-void* RtDelDtor_SpriteSheet(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800037b0>());
-}
 // Object::Internal         ~Internal = 0x1800bfdb0  (PORTED)
 void* RtDelDtor_Internal(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180006440>());
@@ -972,6 +1070,9 @@ void* RtDelDtor_Stream(void* self, unsigned flags) {
 void* RtDelDtor_ImageBuffer(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18001ed20>());
 }
+// Graphics::ParticleSystemInstance ~ParticleSystemInstance = 0x1800a5520  (PORTED,
+//                          BATCH C 2026-09-12, graphics/batchc_gfx_leaves.cpp;
+//                          was "still the DLL's")
 // IO::CompressedMemoryStream ~CompressedMemoryStream = 0x1800a9560  (PORTED)
 void* RtDelDtor_CompressedMemoryStream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x1800244a0>());
@@ -979,18 +1080,6 @@ void* RtDelDtor_CompressedMemoryStream(void* self, unsigned flags) {
 // Engine::UpdateLoop       ~UpdateLoop = 0x1800dddb0  (PORTED)
 void* RtDelDtor_UpdateLoop(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180031900>());
-}
-// UI::Element              ~Element = 0x1801161a0  (PORTED, ui/element.cpp; this note was stale)
-void* RtDelDtor_Element(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180035c10>());
-}
-// UI::DialogController     ~DialogController = 0x1800cd2f0  (PORTED)
-void* RtDelDtor_DialogController(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003b800>());
-}
-// UI::DialogInstance       ~DialogInstance = 0x180114d40  (PORTED, ui/dialog.cpp; this note was stale)
-void* RtDelDtor_DialogInstance(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800458c0>());
 }
 // Engine::LoaderLoop       ~LoaderLoop = 0x1800dc170  (PORTED, BATCH 8)
 void* RtDelDtor_LoaderLoop(void* self, unsigned flags) {
@@ -1004,100 +1093,16 @@ void* RtDelDtor_DialogLoaderLoopT(void* self, unsigned flags) {
 void* RtDelDtor_DialogLoopT(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18004d8b0>());
 }
-// Video::RenderBufferData  ~RenderBufferData = 0x1800f8db0  (PORTED)
-void* RtDelDtor_RenderBufferData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058590>());
-}
-// Video::VideoProgramData  ~VideoProgramData = 0x1800f8d90  (PORTED)
-void* RtDelDtor_VideoProgramData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058610>());
-}
-// Video::RenderStateData   ~RenderStateData = 0x1800f8d70  (PORTED)
-void* RtDelDtor_RenderStateData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058690>());
-}
-// Video::PixelProgramData  ~PixelProgramData = 0x1800f8dd0  (PORTED)
-void* RtDelDtor_PixelProgramData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058710>());
-}
-// Video::VertexProgramData ~VertexProgramData = 0x1800f8d10  (PORTED)
-void* RtDelDtor_VertexProgramData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058790>());
-}
-// Video::VertexLayoutData  ~VertexLayoutData = 0x1800f8d30  (PORTED)
-void* RtDelDtor_VertexLayoutData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058810>());
-}
-// Video::VertexBufferData  ~VertexBufferData = 0x1800f8d50  (PORTED)
-void* RtDelDtor_VertexBufferData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058890>());
-}
-// Video::IndexBufferData   ~IndexBufferData = 0x1800f8df0  (PORTED)
-void* RtDelDtor_IndexBufferData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058910>());
-}
-// Video::ConstantBufferData ~ConstantBufferData = 0x1800f8e50  (PORTED)
-void* RtDelDtor_ConstantBufferData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058990>());
-}
-// Video::ImageBufferData   ~ImageBufferData = 0x1800f8e10  (PORTED)
-void* RtDelDtor_ImageBufferData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058a10>());
-}
-// Video::ContextData       ~ContextData = 0x1800f8e30  (PORTED)
-void* RtDelDtor_ContextData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058a90>());
-}
-// Video::DeviceData        ~DeviceData = 0x1800f8cf0  (PORTED)
-void* RtDelDtor_DeviceData(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058b10>());
-}
-// UI::Dialog               ~Dialog = 0x180112e40  (PORTED, lane DLG2)  [Wave 10C]
-void* RtDelDtor_Dialog(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180038b20>());
-}
-// UI::ToolTipDialog        ~ToolTipDialog = 0x1800dac70  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)  [Wave 10D]
-void* RtDelDtor_ToolTipDialog(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004d270>());
-}
 // IO::CompressedStream     ~CompressedStream = 0x1800aa650  (PORTED, lane PKG2)  [Wave 19]
 void* RtDelDtor_CompressedStream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180023fd0>());
 }
 
 
-// UI::ElementDescription   ~ElementDescription = 0x180116100  (PORTED)  [Wave 27 IOTEXT]
-void* RtDelDtor_ElementDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180035350>());
-}
 
 
-// Video::VideoProgram       ~VideoProgram = 0x1800f4650  (PORTED, videoprogram.cpp)
-void* RtDelDtor_VideoProgram(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004efb0>());
-}
 
-// Video::VertexLayout       ~VertexLayout = 0x1800f5df0  (PORTED, vertexlayout.cpp)
-void* RtDelDtor_VertexLayout(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004e000>());
-}
 
-// Video::ShaderProgram      ~ShaderProgram = 0x1800f50b0  (PORTED, shaderprogram.cpp)
-void* RtDelDtor_ShaderProgram(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004e360>());
-}
-// Video::VertexProgram      ~VertexProgram = 0x1800f61b0  (PORTED, vertexprogram.cpp)
-void* RtDelDtor_VertexProgram(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004e810>());
-}
-// Video::PixelProgram       ~PixelProgram = 0x1800f3a00   (PORTED, pixelprogram.cpp)
-void* RtDelDtor_PixelProgram(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004eb90>());
-}
-// Video::RenderState        ~RenderState = 0x1800f4c30    (PORTED, renderstate.cpp)
-void* RtDelDtor_RenderState(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004b9d0>());
-}
 
 // Rows 57-60 (2026-09-12): the four UI::*Description classes the cutover boot
 // walked that afternoon. Their table rows landed with the class ports but the
@@ -1106,40 +1111,12 @@ void* RtDelDtor_RenderState(void* self, unsigned flags) {
 
 // VTABLE BATCH 9 (2026-09-12). Indices 61-66, appended after rows 57-60
 // (wired above, after this batch's merge found them without wrappers).
-// UI::ComboDialog          ~ComboDialog = 0x180111cd0             (PORTED, runtime/src/ui/combodialog.cpp)
-void* RtDelDtor_ComboDialog(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180074a10>());
-}
-// UI::DialogControllerConfig ~DialogControllerConfig = 0x18003b4f0  (PORTED, runtime/src/ui/dialogcontrollerconfig.cpp)
-void* RtDelDtor_DialogControllerConfig(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003b600>());
-}
-// Object::ExternalList      ~ExternalList = 0x1800076c0           (PORTED, runtime/src/object/external_list.cpp)
-void* RtDelDtor_ExternalList(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180007800>());
-}
 // Vtable batch 8 (2026-09-12): Collision2D::CollisionMesh/Surface,
 // Pathfinding::PointList, Picking::PickingMesh. Indices 67-70 (renumbered at
 // the merge: batch 9 took 61-66 on main first).
 // UI TEXT PIPELINE batch (2026-09-12). Indices 71-74, counted off the MERGED
 // table rather than assumed: this is the fourth batch to append here today and
 // the previous three each started at the same index on their own branch.
-// UI::Font          ~Font          = 0x1801175a0  (PORTED, runtime/src/ui/font.cpp)
-void* RtDelDtor_Font(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180032130>());
-}
-// UI::CharacterSet  ~CharacterSet  = 0x1800cb840  (PORTED, runtime/src/ui/characterset.cpp)
-void* RtDelDtor_CharacterSet(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800378a0>());
-}
-// UI::Cursor        ~Cursor        = 0x1800cd1c0  (PORTED, runtime/src/ui/cursor.cpp)
-void* RtDelDtor_Cursor(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003b3a0>());
-}
-// UI::SpriteCapture ~SpriteCapture = 0x1800d91b0  (PORTED, runtime/src/ui/spritecapture_class.cpp)
-void* RtDelDtor_SpriteCapture(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003ccf0>());
-}
 
 // ---------------------------------------------------------------------------
 // 2026-09-12, VTABLE BATCH 1 -- ten UI::*Description classes, indices 71..80.
@@ -1201,7 +1178,6 @@ const DelDtorSpec* Specs() { return kSpecs; }
 void RtObjectDeletingDtorPortInit() {
     using namespace rtdtor;
 
-    RegisterRuntimeAddr(0x1800037b0, (void*)&RtDelDtor_SpriteSheet);
     RegisterRuntimeAddr(0x180006440, (void*)&RtDelDtor_Internal);
     RegisterRuntimeAddr(0x1800065b0, (void*)&RtDelDtor_Base);
     RegisterRuntimeAddr(0x180006640, (void*)&RtDelDtor_External);
@@ -1210,43 +1186,16 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18001ed20, (void*)&RtDelDtor_ImageBuffer);
     RegisterRuntimeAddr(0x1800244a0, (void*)&RtDelDtor_CompressedMemoryStream);
     RegisterRuntimeAddr(0x180031900, (void*)&RtDelDtor_UpdateLoop);
-    RegisterRuntimeAddr(0x180035c10, (void*)&RtDelDtor_Element);
-    RegisterRuntimeAddr(0x18003b800, (void*)&RtDelDtor_DialogController);
-    RegisterRuntimeAddr(0x1800458c0, (void*)&RtDelDtor_DialogInstance);
     RegisterRuntimeAddr(0x18004d4f0, (void*)&RtDelDtor_LoaderLoop);
     RegisterRuntimeAddr(0x18004d670, (void*)&RtDelDtor_DialogLoaderLoopT);
     RegisterRuntimeAddr(0x18004d8b0, (void*)&RtDelDtor_DialogLoopT);
-    RegisterRuntimeAddr(0x180058590, (void*)&RtDelDtor_RenderBufferData);
-    RegisterRuntimeAddr(0x180058610, (void*)&RtDelDtor_VideoProgramData);
-    RegisterRuntimeAddr(0x180058690, (void*)&RtDelDtor_RenderStateData);
-    RegisterRuntimeAddr(0x180058710, (void*)&RtDelDtor_PixelProgramData);
-    RegisterRuntimeAddr(0x180058790, (void*)&RtDelDtor_VertexProgramData);
-    RegisterRuntimeAddr(0x180058810, (void*)&RtDelDtor_VertexLayoutData);
-    RegisterRuntimeAddr(0x180058890, (void*)&RtDelDtor_VertexBufferData);
-    RegisterRuntimeAddr(0x180058910, (void*)&RtDelDtor_IndexBufferData);
-    RegisterRuntimeAddr(0x180058990, (void*)&RtDelDtor_ConstantBufferData);
-    RegisterRuntimeAddr(0x180058a10, (void*)&RtDelDtor_ImageBufferData);
-    RegisterRuntimeAddr(0x180058a90, (void*)&RtDelDtor_ContextData);
-    RegisterRuntimeAddr(0x180058b10, (void*)&RtDelDtor_DeviceData);
-    RegisterRuntimeAddr(0x180038b20, (void*)&RtDelDtor_Dialog);   // Wave 10C DLG8
-    RegisterRuntimeAddr(0x18004d270, (void*)&RtDelDtor_ToolTipDialog);  // Wave 10D TIP
     RegisterRuntimeAddr(0x180023fd0, (void*)&RtDelDtor_CompressedStream);      // Wave 19 CSTREAM
 
 
-    RegisterRuntimeAddr(0x180035350, (void*)&RtDelDtor_ElementDescription);    // Wave 27 IOTEXT
-    RegisterRuntimeAddr(0x18004efb0, (void*)&RtDelDtor_VideoProgram);
-    RegisterRuntimeAddr(0x18004e000, (void*)&RtDelDtor_VertexLayout);
-    RegisterRuntimeAddr(0x18004e360, (void*)&RtDelDtor_ShaderProgram);
-    RegisterRuntimeAddr(0x18004e810, (void*)&RtDelDtor_VertexProgram);
-    RegisterRuntimeAddr(0x18004eb90, (void*)&RtDelDtor_PixelProgram);
-    RegisterRuntimeAddr(0x18004b9d0, (void*)&RtDelDtor_RenderState);
 
 
     // VTABLE BATCH 9
     // Rows 57-60, the UI::*Description four (wrappers above).
-    RegisterRuntimeAddr(0x180074a10, (void*)&RtDelDtor_ComboDialog);
-    RegisterRuntimeAddr(0x18003b600, (void*)&RtDelDtor_DialogControllerConfig);
-    RegisterRuntimeAddr(0x180007800, (void*)&RtDelDtor_ExternalList);
 
     // 2026-09-12 VTABLE BATCH 1 — ten UI::*Description classes, rows 71..80.
     // Every address a LITERAL, for the reason the banner above gives.
@@ -1257,10 +1206,6 @@ void RtObjectDeletingDtorPortInit() {
     // is closed before the first Dtor(i) lookup can cache a null.
     RtObjectDeletingDtorLeavesRegister();
     // UI TEXT PIPELINE batch, rows 71-74 (wrappers above).
-    RegisterRuntimeAddr(0x180032130, (void*)&RtDelDtor_Font);
-    RegisterRuntimeAddr(0x1800378a0, (void*)&RtDelDtor_CharacterSet);
-    RegisterRuntimeAddr(0x18003b3a0, (void*)&RtDelDtor_Cursor);
-    RegisterRuntimeAddr(0x18003ccf0, (void*)&RtDelDtor_SpriteCapture);
 
     // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12) --------------------
 

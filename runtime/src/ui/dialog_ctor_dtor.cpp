@@ -175,261 +175,71 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/collection/Collection.h" // ENDGAME B.3.2 step 2 — Array<void*> bridge
+#include "../../types/system/String.h"
 #include "../../types/ui/Dialog.h"
 
 // ---- ResolveExport / ResolveAddr -------------------------------------------
 // Forward-declared rather than pulled in from standalone/resolve.h, for the
 // reason rt_port.h gives: resolve.h drags in <windows.h>. These declarations
 // must stay byte-identical to resolve.h's; the linker checks them.
-void* ResolveExport(const char* mangled_name);
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+// ============================================================================
+// ENDGAME B.3.9 block UI-D: the two DOORS this file carried are RETIRED. The
+// constructor above is `UI::Dialog::Dialog()` (Dialog.h, the three vptr stores
+// are the compiler's); the destructor is `UI::Dialog::~Dialog()` below, which
+// the retired `RtUiDialog_Dtor` door ran by hand. Their callers -- the factory
+// pair, Construct/Reconstruct and the four stack temporaries retail inlines --
+// spell `::new (p) UI::Dialog()` and `DeletingDtor(0)`. With the doors go the
+// `[DLG2] FIRST LIVE CALL` lines.
+// ============================================================================
 namespace {
 
-// ============================================================================
-// THE WRITTEN EXTENT
-// ============================================================================
-// The ctor's last store is a QWORD at +0x80, so it writes +0x00..+0x87. This is
-// a LOWER BOUND on `sizeof(UI::Dialog)`, never the size; Dialog.h still carries
-// no `sizeof` assert and this lane does not add one.
-constexpr size_t kDialogCtorExtent = 0x88;
-
-// The one four-byte hole the ctor leaves. 0x180112e0b is `MOV dword [RCX+0x40]`
-// and the next store is a QWORD at +0x48, so +0x44..+0x47 keep whatever the
-// caller's buffer held. Excluded from the compare, counted, and printed.
-constexpr size_t kHoleOff = 0x44;
-constexpr size_t kHoleLen = 4;
-
-// ---- The three vtables -----------------------------------------------------
-// Resolved by NAME from the DLL's own export table. Never minted: a second
-// vtable for a class the DLL also constructs breaks every `IsDerivedFrom` the
-// DLL runs on the object.
-void* VtBase() {
-    static void* v = ResolveExport("??_7Base@Object@@6B@");        // 0x180154788
-    return v;
-}
-void* VtExternal() {
-    static void* v = ResolveExport("??_7External@Object@@6B@");    // 0x1801547a0
-    return v;
-}
-void* VtDialog() {
-    static void* v = ResolveExport("??_7Dialog@UI@@6B@");          // 0x1801562a0
-    return v;
-}
-
-// ---- The allocator boundary ------------------------------------------------
-// BY ADDRESS, for the reason the banner gives. Identical to
-// runtime/src/collection/array.cpp's, including the retry-a-miss contract: a
-// caller that ran before the allocator's arming path supplied this address
-// would otherwise freeze a null into the static for the life of the process.
-void MemFreeStatic(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    if (fn) fn(p);
-}
-
-// ---- The four `~Array` bodies the dtor calls, in the shipped ORDER ---------
-// Order is load-bearing and it is DESCENDING: +0x78, +0x68, +0x58, +0x48.
-// Reached through `ResolveAddr(Module::Runtime, …)`, which consults the port
-// registry FIRST — so the first two land on array.cpp's J1 port today and the
-// last two on the DLL, and all four follow the tree without this file changing.
-// NOTE THE SIGNATURE: this takes the ALREADY-RESOLVED pointer. It does NOT
-// take the address and resolve it, because that would hide four
-// `ResolveAddr(Module::Runtime, 0x…)` literals inside one helper where the
-// census cannot see them — see the call sites.
+// ---- The two `~Array` bodies the dtor still reaches by address -------------
+// Takes the ALREADY-RESOLVED pointer so the two `ResolveAddr(Module::Runtime,
+// 0x…)` literals stay visible at the call sites (see ~Dialog).
 void ArrayDtorAt(uintptr_t resolved, void* member) {
     using Fn = void (*)(void*);
-    Fn fn = reinterpret_cast<Fn>(resolved);
-    if (fn) fn(member);
+    reinterpret_cast<Fn>(resolved)(member);
 }
 
-// ---- `??1External@Object@@UEAA@XZ` 0x1800bc950 -----------------------------
-// Retail TAIL-JUMPS here, so ~External's return value is ~Dialog's. It is
-// EXPORTED, but it is reached BY ADDRESS on purpose: external.cpp registers the
-// port under the ADDRESS door, and going through the address is what makes our
-// dtor use our ~External rather than the DLL's.
-void* ExternalDtor(void* self) {
-    using Fn = void* (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800bc950));
-    return fn ? fn(self) : self;
-}
-
-// ---- System::String refcount, at `data - 4` --------------------------------
-inline int32_t& StringRefCount(char* data) {
-    return *reinterpret_cast<int32_t*>(data - 4);
-}
-
-template <typename T>
-inline T& F(void* base, size_t off) {
-    return *reinterpret_cast<T*>(static_cast<uint8_t*>(base) + off);
-}
-
-// ============================================================================
-// NEGATIVE-CONTROL SELECTOR
-// ============================================================================
-// `BANISHED_DLG2_NEGCTRL=<n>` runs the port with one deliberate defect so the
-// oracle has something it MUST catch. A probe whose corruption slips through
-// was never measuring anything — and a control that corrupts a value nothing
-// compares reports NOT CAUGHT and indicts a sound instrument
-// (reference_control_must_pick_a_compared_subject.md), so every one of these
-// picks a byte the compare above demonstrably reads.
-//
-//   1  ctor: `+0x30 = 0` instead of -1        (fact (c) above)
-//   2  ctor: zero `+0x40` as a QWORD          (writes into the +0x44 HOLE)
-// ============================================================================
-// `??0Dialog@UI@@QEAA@XZ`  0x180112db0
-// ============================================================================
-// Transcribed store for store, in the shipped ORDER, including the two dead
-// base-vtable stamps. The `LEA RAX,[RCX+8]` / `MOV [RAX],RDX` pair is written
-// through the same intermediate pointer retail uses; it is the SEH frame's
-// visible temporary and it costs nothing to keep.
-void* DialogCtorBody(void* self) {
-    uint8_t* p = static_cast<uint8_t*>(self);
-
-    F<void*>(p, 0x00) = VtBase();       // 180112dc1  dead in this build
-    F<void*>(p, 0x00) = VtExternal();   // 180112dcb  dead in this build
-
-    uint64_t* pEight = reinterpret_cast<uint64_t*>(p + 0x08);   // 180112dd5 LEA
-    const uint64_t z = 0;                                       // 180112dde XOR EDX,EDX
-    *pEight            = z;                 // 180112de0  through RAX
-    F<uint64_t>(p, 0x10) = z;               // 180112de3
-    F<uint64_t>(p, 0x18) = z;               // 180112de7
-
-    F<void*>(p, 0x00) = VtDialog();   // 180112deb
-
-    F<uint64_t>(p, 0x20) = z;               // 180112df5
-    F<uint64_t>(p, 0x28) = z;               // 180112df9
-    F<int32_t>(p, 0x30)  = -1;              // 180112dfd  *** -1, NOT 0 ***
-    F<int32_t>(p, 0x34)  = 0;               // 180112e04
-    F<uint64_t>(p, 0x38) = z;               // 180112e07
-
-    F<int32_t>(p, 0x40) = 0;                // 180112e0b  DWORD; +0x44 UNTOUCHED
-
-    F<uint64_t>(p, 0x48) = z;               // 180112e0e
-    F<uint64_t>(p, 0x50) = z;               // 180112e12
-    F<uint64_t>(p, 0x58) = z;               // 180112e16
-    F<uint64_t>(p, 0x60) = z;               // 180112e1a
-    F<uint64_t>(p, 0x68) = z;               // 180112e1e
-    F<uint64_t>(p, 0x70) = z;               // 180112e22
-    F<uint64_t>(p, 0x78) = z;               // 180112e26
-    F<uint64_t>(p, 0x80) = z;               // 180112e2a
-
-    return self;                            // 180112e31  MOV RAX,RCX
-}
+}  // namespace
 
 // ============================================================================
 // `??1Dialog@UI@@UEAA@XZ`  0x180112e40
 // ============================================================================
-void* DialogDtorBody(void* self) {
-    uint8_t* p = static_cast<uint8_t*>(self);
+namespace UI {
 
-    // WAVE 10E lane FINAL: the dtor's re-stamp is a consumer of the row too,
-    // so it gets the tripwire as well — a dispatch DURING teardown would be a
-    // route just as much as one during use.
-    F<void*>(p, 0x00) = VtDialog();  // 180112e56
+Dialog::~Dialog() {
+    uint8_t* p = reinterpret_cast<uint8_t*>(this);
 
-    // *** THE FOUR ADDRESSES ARE SPELLED AS LITERALS AT FOUR SEPARATE
-    //     `ResolveAddr` CALL SITES, ON PURPOSE. *** The first draft routed all
-    //     four through one `ArrayDtorAt(addr, member)` helper, which is tidier
-    //     and INVISIBLE to `tools/runtime_census.py`: its scanner greps for a
-    //     LITERAL `ResolveAddr(Module::Runtime, 0x…)` and cannot see the same
-    //     fact spelled through a variable, so it would have reported this port
-    //     as reaching NOTHING unported while it reached two unported bodies
-    //     every call (reference_literal_grep_blind_to_variables.md — the fourth
-    //     time this project has paid for that blindness, and the address-door
-    //     census committed it WHILE measuring it).
-    //
-    //     Rewriting them this way is what makes the census's own set-diff show
-    //     0x180039360 and 0x180039280 as this port's owed residue. That is a
-    //     row ENTERING, and it is progress: it was always there and nothing
-    //     could see it.
+    // 180112e56: the re-stamp of the Dialog vtable is the compiler's.
+
+    // THE FOUR ARRAYS, DESCENDING: +0x78, +0x68, +0x58, +0x48.
     // ENDGAME B.3.2 step 2 — the first two (+0x78 `_references`, +0x68
     // `_templates`) are `array.cpp`'s J1 `~Array` (destroy == null, i.e.
     // trait-equivalent for a trivially destructible element): `_references`/
     // `_templates` are `void**` + count + capacity, laid out contiguously
     // exactly like `Collection::Array<void*>` (data/size/capacity), so the
-    // conversion bridges at the use site with a `reinterpret_cast` rather than
-    // retyping `Dialog` (that would need every construction/copy path of
-    // `Dialog` proven safe first, which is outside this file's scope — the
-    // brief's "bridge at the USE site" option).
+    // conversion bridges at the use site with a `reinterpret_cast`.
     reinterpret_cast<Collection::Array<void*>*>(p + 0x78)->~Array();  // retail 0x180009460
     reinterpret_cast<Collection::Array<void*>*>(p + 0x68)->~Array();  // retail 0x180039440
 
     // The last two (+0x58 `_namedTemplates`, +0x48 `_controllerConfigs`) are
-    // NOT this shape. They are `array_destroy.cpp`'s J2 entries (registered as
-    // `RtColl_ArrayDtorElem_180039360` / `_180039280`, i.e. now ported, so the
-    // "NOT PORTED -> DLL" half of this comment is stale) — they destroy each
-    // element's embedded `System::String` via a `DestroySpec`/`CORE` pair
-    // (`ReleaseStringsCounted`) that is a DIFFERENT mechanism from
-    // `rtcoll::ArraySpec::destroy` (a different function signature, driven by
-    // array_destroy.cpp's own dispatch, not `Collection::Array<T>::~Array()`'s
-    // `Spec()->destroy`). There is no `kSpec_*` row for either address that
-    // the class template could take as an `ExplicitSpec`, so — per the batch
-    // rule that a `DtorElem` helper may not be convertible at all — these two
-    // stay free-function calls through the seam rather than being forced onto
-    // a container member.
+    // `array_destroy.cpp`'s J2 entries (`RtColl_ArrayDtorElem_180039360` /
+    // `_180039280`): they destroy each element's embedded `System::String`
+    // via a `DestroySpec` — a different mechanism from `rtcoll::ArraySpec` —
+    // so they stay free-function calls through the seam.
     ArrayDtorAt(ResolveAddr(Module::Runtime, 0x180039360), p + 0x58);  // 180112e78
     ArrayDtorAt(ResolveAddr(Module::Runtime, 0x180039280), p + 0x48);  // 180112e82
 
     // ---- the System::String release at +0x28, ASYMMETRY AND ALL ------------
-    char* s = F<char*>(p, 0x28);                            // 180112e88
-    if (s) {                                                // 180112e8f JZ
-        --StringRefCount(s);                                // 180112e91 DEC [RAX-4]
-        if (StringRefCount(s) == 0) {                       // 180112e94 CMP / JNZ
-            // Retail rewrites the FIELD to `data - 8` and frees THAT; the
-            // field is LEFT holding it. It is not nulled on this branch.
-            F<char*>(p, 0x28) = s - 8;                  // 180112e9a ADD [RBX+0x28],-8
-            MemFreeStatic(F<char*>(p, 0x28));           // 180112e9f / 180112ea3
-        } else {
-            F<char*>(p, 0x28) = nullptr;                    // 180112eaa
-        }
-    }
+    // String's own Release (0x1800c9870): the freeing branch leaves the field
+    // at `data - 8`, the sharing branch nulls it (180112e88..180112eaa).
+    System::StringPrivateAccess::Release(
+        *reinterpret_cast<System::String*>(&_spriteName));
 
-    return ExternalDtor(p);                                 // 180112eba TAIL-JMP
+    // 180112eba: the TAIL-JMP to ~External is the compiler's chain.
 }
 
-// ============================================================================
-// THE REGISTERED ENTRY POINTS
-// ============================================================================
-}  // namespace
-
-// LIVENESS, said out loud. A verified body that nothing calls is dead code that
-// reads exactly like a landed port (reference_uncalled_port_is_not_verified.md),
-// and the differential below deliberately does NOT need a live caller — so
-// nothing else in this file can tell the two apart. These two lines can.
-extern "C" void* RtUiDialog_Ctor(void* self) {
-    static bool first = true;
-    if (first) { first = false; printf("[DLG2] FIRST LIVE CALL into ??0Dialog@UI@@\n"); }
-    return DialogCtorBody(self);
-}
-
-extern "C" void* RtUiDialog_Dtor(void* self) {
-    static bool first = true;
-    if (first) { first = false; printf("[DLG2] FIRST LIVE CALL into ??1Dialog@UI@@\n"); }
-    return DialogDtorBody(self);
-}
-
-// ============================================================================
-// REGISTRATION
-// ============================================================================
-// Both doors, both rows. `RegisterRuntimeExport` with the mangled name spelled
-// as its OWN string literal (tools/runtime_census.py cannot see through a named
-// constant and would under-count the lane —
-// reference_census_cannot_see_nonliteral_registrations.md), and
-// `RegisterRuntimeAddr` for the address, because `engine/funcs/` and lane UI3's
-// `ResolveExport("??0Dialog@UI@@QEAA@XZ")` reach these through different doors
-// and a body registered under only one of them is dead code under the other
-// (reference_count_the_doors_not_the_calls.md).
-int RtUiDialogCtorDtorRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("??0Dialog@UI@@QEAA@XZ", (void*)&RtUiDialog_Ctor);
-    RegisterRuntimeAddr(0x180112db0, (void*)&RtUiDialog_Ctor);      ++n;
-
-    RegisterRuntimeExport("??1Dialog@UI@@UEAA@XZ", (void*)&RtUiDialog_Dtor);
-    RegisterRuntimeAddr(0x180112e40, (void*)&RtUiDialog_Dtor);      ++n;
-
-    return n;
-}
+}  // namespace UI

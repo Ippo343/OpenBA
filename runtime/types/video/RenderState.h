@@ -72,6 +72,7 @@
 #include <type_traits>
 
 #include "../object/External.h"
+#include "../object/Internal.h"                // Object::detail::InternalMemFree
 // `_data` is a real `Video::RenderStateData*` (ENDGAME B.3.5 block A, RULE
 // B5-1), which is what lets `renderstate.cpp` call `Create()` / `Bind()` /
 // `DeletingDtor()` on it as virtuals instead of hand-indexing +0x08/+0x10/+0x00,
@@ -98,18 +99,11 @@ namespace Video {
 // Video::RenderState — one compiled render-state resource. 0x80 bytes,
 // `Object::External` base (see the banner).
 //
-// *** NOT CONSTRUCTIBLE IN B.3.5. *** Every live `RenderState` is built by
-// `??0RenderState@Video@@QEAA@XZ` (0x1800f4b60) or by the factory rows in
-// `runtime/src/video/rt_factories_video.inc`, and wears the MINTED
-// `??_7RenderState@Video@@6B@` table rather than GCC's. A `Video::RenderState
-// rs;` would stamp GCC's table on an object the rest of the tree reads through
-// the minted one, with no build error — so the default constructor is
-// `protected` and `= default` (B34_BRIEFS A.4), which leaves a probe SUBCLASS
-// in `tests/unit/` able to reach it and nothing else. It is NOT trivial: it
-// runs `Object::External`'s constructor and the three nested value types'
-// (below), which between them are exactly the field writes retail's ctor
-// inlines — the ctor DOOR still writes them all explicitly anyway, because it
-// also has to stamp the minted vtable.
+// ENDGAME B.3 step 9, block VID (B39_RULES.md D1/D2): CONCRETE. Retail's real
+// public constructor (??0RenderState 0x1800f4b60), its own slot 0, and the
+// factory pair as its own statics: every live RenderState wears the COMPILER's
+// table. The minted row, its RT_DELDTOR row 0x18004b9d0, the ??0 / ??1 doors and
+// the seven slot doors are retired (tools/rt_mint_retired/vid.txt).
 //
 // NO VIRTUAL DESTRUCTOR (ENDGAME B.1 decision 2): slot 0 is
 // `DeletingDtor(unsigned)`. `~RenderState()` is non-virtual and has no slot.
@@ -141,7 +135,9 @@ public:
         // it may be one: the struct has no vtable, so converting its ctor
         // cannot change which table a live object wears (the same licence
         // `IO::Serializer` is granted in runtime/types/io/Serializer.h).
-        AlphaBlend();
+        // Defined inline since ENDGAME B.3.9 (RenderState's real ctor runs it).
+        AlphaBlend()
+            : enabled(0), _pad01{}, srcBlend(1), dstBlend(0), blendOp(0), writeMask(0xf) {}
         // ?Serialize@AlphaBlend@RenderState@Video@@QEAAXAEAVSerializer@IO@@@Z
         //   0x1800f4aa0
         void Serialize(IO::Serializer& ser);
@@ -163,7 +159,8 @@ public:
     //   both bools are 1), qword at +0x04 = 4 (func = 4, +0x08 = 0), +0x0c = 0.
     // ========================================================
     struct Depth {
-        Depth();                             // 0x1800f4a80
+        Depth()                              // 0x1800f4a80
+            : test(1), write(1), _pad02{}, func(4), bias(0.0f), slopeBias(0.0f) {}
         void Serialize(IO::Serializer& ser); // 0x1800f4a00
 
         uint8_t  test;       // +0x00  default 1
@@ -188,7 +185,9 @@ public:
     // the asymmetry is pinned by its own assert below and must not be tidied.
     // ========================================================
     struct Stencil {
-        Stencil();                           // 0x1800f49d0
+        Stencil()                            // 0x1800f49d0 — zeroes the whole 0x24
+            : enabled(0), twoSided(0), _pad02{}, readMask(0), writeMask(0), _pad09{},
+              func(0), failOp(0), depthFailOp(0), passOp(0), backFunc(0), reference(0) {}
         void Serialize(IO::Serializer& ser); // 0x1800f48e0
 
         uint8_t  enabled;      // +0x00
@@ -205,24 +204,38 @@ public:
         uint32_t reference;    // +0x20
     };
 
+    // ??0RenderState@Video@@QEAA@XZ 0x1800f4b60 -- the REAL constructor.
+    // External() (Base's and External's vptrs, +0x08..+0x1f zeroed), NO
+    // CompiledExternal, RenderState's vptr (the compiler's), the three nested
+    // value types' ctors inlined in field order, cull 1 / fill 0 / flag 0, then
+    // PlatformConstruct fills +0x78. +0x71..+0x77 are never written.
+    RenderState() : Object::External(), _alphaBlend(), _depth(), _stencil() {
+        _cullMode = 1;         // +0x68
+        _fillMode = 0;         // +0x6c
+        _flag70   = 0;         // +0x70
+        PlatformConstruct();   // +0x78
+    }
+
     // ---- the nine slots, in measured order ------------------------------
     // Slot 4 is `Object::External::Compile`, INHERITED (retail's slot 4 is
     // 0x1800066e0, External's own body), so it is not redeclared here.
     //
-    // SLOT 0 IS CONCRETE IN RETAIL (0x18004b9d0) AND IS DECLARED `= 0` HERE,
-    // which is B.3.4's settled shape (B34_BRIEFS A.4) and the same call
-    // `CompanionData.h` makes for the twelve `*Data` bases. Our slot 0 is a table
-    // ROW in `runtime/src/object/deleting_dtor.cpp`, registered by address, and is
-    // defined in no translation unit. Leaving it non-pure is what does NOT work,
-    // and the reason is worth recording: defining `~RenderState()` makes GCC emit
-    // a vptr store at the top of the destructor, which needs
-    // `vtable for Video::RenderState`, which needs slot 0's body — one
-    // `undefined reference to 'vtable for Video::RenderState'` at link (seen, not
-    // predicted). Pure makes every entry known (`__cxa_pure_virtual`) and the
-    // vtable emittable in the translation unit that defines the key function
-    // (`TypeName`, i.e. renderstate.cpp) — and that vtable is never installed on
-    // a live object anyway, because the ctor door stamps the MINTED address.
-    virtual Object::Base* DeletingDtor(unsigned flags) override = 0;  // [0] 0x18004b9d0
+    // [0] 0x18004b9d0 -- MSVC's VECTOR deleting destructor (`MOV EDX,0x80`, the
+    // eh-vector dtor over ~RenderState 0x1800f4c30), both arms as the retired
+    // RT_DELDTOR row ran them. Nothing `new[]`s one.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<RenderState*>(self + static_cast<int64_t>(i) * 0x80)->~RenderState();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~RenderState();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char*       TypeName() const override;              // [1] 0x18004b570
     uint32_t          Type() const override;                  // [2] 0x18004b550
     int32_t           GetFileVersion() const override;        // [3] 0x1800f4c80 — `MOV EAX,3`
@@ -253,10 +266,12 @@ public:
     RenderState(const RenderState& other);              // 0x18004b640 — not ported
     RenderState& operator=(const RenderState& other);   // 0x18004b750 — not ported
 
-    // The static reflection companions retail emits.
+    // The static reflection companions retail emits. The factory pair is the
+    // class's own (B39_RULES D2), defined in renderstate.cpp; the class declares
+    // its own placement `operator new` (not ported), so placement spells `::new`.
     static uint32_t      TypeId();                              // 0x18004b560
-    static Object::Base* CreateNewObject();                     // rt_factories_video.inc
-    static Object::Base* CreateInPlaceObject(void* storage);    // rt_factories_video.inc
+    static Object::Base* CreateNewObject();                     // 0x18004b660
+    static Object::Base* CreateInPlaceObject(void* storage);    // 0x18004b6e0
     static void*         operator new(size_t size);             // ??2 — not ported
     static void*         operator new(size_t size, void* storage);
     static void          operator delete(void* p);              // ??3 — not ported
@@ -266,12 +281,8 @@ protected:
     // the forward declaration above this namespace.
     friend struct ::RenderStateDoorAccess;
 
-    // See the "NOT CONSTRUCTIBLE" banner. `??0RenderState@Video@@QEAA@XZ`
-    // (0x1800f4b60) stays a registered ctor DOOR (B4b-2 / B35_RULES 11).
-    RenderState() = default;
-
-    // ??1RenderState@Video@@UEAA@XZ (0x1800f4c30). NON-virtual; reached by
-    // `DeletingDtor` and by `Destruct`.
+    // ??1RenderState@Video@@UEAA@XZ (0x1800f4c30). NON-virtual (no virtual dtor
+    // until the normal-virtual cutover); reached through slot 0.
     ~RenderState();
 
     // The three private platform halves. `PlatformCreate` returns void here,

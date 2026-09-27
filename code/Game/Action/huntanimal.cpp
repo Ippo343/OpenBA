@@ -39,6 +39,10 @@
 #include <cmath>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/HuntComponent.h"
+#include "Component/CitizenComponent.h"
+#include "Component/AnimalDescription.h"
+#include "Component/WildAnimalComponent.h"
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -89,10 +93,6 @@ static s_fn_FindHerdComp_t s_fn_FindHerdComp = nullptr;
 static void (*s_fn_StartMigration)(void* herdComp) = nullptr;
 
 // Type IDs
-static uint32_t* s_typeId_AnimalEntity = nullptr;     // DAT_1401c7890 -- for animal entity check
-static uint32_t* s_typeId_HerdEntity = nullptr;        // DWORD_1401c7158 -- for herd entity check
-static uint32_t* s_typeId_ModelDesc = nullptr;          // DWORD_1401c6fd0 -- ModelDescription type
-static int* s_typeId_HuntAnimalSearch = nullptr;       // DAT_1401c8000 -- search type for spatial query
 
 // TypeInfo for slots 1/2
 static uint64_t* s_dat_VectorDtorReturn = nullptr;    // DAT_1401c5f70
@@ -122,12 +122,6 @@ bool HuntAnimal_ResolveFuncs() {
     s_fn_FindHerdComp = (s_fn_FindHerdComp_t)ResolveAddr(Module::Exe, 0x1400227e0);
     s_fn_StartMigration = (void(*)(void*))ResolveAddr(Module::Exe, 0x140122340);
 
-    // Type IDs
-    s_typeId_AnimalEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7890));
-    s_typeId_HerdEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158)); // 0x1401c7158 = CitizenComponent id (retail validates the herd ref against CitizenComponent)
-    s_typeId_ModelDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6fd0));
-    s_typeId_HuntAnimalSearch = reinterpret_cast<int*>(ResolveAddr(Module::Exe, 0x1401c8000));
-
     // TypeInfo for slots 1/2
     s_dat_VectorDtorReturn = reinterpret_cast<uint64_t*>(ResolveAddr(Module::Exe, 0x1401c5f70));
     s_typeInfo_HuntAnimal = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5f68));
@@ -140,8 +134,6 @@ bool HuntAnimal_ResolveFuncs() {
               s_fn_GetModelComp && s_fn_FindPathCost &&
               s_fn_CheckPathValid && s_fn_GridToWorld &&
               s_fn_SpawnCorpse && s_fn_FindHerdComp && s_fn_StartMigration &&
-              s_typeId_AnimalEntity && s_typeId_HerdEntity &&
-              s_typeId_ModelDesc && s_typeId_HuntAnimalSearch &&
               s_dat_VectorDtorReturn && s_typeInfo_HuntAnimal &&
               s_searchRadius && s_halfOffset &&
               fn_InternalBasePtr_DeletePtr &&
@@ -188,7 +180,7 @@ void HuntAnimal::Persist(void* stream) {
     // Serialize animal entity ref (+0x20) with AnimalEntity type check
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field20 != nullptr) {
-        if (!fn_IsDerivedFrom(_field20, *s_typeId_AnimalEntity)) {
+        if (!fn_IsDerivedFrom(_field20, HuntComponent::TypeId())) {
             _field20 = nullptr;
         }
     }
@@ -196,7 +188,7 @@ void HuntAnimal::Persist(void* stream) {
     // Serialize herd entity ref (+0x28) with HerdEntity type check
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field28 != nullptr) {
-        if (!fn_IsDerivedFrom(_field28, *s_typeId_HerdEntity)) {
+        if (!fn_IsDerivedFrom(_field28, CitizenComponent::TypeId())) {
             _field28 = nullptr;
         }
     }
@@ -267,7 +259,7 @@ void HuntAnimal::Enter() {
     new (&queryOutIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
     // Get the search type ID
-    int searchTypeId = *s_typeId_HuntAnimalSearch;
+    int searchTypeId = static_cast<int>(WildAnimalComponent::TypeId());
 
     // Get herd entity's CharacterComponent position
     // Follow chain: herdEntity(+0x28) -> +0x278 -> +0x68 -> position at +0x158
@@ -374,7 +366,7 @@ void HuntAnimal::Enter() {
 
     // Get description from the found entity's model component
     void* descObj = *(void**)((uint8_t*)(modelCompIBP2[0]) + 0x18);
-    bool isModelDesc = fn_IsDerivedFrom(descObj, *s_typeId_ModelDesc);
+    bool isModelDesc = fn_IsDerivedFrom(descObj, AnimalDescription::TypeId());
     void* modelDesc = isModelDesc ? descObj : nullptr;
 
     // Store model component IBP for corpse entity ref

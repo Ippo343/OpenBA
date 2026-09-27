@@ -29,6 +29,8 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
+#include "Component/RawMaterialDescription.h"
+#include "Component/StateMachineComponent.h"
 
 namespace {
 
@@ -36,12 +38,6 @@ typedef void* (*fn_findStorage_t)(int64_t inner, void* retIBP);  // 0x140006270
 typedef int   (*fn_calc116540_t)(int64_t comp);                  // 0x140116540
 static fn_findStorage_t s_fn_findStorage = nullptr;
 static fn_calc116540_t  s_fn_calc116540  = nullptr;
-// RawMaterialDescription type-id global (0x1401c7cb8). Registered+filled (via
-// GetTypeIdByName after Engine::Startup) in reg_action_child_ctors2.cpp; read here.
-static const uint32_t* s_pTid_RawMatDesc = nullptr;
-// StateMachineComponent type-id global (0x1401c7350) — for the bef70 component-find leaf.
-static const uint32_t* s_pTid_StateMachine = nullptr;
-
 // ENDGAME B.3.8 ACT (B8-10): the class ctors below call EnsureInit and are
 // reached from the loader thread too, so the once-flag is an acquire/release
 // atomic (a racing second init stores the same resolved values).
@@ -50,8 +46,6 @@ static void EnsureInit() {
     if (s_init.load(std::memory_order_acquire)) return;
     s_fn_findStorage  = reinterpret_cast<fn_findStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
     s_fn_calc116540   = reinterpret_cast<fn_calc116540_t >(ResolveAddr(Module::Exe, 0x140116540));
-    s_pTid_RawMatDesc = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
-    s_pTid_StateMachine = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7350));
     s_init.store(true, std::memory_order_release);
 }
 } // namespace
@@ -319,7 +313,7 @@ PickupStoredRawMaterial::PickupStoredRawMaterial(uint64_t* param_2, uint64_t* pa
 
     if (param_4 == 0) return;
 
-    uint32_t wantTid = s_pTid_RawMatDesc ? *s_pTid_RawMatDesc : 0;
+    uint32_t wantTid = RawMaterialDescription::TypeId();
 
     // component-array scan of param_4 for child GetTypeId == wantTid, IsDerivedFrom-confirm
     void* rawMatDesc = nullptr;
@@ -334,7 +328,7 @@ PickupStoredRawMaterial::PickupStoredRawMaterial(uint64_t* param_2, uint64_t* pa
             if (tid == wantTid) {
                 int64_t arr2 = *reinterpret_cast<int64_t*>(param_4 + 0x28);
                 void* match = *reinterpret_cast<void**>(arr2 + (int64_t)idx * 8);
-                if (s_pTid_RawMatDesc && fn_IsDerivedFrom && fn_IsDerivedFrom(match, *s_pTid_RawMatDesc))
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(match, RawMaterialDescription::TypeId()))
                     rawMatDesc = match;
                 break;
             }
@@ -417,7 +411,7 @@ ConsumeRawMaterial::ConsumeRawMaterial(uint64_t* storage)
 void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2) {
     EnsureInit();
     void* found = nullptr;
-    uint32_t wantTid = s_pTid_StateMachine ? *s_pTid_StateMachine : 0;
+    uint32_t wantTid = StateMachineComponent::TypeId();
     int count = *reinterpret_cast<int*>(param_1 + 0x38);
     if (0 < count) {
         int idx = 0;
@@ -429,7 +423,7 @@ void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2) {
             if (tid == wantTid) {
                 int64_t* mslot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x30) + (int64_t)idx * 8);
                 void* match = reinterpret_cast<void*>(*mslot);
-                if (s_pTid_StateMachine && fn_IsDerivedFrom && fn_IsDerivedFrom(match, *s_pTid_StateMachine))
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(match, StateMachineComponent::TypeId()))
                     found = match;
                 break;
             }

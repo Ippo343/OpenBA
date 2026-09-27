@@ -36,6 +36,9 @@
 #include <cstdint>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/CitizenComponent.h"
+#include "Component/RawMaterialDescription.h"
+#include "Component/StorageComponent.h"
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -55,15 +58,6 @@ static s_fn_Storage_AddItem_t s_fn_Storage_AddItem = nullptr;
 typedef void (*s_fn_ArrayResize16_t)(void* arrayBase, int newCount);
 static s_fn_ArrayResize16_t s_fn_ArrayResize16 = nullptr;
 
-// DAT_1401c7158 -- type ID for IsDerivedFrom check on +0x20 (building entity)
-static uint32_t* s_typeId_1401c7158 = nullptr;
-
-// DAT_1401c7cb8 -- RawMaterialDescription type ID
-static uint32_t* s_typeId_RawMatDesc = nullptr;
-
-// DAT_1401c7e78 -- StorageComponent type ID
-static uint32_t* s_typeId_StorageComp = nullptr;
-
 static bool s_funcs_resolved = false;
 
 // ============================================================
@@ -81,18 +75,8 @@ bool PickupStoredRawMaterial_ResolveFuncs() {
     s_fn_ArrayResize16 = reinterpret_cast<s_fn_ArrayResize16_t>(
         ResolveAddr(Module::Exe, 0x14000da70));
 
-    s_typeId_1401c7158 = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7158));
-
-    s_typeId_RawMatDesc = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7cb8));
-
-    s_typeId_StorageComp = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7e78));
-
     bool ok = s_fn_Storage_SubtractItem && s_fn_Storage_AddItem &&
               s_fn_ArrayResize16 &&
-              s_typeId_1401c7158 && s_typeId_RawMatDesc && s_typeId_StorageComp &&
               g_TypeId_ComponentEntity &&
               fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom &&
@@ -102,8 +86,6 @@ bool PickupStoredRawMaterial_ResolveFuncs() {
     printf("[PickupStoredRawMaterial] ResolveFuncs: SubItem=%p AddItem=%p Resize16=%p\n",
            (void*)s_fn_Storage_SubtractItem, (void*)s_fn_Storage_AddItem,
            (void*)s_fn_ArrayResize16);
-    printf("[PickupStoredRawMaterial]   typeId7158=%p RawMat=%p Storage=%p\n",
-           (void*)s_typeId_1401c7158, (void*)s_typeId_RawMatDesc, (void*)s_typeId_StorageComp);
     if (!ok) printf("[PickupStoredRawMaterial] ERROR: some function pointers not resolved!\n");
 #endif
 
@@ -119,7 +101,7 @@ bool PickupStoredRawMaterial_ResolveFuncs() {
 // Generic FindComponent: arrayOffset/countOffset differ by object type.
 // ComponentEntity: array=+0x30, count=+0x38
 // External description objects (e.g. material types): array=+0x28, count=+0x30
-static void* FindComponentByTypeId(void* entity, uint32_t* typeIdPtr,
+static void* FindComponentByTypeId(void* entity, uint32_t wantTypeId,
                                    int arrayOffset, int countOffset) {
     uintptr_t ent = (uintptr_t)entity;
     int compCount = *(int*)(ent + countOffset);
@@ -132,9 +114,9 @@ static void* FindComponentByTypeId(void* entity, uint32_t* typeIdPtr,
         // slot 2 Type()
         uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
 
-        if (typeId == *typeIdPtr) {
+        if (typeId == wantTypeId) {
             void* found = *compIBP;
-            if (fn_IsDerivedFrom(found, *typeIdPtr)) {
+            if (fn_IsDerivedFrom(found, wantTypeId)) {
                 return found;
             }
             return nullptr;
@@ -169,7 +151,7 @@ void PickupStoredRawMaterial::Persist(void* stream) {
     // Serialize target building (+0x20) with type check
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field20 != nullptr) {
-        if (!fn_IsDerivedFrom(_field20, *s_typeId_1401c7158)) {
+        if (!fn_IsDerivedFrom(_field20, CitizenComponent::TypeId())) {
             _field20 = nullptr;
         }
     }
@@ -246,7 +228,7 @@ int  PickupStoredRawMaterial::AbstractImpl(void* actionStack) {
 
         // Find RawMaterialDescription component on the material type
         // Material type is an External description object: components at +0x28/+0x30
-        void* rawMatDesc = FindComponentByTypeId((void*)materialType, s_typeId_RawMatDesc, 0x28, 0x30);
+        void* rawMatDesc = FindComponentByTypeId((void*)materialType, RawMaterialDescription::TypeId(), 0x28, 0x30);
 
         // Get requested count from material list (+0x08 in each entry)
         int requestedCount = *(int*)(matList + matOffset + 8);
@@ -257,7 +239,7 @@ int  PickupStoredRawMaterial::AbstractImpl(void* actionStack) {
             void* parentEntity = *(void**)((uintptr_t)targetBuilding + 0x10);
 
             // Find StorageComponent on parent entity
-            void* parentStorage = FindComponentByTypeId(parentEntity, s_typeId_StorageComp, 0x30, 0x38);
+            void* parentStorage = FindComponentByTypeId(parentEntity, StorageComponent::TypeId(), 0x30, 0x38);
 
             // Create IBP for parent storage, get max capacity and current count
             uintptr_t parentStorageIBP = 0;
@@ -332,7 +314,7 @@ int  PickupStoredRawMaterial::AbstractImpl(void* actionStack) {
         void* parentEntity = *(void**)((uintptr_t)targetBuilding + 0x10);
 
         // Find StorageComponent on parent entity
-        void* parentStorage = FindComponentByTypeId(parentEntity, s_typeId_StorageComp, 0x30, 0x38);
+        void* parentStorage = FindComponentByTypeId(parentEntity, StorageComponent::TypeId(), 0x30, 0x38);
 
         uintptr_t parentStorageIBP2[2];
         new (parentStorageIBP2) ::Object::InternalBasePtr(

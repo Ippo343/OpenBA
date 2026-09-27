@@ -86,17 +86,14 @@ namespace VideoDX11 {
 // (decomp/videodx11.md §"How Runtime loads it": Device+0x100.)
 constexpr uintptr_t kVideoDevice_ActiveDeviceData = 0x100;
 
-// Ghidra address of Runtime's Video::Device::_singleton.
-constexpr uintptr_t kRt_VideoDeviceSingleton = 0x1801fe7a8;
-
 // Ghidra address of the VideoDX11 IAT slot the original reads it through.
 // Retained as documentation of the shipped import; nothing reads it now.
 constexpr uintptr_t kDx11Iat_VideoDeviceSingleton = 0x1800134b8;
 
+// Runtime's Video::Device::_singleton (0x1801fe7a8) — the class static since
+// ENDGAME B.3.9 VID; dx11 is compiled into the exe, so it is read directly.
 inline void** Dx11VideoDeviceSingletonSlot() {
-    static void** slot = reinterpret_cast<void**>(
-        ResolveAddr(Module::Runtime, kRt_VideoDeviceSingleton));
-    return slot;
+    return reinterpret_cast<void**>(&::Video::Device::_singleton);
 }
 
 // Video::Device* — the live singleton.

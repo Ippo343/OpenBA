@@ -25,6 +25,7 @@
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
+#include "Component/FireDescription.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
@@ -52,8 +53,7 @@ static void (*s_fn_GetModelComp)(void* entity, void* outIBP) = nullptr;
 // FUN_1400c3470 -- notify entity changed (triggers visual update)
 static void (*s_fn_NotifyEntityChanged)(void* entity) = nullptr;
 
-// TypeInfo_ComponentEntity (DAT_1401c4218)
-static uint32_t* s_typeId_ComponentEntity = nullptr;
+// DAT_1401c4218 is FireDescription's cell (the variable name below lies — Table 1).
 
 // TypeInfo_RemoveAnimal (DAT_1401c6080)
 static uint32_t* s_typeInfo_RemoveAnimal = nullptr;
@@ -80,8 +80,6 @@ bool RemoveAnimal_ResolveFuncs() {
     s_fn_NotifyEntityChanged = (void(*)(void*))ResolveAddr(Module::Exe, 0x1400c3470);
 
     // Type IDs
-    s_typeId_ComponentEntity = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c4218));
     s_typeInfo_RemoveAnimal = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c6080));
     s_dat_VectorDtorReturn = reinterpret_cast<uint64_t*>(
@@ -89,7 +87,7 @@ bool RemoveAnimal_ResolveFuncs() {
 
     bool ok = s_fn_MarkEntityRemoval &&
               s_fn_GetModelComp && s_fn_NotifyEntityChanged &&
-              s_typeId_ComponentEntity && s_typeInfo_RemoveAnimal &&
+              s_typeInfo_RemoveAnimal &&
               s_dat_VectorDtorReturn &&
               fn_InternalBasePtr_DeletePtr &&
               fn_IsDerivedFrom && fn_MemFreeStatic &&
@@ -98,9 +96,9 @@ bool RemoveAnimal_ResolveFuncs() {
 #ifdef _DEBUG
     printf("[RemoveAnimal] ResolveFuncs: MarkRemove=%p\n",
            (void*)s_fn_MarkEntityRemoval);
-    printf("[RemoveAnimal]   GetModel=%p Notify=%p typeIdCE=%p typeInfoRA=%p\n",
+    printf("[RemoveAnimal]   GetModel=%p Notify=%p typeInfoRA=%p\n",
            (void*)s_fn_GetModelComp, (void*)s_fn_NotifyEntityChanged,
-           (void*)s_typeId_ComponentEntity, (void*)s_typeInfo_RemoveAnimal);
+           (void*)s_typeInfo_RemoveAnimal);
     if (!ok) printf("[RemoveAnimal] ERROR: some function pointers not resolved!\n");
 #endif
 
@@ -134,7 +132,7 @@ void RemoveAnimal::Persist(void* stream) {
     // Type-check: if the deserialized ptr is not a ComponentEntity, null it
     void* entityRef = _field20;
     if (entityRef != nullptr) {
-        if (!fn_IsDerivedFrom(entityRef, *s_typeId_ComponentEntity)) {
+        if (!fn_IsDerivedFrom(entityRef, FireDescription::TypeId())) {
             _field20 = nullptr;
         }
     }

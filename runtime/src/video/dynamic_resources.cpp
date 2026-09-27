@@ -147,7 +147,7 @@ namespace {
 // table — see the banner.
 // ---------------------------------------------------------------------------
 Device** DeviceSlot() {
-    Device** p = RT_DATA_SLOT(Device**, "?_singleton@Device@Video@@0PEAV12@EA");
+    Device** p = reinterpret_cast<Device**>(&::Video::Device::_singleton);
     return p;
 }
 // ENDGAME B.3.5 block VC: typed as the REAL `Video::ImageBuffer` now that the
@@ -156,23 +156,19 @@ Device** DeviceSlot() {
 // `MintStorageCell()` redirect that would make it a C++ static is owed at the
 // end of B.3, not here).
 Video::ImageBuffer** FirstSurfaceSlot() {
-    Video::ImageBuffer** p = RT_DATA_SLOT(Video::ImageBuffer**,
-        "?_firstSurface@ImageBuffer@Video@@0PEAV12@EA");
+    Video::ImageBuffer** p = reinterpret_cast<Video::ImageBuffer**>(&::Video::ImageBuffer::_firstSurface);
     return p;
 }
 IndexBuffer** FirstIndexBufferSlot() {
-    IndexBuffer** p = RT_DATA_SLOT(IndexBuffer**,
-        "?_firstBuffer@IndexBuffer@Video@@0PEAV12@EA");
+    IndexBuffer** p = reinterpret_cast<IndexBuffer**>(&::Video::IndexBuffer::_firstBuffer);
     return p;
 }
 VertexBuffer** FirstVertexBufferSlot() {
-    VertexBuffer** p = RT_DATA_SLOT(VertexBuffer**,
-        "?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA");
+    VertexBuffer** p = reinterpret_cast<VertexBuffer**>(&::Video::VertexBuffer::_firstBuffer);
     return p;
 }
 RenderBuffer** FirstRenderBufferSlot() {
-    RenderBuffer** p = RT_DATA_SLOT(RenderBuffer**,
-        "?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA");
+    RenderBuffer** p = reinterpret_cast<RenderBuffer**>(&::Video::RenderBuffer::_firstRenderBuffer);
     return p;
 }
 
@@ -256,6 +252,17 @@ bool ImageBufferIsDynamicResource(const Video::ImageBuffer* p) {
 }
 
 }  // namespace
+
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.9 VID (B39_RULES D7): the four list heads are class statics, all
+// four in one commit because device-lost recovery walks them together
+// (Release*/Recreate* above and below, the Platform{Construct,Destruct} links in
+// buffers.cpp). Their mint rows retired with their last readers.
+// ---------------------------------------------------------------------------
+Video::ImageBuffer*  Video::ImageBuffer::_firstSurface       = nullptr;   // 0x1801fe780
+Video::IndexBuffer*  Video::IndexBuffer::_firstBuffer        = nullptr;   // 0x1801fe788
+Video::RenderBuffer* Video::RenderBuffer::_firstRenderBuffer = nullptr;   // 0x1801fe790
+Video::VertexBuffer* Video::VertexBuffer::_firstBuffer       = nullptr;   // 0x1801fe798
 
 // ============================================================================
 // Video::Device::Lock  —  retail 0x18000ca90, ordinal 3214

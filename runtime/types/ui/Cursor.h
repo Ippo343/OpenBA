@@ -24,7 +24,7 @@
 // ~Cursor does NOT release +0x28 (cursor.cpp's banner). Both are retail.
 //
 // `??_7Cursor@UI@@6B@` @ 0x180156570, NINE slots (B36_SLOTS.md):
-//   [0] +0x00 0x18003b3a0  (unexported) vector deleting dtor — RT_DELDTOR row
+//   [0] +0x00 0x18003b3a0  (unexported) vector deleting dtor — the class's own (B.3.9)
 //   [1] +0x08 0x18003af80  ?TypeName@Cursor@UI@@UEBAPEBDXZ
 //   [2] +0x10 0x18003af60  ?Type@Cursor@UI@@UEBAIXZ
 //   [3] +0x18 0x1800cd1b0  ?GetFileVersion@Cursor@UI@@UEBAHXZ  (MOV EAX,1)
@@ -34,14 +34,21 @@
 //   [7] +0x38 0x18003b240  ?Destruct@Cursor@UI@@UEAAXXZ
 //   [8] +0x40 0x18003b1e0  ?Construct@Cursor@UI@@UEAAPEAVExternal@Object@@XZ — B6-1.1
 //
-// ABSTRACT, no real constructor, empty non-virtual destructor: the
-// CharacterSet.h shape and reasons.
+// ENDGAME B.3 step 9 (block UI-D, B39_RULES D1/D2): CONCRETE, the
+// CharacterSet.h shape: the real public ctor is the inlined one (seven stores
+// in Construct 0x18003b1e0, the last `[RCX+0x28] = 0`), slot 0 the class's own
+// vector deleting dtor, ~Cursor protected, non-virtual and EMPTY (retail's is a
+// restamp and a tail jump to ~External — the ExternalPtr at +0x28 is NOT
+// released). The factory pair is the class's own (cursor.cpp), replacing the
+// FACTUI1 row; the minted `??_7Cursor@UI@@6B@` and its RT_DELDTOR row are
+// retired.
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
 
 #include "../object/External.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI {
 
@@ -49,7 +56,26 @@ class SpriteSheet;
 
 class Cursor : public Object::External {
 public:
-    Object::Base* DeletingDtor(unsigned flags) override = 0;   // [0] 0x18003b3a0
+    // The REAL constructor: External() (+0x08..+0x18 zero), then +0x28 = 0 —
+    // the ExternalPtr's own default ctor. +0x20 / +0x24 are NOT written
+    // (retail; Serialize fills them).
+    Cursor() : Object::External() {}
+
+    // [0] 0x18003b3a0 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x30`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<Cursor*>(self + static_cast<int64_t>(i) * 0x30)->~Cursor();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~Cursor();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char* TypeName() const override;              // [1] 0x18003af80
     uint32_t    Type() const override;                  // [2] 0x18003af60
@@ -70,16 +96,18 @@ public:
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     Cursor(const Cursor& src);                          // 0x18003b280
     Cursor& operator=(const Cursor& src);               // 0x18003b310
-    static uint32_t TypeId();                           // 0x18003af70
+    // 0x18003af70 — the minted record's type id (cursor.cpp).
+    static uint32_t TypeId();
+    // Placement is spelt `::new (p) Cursor()` (B9-5): these stay undefined.
     static void* operator new(std::size_t bytes);              // 0x18003af90
     static void* operator new(std::size_t bytes, void* place); // 0x18003b000
     static void  operator delete(void* p);                     // 0x18003b010
+    // Retail's factory pair (B39_RULES D2), defined and registered in cursor.cpp.
     static Object::Base* CreateNewObject();                    // 0x18003b070
     static Object::Base* CreateInPlaceObject(void* place);     // 0x18003b120
 
 protected:
-    Cursor() = default;     // NOT retail's 0x1800cd1f0 — see CharacterSet.h
-    ~Cursor();              // 0x1800cd1c0, empty (the door keeps the body)
+    ~Cursor();              // 0x1800cd1c0: empty; the compiler chains ~External
 
 public:
     // ---- the 0x10 bytes Cursor adds (public: the doors reach them) ---------

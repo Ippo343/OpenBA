@@ -25,6 +25,8 @@
 
 #include <cstdio>
 #include "../../funcs/rt_port.h"
+#include "../../types/object/External.h"   // Object::ExternalFactory::_singleton
+#include "../../types/object/Internal.h"   // Object::InternalFactory::_singleton
 
 extern int RtObjectTypeSystemRegister();   // type_system.cpp   (lane A)
 // Wave 24 lane INTERNAL8. ?GetTypeIdForFileExtension@Factory@Object@@ — the
@@ -84,6 +86,16 @@ extern int RtObjectReferenceSetRegister();          // reference_set.cpp
 extern int RtObjectExternalRefTableRegister();      // external_reftable.cpp
 
 void RtObjectPortInit() {
+    // ENDGAME B.3.9 OBJ (B39_RULES D7): the minted storage rows ARE the class
+    // statics from here on (name door, address door, manifest publish). Every
+    // *PortInit runs before the mint; a call after it aborts.
+    RtMintRedirectStorage("?_singleton@ExternalFactory@Object@@0PEAV12@EA",
+                          &::Object::ExternalFactory::_singleton);
+    RtMintRedirectStorage("?_singleton@InternalFactory@Object@@0PEAV12@EA",
+                          &::Object::InternalFactory::_singleton);
+    RtMintRedirectStorage("?_singleton@Factory@Object@@0PEAV12@EA",
+                          &::Object::Factory::_singleton);
+    RtMintRedirectStorage("0x1801fc6d0", &::Object::Factory::_compilerModule);
     int n = 0;
     n += RtObjectTypeSystemRegister();
     n += RtObjectFactoryFileExtensionRegister();

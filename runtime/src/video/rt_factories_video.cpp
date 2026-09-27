@@ -1,8 +1,9 @@
 // ============================================================================
 // runtime/src/video/rt_factories_video.cpp -- WAVE 28 LANE FACTREST
 //
-// 7 classes. ShaderProgram is a retail null stub in both slots; the other
-// six delegate to an out-of-line ??0 constructor.
+// 1 class (Video::ImageBuffer, VID wave 2). ENDGAME B.3.9 VID: the six
+// program / layout / render-state rows went -- each class registers its own
+// factory pair from its own TU (B39_RULES D2).
 //
 // The bodies are the shared interpreter in runtime/src/object/rt_factories_core.cpp;
 // everything class-specific is the transcribed step table in the .inc beside

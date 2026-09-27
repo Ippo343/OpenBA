@@ -144,7 +144,7 @@ inline constexpr size_t kCaptureEntryPadLen = 0x04;
 // `MOV EDX,0x58` in its slot-0 deleting dtor (0x18003ccf0).
 //
 // `??_7SpriteCapture@UI@@6B@` @ 0x1801566a0 (B36_SLOTS.md section 1):
-//   [0] +0x00 0x18003ccf0  (unexported) vector deleting dtor — RT_DELDTOR row
+//   [0] +0x00 0x18003ccf0  (unexported) vector deleting dtor — the class's own (B.3.9)
 //   [1] +0x08 0x18003c810  ?TypeName@SpriteCapture@UI@@UEBAPEBDXZ
 //   [2] +0x10 0x18003c7f0  ?Type@SpriteCapture@UI@@UEBAIXZ
 //   [3] +0x18 0x1800d9520  ?GetFileVersion@SpriteCapture@UI@@UEBAHXZ  (MOV EAX,1)
@@ -154,9 +154,12 @@ inline constexpr size_t kCaptureEntryPadLen = 0x04;
 //   [7] +0x38 0x18003cb40  ?Destruct@SpriteCapture@UI@@UEAAXXZ
 //   [8] +0x40 0x18003cac0  ?Construct@SpriteCapture@UI@@UEAAPEAVExternal@Object@@XZ — B6-1.1
 //
-// ABSTRACT, no real constructor, empty non-virtual destructor — the
-// CharacterSet.h shape and reasons (the factory rows in ui_factory_wave28.cpp
-// and the Construct/Reconstruct doors build live objects on the MINTED table).
+// ENDGAME B.3 step 9 (block UI-D, B39_RULES D1/D2): every SpriteCapture wears
+// the COMPILER's table. The real ctor (0x1800d9140) and dtor (0x1800d91b0) are
+// the class's; the factory pair is the class's own (spritecapture_class.cpp),
+// replacing the FACTUI2 row and its `Ctor_SpriteCapture` door; the minted
+// `??_7SpriteCapture@UI@@6B@`, its RT_DELDTOR row and the `DoorBody` bridge
+// are retired.
 class SpriteCapture : public Object::External {
 public:
     using CaptureEntry = ::UI::CaptureEntry;   // retail's nested spelling
@@ -165,7 +168,9 @@ public:
     // [0] CONCRETE (ENDGAME B.3.8 block RB, B38_RULES D1/D2): the exe
     // instantiates the class itself (its table copy 0x14015d550, stamped by
     // 0x1400792b0), whose slot 0 is the exe scalar deleting dtor 0x140013f80
-    // (~SpriteCapture; MemFree on flags & 1). 0x18003ccf0 stays the mint row.
+    // (~SpriteCapture; MemFree on flags & 1) — the SCALAR arm is kept
+    // (B39_RULES D1.2). The DLL's vector arm (0x18003ccf0, the retired
+    // RT_DELDTOR row) differs only on `flags & 2`, which nothing passes.
     Object::Base* DeletingDtor(unsigned flags) override {
         this->~SpriteCapture();
         if (flags & 1) Object::detail::InternalMemFree(this);
@@ -204,37 +209,32 @@ public:
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     SpriteCapture(const SpriteCapture& src);            // 0x18003cb50
     SpriteCapture& operator=(const SpriteCapture& src); // 0x18003cc20
-    static uint32_t TypeId();                           // 0x18003c800
+    // 0x18003c800 — the minted record's type id (spritecapture_class.cpp).
+    static uint32_t TypeId();
+    // Placement is spelt `::new (p) SpriteCapture()` (B9-5): these stay undefined.
     static void* operator new(std::size_t bytes);              // 0x18003c820
     static void* operator new(std::size_t bytes, void* place); // 0x18003c890
     static void  operator delete(void* p);                     // 0x18003c8a0
-    static Object::Base* CreateNewObject();                    // 0x18003c900  (factory door)
-    static Object::Base* CreateInPlaceObject(void* place);     // 0x18003c9c0  (factory door)
+    // Retail's factory pair (B39_RULES D2): MemAlloc(0x58, 8) + the ctor, and
+    // the null-tested in-place ctor. Defined and registered in
+    // spritecapture_class.cpp.
+    static Object::Base* CreateNewObject();                    // 0x18003c900
+    static Object::Base* CreateInPlaceObject(void* place);     // 0x18003c9c0
 
-    // ??0SpriteCapture@UI@@QEAA@XZ 0x1800d9140 — the REAL constructor (ENDGAME
-    // B.3.8 block RB, RULE B8-1), PUBLIC: the class is concrete. External()
-    // and the stamps are the compiler's; the seven zero stores are ONE body
-    // with the factory ctor door `Ctor_SpriteCapture` (ui_factory_wave28.cpp).
-    SpriteCapture() { InitFields(); }
-
-    struct DoorBody {   // the doors' way onto the shared bodies
-        static void Init(SpriteCapture* s)    { s->InitFields(); }
-        static void Release(SpriteCapture* s) { s->ReleaseFields(); }
-    };
-
-protected:
-    // 0x1800d91b0. NON-VIRTUAL; its body (spritecapture_class.cpp) is
-    // `ReleaseFields`, ONE body with `RtUi_SpriteCapture_Dtor`.
-    ~SpriteCapture();
-
-private:
-    void InitFields() {
+    // ??0SpriteCapture@UI@@QEAA@XZ 0x1800d9140 — the REAL constructor, PUBLIC:
+    // External() and the stamps are the compiler's; then the seven zero
+    // stores +0x20..+0x50.
+    SpriteCapture() : Object::External() {
         _sheets   = CaptureArray{};     // +0x20, +0x28
         _entries  = CaptureArray{};     // +0x30, +0x38
         _sprites  = CaptureArray{};     // +0x40, +0x48
         _width = 0; _height = 0;        // +0x50 (one qword)
     }
-    void ReleaseFields();   // the three ~Array calls of 0x1800d91b0 (spritecapture_class.cpp)
+
+protected:
+    // 0x1800d91b0. NON-VIRTUAL; the three ~Array calls (spritecapture_class.cpp),
+    // then the compiler chains ~External.
+    ~SpriteCapture();
 
 public:
     // ---- the 0x38 bytes SpriteCapture adds (public: the doors reach them) --

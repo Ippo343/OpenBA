@@ -89,10 +89,6 @@ Filename* RtObject_ExternalFactory_ExpandRelativePath(const ExternalFactory* sel
 ExternalPtr<External>* RtObject_ExternalList_Find(const ExternalList* self,
                                                   ExternalPtr<External>* ret,
                                                   const Filename* path, void* type);
-extern "C" void* RtObject_ExternalList_Construct(void* selfv);
-extern "C" void* RtObject_ExternalList_Reconstruct(void* selfv);
-extern "C" void  RtObject_ExternalList_Destruct(void* selfv);
-extern "C" bool  RtObject_ExternalList_Serialize(void* selfv, void* streamv);
 // external_add.cpp:219 — declared inside `namespace RtObject` but `extern "C"`,
 // so the C++ name lives here and the linker name is unqualified.
 extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* external);
@@ -176,12 +172,16 @@ ExternalFactory::ExternalFactory()
       _resources(), _references(), _pathStack(),
       _referenceModeEnabled(false), _loadEnabled(false), _simpleLoadEnabled(false) {}
 
-// ?_singleton@ExternalFactory@Object@@0PEAV12@EA — retail 0x1801fc6c8.
-// A RUNTIME read through the existing port door, exactly as
-// runtime/src/engine/singleton_ctors.cpp:155 and four other sites do it.
+// ?_singleton@ExternalFactory@Object@@0PEAV12@EA — retail 0x1801fc6c8. The
+// class static (ENDGAME B.3.9 OBJ, B39_RULES D7); the minted row is redirected
+// onto it in RtObjectPortInit, so the name and address doors answer these
+// bytes. The mint never zeroes or re-seeds it; the language zero-initialises
+// it and the ctor door publishes into it.
+ExternalFactory* ExternalFactory::_singleton = nullptr;
+
+// ?Get@ExternalFactory@Object@@SAPEAV12@XZ — `MOV RAX,[_singleton]; RET`.
 ExternalFactory* ExternalFactory::Get() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@ExternalFactory@Object@@0PEAV12@EA");
-    return slot ? reinterpret_cast<ExternalFactory*>(*slot) : nullptr;
+    return _singleton;
 }
 
 const External* ExternalFactory::Find(const System::Filename& path) const {
@@ -314,11 +314,10 @@ System::Filename ExternalFactory::GetCompiledPath(const System::Filename& path) 
 // Object::ExternalList — the registry-free half
 // ============================================================================
 
-// ?Construct@ExternalList@Object@@UEAAPEAVExternal@2@XZ's inline half; retail's
-// constructor proper is the same stores. Note that retail stamps Base, then
-// External, then ExternalList — three writes to +0x00 — which the constructor
-// chain reproduces.
-ExternalList::ExternalList() : _resources(nullptr), _count(0), _pad2c(0) {}
+// (The constructor and slot 0, the vector deleting destructor, are inline in
+// External.h since ENDGAME B.3.9 OBJ, so `make unit` can build and destroy a
+// real ExternalList. The class's KEY FUNCTION is therefore `TypeName` below,
+// and GCC emits the vtable here, beside the registry doors, as before.)
 
 // ??1ExternalList@Object@@UEAA@XZ   retail 0x1800076c0
 //
@@ -344,59 +343,44 @@ ExternalList::~ExternalList() {
     _pad2c     = 0;
 }
 
-// slot 0 — 0x180007800, `MOV EDX,0x30` (elem size 0x30) -> ~ExternalList.
-Base* ExternalList::DeletingDtor(unsigned flags) {
-    this->~ExternalList();
-    if (flags & 1) TypeTreeFree(this);
-    return this;
-}
-
-// slot 1 — ?TypeName@ExternalList@Object@@UEBAPEBDXZ   0x180007370
+// slot 1 — ?TypeName@ExternalList@Object@@UEBAPEBDXZ   0x180007370  MOV RAX,[0x1801f9be8]
+// slot 2 — ?Type@ExternalList@Object@@UEBAIXZ          0x180007350  MOV EAX,[0x1801f9be0]
+// ?TypeId@ExternalList@Object@@SAIXZ                   0x180007360  the same load
+// All three over the record accessor (external_class.cpp; ENDGAME B.3.9 OBJ,
+// B39_RULES D6 step 1).
 const char* ExternalList::TypeName() const { return ExternalListTypeInfoRecord()->name; }
-// slot 2 — ?Type@ExternalList@Object@@UEBAIXZ          0x180007350
-uint32_t ExternalList::Type() const { return ExternalListTypeInfoRecord()->typeId; }
-uint32_t ExternalList::TypeId()     { return ExternalListTypeInfoRecord()->typeId; }
+uint32_t    ExternalList::Type() const     { return TypeId(); }
+uint32_t    ExternalList::TypeId()         { return ExternalListTypeInfoRecord()->typeId; }
 
 // slot 3 — ?GetFileVersion@ExternalList@Object@@UEBAHXZ  0x1800bfa10
 //          `MOV EAX,3; RET` — a literal of its own, not ElementDescription's.
 int32_t ExternalList::GetFileVersion() const { return 3; }
 
 // ============================================================================
-// Object::ExternalList — the four slots whose bodies reach the registry
-// (the rest of the class is just above: see external_class.cpp's key-function
-//  banner for why every ExternalList body has to sit in ONE file, this one)
+// Object::ExternalList — slots 6-8 (ENDGAME B.3.9 OBJ: the class's own bodies;
+// the extern "C" doors they forwarded to are retired with the minted table).
+// Slot 5, Serialize, is in external_list.cpp with the factory pair.
 // ============================================================================
 
-// slot 5 — ?Serialize@ExternalList@Object@@UEAA_NAEAVStream@IO@@@Z  0x1800bfa20
-//
-// The body stays in external_list.cpp. B.3.4 block 3 landed `IO::Serializer`
-// and deleted `RtObject::SerializerLite`, so what that body stands on now is
-// the RETAIL ReaderWriter vtable byte offsets under their one remaining
-// spelling, `rt::io::rw_vtbl::k*`. Those offsets DIFFER in the profile build,
-// so this body is never to be cross-checked against the profile disassembly;
-// and its parameter is still a stream, which is block 4's type, so it is not
-// "modernised" here either.
-bool ExternalList::Serialize(void* stream) {
-    return RtObject::RtObject_ExternalList_Serialize(this, stream);
-}
-
 // slot 6 — ?Reconstruct@ExternalList@Object@@UEAAPEAVExternal@2@XZ  0x180007570
-//          `slot0(this, 0)` — destroy without freeing — then the ctor body
-//          again, with NO null test: retail derefs `this` unconditionally to
-//          reach the vtable, so a null faults in retail too.
+//          `slot0(this, 0)` dispatched VIRTUALLY — destroy without freeing —
+//          then the ctor body again, with NO null test.
 External* ExternalList::Reconstruct() {
-    return reinterpret_cast<External*>(                              // B.3.3 bridge
-        RtObject::RtObject_ExternalList_Reconstruct(this));
+    DeletingDtor(0);
+    return ::new (this) ExternalList();
 }
 
 // slot 7 — ?Destruct@ExternalList@Object@@UEAAXXZ   0x180007640
-void ExternalList::Destruct() { RtObject::RtObject_ExternalList_Destruct(this); }
+//          `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
+void ExternalList::Destruct() { DeletingDtor(0); }
 
 // slot 8 — ?Construct@ExternalList@Object@@UEAAPEAVExternal@2@XZ   0x1800075e0
 //          ExternalList's OWN new virtual; External's table stops at eight.
+//          The inlined constructor, i.e. placement construction (retail's
+//          `TEST RCX,RCX` sat in the retired door; a virtual call always has a
+//          `this`).
 External* ExternalList::Construct() {
-    return reinterpret_cast<External*>(                              // B.3.3 bridge
-        RtObject::RtObject_ExternalList_Construct(this));
+    return ::new (this) ExternalList();
 }
 
 // ?Find@ExternalList@Object@@QEBA?AV?$ExternalPtr@VExternal@Object@@@2@AEBVFilename@System@@VType@2@@Z

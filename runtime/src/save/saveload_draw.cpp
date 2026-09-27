@@ -190,7 +190,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <new>          // ENDGAME B.3.9 GFX: placement new of FrameCopyImageBuffer
+#include <new>          // ENDGAME B.3.9: placement new (FrameCopyImageBuffer, MaterialInstance, ...)
 
 #include "saveload_internal.h"
 #include "../../types/math/Math.h"
@@ -355,23 +355,10 @@ RtVideo::Configuration* ConfigurationSingleton() {
     return p ? *p : nullptr;
 }
 
-// The four vtables the inlined constructors stamp. A `??_7X@@6B@` symbol names
-// the ADDRESS OF the first virtual slot, and retail's `LEA RAX,[<that address>]`
-// stores the address itself — so these are used undereferenced. They are also a
-// reminder that `AEAA`/private has nothing to do with exportedness: this DLL
-// exports 147 `??_7` symbols and four of them are exactly what Draw needs
-// (reference_aeaa_means_private_not_unexported.md).
-//
-// ENDGAME B.3.7 B2 (RULE B6-5): these were `static void* p = ResolveExport(...)`
-// guarded statics inside what is now a MEMBER body — the freeze-the-first-
-// answer shape B7-7 names. They are namespace-scope atomic slots with the
-// `RtResolveCached` shape now (saveload_internal.h `AtomicExport`).
-std::atomic<void*> g_vtBase{nullptr};
-std::atomic<void*> g_vtExternal{nullptr};
-std::atomic<void*> g_vtSpriteSheet{nullptr};
-void* VtBase()             { return RtSaveDetail::AtomicExport(g_vtBase,             "??_7Base@Object@@6B@"); }              // 1389
-void* VtExternal()         { return RtSaveDetail::AtomicExport(g_vtExternal,         "??_7External@Object@@6B@"); }          // 1432
-void* VtSpriteSheet()      { return RtSaveDetail::AtomicExport(g_vtSpriteSheet,      "??_7SpriteSheet@UI@@6B@"); }            // 1504
+// (The vtable-stamp helpers VtBase / VtExternal / VtSpriteSheet /
+// VtMaterialInstance are gone: ENDGAME B.3.9 — the inlined constructors they
+// served are real constructors called by placement new, UI-D's SpriteSheet and
+// GFX's MaterialInstance; the merge of the two left Base / External unread.)
 
 // ============================================================================
 // 3. `Video::ImageBuffer::Width()` / `Height()`, inlined by retail at four
@@ -600,23 +587,9 @@ void Save::SaveLoad::Draw(Video::Context& context,
     SpriteSheet* sheet = nullptr;
     {
         void* p = RT_EXPORT_ONCE(OpNewFn, "??2SpriteSheet@UI@@SAPEAX_K@Z")(0x58);
-        if (p != nullptr) {
-            uint8_t* s = static_cast<uint8_t*>(p);
-            *reinterpret_cast<void**>(s)           = VtBase();
-            *reinterpret_cast<void**>(s)           = VtExternal();
-            *reinterpret_cast<uint64_t*>(s + 0x08) = 0;
-            *reinterpret_cast<uint64_t*>(s + 0x10) = 0;
-            *reinterpret_cast<uint64_t*>(s + 0x18) = 0;
-            *reinterpret_cast<void**>(s)           = VtSpriteSheet();
-            *reinterpret_cast<uint64_t*>(s + 0x20) = 0;
-            *reinterpret_cast<uint64_t*>(s + 0x28) = 0;
-            *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
-            *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
-            *reinterpret_cast<uint64_t*>(s + 0x40) = 0;
-            *reinterpret_cast<uint64_t*>(s + 0x48) = 0;
-            *reinterpret_cast<uint8_t*>(s + 0x50)  = 0;   // a BYTE store
-            sheet = reinterpret_cast<SpriteSheet*>(p);
-        }
+        // ENDGAME B.3.9 UI-D (B9-13 foreign site): ??0SpriteSheet inlined is
+        // the class's real constructor; the minted-table stamp is retired.
+        if (p != nullptr) sheet = ::new (p) SpriteSheet();
     }
     sheet->m_field30 = reinterpret_cast<uint64_t>(mat);   // the sheet's material, +0x30
 

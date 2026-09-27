@@ -38,6 +38,8 @@
 #include <cmath>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
+#include "Component/CharacterComponent.h"
+#include "Component/PopulationComponent.h"
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -101,12 +103,6 @@ static int (*s_fn_CopyPathFromFinder)(void* pathfinder, void* slotIdPtr,
 
 // fn_MapGetTerrainPos -- already in engine_funcs.h but we resolve locally too
 // CharacterComponent_impl_f3e0 -- same function as fn_MapGetTerrainPos
-
-// TypeId at DAT_1401c7078 -- for entity type validation on +0x28
-static uint32_t* s_typeId_1401c7078 = nullptr;
-
-// TypeId at DAT_1401c4790 -- for version-0 compatibility serialize
-static uint32_t* s_typeId_1401c4790 = nullptr;
 
 // Constants
 // DAT_1401720d4 = 0.05f (minimum distance threshold)
@@ -179,10 +175,6 @@ bool MoveTo_ResolveFuncs() {
     s_fn_CopyPathFromFinder = reinterpret_cast<int(*)(void*, void*, void*, int)>(
         ResolveAddr(Module::Exe, 0x1400a6d50));
 
-    // Type IDs
-    s_typeId_1401c7078 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7078));
-    s_typeId_1401c4790 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4790));
-
     // Constants
     s_fMinDistSq = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401720d4));
     s_fHalfCell = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
@@ -192,7 +184,6 @@ bool MoveTo_ResolveFuncs() {
               s_fn_Sqrtf && s_fn_SetAnimation &&
               s_fn_BridgeQuery && s_fn_PathSetup && s_fn_UpdateFacing &&
               s_fn_SetTerrainCosts && s_fn_PathfinderQuery && s_fn_CopyPathFromFinder &&
-              s_typeId_1401c7078 && s_typeId_1401c4790 &&
               s_fMinDistSq && s_fHalfCell &&
               g_pGameWorldSingleton && g_fUVScale;
 
@@ -205,8 +196,7 @@ bool MoveTo_ResolveFuncs() {
     printf("[MoveTo]   SetCost=%p PFQuery=%p CopyPath=%p\n",
            (void*)s_fn_SetTerrainCosts, (void*)s_fn_PathfinderQuery,
            (void*)s_fn_CopyPathFromFinder);
-    printf("[MoveTo]   typeId7078=%p typeId4790=%p minDist=%p halfCell=%p\n",
-           (void*)s_typeId_1401c7078, (void*)s_typeId_1401c4790,
+    printf("[MoveTo]   minDist=%p halfCell=%p\n",
            (void*)s_fMinDistSq, (void*)s_fHalfCell);
     if (!ok) printf("[MoveTo] ERROR: some function pointers not resolved!\n");
 #endif
@@ -260,7 +250,7 @@ void MoveTo::Persist(void* stream) {
     // Target entity IBP (+0x28)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser1));   // B.3.4 bridge
     if (_field28 != nullptr) {
-        bool valid = s_fn_IsDerivedFrom(_field28, *s_typeId_1401c7078);
+        bool valid = s_fn_IsDerivedFrom(_field28, CharacterComponent::TypeId());
         if (!valid) {
             _field28 = nullptr;
         }
@@ -295,7 +285,7 @@ void MoveTo::Persist(void* stream) {
         void* tempIBP = nullptr;
         reinterpret_cast<Object::InternalBasePtr*>(&tempIBP)->Serialize(*reinterpret_cast<IO::Serializer*>(ser1));   // B.3.4 bridge
         if (tempIBP != nullptr) {
-            s_fn_IsDerivedFrom(tempIBP, *s_typeId_1401c4790);
+            s_fn_IsDerivedFrom(tempIBP, PopulationComponent::TypeId());
         }
     } else {
         // Version > 0: serialize bridge flag (+0x470)

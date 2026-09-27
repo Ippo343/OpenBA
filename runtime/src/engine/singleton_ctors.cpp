@@ -84,6 +84,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/input/Device.h"   // ENDGAME B.3.9 ENG: the class static
 #include "../../types/application/Application.h"   // ENDGAME B.3.9 ENG: the class static
+#include "../../types/video/Device.h"             // ENDGAME B.3.9 VID: the class statics
 
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/io/Modification.h"
@@ -155,13 +156,13 @@ inline void WP (void* p, size_t o, const void* v) { std::memcpy(static_cast<uint
 // ---------------------------------------------------------------------------
 void** SlotMemoryAllocator() { return RT_DATA_SLOT(void**, "?_singleton@MemoryAllocator@System@@0PEAV12@EA"); }
 void** SlotModification()    { return RT_DATA_SLOT(void**, "?_singleton@Modification@IO@@2PEAV12@EA"); }
-void** SlotFactory()         { return RT_DATA_SLOT(void**, "?_singleton@Factory@Object@@0PEAV12@EA"); }
-void** SlotExternalFactory() { return RT_DATA_SLOT(void**, "?_singleton@ExternalFactory@Object@@0PEAV12@EA"); }
-void** SlotInternalFactory() { return RT_DATA_SLOT(void**, "?_singleton@InternalFactory@Object@@0PEAV12@EA"); }
+void** SlotFactory()         { return reinterpret_cast<void**>(&::Object::Factory::_singleton); }
+void** SlotExternalFactory() { return reinterpret_cast<void**>(&::Object::ExternalFactory::_singleton); }
+void** SlotInternalFactory() { return reinterpret_cast<void**>(&::Object::InternalFactory::_singleton); }
 void** SlotFileSystem()      { return RT_DATA_SLOT(void**, "?_singleton@FileSystem@IO@@0PEAV12@EA"); }
 void** SlotPersistence()     { return RT_DATA_SLOT(void**, "?_singleton@Persistence@IO@@0PEAV12@EA"); }
-void** SlotVideoDevice()     { return RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA"); }
-void** SlotVideoConfig()     { return RT_DATA_SLOT(void**, "?_singleton@Configuration@Video@@0PEAV12@EA"); }
+void** SlotVideoDevice()     { return reinterpret_cast<void**>(&::Video::Device::_singleton); }
+void** SlotVideoConfig()     { return reinterpret_cast<void**>(&::Video::Configuration::_singleton); }
 void** SlotApplication()     { return reinterpret_cast<void**>(&::Application::Application::_singleton); }
 void** SlotInputDevice()     { return reinterpret_cast<void**>(&::Input::Device::_singleton); }
 void** SlotInputConfig()     { return reinterpret_cast<void**>(&::Input::Configuration::_singleton); }

@@ -34,6 +34,7 @@
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "Dialog/ToolUI.h"   // X::TypeId() (B.3.8 callers)
 #include <new>
 
 namespace {
@@ -466,13 +467,8 @@ extern "C" void PlayerTrade_BSTFindRemove_2c690(int64_t* root, void* keyIBP) {
 // ============================================================
 extern "C" void PlayerTrade_EntityUI_66b0(int64_t param_1) {
     // Resolve the dialog controller via DialogInstance::GetController.
-    static uint32_t* s_pCtrlTypeId = nullptr;
-    static bool s_tidInit = false;
-    if (!s_tidInit) {
-        s_pCtrlTypeId = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5788));
-        s_tidInit = true;
-    }
-    uint32_t ctrlTypeId = s_pCtrlTypeId ? *s_pCtrlTypeId : 0;
+    // 0x1401c5788 is ToolUI's cell (Table 1).
+    uint32_t ctrlTypeId = ToolUI::TypeId();
 
 
     void* controllerRaw = nullptr;   // local_res8

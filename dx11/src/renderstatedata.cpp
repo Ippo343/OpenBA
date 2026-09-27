@@ -95,6 +95,7 @@
 // twelve CONCRETE `*Data` classes and the 84-slot seam remain the declared leave
 // of RULE B5-8; only the Runtime-side base is a class.
 #include "video/CompanionData.h"
+#include "video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
 
 namespace VideoDX11 {
 namespace {
@@ -323,10 +324,9 @@ RuntimeDeps& Deps() {
     if (!d.tried) {
         d.tried = true;
 
-        // Runtime 0x1801fe7a8 == ?_singleton@Device@Video@@0PEAV12@EA, the
-        // target of VideoDX11's import slot 0x1800134b8.
-        d.deviceSingleton =
-            reinterpret_cast<void**>(ResolveAddr(Module::Runtime, 0x1801fe7a8));
+        // Video::Device::_singleton, the target of VideoDX11's import slot
+        // 0x1800134b8 -- the class static since ENDGAME B.3.9 VID.
+        d.deviceSingleton = reinterpret_cast<void**>(&::Video::Device::_singleton);
 
         d.memFree = reinterpret_cast<fn_MemFree_t>(
             ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));

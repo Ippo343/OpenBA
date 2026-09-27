@@ -84,13 +84,11 @@ void* ImageBufferVtable() {
 // read verbatim by Width()/Height(); lane B owns Video::Device's own body,
 // not these two field reads.
 void** DeviceSingletonPtr() {
-    void** p = RT_DATA_SLOT(void**,
-        "?_singleton@Device@Video@@0PEAV12@EA");
+    void** p = reinterpret_cast<void**>(&::Video::Device::_singleton);
     return p;
 }
 void** ConfigurationSingletonPtr() {
-    void** p = RT_DATA_SLOT(void**,
-        "?_singleton@Configuration@Video@@0PEAV12@EA");
+    void** p = reinterpret_cast<void**>(&::Video::Configuration::_singleton);
     return p;
 }
 
@@ -100,36 +98,25 @@ void** ConfigurationSingletonPtr() {
 // Video_ImageBuffer_PlatformConstruct.
 // ----------------------------------------------------------------------------
 
-// PORT-AWARE (ResolveExport), and it must be. These are exported DATA in the
-// shipped DLL; while it is loaded and the mint is disarmed this resolves to the
-// DLL's own storage, so our linkage and the DLL's still-unported
-// ImageBuffer::RecreateDynamic / ReleaseDynamic (0x1800f2d90 / 0x1800f2e80,
-// which walk the same list) agree on ONE list. At cutover the mint owns the
-// bytes and the walkers are ours. the raw DLL door would be null at cutover and
-// every link write would land at offset 0 of nothing.
+// ENDGAME B.3.9 VID: the four heads are the class statics (defined in
+// dynamic_resources.cpp beside the walkers), so the links written here and the
+// lists the device-lost sweeps walk are the same four cells by construction.
+// The function-local ResolveExport caches went with the mint rows (B9-10).
 void** ImageBufferFirstSurface() {
-    static void** p = reinterpret_cast<void**>(
-        ResolveExport("?_firstSurface@ImageBuffer@Video@@0PEAV12@EA"));
-    return p;
+    return reinterpret_cast<void**>(&::Video::ImageBuffer::_firstSurface);
 }
 void** IndexBufferFirstBuffer() {
-    static void** p = reinterpret_cast<void**>(
-        ResolveExport("?_firstBuffer@IndexBuffer@Video@@0PEAV12@EA"));
-    return p;
+    return reinterpret_cast<void**>(&::Video::IndexBuffer::_firstBuffer);
 }
 void** VertexBufferFirstBuffer() {
-    static void** p = reinterpret_cast<void**>(
-        ResolveExport("?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA"));
-    return p;
+    return reinterpret_cast<void**>(&::Video::VertexBuffer::_firstBuffer);
 }
 // Wave 9 lane GFX2. Minted (standalone/rt_data_mint_tables.inc, 0x1801fe790,
 // 8 bytes) and already read PORT-AWARE by runtime/src/video/dynamic_resources.cpp
 // so our linkage and lane VID's walkers agree on ONE list on both sides of the
 // cutover.
 void** RenderBufferFirstRenderBuffer() {
-    static void** p = reinterpret_cast<void**>(
-        ResolveExport("?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA"));
-    return p;
+    return reinterpret_cast<void**>(&::Video::RenderBuffer::_firstRenderBuffer);
 }
 
 // Video::Device's recursive render lock, in runtime/src/video/buffers_win.cpp
@@ -485,28 +472,10 @@ bool Video_ImageBuffer_Create(ImageBuffer* self, int32_t imageType, int32_t usag
                                             levels);                        // B.3.5 bridge
 }
 
-// ============================================================================
-// Video::ImageBufferData::~ImageBufferData() — 0x1800f8e10, ordinal 609.
-// This is Runtime's OWN abstract base (runtime/types/video/ImageBuffer.h),
-// distinct from dx11::ImageBufferData. Trivial: reset the vptr to this base
-// class's own vtable. dx11's derived dtor (ImageBufferData_ScalarDeletingDtor,
-// dx11/src/imagebufferdata.cpp) tail-calls this exact export as its
-// `im->BaseDtor(self)` — porting it here is what makes that tail call land on
-// us instead of the DLL, with no change to dx11's own file.
-// ============================================================================
-// ENDGAME B.3.5 block VC — ONE OF THE TWO DOORS block A LEFT BEHIND. All twelve
-// `~XData()` member bodies live in `runtime/src/video/companion_data.cpp`; ten of
-// the twelve doors were converted there and these two (`ImageBufferData` here,
-// `RenderStateData` in `device.cpp`) were left because their doors are in other
-// blocks' files. That duplicate of the three-instruction vptr store is gone: this
-// is a one-line QUALIFIED non-virtual delegation like the other ten, and the
-// qualification is load-bearing for the same reason (a live `*Data` wears dx11's
-// vtable, whose slot 0 is the derived deleting dtor that CALLS this door — an
-// unqualified virtual call would dispatch straight back into it).
-void Video_ImageBufferData_Dtor(ImageBufferData* self) {
-    reinterpret_cast<Video::ImageBufferData*>(self)
-        ->Video::ImageBufferData::~ImageBufferData();               // B.3.5 bridge
-}
+// (The `??1ImageBufferData@Video@@UEAA@XZ` door, retail 0x1800f8e10, is GONE:
+// ENDGAME B.3.9 VID retired it with the RT_DELDTOR row that was its one caller.
+// dx11/src/imagebufferdata.cpp calls `Video::ImageBufferData::~ImageBufferData()`
+// directly, RULE B5-3.)
 
 // ============================================================================
 // Wave 9 lane W — Video::{Image,Index,Vertex}Buffer::Platform{Construct,Destruct}
@@ -1136,10 +1105,6 @@ int RtVideoBuffersRegister() {
         "W4AddressMode@12@44PEAV?$Array@V?$Array@E@Collection@@@Collection@@@Z",
         (void*)&Video_ImageBuffer_Create);
     RegisterRuntimeAddr(0x1800f2680, (void*)&Video_ImageBuffer_Create);
-    n++;
-
-    RegisterRuntimeExport("??1ImageBufferData@Video@@UEAA@XZ", (void*)&Video_ImageBufferData_Dtor);
-    RegisterRuntimeAddr(0x1800f8e10, (void*)&Video_ImageBufferData_Dtor);
     n++;
 
     RegisterRuntimeExport("??0IndexBuffer@Video@@QEAA@XZ", (void*)&Video_IndexBuffer_Ctor);

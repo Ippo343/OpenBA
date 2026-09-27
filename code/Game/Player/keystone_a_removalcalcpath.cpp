@@ -43,6 +43,11 @@
 #include "perf_terrain.h"
 #include "resolve.h"
 #include <cstdint>
+#include "Component/CreateDragDescription.h"
+#include "Component/MapComponent.h"
+#include "Component/DestroyComponent.h"
+#include "Component/WorkComponent.h"
+#include "Work/BuildRoad.h"
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
@@ -100,12 +105,15 @@ static fn_memAllocStatic_t s_memAlloc = nullptr;
 typedef void* (*fn_timeCtor_t)(void* retTime, float seconds);
 static fn_timeCtor_t s_timeCtor = nullptr;
 
-// type-ID storage globals (exe .rdata, filled by RegisterType after Startup)
-static const uint32_t* s_tid_7430 = nullptr;  // RemovalTool_helper_d960
-static const uint32_t* s_tid_79e0 = nullptr;  // BuildComponent slot (DWORD_1401c79e0)
-static const uint32_t* s_tid_75f0 = nullptr;  // DestroyComponent (DWORD_1401c75f0)
-static const uint32_t* s_tid_8070 = nullptr;  // StorageLocationComponent (DWORD_1401c8070)
-static const uint32_t* s_tid_6860 = nullptr;  // TypeInfo_BuildRoad (0x1401c6860)
+// Type-id storage: each cell's class is Table 1's (INVENTORY_C), not the local
+// name below — 0x1401c79e0 is MapComponent's cell (not "BuildComponent"), and
+// 0x1401c8070 is WorkComponent's (not "StorageLocationComponent").
+static uint32_t s_tid_7430_v, s_tid_79e0_v, s_tid_75f0_v, s_tid_8070_v, s_tid_6860_v;
+static const uint32_t* s_tid_7430 = &s_tid_7430_v;  // 0x1401c7430 -> CreateDragDescription
+static const uint32_t* s_tid_79e0 = &s_tid_79e0_v;  // 0x1401c79e0 -> MapComponent
+static const uint32_t* s_tid_75f0 = &s_tid_75f0_v;  // 0x1401c75f0 -> DestroyComponent
+static const uint32_t* s_tid_8070 = &s_tid_8070_v;  // 0x1401c8070 -> WorkComponent
+static const uint32_t* s_tid_6860 = &s_tid_6860_v;  // 0x1401c6860 -> BuildRoad
 
 static bool s_init = false;
 
@@ -136,11 +144,11 @@ static void EnsureInit() {
     s_memAlloc    = reinterpret_cast<fn_memAllocStatic_t>(SlotFn(0x140152b60));
     s_timeCtor    = reinterpret_cast<fn_timeCtor_t>(SlotFn(0x140152b00));
 
-    s_tid_7430 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7430));
-    s_tid_79e0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c79e0));
-    s_tid_75f0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c75f0));
-    s_tid_8070 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c8070));
-    s_tid_6860 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6860));
+    s_tid_7430_v = CreateDragDescription::TypeId();
+    s_tid_79e0_v = MapComponent::TypeId();
+    s_tid_75f0_v = DestroyComponent::TypeId();
+    s_tid_8070_v = WorkComponent::TypeId();
+    s_tid_6860_v = BuildRoad::TypeId();
     s_init = true;
 }
 

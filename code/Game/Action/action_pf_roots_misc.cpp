@@ -21,6 +21,8 @@
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/HerdDescription.h"
+#include "Component/AnimalComponent.h"
 
 namespace {
 
@@ -82,8 +84,6 @@ static inline bool InlBoxIsect(const void* a, const void* b) {
 static fn_BoxIntersect_t s_boxisect   = nullptr;  // slot 0x140151e80
 
 // Type-id / float globals (resolved from exe .rdata).
-static uint32_t* s_pTid_c7858 = nullptr;  // DAT_1401c7858 (StartMigration positive branch)
-static uint32_t* s_pTid_c6f98 = nullptr;  // DAT_1401c6f98 (model/character component type)
 
 static bool s_init = false;
 static void EnsureFns() {
@@ -104,8 +104,6 @@ static void EnsureFns() {
     if (!s_boxisect) s_boxisect = reinterpret_cast<fn_BoxIntersect_t>(
         ResolveExport("?Intersect@Box@Volume@@QEBA_NAEBV12@@Z"));
 
-    s_pTid_c7858 = reinterpret_cast<uint32_t*>(R(0x1401c7858));
-    s_pTid_c6f98 = reinterpret_cast<uint32_t*>(R(0x1401c6f98));
     s_init = true;
 }
 
@@ -521,7 +519,7 @@ void Pf_HerdStartMigration_122340(void* param_1) {
 
     // Positive branch: compute clamped target rectangle + write member move targets.
     void* pvVar11 = *reinterpret_cast<void**>(self + 0x18);
-    bool bVar3 = fn_IsDerivedFrom && fn_IsDerivedFrom(pvVar11, *s_pTid_c7858);
+    bool bVar3 = fn_IsDerivedFrom && fn_IsDerivedFrom(pvVar11, HerdDescription::TypeId());
     void* pvVar6 = bVar3 ? pvVar11 : nullptr;
     int local_res10 = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(pvVar6) + 0x38);
     int worldW = **reinterpret_cast<int**>((uintptr_t)*g_pGameWorldSingleton + 0xf8);
@@ -553,13 +551,13 @@ void Pf_HerdStartMigration_122340(void* param_1) {
                 int idx = 0;
                 while (true) {
                     void** puVar1 = reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(lv + 0x30) + slotOff * 8);
-                    uint32_t wantId = *s_pTid_c6f98;
+                    uint32_t wantId = AnimalComponent::TypeId();
                     uint32_t gotId = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<int64_t*>(*puVar1) + 0x10))(*puVar1);
                     if (gotId == wantId) {
                         // LAB_1401225ef: re-read the slot, IsDerivedFrom-confirm.
                         void** p2 = reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(lv + 0x30) + slotOff * 8);
                         void* comp = *p2;
-                        bool d = fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *s_pTid_c6f98);
+                        bool d = fn_IsDerivedFrom && fn_IsDerivedFrom(comp, AnimalComponent::TypeId());
                         foundComp = d ? comp : nullptr;
                         break;
                     }

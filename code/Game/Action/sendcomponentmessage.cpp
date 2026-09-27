@@ -21,6 +21,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/Component.h"          // ENDGAME B.3.8 CB3: slot 15 OnMessage
 #include "Component/OrchardComponent.h"   // ENDGAME B.3.8 CB3: OrchardComponent::TypeId()
+#include "Entity/ComponentEntity.h"       // ENDGAME B.3.9 C4: ComponentEntity::TypeId()
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -29,10 +30,6 @@
 
 // Object::Type::Serialize(this, serializer) — via dispatch slot at 0x1401516b0
 static void (*s_fn_Type_Serialize)(void* typeField, void* serializer) = nullptr;
-
-// TypeInfo for ComponentEntity — at 0x1401c5d70
-// (Note: SendComponentMessage uses 0x1401c5d70, not 0x1401c4218)
-static uint32_t* s_TypeId_Entity = nullptr;
 
 static bool s_funcs_resolved = false;
 
@@ -46,19 +43,14 @@ bool SendComponentMessage_ResolveFuncs() {
     uintptr_t slotTypeSer = ResolveAddr(Module::Exe, 0x1401516b0);
     if (slotTypeSer) s_fn_Type_Serialize = *reinterpret_cast<void(**)(void*, void*)>(slotTypeSer);
 
-    // TypeInfo
-    s_TypeId_Entity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5d70));
-
     bool ok = s_fn_Type_Serialize &&
-              s_TypeId_Entity &&
               fn_IsDerivedFrom &&
               fn_InternalBasePtr_DeletePtr && fn_InternalBasePtr_Ctor &&
               fn_MemFreeStatic;
 
 #ifdef _DEBUG
-    printf("[SendComponentMessage] ResolveFuncs: TypeSer=%p TypeId=%p\n",
-           (void*)s_fn_Type_Serialize,
-           (void*)s_TypeId_Entity);
+    printf("[SendComponentMessage] ResolveFuncs: TypeSer=%p\n",
+           (void*)s_fn_Type_Serialize);
     if (!ok) printf("[SendComponentMessage] ERROR: some function pointers not resolved!\n");
 #endif
 
@@ -90,7 +82,7 @@ void SendComponentMessage::Persist(void* stream) {
     // Target entity ref (+0x20) with type validation
     reinterpret_cast<Object::InternalBasePtr*>(&this->_field20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (this->_field20 != nullptr) {
-        if (!fn_IsDerivedFrom(this->_field20, *s_TypeId_Entity)) {
+        if (!fn_IsDerivedFrom(this->_field20, ComponentEntity::TypeId())) {
             this->_field20 = nullptr;
         }
     }
@@ -98,7 +90,7 @@ void SendComponentMessage::Persist(void* stream) {
     // Source entity ref (+0x28) with type validation
     reinterpret_cast<Object::InternalBasePtr*>(&this->_field28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (this->_field28 != nullptr) {
-        if (!fn_IsDerivedFrom(this->_field28, *s_TypeId_Entity)) {
+        if (!fn_IsDerivedFrom(this->_field28, ComponentEntity::TypeId())) {
             this->_field28 = nullptr;
         }
     }

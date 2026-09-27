@@ -21,6 +21,8 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include "Component/ComponentDescription.h"
+#include "Game/Profession.h"
 #include <new>
 #include "ui/SpinnerElement.h"   // ENDGAME B.3.6 UI callers (K4)
 
@@ -65,11 +67,19 @@ static fn_CastToSliderElement_t CastToSliderElementFn() {
     return (fn_CastToSliderElement_t)ResolveAddr(Module::Exe, 0x140013920);
 }
 
-static uint32_t* TypeIdBuildingDesc() {       // 0x1401c7318 (cases 0, 7, 10)
-    return (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7318);
+// 0x1401c7318 is ComponentDescription's cell, 0x1401c5a98 is Profession's (Table 1).
+// Neither result is cached (matching the file's existing no-cache pattern for
+// every other lazily-resolved pointer here); a plain read is cheap and this
+// runs only on the single game-update thread.
+static uint32_t s_tidBuildingDesc;
+static uint32_t* TypeIdBuildingDesc() {       // cases 0, 7, 10
+    s_tidBuildingDesc = ComponentDescription::TypeId();
+    return &s_tidBuildingDesc;
 }
-static uint32_t* TypeIdProfessionDesc() {     // 0x1401c5a98 (cases 1, 3, 6)
-    return (uint32_t*)ResolveAddr(Module::Exe, 0x1401c5a98);
+static uint32_t s_tidProfessionDesc;
+static uint32_t* TypeIdProfessionDesc() {     // cases 1, 3, 6
+    s_tidProfessionDesc = Profession::TypeId();
+    return &s_tidProfessionDesc;
 }
 
 // ============================================================

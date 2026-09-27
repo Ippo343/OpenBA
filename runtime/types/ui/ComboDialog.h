@@ -22,13 +22,22 @@
 //   [9]                     inherited (OnSerializeSettings)
 //
 // sizeof 0xd0: `MOV ECX,0xd0` at 0x18011282b (the one ??2 call site) and the
-// deleting dtor's stride. ABSTRACT, no real ctor (B6-3; slot 0 is the mint's).
+// deleting dtor's stride.
+//
+// ENDGAME B.3 step 9 (block UI-D, B39_RULES D1/D2): CONCRETE. Two REAL public
+// ctors -- the default one the factory pair inlines (DialogInstance() then
+// +0xb8/+0xc0/+0xc8 zero) and retail's 4-argument ??0ComboDialog (0x180111d00,
+// combodialog_ctor.cpp) over DialogInstance's root-Element ctor; slot 0 the
+// class's own vector deleting dtor; ~ComboDialog protected and empty (retail:
+// restamp + ~DialogInstance). The minted `??_7ComboDialog@UI@@6B@`, its
+// RT_DELDTOR row and the FACTUI1 row are retired.
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
 
 #include "DialogInstance.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI {
 
@@ -36,8 +45,37 @@ class ComboElement;   // block C1
 
 class ComboDialog : public DialogInstance {
 public:
-    // [0] 0x180074a10 — pure on purpose; the RT_DELDTOR row is not retired.
-    Object::Base* DeletingDtor(unsigned flags) override = 0;
+    // The default ctor the factory pair inlines (0x180074850 / 0x1800748f0):
+    // ??0DialogInstance@UI@@QEAA@XZ, then the three own zero stores.
+    ComboDialog() : DialogInstance() {
+        _list = nullptr;                                  // 1800748c3
+        _parentDialog = Object::InternalPtr<DialogInstance>();   // 1800748ca
+        _combo = nullptr;                                 // 1800748d1
+    }
+    // ??0ComboDialog@UI@@QEAA@PEAVUserInterface@1@V?$InternalPtr@VElement@UI@@@
+    //     Object@@V?$InternalPtr@VDialogInstance@UI@@@4@V?$InternalPtr@
+    //     VComboElement@UI@@@4@@Z                             0x180111d00
+    // (combodialog_ctor.cpp). Every InternalPtr arrives by hidden reference in
+    // retail; by value here (a non-virtual, both ends this GCC).
+    ComboDialog(UserInterface* ui, Object::InternalPtr<Element> root,
+                Object::InternalPtr<DialogInstance> parent,
+                Object::InternalPtr<ComboElement> combo);
+
+    // [0] 0x180074a10 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0xd0`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<ComboDialog*>(self + static_cast<int64_t>(i) * 0xd0)->~ComboDialog();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~ComboDialog();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char* TypeName() const override;                        // [1] 0x180074760
     uint32_t    Type() const override;                            // [2] 0x180074740
@@ -49,21 +87,21 @@ public:
 
     // ---- exported, NOT PORTED as members ----------------------------------
     ComboDialog(const ComboDialog& other);                        // 0x180074940
-    static uint32_t      TypeId();                                // 0x180074750
+    // 0x180074750 — the minted record's type id (combodialog.cpp).
+    static uint32_t      TypeId();
     // MemoryAllocator statics (B36_RULES 7): `??2` 0x180074770 IS ported as the
     // door `RtUi_ComboDialog_OperatorNew` (combodialog_ctor.cpp); the rest not.
+    // Placement is spelt `::new (p) ComboDialog(...)` (B9-5).
     static void* operator new(std::size_t bytes);                 // 0x180074770
     static void* operator new(std::size_t bytes, void* place);    // 0x1800747e0
     static void  operator delete(void* p);                        // 0x1800747f0
+    // Retail's factory pair (B39_RULES D2), defined and registered in combodialog.cpp.
     static Object::Base* CreateNewObject();                       // 0x180074850
     static Object::Base* CreateInPlaceObject(void* storage);      // 0x1800748f0
 
 protected:
-    // NOT retail's ctors (0x180111d00 — the door `RtUi_ComboDialog_Ctor` —
-    // and 0x180112130) — B6-3.
-    ComboDialog() = default;
-    // `??1ComboDialog@UI@@UEAA@XZ` 0x180111cd0, DEFINED EMPTY; the door
-    // `RtUi_ComboDialog_Dtor` stamps the minted table and chains by name.
+    // `??1ComboDialog@UI@@UEAA@XZ` 0x180111cd0: restamp + ~DialogInstance,
+    // both the compiler's — the empty body is retail's.
     ~ComboDialog();
 
     // RULE B5-15 / B6-7, COPIED from B36_SLOTS section 3 (the parent literal

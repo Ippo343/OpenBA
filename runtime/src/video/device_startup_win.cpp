@@ -36,14 +36,15 @@ static const size_t kConfigFullscreen   = 0x40;
 // `RtResolveCached`-backed slot accessor the portable half uses; spelled out
 // here because rt_port.h's RT_DATA_SLOT macro is available and mint-aware.
 #include "../../funcs/rt_port.h"
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
 
 namespace {
 uint8_t* VideoDevice() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+    void** slot = reinterpret_cast<void**>(&::Video::Device::_singleton);
     return slot ? static_cast<uint8_t*>(*slot) : nullptr;
 }
 uint8_t* VideoConfig() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Configuration@Video@@0PEAV12@EA");
+    void** slot = reinterpret_cast<void**>(&::Video::Configuration::_singleton);
     return slot ? static_cast<uint8_t*>(*slot) : nullptr;
 }
 }  // namespace

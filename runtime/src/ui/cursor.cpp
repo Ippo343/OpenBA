@@ -3,8 +3,7 @@
 // ============================================================================
 //
 // ??_7Cursor@UI@@6B@ (retail 0x180156570), nine slots:
-//   0  deleting dtor      0x18003b3a0  deleting_dtor.cpp row (~Class 0x1800cd1c0,
-//                                      sizeof 0x30 — both read off its own bytes)
+//   0  deleting dtor      0x18003b3a0  Cursor.h (the class's own, B.3.9)
 //   1  TypeName           0x18003af80  here
 //   2  Type               0x18003af60  here
 //   3  GetFileVersion     0x1800cd1b0  here  (returns 1)
@@ -13,7 +12,7 @@
 //   6  Reconstruct        0x18003b180  here
 //   7  Destruct           0x18003b240  here
 //   8  Construct          0x18003b1e0  here
-// plus ??1Cursor@UI@@UEAA@XZ 0x1800cd1c0, here.
+// plus ??1Cursor@UI@@UEAA@XZ 0x1800cd1c0 and the factory pair, here.
 //
 // LAYOUT, sizeof 0x30 (`MOV EDX,0x30` in the deleting destructor's array arm at
 // 0x18003b3d2, and the `Allocate(0x30, 8)` in the already-ported factory row):
@@ -38,10 +37,11 @@
 // destructor must release the owning pointer" is exactly the assumption that
 // would otherwise get a helpful line added.
 //
-// THE CONSTRUCTOR IS NOT IN THIS FILE, for the same reason as in
-// runtime/src/ui/characterset.cpp: there is no out-of-line `??0Cursor@UI@@` at
-// all — it is inlined into Construct and Reconstruct, and the same stores are
-// already ported table-driven by runtime/src/ui/factory_ui1.cpp.
+// THE CONSTRUCTOR: there is no out-of-line `??0Cursor@UI@@` — it is inlined
+// into Construct, Reconstruct and both factory statics. ENDGAME B.3.9 block
+// UI-D: it is the class's REAL constructor (Cursor.h), every live Cursor wears
+// the COMPILER's table, and the slot doors, the ??1 door and the FACTUI1 row
+// whose only reader was the minted `??_7Cursor@UI@@6B@` are retired with it.
 // ============================================================================
 #include <cstddef>
 #include <cstdint>
@@ -49,15 +49,12 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/Cursor.h"
+#include <new>
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
-
-void* VtBase()     { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* VtExternal() { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* VtCursor()   { return RT_DATA_SLOT(void*, "??_7Cursor@UI@@6B@"); }
 
 const uint8_t* CursorTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*,
@@ -83,23 +80,6 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
-using Slot0Fn = void* (*)(void* self, unsigned flag);
-void CallSlot0(void* self, unsigned flag) {
-    reinterpret_cast<Slot0Fn>(VTableOf(self)[0])(self, flag);
-}
-
-// The seven stores retail inlines into Construct (0x18003b1f6..0x18003b22a)
-// and, identically, into Reconstruct (0x18003b19e..0x18003b1d2).
-void InlineCtorStores(uint8_t* p) {
-    *reinterpret_cast<void**>(p)        = VtBase();       // 18003b1f6
-    *reinterpret_cast<void**>(p)        = VtExternal();   // 18003b200
-    *reinterpret_cast<void**>(p + 0x08) = nullptr;        // 18003b215
-    *reinterpret_cast<void**>(p + 0x10) = nullptr;        // 18003b218
-    *reinterpret_cast<void**>(p + 0x18) = nullptr;        // 18003b21c
-    *reinterpret_cast<void**>(p)        = VtCursor();     // 18003b220
-    *reinterpret_cast<void**>(p + 0x28) = nullptr;        // 18003b22a
-}
-
 }  // namespace
 
 // ############################################################################
@@ -109,7 +89,9 @@ void InlineCtorStores(uint8_t* p) {
 namespace UI {
 
 // [2] 0x18003af60: `MOV EAX,[0x1801f9e10] ; RET`.
-uint32_t Cursor::Type() const {
+uint32_t Cursor::Type() const { return TypeId(); }
+// ?TypeId@Cursor@UI@@SAIXZ 0x18003af70 — the same first dword.
+uint32_t Cursor::TypeId() {
     const uint8_t* ti = CursorTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
@@ -121,19 +103,32 @@ const char* Cursor::TypeName() const {
 // [3] 0x1800cd1b0: `MOV EAX,0x1 ; RET`.
 int32_t Cursor::GetFileVersion() const { return 1; }
 
-// [8] 0x18003b1e0 — retail's null test (18003b1f1 TEST/JZ) is in the DOOR.
+// [8] 0x18003b1e0 — the inlined constructor, then `MOV RAX,RCX`. (Retail's
+// null test sat in the retired door; a virtual call always has a `this`.)
 Object::External* Cursor::Construct() {
-    InlineCtorStores(reinterpret_cast<uint8_t*>(this));
-    return this;                                          // 18003b22e
+    return ::new (this) Cursor();                         // 18003b1f6..18003b22e
 }
-// [6] 0x18003b180: slot0(this, 0), then the same inlined constructor, open-coded.
+// [6] 0x18003b180: slot0(this, 0) — VIRTUALLY — then the same inlined ctor.
 Object::External* Cursor::Reconstruct() {
-    CallSlot0(this, 0);                                   // 18003b197
-    InlineCtorStores(reinterpret_cast<uint8_t*>(this));
-    return this;                                          // 18003b1d6
+    DeletingDtor(0);                                      // 18003b197
+    return ::new (this) Cursor();                         // 18003b19e..18003b1d6
 }
 // [7] 0x18003b240: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void Cursor::Destruct() { CallSlot0(this, 0); }
+void Cursor::Destruct() { DeletingDtor(0); }
+
+// ?CreateNewObject@Cursor@UI@@SAPEAVBase@Object@@XZ  0x18003b070
+// The FACTUI1 row this replaces: the locked MemAlloc of 0x30 bytes, align 8;
+// retail's null branch; then the inlined constructor.
+Object::Base* Cursor::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(Cursor), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) Cursor();
+}
+// ?CreateInPlaceObject@Cursor@UI@@SAPEAVBase@Object@@PEAX@Z  0x18003b120
+Object::Base* Cursor::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) Cursor();
+}
 
 // ============================================================================
 // [5] ?Serialize@Cursor@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800cd110
@@ -175,79 +170,27 @@ bool Cursor::Serialize(void* streamv) {
     return true;                                          // 1800cd19f MOV AL,1
 }
 
-// ~Cursor: NON-VIRTUAL and EMPTY; the registered dtor door does retail's work.
+// ??1Cursor@UI@@UEAA@XZ   0x1800cd1c0 — restamp, then tail-jump ~External
+// (0x1800cd1d2..0x1800cd1e0): NOTHING of Cursor's own is released. The empty
+// body is retail's; the compiler chains the base (ENDGAME B.3.9 UI-D: the
+// retired `RtUi_Cursor_Dtor` door did the same by hand).
 Cursor::~Cursor() {}
 
 }  // namespace UI
 
 // ============================================================================
-// THE DOORS — qualified delegation (a live Cursor wears the MINTED table).
+// Registration. ENDGAME B.3.9 UI-D: the seven slot doors and the ??1 door are
+// gone -- their only reader was the minted `??_7Cursor@UI@@6B@` (and, for ??1,
+// its RT_DELDTOR row). What is left is the factory pair (B39_RULES D2), by
+// name and address.
 // ============================================================================
-extern "C" uint32_t RtUi_Cursor_Type(const void* selfv) {
-    return reinterpret_cast<const UI::Cursor*>(selfv)->UI::Cursor::Type();          // B.3.6 bridge
-}
-extern "C" const char* RtUi_Cursor_TypeName(const void* selfv) {
-    return reinterpret_cast<const UI::Cursor*>(selfv)->UI::Cursor::TypeName();      // B.3.6 bridge
-}
-extern "C" int32_t RtUi_Cursor_GetFileVersion(const void* selfv) {
-    return reinterpret_cast<const UI::Cursor*>(selfv)->UI::Cursor::GetFileVersion(); // B.3.6 bridge
-}
-extern "C" void* RtUi_Cursor_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                 // 18003b1f1 TEST/JZ
-    return reinterpret_cast<UI::Cursor*>(selfv)->UI::Cursor::Construct();           // B.3.6 bridge
-}
-extern "C" void* RtUi_Cursor_Reconstruct(void* selfv) {
-    return reinterpret_cast<UI::Cursor*>(selfv)->UI::Cursor::Reconstruct();         // B.3.6 bridge
-}
-extern "C" void RtUi_Cursor_Destruct(void* selfv) {
-    reinterpret_cast<UI::Cursor*>(selfv)->UI::Cursor::Destruct();                   // B.3.6 bridge
-}
-extern "C" bool RtUi_Cursor_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<UI::Cursor*>(selfv)->UI::Cursor::Serialize(streamv);    // B.3.6 bridge
-}
-
-// ============================================================================
-// ??1Cursor@UI@@UEAA@XZ   0x1800cd1c0 — restamp, then tail-jump the base. The
-// dtor DOOR keeps its body; the member destructor is empty (Cursor.h).
-// ============================================================================
-extern "C" void RtUi_Cursor_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    *reinterpret_cast<void**>(p) = VtCursor();            // 1800cd1d9
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800cd1e0 JMP
-}
 int RtUiCursorRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@Cursor@UI@@UEBAIXZ", (void*)&RtUi_Cursor_Type);   ++n;
-    RegisterRuntimeAddr(0x18003af60ull, (void*)&RtUi_Cursor_Type);
-
-    RegisterRuntimeExport("?TypeName@Cursor@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_Cursor_TypeName);                          ++n;
-    RegisterRuntimeAddr(0x18003af80ull, (void*)&RtUi_Cursor_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@Cursor@UI@@UEBAHXZ",
-                          (void*)&RtUi_Cursor_GetFileVersion);                     ++n;
-    RegisterRuntimeAddr(0x1800cd1b0ull, (void*)&RtUi_Cursor_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@Cursor@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_Cursor_Construct);                          ++n;
-    RegisterRuntimeAddr(0x18003b1e0ull, (void*)&RtUi_Cursor_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@Cursor@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_Cursor_Reconstruct);                        ++n;
-    RegisterRuntimeAddr(0x18003b180ull, (void*)&RtUi_Cursor_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@Cursor@UI@@UEAAXXZ",
-                          (void*)&RtUi_Cursor_Destruct);                           ++n;
-    RegisterRuntimeAddr(0x18003b240ull, (void*)&RtUi_Cursor_Destruct);
-
-    RegisterRuntimeExport("??1Cursor@UI@@UEAA@XZ", (void*)&RtUi_Cursor_Dtor);      ++n;
-    RegisterRuntimeAddr(0x1800cd1c0ull, (void*)&RtUi_Cursor_Dtor);
-
-    RegisterRuntimeExport("?Serialize@Cursor@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_Cursor_Serialize);                          ++n;
-    RegisterRuntimeAddr(0x1800cd110ull, (void*)&RtUi_Cursor_Serialize);
-
+    RegisterRuntimeExport("?CreateNewObject@Cursor@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::Cursor::CreateNewObject);            ++n;
+    RegisterRuntimeAddr(0x18003b070ull, (void*)&UI::Cursor::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@Cursor@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::Cursor::CreateInPlaceObject);        ++n;
+    RegisterRuntimeAddr(0x18003b120ull, (void*)&UI::Cursor::CreateInPlaceObject);
     return n;
 }

@@ -26,23 +26,17 @@
 #include "Object/factory_registration.h"
 #include "collection/Collection.h"
 #include "Component/CreateRoadDescription.h"
-#include "Component/DecalDescription.h"
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 #include <cstdint>
 #include <cstdio>
 
-// ============================================================
-// Type ID for CreateRoadDescription (DAT_1401c74d8)
-// ============================================================
-static uint32_t* s_TypeId_CreateRoadDescription = nullptr;
-
-// ============================================================
-// Type ID for DecalDescription (DAT_1401c75b8) — the road's decal/texture
-// description, looked up by CalcPath (0x140104d30) to get the surface it paints.
-// NOT a "CreateRoadDescription variant": the RegisterType DATA writer at
-// 0x14014ee35 (DecalDescription_Register) names this global DecalDescription.
-// ============================================================
-static uint32_t* s_TypeId_DecalDescription = nullptr;
+// 0x1401c74d8 is UNREGISTERED (Table 1): ResolveAddr always answers 0, so
+// CreateRoadDescription::TypeId() is the only thing that has ever reached the
+// derived check below (mechanically equivalent to the old raw-read +
+// unconditional fallback). Read once ResolveRoadToolFuncs runs (after
+// Engine::Startup), not at static-init time.
+static uint32_t s_TypeId_CreateRoadDescription_v = 0;
+static const uint32_t* s_TypeId_CreateRoadDescription = nullptr;
 
 // ============================================================
 // Road pathfinding function (RoadTool_sub_ce00)
@@ -80,10 +74,6 @@ static bool s_funcsResolved = false;
 static void ResolveRoadToolFuncs() {
     if (s_funcsResolved) return;
 
-    s_TypeId_CreateRoadDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c74d8));
-    s_TypeId_DecalDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c75b8));
     s_fn_ScreenToCell = reinterpret_cast<fn_ScreenToCell_t>(
         ResolveAddr(Module::Exe, 0x140101270));
     // Road A* (0x14009ce00). Shared by Draw and CalcCost; resolved here so CalcCost —
@@ -93,27 +83,9 @@ static void ResolveRoadToolFuncs() {
             ResolveAddr(Module::Exe, 0x14009ce00));
     }
 
-    // Both globals above are raw .rdata constants, so ResolveAddr returns NULL in the
-    // standalone exe ([[reference_standalone_rdata_null_fallback]]). RoadTool::Startup
-    // then matched no component and left roadDesc (+0x38) null, which is what made the
-    // road tool activate but do nothing. Fall back to the live factory tree by name —
-    // the proven ToolbarStandalone_Init / placementtool pattern. Both names verified
-    // against their RegisterType DATA writers (14014ec90, 14014ee10).
-    static uint32_t s_tid_CreateRoad = 0;
-    static uint32_t s_tid_Decal      = 0;
-    if (!s_TypeId_CreateRoadDescription) {
-        s_tid_CreateRoad = CreateRoadDescription::TypeId();
-        if (s_tid_CreateRoad) s_TypeId_CreateRoadDescription = &s_tid_CreateRoad;
-    }
-    if (!s_TypeId_DecalDescription) {
-        s_tid_Decal = DecalDescription::TypeId();
-        if (s_tid_Decal) s_TypeId_DecalDescription = &s_tid_Decal;
-    }
-
-    // Only latch once both type-ids are in hand. ResolveTypeIdByNameLazy needs the
-    // factory tree, which is not populated until after Engine::Startup; Startup can run
-    // before that, and latching early would leave the ids null for the whole session.
-    s_funcsResolved = (s_TypeId_CreateRoadDescription != nullptr);
+    s_TypeId_CreateRoadDescription_v = CreateRoadDescription::TypeId();
+    s_TypeId_CreateRoadDescription = &s_TypeId_CreateRoadDescription_v;
+    s_funcsResolved = true;
 }
 
 // ============================================================

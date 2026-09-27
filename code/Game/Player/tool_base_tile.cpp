@@ -20,6 +20,7 @@
 #include <cstdint>
 #include "Object/factory_registration.h"
 #include "Component/ModelComponent.h"   // ModelComponent::TypeId (scoped find)
+#include "Component/ModelDescription.h"
 #include "Component/pickingcomponent_funcs.h" // PickingComponent_RegisterMeshForEntity (mesh-precise picking)
 #include <cstdio>                            // BANISHED_TOOL_DIAG place-model trace
 #include <cstdlib>                           // std::getenv
@@ -178,7 +179,6 @@ static ToolTile_resolveIBP_t s_fn_clearPathQ = nullptr; // 003f60
 static ToolTile_c48a0_t   s_fn_c48a0   = nullptr;
 static ToolTile_c2b70_t   s_fn_c2b70   = nullptr;
 static ToolTile_subd960_t s_fn_subd960 = nullptr;
-static const uint32_t*    s_pTid_c7a88 = nullptr; // DAT_1401c7a88
 static bool s_d650Init = false;
 
 static void EnsureD650Deps() {
@@ -190,7 +190,6 @@ static void EnsureD650Deps() {
     s_fn_c48a0     = reinterpret_cast<ToolTile_c48a0_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
     s_fn_c2b70     = reinterpret_cast<ToolTile_c2b70_t>(ResolveAddr(Module::Exe, 0x1400c2b70));
     s_fn_subd960   = reinterpret_cast<ToolTile_subd960_t>(ResolveAddr(Module::Exe, 0x1400fd960));
-    s_pTid_c7a88   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
     s_d650Init = true;
 }
 
@@ -378,8 +377,8 @@ unsigned long long ToolTile_ValidateCreate_fd650(
     if (plVar4 == nullptr) plVar4 = reinterpret_cast<long long*>(ToolTile_FindModelComponentScoped(local_res8));
     if (plVar4 != nullptr) {
         int uVar2 = *reinterpret_cast<int*>(param_1 + 100);
-        if (fn_IsDerivedFrom && s_pTid_c7a88) {
-            fn_IsDerivedFrom(reinterpret_cast<void*>(plVar4[3]), *s_pTid_c7a88);
+        if (fn_IsDerivedFrom) {
+            fn_IsDerivedFrom(reinterpret_cast<void*>(plVar4[3]), ModelDescription::TypeId());
         }
         *reinterpret_cast<short*>(reinterpret_cast<long long>(plVar4) + 0x164) = static_cast<short>(uVar2);
         if (-1 < *reinterpret_cast<short*>(reinterpret_cast<long long>(plVar4) + 0x166)) {

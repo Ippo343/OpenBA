@@ -27,6 +27,7 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/CharacterComponent.h"   // ENDGAME B.3.8 CB3: CharacterComponent::TypeId()
+#include "Component/CharacterDescription.h"
 
 // ============================================================
 // Locally-resolved dispatch-slot / math helpers
@@ -55,24 +56,10 @@ static inline uintptr_t GameWorld() {
 // at +0x38), calls each component's GetTypeId (vtable +0x10), and on the first type
 // match (DAT_1401c7078) runs IsDerivedFrom before storing through the out IBP.
 //
-// 1:1 port — type-ID global at DAT_1401c7078 resolved lazily.
-static const uint32_t* s_pTid_1c7078 = nullptr;
-
+// 1:1 port — type-ID cell at DAT_1401c7078 is CharacterComponent's (Table 1).
 void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP) {
-    if (!s_pTid_1c7078)
-        s_pTid_1c7078 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7078));
-
     void* found = nullptr;
-    uint32_t wantId = s_pTid_1c7078 ? *s_pTid_1c7078 : 0;
-    // Standalone: the shared CharacterComponent type-id global (DAT_1401c7078, written by
-    // CharacterComponent_RegisterType) is left at the 0xFFFFFFFF sentinel because RegisterType
-    // runs before the real CRC ids are assigned. Filling the global would un-dormant ~30 other
-    // readers, so resolve the family type-id self-contained via Object::GetTypeIdByName (the
-    // same real-CRC source the live factories' vtable+0x10 GetTypeId uses) — matches the brick
-    // pattern. Without this the family scan never matches → null entity IBP → MoveTo ctor
-    // null-deref when a citizen state (Leisure/Wander/...) builds a MoveTo action.
-    if (wantId == 0 || wantId == 0xFFFFFFFFu)
-        wantId = CharacterComponent::TypeId();
+    uint32_t wantId = CharacterComponent::TypeId();
     int n = *reinterpret_cast<int*>(entity + 0x38);
     if (n > 0 && wantId != 0 && wantId != 0xFFFFFFFFu) {
         uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
@@ -120,19 +107,9 @@ void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP) {
 //   0x140152a58 Serializer::Serialize(bool*) -> local resolve
 //   0x140151238 String::Serialize            -> System::String::Serialize (B.3.1)
 //   0x1401c70b0 type-ID                       -> local resolve (NOT in engine_funcs.h)
-static const uint32_t* s_pTid_1c70b0 = nullptr;
-static bool s_extSerResolved = false;
-
-static void EnsureExtSerFuncs() {
-    if (s_extSerResolved) return;
-    s_pTid_1c70b0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70b0));
-    s_extSerResolved = true;
-}
-
 void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
-    EnsureExtSerFuncs();
     uintptr_t* pSlot = reinterpret_cast<uintptr_t*>(extPtrSlot);
-    uint32_t typeId = s_pTid_1c70b0 ? *s_pTid_1c70b0 : 0;
+    uint32_t typeId = CharacterDescription::TypeId();
 
     // GetEncoding -> encoding->vtable[+0x10](encoding) == 3 ?
     int encType = -1;

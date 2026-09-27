@@ -155,13 +155,8 @@ extern "C" void ProfessionList_Startup_Impl(void* profList) {
     // B.3.2 bridge: ProfessionList+0x20 is still a raw {data, count|cap} header.
     auto* profArray = reinterpret_cast<Collection::Array<void*>*>(&self->arrayData);
 
-    // Profession type id: raw .rdata dword when the exe is mapped, else the class's.
-    uint32_t profTid = 0;
-    {
-        uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5a98));
-        if (p && *p) profTid = *p;
-    }
-    if (!profTid) profTid = Profession::TypeId();
+    // 0x1401c5a98 is Profession's type-id cell (Table 1).
+    uint32_t profTid = Profession::TypeId();
     if (!profTid) return;
 
     void* factory = *g_pExternalFactorySingleton;

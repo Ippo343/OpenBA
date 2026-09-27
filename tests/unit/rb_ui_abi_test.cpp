@@ -2,10 +2,9 @@
 // tests/unit/rb_ui_abi_test.cpp — ENDGAME B.3.8 block RB, the UI Runtime bases
 //
 // B38_RULES D1 / RULE B8-1: a Runtime base that an exe class derives from gets
-// a REAL constructor whose body is ONE body with its ctor DOOR (`InitFields`,
-// reached by the door through `X::DoorBody::Init` after the door stamped the
-// MINTED table), and a destructor sharing `ReleaseFields` with its dtor door.
-// What this file pins, on the shipped headers:
+// a REAL constructor whose body is `InitFields`, and a destructor whose body is
+// `ReleaseFields` (the ctor / dtor doors that shared them were retired by
+// ENDGAME B.3.9 UI-D). What this file pins, on the shipped headers:
 //
 // PART A — STAMP ORDER. A test subclass's construction runs the shared body
 //   while the object carries the BASE's compiler table (the compiler stamped
@@ -13,10 +12,8 @@
 //   subclass's table; destruction runs `ReleaseFields` with the base's table
 //   restamped. That is retail's order: `CALL ??0Internal`, `MOV [RBX],??_7X`,
 //   body; and on the way out `MOV [RBX],??_7X`, body, `~Internal`.
-// PART B — THE DOOR REACHES THE SAME BODY. A raw buffer stamped with a stand-in
-//   "minted" table and handed to `DoorBody::Init` / `::Release` runs the very
-//   same member with that table in place, with the same arguments, and leaves
-//   the same bytes as the constructor.
+// PART B — (ENDGAME B.3.9 UI-D) the doors are retired; Element's and
+//   ElementDescription's own slot 0, both arms.
 // PART C — RETAIL BODIES THAT ARE INLINE, checked byte for byte: the
 //   DialogInstance default ctor (0x180114ca0), DialogController's
 //   (0x1800cd320, three zero stores, +0x28 untouched), DialogControllerConfig's
@@ -85,9 +82,6 @@ struct Seen {
     int32_t     flags = 0;
 };
 Seen g_di, g_el, g_ed;
-
-// A stand-in for a MINTED table: any address that is not a compiler table.
-const void* const kFakeMinted[4] = {};
 
 }  // namespace
 
@@ -257,61 +251,64 @@ UNIT_TEST(rb_elementdescription_ctor_dtor_run_shared_bodies_under_base_table) {
 }
 
 // ===========================================================================
-// PART B — the door reaches the same body with the MINTED table in place
+// PART B — ENDGAME B.3.9 UI-D: the ctor / dtor doors of DialogInstance,
+// Element and ElementDescription are retired with their minted tables, so the
+// door-vs-ctor comparisons went with them. What replaces them for the two
+// abstract bases: their OWN slot 0 (the retired RT_DELDTOR rows), both arms,
+// through a probe that declares no DeletingDtor of its own.
 // ===========================================================================
-UNIT_TEST(rb_dialoginstance_door_and_ctor_share_one_body) {
+struct B39ElProbe final : UI::Element {
+    void ComputeSize() override {}
+};
+struct B39EdProbe final : UI::ElementDescription {
+    Object::External* Reconstruct() override { return this; }
+    void Destruct() override {}
+    Object::InternalPtr<UI::Element>* CreateInstance(
+            Object::InternalPtr<UI::Element>* ret, const UI::Dialog*) const override {
+        return ret;
+    }
+};
+static_assert(sizeof(B39ElProbe) == 0xc0, "the vector arm's stride is sizeof(Element)");
+static_assert(sizeof(B39EdProbe) == 0x68, "the vector arm's stride is sizeof(ElementDescription)");
+
+UNIT_TEST(b39_uid_element_slot0_both_arms) {
     FactoryScope scope;
-    int dialogToken = 0, dsToken = 0, userToken = 0;
-    Object::InternalPtr<UI::DialogInstance> parent;
+    // scalar arm, flag 0: destruct only
+    alignas(8) unsigned char one[sizeof(B39ElProbe)];
+    B39ElProbe* e = ::new (static_cast<void*>(one)) B39ElProbe();
+    g_el = Seen{};
+    CHECK(e->UI::Element::DeletingDtor(0) == e);
+    CHECK_EQ(g_el.releaseCalls, 1);
+    CHECK(g_el.releaseVptr == ElVt());
 
-    alignas(8) unsigned char viaCtor[sizeof(RbDialog)];
-    std::memset(viaCtor, 0, sizeof viaCtor);
-    g_di = Seen{};
-    RbDialog* d = ::new (static_cast<void*>(viaCtor)) RbDialog(
-        nullptr, reinterpret_cast<const UI::Dialog*>(&dialogToken), parent,
-        reinterpret_cast<Object::Base*>(&dsToken), &userToken, 7);
-
-    alignas(8) unsigned char viaDoor[sizeof(RbDialog)];
-    std::memcpy(viaDoor, viaCtor, sizeof viaDoor);          // same Internal half
-    std::memset(viaDoor + 0x10, 0, sizeof viaDoor - 0x10);  // fields unwritten
-    *reinterpret_cast<const void**>(viaDoor) = kFakeMinted; // the door's stamp
-    g_di = Seen{};
-    UI::DialogInstance::DoorBody::Init(
-        reinterpret_cast<UI::DialogInstance*>(viaDoor), nullptr,
-        reinterpret_cast<const UI::Dialog*>(&dialogToken), &parent,
-        reinterpret_cast<Object::Base*>(&dsToken), &userToken, 7);
-    CHECK_EQ(g_di.initCalls, 1);
-    CHECK(g_di.initVptr == static_cast<const void*>(kFakeMinted));
-    // Same body, same arguments -> the same bytes after the vptr.
-    CHECK(std::memcmp(viaCtor + 0x10, viaDoor + 0x10, sizeof(UI::DialogInstance) - 0x10) == 0);
-
-    g_di = Seen{};
-    UI::DialogInstance::DoorBody::Release(reinterpret_cast<UI::DialogInstance*>(viaDoor));
-    CHECK_EQ(g_di.releaseCalls, 1);
-    CHECK(g_di.releaseVptr == static_cast<const void*>(kFakeMinted));
-    d->~RbDialog();
+    // vector arm, flag 2: the count at this-8, destroyed from the top down
+    alignas(8) unsigned char arr[8 + 2 * sizeof(B39ElProbe)];
+    std::memset(arr, 0, sizeof arr);
+    *reinterpret_cast<int32_t*>(arr) = 2;
+    B39ElProbe* a0 = ::new (static_cast<void*>(arr + 8)) B39ElProbe();
+    ::new (static_cast<void*>(arr + 8 + sizeof(B39ElProbe))) B39ElProbe();
+    g_el = Seen{};
+    CHECK(static_cast<void*>(a0->UI::Element::DeletingDtor(2)) == static_cast<void*>(arr));
+    CHECK_EQ(g_el.releaseCalls, 2);
 }
 
-UNIT_TEST(rb_element_and_description_doors_reach_the_same_body) {
-    alignas(8) unsigned char raw[sizeof(UI::Element)] = {};
-    *reinterpret_cast<const void**>(raw) = kFakeMinted;
-    g_el = Seen{};
-    UI::Element::DoorBody::Init(reinterpret_cast<UI::Element*>(raw));
-    CHECK_EQ(g_el.initCalls, 1);
-    CHECK(g_el.initVptr == static_cast<const void*>(kFakeMinted));
-    UI::Element::DoorBody::Release(reinterpret_cast<UI::Element*>(raw));
-    CHECK_EQ(g_el.releaseCalls, 1);
-    CHECK(g_el.releaseVptr == static_cast<const void*>(kFakeMinted));
-
-    alignas(8) unsigned char rawD[sizeof(UI::ElementDescription)] = {};
-    *reinterpret_cast<const void**>(rawD) = kFakeMinted;
+UNIT_TEST(b39_uid_elementdescription_slot0_both_arms) {
+    alignas(8) unsigned char one[sizeof(B39EdProbe)];
+    B39EdProbe* d = ::new (static_cast<void*>(one)) B39EdProbe();
     g_ed = Seen{};
-    UI::ElementDescription::DoorBody::Init(reinterpret_cast<UI::ElementDescription*>(rawD));
-    CHECK_EQ(g_ed.initCalls, 1);
-    CHECK(g_ed.initVptr == static_cast<const void*>(kFakeMinted));
-    CHECK_EQ(D(reinterpret_cast<UI::ElementDescription*>(rawD), 0x3c), 0xFFFFFFFFu);
-    UI::ElementDescription::DoorBody::Release(reinterpret_cast<UI::ElementDescription*>(rawD));
+    CHECK(d->UI::ElementDescription::DeletingDtor(0) == d);
     CHECK_EQ(g_ed.releaseCalls, 1);
+    CHECK(g_ed.releaseVptr == EdVt());
+
+    alignas(8) unsigned char arr[8 + 3 * sizeof(B39EdProbe)];
+    std::memset(arr, 0, sizeof arr);
+    *reinterpret_cast<int32_t*>(arr) = 3;
+    B39EdProbe* a0 = ::new (static_cast<void*>(arr + 8)) B39EdProbe();
+    for (int i = 1; i < 3; ++i)
+        ::new (static_cast<void*>(arr + 8 + i * sizeof(B39EdProbe))) B39EdProbe();
+    g_ed = Seen{};
+    CHECK(static_cast<void*>(a0->UI::ElementDescription::DeletingDtor(2)) == static_cast<void*>(arr));
+    CHECK_EQ(g_ed.releaseCalls, 3);
 }
 
 // ===========================================================================
@@ -389,8 +386,8 @@ UNIT_TEST(rb_ui_bases_shape) {
     CHECK_EQ(sizeof(UI::Element), (size_t)0xc0);
     CHECK_EQ(sizeof(UI::ElementDescription), (size_t)0x68);
     CHECK(!std::is_abstract<UI::DialogInstance>::value);   // the exe instantiates it
-    CHECK(std::is_abstract<UI::DialogController>::value);
-    CHECK(std::is_abstract<UI::DialogControllerConfig>::value);
+    CHECK(!std::is_abstract<UI::DialogController>::value);      // B.3.9 UI-D: own slot 0
+    CHECK(std::is_abstract<UI::DialogControllerConfig>::value);  // retail's _purecall slots
     CHECK(std::is_abstract<UI::Element>::value);
     CHECK(std::is_abstract<UI::ElementDescription>::value);
     CHECK(!std::has_virtual_destructor<UI::DialogInstance>::value);
@@ -415,11 +412,8 @@ UNIT_TEST(rb_spritesheet_ctor_is_retail_0x18011d600_and_concrete) {
     for (size_t off = 0x08; off < 0x50; off += 8) CHECK_EQ(Q(s, off), (uint64_t)0);
     CHECK_EQ((int)By(s, 0x50), 0);
     CHECK_EQ((int)By(s, 0x51), 0xCD);            // never written
-    alignas(8) unsigned char raw[sizeof(UI::SpriteSheet)];
-    std::memset(raw, 0xCD, sizeof raw);
-    *reinterpret_cast<const void**>(raw) = kFakeMinted;
-    UI::SpriteSheet::DoorBody::Init(reinterpret_cast<UI::SpriteSheet*>(raw));
-    CHECK(std::memcmp(buf + 0x20, raw + 0x20, sizeof raw - 0x20) == 0);
+    // ENDGAME B.3.9 UI-D: the DoorBody bridge is retired with the ctor door;
+    // the real ctor is the only body.
     s->DeletingDtor(0);                           // destruct only (stack buffer)
 
     void* mem = Object::detail::InternalMemAlloc(sizeof(UI::SpriteSheet), 8);
@@ -434,11 +428,8 @@ UNIT_TEST(rb_spritecapture_ctor_is_retail_0x1800d9140_and_concrete) {
     UI::SpriteCapture* c = ::new (static_cast<void*>(buf)) UI::SpriteCapture();
     CHECK(VptrOf(c) == &g_rbScVtGroup[2]);
     for (size_t off = 0x08; off < 0x58; off += 8) CHECK_EQ(Q(c, off), (uint64_t)0);
-    alignas(8) unsigned char raw[sizeof(UI::SpriteCapture)];
-    std::memset(raw, 0xCD, sizeof raw);
-    *reinterpret_cast<const void**>(raw) = kFakeMinted;
-    UI::SpriteCapture::DoorBody::Init(reinterpret_cast<UI::SpriteCapture*>(raw));
-    CHECK(std::memcmp(buf + 0x20, raw + 0x20, sizeof raw - 0x20) == 0);
+    // ENDGAME B.3.9 UI-D: the DoorBody bridge is retired with the ctor door;
+    // the real ctor is the only body.
     c->DeletingDtor(0);
 
     void* mem = Object::detail::InternalMemAlloc(sizeof(UI::SpriteCapture), 8);

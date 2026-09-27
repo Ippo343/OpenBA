@@ -17,6 +17,8 @@
 #include "EditTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "Component/ModelComponent.h"
+#include "Dialog/ToolUI.h"
+#include "Dialog/EntityUI.h"
 #include "Dialog/EntityUI.h"
 #include "Dialog/ToolUI.h"
 #include "engine_funcs.h"
@@ -141,10 +143,6 @@ typedef void* (*fn_IBPCtor_t)(void* self, void* internal);
 static fn_IBPCtor_t s_fn_IBPCtor = nullptr;
 
 
-// Type IDs resolved from .rdata
-static uint32_t* s_pTypeId_ToolUI = nullptr;       // DWORD at 0x1401c5788
-static uint32_t* s_pTypeId_PageToggleUI = nullptr;  // DWORD at 0x1401c4f00
-
 static bool s_editFuncsResolved = false;
 
 static void EnsureEditFuncs() {
@@ -172,10 +170,6 @@ static void EnsureEditFuncs() {
     s_fn_MapHitTest           = (fn_MapHitTest_t)ResolveAddr(Module::Exe, 0x1400aa530);
     s_fn_EntityAtCell         = (fn_EntityAtCell_t)ResolveAddr(Module::Exe, 0x1400a0280);
 
-    // Type IDs
-    s_pTypeId_ToolUI       = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c5788);
-    s_pTypeId_PageToggleUI = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c4f00);
-
     // In standalone the raw .rdata IAT dispatch slots above resolve to 0 (unregistered),
     // which would leave the pick + reposition pipeline dead (KeyMapPressed null -> OnKey
     // returns before ever picking). Fall back to the engine_funcs pointers, which ARE
@@ -186,22 +180,6 @@ static void EnsureEditFuncs() {
     if (!s_fn_IBPCtor && fn_InternalBasePtr_Ctor)
         s_fn_IBPCtor = (fn_IBPCtor_t)fn_InternalBasePtr_Ctor;
 
-
-    // Reposition (Startup +0x38) type-ids: raw .rdata is NULL in standalone. Fill by name so
-    // the GetController(ToolUI)/(EntityUI) lookups resolve. 0x1401c5788="ToolUI",
-    // 0x1401c4f00="EntityUI" (the s_pTypeId_PageToggleUI name is a legacy misnomer — the
-    // RegisterType writer for 0x1401c4f00 names it "EntityUI").
-    // (GetTypeIdByName returns 0xFFFFFFFF before Factory::Startup; retry until a real id.)
-    static uint32_t s_tid_ToolUI_sa = 0, s_tid_EntityUI_sa = 0;
-    auto validTid = [](uint32_t v) { return v != 0 && v != 0xFFFFFFFFu; };
-    if (!s_pTypeId_ToolUI || !validTid(s_tid_ToolUI_sa)) {
-        if (!validTid(s_tid_ToolUI_sa)) s_tid_ToolUI_sa = ToolUI::TypeId();
-        s_pTypeId_ToolUI = &s_tid_ToolUI_sa;
-    }
-    if (!s_pTypeId_PageToggleUI || !validTid(s_tid_EntityUI_sa)) {
-        if (!validTid(s_tid_EntityUI_sa)) s_tid_EntityUI_sa = EntityUI::TypeId();
-        s_pTypeId_PageToggleUI = &s_tid_EntityUI_sa;
-    }
 
     s_editFuncsResolved = true;
 }
@@ -314,12 +292,13 @@ void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr) {
     // when +0x40 (pinned) is clear; a pinned panel survives deselect. The old direct
     // caller had already done this check, so it was omitted here -- but slot 5 (tool
     // teardown) has NOT, and without it a right-click would close pinned panels too.
-    if (s_pTypeId_ToolUI) {
+    {
+        const uint32_t tidToolUI = ToolUI::TypeId();
         uintptr_t ctrl = 0;
         ::new (&ctrl) Object::InternalPtr<UI::DialogController>(
-            reinterpret_cast<UI::DialogInstance*>(dialogPtr)->GetController(*s_pTypeId_ToolUI));  // B.3.6 bridge
+            reinterpret_cast<UI::DialogInstance*>(dialogPtr)->GetController(tidToolUI));  // B.3.6 bridge
         if (ctrl != 0) {
-            if (s_fn_IsDerived && s_fn_IsDerived((void*)ctrl, *s_pTypeId_ToolUI)) {
+            if (s_fn_IsDerived && s_fn_IsDerived((void*)ctrl, tidToolUI)) {
                 if (*(char*)(ctrl + 0x40) != 0) return;   // pinned -> leave it open
             }
         }
@@ -395,12 +374,13 @@ void EditTool::Update(void*, char) {
     uintptr_t controllerResult = 0;
     uintptr_t toolUIObj = 0;
 
-    if (s_pTypeId_ToolUI) {
+    {
+        const uint32_t tidToolUI = ToolUI::TypeId();
         ::new (&controllerResult) Object::InternalPtr<UI::DialogController>(
-            reinterpret_cast<UI::DialogInstance*>(dialogPtr)->GetController(*s_pTypeId_ToolUI));  // B.3.6 bridge
+            reinterpret_cast<UI::DialogInstance*>(dialogPtr)->GetController(tidToolUI));  // B.3.6 bridge
         if (controllerResult != 0) {
             void* ctrObj = (void*)controllerResult;
-            if (s_fn_IsDerived && s_fn_IsDerived(ctrObj, *s_pTypeId_ToolUI)) {
+            if (s_fn_IsDerived && s_fn_IsDerived(ctrObj, tidToolUI)) {
                 toolUIObj = controllerResult;
             }
         }
@@ -415,12 +395,13 @@ void EditTool::Update(void*, char) {
     controllerResult = 0;
     uintptr_t pageToggleObj = 0;
 
-    if (s_pTypeId_PageToggleUI) {
+    {
+        const uint32_t tidEntityUI = EntityUI::TypeId();
         ::new (&controllerResult) Object::InternalPtr<UI::DialogController>(
-            reinterpret_cast<UI::DialogInstance*>(dialogPtr)->GetController(*s_pTypeId_PageToggleUI));  // B.3.6 bridge
+            reinterpret_cast<UI::DialogInstance*>(dialogPtr)->GetController(tidEntityUI));  // B.3.6 bridge
         if (controllerResult != 0) {
             void* ctrObj = (void*)controllerResult;
-            if (s_fn_IsDerived && s_fn_IsDerived(ctrObj, *s_pTypeId_PageToggleUI)) {
+            if (s_fn_IsDerived && s_fn_IsDerived(ctrObj, tidEntityUI)) {
                 pageToggleObj = controllerResult;
             }
         }
@@ -920,6 +901,10 @@ static void DumpCitizenElemTree(void* elem, int depth, int* counter) {
     printf("[CitTree] %*selem=%p tid=%u flags=0x%x name='%.*s' | rect=(%d,%d %dx%d)\n",
            depth * 2, "", elem, tid, flags, len > 0 ? len : 0, nameData ? nameData : "",
            bx, by, bw, bh);
+    // These locals exist only for the trace line above; BANISHED_STRIP_LOGS
+    // turns printf into ((void)0) in release, which otherwise makes every one
+    // of them -Wunused (standalone/log_strip.h's own documented caveat).
+    (void)tid; (void)flags; (void)len; (void)bx; (void)by; (void)bw; (void)bh;
     void** kids = *(void***)(e + 0xa0);
     int kc = *(int*)(e + 0xa8);
     for (int i = 0; kids && i < kc; i++) DumpCitizenElemTree(kids[i], depth + 1, counter);
