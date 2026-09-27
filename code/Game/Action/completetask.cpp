@@ -287,9 +287,4 @@ void* CompleteTask::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(CompleteTask, "_ZTV12CompleteTask")
 
-// B38 D5: every by-address reader of 0x14015fbd0 was inside this block and now
-// builds the object with the real ctor, so the row is gone. The function stays
-// until the coordinator's address_registry hunk drops its call.
-extern "C" void RegisterCompleteTaskVtable() {}
-
 DEFINE_EXE_TYPE(CompleteTask, "Action")

@@ -71,12 +71,10 @@ extern "C" {
     void RegisterToolbarDescriptionStringArrayResize();   // FUN_140028860 (the table row went with ToolbarDescription's real class, B.3.8 K1)
     void RegisterParticleComponentAddrs();   // building particle emitters (chimney smoke etc)
     // wave 2 (economy / farming / services / tools)
-    void RegisterCaptureBoxDescriptionVtable();
     void RegisterWeatherParticleVtable();
     void Reimpl_WeatherArray_Resize(void* hdr, int newCount);
     void RegisterFrustumOutlineDescriptionVtable();
     void RegisterWellDescriptionVtable();
-    void RegisterAnimAudioEventVtable();
     void RegisterAmbientExternalPtrSerialize();
     void RegisterProfessionVtable();
     void RegisterNameDatabaseVtable();
@@ -85,21 +83,10 @@ extern "C" {
 
     // Factory cascade (notes/FACTORY_CASCADE_145_BRIEF.md) — Action family.
     void RegisterPlayAnimationVtable();
-    void RegisterAnimateNaturalResourceVtable();
-    void RegisterCompleteRoadVtable();
-    void RegisterCompleteTaskVtable();
-    void RegisterConsumeRawMaterialVtable();
     void RegisterCreateNaturalResourceVtable();
-    void RegisterCreateRawMaterialVtable();
-    void RegisterDropOffRawMaterialVtable();
-    void RegisterHuntAnimalVtable();
-    void RegisterMoveToVtable();
     void RegisterPerformWorkVtable();
     void RegisterPickupRawMaterialVtable();
-    void RegisterPickupStoredRawMaterialVtable();
-    void RegisterRemoveAnimalVtable();
     void RegisterRemoveNaturalResourceVtable();
-    void RegisterSendComponentMessageVtable();
     void RegisterShowToolVtable();
 
     // Factory cascade — Work family (Object::Internal -> Work, 13-slot vtables).
@@ -1706,15 +1693,10 @@ static void RegisterVtablesAndTypeIds() {
     RegisterToolbarDescriptionStringArrayResize();
     RegisterParticleComponentAddrs();   // ParticleComponent helper closure (0x1400524xx-0x1400536xx)
     // wave 2 (economy / farming / services / tools)
-    RegisterCaptureBoxDescriptionVtable();
     RegisterWeatherParticleVtable();   // weather particle Geometry vtable (0x140160240)
     RegisterFrustumOutlineDescriptionVtable();
     RegisterWellDescriptionVtable();
 
-    // M5 5c citizens — AnimAudioEvent (Graphics::AnimationEvent subclass) is part of
-    // the Character animation closure; without a real factory the citizen template
-    // load hit "[NullFactory] Hit for type: AnimAudioEvent". See animaudioevent.cpp.
-    RegisterAnimAudioEventVtable();
     // Ambient audio: SoundEffect ExternalPtr serialize (0x1400019a0) + biome-table
     // array resize (0x140002540) so the ambient descriptions actually load their
     // day/night sound refs (else they deserialize as null → silent ambient).
@@ -1741,21 +1723,10 @@ static void RegisterVtablesAndTypeIds() {
     // Object::Internal-derived, 10-slot vtables; shared base helpers in
     // code/Game/Action/action_base_standalone.cpp.
     RegisterPlayAnimationVtable();
-    RegisterAnimateNaturalResourceVtable();
-    RegisterCompleteRoadVtable();
-    RegisterCompleteTaskVtable();
-    RegisterConsumeRawMaterialVtable();
     RegisterCreateNaturalResourceVtable();
-    RegisterCreateRawMaterialVtable();
-    RegisterDropOffRawMaterialVtable();
-    RegisterHuntAnimalVtable();
-    RegisterMoveToVtable();
     RegisterPerformWorkVtable();
     RegisterPickupRawMaterialVtable();
-    RegisterPickupStoredRawMaterialVtable();
-    RegisterRemoveAnimalVtable();
     RegisterRemoveNaturalResourceVtable();
-    RegisterSendComponentMessageVtable();
     RegisterShowToolVtable();
 
     // Factory cascade — Work family (Object::Internal -> Work, 13-slot vtables;

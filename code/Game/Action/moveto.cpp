@@ -808,9 +808,4 @@ void* MoveTo::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(MoveTo, "_ZTV6MoveTo")
 
-// B38 D5: every by-address reader of 0x14015fe40 was inside this block and now
-// builds the object with the real ctor, so the row is gone. The function stays
-// until the coordinator's address_registry hunk drops its call.
-extern "C" void RegisterMoveToVtable() {}
-
 DEFINE_EXE_TYPE(MoveTo, "Action")
