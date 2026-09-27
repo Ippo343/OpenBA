@@ -333,7 +333,7 @@ bool MenuScene::Serialize(void* stream) {
     // the terrain → black screen. See FUN_1400988c0 in exe + memory file
     // project_terrain_render_status.md (2026-05-01).
     if (stream) {
-        void* xform = reinterpret_cast<uint8_t*>(this) + 0x88;
+        void* xform = transform;   // +0x88 (caller batch CB6: the named field)
         // Transform::SerializeWrapper (exe 0x1400988c0) resolves to a
         // NOT_IMPLEMENTED stub via the address registry — DON'T call it, use
         // the inline path.
@@ -426,8 +426,7 @@ bool MenuScene::Serialize(void* stream) {
 
         // ----- Atmosphere: Vector4 + 3 Colors + 5 Floats -----
         // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360
-        reinterpret_cast<Math::Vector4*>(
-            reinterpret_cast<uint8_t*>(this) + 0x1B4)->Serialize(outer_ser);
+        reinterpret_cast<Math::Vector4*>(_pad1B4)->Serialize(outer_ser);   // +0x1B4 (the Vector4 starts at _pad1B4)
         reinterpret_cast<System::Color*>(&ambientColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
         reinterpret_cast<System::Color*>(&sunColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
         reinterpret_cast<System::Color*>(&skyColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
@@ -502,8 +501,7 @@ bool MenuScene::Serialize(void* stream) {
         // downstream in the render path (clear color, depth state, sun light
         // dispatch, or Renderer::Draw consuming our reimpl's geometry).
         if (!s_atmosLogged.exchange(true)) {
-            const float* v4 = reinterpret_cast<const float*>(
-                reinterpret_cast<uint8_t*>(this) + 0x1B4);
+            const float* v4 = reinterpret_cast<const float*>(_pad1B4);   // +0x1B4
             printf("[MenuScene::Slot5_Serialize] atmosphere deserialized: "
                    "amb=0x%08x sun=0x%08x sky=0x%08x "
                    "fogStart=%.2f fogEnd=%.2f fogDensity=%.3f "
