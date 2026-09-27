@@ -7,7 +7,7 @@
 // REASON CLASS and a measured by-name-door count -- never asserted
 // here.  standalone/cutover_manifest.cpp consumes this.
 
-// REQUIRED 38 | WITHHELD 1   (of 39 rows)
+// REQUIRED 35 | WITHHELD 1   (of 36 rows)
 
 // Achievement  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=4  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@AchievementManager@Achievement@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc670ull, "Achievement", 4)
@@ -59,10 +59,8 @@ CUTOVER_ROW("?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A", CUTOVER_RE
 CUTOVER_ROW("?_typeInfo@Internal@Object@@0VBaseTypeInfo@2@A", CUTOVER_REQUIRED, true, 0x1801f9c18ull, "Object", 3)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=2  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_disableHandler@Debug@System@@0_NA", CUTOVER_REQUIRED, true, 0x1801fc708ull, "System", 2)
-// System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=2  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_errorString@Error@System@@0PADA", CUTOVER_REQUIRED, true, 0x1801fc720ull, "System", 2)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=3  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_hideDisplay@Error@System@@0_NA", CUTOVER_REQUIRED, true, 0x1801fc709ull, "System", 3)
+CUTOVER_ROW("?_errorString@Error@System@@0PADA", CUTOVER_REQUIRED, true, 0x1801fc720ull, "System", 3)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=20  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_secondsPerTick@Timer@System@@0NA", CUTOVER_REQUIRED, true, 0x1801fe728ull, "System", 20)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=5  -- tag states the verdict inverts at cutover
@@ -70,11 +68,7 @@ CUTOVER_ROW("?_singleton@Configuration@System@@0PEAV12@EA", CUTOVER_REQUIRED, tr
 // System  HARMFUL / DLL-PRESENT  doors=4  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@MemoryAllocator@System@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc718ull, "System", 4)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=2  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_stopApplication@Error@System@@0_NA", CUTOVER_REQUIRED, true, 0x1801fc70aull, "System", 2)
-// System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=2  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_systemInitialTick@Timer@System@@0_JA", CUTOVER_REQUIRED, true, 0x1801fe738ull, "System", 2)
-// System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=2  -- verdict is DLL-PRESENT only and 2 by-name door(s) would resolve NULL at cutover
-CUTOVER_ROW("?_systemSecondsPerTick@Timer@System@@0NA", CUTOVER_REQUIRED, true, 0x1801fe740ull, "System", 2)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=2  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_systemTicksPerSecond@Timer@System@@0_JA", CUTOVER_REQUIRED, true, 0x1801fe730ull, "System", 2)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=2  -- tag states the verdict inverts at cutover
