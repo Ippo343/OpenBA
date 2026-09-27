@@ -20,6 +20,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/AnimalComponent.h"
+#include "Component/WildAnimalComponent.h"
+#include "Component/HuntDescription.h"
 
 // ============================================================
 // FindComponent family (same shape as work_base_reimpl.cpp FindComponentByTypeId)
@@ -31,20 +34,18 @@
 // before returning the component through an out InternalBasePtr.
 //
 // Caller signature: void* fn(uintptr_t entity, void* retIBP)
-static void* HuntFindComponentByTypeId(uintptr_t entity, void* retIBP, const uint32_t* pTypeId) {
+static void* HuntFindComponentByTypeId(uintptr_t entity, void* retIBP, uint32_t typeId) {
     void* found = nullptr;
-    if (pTypeId) {
-        int n = *reinterpret_cast<int*>(entity + 0x38);
-        uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-        for (int i = 0; i < n; i++) {
-            void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-            void* comp = *slot;
-            uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
-            if (t == *pTypeId) {
-                void* c = *slot;
-                found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTypeId)) ? c : nullptr;
-                break;
-            }
+    int n = *reinterpret_cast<int*>(entity + 0x38);
+    uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
+    for (int i = 0; i < n; i++) {
+        void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
+        void* comp = *slot;
+        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        if (t == typeId) {
+            void* c = *slot;
+            found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
+            break;
         }
     }
     if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
@@ -52,27 +53,14 @@ static void* HuntFindComponentByTypeId(uintptr_t entity, void* retIBP, const uin
     return retIBP;
 }
 
-// Lazily-resolved type-ID storage globals (exe .rdata, filled by RegisterType).
-static const uint32_t* s_pTid_6f98 = nullptr;  // 0x1401c6f98  (FUN_140005500 — model/character)
-static const uint32_t* s_pTid_8000 = nullptr;  // 0x1401c8000  (HuntAnimal_helper_27e0 — herd)
-static bool s_huntTidInit = false;
-static void EnsureHuntTypeIds() {
-    if (s_huntTidInit) return;
-    s_pTid_6f98 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6f98));
-    s_pTid_8000 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c8000));
-    s_huntTidInit = true;
-}
-
-// Reimpl of FUN_140005500 (FindComponent, type 0x1401c6f98)
+// Reimpl of FUN_140005500 (FindComponent, type 0x1401c6f98 -> AnimalComponent)
 void* ActHunt_FindComponent_5500(uintptr_t entity, void* retIBP) {
-    EnsureHuntTypeIds();
-    return HuntFindComponentByTypeId(entity, retIBP, s_pTid_6f98);
+    return HuntFindComponentByTypeId(entity, retIBP, AnimalComponent::TypeId());
 }
 
-// Reimpl of HuntAnimal_helper_27e0 (FindComponent, type 0x1401c8000)
+// Reimpl of HuntAnimal_helper_27e0 (FindComponent, type 0x1401c8000 -> WildAnimalComponent)
 void* ActHunt_FindComponent_27e0(uintptr_t entity, void* retIBP) {
-    EnsureHuntTypeIds();
-    return HuntFindComponentByTypeId(entity, retIBP, s_pTid_8000);
+    return HuntFindComponentByTypeId(entity, retIBP, WildAnimalComponent::TypeId());
 }
 
 // ============================================================
@@ -86,9 +74,8 @@ void* ActHunt_FindComponent_27e0(uintptr_t entity, void* retIBP) {
 bool ActHunt_IsAnimalReady_2a80(void* self) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* obj = *reinterpret_cast<void**>(s + 0x18);
-    const uint32_t* pTid = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c78c8));
     void* desc = nullptr;
-    if (pTid && fn_IsDerivedFrom && fn_IsDerivedFrom(obj, *pTid)) desc = obj;
+    if (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, HuntDescription::TypeId())) desc = obj;
 
     const float* pScale = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172234));
     float scale = pScale ? *pScale : 0.0f;

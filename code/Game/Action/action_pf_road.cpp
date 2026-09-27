@@ -38,6 +38,7 @@
 #include "Component/coll_bridge.h"
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include "Component/ModelComponent.h"   // ENDGAME B.3.8 CB3: ModelComponent::TypeId()
+#include "Component/InteractDescription.h"
 
 namespace {
 
@@ -113,7 +114,6 @@ static fn_FindNearestCell_t   s_fn_FindNearestCell = nullptr;  // 008830
 static fn_GridToWorld_t       s_fn_GridToWorld     = nullptr;  // 9f3e0
 
 // Type-ID global + float .rdata constants used by the ports below.
-static const uint32_t* s_pTid_1c7938  = nullptr;  // DAT_1401c7938 (EntityResolvePos build-comp type)
 static const float* s_pUVScale        = nullptr;  // g_fUVScale (DAT_1401720b8 family) — read from exe
 static const float* s_pDAT_172214     = nullptr;  // road-uv add bias
 static const float* s_pDAT_17214c     = nullptr;  // caa0 height->byte add
@@ -142,7 +142,6 @@ static void EnsureInit() {
     s_fn_FindNearestCell = reinterpret_cast<fn_FindNearestCell_t>(ResolveAddr(Module::Exe, 0x140008830));
     s_fn_GridToWorld     = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
 
-    s_pTid_1c7938 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7938));
     s_pUVScale    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401720b8));  // g_fUVScale
     s_pDAT_172214 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172214));
     s_pDAT_17214c = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
@@ -595,7 +594,7 @@ void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* buildRaw = *reinterpret_cast<void**>(s + 0x18);
 
-    uint32_t tid = s_pTid_1c7938 ? *s_pTid_1c7938 : 0;
+    uint32_t tid = InteractDescription::TypeId();
     void* build = nullptr;
     if (fn_IsDerivedFrom && fn_IsDerivedFrom(buildRaw, tid)) build = buildRaw;
 

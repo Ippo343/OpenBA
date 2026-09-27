@@ -44,16 +44,14 @@
 #include <cstdlib>
 #include "Component/CharacterDescription.h"   // ENDGAME B.3.8 CB3: CharacterDescription::TypeId()
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CB3: CitizenComponent::TypeId()
+#include "Component/InteractDescription.h"
+#include "Component/RawMaterialDescription.h"
 // For the BANISHED_LIVE_STORAGE eat-message typeid heal in the
 // SendComponentMessage copy-ctor (see Pf_SendComponentMessageCopyCtor_b1d0).
 #include "Object/factory_registration.h"           // ::Object::GetTypeIdByName
 
 namespace {
 // --- Type-ID globals (exe .rdata), resolved lazily once. ---
-static const uint32_t* s_pTid_MoveTo_70b0  = nullptr;  // DAT_1401c70b0 (MoveTo +0x30 derived check)
-static const uint32_t* s_pTid_PerfWk_7190  = nullptr;  // DWORD_1401c7190 (PerformWork derived check)
-static const uint32_t* s_pTid_123070_7938  = nullptr;  // DAT_1401c7938
-static const uint32_t* s_pTid_c560_7cb8    = nullptr;  // DWORD_1401c7cb8
 // --- Float constants (exe .rdata) for MoveTo speed default. ---
 static const float* s_pDAT_1720e4 = nullptr;  // RandFloatTol scale
 static const float* s_pDAT_17214c = nullptr;  // bias
@@ -79,10 +77,6 @@ static fn_storageSub_t  s_fn_storageSub  = nullptr;
 static std::atomic<bool> s_init{false};
 static void EnsureInit() {
     if (s_init.load(std::memory_order_acquire)) return;
-    s_pTid_MoveTo_70b0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70b0));
-    s_pTid_PerfWk_7190 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7190));
-    s_pTid_123070_7938 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7938));
-    s_pTid_c560_7cb8   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
     s_pDAT_1720e4 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401720e4));
     s_pDAT_17214c = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
     s_fn_notify      = reinterpret_cast<fn_notify_t>(ResolveAddr(Module::Exe, 0x1400c3470));
@@ -241,22 +235,8 @@ MoveTo::MoveTo(void* param_2, uint32_t pathType, int param_4, float* destination
     *reinterpret_cast<int*>(s + 0x470) = param_7;
     s[0x474] = 0;
     void* obj = *reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(s + 0x28) + 0x18);
-    // DAT_1401c70b0 = the CharacterDescription type-id (written by
-    // CharacterDescription_Register). The raw .rdata slot resolves null in standalone,
-    // which made `derived` always false and +0x30 (the walk-speed description: road
-    // speed +0x30 / path +0x34 / normal +0x38) null on EVERY MoveTo. That was latent —
-    // grass takes the default-speed branch — until the first road tile existed, then
-    // MoveTo::Execute's road branch null-deref'd (the post-road-build crash). Fall back
-    // to the runtime type registry, same pattern as ShowTool's description tids.
-    uint32_t charDescTid = 0;
-    if (s_pTid_MoveTo_70b0 && *s_pTid_MoveTo_70b0 && *s_pTid_MoveTo_70b0 != 0xFFFFFFFF) {
-        charDescTid = *s_pTid_MoveTo_70b0;
-    } else {
-        // ENDGAME B.3.8 ACT (B8-10): no function-local cache in a ctor — a plain
-        // registry read per construction (the record is written once at boot).
-        const uint32_t fallbackTid = CharacterDescription::TypeId();
-        if (fallbackTid != 0xFFFFFFFF) charDescTid = fallbackTid;
-    }
+    // DAT_1401c70b0 is CharacterDescription's type-id cell (Table 1).
+    uint32_t charDescTid = CharacterDescription::TypeId();
     bool derived = charDescTid && fn_IsDerivedFrom && fn_IsDerivedFrom(obj, charDescTid);
     *reinterpret_cast<void**>(s + 0x30) = derived ? obj : nullptr;
     if (0.0f <= speed) {
@@ -397,8 +377,7 @@ void Pf_SetFlagRefreshUpdate_107260(int64_t* param_1) {
 int Pf_RecursiveChildSum_123070(int64_t param_1, int param_2) {
     EnsureInit();
     void* obj = *reinterpret_cast<void**>(param_1 + 0x18);
-    bool derived = s_pTid_123070_7938 && fn_IsDerivedFrom &&
-                   fn_IsDerivedFrom(obj, *s_pTid_123070_7938);
+    bool derived = fn_IsDerivedFrom && fn_IsDerivedFrom(obj, InteractDescription::TypeId());
     void* base = derived ? obj : nullptr;
     // [STANDALONE GUARD] base is null when obj is not an InteractDescription OR the
     // type-id global (0x1401c7938) is unfilled/unregistered in standalone. The real
@@ -437,15 +416,15 @@ int Pf_ResourceLimitFlagTest_c560(int64_t param_1, int64_t param_2) {
         int64_t byteOff = 0;  // R14 = iVar*8
         for (;;) {
             int64_t arr = *reinterpret_cast<int64_t*>(param_2 + 0x28);
-            uint32_t wantTid = s_pTid_c560_7cb8 ? *s_pTid_c560_7cb8 : 0;
+            uint32_t wantTid = RawMaterialDescription::TypeId();
             void* child = *reinterpret_cast<void**>(arr + byteOff);
             uint32_t tid = (*reinterpret_cast<uint32_t(**)(void*)>(
                 *reinterpret_cast<int64_t*>(child) + 0x10))(child);
             if (tid == wantTid) {
                 int64_t arr2 = *reinterpret_cast<int64_t*>(param_2 + 0x28);
                 void* match = *reinterpret_cast<void**>(arr2 + static_cast<int64_t>(iVar) * 8);
-                bool derived = s_pTid_c560_7cb8 && fn_IsDerivedFrom &&
-                               fn_IsDerivedFrom(match, *s_pTid_c560_7cb8);
+                bool derived = fn_IsDerivedFrom &&
+                               fn_IsDerivedFrom(match, RawMaterialDescription::TypeId());
                 if (derived) found = match;
                 break;
             }
