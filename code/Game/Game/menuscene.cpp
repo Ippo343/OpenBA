@@ -588,10 +588,6 @@ void* MenuScene::CreateInPlaceObject(void* memory) {
 DEFINE_EXE_VTABLE(MenuScene, "_ZTV9MenuScene")
 
 extern "C" void RegisterMenuSceneVtable() {
-    // B38_RULES D5: nothing in the tree reads 0x14015ede0 back (swept by hex
-    // and owner); this row is reader-less and serves the compiler table only.
-    // The closing pass deletes it with the call.
-    RegisterExeAddr(0x14015ede0, reinterpret_cast<uintptr_t>(MenuScene::Vtable()));
     // FUN_140098800 Transform/Camera init — the ctor calls
     // MenuScene_TransformInit_Standalone directly. Register it so the exe
     // address resolves to our reimpl too, keeping the Game-gap metric honest.

@@ -1872,10 +1872,4 @@ DEFINE_EXE_VTABLE(MarketWork, "_ZTV10MarketWork")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x140161710 is still read back BY ADDRESS — MarketComponent's CreateWork
-// (resourceproduce_creatework.cpp, block MI-B) builds the work by hand and stamps it —
-// so the exe address serves the COMPILER's table.
-extern "C" void RegisterMarketWorkVtable() {
-    RegisterExeAddr(MarketWorkAddr::Vtable, reinterpret_cast<uintptr_t>(MarketWork::Vtable()));   // 0x140161710
-}
 DEFINE_EXE_TYPE(MarketWork, "Work")

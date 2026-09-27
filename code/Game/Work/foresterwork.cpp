@@ -1239,12 +1239,6 @@ DEFINE_EXE_VTABLE(ForesterWork, "_ZTV12ForesterWork")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x1401613a0 is still read back BY ADDRESS — ForesterComponent's CreateWork
-// (resourceproduce_creatework.cpp, block MI-B) builds the work by hand and stamps it —
-// so the exe address serves the COMPILER's table.
-extern "C" void RegisterForesterWorkVtable() {
-    RegisterExeAddr(ForesterWorkAddr::Vtable, reinterpret_cast<uintptr_t>(ForesterWork::Vtable()));   // 0x1401613a0
-}
 // The factory the forester force harness (forester_force_harness.cpp) names.
 extern "C" void* ForesterWork_Factory(void) { return ForesterWork::CreateNewObject(); }
 DEFINE_EXE_TYPE(ForesterWork, "AutoPickupWork")

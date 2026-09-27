@@ -980,10 +980,4 @@ DEFINE_EXE_VTABLE(HerbalistWork, "_ZTV13HerbalistWork")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x1401615a0 is still read back BY ADDRESS — HerbalistComponent's CreateWork
-// (resourceproduce_creatework.cpp, block MI-B) builds the work by hand and stamps it —
-// so the exe address serves the COMPILER's table.
-extern "C" void RegisterHerbalistWorkVtable() {
-    RegisterExeAddr(HerbalistWorkAddr::Vtable, reinterpret_cast<uintptr_t>(HerbalistWork::Vtable()));   // 0x1401615a0
-}
 DEFINE_EXE_TYPE(HerbalistWork, "AutoPickupWork")

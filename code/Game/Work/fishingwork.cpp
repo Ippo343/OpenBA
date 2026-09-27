@@ -1073,10 +1073,4 @@ DEFINE_EXE_VTABLE(FishingWork, "_ZTV11FishingWork")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x140161320 is still read back BY ADDRESS — FishingComponent's CreateWork
-// (resourceproduce_creatework.cpp, block MI-B) builds the work by hand and stamps it —
-// so the exe address serves the COMPILER's table.
-extern "C" void RegisterFishingWorkVtable() {
-    RegisterExeAddr(FishingWorkAddr::Vtable, reinterpret_cast<uintptr_t>(FishingWork::Vtable()));   // 0x140161320
-}
 DEFINE_EXE_TYPE(FishingWork, "Work")

@@ -817,10 +817,4 @@ DEFINE_EXE_VTABLE(HuntWork, "_ZTV8HuntWork")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x140161620 is still read back BY ADDRESS — HuntComponent's CreateWork
-// (resourceproduce_creatework.cpp, block MI-B) builds the work by hand and stamps it —
-// so the exe address serves the COMPILER's table.
-extern "C" void RegisterHuntWorkVtable() {
-    RegisterExeAddr(HuntWorkAddr::Vtable, reinterpret_cast<uintptr_t>(HuntWork::Vtable()));   // 0x140161620
-}
 DEFINE_EXE_TYPE(HuntWork, "AutoPickupWork")

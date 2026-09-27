@@ -102,14 +102,4 @@ void* Disease::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(Disease, "_ZTV7Disease")
 
-#include "resolve.h"   // RegisterExeAddr
-
-// B38_RULES D5: nothing in the tree reads 0x14015e190 back (swept by hex and
-// owner); this row is reader-less and serves the compiler table only so the
-// coordinator-owned call in address_registry.cpp keeps linking. The closing
-// pass deletes it with the call.
-extern "C" void RegisterDiseaseVtable() {
-    RegisterExeAddr(0x14015e190, reinterpret_cast<uintptr_t>(Disease::Vtable()));
-}
-
 DEFINE_EXE_TYPE(Disease, "Object::External")

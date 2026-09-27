@@ -967,10 +967,4 @@ DEFINE_EXE_VTABLE(HarvestArea, "_ZTV11HarvestArea")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x1401614a0 is still read back BY ADDRESS — CropFieldComponent's state
-// machine (cropfieldcomponent_states.cpp, block MI-B) builds the work by hand and
-// stamps it — so the exe address serves the COMPILER's table.
-extern "C" void RegisterHarvestAreaVtable() {
-    RegisterExeAddr(HarvestAreaAddr::Vtable, reinterpret_cast<uintptr_t>(HarvestArea::Vtable()));   // 0x1401614a0
-}
 DEFINE_EXE_TYPE(HarvestArea, "AutoPickupWork")

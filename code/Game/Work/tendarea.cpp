@@ -678,10 +678,4 @@ DEFINE_EXE_VTABLE(TendArea, "_ZTV8TendArea")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x140161990 is still read back BY ADDRESS — CropFieldComponent's state
-// machine (cropfieldcomponent_states.cpp, block MI-B) builds the work by hand and
-// stamps it — so the exe address serves the COMPILER's table.
-extern "C" void RegisterTendAreaVtable() {
-    RegisterExeAddr(TendAreaAddr::Vtable, reinterpret_cast<uintptr_t>(TendArea::Vtable()));   // 0x140161990
-}
 DEFINE_EXE_TYPE(TendArea, "Work")

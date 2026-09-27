@@ -151,11 +151,4 @@ void* Profession::CreateInPlaceObject(void* memory) {
 
 DEFINE_EXE_VTABLE(Profession, "_ZTV10Profession")
 
-// B38_RULES D5: nothing in the tree reads 0x14015efa0 back (swept by hex and
-// owner); this row is reader-less and serves the compiler table only so the
-// coordinator-owned call keeps linking. The closing pass deletes it with the call.
-extern "C" void RegisterProfessionVtable() {
-    RegisterExeAddr(0x14015efa0, reinterpret_cast<uintptr_t>(Profession::Vtable()));
-}
-
 DEFINE_EXE_TYPE(Profession, "Object::External")

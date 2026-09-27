@@ -52,8 +52,6 @@ extern "C" void SetStandaloneKeyMap(void* keyMap) {
 // reimplementation in code/Game/<Module>/<Class>.cpp.
 extern "C" {
     void RegisterStatGoalVtable();
-    void RegisterToolbarVtable();
-    void RegisterMusicListVtable();
     void RegisterMainMenuDialogVtable();
     void RegisterOptionsDialogVtable();
     void RegisterNewGameDialogVtable();
@@ -61,24 +59,14 @@ extern "C" {
     void RegisterMessageDialogVtable();
     void RegisterMenuDialogVtables();
     void RegisterMenuSceneVtable();
-    void RegisterGeometryVtable();
-    void RegisterWeatherVtable();
-    void RegisterClimateGeneratorVtable();
-    void RegisterMapGeneratorVtable();
-    void RegisterTerrainGeneratorVtable();
 
     // M5 5c Foundation C — entity description types (template sub-descriptions).
     void RegisterToolbarDescriptionStringArrayResize();   // FUN_140028860 (the table row went with ToolbarDescription's real class, B.3.8 K1)
     void RegisterParticleComponentAddrs();   // building particle emitters (chimney smoke etc)
-    // wave 2 (economy / farming / services / tools)
     void RegisterWeatherParticleVtable();
     void Reimpl_WeatherArray_Resize(void* hdr, int newCount);
     void RegisterFrustumOutlineDescriptionVtable();
-    void RegisterWellDescriptionVtable();
     void RegisterAmbientExternalPtrSerialize();
-    void RegisterProfessionVtable();
-    void RegisterNameDatabaseVtable();
-    void RegisterDiseaseVtable();
     void RegisterProfessionListVtable();
 
     // Factory cascade (notes/FACTORY_CASCADE_145_BRIEF.md) — Action family.
@@ -93,23 +81,10 @@ extern "C" {
     void RegisterBuildRoadVtable();
     void RegisterClearAreaVtable();
     void RegisterClearStorageVtable();
-    void RegisterConsumeProduceVtable();
     void RegisterFireWorkVtable();
-    void RegisterFishingWorkVtable();
     void RegisterLocationWorkVtable();
-    void RegisterMarketWorkVtable();
     void RegisterPickupVtable();
-    void RegisterPlantAreaVtable();
-    void RegisterTendAreaVtable();
-    void RegisterTradeWorkVtable();
-    void RegisterForesterWorkVtable();
-    void RegisterHarvestAreaVtable();
-    void RegisterHerbalistWorkVtable();
-    void RegisterHuntWorkVtable();
     void RegisterPastureWorkVtable();
-
-    // Factory cascade — External-resource family (Object::External, 9-slot
-    // vtables w/ GetFileVersion @ +0x18; MusicList pattern). Tutorial types.
 
     // Tool family: real classes since ENDGAME B.3.8 (code/Game/Player/*Tool.h);
     // no tool vtable is registered at its exe address any more.
@@ -453,9 +428,8 @@ extern void RegisterPlayerCreateBarBatch(); // GUI Phase 3B (createbar): ffc60 C
 extern void RegisterPlayerTileRenderBatch();// GUI Phase 3C (tilerender): b10e0 + 1008c0 + 101380 green/red footprint validity overlay (f5d0/0f90 already registered)
 extern void RegisterPlayerRenderBatch();    // Selection outline (b930 EdgeMesh tessellation -> c4a0/c9e0/cb40); gated on BANISHED_SELECTION_OUTLINE, which is DEFAULT-ON (the default-on table, component_factory_base.cpp) -- this said "default-OFF" until 2026-09-07 (Wave 6)
 extern void RegisterKeystoneARemovalBatch(); // Keystone A: RemovalTool::CalcPath (1035e0) + closure (d960/f8d50/11e4d0/11dfa0/9c700/f9ad0). Player clearance tool; lead-verified vs disasm.
-extern void RegisterDestroySmBatch();        // Upgrade path: DestroyComponent state handlers + UpgradeUIConfig vtable (reg_destroy_sm.cpp; runtime-gated BANISHED_LIVE_DESTROY, default-ON).
+extern void RegisterDestroySmBatch();        // Upgrade path: DestroyComponent state handlers (reg_destroy_sm.cpp; runtime-gated BANISHED_LIVE_DESTROY, default-ON).
 // .rdata/.data census wave 2026-09-04.
-extern void RegisterW2Lane1();             // purecall placeholder vtable 0x14015f070
 extern void RegisterW2Lane3TypeIds();      // ParticleDescription BaseTypeInfo 0x1401c4758
 extern "C" void RegisterW2Screenshot();    // GameUpdateLoop::TakeScreenshot 0x140095da0
 
@@ -465,7 +439,7 @@ extern void RegisterCodeLane2();           // MapParamsDialog ctor 0x14006bd80 (
 extern "C" void RegisterCodeLane4();       // TakeScreenshot 0x140095da0 (live quicksave crash) + free ports
 extern "C" void RegisterCodeLane5Batch();  // MusicPlayer::Update 0x1400a40e0 (background music) + hygiene
 extern void RegisterCodeLane6Batch();      // DragTool/EntityUI/Decal/StatusIcon/ToolbarDesc ports
-extern void RegisterControlUIBatch();        // ControlUI + ControlUIConfig vtables (reg_controlui.cpp): the generic component-command buttons (pasture work/split/empty, element id 50000, command in cfg+0x20).
+extern void RegisterControlUIBatch();        // ControlUIConfig type-id cell (reg_controlui.cpp): the generic component-command buttons (pasture work/split/empty, element id 50000, command in cfg+0x20).
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -477,7 +451,6 @@ static void RegisterCodeFunctions() {
     RegisterUnregLane3();
 
     // .rdata/.data wave — see docs/waves/rdata_data_wave.md.
-    RegisterW2Lane1();
     RegisterW2Lane3TypeIds();
     RegisterW2Screenshot();
 
@@ -686,7 +659,7 @@ static void RegisterCodeFunctions() {
     //   Lead-verified offset-by-offset vs disasm (dfa0 had 2 crash bugs + 2 fidelity bugs, all fixed).
     //   Player clearance tool — not autostart-reached, so registering only affects the removal path.
     RegisterDestroySmBatch();      // Upgrade path: DestroyComponent state handlers (11d7b0/11cfd0/
-    //   11cec0/11cc70/11c120) + guards (11da80/11e600/11e5b0) + vtable_UpgradeUIConfig 14015df60.
+    //   11cec0/11cc70/11c120) + guards (11da80/11e600/11e5b0).
     //   Runtime behavior gated by BANISHED_LIVE_DESTROY (default-ON since 2026-07-25;
     //   the env var is a kill-switch); see reg_destroy_sm.cpp.
     RegisterControlUIBatch();      // vtable_ControlUI 14015b380 + vtable_ControlUIConfig 14015b3e0.
@@ -1659,62 +1632,28 @@ static void RegisterVtablesAndTypeIds() {
     // Per-class vtables defined alongside their reimplementation in
     // code/Game/<Module>/<Class>.cpp — declared at file scope above.
     RegisterStatGoalVtable();
-    RegisterToolbarVtable();
-    RegisterMusicListVtable();
     RegisterMainMenuDialogVtable();
     RegisterOptionsDialogVtable();
     RegisterNewGameDialogVtable();
     RegisterOptionInputBindDialogVtable();
     RegisterMessageDialogVtable();
     RegisterMenuDialogVtables();
-    RegisterMenuSceneVtable();
+    RegisterMenuSceneVtable();   // MenuScene transform-init door 0x140098800 (the table row is gone)
 
-    // Weather vtable + factory at exe 0x140160290 — needed for MenuScene
-    // particle deserialization (fn_ExternalPtr_Serialize_Weather).
-    RegisterWeatherVtable();
-
-    // World-generator types (Climate/Map/Terrain) — exe-defined Object::External
-    // subclasses loaded as elements of the NewGameDialog combo list .rsc files.
-    // Each registers its verified 9-slot vtable so ExternalFactory::FindOrLoad's
-    // per-element load resolves a real factory instead of NullFactory crashing in
-    // Runtime IsDerivedFrom. REGISTER_TYPE entries live next to the reimpls in
-    // code/Game/Game/{climate,map,terrain}generator.cpp.
-    RegisterClimateGeneratorVtable();
-    RegisterMapGeneratorVtable();
-    RegisterTerrainGeneratorVtable();
-
-    // M5 5c Foundation C — entity description factories. Each registers its
-    // verified vtable so ExternalFactory::FindOrLoad's per-sub-description load
-    // resolves a real factory + Serialize instead of NullFactory. The matching
-    // REGISTER_TYPE entries live next to the reimpls in code/Game/Component/
-    // <type>.cpp; their NullFactory stubs were removed from factory_registrations_bulk.
+    // Description-side helper doors (the description classes are real classes;
+    // their tables are the compiler's and no longer registered).
     RegisterToolbarDescriptionStringArrayResize();
     RegisterParticleComponentAddrs();   // ParticleComponent helper closure (0x1400524xx-0x1400536xx)
-    // wave 2 (economy / farming / services / tools)
-    RegisterWeatherParticleVtable();   // weather particle Geometry vtable (0x140160240)
+    RegisterWeatherParticleVtable();   // weather-particle Geometry doors 0x1400d3f10 / 0x1400d3f80 (the table row is gone)
     RegisterFrustumOutlineDescriptionVtable();
-    RegisterWellDescriptionVtable();
 
     // Ambient audio: SoundEffect ExternalPtr serialize (0x1400019a0) + biome-table
     // array resize (0x140002540) so the ambient descriptions actually load their
     // day/night sound refs (else they deserialize as null → silent ambient).
     RegisterAmbientExternalPtrSerialize();
 
-    // M5 5c citizens — Profession (Object::External) referenced by CitizenDescription.
-    RegisterProfessionVtable();
-
-    // Menu-load — NameDatabase (.ndb, Object::External) loaded by MenuScene_Setup
-    // during DialogLoaderLoopT::Load; was a NullFactory crash. See namedatabase.cpp.
-    RegisterNameDatabaseVtable();
-
-    // In-game worldgen — Disease (Object::External) loaded by the climate/environment
-    // resource list during BuildTerrain; was a NullFactory stub → IsDerivedFrom(NULL)
-    // crash @Runtime+0xC039A (masked as a "BuildTerrain hang"). See disease.cpp.
-    RegisterDiseaseVtable();
-
-    // In-game worldgen — ProfessionList (Object::External, Profession.rsc) loaded
-    // during the world build; same IsDerivedFrom(NULL) NullFactory crash. See
-    // professionlist.cpp.
+    // ProfessionList::Startup door 0x1400a90a0 (GameUpdateLoop::Startup resolves it;
+    // the table row is gone). See professionlist.cpp.
     RegisterProfessionListVtable();
 
     // Factory cascade (notes/FACTORY_CASCADE_145_BRIEF.md) — Action family.
@@ -1732,22 +1671,10 @@ static void RegisterVtablesAndTypeIds() {
     RegisterBuildRoadVtable();
     RegisterClearAreaVtable();
     RegisterClearStorageVtable();
-    RegisterConsumeProduceVtable();
     RegisterFireWorkVtable();
-    RegisterFishingWorkVtable();
     RegisterLocationWorkVtable();
-    RegisterMarketWorkVtable();
     RegisterPickupVtable();
-    RegisterPlantAreaVtable();
-    RegisterTendAreaVtable();
-    RegisterTradeWorkVtable();
-    RegisterForesterWorkVtable();
-    RegisterHarvestAreaVtable();
-    RegisterHerbalistWorkVtable();
-    RegisterHuntWorkVtable();
     RegisterPastureWorkVtable();
-
-    // Factory cascade — External-resource family (MusicList pattern). Tutorial types.
 
     // Tool family (real classes since ENDGAME B.3.8): only the route-builder door.
     RegisterPathToolSetSelected();
@@ -1780,14 +1707,6 @@ static void RegisterVtablesAndTypeIds() {
     // (NaturalResource +0x78, Citizen +0x20/+0x28/+0x30). Stream-identical to the
     // generic ExternalPtr serialize; reuse the StringTable reimpl body.
     RegisterExeAddr(0x140018020, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_StringTable));
-
-    // Geometry / "TerrainGenerator" derived vtable at exe 0x14015f110.
-    // Without this, Reimpl_Geometry_Init's `*self = vtbl` no-ops because
-    // 0x14015f110 isn't registered; the Geometry retains Runtime's base
-    // Graphics::Geometry vtable whose slot +0x18 (Draw) is _purecall.
-    // Renderer::Draw walks Scene+0x60 and dispatches +0x18, popping the
-    // MSVC R6025 MessageBox.
-    RegisterGeometryVtable();
 
     // M3.5 Path B session 7 — NoiseUI ImageBuffer vtable scaffolding
     // (used by NoiseUI / ModDialog / Geometry::Serialize image upload helper).

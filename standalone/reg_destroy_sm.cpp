@@ -1,5 +1,5 @@
 // standalone/reg_destroy_sm.cpp
-// Registration wave — DestroyComponent state machine + UpgradeUIConfig
+// Registration wave — DestroyComponent state machine
 // (the wood→stone upgrade path; see code/Game/Component/destroycomponent_states.cpp).
 //
 // Registered handler impls (faithful ports, all gated at RUNTIME by
@@ -13,7 +13,6 @@
 //   0x14011da80  storage-empty test
 //   0x14011e600  upgrade-target-differs test
 //   0x14011e5b0  upgrade-target-is-current test
-//   0x14015df60  vtable_UpgradeUIConfig (upgradeuiconfig.cpp static vtable)
 //
 // 0x14011c530 contents-scatter is now ported (destroycomponent_states.cpp) but is
 // called directly in-file by state-5 enter/tick, never by exe address — so it needs
@@ -53,7 +52,6 @@ extern "C" char Destroy_State45Event0_Cancel_bcc0(void* data, void* sm);
 extern "C" char Destroy_StorageEmpty_da80(int64_t comp);
 extern "C" char Destroy_TargetDiffers_e600(int64_t comp);
 extern "C" char Destroy_TargetIsCurrent_e5b0(int64_t comp);
-extern "C" void RegisterUpgradeUIConfigVtable();
 
 // State 6 — collapse/rubble (code/Game/Component/destroycomponent_state6.cpp).
 extern "C" char  Destroy_State6Enter_d4d0(void* data, void* sm);
@@ -78,7 +76,6 @@ void RegisterDestroySmBatch() {
     RegisterExeAddr(0x14011da80, reinterpret_cast<uintptr_t>(&Destroy_StorageEmpty_da80));
     RegisterExeAddr(0x14011e600, reinterpret_cast<uintptr_t>(&Destroy_TargetDiffers_e600));
     RegisterExeAddr(0x14011e5b0, reinterpret_cast<uintptr_t>(&Destroy_TargetIsCurrent_e5b0));
-    RegisterUpgradeUIConfigVtable();
 
     // ---- state 6: collapse / rubble --------------------------------------
     RegisterExeAddr(0x14011d4d0, reinterpret_cast<uintptr_t>(&Destroy_State6Enter_d4d0));

@@ -918,10 +918,4 @@ DEFINE_EXE_VTABLE(TradeWork, "_ZTV9TradeWork")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x140161a10 is still read back BY ADDRESS — TradeComponent
-// (tradecomponent.cpp, tradecomponent_states.cpp) builds the work by hand and stamps
-// it — so the exe address serves the COMPILER's table.
-extern "C" void RegisterTradeWorkVtable() {
-    RegisterExeAddr(TradeWorkAddr::Vtable, reinterpret_cast<uintptr_t>(TradeWork::Vtable()));   // 0x140161a10
-}
 DEFINE_EXE_TYPE(TradeWork, "Work")

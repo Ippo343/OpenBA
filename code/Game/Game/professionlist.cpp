@@ -218,10 +218,6 @@ void* ProfessionList::CreateInPlaceObject(void* memory) {
 DEFINE_EXE_VTABLE(ProfessionList, "_ZTV14ProfessionList")
 
 extern "C" void RegisterProfessionListVtable() {
-    // B38_RULES D5: nothing in the tree reads 0x14015ef50 back (swept by hex
-    // and owner); this row is reader-less and serves the compiler table only.
-    // The closing pass deletes it with the call.
-    RegisterExeAddr(0x14015ef50, reinterpret_cast<uintptr_t>(ProfessionList::Vtable()));
     // ProfessionList::Startup (array populate + sort) — GameUpdateLoop::Startup
     // resolves exe 0x1400a90a0 (fn_ProfessionList_Startup) and calls it when the
     // profession list is live; unregistered it was NULL and the call was skipped,

@@ -1288,10 +1288,4 @@ DEFINE_EXE_VTABLE(ConsumeProduce, "_ZTV14ConsumeProduce")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x140161220 is still read back BY ADDRESS — ConsumeProduceComponent's
-// CreateWork (resourceproduce_creatework.cpp, block MI-B) builds the work by hand and
-// stamps it — so the exe address serves the COMPILER's table.
-extern "C" void RegisterConsumeProduceVtable() {
-    RegisterExeAddr(ConsumeProduceAddr::Vtable, reinterpret_cast<uintptr_t>(ConsumeProduce::Vtable()));   // 0x140161220
-}
 DEFINE_EXE_TYPE(ConsumeProduce, "Work")
