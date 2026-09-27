@@ -1104,21 +1104,9 @@ static void RegisterDispatchSlots() {
     RegisterDispatchSlot(0x140152760,
         ResolveAddr(Module::Runtime, 0x1801fc6e8));
 
-    // UI::Dialog::_typeInfo external — exe slot 0x140151728 in the original
-    // is patched by the loader with the **type ID itself** (4-byte uint),
-    // NOT a pointer to BaseTypeInfo. Original code reads it as
-    // `*(uint32_t*)0x140151728` (single deref), so the slot must contain
-    // the typeId directly.
-    //
-    // Note: Ghidra labels this _typeInfo@DialogInstance based on a heuristic
-    // but the actual type checked here is UI::Dialog (Runtime 0x1801faa88) —
-    // FUN_140064720 loads Dialog/Follow.rsc and runs IsDerivedFrom against
-    // this slot, and the .rsc loads as a UI::Dialog External.
-    //
-    // Type ID isn't known until Factory::Startup runs; LoadDialogResource has
-    // a fallback path that uses Object::Factory::GetTypeIdFromName instead, so we
-    // leave this slot zero-filled until something else needs it.
-    RegisterDispatchSlot(0x140151728, 0);
+    // (0x140151728, the UI::Dialog type-info import slot: row deleted at ENDGAME
+    // B.3.9 TR -- its two readers, mainmenudialog.cpp / mod_dialog_vtables.cpp
+    // LoadDialogResource, read UI::Dialog::TypeId().)
 
     // (0x140151e98 ??0External / 0x140151ea0 ??1External: rows deleted at
     // ENDGAME B.3.9 EXA — their only readers, engine_funcs' fn_External_External

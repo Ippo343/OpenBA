@@ -61,6 +61,7 @@
 #include "Dialog/ui_dialogs.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "ui/Dialog.h"   // UI::Dialog::TypeId() (ENDGAME B.3.9 TR)
 #include "resolve.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
@@ -100,17 +101,8 @@ void* ModDlg_LoadDialogResource(const char* rscPath) {
             ->FindOrLoad(filenameObj));
     void* extRes = nullptr;
     if (resource) {
-        uint32_t* slot = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x140151728));
-        uint32_t typeId = slot ? *slot : 0;
-        if (typeId == 0 &&
-            g_pFactorySingleton && *g_pFactorySingleton) {
-            void* factoryObj = *reinterpret_cast<void**>(*g_pFactorySingleton);
-            if (factoryObj) {
-                typeId = reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(
-                    "Dialog", true);   // B.3.3 bridge
-                if (slot) *slot = typeId;
-            }
-        }
+        // UI::Dialog's type id (retail: the import slot 0x140151728; ENDGAME B.3.9 TR).
+        const uint32_t typeId = UI::Dialog::TypeId();
         if (typeId && fn_IsDerivedFrom && fn_IsDerivedFrom(resource, typeId))
             extRes = resource;
     }

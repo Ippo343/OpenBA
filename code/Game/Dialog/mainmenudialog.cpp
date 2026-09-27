@@ -73,10 +73,9 @@ enum MainMenuButtonId {
 // ============================================================
 // Helper: load .rsc resource for dialog construction
 // ============================================================
-// Exe data slot at 0x140151728. The exe loader patches this with the 4-byte
-// type ID for UI::Dialog (NOT DialogInstance — Ghidra mislabeled). Used by
-// LoadDialogResource to validate Dialog/*.rsc resources before construction.
-static uint32_t* g_dialogTypeIdSlot = nullptr;
+// Retail validates Dialog/*.rsc resources against UI::Dialog's type id, read through
+// the import slot 0x140151728 (?_typeInfo@Dialog@UI@@). ENDGAME B.3.9 TR: the class
+// accessor (was the slot, zero in standalone, back-filled by a by-name factory lookup).
 
 static void* LoadDialogResource(const char* rscPath) {
     System::Filename filenameBuf(rscPath);
@@ -86,25 +85,7 @@ static void* LoadDialogResource(const char* rscPath) {
     printf("[LoadDialogResource] '%s' -> FindOrLoad=%p\n", rscPath, resource);
     void* extRes = nullptr;
     if (resource) {
-        // The slot is read as a direct uint32_t in the original (single deref).
-        if (!g_dialogTypeIdSlot) {
-            g_dialogTypeIdSlot = reinterpret_cast<uint32_t*>(
-                ResolveAddr(Module::Exe, 0x140151728));
-        }
-        uint32_t typeId = (g_dialogTypeIdSlot ? *g_dialogTypeIdSlot : 0);
-        if (typeId == 0 &&
-            g_pFactorySingleton && *g_pFactorySingleton) {
-            // Standalone: slot wasn't filled by an exe loader, so look up
-            // UI::Dialog via the Runtime factory. g_pFactorySingleton is a
-            // void** pointing into the slot storage; *g points at the
-            // Runtime DLL's _singleton variable; **g is the actual Factory*.
-            void* factoryObj = *(void**)*g_pFactorySingleton;
-            if (factoryObj) {
-                typeId = reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(
-                    "Dialog", true);   // B.3.3 bridge
-                if (g_dialogTypeIdSlot) *g_dialogTypeIdSlot = typeId;
-            }
-        }
+        const uint32_t typeId = UI::Dialog::TypeId();
         bool derived = (typeId && fn_IsDerivedFrom(resource, typeId));
         printf("[LoadDialogResource] '%s' typeId=%u IsDerivedFrom=%d\n",
                rscPath, typeId, derived ? 1 : 0);
