@@ -58,9 +58,6 @@ static fn_moveToCtor_t      s_fn_moveToCtor     = nullptr;
 static fn_findCell_t        s_fn_findCell       = nullptr;
 static fn_terrainPos_t      s_fn_terrainPos     = nullptr;
 
-// --- action vtable addresses (exe .rdata) ---
-static uintptr_t s_vt_Action        = 0;   // 0x14015faa0
-static uintptr_t s_vt_PlayAnimation = 0;   // 0x140158950
 
 // --- float / dword constants (exe .rdata) ---
 static const uint32_t* s_pMsgId_c70e8 = nullptr;  // DWORD_1401c70e8 (SendComponentMessage id)
@@ -79,8 +76,6 @@ static void EnsureInit() {
     s_fn_moveToCtor  = reinterpret_cast<fn_moveToCtor_t>(ResolveAddr(Module::Exe, 0x1400c9170));
     s_fn_findCell    = reinterpret_cast<fn_findCell_t>(ResolveAddr(Module::Exe, 0x14009ccf0));
     s_fn_terrainPos  = reinterpret_cast<fn_terrainPos_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_vt_Action        = reinterpret_cast<uintptr_t>(Action::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
-    s_vt_PlayAnimation = reinterpret_cast<uintptr_t>(PlayAnimation::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
     s_pMsgId_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
     s_pf_172114 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
     s_pf_172180 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172180));
@@ -149,16 +144,13 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
             int64_t timeStore = 0;
             if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeStore, animTime);
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
-            if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(pmem);
-            uint8_t* a = reinterpret_cast<uint8_t*>(pmem);
-            *reinterpret_cast<uintptr_t*>(a) = s_vt_Action;
-            *reinterpret_cast<uint64_t*>(a + 0x10) = 0;
-            a[0x18] = 0;
-            *reinterpret_cast<uintptr_t*>(a) = s_vt_PlayAnimation;
-            *reinterpret_cast<uint64_t*>(a + 0x20) = entityIBP;
-            *reinterpret_cast<uint32_t*>(a + 0x28) = 0;
-            *reinterpret_cast<int64_t*>(a + 0x30) = timeStore;
-            *reinterpret_cast<uint64_t*>(a + 0x38) = 0;
+            // ENDGAME B.3.9 EXA: the real class (was the `??0Internal` door and
+            // two stamps); then retail's inlined leaf stores.
+            PlayAnimation* a = ::new (pmem) PlayAnimation();
+            *reinterpret_cast<uint64_t*>(&a->_field20) = entityIBP;   // raw IBP copy, as retail
+            *reinterpret_cast<uint32_t*>(a->_pad28)    = 0;
+            *reinterpret_cast<int64_t*>(&a->_field30)  = timeStore;
+            a->_field38                                 = nullptr;
             animAction = pmem;
         }
         int64_t animIBP = 0;

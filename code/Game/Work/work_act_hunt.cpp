@@ -76,7 +76,6 @@ typedef void* (*WAH_fn_MoveTo_t)(void* self, void* familyIBP, int pathType, int 
 // 0x140152b60 — System::MemoryAllocator::MemAlloc(size, align) static wrapper.
 typedef void* (*WAH_fn_MemAlloc_t)(uint64_t size, uint32_t align);
 // 0x140152768 — Object::Internal::Internal(self) base ctor.
-typedef void* (*WAH_fn_ObjInternalCtor_t)(void* self);
 // 0x140152b00 — System::Time::Time(retval, float seconds).
 typedef void* (*WAH_fn_TimeCtor_t)(void* retval, float seconds);
 
@@ -91,7 +90,6 @@ static WAH_fn_PerformWork7_t         s_wah_PerformWork7    = nullptr;
 static WAH_fn_MoveTo_t               s_wah_MoveTo          = nullptr;
 
 static WAH_fn_MemAlloc_t             s_wah_MemAlloc        = nullptr;
-static WAH_fn_ObjInternalCtor_t      s_wah_ObjInternalCtor = nullptr;
 static WAH_fn_TimeCtor_t             s_wah_TimeCtor        = nullptr;
 
 // Inline-object vtables + globals (exe .rdata).
@@ -118,8 +116,6 @@ static void ResolveAll() {
 
     // Dispatch slots — deref once to get the runtime fn ptr.
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b60)) s_wah_MemAlloc        = *reinterpret_cast<WAH_fn_MemAlloc_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152768)) s_wah_ObjInternalCtor = *reinterpret_cast<WAH_fn_ObjInternalCtor_t*>(s);
-    if (!s_wah_ObjInternalCtor) s_wah_ObjInternalCtor = reinterpret_cast<WAH_fn_ObjInternalCtor_t>(fn_ObjectInternal_Ctor);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b00)) s_wah_TimeCtor        = *reinterpret_cast<WAH_fn_TimeCtor_t*>(s);
 
     s_wah_pDword_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));

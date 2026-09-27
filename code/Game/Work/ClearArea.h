@@ -16,9 +16,9 @@
 //   [7] 0x1400e5e00 OnCancel  [8] 0x1400e6650 Cleanup   [9] 0x1400e5b10 Validate
 //   [10] 0x1400e6720 GetTarget  [11] 0x140029860 GetPriority (shared, 13 tables)
 //   [12] = Work (0x140006b10)
-//   ctors: 0x1400e68d0 (default); 0x1400e6960 (the parameterised one) is built BY
-//   HAND in clearareacomponent_states.cpp (block MI-A), which stamps 0x140161110 —
-//   that registration serves ClearArea::Vtable() (B38 D5).
+//   ctors: 0x1400e68d0 (default); 0x1400e6960 (the parameterised one: Work_Ctor25
+//   on the entity, then the leaf stores) — clearareacomponent_states.cpp and the
+//   orchard build it with `::new (p) ClearArea(…)` (ENDGAME B.3.9 EXA).
 // ============================================================================
 
 #include <cstdint>
@@ -46,6 +46,10 @@ class ClearArea final : public Work {
 
 public:
     ClearArea();                                                    // 0x1400e68d0
+    // 0x1400e6960: `Work(pEntityIBP)` (retail's CALL Work_Ctor25 on a copy of
+    // *pEntityIBP), then +0x48..+0x60 = 0, +0x68 = descRef (raw), +0x70..+0x72.
+    ClearArea(void* pEntityIBP, uint64_t descRef, uint8_t clearTrees,
+              uint8_t clearGround, uint8_t clearBuildings);
 
     Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x140029870
     void  Persist(void* stream) override;                           // [3]  0x1400e6740

@@ -75,6 +75,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>   // std::memcpy (B.3.9 EXA)
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CIT (TypeId)
 
@@ -111,10 +113,6 @@ static fn_consumeRaw_t   s_fn_consumeRaw  = nullptr;
 static fn_pickupStored_t s_fn_pickupStored= nullptr;
 static fn_showTool_t     s_fn_showTool    = nullptr;
 
-// --- action vtable addresses (exe .rdata) ---
-static uintptr_t s_vt_Action        = 0;   // 0x14015faa0
-static uintptr_t s_vt_PerformWork   = 0;   // 0x14015fea0
-static uintptr_t s_vt_PlayAnimation = 0;   // 0x140158950
 
 // --- message-id / type-id globals (exe .rdata). Self-contained bricks: 70e8/7158/42c0
 //     are unregistered (read 0); 7cb8 (RawMaterialDescription) is registered+filled. ---
@@ -145,9 +143,6 @@ static void EnsureInit() {
     s_fn_consumeRaw   = reinterpret_cast<fn_consumeRaw_t  >(ResolveAddr(Module::Exe, 0x1400c63b0));
     s_fn_pickupStored = reinterpret_cast<fn_pickupStored_t>(ResolveAddr(Module::Exe, 0x1400ca520));
     s_fn_showTool     = reinterpret_cast<fn_showTool_t    >(ResolveAddr(Module::Exe, 0x140042890));
-    s_vt_Action        = reinterpret_cast<uintptr_t>(Action::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
-    s_vt_PerformWork   = reinterpret_cast<uintptr_t>(PerformWork::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
-    s_vt_PlayAnimation = reinterpret_cast<uintptr_t>(PlayAnimation::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
     s_pMsgId_70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
     s_pMsgId_7158 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
     s_pMsgId_42c0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c42c0));
@@ -185,22 +180,16 @@ static inline void*    MemA(uint64_t sz) {
 // Build a raw inline PerformWork action at `mem` (0x48 bytes). animIdx is the XMM float
 // stored at +0x28 (or a literal int bit-pattern when the original used 0xc47a0000 = -1000.0f).
 // timeBits = packed System::Time (u64) for +0x30, type = +0x2c work type.
+// ENDGAME B.3.9 EXA: the real class — PerformWork's parameterised ctor
+// (0x1400c9720) with useTool = 0 and field44 = -1 writes exactly the stores this
+// helper wrote by hand after the `??0Internal` door and the two stamps (the
+// entity IBP is copied raw at +0x20, as retail's inlined ctor does).
 static void InitPerformWork(void* mem, uint64_t entityVal, uint32_t animIdxBits,
                             uint32_t type, uint64_t timeBits) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(mem);
-    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(mem);
-    *reinterpret_cast<uintptr_t*>(p)       = s_vt_Action;
-    *reinterpret_cast<uint64_t*>(p + 0x10) = 0;
-    p[0x18]                                = 0;
-    *reinterpret_cast<uintptr_t*>(p)       = s_vt_PerformWork;
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x20) = entityVal;
-    *reinterpret_cast<uint32_t*>(p + 0x28) = animIdxBits;
-    *reinterpret_cast<uint32_t*>(p + 0x2c) = type;
-    *reinterpret_cast<uint64_t*>(p + 0x30) = timeBits;
-    *reinterpret_cast<uint64_t*>(p + 0x38) = 0;
-    p[0x40]                                = 0;
-    *reinterpret_cast<uint32_t*>(p + 0x44) = 0xffffffff;
+    float animIdx;
+    std::memcpy(&animIdx, &animIdxBits, sizeof animIdx);
+    ::new (mem) PerformWork(&entityVal, animIdx, type,
+                            static_cast<int64_t>(timeBits), /*useTool=*/0, /*field44=*/-1);
 }
 
 // Resolve the (self+0x278)+0x48 action-stack; return the stack pointer and store the
@@ -889,16 +878,13 @@ void CitizenAI_PlayAnimationCtor4_ba6b0(void* param_1, int64_t* param_2, uint32_
         if (mem) {
             uint64_t t = 0; if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, param_4);
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
-            uint8_t* a = reinterpret_cast<uint8_t*>(mem);
-            if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(mem);
-            *reinterpret_cast<uintptr_t*>(a)       = s_vt_Action;
-            *reinterpret_cast<uint64_t*>(a + 0x10) = 0;
-            a[0x18]                                = 0;
-            *reinterpret_cast<uintptr_t*>(a)       = s_vt_PlayAnimation;
-            *reinterpret_cast<uint64_t*>(a + 0x20) = entityIBP;
-            *reinterpret_cast<uint32_t*>(a + 0x28) = 0;
-            *reinterpret_cast<uint64_t*>(a + 0x30) = t;
-            *reinterpret_cast<uint64_t*>(a + 0x38) = 0;
+            // ENDGAME B.3.9 EXA: the real class (was the `??0Internal` door and
+            // two stamps); then retail's inlined leaf stores.
+            PlayAnimation* a = ::new (mem) PlayAnimation();
+            *reinterpret_cast<uint64_t*>(&a->_field20) = entityIBP;   // raw IBP copy, as retail
+            *reinterpret_cast<uint32_t*>(a->_pad28)    = 0;
+            *reinterpret_cast<uint64_t*>(&a->_field30) = t;
+            a->_field38                                 = nullptr;
         }
         int64_t ibp = 0; if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(mem));   // B.3.3 bridge

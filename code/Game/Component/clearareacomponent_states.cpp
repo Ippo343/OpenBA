@@ -46,6 +46,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // The instant footprint sweep lives in clearareacomponent.cpp (also used by the
@@ -59,12 +60,9 @@ extern int ClearAreaComponent_FootprintSweep(ClearAreaComponent* self);
 typedef void  (*fn_FindWorkComp_t)(void* entity, void* retIBP);        // FUN_140003050
 typedef void  (*fn_WorkSchedPost_t)(uintptr_t workComp, uint32_t code, // ec60
                                     char flag, void* pWorkIBP);
-typedef void  (*fn_ObjInternalCtor_t)(void* self);                     // Object::Internal::Internal
 
 static fn_FindWorkComp_t   s_FindWorkComp   = nullptr;   // 0x140003050
 static fn_WorkSchedPost_t  s_WorkSchedPost  = nullptr;   // 0x14012ec60
-static fn_ObjInternalCtor_t s_ObjInternalCtor = nullptr; // dispatch 0x140152768
-static void*   s_ClearAreaWorkVtable = nullptr;          // 0x140161110
 static uint32_t s_tidNatResDesc  = 0;   // 0x1401c7b68  NaturalResourceDescription
 static uint32_t s_tidRawMatDesc  = 0;   // 0x1401c7cb8  RawMaterialDescription
 static uint32_t s_tidNatResComp  = 0;   // 0x1401c7b30  NaturalResourceComponent
@@ -79,9 +77,6 @@ static void ResolveStates() {
     if (s_resolved) return;
     s_FindWorkComp  = reinterpret_cast<fn_FindWorkComp_t>(ResolveAddr(Module::Exe, 0x140003050));
     s_WorkSchedPost = reinterpret_cast<fn_WorkSchedPost_t>(ResolveAddr(Module::Exe, 0x14012ec60));
-    uintptr_t ctorSlot = ResolveAddr(Module::Exe, 0x140152768);
-    if (ctorSlot) s_ObjInternalCtor = *reinterpret_cast<fn_ObjInternalCtor_t*>(ctorSlot);
-    s_ClearAreaWorkVtable = const_cast<void*>(ClearArea::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
     s_tidNatResDesc = DerefTid(0x1401c7b68);
     s_tidRawMatDesc = DerefTid(0x1401c7cb8);
     s_tidNatResComp = DerefTid(0x1401c7b30);
@@ -329,52 +324,13 @@ static uint32_t ClearArea_ScanKindFlags(void* comp, int* grid, int x1, int y1, i
 // ClearArea_Ctor@0x1400e6960 (parameterized) over Work_Ctor25@0x1400f72e0.
 //   work: 0x78-byte buffer. ownerEnt: the building entity ptr. descRef: filter.
 //   clearTrees/Ground/Buildings: the description flags.
+// ENDGAME B.3.9 EXA: the real class's parameterised ctor (was the `??0Internal`
+// door on raw memory, a hand-inlined Work_Ctor25 and two stamps).
 // ============================================================
 static void* ClearArea_BuildWork(void* work, void* ownerEnt, uint64_t descRef,
                                  uint8_t clearTrees, uint8_t clearGround, uint8_t clearBuildings) {
-    uintptr_t w = reinterpret_cast<uintptr_t>(work);
-    // --- Work_Ctor25(work, &ownerEnt) ---
-    if (s_ObjInternalCtor) s_ObjInternalCtor(work);
-    *reinterpret_cast<void**>(w + 0x00) = const_cast<void*>(Work::Vtable()); // vtable_Work   // B.3.8: the compiler vtable (same bytes, B8-5)
-    *reinterpret_cast<uint64_t*>(w + 0x10) = reinterpret_cast<uint64_t>(ownerEnt);
-    *reinterpret_cast<uint64_t*>(w + 0x18) = 0;
-    *reinterpret_cast<int32_t*>(w + 0x20) = -1;
-    *reinterpret_cast<int32_t*>(w + 0x24) = 0;
-    *reinterpret_cast<int32_t*>(w + 0x28) = -1;
-    *reinterpret_cast<int32_t*>(w + 0x2c) = 0;
-    *reinterpret_cast<uint64_t*>(w + 0x30) = 0;
-    *reinterpret_cast<uint64_t*>(w + 0x38) = 0;
-    *reinterpret_cast<int32_t*>(w + 0x40) = 0;
-    if (ownerEnt) {
-        // +0x28 = center cell index from the owner's build footprint.
-        uint64_t bc = 0;
-        fn_FindComponent_Build(*reinterpret_cast<void**>(w + 0x10), &bc);
-        if (bc) {
-            uintptr_t b = static_cast<uintptr_t>(bc);
-            int* grid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
-            if (grid) {
-                int cx = (*reinterpret_cast<int16_t*>(b + 0x2e) >> 1) + *reinterpret_cast<int16_t*>(b + 0x2a);
-                int cy = (*reinterpret_cast<int16_t*>(b + 0x2c) >> 1) + *reinterpret_cast<int16_t*>(b + 0x28);
-                *reinterpret_cast<int32_t*>(w + 0x28) = cx * (*grid) + cy;
-            }
-        }
-        // +0x18 = the owner's WorkComponent.
-        uint64_t wcIBP = 0;
-        void* ownerLocal = ownerEnt;
-        if (s_FindWorkComp) s_FindWorkComp(ownerLocal, &wcIBP);
-        *reinterpret_cast<uint64_t*>(w + 0x18) = wcIBP;
-    }
-    // --- ClearArea leaf fields ---
-    *reinterpret_cast<void**>(w + 0x00) = s_ClearAreaWorkVtable;
-    *reinterpret_cast<uint64_t*>(w + 0x48) = 0;
-    *reinterpret_cast<uint32_t*>(w + 0x50) = 0;
-    *reinterpret_cast<uint64_t*>(w + 0x58) = 0;
-    *reinterpret_cast<uint32_t*>(w + 0x60) = 0;
-    *reinterpret_cast<uint64_t*>(w + 0x68) = descRef;
-    *reinterpret_cast<uint8_t*>(w + 0x70) = clearTrees;
-    *reinterpret_cast<uint8_t*>(w + 0x71) = clearGround;
-    *reinterpret_cast<uint8_t*>(w + 0x72) = clearBuildings;
-    return work;
+    void* ownerIBP = ownerEnt;   // retail: local_res10 = *param_2 (the entity IBP)
+    return ::new (work) ClearArea(&ownerIBP, descRef, clearTrees, clearGround, clearBuildings);
 }
 
 // ============================================================
