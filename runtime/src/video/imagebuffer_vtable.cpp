@@ -168,12 +168,10 @@ const uint8_t* TypeInfoImageBuffer() {
 // `ResolveAddr(Module::Runtime, …)` is registry-FIRST, so this reaches our port
 // when it is registered and the DLL's body when it is not — which is what
 // retail's tail JMP to 0x1800f2580 does.
-using CtorFn = void (*)(Video::ImageBuffer*);
-CtorFn ImageBufferCtor() {
-    static CtorFn f =
-        reinterpret_cast<CtorFn>(ResolveAddr(Module::Runtime, 0x1800f2580));
-    return f;
-}
+// ENDGAME B.3.9 VS: the door, the by-address lookup and its function-local
+// cache are GONE. Construct / Reconstruct run the real constructor in place,
+// `::new (this) ImageBuffer()` -- retail's `JMP 0x1800f2580`, which stores
+// ImageBuffer's own table exactly as the compiler's constructor does.
 
 // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` — retail 0x1800c9930,
 // PORTED by Wave 2 (`runtime/src/system/string.cpp:1052`).
@@ -335,7 +333,7 @@ void ImageBuffer::Destruct() { CallSlot0(this, 0u); }
 // constructing twice over one object leaks its platform data.
 // ============================================================================
 Object::External* ImageBuffer::Construct() {
-    ImageBufferCtor()(this);
+    ::new (this) ImageBuffer();
     return this;
 }
 
@@ -367,7 +365,7 @@ Object::External* ImageBuffer::Construct() {
 // ============================================================================
 Object::External* ImageBuffer::Reconstruct() {
     CallSlot0(this, 0u);
-    ImageBufferCtor()(this);
+    ::new (this) ImageBuffer();
     return this;
 }
 

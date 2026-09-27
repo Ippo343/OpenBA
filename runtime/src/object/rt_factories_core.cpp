@@ -232,7 +232,8 @@ int RtFactoriesObjectRegister() {
 void RtFactoriesPortInit() {
     int n = 0;
     n += RtFactoriesObjectRegister();
-    n += RtFactoriesVideoRegister();
+    // Video:: has no row left: ENDGAME B.3.9 VS made Video::ImageBuffer register
+    // its own CreateNewObject / CreateInPlaceObject from runtime/src/video/buffers.cpp.
     // Graphics:: has no row left: ENDGAME B.3.9 GFX made its last FACTREST
     // classes (EdgeMesh, FrameCopy/Generated/MaterialInstance) register their own.
     // IO:: has no row left: ENDGAME B.3.9 IO made IO::PackageFile a real class

@@ -3,8 +3,8 @@
 // harvest of Runtime-x64.dll) re-verified against the DLL at generation
 // time. Regenerate with:
 //   tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py
-// Counts: 6 vtables, 103 BaseTypeInfo, 30 storage symbols.
-// Retired (ENDGAME B.3 step 9): 165 row(s), listed in tools/rt_mint_retired/*.txt.
+// Counts: 4 vtables, 103 BaseTypeInfo, 30 storage symbols.
+// Retired (ENDGAME B.3 step 9): 167 row(s), listed in tools/rt_mint_retired/*.txt.
 
 // ---- Per-slot traps. One function per (vtable, slot) so an unreachable
 // slot that DOES get called names itself instead of aborting anonymously.
@@ -31,18 +31,6 @@ RT_MINT_TRAP(3,0)
 RT_MINT_TRAP(3,1)
 RT_MINT_TRAP(3,2)
 RT_MINT_TRAP(3,3)
-RT_MINT_TRAP(3,4)
-RT_MINT_TRAP(3,5)
-RT_MINT_TRAP(3,6)
-RT_MINT_TRAP(3,7)
-RT_MINT_TRAP(3,8)
-RT_MINT_TRAP(3,9)
-RT_MINT_TRAP(4,0)
-RT_MINT_TRAP(4,1)
-RT_MINT_TRAP(4,2)
-RT_MINT_TRAP(4,3)
-RT_MINT_TRAP(5,0)
-RT_MINT_TRAP(5,1)
 
 // ??_7Base@Object@@6B@  DLL 0x180154788  3 slots  [adjacent-export:??_7External@Object@@6B@]
 static const RtMintVSlot kVSlots0[] = {
@@ -81,47 +69,21 @@ static const RtMintVSlot kVSlots2[] = {
 static void* kVTable2[8];
 static const RtMintTrapFn kVTraps2[] = { &RtMintTrapStub_2_0, &RtMintTrapStub_2_1, &RtMintTrapStub_2_2, &RtMintTrapStub_2_3, &RtMintTrapStub_2_4, &RtMintTrapStub_2_5, &RtMintTrapStub_2_6, &RtMintTrapStub_2_7 };
 
-// ??_7ImageBuffer@Video@@6B@  DLL 0x180154fc0  10 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots3[] = {
-    { nullptr, 0x18001ed20ull, RT_MINT_UNNAMED },
-    { "?TypeName@ImageBuffer@Video@@UEBAPEBDXZ", 0x18001e900ull, RT_MINT_NAMED },
-    { "?Type@ImageBuffer@Video@@UEBAIXZ", 0x18001e8e0ull, RT_MINT_NAMED },
-    { "?GetFileVersion@ImageBuffer@Video@@UEBAHXZ", 0x1800f26e0ull, RT_MINT_NAMED },
-    { "?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z", 0x1800066e0ull, RT_MINT_NAMED },
-    { "?Serialize@ImageBuffer@Video@@UEAA_NAEAVStream@IO@@@Z", 0x1800f26f0ull, RT_MINT_NAMED },
-    { "?Reconstruct@ImageBuffer@Video@@UEAAPEAVExternal@Object@@XZ", 0x18001ea80ull, RT_MINT_NAMED },
-    { "?Destruct@ImageBuffer@Video@@UEAAXXZ", 0x18001eab0ull, RT_MINT_NAMED },
-    { "?Construct@ImageBuffer@Video@@UEAAPEAVExternal@Object@@XZ", 0x18001eaa0ull, RT_MINT_NAMED },
-    { "?Create@ImageBuffer@Video@@UEAA_NW4ImageType@12@W4Usage@12@W4Format@12@IHHW4FilterMode@12@W4AddressMode@12@44PEAV?$Array@V?$Array@E@Collection@@@Collection@@@Z", 0x1800f2680ull, RT_MINT_NAMED },
-};
-static void* kVTable3[10];
-static const RtMintTrapFn kVTraps3[] = { &RtMintTrapStub_3_0, &RtMintTrapStub_3_1, &RtMintTrapStub_3_2, &RtMintTrapStub_3_3, &RtMintTrapStub_3_4, &RtMintTrapStub_3_5, &RtMintTrapStub_3_6, &RtMintTrapStub_3_7, &RtMintTrapStub_3_8, &RtMintTrapStub_3_9 };
-
 // ??_7Internal@Object@@6B@  DLL 0x180154720  4 slots  [adjacent-export:??_7Achievement@0@6B@]
-static const RtMintVSlot kVSlots4[] = {
+static const RtMintVSlot kVSlots3[] = {
     { nullptr, 0x180006440ull, RT_MINT_UNNAMED },
     { "?TypeName@Internal@Object@@UEBAPEBDXZ", 0x1800064c0ull, RT_MINT_NAMED },
     { "?Type@Internal@Object@@UEBAIXZ", 0x1800064d0ull, RT_MINT_NAMED },
     { "?Persist@Internal@Object@@UEAAXAEAVStream@IO@@@Z", 0x1800bfda0ull, RT_MINT_NAMED },
 };
-static void* kVTable4[4];
-static const RtMintTrapFn kVTraps4[] = { &RtMintTrapStub_4_0, &RtMintTrapStub_4_1, &RtMintTrapStub_4_2, &RtMintTrapStub_4_3 };
-
-// ??_7Thread@System@@6B@  DLL 0x180155f20  2 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots5[] = {
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { "?OnCompleted@Thread@System@@UEAAXXZ", 0x18000c590ull, RT_MINT_NAMED },
-};
-static void* kVTable5[2];
-static const RtMintTrapFn kVTraps5[] = { &RtMintTrapStub_5_0, &RtMintTrapStub_5_1 };
+static void* kVTable3[4];
+static const RtMintTrapFn kVTraps3[] = { &RtMintTrapStub_3_0, &RtMintTrapStub_3_1, &RtMintTrapStub_3_2, &RtMintTrapStub_3_3 };
 
 static RtMintVtable kMintVtables[] = {
     { "??_7Base@Object@@6B@", 0x180154788ull, 3, kVSlots0, kVTable0, kVTraps0, "adjacent-export:??_7External@Object@@6B@" },
     { "??_7CompiledExternal@Object@@6B@", 0x180154a30ull, 8, kVSlots1, kVTable1, kVTraps1, "tail-not-a-pointer" },
     { "??_7External@Object@@6B@", 0x1801547a0ull, 8, kVSlots2, kVTable2, kVTraps2, "tail-not-a-pointer" },
-    { "??_7ImageBuffer@Video@@6B@", 0x180154fc0ull, 10, kVSlots3, kVTable3, kVTraps3, "tail-not-a-pointer" },
-    { "??_7Internal@Object@@6B@", 0x180154720ull, 4, kVSlots4, kVTable4, kVTraps4, "adjacent-export:??_7Achievement@0@6B@" },
-    { "??_7Thread@System@@6B@", 0x180155f20ull, 2, kVSlots5, kVTable5, kVTraps5, "tail-not-a-pointer" },
+    { "??_7Internal@Object@@6B@", 0x180154720ull, 4, kVSlots3, kVTable3, kVTraps3, "adjacent-export:??_7Achievement@0@6B@" },
 };
 
 // ---- Object::BaseTypeInfo. Fields are link-time constants copied from

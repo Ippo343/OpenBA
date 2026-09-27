@@ -34,3 +34,6 @@
 ?_firstBuffer@IndexBuffer@Video@@0PEAV12@EA              VID   class static Video::IndexBuffer::_firstBuffer; readers converted
 ?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA       VID   class static Video::RenderBuffer::_firstRenderBuffer; readers converted
 ?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA             VID   class static Video::VertexBuffer::_firstBuffer; readers converted
+
+# -- W2 (block VS, branch b39-VS): Video::ImageBuffer, row 71 (M3, after GFX 60/61/110 and EXE-1) --
+??_7ImageBuffer@Video@@6B@          VID   concrete (own scalar slot 0, real public ctor, protected dtor); factory pair the class own; rt_factories_video.{cpp,inc}, RT_DELDTOR 0x18001ed20, ??0/??1 doors (by name + VA) and the minted-table read deleted; context_ctor / Construct / Reconstruct / Graphics / Save builders placement-new

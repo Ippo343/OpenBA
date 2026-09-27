@@ -167,7 +167,8 @@ extern "C" void Video_Context_OperatorDelete(void* p);         // context_lifecy
 // (spelling 3) on a symbol whose only implementation in the process is
 // buffers.cpp's. Now a direct call; the registration there is untouched, so an
 // outside caller that still asks by name or address gets the same body.
-void Video_ImageBuffer_Ctor(ImageBuffer* self);                // buffers.cpp
+// ENDGAME B.3.9 VS: the door is gone; the two default images below are built by
+// the real constructor (`::new (p) Video::ImageBuffer()`).
 
 namespace {
 
@@ -426,12 +427,12 @@ extern "C" void* RtVideo_Context_Ctor(Video::Context* self, void* device,
     Video::ImageBuffer* color =
         static_cast<Video::ImageBuffer*>(Video::ImageBuffer::operator new(0x68));
     // B.3.5 bridge — the ctor DOOR's parameter is the POD view.
-    if (color) Video_ImageBuffer_Ctor(reinterpret_cast<ImageBuffer*>(color));
+    if (color) ::new (color) Video::ImageBuffer();   // ENDGAME B.3.9 VS: `::new (p) Video::ImageBuffer()` -- the ??0 door and the minted row are retired
     Field<void*>(self, 0x2140) = color;
 
     Video::ImageBuffer* depth =
         static_cast<Video::ImageBuffer*>(Video::ImageBuffer::operator new(0x68));
-    if (depth) Video_ImageBuffer_Ctor(reinterpret_cast<ImageBuffer*>(depth));
+    if (depth) ::new (depth) Video::ImageBuffer();
     Field<void*>(self, 0x2148) = depth;
 
     // Two UNGUARDED companion calls on the images just built — slot 1 on the

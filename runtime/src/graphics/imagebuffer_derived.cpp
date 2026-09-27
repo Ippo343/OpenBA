@@ -115,8 +115,9 @@ using SerializeFn = bool (*)(void*, void*);
 // callers below therefore never read its return and use the pointer they
 // already hold (wave23_lane_gfxbody.cpp's rule, and
 // reference_hidden_retslot_wild_write.md's family).
+// ENDGAME B.3.9 VS: `::new (p) Video::ImageBuffer()` -- the ??0 door and the minted row are retired.
 void ImageBufferCtor(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "??0ImageBuffer@Video@@QEAA@XZ")(p);
+    ::new (p) Video::ImageBuffer();
 }
 // ENDGAME B.3.5 block C — the `?Serialize@ImageBuffer@Video@@` (0x1800f26f0)
 // name door is GONE from this file. All three bodies below reach it as their

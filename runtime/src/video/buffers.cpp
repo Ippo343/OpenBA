@@ -34,6 +34,7 @@
 #include <cstdio>
 #include <cstddef>
 #include <cstdint>
+#include <new>       // ENDGAME B.3.9 VS: placement new (the factory pair)
 
 // runtime/src/video/buffers_win.cpp — see the note at their use site below.
 void RtVideoDeviceLock(void** deviceSingleton);
@@ -64,14 +65,10 @@ MemFreeFn MemFree() {
     return RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
 }
 
-// This class's own vtable, restored at dtor entry (the standard MSVC "run the
-// dtor body under this class's own vtable, not a derived override" idiom —
-// reference_phantom_dtor_mangling_qeaa_vs_ueaa.md is the same family of bug
-// this guards against getting backwards).
-void* ImageBufferVtable() {
-    static void* v = ResolveExport("??_7ImageBuffer@Video@@6B@");
-    return v;
-}
+// ENDGAME B.3.9 VS: `ImageBufferVtable()` -- the by-name read of the minted
+// `??_7ImageBuffer@Video@@6B@` the ctor door stamped -- is GONE with the door and
+// the minted row. Every ImageBuffer is built by the real constructor and wears
+// the compiler's table (B39_RULES D1).
 // `ImageBufferDataVtable()` used to live here, as the whole body of
 // `??1ImageBufferData@Video@@`. ENDGAME B.3.5 block VC: that door delegates to
 // `Video::ImageBufferData::~ImageBufferData()`, whose body — the same
@@ -309,55 +306,17 @@ void Video_VertexBuffer_PlatformConstruct(VertexBuffer* self);
 void Video_VertexBuffer_PlatformDestruct(VertexBuffer* self);
 
 // ============================================================================
-// Video::ImageBuffer::ImageBuffer() — 0x1800f2580, ordinal 226
+// ??0ImageBuffer@Video@@QEAA@XZ (0x1800f2580) / ??1ImageBuffer@Video@@UEAA@XZ
+// (0x1800f2610) -- ENDGAME B.3.9 VS: BOTH DOORS ARE GONE.
 //
-// Field values are fixed constants (no inputs), so there is nothing to run
-// the original ctor against and compare — see WAVE6_LANE_C.md for why this
-// lane does not call the real ctor for diffing (PlatformConstruct's factory
-// call links into Video::Device's live buffer/tracking state; invoking it a
-// second time on a throwaway scratch object would corrupt shared state, not
-// verify anything). the diff oracle instead asserts the constants we just
-// wrote are exactly what retail writes.
+// `Video_ImageBuffer_Ctor` stamped the minted `??_7ImageBuffer@Video@@6B@` and ran
+// the shared body; `Video_ImageBuffer_Dtor` was the `~Class` the RT_DELDTOR row
+// (0x18001ed20) resolved by address. Every builder now writes
+// `::new (p) Video::ImageBuffer()` (Runtime: context_ctor, imagebuffer_vtable's
+// Construct / Reconstruct, the Graphics and Save builders; exe: EXA), the row is
+// retired, and nothing reaches either door by name or by address. The bodies
+// are the members at `namespace Video` scope below.
 // ============================================================================
-// ENDGAME B.3.5 block VC: STILL A DOOR, and for B4b-2's reason — it runs on raw
-// `operator new` bytes whose first field it then writes with the MINTED vtable,
-// `Video::ImageBuffer` is abstract in C++ (slot 0 is a `deleting_dtor.cpp` table
-// row), and `context_ctor.cpp` reaches it for the two default render images. What
-// converted inside it is the hand-off to `PlatformConstruct`, now a qualified
-// member call.
-void Video_ImageBuffer_Ctor(ImageBuffer* self) {
-
-    self->vtable = ImageBufferVtable();       // Base->External->CompiledExternal->ImageBuffer chain,
-                                               // collapsed: only the final vtable is observable.
-    self->externalData08 = 0;
-    self->externalData10 = 0;
-    self->externalData18 = 0;
-
-    // ENDGAME B.3.8 block RB (RULE B8-1): the field stores and the
-    // PlatformConstruct call are ONE body with the real constructor
-    // `Video::ImageBuffer()` — `InitFields`, beside ~ImageBuffer below.
-    Video::ImageBuffer::DoorBody::Init(reinterpret_cast<Video::ImageBuffer*>(self));   // B.3.8 bridge
-
-}
-
-// ============================================================================
-// Video::ImageBuffer::~ImageBuffer() — 0x1800f2610, ordinal 608
-//
-// POST-STATE only: a second destructor run on the same object (or a scratch
-// copy) would double-decrement the refcount at pixelData-4 and potentially
-// double-free — there is no safe way to run "theirs" without mutating shared
-// allocator state. Reproduced field-for-field from the decompile.
-// ============================================================================
-// ENDGAME B.3.5 block VC — THE BODY IS `Video::ImageBuffer::~ImageBuffer()`, at
-// `namespace Video` scope below. Retail's last two steps are gone from the body
-// and are the CHAIN's: the `??_7CompiledExternal@Object@@6B@` stamp is what
-// `~CompiledExternal()` emits and the `??1External@Object@@UEAA@XZ` call is
-// `~External()`, both of which now run because the class really derives.
-void Video_ImageBuffer_Dtor(ImageBuffer* self) {
-    // B.3.5 bridge — the registered door's parameter is the POD view.
-    reinterpret_cast<Video::ImageBuffer*>(self)
-        ->Video::ImageBuffer::~ImageBuffer();
-}
 
 // ============================================================================
 // Video::ImageBuffer accessors — pure reads. Bodies are the MEMBERS below; each
@@ -665,18 +624,15 @@ namespace Video {
 //                                              — the DESTRUCTOR CHAIN, which is
 //      what replaced this file's `ObjectExternalDtor()` resolver
 //
-// ENDGAME B.3.8 block RB: step 1's hand-written MINTED stamp is GONE. The
-// destructor now runs on compiler-built objects too (DLG's ModDialog image,
-// the concrete slot 0 above), and a converted object must never wear the
-// minted table (B8-5); the compiler's own stamp on entry is retail's step 1.
-// For the minted objects the door `Video_ImageBuffer_Dtor` still destroys,
-// the vptr during this body is therefore the compiler's ImageBuffer table
-// instead of the minted one — nothing in the body dispatches through `this`
-// (PlatformDestruct walks the companion list; the String release is by hand).
-// Steps 2 and 3 are `ReleaseFields`, the shared body.
+// ENDGAME B.3.8 block RB: step 1's hand-written MINTED stamp is GONE; the
+// compiler's own stamp on entry is retail's step 1. ENDGAME B.3.9 VS: the dtor
+// door is gone too -- this is reached only through slot 0 (`DeletingDtor`) and
+// the subclasses' destructor chains. Steps 2 and 3 are `ReleaseFields`, kept
+// out of line only so the unit tests can link recording stand-ins.
 ImageBuffer::~ImageBuffer() { ReleaseFields(); }
 
-// ??0ImageBuffer 0x1800f2580 after the inlined External stores and the stamp.
+// ??0ImageBuffer 0x1800f2580 after the inlined External stores and the stamp
+// (both the compiler's, in `ImageBuffer()`).
 void ImageBuffer::InitFields() {
     _width = 0;
     _height = 0;
@@ -691,6 +647,20 @@ void ImageBuffer::InitFields() {
     _sourceName = nullptr;
     // +0x50/+0x58 are not written by the ctor.
     PlatformConstruct();
+}
+
+// ?CreateNewObject@ImageBuffer@Video@@SAPEAVBase@Object@@XZ  0x18001e9f0 (read,
+// Runtime-x64.dll): the class `operator new` inlined (Enter(alloc+0x640);
+// Allocate(0x68, 8); Leave), the null branch, then `??0ImageBuffer` -- ENDGAME
+// B.3.9 VS, the class's own pair (B39_RULES D2); the FACTREST row is deleted.
+Object::Base* ImageBuffer::CreateNewObject() {
+    void* p = ImageBuffer::operator new(sizeof(ImageBuffer));
+    if (p == nullptr) return nullptr;
+    return ::new (p) ImageBuffer();
+}
+// ?CreateInPlaceObject@ImageBuffer@Video@@SAPEAVBase@Object@@PEAX@Z  0x18001ea70
+Object::Base* ImageBuffer::CreateInPlaceObject(void* storage) {
+    return storage ? ::new (storage) ImageBuffer() : nullptr;
 }
 
 // ??1ImageBuffer 0x1800f2610 steps 2 and 3 (see above).
@@ -1048,12 +1018,14 @@ bool Video_VertexBuffer_Set(VertexBuffer* self, int sizeBytes, int offsetBytes, 
 int RtVideoBuffersRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("??0ImageBuffer@Video@@QEAA@XZ", (void*)&Video_ImageBuffer_Ctor);
-    RegisterRuntimeAddr(0x1800f2580, (void*)&Video_ImageBuffer_Ctor);
+    // ENDGAME B.3.9 VS (B39_RULES D2): the class's own factory pair, by name AND VA.
+    RegisterRuntimeExport("?CreateNewObject@ImageBuffer@Video@@SAPEAVBase@Object@@XZ",
+                          (void*)&Video::ImageBuffer::CreateNewObject);
+    RegisterRuntimeAddr(0x18001e9f0ull, (void*)&Video::ImageBuffer::CreateNewObject);
     n++;
-
-    RegisterRuntimeExport("??1ImageBuffer@Video@@UEAA@XZ", (void*)&Video_ImageBuffer_Dtor);
-    RegisterRuntimeAddr(0x1800f2610, (void*)&Video_ImageBuffer_Dtor);
+    RegisterRuntimeExport("?CreateInPlaceObject@ImageBuffer@Video@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&Video::ImageBuffer::CreateInPlaceObject);
+    RegisterRuntimeAddr(0x18001ea70ull, (void*)&Video::ImageBuffer::CreateInPlaceObject);
     n++;
 
     RegisterRuntimeExport("?Width@ImageBuffer@Video@@QEBAHXZ", (void*)&Video_ImageBuffer_Width);

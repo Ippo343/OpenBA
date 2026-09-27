@@ -119,93 +119,18 @@ void RtSystem_CriticalSection_Unlock(System::CriticalSection* self) {
 
 // ---- System::Thread ---------------------------------------------------------
 
-// The DLL's own base vtable (??_7Thread@System@@6B@, a real PE export at
-// 0x180155f20 — slot 0 _purecall, slot 1 OnCompleted), used AS-IS and never
-// reimplemented, for the reasons in the file banner.
-//
-// WAVE 9 LANE SYS2: this used to be `static void* v = ResolveExport(...)`, a
-// plain function-local static — the exact defect attempt 14 fixed for the
-// allocator's three by-address call sites, one file over. The Thread ctor runs
-// DURING RuntimePortInit (ConstructLoader, from a singleton ctor), which is
-// BEFORE RtDataMintInit() ever builds the minted table. At cutover the first
-// call therefore froze a NULL in for the life of the process, and attempt 14's
-// log shows it as the very first `[RtUnresolved]` line of the whole run —
-// line 6, above every other symbol, before the mint had a chance to exist.
-//
-// The mint DOES carry this row (rt_data_mint_tables.inc, 2 slots: _purecall +
-// ?OnCompleted@Thread@System@@UEAAXXZ), so the row was never missing -- only
-// unreachable through a cache that had already answered. Going through
-// RT_DATA_SLOT (RtResolveCached: cache a hit, RETRY a miss, name it once) is
-// the whole fix.
-//
-// WAVE 22 LANE SYSBODY: this sentence used to name the slot array `kVSlots42`.
-// It is `kVSlots53` today. The array names are GENERATOR-ASSIGNED indices and
-// they renumber whenever a row is added or removed above this one, so any
-// comment quoting one goes stale silently and with no detector
-// (reference_a_generated_file_goes_stale_with_no_detector.md). The name is
-// DROPPED rather than corrected -- the row is findable by its symbol, which
-// does not drift.
-//
-// WAVE 22 LANE SYSBODY -- THE PROMOTION VERDICT, AND IT IS ROUTE-SCOPED.
-// The promotion backlog reads this row 1/1 COMPLETE and that is CORRECT: the
-// table has two slots, slot 0 is _purecall, slot 1 is OnCompleted, and
-// OnCompleted is ported (below). But COMPLETE says a promotion puts no trap in
-// a live table; it does NOT say the row should be promoted
-// (reference_a_green_readiness_screen_is_not_a_route.md). Promotability turns
-// on owning what STAMPS the table, and the answer differs by route:
-//
-//   DLL PRESENT -- DO NOT PROMOTE. Two things stamp this vptr and we own only
-//   one. `RtSystemThreadVftable()` below is a real door feeding our ported
-//   Thread ctor/dtor (all three constructing call sites -- pathfinder_seed.cpp,
-//   engine/singleton_ctors.cpp, standalone/rt_data_mint.cpp -- reach us by
-//   NAME). Retail's own Thread ctor stamps 0x180155f20 with a RIP-relative LEA
-//   inside the DLL, which is not a door and never will be
-//   (reference_a_ported_row_can_be_permanently_unpromotable.md). Promoting
-//   therefore puts TWO different vptr values in play for one class where today
-//   there is one, and buys nothing: the only dispatched slot is slot 1, and
-//   our OnCompleted and retail's are both a bare RET. Small cost, zero
-//   benefit -- a reason not to do it, not a demonstration that it is safe.
-//
-//   CUTOVER -- REQUIRED. With Runtime-x64.dll absent, RT_DATA_SLOT has nothing
-//   to fall through to and this function returns NULL, so our Thread ctor
-//   stamps a null vptr into every Thread the process builds. That is the
-//   attempt-14 failure this block was written about, one layer along.
-//
-// The two verdicts are opposite, which is the shape
-// reference_unpromotable_is_route_scoped_not_permanent.md names, so neither
-// may be quoted without its route. NOT PROMOTED by this lane: DLL-present is
-// the route every run today takes, and promoting for a route that cannot boot
-// yet would be a change nothing can measure.
-static void* RtSystemThreadVftable() {
-    return RT_DATA_SLOT(void*, "??_7Thread@System@@6B@");
-}
-
-// ENDGAME B.3.9 SYS W1: the two helpers that used to sit here (a by-NAME
-// RT_EXPORT_ONCE lookup of `?ThreadFunc@Thread@System@@CAIPEAX@Z` and a cast of
-// `_beginthreadex`) are gone. Retail's ctor hands `_beginthreadex` the address
-// of ThreadFunc itself (`LEA R8,[0x1800ca440]`), so the shared body below names
-// `Thread::ThreadFunc` directly -- the function the name resolved to (its
-// registered door delegates to it in one line), with no first-use cache (B9-10).
-
-// 0x1800ca4e0  ??0Thread@System@@QEAA@I@Z
-// THE DOOR, for objects not yet built by a C++ ctor (Engine::Loader's mint
-// construction, Audio::Stream, the exe pathfinder): it stamps the MINTED base
-// table, then runs the ONE body the real `System::Thread(unsigned)` runs
-// (RULE B8-1). Retail stores runFlags before the vptr; the body stores it
-// after -- nothing observes the object in between.
-Thread* RtSystem_Thread_Ctor(Thread* self, unsigned int stackSize) {
-    self->vtable = RtSystemThreadVftable();
-    reinterpret_cast<System::Thread*>(self)->InitFields(stackSize);
-    return self;
-}
-
-// 0x1800ca590  ??1Thread@System@@QEAA@XZ
-// THE DOOR: re-stamps the MINTED base table (retail's first store), then the
-// ONE body the real `~Thread()` runs.
-void RtSystem_Thread_Dtor(Thread* self) {
-    self->vtable = RtSystemThreadVftable();
-    reinterpret_cast<System::Thread*>(self)->ReleaseFields();
-}
+// ENDGAME B.3.9 VS (SYS W3, row 140): the minted `??_7Thread@System@@6B@` is
+// RETIRED, and with it the three things that read it here -- the by-name
+// `RtSystemThreadVftable()` lookup and the two ctor/dtor DOORS
+// (`??0Thread@System@@QEAA@I@Z` 0x1800ca4e0, `??1Thread@System@@QEAA@XZ`
+// 0x1800ca590) that stamped it before running the shared body. Every Thread in
+// the build is now a C++ subclass built by `: System::Thread(stackSize)` and
+// torn down by its compiler-chained `~Thread()` (Engine::Loader, Audio::Stream,
+// IO::PersistenceWorker, the exe PathfinderThread), wearing compiler tables;
+// no caller of either door was left (none by name, none by address, no exe
+// import slot registered). Retail's `ThreadFunc` handoff (`LEA R8,[0x1800ca440]`)
+// is `Thread::ThreadFunc` named directly in `InitFields`, with no first-use
+// cache (B9-10).
 
 // 0x1800ca610  ?Start@Thread@System@@QEAAXXZ
 // The parameter is the CLASS, unchanged from the spelling
@@ -433,8 +358,6 @@ int RtSystemThreadRegister() {
     RegisterRuntimeExport("?Lock@CriticalSection@System@@QEAAXXZ", (void*)&RtSystem_CriticalSection_Lock); ++n;
     RegisterRuntimeExport("?Unlock@CriticalSection@System@@QEAAXXZ", (void*)&RtSystem_CriticalSection_Unlock); ++n;
 
-    RegisterRuntimeExport("??0Thread@System@@QEAA@I@Z", (void*)&RtSystem_Thread_Ctor); ++n;
-    RegisterRuntimeExport("??1Thread@System@@QEAA@XZ", (void*)&RtSystem_Thread_Dtor); ++n;
     RegisterRuntimeExport("?Start@Thread@System@@QEAAXXZ", (void*)&RtSystem_Thread_Start); ++n;
     RegisterRuntimeExport("?WaitForFinish@Thread@System@@QEAAXXZ", (void*)&RtSystem_Thread_WaitForFinish); ++n;
 

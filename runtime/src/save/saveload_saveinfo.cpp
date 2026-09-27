@@ -81,7 +81,6 @@ namespace {
 // the `AtomicAddr` shape (cache a hit, RETRY a miss). The null tests that
 // follow each resolve are the pre-existing miss contract, unchanged.
 std::atomic<void*> g_memAllocSlot{nullptr};
-std::atomic<void*> g_imageBufferCtorSlot{nullptr};
 std::atomic<void*> g_deviceSingletonSlot{nullptr};
 
 void* SaveInfoMemAlloc(uint64_t bytes, int align) {
@@ -91,12 +90,10 @@ void* SaveInfoMemAlloc(uint64_t bytes, int align) {
     return fn ? fn(bytes, align) : nullptr;
 }
 
-// ??0ImageBuffer@Video@@QEAA@XZ, 0x1800f2580. Ported (buffers.cpp:1450).
+// ??0ImageBuffer@Video@@QEAA@XZ, 0x1800f2580. ENDGAME B.3.9 VS: `::new (p) Video::ImageBuffer()` -- the ??0 door and the minted row are retired
+// (the by-address door lookup and its atomic slot went with it).
 void ImageBufferCtor(void* self) {
-    using Fn = void (*)(void*);
-    Fn fn = reinterpret_cast<Fn>(
-        RtSaveDetail::AtomicAddr(g_imageBufferCtorSlot, Module::Runtime, 0x1800f2580));
-    if (fn) fn(self);
+    ::new (self) Video::ImageBuffer();
 }
 
 // ?_singleton@Device@Video@@0PEAV12@EA, 0x1801fe7a8 — the SLOT, not the Device.

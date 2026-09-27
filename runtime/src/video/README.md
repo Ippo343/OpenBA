@@ -57,7 +57,6 @@ it — the wave and lane are in each file's own banner.
 | `Video::VertexLayout` (`VertexLayout.h`) | `vertexlayout.cpp` |
 | `Video::RenderState` (`RenderState.h`) | `renderstate.cpp` (with `Stencil` / `Depth` / `AlphaBlend`) |
 | the twelve abstract `Video::*Data` bases (`CompanionData.h`, `ImageBuffer.h`) | `companion_data.cpp` — all 24 ctor/dtor bodies in one file |
-| reflection | `rt_factories_video.cpp` (+ `rt_factories_video.inc`) |
 | registration | `rt_video_port.cpp` |
 
 `closure_batch2b.cpp` is the one file here that is not a class's: it holds two

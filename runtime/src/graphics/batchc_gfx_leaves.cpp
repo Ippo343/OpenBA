@@ -179,7 +179,7 @@ void* ImageBufferOperatorNew(uint64_t n) {
 void* RenderBufferOperatorNew(uint64_t n) {
     return RT_EXPORT_ONCE(NewFn, "??2RenderBuffer@Video@@SAPEAX_K@Z")(n);
 }
-void ImageBufferCtor(void* p) { RT_EXPORT_ONCE(VoidThisFn, "??0ImageBuffer@Video@@QEAA@XZ")(p); }
+void ImageBufferCtor(void* p) { ::new (p) Video::ImageBuffer(); }   // ENDGAME B.3.9 VS: `::new (p) Video::ImageBuffer()` -- the ??0 door and the minted row are retired
 // ENDGAME B.3.5 caller batch: DEFINED members of the real `Video::RenderBuffer`
 // (buffers.cpp / device.cpp). The `RbCreateFn` typedef went with its door.
 void RenderBufferPlatformConstruct(void* p) {

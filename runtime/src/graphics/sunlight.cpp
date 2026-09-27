@@ -111,6 +111,8 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/SunLight.h"
 #include "../../types/video/Device.h"      // RtVideo::Device, RtVideo::RenderBuffer
+#include "../../types/video/ImageBuffer.h" // ENDGAME B.3.9 VS: ::new (p) Video::ImageBuffer()
+#include <new>
 
 #include <cstdio>
 #include <cstddef>
@@ -129,15 +131,11 @@ namespace {
 // and must keep working with the DLL absent
 // (reference_converting_a_door_is_not_satisfying_it.md).
 // ---------------------------------------------------------------------------
-using ImageBufferCtorFn   = void* (*)(void*);
 using MemAllocFn          = void* (*)(size_t, int);
 using MemFreeFn           = void  (*)(void*);
 using PlatformFn          = void  (*)(void*);
 using DeletingDtorFn      = void  (*)(void*, int);
 
-ImageBufferCtorFn ImageBufferCtor() {
-    return RT_EXPORT_ONCE(ImageBufferCtorFn, "??0ImageBuffer@Video@@QEAA@XZ");
-}
 MemAllocFn MemAlloc() {
     return RT_EXPORT_ONCE(MemAllocFn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
 }
@@ -234,7 +232,7 @@ void* NewImageBuffer() {
     void* p = OperatorNew(0x68);
     if (p == nullptr)
         return nullptr;
-    ImageBufferCtor()(p);
+    ::new (p) Video::ImageBuffer();   // ENDGAME B.3.9 VS: `::new (p) Video::ImageBuffer()` -- the ??0 door and the minted row are retired
     return p;
 }
 
