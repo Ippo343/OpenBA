@@ -393,13 +393,11 @@ void FollowDialog::OnUpdate(const System::Time& /*time*/) {
 #include "Object/factory_registration.h"
 
 // ENDGAME B.3.8 block DLG: FollowDialog is a real class (Dialog/FollowDialog.h);
-// the hand-built table above is gone. CitizenUI's Follow button (citizenui.cpp,
-// block PNL) still builds the dialog as door + stamp: it runs the DialogInstance
-// ctor door, then stamps FollowDialog_GetStandaloneVtable() and fills +0xB8..+0xD0
-// itself. That getter now answers FollowDialog::Vtable(), so the reader builds the
-// same bytes the real ctor builds (B38 B8-5). 0x14015be00 stays unregistered (its
-// one by-address reader, engine_funcs.cpp's g_FollowDialog_Vtable, gets 0 and
-// CitizenUI falls back to the getter, as before).
+// the hand-built table above is gone. Since the CB2 caller batch CitizenUI's
+// Follow button (citizenui.cpp) builds the dialog with the real ctor below and
+// fills +0xB8/+0xC0 itself; the door + stamp (and its FollowDialog_GetStandalone-
+// Vtable getter) are gone. 0x14015be00 stays unregistered; engine_funcs.cpp's
+// g_FollowDialog_Vtable has no reader left.
 
 // The ModelComponent type id the follow camera's fn_FindComponent_Character needs.
 // g_TypeId_ModelComponent_FC is DAT_1401c7a50 (documented misnomer,
@@ -447,7 +445,3 @@ void* FollowDialog::CreateInPlaceObject(void* storage) {
 // replaces (ui_dialog_stub_factories.cpp, B38 D4).
 DEFINE_EXE_VTABLE(FollowDialog, "_ZTV12FollowDialog")
 
-// CitizenUI's reader (see above).
-extern "C" void* FollowDialog_GetStandaloneVtable() {
-    return const_cast<void*>(FollowDialog::Vtable());
-}

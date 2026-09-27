@@ -64,69 +64,6 @@
 #include "Dialog/ToolUI.h"
 #include "Dialog/TradeUI.h"
 
-namespace {
-
-// Generic no-op for unused vtable slots. Dormant dialogs are never dispatched,
-// so any slot beyond Dtor (+0x00) / GetTypeId (+0x10) is unreached. Variadic so
-// a stray call with any argument list lands here harmlessly.
-void StubNop(void*, ...) {}
-
-// The widest dialog vtable observed is well under this (DialogInstance's
-// MessageDialog used 14 slots); 48 is safely generous. Out-of-range slots are
-// never read for dormant types.
-constexpr int kStubVtableSlots = 48;
-
-// Fills a vtable array with StubNop, then overrides the two slots that matter.
-struct StubVtableInit {
-    StubVtableInit(void** vt, void* dtor, void* getTypeId) {
-        for (int i = 0; i < kStubVtableSlots; ++i)
-            vt[i] = reinterpret_cast<void*>(&StubNop);
-        vt[0] = dtor;       // +0x00 ScalarDtor
-        vt[2] = getTypeId;  // +0x10 GetTypeId
-    }
-};
-
-}  // namespace
-
-// One dormant-safe factory + per-type vtable per UI dialog.
-#define UI_DIALOG_STUB(Name, Parent, Size)                                       \
-    namespace uistub_##Name {                                                    \
-        static void* g_vt[kStubVtableSlots];                                     \
-        uint32_t GetTypeId(void*) {                                              \
-            static uint32_t c = 0;                                               \
-            if (!c) c = ::Object::GetTypeIdByName(#Name);                        \
-            return c;                                                            \
-        }                                                                        \
-        void* Dtor(void* self, uint32_t flags) {                                 \
-            if (!self) return self;                                              \
-            *reinterpret_cast<void**>(self) = g_vt;                              \
-            if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);         \
-            return self;                                                         \
-        }                                                                        \
-        StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor),              \
-                              reinterpret_cast<void*>(&GetTypeId));              \
-        void Zero(void* p) {                                                     \
-            for (size_t o = 0; o < static_cast<size_t>(Size); o += 8)            \
-                *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;     \
-        }                                                                        \
-        void* Factory() {                                                        \
-            if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;           \
-            void* p = fn_MemAlloc(g_pMemAllocSingleton,                          \
-                                  static_cast<uint64_t>(Size), 8);               \
-            if (!p) return nullptr;                                              \
-            Zero(p);                                                             \
-            *reinterpret_cast<void**>(p) = g_vt;                                 \
-            return p;                                                            \
-        }                                                                        \
-        void* InPlace(void* m) {                                                 \
-            if (!m) return nullptr;                                              \
-            Zero(m);                                                            \
-            *reinterpret_cast<void**>(m) = g_vt;                                 \
-            return m;                                                            \
-        }                                                                        \
-    }                                                                            \
-    REGISTER_TYPE(Name, Parent, &uistub_##Name::Factory, &uistub_##Name::InPlace)
-
 // ---- BuildRequirementUI: PROMOTED to the real reimpl (2026-06-28) ------------
 // This dialog is constructed + its Slot4(Update +0x20) dispatched on hover of a
 // build-tool button (verified live: valid dlgInst@+0x18 / datasource@+0x28). The
@@ -1088,5 +1025,4 @@ DEFINE_EXE_TYPE(ToolbarDialog, "UI::DialogInstance")   // was a UI_DIALOG_STUB t
 
 // ---- External-based tutorial dialogs (parents are abstract External bases) --
 
-#undef UI_DIALOG_STUB
 

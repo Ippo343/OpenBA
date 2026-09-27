@@ -22,6 +22,7 @@
 //   +0xE0 sub-dialog InternalBasePtr (follow-dialog reference)
 
 #include "Dialog/ui_panels.h"
+#include "Dialog/FollowDialog.h"
 #include "Dialog/citizen_icon_helpers.h"
 #include "engine_funcs.h"
 #include "system/String.h"
@@ -43,10 +44,6 @@
 
 #include "Object/factory_registration.h"
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-// FollowDialog's real standalone vtable (built in followdialog.cpp). In standalone
-// mode the exe .rdata FollowDialog vtable (0x14015be00) is never populated, so
-// g_FollowDialog_Vtable stays null; Slot9 uses this as the fallback.
-extern "C" void* FollowDialog_GetStandaloneVtable();
 
 // #6a: g_TypeId_CitizenAIComponent (exe .rdata DAT_1401c70e8) is the CitizenAIComponent
 // type id — the component whose +0x28 holds the citizen's current action-state index
@@ -716,30 +713,24 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
         void* followDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xD8, 8);
         void* resultPtr = nullptr;
         if (followDialog) {
-            // Construct base DialogInstance(self, userInterface, resource, nullParent, 0, 0, 0)
-            uint64_t nullParent = 0;
+            // The real ctor (B38 B8-5): DialogInstance(ui, resource, null parent, 0, 0, 0),
+            // then FollowDialog's own table and zeroed +0xB8..+0xD0 - the bytes the tree's
+            // DialogInstance ctor door + stamp of FollowDialog_GetStandaloneVtable() built.
+            // (It used to read g_FollowDialog_Vtable first: 0x14015be00 is unregistered, so
+            // that read was always 0 and the stamp always took the getter.)
             void* userInterface = *(void**)((uintptr_t)*(void**)(s + 0x18) + 0x10);
-            fn_DialogInstance_Ctor(followDialog, userInterface, checkedRes, &nullParent, 0, 0, 0);
+            FollowDialog* fd = ::new (followDialog) FollowDialog(
+                reinterpret_cast<UI::UserInterface*>(userInterface),
+                reinterpret_cast<const UI::Dialog*>(checkedRes),   // B.3.8 bridge
+                Object::InternalPtr<UI::DialogInstance>());
 
-            // Patch vtable to FollowDialog.
-            void* fdVtable = (void*)g_FollowDialog_Vtable;
-            // Standalone: exe .rdata vtable (0x14015be00) is null → g_FollowDialog_Vtable
-            // unresolved. Use the real reimplemented vtable from followdialog.cpp,
-            // otherwise the dialog gets a NULL vtable and hard-faults on dispatch.
-            if (!fdVtable) fdVtable = FollowDialog_GetStandaloneVtable();
-            *(void**)followDialog = fdVtable;
-
-            // Set FollowDialog-specific fields
-            uintptr_t fd = (uintptr_t)followDialog;
-            *(uint64_t*)(fd + 0xB8) = citizenAIRef;   // entity to follow (CitizenAI IBP)
+            fd->dataB8 = citizenAIRef;                 // entity to follow (CitizenAI IBP)
 
             uint64_t selfRef = 0;
             new (&selfRef) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>((void*)this));   // B.3.3 bridge
-            *(uint64_t*)(fd + 0xC0) = selfRef;         // controller back-reference
-
-            *(uint64_t*)(fd + 0xC8) = 0;               // textFollow (set by Slot4)
-            *(uint64_t*)(fd + 0xD0) = 0;               // textAction (set by Slot4)
+            fd->dataC0 = selfRef;                      // controller back-reference
+            // +0xC8 textFollow / +0xD0 textAction: zeroed by the ctor, set by slot 4.
 
             resultPtr = followDialog;
         }
