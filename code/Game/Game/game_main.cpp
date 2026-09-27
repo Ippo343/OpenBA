@@ -47,6 +47,7 @@
 #include "Game/MenuDialogLoopT.h"       // ENDGAME B.3.8 LOOP
 #include "stall_debug.h"
 #include "boot_state_watchdog.h"
+#include "Object/factory_registration.h"   // Object::VerifyExeTypeInfos (ENDGAME B.3.9 RF)
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
@@ -491,6 +492,12 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
         }
         printf("[GameMain] Post-Startup _firstTypeInfo: %d entries, %d have non-FF typeId\n",
                n, withId);
+        // ENDGAME B.3.9 RF: the exe records are CRT-init statics now. Prove every
+        // DEFINE_EXE_TYPE record is in the chain with its CRC id, and that no two
+        // records share an id -- FATAL otherwise, in every build. Prints the
+        // `[FactoryReg] Registered N` line. Only after a Startup that got past
+        // Factory::Startup: a failed Startup never assigned the ids.
+        if (ok != 0) ::Object::VerifyExeTypeInfos();
         // Dump typeId for first 10 entries — sanity-check CRC32 algorithm.
         int s = 0;
         for (Probe* p = head; p && s < 10; p = p->next, s++) {
@@ -500,8 +507,8 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     }
 
     // Now that Object::Factory::Startup has assigned the real CRC type ids (the
-    // 0xFFFFFFFF ctor sentinel is overwritten only here, NOT at
-    // InvokeAllRegistrations), populate the component type-ID .rdata globals that
+    // 0xFFFFFFFF ctor sentinel the CRT-init records carry is overwritten only
+    // there), populate the component type-ID .rdata globals that
     // the shared FindComponent accessors compare against. Filling earlier stored
     // the sentinel. See reg_component_nature.cpp / standalone/main.cpp.
     FillComponentTypeIdGlobals_nature();

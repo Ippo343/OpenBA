@@ -1,106 +1,58 @@
 #pragma once
-// Factory registration framework — long-term replacement for the original exe's
-// 308 *_RegisterType static initializers.
+// ============================================================================
+// code/Game/Object/factory_registration.h — the exe's type records and the
+// by-name / by-id helpers over Object::Factory.
 //
-// Each `code/Game/<Module>/<Class>.cpp` declares its registration via
-// REGISTER_TYPE(...). At CRT-init time the registration links itself into a
-// pending list (no Runtime-DLL calls, since the DLL isn't resolved yet).
-// After EngineFuncsInit, standalone main calls Object::InvokeAllRegistrations(),
-// which walks the list and calls the Runtime DLL's Object::BaseTypeInfo
-// constructor for each entry. That builds Runtime DLL's _firstTypeInfo linked
-// list, which Engine::Engine::Startup -> Object::Factory::Startup later walks
-// to populate the type-id -> factory tree.
+// ENDGAME B.3.9 RF (B39_RULES.md D6): the FactoryRegistration staging list,
+// InvokeAllRegistrations() and REGISTER_TYPE are gone. Every exe class's
+// reflection record is a real `Object::BaseTypeInfo` class static
+// (DEFINE_EXE_TYPE, Object/exe_type.h) that CRT init links into
+// `BaseTypeInfo::_firstTypeInfo`; Engine::Startup -> Object::Factory::Startup
+// then assigns each typeId = ~CRC32(name) and builds the id-keyed tree that
+// every lookup below walks.
 //
 // Lookup mechanism (Object::External::Load and friends): typeId is read from
-// .rsc payload, then the tree at Object::Factory::_singleton is searched with
-// typeId = ~CRC32(typeName_widened_to_uint16). Matching tree node holds a
-// pointer to our BaseTypeInfo storage; its +0x20 slot is the factoryFn we
-// passed at registration.
+// the .rsc payload, then the tree at Object::Factory::_singleton is searched
+// by id. The matching node holds a pointer to the class's BaseTypeInfo; its
+// +0x20 slot is the class's CreateNewObject.
+// ============================================================================
 
 #include <cstdint>
 
 namespace Object {
 
-// Mirrors the 0x38-byte BaseTypeInfo layout in Runtime DLL.
-// Field offsets (set by Runtime ctor at InvokeAll time):
-//   +0x00 typeId       (uint, set to 0xFFFFFFFF; Factory::Startup overwrites with CRC32)
-//   +0x08 name         (const char*)
-//   +0x10 parent       (const char*, colon-stripped)
-//   +0x18 fileExtension (const char*, may be null) -- the file extension this
-//                     type loads from. NOT an "abstract" flag or name, which
-//                     is what this table called it until Wave 3.
-//                     Factory::GetTypeIdForFileExtension (Runtime 0x1800c04c0)
-//                     _stricmp's +0x18 against a caller-supplied extension;
-//                     nothing ever tests it for abstractness. Every
-//                     Component/Description registration here passes null.
-//                     See runtime/types/object/TypeInfo.h and
-//                     docs/runtime_port/WAVE3_LANE_A.md.
-//   +0x20 factoryFn    (Base* (*)(void))
-//   +0x28 inPlaceFn    (Base* (*)(void*))
-//   +0x30 next         (BaseTypeInfo*) link in _firstTypeInfo
-struct BaseTypeInfoStorage {
-    uint8_t bytes[0x38];
-};
-
-typedef void* (*FactoryFn)(void);
-typedef void* (*InPlaceCreateFn)(void* mem);
-
-// Static-init linked list node. One per registered type.
-struct FactoryRegistration {
-    BaseTypeInfoStorage  storage;
-    const char*          typeName;
-    const char*          parentName;
-    const char*          fileExtension;   // was `abstractName` until Wave 3
-    FactoryFn            factoryFn;
-    InPlaceCreateFn      inPlaceCreateFn;
-    FactoryRegistration* next;
-
-    FactoryRegistration(const char* name, const char* parent, const char* fileExtension,
-                        FactoryFn factory, InPlaceCreateFn inPlace);
-};
+class BaseTypeInfo;
 
 // The factory of an ABSTRACT exe base (DEFINE_EXE_ABSTRACT_TYPE, exe_type.h):
 // retail's is a `_purecall` stub; ours logs the name to stderr and answers null.
 void* AbstractTypeFactory(const char* typeName);
 
-// Walk the pending list and invoke Runtime DLL's BaseTypeInfo ctor for each.
-// Idempotent — safe to call once, NOPs on subsequent calls.
-// Must run AFTER EngineFuncsInit (needs fn_BaseTypeInfo_Ctor) and BEFORE
-// Engine::Engine::Startup (Factory::Startup walks _firstTypeInfo and freezes
-// the typeIds).
-// Returns count of successful registrations.
-int InvokeAllRegistrations();
+// The exe records (one per DEFINE_EXE_TYPE expansion), as the linker collected
+// them in `.data$exetype_b`. Walks the section, not the chain, so it is valid
+// from CRT init on; `typeId` is the CRC only after Object::Factory::Startup.
+// Diagnostics and route code only (standalone/dlgctrl_route.cpp).
+typedef void (*ExeTypeInfoVisitFn)(const BaseTypeInfo& info, void* ctx);
+void ForEachExeTypeInfo(ExeTypeInfoVisitFn fn, void* ctx);
 
-// Look up a registered type's typeId by name. Returns the value at
-// storage[0..3] of the matching FactoryRegistration — i.e. BaseTypeInfo.typeId,
-// which Object::Factory::Startup populates with the CRC32 of the type name.
-// Before Factory::Startup runs, returns 0xFFFFFFFF (the sentinel set by
-// BaseTypeInfo::BaseTypeInfo). Returns 0 if `name` was never registered.
-//
-// Use case: each class's GetTypeId virtual (vtable slot +0x10) calls this,
-// caching the result in a function-local static after first hit.
+// THE COUNT PROOF (B39_RULES D6 / RF item 1c). Call once, after
+// Object::Factory::Startup. Every exe record the linker collected must be in
+// `_firstTypeInfo` (its CRT-init constructor ran and linked it), carry
+// typeId == ~CRC32(name), and every id in the whole chain must be unique
+// (Factory::Startup's Insert silently keeps the first of two equal ids). Any
+// failure is FATAL: stderr + abort(), in every build (not a printf, which the
+// perf build strips). Returns the number of exe records.
+int VerifyExeTypeInfos();
+
+// A registered type's id by NAME: Object::Factory::GetTypeIdFromName (retail
+// 0x1800c0580 — CRC the name, answer it iff the tree holds it). 0 for a name
+// the tree does not hold, and 0 before Engine::Startup has built the Factory.
 uint32_t GetTypeIdByName(const char* name);
 
-// Reverse of the above: the registered type NAME for a runtime type id, or nullptr if
-// no registered type carries it. Diagnostics only — this is a linear walk of the whole
-// registration list, so never call it on a hot path. It exists because a raw type id in
-// a log ("component tid=0x9d9af271") is unreadable, and because this codebase has
-// repeatedly mis-labelled a DAT_ type-id global in comments (0x1401c8070 is called
-// WorkComponent, StorageLocationComponent AND MatDesc in different files). Printing the
-// name the RUNNING binary resolves settles which one is right.
+// Reverse of the above: the registered type NAME for a type id, or nullptr if
+// the tree does not hold it (or for 0 / 0xFFFFFFFF). Diagnostics only — a raw
+// type id in a log ("component tid=0x9d9af271") is unreadable, and this
+// codebase has repeatedly mis-labelled a DAT_ type-id global in comments.
 const char* GetTypeNameById(uint32_t typeId);
-
-// Diagnostic (BANISHED_DUMP_SLOT3=1): walk every registered *Component type,
-// invoke its factory once, and report whether vtable slot [3] (+0x18, the
-// stream Serialize the save/load persist machinery vcalls) is a real per-class
-// serializer or still the base-only Component serialize (= per-instance state
-// silently resets on save/load). Must run AFTER Object::Factory::Startup —
-// factories cache GetTypeIdByName results, which are sentinel 0xFFFFFFFF
-// before Startup. Leaks one small object per class; diagnostics only.
-
-// The BaseTypeInfo pointer for a registered type. Component vtable slot 1 (GetTypeInfo)
-// returns this; in retail it is a per-class .rdata global 8 bytes after the type id.
-void* GetTypeInfoByName(const char* name);
 
 // Description vtable +0x40 ("GetComponentTypeId") contract. The real exe slot is
 // `void f(self=RCX, uint32_t* out=RDX) { *out = <Component>TypeId; return out; }`
@@ -117,10 +69,9 @@ inline void* WriteComponentTypeId(void* out, const char* componentName) {
     return out;
 }
 
-// Lazy resolve a type ID at runtime via Object::Factory::GetTypeIdFromName
-// (Runtime DLL). Walks the live factory tree, so it sees both exe-side
-// REGISTER_TYPE entries AND Runtime-DLL-self-registered types like
-// Graphics::MaterialInstance / Graphics::GraphicsMesh / Graphics::Particle.
+// Lazy resolve a type ID at runtime via Object::Factory::GetTypeIdFromName.
+// Walks the live factory tree, so it sees the exe records AND the Runtime
+// classes' records (Graphics::MaterialInstance / GraphicsMesh / Particle ...).
 //
 // Used by the External-serialize helpers in code/Game/Game/serialize_*.cpp
 // when their .rdata BaseTypeInfo* slot is uninitialized in standalone mode.
@@ -145,48 +96,13 @@ uint32_t ResolveTypeIdByNameLazy(const char* simpleName);
 // standalone.
 bool IsDerivedFromOrTrust(void* obj, uint32_t typeId);
 
-// Registry-based type-derivation test: true when the registered type whose
-// typeId matches `typeId` has `ancestorName` anywhere in its REGISTER_TYPE
-// parent-name chain (inclusive: a type "derives from" its own name). This is
-// the standalone-reliable substitute for the engine's IsDerivedFrom when the
-// question is about EXE-side classes (all 310 are registered with full parent
-// chains in factory_registrations_bulk.cpp) — e.g. the StateMachineComponent
-// controller scan replicating retail 0x14012b6a0's
-// IsDerivedFrom(comp, ControllerComponent). Returns false for typeId 0 /
-// unregistered ids.
+// Type-derivation test by ancestor NAME over the Factory tree
+// (Factory::IsDerivedFrom's parent links, which Startup's second pass built):
+// true when the type `typeId` is `ancestorName` or derives from it. false for
+// 0 / 0xFFFFFFFF, for an id the tree does not hold and for an ancestor name
+// the tree does not hold (where Factory::IsDerivedFrom itself would fault) —
+// e.g. the StateMachineComponent controller scan replicating retail
+// 0x14012b6a0's IsDerivedFrom(comp, ControllerComponent).
 bool IsTypeDerivedFromByName(uint32_t typeId, const char* ancestorName);
 
-// Enumerate every static REGISTER_TYPE entry, in registration order. Diagnostics
-// and route code only -- this is the raw pending list `InvokeAllRegistrations`
-// walks, so it is valid from CRT-init onwards, but `storage` only carries a real
-// typeId after Object::Factory::Startup.
-//
-// Added by Wave 10C lane ROUTES for standalone/dlgctrl_route.cpp, which needs to
-// find the registrations whose PARENT is "UI::DialogController". It is a plain
-// read-only walk with a callback; nothing here allocates or calls the DLL.
-typedef void (*RegistrationVisitFn)(const char* typeName, const char* parentName,
-                                    FactoryFn factory, void* ctx);
-void ForEachRegistration(RegistrationVisitFn fn, void* ctx);
-
 }  // namespace Object
-
-// Convenience macros. Expand to a static-init FactoryRegistration object.
-//   REGISTER_TYPE(Citizen, "Component", &Citizen_Factory, &Citizen_CreateInPlace);
-//   REGISTER_TYPE_FULL(NameDatabase, "Object::External", "ndb",
-//                      &NameDatabase_Factory, &NameDatabase_CreateInPlace);
-//
-// The macro builds a unique name per file via __LINE__ to allow multiple
-// registrations in the same translation unit (e.g. base + derived in one file).
-#define REGISTER_TYPE_IMPL2(name, parent, fileExtension, factory, inplace, lineNum)  \
-    namespace {                                                                 \
-        ::Object::FactoryRegistration g_factory_reg_##lineNum(                  \
-            name, parent, fileExtension,                                        \
-            reinterpret_cast<::Object::FactoryFn>(factory),                     \
-            reinterpret_cast<::Object::InPlaceCreateFn>(inplace));              \
-    }
-#define REGISTER_TYPE_IMPL1(name, parent, fileExtension, factory, inplace, lineNum)  \
-    REGISTER_TYPE_IMPL2(name, parent, fileExtension, factory, inplace, lineNum)
-#define REGISTER_TYPE_FULL(Name, Parent, FileExt, Factory, InPlace)              \
-    REGISTER_TYPE_IMPL1(#Name, Parent, FileExt, Factory, InPlace, __LINE__)
-#define REGISTER_TYPE(Name, Parent, Factory, InPlace)                           \
-    REGISTER_TYPE_FULL(Name, Parent, nullptr, Factory, InPlace)

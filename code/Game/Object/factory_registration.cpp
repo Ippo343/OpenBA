@@ -1,52 +1,90 @@
+// code/Game/Object/factory_registration.cpp — see factory_registration.h.
+//
+// ENDGAME B.3.9 RF (B39_RULES.md D6): the FactoryRegistration staging list
+// (`g_pending`), InvokeAllRegistrations() and the fn_BaseTypeInfo_Ctor door are
+// gone. The exe records are real BaseTypeInfo class statics built at CRT init
+// (Object/exe_type.h); the helpers below answer through Object::Factory.
 #include "factory_registration.h"
-#include "engine_funcs.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 
-namespace Object {
+namespace {
 
-// Linked list of pending registrations. CRT-init populates this; InvokeAll
-// drains it. Zero-initialized as a static, so order of static ctors across
-// TUs doesn't matter — each ctor head-inserts.
-static FactoryRegistration* g_pending = nullptr;
-static bool g_invoked = false;
+// ---------------------------------------------------------------------------
+// The exe-record section. Every DEFINE_EXE_TYPE expansion leaves one
+// constant-initialised `BaseTypeInfo*` (its `_exeTypeInfoEntry`) in the input
+// section `.data$exetype_b`. The PE linker merges `.data$*` input sections
+// into `.data` SORTED BY NAME (`*(SORT(.data$*))`, the default MinGW script),
+// so the two markers below bracket every entry: `.data$exetype_a` sorts before
+// and `.data$exetype_c` after. The entries are data with an address constant,
+// not code: they exist whether or not a dynamic initialiser ran, which is what
+// makes them an INDEPENDENT count of the expansions for VerifyExeTypeInfos().
+// Alignment padding between input sections, if any, is zero bytes; a null
+// entry is skipped.
+// ---------------------------------------------------------------------------
+__attribute__((used, section(".data$exetype_a")))
+::Object::BaseTypeInfo* s_exeTypeInfoBegin = nullptr;
+__attribute__((used, section(".data$exetype_c")))
+::Object::BaseTypeInfo* s_exeTypeInfoEnd = nullptr;
 
-FactoryRegistration::FactoryRegistration(const char* name, const char* parent,
-                                         const char* fileExtension,
-                                         FactoryFn factory, InPlaceCreateFn inPlace)
-    : storage{}, typeName(name), parentName(parent), fileExtension(fileExtension),
-      factoryFn(factory), inPlaceCreateFn(inPlace),
-      next(g_pending) {
-    g_pending = this;
+template <class F>
+void WalkExeTypeInfoSection(F&& f) {
+    ::Object::BaseTypeInfo** p = &s_exeTypeInfoBegin;
+    ::Object::BaseTypeInfo** e = &s_exeTypeInfoEnd;
+    // The LINKER relates the two markers, not the language: hide their
+    // provenance so the compiler cannot reason about two distinct objects.
+    __asm__ volatile("" : "+r"(p), "+r"(e));
+    for (++p; p < e; ++p)
+        if (*p) f(**p);
 }
 
-int InvokeAllRegistrations() {
-    if (g_invoked) {
-        return 0;
-    }
-    g_invoked = true;
+[[noreturn]] void ExeTypeFatal(const char* what, const ::Object::BaseTypeInfo* ti) {
+    std::fprintf(stderr, "[FactoryReg] FATAL: %s%s%s\n", what,
+                 ti ? " -- record " : "", ti ? (ti->name ? ti->name : "(unconstructed)") : "");
+    std::fflush(stderr);
+    std::abort();
+}
 
-    if (!fn_BaseTypeInfo_Ctor) {
-        std::fprintf(stderr,
-            "[FactoryReg] FATAL: fn_BaseTypeInfo_Ctor not resolved — call EngineFuncsInit() first.\n");
-        return 0;
-    }
+}  // namespace
 
-    int n = 0;
-    for (FactoryRegistration* r = g_pending; r != nullptr; r = r->next) {
-        std::memset(&r->storage, 0, sizeof(r->storage));
-        fn_BaseTypeInfo_Ctor(&r->storage,
-                             r->typeName,
-                             r->parentName,
-                             r->fileExtension,
-                             reinterpret_cast<void*>(r->factoryFn),
-                             reinterpret_cast<void*>(r->inPlaceCreateFn));
-        n++;
-    }
-    printf("[FactoryReg] Registered %d types into Runtime _firstTypeInfo\n", n);
-    return n;
+namespace Object {
+
+void ForEachExeTypeInfo(ExeTypeInfoVisitFn fn, void* ctx) {
+    if (!fn) return;
+    WalkExeTypeInfoSection([&](const BaseTypeInfo& ti) { fn(ti, ctx); });
+}
+
+int VerifyExeTypeInfos() {
+    // 1. Every collected record is in the chain: its CRT-init ctor ran.
+    int entries = 0;
+    WalkExeTypeInfoSection([&](const BaseTypeInfo& ti) {
+        ++entries;
+        bool linked = false;
+        for (const BaseTypeInfo* c = BaseTypeInfo::_firstTypeInfo; c; c = c->next)
+            if (c == &ti) { linked = true; break; }
+        if (!linked)
+            ExeTypeFatal("an exe type record is not in _firstTypeInfo (its static "
+                         "initialiser did not run)", &ti);
+        // 2. Factory::Startup walked it: the id is the CRC of the name.
+        if (!ti.name || ti.typeId != TypeNameCRC(ti.name))
+            ExeTypeFatal("an exe type record does not carry ~CRC32(name) after "
+                         "Factory::Startup", &ti);
+    });
+    if (entries == 0)
+        ExeTypeFatal("no exe type record in the .data$exetype_b section (the "
+                     "linker did not bracket it between the markers)", nullptr);
+
+    // 3. No two records of the whole chain share an id (B39_RULES D6: Startup's
+    //    Insert keeps the first of two equal keys without a word).
+    for (const BaseTypeInfo* a = BaseTypeInfo::_firstTypeInfo; a; a = a->next)
+        for (const BaseTypeInfo* b = a->next; b; b = b->next)
+            if (a->typeId == b->typeId)
+                ExeTypeFatal("two records in _firstTypeInfo share a type id", b);
+
+    printf("[FactoryReg] Registered %d exe type records in _firstTypeInfo\n", entries);
+    return entries;
 }
 
 // Abstract base types (DEFINE_EXE_ABSTRACT_TYPE). The exe registers these with
@@ -60,59 +98,23 @@ void* AbstractTypeFactory(const char* typeName) {
     return nullptr;
 }
 
+// Before Engine::Startup has built the Factory there is no id to answer: 0, the
+// value the old exe list answered before its records existed. This is the
+// helper's contract for an early caller, not a guard around a faulting read.
 uint32_t GetTypeIdByName(const char* name) {
     if (!name) return 0;
-    // PERF (2026-09-05): callers in per-tick code pass string literals; a small
-    // direct-mapped cache keyed on the pointer (validated by strcmp, so a reused stack
-    // buffer at the same address can never return the wrong id) turns the list walk into
-    // one compare. Ids are stable once FactoryReg has run; a 0 result is never cached.
-    struct Slot { const char* key; uint32_t id; };
-    static Slot cache[64] = {};
-    const size_t h = (reinterpret_cast<uintptr_t>(name) >> 3) & 63;
-    if (cache[h].key == name && std::strcmp(cache[h].key, name) == 0) return cache[h].id;
-    for (FactoryRegistration* r = g_pending; r != nullptr; r = r->next) {
-        if (r->typeName && std::strcmp(r->typeName, name) == 0) {
-            uint32_t id = *reinterpret_cast<uint32_t*>(&r->storage);
-            if (id != 0) { cache[h].key = name; cache[h].id = id; }
-            return id;
-        }
-    }
-    return 0;
+    const Factory* factory = Factory::Get();
+    if (!factory) return 0;
+    return factory->GetTypeIdFromName(name, /*existingOnly=*/true);
 }
 
-
-// The BANISHED_DUMP_SLOT3 inventory this printed was deleted with the flag (ENDGAME C).
-// standalone/menudialogloopt_stubs.cpp still calls it; the stub goes when that call does.
-
-
-void ForEachRegistration(RegistrationVisitFn fn, void* ctx) {
-    if (!fn) return;
-    for (FactoryRegistration* r = g_pending; r != nullptr; r = r->next) {
-        fn(r->typeName, r->parentName, r->factoryFn, ctx);
-    }
-}
-
+// GetTypeName faults on a miss in retail; this diagnostic helper asks
+// IsTypeValid first and answers nullptr instead.
 const char* GetTypeNameById(uint32_t typeId) {
     if (typeId == 0 || typeId == 0xFFFFFFFFu) return nullptr;
-    for (FactoryRegistration* r = g_pending; r != nullptr; r = r->next) {
-        if (*reinterpret_cast<uint32_t*>(&r->storage) == typeId) return r->typeName;
-    }
-    return nullptr;
-}
-
-// The BaseTypeInfo POINTER for a registered type — the same thing each class's
-// GetTypeInfo virtual (vtable slot 1) returns in retail, where it reads a per-class
-// .rdata global sitting 8 bytes after the type-id global (e.g. FishingComponent's id at
-// 0x1401c7660, its type-info at 0x1401c7668). Our BaseTypeInfoStorage IS that object, so
-// handing back its address is the faithful answer.
-void* GetTypeInfoByName(const char* name) {
-    if (!name) return nullptr;
-    for (FactoryRegistration* r = g_pending; r != nullptr; r = r->next) {
-        if (r->typeName && std::strcmp(r->typeName, name) == 0) {
-            return &r->storage;
-        }
-    }
-    return nullptr;
+    const Factory* factory = Factory::Get();
+    if (!factory || !factory->IsTypeValid(typeId)) return nullptr;
+    return factory->GetTypeName(typeId);
 }
 
 // Per-name cache. Names are static string literals from the call sites, so we
@@ -150,25 +152,13 @@ uint32_t ResolveTypeIdByNameLazy(const char* simpleName) {
         }
     }
 
-    // 2. Try Runtime DLL Factory (covers self-registered Runtime types).
-    uint32_t typeId = 0;
-    if (g_pFactorySingleton
-            && *g_pFactorySingleton) {
-        // Triple deref: dispatch slot -> pointer -> Factory*. See the same
-        // pattern in inputbindings.cpp / engine_funcs.h FindDialogByName_Impl.
-        void* factoryObj = *(void**)*g_pFactorySingleton;
-        if (factoryObj) {
-            typeId = reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(
-                simpleName, /*includeBase=*/true);   // B.3.3 bridge
-        }
-    }
+    // 2. The live Factory tree: it holds every record of `_firstTypeInfo`, the
+    //    exe's and the Runtime's. (The old third step, a fallback to the exe
+    //    staging list, went with that list: after Factory::Startup the tree is
+    //    a superset of it.)
+    const uint32_t typeId = GetTypeIdByName(simpleName);
 
-    // 3. Fallback to exe-side REGISTER_TYPE list.
-    if (typeId == 0) {
-        typeId = GetTypeIdByName(simpleName);
-    }
-
-    // 4. Cache the result (even 0, to avoid re-querying every call) at the
+    // 3. Cache the result (even 0, to avoid re-querying every call) at the
     // first empty slot. If the cache is full, we just pay the lookup cost.
     bool cached = false;
     for (int i = 0; i < kTypeIdCacheSize; ++i) {
@@ -209,50 +199,24 @@ bool IsDerivedFromOrTrust(void* obj, uint32_t typeId) {
 bool IsTypeDerivedFromByName(uint32_t typeId, const char* ancestorName) {
     if (typeId == 0 || typeId == 0xFFFFFFFF || !ancestorName || !*ancestorName)
         return false;
-    // Find the registration owning this typeId.
-    const FactoryRegistration* r = nullptr;
-    for (const FactoryRegistration* it = g_pending; it != nullptr; it = it->next) {
-        if (*reinterpret_cast<const uint32_t*>(&it->storage) == typeId) {
-            r = it;
-            break;
-        }
-    }
-    // Walk the parent-name chain (bounded — the deepest real chain is ~6).
-    for (int depth = 0; r != nullptr && depth < 16; ++depth) {
-        if (r->typeName && std::strcmp(r->typeName, ancestorName) == 0)
-            return true;
-        const char* parent = r->parentName;
-        if (!parent || !*parent) return false;
-        const FactoryRegistration* next = nullptr;
-        for (const FactoryRegistration* it = g_pending; it != nullptr; it = it->next) {
-            if (it->typeName && std::strcmp(it->typeName, parent) == 0) {
-                next = it;
-                break;
-            }
-        }
-        // Parent names may refer to engine-side classes that are not in the
-        // exe registry (e.g. "Object::Internal") — chain ends there.
-        if (next == nullptr) return std::strcmp(parent, ancestorName) == 0;
-        r = next;
-    }
-    return false;
+    const Factory* factory = Factory::Get();
+    if (!factory || !factory->IsTypeValid(typeId)) return false;
+    const uint32_t ancestorId = factory->GetTypeIdFromName(ancestorName, /*existingOnly=*/true);
+    if (ancestorId == 0) return false;
+    return factory->IsDerivedFrom(typeId, ancestorId);
 }
 
 }  // namespace Object
 
 // ============================================================
-// Self-test registration — proves the framework works end-to-end.
-// Parent must be either nullptr or the name of another registered type;
-// Factory::Startup's second loop crashes on an unresolvable parent string.
-//
-// All 310 exe-side types are registered in factory_registrations_bulk.cpp
-// (auto-generated by tools/gen_factory_registrations.py from
-// standalone/factory_registrations.csv).
+// StandaloneFactoryTest — not a retail type; a record with no factory that
+// only enlarges the chain by one. Kept as a plain BaseTypeInfo static until
+// its own commit deletes it (ENDGAME B.3.9 RF).
 // ============================================================
 namespace {
-    void* SelfTest_Factory(void) { return nullptr; }
-    void* SelfTest_InPlace(void* /*mem*/) { return nullptr; }
+    ::Object::Base* SelfTest_Factory() { return nullptr; }
+    ::Object::Base* SelfTest_InPlace(void* /*mem*/) { return nullptr; }
+    ::Object::BaseTypeInfo g_standaloneFactoryTest(
+        "StandaloneFactoryTest", /*parent=*/nullptr, /*fileExtension=*/nullptr,
+        &SelfTest_Factory, &SelfTest_InPlace);
 }
-REGISTER_TYPE(StandaloneFactoryTest, /*parent=*/nullptr,
-              &SelfTest_Factory, &SelfTest_InPlace);
-

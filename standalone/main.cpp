@@ -1462,14 +1462,11 @@ static bool Init() {
     DumpFirstTypeInfo("BEFORE InvokeAllRegistrations");
     StallDebug::Mark("DumpFirstTypeInfo (before)");
 
-    // 6. Drain pending Factory registrations into Runtime _firstTypeInfo.
-    //    Static-init ctors collected them; now we flush by calling
-    //    Object::BaseTypeInfo::BaseTypeInfo for each. Engine::Engine::Startup
-    //    -> Object::Factory::Startup will later walk the list and populate
-    //    the typeId tree.
-    printf("[Standalone] Invoking factory registrations...\n");
-    Object::InvokeAllRegistrations();
-    StallDebug::Mark("Object::InvokeAllRegistrations");
+    // 6. (was InvokeAllRegistrations) The exe type records are real
+    //    Object::BaseTypeInfo statics linked into _firstTypeInfo at CRT init
+    //    (ENDGAME B.3.9 RF, code/Game/Object/exe_type.h); there is nothing to
+    //    drain. Engine::Engine::Startup -> Object::Factory::Startup walks the
+    //    chain and populates the typeId tree.
 
     DumpFirstTypeInfo("AFTER InvokeAllRegistrations");
     StallDebug::Mark("DumpFirstTypeInfo (after)");

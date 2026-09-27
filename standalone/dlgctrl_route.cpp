@@ -139,6 +139,7 @@
 #include <cstring>
 
 #include "Object/factory_registration.h"
+#include "object/TypeInfo.h"     // Object::BaseTypeInfo (the exe records)
 #include "options.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
@@ -236,10 +237,18 @@ void* const kThunk[kSpecCount] = {
 // ---------------------------------------------------------------------------
 constexpr int kScanSlots = 24;   // idiom fills 48; 24 is ample for a majority
 
-void Visit(const char* typeName, const char* parentName,
-           ::Object::FactoryFn factory, void* /*ctx*/) {
+// ENDGAME B.3.9 RF: walks the exe type records (Object::ForEachExeTypeInfo)
+// instead of the retired registration list. A record's parent is stored
+// namespace-STRIPPED (BaseTypeInfo::StripNamespace), so the match is
+// "DialogController" -- which also admits DebugUI, whose parent literal was
+// already the bare "DialogController" and which the raw-literal compare skipped.
+void Visit(const ::Object::BaseTypeInfo& ti, void* /*ctx*/) {
+    const char* typeName   = ti.name;
+    const char* parentName = ti.parentName;
+    typedef void* (*FactoryFn)();
+    FactoryFn factory = reinterpret_cast<FactoryFn>(ti.factoryFn);
     if (!typeName || !parentName || !factory) return;
-    if (std::strcmp(parentName, "UI::DialogController") != 0) return;
+    if (std::strcmp(parentName, "DialogController") != 0) return;
 
     void* obj = factory();
     if (!obj) {
@@ -321,6 +330,6 @@ void DlgCtrlRoute_Arm() {
                     raw ? "" : "  <== NULL, route cannot work");
     }
 
-    ::Object::ForEachRegistration(&Visit, nullptr);
+    ::Object::ForEachExeTypeInfo(&Visit, nullptr);
     fflush(stdout);
 }
