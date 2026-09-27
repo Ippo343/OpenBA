@@ -43,6 +43,7 @@
 //   (camera/PlayerController), 0x1400c44a0 (EntityList::Serialize),
 //   0x1400b04d0 (WorldGeometry).
 
+#include "Game/GameUpdateLoop.h"   // caller batch CB6: SaveRestoreOut, the named fields
 #include "engine_funcs.h"
 #include "options.h"
 #include "resolve.h"
@@ -717,16 +718,16 @@ extern "C" void BucketTree_Serialize_21ba0(void* serializer, void* /*unused*/,
 // could report the same thing by detouring PersistObject itself, which does not
 // require standing in for any retail code.
 
-extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
+// Caller batch CB6: `self` is the real class; its fields are read by name.
+extern "C" void GameUpdateLoop_Serialize_95a90(GameUpdateLoop* self, void* stream,
                                                void* p3, int* outParam) {
     (void)p3;
     EnsureResolved();
-    uintptr_t self = (uintptr_t)selfVoid;
     void* extFactory = *g_pExternalFactorySingleton;
     void* intFactory = s_ppIntFactory ? *s_ppIntFactory : nullptr;
 
     fprintf(stderr, "[GUL::Serialize] %s ENTER self=%p stream=%p\n",
-            IsSaving(stream) ? "SAVE" : "LOAD", selfVoid, stream);
+            IsSaving(stream) ? "SAVE" : "LOAD", (void*)self, stream);
     fflush(stderr);
 
     s_fn_EnableRefMode(extFactory, true);
@@ -807,23 +808,23 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
     s_fn_ResetPersist(intFactory, stream);
 
     if (IsSaving(stream)) {
-        reinterpret_cast<UI::UserInterface*>(*(void**)(self + 0x98))->SaveAllSettings();  // B.3.6 bridge
+        reinterpret_cast<UI::UserInterface*>(self->m_userInterface)->SaveAllSettings();  // B.3.6 bridge
     }
 
-    s_fn_CfgSer_194a0((void*)(self + 0x50), ser);
-    s_fn_CfgSer_19ec0((void*)(self + 0x40), ser);
-    s_fn_CfgSer_1a0c0((void*)(self + 0x48), ser);
+    s_fn_CfgSer_194a0(&self->m_climateConfig, ser);
+    s_fn_CfgSer_19ec0(&self->m_mapConfig, ser);
+    s_fn_CfgSer_1a0c0(&self->m_terrainConfig, ser);
 
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(self + 0x30), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(self + 0x34), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(self->m_seed, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(self->m_mapSize, nullptr);   // B.3.4 bridge
     if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 0)   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(uint32_t*)(self + 0xd0), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(self->m_gameFlags, nullptr);   // B.3.4 bridge
     if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 2)   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(self + 0x15c), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(self->m_scenarioIndex, nullptr);   // B.3.4 bridge
 
-    reinterpret_cast<System::Random*>(*(void**)(self + 0xd8))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<System::String*>(self + 0x28)->Serialize(ser);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(self + 0x158), nullptr);   // B.3.4 bridge
+    reinterpret_cast<System::Random*>(self->m_random)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    self->m_saveName.Serialize(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(&self->m_scenarioCompleted), nullptr);   // B.3.4 bridge
 
 
     // NB: a diagnostic stand-in for this call (AchIbpPeek, below) established
@@ -831,11 +832,11 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
     // retail returns early here and this IBP is NOT the one that faults. Kept
     // out of the live path — the PersistObject probe reports the same thing
     // without replacing any retail code.
-    reinterpret_cast<Object::InternalBasePtr*>((void*)(self + 0x150))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-    if (*(void**)(self + 0x150) != nullptr) {
+    reinterpret_cast<Object::InternalBasePtr*>(&self->m_scenarioInstance)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
+    if (self->m_scenarioInstance != nullptr) {
         uint32_t achTid = s_pAchInstTypeId ? *s_pAchInstTypeId : 0;
-        if (!achTid || !fn_IsDerivedFrom(*(void**)(self + 0x150), achTid))
-            *(void**)(self + 0x150) = nullptr;
+        if (!achTid || !fn_IsDerivedFrom(self->m_scenarioInstance, achTid))
+            self->m_scenarioInstance = nullptr;
     }
 
     // Retail calls AchievementManager::Persist UNCONDITIONALLY (0x140095a90).
@@ -856,23 +857,23 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
     // The `s_fn_AnimMgr_Serialize` cache, its typedef, its resolver and the
     // `anim=%p` it fed the [GUL::Serialize] fprintf all went in the closing pass:
     // a diagnostic that prints the address of a door nobody calls reports nothing.
-    reinterpret_cast<Graphics::AnimationManager*>(*(void**)(self + 0x68))->Serialize(
+    reinterpret_cast<Graphics::AnimationManager*>(self->m_animationManager)->Serialize(
         *reinterpret_cast<IO::Serializer*>(ser));   // B.3.5 bridge
-    reinterpret_cast<Audio::Scene*>(*(void**)(self + 0x78))->Serialize(ser);   // B.3.7 bridge
+    reinterpret_cast<Audio::Scene*>(self->m_audioScene)->Serialize(ser);   // B.3.7 bridge
 
     fprintf(stderr, "[GUL::Serialize] core done — subsystems...\n"); fflush(stderr);
 
-    s_fn_Camera_988c0(*(void**)(self + 0xe0), stream);
-    s_fn_EntList_c44a0(*(void**)(self + 0xe8), stream);
-    s_fn_Geom_b04d0(*(void**)(self + 0x110), stream);
-    s_fn_CitList_8f760(*(void**)(self + 0xf0), stream, nullptr, outParam);
-    s_fn_Grid_9f100(*(void**)(self + 0xf8), stream);
-    s_fn_Goals_f9240(*(void**)(self + 0x118), stream, nullptr, outParam);
-    EntityUI_Serialize_102920(*(void**)(self + 0x120), stream);
+    s_fn_Camera_988c0(self->m_playerController, stream);
+    s_fn_EntList_c44a0(self->m_entityList, stream);
+    s_fn_Geom_b04d0(self->m_worldGeometry, stream);
+    s_fn_CitList_8f760(self->m_citizenList, stream, nullptr, outParam);
+    s_fn_Grid_9f100(self->m_game, stream);
+    s_fn_Goals_f9240(self->m_tutorial, stream, nullptr, outParam);
+    EntityUI_Serialize_102920(self->m_entityUI, stream);
 
     // Day counter (+0x128): { int day; Time accumulated } — version-0 section.
     {
-        uint8_t* dc = *(uint8_t**)(self + 0x128);
+        uint8_t* dc = static_cast<uint8_t*>(self->m_dayCounter);
         alignas(8) uint8_t ser0[24];
         ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
         reinterpret_cast<IO::Serializer*>(ser0)->Serialize(*reinterpret_cast<int*>(dc), nullptr);   // B.3.4 bridge
@@ -881,11 +882,11 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
     }
 
     if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 1)   // B.3.4 bridge
-        EventLog_Serialize_952c0(*(void**)(self + 0x138), stream);
-    WeatherSim_Serialize_93c90(*(void**)(self + 0x130), stream);
-    Minimap_Serialize_a57f0(*(void**)(self + 0x148), stream);
-    EntityList_PostLoad_c4730(*(void**)(self + 0xe8), stream);
-    s_fn_CitPost_8f580(*(void**)(self + 0xf0));
+        EventLog_Serialize_952c0(self->m_eventNotifier, stream);
+    WeatherSim_Serialize_93c90(self->m_weather, stream);
+    Minimap_Serialize_a57f0(self->m_imageCapture, stream);
+    EntityList_PostLoad_c4730(self->m_entityList, stream);
+    s_fn_CitPost_8f580(self->m_citizenList);
 
     if (intFactory) s_fn_ClearPersist(intFactory);
     s_fn_EnableRefMode(extFactory, false);
@@ -901,8 +902,11 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
 // save != 0: serialize the world into a fresh CompressedMemoryStream, then
 // Store the embedded MemoryStream into the SavedState. save == 0: Retrieve
 // the SavedState into the stream, Open (decompress), then deserialize.
-extern "C" void GameUpdateLoop_SaveRestore(void* self, char save,
-                                           void* savedState, int* outParam) {
+// Caller batch CB6: the body of the old `GameUpdateLoop_SaveRestore` door, moved
+// into the member (the slot's override passes nullptr for retail's 4th argument;
+// Load and the roundtrip check pass a real one). The door's reader-less
+// RegisterExeAddr(0x1400959c0) row went with it.
+void GameUpdateLoop::SaveRestoreOut(bool save, Save::SavedState* savedState, int* outParam) {
     EnsureResolved();
     if (!s_fn_CMS_Ctor || !s_fn_CMS_GetMemStream) {
         fprintf(stderr, "[GUL::SaveRestore] MISSING Runtime exports — no-op\n");
@@ -916,17 +920,17 @@ extern "C" void GameUpdateLoop_SaveRestore(void* self, char save,
     // Layout: runtime/types/io/Stream.h.
     alignas(16) uint8_t cms[0x100];
     s_fn_CMS_Ctor(cms);
-    if (save == 0) {
-        reinterpret_cast<Save::SavedState*>(savedState)->Retrieve(   // B.3.7 bridge
+    if (!save) {
+        savedState->Retrieve(
             *reinterpret_cast<IO::MemoryStream*>(s_fn_CMS_GetMemStream(cms)));
         s_fn_CMS_Open(cms);
-        GameUpdateLoop_Serialize_95a90(self, cms, savedState, outParam);
+        GameUpdateLoop_Serialize_95a90(this, cms, savedState, outParam);
         s_fn_CMS_Close(cms);
     } else {
         s_fn_CMS_Create(cms);
-        GameUpdateLoop_Serialize_95a90(self, cms, savedState, outParam);
+        GameUpdateLoop_Serialize_95a90(this, cms, savedState, outParam);
         s_fn_CMS_Close(cms);
-        reinterpret_cast<Save::SavedState*>(savedState)->Store(   // B.3.7 bridge
+        savedState->Store(
             *reinterpret_cast<IO::MemoryStream*>(s_fn_CMS_GetMemStream(cms)));
     }
     s_fn_CMS_Dtor(cms);
@@ -978,7 +982,7 @@ static void RoundtripDump(const char* name, const uint8_t* data, uint32_t size) 
     std::fclose(f);
 }
 
-extern "C" void GameUpdateLoop_SaveRoundtripCheck(void* self, void* loadedState) {
+extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, void* loadedState) {
     const char* e = Opt().saveTest;
     if (!e || _stricmp(e, "roundtrip") != 0) return;
     EnsureResolved();
@@ -990,7 +994,7 @@ extern "C" void GameUpdateLoop_SaveRoundtripCheck(void* self, void* loadedState)
     fprintf(stderr, "[Roundtrip] SaveRestore(save) into a fresh SavedState (loaded image %u bytes)\n",
             loaded->size);
     fflush(stderr);
-    GameUpdateLoop_SaveRestore(self, 1, &fresh, &out);
+    self->SaveRestoreOut(true, reinterpret_cast<Save::SavedState*>(&fresh), &out);   // B.3.8 bridge
 
     uint8_t* a = nullptr; uint32_t an = 0;
     uint8_t* b = nullptr; uint32_t bn = 0;
@@ -1023,7 +1027,6 @@ extern "C" void GameUpdateLoop_SaveRoundtripCheck(void* self, void* loadedState)
 // Registration (called from standalone/address_registry.cpp)
 // ============================================================
 void RegisterGulSerialize() {
-    RegisterExeAddr(0x1400959c0, reinterpret_cast<uintptr_t>(&GameUpdateLoop_SaveRestore));
     RegisterExeAddr(0x140095a90, reinterpret_cast<uintptr_t>(&GameUpdateLoop_Serialize_95a90));
     RegisterExeAddr(0x1400952c0, reinterpret_cast<uintptr_t>(&EventLog_Serialize_952c0));
     RegisterExeAddr(0x1400199a0, reinterpret_cast<uintptr_t>(&EventLog_Resize_199a0));

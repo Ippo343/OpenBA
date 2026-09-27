@@ -31,6 +31,8 @@
 #include "sampler.h"
 #include "options.h"
 #include "Game/GameUpdateLoop.h"   // ENDGAME B.3.8 LOOP: the real class
+#include "Game/WorldGeometry.h"    // caller batch CB6: m_worldGeometry's class
+#include "Player/Tool.h"            // caller batch CB6: the active tool's Draw
 #include "Object/exe_type.h"        // DEFINE_EXE_VTABLE
 #include "address_registry.h"       // RegisterExeAddr
 #include "Entity/entitylist_funcs.h"
@@ -72,8 +74,6 @@ extern "C" void* AutoSaveDialog_Ctor_Standalone(void* self, void* ui, void* extR
 // Event-log writer (code/Game/Game/eventlog.cpp) — appends a real entry to the
 // gameWorld+0x138 event log (formatted from the events/seasons StringTables).
 extern "C" void EventLog_AddSimple(int eventType, int severity);
-// gameupdateloop_serialize.cpp: slot 7's body, registered at 0x1400959c0.
-extern "C" void GameUpdateLoop_SaveRestore(void* self, char save, void* savedState, int* outParam);
 extern "C" void BuildingGoal_Probe(const char* templateName);  // code/Game/Goal/buildinggoal.cpp
 extern "C" void EventLog_AddEventWithName(void* eventLog, int eventType, int severity,
                                           void* entityIBP, void* nameStr);  // 0x140095750
@@ -1126,15 +1126,15 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                m_scenarioInstance, (int)m_scenarioCompleted);
         if (m_scenarioInstance != nullptr && m_scenarioCompleted == 0) {
             TRACE("[GameUpdateLoop::Update] calling AchievementInstance::Update...\n");
-            reinterpret_cast<Achievement::AchievementInstance*>(*(void**)((uintptr_t)this + 0x150))->Update(   // B.3.7 bridge
+            reinterpret_cast<Achievement::AchievementInstance*>(m_scenarioInstance)->Update(   // B.3.7 bridge
                 *reinterpret_cast<const System::Time*>(time));
             TRACE("[GameUpdateLoop::Update] AchievementInstance::Update done\n");
 
-            bool isMet = reinterpret_cast<const Achievement::AchievementInstance*>(*(void**)((uintptr_t)this + 0x150))->IsMet();   // B.3.7 bridge
+            bool isMet = reinterpret_cast<const Achievement::AchievementInstance*>(m_scenarioInstance)->IsMet();   // B.3.7 bridge
             TRACE("[GameUpdateLoop::Update] AchievementInstance::IsMet = %d\n", (int)isMet);
 
             if (!isMet) {
-                bool hasFailed = reinterpret_cast<const Achievement::AchievementInstance*>(*(void**)((uintptr_t)this + 0x150))->HasFailed();   // B.3.7 bridge
+                bool hasFailed = reinterpret_cast<const Achievement::AchievementInstance*>(m_scenarioInstance)->HasFailed();   // B.3.7 bridge
                 TRACE("[GameUpdateLoop::Update] AchievementInstance::HasFailed = %d\n", (int)hasFailed);
                 if (hasFailed) {
                     TRACE("[GameUpdateLoop::Update] calling OnScenarioComplete (failed)...\n");
@@ -1302,11 +1302,12 @@ post_simulation:
     // Step 8: World geometry vtable call (terrain update)
     TRACE("[GameUpdateLoop::Update] calling WorldGeometry::Update...\n");
     {
-        void* worldGeom = m_worldGeometry;
-        void** vtbl = *(void***)worldGeom;
-        typedef void (*WorldGeomUpdate_t)(void* self, void* time);
-        WorldGeomUpdate_t worldGeomUpdate = (WorldGeomUpdate_t)vtbl[1]; // vtable[1] = slot at +0x08
-        worldGeomUpdate(worldGeom, time);
+        // Caller batch CB6: slot 1 (vtable +0x08) of the real class. The receiver is
+        // PROVED: Load's step 23 builds it through Reimpl_Geometry_Init, which
+        // placement-news a WorldGeometry (serialize_arrays.cpp). A virtual call, as
+        // retail's is.
+        static_cast<WorldGeometry*>(m_worldGeometry)->Update(
+            *reinterpret_cast<const System::Time*>(time));   // B.3.8 bridge
     }
     TRACE("[GameUpdateLoop::Update] WorldGeometry::Update done\n");
 
@@ -1329,7 +1330,7 @@ post_simulation:
         bool pausedNow = reinterpret_cast<UI::UserInterface*>(m_userInterface)->PausesGame();  // B.3.6 bridge
         if (!pausedNow) {
             // Check if UI has input focus: userInterface+0xd9 == 0 means no dialog has input
-            bool noInputFocus = (*(uint8_t*)((uintptr_t)m_userInterface + 0xd9) == 0);
+            bool noInputFocus = (reinterpret_cast<UI::UserInterface*>(m_userInterface)->_mouseCaptured == 0);   // B.3.8 bridge
             // Standalone: EntityUI::Update (the camera/tool controller) is not
             // registered, so fn_EntityUI_Update is null and the camera never moved.
             // Drive the camera directly from the KeyMap here — hotkeys (pause/presets)
@@ -1350,7 +1351,7 @@ post_simulation:
         }
 
         // Override cursor if UI has input or game is paused
-        bool hasInput = (*(uint8_t*)((uintptr_t)m_userInterface + 0xd9) != 0);
+        bool hasInput = (reinterpret_cast<UI::UserInterface*>(m_userInterface)->_mouseCaptured != 0);   // B.3.8 bridge
         if (hasInput || reinterpret_cast<UI::UserInterface*>(m_userInterface)->PausesGame()) {  // B.3.6 bridge
             cursorIndex = uiCursor;
         }
@@ -1529,7 +1530,7 @@ post_simulation:
     // Step 17: Next loop transition check
     if (m_nextLoop != nullptr) {
         // Check if fullscreen fade is done (UI+0xf0 == 0.0f)
-        float fadeProgress = *(float*)((uintptr_t)m_userInterface + 0xf0);
+        float fadeProgress = reinterpret_cast<UI::UserInterface*>(m_userInterface)->_fadeVelocity;   // B.3.8 bridge
         if (fadeProgress == 0.0f) {
             TRACE("[GameUpdateLoop::Update] transitioning to next loop %p\n", m_nextLoop);
             reinterpret_cast<Engine::MainLoop*>(*g_pMainLoopSingleton)->SetNextLoop(   // B.3.7 bridge
@@ -1620,8 +1621,8 @@ void GameUpdateLoop::Draw(float alpha) {
     TRACE("[GameUpdateLoop::Draw] setting video context time...\n");
     {
         void* engine = *g_pMainLoopSingleton;
-        void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
-        int64_t engineFrameTime = *(int64_t*)((uintptr_t)engine + 0x68);
+        void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
+        int64_t engineFrameTime = reinterpret_cast< ::Engine::MainLoop*>(engine)->_frameUpdateTime;   // B.3.8 bridge
 
         float gameSeconds = reinterpret_cast<const System::Time*>((void*)&m_gameTime)->AsSeconds();   // B.3.4b bridge
         float frameSeconds = reinterpret_cast<const System::Time*>((void*)&engineFrameTime)->AsSeconds();   // B.3.4b bridge
@@ -1635,7 +1636,7 @@ void GameUpdateLoop::Draw(float alpha) {
     {
         uint8_t* imageCapture = (uint8_t*)m_imageCapture;
         void* engine = *g_pMainLoopSingleton;
-        void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
+        void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
         // fn_ImageCapture_DrawCheck (exe FUN_1400a5140) is our clean port
         // Minimap_PaintTerrain in standalone (see Startup fallback above). It fires
         // once — when the minimap's terrain GPU buffer (imageCapture+0x08) is still
@@ -1643,7 +1644,7 @@ void GameUpdateLoop::Draw(float alpha) {
         if (fn_ImageCapture_DrawCheck && *(int64_t*)(imageCapture + 8) == 0) {
             // Remove and re-add global objects for terrain update
             void* gameWorld = *g_pGameWorldSingleton;
-            void* graphicsScene = *(void**)((uintptr_t)gameWorld + 0x60);
+            void* graphicsScene = static_cast<GameUpdateLoop*>(gameWorld)->m_graphicsScene;   // B.3.8 bridge
 
             Graphics::Scene* gs = reinterpret_cast<Graphics::Scene*>(graphicsScene);   // B.3.5 bridge
             gs->RemoveGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_sunLight));       // B.3.5 bridge
@@ -1667,7 +1668,7 @@ void GameUpdateLoop::Draw(float alpha) {
     TRACE("[GameUpdateLoop::Draw] calling Weather::DrawUpdate...\n");
     {
         void* engine = *g_pMainLoopSingleton;
-        void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
+        void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
         if (fn_Weather_DrawUpdate) fn_Weather_DrawUpdate(m_weather, videoCtx); // [GUARD-M5]
         // Native time-of-day sun/lighting. The original Weather::DrawUpdate
         // (above) no-ops in standalone (not reimplemented + Environment.rsc not
@@ -1762,7 +1763,7 @@ void GameUpdateLoop::Draw(float alpha) {
     TRACE("[GameUpdateLoop::Draw] calling Renderer::Draw...\n");
     {
         void* engine = *g_pMainLoopSingleton;
-        void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
+        void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
         reinterpret_cast<Graphics::Renderer*>(m_renderer)->Draw(
             *reinterpret_cast<Video::Context*>(videoCtx), alpha,
             *reinterpret_cast<const Graphics::Scene*>(m_graphicsScene),
@@ -1779,7 +1780,7 @@ void GameUpdateLoop::Draw(float alpha) {
     if (m_saveLoad != nullptr) {
         TRACE("[GameUpdateLoop::Draw] calling SaveLoad::Draw...\n");
         void* engine = *g_pMainLoopSingleton;
-        void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
+        void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
         // Save::SaveLoad::Draw — the ExternalPtr<Material> is a bare register value (B7-5).
         reinterpret_cast<Save::SaveLoad*>(m_saveLoad)->Draw(   // B.3.7 bridge
             *reinterpret_cast<Video::Context*>(videoCtx),
@@ -1838,7 +1839,7 @@ void GameUpdateLoop::Draw(float alpha) {
     TRACE("[GameUpdateLoop::Draw] setting camera matrices...\n");
     {
         void* engine = *g_pMainLoopSingleton;
-        void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
+        void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
         uintptr_t pc = (uintptr_t)m_playerController;
 
         // Original copies Transform3 (12 floats at +0x98..+0xC4 = 48 bytes) and projection
@@ -1873,21 +1874,22 @@ void GameUpdateLoop::Draw(float alpha) {
     {
         uintptr_t entityUI = (uintptr_t)m_entityUI;
         void* engine = *g_pMainLoopSingleton;
-        void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
+        void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
 
         // Check if UI has input focus or pauses game -> pass as flag
-        bool hasInput = (*(uint8_t*)((uintptr_t)m_userInterface + 0xd9) != 0);
+        bool hasInput = (reinterpret_cast<UI::UserInterface*>(m_userInterface)->_mouseCaptured != 0);   // B.3.8 bridge
         bool pauseCheck = reinterpret_cast<UI::UserInterface*>(m_userInterface)->PausesGame();  // B.3.6 bridge
         uint64_t drawFlag = (hasInput || pauseCheck) ? 1 : 0;
 
         // EntityUI+0x28 is InternalBasePtr to current tool
         void* tool = *(void**)(entityUI + 0x28);
         if (tool) {
-            // vtable[8] (+0x40) = Draw(tool, ctx, flag)
-            void** toolVtbl = *(void***)tool;
-            typedef void (*ToolDraw_t)(void* self, void* ctx, uint64_t flag);
-            ToolDraw_t toolDraw = (ToolDraw_t)toolVtbl[8];
-            toolDraw(tool, videoCtx, drawFlag);
+            // Caller batch CB6: slot 8 (vtable +0x40) `Tool::Draw(context, active)`.
+            // The receiver is PROVED by its only writer, Toolbar_ShowGroup_Impl
+            // (toolbardialog.cpp): it stores the Factory::CreateObject result only
+            // after IsDerivedFrom(DWORD_1401c6eb8), and that cell is TypeId(Tool).
+            // The old typedef passed the flag as a qword; the slot reads its low byte.
+            reinterpret_cast<Tool*>(tool)->Draw(videoCtx, static_cast<char>(drawFlag));   // B.3.8 bridge
         }
     }
     TRACE("[GameUpdateLoop::Draw] EntityUI toolbar draw done\n");
@@ -1896,7 +1898,7 @@ void GameUpdateLoop::Draw(float alpha) {
     TRACE("[GameUpdateLoop::Draw] calling UI::UserInterface::Draw...\n");
     {
         void* engine = *g_pMainLoopSingleton;
-        void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
+        void* videoCtx = reinterpret_cast< ::Engine::MainLoop*>(engine)->_context;   // B.3.8 bridge
         reinterpret_cast<UI::UserInterface*>(m_userInterface)->Draw(*reinterpret_cast<Video::Context*>(videoCtx));  // B.3.6 bridge
     }
     TRACE("[GameUpdateLoop::Draw] UI::UserInterface::Draw done\n");
@@ -1997,7 +1999,7 @@ void GameUpdateLoop::Startup() {
 
     // Set audio scene on UI
     TRACE("[GameUpdateLoop::Startup] setting audio scene on UI...\n");
-    *(void**)((uintptr_t)m_userInterface + 0x90) = m_audioScene;
+    reinterpret_cast<UI::UserInterface*>(m_userInterface)->_audioScene = m_audioScene;   // B.3.8 bridge
 
     // Setup UI references (cursors, lists, etc.)
     // fn_SetupUIRefs (exe FUN_140099260) is not reimplemented/registered in
@@ -2328,7 +2330,7 @@ void GameUpdateLoop::Shutdown() {
     TRACE("[GameUpdateLoop::Shutdown] clearing game flags...\n");
     {
         void* gameWorld = *g_pGameWorldSingleton;
-        uint32_t* flags = (uint32_t*)((uintptr_t)gameWorld + 0xD0);
+        uint32_t* flags = &static_cast<GameUpdateLoop*>(gameWorld)->m_gameFlags;   // B.3.8 bridge
         *flags = *flags & 0xFFFFFEFF;
     }
 
@@ -2401,7 +2403,7 @@ void GameUpdateLoop::Shutdown() {
     TRACE("[GameUpdateLoop::Shutdown] removing global scene objects...\n");
     {
         void* gameWorld = *g_pGameWorldSingleton;
-        void* graphicsScene = *(void**)((uintptr_t)gameWorld + 0x60);
+        void* graphicsScene = static_cast<GameUpdateLoop*>(gameWorld)->m_graphicsScene;   // B.3.8 bridge
         Graphics::Scene* gs = reinterpret_cast<Graphics::Scene*>(graphicsScene);   // B.3.5 bridge
         gs->RemoveGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_worldGeometry));  // B.3.5 bridge
         gs->RemoveGlobalObject(reinterpret_cast<Graphics::Geometry*>(m_sunLight));       // B.3.5 bridge
@@ -2411,7 +2413,7 @@ void GameUpdateLoop::Shutdown() {
     // Delete scenario instance
     if (m_scenarioInstance != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown] deleting scenario instance...\n");
-        reinterpret_cast< ::Object::InternalBasePtr*>((void*)((uintptr_t)this + 0x150))->DeletePtr(
+        reinterpret_cast< ::Object::InternalBasePtr*>(&m_scenarioInstance)->DeletePtr(
             );   // B.3.3 bridge
     }
 
@@ -2527,9 +2529,8 @@ void GameUpdateLoop::Shutdown() {
     // WorldGeometry, SunLight, SkyMesh — via scalar deleting dtor (vtable[0] with flags=1)
     if (m_worldGeometry != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying WorldGeometry...\n");
-        typedef void (*ScalarDtor_t)(void* self, uint32_t flags);
-        ScalarDtor_t dtor = *(ScalarDtor_t*)(*(uintptr_t*)m_worldGeometry);
-        dtor(m_worldGeometry, 1);
+        // Caller batch CB6: slot 0 of the real class (proved as in Update step 8).
+        static_cast<WorldGeometry*>(m_worldGeometry)->DeletingDtor(1);   // B.3.8 bridge
     }
     if (m_sunLight != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying SunLight...\n");
@@ -2605,7 +2606,8 @@ void GameUpdateLoop::Shutdown() {
 static float CalcWindFactor_Impl(void* /*time — dead in retail*/) {
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gw) return 0.0f;
-    uintptr_t playerCtrl = *(uintptr_t*)((uintptr_t)gw + 0xE0);
+    uintptr_t playerCtrl = reinterpret_cast<uintptr_t>(
+        static_cast<GameUpdateLoop*>(gw)->m_playerController);   // B.3.8 bridge
     if (!playerCtrl) return 0.0f;
 
     const float* camPos = (const float*)(playerCtrl + 0x34 + 0x88);
@@ -2632,7 +2634,7 @@ void GameUpdateLoop::OnScenarioComplete() {
     m_scenarioCompleted = 1;
 
     // Check if the achievement has a parent Achievement object
-    void* achievementInstance = *(void**)((uintptr_t)this + 0x150);
+    void* achievementInstance = m_scenarioInstance;
     void* achievement = *(void**)((uintptr_t)achievementInstance + 0x20);
 
     if (achievement == nullptr) {
@@ -2642,7 +2644,7 @@ void GameUpdateLoop::OnScenarioComplete() {
         int64_t nullEntity[1] = {0};
         new (nullEntity) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
-        bool isMet = reinterpret_cast<const Achievement::AchievementInstance*>(*(void**)((uintptr_t)this + 0x150))->IsMet();   // B.3.7 bridge
+        bool isMet = reinterpret_cast<const Achievement::AchievementInstance*>(m_scenarioInstance)->IsMet();   // B.3.7 bridge
 
         // 0x1c = scenario won (28), 0x1d = scenario failed (29). IsMet=1 -> 0x1c.
         // (The IDs were documented inverted here; the live string table settles it —
@@ -2677,7 +2679,7 @@ void GameUpdateLoop::OnScenarioComplete() {
         int64_t nullEntity[1] = {0};
         new (nullEntity) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
-        bool isMet = reinterpret_cast<const Achievement::AchievementInstance*>(*(void**)((uintptr_t)this + 0x150))->IsMet();   // B.3.7 bridge
+        bool isMet = reinterpret_cast<const Achievement::AchievementInstance*>(m_scenarioInstance)->IsMet();   // B.3.7 bridge
 
         // 0x1a = scenario won with name (26), 0x1b = scenario failed with name (27)
         int eventType = 0x1b - (int)isMet;
@@ -2733,26 +2735,30 @@ Engine::UpdateLoop* GameUpdateLoop::DeletingDtor(unsigned flags) {
 // door-then-stamp construction sites outside this block write by hand
 // (newgamedialog.cpp, saveloaddialog.cpp, tutorial_next_scenario.cpp).
 GameUpdateLoop::GameUpdateLoop(void* savedState, uint64_t scenarioIbp, int32_t scenarioIndex,
-                               const System::String& saveName, int32_t mapSizeIndex,
-                               int32_t mapTypeIndex, bool disasters, void* mapConfig,
+                               const System::String& saveName, int32_t seed,
+                               int32_t mapSize, bool disasters, void* mapConfig,
                                void* terrainConfig, void* climateConfig)
     : Engine::UpdateLoop(), m_saveName(saveName) {
-    m_mapSizeIndex  = mapSizeIndex;
-    m_mapTypeIndex  = mapTypeIndex;
+    m_seed          = seed;
+    m_mapSize       = mapSize;
     m_gameTime      = 0;
     m_mapConfig     = mapConfig;
     m_terrainConfig = terrainConfig;
     m_climateConfig = climateConfig;
     m_savedState    = savedState;
-    uint8_t* const g = reinterpret_cast<uint8_t*>(this);
-    for (uintptr_t off = 0x60; off <= 0xB8; off += 8)
-        *reinterpret_cast<uint64_t*>(g + off) = 0;
+    // +0x60..+0xB8, in field order (retail's qword stores).
+    m_graphicsScene = m_animationManager = m_pickingScene = m_audioScene = nullptr;
+    m_musicPlayer = m_characterGrid = m_renderer = m_userInterface = nullptr;
+    m_helpTopics = m_diseaseList = m_professionList = m_uiMaterial = nullptr;
     m_quickSavePressed = 0;
     m_quickLoadPressed = 0;
     m_nextLoop      = nullptr;
     m_gameFlags     = disasters ? 0u : 0xF0u;   // retail: p8 ? 0 : 0xF0
-    for (uintptr_t off = 0xD8; off <= 0x148; off += 8)
-        *reinterpret_cast<uint64_t*>(g + off) = 0;
+    // +0xD8..+0x148, in field order.
+    m_random = m_playerController = m_entityList = m_citizenList = m_game = nullptr;
+    m_sunLight = m_skyMesh = m_worldGeometry = nullptr;
+    m_tutorial = m_entityUI = m_dayCounter = m_weather = nullptr;
+    m_eventNotifier = m_saveLoad = m_imageCapture = nullptr;
     m_scenarioInstance  = reinterpret_cast<void*>(scenarioIbp);   // *param_3
     m_scenarioCompleted = 0;
     m_scenarioIndex     = scenarioIndex;
@@ -2763,14 +2769,13 @@ GameUpdateLoop::GameUpdateLoop(void* savedState, uint64_t scenarioIbp, int32_t s
 // ============================================================
 
 // [7] 0x1400959c0 — serializes loop state to/from a Save::SavedState. The
-// body is the registered door GameUpdateLoop_SaveRestore
-// (gameupdateloop_serialize.cpp, RegisterExeAddr 0x1400959c0) because it takes
+// body is SaveRestoreOut (gameupdateloop_serialize.cpp) because it takes
 // retail's 4th argument, which only GameUpdateLoop::Load passes (directly, with
 // a real pointer). Every virtual caller — Save::SaveLoad::UpdateSave and the
 // ModDialog reload — hands a dead R9 that the save path never reads; nullptr
 // here is the value the old table's slot received from UpdateSave.
 void GameUpdateLoop::SaveRestore(bool saving, Save::SavedState* state) {
-    GameUpdateLoop_SaveRestore(this, saving ? 1 : 0, state, nullptr);
+    SaveRestoreOut(saving, state, nullptr);
 }
 
 // [8] 0x140095970 — PORT GAP (retail releases the loop's GPU buffers on a D3D
