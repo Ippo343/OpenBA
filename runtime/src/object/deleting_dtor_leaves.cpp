@@ -112,16 +112,6 @@ extern "C" void RtUi_ToolTipDialog_Dtor(void* self) {
 
 
 
-// ??1MaterialInstance@Graphics@@UEAA@XZ   0x180103a00
-extern "C" void RtGraphics_MaterialInstance_Dtor(void* self) {
-    STAMP(self, "??_7MaterialInstance@Graphics@@6B@");
-    uint8_t* d = static_cast<uint8_t*>(self);
-    ByAddr(0x180004d60ull)(d + 0x50);
-    ByAddr(0x180004c80ull)(d + 0x40);
-    ByAddr(0x180004b70ull)(d + 0x30);
-    RT_EXPORT_ONCE(DtorFn, "??1External@Object@@UEAA@XZ")(self);
-}
-
 // ??1Base@Object@@UEAA@XZ   0x1800c0360
 extern "C" void RtObject_Base_Dtor(void* self) {
     STAMP(self, "??_7Base@Object@@6B@");
@@ -142,8 +132,6 @@ extern "C" void RtGraphics_ParticleInstance_Dtor(void* self) {
 }
 
 int RtObjectDeletingDtorLeavesRegister() {
-    RegisterRuntimeExport("??1MaterialInstance@Graphics@@UEAA@XZ",        (void*)&RtGraphics_MaterialInstance_Dtor);
-    RegisterRuntimeAddr  (0x180103a00ull,                                  (void*)&RtGraphics_MaterialInstance_Dtor);
     RegisterRuntimeExport("??1Base@Object@@UEAA@XZ",                      (void*)&RtObject_Base_Dtor);
     RegisterRuntimeAddr  (0x1800c0360ull,                                  (void*)&RtObject_Base_Dtor);
     RegisterRuntimeExport("??1Stream@IO@@UEAA@XZ",                        (void*)&RtIo_Stream_Dtor);
@@ -152,5 +140,5 @@ int RtObjectDeletingDtorLeavesRegister() {
     RegisterRuntimeAddr  (0x1801041f0ull,                                  (void*)&RtGraphics_ParticleInstance_Dtor);
     RegisterRuntimeExport("??1ToolTipDialog@UI@@UEAA@XZ",        (void*)&RtUi_ToolTipDialog_Dtor);
     RegisterRuntimeAddr  (0x1800dac70ull,                          (void*)&RtUi_ToolTipDialog_Dtor);
-    return 5;
+    return 4;
 }

@@ -368,11 +368,9 @@ RtVideo::Configuration* ConfigurationSingleton() {
 // `RtResolveCached` shape now (saveload_internal.h `AtomicExport`).
 std::atomic<void*> g_vtBase{nullptr};
 std::atomic<void*> g_vtExternal{nullptr};
-std::atomic<void*> g_vtMaterialInstance{nullptr};
 std::atomic<void*> g_vtSpriteSheet{nullptr};
 void* VtBase()             { return RtSaveDetail::AtomicExport(g_vtBase,             "??_7Base@Object@@6B@"); }              // 1389
 void* VtExternal()         { return RtSaveDetail::AtomicExport(g_vtExternal,         "??_7External@Object@@6B@"); }          // 1432
-void* VtMaterialInstance() { return RtSaveDetail::AtomicExport(g_vtMaterialInstance, "??_7MaterialInstance@Graphics@@6B@"); } // 1464
 void* VtSpriteSheet()      { return RtSaveDetail::AtomicExport(g_vtSpriteSheet,      "??_7SpriteSheet@UI@@6B@"); }            // 1504
 
 // ============================================================================
@@ -560,22 +558,10 @@ void Save::SaveLoad::Draw(Video::Context& context,
     {
         void* p = RT_EXPORT_ONCE(OpNewFn, "??2MaterialInstance@Graphics@@SAPEAX_K@Z")(0x60);
         if (p != nullptr) {
-            uint8_t* m = static_cast<uint8_t*>(p);
-            *reinterpret_cast<void**>(m)            = VtBase();
-            *reinterpret_cast<void**>(m)            = VtExternal();
-            *reinterpret_cast<uint64_t*>(m + 0x08)  = 0;
-            *reinterpret_cast<uint64_t*>(m + 0x10)  = 0;
-            *reinterpret_cast<uint64_t*>(m + 0x18)  = 0;
-            *reinterpret_cast<void**>(m)            = VtMaterialInstance();
-            *reinterpret_cast<uint32_t*>(m + 0x20)  = 0;
-            *reinterpret_cast<uint16_t*>(m + 0x24)  = 0;   // a WORD store, not a dword
-            *reinterpret_cast<uint64_t*>(m + 0x28)  = 0;
-            *reinterpret_cast<uint64_t*>(m + 0x30)  = 0;
-            *reinterpret_cast<uint64_t*>(m + 0x38)  = 0;
-            *reinterpret_cast<uint64_t*>(m + 0x40)  = 0;
-            *reinterpret_cast<uint64_t*>(m + 0x48)  = 0;
-            *reinterpret_cast<uint64_t*>(m + 0x50)  = 0;
-            *reinterpret_cast<uint64_t*>(m + 0x58)  = 0;
+            // ENDGAME B.3.9 GFX (B9-13): those stores ARE the real ctor inlined
+            // (External()'s stamps and zeroes, the MaterialInstance stamp, the
+            // field stores), so the builder is the class's ctor.
+            ::new (p) Graphics::MaterialInstance();
             mat = p;
         }
     }

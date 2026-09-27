@@ -341,11 +341,13 @@ UNIT_TEST(rb_materialinstance_ctor_is_retail_0x180103980_and_concrete) {
     CHECK_EQ((int)By(m, 0x25), 0);
     CHECK_EQ((int)By(m, 0x26), 0xCD);           // never written
     for (size_t off = 0x28; off < 0x60; off += 8) CHECK_EQ(Q(m, off), (uint64_t)0);
-    alignas(8) unsigned char raw[sizeof(Graphics::MaterialInstance)];
-    std::memset(raw, 0xCD, sizeof raw);
-    *reinterpret_cast<const void**>(raw) = kFakeMinted;
-    Graphics::MaterialInstance::DoorBody::Init(reinterpret_cast<Graphics::MaterialInstance*>(raw));
-    CHECK(std::memcmp(buf + 0x20, raw + 0x20, sizeof raw - 0x20) == 0);
+    // (ENDGAME B.3.9 GFX: the ??0 door and DoorBody are retired; the real ctor
+    // is the only builder. Retail's External() zeroes run under the base.)
+    CHECK_EQ(Q(m, 0x08), (uint64_t)0);
+    CHECK_EQ(Q(m, 0x10), (uint64_t)0);
+    CHECK_EQ(Q(m, 0x18), (uint64_t)0);
+    CHECK(!std::is_destructible<Graphics::MaterialInstance>::value);
+    CHECK(!std::has_virtual_destructor<Graphics::MaterialInstance>::value);
     m->DeletingDtor(0);
 
     void* mem = Object::detail::InternalMemAlloc(sizeof(Graphics::MaterialInstance), 8);

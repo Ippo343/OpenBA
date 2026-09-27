@@ -37,3 +37,6 @@
 # -- W2: FrameCopyImageBuffer concrete (exe scalar slot 0 kept) + GeneratedImageBuffer slot 0 concrete (abstract, as retail) --
 ??_7FrameCopyImageBuffer@Graphics@@6B@  GFX   real ctor/dtor (door bodies); FACTREST row, RT_DELDTOR row 0x18001f260, ??0/??1/Create/Generate doors, 8 slot doors deleted; w2_takescreenshot + SaveLoad::Draw builders placement-new
 ??_7GeneratedImageBuffer@Graphics@@6B@  GFX   stamped only by FrameCopy/Reflection ctors (compiler-built now); FACTREST row, RT_DELDTOR row 0x18001eee0, ??0/??1 doors, 4 slot doors deleted; abstract factory pair own
+
+# -- W2: MaterialInstance concrete (exe scalar slot 0 kept); the exe builders were converted by EXA --
+??_7MaterialInstance@Graphics@@6B@      GFX   real ctor/dtor (door bodies); FACTREST row, RT_DELDTOR row 0x180002d60, ??0 door (renderer.cpp), ??1 leaves door, 7 slot doors deleted; Construct/Reconstruct placement-new; SaveLoad::Draw inline stamp -> ::new
