@@ -32,10 +32,6 @@
 // Resolved helpers
 // ============================================================
 
-// Component_Serialize at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
 // fn_IsDerivedFrom — dispatch slot at 0x140152a98
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
@@ -64,9 +60,6 @@ static bool s_initialized = false;
 
 static void EnsureHelpers() {
     if (s_initialized) return;
-
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
 
     uintptr_t slot;
 
@@ -826,169 +819,7 @@ extern "C" void WorkPlaceComponent_EnterBuiltState_Full(void* selfP) {
 
 }
 
-// ============================================================
-// WorkPlaceComponent::Shutdown (vtable slot [3], 0x14012f120)
-// ============================================================
-// Component_Serialize + empty serializer(v0) + versioned serializer(v1) with:
-//   - worker count at +0x60, worker InternalBasePtr array at +0x58
-//   - IsDerivedFrom validation on each worker ptr
-//   - isAccepting bool at +0x50
-//   - version < 1: read +0x48 from description component
-//   - version >= 1: serialize +0x48 via FUN_140018020
 
-void WorkPlaceComponent_Shutdown(WorkPlaceComponent* self, void* stream) {
-    EnsureHelpers();
-
-    // Base Component serialization
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
-
-    // Empty serializer block (version 0, immediately destroyed)
-    alignas(8) uint8_t emptySerializer[24];
-    ::new (static_cast<void*>(emptySerializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(emptySerializer)->~Serializer();   // B.3.4 bridge
-
-    // Main serializer block (version 1)
-    alignas(8) uint8_t serializer[16];  // Ghidra shows local_30[2] = 16 bytes
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
-
-    // Serialize worker count from +0x60
-    int workerCount = *(int*)((uintptr_t)self + 0x60);
-    int countBuf = workerCount;
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(countBuf, nullptr);   // B.3.4 bridge
-
-    // On load, resize the worker array to the count just read.
-    //
-    // ⚠ This tested `*(int*)(serializer + 8) == 0`, but IO::Serializer +0x08 is
-    // m_encoding — a POINTER, never 0 — so the resize NEVER ran on either leg.
-    // The loading flag lives on the STREAM (MemoryStream +0x08), which is how
-    // ComponentEntity_Serialize and goals_serialize.cpp test it. With the resize
-    // dead, +0x58 stayed null on load and the `workerArray` guard below silently
-    // skipped reading `count` worker IBPs that the save had written — and each of
-    // those pulls a worker's ENTITY inline, so the save wrote hundreds of bytes
-    // the load never consumed. That desynced the stream for every later object:
-    // a subsequent entity's component record was read off misaligned bytes,
-    // handing InternalFactory::PersistObject a bogus objId (0xAAA12C08, identical
-    // across saves because it is stream content, not heap garbage) which it used
-    // to index its id map out of bounds -> ACCESS_VIOLATION on load.
-    const uintptr_t serStream = *(uintptr_t*)serializer;
-    const bool loadingLeg = serStream && (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-    // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
-    if (loadingLeg) {
-        GameColl::AsArray<GameColl::Ptr8>((void*)((uintptr_t)self + 0x58)).SetSize(countBuf);
-    }
-
-    // Serialize each worker InternalBasePtr and validate type
-    void* workerArray = *(void**)((uintptr_t)self + 0x58);
-    int64_t count = (int64_t)countBuf;
-    if (count > 0 && workerArray) {
-        uintptr_t ptr = (uintptr_t)workerArray;
-        for (int64_t i = 0; i < count; i++) {
-            reinterpret_cast<Object::InternalBasePtr*>((void*)ptr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            // Validate: if ptr dereferences to non-null, check IsDerivedFrom
-            void* obj = *(void**)ptr;
-            // s_TypeId_WorkerType must hold a CRC, not merely be a registered slot —
-            // IsDerivedFrom(obj, 0) never matches and would null out every worker ref.
-            if (obj != nullptr && s_fn_IsDerivedFrom_dispatch &&
-                s_TypeId_WorkerType && *s_TypeId_WorkerType) {
-                bool valid = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_WorkerType);
-                if (!valid) {
-                    *(uint64_t*)ptr = 0;  // Clear invalid reference
-                }
-            }
-            ptr += 8;  // InternalBasePtr is 8 bytes
-        }
-    }
-
-    // Serialize isAccepting bool at +0x50
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&self->isAccepting), nullptr);   // B.3.4 bridge
-
-    // Version check for +0x48 field
-    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
-    if (version < 1) {
-        // Legacy path: read from description component via IsDerivedFrom
-        void* obj = self->_description;
-        if (s_fn_IsDerivedFrom_dispatch && s_TypeId_WorkPlaceDesc) {
-            bool derived = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_WorkPlaceDesc);
-            void* descComp = derived ? obj : nullptr;
-            if (descComp) {
-                *(uint64_t*)&self->workerData = *(uint64_t*)((uintptr_t)descComp + 0x20);
-            }
-        }
-    } else {
-        // Version >= 1: serialize via FUN_140018020
-        if (s_fn_SerializeIBP) {
-            s_fn_SerializeIBP((void*)((uintptr_t)self + 0x48), serializer);
-        }
-    }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-}
-
-// ============================================================
-// WorkPlaceComponent::OnRemovedFromWorld (vtable slot [7], 0x14012f090)
-// ============================================================
-// Slot 7 (+0x38) is the REMOVAL broadcast slot — FUN_1400c2ea0 (MarkForRemoval)
-// dispatches it to every component whose +0x20 capability flags have bit 1 set
-// (WorkPlaceComponent's are 0x82, so it qualifies). The Ghidra name "OnCreate" is a
-// misnomer, the same one MapComponent carries: this is the TEARDOWN.
-//
-// It reads +0x48 (the profession key), finds that key's bucket in the town's
-// profession BST (gameWorld+0xf0 -> +0x100), and REMOVES this component's owner
-// entity from the bucket's entity array (FUN_140002cc0). Then, unconditionally,
-// ee60 releases every seated worker.
-//
-// Why it matters in standalone: while a building is under construction its
-// WorkPlaceComponent is registered under the Builder profession (the list
-// CitizenBehavior_BuildPathGraph and FindAvailableBuilding walk). With the inert
-// factory's no-op slot 7 the entry survived the entity's free, and the next
-// BuildPathGraph read the freed entity through it — an ACCESS_VIOLATION at
-// citizenbehavior.cpp:716 (fn_Entity_GetGridId on the stale IBP), observed on the
-// first successful building upgrade. Same class as the MapComponent cell-occupancy
-// and PickingComponent pick-mesh teardowns.
-
-void WorkPlaceComponent_OnCreate(WorkPlaceComponent* self) {
-    EnsureHelpers();
-
-    uint64_t professionId = *(uint64_t*)((uintptr_t)self + 0x48);
-    if (professionId != 0 && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        // Build InternalBasePtr for owner
-        uint64_t ownerRef = *(uint64_t*)((uintptr_t)self + 0x10);
-
-        // Get BST root from game world +0xf0 -> +0x100
-        uintptr_t gameState = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
-        uint64_t* node = *(uint64_t**)(gameState + 0x100);
-
-        bool found = false;
-        while (node != nullptr) {
-            if (professionId < *node) {
-                node = (uint64_t*)node[4];  // left child
-            } else if (professionId > *node) {
-                node = (uint64_t*)node[5];  // right child
-            } else {
-                // Found: UNregister the owner entity from this bucket's entity array.
-                if (s_fn_RemoveFromList) {
-                    uint64_t localRef[4];
-                    localRef[0] = ownerRef;
-                    s_fn_RemoveFromList((void*)(node + 1), (void*)localRef);
-                }
-                found = true;
-                break;
-            }
-        }
-
-        if (!found && s_fn_OnCreateFallback) {
-            s_fn_OnCreateFallback(self);
-            return;
-        }
-    }
-
-    // Always call fallback init
-    if (s_fn_OnCreateFallback) {
-        s_fn_OnCreateFallback(self);
-    }
-}
 
 // ============================================================
 // Init: resolve function pointers
@@ -996,9 +827,8 @@ void WorkPlaceComponent_OnCreate(WorkPlaceComponent* self) {
 void WorkPlaceComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[WorkPlaceComponent] Funcs resolved: Component_Serialize=%p "
+    printf("[WorkPlaceComponent] Funcs resolved: "
            "AddToList=%p OnCreateFallback=%p\n",
-           (void*)s_fn_Component_Serialize,
            (void*)s_fn_RemoveFromList,
            (void*)s_fn_OnCreateFallback);
 #endif
@@ -1057,7 +887,7 @@ static char WPC_EnterDemolishState(void* comp, void* /*sm*/) {       // ed60
     // OnCreate body is the same pair in erase-first order; the halves touch disjoint
     // state (+0x48/BST vs the +0x58 roster), so the order is immaterial.
     WPC_TraceEnter("state-3 (demolish/ed60)", comp);
-    WorkPlaceComponent_OnCreate(reinterpret_cast<WorkPlaceComponent*>(comp));   // B.3.8 bridge
+    reinterpret_cast<WorkPlaceComponent*>(comp)->WorkPlaceComponent::OnRemove();   // B.3.8 bridge (the ported slot-7 body)
     return 0;
 }
 
@@ -1160,13 +990,166 @@ void* WorkPlaceComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) WorkPlaceComponent());
 }
 
-// [3] 0x14012f120 — the worker roster (+0x58/+0x60), isAccepting (+0x50) and the
-// profession-key IBP (+0x48). The body resolves its helpers at its top.
-void WorkPlaceComponent::Persist(void* stream) { WorkPlaceComponent_Shutdown(this, stream); }
-// [7] 0x14012f090 — the slot FUN_1400c2ea0 dispatches at entity removal (Ghidra's
-// "OnCreate"): without it a demolished/upgraded building stays in the town
-// profession BST and the next CitizenBehavior_BuildPathGraph derefs the freed entity.
-void WorkPlaceComponent::OnRemove() { WorkPlaceComponent_OnCreate(this); }
+// ============================================================
+// WorkPlaceComponent::Shutdown (vtable slot [3], 0x14012f120)
+// ============================================================
+// Component_Serialize + empty serializer(v0) + versioned serializer(v1) with:
+//   - worker count at +0x60, worker InternalBasePtr array at +0x58
+//   - IsDerivedFrom validation on each worker ptr
+//   - isAccepting bool at +0x50
+//   - version < 1: read +0x48 from description component
+//   - version >= 1: serialize +0x48 via FUN_140018020
+
+void WorkPlaceComponent::Persist(void* stream) {
+    EnsureHelpers();
+
+    // Base Component serialization
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    // Empty serializer block (version 0, immediately destroyed)
+    alignas(8) uint8_t emptySerializer[24];
+    ::new (static_cast<void*>(emptySerializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(emptySerializer)->~Serializer();   // B.3.4 bridge
+
+    // Main serializer block (version 1)
+    alignas(8) uint8_t serializer[16];  // Ghidra shows local_30[2] = 16 bytes
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+
+    // Serialize worker count from +0x60
+    int workerCount = *(int*)(reinterpret_cast<uintptr_t>(this) + 0x60);
+    int countBuf = workerCount;
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(countBuf, nullptr);   // B.3.4 bridge
+
+    // On load, resize the worker array to the count just read.
+    //
+    // ⚠ This tested `*(int*)(serializer + 8) == 0`, but IO::Serializer +0x08 is
+    // m_encoding — a POINTER, never 0 — so the resize NEVER ran on either leg.
+    // The loading flag lives on the STREAM (MemoryStream +0x08), which is how
+    // ComponentEntity_Serialize and goals_serialize.cpp test it. With the resize
+    // dead, +0x58 stayed null on load and the `workerArray` guard below silently
+    // skipped reading `count` worker IBPs that the save had written — and each of
+    // those pulls a worker's ENTITY inline, so the save wrote hundreds of bytes
+    // the load never consumed. That desynced the stream for every later object:
+    // a subsequent entity's component record was read off misaligned bytes,
+    // handing InternalFactory::PersistObject a bogus objId (0xAAA12C08, identical
+    // across saves because it is stream content, not heap garbage) which it used
+    // to index its id map out of bounds -> ACCESS_VIOLATION on load.
+    const uintptr_t serStream = *(uintptr_t*)serializer;
+    const bool loadingLeg = serStream && (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+    // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
+    if (loadingLeg) {
+        GameColl::AsArray<GameColl::Ptr8>((void*)(reinterpret_cast<uintptr_t>(this) + 0x58)).SetSize(countBuf);
+    }
+
+    // Serialize each worker InternalBasePtr and validate type
+    void* workerArray = *(void**)(reinterpret_cast<uintptr_t>(this) + 0x58);
+    int64_t count = (int64_t)countBuf;
+    if (count > 0 && workerArray) {
+        uintptr_t ptr = (uintptr_t)workerArray;
+        for (int64_t i = 0; i < count; i++) {
+            reinterpret_cast<Object::InternalBasePtr*>((void*)ptr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+            // Validate: if ptr dereferences to non-null, check IsDerivedFrom
+            void* obj = *(void**)ptr;
+            // s_TypeId_WorkerType must hold a CRC, not merely be a registered slot —
+            // IsDerivedFrom(obj, 0) never matches and would null out every worker ref.
+            if (obj != nullptr && s_fn_IsDerivedFrom_dispatch &&
+                s_TypeId_WorkerType && *s_TypeId_WorkerType) {
+                bool valid = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_WorkerType);
+                if (!valid) {
+                    *(uint64_t*)ptr = 0;  // Clear invalid reference
+                }
+            }
+            ptr += 8;  // InternalBasePtr is 8 bytes
+        }
+    }
+
+    // Serialize isAccepting bool at +0x50
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&isAccepting), nullptr);   // B.3.4 bridge
+
+    // Version check for +0x48 field
+    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
+    if (version < 1) {
+        // Legacy path: read from description component via IsDerivedFrom
+        void* obj = _description;
+        if (s_fn_IsDerivedFrom_dispatch && s_TypeId_WorkPlaceDesc) {
+            bool derived = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_WorkPlaceDesc);
+            void* descComp = derived ? obj : nullptr;
+            if (descComp) {
+                *(uint64_t*)&workerData = *(uint64_t*)((uintptr_t)descComp + 0x20);
+            }
+        }
+    } else {
+        // Version >= 1: serialize via FUN_140018020
+        if (s_fn_SerializeIBP) {
+            s_fn_SerializeIBP((void*)(reinterpret_cast<uintptr_t>(this) + 0x48), serializer);
+        }
+    }
+
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+}
+// ============================================================
+// WorkPlaceComponent::OnRemovedFromWorld (vtable slot [7], 0x14012f090)
+// ============================================================
+// Slot 7 (+0x38) is the REMOVAL broadcast slot — FUN_1400c2ea0 (MarkForRemoval)
+// dispatches it to every component whose +0x20 capability flags have bit 1 set
+// (WorkPlaceComponent's are 0x82, so it qualifies). The Ghidra name "OnCreate" is a
+// misnomer, the same one MapComponent carries: this is the TEARDOWN.
+//
+// It reads +0x48 (the profession key), finds that key's bucket in the town's
+// profession BST (gameWorld+0xf0 -> +0x100), and REMOVES this component's owner
+// entity from the bucket's entity array (FUN_140002cc0). Then, unconditionally,
+// ee60 releases every seated worker.
+//
+// Why it matters in standalone: while a building is under construction its
+// WorkPlaceComponent is registered under the Builder profession (the list
+// CitizenBehavior_BuildPathGraph and FindAvailableBuilding walk). With the inert
+// factory's no-op slot 7 the entry survived the entity's free, and the next
+// BuildPathGraph read the freed entity through it — an ACCESS_VIOLATION at
+// citizenbehavior.cpp:716 (fn_Entity_GetGridId on the stale IBP), observed on the
+// first successful building upgrade. Same class as the MapComponent cell-occupancy
+// and PickingComponent pick-mesh teardowns.
+
+void WorkPlaceComponent::OnRemove() {
+    EnsureHelpers();
+
+    uint64_t professionId = *(uint64_t*)(reinterpret_cast<uintptr_t>(this) + 0x48);
+    if (professionId != 0 && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        // Build InternalBasePtr for owner
+        uint64_t ownerRef = *(uint64_t*)(reinterpret_cast<uintptr_t>(this) + 0x10);
+
+        // Get BST root from game world +0xf0 -> +0x100
+        uintptr_t gameState = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        uint64_t* node = *(uint64_t**)(gameState + 0x100);
+
+        bool found = false;
+        while (node != nullptr) {
+            if (professionId < *node) {
+                node = (uint64_t*)node[4];  // left child
+            } else if (professionId > *node) {
+                node = (uint64_t*)node[5];  // right child
+            } else {
+                // Found: UNregister the owner entity from this bucket's entity array.
+                if (s_fn_RemoveFromList) {
+                    uint64_t localRef[4];
+                    localRef[0] = ownerRef;
+                    s_fn_RemoveFromList((void*)(node + 1), (void*)localRef);
+                }
+                found = true;
+                break;
+            }
+        }
+
+        if (!found && s_fn_OnCreateFallback) {
+            s_fn_OnCreateFallback(this);
+            return;
+        }
+    }
+
+    // Always call fallback init
+    if (s_fn_OnCreateFallback) {
+        s_fn_OnCreateFallback(this);
+    }
+}
 
 DEFINE_EXE_VTABLE(WorkPlaceComponent, "_ZTV18WorkPlaceComponent")
 DEFINE_EXE_TYPE(WorkPlaceComponent, "ControllerComponent")
