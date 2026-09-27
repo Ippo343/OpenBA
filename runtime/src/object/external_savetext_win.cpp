@@ -229,8 +229,8 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
     // NULL GUARDS" note), and this one does not.
     const uint32_t typeId = ExternalGetTypeId(self);
 
-    const Factory* factory = *RT_DATA_SLOT(Factory**,
-                                           "?_singleton@Factory@Object@@0PEAV12@EA");
+    const Factory* factory = reinterpret_cast<const Factory*>(      // B.3.3 bridge
+        ::Object::Factory::_singleton);   // class static (B.3.9 OBJ, D7)
     const TypeNode* node = factory->root;
     while (node != nullptr) {
         const uint32_t key = node->key;

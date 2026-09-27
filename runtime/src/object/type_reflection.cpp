@@ -285,22 +285,17 @@ void BaseTypeInfo::StripNamespace() {
 // Object::Factory
 // ============================================================================
 
-// ?Get@Factory@Object@@SAPEAV12@XZ — `?_singleton@Factory@Object@@0PEAV12@EA`
-// at retail 0x1801fc6e8.
-//
-// NOT moved off the mint by B.3.3 step 3, deliberately: unlike `_firstTypeInfo`
-// this is only ever read at RUNTIME (never from a static initialiser), so the
-// port door answers it, and moving a second cell would double this step's
-// blast radius for no gain. B33_RULES §2.2 tracks it.
+// ?_singleton@Factory@Object@@0PEAV12@EA — retail 0x1801fc6e8. The class
+// static (ENDGAME B.3.9 OBJ, B39_RULES D7); the minted row is redirected onto
+// it in RtObjectPortInit, so the name and address doors answer these bytes.
+// The mint never zeroes or re-seeds it; the language zero-initialises it and
+// the ctor door publishes into it. (The host has no singleton: in `make unit`
+// it stays null, which is what Get() answered there before.)
+Factory* Factory::_singleton = nullptr;
+
+// ?Get@Factory@Object@@SAPEAV12@XZ — `MOV RAX,[0x1801fc6e8]; RET`.
 Factory* Factory::Get() {
-#if defined(BANISHED_UNIT_TEST)
-    // The host has no singleton. A unit test builds its own Factory and calls
-    // the members on it; nothing under test reaches Get().
-    return nullptr;
-#else
-    Factory** slot = RT_DATA_SLOT(Factory**, "?_singleton@Factory@Object@@0PEAV12@EA");
-    return slot ? *slot : nullptr;
-#endif
+    return _singleton;
 }
 
 uint32_t Factory::GetTypeFromNameCRC(const char* name) const {

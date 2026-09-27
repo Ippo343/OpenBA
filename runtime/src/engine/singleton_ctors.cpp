@@ -157,9 +157,9 @@ inline void WP (void* p, size_t o, const void* v) { std::memcpy(static_cast<uint
 // ---------------------------------------------------------------------------
 void** SlotMemoryAllocator() { return RT_DATA_SLOT(void**, "?_singleton@MemoryAllocator@System@@0PEAV12@EA"); }
 void** SlotModification()    { return reinterpret_cast<void**>(&::IO::Modification::_singleton); }   // B.3.9 IO: class static
-void** SlotFactory()         { return RT_DATA_SLOT(void**, "?_singleton@Factory@Object@@0PEAV12@EA"); }
-void** SlotExternalFactory() { return RT_DATA_SLOT(void**, "?_singleton@ExternalFactory@Object@@0PEAV12@EA"); }
-void** SlotInternalFactory() { return RT_DATA_SLOT(void**, "?_singleton@InternalFactory@Object@@0PEAV12@EA"); }
+void** SlotFactory()         { return reinterpret_cast<void**>(&::Object::Factory::_singleton); }
+void** SlotExternalFactory() { return reinterpret_cast<void**>(&::Object::ExternalFactory::_singleton); }
+void** SlotInternalFactory() { return reinterpret_cast<void**>(&::Object::InternalFactory::_singleton); }
 void** SlotFileSystem()      { return reinterpret_cast<void**>(&::IO::FileSystem::_singleton); }   // B.3.9 IO: class static
 void** SlotPersistence()     { return reinterpret_cast<void**>(&::IO::Persistence::_singleton); }   // B.3.9 IO: class static
 void** SlotVideoDevice()     { return reinterpret_cast<void**>(&::Video::Device::_singleton); }

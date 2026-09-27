@@ -509,8 +509,27 @@ public:
 
     Factory() : _types() {}
 
-    // ?Get@Factory@Object@@SAPEAV12@XZ — the singleton, through the port door.
+    // ?Get@Factory@Object@@SAPEAV12@XZ — `return _singleton;`.
     static Factory* Get();
+
+    // ?_singleton@Factory@Object@@0PEAV12@EA — retail 0x1801fc6e8. The CLASS
+    // STATIC since ENDGAME B.3.9 OBJ (B39_RULES D7): defined in
+    // type_reflection.cpp, and RtObjectPortInit redirects the minted row onto
+    // it, so the name door, the address door and this member are the same
+    // eight bytes. Written by the ctor door (engine/singleton_ctors.cpp).
+    // PUBLIC while foreign readers still reach the cell through the doors.
+    static Factory* _singleton;
+
+    // Runtime 0x1801fc6d0 — the HMODULE of the loaded compiler plugin, an
+    // UNEXPORTED 8-byte cell (so the name is ours; the mint's old note calling
+    // it IO::Modification's is wrong — INVENTORY_D finding 8). Read and
+    // cleared by Factory::UnloadCompilers 0x1800bfad4, Factory::Shutdown
+    // 0x1800c0604 and Engine::Shutdown 0x1800db62d. `void*`, not HMODULE: no
+    // <windows.h> in this header (PLAN.md 4.1). The CLASS STATIC since
+    // ENDGAME B.3.9 OBJ (B39_RULES D7), defined in factory_dtors.cpp;
+    // RtObjectPortInit redirects the by-address mint row onto it. PUBLIC while
+    // the two foreign by-address readers remain.
+    static void* _compilerModule;
 
     // ?Startup@Factory@Object@@QEAA_NXZ   retail 0x1800c0630.
     bool Startup();
