@@ -73,9 +73,6 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Time
 
-// Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
-extern uintptr_t ThumbVtable_StampMaterialInstance(void* obj);
-extern uintptr_t ThumbVtable_StampSpriteSheet(void* obj);
 
 // ============================================================
 // Helper: Find element by name in dialog instance
@@ -248,9 +245,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             void* matInst = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
             void* matInstFinal = nullptr;
             if (matInst) {
-                fn_MaterialInstance_Ctor(matInst);
-                // Patch vtable to the exe's MaterialInstance vtable copy
-                ThumbVtable_StampMaterialInstance(matInst);
+                ::new (matInst) Graphics::MaterialInstance();   // B.3.9 EXA: the real class (exe table 0x14015c400 is its own)
                 matInstFinal = matInst;
             }
             entry[6] = (uint64_t)matInstFinal;
@@ -292,8 +287,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             void* sheet = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
             void* sheetFinal = nullptr;
             if (sheet) {
-                fn_SpriteSheet_Ctor(sheet);
-                ThumbVtable_StampSpriteSheet(sheet);
+                ::new (sheet) UI::SpriteSheet();   // B.3.9 EXA: the real class (exe table 0x14015c3b0 is its own)
                 sheetFinal = sheet;
             }
 

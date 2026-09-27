@@ -2204,21 +2204,11 @@ inline void* GetLoadingSoundString(void* retStr) {
 // ModDialog::Slot4 support (Application-x64.exe + Runtime-x64.dll)
 // ============================================================
 
-// Graphics::MaterialInstance::MaterialInstance(this) — ctor (0x60 bytes)
-// Dispatch table at 0x140151838 in exe
-typedef void* (*fn_MaterialInstance_Ctor_t)(void* self);
-extern fn_MaterialInstance_Ctor_t fn_MaterialInstance_Ctor;
-
-// UI::SpriteSheet::SpriteSheet(this) — ctor (0x58 bytes)
-// Dispatch table at 0x140151848
-typedef void* (*fn_SpriteSheet_Ctor_t)(void* self);
-extern fn_SpriteSheet_Ctor_t fn_SpriteSheet_Ctor;
-
-// Custom vtables set on per-mod thumbnail objects (exe .rdata)
-// ModDialog MaterialInstance vtable (0x14015c400)
-extern uintptr_t g_ModDialog_MaterialInstanceVtable;  // 0x14015c400
-// ModDialog SpriteSheet vtable (0x14015c3b0)
-extern uintptr_t g_ModDialog_SpriteSheetVtable;       // 0x14015c3b0
+// ENDGAME B.3.9 EXA: the MaterialInstance / SpriteSheet ctor doors and the
+// exe thumbnail table globals are gone — `::new (p) Graphics::MaterialInstance()`
+// / `UI::SpriteSheet()` (the exe tables 0x14015c400 / 0x14015c3b0 are the
+// classes' own, read in Ghidra: slot 0 the exe scalar deleting dtor, 1-8 thunks
+// onto the class's own members).
 
 // ModDialog thumbnail array push (FUN_140012a60) — 0x58-byte stride
 // Resizes and copies 0x58-byte entries into the mod cache array.

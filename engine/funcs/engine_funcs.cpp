@@ -469,10 +469,9 @@ fn_PerlinNoise_Ctor_t fn_PerlinNoise_Ctor = nullptr;
 fn_PerlinNoise_Generate_t fn_PerlinNoise_Generate = nullptr;
 // Random default ctor: uses existing fn_Random_Default_Ctor
 // --- ModDialog::Slot4 support ---
-fn_MaterialInstance_Ctor_t fn_MaterialInstance_Ctor = nullptr;
-fn_SpriteSheet_Ctor_t fn_SpriteSheet_Ctor = nullptr;
-uintptr_t g_ModDialog_MaterialInstanceVtable = 0;
-uintptr_t g_ModDialog_SpriteSheetVtable = 0;
+// ENDGAME B.3.9 EXA: fn_MaterialInstance_Ctor / fn_SpriteSheet_Ctor and the
+// always-zero g_ModDialog_{MaterialInstance,SpriteSheet}Vtable are gone: the
+// four thumbnail builders construct the real classes.
 fn_ModDialog_ArrayPush_t fn_ModDialog_ArrayPush = nullptr;
 uint32_t* g_TypeId_BrowserController = nullptr;
 uint32_t* g_TypeId_Material = nullptr;
@@ -1780,25 +1779,11 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140059490));
 
     // --- ModDialog::Slot4 support (Graphics::MaterialInstance, UI::SpriteSheet, etc.) ---
-    // MaterialInstance ctor: dispatch at 0x140151838
-    {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151838));
-        if (d && *d) fn_MaterialInstance_Ctor = reinterpret_cast<fn_MaterialInstance_Ctor_t>(*d);
-    }
     // MaterialInstance::{SetMaterial, AddTexture, BuildParameters} (exe dispatch
     // 0x140151870 / 0x140151878 / 0x140151880) reached 0 CALLs in ENDGAME B.3.5
     // (b35-close): they are members of the real `Graphics::MaterialInstance`. Both
     // resolve paths this file had for each — the slot read here and the by-name
     // fallback further down — are gone with them.
-    // SpriteSheet ctor: dispatch at 0x140151848
-    {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151848));
-        if (d && *d) fn_SpriteSheet_Ctor = reinterpret_cast<fn_SpriteSheet_Ctor_t>(*d);
-    }
-    // ImageBuffer::Width / Height — resolved by export name from Runtime
-    // Custom vtables for mod thumbnail objects
-    g_ModDialog_MaterialInstanceVtable = ResolveAddr(Module::Exe, 0x14015c400);
-    g_ModDialog_SpriteSheetVtable      = ResolveAddr(Module::Exe, 0x14015c3b0);
     // ModDialog array push: FUN_140012a60 is unregistered in standalone; it was called
     // UNGUARDED from ModDialog_RefreshDisplay_Impl (moddialog.cpp), so adding an
     // installed mod's thumbnail entry EXEC'd 0. Byte-faithful C++ port instead.
@@ -1814,16 +1799,6 @@ bool EngineFuncsInit() {
     // UV scale float: DAT_14017214c
     g_fUVScale = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
 
-    // Standalone: the MaterialInstance/SpriteSheet/Sprite dispatch slots above are
-    // unregistered → null, so MapUI::SetupImage guard-returned (MatCtor/SSCtor null)
-    // and the minimap never bound its textures. Resolve them directly by their
-    // Runtime export names (mangled names read from the exe .rdata name table).
-    if (!fn_MaterialInstance_Ctor)
-        fn_MaterialInstance_Ctor = reinterpret_cast<fn_MaterialInstance_Ctor_t>(
-            ResolveExport("??0MaterialInstance@Graphics@@QEAA@XZ"));
-    if (!fn_SpriteSheet_Ctor)
-        fn_SpriteSheet_Ctor = reinterpret_cast<fn_SpriteSheet_Ctor_t>(
-            ResolveExport("??0SpriteSheet@UI@@QEAA@XZ"));
 
     // --- NoiseUI helpers ---
     g_NoiseUI_ImageBufferVtable = ResolveAddr(Module::Exe, 0x14015c8c0);

@@ -103,8 +103,8 @@ void RegisterUnregLane2() {
     // per save file) EXEC's a null function pointer. Registering restores retail;
     // no consumer treats "unregistered" as a deliberate fallback branch.
     // ------------------------------------------------------------------
-    RegisterLane2DispatchSlot(0x140151848,
-        (uintptr_t)ResolveExport("??0SpriteSheet@UI@@QEAA@XZ"));
+    // (0x140151848 ??0SpriteSheet: row deleted at ENDGAME B.3.9 EXA — its one
+    // reader, engine_funcs' fn_SpriteSheet_Ctor, went with the thumbnail builders.)
     RegisterLane2DispatchSlot(0x140151898,
         (uintptr_t)ResolveExport("??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@H@Z"));
     RegisterLane2DispatchSlot(0x140151970,

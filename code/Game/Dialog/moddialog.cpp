@@ -64,9 +64,6 @@
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
-// Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
-extern uintptr_t ThumbVtable_StampMaterialInstance(void* obj);
-extern uintptr_t ThumbVtable_StampSpriteSheet(void* obj);
 
 // ============================================================
 // Helper types
@@ -413,8 +410,7 @@ void ModDialog::OnOpened() {
         void* matInst = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
         entry.matInstance = nullptr;
         if (matInst) {
-            fn_MaterialInstance_Ctor(matInst);
-            ThumbVtable_StampMaterialInstance(matInst);
+            ::new (matInst) Graphics::MaterialInstance();   // B.3.9 EXA: the real class (exe table 0x14015c400 is its own)
             entry.matInstance = matInst;
         }
 
@@ -451,8 +447,7 @@ void ModDialog::OnOpened() {
         void* sprSheet = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
         entry.spriteSheet = nullptr;
         if (sprSheet) {
-            fn_SpriteSheet_Ctor(sprSheet);
-            ThumbVtable_StampSpriteSheet(sprSheet);
+            ::new (sprSheet) UI::SpriteSheet();   // B.3.9 EXA: the real class (exe table 0x14015c3b0 is its own)
             entry.spriteSheet = sprSheet;
 
             // Set materialInstance at +0x30

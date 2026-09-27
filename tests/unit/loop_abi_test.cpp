@@ -40,6 +40,9 @@
 #include "Game/WeatherParticleGeometry.h"
 #include "Game/PathfinderThread.h"
 #include "Game/Tornado.h"
+#include "graphics/Material.h"
+#include "ui/SpriteSheet.h"
+#include "video/ImageBuffer.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -234,6 +237,23 @@ UNIT_TEST(loop_builders_construct_in_place) {
     auto* m = reinterpret_cast<MenuDialogLoopT*>(raw);
     CHECK_EQ(reinterpret_cast<uintptr_t>(static_cast<Engine::UpdateLoop*>(m)),
              reinterpret_cast<uintptr_t>(raw));
+}
+
+// The exe's three local table copies (0x14015c400 MaterialInstance, 0x14015c3b0
+// SpriteSheet, 0x14015c8c0 ImageBuffer) are the Runtime classes' own tables
+// (Ghidra: slot 0 the exe scalar deleting dtor, 1..n thunks onto the class's
+// own members), so the thumbnail / minimap builders write `::new (p) X()` at
+// retail's MemAlloc size. ENDGAME B.3.9 EXA.
+UNIT_TEST(exe_table_copies_are_the_runtime_classes) {
+    CHECK((CanPlacementNew<void, Graphics::MaterialInstance>::value));
+    CHECK((CanPlacementNew<void, UI::SpriteSheet>::value));
+    CHECK((CanPlacementNew<void, Video::ImageBuffer>::value));
+    CHECK_EQ(sizeof(Graphics::MaterialInstance), (size_t)0x60);   // MemAlloc(0x60, 8)
+    CHECK_EQ(sizeof(UI::SpriteSheet), (size_t)0x58);              // MemAlloc(0x58, 8)
+    CHECK_EQ(sizeof(Video::ImageBuffer), (size_t)0x68);           // MemAlloc(0x68, 8)
+    CHECK(!std::is_abstract<Graphics::MaterialInstance>::value);
+    CHECK(!std::is_abstract<UI::SpriteSheet>::value);
+    CHECK(!std::is_abstract<Video::ImageBuffer>::value);
 }
 
 // ===========================================================================
