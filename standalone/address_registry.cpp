@@ -51,7 +51,6 @@ extern "C" void SetStandaloneKeyMap(void* keyMap) {
 // Per-class vtable registration entry points. Each lives next to its class's
 // reimplementation in code/Game/<Module>/<Class>.cpp.
 extern "C" {
-    void RegisterStatGoalVtable();
     void RegisterOptionsDialogVtable();
     void RegisterNewGameDialogVtable();
     void RegisterOptionInputBindDialogVtable();
@@ -1418,7 +1417,6 @@ static void RegisterVtablesAndTypeIds() {
 
     // Per-class vtables defined alongside their reimplementation in
     // code/Game/<Module>/<Class>.cpp — declared at file scope above.
-    RegisterStatGoalVtable();
     RegisterOptionsDialogVtable();
     RegisterNewGameDialogVtable();
     RegisterOptionInputBindDialogVtable();
