@@ -883,3 +883,119 @@ tile=(188,193)`, i.e. StateMachine → slot 17 → `TableController::Enter` → 
   so the script cut a "NEW-GOLDEN" — its md5 is `757e48a15eac71eff097508da169c23c`, IDENTICAL to the tracked
   `golden/Gate.resaved.md5`, and `cmp` against main's `golden/Gate.resaved.bin` is identical: **PASS-equivalent**
   (the worktree golden was removed and the md5 file restored afterwards).
+
+---
+
+## 8. Coordinator's dated corrections from the blocks (2026-09-26, recorded by `b38-close`)
+
+Each item names the block that found it. Where an item contradicts §0–§7 above, the item wins; the text above is
+kept as the question pass wrote it.
+
+> **ENDGAME B.1 decision 2 (question pass, §0.1)** — already corrected above: no multiple inheritance and no RTTI
+> for game classes in the exe; the "second vptr" is an embedded member at a per-class offset. `ENDGAME.md` carries
+> the one-line pointer (096d77eb).
+
+> **D1's door list (block RB, fcadaf25 / 8ad21574 / 3cb5a0b7 series).** Three Runtime bases that D1 lists "with a
+> ctor DOOR" have **no ctor door**: `UI::DialogController` (retail ctor 0x1800cd320: three zero stores, +0x28
+> untouched), `UI::DialogControllerConfig` (empty ctor 0x18003b4a0) and `Graphics::AnimationEvent` (0x1800a2150 is
+> `External()` + stamp only). `UI::DialogInstance` has a real public DEFAULT ctor (retail 0x180114ca0) besides the
+> 6-argument one (0x180114870), and its slot 0 is CONCRETE (the exe instantiates it: table copy 0x14015f5a0, scalar
+> deleting dtor 0x140020cb0). `~Particle` exists (retail 0x180103c70, ported by RB: frees each pool record's +0x18
+> buffer, the record, then `_records`) and `~Light` exists (retail 0x180058d20, a bare tail into `~Geometry`).
+> `~ParticleInstance` (0x1801041f0) was declared and undefined before RB.
+
+> **B8-13 is wrong for the tools (block TOOL).** The Tool leaves' createInPlace (e.g. `BridgeTool` 0x14002d7e0:
+> `TEST RCX,RCX; JNZ <ctor>; XOR EAX,EAX; RET`) DOES build in place — only the `Object::Internal`-rooted components,
+> actions and works import `Internal::CreateInPlaceObject` (`XOR EAX,EAX; RET`). The tree's in-place entries are
+> faithful for the tools.
+
+> **Controller member slot 8 reads a "built" flag, not the state count (block MI-A report; verified by the close).**
+> Well's member slot 8 0x140010260 is `XOR EAX,EAX; CMP dword [0x1401d2cf8],EAX; SETNZ AL; RET`. 0x1401d2cf8 is NOT
+> the count: the state table's static initialiser 0x14014bbc0 builds the 16-entry, 0xf8-stride array at 0x1401d1d70
+> and zeroes the COUNT at 0x1401d2cf0; the population initialiser 0x14014bc20 registers states 2..6 and then stores
+> `1` to 0x1401d2cf8 (0x14014bc6e) — the only writer (xrefs: that store and the slot-8 read). §2.3's "HasStates:
+> `CMP [count]`" and MI-A's commit 54b28f75 name the operand wrongly. The tree's `table.count != 0` answers the same
+> for every table the tree builds (built ⇔ at least one state registered, D6: static init); a table registered empty
+> would differ. Nothing in the tree dispatches member slot 8.
+
+> **Tutorial dialog slot labels (block GOAL, 95e3a7e8 / bfa2b779 / 26120b98 / b7af21d0).** `TutorialHighlightDialog`
+> (10 slots, 0xf0) overrides [4] OnOpened, [6] OnUpdateLayout, [7] OnUpdate and INHERITS 3/5/8/9 (Persist, OnClosed,
+> OnElementEvent, OnSerializeSettings) — the old tree labels on its table were one class off. `TutorialUI` (11 slots,
+> 0x60) is a `DialogController` subclass (slot 4 is `OnCreated`, the DialogController numbering, RULE B6-1.2), not a
+> DialogInstance one. `TutorialGoalDialog` (10 slots, 0x40) and `TutorialSetupDialog` (12 slots, 0x78) are
+> `TutorialGoal` / `TutorialSetup` subclasses — `Object::External`-rooted, not dialogs: slot 4 is the inherited
+> `External::Compile`, slot 8 `TutorialGoal::IsComplete` resp. the TutorialSetup slots 6-10; the "Dialog" in the name
+> is the dialog they open. The slot labels the tree carried before GOAL (DialogInstance names on all four tables) did
+> not match these parents.
+
+> **Ghidra ctor/dtor label swaps (blocks CIT, GOAL, MI-A, K1).** 0x140125d80 is `~NaturalResourceComponent`
+> (restamp + `~Internal`, no own work); 0x1400e01a0 is `~TutorialHighlightDialog` (restamp only); 0x140044510 is
+> `~AttendanceComponent` (frees the +0x28/+0x30 waiting queue); 0x1400c6970 (reported by a block, not re-read by
+> the close). Also TOOL: 0x1400de950 is `~PathTool` (three inlined `~Array`), Ghidra labels it "Tool_CopyCtor". Ghidra's labels
+> were not changed (no block renames in Ghidra); the class headers carry the right names.
+
+> **`Animation.h` slot 8 naming (block VIS, 0034b3cd).** `runtime/types/graphics/Animation.h` names
+> `Graphics::AnimationEvent`'s pure slot 8 `Construct()`. Retail's `AnimAudioEvent` slot 8 is the audio trigger
+> 0x140087e40 and the leaf's own Construct is slot 9 (§2.2); the leaf declares slot 9 `ConstructInPlace` to avoid the
+> clash. The Runtime header's name for slot 8 is wrong; renaming it is Runtime-side work (END of B.3).
+
+> **FILEMAP misassignments (blocks PNL, DLG).** B38_FILEMAP §1 put `modbrowseui.cpp` and
+> `dialog_controller_vtable.cpp` in DLG's set and `thumb_vtables.cpp` in PNL's, while §1.3 / D5 give `ModBrowseUI`
+> (a `DialogController` subclass) and the `Apply()` copy site to PNL and the thumbnail ImageBuffer copy site to DLG.
+> The blocks agreed the split between themselves (b9f2404c: PNL converted `ModBrowseUI` in its own header, DLG left
+> `modbrowseui.cpp` untouched; GOAL finally deleted `dialog_controller_vtable.cpp` with TutorialUI, 95e3a7e8). No
+> file was converted twice.
+
+> **`GameUpdateLoop` +0x30 / +0x34 (caller batch CB6).** The fields are the map SEED (+0x30) and the map-SIZE index
+> (+0x34); the tree's old names had them backwards (the Load body and `newgamedialog.cpp` establish it). Renamed
+> `m_seed` / `m_mapSize`.
+
+> **The `RtEngine::` PODs STAY (block LOOP).** D8's "the `RtEngine::` PODs … retire with them" is wrong for the
+> RUNTIME side: the exe-side mirrors (`engine/types/{UpdateLoop,LoaderLoop,DialogLoaderLoopT,MainLoop}.h`) became
+> forwarders and every `m_` use in the exe files was renamed, but the PODs themselves stay in
+> `runtime/types/engine/UpdateLoop.h` — `UI::UserInterface` names the two dialog PODs as friends,
+> `ui_userinterface_abi_test.cpp` pins them and the Runtime ctor/dtor doors stamp through them. They retire at the
+> END of B.3 (§10).
+
+> **The menu scene's factory bit (block LOOP, 723b0232 — root cause of the first LOOP merge's crash).** Once
+> `~UpdateLoop` ran (the splash's chained dtor, 8e52ea3a), `ExternalFactory::Clean` evicted the menu scene: the
+> standalone loads it from the splash on the main thread while the factory's clean-bit index still holds the
+> SPLASH's bit, whereas retail loads it in `MenuDialogLoopT::Load` on the loader thread after `Loader::Run`
+> published the MENU loop's bit. `MenuDialogLoopT_LoadSceneA1` now publishes the menu's bit for the load and
+> restores it. Before D9 #12 the empty geometry dtor leaked the block and hid the eviction.
+
+> **The resave golden was re-cut (coordinator, 758597e2).** LOOP's `~MenuDialogLoopT` running retail's
+> `~DialogLoopT` chain frees the main menu's 128 UI objects before the game loads, as retail does: the resave's
+> live-Internal-object count is 123,386 (was 123,514), same size, same 5,688 reference rows. Golden md5
+> 757e48a1… → dd3893af…. New-game loader calls 5686 → 5683, openFileFail 3 → 0; tutorial 5776/15 → 5773/12.
+> §7's `calls=5686` and the resave md5 are the PRE-LOOP values.
+
+> **§1.2's unreflected loop tables are REFLECTED nowhere but NAMED now.** The five loop tables are the classes
+> `GameUpdateLoop`, `MenuDialogLoopT`, `GameLoadDialogLoopT` (splash, 0x140158800), `InnerLoaderLoop` (0x140158870)
+> and `GameLoaderLoop` (0x1401588d0); the unreflected Runtime subclasses are `PathfinderThread`, `WorldGeometry`
+> (0x14015f110), `WeatherParticleGeometry` (0x140160240), `TornadoInstance` (0x1401601e0) and `StatusIconGeometry`
+> (0x14015f0c0). None has a `BaseTypeInfo`.
+
+### 8.1 §6 NOT VERIFIED — status at the close
+
+1. **CLOSED** (blocks CIT, VIS, MI-A/B): Component slots 8/9 receive a POINTER to the elapsed `System::Time`, read
+   from the retail callers (tree walk 0x1400c2e5d `MOV RDX,RBP`; bucket tick 0x1400c42af `LEA RDX,[RSP+0x40]`). The
+   controller member's argument lists are §2.3's and every block that converted a controller read them from its
+   member table.
+2. **OPEN.** The type table's order sensitivity: D4 kept the FactoryRegistration order, so nobody needed to measure
+   it; the coordinator's pointer-free type-table gate stayed equal at every merge except the intended
+   `AutoSaveDialog` duplicate removal (DLG).
+3. **CLOSED** (DLG, 99634e67): `StripNamespace` keeps what follows the LAST `:`, so `"public UI::DialogInstance"`
+   and `"UI::DialogInstance"` both strip to `DialogInstance`; the tree's only reader of the unstripped literal is asked
+   about `ControllerComponent` only. Gated with the type table and resave ×5.
+4. **OPEN.** The member slot-1 miss-arm is fixed once in `TableController` for every Tag (MI-A, 54b28f75); the other
+   23 member tables were still not compared byte for byte.
+5. **OPEN.** No leaf with its own Destruct body was looked for.
+6. **CLOSED** (RB): every Runtime class an exe-inlined copy needs is concrete — `DialogInstance`,
+   `AchievementInstance`, `MeshInstance`, `SunLight`, `FrameCopyImageBuffer` (with `GeneratedImageBuffer`),
+   `SpriteSheet`, `SpriteCapture`, `MaterialInstance`, `ImageBuffer`; LOOP builds SkyMesh / Sun / AchievementInstance
+   with `new (p) NS::X()`.
+7. **OPEN.** The loader-thread reach through vtable dispatch remains inferred (no instrument, DIRECTION §2).
+8. Historical (the question pass's own side effect).
+9. **OPEN.** No well was demolished in any gate run; the component `DeletingDtor` chains ran at teardown and in the
+   leaf dtors MI-A transcribed (706058a1), but a live demolish of a converted controller was not observed.
