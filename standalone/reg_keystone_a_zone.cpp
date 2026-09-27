@@ -20,7 +20,6 @@ extern void RoadTool_sub_ce00(int64_t, unsigned int, unsigned int, uint64_t, voi
 
 void RegisterKeystoneAZoneBatch() {
     RegisterExeAddr(0x1400a6e30, reinterpret_cast<uintptr_t>(&RoadTool_helper_6e30));
-    RegisterExeAddr(0x1400a6f00, reinterpret_cast<uintptr_t>(&Pf_EnqueueCmd3_a6f00));
     RegisterExeAddr(0x14009d360, reinterpret_cast<uintptr_t>(&ZoneComponent_sub_d360));
     RegisterExeAddr(0x14009ce00, reinterpret_cast<uintptr_t>(&RoadTool_sub_ce00));
 }

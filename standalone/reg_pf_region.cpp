@@ -38,17 +38,7 @@ extern int      Pf_RegionPathLength_8ba0(int*, int, uint32_t, uint64_t);     // 
 //   (closure now satisfied: 0x14001dc00/0x14001dcd0 registered in reg_pf_astar.cpp)
 
 void RegisterPfRegionBatch() {
-    RegisterExeAddr(0x1400a8200, reinterpret_cast<uintptr_t>(&Pf_RegionNodeFree_8200));
-    RegisterExeAddr(0x1400a8350, reinterpret_cast<uintptr_t>(&Pf_RegionFreeId_8350));
     RegisterExeAddr(0x1400a8420, reinterpret_cast<uintptr_t>(&Pf_DirtyCoarseCellB_8420));
-    RegisterExeAddr(0x1400a7480, reinterpret_cast<uintptr_t>(&Pf_RegionRebuildAdjacency_7480));
-    RegisterExeAddr(0x1400a7670, reinterpret_cast<uintptr_t>(&Pf_StampRegionIdBlock_7670));
-    RegisterExeAddr(0x1400a7750, reinterpret_cast<uintptr_t>(&Pf_AddBorderEdge_7750));
-    RegisterExeAddr(0x1400a7950, reinterpret_cast<uintptr_t>(&Pf_RegionCentroidAndEdges_7950));
-    RegisterExeAddr(0x1400a7ad0, reinterpret_cast<uintptr_t>(&Pf_FloodFillLabel_7ad0));
-    RegisterExeAddr(0x1400a7f20, reinterpret_cast<uintptr_t>(&Pf_SeedFloodFills_7f20));
-    RegisterExeAddr(0x1400a80a0, reinterpret_cast<uintptr_t>(&Pf_RebuildRegionChunk_80a0));
-    RegisterExeAddr(0x1400a8a90, reinterpret_cast<uintptr_t>(&Pf_FlushDirtyChunks_8a90));
     RegisterExeAddr(0x1400a5b30, reinterpret_cast<uintptr_t>(&Pf_RegionPairCacheInsert_5b30));
     RegisterExeAddr(0x1400a5d10, reinterpret_cast<uintptr_t>(&Pf_RegionPairCacheTick_5d10));
     RegisterExeAddr(0x1400a8ba0, reinterpret_cast<uintptr_t>(&Pf_RegionPathLength_8ba0));  // dep 1dc00 now reg

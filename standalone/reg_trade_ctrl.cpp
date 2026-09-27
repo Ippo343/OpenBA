@@ -46,22 +46,9 @@ extern "C" char  TradeCtrl_State13_Enter(void* self, void* sm);              // 
 extern "C" char  TradeCtrl_State13_Update(void* self, void* sm);             // 0x14005a6d0
 
 void RegisterTradeCtrlBatch() {
-    RegisterExeAddr(0x14005abd0, reinterpret_cast<uintptr_t>(&TradeCtrl_State2_Enter));
-    RegisterExeAddr(0x14005aa50, reinterpret_cast<uintptr_t>(&TradeCtrl_State12_Enter));
-    RegisterExeAddr(0x14005a780, reinterpret_cast<uintptr_t>(&TradeCtrl_State13_Tick));
-    RegisterExeAddr(0x14005a9c0, reinterpret_cast<uintptr_t>(&TradeCtrl_Event0B_MerchantLost));
-    RegisterExeAddr(0x14005a850, reinterpret_cast<uintptr_t>(&TradeCtrl_Event09_MerchantDocked));
     // Layer 2 — merchant arrival.
-    RegisterExeAddr(0x14005aa60, reinterpret_cast<uintptr_t>(&TradeCtrl_State2_Tick));
-    RegisterExeAddr(0x14005b160, reinterpret_cast<uintptr_t>(&TradeCtrl_Teardown));
-    RegisterExeAddr(0x14000eb20, reinterpret_cast<uintptr_t>(&BoatRoute_FindBoatComponent));
-    RegisterExeAddr(0x140123880, reinterpret_cast<uintptr_t>(&BoatRoute_FindAttachPoint));
-    RegisterExeAddr(0x1400a7310, reinterpret_cast<uintptr_t>(&BoatRoute_NearestPointIndex));
-    RegisterExeAddr(0x14009ffc0, reinterpret_cast<uintptr_t>(&BoatRoute_FindWaterPath));
     // Layer 3 — the docked state. b580 and 9ad0 have no caller in the image other than
     // a800/a6d0 (checked: their only non-data xrefs are 0x14005a809, 0x14005a831 and
     // 0x14005a6e8), so registering them buys nothing at runtime. They are registered
     // anyway so that the registry, not a source grep, is the authority on what is done.
-    RegisterExeAddr(0x14005a800, reinterpret_cast<uintptr_t>(&TradeCtrl_State13_Enter));
-    RegisterExeAddr(0x14005a6d0, reinterpret_cast<uintptr_t>(&TradeCtrl_State13_Update));
 }

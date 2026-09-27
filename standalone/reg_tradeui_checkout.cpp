@@ -44,6 +44,5 @@ void RegisterTradeUICheckoutBatch() {
     // with callers outside the checkout (0x14005baa0 is the generic buy-order
     // retire, 0x14005a490 the merchant-stay bump), so leaving them unregistered
     // would hand those callers a null once they are wired.
-    RegisterExeAddr(0x14005baa0, reinterpret_cast<uintptr_t>(&TradeComponent_RemoveBuyOrder));
     RegisterExeAddr(0x14005a490, reinterpret_cast<uintptr_t>(&TradeDescription_ExtendMerchantStay));
 }

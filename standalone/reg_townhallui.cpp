@@ -46,7 +46,6 @@ void RegisterTownHallBatch() {
     // (FindAvailableBuilding then AssignWorker); nothing in the exe dispatches it in
     // our build today, but registering it keeps the pair symmetric and gives future
     // callers one seat entry point instead of a hand-rolled fallback chain.
-    RegisterExeAddr(0x140091130, reinterpret_cast<uintptr_t>(&CitizenList_AddWorker_91130));
     RegisterExeAddr(0x14008cbf0, reinterpret_cast<uintptr_t>(&CitizenEmploy_Strat_cbf0));
     RegisterExeAddr(0x14008ca20, reinterpret_cast<uintptr_t>(&CitizenEmploy_Strat_ca20));
     RegisterExeAddr(0x14008c5f0, reinterpret_cast<uintptr_t>(&CitizenEmploy_Strat_c5f0));

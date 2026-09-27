@@ -30,9 +30,7 @@ extern "C" void     RemovalCalc_CitizenAI_9ad0(int64_t, int);                // 
 
 void RegisterKeystoneARemovalBatch() {
     // bottom-up: leaf helpers first
-    RegisterExeAddr(0x14002d960, reinterpret_cast<uintptr_t>(&RemovalCalc_helper_d960));
     RegisterExeAddr(0x1400f8d50, reinterpret_cast<uintptr_t>(&RemovalCalc_helper_8d50));
-    RegisterExeAddr(0x14011e4d0, reinterpret_cast<uintptr_t>(&RemovalCalc_helper_e4d0));
     RegisterExeAddr(0x14011dfa0, reinterpret_cast<uintptr_t>(&RemovalCalc_StateMachine_dfa0));
     RegisterExeAddr(0x14009c700, reinterpret_cast<uintptr_t>(&RemovalCalc_helper_c700));
     RegisterExeAddr(0x1400f9ad0, reinterpret_cast<uintptr_t>(&RemovalCalc_CitizenAI_9ad0));

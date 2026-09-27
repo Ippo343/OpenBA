@@ -29,5 +29,4 @@ extern "C" int  EventLog_TileIndex_Reg(void* unused, void* entityIBP);         /
 extern "C" void RegisterEventLogCitizen() {
     RegisterExeAddr(0x140113af0, reinterpret_cast<uintptr_t>(&CitizenComponent_PostLifeEvent));
     RegisterExeAddr(0x140094e00, reinterpret_cast<uintptr_t>(&EventLog_AddCitizenEvent));
-    RegisterExeAddr(0x140095030, reinterpret_cast<uintptr_t>(&EventLog_TileIndex_Reg));
 }

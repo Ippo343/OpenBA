@@ -24,5 +24,4 @@ extern "C" uint64_t CitizenRoster_CountWorkers_129ff0(int64_t storageComp);     
 
 void RegisterCitizenAssignWorkplace() {
     RegisterExeAddr(0x1401163d0, reinterpret_cast<uintptr_t>(&CitizenComponent_AssignWorkplace));
-    RegisterExeAddr(0x140129ff0, reinterpret_cast<uintptr_t>(&CitizenRoster_CountWorkers_129ff0));
 }

@@ -71,23 +71,11 @@ extern "C" void FillTypeIdGlobals_cropdisease() {
 
 void RegisterCropDiseaseBatch() {
     // Behaviour bodies
-    RegisterExeAddr(0x1400481b0, reinterpret_cast<uintptr_t>(&DiseaseComp_CheckCure));
-    RegisterExeAddr(0x140048320, reinterpret_cast<uintptr_t>(&DiseaseComp_Cure));
     RegisterExeAddr(0x1400483a0, reinterpret_cast<uintptr_t>(&DiseaseComp_Infect));
-    RegisterExeAddr(0x140048610, reinterpret_cast<uintptr_t>(&DiseaseComp_InfectionTick));
-    RegisterExeAddr(0x140048840, reinterpret_cast<uintptr_t>(&DiseaseComp_ActiveDisease));
-    RegisterExeAddr(0x140047b40, reinterpret_cast<uintptr_t>(&DiseaseComp_KillOnePlant));
-    RegisterExeAddr(0x140047d70, reinterpret_cast<uintptr_t>(&DiseaseComp_KillOneAnimal));
 
     // New shared leaves
-    RegisterExeAddr(0x14009fb60, reinterpret_cast<uintptr_t>(&DiseaseComp_SameCropProbe));
-    RegisterExeAddr(0x140047f80, reinterpret_cast<uintptr_t>(&DiseaseComp_GrownIdentity));
-    RegisterExeAddr(0x1400050a0, reinterpret_cast<uintptr_t>(&DiseaseComp_FindSibling));
 
     // Event-log leaves promoted out of eventlog.cpp's file scope
-    RegisterExeAddr(0x140019b70, reinterpret_cast<uintptr_t>(&EventLog_ArrayGrow_Reg));
-    RegisterExeAddr(0x1400951d0, reinterpret_cast<uintptr_t>(&EventLog_YearString_Reg));
-    RegisterExeAddr(0x140095230, reinterpret_cast<uintptr_t>(&EventLog_SeasonString_Reg));
 
     // Type-id global storage (values filled by FillTypeIdGlobals_cropdisease)
     RegisterExeAddr(0x1401c4170, reinterpret_cast<uintptr_t>(&g_tid_DiseaseComponent));

@@ -33,7 +33,6 @@ static const float k_rdata_172114 = 0.5f;
 static const float k_rdata_172234 = 300.0f;
 
 extern "C" void RegisterCitizenNeedsUpdate() {
-    RegisterExeAddr(0x1401121e0, reinterpret_cast<uintptr_t>(&CitizenComp_helper_21e0));
     // rdata float consts (real exe values; not registered elsewhere).
     RegisterExeAddr(0x140172114, reinterpret_cast<uintptr_t>(&k_rdata_172114));
     RegisterExeAddr(0x140172234, reinterpret_cast<uintptr_t>(&k_rdata_172234));
