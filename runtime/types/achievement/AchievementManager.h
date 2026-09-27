@@ -320,6 +320,14 @@ public:
     bool Startup();                                            // 0x18009eaa0 — not ported (no caller)
     void Shutdown();                                           // 0x18009ea90 — not ported (no caller)
 
+    // ?_singleton@AchievementManager@Achievement@@0PEAV12@EA (0x1801fc670) —
+    // the class static (ENDGAME B.3.9 ENG, B39_RULES D7). Defined in
+    // achievement_manager.cpp; RtAchievementPortInit redirects the minted row
+    // onto it, so the name door, the address door and this member are the
+    // same eight bytes. Written by the ctor door (engine_lifecycle.cpp) and
+    // ~AchievementManager. PUBLIC while foreign readers still reach it.
+    static AchievementManager* _singleton;
+
     // The four private `AEAA` platform hooks (exported — this DLL exports its
     // privates, reference_aeaa_is_private_not_unexported.md). PUBLIC here, as
     // in Application.h: each registered door is a free function that has to

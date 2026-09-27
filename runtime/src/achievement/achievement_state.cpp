@@ -100,10 +100,6 @@
 
 namespace {
 
-Achievement::AchievementManager** ManagerSingletonCell() {
-    return RT_DATA_SLOT(Achievement::AchievementManager**,
-        "?_singleton@AchievementManager@Achievement@@0PEAV12@EA");
-}
 
 // IO::Persistence — not converted by this block; reached through its exported
 // members by name (RT_EXPORT_ONCE is a constant-initialised RtResolveCached
@@ -135,7 +131,7 @@ namespace Achievement {
 // and a loop here would double-free every instance.
 // ============================================================================
 AchievementManager::~AchievementManager() {
-    *ManagerSingletonCell() = nullptr;
+    _singleton = nullptr;
 }
 
 // ============================================================================

@@ -15,6 +15,7 @@
 
 #include <cstdio>
 #include "../../funcs/rt_port.h"
+#include "../../types/achievement/AchievementManager.h"
 
 extern int RtAchGoalRegister();       // goal.cpp                (lane A)
 extern int RtAchManagerRegister();    // achievement_manager.cpp (lane B)
@@ -50,6 +51,10 @@ extern int RtAchGoalListRegister();
 extern "C" int RtAchBatchCGoalListDtorRegister();
 
 void RtAchievementPortInit() {
+    // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
+    // static from here on (name door, address door, manifest publish).
+    RtMintRedirectStorage("?_singleton@AchievementManager@Achievement@@0PEAV12@EA",
+                          &Achievement::AchievementManager::_singleton);
     // BATCH C — Achievement::GoalList::~GoalList. Unconditional, see
     // DIRECTION.md §2.3.
     {

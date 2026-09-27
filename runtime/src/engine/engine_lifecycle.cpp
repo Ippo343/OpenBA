@@ -294,10 +294,6 @@ EngineT** EngineSingletonSlot() {
 void** ConfigurationSingletonSlot() {
     return RT_DATA_SLOT(void**, "?_singleton@Configuration@System@@0PEAV12@EA");
 }
-void** AchievementManagerSingletonSlot() {
-    return RT_DATA_SLOT(void**,
-        "?_singleton@AchievementManager@Achievement@@0PEAV12@EA");
-}
 bool* ErrorHideDisplaySlot() {
     return RT_DATA_SLOT(bool*, "?_hideDisplay@Error@System@@0_NA");
 }
@@ -370,7 +366,7 @@ extern "C" void* RtAchievement_AchievementManager_Ctor(void* self) {
     m->_updateTimes._size     = 0;         // +0x38
     m->_updateTimes._capacity = 0;         // +0x3c
     m->_lastAchievementUpdate = 0;         // +0x40
-    if (void** slot = AchievementManagerSingletonSlot()) *slot = self;
+    Achievement::AchievementManager::_singleton = m;   // class static (B.3.9 ENG)
     return self;
 }
 

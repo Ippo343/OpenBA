@@ -75,12 +75,8 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-// ?_singleton@AchievementManager@Achievement@@0PEAV12@EA  (0x1801fc670) — stays a
-// data slot until the class-static conversion at the end of B.3 (carry-over 5).
-Achievement::AchievementManager** ManagerSingletonCell() {
-    return RT_DATA_SLOT(Achievement::AchievementManager**,
-        "?_singleton@AchievementManager@Achievement@@0PEAV12@EA");
-}
+// (`?_singleton@AchievementManager@Achievement@@0PEAV12@EA` is the class
+// static `AchievementManager::_singleton` since ENDGAME B.3.9 ENG.)
 
 // ?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A  (0x1801f9898). The FIRST
 // DWORD is the type id — GetAchievement's own `MOV EDX,dword ptr [0x1801f9898]`
@@ -108,8 +104,10 @@ namespace Achievement {
 // ############################################################################
 
 // static AchievementManager* Get()  retail 0x1800079d0 — `return _singleton;`
+AchievementManager* AchievementManager::_singleton = nullptr;   // 0x1801fc670
+
 AchievementManager* AchievementManager::Get() {
-    return *ManagerSingletonCell();
+    return _singleton;
 }
 
 // int GetAchievementCount() const  retail 0x1800079b0 — `_achievements->_count`,
