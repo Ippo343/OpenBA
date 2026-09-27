@@ -19,6 +19,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
+#include "Component/InteractComponent.h"
 
 // Forward declarations of the ported helpers (code/Game/Work/firework_search.cpp).
 extern void    FireWork_SpiralCell_8730(int64_t, int*, int, int, int, uint32_t,
@@ -32,7 +33,7 @@ static uint32_t g_tid_InteractComponent = 0;   // 0x1401c7900
 static const float g_DAT_140172114 = 0.5f;
 
 extern "C" void FillTypeIdGlobals_worktail_fire() {
-    g_tid_InteractComponent = ::Object::GetTypeIdByName("InteractComponent");
+    g_tid_InteractComponent = InteractComponent::TypeId();
 }
 
 void RegisterWorkTailFireBatch() {

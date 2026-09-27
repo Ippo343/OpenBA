@@ -25,6 +25,8 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
+#include "Component/CemeteryComponent.h"
+#include "Component/HappinessDescription.h"
 
 // --- CemeteryComponent (code/Game/Component/cemeterycomponent.cpp) ---
 extern "C" char CemeteryComponent_EnterBuilt(void* comp, void* sm);       // 0x140046fc0
@@ -69,8 +71,8 @@ static uint32_t g_tid_HappinessDescription = 0;   // 0x1401c42f8
 static uint32_t g_tid_CemeteryComponent = 0;      // 0x1401c4090
 
 extern "C" void FillTypeIdGlobals_town_services() {
-    g_tid_HappinessDescription = ::Object::GetTypeIdByName("HappinessDescription");
-    g_tid_CemeteryComponent    = ::Object::GetTypeIdByName("CemeteryComponent");
+    g_tid_HappinessDescription = HappinessDescription::TypeId();
+    g_tid_CemeteryComponent    = CemeteryComponent::TypeId();
 }
 
 void RegisterTownServices() {

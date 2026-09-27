@@ -22,13 +22,15 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
+#include "Component/FruitComponent.h"
+#include "Component/FruitDescription.h"
 
 // ------------------------------------------------------------------
 // FruitDescription type-id .rdata global (DAT_1401c4288). In the original exe this
 // is .data filled by FruitDescription_Register (0x14014aca5,
 // Object::BaseTypeInfo at &DAT_1401c4288 with name "FruitDescription"). In
 // standalone WE provide the storage (registered below at AddressRegistryInit) and
-// FILL it after Engine::Startup via Object::GetTypeIdByName("FruitDescription") —
+// FILL it after Engine::Startup via FruitDescription::TypeId() —
 // GetTypeIdByName returns the real CRC id only once Object::Factory::Startup has
 // run (0xFFFFFFFF sentinel earlier). FruitComponent_Update validates its
 // description (_unk18) with IsDerivedFrom(_, *DAT_1401c4288); if this global is 0
@@ -47,8 +49,8 @@ static uint32_t g_tid_FruitDescription = 0;  // 0x1401c4288
 static uint32_t g_tid_FruitComponent = 0;    // 0x1401c4250
 
 extern "C" void FillComponentTypeIdGlobals_fruit() {
-    g_tid_FruitDescription = ::Object::GetTypeIdByName("FruitDescription");
-    g_tid_FruitComponent   = ::Object::GetTypeIdByName("FruitComponent");
+    g_tid_FruitDescription = FruitDescription::TypeId();
+    g_tid_FruitComponent   = FruitComponent::TypeId();
 }
 
 // Backing storage for the fruitcomponent .rdata constant-pool entries not already

@@ -13,6 +13,8 @@
 #include "Object/factory_registration.h"      // Object::GetTypeIdByName
 #include "Component/animalcomponent_funcs.h"
 #include <cstdint>
+#include "Component/CharacterComponent.h"
+#include "Component/CharacterDescription.h"
 
 // ---------------------------------------------------------------------------
 // Type-id globals this lane needs that NOTHING else registers.
@@ -41,9 +43,9 @@ static uint32_t g_tid_CharacterDescription = 0;  // 0x1401c70b0
 // FillComponentTypeIdGlobals_* calls for deterministic ordering.
 extern "C" void FillComponentTypeIdGlobals_animal_update() {
     if (g_tid_CharacterComponent == 0)
-        g_tid_CharacterComponent = ::Object::GetTypeIdByName("CharacterComponent");
+        g_tid_CharacterComponent = CharacterComponent::TypeId();
     if (g_tid_CharacterDescription == 0)
-        g_tid_CharacterDescription = ::Object::GetTypeIdByName("CharacterDescription");
+        g_tid_CharacterDescription = CharacterDescription::TypeId();
 }
 
 void RegisterAnimalUpdateLive() {

@@ -36,6 +36,8 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
+#include "Component/DiseaseComponent.h"
+#include "Component/DiseaseDescription.h"
 
 class DiseaseComponent;
 
@@ -66,8 +68,8 @@ static uint32_t g_tid_DiseaseComponent   = 0;   // 0x1401c4170
 static uint32_t g_tid_DiseaseDescription = 0;   // 0x1401c41a8
 
 extern "C" void FillTypeIdGlobals_cropdisease() {
-    g_tid_DiseaseComponent   = ::Object::GetTypeIdByName("DiseaseComponent");
-    g_tid_DiseaseDescription = ::Object::GetTypeIdByName("DiseaseDescription");
+    g_tid_DiseaseComponent   = DiseaseComponent::TypeId();
+    g_tid_DiseaseDescription = DiseaseDescription::TypeId();
 }
 
 void RegisterCropDiseaseBatch() {

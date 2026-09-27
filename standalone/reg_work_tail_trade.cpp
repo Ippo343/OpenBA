@@ -18,6 +18,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
+#include "Component/CitizenComponent.h"
 
 // Ports (code/Game/Work/tradework_serialize.cpp).
 extern "C" void  TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2);          // 0x14002c8a0
@@ -59,7 +60,7 @@ extern "C" void FillTypeIdGlobals_worktail_trade() {
     // "CitizenComponent", matching the retail slot value (see corrected note above);
     // was "CitizenAIComponent" — a latent wrong-id in the (autostart-unexercised)
     // c8a0 serialize validation.
-    g_tid_TradeWork_CitizenComponent = ::Object::GetTypeIdByName("CitizenComponent");
+    g_tid_TradeWork_CitizenComponent = CitizenComponent::TypeId();
 }
 
 void RegisterWorkTailTradeBatch() {

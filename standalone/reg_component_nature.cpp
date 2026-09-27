@@ -6,6 +6,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
+#include "Component/NaturalResourceComponent.h"
 
 // ---- growthcomponent.cpp ----
 extern void GrowthComponent_ModifyFlags(void* comp, uint32_t orMask, uint32_t andNotMask);
@@ -72,7 +73,7 @@ static uint32_t g_tid_NaturalResourceComponent = 0;  // 0x1401c7b30
 
 extern "C" void FillComponentTypeIdGlobals_nature() {
     g_tid_NaturalResourceComponent =
-        ::Object::GetTypeIdByName("NaturalResourceComponent");
+        NaturalResourceComponent::TypeId();
 }
 
 // Backing storage for the growthcomponent .rdata constant-pool entries (exact

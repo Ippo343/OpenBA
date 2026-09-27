@@ -34,6 +34,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "Component/ParticleDescription.h"
 
 namespace {
 // Backing storage. Left 0 until FillTypeIdGlobals_w2lane3() runs: Object::Factory::
@@ -45,7 +46,7 @@ uint32_t g_tid_ParticleDescription = 0;
 
 // ── Phase 2: fill, from game_main.cpp after Object::Factory::Startup ─────────
 extern "C" void FillTypeIdGlobals_w2lane3() {
-    g_tid_ParticleDescription = ::Object::GetTypeIdByName("ParticleDescription");
+    g_tid_ParticleDescription = ParticleDescription::TypeId();
     // Report the VALUE, not the pointer: a registered slot holding 0 is
     // indistinguishable from an unregistered one at every call site.
     if (g_tid_ParticleDescription == 0) {

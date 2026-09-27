@@ -25,6 +25,7 @@
 #include "Component/tornadocomponent_funcs.h"
 #include "Object/factory_registration.h"
 #include <cstdio>
+#include "Component/ParticleComponent.h"
 
 // ENDGAME B.3.8 CIT: the 16-slot copy of the retail vtable that used to live here
 // (g_TornadoComponent_Vtable, registered at 0x14015aa80) is gone. TornadoComponent
@@ -114,7 +115,7 @@ uint32_t g_tid_ParticleComponent = 0;   // storage for 0x1401c4720
 // the EXACT same silent whole-entity miss as no registration at all, so the value
 // is logged once and shouted about if it is unusable.
 extern "C" void FillTypeIdGlobals_tornado() {
-    g_tid_ParticleComponent = ::Object::GetTypeIdByName("ParticleComponent");
+    g_tid_ParticleComponent = ParticleComponent::TypeId();
 
     if (g_tid_ParticleComponent == 0 || g_tid_ParticleComponent == 0xFFFFFFFFu) {
         std::fprintf(stderr,

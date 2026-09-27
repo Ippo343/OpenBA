@@ -19,6 +19,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
+#include "Dialog/ControlUIConfig.h"
 
 // ControlUIConfig's TYPE ID — exe .rdata slot 0x1401c4e20, whose retail DATA writer is
 // ControlUIConfig_Register @ 0x14014be40 (standalone/factory_registrations.csv:76).
@@ -37,7 +38,7 @@ static uint32_t g_tid_ControlUIConfig = 0;
 // Must run AFTER Engine::Startup assigns the real CRC ids — called from game_main.cpp
 // alongside the other Fill* hooks.
 extern "C" void FillControlUITypeIds() {
-    g_tid_ControlUIConfig = ::Object::GetTypeIdByName("ControlUIConfig");
+    g_tid_ControlUIConfig = ControlUIConfig::TypeId();
 }
 
 void RegisterControlUIBatch() {

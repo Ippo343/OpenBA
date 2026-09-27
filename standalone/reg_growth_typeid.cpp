@@ -38,11 +38,12 @@
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
 #include <cstdio>
+#include "Component/GrowthComponent.h"
 
 static uint32_t g_tid_GrowthComponent = 0;   // 0x1401c77b0
 
 extern "C" void FillTypeIdGlobals_growth() {
-    g_tid_GrowthComponent = ::Object::GetTypeIdByName("GrowthComponent");
+    g_tid_GrowthComponent = GrowthComponent::TypeId();
     // Check the VALUE, not the pointer: a registered slot holding 0 is indistinguishable
     // from an unregistered one at every call site. Print in both arms.
     if (g_tid_GrowthComponent == 0) {

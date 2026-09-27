@@ -20,6 +20,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"  // Object::GetTypeIdByName
 #include <cstdint>
+#include "Component/PopulationComponent.h"
 
 // Serialize-only type-id storage. Values are CRC ids that exist only after
 // Object::Factory startup, so they are filled by the Fill* pass below (same
@@ -29,7 +30,7 @@ static uint32_t g_tid_ComponentBase       = 0;  // 0x1401c72a8
 
 extern "C" void FillComponentTypeIdGlobals_animal_serialize() {
     if (g_tid_PopulationComponent == 0)
-        g_tid_PopulationComponent = ::Object::GetTypeIdByName("PopulationComponent");
+        g_tid_PopulationComponent = PopulationComponent::TypeId();
     if (g_tid_ComponentBase == 0)
         g_tid_ComponentBase = ::Object::GetTypeIdByName("Component");
 }

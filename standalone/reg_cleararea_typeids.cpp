@@ -34,13 +34,15 @@
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
 #include <cstdio>
+#include "Component/ClearAreaComponent.h"
+#include "Component/ClearAreaDescription.h"
 
 static uint32_t g_tid_ClearAreaComponent   = 0;   // 0x1401c71c8
 static uint32_t g_tid_ClearAreaDescription = 0;   // 0x1401c7200
 
 extern "C" void FillTypeIdGlobals_cleararea() {
-    g_tid_ClearAreaComponent   = ::Object::GetTypeIdByName("ClearAreaComponent");
-    g_tid_ClearAreaDescription = ::Object::GetTypeIdByName("ClearAreaDescription");
+    g_tid_ClearAreaComponent   = ClearAreaComponent::TypeId();
+    g_tid_ClearAreaDescription = ClearAreaDescription::TypeId();
     // Check the VALUE, not the pointer: a registered slot holding 0 is indistinguishable
     // from an unregistered one at every call site. Print in both arms.
     if (g_tid_ClearAreaComponent == 0)
