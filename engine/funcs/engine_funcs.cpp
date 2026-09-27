@@ -47,10 +47,6 @@ double*  g_Timer_secondsPerTick       = nullptr;
 // Engine function pointers
 // ============================================================
 
-// PostDraw/PostUpdate callback array push helpers
-fn_DynArrayPush_t fn_PostDrawPush = nullptr;
-fn_DynArrayPush_t fn_PostUpdatePush = nullptr;
-
 // Video::Context lifecycle — the whole group RETIRED by ENDGAME B.3.5 (b35-K2),
 // zero callers tree-wide. See engine_funcs.h.
 
@@ -74,17 +70,6 @@ static bool IsDerivedFrom_NullSafe(void* self, uint32_t typeId) {
     return s_fn_IsDerivedFrom_real ? s_fn_IsDerivedFrom_real(self, typeId) : false;
 }
 uint32_t* g_TypeId_Dialog = nullptr;
-fn_ListCleanup_t fn_ListCleanup = nullptr;
-
-// Map::Find (AVL tree lookup)
-fn_Map_Find_t fn_Map_Find = nullptr;
-
-// Map::Insert (AVL tree insert)
-fn_Map_Insert_t fn_Map_Insert = nullptr;
-
-// Configuration parsing helpers
-fn_ParseCommand_t fn_ParseCommand = nullptr;
-fn_ParseValue_t fn_ParseValue = nullptr;
 
 // Persistence
 void** g_pPersistenceSingleton = nullptr;
@@ -115,8 +100,6 @@ uint32_t* g_TypeId_ControlComponent = nullptr;
 
 // EntityTrackingSet_BST_Delete (AVL node deleter, sub-function of _Remove)
 fn_EntityTrackingSet_BST_Delete_t fn_EntityTrackingSet_BST_Delete = nullptr;
-
-fn_GetInputKeyName_t fn_GetInputKeyName = nullptr;
 
 // ============================================================
 // Exe Type IDs (Phase A2)
@@ -236,7 +219,6 @@ uint32_t* g_TypeId_UpgradeUIConfig = nullptr;
 // WorkplaceUI helpers
 fn_WorkplaceComp_SetMaxWorkers_t fn_WorkplaceComp_SetMaxWorkers = nullptr;
 fn_CitizenList_RequestWorker_t fn_CitizenList_RequestWorker = nullptr;
-fn_CitizenList_AssignWorker_t fn_CitizenList_AssignWorker = nullptr;
 fn_CitizenList_RemoveWorker_t fn_CitizenList_RemoveWorker = nullptr;
 uint32_t* g_TypeId_EditTool = nullptr;
 
@@ -400,10 +382,6 @@ uint32_t* g_TypeId_TabElement = nullptr;
 // fn_TownHallUI_UpdateGraph — reimplemented in townhallui.cpp
 // fn_TownHallUI_UpdateGeneral — reimplemented in townhallui.cpp
 // fn_TownHallUI_UpdateProfessions — reimplemented in townhallui.cpp
-fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateProduction = nullptr;
-fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateAgriculture = nullptr;
-fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateInventory = nullptr;
-fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateAll = nullptr;
 // fn_TownHallUI_OnProfessionSpinner — reimplemented in townhallui.cpp
 void** g_pGameSingleton = nullptr;
 // GroupRating helpers
@@ -454,7 +432,6 @@ uint32_t* g_TypeId_SpinnerElement = nullptr;
 uint32_t* g_TypeId_SelectDescription = nullptr;
 fn_Building_GetSellableCount_t fn_Building_GetSellableCount = nullptr;
 fn_StorageTree_Insert_t fn_StorageTree_Insert = nullptr;
-fn_Building_RemoveBuyOrder_t fn_Building_RemoveBuyOrder = nullptr;
 fn_Building_AddBuyToStorage_t fn_Building_AddBuyToStorage = nullptr;
 fn_Building_AddPurchaseOrder_t fn_Building_AddPurchaseOrder = nullptr;
 // fn_NoiseUI_SetupImage — REIMPLEMENTED in code/Game/Dialog/noiseui.cpp
@@ -474,7 +451,6 @@ float* g_fUVScale = nullptr;
 fn_Weather_ResetTime_t fn_Weather_ResetTime = nullptr;
 uint32_t* g_TypeId_DiseaseDescription = nullptr;
 uint32_t* g_TypeId_DrawableType = nullptr;
-fn_Game_SpawnResources_t fn_Game_SpawnResources = nullptr;
 // fn_DebugUI_OnDrawComboChanged removed — now reimplemented in code/Game/Dialog/debugui.cpp
 fn_DrawGeometry_Ctor_t fn_DrawGeometry_Ctor = nullptr;
 fn_DrawGeometry_Init_t fn_DrawGeometry_Init = nullptr;
@@ -489,7 +465,6 @@ fn_Graphics_Scene_Ctor_t         fn_Graphics_Scene_Ctor         = nullptr;
 fn_Volume_Frustum_Ctor_t         fn_Volume_Frustum_Ctor         = nullptr;
 fn_Graphics_Camera_Ctor_t        fn_Graphics_Camera_Ctor        = nullptr;
 
-fn_Game_GetMonthFromTime_t fn_Game_GetMonthFromTime = nullptr;
 
 // --- DebugUI deep-reimpl helpers ---
 uint32_t* g_TypeId_FireComponent = nullptr;
@@ -509,7 +484,6 @@ fn_ResidenceComponent_GetOccupantCount_t fn_ResidenceComponent_GetOccupantCount 
 fn_ResidenceComponent_GetSpawnPoint_t fn_ResidenceComponent_GetSpawnPoint = nullptr;
 fn_CitizenComponent_Setup_t fn_CitizenComponent_Setup = nullptr;
 fn_DisasterComponent_Infect_t fn_DisasterComponent_Infect = nullptr;
-fn_BuildingList_CheckCondition_t fn_BuildingList_CheckCondition = nullptr;
 
 // --- SaveLoadDialog::Load helpers ---
 // ENDGAME B.3.9 EXA: the loop doors (??0UpdateLoop/LoaderLoop/DialogLoaderLoopT/
@@ -637,9 +611,6 @@ void** g_pSingletonExref_151a80 = nullptr;
 uint32_t* g_TypeId_ComponentBase = nullptr;
 
 // CitizenBehavior dependencies
-fn_CitizenBehavior_CountResources_t fn_CitizenBehavior_CountResources = nullptr;
-fn_CitizenBehavior_CheckThresholds_t fn_CitizenBehavior_CheckThresholds = nullptr;
-fn_CitizenBehavior_CollectStats_t fn_CitizenBehavior_CollectStats = nullptr;
 fn_ProfResArray_Init_t fn_ProfResArray_Init = nullptr;
 fn_StatsArray_Init_t fn_StatsArray_Init = nullptr;
 fn_SummaryArray_Init_t fn_SummaryArray_Init = nullptr;
@@ -795,7 +766,6 @@ fn_ExternalPtr_Serialize_t fn_ExternalPtr_Serialize_GraphicsMesh = nullptr;
 fn_ExternalPtr_Serialize_t fn_ExternalPtr_Serialize_Weather = nullptr;
 
 // M3.5 Path B session 2 — 0x60B struct array lifecycle helpers.
-fn_Struct60B_Resize_t       fn_Struct60B_Resize             = nullptr;
 fn_Struct60B_CopyCtor_t     fn_Struct60B_CopyCtor           = nullptr;
 fn_Struct60B_DtorRange_t    fn_Struct60B_DtorRange          = nullptr;
 fn_Struct60B_SubArrayCopy_t fn_Struct60B_SubArrayCopyStride14 = nullptr;
@@ -833,12 +803,6 @@ bool EngineFuncsInit() {
 
     // --- Function pointers (resolve by mangled name, fall back to RVA) ---
 
-    // PostDraw/PostUpdate callback array push (16-byte element template instantiations)
-    fn_PostDrawPush = reinterpret_cast<fn_DynArrayPush_t>(
-        ResolveAddr(Module::Runtime, 0x18004f790));
-    fn_PostUpdatePush = reinterpret_cast<fn_DynArrayPush_t>(
-        ResolveAddr(Module::Runtime, 0x18004f8e0));
-
     // Video::Context lifecycle — the five resolves that used to sit here are GONE
     // (ENDGAME B.3.5, b35-K2: zero callers tree-wide). See engine_funcs.h.
 
@@ -873,21 +837,6 @@ bool EngineFuncsInit() {
     g_TypeId_Dialog = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Runtime, 0x1801faa88));
 
-    fn_ListCleanup = reinterpret_cast<fn_ListCleanup_t>(
-        ResolveAddr(Module::Runtime, 0x180010ab0));
-
-    // --- Map::Find / Map::Insert (AVL tree for Configuration) ---
-    fn_Map_Find = reinterpret_cast<fn_Map_Find_t>(
-        ResolveAddr(Module::Runtime, 0x18002ace0));
-    fn_Map_Insert = reinterpret_cast<fn_Map_Insert_t>(
-        ResolveAddr(Module::Runtime, 0x18002a090));
-
-    // --- Configuration parsing helpers (private static methods) ---
-    fn_ParseCommand = reinterpret_cast<fn_ParseCommand_t>(
-        ResolveAddr(Module::Runtime, 0x1800c4a00));
-    fn_ParseValue = reinterpret_cast<fn_ParseValue_t>(
-        ResolveAddr(Module::Runtime, 0x1800c4930));
-
     // --- Persistence ---
     g_pPersistenceSingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Runtime, 0x1801fc6b8));
@@ -915,10 +864,6 @@ bool EngineFuncsInit() {
     // ================================================================
     // Phase A1: UI Widget Functions (Runtime DLL exports)
     // ================================================================
-
-    // --- GetInputKeyName (exe 0x140099c20) ---
-    fn_GetInputKeyName = reinterpret_cast<fn_GetInputKeyName_t>(
-        ResolveAddr(Module::Exe, 0x140099c20));
 
     // ================================================================
     // Phase A2: Exe Type IDs (.rdata pointers)
@@ -1184,8 +1129,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14012fb00));
     fn_CitizenList_RequestWorker = reinterpret_cast<fn_CitizenList_RequestWorker_t>(
         ResolveAddr(Module::Exe, 0x14008d100));
-    fn_CitizenList_AssignWorker = reinterpret_cast<fn_CitizenList_AssignWorker_t>(
-        ResolveAddr(Module::Exe, 0x14008c3d0));
     fn_CitizenList_RemoveWorker = reinterpret_cast<fn_CitizenList_RemoveWorker_t>(
         ResolveAddr(Module::Exe, 0x140091180));
     // fn_FindComponent_Position — inline in engine_funcs.h (uses g_TypeId_BuildComponent_FC)
@@ -1612,10 +1555,6 @@ bool EngineFuncsInit() {
     // fn_TownHallUI_UpdateGraph — reimplemented in townhallui.cpp
     // fn_TownHallUI_UpdateGeneral — reimplemented in townhallui.cpp
     // fn_TownHallUI_UpdateProfessions — reimplemented in townhallui.cpp
-    // fn_TownHallUI_UpdateProduction — reimplemented in townhallui.cpp
-    // fn_TownHallUI_UpdateAgriculture — reimplemented in townhallui.cpp
-    // fn_TownHallUI_UpdateInventory — reimplemented in townhallui.cpp
-    // fn_TownHallUI_UpdateAll — reimplemented in townhallui.cpp
     // fn_TownHallUI_OnProfessionButton — reimplemented in townhallui.cpp
     // fn_TownHallUI_OnProfessionSpinner — reimplemented in townhallui.cpp
     g_pGameSingleton = reinterpret_cast<void**>(
@@ -1740,8 +1679,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14005a520));
     fn_StorageTree_Insert = reinterpret_cast<fn_StorageTree_Insert_t>(
         ResolveAddr(Module::Exe, 0x14000e1c0));
-    fn_Building_RemoveBuyOrder = reinterpret_cast<fn_Building_RemoveBuyOrder_t>(
-        ResolveAddr(Module::Exe, 0x14005baa0));
     fn_Building_AddBuyToStorage = reinterpret_cast<fn_Building_AddBuyToStorage_t>(
         ResolveAddr(Module::Exe, 0x14005ace0));
     fn_Building_AddPurchaseOrder = reinterpret_cast<fn_Building_AddPurchaseOrder_t>(
@@ -1793,8 +1730,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1401c47c8));
 
     // --- DebugUI Slot9 sub-functions ---
-    fn_Game_SpawnResources = reinterpret_cast<fn_Game_SpawnResources_t>(
-        ResolveAddr(Module::Exe, 0x140091660));
     // fn_DebugUI_OnDrawComboChanged removed — now reimplemented
     // Sub-functions for the reimplementation:
     fn_DrawGeometry_Ctor = reinterpret_cast<fn_DrawGeometry_Ctor_t>(
@@ -1834,8 +1769,6 @@ bool EngineFuncsInit() {
     // `fn_Graphics_Camera_SetFrustum` are GONE — zero callers tree-wide. The three
     // ctor doors in this block stay.
 
-    fn_Game_GetMonthFromTime = reinterpret_cast<fn_Game_GetMonthFromTime_t>(
-        ResolveAddr(Module::Exe, 0x1400932A0));
 
     // --- DebugUI deep-reimpl helpers ---
     g_TypeId_FireComponent = reinterpret_cast<uint32_t*>(
@@ -1871,8 +1804,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140117080));
     fn_DisasterComponent_Infect = reinterpret_cast<fn_DisasterComponent_Infect_t>(
         ResolveAddr(Module::Exe, 0x140116b90));
-    fn_BuildingList_CheckCondition = reinterpret_cast<fn_BuildingList_CheckCondition_t>(
-        ResolveAddr(Module::Exe, 0x1400893c0));
 
     // --- SaveLoadDialog::Load helpers ---
     // ENDGAME B.3.9 EXA: the loop doors and exe loop vtable reads are gone (the
@@ -1908,8 +1839,6 @@ bool EngineFuncsInit() {
     printf("  _systemInitialTick    @ %p = %lld\n", (void*)g_Timer_systemInitialTick,
            g_Timer_systemInitialTick ? *g_Timer_systemInitialTick : -1);
     printf("[EngineFuncs] Functions:\n");
-    printf("  PostDrawPush              = %p\n", (void*)fn_PostDrawPush);
-    printf("  PostUpdatePush            = %p\n", (void*)fn_PostUpdatePush);
     printf("  MemAlloc                  = %p\n", (void*)fn_MemAlloc);
     printf("  MemAllocSingleton         = %p\n", g_pMemAllocSingleton);
     printf("  VideoDevice::_singleton   = %p -> %p\n", (void*)g_pVideoDeviceSingleton,
@@ -1919,11 +1848,6 @@ bool EngineFuncsInit() {
     printf("  IsDerivedFrom             = %p\n", (void*)fn_IsDerivedFrom);
     printf("  Dialog TypeId             = %p -> 0x%x\n", (void*)g_TypeId_Dialog,
            g_TypeId_Dialog ? *g_TypeId_Dialog : 0);
-    printf("  ListCleanup               = %p\n", (void*)fn_ListCleanup);
-    printf("  Map::Find                 = %p\n", (void*)fn_Map_Find);
-    printf("  Map::Insert               = %p\n", (void*)fn_Map_Insert);
-    printf("  ParseCommand              = %p\n", (void*)fn_ParseCommand);
-    printf("  ParseValue                = %p\n", (void*)fn_ParseValue);
     printf("  Persistence::_singleton   = %p -> %p\n", (void*)g_pPersistenceSingleton,
            g_pPersistenceSingleton ? *g_pPersistenceSingleton : nullptr);
     printf("[EngineFuncs] UI infrastructure:\n");
@@ -2243,12 +2167,6 @@ bool EngineFuncsInit() {
     // ================================================================
     // Phase L2: CitizenBehavior dependencies
     // ================================================================
-    fn_CitizenBehavior_CountResources = reinterpret_cast<fn_CitizenBehavior_CountResources_t>(
-        ResolveAddr(Module::Exe, 0x140089ed0));
-    fn_CitizenBehavior_CheckThresholds = reinterpret_cast<fn_CitizenBehavior_CheckThresholds_t>(
-        ResolveAddr(Module::Exe, 0x14008c100));
-    fn_CitizenBehavior_CollectStats = reinterpret_cast<fn_CitizenBehavior_CollectStats_t>(
-        ResolveAddr(Module::Exe, 0x14008a730));
     fn_ProfResArray_Init = reinterpret_cast<fn_ProfResArray_Init_t>(
         ResolveAddr(Module::Exe, 0x1400177c0));
     fn_StatsArray_Init = reinterpret_cast<fn_StatsArray_Init_t>(
@@ -2257,8 +2175,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14000f090));
 #ifdef _DEBUG
     printf("[EngineFuncs] Phase L2: CitizenBehavior deps resolved\n");
-    printf("  CountResources = %p\n", (void*)fn_CitizenBehavior_CountResources);
-    printf("  CollectStats   = %p\n", (void*)fn_CitizenBehavior_CollectStats);
 #endif
 
     // === EntityList dependencies (Agent A) ===
@@ -2352,8 +2268,6 @@ bool EngineFuncsInit() {
     // ============================================================
     // M3.5 Path B session 2 — 0x60B struct array lifecycle helpers
     // ============================================================
-    fn_Struct60B_Resize = reinterpret_cast<fn_Struct60B_Resize_t>(
-        ResolveAddr(Module::Exe, 0x14001f250));
     fn_Struct60B_CopyCtor = reinterpret_cast<fn_Struct60B_CopyCtor_t>(
         ResolveAddr(Module::Exe, 0x14001f5e0));
     fn_Struct60B_DtorRange = reinterpret_cast<fn_Struct60B_DtorRange_t>(
@@ -2364,7 +2278,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14001fe60));
 #ifdef _DEBUG
     printf("[EngineFuncs] M3.5 Path B session 2 (0x60B struct lifecycle) resolved\n");
-    printf("  Struct60B_Resize        = %p\n", (void*)fn_Struct60B_Resize);
     printf("  Struct60B_CopyCtor      = %p\n", (void*)fn_Struct60B_CopyCtor);
     printf("  Struct60B_DtorRange     = %p\n", (void*)fn_Struct60B_DtorRange);
     printf("  Struct60B_SubCopyS14    = %p\n", (void*)fn_Struct60B_SubArrayCopyStride14);
