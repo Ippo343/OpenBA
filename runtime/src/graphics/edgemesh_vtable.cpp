@@ -63,6 +63,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Mesh.h"   // the real Graphics::EdgeMesh (block G)
@@ -75,14 +76,6 @@
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-extern "C" const char* RtGraphics_EdgeMesh_TypeNameStr(const void*);
-extern "C" uint32_t    RtGraphics_EdgeMesh_Type(const void*);
-extern "C" int32_t     RtGraphics_EdgeMesh_GetFileVersion(const void*);
-extern "C" int32_t     RtGraphics_EdgeMesh_Compile(void*, const void*);
-extern "C" bool        RtGraphics_EdgeMesh_Serialize(void*, void*);
-extern "C" void*       RtGraphics_EdgeMesh_Reconstruct(void*);
-extern "C" void        RtGraphics_EdgeMesh_Destruct(void*);
-extern "C" void*       RtGraphics_EdgeMesh_Construct(void*);
 
 namespace {
 
@@ -140,17 +133,8 @@ typedef int32_t     (*CompileFn)(void*, const void*);
 //   flag 0 = destroy in place, flag 1 = destroy AND free.
 using Slot0Fn = void* (*)(void* self, unsigned flag);
 
-// ??0EdgeMesh@Graphics@@QEAA@XZ (0x1800a2830, ordinal 161). Reached through
-// RT_EXPORT_ONCE, NOT by address and NOT as a direct call into mesh.cpp's
-// static: ResolveExport consults the port registry FIRST
-// (reference_resolveaddr_consults_port_registry_first.md), so this picks up
-// mesh.cpp's ported `RtGraphics_EdgeMesh_Ctor` whenever RT_GFXMESH is
-// on, and the DLL's otherwise. Retail's Construct/Reconstruct both reach the
-// ctor by a plain rel32 call to the same body, so one door for both is faithful.
-using CtorFn = void* (*)(void*);
-CtorFn EdgeMeshCtor() {
-    return RT_EXPORT_ONCE(CtorFn, "??0EdgeMesh@Graphics@@QEAA@XZ");
-}
+// (ENDGAME B.3.9 GFX: `EdgeMeshCtor`, the ??0EdgeMesh name door Construct /
+// Reconstruct called, is gone with the door; both placement-new the class.)
 
 // ---------------------------------------------------------------------------
 // THE SERIALIZE CONTEXT, read out of the shipped frame rather than assumed.
@@ -517,8 +501,7 @@ bool EdgeMesh::Serialize(void* stream) {
 // No null test. Retail has none; destructing a null faults here exactly as it
 // faults in the DLL (CLAUDE.md, "Don't fix a faithful crash with a null check").
 void EdgeMesh::Destruct() {
-    void** const vp = reinterpret_cast<void**>(this);
-    reinterpret_cast<Slot0Fn>(static_cast<void**>(*vp)[0])(this, 0);
+    DeletingDtor(0u);
 }
 
 // ---- slot 8  ?Construct@EdgeMesh@Graphics@@UEAAPEAVExternal@Object@@XZ -----
@@ -530,15 +513,10 @@ void EdgeMesh::Destruct() {
 // constructor — EdgeMesh::Construct is a guarded TAIL JUMP to the real ctor at
 // 0x1800a2830. The null test is retail's own and returns null; it is kept.
 //
-// The ctor is reached by NAME (see EdgeMeshCtor above), so this body follows
-// mesh.cpp's ported ctor whenever RT_GFXMESH is on. A tail jump and a
-// call differ only in the stack frame, which no caller of this slot observes.
+// ENDGAME B.3.9 GFX: placement new of the class -- the ctor is the real
+// `EdgeMesh()` (mesh.cpp); a virtual is never entered with null.
 Object::External* EdgeMesh::Construct() {
-    CtorFn ctor = EdgeMeshCtor();
-    // The null test is retail's and lives in the DOOR, which is where retail put
-    // it (`TEST RCX,RCX ; JNZ 0x1800a2830 ; XOR EAX,EAX`); by the time a member
-    // runs, `this` is non-null by construction.
-    return ctor ? reinterpret_cast<Object::External*>(ctor(this)) : nullptr;
+    return ::new (this) EdgeMesh();
 }
 
 // ---- slot 6  ?Reconstruct@EdgeMesh@Graphics@@UEAAPEAVExternal@Object@@XZ ---
@@ -557,121 +535,52 @@ Object::External* EdgeMesh::Construct() {
 // The identical asymmetry exists in the MaterialInstance pair and was kept
 // there for the same reason (wave24_lane_gfxmat.cpp:440).
 Object::External* EdgeMesh::Reconstruct() {
-    void** const vp = reinterpret_cast<void**>(this);
-    reinterpret_cast<Slot0Fn>(static_cast<void**>(*vp)[0])(this, 0);
-    CtorFn ctor = EdgeMeshCtor();
-    return ctor ? reinterpret_cast<Object::External*>(ctor(this)) : nullptr;
+    DeletingDtor(0u);
+    return ::new (this) EdgeMesh();
 }
 
-// ??1EdgeMesh@Graphics@@UEAA@XZ  0x1800a2780 — EMPTY, and the existing door is
-// untouched. `RtGraphics_EdgeMesh_Dtor` in
-// `runtime/src/graphics/batchc_gfx_leaves.cpp` stamps the MINTED table, runs the
-// eight `Video::{Vertex,Index}Buffer::PlatformDestruct` calls in retail's order
-// and frees the two list arrays; a compiler-emitted chain would stamp GCC's
-// tables and would not run the eight platform destructs at all. The two
-// spellings coexist exactly as `Object::External`'s do.
-EdgeMesh::~EdgeMesh() {}
+// ??1EdgeMesh@Graphics@@UEAA@XZ  0x1800a2780 -- ENDGAME B.3.9 GFX: defined in
+// batchc_gfx_leaves.cpp, which holds the retired door's body.
+
+// ?TypeId@EdgeMesh@Graphics@@SAIXZ 0x180012c80 -- over the minted
+// `?_typeInfo@` record until the W3 fold (B39_RULES D6).
+uint32_t EdgeMesh::TypeId() { return ReadTypeId(EdgeMeshTypeInfo()); }
+
+// ?CreateNewObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@XZ 0x180012d80 --
+// `??2EdgeMesh` (MemAlloc 0x180, align 8), the null branch, the ctor.
+// Replaces the FACTREST row (B39_RULES D2).
+Object::Base* EdgeMesh::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(EdgeMesh), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) EdgeMesh();
+}
+// ?CreateInPlaceObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z 0x180012e00
+Object::Base* EdgeMesh::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) EdgeMesh();
+}
 
 }  // namespace Graphics
 
 // ============================================================================
-// THE DOORS. Each keeps its registered name and address and delegates with a
-// QUALIFIED non-virtual call. `Graphics::EdgeMesh` is what the `self` void*
-// really is, so every one of them carries the `// B.3.5 bridge` marker the B.4
-// metric counts.
-// ============================================================================
-extern "C" uint32_t RtGraphics_EdgeMesh_Type(const void* selfv) {
-    return reinterpret_cast<const Graphics::EdgeMesh*>(selfv)      // B.3.5 bridge
-               ->Graphics::EdgeMesh::Type();
-}
-extern "C" const char* RtGraphics_EdgeMesh_TypeNameStr(const void* selfv) {
-    return reinterpret_cast<const Graphics::EdgeMesh*>(selfv)      // B.3.5 bridge
-               ->Graphics::EdgeMesh::TypeName();
-}
-extern "C" int32_t RtGraphics_EdgeMesh_GetFileVersion(const void* selfv) {
-    return reinterpret_cast<const Graphics::EdgeMesh*>(selfv)      // B.3.5 bridge
-               ->Graphics::EdgeMesh::GetFileVersion();
-}
-extern "C" int32_t RtGraphics_EdgeMesh_Compile(void* selfv, const void* filename) {
-    return static_cast<int32_t>(
-        reinterpret_cast<Graphics::EdgeMesh*>(selfv)               // B.3.5 bridge
-            ->Graphics::EdgeMesh::Compile(
-                *reinterpret_cast<const System::Filename*>(filename)));
-}
-extern "C" bool RtGraphics_EdgeMesh_Serialize(void* selfv, void* stream) {
-    return reinterpret_cast<Graphics::EdgeMesh*>(selfv)            // B.3.5 bridge
-               ->Graphics::EdgeMesh::Serialize(stream);
-}
-extern "C" void RtGraphics_EdgeMesh_Destruct(void* selfv) {
-    reinterpret_cast<Graphics::EdgeMesh*>(selfv)                   // B.3.5 bridge
-        ->Graphics::EdgeMesh::Destruct();
-}
-// The null test is RETAIL'S OWN and stays in the door: `TEST RCX,RCX ; JNZ
-// 0x1800a2830 ; XOR EAX,EAX ; RET`, twelve bytes.
-extern "C" void* RtGraphics_EdgeMesh_Construct(void* selfv) {
-    if (!selfv) { return nullptr; }
-    return reinterpret_cast<Graphics::EdgeMesh*>(selfv)            // B.3.5 bridge
-               ->Graphics::EdgeMesh::Construct();
-}
-// NO null test here, unlike Construct one slot over. That asymmetry is retail's
-// and is kept: reconstructing a null faults here exactly as it faults in the DLL.
-extern "C" void* RtGraphics_EdgeMesh_Reconstruct(void* selfv) {
-    return reinterpret_cast<Graphics::EdgeMesh*>(selfv)            // B.3.5 bridge
-               ->Graphics::EdgeMesh::Reconstruct();
-}
-
-// ============================================================================
-// REGISTRATION — by NAME and by ADDRESS, both, for every body.
+// ENDGAME B.3.9 block GFX: THE EIGHT SLOT DOORS ARE RETIRED (Type, TypeName,
+// GetFileVersion, Compile, Serialize, Reconstruct, Destruct, Construct) --
+// their only reader was the minted `??_7EdgeMesh@Graphics@@6B@` (retired), and
+// none of the eight addresses is an identity token anywhere in the tree (the
+// grep this banner used to record). Every EdgeMesh wears the compiler's table.
 //
-// A body PORTED but never REGISTERED is indistinguishable from an ABSENT one to
-// the census (reference_half_registered_port_reads_as_absent.md). The mint
-// fills a slot by NAME for RT_MINT_NAMED and by ADDRESS otherwise; all eight of
-// these are RT_MINT_NAMED in standalone/rt_data_mint_tables.inc (kVSlots22), so
-// the name door is the one the table needs. The address door is registered
-// anyway so a by-address call site reaches the same body
-// (reference_resolveaddr_consults_port_registry_first.md).
-//
-// NOTHING IN THIS TREE USES ANY OF THESE EIGHT ADDRESSES AS AN IDENTITY TOKEN —
-// grepped across runtime/ code/ standalone/ engine/ dx11/ before the address
-// doors were opened, because that is precisely what makes
-// ?AddDrawItems@MeshInstance@ unregisterable (standalone/scene_watch.cpp:401,
-// and see WAVE27_LANE_GFXMESH.md §7). None of the eight appears anywhere except
-// rt_data_mint_tables.inc, which STAMPS them rather than comparing them.
+// REGISTRATION: the factory pair (B39_RULES D2), the class's own statics, by
+// name AND address; the minted `?_typeInfo@EdgeMesh` record resolves them.
 // ============================================================================
 int RtGraphicsEdgeMeshVtableRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("?Type@EdgeMesh@Graphics@@UEBAIXZ",
-                          (void*)&RtGraphics_EdgeMesh_Type); ++n;
-    RegisterRuntimeAddr(0x180012c70ull, (void*)&RtGraphics_EdgeMesh_Type);
+    RegisterRuntimeExport("?CreateNewObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@XZ",
+                          (void*)&Graphics::EdgeMesh::CreateNewObject); ++n;
+    RegisterRuntimeAddr(0x180012d80ull, (void*)&Graphics::EdgeMesh::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&Graphics::EdgeMesh::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr(0x180012e00ull, (void*)&Graphics::EdgeMesh::CreateInPlaceObject);
 
-    RegisterRuntimeExport("?TypeName@EdgeMesh@Graphics@@UEBAPEBDXZ",
-                          (void*)&RtGraphics_EdgeMesh_TypeNameStr); ++n;
-    RegisterRuntimeAddr(0x180012c90ull, (void*)&RtGraphics_EdgeMesh_TypeNameStr);
-
-    RegisterRuntimeExport("?GetFileVersion@EdgeMesh@Graphics@@UEBAHXZ",
-                          (void*)&RtGraphics_EdgeMesh_GetFileVersion); ++n;
-    RegisterRuntimeAddr(0x1800a23d0ull, (void*)&RtGraphics_EdgeMesh_GetFileVersion);
-
-    RegisterRuntimeExport("?Compile@EdgeMesh@Graphics@@UEAA?AW4CompileResult@External@Object@@AEBVFilename@System@@@Z",
-                          (void*)&RtGraphics_EdgeMesh_Compile); ++n;
-    RegisterRuntimeAddr(0x1800a21c0ull, (void*)&RtGraphics_EdgeMesh_Compile);
-
-    RegisterRuntimeExport("?Serialize@EdgeMesh@Graphics@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtGraphics_EdgeMesh_Serialize); ++n;
-    RegisterRuntimeAddr(0x1800a21d0ull, (void*)&RtGraphics_EdgeMesh_Serialize);
-
-    RegisterRuntimeExport("?Reconstruct@EdgeMesh@Graphics@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtGraphics_EdgeMesh_Reconstruct); ++n;
-    RegisterRuntimeAddr(0x180012e10ull, (void*)&RtGraphics_EdgeMesh_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@EdgeMesh@Graphics@@UEAAXXZ",
-                          (void*)&RtGraphics_EdgeMesh_Destruct); ++n;
-    RegisterRuntimeAddr(0x180012e40ull, (void*)&RtGraphics_EdgeMesh_Destruct);
-
-    RegisterRuntimeExport("?Construct@EdgeMesh@Graphics@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtGraphics_EdgeMesh_Construct); ++n;
-    RegisterRuntimeAddr(0x180012e30ull, (void*)&RtGraphics_EdgeMesh_Construct);
-
-    return n;   // 8
+    return n;   // 2
 }

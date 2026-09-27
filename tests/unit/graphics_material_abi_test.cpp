@@ -588,7 +588,8 @@ UNIT_TEST(graphics_edgemesh_layout) {
     CHECK_EQ((int)alignof(Graphics::EdgeMesh), 8);
     CHECK_EQ((int)sizeof(Graphics::EdgeMesh), (int)sizeof(RtGraphics::EdgeMesh));
     CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _reserved20), (int)sizeof(Object::External));
-    CHECK(std::is_abstract<Graphics::EdgeMesh>::value);
+    // B.3.9 GFX: concrete -- slot 0 is the class's own vector DeletingDtor.
+    CHECK(!std::is_abstract<Graphics::EdgeMesh>::value);
 
     // The four material slots, as retail's four getters name them.
     CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _maskMaterial),     0x28);
@@ -830,6 +831,7 @@ bool        EdgeMesh::Serialize(void*) { Note(this, kSerialize / 8); return true
 Object::External* EdgeMesh::Reconstruct() { Note(this, kReconstruct / 8); return this; }
 void        EdgeMesh::Destruct() { Note(this, kDestruct / 8); }
 Object::External* EdgeMesh::Construct() { Note(this, kConstruct / 8); return this; }
+EdgeMesh::EdgeMesh() {}
 EdgeMesh::~EdgeMesh() {}
 
 }  // namespace Graphics

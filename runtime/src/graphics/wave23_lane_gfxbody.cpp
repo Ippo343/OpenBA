@@ -143,9 +143,8 @@ using VoidThisFn  = void (*)(void*);
 void ImageBufferCtor(void* p) {
     RT_EXPORT_ONCE(VoidThisFn, "??0ImageBuffer@Video@@QEAA@XZ")(p);
 }
-void ImageBufferDtor(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "??1ImageBuffer@Video@@UEAA@XZ")(p);
-}
+// (ENDGAME B.3.9 GFX: `ImageBufferDtor` went with the ??1 door; the real
+// ~FrameCopyImageBuffer chains ~ImageBuffer itself.)
 // ENDGAME B.3.5 caller batch: `PlatformConstruct`, `PlatformDestruct` and
 // `Create` are DEFINED members of the real `Video::RenderBuffer` today, so the
 // three by-name doors become member calls and `RbCreateFn` goes with them. The
@@ -165,28 +164,8 @@ bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
         reinterpret_cast<const Video::ImageBuffer*>(depth));          // B.3.5 bridge
 }
 
-// The two vtable addresses, rebased. `ResolveAddr(Module::Runtime, …)` on a
-// DATA address is just the rebase; it consults the address registry first, and
-// NOTHING in code/ engine/ runtime/ standalone/ dx11/ registers either of these
-// two addresses today (checked by grep for `180154f00` and `180154f60` — the
-// only hits are comments). If a later lane MINTS
-// `??_7FrameCopyImageBuffer@Graphics@@6B@`, this call starts stamping the
-// minted table instead of the DLL's, which is the right answer for a promoted
-// row and the wrong one for an unpromoted mint — ADDRESSEE: Wave 23 lane GFXVT,
-// which owns the eight Graphics VTABLE rows; if you mint this table, read this
-// comment first.
-void* VtFrameCopy() {
-    static void* v = nullptr;
-    if (!v) v = reinterpret_cast<void*>(
-        ResolveAddr(Module::Runtime, RtGraphics::kVtFrameCopyImageBuffer));
-    return v;
-}
-void* VtGenerated() {
-    static void* v = nullptr;
-    if (!v) v = reinterpret_cast<void*>(
-        ResolveAddr(Module::Runtime, RtGraphics::kVtGeneratedImageBuffer));
-    return v;
-}
+// ENDGAME B.3.9 block GFX: `VtFrameCopy` / `VtGenerated` (the two minted
+// tables' rebased addresses) are gone with the ??0 / ??1 doors that stamped them.
 
 }  // namespace
 
@@ -230,33 +209,17 @@ void* VtGenerated() {
 // guarded: the deref is load-bearing — retail relies on the allocation being
 // there, and skipping the work would not restore the behaviour.
 //
-// Return type: retail ends `MOV RAX,RSI; RET`, i.e. it returns `this`. Spelled
-// `void*` and returning `self`, so a caller that DOES read RAX (the exe's
-// 0x140095da0 does: `CALL <ctor>; MOV R12,RAX`) gets the right value.
+// Retail ends `MOV RAX,RSI; RET`, i.e. it returns `this`; every C++ builder
+// holds the pointer it constructed into, so nothing reads that RAX any more.
+//
+// ENDGAME B.3.9 block GFX: the ??0 door that stood here is RETIRED. The real
+// `FrameCopyImageBuffer()` is the constructor: ImageBuffer() (0x1800a3d2d), the
+// Generated stamp and `_generation = 0` (GeneratedImageBuffer()) and the
+// FrameCopy stamp (0x1800a3d49) are the compiler's chain; its body (below, §2's
+// end) is everything after the FrameCopy stamp. Every builder -- the factory
+// pair, Construct / Reconstruct, SaveLoad::Draw and the exe's TakeScreenshot --
+// spells `::new (p) Graphics::FrameCopyImageBuffer()`.
 // ============================================================================
-extern "C" void* RtGraphics_FrameCopyImageBuffer_Ctor(void* self) {
-    Attend("FrameCopyImageBuffer::ctor", g_ctorCalls);
-
-    FrameCopyImageBuffer* const p = static_cast<FrameCopyImageBuffer*>(self);
-
-    ImageBufferCtor(p);                              // 0x1800a3d2d
-    p->base.vtable   = VtGenerated();                // 0x1800a3d3a — transient, see below
-    // ENDGAME B.3.8 block RB (RULE B8-1): `_generation = 0` (0x1800a3d3f) is
-    // GeneratedImageBuffer's shared body, the rest after the FrameCopy stamp
-    // is FrameCopyImageBuffer's (`InitFields`, below).
-    ::Graphics::GeneratedImageBuffer::DoorBody::Init(
-        reinterpret_cast<::Graphics::GeneratedImageBuffer*>(self));   // B.3.8 bridge
-    p->base.vtable   = VtFrameCopy();                // 0x1800a3d49
-    // The first vptr store is overwritten seven instructions later with no
-    // virtual dispatch in between, so it is observationally dead. It is kept
-    // because it is what the bytes do, and because a future lane that inserts
-    // anything between the two wants to see retail's own ordering rather than
-    // this lane's opinion of it.
-    ::Graphics::FrameCopyImageBuffer::DoorBody::Init(
-        reinterpret_cast<::Graphics::FrameCopyImageBuffer*>(self));   // B.3.8 bridge
-
-    return self;                                     // MOV RAX,RSI
-}
 
 // ============================================================================
 // §2.  ??1FrameCopyImageBuffer@Graphics@@UEAA@XZ   retail 0x1800a3c80, ord 597
@@ -273,30 +236,22 @@ extern "C" void* RtGraphics_FrameCopyImageBuffer_Ctor(void* self) {
 // `operator delete`) because RenderBuffer has no virtual destructor to reach.
 // Those are not the same idiom and swapping one for the other would leak or
 // double-free (reference_a_written_recipe_can_be_wrong.md is the general form).
+//
+// ENDGAME B.3.9 block GFX: the ??1 door that stood here is RETIRED with the
+// RT_DELDTOR row 0x18001f260 it served. The restamp (0x1800a3c9b), the Generated
+// restamp (0x1800a3cee) and the tail JMP ~ImageBuffer are the compiler's chain
+// around the real `~FrameCopyImageBuffer()` below.
 // ============================================================================
-extern "C" void RtGraphics_FrameCopyImageBuffer_Dtor(void* self) {
-    Attend("FrameCopyImageBuffer::dtor", g_dtorCalls);
-
-    FrameCopyImageBuffer* const p = static_cast<FrameCopyImageBuffer*>(self);
-
-    p->base.vtable = VtFrameCopy();                  // 0x1800a3c9b
-
-    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with `~FrameCopyImageBuffer()`.
-    ::Graphics::FrameCopyImageBuffer::DoorBody::Release(
-        reinterpret_cast<::Graphics::FrameCopyImageBuffer*>(self));   // B.3.8 bridge
-
-    p->base.vtable = VtGenerated();                  // 0x1800a3cee
-    ImageBufferDtor(p);                              // tail JMP 0x1800f2610
-}
 
 // ============================================================================
-// Graphics::FrameCopyImageBuffer::InitFields / ReleaseFields (ENDGAME B.3.8
-// block RB, RULE B8-1): 0x1800a3d10 after the FrameCopy stamp, and 0x1800a3c80
-// between its restamp and the Generated restamp. Shared by the real ctor/dtor
-// (FrameCopyImageBuffer.h) and the two doors above; MOVED VERBATIM through the
-// field-identical `RtGraphics::FrameCopyImageBuffer` POD view.
+// Graphics::FrameCopyImageBuffer::FrameCopyImageBuffer / ~FrameCopyImageBuffer:
+// 0x1800a3d10 after the FrameCopy stamp, and 0x1800a3c80 between its restamp
+// and the Generated restamp -- the bodies the B.3.8 `InitFields` /
+// `ReleaseFields` split shared with the retired doors, MOVED VERBATIM through
+// the field-identical `RtGraphics::FrameCopyImageBuffer` POD view.
 // ============================================================================
-void Graphics::FrameCopyImageBuffer::InitFields() {
+Graphics::FrameCopyImageBuffer::FrameCopyImageBuffer() {
+    Attend("FrameCopyImageBuffer::ctor", g_ctorCalls);
     RtGraphics::FrameCopyImageBuffer* const p =
         reinterpret_cast<RtGraphics::FrameCopyImageBuffer*>(this);   // B.3.8 bridge (the POD view)
     p->_backBufferImage = nullptr;                   // 0x1800a3d4c
@@ -336,7 +291,8 @@ void Graphics::FrameCopyImageBuffer::InitFields() {
     RenderBufferCreate(rb, p->_backBufferImage, nullptr);   // XOR R8D,R8D => depth = null
 }
 
-void Graphics::FrameCopyImageBuffer::ReleaseFields() {
+Graphics::FrameCopyImageBuffer::~FrameCopyImageBuffer() {
+    Attend("FrameCopyImageBuffer::dtor", g_dtorCalls);
     RtGraphics::FrameCopyImageBuffer* const p =
         reinterpret_cast<RtGraphics::FrameCopyImageBuffer*>(this);   // B.3.8 bridge (the POD view)
 
@@ -375,28 +331,9 @@ void Graphics::FrameCopyImageBuffer::ReleaseFields() {
 // ============================================================================
 // ENDGAME B.3.5 block GC: THE BODY MOVED onto
 // `Graphics::FrameCopyImageBuffer::Create` -- vtable SLOT 9, which this class
-// OVERRIDES (the header's correction to B35_RULES 2.3 item 5). The door keeps its
-// name, its registration and its entry counter.
-extern "C" bool RtGraphics_FrameCopyImageBuffer_Create(
-        void* self,
-        int32_t imageType, int32_t usage, int32_t format,
-        uint32_t flags, int32_t width, int32_t height,
-        int32_t filterMode,
-        int32_t addressU, int32_t addressV, int32_t addressW,
-        void* levels) {
-    Attend("FrameCopyImageBuffer::Create", g_createCalls);
-    return reinterpret_cast<Graphics::FrameCopyImageBuffer*>(self)       // B.3.5 bridge
-        ->Graphics::FrameCopyImageBuffer::Create(
-            static_cast<Video::ImageBuffer::ImageType>(imageType),
-            static_cast<Video::ImageBuffer::Usage>(usage),
-            static_cast<Video::ImageBuffer::Format>(format),
-            flags, width, height,
-            static_cast<Video::ImageBuffer::FilterMode>(filterMode),
-            static_cast<Video::ImageBuffer::AddressMode>(addressU),
-            static_cast<Video::ImageBuffer::AddressMode>(addressV),
-            static_cast<Video::ImageBuffer::AddressMode>(addressW),
-            static_cast<Video::ImageBuffer::LevelArray*>(levels));
-}
+// OVERRIDES (the header's correction to B35_RULES 2.3 item 5). ENDGAME B.3.9
+// GFX: the name door is retired with the minted table (its only reader); the
+// entry counter moved into the member.
 
 // ============================================================================
 // §4.  ?Generate@FrameCopyImageBuffer@Graphics@@UEBAX…  retail 0x1800a3b20, 2395
@@ -413,15 +350,9 @@ extern "C" bool RtGraphics_FrameCopyImageBuffer_Create(
 // same class of defect on the call INTO this function, found the same way.
 // ============================================================================
 // ENDGAME B.3.5 block GC: THE BODY MOVED onto
-// `Graphics::FrameCopyImageBuffer::Generate` -- vtable slot 10. The door keeps its
-// name, its registration and the ENTRY counter; the BLIT counter is a branch
-// counter and stays inside the member, where the branch is.
-extern "C" void RtGraphics_FrameCopyImageBuffer_Generate(
-        void* self, void* context, int32_t generation) {
-    Attend("FrameCopyImageBuffer::Generate", g_generateCalls);
-    reinterpret_cast<const Graphics::FrameCopyImageBuffer*>(self)        // B.3.5 bridge
-        ->Graphics::FrameCopyImageBuffer::Generate(context, generation);
-}
+// `Graphics::FrameCopyImageBuffer::Generate` -- vtable slot 10. ENDGAME B.3.9
+// GFX: the name door is retired with the minted table (its only reader); the
+// ENTRY counter moved into the member beside the BLIT counter.
 
 // ============================================================================
 // §5.  ?Update@AnimationManager@Graphics@@QEAAXAEBVTime@System@@_N@Z
@@ -604,20 +535,14 @@ extern "C" void RtGraphics_AnimationManager_Update(void* self, const void* time,
 int RtGraphicsWave23GfxbodyRegister() {
     int count = 0;
 
-    RegisterRuntimeExport("??0FrameCopyImageBuffer@Graphics@@QEAA@XZ",
-                          (void*)&RtGraphics_FrameCopyImageBuffer_Ctor); ++count;
-    RegisterRuntimeExport("??1FrameCopyImageBuffer@Graphics@@UEAA@XZ",
-                          (void*)&RtGraphics_FrameCopyImageBuffer_Dtor); ++count;
-    RegisterRuntimeExport("?Create@FrameCopyImageBuffer@Graphics@@UEAA_NW4ImageType@ImageBuffer@Video@@"
-                          "W4Usage@45@W4Format@45@IHHW4FilterMode@45@W4AddressMode@45@44PEAV?$Array@"
-                          "V?$Array@E@Collection@@@Collection@@@Z",
-                          (void*)&RtGraphics_FrameCopyImageBuffer_Create); ++count;
-    RegisterRuntimeExport("?Generate@FrameCopyImageBuffer@Graphics@@UEBAXAEAVContext@Video@@H@Z",
-                          (void*)&RtGraphics_FrameCopyImageBuffer_Generate); ++count;
+    // ENDGAME B.3.9 block GFX: the four FrameCopyImageBuffer doors (??0, ??1,
+    // Create, Generate) are retired -- every builder is `::new (p) X()`, the
+    // destructor is reached through slot 0, and Create / Generate only through
+    // the object's own (compiler) table.
     RegisterRuntimeExport("?Update@AnimationManager@Graphics@@QEAAXAEBVTime@System@@_N@Z",
                           (void*)&RtGraphics_AnimationManager_Update); ++count;
 
-    return count;   // 5
+    return count;   // 1
 }
 
 // One line beside the other wave summaries, so a run that entered none of these
@@ -743,7 +668,8 @@ bool FrameCopyImageBuffer::Create(ImageType imageType, Usage usage, Format forma
                                   FilterMode filterMode,
                                   AddressMode addressU, AddressMode addressV,
                                   AddressMode addressW, LevelArray* levels) {
-    _dimension = imageType;            // +0x28  <- EDX      (0x1800a3b87)
+    Attend("FrameCopyImageBuffer::Create", g_createCalls);   // B.3.9: from the retired door
+    _dimension = imageType;           // +0x28  <- EDX      (0x1800a3b87)
     _kind      = usage;                    // +0x2c  <- R8D      (0x1800a3b8a)
     _format    = format;            // +0x30 <- R9D (0x1800a3b8e)
     _width     = width;                    // +0x20  <- arg5     (0x1800a3b92)
@@ -795,6 +721,7 @@ bool FrameCopyImageBuffer::Create(ImageType imageType, Usage usage, Format forma
 // four-argument platform slot-3 call (`MOV R9B,0x1`) is unchanged.
 // ---------------------------------------------------------------------------
 void FrameCopyImageBuffer::Generate(void* context, int32_t generation) const {
+    Attend("FrameCopyImageBuffer::Generate", g_generateCalls);   // B.3.9: from the retired door
     if (_generation == generation) return;              // CMP [RCX+0x68],R8D / JZ
 
     Attend("FrameCopyImageBuffer::Generate BLIT", g_generateCopies);

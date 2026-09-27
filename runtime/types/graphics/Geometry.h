@@ -306,6 +306,9 @@ enum GeometryVSlot : int {
 // -------------------------------------------------------------------------
 // ABSTRACT, AND NOTHING HERE IS CONSTRUCTIBLE — B34_BRIEFS §A.4
 // -------------------------------------------------------------------------
+// (ENDGAME B.3.9 GFX: slot 0 is the class's own vector deleting destructor
+// now, and the RT_DELDTOR row is retired; the class stays abstract because
+// slots 1, 2 and 3 are pure. The history below is block E's.)
 // Slot 0 stays `= 0`. Its body is the vector deleting destructor at
 // 0x180015e90, which is a row in the minted tables, not a C++ function this
 // block owns, and B35_RULES §11 forbids retiring that row in step 5. Nothing
@@ -316,6 +319,9 @@ enum GeometryVSlot : int {
 // tree below. `sizeof` and `offsetof` work on an abstract class, so every
 // layout pin still holds.
 //
+// (ENDGAME B.3.9 GFX: the constructor and destructor are real members in
+// scene.cpp and the copy constructor's body is the member in closure_batch2b.cpp;
+// all three doors are retired. The paragraph below is block E's history.)
 // NO REAL CONSTRUCTOR and NO REAL DESTRUCTOR BODY (ENDGAME §B.1 decision 2,
 // B4b-2, B35_RULES §11): `??0Geometry@Graphics@@QEAA@XZ` (0x1800a4270) and
 // `??1Geometry@Graphics@@UEAA@XZ` (0x1800a41c0) keep their doors in
@@ -330,6 +336,10 @@ enum GeometryVSlot : int {
 namespace System { class Time; class String; }
 namespace Video  { class Context; }
 namespace IO     { class Serializer; }
+// runtime/types/object/Internal.h's allocator seam (0x180006a10 is MemFree),
+// declared rather than included: Internal.h pulls the IO serializer into every
+// Video/Graphics TU that includes this base.
+namespace Object { namespace detail { void InternalMemFree(void* p); } }
 
 namespace Graphics {
 
@@ -417,8 +427,28 @@ public:
 
     // ---- the nine slots, in measured retail order -------------------------
     // Slot 0 is `DeletingDtor(unsigned)`, NOT a virtual destructor
-    // (ENDGAME §B.1 decision 2). Deletion is the minted row at 0x180015e90.
-    virtual Geometry* DeletingDtor(unsigned flags) = 0;                  // [0] 0x180015e90
+    // (ENDGAME §B.1 decision 2). [0] 0x180015e90 -- MSVC's VECTOR deleting
+    // destructor, both arms exactly as retail (read this pass): flags & 2 ->
+    // int32 count at this-8, `eh vector destructor iterator` over 0xc0-byte
+    // elements with ~Geometry (0x1800a41c0), MemFree(this-8) on & 1, return
+    // this-8; else ~Geometry, MemFree(this) on & 1, return this. ENDGAME B.3.9
+    // GFX: the class's own body; the RT_DELDTOR row and the minted table are
+    // retired (tools/rt_mint_retired/gfx.txt). Geometry stays ABSTRACT (slots
+    // 1, 2 and 3 are `_purecall`), so only a subclass that does not override
+    // slot 0 ever reaches this body.
+    virtual Geometry* DeletingDtor(unsigned flags) {                     // [0] 0x180015e90
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<Geometry*>(self + static_cast<int64_t>(i) * 0xc0)->~Geometry();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Geometry*>(self - 8);
+        }
+        this->~Geometry();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     virtual void Update(const System::Time& time) = 0;                   // [1] _purecall
     virtual void Draw(Video::Context& context, const Camera& camera,
                       ExternalPtrHandle material,
@@ -464,28 +494,17 @@ public:
     void     SetDetailId(int id);                        // 0x180015880  not ported
     int      GetDetailId() const;                        // 0x180015890  not ported
 
-    // The doors' way onto the shared bodies (ENDGAME B.3.8 block RB, B38_RULES
-    // D1): `RtGraphics_Geometry_Ctor` / `_Dtor` (scene.cpp) stamp the MINTED
-    // table themselves, for the still-unconverted subclasses, then call these.
-    struct DoorBody {
-        static void Init(Geometry* g)    { g->InitFields(); }
-        static void Release(Geometry* g) { g->ReleaseFields(); }
-    };
-
 protected:
     // `??0Geometry@Graphics@@QEAA@XZ` @ 0x1800a4270 — the REAL constructor
-    // (ENDGAME B.3.8 block RB, RULE B8-1): the vptr store is the compiler's,
-    // the 46 field stores are ONE body with the door (`InitFields`).
-    Geometry() { InitFields(); }
-    // `??1Geometry@Graphics@@UEAA@XZ` @ 0x1800a41c0. NON-VIRTUAL (decision 2),
-    // protected because this is a base. The compiler restamps on entry; the
-    // body (detach every child, free `_attached`) is ONE body with the door.
-    // `_attached`'s implicit ~Array after it is a no-op on the zeroed header.
-    ~Geometry() { ReleaseFields(); }
+    // (scene.cpp): the vptr store is the compiler's, the 46 field stores are
+    // the body. ENDGAME B.3.9 GFX: the ??0 door is retired with the minted table.
+    Geometry();
+    // `??1Geometry@Graphics@@UEAA@XZ` @ 0x1800a41c0 (scene.cpp). NON-VIRTUAL
+    // (decision 2), protected because this is a base. The compiler restamps on
+    // entry; the body detaches every child and frees `_attached`, whose implicit
+    // ~Array after it is a no-op on the zeroed header. Its ??1 door is retired.
+    ~Geometry();
 
-private:
-    void InitFields();      // 0x1800a4270 minus the vptr store (scene.cpp)
-    void ReleaseFields();   // 0x1800a41c0 minus the restamp (scene.cpp)
 public:
 
 public:

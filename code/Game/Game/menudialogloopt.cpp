@@ -32,6 +32,7 @@
 #include "Game/MenuDialogLoopT.h"         // _loadBit (LoadSceneA1)
 #include "video/Context.h"
 #include "options.h"
+#include <new>                            // B.3.9 GFX: placement new
 #include "MenuScene.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
@@ -500,13 +501,12 @@ void MenuDialogLoopT_LoadStaticMeshes_PhaseB(void* self, void* menuScene, void* 
 void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* scene) {
     if (!menuScene || !scene) return;
     // B.3.5: Scene::AddObject and Geometry::SetTransform are members now; the
-    // ParticleSystemInstance CTOR door and the Time ctor stay.
+    // Time ctor door stays. ENDGAME B.3.9 GFX (B9-13): the
+    // ParticleSystemInstance CTOR door is gone -- the class's real ctor below.
     if (!fn_MemAlloc || !g_pMemAllocSingleton ||
-        !fn_Graphics_ParticleSystemInstance_Ctor ||
         !fn_Time_Ctor_Float) {
         printf("[MenuDLT::PhaseC] missing required fn ptrs "
-               "(PSICtor=%p TimeC=%p) — skipping\n",
-               (void*)fn_Graphics_ParticleSystemInstance_Ctor,
+               "(TimeC=%p) — skipping\n",
                (void*)fn_Time_Ctor_Float);
         return;
     }
@@ -530,7 +530,7 @@ void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* sce
         // 1. Allocate + construct ParticleSystemInstance.
         void* inst = fn_MemAlloc(g_pMemAllocSingleton, 0xe0, 8);
         if (!inst) continue;
-        fn_Graphics_ParticleSystemInstance_Ctor(inst);
+        ::new (inst) Graphics::ParticleSystemInstance();   // B.3.9 GFX: the real ctor
 
         // 2. Append to all-instance array (+0xbe0).
         AppendToDynArray<void*>(self, offsetof(MenuDialogLoopT, _instanceArray), inst);

@@ -15,7 +15,7 @@
 //   ParticleInstance's body under its own table BEFORE Geometry's.
 // PART B — the doors reach the same bodies with a stand-in minted table.
 //
-// MARKERS: Geometry's InitFields/ReleaseFields (scene.cpp), Particle's
+// MARKERS: Geometry's ctor / dtor (scene.cpp), Particle's
 // ReleaseFields (animation.cpp), RemoveState and the classes' virtuals do not
 // link here; the inline InitFields of Particle / ParticleInstance are REAL.
 // ============================================================================
@@ -29,6 +29,7 @@
 #include "runtime/types/graphics/SunLight.h"
 #include "runtime/types/graphics/Material.h"
 #include "runtime/types/graphics/GeneratedImageBuffer.h"
+#include "runtime/types/graphics/FrameCopyImageBuffer.h"   // B.3.9 GFX
 
 #include <cstdint>
 #include <cstddef>
@@ -58,15 +59,14 @@ Entry g_log[16];
 int   g_n = 0;
 void Log(int ev, const void* self) { if (g_n < 16) g_log[g_n++] = Entry{ev, VptrOf(self)}; }
 
-const void* const kFakeMinted[4] = {};
 }  // namespace
 
 // ===========================================================================
 // Markers (see the banner).
 // ===========================================================================
 namespace Graphics {
-void Geometry::InitFields()    { Log(kGeoInit, this); _attachNode = -1; _detailId = 2; }
-void Geometry::ReleaseFields() { Log(kGeoRel, this); }
+Geometry::Geometry()  { Log(kGeoInit, this); _attachNode = -1; _detailId = 2; }
+Geometry::~Geometry() { Log(kGeoRel, this); }
 void Geometry::UpdateAttached() {}
 Math::Transform* Geometry::GetSubTransform(Math::Transform* ret, int) const { return ret; }
 Math::Matrix* Geometry::GetInstanceTransform(Math::Matrix* ret, int, float) const { return ret; }
@@ -100,8 +100,9 @@ void        ParticleSystem::Destruct() {}
 ParticleInstance* ParticleSystem::CreateSystem() const { return nullptr; }
 Object::External* ParticleSystem::Construct() { return this; }
 
-void MeshInstance::InitFields()    { Log(kMiInit, this); _sortBias = 0; }
-void MeshInstance::ReleaseFields() { Log(kMiRel, this); }
+// ENDGAME B.3.9 GFX: the ctor / dtor are the members themselves (mesh.cpp).
+MeshInstance::MeshInstance()  { Log(kMiInit, this); _sortBias = 0; }
+MeshInstance::~MeshInstance() { Log(kMiRel, this); }
 void MeshInstance::Update(const System::Time&) {}
 void MeshInstance::Draw(Video::Context&, const Camera&, ExternalPtrHandle, float, int, int, int) const {}
 void MeshInstance::AddDrawItems(const Scene&, Renderer&) const {}
@@ -241,28 +242,16 @@ UNIT_TEST(rb_animationevent_ctor_is_retail_0x1800a2150) {
 // PART B
 // ===========================================================================
 UNIT_TEST(rb_graphics_doors_reach_the_same_bodies) {
-    // ParticleInstance: ctor bytes == door bytes over +0xc0..+0xd7.
-    alignas(8) unsigned char a[sizeof(RbTornadoInstance)];
-    RbTornadoInstance* pi = BuildIn<RbTornadoInstance>(a);
-    alignas(8) unsigned char b[sizeof(RbTornadoInstance)];
-    std::memset(b, 0xCD, sizeof b);
-    *reinterpret_cast<const void**>(b) = kFakeMinted;
-    Graphics::ParticleInstance::DoorBody::Init(reinterpret_cast<Graphics::ParticleInstance*>(b));
-    CHECK(std::memcmp(a + 0xc0, b + 0xc0, 0x18) == 0);
-    pi->~RbTornadoInstance();
+    // ParticleInstance: (ENDGAME B.3.9 GFX) the ??0 door and its DoorBody are
+    // retired; the real ctor is the only builder
+    // (rb_particleinstance_ctor_is_retail_* above).
 
     // Particle: (ENDGAME B.3.9 GFX) the ??0 door and its DoorBody are retired;
     // the real ctor is the only builder (rb_particle_ctor_is_retail_* above).
 
-    // Geometry: the door's calls run under the minted table.
-    alignas(8) unsigned char g[sizeof(Graphics::Geometry)] = {};
-    *reinterpret_cast<const void**>(g) = kFakeMinted;
-    g_n = 0;
-    Graphics::Geometry::DoorBody::Init(reinterpret_cast<Graphics::Geometry*>(g));
-    Graphics::Geometry::DoorBody::Release(reinterpret_cast<Graphics::Geometry*>(g));
-    CHECK_EQ(g_n, 2);
-    CHECK(g_log[0].vptr == static_cast<const void*>(kFakeMinted));
-    CHECK(g_log[1].vptr == static_cast<const void*>(kFakeMinted));
+    // Geometry: (ENDGAME B.3.9 GFX) the ??0 / ??1 doors and DoorBody are
+    // retired; the real ctor / dtor are the only bodies
+    // (b39_gfx_geometry_slot0_is_the_classs_own_both_arms below).
 }
 
 // ===========================================================================
@@ -298,15 +287,7 @@ UNIT_TEST(rb_meshinstance_and_sunlight_are_concrete_with_the_exe_slot0) {
     CHECK_EQ(g_log[2].ev, (int)kSlRel);   CHECK(g_log[2].vptr == &g_rbSlVtGroup[2]);
     CHECK_EQ(g_log[3].ev, (int)kGeoRel);  CHECK(g_log[3].vptr == GeoVt());
 
-    // The MeshInstance doors reach the same bodies under the minted table.
-    // (SunLight's doors are retired -- ENDGAME B.3.9 pilot c2.)
-    alignas(8) unsigned char raw[sizeof(Graphics::MeshInstance)] = {};
-    *reinterpret_cast<const void**>(raw) = kFakeMinted;
-    g_n = 0;
-    Graphics::MeshInstance::DoorBody::Init(reinterpret_cast<Graphics::MeshInstance*>(raw));
-    Graphics::MeshInstance::DoorBody::Release(reinterpret_cast<Graphics::MeshInstance*>(raw));
-    CHECK_EQ(g_n, 2);
-    for (int i = 0; i < 2; ++i) CHECK(g_log[i].vptr == static_cast<const void*>(kFakeMinted));
+    // (MeshInstance's and SunLight's doors are retired -- ENDGAME B.3.9.)
 }
 
 // ENDGAME B.3.9 pilot c2: with the ??0/??1 doors gone, the exe's builder
@@ -340,11 +321,13 @@ UNIT_TEST(rb_materialinstance_ctor_is_retail_0x180103980_and_concrete) {
     CHECK_EQ((int)By(m, 0x25), 0);
     CHECK_EQ((int)By(m, 0x26), 0xCD);           // never written
     for (size_t off = 0x28; off < 0x60; off += 8) CHECK_EQ(Q(m, off), (uint64_t)0);
-    alignas(8) unsigned char raw[sizeof(Graphics::MaterialInstance)];
-    std::memset(raw, 0xCD, sizeof raw);
-    *reinterpret_cast<const void**>(raw) = kFakeMinted;
-    Graphics::MaterialInstance::DoorBody::Init(reinterpret_cast<Graphics::MaterialInstance*>(raw));
-    CHECK(std::memcmp(buf + 0x20, raw + 0x20, sizeof raw - 0x20) == 0);
+    // (ENDGAME B.3.9 GFX: the ??0 door and DoorBody are retired; the real ctor
+    // is the only builder. Retail's External() zeroes run under the base.)
+    CHECK_EQ(Q(m, 0x08), (uint64_t)0);
+    CHECK_EQ(Q(m, 0x10), (uint64_t)0);
+    CHECK_EQ(Q(m, 0x18), (uint64_t)0);
+    CHECK(!std::is_destructible<Graphics::MaterialInstance>::value);
+    CHECK(!std::has_virtual_destructor<Graphics::MaterialInstance>::value);
     m->DeletingDtor(0);
 
     void* mem = Object::detail::InternalMemAlloc(sizeof(Graphics::MaterialInstance), 8);
@@ -638,6 +621,358 @@ UNIT_TEST(b39_gfx_reflectionimagebuffer_ctor_stores_and_both_slot0_arms) {
     CHECK(g_riRelOrder[0] == e[2]);
     CHECK(g_riRelOrder[1] == e[1]);
     CHECK(g_riRelOrder[2] == e[0]);
+}
+
+}  // namespace
+
+// ===========================================================================
+// ENDGAME B.3.9 block GFX -- FrameCopyImageBuffer CONCRETE (its real ctor / dtor
+// are the only builders now; moved here from rb_video_abi_test.cpp's PART D) and
+// GeneratedImageBuffer's own VECTOR slot 0 (the class stays abstract).
+// Video::ImageBuffer's and GeneratedImageBuffer's markers are
+// rb_video_abi_test's; FrameCopy's out-of-line members are markers here.
+// ===========================================================================
+namespace {
+int         g_fcCtor = 0, g_fcDtor = 0;
+const void* g_fcCtorVptr = nullptr;
+const void* g_fcDtorVptr = nullptr;
+int32_t     g_fcGenSeen = -1;
+const void* FcVptrOf(const void* p) { return *static_cast<const void* const*>(p); }
+}  // namespace
+namespace Graphics {
+const char*       FrameCopyImageBuffer::TypeName() const { return "FrameCopyImageBuffer"; }
+uint32_t          FrameCopyImageBuffer::Type() const { return 0; }
+int32_t           FrameCopyImageBuffer::GetFileVersion() const { return 0x1007; }
+bool              FrameCopyImageBuffer::Serialize(void*) { return true; }
+Object::External* FrameCopyImageBuffer::Reconstruct() { return this; }
+void              FrameCopyImageBuffer::Destruct() {}
+Object::External* FrameCopyImageBuffer::Construct() { return this; }
+bool FrameCopyImageBuffer::Create(ImageType, Usage, Format, uint32_t, int32_t, int32_t,
+                                  FilterMode, AddressMode, AddressMode, AddressMode, LevelArray*) {
+    return false;
+}
+void FrameCopyImageBuffer::Generate(void*, int32_t) const {}
+void FrameCopyImageBuffer::Render(void*, const void*, const void*, int32_t) const {}
+FrameCopyImageBuffer::FrameCopyImageBuffer() {
+    ++g_fcCtor; g_fcCtorVptr = FcVptrOf(this); g_fcGenSeen = _generation;
+    _backBufferImage = nullptr; _sourceTarget = nullptr; _destTarget = nullptr;
+}
+FrameCopyImageBuffer::~FrameCopyImageBuffer() { ++g_fcDtor; g_fcDtorVptr = FcVptrOf(this); }
+}  // namespace Graphics
+
+extern const void* const g_rbFcVtGroup[] __asm__("_ZTVN8Graphics20FrameCopyImageBufferE");
+
+namespace {
+
+struct RbGeneratedLeaf final : Graphics::GeneratedImageBuffer {   // slot 0 NOT overridden
+    void Generate(void*, int32_t) const override {}
+    void Render(void*, const void*, const void*, int32_t) const override {}
+};
+
+UNIT_TEST(b39_gfx_framecopy_concrete_ctor_dtor_and_exe_scalar_slot0) {
+    using F = Graphics::FrameCopyImageBuffer;
+    CHECK(!std::is_abstract<F>::value);
+    CHECK(!std::is_destructible<F>::value);            // ~F protected
+    CHECK(!std::has_virtual_destructor<F>::value);
+    CHECK_EQ(GfxSlotOffset(&F::DeletingDtor),   (uintptr_t)0x00);   // exe copy 0x140019d50
+    CHECK_EQ(GfxSlotOffset(&F::TypeName),       (uintptr_t)0x08);   // 0x18001efb0
+    CHECK_EQ(GfxSlotOffset(&F::Type),           (uintptr_t)0x10);   // 0x18001ef90
+    CHECK_EQ(GfxSlotOffset(&F::GetFileVersion), (uintptr_t)0x18);   // 0x1800a3c70
+    CHECK_EQ(GfxSlotOffset(&F::Serialize),      (uintptr_t)0x28);   // 0x1800a3c40
+    CHECK_EQ(GfxSlotOffset(&F::Reconstruct),    (uintptr_t)0x30);   // 0x18001f130
+    CHECK_EQ(GfxSlotOffset(&F::Destruct),       (uintptr_t)0x38);   // 0x18001f160
+    CHECK_EQ(GfxSlotOffset(&F::Construct),      (uintptr_t)0x40);   // 0x18001f150
+    CHECK_EQ(GfxSlotOffset(&F::Create),         (uintptr_t)0x48);   // 0x1800a3b70
+    CHECK_EQ(GfxSlotOffset(&F::Generate),       (uintptr_t)0x50);   // 0x1800a3b20
+    CHECK_EQ(GfxSlotOffset(&F::Render),         (uintptr_t)0x58);   // 0x1800a3b10
+
+    // The chain: ImageBuffer() -> GeneratedImageBuffer() (`_generation = 0`)
+    // -> the FrameCopy body under FrameCopy's (compiler) table.
+    g_fcCtor = g_fcDtor = 0; g_fcGenSeen = -1;
+    void* mem = Object::detail::InternalMemAlloc(sizeof(F), 8);
+    std::memset(mem, 0xCD, sizeof(F));
+    F* f = ::new (mem) F();
+    CHECK_EQ(g_fcCtor, 1);
+    CHECK(g_fcCtorVptr == &g_rbFcVtGroup[2]);
+    CHECK_EQ(g_fcGenSeen, 0);
+    CHECK(FcVptrOf(f) == &g_rbFcVtGroup[2]);
+
+    // Slot 0 is the exe copy's SCALAR deleting dtor: ~F, then free on flags & 1.
+    CHECK(static_cast<void*>(f->DeletingDtor(1u)) == mem);
+    CHECK_EQ(g_fcDtor, 1);
+    CHECK(g_fcDtorVptr == &g_rbFcVtGroup[2]);
+
+    alignas(8) unsigned char buf[sizeof(F)];
+    F* g = ::new (static_cast<void*>(buf)) F();
+    CHECK(static_cast<void*>(g->DeletingDtor(0u)) == static_cast<void*>(buf));   // no free
+    CHECK_EQ(g_fcDtor, 2);
+}
+
+// GeneratedImageBuffer: abstract (slots 10 / 11 `_purecall`), protected
+// non-virtual dtor, slot 0 its own VECTOR deleting dtor (`MOV EDX,0x70`).
+UNIT_TEST(b39_gfx_generatedimagebuffer_slot0_is_the_classs_own_both_arms) {
+    using G = Graphics::GeneratedImageBuffer;
+    CHECK(std::is_abstract<G>::value);
+    CHECK(!std::is_destructible<G>::value);
+    CHECK(!std::has_virtual_destructor<G>::value);
+    CHECK_EQ(sizeof(RbGeneratedLeaf), (size_t)0x70);
+    CHECK_EQ(GfxSlotOffset(&G::DeletingDtor), (uintptr_t)0x00);   // 0x18001eee0
+    CHECK_EQ(GfxSlotOffset(&G::Generate),     (uintptr_t)0x50);
+    CHECK_EQ(GfxSlotOffset(&G::Render),       (uintptr_t)0x58);
+
+    alignas(8) unsigned char buf[sizeof(RbGeneratedLeaf)];
+    std::memset(buf, 0xCD, sizeof buf);
+    RbGeneratedLeaf* g = ::new (static_cast<void*>(buf)) RbGeneratedLeaf;   // no value-init
+    uint32_t gen; std::memcpy(&gen, buf + 0x68, 4);
+    CHECK_EQ(gen, 0u);                                             // the ctor's one store
+    uint32_t pad; std::memcpy(&pad, buf + 0x6c, 4);
+    CHECK_EQ(pad, 0xCDCDCDCDu);                                    // never written
+    CHECK(static_cast<void*>(g->DeletingDtor(0u)) == static_cast<void*>(buf));
+
+    void* m = Object::detail::InternalMemAlloc(sizeof(RbGeneratedLeaf), 8);
+    RbGeneratedLeaf* h = ::new (m) RbGeneratedLeaf();
+    CHECK(static_cast<void*>(h->DeletingDtor(1u)) == m);
+
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 2 * 0x70, 8));
+    const int64_t cookie = 2;
+    std::memcpy(block, &cookie, sizeof cookie);
+    RbGeneratedLeaf* e0 = ::new (block + 8) RbGeneratedLeaf();
+    ::new (block + 8 + 0x70) RbGeneratedLeaf();
+    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3u)) == block);   // stride 0x70, freed
+}
+
+}  // namespace
+
+// ===========================================================================
+// ENDGAME B.3.9 block GFX -- ParticleSystemInstance CONCRETE, ParticleInstance
+// slot 0 concrete (the class stays abstract: slot 1 `_purecall`). PSI's
+// out-of-line members are markers here (wave28 / wave27 / batchc do not link).
+// ===========================================================================
+namespace {
+int         g_psiDtor = 0;
+const void* g_psiDtorVptr = nullptr;
+const void* g_psiDtorOrder[4] = {};
+}  // namespace
+namespace Graphics {
+void ParticleSystemInstance::Update(const System::Time&) {}
+void ParticleSystemInstance::SetParticle(ExternalPtrHandle) {}
+ParticleSystemInstance::~ParticleSystemInstance() {
+    if (g_psiDtor < 4) g_psiDtorOrder[g_psiDtor] = this;
+    ++g_psiDtor; g_psiDtorVptr = *static_cast<const void* const*>(static_cast<const void*>(this));
+}
+}  // namespace Graphics
+
+extern const void* const g_rbPsiVtGroup[] __asm__("_ZTVN8Graphics22ParticleSystemInstanceE");
+
+namespace {
+
+struct RbPiLeaf final : Graphics::ParticleInstance {   // slot 0 NOT overridden
+    void Update(const System::Time&) override {}
+};
+
+UNIT_TEST(b39_gfx_particlesysteminstance_concrete_ctor_and_both_slot0_arms) {
+    using P = Graphics::ParticleSystemInstance;
+    CHECK(!std::is_abstract<P>::value);
+    CHECK(!std::is_destructible<P>::value);
+    CHECK(!std::has_virtual_destructor<P>::value);
+    CHECK_EQ(GfxSlotOffset(&P::DeletingDtor),         (uintptr_t)0x00);   // 0x180020ce0
+    CHECK_EQ(GfxSlotOffset(static_cast<void (P::*)(const System::Time&)>(&P::Update)),
+             (uintptr_t)0x08);                                            // 0x1800a5600
+    CHECK_EQ(GfxSlotOffset(&P::GetInstanceTransform), (uintptr_t)0x30);   // PI 0x1801047f0
+    CHECK_EQ(GfxSlotOffset(&P::SetParticle),          (uintptr_t)0x48);   // 0x1800a6a80
+
+    // Retail 0x1800a55a0: Geometry(), +0xc0/+0xc8 = 0, +0xd0 = -1, +0xd8 = 0.
+    g_n = 0;
+    alignas(8) unsigned char buf[sizeof(P)];
+    std::memset(buf, 0xCD, sizeof buf);
+    P* p = ::new (static_cast<void*>(buf)) P();
+    CHECK_EQ(g_n, 1);
+    CHECK_EQ(g_log[0].ev, (int)kGeoInit);
+    CHECK(g_log[0].vptr == GeoVt());
+    CHECK(VptrOf(p) == &g_rbPsiVtGroup[2]);
+    CHECK_EQ(Q(p, 0xc0), (uint64_t)0);
+    CHECK_EQ(Q(p, 0xc8), (uint64_t)0);
+    CHECK_EQ(D(p, 0xd0), 0xFFFFFFFFu);
+    CHECK_EQ(D(p, 0xd4), 0xCDCDCDCDu);          // not written
+    CHECK_EQ(Q(p, 0xd8), (uint64_t)0);
+
+    // Slot 0, flags 0: ~PSI under PSI's table, then RemoveState under PI's,
+    // then Geometry's release under Geometry's; nothing freed.
+    g_n = 0; g_psiDtor = 0;
+    CHECK(static_cast<void*>(p->DeletingDtor(0u)) == static_cast<void*>(buf));
+    CHECK_EQ(g_psiDtor, 1);
+    CHECK(g_psiDtorVptr == &g_rbPsiVtGroup[2]);
+    CHECK_EQ(g_n, 2);
+    CHECK_EQ(g_log[0].ev, (int)kPiRemoveState); CHECK(g_log[0].vptr == PiVt());
+    CHECK_EQ(g_log[1].ev, (int)kGeoRel);        CHECK(g_log[1].vptr == GeoVt());
+
+    void* m = Object::detail::InternalMemAlloc(sizeof(P), 8);
+    P* h = ::new (m) P();
+    CHECK(static_cast<void*>(h->DeletingDtor(1u)) == m);
+
+    // Vector arm: stride 0xe0, downward, block freed.
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0xe0, 8));
+    const int64_t cookie = 3;
+    std::memcpy(block, &cookie, sizeof cookie);
+    P* e[3];
+    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * 0xe0) P();
+    g_psiDtor = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3u)) == block);
+    CHECK_EQ(g_psiDtor, 3);
+    CHECK(g_psiDtorOrder[0] == e[2]);
+    CHECK(g_psiDtorOrder[2] == e[0]);
+}
+
+UNIT_TEST(b39_gfx_particleinstance_slot0_is_the_classs_own_both_arms) {
+    using PI = Graphics::ParticleInstance;
+    CHECK(std::is_abstract<PI>::value);
+    CHECK(!std::is_destructible<PI>::value);
+    CHECK_EQ(GfxSlotOffset(&PI::DeletingDtor), (uintptr_t)0x00);   // 0x180020310
+    CHECK_EQ(sizeof(RbPiLeaf), (size_t)0xd8);
+
+    void* m = Object::detail::InternalMemAlloc(sizeof(RbPiLeaf), 8);
+    RbPiLeaf* p = ::new (m) RbPiLeaf();
+    g_n = 0;
+    CHECK(static_cast<void*>(p->DeletingDtor(1u)) == m);       // ~PI, freed
+    CHECK_EQ(g_n, 2);
+    CHECK_EQ(g_log[0].ev, (int)kPiRemoveState);
+
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 2 * 0xd8, 8));
+    const int64_t cookie = 2;
+    std::memcpy(block, &cookie, sizeof cookie);
+    RbPiLeaf* e0 = ::new (block + 8) RbPiLeaf();
+    ::new (block + 8 + 0xd8) RbPiLeaf();
+    g_n = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3u)) == block);   // stride 0xd8
+    CHECK_EQ(g_n, 4);
+}
+
+}  // namespace
+
+// ===========================================================================
+// ENDGAME B.3.9 block GFX -- EdgeMeshInstance CONCRETE (retail ctor 0x1800a3ab0,
+// slot 0 0x1800175d0 vector, element 0xd0). Its out-of-line members are
+// markers here (mesh.cpp / meshinstance_draw.cpp do not link).
+// ===========================================================================
+namespace {
+int         g_emiDtor = 0;
+const void* g_emiDtorVptr = nullptr;
+const void* g_emiDtorOrder[4] = {};
+}  // namespace
+namespace Graphics {
+void EdgeMeshInstance::Update(const System::Time&) {}
+void EdgeMeshInstance::Draw(Video::Context&, const Camera&, ExternalPtrHandle,
+                            float, int, int, int) const {}
+void EdgeMeshInstance::AddDrawItems(const Scene&, Renderer&) const {}
+Math::Matrix* EdgeMeshInstance::GetInstanceTransform(Math::Matrix* ret, int, float) const {
+    return ret;
+}
+EdgeMeshInstance::~EdgeMeshInstance() {
+    if (g_emiDtor < 4) g_emiDtorOrder[g_emiDtor] = this;
+    ++g_emiDtor; g_emiDtorVptr = *static_cast<const void* const*>(static_cast<const void*>(this));
+}
+}  // namespace Graphics
+
+extern const void* const g_rbEmiVtGroup[] __asm__("_ZTVN8Graphics16EdgeMeshInstanceE");
+
+namespace {
+
+UNIT_TEST(b39_gfx_edgemeshinstance_concrete_ctor_and_both_slot0_arms) {
+    using E = Graphics::EdgeMeshInstance;
+    CHECK(!std::is_abstract<E>::value);
+    CHECK(!std::is_destructible<E>::value);
+    CHECK(!std::has_virtual_destructor<E>::value);
+    CHECK_EQ(GfxSlotOffset(&E::DeletingDtor),         (uintptr_t)0x00);   // 0x1800175d0
+    CHECK_EQ(GfxSlotOffset(&E::GetInstanceTransform), (uintptr_t)0x30);   // 0x1800a3840 RETSLOT
+
+    // Retail 0x1800a3ab0: Geometry(), +0xc0 = 0; +0xc8 NOT written.
+    g_n = 0;
+    alignas(8) unsigned char buf[sizeof(E)];
+    std::memset(buf, 0xCD, sizeof buf);
+    E* p = ::new (static_cast<void*>(buf)) E();
+    CHECK_EQ(g_n, 1);
+    CHECK_EQ(g_log[0].ev, (int)kGeoInit);
+    CHECK(g_log[0].vptr == GeoVt());
+    CHECK(VptrOf(p) == &g_rbEmiVtGroup[2]);
+    CHECK_EQ(Q(p, 0xc0), (uint64_t)0);
+    CHECK_EQ(Q(p, 0xc8), (uint64_t)0xCDCDCDCDCDCDCDCDull);   // not written
+
+    // Slot 0, flags 0: ~EMI under EMI's table, then Geometry's release; nothing freed.
+    g_n = 0; g_emiDtor = 0;
+    CHECK(static_cast<void*>(p->DeletingDtor(0u)) == static_cast<void*>(buf));
+    CHECK_EQ(g_emiDtor, 1);
+    CHECK(g_emiDtorVptr == &g_rbEmiVtGroup[2]);
+    CHECK_EQ(g_n, 1);
+    CHECK_EQ(g_log[0].ev, (int)kGeoRel); CHECK(g_log[0].vptr == GeoVt());
+
+    void* m = Object::detail::InternalMemAlloc(sizeof(E), 8);
+    E* h = ::new (m) E();
+    CHECK(static_cast<void*>(h->DeletingDtor(1u)) == m);
+
+    // Vector arm: stride 0xd0, downward, block freed.
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0xd0, 8));
+    const int64_t cookie = 3;
+    std::memcpy(block, &cookie, sizeof cookie);
+    E* e[3];
+    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * 0xd0) E();
+    g_emiDtor = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3u)) == block);
+    CHECK_EQ(g_emiDtor, 3);
+    CHECK(g_emiDtorOrder[0] == e[2]);
+    CHECK(g_emiDtorOrder[2] == e[0]);
+}
+
+}  // namespace
+
+// ===========================================================================
+// ENDGAME B.3.9 block GFX -- Graphics::Geometry slot 0 is the class's own
+// VECTOR deleting destructor (retail 0x180015e90, element 0xc0, dtor
+// 0x1800a41c0). The class stays abstract; a leaf that does not override
+// slot 0 reaches it.
+// ===========================================================================
+namespace {
+
+struct RbGeoLeaf final : Graphics::Geometry {   // slot 0 NOT overridden
+    void Update(const System::Time&) override {}
+    void Draw(Video::Context&, const Graphics::Camera&, Graphics::ExternalPtrHandle,
+              float, int, int, int) const override {}
+    void AddDrawItems(const Graphics::Scene&, Graphics::Renderer&) const override {}
+};
+
+UNIT_TEST(b39_gfx_geometry_slot0_is_the_classs_own_both_arms) {
+    using G = Graphics::Geometry;
+    CHECK(std::is_abstract<G>::value);
+    CHECK(!std::is_destructible<G>::value);
+    CHECK(!std::has_virtual_destructor<G>::value);
+    CHECK_EQ(GfxSlotOffset(&G::DeletingDtor), (uintptr_t)0x00);   // 0x180015e90
+    CHECK_EQ(sizeof(RbGeoLeaf), (size_t)0xc0);
+
+    // Scalar arm, flags 1: ~Geometry under Geometry's table, freed, returns this.
+    void* m = Object::detail::InternalMemAlloc(sizeof(RbGeoLeaf), 8);
+    RbGeoLeaf* p = ::new (m) RbGeoLeaf();
+    g_n = 0;
+    CHECK(static_cast<void*>(p->DeletingDtor(1u)) == m);
+    CHECK_EQ(g_n, 1);
+    CHECK_EQ(g_log[0].ev, (int)kGeoRel); CHECK(g_log[0].vptr == GeoVt());
+
+    // Scalar arm, flags 0: nothing freed.
+    alignas(8) unsigned char buf[sizeof(RbGeoLeaf)];
+    RbGeoLeaf* q = ::new (static_cast<void*>(buf)) RbGeoLeaf();
+    g_n = 0;
+    CHECK(static_cast<void*>(q->DeletingDtor(0u)) == static_cast<void*>(buf));
+    CHECK_EQ(g_n, 1);
+
+    // Vector arm: stride 0xc0, count at block, block freed, returns block.
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 2 * 0xc0, 8));
+    const int64_t cookie = 2;
+    std::memcpy(block, &cookie, sizeof cookie);
+    RbGeoLeaf* e0 = ::new (block + 8) RbGeoLeaf();
+    ::new (block + 8 + 0xc0) RbGeoLeaf();
+    g_n = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3u)) == block);
+    CHECK_EQ(g_n, 2);
+    CHECK_EQ(g_log[0].ev, (int)kGeoRel);
+    CHECK_EQ(g_log[1].ev, (int)kGeoRel);
 }
 
 }  // namespace

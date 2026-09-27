@@ -323,7 +323,10 @@ static_assert(offsetof(ParticleSystemInstance, _f_d8) == 0xd8, "ParticleSystemIn
 //     ?_ParentTypeName@ParticleSystem@Graphics@@ -> "Particle"
 //
 // SECTION 9 / RULE B4b-4 — `?_rng@Particle@Graphics@@1VRandom@System@@A`
-// (0x1801fe7f0) IS NOT A STATIC MEMBER HERE. It is a `System::Random` held BY
+// (0x1801fe7f0). ENDGAME B.3.9 GFX: IT IS A STATIC MEMBER NOW (`Particle::_rng`
+// below, one seeder at CRT init). The rest of this paragraph is the step-5
+// reasoning, kept as history.
+// (0x1801fe7f0) WAS NOT A STATIC MEMBER HERE. It is a `System::Random` held BY
 // VALUE and seeded through a constructor DOOR at load (0x180149650), which is
 // B4b-2's double-seed case verbatim: a real static member would be constructed
 // a second time by our own runtime init and every particle placement would
@@ -467,6 +470,17 @@ public:
     //   carries the per-class operator new / delete.
     static Object::Base* CreateNewObject();
     static Object::Base* CreateInPlaceObject(void* place);
+
+    // ?_rng@Particle@Graphics@@1VRandom@System@@A  retail 0x1801fe7f0 — the one
+    // MT19937 every particle draws from (ParticleInstance::SetParticle,
+    // ParticleSystem's emitter, the exe's tornado funnel). ENDGAME B.3.9 GFX: a
+    // real class static (animation.cpp), SEEDED ONCE at CRT init by the
+    // transcription of retail's initialiser 0x180149650 beside its definition —
+    // the only seeder (B4b-2); the mint's ConstructParticleRng is gone. Retail
+    // spells it PROTECTED (`1`); public here because ParticleInstance and the
+    // exe's TornadoInstance read it, and access control is not ABI.
+    static System::Random _rng;
+
     // ??0Particle@Graphics@@QEAA@AEBV01@@Z                0x180020030 — NOT PORTED
     // ??4Particle@Graphics@@QEAAAEAV01@AEBV01@@Z          0x1800200e0 — NOT PORTED
     Particle(const Particle& src);

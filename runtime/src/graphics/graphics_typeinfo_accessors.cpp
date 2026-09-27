@@ -104,9 +104,6 @@
 #include "../../types/graphics/Material.h"    // Graphics::MaterialInstance -- ditto
 #include "../../types/graphics/Particle.h"    // Graphics::Particle -- ditto
 
-extern "C" uint32_t    RtGraphics_MaterialInstance_Type(const void*);
-extern "C" const char* RtGraphics_MaterialInstance_TypeName(const void*);
-extern "C" int32_t     RtGraphics_MaterialInstance_GetFileVersion(const void*);
 
 namespace {
 
@@ -186,20 +183,9 @@ const char* ReadTypeName(const uint8_t* node) {
 // members are `const` and touch no field.
 // ############################################################################
 
-extern "C" uint32_t RtGraphics_MaterialInstance_Type(const void* self) {
-    return reinterpret_cast<const Graphics::MaterialInstance*>(self)      // B.3.5 bridge
-               ->Graphics::MaterialInstance::Type();
-}
-
-extern "C" const char* RtGraphics_MaterialInstance_TypeName(const void* self) {
-    return reinterpret_cast<const Graphics::MaterialInstance*>(self)      // B.3.5 bridge
-               ->Graphics::MaterialInstance::TypeName();
-}
-
-extern "C" int32_t RtGraphics_MaterialInstance_GetFileVersion(const void* self) {
-    return reinterpret_cast<const Graphics::MaterialInstance*>(self)      // B.3.5 bridge
-               ->Graphics::MaterialInstance::GetFileVersion();
-}
+// ENDGAME B.3.9 block GFX: MaterialInstance's three slot doors (Type,
+// TypeName, GetFileVersion) are retired with the minted table, their only
+// reader; the members below are the bodies.
 
 
 // ============================================================================
@@ -218,20 +204,8 @@ int RtGraphicsTypeInfoAccessorsRegister() {
 
 
 
-    RegisterRuntimeExport("?Type@MaterialInstance@Graphics@@UEBAIXZ",
-                          (void*)&RtGraphics_MaterialInstance_Type); ++n;
-    RegisterRuntimeAddr(0x1800027f0ull, (void*)&RtGraphics_MaterialInstance_Type);
-
-    RegisterRuntimeExport("?TypeName@MaterialInstance@Graphics@@UEBAPEBDXZ",
-                          (void*)&RtGraphics_MaterialInstance_TypeName); ++n;
-    RegisterRuntimeAddr(0x180002810ull, (void*)&RtGraphics_MaterialInstance_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@MaterialInstance@Graphics@@UEBAHXZ",
-                          (void*)&RtGraphics_MaterialInstance_GetFileVersion); ++n;
-    RegisterRuntimeAddr(0x180103a60ull, (void*)&RtGraphics_MaterialInstance_GetFileVersion);
-
-    // (ENDGAME B.3.9 block GFX: AnimationEvent's two and Particle's three
-    // slot doors are retired with their minted tables.)
+    // (ENDGAME B.3.9 block GFX: AnimationEvent's two, Particle's three and
+    // MaterialInstance's three slot doors are retired with their minted tables.)
 
     return n;
 }

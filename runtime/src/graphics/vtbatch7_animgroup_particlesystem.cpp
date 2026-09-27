@@ -735,24 +735,10 @@ Object::Base* ParticleSystem::CreateInPlaceObject(void* place) {
 }
 
 // [8] ?CreateSystem@ParticleSystem@Graphics@@UEBAPEAVParticleInstance@2@XZ
-//     retail 0x1800a5140. `this` IS NEVER READ (see the banner above the door):
-//     retail ignores the ParticleSystem entirely and the returned instance is
-//     bound to its system later, by the caller.
-ParticleInstance* ParticleSystem::CreateSystem() const {
-    void* inst = rtcoll::MemAlloc(0xe0, 8);                // 1800a5183
-    if (!inst) return nullptr;                             // 1800a519c -> XOR EAX,EAX
-    // 0x1800a55a0 (`Graphics::ParticleInstance::ParticleInstance`) is NOT this
-    // block's row and is reached BY ADDRESS — ResolveAddr consults the port
-    // registry first, so it lands on `animation.cpp`'s ported ctor door. The
-    // result is reinterpreted rather than static_cast because `ParticleInstance`
-    // is only FORWARD-DECLARED in `Particle.h`: including `ParticleInstance.h`
-    // here would drag `Geometry.h` -> `Volume.h` into a translation unit that has
-    // already seen `<windows.h>`, which is the `Rectangle` collision block E
-    // measured.
-    using CtorFn = void* (*)(void*);
-    return reinterpret_cast<ParticleInstance*>(
-        RtAddr<CtorFn>(0x1800a55a0ull)(inst));             // 1800a51a1
-}
+//     retail 0x1800a5140 -- ENDGAME B.3.9 GFX: DEFINED in
+//     wave28_lane_partsys.cpp, which can include ParticleInstance.h (this TU's
+//     `<windows.h>` cannot); the by-address ??0ParticleSystemInstance door it
+//     called here is retired.
 
 // [5] ?Serialize@ParticleSystem@Graphics@@UEAA_NAEAVStream@IO@@@Z  0x1800a4d20.
 //
