@@ -383,7 +383,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // UI::Dialog row above is appended: kProbeSubjects is a list of TABLE
     // INDICES and a mid-table insert silently re-points all twelve
     // Video::*Data probe subjects at the wrong rows.
-    RT_DELDTOR(0x18004d270, 0x1800dac70, 0x0c0, "UI::ToolTipDialog"),
     // ---- WAVE 19 lane CSTREAM -----------------------------------------------
     // Slot 0 of `??_7CompressedStream@IO@@6B@` (0x180155640) and of
     // `??_7CompressedFileStream@IO@@6B@` (0x1801555f0). The THIRD member of that
@@ -861,7 +860,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     //   0x180074a10  LEA R9,[0x180111cd0]  MOV EDX,0xd0   ~ComboDialog
     //     (own body: stamp own vtable, tail into ~DialogInstance -- already
     //     ported, runtime/src/ui/dialog.cpp)
-    RT_DELDTOR(0x180074a10, 0x180111cd0, 0x0d0, "UI::ComboDialog"),
     //   0x18003b600  LEA R9,[0x18003b4f0]  MOV EDX,0x20   ~DialogControllerConfig
     //     (own body: stamp own vtable, tail into ~External -- already ported,
     //     runtime/src/object/external.cpp)
@@ -1329,10 +1327,6 @@ void* RtDelDtor_ContextData(void* self, unsigned flags) {
 void* RtDelDtor_DeviceData(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180058b10>());
 }
-// UI::ToolTipDialog        ~ToolTipDialog = 0x1800dac70  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)  [Wave 10D]
-void* RtDelDtor_ToolTipDialog(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004d270>());
-}
 // IO::CompressedStream     ~CompressedStream = 0x1800aa650  (PORTED, lane PKG2)  [Wave 19]
 void* RtDelDtor_CompressedStream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180023fd0>());
@@ -1422,10 +1416,6 @@ void* RtDelDtor_RenderState(void* self, unsigned flags) {
 
 // VTABLE BATCH 9 (2026-09-12). Indices 61-66, appended after rows 57-60
 // (wired above, after this batch's merge found them without wrappers).
-// UI::ComboDialog          ~ComboDialog = 0x180111cd0             (PORTED, runtime/src/ui/combodialog.cpp)
-void* RtDelDtor_ComboDialog(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180074a10>());
-}
 // Object::ExternalList      ~ExternalList = 0x1800076c0           (PORTED, runtime/src/object/external_list.cpp)
 void* RtDelDtor_ExternalList(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180007800>());
@@ -1580,7 +1570,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180058a10, (void*)&RtDelDtor_ImageBufferData);
     RegisterRuntimeAddr(0x180058a90, (void*)&RtDelDtor_ContextData);
     RegisterRuntimeAddr(0x180058b10, (void*)&RtDelDtor_DeviceData);
-    RegisterRuntimeAddr(0x18004d270, (void*)&RtDelDtor_ToolTipDialog);  // Wave 10D TIP
     RegisterRuntimeAddr(0x180023fd0, (void*)&RtDelDtor_CompressedStream);      // Wave 19 CSTREAM
     RegisterRuntimeAddr(0x180024100, (void*)&RtDelDtor_CompressedFileStream);  // Wave 19 CSTREAM
     RegisterRuntimeAddr(0x18002ba90, (void*)&RtDelDtor_TextFileStream);        // Wave 21 ENC
@@ -1604,7 +1593,6 @@ void RtObjectDeletingDtorPortInit() {
 
     // VTABLE BATCH 9
     // Rows 57-60, the UI::*Description four (wrappers above).
-    RegisterRuntimeAddr(0x180074a10, (void*)&RtDelDtor_ComboDialog);
     RegisterRuntimeAddr(0x180007800, (void*)&RtDelDtor_ExternalList);
     RegisterRuntimeAddr(0x1800656b0, (void*)&RtDelDtor_CollisionMesh);       // vtable batch 8 SPATIAL
     RegisterRuntimeAddr(0x180064ea0, (void*)&RtDelDtor_Collision2DSurface);  // vtable batch 8 SPATIAL

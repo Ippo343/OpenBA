@@ -130,16 +130,13 @@ uint64_t g_setTextEntries  = 0;
 uint64_t g_setTextRootHit  = 0;   // control: the ROOT itself was named textToolTip
 uint64_t g_setTextFound    = 0;   // control: a text element was found at all
 uint64_t g_setTextWrote    = 0;   // control: reached the String::operator= tail
-uint64_t g_typeNameEntries = 0;
-uint64_t g_typeEntries     = 0;
 
 struct TipDlgSummary {
     ~TipDlgSummary() {
         const unsigned long long total =
-            g_newEntries + g_getTipEntries + g_setTextEntries +
-            g_typeNameEntries + g_typeEntries;
+            g_newEntries + g_getTipEntries + g_setTextEntries;
         if (total == 0) {
-            printf("[RtPort] UI::ToolTipDialog ATTENDANCE: none of the five "
+            printf("[RtPort] UI::ToolTipDialog ATTENDANCE: none of the three "
                    "bodies was entered in this run.\n");
             fflush(stdout);
             return;
@@ -147,13 +144,12 @@ struct TipDlgSummary {
         printf("[RtPort] UI::ToolTipDialog ATTENDANCE (entries, not "
                "comparisons): total=%llu operatorNew=%llu (bytes=%llu) "
                "GetToolTipString=%llu (nonNull=%llu) SetText=%llu (rootHit=%llu "
-               "found=%llu wrote=%llu) TypeName=%llu Type=%llu\n",
+               "found=%llu wrote=%llu)\n",
                total,
                (unsigned long long)g_newEntries,      (unsigned long long)g_newBytes,
                (unsigned long long)g_getTipEntries,   (unsigned long long)g_getTipNonNull,
                (unsigned long long)g_setTextEntries,  (unsigned long long)g_setTextRootHit,
-               (unsigned long long)g_setTextFound,    (unsigned long long)g_setTextWrote,
-               (unsigned long long)g_typeNameEntries, (unsigned long long)g_typeEntries);
+               (unsigned long long)g_setTextFound,    (unsigned long long)g_setTextWrote);
         fflush(stdout);
     }
 };
@@ -347,31 +343,6 @@ extern "C" void RtUi_ToolTipDialog_SetText(void* self, const System::String* tex
 }
 
 // ============================================================================
-// ?TypeName@ToolTipDialog@UI@@UEBAPEBDXZ    retail 0x18004cfc0   vtable slot 1
-//     MOV RAX,qword ptr [0x1801fa4a8] / RET
-// ============================================================================
-// 0x1801fa4a8 is `?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A`
-// (0x1801fa4a0) plus 0x08, i.e. the node's `name` field. Two instructions, and
-// the address is a LOAD OF THE FIELD, not of the node — spelled that way here.
-// ============================================================================
-extern "C" const char* RtUi_ToolTipDialog_TypeName(const void* self) {
-    ++g_typeNameEntries;
-    return reinterpret_cast<const UI::ToolTipDialog*>(self)   // B.3.6 bridge
-        ->UI::ToolTipDialog::TypeName();
-}
-
-// ============================================================================
-// ?Type@ToolTipDialog@UI@@UEBAIXZ           retail 0x18004cfa0   vtable slot 2
-//     MOV EAX,dword ptr [0x1801fa4a0] / RET
-// ============================================================================
-// A DWORD load — `MOV EAX`, not `MOV RAX` — of the node's `typeId` at +0x00.
-// ============================================================================
-extern "C" uint32_t RtUi_ToolTipDialog_Type(const void* self) {
-    ++g_typeEntries;
-    return reinterpret_cast<const UI::ToolTipDialog*>(self)   // B.3.6 bridge
-        ->UI::ToolTipDialog::Type();
-}
-
 namespace {
 // Element::FindElement (block A's class), a RETSLOT name door. File scope so
 // no member keeps a static of its own (RULE B6-5). Spelled as ONE literal on
@@ -394,9 +365,25 @@ const char* ToolTipDialog::TypeName() const {                  // [1] 0x18004cfc
         ToolTipDialogTypeInfo() + kBaseTypeInfoName);
 }
 
-uint32_t ToolTipDialog::Type() const {                         // [2] 0x18004cfa0
+uint32_t ToolTipDialog::Type() const { return TypeId(); }      // [2] 0x18004cfa0
+// ?TypeId@ToolTipDialog@UI@@SAIXZ 0x18004cfb0 — the same dword.
+uint32_t ToolTipDialog::TypeId() {
     return *reinterpret_cast<const uint32_t*>(
         ToolTipDialogTypeInfo() + kBaseTypeInfoTypeId);
+}
+
+// ?CreateNewObject@ToolTipDialog@UI@@SAPEAVBase@Object@@XZ  0x18004d0b0
+// The FACTUI2 row this replaces: the locked MemAlloc of 0xc0 bytes, align 8;
+// retail's null branch; then ??0ToolTipDialog (DialogInstance() + the stamp).
+Object::Base* ToolTipDialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ToolTipDialog), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) ToolTipDialog();
+}
+// ?CreateInPlaceObject@ToolTipDialog@UI@@SAPEAVBase@Object@@PEAX@Z  0x18004d140
+Object::Base* ToolTipDialog::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) ToolTipDialog();
 }
 
 // ---- ?GetToolTipString@Element@UI@@QEBA?AVString@System@@XZ 0x1800356a0 ----
@@ -414,8 +401,9 @@ System::String Element::GetToolTipString() const {
     return out;
 }
 
-// ??1ToolTipDialog@UI@@UEAA@XZ 0x1800dac70 — EMPTY; the deleting-dtor row in
-// runtime/src/object/deleting_dtor_leaves.cpp owns the teardown.
+// ??1ToolTipDialog@UI@@UEAA@XZ 0x1800dac70 — restamp + tail-JMP ~DialogInstance,
+// both the compiler's (ENDGAME B.3.9 UI-D: the door in deleting_dtor_leaves.cpp
+// is retired with the minted table). EMPTY, retail's body.
 ToolTipDialog::~ToolTipDialog() {}
 
 // ?SetText@ToolTipDialog@UI@@QEAAXAEBVString@System@@@Z   0x1800dab00 — the
@@ -505,13 +493,14 @@ int RtUiToolTipDialogRegister() {
                           (void*)&RtUi_ToolTipDialog_SetText);
     RegisterRuntimeAddr(0x1800dab00, (void*)&RtUi_ToolTipDialog_SetText);       ++n;
 
-    RegisterRuntimeExport("?TypeName@ToolTipDialog@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_ToolTipDialog_TypeName);
-    RegisterRuntimeAddr(0x18004cfc0, (void*)&RtUi_ToolTipDialog_TypeName);      ++n;
-
-    RegisterRuntimeExport("?Type@ToolTipDialog@UI@@UEBAIXZ",
-                          (void*)&RtUi_ToolTipDialog_Type);
-    RegisterRuntimeAddr(0x18004cfa0, (void*)&RtUi_ToolTipDialog_Type);          ++n;
+    // ENDGAME B.3.9 UI-D: the two slot doors (TypeName / Type) are retired with
+    // the minted table; the factory pair is the class's own (B39_RULES D2).
+    RegisterRuntimeExport("?CreateNewObject@ToolTipDialog@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::ToolTipDialog::CreateNewObject);
+    RegisterRuntimeAddr(0x18004d0b0, (void*)&UI::ToolTipDialog::CreateNewObject);   ++n;
+    RegisterRuntimeExport("?CreateInPlaceObject@ToolTipDialog@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::ToolTipDialog::CreateInPlaceObject);
+    RegisterRuntimeAddr(0x18004d140, (void*)&UI::ToolTipDialog::CreateInPlaceObject); ++n;
 
     return n;
 }

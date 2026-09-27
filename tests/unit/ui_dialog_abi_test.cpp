@@ -359,8 +359,10 @@ UNIT_TEST(ui_dialog_family_layout) {
     CHECK(!std::is_destructible<UI::Dialog>::value);            // protected dtor
     CHECK(!std::is_destructible<UI::DialogController>::value);
     CHECK(!std::has_virtual_destructor<UI::Dialog>::value);
-    CHECK(std::is_abstract<UI::ComboDialog>::value);
-    CHECK(std::is_abstract<UI::ToolTipDialog>::value);
+    CHECK(!std::is_abstract<UI::ComboDialog>::value);     // B.3.9 UI-D: own slot 0
+    CHECK(!std::is_abstract<UI::ToolTipDialog>::value);
+    CHECK(!std::is_destructible<UI::ComboDialog>::value);
+    CHECK(!std::is_destructible<UI::ToolTipDialog>::value);
 
     // Own fields start at sizeof(base).
     CHECK_EQ((int)offsetof(UI::DialogInstance, _ui), (int)sizeof(Object::Internal));
@@ -478,6 +480,46 @@ UNIT_TEST(b39_uid_dialog_ctor_makes_retails_stores) {
     CHECK_EQ(g_b39DtorCount, 1);
 }
 
+UNIT_TEST(b39_uid_combo_tooltip_slot0_by_pmf) {
+    CHECK_EQ(SlotOffset(&UI::ComboDialog::DeletingDtor), (uintptr_t)0x00);     // 0x180074a10
+    CHECK_EQ(SlotOffset(&UI::ComboDialog::OnElementEvent), (uintptr_t)DI::kOnElementEvent);
+    CHECK_EQ(SlotOffset(&UI::ToolTipDialog::DeletingDtor), (uintptr_t)0x00);   // 0x18004d270
+    CHECK_EQ(SlotOffset(&UI::ToolTipDialog::Type), (uintptr_t)DI::kType);
+}
+
+// The default ctors the factory pairs inline: DialogInstance(), then
+// ComboDialog's three zero stores (+0xb8/+0xc0/+0xc8); ToolTipDialog leaves
+// +0xb8/+0xbc alone.
+UNIT_TEST(b39_uid_combo_tooltip_default_ctors) {
+    FactoryScope scope;
+    alignas(8) uint8_t cbuf[0xd0];
+    std::memset(cbuf, 0xCD, sizeof cbuf);
+    UI::ComboDialog* c = ::new (cbuf) UI::ComboDialog();
+    for (int off = 0xb8; off < 0xd0; off += 8) CHECK(*reinterpret_cast<void**>(cbuf + off) == nullptr);
+    CHECK_EQ(c->_spriteIndex, -1);                 // DialogInstance() ran
+    ComboDialogProbe cprobe;
+    CHECK(VTableOf(c) != VTableOf(&cprobe));
+    g_b39DtorCount = 0;
+    CHECK(c->DeletingDtor(0) == c);
+    CHECK_EQ(g_b39DtorCount, 1);
+
+    alignas(8) uint8_t tbuf[0xc0];
+    std::memset(tbuf, 0xCD, sizeof tbuf);
+    UI::ToolTipDialog* t = ::new (tbuf) UI::ToolTipDialog();
+    CHECK_EQ(*reinterpret_cast<uint32_t*>(tbuf + 0xb8), 0xCDCDCDCDu);
+    CHECK_EQ(*reinterpret_cast<uint32_t*>(tbuf + 0xbc), 0xCDCDCDCDu);
+    CHECK_EQ(t->_spriteIndex, -1);
+    g_b39DtorCount = 0;
+    CHECK(t->DeletingDtor(0) == t);
+    CHECK_EQ(g_b39DtorCount, 1);
+}
+
+UNIT_TEST(b39_uid_combo_tooltip_deleting_dtor_both_arms) {
+    FactoryScope scope;
+    B39ExpectBothArms<UI::ComboDialog>(0xd0, [](void* p) { return ::new (p) UI::ComboDialog(); });
+    B39ExpectBothArms<UI::ToolTipDialog>(0xc0, [](void* p) { return ::new (p) UI::ToolTipDialog(); });
+}
+
 UNIT_TEST(b39_uid_dialog_deleting_dtor_both_arms) {
     B39ExpectBothArms<UI::Dialog>(0x88, [](void* p) { return ::new (p) UI::Dialog(); });
 }
@@ -535,11 +577,11 @@ void ComboDialog::OnElementEvent(Object::InternalPtr<Element>* e, int32_t, int32
                                  int32_t, int32_t, int32_t, void*) {
     Note(this, 308); g_lastArg = e;
 }
-ComboDialog::~ComboDialog() {}
+ComboDialog::~ComboDialog() { B39UidDlgNoteDtor(this); }
 
 const char* ToolTipDialog::TypeName() const { Note(this, 401); return "ToolTipDialog"; }
 uint32_t    ToolTipDialog::Type() const { Note(this, 402); return 0u; }
-ToolTipDialog::~ToolTipDialog() {}
+ToolTipDialog::~ToolTipDialog() { B39UidDlgNoteDtor(this); }
 
 const char* Dialog::TypeName() const { Note(this, 501); return "Dialog"; }
 uint32_t    Dialog::Type() const { Note(this, 502); return 0u; }

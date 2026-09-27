@@ -29,6 +29,7 @@
 // ============================================================================
 #include "element_common.h"
 #include "../../types/ui/ComboElement.h"
+#include "../../types/ui/ComboDialog.h"
 #include "../../types/ui/Dialog.h"
 #include <new>
 
@@ -86,8 +87,6 @@ using StringAssignFn   = void* (*)(void* dst, const void* src);
 using CacheTextFn      = void  (*)(void* textElement);
 using ListAddItemFn    = void  (*)(void* list, void** item, int flags);
 using OperatorNewFn    = void* (*)(uint64_t size);
-using ComboDialogCtorFn = void* (*)(void* self, void* ui, void** list,
-                                    void** dlgInstance, void** owner);
 using SetUpperLeftFn   = void  (*)(void* dlgInstance, int x, int y, bool centre);
 using DynArrayPushFn   = void  (*)(void* array, int newSize, const void* fill);
 using CloseDialogFn    = void  (*)(void* ui, void** dlgInstance);
@@ -211,11 +210,10 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
         void* combo = RtAddr<OperatorNewFn>(0x180074770ull)(kDialogSize);
         void* made2 = nullptr;
         if (combo != nullptr) {
-            void* owner = this;
-            void* dlgInst = *reinterpret_cast<void* const*>(dialog);
-            void* listArg = list;
-            made2 = RtAddr<ComboDialogCtorFn>(0x180111d00ull)(
-                combo, ui, &listArg, &dlgInst, &owner);
+            // ENDGAME B.3.9 UI-D (B9-13 foreign site): ??0ComboDialog, the real ctor.
+            made2 = ::new (combo) ComboDialog(
+                ui, Object::InternalPtr<Element>(static_cast<Element*>(list)),
+                *dialog, Object::InternalPtr<ComboElement>(this));
         }
         _openDialog = made2;
 

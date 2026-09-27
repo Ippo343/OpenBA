@@ -148,41 +148,8 @@ inline void RtStore(uint8_t* p, size_t off, T v) { std::memcpy(p + off, &v, size
 // oracle would not notice (the precedent is stringtable_factory.cpp / Wave 26).
 #define VPTR(p, MANGLED)  RtStore<void*>((p), 0, RT_DATA_SLOT(void*, MANGLED))
 
-// An out-of-line base-class ctor call, exactly as retail makes it.
-//
-// Resolved through ResolveExport (the PORT-REGISTRY-AWARE resolver), NOT by
-// address: that is what lets a port of the
-// base ctor be reached instead of the DLL's copy
-// (reference_resolveaddr_consults_port_registry_first.md,
-//  reference_bypassed_port_needs_a_source_checker.md). Cached, because
-// ResolveExport is a string search under the loader lock and calling it per
-// construction is the mistake reference_rtoriginal_is_getprocaddress.md
-// measured at 5.6 points of sim time.
-//
-// The null branch is NOT a guard over a faithful deref: at cutover, with the
-// DLL absent, an unported base ctor resolves to nothing, and the honest
-// behaviour is to SAY SO ONCE rather than jump to address 0 and leave an
-// EXEC-of-0 whose crash log names the resolver instead of the missing symbol
-// (reference_diagnostic_field_cannot_express_the_answer.md).
-void RtFactBaseCall(const char* mangled, void* self, void** cache);
-#define BASE(MANGLED, SELF) \
-    do { static void* rt_base_cache__ = nullptr; \
-         RtFactBaseCall((MANGLED), (SELF), &rt_base_cache__); } while (0)
-
-
-void RtFactBaseCall(const char* mangled, void* self, void** cache) {
-    using Fn = void* (*)(void*);
-    Fn fn = reinterpret_cast<Fn>(RtResolveCached(mangled, cache));
-    if (fn) { fn(self); return; }
-    static int complained = 0;
-    if (complained < 16) {
-        ++complained;
-        printf("[RtPort] FACTUI2: base ctor %s is UNRESOLVED -- the object is "
-               "left UNCONSTRUCTED. Port it, or this factory is a wall that "
-               "moved rather than one that cleared.\n", mangled);
-        fflush(stdout);
-    }
-}
+// (ENDGAME B.3.9 UI-D: the `BASE(...)` base-ctor door call went with the last
+// row that used it, ToolTipDialog's.)
 
 using CtorFn = void* (*)(void*);
 
@@ -264,30 +231,6 @@ extern "C" void* RtUiFact_SpriteSheet_CreateInPlaceObject(void* p) {
 //  is a STRING LITERAL for exactly that second reason).
 
 
-// --------------------------------------------------------------------------
-// UI::ToolTipDialog   allocation 0xc0, align 8
-//   ?CreateNewObject@ToolTipDialog@UI@@SAPEAVBase@Object@@XZ       0x18004d0b0 ord 2124
-//   ?CreateInPlaceObject@ToolTipDialog@UI@@SAPEAVBase@Object@@PEAX@Z 0x18004d140 ord 1987
-//   ??0ToolTipDialog@UI@@QEAA@XZ                                   0x1800dad00 ord 449
-void* Ctor_ToolTipDialog(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    BASE("??0DialogInstance@UI@@QEAA@XZ", self);
-    VPTR(self, "??_7ToolTipDialog@UI@@6B@");
-    return p;
-}
-
-extern "C" void* RtUiFact_ToolTipDialog_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0xc0, &Ctor_ToolTipDialog);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_ToolTipDialog_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_ToolTipDialog);
-}
-
 int RtUiFactory2Register() {
     int n = 0;
 
@@ -298,14 +241,6 @@ int RtUiFactory2Register() {
                           (void*)&RtUiFact_SpriteSheet_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180003000ull, (void*)&RtUiFact_SpriteSheet_CreateInPlaceObject); ++n;
 
-    RegisterRuntimeExport("?CreateNewObject@ToolTipDialog@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_ToolTipDialog_CreateNewObject);
-    RegisterRuntimeAddr(0x18004d0b0ull, (void*)&RtUiFact_ToolTipDialog_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@ToolTipDialog@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_ToolTipDialog_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x18004d140ull, (void*)&RtUiFact_ToolTipDialog_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0ToolTipDialog@UI@@QEAA@XZ", (void*)&Ctor_ToolTipDialog);
-    RegisterRuntimeAddr(0x1800dad00ull, (void*)&Ctor_ToolTipDialog); ++n;
 
     return n;
 }

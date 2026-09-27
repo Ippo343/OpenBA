@@ -531,6 +531,17 @@ public:
         InitFields(ui, dialog, &parent, dataSource, userData, userFlags);
     }
 
+    // ??0DialogInstance@UI@@QEAA@PEAVUserInterface@1@V?$InternalPtr@VElement@UI@@@
+    //     Object@@V?$InternalPtr@VDialogInstance@UI@@@4@PEAVBase@4@PEAXH@Z
+    //                                                            0x1801146b0
+    // The ROOT-ELEMENT overload (ComboDialog's base): no Dialog resource, the
+    // root handed in; the parent's child list gets this dialog PREPENDED.
+    // ENDGAME B.3.9 UI-D: the real constructor, replacing the door
+    // `RtUi_DialogInstance_CtorFromElement` (combodialog_ctor.cpp, the body).
+    DialogInstance(UserInterface* ui, Object::InternalPtr<Element> root,
+                   Object::InternalPtr<DialogInstance> parent,
+                   Object::Base* dataSource, void* userData, int32_t userFlags);
+
     // The doors' way onto the shared bodies (B38_RULES D1): the ctor door
     // `RtUiDialogInstance_Ctor` and the dtor door `RtUiDialogInstance_Dtor`
     // stamp the minted table themselves, then call these. Nothing else may.

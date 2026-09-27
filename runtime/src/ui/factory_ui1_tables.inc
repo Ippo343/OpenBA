@@ -16,12 +16,6 @@
 // are UNALIGNED or OVERLAP their neighbours and that is what retail does.
 // ============================================================================
 
-const Store kComboDialog[] = {
-    { 0x000, 8, SK_VTABLE, 0, "??_7ComboDialog@UI@@6B@", 0x1800748be },
-    { 0x0b8, 8, SK_IMM, 0x0ull, nullptr, 0x1800748c3 },
-    { 0x0c0, 8, SK_IMM, 0x0ull, nullptr, 0x1800748ca },
-    { 0x0c8, 8, SK_IMM, 0x0ull, nullptr, 0x1800748d1 },
-};
 const Store kDialogInstance[] = {
     { 0x000, 8, SK_VTABLE, 0, "??_7DialogInstance@UI@@6B@", 0x180114cc3 },
     { 0x010, 8, SK_IMM, 0x0ull, nullptr, 0x180114cc8 },
@@ -46,12 +40,6 @@ const Store kDialogInstance[] = {
 };
 
 const Spec kSpecs[] = {
-    { "ComboDialog", 0xd0ull, 8,
-      "??0DialogInstance@UI@@QEAA@XZ", kComboDialog,
-      (uint16_t)(sizeof(kComboDialog)/sizeof(Store)),
-      "?CreateNewObject@ComboDialog@UI@@SAPEAVBase@Object@@XZ", 0x180074850ull,
-      "?CreateInPlaceObject@ComboDialog@UI@@SAPEAVBase@Object@@PEAX@Z", 0x1800748f0ull,
-      nullptr, 0ull },
     { "DialogInstance", 0xb8ull, 8,
       "??0Internal@Object@@QEAA@XZ", kDialogInstance,
       (uint16_t)(sizeof(kDialogInstance)/sizeof(Store)),

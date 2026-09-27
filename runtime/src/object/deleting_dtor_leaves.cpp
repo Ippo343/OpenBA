@@ -97,12 +97,6 @@ inline void* Field(void* self, size_t off) {
 
 }  // namespace
 
-// ??1ToolTipDialog@UI@@UEAA@XZ   0x1800dac70
-extern "C" void RtUi_ToolTipDialog_Dtor(void* self) {
-    STAMP(self, "??_7ToolTipDialog@UI@@6B@");
-    RT_EXPORT_ONCE(DtorFn, "??1DialogInstance@UI@@UEAA@XZ")(self);
-}
-
 // ??1ReaderWriter@IO@@UEAA@XZ   0x1800b9150
 extern "C" void RtIo_ReaderWriter_Dtor(void* self) {
     STAMP(self, "??_7ReaderWriter@IO@@6B@");
@@ -186,8 +180,6 @@ int RtObjectDeletingDtorLeavesRegister() {
     RegisterRuntimeAddr  (0x1800b9a40ull,                                  (void*)&RtIo_Stream_Dtor);
     RegisterRuntimeExport("??1ParticleInstance@Graphics@@UEAA@XZ",        (void*)&RtGraphics_ParticleInstance_Dtor);
     RegisterRuntimeAddr  (0x1801041f0ull,                                  (void*)&RtGraphics_ParticleInstance_Dtor);
-    RegisterRuntimeExport("??1ToolTipDialog@UI@@UEAA@XZ",        (void*)&RtUi_ToolTipDialog_Dtor);
-    RegisterRuntimeAddr  (0x1800dac70ull,                          (void*)&RtUi_ToolTipDialog_Dtor);
     RegisterRuntimeExport("??1ReaderWriter@IO@@UEAA@XZ",         (void*)&RtIo_ReaderWriter_Dtor);
     RegisterRuntimeAddr  (0x1800b9150ull,                          (void*)&RtIo_ReaderWriter_Dtor);
     RegisterRuntimeExport("??1Light@Graphics@@UEAA@XZ",          (void*)&RtGraphics_Light_Dtor);
@@ -196,5 +188,5 @@ int RtObjectDeletingDtorLeavesRegister() {
     RegisterRuntimeAddr  (0x1800fb620ull,                          (void*)&RtGraphics_AnimationGroup_Dtor);
     RegisterRuntimeExport("??1SoundEffect@Audio@@UEAA@XZ",       (void*)&RtAudio_SoundEffect_Dtor);
     RegisterRuntimeAddr  (0x1800e0880ull,                          (void*)&RtAudio_SoundEffect_Dtor);
-    return 10;
+    return 9;
 }
