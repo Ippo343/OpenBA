@@ -38,8 +38,8 @@ public:
     // 0x140098060. `scenarioIbp` is the InternalBasePtr's 8 bytes (retail copies
     // `*param_3`); `disasters` is retail's char p8: +0xD0 = p8 ? 0 : 0xF0.
     GameUpdateLoop(void* savedState, uint64_t scenarioIbp, int32_t scenarioIndex,
-                   const System::String& saveName, int32_t mapSizeIndex,
-                   int32_t mapTypeIndex, bool disasters, void* mapConfig,
+                   const System::String& saveName, int32_t seed,
+                   int32_t mapSize, bool disasters, void* mapConfig,
                    void* terrainConfig, void* climateConfig);
 
     Engine::UpdateLoop* DeletingDtor(unsigned flags) override;   // [0] 0x140019dd0
@@ -52,8 +52,11 @@ public:
     // [7] 0x1400959c0 takes a 4th argument (int* out) that only the LOAD path
     // passes, by a DIRECT call (GameUpdateLoop::Load). Every virtual caller
     // (Save::SaveLoad::UpdateSave) passes a dead R9, which the save path never
-    // reads; the override hands the registered door nullptr for it.
+    // reads; the override hands SaveRestoreOut nullptr for it.
     void SaveRestore(bool saving, Save::SavedState* state) override;
+    // 0x1400959c0's body with retail's 4th argument (a distinct name, not an
+    // overload of the virtual, B5-17): Load and the roundtrip check call it.
+    void SaveRestoreOut(bool saving, Save::SavedState* state, int* out);
     void OnVideoError() override;                                // [8] 0x140095970
     void OnVideoRestart() override;                              // [9] 0x140095930
     const char* GetResourceFilename() override;                  // [10] 0x140019d40 "Game/Game"
@@ -71,8 +74,8 @@ protected:
 public:
     // Construction parameters (stored by the ctor, used by Load)
     System::String m_saveName;      // +0x28  save file name
-    int32_t  m_mapSizeIndex;        // +0x30  map size parameter (also Random seed)
-    int32_t  m_mapTypeIndex;        // +0x34  map type parameter
+    int32_t  m_seed;                // +0x30  map seed (seeds the Random at +0xD8; newgamedialog writes it)
+    int32_t  m_mapSize;             // +0x34  map size index (the terrain size-table row)
     int64_t  m_gameTime;            // +0x38  accumulated game time (Time)
     void*    m_mapConfig;           // +0x40  map generation config resource
     void*    m_terrainConfig;       // +0x48  terrain generation config resource
@@ -142,8 +145,8 @@ public:
 static_assert(sizeof(GameUpdateLoop) == 0x160, "GameUpdateLoop is 0x160 (MemAlloc(0x160, 8))");
 static_assert(alignof(GameUpdateLoop) == 8, "qword-aligned (the vptr)");
 static_assert(offsetof(GameUpdateLoop, m_saveName) == 0x28, "m_saveName at +0x28");
-static_assert(offsetof(GameUpdateLoop, m_mapSizeIndex) == 0x30, "m_mapSizeIndex at +0x30");
-static_assert(offsetof(GameUpdateLoop, m_mapTypeIndex) == 0x34, "m_mapTypeIndex at +0x34");
+static_assert(offsetof(GameUpdateLoop, m_seed) == 0x30, "m_seed at +0x30");
+static_assert(offsetof(GameUpdateLoop, m_mapSize) == 0x34, "m_mapSize at +0x34");
 static_assert(offsetof(GameUpdateLoop, m_gameTime) == 0x38, "m_gameTime at +0x38");
 static_assert(offsetof(GameUpdateLoop, m_mapConfig) == 0x40, "m_mapConfig at +0x40");
 static_assert(offsetof(GameUpdateLoop, m_climateConfig) == 0x50, "m_climateConfig at +0x50");

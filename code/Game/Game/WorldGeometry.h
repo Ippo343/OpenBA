@@ -35,6 +35,10 @@ public:
     void AddDrawItems(const Graphics::Scene& scene,
                       Graphics::Renderer& renderer) const override;   // [3] 0x1400ae490
 
+    // 0x1400aad50: the dirty-chunk rebuild slot 1 JMPs to (a non-virtual member;
+    // also reached by address through the Reimpl_GeometryChunkUpdate door).
+    void RebuildDirtyChunks();
+
     // The table's compiler address (DEFINE_EXE_VTABLE's shape; unreflected).
     static const void* Vtable();
 

@@ -34,6 +34,7 @@
 #include "boot_window.h"
 #include "Game/uifade.h"
 #include "Game/GameLoadDialogLoopT.h"   // ENDGAME B.3.8 LOOP
+#include "Game/GameUpdateLoop.h"        // caller batch CB6: GameUpdateLoop::Vtable()
 #include "Object/exe_type.h"         // DEFINE_EXE_VTABLE
 #include <cstdio>
 #include <cstdint>
@@ -436,10 +437,12 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     // into GameUpdateLoop while it is still building, drawing a half-built world.
     // For every other loop (boot splashes -> MenuDLT) worldReady stays true and
     // the transition is purely time-based, exactly as before.
+    // Caller batch CB6: "is the next loop a GameUpdateLoop" compares the vptr
+    // with the class's compiler table (B8-5 identity; it was the by-address
+    // g_GameUpdateLoop_Vtable, which 0x14015e2f0's row served with that table).
     bool worldReady = true;
-    if (_nextLoop && g_GameUpdateLoop_Vtable &&
-        *reinterpret_cast<void**>(_nextLoop) ==
-            reinterpret_cast<void*>(g_GameUpdateLoop_Vtable)) {
+    if (_nextLoop &&
+        *reinterpret_cast<const void* const*>(_nextLoop) == GameUpdateLoop::Vtable()) {
         worldReady = GameUpdateLoop_IsWorldBuilt(_nextLoop);
     }
 

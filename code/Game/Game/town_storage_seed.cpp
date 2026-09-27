@@ -70,7 +70,12 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
-#include "Object/factory_registration.h"
+#include "object/TypeInfo.h"                     // caller batch CB6: Object::Base::Type()
+#include "Game/GameUpdateLoop.h"                // caller batch CB6: the world's named fields
+#include "Component/RawMaterialDescription.h"   // caller batch CB6: TypeId()
+#include "Component/StorageComponent.h"
+#include "Component/StorageDescription.h"
+#include "Component/MapComponent.h"
 #include "collection/Collection.h"
 #include <cstdint>
 #include <cstdio>
@@ -80,16 +85,17 @@
 // ============================================================
 // Type-ids (raw .rdata preferred, GetTypeIdByName fallback)
 // ============================================================
-static uint32_t Tid(uintptr_t rdataAddr, const char* name) {
+// Caller batch CB6: the by-name fallback is the class's TypeId() (a plain read).
+static uint32_t Tid(uintptr_t rdataAddr, uint32_t classTypeId) {
     const uint32_t* p =
         reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, rdataAddr));
     if (p && *p) return *p;
-    return ::Object::GetTypeIdByName(name);
+    return classTypeId;
 }
-static uint32_t TidRawMaterialDescription() { return Tid(0x1401c7cb8, "RawMaterialDescription"); }
-static uint32_t TidStorageComponent()       { return Tid(0x1401c7e78, "StorageComponent"); }
-static uint32_t TidStorageDescription()     { return Tid(0x1401c7eb0, "StorageDescription"); }
-static uint32_t TidMapComponent()           { return Tid(0x1401c79e0, "MapComponent"); }
+static uint32_t TidRawMaterialDescription() { return Tid(0x1401c7cb8, RawMaterialDescription::TypeId()); }
+static uint32_t TidStorageComponent()       { return Tid(0x1401c7e78, StorageComponent::TypeId()); }
+static uint32_t TidStorageDescription()     { return Tid(0x1401c7eb0, StorageDescription::TypeId()); }
+static uint32_t TidMapComponent()           { return Tid(0x1401c79e0, MapComponent::TypeId()); }
 
 // ============================================================
 // Resolved exe helpers (all already registered in standalone)
@@ -116,13 +122,13 @@ static void EnsureFns() {
 
 static inline void* TownMgr() {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return nullptr;
-    return *reinterpret_cast<void**>(
-        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0);
+    return static_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_citizenList;   // +0xf0  B.3.8 bridge
 }
 
+// Slot 2. Every caller passes an element of an entity's component array or a
+// template's description array (proved Object::Base-derived exe objects).
 static inline uint32_t GetTypeIdOf(void* obj) {
-    typedef uint32_t (*fn_GetTypeId_t)(void*);
-    return (*reinterpret_cast<fn_GetTypeId_t*>(*reinterpret_cast<uintptr_t*>(obj) + 0x10))(obj);
+    return reinterpret_cast<const Object::Base*>(obj)->Type();   // B.3.8 bridge
 }
 
 // ============================================================

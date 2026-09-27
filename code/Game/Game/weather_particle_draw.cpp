@@ -75,6 +75,9 @@
 // <windows.h>, whose <wingdi.h> declares a global `Rectangle` FUNCTION that hides
 // `Volume::Rectangle`'s class name inside Volume.h's own static_asserts.
 #include "graphics/Camera.h"
+#include "WeatherParticleGeometry.h"   // caller batch CB6: Draw is the class's
+#include "Weather.h"                   // caller batch CB6: the descriptor's fields
+#include <atomic>
 #include "video/Context.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -160,39 +163,42 @@ inline float rd_f(const void* base, int off) {
 } // namespace
 
 // ============================================================
-// WeatherParticle_Draw — exe FUN_1400d3120 (Geometry Draw vtable +0x10)
-//   geo     : particle Geometry (0xf0 bytes)
-//   context : Video::Context*
-//   camera  : Graphics::Camera*
-// ============================================================
-extern "C" void WeatherParticle_Draw(void* geo, void* context, void* camera) {
-    if (!geo || !context || !camera) return;
+// WeatherParticleGeometry::Draw — exe FUN_1400d3120 (Geometry Draw vtable +0x10)
+//   this      : particle Geometry (0xf0 bytes)
+//   videoCtx  : Video::Context
+//   cam       : Graphics::Camera
+// Caller batch CB6: the body of the old `WeatherParticle_Draw(geo, context,
+// camera)` free function (its one caller was this slot, which delegated to it;
+// no address binding), moved into the member. The `geo + off` reads became the
+// class's named fields; the pointer-null test went with the pointers (the slot
+// receives references). The dead one-shot flag is a namespace-scope atomic (B6-5).
+namespace { std::atomic<bool> s_weatherDrawWarned{false}; }
 
+void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Camera& cam,
+                                   Graphics::ExternalPtrHandle /*material*/,
+                                   float /*opacity*/, int /*a*/, int /*b*/, int /*c*/) const {
     ResolvePtrs();
     // B.3.5: the seven Video/Graphics readiness terms are gone with their doors.
     if (!s_Transform3Copy || !s_FrustumMul || !s_FrustumContains ||
         !s_MatrixCtor ||
         !fn_MemAlloc || !g_pMemAllocSingleton || !fn_MemFreeStatic) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            // Cascade-safe: skip the weather draw rather than crash on a null fn ptr.
-            s_warned = true;
-        }
+        // Cascade-safe: skip the weather draw rather than crash on a null fn ptr.
+        s_weatherDrawWarned.store(true);
         return;
     }
 
-    uint8_t* g   = reinterpret_cast<uint8_t*>(geo);
-    void*    ctx = context;
-    void*    desc = *reinterpret_cast<void**>(g + 0xc8);   // Weather descriptor
-    if (!desc) return;
+    void*    ctx = &videoCtx;
+    void*    camera = const_cast<Graphics::Camera*>(&cam);
+    if (!_descriptor) return;                             // +0xC8 Weather descriptor
+    // The descriptor is a Weather (see WeatherParticle_Config, weather_particles.cpp).
+    const Weather* const desc = static_cast<const Weather*>(_descriptor);   // B.3.8 bridge
 
-    const float boxSize      = rd_f(desc, 0x48);
-    const float particleSize = rd_f(desc, 0x44);
-    const bool  velStretch   = (*reinterpret_cast<const uint8_t*>(
-                                    reinterpret_cast<uint8_t*>(desc) + 0x40) != 0);
-    const int   particleCount = *reinterpret_cast<int*>(g + 0xe8);
-    const int   indexCount    = *reinterpret_cast<int*>(g + 0xd8);
-    const float intensity     = rd_f(g, 0xc0);
+    const float boxSize      = desc->size;            // Weather +0x48
+    const float particleSize = desc->particleSize;    // Weather +0x44
+    const bool  velStretch   = (*reinterpret_cast<const uint8_t*>(&desc->velocityStretch) != 0);   // +0x40
+    const int   particleCount = static_cast<int32_t>(_particleCountCap);   // +0xE8 count
+    const int   indexCount    = static_cast<int32_t>(_indexCount);         // +0xD8
+    const float intensity     = _intensity;                                // +0xC0
 
     // (1) Copy the camera Transform3 (camera+0x64) and pull its basis columns.
     uint8_t camXform[0x70];
@@ -267,10 +273,10 @@ extern "C" void WeatherParticle_Draw(void* geo, void* context, void* camera) {
 
     const float g_fUVScale = 1.0f;            // 0x14017214c
     reinterpret_cast<Video::Context*>(ctx)->SetInverseScale(   // B.3.5 bridge
-        -rd_f(desc, 0x50),                                        // -near_hi (XOR sign flip)
-        g_fUVScale / (rd_f(desc, 0x4c) - rd_f(desc, 0x50)),       // 1 / (near_lo - near_hi)
-        -rd_f(desc, 0x58),                                        // -far_hi
-        g_fUVScale / (rd_f(desc, 0x54) - rd_f(desc, 0x58)));      // 1 / (far_lo - far_hi)
+        -desc->nearFadeStart,                                     // -near_hi (+0x50, XOR sign flip)
+        g_fUVScale / (desc->nearFade - desc->nearFadeStart),      // 1 / (near_lo - near_hi)
+        -desc->farFade,                                           // -far_hi (+0x58)
+        g_fUVScale / (desc->farFadeStart - desc->farFade));       // 1 / (far_lo - far_hi)
 
     // (5) Build the per-particle billboard quads (4 verts * 0x14 bytes each).
     const int   kVtxStride = 0x14;
@@ -294,7 +300,7 @@ extern "C" void WeatherParticle_Draw(void* geo, void* context, void* camera) {
     static const uint32_t kCornerUV[4] = { 0x00000000u, 0x000000ffu, 0x0000ffffu, 0x0000ff00u };
 
     if (staging && particleCount > 0) {
-        uint8_t* particles = *reinterpret_cast<uint8_t**>(g + 0xe0);
+        uint8_t* particles = static_cast<uint8_t*>(_particles);   // +0xE0
         uint8_t* out = staging;
         for (int p = 0; p < particleCount; ++p) {
             const float* pbase = reinterpret_cast<const float*>(particles + (size_t)p * 0x24);
@@ -374,7 +380,7 @@ extern "C" void WeatherParticle_Draw(void* geo, void* context, void* camera) {
 
                 // Copy the shared particle index buffer into the dynamic index cursor.
                 size_t idxBytes = static_cast<size_t>(indexCount) * 2;
-                std::memcpy(idxCur, *reinterpret_cast<void**>(g + 0xd0), idxBytes);
+                std::memcpy(idxCur, _indices, idxBytes);   // +0xD0
                 idxCur = reinterpret_cast<uint8_t*>(idxCur) + idxBytes;
 
                 reinterpret_cast<Video::Context*>(ctx)
