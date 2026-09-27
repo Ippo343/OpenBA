@@ -36,7 +36,6 @@
 // code/Game/Work/pickup.cpp, so no address registration is needed.
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
-#include "Work/pasturework_funcs.h"        // PastureWork_Slot4_Impl
 #include <cstdint>
 
 // Type-id global storage (values filled later by FillTypeIdGlobals_worktail_serialize).
@@ -51,8 +50,9 @@ extern "C" void FillTypeIdGlobals_worktail_serialize() {
 }
 
 void RegisterWorkTailSerializeBatch() {
-    // PastureWork::Slot4 (0x1400f2370) -> clean reimpl in code/Game/Work/pasturework.cpp
-    RegisterExeAddr(0x1400f2370, reinterpret_cast<uintptr_t>(&PastureWork_Slot4_Impl));
+    // (PastureWork::Execute 0x1400f2370: row deleted, ENDGAME B.3.8 CB3 -- its only
+    // reader, pasturework.cpp's own fallback pointer, is gone; the compiler vtable
+    // dispatches the member.)
 
     // Type-id global storage (filled by FillTypeIdGlobals_worktail_serialize after Startup).
     RegisterExeAddr(0x1401c7bd8, reinterpret_cast<uintptr_t>(&g_tid_PastureDescription));

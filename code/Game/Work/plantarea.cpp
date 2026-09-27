@@ -411,11 +411,8 @@ int PlantArea::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
             int priority = (int)selfQ[4];
             uintptr_t citizenEnt = *(uintptr_t*)entityIBP;
 
-            uintptr_t vtable = *(uintptr_t*)this;
-            typedef uintptr_t* (*GetTarget_t)(PlantArea*, void*);
-            auto getTarget = *(GetTarget_t*)(vtable + 0x50);
             uint32_t resultBuf[4] = {0};
-            uintptr_t* wResult = getTarget(this, resultBuf);
+            uintptr_t* wResult = static_cast<uintptr_t*>(GetTarget(resultBuf));
             uintptr_t workEnt = *wResult;
 
             *(uint32_t*)(citizenEnt + 0x54) |= 4;
@@ -916,10 +913,8 @@ DEFINE_EXE_VTABLE(PlantArea, "_ZTV9PlantArea")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x140161890 is still read back BY ADDRESS — CropFieldComponent's state
-// machine (cropfieldcomponent_states.cpp, block MI-B) builds the work by hand and
-// stamps it — so the exe address serves the COMPILER's table.
 extern "C" void RegisterPlantAreaVtable() {
-    RegisterExeAddr(PlantAreaAddr::Vtable, reinterpret_cast<uintptr_t>(PlantArea::Vtable()));   // 0x140161890
+    // ENDGAME B.3.8 CB3: the retail-table row is gone -- no by-address reader of
+    // it is left. The call in address_registry.cpp is the coordinator's to drop.
 }
 DEFINE_EXE_TYPE(PlantArea, "Work")

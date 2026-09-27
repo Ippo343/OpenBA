@@ -13,8 +13,7 @@
 //        `if (flags & 1) MemFree`. ~Work has no body.
 //   [1]  0x14002ca50 TypeName (`MOV RAX,[ti+8]`)   [2] 0x14002ca40 Type
 //   [3]  0x1400f7400 Persist (the Work base Serialize, version 3; ported in
-//        work_base_reimpl.cpp and still reached BY ADDRESS by 22 leaf
-//        Serialize bodies through `WorkBase_Serialize_f7400`, B38 D5 (b) row)
+//        work_base_reimpl.cpp; the leaves' Persist bodies call it QUALIFIED)
 //   [4]  _purecall                                   (the tree's Execute)
 //   [5]  0x1400f7540 `XOR AL,AL; RET` (in 22 tables) (the tree's Slot5)
 //   [6]-[11] _purecall                               (OnComplete … GetPriority)
@@ -116,7 +115,3 @@ static_assert(offsetof(Work, field_30) == 0x30, "Work +0x30 System::Time (Persis
 static_assert(offsetof(Work, field_38) == 0x38, "Work +0x38 System::Time (Persist v3)");
 static_assert(offsetof(Work, field_40) == 0x40, "Work +0x40 (Persist v3)");
 
-// The Work base Serialize, retail 0x1400f7400. A by-address door (22 leaf
-// Serialize bodies reach it through `ResolveAddr(Module::Exe, 0x1400f7400)`,
-// B38 D5 (b)): a one-line QUALIFIED delegation to `Work::Persist`.
-void WorkBase_Serialize_f7400(void* self, void* stream);

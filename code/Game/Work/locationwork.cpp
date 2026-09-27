@@ -320,11 +320,8 @@ int LocationWork::Execute(void* citizenIBP, void* /*context*/, uint64_t /*arg3*/
     // Get work entity via vtable slot +0x50 (Slot10)
     uintptr_t citEntPost = *(uintptr_t*)citizenIBP;
 
-    uintptr_t vtable = *(uintptr_t*)this;
-    typedef uintptr_t* (*GetWorkEntity_t)(LocationWork*, void*);
-    auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
     uintptr_t workEntIBP[2] = {0};
-    uintptr_t* result = getWorkEntity(this, workEntIBP);
+    uintptr_t* result = static_cast<uintptr_t*>(GetTarget(workEntIBP));
     uintptr_t workEntity = *result;
 
     // Set citizen flags
