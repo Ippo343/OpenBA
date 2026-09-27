@@ -58,7 +58,6 @@ void RtApplicationPortInit() {
     int n = 0;
     // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
     // static from here on (name door, address door, manifest publish).
-    RtMintRedirectStorage("?_singleton@Application@1@0PEAV11@EA", &Application::Application::_singleton);
 
     RegisterRuntimeExport("?IsPaused@Application@1@QEAA_NXZ", (void*)&RtApp_IsPaused); ++n;
     RegisterRuntimeAddr(0x18009f4e0, (void*)&RtApp_IsPaused);

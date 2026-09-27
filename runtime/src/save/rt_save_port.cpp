@@ -42,7 +42,6 @@ extern int RtSaveInfoRegister();       // saveload_saveinfo.cpp (Wave 24 INTERNA
 void RtSavePortInit() {
     // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
     // static from here on (name door, address door, manifest publish).
-    RtMintRedirectStorage("?_singleton@SaveLoad@Save@@0PEAV12@EA", &::Save::SaveLoad::_singleton);
     int n = 0;
     n += RtSaveLoadRegister();
     n += RtSaveLoadUpdateRegister();

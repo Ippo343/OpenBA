@@ -89,13 +89,6 @@ void RtObjectPortInit() {
     // ENDGAME B.3.9 OBJ (B39_RULES D7): the minted storage rows ARE the class
     // statics from here on (name door, address door, manifest publish). Every
     // *PortInit runs before the mint; a call after it aborts.
-    RtMintRedirectStorage("?_singleton@ExternalFactory@Object@@0PEAV12@EA",
-                          &::Object::ExternalFactory::_singleton);
-    RtMintRedirectStorage("?_singleton@InternalFactory@Object@@0PEAV12@EA",
-                          &::Object::InternalFactory::_singleton);
-    RtMintRedirectStorage("?_singleton@Factory@Object@@0PEAV12@EA",
-                          &::Object::Factory::_singleton);
-    RtMintRedirectStorage("0x1801fc6d0", &::Object::Factory::_compilerModule);
     int n = 0;
     n += RtObjectTypeSystemRegister();
     n += RtObjectFactoryFileExtensionRegister();

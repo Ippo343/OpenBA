@@ -54,10 +54,8 @@ extern int RtInputPlatformShutdownRegister();     // input_platform_shutdown_win
 void RtInputPortInit() {
     // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
     // static from here on (name door, address door, manifest publish).
-    RtMintRedirectStorage("?_singleton@Device@Input@@0PEAV12@EA", &::Input::Device::_singleton);
     // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
     // static from here on (name door, address door, manifest publish).
-    RtMintRedirectStorage("?_singleton@Configuration@Input@@0PEAV12@EA", &::Input::Configuration::_singleton);
     int n = RtInputRegister();
     n += RtInputWinRegister();
     n += RtInputKeyMapLoadRegister();

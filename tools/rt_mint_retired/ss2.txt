@@ -1,0 +1,27 @@
+# ENDGAME B.3 step 9 -- the storage rows block SS2 retired (storage sweep, exe side; B39_RULES.md D7).
+# Format: <mangled symbol | 0xVA>   <owner block>   <proof>
+# One fragment per block; a key appears once across all fragments.
+# Proof for every row: SS1 converted the readers under runtime/, SS2 the readers in code/, engine/,
+# standalone/, dx11/ (engine_funcs storage globals, import-slot rows and by-name / by-address resolves
+# deleted); the last reader was the owner's RtMintRedirectStorage call, deleted with this line.
+
+?_singleton@AchievementManager@Achievement@@0PEAV12@EA   SS2   class static Achievement::AchievementManager::_singleton; g_ppAchievementManager + slot 0x1401514f0 deleted
+?_singleton@Application@1@0PEAV11@EA                     SS2   class static Application::Application::_singleton; g_pAppSingleton + slot 0x140152368 deleted
+?_singleton@Configuration@Audio@@0PEAV12@EA              SS2   class static Audio::Configuration::_singleton; g_pAudioConfigSingleton deleted
+?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA            SS2   class static Graphics::MeshInstance::_rootOnlyUpdates; slot 0x140151f30 + three file-static doors deleted
+?_frameIndex@ParticleInstance@Graphics@@1HA              SS2   class static Graphics::ParticleInstance::_frameIndex; slot 0x140151f38 + two doors deleted
+?_singleton@Device@Input@@0PEAV12@EA                     SS2   class static Input::Device::_singleton; g_pInputDeviceSingleton deleted
+?_singleton@Configuration@Input@@0PEAV12@EA              SS2   class static Input::Configuration::_singleton; g_pInputConfigSingleton deleted
+?_singleton@FileSystem@IO@@0PEAV12@EA                    SS2   class static IO::FileSystem::_singleton; g_pFileSystemSingleton{,2} + slot 0x140151d18 deleted
+?_singleton@Modification@IO@@2PEAV12@EA                  SS2   class static IO::Modification::_singleton; g_ppModificationSingleton + slot 0x1401519e8 deleted
+?_singleton@Persistence@IO@@0PEAV12@EA                   SS2   class static IO::Persistence::_singleton; g_pPersistenceSingleton deleted
+?_singleton@ExternalFactory@Object@@0PEAV12@EA           SS2   class static Object::ExternalFactory::_singleton; g_pExternalFactorySingleton deleted
+?_singleton@InternalFactory@Object@@0PEAV12@EA           SS2   class static Object::InternalFactory::_singleton; audit / serialize doors deleted
+?_singleton@Factory@Object@@0PEAV12@EA                   SS2   class static Object::Factory::_singleton; g_pFactorySingleton + slot 0x140152760 deleted
+0x1801fc6d0                                              SS2   class static Object::Factory::_compilerModule; game_main.cpp's by-address FreeLibrary converted
+?_singleton@SaveLoad@Save@@0PEAV12@EA                    SS2   class static Save::SaveLoad::_singleton; g_pSaveLoadSingleton + slot 0x140151610 deleted
+?_errorString@Error@System@@0PADA                        SS2   class static System::Error::_errorString; Error's three together (game_main.cpp by-address read converted)
+?_hideDisplay@Error@System@@0_NA                         SS2   class static System::Error::_hideDisplay; Error's three together
+?_stopApplication@Error@System@@0_NA                     SS2   class static System::Error::_stopApplication; Error's three together
+?_singleton@Configuration@System@@0PEAV12@EA             SS2   class static System::Configuration::_singleton; no foreign reader left
+?_singleton@Configuration@Video@@0PEAV12@EA              SS2   class static Video::Configuration::_singleton; g_pVideoConfigSingleton deleted
