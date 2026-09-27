@@ -252,10 +252,39 @@ class Scene;      // block F
 // sizeof 0x38 from the `MOV EDX,0x38` in slot 0's vector deleting destructor,
 // and independently from the ctor's last store ending at +0x37.
 // ============================================================================
+//
+// ENDGAME B.3 step 9 (block GFX, B39_RULES D1/D2): CONCRETE. A real public
+// ctor (retail 0x1801029a0), its own vector slot 0, a protected non-virtual
+// ~Material holding the retired ??1 door's body, the factory pair as the class's
+// own statics; Construct / Reconstruct placement-new the class. The minted
+// `??_7Material@Graphics@@6B@`, its RT_DELDTOR row 0x180011d20, the FACTREST
+// row and the ctor-body / ??1 / slot doors are retired (rt_mint_retired/gfx.txt).
+// ============================================================================
 class Material : public Object::External {
 public:
-    // [0] 0x180011d20 — pure on purpose; the deleting-dtor row is not retired.
-    Object::Base* DeletingDtor(unsigned flags) override = 0;
+    // ??0Material@Graphics@@QEAA@XZ 0x1801029a0 -- the REAL ctor (retail also
+    // inlines it into both factories; Construct tail-jumps it): External(), then
+    // +0x20 = 0 (dword) and the `_passes` header zeroed (its own ctor). +0x24 is
+    // written by nothing.
+    Material() : External() {
+        _type = 0;
+    }
+
+    // [0] 0x180011d20 -- MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x38` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<Material*>(self + static_cast<int64_t>(i) * 0x38)->~Material();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~Material();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char* TypeName() const override;                 // [1] 0x1800118d0
     uint32_t    Type() const override;                     // [2] 0x1800118b0
@@ -298,10 +327,9 @@ public:
     Material(const Material& src);                          // 0x180011be0  not ported
     Material& operator=(const Material& src);               // 0x180011c80  not ported
 
-    static uint32_t TypeId();                               // 0x1800118c0  not ported
-    // The reflection block's five statics. Every one goes through
-    // `System::MemoryAllocator`, which B35_RULES section 11 keeps as a door for
-    // the whole of step 5, so all five are declared and left undefined.
+    static uint32_t TypeId();                               // 0x1800118c0  B.3.9: minted record until W3
+    // The three operators stay declared and undefined (placement is `::new`);
+    // the factory pair is the class's own (B39_RULES D2, material.cpp).
     static void* operator new(std::size_t bytes);            // 0x1800118e0
     static void* operator new(std::size_t bytes, void* place);// 0x180011950
     static void  operator delete(void* p);                   // 0x180011960
@@ -309,18 +337,10 @@ public:
     static Object::Base* CreateInPlaceObject(void* place);   // 0x180011a70
 
 protected:
-    // NOT retail's `??0Material@Graphics@@QEAA@XZ` (0x1801029a0) — see the
-    // banner. `= default` keeps the class trivially default-constructible so no
-    // layout pin moves.
-    Material() = default;
-
-    // `??1Material@Graphics@@UEAA@XZ` @ 0x180102a00. NON-VIRTUAL (decision 2),
-    // and DEFINED EMPTY — the `Object::External` / `AnimationGroup` precedent.
-    // `RtGraphics_Material_Dtor` in material.cpp stamps the MINTED table and
-    // releases `_passes` by hand, which is right for the minted objects that are
-    // the only ones alive today; a real destructor chain emits stamps naming
-    // GCC's tables instead. The two spellings coexist and each half of retail's
-    // decomposition runs exactly once.
+    // `??1Material@Graphics@@UEAA@XZ` @ 0x180102a00. NON-VIRTUAL (decision 2).
+    // ENDGAME B.3.9 GFX: the retired door's body (material.cpp) -- retail's
+    // out-of-line ~Array of `_passes`; the restamp and ~External are the
+    // compiler's chain.
     ~Material();
 
 public:

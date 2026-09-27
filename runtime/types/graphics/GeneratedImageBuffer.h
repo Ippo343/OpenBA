@@ -106,11 +106,8 @@ static_assert(offsetof(ReflectionImageBuffer, _planeY) == 0x84, "_planeY @ +0x84
 static_assert(offsetof(ReflectionImageBuffer, _planeZ) == 0x88, "_planeZ @ +0x88");
 static_assert(offsetof(ReflectionImageBuffer, _planeD) == 0x8c, "_planeD @ +0x8c");
 
-// The vtable this class stamps, as a RETAIL address. `kVtGeneratedImageBuffer`
-// (0x180154f60) is FrameCopyImageBuffer.h's constant and is reused, not
-// restated — the ctor here stamps that one first and then its own, and the
-// destructor restores it on the way out.
-constexpr uintptr_t kVtReflectionImageBuffer = 0x180155190ull;
+// ENDGAME B.3.9 block GFX: `kVtReflectionImageBuffer` (0x180155190) is gone
+// with the minted table it named; the real class's ctor stamps the compiler's.
 
 }  // namespace RtGraphics
 
@@ -249,10 +246,48 @@ static_assert(offsetof(GeneratedImageBuffer, _generation)
 //
 // `?_TypeName@` (0x180022190) -> "ReflectionImageBuffer", `?_ParentTypeName@`
 // (0x1800221a0) -> "GeneratedImageBuffer", NO namespace. RULE B5-15.
+//
+// ENDGAME B.3 step 9 (block GFX, B39_RULES D1/D2): CONCRETE. A real public
+// ctor (retail 0x1800a7130), its own vector slot 0, a protected non-virtual
+// ~ReflectionImageBuffer holding the retired ??1 door's body, the factory pair
+// as the class's own statics; Construct / Reconstruct placement-new the class.
+// The minted `??_7ReflectionImageBuffer@Graphics@@6B@`, its RT_DELDTOR row
+// 0x180022600, the FACTREST row and the ctor / ??1 / slot doors are retired
+// (rt_mint_retired/gfx.txt).
 // ============================================================
 class ReflectionImageBuffer : public GeneratedImageBuffer {
 public:
-    Object::Base*     DeletingDtor(unsigned flags) override = 0;   // [ 0] 0x180022600
+    // [0] 0x180022600 -- MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x90` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<ReflectionImageBuffer*>(self + static_cast<int64_t>(i) * 0x90)
+                    ->~ReflectionImageBuffer();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~ReflectionImageBuffer();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
+
+    // ??0ReflectionImageBuffer@Graphics@@QEAA@XZ 0x1800a7130 -- the REAL ctor
+    // (retail also inlines it into both factories, Construct and Reconstruct).
+    // ImageBuffer(), the Generated stamp + `_generation = 0`
+    // (GeneratedImageBuffer()) and the Reflection stamp are the chain; then the
+    // two owned pointers null and the plane (0, 0, 1, 0) as retail's two qword
+    // stores `[+0x80] = 0` and `[+0x88] = 0x3f800000`.
+    ReflectionImageBuffer() {
+        _depth  = nullptr;
+        _target = nullptr;
+        _planeX = 0.0f;
+        _planeY = 0.0f;
+        _planeZ = 1.0f;
+        _planeD = 0.0f;
+    }
     const char*       TypeName() const override;                   // [ 1] 0x1800221d0
     uint32_t          Type() const override;                       // [ 2] 0x1800221b0
     int32_t           GetFileVersion() const override;             // [ 3] 0x1800a70a0 — 0x1007
@@ -269,8 +304,10 @@ public:
                 int32_t generation) const override;
 
 protected:
-    ReflectionImageBuffer() = default;   // see GeneratedImageBuffer's banner
-    ~ReflectionImageBuffer();            // ??1… 0x1800a70b0 — door in imagebuffer_derived.cpp
+    // ??1… 0x1800a70b0. NON-VIRTUAL. ENDGAME B.3.9 GFX: the retired door's body
+    // (imagebuffer_derived.cpp) -- the two owned GPU objects; the restamps and
+    // ~GeneratedImageBuffer / ~ImageBuffer are the compiler's chain.
+    ~ReflectionImageBuffer();
 
     static const char* _TypeName();
     static const char* _ParentTypeName();

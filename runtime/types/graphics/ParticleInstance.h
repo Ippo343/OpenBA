@@ -140,12 +140,17 @@ public:
     ExternalPtrHandle GetParticle() const;                                 // 0x1800201e0
 
     // `?IncrementInstanceIndex@ParticleInstance@Graphics@@SAXXZ` @ 0x1800201f0.
-    // A CLASS STATIC over `?_frameIndex@ParticleInstance@Graphics@@1HA`
-    // (0x1801fe77c, `1HA` = protected static int). PORTED in `animation.cpp`.
-    // The static itself stays an `RT_DATA_SLOT` read in
-    // `wave28_lane_partsys.cpp` — RULE B4b-4 owes it a `MintStorageCell()`
-    // redirect at the class-static conversion, the END of B.3, not in step 5.
+    // A CLASS STATIC over `_frameIndex` below. PORTED in `animation.cpp`.
     static void IncrementInstanceIndex();
+
+    // ?_frameIndex@ParticleInstance@Graphics@@1HA  0x1801fe77c — retail's
+    // PROTECTED static int (`1`). ENDGAME B.3.9 block GFX (B39_RULES D7 row
+    // A37): the class static, defined in animation.cpp and REDIRECTED onto the
+    // mint's storage row by RtGraphicsPortInit, so the doors the foreign
+    // readers use (particlecomponent.cpp, reg_unreg_lane3.cpp's import slot)
+    // and this member are ONE int. Public because a reader in this block is a
+    // free-function body (wave28_lane_partsys.cpp).
+    static int _frameIndex;
 
     // The ctor door's way onto the shared body (ENDGAME B.3.8 block RB).
     struct DoorBody { static void Init(ParticleInstance* p) { p->InitFields(); } };

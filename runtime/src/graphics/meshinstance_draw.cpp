@@ -67,6 +67,7 @@
 #include "../../types/math/Math.h"
 // ENDGAME B.3.5 block E: the real `Graphics::MeshInstance` / `EdgeMeshInstance`.
 #include "../../types/graphics/Mesh.h"
+#include "../../types/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
 #include "../../types/video/Context.h"   // ENDGAME B.3.5 caller batch: Video::Context
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
@@ -170,9 +171,9 @@ void ContextSetTransformScale(void* ctx, int32_t slot, const void* matrix,
 const uint8_t* VideoDevice() {
     return *RT_DATA_SLOT(const uint8_t* const*, "?_singleton@Device@Video@@0PEAV12@EA");
 }
+// ENDGAME B.3.9 GFX: the class static, not the mint's slot (D7 row A44).
 const uint8_t* AnimationManager() {
-    return *RT_DATA_SLOT(const uint8_t* const*,
-                         "?_singleton@AnimationManager@Graphics@@0PEAV12@EA");
+    return reinterpret_cast<const uint8_t*>(::Graphics::AnimationManager::_singleton);
 }
 
 // ---------------------------------------------------------------------------

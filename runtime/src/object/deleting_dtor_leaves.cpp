@@ -103,27 +103,12 @@ extern "C" void RtUi_ToolTipDialog_Dtor(void* self) {
     RT_EXPORT_ONCE(DtorFn, "??1DialogInstance@UI@@UEAA@XZ")(self);
 }
 
-// ??1Light@Graphics@@UEAA@XZ   0x180058d20  — no restamp, straight to Geometry
-extern "C" void RtGraphics_Light_Dtor(void* self) {
-    RT_EXPORT_ONCE(DtorFn, "??1Geometry@Graphics@@UEAA@XZ")(self);
-}
-
 // ??1SunLight@Graphics@@UEAA@XZ 0x180108160 -- REMOVED (ENDGAME B.3.9 pilot):
 // the name and address were registered TWICE, here and by block RB's one-body
 // door `Graphics_SunLight_Dtor` (runtime/src/graphics/sunlight.cpp), and this
 // older transcription won by running later (INVENTORY_B finding 1). RB's body
 // -- `~SunLight`'s ReleaseFields, shared with the real destructor -- is THE body.
 // (Pilot c2 then retired RB's door too: ~SunLight is the only destructor.)
-
-// ??1AnimationGroup@Graphics@@UEAA@XZ   0x1800fb620
-extern "C" void RtGraphics_AnimationGroup_Dtor(void* self) {
-    STAMP(self, "??_7AnimationGroup@Graphics@@6B@");
-    uint8_t* d = static_cast<uint8_t*>(self);
-    ByAddr(0x18001c3b0ull)(d + 0x48);
-    ByAddr(0x18001c2d0ull)(d + 0x38);
-    ByAddr(0x18001c1e0ull)(d + 0x20);
-    RT_EXPORT_ONCE(DtorFn, "??1External@Object@@UEAA@XZ")(self);
-}
 
 
 
@@ -167,9 +152,5 @@ int RtObjectDeletingDtorLeavesRegister() {
     RegisterRuntimeAddr  (0x1801041f0ull,                                  (void*)&RtGraphics_ParticleInstance_Dtor);
     RegisterRuntimeExport("??1ToolTipDialog@UI@@UEAA@XZ",        (void*)&RtUi_ToolTipDialog_Dtor);
     RegisterRuntimeAddr  (0x1800dac70ull,                          (void*)&RtUi_ToolTipDialog_Dtor);
-    RegisterRuntimeExport("??1Light@Graphics@@UEAA@XZ",          (void*)&RtGraphics_Light_Dtor);
-    RegisterRuntimeAddr  (0x180058d20ull,                          (void*)&RtGraphics_Light_Dtor);
-    RegisterRuntimeExport("??1AnimationGroup@Graphics@@UEAA@XZ", (void*)&RtGraphics_AnimationGroup_Dtor);
-    RegisterRuntimeAddr  (0x1800fb620ull,                          (void*)&RtGraphics_AnimationGroup_Dtor);
-    return 7;
+    return 5;
 }

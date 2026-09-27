@@ -18,6 +18,7 @@
 // real `Object::External`, so the class header comes in at GLOBAL scope, above
 // every namespace block (B34_BRIEFS section A.8).
 #include "../object/External.h"
+#include "../object/Internal.h"      // B.3.9: InternalMemFree (the concrete slot 0)
 #include "../collection/Collection.h"
 
 // Forward declarations only, for the members that are DECLARED-not-ported. None
@@ -169,7 +170,9 @@ static_assert(offsetof(AnimationManager, _groupCapacity) == 0x0c, "AnimationMana
 // NOTHING IS RETIRED HERE. `RT_DELDTOR(0x180011800, 0x1800a2120, 0x020,
 // "Graphics::AnimationEvent")` (runtime/src/object/deleting_dtor.cpp:299), the
 // `??_7AnimationEvent@Graphics@@6B@` mint row and the two `_typeInfo` reflection
-// rows all stay minted, per B35_RULES section 11.
+// rows all stay minted, per B35_RULES section 11. (ENDGAME B.3.9 block GFX
+// retired the RT_DELDTOR row and the vtable row; the `_typeInfo` row waits for
+// the W3 fold.)
 //
 // *** GREP HAZARD, ARMED BY THIS FILE (B4b-5 / B34_BRIEFS A.7). *** Nothing in
 // `runtime/types/graphics/` opened `namespace Graphics` before this commit.
@@ -230,10 +233,32 @@ namespace Graphics {
 // empty and the existing door, which stamps the minted table for minted
 // objects, is left exactly as it is.
 // ============================================================================
+// ENDGAME B.3 step 9 (block GFX, B39_RULES D1/D2) -- the paragraphs above about
+// slot 0, the ctor door and the destructor door are HISTORY. Slot 0 is now the
+// class's own vector deleting dtor; the class stays ABSTRACT only through the
+// pure External slots and `Construct` (the exe's AnimAudioEvent fills them).
+// The ??0 / ??1 doors, the Type / TypeName slot doors, the FACTREST row, the
+// RT_DELDTOR row 0x180011800 and the minted `??_7AnimationEvent@Graphics@@6B@`
+// are retired (tools/rt_mint_retired/gfx.txt). The only builder is the exe's
+// AnimAudioEvent, whose C++ base ctor is the protected one below.
 class AnimationEvent : public Object::External {
 public:
-    // [0] 0x180011800 — see the banner: pure on purpose, row not retired.
-    Object::Base* DeletingDtor(unsigned flags) override = 0;
+    // [0] 0x180011800 -- MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x20` = the element size).
+    // Every exe subclass overrides it with its own scalar slot 0.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<AnimationEvent*>(self + static_cast<int64_t>(i) * 0x20)->~AnimationEvent();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~AnimationEvent();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     // [1] 0x1800116f0 / [2] 0x1800116d0 — both read `?_typeInfo@AnimationEvent@
     // Graphics@@0VBaseTypeInfo@Object@@A` (0x1801f9978). The bodies live in
@@ -246,10 +271,16 @@ public:
     // [8] +0x40 — `_purecall` in retail. RULE B5-16: introduced, so `virtual`.
     virtual Object::External* Construct() = 0;
 
-    // ?TypeId@AnimationEvent@Graphics@@SAIXZ  0x1800116e0.
-    // NOT PORTED and nothing in the tree calls it; declared so no later block
-    // has to edit this header (B35 class-block brief, "declared up front").
+    // ?TypeId@AnimationEvent@Graphics@@SAIXZ  0x1800116e0 -- ENDGAME B.3.9 GFX
+    // (D6 step 1): reads the minted `?_typeInfo@AnimationEvent@` record until
+    // the W3 fold (graphics_typeinfo_accessors.cpp).
     static uint32_t TypeId();
+
+    // ?CreateNewObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@XZ 0x180011700
+    // ?CreateInPlaceObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@PEAX@Z 0x180011710
+    // Retail's abstract factory pair: both `XOR EAX,EAX ; RET` (animation.cpp).
+    static Object::Base* CreateNewObject();
+    static Object::Base* CreateInPlaceObject(void* place);
 
     // ??0AnimationEvent@Graphics@@QEAA@AEBV01@@Z  0x180011720  — NOT PORTED
     // ??4AnimationEvent@Graphics@@QEAAAEAV01@AEBV01@@Z 0x180011790 — NOT PORTED
