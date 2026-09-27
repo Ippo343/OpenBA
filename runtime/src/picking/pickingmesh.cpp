@@ -87,38 +87,14 @@ using SubMesh  = Picking::PickingMesh::SubMesh;
 using Triangle = Picking::PickingMesh::Triangle;
 using UV16     = Picking::PickingMesh::UV16;
 
-void* BaseVTable()         { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* ExternalVTable()     { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* PickingMeshVTable()  { return RT_DATA_SLOT(void*, "??_7PickingMesh@Picking@@6B@"); }
 const uint8_t* PickingMeshTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@PickingMesh@Picking@@0VBaseTypeInfo@Object@@A");
 }
 
-using Slot0Fn = void* (*)(void* self, int flag);
-void CallSlot0(void* self, int flag) {
-    void** vt = *reinterpret_cast<void***>(self);
-    reinterpret_cast<Slot0Fn>(vt[0])(self, flag);
-}
-
-// The stores retail inlines into Construct (0x180071d40) and Reconstruct
-// (0x180071cd0): +0x20/+0x28 as qwords, +0x30 as ONE byte, +0x38/+0x40 as
-// qwords (the last covers _size and _capacity together).
-void InlineCtorStores(Picking::PickingMesh* self) {
-    void** vp = reinterpret_cast<void**>(self);
-    *vp = BaseVTable();
-    *vp = ExternalVTable();
-    self->_path.data      = nullptr;
-    self->_refs._data     = nullptr;
-    self->_refs._size     = 0;
-    self->_refs._capacity = 0;
-    *vp = PickingMeshVTable();
-    self->_string20.data = nullptr;
-    self->_string28.data = nullptr;
-    self->_flag30 = false;
-    self->_nodes._data = nullptr;
-    self->_nodes._size = 0;
-    self->_nodes._capacity = 0;
-}
+// ENDGAME B.3.9 PILOT: `InlineCtorStores` (Base / External / PickingMesh vptr
+// stamps from the MINT plus the zero stores) and the file's `CallSlot0` are
+// gone. The stores are the real constructor now (PickingMesh.h), the stamps
+// the compiler's, and slot 0 is a virtual call on the class.
 
 // ---- the Collection::Array<T> instantiations, by ADDRESS -------------------
 //
@@ -273,19 +249,36 @@ int32_t PickingMesh::GetFileVersion() const { return 9; }
 // [4] 0x180122950: returns 1.
 Object::External::CompileResult PickingMesh::Compile(const System::Filename&) { return 1; }
 
-// [8] 0x180071d40 — retail's null test is in the DOOR.
+// [8] 0x180071d40 — the inlined constructor, i.e. placement construction.
+// (Retail's `TEST RCX,RCX` null test sat in the retired door; a virtual call
+// always has a `this`.) `::new`: the class declares its own placement new.
 Object::External* PickingMesh::Construct() {
-    InlineCtorStores(this);
-    return this;
+    return ::new (this) PickingMesh();
 }
 // [6] 0x180071cd0: slot0(this, 0) dispatched VIRTUALLY, then the same stores.
 Object::External* PickingMesh::Reconstruct() {
-    CallSlot0(this, 0);
-    InlineCtorStores(this);
-    return this;
+    DeletingDtor(0);
+    return ::new (this) PickingMesh();
 }
 // [7] 0x180071db0: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void PickingMesh::Destruct() { CallSlot0(this, 0); }
+void PickingMesh::Destruct() { DeletingDtor(0); }
+
+// ?CreateNewObject@PickingMesh@Picking@@SAPEAVBase@Object@@XZ  0x180071ba0
+// The FACTREST row this replaces (rt_factories_picking.inc, 0x180071ba0..c3f):
+// `?MemAlloc@MemoryAllocator@System@@` (0x1800c7a50, the LOCKED wrapper --
+// the same function Object::detail::InternalMemAlloc reaches) of 0x48 bytes,
+// align 8; retail's null branch; then the inlined constructor.
+Object::Base* PickingMesh::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(PickingMesh), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) PickingMesh();
+}
+// ?CreateInPlaceObject@PickingMesh@Picking@@SAPEAVBase@Object@@PEAX@Z  0x180071c60
+// retail's null test, then the same inlined constructor.
+Object::Base* PickingMesh::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) PickingMesh();
+}
 
 // ============================================================================
 // [5] ?Serialize@PickingMesh@Picking@@UEAA_NAEAVStream@IO@@@Z  0x180122960
@@ -330,57 +323,29 @@ bool PickingMesh::Serialize(void* streamv) {
     return true;
 }
 
-// ~PickingMesh: NON-VIRTUAL and EMPTY; the registered dtor door does retail's work.
-PickingMesh::~PickingMesh() {}
+// ??1PickingMesh@Picking@@UEAA@XZ  0x1801228a0 — retail's body, moved here
+// from the retired `RtPicking_PickingMesh_Dtor` door (ENDGAME B.3.9 PILOT).
+// The entry restamp is the compiler's; so is the tail into ~External. Retail
+// CALLs 0x180073720 at 0x1801228c4: the element destroy 0x180073ee0 over every
+// SubMesh -- four inner buffers DESCENDING from +0x70, then the String at
+// +0x00 -- followed by the plain `~Array`, which frees and ZEROES the header.
+// The compiler-emitted `_nodes.~Array()` that runs after this body therefore
+// sees an empty header: no element destroy (`_size` 0) and MemFree(null),
+// which retail's allocator tests inside (array.cpp ArrayDtorImpl) -- a no-op.
+PickingMesh::~PickingMesh() {
+    SubMeshArrayDtor(&_nodes);
+    RtSystem::RtString_ReleaseInline(&_string28);
+    RtSystem::RtString_ReleaseInline(&_string20);
+}
 
 }  // namespace Picking
 
 // ============================================================================
-// THE DOORS — qualified delegation (a live PickingMesh wears the MINTED table).
+// ENDGAME B.3.9 PILOT: the eight slot doors (`RtPicking_PickingMesh_Type` ..
+// `_Serialize`) and the `??1PickingMesh` door are gone. Their only reader was
+// the minted `??_7PickingMesh@Picking@@6B@` (and, for the ??1 door, its
+// RT_DELDTOR row): every live PickingMesh now wears the compiler's table.
 // ============================================================================
-extern "C" uint32_t RtPicking_PickingMesh_Type(const void* selfv) {
-    return reinterpret_cast<const Picking::PickingMesh*>(selfv)->Picking::PickingMesh::Type();           // B.3.7 bridge
-}
-extern "C" const char* RtPicking_PickingMesh_TypeName(const void* selfv) {
-    return reinterpret_cast<const Picking::PickingMesh*>(selfv)->Picking::PickingMesh::TypeName();       // B.3.7 bridge
-}
-extern "C" int32_t RtPicking_PickingMesh_GetFileVersion(const void* selfv) {
-    return reinterpret_cast<const Picking::PickingMesh*>(selfv)->Picking::PickingMesh::GetFileVersion(); // B.3.7 bridge
-}
-extern "C" int32_t RtPicking_PickingMesh_Compile(void* selfv, const void* pathv) {
-    return static_cast<int32_t>(reinterpret_cast<Picking::PickingMesh*>(selfv)                            // B.3.7 bridge
-        ->Picking::PickingMesh::Compile(*static_cast<const System::Filename*>(pathv)));
-}
-extern "C" void* RtPicking_PickingMesh_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                 // retail's null test
-    return reinterpret_cast<Picking::PickingMesh*>(selfv)->Picking::PickingMesh::Construct();          // B.3.7 bridge
-}
-extern "C" void* RtPicking_PickingMesh_Reconstruct(void* selfv) {
-    return reinterpret_cast<Picking::PickingMesh*>(selfv)->Picking::PickingMesh::Reconstruct();        // B.3.7 bridge
-}
-extern "C" void RtPicking_PickingMesh_Destruct(void* selfv) {
-    reinterpret_cast<Picking::PickingMesh*>(selfv)->Picking::PickingMesh::Destruct();                  // B.3.7 bridge
-}
-extern "C" bool RtPicking_PickingMesh_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<Picking::PickingMesh*>(selfv)->Picking::PickingMesh::Serialize(streamv);   // B.3.7 bridge
-}
-
-// ============================================================================
-// ??1PickingMesh@Picking@@UEAA@XZ (0x1801228a0) — the dtor DOOR keeps its
-// body; the member destructor is empty (PickingMesh.h).
-// ============================================================================
-extern "C" void RtPicking_PickingMesh_Dtor(void* selfv) {
-    Picking::PickingMesh* self = reinterpret_cast<Picking::PickingMesh*>(selfv);   // B.3.7 bridge
-    *reinterpret_cast<void**>(self) = PickingMeshVTable();
-    // Retail CALLs 0x180073720 here (at 0x1801228c4): the element destroy
-    // 0x180073ee0 over every SubMesh -- four inner buffers DESCENDING from
-    // +0x70 and then the String at +0x00 -- followed by the plain `~Array`.
-    SubMeshArrayDtor(&self->_nodes);
-    RtSystem::RtString_ReleaseInline(&self->_string28);
-    RtSystem::RtString_ReleaseInline(&self->_string20);
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(self);
-}
 
 // ---- CUTOVER CLOSURE BATCH D2: the two registered Serialize halves --------
 // Retail's own signatures, so these can stand at their addresses for any
@@ -396,25 +361,17 @@ extern "C" void RtPicking_PickingMesh_SerializeSubMeshes(void* ser, int32_t coun
 
 int RtPickingPickingMeshRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@PickingMesh@Picking@@UEBAIXZ",           (void*)&RtPicking_PickingMesh_Type);           ++n;
-    RegisterRuntimeAddr  (0x180071a90ull,                                (void*)&RtPicking_PickingMesh_Type);
-    RegisterRuntimeExport("?TypeName@PickingMesh@Picking@@UEBAPEBDXZ",    (void*)&RtPicking_PickingMesh_TypeName);       ++n;
-    RegisterRuntimeAddr  (0x180071ab0ull,                                (void*)&RtPicking_PickingMesh_TypeName);
-    RegisterRuntimeExport("?GetFileVersion@PickingMesh@Picking@@UEBAHXZ", (void*)&RtPicking_PickingMesh_GetFileVersion); ++n;
-    RegisterRuntimeAddr  (0x180122940ull,                                (void*)&RtPicking_PickingMesh_GetFileVersion);
-    RegisterRuntimeExport("?Compile@PickingMesh@Picking@@UEAA?AW4CompileResult@External@Object@@AEBVFilename@System@@@Z",
-                          (void*)&RtPicking_PickingMesh_Compile); ++n;
-    RegisterRuntimeAddr  (0x180122950ull,                                (void*)&RtPicking_PickingMesh_Compile);
-    RegisterRuntimeExport("?Construct@PickingMesh@Picking@@UEAAPEAVExternal@Object@@XZ",   (void*)&RtPicking_PickingMesh_Construct);   ++n;
-    RegisterRuntimeAddr  (0x180071d40ull,                                                  (void*)&RtPicking_PickingMesh_Construct);
-    RegisterRuntimeExport("?Reconstruct@PickingMesh@Picking@@UEAAPEAVExternal@Object@@XZ", (void*)&RtPicking_PickingMesh_Reconstruct); ++n;
-    RegisterRuntimeAddr  (0x180071cd0ull,                                                  (void*)&RtPicking_PickingMesh_Reconstruct);
-    RegisterRuntimeExport("?Destruct@PickingMesh@Picking@@UEAAXXZ",       (void*)&RtPicking_PickingMesh_Destruct);       ++n;
-    RegisterRuntimeAddr  (0x180071db0ull,                                (void*)&RtPicking_PickingMesh_Destruct);
-    RegisterRuntimeExport("??1PickingMesh@Picking@@UEAA@XZ",              (void*)&RtPicking_PickingMesh_Dtor);           ++n;
-    RegisterRuntimeAddr  (0x1801228a0ull,                                (void*)&RtPicking_PickingMesh_Dtor);
-    RegisterRuntimeExport("?Serialize@PickingMesh@Picking@@UEAA_NAEAVStream@IO@@@Z", (void*)&RtPicking_PickingMesh_Serialize); ++n;
-    RegisterRuntimeAddr  (0x180122960ull,                                                  (void*)&RtPicking_PickingMesh_Serialize);
+    // ---- the factory pair (B39_RULES D2): the class's OWN statics, both
+    // doors, replacing the FACTREST row. The minted `?_typeInfo@PickingMesh`
+    // record's factoryFn / inPlaceFactoryFn resolve these by name (MintTypeInfos
+    // runs after every *PortInit), so `Object::Factory` -- External::Load's
+    // create-by-type-id -- now builds a real PickingMesh.
+    RegisterRuntimeExport("?CreateNewObject@PickingMesh@Picking@@SAPEAVBase@Object@@XZ",
+                          (void*)&Picking::PickingMesh::CreateNewObject); ++n;
+    RegisterRuntimeAddr  (0x180071ba0ull, (void*)&Picking::PickingMesh::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@PickingMesh@Picking@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&Picking::PickingMesh::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr  (0x180071c60ull, (void*)&Picking::PickingMesh::CreateInPlaceObject);
     // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) --------------
     // The two out-of-line halves of Serialize. Unexported in both builds, so
     // RegisterRuntimeAddr only. Their Array callees (0x18007a4d0, 0x18007a790,

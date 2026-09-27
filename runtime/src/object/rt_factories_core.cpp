@@ -239,7 +239,9 @@ void RtFactoriesPortInit() {
     n += RtFactoriesAudioRegister();
     n += RtFactoriesIoRegister();
     n += RtFactoriesPathfindingRegister();
-    n += RtFactoriesPickingRegister();
+    // Picking:: has no row left: ENDGAME B.3.9's pilot made Picking::PickingMesh
+    // a real class whose own CreateNewObject / CreateInPlaceObject register from
+    // runtime/src/picking/pickingmesh.cpp (B39_RULES D2).
     printf("[RtFactory] FACTREST registered %d non-UI factory classes, "
            "%d distinct slots, both doors each (%llu slot-1 symbols were already "
            "bound by an earlier row and were NOT re-bound)\n",

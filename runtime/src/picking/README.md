@@ -22,9 +22,8 @@ confirm against the retail DLL before porting one.
 status paragraph at the end of this file says what the files hold.)
 
 - `closure_batch2b.cpp`
-- `pickingmesh.cpp`
-- `rt_factories_picking.cpp`
-- `rt_factories_picking.inc`
+- `pickingmesh.cpp` (since ENDGAME B.3.9's pilot also the factory pair; the
+  FACTREST `rt_factories_picking.{cpp,inc}` step table is gone)
 - `rt_picking_port.cpp`
 - `scene.cpp`
 - `scene_grid.cpp`

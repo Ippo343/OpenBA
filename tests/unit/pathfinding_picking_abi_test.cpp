@@ -21,6 +21,12 @@
 //
 // The classes' out-of-line members are defined HERE as markers
 // (runtime/src/pathfinding and runtime/src/picking do not link into a host test).
+//
+// ENDGAME B.3 step 9 PILOT (B39_RULES D1/D2): Picking::PickingMesh is CONCRETE
+// now -- PART A says so, and the b39_* tests construct the REAL class (its
+// ctor and DeletingDtor are inline in PickingMesh.h; only ~PickingMesh is a
+// marker here) and pin slot order by PMF, the ctor's stores, and both arms of
+// slot 0 (free on `flags & 1`, the downward array arm on `flags & 2`).
 // ============================================================================
 #include "unit.h"
 
@@ -256,7 +262,21 @@ bool PickingMesh::Serialize(void*) { Note(this, 5); return true; }
 Object::External* PickingMesh::Reconstruct() { Note(this, 6); return this; }
 void PickingMesh::Destruct() { Note(this, 7); }
 Object::External* PickingMesh::Construct() { Note(this, 8); return this; }
-PickingMesh::~PickingMesh() {}
+}  // namespace Picking
+
+namespace {
+// ENDGAME B.3.9 pilot: the destructor marker RECORDS each call, so the real
+// `DeletingDtor` (inline in PickingMesh.h, the one under test) can be seen
+// running ~PickingMesh once per element and in retail's DESCENDING order.
+int         g_meshDtorCount = 0;
+const void* g_meshDtorOrder[8] = {};
+}  // namespace
+
+namespace Picking {
+PickingMesh::~PickingMesh() {
+    if (g_meshDtorCount < 8) g_meshDtorOrder[g_meshDtorCount] = this;
+    ++g_meshDtorCount;
+}
 }  // namespace Picking
 
 namespace {
@@ -264,6 +284,18 @@ namespace {
 struct PickingMeshProbe final : Picking::PickingMesh {
     Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
 };
+
+// Itanium PMF -> vtable byte offset (the exe_class_abi_test.cpp model):
+// 1 + offset for a virtual, and adjustment 0 for single inheritance.
+template <typename PMF>
+uintptr_t SlotOffset(PMF pmf) {
+    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
+    uintptr_t words[2];
+    std::memcpy(words, &pmf, sizeof words);
+    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
+    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
+    return words[0] - 1;
+}
 
 
 // B7-5 pin: `Object::ExternalPtr<T>` BY VALUE travels as the bare pointer in
@@ -294,8 +326,91 @@ UNIT_TEST(picking_pickingmesh_layout) {
     CHECK_EQ((int)offsetof(Picking::PickingMesh::SubMesh, _vertices),  0x40);
     CHECK_EQ((int)offsetof(Picking::PickingMesh::SubMesh, _triangles), 0x60);
     CHECK((std::is_base_of<Object::External, Picking::PickingMesh>::value));
-    CHECK(std::is_abstract<Picking::PickingMesh>::value);
-    CHECK(!std::is_default_constructible<Picking::PickingMesh>::value);
+    // ENDGAME B.3.9 pilot (B39_RULES D1): CONCRETE, with retail's public
+    // default constructor; still no virtual destructor (the cutover is later).
+    CHECK(!std::is_abstract<Picking::PickingMesh>::value);
+    // The destructor is PROTECTED and non-virtual (B8-2): deletion is slot 0.
+    // (So `is_default_constructible` -- which also asks for an accessible
+    // destructor -- is false; the public ctor is exercised by placement new in
+    // b39_pickingmesh_ctor_makes_retails_stores below.)
+    CHECK(!std::is_destructible<Picking::PickingMesh>::value);
+    CHECK(!std::has_virtual_destructor<Picking::PickingMesh>::value);
+}
+
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.9 PILOT (B39_RULES D1/D2, rule B9-14) — the concrete class.
+// ---------------------------------------------------------------------------
+// Slot order read off the REAL header's pointers-to-virtual-member.
+UNIT_TEST(b39_pickingmesh_slot_order_by_pmf) {
+    using PM = Picking::PickingMesh;
+    CHECK_EQ(SlotOffset(&PM::DeletingDtor),   (uintptr_t)0x00);   // 0x180072050
+    CHECK_EQ(SlotOffset(&PM::TypeName),       (uintptr_t)0x08);   // 0x180071ab0
+    CHECK_EQ(SlotOffset(&PM::Type),           (uintptr_t)0x10);   // 0x180071a90
+    CHECK_EQ(SlotOffset(&PM::GetFileVersion), (uintptr_t)0x18);   // 0x180122940
+    CHECK_EQ(SlotOffset(&PM::Compile),        (uintptr_t)0x20);   // 0x180122950
+    CHECK_EQ(SlotOffset(&PM::Serialize),      (uintptr_t)0x28);   // 0x180122960
+    CHECK_EQ(SlotOffset(&PM::Reconstruct),    (uintptr_t)0x30);   // 0x180071cd0
+    CHECK_EQ(SlotOffset(&PM::Destruct),       (uintptr_t)0x38);   // 0x180071db0
+    CHECK_EQ(SlotOffset(&PM::Construct),      (uintptr_t)0x40);   // 0x180071d40
+}
+
+// The real constructor makes retail's factory stores (0x180071c03..c3f): every
+// field zero, +0x30 ONE byte (the 7 pad bytes after it untouched), and the
+// compiler's table -- the same one for every instance, not the probe's.
+UNIT_TEST(b39_pickingmesh_ctor_makes_retails_stores) {
+    alignas(8) uint8_t buf[0x48];
+    std::memset(buf, 0xCD, sizeof buf);
+    Picking::PickingMesh* m = ::new (buf) Picking::PickingMesh();
+    CHECK(static_cast<void*>(m) == static_cast<void*>(buf));
+    CHECK(m->_path.data == nullptr);
+    CHECK(m->_refs._data == nullptr);
+    CHECK_EQ(m->_refs._size, 0);
+    CHECK_EQ(m->_refs._capacity, 0);
+    CHECK(m->_string20.data == nullptr);
+    CHECK(m->_string28.data == nullptr);
+    CHECK(!m->_flag30);
+    for (int i = 0; i < 7; ++i) CHECK_EQ((int)buf[0x31 + i], 0xCD);
+    CHECK(m->_nodes._data == nullptr);
+    CHECK_EQ(m->_nodes._size, 0);
+    CHECK_EQ(m->_nodes._capacity, 0);
+
+    alignas(8) uint8_t buf2[0x48];
+    Picking::PickingMesh* m2 = ::new (buf2) Picking::PickingMesh();
+    PickingMeshProbe probe;
+    CHECK(VTableOf(m) != nullptr);
+    CHECK(VTableOf(m) == VTableOf(m2));
+    CHECK(VTableOf(m) != VTableOf(&probe));
+
+    g_meshDtorCount = 0;
+    CHECK(m->DeletingDtor(0) == m);       // flags 0: destroy, no free
+    CHECK(m2->DeletingDtor(0) == m2);
+    CHECK_EQ(g_meshDtorCount, 2);
+}
+
+// Slot 0 FREES on `flags & 1` (host seam: InternalMemFree == free, so a wrong
+// pointer is a heap fault here), and the ARRAY arm reads the int32 count at
+// `this - 8`, destroys DOWNWARD, frees and returns `this - 8` -- both arms
+// exactly as the retired RT_DELDTOR row 0x180072050 ran them.
+UNIT_TEST(b39_pickingmesh_deletingdtor_frees_both_arms) {
+    void* p = Object::detail::InternalMemAlloc(sizeof(Picking::PickingMesh), 8);
+    CHECK(p != nullptr);
+    Picking::PickingMesh* m = ::new (p) Picking::PickingMesh();
+    g_meshDtorCount = 0;
+    CHECK(m->DeletingDtor(1) == m);
+    CHECK_EQ(g_meshDtorCount, 1);
+
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0x48, 8));
+    CHECK(block != nullptr);
+    const int64_t cookie = 3;                       // the upper dword is 0 too
+    std::memcpy(block, &cookie, sizeof cookie);
+    Picking::PickingMesh* e[3];
+    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * 0x48) Picking::PickingMesh();
+    g_meshDtorCount = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
+    CHECK_EQ(g_meshDtorCount, 3);
+    CHECK(g_meshDtorOrder[0] == e[2]);
+    CHECK(g_meshDtorOrder[1] == e[1]);
+    CHECK(g_meshDtorOrder[2] == e[0]);
 }
 
 // The accessor bodies compute retail's addresses: `_nodes + i*0x80 + field`

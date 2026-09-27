@@ -106,4 +106,4 @@ int RtFactoriesCollision2DRegister();
 int RtFactoriesAudioRegister();
 int RtFactoriesIoRegister();
 int RtFactoriesPathfindingRegister();
-int RtFactoriesPickingRegister();
+// (RtFactoriesPickingRegister retired with its last row, ENDGAME B.3.9 pilot.)

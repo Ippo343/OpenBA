@@ -8,3 +8,7 @@
 ??_7ExtensionCompiler@Object@@6B@      PILOT   retail factory returns null; RT_DELDTOR row + ??1 door + Type/TypeName deleted
 ??_7ExternalCompiler@Object@@6B@       PILOT   retail factory returns null; RT_DELDTOR row + ??1 door + Type/TypeName deleted
 ??_7IPathInfo@Pathfinding@@6B@         PILOT   interface; slot 0 _purecall, no stamper, no RT_DELDTOR row
+
+# -- pilot (b): an abstract Runtime class made concrete (D1), its factory pair
+#    the class's own statics (D2) --
+??_7PickingMesh@Picking@@6B@           PILOT   real ctor + DeletingDtor; FACTREST row, RT_DELDTOR row, ??1 door, 8 slot doors deleted

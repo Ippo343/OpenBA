@@ -43,11 +43,16 @@
 //   [8] +0x40 0x180071d40  ?Construct@PickingMesh@Picking@@UEAAPEAVExternal@Object@@XZ
 //                          — INTRODUCED HERE (B7-1.6)
 //
-// ABSTRACT (slot 0 `= 0`), NO REAL CONSTRUCTOR, empty non-virtual destructor:
-// the CharacterSet.h / Cursor.h shape and reasons (B4b-2). Live objects are
-// built by the factory rows (rt_factories_picking.inc) and wear the MINTED
-// table. The exe reaches this class only through `?_typeInfo@` and the
-// `Vertices` import (quarry / terraform deformation).
+// ENDGAME B.3 step 9 PILOT (B39_RULES.md D1/D2): CONCRETE. The class has a
+// real public constructor and its own slot 0, so every live PickingMesh wears
+// the COMPILER's table: `CreateNewObject` / `CreateInPlaceObject` (retail's
+// factory pair, registered by name and address from pickingmesh.cpp) are
+// MemAlloc + `::new (p) PickingMesh()`, replacing the FACTREST step table
+// that stamped the minted `??_7PickingMesh@Picking@@6B@`. The minted row, its
+// `RT_DELDTOR` row 0x180072050, the `??1` door and the eight slot doors are
+// retired (tools/rt_mint_retired/pilot.txt). The exe reaches this class only
+// through `?_typeInfo@` and the `Vertices` import (quarry / terraform
+// deformation).
 //
 // PORTABILITY: no <windows.h>, per PLAN.md section 4.1 decision 1.
 // ============================================================================
@@ -60,6 +65,7 @@
 #include "../volume/Volume.h"                 // Box
 #include "../collection/Collection.h"
 #include "../object/External.h"
+#include "../object/Internal.h"                // Object::detail::InternalMemFree
 
 namespace System { class Filename; }
 
@@ -136,8 +142,38 @@ public:
         Collection::Array<UV16>      _uvs;            // +0x70
     };
 
+    // ??0PickingMesh@Picking@@QEAA@XZ 0x180122830 — the REAL constructor. Its
+    // stores are the ones retail's factory pair inlines (0x180071c03..c3f):
+    // Base's and External's vptr (External(), the compiler's), +0x08/+0x10/
+    // +0x18 zero (External()), PickingMesh's vptr (the compiler's), +0x20 and
+    // +0x28 zero, +0x30 ONE zero byte, +0x38/+0x40 zero (the Array's ctor).
+    PickingMesh() : Object::External() {
+        _string20.data = nullptr;
+        _string28.data = nullptr;
+        _flag30 = false;
+    }
+
     // ---- the nine slots, in measured order ----
-    Object::Base* DeletingDtor(unsigned flags) override = 0;   // [0] 0x180072050
+    // [0] 0x180072050 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (deleting_dtor.cpp DeletingDtorCore,
+    // `MOV EDX,0x48` = the element size): `flags & 2` reads the SIGNED int32
+    // count at `this - 8`, destroys the elements DOWNWARD, frees `this - 8` on
+    // `flags & 1` and returns it; otherwise ~PickingMesh, free on `flags & 1`.
+    // Nothing `new[]`s a PickingMesh, so the array arm is the faithful
+    // unreachable it is in Object::Internal's (internal_class.cpp).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<PickingMesh*>(self + static_cast<int64_t>(i) * 0x48)->~PickingMesh();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~PickingMesh();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char*   TypeName() const override;                   // [1] 0x180071ab0
     uint32_t      Type() const override;                       // [2] 0x180071a90
@@ -168,18 +204,18 @@ public:
     static void* operator new(std::size_t bytes);              // 0x180071ac0
     static void* operator new(std::size_t bytes, void* place); // 0x180071b30
     static void  operator delete(void* p);                     // 0x180071b40
-    // Ported table-driven by runtime/src/picking/rt_factories_picking.inc.
+    // Retail's factory pair (B39_RULES D2): `MemAlloc(0x48, 8)` + the ctor, and
+    // the null-tested in-place ctor. Defined in pickingmesh.cpp. NOTE the class
+    // declares its own placement `operator new` (0x180071b30, not ported), so
+    // every placement construction in the tree spells `::new (p) PickingMesh()`.
     static Object::Base* CreateNewObject();                    // 0x180071ba0
     static Object::Base* CreateInPlaceObject(void* place);     // 0x180071c60
 
 protected:
-    // NOT retail's `??0PickingMesh@Picking@@QEAA@XZ` (0x180122830) — the probe
-    // subclass in the unit test is its only user.
-    PickingMesh() = default;
-    // `??1PickingMesh@Picking@@UEAA@XZ` 0x1801228a0. NON-VIRTUAL, DEFINED EMPTY:
-    // the registered dtor door (`RtPicking_PickingMesh_Dtor`) destroys the
-    // SubMesh array through 0x180073720, releases both strings and chains to
-    // ~External by hand.
+    // `??1PickingMesh@Picking@@UEAA@XZ` 0x1801228a0. NON-VIRTUAL (no virtual
+    // dtor until the normal-virtual cutover); pickingmesh.cpp holds retail's
+    // body (the SubMesh array through 0x180073720, then both Strings) and the
+    // compiler chains ~External, retail's tail call.
     ~PickingMesh();
 
 public:
