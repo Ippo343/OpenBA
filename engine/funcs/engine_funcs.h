@@ -256,17 +256,6 @@ extern uint32_t* g_TypeId_RadiusComponent;        // DAT_1401c4870
 extern uint32_t* g_TypeId_ToolbarDescription_FC;// DAT_1401c7f58
 extern uint32_t* g_TypeId_ResourceComponent;      // DAT_1401c7040
 extern uint32_t* g_TypeId_RawMaterialDescription;           // DAT_1401c7cb8
-// ⚠ BOTH NAMES BELOW ARE WRONG — kept only so existing declarations keep compiling.
-// Verified via get_xrefs_to on each slot, checking which *_Register writes it:
-//   0x1401c56e0 <- StatusIconUIConfig_Register (0x14014c865)  => StatusIconUIConfig
-//   0x1401c4f00 <- RegisterType_EntityUI       (0x14014bf65)  => EntityUI
-// Neither slot is RegisterExeAddr'd, so both globals are NULL in standalone and nothing
-// should read them. `g_TypeId_DialogController` now has zero readers tree-wide. Do not
-// add new consumers — use ResolveTypeId(<slot>, "<RealName>", &cache) instead, which
-// guards the VALUE rather than the pointer.
-extern uint32_t* g_TypeId_DialogController;       // DAT_1401c56e0 — really StatusIconUIConfig
-extern uint32_t* g_TypeId_PageToggleUI;           // DAT_1401c4f00 — really EntityUI
-
 // Prefer the raw .rdata DWORD; if that slot is unregistered or filled with 0, fall back to
 // the live factory tree by name. Caches into *cache. Defined in engine_funcs.cpp.
 // (edittool_select.cpp has an identical private helper in an anonymous namespace — this is
@@ -276,8 +265,6 @@ extern uint32_t* g_TypeId_MeshInstanceComponent;  // DAT_1401c7e40
 extern uint32_t* g_TypeId_DestroyComponent;       // DAT_1401c7628
 extern uint32_t* g_TypeId_WorkplaceComponent;     // DAT_1401c80e0
 extern uint32_t* g_TypeId_WorkComponent;// DAT_1401c8070
-extern uint32_t* g_TypeId_StorageComponent;       // (TBD)
-extern uint32_t* g_TypeId_StateMachineComponent;  // (TBD)
 extern uint32_t* g_TypeId_WorkDescription;       // DAT_1401c80a8
 extern uint32_t* g_TypeId_AttendanceDescription;      // DAT_1401c3f78
 extern uint32_t* g_TypeId_ResourceLimitType;      // DAT_1401c5520
@@ -290,8 +277,6 @@ extern uint32_t* g_TypeId_CreateBridgeDescription; // DAT_1401c73f8 (Startup com
 extern uint32_t* g_TypeId_RemovalDescription;      // DAT_1401c74a0 (RemovalTool::Startup component lookup)
 // g_TypeId_MapComponent_FC (DAT_1401c79e0 = MapComponent) — declared with the FindComponent type-ids below
 // g_TypeId_MultiObjectComponent (DAT_1401c7ac0) — already declared below (~line 1448)
-extern uint32_t* g_TypeId_ModelComponent;          // DAT_1401c7a50
-extern uint32_t* g_TypeId_PickingComponent;        // DAT_1401c7c10
 
 // BridgeTool helper functions (internal to exe)
 // BridgeTool_SnapEndCell (0x1400fb710): snaps end cell to same row or column as drag start
@@ -1076,7 +1061,6 @@ extern uint32_t* g_TypeId_StatusIconComponent;  // DAT_1401c7e08
 // (writer CitizenAIComponent_RegisterType) — see reg_citizenai_typeids.cpp. Null unless
 // BANISHED_LIVE_CITIZENAI_TIDS/_AIID registers it.
 extern uint32_t* g_TypeId_CitizenAIComponent;  // DAT_1401c70e8
-extern uint32_t* g_TypeId_ProfessionDescription;  // DAT_1401c5a98 (profession type in TutorialGoalCount)
 
 // StatusBarUI_StatusIconHandler (FUN_14007a120) — status icon click handler
 // REPLACED: now static StatusBarUI_StatusIconHandler_Impl() in code/Game/Dialog/statusbarui.cpp

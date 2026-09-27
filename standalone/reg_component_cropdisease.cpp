@@ -64,11 +64,9 @@ extern "C" void EventLog_SeasonString_Reg(void*, void*, void*);              // 
 // (reference_null_typeid_global_fakes_ordering_bug), so these get storage here and a
 // value later.
 static uint32_t g_tid_DiseaseComponent   = 0;   // 0x1401c4170
-static uint32_t g_tid_DiseaseDescription = 0;   // 0x1401c41a8
 
 extern "C" void FillTypeIdGlobals_cropdisease() {
     g_tid_DiseaseComponent   = DiseaseComponent::TypeId();
-    g_tid_DiseaseDescription = DiseaseDescription::TypeId();
 }
 
 void RegisterCropDiseaseBatch() {
@@ -93,5 +91,4 @@ void RegisterCropDiseaseBatch() {
 
     // Type-id global storage (values filled by FillTypeIdGlobals_cropdisease)
     RegisterExeAddr(0x1401c4170, reinterpret_cast<uintptr_t>(&g_tid_DiseaseComponent));
-    RegisterExeAddr(0x1401c41a8, reinterpret_cast<uintptr_t>(&g_tid_DiseaseDescription));
 }

@@ -112,28 +112,21 @@ uint32_t* g_TypeId_RadiusComponent = nullptr;
 uint32_t* g_TypeId_ToolbarDescription_FC = nullptr;
 uint32_t* g_TypeId_ResourceComponent = nullptr;
 uint32_t* g_TypeId_RawMaterialDescription = nullptr;
-uint32_t* g_TypeId_DialogController = nullptr;
-uint32_t* g_TypeId_PageToggleUI = nullptr;
 uint32_t* g_TypeId_MeshInstanceComponent = nullptr;
 uint32_t* g_TypeId_DestroyComponent = nullptr;
 uint32_t* g_TypeId_WorkplaceComponent = nullptr;
 uint32_t* g_TypeId_WorkComponent = nullptr;
-uint32_t* g_TypeId_StorageComponent = nullptr;
-uint32_t* g_TypeId_StateMachineComponent = nullptr;
 uint32_t* g_TypeId_WorkDescription = nullptr;
 uint32_t* g_TypeId_AttendanceDescription = nullptr;
 uint32_t* g_TypeId_ResourceLimitType = nullptr;
 uint32_t* g_TypeId_ToolUI = nullptr;
-uint32_t* g_TypeId_ProfessionDescription = nullptr;
 
 // BridgeTool-related type IDs
 uint32_t* g_TypeId_CreateBridgeDescription = nullptr;
 // RemovalTool-related type IDs
 uint32_t* g_TypeId_RemovalDescription = nullptr;
 // g_TypeId_MapComponent_FC (DAT_1401c79e0 = MapComponent) defined below with the FindComponent type-ids
-uint32_t* g_TypeId_ModelComponent = nullptr;
 // g_TypeId_MultiObjectComponent already defined below (~line 444)
-uint32_t* g_TypeId_PickingComponent = nullptr;
 
 // BridgeTool helper functions
 fn_BridgeTool_SnapEndCell_t fn_BridgeTool_SnapEndCell = nullptr;
@@ -889,10 +882,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1401c7040));
     g_TypeId_RawMaterialDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7cb8));
-    g_TypeId_DialogController = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c56e0));
-    g_TypeId_PageToggleUI = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c4f00));
     g_TypeId_MeshInstanceComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7e40));
     g_TypeId_DestroyComponent = reinterpret_cast<uint32_t*>(
@@ -917,11 +906,7 @@ bool EngineFuncsInit() {
     g_TypeId_RemovalDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c74a0));
     // g_TypeId_MapComponent_FC (DAT_1401c79e0) is resolved in the FindComponent block below
-    g_TypeId_ModelComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7a50));
     // g_TypeId_MultiObjectComponent already resolved in Phase E below
-    g_TypeId_PickingComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7c10));
     // BridgeTool helper functions (exe-internal)
     fn_BridgeTool_SnapEndCell = reinterpret_cast<fn_BridgeTool_SnapEndCell_t>(
         ResolveAddr(Module::Exe, 0x1400fb710));
@@ -1307,8 +1292,6 @@ bool EngineFuncsInit() {
     g_TypeId_CitizenAIComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c70e8));
     // fn_FindComponent_CitizenAI — inline in engine_funcs.h (uses g_TypeId_CitizenAIComponent)
-    g_TypeId_ProfessionDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c5a98));
     // fn_StatusBarUI_StatusIconHandler — REPLACED with static impl in statusbarui.cpp
 
     // StringTable type ID: exref at 0x140151488 -> pointer -> uint32_t typeId
