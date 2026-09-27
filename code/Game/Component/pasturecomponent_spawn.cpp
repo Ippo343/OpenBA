@@ -42,6 +42,8 @@
 // pasture pick its type itself. That is NOT retail behaviour, so it is opt-in only.
 
 #include "Component/PastureComponent.h"
+#include "Component/LivestockComponent.h"
+#include "Component/AnimalComponent.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -127,11 +129,9 @@ inline uintptr_t GameState() {
 // should have run just before never did.
 // ============================================================
 extern "C" void* Pasture_FindLivestockComp(int64_t entity, void* retIBP) {
-    static const uint32_t* pTid = nullptr;
-    if (!pTid)
-        pTid = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7970));
+    const uint32_t tid = LivestockComponent::TypeId();   // cell 0x1401c7970 (D5)
     void* found = nullptr;
-    if (pTid && *pTid && entity) {
+    if (entity) {
         int n = *reinterpret_cast<int*>(entity + 0x38);
         uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
         for (int i = 0; i < n && list; ++i) {
@@ -139,8 +139,8 @@ extern "C" void* Pasture_FindLivestockComp(int64_t entity, void* retIBP) {
             void* comp = *slot;
             if (!comp) continue;
             uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
-            if (t == *pTid) {
-                found = (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *pTid)) ? comp : nullptr;
+            if (t == tid) {
+                found = (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, tid)) ? comp : nullptr;
                 break;
             }
         }
@@ -392,18 +392,7 @@ extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centr
     // compares GetTypeId (vtable +0x10) against DAT_1401c6f98 — it does NOT call the
     // 0x140005500 finder. Reproduced inline for the same reason: this project has a
     // documented trap where a finder's Ghidra name does not match the type id it keys on.
-    static const uint32_t* pAnimalTid = nullptr;
-    if (!pAnimalTid)
-        pAnimalTid = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6f98));
-    // Guard the VALUE, not just the pointer: a slot that is registered but filled with
-    // zero matches nothing and would silently spawn eight animals with no AnimalComponent.
-    if (!pAnimalTid || !*pAnimalTid) {
-        std::fprintf(stderr, "[StartHerd] AnimalComponent type id unresolved (ptr=%p val=%u)"
-                     " — skipping starting herd\n",
-                     (const void*)pAnimalTid, pAnimalTid ? *pAnimalTid : 0u);
-        std::fflush(stderr);
-        return 0;
-    }
+    const uint32_t animalTid = AnimalComponent::TypeId();   // cell 0x1401c6f98 (D5)
 
     // Retail seeds the alternating sex from ONE Rand(2) before the loop and flips it every
     // iteration, so a group of 8 comes out 4/4 rather than 8 independent coin flips.
@@ -432,8 +421,8 @@ extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centr
                 void* comp = *slot;
                 if (!comp) continue;
                 uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
-                if (tid != *pAnimalTid) continue;
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *pAnimalTid)) animal = comp;
+                if (tid != animalTid) continue;
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, animalTid)) animal = comp;
                 break;
             }
         }

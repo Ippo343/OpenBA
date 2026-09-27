@@ -51,104 +51,35 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
+#include <new>
 
 namespace RtIo {
-
-using rt::io::Serializer;
-using rt::io::VisitorCodec;
 
 namespace {
 
 using MemAllocFn = void* (*)(uint64_t, int);
 
-void** VtblReaderWriterV() {
-    static void** v = reinterpret_cast<void**>(ResolveExport("??_7ReaderWriter@IO@@6B@"));
-    return v;
-}
-void** VtblVisitor() {
-    static void** v = reinterpret_cast<void**>(ResolveExport(rt::io::kVisitorVtableName));
-    return v;
-}
-
-// The shared body of 0x1800baf00 and 0x1800bae40 (byte-identical).
-VisitorCodec* MakeVisitor(Serializer* ser, int32_t version) {
+// The shared body of 0x1800baf00 and 0x1800bae40 (byte-identical):
+// MemAlloc(0x28,4), then (ENDGAME B.3.9 IO) the real `IO::Visitor` ctor in
+// place -- the ReaderWriter base stores (1800baeb3..c1) and the version dword
+// (1800baecf). A failed allocation returns null unconstructed.
+IO::ReaderWriter* MakeVisitor(IO::Serializer& ser, int32_t version) {
     void* p = RT_EXPORT_ONCE(MemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(sizeof(VisitorCodec), 4);
+        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(sizeof(IO::Visitor), 4);
     if (p == nullptr) return nullptr;                      // XOR EAX,EAX path
-    VisitorCodec* c = static_cast<VisitorCodec*>(p);
-    c->base.vtable               = VtblReaderWriterV();    // 1800baeb3
-    c->base.allowCustomSerialize = 0;                      // 1800baeb6 BYTE
-    c->base.serializer           = ser;                    // 1800baeba
-    c->base.stream               = ser->stream;            // 1800baec1
-    c->base.vtable               = VtblVisitor();          // 1800baecc
-    c->version                   = version;                // 1800baecf
-    return c;
+    return ::new (p) IO::Visitor(ser, version);
 }
 
 }  // namespace
 
 // ---------------------------------------------------------------------------
-// ENDGAME B.3.4 block 1 — these ten slots are now `IO::VisitorEncoding`'s and
-// `IO::TextEncoding`'s methods (runtime/types/io/Serializer.h; the two Visitor
-// factory bodies are at the bottom of this file, everything else is inline in
-// the header). The ten doors keep their addresses and their registrations and
-// DELEGATE.
-//
-// The delegation is a QUALIFIED, non-virtual call for the same reason
-// encoding.cpp's is, and that banner has the full argument: a live Encoding
-// wears the MINTED table, whose slots resolve back to these doors, so a virtual
-// call here would recurse into itself instead of delegating. The two file-scope
-// instances exist only to give the non-static members a `this` that none of the
-// ten retail bodies ever reads.
+// ENDGAME B.3.9 IO -- the ten slots are `IO::VisitorEncoding`'s and
+// `IO::TextEncoding`'s methods (runtime/types/io/Serializer.h; the four factory
+// bodies are below, the six constants inline in the header). The stream
+// constructors build the encodings as the real classes, so both unexported
+// minted tables (0x1801559f8, 0x1801559d0) and the ten by-address slot doors
+// that filled them were retired together.
 // ---------------------------------------------------------------------------
-IO::VisitorEncoding g_visitorEncoding;
-IO::TextEncoding    g_textEncoding;
-
-// ---- VISITOR encoding, 0x1801559f8 -----------------------------------------
-extern "C" bool RtIo_VisitorEncoding_IsBinary(void* self) {                              // 0x1800bafe0
-    (void)self; return g_visitorEncoding.IO::VisitorEncoding::IsBinary();
-}
-extern "C" bool RtIo_VisitorEncoding_IsText(void* self) {                                // 0x1800bafd0
-    (void)self; return g_visitorEncoding.IO::VisitorEncoding::IsText();
-}
-extern "C" int32_t RtIo_VisitorEncoding_GetKind(void* self) {                            // 0x1800bafc0
-    (void)self; return g_visitorEncoding.IO::VisitorEncoding::GetKind();
-}
-extern "C" VisitorCodec* RtIo_VisitorEncoding_CreateReader(void* self, Serializer* ser,
-                                                           int32_t version) {          // 0x1800baf00
-    (void)self;
-    return reinterpret_cast<VisitorCodec*>(
-        g_visitorEncoding.IO::VisitorEncoding::CreateReader(
-            reinterpret_cast<IO::Serializer&>(*ser), version));   // B.3.4 bridge
-}
-extern "C" VisitorCodec* RtIo_VisitorEncoding_CreateWriter(void* self, Serializer* ser,
-                                                           int32_t version) {          // 0x1800bae40
-    (void)self;
-    return reinterpret_cast<VisitorCodec*>(
-        g_visitorEncoding.IO::VisitorEncoding::CreateWriter(
-            reinterpret_cast<IO::Serializer&>(*ser), version));   // B.3.4 bridge
-}
-
-// ---- TEXT encoding, 0x1801559d0 ----------------------------------------------
-extern "C" bool RtIo_TextEncoding_IsBinary(void* self) {                                 // 0x1800b9ab0
-    (void)self; return g_textEncoding.IO::TextEncoding::IsBinary();
-}
-extern "C" bool RtIo_TextEncoding_IsText(void* self) {                                   // 0x1800b9aa0
-    (void)self; return g_textEncoding.IO::TextEncoding::IsText();
-}
-extern "C" int32_t RtIo_TextEncoding_GetKind(void* self) {                               // 0x1800b9a90
-    (void)self; return g_textEncoding.IO::TextEncoding::GetKind();
-}
-extern "C" void* RtIo_TextEncoding_CreateReader(void* self, Serializer* ser, int32_t version) {
-    (void)self;                                                                          // 0x1800b9a80
-    return g_textEncoding.IO::TextEncoding::CreateReader(
-        reinterpret_cast<IO::Serializer&>(*ser), version);        // B.3.4 bridge
-}
-extern "C" void* RtIo_TextEncoding_CreateWriter(void* self, Serializer* ser, int32_t version) {
-    (void)self;                                                                          // 0x1800b9a70
-    return g_textEncoding.IO::TextEncoding::CreateWriter(
-        reinterpret_cast<IO::Serializer&>(*ser), version);        // B.3.4 bridge
-}
 
 }  // namespace RtIo
 
@@ -163,13 +94,11 @@ extern "C" void* RtIo_TextEncoding_CreateWriter(void* self, Serializer* ser, int
 namespace IO {
 
 ReaderWriter* VisitorEncoding::CreateReader(Serializer& ser, int version) {
-    return reinterpret_cast<ReaderWriter*>(                        // B.3.4 bridge
-        RtIo::MakeVisitor(reinterpret_cast<rt::io::Serializer*>(&ser), version));
+    return RtIo::MakeVisitor(ser, version);
 }
 
 ReaderWriter* VisitorEncoding::CreateWriter(Serializer& ser, int version) {
-    return reinterpret_cast<ReaderWriter*>(                        // B.3.4 bridge
-        RtIo::MakeVisitor(reinterpret_cast<rt::io::Serializer*>(&ser), version));
+    return RtIo::MakeVisitor(ser, version);
 }
 
 ReaderWriter* TextEncoding::CreateReader(Serializer& ser, int version) {
@@ -183,22 +112,4 @@ ReaderWriter* TextEncoding::CreateWriter(Serializer& ser, int version) {
 }
 
 }  // namespace IO
-
-// Address doors only: nothing here is exported. The minted tables resolve each
-// RT_MINT_UNNAMED slot through RtPortLookupAddr on its dllVa, so these ten
-// registrations are what turn both tables from named traps into our bodies.
-int RtIoVisitorTextEncodingRegister() {
-    using namespace RtIo;
-    RegisterRuntimeAddr(0x1800bafe0, (void*)&RtIo_VisitorEncoding_IsBinary);
-    RegisterRuntimeAddr(0x1800bafd0, (void*)&RtIo_VisitorEncoding_IsText);
-    RegisterRuntimeAddr(0x1800bafc0, (void*)&RtIo_VisitorEncoding_GetKind);
-    RegisterRuntimeAddr(0x1800baf00, (void*)&RtIo_VisitorEncoding_CreateReader);
-    RegisterRuntimeAddr(0x1800bae40, (void*)&RtIo_VisitorEncoding_CreateWriter);
-
-    RegisterRuntimeAddr(0x1800b9ab0, (void*)&RtIo_TextEncoding_IsBinary);
-    RegisterRuntimeAddr(0x1800b9aa0, (void*)&RtIo_TextEncoding_IsText);
-    RegisterRuntimeAddr(0x1800b9a90, (void*)&RtIo_TextEncoding_GetKind);
-    RegisterRuntimeAddr(0x1800b9a80, (void*)&RtIo_TextEncoding_CreateReader);
-    RegisterRuntimeAddr(0x1800b9a70, (void*)&RtIo_TextEncoding_CreateWriter);
-    return 10;
-}
+

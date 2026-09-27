@@ -81,39 +81,14 @@ using rt::io::Serializer;
 using rt::io::Stream;
 using Point = Pathfinding::PointList::Point;
 
-void* BaseVTable()     { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* ExternalVTable() { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* PointListVTable(){ return RT_DATA_SLOT(void*, "??_7PointList@Pathfinding@@6B@"); }
 const uint8_t* PointListTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@PointList@Pathfinding@@0VBaseTypeInfo@Object@@A");
 }
 
-using Slot0Fn = void* (*)(void* self, int flag);
-void CallSlot0(void* self, int flag) {
-    void** vt = *reinterpret_cast<void***>(self);
-    reinterpret_cast<Slot0Fn>(vt[0])(self, flag);
-}
-
-// The stores retail inlines into Construct (0x1800710e0) and Reconstruct
-// (0x180071060) — the same twelve the factory rows transcribe
-// (rt_factories_pathfinding.inc).
-void InlineCtorStores(Pathfinding::PointList* self) {
-    void** vp = reinterpret_cast<void**>(self);
-    *vp = BaseVTable();
-    *vp = ExternalVTable();
-    self->_path.data      = nullptr;
-    self->_refs._data     = nullptr;
-    self->_refs._size     = 0;
-    self->_refs._capacity = 0;
-    *vp = PointListVTable();
-    // Retail writes one null qword per field; the default constructor
-    // (0x180006760) is that one store, placement-constructed because the
-    // object body is raw memory at this point.
-    new (&self->_meshName) System::String();
-    new (&self->_string28) System::String();
-    self->_points._data     = nullptr; self->_points._size     = 0; self->_points._capacity     = 0;
-    self->_pathPoints._data = nullptr; self->_pathPoints._size = 0; self->_pathPoints._capacity = 0;
-}
+// ENDGAME B.3.9 ENG: `InlineCtorStores` (Base / External / PointList vptr
+// stamps from the MINT plus the six zero qwords) and the file's `CallSlot0`
+// are gone. The stores are the real constructor now (PointList.h), the stamps
+// the compiler's, and slot 0 is a virtual call on the class.
 
 // FUN_180071890 (retail 0x180071890) -- release every Point's String in
 // [0, count). Body B with the String at +0x00 and stride 0x18, the same rule
@@ -203,10 +178,12 @@ void PointArrayDtor(Collection::Array<Point>* a) {
 // ############################################################################
 namespace Pathfinding {
 
-// [2] 0x180070e20: `MOV EAX,[_typeInfo] ; RET`.
-uint32_t PointList::Type() const {
+// 0x180070e30: `MOV EAX,[_typeInfo] ; RET` -- the static accessor.
+uint32_t PointList::TypeId() {
     uint32_t v = 0; std::memcpy(&v, PointListTypeInfo(), sizeof v); return v;
 }
+// [2] 0x180070e20: the same load.
+uint32_t PointList::Type() const { return TypeId(); }
 // [1] 0x180070e40: the same node at +8.
 const char* PointList::TypeName() const {
     const char* v = nullptr; std::memcpy(&v, PointListTypeInfo() + 8, sizeof v); return v;
@@ -216,20 +193,37 @@ int32_t PointList::GetFileVersion() const { return 5; }
 // [4] 0x18010f6d0: returns 1 (the same CompileResult value External's returns).
 Object::External::CompileResult PointList::Compile(const System::Filename&) { return 1; }
 
-// [8] 0x1800710e0 — retail's null test is in the DOOR.
+// [8] 0x1800710e0 -- the inlined constructor, i.e. placement construction.
+// (Retail's `TEST RCX,RCX` null test sat in the retired door; a virtual call
+// always has a `this`.) `::new`: the class declares its own placement new.
 Object::External* PointList::Construct() {
-    InlineCtorStores(this);
-    return this;
+    return ::new (this) PointList();
 }
 // [6] 0x180071060: slot0(this, 0) dispatched VIRTUALLY (a subclass's deleting
 // destructor is what has to run), then the same inlined constructor.
 Object::External* PointList::Reconstruct() {
-    CallSlot0(this, 0);
-    InlineCtorStores(this);
-    return this;
+    DeletingDtor(0);
+    return ::new (this) PointList();
 }
 // [7] 0x180071150: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void PointList::Destruct() { CallSlot0(this, 0); }
+void PointList::Destruct() { DeletingDtor(0); }
+
+// ?CreateNewObject@PointList@Pathfinding@@SAPEAVBase@Object@@XZ  0x180070f30
+// The FACTREST row this replaces (rt_factories_pathfinding.inc): MemAlloc of
+// 0x50 bytes, align 8 (the locked `?MemAlloc@MemoryAllocator@System@@`
+// Object::detail::InternalMemAlloc reaches); retail's null branch; then the
+// inlined constructor.
+Object::Base* PointList::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(PointList), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) PointList();
+}
+// ?CreateInPlaceObject@PointList@Pathfinding@@SAPEAVBase@Object@@PEAX@Z  0x180070ff0
+// retail's null test, then the same inlined constructor.
+Object::Base* PointList::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) PointList();
+}
 
 // ============================================================================
 // [5] ?Serialize@PointList@Pathfinding@@UEAA_NAEAVStream@IO@@@Z   0x18010f6e0
@@ -284,8 +278,18 @@ bool PointList::Serialize(void* streamv) {
     return true;
 }
 
-// ~PointList: NON-VIRTUAL and EMPTY; the registered dtor door does retail's work.
-PointList::~PointList() {}
+// ??1PointList@Pathfinding@@UEAA@XZ  0x18010f8e0 -- retail's body, moved here
+// from the retired `RtPathfinding_PointList_Dtor` door (ENDGAME B.3.9 ENG).
+// The entry restamp is the compiler's. Retail CALLs 0x180071600 (~Array<Point>)
+// on BOTH arrays at 0x18010f904 and 0x18010f90e -- NOT SetSize(0), which would
+// keep (leak) the buffer. That body frees and ZEROES each header, so the
+// compiler-emitted `~Array` of each member afterwards is a no-op (MemFree of
+// null). The compiler then releases `_string28` and `_meshName` and chains
+// ~External -- retail's order and retail's tail call.
+PointList::~PointList() {
+    PointArrayDtor(&_pathPoints);
+    PointArrayDtor(&_points);
+}
 
 }  // namespace Pathfinding
 
@@ -306,77 +310,25 @@ extern "C" void* RtPathfinding_PointArray_Dtor(void* a) {
 }
 
 // ============================================================================
-// THE DOORS — qualified delegation (a live PointList wears the MINTED table).
+// ENDGAME B.3.9 ENG: the eight slot doors (`RtPathfinding_PointList_Type` ..
+// `_Serialize`) and the `??1PointList` door are gone. Their only reader was
+// the minted `??_7PointList@Pathfinding@@6B@` (and, for the ??1 door, its
+// RT_DELDTOR row): every live PointList now wears the compiler's table.
 // ============================================================================
-extern "C" uint32_t RtPathfinding_PointList_Type(const void* selfv) {
-    return reinterpret_cast<const Pathfinding::PointList*>(selfv)->Pathfinding::PointList::Type();           // B.3.7 bridge
-}
-extern "C" const char* RtPathfinding_PointList_TypeName(const void* selfv) {
-    return reinterpret_cast<const Pathfinding::PointList*>(selfv)->Pathfinding::PointList::TypeName();       // B.3.7 bridge
-}
-extern "C" int32_t RtPathfinding_PointList_GetFileVersion(const void* selfv) {
-    return reinterpret_cast<const Pathfinding::PointList*>(selfv)->Pathfinding::PointList::GetFileVersion(); // B.3.7 bridge
-}
-extern "C" int32_t RtPathfinding_PointList_Compile(void* selfv, const void* pathv) {
-    return static_cast<int32_t>(reinterpret_cast<Pathfinding::PointList*>(selfv)                              // B.3.7 bridge
-        ->Pathfinding::PointList::Compile(*static_cast<const System::Filename*>(pathv)));
-}
-extern "C" void* RtPathfinding_PointList_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                 // retail's null test
-    return reinterpret_cast<Pathfinding::PointList*>(selfv)->Pathfinding::PointList::Construct();          // B.3.7 bridge
-}
-extern "C" void* RtPathfinding_PointList_Reconstruct(void* selfv) {
-    return reinterpret_cast<Pathfinding::PointList*>(selfv)->Pathfinding::PointList::Reconstruct();        // B.3.7 bridge
-}
-extern "C" void RtPathfinding_PointList_Destruct(void* selfv) {
-    reinterpret_cast<Pathfinding::PointList*>(selfv)->Pathfinding::PointList::Destruct();                  // B.3.7 bridge
-}
-extern "C" bool RtPathfinding_PointList_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<Pathfinding::PointList*>(selfv)->Pathfinding::PointList::Serialize(streamv);   // B.3.7 bridge
-}
-
-// ============================================================================
-// ??1PointList@Pathfinding@@UEAA@XZ (0x18010f8e0) — the dtor DOOR keeps its
-// body; the member destructor is empty (PointList.h).
-// ============================================================================
-extern "C" void RtPathfinding_PointList_Dtor(void* selfv) {
-    Pathfinding::PointList* self = reinterpret_cast<Pathfinding::PointList*>(selfv);   // B.3.7 bridge
-    *reinterpret_cast<void**>(self) = PointListVTable();
-    // Retail CALLs 0x180071600 (~Array<Point>) on BOTH arrays at 0x18010f904
-    // and 0x18010f90e -- NOT SetSize(0). The difference is load-bearing:
-    // SetSize(0) keeps the buffer (its grow test can never fire with n == 0),
-    // so the old spelling released every Point String and then LEAKED the
-    // array buffer on every PointList teardown. Corrected while registering
-    // 0x180071600 (batch D2, 2026-09-12).
-    PointArrayDtor(&self->_pathPoints);
-    PointArrayDtor(&self->_points);
-    self->_string28.~String();
-    self->_meshName.~String();
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(self);
-}
 
 int RtPathfindingPointListRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@PointList@Pathfinding@@UEBAIXZ",           (void*)&RtPathfinding_PointList_Type);           ++n;
-    RegisterRuntimeAddr  (0x180070e20ull,                                  (void*)&RtPathfinding_PointList_Type);
-    RegisterRuntimeExport("?TypeName@PointList@Pathfinding@@UEBAPEBDXZ",    (void*)&RtPathfinding_PointList_TypeName);       ++n;
-    RegisterRuntimeAddr  (0x180070e40ull,                                  (void*)&RtPathfinding_PointList_TypeName);
-    RegisterRuntimeExport("?GetFileVersion@PointList@Pathfinding@@UEBAHXZ", (void*)&RtPathfinding_PointList_GetFileVersion); ++n;
-    RegisterRuntimeAddr  (0x18010f880ull,                                  (void*)&RtPathfinding_PointList_GetFileVersion);
-    RegisterRuntimeExport("?Compile@PointList@Pathfinding@@UEAA?AW4CompileResult@External@Object@@AEBVFilename@System@@@Z",
-                          (void*)&RtPathfinding_PointList_Compile); ++n;
-    RegisterRuntimeAddr  (0x18010f6d0ull,                                  (void*)&RtPathfinding_PointList_Compile);
-    RegisterRuntimeExport("?Construct@PointList@Pathfinding@@UEAAPEAVExternal@Object@@XZ",   (void*)&RtPathfinding_PointList_Construct);   ++n;
-    RegisterRuntimeAddr  (0x1800710e0ull,                                                    (void*)&RtPathfinding_PointList_Construct);
-    RegisterRuntimeExport("?Reconstruct@PointList@Pathfinding@@UEAAPEAVExternal@Object@@XZ", (void*)&RtPathfinding_PointList_Reconstruct); ++n;
-    RegisterRuntimeAddr  (0x180071060ull,                                                    (void*)&RtPathfinding_PointList_Reconstruct);
-    RegisterRuntimeExport("?Destruct@PointList@Pathfinding@@UEAAXXZ",       (void*)&RtPathfinding_PointList_Destruct);       ++n;
-    RegisterRuntimeAddr  (0x180071150ull,                                  (void*)&RtPathfinding_PointList_Destruct);
-    RegisterRuntimeExport("??1PointList@Pathfinding@@UEAA@XZ",              (void*)&RtPathfinding_PointList_Dtor);           ++n;
-    RegisterRuntimeAddr  (0x18010f8e0ull,                                  (void*)&RtPathfinding_PointList_Dtor);
-    RegisterRuntimeExport("?Serialize@PointList@Pathfinding@@UEAA_NAEAVStream@IO@@@Z", (void*)&RtPathfinding_PointList_Serialize); ++n;
-    RegisterRuntimeAddr  (0x18010f6e0ull,                                                    (void*)&RtPathfinding_PointList_Serialize);
+    // ---- the factory pair (B39_RULES D2): the class's OWN statics, both
+    // doors, replacing the FACTREST row. The minted `?_typeInfo@PointList`
+    // record's factoryFn / inPlaceFactoryFn resolve these by name (MintTypeInfos
+    // runs after every *PortInit), so `Object::Factory` now builds a real
+    // PointList.
+    RegisterRuntimeExport("?CreateNewObject@PointList@Pathfinding@@SAPEAVBase@Object@@XZ",
+                          (void*)&Pathfinding::PointList::CreateNewObject); ++n;
+    RegisterRuntimeAddr  (0x180070f30ull, (void*)&Pathfinding::PointList::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@PointList@Pathfinding@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&Pathfinding::PointList::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr  (0x180070ff0ull, (void*)&Pathfinding::PointList::CreateInPlaceObject);
     // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) --------------
     // Unexported in both builds, so RegisterRuntimeAddr only. All three halves
     // of the pair are registered together: at cutover retail's rel32 from

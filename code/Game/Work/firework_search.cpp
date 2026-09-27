@@ -56,6 +56,7 @@
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
+#include "Component/InteractComponent.h"   // ENDGAME B.3.9 D5: InteractComponent::TypeId()
 
 // ---------------------------------------------------------------------------
 // Lazily-resolved sub-helpers (resolve once; in standalone -> our registered ports). Mirrors action_pf_road.cpp's style.
@@ -78,7 +79,6 @@ static fw_ValidateCell_t      s_validateCell = nullptr;
 static fw_IsDstReachable_t    s_isReachable  = nullptr;
 static fw_Sqrtf_t             s_sqrtf        = nullptr;
 static const float*           s_pHalfCell    = nullptr;  // DAT_140172114 = 0.5f
-static const uint32_t*        s_pTid_c7900   = nullptr;  // DAT_1401c7900 (InteractComponent)
 
 static void EnsureInit() {
     if (s_init) return;
@@ -90,7 +90,6 @@ static void EnsureInit() {
     s_isReachable  = reinterpret_cast<fw_IsDstReachable_t>(ResolveAddr(Module::Exe, 0x14009f810));
     s_sqrtf        = reinterpret_cast<fw_Sqrtf_t>(ResolveAddr(Module::Exe, 0x140132010));
     s_pHalfCell    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
-    s_pTid_c7900   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7900));
     s_init = true;
 }
 
@@ -329,7 +328,7 @@ int64_t FireWork_SpiralSearch_81d0(int64_t param_1, uint32_t param_2, int param_
     // Scan the entity's children for the first one whose type == DAT_1401c7900,
     // then verify it via IsDerivedFrom; chosen entity -> `chosen`.
     void* chosen = nullptr;
-    uint32_t typeId = s_pTid_c7900 ? *s_pTid_c7900 : 0;
+    uint32_t typeId = InteractComponent::TypeId();  // DAT_1401c7900 (ENDGAME B.3.9 D5)
     int  childCount = *reinterpret_cast<int*>(entIBP + 0x38);
     if (childCount > 0) {
         int   idx = 0;

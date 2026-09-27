@@ -28,6 +28,7 @@
 #include "runtime/types/graphics/Mesh.h"
 #include "runtime/types/graphics/SunLight.h"
 #include "runtime/types/graphics/Material.h"
+#include "runtime/types/graphics/GeneratedImageBuffer.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -41,6 +42,7 @@ extern const void* const g_rbPaVtGroup[]  __asm__("_ZTVN8Graphics8ParticleE");
 extern const void* const g_rbMiVtGroup[]  __asm__("_ZTVN8Graphics12MeshInstanceE");
 extern const void* const g_rbSlVtGroup[]  __asm__("_ZTVN8Graphics8SunLightE");
 extern const void* const g_rbMatVtGroup[] __asm__("_ZTVN8Graphics16MaterialInstanceE");
+extern const void* const g_rbRiVtGroup[]  __asm__("_ZTVN8Graphics21ReflectionImageBufferE");
 
 namespace {
 const void* GeoVt() { return &g_rbGeoVtGroup[2]; }
@@ -48,7 +50,9 @@ const void* PiVt()  { return &g_rbPiVtGroup[2]; }
 const void* PaVt()  { return &g_rbPaVtGroup[2]; }
 const void* VptrOf(const void* p) { return *static_cast<const void* const*>(p); }
 
-enum Ev { kGeoInit = 1, kGeoRel, kPiRemoveState, kPaRel, kMiInit, kMiRel, kSlInit, kSlRel };
+enum Ev { kGeoInit = 1, kGeoRel, kPiRemoveState, kPaRel, kMiInit, kMiRel, kSlInit, kSlRel,
+          kAlRel, kSpRel, kSpTargets, kPsRel };
+uint32_t g_spKindAtTargets = 0;
 struct Entry { int ev; const void* vptr; };
 Entry g_log[16];
 int   g_n = 0;
@@ -82,6 +86,20 @@ int32_t     Particle::GetFileVersion() const { return 0x1000; }
 bool        Particle::Serialize(void*) { return true; }
 void        Particle::ReleaseFields() { Log(kPaRel, this); }
 
+// ENDGAME B.3.9 block GFX: ParticleSystem is concrete; its out-of-line members
+// are markers here (its vtable emits in this TU). The ctor marker makes one
+// store so the test can see it ran after Particle's.
+ParticleSystem::ParticleSystem() : Particle() { _f48 = 5.0f; }
+ParticleSystem::~ParticleSystem() { Log(kPsRel, this); }
+const char* ParticleSystem::TypeName() const { return "ParticleSystem"; }
+uint32_t    ParticleSystem::Type() const { return 0; }
+int32_t     ParticleSystem::GetFileVersion() const { return 0x1001; }
+bool        ParticleSystem::Serialize(void*) { return true; }
+Object::External* ParticleSystem::Reconstruct() { return this; }
+void        ParticleSystem::Destruct() {}
+ParticleInstance* ParticleSystem::CreateSystem() const { return nullptr; }
+Object::External* ParticleSystem::Construct() { return this; }
+
 void MeshInstance::InitFields()    { Log(kMiInit, this); _sortBias = 0; }
 void MeshInstance::ReleaseFields() { Log(kMiRel, this); }
 void MeshInstance::Update(const System::Time&) {}
@@ -92,6 +110,23 @@ Math::Matrix* MeshInstance::GetInstanceTransform(Math::Matrix* ret, int, float) 
 int MeshInstance::SetSharedInstanceData(Video::Context&, int, float) const { return 0; }
 
 Light::~Light() {}
+
+// ENDGAME B.3.9 block GFX: AmbientLight / SpotLight are concrete; their
+// out-of-line members are markers here (the vtables emit in this TU).
+AmbientLight::~AmbientLight() { Log(kAlRel, this); }
+void AmbientLight::Update(const System::Time&) {}
+void AmbientLight::Draw(Video::Context&, const Camera&, ExternalPtrHandle, float, int, int, int) const {}
+void AmbientLight::AddDrawItems(const Scene&, Renderer&) const {}
+void AmbientLight::DrawShadowMap(Video::Context&, Renderer&, int, int) const {}
+void AmbientLight::DrawLight(Video::Context&, Renderer&, int, int, int, int) const {}
+SpotLight::~SpotLight() { Log(kSpRel, this); }
+void SpotLight::CreateTargets() { Log(kSpTargets, this); g_spKindAtTargets = _materialTypeFlags; }
+void SpotLight::Update(const System::Time&) {}
+void SpotLight::Draw(Video::Context&, const Camera&, ExternalPtrHandle, float, int, int, int) const {}
+void SpotLight::AddDrawItems(const Scene&, Renderer&) const {}
+void SpotLight::DrawShadowMap(Video::Context&, Renderer&, int, int) const {}
+void SpotLight::DrawLight(Video::Context&, Renderer&, int, int, int, int) const {}
+
 void SunLight::InitFields()    { Log(kSlInit, this); _dirZ = -1.0f; }
 void SunLight::ReleaseFields() { Log(kSlRel, this); }
 void SunLight::Update(const System::Time&) {}
@@ -216,15 +251,8 @@ UNIT_TEST(rb_graphics_doors_reach_the_same_bodies) {
     CHECK(std::memcmp(a + 0xc0, b + 0xc0, 0x18) == 0);
     pi->~RbTornadoInstance();
 
-    // Particle: ctor bytes == door bytes over +0x20..+0x47.
-    alignas(8) unsigned char c[sizeof(RbTornado)];
-    RbTornado* p = BuildIn<RbTornado>(c);
-    alignas(8) unsigned char d[sizeof(RbTornado)];
-    std::memset(d, 0xCD, sizeof d);
-    *reinterpret_cast<const void**>(d) = kFakeMinted;
-    Graphics::Particle::DoorBody::Init(reinterpret_cast<Graphics::Particle*>(d));
-    CHECK(std::memcmp(c + 0x20, d + 0x20, 0x28) == 0);
-    p->~RbTornado();
+    // Particle: (ENDGAME B.3.9 GFX) the ??0 door and its DoorBody are retired;
+    // the real ctor is the only builder (rb_particle_ctor_is_retail_* above).
 
     // Geometry: the door's calls run under the minted table.
     alignas(8) unsigned char g[sizeof(Graphics::Geometry)] = {};
@@ -340,6 +368,276 @@ UNIT_TEST(rb_graphics_bases_shape) {
     CHECK(!std::is_abstract<Graphics::SunLight>::value);
     CHECK(!std::has_virtual_destructor<Graphics::MeshInstance>::value);
     CHECK(!std::has_virtual_destructor<Graphics::SunLight>::value);
+}
+
+// ===========================================================================
+// ENDGAME B.3.9 block GFX -- the Light family concrete (B39_RULES D1, B9-16).
+// ===========================================================================
+template <class PMF> uintptr_t GfxSlotOffset(PMF pmf) {
+    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
+    uintptr_t words[2];
+    std::memcpy(words, &pmf, sizeof words);
+    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
+    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
+    return words[0] - 1;
+}
+
+UNIT_TEST(b39_gfx_lights_shape_and_slot_order) {
+    CHECK(!std::is_abstract<Graphics::AmbientLight>::value);
+    CHECK(!std::is_abstract<Graphics::SpotLight>::value);
+    CHECK(std::is_abstract<Graphics::Light>::value);
+    CHECK(!std::is_destructible<Graphics::AmbientLight>::value);
+    CHECK(!std::is_destructible<Graphics::SpotLight>::value);
+    CHECK(!std::has_virtual_destructor<Graphics::AmbientLight>::value);
+    CHECK(!std::has_virtual_destructor<Graphics::SpotLight>::value);
+    using A = Graphics::AmbientLight;
+    using S = Graphics::SpotLight;
+    CHECK_EQ(GfxSlotOffset(&A::DeletingDtor),  (uintptr_t)0x00);   // 0x180059080
+    CHECK_EQ(GfxSlotOffset(&A::Update),        (uintptr_t)0x08);   // 0x1800fa7a0
+    CHECK_EQ(GfxSlotOffset(&A::Draw),          (uintptr_t)0x10);   // 0x1800fa790
+    CHECK_EQ(GfxSlotOffset(&A::AddDrawItems),  (uintptr_t)0x18);   // 0x1800fa890
+    CHECK_EQ(GfxSlotOffset(&A::DrawShadowMap), (uintptr_t)0x48);   // 0x1800fa880
+    CHECK_EQ(GfxSlotOffset(&A::DrawLight),     (uintptr_t)0x50);   // 0x1800fa7b0
+    CHECK_EQ(GfxSlotOffset(&S::DeletingDtor),  (uintptr_t)0x00);   // 0x1800642b0
+    CHECK_EQ(GfxSlotOffset(&S::Update),        (uintptr_t)0x08);   // 0x180105950
+    CHECK_EQ(GfxSlotOffset(&S::Draw),          (uintptr_t)0x10);   // 0x180105940
+    CHECK_EQ(GfxSlotOffset(&S::AddDrawItems),  (uintptr_t)0x18);   // 0x180105e30
+    CHECK_EQ(GfxSlotOffset(&S::DrawShadowMap), (uintptr_t)0x48);   // 0x180105d00
+    CHECK_EQ(GfxSlotOffset(&S::DrawLight),     (uintptr_t)0x50);   // 0x180105960
+}
+
+// ??0AmbientLight 0x1800fa940: Geometry(), the colour zeroed, 10.0f at +0xd0,
+// the kind word 0x8000 at +0x30; +0xd4 untouched.
+UNIT_TEST(b39_gfx_ambientlight_ctor_stores_and_both_slot0_arms) {
+    alignas(8) unsigned char buf[sizeof(Graphics::AmbientLight)];
+    std::memset(buf, 0xCD, sizeof buf);
+    g_n = 0;
+    Graphics::AmbientLight* a = ::new (static_cast<void*>(buf)) Graphics::AmbientLight();
+    CHECK_EQ(g_n, 1);
+    CHECK_EQ(g_log[0].ev, (int)kGeoInit);
+    CHECK_EQ(Q(a, 0xc0), (uint64_t)0);
+    CHECK_EQ(Q(a, 0xc8), (uint64_t)0);
+    CHECK_EQ(D(a, 0xd0), 0x41200000u);
+    CHECK_EQ(D(a, 0xd4), 0xCDCDCDCDu);          // never written
+    CHECK_EQ(D(a, 0x30), 0x8000u);
+    const void* vt = VptrOf(a);
+    CHECK(vt != GeoVt());
+    CHECK(a->DeletingDtor(0) == a);             // destroy, no free
+    CHECK_EQ(g_n, 3);
+    CHECK_EQ(g_log[1].ev, (int)kAlRel); CHECK(g_log[1].vptr == vt);
+    CHECK_EQ(g_log[2].ev, (int)kGeoRel); CHECK(g_log[2].vptr == GeoVt());
+
+    void* m = Object::detail::InternalMemAlloc(sizeof(Graphics::AmbientLight), 8);
+    Graphics::AmbientLight* h = ::new (m) Graphics::AmbientLight();
+    CHECK(h->DeletingDtor(1) == h);             // destroy AND free
+
+    // The vector arm: int32 count at this-8, elements destroyed DOWNWARD with
+    // stride 0xd8, block freed, this-8 returned.
+    uint8_t* block = static_cast<uint8_t*>(
+        Object::detail::InternalMemAlloc(8 + 3 * sizeof(Graphics::AmbientLight), 8));
+    const int64_t cookie = 3;
+    std::memcpy(block, &cookie, sizeof cookie);
+    Graphics::AmbientLight* e[3];
+    for (int i = 0; i < 3; ++i)
+        e[i] = ::new (block + 8 + i * sizeof(Graphics::AmbientLight)) Graphics::AmbientLight();
+    g_n = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
+    CHECK_EQ(g_n, 6);
+    CHECK(g_log[0].vptr == vt);
+}
+
+// ??0SpotLight 0x180106690: the frustum's planes zero, isOrthographic 1, 0.1f /
+// 10.0f, +0x130/+0x134/+0x158 NOT written, colour and the three pointers zero,
+// CreateTargets BEFORE the kind word; ~SpotLight runs its body then ~Geometry.
+UNIT_TEST(b39_gfx_spotlight_ctor_stores_and_dtor_chain) {
+    alignas(8) unsigned char buf[sizeof(Graphics::SpotLight)];
+    std::memset(buf, 0xCD, sizeof buf);
+    g_n = 0;
+    g_spKindAtTargets = 0;
+    Graphics::SpotLight* s = ::new (static_cast<void*>(buf)) Graphics::SpotLight();
+    CHECK_EQ(g_n, 2);
+    CHECK_EQ(g_log[0].ev, (int)kGeoInit);
+    CHECK_EQ(g_log[1].ev, (int)kSpTargets);
+    CHECK(g_spKindAtTargets != 0x8000u);        // the kind word comes AFTER the call
+    for (size_t off = 0xc0; off <= 0x118; off += 8) CHECK_EQ(Q(s, off), (uint64_t)0);
+    CHECK_EQ((int)By(s, 0x120), 1);
+    CHECK_EQ(D(s, 0x128), 0x3dcccccdu);
+    CHECK_EQ(D(s, 0x12c), 0x41200000u);
+    CHECK_EQ(D(s, 0x130), 0xCDCDCDCDu);
+    CHECK_EQ(D(s, 0x134), 0xCDCDCDCDu);
+    CHECK_EQ(Q(s, 0x138), (uint64_t)0);
+    CHECK_EQ(Q(s, 0x140), (uint64_t)0);
+    CHECK_EQ(Q(s, 0x148), (uint64_t)0);
+    CHECK_EQ(Q(s, 0x150), (uint64_t)0);
+    CHECK_EQ(Q(s, 0x158), 0xCDCDCDCDCDCDCDCDull);   // CreateTargets' to fill
+    CHECK_EQ(Q(s, 0x160), (uint64_t)0);
+    CHECK_EQ(D(s, 0x30), 0x8000u);
+    s->_shadowTarget = nullptr;                      // the marker CreateTargets built none
+    const void* vt = VptrOf(s);
+    CHECK(s->DeletingDtor(0) == s);
+    CHECK_EQ(g_n, 4);
+    CHECK_EQ(g_log[2].ev, (int)kSpRel); CHECK(g_log[2].vptr == vt);
+    CHECK_EQ(g_log[3].ev, (int)kGeoRel); CHECK(g_log[3].vptr == GeoVt());
+
+    void* m = Object::detail::InternalMemAlloc(sizeof(Graphics::SpotLight), 8);
+    Graphics::SpotLight* h = ::new (m) Graphics::SpotLight();
+    h->_shadowTarget = nullptr;
+    CHECK(h->DeletingDtor(1) == h);
+}
+
+// ---- Particle / ParticleSystem (vtable rows 97 / 99) ----------------------
+struct RbParticleLeaf final : Graphics::Particle {   // slot 0 NOT overridden
+    Object::External* Reconstruct() override { return this; }
+    void Destruct() override {}
+    Graphics::ParticleInstance* CreateSystem() const override { return nullptr; }
+};
+
+UNIT_TEST(b39_gfx_particle_slot0_is_the_classs_own_both_arms) {
+    // Particle stays abstract (three pure slots); its slot 0 is concrete now.
+    CHECK(std::is_abstract<Graphics::Particle>::value);
+    CHECK(!std::is_destructible<Graphics::Particle>::value);
+    CHECK_EQ(GfxSlotOffset(&Graphics::Particle::DeletingDtor), (uintptr_t)0x00);   // 0x180020160
+    CHECK_EQ(GfxSlotOffset(&Graphics::Particle::CreateSystem), (uintptr_t)0x40);   // _purecall, B5-16
+
+    void* m = Object::detail::InternalMemAlloc(sizeof(RbParticleLeaf), 8);
+    RbParticleLeaf* p = ::new (m) RbParticleLeaf();
+    g_n = 0;
+    CHECK(static_cast<void*>(p->DeletingDtor(1)) == m);      // ~Particle, freed
+    CHECK_EQ(g_n, 1);
+    CHECK_EQ(g_log[0].ev, (int)kPaRel);
+
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 2 * 0x48, 8));
+    const int64_t cookie = 2;
+    std::memcpy(block, &cookie, sizeof cookie);
+    RbParticleLeaf* e0 = ::new (block + 8) RbParticleLeaf();
+    ::new (block + 8 + 0x48) RbParticleLeaf();
+    g_n = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3)) == block);   // stride 0x48, downward
+    CHECK_EQ(g_n, 2);
+}
+
+UNIT_TEST(b39_gfx_particlesystem_concrete_slot_order_and_both_slot0_arms) {
+    using PS = Graphics::ParticleSystem;
+    CHECK(!std::is_abstract<PS>::value);
+    CHECK(!std::is_destructible<PS>::value);
+    CHECK(!std::has_virtual_destructor<PS>::value);
+    CHECK_EQ(GfxSlotOffset(&PS::DeletingDtor),   (uintptr_t)0x00);   // 0x180020a70
+    CHECK_EQ(GfxSlotOffset(&PS::TypeName),       (uintptr_t)0x08);   // 0x1800203e0
+    CHECK_EQ(GfxSlotOffset(&PS::Type),           (uintptr_t)0x10);   // 0x1800203c0
+    CHECK_EQ(GfxSlotOffset(&PS::GetFileVersion), (uintptr_t)0x18);   // 0x1800a4d10
+    CHECK_EQ(GfxSlotOffset(&PS::Serialize),      (uintptr_t)0x28);   // 0x1800a4d20
+    CHECK_EQ(GfxSlotOffset(&PS::Reconstruct),    (uintptr_t)0x30);   // 0x180020560
+    CHECK_EQ(GfxSlotOffset(&PS::Destruct),       (uintptr_t)0x38);   // 0x180020590
+    CHECK_EQ(GfxSlotOffset(&PS::CreateSystem),   (uintptr_t)0x40);   // 0x1800a5140
+    CHECK_EQ(GfxSlotOffset(&PS::Construct),      (uintptr_t)0x48);   // 0x180020580
+
+    // Particle's six stores run under the base ctor (the marker ctor adds _f48).
+    alignas(8) unsigned char buf[sizeof(PS)];
+    std::memset(buf, 0xCD, sizeof buf);
+    PS* ps = ::new (static_cast<void*>(buf)) PS();
+    CHECK_EQ((int)By(ps, 0x20), 1);
+    CHECK_EQ(D(ps, 0x24), 1u);
+    CHECK_EQ(D(ps, 0x28), 0xfu);
+    CHECK_EQ(D(ps, 0x2c), 0xCDCDCDCDu);
+    const void* vt = VptrOf(ps);
+    g_n = 0;
+    CHECK(static_cast<void*>(ps->DeletingDtor(0)) == static_cast<void*>(buf));
+    CHECK_EQ(g_n, 2);                                         // ~ParticleSystem, then ~Particle
+    CHECK_EQ(g_log[0].ev, (int)kPsRel); CHECK(g_log[0].vptr == vt);
+    CHECK_EQ(g_log[1].ev, (int)kPaRel); CHECK(g_log[1].vptr == PaVt());
+
+    void* m = Object::detail::InternalMemAlloc(sizeof(PS), 8);
+    PS* h = ::new (m) PS();
+    CHECK(static_cast<void*>(h->DeletingDtor(1)) == m);
+
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 2 * 0x108, 8));
+    const int64_t cookie = 2;
+    std::memcpy(block, &cookie, sizeof cookie);
+    PS* e0 = ::new (block + 8) PS();
+    PS* e1 = ::new (block + 8 + 0x108) PS();
+    g_n = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3)) == block);
+    CHECK_EQ(g_n, 4);
+    CHECK_EQ(g_log[0].ev, (int)kPsRel);
+    CHECK(g_log[0].vptr == vt);
+    (void)e1;
+}
+
+}  // namespace
+
+// ===========================================================================
+// ENDGAME B.3.9 block GFX -- ReflectionImageBuffer CONCRETE (D1).
+// Its out-of-line members are MARKERS (imagebuffer_derived.cpp does not link
+// here; Video::ImageBuffer's and GeneratedImageBuffer's are rb_video_abi_test's
+// markers); ~ReflectionImageBuffer records each call, so the real inline
+// DeletingDtor can be seen running it.
+// ===========================================================================
+namespace {
+int         g_riRel = 0;
+const void* g_riRelVptr = nullptr;
+const void* g_riRelOrder[4] = {};
+const void* RiVptrOf(const void* p) { return *static_cast<const void* const*>(p); }
+}  // namespace
+namespace Graphics {
+const char*       ReflectionImageBuffer::TypeName() const { return "ReflectionImageBuffer"; }
+uint32_t          ReflectionImageBuffer::Type() const { return 0; }
+int32_t           ReflectionImageBuffer::GetFileVersion() const { return 0x1007; }
+bool              ReflectionImageBuffer::Serialize(void*) { return true; }
+Object::External* ReflectionImageBuffer::Reconstruct() { return this; }
+void              ReflectionImageBuffer::Destruct() {}
+Object::External* ReflectionImageBuffer::Construct() { return this; }
+void ReflectionImageBuffer::Generate(void*, int32_t) const {}
+void ReflectionImageBuffer::Render(void*, const void*, const void*, int32_t) const {}
+ReflectionImageBuffer::~ReflectionImageBuffer() {
+    if (g_riRel < 4) g_riRelOrder[g_riRel] = this;
+    ++g_riRel; g_riRelVptr = RiVptrOf(this);
+}
+}  // namespace Graphics
+
+namespace {
+
+// The ctor is ImageBuffer() -> GeneratedImageBuffer() -> retail 0x1800a7130's
+// stores (+0x70 / +0x78 null, plane (0, 0, 1, 0)); slot 0 is the class's own
+// VECTOR deleting dtor (0x180022600, `MOV EDX,0x90`), both arms.
+UNIT_TEST(b39_gfx_reflectionimagebuffer_ctor_stores_and_both_slot0_arms) {
+    using R = Graphics::ReflectionImageBuffer;
+    CHECK(!std::is_abstract<R>::value);
+    CHECK(!std::is_destructible<R>::value);            // ~R protected
+    CHECK(!std::has_virtual_destructor<R>::value);
+    CHECK_EQ(sizeof(R), (size_t)0x90);
+
+    g_riRel = 0;
+    void* mem = Object::detail::InternalMemAlloc(sizeof(R), 8);
+    std::memset(mem, 0xCD, sizeof(R));
+    R* r = ::new (mem) R();
+    const uint8_t* b = static_cast<const uint8_t*>(mem);
+    auto D = [&](size_t off) { uint32_t v; std::memcpy(&v, b + off, 4); return v; };
+    auto Q = [&](size_t off) { uint64_t v; std::memcpy(&v, b + off, 8); return v; };
+    CHECK(RiVptrOf(r) == &g_rbRiVtGroup[2]);           // the compiler's table
+    CHECK_EQ(D(0x68), 0u);                             // GeneratedImageBuffer()
+    CHECK_EQ(D(0x6c), 0xCDCDCDCDu);                    // never written
+    CHECK_EQ(Q(0x70), (uint64_t)0);
+    CHECK_EQ(Q(0x78), (uint64_t)0);
+    CHECK_EQ(Q(0x80), (uint64_t)0);
+    CHECK_EQ(Q(0x88), (uint64_t)0x3f800000ull);        // retail's one imm64 store
+
+    // scalar arm, flags 1: ~R under R's table, then the chain, then free.
+    CHECK(static_cast<void*>(r->DeletingDtor(1u)) == mem);
+    CHECK_EQ(g_riRel, 1);
+    CHECK(g_riRelVptr == &g_rbRiVtGroup[2]);
+
+    // vector arm, flags 3: count at block-8, destroyed downward, block freed.
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0x90, 8));
+    const int64_t cookie = 3;
+    std::memcpy(block, &cookie, sizeof cookie);
+    R* e[3];
+    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * 0x90) R();
+    g_riRel = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3u)) == block);
+    CHECK_EQ(g_riRel, 3);
+    CHECK(g_riRelOrder[0] == e[2]);
+    CHECK(g_riRelOrder[1] == e[1]);
+    CHECK(g_riRelOrder[2] == e[0]);
 }
 
 }  // namespace

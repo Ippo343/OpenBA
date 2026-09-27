@@ -51,6 +51,8 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <cstring>
+#include <new>
 #include <type_traits>
 
 namespace {
@@ -192,9 +194,12 @@ UNIT_TEST(graphics_animationevent_layout) {
     // vtable and a new slot.
     CHECK_EQ((int)sizeof(Graphics::AnimationEvent), (int)sizeof(Object::External));
 
-    // It is abstract by slot 0, which is what keeps the deleting-dtor row alive
-    // (B35_RULES section 11): `Graphics::AnimationEvent e;` must not compile.
+    // Abstract -- since ENDGAME B.3.9 GFX NOT by slot 0 (concrete now, the
+    // RT_DELDTOR row retired) but by the pure External slots and `Construct`:
+    // `Graphics::AnimationEvent e;` must still not compile.
     CHECK(std::is_abstract<Graphics::AnimationEvent>::value);
+    CHECK(!std::has_virtual_destructor<Graphics::AnimationEvent>::value);
+    CHECK(!std::is_destructible<Graphics::AnimationEvent>::value);
     CHECK(std::is_polymorphic<Graphics::AnimationEvent>::value);
     CHECK((!std::is_base_of<Object::CompiledExternal, Graphics::AnimationEvent>::value));
     CHECK((std::is_base_of<Object::External, Graphics::AnimationEvent>::value));
@@ -235,6 +240,118 @@ UNIT_TEST(graphics_animationgroup_layout) {
         static_cast<Graphics::AnimationGroup*>(&probe));
     CHECK_EQ(*reinterpret_cast<const float*>(bytes + 0x30), 0.1f);
     CHECK_EQ(*reinterpret_cast<const int32_t*>(bytes + 0x28), 7);
+}
+
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.9 block GFX -- AnimationEvent's OWN slot 0 (B39_RULES D1, B9-16).
+// A leaf that overrides every pure slot but NOT slot 0 reaches the class's
+// vector deleting dtor: both arms as the retired RT_DELDTOR row 0x180011800
+// ran them (element size 0x20, count at this-8, downward, free on &1).
+// ---------------------------------------------------------------------------
+int g_aeDtorCount = 0;
+const void* g_aeDtorOrder[4] = {};
+
+struct AnimationEventLeaf final : Graphics::AnimationEvent {
+    int32_t GetFileVersion() const override { return 0; }
+    bool Serialize(void*) override { return true; }
+    Object::External* Reconstruct() override { return this; }
+    void Destruct() override {}
+    Object::External* Construct() override { return this; }
+};
+static_assert(sizeof(AnimationEventLeaf) == 0x20, "the leaf adds nothing");
+
+UNIT_TEST(b39_gfx_animationevent_slot0_is_the_classs_own_both_arms) {
+    alignas(8) uint8_t buf[0x20];
+    std::memset(buf, 0xCD, sizeof buf);
+    AnimationEventLeaf* e = ::new (static_cast<void*>(buf)) AnimationEventLeaf();
+    CHECK_EQ(*reinterpret_cast<const uint64_t*>(buf + 0x08), (uint64_t)0);   // External()
+    g_aeDtorCount = 0;
+    CHECK(static_cast<void*>(e->DeletingDtor(0)) == static_cast<void*>(buf));
+    CHECK_EQ(g_aeDtorCount, 1);
+
+    void* m = Object::detail::InternalMemAlloc(0x20, 8);
+    AnimationEventLeaf* h = ::new (m) AnimationEventLeaf();
+    g_aeDtorCount = 0;
+    CHECK(static_cast<void*>(h->DeletingDtor(1)) == m);
+    CHECK_EQ(g_aeDtorCount, 1);
+
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0x20, 8));
+    const int64_t cookie = 3;
+    std::memcpy(block, &cookie, sizeof cookie);
+    AnimationEventLeaf* el[3];
+    for (int i = 0; i < 3; ++i) el[i] = ::new (block + 8 + i * 0x20) AnimationEventLeaf();
+    g_aeDtorCount = 0;
+    CHECK(reinterpret_cast<uint8_t*>(el[0]->DeletingDtor(3)) == block);
+    CHECK_EQ(g_aeDtorCount, 3);
+    CHECK(g_aeDtorOrder[0] == el[2]);
+    CHECK(g_aeDtorOrder[1] == el[1]);
+    CHECK(g_aeDtorOrder[2] == el[0]);
+}
+
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.9 block GFX -- AnimationGroup CONCRETE (B39_RULES D1, B9-16).
+// ---------------------------------------------------------------------------
+int g_agDtorCount = 0;
+const void* g_agDtorOrder[4] = {};
+
+template <class PMF> uintptr_t GfxSlotOffset(PMF pmf) {
+    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
+    uintptr_t words[2];
+    std::memcpy(words, &pmf, sizeof words);
+    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
+    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
+    return words[0] - 1;
+}
+
+UNIT_TEST(b39_gfx_animationgroup_concrete_slot_order_by_pmf) {
+    using G = Graphics::AnimationGroup;
+    CHECK(!std::is_abstract<G>::value);
+    CHECK(!std::is_destructible<G>::value);
+    CHECK(!std::has_virtual_destructor<G>::value);
+    CHECK_EQ(GfxSlotOffset(&G::DeletingDtor),   (uintptr_t)0x00);   // 0x1800167f0
+    CHECK_EQ(GfxSlotOffset(&G::TypeName),       (uintptr_t)0x08);   // 0x180016310
+    CHECK_EQ(GfxSlotOffset(&G::Type),           (uintptr_t)0x10);   // 0x1800162f0
+    CHECK_EQ(GfxSlotOffset(&G::GetFileVersion), (uintptr_t)0x18);   // 0x1800fb680
+    CHECK_EQ(GfxSlotOffset(&G::Compile),        (uintptr_t)0x20);   // 0x1800fb690
+    CHECK_EQ(GfxSlotOffset(&G::Serialize),      (uintptr_t)0x28);   // 0x1800fb6a0
+    CHECK_EQ(GfxSlotOffset(&G::Reconstruct),    (uintptr_t)0x30);   // 0x180016550
+    CHECK_EQ(GfxSlotOffset(&G::Destruct),       (uintptr_t)0x38);   // 0x180016650
+    CHECK_EQ(GfxSlotOffset(&G::Construct),      (uintptr_t)0x40);   // 0x1800165d0
+}
+
+// The real ctor makes the factory's stores (0x180016463..4ab): External's three
+// zero qwords, the three Array headers zero, +0x30 = 0.1f, +0x34 untouched;
+// slot 0 runs ~AnimationGroup once per element, both arms.
+UNIT_TEST(b39_gfx_animationgroup_ctor_stores_and_both_slot0_arms) {
+    alignas(8) uint8_t buf[0x58];
+    std::memset(buf, 0xCD, sizeof buf);
+    Graphics::AnimationGroup* g = ::new (static_cast<void*>(buf)) Graphics::AnimationGroup();
+    for (size_t off = 0x08; off < 0x30; off += 8)
+        CHECK_EQ(*reinterpret_cast<const uint64_t*>(buf + off), (uint64_t)0);
+    CHECK_EQ(*reinterpret_cast<const uint32_t*>(buf + 0x30), 0x3dcccccdu);
+    CHECK_EQ(*reinterpret_cast<const uint32_t*>(buf + 0x34), 0xCDCDCDCDu);
+    for (size_t off = 0x38; off < 0x58; off += 8)
+        CHECK_EQ(*reinterpret_cast<const uint64_t*>(buf + off), (uint64_t)0);
+    g_agDtorCount = 0;
+    CHECK(static_cast<void*>(g->DeletingDtor(0)) == static_cast<void*>(buf));
+    CHECK_EQ(g_agDtorCount, 1);
+
+    void* m = Object::detail::InternalMemAlloc(0x58, 8);
+    Graphics::AnimationGroup* h = ::new (m) Graphics::AnimationGroup();
+    g_agDtorCount = 0;
+    CHECK(static_cast<void*>(h->DeletingDtor(1)) == m);
+    CHECK_EQ(g_agDtorCount, 1);
+
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0x58, 8));
+    const int64_t cookie = 3;
+    std::memcpy(block, &cookie, sizeof cookie);
+    Graphics::AnimationGroup* el[3];
+    for (int i = 0; i < 3; ++i) el[i] = ::new (block + 8 + i * 0x58) Graphics::AnimationGroup();
+    g_agDtorCount = 0;
+    CHECK(reinterpret_cast<uint8_t*>(el[0]->DeletingDtor(3)) == block);
+    CHECK_EQ(g_agDtorCount, 3);
+    CHECK(g_agDtorOrder[0] == el[2]);
+    CHECK(g_agDtorOrder[2] == el[0]);
 }
 
 // ---------------------------------------------------------------------------
@@ -416,7 +533,11 @@ namespace Graphics {
 
 const char* AnimationEvent::TypeName() const { return "AnimationEvent"; }
 uint32_t    AnimationEvent::Type() const { return 0u; }
-AnimationEvent::~AnimationEvent() {}
+// ENDGAME B.3.9 GFX: the marker RECORDS each call (the real body is empty).
+AnimationEvent::~AnimationEvent() {
+    if (g_aeDtorCount < 4) g_aeDtorOrder[g_aeDtorCount] = this;
+    ++g_aeDtorCount;
+}
 
 const char* AnimationGroup::TypeName() const { Note(this, kTypeName / 8); return "AnimationGroup"; }
 uint32_t    AnimationGroup::Type() const { Note(this, kType / 8); return 0u; }
@@ -428,6 +549,11 @@ bool AnimationGroup::Serialize(void*) { Note(this, kSerialize / 8); return true;
 Object::External* AnimationGroup::Reconstruct() { Note(this, kReconstruct / 8); return this; }
 void AnimationGroup::Destruct() { Note(this, kDestruct / 8); }
 Object::External* AnimationGroup::Construct() { Note(this, kConstruct / 8); return this; }
-AnimationGroup::~AnimationGroup() {}
+// ENDGAME B.3.9 GFX: the marker RECORDS each call (the real body is the three
+// by-address ~Array calls in vtbatch7_animgroup_particlesystem.cpp).
+AnimationGroup::~AnimationGroup() {
+    if (g_agDtorCount < 4) g_agDtorOrder[g_agDtorCount] = this;
+    ++g_agDtorCount;
+}
 
 }  // namespace Graphics

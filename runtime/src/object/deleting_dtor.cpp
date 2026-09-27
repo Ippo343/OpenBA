@@ -285,20 +285,14 @@ namespace rtdtor {
 #define RT_DELDTOR(ADDR, DTOR, SIZE, NAME) { (ADDR), (DTOR), (SIZE), NAME }
 
 static constexpr DelDtorSpec kSpecs[] = {
-    RT_DELDTOR(0x180001680, 0x18009e180, 0x058, "Achievement::Achievement"),
-    RT_DELDTOR(0x180001a90, 0x18009e400, 0x028, "Achievement::AchievementInstance"),
-    RT_DELDTOR(0x180001d70, 0x18009edb0, 0x030, "Achievement::Goal"),
-    RT_DELDTOR(0x1800020c0, 0x18009ef40, 0x020, "Achievement::GoalInstance"),
     RT_DELDTOR(0x180002d60, 0x180103a00, 0x060, "Graphics::MaterialInstance"),
     RT_DELDTOR(0x180006440, 0x1800bfdb0, 0x010, "Object::Internal"),
     RT_DELDTOR(0x1800065b0, 0x1800c0360, 0x008, "Object::Base"),   // probe subject
     RT_DELDTOR(0x180006640, 0x1800bc950, 0x020, "Object::External"),
     RT_DELDTOR(0x18000b7e0, 0x1800bb980, 0x020, "Object::CompiledExternal"),
     RT_DELDTOR(0x18000c610, 0x1800b9a40, 0x018, "IO::Stream"),
-    RT_DELDTOR(0x180011800, 0x1800a2120, 0x020, "Graphics::AnimationEvent"),
     RT_DELDTOR(0x180015e90, 0x1800a41c0, 0x0c0, "Graphics::Geometry"),
     RT_DELDTOR(0x18001ed20, 0x1800f2610, 0x068, "Video::ImageBuffer"),
-    RT_DELDTOR(0x180020160, 0x180103c70, 0x048, "Graphics::Particle"),
     RT_DELDTOR(0x180020310, 0x1801041f0, 0x0d8, "Graphics::ParticleInstance"),
     RT_DELDTOR(0x180020ce0, 0x1800a5520, 0x0e0, "Graphics::ParticleSystemInstance"),
     RT_DELDTOR(0x1800244a0, 0x1800a9560, 0x098, "IO::CompressedMemoryStream"),
@@ -418,88 +412,10 @@ static constexpr DelDtorSpec kSpecs[] = {
     // IO::CompressedMemoryStream) for the reason the two rows above are
     // appended: kProbeSubjects is a list of TABLE INDICES and a mid-table insert
     // silently re-points all twelve Video::*Data probe subjects at wrong rows.
+    //
+    // ENDGAME B.3.9 IO: the IO::CompressedFileStream row (0x180024100) is
+    // retired -- the class's inline DeletingDtor is its slot 0.
     RT_DELDTOR(0x180023fd0, 0x1800aa650, 0x068, "IO::CompressedStream"),
-    RT_DELDTOR(0x180024100, 0x1800a9330, 0x0b8, "IO::CompressedFileStream"),
-    // ---- WAVE 21 lane ENC ----------------------------------------------------
-    // Slot 0 of `??_7TextFileStream@IO@@6B@` (0x180155980), Wave 20 §8 item 3's
-    // named expiry: "unblocks when `??1TextFileStream@` lands." It lands here.
-    //
-    // Both constants disassembled at 0x18002ba90 for this lane (pefile byte read
-    // against Runtime-x64.dll, RETAIL — not the profile build):
-    //     4C 8D 0D E1 E9 08 00   LEA R9,[rip+0x8e9e1] -> 0x1800ba490  ~TextFileStream
-    //     BA 80 00 00 00         MOV EDX,0x80          sizeof(IO::TextFileStream)
-    // 0x1800ba490 resolves in the DLL's export directory (checked by VA, not by
-    // name pattern) to `??1TextFileStream@IO@@UEAA@XZ` -- UEAA, matching
-    // reference_phantom_dtor_mangling_qeaa_vs_ueaa.md's warning that this class
-    // is virtual and QEAA would have resolved NULL silently. NOT yet ported —
-    // no RegisterRuntimeExport for that name exists anywhere in the tree at the
-    // time of this row, so ResolveAddr hands back the DLL's own body and this
-    // row makes that address newly `called`
-    // (reference_porting_can_grow_the_cutover_surface.md). 0x80 matches
-    // runtime/types/io/FileStream.h's independent `static_assert(sizeof(TextFileStream)
-    // == 0x80, ...)`.
-    //
-    // The array-branch CALL target (0x18007ec98, the shared `eh vector
-    // destructor iterator`) and the scalar/array MemFree target (0x180006a10,
-    // one of the ten per-TU `operator delete` copies the banner already lists)
-    // were both re-derived from the same disassembly and match the family's
-    // known constants exactly — this row is not a new shape, just a new address.
-    //
-    // NOT added to kProbeSubjects: ~TextFileStream frees `buffer` (+0x70) when
-    // set and calls into `IO::FileStream`'s own teardown, so running it on a
-    // fabricated object would be a manufactured crash, not a measurement.
-    //
-    // APPENDED rather than inserted in address order (it would sort between
-    // Graphics::ParticleSystemInstance and IO::CompressedMemoryStream) for the
-    // same reason every other row above is appended: kProbeSubjects is a list of
-    // TABLE INDICES and a mid-table insert silently re-points all twelve
-    // Video::*Data probe subjects at wrong rows.
-    RT_DELDTOR(0x18002ba90, 0x1800ba490, 0x080, "IO::TextFileStream"),
-    // ---- WAVE 21 lane ENC, item 12 --------------------------------------------
-    // Slot 0 of `??_7ReaderWriter@IO@@6B@` (0x1801553b0) -- the ONE non-purecall
-    // slot of that 26-slot table (25 are `_purecall`, re-verified this lane with
-    // tools/vtable_dump.py against RETAIL Runtime-x64.dll). This is what the
-    // census's "ours 0 / slots 1" line at reg_mint_promoted.cpp:1202 was
-    // waiting on: the `?` numerator was an expiry with no addressee
-    // (reference_expiry_clause_needs_an_addressee.md); Wave 21's kickoff named
-    // lane ENC as that addressee. The answer, re-derived from the shipped
-    // bytes rather than assumed, is 0 BEFORE this row and 1 AFTER it.
-    //
-    // Both constants disassembled at 0x180023bd0 (pefile byte read against
-    // Runtime-x64.dll, RETAIL):
-    //     4C 8D 0D 61 55 09 00   LEA R9,[rip+0x95561] -> 0x1800b9150  ~ReaderWriter
-    //     BA 20 00 00 00         MOV EDX,0x20          sizeof(IO::ReaderWriter)
-    // 0x1800b9150 resolves in the export directory (checked by VA) to
-    // `??1ReaderWriter@IO@@UEAA@XZ` -- UEAA, virtual, matching
-    // reference_phantom_dtor_mangling_qeaa_vs_ueaa.md's warning. NOT ported (no
-    // RegisterRuntimeExport for that name exists in the tree), so this row
-    // makes that address newly `called`
-    // (reference_porting_can_grow_the_cutover_surface.md) -- the same shape as
-    // the UI::ToolTipDialog and IO::CompressedFileStream rows above, where the
-    // deleting-dtor thunk is ported before its callee. 0x20 matches
-    // runtime/types/io/Serializer.h's `struct ReaderWriter` (4 * 8-byte fields,
-    // no static_assert on the whole-struct size there, but every FIELD offset
-    // through +0x18 is asserted and the struct has no members past it).
-    //
-    // The array-branch CALL target (0x18007ec98, the shared iterator) and the
-    // MemFree target (0x180006a10) both match the family's known constants.
-    //
-    // THIS DOES NOT PROMOTE THE ROW. `??_7ReaderWriter@IO@@6B@` is tagged
-    // RT_UNPROMOTABLE | NONE, EVER in reg_mint_promoted.cpp on independent
-    // grounds (20 stampers, all in-DLL RIP-relative LEA, zero calls through the
-    // stamped object across every stamp window) that this row does not touch.
-    // Filling the one real slot moves the "ours" count truthfully; it does not
-    // change the promotion verdict.
-    //
-    // ADDED to kProbeSubjects: ~ReaderWriter's entire body is
-    // `LEA RAX,[??_7ReaderWriter@IO@@6B@]; MOV [RCX],RAX; RET` -- a pure vtable
-    // restamp with no member destroys and no frees, the same shape as the
-    // Object::Base and Video::*Data subjects already in the list.
-    //
-    // APPENDED (would sort between IO::CompressedFileStream and
-    // IO::TextFileStream) for the same reason every other row above is
-    // appended: kProbeSubjects is a list of TABLE INDICES.
-    RT_DELDTOR(0x180023bd0, 0x1800b9150, 0x020, "IO::ReaderWriter"),
     // ---- WAVE 25 lane VTIO ----------------------------------------------------
     // Slot 0 of `??_7PackageFile@IO@@6B@` (0x180155700). WAVE23_LANE_IOPORT.md
     // §8 item 2 is the residual this discharges: that lane measured the table at
@@ -555,7 +471,8 @@ static constexpr DelDtorSpec kSpecs[] = {
     // run, and this one is not.
     //
     // THIS DOES NOT PROMOTE THE ROW, and the table is still 6/9.
-    RT_DELDTOR(0x1800259d0, 0x1800b4540, 0x0f0, "IO::PackageFile"),
+    // ENDGAME B.3.9 IO: the IO::PackageFile row (0x1800259d0) is retired --
+    // the class's inline DeletingDtor is its slot 0.
     // ---- WAVE 27 lane GFXMESH ------------------------------------------------
     // Slot 0 of the three Graphics mesh vtables this lane owns:
     //     ??_7EdgeMesh@Graphics@@6B@          0x180154c70   -> 0x1800134b0
@@ -772,7 +689,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // pattern-match. Per Wave 27's no-tooling rule the verifier was NOT extended;
     // the defect is filed in WAVE27_LANE_GFXPART.md under INSTRUMENT DEFECT
     // OBSERVED, NOT FIXED, with this file:line. ADDRESSEE for the fix: Wave 28.
-    RT_DELDTOR(0x180058dd0, 0x180058d20, 0x0c0, "Graphics::Light"),
     // (Graphics::SunLight's row 0x180064620 is RETIRED -- ENDGAME B.3.9 pilot
     // c2: every SunLight is exe-built by `::new (p) Graphics::SunLight()` and
     // wears the class's own table, whose slot 0 is the exe's scalar deleting
@@ -812,10 +728,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // at +0x60 and chains to ~External. Run over a fabricated subject that
     // decrements a refcount that was never incremented and frees a garbage
     // pointer. A probe subject must be SAFE TO RUN; this one is not.
-    // 2026-09-12: slot 0 of ??_7Material@Graphics@@6B@. ~Material 0x180102a00 is
-    // ported in runtime/src/graphics/material.cpp; sizeof from the
-    // eh_vector_destructor_iterator call in 0x180011d20 (0x38).
-    RT_DELDTOR(0x180011d20, 0x180102a00, 0x038, "Graphics::Material"),
     // 2026-09-12: slot 0 of ??_7VideoProgram@Video@@6B@ (videoprogram.cpp); 0x48 from
     // CreateNewObject's Allocate(0x48, 8) and the eh_vector iterator stride.
     RT_DELDTOR(0x18004efb0, 0x1800f4650, 0x048, "Video::VideoProgram"),
@@ -879,9 +791,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // All four destructors are ported in runtime/src/collision2d/, pathfinding/, picking/.
     // None is a probe subject: each releases owned Array buffers and/or refcounted
     // Strings, so a fabricated subject would free/decrement garbage.
-    RT_DELDTOR(0x1800656b0, 0x180065400, 0x070, "Collision2D::CollisionMesh"),
-    RT_DELDTOR(0x180064ea0, 0x18010ca00, 0x030, "Collision2D::Surface"),
-    RT_DELDTOR(0x1800713b0, 0x18010f8e0, 0x050, "Pathfinding::PointList"),
     // (ENDGAME B.3.9 PILOT: the Picking::PickingMesh row 0x180072050 retired --
     // the class's own DeletingDtor (PickingMesh.h) carries both arms.)
 
@@ -916,10 +825,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     //   0x180050820  LEA R9,[0x1800e0880]  MOV EDX,0x40   Audio::SoundEffect
     // None of the four ~Class bodies is ported by this batch; all four reach
     // the DLL through ResolveAddr, exactly like most of the rows above.
-    RT_DELDTOR(0x1800167f0, 0x1800fb620, 0x058, "Graphics::AnimationGroup"),
-    RT_DELDTOR(0x180020a70, 0x1800a51c0, 0x108, "Graphics::ParticleSystem"),
-    RT_DELDTOR(0x18000bef0, 0x1800e03b0, 0x080, "Audio::SoundBuffer"),
-    RT_DELDTOR(0x180050820, 0x1800e0880, 0x040, "Audio::SoundEffect"),
     // 2026-09-12, the UI TEXT PIPELINE batch. APPENDED AFTER the batch-8 and
     // batch-9 rows above at merge time: kSpecs is POSITIONAL and three batches
     // each started appending at the same index on their own branch, so the
@@ -1023,12 +928,8 @@ static constexpr DelDtorSpec kSpecs[] = {
     // name, TriangleList's name) or destroys GPU objects through a platform
     // companion pointer. A fabricated subject would decrement a refcount nothing
     // incremented and hand the driver a garbage handle.
-    RT_DELDTOR(0x180059080, 0x180058f30, 0x0d8, "Graphics::AmbientLight"),
     RT_DELDTOR(0x18001eee0, 0x1800a3e40, 0x070, "Graphics::GeneratedImageBuffer"),
     RT_DELDTOR(0x18001f260, 0x1800a3c80, 0x088, "Graphics::FrameCopyImageBuffer"),
-    RT_DELDTOR(0x180022600, 0x1800a70b0, 0x090, "Graphics::ReflectionImageBuffer"),
-    RT_DELDTOR(0x180012bd0, 0x1800ff270, 0x098, "Graphics::GraphicsMesh"),
-    RT_DELDTOR(0x1800642b0, 0x180106270, 0x168, "Graphics::SpotLight"),
     // VTABLE BATCH 3 (2026-09-12): the UI::*Element widget runtime, first
     // half. Thirteen slot-0 rows, appended AFTER every batch on main at
     // merge time -- the table is POSITIONAL and each wrapper below passes
@@ -1176,22 +1077,6 @@ void* DeletingDtorCore(void* self, unsigned flags, int i) {
     return DeletingDtorCoreWith(self, flags, i, Dtor(i));
 }
 
-// Achievement::Achievement ~Achievement = 0x18009e180  (PORTED)
-void* RtDelDtor_Achievement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180001680>());
-}
-// Achievement::AchievementInstance ~AchievementInstance = 0x18009e400  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
-void* RtDelDtor_AchievementInstance(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180001a90>());
-}
-// Achievement::Goal        ~Goal = 0x18009edb0  (PORTED)
-void* RtDelDtor_Goal(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180001d70>());
-}
-// Achievement::GoalInstance ~GoalInstance = 0x18009ef40  (PORTED)
-void* RtDelDtor_GoalInstance(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800020c0>());
-}
 // Graphics::MaterialInstance ~MaterialInstance = 0x180103a00  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
 void* RtDelDtor_MaterialInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180002d60>());
@@ -1216,10 +1101,6 @@ void* RtDelDtor_CompiledExternal(void* self, unsigned flags) {
 void* RtDelDtor_Stream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18000c610>());
 }
-// Graphics::AnimationEvent ~AnimationEvent = 0x1800a2120  (PORTED)
-void* RtDelDtor_AnimationEvent(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180011800>());
-}
 // Graphics::Geometry       ~Geometry = 0x1800a41c0  (PORTED)
 void* RtDelDtor_Geometry(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180015e90>());
@@ -1227,11 +1108,6 @@ void* RtDelDtor_Geometry(void* self, unsigned flags) {
 // Video::ImageBuffer       ~ImageBuffer = 0x1800f2610  (PORTED)
 void* RtDelDtor_ImageBuffer(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18001ed20>());
-}
-// Graphics::Particle       ~Particle = 0x180103c70  (PORTED, BATCH C 2026-09-12,
-//                          graphics/batchc_gfx_leaves.cpp; was "still the DLL's")
-void* RtDelDtor_Particle(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180020160>());
 }
 // Graphics::ParticleInstance ~ParticleInstance = 0x1801041f0  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
 void* RtDelDtor_ParticleInstance(void* self, unsigned flags) {
@@ -1315,29 +1191,6 @@ void* RtDelDtor_DeviceData(void* self, unsigned flags) {
 void* RtDelDtor_CompressedStream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180023fd0>());
 }
-// IO::CompressedFileStream ~CompressedFileStream = 0x1800a9330  (PORTED, Wave 27 IOTEXT
-//                          -- runtime/src/io/file_stream.cpp; this row's address
-//                          door is what made porting it worth doing)
-void* RtDelDtor_CompressedFileStream(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180024100>());
-}
-// IO::TextFileStream       ~TextFileStream = 0x1800ba490  (PORTED, Wave 27 IOTEXT --
-//                          runtime/src/io/file_stream.cpp; this row's own
-//                          address door is what made porting it worth doing)
-void* RtDelDtor_TextFileStream(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18002ba90>());
-}
-// IO::ReaderWriter         ~ReaderWriter = 0x1800b9150  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)  [Wave 21 ENC, item 12]
-void* RtDelDtor_ReaderWriter(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180023bd0>());
-}
-// IO::PackageFile          ~PackageFile = 0x1800b4540  (PORTED -- Wave 25 lane BODY,
-//                          runtime/src/io/package_file_dtor.cpp:442. This line read
-//                          "NOT ported" until Wave 27 lane IOTEXT; the two waves
-//                          landed in the same wave and the comment never caught up.)
-void* RtDelDtor_PackageFile(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800259d0>());
-}
 // Graphics::EdgeMesh          ~EdgeMesh = 0x1800a2780          [Wave 27 GFXMESH]
 void* RtDelDtor_EdgeMesh(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x1800134b0>());
@@ -1351,16 +1204,8 @@ void* RtDelDtor_MeshInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180017330>());
 }
 
-// Graphics::Light          ~Light = 0x180058d20  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)  [Wave 27 GFXPART]
-void* RtDelDtor_Light(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058dd0>());
-}
 
 
-// Graphics::Material        ~Material = 0x180102a00  (PORTED, material.cpp)
-void* RtDelDtor_Material(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180011d20>());
-}
 
 // Video::VideoProgram       ~VideoProgram = 0x1800f4650  (PORTED, videoprogram.cpp)
 void* RtDelDtor_VideoProgram(void* self, unsigned flags) {
@@ -1403,15 +1248,6 @@ void* RtDelDtor_ExternalList(void* self, unsigned flags) {
 // Vtable batch 8 (2026-09-12): Collision2D::CollisionMesh/Surface,
 // Pathfinding::PointList, Picking::PickingMesh. Indices 67-70 (renumbered at
 // the merge: batch 9 took 61-66 on main first).
-void* RtDelDtor_CollisionMesh(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800656b0>());
-}
-void* RtDelDtor_Collision2DSurface(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180064ea0>());
-}
-void* RtDelDtor_PointList(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800713b0>());
-}
 // UI TEXT PIPELINE batch (2026-09-12). Indices 71-74, counted off the MERGED
 // table rather than assumed: this is the fourth batch to append here today and
 // the previous three each started at the same index on their own branch.
@@ -1432,49 +1268,17 @@ void* RtDelDtor_PointList(void* self, unsigned flags) {
 // VTABLE BATCH 7 (2026-09-12). Indices 81-84 (renumbered at this merge: batch
 // 8 took 67-70 on main first, concurrently with this batch's own claim on the
 // same range on this branch).
-// Graphics::AnimationGroup  ~AnimationGroup = 0x1800fb620  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
-void* RtDelDtor_AnimationGroup(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800167f0>());
-}
-// Graphics::ParticleSystem  ~ParticleSystem = 0x1800a51c0  (PORTED, BATCH C
-//                          2026-09-12, graphics/batchc_gfx_leaves.cpp; was
-//                          "NOT ported")
-void* RtDelDtor_ParticleSystem(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180020a70>());
-}
-// Audio::SoundBuffer        ~SoundBuffer = 0x1800e03b0     (PORTED, BATCH C
-//                          2026-09-12, audio/batchc_audio_leaves.cpp; was
-//                          "NOT ported")
-void* RtDelDtor_SoundBuffer(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18000bef0>());
-}
-// Audio::SoundEffect        ~SoundEffect = 0x1800e0880     (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
-void* RtDelDtor_SoundEffect(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180050820>());
-}
 // Vtable batch 6 (2026-09-12): the graphics buffer / mesh / light slot-0 rows.
 // INDICES 103-108, RE-COUNTED OFF THE TABLE AFTER THE THIRD MERGE OF main.
 // These six were 71-76, then 89-94, and are now 103-108: batches 1, 5 and 7
 // took 71-88 and batch 4 elem_B took 89-102 while this branch held them. That
 // is the positional-merge hazard the banner and kSpecCount describe, and it has
 // now bitten this one batch twice. RE-COUNT after every merge, never before.
-void* RtDelDtor_AmbientLight(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180059080>());
-}
 void* RtDelDtor_GeneratedImageBuffer(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18001eee0>());
 }
 void* RtDelDtor_FrameCopyImageBuffer(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18001f260>());
-}
-void* RtDelDtor_ReflectionImageBuffer(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180022600>());
-}
-void* RtDelDtor_GraphicsMesh(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180012bd0>());
-}
-void* RtDelDtor_SpotLight(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800642b0>());
 }
 
 
@@ -1514,20 +1318,14 @@ const DelDtorSpec* Specs() { return kSpecs; }
 void RtObjectDeletingDtorPortInit() {
     using namespace rtdtor;
 
-    RegisterRuntimeAddr(0x180001680, (void*)&RtDelDtor_Achievement);
-    RegisterRuntimeAddr(0x180001a90, (void*)&RtDelDtor_AchievementInstance);
-    RegisterRuntimeAddr(0x180001d70, (void*)&RtDelDtor_Goal);
-    RegisterRuntimeAddr(0x1800020c0, (void*)&RtDelDtor_GoalInstance);
     RegisterRuntimeAddr(0x180002d60, (void*)&RtDelDtor_MaterialInstance);
     RegisterRuntimeAddr(0x180006440, (void*)&RtDelDtor_Internal);
     RegisterRuntimeAddr(0x1800065b0, (void*)&RtDelDtor_Base);
     RegisterRuntimeAddr(0x180006640, (void*)&RtDelDtor_External);
     RegisterRuntimeAddr(0x18000b7e0, (void*)&RtDelDtor_CompiledExternal);
     RegisterRuntimeAddr(0x18000c610, (void*)&RtDelDtor_Stream);
-    RegisterRuntimeAddr(0x180011800, (void*)&RtDelDtor_AnimationEvent);
     RegisterRuntimeAddr(0x180015e90, (void*)&RtDelDtor_Geometry);
     RegisterRuntimeAddr(0x18001ed20, (void*)&RtDelDtor_ImageBuffer);
-    RegisterRuntimeAddr(0x180020160, (void*)&RtDelDtor_Particle);
     RegisterRuntimeAddr(0x180020310, (void*)&RtDelDtor_ParticleInstance);
     RegisterRuntimeAddr(0x180020ce0, (void*)&RtDelDtor_ParticleSystemInstance);
     RegisterRuntimeAddr(0x1800244a0, (void*)&RtDelDtor_CompressedMemoryStream);
@@ -1548,17 +1346,11 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180058a90, (void*)&RtDelDtor_ContextData);
     RegisterRuntimeAddr(0x180058b10, (void*)&RtDelDtor_DeviceData);
     RegisterRuntimeAddr(0x180023fd0, (void*)&RtDelDtor_CompressedStream);      // Wave 19 CSTREAM
-    RegisterRuntimeAddr(0x180024100, (void*)&RtDelDtor_CompressedFileStream);  // Wave 19 CSTREAM
-    RegisterRuntimeAddr(0x18002ba90, (void*)&RtDelDtor_TextFileStream);        // Wave 21 ENC
-    RegisterRuntimeAddr(0x180023bd0, (void*)&RtDelDtor_ReaderWriter);          // Wave 21 ENC item 12
-    RegisterRuntimeAddr(0x1800259d0, (void*)&RtDelDtor_PackageFile);           // Wave 25 VTIO
     RegisterRuntimeAddr(0x1800134b0, (void*)&RtDelDtor_EdgeMesh);              // Wave 27 GFXMESH
     RegisterRuntimeAddr(0x1800175d0, (void*)&RtDelDtor_EdgeMeshInstance);      // Wave 27 GFXMESH
     RegisterRuntimeAddr(0x180017330, (void*)&RtDelDtor_MeshInstance);          // Wave 27 GFXMESH
 
-    RegisterRuntimeAddr(0x180058dd0, (void*)&RtDelDtor_Light);                 // Wave 27 GFXPART
 
-    RegisterRuntimeAddr(0x180011d20, (void*)&RtDelDtor_Material);
     RegisterRuntimeAddr(0x18004efb0, (void*)&RtDelDtor_VideoProgram);
     RegisterRuntimeAddr(0x18004e000, (void*)&RtDelDtor_VertexLayout);
     RegisterRuntimeAddr(0x18004e360, (void*)&RtDelDtor_ShaderProgram);
@@ -1570,29 +1362,18 @@ void RtObjectDeletingDtorPortInit() {
     // VTABLE BATCH 9
     // Rows 57-60, the UI::*Description four (wrappers above).
     RegisterRuntimeAddr(0x180007800, (void*)&RtDelDtor_ExternalList);
-    RegisterRuntimeAddr(0x1800656b0, (void*)&RtDelDtor_CollisionMesh);       // vtable batch 8 SPATIAL
-    RegisterRuntimeAddr(0x180064ea0, (void*)&RtDelDtor_Collision2DSurface);  // vtable batch 8 SPATIAL
-    RegisterRuntimeAddr(0x1800713b0, (void*)&RtDelDtor_PointList);           // vtable batch 8 SPATIAL
 
     // 2026-09-12 VTABLE BATCH 1 — ten UI::*Description classes, rows 71..80.
     // Every address a LITERAL, for the reason the banner above gives.
 
     // VTABLE BATCH 7 (2026-09-12).
-    RegisterRuntimeAddr(0x1800167f0, (void*)&RtDelDtor_AnimationGroup);
-    RegisterRuntimeAddr(0x180020a70, (void*)&RtDelDtor_ParticleSystem);
-    RegisterRuntimeAddr(0x18000bef0, (void*)&RtDelDtor_SoundBuffer);
-    RegisterRuntimeAddr(0x180050820, (void*)&RtDelDtor_SoundEffect);
     // 2026-09-12 cutover walk: the six scalar dtors this table still resolved
     // to NULL (deleting_dtor_leaves.cpp). Registered here so the address door
     // is closed before the first Dtor(i) lookup can cache a null.
     RtObjectDeletingDtorLeavesRegister();
     // UI TEXT PIPELINE batch, rows 71-74 (wrappers above).
-    RegisterRuntimeAddr(0x180059080, (void*)&RtDelDtor_AmbientLight);          // vtable batch 6
     RegisterRuntimeAddr(0x18001eee0, (void*)&RtDelDtor_GeneratedImageBuffer);  // vtable batch 6
     RegisterRuntimeAddr(0x18001f260, (void*)&RtDelDtor_FrameCopyImageBuffer);  // vtable batch 6
-    RegisterRuntimeAddr(0x180022600, (void*)&RtDelDtor_ReflectionImageBuffer); // vtable batch 6
-    RegisterRuntimeAddr(0x180012bd0, (void*)&RtDelDtor_GraphicsMesh);          // vtable batch 6
-    RegisterRuntimeAddr(0x1800642b0, (void*)&RtDelDtor_SpotLight);             // vtable batch 6
 
     // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12) --------------------
 

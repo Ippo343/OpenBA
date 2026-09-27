@@ -354,10 +354,10 @@ void** ObjectFactorySlot() {
     return RT_DATA_SLOT(void**, "?_singleton@Factory@Object@@0PEAV12@EA");
 }
 void** SaveLoadSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@SaveLoad@Save@@0PEAV12@EA");
+    return reinterpret_cast<void**>(&::Save::SaveLoad::_singleton);
 }
 void** MainLoopSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@MainLoop@Engine@@1PEAV12@EA");
+    return reinterpret_cast<void**>(&::Engine::MainLoop::_singleton);
 }
 
 // ---------------------------------------------------------------------------

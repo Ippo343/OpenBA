@@ -31,6 +31,12 @@
 #include <cstdint>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/FishingComponent.h"     // ENDGAME B.3.9 D5: FishingComponent::TypeId()
+#include "Component/FishingDescription.h"   // ENDGAME B.3.9 D5: FishingDescription::TypeId()
+#include "Component/RadiusDescription.h"    // ENDGAME B.3.9 D5: RadiusDescription::TypeId()
+#include "Component/StorageComponent.h"     // ENDGAME B.3.9 D5: StorageComponent::TypeId()
+#include "Component/WorkComponent.h"        // ENDGAME B.3.9 D5: WorkComponent::TypeId()
+#include "Component/CitizenComponent.h"     // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -86,14 +92,6 @@ static void* (*s_fn_FindComp_PositionEntity)(uintptr_t entity, void* outIBP) = n
 // FUN_1400c5400 — cancel pending actions on state machine action list
 static void (*s_fn_CancelPendingActions)(void* smActionList) = nullptr;
 
-// TypeId pointers for component lookups
-static uint32_t* s_typeId_1401c7660 = nullptr;  // FishingComponent (searched on entity.componentList)
-static uint32_t* s_typeId_1401c7698 = nullptr;  // FishingDescription (IsDerivedFrom check)
-static uint32_t* s_typeId_1401c4870 = nullptr;  // RadiusComponent
-static uint32_t* s_typeId_1401c7e78 = nullptr;  // StorageComponent_FC
-static uint32_t* s_typeId_1401c8070 = nullptr;  // StorageLocationComponent / WorkplaceComponent
-static uint32_t* s_typeId_1401c7158 = nullptr;  // Citizen type (IsDerivedFrom check in Serialize)
-
 static bool s_fishingwork_funcs_resolved = false;
 
 // ============================================================
@@ -138,22 +136,11 @@ bool FishingWork_ResolveFuncs() {
     s_fn_CancelPendingActions = reinterpret_cast<void(*)(void*)>(
         ResolveAddr(Module::Exe, 0x1400c5400));
 
-    // Type IDs
-    s_typeId_1401c7660 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7660));
-    s_typeId_1401c7698 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7698));
-    s_typeId_1401c4870 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4870));
-    s_typeId_1401c7e78 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7e78));
-    s_typeId_1401c8070 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c8070));
-    s_typeId_1401c7158 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
-
     bool ok = s_fn_FindComponent_MeshInstance && s_fn_FindComponent_Position &&
               s_fn_Entity_GetSpotPosition && s_fn_MeshInstance_SetVisibility &&
               s_fn_FishingAction_Ctor && s_fn_PlayAnimation_Action_Ctor &&
               s_fn_TryAssignToSpot &&
               s_fn_FindComp_PositionEntity && s_fn_CancelPendingActions &&
-              s_typeId_1401c7660 && s_typeId_1401c7698 &&
-              s_typeId_1401c4870 && s_typeId_1401c7e78 && s_typeId_1401c8070 &&
-              s_typeId_1401c7158 &&
               fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && fn_MemFreeStatic && fn_MemAlloc &&
               fn_Map_CheckPassable && fn_Work_CanStartWork &&
@@ -167,10 +154,6 @@ bool FishingWork_ResolveFuncs() {
     printf("[FishingWork]   FishAction=%p PlayAnim=%p TryAssign=%p\n",
            (void*)s_fn_FishingAction_Ctor, (void*)s_fn_PlayAnimation_Action_Ctor,
            (void*)s_fn_TryAssignToSpot);
-    printf("[FishingWork]   TypeIds: 7660=%p 7698=%p 4870=%p 7e78=%p 8070=%p 7158=%p\n",
-           (void*)s_typeId_1401c7660, (void*)s_typeId_1401c7698,
-           (void*)s_typeId_1401c4870, (void*)s_typeId_1401c7e78, (void*)s_typeId_1401c8070,
-           (void*)s_typeId_1401c7158);
     printf("[FishingWork]   FindPosEnt=%p CancelPending=%p\n",
            (void*)s_fn_FindComp_PositionEntity, (void*)s_fn_CancelPendingActions);
     if (!ok) printf("[FishingWork] ERROR: some function pointers not resolved!\n");
@@ -255,7 +238,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/, uint64_t /*arg3*/) {
     uintptr_t buildingEntity = *(uintptr_t*)(selfAddr + 0x10);
 
     // Find FishingComponent (DAT_1401c7660) on building entity
-    void* fishingComp = FindComponentOnEntity(buildingEntity, *s_typeId_1401c7660);
+    void* fishingComp = FindComponentOnEntity(buildingEntity, FishingComponent::TypeId());
 
     // Wrap in IBP
     uintptr_t fishingIBP = 0;
@@ -264,7 +247,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/, uint64_t /*arg3*/) {
     // Get fishing description via IsDerivedFrom check on component+0x18
     void* compBase = *(void**)(fishingIBP + 0x18);
     void* fishingDesc = nullptr;
-    if (fn_IsDerivedFrom(compBase, *s_typeId_1401c7698)) {
+    if (fn_IsDerivedFrom(compBase, FishingDescription::TypeId())) {
         fishingDesc = compBase;
     }
 
@@ -391,7 +374,9 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/, uint64_t /*arg3*/) {
             // Find RadiusComponent on building's description sub-object (+0x28)
             // Sub-objects use +0x28/+0x30 layout, NOT entity +0x30/+0x38
             uintptr_t entityForRadius = *(uintptr_t*)(*(uintptr_t*)(selfAddr + 0x10) + 0x28);
-            void* radiusComp = FindComponentOnSubObject(entityForRadius, *s_typeId_1401c4870);
+            // DAT_1401c4870 = RadiusDescription (ENDGAME B.3.9 D5: by cell, not by the
+            // legacy variable name "RadiusComponent").
+            void* radiusComp = FindComponentOnSubObject(entityForRadius, RadiusDescription::TypeId());
 
             int radius = *(int*)((uintptr_t)radiusComp + 0x28);
             int radiusSq = radius * radius;
@@ -513,7 +498,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/, uint64_t /*arg3*/) {
             uintptr_t homeEntity = *(uintptr_t*)(citizenEnt + 0x10);
 
             // Find StorageComponent on home entity
-            void* storageComp = FindComponentOnEntity(homeEntity, *s_typeId_1401c7e78);
+            void* storageComp = FindComponentOnEntity(homeEntity, StorageComponent::TypeId());
             uintptr_t storageIBP = 0;
             new (&storageIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
@@ -595,10 +580,10 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/, uint64_t /*arg3*/) {
                 uintptr_t comp = *ibpSlot;
                 // slot 2 Type() on a component-array element (an exe Component)
                 uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
-                if (tid == *s_typeId_1401c8070) {
+                if (tid == WorkComponent::TypeId()) {
                     ibpSlot = (uintptr_t*)(compArray + (uintptr_t)j * 8);
                     void* c = (void*)*ibpSlot;
-                    if (fn_IsDerivedFrom(c, *s_typeId_1401c8070)) {
+                    if (fn_IsDerivedFrom(c, WorkComponent::TypeId())) {
                         workplaceComp = c;
                     }
                     break;
@@ -647,7 +632,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/, uint64_t /*arg3*/) {
             if (!workplaceComp) {
                 static int s_n = 0;
                 if (++s_n <= 8) {
-                    const uint32_t want = *s_typeId_1401c8070;
+                    const uint32_t want = WorkComponent::TypeId();
                     const char* wantName = ::Object::GetTypeNameById(want);
                     std::fprintf(stderr,
                         "[FishWork] +0x28 NULL: spot[%d] cell=%d tile=(%d,%d) "
@@ -846,7 +831,7 @@ void FishingWork::Persist(void* stream) {
             // Validate: if the ptr is non-null and not derived from expected type, null it
             uintptr_t ptrVal = *(uintptr_t*)ibpPtr;
             if (ptrVal != 0) {
-                if (!fn_IsDerivedFrom((void*)ptrVal, *s_typeId_1401c7158)) {
+                if (!fn_IsDerivedFrom((void*)ptrVal, CitizenComponent::TypeId())) {
                     *(uintptr_t*)ibpPtr = 0;
                 }
             }

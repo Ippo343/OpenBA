@@ -111,7 +111,7 @@ inline T* RtDataExport(const char* mangled) {
 // under that rule, and under the [RtSlotAudit] instrument that can see them.
 using SaveLoadSlot = SaveLoad**;
 inline SaveLoad** SaveLoadSingletonSlot() {
-    return RT_DATA_SLOT(SaveLoadSlot, "?_singleton@SaveLoad@Save@@0PEAV12@EA");
+    return reinterpret_cast<SaveLoadSlot>(&::Save::SaveLoad::_singleton);
 }
 inline void* FileSystemSingleton() {
     void** p = RT_DATA_SLOT(void**, "?_singleton@FileSystem@IO@@0PEAV12@EA");

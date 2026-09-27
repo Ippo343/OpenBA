@@ -53,6 +53,8 @@
 
 #include "Component/animalcomponent_funcs.h"
 #include "Component/coll_bridge.h"
+#include "Component/AnimalDescription.h"      // ENDGAME B.3.9 C1: 0x1401c6fd0 cell class
+#include "Component/CharacterDescription.h"   // ENDGAME B.3.9 C1: 0x1401c70b0 cell class
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "math/Math.h"
@@ -132,8 +134,6 @@ fn_ActStackClear_t     s_fnActStackClear  = nullptr;
 fn_ActStackPush_t      s_fnActStackPush   = nullptr;
 fn_MoveToCtor_t        s_fnMoveToCtor     = nullptr;
 
-const uint32_t* s_pTid_AnimalDescription    = nullptr;  // 0x1401c6fd0
-const uint32_t* s_pTid_CharacterDescription = nullptr;  // 0x1401c70b0
 
 bool s_helpersResolved = false;
 
@@ -163,8 +163,6 @@ void EnsureHelpers() {
     s_fnActStackPush   = reinterpret_cast<fn_ActStackPush_t  >(ResolveAddr(Module::Exe, 0x1400c54e0));
     s_fnMoveToCtor     = reinterpret_cast<fn_MoveToCtor_t    >(ResolveAddr(Module::Exe, 0x1400c9170));
 
-    s_pTid_AnimalDescription    = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6fd0));
-    s_pTid_CharacterDescription = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70b0));
 
     s_pfAgeRate    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401720b0));
     s_pfHoursToSec = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017225c));
@@ -219,8 +217,8 @@ inline void* Rng() {
 // Resolve self->_description as an AnimalDescription (the retail IsDerivedFrom guard).
 inline void* AnimalDesc(AnimalComponent* self) {
     void* raw = At<void*>(self, 0x18);
-    if (!raw || !fn_IsDerivedFrom || !s_pTid_AnimalDescription) return nullptr;
-    return fn_IsDerivedFrom(raw, *s_pTid_AnimalDescription) ? raw : nullptr;
+    if (!raw || !fn_IsDerivedFrom) return nullptr;
+    return fn_IsDerivedFrom(raw, AnimalDescription::TypeId()) ? raw : nullptr;
 }
 
 inline int ClampCell(int v, int dim) {
@@ -384,8 +382,8 @@ void AnimalComponent_SetWanderTimer(AnimalComponent* self, uint32_t animId, floa
 
     void* charDescRaw = At<void*>(static_cast<uintptr_t>(character), 0x18);
     void* charDesc = nullptr;
-    if (charDescRaw && fn_IsDerivedFrom && s_pTid_CharacterDescription &&
-        fn_IsDerivedFrom(charDescRaw, *s_pTid_CharacterDescription)) {
+    if (charDescRaw && fn_IsDerivedFrom &&
+        fn_IsDerivedFrom(charDescRaw, CharacterDescription::TypeId())) {
         charDesc = charDescRaw;
     }
 

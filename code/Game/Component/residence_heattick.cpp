@@ -33,6 +33,8 @@
 // 1 + 3 + 5 together close the retail warm/cold loop the building status icon
 // displays.
 
+#include "Component/ResidenceDescription.h"
+#include "Component/RawMaterialDescription.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -52,7 +54,6 @@ typedef int   (*fn_ResCategory_t)(void* storage, void* stack);         // 0x1400
 static fn_FindStorage_t     s_fnFindStorage  = nullptr;
 static fn_StorageSubtract_t s_fnSubtract     = nullptr;
 static fn_ResCategory_t     s_fnCategory     = nullptr;
-static uint32_t*            s_tidResidenceDescription = nullptr;       // DAT_1401c7d28
 
 // Branch-3 status-icon deps (all registered reimpls):
 typedef int   (*fn_GetResCount_t)(int64_t residenceComp);   // 0x14012a9d0 edible / 0x14012ab00 fuel
@@ -69,8 +70,6 @@ static void EnsureFns() {
     s_fnFindStorage = reinterpret_cast<fn_FindStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
     s_fnSubtract    = reinterpret_cast<fn_StorageSubtract_t>(ResolveAddr(Module::Exe, 0x14012d150));
     s_fnCategory    = reinterpret_cast<fn_ResCategory_t>(ResolveAddr(Module::Exe, 0x140088f90));
-    s_tidResidenceDescription =
-        reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7d28));
     s_fnEdibleCount = reinterpret_cast<fn_GetResCount_t>(ResolveAddr(Module::Exe, 0x14012a9d0));
     s_fnFuelCount   = reinterpret_cast<fn_GetResCount_t>(ResolveAddr(Module::Exe, 0x14012ab00));
     s_fnFindIcon    = reinterpret_cast<fn_FindStatusIcon_t>(ResolveAddr(Module::Exe, 0x140002f90));
@@ -112,11 +111,11 @@ extern "C" char ResidenceComponent_HeatTick(void* selfV, void* /*sm*/, void* dtP
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
     uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
     uintptr_t wsim = *reinterpret_cast<uintptr_t*>(gw + 0x130);   // weather sim ptr
-    if (!wsim || !fn_IsDerivedFrom || !s_tidResidenceDescription) return 1;
+    if (!wsim || !fn_IsDerivedFrom) return 1;
     float worldTemp = *reinterpret_cast<float*>(wsim + 0x18);
 
     void* descObj = *reinterpret_cast<void**>(self + 0x18);
-    if (!descObj || !fn_IsDerivedFrom(descObj, *s_tidResidenceDescription)) return 1;
+    if (!descObj || !fn_IsDerivedFrom(descObj, ResidenceDescription::TypeId())) return 1;
     uintptr_t desc = reinterpret_cast<uintptr_t>(descObj);
     float heatThreshold = *reinterpret_cast<float*>(desc + 0x28);
 
@@ -143,15 +142,15 @@ extern "C" char ResidenceComponent_HeatTick(void* selfV, void* /*sm*/, void* dtP
         // Find the stack's RawMaterialDescription (GetTypeId via vtable+0x10,
         // then IsDerivedFrom — same idiom as fn_StorageComponent_QueryCount).
         void* mat = nullptr;
-        if (g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription) {
+        {
             int compCount = *reinterpret_cast<int*>(stack + 0x30);
             uintptr_t comps = *reinterpret_cast<uintptr_t*>(stack + 0x28);
             for (int j = 0; j < compCount; ++j) {
                 void* comp = *reinterpret_cast<void**>(comps + static_cast<uintptr_t>(j) * 8);
                 if (!comp) continue;
                 uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
-                if (tid == *g_TypeId_RawMaterialDescription) {
-                    if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription)) mat = comp;
+                if (tid == RawMaterialDescription::TypeId()) {
+                    if (fn_IsDerivedFrom(comp, RawMaterialDescription::TypeId())) mat = comp;
                     break;
                 }
             }

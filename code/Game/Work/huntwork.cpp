@@ -24,6 +24,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <new>
+#include "Component/HuntDescription.h"   // ENDGAME B.3.9 D5: HuntDescription::TypeId()
 
 // ── Slot4 destination census (BANISHED_CROPFIELD_TRACE, the hunt trace flag). ──
 // Retail's sub_bbc0 builds TWO different chains from this function's last argument:
@@ -110,7 +111,6 @@ static HuW_TreeNodeCleanup_t            s_fn_TreeNodeCleanup = nullptr;
 static HuW_MemFreeStatic_t              s_fn_MemFreeStatic = nullptr;
 
 // Type ID constants
-static uint32_t* s_typeId_HerdComponent = nullptr;  // DAT_1401c78c8
 
 // Float constants from .rdata
 static float* s_fHalfCellOffset = nullptr;  // DAT_140172114 = 0.5f
@@ -195,10 +195,6 @@ bool HuntWork_ResolveFuncs() {
     // fn_MemFreeStatic from engine_funcs
     s_fn_MemFreeStatic = reinterpret_cast<HuW_MemFreeStatic_t>(fn_MemFreeStatic);
 
-    // Type ID pointers
-    s_typeId_HerdComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c78c8));
-
     // Float constants from .rdata
     s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
 
@@ -219,7 +215,7 @@ bool HuntWork_ResolveFuncs() {
               s_fn_BSTFindRemove && s_fn_CancelAllWork &&
               s_fn_FindSubEntity && s_fn_TreeNodeCleanup &&
               fn_IsDerivedFrom &&
-              g_pGameWorldSingleton && s_typeId_HerdComponent &&
+              g_pGameWorldSingleton &&
               s_fHalfCellOffset;
 
     s_hunt_funcs_resolved = ok;
@@ -314,7 +310,9 @@ int HuntWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
 
     // Get the herd object, check if it's derived from HerdComponent
     void* herdObj = *(void**)(*(uintptr_t*)herdIBP + 0x18);
-    bool isHerd = fn_IsDerivedFrom(herdObj, *s_typeId_HerdComponent);
+    // DAT_1401c78c8 = HuntDescription (ENDGAME B.3.9 D5: by cell, not the legacy
+    // variable name "HerdComponent").
+    bool isHerd = fn_IsDerivedFrom(herdObj, HuntDescription::TypeId());
     void* herdComp = isHerd ? herdObj : nullptr;
 
     // Get area component from the workplace entity

@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <cstring>
 #include "../../funcs/rt_port.h"
+#include "../../types/input/Device.h"   // ENDGAME B.3.9 ENG: the class static
 #include "../../types/input/Input.h"
 
 using Input::Binding;
@@ -97,8 +98,7 @@ BindingNode* Successor(BindingNode* n) {
 // through the port-aware data door (carry-over 5: it stays a slot until the
 // end of B.3), exactly like engine_funcs.cpp's own g_pInputDeviceSingleton.
 Input::Device* DeviceSingleton() {
-    Input::Device** slot = RT_DATA_SLOT(Input::Device**,
-        "?_singleton@Device@Input@@0PEAV12@EA");
+    Input::Device** slot = reinterpret_cast<Input::Device**>(&::Input::Device::_singleton);
     return slot ? *slot : nullptr;
 }
 
@@ -568,7 +568,7 @@ void RtInput_Configuration_Save(void* self) {
 void RtInput_Configuration_Dtor(void* /*selfPtr - never read*/) {
           // unconditional; there is no branch
 
-    *RT_DATA_SLOT(void**, "?_singleton@Configuration@Input@@0PEAV12@EA") = nullptr;
+    *reinterpret_cast<void**>(&::Input::Configuration::_singleton) = nullptr;
 
 }
 
@@ -642,3 +642,11 @@ int RtInputRegister() {
 
     return n;
 }
+
+// ?_singleton@Configuration@Input@@0PEAV12@EA (0x1801fe768) -- the class static (ENDGAME B.3.9 ENG, B39_RULES D7);
+// RtInputPortInit redirects the minted storage row onto it.
+::Input::Configuration* ::Input::Configuration::_singleton = nullptr;
+
+// ?_singleton@Device@Input@@0PEAV12@EA (0x1801fe770) -- the class static (ENDGAME B.3.9 ENG, B39_RULES D7);
+// RtInputPortInit redirects the minted storage row onto it.
+::Input::Device* ::Input::Device::_singleton = nullptr;

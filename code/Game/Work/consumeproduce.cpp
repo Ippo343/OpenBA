@@ -30,6 +30,13 @@
 #include <cstdlib>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/ConsumeProduceComponent.h"     // ENDGAME B.3.9 D5
+#include "Component/ConsumeProduceDescription.h"   // ENDGAME B.3.9 D5
+#include "Component/StatusIconComponent.h"         // ENDGAME B.3.9 D5
+#include "Component/StorageComponent.h"            // ENDGAME B.3.9 D5
+#include "Component/RawMaterialDescription.h"      // ENDGAME B.3.9 D5
+#include "Component/WorkComponent.h"               // ENDGAME B.3.9 D5
+#include "Component/CitizenComponent.h"            // ENDGAME B.3.9 D5
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -59,9 +66,6 @@ static void (*s_fn_TaskListCleanup)(void* taskList) = nullptr;
 // FUN_140002e10 -- FindComponent (type DWORD_1401c80e0) on entity, returns IBP
 // Signature: (entity, outIBP*) -> outIBP* (member function ABI: RCX=entity, RDX=outIBP)
 static void* (*s_fn_FindPositionComponent)(void* entity, void* outIBP) = nullptr;
-
-// TypeId at DAT_1401c7158 -- used for IsDerivedFrom check in Serialize
-static uint32_t* s_typeId_1401c7158 = nullptr;
 
 // Cached vtable addresses
 
@@ -117,10 +121,6 @@ bool ConsumeProduce_ResolveFuncs() {
     s_fn_FindPositionComponent = reinterpret_cast<void*(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x140002e10));
 
-    // TypeId for IsDerivedFrom check in Serialize
-    s_typeId_1401c7158 = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7158));
-
     // Execute-specific helpers
     s_fn_ModelComp_SetActiveState = reinterpret_cast<s_fn_ModelComp_SetActiveState_t>(
         ResolveAddr(Module::Exe, 0x14012c3f0));
@@ -140,7 +140,6 @@ bool ConsumeProduce_ResolveFuncs() {
     bool ok = s_fn_Type_Serialize &&
               s_fn_Work_ValidateTask && s_fn_TaskListCleanup &&
               s_fn_FindPositionComponent &&
-              s_typeId_1401c7158 &&
               s_fn_ModelComp_SetActiveState && s_fn_CheckProduceThreshold &&
               s_fn_ResetProductionState && s_fn_Map_RecalcZones &&
               s_fn_SetupWorkChain &&
@@ -165,8 +164,8 @@ bool ConsumeProduce_ResolveFuncs() {
            (void*)s_fn_Type_Serialize);
     printf("[ConsumeProduce]   ValidateTask=%p TaskClean=%p\n",
            (void*)s_fn_Work_ValidateTask, (void*)s_fn_TaskListCleanup);
-    printf("[ConsumeProduce]   FindPos=%p typeId=%p\n",
-           (void*)s_fn_FindPositionComponent, (void*)s_typeId_1401c7158);
+    printf("[ConsumeProduce]   FindPos=%p\n",
+           (void*)s_fn_FindPositionComponent);
     printf("[ConsumeProduce]   SetActiveState=%p CheckThresh=%p ResetProd=%p\n",
            (void*)s_fn_ModelComp_SetActiveState, (void*)s_fn_CheckProduceThreshold,
            (void*)s_fn_ResetProductionState);
@@ -284,8 +283,8 @@ void ConsumeProduce::Persist(void* stream) {
         // destroy live state — strictly worse than skipping a check we cannot perform.
         // Same both-pointer-and-value shape as completetask.cpp's reader.
         void* ptr = (void*)ibpArray[i];
-        if (ptr != nullptr && s_typeId_1401c7158 && *s_typeId_1401c7158) {
-            bool valid = fn_IsDerivedFrom(ptr, *s_typeId_1401c7158);
+        if (ptr != nullptr) {
+            bool valid = fn_IsDerivedFrom(ptr, CitizenComponent::TypeId());  // DAT_1401c7158
             if (!valid) {
                 ibpArray[i] = 0;  // null out invalid refs
             }
@@ -417,7 +416,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*
 
     // --- Get ConsumeProduceDescription from ConsumeProduceComponent's entity +0x18 ---
     void* descBase = *(void**)(smCompIBP + 0x18);
-    bool isDerived = fn_IsDerivedFrom(descBase, *g_TypeId_ConsumeProduceComponent);
+    bool isDerived = fn_IsDerivedFrom(descBase, ConsumeProduceDescription::TypeId());
     void* cpDesc = isDerived ? descBase : nullptr;  // ConsumeProduceDescription*
 
     // --- Find Unknown7ee8 component (for storage slot lookup) ---
@@ -460,7 +459,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*
 
     // --- Find HappinessComponent (type 0x1401c7e08) on work entity ---
     uintptr_t entity = *(uintptr_t*)entityFieldPtr;
-    void* meshComp = FindComponentOnEntity(entity, *g_TypeId_StatusIconComponent);
+    void* meshComp = FindComponentOnEntity(entity, StatusIconComponent::TypeId());
 
     uintptr_t meshCompIBP = 0;
     new (&meshCompIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(meshComp));   // B.3.3 bridge
@@ -470,7 +469,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*
 
     // --- Find ConsumeProduceComponent (type 0x1401c7350) for produce check ---
     entity = *(uintptr_t*)((uintptr_t)this + 0x10);
-    void* smComp2 = FindComponentOnEntity(entity, *g_TypeId_ConsumeProduceComponent_FC);
+    void* smComp2 = FindComponentOnEntity(entity, ConsumeProduceComponent::TypeId());
 
     uintptr_t smComp2IBP = 0;
     new (&smComp2IBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(smComp2));   // B.3.3 bridge
@@ -528,7 +527,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*
 
         // --- Find StorageComponent on work entity ---
         entity = *(uintptr_t*)((uintptr_t)this + 0x10);
-        void* storageComp = FindComponentOnEntity(entity, *g_TypeId_StorageComponent_FC);
+        void* storageComp = FindComponentOnEntity(entity, StorageComponent::TypeId());
 
         uintptr_t storageCompIBP = 0;
         new (&storageCompIBP) ::Object::InternalBasePtr(
@@ -571,7 +570,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*
                         storageComp, (void*)storageCompIBP, (void*)sd,
                         storageCompIBP ? *(int*)(storageCompIBP + 0x30) : -1,
                         sd ? *(void**)sd : nullptr,
-                        g_TypeId_StorageComponent_FC ? *g_TypeId_StorageComponent_FC : 0u,
+                        StorageComponent::TypeId(),
                         activeProductIdx, *(int*)(smCompIBP + 0x50));
                 fflush(stderr);
             }
@@ -606,7 +605,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*
 
                 // Material doesn't match -- need to find and haul it
                 // Get available amount from storage
-                void* rawMatComp = FindDescriptionOnObject(matEntity, *g_TypeId_RawMaterialDescription);
+                void* rawMatComp = FindDescriptionOnObject(matEntity, RawMaterialDescription::TypeId());
 
                 // Check remaining amount in storage: capacity - currently stored
                 int available = *(int*)(inputOffset + 8 + storageData) - *(int*)(inputOffset + 0xc + storageData);
@@ -616,7 +615,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*
                 uintptr_t homeEntity = *(uintptr_t*)(citizenEntity + 0x10);
 
                 // Find StorageComponent on home entity
-                void* homeStorage = FindComponentOnEntity(homeEntity, *g_TypeId_StorageComponent_FC);
+                void* homeStorage = FindComponentOnEntity(homeEntity, StorageComponent::TypeId());
                 uintptr_t homeStorageIBP = 0;
                 new (&homeStorageIBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(homeStorage));   // B.3.3 bridge
@@ -630,7 +629,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*
                     citizenEntity = *(uintptr_t*)entityIBP;
                     homeEntity = *(uintptr_t*)(citizenEntity + 0x10);
 
-                    void* citizenStorage = FindComponentOnEntity(homeEntity, *g_TypeId_StorageComponent_FC);
+                    void* citizenStorage = FindComponentOnEntity(homeEntity, StorageComponent::TypeId());
                     uintptr_t citizenStorageIBP = 0;
                     new (&citizenStorageIBP) ::Object::InternalBasePtr(
                         reinterpret_cast<RtObject::Internal*>(citizenStorage));   // B.3.3 bridge
@@ -760,7 +759,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*
                 if (foundStorage != 0) {
                     // Found storage -- check if it has the material available
                     uintptr_t fStorage = foundStorage;
-                    void* fStorageComp = FindComponentOnEntity(fStorage, *g_TypeId_StorageComponent_FC);
+                    void* fStorageComp = FindComponentOnEntity(fStorage, StorageComponent::TypeId());
                     uintptr_t fStorageIBP = 0;
                     new (&fStorageIBP) ::Object::InternalBasePtr(
                         reinterpret_cast<RtObject::Internal*>(fStorageComp));   // B.3.3 bridge
@@ -775,7 +774,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*
                                     // Material available -- find storage on citizen's home entity
                                     citizenEntity = *(uintptr_t*)entityIBP;
                                     uintptr_t homeEnt2 = *(uintptr_t*)(citizenEntity + 0x10);
-                                    void* homeStorage2 = FindComponentOnEntity(homeEnt2, *g_TypeId_StorageComponent_FC);
+                                    void* homeStorage2 = FindComponentOnEntity(homeEnt2, StorageComponent::TypeId());
                                     uintptr_t homeStorage2IBP = 0;
                                     new (&homeStorage2IBP) ::Object::InternalBasePtr(
                                         reinterpret_cast<RtObject::Internal*>(homeStorage2));   // B.3.3 bridge
@@ -894,7 +893,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*
             if (structEntity != 0) {
                 if (structEntity != *(uintptr_t*)((uintptr_t)this + 0x10)) {
                     // Found a different entity at this position -- check for StorageLocation
-                    void* locComp = FindComponentOnEntity(structEntity, *g_TypeId_WorkComponent);
+                    void* locComp = FindComponentOnEntity(structEntity, WorkComponent::TypeId());
                     uintptr_t locCompIBP = 0;
                     new (&locCompIBP) ::Object::InternalBasePtr(
                         reinterpret_cast<RtObject::Internal*>(locComp));   // B.3.3 bridge
@@ -918,7 +917,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*
         // --- Set up produce action ---
         // Find HappinessComponent again and toggle state 3
         entity = *(uintptr_t*)entityFieldPtr;
-        void* meshComp2 = FindComponentOnEntity(entity, *g_TypeId_StatusIconComponent);
+        void* meshComp2 = FindComponentOnEntity(entity, StatusIconComponent::TypeId());
         uintptr_t meshComp2IBP = 0;
         new (&meshComp2IBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(meshComp2));   // B.3.3 bridge
@@ -966,7 +965,7 @@ int ConsumeProduce::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*
 
                     // Increment produce counter on ConsumeProduceComponent
                     entity = *(uintptr_t*)((uintptr_t)this + 0x10);
-                    void* smComp3 = FindComponentOnEntity(entity, *g_TypeId_ConsumeProduceComponent_FC);
+                    void* smComp3 = FindComponentOnEntity(entity, ConsumeProduceComponent::TypeId());
                     uintptr_t smComp3IBP = 0;
                     new (&smComp3IBP) ::Object::InternalBasePtr(
                         reinterpret_cast<RtObject::Internal*>(smComp3));   // B.3.3 bridge

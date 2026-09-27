@@ -108,6 +108,16 @@
 // Collection code in array.cpp) and 0x180052a50 (the ExternalPtr<SoundBuffer>
 // serialize helper) stay by-address calls: unexported, not this block's, and
 // resolved per call with no cache.
+//
+// ENDGAME B.3.9 ENG (B39_RULES D1/D2): both classes are CONCRETE. Their real
+// constructors (the headers) hold the factory rows' stores, their DeletingDtor
+// the retired RT_DELDTOR rows, and every live object wears the COMPILER's
+// table. The sixteen slot doors, `InlineCtorStores` and `CallSlot0` went with
+// the minted `??_7SoundBuffer@Audio@@6B@` / `??_7SoundEffect@Audio@@6B@` rows
+// and the FACTREST pair (rt_factories_audio.{cpp,inc}); the factory pairs are
+// the classes' own statics below. ~SoundEffect's body moved here from the
+// retired deleting_dtor_leaves.cpp door; ~SoundBuffer's is in
+// batchc_audio_leaves.cpp.
 // ============================================================================
 
 #include <cstddef>
@@ -169,67 +179,11 @@ void MemFreeIfSet(void* p) {
     rtcoll::MemFree(p);
 }
 
-void* BaseVTable()             { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* ExternalVTable()         { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* CompiledExternalVTable() { return RT_DATA_SLOT(void*, "??_7CompiledExternal@Object@@6B@"); }
-void* SoundBufferVTable()      { return RT_DATA_SLOT(void*, "??_7SoundBuffer@Audio@@6B@"); }
-void* SoundEffectVTable()      { return RT_DATA_SLOT(void*, "??_7SoundEffect@Audio@@6B@"); }
 const uint8_t* SoundBufferTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A");
 }
 const uint8_t* SoundEffectTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A");
-}
-
-// Slot 0 dispatched VIRTUALLY on whatever table the object wears (a subclass's
-// deleting destructor is what has to run), exactly as retail's
-// `MOV RAX,[RCX] ; XOR EDX,EDX ; CALL [RAX]`.
-using Slot0Fn = void* (*)(void* self, int flag);
-void CallSlot0(void* self, int flag) {
-    void** vt = *reinterpret_cast<void***>(self);
-    reinterpret_cast<Slot0Fn>(vt[0])(self, flag);
-}
-
-// The stores retail inlines into Construct (0x18000bbd0) and Reconstruct
-// (0x18000bb30) — ctor 0x18000ba90's list, the same the factory rows
-// (rt_factories_audio.inc) transcribe. Three-level stamp chain.
-void InlineCtorStores(Audio::SoundBuffer* self) {
-    void** vp = reinterpret_cast<void**>(self);
-    *vp = BaseVTable();
-    *vp = ExternalVTable();
-    self->_path.data      = nullptr;
-    self->_refs._data     = nullptr;
-    self->_refs._size     = 0;
-    self->_refs._capacity = 0;
-    *vp = CompiledExternalVTable();
-    *vp = SoundBufferVTable();
-    self->_loopForever = 0; self->_streamed = 0;
-    self->_durationSeconds = 0.0f;
-    // Retail writes one null qword per String; the default constructor
-    // (0x180006760) is that one store, placement-constructed because the
-    // object body is raw memory here.
-    new (&self->_string28) System::String();
-    new (&self->_streamPath) System::String();
-    std::memset(self->_format, 0, sizeof self->_format);
-    self->_data = nullptr; self->_length = 0;
-    self->_wmaData = nullptr; self->_wmaLength = 0;
-}
-
-void InlineCtorStores(Audio::SoundEffect* self) {
-    void** vp = reinterpret_cast<void**>(self);
-    *vp = BaseVTable();
-    *vp = ExternalVTable();
-    self->_path.data      = nullptr;
-    self->_refs._data     = nullptr;
-    self->_refs._size     = 0;
-    self->_refs._capacity = 0;
-    *vp = SoundEffectVTable();
-    self->_radius = 1.0f;          // one qword immediate 0x3f800000 over +0x20/+0x24
-    self->_innerRadius = 0.0f;
-    self->_maxLength = 0;
-    self->_samples._data = nullptr;
-    self->_samples._size = 0;
-    self->_samples._capacity = 0;
 }
 
 }  // namespace
@@ -239,10 +193,12 @@ void InlineCtorStores(Audio::SoundEffect* self) {
 // ############################################################################
 namespace Audio {
 
-// [2] 0x18000b890: `MOV EAX,[_typeInfo] ; RET`.
-uint32_t SoundBuffer::Type() const {
+// 0x18000b8a0: `MOV EAX,[_typeInfo] ; RET` -- the static accessor.
+uint32_t SoundBuffer::TypeId() {
     uint32_t v = 0; std::memcpy(&v, SoundBufferTypeInfo(), sizeof v); return v;
 }
+// [2] 0x18000b890: the same load.
+uint32_t SoundBuffer::Type() const { return TypeId(); }
 // [1] 0x18000b8b0: the same node at +8.
 const char* SoundBuffer::TypeName() const {
     const char* v = nullptr; std::memcpy(&v, SoundBufferTypeInfo() + 8, sizeof v); return v;
@@ -250,19 +206,34 @@ const char* SoundBuffer::TypeName() const {
 // [3] 0x1800e0470: `MOV EAX,0xa ; RET`.
 int32_t SoundBuffer::GetFileVersion() const { return 0xa; }
 
-// [8] 0x18000bbd0 — retail's null test is in the DOOR.
+// [8] 0x18000bbd0 -- the inlined constructor, i.e. placement construction.
+// (Retail's null test sat in the retired door; a virtual call always has a
+// `this`.) `::new`: the class declares its own placement new.
 Object::External* SoundBuffer::Construct() {
-    InlineCtorStores(this);
-    return this;
+    return ::new (this) SoundBuffer();
 }
-// [6] 0x18000bb30: slot0(this, 0), then the same inlined constructor.
+// [6] 0x18000bb30: slot0(this, 0) dispatched VIRTUALLY, then the same stores.
 Object::External* SoundBuffer::Reconstruct() {
-    CallSlot0(this, 0);
-    InlineCtorStores(this);
-    return this;
+    DeletingDtor(0);
+    return ::new (this) SoundBuffer();
 }
 // [7] 0x18000bc70: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void SoundBuffer::Destruct() { CallSlot0(this, 0); }
+void SoundBuffer::Destruct() { DeletingDtor(0); }
+
+// ?CreateNewObject@SoundBuffer@Audio@@SAPEAVBase@Object@@XZ  0x18000b9a0
+// The FACTREST row this replaces: MemAlloc of 0x80 bytes, align 8 (the locked
+// `?MemAlloc@MemoryAllocator@System@@` Object::detail::InternalMemAlloc
+// reaches); retail's null branch; then the inlined constructor.
+Object::Base* SoundBuffer::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(SoundBuffer), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) SoundBuffer();
+}
+// ?CreateInPlaceObject@SoundBuffer@Audio@@SAPEAVBase@Object@@PEAX@Z  0x18000ba90
+Object::Base* SoundBuffer::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) SoundBuffer();
+}
 
 // 0x1800e05c0 — the raw-buffer half of Serialize: two counts, a conditional
 // (re)allocate-on-read of the two owned buffers, then three raw byte streams
@@ -311,37 +282,49 @@ bool SoundBuffer::Serialize(void* streamv) {
     return true;
 }
 
-// ~SoundBuffer: NON-VIRTUAL and EMPTY; the registered dtor door
-// (batchc_audio_leaves.cpp) does retail's work on the minted objects.
-SoundBuffer::~SoundBuffer() {}
+// (~SoundBuffer, 0x1800e03b0, is defined in batchc_audio_leaves.cpp next to
+// the Device callback it opens with.)
 
 // ############################################################################
 // Audio::SoundEffect's member bodies
 // ############################################################################
 
-// [2] 0x180050320 / [1] 0x180050340.
-uint32_t SoundEffect::Type() const {
+// 0x180050330: `MOV EAX,[_typeInfo] ; RET` -- the static accessor.
+uint32_t SoundEffect::TypeId() {
     uint32_t v = 0; std::memcpy(&v, SoundEffectTypeInfo(), sizeof v); return v;
 }
+// [2] 0x180050320 / [1] 0x180050340.
+uint32_t SoundEffect::Type() const { return TypeId(); }
 const char* SoundEffect::TypeName() const {
     const char* v = nullptr; std::memcpy(&v, SoundEffectTypeInfo() + 8, sizeof v); return v;
 }
 // [3] 0x1800e0990: `MOV EAX,3 ; RET`.
 int32_t SoundEffect::GetFileVersion() const { return 3; }
 
-// [8] 0x1800505d0 — retail's null test is in the DOOR.
+// [8] 0x1800505d0 -- the inlined constructor (placement construction).
 Object::External* SoundEffect::Construct() {
-    InlineCtorStores(this);
-    return this;
+    return ::new (this) SoundEffect();
 }
-// [6] 0x180050560.
+// [6] 0x180050560: slot0(this, 0) VIRTUALLY, then the same stores.
 Object::External* SoundEffect::Reconstruct() {
-    CallSlot0(this, 0);
-    InlineCtorStores(this);
-    return this;
+    DeletingDtor(0);
+    return ::new (this) SoundEffect();
 }
 // [7] 0x180050640.
-void SoundEffect::Destruct() { CallSlot0(this, 0); }
+void SoundEffect::Destruct() { DeletingDtor(0); }
+
+// ?CreateNewObject@SoundEffect@Audio@@SAPEAVBase@Object@@XZ  0x180050430
+// MemAlloc of 0x40 bytes, align 8; retail's null branch; the inlined ctor.
+Object::Base* SoundEffect::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(SoundEffect), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) SoundEffect();
+}
+// ?CreateInPlaceObject@SoundEffect@Audio@@SAPEAVBase@Object@@PEAX@Z  0x1800504f0
+Object::Base* SoundEffect::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) SoundEffect();
+}
 
 // ============================================================================
 // 0x1800e09a0 — `?Compile@SoundEffect@Audio@@`, WHOLE, byte for byte.
@@ -497,9 +480,16 @@ bool SoundEffect::Serialize(void* streamv) {
     return true;
 }
 
-// ~SoundEffect: NON-VIRTUAL and EMPTY; the registered dtor door is the
-// coordinator's runtime/src/object/deleting_dtor_leaves.cpp.
-SoundEffect::~SoundEffect() {}
+// ??1SoundEffect@Audio@@UEAA@XZ  0x1800e0880 -- retail's body, moved here from
+// the retired deleting_dtor_leaves.cpp door (ENDGAME B.3.9 ENG): restamp (the
+// compiler's), then 0x1800516c0 over `_samples` -- the element destroy of every
+// Sample's variant table followed by the plain ~Array, which frees and ZEROES
+// the header, so the compiler-emitted `_samples.~Array()` afterwards is a
+// no-op -- then ~External (the compiler's chain, retail's tail call).
+SoundEffect::~SoundEffect() {
+    using ArrayDtorFn = void (*)(void*);
+    RtAddr<ArrayDtorFn>(0x1800516c0ull)(&_samples);
+}
 
 }  // namespace Audio
 
@@ -566,61 +556,12 @@ extern "C" void RtAudio_SoundEffect_SerializeBuffers(void* serv, int32_t count,
 // ============================================================================
 
 // ============================================================================
-// THE DOORS — one-line QUALIFIED delegations (a live object wears the MINTED
-// table, whose slots resolve back to these doors; an unqualified virtual call
-// here would dispatch into the door again).
+// The PlatformSerialize name door (an exported non-slot member, AEAA =
+// private). ENDGAME B.3.9 ENG: the sixteen slot doors are gone -- their only
+// reader was the two minted tables.
 // ============================================================================
-extern "C" uint32_t RtAudio_SoundBuffer_Type(const void* selfv) {
-    return reinterpret_cast<const Audio::SoundBuffer*>(selfv)->Audio::SoundBuffer::Type();            // B.3.7 bridge
-}
-extern "C" const char* RtAudio_SoundBuffer_TypeName(const void* selfv) {
-    return reinterpret_cast<const Audio::SoundBuffer*>(selfv)->Audio::SoundBuffer::TypeName();        // B.3.7 bridge
-}
-extern "C" int32_t RtAudio_SoundBuffer_GetFileVersion(const void* selfv) {
-    return reinterpret_cast<const Audio::SoundBuffer*>(selfv)->Audio::SoundBuffer::GetFileVersion();  // B.3.7 bridge
-}
-extern "C" void* RtAudio_SoundBuffer_Construct(void* selfv) {
-    if (!selfv) return nullptr;                          // retail's null test
-    return reinterpret_cast<Audio::SoundBuffer*>(selfv)->Audio::SoundBuffer::Construct();             // B.3.7 bridge
-}
-extern "C" void* RtAudio_SoundBuffer_Reconstruct(void* selfv) {
-    return reinterpret_cast<Audio::SoundBuffer*>(selfv)->Audio::SoundBuffer::Reconstruct();           // B.3.7 bridge
-}
-extern "C" void RtAudio_SoundBuffer_Destruct(void* selfv) {
-    reinterpret_cast<Audio::SoundBuffer*>(selfv)->Audio::SoundBuffer::Destruct();                     // B.3.7 bridge
-}
-extern "C" bool RtAudio_SoundBuffer_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<Audio::SoundBuffer*>(selfv)->Audio::SoundBuffer::Serialize(streamv);      // B.3.7 bridge
-}
 extern "C" void RtAudio_SoundBuffer_PlatformSerialize(void* selfv, void* serv) {
     reinterpret_cast<Audio::SoundBuffer*>(selfv)->Audio::SoundBuffer::PlatformSerialize(serv);        // B.3.7 bridge
-}
-
-extern "C" uint32_t RtAudio_SoundEffect_Type(const void* selfv) {
-    return reinterpret_cast<const Audio::SoundEffect*>(selfv)->Audio::SoundEffect::Type();            // B.3.7 bridge
-}
-extern "C" const char* RtAudio_SoundEffect_TypeName(const void* selfv) {
-    return reinterpret_cast<const Audio::SoundEffect*>(selfv)->Audio::SoundEffect::TypeName();        // B.3.7 bridge
-}
-extern "C" int32_t RtAudio_SoundEffect_GetFileVersion(const void* selfv) {
-    return reinterpret_cast<const Audio::SoundEffect*>(selfv)->Audio::SoundEffect::GetFileVersion();  // B.3.7 bridge
-}
-extern "C" void* RtAudio_SoundEffect_Construct(void* selfv) {
-    if (!selfv) return nullptr;                          // retail's null test
-    return reinterpret_cast<Audio::SoundEffect*>(selfv)->Audio::SoundEffect::Construct();             // B.3.7 bridge
-}
-extern "C" void* RtAudio_SoundEffect_Reconstruct(void* selfv) {
-    return reinterpret_cast<Audio::SoundEffect*>(selfv)->Audio::SoundEffect::Reconstruct();           // B.3.7 bridge
-}
-extern "C" void RtAudio_SoundEffect_Destruct(void* selfv) {
-    reinterpret_cast<Audio::SoundEffect*>(selfv)->Audio::SoundEffect::Destruct();                     // B.3.7 bridge
-}
-extern "C" int32_t RtAudio_SoundEffect_Compile(void* selfv, const void* pathv) {
-    return static_cast<int32_t>(reinterpret_cast<Audio::SoundEffect*>(selfv)                          // B.3.7 bridge
-        ->Audio::SoundEffect::Compile(*static_cast<const System::Filename*>(pathv)));
-}
-extern "C" bool RtAudio_SoundEffect_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<Audio::SoundEffect*>(selfv)->Audio::SoundEffect::Serialize(streamv);      // B.3.7 bridge
 }
 
 int RtAudioBatch7SoundBufferSoundEffectRegister() {
@@ -632,37 +573,22 @@ int RtAudioBatch7SoundBufferSoundEffectRegister() {
     RegisterRuntimeExport("?PlatformSerialize@SoundBuffer@Audio@@AEAAXAEAVSerializer@IO@@@Z",
                           (void*)&RtAudio_SoundBuffer_PlatformSerialize); ++n;
     RegisterRuntimeAddr  (0x1800e05c0ull, (void*)&RtAudio_SoundBuffer_PlatformSerialize);
-    RegisterRuntimeExport("?TypeName@SoundBuffer@Audio@@UEBAPEBDXZ", (void*)&RtAudio_SoundBuffer_TypeName); ++n;
-    RegisterRuntimeAddr  (0x18000b8b0ull, (void*)&RtAudio_SoundBuffer_TypeName);
-    RegisterRuntimeExport("?Type@SoundBuffer@Audio@@UEBAIXZ", (void*)&RtAudio_SoundBuffer_Type); ++n;
-    RegisterRuntimeAddr  (0x18000b890ull, (void*)&RtAudio_SoundBuffer_Type);
-    RegisterRuntimeExport("?GetFileVersion@SoundBuffer@Audio@@UEBAHXZ", (void*)&RtAudio_SoundBuffer_GetFileVersion); ++n;
-    RegisterRuntimeAddr  (0x1800e0470ull, (void*)&RtAudio_SoundBuffer_GetFileVersion);
-    RegisterRuntimeExport("?Serialize@SoundBuffer@Audio@@UEAA_NAEAVStream@IO@@@Z", (void*)&RtAudio_SoundBuffer_Serialize); ++n;
-    RegisterRuntimeAddr  (0x1800e0480ull, (void*)&RtAudio_SoundBuffer_Serialize);
-    RegisterRuntimeExport("?Reconstruct@SoundBuffer@Audio@@UEAAPEAVExternal@Object@@XZ", (void*)&RtAudio_SoundBuffer_Reconstruct); ++n;
-    RegisterRuntimeAddr  (0x18000bb30ull, (void*)&RtAudio_SoundBuffer_Reconstruct);
-    RegisterRuntimeExport("?Destruct@SoundBuffer@Audio@@UEAAXXZ", (void*)&RtAudio_SoundBuffer_Destruct); ++n;
-    RegisterRuntimeAddr  (0x18000bc70ull, (void*)&RtAudio_SoundBuffer_Destruct);
-    RegisterRuntimeExport("?Construct@SoundBuffer@Audio@@UEAAPEAVExternal@Object@@XZ", (void*)&RtAudio_SoundBuffer_Construct); ++n;
-    RegisterRuntimeAddr  (0x18000bbd0ull, (void*)&RtAudio_SoundBuffer_Construct);
 
-    RegisterRuntimeExport("?TypeName@SoundEffect@Audio@@UEBAPEBDXZ", (void*)&RtAudio_SoundEffect_TypeName); ++n;
-    RegisterRuntimeAddr  (0x180050340ull, (void*)&RtAudio_SoundEffect_TypeName);
-    RegisterRuntimeExport("?Type@SoundEffect@Audio@@UEBAIXZ", (void*)&RtAudio_SoundEffect_Type); ++n;
-    RegisterRuntimeAddr  (0x180050320ull, (void*)&RtAudio_SoundEffect_Type);
-    RegisterRuntimeExport("?GetFileVersion@SoundEffect@Audio@@UEBAHXZ", (void*)&RtAudio_SoundEffect_GetFileVersion); ++n;
-    RegisterRuntimeAddr  (0x1800e0990ull, (void*)&RtAudio_SoundEffect_GetFileVersion);
-    RegisterRuntimeExport("?Compile@SoundEffect@Audio@@UEAA?AW4CompileResult@External@Object@@AEBVFilename@System@@@Z",
-                          (void*)&RtAudio_SoundEffect_Compile); ++n;
-    RegisterRuntimeAddr  (0x1800e09a0ull, (void*)&RtAudio_SoundEffect_Compile);
-    RegisterRuntimeExport("?Serialize@SoundEffect@Audio@@UEAA_NAEAVStream@IO@@@Z", (void*)&RtAudio_SoundEffect_Serialize); ++n;
-    RegisterRuntimeAddr  (0x1800e0aa0ull, (void*)&RtAudio_SoundEffect_Serialize);
-    RegisterRuntimeExport("?Reconstruct@SoundEffect@Audio@@UEAAPEAVExternal@Object@@XZ", (void*)&RtAudio_SoundEffect_Reconstruct); ++n;
-    RegisterRuntimeAddr  (0x180050560ull, (void*)&RtAudio_SoundEffect_Reconstruct);
-    RegisterRuntimeExport("?Destruct@SoundEffect@Audio@@UEAAXXZ", (void*)&RtAudio_SoundEffect_Destruct); ++n;
-    RegisterRuntimeAddr  (0x180050640ull, (void*)&RtAudio_SoundEffect_Destruct);
-    RegisterRuntimeExport("?Construct@SoundEffect@Audio@@UEAAPEAVExternal@Object@@XZ", (void*)&RtAudio_SoundEffect_Construct); ++n;
-    RegisterRuntimeAddr  (0x1800505d0ull, (void*)&RtAudio_SoundEffect_Construct);
+    // ---- the factory pairs (B39_RULES D2): the classes' OWN statics, both
+    // doors, replacing the FACTREST rows. The minted `?_typeInfo@` records'
+    // factoryFn / inPlaceFactoryFn resolve these by name (MintTypeInfos runs
+    // after every *PortInit).
+    RegisterRuntimeExport("?CreateNewObject@SoundBuffer@Audio@@SAPEAVBase@Object@@XZ",
+                          (void*)&Audio::SoundBuffer::CreateNewObject); ++n;
+    RegisterRuntimeAddr  (0x18000b9a0ull, (void*)&Audio::SoundBuffer::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@SoundBuffer@Audio@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&Audio::SoundBuffer::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr  (0x18000ba90ull, (void*)&Audio::SoundBuffer::CreateInPlaceObject);
+    RegisterRuntimeExport("?CreateNewObject@SoundEffect@Audio@@SAPEAVBase@Object@@XZ",
+                          (void*)&Audio::SoundEffect::CreateNewObject); ++n;
+    RegisterRuntimeAddr  (0x180050430ull, (void*)&Audio::SoundEffect::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@SoundEffect@Audio@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&Audio::SoundEffect::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr  (0x1800504f0ull, (void*)&Audio::SoundEffect::CreateInPlaceObject);
     return n;
 }

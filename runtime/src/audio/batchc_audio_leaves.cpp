@@ -60,16 +60,9 @@ using VoidThisFn = void (*)(void*);
 // OnSoundBufferDeleted as `this`; the null test below exists only because
 // RT_DATA_SLOT can return a slot the mint has not filled.
 void* AudioDeviceSingleton() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Audio@@0PEAV12@EA");
+    void** slot = reinterpret_cast<void**>(&::Audio::Device::_singleton);
     return slot ? *slot : nullptr;
 }
-
-void* VtSoundBuffer()        { return RT_DATA_SLOT(void*, "??_7SoundBuffer@Audio@@6B@"); }
-void* VtCompiledExternal()   { return RT_DATA_SLOT(void*, "??_7CompiledExternal@Object@@6B@"); }
-
-// `??1External@Object@@UEAA@XZ` 0x1800bc950 — PORTED and registered by both
-// doors (object/external.cpp). ~SoundBuffer tail-jumps it.
-void ExternalDtor(void* p) { RT_EXPORT_ONCE(VoidThisFn, "??1External@Object@@UEAA@XZ")(p); }
 
 // `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` 0x1800c7ad0 — PORTED. Retail's
 // four call sites here test for null OUTSIDE the call; MemFree tests again
@@ -145,28 +138,20 @@ extern "C" void RtAudio_Device_OnSoundBufferDeleted(void* selfv, const void* buf
 // Moving it after the frees would leave the mixer reading freed audio.
 //
 // Layout: `Audio::SoundBuffer` (runtime/types/audio/SoundBuffer.h, 0x80).
-// The dtor stays a DOOR (the class's own `~SoundBuffer` is empty, B4b-2).
+// ENDGAME B.3.9 ENG: the class's REAL destructor now (the door retired with
+// the minted table and its RT_DELDTOR row). The entry restamp is the
+// compiler's; so are the two String releases -- member destruction in reverse
+// declaration order is `_streamPath` (+0x30) then `_string28` (+0x28),
+// retail's descending order -- and the ~CompiledExternal restamp + ~External
+// tail.
 // ############################################################################
-extern "C" void RtAudio_SoundBuffer_Dtor(void* selfv) {
-    Audio::SoundBuffer* const self = reinterpret_cast<Audio::SoundBuffer*>(selfv);   // B.3.7 bridge
+Audio::SoundBuffer::~SoundBuffer() {
+    reinterpret_cast<Audio::Device*>(AudioDeviceSingleton())->OnSoundBufferDeleted(this);   // B.3.7 bridge
 
-    *reinterpret_cast<void**>(self) = VtSoundBuffer();
-
-    reinterpret_cast<Audio::Device*>(AudioDeviceSingleton())->OnSoundBufferDeleted(self);   // B.3.7 bridge
-
-    if (self->_data != nullptr)
-        MemFree(self->_data);                                // +0x38
-    if (self->_wmaData != nullptr)
-        MemFree(self->_wmaData);                             // +0x48
-
-    // Descending, the mirror of the Serialize order. `~String` IS retail's
-    // inlined release idiom (the slot keeps `str-8` on the last reference and
-    // is nulled on a surviving one, runtime/types/system/String.h).
-    self->_streamPath.~String();                             // +0x30
-    self->_string28.~String();                               // +0x28
-
-    *reinterpret_cast<void**>(self) = VtCompiledExternal();
-    ExternalDtor(self);                                      // JMP 0x1800bc950
+    if (_data != nullptr)
+        MemFree(_data);                                      // +0x38
+    if (_wmaData != nullptr)
+        MemFree(_wmaData);                                   // +0x48
 }
 
 // ============================================================================
@@ -180,10 +165,6 @@ extern "C" void RtAudio_SoundBuffer_Dtor(void* selfv) {
 // ============================================================================
 extern "C" int RtAudioBatchCLeavesRegister() {
     int n = 0;
-
-    RegisterRuntimeExport("??1SoundBuffer@Audio@@UEAA@XZ",
-                          (void*)&RtAudio_SoundBuffer_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800e03b0ull, (void*)&RtAudio_SoundBuffer_Dtor);
 
     RegisterRuntimeExport("?OnSoundBufferDeleted@Device@Audio@@QEAAXPEBVSoundBuffer@2@@Z",
                           (void*)&RtAudio_Device_OnSoundBufferDeleted); ++n;

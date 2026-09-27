@@ -62,6 +62,7 @@
 #include <type_traits>
 
 #include "../object/External.h"
+#include "../object/Internal.h"      // B.3.9: InternalMemFree (the concrete slot 0)
 #include "../collection/Collection.h"
 #include "Animation.h"
 
@@ -106,10 +107,40 @@ namespace Graphics {
 // object and wrong for a converted one. The member is declared and defined
 // empty so the chain emits GCC's stamps, and the door is untouched.
 // ============================================================================
+//
+// ENDGAME B.3 step 9 (block GFX, B39_RULES D1/D2) -- the three paragraphs above
+// are HISTORY. The class is CONCRETE: a real public ctor (retail 0x1800fb5a0 /
+// the factory's inlined stores), its own vector slot 0, a protected non-virtual
+// ~AnimationGroup holding the retired ??1 door's body, the factory pair as the
+// class's own statics; Construct / Reconstruct placement-new the class. The
+// minted `??_7AnimationGroup@Graphics@@6B@`, its RT_DELDTOR row 0x1800167f0,
+// the FACTREST row, the ??1 door and the eight slot doors are retired.
+// ============================================================================
 class AnimationGroup : public Object::External {
 public:
-    // [0] 0x1800167f0 — pure on purpose; the RT_DELDTOR row is not retired.
-    Object::Base* DeletingDtor(unsigned flags) override = 0;
+    // ??0AnimationGroup@Graphics@@QEAA@XZ 0x1800fb5a0 -- the REAL ctor (retail
+    // also inlines it into CreateNewObject / CreateInPlaceObject / Construct /
+    // Reconstruct): External(), the three Array headers zeroed (their own
+    // ctors), +0x30 = 0.1f (0x3dcccccd). +0x34 is written by nothing.
+    AnimationGroup() : External() {
+        _defaultBlend = 0.1f;
+    }
+
+    // [0] 0x1800167f0 -- MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x58` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<AnimationGroup*>(self + static_cast<int64_t>(i) * 0x58)->~AnimationGroup();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~AnimationGroup();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char* TypeName() const override;                 // [1] 0x180016310
     uint32_t    Type() const override;                     // [2] 0x1800162f0
@@ -138,7 +169,8 @@ public:
     //   Hidden retslot. Reads `_defaultBlend` (+0x30), in SECONDS.
     System::Time GetDefaultBlendTime() const;
 
-    // ?TypeId@AnimationGroup@Graphics@@SAIXZ 0x180016300 — NOT PORTED
+    // ?TypeId@AnimationGroup@Graphics@@SAIXZ 0x180016300 -- ENDGAME B.3.9 GFX:
+    // over the minted `?_typeInfo@` record until the W3 fold.
     static uint32_t TypeId();
 
     // ??0AnimationGroup@Graphics@@QEAA@AEBV01@@Z    0x180016670 — NOT PORTED
@@ -149,11 +181,10 @@ public:
     // ??2AnimationGroup@Graphics@@SAPEAX_K@Z          0x180016320  — NOT PORTED
     // ??2AnimationGroup@Graphics@@SAPEAX_KPEAX@Z      0x180016390  — NOT PORTED
     // ??3AnimationGroup@Graphics@@SAXPEAX@Z           0x1800163a0  — NOT PORTED
-    // ?CreateNewObject@…SAPEAVBase@Object@@XZ         0x180016400  — NOT PORTED
-    // ?CreateInPlaceObject@…SAPEAVBase@Object@@PEAX@Z 0x1800164d0  — NOT PORTED
-    //   The reflection block's five statics. Declared here so no caller batch
-    //   has to edit this header; each goes through `System::MemoryAllocator`,
-    //   which B35_RULES section 11 keeps as doors for the whole of step 5.
+    // ?CreateNewObject@…SAPEAVBase@Object@@XZ         0x180016400  — (D2) the class's own
+    // ?CreateInPlaceObject@…SAPEAVBase@Object@@PEAX@Z 0x1800164d0  — (D2) the class's own
+    //   The three operators are declared so no caller batch has to edit this
+    //   header and stay undefined: placement is spelled `::new`.
     static void* operator new(std::size_t bytes);
     static void* operator new(std::size_t bytes, void* place);
     static void  operator delete(void* p);
@@ -161,11 +192,9 @@ public:
     static Object::Base* CreateInPlaceObject(void* place);
 
 protected:
-    // NOT retail's 0x1800fb5a0 — see the banner. `= default` keeps the class
-    // trivially default-constructible so no layout pin moves.
-    AnimationGroup() = default;
-
-    // ??1AnimationGroup@Graphics@@UEAA@XZ  0x1800fb620. NON-virtual.
+    // ??1AnimationGroup@Graphics@@UEAA@XZ  0x1800fb620. NON-virtual (no virtual
+    // dtor until the normal-virtual cutover). Retail's body is in
+    // vtbatch7_animgroup_particlesystem.cpp; the compiler chains ~External.
     ~AnimationGroup();
 
 public:

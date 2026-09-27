@@ -126,6 +126,11 @@ public:
     // ---- declared, NOT PORTED: nothing in the tree calls these (no name, no
     // address, no exe-slot binding). Left undefined on purpose. -------------
     static Device* Get();                                   // 0x180022c40  not ported
+    // ?_singleton@Device@Input@@0PEAV12@EA (0x1801fe770) — the class static (ENDGAME B.3.9 ENG, B39_RULES D7).
+    // The namespace's *PortInit redirects the minted storage row onto it, so
+    // the name door, the address door and this member are the same bytes.
+    // PUBLIC while foreign readers still reach the row through the doors.
+    static Device* _singleton;
     // By-value `System::Time` return: a hidden RETSLOT export (B37_SLOTS
     // sec. 4). A door would keep `(this, ret, ...)` and placement-new it.
     System::Time PressedTime(InputDevice device, int32_t joystick, int32_t input) const; // 0x1800e0e20  not ported

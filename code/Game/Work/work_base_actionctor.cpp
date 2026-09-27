@@ -26,6 +26,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/NaturalResourceDescription.h"   // ENDGAME B.3.9 D5
 
 // ============================================================
 // Shared sub-callee / dispatch-slot resolution
@@ -116,8 +117,8 @@ static WA_fn_Time_Ctor_t            s_fn_TimeCtor        = nullptr;
 
 // Inline-object vtables + globals (exe .rdata).
 static const float* s_pf_172124 = nullptr;      // 0x140172124 (c0ad0 PerformWork time)
-static const uint32_t* s_pTid_c7b68 = nullptr;  // 0x1401c7b68 (PerformWork target derive check)
-static const uint32_t* s_pDword_c70e8 = nullptr;// 0x1401c70e8 (SendComponentMessage target type-id = CitizenAIComponent)
+// 0x1401c7b68 = NaturalResourceDescription (ENDGAME B.3.9 D5: read directly below).
+static const uint32_t* s_pDword_c70e8 = nullptr;// 0x1401c70e8 (SendComponentMessage target type-id = CitizenAIComponent -- UNREGISTERED, left for a behaviour commit)
 static const float* s_pf_172280 = nullptr;      // 0x140172280 (MoveTo speed)
 static const float* s_pf_172100 = nullptr;      // 0x140172100 (PlayAnimation time)
 static const float* s_pf_1721b0 = nullptr;      // 0x1401721b0 (grazing PerformWork time)
@@ -154,7 +155,6 @@ static void ResolveAll() {
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b00)) s_fn_TimeCtor        = *reinterpret_cast<WA_fn_Time_Ctor_t*>(s);
 
     s_pf_172124    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172124));
-    s_pTid_c7b68   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7b68));
     s_pDword_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
     s_pf_172280    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172280));
     s_pf_172100    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172100));
@@ -216,7 +216,7 @@ void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targ
     // --- derive the NaturalResource component off the target (param_3) ---
     void* targetComp = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(targetIBP) + 0x18);
     void* derivedTarget = nullptr;
-    if (s_pTid_c7b68 && fn_IsDerivedFrom && fn_IsDerivedFrom(targetComp, *s_pTid_c7b68))
+    if (fn_IsDerivedFrom && fn_IsDerivedFrom(targetComp, NaturalResourceDescription::TypeId()))
         derivedTarget = targetComp;
 
     int64_t targetInner = *reinterpret_cast<int64_t*>(*reinterpret_cast<uintptr_t*>(targetIBP) + 0x10);

@@ -26,6 +26,9 @@
 #include <cstdlib>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/HerbalistComponent.h"    // ENDGAME B.3.9 D5
+#include "Component/HerbalistDescription.h"  // ENDGAME B.3.9 D5
+#include "Component/RadiusDescription.h"     // ENDGAME B.3.9 D5
 
 // ============================================================
 // Local function pointers (resolved once by HerbalistWork_ResolveFuncs)
@@ -109,9 +112,6 @@ static HW_TreeNodeCleanup_t            s_fn_TreeNodeCleanup = nullptr;
 static HW_MemFreeStatic_t              s_fn_MemFreeStatic = nullptr;
 
 // Type ID constants
-static uint32_t* s_typeId_WorkplaceComponent = nullptr;  // DAT_1401c43a0
-static uint32_t* s_typeId_RadiusComponent = nullptr;      // DAT_1401c43d8
-static uint32_t* s_typeId_MaterialComponent = nullptr;     // DAT_1401c4870
 // Note: NatResComponent type ID not needed — FindComp_NatRes handles it internally
 
 // Float constants from .rdata
@@ -205,14 +205,6 @@ bool HerbalistWork_ResolveFuncs() {
     // fn_MemFreeStatic from engine_funcs
     s_fn_MemFreeStatic = reinterpret_cast<HW_MemFreeStatic_t>(fn_MemFreeStatic);
 
-    // Type ID pointers
-    s_typeId_WorkplaceComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c43a0));
-    s_typeId_RadiusComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c43d8));
-    s_typeId_MaterialComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c4870));
-
     // Float constants from .rdata
     s_fPI = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172184));
     s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
@@ -236,8 +228,6 @@ bool HerbalistWork_ResolveFuncs() {
               s_fn_FindSubEntity && s_fn_TreeNodeCleanup &&
               fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && g_pGameWorldSingleton &&
-              s_typeId_WorkplaceComponent && s_typeId_RadiusComponent &&
-              s_typeId_MaterialComponent &&
               s_fPI && s_fHalfCellOffset && s_fGrowthThreshold;
 
     s_herbalist_funcs_resolved = ok;
@@ -400,7 +390,9 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/
 
     // Find WorkplaceComponent on workplace entity
     uintptr_t entity = *plVar14;
-    void* workplaceComp = FindComponentInList(entity, *s_typeId_WorkplaceComponent);
+    // DAT_1401c43a0 = HerbalistComponent (ENDGAME B.3.9 D5: by cell, not the legacy
+    // variable name "WorkplaceComponent").
+    void* workplaceComp = FindComponentInList(entity, HerbalistComponent::TypeId());
 
     // Wrap in InternalBasePtr
     uintptr_t workplaceIBP = 0;
@@ -410,13 +402,17 @@ int HerbalistWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/
     // Get RadiusComponent from workplace description (+0x18)
     void* workplaceDesc = *(void**)(workplaceIBP + 0x18);
     void* radiusComp = nullptr;
-    if (fn_IsDerivedFrom(workplaceDesc, *s_typeId_RadiusComponent)) {
+    // DAT_1401c43d8 = HerbalistDescription (ENDGAME B.3.9 D5: by cell, not the
+    // legacy variable name "RadiusComponent").
+    if (fn_IsDerivedFrom(workplaceDesc, HerbalistDescription::TypeId())) {
         radiusComp = workplaceDesc;
     }
 
     // Find MaterialComponent on workplace's sub-object (+0x28)
     uintptr_t entitySub = *(uintptr_t*)(*plVar14 + 0x28);
-    void* materialComp = FindSubComponentInList(entitySub, *s_typeId_MaterialComponent);
+    // DAT_1401c4870 = RadiusDescription (ENDGAME B.3.9 D5: by cell, not the legacy
+    // variable name "MaterialComponent").
+    void* materialComp = FindSubComponentInList(entitySub, RadiusDescription::TypeId());
 
     // -------------------------------------------------------
     // Step 3: Check capacity — is material count at limit?

@@ -21,6 +21,8 @@
 #include <cstdio>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/CitizenComponent.h"     // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
+#include "Component/InteractDescription.h"  // ENDGAME B.3.9 D5: InteractDescription::TypeId()
 
 // ============================================================
 // Local function pointers (resolved once by LocationWork_ResolveFuncs)
@@ -87,12 +89,6 @@ static LW_CancelAllWork_t              s_fn_CancelAllWork = nullptr;
 static LW_FindSubEntity_t              s_fn_FindSubEntity = nullptr;
 static LW_MemFreeStatic_t              s_fn_MemFreeStatic = nullptr;
 
-// TypeId for Serialize validation (DAT_1401c7158)
-static uint32_t s_typeId_Validate = 0;
-
-// TypeId for RadiusDescription check (DAT_1401c7938)
-static uint32_t* s_typeId_RadiusDesc = nullptr;
-
 // Float constant: g_fUVScale at 0x14017214c
 static float* s_fUVScale = nullptr;
 
@@ -145,15 +141,6 @@ bool LocationWork_ResolveFuncs() {
     // fn_MemFreeStatic from engine_funcs
     s_fn_MemFreeStatic = reinterpret_cast<LW_MemFreeStatic_t>(fn_MemFreeStatic);
 
-    // TypeId for Serialize validation — read uint32 value at 0x1401c7158
-    uintptr_t typeIdAddr = ResolveAddr(Module::Exe, 0x1401c7158);
-    if (typeIdAddr)
-        s_typeId_Validate = *reinterpret_cast<uint32_t*>(typeIdAddr);
-
-    // TypeId for RadiusDescription check (DAT_1401c7938)
-    s_typeId_RadiusDesc = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7938));
-
     // Float constant: g_fUVScale at 0x14017214c
     s_fUVScale = reinterpret_cast<float*>(
         ResolveAddr(Module::Exe, 0x14017214c));
@@ -167,7 +154,7 @@ bool LocationWork_ResolveFuncs() {
               s_fn_WalkTowards_Ctor && s_fn_ValidateEntity &&
               s_fn_CancelAllWork && s_fn_FindSubEntity &&
               fn_InternalBasePtr_Ctor &&
-              fn_IsDerivedFrom && s_typeId_RadiusDesc && s_fUVScale;
+              fn_IsDerivedFrom && s_fUVScale;
 
     s_locationwork_funcs_resolved = ok;
 
@@ -184,7 +171,6 @@ bool LocationWork_ResolveFuncs() {
         if (!s_fn_ValidateEntity) printf("  MISSING: ValidateEntity\n");
         if (!s_fn_CancelAllWork) printf("  MISSING: CancelAllWork\n");
         if (!s_fn_FindSubEntity) printf("  MISSING: FindSubEntity\n");
-        if (!s_typeId_RadiusDesc) printf("  MISSING: typeId_RadiusDesc\n");
         if (!s_fUVScale) printf("  MISSING: fUVScale\n");
     }
 #endif
@@ -211,7 +197,7 @@ void LocationWork::Persist(void* stream) {
 
     // Validate: if _field48 is non-null, check IsDerivedFrom
     if (_field48 != nullptr) {
-        if (!fn_IsDerivedFrom(_field48, s_typeId_Validate)) {
+        if (!fn_IsDerivedFrom(_field48, CitizenComponent::TypeId())) {
             _field48 = nullptr;
         }
     }
@@ -271,7 +257,9 @@ int LocationWork::Execute(void* citizenIBP, void* /*context*/, uint64_t /*arg3*/
     void* descObj = *(void**)(posCompIBP + 0x18);
     int bestDist = 0x7fffffff;
 
-    bool isDerivedRadius = fn_IsDerivedFrom(descObj, *s_typeId_RadiusDesc);
+    // DAT_1401c7938 = InteractDescription (ENDGAME B.3.9 D5: by cell, not the legacy
+    // variable name "RadiusDesc").
+    bool isDerivedRadius = fn_IsDerivedFrom(descObj, InteractDescription::TypeId());
     void* radiusDesc = nullptr;
     if (isDerivedRadius) {
         radiusDesc = descObj;

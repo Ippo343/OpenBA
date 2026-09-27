@@ -60,6 +60,7 @@
 // declaration as a comment because `Camera` was still a POD; this is that debt
 // paid. Camera.h does not include this header, so there is no cycle.
 #include "Camera.h"                         // Graphics::Camera (by value)
+#include "../object/Internal.h"             // B.3.9: InternalMemFree (the concrete slot 0s)
 
 namespace Graphics {
 
@@ -161,12 +162,42 @@ static_assert(alignof(Light) == 8, "qword aligned (the vptr)");
 // linker folded the two because AmbientLight adds no destructible member. Its
 // door is registered at the thunk address AND by name; see lights_vtable.cpp.
 // ============================================================================
+// ENDGAME B.3 step 9 (block GFX, B39_RULES D1): CONCRETE. The real ctor below
+// is retail's ??0 body, its own slot 0 is the vector deleting dtor, ~AmbientLight
+// is protected and non-virtual. The ??0 / ??1 / slot doors, the minted
+// `??_7AmbientLight@Graphics@@6B@` and its RT_DELDTOR row are retired
+// (tools/rt_mint_retired/gfx.txt): nothing in retail or the tree builds one
+// (no caller of ??0AmbientLight by any binding), so no route changes.
+// ============================================================================
 class AmbientLight : public Light {
 public:
     AmbientLight(const AmbientLight& src);              // 0x180058f50  not ported
     AmbientLight& operator=(const AmbientLight& src);   // 0x180058fe0  not ported
 
-    Geometry* DeletingDtor(unsigned flags) override = 0;                 // [0] 0x180059080
+    // ??0AmbientLight@Graphics@@QEAA@XZ 0x1800fa940 -- the REAL ctor. `CALL
+    // ??0Geometry` and the Light / AmbientLight stamps are the compiler's; the
+    // colour's two zeroed qwords are Math::Vector4's own zeroing ctor; then
+    // +0xd0 = 10.0f and +0x30 = 0x8000. +0xd4 is written by nothing.
+    AmbientLight() : Light() {
+        _intensity         = 10.0f;     // 0x41200000
+        _materialTypeFlags = 0x8000u;
+    }
+
+    // [0] 0x180059080 -- MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0xd8` = the element size).
+    Geometry* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<AmbientLight*>(self + static_cast<int64_t>(i) * 0xd8)->~AmbientLight();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Geometry*>(self - 8);
+        }
+        this->~AmbientLight();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     void Update(const System::Time& time) override;                      // [1] 0x1800fa7a0
     void Draw(Video::Context& context, const Camera& camera,
               ExternalPtrHandle material,
@@ -183,7 +214,9 @@ public:
     void Set(const Math::Vector4& colour, float intensity);
 
 protected:
-    ~AmbientLight();     // 0x180058f30, the thunk onto ~Geometry
+    // 0x180058f30, the thunk onto ~Geometry: an empty body (lights_vtable.cpp);
+    // the compiler chains ~Light and ~Geometry. NON-VIRTUAL until the cutover.
+    ~AmbientLight();
 
 public:
     Math::Vector4 _colour;      // +0xc0  ctor 0,0,0,0
@@ -254,12 +287,49 @@ static_assert(offsetof(AmbientLight, _padD4)     == 0xd4, "AmbientLight tail pad
 // reaches them through their own vtable slot 0 / their exported members and
 // keeps doing so.
 // ============================================================================
+// ENDGAME B.3 step 9 (block GFX, B39_RULES D1): CONCRETE, like AmbientLight
+// above -- real ctor (retail's ??0 body), own vector slot 0, protected
+// non-virtual ~SpotLight holding the retired ??1 door's body. No builder of a
+// SpotLight exists in retail or the tree.
+// ============================================================================
 class SpotLight : public Light {
 public:
     SpotLight(const SpotLight& src);                 // 0x180063e60  not ported
     SpotLight& operator=(const SpotLight& src);      // 0x180064080  not ported
 
-    Geometry* DeletingDtor(unsigned flags) override = 0;                 // [0] 0x1800642b0
+    // ??0SpotLight@Graphics@@QEAA@XZ 0x180106690 -- the REAL ctor. `CALL
+    // ??0Geometry` and the two stamps are the compiler's. The twelve zeroed
+    // qwords +0xc0..+0x118 are the Frustum's six planes (Math::Vector4's zeroing
+    // ctor); then isOrthographic = 1, the two literals, the colour (zeroing
+    // ctor), +0x148 / +0x150 / +0x160 = 0 -- +0x130, +0x134 and +0x158 are NOT
+    // written -- then `CreateTargets()` and only THEN +0x30 = 0x8000 (the kind
+    // word is written AFTER the call; CreateTargets reads the object).
+    SpotLight() : Light() {
+        _frustum.isOrthographic = true;
+        _near        = 0.1f;            // 0x3dcccccd
+        _far         = 10.0f;           // 0x41200000
+        _shadowMap   = nullptr;
+        _shadowDepth = nullptr;
+        _boundImage  = nullptr;
+        CreateTargets();
+        _materialTypeFlags = 0x8000u;
+    }
+
+    // [0] 0x1800642b0 -- MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x168` = the element size).
+    Geometry* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<SpotLight*>(self + static_cast<int64_t>(i) * 0x168)->~SpotLight();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Geometry*>(self - 8);
+        }
+        this->~SpotLight();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     void Update(const System::Time& time) override;                      // [1] 0x180105950
     void Draw(Video::Context& context, const Camera& camera,
               ExternalPtrHandle material,
@@ -292,7 +362,10 @@ public:
     void CreateTargets();                            // 0x180106050  door in batchc_gfx_leaves.cpp
 
 protected:
-    ~SpotLight();       // 0x180106270
+    // 0x180106270: the restamp is the compiler's; the three owned resources
+    // (lights_vtable.cpp), then ~Light (empty) and ~Geometry -- the compiler's
+    // chain, retail's tail jump. NON-VIRTUAL until the cutover.
+    ~SpotLight();
 
 public:
     ::Frustum _frustum;        // +0xc0 .. +0x123

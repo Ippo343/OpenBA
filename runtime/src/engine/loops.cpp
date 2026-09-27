@@ -195,7 +195,6 @@ std::atomic<void*> g_vtLoaderLoop{nullptr};
 std::atomic<void*> g_vtDialogLoopT{nullptr};
 std::atomic<void*> g_vtDialogLoaderLoopT{nullptr};
 std::atomic<void*> g_loaderLoopLoader{nullptr};
-std::atomic<void*> g_applicationSingleton{nullptr};
 
 FindOrLoadFn FindOrLoad() {
     return reinterpret_cast<FindOrLoadFn>(rtengine::AtomicExport(g_findOrLoad,
@@ -316,8 +315,7 @@ uint8_t* ModificationSingleton() {
 // `RtEngine::UpdateLoop*`, the same type this lane's ports take, so the
 // comparison below is type-checked end to end.
 Engine::MainLoop* MainLoopSingleton() {
-    MainLoopSlot p = RT_DATA_SLOT(MainLoopSlot,
-        "?_singleton@MainLoop@Engine@@1PEAV12@EA");
+    MainLoopSlot p = reinterpret_cast<MainLoopSlot>(&::Engine::MainLoop::_singleton);
     return p ? *p : nullptr;
 }
 // UI::Dialog's BaseTypeInfo. Both Load bodies read its FIRST DWORD as the type
@@ -1144,12 +1142,10 @@ inline Video::ContextData* CtxDataOf(RtVideo::Context* ctx) {
 // reg_mint_promoted.cpp, so it necessarily reads the DLL's own slot — which is
 // what every body below needs, because retail's MainLoop ctor wrote it.
 
-// `?_singleton@Application@1@0PEAV11@EA` -- the DATA slot (carry-over 5),
-// through a namespace-scope atomic cache.
+// `?_singleton@Application@1@0PEAV11@EA` -- the class static since ENDGAME
+// B.3.9 ENG (the minted row is redirected onto it).
 Application::Application* ApplicationSingleton() {
-    void** slot = static_cast<void**>(rtengine::AtomicExport(g_applicationSingleton,
-        "?_singleton@Application@1@0PEAV11@EA"));
-    return slot ? static_cast<Application::Application*>(*slot) : nullptr;
+    return ::Application::Application::_singleton;
 }
 
 // `mov 0x1801fc678,%rcx ; mov $0xe,%edx ; call Application::SleepThread` — the
@@ -1439,7 +1435,6 @@ extern "C" void RtEngine_DialogLoopT_Draw(DialogLoopT* self, float dt) {
 // it gets the DLL's implementation today and will pick up a port the moment one
 // is registered, with no edit here.
 namespace {
-std::atomic<void*> g_engineSingletonSlot{nullptr};
 std::atomic<void*> g_factorySingletonSlot{nullptr};
 }  // namespace
 
@@ -1450,8 +1445,7 @@ void Engine::Loader::Run() {
     // is a direct member call. The ORDER of the calls below is unchanged
     // (B7-7.4: the device-lost / loader race is the user's decision, and this
     // conversion neither moves nor adds a call in the bracket).
-    void** engineSlot = static_cast<void**>(rtengine::AtomicExport(
-        g_engineSingletonSlot, "?_singleton@Engine@1@0PEAV11@EA"));
+    void** engineSlot = static_cast<void**>(static_cast<void*>(&::Engine::Engine::_singleton));
     void** factorySlot = static_cast<void**>(rtengine::AtomicExport(
         g_factorySingletonSlot, "?_singleton@ExternalFactory@Object@@0PEAV12@EA"));
     if (!engineSlot || !factorySlot) return;

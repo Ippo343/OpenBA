@@ -19,6 +19,8 @@
 #include <cstdlib>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 D5
+#include "Component/StorageComponent.h"         // ENDGAME B.3.9 D5
 
 // ============================================================
 // Local function pointers (resolved once on first use)
@@ -156,10 +158,10 @@ int ClearStorage::Execute(void* citizenAI, void* time, uint64_t /*arg3*/) {
                 void* comp = *(void**)(compArray + (uintptr_t)j * 8);
                 // slot 2 Type() of the description's component description
                 uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
-                if (typeId == *g_TypeId_RawMaterialDescription) {
+                if (typeId == RawMaterialDescription::TypeId()) {
                     // Verify via IsDerivedFrom
                     comp = *(void**)(*(uintptr_t*)(itemEntity + 0x28) + (uintptr_t)j * 8);
-                    if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription)) {
+                    if (fn_IsDerivedFrom(comp, RawMaterialDescription::TypeId())) {
                         rawMatDesc = comp;
                     }
                     break;
@@ -177,10 +179,10 @@ int ClearStorage::Execute(void* citizenAI, void* time, uint64_t /*arg3*/) {
                 void* compIBP = (void*)(*(uintptr_t*)(citizenBuilding + 0x30) + k * 8);
                 void* comp = *(void**)compIBP;
                 uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
-                if (typeId == *g_TypeId_StorageComponent_FC) {
+                if (typeId == StorageComponent::TypeId()) {
                     compIBP = (void*)(*(uintptr_t*)(citizenBuilding + 0x30) + k * 8);
                     void* compVal = *(void**)compIBP;
-                    if (fn_IsDerivedFrom(compVal, *g_TypeId_StorageComponent_FC)) {
+                    if (fn_IsDerivedFrom(compVal, StorageComponent::TypeId())) {
                         destStorage = compVal;
                     }
                     goto found_dest_storage;

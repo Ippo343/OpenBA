@@ -1,0 +1,35 @@
+# ENDGAME B.3 step 9 -- the rows block GFX retired (branch b39-GFX).
+# Format (tools/rt_mint_gen.py banner, B39_RULES.md D3):
+#   <mangled symbol | 0xVA>   <owner block>   <proof>
+# One fragment per block; a key appears once across all fragments.
+
+# -- W1: the Light family made concrete (D1); no builder of either leaf exists --
+??_7AmbientLight@Graphics@@6B@         GFX   real ctor + DeletingDtor + ~X; RT_DELDTOR row 0x180059080, ??0/??1 doors, 5 slot doors deleted
+??_7SpotLight@Graphics@@6B@            GFX   real ctor + DeletingDtor + ~X (door body); RT_DELDTOR row 0x1800642b0, ??0/??1 doors, 5 slot doors deleted
+??_7Light@Graphics@@6B@                GFX   stamped only by the three leaf ctors (all compiler-built now); RT_DELDTOR row 0x180058dd0 + the ??1 leaves door deleted
+
+# -- W1: AnimationEvent -- slot 0 concrete (the class stays abstract: pure External slots + Construct) --
+??_7AnimationEvent@Graphics@@6B@       GFX   concrete DeletingDtor + TypeId + factory pair (null stubs); FACTREST row, RT_DELDTOR row 0x180011800, ??0/??1 doors, Type/TypeName slot doors deleted
+
+# -- W1: AnimationGroup concrete (D1), factory pair the class own (D2) --
+??_7AnimationGroup@Graphics@@6B@       GFX   real ctor + DeletingDtor + ~X (door body) + TypeId; FACTREST row, RT_DELDTOR row 0x1800167f0, ??1 leaves door, 8 slot doors deleted; Construct/Reconstruct placement-new
+
+# -- W1: ParticleSystem concrete (D1/D2); Particle slot 0 concrete (the class stays abstract) --
+??_7ParticleSystem@Graphics@@6B@       GFX   real ctor (door body) + DeletingDtor + ~X (door body) + TypeId; FACTREST row, RT_DELDTOR row 0x180020a70, ??0/??1 doors, 8 slot doors deleted; Construct/Reconstruct placement-new
+??_7Particle@Graphics@@6B@             GFX   concrete DeletingDtor + TypeId + factory pair (null stubs); FACTREST row, RT_DELDTOR row 0x180020160, ??0/??1 doors, DoorBody, 4 slot doors deleted
+
+# -- W1: Material concrete (D1), factory pair the class own (D2) --
+??_7Material@Graphics@@6B@             GFX   real ctor + DeletingDtor + ~X (door body) + TypeId; FACTREST row, RT_DELDTOR row 0x180011d20, ??1 door, 7 slot doors deleted; Construct/Reconstruct placement-new
+??_7GraphicsMesh@Graphics@@6B@         GFX   real ctor + DeletingDtor + ~X (door body) + TypeId; FACTREST row, RT_DELDTOR row 0x180012bd0, ??0/??1 doors, 7 slot doors deleted; Construct/Reconstruct placement-new
+
+# -- W1: ReflectionImageBuffer concrete (D1), factory pair the class own (D2) --
+??_7ReflectionImageBuffer@Graphics@@6B@  GFX   real ctor + DeletingDtor + ~X (door body); FACTREST row, RT_DELDTOR row 0x180022600, ??0/??1 doors, 9 slot doors deleted; Construct/Reconstruct placement-new
+
+# -- W1 storage (D7): the four unexported by-address cells, one site each -> file statics --
+0x1801fc69c                            GFX   GraphicsMesh serialize counter -> g_serializeCounter (graphicsmesh_vtable.cpp), the only site
+0x1801fc6a0                            GFX   GraphicsMesh current mesh -> g_serializeCurrentMesh (graphicsmesh_vtable.cpp), the only site
+0x1801ff30c                            GFX   MeshInstance::Update init guard -> g_updateInitGuard (wave29_lane_slots.cpp), the only site
+0x1801ff310                            GFX   MeshInstance::Update identity table -> g_identityTable (wave29_lane_slots.cpp), the only site
+
+# -- W1 storage (D7): AnimationManager::_singleton -- class static, every reader in GFX files converted --
+?_singleton@AnimationManager@Graphics@@0PEAV12@EA   GFX   class static Graphics::AnimationManager::_singleton (animation.cpp); both writers + 6 readers converted; no foreign reader

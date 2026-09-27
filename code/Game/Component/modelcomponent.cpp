@@ -43,15 +43,10 @@
 typedef void (*fn_Time_Ctor_t)(void* self, float seconds);
 static fn_Time_Ctor_t s_fn_Time_Ctor = nullptr;
 
-// Graphics::MeshInstance::MeshInstance — default ctor, dispatch slot 0x140151490.
-// Used by the real (Foundation F) ModelComponent factory to construct the
-// embedded MeshInstance sub-object at +0x28.
-typedef void* (*fn_MeshInstance_Ctor_t)(void* self);
-static fn_MeshInstance_Ctor_t s_fn_MeshInstance_Ctor = nullptr;
-
-// Graphics::MeshInstance::~MeshInstance — dispatch slot 0x1401514a8.
-typedef void (*fn_MeshInstance_Dtor_t)(void* self);
-static fn_MeshInstance_Dtor_t s_fn_MeshInstance_Dtor = nullptr;
+// ENDGAME B.3.9 GFX (coordinator ruling 4, B9-13 foreign site): the
+// embedded Graphics::MeshInstance at +0x28 is built and destroyed by the real
+// class (`::new` / `->~MeshInstance()`), not through import slots 0x140151490
+// / 0x1401514a8, so those two resolutions are gone from this file.
 
 // ModelComponent_helper_2b70 (0x1400c2b70) — notifies entity of model change
 typedef void (*fn_ModelHelper_2b70_t)(void* entity, int param);
@@ -75,13 +70,6 @@ static void EnsureHelpers() {
 
     slot = ResolveAddr(Module::Exe, 0x140152b00);
     if (slot) s_fn_Time_Ctor = *reinterpret_cast<fn_Time_Ctor_t*>(slot);
-
-    // Foundation F — sub-object ctors/dtor for the real ModelComponent factory.
-    slot = ResolveAddr(Module::Exe, 0x140151490);
-    if (slot) s_fn_MeshInstance_Ctor = *reinterpret_cast<fn_MeshInstance_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x1401514a8);
-    if (slot) s_fn_MeshInstance_Dtor = *reinterpret_cast<fn_MeshInstance_Dtor_t*>(slot);
 
     // Direct exe addresses
     s_fn_ModelHelper_2b70 = reinterpret_cast<fn_ModelHelper_2b70_t>(
@@ -246,7 +234,7 @@ void ModelComponent_InitFuncs() {
 ModelComponent::ModelComponent()
     : meshInstance{}, transform{}, _pad164{}, modelId(-1) {
     EnsureHelpers();
-    if (s_fn_MeshInstance_Ctor) s_fn_MeshInstance_Ctor(meshInstance);                 // +0x28 Graphics::MeshInstance
+    ::new (static_cast<void*>(meshInstance)) Graphics::MeshInstance();   // +0x28, retail CALL [??0MeshInstance] (B.3.9 GFX)
     ::new (static_cast<void*>(transform)) Math::Transform();   // +0x148 Math::Transform (slot 0x140151328)   // B.3.1 bridge
     OrFlagsInCtor(0x83);
 }
@@ -256,7 +244,8 @@ ModelComponent::ModelComponent()
 // never-registered instances; the real ctor always registers).
 ModelComponent::~ModelComponent() {
     EnsureHelpers();
-    if (s_fn_MeshInstance_Dtor) s_fn_MeshInstance_Dtor(meshInstance);
+    // retail CALL [??1MeshInstance] on +0x28 -- a destructor call, no delete (B.3.9 GFX).
+    reinterpret_cast<Graphics::MeshInstance*>(meshInstance)->~MeshInstance();
 }
 
 // ============================================================

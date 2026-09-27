@@ -198,6 +198,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../../types/io/FileSystem.h"
+#include "../../types/io/PackageFile.h"     // ENDGAME B.3.9 IO: the member dtor
 #include "../system/string.h"
 #include "../collection/array_internal.h"   // ENDGAME B.3.2 step 2 -- kSpec_PkgEntry, AsArray
 
@@ -208,8 +209,6 @@ using RtSystem::String;
 
 namespace {
 
-constexpr size_t kPackageFileSize = 0xF0;
-
 // The five String slots, in RETAIL'S RELEASE ORDER (descending). Reproduced,
 // not sorted — see §2(i).
 constexpr uint32_t kStringOffsets[5] = { 0x60, 0x58, 0x50, 0x48, 0x40 };
@@ -218,53 +217,38 @@ typedef void* (*MemberDtorFn)(void* self);
 
 inline uint8_t* Bytes(void* p) { return reinterpret_cast<uint8_t*>(p); }
 
-// Retail's `MOV [RCX],RAX` with RAX = ??_7PackageFile@IO@@6B@ (0x180155700,
-// ord 1471, EXPORTED). RT_DATA_SLOT, not a literal VA: at cutover a raw VA is a
-// pointer into a module that is not loaded, and it would be stamped into every
-// package object in the process. package_file.cpp's constructor uses the same
-// door for the same store.
-inline void StampVtable(void* self) {
-    *reinterpret_cast<void**>(self) =
-        RT_DATA_SLOT(void*, "??_7PackageFile@IO@@6B@");
+// The three member destructors still reached by ADDRESS (registered ports:
+// ~FileInfo 0x18000c180, ~Array<uint8> 0x1800112a0, ~Array<int32>
+// 0x1800111a0). Resolved at each call -- no function-local cache (B9-10); a
+// package is destroyed a handful of times per boot.
+inline MemberDtorFn MemberDtor(uintptr_t addr) {
+    return reinterpret_cast<MemberDtorFn>(ResolveAddr(Module::Runtime, addr));
 }
 
-// ---------------------------------------------------------------------------
-// The body, as a plain function so the oracle in §3 drives the SAME code the
-// registered entry point drives. A probe that re-derived it would be testing a
-// copy of the port rather than the port (the reason array_destroy_internal.h
-// and array_internal.h exist).
-//
-// ---------------------------------------------------------------------------
-void* PackageFileDtorBody(void* self) {
-    // ENDGAME B.3.2 step 2 — the two Array forwarders that used to sit here
-    // (0x1800269a0 ~Array<Entry>, 0x180010ab0 ~Array<String>, both resolved by
-    // address) are GONE; their call sites now name the container directly. The
-    // other four callees are unrelated members and stay address doors.
-    static auto dtorFileInfo  = reinterpret_cast<MemberDtorFn>(ResolveAddr(Module::Runtime, 0x18000c180));
-    static auto dtorArrayU8   = reinterpret_cast<MemberDtorFn>(ResolveAddr(Module::Runtime, 0x1800112a0));
-    static auto dtorArrayI32  = reinterpret_cast<MemberDtorFn>(ResolveAddr(Module::Runtime, 0x1800111a0));
-    static auto dtorExternal  = reinterpret_cast<MemberDtorFn>(ResolveAddr(Module::Runtime, 0x1800bc950));
+}  // namespace
 
-    uint8_t* p = Bytes(self);
+// ============================================================================
+// ??1PackageFile@IO@@UEAA@XZ   retail 0x1800b4540  ord 639
+// ============================================================================
+// ENDGAME B.3.9 IO: the class's own destructor. The door that stood here, its
+// by-address/by-name registration and `StampVtable` are gone: the entry stamp
+// at 0x1800b455b is the compiler's, and the tail JMP into ~External
+// (0x1800b4679) is the compiler's base-destructor call. The order in between is
+// retail's, unchanged.
+IO::PackageFile::~PackageFile() {
+    uint8_t* p = Bytes(this);
 
-    StampVtable(self);                  // 0x1800b455b
-
-    dtorFileInfo (p + 0xC0);                // 0x1800b456c
+    MemberDtor(0x18000c180)(p + 0xC0);      // 0x1800b456c  ~FileInfo
 
     // retail 0x1800269a0 — `~Array<IO::PackageFile::Entry>` at +0xB0.
     // array_destroy.cpp's kD_Str_10 / array.cpp's kSpec_PkgEntry: stride 0x10,
     // an assign that calls Filename::AdjustDelimiters and a destroy that
     // releases the embedded String — neither is trait-expressible (Collection.h's
-    // Array banner), so this stays the hand-derived spec, reached with
-    // `AsArray`. PackageFileView does not name +0xB0 as a typed member (other
-    // files — package_file.cpp, filesystem_packages.cpp, package_file_read_win.cpp
-    // — reach neighbouring fields of the same struct and are outside this
-    // batch), so this is a reinterpret bridge at the use site, not a re-typed
-    // field.
+    // Array banner), so this stays the hand-derived spec, reached with `AsArray`.
     rtcoll::AsArray<&rtcoll::kSpec_PkgEntry>(p + 0xB0)->~Array();
 
-    dtorArrayU8  (p + 0x98);                // 0x1800b4586
-    dtorArrayI32 (p + 0x80);                // 0x1800b4593
+    MemberDtor(0x1800112a0)(p + 0x98);      // 0x1800b4586  ~Array<uint8>
+    MemberDtor(0x1800111a0)(p + 0x80);      // 0x1800b4593  ~Array<int32>
 
     // 0x1800b4599..0x1800b4658 — five copies of the release idiom, descending.
     for (int i = 0; i < 5; ++i) {
@@ -273,44 +257,10 @@ void* PackageFileDtorBody(void* self) {
     }
 
     // retail 0x180010ab0 — `~Array<System::String>` at +0x30 and +0x20 (stride
-    // 8, array_destroy.cpp's kD_Str_08). Its destroy IS `System::String::~String`
-    // per element (Release(), the same idiom the five-slot loop above calls
-    // inline) and its assign IS String's copy ctor (AddRef): an ordinary
-    // non-trivial C++ type, not a hand-derived row, so the trait-derived
-    // `Collection::Array<System::String>` (`rtcoll::SpecFor<System::String>()`)
-    // is the right instantiation. The field is still unnamed in PackageFileView
-    // (+0x20/+0x30 sit inside `_unknown08`, touched by files outside this
-    // batch), so this is a reinterpret_cast bridge, not a re-typed member.
+    // 8, array_destroy.cpp's kD_Str_08): the trait-derived
+    // `Collection::Array<System::String>` over the two POD headers.
     reinterpret_cast<Collection::Array<System::String>*>(p + 0x30)->~Array();  // B.3.2 bridge
     reinterpret_cast<Collection::Array<System::String>*>(p + 0x20)->~Array();  // B.3.2 bridge
 
-    // 0x1800b4679 — TAIL JUMP. Its return value is ours (§2 iv).
-    return dtorExternal(self);
-}
-
-}  // namespace
-
-// ??1PackageFile@IO@@UEAA@XZ   retail 0x1800b4540  ord 639
-extern "C" void* RtIo_PackageFile_Dtor(void* self) {
-
-
-    void* r = PackageFileDtorBody(self);
-    return r;
-}
-
-// ============================================================================
-// Registration — BOTH doors.
-// Every mangled name is ONE literal on ONE line so runtime_census.py and
-// export_name_audit.py can see it.
-// ============================================================================
-int RtIoPackageFileDtorRegister() {
-    int n = 0;
-    RegisterRuntimeExport("??1PackageFile@IO@@UEAA@XZ", (void*)&RtIo_PackageFile_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800b4540, (void*)&RtIo_PackageFile_Dtor);
-    printf("[RtPort]   IO::PackageFile::~PackageFile (lane BODY, W25): %d "
-                "export registered (opens ONE address door, 0x1800269a0; the "
-                "\"5 unported callees\" blocker was measured FALSE -- 6 of 7 are "
-                "ported -- and the \"no oracle\" blocker is answered by the "
-                "[ORACLE] site in package_file_dtor.cpp section 3)\n", n);
-    return n;
+    // 0x1800b4679 — the tail into ~External is the compiler's.
 }

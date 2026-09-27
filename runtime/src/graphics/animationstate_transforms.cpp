@@ -202,10 +202,10 @@ UpdateFn AnimationStateUpdate() { static UpdateFn f = RtAddr<UpdateFn>(0x1800fdb
 
 // ?_singleton@AnimationManager@Graphics@@0PEAV12@EA — the slot at 0x1801fe7b0.
 // ONE deref gives the manager; its +0x00 is the instance array header.
+// ENDGAME B.3.9 GFX: the class static, not the mint's slot (D7 row A44).
 AnimationManagerView* AnimationManagerSingleton() {
-    AnimationManagerView** slot =
-        RT_DATA_SLOT(AnimationManagerView**, "?_singleton@AnimationManager@Graphics@@0PEAV12@EA");
-    return slot ? *slot : nullptr;
+    return reinterpret_cast<AnimationManagerView*>(
+        Graphics::AnimationManager::_singleton);   // B.3.9 bridge (the POD view)
 }
 
 // ?_secondsPerTick@Timer@System@@0NA — a DOUBLE at 0x1801fe728. Seconds->ticks

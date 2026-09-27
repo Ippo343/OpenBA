@@ -79,6 +79,8 @@
 #include <set>
 #include <utility>
 #include <vector>
+#include "Component/ResidenceComponent.h"   // ENDGAME B.3.9 C1: 0x1401c7cf0 cell class
+#include "Component/StorageComponent.h"     // ENDGAME B.3.9 C1: 0x1401c7e78 cell class
 
 // Build-time roster-only guard, shared with citizen_assign_citizens.cpp: while set,
 // the workplace/housing attach-detach helpers skip the Graphics::Scene mesh toggle
@@ -109,10 +111,10 @@ void EnsureResolved() {
     s_resolved = true;
     s_assignWorkplace = RExe<fn_AssignWorkplace_t>(0x1401163d0);
     s_storageSubtract = RExe<fn_StorageSubtract_t>(0x14012d150);
-    uint32_t* residenceTid = RExe<uint32_t*>(0x1401c7cf0);
-    uint32_t* storageTid    = RExe<uint32_t*>(0x1401c7e78);
-    s_tidResidence = residenceTid ? *residenceTid : 0;
-    s_tidStorage   = storageTid ? *storageTid : 0;
+    // ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c7cf0 / 0x1401c7e78 are registered
+    // type-id cells (INVENTORY_C Table 1: ResidenceComponent, StorageComponent).
+    s_tidResidence = ResidenceComponent::TypeId();
+    s_tidStorage   = StorageComponent::TypeId();
 }
 
 // Find the first component on `entity` whose exact type-id == typeId and that passes

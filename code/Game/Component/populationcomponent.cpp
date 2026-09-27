@@ -11,7 +11,9 @@
 // Original: 0x140054070 (256 bytes)
 
 #include "Component/populationcomponent_funcs.h"
+#include "Component/PopulationDescription.h"
 #include "Component/herdcomponent_funcs.h"   // HerdComponent_Populate
+#include "Component/HerdDescription.h"
 #include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"     // Object::GetTypeIdByName
 #include "engine_funcs.h"
@@ -320,13 +322,6 @@ void PopulationComponent_ResizeCells(int64_t* arr, int newCount) {
 //   per cell of the (+0x48)^2 grid: instantiate the template, find its
 //   HerdComponent, point it back at us (+0x28) and at its cell (+0x30), roll
 //   a size in [herdDesc+0x2c, herdDesc+0x28), seed it via Populate, register.
-static uint32_t PopulationTypeId(uintptr_t globalAddr, const char* name) {
-    uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, globalAddr));
-    if (!p) return 0;
-    if (*p == 0) *p = ::Object::GetTypeIdByName(name);
-    return *p;
-}
-
 // 0x140054220 door: called by name from standalone/reg_herd_live.cpp.
 void PopulationComponent_Startup(PopulationComponent* selfC) {
     selfC->PopulationComponent::Startup();
@@ -410,7 +405,7 @@ void PopulationComponent::Startup() {
     if (!s_pGameWorld || !*s_pGameWorld) return;
     uint8_t* gw = reinterpret_cast<uint8_t*>(*s_pGameWorld);
 
-    uint32_t tidPopDesc = PopulationTypeId(0x1401c47c8, "PopulationDescription");
+    uint32_t tidPopDesc = PopulationDescription::TypeId();   // cell 0x1401c47c8 (D5)
     void* descObj = *reinterpret_cast<void**>(self + 0x18);
     void* popDesc = (tidPopDesc && fn_IsDerivedFrom(descObj, tidPopDesc)) ? descObj : nullptr;
     *reinterpret_cast<void**>(self + 0x28) = popDesc;
@@ -456,8 +451,8 @@ void PopulationComponent::Startup() {
     fflush(stderr);
     if (herdTemplate == 0) return;
 
-    uint32_t tidHerdComp = PopulationTypeId(0x1401c7820, "HerdComponent");
-    uint32_t tidHerdDesc = PopulationTypeId(0x1401c7858, "HerdDescription");
+    uint32_t tidHerdComp = HerdComponent::TypeId();   // cell 0x1401c7820 (D5)
+    uint32_t tidHerdDesc = HerdDescription::TypeId();  // cell 0x1401c7858 (D5)
     void* rng = *reinterpret_cast<void**>(gw + 0xd8);
     void* entityList = *reinterpret_cast<void**>(gw + 0xe8);
 

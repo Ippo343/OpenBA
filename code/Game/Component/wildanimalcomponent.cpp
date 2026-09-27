@@ -21,6 +21,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/wildanimalcomponent_funcs.h"
+#include "Component/HerdComponent.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -47,11 +48,6 @@ static fn_EraseFromComponentList_t s_fn_EraseFromComponentList = nullptr;
 typedef void (*fn_IBP_Ctor_t)(void* retbuf, void* rawPtr);
 static fn_IBP_Ctor_t s_fn_IBP_Ctor = nullptr;
 
-// Type ID: DAT_1401c7820 -- HerdComponent (NOT "WildAnimal": factory_registrations
-// .csv:268 maps this global to HerdComponent_RegisterType). The +0x28 back-ref is
-// validated against it because it points at the herd, not at another wild animal.
-static uint32_t* s_TypeId_HerdComponent = nullptr;
-
 static bool s_helpersResolved = false;
 
 static void EnsureHelpers() {
@@ -71,10 +67,6 @@ static void EnsureHelpers() {
     // FUN_140002cc0 -- erase from component list
     s_fn_EraseFromComponentList = reinterpret_cast<fn_EraseFromComponentList_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));
-
-    // Type ID (HerdComponent)
-    s_TypeId_HerdComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7820));
 
     s_helpersResolved = true;
 }
@@ -116,9 +108,9 @@ void WildAnimalComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
     printf("[WildAnimalComponent] Funcs resolved: "
-           "EraseFromList=%p HerdTypeId=%p\n",
+           "EraseFromList=%p HerdTypeId=%u\n",
            (void*)s_fn_EraseFromComponentList,
-           (void*)s_TypeId_HerdComponent);
+           HerdComponent::TypeId());
 #endif
 }
 
@@ -174,9 +166,9 @@ void WildAnimalComponent::Persist(void* stream) {
 
     // Post-deserialize type validation
     if (data28 != 0) {
-        if (s_fn_IsDerivedFrom_dispatch && s_TypeId_HerdComponent) {
+        if (s_fn_IsDerivedFrom_dispatch) {
             bool valid = s_fn_IsDerivedFrom_dispatch(
-                reinterpret_cast<void*>(data28), *s_TypeId_HerdComponent);
+                reinterpret_cast<void*>(data28), HerdComponent::TypeId());
             if (!valid) {
                 data28 = 0;
             }
