@@ -93,6 +93,8 @@ void RtObjectPortInit() {
                           &::Object::ExternalFactory::_singleton);
     RtMintRedirectStorage("?_singleton@InternalFactory@Object@@0PEAV12@EA",
                           &::Object::InternalFactory::_singleton);
+    RtMintRedirectStorage("?_singleton@Factory@Object@@0PEAV12@EA",
+                          &::Object::Factory::_singleton);
     int n = 0;
     n += RtObjectTypeSystemRegister();
     n += RtObjectFactoryFileExtensionRegister();

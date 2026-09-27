@@ -322,8 +322,8 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
                 // Look the type up and BUILD one. `Factory::_singleton`'s tree,
                 // then `BaseTypeInfo::factoryFn` at +0x20 -- the object-creation
                 // path, reached here through the DLL's own typeinfo.
-                const Factory* f =
-                    *RT_DATA_SLOT(Factory**, "?_singleton@Factory@Object@@0PEAV12@EA");
+                const Factory* f = reinterpret_cast<const Factory*>(   // B.3.3 bridge
+                    ::Object::Factory::_singleton);   // class static (B.3.9 OBJ, D7)
                 const TypeNode* n = f->root;
                 const uint32_t want = static_cast<uint32_t>(typeId);
                 while (n != nullptr) {

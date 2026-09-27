@@ -739,14 +739,10 @@ void InternalFactory::ResetPersistState(void* stream) {
 //     That asymmetry is the function.
 namespace {
 
-// `?_singleton@Factory@Object@@0PEAV12@EA` — note the `0PEAV12@EA` spelling; the
-// obvious `1PEAV12@A` is a phantom that resolves NULL silently
-// (reference_resolveexport_phantom_names.md).
-void* g_factorySingletonCache = nullptr;                 // Runtime 0x1801fc6e8
-
+// `?_singleton@Factory@Object@@0PEAV12@EA` (Runtime 0x1801fc6e8) is the class
+// static `Object::Factory::_singleton` since ENDGAME B.3.9 OBJ (B39_RULES D7).
 RtObject::Factory** FactorySingletonSlot() {
-    return reinterpret_cast<RtObject::Factory**>(RtResolveCached(
-        "?_singleton@Factory@Object@@0PEAV12@EA", &g_factorySingletonCache));
+    return reinterpret_cast<RtObject::Factory**>(&Factory::_singleton);   // B.3.3 bridge
 }
 
 // (`Object::Internal`'s type id is `Internal::TypeId()`, the class record's

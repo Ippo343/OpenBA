@@ -509,8 +509,16 @@ public:
 
     Factory() : _types() {}
 
-    // ?Get@Factory@Object@@SAPEAV12@XZ — the singleton, through the port door.
+    // ?Get@Factory@Object@@SAPEAV12@XZ — `return _singleton;`.
     static Factory* Get();
+
+    // ?_singleton@Factory@Object@@0PEAV12@EA — retail 0x1801fc6e8. The CLASS
+    // STATIC since ENDGAME B.3.9 OBJ (B39_RULES D7): defined in
+    // type_reflection.cpp, and RtObjectPortInit redirects the minted row onto
+    // it, so the name door, the address door and this member are the same
+    // eight bytes. Written by the ctor door (engine/singleton_ctors.cpp).
+    // PUBLIC while foreign readers still reach the cell through the doors.
+    static Factory* _singleton;
 
     // ?Startup@Factory@Object@@QEAA_NXZ   retail 0x1800c0630.
     bool Startup();
