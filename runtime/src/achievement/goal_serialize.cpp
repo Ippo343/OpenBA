@@ -233,27 +233,7 @@ void GoalInstance::Persist(void* streamv) {
 }  // namespace Achievement
 
 // ---- The registered doors — QUALIFIED delegations --------------------------
-bool RtAch_Goal_Serialize(Achievement::Goal* self, void* stream) {
-    return self->Achievement::Goal::Serialize(stream);
-}
-
-void RtAch_GoalInstance_Persist(Achievement::GoalInstance* self, void* stream) {
-    self->Achievement::GoalInstance::Persist(stream);
-}
-
-// ---- Registration ----------------------------------------------------------
-// Registered by NAME and by ADDRESS. The name is what engine_funcs.cpp and
-// standalone/reg_goal.cpp ask for; the address so a by-address call site also
-// lands on the port.
-int RtAchGoalSerializeRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtAch_Goal_Serialize); ++n;
-    RegisterRuntimeAddr(0x18009ee20, (void*)&RtAch_Goal_Serialize);
-
-    RegisterRuntimeExport("?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z",
-                          (void*)&RtAch_GoalInstance_Persist); ++n;
-    RegisterRuntimeAddr(0x18009ef70, (void*)&RtAch_GoalInstance_Persist);
-
-    return n;
-}
+// ENDGAME B.3.9 ENG: the two slot doors (`?Serialize@Goal@Achievement@@`
+// 0x18009ee20 and `?Persist@GoalInstance@Achievement@@` 0x18009ef70) and their
+// registration are gone -- their only reader was the minted `??_7Goal` /
+// `??_7GoalInstance` tables. The exe subclasses call the members QUALIFIED.

@@ -22,7 +22,6 @@ extern int RtAchManagerRegister();    // achievement_manager.cpp (lane B)
 // not by a switch of its own: class atomicity (PLAN §4.1 decision 5) means the
 // two stream members must flip together with the ctors/dtors that build the
 // objects they serialize.
-extern int RtAchGoalSerializeRegister();  // goal_serialize.cpp      (Wave 9 P)
 // Wave 23 lane ACHIEVE. Both gated by RT_ACHMGR with
 // achievement_manager.cpp: achievement_state.cpp ports five more members of the
 // SAME three classes (the manager dtor, RemoveAll, ReadAchievements,
@@ -37,7 +36,6 @@ extern int RtAchSerializeRegister();      // achievement_serialize.cpp (Wave 23)
 // registration rather than the file is what keeps class atomicity (PLAN §4.1
 // decision 5) while the eleven bodies — which are the same two-instruction
 // shape — stay together where they can be read side by side.
-extern int RtAchGoalTypeInfoAccessorsRegister();     // Goal + GoalInstance
 extern int RtAchManagerTypeInfoAccessorsRegister();  // Achievement + …Instance
 // Wave 27 lane ACHIEVE — achievement_vtable.cpp (the four non-accessor slots).
 extern int RtAchVtableRegister();
@@ -70,8 +68,6 @@ void RtAchievementPortInit() {
     }
     int n = 0;
     n += RtAchGoalRegister();
-    n += RtAchGoalSerializeRegister();
-    n += RtAchGoalTypeInfoAccessorsRegister();
     n += RtAchGoalListRegister();
     n += RtAchManagerRegister();
     n += RtAchStateRegister();

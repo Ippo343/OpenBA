@@ -287,8 +287,6 @@ namespace rtdtor {
 static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180001680, 0x18009e180, 0x058, "Achievement::Achievement"),
     RT_DELDTOR(0x180001a90, 0x18009e400, 0x028, "Achievement::AchievementInstance"),
-    RT_DELDTOR(0x180001d70, 0x18009edb0, 0x030, "Achievement::Goal"),
-    RT_DELDTOR(0x1800020c0, 0x18009ef40, 0x020, "Achievement::GoalInstance"),
     RT_DELDTOR(0x180002d60, 0x180103a00, 0x060, "Graphics::MaterialInstance"),
     RT_DELDTOR(0x1800037b0, 0x18011d670, 0x058, "UI::SpriteSheet"),
     RT_DELDTOR(0x180006440, 0x1800bfdb0, 0x010, "Object::Internal"),
@@ -1286,14 +1284,6 @@ void* RtDelDtor_Achievement(void* self, unsigned flags) {
 void* RtDelDtor_AchievementInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180001a90>());
 }
-// Achievement::Goal        ~Goal = 0x18009edb0  (PORTED)
-void* RtDelDtor_Goal(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180001d70>());
-}
-// Achievement::GoalInstance ~GoalInstance = 0x18009ef40  (PORTED)
-void* RtDelDtor_GoalInstance(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800020c0>());
-}
 // Graphics::MaterialInstance ~MaterialInstance = 0x180103a00  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
 void* RtDelDtor_MaterialInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180002d60>());
@@ -1822,8 +1812,6 @@ void RtObjectDeletingDtorPortInit() {
 
     RegisterRuntimeAddr(0x180001680, (void*)&RtDelDtor_Achievement);
     RegisterRuntimeAddr(0x180001a90, (void*)&RtDelDtor_AchievementInstance);
-    RegisterRuntimeAddr(0x180001d70, (void*)&RtDelDtor_Goal);
-    RegisterRuntimeAddr(0x1800020c0, (void*)&RtDelDtor_GoalInstance);
     RegisterRuntimeAddr(0x180002d60, (void*)&RtDelDtor_MaterialInstance);
     RegisterRuntimeAddr(0x1800037b0, (void*)&RtDelDtor_SpriteSheet);
     RegisterRuntimeAddr(0x180006440, (void*)&RtDelDtor_Internal);

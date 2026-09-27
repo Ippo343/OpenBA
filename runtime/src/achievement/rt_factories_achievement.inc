@@ -79,40 +79,8 @@ static const RtFactoryClass kClsAchievement_AchievementInstance = {
 extern "C" void* RtFactNew_Achievement_AchievementInstance()          { return RtFactoryNew(kClsAchievement_AchievementInstance); }
 extern "C" void* RtFactIP_Achievement_AchievementInstance(void* p)    { return RtFactoryInPlace(kClsAchievement_AchievementInstance, p); }
 
-// --------------------------------------------------------------------------
-// Achievement::Goal
-//   ?CreateNewObject@Goal@Achievement@@SAPEAVBase@Object@@XZ  0x180001b70
-//   ?CreateInPlaceObject@Goal@Achievement@@SAPEAVBase@Object@@PEAX@Z  0x180001b80
-// --------------------------------------------------------------------------
-static uint64_t kCountAchievement_Goal[3];
-static const RtFactoryClass kClsAchievement_Goal = {
-    "Achievement::Goal", 0x0, 0,
-    nullptr, nullptr,
-    0x180001b70ull, 0x180001b80ull, kCountAchievement_Goal,
-};
-extern "C" void* RtFactNew_Achievement_Goal()          { return RtFactoryNew(kClsAchievement_Goal); }
-extern "C" void* RtFactIP_Achievement_Goal(void* p)    { return RtFactoryInPlace(kClsAchievement_Goal, p); }
-
-// --------------------------------------------------------------------------
-// Achievement::GoalInstance
-//   ?CreateNewObject@GoalInstance@Achievement@@SAPEAVBase@Object@@XZ  0x180001f50
-//   ?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z  0x1800070c0
-// --------------------------------------------------------------------------
-static const RtCtorStep kStepsAchievement_GoalInstance_New[] = {
-    { RtFactOp::Call, 8, 0, 0, "??0Internal@Object@@QEAA@XZ", 0x180001fafull },
-    { RtFactOp::Vptr, 8, 0x00, 0, "??_7GoalInstance@Achievement@@6B@", 0x180001fbcull },
-    { RtFactOp::Imm, 4, 0x10, 0x0ull, nullptr, 0x180001fbfull },
-    { RtFactOp::Imm, 8, 0x18, 0x0ull, nullptr, 0x180001fc6ull },
-    { RtFactOp::End, 0, 0, 0, nullptr, 0 },
-};
-static uint64_t kCountAchievement_GoalInstance[3];
-static const RtFactoryClass kClsAchievement_GoalInstance = {
-    "Achievement::GoalInstance", 0x20, 8,
-    kStepsAchievement_GoalInstance_New, nullptr,
-    0x180001f50ull, 0x1800070c0ull, kCountAchievement_GoalInstance,
-};
-extern "C" void* RtFactNew_Achievement_GoalInstance()          { return RtFactoryNew(kClsAchievement_GoalInstance); }
-extern "C" void* RtFactIP_Achievement_GoalInstance(void* p)    { return RtFactoryInPlace(kClsAchievement_GoalInstance, p); }
+// (Achievement::Goal / GoalInstance: ENDGAME B.3.9 ENG -- the classes' own
+// factory pairs, runtime/src/achievement/goal.cpp.)
 
 
 static const RtFactoryReg kRegs[] = {
@@ -120,8 +88,4 @@ static const RtFactoryReg kRegs[] = {
       "?CreateInPlaceObject@Achievement@1@SAPEAVBase@Object@@PEAX@Z", 0x1800011f0ull, (void*)&RtFactIP_Achievement_Achievement, &kClsAchievement_Achievement },
     { "?CreateNewObject@AchievementInstance@Achievement@@SAPEAVBase@Object@@XZ", 0x1800018b0ull, (void*)&RtFactNew_Achievement_AchievementInstance,
       "?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z", 0x1800070c0ull, (void*)&RtFactIP_Achievement_AchievementInstance, &kClsAchievement_AchievementInstance },
-    { "?CreateNewObject@Goal@Achievement@@SAPEAVBase@Object@@XZ", 0x180001b70ull, (void*)&RtFactNew_Achievement_Goal,
-      "?CreateInPlaceObject@Goal@Achievement@@SAPEAVBase@Object@@PEAX@Z", 0x180001b80ull, (void*)&RtFactIP_Achievement_Goal, &kClsAchievement_Goal },
-    { "?CreateNewObject@GoalInstance@Achievement@@SAPEAVBase@Object@@XZ", 0x180001f50ull, (void*)&RtFactNew_Achievement_GoalInstance,
-      "?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z", 0x1800070c0ull, (void*)&RtFactIP_Achievement_GoalInstance, &kClsAchievement_GoalInstance },
 };

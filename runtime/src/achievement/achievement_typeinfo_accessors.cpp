@@ -220,16 +220,20 @@ const char* AchievementInstance::TypeName() const { return ReadTypeName(Achievem
 uint32_t    AchievementInstance::Type() const     { return ReadTypeId(AchievementInstanceTypeInfo()); }    // 0x1800017a0
 
 // ---- ??_7Goal@Achievement@@6B@  slots 1, 2 and 3 ---------------------------
+// (ENDGAME B.3.9 ENG: TypeId() is retail's static accessor 0x180001b50, the
+// same load; the minted record stays until the D6 fold.)
+uint32_t    Goal::TypeId()         { return ReadTypeId(GoalTypeInfo()); }     // 0x180001b50
 const char* Goal::TypeName() const { return ReadTypeName(GoalTypeInfo()); }   // 0x180001b60
-uint32_t    Goal::Type() const     { return ReadTypeId(GoalTypeInfo()); }     // 0x180001b40
+uint32_t    Goal::Type() const     { return TypeId(); }                       // 0x180001b40
 
 // `MOV EAX,0x10000 ; RET`. A literal: the on-disk format version of a Goal,
 // 65536 — NOT derived from anything in our tree.
 int32_t Goal::GetFileVersion() const { return 0x10000; }                      // 0x18009ee10
 
 // ---- ??_7GoalInstance@Achievement@@6B@  slots 1, 2, 4 and 6 ----------------
+uint32_t    GoalInstance::TypeId()         { return ReadTypeId(GoalInstanceTypeInfo()); }    // 0x180001e50
 const char* GoalInstance::TypeName() const { return ReadTypeName(GoalInstanceTypeInfo()); }  // 0x180001e60
-uint32_t    GoalInstance::Type() const     { return ReadTypeId(GoalInstanceTypeInfo()); }    // 0x180001e40
+uint32_t    GoalInstance::Type() const     { return TypeId(); }                              // 0x180001e40
 
 // `RET`. One byte; the exe subclasses override it.
 void GoalInstance::Startup() {}                                               // 0x18009f000
@@ -259,66 +263,13 @@ extern "C" uint32_t RtAch_AchievementInstance_Type(const Achievement::Achievemen
 extern "C" const char* RtAch_AchievementInstance_TypeName(const Achievement::AchievementInstance* self) {
     return self->Achievement::AchievementInstance::TypeName();
 }
-extern "C" uint32_t RtAch_Goal_Type(const Achievement::Goal* self) {
-    return self->Achievement::Goal::Type();
-}
-extern "C" const char* RtAch_Goal_TypeName(const Achievement::Goal* self) {
-    return self->Achievement::Goal::TypeName();
-}
-extern "C" int32_t RtAch_Goal_GetFileVersion(const Achievement::Goal* self) {
-    return self->Achievement::Goal::GetFileVersion();
-}
-extern "C" uint32_t RtAch_GoalInstance_Type(const Achievement::GoalInstance* self) {
-    return self->Achievement::GoalInstance::Type();
-}
-extern "C" const char* RtAch_GoalInstance_TypeName(const Achievement::GoalInstance* self) {
-    return self->Achievement::GoalInstance::TypeName();
-}
-extern "C" void RtAch_GoalInstance_Startup(Achievement::GoalInstance* self) {
-    self->Achievement::GoalInstance::Startup();
-}
-extern "C" int32_t RtAch_GoalInstance_CheckGoalState(const Achievement::GoalInstance* self) {
-    return self->Achievement::GoalInstance::CheckGoalState();
-}
-
 // ============================================================================
 // REGISTRATION — by NAME and by ADDRESS, both, for every body (unchanged).
 // ============================================================================
 
-// Goal + GoalInstance.
-int RtAchGoalTypeInfoAccessorsRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("?Type@Goal@Achievement@@UEBAIXZ",
-                          (void*)&RtAch_Goal_Type); ++n;
-    RegisterRuntimeAddr(0x180001b40ull, (void*)&RtAch_Goal_Type);
-
-    RegisterRuntimeExport("?TypeName@Goal@Achievement@@UEBAPEBDXZ",
-                          (void*)&RtAch_Goal_TypeName); ++n;
-    RegisterRuntimeAddr(0x180001b60ull, (void*)&RtAch_Goal_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@Goal@Achievement@@UEBAHXZ",
-                          (void*)&RtAch_Goal_GetFileVersion); ++n;
-    RegisterRuntimeAddr(0x18009ee10ull, (void*)&RtAch_Goal_GetFileVersion);
-
-    RegisterRuntimeExport("?Type@GoalInstance@Achievement@@UEBAIXZ",
-                          (void*)&RtAch_GoalInstance_Type); ++n;
-    RegisterRuntimeAddr(0x180001e40ull, (void*)&RtAch_GoalInstance_Type);
-
-    RegisterRuntimeExport("?TypeName@GoalInstance@Achievement@@UEBAPEBDXZ",
-                          (void*)&RtAch_GoalInstance_TypeName); ++n;
-    RegisterRuntimeAddr(0x180001e60ull, (void*)&RtAch_GoalInstance_TypeName);
-
-    RegisterRuntimeExport("?Startup@GoalInstance@Achievement@@UEAAXXZ",
-                          (void*)&RtAch_GoalInstance_Startup); ++n;
-    RegisterRuntimeAddr(0x18009f000ull, (void*)&RtAch_GoalInstance_Startup);
-
-    RegisterRuntimeExport("?CheckGoalState@GoalInstance@Achievement@@UEBA?AW4GoalState@Goal@2@XZ",
-                          (void*)&RtAch_GoalInstance_CheckGoalState); ++n;
-    RegisterRuntimeAddr(0x18009f060ull, (void*)&RtAch_GoalInstance_CheckGoalState);
-
-    return n;
-}
+// (Goal + GoalInstance: ENDGAME B.3.9 ENG retired the seven slot doors with
+// the minted `??_7Goal` / `??_7GoalInstance` rows -- they were their only
+// reader -- and with them `RtAchGoalTypeInfoAccessorsRegister`.)
 
 // Achievement + AchievementInstance.
 int RtAchManagerTypeInfoAccessorsRegister() {

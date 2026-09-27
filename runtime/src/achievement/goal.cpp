@@ -10,17 +10,15 @@
 // hand-built table, whose slot resolves back to the very door, so an
 // unqualified virtual call inside a door would re-enter it (B34_BRIEFS §A.1).
 //
-// What is NOT a member, and why (B4b-2 / B7-13): the two CONSTRUCTOR doors.
-// `Goal` and `GoalInstance` have exe subclasses with hand-built tables, and
-// every construction in the tree goes through `??0Goal`/`??0GoalInstance`,
-// which must stamp the MINTED tables. A C++ constructor would stamp GCC's.
-// They stay free functions over the class's own fields.
+// ENDGAME B.3.9 ENG (B39_RULES D1/D2): the two CONSTRUCTOR doors (which
+// stamped the MINTED tables), the two DESTRUCTOR doors and the slot doors are
+// gone with the minted `??_7Goal` / `??_7GoalInstance` rows: the constructors
+// are real (Goal.h), every live object wears the COMPILER's table, and the
+// factory pairs are the classes' own statics below.
 //
-// The DESTRUCTORS are members now, and real: `~Goal()` / `~GoalInstance()`
-// are empty bodies whose compiler-emitted chain (vptr store, `~String` on
-// `_text`, `~External` / `~Internal`) is exactly retail's
-// re-stamp / release / tail-jump. The exe subclasses' slot-0 bodies call them
-// as qualified member calls (code/Game/Goal/*.cpp).
+// The DESTRUCTORS are real: `~Goal()` / `~GoalInstance()` are empty bodies
+// whose compiler-emitted chain (vptr store, `~String` on `_text`, `~External`
+// / `~Internal`) is exactly retail's re-stamp / release / tail-jump.
 //
 // Retail's historical notes that still matter, kept from the Wave 5 banner:
 //   * `??1Goal@Achievement@@QEAA@XZ`, `??1GoalInstance@…@QEAA@XZ`,
@@ -41,54 +39,6 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/Goal.h"
 #include "../../types/system/Value.h"
-
-// Forward-declared rather than pulled in from standalone/resolve.h: that
-// header drags in <windows.h>, and runtime/src/ stays platform-neutral
-// (PLAN §4.1). Byte-identical to resolve.h's; the linker checks the pair.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
-namespace {
-
-// The vtables the two constructor DOORS stamp. All EXPORTED data symbols,
-// resolved by name so the door installs the MINTED table, never GCC's
-// (B4b-2). Each is an RT_DATA_SLOT-shaped constant-initialised cache
-// (`RtResolveCached`), which is the B6-5 thread shape: GoalInstance objects are
-// constructed on the LOADER thread (GameUpdateLoop::Load -> GoalList::Initialize
-// -> Factory::CreateObject), B37_RULES §5.
-void* BaseVtable()         { return RT_EXPORT_ONCE(void*, "??_7Base@Object@@6B@"); }             // 0x180154788
-void* ExternalVtable()     { return RT_EXPORT_ONCE(void*, "??_7External@Object@@6B@"); }         // 0x1801547a0
-void* GoalVtable()         { return RT_EXPORT_ONCE(void*, "??_7Goal@Achievement@@6B@"); }        // 0x1801546b0
-void* GoalInstanceVtable() { return RT_EXPORT_ONCE(void*, "??_7GoalInstance@Achievement@@6B@"); } // 0x180154678
-
-// ??0Internal@Object@@QEAA@XZ  retail 0x1800bfd10 — allocates this object's
-// handle-table slot. GoalInstance's constructor CALLs it (not inlined). Stays
-// a by-address door: `Object::Internal` has no public real constructor either
-// (B4b-2), and the address is registered by runtime/src/object/, so
-// ResolveAddr lands on the port (registry first).
-using PtrThisFn = void* (*)(void*);
-std::atomic<void*> g_internalCtor{nullptr};
-void CallInternalCtor(void* self) {
-    void* p = g_internalCtor.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1800bfd10));
-        if (p != nullptr) g_internalCtor.store(p, std::memory_order_release);
-    }
-    reinterpret_cast<PtrThisFn>(p)(self);
-}
-
-// `?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A` @
-// 0x1801f9940 — retail's Goal::GetInstanceType reads its first dword. Note the
-// class asymmetry, which is not a typo: Goal::GetInstanceType returns
-// GOALINSTANCE's type, because "the instance type" is what GoalList::Initialize
-// asks the factory to create for this goal.
-uint32_t GoalInstanceTypeId() {
-    const uint32_t* p = RT_DATA_SLOT(const uint32_t*,
-        "?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A");
-    return *p;
-}
-
-}  // namespace
 
 namespace Achievement {
 
@@ -121,7 +71,24 @@ Goal::~Goal() {}
 // is raw storage, so the value is placement-constructed into it.
 // ============================================================================
 Object::Type* Goal::GetInstanceType(Object::Type* ret) const {
-    return new (ret) Object::Type(GoalInstanceTypeId());
+    return new (ret) Object::Type(GoalInstance::TypeId());
+}
+
+// ?CreateNewObject@Goal@Achievement@@SAPEAVBase@Object@@XZ        0x180001b70
+// ?CreateInPlaceObject@Goal@Achievement@@SAPEAVBase@Object@@PEAX@Z 0x180001b80
+// `XOR EAX,EAX ; RET` both: Goal is abstract (slots 6-8 are `_purecall`), so
+// retail's factory never builds one (the FACTREST row had no steps).
+Object::Base* Goal::CreateNewObject() { return nullptr; }
+Object::Base* Goal::CreateInPlaceObject(void*) { return nullptr; }
+
+// ?CreateNewObject@GoalInstance@Achievement@@SAPEAVBase@Object@@XZ 0x180001f50
+// MemAlloc(0x20, 8) (the locked `?MemAlloc@MemoryAllocator@System@@`
+// Object::detail::InternalMemAlloc reaches); retail's null branch; then the
+// inlined constructor (CALL ??0Internal, the stamp, the dword and qword zero).
+Object::Base* GoalInstance::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(GoalInstance), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) GoalInstance();
 }
 
 // ============================================================================
@@ -219,53 +186,8 @@ bool GoalList::AreGoalsMetExcept(const Object::InternalPtr<GoalInstance>* except
 }  // namespace Achievement
 
 // ############################################################################
-// The CONSTRUCTOR doors — NOT members (B4b-2, B7-13; see the banner).
+// The registered doors — one-line QUALIFIED delegations (non-slot members).
 // ############################################################################
-
-// ??0Goal@Achievement@@QEAA@XZ   retail 0x18009ed50
-//     [this] = ??_7Base; [this] = ??_7External;           (dead: MSVC's inlined
-//     [+0x08] = [+0x10] = [+0x18] = 0;                     base constructors)
-//     [this] = ??_7Goal; [+0x20] = [+0x28] = 0
-// Six qword stores covering 0x00..0x2f exactly. The two dead stores are kept:
-// a debugger or detour between them would make them observable.
-Achievement::Goal* RtAch_Goal_Ctor(Achievement::Goal* self) {
-    *reinterpret_cast<void**>(self) = BaseVtable();        // B.3.7 bridge — the minted vptr
-    *reinterpret_cast<void**>(self) = ExternalVtable();    // B.3.7 bridge
-    self->_path.data     = nullptr;                        // +0x08
-    self->_refs._data    = nullptr;                        // +0x10
-    self->_refs._size    = 0;                              // +0x18 — one qword store over
-    self->_refs._capacity = 0;                             //         size and capacity
-    *reinterpret_cast<void**>(self) = GoalVtable();        // B.3.7 bridge
-    // ENDGAME B.3.8 block RB (RULE B8-1): +0x20 / +0x28 are ONE body with the
-    // real constructor `Goal()` (Goal.h, `InitFields`).
-    Achievement::Goal::DoorBody::Init(self);
-    return self;   // retail returns `this` in RAX
-}
-
-// ??0GoalInstance@Achievement@@QEAA@XZ   retail 0x18009ef00
-//     CALL ??0Internal; [this] = ??_7GoalInstance;
-//     MOV dword [+0x10],0 (a DWORD — +0x14 is left alone); [+0x18] = 0
-Achievement::GoalInstance* RtAch_GoalInstance_Ctor(Achievement::GoalInstance* self) {
-    CallInternalCtor(self);
-    *reinterpret_cast<void**>(self) = GoalInstanceVtable();   // B.3.7 bridge — the minted vptr
-    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with `GoalInstance()`.
-    Achievement::GoalInstance::DoorBody::Init(self);
-    return self;
-}
-
-// ############################################################################
-// The registered doors — one-line QUALIFIED delegations.
-// ############################################################################
-
-// ??1Goal@Achievement@@UEAA@XZ  0x18009edb0
-void RtAch_Goal_Dtor(Achievement::Goal* self) {
-    self->Achievement::Goal::~Goal();
-}
-
-// ??1GoalInstance@Achievement@@UEAA@XZ  0x18009ef40
-void RtAch_GoalInstance_Dtor(Achievement::GoalInstance* self) {
-    self->Achievement::GoalInstance::~GoalInstance();
-}
 
 // ?GetGoalCount@GoalList@Achievement@@QEBAHXZ  0x180001700
 int RtAch_GoalList_GetGoalCount(const Achievement::GoalList* self) {
@@ -285,11 +207,6 @@ void* RtAch_GoalInstance_GetGoal(const Achievement::GoalInstance* self, void* re
     new (retval) Object::ExternalPtr<Achievement::Goal>(
         self->Achievement::GoalInstance::GetGoal());
     return retval;
-}
-
-// ?GetInstanceType@Goal@…  0x18009eeb0 — (this, ret), the slot-9 shape.
-Object::Type* RtAch_Goal_GetInstanceType(const Achievement::Goal* self, Object::Type* retval) {
-    return self->Achievement::Goal::GetInstanceType(retval);
 }
 
 // ?GetText@Goal@…  0x180001ba0 — (this, ret). `retval` is raw storage.
@@ -314,35 +231,29 @@ bool RtAch_GoalList_AreGoalsMetExcept(const Achievement::GoalList* self,
     return self->Achievement::GoalList::AreGoalsMetExcept(except);
 }
 
-// ?Update@GoalInstance@…  0x18009f010
-void RtAch_GoalInstance_Update(Achievement::GoalInstance* self, const System::Time* time,
-                               const Achievement::GoalList* list) {
-    self->Achievement::GoalInstance::Update(*time, *list);
-}
-
 // ============================================================================
 // Registration — by NAME and by ADDRESS, unchanged. Every mangled name is ONE
 // string literal on ONE line (tools/runtime_census.py cannot see any other
 // spelling — reference_census_cannot_see_nonliteral_registrations.md).
-// `Goal::Serialize` and `GoalInstance::Persist` register from
-// goal_serialize.cpp; the GoalList copy constructor and `operator=` are real
+// (ENDGAME B.3.9 ENG: the ctor / dtor / slot doors are gone with the minted
+// rows; `Goal::Serialize` and `GoalInstance::Persist` are members only.) The
+// GoalList copy constructor and `operator=` are real
 // members but have no caller and no registration (an unregistered address is
 // the honest state of a body nothing reaches).
 // ============================================================================
 int RtAchGoalRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("??0Goal@Achievement@@QEAA@XZ", (void*)&RtAch_Goal_Ctor); ++n;
-    RegisterRuntimeAddr(0x18009ed50, (void*)&RtAch_Goal_Ctor);
-
-    RegisterRuntimeExport("??1Goal@Achievement@@UEAA@XZ", (void*)&RtAch_Goal_Dtor); ++n;
-    RegisterRuntimeAddr(0x18009edb0, (void*)&RtAch_Goal_Dtor);
-
-    RegisterRuntimeExport("??0GoalInstance@Achievement@@QEAA@XZ", (void*)&RtAch_GoalInstance_Ctor); ++n;
-    RegisterRuntimeAddr(0x18009ef00, (void*)&RtAch_GoalInstance_Ctor);
-
-    RegisterRuntimeExport("??1GoalInstance@Achievement@@UEAA@XZ", (void*)&RtAch_GoalInstance_Dtor); ++n;
-    RegisterRuntimeAddr(0x18009ef40, (void*)&RtAch_GoalInstance_Dtor);
+    // ---- the factory pairs (B39_RULES D2): the classes' OWN statics. The
+    // minted `?_typeInfo@` records resolve them by name (MintTypeInfos runs
+    // after every *PortInit). GoalInstance's in-place half is the shared
+    // `?CreateInPlaceObject@Internal@Object@@` (Object::Internal's).
+    RegisterRuntimeExport("?CreateNewObject@Goal@Achievement@@SAPEAVBase@Object@@XZ", (void*)&Achievement::Goal::CreateNewObject); ++n;
+    RegisterRuntimeAddr(0x180001b70, (void*)&Achievement::Goal::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@Goal@Achievement@@SAPEAVBase@Object@@PEAX@Z", (void*)&Achievement::Goal::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr(0x180001b80, (void*)&Achievement::Goal::CreateInPlaceObject);
+    RegisterRuntimeExport("?CreateNewObject@GoalInstance@Achievement@@SAPEAVBase@Object@@XZ", (void*)&Achievement::GoalInstance::CreateNewObject); ++n;
+    RegisterRuntimeAddr(0x180001f50, (void*)&Achievement::GoalInstance::CreateNewObject);
 
     RegisterRuntimeExport("?GetGoalCount@GoalList@Achievement@@QEBAHXZ", (void*)&RtAch_GoalList_GetGoalCount); ++n;
     RegisterRuntimeAddr(0x180001700, (void*)&RtAch_GoalList_GetGoalCount);
@@ -352,9 +263,6 @@ int RtAchGoalRegister() {
 
     RegisterRuntimeExport("?GetGoal@GoalInstance@Achievement@@QEBA?AV?$ExternalPtr@VGoal@Achievement@@@Object@@XZ", (void*)&RtAch_GoalInstance_GetGoal); ++n;
     RegisterRuntimeAddr(0x180001fe0, (void*)&RtAch_GoalInstance_GetGoal);
-
-    RegisterRuntimeExport("?GetInstanceType@Goal@Achievement@@UEBA?AVType@Object@@XZ", (void*)&RtAch_Goal_GetInstanceType); ++n;
-    RegisterRuntimeAddr(0x18009eeb0, (void*)&RtAch_Goal_GetInstanceType);
 
     RegisterRuntimeExport("?GetText@Goal@Achievement@@QEBA?AVString@System@@XZ", (void*)&RtAch_Goal_GetText); ++n;
     RegisterRuntimeAddr(0x180001ba0, (void*)&RtAch_Goal_GetText);
@@ -368,10 +276,6 @@ int RtAchGoalRegister() {
     RegisterRuntimeExport("?AreGoalsMetExcept@GoalList@Achievement@@QEBA_NV?$InternalPtr@VGoalInstance@Achievement@@@Object@@@Z", (void*)&RtAch_GoalList_AreGoalsMetExcept); ++n;
     RegisterRuntimeAddr(0x18009f070, (void*)&RtAch_GoalList_AreGoalsMetExcept);
 
-    RegisterRuntimeExport("?Update@GoalInstance@Achievement@@UEAAXAEBVTime@System@@AEBVGoalList@2@@Z", (void*)&RtAch_GoalInstance_Update); ++n;
-    RegisterRuntimeAddr(0x18009f010, (void*)&RtAch_GoalInstance_Update);
-
-    printf("[RtPort] Achievement::Goal: %d/15 exports registered here "
-           "(+2 in goal_serialize.cpp: Goal::Serialize, GoalInstance::Persist)\n", n);
+    printf("[RtPort] Achievement::Goal: %d exports registered here\n", n);
     return n;
 }

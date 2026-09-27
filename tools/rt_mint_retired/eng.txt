@@ -8,3 +8,5 @@
 ??_7Surface@Collision2D@@6B@           ENG     class defined (was a file-local POD); real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR row, ??1 door, 7 slot doors deleted
 ??_7SoundBuffer@Audio@@6B@             ENG     real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR row, ??1 door, 7 slot doors deleted
 ??_7SoundEffect@Audio@@6B@             ENG     real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR row, ??1 door (deleting_dtor_leaves), 8 slot doors deleted
+??_7Goal@Achievement@@6B@              ENG     DeletingDtor + real ctor (abstract base); FACTREST row, RT_DELDTOR row, ??0/??1 doors, 5 slot doors deleted
+??_7GoalInstance@Achievement@@6B@      ENG     real ctor + DeletingDtor; FACTREST row, RT_DELDTOR row, ??0/??1 doors, 6 slot doors deleted
