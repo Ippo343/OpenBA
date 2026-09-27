@@ -18,7 +18,8 @@
 #include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
-#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (scoped ModelComponent fallback)
+#include "Object/factory_registration.h"
+#include "Component/ModelComponent.h"   // ModelComponent::TypeId (scoped find)
 #include "Component/component_factory_base.h" // ComponentFactory::the live gate (default-on gates)
 #include "Component/pickingcomponent_funcs.h" // PickingComponent_RegisterMeshForEntity (mesh-precise picking)
 #include <cstdio>                            // BANISHED_TOOL_DIAG place-model trace
@@ -202,8 +203,7 @@ static void EnsureD650Deps() {
 // GetTypeIdByName. Kept SCOPED here (do NOT fill the shared c7a50 global — that
 // regresses the verified produce/animation callers of 003f60).
 static void* ToolTile_FindModelComponentScoped(long long entity) {
-    static uint32_t s_tidModel = 0;
-    if (s_tidModel == 0) s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
+    const uint32_t s_tidModel = ModelComponent::TypeId();
     if (!entity || !s_tidModel) return nullptr;
     int n = *reinterpret_cast<int*>(entity + 0x38);
     long long arr = *reinterpret_cast<long long*>(entity + 0x30);

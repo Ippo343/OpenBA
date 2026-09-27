@@ -45,6 +45,8 @@
 #include "system/String.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
+#include "Dialog/BuildRequirementUI.h"
+#include "Component/ToolbarDescription.h"
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -99,25 +101,13 @@ void EnsureCreateBarExports() {
 // DAT_1401c4d40 — "BuildRequirementUI" (parent UI::DialogController). The CreateBar
 // controller type used to filter GetController. RegisterType_BuildRequirementUI.
 uint32_t BuildReqUICtrlTypeId() {
-    static uint32_t t = 0;
-    if (!t) {
-        const uint32_t* p = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4d40));
-        if (p) t = *p;                                        // raw .rdata type-id (null in standalone)
-        if (!t) t = ::Object::GetTypeIdByName("BuildRequirementUI");  // standalone fallback
-    }
-    return t;
+    return BuildRequirementUI::TypeId();
 }
 
 // DWORD_1401c7f58 — "ToolbarDescription" (parent Description). The component on the
 // tool's description entity that supplies textStatus content. ToolbarDescription_RegisterType.
 uint32_t ToolbarDescTypeId() {
-    static uint32_t t = 0;
-    if (!t) {
-        const uint32_t* p = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7f58));
-        if (p) t = *p;
-        if (!t) t = ::Object::GetTypeIdByName("ToolbarDescription");
-    }
-    return t;
+    return ToolbarDescription::TypeId();
 }
 
 // e360 IsDerivedFrom target — UI::ImageElement type-id. In the exe this is read as

@@ -16,6 +16,9 @@
 #include "options.h"
 #include "EditTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
+#include "Component/ModelComponent.h"
+#include "Dialog/EntityUI.h"
+#include "Dialog/ToolUI.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -192,11 +195,11 @@ static void EnsureEditFuncs() {
     static uint32_t s_tid_ToolUI_sa = 0, s_tid_EntityUI_sa = 0;
     auto validTid = [](uint32_t v) { return v != 0 && v != 0xFFFFFFFFu; };
     if (!s_pTypeId_ToolUI || !validTid(s_tid_ToolUI_sa)) {
-        if (!validTid(s_tid_ToolUI_sa)) s_tid_ToolUI_sa = ::Object::GetTypeIdByName("ToolUI");
+        if (!validTid(s_tid_ToolUI_sa)) s_tid_ToolUI_sa = ToolUI::TypeId();
         s_pTypeId_ToolUI = &s_tid_ToolUI_sa;
     }
     if (!s_pTypeId_PageToggleUI || !validTid(s_tid_EntityUI_sa)) {
-        if (!validTid(s_tid_EntityUI_sa)) s_tid_EntityUI_sa = ::Object::GetTypeIdByName("EntityUI");
+        if (!validTid(s_tid_EntityUI_sa)) s_tid_EntityUI_sa = EntityUI::TypeId();
         s_pTypeId_PageToggleUI = &s_tid_EntityUI_sa;
     }
 
@@ -220,13 +223,7 @@ extern "C" void HighlightFollow_Impl(void* self);
 // standalone exe that constant is null, so fall back to the live factory tree by
 // name (the same reason 0x140003f60's registered reimpl finds nothing in SA).
 static uint32_t ModelComponentTypeId() {
-    static uint32_t cached = 0;
-    if (cached) return cached;
-    uint32_t* p = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7a50);
-    if (p && *p) { cached = *p; return cached; }
-    uint32_t v = ::Object::GetTypeIdByName("ModelComponent");
-    if (v && v != 0xFFFFFFFFu) cached = v;
-    return cached;
+    return ModelComponent::TypeId();   // ENDGAME B.3.8 callers: the class's record
 }
 
 // Project a dynamic entity's (e.g. a citizen's) live world position to a screen point.

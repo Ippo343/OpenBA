@@ -25,6 +25,8 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "collection/Collection.h"
+#include "Component/CreateRoadDescription.h"
+#include "Component/DecalDescription.h"
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 #include <cstdint>
 #include <cstdio>
@@ -100,11 +102,11 @@ static void ResolveRoadToolFuncs() {
     static uint32_t s_tid_CreateRoad = 0;
     static uint32_t s_tid_Decal      = 0;
     if (!s_TypeId_CreateRoadDescription) {
-        s_tid_CreateRoad = ::Object::ResolveTypeIdByNameLazy("CreateRoadDescription");
+        s_tid_CreateRoad = CreateRoadDescription::TypeId();
         if (s_tid_CreateRoad) s_TypeId_CreateRoadDescription = &s_tid_CreateRoad;
     }
     if (!s_TypeId_DecalDescription) {
-        s_tid_Decal = ::Object::ResolveTypeIdByNameLazy("DecalDescription");
+        s_tid_Decal = DecalDescription::TypeId();
         if (s_tid_Decal) s_TypeId_DecalDescription = &s_tid_Decal;
     }
 

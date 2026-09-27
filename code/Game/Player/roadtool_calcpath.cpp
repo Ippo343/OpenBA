@@ -30,6 +30,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "Component/DecalDescription.h"
+#include "Component/MapDescription.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -81,9 +83,9 @@ void EnsureCalcPathFuncs() {
     // take the names from the live factory tree. Both verified against their RegisterType
     // DATA writers: 0x14014ee10 DecalDescription, 0x14014f390 MapDescription.
     if (!s_tid_DecalDescription)
-        s_tid_DecalDescription = ::Object::ResolveTypeIdByNameLazy("DecalDescription");
+        s_tid_DecalDescription = DecalDescription::TypeId();
     if (!s_tid_MapDescription)
-        s_tid_MapDescription = ::Object::ResolveTypeIdByNameLazy("MapDescription");
+        s_tid_MapDescription = MapDescription::TypeId();
 
     // Latch only once the type-ids are in hand — the factory tree is not populated until
     // after Engine::Startup, and latching early would leave them zero for the session.

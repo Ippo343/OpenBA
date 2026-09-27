@@ -12,7 +12,8 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
-#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
+#include "Object/factory_registration.h"
+#include "Component/ToolbarDescription.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
@@ -32,19 +33,10 @@
 //
 // Closure: fn_IsDerivedFrom (engine_funcs export), type-ID global 0x1401c7f58
 // (resolved lazily via ResolveAddr). No exe sub-calls.
-static uint32_t s_tid_c7f58 = 0;   // DWORD_1401c7f58 = "ToolbarDescription" type-id (value)
-static bool s_tidC7f58Init = false;
-
+// ENDGAME B.3.8 callers: DWORD_1401c7f58 is ToolbarDescription's type id, read
+// through the class (the file-local ti-cell read + by-name fallback cache are gone).
 void* DragTool_FindDescription_5160(uintptr_t descList, void* retval) {
-    if (!s_tidC7f58Init) {
-        // The raw .rdata global resolves to null in standalone → the scan below would
-        // no-op (the "no cost in CreateBar" symptom), so fall back to the name-keyed
-        // lookup (the proven Startup/createbar pattern).
-        const uint32_t* p = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7f58));
-        if (p) s_tid_c7f58 = *p;
-        if (!s_tid_c7f58) s_tid_c7f58 = ::Object::GetTypeIdByName("ToolbarDescription");
-        s_tidC7f58Init = true;
-    }
+    const uint32_t s_tid_c7f58 = ToolbarDescription::TypeId();
     void* found = nullptr;
     if (s_tid_c7f58) {
         int n = *reinterpret_cast<int*>(descList + 0x30);

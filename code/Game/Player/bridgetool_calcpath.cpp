@@ -45,6 +45,10 @@
 #include "graphics/Geometry.h"
 #include "BridgeTool.h"
 #include "Component/coll_bridge.h"
+#include "Component/MapComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/MultiObjectComponent.h"
+#include "Component/PickingComponent.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
@@ -124,8 +128,6 @@ void* FindComponentOn(void* entityIBPSlot, uint32_t typeId) {
     }
     return nullptr;
 }
-
-uint32_t Tid(const char* name) { return ::Object::ResolveTypeIdByNameLazy(name); }
 
 // Stamp cell rect + rotation onto a Map/Build-style component.
 void StampCells(void* comp, int col, int row, int w, int h, int rotation) {
@@ -345,10 +347,10 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
         reinterpret_cast<RtObject::Internal*>(master));   // B.3.3 bridge
     if (!master) return 0;
 
-    const uint32_t tidMap     = Tid("MapComponent");
-    const uint32_t tidModel   = Tid("ModelComponent");
-    const uint32_t tidMulti   = Tid("MultiObjectComponent");
-    const uint32_t tidPicking = Tid("PickingComponent");
+    const uint32_t tidMap     = MapComponent::TypeId();
+    const uint32_t tidModel   = ModelComponent::TypeId();
+    const uint32_t tidMulti   = MultiObjectComponent::TypeId();
+    const uint32_t tidPicking = PickingComponent::TypeId();
 
     {
         int mw = stepCol * bodyLen, mh = stepRow * bodyLen;

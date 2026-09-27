@@ -19,6 +19,11 @@
 #include "graphics/Mesh.h"
 #include <new>
 #include "Player/PlacementTool.h"
+#include "Player/RotationSetting.h"
+#include "Component/CreatePlacedDescription.h"
+#include "Component/MapDescription.h"
+#include "Component/ModelDescription.h"
+#include "Component/RadiusDescription.h"
 #include "PlacementTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
@@ -861,7 +866,7 @@ static void EnsureStartupFuncs() {
     // factory tree, same as the *Description type-ids above.
     if (!s_pTypeId_RotationSetting) {
         static uint32_t s_tid_RotationSetting = 0;
-        s_tid_RotationSetting = ::Object::ResolveTypeIdByNameLazy("RotationSetting");
+        s_tid_RotationSetting = RotationSetting::TypeId();
         s_pTypeId_RotationSetting = &s_tid_RotationSetting;
     }
 
@@ -883,10 +888,10 @@ static void EnsureStartupFuncs() {
     //         Startup derefs createComponent+0x28 (mesh count) UNGUARDED — MUST be present.
     //   +0x40 radiusComponent = DWORD_1401c4870 = RadiusDescription     (NOT "RadiusComponent")
     static uint32_t s_tid_CreatePlaced = 0, s_tid_Map = 0, s_tid_Model = 0, s_tid_Radius = 0;
-    s_tid_CreatePlaced = ::Object::ResolveTypeIdByNameLazy("CreatePlacedDescription");
-    s_tid_Map          = ::Object::ResolveTypeIdByNameLazy("MapDescription");
-    s_tid_Model        = ::Object::ResolveTypeIdByNameLazy("ModelDescription");
-    s_tid_Radius       = ::Object::ResolveTypeIdByNameLazy("RadiusDescription");
+    s_tid_CreatePlaced = CreatePlacedDescription::TypeId();
+    s_tid_Map          = MapDescription::TypeId();
+    s_tid_Model        = ModelDescription::TypeId();
+    s_tid_Radius       = RadiusDescription::TypeId();
     // Test the VALUE, not just the pointer. A pointer-only test (`if (!g_TypeId_X)`)
     // cannot see a slot that IS registered but was filled with 0, and that is exactly
     // what happened to +0x30 until 2026-07-31: reg_pipeline_typeids.cpp seeded

@@ -31,6 +31,7 @@
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra); cross-checked vs disassembly.
 
 #include "Player/PathTool.h"
+#include "Component/HighlightComponent.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "collection/Collection.h"
@@ -86,14 +87,14 @@ static void EnsureFns() {
     s_122e20 = reinterpret_cast<fn_ResolvePos_t>(ResolveAddr(Module::Exe, 0x140122e20));
     // DAT_1401c4410 (HighlightComponent type-id) is raw exe .rdata -> NULL in standalone.
     static uint32_t s_tidHi = 0;
-    if (s_tidHi == 0) s_tidHi = ::Object::GetTypeIdByName("HighlightComponent");
+    if (s_tidHi == 0) s_tidHi = HighlightComponent::TypeId();
     s_pTid_Highlight = &s_tidHi;
     s_init = true;
 }
 
 static inline uint32_t GetTypeId(void* obj) {
     if (!obj) return 0;
-    return (*(uint32_t(**)(void*))(*(uintptr_t*)obj + 0x10))(obj);
+    return reinterpret_cast<Object::Base*>(obj)->Type();  // B.3.8 bridge (component array element)
 }
 
 // ---- AVL node accessors (0x28-byte node, shared layout) ----
