@@ -716,6 +716,24 @@ static constexpr DelDtorSpec kSpecs[] = {
     // at +0x60 and chains to ~External. Run over a fabricated subject that
     // decrements a refcount that was never incremented and frees a garbage
     // pointer. A probe subject must be SAFE TO RUN; this one is not.
+    // 2026-09-12: slot 0 of ??_7VideoProgram@Video@@6B@ (videoprogram.cpp); 0x48 from
+    // CreateNewObject's Allocate(0x48, 8) and the eh_vector iterator stride.
+    // 2026-09-12: the Video shader family, all four slot-0 entries. Each row's two
+    // constants were read from the shipped bytes, not from the class header:
+    //   0x18004e360  LEA R9,[0x1800f50b0]  MOV EDX,0x50   Video::ShaderProgram
+    //   0x18004e810  LEA R9,[0x1800f61b0]  MOV EDX,0x58   Video::VertexProgram
+    //   0x18004eb90  LEA R9,[0x1800f3a00]  MOV EDX,0x58   Video::PixelProgram
+    //   0x18004b9d0  LEA R9,[0x1800f4c30]  MOV EDX,0x80   Video::RenderState
+    // All four destructors are ported in runtime/src/video/.
+    //
+    // THREE OF THE FOUR INLINE ~Class IN THE SCALAR ARM and call a CLASS-SPECIFIC
+    // `operator delete` (??3VertexProgram 0x18004e5f0, ??3PixelProgram 0x18004e970,
+    // ??3RenderState 0x18004b600) instead of the shared 0x180006a10. That changes
+    // nothing here: all three were disassembled for this commit and are the same
+    // `if (p) { Enter(cs); Free(_singleton, p); Leave(cs); }` as the other ten
+    // copies this file's banner enumerates, so DeletingDtorCore's single MemFree
+    // is retail's body. The `LEA R9` in each VECTOR arm still names the real
+    // destructor, which is what tools/rt_deleting_dtor_verify.py reads.
     // (UI::GroupDescription's row -- 0x180046af0: LEA R9,[0x180117c00]
     // ~GroupDescription, MOV EDX,0x78; a scalar arm whose class-specific
     // ??3GroupDescription (0x1800466f0) is the same single MemFree -- was retired
@@ -1103,8 +1121,6 @@ void* RtDelDtor_DialogLoaderLoopT(void* self, unsigned flags) {
 void* RtDelDtor_DialogLoopT(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18004d8b0>());
 }
-}
-}
 // IO::CompressedStream     ~CompressedStream = 0x1800aa650  (PORTED, lane PKG2)  [Wave 19]
 void* RtDelDtor_CompressedStream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180023fd0>());
@@ -1121,6 +1137,9 @@ void* RtDelDtor_EdgeMeshInstance(void* self, unsigned flags) {
 void* RtDelDtor_MeshInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180017330>());
 }
+
+
+
 
 
 
