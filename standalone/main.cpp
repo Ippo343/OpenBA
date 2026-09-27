@@ -34,6 +34,7 @@
 #include "Game/game_main.h"
 #include "Object/factory_registration.h"
 #include "Goal/StatGoal.h"             // ENDGAME B.3.9 EXA: StatGoal::Vtable() for the self-test
+#include "object/TypeInfo.h"           // ENDGAME B.3.9 RF: BaseTypeInfo::_firstTypeInfo for the self-test
 // WAVE 11 follow-up 5 (lane TINFO): the BaseTypeInfo::factoryFn dispatch census.
 
 // Wave 9 lane N's work-scheduler probe tally (code/Game/Action/action_base_complete.cpp).
@@ -746,15 +747,10 @@ static bool RunFactorySelfTest(const char* typeName,
         }
     }
 
-    uintptr_t headAddr = ResolveAddr(Module::Runtime, 0x1801fc6e0);
-    if (!headAddr) {
-        printf("[SelfTest %s] FAIL: cannot resolve _firstTypeInfo head\n", typeName);
-        return false;
-    }
-    ProbeBaseTypeInfo* head = *reinterpret_cast<ProbeBaseTypeInfo**>(headAddr);
-
-    ProbeBaseTypeInfo* match = nullptr;
-    for (ProbeBaseTypeInfo* p = head; p; p = p->next) {
+    // ENDGAME B.3.9 RF: the chain head is the class static, not a by-address
+    // read of ?_firstTypeInfo@ (0x1801fc6e0).
+    const ::Object::BaseTypeInfo* match = nullptr;
+    for (const ::Object::BaseTypeInfo* p = ::Object::BaseTypeInfo::_firstTypeInfo; p; p = p->next) {
         if (p->name && std::strcmp(p->name, typeName) == 0) { match = p; break; }
     }
     if (!match) {
@@ -763,9 +759,9 @@ static bool RunFactorySelfTest(const char* typeName,
         return false;
     }
     printf("[SelfTest %s]   found entry @ %p (factoryFn=%p, parent=%s)\n",
-           typeName, (void*)match,
+           typeName, (const void*)match,
            match->factoryFn,
-           match->parent ? match->parent : "(null)");
+           match->parentName ? match->parentName : "(null)");
 
     if (!match->factoryFn) {
         printf("[SelfTest %s] FAIL: factoryFn is NULL\n", typeName);

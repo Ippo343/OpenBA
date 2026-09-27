@@ -207,16 +207,3 @@ bool IsTypeDerivedFromByName(uint32_t typeId, const char* ancestorName) {
 }
 
 }  // namespace Object
-
-// ============================================================
-// StandaloneFactoryTest — not a retail type; a record with no factory that
-// only enlarges the chain by one. Kept as a plain BaseTypeInfo static until
-// its own commit deletes it (ENDGAME B.3.9 RF).
-// ============================================================
-namespace {
-    ::Object::Base* SelfTest_Factory() { return nullptr; }
-    ::Object::Base* SelfTest_InPlace(void* /*mem*/) { return nullptr; }
-    ::Object::BaseTypeInfo g_standaloneFactoryTest(
-        "StandaloneFactoryTest", /*parent=*/nullptr, /*fileExtension=*/nullptr,
-        &SelfTest_Factory, &SelfTest_InPlace);
-}
