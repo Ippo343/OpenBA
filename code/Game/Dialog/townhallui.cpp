@@ -15,6 +15,7 @@
 
 #include "ui/Panels.h"
 #include "engine_funcs.h"
+#include "Component/ValueDescription.h"   // ENDGAME B.3.9 TR: ValueDescription::TypeId()
 #include "system/String.h"
 #include "system/Filename.h"
 #include "Component/coll_bridge.h"
@@ -1421,7 +1422,7 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
             uint64_t entityPtr = entries[i].entityPtr;
 
             // Find ValueDescription component on entity
-            void* valDesc = TownHall_FindComponentByTypeId(entityPtr, *g_TypeInfo_ValueDescription);
+            void* valDesc = TownHall_FindComponentByTypeId(entityPtr, ValueDescription::TypeId());
             if (!valDesc) {
                 elemOff += 0x10;
                 continue;
@@ -2015,18 +2016,13 @@ namespace townhallui_sa {
 //   DAT   0x1401c4b80 "g_TypeId_TradeComponent_FC"   -> TradeComponent
 //   DAT   0x1401c7318 "g_TypeId_ComponentDescription_FC"      -> ComponentDescription
 void EnsureGlobals() {
-    if (!g_TypeInfo_ValueDescription) {
-        static uint32_t s_valueDesc = 0;
-        if (!s_valueDesc) s_valueDesc = ::Object::ResolveTypeIdByNameLazy("ValueDescription");
-        if (s_valueDesc) g_TypeInfo_ValueDescription = &s_valueDesc;
-    }
+    // ENDGAME B.3.9 TR: the ValueDescription by-name lazy fill is gone -- the readers
+    // use ValueDescription::TypeId() (cell 0x1401c4bf0, which was registered).
 }
 
 // Every global/function the Serialize+Startup+per-frame paths dereference
 // unguarded must be live, or a null-deref faults (no SEH under MinGW).
 bool Ready() {
-    if (!g_TypeInfo_ValueDescription)
-        return false;
     if (!(fn_GroupRating_Init && fn_GroupRating_Update && fn_ProfArrayPush &&
           fn_ProdArrayPush && fn_BST_Rebalance_0x30 && fn_BST_Rebalance_0x28 &&
           fn_BST_Insert_0x14 && fn_BST_FreeNodes && fn_QueryProductionStat &&
@@ -2090,13 +2086,8 @@ void DiagPrint(const char* where, void* self) {
         {"fn_InventorySort_Desc", (void*)fn_InventorySort_Desc},
         {"fn_DynArray_Resize",    (void*)fn_DynArray_Resize},
     };
-    // ENDGAME B.3.9 CG2: the 19 g_TypeId_* entries this diagnostic used to list
-    // retired — their class statics always answer, so "MISSING typeId" could
-    // never fire for them again. g_TypeInfo_ValueDescription is the one
-    // remaining (non-g_TypeId_) global still genuinely lazy-filled.
-    const N tids[] = {
-        {"ValueDescription", g_TypeInfo_ValueDescription},
-    };
+    // ENDGAME B.3.9 CG2 / TR: every type-id entry this diagnostic used to list
+    // retired — their class statics always answer.
     fprintf(stderr, "[TownHallSA] %s: self=%p bound=%d built=%d ready=%d town=%d extFactory=%d\n",
             where, self,
             self ? (Bound(self) ? 1 : 0) : -1,
@@ -2105,8 +2096,6 @@ void DiagPrint(const char* where, void* self) {
             (g_pExternalFactorySingleton && *g_pExternalFactorySingleton) ? 1 : 0);
     for (const N& f : fns)
         if (!f.p) fprintf(stderr, "[TownHallSA]   MISSING fn: %s\n", f.n);
-    for (const N& t : tids)
-        if (!t.p) fprintf(stderr, "[TownHallSA]   MISSING typeId: %s\n", t.n);
     if (g_pGameSingleton && *g_pGameSingleton) {
         uintptr_t gw = *(uintptr_t*)g_pGameSingleton;
         uintptr_t townMgr = *(uintptr_t*)(gw + 0xf0);

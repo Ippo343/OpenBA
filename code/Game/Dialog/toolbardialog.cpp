@@ -47,6 +47,8 @@
 #include "Component/coll_bridge.h"
 #include "graphics/Camera.h"   // ENDGAME B.3.5 closing pass -- Graphics::Camera
 #include "engine_funcs.h"
+#include "Player/EditTool.h"   // ENDGAME B.3.9 TR
+#include "Dialog/EntityUI.h"   // ENDGAME B.3.9 TR
 #include "system/String.h"
 #include "system/Filename.h"
 #include "Object/factory_registration.h"
@@ -59,6 +61,10 @@
 #include "Player/Tool.h"
 #include "Player/ToolSetting.h"   // ToolSetting::TypeId() (ENDGAME B.3.9 RF)
 #include "Component/UIDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/ToolbarDescription.h"   // ToolbarDescription::TypeId() (ENDGAME B.3.9 TR)
+#include "Game/Toolbar.h"                  // Toolbar::TypeId() (ENDGAME B.3.9 TR)
+#include "ui/ButtonElement.h"              // UI::ButtonElement::TypeId() (ENDGAME B.3.9 TR)
+#include "ui/CheckElement.h"               // UI::CheckElement::TypeId() (ENDGAME B.3.9 TR)
 
 
 #ifdef _DEBUG
@@ -191,10 +197,10 @@ static void ToolbarDialog_UpdateButtons_Impl(void* self) {
             subCount = *(int32_t*)(subData + 0x30);
         }
 
-        // Find the component type matching g_TypeId_ToolbarDescription_FC
+        // Find the component type matching ToolbarDescription (cell 0x1401c7f58)
         void* matchedComponent = nullptr;
-        if (g_TypeId_ToolbarDescription_FC && subCount > 0) {
-            uint32_t targetType = *g_TypeId_ToolbarDescription_FC;
+        if (subCount > 0) {
+            uint32_t targetType = ToolbarDescription::TypeId();
             for (int j = 0; j < subCount; j++) {
                 void* subItem = *(void**)(*(uintptr_t*)(subData + 0x28) + (int64_t)j * 8);
                 if (!subItem) continue;
@@ -529,7 +535,7 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
 // The Description object (param) has:
 //   +0x28: pointer to array of sub-item ptrs (Description children)
 //   +0x30: int32 count of sub-items
-// One child will be a UIDescription (g_TypeId_UIDescription),
+// One child will be a UIDescription (UIDescription::TypeId()),
 // which has the external resource ref at +0x28.
 //
 // The BST at gameSubsys+0x50 tracks utility dialog positions:
@@ -550,17 +556,6 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
 // ============================================================
 static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param) {
     uintptr_t self = (uintptr_t)gameSubsys;
-
-    // g_TypeId_UIDescription resolves from raw .rdata (0x1401c7f90) → NULL in the
-    // standalone exe. Without it the UIDescription sub-item search below never
-    // matches → no dialog opens. Point it at local storage filled from the live
-    // factory tree (the proven placementtool/ToolbarStandalone_Init pattern).
-    if (!g_TypeId_UIDescription) {
-        static uint32_t s_tid_UIDescription = 0;
-        if (s_tid_UIDescription == 0)
-            s_tid_UIDescription = UIDescription::TypeId();
-        g_TypeId_UIDescription = &s_tid_UIDescription;
-    }
 
     // Get the UserInterface singleton: *(gameWorld + 0x98)
     void* gameWorld = *g_pGameWorldSingleton;
@@ -606,8 +601,8 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
         // Call vtable[2] (+0x10) to get the type ID
         uint32_t subType = reinterpret_cast<Object::Base*>(subItem)->Type();  // B.3.8 bridge
 
-        if (subType == *g_TypeId_UIDescription) {
-            bool isDerived = fn_IsDerivedFrom(subItem, *g_TypeId_UIDescription);
+        if (subType == UIDescription::TypeId()) {
+            bool isDerived = fn_IsDerivedFrom(subItem, UIDescription::TypeId());
             if (isDerived) {
                 uiDescItem = subItem;
             }
@@ -1106,7 +1101,7 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
     // --- Step 5: Collect all Toolbar items matching our group ID ---
     // Use ExternalFactory::FindNext to iterate all Toolbar externals
     void* factory = *g_pExternalFactorySingleton;
-    uint32_t toolbarTypeId = *g_TypeId_ToolbarItem;
+    uint32_t toolbarTypeId = Toolbar::TypeId();
 
     // Temporary dynamic array for matching toolbar items
     void* itemList = nullptr;
@@ -1266,7 +1261,7 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
         if (templateIndex != 0) {
             // Cast element to ButtonElement via IsDerivedFrom
             void* elemForCast = newElement;
-            bool isButton = fn_IsDerivedFrom(elemForCast, *g_TypeId_HelpButtonElem);
+            bool isButton = fn_IsDerivedFrom(elemForCast, UI::ButtonElement::TypeId());
             void* buttonElem = isButton ? elemForCast : nullptr;
 
             uint64_t buttonRef;
@@ -1284,8 +1279,8 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
                         void* subItem = *(void**)(*(uintptr_t*)(entityDesc + 0x28) + (int64_t)j * 8);
                         // Virtual call to GetTypeId (vtable[2], offset 0x10)
                         uint32_t subType = reinterpret_cast<Object::Base*>(subItem)->Type();  // B.3.8 bridge
-                        if (subType == *g_TypeId_ToolbarDescription_FC) {
-                            bool derived = fn_IsDerivedFrom(subItem, *g_TypeId_ToolbarDescription_FC);
+                        if (subType == ToolbarDescription::TypeId()) {
+                            bool derived = fn_IsDerivedFrom(subItem, ToolbarDescription::TypeId());
                             if (derived) {
                                 buildReqComp = subItem;
                             }
@@ -1365,7 +1360,7 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
                 void* childElem = *(void**)childBuf;
 
                 // Cast to ImageElement
-                bool isImage = fn_IsDerivedFrom(childElem, *g_TypeId_ImageElement);
+                bool isImage = fn_IsDerivedFrom(childElem, UI::ImageElement::TypeId());
                 void* imageElem = isImage ? childElem : nullptr;
 
                 uint64_t imageRef;
@@ -1497,7 +1492,7 @@ void ToolbarDialog::OnUpdateLayout() {
                 if (!elem) continue;
 
                 // IsDerivedFrom check, then cast
-                bool isDerived = fn_IsDerivedFrom(elem, *g_TypeId_CheckElement);
+                bool isDerived = fn_IsDerivedFrom(elem, UI::CheckElement::TypeId());
                 void* typedElem = isDerived ? elem : nullptr;
 
                 // InternalBasePtr::Ctor to create a local ref
@@ -1572,7 +1567,7 @@ void ToolbarDialog::OnUpdateLayout() {
             void* childElem = *(void**)childBuf;
 
             // IsDerivedFrom check for TextElement type (exref at 0x140151508)
-            bool isDerived = fn_IsDerivedFrom(childElem, *g_TypeId_TextElement);
+            bool isDerived = fn_IsDerivedFrom(childElem, UI::TextElement::TypeId());
             void* textElem = isDerived ? childElem : nullptr;
 
             // Build local InternalPtr
@@ -1626,7 +1621,7 @@ void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
         // CheckPtr resolves lazy/weak InternalBasePtr before dereference
         // IsDerivedFrom check on the element
         void* elemObj = *(void**)element;
-        bool isDerived = fn_IsDerivedFrom(elemObj, *g_TypeId_CheckElement);
+        bool isDerived = fn_IsDerivedFrom(elemObj, UI::CheckElement::TypeId());
         void* typedElem = isDerived ? elemObj : nullptr;
 
         int64_t localElemRef;
@@ -1788,7 +1783,7 @@ void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
             // Our port had dropped that CheckPtr, so the read could see an
             // unresolved lazy/weak handle instead of the parent dialog.
             void* parentDialog = *(void**)(s + 0x28);
-            bool isDerivedParent = fn_IsDerivedFrom(parentDialog, *g_TypeId_ToolbarDialogParent);
+            bool isDerivedParent = fn_IsDerivedFrom(parentDialog, ToolbarDialog::TypeId());
             void* typedParent = isDerivedParent ? parentDialog : nullptr;
             // No null guard: retail's FUN_1400b9730 derefs param_1+0xe8 unguarded, so
             // this cast is expected to always succeed. It used to fail because the
@@ -1831,7 +1826,7 @@ void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
         void* elemObj = *(void**)element;
         void* castResult = nullptr;
         // FUN_140010e70: IsDerivedFrom check + cast
-        bool isDerived = fn_IsDerivedFrom(elemObj, *g_TypeId_CheckElement);
+        bool isDerived = fn_IsDerivedFrom(elemObj, UI::CheckElement::TypeId());
         if (isDerived) castResult = elemObj;
 
         int64_t localElemRef;
@@ -1908,3 +1903,226 @@ void* ToolbarDialog::CreateInPlaceObject(void* storage) {
 // The reflection record stays at the TU position of the UI_DIALOG_STUB row it
 // replaces (ui_dialog_stub_factories.cpp, B38 D4).
 DEFINE_EXE_VTABLE(ToolbarDialog, "_ZTV13ToolbarDialog")
+
+// moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.
+void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr) {
+    uintptr_t tc = (uintptr_t)toolController;
+    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+
+    // === Section 1: Enable tracking on EntityPanel controller ===
+    if (*(uintptr_t*)parentDialogPtr != 0) {
+
+        // Retail FUN_140103040 reads DWORD_1401c4f00 — whose registrar is
+        // RegisterType_EntityUI — TWICE, and both reads matter. Disassembled at
+        // 0x14010307a..0x1401030af (the decompiled C shows only the second; it drops
+        // GetController's third argument entirely and prints the retval buffer as a
+        // `uint` — reference_ghidra_c_output_vs_disassembly.md):
+        //
+        //     MOV  R8D,[0x1401c4f00]   ; arg 3 = the EntityUI type-id FILTER
+        //     MOV  RCX,[RBX]           ; this = DialogInstance*
+        //     LEA  RDX,[RBP+0x6f]      ; hidden retval slot
+        //     CALL [0x140151768]       ; UI::DialogInstance::GetController
+        //     ...
+        //     MOV  EDX,[0x1401c4f00]   ; and again, for IsDerivedFrom
+        //     CALL [0x140152a98]       ; fn_IsDerivedFrom
+        //
+        // So the type id has to be resolved BEFORE the GetController call, not after.
+        //
+        // GetController's third parameter is a TYPE-ID FILTER, not an index: retail
+        // 0x180113320 walks the controller array and compares the argument against each
+        // controller's own type id (Object::Internal vtable slot +0x10), returning null
+        // when nothing matches. Nothing has type id 0.
+        // (reference_getcontroller_third_arg_is_a_type_filter; the mangled name says so
+        // too — the trailing `I` in ...@Object@@I@Z is that uint32.)
+        //
+        // HISTORY, because this site has now been wrong twice in two different places and
+        // the second fix looked complete when it was not:
+        //   * Originally the downstream IsDerivedFrom used g_TypeId_PageToggleUI — a
+        //     different class (own slot 0x1401c5408, which nothing in this tree reads).
+        //     That was corrected to tidEntityUI, and the note left behind declared the
+        //     "camera centres but never FOLLOWS the entity" bug cured.
+        //   * IT WAS NOT. The UPSTREAM filter was left at literal 0, so GetController
+        //     returned null for every dialog, `controllerRaw` was null, the guard below
+        //     failed, panelController stayed null and entity+0xd8 was never set — the
+        //     identical symptom, for every caller ("go to entity" in workplace /
+        //     profession / residence / townhall / statusbar / toolbar / citizen panels),
+        //     now hidden behind a comment asserting it was fixed. Corrected 2026-09-07
+        //     (Wave 7 lane B; the port of GetController is what surfaced it).
+        // Guard the VALUE, not the pointer: a null-but-resolvable id is not a valid filter.
+        const uint32_t tidEntityUI = EntityUI::TypeId();   // cell 0x1401c4f00
+
+        // Get the EntityUI controller from the dialog instance.
+        uint8_t controllerBuf[16] = {};
+        ::new (static_cast<void*>(controllerBuf)) ::Object::InternalPtr<UI::DialogController>(
+            reinterpret_cast<UI::DialogInstance*>(*(void**)parentDialogPtr)->GetController(tidEntityUI));  // B.3.6 bridge
+
+        uintptr_t controllerRaw = *(uintptr_t*)controllerBuf;
+        void* panelController = nullptr;
+        if (controllerRaw != 0 && tidEntityUI) {
+            if (fn_IsDerivedFrom((void*)controllerRaw, tidEntityUI)) {
+                panelController = (void*)controllerRaw;
+            }
+        }
+
+        uint64_t ctrlRef = 0;
+        new (&ctrlRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(panelController));   // B.3.3 bridge
+
+        if (ctrlRef != 0) {
+            uintptr_t ctrl = (uintptr_t)ctrlRef;
+            uintptr_t trackedEntity = *(uintptr_t*)(ctrl + 0x38);
+
+            if (*(uint8_t*)(trackedEntity + 0xd8) == 0) {
+                // Enable tracking flag
+                ctrl = (uintptr_t)ctrlRef;
+                *(uint8_t*)(*(uintptr_t*)(ctrl + 0x38) + 0xd8) = 1;
+
+                if (fn_EntityPanel_SyncTracking) {
+                    fn_EntityPanel_SyncTracking((void*)ctrl);
+                }
+            }
+        }
+    }
+
+    // === Section 2: Get entity world position ===
+    float targetPos[3] = {0.0f, 0.0f, 0.0f};
+
+    uintptr_t entityRaw = *(uintptr_t*)entityPtr;
+
+    // Try ModelComponent (cell 0x1401c7a50)
+    uint64_t modelRef = 0;
+    fn_FindComponent_Character((void*)entityRaw, &modelRef);
+
+    bool gotPosition = false;
+    if (modelRef != 0) {
+        // Has ModelComponent — check for MultiObjectComponent
+        uint64_t multiRef = 0;
+        fn_FindComponent_MultiObject((void*)entityRaw, &multiRef);
+
+        if (multiRef == 0) {
+            // Single object (citizen/animal/tree): use model's transform position
+            uint64_t modelRef2 = 0;
+            fn_FindComponent_Character((void*)entityRaw, &modelRef2);
+            uintptr_t model = (uintptr_t)modelRef2;
+
+            // Math::Transform at ModelComponent+0x148 is {quat(16 bytes), pos(12 bytes)}
+            // Position starts at +0x10 within the 0x1C-byte Transform = ModelComponent+0x158
+            targetPos[0] = *(float*)(model + 0x158);
+            targetPos[1] = *(float*)(model + 0x15C);
+            targetPos[2] = *(float*)(model + 0x160);
+            gotPosition = true;
+        }
+    }
+
+    if (!gotPosition) {
+        // Building/multi-object: calculate center from BuildComponent grid footprint
+        uint64_t buildRef = 0;
+        fn_FindComponent_Build(*(void**)entityPtr, &buildRef);
+        uintptr_t build = (uintptr_t)buildRef;
+
+        int* mapGrid = *(int**)(game + 0xF8);
+        int gridSize = *mapGrid;
+        float halfGrid = (float)(gridSize >> 1);
+
+        int16_t posX = *(int16_t*)(build + 0x28);
+        int16_t posY = *(int16_t*)(build + 0x2a);
+        int16_t extX = *(int16_t*)(build + 0x2c);
+        int16_t extY = *(int16_t*)(build + 0x2e);
+
+        // Far corner of footprint
+        int idx1 = (int)extX + ((int)extY + (int)posY) * gridSize + (int)posX;
+        float inXY1[3] = {
+            (float)(idx1 % gridSize) - halfGrid,
+            (float)(idx1 / gridSize) - halfGrid,
+            0.0f
+        };
+        float pos1[3];
+        fn_MapGetTerrainPos(mapGrid, pos1, inXY1, '\0', nullptr);
+
+        // Origin corner of footprint
+        int idx2 = gridSize * (int)posY + (int)posX;
+        float inXY2[3] = {
+            (float)(idx2 % gridSize) - halfGrid,
+            (float)(idx2 / gridSize) - halfGrid,
+            0.0f
+        };
+        float pos2[3];
+        fn_MapGetTerrainPos(mapGrid, pos2, inXY2, '\0', nullptr);
+
+        // Midpoint of origin and far corner = footprint center
+        targetPos[0] = (pos1[0] + pos2[0]) * 0.5f;
+        targetPos[1] = (pos1[1] + pos2[1]) * 0.5f;
+        targetPos[2] = (pos1[2] + pos2[2]) * 0.5f;
+    }
+
+    // === Section 3: Snap camera to entity position ===
+    uintptr_t cameraSys = *(uintptr_t*)(game + 0xE0);
+
+    // Set camera target position
+    *(float*)(cameraSys + 0x1C) = targetPos[0];
+    *(float*)(cameraSys + 0x20) = targetPos[1];
+    *(float*)(cameraSys + 0x24) = targetPos[2];
+
+    // Zero-duration time for instant snap (matches original)
+    if (fn_Time_Ctor_Float) {
+        uint64_t timeVal;
+        fn_Time_Ctor_Float(&timeVal, 0.0f);
+    }
+
+    // Compute camera view transform and apply
+    if (fn_CameraSys_ComputeViewTransform) {
+        Math::Transform viewTransform;   // 0x1C bytes = compact Math::Transform
+        void* result = fn_CameraSys_ComputeViewTransform((void*)cameraSys, &viewTransform);
+
+        // ?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ  retail 0x18001fcd0
+        Math::Transform3 transform3 =
+            reinterpret_cast<const Math::Transform*>(result)->AsTransform3();
+        // B.3.5 bridge -- ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z.
+        // The Camera is embedded BY VALUE at cameraSys + 0x34; the proof is the
+        // writer, not the name: Reimpl_FUN_1400985b0
+        // (code/Game/Game/gameupdateloop_load.cpp) constructs it there with
+        // `??0Camera@Graphics@@` on this same +0xE0 object. The readiness `if` went
+        // with the door pointer -- it tested nothing else.
+        reinterpret_cast<Graphics::Camera*>(cameraSys + 0x34)
+            ->SetCameraToWorld(transform3);   // B.3.5 bridge
+    }
+
+    // === Section 4: Select entity in EditTool ===
+    // EditTool::TypeId() (cell 0x1401c6dd8). ENDGAME B.3.9 TR: the three `&& g_TypeId_EditTool`
+    // pointer tests went with the pointer (the cell was registered: they never failed).
+    void* currentTool = *(void**)(tc + 0x28);
+    void* editTool = nullptr;
+
+    if (currentTool) {
+        if (fn_IsDerivedFrom(currentTool, EditTool::TypeId())) {
+            editTool = currentTool;
+        }
+    }
+
+    uint64_t editToolRef = 0;
+    new (&editToolRef) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(editTool));   // B.3.3 bridge
+
+    if (editToolRef == 0) {
+        // Switch to EditTool mode
+        EntityUI_SetEditMode_Impl(toolController, 0);
+
+        // Re-read current tool after mode switch
+        void* newTool = *(void**)(tc + 0x28);
+        editTool = nullptr;
+        if (newTool) {
+            if (fn_IsDerivedFrom(newTool, EditTool::TypeId())) {
+                editTool = newTool;
+            }
+        }
+        editToolRef = 0;
+        new (&editToolRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(editTool));   // B.3.3 bridge
+    }
+
+    // Select the entity in the EditTool
+    if (editToolRef != 0) {
+        void* entityRefCopy = *(void**)entityPtr;
+        fn_EditTool_SelectEntity((void*)(uintptr_t)editToolRef, &entityRefCopy);
+    }
+}

@@ -259,7 +259,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             void* matResource = nullptr;
             if (matExternal) {
                 // IsDerivedFrom check for Material type
-                if (fn_IsDerivedFrom(matExternal, *g_TypeId_TextElement)) {
+                if (fn_IsDerivedFrom(matExternal, UI::TextElement::TypeId())) {
                     matResource = matExternal;
                 }
             }
@@ -863,7 +863,7 @@ static int SaveLoad_ShowConfirmDialog(void* self, const char* rscPath) {
     // IsDerivedFrom check — ensure it's a valid External (matches original _typeInfo_exref)
     void* checkedRes = nullptr;
     if (externalRes) {
-        bool isExternal = fn_IsDerivedFrom(externalRes, *g_TypeId_Dialog);
+        bool isExternal = fn_IsDerivedFrom(externalRes, UI::Dialog::TypeId());
         if (isExternal) checkedRes = externalRes;
     }
 
@@ -1046,7 +1046,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
 
         void* checkedWarn = nullptr;
         if (warnExt) {
-            if (fn_IsDerivedFrom(warnExt, *g_TypeId_Dialog)) {
+            if (fn_IsDerivedFrom(warnExt, UI::Dialog::TypeId())) {
                 checkedWarn = warnExt;
             }
         }
@@ -1065,13 +1065,13 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
         uint64_t warnDlgPtr = 0;
         new (&warnDlgPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(warnDlg));   // B.3.3 bridge
 
-        // Find TextElement within dialog (uses g_TypeId_TextElement)
+        // Find TextElement within dialog (UI::TextElement::TypeId())
         uint64_t textElemPtr = 0;
-        ::new (&textElemPtr) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)warnDlgPtr)->FindElementType(*g_TypeId_TextElement));  // B.3.6 bridge
+        ::new (&textElemPtr) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)warnDlgPtr)->FindElementType(UI::TextElement::TypeId()));  // B.3.6 bridge
 
         // Check IsDerivedFrom TextElement
         void* rawElem = *(void**)&textElemPtr;
-        bool isText = fn_IsDerivedFrom(rawElem, *g_TypeId_TextElement);
+        bool isText = fn_IsDerivedFrom(rawElem, UI::TextElement::TypeId());
         void* textElem = isText ? rawElem : nullptr;
 
         uint64_t textPtr = 0;

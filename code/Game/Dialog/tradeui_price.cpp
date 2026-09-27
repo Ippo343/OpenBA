@@ -50,6 +50,8 @@
 #include "resolve.h"
 #include "object/Internal.h"   // Object::Base::Type (B.3.8 callers)
 #include "engine_funcs.h"
+#include "Component/ValueDescription.h"   // ENDGAME B.3.9 TR: ValueDescription::TypeId()
+#include "Component/TradeDescription.h"   // ENDGAME B.3.9 TR: TradeDescription::TypeId()
 #include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.9 CG2)
 #include <cstdint>
 #include <cstdio>
@@ -91,8 +93,7 @@ extern "C" void** TradeUI_FindValueDescription_ea80(const void* resourceEntity,
                                                     void** out) {
     if (!out) return out;
     *out = nullptr;
-    if (!g_TypeInfo_ValueDescription) return out;
-    *out = PriceFindComponentByTypeId(resourceEntity, *g_TypeInfo_ValueDescription);
+    *out = PriceFindComponentByTypeId(resourceEntity, ValueDescription::TypeId());
     return out;
 }
 
@@ -108,9 +109,7 @@ extern "C" int TradeUI_GetResourcePrice_a520(void* tradeState, void* resourceEnt
 
     // ── No merchant docked: the base value, straight out of ValueDescription.
     if (merchantIdx < 0) {
-        void* vd = g_TypeInfo_ValueDescription
-            ? PriceFindComponentByTypeId(resourceEntity, *g_TypeInfo_ValueDescription)
-            : nullptr;
+        void* vd = PriceFindComponentByTypeId(resourceEntity, ValueDescription::TypeId());
         const int32_t base = vd
             ? *reinterpret_cast<const int32_t*>(reinterpret_cast<uint8_t*>(vd) + 0x40)
             : 0;                                   // retail: *(int*)(0 + 0x40)
@@ -124,8 +123,8 @@ extern "C" int TradeUI_GetResourcePrice_a520(void* tradeState, void* resourceEnt
         : 0;
 
     void* tradeDesc = *reinterpret_cast<void* const*>(ts + 0x18);
-    if (tradeDesc && g_TypeInfo_TradeDescription && fn_IsDerivedFrom &&
-        !fn_IsDerivedFrom(tradeDesc, *g_TypeInfo_TradeDescription)) {
+    if (tradeDesc && fn_IsDerivedFrom &&
+        !fn_IsDerivedFrom(tradeDesc, TradeDescription::TypeId())) {
         tradeDesc = nullptr;                       // retail keeps null on a failed check
     }
     if (!tradeDesc) return 0;                      // retail would deref null here

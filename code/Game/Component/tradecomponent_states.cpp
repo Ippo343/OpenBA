@@ -72,6 +72,7 @@
 #include "Component/controller_state_table.h"
 #include "Component/TradeComponent.h"
 #include "engine_funcs.h"
+#include "Component/TradeDescription.h"   // ENDGAME B.3.9 TR: TradeDescription::TypeId()
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -155,8 +156,8 @@ void Resolve() {
 // than restore it. If this ever faults, the description on +0x18 is the bug.
 void* TradeDesc(uintptr_t comp) {
     void* raw = *reinterpret_cast<void**>(comp + 0x18);
-    if (!g_TypeInfo_TradeDescription || !fn_IsDerivedFrom) return nullptr;
-    return fn_IsDerivedFrom(raw, *g_TypeInfo_TradeDescription) ? raw : nullptr;
+    if (!fn_IsDerivedFrom) return nullptr;
+    return fn_IsDerivedFrom(raw, TradeDescription::TypeId()) ? raw : nullptr;
 }
 
 
@@ -496,8 +497,8 @@ extern "C" char TradeCtrl_State2_Tick(void* selfV, void* smV, void* deltaTime) {
     if (boatCompPtr) {
         BoatComponent_SetDestination(boatCompPtr, &destIBP);
     } else {
-        std::fprintf(stderr, "[TradeCtrl] merchant has NO BoatComponent (type-id slot "
-                             "0x1401c4020 unseeded? needs BANISHED_LIVE_TRADE_TIDS) — "
+        std::fprintf(stderr, "[TradeCtrl] merchant has NO BoatComponent "
+                             "(the template lacks it) — "
                              "boat spawned with no route\n");
         std::fflush(stderr);
     }

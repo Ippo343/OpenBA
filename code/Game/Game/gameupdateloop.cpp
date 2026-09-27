@@ -63,10 +63,6 @@
 #include "audio/Audio.h"                      // ENDGAME B.3.7 callers (K4)
 #include "input/Input.h"                      // ENDGAME B.3.7 callers (K3)
 
-// Toolbar HUD standalone bring-up (code/Game/Dialog/toolbar_vtable_standalone.cpp):
-// builds the ToolbarDialog vtable + fills the toolbar type-id globals. Called only
-// from the BANISHED_LIVE_TOOLBAR-gated HUD path in Startup below.
-extern "C" void ToolbarStandalone_Init();
 // EventNotify ribbon standalone ctor (code/Game/Dialog/eventnotifydialog.cpp) —
 // builds the ribbon dialog (DialogInstance base + our SA vtable + field init).
 extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);
@@ -2073,10 +2069,7 @@ void GameUpdateLoop::Startup() {
 
     // HUD bring-up — the in-game Toolbar (Keystone F). Gated behind the env var
     // BANISHED_LIVE_TOOLBAR (default OFF → the default build stays byte-identical).
-    // When set, ToolbarStandalone_Init() (toolbar_vtable_standalone.cpp) builds the
-    // standalone ToolbarDialog vtable (exe 0x14015fa00 has no standalone counterpart)
-    // and fills the toolbar type-id globals (g_TypeId_ToolbarItem 0x1401c6128 etc.),
-    // and the resource is resolved via ExternalFactory::FindOrLoad (m_resourceList is
+    // The resource is resolved via ExternalFactory::FindOrLoad (m_resourceList is
     // empty in standalone — the preload that populates it is off by default).
     // The Toolbar ctor (0x1400b9910 -> ToolbarDialog_Ctor_Impl) is already registered.
     //
@@ -2097,9 +2090,8 @@ void GameUpdateLoop::Startup() {
     // Create and add Toolbar dialog
     TRACE("[GameUpdateLoop::Startup] creating Toolbar dialog...\n");
     if (kCreateToolbar) {
-        // Synthesize the standalone ToolbarDialog vtable + fill the toolbar type-id
-        // globals before any toolbar object is constructed. Idempotent.
-        ToolbarStandalone_Init();
+        // (ENDGAME B.3.9 TR: ToolbarStandalone_Init and its file are gone -- the
+        // toolbar reads Toolbar / ToolbarDescription / UI element TypeId() directly.)
         System::Filename filename("Dialog/Toolbar.rsc");
 
         // Find the Dialog resource. First try the loop's resource list (populated

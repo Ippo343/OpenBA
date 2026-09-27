@@ -60,6 +60,8 @@
 // any of these four addresses.
 
 #include "engine_funcs.h"
+#include "Component/ValueDescription.h"   // ENDGAME B.3.9 TR: ValueDescription::TypeId()
+#include "Component/TradeDescription.h"   // ENDGAME B.3.9 TR: TradeDescription::TypeId()
 #include "Component/ControllerComponent.h"
 #include "Component/RawMaterialDescription.h"
 #include "resolve.h"
@@ -140,8 +142,8 @@ void Resolve() {
 // The TradeDescription off component+0x18, cast exactly as retail does it.
 void* TradeDesc(uintptr_t comp) {
     void* raw = *reinterpret_cast<void**>(comp + 0x18);
-    if (!g_TypeInfo_TradeDescription || !fn_IsDerivedFrom) return nullptr;
-    return fn_IsDerivedFrom(raw, *g_TypeInfo_TradeDescription) ? raw : nullptr;
+    if (!fn_IsDerivedFrom) return nullptr;
+    return fn_IsDerivedFrom(raw, TradeDescription::TypeId()) ? raw : nullptr;
 }
 
 uintptr_t TownMgr() {
@@ -406,7 +408,7 @@ extern "C" void TradeComponent_BuildMerchantManifest(void* selfV) {
 
     // Each good's ValueDescription, pushed even when absent so the two arrays stay
     // index-aligned — the roll below indexes both with the same number.
-    const uint32_t tidValue = g_TypeInfo_ValueDescription ? *g_TypeInfo_ValueDescription : 0;
+    const uint32_t tidValue = ValueDescription::TypeId();   // cell 0x1401c4bf0
     for (int32_t i = 0; i < goods.count; ++i) {
         void* good = reinterpret_cast<void**>(goods.base)[i];
         PtrArrayPush(values, FindChildByTypeId(reinterpret_cast<uintptr_t>(good), tidValue));
@@ -422,9 +424,8 @@ extern "C" void TradeComponent_BuildMerchantManifest(void* selfV) {
     // the player can turn off reproduces nothing, so name the flag instead.
     if (values.count <= 0) {
         std::fprintf(stderr, "[TradeDock] manifest: NO GOODS to offer (buy list empty). "
-                             "If BANISHED_LIVE_TRADE_TIDS is off, that is why — the "
-                             "ComponentDescription type-id 0x1401c7318 reads 0 and the "
-                             "ExternalFactory walk matches nothing.\n");
+                             "The ExternalFactory walk over ComponentDescription "
+                             "matched nothing.\n");
         std::fflush(stderr);
         if (fn_MemFreeStatic) { fn_MemFreeStatic(reinterpret_cast<void*>(values.base));
                                 fn_MemFreeStatic(reinterpret_cast<void*>(goods.base)); }
@@ -446,7 +447,7 @@ extern "C" void TradeComponent_BuildMerchantManifest(void* selfV) {
             if (!warned) {
                 warned = true;
                 std::fprintf(stderr, "[TradeDock] manifest: good #%d has NO ValueDescription "
-                                     "(type-id 0x1401c4bf0 reads %u) — skipping the roll\n",
+                                     "(ValueDescription type-id %u) — skipping the roll\n",
                              pick, tidValue);
                 std::fflush(stderr);
             }
