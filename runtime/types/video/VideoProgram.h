@@ -78,20 +78,12 @@
 // `?CreateNewObject@` (0x18004ed40), which allocates 0x48 with alignment 8.
 //
 // ---------------------------------------------------------------------------
-// *** NOT CONSTRUCTIBLE, AND SLOT 0 IS PURE. *** (B34_BRIEFS A.4)
+// ENDGAME B.3 step 9, block VID (B39_RULES.md D1/D2): CONCRETE. Retail's real
+// public constructor (??0VideoProgram 0x1800f45b0), its own slot 0, and the
+// factory pair as its own statics: every live VideoProgram wears the COMPILER's
+// table. The minted row, its RT_DELDTOR row 0x18004efb0, the ??0 / ??1 doors and
+// the seven slot doors are retired (tools/rt_mint_retired/vid.txt).
 // ---------------------------------------------------------------------------
-// As with the rest of this family: retail's slot 0 is a concrete per-class body,
-// ours is `runtime/src/object/deleting_dtor.cpp`'s ONE table-driven body reached
-// through the `RT_DELDTOR` row above, and B35_RULES 11 keeps that row for the
-// whole of step 5. Declaring slot 0 `override = 0` is what makes the vtable
-// emittable at all once `~VideoProgram()` is defined, and it costs nothing
-// because nothing constructs a VideoProgram as a C++ object: every live one is
-// built by `Object::ExternalFactory` through the registered ctor DOOR
-// (`??0VideoProgram@Video@@QEAA@XZ`), which stamps the MINTED vtable address that
-// a C++ constructor cannot write (B4b-2). The default constructor is `protected`
-// and `= default` so `Video::VideoProgram p;` cannot compile while a probe
-// subclass in `tests/unit/` still reaches it.
-//
 // NO VIRTUAL DESTRUCTOR (ENDGAME B.1 decision 2): slot 0 is
 // `DeletingDtor(unsigned)`. `~VideoProgram()` (0x1800f4650) is non-virtual, and
 // its tail-JMP to `~External` (0x1800bc950) is the destructor CHAIN.
@@ -101,6 +93,7 @@
 #include <cstdint>
 
 #include "../object/External.h"
+#include "../object/Internal.h"                // Object::detail::InternalMemFree
 
 namespace Video {
 
@@ -122,10 +115,38 @@ class RenderState;
 // ============================================================
 class VideoProgram : public Object::External {
 public:
+    // ??0VideoProgram@Video@@QEAA@XZ 0x1800f45b0 -- the REAL constructor.
+    // External() (Base's and External's vptrs, +0x08/+0x10/+0x18 zeroed), NO
+    // CompiledExternal (see the banner), VideoProgram's vptr (the compiler's),
+    // the four ExternalPtrs zeroed, then PlatformConstruct fills +0x40.
+    VideoProgram() : Object::External() {
+        _vertexLayout  = nullptr;   // +0x20
+        _vertexProgram = nullptr;   // +0x28
+        _pixelProgram  = nullptr;   // +0x30
+        _renderState   = nullptr;   // +0x38
+        PlatformConstruct();        // +0x40
+    }
+
     // ---- the nine slots, in measured order (B35_SLOTS.md) ---------------
     // Slot 4 is `Object::External::Compile`, INHERITED (retail's slot 4 is
     // 0x1800066e0, External's own body).
-    Object::Base*     DeletingDtor(unsigned flags) override = 0;  // [0] 0x18004efb0
+    //
+    // [0] 0x18004efb0 -- MSVC's VECTOR deleting destructor (`MOV EDX,0x48`, the
+    // eh-vector dtor over ~VideoProgram 0x1800f4650), both arms as the retired
+    // RT_DELDTOR row ran them. Nothing `new[]`s one.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<VideoProgram*>(self + static_cast<int64_t>(i) * 0x48)->~VideoProgram();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~VideoProgram();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char*       TypeName() const override;                  // [1] 0x18004ec50
     uint32_t          Type() const override;                      // [2] 0x18004ec30
     int32_t           GetFileVersion() const override;            // [3] 0x1800f46a0 — `MOV EAX,1`
@@ -191,21 +212,21 @@ public:
     void Bind(void* context, int32_t permutation) const;
 
     // The three platform halves. `AEAA` is PRIVATE IN RETAIL, not unexported
-    // (reference_aeaa_is_private_not_unexported.md); public here because the ctor
-    // door and the destructor — free functions, not members or friends — call
-    // them. `PlatformCreate` returns void, like VertexLayout's and unlike
-    // VertexProgram's and PixelProgram's.
+    // (reference_aeaa_is_private_not_unexported.md); public here as the rest of
+    // this family has them. `PlatformCreate` returns void, like VertexLayout's
+    // and unlike VertexProgram's and PixelProgram's.
     void PlatformConstruct();    // 0x1800f47a0
     void PlatformDestruct();     // 0x1800f47f0
     void PlatformCreate();       // 0x1800f4810
 
-    // ??1VideoProgram@Video@@UEAA@XZ (0x1800f4650). NON-virtual; PUBLIC because
-    // the registered door has to spell `->Video::VideoProgram::~VideoProgram()`.
-    ~VideoProgram();
-
-    static uint32_t      TypeId();                                 // 0x18004ec40 — not ported
-    static Object::Base* CreateNewObject();                        // 0x18004ed40 — rt_factories_video.inc
-    static Object::Base* CreateInPlaceObject(void* storage);       // 0x18004edc0 — rt_factories_video.inc
+    // 0x18004ec40 -- `MOV EAX,[_typeInfo]` over the (still minted)
+    // `?_typeInfo@VideoProgram@Video@@` record (B39_RULES D6 step 1).
+    static uint32_t      TypeId();
+    // Retail's factory pair (B39_RULES D2), defined in videoprogram.cpp. The class
+    // declares its own placement `operator new` (not ported): placement spells
+    // `::new (p)`.
+    static Object::Base* CreateNewObject();                        // 0x18004ed40
+    static Object::Base* CreateInPlaceObject(void* storage);       // 0x18004edc0
     static void*         operator new(size_t size);                // 0x18004ec60 — not ported
     static void*         operator new(size_t size, void* storage); // 0x18004ecd0 — not ported
     static void          operator delete(void* p);                 // 0x18004ece0 — class_operator_delete.cpp
@@ -221,9 +242,10 @@ public:
     static const char* _ParentTypeName();  // 0x18004ec20 -> "Object::External" — not ported
 
 protected:
-    // See the "NOT CONSTRUCTIBLE" banner. `??0VideoProgram@Video@@QEAA@XZ`
-    // (0x1800f45b0) stays a registered ctor DOOR (B4b-2 / B35_RULES 11).
-    VideoProgram() = default;
+    // ??1VideoProgram@Video@@UEAA@XZ (0x1800f4650). NON-VIRTUAL (no virtual dtor
+    // until the normal-virtual cutover); reached through slot 0. Retail's body is
+    // PlatformDestruct; its tail-JMP to ~External is the destructor chain.
+    ~VideoProgram();
 
 public:
     // ---- the 0x28 bytes VideoProgram adds ------------------------------

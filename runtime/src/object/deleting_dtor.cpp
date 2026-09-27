@@ -742,30 +742,10 @@ static constexpr DelDtorSpec kSpecs[] = {
     // ported in runtime/src/graphics/material.cpp; sizeof from the
     // eh_vector_destructor_iterator call in 0x180011d20 (0x38).
     RT_DELDTOR(0x180011d20, 0x180102a00, 0x038, "Graphics::Material"),
-    // 2026-09-12: slot 0 of ??_7VideoProgram@Video@@6B@ (videoprogram.cpp); 0x48 from
-    // CreateNewObject's Allocate(0x48, 8) and the eh_vector iterator stride.
-    RT_DELDTOR(0x18004efb0, 0x1800f4650, 0x048, "Video::VideoProgram"),
-    RT_DELDTOR(0x18004e000, 0x1800f5df0, 0x048, "Video::VertexLayout"),   // vertexlayout.cpp (2026-09-12)
-    // 2026-09-12: the Video shader family, all four slot-0 entries. Each row's two
-    // constants were read from the shipped bytes, not from the class header:
-    //   0x18004e360  LEA R9,[0x1800f50b0]  MOV EDX,0x50   Video::ShaderProgram
-    //   0x18004e810  LEA R9,[0x1800f61b0]  MOV EDX,0x58   Video::VertexProgram
-    //   0x18004eb90  LEA R9,[0x1800f3a00]  MOV EDX,0x58   Video::PixelProgram
-    //   0x18004b9d0  LEA R9,[0x1800f4c30]  MOV EDX,0x80   Video::RenderState
-    // All four destructors are ported in runtime/src/video/.
-    //
-    // THREE OF THE FOUR INLINE ~Class IN THE SCALAR ARM and call a CLASS-SPECIFIC
-    // `operator delete` (??3VertexProgram 0x18004e5f0, ??3PixelProgram 0x18004e970,
-    // ??3RenderState 0x18004b600) instead of the shared 0x180006a10. That changes
-    // nothing here: all three were disassembled for this commit and are the same
-    // `if (p) { Enter(cs); Free(_singleton, p); Leave(cs); }` as the other ten
-    // copies this file's banner enumerates, so DeletingDtorCore's single MemFree
-    // is retail's body. The `LEA R9` in each VECTOR arm still names the real
-    // destructor, which is what tools/rt_deleting_dtor_verify.py reads.
-    RT_DELDTOR(0x18004e360, 0x1800f50b0, 0x050, "Video::ShaderProgram"),
-    RT_DELDTOR(0x18004e810, 0x1800f61b0, 0x058, "Video::VertexProgram"),
-    RT_DELDTOR(0x18004eb90, 0x1800f3a00, 0x058, "Video::PixelProgram"),
-    RT_DELDTOR(0x18004b9d0, 0x1800f4c30, 0x080, "Video::RenderState"),
+    // (The Video resource family's six rows -- VideoProgram 0x18004efb0,
+    // VertexLayout 0x18004e000, ShaderProgram 0x18004e360, VertexProgram
+    // 0x18004e810, PixelProgram 0x18004eb90, RenderState 0x18004b9d0 -- were
+    // retired by ENDGAME B.3.9 VID: slot 0 is each class's own.)
     // (UI::GroupDescription's row -- 0x180046af0: LEA R9,[0x180117c00]
     // ~GroupDescription, MOV EDX,0x78; a scalar arm whose class-specific
     // ??3GroupDescription (0x1800466f0) is the same single MemFree -- was retired
@@ -1278,33 +1258,6 @@ void* RtDelDtor_Material(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180011d20>());
 }
 
-// Video::VideoProgram       ~VideoProgram = 0x1800f4650  (PORTED, videoprogram.cpp)
-void* RtDelDtor_VideoProgram(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004efb0>());
-}
-
-// Video::VertexLayout       ~VertexLayout = 0x1800f5df0  (PORTED, vertexlayout.cpp)
-void* RtDelDtor_VertexLayout(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004e000>());
-}
-
-// Video::ShaderProgram      ~ShaderProgram = 0x1800f50b0  (PORTED, shaderprogram.cpp)
-void* RtDelDtor_ShaderProgram(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004e360>());
-}
-// Video::VertexProgram      ~VertexProgram = 0x1800f61b0  (PORTED, vertexprogram.cpp)
-void* RtDelDtor_VertexProgram(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004e810>());
-}
-// Video::PixelProgram       ~PixelProgram = 0x1800f3a00   (PORTED, pixelprogram.cpp)
-void* RtDelDtor_PixelProgram(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004eb90>());
-}
-// Video::RenderState        ~RenderState = 0x1800f4c30    (PORTED, renderstate.cpp)
-void* RtDelDtor_RenderState(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004b9d0>());
-}
-
 // Rows 57-60 (2026-09-12): the four UI::*Description classes the cutover boot
 // walked that afternoon. Their table rows landed with the class ports but the
 // wrapper + RegisterRuntimeAddr pair did not, so slot 0 of each minted vtable
@@ -1479,12 +1432,6 @@ void RtObjectDeletingDtorPortInit() {
 
     RegisterRuntimeAddr(0x180035350, (void*)&RtDelDtor_ElementDescription);    // Wave 27 IOTEXT
     RegisterRuntimeAddr(0x180011d20, (void*)&RtDelDtor_Material);
-    RegisterRuntimeAddr(0x18004efb0, (void*)&RtDelDtor_VideoProgram);
-    RegisterRuntimeAddr(0x18004e000, (void*)&RtDelDtor_VertexLayout);
-    RegisterRuntimeAddr(0x18004e360, (void*)&RtDelDtor_ShaderProgram);
-    RegisterRuntimeAddr(0x18004e810, (void*)&RtDelDtor_VertexProgram);
-    RegisterRuntimeAddr(0x18004eb90, (void*)&RtDelDtor_PixelProgram);
-    RegisterRuntimeAddr(0x18004b9d0, (void*)&RtDelDtor_RenderState);
 
 
     // VTABLE BATCH 9

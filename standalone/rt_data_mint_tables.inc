@@ -3,8 +3,8 @@
 // harvest of Runtime-x64.dll) re-verified against the DLL at generation
 // time. Regenerate with:
 //   tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py
-// Counts: 68 vtables, 104 BaseTypeInfo, 43 storage symbols.
-// Retired (ENDGAME B.3 step 9): 89 row(s), listed in tools/rt_mint_retired/*.txt.
+// Counts: 62 vtables, 104 BaseTypeInfo, 43 storage symbols.
+// Retired (ENDGAME B.3 step 9): 95 row(s), listed in tools/rt_mint_retired/*.txt.
 
 // ---- Per-slot traps. One function per (vtable, slot) so an unreachable
 // slot that DOES get called names itself instead of aborting anonymously.
@@ -433,31 +433,25 @@ RT_MINT_TRAP(44,9)
 RT_MINT_TRAP(45,0)
 RT_MINT_TRAP(45,1)
 RT_MINT_TRAP(45,2)
-RT_MINT_TRAP(45,3)
-RT_MINT_TRAP(45,4)
-RT_MINT_TRAP(45,5)
-RT_MINT_TRAP(45,6)
-RT_MINT_TRAP(45,7)
-RT_MINT_TRAP(45,8)
 RT_MINT_TRAP(46,0)
 RT_MINT_TRAP(46,1)
 RT_MINT_TRAP(46,2)
+RT_MINT_TRAP(46,3)
+RT_MINT_TRAP(46,4)
+RT_MINT_TRAP(46,5)
+RT_MINT_TRAP(46,6)
+RT_MINT_TRAP(46,7)
+RT_MINT_TRAP(46,8)
+RT_MINT_TRAP(46,9)
+RT_MINT_TRAP(46,10)
+RT_MINT_TRAP(46,11)
 RT_MINT_TRAP(47,0)
 RT_MINT_TRAP(47,1)
 RT_MINT_TRAP(47,2)
 RT_MINT_TRAP(47,3)
-RT_MINT_TRAP(47,4)
-RT_MINT_TRAP(47,5)
-RT_MINT_TRAP(47,6)
-RT_MINT_TRAP(47,7)
-RT_MINT_TRAP(47,8)
-RT_MINT_TRAP(47,9)
-RT_MINT_TRAP(47,10)
-RT_MINT_TRAP(47,11)
 RT_MINT_TRAP(48,0)
 RT_MINT_TRAP(48,1)
 RT_MINT_TRAP(48,2)
-RT_MINT_TRAP(48,3)
 RT_MINT_TRAP(49,0)
 RT_MINT_TRAP(49,1)
 RT_MINT_TRAP(49,2)
@@ -467,9 +461,17 @@ RT_MINT_TRAP(49,5)
 RT_MINT_TRAP(49,6)
 RT_MINT_TRAP(49,7)
 RT_MINT_TRAP(49,8)
+RT_MINT_TRAP(49,9)
+RT_MINT_TRAP(49,10)
 RT_MINT_TRAP(50,0)
 RT_MINT_TRAP(50,1)
 RT_MINT_TRAP(50,2)
+RT_MINT_TRAP(50,3)
+RT_MINT_TRAP(50,4)
+RT_MINT_TRAP(50,5)
+RT_MINT_TRAP(50,6)
+RT_MINT_TRAP(50,7)
+RT_MINT_TRAP(50,8)
 RT_MINT_TRAP(51,0)
 RT_MINT_TRAP(51,1)
 RT_MINT_TRAP(51,2)
@@ -478,17 +480,9 @@ RT_MINT_TRAP(51,4)
 RT_MINT_TRAP(51,5)
 RT_MINT_TRAP(51,6)
 RT_MINT_TRAP(51,7)
+RT_MINT_TRAP(51,8)
 RT_MINT_TRAP(52,0)
 RT_MINT_TRAP(52,1)
-RT_MINT_TRAP(52,2)
-RT_MINT_TRAP(52,3)
-RT_MINT_TRAP(52,4)
-RT_MINT_TRAP(52,5)
-RT_MINT_TRAP(52,6)
-RT_MINT_TRAP(52,7)
-RT_MINT_TRAP(52,8)
-RT_MINT_TRAP(52,9)
-RT_MINT_TRAP(52,10)
 RT_MINT_TRAP(53,0)
 RT_MINT_TRAP(53,1)
 RT_MINT_TRAP(53,2)
@@ -496,8 +490,6 @@ RT_MINT_TRAP(53,3)
 RT_MINT_TRAP(53,4)
 RT_MINT_TRAP(53,5)
 RT_MINT_TRAP(53,6)
-RT_MINT_TRAP(53,7)
-RT_MINT_TRAP(53,8)
 RT_MINT_TRAP(54,0)
 RT_MINT_TRAP(54,1)
 RT_MINT_TRAP(54,2)
@@ -516,6 +508,9 @@ RT_MINT_TRAP(56,3)
 RT_MINT_TRAP(56,4)
 RT_MINT_TRAP(56,5)
 RT_MINT_TRAP(56,6)
+RT_MINT_TRAP(56,7)
+RT_MINT_TRAP(56,8)
+RT_MINT_TRAP(56,9)
 RT_MINT_TRAP(57,0)
 RT_MINT_TRAP(57,1)
 RT_MINT_TRAP(57,2)
@@ -525,73 +520,25 @@ RT_MINT_TRAP(57,5)
 RT_MINT_TRAP(57,6)
 RT_MINT_TRAP(57,7)
 RT_MINT_TRAP(57,8)
+RT_MINT_TRAP(57,9)
+RT_MINT_TRAP(57,10)
+RT_MINT_TRAP(57,11)
 RT_MINT_TRAP(58,0)
 RT_MINT_TRAP(58,1)
+RT_MINT_TRAP(58,2)
+RT_MINT_TRAP(58,3)
+RT_MINT_TRAP(58,4)
+RT_MINT_TRAP(58,5)
+RT_MINT_TRAP(58,6)
 RT_MINT_TRAP(59,0)
 RT_MINT_TRAP(59,1)
 RT_MINT_TRAP(59,2)
-RT_MINT_TRAP(59,3)
-RT_MINT_TRAP(59,4)
-RT_MINT_TRAP(59,5)
-RT_MINT_TRAP(59,6)
-RT_MINT_TRAP(59,7)
-RT_MINT_TRAP(59,8)
-RT_MINT_TRAP(59,9)
 RT_MINT_TRAP(60,0)
 RT_MINT_TRAP(60,1)
 RT_MINT_TRAP(60,2)
-RT_MINT_TRAP(60,3)
-RT_MINT_TRAP(60,4)
-RT_MINT_TRAP(60,5)
-RT_MINT_TRAP(60,6)
-RT_MINT_TRAP(60,7)
-RT_MINT_TRAP(60,8)
-RT_MINT_TRAP(60,9)
-RT_MINT_TRAP(60,10)
-RT_MINT_TRAP(60,11)
 RT_MINT_TRAP(61,0)
 RT_MINT_TRAP(61,1)
 RT_MINT_TRAP(61,2)
-RT_MINT_TRAP(61,3)
-RT_MINT_TRAP(61,4)
-RT_MINT_TRAP(61,5)
-RT_MINT_TRAP(61,6)
-RT_MINT_TRAP(62,0)
-RT_MINT_TRAP(62,1)
-RT_MINT_TRAP(62,2)
-RT_MINT_TRAP(62,3)
-RT_MINT_TRAP(62,4)
-RT_MINT_TRAP(62,5)
-RT_MINT_TRAP(62,6)
-RT_MINT_TRAP(62,7)
-RT_MINT_TRAP(62,8)
-RT_MINT_TRAP(63,0)
-RT_MINT_TRAP(63,1)
-RT_MINT_TRAP(63,2)
-RT_MINT_TRAP(64,0)
-RT_MINT_TRAP(64,1)
-RT_MINT_TRAP(64,2)
-RT_MINT_TRAP(64,3)
-RT_MINT_TRAP(64,4)
-RT_MINT_TRAP(64,5)
-RT_MINT_TRAP(64,6)
-RT_MINT_TRAP(64,7)
-RT_MINT_TRAP(64,8)
-RT_MINT_TRAP(65,0)
-RT_MINT_TRAP(65,1)
-RT_MINT_TRAP(65,2)
-RT_MINT_TRAP(66,0)
-RT_MINT_TRAP(66,1)
-RT_MINT_TRAP(66,2)
-RT_MINT_TRAP(66,3)
-RT_MINT_TRAP(66,4)
-RT_MINT_TRAP(66,5)
-RT_MINT_TRAP(66,6)
-RT_MINT_TRAP(66,7)
-RT_MINT_TRAP(66,8)
-RT_MINT_TRAP(67,0)
-RT_MINT_TRAP(67,1)
-RT_MINT_TRAP(67,2)
 
 // (unexported, carried by address)  DLL 0x180155860  2 slots  [tail-not-a-pointer]
 static const RtMintVSlot kVSlots0[] = {
@@ -1285,32 +1232,17 @@ static const RtMintVSlot kVSlots44[] = {
 static void* kVTable44[10];
 static const RtMintTrapFn kVTraps44[] = { &RtMintTrapStub_44_0, &RtMintTrapStub_44_1, &RtMintTrapStub_44_2, &RtMintTrapStub_44_3, &RtMintTrapStub_44_4, &RtMintTrapStub_44_5, &RtMintTrapStub_44_6, &RtMintTrapStub_44_7, &RtMintTrapStub_44_8, &RtMintTrapStub_44_9 };
 
-// ??_7PixelProgram@Video@@6B@  DLL 0x180157ac0  9 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots45[] = {
-    { nullptr, 0x18004eb90ull, RT_MINT_UNNAMED },
-    { "?TypeName@PixelProgram@Video@@UEBAPEBDXZ", 0x18004e8e0ull, RT_MINT_NAMED },
-    { "?Type@PixelProgram@Video@@UEBAIXZ", 0x18004e8c0ull, RT_MINT_NAMED },
-    { "?GetFileVersion@PixelProgram@Video@@UEBAHXZ", 0x1800f3a80ull, RT_MINT_NAMED },
-    { "?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z", 0x1800066e0ull, RT_MINT_NAMED },
-    { "?Serialize@PixelProgram@Video@@UEAA_NAEAVStream@IO@@@Z", 0x1800f3a90ull, RT_MINT_NAMED },
-    { "?Reconstruct@PixelProgram@Video@@UEAAPEAVExternal@Object@@XZ", 0x18004ea60ull, RT_MINT_NAMED },
-    { "?Destruct@PixelProgram@Video@@UEAAXXZ", 0x18004ea90ull, RT_MINT_NAMED },
-    { "?Construct@PixelProgram@Video@@UEAAPEAVExternal@Object@@XZ", 0x18004ea80ull, RT_MINT_NAMED },
-};
-static void* kVTable45[9];
-static const RtMintTrapFn kVTraps45[] = { &RtMintTrapStub_45_0, &RtMintTrapStub_45_1, &RtMintTrapStub_45_2, &RtMintTrapStub_45_3, &RtMintTrapStub_45_4, &RtMintTrapStub_45_5, &RtMintTrapStub_45_6, &RtMintTrapStub_45_7, &RtMintTrapStub_45_8 };
-
 // ??_7PixelProgramData@Video@@6B@  DLL 0x180158a78  3 slots  [adjacent-export:??_7VertexProgramData@Video@@6B@]
-static const RtMintVSlot kVSlots46[] = {
+static const RtMintVSlot kVSlots45[] = {
     { nullptr, 0x180058710ull, RT_MINT_UNNAMED },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
 };
-static void* kVTable46[3];
-static const RtMintTrapFn kVTraps46[] = { &RtMintTrapStub_46_0, &RtMintTrapStub_46_1, &RtMintTrapStub_46_2 };
+static void* kVTable45[3];
+static const RtMintTrapFn kVTraps45[] = { &RtMintTrapStub_45_0, &RtMintTrapStub_45_1, &RtMintTrapStub_45_2 };
 
 // ??_7ReflectionImageBuffer@Graphics@@6B@  DLL 0x180155190  12 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots47[] = {
+static const RtMintVSlot kVSlots46[] = {
     { nullptr, 0x180022600ull, RT_MINT_UNNAMED },
     { "?TypeName@ReflectionImageBuffer@Graphics@@UEBAPEBDXZ", 0x1800221d0ull, RT_MINT_NAMED },
     { "?Type@ReflectionImageBuffer@Graphics@@UEBAIXZ", 0x1800221b0ull, RT_MINT_NAMED },
@@ -1324,59 +1256,30 @@ static const RtMintVSlot kVSlots47[] = {
     { "?Generate@ReflectionImageBuffer@Graphics@@UEBAXAEAVContext@Video@@H@Z", 0x1800a6ef0ull, RT_MINT_NAMED },
     { "?Render@ReflectionImageBuffer@Graphics@@UEBAXAEAVRenderer@2@AEBVScene@2@AEBVCamera@2@H@Z", 0x1800a6b80ull, RT_MINT_NAMED },
 };
-static void* kVTable47[12];
-static const RtMintTrapFn kVTraps47[] = { &RtMintTrapStub_47_0, &RtMintTrapStub_47_1, &RtMintTrapStub_47_2, &RtMintTrapStub_47_3, &RtMintTrapStub_47_4, &RtMintTrapStub_47_5, &RtMintTrapStub_47_6, &RtMintTrapStub_47_7, &RtMintTrapStub_47_8, &RtMintTrapStub_47_9, &RtMintTrapStub_47_10, &RtMintTrapStub_47_11 };
+static void* kVTable46[12];
+static const RtMintTrapFn kVTraps46[] = { &RtMintTrapStub_46_0, &RtMintTrapStub_46_1, &RtMintTrapStub_46_2, &RtMintTrapStub_46_3, &RtMintTrapStub_46_4, &RtMintTrapStub_46_5, &RtMintTrapStub_46_6, &RtMintTrapStub_46_7, &RtMintTrapStub_46_8, &RtMintTrapStub_46_9, &RtMintTrapStub_46_10, &RtMintTrapStub_46_11 };
 
 // ??_7RenderBufferData@Video@@6B@  DLL 0x180158a28  4 slots  [adjacent-export:??_7VideoProgramData@Video@@6B@]
-static const RtMintVSlot kVSlots48[] = {
+static const RtMintVSlot kVSlots47[] = {
     { nullptr, 0x180058590ull, RT_MINT_UNNAMED },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
 };
-static void* kVTable48[4];
-static const RtMintTrapFn kVTraps48[] = { &RtMintTrapStub_48_0, &RtMintTrapStub_48_1, &RtMintTrapStub_48_2, &RtMintTrapStub_48_3 };
-
-// ??_7RenderState@Video@@6B@  DLL 0x180157720  9 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots49[] = {
-    { nullptr, 0x18004b9d0ull, RT_MINT_UNNAMED },
-    { "?TypeName@RenderState@Video@@UEBAPEBDXZ", 0x18004b570ull, RT_MINT_NAMED },
-    { "?Type@RenderState@Video@@UEBAIXZ", 0x18004b550ull, RT_MINT_NAMED },
-    { "?GetFileVersion@RenderState@Video@@UEBAHXZ", 0x1800f4c80ull, RT_MINT_NAMED },
-    { "?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z", 0x1800066e0ull, RT_MINT_NAMED },
-    { "?Serialize@RenderState@Video@@UEAA_NAEAVStream@IO@@@Z", 0x1800f4c90ull, RT_MINT_NAMED },
-    { "?Reconstruct@RenderState@Video@@UEAAPEAVExternal@Object@@XZ", 0x18004b6f0ull, RT_MINT_NAMED },
-    { "?Destruct@RenderState@Video@@UEAAXXZ", 0x18004b720ull, RT_MINT_NAMED },
-    { "?Construct@RenderState@Video@@UEAAPEAVExternal@Object@@XZ", 0x18004b710ull, RT_MINT_NAMED },
-};
-static void* kVTable49[9];
-static const RtMintTrapFn kVTraps49[] = { &RtMintTrapStub_49_0, &RtMintTrapStub_49_1, &RtMintTrapStub_49_2, &RtMintTrapStub_49_3, &RtMintTrapStub_49_4, &RtMintTrapStub_49_5, &RtMintTrapStub_49_6, &RtMintTrapStub_49_7, &RtMintTrapStub_49_8 };
+static void* kVTable47[4];
+static const RtMintTrapFn kVTraps47[] = { &RtMintTrapStub_47_0, &RtMintTrapStub_47_1, &RtMintTrapStub_47_2, &RtMintTrapStub_47_3 };
 
 // ??_7RenderStateData@Video@@6B@  DLL 0x180158a60  3 slots  [adjacent-export:??_7PixelProgramData@Video@@6B@]
-static const RtMintVSlot kVSlots50[] = {
+static const RtMintVSlot kVSlots48[] = {
     { nullptr, 0x180058690ull, RT_MINT_UNNAMED },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
 };
-static void* kVTable50[3];
-static const RtMintTrapFn kVTraps50[] = { &RtMintTrapStub_50_0, &RtMintTrapStub_50_1, &RtMintTrapStub_50_2 };
-
-// ??_7ShaderProgram@Video@@6B@  DLL 0x180157b60  8 slots  [adjacent-export:??_7VertexLayout@Video@@6B@]
-static const RtMintVSlot kVSlots51[] = {
-    { nullptr, 0x18004e360ull, RT_MINT_UNNAMED },
-    { "?TypeName@ShaderProgram@Video@@UEBAPEBDXZ", 0x18004e0c0ull, RT_MINT_NAMED },
-    { "?Type@ShaderProgram@Video@@UEBAIXZ", 0x18004e0a0ull, RT_MINT_NAMED },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { "?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z", 0x1800066e0ull, RT_MINT_NAMED },
-    { "?Serialize@ShaderProgram@Video@@UEAA_NAEAVStream@IO@@@Z", 0x1800f5110ull, RT_MINT_NAMED },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-};
-static void* kVTable51[8];
-static const RtMintTrapFn kVTraps51[] = { &RtMintTrapStub_51_0, &RtMintTrapStub_51_1, &RtMintTrapStub_51_2, &RtMintTrapStub_51_3, &RtMintTrapStub_51_4, &RtMintTrapStub_51_5, &RtMintTrapStub_51_6, &RtMintTrapStub_51_7 };
+static void* kVTable48[3];
+static const RtMintTrapFn kVTraps48[] = { &RtMintTrapStub_48_0, &RtMintTrapStub_48_1, &RtMintTrapStub_48_2 };
 
 // ??_7SpotLight@Graphics@@6B@  DLL 0x180158db0  11 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots52[] = {
+static const RtMintVSlot kVSlots49[] = {
     { nullptr, 0x1800642b0ull, RT_MINT_UNNAMED },
     { "?Update@SpotLight@Graphics@@UEAAXAEBVTime@System@@@Z", 0x180105950ull, RT_MINT_NAMED },
     { "?Draw@SpotLight@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z", 0x180105940ull, RT_MINT_NAMED },
@@ -1389,11 +1292,11 @@ static const RtMintVSlot kVSlots52[] = {
     { "?DrawShadowMap@SpotLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HH@Z", 0x180105d00ull, RT_MINT_NAMED },
     { "?Draw@SpotLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HHHH@Z", 0x180105960ull, RT_MINT_NAMED },
 };
-static void* kVTable52[11];
-static const RtMintTrapFn kVTraps52[] = { &RtMintTrapStub_52_0, &RtMintTrapStub_52_1, &RtMintTrapStub_52_2, &RtMintTrapStub_52_3, &RtMintTrapStub_52_4, &RtMintTrapStub_52_5, &RtMintTrapStub_52_6, &RtMintTrapStub_52_7, &RtMintTrapStub_52_8, &RtMintTrapStub_52_9, &RtMintTrapStub_52_10 };
+static void* kVTable49[11];
+static const RtMintTrapFn kVTraps49[] = { &RtMintTrapStub_49_0, &RtMintTrapStub_49_1, &RtMintTrapStub_49_2, &RtMintTrapStub_49_3, &RtMintTrapStub_49_4, &RtMintTrapStub_49_5, &RtMintTrapStub_49_6, &RtMintTrapStub_49_7, &RtMintTrapStub_49_8, &RtMintTrapStub_49_9, &RtMintTrapStub_49_10 };
 
 // ??_7SpriteCapture@UI@@6B@  DLL 0x1801566a0  9 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots53[] = {
+static const RtMintVSlot kVSlots50[] = {
     { nullptr, 0x18003ccf0ull, RT_MINT_UNNAMED },
     { "?TypeName@SpriteCapture@UI@@UEBAPEBDXZ", 0x18003c810ull, RT_MINT_NAMED },
     { "?Type@SpriteCapture@UI@@UEBAIXZ", 0x18003c7f0ull, RT_MINT_NAMED },
@@ -1404,11 +1307,11 @@ static const RtMintVSlot kVSlots53[] = {
     { "?Destruct@SpriteCapture@UI@@UEAAXXZ", 0x18003cb40ull, RT_MINT_NAMED },
     { "?Construct@SpriteCapture@UI@@UEAAPEAVExternal@Object@@XZ", 0x18003cac0ull, RT_MINT_NAMED },
 };
-static void* kVTable53[9];
-static const RtMintTrapFn kVTraps53[] = { &RtMintTrapStub_53_0, &RtMintTrapStub_53_1, &RtMintTrapStub_53_2, &RtMintTrapStub_53_3, &RtMintTrapStub_53_4, &RtMintTrapStub_53_5, &RtMintTrapStub_53_6, &RtMintTrapStub_53_7, &RtMintTrapStub_53_8 };
+static void* kVTable50[9];
+static const RtMintTrapFn kVTraps50[] = { &RtMintTrapStub_50_0, &RtMintTrapStub_50_1, &RtMintTrapStub_50_2, &RtMintTrapStub_50_3, &RtMintTrapStub_50_4, &RtMintTrapStub_50_5, &RtMintTrapStub_50_6, &RtMintTrapStub_50_7, &RtMintTrapStub_50_8 };
 
 // ??_7SpriteSheet@UI@@6B@  DLL 0x180154590  9 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots54[] = {
+static const RtMintVSlot kVSlots51[] = {
     { nullptr, 0x1800037b0ull, RT_MINT_UNNAMED },
     { "?TypeName@SpriteSheet@UI@@UEBAPEBDXZ", 0x180002e50ull, RT_MINT_NAMED },
     { "?Type@SpriteSheet@UI@@UEBAIXZ", 0x180002e30ull, RT_MINT_NAMED },
@@ -1419,19 +1322,19 @@ static const RtMintVSlot kVSlots54[] = {
     { "?Destruct@SpriteSheet@UI@@UEAAXXZ", 0x180003180ull, RT_MINT_NAMED },
     { "?Construct@SpriteSheet@UI@@UEAAPEAVExternal@Object@@XZ", 0x180003100ull, RT_MINT_NAMED },
 };
-static void* kVTable54[9];
-static const RtMintTrapFn kVTraps54[] = { &RtMintTrapStub_54_0, &RtMintTrapStub_54_1, &RtMintTrapStub_54_2, &RtMintTrapStub_54_3, &RtMintTrapStub_54_4, &RtMintTrapStub_54_5, &RtMintTrapStub_54_6, &RtMintTrapStub_54_7, &RtMintTrapStub_54_8 };
+static void* kVTable51[9];
+static const RtMintTrapFn kVTraps51[] = { &RtMintTrapStub_51_0, &RtMintTrapStub_51_1, &RtMintTrapStub_51_2, &RtMintTrapStub_51_3, &RtMintTrapStub_51_4, &RtMintTrapStub_51_5, &RtMintTrapStub_51_6, &RtMintTrapStub_51_7, &RtMintTrapStub_51_8 };
 
 // ??_7Stream@Audio@@6B@  DLL 0x180154950  2 slots  [adjacent-export:??_7FileStream@IO@@6B@]
-static const RtMintVSlot kVSlots55[] = {
+static const RtMintVSlot kVSlots52[] = {
     { "?Run@Stream@Audio@@UEAAXXZ", 0x1800a0f60ull, RT_MINT_NAMED },
     { "?OnCompleted@Thread@System@@UEAAXXZ", 0x18000c590ull, RT_MINT_NAMED },
 };
-static void* kVTable55[2];
-static const RtMintTrapFn kVTraps55[] = { &RtMintTrapStub_55_0, &RtMintTrapStub_55_1 };
+static void* kVTable52[2];
+static const RtMintTrapFn kVTraps52[] = { &RtMintTrapStub_52_0, &RtMintTrapStub_52_1 };
 
 // ??_7Stream@IO@@6B@  DLL 0x1801549a0  7 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots56[] = {
+static const RtMintVSlot kVSlots53[] = {
     { nullptr, 0x18000c610ull, RT_MINT_UNNAMED },
     { "?GetSource@Stream@IO@@UEBA?AVString@System@@XZ", 0x18000c6a0ull, RT_MINT_NAMED },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
@@ -1440,11 +1343,11 @@ static const RtMintVSlot kVSlots56[] = {
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
 };
-static void* kVTable56[7];
-static const RtMintTrapFn kVTraps56[] = { &RtMintTrapStub_56_0, &RtMintTrapStub_56_1, &RtMintTrapStub_56_2, &RtMintTrapStub_56_3, &RtMintTrapStub_56_4, &RtMintTrapStub_56_5, &RtMintTrapStub_56_6 };
+static void* kVTable53[7];
+static const RtMintTrapFn kVTraps53[] = { &RtMintTrapStub_53_0, &RtMintTrapStub_53_1, &RtMintTrapStub_53_2, &RtMintTrapStub_53_3, &RtMintTrapStub_53_4, &RtMintTrapStub_53_5, &RtMintTrapStub_53_6 };
 
 // ??_7StringTable@UI@@6B@  DLL 0x180154630  9 slots  [adjacent-export:??_7GoalInstance@Achievement@@6B@]
-static const RtMintVSlot kVSlots57[] = {
+static const RtMintVSlot kVSlots54[] = {
     { nullptr, 0x180002740ull, RT_MINT_UNNAMED },
     { "?TypeName@StringTable@UI@@UEBAPEBDXZ", 0x180002190ull, RT_MINT_NAMED },
     { "?Type@StringTable@UI@@UEBAIXZ", 0x180002170ull, RT_MINT_NAMED },
@@ -1455,19 +1358,19 @@ static const RtMintVSlot kVSlots57[] = {
     { "?Destruct@StringTable@UI@@UEAAXXZ", 0x180002460ull, RT_MINT_NAMED },
     { "?Construct@StringTable@UI@@UEAAPEAVExternal@Object@@XZ", 0x180002400ull, RT_MINT_NAMED },
 };
-static void* kVTable57[9];
-static const RtMintTrapFn kVTraps57[] = { &RtMintTrapStub_57_0, &RtMintTrapStub_57_1, &RtMintTrapStub_57_2, &RtMintTrapStub_57_3, &RtMintTrapStub_57_4, &RtMintTrapStub_57_5, &RtMintTrapStub_57_6, &RtMintTrapStub_57_7, &RtMintTrapStub_57_8 };
+static void* kVTable54[9];
+static const RtMintTrapFn kVTraps54[] = { &RtMintTrapStub_54_0, &RtMintTrapStub_54_1, &RtMintTrapStub_54_2, &RtMintTrapStub_54_3, &RtMintTrapStub_54_4, &RtMintTrapStub_54_5, &RtMintTrapStub_54_6, &RtMintTrapStub_54_7, &RtMintTrapStub_54_8 };
 
 // ??_7Thread@System@@6B@  DLL 0x180155f20  2 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots58[] = {
+static const RtMintVSlot kVSlots55[] = {
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { "?OnCompleted@Thread@System@@UEAAXXZ", 0x18000c590ull, RT_MINT_NAMED },
 };
-static void* kVTable58[2];
-static const RtMintTrapFn kVTraps58[] = { &RtMintTrapStub_58_0, &RtMintTrapStub_58_1 };
+static void* kVTable55[2];
+static const RtMintTrapFn kVTraps55[] = { &RtMintTrapStub_55_0, &RtMintTrapStub_55_1 };
 
 // ??_7ToolTipDialog@UI@@6B@  DLL 0x180157880  10 slots  [adjacent-export:??_7DialogLoaderLoopT@Engine@@6B@]
-static const RtMintVSlot kVSlots59[] = {
+static const RtMintVSlot kVSlots56[] = {
     { nullptr, 0x18004d270ull, RT_MINT_UNNAMED },
     { "?TypeName@ToolTipDialog@UI@@UEBAPEBDXZ", 0x18004cfc0ull, RT_MINT_NAMED },
     { "?Type@ToolTipDialog@UI@@UEBAIXZ", 0x18004cfa0ull, RT_MINT_NAMED },
@@ -1479,11 +1382,11 @@ static const RtMintVSlot kVSlots59[] = {
     { "?OnElementEvent@DialogInstance@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z", 0x180114ed0ull, RT_MINT_NAMED },
     { "?OnSerializeSettings@DialogInstance@UI@@UEAAXAEAVStream@IO@@@Z", 0x180115470ull, RT_MINT_NAMED },
 };
-static void* kVTable59[10];
-static const RtMintTrapFn kVTraps59[] = { &RtMintTrapStub_59_0, &RtMintTrapStub_59_1, &RtMintTrapStub_59_2, &RtMintTrapStub_59_3, &RtMintTrapStub_59_4, &RtMintTrapStub_59_5, &RtMintTrapStub_59_6, &RtMintTrapStub_59_7, &RtMintTrapStub_59_8, &RtMintTrapStub_59_9 };
+static void* kVTable56[10];
+static const RtMintTrapFn kVTraps56[] = { &RtMintTrapStub_56_0, &RtMintTrapStub_56_1, &RtMintTrapStub_56_2, &RtMintTrapStub_56_3, &RtMintTrapStub_56_4, &RtMintTrapStub_56_5, &RtMintTrapStub_56_6, &RtMintTrapStub_56_7, &RtMintTrapStub_56_8, &RtMintTrapStub_56_9 };
 
 // ??_7UpdateLoop@Engine@@6B@  DLL 0x180155ba0  12 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots60[] = {
+static const RtMintVSlot kVSlots57[] = {
     { nullptr, 0x180031900ull, RT_MINT_UNNAMED },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
@@ -1497,11 +1400,11 @@ static const RtMintVSlot kVSlots60[] = {
     { "?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ", 0x180031780ull, RT_MINT_NAMED },
     { "?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ", 0x180031790ull, RT_MINT_NAMED },
 };
-static void* kVTable60[12];
-static const RtMintTrapFn kVTraps60[] = { &RtMintTrapStub_60_0, &RtMintTrapStub_60_1, &RtMintTrapStub_60_2, &RtMintTrapStub_60_3, &RtMintTrapStub_60_4, &RtMintTrapStub_60_5, &RtMintTrapStub_60_6, &RtMintTrapStub_60_7, &RtMintTrapStub_60_8, &RtMintTrapStub_60_9, &RtMintTrapStub_60_10, &RtMintTrapStub_60_11 };
+static void* kVTable57[12];
+static const RtMintTrapFn kVTraps57[] = { &RtMintTrapStub_57_0, &RtMintTrapStub_57_1, &RtMintTrapStub_57_2, &RtMintTrapStub_57_3, &RtMintTrapStub_57_4, &RtMintTrapStub_57_5, &RtMintTrapStub_57_6, &RtMintTrapStub_57_7, &RtMintTrapStub_57_8, &RtMintTrapStub_57_9, &RtMintTrapStub_57_10, &RtMintTrapStub_57_11 };
 
 // ??_7VertexBufferData@Video@@6B@  DLL 0x180158ac0  7 slots  [adjacent-export:??_7IndexBufferData@Video@@6B@]
-static const RtMintVSlot kVSlots61[] = {
+static const RtMintVSlot kVSlots58[] = {
     { nullptr, 0x180058890ull, RT_MINT_UNNAMED },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
@@ -1510,80 +1413,35 @@ static const RtMintVSlot kVSlots61[] = {
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
 };
-static void* kVTable61[7];
-static const RtMintTrapFn kVTraps61[] = { &RtMintTrapStub_61_0, &RtMintTrapStub_61_1, &RtMintTrapStub_61_2, &RtMintTrapStub_61_3, &RtMintTrapStub_61_4, &RtMintTrapStub_61_5, &RtMintTrapStub_61_6 };
-
-// ??_7VertexLayout@Video@@6B@  DLL 0x180157ba0  9 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots62[] = {
-    { nullptr, 0x18004e000ull, RT_MINT_UNNAMED },
-    { "?TypeName@VertexLayout@Video@@UEBAPEBDXZ", 0x18004dcd0ull, RT_MINT_NAMED },
-    { "?Type@VertexLayout@Video@@UEBAIXZ", 0x18004dcb0ull, RT_MINT_NAMED },
-    { "?GetFileVersion@VertexLayout@Video@@UEBAHXZ", 0x1800f5e60ull, RT_MINT_NAMED },
-    { "?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z", 0x1800066e0ull, RT_MINT_NAMED },
-    { "?Serialize@VertexLayout@Video@@UEAA_NAEAVStream@IO@@@Z", 0x1800f5e70ull, RT_MINT_NAMED },
-    { "?Reconstruct@VertexLayout@Video@@UEAAPEAVExternal@Object@@XZ", 0x18004de50ull, RT_MINT_NAMED },
-    { "?Destruct@VertexLayout@Video@@UEAAXXZ", 0x18004de80ull, RT_MINT_NAMED },
-    { "?Construct@VertexLayout@Video@@UEAAPEAVExternal@Object@@XZ", 0x18004de70ull, RT_MINT_NAMED },
-};
-static void* kVTable62[9];
-static const RtMintTrapFn kVTraps62[] = { &RtMintTrapStub_62_0, &RtMintTrapStub_62_1, &RtMintTrapStub_62_2, &RtMintTrapStub_62_3, &RtMintTrapStub_62_4, &RtMintTrapStub_62_5, &RtMintTrapStub_62_6, &RtMintTrapStub_62_7, &RtMintTrapStub_62_8 };
+static void* kVTable58[7];
+static const RtMintTrapFn kVTraps58[] = { &RtMintTrapStub_58_0, &RtMintTrapStub_58_1, &RtMintTrapStub_58_2, &RtMintTrapStub_58_3, &RtMintTrapStub_58_4, &RtMintTrapStub_58_5, &RtMintTrapStub_58_6 };
 
 // ??_7VertexLayoutData@Video@@6B@  DLL 0x180158aa8  3 slots  [adjacent-export:??_7VertexBufferData@Video@@6B@]
-static const RtMintVSlot kVSlots63[] = {
+static const RtMintVSlot kVSlots59[] = {
     { nullptr, 0x180058810ull, RT_MINT_UNNAMED },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
 };
-static void* kVTable63[3];
-static const RtMintTrapFn kVTraps63[] = { &RtMintTrapStub_63_0, &RtMintTrapStub_63_1, &RtMintTrapStub_63_2 };
-
-// ??_7VertexProgram@Video@@6B@  DLL 0x180157b10  9 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots64[] = {
-    { nullptr, 0x18004e810ull, RT_MINT_UNNAMED },
-    { "?TypeName@VertexProgram@Video@@UEBAPEBDXZ", 0x18004e560ull, RT_MINT_NAMED },
-    { "?Type@VertexProgram@Video@@UEBAIXZ", 0x18004e540ull, RT_MINT_NAMED },
-    { "?GetFileVersion@VertexProgram@Video@@UEBAHXZ", 0x1800f6230ull, RT_MINT_NAMED },
-    { "?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z", 0x1800066e0ull, RT_MINT_NAMED },
-    { "?Serialize@VertexProgram@Video@@UEAA_NAEAVStream@IO@@@Z", 0x1800f6240ull, RT_MINT_NAMED },
-    { "?Reconstruct@VertexProgram@Video@@UEAAPEAVExternal@Object@@XZ", 0x18004e6e0ull, RT_MINT_NAMED },
-    { "?Destruct@VertexProgram@Video@@UEAAXXZ", 0x18004e710ull, RT_MINT_NAMED },
-    { "?Construct@VertexProgram@Video@@UEAAPEAVExternal@Object@@XZ", 0x18004e700ull, RT_MINT_NAMED },
-};
-static void* kVTable64[9];
-static const RtMintTrapFn kVTraps64[] = { &RtMintTrapStub_64_0, &RtMintTrapStub_64_1, &RtMintTrapStub_64_2, &RtMintTrapStub_64_3, &RtMintTrapStub_64_4, &RtMintTrapStub_64_5, &RtMintTrapStub_64_6, &RtMintTrapStub_64_7, &RtMintTrapStub_64_8 };
+static void* kVTable59[3];
+static const RtMintTrapFn kVTraps59[] = { &RtMintTrapStub_59_0, &RtMintTrapStub_59_1, &RtMintTrapStub_59_2 };
 
 // ??_7VertexProgramData@Video@@6B@  DLL 0x180158a90  3 slots  [adjacent-export:??_7VertexLayoutData@Video@@6B@]
-static const RtMintVSlot kVSlots65[] = {
+static const RtMintVSlot kVSlots60[] = {
     { nullptr, 0x180058790ull, RT_MINT_UNNAMED },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
 };
-static void* kVTable65[3];
-static const RtMintTrapFn kVTraps65[] = { &RtMintTrapStub_65_0, &RtMintTrapStub_65_1, &RtMintTrapStub_65_2 };
-
-// ??_7VideoProgram@Video@@6B@  DLL 0x180157a70  9 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots66[] = {
-    { nullptr, 0x18004efb0ull, RT_MINT_UNNAMED },
-    { "?TypeName@VideoProgram@Video@@UEBAPEBDXZ", 0x18004ec50ull, RT_MINT_NAMED },
-    { "?Type@VideoProgram@Video@@UEBAIXZ", 0x18004ec30ull, RT_MINT_NAMED },
-    { "?GetFileVersion@VideoProgram@Video@@UEBAHXZ", 0x1800f46a0ull, RT_MINT_NAMED },
-    { "?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z", 0x1800066e0ull, RT_MINT_NAMED },
-    { "?Serialize@VideoProgram@Video@@UEAA_NAEAVStream@IO@@@Z", 0x1800f46b0ull, RT_MINT_NAMED },
-    { "?Reconstruct@VideoProgram@Video@@UEAAPEAVExternal@Object@@XZ", 0x18004edd0ull, RT_MINT_NAMED },
-    { "?Destruct@VideoProgram@Video@@UEAAXXZ", 0x18004ee00ull, RT_MINT_NAMED },
-    { "?Construct@VideoProgram@Video@@UEAAPEAVExternal@Object@@XZ", 0x18004edf0ull, RT_MINT_NAMED },
-};
-static void* kVTable66[9];
-static const RtMintTrapFn kVTraps66[] = { &RtMintTrapStub_66_0, &RtMintTrapStub_66_1, &RtMintTrapStub_66_2, &RtMintTrapStub_66_3, &RtMintTrapStub_66_4, &RtMintTrapStub_66_5, &RtMintTrapStub_66_6, &RtMintTrapStub_66_7, &RtMintTrapStub_66_8 };
+static void* kVTable60[3];
+static const RtMintTrapFn kVTraps60[] = { &RtMintTrapStub_60_0, &RtMintTrapStub_60_1, &RtMintTrapStub_60_2 };
 
 // ??_7VideoProgramData@Video@@6B@  DLL 0x180158a48  3 slots  [adjacent-export:??_7RenderStateData@Video@@6B@]
-static const RtMintVSlot kVSlots67[] = {
+static const RtMintVSlot kVSlots61[] = {
     { nullptr, 0x180058610ull, RT_MINT_UNNAMED },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
 };
-static void* kVTable67[3];
-static const RtMintTrapFn kVTraps67[] = { &RtMintTrapStub_67_0, &RtMintTrapStub_67_1, &RtMintTrapStub_67_2 };
+static void* kVTable61[3];
+static const RtMintTrapFn kVTraps61[] = { &RtMintTrapStub_61_0, &RtMintTrapStub_61_1, &RtMintTrapStub_61_2 };
 
 static RtMintVtable kMintVtables[] = {
     { nullptr, 0x180155860ull, 2, kVSlots0, kVTable0, kVTraps0, "tail-not-a-pointer" },
@@ -1631,29 +1489,23 @@ static RtMintVtable kMintVtables[] = {
     { "??_7ParticleInstance@Graphics@@6B@", 0x1801550e0ull, 10, kVSlots42, kVTable42, kVTraps42, "adjacent-export:??_7Particle@Graphics@@6B@" },
     { "??_7ParticleSystem@Graphics@@6B@", 0x180155090ull, 10, kVSlots43, kVTable43, kVTraps43, "adjacent-export:??_7ParticleInstance@Graphics@@6B@" },
     { "??_7ParticleSystemInstance@Graphics@@6B@", 0x180155040ull, 10, kVSlots44, kVTable44, kVTraps44, "adjacent-export:??_7ParticleSystem@Graphics@@6B@" },
-    { "??_7PixelProgram@Video@@6B@", 0x180157ac0ull, 9, kVSlots45, kVTable45, kVTraps45, "tail-not-a-pointer" },
-    { "??_7PixelProgramData@Video@@6B@", 0x180158a78ull, 3, kVSlots46, kVTable46, kVTraps46, "adjacent-export:??_7VertexProgramData@Video@@6B@" },
-    { "??_7ReflectionImageBuffer@Graphics@@6B@", 0x180155190ull, 12, kVSlots47, kVTable47, kVTraps47, "tail-not-a-pointer" },
-    { "??_7RenderBufferData@Video@@6B@", 0x180158a28ull, 4, kVSlots48, kVTable48, kVTraps48, "adjacent-export:??_7VideoProgramData@Video@@6B@" },
-    { "??_7RenderState@Video@@6B@", 0x180157720ull, 9, kVSlots49, kVTable49, kVTraps49, "tail-not-a-pointer" },
-    { "??_7RenderStateData@Video@@6B@", 0x180158a60ull, 3, kVSlots50, kVTable50, kVTraps50, "adjacent-export:??_7PixelProgramData@Video@@6B@" },
-    { "??_7ShaderProgram@Video@@6B@", 0x180157b60ull, 8, kVSlots51, kVTable51, kVTraps51, "adjacent-export:??_7VertexLayout@Video@@6B@" },
-    { "??_7SpotLight@Graphics@@6B@", 0x180158db0ull, 11, kVSlots52, kVTable52, kVTraps52, "tail-not-a-pointer" },
-    { "??_7SpriteCapture@UI@@6B@", 0x1801566a0ull, 9, kVSlots53, kVTable53, kVTraps53, "tail-not-a-pointer" },
-    { "??_7SpriteSheet@UI@@6B@", 0x180154590ull, 9, kVSlots54, kVTable54, kVTraps54, "tail-not-a-pointer" },
-    { "??_7Stream@Audio@@6B@", 0x180154950ull, 2, kVSlots55, kVTable55, kVTraps55, "adjacent-export:??_7FileStream@IO@@6B@" },
-    { "??_7Stream@IO@@6B@", 0x1801549a0ull, 7, kVSlots56, kVTable56, kVTraps56, "tail-not-a-pointer" },
-    { "??_7StringTable@UI@@6B@", 0x180154630ull, 9, kVSlots57, kVTable57, kVTraps57, "adjacent-export:??_7GoalInstance@Achievement@@6B@" },
-    { "??_7Thread@System@@6B@", 0x180155f20ull, 2, kVSlots58, kVTable58, kVTraps58, "tail-not-a-pointer" },
-    { "??_7ToolTipDialog@UI@@6B@", 0x180157880ull, 10, kVSlots59, kVTable59, kVTraps59, "adjacent-export:??_7DialogLoaderLoopT@Engine@@6B@" },
-    { "??_7UpdateLoop@Engine@@6B@", 0x180155ba0ull, 12, kVSlots60, kVTable60, kVTraps60, "tail-not-a-pointer" },
-    { "??_7VertexBufferData@Video@@6B@", 0x180158ac0ull, 7, kVSlots61, kVTable61, kVTraps61, "adjacent-export:??_7IndexBufferData@Video@@6B@" },
-    { "??_7VertexLayout@Video@@6B@", 0x180157ba0ull, 9, kVSlots62, kVTable62, kVTraps62, "tail-not-a-pointer" },
-    { "??_7VertexLayoutData@Video@@6B@", 0x180158aa8ull, 3, kVSlots63, kVTable63, kVTraps63, "adjacent-export:??_7VertexBufferData@Video@@6B@" },
-    { "??_7VertexProgram@Video@@6B@", 0x180157b10ull, 9, kVSlots64, kVTable64, kVTraps64, "tail-not-a-pointer" },
-    { "??_7VertexProgramData@Video@@6B@", 0x180158a90ull, 3, kVSlots65, kVTable65, kVTraps65, "adjacent-export:??_7VertexLayoutData@Video@@6B@" },
-    { "??_7VideoProgram@Video@@6B@", 0x180157a70ull, 9, kVSlots66, kVTable66, kVTraps66, "tail-not-a-pointer" },
-    { "??_7VideoProgramData@Video@@6B@", 0x180158a48ull, 3, kVSlots67, kVTable67, kVTraps67, "adjacent-export:??_7RenderStateData@Video@@6B@" },
+    { "??_7PixelProgramData@Video@@6B@", 0x180158a78ull, 3, kVSlots45, kVTable45, kVTraps45, "adjacent-export:??_7VertexProgramData@Video@@6B@" },
+    { "??_7ReflectionImageBuffer@Graphics@@6B@", 0x180155190ull, 12, kVSlots46, kVTable46, kVTraps46, "tail-not-a-pointer" },
+    { "??_7RenderBufferData@Video@@6B@", 0x180158a28ull, 4, kVSlots47, kVTable47, kVTraps47, "adjacent-export:??_7VideoProgramData@Video@@6B@" },
+    { "??_7RenderStateData@Video@@6B@", 0x180158a60ull, 3, kVSlots48, kVTable48, kVTraps48, "adjacent-export:??_7PixelProgramData@Video@@6B@" },
+    { "??_7SpotLight@Graphics@@6B@", 0x180158db0ull, 11, kVSlots49, kVTable49, kVTraps49, "tail-not-a-pointer" },
+    { "??_7SpriteCapture@UI@@6B@", 0x1801566a0ull, 9, kVSlots50, kVTable50, kVTraps50, "tail-not-a-pointer" },
+    { "??_7SpriteSheet@UI@@6B@", 0x180154590ull, 9, kVSlots51, kVTable51, kVTraps51, "tail-not-a-pointer" },
+    { "??_7Stream@Audio@@6B@", 0x180154950ull, 2, kVSlots52, kVTable52, kVTraps52, "adjacent-export:??_7FileStream@IO@@6B@" },
+    { "??_7Stream@IO@@6B@", 0x1801549a0ull, 7, kVSlots53, kVTable53, kVTraps53, "tail-not-a-pointer" },
+    { "??_7StringTable@UI@@6B@", 0x180154630ull, 9, kVSlots54, kVTable54, kVTraps54, "adjacent-export:??_7GoalInstance@Achievement@@6B@" },
+    { "??_7Thread@System@@6B@", 0x180155f20ull, 2, kVSlots55, kVTable55, kVTraps55, "tail-not-a-pointer" },
+    { "??_7ToolTipDialog@UI@@6B@", 0x180157880ull, 10, kVSlots56, kVTable56, kVTraps56, "adjacent-export:??_7DialogLoaderLoopT@Engine@@6B@" },
+    { "??_7UpdateLoop@Engine@@6B@", 0x180155ba0ull, 12, kVSlots57, kVTable57, kVTraps57, "tail-not-a-pointer" },
+    { "??_7VertexBufferData@Video@@6B@", 0x180158ac0ull, 7, kVSlots58, kVTable58, kVTraps58, "adjacent-export:??_7IndexBufferData@Video@@6B@" },
+    { "??_7VertexLayoutData@Video@@6B@", 0x180158aa8ull, 3, kVSlots59, kVTable59, kVTraps59, "adjacent-export:??_7VertexBufferData@Video@@6B@" },
+    { "??_7VertexProgramData@Video@@6B@", 0x180158a90ull, 3, kVSlots60, kVTable60, kVTraps60, "adjacent-export:??_7VertexLayoutData@Video@@6B@" },
+    { "??_7VideoProgramData@Video@@6B@", 0x180158a48ull, 3, kVSlots61, kVTable61, kVTraps61, "adjacent-export:??_7RenderStateData@Video@@6B@" },
 };
 
 // ---- Object::BaseTypeInfo. Fields are link-time constants copied from

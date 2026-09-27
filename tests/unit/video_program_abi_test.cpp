@@ -338,10 +338,11 @@ UNIT_TEST(video_program_not_constructible) {
     // Abstract, because slot 0 is `override = 0` — the `RT_DELDTOR` rows in
     // deleting_dtor.cpp are the bodies and B35_RULES 11 keeps them.
     CHECK((std::is_abstract<Video::ShaderProgram>::value));
-    CHECK((std::is_abstract<Video::VertexProgram>::value));
-    CHECK((std::is_abstract<Video::PixelProgram>::value));
-    CHECK((std::is_abstract<Video::VertexLayout>::value));
-    CHECK((std::is_abstract<Video::VideoProgram>::value));
+    CHECK(!(std::is_abstract<Video::VertexProgram>::value));   // B.3.9 VID: concrete
+    CHECK(!(std::is_abstract<Video::PixelProgram>::value));   // B.3.9 VID: concrete
+    CHECK(!(std::is_abstract<Video::VertexLayout>::value));   // B.3.9 VID: concrete
+    // ENDGAME B.3.9 VID: VideoProgram is CONCRETE (tests/unit/b39_vid_program_test.cpp).
+    CHECK(!(std::is_abstract<Video::VideoProgram>::value));
 
     // NO VIRTUAL DESTRUCTOR anywhere in the family (ENDGAME B.1 decision 2):
     // slot 0 is `DeletingDtor(unsigned)` and deletion is `Object::Destroy(p)`.

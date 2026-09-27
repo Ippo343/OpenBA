@@ -10,7 +10,7 @@
 //
 // ??_7RenderState@Video@@6B@ (retail 0x180157720), nine slots:
 //
-//   0  deleting dtor        0x18004b9d0  runtime/src/object/deleting_dtor.cpp
+//   0  deleting dtor        0x18004b9d0  RenderState.h (inline, B.3.9)
 //   1  TypeName             0x18004b570  here
 //   2  Type                 0x18004b550  here
 //   3  GetFileVersion       0x1800f4c80  here  (returns 3)
@@ -20,7 +20,6 @@
 //   7  Destruct             0x18004b720  here
 //   8  Construct            0x18004b710  here
 //
-// plus ??0RenderState@Video@@QEAA@XZ (0x1800f4b60, the factory step at
 // 0x18004b6bf), ~RenderState (0x1800f4c30), Initialize, IsWireframe, Bind, the
 // three Platform* helpers, and the three sub-struct ctors and serializers:
 //     ??0Stencil    0x1800f49d0   ?Serialize@Stencil     0x1800f48e0
@@ -55,12 +54,12 @@
 //     reading-direction PlatformCreate. Moving either one relative to another
 //     stream operation is a save-format change (Serializer.h's banner).
 //
-// NOT CHANGED — the vtable stamps in `RenderState::RenderState`'s DOOR. The
-// door writes Base's, External's and RenderState's MINTED addresses by hand and
-// keeps doing so: a real constructor chain would stamp GCC's tables, and the
-// rest of the tree reads this object through the minted one until the mint rows
-// retire at the end of B.3 (B35_RULES 11). `~RenderState` is the mirror case and
-// is the one place that DOES now rely on the chain — see its own note.
+// ENDGAME B.3.9 block VID — THE CLASS IS CONCRETE. The ctor door that wrote
+// Base's, External's and RenderState's MINTED addresses by hand is gone: the
+// real constructor (RenderState.h) and the destructor chain stamp the
+// compiler's tables. The minted row, its RT_DELDTOR row, the ??0 / ??1 doors
+// and the seven slot doors retired together; the factory pair is the class's
+// own.
 //
 // ---------------------------------------------------------------------------
 // Serialize (0x1800f4c90) INLINES TWO OF THE THREE SUB-SERIALIZERS
@@ -111,18 +110,10 @@ struct RenderStateDoorAccess {
     static void PlatformDestruct(Video::RenderState* p) {
         p->Video::RenderState::PlatformDestruct();
     }
-    // A QUALIFIED non-virtual destructor call, never `DeletingDtor(0)` — that
-    // would re-enter slot 0.
-    static void Dtor(Video::RenderState* p) {
-        p->Video::RenderState::~RenderState();
-    }
 };
 
 namespace {
 
-void* BaseVTable()        { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* ExternalVTable()    { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* RenderStateVTable() { return RT_DATA_SLOT(void*, "??_7RenderState@Video@@6B@"); }
 const uint8_t* RenderStateTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A");
 }
@@ -141,38 +132,6 @@ Video::DeviceData* ActiveDeviceData() {
         *reinterpret_cast<void**>(static_cast<uint8_t*>(device) + 0x100));
 }
 
-// The object's OWN vtable slot 0 with the flags byte spelled out. Read through
-// the object rather than through a resolved symbol because `Destruct` and
-// `Reconstruct` are INHERITED by nothing here but are reached on the live
-// object, whose table is the minted one.
-void CallSlot0(void* self, unsigned flags) {
-    void** vt = *reinterpret_cast<void***>(self);
-    reinterpret_cast<void* (*)(void*, unsigned)>(vt[0])(self, flags);
-}
-
-// ??0RenderState@Video@@QEAA@XZ (0x1800f4b60). The three vtable stamps are the
-// MINTED addresses, by hand — see this file's banner. The field defaults are the
-// three sub-struct ctors inlined, in field order, and they are expressed as
-// those ctors so the constants live in exactly one place.
-void ConstructBody(Video::RenderState* self) {
-    void** vp = reinterpret_cast<void**>(self);
-    *vp = BaseVTable();
-    *vp = ExternalVTable();
-    self->_path.data      = nullptr;   // +0x08
-    self->_refs._data     = nullptr;   // +0x10
-    self->_refs._size     = 0;         // +0x18
-    self->_refs._capacity = 0;
-    *vp = RenderStateVTable();         // no CompiledExternal stamp — see the header
-
-    self->_alphaBlend = Video::RenderState::AlphaBlend();   // +0x20 .. +0x33
-    self->_depth      = Video::RenderState::Depth();        // +0x34 .. +0x43
-    self->_stencil    = Video::RenderState::Stencil();      // +0x44 .. +0x67
-    self->_cullMode   = 1;                                  // +0x68
-    self->_fillMode   = 0;                                  // +0x6c
-    self->_flag70     = 0;                                  // +0x70
-    RenderStateDoorAccess::PlatformConstruct(self);      // +0x78
-}
-
 }  // namespace
 
 // ############################################################################
@@ -186,16 +145,9 @@ static_assert(sizeof(bool) == 1,
               "the Bool ReaderWriter slot is handed the address of ONE byte");
 
 // ---- the three nested value types -----------------------------------------
-// ??0AlphaBlend@RenderState@Video@@QEAA@XZ  0x1800f4b30
-RenderState::AlphaBlend::AlphaBlend()
-    : enabled(0), _pad01{}, srcBlend(1), dstBlend(0), blendOp(0), writeMask(0xf) {}
-// ??0Depth@RenderState@Video@@QEAA@XZ       0x1800f4a80
-RenderState::Depth::Depth()
-    : test(1), write(1), _pad02{}, func(4), bias(0.0f), slopeBias(0.0f) {}
-// ??0Stencil@RenderState@Video@@QEAA@XZ     0x1800f49d0 — zeroes the whole 0x24
-RenderState::Stencil::Stencil()
-    : enabled(0), twoSided(0), _pad02{}, readMask(0), writeMask(0), _pad09{},
-      func(0), failOp(0), depthFailOp(0), passOp(0), backFunc(0), reference(0) {}
+// Their three constructors (0x1800f4b30 / 0x1800f4a80 / 0x1800f49d0) are
+// inline in RenderState.h since ENDGAME B.3.9: the real RenderState ctor runs
+// them.
 
 // ?Serialize@AlphaBlend@RenderState@Video@@QEAAXAEAVSerializer@IO@@@Z  0x1800f4aa0
 void RenderState::AlphaBlend::Serialize(IO::Serializer& ser) {
@@ -285,41 +237,42 @@ const char* RenderState::_TypeName()       { return "RenderState"; }
 const char* RenderState::_ParentTypeName() { return "Object::External"; }
 
 // slot 8 — ?Construct@ 0x18004b710.
-// `TEST RCX,RCX; JNZ <ctor>; XOR EAX,EAX; RET` — MSVC's placement-new codegen.
-// The null test on `this` looks unreachable for a virtual and is transcribed
-// anyway: "obviously unreachable" is not a licence to drop a branch — and the
-// branch STAYS IN THE DOOR (`RtVideo_RenderState_Construct` below) rather than
-// here, because `this == nullptr` inside a member is a comparison GCC folds and
-// warns about. The door is where retail's test is observable, so that is where
-// it lives.
+// `TEST RCX,RCX; JNZ <ctor>; XOR EAX,EAX; RET` — MSVC's placement-new codegen;
+// `this` is never null here. `::new` because the class declares its own
+// (unported) placement operator new.
 Object::External* RenderState::Construct() {
-    ConstructBody(this);
-    return this;
+    return ::new (this) RenderState();
 }
 
 // slot 6 — ?Reconstruct@ 0x18004b6f0. Destroy in place through slot 0 with
 // flags 0 ("destroy, do NOT free" — the argument Ghidra's C output drops), then
 // re-construct on the SAME storage: `Object::External`'s device-lost primitive.
 Object::External* RenderState::Reconstruct() {
-    CallSlot0(this, 0u);
-    ConstructBody(this);
-    return this;
+    DeletingDtor(0);
+    return ::new (this) RenderState();
 }
 
 // slot 7 — ?Destruct@ 0x18004b720. `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`.
-void RenderState::Destruct() { CallSlot0(this, 0u); }
+void RenderState::Destruct() { DeletingDtor(0); }
 
-// ??1RenderState@Video@@UEAA@XZ (0x1800f4c30)
 //
 // Retail's order: stamp RenderState's vtable, PlatformDestruct, then TAIL-JMP
-// ~External. The first and the last are BOTH the destructor chain's now — GCC
-// emits the vptr store on entry to `~RenderState` and runs `~External()` on the
-// way out — and neither is hand-written, for the reason
-// `runtime/src/object/external_class.cpp`'s `~External` records: a hand-written
-// store would name the MINTED table where a converted object carries the
-// compiler's, which is the whole point of the class. The one line left is the
-// body retail actually has.
+// ~External. The first and the last are BOTH the destructor chain's — GCC emits
+// the vptr store on entry to `~RenderState` and runs `~External()` on the way
+// out. The one line left is the body retail actually has.
 RenderState::~RenderState() { PlatformDestruct(); }
+
+// ?CreateNewObject@RenderState@Video@@SAPEAVBase@Object@@XZ  0x18004b660:
+// MemAlloc(0x80, 8), null branch, the ctor (B39_RULES D2).
+Object::Base* RenderState::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(RenderState), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) RenderState();
+}
+// ?CreateInPlaceObject@RenderState@Video@@SAPEAVBase@Object@@PEAX@Z  0x18004b6e0
+Object::Base* RenderState::CreateInPlaceObject(void* storage) {
+    return storage ? ::new (storage) RenderState() : nullptr;
+}
 
 // ---- the exported non-virtual members --------------------------------------
 bool RenderState::IsWireframe() const { return _fillMode == 1; }
@@ -407,22 +360,9 @@ extern "C" void RtVideo_RenderState_Stencil_Serialize(void* p, void* serv) {    
             *reinterpret_cast<IO::Serializer*>(serv));           // B.3.5 bridge
 }
 
-extern "C" uint32_t RtVideo_RenderState_Type(const void* selfv) {
-    return reinterpret_cast<const Video::RenderState*>(selfv)
-        ->Video::RenderState::Type();                            // B.3.5 bridge
-}
 extern "C" uint32_t RtVideo_RenderState_TypeId() {
     return Video::RenderState::TypeId();
 }
-extern "C" const char* RtVideo_RenderState_TypeName(const void* selfv) {
-    return reinterpret_cast<const Video::RenderState*>(selfv)
-        ->Video::RenderState::TypeName();                        // B.3.5 bridge
-}
-extern "C" int32_t RtVideo_RenderState_GetFileVersion(const void* selfv) {
-    return reinterpret_cast<const Video::RenderState*>(selfv)
-        ->Video::RenderState::GetFileVersion();                  // B.3.5 bridge
-}
-
 // `?_TypeName@` / `?_ParentTypeName@` are `protected static` on the class
 // (retail's `CA` = private static), so the doors are members' friends by being
 // this file — `Video::RenderState::_TypeName()` is reachable from a member
@@ -431,29 +371,6 @@ extern "C" int32_t RtVideo_RenderState_GetFileVersion(const void* selfv) {
 // B5-15: both are the bytes at 0x18004b530 / 0x18004b540, copied.
 extern "C" const char* RtVideo_RenderState_StaticTypeName() { return "RenderState"; }
 extern "C" const char* RtVideo_RenderState_ParentTypeName() { return "Object::External"; }
-
-extern "C" void* RtVideo_RenderState_Ctor(void* selfv) {
-    ConstructBody(static_cast<Video::RenderState*>(selfv)); return selfv;
-}
-extern "C" void* RtVideo_RenderState_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;
-    return reinterpret_cast<Video::RenderState*>(selfv)
-        ->Video::RenderState::Construct();                       // B.3.5 bridge
-}
-extern "C" void* RtVideo_RenderState_Reconstruct(void* selfv) {
-    return reinterpret_cast<Video::RenderState*>(selfv)
-        ->Video::RenderState::Reconstruct();                     // B.3.5 bridge
-}
-extern "C" void RtVideo_RenderState_Destruct(void* selfv) {
-    reinterpret_cast<Video::RenderState*>(selfv)
-        ->Video::RenderState::Destruct();                        // B.3.5 bridge
-}
-// ??1RenderState@Video@@UEAA@XZ (0x1800f4c30) — a QUALIFIED non-virtual
-// destructor call, never `DeletingDtor(0)`: that would re-enter slot 0.
-extern "C" void RtVideo_RenderState_Dtor(void* selfv) {
-    RenderStateDoorAccess::Dtor(
-        reinterpret_cast<Video::RenderState*>(selfv));            // B.3.5 bridge
-}
 
 extern "C" bool RtVideo_RenderState_IsWireframe(const void* selfv) {
     return reinterpret_cast<const Video::RenderState*>(selfv)
@@ -489,41 +406,22 @@ extern "C" void RtVideo_RenderState_PlatformDestructExport(void* selfv) {
         reinterpret_cast<Video::RenderState*>(selfv));            // B.3.5 bridge
 }
 
-extern "C" bool RtVideo_RenderState_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<Video::RenderState*>(selfv)
-        ->Video::RenderState::Serialize(streamv);                 // B.3.5 bridge
-}
-
 int RtVideoRenderStateRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@RenderState@Video@@UEBAIXZ",        (void*)&RtVideo_RenderState_Type);     ++n;
-    RegisterRuntimeAddr  (0x18004b550ull,                            (void*)&RtVideo_RenderState_Type);
+    // ENDGAME B.3.9 VID: the factory pair by retail NAME and VA (B39_RULES D2).
+    RegisterRuntimeExport("?CreateNewObject@RenderState@Video@@SAPEAVBase@Object@@XZ",
+                          (void*)&Video::RenderState::CreateNewObject); ++n;
+    RegisterRuntimeAddr  (0x18004b660ull, (void*)&Video::RenderState::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@RenderState@Video@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&Video::RenderState::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr  (0x18004b6e0ull, (void*)&Video::RenderState::CreateInPlaceObject);
     RegisterRuntimeExport("?TypeId@RenderState@Video@@SAIXZ",        (void*)&RtVideo_RenderState_TypeId);   ++n;
     RegisterRuntimeAddr  (0x18004b560ull,                            (void*)&RtVideo_RenderState_TypeId);
-    RegisterRuntimeExport("?TypeName@RenderState@Video@@UEBAPEBDXZ", (void*)&RtVideo_RenderState_TypeName); ++n;
-    RegisterRuntimeAddr  (0x18004b570ull,                            (void*)&RtVideo_RenderState_TypeName);
     RegisterRuntimeExport("?_TypeName@RenderState@Video@@CAPEBDXZ",       (void*)&RtVideo_RenderState_StaticTypeName); ++n;
     RegisterRuntimeAddr  (0x18004b530ull,                                 (void*)&RtVideo_RenderState_StaticTypeName);
     RegisterRuntimeExport("?_ParentTypeName@RenderState@Video@@CAPEBDXZ", (void*)&RtVideo_RenderState_ParentTypeName); ++n;
     RegisterRuntimeAddr  (0x18004b540ull,                                 (void*)&RtVideo_RenderState_ParentTypeName);
-    RegisterRuntimeExport("?GetFileVersion@RenderState@Video@@UEBAHXZ",   (void*)&RtVideo_RenderState_GetFileVersion); ++n;
-    RegisterRuntimeAddr  (0x1800f4c80ull,                                 (void*)&RtVideo_RenderState_GetFileVersion);
 
-    RegisterRuntimeExport("??0RenderState@Video@@QEAA@XZ", (void*)&RtVideo_RenderState_Ctor); ++n;
-    RegisterRuntimeAddr  (0x1800f4b60ull,                  (void*)&RtVideo_RenderState_Ctor);
-    RegisterRuntimeExport("??1RenderState@Video@@UEAA@XZ", (void*)&RtVideo_RenderState_Dtor); ++n;
-    RegisterRuntimeAddr  (0x1800f4c30ull,                  (void*)&RtVideo_RenderState_Dtor);
-    RegisterRuntimeExport("?Construct@RenderState@Video@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtVideo_RenderState_Construct); ++n;
-    RegisterRuntimeAddr  (0x18004b710ull, (void*)&RtVideo_RenderState_Construct);
-    RegisterRuntimeExport("?Reconstruct@RenderState@Video@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtVideo_RenderState_Reconstruct); ++n;
-    RegisterRuntimeAddr  (0x18004b6f0ull, (void*)&RtVideo_RenderState_Reconstruct);
-    RegisterRuntimeExport("?Destruct@RenderState@Video@@UEAAXXZ", (void*)&RtVideo_RenderState_Destruct); ++n;
-    RegisterRuntimeAddr  (0x18004b720ull,                         (void*)&RtVideo_RenderState_Destruct);
-    RegisterRuntimeExport("?Serialize@RenderState@Video@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtVideo_RenderState_Serialize); ++n;
-    RegisterRuntimeAddr  (0x1800f4c90ull, (void*)&RtVideo_RenderState_Serialize);
 
     RegisterRuntimeExport("??0Stencil@RenderState@Video@@QEAA@XZ",    (void*)&RtVideo_RenderState_Stencil_Ctor);    ++n;
     RegisterRuntimeAddr  (0x1800f49d0ull,                             (void*)&RtVideo_RenderState_Stencil_Ctor);

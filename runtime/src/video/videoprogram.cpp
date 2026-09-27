@@ -4,7 +4,7 @@
 //
 // ??_7VideoProgram@Video@@6B@ (retail 0x180157a70), nine slots:
 //
-//   0  deleting dtor        0x18004efb0  runtime/src/object/deleting_dtor.cpp row 51
+//   0  deleting dtor        0x18004efb0  VideoProgram.h (inline, B.3.9)
 //   1  TypeName             0x18004ec50  here
 //   2  Type                 0x18004ec30  here
 //   3  GetFileVersion       0x1800f46a0  here  (returns 1)
@@ -14,9 +14,14 @@
 //   7  Destruct             0x18004ee00  here
 //   8  Construct            0x18004edf0  here
 //
-// plus the default ctor ??0VideoProgram@Video@@QEAA@XZ (0x1800f45b0), which the
-// factory steps call (rt_factories_video.inc), ~VideoProgram (0x1800f4650) and
-// the three private Platform* helpers.
+// plus the default ctor ??0VideoProgram@Video@@QEAA@XZ (0x1800f45b0, the real
+// constructor in VideoProgram.h since ENDGAME B.3.9), ~VideoProgram (0x1800f4650),
+// the factory pair and the three private Platform* helpers.
+//
+// ENDGAME B.3.9 block VID: the class is CONCRETE and wears the compiler's table.
+// The ctor door, the dtor door and the seven slot doors below this banner's
+// description are GONE (their callers were the minted table, the FACTREST
+// interpreter and the RT_DELDTOR row, all retired with ??_7VideoProgram@Video@@6B@).
 //
 // ============================================================================
 // ENDGAME B.3.5 BLOCK B — THE BODIES MOVED INTO THE MEMBERS, AND THIS FILE'S
@@ -56,6 +61,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../../standalone/resolve.h"
@@ -70,9 +76,6 @@ using rt::io::Stream;
 using rt::io::ReaderWriter;
 using Video::VideoProgram;
 
-void* BaseVTable()         { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* ExternalVTable()     { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* VideoProgramVTable() { return RT_DATA_SLOT(void*, "??_7VideoProgram@Video@@6B@"); }
 const uint8_t* VideoProgramTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A");
 }
@@ -86,84 +89,12 @@ void* DeviceData() {
 }
 constexpr size_t kDeviceDataCreateVideoProgramData = 0x90;   // DeviceData vtable slot 18
 
-using Slot0Fn = void* (*)(void* self, int flag);
-void CallSlot0(void* self, int flag) {
-    void** vt = *reinterpret_cast<void***>(self);
-    reinterpret_cast<Slot0Fn>(vt[0])(self, flag);
-}
-
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) {
     return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra));
 }
 
-// ??0VideoProgram@Video@@QEAA@XZ (0x1800f45b0) — the ctor DOOR's body, which
-// `Construct` (0x18004edf0) repeats behind a null test. THREE vtable stamps: Base,
-// External, VideoProgram. There is no CompiledExternal stamp and adding one would
-// be the trap this class is famous for.
-void ConstructBody(VideoProgram* self) {
-    void** vp = reinterpret_cast<void**>(self);
-    *vp = BaseVTable();
-    *vp = ExternalVTable();
-    self->_path.data      = nullptr;   // +0x08
-    self->_refs._data     = nullptr;   // +0x10
-    self->_refs._size     = 0;         // +0x18
-    self->_refs._capacity = 0;
-    *vp = VideoProgramVTable();
-    self->_vertexLayout  = nullptr;         // +0x20
-    self->_vertexProgram = nullptr;         // +0x28
-    self->_pixelProgram  = nullptr;         // +0x30
-    self->_renderState   = nullptr;         // +0x38
-    self->Video::VideoProgram::PlatformConstruct();   // +0x40
-}
-
 }  // namespace
-
-// ---------------------------------------------------------------------------
-// The registered doors. Each is one line over the member of the same name.
-// ---------------------------------------------------------------------------
-extern "C" uint32_t RtVideo_VideoProgram_Type(const void* selfv) {
-    return reinterpret_cast<const VideoProgram*>(selfv)
-               ->Video::VideoProgram::Type();                      // B.3.5 bridge
-}
-extern "C" const char* RtVideo_VideoProgram_TypeName(const void* selfv) {
-    return reinterpret_cast<const VideoProgram*>(selfv)
-               ->Video::VideoProgram::TypeName();                  // B.3.5 bridge
-}
-extern "C" int32_t RtVideo_VideoProgram_GetFileVersion(const void* selfv) {
-    return reinterpret_cast<const VideoProgram*>(selfv)
-               ->Video::VideoProgram::GetFileVersion();            // B.3.5 bridge
-}
-
-extern "C" void* RtVideo_VideoProgram_Ctor(void* selfv) {
-    ConstructBody(reinterpret_cast<VideoProgram*>(selfv));         // B.3.5 bridge
-    return selfv;
-}
-extern "C" void* RtVideo_VideoProgram_Construct(void* selfv) {
-    // RETAIL'S NULL TEST STAYS IN THE DOOR (BLOCK_BRIEF "the shape"): `this` is
-    // `nonnull` to the compiler, so the same test inside the member is both a
-    // -Wnonnull-compare warning and an optimisation GCC may delete.
-    if (selfv == nullptr) return nullptr;
-    return reinterpret_cast<VideoProgram*>(selfv)
-               ->Video::VideoProgram::Construct();                 // B.3.5 bridge
-}
-extern "C" void* RtVideo_VideoProgram_Reconstruct(void* selfv) {
-    return reinterpret_cast<VideoProgram*>(selfv)
-               ->Video::VideoProgram::Reconstruct();               // B.3.5 bridge
-}
-extern "C" void RtVideo_VideoProgram_Destruct(void* selfv) {
-    reinterpret_cast<VideoProgram*>(selfv)
-        ->Video::VideoProgram::Destruct();                         // B.3.5 bridge
-}
-// ??1VideoProgram@Video@@UEAA@XZ (0x1800f4650)
-extern "C" void RtVideo_VideoProgram_Dtor(void* selfv) {
-    reinterpret_cast<VideoProgram*>(selfv)
-        ->Video::VideoProgram::~VideoProgram();                    // B.3.5 bridge
-}
-extern "C" bool RtVideo_VideoProgram_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<VideoProgram*>(selfv)
-               ->Video::VideoProgram::Serialize(streamv);          // B.3.5 bridge
-}
 
 // ============================================================================
 // THE MEMBER BODIES — `Video::VideoProgram::*`. At `namespace Video` scope and
@@ -175,48 +106,54 @@ namespace Video {
 const char* VideoProgram::TypeName() const {
     const char* v = nullptr; std::memcpy(&v, VideoProgramTypeInfo() + 8, sizeof v); return v;
 }
-// slot 2 — the record's +0x00, 0xFFFFFFFF until Factory::Startup.
-uint32_t VideoProgram::Type() const {
+// 0x18004ec40 — the static accessor: the record's +0x00, 0xFFFFFFFF until
+// Factory::Startup (B39_RULES D6 step 1).
+uint32_t VideoProgram::TypeId() {
     uint32_t v = 0; std::memcpy(&v, VideoProgramTypeInfo(), sizeof v); return v;
 }
+// slot 2 — 0x18004ec30, the same load.
+uint32_t VideoProgram::Type() const { return TypeId(); }
 // slot 3 — 0x1800f46a0 is `MOV EAX,1 ; RET`.
 int32_t VideoProgram::GetFileVersion() const { return 1; }
 
-// slot 8 — 0x18004edf0, the ctor body; retail's leading `TEST RCX,RCX / JZ` lives
-// in the DOOR. `virtual`, not `override`: this branch introduces the slot (B5-16).
+// slot 8 — 0x18004edf0: `TEST RCX,RCX / JZ` then the ctor. `this` is never null
+// here (the factory's null test is CreateInPlaceObject's). `virtual`, not
+// `override`: this branch introduces the slot (B5-16). `::new` because the class
+// declares its own (unported) placement operator new.
 Object::External* VideoProgram::Construct() {
-    ConstructBody(this);
-    return this;
+    return ::new (this) VideoProgram();
 }
 
-// slot 6 — 0x18004edd0. On why the slot-0 call is `CallSlot0` and not
-// `DeletingDtor(0)`: our slot 0 is declared PURE (the body is deleting_dtor.cpp's
-// table-driven one, registered by address and kept by B35_RULES 11), so the C++
-// spelling would be a virtual call on an abstract class that GCC may fold to
-// `__cxa_pure_virtual`. `CallSlot0` reads the object's ACTUAL — minted — table.
+// slot 6 — 0x18004edd0: slot 0 with flags 0 (destroy in place), then the ctor.
 Object::External* VideoProgram::Reconstruct() {
-    CallSlot0(this, 0);
-    ConstructBody(this);
-    return this;
+    DeletingDtor(0);
+    return ::new (this) VideoProgram();
 }
-// slot 7 — 0x18004ee00.
-void VideoProgram::Destruct() { CallSlot0(this, 0); }
+// slot 7 — 0x18004ee00: `XOR EDX,EDX ; JMP [RAX]` — slot 0, flags 0.
+void VideoProgram::Destruct() { DeletingDtor(0); }
 
 // ??1VideoProgram@Video@@UEAA@XZ (0x1800f4650), read as disassembly:
 //   1800f4666  LEA RAX,[0x180157a70] / MOV [RCX],RAX     the vtable stamp
 //   1800f4670  MOV RCX,[RCX+0x40] / TEST / JE            PlatformDestruct, inlined
 //   1800f4681  CALL [RAX]  with EDX=1                      _data slot 0, flags=1
 //   ...        tail-JMP ~External (0x1800bc950)
-// The stamp is written out by hand, naming the MINTED address, because GCC's own
-// vptr store at the top of a polymorphic destructor names GCC's table while the
-// mint rows and the rest of the tree expect the minted one. The tail-JMP is the
-// destructor CHAIN: `~External()` is a real member
-// (runtime/src/object/external_class.cpp). There are no arrays of our own to tear
-// down — the four fields are trivially destructible `ExternalPtr<T>`s and retail
-// does not release them here either.
+// The stamp is the compiler's (entry to this destructor), the tail-JMP the
+// destructor chain. The four fields are trivially destructible `ExternalPtr<T>`s
+// and retail does not release them here either.
 VideoProgram::~VideoProgram() {
-    *reinterpret_cast<void**>(this) = VideoProgramVTable();
     this->Video::VideoProgram::PlatformDestruct();
+}
+
+// ?CreateNewObject@VideoProgram@Video@@SAPEAVBase@Object@@XZ  0x18004ed40:
+// MemAlloc(0x48, 8), null branch, the ctor (B39_RULES D2).
+Object::Base* VideoProgram::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(VideoProgram), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) VideoProgram();
+}
+// ?CreateInPlaceObject@VideoProgram@Video@@SAPEAVBase@Object@@PEAX@Z  0x18004edc0
+Object::Base* VideoProgram::CreateInPlaceObject(void* storage) {
+    return storage ? ::new (storage) VideoProgram() : nullptr;
 }
 
 // The four getters, 0x18004ee10 .. 0x18004ee40, each `MOV RAX,[RCX+off]` into the
@@ -290,25 +227,15 @@ bool VideoProgram::Serialize(void* streamv) {
 
 }  // namespace Video
 
+// ENDGAME B.3.9 VID: the factory pair, by retail NAME and VA (B39_RULES D2); the
+// minted ?_typeInfo@VideoProgram record resolves its factory pointers by name.
 int RtVideoProgramRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@VideoProgram@Video@@UEBAIXZ",          (void*)&RtVideo_VideoProgram_Type);           ++n;
-    RegisterRuntimeAddr  (0x18004ec30ull,                               (void*)&RtVideo_VideoProgram_Type);
-    RegisterRuntimeExport("?TypeName@VideoProgram@Video@@UEBAPEBDXZ",   (void*)&RtVideo_VideoProgram_TypeName);       ++n;
-    RegisterRuntimeAddr  (0x18004ec50ull,                               (void*)&RtVideo_VideoProgram_TypeName);
-    RegisterRuntimeExport("?GetFileVersion@VideoProgram@Video@@UEBAHXZ",(void*)&RtVideo_VideoProgram_GetFileVersion); ++n;
-    RegisterRuntimeAddr  (0x1800f46a0ull,                               (void*)&RtVideo_VideoProgram_GetFileVersion);
-    RegisterRuntimeExport("??0VideoProgram@Video@@QEAA@XZ",             (void*)&RtVideo_VideoProgram_Ctor);           ++n;
-    RegisterRuntimeAddr  (0x1800f45b0ull,                               (void*)&RtVideo_VideoProgram_Ctor);
-    RegisterRuntimeExport("?Construct@VideoProgram@Video@@UEAAPEAVExternal@Object@@XZ",   (void*)&RtVideo_VideoProgram_Construct);   ++n;
-    RegisterRuntimeAddr  (0x18004edf0ull,                                                 (void*)&RtVideo_VideoProgram_Construct);
-    RegisterRuntimeExport("?Reconstruct@VideoProgram@Video@@UEAAPEAVExternal@Object@@XZ", (void*)&RtVideo_VideoProgram_Reconstruct); ++n;
-    RegisterRuntimeAddr  (0x18004edd0ull,                                                 (void*)&RtVideo_VideoProgram_Reconstruct);
-    RegisterRuntimeExport("?Destruct@VideoProgram@Video@@UEAAXXZ",      (void*)&RtVideo_VideoProgram_Destruct);       ++n;
-    RegisterRuntimeAddr  (0x18004ee00ull,                               (void*)&RtVideo_VideoProgram_Destruct);
-    RegisterRuntimeExport("??1VideoProgram@Video@@UEAA@XZ",             (void*)&RtVideo_VideoProgram_Dtor);           ++n;
-    RegisterRuntimeAddr  (0x1800f4650ull,                               (void*)&RtVideo_VideoProgram_Dtor);
-    RegisterRuntimeExport("?Serialize@VideoProgram@Video@@UEAA_NAEAVStream@IO@@@Z", (void*)&RtVideo_VideoProgram_Serialize); ++n;
-    RegisterRuntimeAddr  (0x1800f46b0ull,                                           (void*)&RtVideo_VideoProgram_Serialize);
+    RegisterRuntimeExport("?CreateNewObject@VideoProgram@Video@@SAPEAVBase@Object@@XZ",
+                          (void*)&Video::VideoProgram::CreateNewObject); ++n;
+    RegisterRuntimeAddr  (0x18004ed40ull, (void*)&Video::VideoProgram::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@VideoProgram@Video@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&Video::VideoProgram::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr  (0x18004edc0ull, (void*)&Video::VideoProgram::CreateInPlaceObject);
     return n;
 }

@@ -1,0 +1,11 @@
+# ENDGAME B.3 step 9 -- the rows block VID (branch b39-VID) retired (B39_RULES.md D3).
+# Format: <mangled symbol | 0xVA>   <owner block>   <proof>
+# One fragment per block; a key appears once across all fragments.
+
+# -- the Video resource classes (rows 148/144/112/146/102/118) --
+??_7VideoProgram@Video@@6B@   VID   real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR 0x18004efb0, ??0/??1 doors, 7 slot doors deleted
+??_7VertexLayout@Video@@6B@   VID   real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR 0x18004e000, ??0/??1 doors, 7 slot doors deleted
+??_7RenderState@Video@@6B@    VID   real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR 0x18004b9d0, ??0/??1 doors, 7 slot doors deleted
+??_7VertexProgram@Video@@6B@  VID   real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR 0x18004e810, ??0/??1 doors, 7 slot doors deleted
+??_7PixelProgram@Video@@6B@   VID   real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR 0x18004eb90, ??0/??1 doors, 7 slot doors deleted
+??_7ShaderProgram@Video@@6B@  VID   abstract base: protected real ctor + DeletingDtor; null factory pair own statics; RT_DELDTOR 0x18004e360, ??0/??1 doors (+ConstructBody), 3 slot doors deleted
