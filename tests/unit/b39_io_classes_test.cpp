@@ -16,6 +16,7 @@
 
 #include "runtime/types/io/Serializer.h"
 #include "runtime/types/io/FileStream.h"
+#include "runtime/types/io/PackageFile.h"
 
 #include <cstdint>
 #include <cstdlib>
@@ -509,4 +510,59 @@ UNIT_TEST(b39_io_compressedfilestream_shape_ctor_and_both_arms) {
     IO::CompressedFileStream* c0 = ::new (block + 8) IO::CompressedFileStream();
     ::new (block + 8 + 0xb8) IO::CompressedFileStream();
     CHECK(reinterpret_cast<uint8_t*>(c0->DeletingDtor(3)) == block);
+}
+
+// ===========================================================================
+// IO::PackageFile -- row 94. ??0 0x1800b4440 / slot 0 0x1800259d0.
+// ===========================================================================
+// The slot bodies and ~PackageFile are host stubs (io_stream_abi_stubs.cpp);
+// the constructor and slot 0 are inline and REAL here.
+UNIT_TEST(b39_io_packagefile_shape_ctor_and_both_arms) {
+    CHECK(!std::is_abstract<IO::PackageFile>::value);
+    CHECK(!std::is_destructible<IO::PackageFile>::value);
+    CHECK(!std::has_virtual_destructor<IO::PackageFile>::value);
+    CHECK_EQ(SlotOffset(&IO::PackageFile::DeletingDtor),   (uintptr_t)0x00);
+    CHECK_EQ(SlotOffset(&IO::PackageFile::TypeName),       (uintptr_t)0x08);
+    CHECK_EQ(SlotOffset(&IO::PackageFile::Serialize),      (uintptr_t)0x28);
+    CHECK_EQ(SlotOffset(&IO::PackageFile::Destruct),       (uintptr_t)0x38);
+    CHECK_EQ(SlotOffset(&IO::PackageFile::Construct),      (uintptr_t)0x40);
+
+    // 0x1800b4440's stores; +0x78..+0x7f, +0x90..+0x97, +0xad..+0xaf, +0xc4
+    // and +0xd4 are never written.
+    alignas(8) uint8_t mem[0xf0];
+    std::memset(mem, 0xCD, sizeof mem);
+    IO::PackageFile* pf = ::new (mem) IO::PackageFile();
+    CHECK(pf->_path.data == nullptr);
+    CHECK(pf->_stringArray20 == nullptr);
+    CHECK_EQ(pf->_stringArray30Count, 0);
+    CHECK(pf->_name.data == nullptr);
+    CHECK(pf->_string60.data == nullptr);
+    CHECK_EQ(pf->_version, 0);
+    CHECK_EQ(pf->_priority, 0x2710);
+    CHECK_EQ(pf->_platform, 0);
+    CHECK_EQ(pf->_iconCount, 0);
+    CHECK(pf->_previewData == nullptr);
+    CHECK_EQ(pf->_crc, 0u);
+    CHECK_EQ((int)pf->_overridable, 1);
+    CHECK_EQ(pf->_entryCount, 0);
+    CHECK_EQ(pf->_file.handle, -1);
+    CHECK_EQ(pf->_file.size, 0);
+    CHECK_EQ(pf->_file.baseOffset, 0);
+    CHECK_EQ(pf->_file.winHandle, (int64_t)-1);
+    CHECK(pf->_file._name1.data == nullptr);
+    for (int i = 0x78; i < 0x80; ++i) CHECK_EQ((int)mem[i], 0xCD);
+    for (int i = 0x90; i < 0x98; ++i) CHECK_EQ((int)mem[i], 0xCD);
+    for (int i = 0xad; i < 0xb0; ++i) CHECK_EQ((int)mem[i], 0xCD);
+    for (int i = 0xc4; i < 0xc8; ++i) CHECK_EQ((int)mem[i], 0xCD);
+    for (int i = 0xd4; i < 0xd8; ++i) CHECK_EQ((int)mem[i], 0xCD);
+    CHECK(pf->DeletingDtor(0) == pf);
+
+    IO::PackageFile* heap = ::new (std::malloc(0xf0)) IO::PackageFile();
+    CHECK(heap->DeletingDtor(1) == heap);
+    uint8_t* block = static_cast<uint8_t*>(std::malloc(8 + 2 * 0xf0));
+    const int64_t two = 2;
+    std::memcpy(block, &two, sizeof two);
+    IO::PackageFile* p0 = ::new (block + 8) IO::PackageFile();
+    ::new (block + 8 + 0xf0) IO::PackageFile();
+    CHECK(reinterpret_cast<uint8_t*>(p0->DeletingDtor(3)) == block);
 }

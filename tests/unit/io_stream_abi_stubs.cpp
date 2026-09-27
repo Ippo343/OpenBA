@@ -36,6 +36,7 @@
 
 #include "runtime/types/io/Stream.h"
 #include "runtime/types/io/FileStream.h"
+#include "runtime/types/io/PackageFile.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -140,5 +141,23 @@ bool     VisitorStream::Read(int, void*)        { StubReached("VisitorStream::Re
 bool     VisitorStream::SetCurrentPos(int)      { StubReached("VisitorStream::SetCurrentPos"); }
 uint32_t VisitorStream::GetCurrentPos() const   { StubReached("VisitorStream::GetCurrentPos"); }
 uint32_t VisitorStream::GetSize() const         { StubReached("VisitorStream::GetSize"); }
+
+// ---- IO::PackageFile (runtime/src/io/package_file*.cpp) --------------------
+// ENDGAME B.3.9 IO: the class is concrete, so the b39_io_packagefile test
+// builds the REAL class and the link needs its vtable (key function
+// TypeName, in package_file.cpp, which stands on the port registry). The
+// constructor and slot 0 are inline and real; the destructor's host body
+// releases nothing because a freshly built package holds nothing.
+const char*   PackageFile::TypeName() const             { StubReached("PackageFile::TypeName"); }
+uint32_t      PackageFile::Type() const                 { StubReached("PackageFile::Type"); }
+int32_t       PackageFile::GetFileVersion() const       { StubReached("PackageFile::GetFileVersion"); }
+Object::External::CompileResult PackageFile::Compile(const System::Filename&) {
+    StubReached("PackageFile::Compile");
+}
+bool          PackageFile::Serialize(void*)             { StubReached("PackageFile::Serialize"); }
+Object::External* PackageFile::Reconstruct()            { StubReached("PackageFile::Reconstruct"); }
+void          PackageFile::Destruct()                   { StubReached("PackageFile::Destruct"); }
+Object::External* PackageFile::Construct()              { StubReached("PackageFile::Construct"); }
+PackageFile::~PackageFile() {}
 
 }  // namespace IO

@@ -1282,7 +1282,6 @@ int RtMintRegisterPromotedRows() {
     // the other 232 bytes whole.
     //
     // A/B control: `BANISHED_RT_PROMOTE_PKGFILE=0`.
-            PromoteVtableGuarded("??_7PackageFile@IO@@6B@", 0x180155700ull, &n);
 
     // ---- ??_7TextFileStream@IO@@6B@ — COMPLETE, and NOT PROMOTED ----------
     //

@@ -777,16 +777,15 @@ void FileSystem::LoadPackages() {
 
     // ---- LOOP 1: one PackageFile per discovered *.pkg ---------------------
     // Retail allocates 0xF0 bytes aligned 8 under the allocator lock, runs the
-    // constructor only `if (p)`, then ReadPackfile, then appends. `??0PackageFile`
-    // and `?ReadPackfile@` are both UNPORTED (§4); ReadPackfile is 6,597 bytes
-    // and is a lane of its own.
-    typedef RtIO::PackageFileView* (*PackageFileCtorFn)(void*);
+    // constructor only `if (p)`, then ReadPackfile, then appends. ENDGAME
+    // B.3.9 IO: the constructor is `IO::PackageFile`'s own, on the same block.
     typedef bool (*ReadPackfileFn)(RtIO::PackageFileView*, const RtSystem::Filename*);
     for (int32_t i = 0; i < found.count; ++i) {
         void* block = RtIO::RtMemAlloc(0xF0u, 8);
         RtIO::PackageFileView* pkg = nullptr;
         if (block != nullptr)
-            pkg = RT_EXPORT_ONCE(PackageFileCtorFn, "??0PackageFile@IO@@QEAA@XZ")(block);
+            pkg = reinterpret_cast<RtIO::PackageFileView*>(
+                      ::new (block) IO::PackageFile());   // B.3.9 IO: the real ctor
         // Unguarded on `pkg` — retail calls ReadPackfile with whatever the
         // constructor branch left in R12, including zero on the out-of-memory
         // path (`XOR R12D,R12D` at 0x1800ab5a5). Faithful; not a null check.
@@ -851,7 +850,8 @@ void FileSystem::LoadPackages() {
         void* block = RtIO::RtMemAlloc(0xF0u, 8);
         RtIO::PackageFileView* pkg = nullptr;
         if (block != nullptr)
-            pkg = RT_EXPORT_ONCE(PackageFileCtorFn, "??0PackageFile@IO@@QEAA@XZ")(block);
+            pkg = reinterpret_cast<RtIO::PackageFileView*>(
+                      ::new (block) IO::PackageFile());   // B.3.9 IO: the real ctor
         RT_EXPORT_ONCE(ReadPackfileFn,
             "?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z")(
                 pkg, reinterpret_cast<const RtSystem::Filename*>(&_userPackFilenames[i]));

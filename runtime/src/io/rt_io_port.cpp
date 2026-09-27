@@ -101,8 +101,6 @@ extern int RtIoFileSystemFindRegister();     // filesystem_find_win.cpp (lane FI
 // removes both halves; if the probe is the problem, it is already gated on the
 // diff harness and a normal run does not run it.
 extern int RtIoPackageFileRegister();        // package_file.cpp (lane PKG2)
-extern int RtIoPackageFileDtorRegister();    // package_file_dtor.cpp (W25 BODY)
-extern int RtIoPackageFileSerializeRegister(); // package_file_serialize.cpp (W27 IOTEXT)
 // Wave 9 lane PKG2 rung 2: the IO::CompressedStream READ path (Read, SetWindow,
 // GetAvailableWindow, DecompressFromSource) — the stack ?ReadPackfile@ stands
 // on, and the thing that gives rung 1's Compression::Decompress its first real
@@ -244,17 +242,6 @@ void RtIoPortInit() {
     n += RtIoFileSystemPackagesRegister();
     n += RtIoFileSystemFindRegister();
     n += RtIoPackageFileRegister();
-    // Wave 25 lane BODY. ~PackageFile on its OWN switch, NOT folded into PKG2:
-    // it is the first body in this class that FREES, so a defect here is a
-    // double free or a leak rather than a wrong value, and the integrator must
-    // be able to A/B it while keeping the ctor and the twenty accessors.
-    n += RtIoPackageFileDtorRegister();
-    // Wave 27 lane IOTEXT. Its OWN switch, not folded into PKG2, for the reason
-    // above and one more: it is the only PackageFile body that decides a FILE
-    // FORMAT, so a defect is a desynced .pkg rather than a wrong value, and it
-    // opens one new unported address door (0x180029bb0). The integrator must be
-    // able to take the table's ninth slot out without losing the other eight.
-    n += RtIoPackageFileSerializeRegister();
     n += RtIoCompressedStreamReadRegister();
     n += RtIoFileSystemOpenFileRegister();
     n += RtIoCompressedStreamReleaseRegister();

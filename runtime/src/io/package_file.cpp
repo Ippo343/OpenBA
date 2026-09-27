@@ -282,6 +282,7 @@
 #include <cstdio>
 #include <cstring>
 #include <new>          // placement new into the retail hidden return slot
+#include <atomic>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/FileSystem.h"
@@ -303,84 +304,28 @@ namespace {
 // `MOV EDX,0xf0` to the array-delete helper. Two independent sites agree.
 constexpr size_t kPackageFileSize = 0xF0;
 
-// ---- data doors -----------------------------------------------------------
-// RT_DATA_SLOT, not a literal VA: the export ADDRESS is the vtable, and at
-// cutover these resolve to lane C2's mint instead of the DLL's .rdata. A null
-// here is a MISSING MINT ROW and it is named by the resolver rather than
-// silently stored as 0 — see §7.
-void* BaseVtable() {
-    return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@");        // 0x180154788
-}
-void* ExternalVtable() {
-    return RT_DATA_SLOT(void*, "??_7External@Object@@6B@");    // 0x1801547a0
-}
-void* PackageFileVtable() {
-    return RT_DATA_SLOT(void*, "??_7PackageFile@IO@@6B@");     // 0x180155700
-}
-
+// ---- the type-info record -------------------------------------------------
 // ?Type@ (0x180025130) reads `dword ptr [0x1801f9ac8]` and ?TypeName@
 // (0x180025150) reads `qword ptr [0x1801f9ad0]` — the same exported
-// BaseTypeInfo, at +0x00 and +0x08. Reading it as a byte pointer avoids
-// dragging Object/TypeInfo.h in for two field reads, and matches how
-// runtime/src/achievement/goal.cpp already spells the same idiom.
+// BaseTypeInfo, at +0x00 and +0x08. ENDGAME B.3.9 W1: the record's address
+// lives in a namespace-scope atomic slot (B9-10: no function-local cache),
+// resolved through the never-caches-a-null door; the record itself stays
+// minted until DEFINE_TYPE (W3).
+std::atomic<const uint8_t*> g_packageFileTypeInfo{nullptr};
 const uint8_t* PackageFileTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@PackageFile@IO@@0VBaseTypeInfo@Object@@A");
+    const uint8_t* ti = g_packageFileTypeInfo.load(std::memory_order_acquire);
+    if (ti == nullptr) {
+        ti = static_cast<const uint8_t*>(
+            ResolveExport("?_typeInfo@PackageFile@IO@@0VBaseTypeInfo@Object@@A"));
+        if (ti != nullptr) g_packageFileTypeInfo.store(ti, std::memory_order_release);
+    }
+    return ti;
 }
 
-// ---- raw stores, so the constructor reads against the disassembly ----------
-// PackageFileView is a partial view (it models the eleven fields anything in
-// this tree reads). The constructor writes the WHOLE object, most of it into
-// regions the view calls padding, so it is transcribed by offset. Every line
-// below carries the address of the instruction it reproduces.
-inline void PutQ(void* p, size_t off, uint64_t v) {
-    std::memcpy(static_cast<uint8_t*>(p) + off, &v, sizeof v);
-}
-inline void PutD(void* p, size_t off, uint32_t v) {
-    std::memcpy(static_cast<uint8_t*>(p) + off, &v, sizeof v);
-}
-inline void PutB(void* p, size_t off, uint8_t v) {
-    *(static_cast<uint8_t*>(p) + off) = v;
-}
-
-// The constructor's body, factored out so the oracle in §5 can run the exact
-// same code onto scratch. Retail's store ORDER is preserved throughout,
-// including the out-of-order +0xd8 at the end.
-void PackageFileCtorBody(void* self) {
-    PutQ(self, 0x00, reinterpret_cast<uint64_t>(BaseVtable()));      // 1800b445b
-    PutQ(self, 0x00, reinterpret_cast<uint64_t>(ExternalVtable()));  // 1800b4465
-    PutQ(self, 0x08, 0);                                            // 1800b4474
-    PutQ(self, 0x10, 0);                                            // 1800b4477
-    PutQ(self, 0x18, 0);                                            // 1800b447b
-    PutQ(self, 0x00, reinterpret_cast<uint64_t>(PackageFileVtable())); // 1800b4486
-    PutQ(self, 0x20, 0);                                            // 1800b4489
-    PutQ(self, 0x28, 0);                                            // 1800b448d
-    PutQ(self, 0x30, 0);                                            // 1800b4491
-    PutQ(self, 0x38, 0);                                            // 1800b4495
-    PutQ(self, 0x40, 0);                                            // 1800b4499  name
-    PutQ(self, 0x48, 0);                                            // 1800b449d  author
-    PutQ(self, 0x50, 0);                                            // 1800b44a1  description
-    PutQ(self, 0x58, 0);                                            // 1800b44a5
-    PutQ(self, 0x60, 0);                                            // 1800b44a9
-    PutQ(self, 0x68, 0);                                            // 1800b44ad  version/userVersion
-    PutQ(self, 0x70, 0x2710);                                       // 1800b44b1  priority=10000, platform=0
-    PutQ(self, 0x80, 0);                                            // 1800b44b9
-    PutQ(self, 0x88, 0);                                            // 1800b44c0
-    PutQ(self, 0x98, 0);                                            // 1800b44c7
-    PutQ(self, 0xA0, 0);                                            // 1800b44ce
-    PutD(self, 0xA8, 0);                                            // 1800b44d5  crc / packfile id
-    PutB(self, 0xAC, 1);                                            // 1800b44dc  overridable = TRUE
-    PutQ(self, 0xB0, 0);                                            // 1800b44e3  entries
-    PutQ(self, 0xB8, 0);                                            // 1800b44ea  entryCount
-    // ADD RCX,0xc0 at 1800b44f1 — the embedded FileSystem::FileInfo. Retail
-    // writes +0x00, +0x08, +0x10, then +0x20, +0x28, and only then +0x18.
-    PutD(self, 0xC0, 0xFFFFFFFFu);                                  // 1800b44fd
-    PutQ(self, 0xC8, 0);                                            // 1800b4503
-    PutD(self, 0xD0, 0);                                            // 1800b4507
-    PutQ(self, 0xE0, 0);                                            // 1800b4514
-    PutQ(self, 0xE8, 0);                                            // 1800b4520
-    PutQ(self, 0xD8, static_cast<uint64_t>(-1));                    // 1800b4523
-}
+// ENDGAME B.3.9 IO: the PutQ/PutD/PutB transcription of ??0PackageFile
+// (`PackageFileCtorBody`, with its three minted vptr stamps) is gone; the
+// stores are `IO::PackageFile`'s real constructor (PackageFile.h), in the same
+// order, and the vptrs are the compiler's.
 
 // ---- oracle typedefs ------------------------------------------------------
 typedef void*    (*CtorFn)(void*);
@@ -409,45 +354,9 @@ typedef int32_t  (*I32ThisFilenameFn)(void*, const void*);
 }  // namespace
 
 // ============================================================================
-// ??0PackageFile@IO@@QEAA@XZ                                 retail 0x1800b4440
-// ============================================================================
-// THE WALL OF ATTEMPT 14. See §1 for the instruction-by-instruction reading and
-// §5 for the oracle.
-extern "C" PackageFileView* RtIo_PackageFile_Ctor(PackageFileView* self) {
-
-    PackageFileCtorBody(self);
-
-    return self;
-}
-
-// ============================================================================
-// ?Construct@PackageFile@IO@@UEAAPEAVExternal@Object@@XZ     retail 0x1800252f0
-// ============================================================================
-//   1800252f0  TEST RCX,RCX
-//   1800252f3  JNZ 0x1800b4440      <- tail jump straight into the constructor
-//   1800252f9  XOR EAX,EAX / RET
-//
-// Vtable slot 8. The null branch is real, not defensive: the factory calls
-// Construct on whatever the allocator returned, including nullptr. Both
-// branches are driven by the sweep probe (§6).
-extern "C" void* RtIo_PackageFile_Construct(void* self) {
-    // *** THE NULL TEST LIVES HERE, IN THE DOOR, AND NOT IN THE MEMBER. ***
-    // Retail's 0x1800252f0 opens `TEST RCX,RCX ; JNZ ??0PackageFile ; XOR EAX,
-    // EAX ; RET` -- the factory calls Construct on whatever the allocator
-    // returned, including nullptr, so the branch is REAL and not defensive, and
-    // it must be reproduced. But it cannot be reproduced inside the member: a
-    // C++ `this` is non-null by definition, GCC says so
-    // (-Wnonnull-compare) and is entitled to delete the comparison. Putting it
-    // in the door keeps retail's control flow EXACTLY -- the test still happens
-    // before any field is touched, on the same pointer, with the same two
-    // outcomes -- while keeping the member well defined. It is a spelling move,
-    // not an added guard; the member's comment records the pairing.
-    if (self == nullptr) {                          // 1800252f0 TEST RCX,RCX
-        return nullptr;                             // 1800252f9 XOR EAX,EAX
-    }
-    return reinterpret_cast<IO::PackageFile*>(self)->IO::PackageFile::Construct();
-}
-
+// ENDGAME B.3.9 IO: the ??0PackageFile door (its callers -- LoadPackages, the
+// FACTREST replay, Construct, Reconstruct -- build the class directly now) and
+// the ?Construct@ slot door are gone.
 // ============================================================================
 // The reflection triple. All three read the exported BaseTypeInfo at
 // 0x1801f9ac8 — ?Type@ and ?TypeId@ are the SAME two instructions at two
@@ -467,105 +376,15 @@ extern "C" void* RtIo_PackageFile_Construct(void* self) {
 // serialize_family.cpp / encoding.cpp established the pattern in blocks 1-2).
 // The non-virtual members below do not need it and carry it anyway, so that a
 // reader never has to check which is which.
-extern "C" uint32_t RtIo_PackageFile_Type(const void* self) {
-    return reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::Type();
-}
-
 extern "C" uint32_t RtIo_PackageFile_TypeId() {
     return IO::PackageFile::TypeId();
 }
 
-extern "C" const char* RtIo_PackageFile_TypeName(const void* self) {
-    return reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::TypeName();
-}
-
 // ============================================================================
-// The two constant-returning vtable slots.
-// ============================================================================
-// 0x1800b6080: MOV EAX,0x5 ; RET. The .pkg format version this build writes and
-// accepts. A constant in the CODE, not a field — reading it off the object
-// would be wrong even though it would usually agree.
-extern "C" int32_t RtIo_PackageFile_GetFileVersion(const void* self) {
-    return reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetFileVersion();
-}
-
-// 0x1800b6090: MOV EAX,0x1 ; RET. External::CompileResult, and the value is 1
-// on every path — a package is never "compiled", so the slot reports the same
-// result whatever Filename it is handed. The parameter is genuinely unread.
-extern "C" int32_t RtIo_PackageFile_Compile(void* self, const void* filename) {
-    return static_cast<int32_t>(
-        reinterpret_cast<IO::PackageFile*>(self)->IO::PackageFile::Compile(
-            *reinterpret_cast<const System::Filename*>(filename)));
-}
-
-// ============================================================================
-// ?Destruct@PackageFile@IO@@UEAAXXZ      retail 0x180025300   vtable slot 7
-// ?Reconstruct@PackageFile@IO@@UEAAPEAVExternal@Object@@XZ
-//                                        retail 0x1800252d0   vtable slot 6
-//                                              (WAVE 27 LANE IOTEXT)
-// ============================================================================
-//
-// DISASSEMBLED from Runtime-x64.dll (NOT the profile build -- this namespace's
-// recorded trap is carrying an IO vtable offset across builds,
-// reference_encoding_vtable_offsets_differ_between_builds.md; nothing here is
-// taken from the profile DLL).
-//
-//   ?Destruct@        180025300  MOV RAX,qword ptr [RCX]   ; this->vtable
-//                     180025303  XOR EDX,EDX               ; flags = 0
-//                     180025305  JMP  qword ptr [RAX]      ; TAIL, slot 0
-//
-//   ?Reconstruct@     1800252d0  PUSH RBX / SUB RSP,0x20
-//                     1800252d6  MOV RAX,qword ptr [RCX]   ; this->vtable
-//                     1800252d9  XOR EDX,EDX               ; flags = 0
-//                     1800252db  MOV RBX,RCX
-//                     1800252de  CALL qword ptr [RAX]      ; slot 0
-//                     1800252e0  MOV RCX,RBX
-//                     1800252e8  JMP  0x1800b4440          ; TAIL, ??0PackageFile
-//
-// THE DISPATCH IS VIRTUAL AND IT STAYS VIRTUAL. Both read slot 0 out of the
-// OBJECT'S OWN vtable rather than naming the deleting destructor, so both are
-// written here as an indirect call through `*(void**)self`. Short-cutting to
-// `RtDelDtor_PackageFile` would read correct today and be wrong for anything
-// derived from PackageFile -- and it would also hide which table is live
-// (the DLL's .rdata before cutover, lane C2's mint after).
-//
-// FLAGS = 0, which in the deleting-destructor family
-// (runtime/src/object/deleting_dtor.cpp) means DESTRUCT IN PLACE AND DO NOT
-// FREE. That is the whole of `Destruct`: the object's storage belongs to the
-// factory that owns it. Passing 1 here would free a block the caller still
-// holds; the constant is read off `XOR EDX,EDX` at both sites, not assumed.
-//
-// `Reconstruct` is therefore exactly "destroy in place, then run the
-// constructor over the same storage", and its declared return is
-// `Object::External*` -- retail returns whatever the tail-jumped constructor
-// leaves in RAX, which `??0PackageFile@IO@@QEAA@XZ` (0x1800b4440, ported at
-// :443) sets to `this`.
-//
-// EVERY CALLEE IS OURS -- these two rows CLOSE:
-//   slot 0  0x1800259d0  deleting dtor   PORTED (deleting_dtor.cpp, Wave 25)
-//   tail    0x1800b4440  ??0PackageFile  PORTED (this file, :443)
-//   (via slot 0) 0x1800b4540 ~PackageFile PORTED and registered BY ADDRESS
-//       (package_file_dtor.cpp:442). NOTE: deleting_dtor.cpp's row-43 comment
-//       still reads "~PackageFile = 0x1800b4540  (NOT ported)". That is STALE
-//       -- Wave 25 lane BODY ported it. Recorded, not fixed, per Wave 27 §4 #1.
-//
-// ORACLE: driven by the sweep probe below on a FRESHLY CONSTRUCTED scratch
-// object, ours and theirs on two separate blocks, compared over all
-// kPackageFileSize bytes. The comparison is sound because the CONSTRUCTOR
-// writes every one of those bytes, so there are no bytes neither side wrote
-// (reference_oracle_must_not_compare_unwritten_bytes.md); and it is SAFE
-// because a just-constructed PackageFile holds only null Strings, empty Arrays
-// and an empty FileInfo, so the destructor releases nothing.
-typedef void* (*SlotZeroFn)(void*, unsigned);
-
-extern "C" void RtIo_PackageFile_Destruct(void* self) {
-    reinterpret_cast<IO::PackageFile*>(self)->IO::PackageFile::Destruct();
-}
-
-extern "C" void* RtIo_PackageFile_Reconstruct(void* self) {
-    return reinterpret_cast<IO::PackageFile*>(self)->IO::PackageFile::Reconstruct();
-}
-
+// ENDGAME B.3.9 IO: the seven slot doors (Type, TypeName, GetFileVersion,
+// Compile, Serialize, Reconstruct, Destruct) and Construct's are gone with the
+// minted ??_7PackageFile row, their only reader. ?TypeId@ is a static, not a
+// slot, and keeps its door.
 // ============================================================================
 // The three String getters. `self->name/author/description` are RtSystem::String
 // MEMBERS of the not-yet-converted PackageFileView, reached through the one
@@ -694,34 +513,9 @@ int RtIoPackageFileRegister() {
     using namespace RtIO;
     int n = 0;
 
-    RegisterRuntimeExport("??0PackageFile@IO@@QEAA@XZ",
-                          (void*)&RtIo_PackageFile_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800b4440, (void*)&RtIo_PackageFile_Ctor);
-
-    RegisterRuntimeExport("?Construct@PackageFile@IO@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtIo_PackageFile_Construct); ++n;
-    RegisterRuntimeAddr(0x1800252f0, (void*)&RtIo_PackageFile_Construct);
-
-    RegisterRuntimeExport("?Type@PackageFile@IO@@UEBAIXZ",
-                          (void*)&RtIo_PackageFile_Type); ++n;
-    RegisterRuntimeAddr(0x180025130, (void*)&RtIo_PackageFile_Type);
-
     RegisterRuntimeExport("?TypeId@PackageFile@IO@@SAIXZ",
                           (void*)&RtIo_PackageFile_TypeId); ++n;
     RegisterRuntimeAddr(0x180025140, (void*)&RtIo_PackageFile_TypeId);
-
-    RegisterRuntimeExport("?TypeName@PackageFile@IO@@UEBAPEBDXZ",
-                          (void*)&RtIo_PackageFile_TypeName); ++n;
-    RegisterRuntimeAddr(0x180025150, (void*)&RtIo_PackageFile_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@PackageFile@IO@@UEBAHXZ",
-                          (void*)&RtIo_PackageFile_GetFileVersion); ++n;
-    RegisterRuntimeAddr(0x1800b6080, (void*)&RtIo_PackageFile_GetFileVersion);
-
-    RegisterRuntimeExport(
-        "?Compile@PackageFile@IO@@UEAA?AW4CompileResult@External@Object@@AEBVFilename@System@@@Z",
-        (void*)&RtIo_PackageFile_Compile); ++n;
-    RegisterRuntimeAddr(0x1800b6090, (void*)&RtIo_PackageFile_Compile);
 
     RegisterRuntimeExport("?GetName@PackageFile@IO@@QEBA?AVString@System@@XZ",
                           (void*)&RtIo_PackageFile_GetName); ++n;
@@ -779,19 +573,16 @@ int RtIoPackageFileRegister() {
                           (void*)&RtIo_PackageFile_GetIconHeight); ++n;
     RegisterRuntimeAddr(0x180025520, (void*)&RtIo_PackageFile_GetIconHeight);
 
-    // ---- WAVE 27 lane IOTEXT: `??_7PackageFile@IO@@6B@` slots 6 and 7 -------
-    // BY NAME *AND* BY ADDRESS, as every row above: the minted table fills these
-    // NAMED rows by name, while the DLL's own .rdata table is reached by
-    // address, and a name-only registration is invisible to the second door
-    // (reference_count_the_doors_not_the_calls.md).
-    RegisterRuntimeExport("?Reconstruct@PackageFile@IO@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtIo_PackageFile_Reconstruct); ++n;
-    RegisterRuntimeAddr(0x1800252d0, (void*)&RtIo_PackageFile_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@PackageFile@IO@@UEAAXXZ",
-                          (void*)&RtIo_PackageFile_Destruct); ++n;
-    RegisterRuntimeAddr(0x180025300, (void*)&RtIo_PackageFile_Destruct);
-
+    // ---- the factory pair (B39_RULES D2): the class's OWN statics, both
+    // doors, replacing the FACTREST row (rt_factories_io.{cpp,inc}, deleted).
+    // The minted `?_typeInfo@PackageFile@IO@@` record's factory pointers
+    // resolve these by name (MintTypeInfos runs after every *PortInit).
+    RegisterRuntimeExport("?CreateNewObject@PackageFile@IO@@SAPEAVBase@Object@@XZ",
+                          (void*)&IO::PackageFile::CreateNewObject); ++n;
+    RegisterRuntimeAddr(0x180025240, (void*)&IO::PackageFile::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@PackageFile@IO@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&IO::PackageFile::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr(0x1800252c0, (void*)&IO::PackageFile::CreateInPlaceObject);
     // DELIBERATELY ABSENT — full reasons in §4.
     //   ?ReadPackfile@PackageFile@IO@@…   0x1800b46b0  ord 3461  6,597 bytes  <- NEXT WALL
     //   ??1PackageFile@IO@@UEAA@XZ        0x1800b4540  ord  639  (5 unported callees)
@@ -834,21 +625,18 @@ int RtIoPackageFileRegister() {
 // every POD is spelled `RtIO::` / `RtSystem::` and every real class `System::`
 // (B34_RULES section 7.2, THE GREP HAZARD).
 //
-// WHAT DID NOT MOVE, AND WHY. `??0PackageFile@IO@@` and `??1PackageFile@IO@@`
-// keep their transcribed bodies: the object is built by a factory-replay row
-// and by filesystem_packages.cpp's MemAlloc(0xF0) + ctor door, and it wears the
-// MINTED `??_7PackageFile@IO@@6B@` whose nine rows are LIVE (B34_RULES section
-// 4.2). A real constructor would stamp GCC's table under the replay, and the
-// destructor performs retail's base-to-derived-to-base restamp by hand. Slot 0
-// is left PURE here for the same reason, so the class is abstract and nothing
-// can construct one by accident.
+// ENDGAME B.3.9 IO: EVERYTHING MOVED. The constructor and destructor are the
+// class's own (PackageFile.h / package_file_dtor.cpp), slot 0 is concrete, and
+// every PackageFile -- LoadPackages, the factory pair below, Construct,
+// Reconstruct -- wears the compiler's table. The minted row, its RT_DELDTOR
+// row and the FACTREST replay are retired.
 // ============================================================================
 
 namespace IO {
 
 // ---- the reflection triple, slots 1 and 2 plus the static companion --------
 // All three read the MINTED `?_typeInfo@PackageFile@IO@@` record at 0x1801f9ac8
-// through RT_DATA_SLOT. The row stays minted in this step -- the class does NOT
+// through a namespace-scope atomic slot (B.3.9 W1). The row stays minted in this step -- the class does NOT
 // take DECLARE_TYPE/DEFINE_TYPE here, for the same reason B.3.3's closing pass
 // left the five Object `?_typeInfo@` rows minted (B34_RULES section 1.4).
 //
@@ -900,35 +688,23 @@ Object::External::CompileResult PackageFile::Compile(const System::Filename& pat
 //                     1800252de  CALL qword ptr [RAX]      ; slot 0
 //                     1800252e8  JMP  0x1800b4440          ; TAIL, ??0PackageFile
 //
-// THE DISPATCH IS VIRTUAL AND IT STAYS VIRTUAL, AND IT IS THE ONE PLACE IN THIS
-// FILE THAT MUST NOT BE WRITTEN AS `this->DeletingDtor(0)`. Both bodies read
-// slot 0 out of the OBJECT'S OWN vtable, and the object's own vtable is the
-// MINTED one -- so the raw indirect call is what reaches the registered
-// deleting dtor, while a C++ virtual call would be a qualified call to a slot
-// this class declares PURE. Short-cutting to `RtDelDtor_PackageFile` would read
-// correct today and be wrong for anything derived from PackageFile, and it
-// would also hide which table is live.
-//
 // FLAGS = 0, which in the deleting-destructor family means DESTRUCT IN PLACE
 // AND DO NOT FREE: the object's storage belongs to the factory that owns it.
 // Passing 1 would free a block the caller still holds. The constant is read off
 // `XOR EDX,EDX` at both sites, not assumed.
+// ENDGAME B.3.9 IO: the object wears the compiler's table, so the virtual
+// slot-0 call is `DeletingDtor(0)` (flags 0: destroy in place, no free).
 void PackageFile::Destruct() {
-    void** const vt = *reinterpret_cast<void***>(this);   // 180025300
-    reinterpret_cast<RtIO::SlotZeroFn>(vt[0])(this, 0u);  // 180025305, flags 0
+    DeletingDtor(0);                                      // 180025305, flags 0
 }
 
 // "Destroy in place, then run the constructor over the same storage." The
 // declared return is `Object::External*`; retail returns whatever the
 // tail-jumped constructor leaves in RAX, which `??0PackageFile@IO@@` sets to
-// `this`. The constructor is reached through the FILE-LOCAL ported body rather
-// than through a door: a door would resolve to that same body and add one more
-// resolve site the cutover census has to carry.
+// `this` -- placement construction over the same storage.
 Object::External* PackageFile::Reconstruct() {
-    void** const vt = *reinterpret_cast<void***>(this);   // 1800252d6
-    reinterpret_cast<RtIO::SlotZeroFn>(vt[0])(this, 0u);  // 1800252de, flags 0
-    RtIo_PackageFile_Ctor(reinterpret_cast<RtIO::PackageFileView*>(this));  // 1800252e8
-    return this;
+    DeletingDtor(0);                                      // 1800252de, flags 0
+    return ::new (this) PackageFile();                    // 1800252e8 ??0PackageFile
 }
 
 // ---- slot 8: PackageFile's OWN virtual -------------------------------------
@@ -936,24 +712,30 @@ Object::External* PackageFile::Reconstruct() {
 //   1800252f3  JNZ 0x1800b4440      <- tail jump straight into the constructor
 //   1800252f9  XOR EAX,EAX / RET
 //
-// The null branch is real, not defensive: the factory calls Construct on
-// whatever the allocator returned, including nullptr. Reproduced exactly, and
-// NOT promoted into the door -- a guard in the door would be a second test on a
-// path retail tests once.
-//
 // See runtime/types/io/PackageFile.h's banner for the four pieces of retail
 // evidence that this virtual is declared on `IO::PackageFile` and not on an
 // unmodelled class between `Object::External` and it.
-// THE NULL BRANCH IS IN THE DOOR, NOT HERE, and that pairing is the whole of
-// the difference between this member and retail's body. See
-// `RtIo_PackageFile_Construct` above: `this` is non-null by definition in C++,
-// GCC warns on the comparison (-Wnonnull-compare) and may delete it, so the
-// test sits on the plain pointer one frame up where it is well defined. Retail
-// tests the same pointer at the same point in the flow with the same two
-// outcomes; nothing was added and nothing was skipped.
+// ENDGAME B.3.9 IO: the retired door held retail's null test; a virtual call
+// always has a `this`, so the member is the tail jump alone.
 Object::External* PackageFile::Construct() {
-    RtIo_PackageFile_Ctor(reinterpret_cast<RtIO::PackageFileView*>(this));  // 1800252e8 tail jump
-    return this;
+    return ::new (this) PackageFile();                    // 1800252f3 ??0PackageFile
+}
+
+// ?CreateNewObject@PackageFile@IO@@SAPEAVBase@Object@@XZ  0x180025240
+// The FACTREST row this replaces: ?MemAlloc@MemoryAllocator (0x1800c7a50, the
+// same function Object::detail::InternalMemAlloc reaches) of 0xf0 bytes,
+// align 8; retail's null branch; then the constructor (call at 0x1800252a1).
+Object::Base* PackageFile::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(PackageFile), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) PackageFile();
+}
+
+// ?CreateInPlaceObject@PackageFile@IO@@SAPEAVBase@Object@@PEAX@Z  0x1800252c0
+// retail's null test, then the constructor (call at 0x1800252c3).
+Object::Base* PackageFile::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) PackageFile();
 }
 
 // ---- the three String getters ----------------------------------------------

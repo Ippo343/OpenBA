@@ -483,7 +483,8 @@ static constexpr DelDtorSpec kSpecs[] = {
     // run, and this one is not.
     //
     // THIS DOES NOT PROMOTE THE ROW, and the table is still 6/9.
-    RT_DELDTOR(0x1800259d0, 0x1800b4540, 0x0f0, "IO::PackageFile"),
+    // ENDGAME B.3.9 IO: the IO::PackageFile row (0x1800259d0) is retired --
+    // the class's inline DeletingDtor is its slot 0.
     // ---- WAVE 27 lane GFXMESH ------------------------------------------------
     // Slot 0 of the three Graphics mesh vtables this lane owns:
     //     ??_7EdgeMesh@Graphics@@6B@          0x180154c70   -> 0x1800134b0
@@ -1368,13 +1369,6 @@ void* RtDelDtor_ToolTipDialog(void* self, unsigned flags) {
 void* RtDelDtor_CompressedStream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180023fd0>());
 }
-// IO::PackageFile          ~PackageFile = 0x1800b4540  (PORTED -- Wave 25 lane BODY,
-//                          runtime/src/io/package_file_dtor.cpp:442. This line read
-//                          "NOT ported" until Wave 27 lane IOTEXT; the two waves
-//                          landed in the same wave and the comment never caught up.)
-void* RtDelDtor_PackageFile(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800259d0>());
-}
 // Graphics::EdgeMesh          ~EdgeMesh = 0x1800a2780          [Wave 27 GFXMESH]
 void* RtDelDtor_EdgeMesh(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x1800134b0>());
@@ -1790,7 +1784,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180038b20, (void*)&RtDelDtor_Dialog);   // Wave 10C DLG8
     RegisterRuntimeAddr(0x18004d270, (void*)&RtDelDtor_ToolTipDialog);  // Wave 10D TIP
     RegisterRuntimeAddr(0x180023fd0, (void*)&RtDelDtor_CompressedStream);      // Wave 19 CSTREAM
-    RegisterRuntimeAddr(0x1800259d0, (void*)&RtDelDtor_PackageFile);           // Wave 25 VTIO
     RegisterRuntimeAddr(0x1800134b0, (void*)&RtDelDtor_EdgeMesh);              // Wave 27 GFXMESH
     RegisterRuntimeAddr(0x1800175d0, (void*)&RtDelDtor_EdgeMeshInstance);      // Wave 27 GFXMESH
     RegisterRuntimeAddr(0x180017330, (void*)&RtDelDtor_MeshInstance);          // Wave 27 GFXMESH
