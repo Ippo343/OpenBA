@@ -62,6 +62,8 @@
 // silently omitted — it is required work, not an optional extra.
 
 #include "Component/controller_state_table.h"
+#include "Component/ClearAreaDescription.h"
+#include "Component/OrchardDescription.h"
 #include "Component/OrchardComponent.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -123,16 +125,7 @@ fn_PostWork_t            s_PostWork           = nullptr;   // 0x14012ec60
 // storage instead, latching only a non-zero CRC (GetTypeIdByName only returns a real id
 // after Object::Factory::Startup). harvestorchard.cpp:202 has the same unfilled slot and
 // will need the same treatment.
-uint32_t OrchardDescTypeId() {
-    static uint32_t cached = 0;
-    if (cached) return cached;
-    if (uintptr_t slot = ResolveAddr(Module::Exe, 0x1401c46e8)) {
-        cached = *reinterpret_cast<uint32_t*>(slot);
-        if (cached) return cached;
-    }
-    cached = ::Object::GetTypeIdByName("OrchardDescription");
-    return cached;
-}
+uint32_t OrchardDescTypeId() { return OrchardDescription::TypeId(); }   // ti cell 0x1401c46e8
 fn_SetWorkplaceActive_t  s_SetWorkplaceActive = nullptr;   // 0x14012fc00
 fn_DeactivateWorkplace_t s_DeactivateWorkplace= nullptr;   // 0x14012eb50
 fn_SMTick_t              s_SMTick             = nullptr;   // 0x1400a9660
@@ -908,16 +901,7 @@ namespace {
 // resource filter) into the work item. Type id read via the .rdata slot, which
 // reg_cleararea_typeids.cpp now backs; GetTypeIdByName is the fallback for the same
 // reason OrchardDescTypeId has one.
-uint32_t ClearAreaDescTypeId() {
-    static uint32_t cached = 0;
-    if (cached) return cached;
-    if (uintptr_t slot = ResolveAddr(Module::Exe, 0x1401c7200)) {
-        cached = *reinterpret_cast<uint32_t*>(slot);
-        if (cached) return cached;
-    }
-    cached = ::Object::GetTypeIdByName("ClearAreaDescription");
-    return cached;
-}
+uint32_t ClearAreaDescTypeId() { return ClearAreaDescription::TypeId(); }   // ti cell 0x1401c7200
 
 void* FindClearAreaDescription(uintptr_t entity) {
     const uint32_t want = ClearAreaDescTypeId();
@@ -928,9 +912,7 @@ void* FindClearAreaDescription(uintptr_t entity) {
     for (int i = 0; arr && i < count; ++i) {
         void* elem = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
         if (!elem) continue;
-        void** vt = *reinterpret_cast<void***>(elem);
-        if (!vt || !vt[2]) continue;                       // vtable+0x10 = GetTypeId
-        if (reinterpret_cast<uint32_t(*)(void*)>(vt[2])(elem) != want) continue;
+        if (reinterpret_cast<Object::Base*>(elem)->Type() != want) continue;   // B.3.8 bridge (slot 2)
         // Retail confirms the hit with IsDerivedFrom before accepting it, and BREAKS out of
         // the loop either way — a type-id match that fails the derived test yields null.
         if (fn_IsDerivedFrom && !fn_IsDerivedFrom(elem, want)) return nullptr;

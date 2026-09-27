@@ -113,8 +113,7 @@ static void* WPC_FindJobHostComponent(int64_t host, uint32_t* pTypeId) {
     for (int i = 0; i < count; i++) {
         int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
         void* comp = (void*)*slot;
-        typedef uint32_t (*GetTypeId_t)(void*);
-        uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (tid == *pTypeId) {
             void* c = (void*)*slot;
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTypeId)) return c;

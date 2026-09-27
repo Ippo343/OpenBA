@@ -25,10 +25,6 @@
 // Resolved helpers
 // ============================================================
 
-// Component_Serialize at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
 // fn_IsDerivedFrom — dispatch slot at 0x140152a98
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
@@ -68,9 +64,6 @@ static bool s_initialized = false;
 
 static void EnsureHelpers() {
     if (s_initialized) return;
-
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
 
     uintptr_t slot;
 
@@ -257,7 +250,7 @@ void PastureComponent_Helper5ed0(void* entityRef) {
     uint8_t t[8] = {0};
     if (s_fn_Time_CtorF) s_fn_Time_CtorF(t, 0.0f);
     // Immediate Update tick (vtable slot +0x48).
-    (*(void(**)(void*, void*))(*(uintptr_t*)p + 0x48))(p, t);
+    reinterpret_cast<Component*>(p)->Update(t);   // B.3.8 bridge (slot 9, +0x48)
 }
 
 // Reimpl of FUN_1401240a0 (reassign animal ref's pasture tile after re-parenting)
@@ -326,9 +319,9 @@ extern "C" void Pasture_ReleaseAllAnimals(void* pasture);
 void PastureComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[PastureComponent] Funcs resolved: Component_Serialize=%p ComputeCapacity=%p "
+    printf("[PastureComponent] Funcs resolved: ComputeCapacity=%p "
            "AddToList=%p PastureHelper=%p ReassignEntityRef=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_ComputePastureCapacity,
+           (void*)s_fn_ComputePastureCapacity,
            (void*)s_fn_EraseByValue,
            (void*)s_fn_PastureHelper5ed0, (void*)s_fn_ReassignEntityRef);
 #endif

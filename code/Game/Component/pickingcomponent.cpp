@@ -10,6 +10,8 @@
 //
 
 #include "Component/pickingcomponent_funcs.h"
+#include "Component/ModelComponent.h"
+#include "Component/MapComponent.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -55,19 +57,13 @@ static bool s_initialized = false;
 
 // This registration path depends on the standalone type registry (GetTypeIdByName)
 // and is only exercised from the SA start-town spawn.
-namespace Object { uint32_t GetTypeIdByName(const char* name); }
-
-static uint32_t s_tidModelComponent = 0;
-
-// forward decl
-namespace { uint32_t PC_ModelTypeId(); }
 
 // Self-contained ModelComponent find over the entity's component array (entity+0x30
 // array ptr / +0x38 count; each slot is an IBP). Mirrors ComponentEntity::FindComponent
 // (the mislabeled Entity_ClearPathQueue, 0x140003f60).
 static void* PC_FindModelComponent(void* entity) {
     if (!entity) return nullptr;
-    uint32_t tid = PC_ModelTypeId();
+    uint32_t tid = ModelComponent::TypeId();
     if (tid == 0) return nullptr;
     uint8_t* e = (uint8_t*)entity;
     int count = *(int32_t*)(e + 0x38);
@@ -76,9 +72,7 @@ static void* PC_FindModelComponent(void* entity) {
         void** slot = (void**)(arr + (uintptr_t)i * 8);
         void* comp = *slot;
         if (!comp) continue;
-        uintptr_t vt = *(uintptr_t*)comp;
-        typedef uint32_t (*gt_t)(void*);
-        if ((*(gt_t*)(vt + 0x10))(comp) == tid) return comp;
+        if (reinterpret_cast<Object::Base*>(comp)->Type() == tid) return comp;   // B.3.8 bridge (slot 2)
     }
     return nullptr;
 }
@@ -168,16 +162,14 @@ void PickingComponent_RegisterMesh(void* pc) {
         const float* f = reinterpret_cast<const float*>(xform);
         int fx = -1, fy = -1, fw = -1, fh = -1;
         {   // owner's MapComponent, for the footprint rect
-            static uint32_t s_tidMapPC = 0;
-            if (!s_tidMapPC) s_tidMapPC = ::Object::GetTypeIdByName("MapComponent");
+            const uint32_t s_tidMapPC = MapComponent::TypeId();
             uint8_t* e = (uint8_t*)entity;
             int n = *(int32_t*)(e + 0x38);
             uintptr_t arr = *(uintptr_t*)(e + 0x30);
             for (int i = 0; i < n && arr; ++i) {
                 void** slot = (void**)(arr + (uintptr_t)i * 8);
                 void* c = *slot; if (!c) continue;
-                typedef uint32_t (*gt_t)(void*);
-                if ((*(gt_t*)(*(uintptr_t*)c + 0x10))(c) == s_tidMapPC) {
+                if (reinterpret_cast<Object::Base*>(c)->Type() == s_tidMapPC) {   // B.3.8 bridge (slot 2)
                     uint8_t* m2 = (uint8_t*)c;
                     fx = *(int16_t*)(m2 + 0x28); fy = *(int16_t*)(m2 + 0x2a);
                     fw = *(int16_t*)(m2 + 0x2c); fh = *(int16_t*)(m2 + 0x2e);
@@ -195,21 +187,11 @@ void PickingComponent_RegisterMesh(void* pc) {
     }
 }
 
-namespace {
-uint32_t PC_ModelTypeId() {
-    if (s_tidModelComponent == 0 || s_tidModelComponent == 0xFFFFFFFF)
-        s_tidModelComponent = ::Object::GetTypeIdByName("ModelComponent");
-    return s_tidModelComponent;
-}
-}
-
 // Entity-level convenience: find the entity's PickingComponent and register its mesh.
 // Used by callers that hold an entity rather than the component (player placement, etc.).
-static uint32_t s_tidPickComponent = 0;
 void PickingComponent_RegisterMeshForEntity(void* entity) {
     if (!entity) return;
-    if (s_tidPickComponent == 0 || s_tidPickComponent == 0xFFFFFFFF)
-        s_tidPickComponent = ::Object::GetTypeIdByName("PickingComponent");
+    const uint32_t s_tidPickComponent = PickingComponent::TypeId();
     if (s_tidPickComponent == 0) return;
     uint8_t* e = (uint8_t*)entity;
     int count = *(int32_t*)(e + 0x38);
@@ -218,9 +200,7 @@ void PickingComponent_RegisterMeshForEntity(void* entity) {
         void** slot = (void**)(arr + (uintptr_t)i * 8);
         void* comp = *slot;
         if (!comp) continue;
-        uintptr_t vt = *(uintptr_t*)comp;
-        typedef uint32_t (*gt_t)(void*);
-        if ((*(gt_t*)(vt + 0x10))(comp) == s_tidPickComponent) {
+        if (reinterpret_cast<Object::Base*>(comp)->Type() == s_tidPickComponent) {   // B.3.8 bridge (slot 2)
             PickingComponent_RegisterMesh(comp);
             return;
         }

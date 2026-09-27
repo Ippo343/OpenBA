@@ -10,6 +10,7 @@
 //
 
 #include "Component/nomadcomponent_funcs.h"
+#include "Dialog/EntityUI.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "math/Math.h"
@@ -152,8 +153,7 @@ void NomadComp_RebuildController_b60(int64_t param_1, int64_t param_2) {
                 int64_t arr = *reinterpret_cast<int64_t*>(list + 0x28);
                 for (int i = 0; i < cnt; i++) {
                     void* comp = *reinterpret_cast<void**>(arr + (int64_t)i * 8);
-                    int64_t cvt = *reinterpret_cast<int64_t*>(comp);
-                    uint32_t tid = (*reinterpret_cast<uint32_t(**)(void*)>(cvt + 0x10))(comp);
+                    uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
                     if (tid == nodeKey) {
                         if (*reinterpret_cast<int64_t*>(arr + (int64_t)i * 8) != 0)
                             matchKey = *node;
@@ -292,8 +292,6 @@ typedef void  (*fn_IBP_CtorFrom_t)(void* dst, void* src);  // slot 0x140152a90
 static fn_FUN_140102b60_t   s_fn_FUN_140102b60 = nullptr;
 static fn_TradeWork_c690_t  s_fn_TradeWork_c690 = nullptr;
 static fn_IBP_CtorFrom_t     s_fn_IBP_CtorFrom = nullptr;
-static uint32_t              s_TypeId_EntityUI = 0;           // DAT_1401c4f00 = EntityUI
-static uint32_t              s_TypeId_EntityUI_cache = 0;
 static bool s_fn3480Resolved = false;
 
 static void Ensure3480() {
@@ -306,7 +304,6 @@ static void Ensure3480() {
     // whole "close the removed entity's open info dialog" path was silently dead code.
     // Retail FUN_140103480 gates on that slot and then reads ctrl+0x30 (EntityUI's bound
     // entity), which confirms the type. Resolve by value with a by-name fallback.
-    s_TypeId_EntityUI = ResolveExeTypeId(0x1401c4f00, "EntityUI", &s_TypeId_EntityUI_cache);
     uintptr_t slot;
     slot = ResolveAddr(Module::Exe, 0x140152a90);
     if (slot) s_fn_IBP_CtorFrom = *reinterpret_cast<fn_IBP_CtorFrom_t*>(slot);
@@ -406,10 +403,10 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
             // and the narrow never gets anything to reject.
             ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(
                 reinterpret_cast<UI::DialogInstance*>(it.node->element)->GetController(  // B.3.6 bridge
-                    s_TypeId_EntityUI));
+                    EntityUI::TypeId()));   // DAT_1401c4f00
             void* found = nullptr;
             if (ctrlBuf[0] != nullptr) {
-                if (s_TypeId_EntityUI && fn_IsDerivedFrom(ctrlBuf[0], s_TypeId_EntityUI))
+                if (fn_IsDerivedFrom(ctrlBuf[0], EntityUI::TypeId()))
                     found = ctrlBuf[0];
             }
             int64_t ibp = 0;

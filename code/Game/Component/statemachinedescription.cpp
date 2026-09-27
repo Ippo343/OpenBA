@@ -16,6 +16,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/StateMachineDescription.h"
+#include "Component/StateMachineComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -53,7 +54,7 @@ void StateMachineDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140038430: StateMachineComponent's type id through the hidden return slot.
 Object::Type* StateMachineDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("StateMachineComponent");
+    ret->_type = StateMachineComponent::TypeId();
     return ret;
 }
 

@@ -134,8 +134,7 @@ void SpawnComponent_InitialSpawn(SpawnComponent* self) {
         for (int j = 0; j < compCount && compArr; ++j) {
             void* c = *(void**)(compArr + (int64_t)j * 8);
             if (!c) continue;
-            typedef uint32_t (*GetTypeId_t)(void*);
-            const uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)c + 0x10)))(c);
+            const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge
             if (tid == *s_pSpawnTemplateTypeId) {
                 growthDesc = c;   // trust it; IsDerivedFrom is unreliable here
                 break;
@@ -298,8 +297,7 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
         int64_t arr = *(int64_t*)(host + 0x28);
         for (int i = 0; i < count; i++) {
             void* comp = *(void**)(arr + (int64_t)i * 8);
-            typedef uint32_t (*GetTypeId_t)(void*);
-            uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
             if (tid == *s_pSpawnTemplateTypeId) {
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *s_pSpawnTemplateTypeId)) templ = comp;
                 break;
@@ -586,8 +584,7 @@ void SpawnComponent::Update(void* timeV) {
 
         for (int j = 0; j < componentCount; j++) {
             void* comp = *(void**)(*(uintptr_t*)(templateData + 0x28) + (uintptr_t)j * 8);
-            typedef uint32_t (*fn_GetTypeId_t)(void*);
-            uint32_t typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
+            uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
 
             if (typeId == *s_pSpawnTemplateTypeId) {
                 if (fn_IsDerivedFrom(comp, *s_pSpawnTemplateTypeId)) {

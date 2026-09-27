@@ -18,6 +18,8 @@
 // `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
 // been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Scene.h"
+#include "Component/RawMaterialDescription.h"
+#include "Component/ModelDescription.h"
 #include "graphics/Mesh.h"
 #include "Component/storagedisplaycomponent_funcs.h"
 #include "engine_funcs.h"
@@ -54,9 +56,8 @@ static uint32_t SDD_ModelDescTypeId() {
     }
     if (s_pModelDescTid_rdata && *s_pModelDescTid_rdata != 0 && *s_pModelDescTid_rdata != 0xFFFFFFFF)
         return *s_pModelDescTid_rdata;
-    static uint32_t cached = 0;
-    if (cached == 0 || cached == 0xFFFFFFFF) cached = ::Object::GetTypeIdByName("ModelDescription");
-    if (cached != 0xFFFFFFFF) return cached;
+    const uint32_t id = ModelDescription::TypeId();
+    if (id != 0xFFFFFFFF) return id;
     return 0;
 }
 
@@ -66,9 +67,8 @@ static uint32_t SDD_RawMatDescTypeId() {
     if (g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription != 0
         && *g_TypeId_RawMaterialDescription != 0xFFFFFFFF)
         return *g_TypeId_RawMaterialDescription;
-    static uint32_t cached = 0;
-    if (cached == 0 || cached == 0xFFFFFFFF) cached = ::Object::GetTypeIdByName("RawMaterialDescription");
-    if (cached != 0xFFFFFFFF) return cached;
+    const uint32_t id = RawMaterialDescription::TypeId();
+    if (id != 0xFFFFFFFF) return id;
     return 0;
 }
 
@@ -227,8 +227,7 @@ void StorageDisplayComponent_Update(StorageDisplayComponent* self) {
                     for (int c = 0; c < compCount; c++) {
                         void* comp = *(void**)(compArray + (uintptr_t)c * 8);
                         if (!comp) continue;   // guard partially-materialized SA entity
-                        typedef uint32_t (*GetTypeId_t)(void*);
-                        uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+                        uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
                         if (typeId == rawMatTid) {
                             if (fn_IsDerivedFrom(comp, rawMatTid)) {
                                 rawMatDesc = comp;
@@ -400,9 +399,7 @@ void* StorageDisplay_EntityFindByType_cbd0(void* hostP, void* retbuf) {
         for (int i = 0; i < count; i++) {
             void* comp = *reinterpret_cast<void**>(arr + (int64_t)i * 8);
             if (!comp) continue;   // guard partially-materialized SA entity
-            int64_t vt = *reinterpret_cast<int64_t*>(comp);
-            typedef uint32_t (*getType_t)(void*);
-            uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(comp);
+            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == modelTid) {
                 if (fn_IsDerivedFrom(comp, modelTid)) found = comp;
                 break;

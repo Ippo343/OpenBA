@@ -13,6 +13,8 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/storagecomponent_funcs.h"
+#include "Component/RawMaterialDescription.h"
+#include "Component/StorageDescription.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -76,16 +78,12 @@ static void EnsureHelpers() {
 static uint32_t EffTid_StorageDescription() {
     if (s_TypeId_StorageDescription && *s_TypeId_StorageDescription)
         return *s_TypeId_StorageDescription;
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("StorageDescription");
-    return cached;
+    return StorageDescription::TypeId();
 }
 static uint32_t EffTid_RawMaterialDescription() {
     if (g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription)
         return *g_TypeId_RawMaterialDescription;
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("RawMaterialDescription");
-    return cached;
+    return RawMaterialDescription::TypeId();
 }
 
 // ============================================================
@@ -117,8 +115,7 @@ static void* FindRawMatDescription(uintptr_t materialEntity) {
     uintptr_t compArray = *(uintptr_t*)(materialEntity + 0x28);
     for (int i = 0; i < compCount; i++) {
         void* comp = *(void**)(compArray + (uintptr_t)i * 8);
-        typedef uint32_t (*GetTypeId_t)(void*);
-        uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+        uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (typeId == tid) {
             // Original: IsDerivedFrom-narrow, then break either way.
             return fn_IsDerivedFrom(comp, tid) ? comp : nullptr;

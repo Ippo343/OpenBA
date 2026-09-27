@@ -17,6 +17,7 @@
 // `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
 // been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Scene.h"
+#include "Component/ParticleDescription.h"
 #include "graphics/Mesh.h"
 #include "graphics/GraphicsMesh.h"
 #include <new>
@@ -97,10 +98,8 @@ static uint32_t PC_DescTypeId() {
     if (s_pParticleDescTypeId && *s_pParticleDescTypeId != 0 &&
         *s_pParticleDescTypeId != 0xFFFFFFFF)
         return *s_pParticleDescTypeId;
-    static uint32_t cached = 0;
-    if (cached == 0 || cached == 0xFFFFFFFF)
-        cached = ::Object::GetTypeIdByName("ParticleDescription");
-    if (cached != 0 && cached != 0xFFFFFFFF) return cached;
+    const uint32_t id = ParticleDescription::TypeId();
+    if (id != 0 && id != 0xFFFFFFFF) return id;
     return 0;
 }
 

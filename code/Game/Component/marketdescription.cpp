@@ -18,6 +18,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/MarketDescription.h"
+#include "Component/MarketComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -93,7 +94,7 @@ void MarketDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x1400083c0: MarketComponent's type id through the hidden return slot.
 Object::Type* MarketDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("MarketComponent");
+    ret->_type = MarketComponent::TypeId();
     return ret;
 }
 

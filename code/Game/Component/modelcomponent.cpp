@@ -110,9 +110,7 @@ extern "C" void ModelComponentNotify_Reimpl(void* entity, int param) {
     for (int64_t i = 0; i < count; ++i) {
         // local copy of arr[i] (the child object pointer); CheckPtr resolves it.
         int64_t* obj = reinterpret_cast<int64_t*>(arr[i]);
-        void** vtbl = reinterpret_cast<void**>(*obj);
-        typedef void (*slot60_t)(void* self, int param);
-        reinterpret_cast<slot60_t>(vtbl[0x60 / 8])(obj, param);
+        reinterpret_cast<Component*>(obj)->OnEvent(param);   // B.3.8 bridge (slot 12, +0x60; an entity component)
     }
 }
 

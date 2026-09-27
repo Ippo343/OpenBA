@@ -18,6 +18,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/TerraformDescription.h"
+#include "Component/TerraformComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -65,7 +66,7 @@ void TerraformDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x14000ce20: TerraformComponent's type id through the hidden return slot.
 Object::Type* TerraformDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("TerraformComponent");
+    ret->_type = TerraformComponent::TypeId();
     return ret;
 }
 
