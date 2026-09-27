@@ -1,0 +1,9 @@
+# ENDGAME B.3 step 9 -- the rows block GFX retired (branch b39-GFX).
+# Format (tools/rt_mint_gen.py banner, B39_RULES.md D3):
+#   <mangled symbol | 0xVA>   <owner block>   <proof>
+# One fragment per block; a key appears once across all fragments.
+
+# -- W1: the Light family made concrete (D1); no builder of either leaf exists --
+??_7AmbientLight@Graphics@@6B@         GFX   real ctor + DeletingDtor + ~X; RT_DELDTOR row 0x180059080, ??0/??1 doors, 5 slot doors deleted
+??_7SpotLight@Graphics@@6B@            GFX   real ctor + DeletingDtor + ~X (door body); RT_DELDTOR row 0x1800642b0, ??0/??1 doors, 5 slot doors deleted
+??_7Light@Graphics@@6B@                GFX   stamped only by the three leaf ctors (all compiler-built now); RT_DELDTOR row 0x180058dd0 + the ??1 leaves door deleted

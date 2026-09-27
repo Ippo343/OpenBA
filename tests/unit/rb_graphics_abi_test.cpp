@@ -48,7 +48,9 @@ const void* PiVt()  { return &g_rbPiVtGroup[2]; }
 const void* PaVt()  { return &g_rbPaVtGroup[2]; }
 const void* VptrOf(const void* p) { return *static_cast<const void* const*>(p); }
 
-enum Ev { kGeoInit = 1, kGeoRel, kPiRemoveState, kPaRel, kMiInit, kMiRel, kSlInit, kSlRel };
+enum Ev { kGeoInit = 1, kGeoRel, kPiRemoveState, kPaRel, kMiInit, kMiRel, kSlInit, kSlRel,
+          kAlRel, kSpRel, kSpTargets };
+uint32_t g_spKindAtTargets = 0;
 struct Entry { int ev; const void* vptr; };
 Entry g_log[16];
 int   g_n = 0;
@@ -92,6 +94,23 @@ Math::Matrix* MeshInstance::GetInstanceTransform(Math::Matrix* ret, int, float) 
 int MeshInstance::SetSharedInstanceData(Video::Context&, int, float) const { return 0; }
 
 Light::~Light() {}
+
+// ENDGAME B.3.9 block GFX: AmbientLight / SpotLight are concrete; their
+// out-of-line members are markers here (the vtables emit in this TU).
+AmbientLight::~AmbientLight() { Log(kAlRel, this); }
+void AmbientLight::Update(const System::Time&) {}
+void AmbientLight::Draw(Video::Context&, const Camera&, ExternalPtrHandle, float, int, int, int) const {}
+void AmbientLight::AddDrawItems(const Scene&, Renderer&) const {}
+void AmbientLight::DrawShadowMap(Video::Context&, Renderer&, int, int) const {}
+void AmbientLight::DrawLight(Video::Context&, Renderer&, int, int, int, int) const {}
+SpotLight::~SpotLight() { Log(kSpRel, this); }
+void SpotLight::CreateTargets() { Log(kSpTargets, this); g_spKindAtTargets = _materialTypeFlags; }
+void SpotLight::Update(const System::Time&) {}
+void SpotLight::Draw(Video::Context&, const Camera&, ExternalPtrHandle, float, int, int, int) const {}
+void SpotLight::AddDrawItems(const Scene&, Renderer&) const {}
+void SpotLight::DrawShadowMap(Video::Context&, Renderer&, int, int) const {}
+void SpotLight::DrawLight(Video::Context&, Renderer&, int, int, int, int) const {}
+
 void SunLight::InitFields()    { Log(kSlInit, this); _dirZ = -1.0f; }
 void SunLight::ReleaseFields() { Log(kSlRel, this); }
 void SunLight::Update(const System::Time&) {}
@@ -340,6 +359,121 @@ UNIT_TEST(rb_graphics_bases_shape) {
     CHECK(!std::is_abstract<Graphics::SunLight>::value);
     CHECK(!std::has_virtual_destructor<Graphics::MeshInstance>::value);
     CHECK(!std::has_virtual_destructor<Graphics::SunLight>::value);
+}
+
+// ===========================================================================
+// ENDGAME B.3.9 block GFX -- the Light family concrete (B39_RULES D1, B9-16).
+// ===========================================================================
+template <class PMF> uintptr_t GfxSlotOffset(PMF pmf) {
+    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
+    uintptr_t words[2];
+    std::memcpy(words, &pmf, sizeof words);
+    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
+    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
+    return words[0] - 1;
+}
+
+UNIT_TEST(b39_gfx_lights_shape_and_slot_order) {
+    CHECK(!std::is_abstract<Graphics::AmbientLight>::value);
+    CHECK(!std::is_abstract<Graphics::SpotLight>::value);
+    CHECK(std::is_abstract<Graphics::Light>::value);
+    CHECK(!std::is_destructible<Graphics::AmbientLight>::value);
+    CHECK(!std::is_destructible<Graphics::SpotLight>::value);
+    CHECK(!std::has_virtual_destructor<Graphics::AmbientLight>::value);
+    CHECK(!std::has_virtual_destructor<Graphics::SpotLight>::value);
+    using A = Graphics::AmbientLight;
+    using S = Graphics::SpotLight;
+    CHECK_EQ(GfxSlotOffset(&A::DeletingDtor),  (uintptr_t)0x00);   // 0x180059080
+    CHECK_EQ(GfxSlotOffset(&A::Update),        (uintptr_t)0x08);   // 0x1800fa7a0
+    CHECK_EQ(GfxSlotOffset(&A::Draw),          (uintptr_t)0x10);   // 0x1800fa790
+    CHECK_EQ(GfxSlotOffset(&A::AddDrawItems),  (uintptr_t)0x18);   // 0x1800fa890
+    CHECK_EQ(GfxSlotOffset(&A::DrawShadowMap), (uintptr_t)0x48);   // 0x1800fa880
+    CHECK_EQ(GfxSlotOffset(&A::DrawLight),     (uintptr_t)0x50);   // 0x1800fa7b0
+    CHECK_EQ(GfxSlotOffset(&S::DeletingDtor),  (uintptr_t)0x00);   // 0x1800642b0
+    CHECK_EQ(GfxSlotOffset(&S::Update),        (uintptr_t)0x08);   // 0x180105950
+    CHECK_EQ(GfxSlotOffset(&S::Draw),          (uintptr_t)0x10);   // 0x180105940
+    CHECK_EQ(GfxSlotOffset(&S::AddDrawItems),  (uintptr_t)0x18);   // 0x180105e30
+    CHECK_EQ(GfxSlotOffset(&S::DrawShadowMap), (uintptr_t)0x48);   // 0x180105d00
+    CHECK_EQ(GfxSlotOffset(&S::DrawLight),     (uintptr_t)0x50);   // 0x180105960
+}
+
+// ??0AmbientLight 0x1800fa940: Geometry(), the colour zeroed, 10.0f at +0xd0,
+// the kind word 0x8000 at +0x30; +0xd4 untouched.
+UNIT_TEST(b39_gfx_ambientlight_ctor_stores_and_both_slot0_arms) {
+    alignas(8) unsigned char buf[sizeof(Graphics::AmbientLight)];
+    std::memset(buf, 0xCD, sizeof buf);
+    g_n = 0;
+    Graphics::AmbientLight* a = ::new (static_cast<void*>(buf)) Graphics::AmbientLight();
+    CHECK_EQ(g_n, 1);
+    CHECK_EQ(g_log[0].ev, (int)kGeoInit);
+    CHECK_EQ(Q(a, 0xc0), (uint64_t)0);
+    CHECK_EQ(Q(a, 0xc8), (uint64_t)0);
+    CHECK_EQ(D(a, 0xd0), 0x41200000u);
+    CHECK_EQ(D(a, 0xd4), 0xCDCDCDCDu);          // never written
+    CHECK_EQ(D(a, 0x30), 0x8000u);
+    const void* vt = VptrOf(a);
+    CHECK(vt != GeoVt());
+    CHECK(a->DeletingDtor(0) == a);             // destroy, no free
+    CHECK_EQ(g_n, 3);
+    CHECK_EQ(g_log[1].ev, (int)kAlRel); CHECK(g_log[1].vptr == vt);
+    CHECK_EQ(g_log[2].ev, (int)kGeoRel); CHECK(g_log[2].vptr == GeoVt());
+
+    void* m = Object::detail::InternalMemAlloc(sizeof(Graphics::AmbientLight), 8);
+    Graphics::AmbientLight* h = ::new (m) Graphics::AmbientLight();
+    CHECK(h->DeletingDtor(1) == h);             // destroy AND free
+
+    // The vector arm: int32 count at this-8, elements destroyed DOWNWARD with
+    // stride 0xd8, block freed, this-8 returned.
+    uint8_t* block = static_cast<uint8_t*>(
+        Object::detail::InternalMemAlloc(8 + 3 * sizeof(Graphics::AmbientLight), 8));
+    const int64_t cookie = 3;
+    std::memcpy(block, &cookie, sizeof cookie);
+    Graphics::AmbientLight* e[3];
+    for (int i = 0; i < 3; ++i)
+        e[i] = ::new (block + 8 + i * sizeof(Graphics::AmbientLight)) Graphics::AmbientLight();
+    g_n = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
+    CHECK_EQ(g_n, 6);
+    CHECK(g_log[0].vptr == vt);
+}
+
+// ??0SpotLight 0x180106690: the frustum's planes zero, isOrthographic 1, 0.1f /
+// 10.0f, +0x130/+0x134/+0x158 NOT written, colour and the three pointers zero,
+// CreateTargets BEFORE the kind word; ~SpotLight runs its body then ~Geometry.
+UNIT_TEST(b39_gfx_spotlight_ctor_stores_and_dtor_chain) {
+    alignas(8) unsigned char buf[sizeof(Graphics::SpotLight)];
+    std::memset(buf, 0xCD, sizeof buf);
+    g_n = 0;
+    g_spKindAtTargets = 0;
+    Graphics::SpotLight* s = ::new (static_cast<void*>(buf)) Graphics::SpotLight();
+    CHECK_EQ(g_n, 2);
+    CHECK_EQ(g_log[0].ev, (int)kGeoInit);
+    CHECK_EQ(g_log[1].ev, (int)kSpTargets);
+    CHECK(g_spKindAtTargets != 0x8000u);        // the kind word comes AFTER the call
+    for (size_t off = 0xc0; off <= 0x118; off += 8) CHECK_EQ(Q(s, off), (uint64_t)0);
+    CHECK_EQ((int)By(s, 0x120), 1);
+    CHECK_EQ(D(s, 0x128), 0x3dcccccdu);
+    CHECK_EQ(D(s, 0x12c), 0x41200000u);
+    CHECK_EQ(D(s, 0x130), 0xCDCDCDCDu);
+    CHECK_EQ(D(s, 0x134), 0xCDCDCDCDu);
+    CHECK_EQ(Q(s, 0x138), (uint64_t)0);
+    CHECK_EQ(Q(s, 0x140), (uint64_t)0);
+    CHECK_EQ(Q(s, 0x148), (uint64_t)0);
+    CHECK_EQ(Q(s, 0x150), (uint64_t)0);
+    CHECK_EQ(Q(s, 0x158), 0xCDCDCDCDCDCDCDCDull);   // CreateTargets' to fill
+    CHECK_EQ(Q(s, 0x160), (uint64_t)0);
+    CHECK_EQ(D(s, 0x30), 0x8000u);
+    s->_shadowTarget = nullptr;                      // the marker CreateTargets built none
+    const void* vt = VptrOf(s);
+    CHECK(s->DeletingDtor(0) == s);
+    CHECK_EQ(g_n, 4);
+    CHECK_EQ(g_log[2].ev, (int)kSpRel); CHECK(g_log[2].vptr == vt);
+    CHECK_EQ(g_log[3].ev, (int)kGeoRel); CHECK(g_log[3].vptr == GeoVt());
+
+    void* m = Object::detail::InternalMemAlloc(sizeof(Graphics::SpotLight), 8);
+    Graphics::SpotLight* h = ::new (m) Graphics::SpotLight();
+    h->_shadowTarget = nullptr;
+    CHECK(h->DeletingDtor(1) == h);
 }
 
 }  // namespace

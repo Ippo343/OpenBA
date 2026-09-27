@@ -778,7 +778,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // pattern-match. Per Wave 27's no-tooling rule the verifier was NOT extended;
     // the defect is filed in WAVE27_LANE_GFXPART.md under INSTRUMENT DEFECT
     // OBSERVED, NOT FIXED, with this file:line. ADDRESSEE for the fix: Wave 28.
-    RT_DELDTOR(0x180058dd0, 0x180058d20, 0x0c0, "Graphics::Light"),
     // (Graphics::SunLight's row 0x180064620 is RETIRED -- ENDGAME B.3.9 pilot
     // c2: every SunLight is exe-built by `::new (p) Graphics::SunLight()` and
     // wears the class's own table, whose slot 0 is the exe's scalar deleting
@@ -1070,12 +1069,10 @@ static constexpr DelDtorSpec kSpecs[] = {
     // name, TriangleList's name) or destroys GPU objects through a platform
     // companion pointer. A fabricated subject would decrement a refcount nothing
     // incremented and hand the driver a garbage handle.
-    RT_DELDTOR(0x180059080, 0x180058f30, 0x0d8, "Graphics::AmbientLight"),
     RT_DELDTOR(0x18001eee0, 0x1800a3e40, 0x070, "Graphics::GeneratedImageBuffer"),
     RT_DELDTOR(0x18001f260, 0x1800a3c80, 0x088, "Graphics::FrameCopyImageBuffer"),
     RT_DELDTOR(0x180022600, 0x1800a70b0, 0x090, "Graphics::ReflectionImageBuffer"),
     RT_DELDTOR(0x180012bd0, 0x1800ff270, 0x098, "Graphics::GraphicsMesh"),
-    RT_DELDTOR(0x1800642b0, 0x180106270, 0x168, "Graphics::SpotLight"),
     // VTABLE BATCH 3 (2026-09-12): the UI::*Element widget runtime, first
     // half. Thirteen slot-0 rows, appended AFTER every batch on main at
     // merge time -- the table is POSITIONAL and each wrapper below passes
@@ -1437,10 +1434,6 @@ void* RtDelDtor_MeshInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180017330>());
 }
 
-// Graphics::Light          ~Light = 0x180058d20  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)  [Wave 27 GFXPART]
-void* RtDelDtor_Light(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180058dd0>());
-}
 
 // UI::ElementDescription   ~ElementDescription = 0x180116100  (PORTED)  [Wave 27 IOTEXT]
 void* RtDelDtor_ElementDescription(void* self, unsigned flags) {
@@ -1609,9 +1602,6 @@ void* RtDelDtor_SoundEffect(void* self, unsigned flags) {
 // took 71-88 and batch 4 elem_B took 89-102 while this branch held them. That
 // is the positional-merge hazard the banner and kSpecCount describe, and it has
 // now bitten this one batch twice. RE-COUNT after every merge, never before.
-void* RtDelDtor_AmbientLight(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180059080>());
-}
 void* RtDelDtor_GeneratedImageBuffer(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18001eee0>());
 }
@@ -1623,9 +1613,6 @@ void* RtDelDtor_ReflectionImageBuffer(void* self, unsigned flags) {
 }
 void* RtDelDtor_GraphicsMesh(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180012bd0>());
-}
-void* RtDelDtor_SpotLight(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800642b0>());
 }
 
 // UI::AnimatedImageElement  ~AnimatedImageElement = 0x1800cb3a0  (PORTED, runtime/src/ui/)
@@ -1778,7 +1765,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x1800175d0, (void*)&RtDelDtor_EdgeMeshInstance);      // Wave 27 GFXMESH
     RegisterRuntimeAddr(0x180017330, (void*)&RtDelDtor_MeshInstance);          // Wave 27 GFXMESH
 
-    RegisterRuntimeAddr(0x180058dd0, (void*)&RtDelDtor_Light);                 // Wave 27 GFXPART
 
     RegisterRuntimeAddr(0x180035350, (void*)&RtDelDtor_ElementDescription);    // Wave 27 IOTEXT
     RegisterRuntimeAddr(0x180011d20, (void*)&RtDelDtor_Material);
@@ -1826,12 +1812,10 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x1800378a0, (void*)&RtDelDtor_CharacterSet);
     RegisterRuntimeAddr(0x18003b3a0, (void*)&RtDelDtor_Cursor);
     RegisterRuntimeAddr(0x18003ccf0, (void*)&RtDelDtor_SpriteCapture);
-    RegisterRuntimeAddr(0x180059080, (void*)&RtDelDtor_AmbientLight);          // vtable batch 6
     RegisterRuntimeAddr(0x18001eee0, (void*)&RtDelDtor_GeneratedImageBuffer);  // vtable batch 6
     RegisterRuntimeAddr(0x18001f260, (void*)&RtDelDtor_FrameCopyImageBuffer);  // vtable batch 6
     RegisterRuntimeAddr(0x180022600, (void*)&RtDelDtor_ReflectionImageBuffer); // vtable batch 6
     RegisterRuntimeAddr(0x180012bd0, (void*)&RtDelDtor_GraphicsMesh);          // vtable batch 6
-    RegisterRuntimeAddr(0x1800642b0, (void*)&RtDelDtor_SpotLight);             // vtable batch 6
 
     // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12) --------------------
     RegisterRuntimeAddr(0x180046540, (void*)&RtDelDtor_NumberEditElement);
