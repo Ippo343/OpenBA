@@ -140,52 +140,6 @@ void MapComponent_Draw(MapComponent* self) {
     }
 }
 
-// ============================================================
-// MapComponent::OnCreate (vtable slot [7], 0x1401242f0)
-// ============================================================
-// Sets up map tiles. If building[0x32] != 0, clears terrain for the tile area.
-// Always calls map initialization at the end.
-//
-// Original disassembly:
-//   Get building via IsDerivedFrom
-//   CMP byte [RDX+0x32],0
-//   JZ skip_clear
-//   MOVSX sign-extend tile coords from int16 to int32
-//   MOV RCX,[g_pGameWorldSingleton]
-//   MOV RCX,[RCX+0x148]            ; terrain subsystem pointer
-//   XOR EDX,EDX                    ; param2 = 0
-//   CALL 0x1400a4d30               ; terrain clear helper
-// skip_clear:
-//   JMP CreateNaturalResource_impl_4750  ; tail call to map init
-
-void MapComponent_OnCreate(MapComponent* self) {
-    EnsureHelpers();
-
-    void* building = GetMapDescription(self);
-    if (building) {
-        // Check building[0x32] != 0 (byte flag: needsTerrainClear)
-        uint8_t clearFlag = *(uint8_t*)((uintptr_t)building + 0x32);
-        if (clearFlag != 0) {
-            // Get terrain subsystem from game world singleton
-            if (g_pGameWorldSingleton && *g_pGameWorldSingleton && s_fn_TerrainClear) {
-                uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
-                void* terrainPtr = *(void**)(gameWorld + 0x148);
-                if (terrainPtr) {
-                    s_fn_TerrainClear(terrainPtr, 0,
-                        (int)(int16_t)self->tileX0,
-                        (int)(int16_t)self->tileY0,
-                        (int)(int16_t)self->tileX1,
-                        (int)(int16_t)self->tileY1);
-                }
-            }
-        }
-    }
-
-    // Always call map initialization (tail call in original)
-    if (s_fn_MapInit) {
-        s_fn_MapInit(self);
-    }
-}
 
 // ============================================================
 // Init: resolve function pointers
@@ -475,6 +429,24 @@ void MapComponent::OnAdded() {
     if (desc[0x30] == 0) return;                 // retail: MapComponent::Draw's gate
     MapComponent_ApplyOccupancy_41b0(s);         // 41b0's occupancy half (+ the 0x100000 bit)
 }
+// ============================================================
+// MapComponent::OnRemove (vtable slot [7], 0x1401242f0)
+// ============================================================
+// Sets up map tiles. If building[0x32] != 0, clears terrain for the tile area.
+// Always calls map initialization at the end.
+//
+// Original disassembly:
+//   Get building via IsDerivedFrom
+//   CMP byte [RDX+0x32],0
+//   JZ skip_clear
+//   MOVSX sign-extend tile coords from int16 to int32
+//   MOV RCX,[g_pGameWorldSingleton]
+//   MOV RCX,[RCX+0x148]            ; terrain subsystem pointer
+//   XOR EDX,EDX                    ; param2 = 0
+//   CALL 0x1400a4d30               ; terrain clear helper
+// skip_clear:
+//   JMP CreateNaturalResource_impl_4750  ; tail call to map init
+
 // [7] 0x1401242f0
 void MapComponent::OnRemove() {
     void* s = this;
@@ -483,7 +455,36 @@ void MapComponent::OnRemove() {
     // ported MapComponent_OnCreate is dead in standalone (IsDerivedFrom
     // landmine), so do it here trusting the linked description.
     MapComponent_PaintMinimapRect(reinterpret_cast<uint8_t*>(s), /*clear=*/true);
-    MapComponent_OnCreate(this);
+
+    // B.3.8 CB1b: the ported retail removal body (0x1401242f0), folded in from the
+    // free MapComponent_OnCreate.
+
+    EnsureHelpers();
+
+    void* building = GetMapDescription(this);
+    if (building) {
+        // Check building[0x32] != 0 (byte flag: needsTerrainClear)
+        uint8_t clearFlag = *(uint8_t*)((uintptr_t)building + 0x32);
+        if (clearFlag != 0) {
+            // Get terrain subsystem from game world singleton
+            if (g_pGameWorldSingleton && *g_pGameWorldSingleton && s_fn_TerrainClear) {
+                uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+                void* terrainPtr = *(void**)(gameWorld + 0x148);
+                if (terrainPtr) {
+                    s_fn_TerrainClear(terrainPtr, 0,
+                        (int)(int16_t)tileX0,
+                        (int)(int16_t)tileY0,
+                        (int)(int16_t)tileX1,
+                        (int)(int16_t)tileY1);
+                }
+            }
+        }
+    }
+
+    // Always call map initialization (tail call in original)
+    if (s_fn_MapInit) {
+        s_fn_MapInit(this);
+    }
 }
 // Slot 12 (+0x60) — the per-component MESSAGE slot, retail `MapComponent_Slot12`
 // (0x1401243c0), which is only three instructions:

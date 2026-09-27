@@ -16,10 +16,5 @@
 // If building[0x30] != 0, calls internal map update sub-function.
 void MapComponent_Draw(MapComponent* self);
 
-// OnCreate (vtable slot [7], 0x1401242f0): Initial map setup.
-// Gets building data, calls terrain clear helper if building[0x32] != 0,
-// then always calls map initialization sub-function.
-void MapComponent_OnCreate(MapComponent* self);
-
 // Init: resolve all internal function pointers (called once at startup)
 void MapComponent_InitFuncs();
