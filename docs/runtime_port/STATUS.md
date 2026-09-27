@@ -20,7 +20,7 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
-- **B.3.8 CLOSED (2026-09-26, step close partial — see "Step close" below):** every exe-phase class in
+- **B.3.8 CLOSED (2026-09-26; step close completed 2026-09-27):** every exe-phase class in
   `code/Game` is a real C++ class with a COMPILER-GENERATED vtable, on the Runtime bases steps 3-7 made
   real: 310 of 310 reflected exe classes (components, descriptions, actions, works, tools, dialogs, panels,
   goals, scenario, tutorial, world externals) + the five loops, the controller members, the exe Geometry /
@@ -67,12 +67,13 @@ built them wrong, and callbacks stored in data.
   SAVE OPERATION COMPLETE, crash log 0; `sa-stress` exit 0 (update 1.85 ms/frame vs baseline 1.92, p95
   2.50 vs 2.40, draw 1.17 vs 1.38 — recorded, not chased); clean rebuild of debug / perf / unit from an
   empty obj dir exit 0, and on it 0 new warnings (debug, perf), 736 tests 0 failures, dispatch 0, manifest
-  OK. **OWED — the run was stopped by the harness for low system memory:** the true release compile died
-  with the compiler processes failing to start (0xC0000142 after 13 files, 0 errors / 0 warnings reported —
-  an environment failure, not a code result), and the clean-built exe's routes / resave, the stub-set diff
-  and the tutorial census line never ran. Re-run `b38_session/stepclose.sh` (from a scratchpad copy) when
-  the machine has memory to spare. The last full gate that ran, on the merged close `e24d1e7c`: 0
-  problems, 736 tests, resave 5/5.
+  OK. **Step close COMPLETED 2026-09-27** (the first run was stopped by the harness for low system memory; the owed
+  items re-run on `ab1e0846`, `b38_session/GATE_TABLE.md` tail): true release compile from a clean obj dir exit 0
+  (1,124 files, 8.3 MB exe), `make clean`, clean rebuild of debug / perf / unit, then the full gate on the
+  clean-built exe: 0 problems, 0 new warnings, 736 tests, dispatch 0, manifest OK, mint tables UP TO DATE
+  (152/104/48), new game `calls=5683 openFileFail=0`, tutorial `5773/12`, Load Game 4758, `[RtResolve] 0 misses`,
+  0 TRAP, resave 5/5; `NOT IMPLEMENTED` stub set identical to the step-8 baseline (23 hits); the tutorial
+  `[TownCensus] LOAD exit` line prints (citizen=16 herd=16). Nothing owed.
 - **B.3.7 CLOSED (2026-09-26):** `Engine`, `Save`, `Achievement`, `Audio`, `Input`, `Pathfinding`,
   `Picking` and `Application` are real C++ classes under retail's names — 15 polymorphic
   (`UpdateLoop`/`LoaderLoop`/`DialogLoopT`/`DialogLoaderLoopT` as their OWN root, `Loader` and

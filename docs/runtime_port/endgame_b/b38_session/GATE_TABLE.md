@@ -71,3 +71,52 @@ clean rebuild unit: exit 0
 true release compile: NOT COMPLETED (compiler processes failed to start, Error -1073741502 = 0xC0000142, during memory pressure; 0 compile errors / 0 warnings in the 13 files it reached)
 closeclean gate (skipbuild) reached: new warnings debug 0 / perf 0, unit 736 tests 0 failures, dispatch 0, manifest OK; then STOPPED — its routes/resave, mintgen, the stub-set diff and the tutorial census NOT RUN (owed)
 ```
+
+## Step close completed (2026-09-27, main ab1e0846 / 3fc6d9f6 docs-only; the owed items, run from a scratchpad kit with 17 GB free)
+
+```
+== owed @ ab1e0846 23:59:28
+true release compile: exit 0, 1124 files compiled, exe 8297699 bytes, warnings 379, errors 1
+clean rebuild standalone-debug: exit 0 (1124 files)
+clean rebuild standalone-perf: exit 0 (1124 files)
+clean rebuild unit: exit 0 (0 files)
+warn baseline debug: 128 entries from 1124 compiled files (runs/baseline)
+warn baseline perf: 291 entries from 1124 compiled files (runs/baseline)
+warnings debug: new vs step-8 baseline set: 0
+warnings perf: new vs step-8 baseline set: 0
+gate baseline exit 0
+== gate baseline @ 3fc6d9f6 00:02:19 mode=skipbuild
+  new warnings (debug, vs clean-rebuild baseline set): 0
+  new warnings (perf, vs clean-rebuild baseline set): 0
+unit: 736 tests, 0 failures
+dispatch: checked 109 ResolveExport registrations, 0 name mismatch(es); 0 address(es) registered more than once (a non-ResolveExport winner means the checked line is dead code)
+manifest: cutover manifest gate: OK (59 rows; row set and every disposition match a fresh derivation)
+mintgen: --check: C:\code\GIT\untitled_rev_eng_project\standalone\rt_data_mint_tables.inc is UP TO DATE (152 vtables, 104 BaseTypeInfo, 48 storage)
+route newgame: exit 0 crashlog=0 hang=no (32s)
+  RtMint TRAP=0  GATE WARN=0  [RtResolve] 0 misses — every cached resolve in this run found its symbol.
+  loader: calls=5683 openFileFail=0 openCompFail=0 retNull=0
+  [GameMain] Post-Startup _firstTypeInfo: 416 entries, 416 have non-FF typeId
+  [RtPort]   Object::factory dtors: 4 exports + 5 helper addresses regis
+  typetable: 32 lines md5 1f3e44cb
+route tutorial: exit 0 crashlog=0 hang=no (21s)
+  RtMint TRAP=0  GATE WARN=0  [RtResolve] 0 misses — every cached resolve in this run found its symbol.
+  loader: calls=5773 openFileFail=12 openCompFail=0 retNull=12
+route loadgame: exit 0 crashlog=0 hang=no (9s)
+  RtMint TRAP=0  GATE WARN=0  [RtResolve] 0 misses — every cached resolve in this run found its symbol.
+  loader: calls=4758 openFileFail=0 openCompFail=0 retNull=0
+resave 1: PASS (21075114 bytes)
+resave 2: PASS (21075114 bytes)
+resave 3: PASS (21075114 bytes)
+resave 4: PASS (21075114 bytes)
+resave 5: PASS (21075114 bytes)
+resave: 5/5 PASS, trailing consecutive PASS streak = 5 (B34_RULES 3.4 wants 3 consecutive)
+GATE RESULT: 0 problem(s)   00:05:53
+NOT IMPLEMENTED hits on new-game: 23
+stub set: 0 new, 0 gone vs step-8 baseline
+typetable vs step-8 baseline: 0 non-lazy line(s) differ
+tutorial census: [TownCensus] LOAD exit : entA=1 entB=0 residence=0 entC=0 cemetery=0 happiness=0 attendance=0 healer=0 livestock=0 pasture=0 citizen=16 herd=16 population=1 build=0 well=0 disease=0
+ M standalone/rt_export_addrs.inc
+== done 00:05:53
+```
+
+This run is also the B.3.9 baseline (warning sets 128 debug / 291 perf from the clean rebuild; typetable 32 lines md5 1f3e44cb; 416 chain entries).
