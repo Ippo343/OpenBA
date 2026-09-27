@@ -293,7 +293,7 @@ namespace professionui_sa {
             if (s_numEdit) g_TypeId_NumberEditElement=&s_numEdit;
         }
     }
-    void Trace(const char* slot, void* self) {
+    void Trace([[maybe_unused]] const char* slot, void* self) {
         static int n=0; if (n>=32) return; ++n;
         uintptr_t s=reinterpret_cast<uintptr_t>(self);
         uint32_t spinN = self?*reinterpret_cast<uint32_t*>(s+0x48):0;

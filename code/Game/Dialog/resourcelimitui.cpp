@@ -236,10 +236,10 @@ namespace resourcelimitui_sa {
         int idx = IdxForFallback(self);
         return idx;
     }
-    void Trace(const char* slot, void* self, int idx) {
+    void Trace([[maybe_unused]] const char* slot, void* self, [[maybe_unused]] int idx) {
         static int n=0; if (n>=24) return; ++n;
         void* cfg = self ? *reinterpret_cast<void**>((uintptr_t)self+0x10) : nullptr;
-        int cfgIdx = cfg ? *reinterpret_cast<int*>((uintptr_t)cfg+0x20) : -1;
+        [[maybe_unused]] int cfgIdx = cfg ? *reinterpret_cast<int*>((uintptr_t)cfg+0x20) : -1;
         printf("[ResourceLimitUI] %s self=%p cfg=%p cfg+0x20=%d dispIdx=%d liveLimit=%d\n",
                slot, self, cfg, cfgIdx, idx, ResourceLimitUI_ReadLimit_SA(idx));
         fflush(stdout);

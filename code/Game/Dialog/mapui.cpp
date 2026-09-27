@@ -289,7 +289,7 @@ void MapUI::OnCreated() {
     if (!s_logged && Opt().mapTrace) {
         s_logged = true;
         void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
-        void* mapObj = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x148) : nullptr;
+        [[maybe_unused]] void* mapObj = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x148) : nullptr;
         printf("[MapUI::Slot4] dispatched self=%p mat_tid=%p img_tid=%p "
                "matVtbl=%p ssVtbl=%p terrBuf=%p ovrBuf=%p\n", (void*)this,
                (void*)g_TypeId_Material, (void*)g_TypeId_ImageElement,
@@ -329,7 +329,6 @@ void MapUI::OnCreated() {
 void MapUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t msg, int32_t id,
                            int32_t clickX, int32_t clickY, int32_t /*e*/, void* /*userData*/) {
     void* param2 = element;
-    (void)this;
     if (msg != 2 || id != 1000) return;
 
     // param2 is an InternalBasePtr to the clicked element

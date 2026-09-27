@@ -29,6 +29,8 @@
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Object/factory_registration.h"
+#include <cstddef>
 
 // ResidenceUI::Slot7 is the per-frame roster refresh (driven via the +0x40 W_OnUpdate
 // hack in standalone). Its _DEBUG bring-up logs used to fflush an unbuffered log once
@@ -65,6 +67,54 @@ static uint64_t FindElemAsBasePtr(void* parentElem, const char* name) {
     return *(uint64_t*)bpBuf;
 }
 
+namespace residenceui_sa {
+
+// Standalone-local fallbacks for exe-.rdata globals that resolve NULL in standalone.
+static uint32_t s_resTid = 0;       // ResidenceComponent type-id
+static uint32_t s_ceTid  = 0;       // ComponentEntity type-id
+static float    s_ageMul = 1.0f;    // matches citizenui.cpp's SA age-multiplier fallback
+
+void EnsureGlobals() {
+    if (!g_TypeId_ComponentEntity) {
+        s_ceTid = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
+        if (s_ceTid) g_TypeId_ComponentEntity = &s_ceTid;
+    }
+    if (!g_TypeId_ResidenceComponent) {
+        s_resTid = ::Object::ResolveTypeIdByNameLazy("ResidenceComponent");
+        if (s_resTid) g_TypeId_ResidenceComponent = &s_resTid;
+    }
+    // g_pAgeMultiplier (0x140172198) is zero-fill in standalone; point it at the same
+    // 1.0 fallback citizenui.cpp uses so resident ages match the citizen dialog.
+    if (!g_pAgeMultiplier) g_pAgeMultiplier = &s_ageMul;
+}
+
+bool Ready() {
+    return g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
+        && g_TypeId_ResidenceComponent && *g_TypeId_ResidenceComponent
+        && g_pAgeMultiplier
+        && g_pGameWorldSingleton && *g_pGameWorldSingleton;
+}
+
+
+// SA-guard: the dialog's data-source entity ref (+0x28) is nulled by entity
+// destruction (verified live 2026-07-20: house demolished via the upgrade path
+// with its panel open → IsDerivedFrom(null) crashed in Runtime). Bail when the
+// entity is gone — the panel just stops refreshing.
+static bool DataSourceAlive(void* self) {
+    void* e = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x28);
+    if (!e) return false;
+    // Marked-for-removal (entity+0x40 bit 0x400): the entity survives until the
+    // EntityList drain, but its components/roster may already be torn down —
+    // reading them crashed live 2026-07-20 (garbage into IsDerivedFrom).
+    if ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(e) + 0x40) >> 10) & 1)
+        return false;
+    return true;
+}
+
+
+
+}  // namespace residenceui_sa
+
 // ============================================================
 // ResidenceUI::Slot4 (vtable +0x20) — Setup resident table
 // ============================================================
@@ -75,8 +125,11 @@ static uint64_t FindElemAsBasePtr(void* parentElem, const char* name) {
 //
 // Original: 0x1400B5850.
 
-void ResidenceUI_Slot4(ResidenceUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [4] 0x1400b5850
+void ResidenceUI::OnCreated() {
+    residenceui_sa::EnsureGlobals();
+    if (!residenceui_sa::Ready()) return;
+    uintptr_t s = (uintptr_t)this;
     void* dialogElem = *(void**)(s + 0x20);
 
     // Try "residenceTable" first, fall back to "residenceLongTable"
@@ -183,8 +236,11 @@ void ResidenceUI_Slot4(ResidenceUI* self) {
 //
 // Original: 0x1400B51F0.
 
-void ResidenceUI_Slot7(ResidenceUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [7] 0x1400b51f0
+void ResidenceUI::OnUpdateLayout() {
+    residenceui_sa::EnsureGlobals();
+    if (!residenceui_sa::Ready() || !residenceui_sa::DataSourceAlive(this)) return;
+    uintptr_t s = (uintptr_t)this;
 
     // Get entity from data source +0x28
     void* dataSource = *(void**)(s + 0x28);
@@ -477,15 +533,19 @@ static void ResidenceUI_GoToCitizen(ResidenceUI* self, int citizenIndex) {
     }
 }
 
-void ResidenceUI_Slot9(ResidenceUI* self, void* param2, int msg, int id) {
+// [9] 0x1400b5820
+void ResidenceUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t msg, int32_t id,
+                                 int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    void* param2 = element;
+    if (!residenceui_sa::Ready() || !residenceui_sa::DataSourceAlive(this)) return;
     (void)param2;
-    uintptr_t s = (uintptr_t)self;
+    uintptr_t s = (uintptr_t)this;
 
     if (msg != 0x12) return;
 
     int count = *(int*)(s + 0x38);
     if (id >= 300 && id < 300 + count) {
-        ResidenceUI_GoToCitizen(self, id - 300);
+        ResidenceUI_GoToCitizen(this, id - 300);
     }
 }
 
@@ -509,86 +569,7 @@ void ResidenceUI_Slot9(ResidenceUI* self, void* param2, int msg, int id) {
 //               drive the refresh here: build once (until +0x38 row count is set), then
 //               re-populate every frame so the roster stays live as residents change.
 //   +0x48 (idx9) Slot9  (0x1400b5820) — resident-row click dispatch (id 300+index)
-#include "Object/factory_registration.h"
-#include <cstddef>
-#include <cstdlib>
 
-namespace residenceui_sa {
-
-// Standalone-local fallbacks for exe-.rdata globals that resolve NULL in standalone.
-static uint32_t s_resTid = 0;       // ResidenceComponent type-id
-static uint32_t s_ceTid  = 0;       // ComponentEntity type-id
-static float    s_ageMul = 1.0f;    // matches citizenui.cpp's SA age-multiplier fallback
-
-void EnsureGlobals() {
-    if (!g_TypeId_ComponentEntity) {
-        s_ceTid = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
-        if (s_ceTid) g_TypeId_ComponentEntity = &s_ceTid;
-    }
-    if (!g_TypeId_ResidenceComponent) {
-        s_resTid = ::Object::ResolveTypeIdByNameLazy("ResidenceComponent");
-        if (s_resTid) g_TypeId_ResidenceComponent = &s_resTid;
-    }
-    // g_pAgeMultiplier (0x140172198) is zero-fill in standalone; point it at the same
-    // 1.0 fallback citizenui.cpp uses so resident ages match the citizen dialog.
-    if (!g_pAgeMultiplier) g_pAgeMultiplier = &s_ageMul;
-}
-
-bool Ready() {
-    return g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
-        && g_TypeId_ResidenceComponent && *g_TypeId_ResidenceComponent
-        && g_pAgeMultiplier
-        && g_pGameWorldSingleton && *g_pGameWorldSingleton;
-}
-
-// idx4 (+0x20): build the per-row element array. Runs once (Slot4 appends rows, so it
-// must not run twice — the OnUpdate self-heal below guards on +0x38 == 0).
-void W_Slot4(void* self) {
-    EnsureGlobals();
-    if (!self || !Ready()) return;
-    ResidenceUI_Slot4(reinterpret_cast<ResidenceUI*>(self));
-}
-
-// SA-guard: the dialog's data-source entity ref (+0x28) is nulled by entity
-// destruction (verified live 2026-07-20: house demolished via the upgrade path
-// with its panel open → IsDerivedFrom(null) crashed in Runtime). Bail when the
-// entity is gone — the panel just stops refreshing.
-static bool DataSourceAlive(void* self) {
-    void* e = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x28);
-    if (!e) return false;
-    // Marked-for-removal (entity+0x40 bit 0x400): the entity survives until the
-    // EntityList drain, but its components/roster may already be torn down —
-    // reading them crashed live 2026-07-20 (garbage into IsDerivedFrom).
-    if ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(e) + 0x40) >> 10) & 1)
-        return false;
-    return true;
-}
-
-// idx7 (+0x38): populate the rows from the residence roster.
-void W_Slot7(void* self) {
-    EnsureGlobals();
-    if (!self || !Ready() || !DataSourceAlive(self)) return;
-    ResidenceUI_Slot7(reinterpret_cast<ResidenceUI*>(self));
-}
-
-// idx8 (+0x40): per-frame. Build the table once (row count still 0), then keep the
-// roster display live by re-populating every frame.
-void W_OnUpdate(void* self, void* /*time*/) {
-    EnsureGlobals();
-    if (!self || !Ready() || !DataSourceAlive(self)) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    if (*reinterpret_cast<int*>(s + 0x38) == 0) {
-        ResidenceUI_Slot4(reinterpret_cast<ResidenceUI*>(self));
-    }
-    ResidenceUI_Slot7(reinterpret_cast<ResidenceUI*>(self));
-}
-
-// idx9 (+0x48): resident-row click. Dispatched (self, &elementPtr, msg, id, x, y).
-void W_Slot9(void* self, void* p2, int msg, int id, int /*mx*/, int /*my*/) {
-    if (!self || !Ready() || !DataSourceAlive(self)) return;
-    ResidenceUI_Slot9(reinterpret_cast<ResidenceUI*>(self), p2, msg, id);
-}
-}  // namespace residenceui_sa
 
 // ~ResidenceUI: the tree's own teardown (its hand-built slot 0 ran this, then freed
 // WITHOUT ~DialogController); moved here unchanged. The compiler now chains
@@ -603,26 +584,19 @@ ResidenceUI::~ResidenceUI() {
     *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
 }
 
-// [4] 0x1400b5850
-void ResidenceUI::OnCreated() {
-    residenceui_sa::W_Slot4(this);
-}
 
-// [7] 0x1400b51f0
-void ResidenceUI::OnUpdateLayout() {
-    residenceui_sa::W_Slot7(this);
-}
 
 // [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
-void ResidenceUI::OnUpdate(const System::Time& time) {
-    residenceui_sa::W_OnUpdate(this, const_cast<System::Time*>(&time));
+void ResidenceUI::OnUpdate(const System::Time& /*time*/) {
+    residenceui_sa::EnsureGlobals();
+    if (!residenceui_sa::Ready() || !residenceui_sa::DataSourceAlive(this)) return;
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+    if (*reinterpret_cast<int*>(s + 0x38) == 0) {
+        ResidenceUI::OnCreated();
+    }
+    ResidenceUI::OnUpdateLayout();
 }
 
-// [9] 0x1400b5820
-void ResidenceUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
-                                 int32_t c, int32_t d, int32_t /*e*/, void* /*userData*/) {
-    residenceui_sa::W_Slot9(this, element, a, b, c, d);
-}
 
 // [0] 0x140020fc0: ~ResidenceUI (restamp, ~DialogController, ~Internal — the
 // compiler's chain), MemFree on &1.

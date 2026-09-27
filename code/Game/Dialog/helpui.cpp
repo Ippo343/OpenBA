@@ -255,11 +255,11 @@ namespace helpui_sa {
         }
         return s_ok != 0;
     }
-    void Trace(const char* slot, void* self) {
+    void Trace([[maybe_unused]] const char* slot, void* self) {
         static int n=0; if (n>=24) return; ++n;
-        uintptr_t s=reinterpret_cast<uintptr_t>(self);
+        [[maybe_unused]] uintptr_t s=reinterpret_cast<uintptr_t>(self);
         void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
-        void* topics = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw)+0xa0) : nullptr;
+        [[maybe_unused]] void* topics = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw)+0xa0) : nullptr;
         printf("[HelpUI] %s self=%p root(+0x20)=%p scroll=%p doc=%p combo=%p back=%p fwd=%p "
                "cont=%p page=%d hist=%d/%d topics=%p n=%d\n", slot, self,
                *reinterpret_cast<void**>(s+0x20), *reinterpret_cast<void**>(s+0x30),

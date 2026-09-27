@@ -211,8 +211,9 @@ int SelectResourceUI_GetResourceCount(void* self) {
 //
 // Original: 0x140078be0 (shared by CropUI, OrchardUI, PastureUI).
 
-void SelectResourceUI_Slot4(void* self) {
-    uintptr_t s = (uintptr_t)self;
+// [4] 0x140078be0.
+void SelectResourceUI::OnCreated() {
+    uintptr_t s = (uintptr_t)this;
 
     // Find "selectResource" combo element via DialogInstance at +0x18
     System::String nameBuf("selectResource");
@@ -232,7 +233,7 @@ void SelectResourceUI_Slot4(void* self) {
     reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x30))->SetElementId(500);  // B.3.6 bridge
 
     // Populate combo with available resources
-    SelectResourceUI_PopulateCombo(self);
+    SelectResourceUI_PopulateCombo(this);
 }
 
 // ============================================================
@@ -243,15 +244,16 @@ void SelectResourceUI_Slot4(void* self) {
 //
 // Original: 0x140078D30 (shared by OrchardUI and PastureUI).
 
-void SelectResourceUI_Slot8(void* self) {
-    uintptr_t s = (uintptr_t)self;
+// [8] 0x140078d30.
+void SelectResourceUI::OnUpdate(const System::Time& /*time*/) {
+    uintptr_t s = (uintptr_t)this;
 
     void* comboElem = *(void**)(s + 0x30);
     int currentCount = reinterpret_cast<const UI::ComboElement*>(comboElem)->GetItemCount();  // B.3.6 bridge
-    int expectedCount = SelectResourceUI_GetResourceCount(self);
+    int expectedCount = SelectResourceUI_GetResourceCount(this);
 
     if (currentCount != expectedCount) {
-        SelectResourceUI_PopulateCombo(self);
+        SelectResourceUI_PopulateCombo(this);
     }
 }
 
@@ -264,11 +266,13 @@ void SelectResourceUI_Slot8(void* self) {
 //
 // Original: 0x140078D80 (shared by CropUI and OrchardUI).
 
-void SelectResourceUI_Slot9(void* self, void* param2, int param3, int param4) {
+// [9] 0x140078d80 — the element pointer's address and (event, id) as the body reads them.
+void SelectResourceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4,
+                                      int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (param3 != 0x14 || param4 != 500)
         return;
 
-    uintptr_t s = (uintptr_t)self;
+    uintptr_t s = (uintptr_t)this;
     void* comboElem = *(void**)(s + 0x30);
 
     // Get current selected item index from combo
@@ -285,7 +289,7 @@ void SelectResourceUI_Slot9(void* self, void* param2, int param3, int param4) {
     int64_t resourceType = *(int64_t*)(resourceArray + (int64_t)resourceIndex * 8);
 
     // Slot 11 (polymorphic -- sets resource type on component)
-    reinterpret_cast<SelectResourceUI*>(self)->SetResource(resourceType);   // B.3.8 bridge
+    SetResource(resourceType);   // slot 11, virtual (as retail)
 }
 
 // ============================================================================
@@ -308,21 +312,6 @@ uint32_t    SelectResourceUI::Type() const {                                    
     return ::Object::GetTypeIdByName("SelectResourceUI");
 }
 
-// [4] 0x140078be0.
-void SelectResourceUI::OnCreated() { SelectResourceUI_Slot4(this); }
 
-// [7] 0x140078cb0. The tree ported this base body under CropUI's name; it reads
-// only the base's +0x28/+0x30.
-void SelectResourceUI::OnUpdateLayout() {
-    CropUI_Slot7(reinterpret_cast<CropUI*>(this));   // B.3.8 bridge
-}
 
-// [8] 0x140078d30.
-void SelectResourceUI::OnUpdate(const System::Time& /*time*/) { SelectResourceUI_Slot8(this); }
 
-// [9] 0x140078d80 — the element pointer's address and (event, id) as the body reads them.
-void SelectResourceUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a,
-                                      int32_t b, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/,
-                                      void* /*userData*/) {
-    SelectResourceUI_Slot9(this, element, a, b);
-}

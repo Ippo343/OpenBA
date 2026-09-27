@@ -30,8 +30,12 @@
 //
 // Original: 0x140077650.
 
-void RadiusUI_Slot5(RadiusUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [5] 0x140077650
+void RadiusUI::OnOpened() {
+    if (!SA_DialogEntityAlive(this)) {
+        return;
+    }
+    uintptr_t s = (uintptr_t)this;
 
     // Get entity at +0x28, check IsA ComponentEntity
     void* entity = (void*)*(uint64_t*)(s + 0x28);
@@ -49,7 +53,7 @@ void RadiusUI_Slot5(RadiusUI* self) {
     // controller to a live ComponentEntity, but our promoted vtable is also dispatched
     // from the harness-driven panel open, where the data source (+0x28) can still be
     // null on the first Slot5 before the framework seats it.
-    if (!entityBasePtr) { self->data30 = -1; return; }
+    if (!entityBasePtr) { this->data30 = -1; return; }
 
     // Get class/template sub-object from entity+0x28
     uint64_t subObj = *(uint64_t*)(entityBasePtr + 0x28);
@@ -85,7 +89,7 @@ void RadiusUI_Slot5(RadiusUI* self) {
     // select an entity whose description has no RadiusDescription. Without this,
     // 0x140055430 reads radiusComp+0x20 off a null pointer.
     if (!buildComp || !radiusComp) {
-        self->data30 = -1;
+        this->data30 = -1;
         return;
     }
 
@@ -98,7 +102,7 @@ void RadiusUI_Slot5(RadiusUI* self) {
     int tileIndex = centerY * gridSize + centerX;
 
     // Calculate radius and store display index
-    self->data30 = fn_RadiusCalc(radiusComp, tileIndex);
+    this->data30 = fn_RadiusCalc(radiusComp, tileIndex);
 
 }
 
@@ -110,12 +114,14 @@ void RadiusUI_Slot5(RadiusUI* self) {
 //
 // Original: 0x140077600, 28 bytes.
 
-void RadiusUI_Slot6(RadiusUI* self) {
-    if (self->data30 >= 0) {
+// [6] 0x140077600 — unconditional: it resets +0x30 to -1 in both arms, and the
+// manager pointer read is guarded by data30 >= 0 inside the body.
+void RadiusUI::OnClosed() {
+    if (this->data30 >= 0) {
         // Game/World singleton +0x110 = RadiusDisplayManager
         void* gameWorld = *g_pGameWorldSingleton;
         void* radiusMgr = *(void**)((uintptr_t)gameWorld + 0x110);
-        fn_RadiusDisplay_Remove(radiusMgr, self->data30);
+        fn_RadiusDisplay_Remove(radiusMgr, this->data30);
     }
-    self->data30 = -1;
+    this->data30 = -1;
 }

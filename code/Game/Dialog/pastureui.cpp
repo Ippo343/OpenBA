@@ -16,6 +16,9 @@
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ComboElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "runtime/types/ui/SliderElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Object/factory_registration.h"
+#include <cstdlib>
+#include <cstdio>
 
 // ============================================================
 // File-local helper: PastureCalcMaxCount_Impl (FUN_140128570)
@@ -128,6 +131,15 @@ static void PastureUI_UpdateSlider_Impl(void* self) {
     *(float*)(slider + 0x128) = (float)currentCount;
 }
 
+namespace pastureui_sa {
+
+static void Trace(const char* what, void* self) {
+    fprintf(stderr, "[PastureUI] %s self=%p\n", what, self);
+    fflush(stderr);
+}
+
+}  // namespace pastureui_sa
+
 // ============================================================
 // PastureUI::Slot4 (vtable +0x20) — Initialize combo + slider elements
 // ============================================================
@@ -137,11 +149,17 @@ static void PastureUI_UpdateSlider_Impl(void* self) {
 //
 // Original: 0x1400B5090.
 
-void PastureUI_Slot4(PastureUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [4] 0x1400b5090
+void PastureUI::OnCreated() {
+    if (!*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(this) + 0x18)) {
+        pastureui_sa::Trace("Slot4 SKIP (no DialogInstance)", this);
+        return;
+    }
+    pastureui_sa::Trace("Slot4", this);
+    uintptr_t s = (uintptr_t)this;
 
     // Initialize combo via base class
-    SelectResourceUI_Slot4(self);
+    SelectResourceUI::OnCreated();
 
     // Find "slider" element in parent element at +0x20
     System::String nameBuf("slider");
@@ -161,7 +179,7 @@ void PastureUI_Slot4(PastureUI* self) {
     reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x38))->SetElementId(0x1f5);  // B.3.6 bridge
 
     // Update slider display with current/max animal counts
-    PastureUI_UpdateSlider_Impl(self);
+    PastureUI_UpdateSlider_Impl(this);
 }
 
 // ============================================================
@@ -172,13 +190,14 @@ void PastureUI_Slot4(PastureUI* self) {
 //
 // Original: 0x1400B4E50.
 
-void PastureUI_Slot7(PastureUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [7] 0x1400b4e50
+void PastureUI::OnUpdateLayout() {
+    uintptr_t s = (uintptr_t)this;
 
     // Per-frame (+0x38): bail on a dead / marked-for-removal datasource before the
     // IsDerivedFrom probe (reliable via the one-frame removal deferral, see
     // entitylist.cpp Step 0).
-    if (!SA_DialogEntityAlive(self)) return;
+    if (!SA_DialogEntityAlive(this)) return;
     // Get entity → find PastureComponent
     void* dataSource = *(void**)(s + 0x28);
     bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
@@ -226,11 +245,12 @@ void PastureUI_Slot7(PastureUI* self) {
 //
 // Original: 0x1400B4C40.
 
-void PastureUI_Slot11(PastureUI* self, int64_t param2) {
-    uintptr_t s = (uintptr_t)self;
+// [11] 0x1400b4c40
+void PastureUI::SetResource(int64_t param2) {
+    uintptr_t s = (uintptr_t)this;
 
     // Bail on a dead / marked-for-removal datasource before probing it (see Slot7).
-    if (!SA_DialogEntityAlive(self)) return;
+    if (!SA_DialogEntityAlive(this)) return;
     // Get entity at +0x28, check ComponentEntity
     void* entity = (void*)*(uint64_t*)(s + 0x28);
     uint32_t entityTypeId = g_TypeId_ComponentEntity ? *g_TypeId_ComponentEntity : 0;
@@ -265,7 +285,7 @@ void PastureUI_Slot11(PastureUI* self, int64_t param2) {
     *(int32_t*)(pastureComp + 0x40) = (int32_t)maxCount;
 
     // Update slider display
-    PastureUI_UpdateSlider_Impl(self);
+    PastureUI_UpdateSlider_Impl(this);
 }
 
 // ============================================================
@@ -276,8 +296,9 @@ void PastureUI_Slot11(PastureUI* self, int64_t param2) {
 //
 // Original: 0x1400B4D00.
 
-void* PastureUI_Slot12(PastureUI* self, void* param2) {
-    uintptr_t s = (uintptr_t)self;
+// [12] 0x1400b4d00
+void* PastureUI::GetResource(void* param2) {
+    uintptr_t s = (uintptr_t)this;
 
     // Get entity at +0x28, check ComponentEntity
     void* entity = (void*)*(uint64_t*)(s + 0x28);
@@ -309,8 +330,11 @@ void* PastureUI_Slot12(PastureUI* self, void* param2) {
 //
 // Original: 0x1400B4E20.
 
-void PastureUI_Slot9(PastureUI* self, void* param2, int param3, int param4) {
-    uintptr_t s = (uintptr_t)self;
+// [9] 0x1400b4e20
+void PastureUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4,
+                               int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    pastureui_sa::Trace("Slot9(event)", this);
+    uintptr_t s = (uintptr_t)this;
 
     if (param3 == 0x14 && param4 == 500) {
         // Combo selection: get selected resource, call Slot11 via vtable
@@ -325,8 +349,8 @@ void PastureUI_Slot9(PastureUI* self, void* param2, int param3, int param4) {
         int64_t resourceType = *(int64_t*)(resourceArray + (int64_t)resourceIndex * 8);
 
         typedef void (*fn_Slot11_t)(void* self, int64_t resourceType);
-        void** vtable = *(void***)self;
-        ((fn_Slot11_t)vtable[11])(self, resourceType);
+        void** vtable = *(void***)this;
+        ((fn_Slot11_t)vtable[11])(this, resourceType);
     }
     else if (param3 == 0x17 && param4 == 501) {
         // Slider change: read slider value, update max count on PastureComponent
@@ -350,8 +374,8 @@ void PastureUI_Slot9(PastureUI* self, void* param2, int param3, int param4) {
 // Slot13 (vtable +0x68): GetCategoryFilter — returns 2 (pasture category)
 // Original: 0x1400B4CF0 (6 bytes, MOV EAX,2; RET, unhookable)
 // ============================================================
-int PastureUI_Slot13(PastureUI* self) {
-    (void)self;
+// [13] 0x1400b4cf0
+int PastureUI::GetCategory() {
     return 2;
 }
 
@@ -373,99 +397,25 @@ int PastureUI_Slot13(PastureUI* self) {
 //   idx11 (+0x58) 0x1400b4c40 Slot11 — SetLivestockType (drives Pasture Slot14 cmd 2)
 //   idx12 (+0x60) 0x1400b4d00 Slot12 — get current type
 //   idx13 (+0x68) 0x1400b4cf0 Slot13 — category filter = 2 (livestock)
-#include "Object/factory_registration.h"
-#include <cstdlib>
-#include <cstdio>
 
-namespace pastureui_sa {
 
-static void Trace(const char* what, void* self) {
-    fprintf(stderr, "[PastureUI] %s self=%p\n", what, self);
-    fflush(stderr);
-}
 
-// idx4 (+0x20): setup. Needs the DialogInstance (+0x18) the framework seats
-// before dispatch; the combo/slider finds are null-guarded in the port.
-void W_Slot4(void* self) {
-    if (!self || !*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x18)) {
-        Trace("Slot4 SKIP (no DialogInstance)", self);
-        return;
-    }
-    Trace("Slot4", self);
-    PastureUI_Slot4(reinterpret_cast<PastureUI*>(self));
-}
-// idx7 (+0x38): per-frame slider text / combo enable (SA_DialogEntityAlive-guarded).
-void W_Slot7(void* self) {
-    if (!self) return;
-    PastureUI_Slot7(reinterpret_cast<PastureUI*>(self));
-}
-// idx8 (+0x40): the base SelectResourceUI combo refresh (retail 0x140078d30 is a real
-// slot on this class, unlike plain DialogController where idx8 stays inherited), plus a
-// standalone-only self-heal of Slot4 if the slider IBP (+0x38) is still null.
-//
-// CORRECTED 2026-08-09: this comment used to claim idx8 was "the ONLY slot the
-// framework dispatches per frame" (sourced from eventlogui.cpp:343). That is FALSE, and
-// Ghidra disproves it: UI::UserInterface::Update (Runtime 0x1801213c0) ->
-// DialogInstance::ComputeLayout (0x180113d90) -> vtable idx6 OnUpdateLayout
-// (0x1801153a0) walks +0x78 and dispatches controller **idx7** every frame, with no
-// dirty flag; idx8 is OnUpdate (0x180115400), also per frame. BOTH tick. Acting on the
-// false claim, this composite also called PastureUI_Slot7 — which W_Slot7 at idx7
-// already does — so Slot7 ran TWICE per frame. That extra call is removed; idx7 is the
-// per-frame sync path and is sufficient on its own.
-void W_Slot8(void* self) {
-    if (!self) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    if (!SA_DialogEntityAlive(self)) return;
+
+// [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
+void PastureUI::OnUpdate(const System::Time& time) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+    if (!SA_DialogEntityAlive(this)) return;
     if (!*reinterpret_cast<void**>(s + 0x38)) {
-        W_Slot4(self);
+        PastureUI::OnCreated();
         if (!*reinterpret_cast<void**>(s + 0x38)) return;   // still no slider — dialog lacks it
     }
     if (*reinterpret_cast<void**>(s + 0x30))
-        SelectResourceUI_Slot8(self);
-}
-// idx9 (+0x48): element events.
-void W_Slot9(void* self, void* p2, int p3, int p4) {
-    if (!self) return;
-    Trace("Slot9(event)", self);
-    PastureUI_Slot9(reinterpret_cast<PastureUI*>(self), p2, p3, p4);
-}
-}  // namespace pastureui_sa
-
-// [4] 0x1400b5090
-void PastureUI::OnCreated() {
-    pastureui_sa::W_Slot4(this);
+        SelectResourceUI::OnUpdate(time);
 }
 
-// [7] 0x1400b4e50
-void PastureUI::OnUpdateLayout() {
-    pastureui_sa::W_Slot7(this);
-}
 
-// [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
-void PastureUI::OnUpdate(const System::Time& /*time*/) {
-    pastureui_sa::W_Slot8(this);
-}
 
-// [9] 0x1400b4e20
-void PastureUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
-                               int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    pastureui_sa::W_Slot9(this, element, a, b);
-}
 
-// [11] 0x1400b4c40
-void PastureUI::SetResource(int64_t type) {
-    ::PastureUI_Slot11(this, type);
-}
-
-// [12] 0x1400b4d00
-void* PastureUI::GetResource(void* out) {
-    return ::PastureUI_Slot12(this, out);
-}
-
-// [13] 0x1400b4cf0
-int PastureUI::GetCategory() {
-    return ::PastureUI_Slot13(this);
-}
 
 // [0] 0x140020ee0: ~PastureUI (restamp, ~DialogController, ~Internal — the
 // compiler's chain), MemFree on &1.

@@ -313,9 +313,49 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
 // creates DialogInstance if entity doesn't have one yet.
 // Kept as passthrough via fn_EditTool_SelectEntity.
 
+namespace entityui_sa {
+
+void EnsureGlobals() {
+    static uint32_t s_ce = 0, s_tool = 0, s_uidesc = 0;
+    if (!g_TypeId_ComponentEntity) { s_ce   = ::Object::ResolveTypeIdByNameLazy("ComponentEntity"); if (s_ce)   g_TypeId_ComponentEntity = &s_ce; }
+    if (!g_TypeId_ToolUI)          { s_tool = ::Object::ResolveTypeIdByNameLazy("ToolUI");          if (s_tool) g_TypeId_ToolUI = &s_tool; }
+    // EntityUI::Slot7 (page switching) reads the entity description's UIDescription
+    // component (+0x40 = default page index) via GetDescPage_Impl, which derefs
+    // *g_TypeId_UIDescription. In SA that exe .rdata global is null, so resolve the
+    // type-id from the live factory tree. Without it, Slot7 can't pick the citizen's
+    // content page and the panel stays on the empty default page (blank body).
+    if (!g_TypeId_UIDescription)   { s_uidesc = ::Object::ResolveTypeIdByNameLazy("UIDescription"); if (s_uidesc) g_TypeId_UIDescription = &s_uidesc; }
+    // Building panels reach BuildComplete_Impl (page selection for in-progress
+    // construction), which classifies the position component's ResourceComponent.
+    static uint32_t s_res = 0;
+    if (!g_TypeId_ResourceComponent) { s_res = ::Object::ResolveTypeIdByNameLazy("ResourceComponent"); if (s_res) g_TypeId_ResourceComponent = &s_res; }
+
+    // EntityUI::Slot9's buttonCenter (id 0x65) finds the entity's ModelComponent
+    // (single object -> use its Transform) or, failing that, its MapComponent grid
+    // footprint (multi-object building). Those finders read exe .rdata type-id
+    // globals that ResolveAddr leaves NULL in standalone, so fill them from the live
+    // factory tree. The type-ids used here: g_TypeId_ModelComponent_FC is
+    // DAT_1401c7a50 = ModelComponent, and g_TypeId_MapComponent_FC is DAT_1401c79e0
+    // = MapComponent (written by MapComponent_RegisterType) — verified via Ghidra
+    // DATA xrefs. Without these the center button would find no component and
+    // (build path) null-deref.
+    static uint32_t s_model = 0, s_multi = 0, s_mapc = 0;
+    if (!g_TypeId_ModelComponent_FC)    { s_model = ::Object::ResolveTypeIdByNameLazy("ModelComponent");       if (s_model) g_TypeId_ModelComponent_FC = &s_model; }
+    if (!g_TypeId_MultiObjectComponent)  { s_multi = ::Object::ResolveTypeIdByNameLazy("MultiObjectComponent"); if (s_multi) g_TypeId_MultiObjectComponent = &s_multi; }
+    if (!g_TypeId_MapComponent_FC)  { s_mapc  = ::Object::ResolveTypeIdByNameLazy("MapComponent");         if (s_mapc)  g_TypeId_MapComponent_FC = &s_mapc; }
+
+}
+
+
+}  // namespace entityui_sa
+
 // Slot4 (0x1400670D0): Startup — find elements, get entity, reset ToolUI flags.
-void EntityUI_Slot4(EntityUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [4] 0x1400670d0
+void EntityUI::OnCreated() {
+    entityui_sa::EnsureGlobals();
+    if (!g_TypeId_ComponentEntity || !g_TypeId_ToolUI) return;
+    if (!SA_DialogEntityAlive(this)) return;
+    uintptr_t s = (uintptr_t)this;
 
     // Get entity from data source (+0x28), check if it's a ComponentEntity
     void* dataSource = *(void**)(s + 0x28);
@@ -380,8 +420,10 @@ void EntityUI_Slot4(EntityUI* self) {
 }
 
 // Slot6: Remove entity from world tracking set.
-void EntityUI_Slot6(EntityUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [6] 0x140067090
+void EntityUI::OnClosed() {
+    if (!SA_DialogEntityAlive(this)) return;
+    uintptr_t s = (uintptr_t)this;
 
     // Copy +0x30 (entity InternalBasePtr) to local
     uint64_t entityKey = *(uint64_t*)(s + 0x30);
@@ -403,8 +445,12 @@ void EntityUI_Slot6(EntityUI* self) {
 //
 // Original: 0x140066D80.
 
-void EntityUI_Slot7(EntityUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [7] 0x140066d80
+void EntityUI::OnUpdateLayout() {
+    entityui_sa::EnsureGlobals();
+    if (!g_TypeId_UIDescription) return;
+    if (!SA_DialogEntityAlive(this)) return;
+    uintptr_t s = (uintptr_t)this;
 
         // (risky in SA, cosmetic only); the page-selection below is what makes the
         // entity/citizen content actually render, so it always runs.
@@ -611,11 +657,29 @@ void EntityUI_Slot8(EntityUI* self) {
 //
 // Original: 0x140067050.
 
-void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id) {
+// [9] 0x140067050
+void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t msg, int32_t id,
+                              int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    void* param2 = element;
+    if (msg != 0x12) return;
+    if (id == 1) return;              // close -> handled by ToolUI::Slot9
+    if (id != 0x65 && id != 100) return;
+    entityui_sa::EnsureGlobals();
+    // pin (id 100) needs the ToolUI type-id to fetch the sibling controller; center
+    // (id 0x65) tolerates null component type-ids (finders just return "not found").
+    if (id == 100 && !g_TypeId_ToolUI) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    // Gate the entity read like every other EntityUI slot (4/6/7): this body reads
+    // the cached datasource copy (s+0x30) for center (0x65) and toggles tracking on
+    // it for pin (100). On a just-demolished building's still-open panel that +0x30
+    // weak-ref dangles, so a center/pin click would deref freed memory
+    // (fn_FindComponent_Character). SA_DialogEntityAlive checks the +0x28
+    // datasource (of which +0x30 is a copy) for null / marked-for-removal (0x400).
+    if (!SA_DialogEntityAlive(this)) return;
     (void)param2;
     if (msg != 0x12) return;
 
-    uintptr_t s = (uintptr_t)self;
+    uintptr_t s = (uintptr_t)this;
     void* playerController = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x120);
 
     if (id == 1) {
@@ -782,125 +846,15 @@ void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id) {
 #include <cstdlib>
 #include <cstdio>
 
-namespace entityui_sa {
 
-void EnsureGlobals() {
-    static uint32_t s_ce = 0, s_tool = 0, s_uidesc = 0;
-    if (!g_TypeId_ComponentEntity) { s_ce   = ::Object::ResolveTypeIdByNameLazy("ComponentEntity"); if (s_ce)   g_TypeId_ComponentEntity = &s_ce; }
-    if (!g_TypeId_ToolUI)          { s_tool = ::Object::ResolveTypeIdByNameLazy("ToolUI");          if (s_tool) g_TypeId_ToolUI = &s_tool; }
-    // EntityUI::Slot7 (page switching) reads the entity description's UIDescription
-    // component (+0x40 = default page index) via GetDescPage_Impl, which derefs
-    // *g_TypeId_UIDescription. In SA that exe .rdata global is null, so resolve the
-    // type-id from the live factory tree. Without it, Slot7 can't pick the citizen's
-    // content page and the panel stays on the empty default page (blank body).
-    if (!g_TypeId_UIDescription)   { s_uidesc = ::Object::ResolveTypeIdByNameLazy("UIDescription"); if (s_uidesc) g_TypeId_UIDescription = &s_uidesc; }
-    // Building panels reach BuildComplete_Impl (page selection for in-progress
-    // construction), which classifies the position component's ResourceComponent.
-    static uint32_t s_res = 0;
-    if (!g_TypeId_ResourceComponent) { s_res = ::Object::ResolveTypeIdByNameLazy("ResourceComponent"); if (s_res) g_TypeId_ResourceComponent = &s_res; }
 
-    // EntityUI::Slot9's buttonCenter (id 0x65) finds the entity's ModelComponent
-    // (single object -> use its Transform) or, failing that, its MapComponent grid
-    // footprint (multi-object building). Those finders read exe .rdata type-id
-    // globals that ResolveAddr leaves NULL in standalone, so fill them from the live
-    // factory tree. The type-ids used here: g_TypeId_ModelComponent_FC is
-    // DAT_1401c7a50 = ModelComponent, and g_TypeId_MapComponent_FC is DAT_1401c79e0
-    // = MapComponent (written by MapComponent_RegisterType) — verified via Ghidra
-    // DATA xrefs. Without these the center button would find no component and
-    // (build path) null-deref.
-    static uint32_t s_model = 0, s_multi = 0, s_mapc = 0;
-    if (!g_TypeId_ModelComponent_FC)    { s_model = ::Object::ResolveTypeIdByNameLazy("ModelComponent");       if (s_model) g_TypeId_ModelComponent_FC = &s_model; }
-    if (!g_TypeId_MultiObjectComponent)  { s_multi = ::Object::ResolveTypeIdByNameLazy("MultiObjectComponent"); if (s_multi) g_TypeId_MultiObjectComponent = &s_multi; }
-    if (!g_TypeId_MapComponent_FC)  { s_mapc  = ::Object::ResolveTypeIdByNameLazy("MapComponent");         if (s_mapc)  g_TypeId_MapComponent_FC = &s_mapc; }
 
-}
-
-void W_Slot4(void* self) {
-    EnsureGlobals();
-    if (!self || !g_TypeId_ComponentEntity || !g_TypeId_ToolUI) return;
-    if (!SA_DialogEntityAlive(self)) return;
-    EntityUI_Slot4(reinterpret_cast<EntityUI*>(self));
-}
-void W_Slot6(void* self) {
-    if (!self || !SA_DialogEntityAlive(self)) return;
-    EntityUI_Slot6(reinterpret_cast<EntityUI*>(self));
-}
-// Slot7 = page switching. The info panel's element tree has the entity/citizen
-// content on a non-default page of the "pages" PageElement (e.g. the tabbed
-// "pageTabGroup" for citizens). Slot7 reads the entity's default page and calls
-// PageElement::SetActivePage — WITHOUT it the panel shows only the empty default
-// page (chrome/title only). The SA build of EntityUI_Slot7 skips the cosmetic
-// tool-hint highlight (EditTool/ToolUI vtable calls, #ifndef STANDALONE_EXE) and
-// runs only the page-selection, which is what makes the body render.
-void W_Slot7(void* self) {
-    EnsureGlobals();
-    if (!self || !g_TypeId_UIDescription) return;
-    if (!SA_DialogEntityAlive(self)) return;
-    EntityUI_Slot7(reinterpret_cast<EntityUI*>(self));
-}
-// +0x40 per-frame: the framework dispatches only vtable+0x40 each frame, so drive
-// the page-selection Slot7 from here (the exe's real +0x40 is the input handler,
-// intentionally left a no-op in SA — higher risk, no display payoff).
-void W_OnUpdate(void* self, void* /*time*/) { W_Slot7(self); }
-
-// +0x48 OnElementEvent — the button-command dispatch. Runtime DialogInstance::On-
-// ElementEvent (0x180114ed0) forwards every element event to each controller's
-// vtable+0x48, so this receives the frame buttons: buttonCenter (id 0x65, msg 0x12)
-// and checkPin (id 100). Those are what implement the panel's "center" and "pin"
-// options for EVERY entity info dialog (EntityUI is the shared frame controller on
-// both building and citizen panels). Wiring this makes them functional in standalone.
-//
-// The close button (id 1) is intentionally NOT forwarded here: retail EntityUI::Slot9
-// closes via SetEditMode(0), which tears down the active EditTool (vtable Shutdown +
-// DeletePtr). In standalone the sibling ToolUI::Slot9 already handles the close (and
-// drops the EditTool's stale dialog ref instead of destroying the tool — see
-// toolui.cpp Slot9), so running SetEditMode here would re-introduce the very
-// tool-teardown crash that path avoids. Skipping id 1 leaves close to ToolUI.
-void W_Slot9(void* self, void* p2, int msg, int id, int /*mx*/, int /*my*/) {
-    if (!self || msg != 0x12) return;
-    if (id == 1) return;              // close -> handled by ToolUI::Slot9
-    if (id != 0x65 && id != 100) return;
-    EnsureGlobals();
-    // pin (id 100) needs the ToolUI type-id to fetch the sibling controller; center
-    // (id 0x65) tolerates null component type-ids (finders just return "not found").
-    if (id == 100 && !g_TypeId_ToolUI) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    // Gate the entity read like every other EntityUI slot wrapper (W_Slot4/6/7):
-    // EntityUI_Slot9 reads the cached datasource copy (s+0x30) for center (0x65) and
-    // toggles tracking on it for pin (100). On a just-demolished building's still-open
-    // panel that +0x30 weak-ref dangles, so a center/pin click would deref freed
-    // memory (fn_FindComponent_Character). SA_DialogEntityAlive checks the +0x28
-    // datasource (of which +0x30 is a copy) for null / marked-for-removal (0x400).
-    if (!SA_DialogEntityAlive(self)) return;
-    EntityUI_Slot9(reinterpret_cast<EntityUI*>(self), p2, msg, id);
-}
-}  // namespace entityui_sa
-
-// [4] 0x1400670d0
-void EntityUI::OnCreated() {
-    entityui_sa::W_Slot4(this);
-}
-
-// [6] 0x140067090
-void EntityUI::OnClosed() {
-    entityui_sa::W_Slot6(this);
-}
-
-// [7] 0x140066d80
-void EntityUI::OnUpdateLayout() {
-    entityui_sa::W_Slot7(this);
-}
 
 // [8] 0x140066ad0
-void EntityUI::OnUpdate(const System::Time& time) {
-    entityui_sa::W_OnUpdate(this, const_cast<System::Time*>(&time));
+void EntityUI::OnUpdate(const System::Time& /*time*/) {
+    EntityUI::OnUpdateLayout();
 }
 
-// [9] 0x140067050
-void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
-                              int32_t c, int32_t d, int32_t /*e*/, void* /*userData*/) {
-    entityui_sa::W_Slot9(this, element, a, b, c, d);
-}
 
 // [0] 0x1400112d0: ~EntityUI (restamp, ~DialogController, ~Internal — the
 // compiler's chain), MemFree on &1.

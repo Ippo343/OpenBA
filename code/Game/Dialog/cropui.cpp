@@ -233,20 +233,22 @@ void CropUI_Slot4(CropUI* self) {
 //
 // Original: 0x140078CB0.
 
-void CropUI_Slot7(CropUI* self) {
+// [7] 0x140078cb0 — SelectResourceUI's own slot 7 body (the tree ported it under
+// CropUI's name; it reads only the base's +0x28/+0x30).
+void SelectResourceUI::OnUpdateLayout() {
     // Per-frame (+0x38): bail on a dead / marked-for-removal datasource before the
     // IsDerivedFrom probe (reliable via the one-frame removal deferral, see
     // entitylist.cpp Step 0).
-    if (!SA_DialogEntityAlive(self)) return;
+    if (!SA_DialogEntityAlive(this)) return;
     // Wrap entity in InternalBasePtr (base class requirement, not used directly)
-    void* entity = *(void**)((uintptr_t)self + 0x28);
+    void* entity = *(void**)((uintptr_t)this + 0x28);
     bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
 
     // Get selectResource combo element
-    void* combo = (void*)self->internalBasePtr;
+    void* combo = (void*)this->internalBasePtr;
 
     // Enable combo if it has items, disable if empty
     int itemCount = reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount();  // B.3.6 bridge

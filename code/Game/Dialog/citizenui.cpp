@@ -175,6 +175,51 @@ static uint64_t FindElemInTree(void* elem, const char* name) {
     return CitUI_OkPtr(result) ? result : 0;
 }
 
+namespace citizenui_sa {
+
+// g_pAgeMultiplier's exe .rdata (0x140172198) is uninitialized in the standalone
+// image (unreadable / zero-fill), so fall back to 1.0 — citizen age at CitizenAI+0x3c
+// is already in display years for the panel. Not a crash risk either way; the fallback
+// just avoids a null-deref in the age line.
+static float s_ageMul = 1.0f;
+
+void EnsureGlobals() {
+    static uint32_t s_ce = 0, s_cd = 0, s_cai = 0, s_prof = 0, s_ext = 0;
+    static uint32_t s_profZero = 0;  // safe no-op type-id for fn_FindComponent_CitizenAI
+    if (!g_TypeId_ComponentEntity)        { s_ce  = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");    if (s_ce)   g_TypeId_ComponentEntity = &s_ce; }
+    if (!g_TypeId_CitizenDescription)     { s_cd  = ::Object::ResolveTypeIdByNameLazy("CitizenDescription"); if (s_cd)   g_TypeId_CitizenDescription = &s_cd; }
+    // g_TypeId_CitizenComponent_FC is DAT_1401c7158 — its name says "CitizenComponent"
+    // now, but the finder that reads it (fn_FindComponent_Citizen) is what the AI panel
+    // actually needs: the name at +0x28, age +0x3c, profession +0x1f0, housing +0x248,
+    // desc +0x288 all live on the CitizenComponent it resolves (the same component the
+    // founding path writes the generated name to). Resolving the literal
+    // "CitizenAIComponent" here finds a DIFFERENT sibling component whose +0x28 is
+    // unset, so the dialog read the wrong object. Resolve "CitizenComponent" (matching
+    // the founding writer's TypeId lookup) so the dialog reads the citizen data that
+    // was actually filled in.
+    if (!g_TypeId_CitizenComponent_FC)    { s_cai = ::Object::GetTypeIdByName("CitizenComponent"); if (s_cai)  g_TypeId_CitizenComponent_FC = &s_cai; }
+    if (!g_TypeId_CitizenAIComponent)     { s_prof= ::Object::ResolveTypeIdByNameLazy("ProfessionComponent");if (s_prof) g_TypeId_CitizenAIComponent = &s_prof; }
+    // ProfessionComponent's registered name doesn't resolve in the standalone factory
+    // tree (0x1401c70e8 is settled as CitizenAIComponent's BaseTypeInfo — writer
+    // CitizenAIComponent_RegisterType). It's used ONLY by the Slot7 action-text lookup, which
+    // is now null-guarded (skips if the component isn't found). Point the global at a
+    // static 0 so fn_FindComponent_CitizenAI is a safe no-op (finds nothing) instead of
+    // dereferencing a null type-id pointer.
+    if (!g_TypeId_CitizenAIComponent)     { g_TypeId_CitizenAIComponent = &s_profZero; }
+    if (!g_TypeId_Dialog)               { s_ext = ::Object::ResolveTypeIdByNameLazy("External");           if (s_ext)  g_TypeId_Dialog = &s_ext; }
+    // The Home/Profession(workplace) buttons call Toolbar_CenterOnEntity_Impl, whose
+    // EditTool re-select derefs *g_TypeId_EditTool — NULL in standalone (raw exe .rdata).
+    // Resolve it here so the camera snap AND the EditTool re-highlight both work; the
+    // inline also guards the deref, so an unresolved id degrades to camera-move only
+    // instead of faulting.
+    static uint32_t s_edit = 0;
+    if (!g_TypeId_EditTool)               { s_edit = ::Object::ResolveTypeIdByNameLazy("EditTool");          if (s_edit) g_TypeId_EditTool = &s_edit; }
+    if (!g_pAgeMultiplier) g_pAgeMultiplier = &s_ageMul;
+
+}
+
+}  // namespace citizenui_sa
+
 // ============================================================
 // Slot4: Setup — finds all named elements, stores pointers, sets button IDs
 // ============================================================
@@ -187,8 +232,11 @@ static uint64_t FindElemInTree(void* elem, const char* name) {
 // Three buttons get element IDs: buttonProfession(0x227), buttonHome(0x226),
 // buttonFollow(0x228).
 
-void CitizenUI_Slot4(CitizenUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [4] 0x1400651a0
+void CitizenUI::OnCreated() {
+    citizenui_sa::EnsureGlobals();
+    if (!SA_DialogEntityAlive(this)) return;
+    uintptr_t s = (uintptr_t)this;
     void* dialogInst = *(void**)(s + 0x18);
     void* parentElem = *(void**)(s + 0x20);
 
@@ -232,8 +280,10 @@ void CitizenUI_Slot4(CitizenUI* self) {
 // ============================================================
 // Original: 0x140065130
 
-void CitizenUI_Slot6(CitizenUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [6] 0x140065130
+void CitizenUI::OnClosed() {
+    if (!SA_DialogEntityAlive(this)) return;
+    uintptr_t s = (uintptr_t)this;
 
     uint64_t subDialog = *(uint64_t*)(s + 0xE0);
     if (subDialog != 0) {
@@ -269,8 +319,15 @@ void CitizenUI_Slot6(CitizenUI* self) {
 // - Name-is text parameter
 // - Action text (based on current state from profession component)
 
-void CitizenUI_Slot7(CitizenUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [7] 0x140064ae0
+void CitizenUI::OnUpdateLayout() {
+    citizenui_sa::EnsureGlobals();
+    // ProfessionComponent is not required — its only use (action text) is null-guarded
+    // and its global has a safe static-0 fallback (see EnsureGlobals).
+    if (!g_TypeId_ComponentEntity || !g_TypeId_CitizenDescription
+        || !g_TypeId_CitizenComponent_FC) return;
+    if (!SA_DialogEntityAlive(this)) return;
+    uintptr_t s = (uintptr_t)this;
 
     CitizenUI_EnsureProfessionTypeId();
 
@@ -564,11 +621,17 @@ void CitizenUI_Slot7(CitizenUI* self) {
 // Navigation uses Toolbar_CenterOnEntity_Impl (FUN_140103040) which moves
 // the camera to the entity's world position or build footprint center.
 
-void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param4) {
+// [9] 0x1400650f0
+void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4,
+                               int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    citizenui_sa::EnsureGlobals();
+    // Gate on datasource-alive like the sibling slots (4/6/7): a click on a dead
+    // citizen's still-open panel must not drive this body into a freed entity.
+    if (!SA_DialogEntityAlive(this)) return;
     // Only handle event type 0x12 (button click)
     if (param3 != 0x12) return;
 
-    uintptr_t s = (uintptr_t)self;
+    uintptr_t s = (uintptr_t)this;
 
     CitizenUI_EnsureProfessionTypeId();
 
@@ -672,7 +735,7 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
 
             uint64_t selfRef = 0;
             new (&selfRef) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
+                reinterpret_cast<RtObject::Internal*>((void*)this));   // B.3.3 bridge
             *(uint64_t*)(fd + 0xC0) = selfRef;         // controller back-reference
 
             *(uint64_t*)(fd + 0xC8) = 0;               // textFollow (set by Slot4)
@@ -724,106 +787,15 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
 #include <cstdlib>
 #include <cstdio>
 
-namespace citizenui_sa {
 
-// g_pAgeMultiplier's exe .rdata (0x140172198) is uninitialized in the standalone
-// image (unreadable / zero-fill), so fall back to 1.0 — citizen age at CitizenAI+0x3c
-// is already in display years for the panel. Not a crash risk either way; the fallback
-// just avoids a null-deref in the age line.
-static float s_ageMul = 1.0f;
 
-void EnsureGlobals() {
-    static uint32_t s_ce = 0, s_cd = 0, s_cai = 0, s_prof = 0, s_ext = 0;
-    static uint32_t s_profZero = 0;  // safe no-op type-id for fn_FindComponent_CitizenAI
-    if (!g_TypeId_ComponentEntity)        { s_ce  = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");    if (s_ce)   g_TypeId_ComponentEntity = &s_ce; }
-    if (!g_TypeId_CitizenDescription)     { s_cd  = ::Object::ResolveTypeIdByNameLazy("CitizenDescription"); if (s_cd)   g_TypeId_CitizenDescription = &s_cd; }
-    // g_TypeId_CitizenComponent_FC is DAT_1401c7158 — its name says "CitizenComponent"
-    // now, but the finder that reads it (fn_FindComponent_Citizen) is what the AI panel
-    // actually needs: the name at +0x28, age +0x3c, profession +0x1f0, housing +0x248,
-    // desc +0x288 all live on the CitizenComponent it resolves (the same component the
-    // founding path writes the generated name to). Resolving the literal
-    // "CitizenAIComponent" here finds a DIFFERENT sibling component whose +0x28 is
-    // unset, so the dialog read the wrong object. Resolve "CitizenComponent" (matching
-    // the founding writer's TypeId lookup) so the dialog reads the citizen data that
-    // was actually filled in.
-    if (!g_TypeId_CitizenComponent_FC)    { s_cai = ::Object::GetTypeIdByName("CitizenComponent"); if (s_cai)  g_TypeId_CitizenComponent_FC = &s_cai; }
-    if (!g_TypeId_CitizenAIComponent)     { s_prof= ::Object::ResolveTypeIdByNameLazy("ProfessionComponent");if (s_prof) g_TypeId_CitizenAIComponent = &s_prof; }
-    // ProfessionComponent's registered name doesn't resolve in the standalone factory
-    // tree (0x1401c70e8 is settled as CitizenAIComponent's BaseTypeInfo — writer
-    // CitizenAIComponent_RegisterType). It's used ONLY by the Slot7 action-text lookup, which
-    // is now null-guarded (skips if the component isn't found). Point the global at a
-    // static 0 so fn_FindComponent_CitizenAI is a safe no-op (finds nothing) instead of
-    // dereferencing a null type-id pointer.
-    if (!g_TypeId_CitizenAIComponent)     { g_TypeId_CitizenAIComponent = &s_profZero; }
-    if (!g_TypeId_Dialog)               { s_ext = ::Object::ResolveTypeIdByNameLazy("External");           if (s_ext)  g_TypeId_Dialog = &s_ext; }
-    // The Home/Profession(workplace) buttons call Toolbar_CenterOnEntity_Impl, whose
-    // EditTool re-select derefs *g_TypeId_EditTool — NULL in standalone (raw exe .rdata).
-    // Resolve it here so the camera snap AND the EditTool re-highlight both work; the
-    // inline also guards the deref, so an unresolved id degrades to camera-move only
-    // instead of faulting.
-    static uint32_t s_edit = 0;
-    if (!g_TypeId_EditTool)               { s_edit = ::Object::ResolveTypeIdByNameLazy("EditTool");          if (s_edit) g_TypeId_EditTool = &s_edit; }
-    if (!g_pAgeMultiplier) g_pAgeMultiplier = &s_ageMul;
 
-}
-
-void W_Slot4(void* self) {
-    EnsureGlobals();
-    if (!self || !SA_DialogEntityAlive(self)) return;
-    CitizenUI_Slot4(reinterpret_cast<CitizenUI*>(self));
-}
-void W_Slot6(void* self) {
-    if (!self || !SA_DialogEntityAlive(self)) return;
-    CitizenUI_Slot6(reinterpret_cast<CitizenUI*>(self));
-}
-void W_Slot7(void* self) {
-    EnsureGlobals();
-    // ProfessionComponent is not required — its only use (action text) is null-guarded
-    // and its global has a safe static-0 fallback (see EnsureGlobals).
-    if (!self || !g_TypeId_ComponentEntity || !g_TypeId_CitizenDescription
-        || !g_TypeId_CitizenComponent_FC) return;
-    if (!SA_DialogEntityAlive(self)) return;
-    CitizenUI_Slot7(reinterpret_cast<CitizenUI*>(self));
-}
-void W_OnUpdate(void* self, void* /*time*/) { W_Slot7(self); }   // +0x40 per-frame
-void W_Slot9(void* self, void* p2, int msg, int id) {
-    EnsureGlobals();
-    // Follow button (0x228) builds a FollowDialog whose vtable is g_FollowDialog_Vtable
-    // — null in standalone. CitizenUI_Slot9 handles profession/home unconditionally;
-    // guard the follow path by skipping if the vtable is unresolved (leave a no-op).
-    // Also gate on datasource-alive like the sibling slots (W_Slot4/6/7): a click on a
-    // dead citizen's still-open panel must not drive CitizenUI_Slot9 into a freed entity.
-    if (self && SA_DialogEntityAlive(self))
-        CitizenUI_Slot9(reinterpret_cast<CitizenUI*>(self),
-                        reinterpret_cast<uint64_t>(p2), msg, id);
-}
-}  // namespace citizenui_sa
-
-// [4] 0x1400651a0
-void CitizenUI::OnCreated() {
-    citizenui_sa::W_Slot4(this);
-}
-
-// [6] 0x140065130
-void CitizenUI::OnClosed() {
-    citizenui_sa::W_Slot6(this);
-}
-
-// [7] 0x140064ae0
-void CitizenUI::OnUpdateLayout() {
-    citizenui_sa::W_Slot7(this);
-}
 
 // [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
-void CitizenUI::OnUpdate(const System::Time& time) {
-    citizenui_sa::W_OnUpdate(this, const_cast<System::Time*>(&time));
+void CitizenUI::OnUpdate(const System::Time& /*time*/) {
+    CitizenUI::OnUpdateLayout();
 }
 
-// [9] 0x1400650f0
-void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
-                               int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    citizenui_sa::W_Slot9(this, element, a, b);
-}
 
 // [0] 0x140010fd0: ~CitizenUI (restamp, ~DialogController, ~Internal — the
 // compiler's chain), MemFree on &1.

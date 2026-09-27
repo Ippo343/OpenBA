@@ -800,6 +800,46 @@ static void Game_InfectRandomCitizen_Impl() {
     fn_DiseaseComponent_Infect(citizen);
 }
 
+namespace debugui_sa {
+
+// Idempotent heal of the exe-.rdata type-id globals. Safe to call on every slot
+// entry; each `if (*global)` short-circuits once filled.
+void EnsureGlobals() {
+    struct Heal { uint32_t** g; uint32_t* s; const char* name; };
+    static uint32_t s_build = 0, s_rawmat = 0, s_interactC = 0, s_interactD = 0,
+                    s_citDesc = 0, s_disease = 0, s_drawable = 0, s_internal = 0;
+    static const Heal heals[] = {
+        { &g_TypeId_ComponentDescription_FC,         &s_build,     "ComponentDescription"   },
+        { &g_TypeId_RawMaterialDescription, &s_rawmat,    "RawMaterialDescription" },
+        { &g_TypeId_InteractComponent_FC,  &s_interactC, "InteractComponent"      },
+        { &g_TypeId_InteractDescription_FC,   &s_interactD, "InteractDescription"    },
+        { &g_TypeId_CitizenDescription,     &s_citDesc,   "CitizenDescription"     },
+        { &g_TypeId_DiseaseDescription,     &s_disease,   "Disease"                },
+        { &g_TypeId_DrawableType,           &s_drawable,  "PopulationDescription"  },
+        { &g_TypeId_Element,         &s_internal,  "Internal"               },
+    };
+    for (const Heal& h : heals) {
+        // A non-null global is not necessarily a USABLE one: some of these .rdata
+        // cells now resolve to real standalone storage (e.g. 0x1401c47c8 is backed by
+        // reg_herd_live.cpp) that is only filled lazily by whichever port gets there
+        // first. Heal a registered-but-still-zero id too, or IsDerivedFrom(x, 0) fails
+        // for every candidate and the combo it gates comes up empty.
+        if (*h.g && **h.g) continue;
+        if (*h.s == 0) *h.s = ::Object::ResolveTypeIdByNameLazy(h.name);
+        if (!*h.s) continue;
+        if (*h.g) **h.g = *h.s;   // fill the real .rdata cell in place
+        else      *h.g = h.s;
+    }
+    // CitizenComponent id resolves via GetTypeIdByName (the proven CitizenUI choice).
+    if (!g_TypeId_CitizenComponent_FC) {
+        static uint32_t s_cai = 0;
+        if (s_cai == 0) s_cai = ::Object::GetTypeIdByName("CitizenComponent");
+        if (s_cai) g_TypeId_CitizenComponent_FC = &s_cai;
+    }
+}
+
+}  // namespace debugui_sa
+
 // ============================================================
 // DebugUI::Slot8 (vtable +0x40) -- Update performance counters
 // ============================================================
@@ -824,61 +864,69 @@ static void Game_InfectRandomCitizen_Impl() {
 //   +0x128 = smoothed total time accumulator (float)
 //
 // Original: 0x1400610C0
-void DebugUI_Slot8(DebugUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [8] 0x1400610c0
+void DebugUI::OnUpdate(const System::Time& /*time*/) {
+    debugui_sa::EnsureGlobals();
+    // perf counters (self-guarded), then keep swatches/day live (the tree's
+    // per-frame drive of slot 7, a standalone deviation).
+    [this] {
+        uintptr_t s = (uintptr_t)this;
 
-    // MainLoop singleton access: slot → *slot → *(result + 0x10)
-    // g_pMainLoopSingleton = &Engine::MainLoop::_singleton (retail: *exref 0x140151440)
-    // So: *g_pMainLoopSingleton = the MainLoop, then +0x10 = its video context
-    // Disasm: MOV RAX,[slot] / MOV RDX,[RAX] / MOV RSI,[RDX+0x10]
-    if (!g_pMainLoopSingleton) return;
-    uintptr_t engineObj = (uintptr_t)*g_pMainLoopSingleton;
-    if (!engineObj) return;
-    uintptr_t engineState = *(uintptr_t*)(engineObj + 0x10);
-    if (!engineState) return;
+        // MainLoop singleton access: slot → *slot → *(result + 0x10)
+        // g_pMainLoopSingleton = &Engine::MainLoop::_singleton (retail: *exref 0x140151440)
+        // So: *g_pMainLoopSingleton = the MainLoop, then +0x10 = its video context
+        // Disasm: MOV RAX,[slot] / MOV RDX,[RAX] / MOV RSI,[RDX+0x10]
+        if (!g_pMainLoopSingleton) return;
+        uintptr_t engineObj = (uintptr_t)*g_pMainLoopSingleton;
+        if (!engineObj) return;
+        uintptr_t engineState = *(uintptr_t*)(engineObj + 0x10);
+        if (!engineState) return;
 
-    // Read and display 4 debug counters from engine state
-    void* numBatches = *(void**)(s + 0x58);
-    if (numBatches) reinterpret_cast<UI::NumberElement*>(numBatches)->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x2158)));  // B.3.6 bridge
+        // Read and display 4 debug counters from engine state
+        void* numBatches = *(void**)(s + 0x58);
+        if (numBatches) reinterpret_cast<UI::NumberElement*>(numBatches)->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x2158)));  // B.3.6 bridge
 
-    void* numDrawCalls = *(void**)(s + 0x40);
-    if (numDrawCalls) reinterpret_cast<UI::NumberElement*>(numDrawCalls)->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x215C)));  // B.3.6 bridge
+        void* numDrawCalls = *(void**)(s + 0x40);
+        if (numDrawCalls) reinterpret_cast<UI::NumberElement*>(numDrawCalls)->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x215C)));  // B.3.6 bridge
 
-    void* numTriangles = *(void**)(s + 0x48);
-    if (numTriangles) reinterpret_cast<UI::NumberElement*>(numTriangles)->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x2150)));  // B.3.6 bridge
+        void* numTriangles = *(void**)(s + 0x48);
+        if (numTriangles) reinterpret_cast<UI::NumberElement*>(numTriangles)->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x2150)));  // B.3.6 bridge
 
-    void* numVertices = *(void**)(s + 0x50);
-    if (numVertices) reinterpret_cast<UI::NumberElement*>(numVertices)->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x2154)));  // B.3.6 bridge
+        void* numVertices = *(void**)(s + 0x50);
+        if (numVertices) reinterpret_cast<UI::NumberElement*>(numVertices)->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x2154)));  // B.3.6 bridge
 
-    // Read frame time and total time from engine object (NOT engineState)
-    // Original: *(*(exref 0x140151440) + 0x68) and + 0x58
-    int64_t frameTimeTicks = *(int64_t*)(engineObj + 0x68);
-    int64_t totalTimeTicks = *(int64_t*)(engineObj + 0x58);
-    float frameSeconds = reinterpret_cast<const System::Time*>(&frameTimeTicks)->AsSeconds();   // B.3.4 bridge
-    float totalSeconds = reinterpret_cast<const System::Time*>(&totalTimeTicks)->AsSeconds();   // B.3.4 bridge
+        // Read frame time and total time from engine object (NOT engineState)
+        // Original: *(*(exref 0x140151440) + 0x68) and + 0x58
+        int64_t frameTimeTicks = *(int64_t*)(engineObj + 0x68);
+        int64_t totalTimeTicks = *(int64_t*)(engineObj + 0x58);
+        float frameSeconds = reinterpret_cast<const System::Time*>(&frameTimeTicks)->AsSeconds();   // B.3.4 bridge
+        float totalSeconds = reinterpret_cast<const System::Time*>(&totalTimeTicks)->AsSeconds();   // B.3.4 bridge
 
-    // Exponential moving average smoothing constants
-    const float alpha = 0.95f;
-    const float beta  = 0.05f;
+        // Exponential moving average smoothing constants
+        const float alpha = 0.95f;
+        const float beta  = 0.05f;
 
-    float* smoothedFPS     = (float*)(s + 0x120);
-    float* smoothedFrameMS = (float*)(s + 0x124);
-    float* smoothedTotalMS = (float*)(s + 0x128);
+        float* smoothedFPS     = (float*)(s + 0x120);
+        float* smoothedFrameMS = (float*)(s + 0x124);
+        float* smoothedTotalMS = (float*)(s + 0x128);
 
-    float instantFPS = (totalSeconds > 0.0f) ? (1.0f / totalSeconds) : 0.0f;
-    *smoothedTotalMS = (*smoothedTotalMS) * alpha + totalSeconds * beta;
-    *smoothedFPS     = instantFPS * beta + (*smoothedFPS) * alpha;
-    *smoothedFrameMS = (*smoothedFrameMS) * alpha + frameSeconds * beta;
+        float instantFPS = (totalSeconds > 0.0f) ? (1.0f / totalSeconds) : 0.0f;
+        *smoothedTotalMS = (*smoothedTotalMS) * alpha + totalSeconds * beta;
+        *smoothedFPS     = instantFPS * beta + (*smoothedFPS) * alpha;
+        *smoothedFrameMS = (*smoothedFrameMS) * alpha + frameSeconds * beta;
 
-    // Display smoothed values
-    void* numFPS = *(void**)(s + 0x60);
-    if (numFPS) reinterpret_cast<UI::NumberElement*>(numFPS)->SetValue(static_cast<int32_t>((int)*smoothedFPS));  // B.3.6 bridge
+        // Display smoothed values
+        void* numFPS = *(void**)(s + 0x60);
+        if (numFPS) reinterpret_cast<UI::NumberElement*>(numFPS)->SetValue(static_cast<int32_t>((int)*smoothedFPS));  // B.3.6 bridge
 
-    void* numFrameMS = *(void**)(s + 0x68);
-    if (numFrameMS) reinterpret_cast<UI::NumberElement*>(numFrameMS)->SetValue(static_cast<float>(*smoothedFrameMS * 1000.0f));  // B.3.6 bridge
+        void* numFrameMS = *(void**)(s + 0x68);
+        if (numFrameMS) reinterpret_cast<UI::NumberElement*>(numFrameMS)->SetValue(static_cast<float>(*smoothedFrameMS * 1000.0f));  // B.3.6 bridge
 
-    void* numTotalMS = *(void**)(s + 0x70);
-    if (numTotalMS) reinterpret_cast<UI::NumberElement*>(numTotalMS)->SetValue(static_cast<float>(*smoothedTotalMS * 1000.0f));  // B.3.6 bridge
+        void* numTotalMS = *(void**)(s + 0x70);
+        if (numTotalMS) reinterpret_cast<UI::NumberElement*>(numTotalMS)->SetValue(static_cast<float>(*smoothedTotalMS * 1000.0f));  // B.3.6 bridge
+    }();
+    if (g_TypeId_Element)
+        DebugUI::OnUpdateLayout();
 }
 
 // ============================================================
@@ -898,8 +946,11 @@ void DebugUI_Slot8(DebugUI* self) {
 //   +0x100 = imageColorFog preview element
 //
 // Original: 0x140061280
-void DebugUI_Slot7(DebugUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [7] 0x140061280
+void DebugUI::OnUpdateLayout() {
+    debugui_sa::EnsureGlobals();
+    if (!g_TypeId_Element) return;  // FindElemBase / child deref
+    uintptr_t s = (uintptr_t)this;
 
     // --- Day slider text update ---
     // Original: CheckPtr(+0x78), get child, CheckPtr child, IsDerivedFrom, IBP ctor,
@@ -1160,8 +1211,19 @@ static void* DebugUI_FindAndSetId(void* parentElem, const char* name, int id) {
     return elem;
 }
 
-void DebugUI_Slot4(DebugUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [4] 0x1400619e0
+void DebugUI::OnCreated() {
+    debugui_sa::EnsureGlobals();
+    // Slot4 unconditionally dereferences ObjectInternal (every FindElemBase),
+    // DiseaseDescription (diseaseCombo populate) and DrawableType (drawCombo
+    // populate). Skip the whole setup rather than fault if any failed to
+    // resolve; all three reliably resolve post-Engine::Startup.
+    if (!g_TypeId_Element || !*g_TypeId_Element
+        || !g_TypeId_DiseaseDescription || !*g_TypeId_DiseaseDescription
+        || !g_TypeId_DrawableType || !*g_TypeId_DrawableType) {
+        return;
+    }
+    uintptr_t s = (uintptr_t)this;
     void* parentElem = *(void**)(s + 0x20);
 
     // ==========================================================
@@ -1204,7 +1266,7 @@ void DebugUI_Slot4(DebugUI* self) {
     // ==========================================================
     {
         void* combo = DebugUI_FindElemBase(parentElem, "diseaseCombo");
-        self->diseaseCombo = combo;
+        this->diseaseCombo = combo;
 
         if (combo) {
             // Populate from ExternalList (resource descriptions at gameWorld+0xA8).
@@ -1240,9 +1302,9 @@ void DebugUI_Slot4(DebugUI* self) {
                                            (void*)((uintptr_t)disease + 0x28));
                 uint8_t spriteBuf[16];
                 ::new (spriteBuf) UI::Sprite();
-                reinterpret_cast<UI::ComboElement*>(self->diseaseCombo)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), textBuf, nullptr);  // B.3.6 bridge
+                reinterpret_cast<UI::ComboElement*>(this->diseaseCombo)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), textBuf, nullptr);  // B.3.6 bridge
             }
-            reinterpret_cast<UI::ComboElement*>(self->diseaseCombo)->SetCurrentItem(0);  // B.3.6 bridge
+            reinterpret_cast<UI::ComboElement*>(this->diseaseCombo)->SetCurrentItem(0);  // B.3.6 bridge
         }
     }
     DebugUI_FindAndSetId(parentElem, "diseaseButton", 0x147);
@@ -1294,10 +1356,10 @@ void DebugUI_Slot4(DebugUI* self) {
     // ==========================================================
     {
         void* combo = DebugUI_FindElemBase(parentElem, "drawCombo");
-        self->drawCombo = combo;
+        this->drawCombo = combo;
 
         if (combo) {
-            reinterpret_cast<UI::Element*>(self->drawCombo)->SetElementId(0x166);  // B.3.6 bridge
+            reinterpret_cast<UI::Element*>(this->drawCombo)->SetElementId(0x166);  // B.3.6 bridge
 
             // Populate from drawable type list at gameWorld+0xF0.
             // STANDALONE: guard a null list (empty combo instead of a fault).
@@ -1313,7 +1375,7 @@ void DebugUI_Slot4(DebugUI* self) {
 
                 uint8_t spriteBuf[16];
                 ::new (spriteBuf) UI::Sprite();
-                reinterpret_cast<UI::ComboElement*>(self->drawCombo)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), *reinterpret_cast<const System::String*>((void*)((uintptr_t)drawableDesc + 0x20)), entry);  // B.3.6 bridge
+                reinterpret_cast<UI::ComboElement*>(this->drawCombo)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), *reinterpret_cast<const System::String*>((void*)((uintptr_t)drawableDesc + 0x20)), entry);  // B.3.6 bridge
 
                 // Check if current entry matches the null/default internal ptr
                 uint8_t nullBuf[8];
@@ -1322,7 +1384,7 @@ void DebugUI_Slot4(DebugUI* self) {
                     selectedIndex = i + 4;
                 }
             }
-            reinterpret_cast<UI::ComboElement*>(self->drawCombo)->SetCurrentItem(selectedIndex);  // B.3.6 bridge
+            reinterpret_cast<UI::ComboElement*>(this->drawCombo)->SetCurrentItem(selectedIndex);  // B.3.6 bridge
         }
     }
 
@@ -1333,7 +1395,7 @@ void DebugUI_Slot4(DebugUI* self) {
     // Min/max are set later (after image elements) matching original order.
 
     #define FIND_SLIDER(field, name, id) do { \
-        self->field = DebugUI_FindElemBase(parentElem, name); \
+        this->field = DebugUI_FindElemBase(parentElem, name); \
         reinterpret_cast<UI::Element*>(*(void**)(s + offsetof(DebugUI, field)))->SetElementId(id);  /* B.3.6 bridge */ \
     } while(0)
 
@@ -1358,9 +1420,9 @@ void DebugUI_Slot4(DebugUI* self) {
     // ==========================================================
     // 8. Color preview images (no IDs, just stored)
     // ==========================================================
-    self->imageColorSun = DebugUI_FindElemBase(parentElem, "imageColorSun");
-    self->imageColorAmb = DebugUI_FindElemBase(parentElem, "imageColorAmb");
-    self->imageColorFog = DebugUI_FindElemBase(parentElem, "imageColorFog");
+    this->imageColorSun = DebugUI_FindElemBase(parentElem, "imageColorSun");
+    this->imageColorAmb = DebugUI_FindElemBase(parentElem, "imageColorAmb");
+    this->imageColorFog = DebugUI_FindElemBase(parentElem, "imageColorFog");
 
     // ==========================================================
     // 8b. Slider min/max — set AFTER image elements (matches original order)
@@ -1394,14 +1456,14 @@ void DebugUI_Slot4(DebugUI* self) {
     // 9. Weather combo (ID 0x163) with weather preset entries
     // ==========================================================
     {
-        self->comboWeather = DebugUI_FindElemBase(parentElem, "comboWeather");
+        this->comboWeather = DebugUI_FindElemBase(parentElem, "comboWeather");
 
-        if (self->comboWeather) {
+        if (this->comboWeather) {
             // Add "None" entry with userData = -1
             System::String noneBuf("None");
             uint8_t spriteBuf[16];
             ::new (spriteBuf) UI::Sprite();
-            reinterpret_cast<UI::ComboElement*>(self->comboWeather)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), noneBuf, (void*)(intptr_t)-1);  // B.3.6 bridge
+            reinterpret_cast<UI::ComboElement*>(this->comboWeather)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), noneBuf, (void*)(intptr_t)-1);  // B.3.6 bridge
 
             // Populate from weather list at gameWorld+0x130.
             // STANDALONE: guard a null weather manager / list.
@@ -1420,7 +1482,7 @@ void DebugUI_Slot4(DebugUI* self) {
 
                 uint8_t spr[16];
                 ::new (spr) UI::Sprite();
-                reinterpret_cast<UI::ComboElement*>(self->comboWeather)->AddItem(*reinterpret_cast<const UI::Sprite*>(spr), *reinterpret_cast<const System::String*>(&filenameBuf), (void*)(intptr_t)i);  // B.3.6 bridge
+                reinterpret_cast<UI::ComboElement*>(this->comboWeather)->AddItem(*reinterpret_cast<const UI::Sprite*>(spr), *reinterpret_cast<const System::String*>(&filenameBuf), (void*)(intptr_t)i);  // B.3.6 bridge
 
                 // Check if this weather is currently active
                 uintptr_t activeCheck = *(uintptr_t*)((uintptr_t)i * 8 +
@@ -1429,19 +1491,19 @@ void DebugUI_Slot4(DebugUI* self) {
                     selectedIndex = i + 1;
                 }
             }
-            reinterpret_cast<UI::ComboElement*>(self->comboWeather)->SetCurrentItem(selectedIndex);  // B.3.6 bridge
-            reinterpret_cast<UI::Element*>(self->comboWeather)->SetElementId(0x163);  // B.3.6 bridge
+            reinterpret_cast<UI::ComboElement*>(this->comboWeather)->SetCurrentItem(selectedIndex);  // B.3.6 bridge
+            reinterpret_cast<UI::Element*>(this->comboWeather)->SetElementId(0x163);  // B.3.6 bridge
         }
     }
 
     // ==========================================================
     // 10. Action buttons (IDs 0x164, 0x165)
     // ==========================================================
-    self->buttonSave = DebugUI_FindElemBase(parentElem, "buttonSave");
-    if (self->buttonSave) reinterpret_cast<UI::Element*>(self->buttonSave)->SetElementId(0x164);  // B.3.6 bridge
+    this->buttonSave = DebugUI_FindElemBase(parentElem, "buttonSave");
+    if (this->buttonSave) reinterpret_cast<UI::Element*>(this->buttonSave)->SetElementId(0x164);  // B.3.6 bridge
 
-    self->buttonMenuScene = DebugUI_FindElemBase(parentElem, "buttonMenuScene");
-    if (self->buttonMenuScene) reinterpret_cast<UI::Element*>(self->buttonMenuScene)->SetElementId(0x165);  // B.3.6 bridge
+    this->buttonMenuScene = DebugUI_FindElemBase(parentElem, "buttonMenuScene");
+    if (this->buttonMenuScene) reinterpret_cast<UI::Element*>(this->buttonMenuScene)->SetElementId(0x165);  // B.3.6 bridge
 
     // ==========================================================
     // Initialize day slider from current game time
@@ -1458,27 +1520,27 @@ void DebugUI_Slot4(DebugUI* self) {
         if (monthIndex > 11) monthIndex = 0;
 
         void** weatherLive = *(void***)((uintptr_t)gameWorld + 0x130);
-        if (self->sliderDay) {
-            *(float*)((uintptr_t)self->sliderDay + 0x128) = (float)(monthIndex * 30);
-            if (weatherLive && *weatherLive) DebugUI_SetDayLighting_Impl(self, monthIndex);
+        if (this->sliderDay) {
+            *(float*)((uintptr_t)this->sliderDay + 0x128) = (float)(monthIndex * 30);
+            if (weatherLive && *weatherLive) DebugUI_SetDayLighting_Impl(this, monthIndex);
         }
     }
 
     // ==========================================================
     // 11. Performance counter elements (stored in struct fields)
     // ==========================================================
-    self->numberFrameMS   = DebugUI_FindElemBase(parentElem, "numberFrameMS");
-    self->numberTotalMS   = DebugUI_FindElemBase(parentElem, "numberTotalMS");
-    self->numberFPS       = DebugUI_FindElemBase(parentElem, "numberFPS");
-    self->numberDrawCalls = DebugUI_FindElemBase(parentElem, "numberDrawCalls");
-    self->numberTriangles = DebugUI_FindElemBase(parentElem, "numberTriangles");
-    self->numberVertices  = DebugUI_FindElemBase(parentElem, "numberVertices");
-    self->numberBatches   = DebugUI_FindElemBase(parentElem, "numberBatches");
+    this->numberFrameMS   = DebugUI_FindElemBase(parentElem, "numberFrameMS");
+    this->numberTotalMS   = DebugUI_FindElemBase(parentElem, "numberTotalMS");
+    this->numberFPS       = DebugUI_FindElemBase(parentElem, "numberFPS");
+    this->numberDrawCalls = DebugUI_FindElemBase(parentElem, "numberDrawCalls");
+    this->numberTriangles = DebugUI_FindElemBase(parentElem, "numberTriangles");
+    this->numberVertices  = DebugUI_FindElemBase(parentElem, "numberVertices");
+    this->numberBatches   = DebugUI_FindElemBase(parentElem, "numberBatches");
 
     // Zero the smoothing accumulators
-    self->smoothedFPS = 0.0f;
-    self->smoothedFrameMS = 0.0f;
-    self->smoothedTotalMS = 0.0f;
+    this->smoothedFPS = 0.0f;
+    this->smoothedFrameMS = 0.0f;
+    this->smoothedTotalMS = 0.0f;
 }
 
 // ============================================================
@@ -1624,98 +1686,19 @@ void DebugUI_SetDayLighting(DebugUI* self, int month) {
 #include <cstdlib>
 #include <cstdio>
 
-namespace debugui_sa {
 
-// Idempotent heal of the exe-.rdata type-id globals. Safe to call on every slot
-// entry; each `if (*global)` short-circuits once filled.
-void EnsureGlobals() {
-    struct Heal { uint32_t** g; uint32_t* s; const char* name; };
-    static uint32_t s_build = 0, s_rawmat = 0, s_interactC = 0, s_interactD = 0,
-                    s_citDesc = 0, s_disease = 0, s_drawable = 0, s_internal = 0;
-    static const Heal heals[] = {
-        { &g_TypeId_ComponentDescription_FC,         &s_build,     "ComponentDescription"   },
-        { &g_TypeId_RawMaterialDescription, &s_rawmat,    "RawMaterialDescription" },
-        { &g_TypeId_InteractComponent_FC,  &s_interactC, "InteractComponent"      },
-        { &g_TypeId_InteractDescription_FC,   &s_interactD, "InteractDescription"    },
-        { &g_TypeId_CitizenDescription,     &s_citDesc,   "CitizenDescription"     },
-        { &g_TypeId_DiseaseDescription,     &s_disease,   "Disease"                },
-        { &g_TypeId_DrawableType,           &s_drawable,  "PopulationDescription"  },
-        { &g_TypeId_Element,         &s_internal,  "Internal"               },
-    };
-    for (const Heal& h : heals) {
-        // A non-null global is not necessarily a USABLE one: some of these .rdata
-        // cells now resolve to real standalone storage (e.g. 0x1401c47c8 is backed by
-        // reg_herd_live.cpp) that is only filled lazily by whichever port gets there
-        // first. Heal a registered-but-still-zero id too, or IsDerivedFrom(x, 0) fails
-        // for every candidate and the combo it gates comes up empty.
-        if (*h.g && **h.g) continue;
-        if (*h.s == 0) *h.s = ::Object::ResolveTypeIdByNameLazy(h.name);
-        if (!*h.s) continue;
-        if (*h.g) **h.g = *h.s;   // fill the real .rdata cell in place
-        else      *h.g = h.s;
-    }
-    // CitizenComponent id resolves via GetTypeIdByName (the proven CitizenUI choice).
-    if (!g_TypeId_CitizenComponent_FC) {
-        static uint32_t s_cai = 0;
-        if (s_cai == 0) s_cai = ::Object::GetTypeIdByName("CitizenComponent");
-        if (s_cai) g_TypeId_CitizenComponent_FC = &s_cai;
-    }
-}
 
-void W_Slot4(void* self) {
-    EnsureGlobals();
-    // Slot4 unconditionally dereferences ObjectInternal (every FindElemBase),
-    // DiseaseDescription (diseaseCombo populate) and DrawableType (drawCombo
-    // populate). Skip the whole setup rather than fault if any failed to
-    // resolve; all three reliably resolve post-Engine::Startup.
-    if (!self || !g_TypeId_Element || !*g_TypeId_Element
-        || !g_TypeId_DiseaseDescription || !*g_TypeId_DiseaseDescription
-        || !g_TypeId_DrawableType || !*g_TypeId_DrawableType) {
-        return;
-    }
-    DebugUI_Slot4(reinterpret_cast<DebugUI*>(self));
-}
-void W_Slot7(void* self) {
-    EnsureGlobals();
-    if (!self || !g_TypeId_Element) return;  // FindElemBase / child deref
-    DebugUI_Slot7(reinterpret_cast<DebugUI*>(self));
-}
-void W_OnUpdate(void* self, void* /*time*/) {   // +0x40 per-frame
-    if (!self) return;
-    EnsureGlobals();
-    DebugUI_Slot8(reinterpret_cast<DebugUI*>(self));         // perf counters (self-guarded)
-    if (g_TypeId_Element)
-        DebugUI_Slot7(reinterpret_cast<DebugUI*>(self));     // keep swatches/day live
-}
-void W_Slot9(void* self, void* p2, int msg, int id) {
-    EnsureGlobals();
-    // Resource-spawn buttons use no type-ids; the entity-manipulation buttons
-    // (raw-material purge, spawn citizens, disasters, tornado) do, and those ids
-    // reliably resolve above. Dispatch as the original did.
-    if (self) DebugUI_Slot9(reinterpret_cast<DebugUI*>(self),
-                            reinterpret_cast<uint64_t>(p2), msg, id);
-}
-}  // namespace debugui_sa
 
-// [4] 0x1400619e0
-void DebugUI::OnCreated() {
-    debugui_sa::W_Slot4(this);
-}
-
-// [7] 0x140061280
-void DebugUI::OnUpdateLayout() {
-    debugui_sa::W_Slot7(this);
-}
-
-// [8] 0x1400610c0
-void DebugUI::OnUpdate(const System::Time& time) {
-    debugui_sa::W_OnUpdate(this, const_cast<System::Time*>(&time));
-}
 
 // [9] 0x140060bc0
 void DebugUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                              int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    debugui_sa::W_Slot9(this, element, a, b);
+    debugui_sa::EnsureGlobals();
+    // Resource-spawn buttons use no type-ids; the entity-manipulation buttons
+    // (raw-material purge, spawn citizens, disasters, tornado) do, and those ids
+    // reliably resolve above. The body stays the free DebugUI_Slot9: it is reached
+    // BY NAME with a null self from standalone/disaster_harness.cpp.
+    DebugUI_Slot9(this, reinterpret_cast<uint64_t>(element), a, b);
 }
 
 // [0] 0x140010f10: ~DebugUI (restamp, ~DialogController, ~Internal — the

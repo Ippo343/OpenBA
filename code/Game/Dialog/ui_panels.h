@@ -18,12 +18,6 @@ void TitleDescToolTipUI_Serialize(TitleDescToolTipUI* self);
 // RadiusUI
 // ============================================================
 
-// Slot5 (vtable +0x28): Calculates radius overlay from building center tile.
-void RadiusUI_Slot5(RadiusUI* self);
-
-// Slot6 (vtable +0x30): Removes active radius overlay and resets index.
-void RadiusUI_Slot6(RadiusUI* self);
-
 // ============================================================
 // BuildRequirementUI
 // ============================================================
@@ -73,24 +67,12 @@ void StatusIconUI_Startup(StatusIconUI* self);
 // Slot4 (vtable +0x20): Finds "selectResource" combo, sets ID 500, populates crop list.
 void CropUI_Slot4(CropUI* self);
 
-// Slot7 (vtable +0x38): Enables/disables combo based on item count.
-void CropUI_Slot7(CropUI* self);
-
 // Slot8 (vtable +0x40): Repopulates combo if item count changed.
 void CropUI_Slot8(CropUI* self);
 
 // ============================================================
 // DestroyUI
 // ============================================================
-
-// Slot4 (vtable +0x20): Finds all named elements, sets button IDs, checks reclaim state.
-void DestroyUI_Slot4(DestroyUI* self);
-
-// Slot7 (vtable +0x38): Visibility state machine for destroy/reclaim panel.
-void DestroyUI_Slot7(DestroyUI* self);
-
-// Slot9 (vtable +0x48): Dispatches reclaim/rebuild/destroy actions.
-void DestroyUI_Slot9(DestroyUI* self, uint64_t param2, int param3, int param4);
 
 // ============================================================
 // ImmigrationUI
@@ -176,70 +158,17 @@ void ResourceLimitUI_Slot9(ResourceLimitUI* self, void* param2,
 // CitizenUI
 // ============================================================
 
-// Slot4 (vtable +0x20): Finds 15 named elements (imageMale/Female, textName,
-// numberAge, textProfession, textEducated*, textClothing, textTool, textNameIs,
-// textAction, groupHearts, groupStars, buttonProfession/Home/Follow).
-// Builds icon arrays for hearts/stars, sets button element IDs.
-void CitizenUI_Slot4(CitizenUI* self);
-
-// Slot6 (vtable +0x30): Closes sub-dialog if open, clears reference.
-void CitizenUI_Slot6(CitizenUI* self);
-
-// Slot7 (vtable +0x38): Updates citizen display — gender icons, name, age,
-// profession, education, clothing, tool, health hearts, happiness stars,
-// button states, action text.
-void CitizenUI_Slot7(CitizenUI* self);
-
-// Slot9 (vtable +0x48): Button dispatch — profession (0x227) navigates to
-// workplace, home (0x226) navigates to residence, follow (0x228) opens
-// follow dialog (delegated to original exe function).
-void CitizenUI_Slot9(CitizenUI* self, uint64_t param2, int param3, int param4);
-
 // ============================================================
 // ResidenceUI
 // ============================================================
-
-// Slot4 (vtable +0x20): Finds residence table element, iterates rows to find
-// child elements (buttonGoto, textName, imageMale, imageFemale, textAge,
-// textProfession), stores in dynamic array at +0x30.
-void ResidenceUI_Slot4(ResidenceUI* self);
-
-// Slot7 (vtable +0x38): Updates resident display — iterates storage component rooms,
-// shows gender icons, name, age, profession per occupied row. Hides unused rows.
-void ResidenceUI_Slot7(ResidenceUI* self);
-
-// Slot9 (vtable +0x48): Dispatches resident row clicks (ID 300+index) to navigate
-// camera to that citizen.
-void ResidenceUI_Slot9(ResidenceUI* self, void* param2, int msg, int id);
 
 // ============================================================
 // EventLogUI
 // ============================================================
 
-// Slot5 (vtable +0x28): Finds navigation buttons, display container, and
-// notification buttons. Allocates display arrays, sets element IDs.
-void EventLogUI_Slot5(EventLogUI* self);
-
-// Slot7 (vtable +0x38): Updates event log display rows from event data,
-// enables/disables scroll buttons based on offset.
-void EventLogUI_Slot7(EventLogUI* self);
-
-// Slot9 (vtable +0x48): Handles scroll buttons (prev/next/bottom),
-// notification toggles, and row click navigation.
-void EventLogUI_Slot9(EventLogUI* self, void* param2, int msg, int id);
-
 // ============================================================
 // ControlUI
 // ============================================================
-
-// Slot4 (vtable +0x20): Finds checkbox element, finds sub-component, sets initial state.
-void ControlUI_Slot4(ControlUI* self);
-
-// Slot7 (vtable +0x38): Updates checkbox state from component, sets enabled/disabled.
-void ControlUI_Slot7(ControlUI* self);
-
-// Slot9 (vtable +0x48): On checkbox click, toggles component state.
-void ControlUI_Slot9(ControlUI* self, uint64_t* param2, int param3, int param4);
 
 // ============================================================
 // BuildUI
@@ -249,71 +178,21 @@ void ControlUI_Slot9(ControlUI* self, uint64_t* param2, int param3, int param4);
 // EntityUI
 // ============================================================
 
-// Slot4 (vtable +0x20): Startup — finds buttonCenter/checkPin/pages elements,
-// sets IDs, gets ComponentEntity from data source, resets ToolUI controller flags.
-void EntityUI_Slot4(EntityUI* self);
-
-// Slot6 (vtable +0x30): Removes entity from world tracking set.
-void EntityUI_Slot6(EntityUI* self);
-
-// Slot7 (vtable +0x38): Determines active page based on entity state
-// (build, destroy, profession). Updates ToolUI controller hint.
-void EntityUI_Slot7(EntityUI* self);
-
 // Slot8 (vtable +0x40): Input handler — reads mouse position, checks key 5 press,
 // selects entity in edit tool if mouse is over this dialog.
 void EntityUI_Slot8(EntityUI* self);
-
-// Slot9 (vtable +0x48): Button dispatch — close (1), center (0x65), pin (100).
-void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id);
 
 // ============================================================
 // OrchardUI
 // ============================================================
 
-// Slot4 (vtable +0x20): Finds "yield" progress element, sets to 1.0f, calls base Slot4.
-void OrchardUI_Slot4(OrchardUI* self);
-
-// Slot7 (vtable +0x38): Updates growth progress bar with percentage text.
-void OrchardUI_Slot7(OrchardUI* self);
-
-// Slot11 (vtable +0x58): Sets crop/resource type on OrchardComponent.
-void OrchardUI_Slot11(OrchardUI* self, int64_t param2);
-
-// Slot12 (vtable +0x60): Gets crop/resource type from OrchardComponent.
-void* OrchardUI_Slot12(OrchardUI* self, void* param2);
-
 // ============================================================
 // SelectResourceUI (shared base for CropUI, OrchardUI, PastureUI)
 // ============================================================
 
-// Slot4 (vtable +0x20): Finds combo element, sets ID 500, populates resources.
-void SelectResourceUI_Slot4(void* self);
-
-// Slot8 (vtable +0x40): Checks combo item count, repopulates if changed.
-void SelectResourceUI_Slot8(void* self);
-
-// Slot9 (vtable +0x48): On combo selection, looks up resource type, calls Slot11.
-void SelectResourceUI_Slot9(void* self, void* param2, int param3, int param4);
-
 // ============================================================
 // PastureUI
 // ============================================================
-
-// Slot4 (vtable +0x20): Initializes combo + slider elements, sets IDs, updates slider.
-void PastureUI_Slot4(PastureUI* self);
-
-// Slot7 (vtable +0x38): Enables/disables combo based on animal count, updates slider text.
-void PastureUI_Slot7(PastureUI* self);
-
-// Slot9 (vtable +0x48): Combo selection (0x14/500) + slider change (0x17/501) handler.
-void PastureUI_Slot9(PastureUI* self, void* param2, int param3, int param4);
-
-// Slot11 (vtable +0x58): Sets animal/resource type, recalcs max count, updates slider.
-void PastureUI_Slot11(PastureUI* self, int64_t param2);
-
-// Slot12 (vtable +0x60): Gets animal/resource type from PastureComponent.
-void* PastureUI_Slot12(PastureUI* self, void* param2);
 
 // ============================================================
 // StorageUI
@@ -429,19 +308,6 @@ void SpriteCaptureUI_OnCreate(SpriteCaptureUI* self);
 // DebugUI
 // ============================================================
 
-// Slot4 (vtable +0x20): Finds 50+ UI elements, assigns element IDs,
-// populates disease/draw/weather combos, sets slider ranges,
-// initializes day lighting from game time.
-void DebugUI_Slot4(DebugUI* self);
-
-// Slot7 (vtable +0x38): Reads day slider and RGB color sliders,
-// formats day text, packs ARGB colors, updates 3 color preview swatches.
-void DebugUI_Slot7(DebugUI* self);
-
-// Slot8 (vtable +0x40): Reads 4 debug counters from engine state,
-// smooths FPS/frame timing with EMA (alpha=0.95), displays as numbers.
-void DebugUI_Slot8(DebugUI* self);
-
 // Slot9 (vtable +0x48): Event dispatch — handles button clicks (resource spawn,
 // disasters, debug toggles), combo changes (disease/draw), slider changes (day/colors).
 void DebugUI_Slot9(DebugUI* self, uint64_t param2, int param3, int param4);
@@ -493,12 +359,6 @@ inline void ModBrowseUI_Slot3(void* /*self*/) {}
 
 // NoiseUI::Slot3/Shutdown (vtable +0x18, 0x140071BB0): 3-byte RET 0 no-op.
 inline void NoiseUI_Slot3(NoiseUI* /*self*/) {}
-
-// OrchardUI::Slot13/GetCategoryFilter (vtable +0x68, 0x140075420): returns 1.
-int OrchardUI_Slot13(OrchardUI* self);
-
-// PastureUI::Slot13/GetCategoryFilter (vtable +0x68, 0x1400B4CF0): returns 2.
-int PastureUI_Slot13(PastureUI* self);
 
 // PageToggleUI::Slot3/Shutdown (vtable +0x18, 0x1400759A0): 3-byte RET 0 no-op.
 inline void PageToggleUI_Slot3(PageToggleUI* /*self*/) {}

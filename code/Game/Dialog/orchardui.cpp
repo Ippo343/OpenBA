@@ -42,6 +42,19 @@ static uint32_t OrchardUI_ProgressElementTypeId() {
     return s_local;
 }
 
+namespace orchardui_sa {
+
+static void Trace(const char* what, void* self) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    fprintf(stderr, "[OrchardUI] %s self=%p combo(+0x30)=%llx yield(+0x38)=%llx\n",
+            what, self,
+            self ? (unsigned long long)*reinterpret_cast<uint64_t*>(s + 0x30) : 0ull,
+            self ? (unsigned long long)*reinterpret_cast<uint64_t*>(s + 0x38) : 0ull);
+    fflush(stderr);
+}
+
+}  // namespace orchardui_sa
+
 // ============================================================
 // OrchardUI::Slot4 (vtable +0x20) — Initialize yield progress + combo
 // ============================================================
@@ -51,8 +64,13 @@ static uint32_t OrchardUI_ProgressElementTypeId() {
 //
 // Original: 0x1400755B0.
 
-void OrchardUI_Slot4(OrchardUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [4] 0x1400755b0
+void OrchardUI::OnCreated() {
+    if (!*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(this) + 0x18)) {
+        orchardui_sa::Trace("Slot4 SKIP (no DialogInstance)", this);
+        return;
+    }
+    uintptr_t s = (uintptr_t)this;
 
     // Find "yield" progress element in parent element at +0x20
     System::String nameStr("yield");
@@ -80,7 +98,8 @@ void OrchardUI_Slot4(OrchardUI* self) {
         *(float*)(*(uint64_t*)(s + 0x38) + 0x124) = 1.0f;
 
     // Initialize combo via base class
-    SelectResourceUI_Slot4(self);
+    SelectResourceUI::OnCreated();
+    orchardui_sa::Trace("Slot4", this);
 }
 
 // ============================================================
@@ -92,12 +111,13 @@ void OrchardUI_Slot4(OrchardUI* self) {
 //
 // Original: 0x1400754B0.
 
-void OrchardUI_Slot7(OrchardUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [7] 0x1400754b0
+void OrchardUI::OnUpdateLayout() {
+    uintptr_t s = (uintptr_t)this;
 
     // Per-frame (+0x38): bail on a dead / marked-for-removal datasource before the
     // IsDerivedFrom probe. Same guard PastureUI_Slot7 carries, same reason.
-    if (!SA_DialogEntityAlive(self)) return;
+    if (!SA_DialogEntityAlive(this)) return;
 
     // Get entity at +0x28, check ComponentEntity
     void* entity = (void*)*(uint64_t*)(s + 0x28);
@@ -150,8 +170,9 @@ void OrchardUI_Slot7(OrchardUI* self) {
 //
 // Original: 0x140075380.
 
-void OrchardUI_Slot11(OrchardUI* self, int64_t param2) {
-    uintptr_t s = (uintptr_t)self;
+// [11] 0x140075380
+void OrchardUI::SetResource(int64_t param2) {
+    uintptr_t s = (uintptr_t)this;
 
     // Get entity at +0x28, check ComponentEntity
     void* entity = (void*)*(uint64_t*)(s + 0x28);
@@ -193,8 +214,9 @@ void OrchardUI_Slot11(OrchardUI* self, int64_t param2) {
 //
 // Original: 0x140075430.
 
-void* OrchardUI_Slot12(OrchardUI* self, void* param2) {
-    uintptr_t s = (uintptr_t)self;
+// [12] 0x140075430
+void* OrchardUI::GetResource(void* param2) {
+    uintptr_t s = (uintptr_t)this;
 
     // Get entity at +0x28, check ComponentEntity
     void* entity = (void*)*(uint64_t*)(s + 0x28);
@@ -220,8 +242,8 @@ void* OrchardUI_Slot12(OrchardUI* self, void* param2) {
 // Slot13 (vtable +0x68): GetCategoryFilter — returns 1 (orchard category)
 // Original: 0x140075420 (6 bytes, MOV EAX,1; RET, unhookable)
 // ============================================================
-int OrchardUI_Slot13(OrchardUI* self) {
-    (void)self;
+// [13] 0x140075420
+int OrchardUI::GetCategory() {
     return 1;
 }
 
@@ -258,93 +280,31 @@ int OrchardUI_Slot13(OrchardUI* self) {
 // `CropUI_Serialize` / `CropUI_OnCreate`, but they are idx4/idx7 of the abstract
 // base table above, i.e. SelectResourceUI's own. Slot7's tail is exactly the
 // "enable the combo iff it has items" logic already inlined in OrchardUI_Slot7.
-#include "Object/factory_registration.h"
-#include <cstdlib>
-#include <cstdio>
 
-namespace orchardui_sa {
 
-static void Trace(const char* what, void* self) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    fprintf(stderr, "[OrchardUI] %s self=%p combo(+0x30)=%llx yield(+0x38)=%llx\n",
-            what, self,
-            self ? (unsigned long long)*reinterpret_cast<uint64_t*>(s + 0x30) : 0ull,
-            self ? (unsigned long long)*reinterpret_cast<uint64_t*>(s + 0x38) : 0ull);
-    fflush(stderr);
-}
 
-// idx4 (+0x20): setup. Needs the DialogInstance (+0x18) the framework seats before
-// dispatch; the element finds inside are guarded.
-void W_Slot4(void* self) {
-    if (!self || !*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x18)) {
-        Trace("Slot4 SKIP (no DialogInstance)", self);
-        return;
-    }
-    OrchardUI_Slot4(reinterpret_cast<OrchardUI*>(self));
-    Trace("Slot4", self);
-}
-// idx7 (+0x38): per-frame growth sync (SA_DialogEntityAlive-guarded in the port).
-void W_Slot7(void* self) {
-    if (!self) return;
-    OrchardUI_Slot7(reinterpret_cast<OrchardUI*>(self));
-}
-// idx8 (+0x40): base combo refresh, plus the same standalone-only self-heal
-// pastureui.cpp carries — re-run Slot4 if the yield IBP (+0x38) is still null.
-void W_Slot8(void* self) {
-    if (!self) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    if (!SA_DialogEntityAlive(self)) return;
+
+// [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
+void OrchardUI::OnUpdate(const System::Time& time) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+    if (!SA_DialogEntityAlive(this)) return;
     if (!*reinterpret_cast<void**>(s + 0x38)) {
-        W_Slot4(self);
+        OrchardUI::OnCreated();
         if (!*reinterpret_cast<void**>(s + 0x38)) return;   // dialog genuinely lacks it
     }
     if (*reinterpret_cast<void**>(s + 0x30))
-        SelectResourceUI_Slot8(self);
-}
-// idx9 (+0x48): combo selection -> Slot11. Base class slot, unlike PastureUI which
-// overrides it to also handle its slider.
-void W_Slot9(void* self, void* p2, int p3, int p4) {
-    if (!self) return;
-    Trace("Slot9(event)", self);
-    SelectResourceUI_Slot9(self, p2, p3, p4);
-}
-}  // namespace orchardui_sa
-
-// [4] 0x1400755b0
-void OrchardUI::OnCreated() {
-    orchardui_sa::W_Slot4(this);
-}
-
-// [7] 0x1400754b0
-void OrchardUI::OnUpdateLayout() {
-    orchardui_sa::W_Slot7(this);
-}
-
-// [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
-void OrchardUI::OnUpdate(const System::Time& /*time*/) {
-    orchardui_sa::W_Slot8(this);
+        SelectResourceUI::OnUpdate(time);
 }
 
 // [9] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
 void OrchardUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
-                               int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    orchardui_sa::W_Slot9(this, element, a, b);
+                               int32_t c, int32_t d, int32_t e, void* userData) {
+    orchardui_sa::Trace("Slot9(event)", this);
+    SelectResourceUI::OnElementEvent(element, a, b, c, d, e, userData);
 }
 
-// [11] 0x140075380
-void OrchardUI::SetResource(int64_t type) {
-    ::OrchardUI_Slot11(this, type);
-}
 
-// [12] 0x140075430
-void* OrchardUI::GetResource(void* out) {
-    return ::OrchardUI_Slot12(this, out);
-}
 
-// [13] 0x140075420
-int OrchardUI::GetCategory() {
-    return ::OrchardUI_Slot13(this);
-}
 
 // [0] 0x1400130e0: ~OrchardUI (restamp, ~DialogController, ~Internal — the
 // compiler's chain), MemFree on &1.
