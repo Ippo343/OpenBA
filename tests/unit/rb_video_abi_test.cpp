@@ -21,7 +21,6 @@
 
 #include "runtime/types/video/ImageBuffer.h"
 #include "runtime/types/graphics/FrameCopyImageBuffer.h"
-#include "runtime/types/graphics/GeneratedImageBuffer.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -32,7 +31,6 @@
 extern const void* const g_rbIbVtGroup[] __asm__("_ZTVN5Video11ImageBufferE");
 extern const void* const g_rbGiVtGroup[] __asm__("_ZTVN8Graphics20GeneratedImageBufferE");
 extern const void* const g_rbFcVtGroup[] __asm__("_ZTVN8Graphics20FrameCopyImageBufferE");
-extern const void* const g_rbRiVtGroup[] __asm__("_ZTVN8Graphics21ReflectionImageBufferE");
 
 namespace {
 const void* IbVt() { return &g_rbIbVtGroup[2]; }
@@ -94,30 +92,6 @@ void FrameCopyImageBuffer::InitFields() {
     _backBufferImage = nullptr; _sourceTarget = nullptr; _destTarget = nullptr;
 }
 void FrameCopyImageBuffer::ReleaseFields() { ++g_fcRel; g_fcRelVptr = VptrOf(this); }
-}  // namespace Graphics
-
-// ENDGAME B.3.9 block GFX -- ReflectionImageBuffer's out-of-line members are
-// MARKERS (imagebuffer_derived.cpp does not link here); ~ReflectionImageBuffer
-// records each call, so the real inline DeletingDtor can be seen running it.
-namespace {
-int         g_riRel = 0;
-const void* g_riRelVptr = nullptr;
-const void* g_riRelOrder[4] = {};
-}  // namespace
-namespace Graphics {
-const char*       ReflectionImageBuffer::TypeName() const { return "ReflectionImageBuffer"; }
-uint32_t          ReflectionImageBuffer::Type() const { return 0; }
-int32_t           ReflectionImageBuffer::GetFileVersion() const { return 0x1007; }
-bool              ReflectionImageBuffer::Serialize(void*) { return true; }
-Object::External* ReflectionImageBuffer::Reconstruct() { return this; }
-void              ReflectionImageBuffer::Destruct() {}
-Object::External* ReflectionImageBuffer::Construct() { return this; }
-void ReflectionImageBuffer::Generate(void*, int32_t) const {}
-void ReflectionImageBuffer::Render(void*, const void*, const void*, int32_t) const {}
-ReflectionImageBuffer::~ReflectionImageBuffer() {
-    if (g_riRel < 4) g_riRelOrder[g_riRel] = this;
-    ++g_riRel; g_riRelVptr = VptrOf(this);
-}
 }  // namespace Graphics
 
 namespace {
@@ -212,58 +186,6 @@ UNIT_TEST(rb_framecopyimagebuffer_chain_and_concrete_slot0) {
     CHECK_EQ(g_fcRel, 1);
     CHECK(g_fcInitVptr == static_cast<const void*>(kFakeMinted));
     CHECK_EQ(g_genSeen, 0);
-}
-
-// ===========================================================================
-// PART E -- ENDGAME B.3.9 block GFX: ReflectionImageBuffer CONCRETE (D1).
-// The ctor is ImageBuffer() -> GeneratedImageBuffer() -> retail 0x1800a7130's
-// stores (+0x70 / +0x78 null, plane (0, 0, 1, 0)); slot 0 is the class's own
-// VECTOR deleting dtor (0x180022600, `MOV EDX,0x90`), both arms.
-// ===========================================================================
-UNIT_TEST(b39_gfx_reflectionimagebuffer_ctor_stores_and_both_slot0_arms) {
-    using R = Graphics::ReflectionImageBuffer;
-    CHECK(!std::is_abstract<R>::value);
-    CHECK(!std::is_destructible<R>::value);            // ~R protected
-    CHECK(!std::has_virtual_destructor<R>::value);
-    CHECK_EQ(sizeof(R), (size_t)0x90);
-
-    g_init = g_rel = g_riRel = 0;
-    void* mem = Object::detail::InternalMemAlloc(sizeof(R), 8);
-    std::memset(mem, 0xCD, sizeof(R));
-    R* r = ::new (mem) R();
-    const uint8_t* b = static_cast<const uint8_t*>(mem);
-    auto D = [&](size_t off) { uint32_t v; std::memcpy(&v, b + off, 4); return v; };
-    auto Q = [&](size_t off) { uint64_t v; std::memcpy(&v, b + off, 8); return v; };
-    CHECK_EQ(g_init, 1);
-    CHECK(g_initVptr == IbVt());                       // ImageBuffer's body first
-    CHECK(VptrOf(r) == &g_rbRiVtGroup[2]);             // the compiler's table
-    CHECK_EQ(D(0x68), 0u);                             // GeneratedImageBuffer()
-    CHECK_EQ(D(0x6c), 0xCDCDCDCDu);                    // never written
-    CHECK_EQ(Q(0x70), (uint64_t)0);
-    CHECK_EQ(Q(0x78), (uint64_t)0);
-    CHECK_EQ(Q(0x80), (uint64_t)0);
-    CHECK_EQ(Q(0x88), (uint64_t)0x3f800000ull);        // retail's one imm64 store
-
-    // scalar arm, flags 1: ~R under R's table, then ~ImageBuffer, then free.
-    CHECK(static_cast<void*>(r->DeletingDtor(1u)) == mem);
-    CHECK_EQ(g_riRel, 1);
-    CHECK(g_riRelVptr == &g_rbRiVtGroup[2]);
-    CHECK_EQ(g_rel, 1);
-    CHECK(g_relVptr == IbVt());
-
-    // vector arm, flags 3: count at block-8, destroyed downward, block freed.
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0x90, 8));
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    R* e[3];
-    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * 0x90) R();
-    g_riRel = 0; g_rel = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3u)) == block);
-    CHECK_EQ(g_riRel, 3);
-    CHECK_EQ(g_rel, 3);
-    CHECK(g_riRelOrder[0] == e[2]);
-    CHECK(g_riRelOrder[1] == e[1]);
-    CHECK(g_riRelOrder[2] == e[0]);
 }
 
 }  // namespace

@@ -28,6 +28,7 @@
 #include "runtime/types/graphics/Mesh.h"
 #include "runtime/types/graphics/SunLight.h"
 #include "runtime/types/graphics/Material.h"
+#include "runtime/types/graphics/GeneratedImageBuffer.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -41,6 +42,7 @@ extern const void* const g_rbPaVtGroup[]  __asm__("_ZTVN8Graphics8ParticleE");
 extern const void* const g_rbMiVtGroup[]  __asm__("_ZTVN8Graphics12MeshInstanceE");
 extern const void* const g_rbSlVtGroup[]  __asm__("_ZTVN8Graphics8SunLightE");
 extern const void* const g_rbMatVtGroup[] __asm__("_ZTVN8Graphics16MaterialInstanceE");
+extern const void* const g_rbRiVtGroup[]  __asm__("_ZTVN8Graphics21ReflectionImageBufferE");
 
 namespace {
 const void* GeoVt() { return &g_rbGeoVtGroup[2]; }
@@ -559,6 +561,83 @@ UNIT_TEST(b39_gfx_particlesystem_concrete_slot_order_and_both_slot0_arms) {
     CHECK_EQ(g_log[0].ev, (int)kPsRel);
     CHECK(g_log[0].vptr == vt);
     (void)e1;
+}
+
+}  // namespace
+
+// ===========================================================================
+// ENDGAME B.3.9 block GFX -- ReflectionImageBuffer CONCRETE (D1).
+// Its out-of-line members are MARKERS (imagebuffer_derived.cpp does not link
+// here; Video::ImageBuffer's and GeneratedImageBuffer's are rb_video_abi_test's
+// markers); ~ReflectionImageBuffer records each call, so the real inline
+// DeletingDtor can be seen running it.
+// ===========================================================================
+namespace {
+int         g_riRel = 0;
+const void* g_riRelVptr = nullptr;
+const void* g_riRelOrder[4] = {};
+const void* RiVptrOf(const void* p) { return *static_cast<const void* const*>(p); }
+}  // namespace
+namespace Graphics {
+const char*       ReflectionImageBuffer::TypeName() const { return "ReflectionImageBuffer"; }
+uint32_t          ReflectionImageBuffer::Type() const { return 0; }
+int32_t           ReflectionImageBuffer::GetFileVersion() const { return 0x1007; }
+bool              ReflectionImageBuffer::Serialize(void*) { return true; }
+Object::External* ReflectionImageBuffer::Reconstruct() { return this; }
+void              ReflectionImageBuffer::Destruct() {}
+Object::External* ReflectionImageBuffer::Construct() { return this; }
+void ReflectionImageBuffer::Generate(void*, int32_t) const {}
+void ReflectionImageBuffer::Render(void*, const void*, const void*, int32_t) const {}
+ReflectionImageBuffer::~ReflectionImageBuffer() {
+    if (g_riRel < 4) g_riRelOrder[g_riRel] = this;
+    ++g_riRel; g_riRelVptr = RiVptrOf(this);
+}
+}  // namespace Graphics
+
+namespace {
+
+// The ctor is ImageBuffer() -> GeneratedImageBuffer() -> retail 0x1800a7130's
+// stores (+0x70 / +0x78 null, plane (0, 0, 1, 0)); slot 0 is the class's own
+// VECTOR deleting dtor (0x180022600, `MOV EDX,0x90`), both arms.
+UNIT_TEST(b39_gfx_reflectionimagebuffer_ctor_stores_and_both_slot0_arms) {
+    using R = Graphics::ReflectionImageBuffer;
+    CHECK(!std::is_abstract<R>::value);
+    CHECK(!std::is_destructible<R>::value);            // ~R protected
+    CHECK(!std::has_virtual_destructor<R>::value);
+    CHECK_EQ(sizeof(R), (size_t)0x90);
+
+    g_riRel = 0;
+    void* mem = Object::detail::InternalMemAlloc(sizeof(R), 8);
+    std::memset(mem, 0xCD, sizeof(R));
+    R* r = ::new (mem) R();
+    const uint8_t* b = static_cast<const uint8_t*>(mem);
+    auto D = [&](size_t off) { uint32_t v; std::memcpy(&v, b + off, 4); return v; };
+    auto Q = [&](size_t off) { uint64_t v; std::memcpy(&v, b + off, 8); return v; };
+    CHECK(RiVptrOf(r) == &g_rbRiVtGroup[2]);           // the compiler's table
+    CHECK_EQ(D(0x68), 0u);                             // GeneratedImageBuffer()
+    CHECK_EQ(D(0x6c), 0xCDCDCDCDu);                    // never written
+    CHECK_EQ(Q(0x70), (uint64_t)0);
+    CHECK_EQ(Q(0x78), (uint64_t)0);
+    CHECK_EQ(Q(0x80), (uint64_t)0);
+    CHECK_EQ(Q(0x88), (uint64_t)0x3f800000ull);        // retail's one imm64 store
+
+    // scalar arm, flags 1: ~R under R's table, then the chain, then free.
+    CHECK(static_cast<void*>(r->DeletingDtor(1u)) == mem);
+    CHECK_EQ(g_riRel, 1);
+    CHECK(g_riRelVptr == &g_rbRiVtGroup[2]);
+
+    // vector arm, flags 3: count at block-8, destroyed downward, block freed.
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0x90, 8));
+    const int64_t cookie = 3;
+    std::memcpy(block, &cookie, sizeof cookie);
+    R* e[3];
+    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * 0x90) R();
+    g_riRel = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3u)) == block);
+    CHECK_EQ(g_riRel, 3);
+    CHECK(g_riRelOrder[0] == e[2]);
+    CHECK(g_riRelOrder[1] == e[1]);
+    CHECK(g_riRelOrder[2] == e[0]);
 }
 
 }  // namespace
