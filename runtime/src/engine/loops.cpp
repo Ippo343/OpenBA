@@ -1084,13 +1084,20 @@ void Engine::Loader::Run() {
     // uncached ResolveExport calls and `LoadResources` a function-local `static`
     // export cache; `LoadResources` is a direct member call. ENDGAME B.3.9 SS1
     // (B39_RULES D7): `?_singleton@ExternalFactory@Object@@` is the class
-    // static too now, so the AtomicExport cache and the door-existence guard
-    // (both slots are addresses of statics -- never null) are gone; the ORDER
-    // of the reads below is unchanged (B7-7.4: the device-lost / loader race
-    // is the user's decision, and this conversion neither moves nor adds a
-    // call in the bracket).
-    ::Engine::Engine* engine = ::Engine::Engine::_singleton;
-    uint8_t* factory = reinterpret_cast<uint8_t*>(::Object::ExternalFactory::_singleton);
+    // static too now, so the AtomicExport cache is gone (B9-10); the ORDER of
+    // the reads below is unchanged (B7-7.4: the device-lost / loader race is
+    // the user's decision, and this conversion neither moves nor adds a call
+    // in the bracket). The `if (!engineSlot || !factorySlot) return;` guard
+    // below is KEPT as-is: nothing in this file ever commented it as scaffolding
+    // for a cell that might not exist, so removing it cannot be justified the
+    // way the FileSystem/Configuration door guards elsewhere in this batch
+    // could be (coordinator correction, ENDGAME B.3.9 SS1 round 2).
+    void** engineSlot = static_cast<void**>(static_cast<void*>(&::Engine::Engine::_singleton));
+    void** factorySlot = reinterpret_cast<void**>(&::Object::ExternalFactory::_singleton);
+    if (!engineSlot || !factorySlot) return;
+
+    ::Engine::Engine* engine = static_cast< ::Engine::Engine*>(*engineSlot);
+    uint8_t* factory = reinterpret_cast<uint8_t*>(*factorySlot);
 
     // `mov 0x6c0(%rsi),%rax ; mov 0x100(%rax),%rcx` — two plain loads, no null
     // test in retail. Left unguarded: retail relies on both being live for the
