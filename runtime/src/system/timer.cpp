@@ -100,23 +100,28 @@
 extern "C" __declspec(dllimport) int __stdcall QueryPerformanceCounter(int64_t*);
 extern "C" __declspec(dllimport) int __stdcall QueryPerformanceFrequency(int64_t*);
 
-namespace {
+// ENDGAME B.3.9 SYS (B39_RULES D7): THE FIVE ARE CLASS STATICS NOW, and the
+// B.3.4b paragraph above is history. RtSystemPortInit (rt_system_port.cpp)
+// redirects the five minted rows onto these five definitions, together, before
+// the mint runs: from then on the name door, the address door (engine_funcs'
+// g_Timer_*, MainLoop.h's by-address reads) and `System::Timer::_x` are ONE
+// cell each, so there is nothing left to publish. The two constants are the
+// mint's `kInit` seeds byte for byte (1000000 and 1.0/1000000.0), which the
+// redirect checks.
 
 // ?_ticksPerSecond@Timer@System@@0_JA   retail 0x1801fe720
 // ?_secondsPerTick@Timer@System@@0NA    retail 0x1801fe728
 // Constants, per the Startup disassembly quoted in the file header.
-int64_t g_ticksPerSecond = 1000000;
-double  g_secondsPerTick = 1.0 / 1000000.0;
+int64_t System::Timer::_ticksPerSecond = 1000000;
+double  System::Timer::_secondsPerTick = 1.0 / 1000000.0;
 
 // ?_systemTicksPerSecond@Timer@System@@0_JA  retail 0x1801fe730
 // ?_systemInitialTick@Timer@System@@0_JA     retail 0x1801fe738
 // ?_systemSecondsPerTick@Timer@System@@0NA   retail 0x1801fe740
 // QPC-derived; written by PlatformStartup only.
-int64_t g_systemTicksPerSecond = 0;
-int64_t g_systemInitialTick    = 0;
-double  g_systemSecondsPerTick = 0.0;
-
-}  // namespace
+int64_t System::Timer::_systemTicksPerSecond = 0;
+int64_t System::Timer::_systemInitialTick    = 0;
+double  System::Timer::_systemSecondsPerTick = 0.0;
 
 // ---------------------------------------------------------------------------
 // PUBLISH THE FIVE VALUES INTO THE EXPORTED DATA SLOTS
@@ -183,20 +188,12 @@ double  g_systemSecondsPerTick = 0.0;
 // Promotion is safe and necessary once those DLL-internal readers no longer
 // exist, i.e. at cutover -- which was lane B3's and lane C2's original
 // intent and still holds.
-namespace {
-void PublishTimerStatics() {
-    if (int64_t* p = RT_DATA_SLOT(int64_t*, "?_ticksPerSecond@Timer@System@@0_JA"))
-        *p = g_ticksPerSecond;
-    if (double* p = RT_DATA_SLOT(double*, "?_secondsPerTick@Timer@System@@0NA"))
-        *p = g_secondsPerTick;
-    if (int64_t* p = RT_DATA_SLOT(int64_t*, "?_systemTicksPerSecond@Timer@System@@0_JA"))
-        *p = g_systemTicksPerSecond;
-    if (int64_t* p = RT_DATA_SLOT(int64_t*, "?_systemInitialTick@Timer@System@@0_JA"))
-        *p = g_systemInitialTick;
-    if (double* p = RT_DATA_SLOT(double*, "?_systemSecondsPerTick@Timer@System@@0NA"))
-        *p = g_systemSecondsPerTick;
-}
-}  // namespace
+//
+// ENDGAME B.3.9 SYS: `PublishTimerStatics()` IS GONE. The copies it made were
+// between our file globals and the minted cells; the redirect makes those the
+// same five cells, so every store below lands in the exported storage
+// directly, at the same moment retail's does. (Its five RT_DATA_SLOT caches
+// went with it.)
 
 // ?PlatformStartup@Timer@System@@CA_NXZ  retail 0x1800ca860 (private static).
 //
@@ -210,20 +207,16 @@ bool System::Timer::PlatformStartup() {
     int64_t freq = 0;
     if (!QueryPerformanceFrequency(&freq)) return false;
 
-    g_systemTicksPerSecond = freq;
+    _systemTicksPerSecond = freq;
     // CVTSI2SD is signed; retail then adds 2^64 (0x180161720 = 1.8446744e19)
     // when the sign bit is set, i.e. it corrects the signed conversion back to
     // unsigned. Reproduced rather than simplified: a frequency with bit 63 set
     // is impossible in practice but the arithmetic is what the DLL does.
     double freqAsDouble = static_cast<double>(freq);
     if (freq < 0) freqAsDouble += 18446744073709551616.0;
-    g_systemSecondsPerTick = 1.0 / freqAsDouble;
+    _systemSecondsPerTick = 1.0 / freqAsDouble;
 
-    QueryPerformanceCounter(&g_systemInitialTick);
-    // See PublishTimerStatics above: retail's PlatformStartup writes the
-    // DLL's three QPC globals directly, and an unported DLL consumer
-    // (MainLoop::Run at 0x1800dd3f9) still reads them.
-    PublishTimerStatics();
+    QueryPerformanceCounter(&_systemInitialTick);
     return true;
 }
 
@@ -233,16 +226,9 @@ bool System::Timer::PlatformStartup() {
 // them, and a caller that ran Shutdown first (a no-op in every shipped build,
 // see below) must still get a live Timer back.
 bool System::Timer::Startup() {
-    g_ticksPerSecond = 1000000;
-    g_secondsPerTick = 1.0 / static_cast<double>(1000000);
-    const bool ok = PlatformStartup();
-    // Retail's Engine::Startup stores these two into 0x1801fe720/728
-    // ITSELF, before it calls PlatformStartup, and does so whether or
-    // not that succeeds. Publishing again here covers the QPF-failed
-    // branch, where PlatformStartup returns early having published
-    // nothing.
-    PublishTimerStatics();
-    return ok;
+    _ticksPerSecond = 1000000;
+    _secondsPerTick = 1.0 / static_cast<double>(1000000);
+    return PlatformStartup();
 }
 
 // ?Shutdown@Timer@System@@SAXXZ          retail 0x1800ca7b0 — `RET`, no body.
@@ -259,7 +245,7 @@ void System::Timer::PlatformShutdown() {}
 // over a faithful crash: retail's precondition ("Startup ran") is genuinely
 // broken by the seam, which is the one case CLAUDE.md's rule allows.
 void RtSystem::TimerEnsurePlatformStarted() {
-    if (g_systemTicksPerSecond == 0) System::Timer::PlatformStartup();
+    if (System::Timer::_systemTicksPerSecond == 0) System::Timer::PlatformStartup();
 }
 
 // The five data-export accessors declared in timer.h. TicksPerSecond and
@@ -267,11 +253,11 @@ void RtSystem::TimerEnsurePlatformStarted() {
 // ensure PlatformStartup has run, so a consumer that reaches them before
 // Engine::Startup gets a live value instead of the zero the DLL's slot holds
 // at that moment.
-int64_t RtSystem::TimerTicksPerSecond()       { return g_ticksPerSecond; }
-double  RtSystem::TimerSecondsPerTick()       { return g_secondsPerTick; }
-int64_t RtSystem::TimerSystemTicksPerSecond() { TimerEnsurePlatformStarted(); return g_systemTicksPerSecond; }
-int64_t RtSystem::TimerSystemInitialTick()    { TimerEnsurePlatformStarted(); return g_systemInitialTick; }
-double  RtSystem::TimerSystemSecondsPerTick() { TimerEnsurePlatformStarted(); return g_systemSecondsPerTick; }
+int64_t RtSystem::TimerTicksPerSecond()       { return System::Timer::_ticksPerSecond; }
+double  RtSystem::TimerSecondsPerTick()       { return System::Timer::_secondsPerTick; }
+int64_t RtSystem::TimerSystemTicksPerSecond() { TimerEnsurePlatformStarted(); return System::Timer::_systemTicksPerSecond; }
+int64_t RtSystem::TimerSystemInitialTick()    { TimerEnsurePlatformStarted(); return System::Timer::_systemInitialTick; }
+double  RtSystem::TimerSystemSecondsPerTick() { TimerEnsurePlatformStarted(); return System::Timer::_systemSecondsPerTick; }
 
 namespace { inline void EnsurePlatform() { RtSystem::TimerEnsurePlatformStarted(); } }
 
@@ -308,7 +294,7 @@ int64_t System::Timer::CurrentTimeTicks() {
     EnsurePlatform();
     int64_t now = 0;
     QueryPerformanceCounter(&now);
-    return (now - g_systemInitialTick) * g_ticksPerSecond / g_systemTicksPerSecond;
+    return (now - _systemInitialTick) * _ticksPerSecond / _systemTicksPerSecond;
 }
 
 // ?CurrentTime@Timer@System@@SAMXZ  retail 0x1800ca760
@@ -319,8 +305,8 @@ float System::Timer::CurrentTime() {
     EnsurePlatform();
     int64_t now = 0;
     QueryPerformanceCounter(&now);
-    int64_t ticks = (now - g_systemInitialTick) * g_ticksPerSecond / g_systemTicksPerSecond;
-    return static_cast<float>(static_cast<double>(ticks) * g_secondsPerTick);
+    int64_t ticks = (now - _systemInitialTick) * _ticksPerSecond / _systemTicksPerSecond;
+    return static_cast<float>(static_cast<double>(ticks) * _secondsPerTick);
 }
 
 // ?SecondsToTicks@Timer@System@@SA_JM@Z  retail 0x1800ca800
@@ -328,7 +314,7 @@ float System::Timer::CurrentTime() {
 //   / CVTTSD2SI RAX,XMM1
 // float widened to double, divided in double, then TRUNCATED toward zero.
 int64_t System::Timer::SecondsToTicks(float seconds) {
-    int64_t ours = static_cast<int64_t>(static_cast<double>(seconds) / g_secondsPerTick);
+    int64_t ours = static_cast<int64_t>(static_cast<double>(seconds) / _secondsPerTick);
     using Fn = int64_t (*)(float);
     return ours;
 }
@@ -338,7 +324,7 @@ int64_t System::Timer::SecondsToTicks(float seconds) {
 // SIGNED widening (CVTSI2SD, not the unsigned pair), multiply in double, one
 // rounding to float at the end.
 float System::Timer::TicksToSeconds(int64_t ticks) {
-    return static_cast<float>(static_cast<double>(ticks) * g_secondsPerTick);
+    return static_cast<float>(static_cast<double>(ticks) * _secondsPerTick);
 }
 
 // ??4Timer@System@@QEAAAEAV01@AEBV01@@Z  retail 0x180007890

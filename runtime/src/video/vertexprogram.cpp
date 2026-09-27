@@ -5,7 +5,7 @@
 //
 // ??_7VertexProgram@Video@@6B@ (retail 0x180157b10), nine slots:
 //
-//   0  deleting dtor        0x18004e810  runtime/src/object/deleting_dtor.cpp
+//   0  deleting dtor        0x18004e810  ShaderProgram.h (inline, B.3.9)
 //   1  TypeName             0x18004e560  here
 //   2  Type                 0x18004e540  here
 //   3  GetFileVersion       0x1800f6230  here  (returns 5)
@@ -82,10 +82,9 @@
 // is the `RT_EXPORT_ONCE(…"??1External@Object@@UEAA@XZ")` binding: two
 // runtime-internal bindings retired, both inside this block's file set.
 //
-// THE CTOR STAYS A DOOR (B4b-2, B35_RULES 11): its first act is writing the
-// vptr, and no C++ constructor can write the MINTED address the rest of the tree
-// and the mint rows read. `RtVideo_ShaderProgram_ConstructBody` is still called
-// from it, because that IS retail's inlined ??0ShaderProgram.
+// ENDGAME B.3.9 block VID: THE CTOR IS REAL NOW (ShaderProgram.h). The ctor and
+// dtor doors, ConstructBody and the seven slot doors retired with
+// ??_7VertexProgram@Video@@6B@; the factory pair is the class's own.
 //
 // CORRECTION (cutover closure batch D1, 2026-09-12). This banner used to read
 // "five ... UNPORTED internals ... with the DLL gone those five resolve to
@@ -100,8 +99,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
 #include "../../types/system/String.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/video/ShaderProgram.h"
@@ -114,8 +115,6 @@
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-extern "C" void  RtVideo_ShaderProgram_ConstructBody(void* self);   // shaderprogram.cpp
-
 namespace {
 
 using rt::io::Serializer;
@@ -125,12 +124,11 @@ using Video::VertexProgram;
 namespace ddvt = rt::video::devicedata_vtbl;
 namespace pdvt = rt::video::programdata_vtbl;
 
-void* VertexProgramVTable()    { return RT_DATA_SLOT(void*, "??_7VertexProgram@Video@@6B@"); }
 const uint8_t* VertexProgramTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A");
 }
-void* DeviceData() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+void* ActiveDeviceDataPtr() {
+    void** slot = reinterpret_cast<void**>(&::Video::Device::_singleton);
     void* device = slot ? *slot : nullptr;
     if (!device) return nullptr;
     return *reinterpret_cast<void**>(static_cast<uint8_t*>(device) + 0x100);
@@ -138,12 +136,6 @@ void* DeviceData() {
 
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
-
-using Slot0Fn = void* (*)(void* self, int flag);
-void CallSlot0(void* self, int flag) {
-    void** vt = *reinterpret_cast<void***>(self);
-    reinterpret_cast<Slot0Fn>(vt[0])(self, flag);
-}
 
 using ScalarFn  = void (*)(ReaderWriter*, void*, const char*);
 using VersionFn = int  (*)(ReaderWriter*);
@@ -170,15 +162,6 @@ struct ArrayHdr { void* data; int32_t size; int32_t capacity; };
 // sequence instruction for instruction, plus the null guard retail also does
 // (runtime/src/collection/array.cpp "THE ALLOCATOR BOUNDARY").
 void MemFree(void* p) { RtAddr<MemFreeFn>(0x1800c7ad0ull)(p); }
-
-// The ctor DOOR's body: retail's ??0VertexProgram (0x1800f6100), which is
-// ??0ShaderProgram inlined, then this class's own vtable stamp, then
-// PlatformConstruct. Not a constructor, for the reason in the banner.
-void ConstructBody(VertexProgram* self) {
-    RtVideo_ShaderProgram_ConstructBody(self);          // through the ShaderProgram stamp
-    *reinterpret_cast<void**>(self) = VertexProgramVTable();
-    self->Video::VertexProgram::PlatformConstruct();    // +0x50
-}
 
 // ---- the version-0 legacy block -------------------------------------------
 // A version-0 file stored the vertex declaration on the program itself. Nothing
@@ -245,57 +228,14 @@ void SerializeLegacyV0(Serializer* ser) {
 // ---------------------------------------------------------------------------
 // The registered doors. Each is one line over the member of the same name.
 // ---------------------------------------------------------------------------
-extern "C" uint32_t RtVideo_VertexProgram_Type(const void* selfv) {
-    return reinterpret_cast<const VertexProgram*>(selfv)
-               ->Video::VertexProgram::Type();                        // B.3.5 bridge
-}
 extern "C" uint32_t RtVideo_VertexProgram_TypeId() {
     return Video::VertexProgram::TypeId();
-}
-extern "C" const char* RtVideo_VertexProgram_TypeName(const void* selfv) {
-    return reinterpret_cast<const VertexProgram*>(selfv)
-               ->Video::VertexProgram::TypeName();                    // B.3.5 bridge
 }
 // .rdata literals at 0x180157a40 / 0x180157a28 / 0x180157a38. RULE B5-15: each
 // is the EXACT retail literal, copied, never derived from the C++ base name.
 extern "C" const char* RtVideo_VertexProgram_StaticTypeName() { return Video::VertexProgram::_TypeName(); }
 extern "C" const char* RtVideo_VertexProgram_ParentTypeName() { return Video::VertexProgram::_ParentTypeName(); }
 extern "C" const char* RtVideo_VertexProgram_FileExtension()  { return Video::VertexProgram::_FileExtension(); }
-extern "C" int32_t     RtVideo_VertexProgram_GetFileVersion(const void* selfv) {
-    return reinterpret_cast<const VertexProgram*>(selfv)
-               ->Video::VertexProgram::GetFileVersion();              // B.3.5 bridge
-}
-
-// ??0VertexProgram@Video@@QEAA@XZ (0x1800f6100) — a ctor DOOR, not a ctor.
-extern "C" void* RtVideo_VertexProgram_Ctor(void* selfv) {
-    ConstructBody(reinterpret_cast<VertexProgram*>(selfv));           // B.3.5 bridge
-    return selfv;
-}
-extern "C" void* RtVideo_VertexProgram_Construct(void* selfv) {
-    // RETAIL'S NULL TEST STAYS IN THE DOOR (BLOCK_BRIEF "the shape"). 0x18004e700
-    // opens with `TEST RCX,RCX / JZ`, and that test cannot move into the member:
-    // `this` is `nonnull` to the compiler, so `if (this == nullptr)` inside
-    // `Construct()` is a -Wnonnull-compare warning AND an optimisation GCC is
-    // entitled to delete. Here the receiver is a `void*` and the test is real.
-    if (selfv == nullptr) return nullptr;
-    return reinterpret_cast<VertexProgram*>(selfv)
-               ->Video::VertexProgram::Construct();                   // B.3.5 bridge
-}
-extern "C" void* RtVideo_VertexProgram_Reconstruct(void* selfv) {
-    return reinterpret_cast<VertexProgram*>(selfv)
-               ->Video::VertexProgram::Reconstruct();                 // B.3.5 bridge
-}
-extern "C" void RtVideo_VertexProgram_Destruct(void* selfv) {
-    reinterpret_cast<VertexProgram*>(selfv)
-        ->Video::VertexProgram::Destruct();                           // B.3.5 bridge
-}
-
-// ??1VertexProgram@Video@@UEAA@XZ (0x1800f61b0)
-extern "C" void RtVideo_VertexProgram_Dtor(void* selfv) {
-    reinterpret_cast<VertexProgram*>(selfv)
-        ->Video::VertexProgram::~VertexProgram();                     // B.3.5 bridge
-}
-
 extern "C" const void* RtVideo_VertexProgram_GetData(const void* selfv) {
     return reinterpret_cast<const VertexProgram*>(selfv)
                ->Video::VertexProgram::GetData();                     // B.3.5 bridge
@@ -322,12 +262,6 @@ extern "C" void RtVideo_VertexProgram_PlatformDestructExport(void* selfv) {
         ->Video::VertexProgram::PlatformDestruct();                   // B.3.5 bridge
 }
 
-// ?Serialize@VertexProgram@Video@@UEAA_NAEAVStream@IO@@@Z (0x1800f6240)
-extern "C" bool RtVideo_VertexProgram_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<VertexProgram*>(selfv)
-               ->Video::VertexProgram::Serialize(streamv);            // B.3.5 bridge
-}
-
 // ============================================================================
 // THE MEMBER BODIES — `Video::VertexProgram::*`. At `namespace Video` scope and
 // AFTER the anonymous namespace (B34_BRIEFS A.2); the helpers above stay
@@ -341,12 +275,10 @@ namespace Video {
 const char* VertexProgram::TypeName() const {
     const char* v = nullptr; std::memcpy(&v, VertexProgramTypeInfo() + 8, sizeof v); return v;
 }
-uint32_t VertexProgram::Type() const {
-    uint32_t v = 0; std::memcpy(&v, VertexProgramTypeInfo(), sizeof v); return v;
-}
 uint32_t VertexProgram::TypeId() {
     uint32_t v = 0; std::memcpy(&v, VertexProgramTypeInfo(), sizeof v); return v;
 }
+uint32_t VertexProgram::Type() const { return TypeId(); }
 // RULE B5-15: read out of .rdata, not derived. "ShaderProgram" is NOT namespaced
 // here even though "Object::CompiledExternal" is on ShaderProgram itself — the
 // pattern is "qualified iff the parent is in a different namespace", and it is a
@@ -359,38 +291,40 @@ const char* VertexProgram::_FileExtension()  { return "srsl"; }
 // wrong constant is what silently dropped every draw item once (B35_RULES 6.1).
 int32_t VertexProgram::GetFileVersion() const { return 5; }
 
-// slot 8 — ?Construct@VertexProgram@Video@@UEAAPEAVExternal@Object@@XZ 0x18004e700.
-// The ctor body; retail's leading `TEST RCX,RCX / JZ` lives in the DOOR, where the
-// receiver is still a `void*` and the test is not undefined behaviour. `virtual`,
-// not `override`: this branch introduces the slot (RULE B5-16).
+// slot 8 — ?Construct@: `TEST RCX,RCX / JZ` then the ctor (`this` is never null
+// here). `virtual`, not `override`: this branch introduces the slot (RULE
+// B5-16). `::new` because the class declares its own (unported) placement new.
 Object::External* VertexProgram::Construct() {
-    ConstructBody(this);
-    return this;
+    return ::new (this) VertexProgram();
 }
 
-// slot 6 — ?Reconstruct@ 0x18004e6e0: destroy in place through slot 0 with
-// flags=0 (no free), then rebuild.
-//
-// THE SLOT-0 CALL IS DELIBERATELY NOT `DeletingDtor(0)`. Our slot 0 is declared
-// PURE (see the header banner: the body is deleting_dtor.cpp's table-driven one,
-// registered by address and kept by B35_RULES 11), so the C++ spelling would be a
-// virtual call on an abstract class that GCC is entitled to fold to
-// `__cxa_pure_virtual`. `CallSlot0` reads the object's ACTUAL table — the minted
-// one — which is where the real body is.
+// slot 6 — ?Reconstruct@: slot 0 with flags 0 (destroy in place, no free), then
+// the ctor over the same storage.
 Object::External* VertexProgram::Reconstruct() {
-    CallSlot0(this, 0);
-    ConstructBody(this);
-    return this;
+    DeletingDtor(0);
+    return ::new (this) VertexProgram();
 }
 
-// slot 7 — ?Destruct@VertexProgram@Video@@UEAAXXZ 0x18004e710. Same slot-0 call.
-void VertexProgram::Destruct() { CallSlot0(this, 0); }
+// slot 7 — ?Destruct@: `XOR EDX,EDX ; JMP [RAX]` — slot 0, flags 0.
+void VertexProgram::Destruct() { DeletingDtor(0); }
 
-// ??1VertexProgram@Video@@UEAA@XZ (0x1800f61b0) — ~ShaderProgram's array
-// teardown and ~External are the CHAIN's; see the file banner.
+// ??1VertexProgram@Video@@UEAA@XZ — retail: stamp ??_7VertexProgram, PlatformDestruct, then
+// ~ShaderProgram inlined and ~External. The stamps and everything after
+// PlatformDestruct are the destructor chain's.
 VertexProgram::~VertexProgram() {
-    *reinterpret_cast<void**>(this) = VertexProgramVTable();
     this->Video::VertexProgram::PlatformDestruct();
+}
+
+// ?CreateNewObject@VertexProgram@Video@@SAPEAVBase@Object@@XZ  0x18004e650:
+// MemAlloc(0x58, 8), null branch, the ctor (B39_RULES D2).
+Object::Base* VertexProgram::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(VertexProgram), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) VertexProgram();
+}
+// ?CreateInPlaceObject@VertexProgram@Video@@SAPEAVBase@Object@@PEAX@Z  0x18004e6d0
+Object::Base* VertexProgram::CreateInPlaceObject(void* storage) {
+    return storage ? ::new (storage) VertexProgram() : nullptr;
 }
 
 // ?GetData@VertexProgram@Video@@QEBAPEBVVertexProgramData@2@XZ (0x18004e720) —
@@ -407,7 +341,7 @@ void VertexProgram::Bind(void* context, int32_t permutation) const {
 
 // ?PlatformConstruct@VertexProgram@Video@@AEAAXXZ (0x1800f65e0)
 void VertexProgram::PlatformConstruct() {
-    void* dd = DeviceData();
+    void* dd = ActiveDeviceDataPtr();
     if (dd == nullptr) { _data = nullptr; return; }
     using CreateFn = void* (*)(void*, void*);
     void** vt = *reinterpret_cast<void***>(dd);
@@ -509,40 +443,26 @@ extern "C" void RtVideo_VertexProgram_SerializeStreams(void* serv, int count, vo
 
 int RtVideoVertexProgramRegister() {
     int n = 0;
+    // ENDGAME B.3.9 VID: the factory pair by retail NAME and VA (B39_RULES D2).
+    RegisterRuntimeExport("?CreateNewObject@VertexProgram@Video@@SAPEAVBase@Object@@XZ",
+                          (void*)&Video::VertexProgram::CreateNewObject); ++n;
+    RegisterRuntimeAddr  (0x18004e650ull, (void*)&Video::VertexProgram::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@VertexProgram@Video@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&Video::VertexProgram::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr  (0x18004e6d0ull, (void*)&Video::VertexProgram::CreateInPlaceObject);
 
     // Batch D1: unexported in both builds, address door only.
     RegisterRuntimeAddr  (0x180056db0ull, (void*)&RtVideo_VertexProgram_SerializeStreams); ++n;
 
-    RegisterRuntimeExport("?Type@VertexProgram@Video@@UEBAIXZ",        (void*)&RtVideo_VertexProgram_Type);     ++n;
-    RegisterRuntimeAddr  (0x18004e540ull,                              (void*)&RtVideo_VertexProgram_Type);
     RegisterRuntimeExport("?TypeId@VertexProgram@Video@@SAIXZ",        (void*)&RtVideo_VertexProgram_TypeId);   ++n;
     RegisterRuntimeAddr  (0x18004e550ull,                              (void*)&RtVideo_VertexProgram_TypeId);
-    RegisterRuntimeExport("?TypeName@VertexProgram@Video@@UEBAPEBDXZ", (void*)&RtVideo_VertexProgram_TypeName); ++n;
-    RegisterRuntimeAddr  (0x18004e560ull,                              (void*)&RtVideo_VertexProgram_TypeName);
     RegisterRuntimeExport("?_TypeName@VertexProgram@Video@@CAPEBDXZ",       (void*)&RtVideo_VertexProgram_StaticTypeName); ++n;
     RegisterRuntimeAddr  (0x18004e520ull,                                   (void*)&RtVideo_VertexProgram_StaticTypeName);
     RegisterRuntimeExport("?_ParentTypeName@VertexProgram@Video@@CAPEBDXZ", (void*)&RtVideo_VertexProgram_ParentTypeName); ++n;
     RegisterRuntimeAddr  (0x18004e530ull,                                   (void*)&RtVideo_VertexProgram_ParentTypeName);
     RegisterRuntimeExport("?_FileExtension@VertexProgram@Video@@CAPEBDXZ",  (void*)&RtVideo_VertexProgram_FileExtension); ++n;
     RegisterRuntimeAddr  (0x18004e510ull,                                   (void*)&RtVideo_VertexProgram_FileExtension);
-    RegisterRuntimeExport("?GetFileVersion@VertexProgram@Video@@UEBAHXZ",   (void*)&RtVideo_VertexProgram_GetFileVersion); ++n;
-    RegisterRuntimeAddr  (0x1800f6230ull,                                   (void*)&RtVideo_VertexProgram_GetFileVersion);
 
-    RegisterRuntimeExport("??0VertexProgram@Video@@QEAA@XZ", (void*)&RtVideo_VertexProgram_Ctor); ++n;
-    RegisterRuntimeAddr  (0x1800f6100ull,                    (void*)&RtVideo_VertexProgram_Ctor);
-    RegisterRuntimeExport("??1VertexProgram@Video@@UEAA@XZ", (void*)&RtVideo_VertexProgram_Dtor); ++n;
-    RegisterRuntimeAddr  (0x1800f61b0ull,                    (void*)&RtVideo_VertexProgram_Dtor);
-    RegisterRuntimeExport("?Construct@VertexProgram@Video@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtVideo_VertexProgram_Construct); ++n;
-    RegisterRuntimeAddr  (0x18004e700ull, (void*)&RtVideo_VertexProgram_Construct);
-    RegisterRuntimeExport("?Reconstruct@VertexProgram@Video@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtVideo_VertexProgram_Reconstruct); ++n;
-    RegisterRuntimeAddr  (0x18004e6e0ull, (void*)&RtVideo_VertexProgram_Reconstruct);
-    RegisterRuntimeExport("?Destruct@VertexProgram@Video@@UEAAXXZ", (void*)&RtVideo_VertexProgram_Destruct); ++n;
-    RegisterRuntimeAddr  (0x18004e710ull,                           (void*)&RtVideo_VertexProgram_Destruct);
-    RegisterRuntimeExport("?Serialize@VertexProgram@Video@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtVideo_VertexProgram_Serialize); ++n;
-    RegisterRuntimeAddr  (0x1800f6240ull, (void*)&RtVideo_VertexProgram_Serialize);
 
     RegisterRuntimeExport("?GetData@VertexProgram@Video@@QEBAPEBVVertexProgramData@2@XZ",
                           (void*)&RtVideo_VertexProgram_GetData); ++n;

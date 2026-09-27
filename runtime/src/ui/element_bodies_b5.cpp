@@ -61,7 +61,8 @@
 // ---------------------------------------------------------------------------
 // THE ONE STALE COMMENT THIS FILE DISPROVES (PLAN.md §6 step 8)
 // ---------------------------------------------------------------------------
-// `runtime/src/ui/ui_factory_wave28.cpp` says of both constructors ported here:
+// `runtime/src/ui/ui_factory_wave28.cpp` (deleted by ENDGAME B.3.9 UI-D) said
+// of both constructors ported here:
 // "The ctor is NOT ported: it calls ?CacheText@…, a private member this lane
 // does not own and did not read." For TextElement that premise expired before
 // it was written — `?CacheText@TextElement@UI@@AEAAXXZ` (0x18011ec10) has been
@@ -98,9 +99,10 @@
 // CreateInstance applier, LayoutElement::GetChildLayout, EditElement::
 // SelectCharacter) and reaches fields by name; each registered door is a
 // one-line QUALIFIED delegation. (`??0TextElement`'s door was retired by
-// ENDGAME B.3.9 UI-A: TextElement's real ctor.) The ButtonDescription and NumberElement notes
-// above are history: that applier moved to buttondescription.cpp in block C1,
-// and the NumberElement ctor/CacheText live in numberelement.cpp.
+// ENDGAME B.3.9 UI-A: TextElement's real ctor.) The ButtonDescription and
+// NumberElement notes above are history: that applier moved to
+// buttondescription.cpp in block C1, and the NumberElement ctor/CacheText
+// live in numberelement.cpp.
 // ============================================================================
 
 #include <atomic>

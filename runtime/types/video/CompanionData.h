@@ -29,6 +29,7 @@
 // that used to sit in this file (head[0x38] + device + platformData) is gone —
 // see the alias below.
 #include "ConstantBuffer.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree (the slot-0 bodies)
 
 namespace RtVideo {
 
@@ -153,25 +154,24 @@ static_assert(offsetof(ImageBufferData, imageBuffer) == 0x08, "imageBuffer at +0
 // add nothing it does not already say, so each class below asserts only that it
 // is still the two-pointer object.
 //
-// SLOT 0 IS CONCRETE IN RETAIL AND IS DECLARED `= 0` HERE, which is B.3.4's
-// settled shape (B34_BRIEFS A.4: "slot 0 is left `override = 0` because its body
-// lives in iobase_vtables.cpp, registered by address"). Retail's slot 0 IS a
-// real body per class — the twelve addresses in the 0x180058590..0x180058b10
-// band, which is what makes these classes abstract-with-a-concrete-slot-0 rather
-// than fully abstract — and ours is already registered BY ADDRESS in
-// `runtime/src/object/deleting_dtor.cpp` (e.g. row 52 for `ImageBufferData`,
-// 0x180058a10). Declaring it `virtual XData* DeletingDtor(unsigned)` without
-// `= 0` is what does NOT work, and the reason is worth recording: defining
-// `~XData()` below makes GCC emit a vptr store at the top of the destructor,
-// which needs `vtable for Video::XData`, which needs slot 0's body — twelve
-// `undefined reference to 'vtable for Video::XData'` at link (seen, not
-// predicted). Pure makes every entry known (`__cxa_pure_virtual`) and the
-// vtable emittable, and that vtable is immediately overwritten by the explicit
-// store of the MINTED address anyway (see companion_data.cpp).
+// ENDGAME B.3 step 9, block VID (B39_RULES.md D1, section 5 item 4): CONCRETE.
+// Each class has a REAL public constructor (retail's `??0XData(owner)`: the
+// owner at +0x08, the vptr -- now the compiler's), its OWN slot 0 with the
+// VECTOR arms of the retired RT_DELDTOR row (element 0x10, over ~XData), and a
+// body in every other slot that is retail's: `_purecall` (0x18007ec28), spelled
+// `detail::CompanionPureCall()`. The twelve minted `??_7XData@Video@@6B@` rows,
+// their RT_DELDTOR rows and the `??1XData` doors are retired
+// (tools/rt_mint_retired/vid.txt).
 //
-// ENDGAME B.2.5 / B35_RULES 11 keep the `RT_DELDTOR` rows and the twelve
-// `??_7*Data` mint rows exactly where they are — the mint row is what FILLS slot
-// 0 of the minted table.
+// NOTHING DISPATCHES ON THESE TABLES. A live companion is built by dx11's
+// factory: `MemAlloc`, the `??0XData` DOOR (companion_data.cpp -- which STAYS,
+// reached through dx11's import struct, B39_RULES D1.4 / B9-6, now one line:
+// `::new (self) XData(owner)`), then dx11 stores ITS OWN derived table
+// (`Dx11LiveVtable`, assembled from DX11_REGISTER_SLOT registrations at
+// `Dx11SeamInstall`, never from a Runtime table). Teardown: dx11's slot 0
+// re-seats its own table, calls `~XData()` (the base table is stored and never
+// read), then frees. So the base table is only ever the vptr between two
+// stores; which table it is changes nothing.
 //
 // SLOT NAMES. Retail gives none: every slot but 0 is `_purecall`, and a pure
 // slot's name can only be read off an override. The overrides are ours —
@@ -184,51 +184,75 @@ static_assert(offsetof(ImageBufferData, imageBuffer) == 0x08, "imageBuffer at +0
 // than given an invented name.
 //
 // NO VIRTUAL DESTRUCTOR (ENDGAME B.1 decision 2). `~XData()` is PUBLIC and
-// non-virtual, which is the one place these classes differ from the abstract
-// bases B.3.4 produced: RULE B5-3 requires each dx11 derived destructor to call
-// `self->Video::XData::~XData()` as a QUALIFIED non-virtual call, and the dx11
-// concrete classes are a DECLARED LEAVE (RULE B5-8) that does not actually
-// derive in C++ — so the call site is not a derived class and a `protected`
+// non-virtual, which is the one place these classes differ from the B.3.9
+// recipe's protected destructor: RULE B5-3 requires each dx11 derived destructor
+// to call `self->Video::XData::~XData()` as a QUALIFIED non-virtual call, and the
+// dx11 concrete classes are a DECLARED LEAVE (RULE B5-8) that does not actually
+// derive in C++ -- so the call site is not a derived class and a `protected`
 // destructor would be unreachable to it. It must NOT become `DeletingDtor(0)`:
 // that re-enters the derived slot 0.
-//
-// NO REAL CONSTRUCTOR (B4b-2). All twelve `??0XData` bodies are a pure write of
-// two fields, `owner` first and then the vtable; they stay registered ctor
-// DOORS in `runtime/src/video/companion_data.cpp`, over the
-// `RtVideo::CompanionData` view, because the first of the two fields is the
-// vptr and no constructor can write it to the MINTED address.
+
+extern "C" void _purecall();   // the CRT's (the exe's standalone/main.cpp logs it)
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"   // the _purecall bodies below
 
 namespace Video {
+namespace detail {
+// Retail's body in every Video::*Data slot but 0: `_purecall` (0x18007ec28).
+// Never reached -- a live companion wears dx11's table -- and never returns.
+[[noreturn]] inline void CompanionPureCall() { _purecall(); __builtin_trap(); }
+}  // namespace detail
+
 
 // ---- 20 slots -------------------------------------------------------------
 class DeviceData {
 public:
-    virtual DeviceData* DeletingDtor(unsigned flags) = 0;            // [ 0] 0x180058b10
-    virtual bool EnumerateInterfaces() = 0;                      // [ 1]
-    virtual bool CreateDevice() = 0;                             // [ 2]
-    virtual void Shutdown() = 0;                                 // [ 3]
-    virtual void  Slot4() = 0;                                   // [ 4] dx11: void stub
-    virtual float Slot5() = 0;                                   // [ 5] dx11: returns 0.0f
-    virtual bool  Slot6() = 0;                                   // [ 6] dx11: returns false
-    virtual bool  Slot7() = 0;                                   // [ 7] dx11: returns true
+    // ??0DeviceData(owner) -- the REAL constructor: the owner at +0x08 (retail
+    // stores it first, then the vptr; nothing can observe the order).
+    explicit DeviceData(void* owner) : _owner(owner) {}
+
+    // [0] 0x180058b10 -- MSVC's VECTOR deleting destructor (element 0x10, over
+    // ~DeviceData), both arms as the retired RT_DELDTOR row ran them. Reached only on
+    // an object wearing THIS table; a live companion wears dx11's.
+    virtual DeviceData* DeletingDtor(unsigned flags) {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<DeviceData*>(self + static_cast<int64_t>(i) * 0x10)->~DeviceData();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<DeviceData*>(self - 8);
+        }
+        this->~DeviceData();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
+    virtual bool EnumerateInterfaces() { detail::CompanionPureCall(); }                      // [ 1]
+    virtual bool CreateDevice() { detail::CompanionPureCall(); }                             // [ 2]
+    virtual void Shutdown() { detail::CompanionPureCall(); }                                 // [ 3]
+    virtual void  Slot4() { detail::CompanionPureCall(); }                                   // [ 4] dx11: void stub
+    virtual float Slot5() { detail::CompanionPureCall(); }                                   // [ 5] dx11: returns 0.0f
+    virtual bool  Slot6() { detail::CompanionPureCall(); }                                   // [ 6] dx11: returns false
+    virtual bool  Slot7() { detail::CompanionPureCall(); }                                   // [ 7] dx11: returns true
     // HCURSOR-shaped: (imageBuffer, hotspotX, hotspotY).
-    virtual void SetImageBuffer(void* imageBuffer, int hotX, int hotY) = 0;  // [ 8]
+    virtual void SetImageBuffer(void* imageBuffer, int hotX, int hotY) { detail::CompanionPureCall(); }  // [ 8]
     // [ 9]..[19] — the eleven companion factories, in retail slot order. Each
     // takes the owning Video-side object and returns the new `*Data`. The
     // Runtime-side callers reach these by BYTE OFFSET: `Video::VertexLayout`'s
     // constructor uses +0x70 (slot 14) and `Video::ConstantBuffer`'s +0x58
     // (slot 11).
-    virtual void* CreateContextData(void* owner) = 0;            // [ 9] +0x48
-    virtual void* CreateImageBufferData(void* owner) = 0;        // [10] +0x50
-    virtual void* CreateConstantBufferData(void* owner) = 0;     // [11] +0x58
-    virtual void* CreateIndexBufferData(void* owner) = 0;        // [12] +0x60
-    virtual void* CreateVertexBufferData(void* owner) = 0;       // [13] +0x68
-    virtual void* CreateVertexLayoutData(void* owner) = 0;       // [14] +0x70
-    virtual void* CreateVertexProgramData(void* owner) = 0;      // [15] +0x78
-    virtual void* CreatePixelProgramData(void* owner) = 0;       // [16] +0x80
-    virtual void* CreateRenderStateData(void* owner) = 0;        // [17] +0x88
-    virtual void* CreateVideoProgramData(void* owner) = 0;       // [18] +0x90
-    virtual void* CreateRenderBufferData(void* owner) = 0;       // [19] +0x98
+    virtual void* CreateContextData(void* owner) { detail::CompanionPureCall(); }            // [ 9] +0x48
+    virtual void* CreateImageBufferData(void* owner) { detail::CompanionPureCall(); }        // [10] +0x50
+    virtual void* CreateConstantBufferData(void* owner) { detail::CompanionPureCall(); }     // [11] +0x58
+    virtual void* CreateIndexBufferData(void* owner) { detail::CompanionPureCall(); }        // [12] +0x60
+    virtual void* CreateVertexBufferData(void* owner) { detail::CompanionPureCall(); }       // [13] +0x68
+    virtual void* CreateVertexLayoutData(void* owner) { detail::CompanionPureCall(); }       // [14] +0x70
+    virtual void* CreateVertexProgramData(void* owner) { detail::CompanionPureCall(); }      // [15] +0x78
+    virtual void* CreatePixelProgramData(void* owner) { detail::CompanionPureCall(); }       // [16] +0x80
+    virtual void* CreateRenderStateData(void* owner) { detail::CompanionPureCall(); }        // [17] +0x88
+    virtual void* CreateVideoProgramData(void* owner) { detail::CompanionPureCall(); }       // [18] +0x90
+    virtual void* CreateRenderBufferData(void* owner) { detail::CompanionPureCall(); }       // [19] +0x98
 
     ~DeviceData();          // ??1DeviceData@Video@@UEAA@XZ  0x1800f8cf0
 
@@ -238,32 +262,51 @@ public:
 // ---- 20 slots -------------------------------------------------------------
 class ContextData {
 public:
-    virtual ContextData* DeletingDtor(unsigned flags) = 0;           // [ 0] 0x180058a90
-    virtual bool BeginCommands() = 0;                            // [ 1]
-    virtual void EndCommands() = 0;                              // [ 2]
-    virtual void Finish() = 0;                                   // [ 3]
+    // ??0ContextData(owner) -- the REAL constructor: the owner at +0x08 (retail
+    // stores it first, then the vptr; nothing can observe the order).
+    explicit ContextData(void* owner) : _owner(owner) {}
+
+    // [0] 0x180058a90 -- MSVC's VECTOR deleting destructor (element 0x10, over
+    // ~ContextData), both arms as the retired RT_DELDTOR row ran them. Reached only on
+    // an object wearing THIS table; a live companion wears dx11's.
+    virtual ContextData* DeletingDtor(unsigned flags) {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<ContextData*>(self + static_cast<int64_t>(i) * 0x10)->~ContextData();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<ContextData*>(self - 8);
+        }
+        this->~ContextData();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
+    virtual bool BeginCommands() { detail::CompanionPureCall(); }                            // [ 1]
+    virtual void EndCommands() { detail::CompanionPureCall(); }                              // [ 2]
+    virtual void Finish() { detail::CompanionPureCall(); }                                   // [ 3]
     virtual void Clear(unsigned flags, unsigned color,
-                       float depth, int stencil) = 0;            // [ 4]
-    virtual void BindRenderBuffer() = 0;                         // [ 5]
-    virtual void BindViewport() = 0;                             // [ 6]
-    virtual void BindScissor() = 0;                              // [ 7]
-    virtual void BindTransforms() = 0;                           // [ 8]
-    virtual void BindTextureNone(int slot) = 0;                  // [ 9]
-    virtual void BindIndexNone() = 0;                            // [10]
-    virtual void BindVertexNone(int slot) = 0;                   // [11]
+                       float depth, int stencil) { detail::CompanionPureCall(); }            // [ 4]
+    virtual void BindRenderBuffer() { detail::CompanionPureCall(); }                         // [ 5]
+    virtual void BindViewport() { detail::CompanionPureCall(); }                             // [ 6]
+    virtual void BindScissor() { detail::CompanionPureCall(); }                              // [ 7]
+    virtual void BindTransforms() { detail::CompanionPureCall(); }                           // [ 8]
+    virtual void BindTextureNone(int slot) { detail::CompanionPureCall(); }                  // [ 9]
+    virtual void BindIndexNone() { detail::CompanionPureCall(); }                            // [10]
+    virtual void BindVertexNone(int slot) { detail::CompanionPureCall(); }                   // [11]
     virtual void DrawIndexed(int primitiveType, int baseVertex, int vertexCount,
                              int startIndex, int indexCount,
-                             int instanceCount) = 0;             // [12]
-    virtual int  GetMaxDynamicInstances(int a, int b, int c) = 0; // [13]
-    virtual bool BeginVertices(int vertexCount, int vertexStride) = 0;        // [14]
-    virtual void EndVertices(int primitiveType) = 0;                          // [15]
+                             int instanceCount) { detail::CompanionPureCall(); }             // [12]
+    virtual int  GetMaxDynamicInstances(int a, int b, int c) { detail::CompanionPureCall(); } // [13]
+    virtual bool BeginVertices(int vertexCount, int vertexStride) { detail::CompanionPureCall(); }        // [14]
+    virtual void EndVertices(int primitiveType) { detail::CompanionPureCall(); }                          // [15]
     virtual bool BeginIndexedVertices(int vertexCount, int vertexStride,
-                                      int indexCount) = 0;                    // [16]
-    virtual void EndIndexedVertices(int primitiveType) = 0;                   // [17]
+                                      int indexCount) { detail::CompanionPureCall(); }                    // [16]
+    virtual void EndIndexedVertices(int primitiveType) { detail::CompanionPureCall(); }                   // [17]
     virtual bool BeginInstancedIndexedVertices(int vertexCount, int vertexStride,
                                                int indexCount,
-                                               int instanceCount) = 0;        // [18]
-    virtual void EndInstancedIndexedVertices(int primitiveType) = 0;          // [19]
+                                               int instanceCount) { detail::CompanionPureCall(); }        // [18]
+    virtual void EndInstancedIndexedVertices(int primitiveType) { detail::CompanionPureCall(); }          // [19]
 
     ~ContextData();         // ??1ContextData@Video@@UEAA@XZ  0x1800f8e30
 
@@ -273,12 +316,31 @@ public:
 // ---- 7 slots --------------------------------------------------------------
 class ImageBufferData {
 public:
-    virtual ImageBufferData* DeletingDtor(unsigned flags) = 0;       // [0] 0x180058a10
-    virtual void AttachColorBuffer() = 0;                        // [1]
-    virtual void AttachDepthBuffer() = 0;                        // [2]
+    // ??0ImageBufferData(owner) -- the REAL constructor: the owner at +0x08 (retail
+    // stores it first, then the vptr; nothing can observe the order).
+    explicit ImageBufferData(void* owner) : _owner(owner) {}
+
+    // [0] 0x180058a10 -- MSVC's VECTOR deleting destructor (element 0x10, over
+    // ~ImageBufferData), both arms as the retired RT_DELDTOR row ran them. Reached only on
+    // an object wearing THIS table; a live companion wears dx11's.
+    virtual ImageBufferData* DeletingDtor(unsigned flags) {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<ImageBufferData*>(self + static_cast<int64_t>(i) * 0x10)->~ImageBufferData();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<ImageBufferData*>(self - 8);
+        }
+        this->~ImageBufferData();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
+    virtual void AttachColorBuffer() { detail::CompanionPureCall(); }                        // [1]
+    virtual void AttachDepthBuffer() { detail::CompanionPureCall(); }                        // [2]
     // `levels` is a `Collection::Array<ImageLevel>`-shaped header; dx11 spells
     // it `ImageLevelArray`.
-    virtual bool Create(const void* levels) = 0;                 // [3]
+    virtual bool Create(const void* levels) { detail::CompanionPureCall(); }                 // [3]
     // ENDGAME B.3.5 block J, SIGNATURE CORRECTED. `unknownArg` was not unknown:
     // it is the `Video::Context*`. Read as DISASSEMBLY this pass from the only
     // caller, `?BindTextures@Context@Video@@` 0x1800ef330 --
@@ -290,9 +352,9 @@ public:
     // slots. VideoDX11's body ignores it (dx11/src/imagebufferdata.cpp says so at
     // the parameter); the CALLER still sets it, and the name should say what the
     // register holds rather than that one implementation does not read it.
-    virtual void Bind(void* context, unsigned slot) = 0;         // [4]
-    virtual bool Update(void* data, int width, int height) = 0;  // [5]
-    virtual bool Read(void* dst, int width, int height) = 0;     // [6]
+    virtual void Bind(void* context, unsigned slot) { detail::CompanionPureCall(); }         // [4]
+    virtual bool Update(void* data, int width, int height) { detail::CompanionPureCall(); }  // [5]
+    virtual bool Read(void* dst, int width, int height) { detail::CompanionPureCall(); }     // [6]
 
     // ??1ImageBufferData@Video@@UEAA@XZ  0x1800f8e10. Its registered DOOR is
     // `Video_ImageBufferData_Dtor` in `runtime/src/video/buffers.cpp` (Wave 6
@@ -307,15 +369,34 @@ public:
 // ---- 7 slots --------------------------------------------------------------
 class IndexBufferData {
 public:
-    virtual IndexBufferData* DeletingDtor(unsigned flags) = 0;        // [0] 0x180058910
+    // ??0IndexBufferData(owner) -- the REAL constructor: the owner at +0x08 (retail
+    // stores it first, then the vptr; nothing can observe the order).
+    explicit IndexBufferData(void* owner) : _owner(owner) {}
+
+    // [0] 0x180058910 -- MSVC's VECTOR deleting destructor (element 0x10, over
+    // ~IndexBufferData), both arms as the retired RT_DELDTOR row ran them. Reached only on
+    // an object wearing THIS table; a live companion wears dx11's.
+    virtual IndexBufferData* DeletingDtor(unsigned flags) {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<IndexBufferData*>(self + static_cast<int64_t>(i) * 0x10)->~IndexBufferData();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<IndexBufferData*>(self - 8);
+        }
+        this->~IndexBufferData();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     virtual bool Create(uint32_t sizeBytes, uint8_t dynamic,
-                        const void* data) = 0;                   // [1]
+                        const void* data) { detail::CompanionPureCall(); }                   // [1]
     virtual bool SetData(int32_t sizeBytes, int32_t offsetBytes,
-                         const void* src) = 0;                   // [2]
+                         const void* src) { detail::CompanionPureCall(); }                   // [2]
     // `Video::IndexBuffer::Lock`/`Unlock` (companion_data.cpp) are three-
     // instruction tail-call trampolines into these two, +0x18 and +0x20.
-    virtual void* Lock(int32_t sizeBytes, int32_t* outByteOffset) = 0;  // [3] +0x18
-    virtual void  Unlock() = 0;                                  // [4] +0x20
+    virtual void* Lock(int32_t sizeBytes, int32_t* outByteOffset) { detail::CompanionPureCall(); }  // [3] +0x18
+    virtual void  Unlock() { detail::CompanionPureCall(); }                                  // [4] +0x20
     // ENDGAME B.3.5 block J, SIGNATURE CORRECTED -- this slot takes the Context.
     // It was declared `Bind()` because VideoDX11's body (0x180003380) reads only
     // `this`. But the ABSTRACT slot is what the CALLER dispatches through, and
@@ -328,8 +409,8 @@ public:
     // the slot's arity. RULE B5-14 / the caller brief: THE SLOT DECIDES, and the
     // arity comes from retail. (VertexBufferData's slot 5, below, takes four; that
     // is still the one slot where the two shapes differ.)
-    virtual void  Bind(void* context) = 0;                       // [5]
-    virtual void  Serialize(void* serializer) = 0;               // [6]
+    virtual void  Bind(void* context) { detail::CompanionPureCall(); }                       // [5]
+    virtual void  Serialize(void* serializer) { detail::CompanionPureCall(); }               // [6]
 
     ~IndexBufferData();     // ??1IndexBufferData@Video@@UEAA@XZ  0x1800f8df0
 
@@ -339,17 +420,36 @@ public:
 // ---- 7 slots --------------------------------------------------------------
 class VertexBufferData {
 public:
-    virtual VertexBufferData* DeletingDtor(unsigned flags) = 0;       // [0] 0x180058890
+    // ??0VertexBufferData(owner) -- the REAL constructor: the owner at +0x08 (retail
+    // stores it first, then the vptr; nothing can observe the order).
+    explicit VertexBufferData(void* owner) : _owner(owner) {}
+
+    // [0] 0x180058890 -- MSVC's VECTOR deleting destructor (element 0x10, over
+    // ~VertexBufferData), both arms as the retired RT_DELDTOR row ran them. Reached only on
+    // an object wearing THIS table; a live companion wears dx11's.
+    virtual VertexBufferData* DeletingDtor(unsigned flags) {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<VertexBufferData*>(self + static_cast<int64_t>(i) * 0x10)->~VertexBufferData();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<VertexBufferData*>(self - 8);
+        }
+        this->~VertexBufferData();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     virtual bool Create(uint32_t sizeBytes, uint8_t dynamic,
-                        const void* data) = 0;                   // [1]
+                        const void* data) { detail::CompanionPureCall(); }                   // [1]
     virtual bool SetData(int32_t sizeBytes, int32_t offsetBytes,
-                         const void* src) = 0;                   // [2]
-    virtual void* Lock(int32_t sizeBytes, int32_t* outByteOffset) = 0;  // [3] +0x18
-    virtual void  Unlock() = 0;                                  // [4] +0x20
+                         const void* src) { detail::CompanionPureCall(); }                   // [2]
+    virtual void* Lock(int32_t sizeBytes, int32_t* outByteOffset) { detail::CompanionPureCall(); }  // [3] +0x18
+    virtual void  Unlock() { detail::CompanionPureCall(); }                                  // [4] +0x20
     // The one slot where the vertex and index shapes differ.
     virtual void  Bind(void* context, uint32_t startSlot, uint32_t offsetBytes,
-                       uint32_t strideBytes) = 0;                // [5]
-    virtual void  Serialize(void* serializer) = 0;               // [6]
+                       uint32_t strideBytes) { detail::CompanionPureCall(); }                // [5]
+    virtual void  Serialize(void* serializer) { detail::CompanionPureCall(); }               // [6]
 
     ~VertexBufferData();    // ??1VertexBufferData@Video@@UEAA@XZ  0x1800f8d50
 
@@ -359,8 +459,27 @@ public:
 // ---- 4 slots --------------------------------------------------------------
 class ConstantBufferData {
 public:
-    virtual ConstantBufferData* DeletingDtor(unsigned flags) = 0;     // [0] 0x180058990
-    virtual bool Create() = 0;                                   // [1]
+    // ??0ConstantBufferData(owner) -- the REAL constructor: the owner at +0x08 (retail
+    // stores it first, then the vptr; nothing can observe the order).
+    explicit ConstantBufferData(void* owner) : _owner(owner) {}
+
+    // [0] 0x180058990 -- MSVC's VECTOR deleting destructor (element 0x10, over
+    // ~ConstantBufferData), both arms as the retired RT_DELDTOR row ran them. Reached only on
+    // an object wearing THIS table; a live companion wears dx11's.
+    virtual ConstantBufferData* DeletingDtor(unsigned flags) {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<ConstantBufferData*>(self + static_cast<int64_t>(i) * 0x10)->~ConstantBufferData();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<ConstantBufferData*>(self - 8);
+        }
+        this->~ConstantBufferData();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
+    virtual bool Create() { detail::CompanionPureCall(); }                                   // [1]
     // `Video::ConstantBuffer::Bind` (0x1800eef70) tail-jumps into this one
     // through +0x10, off the owner's +0x40.
     // ENDGAME B.3.5 block J, SIGNATURE CORRECTED IN TWO PLACES. `unused` is the
@@ -382,8 +501,8 @@ public:
     // is the kind of quiet type error a caller conversion has to pass an ugly cast
     // through, which is how it was found. VideoDX11 reads neither argument.
     virtual void Bind(void* context, const void* srcData, int32_t first,
-                      int32_t sizeBytes) = 0;                    // [2] +0x10
-    virtual int32_t SlotIndexPlusOne() = 0;                      // [3]
+                      int32_t sizeBytes) { detail::CompanionPureCall(); }                    // [2] +0x10
+    virtual int32_t SlotIndexPlusOne() { detail::CompanionPureCall(); }                      // [3]
 
     ~ConstantBufferData();  // ??1ConstantBufferData@Video@@UEAA@XZ  0x1800f8e50
 
@@ -393,10 +512,29 @@ public:
 // ---- 4 slots --------------------------------------------------------------
 class RenderBufferData {
 public:
-    virtual RenderBufferData* DeletingDtor(unsigned flags) = 0;       // [0] 0x180058590
-    virtual bool Slot1() = 0;                                    // [1] dx11: returns true
-    virtual void Bind(void* context) = 0;                        // [2]
-    virtual void Resolve(void* context, void* other, bool flag) = 0;  // [3]
+    // ??0RenderBufferData(owner) -- the REAL constructor: the owner at +0x08 (retail
+    // stores it first, then the vptr; nothing can observe the order).
+    explicit RenderBufferData(void* owner) : _owner(owner) {}
+
+    // [0] 0x180058590 -- MSVC's VECTOR deleting destructor (element 0x10, over
+    // ~RenderBufferData), both arms as the retired RT_DELDTOR row ran them. Reached only on
+    // an object wearing THIS table; a live companion wears dx11's.
+    virtual RenderBufferData* DeletingDtor(unsigned flags) {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<RenderBufferData*>(self + static_cast<int64_t>(i) * 0x10)->~RenderBufferData();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<RenderBufferData*>(self - 8);
+        }
+        this->~RenderBufferData();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
+    virtual bool Slot1() { detail::CompanionPureCall(); }                                    // [1] dx11: returns true
+    virtual void Bind(void* context) { detail::CompanionPureCall(); }                        // [2]
+    virtual void Resolve(void* context, void* other, bool flag) { detail::CompanionPureCall(); }  // [3]
 
     ~RenderBufferData();    // ??1RenderBufferData@Video@@UEAA@XZ  0x1800f8db0
 
@@ -406,11 +544,30 @@ public:
 // ---- 3 slots --------------------------------------------------------------
 class VertexLayoutData {
 public:
-    virtual VertexLayoutData* DeletingDtor(unsigned flags) = 0;       // [0] 0x180058810
-    virtual void Bind(void* context) = 0;                        // [1]
+    // ??0VertexLayoutData(owner) -- the REAL constructor: the owner at +0x08 (retail
+    // stores it first, then the vptr; nothing can observe the order).
+    explicit VertexLayoutData(void* owner) : _owner(owner) {}
+
+    // [0] 0x180058810 -- MSVC's VECTOR deleting destructor (element 0x10, over
+    // ~VertexLayoutData), both arms as the retired RT_DELDTOR row ran them. Reached only on
+    // an object wearing THIS table; a live companion wears dx11's.
+    virtual VertexLayoutData* DeletingDtor(unsigned flags) {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<VertexLayoutData*>(self + static_cast<int64_t>(i) * 0x10)->~VertexLayoutData();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<VertexLayoutData*>(self - 8);
+        }
+        this->~VertexLayoutData();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
+    virtual void Bind(void* context) { detail::CompanionPureCall(); }                        // [1]
     // void, unlike VertexProgramData's and PixelProgramData's bool — VideoDX11's
     // 0x180003ff0 falls off its end with no return value set.
-    virtual void PlatformCreate() = 0;                           // [2] +0x10
+    virtual void PlatformCreate() { detail::CompanionPureCall(); }                           // [2] +0x10
 
     ~VertexLayoutData();    // ??1VertexLayoutData@Video@@UEAA@XZ  0x1800f8d30
 
@@ -420,9 +577,28 @@ public:
 // ---- 3 slots --------------------------------------------------------------
 class VertexProgramData {
 public:
-    virtual VertexProgramData* DeletingDtor(unsigned flags) = 0;      // [0] 0x180058790
-    virtual bool PlatformCreate() = 0;                           // [1]
-    virtual void Bind(void* context, int permutation) = 0;        // [2]
+    // ??0VertexProgramData(owner) -- the REAL constructor: the owner at +0x08 (retail
+    // stores it first, then the vptr; nothing can observe the order).
+    explicit VertexProgramData(void* owner) : _owner(owner) {}
+
+    // [0] 0x180058790 -- MSVC's VECTOR deleting destructor (element 0x10, over
+    // ~VertexProgramData), both arms as the retired RT_DELDTOR row ran them. Reached only on
+    // an object wearing THIS table; a live companion wears dx11's.
+    virtual VertexProgramData* DeletingDtor(unsigned flags) {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<VertexProgramData*>(self + static_cast<int64_t>(i) * 0x10)->~VertexProgramData();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<VertexProgramData*>(self - 8);
+        }
+        this->~VertexProgramData();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
+    virtual bool PlatformCreate() { detail::CompanionPureCall(); }                           // [1]
+    virtual void Bind(void* context, int permutation) { detail::CompanionPureCall(); }        // [2]
 
     ~VertexProgramData();   // ??1VertexProgramData@Video@@UEAA@XZ  0x1800f8d10
 
@@ -432,9 +608,28 @@ public:
 // ---- 3 slots --------------------------------------------------------------
 class PixelProgramData {
 public:
-    virtual PixelProgramData* DeletingDtor(unsigned flags) = 0;       // [0] 0x180058710
-    virtual bool PlatformCreate() = 0;                           // [1]
-    virtual void Bind(void* context, int permutation) = 0;        // [2]
+    // ??0PixelProgramData(owner) -- the REAL constructor: the owner at +0x08 (retail
+    // stores it first, then the vptr; nothing can observe the order).
+    explicit PixelProgramData(void* owner) : _owner(owner) {}
+
+    // [0] 0x180058710 -- MSVC's VECTOR deleting destructor (element 0x10, over
+    // ~PixelProgramData), both arms as the retired RT_DELDTOR row ran them. Reached only on
+    // an object wearing THIS table; a live companion wears dx11's.
+    virtual PixelProgramData* DeletingDtor(unsigned flags) {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<PixelProgramData*>(self + static_cast<int64_t>(i) * 0x10)->~PixelProgramData();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<PixelProgramData*>(self - 8);
+        }
+        this->~PixelProgramData();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
+    virtual bool PlatformCreate() { detail::CompanionPureCall(); }                           // [1]
+    virtual void Bind(void* context, int permutation) { detail::CompanionPureCall(); }        // [2]
 
     ~PixelProgramData();    // ??1PixelProgramData@Video@@UEAA@XZ  0x1800f8dd0
 
@@ -444,9 +639,28 @@ public:
 // ---- 3 slots --------------------------------------------------------------
 class RenderStateData {
 public:
-    virtual RenderStateData* DeletingDtor(unsigned flags) = 0;        // [0] 0x180058690
-    virtual bool Create() = 0;                                   // [1]
-    virtual void Bind(void* context) = 0;                        // [2]
+    // ??0RenderStateData(owner) -- the REAL constructor: the owner at +0x08 (retail
+    // stores it first, then the vptr; nothing can observe the order).
+    explicit RenderStateData(void* owner) : _owner(owner) {}
+
+    // [0] 0x180058690 -- MSVC's VECTOR deleting destructor (element 0x10, over
+    // ~RenderStateData), both arms as the retired RT_DELDTOR row ran them. Reached only on
+    // an object wearing THIS table; a live companion wears dx11's.
+    virtual RenderStateData* DeletingDtor(unsigned flags) {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<RenderStateData*>(self + static_cast<int64_t>(i) * 0x10)->~RenderStateData();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<RenderStateData*>(self - 8);
+        }
+        this->~RenderStateData();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
+    virtual bool Create() { detail::CompanionPureCall(); }                                   // [1]
+    virtual void Bind(void* context) { detail::CompanionPureCall(); }                        // [2]
 
     // ??1RenderStateData@Video@@UEAA@XZ. Its registered DOOR is in
     // `runtime/src/video/device.cpp` (Wave 6 lane B), not in
@@ -460,8 +674,27 @@ public:
 // ---- 3 slots --------------------------------------------------------------
 class VideoProgramData {
 public:
-    virtual VideoProgramData* DeletingDtor(unsigned flags) = 0;       // [0] 0x180058610
-    virtual bool Slot1() = 0;                                    // [1] dx11: returns true
+    // ??0VideoProgramData(owner) -- the REAL constructor: the owner at +0x08 (retail
+    // stores it first, then the vptr; nothing can observe the order).
+    explicit VideoProgramData(void* owner) : _owner(owner) {}
+
+    // [0] 0x180058610 -- MSVC's VECTOR deleting destructor (element 0x10, over
+    // ~VideoProgramData), both arms as the retired RT_DELDTOR row ran them. Reached only on
+    // an object wearing THIS table; a live companion wears dx11's.
+    virtual VideoProgramData* DeletingDtor(unsigned flags) {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<VideoProgramData*>(self + static_cast<int64_t>(i) * 0x10)->~VideoProgramData();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<VideoProgramData*>(self - 8);
+        }
+        this->~VideoProgramData();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
+    virtual bool Slot1() { detail::CompanionPureCall(); }                                    // [1] dx11: returns true
     // ENDGAME B.3.5 block J, SLOT NAMED AND SIGNATURE CORRECTED. It was `Slot2()`
     // because VideoDX11 implements it as a bare `RET` (0x180001190), so the label
     // block A copied from the seam said nothing. The CALLER says what it is:
@@ -477,7 +710,7 @@ public:
     // `PixelProgramData::Bind` at the same slot index. So slot 2 is `Bind`, and
     // this backend simply implements no video-program binding (dx11/src/
     // smallclasses.cpp: "VideoProgramData really is inert").
-    virtual void Bind(void* context, int detail) = 0;             // [2] dx11: inert stub
+    virtual void Bind(void* context, int detail) { detail::CompanionPureCall(); }             // [2] dx11: inert stub
 
     ~VideoProgramData();    // ??1VideoProgramData@Video@@UEAA@XZ  0x1800f8d90
 
@@ -509,3 +742,5 @@ RT_VIDEO_COMPANION_PINS(VideoProgramData);
 #undef RT_VIDEO_COMPANION_PINS
 
 }  // namespace Video
+
+#pragma GCC diagnostic pop

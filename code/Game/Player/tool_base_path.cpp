@@ -32,20 +32,24 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/DestroyComponent.h"
+#include "Component/StateMachineComponent.h"
+#include "Component/CreateDragDescription.h"
 
 // ============================================================
-// type-ID storage globals (exe .rdata, filled by RegisterType)
+// type-ID storage: 0x1401c75f0/7d98/7430 are these classes' cells (Table 1).
 // ============================================================
-static const uint32_t* s_pTid_75f0 = nullptr;  // 0x1401c75f0  (FUN_140005780)
-static const uint32_t* s_pTid_7d98 = nullptr;  // 0x1401c7d98  (FUN_140003ea0)
-static const uint32_t* s_pTid_7430 = nullptr;  // 0x1401c7430  (crop/field description, sub_48a0)
+static uint32_t s_pTid_75f0_v, s_pTid_7d98_v, s_pTid_7430_v;
+static const uint32_t* s_pTid_75f0 = &s_pTid_75f0_v;  // DestroyComponent
+static const uint32_t* s_pTid_7d98 = &s_pTid_7d98_v;  // StateMachineComponent
+static const uint32_t* s_pTid_7430 = &s_pTid_7430_v;  // CreateDragDescription
 static bool s_tidInit = false;
 
 static void EnsureTypeIds() {
     if (s_tidInit) return;
-    s_pTid_75f0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c75f0));
-    s_pTid_7d98 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7d98));
-    s_pTid_7430 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7430));
+    s_pTid_75f0_v = DestroyComponent::TypeId();
+    s_pTid_7d98_v = StateMachineComponent::TypeId();
+    s_pTid_7430_v = CreateDragDescription::TypeId();
     s_tidInit = true;
 }
 

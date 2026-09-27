@@ -141,6 +141,7 @@
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/ui/ComboDialog.h"
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/ui/Element.h"   // ENDGAME B.3.6 closing pass: FindElementType
 #include <new>
@@ -237,18 +238,13 @@ template <class T> inline T& F(void* p, size_t off) {
 // ---------------------------------------------------------------------------
 uint64_t g_newEntries   = 0;
 uint64_t g_newLastBytes = 0;
-uint64_t g_diCtorEntries = 0;
-uint64_t g_cdCtorEntries = 0;
 
 struct ComboDialogSummary {
     ~ComboDialogSummary() {
         printf("[RtPort] UI::ComboDialog ATTENDANCE (entries, not comparisons): "
-               "operator_new=%llu lastBytes=0x%llx  DialogInstance::ctor(Element)=%llu  "
-               "ComboDialog::ctor=%llu\n",
+               "operator_new=%llu lastBytes=0x%llx\n",
                (unsigned long long)g_newEntries,
-               (unsigned long long)g_newLastBytes,
-               (unsigned long long)g_diCtorEntries,
-               (unsigned long long)g_cdCtorEntries);
+               (unsigned long long)g_newLastBytes);
         fflush(stdout);
     }
 };
@@ -270,14 +266,6 @@ void* MemAlloc(uint64_t bytes, int align) {
     static Fn fn = nullptr;
     if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
     return fn ? fn(bytes, align) : nullptr;
-}
-
-// ??0Internal@Object@@QEAA@XZ   0x1800bfd10   (an EXPORT — checked)
-void* InternalCtor(void* self) {
-    using Fn = void* (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveExport("??0Internal@Object@@QEAA@XZ"));
-    return fn(self);
 }
 
 // ?IsDerivedFrom@Base@Object@@QEBA_NI@Z  0x1800c0390 — PORTED (Wave 3 lane A),
@@ -510,30 +498,23 @@ extern "C" void* RtUi_ComboDialog_OperatorNew(uint64_t bytes) {
 // +0x88 each cover a pair of dwords. Spelled out field by field here; the bytes
 // are identical.
 // ============================================================================
-extern "C" void* RtUi_DialogInstance_CtorFromElement(void* self, void* ui,
-                                                     void** rootPtr,
-                                                     void** parentPtr,
-                                                     void* dataSource,
-                                                     void* userData,
-                                                     int32_t userFlags) {
-    ++g_diCtorEntries;
-    DialogInstance* const d = static_cast<DialogInstance*>(self);
-
-    InternalCtor(self);                                       // 0x1801146dc
-
-    // 0x1801146e2: the DLL's OWN exported vtable, never a minted one. Resolving
-    // retail's table keeps a half-ported class from putting two vtables in play
-    // — the `??_7Geometry@Graphics@@6B@` lever from Wave 6.
-    static void* vtbl = nullptr;
-    if (!vtbl) vtbl = ResolveExport("??_7DialogInstance@UI@@6B@");
-    F<void*>(d, 0x00) = vtbl;
+// ENDGAME B.3.9 UI-D: the real constructor (DialogInstance.h). `??0Internal`
+// (0x1801146dc) and the vptr store (0x1801146e2) are the compiler's; the
+// `_timers` / `_controllers` headers are zeroed by their own Array ctors (the
+// three qword stores retail makes at +0x68..+0x80).
+UI::DialogInstance::DialogInstance(UserInterface* ui, Object::InternalPtr<Element> root,
+                                   Object::InternalPtr<DialogInstance> parent,
+                                   Object::Base* dataSource, void* userData,
+                                   int32_t userFlags) {
+    UI::DialogInstance* const d = this;
+    void* const self = this;
 
     d->_ui         = ui;                           // +0x10
     d->_dialog     = nullptr;                      // +0x18  no Dialog resource
     d->_flags      = 0;                            // +0x20  \ one qword store
     d->_result     = 0;                            // +0x24  /
-    d->_parent     = nullptr;                      // +0x28  written 0 then...
-    d->_parent     = *parentPtr;                   // +0x28  ...the real value
+    d->_parent     = Object::InternalPtr<UI::DialogInstance>();   // +0x28  written 0 then...
+    d->_parent     = parent;                       // +0x28  ...the real value
     d->_dataSource = dataSource;                   // +0x30
     // ENDGAME B.3.2 step 2 — these three stay raw field writes, deliberately:
     // `Collection::LinkedList<T>` has NO user-provided default constructor on
@@ -543,15 +524,10 @@ extern "C" void* RtUi_DialogInstance_CtorFromElement(void* self, void* ui,
     d->_children._tail  = nullptr;                 // +0x40
     d->_children._count = 0;                       // +0x48   (+0x4c left alone)
     d->_root       = nullptr;                      // +0x50  written 0 then...
-    d->_root       = *rootPtr;                     // +0x50  ...the real value
+    d->_root       = root.Get();                   // +0x50  ...the real value
     d->_spriteSheet = nullptr;                     // +0x58
     d->_spriteIndex = -1;                          // +0x60   (+0x64 left alone)
-    d->_timers._data      = nullptr;               // +0x68
-    d->_timers._size      = 0;                     // +0x70  \ one qword store
-    d->_timers._capacity  = 0;                     // +0x74  /
-    d->_controllers._data     = nullptr;           // +0x78
-    d->_controllers._size     = 0;                 // +0x80  \ one qword store
-    d->_controllers._capacity = 0;                 // +0x84  /
+    // +0x68..+0x87: the two Array headers, zeroed by their own ctors.
     d->_upperLeftX = 0;                            // +0x88  \ one qword store
     d->_upperLeftY = 0;                            // +0x8c  /
     d->_hoverMouseX = -1;                          // +0x90  a QWORD -1 --
@@ -583,10 +559,10 @@ extern "C" void* RtUi_DialogInstance_CtorFromElement(void* self, void* ui,
     // so there is no second caller to justify adding a class member for it
     // yet. Left as the raw field manipulation, including the guard-free
     // linking through a possibly-null `node` on OOM (retail's own asymmetry).
-    if (DialogInstance* const parent = static_cast<DialogInstance*>(d->_parent)) {
+    if (UI::DialogInstance* const parentDlg = d->_parent.Get()) {
         // 0x1801147af: `LEA EDX,[RBP+0x18] / LEA R8D,[RBP+0x8]` with RBP == 0,
         // wrapped in Enter/Allocate/Leave — i.e. exactly ?MemAlloc@…(0x18, 8).
-        uint8_t* node = static_cast<uint8_t*>(MemAlloc(0x18, 8));
+        uint8_t* node = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(0x18, 8));
         if (node) {
             F<void*>(node, 0x00) = self;      // element
             F<void*>(node, 0x08) = nullptr;   // prev
@@ -594,19 +570,18 @@ extern "C" void* RtUi_DialogInstance_CtorFromElement(void* self, void* ui,
         }
         // 0x1801147e1: on an OOM `node` is null (RBP stayed 0) and retail links
         // the null in anyway. Reproduced, guard-free.
-        if (void* head = parent->_children._head) {
-            F<void*>(head, 0x08) = node;                      // old head->prev
-            F<void*>(node, 0x10) = parent->_children._head;   // node->next
+        if (void* head = parentDlg->_children._head) {
+            F<void*>(head, 0x08) = node;                         // old head->prev
+            F<void*>(node, 0x10) = parentDlg->_children._head;   // node->next
         } else {
-            parent->_children._tail =
-                reinterpret_cast<decltype(parent->_children._tail)>(node);
+            parentDlg->_children._tail =
+                reinterpret_cast<decltype(parentDlg->_children._tail)>(node);
         }
-        parent->_children._head =
-            reinterpret_cast<decltype(parent->_children._head)>(node);
-        parent->_children._count++;
+        parentDlg->_children._head =
+            reinterpret_cast<decltype(parentDlg->_children._head)>(node);
+        parentDlg->_children._count++;
     }
-
-    return self;   // 0x180114803 `MOV RAX,R14`
+    // 0x180114803 `MOV RAX,R14`: a ctor returns `this`.
 }
 
 // ============================================================================
@@ -630,35 +605,26 @@ extern "C" void* RtUi_DialogInstance_CtorFromElement(void* self, void* ui,
 // deliberately NOT forwarded to the base ctor. Both facts are argued in the
 // banner. Returns `this` in RAX.
 // ============================================================================
-extern "C" void* RtUi_ComboDialog_Ctor(void* self, void* ui, void** rootPtr,
-                                       void** parentPtr, void** comboPtr) {
-    ++g_cdCtorEntries;
-    ComboDialog* const cd = static_cast<ComboDialog*>(self);
-
-    // ---- 0x180111d31-0x180111d55: the base ctor ---------------------------
-    // The Element InternalPtr is COPIED into a local (0x180111d35) and the
-    // parent slot is ZEROED (0x180111d31); the base ctor is handed the address
-    // of each. dataSource / userData / userFlags are all zero — the three stack
-    // arguments at [R11-0x68], [R11-0x60] and [RSP+0x30].
-    void* rootTmp   = *rootPtr;
-    void* parentTmp = nullptr;
-    {
-        using Fn = void* (*)(void*, void*, void**, void**, void*, void*, int32_t);
-        static Fn fn = nullptr;
-        if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1801146b0));
-        fn(self, ui, &rootTmp, &parentTmp, nullptr, nullptr, 0);
-    }
-
-    // 0x180111d56: stamp our own vtable over the base's.
-    static void* vtbl = nullptr;
-    if (!vtbl) vtbl = ResolveExport("??_7ComboDialog@UI@@6B@");
-    F<void*>(cd, 0x00) = vtbl;
+// ---- 0x180111d31-0x180111d55: the base ctor, in the init list ------------
+// The Element InternalPtr is COPIED (0x180111d35) and the parent slot is
+// ZEROED (0x180111d31) before the base ctor sees them: the parent is
+// deliberately NOT forwarded. dataSource / userData / userFlags are zero — the
+// three stack arguments at [R11-0x68], [R11-0x60] and [RSP+0x30].
+// 0x180111d56: the stamp is the compiler's. ENDGAME B.3.9 UI-D: the real
+// constructor (ComboDialog.h), replacing the door `RtUi_ComboDialog_Ctor`.
+UI::ComboDialog::ComboDialog(UserInterface* ui, Object::InternalPtr<Element> root,
+                             Object::InternalPtr<DialogInstance> parent,
+                             Object::InternalPtr<ComboElement> combo)
+    : UI::DialogInstance(ui, root, Object::InternalPtr<UI::DialogInstance>(),
+                         nullptr, nullptr, 0) {
+    UI::ComboDialog* const cd = this;
+    void* const* const rootPtr = reinterpret_cast<void* const*>(&root);
 
     cd->_list         = nullptr;      // +0xb8
-    cd->_parentDialog = nullptr;      // +0xc0  written 0 then...
-    cd->_parentDialog = *parentPtr;   // +0xc0  ...the real value
+    cd->_parentDialog = Object::InternalPtr<UI::DialogInstance>();   // +0xc0  written 0 then...
+    cd->_parentDialog = parent;       // +0xc0  ...the real value
     cd->_combo        = nullptr;      // +0xc8  written 0 then...
-    cd->_combo        = *comboPtr;    // +0xc8  ...the real value
+    cd->_combo        = combo.Get();  // +0xc8  ...the real value
 
     // ---- 0x180111d91-0x180111e1e: find the ListElement --------------------
     // Re-reads the INCOMING InternalPtr (`MOV RDI,[R15]`, R15 == the R8 spilled
@@ -667,21 +633,21 @@ extern "C" void* RtUi_ComboDialog_Ctor(void* self, void* ui, void** rootPtr,
     {
         void* const found = FindSelfOrUnderChildren(*rootPtr, tidList);
         // 0x180111e0e: CMOVNZ — null unless it really is a ListElement.
-        cd->_list = IsDerivedFrom(found, tidList) ? found : nullptr;
+        cd->_list = ::IsDerivedFrom(found, tidList) ? found : nullptr;
     }
 
     // 0x180111e1e / 0x180111e24: ?SetElementId@(0) then
     // ?SetFlagsOnOff@(kElementFlagToolTip16, 0), both on the list.
     // UNGUARDED derefs of a pointer the CMOV above may have just nulled.
     F<int32_t>(cd->_list, EL::kElementId) = 0;
-    SetFlagsOnOff(cd->_list, kElementFlagToolTip16, 0);
+    ::SetFlagsOnOff(cd->_list, kElementFlagToolTip16, 0);
 
     // ---- 0x180111e56-0x180111edb: find the ClipRegionElement --------------
     const uint32_t tidClip = TypeIdClipRegionElement();
     void* clipRegion = nullptr;
     {
         void* const found = FindSelfOrUnderChildren(*rootPtr, tidClip);
-        clipRegion = IsDerivedFrom(found, tidClip) ? found : nullptr;
+        clipRegion = ::IsDerivedFrom(found, tidClip) ? found : nullptr;
     }
 
     // ---- 0x180111edf-0x180111f38: the list's second child, as a container --
@@ -695,12 +661,12 @@ extern "C" void* RtUi_ComboDialog_Ctor(void* self, void* ui, void** rootPtr,
     int32_t targetHeight = 0;
     {
         void* const kid = F<void**>(cd->_list, EL::kChildrenData)[1];
-        void* const c = IsDerivedFrom(kid, tidContainer) ? kid : nullptr;
+        void* const c = ::IsDerivedFrom(kid, tidContainer) ? kid : nullptr;
         targetWidth = F<int32_t>(c, kContainerWidth);
     }
     {
         void* const kid = F<void**>(cd->_list, EL::kChildrenData)[1];
-        void* const c = IsDerivedFrom(kid, tidContainer) ? kid : nullptr;
+        void* const c = ::IsDerivedFrom(kid, tidContainer) ? kid : nullptr;
         targetHeight = F<int32_t>(c, kContainerHeight);
     }
 
@@ -722,7 +688,7 @@ extern "C" void* RtUi_ComboDialog_Ctor(void* self, void* ui, void** rootPtr,
     void* const container = F<void**>(cd->_list, EL::kChildrenData)[1];
     {
         void* const kid = F<void**>(cd->_list, EL::kChildrenData)[1];
-        void* const c = IsDerivedFrom(kid, tidContainer) ? kid : nullptr;
+        void* const c = ::IsDerivedFrom(kid, tidContainer) ? kid : nullptr;
         if (F<int32_t>(c, kContainerWidth) <= 0) {
             const int32_t left  = F<int32_t>(container, EL::kLeftPad);
             const int32_t right = F<int32_t>(container, EL::kRightPad);
@@ -732,7 +698,7 @@ extern "C" void* RtUi_ComboDialog_Ctor(void* self, void* ui, void** rootPtr,
     }
     {
         void* const kid = F<void**>(cd->_list, EL::kChildrenData)[1];
-        void* const c = IsDerivedFrom(kid, tidContainer) ? kid : nullptr;
+        void* const c = ::IsDerivedFrom(kid, tidContainer) ? kid : nullptr;
         if (F<int32_t>(c, kContainerHeight) <= 0) {
             const int32_t top    = F<int32_t>(container, EL::kTopPad);
             const int32_t bottom = F<int32_t>(container, EL::kBottomPad);
@@ -744,11 +710,10 @@ extern "C" void* RtUi_ComboDialog_Ctor(void* self, void* ui, void** rootPtr,
     // ---- 0x1801120bb-0x180112104: ?SetSize@ContainerElement@ --------------
     {
         void* const kid = F<void**>(cd->_list, EL::kChildrenData)[1];
-        void* const c = IsDerivedFrom(kid, tidContainer) ? kid : nullptr;
+        void* const c = ::IsDerivedFrom(kid, tidContainer) ? kid : nullptr;
         ContainerSetSize(c, targetWidth, targetHeight);
     }
-
-    return self;   // 0x180112106 `MOV RAX,R14`
+    // 0x180112106 `MOV RAX,R14`: a ctor returns `this`.
 }
 
 // ============================================================================
@@ -770,20 +735,9 @@ int RtUiComboDialogCtorRegister() {
                           (void*)&RtUi_ComboDialog_OperatorNew);
     RegisterRuntimeAddr(0x180074770, (void*)&RtUi_ComboDialog_OperatorNew);      ++n;
 
-    RegisterRuntimeExport(
-        "??0DialogInstance@UI@@QEAA@PEAVUserInterface@1@"
-        "V?$InternalPtr@VElement@UI@@@Object@@"
-        "V?$InternalPtr@VDialogInstance@UI@@@4@PEAVBase@4@PEAXH@Z",
-        (void*)&RtUi_DialogInstance_CtorFromElement);
-    RegisterRuntimeAddr(0x1801146b0, (void*)&RtUi_DialogInstance_CtorFromElement); ++n;
-
-    RegisterRuntimeExport(
-        "??0ComboDialog@UI@@QEAA@PEAVUserInterface@1@"
-        "V?$InternalPtr@VElement@UI@@@Object@@"
-        "V?$InternalPtr@VDialogInstance@UI@@@4@"
-        "V?$InternalPtr@VComboElement@UI@@@4@@Z",
-        (void*)&RtUi_ComboDialog_Ctor);
-    RegisterRuntimeAddr(0x180111d00, (void*)&RtUi_ComboDialog_Ctor);             ++n;
+    // ENDGAME B.3.9 UI-D: the ??0DialogInstance (root-Element) and ??0ComboDialog
+    // doors are retired -- both are real constructors now, and their one
+    // caller (ComboElement::Update) spells `::new (p) UI::ComboDialog(...)`.
 
     return n;
 }

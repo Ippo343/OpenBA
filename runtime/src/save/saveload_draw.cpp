@@ -190,6 +190,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 
 #include "saveload_internal.h"
 #include "../../types/math/Math.h"
@@ -368,11 +369,9 @@ RtVideo::Configuration* ConfigurationSingleton() {
 std::atomic<void*> g_vtBase{nullptr};
 std::atomic<void*> g_vtExternal{nullptr};
 std::atomic<void*> g_vtMaterialInstance{nullptr};
-std::atomic<void*> g_vtSpriteSheet{nullptr};
 void* VtBase()             { return RtSaveDetail::AtomicExport(g_vtBase,             "??_7Base@Object@@6B@"); }              // 1389
 void* VtExternal()         { return RtSaveDetail::AtomicExport(g_vtExternal,         "??_7External@Object@@6B@"); }          // 1432
 void* VtMaterialInstance() { return RtSaveDetail::AtomicExport(g_vtMaterialInstance, "??_7MaterialInstance@Graphics@@6B@"); } // 1464
-void* VtSpriteSheet()      { return RtSaveDetail::AtomicExport(g_vtSpriteSheet,      "??_7SpriteSheet@UI@@6B@"); }            // 1504
 
 // ============================================================================
 // 3. `Video::ImageBuffer::Width()` / `Height()`, inlined by retail at four
@@ -612,23 +611,9 @@ void Save::SaveLoad::Draw(Video::Context& context,
     SpriteSheet* sheet = nullptr;
     {
         void* p = RT_EXPORT_ONCE(OpNewFn, "??2SpriteSheet@UI@@SAPEAX_K@Z")(0x58);
-        if (p != nullptr) {
-            uint8_t* s = static_cast<uint8_t*>(p);
-            *reinterpret_cast<void**>(s)           = VtBase();
-            *reinterpret_cast<void**>(s)           = VtExternal();
-            *reinterpret_cast<uint64_t*>(s + 0x08) = 0;
-            *reinterpret_cast<uint64_t*>(s + 0x10) = 0;
-            *reinterpret_cast<uint64_t*>(s + 0x18) = 0;
-            *reinterpret_cast<void**>(s)           = VtSpriteSheet();
-            *reinterpret_cast<uint64_t*>(s + 0x20) = 0;
-            *reinterpret_cast<uint64_t*>(s + 0x28) = 0;
-            *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
-            *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
-            *reinterpret_cast<uint64_t*>(s + 0x40) = 0;
-            *reinterpret_cast<uint64_t*>(s + 0x48) = 0;
-            *reinterpret_cast<uint8_t*>(s + 0x50)  = 0;   // a BYTE store
-            sheet = reinterpret_cast<SpriteSheet*>(p);
-        }
+        // ENDGAME B.3.9 UI-D (B9-13 foreign site): ??0SpriteSheet inlined is
+        // the class's real constructor; the minted-table stamp is retired.
+        if (p != nullptr) sheet = ::new (p) SpriteSheet();
     }
     sheet->m_field30 = reinterpret_cast<uint64_t>(mat);   // the sheet's material, +0x30
 

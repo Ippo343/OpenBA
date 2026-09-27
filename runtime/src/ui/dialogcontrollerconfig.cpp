@@ -5,13 +5,18 @@
 // ============================================================================
 //
 // ??_7DialogControllerConfig@UI@@6B@ (retail 0x180156650), 8 slots:
-//   0  deleting dtor  0x18003b600  deleting_dtor.cpp row (sizeof 0x20)
+//   0  deleting dtor  0x18003b600  DialogControllerConfig.h (the class's own, B.3.9)
 //   1  TypeName       0x18003b470  here
 //   2  Type           0x18003b450  here
 //   3  purecall trap  0x18007ec28  minted, not this batch's job
 //   4  External::Compile 0x1800066e0  already ported
 //   5,6,7 purecall traps 0x18007ec28  minted, not this batch's job
-// plus ??1DialogControllerConfig@UI@@UEAA@XZ (0x18003b4f0), the row's dtorVa.
+// plus ??1DialogControllerConfig@UI@@UEAA@XZ (0x18003b4f0) and the factory pair.
+//
+// ENDGAME B.3.9 block UI-D: the dtor door and the two slot doors, whose only
+// reader was the minted `??_7DialogControllerConfig@UI@@6B@` (and its
+// RT_DELDTOR row), are retired with it; the FACTUI1 row is replaced by the
+// class's own factory pair below.
 //
 // LAYOUT: this class adds NOTHING over `Object::External` -- sizeof 0x20 is
 // exactly `External`'s own size (runtime/types/object/External.h), which is
@@ -36,26 +41,12 @@ namespace RtUI {
 
 namespace {
 
-void* VtDialogControllerConfig() {
-    return RT_DATA_SLOT(void*, "??_7DialogControllerConfig@UI@@6B@");
-}
 const uint8_t* DialogControllerConfigTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*,
                         "?_typeInfo@DialogControllerConfig@UI@@0VBaseTypeInfo@Object@@A");
 }
 
 }  // namespace
-
-// ---- ??1DialogControllerConfig@UI@@UEAA@XZ   0x18003b4f0 ------------------
-// A DTOR DOOR (RULE B6-3): it stamps the MINTED table and chains to ~External
-// by name for the minted objects that are the only live ones. The C++
-// `~DialogControllerConfig` below is empty for that reason.
-extern "C" void RtUi_DialogControllerConfig_Dtor(void* selfv) {
-    void** v = reinterpret_cast<void**>(selfv);
-    *v = VtDialogControllerConfig();                               // 18003b4f7 (dead store)
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(selfv);  // 0x1800bc950
-}
 
 }  // namespace RtUI
 
@@ -74,45 +65,37 @@ const char* DialogControllerConfig::TypeName() const {
 }
 
 // ?Type@DialogControllerConfig@UI@@UEBAIXZ          0x18003b450
-uint32_t DialogControllerConfig::Type() const {
+uint32_t DialogControllerConfig::Type() const { return TypeId(); }
+// ?TypeId@DialogControllerConfig@UI@@SAIXZ          0x18003b460 — the same dword.
+uint32_t DialogControllerConfig::TypeId() {
     uint32_t v = 0;
     __builtin_memcpy(&v, RtUI::DialogControllerConfigTypeInfo(), sizeof v);
     return v;
 }
 
-DialogControllerConfig::~DialogControllerConfig() {}   // see the dtor door above
+// ?CreateNewObject@ / ?CreateInPlaceObject@DialogControllerConfig@UI@@
+// 0x18003b480 / 0x18003b490: each is `XOR EAX,EAX ; RET` — the class is
+// abstract, so its reflection record builds nothing (the FACTUI1 row this
+// replaces returned null for the same reason).
+Object::Base* DialogControllerConfig::CreateNewObject() { return nullptr; }
+Object::Base* DialogControllerConfig::CreateInPlaceObject(void*) { return nullptr; }
+
+// ??1DialogControllerConfig@UI@@UEAA@XZ 0x18003b4f0: restamp + tail-jump
+// ~External, both the compiler's — the empty body is retail's.
+DialogControllerConfig::~DialogControllerConfig() {}
 
 }  // namespace UI
-
-// The registered doors: QUALIFIED delegation (the minted table's slots 1/2
-// resolve back to these doors).
-extern "C" const char* RtUi_DialogControllerConfig_TypeName(const void* self) {
-    return reinterpret_cast<const UI::DialogControllerConfig*>(self)   // B.3.6 bridge
-        ->UI::DialogControllerConfig::TypeName();
-}
-extern "C" uint32_t RtUi_DialogControllerConfig_Type(const void* self) {
-    return reinterpret_cast<const UI::DialogControllerConfig*>(self)   // B.3.6 bridge
-        ->UI::DialogControllerConfig::Type();
-}
 
 // ============================================================================
 // Registration
 // ============================================================================
 int RtUiDialogControllerConfigRegister() {
-    using namespace RtUI;
     int n = 0;
-
-    RegisterRuntimeExport("?TypeName@DialogControllerConfig@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_DialogControllerConfig_TypeName); ++n;
-    RegisterRuntimeAddr(0x18003b470ull, (void*)&RtUi_DialogControllerConfig_TypeName);
-
-    RegisterRuntimeExport("?Type@DialogControllerConfig@UI@@UEBAIXZ",
-                          (void*)&RtUi_DialogControllerConfig_Type); ++n;
-    RegisterRuntimeAddr(0x18003b450ull, (void*)&RtUi_DialogControllerConfig_Type);
-
-    RegisterRuntimeExport("??1DialogControllerConfig@UI@@UEAA@XZ",
-                          (void*)&RtUi_DialogControllerConfig_Dtor); ++n;
-    RegisterRuntimeAddr(0x18003b4f0ull, (void*)&RtUi_DialogControllerConfig_Dtor);
-
+    RegisterRuntimeExport("?CreateNewObject@DialogControllerConfig@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::DialogControllerConfig::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x18003b480ull, (void*)&UI::DialogControllerConfig::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@DialogControllerConfig@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::DialogControllerConfig::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x18003b490ull, (void*)&UI::DialogControllerConfig::CreateInPlaceObject);
     return n;
 }

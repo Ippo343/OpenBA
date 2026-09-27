@@ -27,17 +27,15 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
+#include "Component/ModelComponent.h"
+#include "Component/GrowthComponent.h"
+#include "Component/ModelDescription.h"
+#include "Component/NaturalResourceDescription.h"
 
 // ============================================================
 // Lazily-resolved exe sub-helpers and type-ID globals (shared by this batch).
 // ============================================================
 namespace {
-
-// Type-ID storage globals (exe .rdata, filled by RegisterType at startup).
-const uint32_t* s_pTid_c7a50 = nullptr;  // 0x1401c7a50  (FindComponent in 0x140003f60)
-const uint32_t* s_pTid_c77b0 = nullptr;  // 0x1401c77b0  (FindComponent in 0x14000c460)
-const uint32_t* s_pTid_c7a88 = nullptr;  // 0x1401c7a88  (ModelDescription)
-const uint32_t* s_pTid_c7b68 = nullptr;  // 0x1401c7b68  (NaturalResourceDescription)
 
 // Exe sub-helpers used by the complex ports.
 typedef void* (*fn_FindComp_t)(uintptr_t entity, void* retIBP);   // member ABI RCX,RDX
@@ -117,11 +115,6 @@ void EnsureResolved() {
     if (s_resolved) return;
     s_resolved = true;
 
-    s_pTid_c7a50 = R<const uint32_t*>(0x1401c7a50);
-    s_pTid_c77b0 = R<const uint32_t*>(0x1401c77b0);
-    s_pTid_c7a88 = R<const uint32_t*>(0x1401c7a88);
-    s_pTid_c7b68 = R<const uint32_t*>(0x1401c7b68);
-
     s_fn_FindComp_3f60  = R<fn_FindComp_t>(0x140003f60);
     s_fn_FindComp_3050  = R<fn_FindComp_t>(0x140003050);
     s_fn_FindComp_4680  = R<fn_FindComp_t>(0x140004680);
@@ -158,20 +151,18 @@ void EnsureResolved() {
 // scan entity's component list (ptr array at entity+0x30, count int at entity+0x38),
 // call each component's GetTypeId (vtable +0x10); on the first type match run an
 // IsDerivedFrom gate before returning through the out InternalBasePtr.
-void* FindComponentByTypeId(uintptr_t entity, void* retIBP, const uint32_t* pTypeId) {
+void* FindComponentByTypeId(uintptr_t entity, void* retIBP, uint32_t typeId) {
     void* found = nullptr;
-    if (pTypeId) {
-        int n = *reinterpret_cast<int*>(entity + 0x38);
-        uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-        for (int i = 0; i < n; i++) {
-            void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-            void* comp = *slot;
-            uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
-            if (t == *pTypeId) {
-                void* c = *slot;
-                found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTypeId)) ? c : nullptr;
-                break;
-            }
+    int n = *reinterpret_cast<int*>(entity + 0x38);
+    uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
+    for (int i = 0; i < n; i++) {
+        void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
+        void* comp = *slot;
+        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        if (t == typeId) {
+            void* c = *slot;
+            found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
+            break;
         }
     }
     if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
@@ -191,7 +182,7 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
 // ============================================================
 void* ActCNR_FindComponent_3f60(uintptr_t entity, void* retIBP) {
     EnsureResolved();
-    return FindComponentByTypeId(entity, retIBP, s_pTid_c7a50);
+    return FindComponentByTypeId(entity, retIBP, ModelComponent::TypeId());
 }
 
 // ============================================================
@@ -199,7 +190,7 @@ void* ActCNR_FindComponent_3f60(uintptr_t entity, void* retIBP) {
 // ============================================================
 void* ActCNR_FindComponent_c460(uintptr_t entity, void* retIBP) {
     EnsureResolved();
-    return FindComponentByTypeId(entity, retIBP, s_pTid_c77b0);
+    return FindComponentByTypeId(entity, retIBP, GrowthComponent::TypeId());
 }
 
 // ============================================================
@@ -297,7 +288,7 @@ void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress) {
 uint32_t ActCNR_NR_GetVariantCount_1252f0(int64_t comp) {
     EnsureResolved();
     void* desc = *reinterpret_cast<void**>(static_cast<uintptr_t>(comp) + 0x18);
-    void* d = (s_pTid_c7a88 && fn_IsDerivedFrom && fn_IsDerivedFrom(desc, *s_pTid_c7a88)) ? desc : nullptr;
+    void* d = (fn_IsDerivedFrom && fn_IsDerivedFrom(desc, ModelDescription::TypeId())) ? desc : nullptr;
     return *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(d) + 0x28);
 }
 
@@ -308,7 +299,7 @@ uint32_t ActCNR_NR_GetVariantCount_1252f0(int64_t comp) {
 uint32_t ActCNR_NR_GetSubVariantCount_125320(int64_t comp, int variant) {
     EnsureResolved();
     void* desc = *reinterpret_cast<void**>(static_cast<uintptr_t>(comp) + 0x18);
-    void* d = (s_pTid_c7a88 && fn_IsDerivedFrom && fn_IsDerivedFrom(desc, *s_pTid_c7a88)) ? desc : nullptr;
+    void* d = (fn_IsDerivedFrom && fn_IsDerivedFrom(desc, ModelDescription::TypeId())) ? desc : nullptr;
     int64_t arr = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20);
     return *reinterpret_cast<uint32_t*>(arr + 0x10 + static_cast<int64_t>(variant) * 0x18);
 }
@@ -325,7 +316,7 @@ void ActCNR_NR_SetVariant_1253d0(int64_t* comp, uint16_t variant, int16_t subVar
     uintptr_t c = reinterpret_cast<uintptr_t>(comp);
     // type-gate the description at comp+0x18 (RDI[0x18]); return value unused here.
     void* desc = *reinterpret_cast<void**>(c + 0x18);
-    if (s_pTid_c7a88 && fn_IsDerivedFrom) fn_IsDerivedFrom(desc, *s_pTid_c7a88);
+    if (fn_IsDerivedFrom) fn_IsDerivedFrom(desc, ModelDescription::TypeId());
 
     *reinterpret_cast<uint16_t*>(c + 0x164) = variant;
     if (*reinterpret_cast<int16_t*>(c + 0x166) >= 0) {
@@ -340,7 +331,7 @@ void ActCNR_NR_SetVariant_1253d0(int64_t* comp, uint16_t variant, int16_t subVar
         //   sub = *(arr + variant*0x18 + 8)   (per-variant sub-array)
         //   mesh= *(sub + subVariant*8)
         void* descMesh = *reinterpret_cast<void**>(c + 0x18);
-        void* d = (s_pTid_c7a88 && fn_IsDerivedFrom && fn_IsDerivedFrom(descMesh, *s_pTid_c7a88)) ? descMesh : nullptr;
+        void* d = (fn_IsDerivedFrom && fn_IsDerivedFrom(descMesh, ModelDescription::TypeId())) ? descMesh : nullptr;
         int16_t sub = *reinterpret_cast<int16_t*>(c + 0x166);
         int16_t var = *reinterpret_cast<int16_t*>(c + 0x164);
         int64_t arr = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20);
@@ -368,7 +359,7 @@ void ActCNR_SetAnimIndex_126440(int64_t self, uint32_t animIdx) {
     EnsureResolved();
     uintptr_t s = static_cast<uintptr_t>(self);
     void* desc = *reinterpret_cast<void**>(s + 0x18);
-    void* d = (s_pTid_c7b68 && fn_IsDerivedFrom && fn_IsDerivedFrom(desc, *s_pTid_c7b68)) ? desc : nullptr;
+    void* d = (fn_IsDerivedFrom && fn_IsDerivedFrom(desc, NaturalResourceDescription::TypeId())) ? desc : nullptr;
 
     if (*reinterpret_cast<int8_t*>(reinterpret_cast<uintptr_t>(d) + 100) == 0) {
         if (((*reinterpret_cast<uint32_t*>(s + 0x20) >> 0x15) & 1) != 0) {
@@ -404,7 +395,7 @@ uint64_t ActCNR_SetupModelAtCell_126540(int64_t self, int cellIndex) {
     void* rng = *reinterpret_cast<void**>(gameWorld + 0xd8);
     int gridW = *mapGrid;
 
-    void* d = (s_pTid_c7b68 && fn_IsDerivedFrom && fn_IsDerivedFrom(desc, *s_pTid_c7b68)) ? desc : nullptr;
+    void* d = (fn_IsDerivedFrom && fn_IsDerivedFrom(desc, NaturalResourceDescription::TypeId())) ? desc : nullptr;
     float jitter = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(d) + 0x60);
 
     float halfBias = s_p_DAT_140172114 ? *s_p_DAT_140172114 : 0.0f;
@@ -482,7 +473,7 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     }
 
     void* desc = *reinterpret_cast<void**>(s + 0x18);
-    void* d = (s_pTid_c7b68 && fn_IsDerivedFrom && fn_IsDerivedFrom(desc, *s_pTid_c7b68)) ? desc : nullptr;
+    void* d = (fn_IsDerivedFrom && fn_IsDerivedFrom(desc, NaturalResourceDescription::TypeId())) ? desc : nullptr;
     int64_t descArr = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20);
     if (descArr == 0) {
         return;

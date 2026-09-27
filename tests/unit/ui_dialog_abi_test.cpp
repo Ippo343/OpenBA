@@ -44,6 +44,7 @@
 #include <cstring>
 #include <initializer_list>
 #include <type_traits>
+#include <new>
 
 // internal_class.cpp's unit-only seams (-DBANISHED_UNIT_TEST): every
 // Object::Internal constructor registers with InternalFactory::Get(), so a
@@ -348,13 +349,20 @@ UNIT_TEST(ui_dialog_family_layout) {
     CHECK((!std::is_base_of<Object::External, UI::DialogInstance>::value));
 
     // ABSTRACT (RULE B6-3) — except DialogInstance, CONCRETE since ENDGAME
-    // B.3.8 block RB: the exe instantiates it (its table copy 0x14015f5a0).
+    // B.3.8 block RB: the exe instantiates it (its table copy 0x14015f5a0) —
+    // and, since ENDGAME B.3.9 block UI-D, DialogController and Dialog (their
+    // own slot 0). DialogControllerConfig keeps retail's four _purecall slots.
     CHECK(!std::is_abstract<UI::DialogInstance>::value);
-    CHECK(std::is_abstract<UI::DialogController>::value);
+    CHECK(!std::is_abstract<UI::DialogController>::value);
     CHECK(std::is_abstract<UI::DialogControllerConfig>::value);
-    CHECK(std::is_abstract<UI::Dialog>::value);
-    CHECK(std::is_abstract<UI::ComboDialog>::value);
-    CHECK(std::is_abstract<UI::ToolTipDialog>::value);
+    CHECK(!std::is_abstract<UI::Dialog>::value);
+    CHECK(!std::is_destructible<UI::Dialog>::value);            // protected dtor
+    CHECK(!std::is_destructible<UI::DialogController>::value);
+    CHECK(!std::has_virtual_destructor<UI::Dialog>::value);
+    CHECK(!std::is_abstract<UI::ComboDialog>::value);     // B.3.9 UI-D: own slot 0
+    CHECK(!std::is_abstract<UI::ToolTipDialog>::value);
+    CHECK(!std::is_destructible<UI::ComboDialog>::value);
+    CHECK(!std::is_destructible<UI::ToolTipDialog>::value);
 
     // Own fields start at sizeof(base).
     CHECK_EQ((int)offsetof(UI::DialogInstance, _ui), (int)sizeof(Object::Internal));
@@ -383,6 +391,146 @@ UNIT_TEST(ui_dialog_family_layout) {
         static_cast<UI::DialogInstance*>(&probe));
     CHECK_EQ(pod->_result, 3);
     CHECK_EQ(pod->_userFlags, 0x40);
+}
+
+// ===========================================================================
+// ENDGAME B.3.9 UI-D (B39_RULES D1/D2, rule B9-16) — the dialog classes'
+// own slot 0. The destructor markers below RECORD each call.
+// ===========================================================================
+namespace {
+int         g_b39DtorCount = 0;
+const void* g_b39DtorOrder[8] = {};
+}  // namespace
+static void B39UidDlgNoteDtor(const void* self) {
+    if (g_b39DtorCount < 8) g_b39DtorOrder[g_b39DtorCount] = self;
+    ++g_b39DtorCount;
+}
+namespace {
+// Itanium PMF -> vtable byte offset: 1 + offset for a virtual, adjustment 0.
+template <typename PMF>
+uintptr_t SlotOffset(PMF pmf) {
+    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
+    uintptr_t words[2];
+    std::memcpy(words, &pmf, sizeof words);
+    if ((words[0] & 1u) == 0) return ~uintptr_t(0);
+    if (words[1] != 0) return ~uintptr_t(0);
+    return words[0] - 1;
+}
+// Scalar arm (with a free) on one object, then the VECTOR arm on three behind
+// an array cookie: destroyed downward, the block freed and returned.
+template <typename T, typename Make>
+void B39ExpectBothArms(size_t elemSize, Make make) {
+    void* p = Object::detail::InternalMemAlloc(elemSize, 8);
+    CHECK(p != nullptr);
+    T* one = make(p);
+    g_b39DtorCount = 0;
+    CHECK(one->DeletingDtor(1) == one);
+    CHECK_EQ(g_b39DtorCount, 1);
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * elemSize, 8));
+    CHECK(block != nullptr);
+    const int64_t cookie = 3;
+    std::memcpy(block, &cookie, sizeof cookie);
+    T* e[3];
+    for (int i = 0; i < 3; ++i) e[i] = make(block + 8 + i * elemSize);
+    g_b39DtorCount = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
+    CHECK_EQ(g_b39DtorCount, 3);
+    CHECK(g_b39DtorOrder[0] == e[2]);
+    CHECK(g_b39DtorOrder[1] == e[1]);
+    CHECK(g_b39DtorOrder[2] == e[0]);
+}
+// Subclasses that INHERIT the class's own slot 0 (no fields, same stride).
+struct B39DcLeaf final : UI::DialogController {};
+struct B39CfgLeaf final : UI::DialogControllerConfig {
+    int32_t GetFileVersion() const override { return 0; }
+    bool Serialize(void*) override { return true; }
+    Object::External* Reconstruct() override { return this; }
+    void Destruct() override {}
+};
+static_assert(sizeof(B39DcLeaf) == 0x30, "no fields of its own");
+static_assert(sizeof(B39CfgLeaf) == 0x20, "no fields of its own");
+}  // namespace
+
+UNIT_TEST(b39_uid_dialog_slot0_by_pmf) {
+    CHECK_EQ(SlotOffset(&UI::Dialog::DeletingDtor), (uintptr_t)0x00);                   // 0x180038b20
+    CHECK_EQ(SlotOffset(&UI::Dialog::Construct), (uintptr_t)EX::kConstruct);
+    CHECK_EQ(SlotOffset(&UI::DialogController::DeletingDtor), (uintptr_t)0x00);         // 0x18003b800
+    CHECK_EQ(SlotOffset(&UI::DialogController::OnSerializeSettings), (uintptr_t)DC::kOnSerializeSettings);
+    CHECK_EQ(SlotOffset(&UI::DialogControllerConfig::DeletingDtor), (uintptr_t)0x00);   // 0x18003b600
+}
+
+// ??0Dialog 0x180112db0: External's words, +0x20..+0x80 zero, +0x30 = -1, and
+// +0x44..+0x47 NEVER written.
+UNIT_TEST(b39_uid_dialog_ctor_makes_retails_stores) {
+    alignas(8) uint8_t buf[0x88];
+    std::memset(buf, 0xCD, sizeof buf);
+    UI::Dialog* d = ::new (buf) UI::Dialog();
+    CHECK(static_cast<void*>(d) == static_cast<void*>(buf));
+    for (int off = 0x08; off < 0x30; off += 8) CHECK(*reinterpret_cast<void**>(buf + off) == nullptr);
+    CHECK_EQ(*reinterpret_cast<uint32_t*>(buf + 0x30), 0xFFFFFFFFu);
+    CHECK_EQ(*reinterpret_cast<uint32_t*>(buf + 0x34), 0u);
+    CHECK(*reinterpret_cast<void**>(buf + 0x38) == nullptr);
+    CHECK_EQ(*reinterpret_cast<uint32_t*>(buf + 0x40), 0u);
+    CHECK_EQ(*reinterpret_cast<uint32_t*>(buf + 0x44), 0xCDCDCDCDu);   // the hole
+    for (int off = 0x48; off < 0x88; off += 8) CHECK(*reinterpret_cast<void**>(buf + off) == nullptr);
+    DialogProbe probe;
+    CHECK(VTableOf(d) != VTableOf(&probe));
+    g_b39DtorCount = 0;
+    CHECK(d->DeletingDtor(0) == d);
+    CHECK_EQ(g_b39DtorCount, 1);
+}
+
+UNIT_TEST(b39_uid_combo_tooltip_slot0_by_pmf) {
+    CHECK_EQ(SlotOffset(&UI::ComboDialog::DeletingDtor), (uintptr_t)0x00);     // 0x180074a10
+    CHECK_EQ(SlotOffset(&UI::ComboDialog::OnElementEvent), (uintptr_t)DI::kOnElementEvent);
+    CHECK_EQ(SlotOffset(&UI::ToolTipDialog::DeletingDtor), (uintptr_t)0x00);   // 0x18004d270
+    CHECK_EQ(SlotOffset(&UI::ToolTipDialog::Type), (uintptr_t)DI::kType);
+}
+
+// The default ctors the factory pairs inline: DialogInstance(), then
+// ComboDialog's three zero stores (+0xb8/+0xc0/+0xc8); ToolTipDialog leaves
+// +0xb8/+0xbc alone.
+UNIT_TEST(b39_uid_combo_tooltip_default_ctors) {
+    FactoryScope scope;
+    alignas(8) uint8_t cbuf[0xd0];
+    std::memset(cbuf, 0xCD, sizeof cbuf);
+    UI::ComboDialog* c = ::new (cbuf) UI::ComboDialog();
+    for (int off = 0xb8; off < 0xd0; off += 8) CHECK(*reinterpret_cast<void**>(cbuf + off) == nullptr);
+    CHECK_EQ(c->_spriteIndex, -1);                 // DialogInstance() ran
+    ComboDialogProbe cprobe;
+    CHECK(VTableOf(c) != VTableOf(&cprobe));
+    g_b39DtorCount = 0;
+    CHECK(c->DeletingDtor(0) == c);
+    CHECK_EQ(g_b39DtorCount, 1);
+
+    alignas(8) uint8_t tbuf[0xc0];
+    std::memset(tbuf, 0xCD, sizeof tbuf);
+    UI::ToolTipDialog* t = ::new (tbuf) UI::ToolTipDialog();
+    CHECK_EQ(*reinterpret_cast<uint32_t*>(tbuf + 0xb8), 0xCDCDCDCDu);
+    CHECK_EQ(*reinterpret_cast<uint32_t*>(tbuf + 0xbc), 0xCDCDCDCDu);
+    CHECK_EQ(t->_spriteIndex, -1);
+    g_b39DtorCount = 0;
+    CHECK(t->DeletingDtor(0) == t);
+    CHECK_EQ(g_b39DtorCount, 1);
+}
+
+UNIT_TEST(b39_uid_combo_tooltip_deleting_dtor_both_arms) {
+    FactoryScope scope;
+    B39ExpectBothArms<UI::ComboDialog>(0xd0, [](void* p) { return ::new (p) UI::ComboDialog(); });
+    B39ExpectBothArms<UI::ToolTipDialog>(0xc0, [](void* p) { return ::new (p) UI::ToolTipDialog(); });
+}
+
+UNIT_TEST(b39_uid_dialog_deleting_dtor_both_arms) {
+    B39ExpectBothArms<UI::Dialog>(0x88, [](void* p) { return ::new (p) UI::Dialog(); });
+}
+
+UNIT_TEST(b39_uid_dialogcontroller_deleting_dtor_both_arms) {
+    FactoryScope scope;   // Object::Internal objects
+    B39ExpectBothArms<B39DcLeaf>(0x30, [](void* p) { return ::new (p) B39DcLeaf(); });
+}
+
+UNIT_TEST(b39_uid_dialogcontrollerconfig_deleting_dtor_both_arms) {
+    B39ExpectBothArms<B39CfgLeaf>(0x20, [](void* p) { return ::new (p) B39CfgLeaf(); });
 }
 
 // ============================================================================
@@ -419,7 +567,7 @@ void DialogController::OnElementEvent(Object::InternalPtr<Element>* e, int32_t, 
     Note(this, 209); g_lastArg = e;
 }
 void DialogController::OnSerializeSettings(void*) { Note(this, 210); }
-DialogController::~DialogController() {}
+DialogController::~DialogController() { B39UidDlgNoteDtor(this); }
 
 const char* ComboDialog::TypeName() const { Note(this, 301); return "ComboDialog"; }
 uint32_t    ComboDialog::Type() const { Note(this, 302); return 0u; }
@@ -429,11 +577,11 @@ void ComboDialog::OnElementEvent(Object::InternalPtr<Element>* e, int32_t, int32
                                  int32_t, int32_t, int32_t, void*) {
     Note(this, 308); g_lastArg = e;
 }
-ComboDialog::~ComboDialog() {}
+ComboDialog::~ComboDialog() { B39UidDlgNoteDtor(this); }
 
 const char* ToolTipDialog::TypeName() const { Note(this, 401); return "ToolTipDialog"; }
 uint32_t    ToolTipDialog::Type() const { Note(this, 402); return 0u; }
-ToolTipDialog::~ToolTipDialog() {}
+ToolTipDialog::~ToolTipDialog() { B39UidDlgNoteDtor(this); }
 
 const char* Dialog::TypeName() const { Note(this, 501); return "Dialog"; }
 uint32_t    Dialog::Type() const { Note(this, 502); return 0u; }
@@ -442,10 +590,10 @@ bool        Dialog::Serialize(void*) { Note(this, 505); return true; }
 Object::External* Dialog::Reconstruct() { Note(this, 506); return this; }
 void        Dialog::Destruct() { Note(this, 507); }
 Object::External* Dialog::Construct() { Note(this, 508); return this; }
-Dialog::~Dialog() {}
+Dialog::~Dialog() { B39UidDlgNoteDtor(this); }
 
 const char* DialogControllerConfig::TypeName() const { Note(this, 601); return "DialogControllerConfig"; }
 uint32_t    DialogControllerConfig::Type() const { Note(this, 602); return 0u; }
-DialogControllerConfig::~DialogControllerConfig() {}
+DialogControllerConfig::~DialogControllerConfig() { B39UidDlgNoteDtor(this); }
 
 }  // namespace UI

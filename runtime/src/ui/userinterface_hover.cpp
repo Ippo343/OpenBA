@@ -79,8 +79,6 @@ constexpr uintptr_t kAddDialogsSetSizeAddr = 0x18007a0d0;  // Array<InternalPtr<
 
 using SetSizeFn      = void  (*)(void* array, int32_t newSize, const void* fill);
 using OperatorNewFn  = void* (*)(uint64_t size);
-using DlgInstCtorFn  = void* (*)(void* self, void* ui, const void* dialog, void* parentPtr,
-                                 void* dataSource, void* userData, int32_t userFlags);
 
 // ENDGAME B.3.6 (RULE B6-5): the two address doors used to be function-local
 // `static` first-call caches, and every other door this file still needs is a
@@ -90,8 +88,6 @@ std::atomic<void*> g_eventsSetSizeSlot{nullptr};
 std::atomic<void*> g_addDialogsSetSizeSlot{nullptr};
 std::atomic<void*> g_sptSlot{nullptr};
 std::atomic<void*> g_tipOperatorNewSlot{nullptr};
-std::atomic<void*> g_dlgInstCtorSlot{nullptr};
-std::atomic<void*> g_tipVtableSlot{nullptr};
 
 SetSizeFn EventsSetSize() {
     return reinterpret_cast<SetSizeFn>(
@@ -406,22 +402,18 @@ void UI::UserInterface::BeginToolTip(Object::InternalPtr<DialogInstance>* dialog
     // says the ALLOCATED size of a DialogInstance-derived object is 0xc0 while
     // the ctor-initialised extent is 0xb8.
     //
-    // ENDGAME B.3.6: `??2ToolTipDialog` (a MemoryAllocator door, B36_RULES 7),
-    // `DialogInstance`'s ctor (a DOOR, B6-3 — no real ctor on a polymorphic
-    // class) and the minted `??_7ToolTipDialog` stamp all STAY doors; only
-    // their caches moved to namespace-scope atomics (RULE B6-5).
+    // `??2ToolTipDialog` stays a MemoryAllocator door (B36_RULES 7). ENDGAME
+    // B.3.9 UI-D: the construction is retail's inlined ??0ToolTipDialog
+    // (0x1800daca0) — the 6-argument DialogInstance ctor with dataSource = the
+    // element, userData = 0, flags = 0, then the stamp — spelt as the real
+    // constructor (the DialogInstance ctor door and the minted
+    // `??_7ToolTipDialog` stamp are retired).
     void* tip = reinterpret_cast<OperatorNewFn>(rtuielem::AtomicExport(
         g_tipOperatorNewSlot, "??2ToolTipDialog@UI@@SAPEAX_K@Z"))(0xc0);  // 0x1801208f0
     if (tip) {
-        void* parentLocal = *dlgPtr;                                  // 0x180120907
-        reinterpret_cast<DlgInstCtorFn>(rtuielem::AtomicExport(g_dlgInstCtorSlot,
-            "??0DialogInstance@UI@@QEAA@PEAVUserInterface@1@PEBVDialog@1@"
-            "V?$InternalPtr@VDialogInstance@UI@@@Object@@PEAVBase@5@PEAXH@Z"))
-            (tip, self, elem->_toolTipDialog, &parentLocal, elem, nullptr, 0);  // 0x180120928
-        // Stamp ??_7ToolTipDialog@UI@@6B@ over the base ctor's vtable.
-        // Reached by NAME: it is exported DATA (0x180157880).
-        *reinterpret_cast<void**>(tip) =
-            rtuielem::AtomicExport(g_tipVtableSlot, "??_7ToolTipDialog@UI@@6B@");  // 0x18012092e
+        ::new (tip) ToolTipDialog(                                     // 0x180120907..0x18012092e
+            self, static_cast<const Dialog*>(elem->_toolTipDialog),
+            *dialog, Object::InternalPtr<Element>(elem));
     } else {
         ++g_tipAllocFailed;                                            // 0x18012093a
     }

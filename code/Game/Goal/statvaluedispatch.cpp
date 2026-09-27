@@ -23,6 +23,22 @@
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Time
+#include "Component/ComponentDescription.h"
+#include "Component/RawMaterialDescription.h"
+#include "Component/StorageComponent.h"
+#include "Component/TrackerComponent.h"
+#include "Component/WorkPlaceComponent.h"
+#include "Component/WorkPlaceDescription.h"
+#include "Component/BuildComponent.h"
+#include "Component/DestroyComponent.h"
+#include "Component/StateMachineComponent.h"
+#include "Component/BuildDescription.h"
+#include "Component/MapComponent.h"
+#include "Component/TombstoneComponent.h"
+#include "Component/SelectDescription.h"
+#include "Game/Profession.h"
+#include "Game/TerrainGenerator.h"
+#include "Game/ClimateGenerator.h"
 
 // ============================================================
 // GameWorld accessor — *g_pGameWorldSingleton is the world object; the exe
@@ -41,28 +57,34 @@ static inline uintptr_t WorldPtr(uintptr_t off) {
 }
 
 // ============================================================
-// Lazily-resolved type-ID storage globals (exe .rdata uint32_t, filled by
-// each type's RegisterType at startup). These 0x1401cXXXX / 0x140172XXX
-// addresses are OUTSIDE the gap range — do NOT register them anywhere.
-// A null resolve (standalone, not yet present) => treat the type-id as
-// unmatchable (the scan returns null for that component).
+// Type-ID storage: each 0x1401cXXXX cell's class (Table 1, INVENTORY_C) rather
+// than the (several misleading) local names below — s_tidProfComp's cell
+// (0x1401c7cb8) is RawMaterialDescription's, not Profession's; the comment
+// predates ENDGAME B.3.9 D5's per-cell audit. Every storage slot below now
+// holds `Class::TypeId()`, so it is always valid (never the raw, sometimes-
+// unfilled .rdata cell) and every existing call site (which treats a null
+// pointer as "unmatchable") is unaffected.
 // ============================================================
-static const uint32_t* s_tidCitizenAI    = nullptr;  // 0x1401c7318 (the "citizen" container type)
-static const uint32_t* s_tidProfComp      = nullptr;  // 0x1401c7cb8 (Profession-on-citizen component)
-static const uint32_t* s_tidStorage       = nullptr;  // 0x1401c7e78
-static const uint32_t* s_tid_4b10         = nullptr;  // 0x1401c4b10
-static const uint32_t* s_tid_80e0         = nullptr;  // 0x1401c80e0
-static const uint32_t* s_tid_8118         = nullptr;  // 0x1401c8118 (DAT_)
-static const uint32_t* s_tid_7008         = nullptr;  // 0x1401c7008
-static const uint32_t* s_tid_75f0         = nullptr;  // 0x1401c75f0
-static const uint32_t* s_tid_7d98         = nullptr;  // 0x1401c7d98
-static const uint32_t* s_tid_7040         = nullptr;  // 0x1401c7040
-static const uint32_t* s_tid_79e0         = nullptr;  // 0x1401c79e0
-static const uint32_t* s_tid_4a30         = nullptr;  // 0x1401c4a30
-static const uint32_t* s_tid_48a8         = nullptr;  // 0x1401c48a8
-static const uint32_t* s_tidProfession    = nullptr;  // 0x1401c5a98 (TypeInfo_Profession)
-static const uint32_t* s_tidTerrainGen    = nullptr;  // 0x1401c5b40 (TypeInfo_TerrainGenerator)
-static const uint32_t* s_tidClimateGen    = nullptr;  // 0x1401c5910 (TypeInfo_ClimateGenerator)
+static uint32_t s_tidCitizenAI_v, s_tidProfComp_v, s_tidStorage_v, s_tid_4b10_v,
+                s_tid_80e0_v, s_tid_8118_v, s_tid_7008_v, s_tid_75f0_v, s_tid_7d98_v,
+                s_tid_7040_v, s_tid_79e0_v, s_tid_4a30_v, s_tid_48a8_v,
+                s_tidProfession_v, s_tidTerrainGen_v, s_tidClimateGen_v;
+static const uint32_t* s_tidCitizenAI    = &s_tidCitizenAI_v;    // 0x1401c7318 -> ComponentDescription
+static const uint32_t* s_tidProfComp      = &s_tidProfComp_v;    // 0x1401c7cb8 -> RawMaterialDescription
+static const uint32_t* s_tidStorage       = &s_tidStorage_v;     // 0x1401c7e78 -> StorageComponent
+static const uint32_t* s_tid_4b10         = &s_tid_4b10_v;       // 0x1401c4b10 -> TrackerComponent
+static const uint32_t* s_tid_80e0         = &s_tid_80e0_v;       // 0x1401c80e0 -> WorkPlaceComponent
+static const uint32_t* s_tid_8118         = &s_tid_8118_v;       // 0x1401c8118 -> WorkPlaceDescription
+static const uint32_t* s_tid_7008         = &s_tid_7008_v;       // 0x1401c7008 -> BuildComponent
+static const uint32_t* s_tid_75f0         = &s_tid_75f0_v;       // 0x1401c75f0 -> DestroyComponent
+static const uint32_t* s_tid_7d98         = &s_tid_7d98_v;       // 0x1401c7d98 -> StateMachineComponent
+static const uint32_t* s_tid_7040         = &s_tid_7040_v;       // 0x1401c7040 -> BuildDescription
+static const uint32_t* s_tid_79e0         = &s_tid_79e0_v;       // 0x1401c79e0 -> MapComponent
+static const uint32_t* s_tid_4a30         = &s_tid_4a30_v;       // 0x1401c4a30 -> TombstoneComponent
+static const uint32_t* s_tid_48a8         = &s_tid_48a8_v;       // 0x1401c48a8 -> SelectDescription
+static const uint32_t* s_tidProfession    = &s_tidProfession_v;  // 0x1401c5a98 -> Profession
+static const uint32_t* s_tidTerrainGen    = &s_tidTerrainGen_v;  // 0x1401c5b40 -> TerrainGenerator
+static const uint32_t* s_tidClimateGen    = &s_tidClimateGen_v;  // 0x1401c5910 -> ClimateGenerator
 
 // Float constants used by helper_8c50 (season-progress weighting).
 static const float* s_pDAT_14017225c = nullptr;
@@ -71,22 +93,22 @@ static const float* s_pDAT_1401721e4 = nullptr;
 static bool s_tidInit = false;
 static void EnsureTypeIds() {
     if (s_tidInit) return;
-    s_tidCitizenAI = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7318));
-    s_tidProfComp  = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
-    s_tidStorage   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7e78));
-    s_tid_4b10     = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4b10));
-    s_tid_80e0     = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c80e0));
-    s_tid_8118     = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c8118));
-    s_tid_7008     = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7008));
-    s_tid_75f0     = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c75f0));
-    s_tid_7d98     = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7d98));
-    s_tid_7040     = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7040));
-    s_tid_79e0     = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c79e0));
-    s_tid_4a30     = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4a30));
-    s_tid_48a8     = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c48a8));
-    s_tidProfession= reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5a98));
-    s_tidTerrainGen= reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5b40));
-    s_tidClimateGen= reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5910));
+    s_tidCitizenAI_v  = ComponentDescription::TypeId();
+    s_tidProfComp_v   = RawMaterialDescription::TypeId();
+    s_tidStorage_v    = StorageComponent::TypeId();
+    s_tid_4b10_v      = TrackerComponent::TypeId();
+    s_tid_80e0_v      = WorkPlaceComponent::TypeId();
+    s_tid_8118_v      = WorkPlaceDescription::TypeId();
+    s_tid_7008_v      = BuildComponent::TypeId();
+    s_tid_75f0_v      = DestroyComponent::TypeId();
+    s_tid_7d98_v      = StateMachineComponent::TypeId();
+    s_tid_7040_v      = BuildDescription::TypeId();
+    s_tid_79e0_v      = MapComponent::TypeId();
+    s_tid_4a30_v      = TombstoneComponent::TypeId();
+    s_tid_48a8_v      = SelectDescription::TypeId();
+    s_tidProfession_v = Profession::TypeId();
+    s_tidTerrainGen_v = TerrainGenerator::TypeId();
+    s_tidClimateGen_v = ClimateGenerator::TypeId();
     s_pDAT_14017225c = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017225c));
     s_pDAT_1401721e4 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401721e4));
     s_tidInit = true;

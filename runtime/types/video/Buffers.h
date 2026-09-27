@@ -124,6 +124,9 @@ public:
     static void RecreateDynamic();
     // ?ReleaseDynamic@IndexBuffer@Video@@SAXXZ    0x1800f35d0  dynamic_resources.cpp
     static void ReleaseDynamic();
+    // ?_firstBuffer@IndexBuffer@Video@@0PEAV12@EA (0x1801fe788) — the list head
+    // (ENDGAME B.3.9 VID class static, B39_RULES D7; dynamic_resources.cpp).
+    static IndexBuffer* _firstBuffer;
 
     // ---- the platform half; DOORS in buffers.cpp ---------------------------
     // NOTE both are PUBLIC in retail (`QEAA`), unlike ImageBuffer's and
@@ -182,6 +185,9 @@ public:
     static void RecreateDynamic();
     // ?ReleaseDynamic@VertexBuffer@Video@@SAXXZ    0x1800f5730  dynamic_resources.cpp
     static void ReleaseDynamic();
+    // ?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA (0x1801fe798) — the list head
+    // (ENDGAME B.3.9 VID class static, B39_RULES D7; dynamic_resources.cpp).
+    static VertexBuffer* _firstBuffer;
 
     // ?PlatformConstruct@VertexBuffer@Video@@QEAAXXZ 0x1800f57e0  buffers.cpp
     void PlatformConstruct();

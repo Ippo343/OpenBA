@@ -153,6 +153,13 @@ public:
     // Literally `GetVersionString(0x010007ff, false)`.
     static String CurrentVersion();
 
+    // ?_singleton@Configuration@System@@0PEAV12@EA  0x1801fc6f8 — ENDGAME B.3.9
+    // SYS (B39_RULES D7): the class static, defined in configuration.cpp;
+    // RtSystemPortInit redirects the minted row onto it. Written by the ctor
+    // door (engine_lifecycle.cpp, retail `MOV [0x1801fc6f8],RCX`). PUBLIC
+    // while foreign readers (IO, the loader thread) still reach the door.
+    static Configuration* _singleton;
+
     // ---- the 0x30 bytes ----------------------------------------------------
     // PUBLIC for the same reason `System::Thread`'s handles are: the
     // unconverted tree reaches these bytes through a cast, and `offsetof` on

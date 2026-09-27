@@ -438,11 +438,8 @@ void MainMenuDialog_OpenMod(MainMenuDialog* self) {
 // Mirrors the bottom half of MainMenuDialog_Slot4 (exe @ 0x1400b3cd0) so it
 // can be reused from the standalone Slot4 stub. Returns true on success.
 //
-// Standalone gotcha: g_MainMenuDialog_BuildIdVtable resolves via the exe data
-// section (0x14015f5a0). In standalone mode there's no exe loader to fill it,
-// so it stays null. When null we skip the vtable override and let the default
-// DialogInstance vtable handle Dtor/etc. (BuildId child has no overridden
-// behavior beyond display.)
+// The child is a plain UI::DialogInstance (retail stamps the exe's copy of its
+// table, 0x14015f5a0; the real class's compiler table is that table).
 //
 // Returns true if the child dialog was created and added to the UI.
 static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
@@ -452,7 +449,6 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
     }
     if (!fn_IsDerivedFrom ||
         !fn_MemAlloc || !fn_InternalBasePtr_Ctor ||
-        !fn_DialogInstance_Ctor ||
         !fn_Configuration_CurrentVersion ||
         !fn_Configuration_CurrentBuildId) {
         printf("[BuildId] missing engine fns, skipping\n");
@@ -487,20 +483,16 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
         return false;
     }
 
-    uint8_t parentPtr[16] = {};
-    new (parentPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(selfDialog));   // B.3.3 bridge
-
-    fn_DialogInstance_Ctor(childDialog,
-                           userInterfacePtr,
-                           dialogResource,
-                           parentPtr,
-                           0, 0, 0);
-
-    // Override vtable to BuildId secondary when that vtable is available; in
-    // standalone the slot is null so we keep the default DI vtable from the ctor.
-    if (g_MainMenuDialog_BuildIdVtable) {
-        *(void**)childDialog = (void*)g_MainMenuDialog_BuildIdVtable;
-    }
+    // ENDGAME B.3.9 UI-D (B9-13 foreign site): the real 6-arg ctor
+    // (0x180114870), parent = this menu dialog. Its compiler table is the one
+    // retail's copy at 0x14015f5a0 describes, so the (standalone-null)
+    // g_MainMenuDialog_BuildIdVtable stamp is gone.
+    ::new (childDialog) UI::DialogInstance(
+        reinterpret_cast<UI::UserInterface*>(userInterfacePtr),       // B.3.8 bridge
+        reinterpret_cast<const UI::Dialog*>(dialogResource),          // B.3.8 bridge
+        Object::InternalPtr<UI::DialogInstance>(
+            reinterpret_cast<UI::DialogInstance*>(selfDialog)),       // B.3.8 bridge
+        nullptr, nullptr, 0);
 
     // --- Add child to UI ---
     uint8_t childInternalPtr[16] = {};

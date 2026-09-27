@@ -38,21 +38,11 @@ namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_reg
 // GetTypeId (vtable +0x10), and on the first type match runs an IsDerivedFrom
 // check before returning the component through an out InternalBasePtr.
 // Caller signature (workplaceui.cpp): void* fn(void* entity, void* retIBP).
-static const uint32_t* s_pTid_d6c0 = nullptr;  // 0x1401c7008
-static bool s_tidInit = false;
-
 void* Dialog_FindComponent_d6c0(void* entity, void* retIBP) {
-    if (!s_tidInit) {
-        s_pTid_d6c0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7008));
-        // 0x1401c7008 = BuildComponent TypeInfo (decomp/application.md); NULL in
-        // standalone -> fall back to the runtime type registry so the gather Execute's
-        // FindComp_Unk actually locates the build component (else null deref at +0x18).
-        static uint32_t v_d6c0;
-        if (!s_pTid_d6c0) { v_d6c0 = BuildComponent::TypeId(); s_pTid_d6c0 = &v_d6c0; }
-        s_tidInit = true;
-    }
+    // 0x1401c7008 is BuildComponent's type-id cell (Table 1).
+    const uint32_t tid = BuildComponent::TypeId();
     void* found = nullptr;
-    if (s_pTid_d6c0) {
+    {
         uintptr_t e = reinterpret_cast<uintptr_t>(entity);
         int n = *reinterpret_cast<int*>(e + 0x38);
         uintptr_t list = *reinterpret_cast<uintptr_t*>(e + 0x30);
@@ -60,9 +50,9 @@ void* Dialog_FindComponent_d6c0(void* entity, void* retIBP) {
             void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
             void* comp = *slot;
             uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-            if (t == *s_pTid_d6c0) {
+            if (t == tid) {
                 void* c = *slot;
-                found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_pTid_d6c0)) ? c : nullptr;
+                found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? c : nullptr;
                 break;
             }
         }

@@ -8,7 +8,7 @@
 // ============================================================================
 //
 // ??_7ComboDialog@UI@@6B@ (retail 0x1801590e0), 10 slots:
-//   0  deleting dtor    0x180074a10  deleting_dtor.cpp row (sizeof 0xd0)
+//   0  deleting dtor    0x180074a10  ComboDialog.h (the class's own, B.3.9)
 //   1  TypeName         0x180074760  here
 //   2  Type             0x180074740  here
 //   3  Persist          0x180114fa0  already ported (DialogInstance)
@@ -18,9 +18,10 @@
 //   7  OnUpdate         0x180111bd0  here
 //   8  OnElementEvent   0x180111af0  here
 //   9  OnSerializeSettings 0x180115470  already ported (DialogInstance)
-// plus ??1ComboDialog@UI@@UEAA@XZ (0x180111cd0), the deleting-dtor row's
-// dtorVa: stamp own vtable, tail-call ~DialogInstance (already ported,
-// runtime/src/ui/dialog.cpp).
+// plus ??1ComboDialog@UI@@UEAA@XZ (0x180111cd0): stamp own vtable, tail-call
+// ~DialogInstance -- the compiler's chain (ENDGAME B.3.9 UI-D: the dtor door and
+// the five slot doors are retired with the minted `??_7ComboDialog@UI@@6B@`,
+// the factory pair is the class's own, below).
 //
 // LAYOUT. `DialogInstance` is 0xb8 bytes (runtime/types/ui/DialogInstance.h);
 // this class adds THREE pointers, to 0xd0 (the deleting destructor's own
@@ -115,6 +116,7 @@
 // ============================================================================
 
 #include <cstdint>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/ComboDialog.h"
@@ -123,7 +125,6 @@ namespace RtUI {
 
 namespace {
 
-void* VtComboDialog() { return RT_DATA_SLOT(void*, "??_7ComboDialog@UI@@6B@"); }
 const uint8_t* ComboDialogTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@ComboDialog@UI@@0VBaseTypeInfo@Object@@A");
 }
@@ -134,15 +135,6 @@ using PlayFn           = void (*)(void* ui, int32_t soundId);
 using CloseDialogFn    = void (*)(void* ui, void** dlgPtr);
 
 }  // namespace
-
-// ---- ??1ComboDialog@UI@@UEAA@XZ   0x180111cd0 -----------------------------
-// A DTOR DOOR (RULE B6-3): stamps the minted table and chains to
-// ~DialogInstance by name. The C++ `~ComboDialog` below is empty.
-extern "C" void RtUi_ComboDialog_Dtor(void* selfv) {
-    void** v = reinterpret_cast<void**>(selfv);
-    *v = VtComboDialog();                                            // 180111cd7
-    RT_EXPORT_ONCE(void (*)(void*), "??1DialogInstance@UI@@UEAA@XZ")(selfv);  // 0x180114d40
-}
 
 // Other blocks' doors the member bodies reach (ComboElement, UserInterface),
 // file-scope so that no member keeps a static of its own (RULE B6-5).
@@ -182,13 +174,32 @@ const char* ComboDialog::TypeName() const {
     return v;
 }
 // ?Type@ComboDialog@UI@@UEBAIXZ          0x180074740
-uint32_t ComboDialog::Type() const {
+uint32_t ComboDialog::Type() const { return TypeId(); }
+// ?TypeId@ComboDialog@UI@@SAIXZ          0x180074750 — the same dword.
+uint32_t ComboDialog::TypeId() {
     uint32_t v = 0;
     __builtin_memcpy(&v, RtUI::ComboDialogTypeInfo(), sizeof v);
     return v;
 }
 
-ComboDialog::~ComboDialog() {}   // see the dtor door above
+// ?CreateNewObject@ComboDialog@UI@@SAPEAVBase@Object@@XZ  0x180074850
+// The FACTUI1 row this replaces: the locked MemAlloc of 0xd0 bytes, align 8;
+// retail's null branch; then the inlined default ctor (??0DialogInstance and
+// the three own zero stores).
+Object::Base* ComboDialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ComboDialog), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) ComboDialog();
+}
+// ?CreateInPlaceObject@ComboDialog@UI@@SAPEAVBase@Object@@PEAX@Z  0x1800748f0
+Object::Base* ComboDialog::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) ComboDialog();
+}
+
+// ??1ComboDialog@UI@@UEAA@XZ 0x180111cd0 — restamp + ~DialogInstance, both
+// the compiler's; the empty body is retail's.
+ComboDialog::~ComboDialog() {}
 
 // ?OnUpdateLayout@ComboDialog@UI@@UEAAXXZ   0x180111cb0 — a tail JMP into
 // SetUpperLeft at the combo element's (left, bottom).
@@ -278,66 +289,16 @@ void ComboDialog::OnElementEvent(Object::InternalPtr<Element>* /*element*/,
 
 }  // namespace UI
 
-// The registered doors: QUALIFIED delegation (the minted table's slots
-// resolve back to these doors).
-namespace {
-inline UI::ComboDialog* AsCombo(void* p) {
-    return reinterpret_cast<UI::ComboDialog*>(p);           // B.3.6 bridge
-}
-}  // namespace
-
-extern "C" const char* RtUi_ComboDialog_TypeName(const void* self) {
-    return reinterpret_cast<const UI::ComboDialog*>(self)->UI::ComboDialog::TypeName();   // B.3.6 bridge
-}
-extern "C" uint32_t RtUi_ComboDialog_Type(const void* self) {
-    return reinterpret_cast<const UI::ComboDialog*>(self)->UI::ComboDialog::Type();   // B.3.6 bridge
-}
-extern "C" void RtUi_ComboDialog_OnUpdateLayout(void* self) {
-    AsCombo(self)->UI::ComboDialog::OnUpdateLayout();
-}
-extern "C" void RtUi_ComboDialog_OnUpdate(void* self, const void* time) {
-    AsCombo(self)->UI::ComboDialog::OnUpdate(*static_cast<const System::Time*>(time));
-}
-// The full eight-argument retail signature (the door used to spell only the
-// first five; the remaining three were never read and still are not).
-extern "C" void RtUi_ComboDialog_OnElementEvent(void* self, void* element,
-                                                int32_t a, int32_t b, int32_t c,
-                                                int32_t d, int32_t e, void* userData) {
-    AsCombo(self)->UI::ComboDialog::OnElementEvent(
-        static_cast<Object::InternalPtr<UI::Element>*>(element), a, b, c, d, e, userData);
-}
-
 // ============================================================================
-// Registration
+// Registration: the factory pair (B39_RULES D2), the class's own statics.
 // ============================================================================
 int RtUiComboDialogRegister() {
-    using namespace RtUI;
     int n = 0;
-
-    RegisterRuntimeExport("?TypeName@ComboDialog@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_ComboDialog_TypeName); ++n;
-    RegisterRuntimeAddr(0x180074760ull, (void*)&RtUi_ComboDialog_TypeName);
-
-    RegisterRuntimeExport("?Type@ComboDialog@UI@@UEBAIXZ",
-                          (void*)&RtUi_ComboDialog_Type); ++n;
-    RegisterRuntimeAddr(0x180074740ull, (void*)&RtUi_ComboDialog_Type);
-
-    RegisterRuntimeExport("??1ComboDialog@UI@@UEAA@XZ",
-                          (void*)&RtUi_ComboDialog_Dtor); ++n;
-    RegisterRuntimeAddr(0x180111cd0ull, (void*)&RtUi_ComboDialog_Dtor);
-
-    RegisterRuntimeExport("?OnUpdateLayout@ComboDialog@UI@@UEAAXXZ",
-                          (void*)&RtUi_ComboDialog_OnUpdateLayout); ++n;
-    RegisterRuntimeAddr(0x180111cb0ull, (void*)&RtUi_ComboDialog_OnUpdateLayout);
-
-    RegisterRuntimeExport("?OnUpdate@ComboDialog@UI@@UEAAXAEBVTime@System@@@Z",
-                          (void*)&RtUi_ComboDialog_OnUpdate); ++n;
-    RegisterRuntimeAddr(0x180111bd0ull, (void*)&RtUi_ComboDialog_OnUpdate);
-
-    RegisterRuntimeExport(
-        "?OnElementEvent@ComboDialog@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z",
-        (void*)&RtUi_ComboDialog_OnElementEvent); ++n;
-    RegisterRuntimeAddr(0x180111af0ull, (void*)&RtUi_ComboDialog_OnElementEvent);
-
+    RegisterRuntimeExport("?CreateNewObject@ComboDialog@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::ComboDialog::CreateNewObject); ++n;
+    RegisterRuntimeAddr(0x180074850ull, (void*)&UI::ComboDialog::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@ComboDialog@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::ComboDialog::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr(0x1800748f0ull, (void*)&UI::ComboDialog::CreateInPlaceObject);
     return n;
 }

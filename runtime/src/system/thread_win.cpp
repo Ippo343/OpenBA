@@ -180,59 +180,31 @@ static void* RtSystemThreadVftable() {
     return RT_DATA_SLOT(void*, "??_7Thread@System@@6B@");
 }
 
-// The worker entry point. Asked for BY NAME through the PORT-AWARE resolver, so
-// this hands back our own RtSystem_Thread_ThreadFunc (below) once
-// RtSystemThreadRegister has run.
-//
-// WAVE 9 LANE SYS2: same freeze hazard as the vtable above — a null or
-// pre-registration answer frozen here is a bypassed port. RT_EXPORT_ONCE
-// retries a miss.
-static unsigned(__stdcall* RtSystemThreadFunc())(void*) {
-    using Fn = unsigned(__stdcall*)(void*);
-    return RT_EXPORT_ONCE(Fn, "?ThreadFunc@Thread@System@@CAIPEAX@Z");
-}
-
-// _beginthreadex. Retail called its own statically-linked CRT's copy
-// (0x18007fbfc, the ctor's CALL target in the disassembly); ours is the
-// identical routine with the same contract.
-using BeginThreadExFn = uintptr_t(__cdecl*)(void*, unsigned, unsigned(__stdcall*)(void*), void*, unsigned, unsigned*);
-static BeginThreadExFn RtDllBeginThreadEx() {
-    return reinterpret_cast<BeginThreadExFn>(&_beginthreadex);
-}
+// ENDGAME B.3.9 SYS W1: the two helpers that used to sit here (a by-NAME
+// RT_EXPORT_ONCE lookup of `?ThreadFunc@Thread@System@@CAIPEAX@Z` and a cast of
+// `_beginthreadex`) are gone. Retail's ctor hands `_beginthreadex` the address
+// of ThreadFunc itself (`LEA R8,[0x1800ca440]`), so the shared body below names
+// `Thread::ThreadFunc` directly -- the function the name resolved to (its
+// registered door delegates to it in one line), with no first-use cache (B9-10).
 
 // 0x1800ca4e0  ??0Thread@System@@QEAA@I@Z
+// THE DOOR, for objects not yet built by a C++ ctor (Engine::Loader's mint
+// construction, Audio::Stream, the exe pathfinder): it stamps the MINTED base
+// table, then runs the ONE body the real `System::Thread(unsigned)` runs
+// (RULE B8-1). Retail stores runFlags before the vptr; the body stores it
+// after -- nothing observes the object in between.
 Thread* RtSystem_Thread_Ctor(Thread* self, unsigned int stackSize) {
-    self->runFlags = 0;
     self->vtable = RtSystemThreadVftable();
-
-    // Retail: XOR ECX,ECX (security=NULL); [RSP+0x20]=4 (CREATE_SUSPENDED) is
-    // the LAST arg written before the call, so RDX (stackSize) passes through
-    // unmodified. CREATE_SUSPENDED matters: ThreadFunc's first act is to wait
-    // on {hStart, hStop}, and those two handles (plus hFinished) are not
-    // created until AFTER this call returns. Starting running immediately
-    // would have ThreadFunc wait on uninitialized handles.
-    unsigned int threadId = 0;
-    uintptr_t h = RtDllBeginThreadEx()(nullptr, stackSize, RtSystemThreadFunc(), self, CREATE_SUSPENDED, &threadId);
-    self->hThread = reinterpret_cast<void*>(h);
-    SetThreadPriority(reinterpret_cast<HANDLE>(self->hThread), THREAD_PRIORITY_NORMAL);
-
-    self->hStart    = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    self->hStop     = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    self->hFinished = CreateEventW(nullptr, TRUE,  TRUE,  nullptr);
-
-    ResumeThread(reinterpret_cast<HANDLE>(self->hThread));
+    reinterpret_cast<System::Thread*>(self)->InitFields(stackSize);
     return self;
 }
 
 // 0x1800ca590  ??1Thread@System@@QEAA@XZ
+// THE DOOR: re-stamps the MINTED base table (retail's first store), then the
+// ONE body the real `~Thread()` runs.
 void RtSystem_Thread_Dtor(Thread* self) {
     self->vtable = RtSystemThreadVftable();
-    SetEvent(reinterpret_cast<HANDLE>(self->hStop));
-    WaitForSingleObject(reinterpret_cast<HANDLE>(self->hThread), INFINITE);
-    CloseHandle(reinterpret_cast<HANDLE>(self->hThread));
-    CloseHandle(reinterpret_cast<HANDLE>(self->hStart));
-    CloseHandle(reinterpret_cast<HANDLE>(self->hStop));
-    CloseHandle(reinterpret_cast<HANDLE>(self->hFinished));
+    reinterpret_cast<System::Thread*>(self)->ReleaseFields();
 }
 
 // 0x1800ca610  ?Start@Thread@System@@QEAAXXZ
@@ -351,6 +323,42 @@ void CriticalSection::Unlock() {
     LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(this));
 }
 
+// 0x1800ca4e0  ??0Thread@System@@QEAA@I@Z -- the body MINUS the vptr store
+// (the compiler's, in `Thread(unsigned)`; the minted one, in the door).
+void Thread::InitFields(unsigned int stackSize) {
+    _runFlags = 0;
+
+    // Retail: XOR ECX,ECX (security=NULL); [RSP+0x20]=4 (CREATE_SUSPENDED) is
+    // the LAST arg written before the call, so RDX (stackSize) passes through
+    // unmodified. Retail called its own statically-linked CRT copy of
+    // _beginthreadex (0x18007fbfc); ours is the identical routine.
+    // CREATE_SUSPENDED matters: ThreadFunc's first act is to wait on {hStart,
+    // hStop}, and those two handles (plus hFinished) are not created until
+    // AFTER this call returns. Starting running immediately would have
+    // ThreadFunc wait on uninitialized handles.
+    unsigned int threadId = 0;
+    uintptr_t h = _beginthreadex(nullptr, stackSize, &Thread::ThreadFunc, this,
+                                 CREATE_SUSPENDED, &threadId);
+    _hThread = reinterpret_cast<void*>(h);
+    SetThreadPriority(reinterpret_cast<HANDLE>(_hThread), THREAD_PRIORITY_NORMAL);
+
+    _hStart    = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    _hStop     = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    _hFinished = CreateEventW(nullptr, TRUE,  TRUE,  nullptr);
+
+    ResumeThread(reinterpret_cast<HANDLE>(_hThread));
+}
+
+// 0x1800ca590  ??1Thread@System@@QEAA@XZ -- the body MINUS the vptr store.
+void Thread::ReleaseFields() {
+    SetEvent(reinterpret_cast<HANDLE>(_hStop));
+    WaitForSingleObject(reinterpret_cast<HANDLE>(_hThread), INFINITE);
+    CloseHandle(reinterpret_cast<HANDLE>(_hThread));
+    CloseHandle(reinterpret_cast<HANDLE>(_hStart));
+    CloseHandle(reinterpret_cast<HANDLE>(_hStop));
+    CloseHandle(reinterpret_cast<HANDLE>(_hFinished));
+}
+
 // 0x1800ca610  ?Start@Thread@System@@QEAAXXZ
 void Thread::Start() {
     ResetEvent(reinterpret_cast<HANDLE>(_hFinished));
@@ -430,8 +438,8 @@ int RtSystemThreadRegister() {
     RegisterRuntimeExport("?Start@Thread@System@@QEAAXXZ", (void*)&RtSystem_Thread_Start); ++n;
     RegisterRuntimeExport("?WaitForFinish@Thread@System@@QEAAXXZ", (void*)&RtSystem_Thread_WaitForFinish); ++n;
 
-    // Wave 9 lane P. Registered by ADDRESS as well as by name: the ctor above
-    // asks by name, but the DLL's own ??0Thread ctor (still live for any Thread
+    // Wave 9 lane P. Registered by ADDRESS as well as by name (since B.3.9 the
+    // ctor body names Thread::ThreadFunc directly, as retail's LEA does), and the DLL's own ??0Thread ctor (still live for any Thread
     // the DLL builds itself) hands 0x1800ca440 to _beginthreadex, and Wave 3's
     // seam only redirects a call that goes through a resolver. Registering the
     // address costs nothing and means a future by-address caller lands on us.

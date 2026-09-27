@@ -89,7 +89,7 @@
 #include <cstdlib>
 
 #include "../../funcs/rt_port.h"
-#include "../../types/ui/SpriteSheet.h"   // ENDGAME B.3.8 RB: the shared ctor/dtor body
+#include "../../types/ui/SpriteSheet.h"   // ~SpriteSheet's body lives here
 
 // ResolveAddr lives in standalone/resolve.h, which drags in <windows.h> and so
 // must not be included from runtime/src (rt_port.h explains why). Declared here
@@ -141,10 +141,11 @@ void* MemAlloc(uint64_t bytes, int align) {
 // `?MemFree@MemoryAllocator@System@@SAXPEAX@Z`, 0x1800c7ad0 — the matching
 // lock/Free/unlock triple, the address standalone/filename_runtime_hook.cpp:496
 // already uses.
+// ENDGAME B.3.9 UI-D: no function-local cache any more — ~SpriteSheet runs
+// through here on the loader thread too (B9-10).
 void MemFree(void* p) {
     using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
+    Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
     if (fn) fn(p);
 }
 
@@ -186,36 +187,17 @@ extern "C" void RtUi_ToolTipDialog_OperatorDelete(void* p) { MemFree(p); }
 // `??3DialogInstance@UI@@SAXPEAX@Z` (retail 0x180045490, 93 bytes). Same body.
 extern "C" void RtUi_DialogInstance_OperatorDelete(void* p) { MemFree(p); }
 
-// `??1SpriteSheet@UI@@UEAA@XZ` — retail 0x18011d670, ord 686.
+// ============================================================================
+// `??1SpriteSheet@UI@@UEAA@XZ` — retail 0x18011d670, ord 686. The REAL
+// destructor (ENDGAME B.3.9 UI-D: the registered door is retired).
 // Releases the two refcounted String slots at +0x40 (`m_groupName`) then
 // +0x38 (`m_textureName`) — in THAT order, per the disassembly — destroys the
 // `m_sprites` array (+0x20, Array<SpriteInfo>) through the already-ported
 // `~Array<SpriteEntry:0x38>` at 0x180004f50
-// (runtime/src/collection/array_destroy.cpp), then tail-calls
-// `Object::External::~External`. The vtable is re-stamped first, exactly as
-// retail's `*(undefined***)this = &_vftable_` does — this class's own vtable,
-// not a base class's, because a derived class's dtor thunk has already
-// re-stamped ITS vtable and this call is the base-class step of that chain.
-extern "C" void RtUi_SpriteSheet_Dtor(void* self) {
-    uint8_t* p = static_cast<uint8_t*>(self);
-    void* vtbl = RT_DATA_SLOT(void*, "??_7SpriteSheet@UI@@6B@");
-    if (vtbl) *reinterpret_cast<void**>(p) = vtbl;
-
-    // ENDGAME B.3.8 block RB (RULE B8-1): the two String releases and the
-    // m_sprites array destroy are ONE body with the real destructor
-    // `UI::SpriteSheet::~SpriteSheet()` — `ReleaseFields`, below.
-    UI::SpriteSheet::DoorBody::Release(reinterpret_cast<UI::SpriteSheet*>(self));   // B.3.8 bridge
-
-    using ExternalDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExternalDtorFn, "??1External@Object@@UEAA@XZ")(self);
-}
-
+// (runtime/src/collection/array_destroy.cpp); the restamp before and
+// `Object::External::~External` after are the compiler's.
 // ============================================================================
-// UI::SpriteSheet::ReleaseFields — ??1SpriteSheet 0x18011d670 between the
-// restamp and the ~External tail (ENDGAME B.3.8 block RB). Moved verbatim from
-// the door above; `p` is `this`.
-// ============================================================================
-void UI::SpriteSheet::ReleaseFields() {
+UI::SpriteSheet::~SpriteSheet() {
     uint8_t* p = reinterpret_cast<uint8_t*>(this);
     auto release = [](uint8_t* slot) {
         uint8_t* str = *reinterpret_cast<uint8_t**>(slot);
@@ -243,11 +225,11 @@ void UI::SpriteSheet::ReleaseFields() {
     // "DtorElem" helper may not be convertible at all, `m_sprites`
     // (SpriteSheet.h +0x20, `Collection::Array<SpriteInfo>`) stays reached
     // through the seam rather than forced onto `.~Array()`.
+    // No function-local cache (B9-10: UI is torn down on the loader thread
+    // too); ResolveAddr is a registry lookup.
     using ArrayDtorFn = void* (*)(void*);
-    static ArrayDtorFn arrayDtor = nullptr;
-    if (!arrayDtor) arrayDtor = reinterpret_cast<ArrayDtorFn>(
-        ResolveAddr(Module::Runtime, 0x180004f50));
-    arrayDtor(p + 0x20);   // m_sprites, Array<SpriteInfo>
+    reinterpret_cast<ArrayDtorFn>(ResolveAddr(Module::Runtime, 0x180004f50))(
+        p + 0x20);         // m_sprites, Array<SpriteInfo>
 }
 
 // ============================================================================
@@ -263,9 +245,6 @@ int RtUiSpriteSheetNewRegister() {
     RegisterRuntimeExport("??2SpriteSheet@UI@@SAPEAX_K@Z",
                           (void*)&RtUi_SpriteSheet_OperatorNew);
     RegisterRuntimeAddr(0x180002e60, (void*)&RtUi_SpriteSheet_OperatorNew);
-
-    RegisterRuntimeExport("??1SpriteSheet@UI@@UEAA@XZ", (void*)&RtUi_SpriteSheet_Dtor);
-    RegisterRuntimeAddr(0x18011d670, (void*)&RtUi_SpriteSheet_Dtor);
 
     // Three deleting-dtor rows (operator_delete), UI leftovers batch. Each is
     // one of the per-translation-unit `operator delete` copies

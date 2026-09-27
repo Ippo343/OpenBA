@@ -44,6 +44,9 @@
 // every field" has no field to act on. An empty class is 1 byte in both ABIs
 // and nothing in the tree constructs one.
 //
+// *** SUPERSEDED BY ENDGAME B.3.9 SYS: the five statics ARE class statics now
+// (bottom of the class), redirected together. The B.3.4b text below is history. ***
+//
 // *** THE FIVE STATICS STAY `RT_DATA_SLOT` READS — RULE B4b-4. ***
 // `?_ticksPerSecond@`, `?_secondsPerTick@`, `?_systemTicksPerSecond@`,
 // `?_systemInitialTick@` and `?_systemSecondsPerTick@` are all
@@ -116,6 +119,20 @@ public:
     // because it is a real export with a registered door, not because anything
     // calls it.
     Timer& operator=(const Timer& other);
+
+    // ---- the five statics (`0…A`: PRIVATE STATIC DATA in retail) ----------
+    // ENDGAME B.3.9 SYS (B39_RULES D7): class statics, defined in timer.cpp
+    // with retail's constant initialisers (Timer::Startup's two stores) or
+    // zero (the three PlatformStartup writes). RtSystemPortInit redirects the
+    // five minted rows onto them TOGETHER, so the name door, the address door
+    // and these members are the same bytes. Read every frame on the main
+    // thread and by the loader thread: plain statics, no lazy init, no lock.
+    // PUBLIC while foreign readers remain (they reach the doors today).
+    static int64_t _ticksPerSecond;         // ?_ticksPerSecond@Timer@System@@0_JA       0x1801fe720
+    static double  _secondsPerTick;         // ?_secondsPerTick@Timer@System@@0NA        0x1801fe728
+    static int64_t _systemTicksPerSecond;   // ?_systemTicksPerSecond@Timer@System@@0_JA 0x1801fe730
+    static int64_t _systemInitialTick;      // ?_systemInitialTick@Timer@System@@0_JA    0x1801fe738
+    static double  _systemSecondsPerTick;   // ?_systemSecondsPerTick@Timer@System@@0NA  0x1801fe740
 };
 
 }  // namespace System

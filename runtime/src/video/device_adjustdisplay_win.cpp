@@ -79,6 +79,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Configuration::_singleton
 
 static const size_t kDeviceBackBufferWidth  = 0x04;
 static const size_t kDeviceBackBufferHeight = 0x08;
@@ -94,7 +95,7 @@ static const size_t kConfigFullscreen   = 0x40;
 
 namespace {
 uint8_t* VideoConfig() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Configuration@Video@@0PEAV12@EA");
+    void** slot = reinterpret_cast<void**>(&::Video::Configuration::_singleton);
     return slot ? static_cast<uint8_t*>(*slot) : nullptr;
 }
 }  // namespace

@@ -30,6 +30,7 @@
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
+#include "Component/CitizenComponent.h"
 #include <cstdio>
 #include <cstdint>
 #include <new>
@@ -61,9 +62,6 @@ static s_fn_EntityFlagSet_t s_fn_EntityFlagSet = nullptr;
 // GameColl::AsArray<GameColl::Ptr8> member call, so its resolved-pointer stand-in
 // is gone.
 
-// DAT_1401c7158 -- type ID for IsDerivedFrom check on +0x20
-static uint32_t* s_typeId_1401c7158 = nullptr;
-
 static bool s_funcs_resolved = false;
 
 // ============================================================
@@ -81,12 +79,9 @@ bool PickupRawMaterial_ResolveFuncs() {
     s_fn_EntityFlagSet = reinterpret_cast<s_fn_EntityFlagSet_t>(
         ResolveAddr(Module::Exe, 0x1400c2ea0));
 
-    s_typeId_1401c7158 = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7158));
-
     bool ok = s_fn_FindComponent_7c80 && s_fn_Storage_AddItem &&
               s_fn_EntityFlagSet &&
-              s_typeId_1401c7158 && g_TypeId_ComponentEntity &&
+              g_TypeId_ComponentEntity &&
               g_pGameWorldSingleton &&
               fn_IsDerivedFrom;
 
@@ -122,7 +117,7 @@ void PickupRawMaterial::Persist(void* stream) {
     // Serialize source building (+0x20) with type check
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field20 != nullptr) {
-        if (!fn_IsDerivedFrom(_field20, *s_typeId_1401c7158)) {
+        if (!fn_IsDerivedFrom(_field20, CitizenComponent::TypeId())) {
             _field20 = nullptr;
         }
     }

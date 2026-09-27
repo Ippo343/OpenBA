@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Entity/ComponentEntity.h"
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -34,10 +35,6 @@ static void (*s_fn_SetAnimIndex)(void* nrComp, uint32_t animIdx) = nullptr;
 
 // FUN_140003f60 — get ModelComponent from entity
 static void* (*s_fn_GetModelComp)(void* entity, void* outIBP) = nullptr;
-
-// TypeInfo address
-static uint32_t* s_TypeId_ComponentEntity = nullptr;  // DAT_1401c5d70 — ComponentEntity
-    // (was mistranscribed 0x1401c4218 = FireDescription; retail AnimateNaturalResource reads c5d70)
 
 static bool s_funcs_resolved = false;
 
@@ -59,11 +56,8 @@ bool AnimateNaturalResource_ResolveFuncs() {
     // used to be read out of exe dispatch slot 0x1401514b0 went with its one caller
     // in Execute, which now calls the member.
 
-    // TypeInfo
-    s_TypeId_ComponentEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5d70));
-
     bool ok = s_fn_GetNRComp && s_fn_SetAnimIndex &&
-              s_fn_GetModelComp && s_TypeId_ComponentEntity &&
+              s_fn_GetModelComp &&
               fn_IsDerivedFrom &&
               fn_InternalBasePtr_DeletePtr && fn_MemFreeStatic;
 
@@ -101,7 +95,7 @@ void AnimateNaturalResource::Persist(void* stream) {
     // Entity ref (+0x20) with type validation
     reinterpret_cast<Object::InternalBasePtr*>(&this->_field20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (this->_field20 != nullptr) {
-        if (!fn_IsDerivedFrom(this->_field20, *s_TypeId_ComponentEntity)) {
+        if (!fn_IsDerivedFrom(this->_field20, ComponentEntity::TypeId())) {
             this->_field20 = nullptr;
         }
     }

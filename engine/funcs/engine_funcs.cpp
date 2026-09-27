@@ -343,8 +343,6 @@ uint32_t* g_TypeId_CitizenAIComponent = nullptr;
 
 fn_Configuration_CurrentVersion_t fn_Configuration_CurrentVersion = nullptr;
 fn_Configuration_CurrentBuildId_t fn_Configuration_CurrentBuildId = nullptr;
-fn_DialogInstance_Ctor_t fn_DialogInstance_Ctor = nullptr;
-void** g_MainMenuDialog_BuildIdVtable = nullptr;
 // fn_MainMenu_* handlers — REMOVED, now reimplemented in mainmenudialog.cpp
 // Dialog ctor function pointers (used by reimplemented Open* handlers)
 fn_NewGameDialog_Ctor_t fn_NewGameDialog_Ctor = nullptr;
@@ -1335,12 +1333,6 @@ bool EngineFuncsInit() {
 
     fn_Configuration_CurrentBuildId = reinterpret_cast<fn_Configuration_CurrentBuildId_t>(
         ResolveExport("?CurrentBuildId@Configuration@System@@SA?AVString@2@XZ"));
-
-    fn_DialogInstance_Ctor = reinterpret_cast<fn_DialogInstance_Ctor_t>(
-        ResolveAddr(Module::Runtime, 0x180114870));
-
-    g_MainMenuDialog_BuildIdVtable = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x14015f5a0));
 
     // MainMenuDialog Slot8 handler functions — REIMPLEMENTED, now resolve dialog ctor ptrs
     fn_NewGameDialog_Ctor = reinterpret_cast<fn_NewGameDialog_Ctor_t>(

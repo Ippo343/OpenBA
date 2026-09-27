@@ -31,6 +31,11 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
+#include "Component/CitizenComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Component/RawMaterialDescription.h"
+#include "Component/RawMaterialComponent.h"
+#include "Component/WorkPlaceDescription.h"
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -67,21 +72,6 @@ static void* (*s_fn_GetChildEntities)(int64_t entity, void* retbuf) = nullptr;
 // FUN_140003050 -- find component on entity (ResourceDescription?)
 // Member ABI: RCX=entity, RDX=retbuf
 static void* (*s_fn_FindComponent_RD)(int64_t entity, void* retbuf) = nullptr;
-
-// TypeId for entity validation: 0x1401c7158 (used for +0x28 IBP)
-static uint32_t* s_typeId_1401c7158 = nullptr;
-
-// TypeId for ComponentEntity: 0x1401c5d70 (used for +0x30, +0x38 IBP)
-static uint32_t* s_typeId_ComponentEntity = nullptr;
-
-// TypeId for RawMaterialDescription: 0x1401c7cb8
-static uint32_t* s_typeId_RawMatDesc = nullptr;
-
-// TypeId for component on new entity: DAT_1401c7c80
-static uint32_t* s_typeId_1401c7c80 = nullptr;
-
-// TypeId for DAT_1401c8118 (used for secondary entity component)
-static uint32_t* s_typeId_1401c8118 = nullptr;
 
 // Constant: rotation scale factor (90.0f) at 0x140172204
 static const float ROTATION_SCALE = 90.0f;
@@ -124,23 +114,10 @@ bool CreateRawMaterial_ResolveFuncs() {
     // GameColl::AsArray<GameColl::I32> member call, so its resolved-pointer
     // stand-in is gone.
 
-    s_typeId_1401c7158 = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7158));
-    s_typeId_ComponentEntity = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c5d70));
-    s_typeId_RawMatDesc = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7cb8));
-    s_typeId_1401c7c80 = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7c80));
-    s_typeId_1401c8118 = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c8118));
-
     bool ok = s_fn_SerializeTypeRef && s_fn_ComponentEntity_CopyCtor &&
               s_fn_FindPlacementCell && s_fn_PositionEntity &&
               s_fn_RegisterRawMaterial && s_fn_RegisterEntity &&
               s_fn_GetChildEntities && s_fn_FindComponent_RD &&
-              s_typeId_1401c7158 && s_typeId_ComponentEntity &&
-              s_typeId_RawMatDesc && s_typeId_1401c7c80 && s_typeId_1401c8118 &&
               fn_InternalBasePtr_DeletePtr &&
               fn_MemFreeStatic &&
               fn_InternalBasePtr_Ctor && fn_IsDerivedFrom &&
@@ -176,9 +153,9 @@ static void* FindRawMaterialDesc(void* descEntity) {
         void* comp = *(void**)(compArray + (int64_t)i * 8);
         // slot 2 Type()
         uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
-        if (typeId == *s_typeId_RawMatDesc) {
+        if (typeId == RawMaterialDescription::TypeId()) {
             // Verify with IsDerivedFrom
-            if (fn_IsDerivedFrom(comp, *s_typeId_RawMatDesc)) {
+            if (fn_IsDerivedFrom(comp, RawMaterialDescription::TypeId())) {
                 return comp;
             }
         }
@@ -240,7 +217,7 @@ void CreateRawMaterial::Persist(void* stream) {
     // Source building IBP (+0x28)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (sourceBuilding != nullptr) {
-        if (!fn_IsDerivedFrom(sourceBuilding, *s_typeId_1401c7158)) {
+        if (!fn_IsDerivedFrom(sourceBuilding, CitizenComponent::TypeId())) {
             sourceBuilding = nullptr;
         }
     }
@@ -265,7 +242,7 @@ void CreateRawMaterial::Persist(void* stream) {
     if (version > 0) {
         reinterpret_cast<Object::InternalBasePtr*>(s + 0x30)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
         if (secondaryEntity != nullptr) {
-            if (!fn_IsDerivedFrom(secondaryEntity, *s_typeId_ComponentEntity)) {
+            if (!fn_IsDerivedFrom(secondaryEntity, ComponentEntity::TypeId())) {
                 secondaryEntity = nullptr;
             }
         }
@@ -284,7 +261,7 @@ void CreateRawMaterial::Persist(void* stream) {
     if (version > 2) {
         reinterpret_cast<Object::InternalBasePtr*>(s + 0x38)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
         if (tertiaryEntity != nullptr) {
-            if (!fn_IsDerivedFrom(tertiaryEntity, *s_typeId_ComponentEntity)) {
+            if (!fn_IsDerivedFrom(tertiaryEntity, ComponentEntity::TypeId())) {
                 tertiaryEntity = nullptr;
             }
         }
@@ -417,7 +394,7 @@ int  CreateRawMaterial::AbstractImpl(void* actionStack) {
                 reinterpret_cast<RtObject::Internal*>(newEntity));   // B.3.3 bridge
 
             // Find component on new entity (DAT_1401c7c80 type)
-            void* comp = FindComponentOnEntity(entityIBP, *s_typeId_1401c7c80);
+            void* comp = FindComponentOnEntity(entityIBP, RawMaterialComponent::TypeId());
 
             // Wrap component in IBP
             int64_t compIBP = 0;
@@ -438,8 +415,8 @@ int  CreateRawMaterial::AbstractImpl(void* actionStack) {
                 for (int i = 0; i < secCount; i++) {
                     void* secComp = *(void**)(*(uintptr_t*)(secDesc + 0x28) + (int64_t)i * 8);
                     uint32_t secTypeId = reinterpret_cast<Object::Base*>(secComp)->Type();   // B.3.8 bridge
-                    if (secTypeId == *s_typeId_1401c8118) {
-                        fn_IsDerivedFrom(secComp, *s_typeId_1401c8118);
+                    if (secTypeId == WorkPlaceDescription::TypeId()) {
+                        fn_IsDerivedFrom(secComp, WorkPlaceDescription::TypeId());
                         break;
                     }
                 }

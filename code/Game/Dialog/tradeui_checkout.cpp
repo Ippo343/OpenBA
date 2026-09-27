@@ -71,6 +71,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/RawMaterialDescription.h"
+#include "Component/NaturalResourceDescription.h"
+#include "Component/LivestockDescription.h"
+#include "Component/TradeDescription.h"
 #include "runtime/types/ui/SpinnerElement.h"    // ENDGAME B.3.6 UI callers round 2 (K1)
 
 // ── Cross-module reimpls this calls ──────────────────────────────────────────
@@ -88,13 +92,6 @@ typedef int  (*GetResourceCategory_t)(void* storageComp, void* entity);        /
 StorageSubtract_t     s_storageSubtract = nullptr;   // 0x14012d150 (reg_action_rawmat)
 GetResourceCategory_t s_resourceCategory = nullptr;  // 0x140088f90 (reg_action_rawmat)
 
-// The three purchased-goods description type-ids. These are plain .rdata uint32
-// slots (RegisterExeAddr hands back the address OF the uint32), so they take a
-// SINGLE deref — unlike the 0x14015xxxx dispatch slots, which take two.
-const uint32_t* s_tidRawMaterialDesc = nullptr;      // 0x1401c7cb8 (reg_action_child_ctors2)
-const uint32_t* s_tidNaturalResDesc  = nullptr;      // 0x1401c7b68 (reg_economy_typeids)
-const uint32_t* s_tidLivestockDesc   = nullptr;      // 0x1401c79a8 (reg_component_animal)
-
 bool s_resolved = false;
 
 void ResolveOnce() {
@@ -104,12 +101,6 @@ void ResolveOnce() {
                                ResolveAddr(Module::Exe, 0x14012d150));
     s_resourceCategory   = reinterpret_cast<GetResourceCategory_t>(
                                ResolveAddr(Module::Exe, 0x140088f90));
-    s_tidRawMaterialDesc = reinterpret_cast<const uint32_t*>(
-                               ResolveAddr(Module::Exe, 0x1401c7cb8));
-    s_tidNaturalResDesc  = reinterpret_cast<const uint32_t*>(
-                               ResolveAddr(Module::Exe, 0x1401c7b68));
-    s_tidLivestockDesc   = reinterpret_cast<const uint32_t*>(
-                               ResolveAddr(Module::Exe, 0x1401c79a8));
 }
 
 // Probe a purchased entity's component array for an object of a given type-id.
@@ -202,12 +193,9 @@ extern "C" void TradeDescription_ExtendMerchantStay(void* tradeComp) {
     uintptr_t tc = reinterpret_cast<uintptr_t>(tradeComp);
 
     void* desc = *reinterpret_cast<void**>(tc + 0x18);
-    uint32_t tidTradeDesc = 0;
-    if (uintptr_t slot = ResolveAddr(Module::Exe, 0x1401c4bb8))
-        tidTradeDesc = *reinterpret_cast<uint32_t*>(slot);
-    // Retail keeps the null and derefs it; standalone would take an access
-    // violation here on a mis-typed post, which tells us nothing useful.
-    if (!desc || !tidTradeDesc || !fn_IsDerivedFrom(desc, tidTradeDesc)) return;
+    // 0x1401c4bb8 is TradeDescription's type-id cell (Table 1).
+    const uint32_t tidTradeDesc = TradeDescription::TypeId();
+    if (!desc || !fn_IsDerivedFrom(desc, tidTradeDesc)) return;
     uintptr_t d = reinterpret_cast<uintptr_t>(desc);
 
     uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
@@ -339,20 +327,17 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
 
             // Raw material: deliver into the post's storage, and make the
             // material available to the town.
-            if (s_tidRawMaterialDesc &&
-                FindComponentByTypeId(boughtEntity, *s_tidRawMaterialDesc)) {
+            if (FindComponentByTypeId(boughtEntity, RawMaterialDescription::TypeId())) {
                 fn_StorageAddItem(reinterpret_cast<void*>(storagePtr[0]), bought, qty);
                 RawMaterialComponent_RegisterRawMaterial(
                     reinterpret_cast<void*>(townMgr), bought);
             }
             // Natural resource (crop / orchard seed): availability only.
-            else if (s_tidNaturalResDesc &&
-                     FindComponentByTypeId(boughtEntity, *s_tidNaturalResDesc)) {
+            else if (FindComponentByTypeId(boughtEntity, NaturalResourceDescription::TypeId())) {
                 TownMgr_AddAvailableAgri(reinterpret_cast<uint8_t*>(townMgr), bought);
             }
             // Livestock: availability, plus spawn the animals into the world.
-            else if (s_tidLivestockDesc &&
-                     FindComponentByTypeId(boughtEntity, *s_tidLivestockDesc)) {
+            else if (FindComponentByTypeId(boughtEntity, LivestockDescription::TypeId())) {
                 TownMgr_AddAvailableAgri(reinterpret_cast<uint8_t*>(townMgr), bought);
                 if (fn_Building_AddBuyToStorage) {
                     fn_Building_AddBuyToStorage(reinterpret_cast<void*>(tradePtr[0]), bought, qty);

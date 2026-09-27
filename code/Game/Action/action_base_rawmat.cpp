@@ -37,20 +37,10 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/RawMaterialComponent.h"   // ENDGAME B.3.8 CB3: RawMaterialComponent::TypeId()
+#include "Component/RawMaterialDescription.h"
+#include "Component/TrackerComponent.h"
 
 namespace {
-// Type-ID globals (resolved lazily from the exe .rdata).
-static const uint32_t* s_pTid_RawMatDesc = nullptr;  // DAT_1401c7cb8 (RawMaterialDescription)
-static const uint32_t* s_pTid_1c7c80     = nullptr;  // DAT_1401c7c80 (FindComponent_7c80 target)
-static const uint32_t* s_pTid_c4b10      = nullptr;  // DWORD_1401c4b10 (FindComp_013320 target)
-static bool s_tidInit = false;
-static void EnsureTids() {
-    if (s_tidInit) return;
-    s_pTid_RawMatDesc = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
-    s_pTid_1c7c80     = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7c80));
-    s_pTid_c4b10      = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4b10));
-    s_tidInit = true;
-}
 
 // Exe sub-helpers / engine constants used by the PositionEntity / FindPlacementCell
 // ports below. Resolved lazily (all already registered or Runtime exports).
@@ -265,8 +255,7 @@ void ActRm_DynArrayPush4_44810(uintptr_t self, uint32_t value) {
 // (vtable+0x10) + IsDerivedFrom, then map the first set bit of comp+0x5c to a category
 // index (faithful bit->index table). Returns -1 if none. Leaf (engine_funcs only).
 int ActRm_GetResourceCategory_88f90(void* /*unused*/, uintptr_t entity) {
-    EnsureTids();
-    uint32_t typeId = s_pTid_RawMatDesc ? *s_pTid_RawMatDesc : 0;
+    uint32_t typeId = RawMaterialDescription::TypeId();
     void* comp = nullptr;
     int n = *reinterpret_cast<int*>(entity + 0x30);
     uintptr_t base = *reinterpret_cast<uintptr_t*>(entity + 0x28);
@@ -313,15 +302,7 @@ int ActRm_GetResourceCategory_88f90(void* /*unused*/, uintptr_t entity) {
 // match re-CheckPtr + IsDerivedFrom, then construct retIBP from the found object (or
 // null). Returns retIBP. Leaf (engine_funcs only).
 void* ActRm_FindComponent_223c0(uintptr_t entity, void* retIBP) {
-    EnsureTids();
-    uint32_t typeId = s_pTid_1c7c80 ? *s_pTid_1c7c80 : 0;
-    // [standalone] The shared .rdata type-id global DAT_1401c7c80 (RawMaterialComponent) is
-    // unfilled (0/0xFFFFFFFF) in standalone → the scan would match nothing and return null,
-    // crashing the produce's downstream PositionEntity. Self-resolve via GetTypeIdByName
-    // (the proven citizen-brick pattern; verified c7c80 <- RawMaterialComponent_RegisterType).
-    if (typeId == 0 || typeId == 0xFFFFFFFFu) {
-        typeId = RawMaterialComponent::TypeId();   // B.3.8: no lazy cache (B6-5)
-    }
+    uint32_t typeId = RawMaterialComponent::TypeId();
     void* found = nullptr;
     int n = *reinterpret_cast<int*>(entity + 0x38);
     uintptr_t base = *reinterpret_cast<uintptr_t*>(entity + 0x30);
@@ -350,8 +331,7 @@ void* ActRm_FindComponent_223c0(uintptr_t entity, void* retIBP) {
 // (vtable+0x10) vs the target, on first match re-CheckPtr + IsDerivedFrom, construct
 // retIBP from the found object (or null). Returns retIBP. Leaf (engine_funcs only).
 void* ActRm_FindComp_013320(uintptr_t self, void* retIBP) {
-    EnsureTids();
-    uint32_t typeId = s_pTid_c4b10 ? *s_pTid_c4b10 : 0;
+    uint32_t typeId = TrackerComponent::TypeId();
     void* found = nullptr;
     int n = *reinterpret_cast<int*>(self + 0x38);
     uintptr_t base = *reinterpret_cast<uintptr_t*>(self + 0x30);

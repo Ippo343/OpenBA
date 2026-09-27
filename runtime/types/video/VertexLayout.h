@@ -93,6 +93,7 @@
 
 #include "../collection/Collection.h"
 #include "../object/External.h"
+#include "../object/Internal.h"                // Object::detail::InternalMemFree
 
 namespace IO { class Stream; }
 
@@ -102,15 +103,11 @@ namespace Video {
 // Video::VertexLayout — a compiled vertex-buffer layout. 0x48 bytes,
 // `Object::CompiledExternal` base (which adds no bytes over `External`'s 0x20).
 //
-// *** NOT CONSTRUCTIBLE IN B.3.5. *** Every live `VertexLayout` is built by
-// `??0VertexLayout@Video@@QEAA@XZ` (or by the factory rows in
-// `runtime/src/video/rt_factories_video.inc`) and wears the MINTED
-// `??_7VertexLayout@Video@@6B@` table, not GCC's. A `Video::VertexLayout vl;`
-// would stamp GCC's table on an object the rest of the tree reads through the
-// minted one, with no build error — so the default constructor is `protected`
-// and `= default` (B34_BRIEFS A.4). `= default` keeps the class trivially
-// default-constructible, so no layout pin moves, and a probe SUBCLASS in
-// `tests/unit/` can still reach it.
+// ENDGAME B.3 step 9, block VID (B39_RULES.md D1/D2): CONCRETE. Retail's real
+// public constructor (??0VertexLayout 0x1800f5d50), its own slot 0, and the
+// factory pair as its own statics: every live VertexLayout wears the COMPILER's
+// table. The minted row, its RT_DELDTOR row 0x18004e000, the ??0 / ??1 doors and
+// the seven slot doors are retired (tools/rt_mint_retired/vid.txt).
 //
 // NO VIRTUAL DESTRUCTOR (ENDGAME B.1 decision 2): slot 0 is
 // `DeletingDtor(unsigned)`. `~VertexLayout()` is non-virtual and has no slot.
@@ -154,24 +151,35 @@ public:
         uint32_t _pad1c;      // +0x1c  NOT WRITTEN by `Add` (0x1800f5a90)
     };
 
+    // ??0VertexLayout@Video@@QEAA@XZ 0x1800f5d50 -- the REAL constructor.
+    // CompiledExternal() (Base's, External's and CompiledExternal's vptrs,
+    // External's zero stores), VertexLayout's vptr (the compiler's), the two
+    // Array headers zeroed (their own constructors: +0x20 and +0x38), then
+    // PlatformConstruct fills +0x30 -- retail's order.
+    VertexLayout() : Object::CompiledExternal(), _elements(), _signature() {
+        PlatformConstruct();   // +0x30
+    }
+
     // ---- the nine slots, in measured order -----------------------------
     // Slot 4 is `Object::External::Compile`, INHERITED (retail's slot 4 is
     // 0x1800066e0, External's own body), so it is not redeclared here.
     //
-    // ENDGAME B.3.5 block B: slot 0 is `override = 0`, where block A wrote it
-    // non-pure. Retail's slot 0 IS a concrete per-class body, but OURS is not a
-    // per-class function at all — it is deleting_dtor.cpp's ONE table-driven body,
-    // reached through `RT_DELDTOR(0x18004e000, 0x1800f5df0, 0x048,
-    // "Video::VertexLayout")` at deleting_dtor.cpp:826, and B35_RULES 11 keeps that
-    // row for the whole of step 5. Leaving it non-pure was harmless while no member
-    // had a body; the moment `~VertexLayout()` is DEFINED, GCC emits a vptr store
-    // that needs `vtable for Video::VertexLayout`, which needs every non-pure slot
-    // to have one — twelve `undefined reference to vtable` at link is exactly what
-    // block A hit on the `*Data` bases and answered the same way (B34_BRIEFS A.4,
-    // the IO::BinaryReader shape). The class is therefore abstract in C++ where
-    // retail's is concrete, which costs nothing: nothing constructs one as a C++
-    // object, and a probe subclass in tests/unit can still override slot 0.
-    Object::Base*     DeletingDtor(unsigned flags) override = 0;  // [0] 0x18004e000
+    // [0] 0x18004e000 -- MSVC's VECTOR deleting destructor (`MOV EDX,0x48`, the
+    // eh-vector dtor over ~VertexLayout 0x1800f5df0), both arms as the retired
+    // RT_DELDTOR row ran them. Nothing `new[]`s one.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<VertexLayout*>(self + static_cast<int64_t>(i) * 0x48)->~VertexLayout();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~VertexLayout();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char*       TypeName() const override;              // [1] 0x18004dcd0
     uint32_t          Type() const override;                  // [2] 0x18004dcb0
     int32_t           GetFileVersion() const override;        // [3] 0x1800f5e60 — `MOV EAX,3`
@@ -210,25 +218,18 @@ public:
     VertexLayout(const VertexLayout& other);                      // 0x18004deb0 — not ported
     VertexLayout& operator=(const VertexLayout& other);           // 0x18004df30 — not ported
 
-    // The static reflection companions retail emits.
-    static uint32_t     TypeId();                                 // 0x18004dcc0 — not ported
-    static Object::Base* CreateNewObject();                       // 0x18004ddc0 — rt_factories_video.inc
-    static Object::Base* CreateInPlaceObject(void* storage);      // 0x18004de40 — rt_factories_video.inc
+    // The static reflection companions retail emits. TypeId (0x18004dcc0) is
+    // `MOV EAX,[_typeInfo]` over the (still minted) record (B39_RULES D6 step
+    // 1); the factory pair is the class's own (D2), defined in vertexlayout.cpp.
+    // The class declares its own placement `operator new` (not ported):
+    // placement spells `::new (p)`.
+    static uint32_t     TypeId();                                 // 0x18004dcc0
+    static Object::Base* CreateNewObject();                       // 0x18004ddc0
+    static Object::Base* CreateInPlaceObject(void* storage);      // 0x18004de40
     static void*        operator new(size_t size);                // 0x18004dce0 — not ported
     static void*        operator new(size_t size, void* storage); // 0x18004dd50 — not ported
     static void         operator delete(void* p);                 // 0x18004dd60 — class_operator_delete.cpp
 
-    // ??1VertexLayout@Video@@UEAA@XZ (0x1800f5df0). NON-virtual; reached by
-    // `DeletingDtor` and by `Destruct`.
-    //
-    // PUBLIC as of B.3.5 block B, where block A had it protected: the REGISTERED
-    // DOOR that fills `??1VertexLayout@Video@@UEAA@XZ` is a free function, not a
-    // member or a friend, and has to spell
-    // `->Video::VertexLayout::~VertexLayout()`. Block A's `protected` was correct
-    // while no door reached it. The same applies to the three `Platform*` halves,
-    // which the ctor door and the destructor call. The one thing that stays
-    // inaccessible is the CONSTRUCTOR, which is the property that matters.
-    ~VertexLayout();
 
     // The three platform halves (`AEAA`, i.e. PRIVATE in retail, not unexported —
     // reference_aeaa_is_private_not_unexported.md). `PlatformCreate` returns void,
@@ -247,10 +248,9 @@ public:
     static const char* _ParentTypeName();        // 0x18004dca0 -> "Object::CompiledExternal" — not ported
 
 protected:
-    // See the "NOT CONSTRUCTIBLE" banner. `??0VertexLayout@Video@@QEAA@XZ`
-    // (0x1800f5d50) stays a registered ctor DOOR (B4b-2 / B35_RULES 11): no
-    // real constructor on a polymorphic class.
-    VertexLayout() = default;
+    // ??1VertexLayout@Video@@UEAA@XZ (0x1800f5df0). NON-VIRTUAL (no virtual dtor
+    // until the normal-virtual cutover); reached through slot 0.
+    ~VertexLayout();
 
 public:
     // ---- the 0x28 bytes VertexLayout adds ------------------------------

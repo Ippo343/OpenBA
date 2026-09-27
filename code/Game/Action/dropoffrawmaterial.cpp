@@ -37,6 +37,7 @@
 #include <cstdlib>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.9 C4: CitizenComponent::TypeId()
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -60,9 +61,6 @@ static s_fn_DropOffSub_t s_fn_DropOffSub = nullptr;
 typedef void (*s_fn_DropAllInventory_t)(void* self);
 static s_fn_DropAllInventory_t s_fn_DropAllInventory = nullptr;
 
-// Type IDs for IsDerivedFrom checks in Serialize
-static uint32_t* s_typeId_1401c7158 = nullptr;  // entity type ref for +0x30
-
 // TypeInfo for BaseDtor (slot 2) — DAT_1401c5f38
 static uint32_t* s_typeInfo_DropOffRawMaterial = nullptr;
 
@@ -84,10 +82,6 @@ bool DropOffRawMaterial_ResolveFuncs() {
     // Entity_impl_7570 — drop all inventory
     s_fn_DropAllInventory = (s_fn_DropAllInventory_t)ResolveAddr(Module::Exe, 0x1400c7570);
 
-    // Type IDs
-    s_typeId_1401c7158 = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7158));
-
     // TypeInfo for BaseDtor — read from [0x1401c5f38]
     s_typeInfo_DropOffRawMaterial = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5f38));
@@ -95,7 +89,7 @@ bool DropOffRawMaterial_ResolveFuncs() {
     bool ok = s_fn_IBP_DeletePtr &&
               s_fn_DropOffSub &&
               s_fn_DropAllInventory &&
-              s_typeId_1401c7158 && g_TypeId_ComponentEntity &&
+              g_TypeId_ComponentEntity &&
               s_typeInfo_DropOffRawMaterial &&
               fn_IsDerivedFrom &&
               fn_MemFreeStatic && fn_ExternalPtr_BuildSerialize;
@@ -104,9 +98,8 @@ bool DropOffRawMaterial_ResolveFuncs() {
     printf("[DropOffRawMaterial] ResolveFuncs: IBPDel=%p DropSub=%p\n",
            (void*)s_fn_IBP_DeletePtr,
            (void*)s_fn_DropOffSub);
-    printf("[DropOffRawMaterial]   DropAll=%p typeId7158=%p CompEnt=%p\n",
-           (void*)s_fn_DropAllInventory,
-           (void*)s_typeId_1401c7158, (void*)g_TypeId_ComponentEntity);
+    printf("[DropOffRawMaterial]   DropAll=%p CompEnt=%p\n",
+           (void*)s_fn_DropAllInventory, (void*)g_TypeId_ComponentEntity);
     if (!ok) printf("[DropOffRawMaterial] ERROR: some function pointers not resolved!\n");
 #endif
 
@@ -138,7 +131,7 @@ void DropOffRawMaterial::Persist(void* stream) {
     // Serialize target storage entity ref (+0x30)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x30)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field30 != nullptr) {
-        if (!fn_IsDerivedFrom(_field30, *s_typeId_1401c7158)) {
+        if (!fn_IsDerivedFrom(_field30, CitizenComponent::TypeId())) {
             _field30 = nullptr;
         }
     }

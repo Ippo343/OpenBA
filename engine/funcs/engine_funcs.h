@@ -240,8 +240,9 @@ extern fn_InternalBasePtr_Ctor_t fn_InternalBasePtr_Ctor;
 // ENDGAME B.3.6 closing pass: every UI::* door pointer that stood here reached
 // zero references and was deleted; callers use the real UI classes
 // (runtime/types/ui/*.h). The ctor/dtor doors the exe subclasses still
-// construct through (fn_DialogInstance_Ctor/_Dtor, fn_Element_Ctor,
-// fn_ElementDescription_Ctor/_Dtor, fn_SpriteSheet_Ctor) stay — B36_RULES 7.
+// constructed through (fn_DialogInstance_Ctor/_Dtor, fn_Element_Ctor,
+// fn_ElementDescription_Ctor/_Dtor, fn_SpriteSheet_Ctor) are gone too: the
+// exe classes use the real constructors (ENDGAME B.3.8 / B.3.9).
 // ============================================================
 
 // ============================================================
@@ -1150,16 +1151,6 @@ extern fn_Configuration_CurrentBuildId_t fn_Configuration_CurrentBuildId;
 // NEVER ADD VALIDATION TO IT, and never reintroduce a caller.
 
 // UI::DialogInstance::DialogInstance(this, ui, dialog, parentInternalPtr, dataSource, extraPtr, flags)
-// Full constructor for creating child dialog instances.
-// MSVC signature: (UserInterface*, Dialog const*, InternalPtr<DialogInstance>, Base*, void*, int)
-// Resolved from Runtime export at 0x180114870
-typedef void* (*fn_DialogInstance_Ctor_t)(void* self, void* userInterface, void* externalRes,
-                                          void* parentPtr, void* dataSource, void* extraPtr, int flags);
-extern fn_DialogInstance_Ctor_t fn_DialogInstance_Ctor;
-
-// MainMenuDialog BuildId child dialog vtable (PTR_FUN_14015f5a0 in exe)
-extern void** g_MainMenuDialog_BuildIdVtable;
-
 // MainMenuDialog Slot8 private handler functions — NOW REIMPLEMENTED
 // All 11 Open* functions are reimplemented inline in mainmenudialog.cpp.
 // They use dialog-specific ctor function pointers and vtable addresses below.

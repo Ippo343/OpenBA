@@ -104,6 +104,12 @@
 #include "address_registry.h"
 #include "collection/Collection.h"
 #include "Component/coll_bridge.h"
+#include "Component/LivestockComponent.h"
+#include "Component/HerdComponent.h"
+#include "Component/DiseaseComponent.h"
+#include "Component/PopulationComponent.h"
+#include "Component/BuildComponent.h"
+#include "Component/MapComponent.h"
 #include <cstdint>
 #include <cstring>
 #include <new>
@@ -136,12 +142,16 @@ fn_TreeRetraceE360_t s_fn_TreeRetrace_e360 = nullptr;    // 0x14000e360 (DEAD-PA
 
 uint32_t g_tid_HealerComponent = 0;   // 0x1401c4330 — HealerComponent BaseTypeInfo
 uint32_t g_tid_WellComponent   = 0;   // 0x1401c4c28 — WellComponent BaseTypeInfo
-const uint32_t* s_tid_HappinessComponent = nullptr;   // 0x1401c42c0 (registered by reg_citizenai_typeids.cpp)
-const uint32_t* s_tid_LivestockComponent = nullptr;   // 0x1401c7970 (registered by reg_component_animal.cpp)
-const uint32_t* s_tid_HerdComponent      = nullptr;   // 0x1401c7820 (registered by reg_component_animal.cpp)
-const uint32_t* s_tid_DiseaseComponent   = nullptr;   // 0x1401c4170 (registered by reg_component_cropdisease.cpp)
-const uint32_t* s_tid_PopulationComponent= nullptr;   // 0x1401c4790 (registered by reg_animal_serialize.cpp)
-const uint32_t* s_tid_BuildComponent     = nullptr;   // 0x1401c7008
+// 0x1401c42c0 (HappinessComponent) is UNREGISTERED (ENDGAME C.2 deleted its opt-in
+// fill on purpose) — BEHAVIOUR-LEFT, kept as a raw resolve (ENDGAME B.3.9 C5).
+const uint32_t* s_tid_HappinessComponent = nullptr;
+uint32_t s_tid_LivestockComponent_v, s_tid_HerdComponent_v, s_tid_DiseaseComponent_v,
+         s_tid_PopulationComponent_v, s_tid_BuildComponent_v;
+const uint32_t* s_tid_LivestockComponent = &s_tid_LivestockComponent_v;   // 0x1401c7970
+const uint32_t* s_tid_HerdComponent      = &s_tid_HerdComponent_v;        // 0x1401c7820
+const uint32_t* s_tid_DiseaseComponent   = &s_tid_DiseaseComponent_v;     // 0x1401c4170
+const uint32_t* s_tid_PopulationComponent= &s_tid_PopulationComponent_v;  // 0x1401c4790
+const uint32_t* s_tid_BuildComponent     = &s_tid_BuildComponent_v;       // 0x1401c7008
 
 bool s_resolved = false;
 void EnsureResolved() {
@@ -151,11 +161,11 @@ void EnsureResolved() {
     s_fn_TreeRetrace_e360 = reinterpret_cast<fn_TreeRetraceE360_t>(
         ResolveAddr(Module::Exe, 0x14000e360));
     s_tid_HappinessComponent  = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c42c0));
-    s_tid_LivestockComponent  = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7970));
-    s_tid_HerdComponent       = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7820));
-    s_tid_DiseaseComponent    = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4170));
-    s_tid_PopulationComponent = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4790));
-    s_tid_BuildComponent      = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7008));
+    s_tid_LivestockComponent_v  = LivestockComponent::TypeId();
+    s_tid_HerdComponent_v       = HerdComponent::TypeId();
+    s_tid_DiseaseComponent_v    = DiseaseComponent::TypeId();
+    s_tid_PopulationComponent_v = PopulationComponent::TypeId();
+    s_tid_BuildComponent_v      = BuildComponent::TypeId();
     s_resolved = true;
 }
 
@@ -756,11 +766,9 @@ static fn_AddCellEntry_t s_fn_AddCellEntry = nullptr;
 
 // DWORD_1401c79e0 — the component type-id validated inside PostLoad's inner
 // scan (the "position"-like component providing cell coords at +0x28/+0x2a).
-// Not identified against a named component elsewhere in the project; resolved
-// lazily by raw .rdata address like every other DWORD_/DAT_ type-id cell here.
+// Table 1: 0x1401c79e0 is MapComponent's cell.
 static uint32_t DWORD_1401c79e0_TypeId() {
-    static const uint32_t* p = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c79e0));
-    return p ? *p : 0;
+    return MapComponent::TypeId();
 }
 
 extern "C" void CitizenList_PostLoad_8f580(void* self) {

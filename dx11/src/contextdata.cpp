@@ -151,6 +151,7 @@
 // and `Video::ContextData` (RULE B5-3's qualified base-destructor call).
 #include "video/Context.h"
 #include "video/CompanionData.h"
+#include "video/Device.h"   // ENDGAME B.3.9 VID: Video::Configuration::_singleton
 // ENDGAME B.3.5 block J, RULE B5-14: the seventeen table-driven Runtime imports
 // this file used to resolve by mangled name are direct member calls now, so the
 // classes that own those members are named here. `video/Device.h` arrives via
@@ -202,58 +203,12 @@ namespace {
 // `Video::Context` declares both as public members (Context.h), which is what
 // makes the direct call legal on this side of the seam.
 //
-// WHAT STAYS, AND WHY IT IS STILL AN ALL-OR-NOTHING TEST. `g_imOk` is what makes
-// `GetImports()` return null, and a null there is what sends a slot to
-// `Orig<>()` instead of dereferencing a null pointer (RULE B5-8: the seam's
-// completeness check is the only guarantee those slots are non-null). A row whose
-// import became a direct member call no longer NEEDS that test — the linker
-// proves the symbol exists at build time, which is strictly stronger than a
-// run-time null check. So the test is not weakened by the rows leaving; it is
-// narrowed to the one binding that is still resolved at run time:
-//
-//   ?_singleton@Configuration@Video@@0PEAV12@EA  — a STATIC STORAGE read, which
-//   B35_RULES section 9 / RULE B4b-4 keep as a by-name read until the
-//   class-static conversion at the end of B.3. Slot 3 is its only reader, and
-//   slot 3 is the only slot that still consults `GetImports()`.
-//
-// `Dx11SeamInstall()`'s own completeness check is untouched: all 20 slots are
-// still registered, and the twelve concrete `*Data` classes and the 84-slot seam
-// remain the DECLARED LEAVE of RULE B5-8.
-//
-// The IAT slot addresses were derived by walking the import table in order from
-// two anchors (?_singleton@Device@Video@@ at 0x1800134b8 and ?MemFree@ at
-// 0x1800134d0) and then cross-checked against Ghidra's own call-site labels.
-// ============================================================
-struct Imports {
-    void** configSingleton;                           // ?_singleton@Configuration@Video@@0PEAV12@EA 0x180013480
-};
-
-Imports g_im;
-bool    g_imResolved = false;
-bool    g_imOk       = false;
-
-// Returns nullptr when the one remaining import is missing; slot 3 then forwards
-// to the shipped implementation instead of dereferencing a null. This is the
-// same policy lane L3 used.
-const Imports* GetImports() {
-    if (!g_imResolved) {
-        g_imResolved = true;
-        std::memset(&g_im, 0, sizeof(g_im));
-
-        struct Entry { void** dst; const char* mangled; uintptr_t iat; };
-        const Entry table[] = {
-            { (void**)&g_im.configSingleton,       "?_singleton@Configuration@Video@@0PEAV12@EA",                   0x180013480 },
-        };
-        for (const Entry& e : table)
-            *e.dst = Dx11ResolveRuntimeImport(e.mangled, e.iat);
-
-        const void* const* p = reinterpret_cast<const void* const*>(&g_im);
-        g_imOk = true;
-        for (size_t i = 0; i < sizeof(Imports) / sizeof(void*); ++i)
-            if (p[i] == nullptr) g_imOk = false;
-    }
-    return g_imOk ? &g_im : nullptr;
-}
+// ENDGAME B.3.9 VID: the one binding that was still resolved at run time,
+// `?_singleton@Configuration@Video@@0PEAV12@EA`, is the class static
+// `Video::Configuration::_singleton` now (dx11 is compiled into the exe), so the
+// Imports struct, GetImports() and slot 3's forward-to-original branch went
+// with it. `Dx11SeamInstall()`'s own completeness check is untouched: all 20
+// slots are still registered (RULE B5-8).
 
 // ============================================================
 // Video::Context field access
@@ -674,13 +629,10 @@ bool ForceDeviceLostThisFrame() {
 }  // namespace
 
 void ContextData_Finish(ContextData* self) {
-    const Imports* im = GetImports();
-    if (!im) { Orig<void (*)(ContextData*)>(3)(self); return; }
-
     void*       device = OwnerDevice(self);
     DeviceData* dd     = Field<DeviceData*>(device, Dev::kActiveDeviceData);
 
-    const void* config = *im->configSingleton;
+    const void* config = ::Video::Configuration::_singleton;   // the class static (B.3.9 VID)
     const UINT  sync   = Field<uint8_t>(config, kConfigVSync) != 0 ? 1u : 0u;
 
     HRESULT hr = static_cast<IDXGISwapChain*>(dd->swapChain)->Present(sync, 0);

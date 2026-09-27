@@ -207,6 +207,8 @@
 #include "../../types/audio/Audio.h"       // ENDGAME B.3.7 callers (K4): Audio::Configuration / Device
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/system/String.h"
+#include "../../types/system/Error.h"      // ENDGAME B.3.9 SYS: Error::_hideDisplay
+#include "../../types/system/Configuration.h"   // ENDGAME B.3.9 SYS: Configuration::_singleton
 
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
 // — same reasoning engine.cpp gives (resolve.h drags in <windows.h>, and
@@ -291,12 +293,6 @@ void MemFree(void* p) {
 EngineT** EngineSingletonSlot() {
     return reinterpret_cast<EngineT**>(&::Engine::Engine::_singleton);
 }
-void** ConfigurationSingletonSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Configuration@System@@0PEAV12@EA");
-}
-bool* ErrorHideDisplaySlot() {
-    return RT_DATA_SLOT(bool*, "?_hideDisplay@Error@System@@0_NA");
-}
 
 // Effectiveness counters. Read by RtEngineLifecycleSummary(); the four bodies
 // run once each, so "did it run at all" is the only coverage question there is.
@@ -335,7 +331,7 @@ extern "C" void* RtSystem_Configuration_Ctor(void* self) {
     *reinterpret_cast<int32_t*>(p + 0x18)  = 0;
     *reinterpret_cast<void**>(p + 0x20)    = nullptr;
     *reinterpret_cast<int32_t*>(p + 0x28)  = 0;
-    if (void** slot = ConfigurationSingletonSlot()) *slot = self;
+    System::Configuration::_singleton = static_cast<System::Configuration*>(self);   // class static (B.3.9 SYS)
     return self;
 }
 
@@ -684,7 +680,7 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     if (!_noConfigure) {
         // ENDGAME B.3.7: a member call (was the name door).
         if (!PlatformConfigure(true, _platformHandle)) {
-            if (bool* hide = ErrorHideDisplaySlot()) *hide = true;
+            System::Error::_hideDisplay = true;   // class static (B.3.9 SYS)
             g_startupFailAt = 10;
             return 0;
         }
