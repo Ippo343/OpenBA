@@ -30,8 +30,11 @@
 #include <vector>
 #include "Entity/componententity_funcs.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "resolve.h"
-#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (dying-entity dialog close)
+#include "Dialog/EntityUI.h"             // caller batch CB6: TypeId()
+#include "Player/EditTool.h"
+#include "Component/ModelComponent.h"
 #include "stress_harness.h"               // g_compProfOn / CompProf_AddVtbl (BANISHED_STRESS)
 #include <cstdint>
 #include <cstdio>
@@ -65,10 +68,6 @@ static fn_EntityList_PostUpdateStaging_t s_fn_PostUpdateStaging = nullptr;
 typedef void (*fn_EntityList_RemoveEntity_t)(EntityList* self, void* entityIBP);
 static fn_EntityList_RemoveEntity_t s_fn_RemoveEntity = nullptr;
 
-// EntityList::FlagAggregation (0x1400c3470) — aggregate entity flags
-typedef void (*fn_EntityList_FlagAggregation_t)(void* entity);
-static fn_EntityList_FlagAggregation_t s_fn_FlagAggregation = nullptr;
-
 // EntityList::Serialize (0x1400c44a0) — save/load
 typedef void (*fn_EntityList_Serialize_t)(EntityList* self, void* stream);
 static fn_EntityList_Serialize_t s_fn_Serialize = nullptr;
@@ -100,8 +99,6 @@ void EntityList_InitFuncs() {
         ResolveAddr(Module::Exe, 0x1400c3ab0));
     s_fn_RemoveEntity = reinterpret_cast<fn_EntityList_RemoveEntity_t>(
         ResolveAddr(Module::Exe, 0x1400c38e0));
-    s_fn_FlagAggregation = reinterpret_cast<fn_EntityList_FlagAggregation_t>(
-        ResolveAddr(Module::Exe, 0x1400c3470));
     s_fn_Serialize = reinterpret_cast<fn_EntityList_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1400c44a0));
     s_fn_PostUpdateNodeHandler = reinterpret_cast<fn_PostUpdateNodeHandler_t>(
@@ -115,7 +112,6 @@ void EntityList_InitFuncs() {
     printf("  PostUpdate         = %p\n", (void*)s_fn_PostUpdate);
     printf("  PostUpdateStaging  = %p\n", (void*)s_fn_PostUpdateStaging);
     printf("  RemoveEntity       = %p\n", (void*)s_fn_RemoveEntity);
-    printf("  FlagAggregation    = %p\n", (void*)s_fn_FlagAggregation);
     printf("  Serialize          = %p\n", (void*)s_fn_Serialize);
     printf("  PostUpdateNodeHdlr = %p\n", (void*)s_fn_PostUpdateNodeHandler);
 #endif
@@ -836,14 +832,12 @@ static void EntityList_CloseDialogsForDyingEntities() {
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gw)
         return;
-    void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x98);
+    void* ui = reinterpret_cast<GameUpdateLoop*>(gw)->m_userInterface;   // B.3.8 bridge
     if (!ui) return;
 
     // EntityUI is the shared frame controller on every entity info dialog; its +0x28 is
     // the data-source entity (raw .rdata type-id is null in standalone -> resolve by name).
-    static uint32_t s_tidEntityUI = 0;
-    if (s_tidEntityUI == 0 || s_tidEntityUI == 0xFFFFFFFFu)
-        s_tidEntityUI = ::Object::GetTypeIdByName("EntityUI");
+    const uint32_t s_tidEntityUI = EntityUI::TypeId();   // caller batch CB6: was a lazy by-name cache
     if (s_tidEntityUI == 0 || s_tidEntityUI == 0xFFFFFFFFu) return;
 
     // Collect first, close after — fn_UI_CloseDialog mutates the list we're walking.
@@ -896,16 +890,14 @@ static void EntityList_CloseDialogsForDyingEntities() {
 static void EntityList_ClearToolSelectionForDyingEntities() {
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gw || !fn_IsDerivedFrom) return;
-    void* entityUI = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x120);
+    void* entityUI = reinterpret_cast<GameUpdateLoop*>(gw)->m_entityUI;   // B.3.8 bridge
     if (!entityUI) return;
     void* toolSlot = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(entityUI) + 0x28);
     if (*reinterpret_cast<void**>(toolSlot) == nullptr) return;
     void* tool = *reinterpret_cast<void**>(toolSlot);
     if (!tool) return;
 
-    static uint32_t s_tidEditTool = 0;
-    if (s_tidEditTool == 0 || s_tidEditTool == 0xFFFFFFFFu)
-        s_tidEditTool = ::Object::GetTypeIdByName("EditTool");
+    const uint32_t s_tidEditTool = EditTool::TypeId();   // caller batch CB6: was a lazy by-name cache
     if (s_tidEditTool == 0 || s_tidEditTool == 0xFFFFFFFFu) return;
     if (!fn_IsDerivedFrom(tool, s_tidEditTool)) return;
 
@@ -964,9 +956,7 @@ static void EntityList_ClearToolSelectionForDyingEntities() {
 static void AuditDyingEntity(int64_t entity) {
     if (entity < 0x10000) return;
 
-    static uint32_t s_tidModel = 0;
-    if (s_tidModel == 0 || s_tidModel == 0xFFFFFFFFu)
-        s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
+    const uint32_t s_tidModel = ModelComponent::TypeId();   // caller batch CB6: was a lazy by-name cache
 
 
     int models = 0, live = 0;
@@ -983,9 +973,9 @@ static void AuditDyingEntity(int64_t entity) {
             // Unlink it (vtable +0x38 = the removed-from-world handler; on
             // ModelComponent that is Scene::RemoveObject + modelId = -1). Dispatched
             // virtually so derived overrides (NaturalResourceComponent) still apply.
-            void** vt = *reinterpret_cast<void***>(c);
-            if (vt && vt[7])
-                reinterpret_cast<void(*)(void*)>(vt[7])(reinterpret_cast<void*>(c));
+            // Caller batch CB6: slot 7 `OnRemove` of the proved ModelComponent (the
+            // IsDerivedFrom test above); a compiler table's slot is never null.
+            reinterpret_cast<ModelComponent*>(c)->OnRemove();   // B.3.8 bridge
         }
     }
 
@@ -1312,8 +1302,11 @@ void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
 // ComponentEntity::RefreshEntityFlags, already reimplemented
 // in code/Game/Entity/componententity.cpp.
 // Delegates to that implementation.
+// Caller batch CB6: the member (the old ComponentEntity_RefreshEntityFlags door's
+// body); the dead `s_fn_FlagAggregation` door cache (a ResolveAddr of 0x1400c3470
+// read only by a debug printf) went with it.
 void EntityList_FlagAggregation(void* entity) {
-    ComponentEntity_RefreshEntityFlags(reinterpret_cast<ComponentEntity*>(entity));
+    reinterpret_cast<ComponentEntity*>(entity)->RefreshEntityFlags();   // B.3.8 bridge
 }
 
 // ============================================================

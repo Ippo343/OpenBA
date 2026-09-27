@@ -27,6 +27,7 @@
 // Default builds stay byte-unchanged.
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "resolve.h"
 #include <cstdint>
 #include <cstdlib>
@@ -41,9 +42,9 @@ extern "C" void CharManager_Seed() {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton || !fn_MemAlloc) return;
 
     uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
-    if (*reinterpret_cast<void**>(gw + 0x88) != nullptr) return;   // already seeded
+    if (reinterpret_cast<GameUpdateLoop*>(gw)->m_characterGrid != nullptr) return;   // already seeded   // B.3.8 bridge
 
-    void* mapV = *reinterpret_cast<void**>(gw + 0xf8);
+    void* mapV = reinterpret_cast<GameUpdateLoop*>(gw)->m_game;   // B.3.8 bridge
     if (!mapV) { fprintf(stderr, "[CharMgr] no map @ GW+0xf8 — skip\n"); fflush(stderr); return; }
     int dim = *reinterpret_cast<int*>(mapV);
     if (dim <= 0) { fprintf(stderr, "[CharMgr] bad map dim=%d — skip\n", dim); fflush(stderr); return; }
@@ -88,7 +89,7 @@ extern "C" void CharManager_Seed() {
     *reinterpret_cast<int**> (m + 0x40) = offTbl;
     *reinterpret_cast<int**> (m + 0x50) = cellOcc;
 
-    *reinterpret_cast<void**>(gw + 0x88) = m;
+    reinterpret_cast<GameUpdateLoop*>(gw)->m_characterGrid = m;   // B.3.8 bridge
 
     fprintf(stderr, "[CharMgr] seeded @ GW+0x88 = %p (dim=%d, levels=%d, cells=%d)\n",
             static_cast<void*>(m), dim, levels, totalCells);

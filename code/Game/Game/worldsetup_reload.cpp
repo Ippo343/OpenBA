@@ -55,16 +55,14 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
     if (!worldSetup) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(worldSetup);
 
-    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_UpdateLoop_Ctor ||
-        !fn_DialogLoaderLoopT_Ctor || !fn_LoaderLoop_Ctor || !fn_Time_Ctor_Float ||
-        !g_GameUpdateLoop_Vtable || !g_GameLoadDialogLoopT_Vtable ||
-        !g_GameLoaderLoop_Vtable) {
-        printf("[WorldSetup::LoadFromSave] loop-chain ctors unresolved - aborting "
-                    "(alloc=%p updateLoop=%p dlt=%p loader=%p vt=%p/%p/%p)\n",
-                    (void*)fn_MemAlloc, (void*)fn_UpdateLoop_Ctor,
-                    (void*)fn_DialogLoaderLoopT_Ctor, (void*)fn_LoaderLoop_Ctor,
-                    (void*)g_GameUpdateLoop_Vtable, (void*)g_GameLoadDialogLoopT_Vtable,
-                    (void*)g_GameLoaderLoop_Vtable);
+    // Caller batch CB6: the three loops are built by their real ctors (below),
+    // which stamp the compiler tables and chain the Runtime base ctors
+    // directly, so the by-address table globals and the base-ctor doors this
+    // readiness test named are no longer read here.
+    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_Time_Ctor_Float) {
+        printf("[WorldSetup::LoadFromSave] loop-chain allocator unresolved - aborting "
+                    "(alloc=%p time=%p)\n",
+                    (void*)fn_MemAlloc, (void*)fn_Time_Ctor_Float);
         return;
     }
 

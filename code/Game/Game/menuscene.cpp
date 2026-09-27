@@ -20,6 +20,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Game/MenuScene.h"
+#include "Game/WorldGeometry.h"   // caller batch CB6: +0x28's class
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "system/String.h"
@@ -136,14 +137,12 @@ Object::External* MenuScene::Construct() {
 // +0x1C8, frees the arrays at +0x60, +0x50, +0x40, +0x30, destroys the String
 // at +0x20; External::~External is the compiler's chain.
 MenuScene::~MenuScene() {
-    // Destroy Geometry object at +0x28 via its vtable scalar deleting dtor
-    // (bridge: the Geometry is still an untyped pointer).
+    // Destroy Geometry object at +0x28 via its vtable scalar deleting dtor.
+    // Caller batch CB6: slot 0 of the proved WorldGeometry (Serialize builds
+    // +0x28 with its ctor); still a virtual call, as retail's is.
     void* geom = _field28;
     if (geom) {
-        typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
-        void** geomVtable = *(void***)geom;
-        fn_ScalarDtor_t geomDtor = (fn_ScalarDtor_t)geomVtable[0];
-        geomDtor(geom, 1);  // flags=1 => free memory
+        static_cast<WorldGeometry*>(geom)->DeletingDtor(1);  // flags=1 => free memory  B.3.8 bridge
     }
 
     // Cleanup tree/map at +0x1E8 and +0x1C8
@@ -279,13 +278,11 @@ bool MenuScene::Serialize(void* stream) {
         } else {
             void* geom = fn_MemAlloc(g_pMemAllocSingleton, 0x230, 8);
             if (geom) {
-                if (fn_Geometry_Init) {
-                    fn_Geometry_Init(geom);
-                } else {
-                    // Fallback: zero-fill. The session 5 helpers should still
-                    // resize correctly given a zeroed header.
-                    memset(geom, 0, 0x230);
-                }
+                // Caller batch CB6: the real ctor (0x1400b00e0), where this went
+                // through the fn_Geometry_Init door (Reimpl_Geometry_Init, which
+                // placement-news the same class) and a zero-fill fallback for an
+                // unresolved door.
+                ::new (geom) WorldGeometry();
                 _field28 = geom;
             } else {
                 printf("[MenuScene::Slot5_Serialize] MemAlloc(0x230) failed — "
@@ -333,7 +330,7 @@ bool MenuScene::Serialize(void* stream) {
     // the terrain → black screen. See FUN_1400988c0 in exe + memory file
     // project_terrain_render_status.md (2026-05-01).
     if (stream) {
-        void* xform = reinterpret_cast<uint8_t*>(this) + 0x88;
+        void* xform = transform;   // +0x88 (caller batch CB6: the named field)
         // Transform::SerializeWrapper (exe 0x1400988c0) resolves to a
         // NOT_IMPLEMENTED stub via the address registry — DON'T call it, use
         // the inline path.
@@ -426,8 +423,7 @@ bool MenuScene::Serialize(void* stream) {
 
         // ----- Atmosphere: Vector4 + 3 Colors + 5 Floats -----
         // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360
-        reinterpret_cast<Math::Vector4*>(
-            reinterpret_cast<uint8_t*>(this) + 0x1B4)->Serialize(outer_ser);
+        reinterpret_cast<Math::Vector4*>(_pad1B4)->Serialize(outer_ser);   // +0x1B4 (the Vector4 starts at _pad1B4)
         reinterpret_cast<System::Color*>(&ambientColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
         reinterpret_cast<System::Color*>(&sunColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
         reinterpret_cast<System::Color*>(&skyColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
@@ -502,8 +498,7 @@ bool MenuScene::Serialize(void* stream) {
         // downstream in the render path (clear color, depth state, sun light
         // dispatch, or Renderer::Draw consuming our reimpl's geometry).
         if (!s_atmosLogged.exchange(true)) {
-            const float* v4 = reinterpret_cast<const float*>(
-                reinterpret_cast<uint8_t*>(this) + 0x1B4);
+            const float* v4 = reinterpret_cast<const float*>(_pad1B4);   // +0x1B4
             printf("[MenuScene::Slot5_Serialize] atmosphere deserialized: "
                    "amb=0x%08x sun=0x%08x sky=0x%08x "
                    "fogStart=%.2f fogEnd=%.2f fogDensity=%.3f "

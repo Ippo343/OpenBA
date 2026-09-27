@@ -43,6 +43,8 @@
 // <wingdi.h> declares a global `Rectangle` FUNCTION that hides
 // `Volume::Rectangle`'s class name inside Volume.h's own static_asserts.
 #include "video/Buffers.h"
+#include "WorldGeometry.h"   // caller batch CB6: RebuildDirtyChunks is the class's
+#include <atomic>
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -691,6 +693,8 @@ extern "C" void WorldGen_BuildWaterMesh(void* self) {
     fflush(stderr);
 }
 
+} // anonymous namespace
+
 // ============================================================
 // Chunk-streaming — FUN_1400AAD50 (per-frame dirty-chunk upload)
 // ============================================================
@@ -714,38 +718,38 @@ extern "C" void WorldGen_BuildWaterMesh(void* self) {
 // path for now — the menu scene has zero entities (self+0x1F8 == 0) so it's
 // dead code there; document the omission and the disasm for the in-game
 // follow-up. See `notes/M35_geom_serialize_findings.md` for the spec.
+
+// Cascade safety: if MemAlloc/Free are unresolved we soft-fail with a one-shot
+// warning and return early — better than corrupting the dirty tree.
 //
-// Cascade safety: if VertexBuffer::Set is unresolved we soft-fail with a
-// one-shot warning and return early — better than corrupting the dirty tree.
+// Caller batch CB6: the body of the old anonymous GeometryChunkUpdate_Body, moved
+// into the member (0x1400aad50 is its own function in retail; slot 1 0x1400aed40
+// is a JMP to it). `selfBytes + off` reads became the class's named fields. The
+// one-shot warning flag is a namespace-scope atomic (B6-5), not a function-local.
 extern "C" void  Reimpl_FUN_1400ac880(void* self, int colStart, int rowStart,
                                       int cellSize_x, int cellSize_y,
                                       int16_t* vertOut);
+namespace { std::atomic<bool> s_chunkUpdateWarned{false}; }
 
-void GeometryChunkUpdate_Body(void* self) {
-    if (!self) return;
-
-    uint8_t* selfBytes = reinterpret_cast<uint8_t*>(self);
-
-    // self+0xF0 is the "dirty tree non-empty" flag (4 bytes). The original
+void WorldGeometry::RebuildDirtyChunks() {
+    // +0xF0 is the "dirty tree non-empty" count (4 bytes). The original
     // tests this as the first thing — when no chunks are dirty, return.
-    if (*reinterpret_cast<int32_t*>(selfBytes + 0xF0) == 0) return;
+    if (_dirtyTreeCount == 0) return;
 
     if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_MemFreeStatic) {
-        static bool s_warned = false;
-        if (!s_warned) {
+        if (!s_chunkUpdateWarned.exchange(true)) {
             printf("[GeometryChunkUpdate] MemAlloc/Free unavailable — skipping\n");
             fflush(stdout);
-            s_warned = true;
         }
         return;
     }
 
     // B.3.5: the `VertexBuffer::Set` door-readiness guard is gone with the door.
 
-    int gridSize       = *reinterpret_cast<int*>(selfBytes + 0xC0);
-    int chunkSize      = *reinterpret_cast<int*>(selfBytes + 0xC8);
-    int vertsPerSide   = *reinterpret_cast<int*>(selfBytes + 0xCC);
-    int vertsPerChunk  = *reinterpret_cast<int*>(selfBytes + 0xD4);
+    int gridSize       = _gridSize;           // +0xC0
+    int chunkSize      = _chunkSize;          // +0xC8
+    int vertsPerSide   = _fieldCC;            // +0xCC
+    int vertsPerChunk  = _chunkIndexStride;   // +0xD4
     int chunksPerSide  = (chunkSize > 0) ? (gridSize / chunkSize) : 0;
 
     if (chunksPerSide <= 0 || vertsPerChunk <= 0) return;
@@ -766,7 +770,7 @@ void GeometryChunkUpdate_Body(void* self) {
     // Recursive in-order walk of the dirty-chunk tree. Mirrors the original's
     // threaded-BST traversal but using the call stack — depth is O(log N) for
     // a balanced AVL, max ~10 even for 18x18 chunks.
-    auto* treeRoot = *reinterpret_cast<void**>(selfBytes + 0xE8);
+    void* treeRoot = _dirtyTreeRoot;          // +0xE8
 
     auto upload = [&](void* node) {
         uint8_t* n = reinterpret_cast<uint8_t*>(node);
@@ -775,16 +779,14 @@ void GeometryChunkUpdate_Body(void* self) {
         int col = chunkIdx % chunksPerSide;
 
         // Generate this chunk's vertices into the scratch buffer, then upload.
-        Reimpl_FUN_1400ac880(self,
+        Reimpl_FUN_1400ac880(this,
                              col * chunkSize, row * chunkSize,
                              vertsPerSide, vertsPerSide,
                              vertScratch);
 
         int byteSize   = vertsPerChunk * 0x10;
         int byteOffset = (row * chunksPerSide + col) * vertsPerChunk * 0x10;
-        reinterpret_cast<Video::VertexBuffer*>(selfBytes + 0x100)
-            ->Set(byteSize, byteOffset, vertScratch);   // B.3.5 bridge
-
+        _vertexBuffer.Set(byteSize, byteOffset, vertScratch);   // +0x100
     };
 
     // Iterative in-order walk to avoid std::function or recursive lambdas.
@@ -840,8 +842,8 @@ void GeometryChunkUpdate_Body(void* self) {
     };
     freeNode(freeNode, treeRoot);
 
-    *reinterpret_cast<void**>(selfBytes + 0xE8) = nullptr;
-    *reinterpret_cast<int32_t*>(selfBytes + 0xF0) = 0;
+    _dirtyTreeRoot = nullptr;    // +0xE8
+    _dirtyTreeCount = 0;         // +0xF0
 
     // Free scratch buffer.
     if (scratch.data) {
@@ -855,7 +857,6 @@ void GeometryChunkUpdate_Body(void* self) {
     // editing wants entity re-meshing on terraform.
 }
 
-} // anonymous namespace
 
 // ============================================================
 // Public reimpl entry points
@@ -882,6 +883,9 @@ extern "C" void* Reimpl_TradeWork_helper_e270(void* self, void* retbuf, int col,
     return TradeWork_helper_e270_Body(self, retbuf, col, row);
 }
 
+// Door: registered at 0x1400aad50 / 0x1400aed40 (address_registry.cpp) and
+// read by name there, so it stays (qualified, non-virtual: the body).
 extern "C" void Reimpl_GeometryChunkUpdate(void* self) {
-    GeometryChunkUpdate_Body(self);
+    if (!self) return;
+    reinterpret_cast<WorldGeometry*>(self)->RebuildDirtyChunks();   // B.3.8 bridge
 }
