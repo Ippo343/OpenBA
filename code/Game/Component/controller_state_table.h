@@ -146,7 +146,9 @@ inline int TableFindIndex(const StateTable& t, int input) {
 template <class Tag>
 struct Dispatcher {
     static StateTable table;
-    static void*      vtbl[16];
+    // (The hand-built 16-slot `vtbl` + `Vtable()` + `Stub` went at ENDGAME B.3.9
+    // EXA: no reader — every controller member is a TableController<Tag> with a
+    // compiler table whose slots call the static handlers below.)
 
     // slot 0 (+0x00): Step(node /*ignored*/, input) -> index / -1
     static int Step(void* /*node*/, int input) {
@@ -268,27 +270,8 @@ struct Dispatcher {
         }
         return 0;
     }
-    // Any other slot (dtor/GetTypeId/Serialize/…) — safe no-op.
-    static void* Stub(void*, ...) { return nullptr; }
-
-    static void** Vtable() {
-        if (vtbl[0] == nullptr) {
-            for (int i = 0; i < 16; ++i) vtbl[i] = reinterpret_cast<void*>(&Stub);
-            vtbl[0] = reinterpret_cast<void*>(&Step);
-            vtbl[1] = reinterpret_cast<void*>(&RequestTransition);
-            vtbl[2] = reinterpret_cast<void*>(&PostEvent);
-            vtbl[3] = reinterpret_cast<void*>(&Enter);
-            vtbl[4] = reinterpret_cast<void*>(&Update);
-            vtbl[5] = reinterpret_cast<void*>(&OnState);
-            vtbl[6] = reinterpret_cast<void*>(&Trans30);
-            vtbl[7] = reinterpret_cast<void*>(&Trans38);
-            vtbl[8] = reinterpret_cast<void*>(&HasStates);   // retail slot 8 (D9 #9)
-        }
-        return vtbl;
-    }
 };
 template <class Tag> StateTable Dispatcher<Tag>::table = {};
-template <class Tag> void*      Dispatcher<Tag>::vtbl[16] = {};
 
 // Request a state transition from a ported state handler, replicating the exe idiom:
 //   int d=desiredStateId; int i = node->slot08(node, sm->index, &d);

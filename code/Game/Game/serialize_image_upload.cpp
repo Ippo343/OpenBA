@@ -14,7 +14,9 @@
 // Body shape (verified via Ghidra disassembly @ 0x1400ac780, ~30 instructions):
 //   1. img = MemAlloc(0x68, 8)                         // ImageBuffer size
 //   2. ImageBuffer::ImageBuffer(img)                   // Runtime DLL ctor
-//   3. *(void**)img = &g_NoiseUI_ImageBufferVtable     // override vtable
+//   3. *(void**)img = 0x14015c8c0                      // the exe's copy of the
+//                                                      // class's OWN table: 2+3
+//                                                      // = `new ImageBuffer()`
 //   4. self+0x148 = img                                // store on self
 //   5. img->vtbl[0x48 / 8](img,                        // index 9: Create
 //          0,           // ImageType
@@ -41,9 +43,9 @@
 // - All Runtime primitives are resolved at startup in engine_funcs.cpp.
 // - If any of them is null at runtime (Runtime DLL load failure), the helper
 //   one-shot logs and returns early — no crash, no upload.
-// - The vtable at 0x14015c8c0 is exe-resident; address_registry.cpp's
-//   RegisterNoiseUIImageBufferVtable provides our own slot table that points at
-//   the same Runtime exports the exe thunks did.
+// - The vtable at 0x14015c8c0 is exe-resident and is Video::ImageBuffer's own
+//   (slot 0 the exe scalar deleting dtor, 1-9 thunks onto the class's members):
+//   ENDGAME B.3.9 EXA constructs the real class.
 //
 // This helper is NOT yet called from anywhere — Geometry::Serialize body is
 // session 8. Session 7's only goal is that the helper exists, links, and is
@@ -123,32 +125,6 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
         return;
     }
 
-    // ENDGAME B.3.5 batch K1: the CopyToTexture / Device::Lock / Device::Unlock terms
-    // left this aggregate with their call sites. `fn_ImageBuffer_Ctor` is a CTOR door
-    // and stays (B4b-2).
-    if (!fn_ImageBuffer_Ctor) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            printf("[sub_c780] Runtime primitives unresolved (Ctor=%p) — "
-                   "skipping (cascade-safe no-op)\n",
-                   (void*)fn_ImageBuffer_Ctor);
-            fflush(stdout);
-            s_warned = true;
-        }
-        return;
-    }
-
-    if (g_NoiseUI_ImageBufferVtable == 0) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            printf("[sub_c780] g_NoiseUI_ImageBufferVtable unresolved — "
-                   "skipping image upload (cascade-safe no-op)\n");
-            fflush(stdout);
-            s_warned = true;
-        }
-        return;
-    }
-
     if (!g_pVideoDeviceSingleton || !*g_pVideoDeviceSingleton) {
         static bool s_warned = false;
         if (!s_warned) {
@@ -174,8 +150,9 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
         return;
     }
 
-    // (2) Run the base ImageBuffer ctor (sets default vtable, zeros fields).
-    fn_ImageBuffer_Ctor(img);
+    // (2)+(3) Construct the real class: retail's imported ctor followed by the
+    // exe's copy of the class's own table (ENDGAME B.3.9 EXA).
+    ::new (img) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
 
     // Diagnostic: dump ImageBuffer struct after ctor to verify
     // PlatformConstruct populated +0x50/+0x58 (linked-list ptrs) and +0x60
@@ -192,9 +169,6 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
         printf("    +0x60 (ImageBufferData) = %p\n", (void*)iq[12]);
         fflush(stdout);
     }
-
-    // (3) Override the vtable with the NoiseUI/ModDialog/Geometry shared one.
-    *reinterpret_cast<uintptr_t*>(img) = g_NoiseUI_ImageBufferVtable;
 
     // (4) Store on the Geometry container.
     *reinterpret_cast<void**>(selfBytes + kImageBufferOffset) = img;

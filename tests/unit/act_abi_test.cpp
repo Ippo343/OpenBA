@@ -41,6 +41,7 @@
 #include <cstddef>
 #include <cstring>
 #include <type_traits>
+#include <utility>
 
 namespace {
 
@@ -286,6 +287,21 @@ UNIT_TEST(act_leaf_showtool) {
     CHECK_EQ(SlotOffset(&ShowTool::GetTarget), (uintptr_t)0x48);   // [9] 0x140042680
     CHECK_EQ(offsetof(ShowTool, _field20), (size_t)0x20);
     CHECK_EQ(offsetof(ShowTool, _field28), (size_t)0x28);
+}
+
+// ENDGAME B.3.9 EXA: the citizen-AI builders construct PerformWork (the
+// parameterised ctor 0x1400c9720) and PlayAnimation (default ctor + retail's
+// inlined leaf stores) with `::new (MemAlloc(size, 8))` instead of the
+// `??0Internal` door plus two stamps. The expressions are checked unevaluated.
+template <typename T, typename... A>
+using ExaNew = decltype(::new (std::declval<void*>()) T(std::declval<A>()...));
+template <typename, typename T, typename... A> struct ExaCanNew : std::false_type {};
+template <typename T, typename... A>
+struct ExaCanNew<std::void_t<ExaNew<T, A...>>, T, A...> : std::true_type {};
+
+UNIT_TEST(act_citizenai_builders_construct_in_place) {
+    CHECK((ExaCanNew<void, PerformWork, void*, float, uint32_t, int64_t, uint8_t, int>::value));
+    CHECK((ExaCanNew<void, PlayAnimation>::value));
 }
 
 }  // namespace

@@ -44,8 +44,6 @@
 // Local function pointers resolved at init time
 // ============================================================
 
-// Object::Internal::~Internal(this) -- via IAT at 0x140152770
-static void (*s_fn_ObjectInternal_Dtor)(void* self) = nullptr;
 
 // HuntAnimal_helper_2a80 (0x140122a80) -- checks if animal has been held long enough
 // Returns true if entity's time at +0x50 >= description's holdTime * 300.0
@@ -112,9 +110,6 @@ static bool s_funcs_resolved = false;
 bool HuntAnimal_ResolveFuncs() {
     if (s_funcs_resolved) return true;
 
-    // Object::Internal dtor via IAT
-    uintptr_t iatDtor = ResolveAddr(Module::Exe, 0x140152770);
-    if (iatDtor) s_fn_ObjectInternal_Dtor = *reinterpret_cast<void(**)(void*)>(iatDtor);
 
     // Helpers
     s_fn_IsAnimalReady = (bool(*)(void*))ResolveAddr(Module::Exe, 0x140122a80);
@@ -141,8 +136,7 @@ bool HuntAnimal_ResolveFuncs() {
     s_searchRadius = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401721a8));
     s_halfOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
 
-    bool ok = s_fn_ObjectInternal_Dtor &&
-              s_fn_IsAnimalReady && s_fn_SpatialQuery &&
+    bool ok = s_fn_IsAnimalReady && s_fn_SpatialQuery &&
               s_fn_GetModelComp && s_fn_FindPathCost &&
               s_fn_CheckPathValid && s_fn_GridToWorld &&
               s_fn_SpawnCorpse && s_fn_FindHerdComp && s_fn_StartMigration &&
@@ -155,8 +149,7 @@ bool HuntAnimal_ResolveFuncs() {
               fn_MemFreeStatic && g_pGameWorldSingleton;
 
 #ifdef _DEBUG
-    printf("[HuntAnimal] ResolveFuncs: ObjDtor=%p IsReady=%p SpatialQ=%p\n",
-           (void*)s_fn_ObjectInternal_Dtor,
+    printf("[HuntAnimal] ResolveFuncs: IsReady=%p SpatialQ=%p\n",
            (void*)s_fn_IsAnimalReady, (void*)s_fn_SpatialQuery);
     printf("[HuntAnimal]   GetModel=%p PathCost=%p PathValid=%p GridToWorld=%p\n",
            (void*)s_fn_GetModelComp, (void*)s_fn_FindPathCost,

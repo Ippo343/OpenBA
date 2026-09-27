@@ -36,8 +36,6 @@
 // (NOT in engine_funcs.h -- RemoveAnimal-specific helpers)
 // ============================================================
 
-// Object::Internal::~Internal(this) -- via IAT at 0x140152770
-static void (*s_fn_ObjectInternal_Dtor)(void* self) = nullptr;
 
 // FUN_1400c2ea0 -- marks entity for removal (sets bit 10 of flags at +0x40)
 static void (*s_fn_MarkEntityRemoval)(void* entity) = nullptr;
@@ -71,9 +69,6 @@ static bool s_funcs_resolved = false;
 bool RemoveAnimal_ResolveFuncs() {
     if (s_funcs_resolved) return true;
 
-    // Object::Internal dtor via IAT
-    uintptr_t iatDtor = ResolveAddr(Module::Exe, 0x140152770);
-    if (iatDtor) s_fn_ObjectInternal_Dtor = *reinterpret_cast<void(**)(void*)>(iatDtor);
 
     // FUN_1400c2ea0 -- mark entity removal
     s_fn_MarkEntityRemoval = (void(*)(void*))ResolveAddr(Module::Exe, 0x1400c2ea0);
@@ -92,8 +87,7 @@ bool RemoveAnimal_ResolveFuncs() {
     s_dat_VectorDtorReturn = reinterpret_cast<uint64_t*>(
         ResolveAddr(Module::Exe, 0x1401c6088));
 
-    bool ok = s_fn_ObjectInternal_Dtor &&
-              s_fn_MarkEntityRemoval &&
+    bool ok = s_fn_MarkEntityRemoval &&
               s_fn_GetModelComp && s_fn_NotifyEntityChanged &&
               s_typeId_ComponentEntity && s_typeInfo_RemoveAnimal &&
               s_dat_VectorDtorReturn &&
@@ -102,8 +96,7 @@ bool RemoveAnimal_ResolveFuncs() {
               g_pGameWorldSingleton;
 
 #ifdef _DEBUG
-    printf("[RemoveAnimal] ResolveFuncs: ObjDtor=%p MarkRemove=%p\n",
-           (void*)s_fn_ObjectInternal_Dtor,
+    printf("[RemoveAnimal] ResolveFuncs: MarkRemove=%p\n",
            (void*)s_fn_MarkEntityRemoval);
     printf("[RemoveAnimal]   GetModel=%p Notify=%p typeIdCE=%p typeInfoRA=%p\n",
            (void*)s_fn_GetModelComp, (void*)s_fn_NotifyEntityChanged,

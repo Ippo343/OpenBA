@@ -273,10 +273,6 @@ extern void** g_pAppSingleton;
 // UI infrastructure (DialogController, Element, TextElement)
 // ============================================================
 
-// UI::DialogInstance::~DialogInstance(this) — virtual base dtor
-// Resets vtable to DialogInstance, cleans up dialog fields, calls Internal::~Internal
-typedef void (*fn_DialogInstance_Dtor_t)(void* self);
-extern fn_DialogInstance_Dtor_t fn_DialogInstance_Dtor;
 
 // System::MemoryAllocator::MemFree(ptr) — static, gets singleton internally
 // Used by scalar deleting destructors for conditional free
@@ -758,10 +754,7 @@ typedef int (*fn_SelectResourceUI_GetResourceCount_t)(void* self);
 // Video::ImageBuffer (Runtime DLL exports, used by MapUI/NoiseUI/SpriteCaptureUI)
 // ============================================================
 
-// ImageBuffer::ImageBuffer() — default ctor
-// ??0ImageBuffer@Video@@QEAA@XZ (0x1800f2580, ordinal 227)
-typedef void* (*fn_ImageBuffer_Ctor_t)(void* self);
-extern fn_ImageBuffer_Ctor_t fn_ImageBuffer_Ctor;
+// (fn_ImageBuffer_Ctor went at ENDGAME B.3.9 EXA: `::new (p) Video::ImageBuffer()`.)
 
 // ENDGAME B.3.5 (b35-K2): `fn_ImageBuffer_Dtor`
 // (??1ImageBuffer@Video@@UEAA@XZ, 0x1800f2610) is GONE — zero callers tree-wide.
@@ -1058,15 +1051,9 @@ inline void ResolveExternalByName_Impl(void* nameString) {
     *(int32_t*)(s + 0x08) = factoryGen;
 }
 
-// Object::External::External(this) — base class constructor/reinit
-// Runtime function at dispatch table 0x140151e98
-typedef void (*fn_External_External_t)(void* self);
-extern fn_External_External_t fn_External_External;
-
-// Object::External::~External(this) — base class destructor
-// Runtime function at dispatch table 0x140151ea0
-typedef void (*fn_External_Dtor_t)(void* self);
-extern fn_External_Dtor_t fn_External_Dtor;
+// (fn_External_External / fn_External_Dtor — the ??0/??1External doors read
+// through exe slots 0x140151e98 / 0x140151ea0 — went at ENDGAME B.3.9 EXA:
+// zero readers.)
 
 // ============================================================
 // Phase F Wave 2C: EntityUI::Slot8, ResidenceUI::Slot7, EventNotifyDialog::Slot7
@@ -1864,9 +1851,8 @@ extern fn_Building_AddPurchaseOrder_t fn_Building_AddPurchaseOrder;  // 0x140059
 // NoiseUI helpers (Application-x64.exe)
 // ============================================================
 
-// NoiseUI ImageBuffer vtable (0x14015c8c0 in exe .rdata) — custom vtable
-// set on ImageBuffer after construction. Resolved at runtime.
-extern uintptr_t g_NoiseUI_ImageBufferVtable;
+// (g_NoiseUI_ImageBufferVtable went at ENDGAME B.3.9 EXA: 0x14015c8c0 is the
+// exe's copy of Video::ImageBuffer's own table; the builders construct the class.)
 
 // NoiseUI helpers — REIMPLEMENTED in code/Game/Dialog/noiseui.cpp
 // fn_NoiseUI_SetupImage (0x140071890) — now NoiseUI_SetupImage()
@@ -1962,13 +1948,6 @@ extern fn_Entity_FindAudioComponent_t fn_Entity_FindAudioComponent;
 typedef void* (*fn_Graphics_ParticleSystemInstance_Ctor_t)(void* self);
 extern fn_Graphics_ParticleSystemInstance_Ctor_t fn_Graphics_ParticleSystemInstance_Ctor;
 
-// Graphics::Particle::Particle() — default ctor for the Particle base class
-// (Runtime 0x180103e80, export ??0Particle@Graphics@@QEAA@XZ). Initializes the
-// [0x00,0x48) base region + base vtable. Used by the standalone Tornado factory
-// (code/Game/Game/tornado.cpp), which then fills the Tornado-specific float
-// block at +0x48.. — mirrors the exe ctor FUN_1400d23c0's first call.
-typedef void* (*fn_Graphics_Particle_Ctor_t)(void* self);
-extern fn_Graphics_Particle_Ctor_t fn_Graphics_Particle_Ctor;
 
 // ENDGAME B.3.5 (b35-K2): `fn_Graphics_ParticleInstance_IncrementInstanceIndex`
 // (?IncrementInstanceIndex@ParticleInstance@Graphics@@SAXXZ) is GONE — zero
@@ -1995,9 +1974,8 @@ extern fn_Graphics_Scene_Ctor_t fn_Graphics_Scene_Ctor;
 // (the ??0SunLight door) is GONE too — its one caller,
 // MenuDialogLoopT_LoadSceneA1, builds `::new (p) Graphics::SunLight()`.
 
-// Graphics::MeshInstance::MeshInstance() — default ctor. Object size 0x120, alignment 8.
-typedef void* (*fn_Graphics_MeshInstance_Ctor_t)(void* self);
-extern fn_Graphics_MeshInstance_Ctor_t fn_Graphics_MeshInstance_Ctor;
+// (fn_Graphics_MeshInstance_Ctor went at ENDGAME B.3.9 EXA: MenuDialogLoopT's
+// scene build writes `::new (p) Graphics::MeshInstance()`.)
 
 // ENDGAME B.3.5 (b35-K2): `fn_Graphics_MeshInstance_SetMesh`
 // (?SetMesh@MeshInstance@Graphics@@) is GONE — zero callers. It had FOUR in
@@ -2128,91 +2106,20 @@ extern fn_BuildingList_CheckCondition_t fn_BuildingList_CheckCondition;
 // SaveLoadDialog::Load — game load loop construction helpers
 // ============================================================
 
-// GameUpdateLoop ctor (FUN_140098060 in exe) — NOW REIMPLEMENTED in saveloaddialog.cpp
-// Constructs the gameplay UpdateLoop (0x160 bytes).
-// Calls Engine::UpdateLoop::UpdateLoop then sets vtable to PTR_FUN_14015e2f0.
-// Old typedef kept for reference:
-// typedef void* (*fn_GameUpdateLoop_Ctor_t)(void* self, void* savedState, void* loaderLoopPtr,
-//                                            uint32_t opFlag, void* nameStr,
-//                                            uint32_t p6, uint32_t p7, uint8_t p8,
-//                                            uint64_t p9, uint64_t p10, uint64_t p11);
-// extern fn_GameUpdateLoop_Ctor_t fn_GameUpdateLoop_Ctor;
-
-// Engine::UpdateLoop::UpdateLoop(this) — base ctor from Runtime DLL
-// ??0UpdateLoop@Engine@@QEAA@XZ
-typedef void* (*fn_UpdateLoop_Ctor_t)(void* self);
-extern fn_UpdateLoop_Ctor_t fn_UpdateLoop_Ctor;
-
-// GameUpdateLoop vtable: PTR_FUN_14015e2f0 — written after UpdateLoop base ctor
-extern void** g_GameUpdateLoop_Vtable;  // 0x14015e2f0
-
-// Engine::LoaderLoop ctor (Runtime 0x1800DC1E0)
-// RCX=self(LoaderLoop*), RDX=nextLoop(UpdateLoop*), R8=delayTime(Time const&)
-// ??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z
-typedef void* (*fn_LoaderLoop_Ctor_t)(void* self, void* nextLoop, void* delayTime);
-extern fn_LoaderLoop_Ctor_t fn_LoaderLoop_Ctor;
-
-// Engine::DialogLoaderLoopT ctor (Runtime 0x1800DB0D0)
-// RCX=self, RDX=dialogFilename(String const&), R8=nextLoop(UpdateLoop*), R9=delayTime(Time const&)
-// ??0DialogLoaderLoopT@Engine@@QEAA@AEBVString@System@@PEAVUpdateLoop@1@AEBVTime@3@@Z
-typedef void* (*fn_DialogLoaderLoopT_Ctor_t)(void* self, void* dialogFilename,
-                                              void* nextLoop, void* delayTime);
-extern fn_DialogLoaderLoopT_Ctor_t fn_DialogLoaderLoopT_Ctor;
+// ENDGAME B.3.9 EXA: the GameUpdateLoop / GameLoadDialogLoopT / GameLoaderLoop /
+// MenuDialogLoopT builders construct the real classes (code/Game/Game/*Loop*.h);
+// the four loop ctor doors, the four exe loop vtable globals and the inline
+// MenuDialogLoopT_Ctor are gone.
 
 // System::Random::Random() — default ctor (Runtime 0x1800c7f20), seeds from time(nullptr)
 // ??0Random@System@@QEAA@XZ
 typedef void* (*fn_Random_Default_Ctor_t)(void* self);
 extern fn_Random_Default_Ctor_t fn_Random_Default_Ctor;
 
-// Exe vtable pointer for GameLoadDialogLoopT (subclass of DialogLoaderLoopT).
-// PTR_FUN_140158800 — written to DialogLoaderLoopT after base ctor to override vtable.
-extern void** g_GameLoadDialogLoopT_Vtable;  // 0x140158800
-
-// Exe vtable pointer for GameLoaderLoop (subclass of LoaderLoop).
-// PTR_FUN_1401588d0 — written to outer LoaderLoop after base ctor to override vtable.
-extern void** g_GameLoaderLoop_Vtable;  // 0x1401588d0
-
-// Engine::DialogLoopT::DialogLoopT(self, dialogFilename) — Runtime base ctor
-// ??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z (Runtime 0x1800db3f0)
-// Calls UpdateLoop::UpdateLoop, patches DialogLoopT vtable, copies string, inits UI::UserInterface.
-typedef void* (*fn_DialogLoopT_Ctor_t)(void* self, void* dialogFilename);
-extern fn_DialogLoopT_Ctor_t fn_DialogLoopT_Ctor;
-
 // Audio::Scene::Scene() — Runtime default ctor (0x1800e0160)
 // ??0Scene@Audio@@QEAA@XZ — initializes 0x38-byte Audio::Scene sub-object.
 typedef void* (*fn_AudioScene_Ctor_t)(void* self);
 extern fn_AudioScene_Ctor_t fn_AudioScene_Ctor;
-
-// Exe vtable pointer for MenuDialogLoopT (subclass of Engine::DialogLoopT).
-// PTR_FUN_14015ed00 — written to DialogLoopT after MenuDialogLoopT_Ctor.
-extern void** g_MenuDialogLoopT_Vtable;  // 0x14015ed00
-
-// MenuDialogLoopT_Ctor — FUN_14009bb00 — NOW REIMPLEMENTED INLINE
-// Calls Engine::DialogLoopT::DialogLoopT(self, filename), then patches vtable to
-// PTR_FUN_14015ed00 (MenuDialogLoopT subclass vtable), constructs System::Random at +0x168
-// and Audio::Scene at +0xb30, then zeroes extra fields (+0xb68..+0xbf8).
-// Allocate 0xc00 bytes before calling. Used to create the MainMenu/tutorial dialog loop.
-// Old typedef kept for reference:
-// typedef void* (*fn_MenuDialogLoopT_Ctor_t)(void* self, void* dialogFilename);
-// extern fn_MenuDialogLoopT_Ctor_t fn_MenuDialogLoopT_Ctor;
-inline void* MenuDialogLoopT_Ctor(void* self, void* dialogFilename) {
-    // 1. Call base Engine::DialogLoopT ctor (initializes UpdateLoop, UI::UserInterface, etc.)
-    fn_DialogLoopT_Ctor(self, dialogFilename);
-
-    // 2. Patch vtable to MenuDialogLoopT exe subclass
-    *(void**)self = (void*)g_MenuDialogLoopT_Vtable;
-
-    // 3. Construct embedded sub-objects
-    fn_Random_Default_Ctor((void*)((uintptr_t)self + 0x168));   // System::Random at +0x168
-    fn_AudioScene_Ctor((void*)((uintptr_t)self + 0xb30));       // Audio::Scene at +0xb30
-
-    // 4. Zero-init MenuDialogLoopT-specific fields (+0xb68..+0xbf8)
-    uintptr_t s = (uintptr_t)self;
-    for (uintptr_t off = 0xb68; off <= 0xbf8; off += 8)
-        *(uint64_t*)(s + off) = 0;
-
-    return self;
-}
 
 // SetEngineNextLoop — sets next loop on the MainLoop engine singleton
 // FUN_140097fb0(enginePtr, loaderLoop): sets UI cursor, fullscreen fade, stores next loop ptr
@@ -2272,21 +2179,11 @@ inline void* GetLoadingSoundString(void* retStr) {
 // ModDialog::Slot4 support (Application-x64.exe + Runtime-x64.dll)
 // ============================================================
 
-// Graphics::MaterialInstance::MaterialInstance(this) — ctor (0x60 bytes)
-// Dispatch table at 0x140151838 in exe
-typedef void* (*fn_MaterialInstance_Ctor_t)(void* self);
-extern fn_MaterialInstance_Ctor_t fn_MaterialInstance_Ctor;
-
-// UI::SpriteSheet::SpriteSheet(this) — ctor (0x58 bytes)
-// Dispatch table at 0x140151848
-typedef void* (*fn_SpriteSheet_Ctor_t)(void* self);
-extern fn_SpriteSheet_Ctor_t fn_SpriteSheet_Ctor;
-
-// Custom vtables set on per-mod thumbnail objects (exe .rdata)
-// ModDialog MaterialInstance vtable (0x14015c400)
-extern uintptr_t g_ModDialog_MaterialInstanceVtable;  // 0x14015c400
-// ModDialog SpriteSheet vtable (0x14015c3b0)
-extern uintptr_t g_ModDialog_SpriteSheetVtable;       // 0x14015c3b0
+// ENDGAME B.3.9 EXA: the MaterialInstance / SpriteSheet ctor doors and the
+// exe thumbnail table globals are gone — `::new (p) Graphics::MaterialInstance()`
+// / `UI::SpriteSheet()` (the exe tables 0x14015c400 / 0x14015c3b0 are the
+// classes' own, read in Ghidra: slot 0 the exe scalar deleting dtor, 1-8 thunks
+// onto the class's own members).
 
 // ModDialog thumbnail array push (FUN_140012a60) — 0x58-byte stride
 // Resizes and copies 0x58-byte entries into the mod cache array.
@@ -2441,17 +2338,9 @@ extern fn_MessageDialog_Ctor_t fn_MessageDialog_Ctor;
 // Description class reimpl support (shared serialization helpers)
 // ============================================================
 
-// UI::ElementDescription::~ElementDescription(this) — base destructor
-typedef void (*fn_ElementDescription_Dtor_t)(void* self);
-extern fn_ElementDescription_Dtor_t fn_ElementDescription_Dtor;
-
-// UI::ElementDescription::ElementDescription(this) — base constructor
-typedef void (*fn_ElementDescription_Ctor_t)(void* self);
-extern fn_ElementDescription_Ctor_t fn_ElementDescription_Ctor;
-
-// UI::Element::Element(this) — Element base constructor
-typedef void (*fn_Element_Ctor_t)(void* self);
-extern fn_Element_Ctor_t fn_Element_Ctor;
+// (fn_ElementDescription_Dtor / _Ctor and fn_Element_Ctor — doors read through
+// exe slots 0x1401518b8 / 0x1401518b0 / 0x1401518d8 — went at ENDGAME B.3.9
+// EXA: zero readers.)
 
 // SerializerEncodingVCall — REMOVED, ENDGAME B.3.4a closing 2d. It hand-rolled
 // a virtual dispatch through the 24-byte Serializer's encoding sub-object at
@@ -3408,9 +3297,8 @@ extern fn_TreeRemoveByKey_t fn_TreeRemoveByKey;
 typedef void (*fn_TreeRecursiveFree_t)(void* treeRootPtr, void* node);
 extern fn_TreeRecursiveFree_t fn_TreeRecursiveFree;
 
-// Object::Internal::~Internal — via dispatch slot 0x140152770
-typedef void (*fn_ObjectInternal_Dtor_t)(void* self);
-extern fn_ObjectInternal_Dtor_t fn_ObjectInternal_Dtor;
+// (fn_ObjectInternal_Dtor — the ??1Internal door via slot 0x140152770 — went
+// at ENDGAME B.3.9 EXA: never called, only a readiness conjunct.)
 
 // Citizen state machine release (FUN_1400c5400 @ 0x1400c5400)
 // Walks task list, calls vtable+0x40 on each, clears slots.
@@ -3683,11 +3571,6 @@ extern fn_FindWorkplaceComp_t fn_FindWorkplaceComp;
 // Achievement Goal support (code/Game/Goal/)
 // ============================================================
 
-// Achievement::Goal::Goal() (Runtime 0x18009ed50, ordinal 207)
-// ??0Goal@Achievement@@QEAA@XZ — default ctor, zeroes base fields (a ctor
-// mangles as ??0; this line said "?Goal@..." until 2026-09-06)
-typedef void (*fn_Goal_BaseCtor_t)(void* self);
-extern fn_Goal_BaseCtor_t fn_Goal_BaseCtor;
 
 // Object::InternalBasePtr::Serialize — REMOVED, ENDGAME B.3.4a closing 2d
 // (0 CALLs; every site is now a member call on a real InternalBasePtr).
@@ -3978,11 +3861,9 @@ extern fn_CitizenComponent_AssignHousing_t fn_CitizenComponent_AssignHousing;
 
 // Runtime DLL ctors used by Reimpl_Geometry_Init when the cleaned body runs
 // (standalone mode: exe 0x1400b00e0 is registered to the wrapper).
-//   ??0Geometry@Graphics@@QEAA@XZ      — Runtime 0x1800a4270
 //   ??0VertexBuffer@Video@@QEAA@XZ     — Runtime 0x1800f55f0
 //   ??0IndexBuffer@Video@@QEAA@XZ      — Runtime 0x1800f3490
-typedef void (*fn_Graphics_Geometry_Ctor_t)(void* self);
-extern fn_Graphics_Geometry_Ctor_t fn_Graphics_Geometry_Ctor;
+// (fn_Graphics_Geometry_Ctor went at ENDGAME B.3.9 EXA: zero readers.)
 typedef void (*fn_Video_VertexBuffer_Ctor_t)(void* self);
 extern fn_Video_VertexBuffer_Ctor_t fn_Video_VertexBuffer_Ctor;
 typedef void (*fn_Video_IndexBuffer_Ctor_t)(void* self);

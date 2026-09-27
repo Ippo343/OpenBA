@@ -65,7 +65,7 @@ bool AnimateNaturalResource_ResolveFuncs() {
     bool ok = s_fn_GetNRComp && s_fn_SetAnimIndex &&
               s_fn_GetModelComp && s_TypeId_ComponentEntity &&
               fn_IsDerivedFrom &&
-              fn_InternalBasePtr_DeletePtr && fn_ObjectInternal_Dtor && fn_MemFreeStatic;
+              fn_InternalBasePtr_DeletePtr && fn_MemFreeStatic;
 
 #ifdef _DEBUG
     printf("[AnimateNaturalResource] ResolveFuncs: GetNR=%p SetAnim=%p GetModel=%p\n",

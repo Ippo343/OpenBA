@@ -567,12 +567,6 @@ Object::InternalPtr<UI::DialogInstance>* GameLoadDialogLoopT::CreateLoopDialog(
         LoaderDialog_FromSplashDLT(this, retPtr));
 }
 
-// B38_RULES D5: `Vtable()` is the COMPILER's table; 0x140158800 keeps serving
-// it while the door-then-stamp sites in code/Game/{Dialog,Tutorial} read it
-// (through engine_funcs.cpp's g_GameLoadDialogLoopT_Vtable).
+// B38_RULES D5: `Vtable()` is the COMPILER's table. ENDGAME B.3.9 EXA: the
+// 0x140158800 registration went with the last door-then-stamp builder.
 DEFINE_EXE_VTABLE(GameLoadDialogLoopT, "_ZTV19GameLoadDialogLoopT")
-
-// Called from address_registry.cpp's RegisterVtablesAndTypeIds().
-void RegisterSplashDialogLoopVtable() {
-    RegisterExeAddr(0x140158800, reinterpret_cast<uintptr_t>(GameLoadDialogLoopT::Vtable()));
-}

@@ -89,7 +89,6 @@ fn_ParseValue_t fn_ParseValue = nullptr;
 // Persistence
 void** g_pPersistenceSingleton = nullptr;
 
-fn_DialogInstance_Dtor_t fn_DialogInstance_Dtor = nullptr;
 fn_MemFreeStatic_t fn_MemFreeStatic = nullptr;
 fn_InternalBasePtr_Ctor_t fn_InternalBasePtr_Ctor = nullptr;
 
@@ -214,7 +213,6 @@ fn_OrchardGetGrowth_t fn_OrchardGetGrowth = nullptr;
 // ============================================================
 // Video::ImageBuffer (Runtime DLL exports)
 // ============================================================
-fn_ImageBuffer_Ctor_t fn_ImageBuffer_Ctor = nullptr;
 
 fn_SaveLoad_Dtor_t fn_SaveLoad_Dtor = nullptr;
 void** g_pSaveLoadSingleton = nullptr;
@@ -284,8 +282,6 @@ uint32_t* g_TypeId_CheckElement = nullptr;
 uint32_t* g_TypeId_ToolbarDialogParent = nullptr;
 uint32_t* g_TypeId_ComboElement = nullptr;
 // fn_ResolveExternalByName — REPLACED with inline ResolveExternalByName_Impl in engine_funcs.h
-fn_External_External_t fn_External_External = nullptr;
-fn_External_Dtor_t fn_External_Dtor = nullptr;
 
 fn_EditTool_SelectEntity_t fn_EditTool_SelectEntity = nullptr;
 float* g_pAgeMultiplier = nullptr;
@@ -461,7 +457,6 @@ fn_StorageTree_Insert_t fn_StorageTree_Insert = nullptr;
 fn_Building_RemoveBuyOrder_t fn_Building_RemoveBuyOrder = nullptr;
 fn_Building_AddBuyToStorage_t fn_Building_AddBuyToStorage = nullptr;
 fn_Building_AddPurchaseOrder_t fn_Building_AddPurchaseOrder = nullptr;
-uintptr_t g_NoiseUI_ImageBufferVtable = 0;
 // fn_NoiseUI_SetupImage — REIMPLEMENTED in code/Game/Dialog/noiseui.cpp
 // fn_NoiseUI_GenerateNoise — REIMPLEMENTED in code/Game/Dialog/noiseui.cpp
 // NoiseUI runtime dependencies
@@ -469,10 +464,9 @@ fn_PerlinNoise_Ctor_t fn_PerlinNoise_Ctor = nullptr;
 fn_PerlinNoise_Generate_t fn_PerlinNoise_Generate = nullptr;
 // Random default ctor: uses existing fn_Random_Default_Ctor
 // --- ModDialog::Slot4 support ---
-fn_MaterialInstance_Ctor_t fn_MaterialInstance_Ctor = nullptr;
-fn_SpriteSheet_Ctor_t fn_SpriteSheet_Ctor = nullptr;
-uintptr_t g_ModDialog_MaterialInstanceVtable = 0;
-uintptr_t g_ModDialog_SpriteSheetVtable = 0;
+// ENDGAME B.3.9 EXA: fn_MaterialInstance_Ctor / fn_SpriteSheet_Ctor and the
+// always-zero g_ModDialog_{MaterialInstance,SpriteSheet}Vtable are gone: the
+// four thumbnail builders construct the real classes.
 fn_ModDialog_ArrayPush_t fn_ModDialog_ArrayPush = nullptr;
 uint32_t* g_TypeId_BrowserController = nullptr;
 uint32_t* g_TypeId_Material = nullptr;
@@ -488,12 +482,10 @@ fn_AudioObjectGroup_Ctor_t fn_AudioObjectGroup_Ctor = nullptr;
 fn_AudioScene_RegisterObject_t fn_AudioScene_RegisterObject = nullptr;
 fn_Entity_FindAudioComponent_t fn_Entity_FindAudioComponent = nullptr;
 fn_Graphics_ParticleSystemInstance_Ctor_t fn_Graphics_ParticleSystemInstance_Ctor = nullptr;
-fn_Graphics_Particle_Ctor_t fn_Graphics_Particle_Ctor = nullptr;
 
 // --- MenuScene 3D rendering (Phase A) ---
 fn_Graphics_Renderer_Ctor_t      fn_Graphics_Renderer_Ctor      = nullptr;
 fn_Graphics_Scene_Ctor_t         fn_Graphics_Scene_Ctor         = nullptr;
-fn_Graphics_MeshInstance_Ctor_t  fn_Graphics_MeshInstance_Ctor  = nullptr;
 fn_Volume_Frustum_Ctor_t         fn_Volume_Frustum_Ctor         = nullptr;
 fn_Graphics_Camera_Ctor_t        fn_Graphics_Camera_Ctor        = nullptr;
 
@@ -520,21 +512,14 @@ fn_DisasterComponent_Infect_t fn_DisasterComponent_Infect = nullptr;
 fn_BuildingList_CheckCondition_t fn_BuildingList_CheckCondition = nullptr;
 
 // --- SaveLoadDialog::Load helpers ---
-// fn_GameUpdateLoop_Ctor — REMOVED, now reimplemented in saveloaddialog.cpp
-fn_UpdateLoop_Ctor_t fn_UpdateLoop_Ctor = nullptr;
-void** g_GameUpdateLoop_Vtable = nullptr;
-fn_LoaderLoop_Ctor_t fn_LoaderLoop_Ctor = nullptr;
-fn_DialogLoaderLoopT_Ctor_t fn_DialogLoaderLoopT_Ctor = nullptr;
+// ENDGAME B.3.9 EXA: the loop doors (??0UpdateLoop/LoaderLoop/DialogLoaderLoopT/
+// DialogLoopT) and the four exe loop vtable globals are gone — every builder
+// constructs the real loop class (code/Game/Game/*Loop*.h).
 fn_Random_Default_Ctor_t fn_Random_Default_Ctor = nullptr;
-void** g_GameLoadDialogLoopT_Vtable = nullptr;
-void** g_GameLoaderLoop_Vtable = nullptr;
 // fn_SetEngineNextLoop — REPLACED with inline SetEngineNextLoop() in engine_funcs.h
 // fn_SetDialogLoaderNextLoop — REPLACED with inline SetDialogLoaderNextLoop() in engine_funcs.h
 // fn_GetLoadingSoundString — REPLACED with inline GetLoadingSoundString() in engine_funcs.h
-fn_DialogLoopT_Ctor_t fn_DialogLoopT_Ctor = nullptr;
 fn_AudioScene_Ctor_t fn_AudioScene_Ctor = nullptr;
-// fn_MenuDialogLoopT_Ctor — REMOVED, now reimplemented as inline MenuDialogLoopT_Ctor() in engine_funcs.h
-void** g_MenuDialogLoopT_Vtable = nullptr;
 
 void** g_pFileSystemSingleton = nullptr;
 
@@ -566,9 +551,6 @@ fn_UpdateAutoSaveTimer_t fn_UpdateAutoSaveTimer = nullptr;
 uint32_t* g_TypeId_AutoSaveDialogType = nullptr;
 fn_RegisterDefaultInputBindings_t fn_RegisterDefaultInputBindings = nullptr;
 
-fn_ElementDescription_Dtor_t fn_ElementDescription_Dtor = nullptr;
-fn_ElementDescription_Ctor_t fn_ElementDescription_Ctor = nullptr;
-fn_Element_Ctor_t fn_Element_Ctor = nullptr;
 fn_ExternalPtr_Serialize_t fn_ExternalPtr_Serialize = nullptr;
 fn_ExternalPtr_Serialize2_t fn_ExternalPtr_Serialize2 = nullptr;
 fn_ExternalPtr_Serialize3_t fn_ExternalPtr_Serialize3 = nullptr;
@@ -642,7 +624,6 @@ fn_CitizenComponent_CheckWorkplaceValid_t fn_CitizenComponent_CheckWorkplaceVali
 fn_FindStorageLocationComp_t fn_FindStorageLocationComp = nullptr;
 fn_FindWorkplaceComp_t fn_FindWorkplaceComp = nullptr;
 
-fn_Goal_BaseCtor_t fn_Goal_BaseCtor = nullptr;
 fn_ExternalPtr_SerializeTutorial_t fn_ExternalPtr_SerializeTutorial = nullptr;
 fn_BuildingTypeArray_Dtor_t fn_BuildingTypeArray_Dtor = nullptr;
 fn_FindUIElementByPath_t fn_FindUIElementByPath = nullptr;
@@ -798,10 +779,8 @@ void fn_ModDialog_ArrayPush58_CppImpl(void* arrayHeader, int newCount, void* ele
 // ============================================================
 fn_TreeRemoveByKey_t fn_TreeRemoveByKey = nullptr;
 fn_TreeRecursiveFree_t fn_TreeRecursiveFree = nullptr;
-fn_ObjectInternal_Dtor_t fn_ObjectInternal_Dtor = nullptr;
 fn_StateMachine_ReleaseTasks_t fn_StateMachine_ReleaseTasks = nullptr;
 
-fn_Graphics_Geometry_Ctor_t fn_Graphics_Geometry_Ctor = nullptr;
 fn_Video_VertexBuffer_Ctor_t fn_Video_VertexBuffer_Ctor = nullptr;
 fn_Video_IndexBuffer_Ctor_t fn_Video_IndexBuffer_Ctor = nullptr;
 
@@ -915,9 +894,6 @@ bool EngineFuncsInit() {
 
     // --- UI infrastructure ---
 
-    // UI::DialogInstance::~DialogInstance — virtual base dtor
-    fn_DialogInstance_Dtor = reinterpret_cast<fn_DialogInstance_Dtor_t>(
-        ResolveExport("??1DialogInstance@UI@@UEAA@XZ"));
 
     // System::MemoryAllocator::MemFree — static, single arg
     fn_MemFreeStatic = reinterpret_cast<fn_MemFreeStatic_t>(
@@ -1125,8 +1101,8 @@ bool EngineFuncsInit() {
     // ================================================================
     // Video::ImageBuffer (Runtime DLL exports — by mangled name, fallback to RVA)
     // ================================================================
-    fn_ImageBuffer_Ctor = reinterpret_cast<fn_ImageBuffer_Ctor_t>(
-        ResolveExport("??0ImageBuffer@Video@@QEAA@XZ"));
+    // ENDGAME B.3.9 EXA: `fn_ImageBuffer_Ctor` is gone — every exe builder
+    // writes `::new (p) Video::ImageBuffer()`.
 
     fn_SaveLoad_Dtor = reinterpret_cast<fn_SaveLoad_Dtor_t>(
         ResolveExport("??1SaveLoad@Save@@QEAA@XZ"));
@@ -1307,20 +1283,6 @@ bool EngineFuncsInit() {
         }
     }
     // fn_ResolveExternalByName — REPLACED with inline ResolveExternalByName_Impl in engine_funcs.h
-    // Object::External::External — runtime dispatch at 0x140151e98
-    {
-        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151e98));
-        if (dispatch && *dispatch) {
-            fn_External_External = reinterpret_cast<fn_External_External_t>(*dispatch);
-        }
-    }
-    // Object::External::~External — runtime dispatch at 0x140151ea0
-    {
-        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151ea0));
-        if (dispatch && *dispatch) {
-            fn_External_Dtor = reinterpret_cast<fn_External_Dtor_t>(*dispatch);
-        }
-    }
 
     fn_EditTool_SelectEntity = reinterpret_cast<fn_EditTool_SelectEntity_t>(
         ResolveAddr(Module::Exe, 0x1400fd3b0));
@@ -1786,25 +1748,11 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140059490));
 
     // --- ModDialog::Slot4 support (Graphics::MaterialInstance, UI::SpriteSheet, etc.) ---
-    // MaterialInstance ctor: dispatch at 0x140151838
-    {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151838));
-        if (d && *d) fn_MaterialInstance_Ctor = reinterpret_cast<fn_MaterialInstance_Ctor_t>(*d);
-    }
     // MaterialInstance::{SetMaterial, AddTexture, BuildParameters} (exe dispatch
     // 0x140151870 / 0x140151878 / 0x140151880) reached 0 CALLs in ENDGAME B.3.5
     // (b35-close): they are members of the real `Graphics::MaterialInstance`. Both
     // resolve paths this file had for each — the slot read here and the by-name
     // fallback further down — are gone with them.
-    // SpriteSheet ctor: dispatch at 0x140151848
-    {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151848));
-        if (d && *d) fn_SpriteSheet_Ctor = reinterpret_cast<fn_SpriteSheet_Ctor_t>(*d);
-    }
-    // ImageBuffer::Width / Height — resolved by export name from Runtime
-    // Custom vtables for mod thumbnail objects
-    g_ModDialog_MaterialInstanceVtable = ResolveAddr(Module::Exe, 0x14015c400);
-    g_ModDialog_SpriteSheetVtable      = ResolveAddr(Module::Exe, 0x14015c3b0);
     // ModDialog array push: FUN_140012a60 is unregistered in standalone; it was called
     // UNGUARDED from ModDialog_RefreshDisplay_Impl (moddialog.cpp), so adding an
     // installed mod's thumbnail entry EXEC'd 0. Byte-faithful C++ port instead.
@@ -1820,19 +1768,10 @@ bool EngineFuncsInit() {
     // UV scale float: DAT_14017214c
     g_fUVScale = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
 
-    // Standalone: the MaterialInstance/SpriteSheet/Sprite dispatch slots above are
-    // unregistered → null, so MapUI::SetupImage guard-returned (MatCtor/SSCtor null)
-    // and the minimap never bound its textures. Resolve them directly by their
-    // Runtime export names (mangled names read from the exe .rdata name table).
-    if (!fn_MaterialInstance_Ctor)
-        fn_MaterialInstance_Ctor = reinterpret_cast<fn_MaterialInstance_Ctor_t>(
-            ResolveExport("??0MaterialInstance@Graphics@@QEAA@XZ"));
-    if (!fn_SpriteSheet_Ctor)
-        fn_SpriteSheet_Ctor = reinterpret_cast<fn_SpriteSheet_Ctor_t>(
-            ResolveExport("??0SpriteSheet@UI@@QEAA@XZ"));
 
     // --- NoiseUI helpers ---
-    g_NoiseUI_ImageBufferVtable = ResolveAddr(Module::Exe, 0x14015c8c0);
+    // (g_NoiseUI_ImageBufferVtable, the exe's copy 0x14015c8c0 of ImageBuffer's
+    // own table, went at ENDGAME B.3.9 EXA with its hand-built registration.)
     // fn_NoiseUI_SetupImage — REIMPLEMENTED in code/Game/Dialog/noiseui.cpp
     // fn_NoiseUI_GenerateNoise — REIMPLEMENTED in code/Game/Dialog/noiseui.cpp
     // NoiseUI runtime dependencies
@@ -1876,13 +1815,9 @@ bool EngineFuncsInit() {
     // doors keep their rows.
     fn_Graphics_ParticleSystemInstance_Ctor = reinterpret_cast<fn_Graphics_ParticleSystemInstance_Ctor_t>(
         ResolveExport("??0ParticleSystemInstance@Graphics@@QEAA@XZ"));
-    fn_Graphics_Particle_Ctor = reinterpret_cast<fn_Graphics_Particle_Ctor_t>(
-        ResolveExport("??0Particle@Graphics@@QEAA@XZ"));
     printf("[EngineFuncs] MenuDLT static-mesh + particle helpers:\n"
-           "  ParticleSystemInstance::Ctor  = %p\n"
-           "  Particle::Ctor                = %p\n",
-           (void*)fn_Graphics_ParticleSystemInstance_Ctor,
-           (void*)fn_Graphics_Particle_Ctor);
+           "  ParticleSystemInstance::Ctor  = %p\n",
+           (void*)fn_Graphics_ParticleSystemInstance_Ctor);
     fflush(stdout);
 
     // --- MenuScene 3D rendering (Phase A) ---
@@ -1890,8 +1825,6 @@ bool EngineFuncsInit() {
         ResolveExport("??0Renderer@Graphics@@QEAA@XZ"));
     fn_Graphics_Scene_Ctor = reinterpret_cast<fn_Graphics_Scene_Ctor_t>(
         ResolveExport("??0Scene@Graphics@@QEAA@XZ"));
-    fn_Graphics_MeshInstance_Ctor = reinterpret_cast<fn_Graphics_MeshInstance_Ctor_t>(
-        ResolveExport("??0MeshInstance@Graphics@@QEAA@XZ"));
     fn_Volume_Frustum_Ctor = reinterpret_cast<fn_Volume_Frustum_Ctor_t>(
         ResolveExport("??0Frustum@Volume@@QEAA@AEBVScalar@Math@@000@Z"));
     fn_Graphics_Camera_Ctor = reinterpret_cast<fn_Graphics_Camera_Ctor_t>(
@@ -1942,29 +1875,15 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400893c0));
 
     // --- SaveLoadDialog::Load helpers ---
-    // fn_GameUpdateLoop_Ctor — REIMPLEMENTED, now resolve inner helpers
-    fn_UpdateLoop_Ctor = reinterpret_cast<fn_UpdateLoop_Ctor_t>(
-        ResolveExport("??0UpdateLoop@Engine@@QEAA@XZ"));
-    g_GameUpdateLoop_Vtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x14015e2f0));
-    fn_LoaderLoop_Ctor = reinterpret_cast<fn_LoaderLoop_Ctor_t>(
-        ResolveExport("??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z"));
-    fn_DialogLoaderLoopT_Ctor = reinterpret_cast<fn_DialogLoaderLoopT_Ctor_t>(
-        ResolveExport("??0DialogLoaderLoopT@Engine@@QEAA@AEBVString@System@@PEAVUpdateLoop@1@AEBVTime@3@@Z"));
+    // ENDGAME B.3.9 EXA: the loop doors and exe loop vtable reads are gone (the
+    // builders construct the real loop classes).
     fn_Random_Default_Ctor = reinterpret_cast<fn_Random_Default_Ctor_t>(
         ResolveExport("??0Random@System@@QEAA@XZ"));
-    // Exe vtable pointers for subclasses of DialogLoaderLoopT and LoaderLoop
-    g_GameLoadDialogLoopT_Vtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140158800));
-    g_GameLoaderLoop_Vtable      = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401588d0));
     // fn_SetEngineNextLoop — REPLACED with inline SetEngineNextLoop() in engine_funcs.h
     // fn_SetDialogLoaderNextLoop — REPLACED with inline SetDialogLoaderNextLoop() in engine_funcs.h
     // fn_GetLoadingSoundString — REPLACED with inline GetLoadingSoundString() in engine_funcs.h
-    // fn_MenuDialogLoopT_Ctor — REIMPLEMENTED as inline MenuDialogLoopT_Ctor() in engine_funcs.h
-    // Now resolve its inner dependencies:
-    fn_DialogLoopT_Ctor = reinterpret_cast<fn_DialogLoopT_Ctor_t>(
-        ResolveExport("??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z"));
     fn_AudioScene_Ctor = reinterpret_cast<fn_AudioScene_Ctor_t>(
         ResolveExport("??0Scene@Audio@@QEAA@XZ"));
-    g_MenuDialogLoopT_Vtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x14015ed00));
 
     // --- Engine globals (direct memory addresses) ---
     g_pLoader              = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe7b8));
@@ -2031,8 +1950,6 @@ bool EngineFuncsInit() {
     printf("  CemeteryComponent         = %p -> 0x%x\n", (void*)g_TypeId_CemeteryComponent,
            g_TypeId_CemeteryComponent ? *g_TypeId_CemeteryComponent : 0);
     // DestroyComponent_Reclaim/Rebuild/Destroy: now implemented as statics in destroyui.cpp
-    printf("[EngineFuncs] Video::ImageBuffer:\n");
-    printf("  ImageBuffer::Ctor         = %p\n", (void*)fn_ImageBuffer_Ctor);
     printf("[EngineFuncs] Globals:\n");
     printf("  _loader                   = %p\n", g_pLoader);
     printf("  _loader.m_flags           = %p -> 0x%x\n", (void*)g_pLoaderFlags,
@@ -2102,12 +2019,6 @@ bool EngineFuncsInit() {
     fn_MessageDialog_Ctor = reinterpret_cast<fn_MessageDialog_Ctor_t>(
         ResolveAddr(Module::Exe, 0x14006d300));
 
-    fn_ElementDescription_Dtor = *reinterpret_cast<fn_ElementDescription_Dtor_t*>(
-        ResolveAddr(Module::Exe, 0x1401518b8));
-    fn_ElementDescription_Ctor = *reinterpret_cast<fn_ElementDescription_Ctor_t*>(
-        ResolveAddr(Module::Exe, 0x1401518b0));
-    fn_Element_Ctor = *reinterpret_cast<fn_Element_Ctor_t*>(
-        ResolveAddr(Module::Exe, 0x1401518d8));
     // fn_Serializer_SerializeBulk read slot 0x140152400 here until ENDGAME
     // B.3.4a closing 2d; it was 0-CALL. The slot row itself stays registered.
 
@@ -2175,8 +2086,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140025520));
     fn_TreeRecursiveFree = reinterpret_cast<fn_TreeRecursiveFree_t>(
         ResolveAddr(Module::Exe, 0x140014c30));
-    fn_ObjectInternal_Dtor = reinterpret_cast<fn_ObjectInternal_Dtor_t>(
-        *reinterpret_cast<uintptr_t*>(ResolveAddr(Module::Exe, 0x140152770)));
     fn_StateMachine_ReleaseTasks = reinterpret_cast<fn_StateMachine_ReleaseTasks_t>(
         ResolveAddr(Module::Exe, 0x1400c5400));
     fn_Map_CheckPassable = reinterpret_cast<fn_Map_CheckPassable_t>(
@@ -2269,8 +2178,6 @@ bool EngineFuncsInit() {
     printf("[EngineFuncs] Phase I+J: All work class + BuildStructure helpers resolved\n");
 #endif
 
-    fn_Goal_BaseCtor = reinterpret_cast<fn_Goal_BaseCtor_t>(
-        ResolveExport("??0Goal@Achievement@@QEAA@XZ"));
 
     // InternalBasePtr::Serialize was resolved here until ENDGAME B.3.4a
     // closing 2d; it was 0-CALL.
@@ -2284,7 +2191,6 @@ bool EngineFuncsInit() {
 
 #ifdef _DEBUG
     printf("[EngineFuncs] Achievement Goal support resolved\n");
-    printf("  Goal::Goal()        = %p\n", (void*)fn_Goal_BaseCtor);
 #endif
 
     // --- Phase K: Tutorial Goal helpers ---
@@ -2414,8 +2320,6 @@ bool EngineFuncsInit() {
 #endif
 
     // Runtime ctors used by the standalone Reimpl_Geometry_Init body.
-    fn_Graphics_Geometry_Ctor = reinterpret_cast<fn_Graphics_Geometry_Ctor_t>(
-        ResolveExport("??0Geometry@Graphics@@QEAA@XZ"));
     fn_Video_VertexBuffer_Ctor = reinterpret_cast<fn_Video_VertexBuffer_Ctor_t>(
         ResolveExport("??0VertexBuffer@Video@@QEAA@XZ"));
     fn_Video_IndexBuffer_Ctor = reinterpret_cast<fn_Video_IndexBuffer_Ctor_t>(
@@ -2509,7 +2413,6 @@ bool EngineFuncsInit() {
 
 #ifdef _DEBUG
     printf("[EngineFuncs] M3.5 MenuScene::Serialize helpers resolved\n");
-    printf("  Graphics_Geometry_Ctor  = %p\n", (void*)fn_Graphics_Geometry_Ctor);
     printf("  Video_VertexBuffer_Ctor = %p\n", (void*)fn_Video_VertexBuffer_Ctor);
     printf("  Video_IndexBuffer_Ctor  = %p\n", (void*)fn_Video_IndexBuffer_Ctor);
     printf("  Array_Resize_S20/S08/S14= %p / %p / %p\n",

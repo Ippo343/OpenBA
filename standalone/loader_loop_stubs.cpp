@@ -201,16 +201,9 @@ void GameLoaderLoop::Startup() {
     }
 }
 
-// B38_RULES D5: `X::Vtable()` is the COMPILER's table. The retail addresses
-// keep serving it while unconverted readers stamp them by address (the
-// door-then-stamp sites in code/Game/{Dialog,Tutorial} and engine_funcs.cpp's
-// g_GameLoaderLoop_Vtable).
+// B38_RULES D5: `X::Vtable()` is the COMPILER's table. Neither retail address
+// is registered any more: InnerLoaderLoop's 0x140158870 row went at the B.3.8
+// close, GameLoaderLoop's 0x1401588d0 at B.3.9 EXA (every builder constructs
+// the real class).
 DEFINE_EXE_VTABLE(InnerLoaderLoop, "_ZTV15InnerLoaderLoop")
 DEFINE_EXE_VTABLE(GameLoaderLoop, "_ZTV14GameLoaderLoop")
-
-// Called from address_registry.cpp's RegisterVtablesAndTypeIds(). (InnerLoaderLoop's
-// 0x140158870 row went at the B.3.8 close: GameMain constructs the class, nothing
-// reads the address back.)
-void RegisterLoaderLoopVtables() {
-    RegisterExeAddr(0x1401588d0, reinterpret_cast<uintptr_t>(GameLoaderLoop::Vtable()));
-}

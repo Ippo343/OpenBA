@@ -287,7 +287,6 @@ void OptionsInit() {
     o.screenshotAt           = Raw("BANISHED_SCREENSHOT_AT");
     o.captureIngame          = Raw("BANISHED_CAPTURE_INGAME");
     o.achIgnoreMods          = Raw("BANISHED_ACH_IGNORE_MODS");
-    o.factoryEnum            = Raw("BANISHED_FACTORY_ENUM");
     o.fastTrig               = Raw("BANISHED_FAST_TRIG");
     o.treeGuards             = Raw("BANISHED_TREE_GUARDS");
     o.treePrefetch           = Raw("BANISHED_TREE_PREFETCH");

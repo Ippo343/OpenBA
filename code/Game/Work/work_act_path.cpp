@@ -87,7 +87,6 @@ typedef void* (*WAP2_IbpCtor_t)(void* self, void* obj);
 // 0x140151ab8 — Object::InternalBasePtr::DeletePtr(self). (0xbf87b)
 typedef void  (*WAP2_IbpDelete_t)(void* self);
 // 0x140152768 — Object::Internal::Internal(self) base ctor. (0xbf989 / 0xbfc79)
-typedef void* (*WAP2_ObjInternalCtor_t)(void* self);
 // 0x140152b00 — System::Time::Time(retval, float seconds) → returns Time*. (0xbf97d etc.)
 typedef void* (*WAP2_TimeCtor_t)(void* retval, float seconds);
 
@@ -106,7 +105,6 @@ static WAP2_MoveTo_t              s_wap2_MoveTo            = nullptr;
 static WAP2_MemAlloc_t            s_wap2_MemAlloc          = nullptr;
 static WAP2_IbpCtor_t             s_wap2_IbpCtor           = nullptr;
 static WAP2_IbpDelete_t           s_wap2_IbpDelete         = nullptr;
-static WAP2_ObjInternalCtor_t     s_wap2_ObjInternalCtor   = nullptr;
 static WAP2_TimeCtor_t            s_wap2_TimeCtor          = nullptr;
 
 // Inline-object vtables (exe .rdata).
@@ -142,13 +140,11 @@ static void ResolveAll() {
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b60)) s_wap2_MemAlloc        = *reinterpret_cast<WAP2_MemAlloc_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152a90)) s_wap2_IbpCtor         = *reinterpret_cast<WAP2_IbpCtor_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140151ab8)) s_wap2_IbpDelete       = *reinterpret_cast<WAP2_IbpDelete_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152768)) s_wap2_ObjInternalCtor = *reinterpret_cast<WAP2_ObjInternalCtor_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b00)) s_wap2_TimeCtor        = *reinterpret_cast<WAP2_TimeCtor_t*>(s);
 
     // Fallbacks to engine_funcs helpers (same IAT targets) when a slot is unregistered.
     if (!s_wap2_IbpCtor)         s_wap2_IbpCtor         = reinterpret_cast<WAP2_IbpCtor_t>(fn_InternalBasePtr_Ctor);
     if (!s_wap2_IbpDelete)       s_wap2_IbpDelete       = reinterpret_cast<WAP2_IbpDelete_t>(fn_InternalBasePtr_DeletePtr);
-    if (!s_wap2_ObjInternalCtor) s_wap2_ObjInternalCtor = reinterpret_cast<WAP2_ObjInternalCtor_t>(fn_ObjectInternal_Ctor);
 
     s_wap2_pMsgId_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
     s_wap2_pMsgId_c7158 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));

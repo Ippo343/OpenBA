@@ -80,7 +80,6 @@ typedef int   (*WA_fn_StorageQueryCount_t)(void* storageComp);
 // 0x140152b60 — System::MemoryAllocator::MemAlloc(size, align) static wrapper.
 typedef void* (*WA_fn_MemAllocStatic2_t)(uint64_t size, uint32_t align);
 // 0x140152768 — Object::Internal::Internal(self) base ctor.
-typedef void* (*WA_fn_ObjectInternal_Ctor_t)(void* self);
 // 0x140152b00 — System::Time::Time(retval, float seconds) (used in PlayAnimation/grazing/plant ctors).
 typedef void* (*WA_fn_Time_Ctor_t)(void* retval, float seconds);
 // 0x140152a30 — Math::Vector3::Vector3(self, x, y, z): now the class ctor (B.3.1 step 2).
@@ -113,7 +112,6 @@ static WA_fn_FindStorage_t                   s_fn_FindStorage          = nullptr
 static WA_fn_StorageQueryCount_t             s_fn_StorageQueryCount    = nullptr;
 
 static WA_fn_MemAllocStatic2_t      s_fn_MemAllocStatic = nullptr;
-static WA_fn_ObjectInternal_Ctor_t  s_fn_ObjInternalCtor = nullptr;
 static WA_fn_Time_Ctor_t            s_fn_TimeCtor        = nullptr;
 
 // Inline-object vtables + globals (exe .rdata).
@@ -151,10 +149,8 @@ static void ResolveAll() {
 
     // Dispatch slots — deref once to get the runtime fn ptr.
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b60)) s_fn_MemAllocStatic  = *reinterpret_cast<WA_fn_MemAllocStatic2_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152768)) s_fn_ObjInternalCtor = *reinterpret_cast<WA_fn_ObjectInternal_Ctor_t*>(s);
     // Slot 0x140152768 isn't registered as a dispatch slot in standalone; fall back to
     // the engine_funcs Object::Internal::Internal helper (same IAT target).
-    if (!s_fn_ObjInternalCtor) s_fn_ObjInternalCtor = reinterpret_cast<WA_fn_ObjectInternal_Ctor_t>(fn_ObjectInternal_Ctor);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b00)) s_fn_TimeCtor        = *reinterpret_cast<WA_fn_Time_Ctor_t*>(s);
 
     s_pf_172124    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172124));

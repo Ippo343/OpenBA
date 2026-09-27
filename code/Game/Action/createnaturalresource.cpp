@@ -119,7 +119,7 @@ bool CreateNaturalResource_ResolveFuncs() {
               s_fn_NR_GetVariantCount && s_fn_NR_GetSubVariantCount &&
               s_fn_NR_SetVariant && s_fn_RegisterEntity &&
               s_typeId_ComponentEntity &&
-              fn_ObjectInternal_Dtor && fn_InternalBasePtr_DeletePtr &&
+              fn_InternalBasePtr_DeletePtr &&
               fn_MemFreeStatic &&
               fn_InternalBasePtr_Ctor && fn_IsDerivedFrom &&
               g_pGameWorldSingleton && fn_MemAlloc && g_pMemAllocSingleton;

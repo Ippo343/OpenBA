@@ -264,14 +264,9 @@ void* StatGoal::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(::new (storage) StatGoal());
 }
 
+// B38_RULES D5: standalone/main.cpp's factory self-test compares a
+// factory-built object's vptr with this (ENDGAME B.3.9 EXA: directly; the
+// 0x1401604c0 registration it used to read back is gone).
 DEFINE_EXE_VTABLE(StatGoal, "_ZTV8StatGoal")
-
-// B38_RULES D5: standalone/main.cpp's factory self-test (RunFactorySelfTest
-// "StatGoal", 0x1401604c0) still reads the retail table address back and
-// compares it with a factory-built object's vptr, so the exe address serves
-// the COMPILER's table.
-extern "C" void RegisterStatGoalVtable() {
-    RegisterExeAddr(0x1401604c0, reinterpret_cast<uintptr_t>(StatGoal::Vtable()));
-}
 
 DEFINE_EXE_TYPE(StatGoal, "Achievement::Goal")

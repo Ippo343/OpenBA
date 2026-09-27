@@ -74,7 +74,6 @@ typedef void*  (*WAP_fn_MoveTo_t)(void* self, void* familyIBP, int pathType, int
 typedef void   (*WAP_fn_IbpCtor_t)(void* ibp, void* obj);     // 0x140152a90
 typedef void   (*WAP_fn_DeletePtr_t)(void* ibp);              // 0x140151ab8
 typedef void*  (*WAP_fn_MemAlloc_t)(uint64_t size, uint32_t align); // 0x140152b60
-typedef void*  (*WAP_fn_ObjInternalCtor_t)(void* self);       // 0x140152768
 typedef void*  (*WAP_fn_TimeCtor_t)(void* retval, float seconds);   // 0x140152b00
 // 0x1401512c0 — ?Normalize@Vector3@Math@@QEBA?AV12@XZ. Returns a NEW Vector3 BY VALUE,
 // so the Microsoft x64 ABI passes a hidden return-slot pointer in RDX (>=12 bytes) and
@@ -115,7 +114,6 @@ static WAP_fn_MoveTo_t              s_wap_MoveTo          = nullptr;
 static WAP_fn_IbpCtor_t             s_wap_IbpCtor         = nullptr;
 static WAP_fn_DeletePtr_t           s_wap_DeletePtr       = nullptr;
 static WAP_fn_MemAlloc_t            s_wap_MemAlloc        = nullptr;
-static WAP_fn_ObjInternalCtor_t     s_wap_ObjInternalCtor = nullptr;
 static WAP_fn_TimeCtor_t            s_wap_TimeCtor        = nullptr;
 
 // Inline-object vtables (exe .rdata) + .rdata float/dword constants.
@@ -154,8 +152,6 @@ static void ResolveAll() {
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140151ab8)) s_wap_DeletePtr       = *reinterpret_cast<WAP_fn_DeletePtr_t*>(s);
     if (!s_wap_DeletePtr) s_wap_DeletePtr = reinterpret_cast<WAP_fn_DeletePtr_t>(fn_InternalBasePtr_DeletePtr);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b60)) s_wap_MemAlloc        = *reinterpret_cast<WAP_fn_MemAlloc_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152768)) s_wap_ObjInternalCtor = *reinterpret_cast<WAP_fn_ObjInternalCtor_t*>(s);
-    if (!s_wap_ObjInternalCtor) s_wap_ObjInternalCtor = reinterpret_cast<WAP_fn_ObjInternalCtor_t>(fn_ObjectInternal_Ctor);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b00)) s_wap_TimeCtor        = *reinterpret_cast<WAP_fn_TimeCtor_t*>(s);
 
     s_wap_pDword_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));

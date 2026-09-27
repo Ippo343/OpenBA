@@ -121,7 +121,9 @@ uint32_t ImageElementTypeId() {
             void* ti = ResolveExport("?_typeInfo@ImageElement@UI@@0VBaseTypeInfo@Object@@A");
             if (ti) t = *reinterpret_cast<uint32_t*>(ti);
         }
-        if (!t) t = ::Object::GetTypeIdByName("ImageElement");
+        // (A third fallback, GetTypeIdByName("ImageElement"), went at ENDGAME
+        // B.3.9 EXA: that walks the EXE registration list, which never holds a
+        // Runtime class, so it always answered 0.)
     }
     return t;
 }

@@ -836,24 +836,16 @@ void PlacementTool::Draw(void* context, char param3) {
 // Original: 0x1400fe580
 
 // Local function pointers for Startup (resolved from IAT dispatch slots)
-typedef void (*fn_MeshInstanceCtor_t)(void* self);
-
-static fn_MeshInstanceCtor_t s_fn_MeshInstanceCtor = nullptr;
 static uint32_t* s_pTypeId_RotationSetting = nullptr;
-static void** s_pMeshInstanceVtable = nullptr;
 static bool s_startupFuncsResolved = false;
 
 static void EnsureStartupFuncs() {
     if (s_startupFuncsResolved) return;
     EnsureFuncs();  // resolve common funcs (IBP_Ctor, etc.)
 
-    auto resolveIAT = [](uintptr_t ghidraAddr) -> void* {
-        uintptr_t slot = ResolveAddr(Module::Exe, ghidraAddr);
-        if (slot) return *reinterpret_cast<void**>(slot);
-        return nullptr;
-    };
+    // ENDGAME B.3.9 EXA: the MeshInstance ctor slot (0x140151490) and the exe
+    // table (0x14015e240) reads went: the preview mesh is `::new` of the class.
 
-    s_fn_MeshInstanceCtor = (fn_MeshInstanceCtor_t)resolveIAT(0x140151490);
     // ENDGAME B.3.5 batch K1: the `MeshInstance::SetMesh` cache (slot 0x140151498) that
     // sat beside it had NO caller left -- batch I2 converted its one call site and left
     // the resolve behind, so it was dead on arrival. Typedef, static and resolve removed.
@@ -870,8 +862,6 @@ static void EnsureStartupFuncs() {
         s_pTypeId_RotationSetting = &s_tid_RotationSetting;
     }
 
-    // MeshInstance vtable at 0x14015e240 (LEA, not deref -- direct address in .rdata)
-    s_pMeshInstanceVtable = (void**)ResolveAddr(Module::Exe, 0x14015e240);
 
     // The four *Description type-id globals Startup's findComp reads are filled in
     // engine_funcs.cpp via ResolveAddr(Exe, .rdata) — which is NULL in the standalone
@@ -990,13 +980,9 @@ void PlacementTool::Startup() {
 
     void* meshInst = nullptr;
     if (meshMem) {
-        if (s_fn_MeshInstanceCtor) {
-            s_fn_MeshInstanceCtor(meshMem);
-        }
-        // Overwrite vtable to 0x14015e240 (specific MeshInstance subclass vtable)
-        if (s_pMeshInstanceVtable) {
-            *(void**)meshMem = s_pMeshInstanceVtable;
-        }
+        // Retail: `??0MeshInstance` then the exe's copy 0x14015e240 of the class's
+        // own table (not a subclass) = `new MeshInstance()`.
+        ::new (meshMem) Graphics::MeshInstance();   // B.3.9 EXA: the real class (exe table 0x14015e240 is its own)
         meshInst = meshMem;
     }
     meshInstance = meshInst;
@@ -1044,17 +1030,14 @@ void PlacementTool::Startup() {
     meshVariant = (int32_t)variant;
 
     // Diagnostic: dump the built preview mesh's state so we can see why it may not
-    // render. s_pMeshInstanceVtable is NULL in standalone (0x14015e240 is a raw .rdata
-    // vtable → ResolveAddr(Exe, .rdata)=0), so the exe's vtable override is SKIPPED and
-    // the mesh keeps the base Graphics::MeshInstance vtable. Log the bounds (mesh+0x34,
-    // 6 floats) — if zero, the renderer frustum-culls it → invisible.
+    // render. Log the bounds (mesh+0x34, 6 floats) — if zero, the renderer
+    // frustum-culls it → invisible.
     if (meshInstance) {
         uintptr_t m = (uintptr_t)meshInstance;
         const float* b = (const float*)(m + 0x34);
-        fprintf(stderr, "[Placement] mesh built: mesh=%p vtable=%p (override %s) meshPtr=%p "
+        fprintf(stderr, "[Placement] mesh built: mesh=%p vtable=%p meshPtr=%p "
                 "count=%u variant=%u bounds=[%.2f %.2f %.2f .. %.2f %.2f %.2f]\n",
                 meshInstance, *(void**)m,
-                s_pMeshInstanceVtable ? "APPLIED" : "SKIPPED(null in SA!)",
                 mesh, meshCount, variant, b[0], b[1], b[2], b[3], b[4], b[5]);
         fflush(stderr);
     }

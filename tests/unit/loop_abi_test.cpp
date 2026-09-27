@@ -40,11 +40,15 @@
 #include "Game/WeatherParticleGeometry.h"
 #include "Game/PathfinderThread.h"
 #include "Game/Tornado.h"
+#include "graphics/Material.h"
+#include "ui/SpriteSheet.h"
+#include "video/ImageBuffer.h"
 
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
 #include <type_traits>
+#include <utility>
 
 namespace {
 
@@ -192,6 +196,64 @@ UNIT_TEST(loop_splash_slot12_is_retslot_first) {
                         Ret* (GameLoadDialogLoopT::*)(Ret*)>::value));
     CHECK((std::is_same<decltype(&MenuDialogLoopT::CreateLoopDialog),
                         Ret* (MenuDialogLoopT::*)(Ret*)>::value));
+}
+
+// ===========================================================================
+// PART D — THE BUILDERS' CONSTRUCTION (ENDGAME B.3.9 EXA)
+// Every loop builder (mainmenudialog, newgamedialog, saveloaddialog, tutorialui,
+// tutorial_next_scenario, worldsetup_reload, GameMain) writes
+// `::new (MemAlloc(size, align)) X(args)` with exactly the argument shapes
+// below — the ctor arguments of retail's 0x140098060 / 0x14009bb00 / the inlined
+// splash ctor / ??0LoaderLoop. The expression is checked unevaluated (the ctor
+// bodies do not link into a host test); a builder that needed a door or a
+// by-address vtable stamp again would have to break one of these.
+// ===========================================================================
+template <typename T, typename... A>
+using PlacementNewResult = decltype(::new (std::declval<void*>()) T(std::declval<A>()...));
+
+template <typename, typename T, typename... A>
+struct CanPlacementNew : std::false_type {};
+template <typename T, typename... A>
+struct CanPlacementNew<std::void_t<PlacementNewResult<T, A...>>, T, A...> : std::true_type {};
+
+UNIT_TEST(loop_builders_construct_in_place) {
+    CHECK((CanPlacementNew<void, GameUpdateLoop, void*, uint64_t, int32_t,
+                           const System::String&, int32_t, int32_t, bool,
+                           void*, void*, void*>::value));
+    CHECK((CanPlacementNew<void, MenuDialogLoopT, const System::String&>::value));
+    CHECK((CanPlacementNew<void, GameLoadDialogLoopT, const System::String&,
+                           Engine::UpdateLoop*, const System::Time&>::value));
+    CHECK((CanPlacementNew<void, GameLoaderLoop, Engine::UpdateLoop*,
+                           const System::Time&>::value));
+    // The builders chain the loops through Engine::UpdateLoop*: single
+    // inheritance, so the base pointer IS the object's address (no adjustment).
+    alignas(8) unsigned char raw[16] = {};
+    auto* g = reinterpret_cast<GameUpdateLoop*>(raw);
+    CHECK_EQ(reinterpret_cast<uintptr_t>(static_cast<Engine::UpdateLoop*>(g)),
+             reinterpret_cast<uintptr_t>(raw));
+    auto* d = reinterpret_cast<GameLoadDialogLoopT*>(raw);
+    CHECK_EQ(reinterpret_cast<uintptr_t>(static_cast<Engine::UpdateLoop*>(d)),
+             reinterpret_cast<uintptr_t>(raw));
+    auto* m = reinterpret_cast<MenuDialogLoopT*>(raw);
+    CHECK_EQ(reinterpret_cast<uintptr_t>(static_cast<Engine::UpdateLoop*>(m)),
+             reinterpret_cast<uintptr_t>(raw));
+}
+
+// The exe's three local table copies (0x14015c400 MaterialInstance, 0x14015c3b0
+// SpriteSheet, 0x14015c8c0 ImageBuffer) are the Runtime classes' own tables
+// (Ghidra: slot 0 the exe scalar deleting dtor, 1..n thunks onto the class's
+// own members), so the thumbnail / minimap builders write `::new (p) X()` at
+// retail's MemAlloc size. ENDGAME B.3.9 EXA.
+UNIT_TEST(exe_table_copies_are_the_runtime_classes) {
+    CHECK((CanPlacementNew<void, Graphics::MaterialInstance>::value));
+    CHECK((CanPlacementNew<void, UI::SpriteSheet>::value));
+    CHECK((CanPlacementNew<void, Video::ImageBuffer>::value));
+    CHECK_EQ(sizeof(Graphics::MaterialInstance), (size_t)0x60);   // MemAlloc(0x60, 8)
+    CHECK_EQ(sizeof(UI::SpriteSheet), (size_t)0x58);              // MemAlloc(0x58, 8)
+    CHECK_EQ(sizeof(Video::ImageBuffer), (size_t)0x68);           // MemAlloc(0x68, 8)
+    CHECK(!std::is_abstract<Graphics::MaterialInstance>::value);
+    CHECK(!std::is_abstract<UI::SpriteSheet>::value);
+    CHECK(!std::is_abstract<Video::ImageBuffer>::value);
 }
 
 // ===========================================================================

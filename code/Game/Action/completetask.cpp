@@ -90,7 +90,7 @@ bool CompleteTask_ResolveFuncs() {
     // was reachable for POST but never for complete/cancel.
     bool execOk = s_fn_TryCompleteTask && s_fn_TaskCleanup && s_fn_TaskReassign &&
                   s_pGameState && fn_IsDerivedFrom &&
-                  fn_InternalBasePtr_DeletePtr && fn_ObjectInternal_Dtor && fn_MemFreeStatic;
+                  fn_InternalBasePtr_DeletePtr && fn_MemFreeStatic;
 
 #ifdef _DEBUG
     bool serializeOk = s_TypeId_1401c7158 && s_TypeId_ComponentEntity;

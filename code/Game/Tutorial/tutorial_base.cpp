@@ -32,6 +32,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include "Component/WorkDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Game/Toolbar.h"                // B.3.9 EXA: Toolbar::TypeId()
 
 // ============================================================
 // Family A — ExternalPtr serialize helpers
@@ -143,7 +144,7 @@ extern "C" void TutBase_ResolveToolbarRef(void* stringField) {
     if (found) {
         uint32_t tid = (g_TypeId_ToolbarItem && *g_TypeId_ToolbarItem)
                            ? *g_TypeId_ToolbarItem
-                           : ::Object::ResolveTypeIdByNameLazy("Toolbar");
+                           : Toolbar::TypeId();   // B.3.9 EXA (was by name)
         if (!tid || !fn_IsDerivedFrom || fn_IsDerivedFrom(found, tid)) {
             result = found;
         }

@@ -79,7 +79,6 @@ typedef bool  (*s_wac_IsDerivedFrom_t)(void* obj, uint32_t tid); // 0x140152a98
 typedef void* (*s_wac_MemAlloc_t)(uint64_t size, uint32_t align);// 0x140152b60
 typedef void  (*s_wac_IbpCtor_t)(void* ibp, void* obj);          // 0x140152a90
 typedef void  (*s_wac_DeletePtr_t)(void* ibp);                   // 0x140151ab8
-typedef void* (*s_wac_ObjInternalCtor_t)(void* self);            // 0x140152768
 typedef void  (*s_wac_MemFree_t)(void* ptr);                     // 0x140152b68
 
 static s_wac_Entity29a0_t      s_wac_Entity29a0     = nullptr;
@@ -97,7 +96,6 @@ static s_wac_IsDerivedFrom_t   s_wac_IsDerivedFrom  = nullptr;
 static s_wac_MemAlloc_t        s_wac_MemAlloc       = nullptr;
 static s_wac_IbpCtor_t         s_wac_IbpCtor        = nullptr;
 static s_wac_DeletePtr_t       s_wac_DeletePtr      = nullptr;
-static s_wac_ObjInternalCtor_t s_wac_ObjInternalCtor= nullptr;
 static s_wac_MemFree_t         s_wac_MemFree        = nullptr;
 
 // Inline-object vtables + globals (exe .rdata).
@@ -127,13 +125,11 @@ static void s_wac_ResolveAll() {
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b60)) s_wac_MemAlloc        = *reinterpret_cast<s_wac_MemAlloc_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152a90)) s_wac_IbpCtor         = *reinterpret_cast<s_wac_IbpCtor_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140151ab8)) s_wac_DeletePtr       = *reinterpret_cast<s_wac_DeletePtr_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152768)) s_wac_ObjInternalCtor = *reinterpret_cast<s_wac_ObjInternalCtor_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b68)) s_wac_MemFree         = *reinterpret_cast<s_wac_MemFree_t*>(s);
 
     // Engine-funcs fallbacks (same IAT targets) when the dispatch slot is unregistered.
     if (!s_wac_IbpCtor   && fn_InternalBasePtr_Ctor)      s_wac_IbpCtor   = reinterpret_cast<s_wac_IbpCtor_t>(fn_InternalBasePtr_Ctor);
     if (!s_wac_DeletePtr && fn_InternalBasePtr_DeletePtr) s_wac_DeletePtr = reinterpret_cast<s_wac_DeletePtr_t>(fn_InternalBasePtr_DeletePtr);
-    if (!s_wac_ObjInternalCtor && fn_ObjectInternal_Ctor) s_wac_ObjInternalCtor = reinterpret_cast<s_wac_ObjInternalCtor_t>(fn_ObjectInternal_Ctor);
     if (!s_wac_IsDerivedFrom   && fn_IsDerivedFrom)       s_wac_IsDerivedFrom   = reinterpret_cast<s_wac_IsDerivedFrom_t>(fn_IsDerivedFrom);
 
     s_wac_pTid_c7b68   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7b68));

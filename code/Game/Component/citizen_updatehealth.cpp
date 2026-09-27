@@ -40,6 +40,7 @@
 #include "engine_funcs.h"
 #include "Component/WorkPlaceComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/CitizenComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Game/Disease.h"                 // B.3.9 EXA: Disease::TypeId()
 #include "options.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
@@ -114,7 +115,7 @@ static void EnsureInit() {
     s_pSecsPerMonth  = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172234));
 
     s_tidCitizen = CitizenComponent::TypeId();
-    s_tidDisease = ::Object::GetTypeIdByName("Disease");
+    s_tidDisease = Disease::TypeId();   // B.3.9 EXA: the class's own record (was by name)
 }
 
 static inline void* GameWorld() {

@@ -87,10 +87,7 @@ namespace {
 //       B35_RULES section 11: no Video/Graphics class has a real ctor or dtor).
 //   s_Frustum_Ortho_Ctor  — a Volume::Frustum constructor, not a member of any
 //       Video/Graphics class.
-//   fn_ImageBuffer_Ctor — a CTOR door. (`CopyFromTexture` was on this list until
-//       block D2's buffers.cpp landed the member; it is converted now. So was
-//       `Graphics::Renderer::Draw`, until the fragment pass moved its body onto the
-//       member — batch K1 converted it.)
+//   (`fn_ImageBuffer_Ctor` went at ENDGAME B.3.9 EXA: `::new (p) Video::ImageBuffer()`.)
 typedef void* (*fn_RenderBuffer_Ctor_t)(void* self);
 typedef void  (*fn_RenderBuffer_Dtor_t)(void* self);
 typedef void* (*fn_Frustum_Ortho_Ctor_t)(void* self, bool ortho, const void* near_,
@@ -124,7 +121,6 @@ bool ResolveFuncs() {
            // engine_funcs primitives this port relies on:
            fn_MemAlloc && g_pMemAllocSingleton && fn_MemFreeStatic &&
            // B.3.5: the CopyFromTexture readiness term went with its door.
-           fn_ImageBuffer_Ctor && g_NoiseUI_ImageBufferVtable &&
            fn_Graphics_Camera_Ctor &&
            fn_Graphics_Renderer_Ctor && fn_Graphics_Scene_Ctor &&
            // B.3.5 batch K1: the Renderer::Draw readiness term went with its door.
@@ -142,18 +138,13 @@ bool ResolveFuncs() {
     return s_ok;
 }
 
-// Allocate + construct an ImageBuffer with the NoiseUI vtable, then Create it as a
-// render-target (color) / depth surface. Returns the buffer or null.
+// Allocate + construct a Video::ImageBuffer (retail: the imported ctor + the
+// exe's own copy of the class's table), then Create it as a render-target
+// (color) / depth surface. Returns the buffer or null.
 void* MakeRenderTargetBuffer(int width, int usage, int format) {
     void* img = fn_MemAlloc(g_pMemAllocSingleton, 0x68, 8);
     if (!img) return nullptr;
-    fn_ImageBuffer_Ctor(img);
-    *reinterpret_cast<uintptr_t*>(img) = g_NoiseUI_ImageBufferVtable;
-    // B.3.5 bridge — the hand-inlined `*(vtable + 0x48)` dispatch is slot 9 of
-    // `Video::ImageBuffer`, i.e. `Create` (B35_RULES 2.3 item 5). The receiver is
-    // a PROVED ImageBuffer: 0x68 bytes (sizeof) from MemAlloc, run through
-    // `??0ImageBuffer@Video@@`, then given the exe's own NoiseUI vtable — so the
-    // virtual call reads that live table at exactly the same +0x48 it read before.
+    ::new (img) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
     reinterpret_cast<Video::ImageBuffer*>(img)->Create(
         /*type*/0, usage, format, /*flags*/0u, width, width,
         /*filter*/1, /*addressU*/1, /*addressV*/1, /*addressW*/1,

@@ -36,9 +36,6 @@
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
-// Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
-extern uintptr_t ThumbVtable_StampMaterialInstance(void* obj);
-extern uintptr_t ThumbVtable_StampSpriteSheet(void* obj);
 
 // Helper: find element by name in parent element, cast to InternalBasePtr
 static uint64_t NoiseUI_FindElemAsBasePtr(void* parentElem, const char* name) {
@@ -80,8 +77,7 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
     void* matInst = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
     void* materialPtr = nullptr;
     if (matInst) {
-        fn_MaterialInstance_Ctor(matInst);
-        ThumbVtable_StampMaterialInstance(matInst);
+        ::new (matInst) Graphics::MaterialInstance();   // B.3.9 EXA: the real class (exe table 0x14015c400 is its own)
         materialPtr = matInst;
     }
     *materialOut = materialPtr;
@@ -118,8 +114,7 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
     void* sheet = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
     void* spriteSheet = nullptr;
     if (sheet) {
-        fn_SpriteSheet_Ctor(sheet);
-        ThumbVtable_StampSpriteSheet(sheet);
+        ::new (sheet) UI::SpriteSheet();   // B.3.9 EXA: the real class (exe table 0x14015c3b0 is its own)
         spriteSheet = sheet;
     }
     *spriteSheetOut = spriteSheet;
@@ -295,9 +290,7 @@ void NoiseUI_Slot4(NoiseUI* self) {
     void* imgBuf = fn_MemAlloc(g_pMemAllocSingleton, 0x68, 8);
     void* imageBuffer = nullptr;
     if (imgBuf != nullptr) {
-        fn_ImageBuffer_Ctor(imgBuf);
-        // Set vtable to NoiseUI-specific ImageBuffer vtable
-        *(uintptr_t*)imgBuf = g_NoiseUI_ImageBufferVtable;
+        ::new (imgBuf) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
         imageBuffer = imgBuf;
     }
     *(void**)(s + 0x30) = imageBuffer;

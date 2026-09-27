@@ -41,8 +41,6 @@
 // (NOT in engine_funcs.h — RemoveNaturalResource-specific helpers)
 // ============================================================
 
-// Object::Internal::~Internal(this) — via IAT at 0x140152770
-static void (*s_fn_ObjectInternal_Dtor)(void* self) = nullptr;
 
 // Object::InternalBasePtr::DeletePtr — clears entity ref during dtor
 static void (*s_fn_IBP_DeletePtr)(void* self) = nullptr;
@@ -75,9 +73,6 @@ static bool s_funcs_resolved = false;
 bool RemoveNaturalResource_ResolveFuncs() {
     if (s_funcs_resolved) return true;
 
-    // Object::Internal dtor via IAT
-    uintptr_t iatDtor = ResolveAddr(Module::Exe, 0x140152770);
-    if (iatDtor) s_fn_ObjectInternal_Dtor = *reinterpret_cast<void(**)(void*)>(iatDtor);
 
     // InternalBasePtr::DeletePtr
     s_fn_IBP_DeletePtr = (void(*)(void*))fn_InternalBasePtr_DeletePtr;
@@ -101,7 +96,7 @@ bool RemoveNaturalResource_ResolveFuncs() {
     s_typeInfo_RemoveNaturalResource = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c60c0));
 
-    bool ok = s_fn_ObjectInternal_Dtor && s_fn_IBP_DeletePtr &&
+    bool ok = s_fn_IBP_DeletePtr &&
               s_fn_FindNRComp &&
               s_fn_NotifyEntityChanged && s_fn_RemoveNatRes &&
               s_typeId_1401c7158 && g_TypeId_ComponentEntity &&
@@ -111,8 +106,8 @@ bool RemoveNaturalResource_ResolveFuncs() {
               fn_MemFreeStatic && g_pGameWorldSingleton;
 
 #ifdef _DEBUG
-    printf("[RemoveNaturalResource] ResolveFuncs: ObjDtor=%p IBPDel=%p FindNR=%p\n",
-           (void*)s_fn_ObjectInternal_Dtor, (void*)s_fn_IBP_DeletePtr,
+    printf("[RemoveNaturalResource] ResolveFuncs: IBPDel=%p FindNR=%p\n",
+           (void*)s_fn_IBP_DeletePtr,
            (void*)s_fn_FindNRComp);
     printf("[RemoveNaturalResource]   NotifyChanged=%p RemoveNR=%p typeId7158=%p NRDesc=%p\n",
            (void*)s_fn_NotifyEntityChanged, (void*)s_fn_RemoveNatRes,

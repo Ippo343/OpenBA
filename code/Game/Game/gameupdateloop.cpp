@@ -2801,14 +2801,7 @@ const char* GameUpdateLoop::GetResourceFilename() {
     return "Game/Game";
 }
 
-// B38_RULES D5: `Vtable()` is the COMPILER's table; 0x14015e2f0 keeps serving
-// it while the door-then-stamp sites outside this block (newgamedialog.cpp,
-// saveloaddialog.cpp, tutorial_next_scenario.cpp, via engine_funcs.cpp's
-// g_GameUpdateLoop_Vtable) and the splash's "is the next loop a
-// GameUpdateLoop" test read it.
+// B38_RULES D5: `Vtable()` is the COMPILER's table (the splash's "is the next
+// loop a GameUpdateLoop" identity test reads it). ENDGAME B.3.9 EXA: the
+// 0x14015e2f0 registration went with the last door-then-stamp builder.
 DEFINE_EXE_VTABLE(GameUpdateLoop, "_ZTV14GameUpdateLoop")
-
-// Called from address_registry.cpp's RegisterVtablesAndTypeIds().
-void RegisterGameUpdateLoopVtable() {
-    RegisterExeAddr(0x14015e2f0, reinterpret_cast<uintptr_t>(GameUpdateLoop::Vtable()));
-}

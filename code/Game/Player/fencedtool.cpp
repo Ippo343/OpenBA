@@ -731,13 +731,6 @@ after_check:
 // Local function pointers for Startup
 // ============================================================
 
-// Graphics::MeshInstance::MeshInstance(this) — dispatch slot 0x140151490
-typedef void* (*fn_MeshInstance_Ctor_t)(void* self);
-static fn_MeshInstance_Ctor_t s_fn_MeshInstance_Ctor = nullptr;
-
-// MeshInstance vtable override pointer — 0x14015e240
-static void** s_MeshInstance_Vtable = nullptr;
-
 // RotationSetting type ID — DAT_1401c63c8
 static uint32_t* s_TypeId_RotationSetting = nullptr;
 
@@ -745,13 +738,6 @@ static bool s_startupFuncsResolved = false;
 
 static void EnsureStartupHelpers() {
     if (s_startupFuncsResolved) return;
-
-    // MeshInstance::MeshInstance — dispatch slot 0x140151490
-    uintptr_t slot1 = ResolveAddr(Module::Exe, 0x140151490);
-    if (slot1) s_fn_MeshInstance_Ctor = *(fn_MeshInstance_Ctor_t*)slot1;
-
-    // MeshInstance vtable override at 0x14015e240
-    s_MeshInstance_Vtable = (void**)ResolveAddr(Module::Exe, 0x14015e240);
 
     // RotationSetting type ID at DAT_1401c63c8
     s_TypeId_RotationSetting = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c63c8);
@@ -882,14 +868,9 @@ void FencedTool::Startup() {
     void* meshMem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x120, 8) : nullptr;
     void* meshInst = nullptr;
     if (meshMem) {
-        // Construct MeshInstance
-        if (s_fn_MeshInstance_Ctor) {
-            s_fn_MeshInstance_Ctor(meshMem);
-        }
-        // Override vtable to 0x14015e240
-        if (s_MeshInstance_Vtable) {
-            *(void**)meshMem = s_MeshInstance_Vtable;
-        }
+        // Retail: `??0MeshInstance` then the exe's copy 0x14015e240 of the class's
+        // own table (not a subclass) = `new MeshInstance()`.
+        ::new (meshMem) Graphics::MeshInstance();   // B.3.9 EXA: the real class (exe table 0x14015e240 is its own)
         meshInst = meshMem;
     }
     meshInstance = meshInst;

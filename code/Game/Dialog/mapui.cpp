@@ -32,9 +32,6 @@
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
-// Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
-extern uintptr_t ThumbVtable_StampMaterialInstance(void* obj);
-extern uintptr_t ThumbVtable_StampSpriteSheet(void* obj);
 
 // ============================================================
 // SetupImage (0x14006cb00): Create MaterialInstance + SpriteSheet
@@ -58,12 +55,9 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     // very first thing below is fn_ImageBuffer_Width(imageBuffer). If the GPU
     // buffer was never created (Minimap_CreateAndUpload not yet run) skip rather
     // than fault. Also require the core primitives.
-    if (!imageBuffer || !fn_MemAlloc || !g_pMemAllocSingleton ||
-        !fn_MaterialInstance_Ctor || !fn_SpriteSheet_Ctor) {
-        if (trc) printf("[SetupImg] GUARD-RETURN elem=%s imgBuf=%p MemAlloc=%p Alloc*=%p "
-               "MatCtor=%p SSCtor=%p\n", elementName, imageBuffer,
-               (void*)fn_MemAlloc, g_pMemAllocSingleton, (void*)fn_MaterialInstance_Ctor,
-               (void*)fn_SpriteSheet_Ctor);
+    if (!imageBuffer || !fn_MemAlloc || !g_pMemAllocSingleton) {
+        if (trc) printf("[SetupImg] GUARD-RETURN elem=%s imgBuf=%p MemAlloc=%p Alloc*=%p\n",
+               elementName, imageBuffer, (void*)fn_MemAlloc, g_pMemAllocSingleton);
         *materialOut = nullptr;
         *spriteSheetOut = nullptr;
         return;
@@ -73,9 +67,7 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     void* matInst = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
     void* materialPtr = nullptr;
     if (matInst) {
-        fn_MaterialInstance_Ctor(matInst);
-        // Set vtable to the exe's MaterialInstance vtable copy (0x14015c400).
-        ThumbVtable_StampMaterialInstance(matInst);
+        ::new (matInst) Graphics::MaterialInstance();   // B.3.9 EXA: the real class (exe table 0x14015c400 is its own)
         materialPtr = matInst;
     }
     *materialOut = materialPtr;
@@ -115,9 +107,7 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     void* sheet = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
     void* spriteSheet = nullptr;
     if (sheet) {
-        fn_SpriteSheet_Ctor(sheet);
-        // Set vtable to the exe's SpriteSheet vtable copy (0x14015c3b0).
-        ThumbVtable_StampSpriteSheet(sheet);
+        ::new (sheet) UI::SpriteSheet();   // B.3.9 EXA: the real class (exe table 0x14015c3b0 is its own)
         spriteSheet = sheet;
     }
     *spriteSheetOut = spriteSheet;
@@ -291,10 +281,8 @@ void MapUI::OnCreated() {
         void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
         [[maybe_unused]] void* mapObj = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x148) : nullptr;
         printf("[MapUI::Slot4] dispatched self=%p mat_tid=%p img_tid=%p "
-               "matVtbl=%p ssVtbl=%p terrBuf=%p ovrBuf=%p\n", (void*)this,
+               "terrBuf=%p ovrBuf=%p\n", (void*)this,
                (void*)g_TypeId_Material, (void*)g_TypeId_ImageElement,
-               (void*)g_ModDialog_MaterialInstanceVtable,
-               (void*)g_ModDialog_SpriteSheetVtable,
                mapObj ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(mapObj) + 0x08) : nullptr,
                mapObj ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(mapObj) + 0x10) : nullptr);
         fflush(stdout);

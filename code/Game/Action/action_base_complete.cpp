@@ -44,6 +44,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 
 #include "scene_watch.h"
 #include <windows.h>
@@ -342,8 +343,6 @@ namespace {
 typedef void  (*fn_TimeCtor_t)(void* retTime, float seconds);            // 0x140152b00
 
 static fn_TimeCtor_t         s_TimeCtorMesh   = nullptr;  // 0x140152b00 (MeshInstance update arg)
-typedef void (*fn_MIDefCtor_t)(void* meshInstance);       // 0x140151490 (MeshInstance default-ctor)
-static fn_MIDefCtor_t        s_MI_DefCtor     = nullptr;
 static float*                s_pUVScale       = nullptr;  // g_fUVScale (DAT_14017214c)
 static uint32_t*             s_pTid_FenceDesc = nullptr;  // DAT_1401c7a88
 static uint32_t*             s_pTid_RawMat    = nullptr;  // DAT_1401c7cb8
@@ -368,7 +367,6 @@ static void EnsureShow() {
     // and detach this file performs — dead since the day they were written (found by
     // tools/export_name_audit.py; reference_resolveexport_phantom_names.md). Both are
     // members of the real `Graphics::Geometry` now, so the phantom cannot come back.
-    s_MI_DefCtor     = reinterpret_cast<fn_MIDefCtor_t>(ReadDispatchSlot(0x140151490));
     s_pUVScale       = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
     s_pTid_FenceDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
     s_pTid_RawMat    = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
@@ -511,8 +509,8 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
     // (READ of +0x40). Default-construct it in place with sceneId(+0x120) = -1 — the same
     // guard showtool.cpp uses for carried items. (This was missing from the registered
     // ActCt_ variant, crashing the FIRST build-labor ShowTool.)
-    if (*reinterpret_cast<void**>(e + 0xb8) == nullptr && s_MI_DefCtor) {
-        s_MI_DefCtor(reinterpret_cast<void*>(e + 0xb8));
+    if (*reinterpret_cast<void**>(e + 0xb8) == nullptr) {
+        ::new (reinterpret_cast<void*>(e + 0xb8)) Graphics::MeshInstance();   // B.3.9 EXA: the real class
         *reinterpret_cast<uint32_t*>(e + 0xb8 + 0x120) = 0xffffffff;   // sceneId = -1
     }
 

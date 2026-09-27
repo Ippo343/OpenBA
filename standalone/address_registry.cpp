@@ -51,7 +51,6 @@ extern "C" void SetStandaloneKeyMap(void* keyMap) {
 // Per-class vtable registration entry points. Each lives next to its class's
 // reimplementation in code/Game/<Module>/<Class>.cpp.
 extern "C" {
-    void RegisterStatGoalVtable();
     void RegisterOptionsDialogVtable();
     void RegisterNewGameDialogVtable();
     void RegisterOptionInputBindDialogVtable();
@@ -848,14 +847,11 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?Serialize@Type@Object@@QEAAXAEAVSerializer@IO@@@Z"));
     RegisterDispatchSlot(0x1401518c8,
         (uintptr_t)ResolveExport("?Serialize@ElementDescription@UI@@UEAA_NAEAVStream@IO@@@Z"));
-    RegisterDispatchSlot(0x1401518b8,
-        (uintptr_t)ResolveExport("??1ElementDescription@UI@@UEAA@XZ"));
-    RegisterDispatchSlot(0x1401518b0,
-        (uintptr_t)ResolveExport("??0ElementDescription@UI@@QEAA@XZ"));
+    // (0x1401518b8 ??1ElementDescription / 0x1401518b0 ??0ElementDescription /
+    // 0x1401518d8 ??0Element: rows deleted at ENDGAME B.3.9 EXA — their only
+    // readers were engine_funcs door globals with no callers.)
     RegisterDispatchSlot(0x1401518d0,
         (uintptr_t)ResolveExport("?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z"));
-    RegisterDispatchSlot(0x1401518d8,
-        (uintptr_t)ResolveExport("??0Element@UI@@QEAA@XZ"));
     RegisterDispatchSlot(0x1401518e0,
         (uintptr_t)ResolveExport("??1Element@UI@@UEAA@XZ"));
     RegisterDispatchSlot(0x1401518e8,
@@ -1182,8 +1178,9 @@ static void RegisterDispatchSlots() {
     //  call the real Object::Internal::Internal directly at load.)
     RegisterDispatchSlot(0x140152768,
         (uintptr_t)ResolveExport("??0Internal@Object@@QEAA@XZ"));
-    RegisterDispatchSlot(0x140152770,
-        (uintptr_t)ResolveExport("??1Internal@Object@@UEAA@XZ"));
+    // (0x140152770 ??1Internal: row deleted at ENDGAME B.3.9 EXA — its readers
+    // were the never-called fn_ObjectInternal_Dtor and five Action-local copies,
+    // used only as readiness conjuncts.)
     RegisterDispatchSlot(0x140152a30,
         (uintptr_t)ResolveExport("??0Vector3@Math@@QEAA@MMM@Z"));
 
@@ -1308,20 +1305,9 @@ static void RegisterDispatchSlots() {
     // leave this slot zero-filled until something else needs it.
     RegisterDispatchSlot(0x140151728, 0);
 
-    // Object::External::External — dispatch slot for the External base ctor.
-    // engine_funcs.cpp reads it (EngineFuncsInit):
-    //   dispatch = ResolveAddr(Module::Exe, 0x140151e98);
-    //   fn_External_External = *(fn_t*)dispatch;
-    // So the slot must hold a pointer to the Runtime's External::External.
-    // Mangled: ??0External@Object@@QEAA@XZ (default ctor, public non-virtual).
-    RegisterDispatchSlot(0x140151e98,
-        (uintptr_t)ResolveExport("??0External@Object@@QEAA@XZ"));
-
-    // Object::External::~External — paired dtor for the same dispatch pattern.
-    // engine_funcs.cpp (fn_External_Dtor) and controller_live_base.cpp read slot
-    // 0x140151ea0 the same way.
-    RegisterDispatchSlot(0x140151ea0,
-        (uintptr_t)ResolveExport("??1External@Object@@UEAA@XZ"));
+    // (0x140151e98 ??0External / 0x140151ea0 ??1External: rows deleted at
+    // ENDGAME B.3.9 EXA — their only readers, engine_funcs' fn_External_External
+    // / fn_External_Dtor, had no callers.)
 
     // Object::Base::IsA — dispatch slot 0x140151410, read as `CALL qword ptr [...]`.
     // The slot was bound to exe 0x140002d40, which is NOT IsA (it is
@@ -1402,111 +1388,9 @@ static void* g_storage_KeyMapSingleton = nullptr;       // 0x1401c3de8
 static void* g_storage_GameWorldSingleton = nullptr;    // 0x1401c3dd8
 static void* g_storage_GameSettingsPtr = nullptr;       // 0x1401c3de0
 
-// Defined in standalone/menudialogloopt_stubs.cpp.
-extern void RegisterMenuDialogLoopVtable();
-
-// Defined in standalone/splash_loop_stubs.cpp.
-extern void RegisterSplashDialogLoopVtable();
-
-// Defined in standalone/loader_loop_stubs.cpp.
-extern void RegisterLoaderLoopVtables();
-
-// Defined in standalone/gameupdateloop_stubs.cpp — the in-game simulation loop
-// vtable (0x14015e2f0). Built by NewGameDialog::StartGame on "OK".
-extern void RegisterGameUpdateLoopVtable();
-
-// ============================================================
-// M3.5 Path B session 7 — NoiseUI ImageBuffer vtable scaffolding
-// ============================================================
-// The original exe stores a 10-slot vtable at 0x14015c8c0 that gets installed
-// onto Video::ImageBuffer instances created by NoiseUI / ModDialog / and
-// (per session 7) the Geometry::Serialize heightmap upload helper. Each slot
-// in the original is a thin JMP qword [0x14015XXXX] thunk that the loader
-// fills with Runtime DLL function pointers.
-//
-// In standalone mode we own the storage: WE allocate a 10-slot array, fill it
-// with Runtime exports resolved at boot, and register its address. Code that
-// reads `g_NoiseUI_ImageBufferVtable` (which equals `ResolveAddr(Module::Exe,
-// 0x14015c8c0)`) gets our backing storage and dispatches normally.
-//
-// Slot layout (verified via Ghidra disassembly @ 0x14015c8c0):
-//   [0] +0x00  Dtor             — original 0x1400129D0 (ModDialog_Slot10)
-//   [1] +0x08  TypeName-ish     — JMP [0x140151b20]
-//   [2] +0x10  ?                — JMP [0x140151b28]
-//   [3] +0x18  ?                — JMP [0x140151ae0]
-//   [4] +0x20  ?                — JMP [0x140151240]
-//   [5] +0x28  ?                — JMP [0x140151ae8]
-//   [6] +0x30  ?                — JMP [0x140151b00]
-//   [7] +0x38  ?                — JMP [0x140151b08]
-//   [8] +0x40  ?                — JMP [0x140151b10]
-//   [9] +0x48  Create           — JMP [0x140151a88]  (?Create@ImageBuffer@Video@@)
-//
-// Only slots [0] (dtor) and [9] (Create) are dispatched by code we currently
-// have running in standalone. Other slots are left null — if the engine ever
-// dispatches one and finds it null, the stub will need to be filled with the
-// matching Runtime export. Cascade-risk surface documented in the session 7
-// report. The Runtime exports for the unknown slots can be discovered via
-// Ghidra's `0x14015XXXX` slot pre-loaded values when the Runtime DLL fills
-// them at startup; for now slots [1]..[8] hold a safe no-op.
-static void* g_NoiseUI_ImageBufferVtable_Standalone[10] = {0};
-
-// Forward-decl ImageBuffer dtor type — Runtime exports
-//   ??1ImageBuffer@Video@@UEAA@XZ
-typedef void  (*fn_ImgBuf_Dtor_StandaloneVt_t)(void* self);
-typedef bool  (*fn_ImgBuf_Create_StandaloneVt_t)(
-    void* self, int imageType, int usage, int format,
-    unsigned int mipLevels, int width, int height,
-    int filterMode, int addrU, int addrV, int addrW,
-    void* mipData);
-
-// Safe no-op stub for slots [1]..[8] until they're individually resolved.
-static void* NoiseUIImgBuf_VtblStub_ReturnNull(void* /*self*/, ...) {
-    return nullptr;
-}
-
-// ENDGAME B.3.8 DLG, D9 #12: slot [0] is retail 0x1400129d0, a SCALAR DELETING
-// dtor: `~ImageBuffer` (import [0x140151a78]), then MemFree(this) when flags & 1,
-// and return this. This table used to hold the complete dtor `??1` itself, so a
-// deleting call (Game_ImageCaptureDtor, the ExternalPtr release) never freed the
-// 0x68-byte MemAlloc block. Every builder of this copy allocates with MemAlloc.
-static fn_ImgBuf_Dtor_StandaloneVt_t s_NoiseUIImgBuf_CompleteDtor = nullptr;
-static void* NoiseUIImgBuf_ScalarDeletingDtor(void* self, unsigned flags) {
-    s_NoiseUIImgBuf_CompleteDtor(self);
-    if (flags & 1) fn_MemFreeStatic(self);
-    return self;
-}
-
-extern "C" void RegisterNoiseUIImageBufferVtable() {
-    // Resolve slot [0] = ImageBuffer destructor.
-    fn_ImgBuf_Dtor_StandaloneVt_t fnDtor =
-        reinterpret_cast<fn_ImgBuf_Dtor_StandaloneVt_t>(
-            ResolveExport("??1ImageBuffer@Video@@UEAA@XZ"));
-
-    // Resolve slot [9] = ImageBuffer::Create — vtable +0x48 in the layout.
-    // Mangled name verified via Ghidra:
-    //   ?Create@ImageBuffer@Video@@UEAA_NW4ImageType@12@W4Usage@12@
-    //     W4Format@12@IHHW4FilterMode@12@W4AddressMode@12@44PEAV?$Array@
-    //     V?$Array@E@Collection@@@Collection@@@Z
-    fn_ImgBuf_Create_StandaloneVt_t fnCreate =
-        reinterpret_cast<fn_ImgBuf_Create_StandaloneVt_t>(
-            ResolveExport("?Create@ImageBuffer@Video@@UEAA_NW4ImageType@12@W4Usage@12@W4Format@12@IHHW4FilterMode@12@W4AddressMode@12@44PEAV?$Array@V?$Array@E@Collection@@@Collection@@@Z"));
-
-    s_NoiseUIImgBuf_CompleteDtor = fnDtor;
-    g_NoiseUI_ImageBufferVtable_Standalone[0] =
-        fnDtor ? reinterpret_cast<void*>(&NoiseUIImgBuf_ScalarDeletingDtor) : nullptr;
-    g_NoiseUI_ImageBufferVtable_Standalone[1] = reinterpret_cast<void*>(&NoiseUIImgBuf_VtblStub_ReturnNull);
-    g_NoiseUI_ImageBufferVtable_Standalone[2] = reinterpret_cast<void*>(&NoiseUIImgBuf_VtblStub_ReturnNull);
-    g_NoiseUI_ImageBufferVtable_Standalone[3] = reinterpret_cast<void*>(&NoiseUIImgBuf_VtblStub_ReturnNull);
-    g_NoiseUI_ImageBufferVtable_Standalone[4] = reinterpret_cast<void*>(&NoiseUIImgBuf_VtblStub_ReturnNull);
-    g_NoiseUI_ImageBufferVtable_Standalone[5] = reinterpret_cast<void*>(&NoiseUIImgBuf_VtblStub_ReturnNull);
-    g_NoiseUI_ImageBufferVtable_Standalone[6] = reinterpret_cast<void*>(&NoiseUIImgBuf_VtblStub_ReturnNull);
-    g_NoiseUI_ImageBufferVtable_Standalone[7] = reinterpret_cast<void*>(&NoiseUIImgBuf_VtblStub_ReturnNull);
-    g_NoiseUI_ImageBufferVtable_Standalone[8] = reinterpret_cast<void*>(&NoiseUIImgBuf_VtblStub_ReturnNull);
-    g_NoiseUI_ImageBufferVtable_Standalone[9] = reinterpret_cast<void*>(fnCreate);
-
-    RegisterExeAddr(0x14015c8c0,
-                    reinterpret_cast<uintptr_t>(g_NoiseUI_ImageBufferVtable_Standalone));
-}
+// (The hand-built `Video::ImageBuffer` table registered at 0x14015c8c0 — slots
+// 1-8 returning null — went at ENDGAME B.3.9 EXA: the exe table is the class's
+// own, and every builder constructs the real class.)
 
 static void RegisterVtablesAndTypeIds() {
     // --- Game singleton pointer storage (initialized to null, written at boot) ---
@@ -1514,27 +1398,12 @@ static void RegisterVtablesAndTypeIds() {
     RegisterExeAddr(0x1401c3dd8, reinterpret_cast<uintptr_t>(&g_storage_GameWorldSingleton));
     RegisterExeAddr(0x1401c3de0, reinterpret_cast<uintptr_t>(&g_storage_GameSettingsPtr));
 
-    // --- MenuDialogLoopT vtable (0x14015ed00): the real class's table, read back by
-    //     engine_funcs.cpp (g_MenuDialogLoopT_Vtable) ---
-    RegisterMenuDialogLoopVtable();
-
-    // --- Splash DialogLoaderLoopT vtable (0x140158800): the real class's table,
-    //     read back by engine_funcs.cpp (g_GameLoadDialogLoopT_Vtable) ---
-    // Used by both Dialog\Loading.rsc and Dialog\ShiningRock.rsc instances.
-    RegisterSplashDialogLoopVtable();
-
-    // --- LoaderLoop vtables (0x140158870 inner + 0x1401588d0 outer) ---
-    RegisterLoaderLoopVtables();
-
-    // --- GameUpdateLoop vtable (0x14015e2f0) — in-game simulation loop ---
-    // The real class's table (ENDGAME B.3.8 LOOP), still read back by
-    // engine_funcs.cpp (g_GameUpdateLoop_Vtable), which the dialogs that start a
-    // game stamp onto the freshly-allocated GameUpdateLoop.
-    RegisterGameUpdateLoopVtable();
+    // ENDGAME B.3.9 EXA: the four loop vtable rows (MenuDialogLoopT 0x14015ed00,
+    // GameLoadDialogLoopT 0x140158800, GameLoaderLoop 0x1401588d0, GameUpdateLoop
+    // 0x14015e2f0) are gone: every builder constructs the real class.
 
     // Per-class vtables defined alongside their reimplementation in
     // code/Game/<Module>/<Class>.cpp — declared at file scope above.
-    RegisterStatGoalVtable();
     RegisterOptionsDialogVtable();
     RegisterNewGameDialogVtable();
     RegisterOptionInputBindDialogVtable();
@@ -1591,10 +1460,6 @@ static void RegisterVtablesAndTypeIds() {
     // (NaturalResource +0x78, Citizen +0x20/+0x28/+0x30). Stream-identical to the
     // generic ExternalPtr serialize; reuse the StringTable reimpl body.
     RegisterExeAddr(0x140018020, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_StringTable));
-
-    // M3.5 Path B session 7 — NoiseUI ImageBuffer vtable scaffolding
-    // (used by NoiseUI / ModDialog / Geometry::Serialize image upload helper).
-    RegisterNoiseUIImageBufferVtable();
 }
 
 // ============================================================

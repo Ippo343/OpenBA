@@ -12,40 +12,21 @@
 // and re-run codegen. The per-class file's REGISTER_TYPE takes over.
 
 #include "factory_registration.h"
-#include "options.h"
 #include <cstdio>
 #include <cstdlib>
 
-// Accelerator A (notes/PRELOAD_CASCADES_PLAN.md): when BANISHED_FACTORY_ENUM is
-// set, LogAndReturnNull delegates to FactoryEnumStub (standalone/
-// factory_enum_stub.cpp), which returns a non-crashing skip-deserialize stub so
-// a single run enumerates the WHOLE factory cascade instead of dying on the
-// first missing type. Default OFF -> the original crash behavior below.
-//
 // NOTE: this file is nominally codegen'd by tools/gen_factory_registrations.py,
 // but the generator's CSV is STALE (the committed file was hand-trimmed of all
 // Foundation C/D/E factories without updating the generator's REIMPLEMENTED set,
 // so regenerating re-adds ~160 NullFactory stubs over real factories). Edit this
-// preamble BY HAND; the generator carries a matching edit for documentation only.
-extern "C" void* FactoryEnumStub(const char* typeName);
-
-// Per-type tracing factories. When External::Load calls one of these,
-// we log which type was hit (so we know which real factory to write next)
-// before returning NULL. The NULL return triggers the IsDerivedFrom-NULL
-// crash at Runtime+0xC039A — but the trace tells us what to fix.
+// preamble BY HAND.
+//
+// ENDGAME B.3.9 EXA: the NullFactory machinery (LogAndReturnNull, the
+// REGISTER_NULL_FACTORY{,_FULL} macros, and BANISHED_FACTORY_ENUM's
+// FactoryEnumStub in standalone/factory_enum_stub.cpp) had ZERO expansions left
+// and is deleted; only the abstract-base registrations remain.
 namespace {
     void* NullInPlace(void* /*mem*/) { return nullptr; }
-
-    // Generic stub that logs the name. Each REGISTER_TYPE entry below
-    // points at a unique trampoline that calls this with its typeName.
-    void* LogAndReturnNull(const char* typeName) {
-        static int s_enum = -1;
-        if (s_enum < 0) { const char* e = Opt().factoryEnum; s_enum = (e && *e && e[0] != '0') ? 1 : 0; }
-        if (s_enum) return FactoryEnumStub(typeName);
-        std::fprintf(stderr, "[NullFactory] Hit for type: %s\n", typeName);
-        std::fflush(stderr);
-        return nullptr;
-    }
 
     // Abstract base types. The exe registers these with
     // AutoPickupWork_Factory_Abstract (a _purecall stub) — they are never
@@ -60,13 +41,6 @@ namespace {
     }
 }
 
-// Macro: declares a per-type factory + registers it in one line.
-#define REGISTER_NULL_FACTORY(Name, Parent)                                  \
-    namespace { void* NullFactory_##Name() { return LogAndReturnNull(#Name); } } \
-    REGISTER_TYPE(Name, Parent, &NullFactory_##Name, &NullInPlace)
-#define REGISTER_NULL_FACTORY_FULL(Name, Parent, FileExt)                    \
-    namespace { void* NullFactory_##Name() { return LogAndReturnNull(#Name); } } \
-    REGISTER_TYPE_FULL(Name, Parent, FileExt, &NullFactory_##Name, &NullInPlace)
 // Macro: registers an abstract base type (no concrete factory by design).
 #define REGISTER_ABSTRACT_FACTORY(Name, Parent)                              \
     namespace { void* AbstractFactory_##Name() { return AbstractFactory(#Name); } } \

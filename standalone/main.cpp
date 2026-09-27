@@ -33,6 +33,7 @@
 #include "system/MemoryAllocator.h"   // RtSystemAllocatorSetCutoverArmer
 #include "Game/game_main.h"
 #include "Object/factory_registration.h"
+#include "Goal/StatGoal.h"             // ENDGAME B.3.9 EXA: StatGoal::Vtable() for the self-test
 // WAVE 11 follow-up 5 (lane TINFO): the BaseTypeInfo::factoryFn dispatch census.
 
 // Wave 9 lane N's work-scheduler probe tally (code/Game/Action/action_base_complete.cpp).
@@ -721,8 +722,13 @@ struct FieldCheck {
     const char* name;
 };
 
+// `expectedVtable` is the class's COMPILER table (`X::Vtable()`): the test asks
+// "did the factory build THIS class", an identity question (B38_RULES D5). It
+// used to take the retail table address and read it back through the address
+// registry, which only served the compiler table because a RegisterExeAddr row
+// existed for this test alone (ENDGAME B.3.9 EXA deleted it).
 static bool RunFactorySelfTest(const char* typeName,
-                               uintptr_t expectedVtableExeAddr,
+                               const void* expectedVtable,
                                size_t expectedSize,
                                const FieldCheck* fields, size_t fieldCount) {
     printf("\n[SelfTest %s] start\n", typeName);
@@ -775,12 +781,10 @@ static bool RunFactorySelfTest(const char* typeName,
     printf("[SelfTest %s]   factory returned %p\n", typeName, obj);
 
     // Validate vtable
-    uintptr_t expectedVt = ResolveAddr(Module::Exe, expectedVtableExeAddr);
     void* actualVt = *(void**)obj;
-    if ((uintptr_t)actualVt != expectedVt) {
-        printf("[SelfTest %s] FAIL: vtable %p != expected %p (exe 0x%llx)\n",
-               typeName, actualVt, (void*)expectedVt,
-               (unsigned long long)expectedVtableExeAddr);
+    if (actualVt != expectedVtable) {
+        printf("[SelfTest %s] FAIL: vtable %p != expected %p (the class's compiler table)\n",
+               typeName, actualVt, expectedVtable);
         return false;
     }
     printf("[SelfTest %s]   vtable OK (%p)\n", typeName, actualVt);
@@ -949,7 +953,7 @@ extern "C" void RunStartupSelfTests() {
         { 0x78, 0x20, 4, "statFlags" },
         { 0x7c, 1,    4, "statSubType" },
     };
-    RunFactorySelfTest("StatGoal", 0x1401604c0, 0x80,
+    RunFactorySelfTest("StatGoal", StatGoal::Vtable(), 0x80,
                        statGoalFields, sizeof(statGoalFields)/sizeof(*statGoalFields));
 
     DumpVideoState();

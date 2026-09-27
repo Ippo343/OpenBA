@@ -242,9 +242,8 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded() {
 // ENDGAME B.3.8 block LOOP: the old hand-built `g_menuDialogLoopVtable[13]`'s
 // stub bodies, moved into the real class's members unchanged.
 
-// 0x14009bb00 — was the inline `MenuDialogLoopT_Ctor` (engine_funcs.h), which
-// the two unconverted construction sites (mainmenudialog.cpp, tutorialui.cpp)
-// still use; this is the same body with the vtable store the compiler's.
+// 0x14009bb00 — the body the inline `MenuDialogLoopT_Ctor` (engine_funcs.h,
+// deleted at B.3.9 EXA) duplicated, with the vtable store the compiler's.
 MenuDialogLoopT::MenuDialogLoopT(const System::String& filename)
     : Engine::DialogLoopT(filename) {
     fn_Random_Default_Ctor(&_random);     // System::Random at +0x168
@@ -800,12 +799,6 @@ Object::InternalPtr<UI::DialogInstance>* MenuDialogLoopT::CreateLoopDialog(
         MainMenuDialog_FromMenuDLT(this, retPtr));
 }
 
-// B38_RULES D5: `Vtable()` is the COMPILER's table; 0x14015ed00 keeps serving
-// it while the inline `MenuDialogLoopT_Ctor` (engine_funcs.h, used by
-// mainmenudialog.cpp and tutorialui.cpp) stamps g_MenuDialogLoopT_Vtable.
+// B38_RULES D5: `Vtable()` is the COMPILER's table. ENDGAME B.3.9 EXA: the
+// 0x14015ed00 registration went with the inline door-then-stamp builder.
 DEFINE_EXE_VTABLE(MenuDialogLoopT, "_ZTV15MenuDialogLoopT")
-
-// Called from address_registry.cpp's RegisterVtablesAndTypeIds().
-void RegisterMenuDialogLoopVtable() {
-    RegisterExeAddr(0x14015ed00, reinterpret_cast<uintptr_t>(MenuDialogLoopT::Vtable()));
-}

@@ -49,6 +49,7 @@
 #include <cstddef>
 #include <cstring>
 #include <type_traits>
+#include <utility>
 
 namespace {
 
@@ -339,6 +340,20 @@ UNIT_TEST(wrk_gettarget_raw_call_order) {
     CHECK(r == &buf);
     CHECK(probe.seenThis == &probe);
     CHECK_EQ(buf, (uint64_t)0x5a5a);
+}
+
+// ENDGAME B.3.9 EXA: ClearArea's parameterised ctor (0x1400e6960 = Work_Ctor25 +
+// the leaf stores) is a real constructor; the ClearArea / orchard builders write
+// `::new (MemAlloc(0x78, 8)) ClearArea(&entity, descRef, trees, ground, buildings)`.
+template <typename T, typename... A>
+using ExaNew = decltype(::new (std::declval<void*>()) T(std::declval<A>()...));
+template <typename, typename T, typename... A> struct ExaCanNew : std::false_type {};
+template <typename T, typename... A>
+struct ExaCanNew<std::void_t<ExaNew<T, A...>>, T, A...> : std::true_type {};
+
+UNIT_TEST(wrk_cleararea_parameterised_ctor) {
+    CHECK((ExaCanNew<void, ClearArea, void*, uint64_t, uint8_t, uint8_t, uint8_t>::value));
+    CHECK((ExaCanNew<void, ClearArea>::value));
 }
 
 }  // namespace

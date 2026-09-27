@@ -42,8 +42,6 @@
 // Object::InternalBasePtr::DeletePtr -- via export
 static void (*s_fn_IBP_DeletePtr)(void* ibp) = nullptr;
 
-// Object::Internal::~Internal -- via IAT at 0x140152770
-static void (*s_fn_ObjectInternal_Dtor)(void* self) = nullptr;
 
 // Entity_FindComponent_Family (0x1400012d0)
 static void* (*s_fn_FindFamily)(void* entity, void* outIBP) = nullptr;
@@ -103,9 +101,6 @@ bool PerformWork_ResolveFuncs() {
     // IBP::DeletePtr
     s_fn_IBP_DeletePtr = (void(*)(void*))fn_InternalBasePtr_DeletePtr;
 
-    // Object::Internal::~Internal via IAT at [0x140152770]
-    uintptr_t iatDtor = ResolveAddr(Module::Exe, 0x140152770);
-    if (iatDtor) s_fn_ObjectInternal_Dtor = *reinterpret_cast<void(**)(void*)>(iatDtor);
 
     // FindFamily (0x1400012d0)
     s_fn_FindFamily = reinterpret_cast<void*(*)(void*, void*)>(
@@ -162,7 +157,6 @@ bool PerformWork_ResolveFuncs() {
     }
 
     bool ok = s_fn_IBP_DeletePtr &&
-              s_fn_ObjectInternal_Dtor &&
               s_fn_FindFamily &&
               s_fn_SetAnimation && s_fn_SetFacingDirection &&
               s_fn_FromYawPitch && s_fn_CitizenBreakCheck &&
@@ -182,7 +176,6 @@ bool PerformWork_ResolveFuncs() {
             s_reported = true;
             struct { const char* name; const void* p; } kDeps[] = {
                 { "IBP_DeletePtr",         (const void*)s_fn_IBP_DeletePtr },
-                { "ObjectInternal_Dtor",   (const void*)s_fn_ObjectInternal_Dtor },
                 { "FindFamily",            (const void*)s_fn_FindFamily },
                 { "SetAnimation",          (const void*)s_fn_SetAnimation },
                 { "SetFacingDirection",    (const void*)s_fn_SetFacingDirection },

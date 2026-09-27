@@ -7,6 +7,9 @@
 // dialog_controller_vtable.cpp inherit-fill are gone. Field map: the header.
 
 #include "Tutorial/TutorialUI.h"
+#include "Game/MenuDialogLoopT.h"       // ENDGAME B.3.9 EXA: the real loop classes
+#include "Game/GameLoadDialogLoopT.h"
+#include "Game/GameLoaderLoop.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
@@ -110,39 +113,27 @@ void TutorialUI::QuitTutorial() {
 
     // --- Step 1: Allocate and construct the MenuDialogLoopT (0xc00 bytes) ---
     // This is the main menu dialog loop that will display after the loading screen.
+    // ENDGAME B.3.9 EXA: the real class (ctor 0x14009bb00, which retail CALLs).
     void* menuLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xc00, 8);
-    void* pMenuLoop = nullptr;
+    Engine::UpdateLoop* pMenuLoop = nullptr;
     if (menuLoop) {
         System::String menuNameStr("Dialog/MainMenu.rsc");
-        MenuDialogLoopT_Ctor(menuLoop, &menuNameStr);
-        pMenuLoop = menuLoop;
+        pMenuLoop = ::new (menuLoop) MenuDialogLoopT(menuNameStr);
     }
 
     // --- Step 2: Allocate and construct the GameLoadDialogLoopT (0xb60 bytes) ---
     // Wraps the menu loop; shows "Dialog/Loading.rsc" while the menu is loading.
+    // The real class: its ctor is the subclass init retail inlines here.
     void* dlLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xb60, 4);
-    void* pDlLoop = nullptr;
+    Engine::UpdateLoop* pDlLoop = nullptr;
     if (dlLoop) {
         // Delay constant is 1.0f (DAT_14017214c — bytes 0x3f800000).
-        uint64_t delayTime[1];
-        fn_Time_Ctor_Float((void*)delayTime, 1.0f);
+        uint64_t delayTime = 0;
+        fn_Time_Ctor_Float(&delayTime, 1.0f);
 
         System::String loadingNameStr("Dialog/Loading.rsc");
-        fn_DialogLoaderLoopT_Ctor(dlLoop, &loadingNameStr, pMenuLoop, (void*)delayTime);
-
-        // Patch vtable to exe subclass (GameLoadDialogLoopT)
-        *(void**)dlLoop = (void*)g_GameLoadDialogLoopT_Vtable;
-
-        // Initialize extra fields added by the exe subclass
-        uintptr_t dl = (uintptr_t)dlLoop;
-        *(uint32_t*)(dl + 0x188) = 0xff000000;
-        *(uint32_t*)(dl + 0x18c) = 0xff000000;
-        *(uint8_t*)(dl  + 0x190) = 0;   // [400] = 0
-        fn_Random_Default_Ctor((void*)(dl + 0x194));
-        *(uint64_t*)(dl + 0xb58) = 0;
-        *(uint8_t*)(dl  + 0x40)  = 0;   // m_autoAdvance = 0 (see LoaderLoop.h)
-
-        pDlLoop = dlLoop;
+        pDlLoop = ::new (dlLoop) GameLoadDialogLoopT(
+            loadingNameStr, pMenuLoop, *reinterpret_cast<const System::Time*>(&delayTime));
     }
 
     // --- Step 3: Allocate and construct the outer GameLoaderLoop (0x48 bytes) ---
@@ -150,12 +141,10 @@ void TutorialUI::QuitTutorial() {
     void* outerLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 4);
     void* pOuterLoop = nullptr;
     if (outerLoop) {
-        uint64_t zeroTime[1];
-        fn_Time_Ctor_Float((void*)zeroTime, 0.0f);
-        fn_LoaderLoop_Ctor(outerLoop, pDlLoop, (void*)zeroTime);
-        // Patch vtable to exe subclass (GameLoaderLoop)
-        *(void**)outerLoop = (void*)g_GameLoaderLoop_Vtable;
-        pOuterLoop = outerLoop;
+        uint64_t zeroTime = 0;
+        fn_Time_Ctor_Float(&zeroTime, 0.0f);
+        pOuterLoop = ::new (outerLoop) GameLoaderLoop(
+            pDlLoop, *reinterpret_cast<const System::Time*>(&zeroTime));
     }
 
     // --- Step 4: Set cursor, fullscreen fade to black, and queue next loop ---

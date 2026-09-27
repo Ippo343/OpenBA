@@ -141,7 +141,7 @@ bool CreateRawMaterial_ResolveFuncs() {
               s_fn_GetChildEntities && s_fn_FindComponent_RD &&
               s_typeId_1401c7158 && s_typeId_ComponentEntity &&
               s_typeId_RawMatDesc && s_typeId_1401c7c80 && s_typeId_1401c8118 &&
-              fn_ObjectInternal_Dtor && fn_InternalBasePtr_DeletePtr &&
+              fn_InternalBasePtr_DeletePtr &&
               fn_MemFreeStatic &&
               fn_InternalBasePtr_Ctor && fn_IsDerivedFrom &&
               g_pGameWorldSingleton && fn_MemAlloc && g_pMemAllocSingleton;

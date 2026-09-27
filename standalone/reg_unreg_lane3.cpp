@@ -146,8 +146,8 @@ void RegisterUnregLane3() {
     // (MapUI::SetupImage never bound its minimap textures). So registering the
     // exe slots here changes NOTHING for those four — same Runtime function
     // pointer either way — but completes the PE table faithfully.
-    RegisterLane3Slot(0x140151838,
-        (uintptr_t)ResolveExport("??0MaterialInstance@Graphics@@QEAA@XZ"));
+    // (0x140151838 ??0MaterialInstance: row deleted at ENDGAME B.3.9 EXA — its
+    // one reader, engine_funcs' fn_MaterialInstance_Ctor, went with the builders.)
     RegisterLane3Slot(0x140151870,
         (uintptr_t)ResolveExport("?SetMaterial@MaterialInstance@Graphics@@QEAAXV?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z"));
     RegisterLane3Slot(0x140151878,

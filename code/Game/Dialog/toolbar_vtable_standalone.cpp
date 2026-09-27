@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <cstdio>
 #include "Component/ToolbarDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Game/Toolbar.h"                    // B.3.9 EXA: Toolbar::TypeId()
 
 // Idempotent: fill the toolbar type-id globals. Called from GameUpdateLoop::Startup
 // before the toolbar is built. Must run AFTER Engine::Startup (the type ids are the
@@ -42,7 +43,7 @@ extern "C" void ToolbarStandalone_Init() {
     // only knows our exe-side REGISTER_TYPE list and would return 0 for the UI types.
     static uint32_t s_tid_Toolbar = 0, s_tid_ToolbarDesc = 0, s_tid_Button = 0,
                     s_tid_Image = 0, s_tid_Check = 0, s_tid_Text = 0;
-    s_tid_Toolbar     = ::Object::ResolveTypeIdByNameLazy("Toolbar");
+    s_tid_Toolbar     = Toolbar::TypeId();   // B.3.9 EXA: the class's own record (was by name)
     s_tid_ToolbarDesc = ToolbarDescription::TypeId();
     s_tid_Button      = ::Object::ResolveTypeIdByNameLazy("ButtonElement");
     s_tid_Image       = ::Object::ResolveTypeIdByNameLazy("ImageElement");
