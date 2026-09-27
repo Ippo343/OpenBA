@@ -285,7 +285,6 @@ std::atomic<void*> g_videoDeviceSlot{nullptr};
 std::atomic<void*> g_applicationSlot{nullptr};
 std::atomic<void*> g_inputConfigSlot{nullptr};
 std::atomic<void*> g_memFreeSlot{nullptr};
-std::atomic<void*> g_memAllocSlot{nullptr};
 inline const double* TimerSecondsPerTick() {
     return static_cast<const double*>(
         rtuielem::AtomicExport(g_sptSlot, "?_secondsPerTick@Timer@System@@0NA"));
@@ -1446,25 +1445,6 @@ extern "C" void RtUi_UserInterface_Dtor(UserInterface* self) {
 
 namespace {
 
-// The two EXPORTED IO vtables, through the never-caches-a-null data door.
-// ENDGAME B.3.6 (RULE B6-5): namespace-scope atomic slots, not function-local
-// statics — `VtblIoEncoding`'s old `static void* v` was exactly the non-atomic
-// first-call cache the rule removes.
-std::atomic<void*> g_vtIoStreamSlot{nullptr};
-std::atomic<void*> g_vtIoMemStreamSlot{nullptr};
-inline const void* VtblIoStream() {
-    return rtuielem::AtomicExport(g_vtIoStreamSlot, "??_7Stream@IO@@6B@");        // 0x1801549a0
-}
-inline const void* VtblIoMemoryStream() {
-    return rtuielem::AtomicExport(g_vtIoMemStreamSlot, "??_7MemoryStream@IO@@6B@"); // 0x1801555b0
-}
-
-inline void* UiMemAllocA(size_t n, int align) {
-    using Fn = void* (*)(size_t, int);
-    return reinterpret_cast<Fn>(rtuielem::AtomicExport(
-        g_memAllocSlot, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"))(n, align);
-}
-
 // `IO::Serializer` — {Stream*, ReaderWriter*}, 0x10 bytes
 // (runtime/types/io/Serializer.h). Built on the stack twice per controller.
 struct UiSerializer { void* stream; void* rw; };
@@ -1479,58 +1459,45 @@ void UI::UserInterface::SaveAllSettings() {
     uint8_t* node = *reinterpret_cast<uint8_t**>(this);   // _dialogs._head
     if (!node) return;
 
-    const void* vtStream = VtblIoStream();
-    const void* vtMem    = VtblIoMemoryStream();
-
     do {
         uint8_t* dlg = *reinterpret_cast<uint8_t**>(node);
         if (*reinterpret_cast<void**>(dlg + 0xa8) != nullptr) {
-            // ---- 1. the inlined IO::MemoryStream ---------------------------
-            RtIo::MemoryStream st;
-            st.base.vptr     = vtStream;
-            st.base.direction = 0;
-            st.base.encoding = nullptr;
-            st.base.vptr     = vtMem;
-            st.data          = nullptr;
-            st.ownsData      = 0;
-            st.cursor        = 0;      // the one qword at +0x24 covers both
-            st.size          = 0;
-
-            // ---- 2. the 8-byte IO::Encoding -------------------------------
-            void* enc = UiMemAllocA(8, 4);
-            if (enc) ::new (enc) IO::BinaryEncoding();   // B.3.9 IO: the real class
-            // Retail frees the PREVIOUS encoding before installing this one.
-            // It is always null at this point; the store order is retail's.
-            if (void* oldEnc = st.base.encoding) UiMemFree(oldEnc);
-            st.base.encoding = enc;
+            // ---- 1+2. the inlined IO::MemoryStream and its 8-byte encoding -
+            // ENDGAME B.3.9 IO (foreign site, IO's class): retail's inlined
+            // ??0MemoryStream is the class's real constructor -- the Stream
+            // base, the field stores, MemAlloc(8,4) + the Binary encoding (null
+            // on a failed allocation), the dead free of the previous one.
+            alignas(IO::MemoryStream) unsigned char stMem[sizeof(IO::MemoryStream)];
+            IO::MemoryStream* const st = ::new (static_cast<void*>(stMem)) IO::MemoryStream();
+            void* enc = st->_encoding;
 
             // ---- 3. point the stream at the dialog's settings buffer ------
             const int32_t size = *reinterpret_cast<int32_t*>(dlg + 0xb0);
             void*         buf  = *reinterpret_cast<void**>(dlg + 0xa8);
-            st.data      = buf;
-            st.size      = static_cast<uint32_t>(size);
-            st.cursor    = 0;
-            st.base.direction = 1;
+            st->_data      = buf;
+            st->_size      = static_cast<uint32_t>(size);
+            st->_cursor    = 0;
+            st->_direction = 1;
             if (size >= 4) {
                 *reinterpret_cast<uint32_t*>(buf) = 0xdeadbeefu;
-                st.cursor += 4;
+                st->_cursor += 4;
             }
 
             // ---- 4. the top-level ReaderWriter ----------------------------
-            UiSerializer ser{ &st, nullptr };
+            UiSerializer ser{ st, nullptr };
             void* rw = nullptr;
             if (enc) {
                 void** encVt = *reinterpret_cast<void***>(enc);
                 UiCreateRwFn make = reinterpret_cast<UiCreateRwFn>(
-                    st.base.direction != 0 ? encVt[4]    // +0x20 CreateWriter
-                                           : encVt[3]);  // +0x18 CreateReader
+                    st->_direction != 0 ? encVt[4]    // +0x20 CreateWriter
+                                        : encVt[3]);  // +0x18 CreateReader
                 rw = make(enc, &ser, nullptr);
             }
             ser.rw = rw;
 
             // ---- 5. the dialog's own OnSerializeSettings ------------------
             // DialogInstance vtable slot 9 (+0x48) — VIRTUAL.
-            reinterpret_cast<UI::DialogInstance*>(dlg)->OnSerializeSettings(&st);   // B.3.6 bridge
+            reinterpret_cast<UI::DialogInstance*>(dlg)->OnSerializeSettings(st);   // B.3.6 bridge
 
             // ---- 6. the controller loop -----------------------------------
             int32_t count = *reinterpret_cast<int32_t*>(dlg + 0x80);
@@ -1549,12 +1516,12 @@ void UI::UserInterface::SaveAllSettings() {
                         (*reinterpret_cast<void***>(rw))[19])(rw, &id, nullptr); // +0x98
                 }
 
-                UiSerializer ser2{ &st, nullptr };
+                UiSerializer ser2{ st, nullptr };
                 void* rw2 = nullptr;
                 if (enc) {
                     void** encVt = *reinterpret_cast<void***>(enc);
                     UiCreateRwFn make2 = reinterpret_cast<UiCreateRwFn>(
-                        st.base.direction != 0 ? encVt[4] : encVt[3]);
+                        st->_direction != 0 ? encVt[4] : encVt[3]);
                     rw2 = make2(enc, &ser2, nullptr);
                 }
                 ser2.rw = rw2;
@@ -1564,7 +1531,7 @@ void UI::UserInterface::SaveAllSettings() {
                 ctl = *reinterpret_cast<void**>(arr + i * 8);
                 // DialogController vtable slot 10 (+0x50) `OnSerializeSettings`
                 // (B6-1.2: one slot LATER than DialogInstance's) — VIRTUAL.
-                reinterpret_cast<UI::DialogController*>(ctl)->OnSerializeSettings(&st); // B.3.6 bridge
+                reinterpret_cast<UI::DialogController*>(ctl)->OnSerializeSettings(st); // B.3.6 bridge
 
                 if (rw2) {
                     reinterpret_cast<UiDelDtorFn>(
@@ -1577,10 +1544,9 @@ void UI::UserInterface::SaveAllSettings() {
                 reinterpret_cast<UiDelDtorFn>(
                     (*reinterpret_cast<void***>(rw))[0])(rw, 1);
             }
-            st.base.vptr = vtMem;
-            if (st.ownsData != 0 && st.data) UiMemFree(st.data);   // dead: never owns
-            st.base.vptr = vtStream;
-            if (st.base.encoding) UiMemFree(st.base.encoding);
+            // ~MemoryStream (dead buffer free: never owns) then ~Stream (the
+            // encoding): the class's destructor chain, no free of the storage.
+            st->IO::MemoryStream::DeletingDtor(0);
         }
         node = *reinterpret_cast<uint8_t**>(node + 0x10);
     } while (node);

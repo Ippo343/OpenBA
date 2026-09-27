@@ -180,8 +180,6 @@ void CallStreamCloseVirtual(MemoryStream* ms) {
 
 }  // namespace
 
-static const void* VtblMemoryStream();
-
 // ============================================================================
 // ??0CompressedMemoryStream@IO@@QEAA@XZ   retail 0x1800a9520, profile 0x18005c240
 // ============================================================================
@@ -425,27 +423,8 @@ RtIo_CompressedMemoryStream_GetMemoryStream(CompressedMemoryStream* self) {
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module module, uintptr_t ghidraAddr);
 
-static const void* VtblMemoryStream() {
-    static const void* v = ResolveExport("??_7MemoryStream@IO@@6B@");
-    return v;
-}
-
 using MemAllocFn = void* (*)(uint64_t, int);
 using MemFreeFn  = void  (*)(void*);
-
-// ??1MemoryStream's body, factored out so the oracle below can run it on a
-// scratch object WITHOUT re-entering the diff guard. Calling the registered
-// entry point recursively would recurse forever — the same shape lane V2 caught
-// in widgets_layout.cpp's RemoveGraphs, where a blanket door conversion would
-// have made a function resolve to itself.
-static void MemoryStreamDtorBody(MemoryStream* self) {
-    self->base.vptr = VtblMemoryStream();
-    if (self->ownsData && self->data != nullptr)
-        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(self->data);
-    self->base.vptr = VtblStream();
-    if (self->base.encoding != nullptr)
-        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(self->base.encoding);
-}
 
 // ?Open@MemoryStream@IO@@QEAA_NH@Z — 0x1800ae670.
 //
@@ -560,58 +539,17 @@ extern "C" bool RtIo_MemoryStream_Create(MemoryStream* self, int size) {
 
 // ??1MemoryStream@IO@@UEAA@XZ — 0x1800ae890.
 //
-// Retail, in order:
-//     vptr = &MemoryStream::_vftable_      // the MSVC "run the dtor under this
-//                                          // class's own vtable" idiom
-//     if (_ownsData && _data) MemFree(_data);
-//     vptr = &Stream::_vftable_            // the inlined ~Stream
-//     if (_encoding)          MemFree(_encoding);
+// Retail: vptr = MemoryStream's; if (_ownsData && _data) MemFree(_data);
+// vptr = Stream's; if (_encoding) MemFree(_encoding). _data and _encoding are
+// left holding freed pointers.
 //
-// It writes exactly ONE field — the vptr, twice — and frees at most two blocks.
-// _data and _encoding are left holding freed pointers; retail does not null
-// them and neither does MemoryStreamDtorBody above. The object is dead, and
-// nulling would show up as a divergence against the shipped bytes for no gain.
-//
-// The two MemFree calls are the inlined `?MemFree@MemoryAllocator@System@@SAXPEAX@Z`
-// (0x1800c7ad0), whose whole body is `if (p) { lock; Free(_singleton,p); unlock; }`.
-// Retail reaches it through FUN_180006a10, a SECOND un-exported copy of those
-// same instructions — this file's comment at :313 already records that pair.
-// Calling the exported name is the same code and is the one lane E's allocator
-// port replaces.
-//
-// ORACLE: A/B ON TWO SCRATCH OBJECTS, and why it is not a replay is the point.
-// A destructor cannot be replayed: running theirs after ours double-frees both
-// blocks, and suppressing the frees (nulling _data and _encoding first, the way
-// this wave does for Video::ImageBuffer::PlatformDestruct) would leave nothing
-// to compare, because the only field either body writes is the vptr and it is
-// written unconditionally. So two identical scratch streams are built with the
-// DLL's constructor and OPENED with the DLL's Open — which sets _ownsData, so
-// the branch that actually matters runs on both sides. That is the
-// EFFECTIVENESS control, not decoration: without the Open, both bodies would
-// skip the first free and the comparison would be green over an untaken branch
-// (reference_probe_needs_an_effectiveness_control.md). Ours destroys one,
-// theirs destroys the other, and the post-states are compared on every byte
-// except the two heap pointers.
-//
-// WHAT THIS DOES NOT PROVE, stated rather than implied: that both bodies freed
-// the same blocks. Two frees per side are not observable from here. What IS
-// checked is the branch decision that selects them and the vptr sequence — the
-// two things a wrong destructor gets wrong, and the pair that
-// reference_phantom_dtor_mangling_qeaa_vs_ueaa.md is about.
+// ENDGAME B.3.9 IO: that is `IO::MemoryStream::~MemoryStream` followed by
+// `~Stream` (Stream.h). The door STAYS for its by-name callers
+// (CompressedMemoryStream's dtor above, Object::Internal::Clone, the dialog
+// settings load) and is one non-virtual slot-0 call with flags 0: the
+// destructor chain, no free (B9-6).
 extern "C" void RtIo_MemoryStream_Dtor(MemoryStream* self) {
-
-    alignas(16) unsigned char oursScratch[sizeof(MemoryStream)];
-    alignas(16) unsigned char theirsScratch[sizeof(MemoryStream)];
-
-    // EFFECTIVENESS CONTROL, on the LIVE object rather than the scratch. The
-    // scratch pair is deliberately constructed so both frees always run, which
-    // is what makes the A/B comparison meaningful -- but it says nothing about
-    // whether the live stream this call is actually destroying was ever opened.
-    // A run where every live call had _ownsData == false would report the same
-    // green number over a branch the real objects never take.
-
-    MemoryStreamDtorBody(self);
-
+    reinterpret_cast<IO::MemoryStream*>(self)->IO::MemoryStream::DeletingDtor(0);
 }
 
 // ============================================================================
@@ -724,18 +662,13 @@ void ConstructEncoding(Stream* base) {
 }
 
 
+// ??0MemoryStream@IO@@QEAA@XZ (0x1800ae710). ENDGAME B.3.9 IO: the body is
+// `IO::MemoryStream`'s real constructor (Stream.h). The door STAYS: it is
+// reached by name on raw storage from CompressedMemoryStream's ctor (above),
+// Save::SaveLoad::SaveMetaData, Object::Internal::Clone, the dialog-settings
+// load and PackageFile::ReadPackfile -- one placement new (B9-6).
 extern "C" MemoryStream* RtIo_MemoryStream_Ctor(MemoryStream* self) {
-
-    self->base.vptr      = VtblStream();          // the inlined IO::Stream ctor
-    self->base.direction = 0;
-    self->base.encoding  = nullptr;
-    self->base.vptr      = VtblMemoryStream();
-    self->data           = nullptr;
-    self->ownsData       = 0;                     // BYTE store in retail
-    self->cursor         = 0;                     // retail: ONE qword over
-    self->size           = 0;                     //   +0x24..+0x2b
-    ConstructEncoding(&self->base);
-
+    ::new (static_cast<void*>(self)) IO::MemoryStream();
     return self;
 }
 

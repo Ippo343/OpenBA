@@ -1057,7 +1057,6 @@ int RtMintRegisterPromotedRows() {
     // READY and unpromoted since Wave 17; see WAVE19_LANE_IOBASE.md for the
     // route question, which is answered there and is NOT answered by this
     // comment.
-    PromoteVtableGuarded("??_7MemoryStream@IO@@6B@", 0x1801555b0ull, &n);
 
     // ---- ??_7BinaryWriter@IO@@6B@ — the row that was READY since Wave 17 ----
     //

@@ -120,7 +120,6 @@ extern int RtIoFileSystemOpenFileRegister();  // filesystem_openfile_win.cpp (la
 // switch because it sits UNDER CompressedStream::Open -- every stream read in
 // the packfile header path goes through it, so the integrator must be able to
 // remove exactly it if a boot regresses.
-extern int RtIoMemoryStreamRegister();        // memory_stream.cpp (lane PKG2)
 // Wave 9 lane PKG2 rung 4b-iii: CompressedStream::Release and ~CompressedStream.
 // LANE W'S ROWS. ~CompressedStream is a LIVE blocker today, not just at
 // cutover: lane W's ported ~CompressedMemoryStream tail-jumps into it.
@@ -258,7 +257,6 @@ void RtIoPortInit() {
     n += RtIoPackageFileSerializeRegister();
     n += RtIoCompressedStreamReadRegister();
     n += RtIoFileSystemOpenFileRegister();
-    n += RtIoMemoryStreamRegister();
     n += RtIoCompressedStreamReleaseRegister();
     n += RtIoCompressedStreamOpenRegister();
     n += RtIoPackageFileReadRegister();

@@ -111,6 +111,11 @@
 // with `sizeof(T)` = 0x30 (MemoryStream), 0x30 (BinaryReader), 0x28 (Visitor),
 // 0x18 (VisitorStream), matching each type header's `static_assert`.
 //
+// ENDGAME B.3.9 IO: all four are now the classes' own inline `DeletingDtor`
+// overrides (Stream.h, Serializer.h, FileStream.h) and the `flags & 2` arm IS
+// retail's vector delete; the abort below and its helper are gone. The
+// paragraph is kept as the record of what the arm used to be.
+//
 // **THE `flags & 2` ARM IS A NAMED ABORT, NOT A PORT — and that is a declared
 // divergence.** ENC-2 took the same position for BinaryWriter and gave the
 // reason for BinaryWriter only. Re-derived here per class rather than
@@ -260,16 +265,6 @@ namespace RtIo {
 
 namespace {
 
-using MemFreeFn  = void  (*)(void*);
-using VoidThisFn   = void  (*)(void*);
-
-inline void MemFree(void* p) {
-    // Null-tested INSIDE the callee in retail; handing it a null is faithful.
-    RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
-}
-
-// The one place the `flags & 2` divergence is spelled, so the four call sites
-// cannot drift apart and the message always names its own class.
 // Collection::Array<Mod>::~Array, 0x180010b80. Already ported by lane MOD
 // (modification.cpp:573) and registered BY ADDRESS at :905, so the address
 // door — which is registry-first — reaches our body.
@@ -279,19 +274,6 @@ inline void ArrayModDtor(void* arrayField) {
     if (!fn) fn = reinterpret_cast<ArrayDtorFn>(
                       ResolveAddr(Module::Runtime, 0x180010b80ull));
     fn(arrayField);
-}
-
-[[noreturn]] void ArrayArmUnreachable(const char* cls, const char* producer) {
-    std::fprintf(stderr,
-        "\n[RtIo] FATAL: %s deleting dtor reached with flags&2 (delete[]).\n"
-        "[RtIo] No code path array-allocates a %s: %s\n"
-        "[RtIo] writes no array cookie, so the 8 bytes at this-8 are heap\n"
-        "[RtIo] metadata, not a count. Reaching here means a wrong-typed\n"
-        "[RtIo] pointer arrived, or a producer exists that Wave 19 lane\n"
-        "[RtIo] IOBASE did not find -- see WAVE19_LANE_IOBASE.md.\n\n",
-        cls, cls, producer);
-    std::fflush(stderr);
-    std::abort();
 }
 
 }  // namespace
@@ -329,36 +311,6 @@ extern "C" void* RtIo_Stream_GetSource(const void* self, void** ret) {
 extern "C" int32_t RtIo_Stream_GetDirection(const void* self) {
     return static_cast<int32_t>(
         reinterpret_cast<const IO::Stream*>(self)->GetDirection());
-}
-
-// ===========================================================================
-// MemoryStream vector deleting destructor   0x1800242a0   — vtable slot 0
-// ===========================================================================
-// ~MemoryStream ITSELF WAS ALREADY IN THE TREE and this lane nearly rewrote it.
-// `runtime/src/io/compressedstream.cpp:657` (Wave 9 lane W) holds
-// `RtIo_MemoryStream_Dtor`, registered under BOTH doors at :963-965, and it
-// carries a diff oracle. My duplicate got as far as the LINKER, which reported
-// it as `multiple definition` — the grep did not catch it because I searched
-// for the mangled name and the ADDRESS and found only comments; the body is
-// spelled `RtIo_MemoryStream_Dtor` in a file whose name says CompressedStream.
-// (reference_grep_for_the_port_before_writing_it.md, and the diff table
-// catching it rather than review.)
-//
-// So this is the missing COMPLEMENT, not a rewrite — and lane W said so in
-// advance at compressedstream.cpp:966-971: "??_7MemoryStream@IO@@6B@ slot 0 is
-// the DELETING destructor thunk (0x1800242a0), NOT this body, so registering
-// ??1 does not change what a virtual `delete` dispatches to." This body is what
-// that note was waiting for. It reaches lane W's ~MemoryStream through the
-// EXPORT door, exactly as compressedstream.cpp:330 does, so a future change to
-// that body is picked up here and there is one implementation, not two.
-extern "C" void* RtIo_MemoryStream_DeletingDtor(MemoryStream* self, unsigned int flags) {
-    if (flags & 2u)
-        ArrayArmUnreachable("MemoryStream",
-                            "every producer stack-constructs one or embeds it "
-                            "at CompressedMemoryStream+0x68, which");
-    RT_EXPORT_ONCE(VoidThisFn, "??1MemoryStream@IO@@UEAA@XZ")(self);
-    if (flags & 1u) MemFree(self);
-    return self;
 }
 
 // ===========================================================================
@@ -454,10 +406,6 @@ int RtIoBaseVtablesRegister() {
     RegisterRuntimeExport("?GetDirection@Stream@IO@@QEBA?AW4Direction@12@XZ",
                           (void*)&RtIo_Stream_GetDirection); ++n;
     RegisterRuntimeAddr(0x180006200, (void*)&RtIo_Stream_GetDirection);
-
-    // ---- MemoryStream ------------------------------------------------------
-    // ??1MemoryStream is lane W's, registered in compressedstream.cpp:963.
-    RegisterRuntimeAddr(0x1800242a0, (void*)&RtIo_MemoryStream_DeletingDtor); ++n;
 
     // ---- IO::Modification ---------------------------------------------------
     RegisterRuntimeExport("??1Modification@IO@@QEAA@XZ",

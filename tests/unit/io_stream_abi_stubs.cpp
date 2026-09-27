@@ -57,10 +57,7 @@ namespace {
 namespace IO {
 
 // ---- IO::MemoryStream (runtime/src/io/memory_stream.cpp) -------------------
-// Slot 0's real body is the registered thunk at 0x1800242a0 in
-// iobase_vtables.cpp; the class names it rather than restating it, and neither
-// that registration nor the thunk exists on the host.
-Stream* MemoryStream::DeletingDtor(unsigned) { StubReached("MemoryStream::DeletingDtor"); }
+// Slot 0 is the class's own inline DeletingDtor (ENDGAME B.3.9 IO).
 bool     MemoryStream::Write(int, const void*) { StubReached("MemoryStream::Write"); }
 bool     MemoryStream::Read(int, void*)        { StubReached("MemoryStream::Read"); }
 bool     MemoryStream::SetCurrentPos(int)      { StubReached("MemoryStream::SetCurrentPos"); }

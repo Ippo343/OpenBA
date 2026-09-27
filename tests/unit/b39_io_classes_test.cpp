@@ -420,3 +420,45 @@ UNIT_TEST(b39_io_filestream_family_deletingdtor_arms) {
     CHECK_EQ(t0->_requestedFormat, 6);
     CHECK(reinterpret_cast<uint8_t*>(t0->DeletingDtor(3)) == tblock);
 }
+
+// ===========================================================================
+// IO::MemoryStream -- row 88. 0x1800ae710 / 0x1800ae890 / slot 0 0x1800242a0.
+// ===========================================================================
+UNIT_TEST(b39_io_memorystream_shape_ctor_and_both_arms) {
+    CHECK(!std::is_abstract<IO::MemoryStream>::value);
+    CHECK(!std::is_destructible<IO::MemoryStream>::value);
+    CHECK(!std::has_virtual_destructor<IO::MemoryStream>::value);
+    CHECK_EQ(SlotOffset(&IO::MemoryStream::DeletingDtor), (uintptr_t)0x00);
+    CHECK_EQ(SlotOffset(&IO::MemoryStream::Write),        (uintptr_t)0x10);
+    CHECK_EQ(SlotOffset(&IO::MemoryStream::Close),        (uintptr_t)0x38);   // NOT Open
+
+    // +0x08 = 0, +0x18 = null, +0x20 = 0 (one byte), +0x24..+0x2b = 0, +0x10 =
+    // a fresh BINARY encoding; +0x0c, +0x21..+0x23 and +0x2c never written.
+    alignas(8) uint8_t mem[0x30];
+    std::memset(mem, 0xCD, sizeof mem);
+    IO::MemoryStream* ms = ::new (mem) IO::MemoryStream();
+    CHECK_EQ(ms->_direction, 0);
+    CHECK(ms->_data == nullptr);
+    CHECK_EQ((int)ms->_ownsData, 0);
+    CHECK_EQ(ms->_cursor, 0u);
+    CHECK_EQ(ms->_size, 0u);
+    CHECK(ms->_encoding != nullptr);
+    CHECK(ms->_encoding->IsBinary());
+    for (int i = 0x0c; i < 0x10; ++i) CHECK_EQ((int)mem[i], 0xCD);
+    for (int i = 0x21; i < 0x24; ++i) CHECK_EQ((int)mem[i], 0xCD);
+    for (int i = 0x2c; i < 0x30; ++i) CHECK_EQ((int)mem[i], 0xCD);
+    // An OWNED buffer is freed by ~MemoryStream, then ~Stream frees the encoding.
+    ms->_data = std::malloc(16);
+    ms->_ownsData = 1;
+    CHECK(ms->DeletingDtor(0) == ms);
+
+    // flags 1 frees `this`; the vector arm (stride 0x30) frees `this - 8`.
+    IO::MemoryStream* heap = ::new (std::malloc(0x30)) IO::MemoryStream();
+    CHECK(heap->DeletingDtor(1) == heap);
+    uint8_t* block = static_cast<uint8_t*>(std::malloc(8 + 2 * 0x30));
+    const int64_t two = 2;
+    std::memcpy(block, &two, sizeof two);
+    IO::MemoryStream* m0 = ::new (block + 8) IO::MemoryStream();
+    ::new (block + 8 + 0x30) IO::MemoryStream();
+    CHECK(reinterpret_cast<uint8_t*>(m0->DeletingDtor(3)) == block);
+}
