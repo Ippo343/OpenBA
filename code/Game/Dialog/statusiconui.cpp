@@ -299,8 +299,7 @@ static void* StatusIconUI_FindStatusIconComp(void* entity) {
         void** ibp = (void**)(arr + (int64_t)i * 8);
         void* comp = *ibp;
         if (!comp) continue;
-        typedef uint32_t (*GetTypeId_t)(void*);
-        uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (tid == want)
             return fn_IsDerivedFrom(comp, want) ? comp : nullptr;
     }

@@ -117,7 +117,7 @@ static void* FindComponentInEntity(uintptr_t entity, const uint32_t* pTid) {
     for (int i = 0; i < n; i++) {
         void** slot = reinterpret_cast<void**>(list + (int64_t)i * 8);
         void* comp = *slot;
-        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (t == *pTid) {
             return DerivedOr0(*slot, pTid);
         }
@@ -134,7 +134,7 @@ static void* FindComponentAt28(uintptr_t base, const uint32_t* pTid) {
     uintptr_t list = *reinterpret_cast<uintptr_t*>(base + 0x28);
     for (int i = 0; i < n; i++) {
         void* comp = *reinterpret_cast<void**>(list + (int64_t)i * 8);
-        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (t == *pTid) {
             return DerivedOr0(*reinterpret_cast<void**>(list + (int64_t)i * 8), pTid);
         }

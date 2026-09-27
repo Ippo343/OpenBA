@@ -62,20 +62,12 @@ static int CropUI_IterateResources(CropUI* self, void* combo, int* selectedIndex
     int numTypes = *(int*)(scenarioPtr + 0x128);
     uintptr_t typeArray = *(uintptr_t*)(scenarioPtr + 0x120);
 
-    // Get current resource type via virtual call (vtable +0x60)
-    // Returns the currently selected resource type pointer at local_80
-    typedef void (*fn_GetCurrentResource_t)(void* self, void* outPtr);
-    void** vtable = *(void***)self;
-    fn_GetCurrentResource_t fnGetCurrent =
-        reinterpret_cast<fn_GetCurrentResource_t>(vtable[0x60 / 8]);
+    // Current resource type: slot 12 GetResource (retslot shape, out at local_80)
     uint64_t currentResource = 0;
-    fnGetCurrent(self, &currentResource);
+    self->GetResource(&currentResource);
 
-    // Get category filter via virtual call (vtable +0x68)
-    typedef int (*fn_GetCategoryFilter_t)(void* self);
-    fn_GetCategoryFilter_t fnGetCategory =
-        reinterpret_cast<fn_GetCategoryFilter_t>(vtable[0x68 / 8]);
-    int categoryFilter = fnGetCategory(self);
+    // Category filter: slot 13 GetCategory
+    int categoryFilter = self->GetCategory();
 
     // Bail on a dead / marked-for-removal datasource before probing it (see Slot7);
     // returns "no resources" (0) for this iterate helper.
@@ -101,10 +93,7 @@ static int CropUI_IterateResources(CropUI* self, void* combo, int* selectedIndex
 
             // Check if sub-component's type matches SelectDescription
             // Virtual call at vtable+0x10 returns type ID
-            typedef int (*GetTypeId_t)(void*);
-            void** subVtable = *(void***)subComp;
-            GetTypeId_t fnGetTypeId = reinterpret_cast<GetTypeId_t>(subVtable[0x10 / 8]);
-            int subTypeId = fnGetTypeId((void*)subComp);
+            int subTypeId = reinterpret_cast<Object::Base*>(subComp)->Type();  // B.3.8 bridge
 
             if (subTypeId == (int)*g_TypeId_SelectDescription) {
                 void* subObj = *(void**)(subArray + (uintptr_t)j * 8);

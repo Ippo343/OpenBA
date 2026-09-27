@@ -329,9 +329,7 @@ void ToolUI::OnCreated() {
         for (int i = 0; i < descCount; i++) {
             void* entry = *(void**)(descArray + (uintptr_t)i * 8);
             // Get TypeId via vtable[2]
-            typedef int (*fn_GetTypeId_t)(void*);
-            void** vtbl = *(void***)entry;
-            int typeId = ((fn_GetTypeId_t)vtbl[2])(entry);
+            int typeId = reinterpret_cast<Object::Base*>(entry)->Type();  // B.3.8 bridge
 
             if (typeId == (int)*g_TypeId_ToolbarDescription_FC) {
                 bool check = fn_IsDerivedFrom(entry, *g_TypeId_ToolbarDescription_FC);
@@ -393,9 +391,7 @@ void ToolUI::OnCreated() {
 
         for (int i = 0; i < descCount; i++) {
             void* entry = *(void**)(descArray + (uintptr_t)i * 8);
-            typedef int (*fn_GetTypeId_t)(void*);
-            void** vtbl = *(void***)entry;
-            int typeId = ((fn_GetTypeId_t)vtbl[2])(entry);
+            int typeId = reinterpret_cast<Object::Base*>(entry)->Type();  // B.3.8 bridge
             if (Opt().mapTrace)
                 printf("[ToolUI_Slot4]   descEntry[%d]=%p tid=%d\n", i, entry, typeId);
 

@@ -392,8 +392,7 @@ static void Game_DestroyAllRawMaterials_Impl() {
         for (int i = 0; i < compCount; i++) {
             void* comp = compArray[i];
             // Get component type via vtable[2] (+0x10)
-            typedef uint32_t (*fn_GetTypeId_t)(void*);
-            uint32_t typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
+            uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
             if (typeId == *g_TypeId_RawMaterialDescription) {
                 // Re-read component pointer from array and confirm with IsDerivedFrom
                 void* rawComp = compArray[i];
@@ -484,8 +483,7 @@ static void Game_SpawnCitizens_Impl() {
                         while (ci < compCount) {
                             void** pComp = (void**)(compArrayBase + cOffset * 8);
                             void* comp = *pComp;
-                            typedef uint32_t (*fn_GetTypeId_t)(void*);
-                            uint32_t typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
+                            uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                             if (typeId == *g_TypeId_InteractComponent_FC) {
                                 // Re-read and CheckPtr on the array slot
                                 pComp = (void**)(compArrayBase + cOffset * 8);
@@ -600,8 +598,7 @@ found_residence:
                                 while (ci < compCount) {
                                     void** pComp = (void**)(compArrayBase + cOffset * 8);
                                     void* comp = *pComp;
-                                    typedef uint32_t (*fn_GetTypeId_t)(void*);
-                                    uint32_t typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
+                                    uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                                     if (typeId == *g_TypeId_CitizenComponent_FC) {
                                         pComp = (void**)(compArrayBase + cOffset * 8);
                                         comp = *pComp;

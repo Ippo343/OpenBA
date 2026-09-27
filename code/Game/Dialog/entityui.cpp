@@ -74,9 +74,7 @@ static void GetDescPage_Impl(void* entityDesc, void* retval)
         if (!comp) continue;
 
         // vtable[2] = GetTypeId (returns int typeId)
-        void** vtable = *(void***)comp;
-        typedef int (*fn_GetTypeId_t)(void*);
-        int typeId = ((fn_GetTypeId_t)vtable[2])(comp);
+        int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
         if (typeId == (int)*g_TypeId_UIDescription) {
             if (fn_IsDerivedFrom(comp, *g_TypeId_UIDescription)) {

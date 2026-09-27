@@ -697,9 +697,7 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
                 uintptr_t subComp = *(uintptr_t*)(subArray + (uintptr_t)j * 8);
                 // Check if sub-component's type matches SelectDescription
                 // Virtual call at vtable+0x10 returns type ID
-                typedef int (*GetTypeId_t)(void*);
-                GetTypeId_t getTypeId = *(GetTypeId_t*)(*(uintptr_t*)subComp + 0x10);
-                int subTypeId = getTypeId((void*)subComp);
+                int subTypeId = reinterpret_cast<Object::Base*>(subComp)->Type();  // B.3.8 bridge
 
                 if (subTypeId == (int)selectDescId) {
                     // Found a SelectDescription sub-component
@@ -1261,8 +1259,7 @@ static void* TownHall_FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
         if (!vtable) {
             continue;
         }
-        typedef int (*fn_GetTypeId_t)(void*);
-        int id = ((fn_GetTypeId_t)vtable[2])(comp);
+        int id = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if ((uint32_t)id == typeId) {
             bool derived = fn_IsDerivedFrom(comp, typeId);
             if (derived)
@@ -1299,8 +1296,7 @@ static void* TownHall_FindComponentByTypeId_CE(uintptr_t entity, uint32_t typeId
         void** vtable = *(void***)comp;
         if (!vtable) continue;
 
-        typedef int (*fn_GetTypeId_t)(void*);
-        int id = ((fn_GetTypeId_t)vtable[2])(comp);
+        int id = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if ((uint32_t)id == typeId) {
             bool derived = fn_IsDerivedFrom(comp, typeId);
             if (derived)

@@ -67,9 +67,7 @@ void RadiusUI::OnOpened() {
         void* comp = (void*)*(uint64_t*)(arrayBase + (uint64_t)i * 8);
         // vtable[2] (offset 0x10) = GetTypeId. Ghidra prints this as `(...)()` — that
         // means "args unknown", NOT "no args"; the callee still reads `this` from RCX.
-        void** vtable = *(void***)comp;
-        typedef int (*fn_GetTypeId_t)(void*);
-        int typeId = ((fn_GetTypeId_t)vtable[2])(comp);
+        int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (typeId == (int)radiusTypeId) {
             if (fn_IsDerivedFrom(comp, radiusTypeId)) {
                 radiusComp = comp;

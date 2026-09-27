@@ -35,6 +35,7 @@
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Component/Component.h"
 
 namespace {
 
@@ -99,9 +100,7 @@ void CropUI::SetResource(int64_t newType) {
 
     int64_t cur = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(comp) + 0x50);
     if (cur == 0 && newType != 0) {
-        void** vt = *reinterpret_cast<void***>(comp);
-        typedef void (*StartCycle_t)(void*, int);
-        reinterpret_cast<StartCycle_t>(vt[14])(comp, 2);
+        reinterpret_cast<Component*>(comp)->Command(2);   // slot 14; B.3.8 bridge
     }
     *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(comp) + 0x50) = newType;
 }

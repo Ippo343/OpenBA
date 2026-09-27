@@ -137,9 +137,7 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
             for (int j = 0; j < subCount; j++) {
                 void* subEntry = *(void**)(subArray + (uintptr_t)j * 8);
                 // Call GetTypeId virtual (vtable+0x10) and compare
-                typedef int (*fn_GetTypeId_t)(void*);
-                void** vtbl = *(void***)subEntry;
-                int typeId = ((fn_GetTypeId_t)vtbl[2])(subEntry);
+                int typeId = reinterpret_cast<Object::Base*>(subEntry)->Type();  // B.3.8 bridge
                 if (typeId == (int)*g_TypeId_RawMaterialDescription) {
                     // Verify with IsDerivedFrom
                     if (fn_IsDerivedFrom((void*)subEntry, *g_TypeId_RawMaterialDescription)) {

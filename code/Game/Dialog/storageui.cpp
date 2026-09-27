@@ -212,10 +212,8 @@ void StorageUI::OnCreated() {
                      GameColl::Bytes<0x18, 8>(labelStorage, numberCount, rawChild));
     }
 
-    // Call Startup via vtable +0x38
-    typedef void (*fn_Startup_t)(void*);
-    void** vtable = *(void***)this;
-    ((fn_Startup_t)vtable[7])(this);  // vtable +0x38 = index 7
+    // Slot 7 (vtable +0x38), virtual as retail
+    OnUpdateLayout();
 }
 
 // ============================================================
@@ -279,8 +277,7 @@ void StorageUI::OnUpdateLayout() {
 #endif
                 for (int c = 0; c < compCount; c++) {
                     void* comp = *(void**)(*(uintptr_t*)(resEntry + 0x28) + c * 8);
-                    typedef int (*fn_GetTypeId_t)(void*);
-                    int typeId = ((fn_GetTypeId_t)(*(void***)comp)[2])(comp);
+                    int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                     if (typeId == (int)*g_TypeId_RawMaterialDescription) {
                         if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription)) {
                             resType = comp;

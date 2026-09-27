@@ -20,6 +20,8 @@
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Object/factory_registration.h"
+#include "Component/Component.h"
 
 // ============================================================
 // DestroyComponent_CanReclaim (0x14011e690)
@@ -152,9 +154,7 @@ static void DestroyComponent_Reclaim_Impl(void* destroyComp)
     ((fn_StateTransition_t)smVtable[2])(smPtr, smPtrAddr, (int)stateFrom, 0);
 
     // Also call destroyComp->vtable[4](self) — the "Reclaim" notification
-    void** selfVtable = *(void***)destroyComp;
-    typedef void (*fn_SelfNotify_t)(void* self);
-    ((fn_SelfNotify_t)selfVtable[4])(destroyComp);
+    reinterpret_cast<Component*>(destroyComp)->Startup();   // slot 4; B.3.8 bridge
 }
 
 static void DestroyComponent_Rebuild_Impl(void* destroyComp)
@@ -584,7 +584,6 @@ void DestroyUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
 // built once (Slot4, guarded on +0x30 still null), then the visibility state
 // machine (Slot7) runs every frame. Replaces the UI_DIALOG_STUB(DestroyUI, ...)
 // no-op registration in ui_dialog_stub_factories.cpp.
-#include "Object/factory_registration.h"
 
 
 

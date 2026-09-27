@@ -314,9 +314,7 @@ static void* FindDescComponent(void* descEntity, uint32_t typeId)
     void** arr = *(void***)((uintptr_t)descEntity + 0x28);
     for (int i = 0; i < count; i++) {
         void* comp = arr[i];
-        void** vtbl = *(void***)comp;
-        typedef int (*fn_GetTypeId_t)(void*);
-        int tid = ((fn_GetTypeId_t)vtbl[2])(comp);
+        int tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if ((uint32_t)tid == typeId) {
             if (fn_IsDerivedFrom(comp, typeId))
                 return comp;
@@ -450,9 +448,7 @@ void TradeUI_RefreshSellTable(TradeUI* self)
                         void** descArray = *(void***)(resEntity + 0x28);
                         for (int d = 0; d < descCount; d++) {
                             void* comp = descArray[d];
-                            void** cvtbl = *(void***)comp;
-                            typedef int (*fn_GetTypeId_t)(void*);
-                            int tid = ((fn_GetTypeId_t)cvtbl[2])(comp);
+                            int tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                             if ((uint32_t)tid == *g_TypeId_RawMaterialDescription) {
                                 if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription))
                                     resTypeComp = comp;
@@ -462,9 +458,7 @@ void TradeUI_RefreshSellTable(TradeUI* self)
                         // Find ValueDescription
                         for (int d = 0; d < descCount; d++) {
                             void* comp = descArray[d];
-                            void** cvtbl = *(void***)comp;
-                            typedef int (*fn_GetTypeId_t)(void*);
-                            int tid = ((fn_GetTypeId_t)cvtbl[2])(comp);
+                            int tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                             if ((uint32_t)tid == *g_TypeInfo_ValueDescription) {
                                 if (fn_IsDerivedFrom(comp, *g_TypeInfo_ValueDescription))
                                     valueDesc = comp;
@@ -502,9 +496,7 @@ void TradeUI_RefreshSellTable(TradeUI* self)
         void** compArr = *(void***)(entityPtr[0] + 0x30);
         for (int i = 0; i < compCount; i++) {
             void* comp = compArr[i];
-            void** cvtbl = *(void***)comp;
-            typedef int (*fn_GetTypeId_t)(void*);
-            int tid = ((fn_GetTypeId_t)cvtbl[2])(comp);
+            int tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
             if ((uint32_t)tid == *g_TypeId_StateMachineComponent_FC) {
                 if (fn_IsDerivedFrom(comp, *g_TypeId_StateMachineComponent_FC))
                     buildStateComp = comp;
@@ -1177,9 +1169,7 @@ void TradeUI::OnCreated() {
             void** compArray = *(void***)((uintptr_t)buildComp + 0x28);
             for (int c = 0; c < compCount; c++) {
                 void* comp = compArray[c];
-                typedef int (*GetTypeId_t)(void*);
-                uintptr_t vtbl = *(uintptr_t*)comp;
-                int typeId = ((GetTypeId_t)(*(void**)(vtbl + 0x10)))(comp);
+                int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                 if (typeId == (int)*g_TypeId_SelectDescription) {
                     void* selectComp = nullptr;
                     if (fn_IsDerivedFrom(comp, *g_TypeId_SelectDescription))
@@ -1447,10 +1437,7 @@ static int FindResourceValue(void* resourceEntity) {
         void* comp = compArray[k];
         if (!comp) continue;
         // Call vtable+0x10 to get type ID
-        typedef int (*GetTypeId_t)(void* self);
-        uintptr_t vtbl = *(uintptr_t*)comp;
-        GetTypeId_t getType = *(GetTypeId_t*)(vtbl + 0x10);
-        int typeId = getType(comp);
+        int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (typeId == (int)*g_TypeId_RawMaterialDescription) {
             // Verify with IsDerivedFrom, then return value at +0x48
             bool isRes = fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription);
@@ -2528,9 +2515,7 @@ static void* FindDescSubObject(void* descEntity, uint32_t* typeIdPtr) {
     for (int i = 0; i < compCount; i++) {
         void* comp = compArray[i];
         if (!comp) continue;
-        void** vtable = *(void***)comp;
-        typedef int (*fn_GetTypeId_t)(void*);
-        int typeId = ((fn_GetTypeId_t)vtable[2])(comp);
+        int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if ((uint32_t)typeId == target) {
             if (fn_IsDerivedFrom(comp, target))
                 return comp;

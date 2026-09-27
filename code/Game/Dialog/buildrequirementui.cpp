@@ -73,8 +73,7 @@ static void* FindCompInDesc(uintptr_t desc, uint32_t typeId) {
         // or every component gets skipped.
         void** vtable = *(void***)comp;
         if (!SaneHeapPtr(vtable) || vtable[2] == nullptr) continue;
-        typedef int (*fn_GetTypeId_t)(void*);
-        int compTypeId = ((fn_GetTypeId_t)vtable[2])(comp);
+        int compTypeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
         if (compTypeId == (int)typeId) {
             if (fn_IsDerivedFrom(comp, typeId)) {

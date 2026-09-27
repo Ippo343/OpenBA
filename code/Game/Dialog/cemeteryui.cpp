@@ -68,9 +68,7 @@ static int CemeteryGetBurialCount_Impl(void* cemeteryComp) {
             if (!comp) continue;
 
             // Check TypeId via vtable[2]
-            typedef int (*GetTypeId_t)(void* self);
-            uintptr_t* vtbl = *(uintptr_t**)comp;
-            int typeId = ((GetTypeId_t)(vtbl[2]))(comp);
+            int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
             if (typeId == (int)tombTypeId) {
                 bool isTomb = fn_IsDerivedFrom(comp, tombTypeId);
                 if (isTomb) { found = true; break; }

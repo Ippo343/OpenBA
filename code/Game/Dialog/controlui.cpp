@@ -15,6 +15,7 @@
 #include "resolve.h"
 #include <cstdio>
 #include <cstdlib>
+#include "Component/Component.h"
 
 // ---- Element type ids: UI::ButtonElement and UI::CheckElement ----------------
 // Retail reads these through exe .rdata exrefs 0x1401514f8 (ButtonElement, tested
@@ -216,10 +217,8 @@ void ControlUI::OnCreated() {
     bool isCheckbox = fn_IsDerivedFrom(elemAt30, checkboxTypeId);
     if (isCheckbox) {
         void* subCompPtr = (void*)*(uint64_t*)(s + 0x38);
-        void** vtable = *(void***)subCompPtr;
         // vtable[13] (offset 0x68): query enabled state with key from component+0x20
-        typedef uint32_t (*fn_QueryState_t)(void*, int);
-        uint32_t value = ((fn_QueryState_t)vtable[13])(subCompPtr, *(int*)((uintptr_t)component + 0x20));
+        uint32_t value = reinterpret_cast<Component*>(subCompPtr)->CommandMask(*(int*)((uintptr_t)component + 0x20));  // slot 13; B.3.8 bridge
 
         // Validate element again for safe access
         void* checkboxElem = nullptr;
@@ -257,9 +256,7 @@ void ControlUI::OnUpdateLayout() {
     if (isCheckbox) {
         // Query current state from sub-component vtable[13]
         void* subCompPtr = (void*)*(uint64_t*)(s + 0x38);
-        void** subVtable = *(void***)subCompPtr;
-        typedef uint32_t (*fn_QueryState_t)(void*, int);
-        uint32_t value = ((fn_QueryState_t)subVtable[13])(subCompPtr, *(int*)((uintptr_t)component + 0x20));
+        uint32_t value = reinterpret_cast<Component*>(subCompPtr)->CommandMask(*(int*)((uintptr_t)component + 0x20));  // slot 13; B.3.8 bridge
         char newState = (char)((value >> 1) & 1);
 
         // Only update if state changed
@@ -278,9 +275,7 @@ void ControlUI::OnUpdateLayout() {
 
     // Set enabled/disabled via vtable[8] based on component's enabled state
     void* subCompPtr = (void*)*(uint64_t*)(s + 0x38);
-    void** subVtable = *(void***)subCompPtr;
-    typedef uint32_t (*fn_QueryState_t)(void*, int);
-    uint32_t enabledBits = ((fn_QueryState_t)subVtable[13])(subCompPtr, *(int*)((uintptr_t)component + 0x20));
+    uint32_t enabledBits = reinterpret_cast<Component*>(subCompPtr)->CommandMask(*(int*)((uintptr_t)component + 0x20));  // slot 13; B.3.8 bridge
     bool enabled = (enabledBits & 1) != 0;
 
     void* elem = (void*)*(uint64_t*)(s + 0x30);
@@ -316,9 +311,7 @@ void ControlUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_
             // Call vtable[14] (offset 0x70) on sub-component to toggle state
             void* subCompPtr = (void*)*(uint64_t*)(s + 0x38);
             if (!subCompPtr) return;  // SA guard: entity lacks the target component
-            void** subVtable = *(void***)subCompPtr;
-            typedef void (*fn_ToggleState_t)(void*, int);
-            ((fn_ToggleState_t)subVtable[14])(subCompPtr, *(int*)((uintptr_t)component + 0x20));
+            reinterpret_cast<Component*>(subCompPtr)->Command(*(int*)((uintptr_t)component + 0x20));  // slot 14; B.3.8 bridge
         }
     }
 }

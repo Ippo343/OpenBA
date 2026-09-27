@@ -113,10 +113,7 @@ static int SelectResourceUI_IterateResources(void* self, void* combo, int* selec
 
             // Check if sub-component's type matches SelectDescription
             // Virtual call at vtable+0x10 returns type ID
-            typedef int (*GetTypeId_t)(void*);
-            void** subVtable = *(void***)subComp;
-            GetTypeId_t fnGetTypeId = reinterpret_cast<GetTypeId_t>(subVtable[0x10 / 8]);
-            int subTypeId = fnGetTypeId((void*)subComp);
+            int subTypeId = reinterpret_cast<Object::Base*>(subComp)->Type();  // B.3.8 bridge
 
             if (subTypeId == (int)*g_TypeId_SelectDescription) {
                 void* subObj = *(void**)(subArray + (uintptr_t)j * 8);

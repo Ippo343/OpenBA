@@ -352,9 +352,7 @@ void StatusBarUI::OnUpdateLayout() {
             void* comp = compArray[j];
 
             // Check component type via vtable GetTypeId (vtable +0x10)
-            void** vtable = *(void***)comp;
-            typedef int (*fn_GetTypeId_t)(void*);
-            int typeId = ((fn_GetTypeId_t)vtable[2])(comp);
+            int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
             if (typeId == (int)*g_TypeId_StatusIconComponent) {
                 void* pComp = compArray[j];
@@ -648,9 +646,7 @@ static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex)
                 if (!comp) continue;
 
                 // vtable slot +0x10 (index 2) returns type ID
-                void** vtable = *(void***)comp;
-                typedef int (*fn_GetTypeId_t)(void*);
-                int compTypeId = ((fn_GetTypeId_t)vtable[2])(comp);
+                int compTypeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
                 if (g_TypeId_StatusIconComponent && (uint32_t)compTypeId == *g_TypeId_StatusIconComponent) {
                     // Confirm with IsDerivedFrom

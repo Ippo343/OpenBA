@@ -282,8 +282,7 @@ void BuildUI::OnCreated() {
             for (int c = 0; c < compCount; c++) {
                 void* comp = *(void**)(*(uintptr_t*)(resEntry + 0x28) + c * 8);
                 // Get TypeId via vtable[2] and compare with RawMaterialDescription
-                typedef int (*fn_GetTypeId_t)(void*);
-                int typeId = ((fn_GetTypeId_t)(*(void***)comp)[2])(comp);
+                int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                 if (typeId == (int)*g_TypeId_RawMaterialDescription) {
                     if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription)) {
                         resType = comp;

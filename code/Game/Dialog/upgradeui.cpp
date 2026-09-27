@@ -130,9 +130,7 @@ void UpgradeUI::OnCreated() {
             if (!comp) continue;
 
             // Call component vtable[2] to get type ID
-            void** compVtable = *(void***)comp;
-            typedef uint32_t (*fn_GetTypeId_t)(void*);
-            uint32_t typeId = ((fn_GetTypeId_t)compVtable[2])(comp);
+            uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
             if (typeId == *g_TypeId_ToolbarDescription_FC) {
                 void* checked = fn_IsDerivedFrom(comp, *g_TypeId_ToolbarDescription_FC)

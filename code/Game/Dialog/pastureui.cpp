@@ -68,8 +68,7 @@ static uint32_t PastureCalcMaxCount_Impl(uintptr_t pastureComp) {
         uintptr_t compIPtr = compArray[i];
         void* comp = (void*)compIPtr;
         if (!comp) continue;
-        typedef int (*GetTypeId_t)(void*);
-        int typeId = ((GetTypeId_t)(*(uintptr_t**)comp)[2])(comp);
+        int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (typeId == (int)animalDescTypeId) {
             bool isAnimalDesc = fn_IsDerivedFrom(comp, animalDescTypeId);
             if (isAnimalDesc) { animalDesc = comp; break; }
@@ -348,9 +347,7 @@ void PastureUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
         uintptr_t resourceArray = *(uintptr_t*)(entityList + 0x120);
         int64_t resourceType = *(int64_t*)(resourceArray + (int64_t)resourceIndex * 8);
 
-        typedef void (*fn_Slot11_t)(void* self, int64_t resourceType);
-        void** vtable = *(void***)this;
-        ((fn_Slot11_t)vtable[11])(this, resourceType);
+        SetResource(resourceType);   // slot 11, virtual (as retail)
     }
     else if (param3 == 0x17 && param4 == 501) {
         // Slider change: read slider value, update max count on PastureComponent

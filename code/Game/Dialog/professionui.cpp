@@ -608,9 +608,7 @@ void ProfessionUI::OnOpened() {
     // Call Slot8 (vtable +0x40) with Time(0.0)
     uint8_t timeBuf[8];
     fn_Time_Ctor_Float(timeBuf, 0.0f);
-    typedef void (*fn_VSlot8_t)(void* self, void* time);
-    void** vtbl = *(void***)this;
-    ((fn_VSlot8_t)vtbl[8])(this, timeBuf);
+    OnUpdate(*reinterpret_cast<const System::Time*>(timeBuf));   // slot 8, virtual; B.3.8 bridge
 }
 
 // ============================================================
@@ -749,9 +747,7 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
                 void** compIBP = (void**)(compArray + (uintptr_t)c * 8);
                 uintptr_t comp = *(uintptr_t*)compIBP;
                 if (!comp) continue;
-                typedef int (*fn_GetTypeId_t)(void*);
-                void** vtbl = *(void***)(comp);
-                int typeId = ((fn_GetTypeId_t)vtbl[2])((void*)comp);
+                int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                 if (typeId == (int)*g_TypeId_WorkplaceComponent) {
                     if (fn_IsDerivedFrom((void*)comp, *g_TypeId_WorkplaceComponent)) {
                         workplaceComp = comp;
@@ -780,9 +776,7 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
                         void** compIBP = (void**)(pCompArray + (uintptr_t)c * 8);
                         uintptr_t comp = *(uintptr_t*)compIBP;
                         if (!comp) continue;
-                        typedef int (*fn_GetTypeId_t)(void*);
-                        void** vtbl = *(void***)(comp);
-                        int typeId = ((fn_GetTypeId_t)vtbl[2])((void*)comp);
+                        int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                         if (typeId == (int)*g_TypeId_WorkComponent) {
                             if (fn_IsDerivedFrom((void*)comp, *g_TypeId_WorkComponent)) {
                                 storageLocComp = comp;
@@ -911,9 +905,7 @@ next_iter:
     // Refresh display: call Slot8 (vtable +0x40) with Time(0.0)
     uint8_t timeBuf[8];
     fn_Time_Ctor_Float(timeBuf, 0.0f);
-    typedef void (*fn_VSlot8_t)(void* self, void* time);
-    void** vtbl = *(void***)self;
-    ((fn_VSlot8_t)vtbl[8])(self, timeBuf);
+    self->OnUpdate(*reinterpret_cast<const System::Time*>(timeBuf));   // slot 8, virtual; B.3.8 bridge
 }
 
 // ============================================================

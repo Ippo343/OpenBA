@@ -48,6 +48,7 @@
 // standalone/reg_citizenai_actionctors.cpp:51. Two sources, one value, and it is
 // below 1.0 as a discount must be.
 #include "resolve.h"
+#include "object/Internal.h"   // Object::Base::Type (B.3.8 callers)
 #include "engine_funcs.h"
 #include <cstdint>
 #include <cstdio>
@@ -71,11 +72,7 @@ void* PriceFindComponentByTypeId(const void* entity, uint32_t typeId) {
     for (int32_t i = 0; i < count; ++i) {
         void* comp = arr[i];
         if (!comp) continue;
-        typedef uint32_t (*GetTypeId_t)(void*);
-        GetTypeId_t getId = reinterpret_cast<GetTypeId_t>(
-            *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10));
-        if (!getId) continue;
-        if (getId(comp) != typeId) continue;
+        if (reinterpret_cast<Object::Base*>(comp)->Type() != typeId) continue;  // B.3.8 bridge
         // Retail stops at the FIRST id match and then confirms; a failed confirm
         // yields null rather than continuing the scan.
         if (fn_IsDerivedFrom && !fn_IsDerivedFrom(comp, typeId)) return nullptr;
