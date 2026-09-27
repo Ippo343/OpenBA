@@ -760,7 +760,9 @@ void SaveLoadDialog::OnUpdate(const System::Time& time) {
         Engine::UpdateLoop* pGameLoop = nullptr;
         if (gameLoop) {
             void* savedState = reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetSaveState();  // B.3.7 bridge
-            System::String nameStr("");
+            // Retail (0x1400b7b1b): `MOV [RSP+0xc0],RBX` with RBX = 0 — an EMPTY
+            // String (null COW pointer), not String("") (a 1-byte "" buffer).
+            const System::String nameStr;
             pGameLoop = ::new (gameLoop) GameUpdateLoop(
                 savedState, /*scenarioIbp=*/0, /*scenarioIndex=*/-1, nameStr,
                 0, 0, /*p8=*/true, nullptr, nullptr, nullptr);
