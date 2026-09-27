@@ -28,10 +28,6 @@
 // Resolved helpers
 // ============================================================
 
-// Component_Serialize at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
 // FUN_140018020 — serialize field30 (version >= 2)
 typedef void (*fn_SerializeField30_t)(void* fieldPtr, void* serializer);
 static fn_SerializeField30_t s_fn_SerializeField30 = nullptr;
@@ -89,8 +85,6 @@ static bool s_initialized = false;
 static void EnsureHelpers() {
     if (s_initialized) return;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
 
     uintptr_t slot;
 
@@ -135,169 +129,8 @@ static void EnsureHelpers() {
     s_initialized = true;
 }
 
-// ============================================================
-// RawMaterialComponent::Shutdown (vtable slot [3], 0x140129330)
-// ============================================================
-// Versioned serialization (version 2):
-//   - field28 (resource type ID, int)
-//   - field38 (Time accumulator)
-//   - field30 (version >= 2 only)
 
-void RawMaterialComponent_Shutdown(RawMaterialComponent* self, void* stream) {
-    EnsureHelpers();
 
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
-
-    alignas(8) uint8_t serializerBuf[24];
-    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge
-
-    // Serialize field28 (resource type ID)
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->field28), nullptr);   // B.3.4 bridge
-
-    // Serialize field38 (Time accumulator)
-    reinterpret_cast<System::Time*>(&self->field38)->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4b bridge
-
-    // Version >= 2: serialize field30
-    int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
-    if (version >= 2 && s_fn_SerializeField30) {
-        s_fn_SerializeField30(&self->field30, serializerBuf);
-    }
-
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();                                       // B.3.4 bridge
-}
-
-// ============================================================
-// RawMaterialComponent::Serialize (vtable slot [4], 0x1401292c0)
-// ============================================================
-// Init field28 from building data type at +0x40, then register
-// the entity with the world raw material manager.
-
-void RawMaterialComponent_Serialize(RawMaterialComponent* self) {
-    EnsureHelpers();
-
-    // Get building data via IsDerivedFrom check on _unk18
-    void* baseObj = self->_description;
-    void* buildingData = nullptr;
-    if (fn_IsDerivedFrom && g_TypeId_RawMaterialDescription) {
-        bool isDerived = fn_IsDerivedFrom(baseObj, *g_TypeId_RawMaterialDescription);
-        if (isDerived) {
-            buildingData = baseObj;
-        }
-    }
-
-    // Copy resource type from building data +0x40 to field28
-    if (buildingData) {
-        *(uint32_t*)&self->field28 = *(uint32_t*)((uintptr_t)buildingData + 0x40);
-    }
-
-    // CheckPtr on owner at +0x10
-
-    // Get entity chain from owner+0x28, register with world manager
-    if (s_pGameState && *s_pGameState && s_fn_RegisterRawMaterial) {
-        uintptr_t gameState = (uintptr_t)*s_pGameState;
-        uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
-        void* entityChain = *(void**)(*(uintptr_t*)((uintptr_t)self + 0x10) + 0x28);
-        s_fn_RegisterRawMaterial((void*)worldMgr, entityChain);
-    }
-}
-
-// ============================================================
-// RawMaterialComponent::Draw (vtable slot [6], 0x1401291d0)
-// ============================================================
-// ⚠ NOT a render call — the name is Ghidra's. This is THE PILE-PICKUP TRIGGER: it builds a
-// Pickup WORK and posts it to the citizen work-scheduler, so a laborer comes and hauls the
-// pile away. Slot [6] (+0x30) is the OnAdded hook that ComponentEntity_OnAddedPass dispatches
-// when the entity is registered (flags 0x89 have bit 0 set), i.e. the moment a harvested pile
-// joins the world via EntityList_RegisterEntity.
-//
-// Original logic (FUN_1401291d0):
-//   1. CheckPtr on entity ref (+0x10)
-//   2. FUN_140003050 on the owner entity — its WorkComponent (the post target)
-//   3. IsDerivedFrom check on _unk18 for RawMaterialDescription
-//   4. helper_9480 — the work kind/category code from the description
-//   5. MemAlloc 0x60 bytes for the Pickup work
-//   6. Work_Ctor25 (0x1400f72e0) to initialize the Work base
-//   7. Set vtable to vtable_Pickup (0x140161810), zero fields at +0x48, +0x50, +0x58
-//   8. InternalBasePtr_Ctor to wrap the work
-//   9. CheckPtr on the WorkComponent ref
-//  10. CitizenAI_impl_ec60 (0x14012ec60) — POST the work to the scheduler
-
-void RawMaterialComponent_Draw(RawMaterialComponent* self) {
-    EnsureHelpers();
-
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    // CheckPtr on entity ref
-
-    uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
-
-    // FindComponent_MatDesc on entity
-    uintptr_t matDescBuf[2] = {0, 0};
-    if (s_fn_FindComponent_MatDesc) {
-        s_fn_FindComponent_MatDesc(entity, (void*)matDescBuf);
-    }
-
-    // Get RawMaterialDescription via IsDerivedFrom
-    void* baseObj = self->_description;
-    void* rawMatDesc = nullptr;
-    if (fn_IsDerivedFrom && g_TypeId_RawMaterialDescription) {
-        if (fn_IsDerivedFrom(baseObj, *g_TypeId_RawMaterialDescription)) {
-            rawMatDesc = baseObj;
-        }
-    }
-
-    if (!rawMatDesc) return;
-
-    // Get pickup category from material flags
-    uint64_t category = 1;
-    if (s_fn_GetPickupCategory) {
-        category = s_fn_GetPickupCategory((uintptr_t)rawMatDesc);
-    }
-
-    // Allocate pickup draw item (0x60 bytes)
-    void* pickupItem = nullptr;
-    if (fn_MemAlloc && g_pMemAllocSingleton) {
-        pickupItem = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
-    }
-
-    void* pickupItemResult = nullptr;
-    if (pickupItem) {
-        // Construct base with entity reference
-        uintptr_t entityRef = entity;
-        uintptr_t entityRefBuf[2];
-        entityRefBuf[0] = entityRef;
-        if (s_fn_WorkCtor25) {
-            s_fn_WorkCtor25(pickupItem, (void*)entityRefBuf);
-        }
-
-        // Set pickup vtable and zero extra fields
-        if (s_vtable_Pickup) {
-            *(void**)pickupItem = s_vtable_Pickup;
-        }
-        *(uint32_t*)((uintptr_t)pickupItem + 0x48) = 0;
-        *(uint64_t*)((uintptr_t)pickupItem + 0x50) = 0;
-        *(uint64_t*)((uintptr_t)pickupItem + 0x58) = 0;
-
-        pickupItemResult = pickupItem;
-    }
-
-    // Wrap in InternalBasePtr
-    uintptr_t itemRef[2] = {0, 0};
-    if (fn_InternalBasePtr_Ctor) {
-        new (&itemRef) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(pickupItemResult));   // B.3.3 bridge
-    }
-
-    // CheckPtr on the WorkComponent ref
-
-    // POST the Pickup work to the citizen work-scheduler — a laborer then claims it and
-    // hauls this pile away. This is the pile-pickup trigger.
-    if (s_fn_PostWork) {
-        s_fn_PostWork(matDescBuf[0], (uint32_t)category, '\x01', (void*)itemRef);
-    }
-}
 
 // ============================================================
 // RawMaterialComponent::Update (vtable slot [9], 0x140129130)
@@ -430,10 +263,9 @@ uint64_t RawMaterialComponent_GetPickupCategory(uintptr_t rawMatDesc) {
 void RawMaterialComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[RawMaterialComponent] Funcs resolved: Component_Serialize=%p "
+    printf("[RawMaterialComponent] Funcs resolved: "
            "RegisterRawMaterial=%p "
            "GetPickupCategory=%p MemAlloc=%p PostWork=%p\n",
-           (void*)s_fn_Component_Serialize,
            (void*)s_fn_RegisterRawMaterial,
            (void*)s_fn_GetPickupCategory, (void*)fn_MemAlloc,
            (void*)s_fn_PostWork);
@@ -460,20 +292,167 @@ RawMaterialComponent::RawMaterialComponent()
     OrFlagsInCtor(0x89);
 }
 
-// [3] 0x140129330
-void RawMaterialComponent::Persist(void* stream) { RawMaterialComponent_Shutdown(this, stream); }
+// ============================================================
+// RawMaterialComponent::Persist (vtable slot [3], 0x140129330)
+// ============================================================
+// Versioned serialization (version 2):
+//   - field28 (resource type ID, int)
+//   - field38 (Time accumulator)
+//   - field30 (version >= 2 only)
 
-// [4] 0x1401292c0 (Ghidra "Serialize"): copies the material type out of the
-// description AND registers the pile's template into the town resource
-// registry (townMgr+0x110, via 0x140091e60). Without it no produced material
-// type is known to the market/trade code at all.
-void RawMaterialComponent::Startup() { RawMaterialComponent_Serialize(this); }
+void RawMaterialComponent::Persist(void* stream) {
+    EnsureHelpers();
 
-// [6] 0x1401291d0 — the pile-pickup trigger: posts a Pickup work to the citizen
-// work-scheduler. ComponentEntity_OnAddedPass dispatches it at
-// EntityList_RegisterEntity time — exactly when RemoveNaturalResource's yield
-// spawns the pile.
-void RawMaterialComponent::OnAdded() { RawMaterialComponent_Draw(this); }
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    alignas(8) uint8_t serializerBuf[24];
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge
+
+    // Serialize field28 (resource type ID)
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&field28), nullptr);   // B.3.4 bridge
+
+    // Serialize field38 (Time accumulator)
+    reinterpret_cast<System::Time*>(&field38)->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4b bridge
+
+    // Version >= 2: serialize field30
+    int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
+    if (version >= 2 && s_fn_SerializeField30) {
+        s_fn_SerializeField30(&field30, serializerBuf);
+    }
+
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();                                       // B.3.4 bridge
+}
+
+// ============================================================
+// RawMaterialComponent::Startup (vtable slot [4], 0x1401292c0)
+// ============================================================
+// Init field28 from building data type at +0x40, then register
+// the entity with the world raw material manager.
+
+void RawMaterialComponent::Startup() {
+    EnsureHelpers();
+
+    // Get building data via IsDerivedFrom check on _unk18
+    void* baseObj = _description;
+    void* buildingData = nullptr;
+    if (fn_IsDerivedFrom && g_TypeId_RawMaterialDescription) {
+        bool isDerived = fn_IsDerivedFrom(baseObj, *g_TypeId_RawMaterialDescription);
+        if (isDerived) {
+            buildingData = baseObj;
+        }
+    }
+
+    // Copy resource type from building data +0x40 to field28
+    if (buildingData) {
+        *(uint32_t*)&field28 = *(uint32_t*)((uintptr_t)buildingData + 0x40);
+    }
+
+    // CheckPtr on owner at +0x10
+
+    // Get entity chain from owner+0x28, register with world manager
+    if (s_pGameState && *s_pGameState && s_fn_RegisterRawMaterial) {
+        uintptr_t gameState = (uintptr_t)*s_pGameState;
+        uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
+        void* entityChain = *(void**)(*(uintptr_t*)(reinterpret_cast<uintptr_t>(this) + 0x10) + 0x28);
+        s_fn_RegisterRawMaterial((void*)worldMgr, entityChain);
+    }
+}
+
+// ============================================================
+// RawMaterialComponent::OnAdded (vtable slot [6], 0x1401291d0)
+// ============================================================
+// ⚠ NOT a render call — the name is Ghidra's. This is THE PILE-PICKUP TRIGGER: it builds a
+// Pickup WORK and posts it to the citizen work-scheduler, so a laborer comes and hauls the
+// pile away. Slot [6] (+0x30) is the OnAdded hook that ComponentEntity_OnAddedPass dispatches
+// when the entity is registered (flags 0x89 have bit 0 set), i.e. the moment a harvested pile
+// joins the world via EntityList_RegisterEntity.
+//
+// Original logic (FUN_1401291d0):
+//   1. CheckPtr on entity ref (+0x10)
+//   2. FUN_140003050 on the owner entity — its WorkComponent (the post target)
+//   3. IsDerivedFrom check on _unk18 for RawMaterialDescription
+//   4. helper_9480 — the work kind/category code from the description
+//   5. MemAlloc 0x60 bytes for the Pickup work
+//   6. Work_Ctor25 (0x1400f72e0) to initialize the Work base
+//   7. Set vtable to vtable_Pickup (0x140161810), zero fields at +0x48, +0x50, +0x58
+//   8. InternalBasePtr_Ctor to wrap the work
+//   9. CheckPtr on the WorkComponent ref
+//  10. CitizenAI_impl_ec60 (0x14012ec60) — POST the work to the scheduler
+
+void RawMaterialComponent::OnAdded() {
+    EnsureHelpers();
+
+    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
+
+    // CheckPtr on entity ref
+
+    uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
+
+    // FindComponent_MatDesc on entity
+    uintptr_t matDescBuf[2] = {0, 0};
+    if (s_fn_FindComponent_MatDesc) {
+        s_fn_FindComponent_MatDesc(entity, (void*)matDescBuf);
+    }
+
+    // Get RawMaterialDescription via IsDerivedFrom
+    void* baseObj = _description;
+    void* rawMatDesc = nullptr;
+    if (fn_IsDerivedFrom && g_TypeId_RawMaterialDescription) {
+        if (fn_IsDerivedFrom(baseObj, *g_TypeId_RawMaterialDescription)) {
+            rawMatDesc = baseObj;
+        }
+    }
+
+    if (!rawMatDesc) return;
+
+    // Get pickup category from material flags
+    uint64_t category = 1;
+    if (s_fn_GetPickupCategory) {
+        category = s_fn_GetPickupCategory((uintptr_t)rawMatDesc);
+    }
+
+    // Allocate pickup draw item (0x60 bytes)
+    void* pickupItem = nullptr;
+    if (fn_MemAlloc && g_pMemAllocSingleton) {
+        pickupItem = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
+    }
+
+    void* pickupItemResult = nullptr;
+    if (pickupItem) {
+        // Construct base with entity reference
+        uintptr_t entityRef = entity;
+        uintptr_t entityRefBuf[2];
+        entityRefBuf[0] = entityRef;
+        if (s_fn_WorkCtor25) {
+            s_fn_WorkCtor25(pickupItem, (void*)entityRefBuf);
+        }
+
+        // Set pickup vtable and zero extra fields
+        if (s_vtable_Pickup) {
+            *(void**)pickupItem = s_vtable_Pickup;
+        }
+        *(uint32_t*)((uintptr_t)pickupItem + 0x48) = 0;
+        *(uint64_t*)((uintptr_t)pickupItem + 0x50) = 0;
+        *(uint64_t*)((uintptr_t)pickupItem + 0x58) = 0;
+
+        pickupItemResult = pickupItem;
+    }
+
+    // Wrap in InternalBasePtr
+    uintptr_t itemRef[2] = {0, 0};
+    if (fn_InternalBasePtr_Ctor) {
+        new (&itemRef) ::Object::InternalBasePtr(
+            reinterpret_cast<RtObject::Internal*>(pickupItemResult));   // B.3.3 bridge
+    }
+
+    // CheckPtr on the WorkComponent ref
+
+    // POST the Pickup work to the citizen work-scheduler — a laborer then claims it and
+    // hauls this pile away. This is the pile-pickup trigger.
+    if (s_fn_PostWork) {
+        s_fn_PostWork(matDescBuf[0], (uint32_t)category, '\x01', (void*)itemRef);
+    }
+}
 
 // [9] 0x140129130. PORT GAP (retail 0x140129130) — B38 D9: the body is ported
 // above (RawMaterialComponent_Update, the pile expiry timer) but the tree's

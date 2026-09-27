@@ -37,7 +37,7 @@
 // Decompiled from Application-x64.exe; the slope test and the cell-stamp tail are
 // pinned against the disassembly (see the notes at each site).
 
-#include "Component/quarrycomponent_funcs.h"
+#include "Component/QuarryComponent.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "perf_terrain.h"
@@ -262,10 +262,10 @@ extern "C" void QuarryComponent_ApplyDepth(void* selfV, float depth) {
 // QuarryComponent slot [12] (0x1400550f0) — message sink
 // ============================================================
 // msg 4 = build complete: carve the pit once at _initialDepth.
-extern "C" void QuarryComponent_Slot12(void* selfV, int msgId) {
+void QuarryComponent::OnEvent(int msgId) {
     if (msgId != 4) return;
     QuarryDeformResolve();
-    void* entity = QuarryOwnerEntity(reinterpret_cast<uintptr_t>(selfV));
+    void* entity = QuarryOwnerEntity(reinterpret_cast<uintptr_t>(this));
 
     void* desc = QuarryFindDescription(entity);
     if (!desc) { QuarryBail("Slot12(msg4)", "no QuarryDescription in the entity description list"); return; }
@@ -273,9 +273,14 @@ extern "C" void QuarryComponent_Slot12(void* selfV, int msgId) {
     const float initialDepth = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x28);
 
     void* decal = QuarryDecalSuspend(entity);
-    QuarryComponent_ApplyDepth(selfV, initialDepth);
+    QuarryComponent_ApplyDepth(this, initialDepth);
     QuarryDecalResume(decal);
 
+}
+
+// 0x1400550f0 door: registered by address (standalone/reg_quarry_live.cpp).
+extern "C" void QuarryComponent_Slot12(void* selfV, int msgId) {
+    reinterpret_cast<QuarryComponent*>(selfV)->QuarryComponent::OnEvent(msgId);   // B.3.8 bridge
 }
 
 // ============================================================
@@ -285,9 +290,9 @@ extern "C" void QuarryComponent_Slot12(void* selfV, int msgId) {
 // completed stone-production cycle lands here. Two halves:
 //   1. re-carve the floor at lerp(_initialDepth, _maxDepth, produced/_maximumProduction)
 //   2. walk the footprint and convert the dug cells' terrain type to 5 (quarried rock)
-extern "C" void QuarryComponent_Slot15(void* selfV) {
+void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0*/, uint32_t /*arg1*/) {
     QuarryDeformResolve();
-    void* entity = QuarryOwnerEntity(reinterpret_cast<uintptr_t>(selfV));
+    void* entity = QuarryOwnerEntity(reinterpret_cast<uintptr_t>(this));
 
     // ---- production progress -> depth -------------------------------------------
     void* cp = QuarryFindComp(s_fn_FindComp_CP, entity);
@@ -313,7 +318,7 @@ extern "C" void QuarryComponent_Slot15(void* selfV) {
     const float depth        = (1.0f - t) * initialDepth + t * maxDepth;
 
     void* decal = QuarryDecalSuspend(entity);
-    QuarryComponent_ApplyDepth(selfV, depth);
+    QuarryComponent_ApplyDepth(this, depth);
     QuarryDecalResume(decal);
 
     // ---- footprint -> terrain type 5 --------------------------------------------
@@ -411,4 +416,9 @@ extern "C" void QuarryComponent_Slot15(void* selfV) {
         }
     }
 
+}
+
+// 0x140054b80 door: registered by address (standalone/reg_quarry_live.cpp).
+extern "C" void QuarryComponent_Slot15(void* selfV) {
+    reinterpret_cast<QuarryComponent*>(selfV)->QuarryComponent::OnMessage(0, nullptr, 0, 0);   // B.3.8 bridge
 }
