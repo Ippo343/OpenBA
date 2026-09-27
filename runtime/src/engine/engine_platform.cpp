@@ -142,7 +142,7 @@ void** VideoConfigSingletonSlot() {
     return RT_DATA_SLOT(void**, "?_singleton@Configuration@Video@@0PEAV12@EA");
 }
 void** AudioConfigSingletonSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Configuration@Audio@@0PEAV12@EA");
+    return reinterpret_cast<void**>(&::Audio::Configuration::_singleton);
 }
 void** InputConfigSingletonSlot() {
     return RT_DATA_SLOT(void**, "?_singleton@Configuration@Input@@0PEAV12@EA");

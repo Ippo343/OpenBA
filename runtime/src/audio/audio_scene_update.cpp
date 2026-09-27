@@ -302,7 +302,7 @@ void* DeviceSingleton() {
 }
 
 void* ConfigurationSingleton() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Configuration@Audio@@0PEAV12@EA");
+    void** slot = reinterpret_cast<void**>(&::Audio::Configuration::_singleton);
     return slot ? *slot : nullptr;
 }
 

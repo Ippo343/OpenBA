@@ -11,6 +11,7 @@
 
 #include <cstdio>
 #include "../../funcs/rt_port.h"
+#include "../../types/audio/Audio.h"   // ENDGAME B.3.9 ENG: the storage redirect
 
 extern int RtAudioSceneRegister();          // audio.cpp
 // WAVE 28 lane MISC: ?Update@Scene@Audio@@ (0x1800df6c0, 1816 bytes), the one
@@ -48,6 +49,9 @@ extern int RtAudioPlayPlatformRegister();   // audio_play_platform.cpp
 extern "C" int RtAudioBatchCLeavesRegister();
 
 void RtAudioPortInit() {
+    // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
+    // static from here on (name door, address door, manifest publish).
+    RtMintRedirectStorage("?_singleton@Configuration@Audio@@0PEAV12@EA", &::Audio::Configuration::_singleton);
     // BATCH C — ~SoundBuffer and Device::OnSoundBufferDeleted. Unconditional,
     // see DIRECTION.md §2.3.
     {

@@ -165,7 +165,7 @@ void** SlotApplication()     { return reinterpret_cast<void**>(&::Application::A
 void** SlotInputDevice()     { return RT_DATA_SLOT(void**, "?_singleton@Device@Input@@0PEAV12@EA"); }
 void** SlotInputConfig()     { return RT_DATA_SLOT(void**, "?_singleton@Configuration@Input@@0PEAV12@EA"); }
 void** SlotAudioDevice()     { return RT_DATA_SLOT(void**, "?_singleton@Device@Audio@@0PEAV12@EA"); }
-void** SlotAudioConfig()     { return RT_DATA_SLOT(void**, "?_singleton@Configuration@Audio@@0PEAV12@EA"); }
+void** SlotAudioConfig()     { return reinterpret_cast<void**>(&::Audio::Configuration::_singleton); }
 
 // The one store this whole lane is about. Written once, called fourteen times,
 // so there is exactly one place to read to know how the criterion is met.
