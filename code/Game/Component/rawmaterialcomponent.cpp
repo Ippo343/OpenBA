@@ -13,6 +13,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/rawmaterialcomponent_funcs.h"
+#include "Work/Pickup.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -62,15 +63,6 @@ static fn_GetPickupCategory_t s_fn_GetPickupCategory = nullptr;
 
 // Use fn_MemAlloc + g_pMemAllocSingleton from engine_funcs.h
 
-// Work_Ctor25 (0x1400d3cc0) — construct pickup work item base
-typedef void (*fn_WorkCtor25_t)(void* self, void* entityRef);
-static fn_WorkCtor25_t s_fn_WorkCtor25 = nullptr;
-
-// vtable_Pickup — the Pickup WORK class vtable at 0x140161810 (code/Game/Work/pickup.cpp;
-// standalone table registered by RegisterPickupVtable). Verified against the disassembly of
-// RawMaterialComponent::Draw: `14012924b CALL 0x1400f72e0` (Work_Ctor25) then
-// `140129251 LEA RAX,[0x140161810]` / `140129258 MOV [RBX],RAX` = the vtable store.
-static void** s_vtable_Pickup = nullptr;
 
 // fn_InternalBasePtr_Ctor — already in engine_funcs.h
 // fn_IsDerivedFrom — already in engine_funcs.h
@@ -114,12 +106,6 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x140129480));
 
     // fn_MemAlloc + g_pMemAllocSingleton resolved globally in engine_funcs
-
-    s_fn_WorkCtor25 = reinterpret_cast<fn_WorkCtor25_t>(
-        ResolveAddr(Module::Exe, 0x1400f72e0));  // Work_Ctor25 (CALL @14012924b in RawMaterialComponent::Draw)
-
-    s_vtable_Pickup = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161810));
 
     // CitizenAI_impl_ec60 = the citizen WORK-SCHEDULER POST (the same call the ClearArea
     // controller uses to hand a job to a laborer), NOT a render/draw registration.
@@ -419,21 +405,15 @@ void RawMaterialComponent::OnAdded() {
 
     void* pickupItemResult = nullptr;
     if (pickupItem) {
-        // Construct base with entity reference
-        uintptr_t entityRef = entity;
+        // Retail: `14012924b CALL 0x1400f72e0` (Work_Ctor25, the entity-seeded base
+        // ctor), `LEA RAX,[0x140161810]; MOV [RBX],RAX` (the Pickup table), then
+        // +0x48 = +0x50 = +0x58 = 0. B.3.8 (B8-5): the real Pickup ctor builds the same
+        // bytes (the compiler stamps Pickup's table and zeroes the three fields), and
+        // Work::InitFromEntity is Work_Ctor25's body.
         uintptr_t entityRefBuf[2];
-        entityRefBuf[0] = entityRef;
-        if (s_fn_WorkCtor25) {
-            s_fn_WorkCtor25(pickupItem, (void*)entityRefBuf);
-        }
-
-        // Set pickup vtable and zero extra fields
-        if (s_vtable_Pickup) {
-            *(void**)pickupItem = s_vtable_Pickup;
-        }
-        *(uint32_t*)((uintptr_t)pickupItem + 0x48) = 0;
-        *(uint64_t*)((uintptr_t)pickupItem + 0x50) = 0;
-        *(uint64_t*)((uintptr_t)pickupItem + 0x58) = 0;
+        entityRefBuf[0] = entity;
+        Pickup* pickup = new (pickupItem) Pickup();
+        pickup->InitFromEntity(entityRefBuf);
 
         pickupItemResult = pickupItem;
     }
