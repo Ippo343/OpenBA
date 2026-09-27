@@ -34,6 +34,8 @@
 #include "Dialog/ui_panels.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Component/ValueDescription.h"   // ENDGAME B.3.9 TR: ValueDescription::TypeId()
+#include "Component/TradeDescription.h"   // ENDGAME B.3.9 TR: TradeDescription::TypeId()
 #include "resolve.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -412,7 +414,7 @@ void TradeUI_RefreshSellTable(TradeUI* self)
     fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
 
     // Check TradeDescription on building
-    fn_IsDerivedFrom(*(void**)(buildingPtr[0] + 0x18), *g_TypeInfo_TradeDescription);
+    fn_IsDerivedFrom(*(void**)(buildingPtr[0] + 0x18), TradeDescription::TypeId());
 
     uint64_t smPtr[2] = {0, 0};
     fn_FindComponent_Storage((void*)entityPtr[0], &smPtr);
@@ -465,8 +467,8 @@ void TradeUI_RefreshSellTable(TradeUI* self)
                         for (int d = 0; d < descCount; d++) {
                             void* comp = descArray[d];
                             int tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-                            if ((uint32_t)tid == *g_TypeInfo_ValueDescription) {
-                                if (fn_IsDerivedFrom(comp, *g_TypeInfo_ValueDescription))
+                            if ((uint32_t)tid == ValueDescription::TypeId()) {
+                                if (fn_IsDerivedFrom(comp, ValueDescription::TypeId()))
                                     valueDesc = comp;
                                 break;
                             }
@@ -672,7 +674,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
     fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
 
     void* tradeDescRaw = *(void**)(buildingPtr[0] + 0x18);
-    bool isTrade = fn_IsDerivedFrom(tradeDescRaw, *g_TypeInfo_TradeDescription);
+    bool isTrade = fn_IsDerivedFrom(tradeDescRaw, TradeDescription::TypeId());
     void* tradeDesc = isTrade ? tradeDescRaw : nullptr;
 
     // Clear buy data array at +0x40 (stride 0x18)
@@ -738,7 +740,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
             uintptr_t orderEntry = *(uintptr_t*)(orderList + (uintptr_t)oi * 0x10);
 
             // Find ValueDescription in order entry's description
-            void* valDesc = FindDescComponent((void*)orderEntry, *g_TypeInfo_ValueDescription);
+            void* valDesc = FindDescComponent((void*)orderEntry, ValueDescription::TypeId());
 
             // Build 0x18-byte buy data entry and push to array at +0x40.
             // B.3.2 bridge: TradeUI+0x40 is Collection::Array<{orderEntry, valDesc,
@@ -763,7 +765,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
             uintptr_t orderDesc = *buyOrder;
 
             // Find ValueDescription
-            void* valDesc = FindDescComponent((void*)orderDesc, *g_TypeInfo_ValueDescription);
+            void* valDesc = FindDescComponent((void*)orderDesc, ValueDescription::TypeId());
 
             // Set sprite from ValueDescription
             uint8_t spriteBuf[16] = {0};
@@ -869,7 +871,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
             uintptr_t purchaseEntity = *(uintptr_t*)(offset + *(uintptr_t*)(s + 0xb0));
 
             // Find ValueDescription for this purchase entity
-            void* valDesc = FindDescComponent((void*)purchaseEntity, *g_TypeInfo_ValueDescription);
+            void* valDesc = FindDescComponent((void*)purchaseEntity, ValueDescription::TypeId());
 
             // Set sprite and text on purchase button element
             void* purchaseUI = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
@@ -1030,11 +1032,11 @@ void TradeUI::OnCreated() {
     // --- Phase 1: Find all 15 named elements ---
     void* dialogElemPtr = (void*)(s + 0x20);
 
-    // ENDGAME B.3.9 CG2: g_TypeId_TableElement/NumberElement/TextElement ->
-    // UI::TableElement/NumberElement/TextElement::TypeId(); g_TypeId_HelpButtonElem
-    // shares its initialiser exref (0x1401514f8) with g_TypeId_ButtonElement ->
-    // UI::ButtonElement::TypeId(); g_TypeId_HelpComboElem shares its initialiser
-    // exref (0x140151690) with g_TypeId_ComboElement -> UI::ComboElement::TypeId()
+    // ENDGAME B.3.9 CG2: TypeId_TableElement/NumberElement/TextElement ->
+    // UI::TableElement/NumberElement/TextElement::TypeId(); TypeId_HelpButtonElem
+    // shares its initialiser exref (0x1401514f8) with TypeId_ButtonElement ->
+    // UI::ButtonElement::TypeId(); TypeId_HelpComboElem shares its initialiser
+    // exref (0x140151690) with TypeId_ComboElement -> UI::ComboElement::TypeId()
     // (Table 3 name lies — neither is a distinct "help" element class).
     uint32_t tableElementTypeId = UI::TableElement::TypeId();
     uint32_t numberElementTypeId = UI::NumberElement::TypeId();
@@ -1431,7 +1433,7 @@ void TradeUI::OnCreated() {
 // buy orders: self+0x40 = ptr, self+0x48 = count, stride 0x18
 //   entry[j]: +0x00 = resource entity ptr, +0x10 = quantity int
 // resource entity: +0x28 = component array ptr, +0x30 = component count
-//   component value at +0x48 (identified by vtable+0x10 returning g_TypeId_RawMaterialDescription)
+//   component value at +0x48 (identified by vtable+0x10 returning TypeId_RawMaterialDescription)
 // merchant state check: BuildState component, byte at +0x52 (or +0x50 if negative)
 //   0x13 = merchant arrived (enables dismiss button)
 // storage capacity: StateMachineComp+0x38 vs StorageComponent_QueryCount
@@ -1445,7 +1447,7 @@ static inline void Element_SetEnabled(void* element, bool enabled) {
 }
 
 // Find resource value for a given resource entity ptr by searching its component array
-// Returns 0 if not found. Resource type identified via vtable+0x10 == g_TypeId_RawMaterialDescription.
+// Returns 0 if not found. Resource type identified via vtable+0x10 == TypeId_RawMaterialDescription.
 static int FindResourceValue(void* resourceEntity) {
     if (!resourceEntity) return 0;
     uintptr_t entity = (uintptr_t)resourceEntity;
@@ -2448,7 +2450,7 @@ void TradeUI_RefreshOrderDisplay(TradeUI* self) {
         int typeIdx = *(int*)(ordersBase2 + orderOff + 4);
 
         // IsDerivedFrom check for TradeDescription — original does this each iteration
-        bool isTradeDesc = fn_IsDerivedFrom(rawDesc, *g_TypeInfo_TradeDescription);
+        bool isTradeDesc = fn_IsDerivedFrom(rawDesc, TradeDescription::TypeId());
         void* tradeDesc = isTradeDesc ? rawDesc : nullptr;
 
         // Construct UI::Sprite via fn_Sprite_Ctor (NOT raw struct init)
@@ -2472,7 +2474,7 @@ void TradeUI_RefreshOrderDisplay(TradeUI* self) {
         uintptr_t ordersBase3 = *(uintptr_t*)(buildingPtr[0] + 0x40);
         typeIdx = *(int*)(ordersBase3 + orderOff + 4);
 
-        isTradeDesc = fn_IsDerivedFrom(rawDesc, *g_TypeInfo_TradeDescription);
+        isTradeDesc = fn_IsDerivedFrom(rawDesc, TradeDescription::TypeId());
         tradeDesc = isTradeDesc ? rawDesc : nullptr;
 
         // Construct UI::String via fn_UIString_Ctor (NOT raw struct init)
@@ -2558,7 +2560,8 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
 
         uint32_t rawMaterialDescriptionTypeId = RawMaterialDescription::TypeId();
         void* resourceComp = FindDescSubObject((void*)entity, &rawMaterialDescriptionTypeId);
-        void* valueComp = FindDescSubObject((void*)entity, g_TypeInfo_ValueDescription);
+        uint32_t valueDescriptionTypeId = ValueDescription::TypeId();
+        void* valueComp = FindDescSubObject((void*)entity, &valueDescriptionTypeId);
 
         // Push 0x18-byte entry {entity, resourceComp, valueComp} into the display
         // array at +0x50.
@@ -2578,12 +2581,12 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
     uint64_t entityPtr[2] = {0, 0};
     new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
-    // Find TradeComponent (uses g_TypeId_TradeComponent_FC = DAT_1401c4b80)
+    // Find TradeComponent (uses TypeId_TradeComponent_FC = DAT_1401c4b80)
     uint64_t tradePtr[2] = {0, 0};
     fn_FindComponent_Building((void*)entityPtr[0], &tradePtr);
 
     // Validate TradeDescription derivation (result unused — validation only)
-    fn_IsDerivedFrom(*(void**)(tradePtr[0] + 0x18), *g_TypeInfo_TradeDescription);
+    fn_IsDerivedFrom(*(void**)(tradePtr[0] + 0x18), TradeDescription::TypeId());
 
     // Find StorageComponent
     uint64_t storagePtr[2] = {0, 0};

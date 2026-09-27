@@ -65,7 +65,7 @@ static void PushElementPair(uintptr_t self, int arrayOffset,
 // (UI::NumberElement — the engine_funcs label "SpinnerElement" is a known
 // misnomer, see standalone/reg_element_typeids.cpp:35).
 //
-// ENDGAME B.3.9 CG2: g_TypeId_LabelElement / g_TypeId_NumberElement -> the ported
+// ENDGAME B.3.9 CG2: TypeId_LabelElement / TypeId_NumberElement -> the ported
 // Runtime statics UI::LabelElement::TypeId() / UI::NumberElement::TypeId(). That
 // static is a source independent of the exe-side reflection cell (and the
 // BANISHED_LIVE_ELEMENT_TIDS gate) this file used to read through the shared
@@ -117,11 +117,11 @@ namespace productionui_sa {
     // are already registered+filled, ungated, by reg_action_child_ctors2, and
     // TrackerComponent (0x1401c4b10) by reg_tracker_typeid.cpp. The two ELEMENT ids
     // are resolved privately inside productionui.cpp (ProductionUI_TypeIdsReady) —
-    // deliberately NOT published into g_TypeId_LabelElement / g_TypeId_NumberElement,
+    // deliberately NOT published into TypeId_LabelElement / TypeId_NumberElement,
     // which reg_element_typeids.cpp owns and keeps behind BANISHED_LIVE_ELEMENT_TIDS.
     bool Ready() {
-        // ENDGAME B.3.9 CG2: g_TypeId_ComponentEntity, g_TypeId_RawMaterialDescription,
-        // g_TypeId_TrackerComponent -> the class statics, which always answer.
+        // ENDGAME B.3.9 CG2: TypeId_ComponentEntity, TypeId_RawMaterialDescription,
+        // TypeId_TrackerComponent -> the class statics, which always answer.
         bool ok = g_pGameWorldSingleton;
         static bool s_logged = false;
         if (!s_logged) {
@@ -202,7 +202,7 @@ void ProductionUI::OnCreated() {
           ::new (&labelResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(childElem)->FindElement(nameStr)); }  // B.3.6 bridge
 
         // Retail casts the hit through IsDerivedFrom(LabelElement) and stores NULL
-        // when it isn't one (0x140075da0 uses g_TypeId_LabelElement_exref @0x140151668).
+        // when it isn't one (0x140075da0 uses TypeId_LabelElement_exref @0x140151668).
         uint64_t labelBP = 0;
         new (&labelBP) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(CastLabel((void*)labelResult)));   // B.3.3 bridge

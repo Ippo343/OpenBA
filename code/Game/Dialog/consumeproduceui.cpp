@@ -41,7 +41,7 @@
 // product makes no ale, IsActive's desc+0x25 arm never finds a matching good, and the
 // source can never register. Wiring the panel is the prerequisite for that A/B.
 // ENDGAME B.3.9: ComponentEntity / UI::ComboElement / UI::ProgressElement /
-// ConsumeProduceDescription (was g_TypeId_ConsumeProduceComponent, bound to 0x1401c7388
+// ConsumeProduceDescription (was TypeId_ConsumeProduceComponent, bound to 0x1401c7388
 // which really is ConsumeProduceDescription's cell -- the guarded object at
 // component+0x18 is that description, matching Table 1's authority) / RawMaterialDescription
 // all have a ported TypeId() now, so the EnsureTypeIds()/Ready() lazy-cache is dead.
@@ -152,7 +152,7 @@ void ConsumeProduceUI::OnCreated() {
             // at entry+0x10 = pointer to sub-entry
             uintptr_t entryPtr = *(uintptr_t*)(entriesBase + (uintptr_t)i * 0x28 + 0x10);
 
-            // Search sub-entries for ResourceDescription type (g_TypeId_RawMaterialDescription)
+            // Search sub-entries for ResourceDescription type (TypeId_RawMaterialDescription)
             int subCount = *(int*)(entryPtr + 0x30);
             uintptr_t subArray = *(uintptr_t*)(entryPtr + 0x28);
             void* resourceDesc = nullptr;

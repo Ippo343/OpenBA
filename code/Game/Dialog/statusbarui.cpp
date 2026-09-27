@@ -64,8 +64,8 @@ static void* FindElement(void* dialogController, const char* name) {
 
 namespace statusbarui_sa {
 
-// ENDGAME B.3.9 CG2: g_TypeId_StatusIconComponent (cell 0x1401c7e08) ->
-// StatusIconComponent::TypeId(), g_TypeId_CitizenDescription -> CitizenDescription::
+// ENDGAME B.3.9 CG2: TypeId_StatusIconComponent (cell 0x1401c7e08) ->
+// StatusIconComponent::TypeId(), TypeId_CitizenDescription -> CitizenDescription::
 // TypeId(). Both class statics always answer, so the backfill retires.
 void EnsureGlobals() {
 }
@@ -232,7 +232,7 @@ void StatusBarUI::OnOpened() {
         ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
 
         // NOTE: retail type-checks the group against a UI type-info whose decompiled
-        // label ("g_TypeId_HelpButtonElem" = ButtonElement) is wrong for these ribbon
+        // label ("TypeId_HelpButtonElem" = ButtonElement) is wrong for these ribbon
         // groups — with that id the check rejects the element and hearts stay blank.
         // The elements come from our own StatusBar.rsc, so accept the find result
         // directly (CitizenUI's identical groupHearts/groupStars binding does the same).

@@ -46,7 +46,6 @@
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 
 // code/Game/Object/factory_registration.cpp
-namespace Object { uint32_t ResolveTypeIdByNameLazy(const char* simpleName); }
 
 // Forward declaration — defined in entityui.cpp
 extern "C" bool EditTool_IsEditTool(void* tool);   // code/Game/Player/edittool.cpp

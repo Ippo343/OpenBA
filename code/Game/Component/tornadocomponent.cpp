@@ -184,7 +184,7 @@ void* GameWorld() {
 
 // The TornadoDescription behind this component. Retail:
 //     obj = *(void**)(self + 0x18);
-//     desc = IsDerivedFrom(obj, g_TypeId_TornadoDescription) ? obj : nullptr;
+//     desc = IsDerivedFrom(obj, TypeId_TornadoDescription) ? obj : nullptr;
 // and then dereferences `desc` unguarded. The type-id global (0x1401c4aa0) has no
 // storage in standalone, so the id comes from the runtime type registry instead —
 // the standard substitution here (see tornadodescription.cpp).

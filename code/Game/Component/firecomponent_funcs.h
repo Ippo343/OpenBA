@@ -34,6 +34,3 @@ extern "C" bool FireComponent_BeginBurning_11e7b0(void* destroyComp,
                                                   const int64_t* burnTime);  // 0x14011e7b0
 extern "C" void FireComponent_StopBurning_11ea10(void* destroyComp);         // 0x14011ea10
 
-
-// Type-id globals, filled after Engine::Startup from game_main.cpp.
-extern "C" void FillTypeIdGlobals_fire();

@@ -811,10 +811,10 @@ static void Game_InfectRandomCitizen_Impl() {
 // ENDGAME B.3.9: every global the old debugui_sa::EnsureGlobals() healed now has a
 // ported TypeId(): ComponentDescription (cell 0x1401c7318), RawMaterialDescription
 // (0x1401c7cb8), InteractComponent (0x1401c7900), InteractDescription (0x1401c7938),
-// CitizenDescription (0x1401c7190), Disease (was g_TypeId_DiseaseDescription, cell
+// CitizenDescription (0x1401c7190), Disease (was TypeId_DiseaseDescription, cell
 // 0x1401c5948 -- Table 1's authority, not the name), PopulationDescription (was
-// g_TypeId_DrawableType, cell 0x1401c47c8 -- Table 1's authority), CitizenComponent
-// (0x1401c7158), and UI::Element (was g_TypeId_Element, healed here under the WRONG
+// TypeId_DrawableType, cell 0x1401c47c8 -- Table 1's authority), CitizenComponent
+// (0x1401c7158), and UI::Element (was TypeId_Element, healed here under the WRONG
 // by-name guess "Internal" -- the cell is exref 0x140151660, UI::Element's own
 // _typeInfo per Table 1 / standalone/reg_element_typeids.cpp, matching this file's
 // OWN correct comment on the FindElemBase guard further down). The lazy-cache
@@ -1168,7 +1168,7 @@ static void* DebugUI_FindElemBase(void* parentElem, const char* name) {
     else printf("[DebugUI::Slot4] FindElemBase('%s') = %p\n", name, rawElem);
 #endif
     // Original uses UI::Element's own id (exe slot 0x140151660), NOT
-    // g_TypeId_ButtonElement which excludes sliders/images/numbers.
+    // TypeId_ButtonElement which excludes sliders/images/numbers.
     if (!rawElem || !fn_IsDerivedFrom(rawElem, UI::Element::TypeId())) {
         rawElem = nullptr;
     }
@@ -1550,15 +1550,15 @@ void DebugUI::OnCreated() {
 // live Runtime factory tree (post-Engine::Startup) by each id's REAL registered
 // name (the engine_funcs labels now match, verified against the Ghidra
 // registration writers):
-//   g_TypeId_ComponentDescription_FC(0x1401c7318)        -> "ComponentDescription"
-//   g_TypeId_RawMaterialDescription(0x1401c7cb8)-> "RawMaterialDescription"
-//   g_TypeId_InteractComponent_FC(0x1401c7900) -> "InteractComponent"
-//   g_TypeId_InteractDescription_FC(0x1401c7938)  -> "InteractDescription"
-//   g_TypeId_CitizenDescription(0x1401c7190)    -> "CitizenDescription"
-//   g_TypeId_DiseaseDescription(0x1401c5948)    -> "Disease"
-//   g_TypeId_DrawableType(0x1401c47c8)          -> "PopulationDescription"
-//   g_TypeId_Element                     -> "Internal"
-//   g_TypeId_CitizenComponent_FC(0x1401c7158) -> "CitizenComponent" (name now correct)
+//   TypeId_ComponentDescription_FC(0x1401c7318)        -> "ComponentDescription"
+//   TypeId_RawMaterialDescription(0x1401c7cb8)-> "RawMaterialDescription"
+//   TypeId_InteractComponent_FC(0x1401c7900) -> "InteractComponent"
+//   TypeId_InteractDescription_FC(0x1401c7938)  -> "InteractDescription"
+//   TypeId_CitizenDescription(0x1401c7190)    -> "CitizenDescription"
+//   TypeId_DiseaseDescription(0x1401c5948)    -> "Disease"
+//   TypeId_DrawableType(0x1401c47c8)          -> "PopulationDescription"
+//   TypeId_Element                     -> "Internal"
+//   TypeId_CitizenComponent_FC(0x1401c7158) -> "CitizenComponent" (name now correct)
 //     (via GetTypeIdByName, matching the proven CitizenUI heal)
 // Slot8 reads the MainLoop through g_pMainLoopSingleton (the exe's exref
 // 0x140151440 names the same symbol) and opens with a null check on it.

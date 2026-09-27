@@ -34,7 +34,6 @@ extern void ZoneComponent_ZoneMapAdd(void* zoneMap, void* entityPtr);
 // ---- naturalresourcecomponent.cpp ----
 extern void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP);
 
-
 // ---- cropfieldcomponent.cpp ----
 extern void CropFieldComponent_ValidateEntityRefs(uintptr_t self);
 extern void CropFieldComponent_ResizeEntityList(void* arrayPtr, int newSize);
@@ -58,21 +57,6 @@ extern void  HerdComponent_AdjustSize(void* herdComp, int targetSize);
 // addresses below. 0x1400035b0 / 0x1400036c0 are NOT registered.
 
 // ------------------------------------------------------------------
-// Component type-ID .rdata globals (e.g. DAT_1401c7b30 = NaturalResourceComponent).
-// The shared FindComponent accessors (FUN_1400052c0 et al.) compare a sibling
-// component's GetTypeId against *pTypeId where pTypeId = ResolveAddr(Exe, addr);
-// in the original these globals are .data filled by RegisterType. In standalone
-// WE provide the storage (registered below at AddressRegistryInit) and FILL it
-// after InvokeAllRegistrations — see FillComponentTypeIdGlobals_nature(), called
-// from standalone/main.cpp once the type tree is populated (GetTypeIdByName is a
-// registration-list lookup, so it returns 0 until then). Without this every
-// type-id-keyed FindComponent silently returns null in standalone.
-static uint32_t g_tid_NaturalResourceComponent = 0;  // 0x1401c7b30
-
-extern "C" void FillComponentTypeIdGlobals_nature() {
-    g_tid_NaturalResourceComponent =
-        NaturalResourceComponent::TypeId();
-}
 
 // Backing storage for the growthcomponent .rdata constant-pool entries (exact
 // bit patterns from Application-x64.exe .rdata, verified in Ghidra).
@@ -146,6 +130,4 @@ void RegisterComponentBatch_nature() {
     RegisterExeAddr(0x140172288, reinterpret_cast<uintptr_t>(&k_rdata_172288));  // -10.0  growth rate at freeze
     RegisterExeAddr(0x1401722b0, reinterpret_cast<uintptr_t>(&k_rdata_1722b0));  // double fabs bitmask
 
-    // Component type-ID global (filled after InvokeAllRegistrations — see above).
-    RegisterExeAddr(0x1401c7b30, reinterpret_cast<uintptr_t>(&g_tid_NaturalResourceComponent));
 }

@@ -140,7 +140,7 @@ extern "C" void TutBase_ResolveToolbarRef(void* stringField) {
         }
     }
 
-    // Validate Toolbar type (cell 0x1401c6128; the global "g_TypeId_ToolbarItem" lies — D5).
+    // Validate Toolbar type (cell 0x1401c6128; the global "TypeId_ToolbarItem" lies — D5).
     void* result = nullptr;
     if (found) {
         uint32_t tid = Toolbar::TypeId();

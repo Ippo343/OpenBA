@@ -57,6 +57,7 @@
 #include "resolve.h"
 #include "object/Internal.h"   // Object::Base::Type (B.3.8 callers)
 #include "engine_funcs.h"
+#include "Component/TradeDescription.h"   // ENDGAME B.3.9 TR: TradeDescription::TypeId()
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "Component/ComponentDescription.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.9 CG2)
@@ -144,8 +145,8 @@ extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray) {
 
     const uint8_t* ts = reinterpret_cast<const uint8_t*>(tradeState);
     void* tradeDesc = *reinterpret_cast<void* const*>(ts + 0x18);
-    if (tradeDesc && g_TypeInfo_TradeDescription && fn_IsDerivedFrom &&
-        !fn_IsDerivedFrom(tradeDesc, *g_TypeInfo_TradeDescription)) {
+    if (tradeDesc && fn_IsDerivedFrom &&
+        !fn_IsDerivedFrom(tradeDesc, TradeDescription::TypeId())) {
         tradeDesc = nullptr;
     }
     if (!tradeDesc) return;                  // retail would deref null

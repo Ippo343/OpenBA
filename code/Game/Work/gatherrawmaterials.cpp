@@ -30,7 +30,6 @@
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.8 CB3: RawMaterialDescription::TypeId()
 #include "Component/InteractDescription.h"   // ENDGAME B.3.9 D5: InteractDescription::TypeId()
 
-namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_registration.h
 
 // ============================================================
 // Local function pointers resolved at init time

@@ -66,19 +66,20 @@ static uint64_t StorageUI_FindElemAsBasePtr(void* parentElem, const char* name) 
 
 namespace storageui_sa {
 
-// ENDGAME B.3.9 CG2: g_TypeId_ComponentEntity -> ComponentEntity::TypeId(),
-// g_TypeId_RawMaterialDescription -> RawMaterialDescription::TypeId(). Both class
+// ENDGAME B.3.9 CG2: TypeId_ComponentEntity -> ComponentEntity::TypeId(),
+// TypeId_RawMaterialDescription -> RawMaterialDescription::TypeId(). Both class
 // statics always answer, so the lazy-fill retires.
 void EnsureGlobals() {
-    // g_TypeId_StorageComponent_FC (0x1401c7e78, used by fn_FindComponent_Storage)
-    // and g_pExternalFactorySingleton are filled by engine_funcs init in standalone.
+    // g_pExternalFactorySingleton is filled by engine_funcs init in standalone.
+    // (ENDGAME B.3.9 TR: fn_FindComponent_Storage reads StorageComponent::TypeId().)
 }
 
 // All globals StorageUI_Serialize/Startup dereference must be live before we run,
 // or a null-deref would fault (MinGW has no __try/__except to catch it).
 bool Ready() {
-    return g_TypeId_StorageComponent_FC
-        && ::Object::ExternalFactory::_singleton;
+    // ENDGAME B.3.9 TR: the StorageComponent type-id conjunct is gone -- the class
+    // static always answers (the cell pointer it tested was never null).
+    return ::Object::ExternalFactory::_singleton != nullptr;
 }
 
 static void Trace(const char* what, void* self) {

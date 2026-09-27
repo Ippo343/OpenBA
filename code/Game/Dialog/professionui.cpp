@@ -286,7 +286,7 @@ static void PushToArray8(uintptr_t self, int ptrOffset, uint64_t value) {
 // tidy). Construction stays the stub alloc+zero+vtable; the framework fills the base
 // dialog/datasource fields afterward — same shape as the MapUI/ImmigrationUI promotions.
 namespace professionui_sa {
-    // ENDGAME B.3.9 CG2: EnsureTypeIds retired — it healed g_TypeId_NumberEditElement
+    // ENDGAME B.3.9 CG2: EnsureTypeIds retired — it healed TypeId_NumberEditElement
     // (a per-file lazy-fill of the exe-side global) which the conversion below to
     // UI::NumberEditElement::TypeId() (the ported Runtime static) makes unnecessary.
     void Trace([[maybe_unused]] const char* slot, void* self) {
@@ -551,7 +551,7 @@ void ProfessionUI::OnOpened() {
         uint64_t numEditBuf = 0;
         ::new (&numEditBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(spinnerBuf)->Child(0));  // B.3.6 bridge
         void* numEditRaw = (void*)numEditBuf;
-        // ENDGAME B.3.9 CG2: g_TypeId_NumberEditElement -> UI::NumberEditElement::TypeId()
+        // ENDGAME B.3.9 CG2: TypeId_NumberEditElement -> UI::NumberEditElement::TypeId()
         // (the ported Runtime static always answers; the null-guard on the exe-side
         // global retires with the conversion).
         void* numEditChecked = nullptr;

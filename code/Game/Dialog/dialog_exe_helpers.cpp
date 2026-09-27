@@ -27,7 +27,6 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/BuildComponent.h"   // X::TypeId() (B.3.8 callers)
 
-namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_registration.h
 
 // ============================================================
 // WorkplaceUI FindComponent (FUN_14000d6c0, type 0x1401c7008)

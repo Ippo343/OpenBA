@@ -11,6 +11,7 @@
 
 #include "Component/workcomponent_funcs.h"
 #include "engine_funcs.h"
+#include "Component/WorkDescription.h"   // ENDGAME B.3.9 TR
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -323,3 +324,26 @@ void* WorkComponent::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(WorkComponent, "_ZTV13WorkComponent")
 DEFINE_EXE_TYPE(WorkComponent, "Component")
+
+// moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.
+int fn_StorageCountQuery(void* component) {
+    uintptr_t c = (uintptr_t)component;
+    void* base = *(void**)(c + 0x18);
+    void* jobType = fn_IsDerivedFrom(base, WorkDescription::TypeId()) ? base : nullptr;
+    if (!jobType) return 0;
+    uintptr_t jt = (uintptr_t)jobType;
+    if (*(uint8_t*)(jt + 0x34) == 0) {
+        return *(int*)(jt + 0x24);
+    }
+    uint64_t buildBP = 0;
+    fn_FindComponent_Build(*(void**)(c + 0x10), &buildBP);
+    uintptr_t build = (uintptr_t)buildBP;
+    int defaultWorkers = *(int*)(jt + 0x24);   // _defaultWorkers (NOT _maxWorkerCount)
+    int maxArea        = *(int*)(jt + 0x30);   // _maxArea (NOT the building's tile area)
+    int width      = (int)*(short*)(build + 0x2c);
+    int height     = (int)*(short*)(build + 0x2e);
+    int result = (int)(((float)(width * height) / (float)maxArea) * (float)defaultWorkers + 1.0f);
+    if (result > defaultWorkers) result = defaultWorkers;
+    if (result < 1)              result = 1;
+    return result;
+}

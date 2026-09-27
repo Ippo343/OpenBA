@@ -75,7 +75,7 @@ static float* s_fYawMax = nullptr;
 
 // TypeInfo for IsDerivedFrom check in Serialize -- cell 0x1401c7158, read directly
 // through CitizenComponent::TypeId() (D5, ENDGAME B.3.9 CG3). The env-gated
-// g_TypeId_CitizenComponent_FC / by-name fallback pair this used to juggle read the
+// TypeId_CitizenComponent_FC / by-name fallback pair this used to juggle read the
 // SAME cell and always agreed (verified in the 2026-08-26 graduation A/B), so there
 // is nothing left to fall back to.
 

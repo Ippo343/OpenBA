@@ -446,7 +446,7 @@ static fn_MemFreeDispatch_t fn_MemFreeDispatch = nullptr;
 // read directly through RawMaterialComponent::TypeId() below).
 
 // WorkComponent type ID — DAT_1401c8070 (already in engine_funcs.h as
-// g_TypeId_WorkComponent; the comment here used to say "StorageLocationComponent",
+// TypeId_WorkComponent; the comment here used to say "StorageLocationComponent",
 // which was also wrong).
 
 // Float constant: half-cell offset (DAT_140172114)

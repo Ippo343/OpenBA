@@ -27,6 +27,8 @@
 #include "Component/WorkComponent.h"           // ENDGAME B.3.9 C1: 0x1401c8070 cell class
 #include "Component/RawMaterialDescription.h"  // ENDGAME B.3.9 C1: 0x1401c7cb8 cell class
 #include "Component/CitizenComponent.h"        // ENDGAME B.3.9 C1: 0x1401c7158 cell class
+#include "Component/CharacterComponent.h"      // ENDGAME B.3.9 TR
+#include "Component/StatusIconComponent.h"     // ENDGAME B.3.9 TR
 #include "Component/AttendanceDescription.h"   // ENDGAME B.3.9 CB: 0x1401c3f78 cell class
 #include "options.h"
 #include "engine_funcs.h"
@@ -1876,7 +1878,6 @@ char CitizenComp_CanFindHousing(int64_t selfV) {
 
 // The standalone type-name -> CRC registry lookup (also declared further down, next to
 // the storage finder that uses it). Needed here for the newborn-component fallback.
-namespace Object { uint32_t GetTypeIdByName(const char* name); }
 
 // Reimpl of CitizenComponent_helper_1b90 (0x140111b90):
 // procreation — count nearby eligible mature citizens to bias child gender, allocate
@@ -1934,7 +1935,7 @@ void CitizenComp_helper_1b90(int64_t selfV) {
     // ACCESS_VIOLATION reading 0x10 inside CitizenComp_DeferredInit_117080's first
     // `*(self+0x10)` (observed on the very first in-game birth, ~frame 5000, release
     // build 2026-07-25). Fall back to the self-contained name→CRC lookup — the same
-    // pattern CitizenComp_FindSiblingByName uses — instead of filling the shared global,
+    // pattern CitizenComp_FindSiblingByTypeId uses — instead of filling the shared global,
     // which would un-dormant ~30 unrelated readers.
     // ENDGAME B.3.9 C1: 0x1401c7158 IS CitizenComponent (INVENTORY_C Table 1, not
     // "CitizenAIComponent" as the old local name said), so the fallback above is
@@ -1997,7 +1998,6 @@ void CitizenComp_helper_1b90(int64_t selfV) {
 // [EatMsg] traces gated on BANISHED_STORAGE_TRACE.
 // Forward decl (factory_registration.h is only included further down, in the
 // factory section) — the standalone type-name -> CRC registry lookup.
-namespace Object { uint32_t GetTypeIdByName(const char* name); }
 // [SCOPED STANDALONE FALLBACK] self-contained StorageComponent find on an entity
 // (+0x30 comp array / +0x38 count). The registered 6270 port (work_base_reimpl.cpp)
 // reads its type-id from raw .rdata 0x1401c7e78 which is UNREGISTERED in standalone,
@@ -2960,9 +2960,8 @@ void CitizenComponent_InitFuncs() {
 // type-id globals (DAT_1401c7078 CharacterComponent / DWORD_1401c7e08
 // StatusIconComponent) — those are 0xFFFFFFFF in standalone and filling them
 // would un-dormant ~30 unrelated readers (same reasoning as CitizenAI's find).
-static void* CitizenComp_FindSiblingByName(int64_t ownerEntity, const char* typeName) {
+static void* CitizenComp_FindSiblingByTypeId(int64_t ownerEntity, uint32_t want) {
     if (!ownerEntity) return nullptr;
-    uint32_t want = ::Object::GetTypeIdByName(typeName);
     if (want == 0 || want == 0xFFFFFFFF) return nullptr;
     uint8_t* e = reinterpret_cast<uint8_t*>(ownerEntity);
     int count = *reinterpret_cast<int*>(e + 0x38);
@@ -3045,11 +3044,11 @@ void CitizenComponent::Startup() {
     // +0x278 = CharacterComponent IBP ("Family" finder; CitizenAI reads its +0x60
     // char-index as the alive flag: index>=0 alive, -1 dead).
     *reinterpret_cast<void**>(p + 0x278) =
-        CitizenComp_FindSiblingByName(owner, "CharacterComponent");
+        CitizenComp_FindSiblingByTypeId(owner, CharacterComponent::TypeId());
     // +0x280 = StatusIconComponent IBP ("MeshInstance" finder; used by the heavy
     // Update only — not by CitizenAI — so a null here is harmless for Brick 2).
     *reinterpret_cast<void**>(p + 0x280) =
-        CitizenComp_FindSiblingByName(owner, "StatusIconComponent");
+        CitizenComp_FindSiblingByTypeId(owner, StatusIconComponent::TypeId());
 
     // +0x288 = CitizenDescription: trust comp+0x18 (the copy-ctor stored it).
     // The original validates IsDerivedFrom(obj, CitizenDescription 0x1401c7190),

@@ -62,8 +62,8 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
 
     elem = *(void**)foundBuf;
 
-    // ENDGAME B.3.9 CG2: g_TypeId_HelpButtonElem shares its initialiser (exref
-    // 0x1401514f8) with g_TypeId_ButtonElement -> UI::ButtonElement::TypeId()
+    // ENDGAME B.3.9 CG2: TypeId_HelpButtonElem shares its initialiser (exref
+    // 0x1401514f8) with TypeId_ButtonElement -> UI::ButtonElement::TypeId()
     // (Table 3 name lie: this is not a distinct "help button" element class).
     void* buttonElem = nullptr;
     if (elem && fn_IsDerivedFrom(elem, UI::ButtonElement::TypeId()))

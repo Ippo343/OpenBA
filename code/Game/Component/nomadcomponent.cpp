@@ -251,7 +251,7 @@ void NomadComp_RebuildController_b60(int64_t param_1, int64_t param_2) {
 //   1. If the controller at +0x28 reports active (vtable+0x50), call FUN_140102b60(self,0).
 //   2. TradeWork_impl_c690 detaches the entity from the work list (+0x60).
 //   3. Walk the UI's open dialogs; for any whose controller derives from
-//      g_TypeId_PageToggleUI (DAT_1401c4f00) and whose bound entity (+0x30) == param_2,
+//      TypeId_PageToggleUI (DAT_1401c4f00) and whose bound entity (+0x30) == param_2,
 //      close that dialog and return.
 // Sub-deps + the member-return UI calls resolved via .rdata dispatch slots.
 // Non-static for registration. Faithful structural port of 0x140103480.

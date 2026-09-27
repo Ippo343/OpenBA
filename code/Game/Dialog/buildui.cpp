@@ -126,7 +126,7 @@ static uint64_t BuildUI_FindElemAsBasePtr(void* parentElem, const char* name) {
 // alloc+zero+vtable; the engine fills the base fields (dialog +0x20 / datasource
 // +0x28) afterward. Same shape as the BuildRequirementUI promotion above.
 namespace buildui_sa {
-    // ENDGAME B.3.9: ComponentEntity / BuildDescription (was g_TypeId_ResourceComponent,
+    // ENDGAME B.3.9: ComponentEntity / BuildDescription (was TypeId_ResourceComponent,
     // a misnamed alias) / RawMaterialDescription / BuildComponent / ClearAreaComponent
     // all have a ported TypeId() now, so the EnsureTypeIds()/HardIdsReady() lazy-cache
     // over the exe .rdata globals is dead — the statics always answer.

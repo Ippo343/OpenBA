@@ -194,8 +194,6 @@ extern void RegisterComponentBatch_visuals();
 // type-id .rdata global its component's live Update/Startup needs (all other helpers
 // already registered by earlier waves). See final_steps.md §3 Phase 1.
 extern void RegisterComponentBatch_fruit();
-extern void RegisterComponentBatch_spawn();
-extern void RegisterComponentBatch_tombstone();
 // Animal spawn wave (2026-07-28, deer herds + pasture livestock). Shared type-id
 // globals in reg_component_animal.cpp (gated on any BANISHED_LIVE_ANIMALS/HERD/
 // PASTURE/ANIMAL_UPDATE flag); per-lane bring-ups in reg_herd_live.cpp,
@@ -266,9 +264,6 @@ extern void RegisterWorkActionCtorBatch();   // Phase 2 Keystone B2: 4 Work acti
 extern void RegisterActionChildCtors2Batch();// Phase 2 Keystone B3: leaf copy-ctors + consume-list
 extern void RegisterCitizenAICandidateList();// Phase 3 Keystone D Brick 3: CitizenAI candidate-selection
 extern void RegisterAutoSaveTypeIds();       // LANE1 13/14: AutoSaveDialog type-id slot 0x1401c4d08
-extern void RegisterCitizenAITypeIds();      // openfuncs step 2: c70e8/c7158/c42c0 type-id fill (BANISHED_LIVE_CITIZENAI_TIDS)
-extern void RegisterTradeUITypeIds();        // c4b80 TradeComponent type-id fill (BANISHED_LIVE_TRADE_TIDS)
-extern void RegisterElementTypeIds();        // 13 UI-element type-id dispatch slots, one batch (BANISHED_LIVE_ELEMENT_TIDS)
 extern void RegisterCitizenAIHandlers();     // Phase 3 Keystone D Brick 3b: CitizenAI state handlers
 extern void RegisterCitizenAIFindTarget();   // Phase 3 Keystone D Brick 3b: CitizenAI find-best-target (dd30)
 extern void RegisterCitizenAIActionCtors();  // Phase 3 Keystone D Brick 3b: CitizenAI action-ctor family
@@ -283,16 +278,8 @@ extern void RegisterCitizenAIHousingIdle();  // Phase 3 Keystone D Brick 3b-W4: 
 extern "C" float CharacterComponent_Sinf_131c90(float); // Phase 3 Keystone D: move-tick heading sinf (0x140131c90)
 extern "C" float CharacterComponent_Cosf_131090(float); // Phase 3 Keystone D: move-tick heading cosf (0x140131090)
 extern void RegisterCharManager();           // Phase 3 Keystone D: char spatial-hash manager (sub_83f0/8660/8c40/8d00/28c0/8560)
-extern void RegisterEconomyTypeIds();        // Phase 3 economy: building-find type-id globals (InteractDescription c7938)
-extern void RegisterPipelineTypeIds();       // StartTown 1fc0 pipeline: CreatePlacedDescription c7468 / ModelComponent c7a50 / ModelDescription c7a88 (gated BANISHED_LIVE_DECAL)
-extern void RegisterTrackerTypeIds();        // TrackerComponent c4b10 storage (filled by FillTypeIdGlobals_tracker)
-extern void RegisterOrchardTypeIds();        // OrchardComponent c46b0 storage (filled by FillTypeIdGlobals_orchard)
-extern void RegisterMarketTypeIds();         // MarketComponent c44f0 + MarketDescription c4528 storage (filled by FillTypeIdGlobals_market)
-extern void RegisterFoodTypeIds();           // Fishing/Hunt/Herbalist/CropField component+description type-id storage (filled by FillTypeIdGlobals_food)
-extern void RegisterTutorialTypeIds();       // FinishTutorialGoal c6240 + FinishTutorialInstance c6278 + TutorialInstance c6668 (filled by FillTypeIdGlobals_tutorial)
+extern void RegisterFoodTypeIds();           // food-production .rdata const + CropField maturity door (type-id storage gone, ENDGAME B.3.9 TR)
 extern void RegisterRdataFloatConsts();     // 25 .rdata float constants resolved by code/ but registered nowhere; a null one is SILENT (cost the crop harvest)
-extern void RegisterGrowthTypeIds();         // GrowthComponent c77b0 storage (filled by FillTypeIdGlobals_growth)
-extern void RegisterClearAreaTypeIds();      // ClearAreaComponent c71c8 + ClearAreaDescription c7200 storage (filled by FillTypeIdGlobals_cleararea)
 extern void RegisterOrchardGrowth();         // OrchardComponent::GetGrowth 51640 (orchard panel yield bar)
 extern void RegisterWorkActBatch();          // Phase 2 Keystone B3: 5 Work action-queue builders
 extern void RegisterTradeCtrlBatch();        // TradeComponent state machine, layer 1 (BANISHED_LIVE_TRADE_CTRL)
@@ -303,7 +290,6 @@ extern void RegisterTradeUICheckoutBatch();   // Wave D: TradeUI checkout (81420
 extern void RegisterWorkTailFireBatch();     // Phase 2 Keystone B tail: FireWork spiral search (881d0/88730)
 extern void RegisterFireBatch();             // Fire disaster lane: ignite/spread/extinguish/slot15 + the 2 type-id globals
 extern void RegisterCropDiseaseBatch();      // Crop infestation / livestock disease (DiseaseComponent 48xxx)
-extern void RegisterWorkTailSerializeBatch();// Phase 2 Keystone B tail: PastureWork Slot4 (f2370) registration
 extern void RegisterKeystoneAZoneBatch();    // Phase 2 Keystone A: zone+road enqueue (a6f00/9d360/9ce00/a6e30)
 extern void RegisterKeystoneARestreeBatch(); // Phase 2 Keystone A: residence RB-tree (17230/15ec0/172f0/17460/14b40)
 extern void RegisterTownWorkplaceRegistry();  // Phase 3 economy: profession-BST workplace insert (0x1400895a0)
@@ -319,7 +305,6 @@ extern "C" void StartNewGame_Reg(void*, void*, void*, void*, char, void*, void*,
                                  unsigned, void*);                        // 0x1400b4540 (newgamedialog.cpp)
 namespace Game { void RegisterDefaultInputBindings(); }                   // 0x1400992f0 (inputbindings.cpp)
 extern void RegisterCitizen25();              // openfuncs step 2.5 — needs-msg helpers (fde0/17a0/1540) + lifecycle quartet (2040/68a0/302a0/117080)
-extern void RegisterTownServices();            // Cemetery/Healer/Happiness controller state tables (town-service wave)
 extern void RegisterCitizenLifeEventHandler(); // step 2.5 defer close — HandleLifeEvent 116dd0 death chain (cemetery/tombstone/mourning, 7 fns)
 extern "C" void RegisterCitizen25Tick();      // openfuncs step 2.5(b) — behavior-tick group + EventLog_AddEvent
 extern "C" void RegisterEventLogCitizen();    // citizen life-event chain: PostLifeEvent (ex-"AssignState") + AddCitizenEvent + TileIndex
@@ -356,7 +341,7 @@ extern void RegisterTutorialWaveBatch();   // Lane 2 Tutorial wave: 12 helper fn
 extern void RegisterUnregLane2();          // Lane 2: UI/dialog gaps — GetController + 4 SpriteSheet/Sprite ctors
 extern void RegisterUnregLane3();
 extern "C" void RegisterUnregLane1Batch();     // Lane 1: save/load + object core
-extern void RegisterUnregLane4TypeIds();   // Lane 4: 30 exe type-id storage slots + 3 .rdata float consts          // Lane 3: graphics/math gaps — Vector3/Rectangle ctors, RandFloatTol, IsRunning, Material typeid, String/Filename ops
+extern void RegisterUnregLane4RdataConsts(); // Lane 4: 3 .rdata float consts          // Lane 3: graphics/math gaps — Vector3/Rectangle ctors, RandFloatTol, IsRunning, Material typeid, String/Filename ops
 extern void RegisterGameLeafBatch();       // Game gap: closure-safe leaf dtors/teardown + terrain reimpls
 extern void RegisterPlayerDragBatch();     // Player wave (drag): FindDescription/sounds/CloseDialog/ClearPathEntities (6)
 extern void RegisterPlayerPlaceBatch();    // Player wave (place): FlipVariant (1) + UpdateHierarchy dispatch slot
@@ -378,14 +363,12 @@ extern void RegisterPlayerRenderBatch();    // Selection outline (b930 EdgeMesh 
 extern void RegisterKeystoneARemovalBatch(); // Keystone A: RemovalTool::CalcPath (1035e0) + closure (d960/f8d50/11e4d0/11dfa0/9c700/f9ad0). Player clearance tool; lead-verified vs disasm.
 extern void RegisterDestroySmBatch();        // Upgrade path: DestroyComponent state handlers (reg_destroy_sm.cpp; runtime-gated BANISHED_LIVE_DESTROY, default-ON).
 // .rdata/.data census wave 2026-09-04.
-extern void RegisterW2Lane3TypeIds();      // ParticleDescription BaseTypeInfo 0x1401c4758
 extern "C" void RegisterW2Screenshot();    // GameUpdateLoop::TakeScreenshot 0x140095da0
 
 // Code-fn wave 2026-09-04 (unported exe .text functions), six lanes.
 extern void RegisterCodeLane2();           // MapParamsDialog ctor 0x14006bd80 (the Map button) + hygiene
 extern "C" void RegisterCodeLane4();       // TakeScreenshot 0x140095da0 (live quicksave crash) + free ports
 extern "C" void RegisterCodeLane5Batch();  // MusicPlayer::Update 0x1400a40e0 (background music) + hygiene
-extern void RegisterControlUIBatch();        // ControlUIConfig type-id cell (reg_controlui.cpp): the generic component-command buttons (pasture work/split/empty, element id 50000, command in cfg+0x20).
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -397,7 +380,6 @@ static void RegisterCodeFunctions() {
     RegisterUnregLane3();
 
     // .rdata/.data wave — see docs/waves/rdata_data_wave.md.
-    RegisterW2Lane3TypeIds();
     RegisterW2Screenshot();
 
     // Code-fn wave 2026-09-04 — see docs/waves/code_fns_wave.md.
@@ -405,7 +387,7 @@ static void RegisterCodeFunctions() {
     RegisterCodeLane4();
     RegisterCodeLane5Batch();
     RegisterUnregLane1Batch();
-    RegisterUnregLane4TypeIds();
+    RegisterUnregLane4RdataConsts();
     RegisterComponentBatch_people();
     RegisterImmigrationWave();
     RegisterComponentBatch_economy();
@@ -415,8 +397,6 @@ static void RegisterCodeFunctions() {
     // batch self-gates on BANISHED_LIVE_SPAWN (its type-id globals are also read by
     // other null-guarded consumers, so env-off must publish nothing).
     RegisterComponentBatch_fruit();
-    RegisterComponentBatch_spawn();
-    RegisterComponentBatch_tombstone();
     // Animal spawn wave — shared type-ids + per-lane bring-ups (all self-gated).
     RegisterComponentBatch_animal();
     RegisterHerdLive();
@@ -464,9 +444,6 @@ static void RegisterCodeFunctions() {
     RegisterActionChildCtors2Batch();// Phase 2 Keystone B3 — leaf copy-ctors + consume-list
     RegisterCitizenAICandidateList();// Phase 3 Keystone D Brick 3 — CitizenAI candidate-selection
     RegisterAutoSaveTypeIds();       // LANE1 13/14 - AutoSaveDialog type-id slot (0x1401c4d08)
-    RegisterCitizenAITypeIds();      // openfuncs step 2 — c70e8/c7158/c42c0 fill (gated BANISHED_LIVE_CITIZENAI_TIDS)
-    RegisterTradeUITypeIds();        // c4b80 TradeComponent — unblocks fn_FindComponent_Building (gated BANISHED_LIVE_TRADE_TIDS)
-    RegisterElementTypeIds();        // whole UI-element type-id table — unblocks every FindTypedElement (gated BANISHED_LIVE_ELEMENT_TIDS)
     RegisterCitizenAIHandlers();     // Phase 3 Keystone D Brick 3b — CitizenAI state handlers (Wander+)
     RegisterCitizenAIFindTarget();   // Phase 3 Keystone D Brick 3b — CitizenAI find-best-target (dd30+78c0)
     RegisterCitizenAIActionCtors();  // Phase 3 Keystone D Brick 3b — CitizenAI action-ctor family (9 ctors)
@@ -499,12 +476,10 @@ static void RegisterCodeFunctions() {
     RegisterWorkTailFireBatch();     // Phase 2 Keystone B tail — FireWork spiral search (881d0/88730)
     RegisterFireBatch();             // Fire disaster lane (standalone/reg_fire.cpp)
     RegisterCropDiseaseBatch();      // Crop infestation — opt-in via BANISHED_LIVE_CROPDISEASE
-    RegisterWorkTailSerializeBatch();// Phase 2 Keystone B tail — PastureWork Slot4 (f2370) registration
     RegisterKeystoneAZoneBatch();    // Phase 2 Keystone A — zone+road enqueue cluster
     RegisterKeystoneARestreeBatch(); // Phase 2 Keystone A — residence RB-tree cluster
     RegisterTownWorkplaceRegistry(); // Phase 3 economy — profession-BST workplace insert
     RegisterBuildActions();          // Construction 2c — SetupBuildActions build-labor action chain (0x1400c0690)
-    RegisterTownServices();            // Cemetery/Healer/Happiness controller state tables
     RegisterCitizenLifeEventHandler(); // step 2.5 defer close — HandleLifeEvent 116dd0 death chain
     RegisterTownStorageSeed();       // Economy M-D — storage-location registry + start-resource seeder
     RegisterCitizenNeedsUpdate();    // Economy M-D — CitizenComponent message dispatch (eat/drink delivery)
@@ -567,16 +542,8 @@ static void RegisterCodeFunctions() {
     RegisterTutorialBaseBatch();   // Tutorial gap -> 0: serialize family (26fb0/27ad0/27de0/28cf0/28f40/29190) + Check helpers (92010/910a0/13920/12e5c0/12fbb0)
     RegisterFindUIElementByPath();  // e1870: without it every highlight + "unhide only this" step is a no-op
     RegisterTutorialWaveBatch();   // Tutorial wave: 262b0/28650/1001f0/e2250/e2330/e24f0/e2700/e29f0/1af90/1afe0/e1260/e1db0 + vtables 160f30/160870/1607a0/160d20/160c30/1609e0 + ctors e01d0/e2cc0
-    RegisterEconomyTypeIds();      // Phase 3 economy: InteractDescription c7938 storage (filled by FillEconomyTypeIdGlobals)
-    RegisterPipelineTypeIds();     // StartTown 1fc0 pipeline: ModelComponent/ModelDescription/CreatePlacedDescription find (filled by FillPipelineTypeIds; gated BANISHED_LIVE_DECAL)
-    RegisterTrackerTypeIds();      // TrackerComponent c4b10 storage (filled by FillTypeIdGlobals_tracker) — production-stats panel + rawmat/statvalue consumers
-    RegisterOrchardTypeIds();      // OrchardComponent c46b0 storage (filled by FillTypeIdGlobals_orchard) — orchard panel type/yield + plant/tend work
-    RegisterMarketTypeIds();       // MarketComponent c44f0 + MarketDescription c4528 storage — MarketWork slot 4 component scan + description narrowing
     RegisterFoodTypeIds();         // food-production component/description type ids — without these the fishing rate mask reads 0 on perfect water
-    RegisterTutorialTypeIds();     // tutorial type ids — a null FinishTutorialGoal id makes Slot4's goal narrow fail, so the tutorial never gets its Tutorial definition
     RegisterRdataFloatConsts();    // unregistered .rdata floats: hard guards go inert, soft `p ? *p : 0.0f` fallbacks silently use the WRONG value
-    RegisterGrowthTypeIds();       // GrowthComponent c77b0 storage (filled by FillTypeIdGlobals_growth) — every natural resource spawned at runtime
-    RegisterClearAreaTypeIds();    // ClearAreaComponent c71c8 (backs fn_FindComponent_SM, null until now) + ClearAreaDescription c7200 — orchard state 20 "cut"
     RegisterOrchardGrowth();       // OrchardComponent::GetGrowth 51640 — fn_OrchardGetGrowth was null (EXEC-of-0 in OrchardUI::Slot7)
 
     // Player registration wave (round 1) — closure-safe tool sub-helpers.
@@ -591,12 +558,6 @@ static void RegisterCodeFunctions() {
     //   11cec0/11cc70/11c120) + guards (11da80/11e600/11e5b0).
     //   Runtime behavior gated by BANISHED_LIVE_DESTROY (default-ON since 2026-07-25;
     //   the env var is a kill-switch); see reg_destroy_sm.cpp.
-    RegisterControlUIBatch();      // vtable_ControlUI 14015b380 + vtable_ControlUIConfig 14015b3e0.
-    //   The generic component-command buttons (pasture work/split/empty share element id 50000;
-    //   the command int is ControlUIConfig+0x20 — work=2 split=1 empty=0 — and the target
-    //   component type is +0x24, both read by the config's idx5 deserialize 0x14005fb70).
-    //   Both classes were all-no-op stubs until 2026-07-31, so ControlUI's ported slots were
-    //   dead code; see reg_controlui.cpp.
     RegisterPlayerTileBatch();     // r2 tile: 003870 + d580 + fd650 (closure complete via prior waves)
     RegisterPlayerRayBatch();      // r2 ray: aa530 + 1005a0 + 101270 + fda00 (bottom-up; 1005a0 resolves 4 exports locally)
     RegisterPlayerTradeBatch();    // r2c trade: 66800 EditTool + 666b0 EntityUI + AVL family (retrace disasm-verified, typo 2e30/c690->102e30/2c690 caught)
@@ -1115,21 +1076,9 @@ static void RegisterDispatchSlots() {
     // (0x140152368 Application::_singleton and 0x140152760 Object::Factory::_singleton:
     // rows deleted at ENDGAME B.3.9 SS2 — their readers read the class statics.)
 
-    // UI::Dialog::_typeInfo external — exe slot 0x140151728 in the original
-    // is patched by the loader with the **type ID itself** (4-byte uint),
-    // NOT a pointer to BaseTypeInfo. Original code reads it as
-    // `*(uint32_t*)0x140151728` (single deref), so the slot must contain
-    // the typeId directly.
-    //
-    // Note: Ghidra labels this _typeInfo@DialogInstance based on a heuristic
-    // but the actual type checked here is UI::Dialog (Runtime 0x1801faa88) —
-    // FUN_140064720 loads Dialog/Follow.rsc and runs IsDerivedFrom against
-    // this slot, and the .rsc loads as a UI::Dialog External.
-    //
-    // Type ID isn't known until Factory::Startup runs; LoadDialogResource has
-    // a fallback path that uses Object::Factory::GetTypeIdFromName instead, so we
-    // leave this slot zero-filled until something else needs it.
-    RegisterDispatchSlot(0x140151728, 0);
+    // (0x140151728, the UI::Dialog type-info import slot: row deleted at ENDGAME
+    // B.3.9 TR -- its two readers, mainmenudialog.cpp / mod_dialog_vtables.cpp
+    // LoadDialogResource, read UI::Dialog::TypeId().)
 
     // (0x140151e98 ??0External / 0x140151ea0 ??1External: rows deleted at
     // ENDGAME B.3.9 EXA — their only readers, engine_funcs' fn_External_External

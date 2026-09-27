@@ -126,7 +126,7 @@ static uint64_t FindDialogElemAsBasePtr(void* dialogInst, const char* name) {
 
 // ENDGAME B.3.9: the exe .rdata type-id globals below all have a ported TypeId() now,
 // so the EnsureTypeIds() lazy-cache/heal is dead. NOTE (Table 1/3 correction): this
-// file's old comment claimed g_TypeId_ComponentDescription_FC (cell 0x1401c7318) was
+// file's old comment claimed TypeId_ComponentDescription_FC (cell 0x1401c7318) was
 // "BuildComponent" and healed it with BuildComponent::TypeId() when null — but the
 // cell's real class (its RegisterExeAddr / Fill* binding, reg_tradeui_typeids.cpp:127,
 // game_main.cpp Fill*) is ComponentDescription, and the heal never actually ran (the

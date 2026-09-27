@@ -274,7 +274,7 @@ void ResidenceComponent_SerializeResidentArray(void* serializer, int count, void
             reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             void* val = *(void**)ibp;
             // Require the VALUE, not just the pointer: with 0x1401c7158 registered the
-            // slot exists from startup but only holds the CRC after FillTypeIdGlobals_citizenai.
+            // slot existed from startup but only held the CRC after a post-Startup fill.
             // IsDerivedFrom(val, 0) matches nothing, so a bare pointer check would clear
             // every resident ref in that window.
             if (val && fn_IsDerivedFrom &&

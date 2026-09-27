@@ -7,28 +7,11 @@
 
 #include <cstdio>
 
-// Shared .rdata-slot type-id resolver. Declared in engine_funcs.h.
-// Prefers the exe .rdata DWORD; falls back to the live factory tree by NAME when that slot
-// is unregistered (ResolveAddr -> 0) or registered-but-filled-with-zero. Testing the VALUE
-// rather than the pointer is deliberate: a slot holding 0 is the documented failure mode a
-// null-pointer check cannot see.
-namespace Object { uint32_t ResolveTypeIdByNameLazy(const char* simpleName); }
-
 // ScenarioDialog_Ctor (code/Game/Dialog/scenariodialog.cpp) — ported replacement
 // for the unregistered ScenarioDialog_CopyCtor (0x1400786b0). Declared here rather
 // than including ui_dialogs.h to avoid pulling the dialog header tree into this file.
 void* ScenarioDialog_Ctor(void* self, void* ui, void* extRes, void* parentIBP,
                           void* parentMenuIBP, uint8_t difficulty);
-
-uint32_t ResolveExeTypeId(uintptr_t rdataAddr, const char* name, uint32_t* cache) {
-    if (cache && *cache) return *cache;
-    uint32_t tid = 0;
-    const uint32_t* p = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, rdataAddr));
-    if (p && *p && *p != 0xFFFFFFFFu) tid = *p;
-    if (!tid) tid = ::Object::ResolveTypeIdByNameLazy(name);
-    if (cache) *cache = tid;
-    return tid;
-}
 
 // ============================================================
 // Engine function pointers
@@ -52,7 +35,6 @@ static bool IsDerivedFrom_NullSafe(void* self, uint32_t typeId) {
     if (!self) return false;
     return s_fn_IsDerivedFrom_real ? s_fn_IsDerivedFrom_real(self, typeId) : false;
 }
-uint32_t* g_TypeId_Dialog = nullptr;
 
 fn_MemFreeStatic_t fn_MemFreeStatic = nullptr;
 fn_InternalBasePtr_Ctor_t fn_InternalBasePtr_Ctor = nullptr;
@@ -61,20 +43,10 @@ fn_InternalBasePtr_Ctor_t fn_InternalBasePtr_Ctor = nullptr;
 // UI Widget Functions (Phase A1)
 // ============================================================
 
-// CheckboxElement type ID (exref)
-uint32_t* g_TypeId_CheckboxElement = nullptr;
 
-// UI::ButtonElement type info (exe slot 0x1401514f8)
-uint32_t* g_TypeId_ButtonElement = nullptr;
 
-// UI::Element type info (exe slot 0x140151660)
-uint32_t* g_TypeId_Element = nullptr;
 
-// UI::ImageElement type ID (exref 0x140151500)
-uint32_t* g_TypeId_ImageElement = nullptr;
 
-// ControlComponent type ID (direct)
-uint32_t* g_TypeId_ControlComponent = nullptr;
 
 // FindComponentByTypeId — now inline in engine_funcs.h (reimplemented from FUN_1400c3680)
 
@@ -84,40 +56,12 @@ fn_EntityTrackingSet_BST_Delete_t fn_EntityTrackingSet_BST_Delete = nullptr;
 // ============================================================
 // Exe Type IDs (Phase A2)
 // ============================================================
-uint32_t* g_TypeId_ComponentEntity = nullptr;
-uint32_t* g_TypeId_ProgressElement = nullptr;
-uint32_t* g_TypeId_ComponentDescription_FC = nullptr;
-uint32_t* g_TypeId_ConsumeProduceComponent = nullptr;
-uint32_t* g_TypeId_RadiusComponent = nullptr;
-uint32_t* g_TypeId_ToolbarDescription_FC = nullptr;
-uint32_t* g_TypeId_ResourceComponent = nullptr;
-uint32_t* g_TypeId_RawMaterialDescription = nullptr;
-uint32_t* g_TypeId_MeshInstanceComponent = nullptr;
-uint32_t* g_TypeId_DestroyComponent = nullptr;
-uint32_t* g_TypeId_WorkplaceComponent = nullptr;
-uint32_t* g_TypeId_WorkComponent = nullptr;
-uint32_t* g_TypeId_WorkDescription = nullptr;
-uint32_t* g_TypeId_AttendanceDescription = nullptr;
-uint32_t* g_TypeId_ResourceLimitType = nullptr;
-uint32_t* g_TypeId_ToolUI = nullptr;
 
-// BridgeTool-related type IDs
-uint32_t* g_TypeId_CreateBridgeDescription = nullptr;
-// RemovalTool-related type IDs
-uint32_t* g_TypeId_RemovalDescription = nullptr;
-// g_TypeId_MapComponent_FC (DAT_1401c79e0 = MapComponent) defined below with the FindComponent type-ids
-// g_TypeId_MultiObjectComponent already defined below (~line 444)
 
 // BridgeTool helper functions
 fn_BridgeTool_SnapEndCell_t fn_BridgeTool_SnapEndCell = nullptr;
 fn_BridgeTool_ValidatePath_t fn_BridgeTool_ValidatePath = nullptr;
 
-// DragPlacementTool/FencedTool type IDs
-uint32_t* g_TypeId_CreatePlacementDescription = nullptr;
-uint32_t* g_TypeId_CreateFencedDescription = nullptr;
-uint32_t* g_TypeId_AreaDescription = nullptr;
-uint32_t* g_TypeId_FenceDescription = nullptr;
-uint32_t* g_TypeId_SizeDescription = nullptr;
 
 // ============================================================
 // Game Singletons (Phase A3)
@@ -131,25 +75,6 @@ void** g_pInputConfigSingletonExref = nullptr;
 // ============================================================
 // FindComponent functions are now inline C++ (see engine_funcs.h).
 // These globals are resolved directly from exe .rdata addresses.
-uint32_t* g_TypeId_MapComponent_FC     = nullptr;  // DAT_1401c79e0
-uint32_t* g_TypeId_StateMachineComponent_FC      = nullptr;  // DAT_1401c7d98
-uint32_t* g_TypeId_ConsumeProduceComponent_FC = nullptr;  // DAT_1401c7350
-uint32_t* g_TypeId_BuildComponent_FC        = nullptr;  // DAT_1401c7008
-uint32_t* g_TypeId_DestroyComponent_FC      = nullptr;  // DAT_1401c75f0
-uint32_t* g_TypeId_TradeComponent_FC        = nullptr;  // DAT_1401c4b80
-uint32_t* g_TypeId_AttendanceComponent      = nullptr;  // DAT_1401c3f40
-uint32_t* g_TypeId_PastureComponent         = nullptr;  // DAT_1401c7ba0
-uint32_t* g_TypeId_AnimalDescription        = nullptr;  // DAT_1401c6fd0
-uint32_t* g_TypeId_OrchardComponent         = nullptr;  // DAT_1401c46b0
-uint32_t* g_TypeId_ClearAreaComponent_FC              = nullptr;  // DAT_1401c71c8
-uint32_t* g_TypeId_CitizenComponent_FC      = nullptr;  // DAT_1401c7158
-uint32_t* g_TypeId_StorageComponent_FC      = nullptr;  // DAT_1401c7e78
-uint32_t* g_TypeId_ResidenceComponent       = nullptr;  // DAT_1401c7cf0
-uint32_t* g_TypeId_CemeteryComponent        = nullptr;  // DAT_1401c4090
-uint32_t* g_TypeId_TombstoneComponent       = nullptr;  // DAT_1401c4a30
-uint32_t* g_TypeId_ImmigrationComponent     = nullptr;  // DAT_1401c4480
-uint32_t* g_TypeId_TrackerComponent         = nullptr;  // DAT_1401c4b10
-uint32_t* g_TypeId_ModelComponent_FC       = nullptr;  // DAT_1401c7a50
 
 fn_RadiusCalc_t fn_RadiusCalc = nullptr;
 fn_RadiusDisplay_Remove_t fn_RadiusDisplay_Remove = nullptr;
@@ -177,7 +102,6 @@ fn_LoadScenarioFromSave_t fn_LoadScenarioFromSave = nullptr;
 // fn_FollowDialog_Close — inlined in followdialog.cpp Slot7
 
 // UpgradeUI helpers
-uint32_t* g_TypeId_UpgradeUIConfig = nullptr;
 // fn_DestroyComponent_StartUpgrade — REMOVED, now reimplemented in destroyui.cpp
 
 // fn_ResidenceUI_GoToCitizen — now inline in residenceui.cpp ResidenceUI_GoToCitizen
@@ -189,13 +113,10 @@ uint32_t* g_TypeId_UpgradeUIConfig = nullptr;
 fn_WorkplaceComp_SetMaxWorkers_t fn_WorkplaceComp_SetMaxWorkers = nullptr;
 fn_CitizenList_RequestWorker_t fn_CitizenList_RequestWorker = nullptr;
 fn_CitizenList_RemoveWorker_t fn_CitizenList_RemoveWorker = nullptr;
-uint32_t* g_TypeId_EditTool = nullptr;
 
 // EntityUI helpers — now reimplemented inline in entityui.cpp
 // fn_EntityUI_SetEditMode — inlined
 // fn_EntityUI_SelectEntity — inlined
-uint32_t* g_TypeId_ToolController = nullptr;
-uint32_t* g_TypeId_ToolSetting = nullptr;
 fn_AVL_Rebalance_0x38_t fn_AVL_Rebalance_0x38 = nullptr;
 // ============================================================
 // Phase F Wave 1: MapParamsDialog / UpgradeUI / ConsumeProduceUI / HelpUI
@@ -212,26 +133,18 @@ fn_AVL_Rebalance_0x38_t fn_AVL_Rebalance_0x38 = nullptr;
 // fn_EventNotifyDialog_ArrayPush — now inline as EventNotifyDialog_ArrayPush_Impl in eventnotifydialog.cpp
 // fn_ScenarioDialog_ArrayPush — now inline as ScenarioDialog_ArrayPush_Impl in scenariodialog.cpp
 fn_ExternalList_GetResourceCount_t fn_ExternalList_GetResourceCount = nullptr;
-uint32_t* g_TypeId_Scenario = nullptr;
 // fn_EventNotifyDialog_ArrayRemove — inlined as EventNotifyDialog_ArrayRemove_Impl in eventnotifydialog.cpp
 fn_ToolbarDialog_Ctor_t fn_ToolbarDialog_Ctor = nullptr;
 fn_Toolbar_ShowGroup_t fn_Toolbar_ShowGroup = nullptr;
 uintptr_t g_ToolUI_ChildDialog_Vtable = 0; // PTR_FUN_14015f5a0
-// fn_Factory_CreateObject, g_TypeId_ToolController, g_TypeId_ToolSetting — defined above (entityui section)
-uint32_t* g_TypeId_ToolbarExternal = nullptr;
-uint32_t* g_TypeId_ToolbarItem = nullptr;
 fn_FindDialogByControllerType_t fn_FindDialogByControllerType = nullptr;
 // fn_Toolbar_FindEntity — inlined as Toolbar_FindEntity_Impl in toolbardialog.cpp
 // fn_Toolbar_CenterOnEntity — inlined as Toolbar_CenterOnEntity_Impl in engine_funcs.h
-uint32_t* g_TypeId_MultiObjectComponent = nullptr;
 fn_EntityPanel_SyncTracking_t fn_EntityPanel_SyncTracking = nullptr;
 fn_CameraSys_ComputeViewTransform_t fn_CameraSys_ComputeViewTransform = nullptr;
 // fn_ToolbarDialog_CloseSubDialog — inlined as ToolbarDialog_CloseSubDialog_Impl in toolbardialog.cpp
 // fn_ToolbarDialog_ChangeSpeed — inlined as ToolbarDialog_ChangeSpeed_Impl in toolbardialog.cpp
 // fn_ToolbarDialog_UpdateButtons — inlined as ToolbarDialog_UpdateButtons_Impl in toolbardialog.cpp
-uint32_t* g_TypeId_CheckElement = nullptr;
-uint32_t* g_TypeId_ToolbarDialogParent = nullptr;
-uint32_t* g_TypeId_ComboElement = nullptr;
 // fn_ResolveExternalByName — REPLACED with inline ResolveExternalByName_Impl in engine_funcs.h
 
 fn_EditTool_SelectEntity_t fn_EditTool_SelectEntity = nullptr;
@@ -239,23 +152,13 @@ float* g_pAgeMultiplier = nullptr;
 float* g_pNotifyTimerDuration = nullptr;
 fn_Time_Ctor_Float_t fn_Time_Ctor_Float = nullptr;
 // fn_Dialog_GetReference removed — see engine_funcs.h (Wave 7 lane B)
-uint32_t* g_TypeId_StringTable = nullptr;
-uint32_t* g_TypeId_HelpFirstElem = nullptr;
-uint32_t* g_TypeId_HelpComboElem = nullptr;
-uint32_t* g_TypeId_HelpDocTextElem = nullptr;
-uint32_t* g_TypeId_HelpContainerElem = nullptr;
-uint32_t* g_TypeId_HelpButtonElem = nullptr;
 // fn_HelpUI_ArrayResize — now inline as HelpUI_ArrayResize_Impl in helpui.cpp
 
 // NewGameDialog support
 void** g_pNewGameSettings = nullptr;
 // fn_GenerateTownName — REMOVED, now reimplemented in newgamedialog.cpp
 fn_NameDB_GenerateName_t fn_NameDB_GenerateName = nullptr;
-uint32_t* g_TypeId_NameDatabase = nullptr;
 fn_StartNewGame_t fn_StartNewGame = nullptr;
-uint32_t* g_TypeId_MapGenerator = nullptr;
-uint32_t* g_TypeId_ClimateGenerator = nullptr;
-uint32_t* g_TypeId_TerrainGenerator = nullptr;
 
 // OptionsDialog support — Runtime DLL exports
 
@@ -280,7 +183,6 @@ int32_t** g_pGameSettingsPtr = nullptr;
 fn_MapUI_ProjectCornersToGround_t fn_MapUI_ProjectCornersToGround = nullptr;
 
 // fn_UIDesc_AddControllers removed — reimplemented as UIDesc_AddControllers_Impl()
-uint32_t* g_TypeId_UIDescription = nullptr;
 
 // Player/Tool module — shared engine APIs
 fn_SceneAddObject_t fn_SceneAddObject = nullptr;
@@ -300,9 +202,6 @@ fn_Configuration_GetVersionString_t fn_Configuration_GetVersionString = nullptr;
 // ModDetails_StringArrayPush — now static inline in moddetailsdialog.cpp
 
 // CitizenUI helpers
-uint32_t* g_TypeId_CitizenDescription = nullptr;
-uint32_t* g_TypeId_StatusIconComponent = nullptr;
-uint32_t* g_TypeId_CitizenAIComponent = nullptr;
 // fn_StatusBarUI_StatusIconHandler — REPLACED with static StatusBarUI_StatusIconHandler_Impl() in statusbarui.cpp
 
 // ProductionUI support
@@ -339,7 +238,6 @@ fn_SavedState_Ctor_t fn_SavedState_Ctor = nullptr;
 // IO::Serializer shared globals — all five removed, ENDGAME B.3.4a closing 2d.
 
 // TownHallUI support
-uint32_t* g_TypeId_TabElement = nullptr;
 // fn_TownHallUI_InitGeneral — reimplemented as TownHallUI_InitGeneral() in townhallui.cpp
 // fn_TownHallUI_UpdateGraph — reimplemented in townhallui.cpp
 // fn_TownHallUI_UpdateGeneral — reimplemented in townhallui.cpp
@@ -370,11 +268,7 @@ fn_InventorySort_Desc_t fn_InventorySort_Desc = nullptr;
 // fn_GoToEntity — inlined as Toolbar_CenterOnEntity_Impl in engine_funcs.h
 
 // SpriteCaptureUI support
-uint32_t* g_TypeId_EditElement = nullptr;
-uint32_t* g_TypeId_CaptureBoxElement = nullptr;
 
-uint32_t* g_TypeInfo_ValueDescription = nullptr;
-uint32_t* g_TypeInfo_TradeDescription = nullptr;
 fn_DynArray_Clear_0x18_t fn_DynArray_Clear_0x18 = nullptr;
 fn_IntroSort_ByName_t fn_IntroSort_ByName = nullptr;
 fn_IntroSort_ByComponent_t fn_IntroSort_ByComponent = nullptr;
@@ -385,13 +279,6 @@ fn_DynArray_Clear_0x18_t fn_DynArray_Clear_0x18_Buy = nullptr;
 fn_Building_GetOrderName_t fn_Building_GetOrderName = nullptr;
 fn_Building_GetBuyEntries_t fn_Building_GetBuyEntries = nullptr;
 fn_TradeUI_OnTradeButton_t fn_TradeUI_OnTradeButton = nullptr;
-uint32_t* g_TypeId_TableElement = nullptr;
-uint32_t* g_TypeId_NumberElement = nullptr;
-uint32_t* g_TypeId_TextElement = nullptr;
-uint32_t* g_TypeId_LabelElement = nullptr;
-uint32_t* g_TypeId_NumberEditElement = nullptr;
-uint32_t* g_TypeId_SpinnerElement = nullptr;
-uint32_t* g_TypeId_SelectDescription = nullptr;
 fn_Building_GetSellableCount_t fn_Building_GetSellableCount = nullptr;
 fn_StorageTree_Insert_t fn_StorageTree_Insert = nullptr;
 fn_Building_AddBuyToStorage_t fn_Building_AddBuyToStorage = nullptr;
@@ -407,12 +294,8 @@ fn_PerlinNoise_Generate_t fn_PerlinNoise_Generate = nullptr;
 // always-zero g_ModDialog_{MaterialInstance,SpriteSheet}Vtable are gone: the
 // four thumbnail builders construct the real classes.
 fn_ModDialog_ArrayPush_t fn_ModDialog_ArrayPush = nullptr;
-uint32_t* g_TypeId_BrowserController = nullptr;
-uint32_t* g_TypeId_Material = nullptr;
 float* g_fUVScale = nullptr;
 fn_Weather_ResetTime_t fn_Weather_ResetTime = nullptr;
-uint32_t* g_TypeId_DiseaseDescription = nullptr;
-uint32_t* g_TypeId_DrawableType = nullptr;
 // fn_DebugUI_OnDrawComboChanged removed — now reimplemented in code/Game/Dialog/debugui.cpp
 fn_DrawGeometry_Ctor_t fn_DrawGeometry_Ctor = nullptr;
 fn_DrawGeometry_Init_t fn_DrawGeometry_Init = nullptr;
@@ -428,8 +311,6 @@ fn_Graphics_Camera_Ctor_t        fn_Graphics_Camera_Ctor        = nullptr;
 
 
 // --- DebugUI deep-reimpl helpers ---
-uint32_t* g_TypeId_FireComponent = nullptr;
-// g_TypeId_CitizenComponent removed — was duplicate of g_TypeId_RawMaterialDescription (DAT_1401c7cb8)
 fn_Game_DestroyEntity_t fn_Game_DestroyEntity = nullptr;
 fn_FireComponent_Ignite_t fn_FireComponent_Ignite = nullptr;
 fn_DiseaseComponent_Infect_t fn_DiseaseComponent_Infect = nullptr;
@@ -439,8 +320,6 @@ fn_StorageCanAdd_t fn_StorageCanAdd = nullptr;   // 0x14012cd80
 fn_StorageAddItem_t fn_StorageAddItem = nullptr;  // 0x14012d000
 fn_EntityFactory_CreateEntity_t fn_EntityFactory_CreateEntity = nullptr;
 fn_EntityList_RegisterEntity_t fn_EntityList_RegisterEntity = nullptr;
-uint32_t* g_TypeId_InteractComponent_FC = nullptr;
-uint32_t* g_TypeId_InteractDescription_FC = nullptr;
 fn_ResidenceComponent_GetOccupantCount_t fn_ResidenceComponent_GetOccupantCount = nullptr;
 fn_ResidenceComponent_GetSpawnPoint_t fn_ResidenceComponent_GetSpawnPoint = nullptr;
 fn_CitizenComponent_Setup_t fn_CitizenComponent_Setup = nullptr;
@@ -464,7 +343,6 @@ fn_SaveGameSettings_t fn_SaveGameSettings = nullptr;
 fn_ReadGameSettings_t fn_ReadGameSettings = nullptr;
 fn_ApplyKeyMapToUI_t fn_ApplyKeyMapToUI = nullptr;
 fn_UpdateAutoSaveTimer_t fn_UpdateAutoSaveTimer = nullptr;
-uint32_t* g_TypeId_AutoSaveDialogType = nullptr;
 fn_RegisterDefaultInputBindings_t fn_RegisterDefaultInputBindings = nullptr;
 
 fn_ExternalPtr_Serialize_t fn_ExternalPtr_Serialize = nullptr;
@@ -492,7 +370,6 @@ fn_MapGetTerrainPos_t fn_MapGetTerrainPos = nullptr;
 fn_IsA_t fn_IsA = nullptr;
 
 // ClearStorage helpers
-uint32_t* g_TypeId_UnknownComp_7ee8       = nullptr;  // DAT_1401c7ee8
 fn_Work_CanStartWork_t fn_Work_CanStartWork = nullptr;  // FUN_1400f7100
 fn_FindStorageDestination_t fn_FindStorageDestination = nullptr;  // FUN_14008d590
 fn_Map_CanPathTo_t fn_Map_CanPathTo = nullptr;  // FUN_1400a00f0
@@ -545,10 +422,8 @@ fn_FindUIElementByPath_t fn_FindUIElementByPath = nullptr;
 fn_ObjectInternal_Ctor_t fn_ObjectInternal_Ctor = nullptr;
 fn_TutorialTreeInsert_t fn_TutorialTreeInsert = nullptr;
 fn_TutorialStepExecute_t fn_TutorialStepExecute = nullptr;
-uint32_t* g_TypeId_FinishTutorialGoal = nullptr;
 
 // ComponentEntity dependencies
-uint32_t* g_TypeId_ComponentBase = nullptr;
 
 // CitizenBehavior dependencies
 fn_ProfResArray_Init_t fn_ProfResArray_Init = nullptr;
@@ -711,9 +586,6 @@ fn_Struct60B_DtorRange_t    fn_Struct60B_DtorRange          = nullptr;
 fn_Struct60B_SubArrayCopy_t fn_Struct60B_SubArrayCopyStride14 = nullptr;
 fn_Struct60B_SubArrayCopy_t fn_Struct60B_SubArrayCopyStride02 = nullptr;
 
-uint32_t** g_ppTypeInfo_GraphicsMesh = nullptr;
-uint32_t** g_ppTypeInfo_Particle = nullptr;
-uint32_t*  g_pTypeId_Weather = nullptr;
 
 // M3.5 Path B session 3 — typed-ExternalPtr serialize helper at 0x140007140.
 uint32_t** g_ppTypeInfo_MaterialInstance = nullptr;
@@ -760,9 +632,6 @@ bool EngineFuncsInit() {
         fn_IsDerivedFrom = &IsDerivedFrom_NullSafe;
     }
 
-    // UI::Dialog type info (?_typeInfo@Dialog@UI@@) — dialog resources
-    g_TypeId_Dialog = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Runtime, 0x1801faa88));
 
     // --- UI infrastructure ---
 
@@ -791,101 +660,14 @@ bool EngineFuncsInit() {
     // ================================================================
     // Phase A2: Exe Type IDs (.rdata pointers)
     // ================================================================
-    g_TypeId_ComponentEntity = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c5d70));
-    // ProgressElement type ID: exref at 0x1401515b8 → pointer → uint32_t typeId
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401515b8));
-        if (exref && *exref) {
-            g_TypeId_ProgressElement = reinterpret_cast<uint32_t*>(*exref);
-        }
-    }
-    g_TypeId_ComponentDescription_FC = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7318));
-    g_TypeId_ConsumeProduceComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7388));
-    g_TypeId_RadiusComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c4870));
-    g_TypeId_ToolbarDescription_FC = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7f58));
-    g_TypeId_ResourceComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7040));
-    g_TypeId_RawMaterialDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7cb8));
-    g_TypeId_MeshInstanceComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7e40));
-    g_TypeId_DestroyComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7628));
-    g_TypeId_WorkplaceComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c80e0));
-    g_TypeId_WorkComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c8070));
-    g_TypeId_WorkDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c80a8));
-    g_TypeId_AttendanceDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c3f78));
-    g_TypeId_ResourceLimitType = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c5520));
-    g_TypeId_ToolUI = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c5788));
 
-    // BridgeTool type IDs
-    g_TypeId_CreateBridgeDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c73f8));
-    // RemovalTool type IDs
-    g_TypeId_RemovalDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c74a0));
-    // g_TypeId_MapComponent_FC (DAT_1401c79e0) is resolved in the FindComponent block below
-    // g_TypeId_MultiObjectComponent already resolved in Phase E below
     // BridgeTool helper functions (exe-internal)
     fn_BridgeTool_SnapEndCell = reinterpret_cast<fn_BridgeTool_SnapEndCell_t>(
         ResolveAddr(Module::Exe, 0x1400fb710));
     fn_BridgeTool_ValidatePath = reinterpret_cast<fn_BridgeTool_ValidatePath_t>(
         ResolveAddr(Module::Exe, 0x1400fb2d0));
 
-    // DragPlacementTool/FencedTool type IDs
-    g_TypeId_CreatePlacementDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7430));
-    g_TypeId_CreateFencedDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c4100));
-    g_TypeId_AreaDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7a18));
-    g_TypeId_FenceDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7a88));
-    g_TypeId_SizeDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7468));
 
-    // CheckboxElement type ID: exref at 0x1401516a8 → pointer → uint32_t typeId
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401516a8));
-        if (exref && *exref) {
-            g_TypeId_CheckboxElement = reinterpret_cast<uint32_t*>(*exref);
-        }
-    }
-    // UI element base type ID: exref at 0x1401514f8 (used by ControlUI::Slot4)
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401514f8));
-        if (exref && *exref) {
-            g_TypeId_ButtonElement = reinterpret_cast<uint32_t*>(*exref);
-        }
-    }
-    // Object::Internal type ID: exref at 0x140151660 (used by BuildRequirementUI::Slot4)
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151660));
-        if (exref && *exref) {
-            g_TypeId_Element = reinterpret_cast<uint32_t*>(*exref);
-        }
-    }
-    // UI::ImageElement type ID: exref at 0x140151500 (used by EventNotifyDialog::Update and others)
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151500));
-        if (exref && *exref) {
-            g_TypeId_ImageElement = reinterpret_cast<uint32_t*>(*exref);
-        }
-    }
-    // ControlComponent type ID: direct uint32 at DAT_1401c4e20
-    g_TypeId_ControlComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c4e20));
 
     // ================================================================
     // Phase A3: Game Singletons
@@ -904,26 +686,6 @@ bool EngineFuncsInit() {
     // The exe array helpers (fn_ExeArrayResize/2/3/Push) are gone entirely --
     // their callers are Collection::Array<T>::SetSize.
     // ================================================================
-    g_TypeId_MapComponent_FC     = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c79e0));
-    g_TypeId_StateMachineComponent_FC      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7d98));
-    g_TypeId_ConsumeProduceComponent_FC = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7350));
-    g_TypeId_BuildComponent_FC        = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7008));
-    g_TypeId_DestroyComponent_FC      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c75f0));
-    g_TypeId_TradeComponent_FC        = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4b80));
-    g_TypeId_AttendanceComponent      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c3f40));
-    g_TypeId_PastureComponent         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7ba0));
-    g_TypeId_AnimalDescription        = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6fd0));
-    g_TypeId_OrchardComponent         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c46b0));
-    g_TypeId_ClearAreaComponent_FC              = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c71c8));
-    g_TypeId_CitizenComponent_FC      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
-    g_TypeId_StorageComponent_FC      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7e78));
-    g_TypeId_ResidenceComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7cf0));
-    g_TypeId_CemeteryComponent        = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4090));
-    g_TypeId_TombstoneComponent       = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4a30));
-    g_TypeId_ImmigrationComponent     = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4480));
-    g_TypeId_TrackerComponent         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4b10));
-    g_TypeId_ModelComponent_FC       = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a50));
 
     fn_RadiusCalc = reinterpret_cast<fn_RadiusCalc_t>(
         ResolveAddr(Module::Exe, 0x140055430));
@@ -946,16 +708,13 @@ bool EngineFuncsInit() {
 
     // EntityTrackingSet_Remove: now a static impl in citizenui.cpp
 
-    // fn_FindComponent_Immigration — inline in engine_funcs.h (uses g_TypeId_ImmigrationComponent)
     // WorkplaceComponent_Toggle — FUN_14012fc00 (toggles workplace enabled state)
     fn_WorkplaceComponent_Toggle = reinterpret_cast<fn_WorkplaceComponent_Toggle_t>(
         ResolveAddr(Module::Exe, 0x14012fc00));
 
-    // fn_FindComponent_Orchard — inline in engine_funcs.h (uses g_TypeId_OrchardComponent)
     // OrchardComponent_GetGrowth — FUN_140051640 (returns average growth ratio)
     fn_OrchardGetGrowth = reinterpret_cast<fn_OrchardGetGrowth_t>(
         ResolveAddr(Module::Exe, 0x140051640));
-    // fn_FindComponent_Pasture — inline in engine_funcs.h (uses g_TypeId_PastureComponent)
     // PastureCalcMaxCount, PastureUI_UpdateSlider — now static inline in pastureui.cpp
 
     // ================================================================
@@ -982,8 +741,6 @@ bool EngineFuncsInit() {
 
     // UpgradeUIConfig type ID at DAT_1401c5868 (UI::DialogControllerConfig;
     // its +0x20 holds the upgrade target ComponentEntity template)
-    g_TypeId_UpgradeUIConfig = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c5868));
 
     // DestroyComponent_StartUpgrade — REMOVED, now reimplemented in destroyui.cpp
 
@@ -992,26 +749,18 @@ bool EngineFuncsInit() {
     // EventLogUI_ToggleNotification and NavigateToEvent now inline in eventlogui.cpp
 
     // WorkplaceUI_AdjustWorkerCount/ToggleWorkplace: now static impls in workplaceui.cpp
-    // fn_FindComponent_WorkPlace — inline in engine_funcs.h (uses g_TypeId_StateMachineComponent_FC)
     fn_WorkplaceComp_SetMaxWorkers = reinterpret_cast<fn_WorkplaceComp_SetMaxWorkers_t>(
         ResolveAddr(Module::Exe, 0x14012fb00));
     fn_CitizenList_RequestWorker = reinterpret_cast<fn_CitizenList_RequestWorker_t>(
         ResolveAddr(Module::Exe, 0x14008d100));
     fn_CitizenList_RemoveWorker = reinterpret_cast<fn_CitizenList_RemoveWorker_t>(
         ResolveAddr(Module::Exe, 0x140091180));
-    // fn_FindComponent_Position — inline in engine_funcs.h (uses g_TypeId_BuildComponent_FC)
     // EditTool type ID — from the exe exref used in EntityUI
     // The original uses _typeInfo_exref which is the same exref as EditTool's type
     // We resolve it from the address seen in EntityUI::Slot7
-    g_TypeId_EditTool = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c6dd8));
 
     // EntityUI helpers — SetEditMode/SelectEntity now reimplemented in entityui.cpp
     // Resolve sub-functions needed by reimplementations:
-    g_TypeId_ToolController = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c6eb8));
-    g_TypeId_ToolSetting = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c6ef0));
     fn_AVL_Rebalance_0x38 = reinterpret_cast<fn_AVL_Rebalance_0x38_t>(
         ResolveAddr(Module::Exe, 0x140025920));
     // fn_GetDescPage/fn_BuildComplete: now static impls in buildui.cpp
@@ -1026,7 +775,6 @@ bool EngineFuncsInit() {
 
     // Scenario type ID: direct uint32_t in .data at 0x1401c5b08
     // (Original Slot4 at 0x140078248: MOV EDX, dword ptr [0x1401c5b08])
-    g_TypeId_Scenario = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5b08));
 
     fn_ToolbarDialog_Ctor = reinterpret_cast<fn_ToolbarDialog_Ctor_t>(
         ResolveAddr(Module::Exe, 0x1400b9910));
@@ -1040,18 +788,7 @@ bool EngineFuncsInit() {
     // RegisterPlayerToolUIBatch (AddressRegistryInit, runs earlier) installed.
     if (uintptr_t toolUIChildVt = ResolveAddr(Module::Exe, 0x14015f5a0))
         g_ToolUI_ChildDialog_Vtable = toolUIChildVt;
-    // fn_Factory_CreateObject, g_TypeId_ToolController, g_TypeId_ToolSetting — resolved above (entityui section)
     // Toolbar item sort function
-    // TypeInfo for Toolbar external (used by ExternalFactory::FindNext)
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x14015f980));
-        if (exref && *exref) {
-            g_TypeId_ToolbarExternal = reinterpret_cast<uint32_t*>(*exref);
-        }
-    }
-    // Toolbar type ID at DAT_1401c6128 (filled by Toolbar_RegisterType at runtime)
-    g_TypeId_ToolbarItem = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c6128));
     // RadioElement::FindCheckBoxes. NO FALLBACK (Wave 9 lane F deleted it, and
     // the record of why has to survive the deletion): FindCheckBoxes is an
     // OVERLOAD SET and the fallback named the wrong member of it until
@@ -1067,8 +804,6 @@ bool EngineFuncsInit() {
     // fn_Toolbar_FindEntity — inlined as Toolbar_FindEntity_Impl in toolbardialog.cpp
     // fn_Toolbar_CenterOnEntity — inlined as Toolbar_CenterOnEntity_Impl in engine_funcs.h
     // Sub-dependencies:
-    g_TypeId_MultiObjectComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7ac0));
     fn_EntityPanel_SyncTracking = reinterpret_cast<fn_EntityPanel_SyncTracking_t>(
         ResolveAddr(Module::Exe, 0x1400666b0));
     fn_CameraSys_ComputeViewTransform = reinterpret_cast<fn_CameraSys_ComputeViewTransform_t>(
@@ -1076,28 +811,10 @@ bool EngineFuncsInit() {
     // fn_ToolbarDialog_CloseSubDialog — inlined as ToolbarDialog_CloseSubDialog_Impl in toolbardialog.cpp
     // fn_ToolbarDialog_ChangeSpeed — inlined as ToolbarDialog_ChangeSpeed_Impl in toolbardialog.cpp
     // fn_ToolbarDialog_UpdateButtons — REPLACED with inline impl in toolbardialog.cpp
-    // ToolbarElement type ID: exref at 0x1401516a8, used in ToolbarDialog::Update/OnEvent for IsDerivedFrom
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401516a8));
-        if (exref && *exref) {
-            g_TypeId_CheckElement = reinterpret_cast<uint32_t*>(*exref);
-        }
-    }
-    // ToolbarDialog parent type ID: direct uint32 at DAT_1401c5d38, used in case 5 (CenterOnPoint)
-    g_TypeId_ToolbarDialogParent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c5d38));
-    // ComboElement type ID: exref at 0x140151690 (double-indirect)
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151690));
-        if (exref && *exref) {
-            g_TypeId_ComboElement = reinterpret_cast<uint32_t*>(*exref);
-        }
-    }
     // fn_ResolveExternalByName — REPLACED with inline ResolveExternalByName_Impl in engine_funcs.h
 
     fn_EditTool_SelectEntity = reinterpret_cast<fn_EditTool_SelectEntity_t>(
         ResolveAddr(Module::Exe, 0x1400fd3b0));
-    // fn_FindComponent_Residence — inline in engine_funcs.h (uses g_TypeId_StorageComponent_FC, same as Storage)
     g_pAgeMultiplier = reinterpret_cast<float*>(
         ResolveAddr(Module::Exe, 0x140172198));
     g_pNotifyTimerDuration = reinterpret_cast<float*>(
@@ -1128,40 +845,9 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14006c5b0));
 
     // --- CitizenUI helpers ---
-    // fn_FindComponent_Citizen — inline in engine_funcs.h (uses g_TypeId_CitizenComponent_FC)
-    g_TypeId_CitizenDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7190));
-    g_TypeId_StatusIconComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7e08));
-    g_TypeId_CitizenAIComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c70e8));
-    // fn_FindComponent_CitizenAI — inline in engine_funcs.h (uses g_TypeId_CitizenAIComponent)
     // fn_StatusBarUI_StatusIconHandler — REPLACED with static impl in statusbarui.cpp
 
-    // StringTable type ID: exref at 0x140151488 -> pointer -> uint32_t typeId
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151488));
-        if (exref && *exref) {
-            g_TypeId_StringTable = reinterpret_cast<uint32_t*>(*exref);
-        }
-    }
-
-    // HelpUI element type IDs from _typeInfo_exref addresses
-    {
-        auto resolveTypeId = [](uintptr_t exrefAddr) -> uint32_t* {
-            void** exref = reinterpret_cast<void**>(exrefAddr);
-            if (exref && *exref) return reinterpret_cast<uint32_t*>(*exref);
-            return nullptr;
-        };
-        g_TypeId_HelpFirstElem    = resolveTypeId(ResolveAddr(Module::Exe, 0x1401517e8));
-        g_TypeId_HelpComboElem    = resolveTypeId(ResolveAddr(Module::Exe, 0x140151690));
-        g_TypeId_HelpDocTextElem  = resolveTypeId(ResolveAddr(Module::Exe, 0x1401517f0));
-        g_TypeId_HelpContainerElem = resolveTypeId(ResolveAddr(Module::Exe, 0x1401517f8));
-        g_TypeId_HelpButtonElem   = resolveTypeId(ResolveAddr(Module::Exe, 0x1401514f8));
-    }
-
     // --- ProductionUI support ---
-    // fn_FindComponent_Tracker — inline in engine_funcs.h (uses g_TypeId_TrackerComponent)
     // fn_TrackerComponent_Rebuild — inline in engine_funcs.h
 
     // --- ProfessionUI support ---
@@ -1203,20 +889,10 @@ bool EngineFuncsInit() {
     // fn_GenerateTownName — REIMPLEMENTED, now resolve inner helpers
     fn_NameDB_GenerateName = reinterpret_cast<fn_NameDB_GenerateName_t>(
         ResolveAddr(Module::Exe, 0x1400a4b30));
-    g_TypeId_NameDatabase = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c5a60));
     fn_StartNewGame = reinterpret_cast<fn_StartNewGame_t>(
         ResolveAddr(Module::Exe, 0x1400b4540));
-    g_TypeId_MapGenerator = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c59b8));
-    g_TypeId_ClimateGenerator = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c5910));
-    g_TypeId_TerrainGenerator = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c5b40));
 
     // fn_UIDesc_AddControllers — REIMPLEMENTED as UIDesc_AddControllers_Impl()
-    g_TypeId_UIDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7f90));
 
     // --- Player/Tool module: shared engine APIs ---
     // Graphics::Scene::AddObject — IAT dispatch slot 0x140151370
@@ -1345,12 +1021,6 @@ bool EngineFuncsInit() {
     // closing 2d. IO::Serializer is a real class now, so nothing read them.
 
     // --- TownHallUI support ---
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151de0));
-        if (exref && *exref) {
-            g_TypeId_TabElement = reinterpret_cast<uint32_t*>(*exref);
-        }
-    }
     // fn_TownHallUI_InitGeneral — reimplemented in townhallui.cpp
     // fn_TownHallUI_InitGraph — reimplemented in townhallui.cpp
     // fn_TownHallUI_UpdateGraph — reimplemented in townhallui.cpp
@@ -1405,26 +1075,8 @@ bool EngineFuncsInit() {
     // fn_GoToEntity — inlined as Toolbar_CenterOnEntity_Impl in engine_funcs.h
 
     // --- SpriteCaptureUI support ---
-    // EditElement type ID: exref at 0x140151b50 (double-indirect)
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151b50));
-        if (exref && *exref) g_TypeId_EditElement = reinterpret_cast<uint32_t*>(*exref);
-    }
-    // CaptureBoxElement type ID: direct dword at 0x1401c5638
-    g_TypeId_CaptureBoxElement = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c5638));
-    // ButtonElement type ID: exref at 0x1401514f8 (shared with HelpUI)
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401514f8));
-        if (exref && *exref) g_TypeId_HelpButtonElem = reinterpret_cast<uint32_t*>(*exref);
-    }
 
     // TradeUI support
-    // fn_FindComponent_Building — inline in engine_funcs.h (uses g_TypeId_TradeComponent_FC)
-    g_TypeInfo_ValueDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c4bf0));
-    g_TypeInfo_TradeDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c4bb8));
     fn_DynArray_Clear_0x18 = reinterpret_cast<fn_DynArray_Clear_0x18_t>(
         ResolveAddr(Module::Exe, 0x140016200));
     fn_IntroSort_ByName = reinterpret_cast<fn_IntroSort_ByName_t>(
@@ -1444,38 +1096,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140081420));
     // TableElement type ID — dispatch slot at 0x140151510 contains a POINTER to the type ID
     // Original asm: MOV RAX,[0x140151510]; MOV EDX,[RAX] (double deref)
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151510));
-        if (exref && *exref) g_TypeId_TableElement = reinterpret_cast<uint32_t*>(*exref);
-    }
-    // SpinnerElement type ID — dispatch slot at 0x1401516c8 contains a POINTER to the type ID
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401516c8));
-        if (exref && *exref) g_TypeId_NumberElement = reinterpret_cast<uint32_t*>(*exref);
-    }
-    // TextElement type ID — exref at 0x140151508
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151508));
-        if (exref && *exref) g_TypeId_TextElement = reinterpret_cast<uint32_t*>(*exref);
-    }
-    // LabelElement type ID — exref at 0x140151668
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151668));
-        if (exref && *exref) g_TypeId_LabelElement = reinterpret_cast<uint32_t*>(*exref);
-    }
-    // NumberEditElement type ID — exref at 0x140151cb0
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151cb0));
-        if (exref && *exref) g_TypeId_NumberEditElement = reinterpret_cast<uint32_t*>(*exref);
-    }
-    // SliderElement type ID — exref at 0x140151cf0
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151cf0));
-        if (exref && *exref) g_TypeId_SpinnerElement = reinterpret_cast<uint32_t*>(*exref);
-    }
-    // SelectDescription type ID — DAT_1401c48a8
-    g_TypeId_SelectDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c48a8));
     fn_Building_GetSellableCount = reinterpret_cast<fn_Building_GetSellableCount_t>(
         ResolveAddr(Module::Exe, 0x14005a520));
     fn_StorageTree_Insert = reinterpret_cast<fn_StorageTree_Insert_t>(
@@ -1495,14 +1115,6 @@ bool EngineFuncsInit() {
     // UNGUARDED from ModDialog_RefreshDisplay_Impl (moddialog.cpp), so adding an
     // installed mod's thumbnail entry EXEC'd 0. Byte-faithful C++ port instead.
     fn_ModDialog_ArrayPush = &fn_ModDialog_ArrayPush58_CppImpl;
-    // BrowserController type ID: DAT_1401c5210
-    g_TypeId_BrowserController = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c5210));
-    // Material type ID: dispatch at 0x140151858 (double-indirect)
-    {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151858));
-        if (d && *d) g_TypeId_Material = reinterpret_cast<uint32_t*>(*d);
-    }
     // UV scale float: DAT_14017214c
     g_fUVScale = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
 
@@ -1523,12 +1135,6 @@ bool EngineFuncsInit() {
     // Weather_ResetTime (exe 0x1400944e0)
     fn_Weather_ResetTime = reinterpret_cast<fn_Weather_ResetTime_t>(
         ResolveAddr(Module::Exe, 0x1400944e0));
-    // DiseaseDescription type ID (DAT_1401c5948)
-    g_TypeId_DiseaseDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c5948));
-    // DrawableType type ID (DAT_1401c47c8)
-    g_TypeId_DrawableType = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c47c8));
 
     // --- DebugUI Slot9 sub-functions ---
     // fn_DebugUI_OnDrawComboChanged removed — now reimplemented
@@ -1566,9 +1172,6 @@ bool EngineFuncsInit() {
 
 
     // --- DebugUI deep-reimpl helpers ---
-    g_TypeId_FireComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c41e0));
-    // g_TypeId_CitizenComponent removed — was duplicate of g_TypeId_RawMaterialDescription (DAT_1401c7cb8)
     fn_Game_DestroyEntity = reinterpret_cast<fn_Game_DestroyEntity_t>(
         ResolveAddr(Module::Exe, 0x140091e60));
     fn_FireComponent_Ignite = reinterpret_cast<fn_FireComponent_Ignite_t>(
@@ -1587,10 +1190,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400c3720));
     fn_EntityList_RegisterEntity = reinterpret_cast<fn_EntityList_RegisterEntity_t>(
         ResolveAddr(Module::Exe, 0x1400c48a0));
-    g_TypeId_InteractComponent_FC = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7900));
-    g_TypeId_InteractDescription_FC = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7938));
     fn_ResidenceComponent_GetOccupantCount = reinterpret_cast<fn_ResidenceComponent_GetOccupantCount_t>(
         ResolveAddr(Module::Exe, 0x140123070));
     fn_ResidenceComponent_GetSpawnPoint = reinterpret_cast<fn_ResidenceComponent_GetSpawnPoint_t>(
@@ -1616,19 +1215,10 @@ bool EngineFuncsInit() {
     printf("  MemAlloc                  = %p\n", (void*)fn_MemAlloc);
     printf("  MemAllocSingleton         = %p\n", g_pMemAllocSingleton);
     printf("  IsDerivedFrom             = %p\n", (void*)fn_IsDerivedFrom);
-    printf("  Dialog TypeId             = %p -> 0x%x\n", (void*)g_TypeId_Dialog,
-           g_TypeId_Dialog ? *g_TypeId_Dialog : 0);
     printf("[EngineFuncs] UI infrastructure:\n");
     printf("  MemFreeStatic             = %p\n", (void*)fn_MemFreeStatic);
     printf("  InternalBasePtr::Ctor     = %p\n", (void*)fn_InternalBasePtr_Ctor);
     printf("[EngineFuncs] Phase A1 — UI Widget Functions:\n");
-    printf("[EngineFuncs] Phase A2 — Type IDs:\n");
-    printf("  ComponentDescription      = %p -> 0x%x\n", (void*)g_TypeId_ComponentDescription_FC,
-           g_TypeId_ComponentDescription_FC ? *g_TypeId_ComponentDescription_FC : 0);
-    printf("  DestroyComponent          = %p -> 0x%x\n", (void*)g_TypeId_DestroyComponent,
-           g_TypeId_DestroyComponent ? *g_TypeId_DestroyComponent : 0);
-    printf("  MeshInstanceComponent     = %p -> 0x%x\n", (void*)g_TypeId_MeshInstanceComponent,
-           g_TypeId_MeshInstanceComponent ? *g_TypeId_MeshInstanceComponent : 0);
     printf("[EngineFuncs] Phase A3 — Singletons:\n");
     printf("  GameWorld                 = %p -> %p\n", (void*)g_pGameWorldSingleton,
            g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
@@ -1636,11 +1226,6 @@ bool EngineFuncsInit() {
            g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
     printf("  KeyMap (object exref)     = %p -> %p\n", (void*)g_pInputConfigSingletonExref,
            g_pInputConfigSingletonExref ? *g_pInputConfigSingletonExref : nullptr);
-    printf("[EngineFuncs] Phase A4 -- FindComponent type IDs (C++ reimpl):\n");
-    printf("  MapComponent              = %p -> 0x%x\n", (void*)g_TypeId_MapComponent_FC,
-           g_TypeId_MapComponent_FC ? *g_TypeId_MapComponent_FC : 0);
-    printf("  CemeteryComponent         = %p -> 0x%x\n", (void*)g_TypeId_CemeteryComponent,
-           g_TypeId_CemeteryComponent ? *g_TypeId_CemeteryComponent : 0);
     // DestroyComponent_Reclaim/Rebuild/Destroy: now implemented as statics in destroyui.cpp
 #endif
 
@@ -1662,8 +1247,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140099260));
     fn_UpdateAutoSaveTimer = reinterpret_cast<fn_UpdateAutoSaveTimer_t>(
         ResolveAddr(Module::Exe, 0x14005e120));
-    g_TypeId_AutoSaveDialogType = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c4d08));
     fn_RegisterDefaultInputBindings = reinterpret_cast<fn_RegisterDefaultInputBindings_t>(
         ResolveAddr(Module::Exe, 0x1400992f0));
 
@@ -1765,7 +1348,6 @@ bool EngineFuncsInit() {
     fn_BuildRoad_QueryStorage = reinterpret_cast<fn_BuildRoad_QueryStorage_t>(
         ResolveAddr(Module::Exe, 0x14012ce70));
     // ClearStorage-specific helpers
-    g_TypeId_UnknownComp_7ee8 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7ee8));
     fn_Work_CanStartWork = reinterpret_cast<fn_Work_CanStartWork_t>(
         ResolveAddr(Module::Exe, 0x1400f7100));
     fn_FindStorageDestination = reinterpret_cast<fn_FindStorageDestination_t>(
@@ -1862,9 +1444,6 @@ bool EngineFuncsInit() {
     fn_TutorialStepExecute = reinterpret_cast<fn_TutorialStepExecute_t>(
         ResolveAddr(Module::Exe, 0x1400e1db0));
 
-    // TypeId for FinishTutorialGoal — stored at exe 0x1401c6240
-    g_TypeId_FinishTutorialGoal = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c6240));
 
 #ifdef _DEBUG
     printf("[EngineFuncs] Phase K: Tutorial goal helpers resolved\n");
@@ -1872,18 +1451,11 @@ bool EngineFuncsInit() {
     printf("  ObjectInternal::Ctor  = %p\n", (void*)fn_ObjectInternal_Ctor);
     printf("  TutorialTreeInsert    = %p\n", (void*)fn_TutorialTreeInsert);
     printf("  TutorialStepExecute   = %p\n", (void*)fn_TutorialStepExecute);
-    printf("  TypeId_FTGoal         = %p\n", (void*)g_TypeId_FinishTutorialGoal);
 #endif
 
     // ================================================================
     // Phase L: ComponentEntity dependencies
     // ================================================================
-    g_TypeId_ComponentBase = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c72a8));
-#ifdef _DEBUG
-    printf("[EngineFuncs] Phase L: ComponentEntity deps resolved\n");
-    printf("  TypeId_ComponentBase  = %p\n", (void*)g_TypeId_ComponentBase);
-#endif
 
     // ================================================================
     // Phase L2: CitizenBehavior dependencies
@@ -2034,12 +1606,6 @@ bool EngineFuncsInit() {
     // type-registration plumbing in the original; in standalone they may be
     // null until the underlying type registers, in which case the helpers
     // below detect null and emit a one-shot warning instead of crashing.
-    g_ppTypeInfo_GraphicsMesh = reinterpret_cast<uint32_t**>(
-        ResolveAddr(Module::Exe, 0x140151f20));
-    g_ppTypeInfo_Particle = reinterpret_cast<uint32_t**>(
-        ResolveAddr(Module::Exe, 0x140151420));
-    g_pTypeId_Weather = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c6198));
 
     // M3.5 Path B session 3 — FUN_140007140 + MaterialInstance typeInfo slot.
     g_ppTypeInfo_MaterialInstance = reinterpret_cast<uint32_t**>(
@@ -2060,9 +1626,6 @@ bool EngineFuncsInit() {
     printf("  ExtPtr Mesh/Weather     = %p / %p\n",
         (void*)fn_ExternalPtr_Serialize_GraphicsMesh,
         (void*)fn_ExternalPtr_Serialize_Weather);
-    printf("  TypeInfo Mesh/Particle  = %p / %p\n",
-        (void*)g_ppTypeInfo_GraphicsMesh, (void*)g_ppTypeInfo_Particle);
-    printf("  TypeId Weather          = %p\n", (void*)g_pTypeId_Weather);
     // M3.5 Path B session 3
     printf("  TypeInfo MaterialInst   = %p\n",
         (void*)g_ppTypeInfo_MaterialInstance);

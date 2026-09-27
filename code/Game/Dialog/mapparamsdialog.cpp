@@ -308,7 +308,7 @@ void MapParamsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element
                 // The IsDerivedFrom type-check retail runs here is skipped, as in
                 // NewGameDialog::GenerateTownName and citizen_names.cpp: the
                 // standalone factory tree is incomplete so the walk NULL-faults,
-                // and *g_TypeId_NameDatabase is itself NULL until something
+                // and *TypeId_NameDatabase is itself NULL until something
                 // lazy-resolves it. FindOrLoad by exact filename is authoritative.
 
                 fn_NameDB_GenerateName(&nameBuf, nameDB, random, 5, nameLen);

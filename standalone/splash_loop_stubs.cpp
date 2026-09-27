@@ -100,8 +100,8 @@ void SetRandomLoadingTip(GameLoadDialogLoopT* self) {
     // dispatch slot, which is what sent the first port to LabelElement).
     // descText is a TextDescription, so IsDerivedFrom(elem, LabelElement)
     // was FALSE and the tip was skipped on every game-load splash.
-    if (fn_IsDerivedFrom && g_TypeId_TextElement &&
-        !fn_IsDerivedFrom(elem, *g_TypeId_TextElement)) {
+    if (fn_IsDerivedFrom &&
+        !fn_IsDerivedFrom(elem, UI::TextElement::TypeId())) {   // ENDGAME B.3.9 TR
         TipBail("descText is not a TextElement", elem);
         return;
     }

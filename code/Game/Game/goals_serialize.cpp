@@ -55,13 +55,9 @@
 //   0x140014c30  Layout-A post-order free — ALREADY ported (WorkBase_TreeNodeFree_14c30).
 //   0x14000e320  Layout-B post-order free — ALREADY ported (WorkBase_TreeNodeFree_e320).
 //
-// DWORD_1401c6cf8 ("TypeInfo_Work" per Ghidra) — a NEW type-id cell (distinct from the
-// already-registered g_TypeId_WorkComponent @ 0x1401c8070). Registered here as a zero-filled
-// storage cell (same pattern as standalone/reg_economy_typeids.cpp); it still needs a
-// GetTypeIdByName("Work") fill wired into FillEconomyTypeIdGlobals() (code/Game/Game/game_main.cpp)
-// for the load-time IsDerivedFrom filter in d060/d340 to pass real objects through instead of
-// nulling everything — flagged in the port report, not done here (out of this file's scope;
-// avoids touching game_main.cpp / address_registry.cpp per task instructions).
+// DWORD_1401c6cf8 ("TypeInfo_Work" per Ghidra) is Work's type record: the load-time
+// IsDerivedFrom filter in d060/d340 reads Work::TypeId() (ENDGAME B.3.9 RF). The zero-filled
+// storage cell this file used to register for it went at ENDGAME B.3.9 TR (no reader left).
 //
 // Byte-faithful port — every branch, walk, and rebuild step mirrors the decompile. In-order BST
 // walks (Ghidra's coalesced goto-successor idiom) are rewritten as clean iterator loops via the
@@ -106,16 +102,9 @@ static fn_TreeFree_t   s_freeA       = nullptr; // 0x140014c30 (Layout A post-or
 static fn_TreeFree_t   s_freeB       = nullptr; // 0x14000e320 (Layout B post-order free)
 static fn_ExternalRefSerialize_t s_externalRefSerialize = nullptr; // 0x140018020
 
-static uint32_t g_tid_Work = 0; // 0x1401c6cf8 — no reader left in this file (Work::TypeId(), ENDGAME B.3.9 RF); the cell row goes with CLOSE
-
 static bool s_depsInit = false;
 static void EnsureDeps() {
     if (s_depsInit) return;
-    // Fill the 0x1401c6cf8 type-id cell from the factory (retail fills it at
-    // Work_RegisterType static-init; a zero cell would make the load-time
-    // IsDerivedFrom filter null every payload — "registered but filled with
-    // ZERO" trap).
-    if (g_tid_Work == 0) g_tid_Work = ::Object::GetTypeIdByName("Work");
     s_rebA   = reinterpret_cast<fn_RebalanceA_t>(ResolveAddr(Module::Exe, 0x14001a8c0));
     s_rebB   = reinterpret_cast<fn_RebalanceB_t>(ResolveAddr(Module::Exe, 0x140013480));
     s_rebC   = reinterpret_cast<fn_RebalanceC_t>(ResolveAddr(Module::Exe, 0x140014b40));
@@ -715,7 +704,7 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
         }
 
         // --- Stage 3: scan the live GameWorld entity list; for each entity, find its
-        // WorkComponent (g_TypeId_WorkComponent), look its workId up in the world work-slot
+        // WorkComponent (TypeId_WorkComponent), look its workId up in the world work-slot
         // tree (*g_pGameWorldSingleton+0x118)+0x30 == self+0x30's OWN tree), and if present,
         // erase the matching id from localFoundRoot (it's still alive). ---
         if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
@@ -870,8 +859,4 @@ void RegisterGoalsSerialize() {
     RegisterExeAddr(0x14002d060, reinterpret_cast<uintptr_t>(&Goals_TreeArray_Serialize_d060));
     RegisterExeAddr(0x14002d5f0, reinterpret_cast<uintptr_t>(&Goals_WorkTree_Serialize_d5f0));
     RegisterExeAddr(0x14002ccf0, reinterpret_cast<uintptr_t>(&Goals_LayoutC_Insert_ccf0));
-    // Type-id storage cell — needs a GetTypeIdByName("Work") fill wired into
-    // FillEconomyTypeIdGlobals() (code/Game/Game/game_main.cpp) for full correctness; see
-    // the file header note. Registering the storage cell alone keeps ResolveAddr non-null.
-    RegisterExeAddr(0x1401c6cf8, reinterpret_cast<uintptr_t>(&g_tid_Work));
 }

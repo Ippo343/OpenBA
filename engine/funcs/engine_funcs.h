@@ -154,10 +154,6 @@ extern void* g_pMemAllocSingleton;
 typedef bool (*fn_IsDerivedFrom_t)(void* self, uint32_t typeId);
 extern fn_IsDerivedFrom_t fn_IsDerivedFrom;
 
-// UI::Dialog's type info (?_typeInfo@Dialog@UI@@ @ Runtime 0x1801faa88): the
-// dialog Load methods' IsDerivedFrom check on a loaded External. Named
-// g_pExternalTypeId until the ENDGAME B.3.6 closing pass (rename only).
-extern uint32_t* g_TypeId_Dialog;
 
 // ============================================================
 // Mod entry lifecycle (for Modification::Swap)
@@ -210,36 +206,8 @@ extern fn_InternalBasePtr_Ctor_t fn_InternalBasePtr_Ctor;
 // ============================================================
 // Exe Type IDs (Phase A2 — .rdata pointers in Application-x64.exe)
 // ============================================================
-
-extern uint32_t* g_TypeId_ComponentEntity;       // DAT_1401c5d70
-extern uint32_t* g_TypeId_ProgressElement;       // exref at 0x1401515b8 (double-indirect)
-extern uint32_t* g_TypeId_ComponentDescription_FC;         // DAT_1401c7318
-extern uint32_t* g_TypeId_ConsumeProduceComponent;// DAT_1401c7388
-extern uint32_t* g_TypeId_RadiusComponent;        // DAT_1401c4870
-extern uint32_t* g_TypeId_ToolbarDescription_FC;// DAT_1401c7f58
-extern uint32_t* g_TypeId_ResourceComponent;      // DAT_1401c7040
-extern uint32_t* g_TypeId_RawMaterialDescription;           // DAT_1401c7cb8
-// Prefer the raw .rdata DWORD; if that slot is unregistered or filled with 0, fall back to
-// the live factory tree by name. Caches into *cache. Defined in engine_funcs.cpp.
-// (edittool_select.cpp has an identical private helper in an anonymous namespace — this is
-// the shared, externally-linkable one. Guards the VALUE, not the pointer.)
-uint32_t ResolveExeTypeId(uintptr_t rdataAddr, const char* name, uint32_t* cache);
-extern uint32_t* g_TypeId_MeshInstanceComponent;  // DAT_1401c7e40
-extern uint32_t* g_TypeId_DestroyComponent;       // DAT_1401c7628
-extern uint32_t* g_TypeId_WorkplaceComponent;     // DAT_1401c80e0
-extern uint32_t* g_TypeId_WorkComponent;// DAT_1401c8070
-extern uint32_t* g_TypeId_WorkDescription;       // DAT_1401c80a8
-extern uint32_t* g_TypeId_AttendanceDescription;      // DAT_1401c3f78
-extern uint32_t* g_TypeId_ResourceLimitType;      // DAT_1401c5520
-extern uint32_t* g_TypeId_ToolUI;                 // DAT_1401c5788
-
-// BridgeTool-related type IDs
-extern uint32_t* g_TypeId_CreateBridgeDescription; // DAT_1401c73f8 (Startup component lookup)
-
-// RemovalTool-related type IDs
-extern uint32_t* g_TypeId_RemovalDescription;      // DAT_1401c74a0 (RemovalTool::Startup component lookup)
-// g_TypeId_MapComponent_FC (DAT_1401c79e0 = MapComponent) — declared with the FindComponent type-ids below
-// g_TypeId_MultiObjectComponent (DAT_1401c7ac0) — already declared below (~line 1448)
+// ENDGAME B.3.9 TR: the type-id cell pointers that stood here are
+// gone; readers use X::TypeId() of the class at the cell (INVENTORY_C Table 1).
 
 // BridgeTool helper functions (internal to exe)
 // BridgeTool_SnapEndCell (0x1400fb710): snaps end cell to same row or column as drag start
@@ -254,14 +222,6 @@ extern fn_BridgeTool_ValidatePath_t fn_BridgeTool_ValidatePath;
 
 // === DragPlacementTool/FencedTool dependencies ===
 
-// DragPlacementTool type IDs
-extern uint32_t* g_TypeId_CreatePlacementDescription; // DAT_1401c7430 (DragPlacementTool::Startup)
-
-// FencedTool type IDs
-extern uint32_t* g_TypeId_CreateFencedDescription;    // DAT_1401c4100 (FencedTool::Startup)
-extern uint32_t* g_TypeId_AreaDescription;            // DAT_1401c7a18 (shared: DragPlacementTool + FencedTool)
-extern uint32_t* g_TypeId_FenceDescription;           // DAT_1401c7a88 (FencedTool::Startup)
-extern uint32_t* g_TypeId_SizeDescription;            // DAT_1401c7468 (FencedTool::Startup)
 
 // ============================================================
 // Game Singletons (Phase A3 — exe global pointers)
@@ -297,30 +257,6 @@ extern void** g_pInputConfigSingletonExref;
 // REIMPLEMENTED: decompiled from all FindComponent_X variants (identical algorithm).
 void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeIdPtr);
 
-// Type ID globals used by FindComponent variants.
-// Resolved from exe .rdata (direct DAT_ addresses, not double-indirect exrefs).
-// Names reflect which component each FindComponent function actually searches for.
-extern uint32_t* g_TypeId_MapComponent_FC;     // DAT_1401c79e0 (fn_FindComponent_Build)
-extern uint32_t* g_TypeId_StateMachineComponent_FC;      // DAT_1401c7d98 (fn_FindComponent_BuildState)
-extern uint32_t* g_TypeId_ConsumeProduceComponent_FC; // DAT_1401c7350 (fn_FindComponent_ConsumeProduce)
-extern uint32_t* g_TypeId_BuildComponent_FC;        // DAT_1401c7008 (fn_FindComponent_Position)
-extern uint32_t* g_TypeId_DestroyComponent_FC;      // DAT_1401c75f0 (fn_FindComponent_Destroy)
-extern uint32_t* g_TypeId_TradeComponent_FC;        // DAT_1401c4b80 (fn_FindComponent_Building)
-extern uint32_t* g_TypeId_AttendanceComponent;      // DAT_1401c3f40 (fn_FindComponent_Attendance)
-extern uint32_t* g_TypeId_PastureComponent;         // DAT_1401c7ba0 (fn_FindComponent_Pasture)
-extern uint32_t* g_TypeId_AnimalDescription;        // DAT_1401c6fd0 (used by PastureCalcMaxCount)
-extern uint32_t* g_TypeId_OrchardComponent;         // DAT_1401c46b0 (fn_FindComponent_Orchard)
-extern uint32_t* g_TypeId_ClearAreaComponent_FC;              // DAT_1401c71c8 (fn_FindComponent_SM)
-extern uint32_t* g_TypeId_CitizenComponent_FC;      // DAT_1401c7158 — CitizenComponent's
-    // BaseTypeInfo (writer CitizenComponent_RegisterType 0x14014e7b5).
-    // Null unless BANISHED_LIVE_CITIZENAI_TIDS registers the slot (reg_citizenai_typeids.cpp).
-extern uint32_t* g_TypeId_StorageComponent_FC;      // DAT_1401c7e78 (fn_FindComponent_Storage/Residence)
-extern uint32_t* g_TypeId_ResidenceComponent;        // DAT_1401c7cf0
-extern uint32_t* g_TypeId_CemeteryComponent;        // DAT_1401c4090 (fn_FindComponent_Cemetery)
-extern uint32_t* g_TypeId_TombstoneComponent;       // DAT_1401c4a30
-extern uint32_t* g_TypeId_ImmigrationComponent;     // DAT_1401c4480 (fn_FindComponent_Immigration)
-extern uint32_t* g_TypeId_TrackerComponent;         // DAT_1401c4b10 (fn_FindComponent_Tracker)
-extern uint32_t* g_TypeId_ModelComponent_FC;       // DAT_1401c7a50 (fn_FindComponent_Character)
 
 // Typedef kept for any existing code that uses fn_FindComponent_t as a type.
 typedef void (*fn_FindComponent_t)(void* entity, void* retval);
@@ -330,26 +266,16 @@ typedef void (*fn_FindComponent_t)(void* entity, void* retval);
 
 // fn_FindComponent_Build — DAT_1401c79e0, original FUN_140004680. MISNOMER: the type id at
 // DAT_1401c79e0 is MapComponent, not BuildComponent (registrar MapComponent_RegisterType
-// 0x14014f375; the declaration above already names it g_TypeId_MapComponent_FC).
-inline void fn_FindComponent_Build(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_MapComponent_FC);
-}
+// 0x14014f375). Bodies: code/Game/Entity/entity_findcomponent.cpp.
+void fn_FindComponent_Build(void* entity, void* retval);
 // fn_FindComponent_BuildState — DAT_1401c7d98, original FUN_140003ea0
-inline void fn_FindComponent_BuildState(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_StateMachineComponent_FC);
-}
+void fn_FindComponent_BuildState(void* entity, void* retval);
 // fn_FindComponent_ConsumeProduce — DAT_1401c7350, original FUN_14000b6f0
-inline void fn_FindComponent_ConsumeProduce(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_ConsumeProduceComponent_FC);
-}
+void fn_FindComponent_ConsumeProduce(void* entity, void* retval);
 // fn_FindComponent_Position — DAT_1401c7008, original FUN_14000d6c0
-inline void fn_FindComponent_Position(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_BuildComponent_FC);
-}
+void fn_FindComponent_Position(void* entity, void* retval);
 // fn_FindComponent_Destroy — DAT_1401c75f0, original FUN_140005780
-inline void fn_FindComponent_Destroy(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_DestroyComponent_FC);
-}
+void fn_FindComponent_Destroy(void* entity, void* retval);
 // fn_FindComponent_Building — DAT_1401c4b80, original FUN_140015140.
 // ⚠ MISNAMED, kept only because the name is load-bearing across the tree: 0x140015140
 // matches DWORD_1401c4b80 = TradeComponent (verified at instruction level 2026-08-21),
@@ -358,9 +284,7 @@ inline void fn_FindComponent_Destroy(void* entity, void* retval) {
 // animalcomponent.cpp, whose comment said exactly that until it was corrected.
 // Consequence for gating: this finder returns null for EVERY entity while
 // BANISHED_LIVE_TRADE_TIDS is off, and non-null only for a trading post when it is on.
-inline void fn_FindComponent_Building(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_TradeComponent_FC);
-}
+void fn_FindComponent_Building(void* entity, void* retval);
 // fn_FindComponent_Work — DAT_1401c8070 = "WorkComponent" (factory_registrations.csv:306),
 // original FUN_140003050. Was named fn_FindComponent_Workplace, which is a DIFFERENT type:
 // WorkPlaceComponent is DAT_1401c80e0 / fn_FindComponent_WorkPlace below. Retail uses both,
@@ -369,77 +293,46 @@ inline void fn_FindComponent_Building(void* entity, void* retval) {
 // WorkPlaceComponent puts the small work id (+0x28) where a roster heap pointer (+0x58) is
 // expected. Fields used off a WorkComponent: +0x18 WorkDescription, +0x28 scheduler work id
 // (-1 = none), +0x30 cached max workers (WorkComponent_CalcMaxWorkers).
-inline void fn_FindComponent_Work(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_WorkComponent);
-}
+void fn_FindComponent_Work(void* entity, void* retval);
 // fn_FindComponent_Attendance — DAT_1401c3f40, original FUN_1400105e0
-inline void fn_FindComponent_Attendance(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_AttendanceComponent);
-}
+void fn_FindComponent_Attendance(void* entity, void* retval);
 // fn_FindComponent_Pasture — DAT_1401c7ba0, original FUN_140004fe0
-inline void fn_FindComponent_Pasture(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_PastureComponent);
-}
+void fn_FindComponent_Pasture(void* entity, void* retval);
 // fn_FindComponent_Orchard — DAT_1401c46b0, original FUN_140005440
-inline void fn_FindComponent_Orchard(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_OrchardComponent);
-}
+void fn_FindComponent_Orchard(void* entity, void* retval);
 // fn_FindComponent_WorkPlace — DAT_1401c80e0 = "WorkPlaceComponent"
 // (factory_registrations.csv:308), original FUN_140002e10. Was named
 // fn_FindComponent_BuildState2. Fields: +0x48 active profession key, +0x58 roster base,
 // +0x60 roster count, +0x18 WorkPlaceDescription (whose +0x20 is the natural profession).
-inline void fn_FindComponent_WorkPlace(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_WorkplaceComponent);
-}
+void fn_FindComponent_WorkPlace(void* entity, void* retval);
 // fn_FindComponent_SM — DAT_1401c71c8, original FUN_14000a170
-inline void fn_FindComponent_SM(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_ClearAreaComponent_FC);
-}
+void fn_FindComponent_SM(void* entity, void* retval);
 // fn_FindComponent_Citizen — DAT_1401c7158, original FUN_140009790
-inline void fn_FindComponent_Citizen(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_CitizenComponent_FC);
-}
+void fn_FindComponent_Citizen(void* entity, void* retval);
 // fn_FindComponent_Storage — DAT_1401c7e78, original FUN_140006270
 // NOTE: same function as fn_FindComponent_Residence (same type ID search)
-inline void fn_FindComponent_Storage(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_StorageComponent_FC);
-}
+void fn_FindComponent_Storage(void* entity, void* retval);
 // fn_FindComponent_Residence — same as fn_FindComponent_Storage (same type ID)
-inline void fn_FindComponent_Residence(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_StorageComponent_FC);
-}
+void fn_FindComponent_Residence(void* entity, void* retval);
 // fn_FindComponent_Cemetery — DAT_1401c4090, original FUN_140010a00
-inline void fn_FindComponent_Cemetery(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_CemeteryComponent);
-}
+void fn_FindComponent_Cemetery(void* entity, void* retval);
 // fn_FindComponent_Immigration — DAT_1401c4480, original FUN_140012020
-inline void fn_FindComponent_Immigration(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_ImmigrationComponent);
-}
+void fn_FindComponent_Immigration(void* entity, void* retval);
 // fn_FindComponent_Tracker — DAT_1401c4b10, original FUN_140013320
-inline void fn_FindComponent_Tracker(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_TrackerComponent);
-}
-// Forward declarations needed by inline helpers below (defined later in this file)
-extern uint32_t* g_TypeId_StatusIconComponent;
-extern uint32_t* g_TypeId_CitizenAIComponent;
-// fn_FindComponent_MeshInstance — DAT_1401c7e08 = g_TypeId_StatusIconComponent,
+void fn_FindComponent_Tracker(void* entity, void* retval);
+// fn_FindComponent_MeshInstance — DAT_1401c7e08,
 // StatusIconComponent's BaseTypeInfo (writer StatusIconComponent_RegisterType
 // 0x14014fab5; real HappinessComponent id is 0x1401c42c0). Original FUN_140002f90.
-inline void fn_FindComponent_MeshInstance(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_StatusIconComponent);
-}
+void fn_FindComponent_MeshInstance(void* entity, void* retval);
 // fn_FindComponent_Character — DAT_1401c7a50 = ModelComponent (writer ModelComponent_RegisterType);
 // finds ModelComponent. Function name kept for callers; the "Character" label is historical.
 // Original FUN_140003f60.
-inline void fn_FindComponent_Character(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_ModelComponent_FC);
-}
+void fn_FindComponent_Character(void* entity, void* retval);
 // fn_FindComponent_CitizenAI — FUN_140011050, Entity::FindComponent<CitizenAIComponent>
 // (compares against [0x1401c70e8] at 0x140011093, IsDerivedFrom at 0x1400110ec).
 // ENDGAME B.3.9 CB: defined in code/Game/Dialog/citizenui.cpp over
 // CitizenAIComponent::TypeId(); the cell is unregistered, so the old inline over
-// g_TypeId_CitizenAIComponent only worked when a dialog re-pointed that global.
+// the cell pointer only worked when a dialog re-pointed that global.
 void fn_FindComponent_CitizenAI(void* entity, void* retval);
 
 // ============================================================
@@ -461,38 +354,7 @@ void fn_FindComponent_CitizenAI(void* entity, void* retval);
 //   [8..11] = item quantity count
 // For each item: scan its component array for ResourceType (type ID check at vtable+0x10,
 // then IsDerivedFrom). Accumulate ResourceType.quantity(+0x48) * item.count.
-inline int fn_StorageComponent_QueryCount(void* storageComp) {
-    uintptr_t sc = (uintptr_t)storageComp;
-    int slotCount = *(int*)(sc + 0x30);
-    int total = 0;
-    uintptr_t itemArray = *(uintptr_t*)(sc + 0x28);
-    for (int i = 0; i < slotCount; i++) {
-        uintptr_t slotBase = itemArray + (uintptr_t)i * 0x10;
-        uintptr_t item = *(uintptr_t*)slotBase;
-        int itemQty = *(int*)(slotBase + 0x8);
-        // Scan item's component array for ResourceType
-        int compCount = *(int*)(item + 0x30);
-        uintptr_t compArray = *(uintptr_t*)(item + 0x28);
-        void* resourceType = nullptr;
-        for (int j = 0; j < compCount; j++) {
-            void* comp = *(void**)(compArray + (uintptr_t)j * 8);
-            // GetTypeId via vtable slot +0x10
-            typedef uint32_t (*GetTypeId_t)(void*);
-            uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
-            if (typeId == *g_TypeId_RawMaterialDescription) {
-                if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription)) {
-                    resourceType = comp;
-                }
-                break;
-            }
-        }
-        if (resourceType) {
-            int quantity = *(int*)((uintptr_t)resourceType + 0x48);
-            total += quantity * itemQty;
-        }
-    }
-    return total;
-}
+int fn_StorageComponent_QueryCount(void* storageComp);
 
 // Radius calculation helper (returns radius display index)
 typedef int (*fn_RadiusCalc_t)(void* component, int tileIndex);
@@ -519,23 +381,11 @@ extern fn_GetActiveProductIndex_t fn_GetActiveProductIndex; // FUN_140119470
 
 // --- UI::Element type IDs (exref, double-indirect) ---
 
-// CheckboxElement type ID at exref 0x1401516a8
-extern uint32_t* g_TypeId_CheckboxElement;
-
-// UI::ButtonElement type info, exe slot 0x1401514f8 (used by ControlUI).
-// Named g_TypeId_UIElementBase until the B.3.6 closing pass (rename only).
-extern uint32_t* g_TypeId_ButtonElement;
-
-// UI::ImageElement type ID at exref 0x140151500 (used by EventNotifyDialog::Update,
-// ScenarioDialog, and many other dialog Update functions to check child element types)
-extern uint32_t* g_TypeId_ImageElement;
 
 // ============================================================
 // Additional Exe Type IDs (Phase D additions)
 // ============================================================
 
-// ControlComponent type ID at DAT_1401c4e20 (direct)
-extern uint32_t* g_TypeId_ControlComponent;
 
 // ============================================================
 // Additional Exe Functions (Phase D additions)
@@ -675,11 +525,6 @@ inline bool SA_DialogEntityAlive(void* self) {
 // UpgradeUI helpers
 // ============================================================
 
-// UpgradeUIConfig type ID at DAT_1401c5868 (registered by 0x14014ca00 as
-// "UpgradeUIConfig" / "UI::DialogControllerConfig"). No "UpgradeDescription"
-// class exists in retail — the upgrade target at UpgradeUIConfig+0x20 is a
-// plain ComponentEntity template pointer, not a description struct.
-extern uint32_t* g_TypeId_UpgradeUIConfig;
 
 // 0x14011dfa0 ("StartUpgrade" — misnomer; the generic BuildState state-machine
 // driver): ported disasm-faithfully as RemovalCalc_StateMachine_dfa0 in
@@ -715,8 +560,6 @@ extern fn_CitizenList_RequestWorker_t fn_CitizenList_RequestWorker;
 typedef void (*fn_CitizenList_RemoveWorker_t)(void* citizenList, uint64_t professionId);
 extern fn_CitizenList_RemoveWorker_t fn_CitizenList_RemoveWorker;
 
-// EditTool type ID at g_TypeId_EditTool
-extern uint32_t* g_TypeId_EditTool;  // resolved from _typeInfo_exref for EditTool checks
 
 // ============================================================
 // EntityUI helpers
@@ -735,11 +578,6 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
 // Used by SetEditMode to create tool controller objects.
 // Ordinal for Object::Factory::CreateObject
 
-// ToolController type ID — DAT_1401c6eb8 (IsDerivedFrom check on Factory::CreateObject result)
-extern uint32_t* g_TypeId_ToolController;
-
-// ToolSetting type ID — TypeInfo_ToolSetting (used to IsDerivedFrom check on created setting)
-extern uint32_t* g_TypeId_ToolSetting;
 
 // AVL tree rebalance for 0x38-byte nodes (entity tracking BST)
 // FUN_140025920: walks up tree fixing balance factors, does rotations
@@ -779,8 +617,6 @@ extern fn_AVL_Rebalance_0x38_t fn_AVL_Rebalance_0x38;
 typedef int (*fn_ExternalList_GetResourceCount_t)(void* self);
 extern fn_ExternalList_GetResourceCount_t fn_ExternalList_GetResourceCount;
 
-// Scenario type ID pointer (for IsDerivedFrom check in ScenarioDialog)
-extern uint32_t* g_TypeId_Scenario;  // from exref in ScenarioDialog::Slot4
 
 // fn_EventNotifyDialog_ArrayRemove — now inline as EventNotifyDialog_ArrayRemove_Impl in eventnotifydialog.cpp
 
@@ -805,17 +641,9 @@ extern fn_Toolbar_ShowGroup_t fn_Toolbar_ShowGroup;
 // ToolUI child dialog vtable (PTR_FUN_14015f5a0 in exe .rdata) — used by Toolbar_Utility
 extern uintptr_t g_ToolUI_ChildDialog_Vtable;
 
-// fn_Factory_CreateObject, g_TypeId_ToolController, g_TypeId_ToolSetting — declared above (entityui section)
-
 // Toolbar item sort function (FUN_140021790) — sorts toolbar items by priority
 typedef void (*fn_ToolbarSort_t)(void* array, int count);
 
-// TypeInfo for Toolbar external — used by ExternalFactory::FindNext
-extern uint32_t* g_TypeId_ToolbarExternal;
-
-// Toolbar type ID at DAT_1401c6128 — used by ExternalFactory::FindNext and IsDerivedFrom
-// in ToolbarDialog_Ctor to iterate all Toolbar items matching a group
-extern uint32_t* g_TypeId_ToolbarItem;
 
 // FUN_140100270: Find open dialog by controller type matching group ID
 // Searches all open dialogs for one whose controller matches a specific type
@@ -828,13 +656,9 @@ extern fn_FindDialogByControllerType_t fn_FindDialogByControllerType;
 
 // --- Sub-dependencies for Toolbar_CenterOnEntity_Impl ---
 
-// MultiObjectComponent type ID — DAT_1401c7ac0 (multi-tile buildings: Cemetery, Pasture, Tunnel, Bridge)
-extern uint32_t* g_TypeId_MultiObjectComponent;
 
 // FindComponent_MultiObject — inline wrapper for MultiObjectComponent lookup
-inline void fn_FindComponent_MultiObject(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_MultiObjectComponent);
-}
+void fn_FindComponent_MultiObject(void* entity, void* retval);
 
 // EntityPanel_SyncTracking (FUN_1400666b0) — syncs tracking/follow flag to dialog controller
 typedef void (*fn_EntityPanel_SyncTracking_t)(void* panelController);
@@ -860,17 +684,6 @@ extern fn_CameraSys_ComputeViewTransform_t fn_CameraSys_ComputeViewTransform;
 // ToolbarDialog update button states helper (FUN_1400b8fd0)
 // REPLACED: now ToolbarDialog_UpdateButtons_Impl() in code/Game/Dialog/toolbardialog.cpp
 
-// UI::CheckElement type info, exe slot 0x1401516a8 — ToolbarDialog's
-// IsDerivedFrom checks on toolbar buttons. Named g_TypeId_ToolbarElement until
-// the B.3.6 closing pass (rename only). Same slot as g_TypeId_CheckboxElement,
-// resolved separately (that one is filled at a different point).
-extern uint32_t* g_TypeId_CheckElement;  // _typeInfo_exref in ToolbarDialog Update/OnEvent
-
-// ToolbarDialog parent type ID (DAT_1401c5d38) — for IsDerivedFrom in case 5 (CenterOnPoint)
-extern uint32_t* g_TypeId_ToolbarDialogParent;
-
-// ComboElement type ID: exref at 0x140151690 — for IsDerivedFrom checks on combo elements
-extern uint32_t* g_TypeId_ComboElement;
 
 // fn_GetCurrentProductIndex — inline defined later (after fn_Random_RandFloat)
 // FUN_140119470: if +0x50 != 0xffffffff return it; else weighted random pick from +0x58 array.
@@ -883,42 +696,10 @@ extern uint32_t* g_TypeId_ComboElement;
 //   +0x10: void*  — cached External* result
 // If the generation counter matches the factory's, the cached result is still valid.
 // Otherwise, looks up the External by converting the String to a Filename and calling
-// ExternalFactory::Find. If found and passes IsDerivedFrom(g_TypeId_ComponentDescription_FC),
-// caches the result; otherwise caches nullptr.
+// ExternalFactory::Find. If found and passes IsDerivedFrom(ComponentDescription::TypeId()),
+// caches the result; otherwise caches nullptr. Body: code/Game/Component/componentdescription.cpp.
 typedef void (*fn_ResolveExternalByName_t)(void* nameString); // kept for ABI reference
-inline void ResolveExternalByName_Impl(void* nameString) {
-    uintptr_t s = (uintptr_t)nameString;
-    void* factory = ::Object::ExternalFactory::_singleton;
-    if (!factory) return;
-
-    // Check generation counter: if matches, cached value is still valid
-    int32_t refGen     = *(int32_t*)(s + 0x08);
-    int32_t factoryGen = *(int32_t*)((uintptr_t)factory + 0x08);
-    if (refGen == factoryGen) return;
-
-    // Convert String to Filename, look up in factory.
-    // ??0Filename@System@@QEAA@AEBVString@1@@Z  retail 0x1800c6360
-    System::Filename filename(*reinterpret_cast<const System::String*>(s));
-    void* found = const_cast<void*>(static_cast<const void*>(
-        reinterpret_cast<const ::Object::ExternalFactory*>(factory)   // B.3.3 bridge
-            ->Find(filename)));
-
-    // Validate the found object is the expected type (Description base).
-    // In standalone the exe-side type-id storage (g_TypeId_ComponentDescription_FC ->
-    // DAT_1401c7318) is unregistered, so the global is NULL — dereferencing it
-    // would fault. Per the factory-cascade strategy ([[feedback_factory_cascade_strategy]])
-    // trust the FindOrLoad/Find result when the type-id check can't run.
-    void* result = nullptr;
-    if (found) {
-        if (!g_TypeId_ComponentDescription_FC || fn_IsDerivedFrom(found, *g_TypeId_ComponentDescription_FC)) {
-            result = found;
-        }
-    }
-
-    // Cache result and update generation
-    *(void**)(s + 0x10)  = result;
-    *(int32_t*)(s + 0x08) = factoryGen;
-}
+void ResolveExternalByName_Impl(void* nameString);
 
 // (fn_External_External / fn_External_Dtor — the ??0/??1External doors read
 // through exe slots 0x140151e98 / 0x140151ea0 — went at ENDGAME B.3.9 EXA:
@@ -971,18 +752,6 @@ extern fn_Time_Ctor_Float_t fn_Time_Ctor_Float;
 // HelpUI support functions
 // ============================================================
 
-// StringTable type ID — resolved from _typeInfo_exref at 0x140151488
-// Used for IsDerivedFrom checks on ExternalList entries
-extern uint32_t* g_TypeId_StringTable;
-
-// HelpUI element type IDs — resolved from _typeInfo_exref addresses in exe
-// Used by Slot4's FindElementType calls to find typed UI elements
-extern uint32_t* g_TypeId_HelpFirstElem;      // exref 0x1401517e8 -> +0x30
-extern uint32_t* g_TypeId_HelpComboElem;       // exref 0x140151690 -> +0x40
-extern uint32_t* g_TypeId_HelpDocTextElem;     // exref 0x1401517f0 -> +0x38
-extern uint32_t* g_TypeId_HelpContainerElem;   // exref 0x1401517f8 -> +0x58
-// Type ID used for IsDerivedFrom on named button elements (buttonBack/buttonForward)
-extern uint32_t* g_TypeId_HelpButtonElem;      // exref 0x1401514f8 (same used in Slot9 back/fwd)
 
 // HelpUI_ArrayResize — now inline as HelpUI_ArrayResize_Impl in helpui.cpp
 
@@ -994,18 +763,6 @@ extern uint32_t* g_TypeId_HelpButtonElem;      // exref 0x1401514f8 (same used i
 // CitizenUI helpers
 // ============================================================
 
-// FindComponent_CitizenAI — finds CitizenAIComponent on entity
-// FUN_140009790: entity(longlong), retval(InternalBasePtr*)
-// CitizenDescription type ID at DAT_1401c7190 (used for IsDerivedFrom in Slot7)
-extern uint32_t* g_TypeId_CitizenDescription;  // DAT_1401c7190
-
-// StatusIconComponent type ID at DAT_1401c7e08 (used for FindComponent in StatusBarUI)
-extern uint32_t* g_TypeId_StatusIconComponent;  // DAT_1401c7e08
-
-// DAT_1401c70e8 = g_TypeId_CitizenAIComponent, CitizenAIComponent's BaseTypeInfo+0
-// (writer CitizenAIComponent_RegisterType) — see reg_citizenai_typeids.cpp. Null unless
-// BANISHED_LIVE_CITIZENAI_TIDS/_AIID registers it.
-extern uint32_t* g_TypeId_CitizenAIComponent;  // DAT_1401c70e8
 
 // StatusBarUI_StatusIconHandler (FUN_14007a120) — status icon click handler
 // REPLACED: now static StatusBarUI_StatusIconHandler_Impl() in code/Game/Dialog/statusbarui.cpp
@@ -1197,27 +954,7 @@ inline uint32_t fn_GetCurrentProductIndex(void* component) {
 // If _scaleWorkersWithSize (+0x34) == 0: return _defaultWorkers (+0x24) flat.
 // Else: trunc(w*h / _maxArea * _defaultWorkers + 1) clamped to [1, _defaultWorkers].
 // Used as fn_StorageCountQuery in workplaceui, fn_CalcWorkerSlots in professionui.
-inline int fn_StorageCountQuery(void* component) {
-    uintptr_t c = (uintptr_t)component;
-    void* base = *(void**)(c + 0x18);
-    void* jobType = fn_IsDerivedFrom(base, *g_TypeId_WorkDescription) ? base : nullptr;
-    if (!jobType) return 0;
-    uintptr_t jt = (uintptr_t)jobType;
-    if (*(uint8_t*)(jt + 0x34) == 0) {
-        return *(int*)(jt + 0x24);
-    }
-    uint64_t buildBP = 0;
-    fn_FindComponent_Build(*(void**)(c + 0x10), &buildBP);
-    uintptr_t build = (uintptr_t)buildBP;
-    int defaultWorkers = *(int*)(jt + 0x24);   // _defaultWorkers (NOT _maxWorkerCount)
-    int maxArea        = *(int*)(jt + 0x30);   // _maxArea (NOT the building's tile area)
-    int width      = (int)*(short*)(build + 0x2c);
-    int height     = (int)*(short*)(build + 0x2e);
-    int result = (int)(((float)(width * height) / (float)maxArea) * (float)defaultWorkers + 1.0f);
-    if (result > defaultWorkers) result = defaultWorkers;
-    if (result < 1)              result = 1;
-    return result;
-}
+int fn_StorageCountQuery(void* component);
 // Alias used by professionui.cpp
 inline int fn_CalcWorkerSlots(void* storageLocComp) {
     return fn_StorageCountQuery(storageLocComp);
@@ -1235,8 +972,6 @@ typedef void* (*fn_NameDB_GenerateName_t)(void* retStr, void* nameDB, void* rand
                                            int minSyllables, int maxChars);
 extern fn_NameDB_GenerateName_t fn_NameDB_GenerateName;  // 0x1400a4b30
 
-// TypeInfo for NameDatabase IsDerivedFrom check
-extern uint32_t* g_TypeId_NameDatabase;  // DAT_1401c5a60
 
 // Start game handler: FUN_1400b4540
 // Constructs GameUpdateLoop -> GameLoadDialogLoopT -> LoaderLoop chain and sets next loop.
@@ -1248,10 +983,6 @@ typedef void (*fn_StartNewGame_t)(void* worldSetup, void* nameStr, uint32_t seed
                                    void* terrain, void* climate, uint32_t scenarioIdx, void* retvalIBP);
 extern fn_StartNewGame_t fn_StartNewGame;
 
-// TypeInfo IDs for generator IsDerivedFrom checks
-extern uint32_t* g_TypeId_MapGenerator;      // DAT_1401c59b8
-extern uint32_t* g_TypeId_ClimateGenerator;  // DAT_1401c5910
-extern uint32_t* g_TypeId_TerrainGenerator;  // DAT_1401c5b40
 
 // ============================================================
 // OptionsDialog support — Runtime DLL exports for video/audio config
@@ -1312,8 +1043,6 @@ extern fn_MapUI_ProjectCornersToGround_t fn_MapUI_ProjectCornersToGround;
 // Old fn_* pointer removed; replaced by UIDesc_AddControllers_Impl().
 void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSource);
 
-// TypeId for UIDescription — DAT_1401c7f90
-extern uint32_t* g_TypeId_UIDescription;
 
 // ============================================================
 // DragTool support functions
@@ -1432,8 +1161,6 @@ extern fn_SavedState_Ctor_t fn_SavedState_Ctor;
 // TownHallUI support functions
 // ============================================================
 
-// TabElement type ID: exref at 0x140151de0 (double-indirect)
-extern uint32_t* g_TypeId_TabElement;
 
 // --- Reimplemented TownHallUI functions (clean C++ in townhallui.cpp) ---
 // Forward-declared here; defined in code/Game/Dialog/townhallui.cpp.
@@ -1539,11 +1266,6 @@ extern void** g_pGameSingleton;  // 0x1401c3dd8
 // SpriteCaptureUI support functions
 // ============================================================
 
-// EditElement type ID: exref at 0x140151b50 (double-indirect: ptr -> ptr -> typeId)
-extern uint32_t* g_TypeId_EditElement;
-
-// CaptureBoxElement type ID: DAT_1401c5638 (direct dword in .data)
-extern uint32_t* g_TypeId_CaptureBoxElement;
 
 // ============================================================
 // TradeUI support functions
@@ -1553,11 +1275,6 @@ extern uint32_t* g_TypeId_CaptureBoxElement;
 // fn_TradeUI_RefreshDisplay pointer kept for reference / fallback only.
 typedef void (*fn_TradeUI_RefreshDisplay_t)(void* self, uint64_t p2, uint64_t p3, int64_t p4);
 
-// ValueDescription type ID — DAT_1401c4bf0 (sprite + name on trade entity descriptions)
-extern uint32_t* g_TypeInfo_ValueDescription;
-
-// TradeDescription type ID — DAT_1401c4bb8 (trade order data on TradeComponent)
-extern uint32_t* g_TypeInfo_TradeDescription;
 
 // DynArray clear for 0x18-byte stride arrays (FUN_140016200)
 // Resets count to 0. arrayStruct = pointer to {dataPtr, ..., count(+8), capacity(+C)}.
@@ -1598,39 +1315,8 @@ extern fn_Building_GetBuyEntries_t fn_Building_GetBuyEntries;
 typedef void (*fn_TradeUI_OnTradeButton_t)(void* self, void* p2, void* p3, int64_t p4);
 extern fn_TradeUI_OnTradeButton_t fn_TradeUI_OnTradeButton;   // 0x140081420
 
-// TradeUI type IDs used in IsDerivedFrom checks
-// TableElement type ID — exref 0x140151510
-extern uint32_t* g_TypeId_TableElement;
 
-// UI::NumberElement type info — exe slot 0x1401516c8. Named
-// g_TypeId_SpinnerElement until the B.3.6 closing pass (rename only).
-extern uint32_t* g_TypeId_NumberElement;
 
-// TextElement type ID — exref 0x140151508
-extern uint32_t* g_TypeId_TextElement;
-
-// LabelElement type ID — exref 0x140151668
-extern uint32_t* g_TypeId_LabelElement;
-
-// NumberEditElement type ID — exref 0x140151cb0
-extern uint32_t* g_TypeId_NumberEditElement;
-
-// UI::SpinnerElement type info — exe slot 0x140151cf0 (NOT SliderElement,
-// whose slot is 0x1401516d0). Named g_TypeId_SliderElement until the B.3.6
-// closing pass (rename only; the value never changed).
-// Used in TradeUI inner loops (tablePurchase child(2), tableStorage child(1),
-// tableSell child(3), tableBuy child(3))
-extern uint32_t* g_TypeId_SpinnerElement;
-
-// ButtonElement type ID — exref 0x1401514f8 (same as g_TypeId_HelpButtonElem)
-// Already available as g_TypeId_HelpButtonElem
-
-// ComboElement type ID — exref 0x140151690 (same as g_TypeId_HelpComboElem)
-// Already available as g_TypeId_HelpComboElem
-
-// SelectDescription type ID — DAT_1401c48a8
-// Used in Serialize ExternalFactory loop to count selectable build types
-extern uint32_t* g_TypeId_SelectDescription;
 
 // FUN_14005a520: (tradeState, resourceEntityTemplate) -> int
 //
@@ -1638,7 +1324,7 @@ extern uint32_t* g_TypeId_SelectDescription;
 // "sellable count". It is the per-resource PRICE/VALUE lookup for the trade panel.
 // Verified from the 0x14005a520 decompile (2026-07-30):
 //   * When tradeState+0x2c < 0 (no merchant docked) it finds the resource's
-//     ValueDescription (g_TypeInfo_ValueDescription) and returns desc+0x40 — the
+//     ValueDescription (DWORD_1401c4bf0) and returns desc+0x40 — the
 //     base value.
 //   * Otherwise it finds the resource's RawMaterial-ish component (DWORD_1401c7cb8)
 //     and tests that component's category flags at +0x5c against the docked
@@ -1715,11 +1401,6 @@ extern fn_PerlinNoise_Generate_t fn_PerlinNoise_Generate;
 typedef void (*fn_Weather_ResetTime_t)(void* weatherMgrPtr, void* timePtr);
 extern fn_Weather_ResetTime_t fn_Weather_ResetTime;
 
-// TypeId for DiseaseDescription — DAT_1401c5948
-extern uint32_t* g_TypeId_DiseaseDescription;
-
-// TypeId for DrawableType (used in drawCombo population) — DAT_1401c47c8
-extern uint32_t* g_TypeId_DrawableType;
 
 // ============================================================
 // DebugUI Slot9 sub-functions (Application-x64.exe)
@@ -1767,7 +1448,6 @@ extern fn_Entity_FindAudioComponent_t fn_Entity_FindAudioComponent;
 //   fn_Graphics_MeshInstance_SetMaterialInstance (?SetMaterialInstance@MeshInstance@Graphics@@)
 // The first two were the two HEAVIEST doors in B35_RULES section 7's table (12
 // and 7 call sites); both are at zero now. Their registered doors are untouched.
-
 
 
 // ENDGAME B.3.5 (b35-K2): `fn_Graphics_ParticleInstance_IncrementInstanceIndex`
@@ -1831,18 +1511,11 @@ extern fn_Graphics_Camera_Ctor_t fn_Graphics_Camera_Ctor;
 // DebugUI deep-reimpl helper functions (exe sub-functions)
 // ============================================================
 
-// FireComponent type ID — DAT_1401c41e0 (used by FindComponent_Fire)
-extern uint32_t* g_TypeId_FireComponent;
 
 // fn_FindComponent_Fire — searches entity for FireComponent (DAT_1401c41e0)
-inline void fn_FindComponent_Fire(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_FireComponent);
-}
+void fn_FindComponent_Fire(void* entity, void* retval);
 
 // fn_FindComponent_RawMaterial — searches entity for RawMaterialDescription (DAT_1401c7cb8)
-inline void fn_FindComponent_RawMaterial(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_RawMaterialDescription);
-}
 
 // Game_DestroyEntity (FUN_1400c3ec0 in exe) — destroys an entity from the entity list
 // RCX=entityList, RDX=entity
@@ -1879,17 +1552,10 @@ extern fn_EntityFactory_CreateEntity_t fn_EntityFactory_CreateEntity;
 typedef void (*fn_EntityList_RegisterEntity_t)(void* entityList, void* entityPtrRef, int categoryId);
 extern fn_EntityList_RegisterEntity_t fn_EntityList_RegisterEntity;
 
-// InteractComponent type ID — DAT_1401c7900 (used by SpawnCitizens)
-extern uint32_t* g_TypeId_InteractComponent_FC;
 
 // fn_FindComponent_ResidenceFC — searches entity for InteractComponent (DAT_1401c7900);
 // function name kept for callers.
-inline void fn_FindComponent_ResidenceFC(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_InteractComponent_FC);
-}
 
-// InteractDescription type ID — DAT_1401c7938 (used by SpawnCitizens)
-extern uint32_t* g_TypeId_InteractDescription_FC;
 
 // ResidenceComponent_GetOccupantCount (FUN_140123070) — returns current occupant count
 // RCX=residenceComponent, EDX=mode(0=current)
@@ -2003,12 +1669,6 @@ inline void* GetLoadingSoundString(void* retStr) {
 typedef void (*fn_ModDialog_ArrayPush_t)(void* arrayHeader, int newCount, void* entry);
 extern fn_ModDialog_ArrayPush_t fn_ModDialog_ArrayPush;  // 0x140012a60
 
-// Browser controller type ID — DAT_1401c5210
-// Used by AddController to attach the mod browser controller.
-extern uint32_t* g_TypeId_BrowserController;  // 0x1401c5210
-
-// Material type ID for IsDerivedFrom check in ModDialog (dispatch 0x140151858)
-extern uint32_t* g_TypeId_Material;
 
 // DAT_14017214c — UV scale constant (= 1.0f used in SpriteSheet::SetSpriteInfo)
 extern float* g_fUVScale;  // DAT_14017214c
@@ -2044,14 +1704,6 @@ extern float* g_fUVScale;  // DAT_14017214c
 
 // --- Engine::MainLoop ---
 
-// UI::Element type info — exe slot 0x140151660 (?_typeInfo@Element@UI@@).
-// Used for IsDerivedFrom checks before InternalBasePtr wrapping / GetUserData.
-// Named g_TypeId_ObjectInternal until the B.3.6 closing pass (rename only).
-// NOTE: with the exe slot unfilled (BANISHED_LIVE_ELEMENT_TIDS off) two
-// lazy fallbacks (ui_dialog_stub_factories.cpp EnsureTypeIds, debugui.cpp's
-// heal table) fill it with Object::Internal's id instead - a live divergence
-// from the slot's class, recorded in B36_RULES section 12, not changed here.
-extern uint32_t* g_TypeId_Element;
 
 // ============================================================
 // Stage 3: OptionsDialog Apply/Restore exe helpers
@@ -2086,8 +1738,6 @@ extern fn_ApplyKeyMapToUI_t fn_ApplyKeyMapToUI;
 typedef void (*fn_UpdateAutoSaveTimer_t)(void* dialogInstance);
 extern fn_UpdateAutoSaveTimer_t fn_UpdateAutoSaveTimer;
 
-// Type ID DAT_1401c4d08 — used for IsDerivedFrom check in ApplyGameSettings dialog iteration
-extern uint32_t* g_TypeId_AutoSaveDialogType;
 
 // RegisterDefaultInputBindings — clears KeyMap, re-registers all default bindings, then loads saved config
 // FUN_1400992f0 in exe (standalone function, no parameters)
@@ -2308,38 +1958,6 @@ inline void Game_RemoveEntity_Impl(void* gameWorldPtr, void* entityPtr) {
 // Checks if storageComp can hold 'quantity' more of the resource on entityPtr.
 // Returns true if total count + (resourceType.size * quantity) <= storageComp.capacity (+0x38).
 // REIMPLEMENTED inline from Ghidra decompilation.
-inline bool Storage_CanAddItem(void* storageComp, void* entityPtr, int quantity) {
-    uintptr_t sc = (uintptr_t)storageComp;
-    uintptr_t ent = (uintptr_t)entityPtr;
-
-    // Check resource flags match: storageComp+0x3c & resourceType+0x5c
-    // Find ResourceType component on entity
-    int compCount = *(int*)(ent + 0x30);
-    uintptr_t compArray = *(uintptr_t*)(ent + 0x28);
-    void* resourceType = nullptr;
-    for (int i = 0; i < compCount; i++) {
-        void* comp = *(void**)(compArray + (uintptr_t)i * 8);
-        typedef uint32_t (*GetTypeId_t)(void*);
-        uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
-        if (typeId == *g_TypeId_RawMaterialDescription) {
-            if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription)) {
-                resourceType = comp;
-            }
-            break;
-        }
-    }
-
-    // Check flags compatibility
-    uint32_t storageFlags = *(uint32_t*)(sc + 0x3c);
-    uint32_t resourceFlags = *(uint32_t*)((uintptr_t)resourceType + 0x5c);
-    if ((storageFlags & resourceFlags) == 0) return false;
-
-    // Check capacity: currentTotal + resourceSize * quantity <= capacity
-    int currentTotal = fn_StorageComponent_QueryCount(storageComp);
-    int resourceSize = *(int*)((uintptr_t)resourceType + 0x48);
-    int maxCapacity = *(int*)(sc + 0x38);
-    return (currentTotal + resourceSize * quantity) <= maxCapacity;
-}
 
 // --- Storage add item: FUN_14012d000(storageComp, entityPtr, quantity) ---
 // Adds quantity of entity's resource to storage. If entity already exists in storage
@@ -2538,66 +2156,7 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
 // Iterates ExternalFactory for entities with ComponentDescription (DAT_1401c7318),
 // finds SelectDescription sub-component (DAT_1401c48a8), checks type match,
 // removes matching entity via Game_RemoveEntity.
-inline void Game_TriggerDisasterByType_Impl(int disasterType) {
-    if (!::Object::ExternalFactory::_singleton) return;
-    if (!fn_IsDerivedFrom) return;
-
-    void* factory = ::Object::ExternalFactory::_singleton;
-    void* gameWorld = *g_pGameWorldSingleton;
-    if (!gameWorld) return;
-    void* entityList = *(void**)((uintptr_t)gameWorld + 0xf0);
-
-    // Iterate all ComponentDescription-type externals
-    const ::Object::ExternalFactory* efactory =
-        reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
-    void* ext = const_cast<void*>(static_cast<const void*>(
-        efactory->FindNext(*g_TypeId_ComponentDescription_FC, nullptr)));
-    while (ext != nullptr) {
-        uintptr_t e = (uintptr_t)ext;
-        if (fn_IsDerivedFrom(ext, *g_TypeId_ComponentDescription_FC)) {
-            // Find SelectDescription sub-component
-            int compCount = *(int*)(e + 0x30);
-            uintptr_t compArray = *(uintptr_t*)(e + 0x28);
-
-            // First pass: check if entity HAS a SelectDescription
-            bool hasSelect = false;
-            for (int i = 0; i < compCount; i++) {
-                void* comp = *(void**)(compArray + (uintptr_t)i * 8);
-                typedef uint32_t (*GetTypeId_t)(void*);
-                uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
-                if (typeId == *g_TypeId_SelectDescription) {
-                    if (fn_IsDerivedFrom(comp, *g_TypeId_SelectDescription) && comp != nullptr) {
-                        hasSelect = true;
-                    }
-                    break;
-                }
-            }
-
-            if (hasSelect) {
-                // Second pass: find the SelectDescription and check type
-                void* selectDesc = nullptr;
-                for (int i = 0; i < compCount; i++) {
-                    void* comp = *(void**)(compArray + (uintptr_t)i * 8);
-                    typedef uint32_t (*GetTypeId_t)(void*);
-                    uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
-                    if (typeId == *g_TypeId_SelectDescription) {
-                        if (fn_IsDerivedFrom(comp, *g_TypeId_SelectDescription)) {
-                            selectDesc = comp;
-                        }
-                        break;
-                    }
-                }
-                // Check if SelectDescription.type (+0x40) matches requested disaster type
-                if (selectDesc && *(int*)((uintptr_t)selectDesc + 0x40) == disasterType) {
-                    Game_RemoveEntity_Impl(entityList, ext);
-                }
-            }
-        }
-        ext = const_cast<void*>(static_cast<const void*>(
-            efactory->FindNext(*g_TypeId_ComponentDescription_FC,
-                               reinterpret_cast<const ::Object::External*>(ext))));
-    }
-}
+void Game_TriggerDisasterByType_Impl(int disasterType);
 
 // --- Game_SpawnResources (0x140091660) — REIMPLEMENTED inline ---
 // Spawns 'count' resources into citizen storage buildings.
@@ -2624,188 +2183,7 @@ extern fn_StorageCanAdd_t fn_StorageCanAdd;  // 0x14012cd80
 typedef void (*fn_StorageAddItem_t)(void* storageComp, void* entityPtr, int quantity);
 extern fn_StorageAddItem_t fn_StorageAddItem;  // 0x14012d000
 
-inline void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int count) {
-    int64_t* param_1 = (int64_t*)citizenListPtr;
-
-    // Dynamic array for matching entities
-    // Ghidra uses local_48 = array ptr, local_40 = packed CONCAT44(capacity, count)
-    void* matchArr = nullptr;
-    int matchCount = 0;
-    int matchCapacity = 0;
-
-    // Phase 1: Build array of entity pointers whose NaturalResourceComponent flags match resourceFlag
-    // Entity array is raw pointers: param_1[0x22] = array ptr, param_1[0x23] = count
-    if ((int)param_1[0x23] > 0) {
-        int64_t entityOffset = 0;
-        int entityIdx = 0;
-        do {
-            int64_t entity = *(int64_t*)(entityOffset + param_1[0x22]);
-
-            // Find NaturalResourceComponent on this entity (raw component array at +0x28/+0x30)
-            void* natResComp = nullptr;
-            int compIdx = 0;
-            int64_t compOffset = 0;
-            if (*(int*)(entity + 0x30) > 0) {
-                do {
-                    void* comp = *(void**)(*(int64_t*)(entity + 0x28) + compOffset * 8);
-                    // vtable call: GetTypeId at vtable+0x10
-                    typedef uint32_t (*GetTypeId_t)(void*);
-                    uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
-                    if (typeId == *g_TypeId_RawMaterialDescription) {
-                        void* foundComp = *(void**)(*(int64_t*)(entity + 0x28) + compOffset * 8);
-                        bool isDerived = fn_IsDerivedFrom(foundComp, *g_TypeId_RawMaterialDescription);
-                        natResComp = nullptr;
-                        if (isDerived) {
-                            natResComp = foundComp;
-                        }
-                        goto phase1_found;
-                    }
-                    compIdx++;
-                    compOffset++;
-                } while (compIdx < *(int*)(entity + 0x30));
-            }
-            natResComp = nullptr;
-
-        phase1_found:
-            {
-                // Check resource flags match (natResComp+0x5c & resourceFlag)
-                // Original code does NOT null-check — relies on entities always having the component
-                void* oldArr = matchArr;
-                int oldCount = matchCount;
-                if ((*(uint32_t*)((uintptr_t)natResComp + 0x5c) & resourceFlag) != 0) {
-                    int newCount = matchCount + 1;
-                    if (newCount != matchCount) {  // overflow guard (matches original JZ)
-                        matchCount = newCount;
-                        if (matchCapacity < newCount) {
-                            // Growth: if first alloc, capacity = newCount; else capacity = newCount * 3
-                            matchCapacity = newCount;
-                            if (oldArr != nullptr) {
-                                matchCapacity = newCount * 3;
-                            }
-                            matchArr = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)matchCapacity * 8, 8);
-                        }
-
-                        // Copy old entries + append new entity
-                        // If matchArr == oldArr (no realloc needed), start from old count (just append)
-                        // If matchArr != oldArr (reallocated), start from 0 (copy all + append)
-                        uint32_t copyStart = 0;
-                        if (oldArr == matchArr) {
-                            copyStart = (uint32_t)oldCount;
-                        }
-                        int copyIdx = (int)copyStart;
-                        if (copyIdx < newCount) {
-                            int64_t* dstSlot = (int64_t*)((int64_t)matchArr + (int64_t)copyIdx * 8);
-                            int64_t* srcSlot = (int64_t*)((int64_t)oldArr + (int64_t)copyIdx * 8);
-                            do {
-                                if (dstSlot != nullptr) {
-                                    int64_t* source = &entity;
-                                    if ((int)copyStart < oldCount) {
-                                        source = srcSlot;
-                                    }
-                                    *dstSlot = *source;
-                                }
-                                copyStart++;
-                                srcSlot++;
-                                dstSlot++;
-                            } while ((int)copyStart < newCount);
-                        }
-
-                        // Free old array if it was reallocated
-                        if (oldArr != matchArr) {
-                            fn_MemFreeStatic(oldArr);
-                        }
-                    }
-                }
-            }
-
-            entityIdx++;
-            entityOffset += 8;
-        } while (entityIdx < (int)param_1[0x23]);
-
-        // Phase 2: Round-robin distribute items across citizens' StorageComponents
-        // Citizens are InternalBasePtr entries: param_1[0] = array ptr, param_1[1] = count
-        if (matchCount > 0 && count > 0) {
-            int spawned = 0;
-
-            while (true) {
-                bool anyAdded = false;
-                int citizenIdx = 0;
-                if ((int)param_1[1] < 1) break;
-
-                int64_t citizenOffset = 0;
-                do {
-                    // Each citizen entry is an InternalBasePtr — load then CheckPtr
-                    int64_t citizenIBP = *(int64_t*)(citizenOffset + *param_1);
-                    int64_t citizen = citizenIBP;
-
-                    // Find StorageComponent on citizen
-                    // Citizen component array is IBP entries at citizen+0x30, count at citizen+0x38
-                    void* storageComp = nullptr;
-                    int cCompIdx = 0;
-                    int64_t cCompOffset = 0;
-                    if (*(int*)(citizen + 0x38) > 0) {
-                        do {
-                            // Each component entry is an InternalBasePtr — CheckPtr before reading
-                            void* compIBP = (void*)(*(int64_t*)(citizen + 0x30) + cCompOffset * 8);
-
-                            typedef uint32_t (*GetTypeId_t)(void*);
-                            uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)(*(int64_t*)compIBP) + 0x10)))(*(void**)compIBP);
-                            if (typeId == *g_TypeId_StorageComponent_FC) {
-                                // Re-CheckPtr the IBP slot and read again
-                                void* compIBP2 = (void*)(*(int64_t*)(citizen + 0x30) + cCompOffset * 8);
-                                void* compVal = *(void**)compIBP2;
-
-                                bool isDerived = fn_IsDerivedFrom(compVal, *g_TypeId_StorageComponent_FC);
-                                storageComp = nullptr;
-                                if (isDerived) {
-                                    storageComp = compVal;
-                                }
-                                goto phase2_found;
-                            }
-                            cCompIdx++;
-                            cCompOffset++;
-                        } while (cCompIdx < *(int*)(citizen + 0x38));
-                    }
-                    storageComp = nullptr;
-
-                phase2_found:
-                    {
-                        // Wrap found storage component in an InternalBasePtr
-                        int64_t storageIBP = 0;
-                        new (&storageIBP) ::Object::InternalBasePtr(
-                            reinterpret_cast<RtObject::Internal*>(storageComp));   // B.3.3 bridge
-
-                        // Try to add one item via round-robin
-                        if (spawned < count) {
-                            int64_t* matchSlot = (int64_t*)((int64_t)matchArr + (int64_t)(spawned % matchCount) * 8);
-
-                            // CheckPtr the storage IBP before use
-
-                            // Call original exe CanAdd function (0x14012cd80)
-                            uint32_t canAdd = fn_StorageCanAdd((void*)storageIBP, (void*)*matchSlot, 1);
-                            if ((char)canAdd != '\0') {
-                                // CheckPtr again before AddItem
-
-                                // Call original exe AddItem function (0x14012d000)
-                                fn_StorageAddItem((void*)storageIBP, (void*)*matchSlot, 1);
-                                spawned++;
-                                anyAdded = true;
-                            }
-                        }
-                    }
-
-                    citizenIdx++;
-                    citizenOffset += 8;
-                } while (citizenIdx < (int)param_1[1]);
-
-                if (!anyAdded || spawned >= count) break;
-            }
-        }
-    }
-
-    // Free match array
-    fn_MemFreeStatic(matchArr);
-}
+void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int count);
 
 // ============================================================
 // Toolbar_CenterOnEntity_Impl — centers camera on entity and selects it in EditTool
@@ -2825,234 +2203,10 @@ inline void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag
 // 3. Set camera target and snap camera to new position
 // 4. Get/create EditTool and select entity in it
 //
-// NOTE: g_TypeId_ModelComponent_FC (DAT_1401c7a50) is ModelComponent's TypeInfo.
-// fn_FindComponent_Character keeps its historical name but finds ModelComponent.
+// NOTE: fn_FindComponent_Character keeps its historical name but finds ModelComponent
+// (DAT_1401c7a50). Body: code/Game/Dialog/toolbardialog.cpp.
 
-inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr) {
-    uintptr_t tc = (uintptr_t)toolController;
-    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
-
-    // === Section 1: Enable tracking on EntityPanel controller ===
-    if (*(uintptr_t*)parentDialogPtr != 0) {
-
-        // Retail FUN_140103040 reads DWORD_1401c4f00 — whose registrar is
-        // RegisterType_EntityUI — TWICE, and both reads matter. Disassembled at
-        // 0x14010307a..0x1401030af (the decompiled C shows only the second; it drops
-        // GetController's third argument entirely and prints the retval buffer as a
-        // `uint` — reference_ghidra_c_output_vs_disassembly.md):
-        //
-        //     MOV  R8D,[0x1401c4f00]   ; arg 3 = the EntityUI type-id FILTER
-        //     MOV  RCX,[RBX]           ; this = DialogInstance*
-        //     LEA  RDX,[RBP+0x6f]      ; hidden retval slot
-        //     CALL [0x140151768]       ; UI::DialogInstance::GetController
-        //     ...
-        //     MOV  EDX,[0x1401c4f00]   ; and again, for IsDerivedFrom
-        //     CALL [0x140152a98]       ; fn_IsDerivedFrom
-        //
-        // So the type id has to be resolved BEFORE the GetController call, not after.
-        //
-        // GetController's third parameter is a TYPE-ID FILTER, not an index: retail
-        // 0x180113320 walks the controller array and compares the argument against each
-        // controller's own type id (Object::Internal vtable slot +0x10), returning null
-        // when nothing matches. Nothing has type id 0.
-        // (reference_getcontroller_third_arg_is_a_type_filter; the mangled name says so
-        // too — the trailing `I` in ...@Object@@I@Z is that uint32.)
-        //
-        // HISTORY, because this site has now been wrong twice in two different places and
-        // the second fix looked complete when it was not:
-        //   * Originally the downstream IsDerivedFrom used g_TypeId_PageToggleUI — a
-        //     different class (own slot 0x1401c5408, which nothing in this tree reads).
-        //     That was corrected to tidEntityUI, and the note left behind declared the
-        //     "camera centres but never FOLLOWS the entity" bug cured.
-        //   * IT WAS NOT. The UPSTREAM filter was left at literal 0, so GetController
-        //     returned null for every dialog, `controllerRaw` was null, the guard below
-        //     failed, panelController stayed null and entity+0xd8 was never set — the
-        //     identical symptom, for every caller ("go to entity" in workplace /
-        //     profession / residence / townhall / statusbar / toolbar / citizen panels),
-        //     now hidden behind a comment asserting it was fixed. Corrected 2026-09-07
-        //     (Wave 7 lane B; the port of GetController is what surfaced it).
-        // Guard the VALUE, not the pointer: a null-but-resolvable id is not a valid filter.
-        static uint32_t s_tid_EntityUI_toolbar = 0;
-        const uint32_t tidEntityUI = ResolveExeTypeId(0x1401c4f00, "EntityUI", &s_tid_EntityUI_toolbar);
-
-        // Get the EntityUI controller from the dialog instance.
-        uint8_t controllerBuf[16] = {};
-        ::new (static_cast<void*>(controllerBuf)) ::Object::InternalPtr<UI::DialogController>(
-            reinterpret_cast<UI::DialogInstance*>(*(void**)parentDialogPtr)->GetController(tidEntityUI));  // B.3.6 bridge
-
-        uintptr_t controllerRaw = *(uintptr_t*)controllerBuf;
-        void* panelController = nullptr;
-        if (controllerRaw != 0 && tidEntityUI) {
-            if (fn_IsDerivedFrom((void*)controllerRaw, tidEntityUI)) {
-                panelController = (void*)controllerRaw;
-            }
-        }
-
-        uint64_t ctrlRef = 0;
-        new (&ctrlRef) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(panelController));   // B.3.3 bridge
-
-        if (ctrlRef != 0) {
-            uintptr_t ctrl = (uintptr_t)ctrlRef;
-            uintptr_t trackedEntity = *(uintptr_t*)(ctrl + 0x38);
-
-            if (*(uint8_t*)(trackedEntity + 0xd8) == 0) {
-                // Enable tracking flag
-                ctrl = (uintptr_t)ctrlRef;
-                *(uint8_t*)(*(uintptr_t*)(ctrl + 0x38) + 0xd8) = 1;
-
-                if (fn_EntityPanel_SyncTracking) {
-                    fn_EntityPanel_SyncTracking((void*)ctrl);
-                }
-            }
-        }
-    }
-
-    // === Section 2: Get entity world position ===
-    float targetPos[3] = {0.0f, 0.0f, 0.0f};
-
-    uintptr_t entityRaw = *(uintptr_t*)entityPtr;
-
-    // Try ModelComponent (DAT_1401c7a50 = g_TypeId_ModelComponent_FC)
-    uint64_t modelRef = 0;
-    fn_FindComponent_Character((void*)entityRaw, &modelRef);
-
-    bool gotPosition = false;
-    if (modelRef != 0) {
-        // Has ModelComponent — check for MultiObjectComponent
-        uint64_t multiRef = 0;
-        fn_FindComponent_MultiObject((void*)entityRaw, &multiRef);
-
-        if (multiRef == 0) {
-            // Single object (citizen/animal/tree): use model's transform position
-            uint64_t modelRef2 = 0;
-            fn_FindComponent_Character((void*)entityRaw, &modelRef2);
-            uintptr_t model = (uintptr_t)modelRef2;
-
-            // Math::Transform at ModelComponent+0x148 is {quat(16 bytes), pos(12 bytes)}
-            // Position starts at +0x10 within the 0x1C-byte Transform = ModelComponent+0x158
-            targetPos[0] = *(float*)(model + 0x158);
-            targetPos[1] = *(float*)(model + 0x15C);
-            targetPos[2] = *(float*)(model + 0x160);
-            gotPosition = true;
-        }
-    }
-
-    if (!gotPosition) {
-        // Building/multi-object: calculate center from BuildComponent grid footprint
-        uint64_t buildRef = 0;
-        fn_FindComponent_Build(*(void**)entityPtr, &buildRef);
-        uintptr_t build = (uintptr_t)buildRef;
-
-        int* mapGrid = *(int**)(game + 0xF8);
-        int gridSize = *mapGrid;
-        float halfGrid = (float)(gridSize >> 1);
-
-        int16_t posX = *(int16_t*)(build + 0x28);
-        int16_t posY = *(int16_t*)(build + 0x2a);
-        int16_t extX = *(int16_t*)(build + 0x2c);
-        int16_t extY = *(int16_t*)(build + 0x2e);
-
-        // Far corner of footprint
-        int idx1 = (int)extX + ((int)extY + (int)posY) * gridSize + (int)posX;
-        float inXY1[3] = {
-            (float)(idx1 % gridSize) - halfGrid,
-            (float)(idx1 / gridSize) - halfGrid,
-            0.0f
-        };
-        float pos1[3];
-        fn_MapGetTerrainPos(mapGrid, pos1, inXY1, '\0', nullptr);
-
-        // Origin corner of footprint
-        int idx2 = gridSize * (int)posY + (int)posX;
-        float inXY2[3] = {
-            (float)(idx2 % gridSize) - halfGrid,
-            (float)(idx2 / gridSize) - halfGrid,
-            0.0f
-        };
-        float pos2[3];
-        fn_MapGetTerrainPos(mapGrid, pos2, inXY2, '\0', nullptr);
-
-        // Midpoint of origin and far corner = footprint center
-        targetPos[0] = (pos1[0] + pos2[0]) * 0.5f;
-        targetPos[1] = (pos1[1] + pos2[1]) * 0.5f;
-        targetPos[2] = (pos1[2] + pos2[2]) * 0.5f;
-    }
-
-    // === Section 3: Snap camera to entity position ===
-    uintptr_t cameraSys = *(uintptr_t*)(game + 0xE0);
-
-    // Set camera target position
-    *(float*)(cameraSys + 0x1C) = targetPos[0];
-    *(float*)(cameraSys + 0x20) = targetPos[1];
-    *(float*)(cameraSys + 0x24) = targetPos[2];
-
-    // Zero-duration time for instant snap (matches original)
-    if (fn_Time_Ctor_Float) {
-        uint64_t timeVal;
-        fn_Time_Ctor_Float(&timeVal, 0.0f);
-    }
-
-    // Compute camera view transform and apply
-    if (fn_CameraSys_ComputeViewTransform) {
-        Math::Transform viewTransform;   // 0x1C bytes = compact Math::Transform
-        void* result = fn_CameraSys_ComputeViewTransform((void*)cameraSys, &viewTransform);
-
-        // ?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ  retail 0x18001fcd0
-        Math::Transform3 transform3 =
-            reinterpret_cast<const Math::Transform*>(result)->AsTransform3();
-        // B.3.5 bridge -- ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z.
-        // The Camera is embedded BY VALUE at cameraSys + 0x34; the proof is the
-        // writer, not the name: Reimpl_FUN_1400985b0
-        // (code/Game/Game/gameupdateloop_load.cpp) constructs it there with
-        // `??0Camera@Graphics@@` on this same +0xE0 object. The readiness `if` went
-        // with the door pointer -- it tested nothing else.
-        reinterpret_cast<Graphics::Camera*>(cameraSys + 0x34)
-            ->SetCameraToWorld(transform3);   // B.3.5 bridge
-    }
-
-    // === Section 4: Select entity in EditTool ===
-    // g_TypeId_EditTool is an exe .rdata type-id that is NULL in standalone until
-    // lazily resolved (e.g. CitizenUI::EnsureGlobals). Dereferencing *g_TypeId_EditTool
-    // with a null pointer reads address 0 and hard-faults. The camera snap (Section 3)
-    // has already run, so if we can't classify the EditTool we simply skip the re-select
-    // — the camera still moves to the entity.
-    void* currentTool = *(void**)(tc + 0x28);
-    void* editTool = nullptr;
-
-    if (currentTool && g_TypeId_EditTool) {
-        if (fn_IsDerivedFrom(currentTool, *g_TypeId_EditTool)) {
-            editTool = currentTool;
-        }
-    }
-
-    uint64_t editToolRef = 0;
-    new (&editToolRef) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(editTool));   // B.3.3 bridge
-
-    if (editToolRef == 0 && g_TypeId_EditTool) {
-        // Switch to EditTool mode
-        EntityUI_SetEditMode_Impl(toolController, 0);
-
-        // Re-read current tool after mode switch
-        void* newTool = *(void**)(tc + 0x28);
-        editTool = nullptr;
-        if (newTool && g_TypeId_EditTool) {
-            if (fn_IsDerivedFrom(newTool, *g_TypeId_EditTool)) {
-                editTool = newTool;
-            }
-        }
-        editToolRef = 0;
-        new (&editToolRef) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(editTool));   // B.3.3 bridge
-    }
-
-    // Select the entity in the EditTool
-    if (editToolRef != 0) {
-        void* entityRefCopy = *(void**)entityPtr;
-        fn_EditTool_SelectEntity((void*)(uintptr_t)editToolRef, &entityRefCopy);
-    }
-}
+void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr);
 
 // ============================================================
 // Work class helpers (shared by BuildStructure, ClearArea, ClearStorage)
@@ -3168,12 +2322,8 @@ extern fn_BuildRoad_QueryStorage_t fn_BuildRoad_QueryStorage;
 // ClearStorage helpers (code/Game/Work/clearstorage.cpp)
 // ============================================================
 
-// FUN_140017980: FindComponent by type ID 0x1401c7ee8 (unknown component type)
-extern uint32_t* g_TypeId_UnknownComp_7ee8;  // DAT_1401c7ee8
 
-inline void fn_FindComponent_Unknown7ee8(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_UnknownComp_7ee8);
-}
+void fn_FindComponent_Unknown7ee8(void* entity, void* retval);
 
 // FUN_1400f7100: Work::CanStartWork(self, citizenAI, taskIBP, outCompleteTask)
 typedef bool (*fn_Work_CanStartWork_t)(void* self, void* citizenAI, void* taskIBP, void* outCompleteTask);
@@ -3389,8 +2539,6 @@ extern fn_TutorialTreeInsert_t fn_TutorialTreeInsert;
 typedef void (*fn_TutorialStepExecute_t)(void* tutInst, void* param2, void* param3, uint64_t param4);
 extern fn_TutorialStepExecute_t fn_TutorialStepExecute;
 
-// TypeId for FinishTutorialGoal — stored at 0x1401c6240 in exe .rdata
-extern uint32_t* g_TypeId_FinishTutorialGoal;
 
 // FUN_1400e1870(outIBP, elementPath, outDialogPtr) — find UI element by dotted path string.
 // Parses "DialogType.ElementName" (or "DialogType.Controller.ElementName"),
@@ -3405,9 +2553,6 @@ extern fn_FindUIElementByPath_t fn_FindUIElementByPath;
 // ComponentEntity dependencies
 // ============================================================
 
-// Component base class type ID (used with fn_IsDerivedFrom to verify components)
-// Stored at exe .rdata 0x1401c72a8, filled at runtime by Component_Register.
-extern uint32_t* g_TypeId_ComponentBase;
 
 // fn_ExeArrayResizeFill (FUN_140003110, the three-argument Array<T>::SetSize(n,
 // fill), stride 8 align 8) went with the B.3.2 closing pass: its six call sites
@@ -3598,8 +2743,6 @@ extern fn_PathDistance_t fn_PathDistance;
 typedef void (*fn_CitizenComponent_AssignHousing_t)(void* citizen, void* housingPtr);
 extern fn_CitizenComponent_AssignHousing_t fn_CitizenComponent_AssignHousing;
 
-// g_TypeId_ResidenceComponent — already declared above (DAT_1401c7cf0)
-
 // ============================================================
 // M3.5 — MenuScene::Serialize generic helpers (Geometry/Transform serialize,
 // dynamic-array resize/serialize, ExternalPtr serialize)
@@ -3771,12 +2914,10 @@ extern fn_Array_Resize_t fn_Array_Resize_Stride16B;      // 0x14001ef10  M3.5 Pa
 // either resolves them from Runtime DLL exports or leaves them null and the
 // helpers gracefully no-op (cascade fix is a later step).
 //
-// The exe disasm reads typeId via a single deref:
-//     MOV RCX,[0x140151f20]  ; pointer to BaseTypeInfo
-//     MOV EDX,[RCX]          ; *(uint*)BaseTypeInfo == typeId
-extern uint32_t** g_ppTypeInfo_GraphicsMesh;   // .rdata slot 0x140151f20
-extern uint32_t** g_ppTypeInfo_Particle;       // .rdata slot 0x140151420
-extern uint32_t*  g_pTypeId_Weather;           // direct dword 0x1401c6198
+// ENDGAME B.3.9 TR: the GraphicsMesh (0x140151f20) / Particle (0x140151420) import-slot
+// pointers and the Weather cell pointer (0x1401c6198) are gone -- their readers use
+// Graphics::GraphicsMesh::TypeId() / Graphics::Particle::TypeId() / Weather::TypeId().
+// MaterialInstance's stays: Graphics::MaterialInstance::TypeId() is not ported yet.
 
 // M3.5 Path B session 3 — additional typed-ExternalPtr serialize helper.
 // FUN_140007140 is byte-identical to FUN_14001b8e0 (helper #9, GraphicsMesh)

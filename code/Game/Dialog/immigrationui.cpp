@@ -64,7 +64,7 @@ namespace immigrationui_sa {
     // [[project_townhallui_promoted]]). Fill from the live factory tree post-Engine::
     // Startup; Entity_FindComponentByExeTypeId derefs the id ptr, so it must be live.
     // ENDGAME B.3.9: ComponentEntity / ImmigrationComponent / StateMachineComponent (was
-    // g_TypeId_StateMachineComponent_FC) all have a ported TypeId() now, so the
+    // TypeId_StateMachineComponent_FC) all have a ported TypeId() now, so the
     // EnsureGlobals() lazy-cache is dead; only the game-world singleton check stays.
     bool Ready() {
         return g_pGameWorldSingleton && *g_pGameWorldSingleton;

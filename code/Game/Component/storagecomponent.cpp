@@ -467,3 +467,37 @@ void* StorageComponent::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(StorageComponent, "_ZTV16StorageComponent")
 DEFINE_EXE_TYPE(StorageComponent, "Component")
+
+// moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.
+int fn_StorageComponent_QueryCount(void* storageComp) {
+    uintptr_t sc = (uintptr_t)storageComp;
+    int slotCount = *(int*)(sc + 0x30);
+    int total = 0;
+    uintptr_t itemArray = *(uintptr_t*)(sc + 0x28);
+    for (int i = 0; i < slotCount; i++) {
+        uintptr_t slotBase = itemArray + (uintptr_t)i * 0x10;
+        uintptr_t item = *(uintptr_t*)slotBase;
+        int itemQty = *(int*)(slotBase + 0x8);
+        // Scan item's component array for ResourceType
+        int compCount = *(int*)(item + 0x30);
+        uintptr_t compArray = *(uintptr_t*)(item + 0x28);
+        void* resourceType = nullptr;
+        for (int j = 0; j < compCount; j++) {
+            void* comp = *(void**)(compArray + (uintptr_t)j * 8);
+            // GetTypeId via vtable slot +0x10
+            typedef uint32_t (*GetTypeId_t)(void*);
+            uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+            if (typeId == RawMaterialDescription::TypeId()) {
+                if (fn_IsDerivedFrom(comp, RawMaterialDescription::TypeId())) {
+                    resourceType = comp;
+                }
+                break;
+            }
+        }
+        if (resourceType) {
+            int quantity = *(int*)((uintptr_t)resourceType + 0x48);
+            total += quantity * itemQty;
+        }
+    }
+    return total;
+}

@@ -347,7 +347,7 @@ extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void* self, uintptr_t* 
     void* cpDesc = nullptr;
     if (descRoot) {
         const uint32_t want = ConsumeProduceDescription::TypeId();   // cell 0x1401c7388 (D5);
-                                                                      // g_TypeId_ConsumeProduceComponent
+                                                                      // TypeId_ConsumeProduceComponent
                                                                       // is a documented misnomer.
         const int    n   = *reinterpret_cast<int32_t*>(descRoot + 0x30);
         void** const arr = *reinterpret_cast<void***>(descRoot + 0x28);

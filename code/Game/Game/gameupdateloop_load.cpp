@@ -30,6 +30,7 @@
 #include "graphics/Scene.h"
 #include "graphics/Mesh.h"        // MeshInstance
 #include "graphics/SunLight.h"
+#include "graphics/Material.h"   // Graphics::Material::TypeId() (ENDGAME B.3.9 TR)
 #include "GameUpdateLoop.h"
 #include "WorldGeometry.h"      // caller batch CB6: m_worldGeometry's class
 #include "engine_funcs.h"
@@ -73,22 +74,10 @@ extern "C" void  StartTown_SpawnEntities(void* startConfig, void* world);       
 // ============================================================
 
 // --- Step 32 (AchievementInstance) -----------------------------------------
-// ?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A      (BaseTypeInfo; +0 is the type id)
 // (The instance is the real class and SetAchievement a member — ENDGAME B.3.8 /
-// B.3.7.) GameUpdateLoop::Load runs on the LOADER thread, so the resolve is a
-// namespace-scope atomic slot (B6-5; ENDGAME B.3.8 LOOP), not a lazy
-// function-local flag: a racing first use resolves the same pointer twice.
-static std::atomic<const uint32_t*> s_AchievementTypeId{nullptr};
-
-static const uint32_t* AchievementTypeId() {
-    const uint32_t* id = s_AchievementTypeId.load(std::memory_order_acquire);
-    if (!id) {
-        id = static_cast<const uint32_t*>(
-            ResolveExport("?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A"));
-        s_AchievementTypeId.store(id, std::memory_order_release);
-    }
-    return id;
-}
+// B.3.7.) The Achievement type id is Achievement::Achievement::TypeId()
+// (ENDGAME B.3.9 TR: was a by-name resolve of the Runtime record, cached in a
+// namespace-scope atomic).
 
 typedef void* (*fn_Random_Seeded_Ctor_t)(void* self, uint32_t seed);
 static fn_Random_Seeded_Ctor_t s_fn_Random_Seeded_Ctor = nullptr;   // ??0Random@System@@QEAA@I@Z
@@ -197,13 +186,11 @@ static void LoadUIMaterial_Step3(GameUpdateLoop* self) {
         ::Object::ExternalFactory::_singleton
             ->FindOrLoad(fname));                                          // B.3.3 bridge
 
-    // Retail's type gate (exe .rdata Material typeinfo slot is unfilled in SA —
-    // resolve Graphics::Material's BaseTypeInfo from the Runtime export).
-    const uint32_t* s_matTypeInfo = RT_DATA_SLOT(const uint32_t*,
-        "?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A");
+    // Retail's type gate: Graphics::Material's type id (ENDGAME B.3.9 TR: the class
+    // accessor; was an RT_DATA_SLOT read of its ?_typeInfo@ record).
     bool isMat = false;
-    if (mat && s_matTypeInfo && fn_IsDerivedFrom)
-        isMat = fn_IsDerivedFrom(mat, *s_matTypeInfo);
+    if (mat && fn_IsDerivedFrom)
+        isMat = fn_IsDerivedFrom(mat, Graphics::Material::TypeId());
     if (isMat) self->m_uiMaterial = mat;
 
     fprintf(stderr, "[GUL::UIMat] gw+0xb8=%p (loaded=%p isMaterial=%d)\n",
@@ -227,13 +214,11 @@ static void LoadHelpTopics_Step4(GameUpdateLoop* self) {
         ::Object::ExternalFactory::_singleton
             ->FindOrLoad(fname));                                          // B.3.3 bridge
 
-    // Retail's type gate. Resolve Object::ExternalList's own BaseTypeInfo from the
-    // Runtime (the exe .rdata slot 0x140151ef0 that retail reads is unfilled in SA).
-    const uint32_t* s_extListTypeInfo = RT_DATA_SLOT(const uint32_t*,
-        "?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A");
+    // Retail's type gate: Object::ExternalList's type id (retail reads it through the
+    // exe import slot 0x140151ef0; ENDGAME B.3.9 TR: the class accessor).
     bool isList = false;
-    if (list && s_extListTypeInfo && fn_IsDerivedFrom)
-        isList = fn_IsDerivedFrom(list, *s_extListTypeInfo);
+    if (list && fn_IsDerivedFrom)
+        isList = fn_IsDerivedFrom(list, ::Object::ExternalList::TypeId());
     if (isList) self->m_helpTopics = list;
 
     fprintf(stderr, "[GUL::Help] gw+0xa0=%p (loaded=%p isExternalList=%d topics=%d)\n",
@@ -283,13 +268,10 @@ static void LoadDiseaseList_Step1(GameUpdateLoop* self) {
         ::Object::ExternalFactory::_singleton
             ->FindOrLoad(fname));                                          // B.3.3 bridge
 
-    // Retail's type gate (same Runtime-side BaseTypeInfo as the HelpTopics list; the
-    // exe .rdata slot retail reads is unfilled in standalone).
-    const uint32_t* s_extListTypeInfo = RT_DATA_SLOT(const uint32_t*,
-        "?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A");
+    // Retail's type gate (same ExternalList type id as the HelpTopics list).
     bool isList = false;
-    if (list && s_extListTypeInfo && fn_IsDerivedFrom)
-        isList = fn_IsDerivedFrom(list, *s_extListTypeInfo);
+    if (list && fn_IsDerivedFrom)
+        isList = fn_IsDerivedFrom(list, ::Object::ExternalList::TypeId());
     if (isList) self->m_diseaseList = list;
 
     // The `fn_ExternalList_GetResourceCount` test is KEPT even though the call
@@ -1583,7 +1565,7 @@ void GameUpdateLoop::Load() {
     // BANISHED_LIVE_SCENARIO_GOALS=0 is the kill switch for an A/B run.
     m_scenarioInstance = nullptr;
     if (achievementId >= 0) {
-        const uint32_t* const achTypeId = AchievementTypeId();
+        const uint32_t achTypeId = Achievement::Achievement::TypeId();
         if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_InternalBasePtr_Ctor ||
             !g_pKeyMapSingleton) {
             fprintf(stderr, "[GUL::Load] step32 SKIPPED - unresolved ("
@@ -1626,13 +1608,13 @@ void GameUpdateLoop::Load() {
             // exported BaseTypeInfo for Achievement; its first dword IS the type id.
             void* checked = scenario;
             if (scenario && fn_IsDerivedFrom && achTypeId)
-                checked = fn_IsDerivedFrom(scenario, *achTypeId) ? scenario : nullptr;
+                checked = fn_IsDerivedFrom(scenario, achTypeId) ? scenario : nullptr;
 
             void* inst = m_scenarioInstance;
             fprintf(stderr, "[GUL::Load] step32 achievementId=%d instance=%p scenario=%p "
                             "derived=%p achTid=%u\n",
                     achievementId, inst, scenario, checked,
-                    achTypeId ? *achTypeId : 0u);
+                    achTypeId);
             fflush(stderr);
             // ExternalPtr<Achievement> arrives as a bare register value (B7-5).
             if (inst) reinterpret_cast<Achievement::AchievementInstance*>(inst)->SetAchievement(   // B.3.7 bridge

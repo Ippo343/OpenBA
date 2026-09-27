@@ -149,36 +149,9 @@ void RegisterUnregLane3() {
     RegisterLane3Slot(0x140151350,
         (uintptr_t)ResolveExport("?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A"));
 
-    // Graphics::Material::_typeInfo (data slot) — REAL FIX. Populates
-    // g_TypeId_Material, which has NO fallback at its two live call sites:
-    //   - code/Game/Dialog/mapui.cpp:81      MapUI_SetupImageImpl
-    //   - code/Game/Dialog/noiseui.cpp:84    (same shape)
-    // Both do:
-    //     if (g_TypeId_Material && fn_IsDerivedFrom(ext, *g_TypeId_Material)) {
-    //         material = ext;
-    //     }
-    //     fn_MaterialInstance_SetMaterial(*materialOut, material);
-    // — a null-guard-and-SKIP on the validation, but the skip means `material`
-    // stays NULL even though `ext` (the just-loaded UIMaterial(NoBlend).rsc
-    // resource) is real, so SetMaterial is called with a null material every
-    // time instead of the one just loaded. moddialog.cpp's use of the same
-    // global at line 432 passes `g_TypeId_Material ? *g_TypeId_Material : 0`
-    // into IsDerivedFrom directly (0 is never a valid type id, so it also
-    // silently fails validation). ui_dialog_stub_factories.cpp is the only
-    // consumer with its own local lazy-resolve fallback and is unaffected.
-    RegisterLane3Slot(0x140151858,
-        (uintptr_t)ResolveExport("?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A"));
-
-    // ------------------------------------------------------------------
-    // Graphics::GraphicsMesh::_typeInfo / Graphics::Particle::_typeInfo (data
-    // slots). Both consumers (serialize_arrays.cpp's two ArraySerializeExternalGeneric
-    // callers) already fall back to Object::ResolveTypeIdByNameLazy(simpleName)
-    // when the slot is null, so — like MaterialInstance's typeInfo above — this
-    // is a no-op today, just restoring the exact retail lookup path.
-    RegisterLane3Slot(0x140151f20,
-        (uintptr_t)ResolveExport("?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A"));
-    RegisterLane3Slot(0x140151420,
-        (uintptr_t)ResolveExport("?_typeInfo@Particle@Graphics@@0VBaseTypeInfo@Object@@A"));
+    // (0x140151858 Graphics::Material, 0x140151f20 Graphics::GraphicsMesh and
+    // 0x140151420 Graphics::Particle type-info import slots: rows deleted at ENDGAME
+    // B.3.9 TR -- every reader uses the class's TypeId().)
 
     // (0x140151f38 Graphics::ParticleInstance::_frameIndex: row deleted at ENDGAME
     // B.3.9 SS2 — GameUpdateLoop::Update increments the class static.)

@@ -208,3 +208,36 @@ void* ComponentDescription::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(ComponentDescription, "_ZTV20ComponentDescription")
 DEFINE_EXE_TYPE(ComponentDescription, "Object::External")
+
+// moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.
+void ResolveExternalByName_Impl(void* nameString) {
+    uintptr_t s = (uintptr_t)nameString;
+    void* factory = ::Object::ExternalFactory::_singleton;   // ENDGAME B.3.9 SS2 (merged)
+    if (!factory) return;
+
+    // Check generation counter: if matches, cached value is still valid
+    int32_t refGen     = *(int32_t*)(s + 0x08);
+    int32_t factoryGen = *(int32_t*)((uintptr_t)factory + 0x08);
+    if (refGen == factoryGen) return;
+
+    // Convert String to Filename, look up in factory.
+    // ??0Filename@System@@QEAA@AEBVString@1@@Z  retail 0x1800c6360
+    System::Filename filename(*reinterpret_cast<const System::String*>(s));
+    void* found = const_cast<void*>(static_cast<const void*>(
+        reinterpret_cast<const ::Object::ExternalFactory*>(factory)   // B.3.3 bridge
+            ->Find(filename)));
+
+    // Validate the found object is a ComponentDescription (cell 0x1401c7318). The
+    // null-pointer escape that stood here went with the cell pointer (it was
+    // registered, so the escape never ran).
+    void* result = nullptr;
+    if (found) {
+        if (fn_IsDerivedFrom(found, ComponentDescription::TypeId())) {
+            result = found;
+        }
+    }
+
+    // Cache result and update generation
+    *(void**)(s + 0x10)  = result;
+    *(int32_t*)(s + 0x08) = factoryGen;
+}

@@ -110,12 +110,11 @@ void CharacterComponent_InitFuncs() {
 // Startup-ONLY (the heavy move/anim tick + action executor at 0x1401094c0 stays
 // inert — that is Brick 4b): we set +0x60 = -1 (no actions) so even a future
 // move-tick would skip the executor on the empty stack. Default (env off) =>
-// inert => byte-unchanged. Finds are self-contained via GetTypeIdByName (the
-// .rdata type-id globals c7a50/c7c10 are 0xFFFFFFFF in standalone).
+// inert => byte-unchanged. Finds are self-contained over the class's TypeId()
+// (ENDGAME B.3.9 TR: was a by-name lookup of the same record).
 // ------------------------------------------------------------------
-static void* CharComp_FindSiblingByName(int64_t ownerEntity, const char* typeName) {
+static void* CharComp_FindSiblingByTypeId(int64_t ownerEntity, uint32_t want) {
     if (!ownerEntity) return nullptr;
-    uint32_t want = ::Object::GetTypeIdByName(typeName);
     if (want == 0 || want == 0xFFFFFFFF) return nullptr;
     uint8_t* e = reinterpret_cast<uint8_t*>(ownerEntity);
     int count = *reinterpret_cast<int*>(e + 0x38);
@@ -190,6 +189,8 @@ extern "C" void CharMgr_impl_8560(int64_t mgr, int idx);
 // ctor/dtor chain (B38_RULES D1, D2).
 // ============================================================================
 #include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"     // ModelComponent::TypeId() (ENDGAME B.3.9 TR)
+#include "Component/PickingComponent.h"   // PickingComponent::TypeId() (ENDGAME B.3.9 TR)
 
 
 // 0x140109d20. Component() is the CALL 0x1401188b0; the 0x140162370 stamp is
@@ -235,9 +236,9 @@ void CharacterComponent::Startup() {
     if (!owner) return;
 
     // +0x68 = ModelComponent (geometry; +0x158 = world position).
-    *reinterpret_cast<void**>(p + 0x68) = CharComp_FindSiblingByName(owner, "ModelComponent");
+    *reinterpret_cast<void**>(p + 0x68) = CharComp_FindSiblingByTypeId(owner, ModelComponent::TypeId());
     // +0x70 = PickingComponent.
-    *reinterpret_cast<void**>(p + 0x70) = CharComp_FindSiblingByName(owner, "PickingComponent");
+    *reinterpret_cast<void**>(p + 0x70) = CharComp_FindSiblingByTypeId(owner, PickingComponent::TypeId());
     // +0x78 = CharacterDescription (trust comp+0x18).
     *reinterpret_cast<void**>(p + 0x78) = *reinterpret_cast<void**>(p + 0x18);
 

@@ -142,7 +142,7 @@ bool CreateRawMaterial_ResolveFuncs() {
 // ============================================================
 // Helper: find RawMaterialDescription component in description entity
 // Searches the component array at desc+0x28 (count at desc+0x30)
-// for a component matching type g_TypeId_RawMaterialDescription.
+// for a component matching type TypeId_RawMaterialDescription.
 // ============================================================
 static void* FindRawMaterialDesc(void* descEntity) {
     uintptr_t desc = (uintptr_t)descEntity;

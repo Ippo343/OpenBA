@@ -457,7 +457,7 @@ void ForceTornado(int frameNum, int want) {
 // the type of the DISEASE EXTERNAL.
 //
 // TWO DIFFERENT SYSTEMS SHARE THE WORD "disease", and this arm read the wrong handle.
-// `g_TypeId_DiseaseDescription` is a misnomer twice over:
+// `TypeId_DiseaseDescription` is a misnomer twice over:
 //   * the id it holds is registered under the name "Disease" (the citizen-illness
 //     external authored in Game/Disease/*.rsc), NOT the crop lane DiseaseDescription
 //     (the CropField/Orchard/Pasture component description); and

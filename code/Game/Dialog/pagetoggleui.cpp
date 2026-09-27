@@ -24,13 +24,13 @@
 // own .rdata at 0x1401b8ce8, and an export of Runtime-x64.dll). In standalone the
 // whole element-type-id table lives in standalone/reg_element_typeids.cpp, gated on
 // BANISHED_LIVE_ELEMENT_TIDS. That gate GRADUATED into the default-on table 2026-08-22 and is
-// now a kill-switch, so g_TypeId_CheckboxElement is normally POPULATED — but it can still
+// now a kill-switch, so TypeId_CheckboxElement is normally POPULATED — but it can still
 // be null when someone A/Bs with BANISHED_LIVE_ELEMENT_TIDS=0, and then
 // FindElementType(root, 0) can never match, leaving +0x30 null for Slot7 to fault on.
 // The private-resolve below is what keeps that arm safe, so it stays.
 //
-// ENDGAME B.3.9 CG2: g_TypeId_CheckboxElement's initialiser (engine_funcs.cpp)
-// binds it to the SAME exref (0x1401516a8) as g_TypeId_CheckElement — there is
+// ENDGAME B.3.9 CG2: TypeId_CheckboxElement's initialiser (engine_funcs.cpp)
+// binds it to the SAME exref (0x1401516a8) as TypeId_CheckElement — there is
 // no separate "CheckboxElement" Runtime class (no CheckboxElement.h under
 // runtime/types/ui/); both globals are UI::CheckElement's id (Table 3 name
 // lie). UI::CheckElement::TypeId() is the ported static over that class's own
@@ -71,7 +71,7 @@ bool PageToggleUI_TypeIdsReady() { return PageToggleUI_CheckElementTypeId() != 0
 // In standalone the checkbox type id is null by default — the exe reads it through
 // .rdata exref 0x1401516a8, and that whole element-type-id table
 // (standalone/reg_element_typeids.cpp) is gated on BANISHED_LIVE_ELEMENT_TIDS,
-// which is NOT in the default-on table. With g_TypeId_CheckboxElement null,
+// which is NOT in the default-on table. With TypeId_CheckboxElement null,
 // FindElementType(root, 0) can never match, +0x30 stays null, and Slot7 faults.
 // pagetoggleui.cpp therefore resolves a PRIVATE copy of the id by name (the
 // exref's import string, read out of exe .rdata at 0x1401b8ce8, is
@@ -81,7 +81,7 @@ bool PageToggleUI_TypeIdsReady() { return PageToggleUI_CheckElementTypeId() != 0
 namespace pagetoggleui_sa {
     // The CheckElement type id is resolved PRIVATELY inside pagetoggleui.cpp
     // (PageToggleUI_TypeIdsReady) — see the long note there. We must not fill the
-    // shared g_TypeId_CheckboxElement here: reg_element_typeids.cpp owns that
+    // shared TypeId_CheckboxElement here: reg_element_typeids.cpp owns that
     // table and holds it behind BANISHED_LIVE_ELEMENT_TIDS on purpose.
     // Every slot below dereferences the checkbox / "pages" element unguarded, and
     // Slot4 cannot populate either without the type id. Report the outcome once.

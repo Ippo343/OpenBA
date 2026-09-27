@@ -8,12 +8,10 @@
 // FUN_140132010, Entity_FindComponent_Position 2ed0, Random::Rand slot 0x1401512e8) — so
 // these two are the only newly-registered addresses.
 //
-// Also fills the InteractComponent type-id global 0x1401c7900 — read by 81d0's child-type
-// scan (and already read by several landed FindComponent_2ed0 callers that previously saw
-// it null). Filled via GetTypeIdByName AFTER Engine::Startup (Object::Factory::Startup
-// assigns the real CRC id only then), called from game_main.cpp alongside the other
-// FillTypeIdGlobals_*. The 0.5f half-cell const at 0x140172114 is registered too so the
-// terrain-position bias reads the exact image value instead of the 0.5f fallback.
+// The 0.5f half-cell const at 0x140172114 is registered so the terrain-position bias
+// reads the exact image value instead of the 0.5f fallback.
+// (ENDGAME B.3.9 TR: the type-id storage cell this file used to register and fill is
+// gone; the readers use X::TypeId() of the class at the cell.)
 //
 // Mirrors reg_work_act.cpp + reg_action_child_ctors2.cpp.
 #include "resolve.h"
@@ -24,20 +22,11 @@
 // Forward declarations of the ported helpers (code/Game/Work/firework_search.cpp).
 extern int64_t FireWork_SpiralSearch_81d0(int64_t, uint32_t, int, float*, float*);   // 0x1400881d0
 
-// Type-id global filled after Engine::Startup.
-static uint32_t g_tid_InteractComponent = 0;   // 0x1401c7900
-
 // 0.5f half-cell-centre constant (exe .rdata DAT_140172114, bit pattern 0x3f000000).
 static const float g_DAT_140172114 = 0.5f;
 
-extern "C" void FillTypeIdGlobals_worktail_fire() {
-    g_tid_InteractComponent = InteractComponent::TypeId();
-}
-
 void RegisterWorkTailFireBatch() {
     RegisterExeAddr(0x1400881d0, reinterpret_cast<uintptr_t>(&FireWork_SpiralSearch_81d0));
-    // type-id global storage (value filled later by FillTypeIdGlobals_worktail_fire)
-    RegisterExeAddr(0x1401c7900, reinterpret_cast<uintptr_t>(&g_tid_InteractComponent));
     // 0.5f half-cell const (read-only; safe to register unconditionally)
     // 0x140172114 (0.5f) is registered by reg_citizen_needsupdate.cpp, which runs later.
     // Both copies hold the same verified value; duplicate removed 2026-08-30.

@@ -161,8 +161,8 @@ static uint64_t FindElemAsBasePtr(void* dialogElem, const char* name) {
 
 namespace workplaceui_sa {
 
-// ENDGAME B.3.9 CG2: g_TypeId_ComponentEntity -> ComponentEntity::TypeId(),
-// g_TypeId_WorkplaceComponent -> WorkPlaceComponent::TypeId() (cell 0x1401c80e0).
+// ENDGAME B.3.9 CG2: TypeId_ComponentEntity -> ComponentEntity::TypeId(),
+// TypeId_WorkplaceComponent -> WorkPlaceComponent::TypeId() (cell 0x1401c80e0).
 // Both class statics always answer, so the lazy-fill retires.
 void EnsureGlobals() {
 }
@@ -187,7 +187,7 @@ void UpdateVisibility(void* self) {
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
     void* entityPtr = *reinterpret_cast<void**>(entityBuf);
 
-    // Find the WorkPlaceComponent (fn_FindComponent_WorkPlace → g_TypeId_WorkplaceComponent).
+    // Find the WorkPlaceComponent (fn_FindComponent_WorkPlace → TypeId_WorkplaceComponent).
     uint64_t workComp = 0;
     fn_FindComponent_WorkPlace(entityPtr, &workComp);
 
@@ -220,7 +220,7 @@ void UpdateVisibility(void* self) {
 //
 // Runs for any workplace panel, so the count is correct on every building dialog,
 // not just under-construction sites. `workComp` here is the WorkPlaceComponent
-// (fn_FindComponent_WorkPlace → g_TypeId_WorkplaceComponent), matching retail's
+// (fn_FindComponent_WorkPlace → TypeId_WorkplaceComponent), matching retail's
 // local_res18 — its +0x48 is the active profession, +0x60 the live roster.
 // One-shot recursive element-tree dump: name (+0x10 = char* with length at [-8]),
 // id (+0x88), child array (+0xa0) / count (+0xa8). Reveals the real panel structure so
@@ -314,7 +314,7 @@ void PopulateCounts(void* self) {
     // the +0x30 cache. The natural-builder flow (FindAvailableBuilding) usually has
     // already primed +0x30, so it is read directly; StorageCountQuery only fills it
     // when still zero. ENDGAME B.3.9 CG2: the "only when its type-id deps are live"
-    // g_TypeId_WorkDescription readiness gate retired — WorkDescription::TypeId()
+    // TypeId_WorkDescription readiness gate retired — WorkDescription::TypeId()
     // (the class static) always answers.
     uint32_t capacity = 0;
     {
@@ -446,7 +446,7 @@ static void SA_AdjustJobCount(void* self, int delta) {
         return;
     }
     uintptr_t c = static_cast<uintptr_t>(workC);
-    // ENDGAME B.3.9 CG2: g_TypeId_WorkDescription readiness gate retired —
+    // ENDGAME B.3.9 CG2: TypeId_WorkDescription readiness gate retired —
     // WorkDescription::TypeId() (the class static) always answers.
     if (*reinterpret_cast<int*>(c + 0x30) == 0) {
         *reinterpret_cast<int*>(c + 0x30) = fn_StorageCountQuery(reinterpret_cast<void*>(c));

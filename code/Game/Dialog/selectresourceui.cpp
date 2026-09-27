@@ -63,8 +63,8 @@ static int SelectResourceUI_IterateResources(void* self, void* combo, int* selec
     int count = 0;
     int selectedIdx = -1;
 
-    // ENDGAME B.3.9 CG2: g_TypeId_SelectDescription (cell 0x1401c48a8) and
-    // g_TypeId_ComponentEntity (cell 0x1401c5d70) -> SelectDescription::TypeId()
+    // ENDGAME B.3.9 CG2: TypeId_SelectDescription (cell 0x1401c48a8) and
+    // TypeId_ComponentEntity (cell 0x1401c5d70) -> SelectDescription::TypeId()
     // / ComponentEntity::TypeId(). The lazy-resolve/heal block that patched the
     // exe-side globals from the class statics is retired with this conversion;
     // the statics always answer.

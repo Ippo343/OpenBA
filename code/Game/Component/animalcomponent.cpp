@@ -139,19 +139,12 @@ bool s_helpersResolved = false;
 
 } // namespace
 
-// Fills the CharacterComponent / CharacterDescription type-id globals this lane
-// registers (standalone/reg_animal_update.cpp). Idempotent and self-gated; the
-// first live animal tick is always past Object::Factory::Startup, so calling it
-// from here removes the need for a game_main.cpp hook.
-extern "C" void FillComponentTypeIdGlobals_animal_update();
-
 namespace {
 
 void EnsureHelpers() {
     if (s_helpersResolved) return;
     s_helpersResolved = true;
 
-    FillComponentTypeIdGlobals_animal_update();
 
     s_fnFindCharacter  = reinterpret_cast<fn_FindCharacter_t >(ResolveAddr(Module::Exe, 0x1400012d0));
     s_fnFindModel      = reinterpret_cast<fn_FindModel_t     >(ResolveAddr(Module::Exe, 0x140003f60));

@@ -45,8 +45,8 @@ static void* StatusIconUI_FindStatusIconComp(void* entity);
 //   misnomer already flagged in code/Game/Player/edittool.cpp:288 and used correctly in
 //   edittool_select.cpp:151, but the correction never reached this file.
 //
-// Resolved by NAME here rather than through the mislabelled g_TypeId_* globals, which are
-// left untouched because engine_funcs.h:4585 still consumes g_TypeId_PageToggleUI.
+// Resolved by NAME here rather than through the mislabelled TypeId_* globals, which are
+// left untouched because engine_funcs.h:4585 still consumes TypeId_PageToggleUI.
 static uint32_t s_tidStatusIconUIConfig = 0;
 static uint32_t s_tidEntityUI = 0;
 
@@ -54,7 +54,7 @@ namespace statusiconui_sa {
 
 void EnsureGlobals() {
     static uint32_t s_dc = 0, s_pt = 0;
-    // ENDGAME B.3.9 CG2: g_TypeId_ComponentEntity (cell 0x1401c5d70) -> ComponentEntity::
+    // ENDGAME B.3.9 CG2: TypeId_ComponentEntity (cell 0x1401c5d70) -> ComponentEntity::
     // TypeId(); the class static always answers, so the lazy-fill of the global retires.
     // These two are the REAL types the page gate needs (see the note at the top of this
     // file). The gate is not cosmetic: without it the title-bar mount of the icons ribbon
@@ -66,8 +66,8 @@ void EnsureGlobals() {
     // Neither 0x1401c56e0 nor 0x1401c4f00 is RegisterExeAddr'd, so engine_funcs.cpp's
     // ResolveAddr leaves both globals null; THIS was the only code in the tree that ever
     // made them non-null, and it filled them by NAME with genuinely different classes than
-    // the .rdata slots they are documented as. `*g_TypeId_DialogController` now has no
-    // readers at all, and the sole reader of `*g_TypeId_PageToggleUI`
+    // the .rdata slots they are documented as. `*TypeId_DialogController` now has no
+    // readers at all, and the sole reader of `*TypeId_PageToggleUI`
     // (engine_funcs.h, Toolbar_CenterOnEntity_Impl) actually wants **EntityUI** — retail
     // FUN_140103040 compares against DWORD_1401c4f00, whose registrar is
     // RegisterType_EntityUI. Feeding it the real PageToggleUI id (a different class, whose

@@ -21,6 +21,9 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "Component/EnvironmentDescription.h"   // caller batch CB6: TypeId()
+#include "Game/Toolbar.h"   // Toolbar::TypeId() (ENDGAME B.3.9 TR)
+#include "Game/Weather.h"   // Weather::TypeId() (ENDGAME B.3.9 TR)
+#include "graphics/GraphicsMesh.h"   // Graphics::GraphicsMesh::TypeId() (ENDGAME B.3.9 TR)
 #include "ui/StringTable.h"   // UI::StringTable::TypeId() (D5, ENDGAME B.3.9 CG3)
 #include "Game/serialize_externals.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A — Object::External / ExternalFactory
@@ -192,12 +195,10 @@ extern "C" void Reimpl_ExternalPtr_Serialize_GraphicsMesh(
     void* refField, void* serializer) {
 
 
-    const uint32_t* typeIdPtr = nullptr;
-    if (g_ppTypeInfo_GraphicsMesh && *g_ppTypeInfo_GraphicsMesh) {
-        typeIdPtr = *g_ppTypeInfo_GraphicsMesh;
-    }
+    // ENDGAME B.3.9 TR: Graphics::GraphicsMesh::TypeId() (was the import slot 0x140151f20).
+    const uint32_t tid = Graphics::GraphicsMesh::TypeId();
     ExternalPtrSerializeGeneric(reinterpret_cast<void**>(refField), serializer,
-                                typeIdPtr, "Graphics::GraphicsMesh");
+                                tid ? &tid : nullptr, "Graphics::GraphicsMesh");
 }
 
 // ============================================================
@@ -207,17 +208,17 @@ extern "C" void Reimpl_ExternalPtr_Serialize_Weather(
     void* refField, void* serializer) {
 
 
-    // Weather typeId is a direct dword (no double-deref).
-    const uint32_t* typeIdPtr = g_pTypeId_Weather;
+    // Weather's type id (cell 0x1401c6198; ENDGAME B.3.9 TR: the class static).
+    const uint32_t tid = Weather::TypeId();
     ExternalPtrSerializeGeneric(reinterpret_cast<void**>(refField), serializer,
-                                typeIdPtr, "Weather");
+                                tid ? &tid : nullptr, "Weather");
 }
 
 // ============================================================
 // 0x14000bf40 — Object::ExternalPtr<StringTable>::Serialize
 //   (project name fn_ExternalPtr_Serialize2). Byte-identical to
 //   FUN_14001b8e0 / FUN_140007140; only the type-validation slot differs
-//   (0x140151488 = g_TypeId_StringTable). Every generator's +0x20 ExternalPtr
+//   (0x140151488 = TypeId_StringTable). Every generator's +0x20 ExternalPtr
 //   field is serialized through this. In standalone fn_ExternalPtr_Serialize2
 //   was NULL (0x14000bf40 unregistered) so the generators SKIPPED their +0x20
 //   read, mis-advancing the stream cursor for every subsequent field. Wiring
@@ -226,7 +227,7 @@ extern "C" void Reimpl_ExternalPtr_Serialize_Weather(
 extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(
     void* refField, void* serializer) {
     // Read directly (D5, ENDGAME B.3.9 CG3): UI::StringTable::TypeId() is the same
-    // Runtime record engine_funcs' g_TypeId_StringTable (exref 0x140151488) points
+    // Runtime record engine_funcs' TypeId_StringTable (exref 0x140151488) points
     // at. The generic body still handles an unresolved (0) id gracefully.
     const uint32_t tid = UI::StringTable::TypeId();
     ExternalPtrSerializeGeneric(reinterpret_cast<void**>(refField), serializer,
@@ -235,16 +236,22 @@ extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(
 
 // ============================================================
 // 0x140024c70 — Object::ExternalPtr<Toolbar>::Serialize. Byte-identical to the
-// generic ExternalPtr<T>::Serialize; validation type = Toolbar (DAT_1401c6128,
-// g_TypeId_ToolbarExternal). Used by Toolbar_Serialize for the +0x60 field. In
-// standalone this was NULL (0x140024c70 unregistered) so the +0x60 ExternalPtr
-// was skipped, mis-advancing the stream cursor for the following fields.
+// generic ExternalPtr<T>::Serialize; validation type = Toolbar: retail reads
+// `MOV EDX,dword ptr [0x1401c6128]` (Toolbar's record) at 0x140024cd5 before the
+// IsDerivedFrom call at 0x140024cde (disassembly, Application-x64.exe). Used by
+// Toolbar_Serialize for the +0x60 field.
+//
+// ENDGAME B.3.9 TR (behaviour): this read a retired engine_funcs type-id pointer
+// ("ToolbarExternal") bound to 0x14015f980 -- which is NOT a type-info import
+// slot but slot 2 of the vtable at 0x14015f970 (it holds code, 0x140021310), never
+// registered, so the pointer was always NULL and the generic body fell back to a
+// by-name lookup of "Toolbar". Now the class's own id, as retail.
 // ============================================================
 extern "C" void Reimpl_ExternalPtr_Serialize_Toolbar(
     void* refField, void* serializer) {
-    const uint32_t* typeIdPtr = g_TypeId_ToolbarExternal;
+    const uint32_t tid = Toolbar::TypeId();
     ExternalPtrSerializeGeneric(reinterpret_cast<void**>(refField), serializer,
-                                typeIdPtr, "Toolbar");
+                                tid ? &tid : nullptr, "Toolbar");
 }
 
 // ============================================================

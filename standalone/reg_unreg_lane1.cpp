@@ -98,28 +98,9 @@ extern "C" void RegisterUnregLane1Batch() {
     // empty virtual; it moves ZERO stream bytes. Registered here anyway so the
     // call is byte-faithful and nobody re-opens this as a suspect.
 
-    // ------------------------------------------------------------------
-    // 0x140152870 — Object::External::_typeInfo  (DATA, not a function)
-    // ------------------------------------------------------------------
-    // A static BaseTypeInfo object in Runtime; the import slot holds its
-    // ADDRESS. Retail FUN_1400265b0 (the StatGoal ExternalPtr resolver) does
-    //     MOV RAX,[0x140152870] ; MOV EDX,[RAX] ; CALL [0x140152a98]
-    // i.e. IsDerivedFrom(found, *(uint*)&External::_typeInfo).
-    //
-    // Consumer: code/Game/Goal/goal_exe_helpers.cpp:95 reads exactly that
-    // double-indirect. standalone/reg_goal.cpp:8 documents relying on the slot
-    // being unregistered so the type check is SKIPPED. That was a defensible
-    // stopgap, but it is a deviation, and the check it skips is the cheapest
-    // possible one: the expected type is the BASE class External, so every
-    // object ExternalFactory::Find can return passes it. Registering restores
-    // retail with no reachable change in outcome.
-    //   Safety of the surviving guard: goal_exe_helpers.cpp reads
-    //   `(!pTypeId || (fn_IsDerivedFrom && fn_IsDerivedFrom(...)))`. Making
-    //   pTypeId non-null means fn_IsDerivedFrom must be non-null or the result
-    //   is nulled — it always is (engine_funcs.cpp:1742 ResolveExport, with a
-    //   Runtime-address fallback and a null-safe trampoline).
-    RegisterDispatchSlot(0x140152870,
-        (uintptr_t)ResolveExport("?_typeInfo@External@Object@@0VBaseTypeInfo@2@A"));
+    // (0x140152870, the Object::External type-info import slot: row deleted at
+    // ENDGAME B.3.9 TR -- its one reader, goal_exe_helpers.cpp's StatGoal
+    // ExternalPtr resolver, reads Object::External::TypeId().)
 
     // ------------------------------------------------------------------
     // 0x1401529f8 / 0x140151218 / 0x140151220 / 0x140151228

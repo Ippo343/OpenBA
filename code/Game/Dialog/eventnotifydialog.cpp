@@ -924,9 +924,9 @@ namespace eventnotify_sa {
 // Slot7 dereferences g_pNotifyTimerDuration (raw exe .rdata -> NULL in standalone).
 // Lazy-fill so the ribbon tick can't null-deref. The timer duration is a
 // byte-faithful 30.0s (exe DAT_1401721cc).
-// ENDGAME B.3.9: the g_TypeId_Dialog / g_TypeId_ImageElement heals that used to live
+// ENDGAME B.3.9: the TypeId_Dialog / TypeId_ImageElement heals that used to live
 // here are dead -- UI::Dialog / UI::ImageElement have a ported TypeId() now (the old
-// heal's "External" guess for g_TypeId_Dialog was wrong too: that cell is UI::Dialog's
+// heal's "External" guess for TypeId_Dialog was wrong too: that cell is UI::Dialog's
 // own _typeInfo, engine_funcs.cpp:828, and the heal never actually ran).
 void EnsureGlobals() {
     static float s_notifyTimer = 30.0f;

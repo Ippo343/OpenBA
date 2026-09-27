@@ -34,29 +34,8 @@
 #include "Component/LivestockDescription.h"
 #include "Component/WildAnimalComponent.h"
 
-static uint32_t g_tid_HerdDescription      = 0;  // 0x1401c7858
-static uint32_t g_tid_HerdComponent        = 0;  // 0x1401c7820
-static uint32_t g_tid_AnimalComponent      = 0;  // 0x1401c6f98
-static uint32_t g_tid_WildAnimalComponent  = 0;  // 0x1401c8000
-static uint32_t g_tid_LivestockComponent   = 0;  // 0x1401c7970
-static uint32_t g_tid_LivestockDescription = 0;  // 0x1401c79a8
 static float    g_f_HerdSpawnSpread        = 180.0f;  // 0x140172220
 
-extern "C" void FillComponentTypeIdGlobals_animal() {
-    g_tid_HerdDescription      = HerdDescription::TypeId();
-    g_tid_HerdComponent        = HerdComponent::TypeId();
-    g_tid_AnimalComponent      = AnimalComponent::TypeId();
-    g_tid_WildAnimalComponent  = WildAnimalComponent::TypeId();
-    g_tid_LivestockComponent   = LivestockComponent::TypeId();
-    g_tid_LivestockDescription = LivestockDescription::TypeId();
-}
-
 void RegisterComponentBatch_animal() {
-    RegisterExeAddr(0x1401c7858, reinterpret_cast<uintptr_t>(&g_tid_HerdDescription));
-    RegisterExeAddr(0x1401c7820, reinterpret_cast<uintptr_t>(&g_tid_HerdComponent));
-    RegisterExeAddr(0x1401c6f98, reinterpret_cast<uintptr_t>(&g_tid_AnimalComponent));
-    RegisterExeAddr(0x1401c8000, reinterpret_cast<uintptr_t>(&g_tid_WildAnimalComponent));
-    RegisterExeAddr(0x1401c7970, reinterpret_cast<uintptr_t>(&g_tid_LivestockComponent));
-    RegisterExeAddr(0x1401c79a8, reinterpret_cast<uintptr_t>(&g_tid_LivestockDescription));
     RegisterExeAddr(0x140172220, reinterpret_cast<uintptr_t>(&g_f_HerdSpawnSpread));
 }

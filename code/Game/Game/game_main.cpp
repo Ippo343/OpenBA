@@ -78,50 +78,8 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded();
 // type, invokes its factory, validates vtable + ctor-set field defaults.
 extern "C" void RunStartupSelfTests();
 
-// Defined in standalone/reg_component_nature.cpp — fills the component type-ID
-// .rdata globals once Object::Factory::Startup has assigned the real CRC ids.
-extern "C" void FillComponentTypeIdGlobals_nature();
-// Phase-1 self-contained-sim live bring-ups — fill each component's type-id global.
-extern "C" void FillComponentTypeIdGlobals_fruit();
-extern "C" void FillComponentTypeIdGlobals_spawn();
-extern "C" void FillComponentTypeIdGlobals_tombstone();
-// Animal spawn wave — herd/animal/livestock type-id globals (reg_component_animal.cpp).
-extern "C" void FillComponentTypeIdGlobals_animal();
-// Animal-update lane — CharacterComponent/CharacterDescription ids (reg_animal_update.cpp;
-// idempotent, also self-fills lazily on the first live animal tick).
-extern "C" void FillComponentTypeIdGlobals_animal_update();
-extern "C" void FillComponentTypeIdGlobals_animal_serialize();
-// Phase 2 Keystone B3 — RawMaterialDescription type-id global (0x1401c7cb8) for ca520.
-extern "C" void FillTypeIdGlobals_actionchild();
-// Phase 2 Keystone B tail — Work-tail type-id globals (trade=private CitizenAIComponent;
-// fire=InteractComponent c7900; serialize=Pasture/Animal ids).
-extern "C" void FillTypeIdGlobals_worktail_trade();
-// openfuncs step 2 — CitizenAI/Citizen/Happiness type-id globals (c70e8/c7158/c42c0;
-// storage gated on BANISHED_LIVE_CITIZENAI_TIDS, fill is a harmless no-op when off).
-extern "C" void FillTypeIdGlobals_citizenai();
-extern "C" void FillTypeIdGlobals_autosave();
-extern "C" void FillTypeIdGlobals_tradeui();
-extern "C" void ReportTypeIdGlobals_elements();
-extern "C" void FillTypeIdGlobals_worktail_fire();
-extern "C" void FillTypeIdGlobals_fire();
-extern "C" void FillTypeIdGlobals_lane4();   // unreg wave lane 4: 30 exe type-id slots
-extern "C" void FillTypeIdGlobals_cropdisease();
-// step 2.5 defer close — TombstoneComponent c4a30 / CemeteryDescription c40c8 (HandleLifeEvent death chain)
-extern "C" void FillTypeIdGlobals_citizen_lifeevent();
-extern "C" void FillTypeIdGlobals_town_services();
-extern "C" void FillControlUITypeIds();
-extern "C" void FillTypeIdGlobals_tracker();
-extern "C" void FillTypeIdGlobals_orchard();
-extern "C" void FillTypeIdGlobals_market();
-extern "C" void FillTypeIdGlobals_food();
-extern "C" void FillTypeIdGlobals_tutorial();
-extern "C" void FillTypeIdGlobals_growth();
-extern "C" void FillTypeIdGlobals_cleararea();
-extern "C" void FillEconomyTypeIdGlobals();
-extern "C" void FillTypeIdGlobals_worktail_serialize();
-// StartTown 1fc0 pipeline — ModelComponent/ModelDescription/CreatePlacedDescription
-// find type-id globals (reg_pipeline_typeids.cpp; storage gated on BANISHED_LIVE_DECAL).
-extern "C" void FillPipelineTypeIds();
+// (ENDGAME B.3.9 TR: the post-Startup Fill* passes over the exe type-id storage cells
+// that were declared here are gone -- every reader reads X::TypeId().)
 
 // standalone/boot_state_watchdog.cpp -- "MainLoop::Run returned, teardown has
 // begun". Teardown renders no frames, so the hang detector budgets it from
@@ -505,42 +463,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
         }
     }
 
-    // Now that Object::Factory::Startup has assigned the real CRC type ids (the
-    // 0xFFFFFFFF ctor sentinel the CRT-init records carry is overwritten only
-    // there), populate the component type-ID .rdata globals that
-    // the shared FindComponent accessors compare against. Filling earlier stored
-    // the sentinel. See reg_component_nature.cpp / standalone/main.cpp.
-    FillComponentTypeIdGlobals_nature();
-    FillComponentTypeIdGlobals_fruit();
-    FillComponentTypeIdGlobals_spawn();
-    FillComponentTypeIdGlobals_tombstone();
-    FillComponentTypeIdGlobals_animal();   // herd/animal/livestock ids (self-gated)
-    FillComponentTypeIdGlobals_animal_update(); // Character comp/desc ids (self-gated)
-    FillComponentTypeIdGlobals_animal_serialize(); // serialize-only PopulationComponent/Component ids
     StallDebug::Mark("post-Startup typeinfo dump + typeId globals");
-    FillTypeIdGlobals_actionchild();   // RawMaterialDescription tid 0x1401c7cb8 (ca520 + latent fix)
-    FillTypeIdGlobals_worktail_trade();    // Phase 2 B tail — TradeWork c8a0 private CitizenAIComponent id
-    FillTypeIdGlobals_worktail_fire();     // Phase 2 B tail — FireWork InteractComponent id (0x1401c7900)
-    FillTypeIdGlobals_fire();              // Fire lane — FireDescription 0x1401c4218 + FireComponent 0x1401c41e0
-    FillTypeIdGlobals_lane4();             // unreg wave lane 4 — 30 type ids incl. Disease (0x1401c5948, most-resolved unregistered address in the load census)
-    FillTypeIdGlobals_cropdisease();       // Crop infestation — Disease Component/Description ids
-    FillTypeIdGlobals_worktail_serialize();// Phase 2 B tail — PastureWork Pasture/Animal ids
-    FillEconomyTypeIdGlobals();            // Phase 3 economy — InteractDescription id (0x1401c7938)
-    FillPipelineTypeIds();                 // StartTown 1fc0 pipeline — ModelComponent/ModelDescription/CreatePlacedDescription ids (c7a50/c7a88/c7468)
-    FillTypeIdGlobals_autosave();          // LANE1 13/14 - AutoSaveDialog id (c4d08)
-    FillTypeIdGlobals_citizenai();         // openfuncs step 2 — CitizenAI/Citizen/Happiness ids (c70e8/c7158/c42c0, gated)
-    FillTypeIdGlobals_tradeui();           // c4b80 TradeComponent id — MUST be post-Startup (see reg_tradeui_typeids.cpp)
-    ReportTypeIdGlobals_elements();        // UI-element type-id table — nothing to fill (Runtime owns the ids); proves they are non-zero
-    FillTypeIdGlobals_town_services();     // town-service wave — HappinessDescription id (c42f8)
-    FillTypeIdGlobals_citizen_lifeevent(); // step 2.5 defer close — TombstoneComponent/CemeteryDescription ids (c4a30/c40c8)
-    FillControlUITypeIds();                // ControlUIConfig id (0x1401c4e20) — gates EVERY ControlUI button (work/split/empty)
-    FillTypeIdGlobals_tracker();           // production-stats panel — TrackerComponent id (c4b10)
-    FillTypeIdGlobals_orchard();           // orchard panel type/yield — OrchardComponent id (c46b0)
-    FillTypeIdGlobals_market();            // MarketWork slot 4 — MarketComponent (c44f0) + MarketDescription (c4528) ids
-    FillTypeIdGlobals_food();              // fishing/hunt/gatherer/cropfield component + description ids
-    FillTypeIdGlobals_tutorial();          // FinishTutorialGoal (c6240) / FinishTutorialInstance (c6278) / TutorialInstance (c6668)
-    FillTypeIdGlobals_growth();            // GrowthComponent id (c77b0) — the finder every runtime-spawned natural resource goes through
-    FillTypeIdGlobals_cleararea();         // ClearAreaComponent (c71c8) + ClearAreaDescription (c7200) — fn_FindComponent_SM was a null-typeid miss game-wide
 
     if (ok != 0) {
 

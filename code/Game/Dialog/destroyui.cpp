@@ -64,7 +64,7 @@ static bool DestroyComponent_CanReclaim_Impl(void* destroyComp)
 // Returns true if upgrade is pending (destroyComp+0x60 points to upgrade target).
 // Checks that destroyComp+0x60 != entity.descState AND != desc+0x20.
 //
-// destroyComp+0x18 = description (checked as DAT_1401c7628 = g_TypeId_DestroyComponent)
+// destroyComp+0x18 = description (checked as DAT_1401c7628 = TypeId_DestroyComponent)
 // destroyComp+0x60 = upgrade description reference (int64/ptr)
 // destroyComp+0x10 = entity (checked via CheckPtr)
 static bool DestroyComponent_CanRebuild_Impl(void* destroyComp)
@@ -230,7 +230,7 @@ static uint64_t FindElemAsBasePtr(void* dialogElem, const char* name) {
 
 namespace destroyui_sa {
 
-// ENDGAME B.3.9: ComponentEntity / DestroyDescription (was g_TypeId_DestroyComponent, a
+// ENDGAME B.3.9: ComponentEntity / DestroyDescription (was TypeId_DestroyComponent, a
 // misnamed alias for the cell at 0x1401c7628) both have a ported TypeId() now, so the
 // EnsureGlobals() lazy-cache over the exe .rdata globals is dead.
 

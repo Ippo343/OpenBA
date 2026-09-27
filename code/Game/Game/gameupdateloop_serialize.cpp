@@ -99,7 +99,6 @@ static fn_SerializeRefTable_t   s_fn_SerializeRefTable = nullptr;
 static fn_ResetPersist_t        s_fn_ResetPersist = nullptr;
 static fn_ClearPersist_t        s_fn_ClearPersist = nullptr;
 
-static const uint32_t*          s_pAchInstTypeId = nullptr; // AchievementInstance BaseTypeInfo (typeId at +0)
 
 // ------------------------------------------------------------
 // Exe helpers already ported+registered (called via the registry)
@@ -146,8 +145,6 @@ void EnsureResolved() {
     s_fn_ClearPersist = reinterpret_cast<fn_ClearPersist_t>(
         ResolveExport("?ClearPersistState@InternalFactory@Object@@QEAAXXZ"));
 
-    s_pAchInstTypeId = reinterpret_cast<const uint32_t*>(
-        ResolveExport("?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A"));
 
     auto R = [](uintptr_t a) { return ResolveAddr(Module::Exe, a); };
     s_fn_CfgSer_194a0 = reinterpret_cast<fn_FieldSer_t>(R(0x1400194a0));
@@ -805,7 +802,7 @@ extern "C" void GameUpdateLoop_Serialize_95a90(GameUpdateLoop* self, void* strea
     // without replacing any retail code.
     reinterpret_cast<Object::InternalBasePtr*>(&self->m_scenarioInstance)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     if (self->m_scenarioInstance != nullptr) {
-        uint32_t achTid = s_pAchInstTypeId ? *s_pAchInstTypeId : 0;
+        uint32_t achTid = Achievement::AchievementInstance::TypeId();   // ENDGAME B.3.9 TR (was ResolveExport of its ?_typeInfo@)
         if (!achTid || !fn_IsDerivedFrom(self->m_scenarioInstance, achTid))
             self->m_scenarioInstance = nullptr;
     }

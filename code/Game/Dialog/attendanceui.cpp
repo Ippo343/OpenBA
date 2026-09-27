@@ -45,7 +45,7 @@
 
 // ENDGAME B.3.9: ProgressElement/ComponentEntity/AttendanceDescription/AttendanceComponent
 // all have a ported TypeId() now, so the old EnsureTypeIds()/Ready() lazy-cache over the
-// exe .rdata globals (g_TypeId_ProgressElement etc.) is dead — the static always answers.
+// exe .rdata globals (TypeId_ProgressElement etc.) is dead — the static always answers.
 
 // ============================================================
 // AttendanceUI::Slot4 (vtable +0x20) — Setup/refresh

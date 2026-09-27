@@ -204,14 +204,13 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     int64_t* tree = (int64_t*)((uintptr_t)entityUI + 0x10);
     if (*tree != 0) return;  // already built
 
-    // Fill the "Tool" / "ToolSetting" base type-ids that the SetEditMode reimpls
-    // IsDerivedFrom (0x1401c6eb8="Tool", 0x1401c6ef0="ToolSetting"; both resolve to
-    // NULL pointers in standalone since they are raw .rdata constants).
+    // The "Tool" / "ToolSetting" base type ids the SetEditMode reimpls IsDerivedFrom
+    // (cells 0x1401c6eb8 / 0x1401c6ef0) are the classes' own records (ENDGAME B.3.9 RF);
+    // kept here only for the trace line below. (ENDGAME B.3.9 TR: the null-fill of the
+    // two engine_funcs pointers that stood here went with them.)
     static uint32_t s_tid_Tool = 0, s_tid_ToolSetting = 0;
-    s_tid_Tool        = Tool::TypeId();          // ENDGAME B.3.9 RF: the abstract base has its record
+    s_tid_Tool        = Tool::TypeId();
     s_tid_ToolSetting = ToolSetting::TypeId();
-    if (!g_TypeId_ToolController) g_TypeId_ToolController = &s_tid_Tool;
-    if (!g_TypeId_ToolSetting)    g_TypeId_ToolSetting    = &s_tid_ToolSetting;
 
     uint32_t tid_CreatePlaced  = CreatePlacedDescription::TypeId();
     uint32_t tid_PlacementTool = PlacementTool::TypeId();
