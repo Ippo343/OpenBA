@@ -524,12 +524,16 @@ void RtObject_ExternalFactory_Dtor(void* self) {
 // platform seam; this is the same one Engine::Shutdown's identical step uses.
 void RtEngineLifecyclePlatformFreeLibrary(void* module);
 
+// Runtime 0x1801fc6d0 — Object::Factory's compiler-plugin HMODULE, the class
+// static (ENDGAME B.3.9 OBJ, B39_RULES D7; TypeInfo.h). The by-address mint row
+// is redirected onto it in RtObjectPortInit. The mint never zeroes or re-seeds
+// it; the language zero-initialises it.
+void* Object::Factory::_compilerModule = nullptr;
+
 extern "C" void RtObject_Factory_Shutdown(void* /*self — RCX is overwritten*/) {
-    if (uintptr_t g = ResolveAddr(Module::Runtime, 0x1801fc6d0)) {
-        void** slot = reinterpret_cast<void**>(g);
-        if (*slot) RtEngineLifecyclePlatformFreeLibrary(*slot);
-        *slot = nullptr;
-    }
+    void** slot = &::Object::Factory::_compilerModule;
+    if (*slot) RtEngineLifecyclePlatformFreeLibrary(*slot);
+    *slot = nullptr;
 }
 
 namespace Object {
