@@ -51,8 +51,8 @@ CUTOVER_ROW("?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA", CUTOVER_REQUIRED,
 CUTOVER_ROW("?_singleton@ExternalFactory@Object@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6c8ull, "Object", 6)
 // Object  HARMFUL / DLL-PRESENT  doors=11  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@Factory@Object@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6e8ull, "Object", 11)
-// Object  HARMFUL / DLL-PRESENT  doors=4  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_singleton@InternalFactory@Object@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6d8ull, "Object", 4)
+// Object  HARMFUL / DLL-PRESENT  doors=3  -- tag states the verdict inverts at cutover
+CUTOVER_ROW("?_singleton@InternalFactory@Object@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6d8ull, "Object", 3)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=2  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_disableHandler@Debug@System@@0_NA", CUTOVER_REQUIRED, true, 0x1801fc708ull, "System", 2)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=2  -- tag states the verdict inverts at cutover

@@ -558,15 +558,15 @@ Internal* Internal::Clone() {
 // Object::InternalFactory
 // ============================================================================
 
+// ?_singleton@InternalFactory@Object@@0PEAV12@EA — retail 0x1801fc6d8. The
+// class static (ENDGAME B.3.9 OBJ, B39_RULES D7); the minted row is redirected
+// onto it in RtObjectPortInit, so the name and address doors answer these
+// bytes. The mint never zeroes or re-seeds it; the language zero-initialises
+// it and the ctor door publishes into it.
+InternalFactory* InternalFactory::_singleton = nullptr;
+
 // ?Get@InternalFactory@Object@@SAPEAV12@XZ   retail 0x18002f850 —
 // `MOV RAX,[0x1801fc6d8]; RET`.
-//
-// The cell is `?_singleton@InternalFactory@Object@@0PEAV12@EA`, reached through
-// the port door for the same reason `Object::Factory::Get()` is (B33_RULES
-// §9.3): it is only ever read at RUNTIME, never from a static initialiser, so
-// the door answers it and no second cell is created. `reg_mint_promoted.cpp`
-// records that row as UNPROMOTABLE while the DLL is present and REQUIRED at
-// cutover; nothing here changes that.
 #if defined(BANISHED_UNIT_TEST)
 namespace detail {
 // A unit test builds its own factory and installs it for the duration of a
@@ -575,11 +575,7 @@ InternalFactory* g_unitInternalFactory = nullptr;
 }  // namespace detail
 InternalFactory* InternalFactory::Get() { return detail::g_unitInternalFactory; }
 #else
-InternalFactory* InternalFactory::Get() {
-    InternalFactory** slot = RT_DATA_SLOT(InternalFactory**,
-        "?_singleton@InternalFactory@Object@@0PEAV12@EA");
-    return slot ? *slot : nullptr;
-}
+InternalFactory* InternalFactory::Get() { return _singleton; }
 #endif
 
 // ?Startup@InternalFactory@Object@@QEAA_NXZ   retail 0x1800c0020 — `MOV AL,1; RET`.
