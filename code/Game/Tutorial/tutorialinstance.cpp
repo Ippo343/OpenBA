@@ -102,18 +102,6 @@ void TutorialInstance::Persist(void* stream) {
 }
 
 // ============================================================
-// By-address doors (B38_RULES D5): standalone/reg_w2_lane2.cpp's opt-in
-// hand table (BANISHED_LIVE_TUTORIALINSTANCE_VT) still names these two by
-// address; each is one QUALIFIED delegation to the member.
-// ============================================================
-void* TutorialInstance_Dtor(void* self, uint32_t flags) {
-    return static_cast<TutorialInstance*>(static_cast<Object::Internal*>(self))->TutorialInstance::DeletingDtor(flags);   // B.3.8 bridge
-}
-void TutorialInstance_Serialize(void* self, void* stream) {
-    static_cast<TutorialInstance*>(static_cast<Object::Internal*>(self))->TutorialInstance::Persist(stream);   // B.3.8 bridge
-}
-
-// ============================================================
 // Reflection (ENDGAME B.3.8)
 // ============================================================
 // create 0x140028120: MemAlloc(0x38, 8), then the (inlined) ctor.
