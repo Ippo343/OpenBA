@@ -30,6 +30,9 @@
 #include "Component/TradeComponent.h"   // ENDGAME B.3.8 CB3: TradeComponent::TypeId()
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CB3: CitizenComponent::TypeId()
 #include "Action/CompleteTask.h"   // ENDGAME B.3.8 CB3: CompleteTask::TypeId()
+#include "Component/StatusIconComponent.h"          // ENDGAME B.3.9 D5
+#include "Component/NaturalResourceComponent.h"     // ENDGAME B.3.9 D5
+#include "Entity/ComponentEntity.h"                 // ENDGAME B.3.9 D5
 
 
 // ============================================================
@@ -45,23 +48,22 @@
 // and the fn_FindComponent_* decls in engine_funcs.h): the function returns the
 // out-IBP it was handed.   void* fn(uintptr_t entity, void* retIBP)
 
-// Generic body shared by all variants. pTypeId points at the exe's type-ID storage
-// global (a uint32_t filled in by the component's RegisterType at startup).
-static void* FindComponentByTypeId(uintptr_t entity, void* retIBP, const uint32_t* pTypeId) {
+// Generic body shared by all variants (ENDGAME B.3.9 D5: typeId is the class's own
+// TypeId() value, not a cell pointer -- every cell in this family is registered, so
+// the value is always available and no resolve/heal is needed).
+static void* FindComponentByTypeId(uintptr_t entity, void* retIBP, uint32_t typeId) {
     void* found = nullptr;
-    if (pTypeId) {
-        int n = *reinterpret_cast<int*>(entity + 0x38);
-        uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-        for (int i = 0; i < n; i++) {
-            void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-            void* comp = *slot;
-            // GetTypeId is component vtable slot +0x10.
-            uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
-            if (t == *pTypeId) {
-                void* c = *slot;
-                found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTypeId)) ? c : nullptr;
-                break;
-            }
+    int n = *reinterpret_cast<int*>(entity + 0x38);
+    uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
+    for (int i = 0; i < n; i++) {
+        void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
+        void* comp = *slot;
+        // GetTypeId is component vtable slot +0x10.
+        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        if (t == typeId) {
+            void* c = *slot;
+            found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
+            break;
         }
     }
     if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
@@ -69,72 +71,37 @@ static void* FindComponentByTypeId(uintptr_t entity, void* retIBP, const uint32_
     return retIBP;
 }
 
-// Lazily-resolved type-ID storage globals (exe .rdata, filled by RegisterType).
-static const uint32_t* s_pTid_2ed0 = nullptr;  // 0x1401c7900  (Position/Interact)
-static const uint32_t* s_pTid_2f90 = nullptr;  // 0x1401c7e08  (MeshInstance/StatusIcon)
-static const uint32_t* s_pTid_3050 = nullptr;  // 0x1401c8070
-static const uint32_t* s_pTid_52c0 = nullptr;  // 0x1401c7b30  (NaturalResource/BuildState)
-static const uint32_t* s_pTid_6270 = nullptr;  // 0x1401c7e78  (Storage)
-static const uint32_t* s_pTid_15140 = nullptr; // 0x1401c4b80  (TradeComponent)
-static bool s_tidInit = false;
-
-static void EnsureTypeIds() {
-    if (s_tidInit) return;
-    s_pTid_2ed0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7900));
-    s_pTid_2f90 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7e08));
-    s_pTid_3050 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c8070));
-    s_pTid_52c0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7b30));
-    s_pTid_6270 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7e78));
-    s_pTid_15140 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4b80));
-    // Raw .rdata type-id globals are NULL in standalone; fall back to the runtime type
-    // registry so these FindComponent helpers actually match (else they return null and
-    // callers deref null). Names verified from decomp/application.md TypeInfo column.
-    static uint32_t v_2ed0, v_3050, v_6270, v_15140;
-    if (!s_pTid_2ed0) { v_2ed0 = InteractComponent::TypeId(); s_pTid_2ed0 = &v_2ed0; }
-    if (!s_pTid_3050) { v_3050 = WorkComponent::TypeId();      s_pTid_3050 = &v_3050; }
-    if (!s_pTid_6270) { v_6270 = StorageComponent::TypeId();   s_pTid_6270 = &v_6270; }
-    if (!s_pTid_15140){ v_15140 = TradeComponent::TypeId();    s_pTid_15140 = &v_15140; }
-    s_tidInit = true;
-}
-
-// Reimpl of Entity_FindComponent_Position (FUN_140002ed0, type 0x1401c7900)
+// Reimpl of Entity_FindComponent_Position (FUN_140002ed0, type 0x1401c7900 = InteractComponent)
 void* WorkBase_FindComponent_2ed0(uintptr_t entity, void* retIBP) {
-    EnsureTypeIds();
-    return FindComponentByTypeId(entity, retIBP, s_pTid_2ed0);
+    return FindComponentByTypeId(entity, retIBP, InteractComponent::TypeId());
 }
 
-// Reimpl of Entity_FindComponent_MeshInstance (FUN_140002f90, type 0x1401c7e08)
+// Reimpl of Entity_FindComponent_MeshInstance (FUN_140002f90, type 0x1401c7e08 = StatusIconComponent)
 void* WorkBase_FindComponent_2f90(uintptr_t entity, void* retIBP) {
-    EnsureTypeIds();
-    return FindComponentByTypeId(entity, retIBP, s_pTid_2f90);
+    return FindComponentByTypeId(entity, retIBP, StatusIconComponent::TypeId());
 }
 
-// Reimpl of FUN_140003050 (type 0x1401c8070)
+// Reimpl of FUN_140003050 (type 0x1401c8070 = WorkComponent)
 void* WorkBase_FindComponent_3050(uintptr_t entity, void* retIBP) {
-    EnsureTypeIds();
-    return FindComponentByTypeId(entity, retIBP, s_pTid_3050);
+    return FindComponentByTypeId(entity, retIBP, WorkComponent::TypeId());
 }
 
-// Reimpl of FUN_1400052c0 (type 0x1401c7b30)
+// Reimpl of FUN_1400052c0 (type 0x1401c7b30 = NaturalResourceComponent)
 void* WorkBase_FindComponent_52c0(uintptr_t entity, void* retIBP) {
-    EnsureTypeIds();
-    return FindComponentByTypeId(entity, retIBP, s_pTid_52c0);
+    return FindComponentByTypeId(entity, retIBP, NaturalResourceComponent::TypeId());
 }
 
-// Reimpl of Entity_FindComponent_Storage (FUN_140006270, type 0x1401c7e78)
+// Reimpl of Entity_FindComponent_Storage (FUN_140006270, type 0x1401c7e78 = StorageComponent)
 void* WorkBase_FindComponent_6270(uintptr_t entity, void* retIBP) {
-    EnsureTypeIds();
-    return FindComponentByTypeId(entity, retIBP, s_pTid_6270);
+    return FindComponentByTypeId(entity, retIBP, StorageComponent::TypeId());
 }
 
 // Reimpl of Entity_FindComponent_Building (FUN_140015140, type 0x1401c4b80 = TradeComponent).
 // Byte-for-byte the same component scan as the family above; the Ghidra name is a misnomer
 // (it matches the TradeComponent type-id, not a generic "building"). Ported to close the
-// TradeWork::Slot4 closure gap; the raw .rdata type-id 0x1401c4b80 is null in standalone so
-// EnsureTypeIds heals it via GetTypeIdByName("TradeComponent").
+// TradeWork::Slot4 closure gap.
 void* WorkBase_FindComponent_15140(uintptr_t entity, void* retIBP) {
-    EnsureTypeIds();
-    return FindComponentByTypeId(entity, retIBP, s_pTid_15140);
+    return FindComponentByTypeId(entity, retIBP, TradeComponent::TypeId());
 }
 
 // ============================================================
@@ -292,18 +259,17 @@ void WorkBase_TaskListCleanup_c5400(void* self) {
 // +0x24 is version-gated (copied from +0x20 pre-v1); two Times + an int at +0x30..+0x40
 // added at v3+.   Caller signature: void fn(void* self, void* stream)
 void Work::Persist(void* stream) {
-    EnsureTypeIds();
     alignas(8) uint64_t ser[3];  // IO::Serializer, 0x18 bytes on the original's stack
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
 
     reinterpret_cast<Object::InternalBasePtr*>(&field_10)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-    if (field_10 && fn_IsDerivedFrom && g_TypeId_ComponentEntity) {
-        if (!fn_IsDerivedFrom(field_10, *g_TypeId_ComponentEntity))
+    if (field_10 && fn_IsDerivedFrom) {
+        if (!fn_IsDerivedFrom(field_10, ComponentEntity::TypeId()))
             field_10 = nullptr;
     }
     reinterpret_cast<Object::InternalBasePtr*>(&field_18)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-    if (field_18 && fn_IsDerivedFrom && s_pTid_3050) {
-        if (!fn_IsDerivedFrom(field_18, *s_pTid_3050))
+    if (field_18 && fn_IsDerivedFrom) {
+        if (!fn_IsDerivedFrom(field_18, WorkComponent::TypeId()))
             field_18 = nullptr;
     }
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(field_20, nullptr);   // B.3.4 bridge
@@ -324,30 +290,20 @@ void Work::Persist(void* stream) {
 uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskIBP, void** out) {
     if (*reinterpret_cast<uintptr_t*>(taskIBP) == 0) return 0;
     void* obj = *reinterpret_cast<void**>(taskIBP);
-    uint32_t ciTid = g_TypeId_CitizenComponent_FC ? *g_TypeId_CitizenComponent_FC : 0;
-    // The IsA gate reads DWORD_1401c7158 (== g_TypeId_CitizenComponent_FC, CitizenComponent's
-    // type-id — see citizenui.cpp:794). That raw .rdata global is null in
-    // the standalone exe unless some other path (e.g. the citizen UI dialog) has already
-    // healed it, so heal it here too — otherwise ciTid==0 makes CanStartWork bail (return 0)
-    // and every registered haul task is judged invalid, driving the enqueue↔invalidate reset
-    // loop that stops any construction haul from completing.
-    if (!ciTid) ciTid = CitizenComponent::TypeId();
-    if (!fn_IsA || !ciTid || !fn_IsA(obj, ciTid)) return 0;
+    // DWORD_1401c7158 = CitizenComponent (ENDGAME B.3.9 D5: by cell, read directly --
+    // the registered cell always holds this id, so the old healing fallback is gone).
+    uint32_t ciTid = CitizenComponent::TypeId();
+    if (!fn_IsA || !fn_IsA(obj, ciTid)) return 0;
 
     uintptr_t ci = *reinterpret_cast<uintptr_t*>(taskIBP);
     uintptr_t container = *reinterpret_cast<uintptr_t*>(ci + 0x278);
     int count = *reinterpret_cast<int*>(container + 0x60) + 1;
     uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(container + 0x48);
 
-    uint32_t completeTaskTid = 0;
-    if (uint32_t* pCT = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5e50))) completeTaskTid = *pCT;
-    // 0x1401c5e50 == CompleteTask TypeInfo (decomp/application.md). Raw .rdata type-id
-    // globals resolve to NULL in the standalone exe, so completeTaskTid stays 0 and the
-    // IsDerivedFrom(elem, completeTaskTid) below can NEVER recognise the CompleteTask node
-    // the haul chain pushed onto the citizen — CanStartWork then returns 0 for a citizen
-    // that IS validly hauling, and GatherRawMaterials::Update invalidates+removes it every
-    // tick (the enqueue↔reset loop). Heal via the runtime type registry by name.
-    if (!completeTaskTid) completeTaskTid = CompleteTask::TypeId();
+    // 0x1401c5e50 (CompleteTask's own cell) is UNREGISTERED -- the old raw-.rdata read
+    // always failed and fell through to this same CompleteTask::TypeId() call, so
+    // calling it directly is not a behaviour change (ENDGAME B.3.9 D5 note).
+    uint32_t completeTaskTid = CompleteTask::TypeId();
     int wantId = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(self) + 0x20);
 
     for (int i = 0; i < count; i++) {

@@ -22,6 +22,8 @@
 #include "resolve.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/OrchardComponent.h"   // ENDGAME B.3.9 D5
+#include "Component/FishingComponent.h"   // ENDGAME B.3.9 D5
 
 // ============================================================
 // Sub-callee / dispatch-slot resolution (self-contained, s_war_* prefix)
@@ -86,9 +88,9 @@ static WAR_fn_Time_Ctor_t           s_war_TimeCtor         = nullptr;
 
 // Runtime type-id dwords (CRC values filled after Engine::Startup). Read via pointer
 // at call time, never inlined (they are 0 in the static image).
-static const uint32_t* s_war_pMsgId1_c70e8 = nullptr; // 0x1401c70e8 (SendComponentMessage #1 target type-id = CitizenAIComponent, both fns)
-static const uint32_t* s_war_pMsgId2_c46b0 = nullptr; // 0x1401c46b0 (bb7b0 SendComponentMessage #2 target type-id = OrchardComponent)
-static const uint32_t* s_war_pMsgId2_c7660 = nullptr; // 0x1401c7660 (beae0 SendComponentMessage #2 target type-id = FishingComponent)
+static const uint32_t* s_war_pMsgId1_c70e8 = nullptr; // 0x1401c70e8 (SendComponentMessage #1 target type-id = CitizenAIComponent, both fns -- UNREGISTERED, left for a behaviour commit)
+// 0x1401c46b0 = OrchardComponent, 0x1401c7660 = FishingComponent (ENDGAME B.3.9 D5:
+// read directly below).
 // Float .rdata constants (bit-exact from read_memory).
 static const float*    s_war_pf_172280 = nullptr;     // 0x140172280 = -1.0f (MoveTo speed, both fns)
 
@@ -116,8 +118,6 @@ static void ResolveAll() {
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b00)) s_war_TimeCtor       = *reinterpret_cast<WAR_fn_Time_Ctor_t*>(s);
 
     s_war_pMsgId1_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
-    s_war_pMsgId2_c46b0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c46b0));
-    s_war_pMsgId2_c7660 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7660));
     s_war_pf_172280     = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172280));
 }
 
@@ -209,7 +209,7 @@ void WorkAct_GatherWorkCtor_bb7b0(void* citizenIBP, uint32_t workId, int64_t* wo
     if (obj) {
         uintptr_t innerIbp = 0;          // [RBP-0x19]
         WAR_IbpCtor(&innerIbp, nullptr);
-        uint32_t msgId = s_war_pMsgId2_c46b0 ? *s_war_pMsgId2_c46b0 : 0;     // [0x1401c46b0] -> [RBP+0x47]
+        uint32_t msgId = OrchardComponent::TypeId();     // [0x1401c46b0] -> [RBP+0x47]
         uintptr_t entityInner = static_cast<uintptr_t>(*workEntity);        // *param_3 -> [RBP-0x21]
         if (s_war_SendCompMsg) sm2 = s_war_SendCompMsg(obj, &entityInner, &msgId, 1, &innerIbp, param9);
     }
@@ -348,7 +348,7 @@ void WorkAct_FishWorkCtor_beae0(void* citizenIBP, uint32_t workId, int64_t* work
         if (obj) {
             uintptr_t innerIbp = 0;      // [RBP+0x50]
             WAR_IbpCtor(&innerIbp, nullptr);
-            uint32_t msgId = s_war_pMsgId2_c7660 ? *s_war_pMsgId2_c7660 : 0; // [0x1401c7660] -> [RBP+0x40]
+            uint32_t msgId = FishingComponent::TypeId(); // [0x1401c7660] -> [RBP+0x40]
             uintptr_t entityInner = static_cast<uintptr_t>(*workEntity);    // *param_3 -> [RBP-0x18]
             // disasm: R9D=0 (p4), [RSP+0x28]=R15D = param_8 ([RBP+0x78]) -> p6
             if (s_war_SendCompMsg) sm2 = s_war_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, param8);

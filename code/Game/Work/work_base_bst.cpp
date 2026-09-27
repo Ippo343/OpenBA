@@ -20,6 +20,7 @@
 #include "resolve.h"
 #include "io/Serializer.h"     // ENDGAME B.3.4 caller batch C
 #include "object/Internal.h"   // ENDGAME B.3.4a closing: InternalBasePtr::Serialize
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
 #include <cstdint>
 
 // ============================================================
@@ -283,7 +284,7 @@ void WorkBST_BST_Serialize_296b0(uintptr_t* root, void* serializer) {
     int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(root) + 8);
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
     bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-    uint32_t citTid = g_TypeId_CitizenComponent_FC ? *g_TypeId_CitizenComponent_FC : 0;
+    uint32_t citTid = CitizenComponent::TypeId();  // DAT_1401c7158
 
     if (loading) {
         for (int i = 0; i < count; i++) {
