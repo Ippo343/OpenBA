@@ -5,3 +5,11 @@
 
 ??_7BorderDescription@UI@@6B@          UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x180040ff0, ??1 door, 8 slot doors deleted
 ??_7BorderElement@UI@@6B@              UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x1800414f0, ??1/copy doors, 5 slot doors deleted
+??_7ClipRegionDescription@UI@@6B@      UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x180037eb0, ??1 door, 8 slot doors deleted
+??_7ClipRegionElement@UI@@6B@          UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x180038370, ??0/copy/??1 doors, 7 slot doors deleted; ContainerDescription builder (UI-B file) spells the ctor
+??_7EditDescription@UI@@6B@            UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x18003fa20, ??1 door, 8 slot doors deleted
+??_7EditElement@UI@@6B@                UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x18003fed0, ??1/copy doors, 7 slot doors deleted
+??_7NumberEditDescription@UI@@6B@      UI-A    real ctor + DeletingDtor; FACTUI2 row, RT_DELDTOR row 0x180046190, ??0/??1 doors, 8 slot doors deleted
+??_7NumberEditElement@UI@@6B@          UI-A    real ctor + DeletingDtor; FACTUI2 row, RT_DELDTOR row 0x180046540, ??0/??1 doors, 3 slot doors deleted
+??_7NumberDescription@UI@@6B@          UI-A    real ctor + DeletingDtor; FACTUI2 row (and its ??0 door), RT_DELDTOR row 0x18004a760, ??1 door, 8 slot doors deleted
+??_7NumberElement@UI@@6B@              UI-A    real ctor + DeletingDtor; FACTUI2 row, RT_DELDTOR row 0x18004ab80, ??0/??1 doors, 5 slot doors deleted

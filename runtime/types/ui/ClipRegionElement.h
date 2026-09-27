@@ -16,7 +16,7 @@
 // `??_7ClipRegionElement@UI@@6B@` @ 0x1801562f0, TWELVE slots (sizeof from
 // `MOV EDX,0xd8` in slot 0 0x180038370):
 //
-//   [ 0] 0x180038370  (unexported) vector deleting dtor — RT_DELDTOR row, kept
+//   [ 0] 0x180038370  (unexported) vector deleting dtor — the class's own (B.3.9)
 //   [ 1] 0x180037f70  TypeName
 //   [ 2] 0x180037f50  Type
 //   [ 3] 0x180116870  Element::Persist     INHERITED
@@ -29,10 +29,9 @@
 //   [10] 0x180035620  Element::SetColor    INHERITED
 //   [11] 0x180035630  Element::GetBorder   INHERITED (RETSLOT)
 //
-// ABSTRACT, no real ctor: live ones are built by the `??0ClipRegionElement`
-// door (0x1800cbe60), by ClipRegionDescription::CreateInstance's inlined
-// copy, and by ContainerDescription::CreateInstance (block C4's) — all wearing
-// the MINTED table.
+// Built by the real ctor (below) at every site retail inlines it:
+// ClipRegionDescription::CreateInstance, ContainerDescription::CreateInstance
+// (block UI-B's file) and the factory pair.
 //
 // ---------------------------------------------------------------------------
 // LAYOUT — 0xd8 bytes, six dwords past UI::Element
@@ -46,6 +45,13 @@
 // +0xc8/+0xcc are what `UI::ContainerElement` reads back to size its scroll
 // bars; +0xd0/+0xd4 are what `?SetOffsets@ContainerElement@UI@@` (0x1800cc1e0)
 // writes. The names are the ported bodies' (clipregionelement.cpp).
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0ClipRegionElement@UI@@QEAA@XZ` (0x1800cbe60) minus its vptr stores;
+// slot 0 is the class's own vector deleting dtor; ~ClipRegionElement is protected and
+// non-virtual. The factory pair is the class's own; the minted
+// `??_7ClipRegionElement@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
+// the doors are retired.
 // ============================================================================
 
 #include <cstdint>
@@ -53,13 +59,42 @@
 #include <type_traits>
 
 #include "Element.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI {
 
 class ClipRegionElement : public Element {
 public:
+    // ??0ClipRegionElement@UI@@QEAA@XZ 0x1800cbe60 — the REAL constructor:
+    // Element(), then `MOV dword [+0xc0],0x64 ; MOV qword [+0xc4],0x64 ;
+    // MOV qword [+0xcc],0 ; MOV dword [+0xd4],0` — the two overlapping qwords
+    // cover exactly the six fields below (+0xc8 gets the upper half, 0).
+    ClipRegionElement() : Element() {
+        _reqWidth    = 100;
+        _reqHeight   = 100;
+        _innerWidth  = 0;
+        _innerHeight = 0;
+        _offsetX     = 0;
+        _offsetY     = 0;
+    }
+
     // ---- the twelve slots, in measured order ------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180038370
+    // [0] 0x180038370 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0xd8`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<ClipRegionElement*>(self + static_cast<int64_t>(i) * 0xd8)
+                    ->~ClipRegionElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~ClipRegionElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180037f70
     uint32_t    Type() const override;                            // [2] 0x180037f50
     void ComputeSize() override;                                  // [4] 0x1800cbc60
@@ -80,19 +115,17 @@ public:
     void    SetOffset(int32_t x, int32_t y);                      // 0x1800381d0
     void    SetSize(int32_t w, int32_t h);                        // 0x180038190
 
-    ClipRegionElement(const ClipRegionElement& src);              // 0x180038220  door (clipregionelement.cpp)
+    ClipRegionElement(const ClipRegionElement& src);              // 0x180038220  not ported (door retired: no caller)
     ClipRegionElement& operator=(const ClipRegionElement& src);   // 0x1800382b0  not ported
 
-    static uint32_t TypeId();                                     // 0x180037f60  not ported
-    static Object::Base* CreateNewObject();                       // 0x180038060  factory_ui1.cpp door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180038110  factory_ui1.cpp door
+    static uint32_t TypeId();                                     // 0x180037f60  ported over the minted record
+    static Object::Base* CreateNewObject();                       // 0x180038060  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x180038110  the class's own (B39 D2)
 
 protected:
-    // NOT retail's `??0ClipRegionElement@UI@@QEAA@XZ` (0x1800cbe60, the door
-    // `RtUi_ClipRegionElement_Ctor`).
-    ClipRegionElement() = default;
-    // `??1ClipRegionElement@UI@@UEAA@XZ` (0x1800cbe30), declared only; the
-    // retail body is the door `RtUi_ClipRegionElement_Dtor`.
+    // `??1ClipRegionElement@UI@@UEAA@XZ` (0x1800cbe30). NON-VIRTUAL and EMPTY
+    // (clipregionelement.cpp): restamp, then JMP ~Element, which the compiler
+    // chains.
     ~ClipRegionElement();
 
 private:
@@ -113,6 +146,7 @@ static_assert(sizeof(ClipRegionElement) == 0xd8,
               "UI::ClipRegionElement is 0xd8 bytes (MOV EDX,0xd8 in 0x180038370)");
 static_assert(alignof(ClipRegionElement) == 8, "UI::ClipRegionElement aligns to 8");
 static_assert(!std::has_virtual_destructor<ClipRegionElement>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<ClipRegionElement>::value, "B39 D1: concrete");
 static_assert(offsetof(ClipRegionElement, _reqWidth) == sizeof(Element),
               "ClipRegionElement's own fields begin at the end of UI::Element");
 static_assert(offsetof(ClipRegionElement, _reqWidth)    == 0xc0, "");

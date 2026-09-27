@@ -32,12 +32,21 @@
 //     +0x80 byte  1      _b80   "allow negative": selects "0123456789-"
 //     +0x81..+0x87 never written
 // Names: the ported file's; meanings where CreateInstance proves them.
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0NumberEditDescription@UI@@QEAA@XZ` (0x1800d5050) minus its vptr stores;
+// slot 0 is the class's own vector deleting dtor; ~NumberEditDescription is protected and
+// non-virtual. The factory pair is the class's own; the minted
+// `??_7NumberEditDescription@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
+// the doors are retired.
 // ============================================================================
 
+#include <type_traits>
 #include <cstdint>
 #include <cstddef>
 
 #include "ElementDescription.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI {
 
@@ -47,7 +56,34 @@ class Font;
 
 class NumberEditDescription : public ElementDescription {
 public:
-    Object::Base* DeletingDtor(unsigned flags) override = 0;     // [0] 0x180046190
+    // ??0NumberEditDescription@UI@@QEAA@XZ 0x1800d5050 — the REAL constructor:
+    // ElementDescription()'s stores, then +0x68 QWORD 0, (+0x70 NOT written —
+    // see numbereditdescription.cpp's banner), +0x74 6, +0x78 0xffff8001,
+    // +0x7c 0x7fff, +0x80 BYTE 1 (0x1800d50cd..0x1800d50e6).
+    NumberEditDescription() : ElementDescription() {
+        _font = nullptr;
+        _i74  = 6;
+        _i78  = static_cast<int32_t>(0xffff8001u);
+        _i7c  = 0x7fff;
+        _b80  = 1;
+    }
+
+    // [0] 0x180046190 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x88`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<NumberEditDescription*>(self + static_cast<int64_t>(i) * 0x88)
+                    ->~NumberEditDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~NumberEditDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                       // [1] 0x180045e90
     uint32_t    Type() const override;                           // [2] 0x180045e70
     int32_t     GetFileVersion() const override;                 // [3] 0x1800d4fd0
@@ -61,16 +97,18 @@ public:
 
     NumberEditDescription(const NumberEditDescription& src);             // 0x180046050  not ported
     NumberEditDescription& operator=(const NumberEditDescription& src);  // 0x1800460c0  not ported
-    static uint32_t TypeId();                                    // 0x180045e80  not ported
-    static Object::Base* CreateNewObject();                      // 0x180045f80  ui_factory_wave28.cpp door
-    static Object::Base* CreateInPlaceObject(void* place);       // 0x180046000  ui_factory_wave28.cpp door
+    static uint32_t TypeId();                                    // 0x180045e80  ported over the minted record
+    static Object::Base* CreateNewObject();                      // 0x180045f80  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);       // 0x180046000  the class's own (B39 D2)
     static void* operator new(std::size_t bytes);                // 0x180045ea0  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x180045f10  not ported
     static void  operator delete(void* p);                       // 0x180045f20  not ported
 
 protected:
-    NumberEditDescription() = default;   // NOT retail's 0x1800d5050 (the door)
-    ~NumberEditDescription();            // 0x1800d4fe0 — NOT defined (~ElementDescription is not)
+    // `??1NumberEditDescription@UI@@UEAA@XZ` (0x1800d4fe0). NON-VIRTUAL and
+    // EMPTY (numbereditdescription.cpp): only the base's +0x60 is released
+    // (the compiler chains ~ElementDescription and ~External).
+    ~NumberEditDescription();
 
 private:
     static const char* _TypeName();                              // 0x180045e50 -> "NumberEditDescription"
@@ -90,6 +128,8 @@ public:
 static_assert(sizeof(NumberEditDescription) == 0x88,
               "UI::NumberEditDescription is 0x88 (MOV EDX,0x88 at 0x1800461af)");
 static_assert(alignof(NumberEditDescription) == 8, "UI::NumberEditDescription aligns to 8");
+static_assert(!std::has_virtual_destructor<NumberEditDescription>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<NumberEditDescription>::value, "B39 D1: concrete");
 static_assert(offsetof(NumberEditDescription, _font) == sizeof(ElementDescription), "");
 static_assert(offsetof(NumberEditDescription, _font) == 0x68, "");
 static_assert(offsetof(NumberEditDescription, _i70)  == 0x70, "");

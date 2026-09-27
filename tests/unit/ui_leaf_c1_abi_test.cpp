@@ -324,7 +324,7 @@ bool ClipRegionElement::Contains(int32_t x, int32_t y, UserInterface* ui) const 
     Note(this, kClipE, 9);
     return Element::Contains(x, y, ui);
 }
-ClipRegionElement::~ClipRegionElement() {}
+ClipRegionElement::~ClipRegionElement() { B39NoteDtor(this); }
 
 // ---- BorderDescription / ClipRegionDescription: direct ElementDescription leaves.
 const char* BorderDescription::TypeName() const { Note(this, kBorderD, 1); return "BorderDescription"; }
@@ -361,7 +361,7 @@ Object::InternalPtr<Element>* ClipRegionDescription::CreateInstance(
     return ret;
 }
 Object::External* ClipRegionDescription::Construct() { Note(this, kClipD, 9); return this; }
-ClipRegionDescription::~ClipRegionDescription() {}
+ClipRegionDescription::~ClipRegionDescription() { B39NoteDtor(this); }
 
 }  // namespace UI
 
@@ -729,10 +729,12 @@ UNIT_TEST(ui_c1_border_clipregion_layout) {
     CHECK((std::is_base_of<UI::ElementDescription, UI::ClipRegionDescription>::value));
     CHECK(!std::is_abstract<UI::BorderElement>::value);      // B.3.9 UI-A: concrete
     CHECK(!std::is_destructible<UI::BorderElement>::value);  // protected non-virtual dtor
-    CHECK(std::is_abstract<UI::ClipRegionElement>::value);
+    CHECK(!std::is_abstract<UI::ClipRegionElement>::value);      // B.3.9 UI-A: concrete
+    CHECK(!std::is_destructible<UI::ClipRegionElement>::value);  // protected non-virtual dtor
     CHECK(!std::is_abstract<UI::BorderDescription>::value);      // B.3.9 UI-A: concrete
     CHECK(!std::is_destructible<UI::BorderDescription>::value);  // protected non-virtual dtor
-    CHECK(std::is_abstract<UI::ClipRegionDescription>::value);
+    CHECK(!std::is_abstract<UI::ClipRegionDescription>::value);      // B.3.9 UI-A: concrete
+    CHECK(!std::is_destructible<UI::ClipRegionDescription>::value);  // protected non-virtual dtor
     CHECK(!std::has_virtual_destructor<UI::BorderElement>::value);
     CHECK(!std::has_virtual_destructor<UI::ClipRegionElement>::value);
 
@@ -951,4 +953,62 @@ UNIT_TEST(b39_uia_border_deletingdtor_both_arms) {
     FactoryScope scope;
     B39ExpectBothArms<UI::BorderElement>(0x150, [](void* p) { return ::new (p) UI::BorderElement(); });
     B39ExpectBothArms<UI::BorderDescription>(0xb8, [](void* p) { return ::new (p) UI::BorderDescription(); });
+}
+
+UNIT_TEST(b39_uia_clipregion_slot_order_by_pmf) {
+    using CE = UI::ClipRegionElement;
+    CHECK_EQ(SlotOffset(&CE::DeletingDtor),  (uintptr_t)0x00);   // 0x180038370
+    CHECK_EQ(SlotOffset(&CE::TypeName),      (uintptr_t)0x08);
+    CHECK_EQ(SlotOffset(&CE::Type),          (uintptr_t)0x10);
+    CHECK_EQ(SlotOffset(&CE::ComputeSize),   (uintptr_t)0x20);
+    CHECK_EQ(SlotOffset(&CE::ComputeLayout), (uintptr_t)0x28);
+    CHECK_EQ(SlotOffset(&CE::Draw),          (uintptr_t)0x30);
+    CHECK_EQ(SlotOffset(&CE::Update),        (uintptr_t)0x38);
+    CHECK_EQ(SlotOffset(&CE::Contains),      (uintptr_t)0x48);
+    using CD = UI::ClipRegionDescription;
+    CHECK_EQ(SlotOffset(&CD::DeletingDtor),   (uintptr_t)0x00);  // 0x180037eb0
+    CHECK_EQ(SlotOffset(&CD::GetFileVersion), (uintptr_t)0x18);
+    CHECK_EQ(SlotOffset(&CD::Serialize),      (uintptr_t)0x28);
+    CHECK_EQ(SlotOffset(&CD::Reconstruct),    (uintptr_t)0x30);
+    CHECK_EQ(SlotOffset(&CD::Destruct),       (uintptr_t)0x38);
+    CHECK_EQ(SlotOffset(&CD::CreateInstance), (uintptr_t)0x40);
+    CHECK_EQ(SlotOffset(&CD::Construct),      (uintptr_t)0x48);
+}
+
+// ??0ClipRegionElement 0x1800cbe60: Element(), then 100, 100, 0, 0, 0, 0.
+// ??0ClipRegionDescription 0x1800cc140: ElementDescription(), 0x64, 0x64, null.
+UNIT_TEST(b39_uia_clipregion_ctors_make_retails_stores) {
+    FactoryScope scope;
+    alignas(8) uint8_t buf[0xd8];
+    std::memset(buf, 0xCD, sizeof buf);
+    UI::ClipRegionElement* e = ::new (buf) UI::ClipRegionElement();
+    CHECK_EQ(e->_alignment, 3);
+    CHECK_EQ(e->_reqWidth, 100);
+    CHECK_EQ(e->_reqHeight, 100);
+    CHECK_EQ(e->_innerWidth, 0);
+    CHECK_EQ(e->_innerHeight, 0);
+    CHECK_EQ(e->_offsetX, 0);
+    CHECK_EQ(e->_offsetY, 0);
+    ClipRegionElementProbe probe{};
+    CHECK(VTableOf(e) != VTableOf(&probe));
+    g_b39DtorCount = 0;
+    CHECK(e->DeletingDtor(0) == e);
+    CHECK_EQ(g_b39DtorCount, 1);
+
+    alignas(8) uint8_t dbuf[0x78];
+    std::memset(dbuf, 0xCD, sizeof dbuf);
+    UI::ClipRegionDescription* d = ::new (dbuf) UI::ClipRegionDescription();
+    CHECK_EQ(d->_id, -1);
+    CHECK_EQ(d->_width, 0x64);
+    CHECK_EQ(d->_height, 0x64);
+    CHECK(d->_childDesc == nullptr);
+    g_b39DtorCount = 0;
+    CHECK(d->DeletingDtor(0) == d);
+    CHECK_EQ(g_b39DtorCount, 1);
+}
+
+UNIT_TEST(b39_uia_clipregion_deletingdtor_both_arms) {
+    FactoryScope scope;
+    B39ExpectBothArms<UI::ClipRegionElement>(0xd8, [](void* p) { return ::new (p) UI::ClipRegionElement(); });
+    B39ExpectBothArms<UI::ClipRegionDescription>(0x78, [](void* p) { return ::new (p) UI::ClipRegionDescription(); });
 }

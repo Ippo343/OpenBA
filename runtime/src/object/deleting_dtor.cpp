@@ -948,11 +948,9 @@ static constexpr DelDtorSpec kSpecs[] = {
     // be a manufactured crash rather than a measurement.
     RT_DELDTOR(0x1800481a0, 0x180110bd0, 0x0a0, "UI::ButtonDescription"),
     RT_DELDTOR(0x1800489c0, 0x180111620, 0x0a8, "UI::CheckDescription"),
-    RT_DELDTOR(0x180037eb0, 0x1800cc0d0, 0x078, "UI::ClipRegionDescription"),
     RT_DELDTOR(0x180074e70, 0x180112370, 0x0b8, "UI::ComboDescription"),
     RT_DELDTOR(0x180039c00, 0x1800ccff0, 0x090, "UI::ContainerDescription"),
     RT_DELDTOR(0x18003bd90, 0x1800cfb30, 0x0e8, "UI::DocumentTextDescription"),
-    RT_DELDTOR(0x18003fa20, 0x1800d11f0, 0x088, "UI::EditDescription"),
     RT_DELDTOR(0x1800403a0, 0x1800d1b30, 0x088, "UI::GraphDescription"),
     RT_DELDTOR(0x180042730, 0x1800d2960, 0x0b8, "UI::LabelDescription"),
 
@@ -1055,8 +1053,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // both rows.
     RT_DELDTOR(0x180043570, 0x1800d32a0, 0x0d0, "UI::LayoutElement"),
     RT_DELDTOR(0x180045320, 0x1800d4530, 0x100, "UI::ListElement"),
-    RT_DELDTOR(0x180046540, 0x1800d4c40, 0x100, "UI::NumberEditElement"),
-    RT_DELDTOR(0x18004ab80, 0x180118ce0, 0x0e8, "UI::NumberElement"),
     RT_DELDTOR(0x180047540, 0x1800d5220, 0x0c8, "UI::PageElement"),
     RT_DELDTOR(0x180078150, 0x180077ef0, 0x130, "UI::ProgressElement"),
     RT_DELDTOR(0x180047d50, 0x1800d5820, 0x0d8, "UI::RadioElement"),
@@ -1137,11 +1133,9 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180036db0, 0x1800cb3a0, 0x100, "UI::AnimatedImageElement"),
     RT_DELDTOR(0x1800485b0, 0x180110c90, 0x0d8, "UI::ButtonElement"),
     RT_DELDTOR(0x180048d80, 0x180111700, 0x0e0, "UI::CheckElement"),
-    RT_DELDTOR(0x180038370, 0x1800cbe30, 0x0d8, "UI::ClipRegionElement"),
     RT_DELDTOR(0x180075390, 0x180112490, 0x128, "UI::ComboElement"),
     RT_DELDTOR(0x18003a050, 0x1800ccb10, 0x0d8, "UI::ContainerElement"),
     RT_DELDTOR(0x18003c650, 0x1800cf320, 0x1c8, "UI::DocumentTextElement"),
-    RT_DELDTOR(0x18003fed0, 0x1800d0e50, 0x0f8, "UI::EditElement"),
     RT_DELDTOR(0x1800408b0, 0x1800d1840, 0x100, "UI::GraphElement"),
     RT_DELDTOR(0x180046e10, 0x180117cc0, 0x0c0, "UI::GroupElement"),
     RT_DELDTOR(0x180036600, 0x180118470, 0x0e0, "UI::ImageElement"),
@@ -1164,8 +1158,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // the same test the UI::ElementDescription row applies.
     RT_DELDTOR(0x1800431d0, 0x1800d3a10, 0x078, "UI::LayoutDescription"),
     RT_DELDTOR(0x180044ed0, 0x1800d4910, 0x090, "UI::ListDescription"),
-    RT_DELDTOR(0x18004a760, 0x180118c00, 0x088, "UI::NumberDescription"),
-    RT_DELDTOR(0x180046190, 0x1800d4fe0, 0x088, "UI::NumberEditDescription"),
     RT_DELDTOR(0x1800471a0, 0x1800d54b0, 0x080, "UI::PageDescription"),
     RT_DELDTOR(0x180077c80, 0x18011a080, 0x0b0, "UI::ProgressDescription"),
     RT_DELDTOR(0x180047930, 0x1800d5b20, 0x080, "UI::RadioDescription"),
@@ -1605,10 +1597,6 @@ void* RtDelDtor_ButtonDescription(void* self, unsigned flags) {
 void* RtDelDtor_CheckDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x1800489c0>());
 }
-// UI::ClipRegionDescription ~ = 0x1800cc0d0   (PORTED, clipregiondescription.cpp)
-void* RtDelDtor_ClipRegionDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180037eb0>());
-}
 // UI::ComboDescription      ~ = 0x180112370   (PORTED, combodescription.cpp)
 void* RtDelDtor_ComboDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180074e70>());
@@ -1620,10 +1608,6 @@ void* RtDelDtor_ContainerDescription(void* self, unsigned flags) {
 // UI::DocumentTextDescription ~ = 0x1800cfb30 (PORTED, documenttextdescription.cpp)
 void* RtDelDtor_DocumentTextDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18003bd90>());
-}
-// UI::EditDescription       ~ = 0x1800d11f0   (PORTED, editdescription.cpp)
-void* RtDelDtor_EditDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003fa20>());
 }
 // UI::GraphDescription      ~ = 0x1800d1b30   (PORTED, graphdescription.cpp)
 void* RtDelDtor_GraphDescription(void* self, unsigned flags) {
@@ -1694,10 +1678,6 @@ void* RtDelDtor_ButtonElement(void* self, unsigned flags) {
 void* RtDelDtor_CheckElement(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180048d80>());
 }
-// UI::ClipRegionElement  ~ClipRegionElement = 0x1800cbe30  (PORTED, runtime/src/ui/)
-void* RtDelDtor_ClipRegionElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180038370>());
-}
 // UI::ComboElement  ~ComboElement = 0x180112490  (PORTED, runtime/src/ui/)
 void* RtDelDtor_ComboElement(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180075390>());
@@ -1709,10 +1689,6 @@ void* RtDelDtor_ContainerElement(void* self, unsigned flags) {
 // UI::DocumentTextElement  ~DocumentTextElement = 0x1800cf320  (PORTED, runtime/src/ui/)
 void* RtDelDtor_DocumentTextElement(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18003c650>());
-}
-// UI::EditElement  ~EditElement = 0x1800d0e50  (PORTED, runtime/src/ui/)
-void* RtDelDtor_EditElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003fed0>());
 }
 // UI::GraphElement  ~GraphElement = 0x1800d1840  (PORTED, runtime/src/ui/)
 void* RtDelDtor_GraphElement(void* self, unsigned flags) {
@@ -1735,8 +1711,6 @@ void* RtDelDtor_LabelElement(void* self, unsigned flags) {
 // All fourteen ~Class bodies are PORTED (runtime/src/ui/<class>element.cpp).
 void* RtDelDtor_LayoutElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x180043570>()); }
 void* RtDelDtor_ListElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, Row<0x180045320>()); }
-void* RtDelDtor_NumberEditElement(void* self, unsigned flags) { return DeletingDtorCore(self, flags, Row<0x180046540>()); }
-void* RtDelDtor_NumberElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x18004ab80>()); }
 void* RtDelDtor_PageElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, Row<0x180047540>()); }
 void* RtDelDtor_ProgressElement(void* self, unsigned flags)   { return DeletingDtorCore(self, flags, Row<0x180078150>()); }
 void* RtDelDtor_RadioElement(void* self, unsigned flags)      { return DeletingDtorCore(self, flags, Row<0x180047d50>()); }
@@ -1761,14 +1735,6 @@ void* RtDelDtor_LayoutDescription(void* self, unsigned flags) {
 // UI::ListDescription         ~ListDescription = 0x1800d4910
 void* RtDelDtor_ListDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180044ed0>());
-}
-// UI::NumberDescription       ~NumberDescription = 0x180118c00
-void* RtDelDtor_NumberDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004a760>());
-}
-// UI::NumberEditDescription   ~NumberEditDescription = 0x1800d4fe0
-void* RtDelDtor_NumberEditDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180046190>());
 }
 // UI::PageDescription         ~PageDescription = 0x1800d54b0
 void* RtDelDtor_PageDescription(void* self, unsigned flags) {
@@ -1911,11 +1877,9 @@ void RtObjectDeletingDtorPortInit() {
     // Every address a LITERAL, for the reason the banner above gives.
     RegisterRuntimeAddr(0x1800481a0, (void*)&RtDelDtor_ButtonDescription);
     RegisterRuntimeAddr(0x1800489c0, (void*)&RtDelDtor_CheckDescription);
-    RegisterRuntimeAddr(0x180037eb0, (void*)&RtDelDtor_ClipRegionDescription);
     RegisterRuntimeAddr(0x180074e70, (void*)&RtDelDtor_ComboDescription);
     RegisterRuntimeAddr(0x180039c00, (void*)&RtDelDtor_ContainerDescription);
     RegisterRuntimeAddr(0x18003bd90, (void*)&RtDelDtor_DocumentTextDescription);
-    RegisterRuntimeAddr(0x18003fa20, (void*)&RtDelDtor_EditDescription);
     RegisterRuntimeAddr(0x1800403a0, (void*)&RtDelDtor_GraphDescription);
     RegisterRuntimeAddr(0x180042730, (void*)&RtDelDtor_LabelDescription);
 
@@ -1943,8 +1907,6 @@ void RtObjectDeletingDtorPortInit() {
     // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12) --------------------
     RegisterRuntimeAddr(0x180043570, (void*)&RtDelDtor_LayoutElement);
     RegisterRuntimeAddr(0x180045320, (void*)&RtDelDtor_ListElement);
-    RegisterRuntimeAddr(0x180046540, (void*)&RtDelDtor_NumberEditElement);
-    RegisterRuntimeAddr(0x18004ab80, (void*)&RtDelDtor_NumberElement);
     RegisterRuntimeAddr(0x180047540, (void*)&RtDelDtor_PageElement);
     RegisterRuntimeAddr(0x180078150, (void*)&RtDelDtor_ProgressElement);
     RegisterRuntimeAddr(0x180047d50, (void*)&RtDelDtor_RadioElement);
@@ -1960,11 +1922,9 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180036db0, (void*)&RtDelDtor_AnimatedImageElement);
     RegisterRuntimeAddr(0x1800485b0, (void*)&RtDelDtor_ButtonElement);
     RegisterRuntimeAddr(0x180048d80, (void*)&RtDelDtor_CheckElement);
-    RegisterRuntimeAddr(0x180038370, (void*)&RtDelDtor_ClipRegionElement);
     RegisterRuntimeAddr(0x180075390, (void*)&RtDelDtor_ComboElement);
     RegisterRuntimeAddr(0x18003a050, (void*)&RtDelDtor_ContainerElement);
     RegisterRuntimeAddr(0x18003c650, (void*)&RtDelDtor_DocumentTextElement);
-    RegisterRuntimeAddr(0x18003fed0, (void*)&RtDelDtor_EditElement);
     RegisterRuntimeAddr(0x1800408b0, (void*)&RtDelDtor_GraphElement);
     RegisterRuntimeAddr(0x180046e10, (void*)&RtDelDtor_GroupElement);
     RegisterRuntimeAddr(0x180036600, (void*)&RtDelDtor_ImageElement);
@@ -1972,8 +1932,6 @@ void RtObjectDeletingDtorPortInit() {
     // ---- VTABLE BATCH 2 (the UI::*Description second half), rows 103..115 --
     RegisterRuntimeAddr(0x1800431d0, (void*)&RtDelDtor_LayoutDescription);
     RegisterRuntimeAddr(0x180044ed0, (void*)&RtDelDtor_ListDescription);
-    RegisterRuntimeAddr(0x18004a760, (void*)&RtDelDtor_NumberDescription);
-    RegisterRuntimeAddr(0x180046190, (void*)&RtDelDtor_NumberEditDescription);
     RegisterRuntimeAddr(0x1800471a0, (void*)&RtDelDtor_PageDescription);
     RegisterRuntimeAddr(0x180077c80, (void*)&RtDelDtor_ProgressDescription);
     RegisterRuntimeAddr(0x180047930, (void*)&RtDelDtor_RadioDescription);

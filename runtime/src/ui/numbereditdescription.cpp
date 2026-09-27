@@ -6,7 +6,7 @@
 // and Page, which go through GroupDescription).
 //
 // ??_7NumberEditDescription@UI@@6B@ (retail 0x180156fe0), ten slots:
-//   0  deleting dtor      0x180046190  deleting_dtor.cpp row (sizeof 0x88)
+//   0  deleting dtor      0x180046190  NumberEditDescription.h (sizeof 0x88)
 //   1  TypeName           0x180045e90  here
 //   2  Type               0x180045e70  here
 //   3  GetFileVersion     0x1800d4fd0  here  (returns 0x1004)
@@ -16,7 +16,8 @@
 //   7  Destruct           0x180046040  here
 //   8  CreateInstance     0x1800d4cc0  here
 //   9  Construct          0x180046030  here
-// plus ??0NumberEditDescription@UI@@QEAA@XZ 0x1800d5050 (out of line) and
+// plus ??0NumberEditDescription@UI@@QEAA@XZ 0x1800d5050 (out of line; the real
+// ctor in the header since ENDGAME B.3.9 UI-A) and
 // ??1NumberEditDescription@UI@@UEAA@XZ 0x1800d4fe0.
 //
 // LAYOUT, sizeof 0x88 (`MOV EDX,0x88` at 0x1800461af). ElementDescription
@@ -57,22 +58,13 @@
 
 namespace {
 
-void* VtBase()                  { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* VtExternal()              { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* VtElementDescription()    { return RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@"); }
-void* VtNumberEditDescription() { return RT_DATA_SLOT(void*, "??_7NumberEditDescription@UI@@6B@"); }
-
 // RULE B6-5: the members resolve through namespace-scope atomics.
 std::atomic<void*> g_typeInfoSlot{nullptr};
-std::atomic<void*> g_vtNumberEditElementSlot{nullptr};
 std::atomic<void*> g_memFreeSlot{nullptr};
 
 const uint8_t* NumberEditDescriptionTypeInfo() {
     return static_cast<const uint8_t*>(rtuielem::AtomicExport(
         g_typeInfoSlot, "?_typeInfo@NumberEditDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
-void* VtNumberEditElement() {
-    return rtuielem::AtomicExport(g_vtNumberEditElementSlot, "??_7NumberEditElement@UI@@6B@");
 }
 
 template <typename Fn>
@@ -134,42 +126,11 @@ void StringReleaseInline(char** slot) {
 
 }  // namespace
 
-// ============================================================================
-// ??0NumberEditDescription@UI@@QEAA@XZ   retail 0x1800d5050 — a DOOR BODY
-// ============================================================================
-extern "C" void* RtUi_NumberEditDescription_Ctor(void* selfv) {
-    uint8_t* p = static_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtBase();                                              // 1800d5061
-    *v = VtExternal();                                          // 1800d506b
-    *reinterpret_cast<uint64_t*>(p + 0x08) = 0;                 // 1800d5080
-    *reinterpret_cast<uint64_t*>(p + 0x10) = 0;                 // 1800d5083
-    *reinterpret_cast<uint64_t*>(p + 0x18) = 0;                 // 1800d5087
-    *v = VtElementDescription();                                // 1800d508b
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;                 // 1800d5095
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;                 // 1800d5099
-    *reinterpret_cast<uint64_t*>(p + 0x30) = 0;                 // 1800d509d
-    *reinterpret_cast<int32_t*>(p + 0x38)  = 0;                 // 1800d50a1  DWORD
-    *reinterpret_cast<int32_t*>(p + 0x3c)  = -1;                // 1800d50a4  DWORD
-    *reinterpret_cast<uint64_t*>(p + 0x40) = 3;                 // 1800d50ab  ONE QWORD
-    *reinterpret_cast<uint64_t*>(p + 0x48) = 0;                 // 1800d50b3
-    *reinterpret_cast<uint64_t*>(p + 0x50) = 0;                 // 1800d50b7
-    *reinterpret_cast<uint64_t*>(p + 0x58) = 0;                 // 1800d50bb
-    *reinterpret_cast<uint64_t*>(p + 0x60) = 0;                 // 1800d50bf
-    *v = VtNumberEditDescription();                             // 1800d50c3
-    *reinterpret_cast<uint64_t*>(p + 0x68) = 0;                 // 1800d50cd  _font
-    // +0x70 (_i70) SKIPPED — see the banner. The next store is at +0x74.
-    *reinterpret_cast<int32_t*>(p + 0x74)  = 6;                 // 1800d50d1  _i74
-    *reinterpret_cast<int32_t*>(p + 0x78)  = static_cast<int32_t>(0xffff8001u);  // 1800d50d8 _i78
-    *reinterpret_cast<int32_t*>(p + 0x7c)  = 0x7fff;            // 1800d50df  _i7c
-    p[0x80] = 1;                                                // 1800d50e6  _b80
-    return p;                                                   // 1800d50ed
-}
-
 namespace UI {
 
-uint32_t NumberEditDescription::Type() const {
+uint32_t NumberEditDescription::Type() const { return TypeId(); }
+// ?TypeId@NumberEditDescription@UI@@SAIXZ 0x180045e80 — the record's first dword.
+uint32_t NumberEditDescription::TypeId() {
     uint32_t v = 0; __builtin_memcpy(&v, NumberEditDescriptionTypeInfo(), sizeof v); return v;
 }
 const char* NumberEditDescription::TypeName() const {
@@ -179,15 +140,13 @@ const char* NumberEditDescription::TypeName() const {
 }
 int32_t NumberEditDescription::GetFileVersion() const { return 0x1004; }
 
-// 0x180046030: null test (in the DOOR), then the ctor.
+// 0x180046030: null test (it sat in the retired door), then the ctor.
 Object::External* NumberEditDescription::Construct() {
-    RtUi_NumberEditDescription_Ctor(this);
-    return this;
+    return ::new (this) NumberEditDescription();
 }
 Object::External* NumberEditDescription::Reconstruct() {
     DeletingDtor(0);
-    RtUi_NumberEditDescription_Ctor(this);
-    return this;
+    return ::new (this) NumberEditDescription();
 }
 void NumberEditDescription::Destruct() { DeletingDtor(0); }
 
@@ -239,8 +198,9 @@ bool NumberEditDescription::Serialize(void* streamv) {
 // children.
 //
 // NumberEditElement is 0x100 bytes (`MOV EDX,0x100` at 0x1800d4cff). Its
-// construction CALLS ??0EditElement (0x1800d0f10, a door), stamps the
-// NumberEditElement vtable and writes the two dwords that the tail then
+// construction (the real ctor, NumberEditElement.h) CALLS ??0EditElement
+// (0x1800d0f10), stamps the NumberEditElement vtable and writes the two dwords
+// that the tail then
 // OVERWRITES with the description's own values. Retail does both; the pair at
 // 0x1800d4d41/0x1800d4d4b is not dead, because the null-allocation path skips
 // them and the tail's stores then run against a null pointer anyway.
@@ -259,13 +219,8 @@ Object::InternalPtr<Element>* NumberEditDescription::CreateInstance(
     void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0x100, 8);  // 1800d4cff (inlined)
 
     NumberEditElement* elem = static_cast<NumberEditElement*>(raw);
-    if (raw != nullptr) {                                      // 1800d4d2c
-        using EditElementCtorFn = void* (*)(void*);
-        RtAddr<EditElementCtorFn>(0x1800d0f10ull)(raw);        // 1800d4d31 ??0EditElement
-        *reinterpret_cast<void**>(raw) = VtNumberEditElement();            // 1800d4d37
-        elem->_min = static_cast<int32_t>(0xffff8001u);        // 1800d4d41
-        elem->_max = 0x8000;                                   // 1800d4d4b
-    }
+    if (raw != nullptr)                                        // 1800d4d2c
+        elem = ::new (raw) NumberEditElement();                // 1800d4d31..1800d4d4b inlined ctor
 
     void* slot = elem;                                         // 1800d4d5a
     // The non-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
@@ -327,109 +282,43 @@ Object::InternalPtr<Element>* NumberEditDescription::CreateInstance(
 }  // namespace UI
 
 // ============================================================================
-// ??1NumberEditDescription@UI@@UEAA@XZ   0x1800d4fe0 — a DOOR BODY
+// ??1NumberEditDescription@UI@@UEAA@XZ   0x1800d4fe0
 // ============================================================================
 // ONE String release — ElementDescription's _textName at +0x60, under the BASE
-// vtable. The ExternalPtr<Font> at +0x68 is not released (same asymmetry as
-// ~ImageDescription). Tail JMP to ??1External@Object@@.
-extern "C" void RtUi_NumberEditDescription_Dtor(void* selfv) {
-    UI::NumberEditDescription* self = reinterpret_cast<UI::NumberEditDescription*>(selfv);   // B.3.6 bridge
-    void** v = reinterpret_cast<void**>(selfv);
+// vtable — then the tail JMP to ??1External. ENDGAME B.3.9 UI-A: the body is
+// EMPTY and the compiler chains ~ElementDescription and ~External. The
+// ExternalPtr<Font> at +0x68 is not released (same asymmetry as
+// ~ImageDescription).
+namespace UI {
+NumberEditDescription::~NumberEditDescription() {}
 
-    *v = VtNumberEditDescription();                            // 1800d4ff6
-    *v = VtElementDescription();                               // 1800d5000
-
-    char*& text = self->_textName;
-    if (text != nullptr) {                                     // 1800d500e
-        --RefCount(text);                                      // 1800d5013
-        if (RefCount(text) == 0) {                             // 1800d5016
-            text = text - 8;                                   // 1800d501c
-            RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(text);
-        } else {
-            text = nullptr;                                    // 1800d502c
-        }
-    }
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(selfv);   // 1800d503c JMP
+// ?CreateNewObject@NumberEditDescription@UI@@SAPEAVBase@Object@@XZ  0x180045f80
+// The FACTUI2 row this replaces: MemAlloc(0x88, 8), retail's null branch, then
+// the out-of-line ctor ??0NumberEditDescription (0x1800d5050).
+Object::Base* NumberEditDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(NumberEditDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) NumberEditDescription();
 }
+// ?CreateInPlaceObject@NumberEditDescription@UI@@SAPEAVBase@Object@@PEAX@Z  0x180046000
+Object::Base* NumberEditDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) NumberEditDescription();
+}
+}  // namespace UI
 
 // ============================================================================
-// The registered doors — one QUALIFIED delegation each.
+// Registration. ENDGAME B.3.9 UI-A: the slot doors and the ??0 / ??1 doors,
+// read only by the retired minted table / RT_DELDTOR row / FACTUI2 row, are
+// gone. The factory pair (B39_RULES D2) is the class's own.
 // ============================================================================
-extern "C" uint32_t RtUi_NumberEditDescription_Type(const void* self) {
-    return reinterpret_cast<const UI::NumberEditDescription*>(self)->UI::NumberEditDescription::Type();   // B.3.6 bridge
-}
-extern "C" const char* RtUi_NumberEditDescription_TypeName(const void* self) {
-    return reinterpret_cast<const UI::NumberEditDescription*>(self)->UI::NumberEditDescription::TypeName();   // B.3.6 bridge
-}
-extern "C" int32_t RtUi_NumberEditDescription_GetFileVersion(const void* self) {
-    return reinterpret_cast<const UI::NumberEditDescription*>(self)->UI::NumberEditDescription::GetFileVersion();   // B.3.6 bridge
-}
-extern "C" void* RtUi_NumberEditDescription_Construct(void* self) {
-    if (self == nullptr) return nullptr;                       // 180046030
-    return reinterpret_cast<UI::NumberEditDescription*>(self)->UI::NumberEditDescription::Construct();   // B.3.6 bridge
-}
-extern "C" void* RtUi_NumberEditDescription_Reconstruct(void* self) {
-    return reinterpret_cast<UI::NumberEditDescription*>(self)->UI::NumberEditDescription::Reconstruct();   // B.3.6 bridge
-}
-extern "C" void RtUi_NumberEditDescription_Destruct(void* self) {
-    reinterpret_cast<UI::NumberEditDescription*>(self)->UI::NumberEditDescription::Destruct();   // B.3.6 bridge
-}
-extern "C" bool RtUi_NumberEditDescription_Serialize(void* self, void* stream) {
-    return reinterpret_cast<UI::NumberEditDescription*>(self)->UI::NumberEditDescription::Serialize(stream);   // B.3.6 bridge
-}
-// RDX is the caller's slot; the member writes it and hands it back (B6-2).
-extern "C" void** RtUi_NumberEditDescription_CreateInstance(const void* self, void** ret,
-                                                            const void* dialog) {
-    return reinterpret_cast<void**>(
-        reinterpret_cast<const UI::NumberEditDescription*>(self)->UI::NumberEditDescription::CreateInstance(   // B.3.6 bridge
-            reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
-            static_cast<const UI::Dialog*>(dialog)));
-}
-
 int RtUiNumberEditDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@NumberEditDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_NumberEditDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x180045e70ull, (void*)&RtUi_NumberEditDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@NumberEditDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_NumberEditDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x180045e90ull, (void*)&RtUi_NumberEditDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@NumberEditDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_NumberEditDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x1800d4fd0ull, (void*)&RtUi_NumberEditDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@NumberEditDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_NumberEditDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x180046030ull, (void*)&RtUi_NumberEditDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@NumberEditDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_NumberEditDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x180046010ull, (void*)&RtUi_NumberEditDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@NumberEditDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_NumberEditDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x180046040ull, (void*)&RtUi_NumberEditDescription_Destruct);
-
-    RegisterRuntimeExport("??0NumberEditDescription@UI@@QEAA@XZ",
-                          (void*)&RtUi_NumberEditDescription_Ctor);            ++n;
-    RegisterRuntimeAddr(0x1800d5050ull, (void*)&RtUi_NumberEditDescription_Ctor);
-
-    RegisterRuntimeExport("??1NumberEditDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_NumberEditDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x1800d4fe0ull, (void*)&RtUi_NumberEditDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@NumberEditDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_NumberEditDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x1800d4ee0ull, (void*)&RtUi_NumberEditDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@NumberEditDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_NumberEditDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x1800d4cc0ull, (void*)&RtUi_NumberEditDescription_CreateInstance);
-
+    RegisterRuntimeExport("?CreateNewObject@NumberEditDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::NumberEditDescription::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x180045f80ull, (void*)&UI::NumberEditDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@NumberEditDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::NumberEditDescription::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x180046000ull, (void*)&UI::NumberEditDescription::CreateInPlaceObject);
     return n;
 }

@@ -28,12 +28,21 @@
 // The `NumberType` enum `?GetNumberType@NumberElement@UI@@` returns is nested
 // here (`W4NumberType@NumberDescription@2@`); its enumerator names are not in
 // the binary, and none is invented (0 = int, 1 = float per CacheText).
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0NumberDescription@UI@@QEAA@XZ` (0x180118b60) minus its vptr stores;
+// slot 0 is the class's own vector deleting dtor; ~NumberDescription is protected and
+// non-virtual. The factory pair is the class's own; the minted
+// `??_7NumberDescription@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
+// the doors are retired.
 // ============================================================================
 
+#include <type_traits>
 #include <cstdint>
 #include <cstddef>
 
 #include "ElementDescription.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI {
 
@@ -46,7 +55,35 @@ public:
     // A `W4` enum: four bytes, returned in EAX.
     enum NumberType : int32_t {};
 
-    Object::Base* DeletingDtor(unsigned flags) override = 0;     // [0] 0x18004a760
+    // ??0NumberDescription@UI@@QEAA@XZ 0x180118b60 — the REAL constructor, the
+    // same stores Construct / Reconstruct inline (0x18004a586..0x18004a600):
+    // ElementDescription()'s stores, then +0x68 QWORD 0, +0x70 QWORD 0 (both
+    // _u70 and _i74), +0x78 DWORD 0 (0.0f), +0x7c BYTE 0. The tail pad stays
+    // unwritten.
+    NumberDescription() : ElementDescription() {
+        _font = nullptr;
+        _u70  = 0;
+        _i74  = 0;
+        _f78  = 0.0f;
+        _b7c  = 0;
+    }
+
+    // [0] 0x18004a760 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x88`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<NumberDescription*>(self + static_cast<int64_t>(i) * 0x88)
+                    ->~NumberDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~NumberDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                       // [1] 0x18004a240
     uint32_t    Type() const override;                           // [2] 0x18004a220
     int32_t     GetFileVersion() const override;                 // [3] 0x180118e20
@@ -60,16 +97,18 @@ public:
 
     NumberDescription(const NumberDescription& src);             // 0x18004a620  not ported
     NumberDescription& operator=(const NumberDescription& src);  // 0x18004a690  not ported
-    static uint32_t TypeId();                                    // 0x18004a230  not ported
-    static Object::Base* CreateNewObject();                      // 0x18004a330  ui_factory_wave28.cpp door
-    static Object::Base* CreateInPlaceObject(void* place);       // 0x18004a420  ui_factory_wave28.cpp door
+    static uint32_t TypeId();                                    // 0x18004a230  ported over the minted record
+    static Object::Base* CreateNewObject();                      // 0x18004a330  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);       // 0x18004a420  the class's own (B39 D2)
     static void* operator new(std::size_t bytes);                // 0x18004a250  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x18004a2c0  not ported
     static void  operator delete(void* p);                       // 0x18004a2d0  not ported
 
 protected:
-    NumberDescription() = default;   // NOT retail's 0x180118b60 (ui_factory_wave28.cpp door)
-    ~NumberDescription();            // 0x180118c00 — NOT defined (~ElementDescription is not)
+    // `??1NumberDescription@UI@@UEAA@XZ` (0x180118c00). NON-VIRTUAL and EMPTY
+    // (numberdescription.cpp): only the base's +0x60 is released; the
+    // compiler chains ~ElementDescription and ~External.
+    ~NumberDescription();
 
 private:
     static const char* _TypeName();                              // 0x18004a200 -> "NumberDescription"
@@ -88,6 +127,8 @@ public:
 static_assert(sizeof(NumberDescription) == 0x88,
               "UI::NumberDescription is 0x88 (MOV EDX,0x88 at 0x18004a77f)");
 static_assert(alignof(NumberDescription) == 8, "UI::NumberDescription aligns to 8");
+static_assert(!std::has_virtual_destructor<NumberDescription>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<NumberDescription>::value, "B39 D1: concrete");
 static_assert(sizeof(NumberDescription::NumberType) == 4, "a W4 enum is four bytes");
 static_assert(offsetof(NumberDescription, _font) == sizeof(ElementDescription), "");
 static_assert(offsetof(NumberDescription, _font) == 0x68, "");
