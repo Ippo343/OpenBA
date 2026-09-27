@@ -435,8 +435,8 @@ struct SliderElementProbe final : UI::SliderElement {
 }  // namespace
 
 UNIT_TEST(ui_c5_slider_layout) {
-    CheckShape<UI::SliderDescription, UI::ElementDescription>(0xb8);   // 0x180049c60
-    CheckShape<UI::SliderElement, UI::Element>(0x130);                 // 0x18004a180
+    CheckShape<UI::SliderDescription, UI::ElementDescription>(0xb8, true);   // 0x180049c60
+    CheckShape<UI::SliderElement, UI::Element>(0x130, true);                 // 0x18004a180
     CHECK_EQ(offsetof(UI::SliderDescription, _childDescription), sizeof(UI::ElementDescription));
     CHECK_EQ(offsetof(UI::SliderDescription, _steps), (size_t)0xb0);
     CHECK_EQ(offsetof(UI::SliderElement, _trackStart), sizeof(UI::Element));
@@ -747,4 +747,43 @@ UNIT_TEST(b39_uib_c5_progress_ribbon_deletingdtor_arms) {
     B39CheckDeletingDtorArms<UI::RibbonDescription, 0x80>(VTableOf(&rdp));
     RibbonElementProbe rep{};
     B39CheckDeletingDtorArms<UI::RibbonElement, 0xd8>(VTableOf(&rep));
+}
+
+// ---- Slider (ENDGAME B.3.9 UI-B) -------------------------------------------
+UNIT_TEST(b39_uib_c5_slider) {
+    B39CheckDescriptionPmf<UI::SliderDescription>();
+    B39CheckElementPmf<UI::SliderElement>();
+
+    FactoryScope scope;
+    // ??0SliderDescription 0x1800d7b60: +0xb4 written by nothing.
+    alignas(8) uint8_t d[0xb8];
+    std::memset(d, 0xCD, sizeof d);
+    auto* sd = ::new (static_cast<void*>(d)) UI::SliderDescription();
+    CHECK(sd->_childDescription == nullptr);
+    CHECK(sd->_thumbHotName == nullptr);
+    CHECK_EQ(sd->_trackOffsetY, 0);
+    CHECK_EQ(sd->_thumbMargin, 0);
+    CHECK(sd->_minimum == 0.0f);
+    CHECK(sd->_maximum == 1.0f);
+    CHECK_EQ(sd->_steps, 10);
+    CHECK_EQ((int)d[0xb4], 0xCD);
+    sd->DeletingDtor(0);
+    // ??0SliderElement 0x1800d7570: +0x125..+0x127 and +0x12c NOT written.
+    alignas(8) uint8_t e[0x130];
+    std::memset(e, 0xCD, sizeof e);
+    auto* se = ::new (static_cast<void*>(e)) UI::SliderElement();
+    CHECK(se->_thumb.spriteSheet == nullptr);
+    CHECK_EQ(se->_thumbHot.spriteIndex, -1);
+    CHECK(se->_maximum == 1.0f);
+    CHECK_EQ(se->_steps, 10);
+    CHECK_EQ((int)se->_hovered, 0);
+    CHECK(se->_value == 0.25f);
+    CHECK_EQ((int)e[0x125], 0xCD);
+    CHECK_EQ((int)e[0x12c], 0xCD);
+    se->DeletingDtor(0);
+
+    SliderDescriptionProbe dp;
+    B39CheckDeletingDtorArms<UI::SliderDescription, 0xb8>(VTableOf(&dp));
+    SliderElementProbe ep{};
+    B39CheckDeletingDtorArms<UI::SliderElement, 0x130>(VTableOf(&ep));
 }

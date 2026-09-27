@@ -1048,8 +1048,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x18004ab80, 0x180118ce0, 0x0e8, "UI::NumberElement"),
     RT_DELDTOR(0x180047540, 0x1800d5220, 0x0c8, "UI::PageElement"),
     RT_DELDTOR(0x180047d50, 0x1800d5820, 0x0d8, "UI::RadioElement"),
-    RT_DELDTOR(0x18003adc0, 0x18011a900, 0x178, "UI::ScrollElement"),
-    RT_DELDTOR(0x18004a180, 0x180049ee0, 0x130, "UI::SliderElement"),
     RT_DELDTOR(0x18004b3b0, 0x1800d8640, 0x0c8, "UI::SpinnerElement"),
     RT_DELDTOR(0x18004ca90, 0x1800da360, 0x108, "UI::TabElement"),
     RT_DELDTOR(0x180079600, 0x18011e2a0, 0x0f0, "UI::TableElement"),
@@ -1151,8 +1149,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180046190, 0x1800d4fe0, 0x088, "UI::NumberEditDescription"),
     RT_DELDTOR(0x1800471a0, 0x1800d54b0, 0x080, "UI::PageDescription"),
     RT_DELDTOR(0x180047930, 0x1800d5b20, 0x080, "UI::RadioDescription"),
-    RT_DELDTOR(0x18003a790, 0x18011a5d0, 0x0c8, "UI::ScrollDescription"),
-    RT_DELDTOR(0x180049c60, 0x1800d7a00, 0x0b8, "UI::SliderDescription"),
     RT_DELDTOR(0x18004b050, 0x1800d8950, 0x088, "UI::SpinnerDescription"),
     RT_DELDTOR(0x18004c640, 0x1800da8e0, 0x0b8, "UI::TabDescription"),
     RT_DELDTOR(0x180079210, 0x18011e6f0, 0x098, "UI::TableDescription"),
@@ -1700,8 +1696,6 @@ void* RtDelDtor_NumberEditElement(void* self, unsigned flags) { return DeletingD
 void* RtDelDtor_NumberElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x18004ab80>()); }
 void* RtDelDtor_PageElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, Row<0x180047540>()); }
 void* RtDelDtor_RadioElement(void* self, unsigned flags)      { return DeletingDtorCore(self, flags, Row<0x180047d50>()); }
-void* RtDelDtor_ScrollElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x18003adc0>()); }
-void* RtDelDtor_SliderElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x18004a180>()); }
 void* RtDelDtor_SpinnerElement(void* self, unsigned flags)    { return DeletingDtorCore(self, flags, Row<0x18004b3b0>()); }
 void* RtDelDtor_TabElement(void* self, unsigned flags)        { return DeletingDtorCore(self, flags, Row<0x18004ca90>()); }
 void* RtDelDtor_TableElement(void* self, unsigned flags)      { return DeletingDtorCore(self, flags, Row<0x180079600>()); }
@@ -1727,14 +1721,6 @@ void* RtDelDtor_PageDescription(void* self, unsigned flags) {
 // UI::RadioDescription        ~RadioDescription = 0x1800d5b20
 void* RtDelDtor_RadioDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180047930>());
-}
-// UI::ScrollDescription       ~ScrollDescription = 0x18011a5d0
-void* RtDelDtor_ScrollDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003a790>());
-}
-// UI::SliderDescription       ~SliderDescription = 0x1800d7a00
-void* RtDelDtor_SliderDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180049c60>());
 }
 // UI::SpinnerDescription      ~SpinnerDescription = 0x1800d8950
 void* RtDelDtor_SpinnerDescription(void* self, unsigned flags) {
@@ -1888,8 +1874,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18004ab80, (void*)&RtDelDtor_NumberElement);
     RegisterRuntimeAddr(0x180047540, (void*)&RtDelDtor_PageElement);
     RegisterRuntimeAddr(0x180047d50, (void*)&RtDelDtor_RadioElement);
-    RegisterRuntimeAddr(0x18003adc0, (void*)&RtDelDtor_ScrollElement);
-    RegisterRuntimeAddr(0x18004a180, (void*)&RtDelDtor_SliderElement);
     RegisterRuntimeAddr(0x18004b3b0, (void*)&RtDelDtor_SpinnerElement);
     RegisterRuntimeAddr(0x18004ca90, (void*)&RtDelDtor_TabElement);
     RegisterRuntimeAddr(0x180079600, (void*)&RtDelDtor_TableElement);
@@ -1911,8 +1895,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180046190, (void*)&RtDelDtor_NumberEditDescription);
     RegisterRuntimeAddr(0x1800471a0, (void*)&RtDelDtor_PageDescription);
     RegisterRuntimeAddr(0x180047930, (void*)&RtDelDtor_RadioDescription);
-    RegisterRuntimeAddr(0x18003a790, (void*)&RtDelDtor_ScrollDescription);
-    RegisterRuntimeAddr(0x180049c60, (void*)&RtDelDtor_SliderDescription);
     RegisterRuntimeAddr(0x18004b050, (void*)&RtDelDtor_SpinnerDescription);
     RegisterRuntimeAddr(0x18004c640, (void*)&RtDelDtor_TabDescription);
     RegisterRuntimeAddr(0x180079210, (void*)&RtDelDtor_TableDescription);

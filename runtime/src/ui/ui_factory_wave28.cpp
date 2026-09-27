@@ -613,104 +613,6 @@ extern "C" void* RtUiFact_RadioElement_CreateInPlaceObject(void* p) {
 }
 
 // --------------------------------------------------------------------------
-// UI::ScrollDescription   allocation 0xc8, align 8
-//   ?CreateNewObject@ScrollDescription@UI@@SAPEAVBase@Object@@XZ   0x18003a210 ord 2105
-//   ?CreateInPlaceObject@ScrollDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x18003a290 ord 1968
-//   ??0ScrollDescription@UI@@QEAA@XZ                               0x18011a4e0 ord 378
-// SHAPE C: the factory pair is a bare `alloc / null test / call the
-// exported ctor`. The whole body lives in ??0ScrollDescription@UI@@QEAA@XZ.
-// That ctor IS ported below, so this row does not merely move the wall.
-extern "C" void* RtUi_ScrollDescription_Ctor(void* self);
-void* Ctor_ScrollDescription(void* p) { return RtUi_ScrollDescription_Ctor(p); }
-
-extern "C" void* RtUiFact_ScrollDescription_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0xc8, &Ctor_ScrollDescription);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_ScrollDescription_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_ScrollDescription);
-}
-
-// --------------------------------------------------------------------------
-// UI::ScrollElement   allocation 0x178, align 8
-//   ?CreateNewObject@ScrollElement@UI@@SAPEAVBase@Object@@XZ       0x18003a940 ord 2106
-//   ?CreateInPlaceObject@ScrollElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x18003a9c0 ord 1969
-//   ??0ScrollElement@UI@@QEAA@XZ                                   0x18011a7f0 ord 380
-// SHAPE C: the factory pair is a bare `alloc / null test / call the
-// exported ctor`. The whole body lives in ??0ScrollElement@UI@@QEAA@XZ.
-// That ctor IS ported below, so this row does not merely move the wall.
-extern "C" void* RtUi_ScrollElement_Ctor(void* self);   // runtime/src/ui/scrollelement.cpp
-// The inlined stores that used to live here were a second copy of
-// ??0ScrollElement@UI@@QEAA@XZ; the class file owns the body since vtable
-// batch 4 (2026-09-12) and this factory pair forwards to it.
-void* Ctor_ScrollElement(void* p) { return RtUi_ScrollElement_Ctor(p); }
-
-extern "C" void* RtUiFact_ScrollElement_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0x178, &Ctor_ScrollElement);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_ScrollElement_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_ScrollElement);
-}
-
-// --------------------------------------------------------------------------
-// UI::SliderDescription   allocation 0xb8, align 8
-//   ?CreateNewObject@SliderDescription@UI@@SAPEAVBase@Object@@XZ   0x180049840 ord 2108
-//   ?CreateInPlaceObject@SliderDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x1800498c0 ord 1971
-//   ??0SliderDescription@UI@@QEAA@XZ                               0x1800d7b60 ord 385
-// SHAPE C: the factory pair is a bare `alloc / null test / call the
-// exported ctor`. The whole body lives in ??0SliderDescription@UI@@QEAA@XZ.
-// That ctor IS ported below, so this row does not merely move the wall.
-extern "C" void* RtUi_SliderDescription_Ctor(void* self);
-void* Ctor_SliderDescription(void* p) { return RtUi_SliderDescription_Ctor(p); }
-
-extern "C" void* RtUiFact_SliderDescription_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0xb8, &Ctor_SliderDescription);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_SliderDescription_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_SliderDescription);
-}
-
-// --------------------------------------------------------------------------
-// UI::SliderElement   allocation 0x130, align 8
-//   ?CreateNewObject@SliderElement@UI@@SAPEAVBase@Object@@XZ       0x180049e10 ord 2109
-//   ?CreateInPlaceObject@SliderElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180049e90 ord 1972
-//   ??0SliderElement@UI@@QEAA@XZ                                   0x1800d7570 ord 387
-// SHAPE C: the factory pair is a bare `alloc / null test / call the
-// exported ctor`. The whole body lives in ??0SliderElement@UI@@QEAA@XZ.
-// That ctor IS ported below, so this row does not merely move the wall.
-extern "C" void* RtUi_SliderElement_Ctor(void* self);   // runtime/src/ui/sliderelement.cpp
-// The inlined stores that used to live here were a second copy of
-// ??0SliderElement@UI@@QEAA@XZ; the class file owns the body since vtable
-// batch 4 (2026-09-12) and this factory pair forwards to it.
-void* Ctor_SliderElement(void* p) { return RtUi_SliderElement_Ctor(p); }
-
-extern "C" void* RtUiFact_SliderElement_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0x130, &Ctor_SliderElement);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_SliderElement_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_SliderElement);
-}
-
-// --------------------------------------------------------------------------
 // UI::SpinnerDescription   allocation 0x88, align 8
 //   ?CreateNewObject@SpinnerDescription@UI@@SAPEAVBase@Object@@XZ  0x18004ae50 ord 2112
 //   ?CreateInPlaceObject@SpinnerDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x18004aed0 ord 1975
@@ -1073,34 +975,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@RadioElement@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_RadioElement_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180047ba0ull, (void*)&RtUiFact_RadioElement_CreateInPlaceObject); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@ScrollDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_ScrollDescription_CreateNewObject);
-    RegisterRuntimeAddr(0x18003a210ull, (void*)&RtUiFact_ScrollDescription_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@ScrollDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_ScrollDescription_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x18003a290ull, (void*)&RtUiFact_ScrollDescription_CreateInPlaceObject); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@ScrollElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_ScrollElement_CreateNewObject);
-    RegisterRuntimeAddr(0x18003a940ull, (void*)&RtUiFact_ScrollElement_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@ScrollElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_ScrollElement_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x18003a9c0ull, (void*)&RtUiFact_ScrollElement_CreateInPlaceObject); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@SliderDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_SliderDescription_CreateNewObject);
-    RegisterRuntimeAddr(0x180049840ull, (void*)&RtUiFact_SliderDescription_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@SliderDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_SliderDescription_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x1800498c0ull, (void*)&RtUiFact_SliderDescription_CreateInPlaceObject); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@SliderElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_SliderElement_CreateNewObject);
-    RegisterRuntimeAddr(0x180049e10ull, (void*)&RtUiFact_SliderElement_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@SliderElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_SliderElement_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x180049e90ull, (void*)&RtUiFact_SliderElement_CreateInPlaceObject); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@SpinnerDescription@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_SpinnerDescription_CreateNewObject);

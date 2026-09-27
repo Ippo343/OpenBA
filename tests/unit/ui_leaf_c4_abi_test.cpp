@@ -230,12 +230,12 @@ UNIT_TEST(ui_c4_classes_are_abstract_single_base_no_virtual_dtor) {
     C4_CONCRETE(ContainerDescription, ElementDescription)
     C4_CONCRETE(LayoutDescription, ElementDescription)
     C4_CONCRETE(ListDescription,   ElementDescription)
-    C4_SHAPE(ScrollDescription,    ElementDescription)
+    C4_CONCRETE(ScrollDescription, ElementDescription)
     C4_SHAPE(TableDescription,     ElementDescription)
     C4_CONCRETE(ContainerElement,  Element)
     C4_CONCRETE(LayoutElement,     Element)
     C4_CONCRETE(ListElement,       Element)
-    C4_SHAPE(ScrollElement,        Element)
+    C4_CONCRETE(ScrollElement,     Element)
     C4_SHAPE(TableElement,         Element)
 #undef C4_SHAPE
 #undef C4_CONCRETE
@@ -629,4 +629,45 @@ UNIT_TEST(ui_c4_inline_accessors_read_the_retail_offsets) {
     s.SetCurrentValue(2.5f);
     CHECK(s._currentValue == 2.5f);          // 0x18003aa10
     CHECK(s.GetCurrentValue() == 2.5f);      // 0x18003aa20
+}
+
+// ---- Scroll (ENDGAME B.3.9 UI-B) -------------------------------------------
+UNIT_TEST(b39_uib_c4_scroll) {
+    B39CheckDescriptionPmf<UI::ScrollDescription>();
+    B39CheckElementPmf<UI::ScrollElement>();
+
+    FactoryScope scope;
+    // ??0ScrollDescription 0x18011a4e0: +0xb9..+0xbb written by nothing.
+    alignas(8) uint8_t d[0xc8];
+    std::memset(d, 0xCD, sizeof d);
+    auto* sd = ::new (static_cast<void*>(d)) UI::ScrollDescription();
+    CHECK(sd->_spriteSheet == nullptr);
+    for (int i = 0; i < 9; ++i) CHECK(sd->_spriteNames[i] == nullptr);
+    CHECK_EQ((int)sd->_vertical, 1);
+    CHECK_EQ((int)d[0xb9], 0xCD);
+    CHECK_EQ(sd->_inset, 1);
+    CHECK_EQ(sd->_barColor, 0xffffffffu);
+    CHECK_EQ(sd->_unknownC4, 0xffffffffu);
+    sd->DeletingDtor(0);
+    // ??0ScrollElement 0x18011a7f0: _inset (+0x15c) NOT written.
+    alignas(8) uint8_t e[0x178];
+    std::memset(e, 0xCD, sizeof e);
+    auto* se = ::new (static_cast<void*>(e)) UI::ScrollElement();
+    CHECK(se->_trackStart.spriteSheet == nullptr);
+    CHECK_EQ(se->_hotEnd.spriteIndex, -1);
+    CHECK_EQ((int)se->_vertical, 1);
+    CHECK_EQ(se->_barColor, 0xffffffffu);
+    CHECK_EQ(se->_unknown158, 0xffffffffu);
+    CHECK_EQ((int)e[0x15c], 0xCD);
+    CHECK(se->_currentValue == 0.0f);
+    CHECK(se->_displayPercent == 0.33333334f);
+    CHECK(se->_maxValue == 4.0f);
+    CHECK(se->_dragAnchor == 0.0f);
+    CHECK(se->_dragValue == 0.0f);
+    se->DeletingDtor(0);
+
+    ScrollDProbe dp;
+    B39CheckDeletingDtorArms<UI::ScrollDescription, 0xc8>(VTableOf(&dp));
+    ScrollEProbe ep;
+    B39CheckDeletingDtorArms<UI::ScrollElement, 0x178>(VTableOf(&ep));
 }

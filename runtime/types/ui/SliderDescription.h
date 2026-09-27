@@ -29,6 +29,13 @@
 //   [7] 0x180049900 Destruct        [8] 0x1800d7630 CreateInstance RETSLOT (B6-2)
 //   [9] 0x1800498f0 Construct — INTRODUCED here (B6-1.1)
 //
+// ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2) -- the paragraph below is
+// HISTORY: the class is now CONCRETE. A real public ctor (retail's stores), its
+// own slot 0 (the vector deleting dtor), a protected non-virtual ~SliderDescription holding
+// the retired ??1 door's body, and the factory pair as the class's own statics;
+// every live one wears the COMPILER's table. The minted `??_7SliderDescription@UI@@6B@`,
+// its RT_DELDTOR row 0x180049c60 and the ctor / dtor / slot doors are retired
+// (tools/rt_mint_retired/ui-b.txt).
 // ABSTRACT (slot 0 `= 0`), NO real ctor. The destructor is declared only:
 // `??1` (0x1800d7a00) is the registered door.
 // ============================================================================
@@ -42,7 +49,40 @@ namespace UI {
 
 class SliderDescription : public ElementDescription {
 public:
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180049c60
+    // ??0SliderDescription@UI@@QEAA@XZ 0x1800d7b60 -- the REAL ctor:
+    // ElementDescription's stores (inlined in retail), then +0x68..+0xa7 zero,
+    // +0xa8 0.0f, +0xac 1.0f (stored as the integer 0x3f800000), +0xb0 10.
+    // +0xb4 is written by nothing.
+    SliderDescription() : ElementDescription() {
+        _childDescription = nullptr;
+        _spriteSheet      = nullptr;
+        _trackStartName   = nullptr;
+        _trackMiddleName  = nullptr;
+        _trackEndName     = nullptr;
+        _thumbName        = nullptr;
+        _thumbHotName     = nullptr;
+        _trackOffsetY     = 0;
+        _thumbMargin      = 0;
+        _minimum          = 0.0f;
+        _maximum          = 1.0f;
+        _steps            = 10;
+    }
+
+    // [0] 0x180049c60 -- MSVC's VECTOR deleting destructor, both arms exactly as the
+    // retired RT_DELDTOR row ran them (`MOV EDX,0xb8` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<SliderDescription*>(self + static_cast<int64_t>(i) * 0xb8)->~SliderDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~SliderDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180049750
     uint32_t    Type() const override;                            // [2] 0x180049730
     int32_t     GetFileVersion() const override;                  // [3] 0x1800d79f0
@@ -56,13 +96,15 @@ public:
 
     SliderDescription(const SliderDescription& src);              // 0x180049910  not ported
     SliderDescription& operator=(const SliderDescription& src);   // 0x180049a30  not ported
-    static uint32_t TypeId();                                     // not ported
-    static Object::Base* CreateNewObject();                       // factory door
-    static Object::Base* CreateInPlaceObject(void* place);        // factory door
+    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
+    static Object::Base* CreateNewObject();                       // (D2) the class's own
+    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
-    SliderDescription() = default;   // NOT ??0SliderDescription (0x1800d7b60, a door)
-    ~SliderDescription();            // ??1SliderDescription 0x1800d7a00 — the door
+    // `??1SliderDescription@UI@@UEAA@XZ` (0x1800d7a00): NON-VIRTUAL (no virtual dtor until
+    // the normal-virtual cutover). Retail's body is in sliderdescription.cpp;
+    // the compiler chains the base's.
+    ~SliderDescription();
 
 private:
     static const char* _TypeName();                               // 0x180049710
