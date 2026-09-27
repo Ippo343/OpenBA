@@ -109,7 +109,7 @@ void PanelHoldClick(int frameNum) {
             std::fprintf(stderr, "[PanelHold] dialog #%d inst=%p controllers=%d:", dialogs, dlgInst, nc);
             for (int i = 0; i < nc && i < 32 && arr; ++i) {
                 void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-                uint32_t t = c ? (reinterpret_cast<uint32_t(*)(void*)>((*reinterpret_cast<void***>(c))[2]))(c) : 0;
+                uint32_t t = c ? reinterpret_cast<Object::Base*>(c)->Type() : 0;   // B.3.8 bridge
                 std::fprintf(stderr, " %08x", t);
             }
             std::fprintf(stderr, "\n");
@@ -132,11 +132,12 @@ void PanelHoldClick(int frameNum) {
         std::fflush(stderr);
         return;
     }
-    typedef void (*OnEvent_t)(void* self, void* p2, int msg, int id, int p5, int p6);
-    OnEvent_t onEvent = reinterpret_cast<OnEvent_t>((*reinterpret_cast<void***>(ctrl))[9]);
     std::fprintf(stderr, "[PanelHold] frame %d: click %s id=%d (msg 0x12) ctrl=%p\n", frameNum, s_ctrl, s_id, ctrl);
     std::fflush(stderr);
-    if (onEvent) onEvent(ctrl, nullptr, 0x12, s_id, 0, 0);
+    // slot 9: the controller's OnElementEvent (GetController hands back a
+    // UI::DialogController; every exe panel overrides it as a real class, ENDGAME B.3.8).
+    reinterpret_cast<UI::DialogController*>(ctrl)->OnElementEvent(   // B.3.8 bridge
+        nullptr, 0x12, s_id, 0, 0, 0, nullptr);
 }
 }  // namespace
 
@@ -154,9 +155,7 @@ void* FindComp(void* ent, uint32_t tid) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
         void* c = *slot;
         if (!c) continue;
-        typedef uint32_t (*GetTypeId_t)(void*);
-        const uint32_t t = (reinterpret_cast<GetTypeId_t>(
-            *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(c) + 0x10)))(c);
+        const uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge
         if (t == tid) return (!fn_IsDerivedFrom || fn_IsDerivedFrom(c, tid)) ? c : nullptr;
     }
     return nullptr;

@@ -38,6 +38,7 @@
 //
 // NOT autostart-exercised (player RemovalTool path) — Ghidra-verified only.
 
+#include "Player/RemovalTool.h"
 #include "engine_funcs.h"
 #include "perf_terrain.h"
 #include "resolve.h"
@@ -143,9 +144,9 @@ static void EnsureInit() {
     s_init = true;
 }
 
-// Component vtable+0x10 = GetTypeId(). Helper to read it.
+// Component virtual slot 2 (+0x10) = Type(). Helper to read it.
 static inline uint32_t CompTypeId(void* comp) {
-    return (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+    return reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 }
 
 // Shared FindComponent-by-type-id scan over an entity's component list
@@ -725,7 +726,7 @@ extern "C" void RemovalCalc_CitizenAI_9ad0(int64_t param_1, int param_2) {
 // grid and, per cell, applies the active RemovalDescription. See file header.
 // Faithful to the decompile.
 // ============================================================
-extern "C" uint64_t RemovalCalc_Slot13(int64_t param_1, int param_2, int param_3) {
+bool RemovalTool::CalcPath(int param_2, int param_3) {
     EnsureInit();
 
     // Decompile variable names preserved verbatim for offset-by-offset fidelity.
@@ -760,7 +761,7 @@ extern "C" uint64_t RemovalCalc_Slot13(int64_t param_1, int param_2, int param_3
     }
 
     // single-cell drag-snapshot validity (lVar21+0x80 flag)
-    int64_t lVar21 = *reinterpret_cast<int64_t*>(param_1 + 0x10);
+    int64_t lVar21 = reinterpret_cast<int64_t>(dialogPtr);
     if (*reinterpret_cast<char*>(lVar21 + 0x80) != 0) {
         int iVar24 = dim;
         int64_t uVar16b = (int64_t)*reinterpret_cast<int*>(lVar21 + 0x9c) / iVar24;
@@ -768,14 +769,14 @@ extern "C" uint64_t RemovalCalc_Slot13(int64_t param_1, int param_2, int param_3
             ((int)uVar26 != *reinterpret_cast<int*>(lVar21 + 0x98) / iVar24) ||
             (*reinterpret_cast<int*>(lVar21 + 0x9c) % iVar24 != (int)uVar3) ||
             ((int)uVar16b != (int)uVar13)) {
-            return (uint64_t)uVar16b & 0xffffff00ull;
+            return false;   // AL = 0 (retail: uVar16b & ~0xff in RAX; callers test AL)
         }
     }
 
     // RemovalTool_helper_d960 on the active desc's container (desc+0x38), if any
-    if (*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x38) + 0x38) != 0) {
+    if (*reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(removalDesc) + 0x38) != 0) {
         int64_t tmp58 = 0;
-        RemovalCalc_helper_d960(*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x38) + 0x38),
+        RemovalCalc_helper_d960(*reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(removalDesc) + 0x38),
                                 reinterpret_cast<void**>(&tmp58));
         uVar22 = (int64_t)local_res18;
     }
@@ -814,11 +815,11 @@ extern "C" uint64_t RemovalCalc_Slot13(int64_t param_1, int param_2, int param_3
                     int64_t local_e0 = local_e8;
 
                     // ---- building/item removal (sub_48a0) ----
-                    if ((char)PlayerPath_Sub_48a0(param_1, &local_e0, iCol, iRow) != 0) {
+                    if ((char)PlayerPath_Sub_48a0(reinterpret_cast<uintptr_t>(this), &local_e0, iCol, iRow) != 0) {
                         void* mem = s_memAlloc ? s_memAlloc(0x48, 8) : nullptr;
                         void* cloned = nullptr;
                         if (mem) cloned = s_copyCtor(mem,
-                            *reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(param_1 + 0x38) + 0x38));
+                            *reinterpret_cast<void**>(reinterpret_cast<int64_t>(removalDesc) + 0x38));
                         int64_t local_90 = 0;
                         if (fn_InternalBasePtr_Ctor) new (&local_90) ::Object::InternalBasePtr(
                             reinterpret_cast<RtObject::Internal*>(cloned));   // B.3.3 bridge
@@ -833,13 +834,13 @@ extern "C" uint64_t RemovalCalc_Slot13(int64_t param_1, int param_2, int param_3
                         if (s_regEntity)
                             s_regEntity(*reinterpret_cast<void**>((uintptr_t)*g_pGameWorldSingleton + 0xe8),
                                         &local_70,
-                                        *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x38) + 0x38) + 0x20));
+                                        *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(removalDesc) + 0x38) + 0x20));
                         puVar18 = local_a0;
                     }
 
                     // ---- road removal (flag desc+0x40) ----
                     int* piVar15 = *reinterpret_cast<int**>((uintptr_t)*g_pGameWorldSingleton + 0xf8);
-                    if (*reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(param_1 + 0x38) + 0x40) != 0) {
+                    if (*reinterpret_cast<char*>(reinterpret_cast<int64_t>(removalDesc) + 0x40) != 0) {
                         int cid = *piVar15 * iRow + iCol;
                         int64_t cl = (int64_t)cid * 0x30 + *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(piVar15) + 0x80);
                         uint32_t mask = 1u << (*reinterpret_cast<uint8_t*>(cl + 0x29) & 0x1f);
@@ -865,7 +866,7 @@ extern "C" uint64_t RemovalCalc_Slot13(int64_t param_1, int param_2, int param_3
                                 void* mem = s_memAlloc ? s_memAlloc(0x48, 8) : nullptr;
                                 void* cloned = nullptr;
                                 if (mem) cloned = s_copyCtor(mem,
-                                    *reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(param_1 + 0x38) + 0x38));
+                                    *reinterpret_cast<void**>(reinterpret_cast<int64_t>(removalDesc) + 0x38));
                                 int64_t local_a8 = 0;
                                 if (fn_InternalBasePtr_Ctor) new (&local_a8) ::Object::InternalBasePtr(
                                     reinterpret_cast<RtObject::Internal*>(cloned));   // B.3.3 bridge
@@ -880,16 +881,16 @@ extern "C" uint64_t RemovalCalc_Slot13(int64_t param_1, int param_2, int param_3
                                 if (s_regEntity)
                                     s_regEntity(*reinterpret_cast<void**>((uintptr_t)*g_pGameWorldSingleton + 0xe8),
                                                 &local_78,
-                                                *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x38) + 0x38) + 0x20));
+                                                *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(removalDesc) + 0x38) + 0x20));
                             }
                         }
                     }
 
                     // ---- mark-for-removal of resident entity (sub_4770) ----
                     local_e0 = local_e8;
-                    if ((char)PlayerPath_Sub_4770(param_1, &local_e0) != 0) {
+                    if ((char)PlayerPath_Sub_4770(reinterpret_cast<uintptr_t>(this), &local_e0) != 0) {
                         if (*reinterpret_cast<int64_t*>(local_e8 + 0x28) ==
-                            *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x38) + 0x38)) {
+                            *reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(removalDesc) + 0x38)) {
                             local_e0 = local_e8;
                             int64_t lst = *reinterpret_cast<int64_t*>((uintptr_t)*g_pGameWorldSingleton + 0xe8);
                             if ((*reinterpret_cast<uint32_t*>(local_e0 + 0x40) >> 10 & 1) == 0) {
@@ -923,7 +924,7 @@ extern "C" uint64_t RemovalCalc_Slot13(int64_t param_1, int param_2, int param_3
 
                     // ---- StateMachine kick (sub_4670) ----
                     int64_t local_b8 = local_e8;
-                    if ((char)PlayerPath_Sub_4670(param_1, &local_b8) != 0) {
+                    if ((char)PlayerPath_Sub_4670(reinterpret_cast<uintptr_t>(this), &local_b8) != 0) {
                         void* comp = FindCompInEntity(local_e8, s_tid_75f0);
                         int64_t local_c0 = 0;
                         if (fn_InternalBasePtr_Ctor) new (&local_c0) ::Object::InternalBasePtr(
@@ -933,7 +934,7 @@ extern "C" uint64_t RemovalCalc_Slot13(int64_t param_1, int param_2, int param_3
 
                     // ---- citizen-AI notify (flag desc+0x43) ----
                     local_e0 = local_e8;
-                    if ((*reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(param_1 + 0x38) + 0x43) != 0) &&
+                    if ((*reinterpret_cast<char*>(reinterpret_cast<int64_t>(removalDesc) + 0x43) != 0) &&
                         (local_e8 != 0)) {
                         void* comp = FindCompInEntity(local_e0, s_tid_8070);
                         int64_t local_d0 = 0;
@@ -991,5 +992,8 @@ extern "C" uint64_t RemovalCalc_Slot13(int64_t param_1, int param_2, int param_3
     }
 
     // FIX(lead-verify): faithful CONCAT71 — roadMesh return in the upper bytes, low byte 1.
-    return (uVar16ret & 0xffffffffffffff00ull) | 1;
+    // ENDGAME B.3.8: slot 13 is `bool` (the callers test AL), so only the low byte is
+    // returned; the upper bytes retail leaves in RAX are not part of the slot's contract.
+    (void)uVar16ret;
+    return true;
 }

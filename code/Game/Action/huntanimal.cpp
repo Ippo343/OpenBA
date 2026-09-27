@@ -171,38 +171,22 @@ bool HuntAnimal_ResolveFuncs() {
 }
 
 // ============================================================
-// Slot 1: VectorDeletingDtor (0x1400226f0) -- unhookable (7 bytes, RIP-relative)
-// Returns DAT_1401c5f70 (type factory pointer).
-// ============================================================
-uint64_t HuntAnimal_VectorDtor_Impl() {
-    return *s_dat_VectorDtorReturn;
-}
-
-// ============================================================
-// Slot 2: BaseDtor (0x1400226e0) -- unhookable (7 bytes, RIP-relative)
-// Returns TypeInfo for HuntAnimal (DAT_1401c5f68).
-// ============================================================
-uint32_t HuntAnimal_BaseDtor_Impl() {
-    return *s_typeInfo_HuntAnimal;
-}
-
-// ============================================================
 // Slot 3: Serialize (0x1400c8260)
 // Serializes: status(+0x18), animal entity(+0x20) with type check,
 //             herd entity(+0x28) with type check, huntStarted flag(+0x38).
 // ============================================================
-void HuntAnimal_Serialize_Impl(HuntAnimal* self, void* stream) {
+void HuntAnimal::Persist(void* stream) {
     // Reached through the registered vtable, which the factory path never
     // has to touch — an exe-ctor-built action arrives here with the file
     // statics still null. Lazy-resolve like the other entry points do.
     HuntAnimal_ResolveFuncs();
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[16];
     alignas(8) uint8_t ser2[24];
 
     // Serialize status byte (+0x18)
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Serialize entity refs and hunt flag
@@ -210,17 +194,17 @@ void HuntAnimal_Serialize_Impl(HuntAnimal* self, void* stream) {
 
     // Serialize animal entity ref (+0x20) with AnimalEntity type check
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (*(void**)(s + 0x20) != nullptr) {
-        if (!fn_IsDerivedFrom(*(void**)(s + 0x20), *s_typeId_AnimalEntity)) {
-            *(void**)(s + 0x20) = nullptr;
+    if (_field20 != nullptr) {
+        if (!fn_IsDerivedFrom(_field20, *s_typeId_AnimalEntity)) {
+            _field20 = nullptr;
         }
     }
 
     // Serialize herd entity ref (+0x28) with HerdEntity type check
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (*(void**)(s + 0x28) != nullptr) {
-        if (!fn_IsDerivedFrom(*(void**)(s + 0x28), *s_typeId_HerdEntity)) {
-            *(void**)(s + 0x28) = nullptr;
+    if (_field28 != nullptr) {
+        if (!fn_IsDerivedFrom(_field28, *s_typeId_HerdEntity)) {
+            _field28 = nullptr;
         }
     }
 
@@ -234,22 +218,20 @@ void HuntAnimal_Serialize_Impl(HuntAnimal* self, void* stream) {
 // Slot 4: AbstractImpl (0x1400c8250) -- unhookable (9 bytes)
 // Returns 1 if hunt not started (keep running), 0 if hunt completed.
 // ============================================================
-int HuntAnimal_AbstractImpl_Impl(HuntAnimal* self, void* actionStack) {
+int  HuntAnimal::AbstractImpl(void* actionStack) {
     HuntAnimal_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
-    uint8_t* s = (uint8_t*)self;
-    return (*(uint8_t*)(s + 0x38) == 0) ? 1 : 0;
+    return (_field38 == 0) ? 1 : 0;
 }
 
 // ============================================================
 // Slot 5: Execute (0x1400c8240) -- unhookable (9 bytes)
 // Same logic as AbstractImpl: returns 1 if hunt not started, 0 if completed.
 // ============================================================
-int HuntAnimal_Execute_Impl(HuntAnimal* self, void* actionStack, void* time) {
+int  HuntAnimal::Execute(void* actionStack, void* time) {
     (void)actionStack;
     (void)time;
-    uint8_t* s = (uint8_t*)self;
-    return (*(uint8_t*)(s + 0x38) == 0) ? 1 : 0;
+    return (_field38 == 0) ? 1 : 0;
 }
 
 // ============================================================
@@ -271,16 +253,15 @@ int HuntAnimal_Execute_Impl(HuntAnimal* self, void* actionStack, void* time) {
 //    d. Find HerdComponent from the found entity
 //    e. Start herd migration
 
-void HuntAnimal_Enter_Impl(HuntAnimal* self) {
-    uint8_t* s = (uint8_t*)self;
+void HuntAnimal::Enter() {
 
     // If hunt already started, return early
-    if (*(uint8_t*)(s + 0x38) != 0) {
+    if (_field38 != 0) {
         return;
     }
 
     // Check if the animal at +0x20 is ready to be hunted
-    void* animalEntity = *(void**)(s + 0x20);
+    void* animalEntity = _field20;
     if (!s_fn_IsAnimalReady(animalEntity)) {
         return;
     }
@@ -297,7 +278,7 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
 
     // Get herd entity's CharacterComponent position
     // Follow chain: herdEntity(+0x28) -> +0x278 -> +0x68 -> position at +0x158
-    void* herdEntity = *(void**)(s + 0x28);
+    void* herdEntity = _field28;
 
     void* charComp = *(void**)((uint8_t*)herdEntity + 0x278);
 
@@ -353,7 +334,7 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
     float foundPosY = *(float*)((uint8_t*)foundPosHolder + 0x15c);
 
     // Get herd position again for the herd's grid cell
-    herdEntity = *(void**)(s + 0x28);
+    herdEntity = _field28;
     charComp = *(void**)((uint8_t*)herdEntity + 0x278);
     posHolder = *(void**)((uint8_t*)charComp + 0x68);
 
@@ -419,7 +400,7 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
 
     // Spawn the corpse -- call RemoveAnimal_Action_Ctor
     // Params: herdIBP(+0x28), animIndex(-1), worldPos, fromCell, corpseIBP, descPtr, flags(0)
-    void* herdRef = *(void**)(s + 0x28);
+    void* herdRef = _field28;
     void* herdIBP_local[2];
     herdIBP_local[0] = herdRef;
 
@@ -443,10 +424,10 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
     s_fn_StartMigration(migrationTarget);
 
     // Clear the animal entity's time at +0x50 and set hunt started flag
-    animalEntity = *(void**)(s + 0x20);
+    animalEntity = _field20;
     *(uint64_t*)((uint8_t*)animalEntity + 0x50) = 0;
 
-    *(uint8_t*)(s + 0x38) = 1;
+    _field38 = 1;
 }
 
 // ============================================================
@@ -454,12 +435,11 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
 // Returns true if param matches the herd entity's parent (+0x28->+0x10)
 // or the animal entity's parent (+0x20->+0x10).
 // ============================================================
-bool HuntAnimal_GetTarget_Impl(HuntAnimal* self, void* param) {
+bool HuntAnimal::GetTarget(void* param) {
     HuntAnimal_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
-    uint8_t* s = (uint8_t*)self;
 
     // Check herd entity's parent at +0x28 -> +0x10
-    void* herdEntity = *(void**)(s + 0x28);
+    void* herdEntity = _field28;
     void* herdParent = *(void**)((uint8_t*)herdEntity + 0x10);
 
     if (herdParent == *(void**)param) {
@@ -467,7 +447,7 @@ bool HuntAnimal_GetTarget_Impl(HuntAnimal* self, void* param) {
     }
 
     // Check animal entity's parent at +0x20 -> +0x10
-    void* animalEntity = *(void**)(s + 0x20);
+    void* animalEntity = _field20;
     void* animalParent = *(void**)((uint8_t*)animalEntity + 0x10);
 
     if (animalParent == *(void**)param) {
@@ -503,15 +483,10 @@ Object::Base* HuntAnimal::DeletingDtor(unsigned flags) {
 }
 
 // [3] 0x1400c8260
-void HuntAnimal::Persist(void* stream) { HuntAnimal_Serialize_Impl(this, stream); }
 // [4] 0x1400c8250
-int  HuntAnimal::AbstractImpl(void* actionStack) { return HuntAnimal_AbstractImpl_Impl(this, actionStack); }
 // [5] 0x1400c8240
-int  HuntAnimal::Execute(void* actionStack, void* time) { return HuntAnimal_Execute_Impl(this, actionStack, time); }
 // [6] 0x1400c7de0
-void HuntAnimal::Enter() { HuntAnimal_Enter_Impl(this); }
 // [9] 0x1400c7d60
-bool HuntAnimal::GetTarget(void* param) { return HuntAnimal_GetTarget_Impl(this, param); }
 
 void* HuntAnimal::CreateNewObject() {
     HuntAnimal_ResolveFuncs();
@@ -526,10 +501,5 @@ void* HuntAnimal::CreateInPlaceObject(void* storage) {
 }
 
 DEFINE_EXE_VTABLE(HuntAnimal, "_ZTV10HuntAnimal")
-
-// B38 D5: every by-address reader of 0x14015fde0 was inside this block and now
-// builds the object with the real ctor, so the row is gone. The function stays
-// until the coordinator's address_registry hunk drops its call.
-extern "C" void RegisterHuntAnimalVtable() {}
 
 DEFINE_EXE_TYPE(HuntAnimal, "Action")

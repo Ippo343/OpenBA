@@ -304,21 +304,17 @@ void ResourceProduceComponent::Command(int /*command*/) {
     const uintptr_t sm = smcIbp + 0x48;
     void* node = *reinterpret_cast<void**>(sm);
     if (node) {
-        void** nvt = *reinterpret_cast<void***>(node);
-        if (nvt && nvt[2]) {
-            const int curIdx = *reinterpret_cast<int8_t*>(smcIbp + 0x51);
-            reinterpret_cast<char (*)(void*, void*, int, int)>(nvt[2])(
-                node, reinterpret_cast<void*>(sm), curIdx, 0);
-        }
+        // node = the controller member the StateMachineComponent linked (D6); slot 2.
+        const int curIdx = *reinterpret_cast<int8_t*>(smcIbp + 0x51);
+        reinterpret_cast<ControllerComponent::Controller*>(node)->PostEvent(   // B.3.8 bridge
+            reinterpret_cast<void*>(sm), curIdx, 0);
     }
 
     // Force an immediate StateMachineComponent tick (its vtable slot 8) with Time(0).
-    void** svt = *reinterpret_cast<void***>(smcIbp);
-    if (svt && svt[8]) {
+    {
         int64_t zeroTime = 0;
         if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&zeroTime, 0.0f);
-        reinterpret_cast<void (*)(void*, void*)>(svt[8])(
-            reinterpret_cast<void*>(smcIbp), &zeroTime);
+        reinterpret_cast<Component*>(smcIbp)->Tick(&zeroTime);   // B.3.8 bridge (slot 8)
     }
 }
 

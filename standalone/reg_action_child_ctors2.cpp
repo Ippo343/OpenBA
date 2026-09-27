@@ -11,6 +11,10 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
+#include "Entity/ComponentEntity.h"
+#include "Component/ConsumeProduceComponent.h"
+#include "Component/ConsumeProduceDescription.h"
+#include "Component/RawMaterialDescription.h"
 
 extern void* ActChild_CompleteRoadCopyCtor_c59d0(void*, uint32_t, uint32_t, uint8_t); // 0x1400c59d0
 extern void* ActChild_HuntAnimalCopyCtor_c8400(void*, uint64_t*, uint64_t*);          // 0x1400c8400
@@ -40,10 +44,10 @@ static uint32_t g_tid_ConsumeProduceDescription = 0; // 0x1401c7388 (bef70 compo
 static uint32_t g_tid_ComponentEntity = 0;         // 0x1401c5d70
 
 extern "C" void FillTypeIdGlobals_actionchild() {
-    g_tid_RawMaterialDescription = ::Object::GetTypeIdByName("RawMaterialDescription");
-    g_tid_ConsumeProduceComponent = ::Object::GetTypeIdByName("ConsumeProduceComponent");
-    g_tid_ConsumeProduceDescription = ::Object::GetTypeIdByName("ConsumeProduceDescription");
-    g_tid_ComponentEntity        = ::Object::GetTypeIdByName("ComponentEntity");
+    g_tid_RawMaterialDescription = RawMaterialDescription::TypeId();
+    g_tid_ConsumeProduceComponent = ConsumeProduceComponent::TypeId();
+    g_tid_ConsumeProduceDescription = ConsumeProduceDescription::TypeId();
+    g_tid_ComponentEntity        = ComponentEntity::TypeId();
 }
 
 void RegisterActionChildCtors2Batch() {

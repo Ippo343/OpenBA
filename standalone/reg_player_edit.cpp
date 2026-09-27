@@ -47,12 +47,11 @@ extern uint64_t PlayerEdit_FencedAnchorCalc_dbf90(uintptr_t, uint32_t*, uint32_t
 //   0x1400aa530 (QuarryComponent_impl_a530); see edittool.cpp:145.
 // ----------------------------------------------------------------------------
 
-// FencedTool::CalcPath (fenced-area drag commit) — fencedtool_calcpath.cpp.
-extern "C" uint64_t FencedTool_CalcPath_Port(void* self, int64_t startCell, int64_t endCell);
+// FencedTool::CalcPath (0x1400dae00) is FencedTool's slot 13, a real virtual since
+// ENDGAME B.3.8; nothing read the address back, so its row is gone.
 
 void RegisterPlayerEditBatch() {
     RegisterExeAddr(0x1400a0280, reinterpret_cast<uintptr_t>(&PlayerEdit_EntityAtCell_a0280));
     RegisterExeAddr(0x140101730, reinterpret_cast<uintptr_t>(&PlayerEdit_AvgTerrainHeight_101730));
     RegisterExeAddr(0x1400dbf90, reinterpret_cast<uintptr_t>(&PlayerEdit_FencedAnchorCalc_dbf90));
-    RegisterExeAddr(0x1400dae00, reinterpret_cast<uintptr_t>(&FencedTool_CalcPath_Port));
 }

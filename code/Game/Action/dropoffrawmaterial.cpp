@@ -120,29 +120,21 @@ bool DropOffRawMaterial_ResolveFuncs() {
 }
 
 // ============================================================
-// BaseDtor (0x1400225e0) — slot 2
-// Returns TypeInfo for DropOffRawMaterial (tiny, unhookable).
-// ============================================================
-uint32_t DropOffRawMaterial_BaseDtor_Impl() {
-    return *s_typeInfo_DropOffRawMaterial;
-}
-
-// ============================================================
 // Serialize (0x1400c7b10)
 // Serializes: status(+0x18), storage(+0x30), source(+0x38), resource(+0x28), flag(+0x20), count(+0x24)
 // ============================================================
-void DropOffRawMaterial_Serialize_Impl(DropOffRawMaterial* self, void* stream) {
+void DropOffRawMaterial::Persist(void* stream) {
     // Reached through the registered vtable, which the factory path never
     // has to touch — an exe-ctor-built action arrives here with the file
     // statics still null. Lazy-resolve like the other entry points do.
     DropOffRawMaterial_ResolveFuncs();
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
 
     // Serialize status byte (+0x18)
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Serialize entity refs, resource type, flag, and count
@@ -150,17 +142,17 @@ void DropOffRawMaterial_Serialize_Impl(DropOffRawMaterial* self, void* stream) {
 
     // Serialize target storage entity ref (+0x30)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x30)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (*(void**)(s + 0x30) != nullptr) {
-        if (!fn_IsDerivedFrom(*(void**)(s + 0x30), *s_typeId_1401c7158)) {
-            *(void**)(s + 0x30) = nullptr;
+    if (_field30 != nullptr) {
+        if (!fn_IsDerivedFrom(_field30, *s_typeId_1401c7158)) {
+            _field30 = nullptr;
         }
     }
 
     // Serialize source entity ref (+0x38)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x38)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (*(void**)(s + 0x38) != nullptr) {
-        if (!fn_IsDerivedFrom(*(void**)(s + 0x38), *g_TypeId_ComponentEntity)) {
-            *(void**)(s + 0x38) = nullptr;
+    if (_field38 != nullptr) {
+        if (!fn_IsDerivedFrom(_field38, *g_TypeId_ComponentEntity)) {
+            _field38 = nullptr;
         }
     }
 
@@ -183,26 +175,26 @@ void DropOffRawMaterial_Serialize_Impl(DropOffRawMaterial* self, void* stream) {
 //   parent's storage, build array, transfer each via sub_7620.
 // Returns 1 (needs more work) or 2 (action pushed, e.g. MoveTo for full storage).
 // ============================================================
-int DropOffRawMaterial_AbstractImpl_Impl(DropOffRawMaterial* self, void* actionStack) {
+int  DropOffRawMaterial::AbstractImpl(void* actionStack) {
     DropOffRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     { // [HAUL-DIAG] gated: did the citizen's executor actually RUN a dropoff?
     }
 
     // If source entity is null, drop all inventory items
-    if (*(void**)(s + 0x38) == nullptr) {
-        s_fn_DropAllInventory(self);
+    if (_field38 == nullptr) {
+        s_fn_DropAllInventory(this);
         return 1;
     }
 
     // Find StorageComponent on source entity at +0x38
     uintptr_t storageIBP = 0;
-    fn_FindComponent_Storage(*(void**)(s + 0x38), &storageIBP);
+    fn_FindComponent_Storage(_field38, &storageIBP);
 
     // If resource type (+0x28) is specified, transfer just that type
-    if (*(void**)(s + 0x28) != 0) {
-        uint64_t result = s_fn_DropOffSub(self, actionStack, &storageIBP,
+    if (_field28 != 0) {
+        uint64_t result = s_fn_DropOffSub(this, actionStack, &storageIBP,
                                           *(uint64_t*)(s + 0x28));
         if ((int)result == 2) {
             return 2;
@@ -290,7 +282,7 @@ int DropOffRawMaterial_AbstractImpl_Impl(DropOffRawMaterial* self, void* actionS
         uint64_t* ptr = itemArray;
         do {
             if ((int)ptr[1] > 0) {
-                uint64_t result = s_fn_DropOffSub(self, actionStack, &storageIBP, ptr[0]);
+                uint64_t result = s_fn_DropOffSub(this, actionStack, &storageIBP, ptr[0]);
                 anyPushed = anyPushed || ((int)result == 2);
             }
             ptr += 2;
@@ -312,9 +304,9 @@ int DropOffRawMaterial_AbstractImpl_Impl(DropOffRawMaterial* self, void* actionS
 // JMP thunk to Entity_impl_7570 (drops off all inventory items).
 // Only 5 bytes (JMP rel32), not hookable.
 // ============================================================
-void DropOffRawMaterial_CheckEntity_Impl(DropOffRawMaterial* self) {
+void DropOffRawMaterial::CheckEntity() {
     DropOffRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
-    s_fn_DropAllInventory(self);
+    s_fn_DropAllInventory(this);
 }
 
 // ============================================================
@@ -322,11 +314,11 @@ void DropOffRawMaterial_CheckEntity_Impl(DropOffRawMaterial* self) {
 // Returns true if param matches source entity at +0x38, or
 // the target storage entity at +0x30's parent entity (+0x10).
 // ============================================================
-bool DropOffRawMaterial_GetTarget_Impl(DropOffRawMaterial* self, void* param) {
+bool DropOffRawMaterial::GetTarget(void* param) {
     DropOffRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
-    void* sourceEntity = *(void**)(s + 0x38);
+    void* sourceEntity = _field38;
 
     if (*(void**)param == sourceEntity) {
         return true;
@@ -364,13 +356,9 @@ Object::Base* DropOffRawMaterial::DeletingDtor(unsigned flags) {
 }
 
 // [3] 0x1400c7b10
-void DropOffRawMaterial::Persist(void* stream) { DropOffRawMaterial_Serialize_Impl(this, stream); }
 // [4] 0x1400c7300
-int  DropOffRawMaterial::AbstractImpl(void* actionStack) { return DropOffRawMaterial_AbstractImpl_Impl(this, actionStack); }
 // [8] 0x1400c72f0 (JMP 0x1400c7570)
-void DropOffRawMaterial::CheckEntity() { DropOffRawMaterial_CheckEntity_Impl(this); }
 // [9] 0x1400c7270
-bool DropOffRawMaterial::GetTarget(void* param) { return DropOffRawMaterial_GetTarget_Impl(this, param); }
 
 void* DropOffRawMaterial::CreateNewObject() {
     DropOffRawMaterial_ResolveFuncs();
@@ -385,10 +373,5 @@ void* DropOffRawMaterial::CreateInPlaceObject(void* storage) {
 }
 
 DEFINE_EXE_VTABLE(DropOffRawMaterial, "_ZTV18DropOffRawMaterial")
-
-// B38 D5: every by-address reader of 0x14015fd80 was inside this block and now
-// builds the object with the real ctor, so the row is gone. The function stays
-// until the coordinator's address_registry hunk drops its call.
-extern "C" void RegisterDropOffRawMaterialVtable() {}
 
 DEFINE_EXE_TYPE(DropOffRawMaterial, "Action")

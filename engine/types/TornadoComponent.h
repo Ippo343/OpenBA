@@ -36,18 +36,6 @@
 #include <cstddef>
 #include "Component.h"
 
-namespace TornadoComponentAddr {
-    constexpr uintptr_t Vtable = 0x14015aa80;
-
-    // The three overridden slots. Everything else in the 16-slot vtable is a
-    // base-Component no-op (0x140118xxx). Slot indices are from the vtable BYTES
-    // at 0x14015aa80, not from Ghidra's names — Ghidra labels slot 3 "_Shutdown",
-    // slot 4 "_Serialize" and slot 8 "_OnRemove", and all three are off by one.
-    constexpr uintptr_t Serialize = 0x140058b80;  // slot 3 (+0x18)
-    constexpr uintptr_t Startup   = 0x1400585a0;  // slot 4 (+0x20)
-    constexpr uintptr_t Update    = 0x140057cd0;  // slot 8 (+0x40), every frame
-}
-
 // ENDGAME B.3.8 CIT: the POD is gone — `TornadoComponent` is a real class now
 // (code/Game/Component/TornadoComponent.h, compiler vtable). This forwarder keeps the
 // old include spelling working until the closing pass deletes it (B8-4).

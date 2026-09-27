@@ -261,8 +261,6 @@ void OptionsInit() {
     // ── opt-in LIVE_* gates ──────────────────────────────────────────────────
     {   const char* v = Raw("BANISHED_LIVE_SEAT_SHUFFLE");
         o.liveSeatShuffle = v && v[0] != '0'; }
-    {   const char* v = Raw("BANISHED_LIVE_TUTORIALINSTANCE_VT");
-        o.liveTutorialInstVt = v && v[0] != '0'; }
 
 
     // ── code/Game readers migrated off getenv (ENDGAME C.2/C.4 close) ────────

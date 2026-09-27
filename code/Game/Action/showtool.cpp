@@ -9,6 +9,9 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "ShowTool.h"
+#include "Component/ModelDescription.h"   // ENDGAME B.3.8 CB3: ModelDescription::TypeId()
+#include "Component/RawMaterialDescription.h"   // ENDGAME B.3.8 CB3: RawMaterialDescription::TypeId()
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CB3: CitizenComponent::TypeId()
 // The runtime type headers come FIRST: they reach runtime/types/volume/Volume.h,
 // whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch K1.
@@ -69,8 +72,7 @@ static fn_MIDefCtor_t    s_slot_MI_DefCtor = nullptr;
 static uint32_t ShowTool_ModelDescTid() {
     uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
     if (p && *p && *p != 0xFFFFFFFF) return *p;
-    static uint32_t c = 0;
-    if (!c || c == 0xFFFFFFFF) c = ::Object::GetTypeIdByName("ModelDescription");
+    const uint32_t c = ModelDescription::TypeId();   // B.3.8: no lazy cache (B6-5)
     if (c != 0xFFFFFFFF) return c;
     return 0;
 }
@@ -81,8 +83,7 @@ static uint32_t ShowTool_RawMatTid() {
         return *g_TypeId_RawMaterialDescription;
     uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
     if (p && *p && *p != 0xFFFFFFFF) return *p;
-    static uint32_t c = 0;
-    if (!c || c == 0xFFFFFFFF) c = ::Object::GetTypeIdByName("RawMaterialDescription");
+    const uint32_t c = RawMaterialDescription::TypeId();   // B.3.8: no lazy cache (B6-5)
     if (c != 0xFFFFFFFF) return c;
     return 0;
 }
@@ -98,9 +99,7 @@ static void* ShowTool_FindComponentByTid(void* hostP, uint32_t tid) {
     for (int i = 0; i < count; i++) {
         void* comp = *reinterpret_cast<void**>(arr + (int64_t)i * 8);
         if (!comp) continue;
-        int64_t vt = *reinterpret_cast<int64_t*>(comp);
-        typedef uint32_t (*getType_t)(void*);
-        uint32_t got = (*reinterpret_cast<getType_t*>(vt + 0x10))(comp);
+        uint32_t got = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (got == tid)
             return fn_IsDerivedFrom(comp, tid) ? comp : nullptr;
     }
@@ -126,7 +125,7 @@ bool ShowTool_ResolveFuncs() {
     if (!s_TypeInfo_ShowToolEntity || !*s_TypeInfo_ShowToolEntity
         || *s_TypeInfo_ShowToolEntity == 0xFFFFFFFF) {
         static uint32_t s_citizenTid = 0;
-        uint32_t tid = ::Object::GetTypeIdByName("CitizenComponent");
+        uint32_t tid = CitizenComponent::TypeId();
         if (tid && tid != 0xFFFFFFFF) {
             s_citizenTid = tid;
             s_TypeInfo_ShowToolEntity = &s_citizenTid;
@@ -169,24 +168,24 @@ bool ShowTool_ResolveFuncs() {
 // ShowTool::Serialize (0x140042780)
 // Serializes: status(+0x18), entity ptr(+0x20) with type check, int(+0x28)
 // ============================================================
-void ShowTool_Serialize_Impl(void* self, void* stream) {
+void ShowTool::Persist(void* stream) {
     // Reached through the registered vtable, which the factory path never
     // has to touch — an exe-ctor-built action arrives here with the file
     // statics still null. Lazy-resolve like the other entry points do.
     ShowTool_ResolveFuncs();
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
 
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (*(void**)(s + 0x20) != nullptr) {
-        if (!fn_IsDerivedFrom(*(void**)(s + 0x20), *s_TypeInfo_ShowToolEntity)) {
-            *(void**)(s + 0x20) = nullptr;
+    if (_field20 != nullptr) {
+        if (!fn_IsDerivedFrom(_field20, *s_TypeInfo_ShowToolEntity)) {
+            _field20 = nullptr;
         }
     }
     reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
@@ -321,25 +320,25 @@ static void ShowTool_ShowCarried(void* entityV) {
 // Always returns 1.
 // ============================================================
 
-int ShowTool_AbstractImpl_Impl(void* self, void* actionStack) {
+int  ShowTool::AbstractImpl(void* actionStack) {
     (void)actionStack;
     // Lazy resolve: when this action is built via the exe action-ctor path (not our
     // factory) ShowTool_ResolveFuncs never ran, so s_fn_* are null -> EXEC-of-null when
     // the executor runs it (e.g. a forester's PerformWork cut sequence shows the axe).
     // Same fix as the PerformWork vtable methods. Bail "done" if deps still missing.
     if (!ShowTool_ResolveFuncs()) return 1;
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     uint32_t toolId = *(uint32_t*)(s + 0x28);
 
 
     if (toolId > 10 && toolId != 0xFFFFFFFE) {
-        void* entity = *(void**)(s + 0x20);
+        void* entity = _field20;
         if (!entity) return 1;  // entity removed, nothing to do
         s_fn_HideTool(entity);
         return 1;
     }
 
-    void* entity = *(void**)(s + 0x20);
+    void* entity = _field20;
     if (!entity) return 1;  // entity removed, nothing to do
 
     // toolId < 0 (e.g. 0xFFFFFFFE = -2) is the "carry" path: show the model of the
@@ -360,10 +359,9 @@ int ShowTool_AbstractImpl_Impl(void* self, void* actionStack) {
 // ShowTool::CheckEntity (0x1400426d0)
 // Hides tool on the entity at +0x20.
 // ============================================================
-void ShowTool_CheckEntity_Impl(void* self) {
+void ShowTool::CheckEntity() {
     if (!ShowTool_ResolveFuncs()) return;   // lazy resolve (exe-ctor-built action)
-    uint8_t* s = (uint8_t*)self;
-    void* entity = *(void**)(s + 0x20);
+    void* entity = _field20;
     if (!entity) return;  // entity already gone
     s_fn_HideTool(entity);
 }
@@ -372,12 +370,11 @@ void ShowTool_CheckEntity_Impl(void* self) {
 // ShowTool::GetTarget (0x140042680)
 // Returns true if entity at +0x20's parent (+0x10) matches the param.
 // ============================================================
-bool ShowTool_GetTarget_Impl(void* self, void* param) {
+bool ShowTool::GetTarget(void* param) {
     if (!ShowTool_ResolveFuncs()) return false;   // lazy resolve (exe-ctor-built action)
-    uint8_t* s = (uint8_t*)self;
-    void* entity = *(void**)(s + 0x20);
+    void* entity = _field20;
     if (!entity) return false;  // entity gone, no match
-    void* entityParent = *(void**)(entity + 0x10);
+    void* entityParent = *(void**)((uint8_t*)entity + 0x10);
     return entityParent == *(void**)param;
 }
 
@@ -406,15 +403,11 @@ Object::Base* ShowTool::DeletingDtor(unsigned flags) {
 }
 
 // [3] 0x140042780
-void ShowTool::Persist(void* stream) { ShowTool_Serialize_Impl(this, stream); }
 // [4] 0x140042710
-int  ShowTool::AbstractImpl(void* actionStack) { return ShowTool_AbstractImpl_Impl(this, actionStack); }
 // [7] 0x140042700 — the leaf's own `RET 0` (same bytes as the base body)
 void ShowTool::Exit(void*) {}
 // [8] 0x1400426d0
-void ShowTool::CheckEntity() { ShowTool_CheckEntity_Impl(this); }
 // [9] 0x140042680
-bool ShowTool::GetTarget(void* param) { return ShowTool_GetTarget_Impl(this, param); }
 
 void* ShowTool::CreateNewObject() {
     ShowTool_ResolveFuncs();
@@ -429,13 +422,5 @@ void* ShowTool::CreateInPlaceObject(void* storage) {
 }
 
 DEFINE_EXE_VTABLE(ShowTool, "_ZTV8ShowTool")
-
-// B38 D5: 0x1401589b0 is still read back BY ADDRESS outside this block
-// (work_act_clear.cpp:141, work_act_hunt.cpp:128),
-// so the row stays, serving the compiler table (every such reader builds the
-// same bytes the ctor builds: Internal(), +0x10/+0x18 zeroed, the fields).
-extern "C" void RegisterShowToolVtable() {
-    RegisterExeAddr(0x1401589b0, reinterpret_cast<uintptr_t>(ShowTool::Vtable()));
-}
 
 DEFINE_EXE_TYPE(ShowTool, "Action")

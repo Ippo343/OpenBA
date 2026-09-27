@@ -43,24 +43,26 @@
 
 #include "engine_funcs.h"
 #include "system/String.h"
+#include "Game/GameLoaderLoop.h"   // ENDGAME B.3.8 LOOP
+#include "Game/GameLoadDialogLoopT.h"
+#include "Game/GameUpdateLoop.h"
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
                                         void* scenarioIdx, void* retvalIbpPtr) {
     if (!worldSetup) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(worldSetup);
 
-    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_UpdateLoop_Ctor ||
-        !fn_DialogLoaderLoopT_Ctor || !fn_LoaderLoop_Ctor || !fn_Time_Ctor_Float ||
-        !g_GameUpdateLoop_Vtable || !g_GameLoadDialogLoopT_Vtable ||
-        !g_GameLoaderLoop_Vtable) {
-        printf("[WorldSetup::LoadFromSave] loop-chain ctors unresolved - aborting "
-                    "(alloc=%p updateLoop=%p dlt=%p loader=%p vt=%p/%p/%p)\n",
-                    (void*)fn_MemAlloc, (void*)fn_UpdateLoop_Ctor,
-                    (void*)fn_DialogLoaderLoopT_Ctor, (void*)fn_LoaderLoop_Ctor,
-                    (void*)g_GameUpdateLoop_Vtable, (void*)g_GameLoadDialogLoopT_Vtable,
-                    (void*)g_GameLoaderLoop_Vtable);
+    // Caller batch CB6: the three loops are built by their real ctors (below),
+    // which stamp the compiler tables and chain the Runtime base ctors
+    // directly, so the by-address table globals and the base-ctor doors this
+    // readiness test named are no longer read here.
+    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_Time_Ctor_Float) {
+        printf("[WorldSetup::LoadFromSave] loop-chain allocator unresolved - aborting "
+                    "(alloc=%p time=%p)\n",
+                    (void*)fn_MemAlloc, (void*)fn_Time_Ctor_Float);
         return;
     }
 
@@ -72,57 +74,32 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
     void* pGameLoop = nullptr;
     void* gameLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
     if (gameLoop) {
-        uintptr_t g = reinterpret_cast<uintptr_t>(gameLoop);
-        fn_UpdateLoop_Ctor(gameLoop);
-        *reinterpret_cast<void**>(gameLoop) = (void*)g_GameUpdateLoop_Vtable;
-
-        // +0x28: copy of retail's `local_res8 = 0` empty System::String. A null COW
-        // pointer IS the empty string, so the copy-ctor result is a plain 0 - no
-        // allocation, and nothing to destruct.
-        *reinterpret_cast<uint64_t*>(g + 0x28) = 0;
-        *reinterpret_cast<uint32_t*>(g + 0x30) = 0;   // p6
-        *reinterpret_cast<uint32_t*>(g + 0x34) = 0;   // p7
-        *reinterpret_cast<uint64_t*>(g + 0x38) = 0;
-        *reinterpret_cast<uint64_t*>(g + 0x40) = 0;   // p9
-        *reinterpret_cast<uint64_t*>(g + 0x48) = 0;   // p10
-        *reinterpret_cast<uint64_t*>(g + 0x50) = 0;   // p11
-        *reinterpret_cast<uint64_t*>(g + 0x58) = reinterpret_cast<uint64_t>(savedState);
-        for (uintptr_t off = 0x60; off <= 0xB8; off += 8)
-            *reinterpret_cast<uint64_t*>(g + off) = 0;
-        *reinterpret_cast<uint16_t*>(g + 0xC0) = 0;
-        *reinterpret_cast<uint64_t*>(g + 0xC8) = 0;
-        // p8 == '\0' at this call site, so retail writes 0xF0 here (NOT 0).
-        *reinterpret_cast<uint32_t*>(g + 0xD0) = 0xF0;
-        for (uintptr_t off = 0xD8; off <= 0x148; off += 8)
-            *reinterpret_cast<uint64_t*>(g + off) = 0;
-        *reinterpret_cast<uint64_t*>(g + 0x150) = ibpCopy;
-        *reinterpret_cast<uint8_t*>(g + 0x158)  = 0;
-        *reinterpret_cast<uint32_t*>(g + 0x15C) =
-            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(scenarioIdx) & 0xFFFFFFFFu);
-        pGameLoop = gameLoop;
+        // ENDGAME B.3.8 LOOP: the real class; its ctor is 0x140098060's body.
+        // +0x28 is a copy of retail's `local_res8 = 0` empty System::String (a
+        // null COW pointer IS the empty string: the copy is a plain 0). p8 ==
+        // '\0' at this call site, so retail writes 0xF0 at +0xD0 (NOT 0).
+        const System::String emptyName;
+        pGameLoop = ::new (gameLoop) GameUpdateLoop(
+            savedState, ibpCopy,
+            static_cast<int32_t>(reinterpret_cast<uintptr_t>(scenarioIdx) & 0xFFFFFFFFu),
+            emptyName, 0, 0, /*disasters (p8)=*/false, nullptr, nullptr, nullptr);
     }
 
     // --- Step 2: GameLoadDialogLoopT (0xb60) ---------------------------------
     void* pDlLoop = nullptr;
     void* dlLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xb60, 4);
     if (dlLoop) {
-        uintptr_t dl = reinterpret_cast<uintptr_t>(dlLoop);
         uint64_t delayTime[1];
         fn_Time_Ctor_Float((void*)delayTime, 1.0f);
 
         System::String loadingName;
         GetLoadingSoundString(&loadingName);   // FUN_140099130, inline in engine_funcs.h
 
-        fn_DialogLoaderLoopT_Ctor(dlLoop, &loadingName, pGameLoop, (void*)delayTime);
-
-        *reinterpret_cast<void**>(dlLoop) = (void*)g_GameLoadDialogLoopT_Vtable;
-        *reinterpret_cast<uint32_t*>(dl + 0x188) = 0xFF000000;
-        *reinterpret_cast<uint32_t*>(dl + 0x18C) = 0xFF000000;
-        *reinterpret_cast<uint8_t*>(dl + 0x190)  = 0;   // retail `this[400]`
-        fn_Random_Default_Ctor((void*)(dl + 0x194));
-        *reinterpret_cast<uint64_t*>(dl + 0xB58) = 0;
-        *reinterpret_cast<uint8_t*>(dl + 0x40)   = 0;
-        pDlLoop = dlLoop;
+        // ENDGAME B.3.8 LOOP: the real class; its ctor is the subclass field
+        // init retail inlines here (colours, +0x190, Random, +0xB58, +0x40).
+        pDlLoop = ::new (dlLoop) GameLoadDialogLoopT(
+            loadingName, static_cast<Engine::UpdateLoop*>(pGameLoop),       // B.3.8 bridge
+            *reinterpret_cast<const System::Time*>(delayTime));
     }
 
     // --- Step 3: outer LoaderLoop (0x48) -------------------------------------
@@ -131,9 +108,11 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
     if (outerLoop) {
         uint64_t zeroTime[1];
         fn_Time_Ctor_Float((void*)zeroTime, 0.0f);
-        fn_LoaderLoop_Ctor(outerLoop, pDlLoop, (void*)zeroTime);
-        *reinterpret_cast<void**>(outerLoop) = (void*)g_GameLoaderLoop_Vtable;
-        pOuterLoop = outerLoop;
+        // ENDGAME B.3.8 LOOP: the real class (its ctor = the LoaderLoop door's
+        // body + the compiler's 0x1401588d0 stamp).
+        pOuterLoop = ::new (outerLoop) GameLoaderLoop(
+            static_cast<Engine::UpdateLoop*>(pDlLoop),                          // B.3.8 bridge
+            *reinterpret_cast<const System::Time*>(zeroTime));
     }
 
     // --- Step 4: publish the next loop ---------------------------------------

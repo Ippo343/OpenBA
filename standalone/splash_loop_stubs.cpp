@@ -18,24 +18,24 @@
 //   +0x58  AllowsModChanges(self)          — thunk 0x14003A8F4 -> Runtime UpdateLoop::AllowsModChanges (FALSE)
 //   +0x60  CreateDialog(self, retptr)      — exe 0x140099070 (LoaderDialog ctor)
 //
-// First-pass: Startup/Shutdown/Update/Draw/CreateDialog are print-only stubs.
-// Update returns false on the first tick so MainLoop::Run exits cleanly.
-// As real reimpls land in code/Game/Game/, replace the matching stub entry.
+// ENDGAME B.3.8 block LOOP: the hand-built table is gone. This file now holds
+// the MEMBER bodies of the real class `GameLoadDialogLoopT`
+// (code/Game/Game/GameLoadDialogLoopT.h), whose compiler vtable 0x140158800
+// serves (B38_RULES D5). The slot list above is retail's (B38_SLOTS sec. 6).
 
 
 #include "address_registry.h"
 #include "resolve.h"
 #include "engine_funcs.h"
-#include "UpdateLoop.h"
-#include "DialogLoaderLoopT.h"
-#include "MainLoop.h"
 #include "common.h"
 #include "engine_loader_gate.h"
 #include "chunked_scene_loader.h"
 #include "stall_debug.h"
 #include "boot_window.h"
-#include "Game/dialogloaderloop.h"
 #include "Game/uifade.h"
+#include "Game/GameLoadDialogLoopT.h"   // ENDGAME B.3.8 LOOP
+#include "Game/GameUpdateLoop.h"        // caller batch CB6: GameUpdateLoop::Vtable()
+#include "Object/exe_type.h"         // DEFINE_EXE_VTABLE
 #include <cstdio>
 #include <cstdint>
 #include "system/String.h"   // -Iruntime/types
@@ -75,16 +75,16 @@ static void TipBail(const char* why, const void* p) {
     if (n++ < 12) printf("[SplashDLT] loading tip SKIPPED: %s (%p)\n", why, p);
 }
 
-void SetRandomLoadingTip(DialogLoaderLoopT* self) {
+void SetRandomLoadingTip(GameLoadDialogLoopT* self) {
     if (!self) { TipBail("self==null", nullptr); return; }
-    if (!self->m_dialogInstance) { TipBail("m_dialogInstance==null", self); return; }
+    if (!self->_dialogInstance) { TipBail("m_dialogInstance==null", self); return; }
 
     // Find "descText" in the dialog instance (member value-return ABI:
     // RCX=this, RDX=retbuf, R8=name — the typedef carries all three).
     const System::String nameStr("descText");
     uint64_t elemBuf = 0;
     ::new (&elemBuf) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<UI::DialogInstance*>(self->m_dialogInstance)->FindElement(nameStr));  // B.3.6 bridge
+        reinterpret_cast<UI::DialogInstance*>(self->_dialogInstance)->FindElement(nameStr));  // B.3.6 bridge
 
     // Normalise the missing-element sentinel (0xffffffff........) to null.
     uintptr_t raw = static_cast<uintptr_t>(elemBuf);
@@ -110,8 +110,7 @@ void SetRandomLoadingTip(DialogLoaderLoopT* self) {
     if (!table) { TipBail("elem+0xD8 StringTable==null", elem); return; }
     int count = reinterpret_cast<const UI::StringTable*>(table)->GetCount();  // B.3.6 bridge
     if (count <= 0) { TipBail("StringTable count<=0", table); return; }
-    void* rng = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x194);
-    uint32_t idx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(count - 1));   // B.3.4 bridge
+    uint32_t idx = self->_random.Rand(static_cast<uint32_t>(count - 1));   // the loop's own Random (+0x194)
 
     uint8_t uiStr[16];
     ::new (uiStr) UI::String(
@@ -129,92 +128,110 @@ void SetRandomLoadingTip(DialogLoaderLoopT* self) {
     }
 }
 
-void Stub_Destroy(UpdateLoop* self, unsigned flags) {
-    printf("[SplashDLT::Destroy] self=%p flags=%u\n", (void*)self, flags);
-    // Skip the real cleanup chain (DialogLoaderLoopT::~DialogLoaderLoopT unwinds
-    // UI::UserInterface, String, Audio::Scene, Random — all leak on this run but
-    // the process exits immediately after MainLoop::Run returns).
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-}
-
 // Per-loop latch for the fade-out kick. It used to be a function-local static
 // compared as `latch != self`, on the stated assumption that "splash loops run one
 // at a time, each with a unique self". Quit-to-main-menu broke that: a SECOND new
 // game builds a second splash loop, the allocator can hand back the freed first
 // one's address, and `latch == self` is then true on frame 0. Clearing it in
-// Stub_Startup (which runs exactly once per loop) makes the latch depend on the
+// Startup (which runs exactly once per loop) makes the latch depend on the
 // loop's LIFETIME rather than its address.
-UpdateLoop* g_fadeOutInitiatedFor = nullptr;
+const void* g_fadeOutInitiatedFor = nullptr;
 
-void Stub_Startup(UpdateLoop* self) {
+} // namespace
+
+// ============================================================================
+// GameLoadDialogLoopT (vtable @ 0x140158800) — code/Game/Game/GameLoadDialogLoopT.h
+// ============================================================================
+// ENDGAME B.3.8 block LOOP: the old hand-built `g_splashDialogLoopVtable[13]`'s
+// stub bodies, moved into the real class's members unchanged.
+
+// The ctor retail inlines at each of its 7 construction sites (header banner).
+GameLoadDialogLoopT::GameLoadDialogLoopT(const System::String& filename,
+                                         Engine::UpdateLoop* nextLoop,
+                                         const System::Time& delay)
+    : Engine::DialogLoaderLoopT(filename, nextLoop, delay) {
+    _fadeColor1 = 0xff000000;
+    _fadeColor2 = 0xff000000;
+    _fadeDone   = 0;
+    fn_Random_Default_Ctor(&_random);   // ??0Random@System@@QEAA@XZ
+    _tipTimer   = 0;
+    _autoAdvance = 0;
+}
+
+Engine::UpdateLoop* GameLoadDialogLoopT::DeletingDtor(unsigned flags) {
+    printf("[SplashDLT::Destroy] self=%p flags=%u\n", (void*)this, flags);
+    // Retail 0x140001010: CALL ??1DialogLoaderLoopT@Engine@@ (import
+    // 0x140152b88), then MemFree on &1 (System::Random has no destructor). The
+    // compiler's chain: ~UserInterface, ~String, ~LoaderLoop -> ~UpdateLoop.
+    this->~GameLoadDialogLoopT();
+    if (flags & 1) {
+        fn_MemFreeStatic(this);
+    }
+    return this;
+}
+
+void GameLoadDialogLoopT::Startup() {
     StallDebug::Phase startupPhase("SplashDLT::Stub_Startup");
     g_fadeOutInitiatedFor = nullptr;
-    DialogLoaderLoopT* ll = reinterpret_cast<DialogLoaderLoopT*>(self);
-    UpdateLoop* next = ll->m_nextLoop;
+    Engine::UpdateLoop* next = _nextLoop;
     printf("[SplashDLT::Startup] self=%p next=%p m_dialogExternal(before)=%p\n",
-           (void*)self, (void*)next, ll->m_dialogExternal);
+           (void*)this, (void*)next, _dialogExternal);
 
     // Step 1: load self's own .rsc if not yet loaded. The original game's
     // Loader thread does this asynchronously before each loop becomes active,
     // but standalone has no thread — so we call DialogLoaderLoopT::Load on
-    // ourselves synchronously here. Reads m_dialogFilename @ +0x48 and writes
-    // the loaded External to m_dialogExternal @ +0x50.
-    if (!ll->m_dialogExternal) {
+    // ourselves synchronously here. Reads _dialogFilename @ +0x48 and writes
+    // the loaded External to _dialogExternal @ +0x50.
+    if (!_dialogExternal) {
         StallDebug::Phase ownLoadPhase("SplashDLT own-rsc DialogLoaderLoopT::Load");
         // Bracket the load so resolve_standalone logs every exe-side resolution
-        // and the bulk NullFactory marks any hits with [TRACE!]. m_dialogFilename
+        // and the bulk NullFactory marks any hits with [TRACE!]. _dialogFilename
         // at self+0x48 is a wchar_t COW wrapper — too risky to deref blind, so
         // we just tag with self pointer (each splash loop has a unique address).
         char label[96];
         std::snprintf(label, sizeof(label),
                       "DialogLoaderLoopT::Load (Stub_Startup) self=%p",
-                      (void*)self);
+                      (void*)this);
         TraceExeBegin(label);
-        // ENDGAME B.3.7: QUALIFIED -- slot 6 is VIRTUAL on the base and this
-        // object wears the exe table, so an unqualified call would re-enter
-        // Stub_Load.
-        reinterpret_cast<Engine::DialogLoaderLoopT*>(self)                   // B.3.7 bridge
-            ->Engine::DialogLoaderLoopT::Load();
+        // QUALIFIED -- slot 6 is VIRTUAL on the base, so an unqualified call
+        // would re-enter this class's own Load.
+        Engine::DialogLoaderLoopT::Load();
         TraceExeEnd(label);
         printf("[SplashDLT::Startup] DialogLoaderLoopT::Load returned, "
-               "m_dialogExternal=%p\n", ll->m_dialogExternal);
+               "m_dialogExternal=%p\n", _dialogExternal);
     }
 
     // Step 2: chain DialogLoaderLoopT::Startup. Mirrors original exe
     // 0x140098FA0 which tail-calls Runtime DialogLoaderLoopT::Startup
-    // (0x1800db000). That function calls our vtable[+0x60] CreateDialog to
-    // produce a LoaderDialog wrapping m_dialogExternal, stores it at
-    // self+0x58 (m_dialogInstance), invokes the dialog's Slot4 (Setup),
+    // (0x1800db000). That function calls our slot 12 CreateLoopDialog to
+    // produce a LoaderDialog wrapping _dialogExternal, stores it at
+    // self+0x58 (_dialogInstance), invokes the dialog's Slot4 (Setup),
     // pushes the IBP into the UI's pending-open list at self+0x88, then calls
-    // Loader::Load(&_loader, m_nextLoop).
+    // Loader::Load(&_loader, _nextLoop).
     //
     // THAT TAIL CALL IS THE ONE AND ONLY LOAD KICK, here and in retail. Read
     // out of the shipped exe: 0x140098fa0 is 29 instructions and its first call
     // is this chain; there is no second dispatch and no exe-side loader at all
     // (the exe does not even import Engine::Loader — see
     // docs/runtime_port/endgame_b/LOADER_READ_SPIN_GHIDRA.md §Q5). The loader
-    // thread it starts loads m_nextLoop's resources while the main thread below
+    // thread it starts loads _nextLoop's resources while the main thread below
     // animates this splash, which is exactly retail's shape.
-    if (ll->m_dialogExternal) {
+    if (_dialogExternal) {
         StallDebug::Phase chainPhase("SplashDLT DialogLoaderLoopT::Startup");
         printf("[SplashDLT::Startup] invoking DialogLoaderLoopT::Startup "
                "(creates dialog + pushes to UI, then kicks the ONE "
                "Engine::Loader thread for next)\n");
-        // ENDGAME B.3.7: QUALIFIED (slot 1 is VIRTUAL on the base; this is
-        // Stub_Startup itself).
-        reinterpret_cast<Engine::DialogLoaderLoopT*>(self)                   // B.3.7 bridge
-            ->Engine::DialogLoaderLoopT::Startup();
-        // Arm the gate the moment the kick has happened; Stub_Update polls it
+        // QUALIFIED (slot 1 is VIRTUAL on the base; this is Startup itself).
+        Engine::DialogLoaderLoopT::Startup();
+        // Arm the gate the moment the kick has happened; Update polls it
         // in the same place retail polls LoaderLoop::IsFinished.
         EngineLoader::NoteKicked();
         printf("[SplashDLT::Startup] DialogLoaderLoopT::Startup returned, "
                "m_dialogInstance=%p loaderBusy=%d\n",
-               ll->m_dialogInstance, (int)EngineLoader::IsBusy());
+               _dialogInstance, (int)EngineLoader::IsBusy());
     } else {
         printf("[SplashDLT::Startup] WARN: skipping DialogLoaderLoopT::Startup "
-               "(rsc=%p)\n", ll->m_dialogExternal);
+               "(rsc=%p)\n", _dialogExternal);
     }
 
     // Step 3 USED TO BE HERE and is gone. It kicked next->vtable->Load a SECOND
@@ -232,37 +249,38 @@ void Stub_Startup(UpdateLoop* self) {
     // AsyncLoader was our invention and not ported retail code is §Q5 of
     // LOADER_READ_SPIN_GHIDRA.md.
     //
-    // The reason the kick was deferred into Stub_Update in the first place — the
+    // The reason the kick was deferred into Update in the first place — the
     // load was synchronous on the main thread, so the screen sat black for the
     // whole ~5.8s world build — no longer exists: step 2's loader thread does the
     // load while the main thread keeps animating this splash, which is what
     // retail does and what the deferral was hand-rolling.
     //
     // Note: ChunkedSceneLoader is only ARMED at boot (RunGameMain in
-    // code/Game/Game/game_main.cpp). Stub_Update runs its Init and Tick()s PhaseB
+    // code/Game/Game/game_main.cpp). Update runs its Init and Tick()s PhaseB
     // once the loader thread is done (see the gate there), so MenuDLT's struct
     // fields (+0xb90 menuScene, +0xb98 renderer, etc.) are populated behind a
     // drawn splash rather than during the un-presented boot window.
 
     // Trigger reveal. Only Step 1's own-rsc load is synchronous (~10ms for the
-    // ShiningRock/Loading splashes; usually skipped because m_dialogExternal was
+    // ShiningRock/Loading splashes; usually skipped because _dialogExternal was
     // populated by an upstream load), and it runs BEFORE step 2 starts the loader
     // thread, so it is not concurrent with it. The reveal gets a normal
     // first-tick dt and animates frame-by-frame.
-    void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
+    void* ui = &_ui;
     UIFade::EnsureFadeSprite(ui);
     UIFade::TriggerReveal(ui);
 }
 
-void Stub_Shutdown(UpdateLoop* self) {
-    printf("[SplashDLT::Shutdown] self=%p\n", (void*)self);
+void GameLoadDialogLoopT::Shutdown() {
+    printf("[SplashDLT::Shutdown] self=%p\n", (void*)this);
     // Original is RET 0 (literal no-op).
 }
 
-bool Stub_Update(UpdateLoop* self, void* time) {
+bool GameLoadDialogLoopT::Update(const System::Time& time) {
     StallDebug::Tick("SplashDLT::Update");
-    DialogLoaderLoopT* ll = reinterpret_cast<DialogLoaderLoopT*>(self);
-    Time* dt = reinterpret_cast<Time*>(time);
+    // The first-tick clamp below writes the caller's Time and restores it
+    // before returning (MainLoop owns it); retail's slot takes it by const&.
+    Time* dt = reinterpret_cast<Time*>(const_cast<System::Time*>(&time));   // B.3.8 bridge
 
     // Pump the embedded UI — flushes the pending-open list (where Startup
     // pushed our LoaderDialog), runs each open dialog's OnUpdate, processes
@@ -271,7 +289,7 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // empty list and the screen stays blank. Mirrors Runtime
     // DialogLoaderLoopT::Update @ 0x1800daf20.
     //
-    // Clamp first-tick dt: Stub_Startup ran synchronously and may have spent
+    // Clamp first-tick dt: Startup ran synchronously and may have spent
     // 60-100ms+ doing the own-rsc load (first splash) or ~3ms (subsequent
     // splashes). Either way, MainLoop accumulates that time and feeds it back
     // as the first Update's dt. UI::Update advances the fade alpha by
@@ -282,27 +300,23 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // so the fade animates frame-by-frame.
     int64_t origTicks = 0;
     bool clamped = false;
-    if (ll->m_elapsedTicks == 0 && dt && g_Timer_ticksPerSecond &&
+    if (_elapsedTicks == 0 && dt && g_Timer_ticksPerSecond &&
         *g_Timer_ticksPerSecond > 0) {
         origTicks = dt->ticks;
         double dtMs = (double)origTicks * 1000.0 / (double)*g_Timer_ticksPerSecond;
         printf("[SplashDLT::Update] self=%p first-tick dt=%lld (%.2fms)\n",
-               (void*)self, (long long)origTicks, dtMs);
+               (void*)this, (long long)origTicks, dtMs);
         int64_t maxTicks = *g_Timer_ticksPerSecond / 60;
         if (origTicks > maxTicks) {
             dt->ticks = maxTicks;
             clamped = true;
             printf("[SplashDLT::Update] self=%p first-tick dt clamped from %lld "
                    "to %lld (~16ms) — Startup stall accumulator\n",
-                   (void*)self, (long long)origTicks, (long long)maxTicks);
+                   (void*)this, (long long)origTicks, (long long)maxTicks);
         }
     }
 
-    {
-        void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
-        reinterpret_cast<UI::UserInterface*>(ui)->Update(  // B.3.6 bridge
-            *reinterpret_cast<const System::Time*>(time));
-    }
+    _ui.Update(time);
 
     // Safety net for the deferred window reveal — if the Draw path never runs,
     // this reveals the window anyway rather than leaving the process invisible.
@@ -339,14 +353,14 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // splash — just after the loader has finished rather than beside it.
     if (!EngineLoader::IsBusy()) {
         if (ChunkedSceneLoader::IsArmed()) {
-            void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
+            void* ui = &_ui;
             int64_t revealCap = (g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0)
                 ? *g_Timer_ticksPerSecond / 4 : 0;
             float revealAlpha = UIFade::GetCurrentAlpha(ui);
-            if (revealAlpha < 0.5f || (revealCap && ll->m_elapsedTicks >= revealCap)) {
+            if (revealAlpha < 0.5f || (revealCap && _elapsedTicks >= revealCap)) {
                 printf("[SplashDLT::Update] self=%p reveal-alpha=%.2f "
                        "loader idle -> running deferred ChunkedSceneLoader init\n",
-                       (void*)self, revealAlpha);
+                       (void*)this, revealAlpha);
                 ChunkedSceneLoader::RunArmedInit();
             }
         }
@@ -367,18 +381,18 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // Loading-screen frame cap (matches real LoaderLoop ~14ms sleep).
     Sleep(14);
 
-    ll->m_elapsedTicks += dt->ticks;
+    _elapsedTicks += dt->ticks;
 
     // (The "Fix 1 deferred load kick" that used to sit here is gone — it was the
     // second dispatcher of next->vtable->Load. See the Step 3 note in
-    // Stub_Startup. The load now runs once, on the Engine::Loader thread that
-    // Stub_Startup's step 2 started, which is retail's single loader.)
+    // Startup. The load now runs once, on the Engine::Loader thread that
+    // Startup's step 2 started, which is retail's single loader.)
 
     // ---- Fix 2: cycle the loading tip every 2.0s, as retail does ----
     // Retail FUN_140098DA0 drives this off the self+0xB58 timer against
     // DAT_140172174, which is exactly 2.0f. Measured here at 2015ms -- match.
     //
-    // The block is gated on nextLoop->m_loadProgress != 0 (UpdateLoop+0x24),
+    // The block is gated on nextLoop->_loadProgress != 0 (UpdateLoop+0x24),
     // exactly as retail. An earlier note here claimed the gate could not be
     // honoured because "the Runtime Loader::Load path calls SetLoadProgress and
     // our AsyncLoader replaced it" -- that was wrong on both counts. The
@@ -392,19 +406,17 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // running; the boot splash chain (nextLoop=MenuDLT) and save-loads never
     // write +0x24, so those screens keep the .rsc default (a single space).
     //
-    // The gate is now EXACTLY retail's: `nextLoop->m_loadProgress != 0` and
+    // The gate is now EXACTLY retail's: `nextLoop->_loadProgress != 0` and
     // nothing else (exe 0x140098e0d: MOV RAX,[RSI+0x28]; MOV ECX,[RAX+0x24];
     // TEST ECX,ECX; JZ). The extra `g_loadKickedFor == self` term that used to
     // be here was an artefact of our deferred load kick, which is gone.
     if (g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0 &&
-        ll->m_nextLoop && *(int*)((uintptr_t)ll->m_nextLoop + 0x24) != 0) {
-        int64_t* tipTimer =
-            reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(self) + 0xB58);
-        *tipTimer += dt->ticks;
-        if (*tipTimer >= *g_Timer_ticksPerSecond * 2) {   // 2.0s
-            *tipTimer = 0;
+        _nextLoop && _nextLoop->GetLoadProgress() != 0) {
+        _tipTimer += dt->ticks;
+        if (_tipTimer >= *g_Timer_ticksPerSecond * 2) {   // 2.0s
+            _tipTimer = 0;
             // [diag] measure the ACTUAL interval and the retail gate value.
-            // Retail cycles only while nextLoop->m_loadProgress (UpdateLoop+0x24)
+            // Retail cycles only while nextLoop->_loadProgress (UpdateLoop+0x24)
             // is non-zero, and its period is DAT_140172174 = 2.0s exactly.
             static long long s_prevTip = 0;
             LARGE_INTEGER qf, qn; QueryPerformanceFrequency(&qf); QueryPerformanceCounter(&qn);
@@ -412,8 +424,8 @@ bool Stub_Update(UpdateLoop* self, void* time) {
             s_prevTip = qn.QuadPart;
             printf("[SplashDLT] tip cycle: wall=%.0fms tps=%lld loadProgress=%d\n",
                    sinceMs, (long long)*g_Timer_ticksPerSecond,
-                   ll->m_nextLoop ? *(int*)((uintptr_t)ll->m_nextLoop + 0x24) : -1);
-            SetRandomLoadingTip(ll);
+                   _nextLoop ? _nextLoop->GetLoadProgress() : -1);
+            SetRandomLoadingTip(this);
         }
     }
 
@@ -425,11 +437,13 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // into GameUpdateLoop while it is still building, drawing a half-built world.
     // For every other loop (boot splashes -> MenuDLT) worldReady stays true and
     // the transition is purely time-based, exactly as before.
+    // Caller batch CB6: "is the next loop a GameUpdateLoop" compares the vptr
+    // with the class's compiler table (B8-5 identity; it was the by-address
+    // g_GameUpdateLoop_Vtable, which 0x14015e2f0's row served with that table).
     bool worldReady = true;
-    if (ll->m_nextLoop && g_GameUpdateLoop_Vtable &&
-        *reinterpret_cast<void**>(ll->m_nextLoop) ==
-            reinterpret_cast<void*>(g_GameUpdateLoop_Vtable)) {
-        worldReady = GameUpdateLoop_IsWorldBuilt(ll->m_nextLoop);
+    if (_nextLoop &&
+        *reinterpret_cast<const void* const*>(_nextLoop) == GameUpdateLoop::Vtable()) {
+        worldReady = GameUpdateLoop_IsWorldBuilt(_nextLoop);
     }
 
     // Once the loader thread is done AND the splash hold has elapsed, kick off
@@ -441,16 +455,16 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // EngineLoader::IsBusy() is that first term, asked without the wake-up race
     // (see engine_loader_gate.h); `worldReady` is ours, because our world build
     // signals completion separately.
-    if (!EngineLoader::IsBusy() && ll->m_elapsedTicks >= ll->m_delayTicks &&
+    if (!EngineLoader::IsBusy() && _elapsedTicks >= _delayTicks &&
         worldReady) {
-        void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
+        void* ui = &_ui;
 
-        if (g_fadeOutInitiatedFor != self) {
-            g_fadeOutInitiatedFor = self;
+        if (g_fadeOutInitiatedFor != this) {
+            g_fadeOutInitiatedFor = this;
             UIFade::EnsureFadeSprite(ui);
             UIFade::TriggerFadeIn(ui);
             printf("[SplashDLT::Update] self=%p kicked fade-out-to-black, "
-                   "waiting for alpha=1\n", (void*)self);
+                   "waiting for alpha=1\n", (void*)this);
             return true;
         }
 
@@ -475,20 +489,19 @@ bool Stub_Update(UpdateLoop* self, void* time) {
             static int waitCount = 0;
             if ((waitCount++ % 30) == 0) {
                 printf("[SplashDLT::Update] self=%p fade=%.3f waiting for "
-                       "ChunkedSceneLoader\n", (void*)self, alpha);
+                       "ChunkedSceneLoader\n", (void*)this, alpha);
             }
             return true;
         }
 
-        UpdateLoop* next = ll->m_nextLoop;
+        Engine::UpdateLoop* next = _nextLoop;
         void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
         printf("[SplashDLT::Update] self=%p elapsed=%lld delay=%lld "
                "fade-alpha=%.3f -> transition next=%p\n",
-               (void*)self, (long long)ll->m_elapsedTicks,
-               (long long)ll->m_delayTicks, alpha, (void*)next);
+               (void*)this, (long long)_elapsedTicks,
+               (long long)_delayTicks, alpha, (void*)next);
         if (next && mainLoop) {
-            reinterpret_cast<Engine::MainLoop*>(mainLoop)->SetNextLoop(      // B.3.7 bridge
-                reinterpret_cast<Engine::UpdateLoop*>(next));
+            reinterpret_cast<Engine::MainLoop*>(mainLoop)->SetNextLoop(next);   // B.3.7 bridge
         }
         return false;
     }
@@ -498,35 +511,38 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     ++updateCount;
     if (updateCount <= 3 || updateCount % 50 == 0) {
         printf("[SplashDLT::Update] self=%p tick=%d elapsed=%lld delay=%lld\n",
-               (void*)self, updateCount,
-               (long long)ll->m_elapsedTicks, (long long)ll->m_delayTicks);
+               (void*)this, updateCount,
+               (long long)_elapsedTicks, (long long)_delayTicks);
     }
     return true;
 }
 
-void Stub_Draw(UpdateLoop* self, float alpha) {
+void GameLoadDialogLoopT::Draw(float alpha) {
     StallDebug::Tick("SplashDLT::Draw");
     (void)alpha;  // frame-blend interpolation, not the fade alpha
-    // Mirror Runtime DialogLoaderLoopT::Draw (0x1800DAE20). Shared body lives in
-    // code/Game/Game/dialogloaderloop.cpp; DLL-mode reaches it via Reimpl_Draw
-    // in engine/reimpl/dialogloaderloop.cpp.
+    // STANDALONE DIVERGENCE: retail's slot 4 is the base DialogLoaderLoopT::Draw
+    // (0x1800dae20), called below unchanged; the override only adds the boot
+    // window reveal (and a fade-alpha trace) around it.
     static int draws = 0;
     ++draws;
     bool trace = (draws <= 3);
 
     if (trace) {
-        printf("[SplashDLT::Draw] self=%p frameAlpha=%f -> DialogLoaderLoopT_Draw_Impl\n",
-               (void*)self, alpha);
+        printf("[SplashDLT::Draw] self=%p frameAlpha=%f -> DialogLoaderLoopT::Draw\n",
+               (void*)this, alpha);
     }
 
     // Per-frame fade alpha trace — log first 5 frames + every 10th so the curve
     // is visible in standalone_debug.log without spamming. UI is at self+0x60
     // for DialogLoaderLoopT.
     if (draws <= 5 || (draws % 10) == 0) {
-        UIFade::LogState("SplashDLT::Draw", reinterpret_cast<uint8_t*>(self) + 0x60);
+        UIFade::LogState("SplashDLT::Draw", &_ui);
     }
 
-    DialogLoaderLoopT_Draw_Impl(reinterpret_cast<DialogLoaderLoopT*>(self));
+    // Retail's slot 4 IS this base body (import ?Draw@DialogLoaderLoopT@):
+    // clear to black, publish the load timer to the shader constants, draw the
+    // UI. QUALIFIED, or it would dispatch back into this override.
+    Engine::DialogLoaderLoopT::Draw(alpha);
 
     // Reveal the engine window once a real frame is actually in the swap chain.
     // MainLoop presents AFTER Draw returns, so draw #1 has not been presented
@@ -538,97 +554,25 @@ void Stub_Draw(UpdateLoop* self, float alpha) {
     }
 }
 
-void Stub_DrawFailed(UpdateLoop* self) {
-    printf("[SplashDLT::DrawFailed] self=%p\n", (void*)self);
-}
-
-void Stub_Load(UpdateLoop* self) {
-    DialogLoaderLoopT* ll = reinterpret_cast<DialogLoaderLoopT*>(self);
-    printf("[SplashDLT::Load] self=%p m_dialogExternal(before)=%p\n",
-           (void*)self, ll->m_dialogExternal);
-    {
-        // Same bracket pattern as Stub_Startup. Stub_Load gets called when our
-        // Stub_Startup synchronously drives `next->vtable->Load` on the next
-        // splash loop, so this captures the *second* splash's load too.
-        char label[96];
-        std::snprintf(label, sizeof(label),
-                      "DialogLoaderLoopT::Load (Stub_Load) self=%p",
-                      (void*)self);
-        TraceExeBegin(label);
-        // ENDGAME B.3.7: QUALIFIED. This stub IS the exe table's slot 6, so an
-        // unqualified `->Load()` would call itself forever.
-        reinterpret_cast<Engine::DialogLoaderLoopT*>(self)                   // B.3.7 bridge
-            ->Engine::DialogLoaderLoopT::Load();
-        TraceExeEnd(label);
-        printf("[SplashDLT::Load] m_dialogExternal(after)=%p\n", ll->m_dialogExternal);
-    }
-}
-
-void Stub_SaveRestore(UpdateLoop* self, bool save, void* state) {
-    printf("[SplashDLT::SaveRestore] self=%p save=%d state=%p\n",
-           (void*)self, save, state);
-}
-
-void Stub_OnVideoError(UpdateLoop* self) {
-    printf("[SplashDLT::OnVideoError] self=%p\n", (void*)self);
-}
-
-void Stub_OnVideoRestart(UpdateLoop* self) {
-    printf("[SplashDLT::OnVideoRestart] self=%p\n", (void*)self);
-}
-
-const char* Stub_GetResourceFilename(UpdateLoop* self) {
-    (void)self;
-    // Original thunks to Runtime DialogLoaderLoopT::GetResourceFilename which
-    // returns "Game/Loader" (see runtime ?GetResourceFilename@DialogLoaderLoopT).
-    return "Game/Loader";
-}
-
-bool Stub_AllowsModChanges(UpdateLoop* self) {
-    (void)self;
-    // Exe slot 11 (vtable 0x140158800 +0x58) is the import thunk 0x14003a8f4 ->
-    // the ONE Runtime export ?AllowsModChanges@UpdateLoop@Engine@@ (0x180031790,
-    // `XOR AL,AL ; RET`): FALSE. There is no DialogLoaderLoopT override; only
-    // MenuDialogLoopT (exe 0x14001a2c0) returns true. See GUL_AllowsModChanges
-    // (gameupdateloop_stubs.cpp) for what Engine::Loader::Load does with it.
-    return false;
-}
-
 extern "C" void* LoaderDialog_FromSplashDLT(void* loop, void* retInternalBasePtr);
 
-void* Stub_CreateDialog(UpdateLoop* self, void* retPtr) {
-    void* rsc = self ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x50) : nullptr;
+Object::InternalPtr<UI::DialogInstance>* GameLoadDialogLoopT::CreateLoopDialog(
+        Object::InternalPtr<UI::DialogInstance>* retPtr) {
     printf("[SplashDLT::CreateDialog] self=%p retPtr=%p rsc=%p -> LoaderDialog_FromSplashDLT\n",
-           (void*)self, retPtr, rsc);
+           (void*)this, (void*)retPtr, _dialogExternal);
     // Mirrors exe LoaderDialog_Ctor3 @ 0x140099070: builds a real DialogInstance
     // subclass wrapping the loaded .rsc (Dialog/ShiningRock.rsc or
     // Dialog/Loading.rsc), patches our standalone vtable, returns IBP.
-    return LoaderDialog_FromSplashDLT(self, retPtr);
+    return static_cast<Object::InternalPtr<UI::DialogInstance>*>(
+        LoaderDialog_FromSplashDLT(this, retPtr));
 }
 
-// 13-slot vtable — 12 UpdateLoop slots + DialogLoaderLoopT's CreateDialog at +0x60.
-// The original layout reserves a NULL at +0x68 (8 bytes of padding before the next
-// vtable in .rdata), but it is never indexed at runtime so we omit it here.
-void* g_splashDialogLoopVtable[13] = {
-    reinterpret_cast<void*>(&Stub_Destroy),               // +0x00
-    reinterpret_cast<void*>(&Stub_Startup),               // +0x08
-    reinterpret_cast<void*>(&Stub_Shutdown),              // +0x10
-    reinterpret_cast<void*>(&Stub_Update),                // +0x18
-    reinterpret_cast<void*>(&Stub_Draw),                  // +0x20
-    reinterpret_cast<void*>(&Stub_DrawFailed),            // +0x28
-    reinterpret_cast<void*>(&Stub_Load),                  // +0x30
-    reinterpret_cast<void*>(&Stub_SaveRestore),           // +0x38
-    reinterpret_cast<void*>(&Stub_OnVideoError),          // +0x40
-    reinterpret_cast<void*>(&Stub_OnVideoRestart),        // +0x48
-    reinterpret_cast<void*>(&Stub_GetResourceFilename),   // +0x50
-    reinterpret_cast<void*>(&Stub_AllowsModChanges),      // +0x58
-    reinterpret_cast<void*>(&Stub_CreateDialog),          // +0x60
-};
-
-} // namespace
+// B38_RULES D5: `Vtable()` is the COMPILER's table; 0x140158800 keeps serving
+// it while the door-then-stamp sites in code/Game/{Dialog,Tutorial} read it
+// (through engine_funcs.cpp's g_GameLoadDialogLoopT_Vtable).
+DEFINE_EXE_VTABLE(GameLoadDialogLoopT, "_ZTV19GameLoadDialogLoopT")
 
 // Called from address_registry.cpp's RegisterVtablesAndTypeIds().
 void RegisterSplashDialogLoopVtable() {
-    RegisterExeAddr(0x140158800, reinterpret_cast<uintptr_t>(g_splashDialogLoopVtable));
+    RegisterExeAddr(0x140158800, reinterpret_cast<uintptr_t>(GameLoadDialogLoopT::Vtable()));
 }
-

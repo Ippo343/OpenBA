@@ -19,6 +19,8 @@
 #include <cstdint>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/Component.h"          // ENDGAME B.3.8 CB3: slot 15 OnMessage
+#include "Component/OrchardComponent.h"   // ENDGAME B.3.8 CB3: OrchardComponent::TypeId()
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -69,7 +71,7 @@ bool SendComponentMessage_ResolveFuncs() {
 // Serializes status, two entity refs with type checks, component type,
 // message ID, and two uint params.
 // ============================================================
-void SendComponentMessage_Serialize_Impl(SendComponentMessage* self, void* stream) {
+void SendComponentMessage::Persist(void* stream) {
     // Reached through the registered vtable, which the factory path never
     // has to touch — an exe-ctor-built action arrives here with the file
     // statics still null. Lazy-resolve like the other entry points do.
@@ -79,38 +81,38 @@ void SendComponentMessage_Serialize_Impl(SendComponentMessage* self, void* strea
 
     // Serialize status (version 0)
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(&self->_status), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(&this->_status), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Serialize entity refs + message fields (version 0)
     ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Target entity ref (+0x20) with type validation
-    reinterpret_cast<Object::InternalBasePtr*>(&self->_field20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (self->_field20 != nullptr) {
-        if (!fn_IsDerivedFrom(self->_field20, *s_TypeId_Entity)) {
-            self->_field20 = nullptr;
+    reinterpret_cast<Object::InternalBasePtr*>(&this->_field20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
+    if (this->_field20 != nullptr) {
+        if (!fn_IsDerivedFrom(this->_field20, *s_TypeId_Entity)) {
+            this->_field20 = nullptr;
         }
     }
 
     // Source entity ref (+0x28) with type validation
-    reinterpret_cast<Object::InternalBasePtr*>(&self->_field28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (self->_field28 != nullptr) {
-        if (!fn_IsDerivedFrom(self->_field28, *s_TypeId_Entity)) {
-            self->_field28 = nullptr;
+    reinterpret_cast<Object::InternalBasePtr*>(&this->_field28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
+    if (this->_field28 != nullptr) {
+        if (!fn_IsDerivedFrom(this->_field28, *s_TypeId_Entity)) {
+            this->_field28 = nullptr;
         }
     }
 
     // Component type (+0x30) — Object::Type::Serialize
-    s_fn_Type_Serialize(&self->_field30, ser2);
+    s_fn_Type_Serialize(&this->_field30, ser2);
 
     // Message ID (+0x34) — int
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&self->_field34), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&this->_field34), nullptr);   // B.3.4 bridge
 
     // Message params (+0x38, +0x3c) — uint
     // Note: _field38 is void* in struct but actually two uint32s packed
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<unsigned int*>(((uint8_t*)self + 0x38)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<unsigned int*>(((uint8_t*)self + 0x3c)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<unsigned int*>((reinterpret_cast<uint8_t*>(this) + 0x38)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<unsigned int*>((reinterpret_cast<uint8_t*>(this) + 0x3c)), nullptr);   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
 }
@@ -121,15 +123,15 @@ void SendComponentMessage_Serialize_Impl(SendComponentMessage* self, void* strea
 // message handler virtual method (vtable+0x78).
 // Returns 0 on success, 2 if component not found.
 // ============================================================
-int SendComponentMessage_AbstractImpl_Impl(SendComponentMessage* self, void* actionStack) {
+int  SendComponentMessage::AbstractImpl(void* actionStack) {
     SendComponentMessage_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
 
-    uint32_t componentTypeId = self->_field30;
-    uint8_t* s = (uint8_t*)self;
+    uint32_t componentTypeId = this->_field30;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     // CheckPtr on target entity
-    uintptr_t entity = (uintptr_t)self->_field20;
+    uintptr_t entity = reinterpret_cast<uintptr_t>(_field20);
 
     // SA-guard: the target at +0x20 is a WEAK ref, and nothing invalidates it when the
     // entity is freed (CheckPtr is an empty function in the shipping Runtime). A citizen
@@ -168,7 +170,7 @@ int SendComponentMessage_AbstractImpl_Impl(SendComponentMessage* self, void* act
                          "(canonical=%d dying=%d msgId=%d compType=%u) — action dropped "
                          "instead of reading freed memory\n",
                          reinterpret_cast<void*>(entity), (int)canonical, (int)dying,
-                         *(int32_t*)(s + 0x34), componentTypeId);
+                         _field34, componentTypeId);
             std::fflush(stderr);
         }
         return 2;
@@ -190,10 +192,7 @@ int SendComponentMessage_AbstractImpl_Impl(SendComponentMessage* self, void* act
         if (comp < 0x10000 || comp > 0x00007FFFFFFFFFFFULL) continue;
 
         // Get component type ID via vtable+0x10
-        uintptr_t compVtable = *(uintptr_t*)comp;
-        typedef int (*GetTypeId_t)(void*);
-        GetTypeId_t getTypeId = *(GetTypeId_t*)(compVtable + 0x10);
-        int typeId = getTypeId((void*)comp);
+        int typeId = static_cast<int>(reinterpret_cast<Object::Base*>(comp)->Type());   // B.3.8 bridge
 
         if (typeId == (int)componentTypeId) {
             // Found matching component
@@ -210,15 +209,14 @@ int SendComponentMessage_AbstractImpl_Impl(SendComponentMessage* self, void* act
         // happened — so "zero msg=1 sends" read as a missing message when the message was
         // simply unloggable. A saturating diagnostic reports its own budget, not the
         // system. See reference_diagnostics_must_report_outcomes.
-        static uint32_t s_tidOrchard = ::Object::GetTypeIdByName("OrchardComponent");
         static int s_seen[8] = {0};
-        const int msgId = *(int32_t*)(s + 0x34);
+        const int msgId = _field34;
         const int bucket = (msgId >= 0 && msgId < 8) ? msgId : 7;
-        if (componentTypeId == s_tidOrchard && s_seen[bucket]++ < 8) {
+        if (componentTypeId == OrchardComponent::TypeId() && s_seen[bucket]++ < 8) {
             std::fprintf(stderr, "[SendCompMsg] entity=%p compType=%u msg=%d p1=%u -> "
                          "scanned %d components, found=%p\n",
                          reinterpret_cast<void*>(entity), componentTypeId,
-                         *(int32_t*)(s + 0x34), *(uint32_t*)(s + 0x38), compCount,
+                         _field34, *(uint32_t*)(s + 0x38), compCount,
                          reinterpret_cast<void*>(foundComp));
             std::fflush(stderr);
         }
@@ -238,10 +236,9 @@ int SendComponentMessage_AbstractImpl_Impl(SendComponentMessage* self, void* act
 
     // Build call args: component, msgId, &sourceEntity, param1, param2
     uintptr_t sourceEntityRef = *(uintptr_t*)(s + 0x28);
-    uintptr_t compVtable = *(uintptr_t*)compObj;
-    typedef void (*MsgHandler_t)(void* comp, int32_t msgId, void* sourceEntityRef, uint32_t param1, uint32_t param2);
-    MsgHandler_t handler = *(MsgHandler_t*)(compVtable + 0x78);
-    handler((void*)compObj, *(int32_t*)(s + 0x34), &sourceEntityRef, *(uint32_t*)(s + 0x38), *(uint32_t*)(s + 0x3c));
+    // slot 15 (vtable +0x78) Component::OnMessage on the component the type scan found
+    reinterpret_cast<Component*>(compObj)->OnMessage(_field34, &sourceEntityRef,   // B.3.8 bridge
+                                                     *(uint32_t*)(s + 0x38), *(uint32_t*)(s + 0x3c));
 
     return 0;
 }
@@ -250,15 +247,15 @@ int SendComponentMessage_AbstractImpl_Impl(SendComponentMessage* self, void* act
 // GetTarget (0x1400cae80, vtable slot 9)
 // Returns true if param matches entity at +0x20 or +0x28.
 // ============================================================
-bool SendComponentMessage_GetTarget_Impl(SendComponentMessage* self, void* param) {
+bool SendComponentMessage::GetTarget(void* param) {
     SendComponentMessage_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     // CheckPtr on +0x20, then compare [param] directly (no CheckPtr on param)
-    if (*(void**)param == self->_field20) {
+    if (*(void**)param == this->_field20) {
         return true;
     }
 
     // CheckPtr on +0x28, then compare [param]
-    return *(void**)param == self->_field28;
+    return *(void**)param == this->_field28;
 }
 
 // ============================================================
@@ -288,11 +285,8 @@ Object::Base* SendComponentMessage::DeletingDtor(unsigned flags) {
 }
 
 // [3] 0x1400cb000
-void SendComponentMessage::Persist(void* stream) { SendComponentMessage_Serialize_Impl(this, stream); }
 // [4] 0x1400caef0
-int  SendComponentMessage::AbstractImpl(void* actionStack) { return SendComponentMessage_AbstractImpl_Impl(this, actionStack); }
 // [9] 0x1400cae80
-bool SendComponentMessage::GetTarget(void* param) { return SendComponentMessage_GetTarget_Impl(this, param); }
 
 void* SendComponentMessage::CreateNewObject() {
     SendComponentMessage_ResolveFuncs();
@@ -307,10 +301,5 @@ void* SendComponentMessage::CreateInPlaceObject(void* storage) {
 }
 
 DEFINE_EXE_VTABLE(SendComponentMessage, "_ZTV20SendComponentMessage")
-
-// B38 D5: every by-address reader of 0x1401600c0 was inside this block and now
-// builds the object with the real ctor, so the row is gone. The function stays
-// until the coordinator's address_registry hunk drops its call.
-extern "C" void RegisterSendComponentMessageVtable() {}
 
 DEFINE_EXE_TYPE(SendComponentMessage, "Action")

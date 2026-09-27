@@ -93,11 +93,4 @@ void* UpgradeUIConfig::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(UpgradeUIConfig, "_ZTV15UpgradeUIConfig")
 
-// B38 D5: the vtable row this registered had no by-address reader left and is
-// gone (CB2 caller batch); only the call from standalone keeps the empty body.
-extern "C" void RegisterUpgradeUIConfigVtable() {
-    // Emptied by the B.3.8 CB2 caller batch: the row had no by-address reader left
-    // (CALLER_SURFACE section 5). The closing pass deletes this function and its call.
-}
-
 DEFINE_EXE_TYPE(UpgradeUIConfig, "UI::DialogControllerConfig")

@@ -8,137 +8,98 @@
 // hang" was actually this crash, masked by the shutdown-deadlock in
 // LdrShutdownProcess). This file provides the real factory + faithful Serialize.
 //
+// ENDGAME B.3.8 block LOOP: a REAL class (code/Game/Game/Disease.h) with a
+// compiler-generated vtable; the old 9-slot `g_Disease_Vtable` is gone.
+//
 // Decompiled READ-ONLY from Application-x64.exe:
 //   RegisterType  0x14014cb00 (mislabeled ClimateGenerator_StaticInit):
 //                 BaseTypeInfo("Disease","Object::External", abstract=NULL,
 //                              factory=0x14008fd0, vslot=ClimateGenerator_vslot18)
 //   Factory       0x14008fd0: MemAlloc(0x48,8); External::External; vtable 0x14015e190;
 //                 +0x20=0 +0x28=0 +0x30=1.0f +0x34=0 +0x38=1.0f +0x3c=10.0f +0x40=0
-//   Vtable        0x14015e190: +0x00 Dtor=0x140018f60, +0x10 GetTypeId,
-//                 +0x18 GetVersion=0x140093390 (mov eax,2), +0x28 Serialize=0x1400932d0
 //   Serialize     0x1400932d0 stream order:
 //                 +0x20 ExternalPtr<StringTable> (FUN_14000bf40),
 //                 +0x28 System::String,
 //                 +0x30/+0x34/+0x38/+0x3c/+0x40 floats
 //   Dtor          0x140018f60: String::~String(+0x28); External::~External; cond free.
 
+#include "Game/Disease.h"
 #include "engine_funcs.h"
 #include "system/String.h"
-#include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
+#include "object/Internal.h" // Object::detail::InternalMemAlloc / InternalMemFree
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kDiseaseVtable = 0x14015e190;
+// 0x14000bf40 — ExternalPtr<StringTable>::Serialize, registered at that address
+// (standalone/address_registry.cpp) to this body in serialize_externals.cpp.
+// Called directly: the old lazily-resolved door (a non-atomic first-call cache,
+// reached on the LOADER thread — B6-5) resolved to exactly this function.
+extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);
 
-// ============================================================
-// Local serializer function pointers (resolved lazily; standalone fallbacks)
-// ============================================================
-static void  (*s_fn_ExternalPtr_Serialize2)(void* field, void* serializer) = nullptr;
-static bool  s_funcsInited = false;
+// create 0x14008fd0 — the field defaults (External() and the stamp are the
+// compiler's).
+Disease::Disease()
+    : _stringTable(nullptr), _name(nullptr),     // ExternalPtr (weak), empty COW String
+      _field30(1.0f), _field34(0.0f), _field38(1.0f), _field3C(10.0f), _field40(0.0f) {}
 
-static void Disease_InitFuncs() {
-    if (s_funcsInited) return;
-    s_funcsInited = true;
-
-    s_fn_ExternalPtr_Serialize2 = reinterpret_cast<void(*)(void*, void*)>(
-        ResolveAddr(Module::Exe, 0x14000bf40));
-
-    // Standalone fallback: the exe door resolves to NULL when the original exe
-    // isn't mapped. Fall back to the Runtime-resolved engine_funcs global so the
-    // SAME Serialize works in the standalone exe.
-    if (!s_fn_ExternalPtr_Serialize2) s_fn_ExternalPtr_Serialize2 = reinterpret_cast<void(*)(void*, void*)>((uintptr_t)fn_ExternalPtr_BuildSerialize);
+// Dtor 0x140018f60's body: ~String(+0x28); ~External is the compiler's chain.
+Disease::~Disease() {
+    reinterpret_cast<System::String*>(&_name)->~String();   // B.3.1 bridge: the field is the COW pointer
 }
 
-// ============================================================
-// Disease::Init — mirrors factory 0x14008fd0
-// ============================================================
-static void Disease_Init(void* self) {
-    if (fn_External_External) fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kDiseaseVtable);
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(int64_t*)(s + 0x20) = 0;          // ExternalPtr<StringTable> (weak)
-    *(int64_t*)(s + 0x28) = 0;          // System::String (empty COW)
-    *(float*)(s + 0x30) = 1.0f;
-    *(float*)(s + 0x34) = 0.0f;
-    *(float*)(s + 0x38) = 1.0f;
-    *(float*)(s + 0x3c) = 10.0f;
-    *(float*)(s + 0x40) = 0.0f;
+// [0] 0x140018f60
+Object::Base* Disease::DeletingDtor(unsigned flags) {
+    this->~Disease();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-// ============================================================
-// Disease::Serialize (vtable +0x28, exe 0x1400932d0)
-// ============================================================
-void Disease_Serialize(void* self, void* stream) {
-    Disease_InitFuncs();
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-
+// [5] 0x1400932d0 — returns AL=1.
+bool Disease::Serialize(void* stream) {
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    if (s_fn_ExternalPtr_Serialize2) s_fn_ExternalPtr_Serialize2((void*)(s + 0x20), serializer);
-    // B.3.1 bridge: Disease is still an untyped byte struct.
-    reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer);
-    // Untyped byte struct: field pointers are uint8_t*, not float — cast kept.
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x30), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x34), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x38), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x3c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x40), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    Reimpl_ExternalPtr_Serialize_StringTable(&_stringTable, serializer);
+    // B.3.1 bridge: the String field is its COW pointer.
+    reinterpret_cast<System::String*>(&_name)->Serialize(serializer);
+    IO::Serializer& s = *reinterpret_cast<IO::Serializer*>(serializer);   // B.3.4 bridge
+    s.Serialize(_field30, nullptr);
+    s.Serialize(_field34, nullptr);
+    s.Serialize(_field38, nullptr);
+    s.Serialize(_field3C, nullptr);
+    s.Serialize(_field40, nullptr);
+    s.~Serializer();
+    return true;
 }
 
-// ============================================================
-// Disease::Dtor (vtable +0x00, exe 0x140018f60)
-// ============================================================
-void* Disease_Dtor(void* self, uint32_t flags) {
-    Disease_InitFuncs();
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    reinterpret_cast<System::String*>(s + 0x28)->~String();
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x1400190a0 — slot 0 with flags 0 (destroy, no free), then the ctor
+// again in place (retail inlines the ctor: External(), stamp, the defaults).
+Object::External* Disease::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) Disease();
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
+// [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
+// slot 0 with flags 0 (destroy, no free).
+void Disease::Destruct() { DeletingDtor(0); }
 
-static uint32_t Disease_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("Disease");
-    return cached;
-}
-static int   Disease_Return2(void* /*self*/) { return 2; }   // GetVersion = 2
-static int   Disease_Return0(void* /*self*/) { return 0; }
-static void* Disease_ReturnNull(void*, ...)  { return nullptr; }
-static void* Disease_CreateInPlace(void* mem);
-
-static void* g_Disease_Vtable[9] = {
-    reinterpret_cast<void*>(&Disease_Dtor),         // +0x00 Dtor
-    reinterpret_cast<void*>(&Disease_ReturnNull),   // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&Disease_GetTypeId),    // +0x10 GetTypeId (used by IsDerivedFrom)
-    reinterpret_cast<void*>(&Disease_Return2),      // +0x18 GetVersion=2
-    reinterpret_cast<void*>(&Disease_Return0),      // +0x20 Compile thunk
-    reinterpret_cast<void*>(&Disease_Serialize),    // +0x28 Serialize
-    reinterpret_cast<void*>(&Disease_Return0),      // +0x30
-    reinterpret_cast<void*>(&Disease_Return0),      // +0x38
-    reinterpret_cast<void*>(&Disease_CreateInPlace),// +0x40
-};
-
-extern "C" void RegisterDiseaseVtable() {
-    RegisterExeAddr(kDiseaseVtable, reinterpret_cast<uintptr_t>(g_Disease_Vtable));
+// [8] 0x140019040 — placement-new of the class on `this` (the old table's
+// CreateInPlace, the same behaviour).
+Object::External* Disease::Construct() {
+    return ::new (static_cast<void*>(this)) Disease();
 }
 
-extern "C" void* Disease_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+// create 0x14008fd0: MemAlloc(0x48, 8), then the ctor.
+void* Disease::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(Disease), 8);
     if (!p) return nullptr;
-    Disease_Init(p);
-    return p;
+    return static_cast<Object::Base*>(::new (p) Disease());
 }
-static void* Disease_CreateInPlace(void* mem) {
-    if (!mem) return nullptr;
-    Disease_Init(mem);
-    return mem;
+void* Disease::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) Disease());
 }
 
-REGISTER_TYPE(Disease, "Object::External", &Disease_Factory, &Disease_CreateInPlace);
+DEFINE_EXE_VTABLE(Disease, "_ZTV7Disease")
+
+DEFINE_EXE_TYPE(Disease, "Object::External")

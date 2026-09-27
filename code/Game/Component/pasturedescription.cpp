@@ -14,6 +14,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/PastureDescription.h"
+#include "Component/PastureComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -53,7 +54,7 @@ void PastureDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x1400368a0: PastureComponent's type id through the hidden return slot.
 Object::Type* PastureDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("PastureComponent");
+    ret->_type = PastureComponent::TypeId();
     return ret;
 }
 

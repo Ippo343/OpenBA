@@ -9,7 +9,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/marketlocationcomponent_funcs.h"
+#include "Component/MarketLocationComponent.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -20,10 +20,6 @@
 // ============================================================
 // Resolved helpers
 // ============================================================
-
-// Component_Serialize (base Shutdown) at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
 // FUN_140002cc0 = DynArray8_EraseByValue — linear scan of an 8-byte-stride DynArray
 // (+0x00 data, +0x08 count, +0x0C capacity), shift-down removing EVERY slot equal to
@@ -38,96 +34,13 @@ static bool s_initialized = false;
 static void EnsureHelpers() {
     if (s_initialized) return;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-
     s_fn_ListEraseByValue = reinterpret_cast<fn_ListEraseByValue_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));
 
     s_initialized = true;
 }
 
-// ============================================================
-// MarketLocationComponent::Shutdown (vtable slot [3], 0x14004efa0)
-// ============================================================
-// Calls Component_Serialize (base), then creates/destroys two empty
-// Serializer blocks (version 0 each). These exist for binary format
-// compatibility (versioned sub-sections with no fields).
-//
-// Original disassembly:
-//   CALL Component_Serialize (0x1401189b0)
-//   CALL Serializer_Ctor(local1, stream, 0)
-//   CALL Serializer_Dtor(local1)
-//   CALL Serializer_Ctor(local2, stream, 0)
-//   CALL Serializer_Dtor(local2)
 
-void MarketLocationComponent_Shutdown(MarketLocationComponent* self, void* stream) {
-    EnsureHelpers();
-
-    // Call base Component_Serialize
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
-
-    // Two empty serializer blocks (version 0)
-    alignas(8) uint8_t serializerBuf1[24];
-    ::new (static_cast<void*>(serializerBuf1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializerBuf1)->~Serializer();                                       // B.3.4 bridge
-
-    alignas(8) uint8_t serializerBuf2[24];
-    ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();                                       // B.3.4 bridge
-}
-
-// ============================================================
-// MarketLocationComponent::OnCreate (vtable slot [7], 0x14004ef60)
-// ============================================================
-// ⚠ The Ghidra name lies. Slot 7 on this component family is the REMOVAL hook, not
-// OnAdded: entity mark-removal (FUN_1400c2ea0) broadcasts vtable+0x38 to every
-// component whose capability flags (+0x20) carry bit 1 — MarketLocationComponent's
-// 0x82 qualifies. The body is a single DynArray8_EraseByValue, i.e. it UNREGISTERS
-// the owning entity from the town's market-location list at (gameState+0xf0)+0x10.
-// The function name is kept because it is the name in marketlocationcomponent_funcs.h
-// (out of this wave's file scope); the behaviour is the erase.
-//
-// Original disassembly:
-//   MOV RAX,[RCX+0x10]          ; entity ptr from owner
-//   LEA RDX,[RSP+0x30]          ; stack InternalBasePtr
-//   MOV [RSP+0x30],RAX          ; store entity ptr (the needle)
-//   MOV RAX,[DAT_1401c3dd8]     ; game state singleton
-//   MOV RCX,[RAX+0xf0]          ; town / world manager
-//   ADD RCX,0x10                ; market location entity list
-//   CALL FUN_140002cc0           ; erase-by-value
-
-void MarketLocationComponent_OnCreate(MarketLocationComponent* self) {
-    EnsureHelpers();
-
-    if (!s_fn_ListEraseByValue || !g_pGameWorldSingleton || !*g_pGameWorldSingleton)
-        return;
-
-    // Build an InternalBasePtr on the stack with the owner entity
-    uint64_t entityPtr = (uint64_t)(uintptr_t)self->_entity;
-
-    // Get the world manager from game state
-    uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
-    uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
-
-    // Erase the owner entity from the market-location list at worldMgr + 0x10
-    s_fn_ListEraseByValue((void*)(worldMgr + 0x10), &entityPtr);
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void MarketLocationComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[MarketLocationComponent] Funcs resolved: Component_Serialize=%p "
-           "RegisterEntity=%p\n",
-           (void*)s_fn_Component_Serialize,
-           (void*)s_fn_ListEraseByValue);
-#endif
-}
 
 // ============================================================================
 // ENDGAME B.3.8 MI-B — MarketLocationComponent as a REAL class with its retail
@@ -166,7 +79,7 @@ static char MarketLoc_State2Enter(void* data, void* /*sm*/) {
 // DynArray8_EraseByValue(*(gw+0xf0) + 0x10, &local)` (0x140002cc0), then `XOR AL,AL`.
 // Byte-for-byte the slot-7 removal hook's body.
 static char MarketLoc_State3Enter(void* data, void* /*sm*/) {
-    MarketLocationComponent_OnCreate(reinterpret_cast<MarketLocationComponent*>(data));   // B.3.8 bridge
+    reinterpret_cast<MarketLocationComponent*>(data)->MarketLocationComponent::OnRemove();   // B.3.8 bridge (retail: an identical body, not a dispatch)
     return 0;
 }
 
@@ -216,8 +129,69 @@ void* MarketLocationComponent::CreateInPlaceObject(void* storage) {
 }
 
 // [3] 0x14004efa0 (the body resolves at its top). [7] 0x14004ef60 — the removal hook.
-void MarketLocationComponent::Persist(void* stream) { MarketLocationComponent_Shutdown(this, stream); }
-void MarketLocationComponent::OnRemove() { MarketLocationComponent_OnCreate(this); }
+// ============================================================
+// MarketLocationComponent::Persist (vtable slot [3], 0x14004efa0)
+// ============================================================
+// Calls Component_Serialize (base), then creates/destroys two empty
+// Serializer blocks (version 0 each). These exist for binary format
+// compatibility (versioned sub-sections with no fields).
+//
+// Original disassembly:
+//   CALL Component_Serialize (0x1401189b0)
+//   CALL Serializer_Ctor(local1, stream, 0)
+//   CALL Serializer_Dtor(local1)
+//   CALL Serializer_Ctor(local2, stream, 0)
+//   CALL Serializer_Dtor(local2)
+
+void MarketLocationComponent::Persist(void* stream) {
+    // Call base Component_Serialize
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    // Two empty serializer blocks (version 0)
+    alignas(8) uint8_t serializerBuf1[24];
+    ::new (static_cast<void*>(serializerBuf1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf1)->~Serializer();                                       // B.3.4 bridge
+
+    alignas(8) uint8_t serializerBuf2[24];
+    ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();                                       // B.3.4 bridge
+}
+// ============================================================
+// MarketLocationComponent::OnRemove (vtable slot [7], 0x14004ef60)
+// ============================================================
+// ⚠ The Ghidra name lies. Slot 7 on this component family is the REMOVAL hook, not
+// OnAdded: entity mark-removal (FUN_1400c2ea0) broadcasts vtable+0x38 to every
+// component whose capability flags (+0x20) carry bit 1 — MarketLocationComponent's
+// 0x82 qualifies. The body is a single DynArray8_EraseByValue, i.e. it UNREGISTERS
+// the owning entity from the town's market-location list at (gameState+0xf0)+0x10.
+// The function name is kept because it is the name in marketlocationcomponent_funcs.h
+// (out of this wave's file scope); the behaviour is the erase.
+//
+// Original disassembly:
+//   MOV RAX,[RCX+0x10]          ; entity ptr from owner
+//   LEA RDX,[RSP+0x30]          ; stack InternalBasePtr
+//   MOV [RSP+0x30],RAX          ; store entity ptr (the needle)
+//   MOV RAX,[DAT_1401c3dd8]     ; game state singleton
+//   MOV RCX,[RAX+0xf0]          ; town / world manager
+//   ADD RCX,0x10                ; market location entity list
+//   CALL FUN_140002cc0           ; erase-by-value
+
+void MarketLocationComponent::OnRemove() {
+    EnsureHelpers();
+
+    if (!s_fn_ListEraseByValue || !g_pGameWorldSingleton || !*g_pGameWorldSingleton)
+        return;
+
+    // Build an InternalBasePtr on the stack with the owner entity
+    uint64_t entityPtr = (uint64_t)(uintptr_t)_entity;
+
+    // Get the world manager from game state
+    uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
+
+    // Erase the owner entity from the market-location list at worldMgr + 0x10
+    s_fn_ListEraseByValue((void*)(worldMgr + 0x10), &entityPtr);
+}
 
 DEFINE_EXE_VTABLE(MarketLocationComponent, "_ZTV23MarketLocationComponent")
 DEFINE_EXE_TYPE(MarketLocationComponent, "ControllerComponent")

@@ -344,11 +344,11 @@ extern "C" void TradeStock_SeedForTest(void* tradeComp, void* resourceEntity, in
 
 
 // ============================================================
-// TradeComponent::Serialize (vtable slot [3], 0x14005bd50)
+// TradeComponent::Persist (vtable slot [3], 0x14005bd50)
 // ============================================================
-extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
-    if (!self || !stream) return;
-    if (fn_ComponentBase_Serialize) fn_ComponentBase_Serialize(self, stream);
+void TradeComponent::Persist(void* stream) {
+    if (!stream) return;
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
 
     // Retail 0x14005bd50 opens TWO Serializer scopes: an EMPTY one that is
     // constructed and immediately destroyed (the controller-section stub), and
@@ -373,12 +373,12 @@ extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);        // B.3.4 bridge
 
     // +0x50/+0x58: ComponentRef table, stride 0x10 {ComponentRef, int, int}.
-    int32_t refCount = *reinterpret_cast<int32_t*>(At(self, 0x58));
+    int32_t refCount = *reinterpret_cast<int32_t*>(At(this, 0x58));
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(refCount, nullptr);   // B.3.4 bridge
     if (Loading(ser) && fn_SummaryArray_Init)
-        fn_SummaryArray_Init(At(self, 0x50), refCount);
+        fn_SummaryArray_Init(At(this, 0x50), refCount);
     {
-        uint8_t* elem = *reinterpret_cast<uint8_t**>(At(self, 0x50));
+        uint8_t* elem = *reinterpret_cast<uint8_t**>(At(this, 0x50));
         for (int32_t i = 0; i < refCount && elem; ++i, elem += 0x10) {
             if (fn_ExternalPtr_BuildSerialize) fn_ExternalPtr_BuildSerialize(elem + 0x0, ser);
             reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(elem + 0x8), nullptr);   // B.3.4 bridge
@@ -387,18 +387,18 @@ extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
     }
 
     // +0x2c: selected-merchant index.
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(At(self, 0x2c)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(At(this, 0x2c)), nullptr);   // B.3.4 bridge
 
     // +0x60: AVL tree, ComponentRef -> int.
-    TradeComp_BstSerialize(At(self, 0x60), ser);
+    TradeComp_BstSerialize(At(this, 0x60), ser);
 
     // +0x30/+0x38: trade-name array, stride 0x20.
-    int32_t nameCount = *reinterpret_cast<int32_t*>(At(self, 0x38));
+    int32_t nameCount = *reinterpret_cast<int32_t*>(At(this, 0x38));
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(nameCount, nullptr);   // B.3.4 bridge
     if (Loading(ser))
-        TradeComponent_ResizeNames(reinterpret_cast<int64_t*>(At(self, 0x30)), nameCount);
+        TradeComponent_ResizeNames(reinterpret_cast<int64_t*>(At(this, 0x30)), nameCount);
     {
-        uint8_t* elem = *reinterpret_cast<uint8_t**>(At(self, 0x30));
+        uint8_t* elem = *reinterpret_cast<uint8_t**>(At(this, 0x30));
         for (int32_t i = 0; i < nameCount && elem; ++i, elem += 0x20) {
             reinterpret_cast<System::String*>(elem + 0x0)->Serialize(ser);   // B.3.1 bridge
             int32_t innerCount = *reinterpret_cast<int32_t*>(elem + 0x18);
@@ -415,12 +415,12 @@ extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
     }
 
     // +0x40/+0x48: item table, stride 0xc {resourceId(enum), index, spare}.
-    int32_t itemCount = *reinterpret_cast<int32_t*>(At(self, 0x48));
+    int32_t itemCount = *reinterpret_cast<int32_t*>(At(this, 0x48));
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(itemCount, nullptr);   // B.3.4 bridge
     if (Loading(ser))
-        TradeComponent_ResizeItems(reinterpret_cast<int64_t*>(At(self, 0x40)), itemCount);
+        TradeComponent_ResizeItems(reinterpret_cast<int64_t*>(At(this, 0x40)), itemCount);
     {
-        uint8_t* elem = *reinterpret_cast<uint8_t**>(At(self, 0x40));
+        uint8_t* elem = *reinterpret_cast<uint8_t**>(At(this, 0x40));
         for (int32_t i = 0; i < itemCount && elem; ++i, elem += 0xc) {
             SerializeEnumField(ser, elem + 0x0);
             reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(elem + 0x8), nullptr);   // B.3.4 bridge
@@ -429,25 +429,31 @@ extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
     }
 
     // +0x28: plain int.
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(At(self, 0x28)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(At(this, 0x28)), nullptr);   // B.3.4 bridge
 
     // +0x78: Time.
-    reinterpret_cast<System::Time*>(At(self, 0x78))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(At(this, 0x78))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
 
     // +0x71: bool.
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x71)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(this, 0x71)), nullptr);   // B.3.4 bridge
 
     // +0x80: InternalBasePtr, validated against ComponentEntity.
-    reinterpret_cast<Object::InternalBasePtr*>(At(self, 0x80))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
+    reinterpret_cast<Object::InternalBasePtr*>(At(this, 0x80))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     {
-        void* obj = *reinterpret_cast<void**>(At(self, 0x80));
+        void* obj = *reinterpret_cast<void**>(At(this, 0x80));
         if (obj && fn_IsDerivedFrom && g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity &&
             !fn_IsDerivedFrom(obj, *g_TypeId_ComponentEntity))
-            *reinterpret_cast<uint64_t*>(At(self, 0x80)) = 0;
+            *reinterpret_cast<uint64_t*>(At(this, 0x80)) = 0;
     }
 
     // +0x70: bool.
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x70)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(this, 0x70)), nullptr);   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+}
+
+// 0x14005bd50 door: registered by address (standalone/reg_trade_serialize.cpp).
+extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
+    if (!self) return;
+    self->TradeComponent::Persist(stream);
 }

@@ -13,6 +13,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/WildAnimalDescription.h"
+#include "Component/WildAnimalComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -44,7 +45,7 @@ void WildAnimalDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140039d80: WildAnimalComponent's type id through the hidden return slot.
 Object::Type* WildAnimalDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("WildAnimalComponent");
+    ret->_type = WildAnimalComponent::TypeId();
     return ret;
 }
 

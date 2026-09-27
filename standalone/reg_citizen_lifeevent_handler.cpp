@@ -24,6 +24,8 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
+#include "Component/CemeteryDescription.h"
+#include "Component/TombstoneComponent.h"
 
 // Forward declarations (code/Game/Component/citizen_lifeevent_handler.cpp).
 extern "C" uint64_t CitizenComponent_HandleLifeEvent(void*, int, const char*);       // 0x140116dd0
@@ -39,8 +41,8 @@ static uint32_t g_tid_TombstoneComponent  = 0;   // 0x1401c4a30
 static uint32_t g_tid_CemeteryDescription = 0;   // 0x1401c40c8
 
 extern "C" void FillTypeIdGlobals_citizen_lifeevent() {
-    g_tid_TombstoneComponent  = ::Object::GetTypeIdByName("TombstoneComponent");
-    g_tid_CemeteryDescription = ::Object::GetTypeIdByName("CemeteryDescription");
+    g_tid_TombstoneComponent  = TombstoneComponent::TypeId();
+    g_tid_CemeteryDescription = CemeteryDescription::TypeId();
 }
 
 void RegisterCitizenLifeEventHandler() {

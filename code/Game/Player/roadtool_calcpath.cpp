@@ -8,7 +8,7 @@
 // needs; every deeper leaf was already ported + registered by earlier waves.
 //
 // Ported here (all verified against the Application-x64.exe disassembly):
-//   0x140104d30  RoadTool_CalcPath_Impl        — slot 13, validate + place the run
+//   0x140104d30  RoadTool::CalcPath            — slot 13, validate + place the run
 //   0x14009c960  RoadTool_PlaceRoadSegment     — one cell: BuildRoad work + queue + BST
 //   0x1400acd90  RoadTool_DecalStore           — record the road's decal by road type
 //   0x140026990  RoadTool_FindMapDescription   — find MapDescription on the descriptor
@@ -30,6 +30,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "Component/DecalDescription.h"
+#include "Component/MapDescription.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -81,9 +83,9 @@ void EnsureCalcPathFuncs() {
     // take the names from the live factory tree. Both verified against their RegisterType
     // DATA writers: 0x14014ee10 DecalDescription, 0x14014f390 MapDescription.
     if (!s_tid_DecalDescription)
-        s_tid_DecalDescription = ::Object::ResolveTypeIdByNameLazy("DecalDescription");
+        s_tid_DecalDescription = DecalDescription::TypeId();
     if (!s_tid_MapDescription)
-        s_tid_MapDescription = ::Object::ResolveTypeIdByNameLazy("MapDescription");
+        s_tid_MapDescription = MapDescription::TypeId();
 
     // Latch only once the type-ids are in hand — the factory tree is not populated until
     // after Engine::Startup, and latching early would leave them zero for the session.
@@ -103,9 +105,7 @@ void* FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
     for (int i = 0; i < count; ++i) {
         void* comp = comps[i];
         if (!comp) continue;
-        typedef uint32_t (*GetTypeId_t)(void*);
-        GetTypeId_t getTypeId = *(GetTypeId_t*)(*(uintptr_t*)comp + 0x10);
-        if (getTypeId(comp) == typeId) {
+        if (reinterpret_cast<Object::Base*>(comp)->Type() == typeId) {  // B.3.8 bridge
             return fn_IsDerivedFrom(comp, typeId) ? comp : nullptr;
         }
     }
@@ -250,9 +250,8 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(uint32_t* mapGrid, uint32_t cell
 // Returns true when the road run was committed. Retail's failure paths all return a
 // value whose low byte is 0, which DragTool_OnKey reads as false (error sound).
 // ============================================================================
-extern "C" bool RoadTool_CalcPath_Impl(RoadTool* self, uint32_t startCell, uint32_t endCell) {
+bool RoadTool::CalcPath(int startCell, int endCell) {
     EnsureCalcPathFuncs();
-    if (!self) return false;
     if ((int)startCell < 0 || (int)endCell < 0) return false;
 
     // Sort so sc <= ec.
@@ -275,7 +274,7 @@ extern "C" bool RoadTool_CalcPath_Impl(RoadTool* self, uint32_t startCell, uint3
     if (*(int64_t*)cellA != 0 || *(int64_t*)cellB != 0) return false;
 
     // Honour the descriptor's fixed-endpoint constraint (used by scripted/tutorial roads).
-    uintptr_t controller = (uintptr_t)*(void**)((uintptr_t)self + 0x10);
+    uintptr_t controller = (uintptr_t)dialogPtr;
     if (controller && *(char*)(controller + 0x80) != '\0') {
         int gridSize = (int)*mapGrid;
         if (gridSize != 0) {
@@ -292,14 +291,14 @@ extern "C" bool RoadTool_CalcPath_Impl(RoadTool* self, uint32_t startCell, uint3
     int pathLen = 0;
     if (s_fn_RoadAStar) {
         pathLen = s_fn_RoadAStar((int64_t)mapGrid, 0xa17, sc, (uint64_t)ec, 0,
-                                 (int64_t)pathBuf, self->modifierFlag, 1);
+                                 (int64_t)pathBuf, modifierFlag, 1);
     }
     if (pathLen == 0) {
         return false;
     }
 
-    uintptr_t descEntity = (uintptr_t)*(void**)((uintptr_t)self + 0x20);
-    uintptr_t roadDesc   = (uintptr_t)*(void**)((uintptr_t)self + 0x38);
+    uintptr_t descEntity = (uintptr_t)descriptionPtr;
+    uintptr_t roadDesc   = (uintptr_t)this->roadDesc;
     if (!descEntity || !roadDesc) return false;
 
     // The decal the finished road paints, and the MapDescription value each segment gets.

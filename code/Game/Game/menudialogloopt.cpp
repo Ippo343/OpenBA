@@ -29,6 +29,7 @@
 #include "graphics/GraphicsMesh.h"
 #include "graphics/SunLight.h"
 #include "graphics/ParticleInstance.h"    // ParticleSystemInstance
+#include "Game/MenuDialogLoopT.h"         // _loadBit (LoadSceneA1)
 #include "video/Context.h"
 #include "options.h"
 #include "MenuScene.h"
@@ -50,46 +51,15 @@
 // Wave 9 lane S probe (runtime/src/audio/audio.cpp).
 
 // ============================================================
-// MenuDLT struct field offsets (Engine::DialogLoopT subclass)
+// MenuDLT fields (Engine::DialogLoopT subclass)
 // ============================================================
-// DialogLoopT is 0x168 bytes (vtable + UpdateLoop + dialog fields + UI). MenuDLT
-// extends it with menu-specific fields starting around +0xb70:
-//   +0xb7c: float copy of transform[+0x28] (preserved across reload)
-//   +0xb80: float copy of transform[+0x2C] (preserved across reload)
-//   +0xb88: External* — Audio/Music/Menu.rsc (Phase A skips)
-//   +0xb90: External* — Game/MenuScene/SceneN.rsc (the MenuScene)
-//   +0xb98: Graphics::Renderer*
-//   +0xba0: Graphics::Scene*  (NB: Graphics, NOT Audio)
-//   +0xba8: Graphics::MeshInstance* — main scene mesh
-//   +0xbb0: Graphics::SunLight*
-//   +0xbb8: Math::Transform*  (size 0x10C, Camera embedded at +0x34)
-//   +0xbc0: Geometry* — the scene's first Geometry (MenuScene+0x28)
-//   +0xbc8: TradeWork* — DLC ship (Phase A skips)
-//   +0xbd0..+0xbfc: dynamic arrays for static meshes/particles (Phase B/C)
-namespace MenuDLTOff {
-    constexpr uintptr_t audioScene_b30  = 0xb30;  // embedded Audio::Scene (0x38 bytes)
-    constexpr uintptr_t scrollX_b7c     = 0xb7c;
-    constexpr uintptr_t scrollY_b80     = 0xb80;
-    constexpr uintptr_t musicExt_b88    = 0xb88;  // External* — Audio/Music/Menu.rsc
-    constexpr uintptr_t menuSceneExt_b90 = 0xb90;
-    constexpr uintptr_t renderer_b98    = 0xb98;
-    constexpr uintptr_t graphicsScene_ba0 = 0xba0;
-    constexpr uintptr_t mainMesh_ba8    = 0xba8;
-    constexpr uintptr_t sunLight_bb0    = 0xbb0;
-    constexpr uintptr_t transform_bb8   = 0xbb8;
-    constexpr uintptr_t sceneGeom_bc0   = 0xbc0;
-    // Phase B/C: dynamic arrays for static-mesh + particle instances.
-    // Layout per array: data ptr / count int / capacity int (12 bytes total
-    // but aligned to 16 in struct so each array spans .._00..0x10 bytes).
-    constexpr uintptr_t partInstArr_bd0 = 0xbd0;  // data: ParticleSystemInstance*
-    constexpr uintptr_t partInstCnt_bd8 = 0xbd8;
-    constexpr uintptr_t partInstCap_bdc = 0xbdc;
-    constexpr uintptr_t allInstArr_be0  = 0xbe0;  // data: Geometry* (mesh + particle, shared)
-    constexpr uintptr_t allInstCnt_be8  = 0xbe8;
-    constexpr uintptr_t allInstCap_bec  = 0xbec;
-    constexpr uintptr_t sceneIdArr_bf0  = 0xbf0;  // data: uint32 ids
-    constexpr uintptr_t sceneIdCnt_bf8  = 0xbf8;
-    constexpr uintptr_t sceneIdCap_bfc  = 0xbfc;
+// Caller batch CB6: the helpers below take the loop as `void* self` (their
+// callers pass `this`); its fields are the named members of the real class
+// code/Game/Game/MenuDialogLoopT.h (+0xb30 the embedded Audio::Scene, +0xb68
+// .. +0xbf8 the menu fields, the three {data, count|cap} arrays at +0xbd0/
+// +0xbe0/+0xbf0). The old MenuDLTOff offset table went with its last user.
+static inline MenuDialogLoopT* Loop(void* self) {
+    return static_cast<MenuDialogLoopT*>(self);   // B.3.8 bridge
 }
 
 // Helper: read/write fields by offset (matches the project's prevailing style).
@@ -299,7 +269,7 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
     fn_Graphics_MeshInstance_Ctor(inst);
 
     // 2. Append to MenuDLT+0xbe0 (shared instance list).
-    AppendToDynArray<void*>(self, MenuDLTOff::allInstArr_be0, inst);
+    AppendToDynArray<void*>(self, offsetof(MenuDialogLoopT, _instanceArray), inst);
 
     // 3. Per-element setup — mirror MenuScene_helper_3b60.
     int16_t meshIdx = *reinterpret_cast<const int16_t*>(elem + 0x1c);
@@ -310,7 +280,7 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
     if (meshIdx < 0 || meshIdx >= meshArrCount) {
         uint32_t id0 = reinterpret_cast<Graphics::Scene*>(scene)->AddObject(
             reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge
-        AppendToDynArray<uint32_t>(self, MenuDLTOff::sceneIdArr_bf0, id0);
+        AppendToDynArray<uint32_t>(self, offsetof(MenuDialogLoopT, _sceneIdArray), id0);
         *outSkippedBadIdx = true;
         return 0;
     }
@@ -396,7 +366,7 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
     // 4. Scene::AddObject + append id.
     uint32_t id = reinterpret_cast<Graphics::Scene*>(scene)->AddObject(
         reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge
-    AppendToDynArray<uint32_t>(self, MenuDLTOff::sceneIdArr_bf0, id);
+    AppendToDynArray<uint32_t>(self, offsetof(MenuDialogLoopT, _sceneIdArray), id);
 
     return matSlots;
 }
@@ -564,7 +534,7 @@ void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* sce
         fn_Graphics_ParticleSystemInstance_Ctor(inst);
 
         // 2. Append to all-instance array (+0xbe0).
-        AppendToDynArray<void*>(self, MenuDLTOff::allInstArr_be0, inst);
+        AppendToDynArray<void*>(self, offsetof(MenuDialogLoopT, _instanceArray), inst);
 
         // 3. helper_3ca0 inline:
         //    Element layout: elem+0x00 = Vector3 offset, elem+0x0c = yaw,
@@ -600,12 +570,12 @@ void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* sce
             *reinterpret_cast<const System::Time*>(timeBuf));   // B.3.5 bridge
 
         // 4. Append to particle-only array (+0xbd0) — drives per-frame Update.
-        AppendToDynArray<void*>(self, MenuDLTOff::partInstArr_bd0, inst);
+        AppendToDynArray<void*>(self, offsetof(MenuDialogLoopT, _particleArray), inst);
 
         // 5. Scene::AddObject + append id.
         uint32_t id = reinterpret_cast<Graphics::Scene*>(scene)->AddObject(
             reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge
-        AppendToDynArray<uint32_t>(self, MenuDLTOff::sceneIdArr_bf0, id);
+        AppendToDynArray<uint32_t>(self, offsetof(MenuDialogLoopT, _sceneIdArray), id);
         ++added;
     }
 
@@ -626,8 +596,8 @@ void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* sce
 void MenuDialogLoopT_TickParticles(void* self, void* time) {
     if (!self || !time) return;
 
-    void** arr   = Field<void**>(self,  MenuDLTOff::partInstArr_bd0);
-    int32_t count = Field<int32_t>(self, MenuDLTOff::partInstCnt_bd8);
+    void** arr   = *reinterpret_cast<void***>(Loop(self)->_particleArray);        // {data,
+    int32_t count = *reinterpret_cast<int32_t*>(Loop(self)->_particleArray + 8);  //  count|cap}
 
     if (!arr || count <= 0) return;
     for (int32_t i = 0; i < count; ++i) {
@@ -648,7 +618,7 @@ void MenuDialogLoopT_TickParticles(void* self, void* time) {
     // Renderer to read stale bounds/transforms each frame (visible flicker).
     // B.3.5 bridge — a CLASS STATIC, so there is no receiver at all.
     Graphics::ParticleInstance::IncrementInstanceIndex();   // B.3.5 bridge
-    void* scene = Field<void*>(self, 0xba0);
+    void* scene = Loop(self)->_scene;
     if (scene) {
         reinterpret_cast<Graphics::Scene*>(scene)->Clean();   // B.3.5 bridge
     }
@@ -692,7 +662,7 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
         reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
 
     // Engine::Random lives at self+0x168 (UpdateLoop base + DialogLoopT field area).
-    void* sceneRng = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x168);
+    void* sceneRng = &Loop(self)->_random;
     uint32_t variant = reinterpret_cast<System::Random*>(sceneRng)->Rand(10);   // B.3.4b bridge
 
     // Diagnostic lever: BANISHED_MENU_SCENE pins the menu scene index (0..9) so
@@ -713,6 +683,25 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     // Filename(const String&) is what retail builds here: Format gave us a String.
     System::Filename fnBuf(stringBuf);
 
+    // THE MENU'S RESOURCES CARRY THE MENU'S BIT. Retail loads the scene inside
+    // MenuDialogLoopT::Load on the loader thread, where Loader::Run has just
+    // published THIS loop's _loadBit as the factory's _cleanBitIndex, so every
+    // External the scene pulls in (the scene, its meshes, particles, geometry
+    // materials) is marked with the menu's usage bit. The standalone runs this
+    // load from the splash (ChunkedSceneLoader, main thread) while the index
+    // still holds the Loading splash's bit — so the scene belonged to the splash,
+    // and the splash's retirement (~UpdateLoop -> ExternalFactory::Clean) evicted
+    // it under the live menu: MenuScene freed, its WorldGeometry freed (D9 #12),
+    // the menu's Graphics::Scene still holding it. Publish the menu's bit for
+    // the load, as Loader::Run would, and hand the index back afterwards (the
+    // loader thread is idle here: the splash waits for EngineLoader::IsBusy()).
+    struct PublishLoadBit {
+        ::Object::ExternalFactory* f;
+        int32_t saved;
+        PublishLoadBit(::Object::ExternalFactory* factory, int32_t bit)
+            : f(factory), saved(factory->_cleanBitIndex) { f->_cleanBitIndex = bit; }
+        ~PublishLoadBit() { f->_cleanBitIndex = saved; }
+    } publish(efactory, static_cast<MenuDialogLoopT*>(self)->_loadBit);   // bridge: self is the menu loop
     void* obj = const_cast<::Object::External*>(efactory->FindOrLoad(fnBuf));  // B.3.3 bridge
 
     // Original validates via IsDerivedFrom against TypeInfo_MenuScene at exe 0x1401c59f0.
@@ -721,7 +710,7 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     // gave us a non-NULL External and the path resolved, it's the right type.
     void* menuScene = obj;
 
-    Field<void*>(self, MenuDLTOff::menuSceneExt_b90) = menuScene;
+    Loop(self)->_menuScene = menuScene;
 
     if (!menuScene) {
         printf("[MenuDLT::LoadScene] failed to load Game/MenuScene/Scene%u.rsc\n", variant);
@@ -732,12 +721,12 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     // --- Allocate Renderer (0x50 bytes, alignment 4) ---
     void* renderer = fn_MemAlloc(g_pMemAllocSingleton, 0x50, 4);
     if (renderer) fn_Graphics_Renderer_Ctor(renderer);
-    Field<void*>(self, MenuDLTOff::renderer_b98) = renderer;
+    Loop(self)->_renderer = renderer;
 
     // --- Allocate Graphics::Scene (0x78 bytes, alignment 8) ---
     void* gScene = fn_MemAlloc(g_pMemAllocSingleton, 0x78, 8);
     if (gScene) fn_Graphics_Scene_Ctor(gScene);
-    Field<void*>(self, MenuDLTOff::graphicsScene_ba0) = gScene;
+    Loop(self)->_scene = gScene;
 
     // --- Allocate SunLight (0x108 bytes, alignment 8) ---
     void* sunLight = fn_MemAlloc(g_pMemAllocSingleton, 0x108, 8);
@@ -747,12 +736,12 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
         //   *(SunLight*)sunLight = PTR_FUN_14015e290
         // We skip this — using the Runtime default vtable is fine for Phase A.
     }
-    Field<void*>(self, MenuDLTOff::sunLight_bb0) = sunLight;
+    Loop(self)->_sunLight = sunLight;
 
     // --- Allocate Transform (0x10C bytes, alignment 4) ---
     void* transform = fn_MemAlloc(g_pMemAllocSingleton, 0x10C, 4);
     if (transform) MenuScene_Helper_8800(transform);
-    Field<void*>(self, MenuDLTOff::transform_bb8) = transform;
+    Loop(self)->_transform = transform;
 
     // --- Allocate MeshInstance (0x120 bytes, alignment 8) ---
     void* mainMesh = fn_MemAlloc(g_pMemAllocSingleton, 0x120, 8);
@@ -762,7 +751,7 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
         //   *(MeshInstance*)mainMesh = PTR_EnvironmentDescription_vslot10_14015e240
         // Skipped for Phase A.
     }
-    Field<void*>(self, MenuDLTOff::mainMesh_ba8) = mainMesh;
+    Loop(self)->_mainMesh = mainMesh;
 
     // --- SetMesh from MenuScene+0x70 (the GraphicsMesh ExternalPtr) ---
     void* meshExt = Field<void*>(menuScene, 0x70);
@@ -784,7 +773,7 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     }
 
     // --- Capture scene Geometry pointer (MenuScene+0x28 = Geometry*) ---
-    Field<void*>(self, MenuDLTOff::sceneGeom_bc0) = Field<void*>(menuScene, 0x28);
+    Loop(self)->_sceneGeometry = Field<void*>(menuScene, 0x28);
 
     // --- Set the +0x28 type/category field on each Geometry. Original:
     //   mainMesh->[+0x28] = 0   (default category)
@@ -792,7 +781,7 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     //   sceneGeom->[+0x28] = 1  (terrain category)
     if (mainMesh)  Field<uint32_t>(mainMesh, 0x28) = 0;
     if (sunLight)  Field<uint32_t>(sunLight, 0x28) = 0;
-    void* sceneGeom = Field<void*>(self, MenuDLTOff::sceneGeom_bc0);
+    void* sceneGeom = Loop(self)->_sceneGeometry;
     if (sceneGeom) Field<uint32_t>(sceneGeom, 0x28) = 1;
 
     // --- Add to global scene list (terrain Geometry, SunLight, MeshInstance) ---
@@ -808,8 +797,8 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
         const void* srcTransform = reinterpret_cast<const uint8_t*>(menuScene) + 0x88;
         MenuScene_CopyTransform(transform, srcTransform);
         // Cache transform[+0x28] / [+0x2C] (yaw/pitch scrolls) at MenuDLT+0xb7c/+0xb80.
-        Field<float>(self, MenuDLTOff::scrollX_b7c) = Field<float>(transform, 0x28);
-        Field<float>(self, MenuDLTOff::scrollY_b80) = Field<float>(transform, 0x2C);
+        Loop(self)->_scrollX = Field<float>(transform, 0x28);
+        Loop(self)->_scrollY = Field<float>(transform, 0x2C);
     }
 
     // Skip TradeWork (gameSettings[0x16]) — DLC ship, out of scope.
@@ -829,8 +818,8 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
 // from ChunkedSceneLoader after the chunked PhaseB completes; DLL-mode
 // calls it from MenuDialogLoopT_LoadScene_PhaseA below.
 void MenuDialogLoopT_LoadSceneA3(void* self) {
-    void* menuScene = Field<void*>(self, MenuDLTOff::menuSceneExt_b90);
-    void* gScene    = Field<void*>(self, MenuDLTOff::graphicsScene_ba0);
+    void* menuScene = Loop(self)->_menuScene;
+    void* gScene    = Loop(self)->_scene;
     if (!menuScene || !gScene) {
         printf("[MenuDLT::LoadSceneA3] WARN: menuScene=%p gScene=%p — skipping\n",
                menuScene, gScene);
@@ -849,8 +838,8 @@ void MenuDialogLoopT_LoadSceneA3(void* self) {
 // PhaseB freeze becomes invisible.
 bool MenuDialogLoopT_LoadScene_PhaseA(void* self) {
     if (!MenuDialogLoopT_LoadSceneA1(self)) return false;
-    void* menuScene = Field<void*>(self, MenuDLTOff::menuSceneExt_b90);
-    void* gScene    = Field<void*>(self, MenuDLTOff::graphicsScene_ba0);
+    void* menuScene = Loop(self)->_menuScene;
+    void* gScene    = Loop(self)->_scene;
     MenuDialogLoopT_LoadStaticMeshes_PhaseB(self, menuScene, gScene);
     MenuDialogLoopT_LoadSceneA3(self);
     return true;
@@ -860,16 +849,16 @@ bool MenuDialogLoopT_LoadScene_PhaseA(void* self) {
 // Phase A: Draw — render menu scene with sun lighting + fog
 // ============================================================
 void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context) {
-    void* menuScene = Field<void*>(self, MenuDLTOff::menuSceneExt_b90);
+    void* menuScene = Loop(self)->_menuScene;
     if (!menuScene || !context) return;
 
     // B.3.5: SunLight::Set, Context::SetFog and — since batch K1 —
     // `Graphics::Renderer::Draw` are all members. The readiness guard that tested
     // nothing but the Draw door pointer went with it.
-    void* transform = Field<void*>(self, MenuDLTOff::transform_bb8);
-    void* renderer  = Field<void*>(self, MenuDLTOff::renderer_b98);
-    void* sunLight  = Field<void*>(self, MenuDLTOff::sunLight_bb0);
-    void* gScene    = Field<void*>(self, MenuDLTOff::graphicsScene_ba0);
+    void* transform = Loop(self)->_transform;
+    void* renderer  = Loop(self)->_renderer;
+    void* sunLight  = Loop(self)->_sunLight;
+    void* gScene    = Loop(self)->_scene;
     if (!transform || !renderer || !sunLight || !gScene) return;
 
     // Per-frame camera update: aspect-aware fovX, near/far from helper-8660 set.
@@ -994,10 +983,10 @@ void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context) {
 // +0x1C..+0x27, the (animated) yaw at +0x28, the pitch at +0x2C, and the
 // distance at +0x30 actually matter as inputs.
 void MenuDialogLoopT_UpdateCamera_PhaseA(void* self, float deltaSeconds) {
-    void* menuScene = Field<void*>(self, MenuDLTOff::menuSceneExt_b90);
+    void* menuScene = Loop(self)->_menuScene;
     if (!menuScene) return;
 
-    void* transform = Field<void*>(self, MenuDLTOff::transform_bb8);
+    void* transform = Loop(self)->_transform;
     if (!transform) return;
 
     // 1. Animate yaw at MenuDLT+0xb78 (live) using cached scrollX at +0xb7c.
@@ -1013,13 +1002,11 @@ void MenuDialogLoopT_UpdateCamera_PhaseA(void* self, float deltaSeconds) {
     static constexpr float kYawSpinRate    = 11.25f;     // deg/sec
     static constexpr float kYawOrbitRadius = 2.0f;       // deg
     static constexpr float kDegToRad       = 3.14159265358979323846f / 180.0f;
-    constexpr uintptr_t animYawOff = 0xb78;
-
-    float animYaw = Field<float>(self, animYawOff) + deltaSeconds * kYawSpinRate;
-    Field<float>(self, animYawOff) = animYaw;
+    float animYaw = Loop(self)->_animYaw + deltaSeconds * kYawSpinRate;
+    Loop(self)->_animYaw = animYaw;
 
     float cosAnim = std::cos(animYaw * kDegToRad);
-    float cachedYaw = Field<float>(self, MenuDLTOff::scrollX_b7c);
+    float cachedYaw = Loop(self)->_scrollX;
 
     // Update transform[+0x28] (yaw input to FromYawPitch) with the orbit offset.
     Field<float>(transform, 0x28) = cosAnim * kYawOrbitRadius + cachedYaw;
@@ -1158,7 +1145,7 @@ bool MenuDialogLoopT_LoadMusic(void* self) {
         reinterpret_cast<::Object::ExternalFactory*>(factory)
             ->FindOrLoad(fnBuf));                                            // B.3.3 bridge
 
-    Field<void*>(self, MenuDLTOff::musicExt_b88) = music;
+    Loop(self)->_music = music;
     printf("[MenuDLT::LoadMusic] Audio/Music/Menu.rsc -> %p (self+0xb88)\n", music);
     return music != nullptr;
 }
@@ -1179,12 +1166,11 @@ void MenuDialogLoopT_StartMusic(void* self) {
     // 1. Register the loop's embedded Audio::Scene (+0xb30) with the
     //    DialogInstance base at +0xd0 (where UI sound effects route). The
     //    original writes this even before PlayEffect.
-    void* audioScene = reinterpret_cast<void*>(
-        reinterpret_cast<uintptr_t>(self) + MenuDLTOff::audioScene_b30);
-    Field<void*>(self, 0xd0) = audioScene;
+    void* audioScene = Loop(self)->_audioScene;   // the embedded Audio::Scene (+0xb30)
+    Loop(self)->_ui._audioScene = audioScene;   // +0xd0 = UI (+0x40) + 0x90
 
     // 2. Play the looping menu music.
-    void* music = Field<void*>(self, MenuDLTOff::musicExt_b88);
+    void* music = Loop(self)->_music;
     if (!music) {
         printf("[MenuDLT::StartMusic] no music External at +0xb88 — silent menu\n");
         return;
@@ -1224,8 +1210,7 @@ void MenuDialogLoopT_StartMusic(void* self) {
 // freed/null array (STATUS open defect (c), ~1 in 60 resave runs).
 void MenuDialogLoopT_StopMusic(void* self) {
     if (!self) return;
-    void* audioScene = reinterpret_cast<void*>(
-        reinterpret_cast<uintptr_t>(self) + MenuDLTOff::audioScene_b30);
+    void* audioScene = Loop(self)->_audioScene;   // the embedded Audio::Scene (+0xb30)
     reinterpret_cast<Audio::Scene*>(audioScene)->StopAll();   // B.3.7 bridge
 }
 
@@ -1269,7 +1254,7 @@ void MenuDialogLoopT_BindUISounds(void* self) {
         return;
     }
     void* keyMap = *g_pKeyMapSingleton;
-    void* ui = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x40);
+    void* ui = &Loop(self)->_ui;
 
     Field<void*>(ui, 0xa8) = Field<void*>(keyMap, 0x70);  // BeginDrag  (id 2)
     Field<void*>(ui, 0xb0) = Field<void*>(keyMap, 0x78);  // EndDrag    (id 3)
@@ -1299,9 +1284,8 @@ void MenuDialogLoopT_BindUISounds(void* self) {
 void MenuDialogLoopT_TickAudioScene(void* self, void* time) {
     if (!self || !time) return;
 
-    void* audioScene = reinterpret_cast<void*>(
-        reinterpret_cast<uintptr_t>(self) + MenuDLTOff::audioScene_b30);
-    void* rng = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x168);
+    void* audioScene = Loop(self)->_audioScene;   // the embedded Audio::Scene (+0xb30)
+    void* rng = &Loop(self)->_random;
 
     System::Time elapsed;  elapsed._ticks  = *reinterpret_cast<int64_t*>(time);  // *(u64*)time — System::Time ticks
     System::Time timeZero; timeZero._ticks = 0;                                  // Time(0), passed by value

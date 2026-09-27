@@ -82,7 +82,7 @@ bool AnimateNaturalResource_ResolveFuncs() {
 // Serialize (0x1400c5660, vtable slot 3)
 // Serializes status, entity ref with type check, animIndex, waitForAnim.
 // ============================================================
-void AnimateNaturalResource_Serialize_Impl(AnimateNaturalResource* self, void* stream) {
+void AnimateNaturalResource::Persist(void* stream) {
     // Reached through the registered vtable, which the factory path never
     // has to touch — an exe-ctor-built action arrives here with the file
     // statics still null. Lazy-resolve like the other entry points do.
@@ -92,25 +92,25 @@ void AnimateNaturalResource_Serialize_Impl(AnimateNaturalResource* self, void* s
 
     // Serialize status (version 0)
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(&self->_status), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(&this->_status), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Serialize entity ref + extra fields (version 0)
     ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Entity ref (+0x20) with type validation
-    reinterpret_cast<Object::InternalBasePtr*>(&self->_field20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (self->_field20 != nullptr) {
-        if (!fn_IsDerivedFrom(self->_field20, *s_TypeId_ComponentEntity)) {
-            self->_field20 = nullptr;
+    reinterpret_cast<Object::InternalBasePtr*>(&this->_field20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
+    if (this->_field20 != nullptr) {
+        if (!fn_IsDerivedFrom(this->_field20, *s_TypeId_ComponentEntity)) {
+            this->_field20 = nullptr;
         }
     }
 
     // Animation index (+0x28)
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&self->animIndex), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<int*>(&this->animIndex), nullptr);   // B.3.4 bridge
 
     // Wait for anim flag (+0x2C)
-    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<bool*>(&self->waitForAnim), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser2)->Serialize(*reinterpret_cast<bool*>(&this->waitForAnim), nullptr);   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
 }
@@ -120,27 +120,27 @@ void AnimateNaturalResource_Serialize_Impl(AnimateNaturalResource* self, void* s
 // Gets NR component from entity at +0x20, calls SetAnimIndex with +0x28.
 // Returns waitForAnim flag.
 // ============================================================
-int AnimateNaturalResource_AbstractImpl_Impl(AnimateNaturalResource* self, void* actionStack) {
+int  AnimateNaturalResource::AbstractImpl(void* actionStack) {
     AnimateNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
 
     void* localIBP;
-    s_fn_GetNRComp(self->_field20, &localIBP);
-    s_fn_SetAnimIndex(localIBP, (uint32_t)self->animIndex);
+    s_fn_GetNRComp(this->_field20, &localIBP);
+    s_fn_SetAnimIndex(localIBP, (uint32_t)this->animIndex);
 
-    return (self->waitForAnim != 0) ? 1 : 0;
+    return (this->waitForAnim != 0) ? 1 : 0;
 }
 
 // ============================================================
 // Execute (0x1400c55b0, vtable slot 5)
 // Checks if entity's model is still animating. Returns true while animating.
 // ============================================================
-int AnimateNaturalResource_Execute_Impl(AnimateNaturalResource* self, void* actionStack, void* time) {
+int  AnimateNaturalResource::Execute(void* actionStack, void* time) {
     (void)actionStack;
     (void)time;
 
     void* localIBP[4] = {nullptr, nullptr, nullptr, nullptr};
-    s_fn_GetModelComp(self->_field20, localIBP);
+    s_fn_GetModelComp(this->_field20, localIBP);
 
     // Standalone-inert guard: on a tree whose ModelComponent find resolves null (inert
     // resource-entity render layer, unfilled type-id global), report "not animating" so the
@@ -157,9 +157,9 @@ int AnimateNaturalResource_Execute_Impl(AnimateNaturalResource* self, void* acti
 // GetTarget (0x1400c5560, vtable slot 9)
 // Returns true if param matches entity at +0x20.
 // ============================================================
-bool AnimateNaturalResource_GetTarget_Impl(AnimateNaturalResource* self, void* param) {
+bool AnimateNaturalResource::GetTarget(void* param) {
     AnimateNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
-    return self->_field20 == *(void**)param;
+    return this->_field20 == *(void**)param;
 }
 
 // ============================================================
@@ -196,15 +196,11 @@ Object::Base* AnimateNaturalResource::DeletingDtor(unsigned flags) {
 }
 
 // [3] 0x1400c5660
-void AnimateNaturalResource::Persist(void* stream) { AnimateNaturalResource_Serialize_Impl(this, stream); }
 // [4] 0x1400c5600
-int  AnimateNaturalResource::AbstractImpl(void* actionStack) { return AnimateNaturalResource_AbstractImpl_Impl(this, actionStack); }
 // [5] 0x1400c55b0
-int  AnimateNaturalResource::Execute(void* actionStack, void* time) { return AnimateNaturalResource_Execute_Impl(this, actionStack, time); }
 // [8] 0x1400c55a0 — the leaf's own `RET 0` (same bytes as the base body)
 void AnimateNaturalResource::CheckEntity() {}
 // [9] 0x1400c5560
-bool AnimateNaturalResource::GetTarget(void* param) { return AnimateNaturalResource_GetTarget_Impl(this, param); }
 
 void* AnimateNaturalResource::CreateNewObject() {
     AnimateNaturalResource_ResolveFuncs();
@@ -219,10 +215,5 @@ void* AnimateNaturalResource::CreateInPlaceObject(void* storage) {
 }
 
 DEFINE_EXE_VTABLE(AnimateNaturalResource, "_ZTV22AnimateNaturalResource")
-
-// B38 D5: every by-address reader of 0x14015fb10 was inside this block and now
-// builds the object with the real ctor, so the row is gone. The function stays
-// until the coordinator's address_registry hunk drops its call.
-extern "C" void RegisterAnimateNaturalResourceVtable() {}
 
 DEFINE_EXE_TYPE(AnimateNaturalResource, "Action")

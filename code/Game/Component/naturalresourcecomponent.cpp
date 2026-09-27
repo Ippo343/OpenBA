@@ -16,6 +16,7 @@
 // Volume.h's own `sizeof(Rectangle)` assert into a hard error.
 #include "graphics/Mesh.h"   // ENDGAME B.3.5 caller batch I2
 #include "Component/naturalresourcecomponent_funcs.h"
+#include "Component/ParticleComponent.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -27,9 +28,6 @@
 // ============================================================
 // Resolved helpers
 // ============================================================
-
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
 // Entity_ClearPathQueue(entity, outIBP)
 typedef void (*fn_ClearPathQueue_t)(void* entity, void* outIBP);
@@ -44,33 +42,6 @@ typedef void (*fn_ReassignResource_t)(void* self, void* ibp, char flag);
 static fn_ReassignResource_t s_fn_ReassignResource = nullptr;
 
 static bool s_initialized = false;
-
-// ============================================================
-// NaturalResourceComponent::Shutdown (0x140125cf0)
-// ============================================================
-
-void NaturalResourceComponent_Shutdown(NaturalResourceComponent* self, void* stream) {
-    // resolver call added at top, save/load wave 2026-08-28: InitFuncs was declared
-    // but never called anywhere, so every s_fn_* below stayed null and load silently
-    // skipped this component's fields.
-    NaturalResourceComponent_InitFuncs();
-    if (s_fn_Component_Serialize)
-        s_fn_Component_Serialize(self, stream);
-
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->resourceScale, nullptr);   // B.3.4 bridge
-
-    // resourceFlags is uint16_t at +0x2C; the original serializes
-    // the two bytes individually as bool at +0x2C and +0x2D
-    bool* flagLow  = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x2C);
-    bool* flagHigh = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x2D);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagLow, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagHigh, nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-}
 
 // ============================================================
 // NaturalResourceComponent::OnRemove (0x140125c40)
@@ -125,17 +96,11 @@ void NaturalResourceComponent_OnRemove(NaturalResourceComponent* self) {
 // (or null) into the caller-provided InternalBasePtr (outIBP). Matches the
 // existing fn_ClearPathQueue_t typedef: void(void* entity, void* outIBP).
 // NON-STATIC so the standalone registrar can take its address.
-static uint32_t* s_TypeId_1401c4720 = nullptr;
-
 void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP) {
     uintptr_t ent = (uintptr_t)entity;
     void* found = nullptr;
 
-    if (!s_TypeId_1401c4720) {
-        s_TypeId_1401c4720 = reinterpret_cast<uint32_t*>(
-            ResolveAddr(Module::Exe, 0x1401c4720));
-    }
-    uint32_t wantId = s_TypeId_1401c4720 ? *s_TypeId_1401c4720 : 0;
+    const uint32_t wantId = ParticleComponent::TypeId();   // ti cell 0x1401c4720
 
     int count = *(int*)(ent + 0x38);
     uintptr_t arrBase = *(uintptr_t*)(ent + 0x30);
@@ -144,14 +109,9 @@ void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP) {
         void** slot = reinterpret_cast<void**>(arrBase + (uintptr_t)i * 8);
 
         void* comp = *slot;
-        // virtual GetTypeId at vtable+0x10
+        // virtual Type() (slot 2)
         uint32_t compId = 0;
-        if (comp) {
-            uintptr_t vtbl = *reinterpret_cast<uintptr_t*>(comp);
-            typedef uint32_t (*fn_GetTypeId_t)(void*);
-            fn_GetTypeId_t getId = *reinterpret_cast<fn_GetTypeId_t*>(vtbl + 0x10);
-            if (getId) compId = getId(comp);
-        }
+        if (comp) compId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
 
         if (compId == wantId) {
             // re-read the matching slot (matches original's second CheckPtr)
@@ -174,9 +134,6 @@ void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP) {
 // ============================================================
 void NaturalResourceComponent_InitFuncs() {
     if (s_initialized) return;
-
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
 
     s_fn_ClearPathQueue = reinterpret_cast<fn_ClearPathQueue_t>(
         ResolveAddr(Module::Exe, 0x140005200));  // Entity_ClearPathQueue used in decomp
@@ -216,8 +173,27 @@ Object::Base* NaturalResourceComponent::DeletingDtor(unsigned flags) {
     return this;
 }
 
-// [3] 0x140125cf0 — the body resolves its own helpers first.
-void NaturalResourceComponent::Persist(void* stream) { NaturalResourceComponent_Shutdown(this, stream); }
+// ============================================================
+// NaturalResourceComponent::Persist (vtable slot [3], 0x140125cf0)
+// ============================================================
+
+void NaturalResourceComponent::Persist(void* stream) {
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(resourceScale, nullptr);   // B.3.4 bridge
+
+    // resourceFlags is uint16_t at +0x2C; the original serializes
+    // the two bytes individually as bool at +0x2C and +0x2D
+    bool* flagLow  = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(this) + 0x2C);
+    bool* flagHigh = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(this) + 0x2D);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagLow, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagHigh, nullptr);   // B.3.4 bridge
+
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+}
 
 // [8] 0x140125c40. PORT GAP (retail 0x140125c40) — B38 D9: the body is ported
 // above (NaturalResourceComponent_OnRemove) but the tree's table never

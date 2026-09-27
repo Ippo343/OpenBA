@@ -62,6 +62,11 @@
 #include <cstdlib>
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName (.rdata type-id fallback)
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/RawMaterialDescription.h"   // ENDGAME B.3.8 CB3: RawMaterialDescription::TypeId()
+#include "Component/StorageLocationComponent.h"   // ENDGAME B.3.8 CB3: StorageLocationComponent::TypeId()
+#include "Component/MarketLocationComponent.h"   // ENDGAME B.3.8 CB3: MarketLocationComponent::TypeId()
+#include "Component/StorageComponent.h"   // ENDGAME B.3.8 CB3: StorageComponent::TypeId()
+#include "Component/StorageLocationDescription.h"   // ENDGAME B.3.8 CB3: StorageLocationDescription::TypeId()
 
 namespace {
 
@@ -132,11 +137,11 @@ static void EnsureFns() {
     // contained via Object::GetTypeIdByName and point the pointers at static storage
     // (names verified from the *_RegisterType writers in factory_registrations.csv).
     static uint32_t v_c7cb8, v_c7ee8, v_c4560, v_c7e78, v_c7f20;
-    v_c7cb8 = ::Object::GetTypeIdByName("RawMaterialDescription");     s_pTid_c7cb8 = &v_c7cb8;
-    v_c7ee8 = ::Object::GetTypeIdByName("StorageLocationComponent");   s_pTid_c7ee8 = &v_c7ee8;
-    v_c4560 = ::Object::GetTypeIdByName("MarketLocationComponent");    s_pTid_c4560 = &v_c4560;
-    v_c7e78 = ::Object::GetTypeIdByName("StorageComponent");           s_pTid_c7e78 = &v_c7e78;
-    v_c7f20 = ::Object::GetTypeIdByName("StorageLocationDescription"); s_pTid_c7f20 = &v_c7f20;
+    v_c7cb8 = RawMaterialDescription::TypeId();     s_pTid_c7cb8 = &v_c7cb8;
+    v_c7ee8 = StorageLocationComponent::TypeId();   s_pTid_c7ee8 = &v_c7ee8;
+    v_c4560 = MarketLocationComponent::TypeId();    s_pTid_c4560 = &v_c4560;
+    v_c7e78 = StorageComponent::TypeId();           s_pTid_c7e78 = &v_c7e78;
+    v_c7f20 = StorageLocationDescription::TypeId(); s_pTid_c7f20 = &v_c7f20;
     s_pHalfCell_172114 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
     s_QueryCount = reinterpret_cast<fn_QueryCount_t>(ResolveAddr(Module::Exe, 0x14012cf10));
     s_init = true;

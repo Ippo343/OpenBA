@@ -30,27 +30,6 @@
 #include <cstddef>
 #include "Component.h"
 
-namespace DiseaseComponentAddr {
-    constexpr uintptr_t Vtable            = 0x140159290;
-    constexpr uintptr_t DescriptionVtable = 0x140159310;
-
-    // Bodies (all ported in code/Game/Component/diseasecomponent.cpp).
-    constexpr uintptr_t CheckCure      = 0x1400481b0;
-    constexpr uintptr_t Cure           = 0x140048320;
-    constexpr uintptr_t Infect         = 0x1400483a0;
-    constexpr uintptr_t InfectionTick  = 0x140048610;
-    constexpr uintptr_t ActiveDisease  = 0x140048840;
-    constexpr uintptr_t Update         = 0x140048b90;
-    constexpr uintptr_t Startup        = 0x140048c50;
-    constexpr uintptr_t OnAdded        = 0x140048c00;
-    constexpr uintptr_t OnRemoved      = 0x140048bb0;
-    constexpr uintptr_t Serialize      = 0x140048ca0;
-    constexpr uintptr_t SameCropProbe  = 0x14009fb60;  // "helper_fb60"
-    constexpr uintptr_t GrownIdentity  = 0x140047f80;
-    constexpr uintptr_t KillOnePlant   = 0x140047b40;  // Ghidra "AnimateNaturalResource_impl_7b40"
-    constexpr uintptr_t KillOneAnimal  = 0x140047d70;
-}
-
 // ------------------------------------------------------------------
 // DiseaseComponent — 0x58 bytes
 // ------------------------------------------------------------------

@@ -39,6 +39,9 @@
 #include "Object/factory_registration.h"      // Object::GetTypeIdByName
 #include <cstdint>
 #include <cstdio>
+#include "Component/CitizenAIComponent.h"
+#include "Component/CitizenComponent.h"
+#include "Component/HappinessComponent.h"
 
 // Backing storage (filled after Engine::Startup — Object::Factory::Startup assigns
 // the real CRC ids only then; filling at registration time would store 0xFFFFFFFF).
@@ -48,9 +51,9 @@ static uint32_t g_tid_HappinessComponent = 0;  // 0x1401c42c0
 
 extern "C" void FillTypeIdGlobals_citizenai() {
     // No-op unless the storage was registered (gate on); harmless otherwise.
-    g_tid_CitizenAIComponent = ::Object::GetTypeIdByName("CitizenAIComponent");
-    g_tid_CitizenComponent   = ::Object::GetTypeIdByName("CitizenComponent");
-    g_tid_HappinessComponent = ::Object::GetTypeIdByName("HappinessComponent");
+    g_tid_CitizenAIComponent = CitizenAIComponent::TypeId();
+    g_tid_CitizenComponent   = CitizenComponent::TypeId();
+    g_tid_HappinessComponent = HappinessComponent::TypeId();
 
     // Report the OUTCOME, not the intent: for each slot print whether the registry
     // actually resolves it (gate on) and what a reader will now see there. A slot that

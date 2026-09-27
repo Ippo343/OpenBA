@@ -25,6 +25,8 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "collection/Collection.h"
+#include "Component/CreateRoadDescription.h"
+#include "Component/DecalDescription.h"
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 #include <cstdint>
 #include <cstdio>
@@ -100,11 +102,11 @@ static void ResolveRoadToolFuncs() {
     static uint32_t s_tid_CreateRoad = 0;
     static uint32_t s_tid_Decal      = 0;
     if (!s_TypeId_CreateRoadDescription) {
-        s_tid_CreateRoad = ::Object::ResolveTypeIdByNameLazy("CreateRoadDescription");
+        s_tid_CreateRoad = CreateRoadDescription::TypeId();
         if (s_tid_CreateRoad) s_TypeId_CreateRoadDescription = &s_tid_CreateRoad;
     }
     if (!s_TypeId_DecalDescription) {
-        s_tid_Decal = ::Object::ResolveTypeIdByNameLazy("DecalDescription");
+        s_tid_Decal = DecalDescription::TypeId();
         if (s_tid_Decal) s_TypeId_DecalDescription = &s_tid_Decal;
     }
 
@@ -139,14 +141,14 @@ Object::Base* RoadTool::DeletingDtor(unsigned flags) {
 //   +0x30: int    componentCount  — number of components
 //
 // Original: 0x1401056e0
-void RoadTool_Startup(RoadTool* self) {
+void RoadTool::Startup() {
     ResolveRoadToolFuncs();
 
-    uintptr_t entity = (uintptr_t)self->descriptionPtr;
+    uintptr_t entity = (uintptr_t)descriptionPtr;
     void* result = nullptr;
 
     if (!entity || !s_TypeId_CreateRoadDescription || !fn_IsDerivedFrom) {
-        self->roadDesc = nullptr;
+        roadDesc = nullptr;
         return;
     }
 
@@ -158,10 +160,8 @@ void RoadTool_Startup(RoadTool* self) {
         void* comp = components[i];
         if (!comp) continue;
 
-        // Call vtable slot +0x10: GetTypeId() -> uint32_t
-        typedef uint32_t (*fn_GetTypeId_t)(void* self);
-        fn_GetTypeId_t getTypeId = *(fn_GetTypeId_t*)(*(uintptr_t*)comp + 0x10);
-        uint32_t typeId = getTypeId(comp);
+        // Virtual slot 2 (+0x10): Type()
+        uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
         if (typeId == targetTypeId) {
             // Verify with IsDerivedFrom before casting
@@ -172,7 +172,7 @@ void RoadTool_Startup(RoadTool* self) {
         }
     }
 
-    self->roadDesc = result;
+    roadDesc = result;
 }
 
 // ============================================================
@@ -186,20 +186,20 @@ void RoadTool_Startup(RoadTool* self) {
 //
 // UNHOOKABLE: CALL rel32 in prologue.
 // Original: 0x140105690
-uint64_t RoadTool_OnKey_Impl(RoadTool* self, char key) {
+char RoadTool::OnKey(char key) {
     // Retail (0x140105690) opens with `CALL 0x1400fc6b0` = DragTool::OnKey — a direct
     // rel32 call to the base, NOT a virtual dispatch (dispatching through vtable[6]
-    // would re-enter RoadTool_OnKey_Impl and recurse forever). This call IS the drag
+    // would re-enter RoadTool::OnKey and recurse forever). This call IS the drag
     // state machine: it starts/updates the drag, records startCell/endCell at +0x2c/
     // +0x30, drives the per-frame cost preview via slot 14 (CalcCost) and commits via
     // slot 13 (CalcPath) on release. Omitting it left the road tool inert — it would
     // activate but never respond to the mouse.
-    DragTool_OnKey(reinterpret_cast<DragTool*>(self), key);
+    DragTool::OnKey(key);
 
     // Read KeyMap::GetValue(0, 0x16) for the modifier flag
     uint64_t keyMap = (uint64_t)***(void****)g_pInputConfigSingletonExref;
     short val = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0x16);  // B.3.7 bridge
-    self->modifierFlag = (val == 0) ? 1 : 0;
+    modifierFlag = (val == 0) ? 1 : 0;
 
     return 1;
 }
@@ -244,8 +244,8 @@ uint64_t RoadTool_OnKey_Impl(RoadTool* self, char key) {
 //   6. Call RoadTool_sub_ce00 for pathfinding
 //   7. On success: set outputs to path length, *outValid=1, return 0
 //   8. On failure: return 3
-uint64_t RoadTool_CalcCost_Impl(RoadTool* self, uint32_t startCell, uint32_t endCell,
-    uint32_t* outValid, int* outCostB, int* outCostA, int* outLength) {
+int RoadTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
+                       int* outCostB, int* outCostA, int* outLength) {
     ResolveRoadToolFuncs();
 
     // Sort cells: ensure start <= end
@@ -269,10 +269,10 @@ uint64_t RoadTool_CalcCost_Impl(RoadTool* self, uint32_t startCell, uint32_t end
     *outLength = 1;
 
     // Check entity description path constraints
-    uintptr_t descEntity = (uintptr_t)*(void**)((uintptr_t)self + 0x10);
+    uintptr_t descEntity = (uintptr_t)dialogPtr;
     // g_pGameWorldSingleton is the singleton SLOT (void**), so the world pointer needs a
     // deref first — this read was using the slot's own address as the world base, so
-    // mapGrid came back null and the terrainArray read below faulted on 0x80. RoadTool_Draw
+    // mapGrid came back null and the terrainArray read below faulted on 0x80. RoadTool::Draw
     // (below) already had this right.
     int* mapGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
 
@@ -317,7 +317,7 @@ uint64_t RoadTool_CalcCost_Impl(RoadTool* self, uint32_t startCell, uint32_t end
     int pathLength = 0;
     if (s_fn_RoadPathfind) {
         pathLength = s_fn_RoadPathfind((uintptr_t)mapGrid, combinedFlags | 0xa17, sc, ec,
-                                       0, (uintptr_t)pathBuf, self->modifierFlag, 1);
+                                       0, (uintptr_t)pathBuf, modifierFlag, 1);
     }
     if (pathLength != 0) {
         *outCostA  = pathLength;
@@ -390,12 +390,12 @@ static void ResolveRoadDrawFuncs() {
 //   2. Drag selection with pathfinding (strict then relaxed mask)
 //
 // Original: 0x140105190
-void RoadTool_Draw(RoadTool* self, void* context, char param3) {
+void RoadTool::Draw(void* context, char param3) {
     ResolveRoadDrawFuncs();
     ResolveRoadToolFuncs();
 
     int* mapGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
-    uintptr_t descEntity = *(uintptr_t*)((uintptr_t)self + 0x10);
+    uintptr_t descEntity = (uintptr_t)dialogPtr;
     int pathBuf[2048]; // large stack buffer for pathfinding output
 
     // ---- Phase 1: Constrained path from description entity ----
@@ -411,7 +411,7 @@ void RoadTool_Draw(RoadTool* self, void* context, char param3) {
         int pathLen = 0;
         if (s_fn_RoadPathfind) {
             pathLen = s_fn_RoadPathfind((uintptr_t)mapGrid, 0xa17, (uint32_t)startNorm,
-                (uint32_t)endNorm, 0, (uintptr_t)pathBuf, self->modifierFlag, 1);
+                (uint32_t)endNorm, 0, (uintptr_t)pathBuf, modifierFlag, 1);
         }
 
         // Build tile array from path results
@@ -440,7 +440,7 @@ void RoadTool_Draw(RoadTool* self, void* context, char param3) {
     if (param3 == '\0') {
         uint32_t startCell, endCell;
 
-        if (*(char*)((uintptr_t)self + 0x28) == '\0') {
+        if (dragState == '\0') {
             int cell = -1;
             if (s_fn_ScreenToCell) {
                 cell = s_fn_ScreenToCell(0);
@@ -448,8 +448,8 @@ void RoadTool_Draw(RoadTool* self, void* context, char param3) {
             startCell = (uint32_t)cell;
             endCell   = (uint32_t)cell;
         } else {
-            startCell = (uint32_t)*(int*)((uintptr_t)self + 0x2c);
-            endCell   = (uint32_t)*(int*)((uintptr_t)self + 0x30);
+            startCell = (uint32_t)this->startCell;
+            endCell   = (uint32_t)this->endCell;
         }
 
         if ((int)startCell < 0) return;
@@ -482,7 +482,7 @@ void RoadTool_Draw(RoadTool* self, void* context, char param3) {
             // Try strict pathfinding first (mask: combinedFlags | 0xa17)
             if (s_fn_RoadPathfind) {
                 pathLen = s_fn_RoadPathfind((uintptr_t)mapGrid, combinedFlags | 0xa17,
-                    sc, ec, 0, (uintptr_t)pathBuf, self->modifierFlag, 1);
+                    sc, ec, 0, (uintptr_t)pathBuf, modifierFlag, 1);
             }
         }
 
@@ -490,7 +490,7 @@ void RoadTool_Draw(RoadTool* self, void* context, char param3) {
             // Fallback: relaxed pathfinding (mask: combinedFlags | 0xff7)
             if (s_fn_RoadPathfind) {
                 pathLen = s_fn_RoadPathfind((uintptr_t)mapGrid, combinedFlags | 0xff7,
-                    sc, ec, 0, (uintptr_t)pathBuf, self->modifierFlag, 0);
+                    sc, ec, 0, (uintptr_t)pathBuf, modifierFlag, 0);
             }
         }
 
@@ -544,21 +544,8 @@ void RoadTool_Draw(RoadTool* self, void* context, char param3) {
 // ============================================================
 #include <new>
 
-void RoadTool::Startup() { RoadTool_Startup(this); }                           // [4]
-char RoadTool::OnKey(char active) {                                            // [6]
-    return static_cast<char>(RoadTool_OnKey_Impl(this, active));
-}
-void RoadTool::Draw(void* context, char active) { RoadTool_Draw(this, context, active); }  // [8]
-bool RoadTool::CalcPath(int startCell, int endCell) {                          // [13]
-    return RoadTool_CalcPath_Impl(this, static_cast<uint32_t>(startCell),
-                                  static_cast<uint32_t>(endCell));
-}
-int RoadTool::CalcCost(int startCell, int endCell, uint32_t* outValid,        // [14]
-                       int* outCostB, int* outCostA, int* outLength) {
-    return static_cast<int>(RoadTool_CalcCost_Impl(this, static_cast<uint32_t>(startCell),
-                                                   static_cast<uint32_t>(endCell),
-                                                   outValid, outCostB, outCostA, outLength));
-}
+// [4] Startup, [6] OnKey, [8] Draw and [14] CalcCost are defined above, [13]
+// CalcPath in roadtool_calcpath.cpp.
 
 // create 0x14002e870: MemAlloc(0x48, 8), then the ctor 0x1401057d0.
 void* RoadTool::CreateNewObject() {

@@ -10,7 +10,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/storagelocationcomponent_funcs.h"
+#include "Component/StorageLocationComponent.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -22,10 +22,6 @@
 // ============================================================
 // Resolved helpers
 // ============================================================
-
-// Component_Serialize (base Shutdown) at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
 // FUN_140002cc0 — register entity with world entity list
 typedef void (*fn_RegisterEntity_t)(void* listPtr, void* entityPtr);
@@ -39,8 +35,6 @@ static bool s_initialized = false;
 static void EnsureHelpers() {
     if (s_initialized) return;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
 
     s_fn_RegisterEntity = reinterpret_cast<fn_RegisterEntity_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));
@@ -49,34 +43,6 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x1401c3dd8));
 
     s_initialized = true;
-}
-
-// ============================================================
-// StorageLocationComponent::Shutdown (vtable slot [3], 0x14012d2a0)
-// ============================================================
-// Component_Serialize + two empty Serializer blocks (version 0).
-//
-// Original disassembly:
-//   CALL Component_Serialize(self, stream)
-//   Serializer_Ctor(local1, stream, 0)
-//   Serializer_Dtor(local1)
-//   Serializer_Ctor(local2, stream, 0)
-//   Serializer_Dtor(local2)
-
-void StorageLocationComponent_Shutdown(StorageLocationComponent* self, void* stream) {
-    EnsureHelpers();
-
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
-
-    alignas(8) uint8_t serializerBuf1[24];
-    ::new (static_cast<void*>(serializerBuf1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializerBuf1)->~Serializer();   // B.3.4 bridge
-
-    alignas(8) uint8_t serializerBuf2[24];
-    ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -104,19 +70,6 @@ void StorageLocationComponent_OnCreate(StorageLocationComponent* self) {
 
     // Register entity at worldMgr + 0x00 (storage location entity list)
     s_fn_RegisterEntity((void*)worldMgr, &entityPtr);
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void StorageLocationComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[StorageLocationComponent] Funcs resolved: Component_Serialize=%p "
-           "RegisterEntity=%p pGameState=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_RegisterEntity,
-           (void*)s_pGameState);
-#endif
 }
 
 // ===== ENDGAME B.3.8 MI-B — StorageLocationComponent as a REAL class =====
@@ -229,9 +182,29 @@ void* StorageLocationComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) StorageLocationComponent());
 }
 
-// [3] 0x14012d2a0. Slot 3 is the FIRST call into this class on a load-from-save, so
-// the body resolves unconditionally at its top (EnsureHelpers).
-void StorageLocationComponent::Persist(void* stream) { StorageLocationComponent_Shutdown(this, stream); }
+// ============================================================
+// StorageLocationComponent::Persist (vtable slot [3], 0x14012d2a0)
+// ============================================================
+// Component_Serialize + two empty Serializer blocks (version 0).
+//
+// Original disassembly:
+//   CALL Component_Serialize(self, stream)
+//   Serializer_Ctor(local1, stream, 0)
+//   Serializer_Dtor(local1)
+//   Serializer_Ctor(local2, stream, 0)
+//   Serializer_Dtor(local2)
+
+void StorageLocationComponent::Persist(void* stream) {
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    alignas(8) uint8_t serializerBuf1[24];
+    ::new (static_cast<void*>(serializerBuf1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf1)->~Serializer();   // B.3.4 bridge
+
+    alignas(8) uint8_t serializerBuf2[24];
+    ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();   // B.3.4 bridge
+}
 
 DEFINE_EXE_VTABLE(StorageLocationComponent, "_ZTV24StorageLocationComponent")
 DEFINE_EXE_TYPE(StorageLocationComponent, "ControllerComponent")

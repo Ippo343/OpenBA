@@ -20,7 +20,13 @@
 //
 // Gated behind BANISHED_LIVE_CHARACTER_MOVETICK (the env that enables the move-tick
 // executor — the only consumer); default builds stay byte-unchanged.
+//
+// ENDGAME B.3.8 block LOOP: the object is the REAL class `PathfinderThread`
+// (code/Game/Game/PathfinderThread.h); its worker loop is `Run()` and slot 1 is
+// System::Thread's OnCompleted, inherited. Gone: the hand-built 2-slot
+// `g_pf_vtable` and its no-op OnCompleted stub (the same RET body).
 
+#include "Game/PathfinderThread.h"
 #include "engine_funcs.h"
 #include "Component/component_factory_base.h"
 #include "resolve.h"
@@ -28,6 +34,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "system/Thread.h"     // ENDGAME B.3.4b System caller batch (CriticalSection/Thread)
+#include "Object/exe_type.h"     // DEFINE_EXE_VTABLE
 
 // A* / pathfinder helpers (reimplemented + registered elsewhere) — call directly by name.
 extern void Pf_WorkerApplyCmd_a6430(int64_t self, uint32_t* cmd, void* ctxA, void* ctxB);   // 0x1400a6430
@@ -42,6 +49,10 @@ typedef void  (*pf_fn_MemFree_t)(void* ptr);                            // ?MemF
 static fn_ThreadCtor_t s_fn_ThreadCtor = nullptr;
 static fn_CSCtor_t     s_fn_CSCtor     = nullptr;
 static pf_fn_MemFree_t s_fn_MemFree    = nullptr;
+
+} // namespace
+
+DEFINE_EXE_VTABLE(PathfinderThread, "_ZTV16PathfinderThread")
 
 // --- Pathfinder System::Thread vtable (2 slots) ------------------------------------------
 // The pathfinder is a System::Thread subclass; its real vtable (0x14015ef18) is
@@ -63,9 +74,9 @@ static pf_fn_MemFree_t s_fn_MemFree    = nullptr;
 // lock (standalone/allocator_lock.cpp), so the worker can't race the main thread on the
 // engine free-list. Queue: tail@+0x60, head@+0x68, count@+0x70; node qwords [0]=cmd{type,arg1}
 // [1]=cmd{arg2,arg3} [2]=next(+0x10) [3]=prev(+0x18).
-static void Pf_WorkerLoop_a6360(void* selfV) {
-    uint8_t* p   = reinterpret_cast<uint8_t*>(selfV);
-    int64_t  self = reinterpret_cast<int64_t>(selfV);
+void PathfinderThread::Run() {
+    uint8_t* p   = reinterpret_cast<uint8_t*>(this);   // bridge: the body reads offsets
+    int64_t  self = reinterpret_cast<int64_t>(this);
     int count = *reinterpret_cast<int*>(p + 0x70);
     while (count > 0) {
         reinterpret_cast<System::CriticalSection*>(p + 0x30)->Lock();   // B.3.4b bridge
@@ -88,12 +99,7 @@ static void Pf_WorkerLoop_a6360(void* selfV) {
     }
 }
 
-// slot 1 — System::Thread::OnCompleted base (Runtime 0x18000c590 is a bare RET).
-static void Pf_OnCompleted_noop(void*) {}
-
-static void* g_pf_vtable[2] = { reinterpret_cast<void*>(&Pf_WorkerLoop_a6360),
-                                reinterpret_cast<void*>(&Pf_OnCompleted_noop) };
-
+namespace {
 // FUN_1400a6110 — pathfinder cell-grid ctor (grid = pf+0x78). dim = map width.
 static void GridCtor(uint8_t* g, int dim) {
     *reinterpret_cast<int*>(g + 0x00)       = 1;
@@ -141,7 +147,9 @@ extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
 
     // --- FUN_1400a67f0 ctor (inline) ---
     s_fn_ThreadCtor(pfV, 0x10000);                       // System::Thread::Thread(self, 0x10000) — creates+parks the worker thread
-    *reinterpret_cast<void**>(p)            = g_pf_vtable;       // slot0 = worker run-loop, slot1 = OnCompleted (real = 0x14015ef18)
+    // Bridge (B4b-2): the Thread ctor door stamped the minted base table; the
+    // class's own table goes over it, as retail's ctor stamps 0x14015ef18.
+    *reinterpret_cast<const void**>(p)      = PathfinderThread::Vtable();
     s_fn_CSCtor(p + 0x30);                               // System::CriticalSection::CriticalSection(self+0x30)
     *reinterpret_cast<int*>(p + 0x58)       = 1;         // next result-slot generation id
     p[0x5c]                                 = 1;         // priming runs SYNC (a6a30/a6430 apply inline); flipped to 0 (async) after priming

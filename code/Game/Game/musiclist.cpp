@@ -31,17 +31,24 @@
 // FUN_1400019a0 = the templated Object::ExternalPtr::Serialize (NOT String::Serialize)
 // — see the per-element note below. GetFileVersion (vtable +0x18, exe 0x1400a3f80)
 // = 1 (verified: `mov eax,1; ret`).
+//
+// ENDGAME B.3.8 block LOOP: a REAL class (code/Game/Game/MusicList.h, field
+// layout and retail slot map there) with a compiler-generated vtable. Gone: the
+// hand-built 9-slot `g_MusicList_Vtable` (three null slots: TypeName, Compile,
+// Destruct), the lazily-resolved resize pointer (a non-atomic first-call cache,
+// B6-5) and the C entry points.
 
+#include "Game/MusicList.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "collection/Collection.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
+#include "object/Internal.h" // Object::detail::InternalMemAlloc / InternalMemFree
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <new>
 
-static constexpr uintptr_t kVtableAddr = 0x14015ee40;
-static constexpr int       kSize       = 0x30;
 static constexpr size_t    kEntryStride = 0x18;
 
 // ============================================================
@@ -81,10 +88,10 @@ using MusicTrackArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
                                           Collection::ExplicitSpec<&kSpec_MusicTrackEntry>>;
 }  // namespace
 
-// Exe-internal array resize helper for the 0x18-byte track entries.
-//   The exe-internal addr is not registered → ResolveAddr returns 0, so we
-//   fall back to a faithful local resize with the same default-init.
-static constexpr uintptr_t kResizeEntries = 0x14001c3c0;
+// Exe-internal array resize helper for the 0x18-byte track entries
+// (0x14001c3c0). The exe-internal addr is not registered, so the faithful local
+// resize below, with the same default-init, is what runs.
+namespace { std::atomic<bool> s_resizeWarned{false}; }
 
 // ============================================================
 // Local resize fallback (standalone) — mirrors exe FUN_14001c3c0
@@ -109,13 +116,11 @@ static constexpr uintptr_t kResizeEntries = 0x14001c3c0;
 static void MusicList_ResizeEntries_Fallback(void* arrayHeader, int newCount) {
     if (!arrayHeader) return;
     if (newCount < 0) {
-        static bool s_warned = false;
-        if (!s_warned) {
+        if (!s_resizeWarned.exchange(true)) {
             printf("[MusicList::Resize] negative newCount=%d header=%p — stream "
                    "misaligned upstream; leaving array unchanged\n",
                    newCount, arrayHeader);
             fflush(stdout);
-            s_warned = true;
         }
         return;
     }
@@ -166,43 +171,25 @@ static void MusicList_ResizeEntries_Fallback(void* arrayHeader, int newCount) {
     }
 }
 
-typedef void (*Resize_t)(void* arrayHeader, int newCount);
-static Resize_t s_resize = nullptr;
-static bool     s_resolved = false;
-
-static void MusicList_ResolveFuncs() {
-    if (s_resolved) return;
-    s_resolved = true;
-    // Exe-internal addr is unregistered → 0, so we use the local fallback below.
-    s_resize = reinterpret_cast<Resize_t>(ResolveAddr(Module::Exe, kResizeEntries));
-    if (!s_resize) s_resize = &MusicList_ResizeEntries_Fallback;
-}
-
 // ============================================================
-// MusicList::Init — base ctor + vtable + zero the entry array
+// MusicList::MusicList — factory sub_c260 body
 // ============================================================
-// Mirrors factory sub_c260: External::External(self); vtable; +0x20=0; +0x28=0.
-static void MusicList_Init(void* mem) {
-    if (!mem) return;
-    uint8_t* s = reinterpret_cast<uint8_t*>(mem);
-    if (fn_External_External) fn_External_External(mem);     // Object::External base
-    *(void**)mem = (void*)ResolveAddr(Module::Exe, kVtableAddr);
-    *(uint64_t*)(s + 0x20) = 0;   // entries.data (+0x20) + count (+0x28 low) cleared
-    *(uint64_t*)(s + 0x28) = 0;   // entries.count (+0x28) + cap (+0x2c)
+// External() and the 0x14015ee40 stamp are the compiler's; then +0x20 = 0,
+// +0x28 = 0 (two qwords: data, count + capacity).
+MusicList::MusicList() {
+    _entries       = nullptr;
+    _entryCount    = 0;
+    _entryCapacity = 0;
 }
 
 // ============================================================
 // MusicList::Serialize (vtable +0x28) — faithful port of 0x1400a3e90
 // ============================================================
-extern "C" void MusicList_Serialize(void* self, void* stream) {
-    if (!self) return;
-    MusicList_ResolveFuncs();
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-
+bool MusicList::Serialize(void* stream) {
     alignas(8) uint8_t ser[24];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    int count = *(int*)(s + 0x28);
+    int count = _entryCount;
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge (cast dropped: count is int)
 
     // Loading when the serializer's stream-mode field == 0. The original reads
@@ -211,15 +198,17 @@ extern "C" void MusicList_Serialize(void* self, void* stream) {
     // namedatabase.cpp.) Reading ser+8 directly mis-evaluates the load flag, so
     // the resize is skipped, entries.data stays null, and the per-element read
     // below faults (dst = elem+0x08 = 0x8 when elem == null).
+    // FUN_14001c3c0 is unregistered; the resize is the local mirror above
+    // (called directly; the old lazily-resolved pointer always fell back to it).
     void* serState = *(void**)ser;
-    if (serState && static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0 && s_resize) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        s_resize(s + 0x20, count);   // &entries header
+    if (serState && static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+        MusicList_ResizeEntries_Fallback(&_entries, count);   // &entries header
     }
 
     // Per-element read. Guard on a non-null buffer: if the array wasn't
     // allocated (e.g. count==0, or a resize that couldn't allocate), don't
     // deref null. With the load flag fixed this holds whenever count>0.
-    uint8_t* elem = *(uint8_t**)(s + 0x20);   // entries.data
+    uint8_t* elem = reinterpret_cast<uint8_t*>(_entries);   // entries.data
     if (count > 0 && elem) {
         for (int i = 0; i < count; ++i) {
             // ORDER IS LOAD-BEARING: float@+0x08, float@+0x0c, int@+0x10,
@@ -243,86 +232,58 @@ extern "C" void MusicList_Serialize(void* self, void* stream) {
     }
 
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    return true;
 }
 
 // ============================================================
-// MusicList::Dtor (vtable +0x00, exe 0x14001c360) — free array, base dtor
+// MusicList::~MusicList / DeletingDtor (vtable +0x00, exe 0x14001c360)
 // ============================================================
 // ENDGAME B.3.2 step 2: the array free is `MusicTrackArray::~Array`
 // (re-decompiled 2026-09-13: MemFree(+0x20); +0x20 = 0; one qword over +0x28 —
 // ArrayDtorImpl exactly; the row above has no destroy step, matching retail's
-// absence of an element loop).
-extern "C" void* MusicList_Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtableAddr);
-    reinterpret_cast<MusicTrackArray*>(s + 0x20)->~Array();   // B.3.2 bridge: entries header
-    if (fn_External_Dtor) fn_External_Dtor(self);                  // base dtor
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// absence of an element loop). External::~External is the compiler's chain.
+MusicList::~MusicList() {
+    reinterpret_cast<MusicTrackArray*>(&_entries)->~Array();   // B.3.2 bridge: entries header
+}
+
+Object::Base* MusicList::DeletingDtor(unsigned flags) {
+    this->~MusicList();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
-// MusicList::Cleanup (vtable +0x30, exe 0x14001c310) — dtor(0) then re-init
+// MusicList::Reconstruct (vtable +0x30, exe 0x14001c310) — dtor(0) then re-init
 // ============================================================
-extern "C" void* MusicList_Cleanup(void* self) {
-    if (!self) return self;
-    // Original calls the vtable[0] dtor with flags=0, then re-inits in place.
-    MusicList_Dtor(self, 0);
-    MusicList_Init(self);
-    return self;
+Object::External* MusicList::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) MusicList();
+}
+
+// [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
+// slot 0 with flags 0 (destroy, no free).
+void MusicList::Destruct() { DeletingDtor(0); }
+
+// ============================================================
+// MusicList::Construct (vtable +0x40, exe 0x14001c2c0) — in-place init
+// ============================================================
+Object::External* MusicList::Construct() {
+    return ::new (static_cast<void*>(this)) MusicList();
 }
 
 // ============================================================
-// MusicList::CreateInPlace (vtable +0x40, exe 0x14001c2c0) — in-place init
+// Reflection: create / createInPlace, the registration
 // ============================================================
-extern "C" void* MusicList_CreateInPlace(void* mem) {
-    if (!mem) return nullptr;
-    MusicList_Init(mem);
-    return mem;
-}
-
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-// Slot2 (vtable +0x10): GetTypeId — original returns TypeInfo_MusicList; standalone
-// reads it from REGISTER_TYPE storage.
-static uint32_t MusicList_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("MusicList");
-    return cached;
-}
-
-// Slot3 (vtable +0x18): GetFileVersion — original (0x1400a3f80) is `mov eax,1; ret`.
-static int MusicList_GetFileVersion(void* /*self*/) { return 1; }
-
-// 9-slot vtable matching exe 0x14015ee40 (Object::External base layout).
-// Base/Runtime thunk slots (+0x08, +0x20, +0x38) stay null — same as Toolbar.
-static void* g_MusicList_Vtable[9] = {
-    reinterpret_cast<void*>(&MusicList_Dtor),           // +0x00 Dtor
-    nullptr,                                            // +0x08 (base thunk 0x14001c250)
-    reinterpret_cast<void*>(&MusicList_GetTypeId),      // +0x10 GetTypeId
-    reinterpret_cast<void*>(&MusicList_GetFileVersion), // +0x18 GetFileVersion = 1
-    nullptr,                                            // +0x20 (base thunk 0x14003a912)
-    reinterpret_cast<void*>(&MusicList_Serialize),      // +0x28 Serialize
-    reinterpret_cast<void*>(&MusicList_Cleanup),        // +0x30 Cleanup
-    nullptr,                                            // +0x38 (base 0x140001640)
-    reinterpret_cast<void*>(&MusicList_CreateInPlace),  // +0x40 CreateInPlace (init)
-};
-
-extern "C" void RegisterMusicListVtable() {
-    RegisterExeAddr(kVtableAddr, reinterpret_cast<uintptr_t>(g_MusicList_Vtable));
-}
-
-extern "C" void* MusicList_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, kSize, 8);  // MusicList size = 0x30
+void* MusicList::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(MusicList), 8);
     if (!p) return nullptr;
-    MusicList_Init(p);
-    return p;
+    return static_cast<Object::Base*>(::new (p) MusicList());
+}
+void* MusicList::CreateInPlaceObject(void* memory) {
+    if (!memory) return nullptr;
+    return static_cast<Object::Base*>(::new (memory) MusicList());
 }
 
-// Parent "Object::External" matches the original MusicList registration.
-REGISTER_TYPE(MusicList, "Object::External",
-              &MusicList_Factory, &MusicList_CreateInPlace);
+DEFINE_EXE_VTABLE(MusicList, "_ZTV9MusicList")
 
+DEFINE_EXE_TYPE(MusicList, "Object::External")

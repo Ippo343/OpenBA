@@ -37,7 +37,9 @@
 // Decompiled from Application-x64.exe; the slope test and the cell-stamp tail are
 // pinned against the disassembly (see the notes at each site).
 
-#include "Component/quarrycomponent_funcs.h"
+#include "Component/QuarryComponent.h"
+#include "Component/ConsumeProduceDescription.h"
+#include "Component/QuarryDescription.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "perf_terrain.h"
@@ -125,24 +127,13 @@ void* QuarryFindComp(fn_FindCompOut_t finder, void* entity) {
     return reinterpret_cast<void*>(out[0]);
 }
 
-// The raw .rdata type-id globals (QuarryDescription 0x1401c4838, ConsumeProduce-
-// Description 0x1401c7388) are UNFILLED in standalone — the documented trap where a
-// registered-but-zero global makes IsDerivedFrom(x, 0) match nothing, so the find
-// silently returns null and the whole carve no-ops. Resolve by NAME first and fall
-// back to the raw global only if the name lookup fails.
-uint32_t QuarryTypeId(const char* name, uintptr_t rdataAddr) {
-    uint32_t id = ::Object::GetTypeIdByName(name);
-    if (id != 0) return id;
-    const uint32_t* p = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, rdataAddr));
-    return p ? *p : 0u;
-}
 
 // Retail reaches the QuarryDescription through the owning entity's DESCRIPTION list
 // (entity+0x28 -> array +0x28, count +0x30) — NOT the component array at +0x30/+0x38.
 // The two lists are one deref apart and picking the wrong one finds nothing.
 void* QuarryFindDescription(void* entity) {
     if (!entity || !s_fn_IsDerivedFrom) return nullptr;
-    const uint32_t tid = QuarryTypeId("QuarryDescription", 0x1401c4838);
+    const uint32_t tid = QuarryDescription::TypeId();
     if (tid == 0) return nullptr;
     const uintptr_t descList = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(entity) + 0x28);
     if (!descList) return nullptr;
@@ -162,20 +153,12 @@ void* QuarryFindDescription(void* entity) {
 void* QuarryDecalSuspend(void* entity) {
     void* decal = QuarryFindComp(s_fn_FindComp_Decal, entity);
     if (!decal) return nullptr;
-    void** vt = *reinterpret_cast<void***>(decal);
-    if (!vt) return nullptr;
-    typedef void (*fn_t)(void*);
-    fn_t f = reinterpret_cast<fn_t>(vt[7]);
-    if (f) f(decal);
+    reinterpret_cast<Component*>(decal)->OnRemove();   // B.3.8 bridge (slot 7; the DecalComponent)
     return decal;
 }
 void QuarryDecalResume(void* decal) {
     if (!decal) return;
-    void** vt = *reinterpret_cast<void***>(decal);
-    if (!vt) return;
-    typedef void (*fn_t)(void*);
-    fn_t f = reinterpret_cast<fn_t>(vt[6]);
-    if (f) f(decal);
+    reinterpret_cast<Component*>(decal)->OnAdded();   // B.3.8 bridge (slot 6; the DecalComponent)
 }
 
 }  // namespace
@@ -196,7 +179,7 @@ extern "C" void QuarryComponent_ApplyDepth(void* selfV, float depth) {
 
     void* descRaw = *reinterpret_cast<void**>(self + 0x18);
     if (!s_fn_IsDerivedFrom) { QuarryBail("ApplyDepth", "IsDerivedFrom slot 0x140152a98 unresolved"); return; }
-    const uint32_t tidDesc = QuarryTypeId("QuarryDescription", 0x1401c4838);
+    const uint32_t tidDesc = QuarryDescription::TypeId();
     if (tidDesc == 0) { QuarryBail("ApplyDepth", "QuarryDescription type id is 0"); return; }
     if (!descRaw || !s_fn_IsDerivedFrom(descRaw, tidDesc)) {
         QuarryBail("ApplyDepth", "component +0x18 is not a QuarryDescription"); return;
@@ -262,10 +245,10 @@ extern "C" void QuarryComponent_ApplyDepth(void* selfV, float depth) {
 // QuarryComponent slot [12] (0x1400550f0) — message sink
 // ============================================================
 // msg 4 = build complete: carve the pit once at _initialDepth.
-extern "C" void QuarryComponent_Slot12(void* selfV, int msgId) {
+void QuarryComponent::OnEvent(int msgId) {
     if (msgId != 4) return;
     QuarryDeformResolve();
-    void* entity = QuarryOwnerEntity(reinterpret_cast<uintptr_t>(selfV));
+    void* entity = QuarryOwnerEntity(reinterpret_cast<uintptr_t>(this));
 
     void* desc = QuarryFindDescription(entity);
     if (!desc) { QuarryBail("Slot12(msg4)", "no QuarryDescription in the entity description list"); return; }
@@ -273,9 +256,14 @@ extern "C" void QuarryComponent_Slot12(void* selfV, int msgId) {
     const float initialDepth = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x28);
 
     void* decal = QuarryDecalSuspend(entity);
-    QuarryComponent_ApplyDepth(selfV, initialDepth);
+    QuarryComponent_ApplyDepth(this, initialDepth);
     QuarryDecalResume(decal);
 
+}
+
+// 0x1400550f0 door: registered by address (standalone/reg_quarry_live.cpp).
+extern "C" void QuarryComponent_Slot12(void* selfV, int msgId) {
+    reinterpret_cast<QuarryComponent*>(selfV)->QuarryComponent::OnEvent(msgId);   // B.3.8 bridge
 }
 
 // ============================================================
@@ -285,15 +273,15 @@ extern "C" void QuarryComponent_Slot12(void* selfV, int msgId) {
 // completed stone-production cycle lands here. Two halves:
 //   1. re-carve the floor at lerp(_initialDepth, _maxDepth, produced/_maximumProduction)
 //   2. walk the footprint and convert the dug cells' terrain type to 5 (quarried rock)
-extern "C" void QuarryComponent_Slot15(void* selfV) {
+void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0*/, uint32_t /*arg1*/) {
     QuarryDeformResolve();
-    void* entity = QuarryOwnerEntity(reinterpret_cast<uintptr_t>(selfV));
+    void* entity = QuarryOwnerEntity(reinterpret_cast<uintptr_t>(this));
 
     // ---- production progress -> depth -------------------------------------------
     void* cp = QuarryFindComp(s_fn_FindComp_CP, entity);
     if (!cp) { QuarryBail("Slot15", "owner has no ConsumeProduceComponent"); return; }
     void* cpDescRaw = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(cp) + 0x18);
-    const uint32_t tidCP = QuarryTypeId("ConsumeProduceDescription", 0x1401c7388);
+    const uint32_t tidCP = ConsumeProduceDescription::TypeId();
     void* cpDesc = (cpDescRaw && s_fn_IsDerivedFrom && tidCP && s_fn_IsDerivedFrom(cpDescRaw, tidCP))
                  ? cpDescRaw : nullptr;
     if (!cpDesc) { QuarryBail("Slot15", "ConsumeProduce +0x18 is not a ConsumeProduceDescription"); return; }
@@ -313,7 +301,7 @@ extern "C" void QuarryComponent_Slot15(void* selfV) {
     const float depth        = (1.0f - t) * initialDepth + t * maxDepth;
 
     void* decal = QuarryDecalSuspend(entity);
-    QuarryComponent_ApplyDepth(selfV, depth);
+    QuarryComponent_ApplyDepth(this, depth);
     QuarryDecalResume(decal);
 
     // ---- footprint -> terrain type 5 --------------------------------------------
@@ -411,4 +399,9 @@ extern "C" void QuarryComponent_Slot15(void* selfV) {
         }
     }
 
+}
+
+// 0x140054b80 door: registered by address (standalone/reg_quarry_live.cpp).
+extern "C" void QuarryComponent_Slot15(void* selfV) {
+    reinterpret_cast<QuarryComponent*>(selfV)->QuarryComponent::OnMessage(0, nullptr, 0, 0);   // B.3.8 bridge
 }

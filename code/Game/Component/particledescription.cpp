@@ -36,6 +36,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/ParticleDescription.h"
+#include "Component/ParticleComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -151,7 +152,7 @@ void ParticleDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x14000a4f0: ParticleComponent's type id through the hidden return slot.
 Object::Type* ParticleDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("ParticleComponent");
+    ret->_type = ParticleComponent::TypeId();
     return ret;
 }
 

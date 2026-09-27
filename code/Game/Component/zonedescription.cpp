@@ -20,6 +20,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/ZoneDescription.h"
+#include "Component/ZoneComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -51,7 +52,7 @@ void ZoneDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x14003a800: ZoneComponent's type id through the hidden return slot.
 Object::Type* ZoneDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("ZoneComponent");
+    ret->_type = ZoneComponent::TypeId();
     return ret;
 }
 

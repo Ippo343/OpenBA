@@ -500,11 +500,8 @@ int HuntWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
     int priority = (int)selfQ[4];
     uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
 
-    uintptr_t vtable = *(uintptr_t*)this;
-    typedef uintptr_t* (*GetWorkEntity_t)(HuntWork*, void*);
-    auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
     uintptr_t workEntIBP[2] = {0};
-    uintptr_t* wResult = getWorkEntity(this, workEntIBP);
+    uintptr_t* wResult = static_cast<uintptr_t*>(GetTarget(workEntIBP));
     uintptr_t workEnt = *wResult;
 
     *(uint32_t*)(citizenEnt + 0x54) |= 4;
@@ -817,10 +814,4 @@ DEFINE_EXE_VTABLE(HuntWork, "_ZTV8HuntWork")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x140161620 is still read back BY ADDRESS — HuntComponent's CreateWork
-// (resourceproduce_creatework.cpp, block MI-B) builds the work by hand and stamps it —
-// so the exe address serves the COMPILER's table.
-extern "C" void RegisterHuntWorkVtable() {
-    RegisterExeAddr(HuntWorkAddr::Vtable, reinterpret_cast<uintptr_t>(HuntWork::Vtable()));   // 0x140161620
-}
 DEFINE_EXE_TYPE(HuntWork, "AutoPickupWork")

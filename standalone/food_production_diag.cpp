@@ -26,6 +26,18 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "Component/CropFieldComponent.h"
+#include "Component/FishingComponent.h"
+#include "Component/HerbalistComponent.h"
+#include "Component/HerbalistDescription.h"
+#include "Component/HuntComponent.h"
+#include "Component/MapComponent.h"
+#include "Component/OrchardComponent.h"
+#include "Component/PastureComponent.h"
+#include "Component/RadiusDescription.h"
+#include "Component/StateMachineComponent.h"
+#include "Component/StorageComponent.h"
+#include "Component/WorkPlaceComponent.h"
 
 namespace {
 
@@ -53,8 +65,6 @@ struct ClassRow {
 // wave (ControllerComponent layout); the owning StateMachine carries the current
 // state id in its +0x0a byte. We read the StateMachineComponent instead, which is
 // where the id is actually published — comp+0x28 is only the node.
-uint32_t Tid(const char* n) { return ::Object::GetTypeIdByName(n); }
-
 // Find a component of type `tid` on an entity (the +0x30 array / +0x38 count pair).
 void* FindComp(void* ent, uint32_t tid) {
     if (!ent || !tid) return nullptr;
@@ -64,15 +74,13 @@ void* FindComp(void* ent, uint32_t tid) {
         void** cs = reinterpret_cast<void**>(a + static_cast<uintptr_t>(i) * 8);
         void* c = *cs;
         if (!c) continue;
-        void** vt = *reinterpret_cast<void***>(c);
-        if (!vt || !vt[2]) continue;
-        if (reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c) == tid) return c;
+        if (reinterpret_cast<Object::Base*>(c)->Type() == tid) return c;   // B.3.8 bridge
     }
     return nullptr;
 }
 
 void DumpStorage(int frame, uintptr_t arr, int n) {
-    const uint32_t tidStorage = Tid("StorageComponent");
+    const uint32_t tidStorage = StorageComponent::TypeId();
     if (!tidStorage || !arr || n <= 0) {
         std::fprintf(stderr, "[FoodDiag] frame=%d storage: CANNOT SCAN "
                      "(tid=%u entities=%d)\n", frame, tidStorage, n);
@@ -93,9 +101,7 @@ void DumpStorage(int frame, uintptr_t arr, int n) {
             void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
             void* comp = *cs;
             if (!comp) continue;
-            void** vt = *reinterpret_cast<void***>(comp);
-            if (!vt || !vt[2]) continue;
-            if (reinterpret_cast<uint32_t(*)(void*)>(vt[2])(comp) != tidStorage) continue;
+            if (reinterpret_cast<Object::Base*>(comp)->Type() != tidStorage) continue;   // B.3.8 bridge
             ++storages;
             uintptr_t st = reinterpret_cast<uintptr_t>(comp);
             const int stacks = *reinterpret_cast<int32_t*>(st + 0x30);
@@ -136,16 +142,16 @@ void DumpAll(int frame) {
     int       n   = *reinterpret_cast<int32_t*>(entityList + 0x10);
 
     ClassRow rows[] = {
-        { "CropFieldComponent", Tid("CropFieldComponent"), 0 },
-        { "OrchardComponent",   Tid("OrchardComponent"),   0 },
-        { "PastureComponent",   Tid("PastureComponent"),   0 },
-        { "FishingComponent",   Tid("FishingComponent"),   0 },
-        { "HuntComponent",      Tid("HuntComponent"),      0 },
-        { "HerbalistComponent", Tid("HerbalistComponent"), 0 },
+        { "CropFieldComponent", CropFieldComponent::TypeId(), 0 },
+        { "OrchardComponent",   OrchardComponent::TypeId(),   0 },
+        { "PastureComponent",   PastureComponent::TypeId(),   0 },
+        { "FishingComponent",   FishingComponent::TypeId(),   0 },
+        { "HuntComponent",      HuntComponent::TypeId(),      0 },
+        { "HerbalistComponent", HerbalistComponent::TypeId(), 0 },
     };
     const int nRows = (int)(sizeof(rows) / sizeof(rows[0]));
-    const uint32_t tidSM  = Tid("StateMachineComponent");
-    const uint32_t tidWPC = Tid("WorkPlaceComponent");
+    const uint32_t tidSM  = StateMachineComponent::TypeId();
+    const uint32_t tidWPC = WorkPlaceComponent::TypeId();
 
     for (int i = 0; i < n && arr; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
@@ -199,7 +205,7 @@ void DumpAll(int frame) {
                 // Radius lives on the RadiusDescription in the entity's description
                 // list (entity+0x28), at +0x28 — the same read the work does.
                 int radius = 0;
-                const uint32_t tidRadius = Tid("RadiusDescription");
+                const uint32_t tidRadius = RadiusDescription::TypeId();
                 uintptr_t dlist = *reinterpret_cast<uintptr_t*>(
                     static_cast<uint8_t*>(ent) + 0x28);
                 if (dlist && tidRadius) {
@@ -214,7 +220,7 @@ void DumpAll(int frame) {
                 }
                 if (grid && mw > 0 && radius > 0) {
                     // Building tile centre, as the works compute it.
-                    const uint32_t tidMap = Tid("MapComponent");
+                    const uint32_t tidMap = MapComponent::TypeId();
                     void* mc = FindComp(ent, tidMap);
                     if (mc) {
                         uintptr_t m = reinterpret_cast<uintptr_t>(mc);
@@ -249,7 +255,7 @@ void DumpAll(int frame) {
                     // finder uses type id 0x1401c43a0, which is HerbalistComponent despite
                     // the port naming its local `s_typeId_WorkplaceComponent`. `comp` here
                     // is already that component.
-                    const uint32_t tidHerbDesc = Tid("HerbalistDescription");
+                    const uint32_t tidHerbDesc = HerbalistDescription::TypeId();
                     void* hdesc = nullptr;
                     {
                         void* d = *reinterpret_cast<void**>(
@@ -262,7 +268,7 @@ void DumpAll(int frame) {
                         uintptr_t hd = reinterpret_cast<uintptr_t>(hdesc);
                         listN = *reinterpret_cast<int32_t*>(hd + 0x28);
                         uintptr_t* list = *reinterpret_cast<uintptr_t**>(hd + 0x20);
-                        const uint32_t tidMap2 = Tid("MapComponent");
+                        const uint32_t tidMap2 = MapComponent::TypeId();
                         void* mc2 = FindComp(ent, tidMap2);
                         if (list && listN > 0 && mc2) {
                             uintptr_t m2 = reinterpret_cast<uintptr_t>(mc2);

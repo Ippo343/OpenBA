@@ -4,7 +4,9 @@
 // Three exe code functions (lead-verified addresses this session):
 //   0x1400c4c50  CitizenAI_ActionExecutor_c4c50    — action-stack executor
 //   0x1400c4bb0  CitizenAI_ActionFlush_c4bb0       — executor flush/cleanup tail
-//   0x1401094c0  CharacterComponent_MoveTick_1094c0 — move-tick (runs executor + transform tail)
+//   0x1401094c0  CharacterComponent_MoveTick_1094c0 — move-tick (runs executor + transform tail);
+//                its row went in ENDGAME B.3.8 (CharacterComponent::Tick is a real virtual and
+//                nothing read the address back)
 //
 // No new .rdata const storage is added here: every float const / vtable slot the
 // move-tick TAIL reads (0x140172xxx floats, 0x1401bc2e8 _rootOnlyUpdates, the
@@ -26,10 +28,8 @@
 
 extern "C" void CitizenAI_ActionExecutor_c4c50(int64_t* stackAt48, void* time);
 extern "C" void CitizenAI_ActionFlush_c4bb0(int64_t stack);
-extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time);
 
 void RegisterCitizenAIExecutor() {
     RegisterExeAddr(0x1400c4c50, reinterpret_cast<uintptr_t>(&CitizenAI_ActionExecutor_c4c50));
     RegisterExeAddr(0x1400c4bb0, reinterpret_cast<uintptr_t>(&CitizenAI_ActionFlush_c4bb0));
-    RegisterExeAddr(0x1401094c0, reinterpret_cast<uintptr_t>(&CharacterComponent_MoveTick_1094c0));
 }

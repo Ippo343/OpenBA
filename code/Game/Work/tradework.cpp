@@ -887,12 +887,6 @@ TradeWork::TradeWork() : Work(), bstRoot(nullptr), workerCount(0), _pad54{} {
     TradeWork_ResolveFuncs();
 }
 
-// The by-address door for slot 4 (0x1400f5d40), registered in
-// standalone/reg_work_tail_trade.cpp.
-int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t param3, uint64_t param4) {
-    return self->TradeWork::Execute(citizenIBP, reinterpret_cast<void*>(param3), param4);
-}
-
 // ============================================================
 // Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================
@@ -918,10 +912,4 @@ DEFINE_EXE_VTABLE(TradeWork, "_ZTV9TradeWork")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x140161a10 is still read back BY ADDRESS — TradeComponent
-// (tradecomponent.cpp, tradecomponent_states.cpp) builds the work by hand and stamps
-// it — so the exe address serves the COMPILER's table.
-extern "C" void RegisterTradeWorkVtable() {
-    RegisterExeAddr(TradeWorkAddr::Vtable, reinterpret_cast<uintptr_t>(TradeWork::Vtable()));   // 0x140161a10
-}
 DEFINE_EXE_TYPE(TradeWork, "Work")

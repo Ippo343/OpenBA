@@ -3,22 +3,28 @@
 // Real implementations of the 9 vtable slots at exe 0x14015f110 ("derived
 // Graphics::Geometry" / TerrainGenerator). Decompiled from the original exe.
 //
+// ENDGAME B.3.8 block LOOP: these are the members of the REAL class
+// `WorldGeometry` (code/Game/Game/WorldGeometry.h) now, with a compiler vtable.
+// Gone: the hand-built 9-slot `g_Geometry_Vtable_Standalone` (serialize_arrays.cpp)
+// and the five GeomDraw_* forwarders for slots 4..8 — the class inherits
+// Graphics::Geometry's, which is exactly what they called.
+//
 // Vtable layout (verified via Ghidra read of 0x14015f110):
-//   +0x00  GeomDraw_Dtor               (exe 0x14001ECC0)  — see below
-//   +0x08  GeomDraw_ChunkUpdate        (exe 0x1400AED40 → JMP 0x1400AAD50)
-//   +0x10  GeomDraw_ItemDraw           (exe 0x1400AEA10)  per-item GPU draw
-//   +0x18  GeomDraw_CollectDraw        (exe 0x1400AE490)  frustum cull + AddDrawItem
+//   +0x00  DeletingDtor                (exe 0x14001ECC0)  — see below
+//   +0x08  Update (chunk rebuild)      (exe 0x1400AED40 → JMP 0x1400AAD50)
+//   +0x10  Draw (per item)             (exe 0x1400AEA10)  per-item GPU draw
+//   +0x18  AddDrawItems                (exe 0x1400AE490)  frustum cull + AddDrawItem
 //   +0x20  inherited UpdateAttached    (Runtime export)
 //   +0x28  inherited GetSubTransform   (Runtime export, hidden retval)
 //   +0x30  inherited GetInstanceTransform (Runtime export, hidden retval)
 //   +0x38  inherited SetSharedInstanceData (Runtime export)
 //   +0x40  inherited Clean             (Runtime export)
 //
-// The 9-slot vtable in serialize_arrays.cpp points at the functions defined here.
 
 // ENDGAME B.3.5 batch K1: the runtime type headers come FIRST — they reach
 // runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
 // <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
+#include "Game/WorldGeometry.h"
 #include "graphics/Geometry.h"
 #include "graphics/Camera.h"     // Graphics::Camera, Graphics::Renderer
 #include "graphics/Material.h"   // Graphics::MaterialInstance
@@ -29,6 +35,9 @@
 #include "math/Math.h"
 #include "resolve.h"
 #include "perf_experimental.h"
+#include "Object/exe_type.h"   // DEFINE_EXE_VTABLE
+#include "object/Internal.h"   // Object::detail::InternalMemFree
+#include <atomic>
 #include <cstdint>
 #include <new>
 #include <cstdio>
@@ -48,19 +57,86 @@
 namespace {
 constexpr float kChunkZMin   = -16.0f;  // exe 0x14017228c
 constexpr float kChunkZRange =  32.0f;  // exe 0x1401721d0
+
+// One-shot log latches (namespace scope, atomic: B6-5).
+std::atomic<bool> s_collectLogged{false};
+std::atomic<bool> s_frustumWarned{false};
+std::atomic<bool> s_itemDrawLogged{false};
 }  // namespace
 
+DEFINE_EXE_VTABLE(WorldGeometry, "_ZTV13WorldGeometry")
+
 // ============================================================
-// Slot +0x00 — destructor stub
+// Slot +0x00 — destructor (B38 D9 #12)
 // ============================================================
 //
-// Original dtor (exe 0x14001ECC0) walks all the SoA arrays at +0x140..+0x228,
-// calls MemFree on each, then tail-calls operator delete via slot 0x140152b68
-// when the low bit of the flags arg is set. For now we keep the lightweight
-// stub: the menu Geometry lives until process exit, leaking is fine. Full
-// dtor body is in TODOs for a follow-up session.
-extern "C" void* GeomDraw_Dtor(void* self, uint32_t /*flags*/) {
-    return self;
+// Callees, each the body registered at its retail address.
+extern "C" void Reimpl_Struct60B_DtorRange(void* unused, void* first, int count);  // 0x14001fb80
+extern "C" void ArrayOfArrays_Clear_175d0(void* hdr);                               // 0x1400175d0
+void WorkBase_TreeNodeFree_14c30(void* root, void* node);                           // 0x140014c30
+
+namespace {
+// `MemFree(h.data); h = {}` — one of retail's free-and-zero pairs.
+void FreeHeader(WorldGeometry::Header& h) {
+    Object::detail::InternalMemFree(h.data);   // MemFree is null-tolerant, as retail relies on
+    h.data = nullptr;
+    h.sizeCap = 0;
+}
+}  // namespace
+
+// Body 0x1400aed50, transcribed in retail's order (read in Ghidra). The vptr
+// restamp on entry and the tail JMP to Graphics::Geometry::~Geometry are the
+// compiler's.
+WorldGeometry::~WorldGeometry() {
+    // +0x148: the height ImageBuffer, deleted through its own slot 0 with
+    // flags 1 (retail: MOV RAX,[RCX]; MOV EDX,1; CALL [RAX]). Bridge: the
+    // pointer is untyped and the call is the raw dispatch retail makes.
+    if (_heightImage) {
+        using DeletingDtorFn = void* (*)(void*, unsigned);
+        (*reinterpret_cast<DeletingDtorFn* const*>(_heightImage))[0](_heightImage, 1);
+    }
+    Object::detail::InternalMemFree(_heightBytes);          // +0x140 (not zeroed)
+
+    FreeHeader(_arrays[8]);                                 // +0x220 ints
+    FreeHeader(_arrays[7]);                                 // +0x210 External* refs
+    Reimpl_Struct60B_DtorRange(nullptr, _arrays[6].data,    // +0x200 decal elements
+                               static_cast<int>(_arrays[6].sizeCap));
+    FreeHeader(_arrays[6]);
+    Reimpl_Struct60B_DtorRange(nullptr, _arrays[5].data,    // +0x1f0 decal elements
+                               static_cast<int>(_arrays[5].sizeCap));
+    FreeHeader(_arrays[5]);
+    ArrayOfArrays_Clear_175d0(&_arrays[4]);                 // +0x1e0 array of arrays
+    FreeHeader(_arrays[3]);                                 // +0x1d0
+    FreeHeader(_arrays[2]);                                 // +0x1c0
+    FreeHeader(_arrays[1]);                                 // +0x1b0
+    FreeHeader(_arrays[0]);                                 // +0x1a0
+
+    // ~IndexBuffer / ~VertexBuffer are `JMP PlatformDestruct` in retail
+    // (0x1800f3480 / 0x1800f55e0).
+    _waterIndexBuffer.PlatformDestruct();                   // +0x180
+    _waterVertexBuffer.PlatformDestruct();                  // +0x160
+    _indexBuffer.PlatformDestruct();                        // +0x120
+    _vertexBuffer.PlatformDestruct();                       // +0x100
+
+    // +0xe8: the dirty-chunk tree — free both subtrees, then the root node.
+    if (void* root = _dirtyTreeRoot) {
+        WorkBase_TreeNodeFree_14c30(&_dirtyTreeRoot, *reinterpret_cast<void**>(static_cast<uint8_t*>(root) + 0x10));
+        WorkBase_TreeNodeFree_14c30(&_dirtyTreeRoot, *reinterpret_cast<void**>(static_cast<uint8_t*>(root) + 0x18));
+        Object::detail::InternalMemFree(root);
+    }
+    _dirtyTreeRoot = nullptr;
+    _dirtyTreeCount = 0;
+
+    Object::detail::InternalMemFree(_arrayD8);              // +0xd8
+    _arrayD8 = nullptr;
+    _arrayD8Size = 0;
+}
+
+// 0x14001ecc0: the body above, then MemFree(this) on flags & 1.
+Graphics::Geometry* WorldGeometry::DeletingDtor(unsigned flags) {
+    this->~WorldGeometry();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
@@ -72,33 +148,32 @@ extern "C" void* GeomDraw_Dtor(void* self, uint32_t /*flags*/) {
 // chunk's vertices via FUN_1400ac880, and uploads them into the master
 // VertexBuffer at self+0x100 via Video::VertexBuffer::Set.
 //
-// Body lives in serialize_heightmap_mesh.cpp next to the related helpers
-// (FUN_1400ac880, helper_e270, sub_c1e0) and shares its lazy Runtime
-// resolution machinery.
-extern "C" void Reimpl_GeometryChunkUpdate(void* self);
-
-extern "C" void GeomDraw_ChunkUpdate(void* self) {
-    Reimpl_GeometryChunkUpdate(self);
+// Body: WorldGeometry::RebuildDirtyChunks (0x1400aad50), in
+// serialize_heightmap_mesh.cpp next to the related helpers (FUN_1400ac880,
+// helper_e270, sub_c1e0). Caller batch CB6: the slot calls the member (it went
+// through the Reimpl_GeometryChunkUpdate door, which now delegates to it).
+void WorldGeometry::Update(const System::Time& /*time*/) {
+    RebuildDirtyChunks();
 }
 
 // ============================================================
 // Slot +0x18 — collect-phase Draw (frustum cull + queue draw items)
 // ============================================================
 //
-// Decompiled from exe 0x1400AE490 (~300 instructions). Takes (self, unused, renderer)
-// where `unused` is a Time* that the original ignores. Walks the heightmap
+// Decompiled from exe 0x1400AE490 (~300 instructions). Takes (self, scene, renderer);
+// the original ignores the scene. Walks the heightmap
 // chunk grid, frustum-culls each chunk, and calls Renderer::AddDrawItem for
 // each visible chunk + the SoA arrays at +0x1C0/+0x1D0/+0x1F0/+0x200.
-extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* renderer) {
-    if (!self || !renderer) return;
+void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
+                                 Graphics::Renderer& rendererRef) const {
+    void* self = const_cast<WorldGeometry*>(this);   // bridge: the body reads offsets
+    void* renderer = &rendererRef;
 
-    static int s_calls = 0;
-    if (s_calls == 0) {
+    if (!s_collectLogged.exchange(true)) {
         printf("[GeomDraw_CollectDraw] first call self=%p renderer=%p\n",
                self, renderer);
         fflush(stdout);
     }
-    ++s_calls;
 
     // Cascade: every Runtime primitive needed must be wired. ENDGAME B.3.5 batch K1:
     // the five Video/Graphics terms (GetCullCamera, Geometry::GetTransform,
@@ -106,13 +181,11 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
     // aggregate with their call sites; the two Volume::Frustum terms stay, because
     // `Volume::Frustum` is not a Video/Graphics class and its doors are untouched.
     if (!fn_Frustum_MulTransform3 || !fn_Frustum_Contains) {
-        static bool s_warned = false;
-        if (!s_warned) {
+        if (!s_frustumWarned.exchange(true)) {
             printf("[Geometry::CollectDraw] Volume::Frustum primitives unwired — "
                    "terrain will not render. Frustum=%p\n",
                    (void*)fn_Frustum_Contains);
             fflush(stdout);
-            s_warned = true;
         }
         return;
     }
@@ -307,21 +380,22 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
 // ============================================================
 //
 // Decompiled from exe 0x1400AEA10 (~170 instructions). Signature:
-//   (self, Context*, unused, unused, float param5, uint param6)
-// where param5 is the interpolation alpha (Scalar) and param6 is the per-item
+//   (self, Context&, Camera& (unused), material (unused), float opacity, int a, ...)
+// where opacity (param5) is the interpolation alpha (Scalar) and a (param6) is the per-item
 // key (the 2nd ushort key passed to AddDrawItem above, packed with extra bits
 // in 0xE000 to choose draw mode).
-extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
-                                  void* /*p4*/, float param5, uint32_t param6) {
-    if (!self || !context) return;
+void WorldGeometry::Draw(Video::Context& contextRef, const Graphics::Camera& /*camera*/,
+                         Graphics::ExternalPtrHandle /*material*/,
+                         float param5, int a, int /*b*/, int /*c*/) const {
+    void* self = const_cast<WorldGeometry*>(this);   // bridge: the body reads offsets
+    void* context = &contextRef;
+    const uint32_t param6 = static_cast<uint32_t>(a);
 
-    static int s_calls = 0;
-    if (s_calls == 0) {
+    if (!s_itemDrawLogged.exchange(true)) {
         printf("[GeomDraw_ItemDraw] first call self=%p ctx=%p alpha=%f key=0x%x\n",
                self, context, param5, param6);
         fflush(stdout);
     }
-    ++s_calls;
 
     auto* selfBytes = reinterpret_cast<uint8_t*>(self);
 
@@ -524,65 +598,4 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
     //   DrawIndexed(ctx, 0, iVar7=start, iVar8=scale, iVar9=0, iVar10=primCount, 1)
     reinterpret_cast<Video::Context*>(context)
         ->DrawIndexed(0, start, scale, 0, primCount, 1);   // B.3.5 bridge
-}
-
-// ============================================================
-// Slots +0x20..+0x40 — inherited Graphics::Geometry base methods
-// ============================================================
-//
-// Each is a thin trampoline that forwards to the corresponding Runtime DLL
-// export. The original exe used `FF 25 imm32` IAT thunks; in standalone we
-// need real C functions in our PE that the vtable can dispatch through. These
-// preserve the calling convention exactly (RCX=this, RDX=hidden_retval where
-// applicable, R8/R9/stack=remaining args) since the ABI is identical for
-// "trampoline that tail-calls another fn with same signature".
-
-// ENDGAME B.3.5 batch K1. All five call the MEMBER, and all five spell it
-// QUALIFIED — `->Graphics::Geometry::X(...)` — which is NOT a stylistic choice.
-// Slots 4..8 are VIRTUAL on `Graphics::Geometry`, and these five functions ARE the
-// five slots of this file's hand-built derived vtable. An unqualified
-// `geom->UpdateAttached()` would dispatch back through that table into this same
-// function and recurse until the stack is gone. The qualified form is the non-virtual
-// call to Geometry's own body, which is exactly the address the removed
-// `fn_Geometry_*` globals held (`?UpdateAttached@Geometry@Graphics@@UEAAXXZ` and
-// siblings). The old `if (fn_...)` tests were readiness tests on those pointers and
-// go with them; the members always exist.
-
-// +0x20 — Graphics::Geometry::UpdateAttached (no args, no return)
-extern "C" void GeomDraw_UpdateAttached(void* self) {
-    reinterpret_cast<Graphics::Geometry*>(self)
-        ->Graphics::Geometry::UpdateAttached();   // B.3.5 bridge
-}
-
-// +0x28 — Graphics::Geometry::GetSubTransform (member fn, hidden retval)
-//
-// Signature in retail AND in C++: `Math::Transform* GetSubTransform(Math::Transform*
-// ret, int node) const` — the hidden return slot is spelled OUT, in retail's order
-// (`this`, then the caller's storage), per B5-12 and its COORDINATOR AMENDMENT: a
-// by-value C++ return is WRONG for a VIRTUAL here, because GCC's ms_abi passes the
-// hidden pointer FIRST and MSVC (and every minted row) passes `this` first.
-extern "C" void* GeomDraw_GetSubTransform(void* self, void* retval, int idx) {
-    return reinterpret_cast<const Graphics::Geometry*>(self)
-        ->Graphics::Geometry::GetSubTransform(
-            static_cast<Math::Transform*>(retval), idx);   // B.3.5 bridge
-}
-
-// +0x30 — Graphics::Geometry::GetInstanceTransform (member fn, hidden retval)
-extern "C" void* GeomDraw_GetInstanceTransform(void* self, void* retval, int idx, float t) {
-    return reinterpret_cast<const Graphics::Geometry*>(self)
-        ->Graphics::Geometry::GetInstanceTransform(
-            static_cast<Math::Matrix*>(retval), idx, t);   // B.3.5 bridge
-}
-
-// +0x38 — Graphics::Geometry::SetSharedInstanceData (returns int)
-extern "C" int GeomDraw_SetSharedInstanceData(void* self, void* context, int idx, float t) {
-    return reinterpret_cast<const Graphics::Geometry*>(self)
-        ->Graphics::Geometry::SetSharedInstanceData(
-            *reinterpret_cast<Video::Context*>(context), idx, t);   // B.3.5 bridge
-}
-
-// +0x40 — Graphics::Geometry::Clean (returns bool)
-extern "C" bool GeomDraw_Clean(void* self) {
-    return reinterpret_cast<Graphics::Geometry*>(self)
-        ->Graphics::Geometry::Clean();   // B.3.5 bridge
 }

@@ -6,6 +6,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
+#include "Component/NaturalResourceComponent.h"
 
 // ---- growthcomponent.cpp ----
 extern void GrowthComponent_ModifyFlags(void* comp, uint32_t orMask, uint32_t andNotMask);
@@ -26,10 +27,7 @@ extern void OrchardComponent_SerializeRefEntries(void* serializer, int count, vo
 extern void OrchardComponent_ValidateRefs(void* selfV);
 
 // ---- zonecomponent.cpp ----
-struct ZoneComponent;  // defined in engine/types/ZoneComponent.h; bodies take ZoneComponent*
 extern void ZoneComponent_ZoneMapAdd(void* zoneMap, void* entityPtr);
-extern void ZoneComponent_Draw(ZoneComponent* self);
-extern void ZoneComponent_OnCreate(ZoneComponent* self);
 
 // ---- huntcomponent.cpp ----
 
@@ -54,10 +52,6 @@ extern float HerdComponent_CheckFood(int64_t entityComp, int gridCell);
 extern char  HerdComponent_CheckMigrationDone(int64_t herdComp);
 extern void  HerdComponent_AdjustSize(void* herdComp, int targetSize);
 
-// NOTE: 0x140106420 (AnimalComponent::Update) is intentionally NOT registered —
-// it remains a passthrough that resolves and calls 0x140106420 itself; registering
-// it would cause infinite recursion. Needs a genuine 452-instruction reimpl first.
-//
 // NOTE: the brief's cropfield addresses 0x1400035b0 / 0x1400036c0 were a
 // dropped-digit typo (they point at UNRELATED functions —
 // AutoPickupComponent_ScalarDtor mid-body / BoatComponent_GetType). The real
@@ -79,7 +73,7 @@ static uint32_t g_tid_NaturalResourceComponent = 0;  // 0x1401c7b30
 
 extern "C" void FillComponentTypeIdGlobals_nature() {
     g_tid_NaturalResourceComponent =
-        ::Object::GetTypeIdByName("NaturalResourceComponent");
+        NaturalResourceComponent::TypeId();
 }
 
 // Backing storage for the growthcomponent .rdata constant-pool entries (exact
@@ -112,8 +106,6 @@ void RegisterComponentBatch_nature() {
 
     // zonecomponent.cpp
     RegisterExeAddr(0x140088e20, reinterpret_cast<uintptr_t>(&ZoneComponent_ZoneMapAdd));
-    RegisterExeAddr(0x1401301f0, reinterpret_cast<uintptr_t>(&ZoneComponent_Draw));
-    RegisterExeAddr(0x140130080, reinterpret_cast<uintptr_t>(&ZoneComponent_OnCreate));
 
     // 0x14012e5c0 (WorkComponent::CalcMaxWorkers) used to be registered here TOO, as
     // "HuntComponent_ComputeTerrainSpeed". Both copies had identical bodies, so which one

@@ -12,7 +12,7 @@
 //
 // Decompiled from Application-x64.exe.
 
-#include "Player/pathtool_funcs.h"
+#include "Player/PathTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -128,7 +128,7 @@ PathTool::~PathTool() {
 //   7. Always returns 1
 //
 // Original: 0x1400de6b0
-uint64_t PathTool_OnKey(PathTool* self, char key) {
+char PathTool::OnKey(char key) {
     ResolvePathToolFuncs();
 
     if (key == '\0') {
@@ -209,10 +209,10 @@ uint64_t PathTool_OnKey(PathTool* self, char key) {
 
     // If we found an entity and it differs from current selection, update
     if (entityIBP != 0) {
-        if ((uint64_t)self->selectedEntity != entityIBP) {
+        if ((uint64_t)selectedEntity != entityIBP) {
             uint64_t tmpIBP = entityIBP;
             if (s_fn_PathToolSetSelected) {
-                s_fn_PathToolSetSelected((uint64_t)self, &tmpIBP);
+                s_fn_PathToolSetSelected((uint64_t)this, &tmpIBP);
             }
         }
     }
@@ -347,14 +347,14 @@ struct PathLineArray {
 // vertex submission (material setup, quad generation, etc.).
 //
 // Original: 0x1400dd3b0
-void PathTool_Draw(PathTool* self, void* context) {
+void PathTool::Draw(void* context, char) {
     int* mapGrid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
     int mapWidth = *mapGrid;
 
     // ---- Build tile array from point markers (+0x40, +0x48) ----
     PathTileArray tiles;
-    int* pointArray = (int*)self->_field40;
-    int pointCount  = self->_field48;
+    int* pointArray = (int*)_field40;
+    int pointCount  = _field48;
 
     for (int i = 0; i < pointCount; i++) {
         int cellIdx = pointArray[i];
@@ -369,8 +369,8 @@ void PathTool_Draw(PathTool* self, void* context) {
 
     // ---- Build line array from line segments (+0x50, +0x58) ----
     PathLineArray lines;
-    int* segArray  = (int*)self->_field50;
-    int segCount   = self->_field58;
+    int* segArray  = (int*)_field50;
+    int segCount   = _field58;
 
     for (int i = 0; i < segCount; i++) {
         int cellA = segArray[i * 2];
@@ -408,13 +408,13 @@ void PathTool_Draw(PathTool* self, void* context) {
 // to the selected entity value. Returns true if they match.
 //
 // Original: 0x1400de8d0
-bool PathTool_Serialize(PathTool* self, uint64_t* param2) {
+bool PathTool::IsSelected(uint64_t* param2) {
     ResolvePathToolFuncs();
 
     // Call CheckPtr on self->selectedEntity to resolve any lazy pointer
 
     // Compare the stream value to the selected entity
-    return *param2 == self->selectedEntity;
+    return *param2 == selectedEntity;
 }
 
 // ============================================================
@@ -428,18 +428,9 @@ bool PathTool_Serialize(PathTool* self, uint64_t* param2) {
 #include "Object/factory_registration.h"
 #include <new>
 
-// Defined in pathtool_setselected.cpp (exe 0x1400dd250).
-extern "C" void PathTool_ClearHighlight_d250(int64_t self);
-
-// [5] 0x1400de930 is a bare JMP to 0x1400dd250 (clear the selection
-// highlight). SetEditMode calls this slot on the OUTGOING tool before it is
-// deleted; without it the last selected building stayed lit forever.
-void PathTool::Shutdown() { PathTool_ClearHighlight_d250(reinterpret_cast<int64_t>(this)); }
-char PathTool::OnKey(char active) {                                            // [6] 0x1400de6b0
-    return static_cast<char>(PathTool_OnKey(this, active));
-}
-void PathTool::Draw(void* context, char) { PathTool_Draw(this, context); }    // [8] 0x1400dd3b0
-bool PathTool::IsSelected(uint64_t* ref) { return PathTool_Serialize(this, ref); }  // [10] 0x1400de8d0
+// [6] OnKey (0x1400de6b0), [8] Draw (0x1400dd3b0) and [10] IsSelected (0x1400de8d0)
+// are defined above; [5] Shutdown (0x1400de930, a bare JMP to 0x1400dd250) is in
+// pathtool_setselected.cpp next to the helper it jumps to.
 
 // create 0x140026b10: MemAlloc(0x60, 8), then the ctor 0x1400de9e0.
 void* PathTool::CreateNewObject() {

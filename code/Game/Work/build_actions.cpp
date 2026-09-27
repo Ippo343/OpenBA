@@ -41,6 +41,8 @@
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
+#include "Component/BuildComponent.h"   // ENDGAME B.3.8 CB3: BuildComponent::TypeId()
+#include "Component/DestroyComponent.h"   // ENDGAME B.3.8 CB3: DestroyComponent::TypeId()
 
 namespace {
 
@@ -93,12 +95,12 @@ void EnsureInit() {
     s_msg75f0 = rd(0x1401c75f0);
     // c7008 = BuildComponent type-id (the state-8 message target); heal it so the message
     // routes to the site's BuildComponent (the raw .rdata id is 0 in standalone).
-    if (s_msg7008 == 0) s_msg7008 = ::Object::GetTypeIdByName("BuildComponent");
+    if (s_msg7008 == 0) s_msg7008 = BuildComponent::TypeId();
     // c75f0 = DestroyComponent type-id (Ghidra: written by DestroyComponent_RegisterType
     // 0x14014ee75) — the altAnim/demolition variant of the same state-8 message. Without
     // this heal the destroy-mode SendComponentMessage carries id 0, matches no component,
     // and DestroyComponent+0x54 demolition progress never advances.
-    if (s_msg75f0 == 0) s_msg75f0 = ::Object::GetTypeIdByName("DestroyComponent");
+    if (s_msg75f0 == 0) s_msg75f0 = DestroyComponent::TypeId();
     s_init = true;
 }
 

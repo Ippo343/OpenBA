@@ -37,8 +37,11 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "Component/StorageComponent.h"
+#include "Component/TradeComponent.h"
+#include "Dialog/TradeUI.h"
 
-struct TradeUI;
+class TradeUI;
 void TradeUI_UpdateBuyTotals(TradeUI* self);
 // The sell/buy tables are built ONCE when the panel opens. Seeding the trade
 // stock afterwards leaves the rows as they were, so the refresh has to be
@@ -77,8 +80,6 @@ void Init() {
     std::fflush(stderr);
 }
 
-uint32_t Tid(const char* n) { return n ? ::Object::GetTypeIdByName(n) : 0; }
-
 void* FindCompOnEntity(void* ent, uint32_t tid) {
     if (!ent || !tid) return nullptr;
     const int n = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
@@ -87,8 +88,7 @@ void* FindCompOnEntity(void* ent, uint32_t tid) {
         void** cs = reinterpret_cast<void**>(a + static_cast<uintptr_t>(i) * 8);
         void* c = *cs;
         if (!c) continue;
-        void** vt = *reinterpret_cast<void***>(c);
-        if (vt && vt[2] && reinterpret_cast<uint32_t (*)(void*)>(vt[2])(c) == tid) return c;
+        if (reinterpret_cast<Object::Base*>(c)->Type() == tid) return c;   // B.3.8 bridge
     }
     return nullptr;
 }
@@ -116,7 +116,7 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
     if (!townMgr) return;
 
     // Scan the entity list for a trading post (an entity carrying a TradeComponent).
-    const uint32_t tidTrade = Tid("TradeComponent");
+    const uint32_t tidTrade = TradeComponent::TypeId();
     uintptr_t entityList = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(gw) + 0xe8);
     uintptr_t arr = entityList ? *reinterpret_cast<uintptr_t*>(entityList + 0x08) : 0;
     const int n   = entityList ? *reinterpret_cast<int32_t*>(entityList + 0x10) : 0;
@@ -152,15 +152,14 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
     if (!dialog) { std::fprintf(stderr, "[TradeSell] f=%d post opened no dialog\n", frameNum);
                    std::fflush(stderr); return; }
 
-    const uint32_t tidTradeUI = Tid("TradeUI");
+    const uint32_t tidTradeUI = TradeUI::TypeId();
     void** ctrlArr = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(dialog) + 0x78);
     const int cnt  = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dialog) + 0x80);
     void* tui = nullptr;
     for (int i = 0; ctrlArr && i < cnt; ++i) {
         void* c = ctrlArr[i];
         if (!c) continue;
-        void** vt = *reinterpret_cast<void***>(c);
-        if (vt && vt[2] && reinterpret_cast<uint32_t (*)(void*)>(vt[2])(c) == tidTradeUI) tui = c;
+        if (reinterpret_cast<Object::Base*>(c)->Type() == tidTradeUI) tui = c;   // B.3.8 bridge
     }
     if (!tui) {
         std::fprintf(stderr, "[TradeSell] f=%d panel opened but no TradeUI controller\n", frameNum);
@@ -234,7 +233,7 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
                 typedef void (*AddItem_t)(int64_t storage, int64_t material, int n);
                 static AddItem_t addItem = reinterpret_cast<AddItem_t>(
                     ResolveAddr(Module::Exe, 0x14012d000));
-                void* storage = FindCompOnEntity(postEnt, Tid("StorageComponent"));
+                void* storage = FindCompOnEntity(postEnt, StorageComponent::TypeId());
                 if (addItem && storage && tmpls) {
                     for (int i = 0; i < tmplN; ++i)
                         if (tmpls[i])

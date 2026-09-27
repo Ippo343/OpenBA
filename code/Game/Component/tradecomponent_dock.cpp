@@ -60,6 +60,7 @@
 // any of these four addresses.
 
 #include "engine_funcs.h"
+#include "Component/ControllerComponent.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -161,9 +162,7 @@ void* FindChildByTypeId(uintptr_t owner, uint32_t typeId) {
     for (int i = 0; i < count; ++i) {
         void* obj = objs[i];
         if (!obj) continue;
-        uint32_t (*getTypeId)(void*) =
-            *reinterpret_cast<uint32_t (**)(void*)>(*reinterpret_cast<uintptr_t*>(obj) + 0x10);
-        if (getTypeId(obj) != typeId) continue;
+        if (reinterpret_cast<Object::Base*>(obj)->Type() != typeId) continue;   // B.3.8 bridge (slot 2)
         return (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, typeId)) ? obj : nullptr;
     }
     return nullptr;
@@ -813,11 +812,9 @@ extern "C" char TradeCtrl_State13_Update(void* selfV, void* /*sm*/) {
         // Node vtable slot 2 (+0x10) is PostEvent(node, sm, curStateIdx, eventId); the
         // current index is the machine's own byte at sm+9 (= smComp+0x51). Event 0 is
         // "you are released".
-        typedef void (*PostEvent_t)(void*, void*, int, int);
-        PostEvent_t post = *reinterpret_cast<PostEvent_t*>(*reinterpret_cast<uintptr_t*>(node) + 0x10);
-        if (post)
-            post(reinterpret_cast<void*>(node), reinterpret_cast<void*>(machine),
-                 static_cast<int>(*reinterpret_cast<int8_t*>(smComp + 0x51)), 0);
+        reinterpret_cast<ControllerComponent::Controller*>(node)->PostEvent(   // B.3.8 bridge
+            reinterpret_cast<void*>(machine),
+            static_cast<int>(*reinterpret_cast<int8_t*>(smComp + 0x51)), 0);
     } else {
         std::fprintf(stderr, "[TradeDock] leaving merchant has NO StateMachineComponent — "
                              "the boat was not told to cast off; releasing the manifest anyway\n");

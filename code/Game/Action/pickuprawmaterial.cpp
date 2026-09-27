@@ -106,14 +106,14 @@ bool PickupRawMaterial_ResolveFuncs() {
 // Serializes: status(+0x18), entity(+0x20) with type check DAT_1401c7158,
 //             entity(+0x28) with type check ComponentEntity
 // ============================================================
-void PickupRawMaterial_Serialize_Impl(PickupRawMaterial* self, void* stream) {
-    uint8_t* s = (uint8_t*)self;
+void PickupRawMaterial::Persist(void* stream) {
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t ser1[24];
     alignas(8) uint8_t ser2[24];
 
     // Serialize status byte (+0x18)
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(s + 0x18), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(_status, nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Serialize entity refs
@@ -121,17 +121,17 @@ void PickupRawMaterial_Serialize_Impl(PickupRawMaterial* self, void* stream) {
 
     // Serialize source building (+0x20) with type check
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (*(void**)(s + 0x20) != nullptr) {
-        if (!fn_IsDerivedFrom(*(void**)(s + 0x20), *s_typeId_1401c7158)) {
-            *(void**)(s + 0x20) = nullptr;
+    if (_field20 != nullptr) {
+        if (!fn_IsDerivedFrom(_field20, *s_typeId_1401c7158)) {
+            _field20 = nullptr;
         }
     }
 
     // Serialize source entity (+0x28) with ComponentEntity type check
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
-    if (*(void**)(s + 0x28) != nullptr) {
-        if (!fn_IsDerivedFrom(*(void**)(s + 0x28), *g_TypeId_ComponentEntity)) {
-            *(void**)(s + 0x28) = nullptr;
+    if (_field28 != nullptr) {
+        if (!fn_IsDerivedFrom(_field28, *g_TypeId_ComponentEntity)) {
+            _field28 = nullptr;
         }
     }
 
@@ -148,13 +148,12 @@ void PickupRawMaterial_Serialize_Impl(PickupRawMaterial* self, void* stream) {
 // 5. Checks entity flags, marks entity for removal if needed
 // Returns 0 (action complete).
 // ============================================================
-int PickupRawMaterial_AbstractImpl_Impl(PickupRawMaterial* self, void* actionStack) {
+int  PickupRawMaterial::AbstractImpl(void* actionStack) {
     PickupRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
-    uint8_t* s = (uint8_t*)self;
 
     // Get source entity at +0x28
-    void* sourceEntity = *(void**)(s + 0x28);
+    void* sourceEntity = _field28;
 
     // Find RawMaterial description component on source entity via FUN_1400223c0
     // This is a FindComponent variant using DAT_1401c7c80 type ID
@@ -168,10 +167,10 @@ int PickupRawMaterial_AbstractImpl_Impl(PickupRawMaterial* self, void* actionSta
     int quantity = *(int*)((uintptr_t)rawMatDesc + 0x28);
 
     // Read raw material type from source entity (+0x28 field = ExternalPtr)
-    int64_t itemType = *(int64_t*)((uintptr_t)(*(void**)(s + 0x28)) + 0x28);
+    int64_t itemType = *(int64_t*)((uintptr_t)(_field28) + 0x28);
 
     // Navigate to source building (+0x20) -> parent entity (+0x10)
-    void* building = *(void**)(s + 0x20);
+    void* building = _field20;
     void* parentEntity = *(void**)((uintptr_t)building + 0x10);
 
     // Find StorageComponent on parent entity
@@ -182,7 +181,7 @@ int PickupRawMaterial_AbstractImpl_Impl(PickupRawMaterial* self, void* actionSta
     s_fn_Storage_AddItem((void*)storageIBP, itemType, quantity);
 
     // Get source entity again, check if it should be flagged for removal
-    void* entityRef = *(void**)(s + 0x28);
+    void* entityRef = _field28;
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
     uintptr_t worldList = *(uintptr_t*)(gameWorld + 0xe8);
 
@@ -214,9 +213,9 @@ int PickupRawMaterial_AbstractImpl_Impl(PickupRawMaterial* self, void* actionSta
 // Returns true if param matches entity at +0x28, or
 // matches the parent entity (+0x10) of the building at +0x20.
 // ============================================================
-bool PickupRawMaterial_GetTarget_Impl(PickupRawMaterial* self, void* param) {
+bool PickupRawMaterial::GetTarget(void* param) {
     PickupRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
-    uint8_t* s = (uint8_t*)self;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     // Check direct match with +0x28
     uintptr_t paramVal = *(uintptr_t*)param;
@@ -254,11 +253,8 @@ Object::Base* PickupRawMaterial::DeletingDtor(unsigned flags) {
 }
 
 // [3] 0x1400c99e0
-void PickupRawMaterial::Persist(void* stream) { PickupRawMaterial_Serialize_Impl(this, stream); }
 // [4] 0x1400c98d0
-int  PickupRawMaterial::AbstractImpl(void* actionStack) { return PickupRawMaterial_AbstractImpl_Impl(this, actionStack); }
 // [9] 0x1400c9860
-bool PickupRawMaterial::GetTarget(void* param) { return PickupRawMaterial_GetTarget_Impl(this, param); }
 
 void* PickupRawMaterial::CreateNewObject() {
     PickupRawMaterial_ResolveFuncs();
@@ -273,13 +269,5 @@ void* PickupRawMaterial::CreateInPlaceObject(void* storage) {
 }
 
 DEFINE_EXE_VTABLE(PickupRawMaterial, "_ZTV17PickupRawMaterial")
-
-// B38 D5: 0x14015ff10 is still read back BY ADDRESS outside this block
-// (work_base_actionctor.cpp:164),
-// so the row stays, serving the compiler table (every such reader builds the
-// same bytes the ctor builds: Internal(), +0x10/+0x18 zeroed, the fields).
-extern "C" void RegisterPickupRawMaterialVtable() {
-    RegisterExeAddr(0x14015ff10, reinterpret_cast<uintptr_t>(PickupRawMaterial::Vtable()));
-}
 
 DEFINE_EXE_TYPE(PickupRawMaterial, "Action")

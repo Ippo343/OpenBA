@@ -26,6 +26,7 @@
 // decompiler noise** (R9 leftover from prior code), so our reimpl signature
 // drops it entirely.
 
+#include "Game/WorldGeometry.h"
 #include "engine_funcs.h"
 #include "Component/coll_bridge.h"
 #include "system/Filename.h"
@@ -38,6 +39,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <atomic>
 #include <new>
 
 // ============================================================
@@ -58,128 +60,56 @@
 //   +0x1a0..+0x228  zeroed
 //   +0x030  = 1  (state flag)
 //
-// fn_Geometry_Init resolves to ourselves via the address registry, so we run
-// the cleaned body using Runtime DLL ctors directly (no recursion).
+// ENDGAME B.3.8 block LOOP: the body is WorldGeometry's constructor
+// (code/Game/Game/WorldGeometry.h). Graphics::Geometry() and the 0x14015f110
+// stamp are the compiler's (the old body ran the base ctor door and then
+// stamped the hand-built table registered at 0x14015f110); the field stores are
+// unchanged. Reimpl_Geometry_Init (registered at 0x1400b00e0, reached through
+// fn_Geometry_Init and GameUpdateLoop::Load) placement-news the class.
+WorldGeometry::WorldGeometry() {
+    _gridSize = 0;  _fieldC4 = 0;       // qword +0xc0
+    _chunkSize = 0; _fieldCC = 0;       // qword +0xc8
+    _fieldD0 = 0;                       // dword +0xd0 (+0xd4 left as found)
+    _arrayD8 = nullptr;                 // +0xd8
+    _arrayD8Size = 0;                   // +0xe0
+    _dirtyTreeRoot = nullptr;           // +0xe8
+    _dirtyTreeCount = 0;                // dword +0xf0
+    _terrainMaterial = nullptr;         // +0xf8
+
+    fn_Video_VertexBuffer_Ctor(&_vertexBuffer);   // +0x100 (ctor door, B4b-2)
+    fn_Video_IndexBuffer_Ctor(&_indexBuffer);     // +0x120
+
+    _waterMaterialA = nullptr;          // +0x150
+    _waterMaterialB = nullptr;          // +0x158
+
+    fn_Video_VertexBuffer_Ctor(&_waterVertexBuffer);   // +0x160
+    fn_Video_IndexBuffer_Ctor(&_waterIndexBuffer);     // +0x180
+
+    for (Header& h : _arrays) { h.data = nullptr; h.sizeCap = 0; }   // +0x1a0..+0x228
+
+    _materialTypeFlags = 1;             // +0x30 (Graphics::Geometry's)
+}
+
+namespace { std::atomic<bool> s_geomInitWarned{false}; }
+
 extern "C" void Reimpl_Geometry_Init(void* self) {
     if (!self) return;
 
-
     if (!fn_Graphics_Geometry_Ctor || !fn_Video_VertexBuffer_Ctor ||
         !fn_Video_IndexBuffer_Ctor) {
-        static bool s_warned = false;
-        if (!s_warned) {
+        if (!s_geomInitWarned.exchange(true)) {
             printf("[Geometry::Init] Runtime ctors unresolved "
                    "(GeomC=%p VB=%p IB=%p) — zero-fill fallback (self=%p)\n",
                    (void*)fn_Graphics_Geometry_Ctor,
                    (void*)fn_Video_VertexBuffer_Ctor,
                    (void*)fn_Video_IndexBuffer_Ctor, self);
             fflush(stdout);
-            s_warned = true;
         }
         memset(self, 0, 0x230);
         return;
     }
 
-    fn_Graphics_Geometry_Ctor(self);
-
-    // Override base vtable with the derived "TerrainGenerator" 9-slot vtable.
-    // The exe-resident vtable at 0x14015f110 holds 9 fn ptrs to exe code; in
-    // standalone mode those code addresses may not be registered, but the
-    // vtable pointer itself is needed so virtual dispatch through the
-    // geometry has *something*. Callers in the Slot5 path (TradeWork_impl_04d0
-    // / _f1a0) don't dispatch through this vtable, so leaving exe slot
-    // contents unresolved is safe for the immediate menu render.
-    uintptr_t vtbl = ResolveAddr(Module::Exe, 0x14015f110);
-    if (vtbl) {
-        *reinterpret_cast<uintptr_t*>(self) = vtbl;
-    }
-
-    auto* base = reinterpret_cast<uint8_t*>(self);
-    *reinterpret_cast<uint64_t*>(base + 0xc0) = 0;
-    *reinterpret_cast<uint64_t*>(base + 0xc8) = 0;
-    *reinterpret_cast<uint32_t*>(base + 0xd0) = 0;
-    *reinterpret_cast<uint64_t*>(base + 0xd8) = 0;
-    *reinterpret_cast<uint64_t*>(base + 0xe0) = 0;
-    *reinterpret_cast<uint64_t*>(base + 0xe8) = 0;
-    *reinterpret_cast<uint32_t*>(base + 0xf0) = 0;
-    *reinterpret_cast<uint64_t*>(base + 0xf8) = 0;
-
-    fn_Video_VertexBuffer_Ctor(base + 0x100);
-    fn_Video_IndexBuffer_Ctor(base + 0x120);
-
-    *reinterpret_cast<uint64_t*>(base + 0x150) = 0;
-    *reinterpret_cast<uint64_t*>(base + 0x158) = 0;
-
-    fn_Video_VertexBuffer_Ctor(base + 0x160);
-    fn_Video_IndexBuffer_Ctor(base + 0x180);
-
-    for (int off = 0x1a0; off <= 0x228; off += 8) {
-        *reinterpret_cast<uint64_t*>(base + off) = 0;
-    }
-
-    *reinterpret_cast<uint32_t*>(base + 0x30) = 1;
-}
-
-// ============================================================
-// Standalone-only stub vtable for the derived Geometry / "TerrainGenerator"
-// class. The 9-slot exe vtable lives at 0x14015f110; none of those exe
-// addresses are registered, so the Geometry retained the Runtime base
-// Graphics::Geometry vtable — whose Draw slot (+0x18) is _purecall. Renderer::Draw walks
-// Scene+0x60 and dispatches vtable[+0x18] on every object, hitting MSVC's
-// _purecall handler (a MessageBox).
-//
-// Until the 9 derived methods are reimplemented properly, register a stub
-// vtable here. The slots are best-effort: dtor returns self, Draw is a void
-// no-op (terrain just won't render), the rest return 0/null. The crucial
-// property is that none of them is _purecall.
-//
-// Original exe vtable contents (from Ghidra read of 0x14015f110):
-//   +0x00  0x14001ECC0   dtor
-//   +0x08  0x1400AED40   ?
-//   +0x10  0x1400AEA10   ?
-//   +0x18  0x1400AE490   Draw
-//   +0x20  0x14003AA7A   ?
-//   +0x28  0x14003AAA4   ?
-//   +0x30  0x14003AB22   ?
-//   +0x38  0x14003AB1C   ?
-//   +0x40  0x14003AAAA   ?
-// ============================================================
-// Real implementations of the 9 vtable slots live in
-// code/Game/Game/geometry_draw.cpp. They're decompiled from the original exe
-// at 0x14001ECC0 / 0x1400AED40 / 0x1400AEA10 / 0x1400AE490 / Runtime IAT
-// thunks, and wired through engine_funcs.h fn_* pointers (resolved via
-// ResolveExport from Runtime DLL exports).
-extern "C" {
-    void* GeomDraw_Dtor(void* self, uint32_t flags);
-    void  GeomDraw_ChunkUpdate(void* self);
-    void  GeomDraw_ItemDraw(void* self, void* context, void* p3, void* p4,
-                            float param5, uint32_t param6);
-    void  GeomDraw_CollectDraw(void* self, void* unused, void* renderer);
-    void  GeomDraw_UpdateAttached(void* self);
-    void* GeomDraw_GetSubTransform(void* self, void* retval, int idx);
-    void* GeomDraw_GetInstanceTransform(void* self, void* retval, int idx, float t);
-    int   GeomDraw_SetSharedInstanceData(void* self, void* context, int idx, float t);
-    bool  GeomDraw_Clean(void* self);
-}
-
-namespace {
-void* g_Geometry_Vtable_Standalone[9] = {
-    reinterpret_cast<void*>(&GeomDraw_Dtor),                  // +0x00 dtor
-    reinterpret_cast<void*>(&GeomDraw_ChunkUpdate),           // +0x08 chunk-streaming
-    reinterpret_cast<void*>(&GeomDraw_ItemDraw),              // +0x10 per-item Draw
-    reinterpret_cast<void*>(&GeomDraw_CollectDraw),           // +0x18 collect Draw
-    reinterpret_cast<void*>(&GeomDraw_UpdateAttached),        // +0x20 UpdateAttached
-    reinterpret_cast<void*>(&GeomDraw_GetSubTransform),       // +0x28 GetSubTransform
-    reinterpret_cast<void*>(&GeomDraw_GetInstanceTransform),  // +0x30 GetInstanceTransform
-    reinterpret_cast<void*>(&GeomDraw_SetSharedInstanceData), // +0x38 SetSharedInstanceData
-    reinterpret_cast<void*>(&GeomDraw_Clean),                 // +0x40 Clean
-};
-}  // namespace
-
-extern "C" void RegisterGeometryVtable() {
-    extern void RegisterExeAddr(uintptr_t exeAddr, uintptr_t standaloneAddr);
-    RegisterExeAddr(0x14015f110,
-                    reinterpret_cast<uintptr_t>(&g_Geometry_Vtable_Standalone));
+    ::new (self) WorldGeometry();
 }
 
 // ============================================================

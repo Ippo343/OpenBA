@@ -30,6 +30,8 @@
 //
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra); cross-checked vs disassembly.
 
+#include "Player/PathTool.h"
+#include "Component/HighlightComponent.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "collection/Collection.h"
@@ -85,14 +87,14 @@ static void EnsureFns() {
     s_122e20 = reinterpret_cast<fn_ResolvePos_t>(ResolveAddr(Module::Exe, 0x140122e20));
     // DAT_1401c4410 (HighlightComponent type-id) is raw exe .rdata -> NULL in standalone.
     static uint32_t s_tidHi = 0;
-    if (s_tidHi == 0) s_tidHi = ::Object::GetTypeIdByName("HighlightComponent");
+    if (s_tidHi == 0) s_tidHi = HighlightComponent::TypeId();
     s_pTid_Highlight = &s_tidHi;
     s_init = true;
 }
 
 static inline uint32_t GetTypeId(void* obj) {
     if (!obj) return 0;
-    return (*(uint32_t(**)(void*))(*(uintptr_t*)obj + 0x10))(obj);
+    return reinterpret_cast<Object::Base*>(obj)->Type();  // B.3.8 bridge (component array element)
 }
 
 // ---- AVL node accessors (0x28-byte node, shared layout) ----
@@ -631,20 +633,21 @@ extern "C" void PathTool_helper_d710(int64_t param_1, uint64_t* param_2) {
 
 #include "address_registry.h"
 // ============================================================
-// 0x1400dd250 — exported so PathTool's vtable slot +0x28 can reach it.
+// PathTool::Shutdown — slot 5 (+0x28), 0x1400de930: a bare JMP to 0x1400dd250.
 // ============================================================
 // Retail's PathTool vtable (0x140160680) slot +0x28 is 0x1400de930, which is a bare
-// JMP to this function — i.e. the tool's Shutdown IS "clear the selection highlight".
+// JMP to 0x1400dd250 — i.e. the tool's Shutdown IS "clear the selection highlight".
 // Toolbar_ShowGroup calls that slot on the OUTGOING controller before deleting it
 // (`(**(code **)(**(longlong **)(param_1 + 0x28) + 0x28))()` in FUN_140102b60), so it
 // is what un-highlights the last selected building when the Paths tool is switched
 // away or disabled. Our vtable had `Tool_Ret0` in that slot, so the highlight stayed
 // lit on the last building forever. Reported live 2026-08-20.
-extern "C" void PathTool_ClearHighlight_d250(int64_t self) {
-    PathSel_ClearHighlight_d250(self);
+// (ENDGAME B.3.8 callers: the `PathTool_ClearHighlight_d250` export the member used to
+// call, and its reader-less RegisterExeAddr(0x1400dd250) row, are gone.)
+void PathTool::Shutdown() {
+    PathSel_ClearHighlight_d250(reinterpret_cast<int64_t>(this));
 }
 
 extern "C" void RegisterPathToolSetSelected() {
     RegisterExeAddr(0x1400dd710, reinterpret_cast<uintptr_t>(&PathTool_helper_d710));
-    RegisterExeAddr(0x1400dd250, reinterpret_cast<uintptr_t>(&PathTool_ClearHighlight_d250));
 }

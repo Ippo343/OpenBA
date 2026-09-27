@@ -59,8 +59,6 @@ static uint32_t ControlUI_CheckElementTypeId() {
 
 namespace controlui_sa {
 
-constexpr uintptr_t kVtable = 0x14015b380;
-
 // Report Slot4's INPUTS as well as its outputs. The first version of this printed only
 // +0x30/+0x38 — which are Slot4's OUTPUTS — so when the type-id guard rejected every call
 // before writing them, the trace read as "the framework never bound +0x20/+0x28" and sent
@@ -340,17 +338,6 @@ void ControlUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_
 // per frame (see the note at pastureui.cpp:425), so — exactly as the PastureUI /
 // StorageUI promotions do — idx8 here is a composite that self-heals Slot4 once
 // and then drives Slot7.
-
-
-
-// B38 D5: the vtable row this registered had no by-address reader left and is
-// gone (CB2 caller batch); only the call from standalone keeps the empty body.
-extern "C" void RegisterControlUIVtable() {
-    // Emptied by the B.3.8 CB2 caller batch: the row had no by-address reader left
-    // (CALLER_SURFACE section 5). The closing pass deletes this function and its call.
-}
-
-
 
 
 // [0] 0x140010e20: ~ControlUI (restamp, ~DialogController, ~Internal — the
