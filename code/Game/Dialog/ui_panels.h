@@ -96,16 +96,6 @@ void DestroyUI_Slot9(DestroyUI* self, uint64_t param2, int param3, int param4);
 // ImmigrationUI
 // ============================================================
 
-// Slot4 (vtable +0x20): Finds text/button elements, sets button IDs.
-void ImmigrationUI_Slot4(ImmigrationUI* self);
-
-// Slot7 (vtable +0x38): Updates immigration count, enables buttons when build complete.
-void ImmigrationUI_Slot7(ImmigrationUI* self);
-
-// Slot9 (vtable +0x48): Handles Allow/Deny button clicks, sends action to StateMachine.
-void ImmigrationUI_Slot9(ImmigrationUI* self, void* param2, int msg, int id,
-                          int param5, int param6);
-
 // ============================================================
 // WorkplaceUI
 // ============================================================
@@ -135,17 +125,6 @@ void UpgradeUI_OnRemove(UpgradeUI* self, void* p2, int eventType, int eventId);
 // ============================================================
 // HelpUI
 // ============================================================
-
-// Slot4 (vtable +0x20): Finds UI elements, populates combo with help topics, loads first page.
-void HelpUI_Slot4(HelpUI* self);
-
-// Slot7 (vtable +0x38): Enables/disables prev/next buttons based on page index.
-void HelpUI_Slot7(HelpUI* self);
-
-// Slot9 (vtable +0x48): Handles document link clicks, back/forward navigation, combo changes.
-// linkIndex (7th param) carries the clicked link index for document link events.
-void HelpUI_Slot9(HelpUI* self, uint64_t param2, int msg, int id,
-                   int param5, int param6, int linkIndex);
 
 // ============================================================
 // AttendanceUI
@@ -185,42 +164,13 @@ void ResourceLimitUI_Slot9(ResourceLimitUI* self, void* param2,
 // PageToggleUI
 // ============================================================
 
-// Slot4 (vtable +0x20): Finds checkbox element by type, finds "pages" PageElement,
-// restores active page if valid.
-void PageToggleUI_Slot4(PageToggleUI* self);
-
-// Slot7 (vtable +0x38): Enables/disables checkbox based on active page state.
-void PageToggleUI_Slot7(PageToggleUI* self);
-
-// Slot9 (vtable +0x48): On checkbox toggle, sets active page (0 or 4).
-void PageToggleUI_Slot9(PageToggleUI* self, void* param2, int param3, int param4);
-
 // ============================================================
 // ProfessionUI
 // ============================================================
 
-// Slot5 (vtable +0x28): Populates profession table with entries from game world,
-// sets up BST mapping, caches spinner/number elements.
-void ProfessionUI_Slot5(ProfessionUI* self);
-
-// Slot8 (vtable +0x40): Counts citizens per profession, updates spinner values
-// and worker-slot number displays.
-void ProfessionUI_Slot8(ProfessionUI* self);
-
-// Slot9 (vtable +0x48): Handles spinner changes (msg 0x12, reassign citizens)
-// and button clicks (msg 0x15, center camera on citizen).
-void ProfessionUI_Slot9(ProfessionUI* self, void* param2, int param3, int param4);
-
 // ============================================================
 // ProductionUI
 // ============================================================
-
-// Slot4 (vtable +0x20): Finds "production" container (fallback "production3"/"production4"),
-// caches "labelStorage"/"numberCount" element pairs for consumed and produced items.
-void ProductionUI_Slot4(ProductionUI* self);
-
-// Slot7 (vtable +0x38): Updates consumed and produced item displays from TrackerComponent.
-void ProductionUI_Slot7(ProductionUI* self);
 
 // ============================================================
 // CitizenUI
@@ -294,17 +244,6 @@ void ControlUI_Slot9(ControlUI* self, uint64_t* param2, int param3, int param4);
 // ============================================================
 // BuildUI
 // ============================================================
-
-// Slot4 (vtable +0x20): Setup — finds storage table, progress bar, button elements,
-// populates rows with resource sprites, names, and required amounts.
-void BuildUI_Slot4(BuildUI* self);
-
-// Slot7 (vtable +0x38): Updates build progress — queries StateMachine for delivered
-// material counts, calculates fill ratio, updates progress bar percentage.
-void BuildUI_Slot7(BuildUI* self);
-
-// Slot9 (vtable +0x48): On button click, toggles workplace enabled state.
-void BuildUI_Slot9(BuildUI* self, uint64_t param2, int param3, int param4);
 
 // ============================================================
 // EntityUI
@@ -392,65 +331,13 @@ void StorageUI_Startup(StorageUI* self);
 // ToolUI
 // ============================================================
 
-// Slot4 (vtable +0x20): Finds labelTitle/buttonClose/borderTitle elements,
-// gets BuildComponent or ComponentEntity data source, sets title text from
-// ToolbarDescription, configures sub-controllers from UIDescription.
-void ToolUI_Slot4(ToolUI* self);
-
-// Slot8 (vtable +0x40): Input handler — reads mouse position via KeyMap,
-// detects drag start (mouse movement threshold), drags dialog position,
-// updates entity position tracking BST.
-void ToolUI_Slot8(ToolUI* self);
-
-// Slot9 (vtable +0x48): Event dispatch — mouse click (msg=2) starts drag,
-// mouse up (msg=5) stops drag, focus events (msg=8-0xA) bring to front,
-// button click (msg=0x12, id=1) closes dialog and removes tracking entry.
-void ToolUI_Slot9(ToolUI* self, void* param2, int msg, int id,
-                  int mouseX, int mouseY);
-
 // ============================================================
 // MapUI
 // ============================================================
 
-// Slot4 (vtable +0x20): Creates MaterialInstance + SpriteSheet for terrain map
-// and overlay ImageBuffers, finds "imageMap"/"imageOverlay" elements, sets sprites.
-void MapUI_Slot4(MapUI* self);
-
-// Slot9 (vtable +0x48): Handles map click (msg==2, id==1000) — reads element
-// position/size, translates click to map coordinates, moves camera.
-void MapUI_Slot9(MapUI* self, void* param2, int msg, int id,
-                 int clickX, int clickY);
-
 // ============================================================
 // TradeUI
 // ============================================================
-
-// Draw (vtable +0x28): Marks sell/buy tables for layout recalc,
-// sets building dirty flag (+0x71) to 1.
-void TradeUI_Draw(TradeUI* self);
-
-// Slot6 (vtable +0x30): Clears building dirty flag (+0x71) to 0.
-void TradeUI_Slot6(TradeUI* self);
-
-// Serialize (vtable +0x20): Full UI setup — finds 15 named elements,
-// builds 4 table arrays with row sub-elements, enumerates resource types
-// via ExternalFactory, clones template elements, sets element IDs.
-void TradeUI_Serialize(TradeUI* self);
-
-// Startup (vtable +0x38): Calculates sell/buy totals from order arrays,
-// checks storage capacity, shows/hides warning text (textNoStorage,
-// textTooMuch, textNotEnough), enables/disables trade and dismiss buttons.
-void TradeUI_Startup(TradeUI* self);
-
-// OnCreate (vtable +0x40): Checks order count changes, refreshes tables.
-void TradeUI_OnCreate(TradeUI* self);
-
-// OnRemove (vtable +0x48): Event dispatcher — button clicks, spinner
-// changes, combo selections. Delegated to exe.
-void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId);
-
-// Update (vtable +0x50): Serializes/restores tab and sort combo state.
-void TradeUI_Update(TradeUI* self, void* stream, void* p3, int64_t p4);
 
 // Sub-functions (called by event handlers and Startup):
 void TradeUI_UpdateBuyTotals(TradeUI* self);

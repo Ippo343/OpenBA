@@ -66,6 +66,115 @@
 // reg_element_typeids.cpp:36 documents the old "SliderElement" mislabel), so those
 // sites call UI::SpinnerElement::SetMinMax directly (ENDGAME B.3.6).
 
+// ---- TradeUI: PROMOTED to the real reimpl (Wave A), GATED on its exe leaves ----
+// The trading-post panel (Dialog\Trade.rsc). ~2800 lines of real reimplementation
+// already exist in code/Game/Dialog/tradeui.cpp but were unreachable: the generic
+// UI_DIALOG_STUB below registered the type name to a zero-filled 0x148 stub with a
+// no-op vtable, so opening a post gave a blank panel and every ported method was
+// dead code. This promotion follows the ProfessionUI pattern above (own g_vt +
+// REGISTER_TYPE; slots wired by index, never by exe address).
+//
+// Slot map (byte offset = slot * 8), taken from the per-function headers in
+// tradeui.cpp, which were recorded against the retail vtable when each was ported:
+//   slot 4  (+0x20) TradeUI_Serialize — MISNAMED: this is the full UI SETUP
+//                   (element lookup + table building). It is the ProfessionUI-Slot5
+//                   analogue and must run before any other slot touches the caches.
+//   slot 5  (+0x28) TradeUI_Draw      — mark tables for layout recalc
+//   slot 6  (+0x30) TradeUI_Slot6     — clear the building dirty flag
+//   slot 7  (+0x38) TradeUI_Startup   — trade value calcs, warning text, button enable
+//   slot 8  (+0x40) TradeUI_OnCreate  — per-frame refresh when the order count changes
+//   slot 9  (+0x48) TradeUI_OnRemove  — event dispatcher (spinners/combos/buttons)
+//   slot 10 (+0x50) TradeUI_Update    — serialize the tab/sort state
+//
+// ── WHY THE GATE ─────────────────────────────────────────────────────────────
+// tradeui.cpp calls 11 exe-resolved leaf helpers that are NOT ported and NOT
+// registered, so ResolveAddr returns 0 for every one of them:
+//   0x14005a520 fn_Building_GetSellableCount    0x140016050 fn_DynArray_Clear_0x20
+//   0x140059670 fn_Building_GetBuyEntries       0x140016130 fn_DynArray_Clear_0x18_Buy
+//   0x140015fd0 fn_Building_GetOrderName        0x140016200 fn_DynArray_Clear_0x18
+//   0x1400165d0 fn_IntroSort_ByComponent        0x1400162d0 fn_IntroSort_ByName
+//   0x14000e1c0 fn_StorageTree_Insert           0x140059490 fn_Building_AddPurchaseOrder
+//   0x140081420 fn_TradeUI_OnTradeButton (also needs Wave D — it IS the checkout)
+// Eight of those are reachable from the slot-4 SETUP path alone (it tails into
+// RefreshDisplay + RefreshSellTable + RefreshBuyTable), so wiring the real slots
+// today would EXEC-of-0 on the very first dispatch — the panel would crash rather
+// than render. Wave A is therefore "port + register those 11, THEN flip", not a
+// one-line stub removal.
+//
+// Rather than leave that as a tripwire, the wiring is conditional: DepsReady()
+// checks every one of them at first dispatch, and while any is null the slots stay
+// no-ops (identical to the old stub) and a single loud line names what is missing.
+// Once the 11 land, this promotion goes live with no further edit here.
+namespace tradeui_sa {
+    // Every exe leaf the wired slots can reach. Null while unported/unregistered.
+    bool DepsReady() {
+        static int s_ok = -1;
+        if (s_ok >= 0) return s_ok != 0;
+        struct Dep { const char* name; const void* fn; };
+        const Dep deps[] = {
+            { "fn_Building_GetSellableCount (0x14005a520)",  (const void*)fn_Building_GetSellableCount },
+            { "fn_Building_GetBuyEntries (0x140059670)",     (const void*)fn_Building_GetBuyEntries },
+            { "fn_Building_GetOrderName (0x140015fd0)",      (const void*)fn_Building_GetOrderName },
+            { "fn_Building_AddPurchaseOrder (0x140059490)",  (const void*)fn_Building_AddPurchaseOrder },
+            { "fn_DynArray_Clear_0x20 (0x140016050)",        (const void*)fn_DynArray_Clear_0x20 },
+            { "fn_DynArray_Clear_0x18_Buy (0x140016130)",    (const void*)fn_DynArray_Clear_0x18_Buy },
+            { "fn_DynArray_Clear_0x18 (0x140016200)",        (const void*)fn_DynArray_Clear_0x18 },
+            { "fn_IntroSort_ByComponent (0x1400165d0)",      (const void*)fn_IntroSort_ByComponent },
+            { "fn_IntroSort_ByName (0x1400162d0)",           (const void*)fn_IntroSort_ByName },
+            { "fn_StorageTree_Insert (0x14000e1c0)",         (const void*)fn_StorageTree_Insert },
+            // NOTE: fn_TradeUI_OnTradeButton (0x140081420) is deliberately NOT in this
+            // list. It is the Wave D checkout, reachable ONLY from the slot-9 buttonTrade
+            // branch, which null-guards it at the call site (tradeui.cpp). Including it
+            // here would mean the panel could not open until Wave D landed — the opposite
+            // of the intent, since rendering the panel needs none of the checkout.
+        };
+        int missing = 0;
+        for (const Dep& d : deps) if (!d.fn) ++missing;
+        s_ok = (missing == 0) ? 1 : 0;
+        if (missing) {
+            std::fprintf(stderr, "[TradeUI] STAYING STUBBED — %d unresolved exe leaf(s); the "
+                         "panel would EXEC-of-0 on its setup slot. Missing:\n", missing);
+            for (const Dep& d : deps)
+                if (!d.fn) std::fprintf(stderr, "[TradeUI]     %s\n", d.name);
+            std::fprintf(stderr, "[TradeUI]   Port+register these, then TradeUI goes live with "
+                         "no further change to ui_dialog_stub_factories.cpp.\n");
+            std::fflush(stderr);
+        }
+        return s_ok != 0;
+    }
+    // Slot 4 builds the element caches (+0xC0..+0x140) every other slot dereferences.
+    // Same hazard ProfessionUI documents: the framework dispatches the per-frame slots
+    // before setup has run, so they must skip until the caches exist.
+    bool IsSetUp(void* self) {
+        uintptr_t s=reinterpret_cast<uintptr_t>(self);
+        return *reinterpret_cast<void**>(s+0xC8)!=nullptr &&   // tableSell
+               *reinterpret_cast<void**>(s+0xD0)!=nullptr;     // tableBuy
+    }
+    void Trace(const char* slot, void* self) {
+        static int n=0; if (n>=32) return; ++n;
+        uintptr_t s=reinterpret_cast<uintptr_t>(self);
+        // stderr, NOT stdout — two independent reasons, both already project rules:
+        //  1. `std::printf` does not survive the release build. log_strip.h defines
+        //     `printf(...)` as `((void)0)`, so the QUALIFIED call expands to
+        //     `std::((void)0)` and fails with "expected unqualified-id before '('".
+        //     This single line broke `make standalone` for the whole tree.
+        //  2. stdout STALLS in this exe (standalone_debug.log froze at 22KB on the splash
+        //     while stderr kept growing all session), so a printf-based harness prints
+        //     NOTHING and looks identical to one that never fired — which is exactly the
+        //     symptom this trace was added to investigate.
+        std::fprintf(stderr, "[TradeUI] %s self=%p tableSell(+0xC8)=%p tableBuy(+0xD0)=%p "
+               "buttonTrade(+0xF0)=%p sell.n(+0x38)=%d buy.n(+0x48)=%d\n", slot, self,
+               self?*reinterpret_cast<void**>(s+0xC8):nullptr,
+               self?*reinterpret_cast<void**>(s+0xD0):nullptr,
+               self?*reinterpret_cast<void**>(s+0xF0):nullptr,
+               self?*reinterpret_cast<int32_t*>(s+0x38):0,
+               self?*reinterpret_cast<int32_t*>(s+0x48):0);
+        std::fflush(stderr);
+    }
+    // Slot 4 is idempotent-guarded for the same reason ProfessionUI's Slot5 is: a second
+    // run re-clones table rows and appends to the element arrays instead of clearing.
+}
+
 // ============================================================
 // Draw (vtable +0x28): Mark tables for layout recalc, set building dirty flag
 // ============================================================
@@ -75,8 +184,11 @@
 // Then finds the BuildingComponent on the owning entity and sets its
 // dirty flag (byte at +0x71) to 1, triggering a visual refresh.
 
-void TradeUI_Draw(TradeUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [5] 0x140082a70
+void TradeUI::OnOpened() {
+    if (!tradeui_sa::DepsReady() || !tradeui_sa::IsSetUp(this)) return;
+    tradeui_sa::Trace("Slot5-draw", this);
+    uintptr_t s = (uintptr_t)this;
 
     // Mark sell and buy tables for layout recalculation
     reinterpret_cast<UI::Element*>(*(void**)(s + 0xC8))->SetNeedsSizeCalc();  // B.3.6 bridge
@@ -106,8 +218,10 @@ void TradeUI_Draw(TradeUI* self) {
 // Finds BuildingComponent on owning entity, clears its dirty flag
 // (byte at +0x71 = 0). Called when panel is hidden/deactivated.
 
-void TradeUI_Slot6(TradeUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [6] 0x140082a00
+void TradeUI::OnClosed() {
+    if (!tradeui_sa::DepsReady() || !tradeui_sa::IsSetUp(this)) return;
+    uintptr_t s = (uintptr_t)this;
 
     void* entity = *(void**)(s + 0x28);
     bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
@@ -895,8 +1009,14 @@ static void TradeUI_ReportSpinnerTag(const char* family, int idx, void* spinner,
     fflush(stderr);
 }
 
-void TradeUI_Serialize(TradeUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [4] 0x140084dd0
+void TradeUI::OnCreated() {
+    // Slot 4 is idempotent-guarded for the same reason ProfessionUI's Slot5 is: a second
+    // run re-clones table rows and appends to the element arrays instead of clearing.
+    if (!tradeui_sa::DepsReady()) return;
+    if (tradeui_sa::IsSetUp(this)) { tradeui_sa::Trace("Slot4-skip(already set up)", this); return; }
+    tradeui_sa::Trace("Slot4-setup", this);
+    uintptr_t s = (uintptr_t)this;
 
     // --- Get entity and find BuildingComponent ---
     void* entityRaw = *(void**)(s + 0x28);
@@ -1283,9 +1403,9 @@ void TradeUI_Serialize(TradeUI* self) {
     }
 
     // --- Phase 5: Call refresh functions ---
-    TradeUI_RefreshDisplay(self, 0, 0, 0);
-    TradeUI_RefreshSellTable(self);
-    TradeUI_RefreshBuyTable(self);
+    TradeUI_RefreshDisplay(this, 0, 0, 0);
+    TradeUI_RefreshSellTable(this);
+    TradeUI_RefreshBuyTable(this);
 }
 
 // ============================================================
@@ -1341,8 +1461,11 @@ static int FindResourceValue(void* resourceEntity) {
     return 0;
 }
 
-void TradeUI_Startup(TradeUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [7] 0x140082150
+void TradeUI::OnUpdateLayout() {
+    if (!tradeui_sa::DepsReady() || !tradeui_sa::IsSetUp(this)) return;
+    tradeui_sa::Trace("Slot7-values", this);
+    uintptr_t s = (uintptr_t)this;
 
     // Find BuildingComponent and StateMachineComponent
     void* entity = *(void**)(s + 0x28);
@@ -1454,9 +1577,9 @@ void TradeUI_Startup(TradeUI* self) {
     reinterpret_cast<UI::Element*>(*(void**)(s + 0xD0))->SetNeedsSizeCalc();  // B.3.6 bridge
 
     // --- Refresh table displays ---
-    TradeUI_RefreshOrderQuantityDisplay(self);
-    TradeUI_RefreshSellSpinnerValues(self);
-    TradeUI_RefreshOrderDisplay(self);
+    TradeUI_RefreshOrderQuantityDisplay(this);
+    TradeUI_RefreshSellSpinnerValues(this);
+    TradeUI_RefreshOrderDisplay(this);
 }
 
 // ============================================================
@@ -1468,8 +1591,10 @@ void TradeUI_Startup(TradeUI* self) {
 // differs from building's order count (+0x58 on building). If changed,
 // refreshes sell, buy, and order tables.
 
-void TradeUI_OnCreate(TradeUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [8] 0x1400827b0
+void TradeUI::OnUpdate(const System::Time& /*time*/) {
+    if (!tradeui_sa::DepsReady() || !tradeui_sa::IsSetUp(this)) return;
+    uintptr_t s = (uintptr_t)this;
 
     // Get owning entity and find BuildingComponent
     void* entity = *(void**)(s + 0x28);
@@ -1488,14 +1613,14 @@ void TradeUI_OnCreate(TradeUI* self) {
 
     if (selfOrderCount != buildingOrderCount) {
         // Order count changed — refresh sell, buy, and order tables
-        TradeUI_RefreshSellTable(self);
-        TradeUI_RefreshBuyTable(self);
-        TradeUI_RefreshDisplay(self, 0, 0, 0);
+        TradeUI_RefreshSellTable(this);
+        TradeUI_RefreshBuyTable(this);
+        TradeUI_RefreshDisplay(this, 0, 0, 0);
     }
 
     // Always update totals
-    TradeUI_UpdateSellTotals(self);
-    TradeUI_UpdateBuyTotals(self);
+    TradeUI_UpdateSellTotals(this);
+    TradeUI_UpdateBuyTotals(this);
 }
 
 // ============================================================
@@ -1516,8 +1641,13 @@ void TradeUI_OnCreate(TradeUI* self) {
 // if no 0x12 match was found.
 
 
-void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
-    uintptr_t s = (uintptr_t)self;
+// [9] 0x140081f20
+void TradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t eventType, int32_t eventId,
+                             int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    void* param2 = element;
+    if (!tradeui_sa::DepsReady() || !tradeui_sa::IsSetUp(this)) return;
+    tradeui_sa::Trace("Slot9-event", this);
+    uintptr_t s = (uintptr_t)this;
 
 
     int switchVal = eventType - 0x12;
@@ -1542,18 +1672,18 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
                 }
                 return;
             }
-            fn_TradeUI_OnTradeButton(self, param2, nullptr, 0);
+            fn_TradeUI_OnTradeButton(this, param2, nullptr, 0);
             return;
         }
         if (eventId == 0x4e21) {
-            TradeUI_OnDismissButton(self);
+            TradeUI_OnDismissButton(this);
             return;
         }
         // orderUp spinners: id range [0x1388, 0x1388 + orderCount]
         {
             int orderCount = *(int*)(s + 0x98);
             if (eventId >= 0x1388 && eventId <= orderCount + 0x1388) {
-                TradeUI_OnOrderSpinner(self, eventId - 0x1388, eventId - 0x1389);
+                TradeUI_OnOrderSpinner(this, eventId - 0x1388, eventId - 0x1389);
                 goto check_type14;
             }
         }
@@ -1562,7 +1692,7 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
             int orderCount = *(int*)(s + 0x98);
             if (eventId >= 0x1770 && eventId <= orderCount + 0x1770) {
                 // Note: second arg is idx+1 relative to base (idx-0x176f = idx-0x1770+1)
-                TradeUI_OnOrderSpinner(self, eventId - 0x1770, eventId - 0x176f);
+                TradeUI_OnOrderSpinner(this, eventId - 0x1770, eventId - 0x176f);
                 goto check_type14;
             }
         }
@@ -1570,7 +1700,7 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
         {
             int purchaseCount = *(int*)(s + 0xa8);
             if (eventId >= 0x1f40 && eventId <= purchaseCount + 0x1f40) {
-                TradeUI_OnPurchaseButton(self, eventId - 0x1f40);
+                TradeUI_OnPurchaseButton(this, eventId - 0x1f40);
                 goto check_type14;
             }
         }
@@ -1594,7 +1724,7 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
     {
         int storageCount = *(int*)(s + 0x58);
         if (eventId >= 0x7d0 && eventId < storageCount + 0x7d0) {
-            TradeUI_OnStorageSpinner(self, eventId - 0x7d0, param2);
+            TradeUI_OnStorageSpinner(this, eventId - 0x7d0, param2);
             return;
         }
     }
@@ -1603,7 +1733,7 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
         void* tableSell = *(void**)(s + 0xC8);
         int sellChildCount = *(int*)((uintptr_t)tableSell + 0xC0);
         if (eventId < sellChildCount + 0xbb8) {
-            TradeUI_OnSellSpinner(self, eventId - 0xbb8);
+            TradeUI_OnSellSpinner(this, eventId - 0xbb8);
             return;
         }
     }
@@ -1612,7 +1742,7 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
         void* tableBuy = *(void**)(s + 0xD0);
         int buyChildCount = *(int*)((uintptr_t)tableBuy + 0xC0);
         if (eventId < buyChildCount + 0xfa0) {
-            TradeUI_OnBuySpinner(self, eventId - 0xfa0);
+            TradeUI_OnBuySpinner(this, eventId - 0xfa0);
             return;
         }
     }
@@ -1620,7 +1750,7 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
     {
         int orderCount = *(int*)(s + 0x98);
         if (eventId >= 0x1b58 && eventId < orderCount + 0x1b58) {
-            TradeUI_OnOrderAmountSpinner(self, eventId - 0x1b58);
+            TradeUI_OnOrderAmountSpinner(this, eventId - 0x1b58);
             return;
         }
     }
@@ -1629,15 +1759,15 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
 check_type14:
     // Shared check for combo/sort events (reached from type 0x12 and 0x14)
     if (eventId == 0x4e22) {
-        TradeUI_OnComboPurchase(self);
+        TradeUI_OnComboPurchase(this);
         return;
     }
     if (eventId == 0x4e23) {
-        TradeUI_OnComboOrder(self);
+        TradeUI_OnComboOrder(this);
         return;
     }
     if (eventId == 0xc7) {
-        TradeUI_RefreshDisplay(self, 0, 0, 0);
+        TradeUI_RefreshDisplay(this, 0, 0, 0);
     }
 }
 
@@ -1650,8 +1780,11 @@ check_type14:
 // sortCombo selection via IO::Serializer. On load, restores tab
 // and combo state, then refreshes the sorted display.
 
-void TradeUI_Update(TradeUI* self, void* stream, void* p3, int64_t p4) {
-    uintptr_t s = (uintptr_t)self;
+// [10] 0x1400868c0
+void TradeUI::OnSerializeSettings(void* stream) {
+    int64_t p4 = 0;
+    if (!tradeui_sa::DepsReady() || !tradeui_sa::IsSetUp(this)) return;
+    uintptr_t s = (uintptr_t)this;
 
     // Find "tradeTabs" TabElement
     System::String strBuf("tradeTabs");
@@ -1695,7 +1828,7 @@ void TradeUI_Update(TradeUI* self, void* stream, void* p3, int64_t p4) {
         reinterpret_cast<UI::ComboElement*>(*(void**)(s + 0x140))->SetCurrentItem(sortIndex);  // B.3.6 bridge
 
         // Refresh sorted display
-        TradeUI_RefreshDisplay(self, (uint64_t)sortIndex, 0, p4);
+        TradeUI_RefreshDisplay(this, (uint64_t)sortIndex, 0, p4);
     }
 
     // Destroy serializer

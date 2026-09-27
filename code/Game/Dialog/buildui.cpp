@@ -16,6 +16,7 @@
 #include "Dialog/ui_panels.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
+#include "Object/factory_registration.h"
 #include "system/String.h"
 #include <cstdint>
 #include <cstdio>
@@ -108,6 +109,46 @@ static uint64_t BuildUI_FindElemAsBasePtr(void* parentElem, const char* name) {
     return *(uint64_t*)bpBuf;
 }
 
+// ---- BuildUI: PROMOTED to the real reimpl (2026-07-13) -----------------------
+// The in-game "under construction" panel: a per-material storage table
+// (delivered / required), a construction progress bar + percent, and a
+// pause-construction button. It is a DialogController bound into a building's
+// info dialog (created by EditTool select); the generic stub left every slot a
+// no-op, so selecting a building being built showed the ordinary (empty) info
+// panel with no materials/progress. Wiring Slot4 (setup +0x20), Slot7
+// (per-frame update +0x38) and Slot9 (button event +0x48) to the real bodies in
+// code/Game/Dialog/buildui.cpp populates it. Construction stays the stub
+// alloc+zero+vtable; the engine fills the base fields (dialog +0x20 / datasource
+// +0x28) afterward. Same shape as the BuildRequirementUI promotion above.
+namespace buildui_sa {
+    // Dtor: free the Slot4-allocated row array at self+0x30 (MemAlloc'd fresh on
+    // every open), then the standard vtable-restore + conditional self-free.
+    // Lazy-fill the exe-.rdata type-id globals the reimpl + its FindComponent
+    // helpers key off. In standalone these resolve from raw exe .rdata → null;
+    // fill from the live Factory tree (post-Engine::Startup), idempotent. The
+    // FindComponent helpers null-check their type-id pointer (a still-null one is
+    // a safe no-match, not a crash — Entity_FindComponentByExeTypeId:1139), so the
+    // only HARD requirements are the three ids the reimpl derefs directly:
+    // ComponentEntity / BuildDescription (g_TypeId_ResourceComponent) /
+    // RawMaterialDescription. Position=BuildComponent (0x1401c7008) and
+    // SM=ClearAreaComponent (0x1401c71c8) drive the resource/progress finds; the
+    // rest (MapComponent/WorkPlaceComponent/WorkComponent/StorageComponent) are
+    // already registered+filled by FillEconomyTypeIdGlobals.
+    void EnsureTypeIds() {
+        static uint32_t s_entity=0, s_buildDesc=0, s_rawMat=0, s_build=0, s_clear=0;
+        if (!g_TypeId_ComponentEntity)        { s_entity=::Object::ResolveTypeIdByNameLazy("ComponentEntity");        if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
+        if (!g_TypeId_ResourceComponent)      { s_buildDesc=::Object::ResolveTypeIdByNameLazy("BuildDescription");    if(s_buildDesc) g_TypeId_ResourceComponent=&s_buildDesc; }
+        if (!g_TypeId_RawMaterialDescription) { s_rawMat=::Object::ResolveTypeIdByNameLazy("RawMaterialDescription"); if(s_rawMat) g_TypeId_RawMaterialDescription=&s_rawMat; }
+        if (!g_TypeId_BuildComponent_FC)      { s_build=::Object::ResolveTypeIdByNameLazy("BuildComponent");         if(s_build) g_TypeId_BuildComponent_FC=&s_build; }
+        if (!g_TypeId_ClearAreaComponent_FC)            { s_clear=::Object::ResolveTypeIdByNameLazy("ClearAreaComponent");      if(s_clear) g_TypeId_ClearAreaComponent_FC=&s_clear; }
+    }
+    // Slot4 has run once self+0x40 (the "progress" element IBP) is populated.
+    inline bool IsSetUp(void* self) { return self && *reinterpret_cast<uint64_t*>((uintptr_t)self + 0x40) != 0; }
+    bool HardIdsReady() {
+        return g_TypeId_ComponentEntity && g_TypeId_ResourceComponent && g_TypeId_RawMaterialDescription;
+    }
+}
+
 // ============================================================
 // BuildUI::Slot4 (vtable +0x20) — Setup/populate build storage table
 // ============================================================
@@ -118,8 +159,15 @@ static uint64_t BuildUI_FindElemAsBasePtr(void* parentElem, const char* name) {
 //
 // Original: 0x1400B1F40.
 
-void BuildUI_Slot4(BuildUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [4] 0x1400b1f40
+void BuildUI::OnCreated() {
+    buildui_sa::EnsureTypeIds();
+    if (!buildui_sa::HardIdsReady() || !SA_DialogEntityAlive(this)) return;
+    // Idempotent: the framework dispatches setup on attach; a re-drive would
+    // append a second copy of the storage rows to self+0x30 (count never reset)
+    // — exactly the ProfessionUI double-populate class. Skip if already set up.
+    if (buildui_sa::IsSetUp(this)) return;
+    uintptr_t s = (uintptr_t)this;
 
     // Find "storageTable" element, wrap as InternalBasePtr
     void* dialogElem = *(void**)(s + 0x20);
@@ -342,8 +390,14 @@ void BuildUI_Slot4(BuildUI* self) {
 //
 // Original: 0x1400B1A50.
 
-void BuildUI_Slot7(BuildUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [7] 0x1400b1a50
+void BuildUI::OnUpdateLayout() {
+    buildui_sa::EnsureTypeIds();
+    // Per-frame update: the framework fires this every tick, including before
+    // Slot4 populates (self+0x40 progress / self+0x30 rows still null). Guard.
+    if (!buildui_sa::IsSetUp(this) || !buildui_sa::HardIdsReady()) return;
+    if (!SA_DialogEntityAlive(this)) return;
+    uintptr_t s = (uintptr_t)this;
 
     // Get entity, check ComponentEntity
     void* entityRaw = *(void**)(s + 0x28);
@@ -484,8 +538,12 @@ void BuildUI_Slot7(BuildUI* self) {
 }
 
 // Slot9: On button click (event 0x12, id 6000), toggle workplace enabled state.
-void BuildUI_Slot9(BuildUI* self, uint64_t param2, int param3, int param4) {
-    uintptr_t s = (uintptr_t)self;
+// [9] 0x1400b1ea0
+void BuildUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4,
+                             int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    buildui_sa::EnsureTypeIds();
+    if (!g_TypeId_ComponentEntity || !SA_DialogEntityAlive(this)) return;
+    uintptr_t s = (uintptr_t)this;
 
     if (param3 == 0x12 && param4 == 6000) {
         // Get entity at +0x28, check IsA ComponentEntity

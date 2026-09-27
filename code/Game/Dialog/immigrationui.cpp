@@ -10,6 +10,8 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include <cstdio>
+#include "Object/factory_registration.h"
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -36,6 +38,50 @@ static uint64_t FindElemAsBasePtr(void* dialogElem, const char* name) {
     return *(uint64_t*)basePtrBuf;
 }
 
+// ---- ImmigrationUI: PROMOTED to a real SA vtable (immigrationui.cpp) ----------
+// The Town Hall "Nomads" tab: Dialog/Immigration.rsc is inserted into the empty
+// nomadTab GroupDescription and driven by ImmigrationUI (see Template/TownHall.rsc
+// _controllers). The generic stub left every slot a no-op, so the tab showed the
+// .rsc placeholder text and dead Allow/Deny buttons. Wiring Slot4 (+0x20 setup —
+// finds textNone/textNomad/buttonAllow/buttonDeny, sets button ids), Slot7 (+0x38
+// update — finds the ImmigrationComponent on the town-hall entity, enables the
+// buttons + shows the nomad-request text when a group is waiting), and Slot9
+// (+0x48 event — Allow=39000/Deny=0x9859 dispatch to the nomad camp's StateMachine)
+// makes the tab live. Construction stays the stub alloc+zero+vtable; the framework
+// fills the base fields (dialog +0x18, datasource entity +0x28) afterward — the
+// same shape as the ResourceLimitUI/StatusBarUI promotions. The ported Slot7/Slot9
+// degrade to the "no nomads" state if the entity/component is unbound in standalone
+// (see immigrationui.cpp guards), so a missing ImmigrationComponent can't fault.
+namespace immigrationui_sa {
+    // ImmigrationUI Slot7/Slot9 dereference these exe-.rdata type-id globals (null in
+    // standalone): the entity IsA check (ComponentEntity — the reimpl already guards a
+    // null id), fn_FindComponent_Immigration (ImmigrationComponent), and
+    // fn_FindComponent_BuildState (DAT_1401c7d98 = StateMachineComponent; the
+    // engine_funcs label now matches, see
+    // [[project_townhallui_promoted]]). Fill from the live factory tree post-Engine::
+    // Startup; Entity_FindComponentByExeTypeId derefs the id ptr, so it must be live.
+    void EnsureGlobals() {
+        static uint32_t s_entity=0, s_immig=0, s_bstate=0;
+        if (!g_TypeId_ComponentEntity)      { s_entity=::Object::ResolveTypeIdByNameLazy("ComponentEntity");        if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
+        if (!g_TypeId_ImmigrationComponent) { s_immig =::Object::ResolveTypeIdByNameLazy("ImmigrationComponent");   if(s_immig)  g_TypeId_ImmigrationComponent=&s_immig; }
+        if (!g_TypeId_StateMachineComponent_FC)  { s_bstate=::Object::ResolveTypeIdByNameLazy("StateMachineComponent");  if(s_bstate) g_TypeId_StateMachineComponent_FC=&s_bstate; }
+    }
+    bool Ready() {
+        return g_TypeId_ComponentEntity && g_TypeId_ImmigrationComponent &&
+               g_TypeId_StateMachineComponent_FC &&
+               g_pGameWorldSingleton && *g_pGameWorldSingleton;
+    }
+    // stderr, not stdout: the perf build strips printf, and the Immigrants wave's
+    // harness runs (tools/stress_run.sh) only keep standalone_error.log.
+    void Trace(const char* slot, void* self) {
+        static int n=0; if (n>=16) return; ++n;
+        void* ent = self ? *reinterpret_cast<void**>((uintptr_t)self+0x28) : nullptr;
+        fprintf(stderr, "[ImmigrationUI] %s self=%p entity(+0x28)=%p dlg(+0x18)=%p\n", slot, self, ent,
+                self ? *reinterpret_cast<void**>((uintptr_t)self+0x18) : nullptr);
+        fflush(stderr);
+    }
+}
+
 // ============================================================
 // ImmigrationUI::Slot4 (vtable +0x20) — Setup/refresh
 // ============================================================
@@ -45,20 +91,22 @@ static uint64_t FindElemAsBasePtr(void* dialogElem, const char* name) {
 //
 // Original: 0x14006B330.
 
-void ImmigrationUI_Slot4(ImmigrationUI* self) {
-    void* dialogElem = *(void**)((uintptr_t)self + 0x20);
+// [4] 0x14006b330
+void ImmigrationUI::OnCreated() {
+    immigrationui_sa::Trace("Slot4", this);
+    void* dialogElem = *(void**)((uintptr_t)this + 0x20);
 
     // Find text elements
-    self->data30 = FindElemAsBasePtr(dialogElem, "textNone");
-    self->data38 = FindElemAsBasePtr(dialogElem, "textNomad");
+    this->data30 = FindElemAsBasePtr(dialogElem, "textNone");
+    this->data38 = FindElemAsBasePtr(dialogElem, "textNomad");
 
     // Find button elements
-    self->data40 = FindElemAsBasePtr(dialogElem, "buttonAllow");
-    self->data48 = FindElemAsBasePtr(dialogElem, "buttonDeny");
+    this->data40 = FindElemAsBasePtr(dialogElem, "buttonAllow");
+    this->data48 = FindElemAsBasePtr(dialogElem, "buttonDeny");
 
     // Set element IDs on buttons
-    reinterpret_cast<UI::Element*>(self->data40)->SetElementId(39000);  // B.3.6 bridge
-    reinterpret_cast<UI::Element*>(self->data48)->SetElementId(0x9859);  // B.3.6 bridge
+    reinterpret_cast<UI::Element*>(this->data40)->SetElementId(39000);  // B.3.6 bridge
+    reinterpret_cast<UI::Element*>(this->data48)->SetElementId(0x9859);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -70,8 +118,12 @@ void ImmigrationUI_Slot4(ImmigrationUI* self) {
 //
 // Original: 0x14006B130.
 
-void ImmigrationUI_Slot7(ImmigrationUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [7] 0x14006b130
+void ImmigrationUI::OnUpdateLayout() {
+    immigrationui_sa::EnsureGlobals();
+    if (!immigrationui_sa::Ready()) return;
+    immigrationui_sa::Trace("Slot7", this);
+    uintptr_t s = (uintptr_t)this;
 
     // Get entity at +0x28, check IsA ComponentEntity
     void* entity = (void*)*(uint64_t*)(s + 0x28);
@@ -161,9 +213,13 @@ void ImmigrationUI_Slot7(ImmigrationUI* self) {
 //
 // Original: 0x14006B300.
 
-void ImmigrationUI_Slot9(ImmigrationUI* self, void* param2, int msg, int id,
-                          int param5, int param6) {
-    uintptr_t s = (uintptr_t)self;
+// [9] 0x14006b300
+void ImmigrationUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t msg, int32_t id,
+                                   int32_t /*param5*/, int32_t /*param6*/, int32_t /*e*/, void* /*userData*/) {
+    immigrationui_sa::EnsureGlobals();
+    if (!immigrationui_sa::Ready()) return;
+    immigrationui_sa::Trace("Slot9", this);
+    uintptr_t s = (uintptr_t)this;
 
     if (msg != 0x12) return;
 

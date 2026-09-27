@@ -7,6 +7,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include <cstdio>
 #include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
 #include "system/String.h"
 #include <cstdint>
@@ -45,9 +46,65 @@ static uint32_t PageToggleUI_CheckElementTypeId() {
 // checkbox vtable with no null check of its own (retail 0x140075780).
 bool PageToggleUI_TypeIdsReady() { return PageToggleUI_CheckElementTypeId() != 0; }
 
+// ---- PageToggleUI: PROMOTED to the real reimpl (production-statistics button) --
+// PageToggleUI drives the `checkProduction` CheckElement that Dialog/Production.rsc
+// inserts into a workplace dialog's title bar (userTitle0). It is the ONLY thing
+// that switches a StandardDialog between pageMain(0) and pageUser(4) — the page
+// that holds the production-statistics content (Production.rsc:production4, driven
+// by ProductionUI below). Retail bodies:
+//   Slot4 (+0x20, Setup)  0x140075850 — FindElementType(CheckElement) -> +0x30,
+//                         SetElementId(700), FindElement("pages") -> +0x38, then
+//                         restore the saved page if the dialog is on page 0 or 4.
+//   Slot7 (+0x38, Update) 0x140075780 — enable/disable the checkbox (vtable +0x40)
+//                         depending on whether the active page is 0 or 4.
+//   Slot9 (+0x48, Event)  0x140075710 — msg 0x12 + id 700 -> +0x40 = checked ? 4 : 0
+//                         and PageElement::SetActivePage. It opens NO dialog.
+//   Slot3 (+0x18)         0x1400759a0 is a 3-byte `RET 0` — left a no-op stub
+//                         (see ui_panels.h:618).
+// The generic stub made all three no-ops, so the button was inert: the id-700
+// event never fired and clicking the control did nothing.
+//
+// HAZARD (retail-faithful, hence the gate below): Slot7 derefs the checkbox
+// vtable with NO null check, so if Slot4's FindElementType misses, Slot7 faults.
+// In standalone the checkbox type id is null by default — the exe reads it through
+// .rdata exref 0x1401516a8, and that whole element-type-id table
+// (standalone/reg_element_typeids.cpp) is gated on BANISHED_LIVE_ELEMENT_TIDS,
+// which is NOT in the default-on table. With g_TypeId_CheckboxElement null,
+// FindElementType(root, 0) can never match, +0x30 stays null, and Slot7 faults.
+// pagetoggleui.cpp therefore resolves a PRIVATE copy of the id by name (the
+// exref's import string, read out of exe .rdata at 0x1401b8ce8, is
+// "?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A" — i.e. UI::CheckElement),
+// without writing the shared global, and Ready() refuses to dispatch any slot
+// until it is non-zero.
+namespace pagetoggleui_sa {
+    // The CheckElement type id is resolved PRIVATELY inside pagetoggleui.cpp
+    // (PageToggleUI_TypeIdsReady) — see the long note there. We must not fill the
+    // shared g_TypeId_CheckboxElement here: reg_element_typeids.cpp owns that
+    // table and holds it behind BANISHED_LIVE_ELEMENT_TIDS on purpose.
+    // Every slot below dereferences the checkbox / "pages" element unguarded, and
+    // Slot4 cannot populate either without the type id. Report the outcome once.
+    bool Ready() {
+        bool ok = PageToggleUI_TypeIdsReady();
+        static bool s_logged = false;
+        if (!s_logged) {
+            s_logged = true;
+            fprintf(stderr, "[PageToggleUI] Ready=%d (CheckElement id resolved=%d)\n",
+                    (int)ok, (int)PageToggleUI_TypeIdsReady());
+            fflush(stderr);
+        }
+        return ok;
+    }
+    // Slot7 runs every frame, including before Slot4 has populated +0x30/+0x38.
+    // Retail cannot observe that ordering (its Slot4 always succeeds first), so
+    // the empty-cache test below is a STANDALONE-ONLY precondition, not a
+    // behaviour change: with both caches populated this is retail verbatim.
+}
+
 // Slot4: Find checkbox by type, find "pages" element, restore saved page.
-void PageToggleUI_Slot4(PageToggleUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [4] 0x140075850
+void PageToggleUI::OnCreated() {
+    if (!pagetoggleui_sa::Ready()) return;
+    uintptr_t s = (uintptr_t)this;
 
     // Find checkbox element by type ID in the dialog element tree
     uint32_t checkboxTypeId = PageToggleUI_CheckElementTypeId();
@@ -87,8 +144,15 @@ void PageToggleUI_Slot4(PageToggleUI* self) {
 }
 
 // Slot7: Enable/disable checkbox based on whether active page is 0 or 4.
-void PageToggleUI_Slot7(PageToggleUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [7] 0x140075780
+void PageToggleUI::OnUpdateLayout() {
+    if (!pagetoggleui_sa::Ready()) return;
+    // Standalone-only precondition: Slot7/Slot9 run before Slot4 has populated
+    // +0x30/+0x38 (retail's Slot4 always succeeds first); with both caches
+    // populated this is retail verbatim.
+    if (!*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(this) + 0x30) ||
+        !*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(this) + 0x38)) return;
+    uintptr_t s = (uintptr_t)this;
 
     void* checkbox = (void*)*(uint64_t*)(s + 0x30);
 
@@ -106,8 +170,16 @@ void PageToggleUI_Slot7(PageToggleUI* self) {
 }
 
 // Slot9: On checkbox toggle event, switch between page 0 and page 4.
-void PageToggleUI_Slot9(PageToggleUI* self, void* param2, int param3, int param4) {
-    uintptr_t s = (uintptr_t)self;
+// [9] 0x140075710
+void PageToggleUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4,
+                                  int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    if (!pagetoggleui_sa::Ready()) return;
+    // Standalone-only precondition: Slot7/Slot9 run before Slot4 has populated
+    // +0x30/+0x38 (retail's Slot4 always succeeds first); with both caches
+    // populated this is retail verbatim.
+    if (!*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(this) + 0x30) ||
+        !*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(this) + 0x38)) return;
+    uintptr_t s = (uintptr_t)this;
 
     if (param3 == 0x12 && param4 == 700) {
         // Read checkbox state at +0xd8 (bool: checked or not)

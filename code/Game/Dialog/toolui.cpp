@@ -204,6 +204,58 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
     }
 }
 
+// ---- ToolUI: PROMOTED to the real Slot4 reimpl (map-render bring-up) ----------
+// ToolUI is StandardDialog.rsc's controller — created for EVERY StandardDialog-
+// based utility dialog (Map/Help/Goal/…). Its Slot4 (+0x20, Setup) reads the
+// dialog's data source (a ComponentEntity → its description), finds the title/
+// close/drag elements, and — crucially — searches the description for a
+// UIDescription and calls UIDesc_AddControllers_Impl, which injects each of the
+// UIDescription's sub-controllers (for UtilityMap: the MapUI controller +
+// Dialog/Map.rsc:content = imageMap/imageOverlay/frustum) at their _insertAt
+// element ("userGroup0") via DialogInstance::AddController6. The generic no-op
+// stub left Slot4 dead, so NO utility dialog ever built its inner content — the
+// minimap was never instantiated. Wiring Slot4 to the real reimpl runs the whole
+// injection chain. Slot9 (+0x48, event) is now wired too so the close (X) button
+// works, and Slot8 (+0x40, per-frame drag-follow) so the title-bar drag actually
+// moves the dialog: Runtime DialogInstance::OnUpdate (0x180115400) calls every
+// controller's vtable+0x40 with (controller, Time&) each frame; Slot9's msg=2
+// drag-init only sets the flags, Slot8 does the SetUpperLeft follow + writes the
+// new position into the utility-dialog position BST (gameSubsys+0x50).
+// Slot9 (+0x48) is ToolUI's OnElementEvent handler. It contains the buttonClose
+// (element id 1, msg 0x12) -> UserInterface::CloseDialog logic that dismisses the
+// dialog, plus focus (msg 8..10 -> BringDialogToFront) and drag-init (msg 2).
+// DialogInstance::OnElementEvent (Runtime 0x180114ed0) dispatches every element
+// event to each controller's vtable+0x48, so leaving this a no-op meant the map/
+// Help/etc. dialogs' X button (and every close button) did nothing.
+namespace toolui_sa {
+    // ToolUI_Slot4 + UIDesc_AddControllers_Impl dereference these exe-.rdata type-id
+    // globals (null in standalone). Lazy-fill from the live factory tree post-
+    // Engine::Startup. Idempotent.
+    void EnsureTypeIds() {
+        static uint32_t s_build=0, s_entity=0, s_breq=0, s_uidesc=0, s_tab=0;
+        // NB: g_TypeId_ComponentDescription_FC maps to exe .rdata 0x1401c7318 whose real
+        // identity is ComponentDescription (verified: written by
+        // ComponentDescription_Register; the engine_funcs label now matches).
+        // ToolUI::Slot4 branch-1 tests the datasource against
+        // THIS id (a utility dialog's datasource is a ComponentDescription), so it
+        // must be filled with the ComponentDescription type-id.
+        if (!g_TypeId_ComponentDescription_FC)            { s_build =::Object::ResolveTypeIdByNameLazy("ComponentDescription");      if(s_build)  g_TypeId_ComponentDescription_FC=&s_build; }
+        if (!g_TypeId_ComponentEntity)           { s_entity=::Object::ResolveTypeIdByNameLazy("ComponentEntity");           if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
+        // CORRECTED 2026-07-19: slot 0x1401c7f58's writer is ToolbarDescription_RegisterType;
+        // the old resolve string "BuildRequirementComponent" (an invented name) is not in the
+        // type registry, so this heal always returned 0 and silently never fired.
+        if (!g_TypeId_ToolbarDescription_FC) { s_breq  =::Object::ResolveTypeIdByNameLazy("ToolbarDescription"); if(s_breq)   g_TypeId_ToolbarDescription_FC=&s_breq; }
+        if (!g_TypeId_UIDescription)             { s_uidesc=::Object::ResolveTypeIdByNameLazy("UIDescription");             if(s_uidesc) g_TypeId_UIDescription=&s_uidesc; }
+        if (!g_TypeId_TabElement)                { s_tab   =::Object::ResolveTypeIdByNameLazy("TabElement");                if(s_tab)    g_TypeId_TabElement=&s_tab; }
+    }
+    // Per-frame update (+0x40). Runtime DialogInstance::OnUpdate dispatches
+    // (controller, Time&); the reimpl ignores the Time arg. Idle cost is two flag
+    // reads (+0x41/+0x4D, both 0 unless Slot9 armed a drag). Guard the KeyMap
+    // exref + the Runtime fns the drag path dereferences unconditionally.
+    // OnElementEvent (+0x48). Dispatched with (self, &elementPtr, msg, id, x, y, ...);
+    // the real handler closes the dialog on the buttonClose (id 1, msg 0x12).
+}
+
 // ============================================================
 // ToolUI::Slot4 (vtable +0x20) — Setup/populate tool panel
 // ============================================================
@@ -216,8 +268,19 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
 //
 // Original: 0x14007BD70.
 
-void ToolUI_Slot4(ToolUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [4] 0x14007bd70
+void ToolUI::OnCreated() {
+    toolui_sa::EnsureTypeIds();
+    // The reimpl unconditionally dereferences these; skip rather than fault if
+    // any failed to resolve.
+    if (!g_TypeId_ComponentDescription_FC || !g_TypeId_ComponentEntity
+        || !g_TypeId_ToolbarDescription_FC || !g_TypeId_UIDescription
+        || !g_TypeId_TabElement) return;
+    static bool s_logged=false;
+    if(!s_logged && Opt().mapTrace){ s_logged=true;
+        printf("[ToolUI::Slot4] dispatched self=%p ds(+0x28)=%p\n",
+               (void*)this, *reinterpret_cast<void**>((char*)this+0x28)); fflush(stdout); }
+    uintptr_t s = (uintptr_t)this;
 
     // Determine description source from +0x28
     void* dataSource = *(void**)(s + 0x28);
@@ -380,8 +443,15 @@ static bool ToolUI_DialogHasEntityUI(uintptr_t s) {
 //
 // Original: 0x14007B9B0.
 
-void ToolUI_Slot8(ToolUI* self) {
-    uintptr_t s = (uintptr_t)self;
+// [8] 0x14007b9b0
+void ToolUI::OnUpdate(const System::Time& /*time*/) {
+    // Per-frame update (+0x40). Runtime DialogInstance::OnUpdate dispatches
+    // (controller, Time&); the body ignores the Time arg. Idle cost is two flag
+    // reads (+0x41/+0x4D, both 0 unless Slot9 armed a drag). Guard the KeyMap
+    // exref + the Runtime fns the drag path dereferences unconditionally.
+    if (!g_pInputConfigSingletonExref || !*g_pInputConfigSingletonExref
+        || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uintptr_t s = (uintptr_t)this;
 
     // --- Standalone drag-enable for entity / citizen info panels ---------------
     // Retail arms the entity panel's title-bar drag through EntityUI's per-frame
@@ -539,9 +609,10 @@ void ToolUI_Slot8(ToolUI* self) {
 //
 // Original: 0x14007BC30.
 
-void ToolUI_Slot9(ToolUI* self, void* /*param2*/, int msg, int id,
-                   int mouseX, int mouseY) {
-    uintptr_t s = (uintptr_t)self;
+// [9] 0x14007bc30
+void ToolUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t msg, int32_t id,
+                            int32_t mouseX, int32_t mouseY, int32_t /*e*/, void* /*userData*/) {
+    uintptr_t s = (uintptr_t)this;
 
     if (msg == 2) {
         if (id == 0) {
