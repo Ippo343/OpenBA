@@ -161,6 +161,7 @@
 #include "../../types/application/Application.h"   // ENDGAME B.3.9 ENG: the class static
 #include "../../types/input/Input.h"
 #include "../../types/system/Value.h"   // System::Time
+#include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 
 namespace {
 
@@ -177,7 +178,8 @@ inline Input::Configuration** InputConfigSingleton() {
     return reinterpret_cast<Input::Configuration**>(&::Input::Configuration::_singleton);
 }
 inline const double* TimerSecondsPerTick() {
-    return RT_DATA_SLOT(const double*, "?_secondsPerTick@Timer@System@@0NA");
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, no lazy cache.
+    return &::System::Timer::_secondsPerTick;
 }
 
 // ---- the three constants, from their bit patterns ---------------------------

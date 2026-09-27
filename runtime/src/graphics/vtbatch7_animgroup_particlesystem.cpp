@@ -166,6 +166,7 @@
 // block must be written `RtGraphics::`.
 #include "../../types/graphics/AnimationGroup.h"
 #include "../../types/graphics/Particle.h"
+#include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "../object/deleting_dtor_internal.h"   // rtcoll::MemAlloc
 
 using rt::io::ReaderWriter;
@@ -562,8 +563,8 @@ const uint8_t* ParticleSystemTypeInfo() {
 namespace {
 
 double SecondsPerTick() {
-    double* slot = RT_DATA_SLOT(double*, "?_secondsPerTick@Timer@System@@0NA");
-    return slot ? *slot : 1.0;
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+    return ::System::Timer::_secondsPerTick;
 }
 
 }  // namespace
