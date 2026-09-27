@@ -48,6 +48,9 @@
 #include "ui/Dialog.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/SaveLoadDialog.h"
+#include "Game/GameUpdateLoop.h"       // ENDGAME B.3.9 EXA: the real loop classes
+#include "Game/GameLoadDialogLoopT.h"
+#include "Game/GameLoaderLoop.h"
 #include "Dialog/ui_dialogs.h"
 // ENDGAME B.3.5 batch K1: the runtime type headers come FIRST — they reach
 // runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
@@ -754,87 +757,42 @@ void SaveLoadDialog::OnUpdate(const System::Time& time) {
         void* ui = *(void**)(s + 0x10);
         reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&basePtr));  // B.3.6 bridge
 
-        // --- Step 1: Allocate and construct the inner GameUpdateLoop (0x160 bytes) ---
-        // GameUpdateLoop_Ctor reimplemented inline (was FUN_140098060).
-        // Calls UpdateLoop base ctor, patches vtable, initializes all fields.
+        // ENDGAME B.3.9 EXA: the three real loop classes, built as retail's
+        // 0x1400b79b0 builds them.
+        // --- Step 1: the inner GameUpdateLoop (0x160 bytes), ctor 0x140098060 ---
+        // Retail: (savedState = GetSaveState(), &InternalBasePtr(0), -1, name,
+        // 0, 0, p8 = 1, 0, 0, 0). p8 = 1 writes +0xD0 = 0.
         void* gameLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
-        void* pGameLoop = nullptr;
+        Engine::UpdateLoop* pGameLoop = nullptr;
         if (gameLoop) {
             void* savedState = reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetSaveState();  // B.3.7 bridge
-
-            fn_UpdateLoop_Ctor(gameLoop);
-            *(void**)gameLoop = (void*)g_GameUpdateLoop_Vtable;
-
-            // +0x28: empty name string. Ownership is transferred into gameLoop by raw
-            // copy (matching retail): null the local out afterward so its destructor
-            // (which never fires in the original) is a no-op rather than a double-free.
             System::String nameStr("");
-            *(uint64_t*)((uintptr_t)gameLoop + 0x28) = *reinterpret_cast<uint64_t*>(&nameStr);
-            nameStr._data = nullptr;
-            *(uint32_t*)((uintptr_t)gameLoop + 0x30) = 0;   // p6
-            *(uint32_t*)((uintptr_t)gameLoop + 0x34) = 0;   // p7
-            *(uint64_t*)((uintptr_t)gameLoop + 0x38) = 0;
-            *(uint64_t*)((uintptr_t)gameLoop + 0x40) = 0;   // p9
-            *(uint64_t*)((uintptr_t)gameLoop + 0x48) = 0;   // p10
-            *(uint64_t*)((uintptr_t)gameLoop + 0x50) = 0;   // p11
-            *(uint64_t*)((uintptr_t)gameLoop + 0x58) = (uint64_t)savedState;
-            // Zero remaining fields +0x60..+0xC0
-            for (uintptr_t off = 0x60; off <= 0xC0; off += 8)
-                *(uint64_t*)((uintptr_t)gameLoop + off) = 0;
-            *(uint16_t*)((uintptr_t)gameLoop + 0xC0) = 0;
-            *(uint64_t*)((uintptr_t)gameLoop + 0xC8) = 0;
-            // p8=1 means disasterOff=false -> 0 (not 0xF0)
-            *(uint32_t*)((uintptr_t)gameLoop + 0xD0) = 0;
-            for (uintptr_t off = 0xD8; off <= 0x148; off += 8)
-                *(uint64_t*)((uintptr_t)gameLoop + off) = 0;
-            // +0x150: loaderLoopPtr (null)
-            *(uint64_t*)((uintptr_t)gameLoop + 0x150) = 0;
-            *(uint8_t*)((uintptr_t)gameLoop + 0x158) = 0;
-            *(uint32_t*)((uintptr_t)gameLoop + 0x15C) = 0xFFFFFFFF;  // opFlag
-
-            pGameLoop = gameLoop;
+            pGameLoop = ::new (gameLoop) GameUpdateLoop(
+                savedState, /*scenarioIbp=*/0, /*scenarioIndex=*/-1, nameStr,
+                0, 0, /*p8=*/true, nullptr, nullptr, nullptr);
         }
 
-        // --- Step 2: Allocate and construct the GameLoadDialogLoopT (0xb60 bytes) ---
-        // Base: Engine::DialogLoaderLoopT (Runtime export), then patch exe subclass vtable.
+        // --- Step 2: the GameLoadDialogLoopT (0xb60 bytes) — the subclass ctor
+        // retail inlines here ---
         void* dlLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xb60, 4);
-        void* pDlLoop = nullptr;
+        Engine::UpdateLoop* pDlLoop = nullptr;
         if (dlLoop) {
-            // Build Time from constant (1.0f delay)
-            uint64_t delayTime[1];
-            fn_Time_Ctor_Float((void*)delayTime, 1.0f);
-
-            // GetLoadingSoundString reimplemented inline: generates random loading sound variant
+            uint64_t delayTime = 0;
+            fn_Time_Ctor_Float(&delayTime, 1.0f);
             System::String dialogNameStr;
             GetLoadingSoundString(&dialogNameStr);
-
-            // Construct base Engine::DialogLoaderLoopT
-            fn_DialogLoaderLoopT_Ctor(dlLoop, &dialogNameStr, pGameLoop, (void*)delayTime);
-
-            // Patch vtable to exe subclass (GameLoadDialogLoopT)
-            *(void**)dlLoop = (void*)g_GameLoadDialogLoopT_Vtable;
-
-            // Initialize extra fields added by exe subclass
-            uintptr_t dl = (uintptr_t)dlLoop;
-            *(uint32_t*)(dl + 0x188) = 0xff000000;
-            *(uint32_t*)(dl + 0x18c) = 0xff000000;
-            *(uint8_t*)(dl  + 0x190) = 0;  // [400]
-            fn_Random_Default_Ctor((void*)(dl + 0x194));
-            *(uint64_t*)(dl + 0xb58) = 0;
-            *(uint8_t*)(dl  + 0x40)  = 0;  // m_autoAdvance = 0 (see LoaderLoop.h)
-
-            pDlLoop = dlLoop;
+            pDlLoop = ::new (dlLoop) GameLoadDialogLoopT(
+                dialogNameStr, pGameLoop, *reinterpret_cast<const System::Time*>(&delayTime));
         }
 
-        // --- Step 3: Allocate and construct the outer LoaderLoop (0x48 bytes) ---
+        // --- Step 3: the outer GameLoaderLoop (0x48 bytes) ---
         void* outerLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 4);
         void* pOuterLoop = nullptr;
         if (outerLoop) {
-            uint64_t zeroTime[1];
-            fn_Time_Ctor_Float((void*)zeroTime, 0.0f);
-            fn_LoaderLoop_Ctor(outerLoop, pDlLoop, (void*)zeroTime);
-            *(void**)outerLoop = (void*)g_GameLoaderLoop_Vtable;
-            pOuterLoop = outerLoop;
+            uint64_t zeroTime = 0;
+            fn_Time_Ctor_Float(&zeroTime, 0.0f);
+            pOuterLoop = ::new (outerLoop) GameLoaderLoop(
+                pDlLoop, *reinterpret_cast<const System::Time*>(&zeroTime));
         }
 
         // --- Step 4: Set the outer LoaderLoop as the engine's next loop ---

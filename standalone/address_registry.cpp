@@ -1402,19 +1402,6 @@ static void* g_storage_KeyMapSingleton = nullptr;       // 0x1401c3de8
 static void* g_storage_GameWorldSingleton = nullptr;    // 0x1401c3dd8
 static void* g_storage_GameSettingsPtr = nullptr;       // 0x1401c3de0
 
-// Defined in standalone/menudialogloopt_stubs.cpp.
-extern void RegisterMenuDialogLoopVtable();
-
-// Defined in standalone/splash_loop_stubs.cpp.
-extern void RegisterSplashDialogLoopVtable();
-
-// Defined in standalone/loader_loop_stubs.cpp.
-extern void RegisterLoaderLoopVtables();
-
-// Defined in standalone/gameupdateloop_stubs.cpp — the in-game simulation loop
-// vtable (0x14015e2f0). Built by NewGameDialog::StartGame on "OK".
-extern void RegisterGameUpdateLoopVtable();
-
 // ============================================================
 // M3.5 Path B session 7 — NoiseUI ImageBuffer vtable scaffolding
 // ============================================================
@@ -1514,23 +1501,9 @@ static void RegisterVtablesAndTypeIds() {
     RegisterExeAddr(0x1401c3dd8, reinterpret_cast<uintptr_t>(&g_storage_GameWorldSingleton));
     RegisterExeAddr(0x1401c3de0, reinterpret_cast<uintptr_t>(&g_storage_GameSettingsPtr));
 
-    // --- MenuDialogLoopT vtable (0x14015ed00): the real class's table, read back by
-    //     engine_funcs.cpp (g_MenuDialogLoopT_Vtable) ---
-    RegisterMenuDialogLoopVtable();
-
-    // --- Splash DialogLoaderLoopT vtable (0x140158800): the real class's table,
-    //     read back by engine_funcs.cpp (g_GameLoadDialogLoopT_Vtable) ---
-    // Used by both Dialog\Loading.rsc and Dialog\ShiningRock.rsc instances.
-    RegisterSplashDialogLoopVtable();
-
-    // --- LoaderLoop vtables (0x140158870 inner + 0x1401588d0 outer) ---
-    RegisterLoaderLoopVtables();
-
-    // --- GameUpdateLoop vtable (0x14015e2f0) — in-game simulation loop ---
-    // The real class's table (ENDGAME B.3.8 LOOP), still read back by
-    // engine_funcs.cpp (g_GameUpdateLoop_Vtable), which the dialogs that start a
-    // game stamp onto the freshly-allocated GameUpdateLoop.
-    RegisterGameUpdateLoopVtable();
+    // ENDGAME B.3.9 EXA: the four loop vtable rows (MenuDialogLoopT 0x14015ed00,
+    // GameLoadDialogLoopT 0x140158800, GameLoaderLoop 0x1401588d0, GameUpdateLoop
+    // 0x14015e2f0) are gone: every builder constructs the real class.
 
     // Per-class vtables defined alongside their reimplementation in
     // code/Game/<Module>/<Class>.cpp — declared at file scope above.

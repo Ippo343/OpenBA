@@ -39,6 +39,9 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 #include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Random
+#include "Game/GameUpdateLoop.h"       // ENDGAME B.3.9 EXA: the real loop classes
+#include "Game/GameLoadDialogLoopT.h"
+#include "Game/GameLoaderLoop.h"
 
 // ============================================================
 // Helper: find element by name, returns raw element pointer
@@ -818,83 +821,49 @@ void* StartNewGame_Impl(void* worldSetup, void* nameStr, uint32_t seed, uint32_t
         fprintf(stderr, "[StartNewGame] ENTER worldSetup=%p seed=%u size=%u disastersOff=%d "
                 "scenarioIdx=%d saved=%p GameUpdateLoop_Vtable=%p\n",
                 (void*)ws, seed, terrainSize, (int)disastersOff, (int)scenarioResIdx,
-                savedStateIBP, (void*)g_GameUpdateLoop_Vtable);
+                savedStateIBP, GameUpdateLoop::Vtable());
         fflush(stderr);
 
-        // Step 1: Allocate and construct GameUpdateLoop (0x160 bytes)
+        // Step 1: GameUpdateLoop (0x160 bytes). ENDGAME B.3.9 EXA: the real class
+        // (its ctor is 0x140098060, which retail CALLs here). Retail passes
+        // savedState = 0 and a copy of *param_10 (the saved-state IBP) by
+        // address; the tree's new-game caller hands a null param_10, which the
+        // tree has always read as a null IBP. Retail's +0xD0 is `p8 ? 0 : 0xF0`;
+        // this function's `disastersOff` is the inverse sense, so p8 = !disastersOff
+        // writes exactly the bytes the old inline stores wrote.
         void* gameLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
-        void* pGameLoop = nullptr;
+        Engine::UpdateLoop* pGameLoop = nullptr;
         if (gameLoop) {
-            // GameUpdateLoop_Ctor reimplemented inline:
-            // Calls UpdateLoop base ctor, then sets vtable and fields.
-            fn_UpdateLoop_Ctor(gameLoop);
-            *(void**)gameLoop = (void*)g_GameUpdateLoop_Vtable;
-            // Copy name string to +0x28 (GameUpdateLoop::name, a raw offset into
-            // freshly-allocated memory — placement-construct then assign).
-            {
-                void* nameField = (void*)((uintptr_t)gameLoop + 0x28);
-                new (nameField) System::String();  // B.3.1 bridge — GameUpdateLoop::name field
-                *reinterpret_cast<System::String*>(nameField) =
-                    *reinterpret_cast<const System::String*>(nameStr);  // B.3.1 bridge
-            }
-            *(uint32_t*)((uintptr_t)gameLoop + 0x30) = seed;
-            *(uint32_t*)((uintptr_t)gameLoop + 0x34) = terrainSize;
-            *(uint64_t*)((uintptr_t)gameLoop + 0x38) = 0;
-            *(uint64_t*)((uintptr_t)gameLoop + 0x40) = (uint64_t)mapGen;
-            *(uint64_t*)((uintptr_t)gameLoop + 0x48) = (uint64_t)terrainGen;
-            *(uint64_t*)((uintptr_t)gameLoop + 0x50) = (uint64_t)climateGen;
-            *(uint64_t*)((uintptr_t)gameLoop + 0x58) = 0;  // savedState = null
-            // Zero remaining fields
-            for (uintptr_t off = 0x60; off <= 0xC0; off += 8) {
-                *(uint64_t*)((uintptr_t)gameLoop + off) = 0;
-            }
-            *(uint16_t*)((uintptr_t)gameLoop + 0xC0) = 0;
-            *(uint64_t*)((uintptr_t)gameLoop + 0xC8) = 0;
-            // disaster flag: +0xD0 = 0 means disasters ON, 0xF0 means OFF.
-            *(uint32_t*)((uintptr_t)gameLoop + 0xD0) = disastersOff ? 0xF0 : 0;
-            for (uintptr_t off = 0xD8; off <= 0x148; off += 8) {
-                *(uint64_t*)((uintptr_t)gameLoop + off) = 0;
-            }
-            // Store retval ptr at +0x150
-            uint8_t nullIBP[8];
-            new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            // +0x150 = saved-state IBP (retail *param_10; null for a new sandbox game).
-            *(uint64_t*)((uintptr_t)gameLoop + 0x150) =
-                savedStateIBP ? *(uint64_t*)savedStateIBP : *(uint64_t*)nullIBP;
-            *(uint8_t*)((uintptr_t)gameLoop + 0x158) = 0;
-            // +0x15C = scenario resource index (retail param_9; -1 = plain new game).
-            *(uint32_t*)((uintptr_t)gameLoop + 0x15C) = scenarioResIdx;
-            pGameLoop = gameLoop;
+            const uint64_t ibp = savedStateIBP ? *(uint64_t*)savedStateIBP : 0;
+            pGameLoop = ::new (gameLoop) GameUpdateLoop(
+                nullptr, ibp, (int32_t)scenarioResIdx,
+                *reinterpret_cast<const System::String*>(nameStr),   // editName+0xC8
+                (int32_t)seed, (int32_t)terrainSize, /*p8=*/!disastersOff,
+                mapGen, terrainGen, climateGen);
         }
 
-        // Step 2: Allocate and construct GameLoadDialogLoopT (0xB60 bytes)
+        // Step 2: GameLoadDialogLoopT (0xB60 bytes) — retail inlines the subclass
+        // ctor here; the real class's ctor is that body.
         void* dlLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xB60, 4);
-        void* pDlLoop = nullptr;
+        Engine::UpdateLoop* pDlLoop = nullptr;
         if (dlLoop) {
-            uint8_t delayTime[8];
-            fn_Time_Ctor_Float(delayTime, 1.0f);
+            uint64_t delayTime = 0;
+            fn_Time_Ctor_Float(&delayTime, 1.0f);
             System::String loadingStr;
             GetLoadingSoundString(&loadingStr);
-            fn_DialogLoaderLoopT_Ctor(dlLoop, &loadingStr, pGameLoop, delayTime);
-            *(void**)dlLoop = (void*)g_GameLoadDialogLoopT_Vtable;
-            *(uint32_t*)((uintptr_t)dlLoop + 0x188) = 0xFF000000;
-            *(uint32_t*)((uintptr_t)dlLoop + 0x18C) = 0xFF000000;
-            *(uint8_t*)((uintptr_t)dlLoop + 400) = 0;
-            fn_Random_Default_Ctor((void*)((uintptr_t)dlLoop + 0x194));
-            *(uint64_t*)((uintptr_t)dlLoop + 0xB58) = 0;
-            *(uint8_t*)((uintptr_t)dlLoop + 0x40) = 0;
-            pDlLoop = dlLoop;
+            pDlLoop = ::new (dlLoop) GameLoadDialogLoopT(
+                loadingStr, pGameLoop, *reinterpret_cast<const System::Time*>(&delayTime));
         }
 
-        // Step 3: Allocate and construct outer LoaderLoop (0x48 bytes)
+        // Step 3: outer LoaderLoop (0x48 bytes): `??0LoaderLoop` + the 0x1401588d0
+        // stamp, i.e. the real GameLoaderLoop.
         void* outerLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 4);
         void* pOuterLoop = nullptr;
         if (outerLoop) {
-            uint8_t zeroTime[8];
-            fn_Time_Ctor_Float(zeroTime, 0.0f);
-            fn_LoaderLoop_Ctor(outerLoop, pDlLoop, zeroTime);
-            *(void**)outerLoop = (void*)g_GameLoaderLoop_Vtable;
-            pOuterLoop = outerLoop;
+            uint64_t zeroTime = 0;
+            fn_Time_Ctor_Float(&zeroTime, 0.0f);
+            pOuterLoop = ::new (outerLoop) GameLoaderLoop(
+                pDlLoop, *reinterpret_cast<const System::Time*>(&zeroTime));
         }
 
         // Step 4: Set next loop
@@ -903,7 +872,7 @@ void* StartNewGame_Impl(void* worldSetup, void* nameStr, uint32_t seed, uint32_t
         uintptr_t engPtr0 = *(uintptr_t*)(ws + 0xB8);
         fprintf(stderr, "[StartNewGame] loops built game=%p dl=%p outer=%p; "
                 "ws+0xC0(loop)=%p ws+0xB8(engine)=%p -> %s\n",
-                pGameLoop, pDlLoop, pOuterLoop, (void*)loaderLoop1, (void*)engPtr0,
+                (void*)pGameLoop, (void*)pDlLoop, pOuterLoop, (void*)loaderLoop1, (void*)engPtr0,
                 loaderLoop1 ? "SetDialogLoaderNextLoop(loop)" : "SetEngineNextLoop(engine)");
         fflush(stderr);
         if (loaderLoop1 == 0) {

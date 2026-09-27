@@ -12,7 +12,7 @@
 //   0x140013A60  Scenario::GetDisplayName -> String(scenario + 0x58)
 //   0x140013AA0  Scenario::GetSaveName    -> String(scenario + 0x88)
 //   0x140099130  GetLoadingSoundString    -> already inline in engine_funcs.h
-//   0x140098060  GameUpdateLoop ctor      -> flat 0x160-byte field init, below
+//   0x140098060  GameUpdateLoop ctor      -> the real class (Game/GameUpdateLoop.h)
 // (See reference_stub_comment_outlived_the_port_that_replaced_it: grep the
 // retail ADDRESS, not the stub's prose.)
 //
@@ -44,6 +44,9 @@
 #include "system/Filename.h"
 #include "system/String.h"
 #include "Tutorial/Tutorial.h"
+#include "Game/GameUpdateLoop.h"       // ENDGAME B.3.9 EXA: the real loop classes
+#include "Game/GameLoadDialogLoopT.h"
+#include "Game/GameLoaderLoop.h"
 #include "io/Persistence.h"   // ENDGAME B.3.4 caller batch P
 #include "io/FileSystem.h"    // ENDGAME B.3.4 caller batch P
 #include "save/SaveLoad.h"    // ENDGAME B.3.7 callers (K2)
@@ -54,85 +57,33 @@
 
 namespace {
 
-// ---------------------------------------------------------------------------
-// GameUpdateLoop ctor -- exe 0x140098060
-// ---------------------------------------------------------------------------
-// Flat field init over the 0x160-byte allocation. Arg -> field map taken from
-// the decompile (the same map documented in worldsetup_reload.cpp):
-//   p2 savedState -> +0x58 | p3 &IBP -> +0x150 (= *p3) | p4 int -> +0x15C
-//   p5 String     -> +0x28 (copy)    | p6 -> +0x30     | p7   -> +0x34
-//   p8 char       -> +0xD0 = (p8 ? 0 : 0xF0)
-//   p9 -> +0x40   | p10 -> +0x48     | p11 -> +0x50    | everything else zeroed
-//
-// p5 is a System::String COPY-construct in retail. Both of our call sites hand
-// it a string we own for the duration, and a String is a single COW pointer, so
-// copying the pointer and NOT destructing our source would double-free. We
-// instead copy the pointer and let the caller's String live on -- matching what
-// the three existing inline copies of this ctor already do.
-void GameUpdateLoop_Ctor_98060(void* self, void* savedState, uint64_t ibp,
-                               uint32_t scenarioIdx, uint64_t nameStr,
-                               uint32_t p6, uint32_t p7, char p8,
-                               uint64_t p9, uint64_t p10, uint64_t p11) {
-    uintptr_t g = reinterpret_cast<uintptr_t>(self);
-
-    fn_UpdateLoop_Ctor(self);
-    *reinterpret_cast<void**>(self) = (void*)g_GameUpdateLoop_Vtable;
-
-    *reinterpret_cast<uint64_t*>(g + 0x28) = nameStr;
-    *reinterpret_cast<uint32_t*>(g + 0x30) = p6;
-    *reinterpret_cast<uint32_t*>(g + 0x34) = p7;
-    *reinterpret_cast<uint64_t*>(g + 0x38) = 0;
-    *reinterpret_cast<uint64_t*>(g + 0x40) = p9;
-    *reinterpret_cast<uint64_t*>(g + 0x48) = p10;
-    *reinterpret_cast<uint64_t*>(g + 0x50) = p11;
-    *reinterpret_cast<uint64_t*>(g + 0x58) = reinterpret_cast<uint64_t>(savedState);
-    for (uintptr_t off = 0x60; off <= 0xB8; off += 8)
-        *reinterpret_cast<uint64_t*>(g + off) = 0;
-    *reinterpret_cast<uint16_t*>(g + 0xC0) = 0;
-    *reinterpret_cast<uint64_t*>(g + 0xC8) = 0;
-    *reinterpret_cast<uint32_t*>(g + 0xD0) = p8 ? 0u : 0xF0u;
-    for (uintptr_t off = 0xD8; off <= 0x148; off += 8)
-        *reinterpret_cast<uint64_t*>(g + off) = 0;
-    *reinterpret_cast<uint64_t*>(g + 0x150) = ibp;
-    *reinterpret_cast<uint8_t*>(g + 0x158)  = 0;
-    *reinterpret_cast<uint32_t*>(g + 0x15C) = scenarioIdx;
-}
-
 // Steps 2 and 3 of the chain, shared by both branches:
 //   GameLoadDialogLoopT (0xb60) wrapping the GameUpdateLoop, then the outer
-//   LoaderLoop (0x48). Identical to retail's tail and to the copies in
+//   GameLoaderLoop (0x48). Identical to retail's tail and to the builders in
 //   worldsetup_reload.cpp / newgamedialog.cpp / saveloaddialog.cpp.
-void* BuildLoaderChain(void* pGameLoop) {
-    void* pDlLoop = nullptr;
+// ENDGAME B.3.9 EXA: the real loop classes (retail inlines the splash's
+// subclass ctor here; the class's ctor is that body).
+void* BuildLoaderChain(Engine::UpdateLoop* pGameLoop) {
+    Engine::UpdateLoop* pDlLoop = nullptr;
     void* dlLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xb60, 4);
     if (dlLoop) {
-        uintptr_t dl = reinterpret_cast<uintptr_t>(dlLoop);
-        uint64_t delayTime[1];
-        fn_Time_Ctor_Float((void*)delayTime, 1.0f);
+        uint64_t delayTime = 0;
+        fn_Time_Ctor_Float(&delayTime, 1.0f);
 
         System::String loadingName;
         GetLoadingSoundString(&loadingName);   // 0x140099130
 
-        fn_DialogLoaderLoopT_Ctor(dlLoop, &loadingName, pGameLoop, (void*)delayTime);
-
-        *reinterpret_cast<void**>(dlLoop) = (void*)g_GameLoadDialogLoopT_Vtable;
-        *reinterpret_cast<uint32_t*>(dl + 0x188) = 0xFF000000;
-        *reinterpret_cast<uint32_t*>(dl + 0x18C) = 0xFF000000;
-        *reinterpret_cast<uint8_t*>(dl + 0x190)  = 0;   // retail `this[400]`
-        fn_Random_Default_Ctor((void*)(dl + 0x194));
-        *reinterpret_cast<uint64_t*>(dl + 0xB58) = 0;
-        *reinterpret_cast<uint8_t*>(dl + 0x40)   = 0;
-        pDlLoop = dlLoop;
+        pDlLoop = ::new (dlLoop) GameLoadDialogLoopT(
+            loadingName, pGameLoop, *reinterpret_cast<const System::Time*>(&delayTime));
     }
 
     void* pOuterLoop = nullptr;
     void* outerLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 4);
     if (outerLoop) {
-        uint64_t zeroTime[1];
-        fn_Time_Ctor_Float((void*)zeroTime, 0.0f);
-        fn_LoaderLoop_Ctor(outerLoop, pDlLoop, (void*)zeroTime);
-        *reinterpret_cast<void**>(outerLoop) = (void*)g_GameLoaderLoop_Vtable;
-        pOuterLoop = outerLoop;
+        uint64_t zeroTime = 0;
+        fn_Time_Ctor_Float(&zeroTime, 0.0f);
+        pOuterLoop = ::new (outerLoop) GameLoaderLoop(
+            pDlLoop, *reinterpret_cast<const System::Time*>(&zeroTime));
     }
     return pOuterLoop;
 }
@@ -144,12 +95,6 @@ const char* MissingDependency(bool needSaveLoad) {
     if (!g_TypeId_Scenario) return "Scenario type id (0x1401c5b08)";
     if (!fn_IsDerivedFrom) return "IsDerivedFrom";
     if (!fn_MemAlloc || !g_pMemAllocSingleton) return "MemAlloc";
-    if (!fn_UpdateLoop_Ctor) return "UpdateLoop::UpdateLoop";
-    if (!g_GameUpdateLoop_Vtable) return "GameUpdateLoop vtable";
-    if (!fn_DialogLoaderLoopT_Ctor) return "DialogLoaderLoopT::DialogLoaderLoopT";
-    if (!g_GameLoadDialogLoopT_Vtable) return "GameLoadDialogLoopT vtable";
-    if (!fn_LoaderLoop_Ctor) return "LoaderLoop::LoaderLoop";
-    if (!g_GameLoaderLoop_Vtable) return "GameLoaderLoop vtable";
     if (!fn_Time_Ctor_Float) return "Time::Time(float)";
     if (!fn_Random_Default_Ctor) return "Random::Random";
     if (!fn_InternalBasePtr_Ctor) return "InternalBasePtr::InternalBasePtr";
@@ -230,7 +175,7 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
     new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     uint64_t ibpCopy = *reinterpret_cast<uint64_t*>(nullIBP);
 
-    void* pGameLoop = nullptr;
+    Engine::UpdateLoop* pGameLoop = nullptr;
 
     if (!hasSaveState) {
         // ---- NEW-SCENARIO branch -------------------------------------------
@@ -252,16 +197,14 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
 
         void* gameLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
         if (gameLoop) {
-            GameUpdateLoop_Ctor_98060(gameLoop, nullptr, ibpCopy,
-                                      static_cast<uint32_t>(scenIdx),
-                                      reinterpret_cast<uint64_t>(displayNameStr._data),
-                                      seedVal, terrainSizeVal, disasterOff,
-                                      mapGen, terrainGen, climateGen);
-            pGameLoop = gameLoop;
-            // The ctor STEALS the COW pointer into the loop at +0x28 (see its
-            // header comment) rather than copy-constructing, so hand ownership
-            // over: null ours so the destructor does not release the loop's.
-            displayNameStr._data = nullptr;
+            // ENDGAME B.3.9 EXA: the real class; ctor 0x140098060 copy-constructs
+            // the name (retail's by-value String arrives by hidden pointer), and
+            // our local releases its own reference as retail's ~String does.
+            pGameLoop = ::new (gameLoop) GameUpdateLoop(
+                nullptr, ibpCopy, scenIdx, displayNameStr,
+                static_cast<int32_t>(seedVal), static_cast<int32_t>(terrainSizeVal),
+                /*p8=*/disasterOff != 0, reinterpret_cast<void*>(mapGen),
+                reinterpret_cast<void*>(terrainGen), reinterpret_cast<void*>(climateGen));
         }
     } else {
         // ---- SAVED-SCENARIO branch -----------------------------------------
@@ -318,11 +261,10 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
         if (gameLoop) {
             // Retail passes an EMPTY String here (local_res8 = 0). A null COW
             // pointer IS the empty string -- no allocation, nothing to destruct.
-            GameUpdateLoop_Ctor_98060(gameLoop, savedState, ibpCopy,
-                                      static_cast<uint32_t>(scenIdx),
-                                      /*nameStr=*/0,
-                                      0, 0, /*p8=*/'\0', 0, 0, 0);
-            pGameLoop = gameLoop;
+            const System::String emptyName;
+            pGameLoop = ::new (gameLoop) GameUpdateLoop(
+                savedState, ibpCopy, scenIdx, emptyName,
+                0, 0, /*p8=*/false, nullptr, nullptr, nullptr);
         }
 
     }
@@ -334,6 +276,6 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
     SetEngineNextLoop(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton), pOuterLoop);
 
     fprintf(stderr, "[TutNext] next-scenario loop chain queued (gameLoop=%p loader=%p)\n",
-            pGameLoop, pOuterLoop);
+            (void*)pGameLoop, pOuterLoop);
     fflush(stderr);
 }

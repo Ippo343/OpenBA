@@ -521,21 +521,14 @@ fn_DisasterComponent_Infect_t fn_DisasterComponent_Infect = nullptr;
 fn_BuildingList_CheckCondition_t fn_BuildingList_CheckCondition = nullptr;
 
 // --- SaveLoadDialog::Load helpers ---
-// fn_GameUpdateLoop_Ctor — REMOVED, now reimplemented in saveloaddialog.cpp
-fn_UpdateLoop_Ctor_t fn_UpdateLoop_Ctor = nullptr;
-void** g_GameUpdateLoop_Vtable = nullptr;
-fn_LoaderLoop_Ctor_t fn_LoaderLoop_Ctor = nullptr;
-fn_DialogLoaderLoopT_Ctor_t fn_DialogLoaderLoopT_Ctor = nullptr;
+// ENDGAME B.3.9 EXA: the loop doors (??0UpdateLoop/LoaderLoop/DialogLoaderLoopT/
+// DialogLoopT) and the four exe loop vtable globals are gone — every builder
+// constructs the real loop class (code/Game/Game/*Loop*.h).
 fn_Random_Default_Ctor_t fn_Random_Default_Ctor = nullptr;
-void** g_GameLoadDialogLoopT_Vtable = nullptr;
-void** g_GameLoaderLoop_Vtable = nullptr;
 // fn_SetEngineNextLoop — REPLACED with inline SetEngineNextLoop() in engine_funcs.h
 // fn_SetDialogLoaderNextLoop — REPLACED with inline SetDialogLoaderNextLoop() in engine_funcs.h
 // fn_GetLoadingSoundString — REPLACED with inline GetLoadingSoundString() in engine_funcs.h
-fn_DialogLoopT_Ctor_t fn_DialogLoopT_Ctor = nullptr;
 fn_AudioScene_Ctor_t fn_AudioScene_Ctor = nullptr;
-// fn_MenuDialogLoopT_Ctor — REMOVED, now reimplemented as inline MenuDialogLoopT_Ctor() in engine_funcs.h
-void** g_MenuDialogLoopT_Vtable = nullptr;
 
 void** g_pFileSystemSingleton = nullptr;
 
@@ -1945,29 +1938,15 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400893c0));
 
     // --- SaveLoadDialog::Load helpers ---
-    // fn_GameUpdateLoop_Ctor — REIMPLEMENTED, now resolve inner helpers
-    fn_UpdateLoop_Ctor = reinterpret_cast<fn_UpdateLoop_Ctor_t>(
-        ResolveExport("??0UpdateLoop@Engine@@QEAA@XZ"));
-    g_GameUpdateLoop_Vtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x14015e2f0));
-    fn_LoaderLoop_Ctor = reinterpret_cast<fn_LoaderLoop_Ctor_t>(
-        ResolveExport("??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z"));
-    fn_DialogLoaderLoopT_Ctor = reinterpret_cast<fn_DialogLoaderLoopT_Ctor_t>(
-        ResolveExport("??0DialogLoaderLoopT@Engine@@QEAA@AEBVString@System@@PEAVUpdateLoop@1@AEBVTime@3@@Z"));
+    // ENDGAME B.3.9 EXA: the loop doors and exe loop vtable reads are gone (the
+    // builders construct the real loop classes).
     fn_Random_Default_Ctor = reinterpret_cast<fn_Random_Default_Ctor_t>(
         ResolveExport("??0Random@System@@QEAA@XZ"));
-    // Exe vtable pointers for subclasses of DialogLoaderLoopT and LoaderLoop
-    g_GameLoadDialogLoopT_Vtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140158800));
-    g_GameLoaderLoop_Vtable      = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401588d0));
     // fn_SetEngineNextLoop — REPLACED with inline SetEngineNextLoop() in engine_funcs.h
     // fn_SetDialogLoaderNextLoop — REPLACED with inline SetDialogLoaderNextLoop() in engine_funcs.h
     // fn_GetLoadingSoundString — REPLACED with inline GetLoadingSoundString() in engine_funcs.h
-    // fn_MenuDialogLoopT_Ctor — REIMPLEMENTED as inline MenuDialogLoopT_Ctor() in engine_funcs.h
-    // Now resolve its inner dependencies:
-    fn_DialogLoopT_Ctor = reinterpret_cast<fn_DialogLoopT_Ctor_t>(
-        ResolveExport("??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z"));
     fn_AudioScene_Ctor = reinterpret_cast<fn_AudioScene_Ctor_t>(
         ResolveExport("??0Scene@Audio@@QEAA@XZ"));
-    g_MenuDialogLoopT_Vtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x14015ed00));
 
     // --- Engine globals (direct memory addresses) ---
     g_pLoader              = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe7b8));

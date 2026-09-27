@@ -2131,91 +2131,20 @@ extern fn_BuildingList_CheckCondition_t fn_BuildingList_CheckCondition;
 // SaveLoadDialog::Load — game load loop construction helpers
 // ============================================================
 
-// GameUpdateLoop ctor (FUN_140098060 in exe) — NOW REIMPLEMENTED in saveloaddialog.cpp
-// Constructs the gameplay UpdateLoop (0x160 bytes).
-// Calls Engine::UpdateLoop::UpdateLoop then sets vtable to PTR_FUN_14015e2f0.
-// Old typedef kept for reference:
-// typedef void* (*fn_GameUpdateLoop_Ctor_t)(void* self, void* savedState, void* loaderLoopPtr,
-//                                            uint32_t opFlag, void* nameStr,
-//                                            uint32_t p6, uint32_t p7, uint8_t p8,
-//                                            uint64_t p9, uint64_t p10, uint64_t p11);
-// extern fn_GameUpdateLoop_Ctor_t fn_GameUpdateLoop_Ctor;
-
-// Engine::UpdateLoop::UpdateLoop(this) — base ctor from Runtime DLL
-// ??0UpdateLoop@Engine@@QEAA@XZ
-typedef void* (*fn_UpdateLoop_Ctor_t)(void* self);
-extern fn_UpdateLoop_Ctor_t fn_UpdateLoop_Ctor;
-
-// GameUpdateLoop vtable: PTR_FUN_14015e2f0 — written after UpdateLoop base ctor
-extern void** g_GameUpdateLoop_Vtable;  // 0x14015e2f0
-
-// Engine::LoaderLoop ctor (Runtime 0x1800DC1E0)
-// RCX=self(LoaderLoop*), RDX=nextLoop(UpdateLoop*), R8=delayTime(Time const&)
-// ??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z
-typedef void* (*fn_LoaderLoop_Ctor_t)(void* self, void* nextLoop, void* delayTime);
-extern fn_LoaderLoop_Ctor_t fn_LoaderLoop_Ctor;
-
-// Engine::DialogLoaderLoopT ctor (Runtime 0x1800DB0D0)
-// RCX=self, RDX=dialogFilename(String const&), R8=nextLoop(UpdateLoop*), R9=delayTime(Time const&)
-// ??0DialogLoaderLoopT@Engine@@QEAA@AEBVString@System@@PEAVUpdateLoop@1@AEBVTime@3@@Z
-typedef void* (*fn_DialogLoaderLoopT_Ctor_t)(void* self, void* dialogFilename,
-                                              void* nextLoop, void* delayTime);
-extern fn_DialogLoaderLoopT_Ctor_t fn_DialogLoaderLoopT_Ctor;
+// ENDGAME B.3.9 EXA: the GameUpdateLoop / GameLoadDialogLoopT / GameLoaderLoop /
+// MenuDialogLoopT builders construct the real classes (code/Game/Game/*Loop*.h);
+// the four loop ctor doors, the four exe loop vtable globals and the inline
+// MenuDialogLoopT_Ctor are gone.
 
 // System::Random::Random() — default ctor (Runtime 0x1800c7f20), seeds from time(nullptr)
 // ??0Random@System@@QEAA@XZ
 typedef void* (*fn_Random_Default_Ctor_t)(void* self);
 extern fn_Random_Default_Ctor_t fn_Random_Default_Ctor;
 
-// Exe vtable pointer for GameLoadDialogLoopT (subclass of DialogLoaderLoopT).
-// PTR_FUN_140158800 — written to DialogLoaderLoopT after base ctor to override vtable.
-extern void** g_GameLoadDialogLoopT_Vtable;  // 0x140158800
-
-// Exe vtable pointer for GameLoaderLoop (subclass of LoaderLoop).
-// PTR_FUN_1401588d0 — written to outer LoaderLoop after base ctor to override vtable.
-extern void** g_GameLoaderLoop_Vtable;  // 0x1401588d0
-
-// Engine::DialogLoopT::DialogLoopT(self, dialogFilename) — Runtime base ctor
-// ??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z (Runtime 0x1800db3f0)
-// Calls UpdateLoop::UpdateLoop, patches DialogLoopT vtable, copies string, inits UI::UserInterface.
-typedef void* (*fn_DialogLoopT_Ctor_t)(void* self, void* dialogFilename);
-extern fn_DialogLoopT_Ctor_t fn_DialogLoopT_Ctor;
-
 // Audio::Scene::Scene() — Runtime default ctor (0x1800e0160)
 // ??0Scene@Audio@@QEAA@XZ — initializes 0x38-byte Audio::Scene sub-object.
 typedef void* (*fn_AudioScene_Ctor_t)(void* self);
 extern fn_AudioScene_Ctor_t fn_AudioScene_Ctor;
-
-// Exe vtable pointer for MenuDialogLoopT (subclass of Engine::DialogLoopT).
-// PTR_FUN_14015ed00 — written to DialogLoopT after MenuDialogLoopT_Ctor.
-extern void** g_MenuDialogLoopT_Vtable;  // 0x14015ed00
-
-// MenuDialogLoopT_Ctor — FUN_14009bb00 — NOW REIMPLEMENTED INLINE
-// Calls Engine::DialogLoopT::DialogLoopT(self, filename), then patches vtable to
-// PTR_FUN_14015ed00 (MenuDialogLoopT subclass vtable), constructs System::Random at +0x168
-// and Audio::Scene at +0xb30, then zeroes extra fields (+0xb68..+0xbf8).
-// Allocate 0xc00 bytes before calling. Used to create the MainMenu/tutorial dialog loop.
-// Old typedef kept for reference:
-// typedef void* (*fn_MenuDialogLoopT_Ctor_t)(void* self, void* dialogFilename);
-// extern fn_MenuDialogLoopT_Ctor_t fn_MenuDialogLoopT_Ctor;
-inline void* MenuDialogLoopT_Ctor(void* self, void* dialogFilename) {
-    // 1. Call base Engine::DialogLoopT ctor (initializes UpdateLoop, UI::UserInterface, etc.)
-    fn_DialogLoopT_Ctor(self, dialogFilename);
-
-    // 2. Patch vtable to MenuDialogLoopT exe subclass
-    *(void**)self = (void*)g_MenuDialogLoopT_Vtable;
-
-    // 3. Construct embedded sub-objects
-    fn_Random_Default_Ctor((void*)((uintptr_t)self + 0x168));   // System::Random at +0x168
-    fn_AudioScene_Ctor((void*)((uintptr_t)self + 0xb30));       // Audio::Scene at +0xb30
-
-    // 4. Zero-init MenuDialogLoopT-specific fields (+0xb68..+0xbf8)
-    uintptr_t s = (uintptr_t)self;
-    for (uintptr_t off = 0xb68; off <= 0xbf8; off += 8)
-        *(uint64_t*)(s + off) = 0;
-
-    return self;
-}
 
 // SetEngineNextLoop — sets next loop on the MainLoop engine singleton
 // FUN_140097fb0(enginePtr, loaderLoop): sets UI cursor, fullscreen fade, stores next loop ptr

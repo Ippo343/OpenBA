@@ -21,6 +21,9 @@
 #include "application/Application.h"   // ENDGAME B.3.7 callers (K1)
 #include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
 #include "Dialog/MainMenuDialog.h"
+#include "Game/MenuDialogLoopT.h"       // ENDGAME B.3.9 EXA: the real loop classes
+#include "Game/GameLoadDialogLoopT.h"
+#include "Game/GameLoaderLoop.h"
 #include "Dialog/MapParamsDialog.h"
 #include "Dialog/AchievementDialog.h"
 #include "Dialog/GoalDialog.h"
@@ -247,41 +250,36 @@ void MainMenuDialog_ReturnToMenu(MainMenuDialog* self) {
         *(void**)(gameWorld + 0x140) = nullptr;
     }
 
-    // Step 1: Create MenuDialogLoopT (0xC00 bytes) with "Dialog/MainMenu.rsc"
-    void* menuLoop = nullptr;
+    // ENDGAME B.3.9 EXA: the three real loop classes, built as retail's
+    // 0x1400B4790 builds them (same allocations, same ctor arguments).
+    // Step 1: MenuDialogLoopT (0xC00 bytes) with "Dialog/MainMenu.rsc" (ctor 0x14009bb00)
+    Engine::UpdateLoop* menuLoop = nullptr;
     void* menuMem = fn_MemAlloc(g_pMemAllocSingleton, 0xC00, 8);
     if (menuMem) {
         System::String menuStr("Dialog/MainMenu.rsc");
-        menuLoop = MenuDialogLoopT_Ctor(menuMem, &menuStr);
+        menuLoop = ::new (menuMem) MenuDialogLoopT(menuStr);
     }
 
-    // Step 2: Create GameLoadDialogLoopT (0xB60 bytes) wrapping the menu loop
-    void* dlLoop = nullptr;
+    // Step 2: GameLoadDialogLoopT (0xB60 bytes) wrapping the menu loop (the
+    // subclass ctor retail inlines here)
+    Engine::UpdateLoop* dlLoop = nullptr;
     void* dlMem = fn_MemAlloc(g_pMemAllocSingleton, 0xB60, 4);
     if (dlMem) {
-        uint8_t delayTime[8];
-        fn_Time_Ctor_Float(delayTime, 1.0f);
+        uint64_t delayTime = 0;
+        fn_Time_Ctor_Float(&delayTime, 1.0f);
         System::String loadingStr("Dialog/Loading.rsc");
-        fn_DialogLoaderLoopT_Ctor(dlMem, &loadingStr, menuLoop, delayTime);
-        *(void**)dlMem = (void*)g_GameLoadDialogLoopT_Vtable;
-        *(uint32_t*)((uintptr_t)dlMem + 0x188) = 0xFF000000;
-        *(uint32_t*)((uintptr_t)dlMem + 0x18C) = 0xFF000000;
-        *(uint8_t*)((uintptr_t)dlMem + 400) = 0;
-        fn_Random_Default_Ctor((void*)((uintptr_t)dlMem + 0x194));
-        *(uint64_t*)((uintptr_t)dlMem + 0xB58) = 0;
-        *(uint8_t*)((uintptr_t)dlMem + 0x40) = 0;
-        dlLoop = dlMem;
+        dlLoop = ::new (dlMem) GameLoadDialogLoopT(
+            loadingStr, menuLoop, *reinterpret_cast<const System::Time*>(&delayTime));
     }
 
-    // Step 3: Create outer LoaderLoop (0x48 bytes) wrapping the dialog loader
+    // Step 3: outer GameLoaderLoop (0x48 bytes) wrapping the dialog loader
     void* outerLoop = nullptr;
     void* outerMem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 4);
     if (outerMem) {
-        uint8_t zeroTime[8];
-        fn_Time_Ctor_Float(zeroTime, 0.0f);
-        fn_LoaderLoop_Ctor(outerMem, dlLoop, zeroTime);
-        *(void**)outerMem = (void*)g_GameLoaderLoop_Vtable;
-        outerLoop = outerMem;
+        uint64_t zeroTime = 0;
+        fn_Time_Ctor_Float(&zeroTime, 0.0f);
+        outerLoop = ::new (outerMem) GameLoaderLoop(
+            dlLoop, *reinterpret_cast<const System::Time*>(&zeroTime));
     }
 
     // Step 4: Set next loop on the appropriate target
