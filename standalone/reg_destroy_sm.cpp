@@ -64,28 +64,11 @@ extern "C" void  TownMgr_AbortCitizenActionsFor_89e30(void* townMgr, void** pEnt
 extern "C" void  ActionStack_AbortForEntity_c52c0(void* stack, void** pEntityIbp);
 
 void RegisterDestroySmBatch() {
-    RegisterExeAddr(0x14011d7b0, reinterpret_cast<uintptr_t>(&Destroy_State3Enter_d7b0));
-    RegisterExeAddr(0x14011cfd0, reinterpret_cast<uintptr_t>(&Destroy_State4Enter_cfd0));
-    RegisterExeAddr(0x14011cec0, reinterpret_cast<uintptr_t>(&Destroy_State4Tick_cec0));
-    RegisterExeAddr(0x14011cc70, reinterpret_cast<uintptr_t>(&Destroy_State5Enter_cc70));
-    RegisterExeAddr(0x14011c120, reinterpret_cast<uintptr_t>(&Destroy_State5Tick_c120));
     // The remaining two DestroyComponent event handlers (dd00's sub_4020 pairs):
     // state 6 event 2, and state 4 + state 5 event 0.
-    RegisterExeAddr(0x14011d390, reinterpret_cast<uintptr_t>(&Destroy_State6Event2_ToRubble_d390));
-    RegisterExeAddr(0x14011bcc0, reinterpret_cast<uintptr_t>(&Destroy_State45Event0_Cancel_bcc0));
-    RegisterExeAddr(0x14011da80, reinterpret_cast<uintptr_t>(&Destroy_StorageEmpty_da80));
-    RegisterExeAddr(0x14011e600, reinterpret_cast<uintptr_t>(&Destroy_TargetDiffers_e600));
-    RegisterExeAddr(0x14011e5b0, reinterpret_cast<uintptr_t>(&Destroy_TargetIsCurrent_e5b0));
 
     // ---- state 6: collapse / rubble --------------------------------------
-    RegisterExeAddr(0x14011d4d0, reinterpret_cast<uintptr_t>(&Destroy_State6Enter_d4d0));
-    RegisterExeAddr(0x14011d400, reinterpret_cast<uintptr_t>(&Destroy_State6Update_d400));
-    RegisterExeAddr(0x14011d490, reinterpret_cast<uintptr_t>(&Destroy_State6Tick_d490));
-    RegisterExeAddr(0x14011d5d0, reinterpret_cast<uintptr_t>(&Destroy_RubbleStep_d5d0));
-    RegisterExeAddr(0x140125020, reinterpret_cast<uintptr_t>(&ModelComp_SetMaterialSet_125020));
     RegisterExeAddr(0x14000b630, reinterpret_cast<uintptr_t>(&Destroy_FindDecalComponent_b630));
-    RegisterExeAddr(0x140089e30, reinterpret_cast<uintptr_t>(&TownMgr_AbortCitizenActionsFor_89e30));
-    RegisterExeAddr(0x1400c52c0, reinterpret_cast<uintptr_t>(&ActionStack_AbortForEntity_c52c0));
 
     // The two Graphics dispatch slots the rubble step reads (GraphicsMesh::
     // GetMaterialList / MeshInstance::SetMaterialInstance) live with the rest of the

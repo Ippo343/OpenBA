@@ -60,8 +60,6 @@ static const uint32_t g_DAT_1401722c0 = 0x80000000u;
 void RegisterFireBatch() {
     // --- FireComponent leaf bodies ---
     RegisterExeAddr(0x140049610, reinterpret_cast<uintptr_t>(&FireComponent_Ignite_610));
-    RegisterExeAddr(0x1400499c0, reinterpret_cast<uintptr_t>(&FireComp_MarkDanger_99c0));
-    RegisterExeAddr(0x14009fa80, reinterpret_cast<uintptr_t>(&FireComp_StampDangerRect_9fa80));
 
     // --- audio arm ---
     // 0x140053720 and 0x140042960 are deliberately NOT here: the TORNADO lane

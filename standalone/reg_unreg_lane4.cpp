@@ -211,12 +211,6 @@ TypeIdSlot g_slots[] = {
     // weather external is validated against a null id today.
     { 0x1401c6198, "Weather", 0 },
 
-    // load=1. TimeGoal — timegoalinstance.cpp:84 caches this pointer as
-    // s_TypeInfo_TimeGoal. Scenario/tutorial goal instances are restored during the
-    // load, and a goal whose class cannot be identified is the exact family of bug
-    // that made 23 tutorial goals auto-pass.
-    { 0x1401c62e8, "TimeGoal", 0 },
-
     // load=0. EditTool (engine_funcs.cpp:2698 g_TypeId_EditTool — label agrees).
     { 0x1401c6dd8, "EditTool", 0 },
 

@@ -27,10 +27,6 @@ extern void CitizenAI_BuildCandidateStateList(void* self, int64_t* outList, char
 extern int  CitizenAI_ValidateAndEnterState(void* self, int state);
 
 void RegisterCitizenAICandidateList() {
-    RegisterExeAddr(0x14002fe10, reinterpret_cast<uintptr_t>(&CitizenAI_SortByPriority));
-    RegisterExeAddr(0x1401156e0, reinterpret_cast<uintptr_t>(&CitizenComp_HasSufficientResources));
-    RegisterExeAddr(0x1401157f0, reinterpret_cast<uintptr_t>(&CitizenComp_HasSufficientResources2));
-    RegisterExeAddr(0x140115de0, reinterpret_cast<uintptr_t>(&CitizenComp_GetHappiness));
     RegisterExeAddr(0x14010dca0, reinterpret_cast<uintptr_t>(&CitizenAI_BuildCandidateStateList));
     RegisterExeAddr(0x14010f1f0, reinterpret_cast<uintptr_t>(&CitizenAI_ValidateAndEnterState));
 }

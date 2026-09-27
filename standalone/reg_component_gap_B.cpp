@@ -85,13 +85,11 @@ void RegisterComponentGap_B() {
     RegisterExeAddr(0x140007960, reinterpret_cast<uintptr_t>(&ResidenceComponent_CopyInnerArray));
 
     // wellcomponent.cpp  (WELL cluster — bottom-up closure landed)
-    RegisterExeAddr(0x1400889e0, reinterpret_cast<uintptr_t>(&WellComp_RemoveCellEntry_889e0));
     RegisterExeAddr(0x140091ba0, reinterpret_cast<uintptr_t>(&WellComp_UnregisterEntity_91ba0));
     // The REGISTER half of the same pair (added 2026-08-22, fire lane): without these
     // the water-source array and the coarse cell index the FireWork search walks are
     // never written, so every fire reports buckets=0.
     RegisterExeAddr(0x140088a80, reinterpret_cast<uintptr_t>(&WellComp_AddCellEntry_88a80));
-    RegisterExeAddr(0x140091cb0, reinterpret_cast<uintptr_t>(&WellComp_RegisterEntity_91cb0));
     // 0x140102b60 — the live port is Toolbar_ShowGroup_Impl (see note above).
     RegisterExeAddr(0x140102b60, reinterpret_cast<uintptr_t>(&Toolbar_ShowGroup_Impl));
 }

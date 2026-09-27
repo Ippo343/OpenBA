@@ -25,10 +25,5 @@ extern "C" float*  CharMgr_helper_28c0(void* slotPtr, float* outRect);
 extern "C" void    CharMgr_impl_8560(int64_t mgr, int idx);
 
 void RegisterCharManager() {
-    RegisterExeAddr(0x1400183f0, reinterpret_cast<uintptr_t>(&CharMgr_sub_83f0));
     RegisterExeAddr(0x140018660, reinterpret_cast<uintptr_t>(&CharMgr_sub_8660));
-    RegisterExeAddr(0x140018c40, reinterpret_cast<uintptr_t>(&CharMgr_helper_8c40));
-    RegisterExeAddr(0x140018d00, reinterpret_cast<uintptr_t>(&CharMgr_helper_8d00));
-    RegisterExeAddr(0x1400928c0, reinterpret_cast<uintptr_t>(&CharMgr_helper_28c0));
-    RegisterExeAddr(0x140018560, reinterpret_cast<uintptr_t>(&CharMgr_impl_8560));
 }

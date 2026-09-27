@@ -33,6 +33,7 @@
 
 #include "resolve.h"
 #include "rt_data_mint.h"
+#include "rt_mint_redirect.h"
 #include "../runtime/types/object/TypeInfo.h"
 #include "../runtime/types/system/Thread.h"
 
@@ -133,6 +134,49 @@ static const int kVtableCount   = (int)(sizeof(kMintVtables)   / sizeof(kMintVta
 static const int kTypeInfoCount = (int)(sizeof(kMintTypeInfos) / sizeof(kMintTypeInfos[0]));
 static const int kStorageCount  = (int)(sizeof(kMintStorage)   / sizeof(kMintStorage[0]));
 
+// ============================================================
+// B.3.9 (D7) -- the storage REDIRECT. Contract and seeding rule:
+// rt_mint_redirect.h. Every storage path below asks MintStorageCell(i), never
+// `kMintStorage[i].storage` directly.
+// ============================================================
+static bool g_minted = false;
+static RtMintRedirect::Table<64> g_redirects;
+
+static const char kLoaderSym[] = "?_loader@LoaderLoop@Engine@@1VLoader@2@A";
+static const char kRngSym[]    = "?_rng@Particle@Graphics@@1VRandom@System@@A";
+static const char kFirstTiSym[] = "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA";
+
+static bool SymIs(const char* sym, const char* want) {
+    return sym && strcmp(sym, want) == 0;
+}
+
+// The two statics MintConstructedStatics() BUILDS (a Thread object, a seeded
+// MT19937). `_firstTypeInfo` also carries a ctorInit but is only spliced, not
+// constructed, so it may be redirected.
+static bool MintConstructs(const RtMintStorage& s) {
+    return SymIs(s.symbol, kLoaderSym) || SymIs(s.symbol, kRngSym);
+}
+
+// The cell the row lives in: the owner's redirected static, else the mint's.
+static void* MintStorageCell(int i) {
+    void* c = g_redirects.CellFor(i);
+    return c ? c : kMintStorage[i].storage;
+}
+
+void RtMintRedirectStorage(const char* symbol, void* cell) {
+    RtMintRedirect::RowView rows[kStorageCount];
+    for (int i = 0; i < kStorageCount; ++i) {
+        const RtMintStorage& s = kMintStorage[i];
+        rows[i] = { s.symbol, s.dllVa, s.size, s.init, s.initLen, MintConstructs(s) };
+    }
+    RtMintRedirect::Result r = g_redirects.Add(symbol, cell, rows, kStorageCount, g_minted);
+    if (r == RtMintRedirect::kOk) return;
+    fprintf(stderr, "[RtMint] FATAL: RtMintRedirectStorage(\"%s\", %p) refused: the row %s.\n",
+            symbol ? symbol : "(null)", cell, RtMintRedirect::ResultText(r));
+    fflush(stderr);
+    abort();
+}
+
 // The layout the mint writes through. If any of these ever stops holding, the
 // minted BaseTypeInfo objects are the wrong shape and Factory::Startup walks
 // garbage — so it is a compile error, not a runtime surprise.
@@ -210,7 +254,6 @@ static void* OurPort(const RtMintVSlot& s) {
 // ============================================================
 // The mint
 // ============================================================
-static bool g_minted = false;
 
 struct MintCounts {
     int slots = 0, filled = 0, pureTraps = 0, unportedTraps = 0;
@@ -238,28 +281,6 @@ static const char* StripParent(const char* p) {
     return q;
 }
 
-// WAVE 25 lane VTGFX. Per-row unported-trap count, recorded while MintVtables
-// fills. This exists so a PROMOTION can refuse itself at runtime.
-//
-// THE HAZARD IT CLOSES, and it is one no build check can see (kickoff §3.6):
-// a promoted vtable's slots are filled from the LIVE port registry, so any
-// registration that does not land turns that row's slots into
-// named abort traps -- and the promotion would then publish a TRAP TABLE into
-// live objects. The build is clean, the link succeeds, and the first virtual
-// call aborts. `??_7BinaryFileStream@IO@@6B@` and the other five promoted
-// vtables have carried that exposure unguarded since Wave 19; this counter is
-// the first thing in the tree that can answer the question at all.
-static int g_vtableTraps[kVtableCount];
-
-int RtMintVtableTrapCount(const char* symbol) {
-    if (!symbol) return -1;
-
-    for (int i = 0; i < kVtableCount; ++i)
-        if (kMintVtables[i].symbol && strcmp(kMintVtables[i].symbol, symbol) == 0)
-            return g_vtableTraps[i];
-    return -1;   // not a minted VTABLE row -- NOT "zero traps"
-}
-
 static void MintVtables() {
     for (int vi = 0; vi < kVtableCount; ++vi) {
         const RtMintVtable& v = kMintVtables[vi];
@@ -282,7 +303,6 @@ static void MintVtables() {
                 ++missing;
             }
         }
-        g_vtableTraps[vi] = missing;
         if (missing == 0) ++g_counts.vtablesComplete;
     }
 }
@@ -431,7 +451,7 @@ static void RtMintLoaderTeardown() {
 //     _loader.vtable = ??_7Loader@Engine@@6B@;
 //     _loader._loop  = nullptr;                    // +0x30
 //     atexit(FUN_18014a580);
-static bool ConstructLoader(const RtMintStorage& s) {
+static bool ConstructLoader(const RtMintStorage& s, void* cell) {
     typedef void* (*ThreadCtorFn)(void*, unsigned int);
     ThreadCtorFn ctor = (ThreadCtorFn)RtPortLookupExport("??0Thread@System@@QEAA@I@Z");
     if (!ctor) {
@@ -457,16 +477,16 @@ static bool ConstructLoader(const RtMintStorage& s) {
                         "not minted.\n", s.symbol);
         return false;
     }
-    ctor(s.storage, 0x40000);
-    *(void**)s.storage = (void*)vt;                       // +0x00
+    ctor(cell, 0x40000);
+    *(void**)cell = (void*)vt;                            // +0x00
     // _loop is a void* (UpdateLoop*), 8 bytes -- this was *(int*)0 until
     // Wave 9, which zeroed only the LOW HALF.  Harmless in practice only
     // because the storage is BSS and already zero, so nothing ever
     // depended on it; but a 4-byte write to an 8-byte pointer field is
     // this project's wild-write family in miniature, and it would have
     // become real the moment this object was ever reconstructed in place.
-    *(void**)((char*)s.storage + 0x30) = nullptr;         // Loader::_loop
-    g_loaderStorage = s.storage;
+    *(void**)((char*)cell + 0x30) = nullptr;              // Loader::_loop
+    g_loaderStorage = cell;
     atexit(&RtMintLoaderTeardown);
     return true;
 }
@@ -492,13 +512,13 @@ static bool ConstructLoader(const RtMintStorage& s) {
 //
 // `index` at +0x00 is deliberately NOT written: retail leaves it zero from BSS,
 // which is what forces the first Rand() to regenerate.
-static bool ConstructParticleRng(const RtMintStorage& s) {
+static bool ConstructParticleRng(const RtMintStorage& s, void* cell) {
     if (s.size < 4 + 624 * 4) {
         fprintf(stderr, "[RtMint] CANNOT construct %s: minted storage is %u bytes, "
                         "MT19937 needs %u\n", s.symbol, s.size, 4u + 624u * 4u);
         return false;
     }
-    unsigned int* mt = (unsigned int*)((char*)s.storage + 4);   // +0x04 .. +0x9c4
+    unsigned int* mt = (unsigned int*)((char*)cell + 4);        // +0x04 .. +0x9c4
     mt[0] = (unsigned int)time(nullptr);
     for (unsigned int i = 1; i < 624; ++i)
         mt[i] = 0x6c078965u * (mt[i - 1] ^ (mt[i - 1] >> 30)) + i;
@@ -511,12 +531,12 @@ static void MintConstructedStatics() {
     for (int i = 0; i < kStorageCount; ++i) {
         const RtMintStorage& s = kMintStorage[i];
         if (!s.ctorInit) continue;
-        if (s.symbol && strcmp(s.symbol, "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA") == 0) {
+        if (SymIs(s.symbol, kFirstTiSym)) {
             ++g_constructed;              // MintTypeInfos() already built it
-        } else if (s.symbol && strcmp(s.symbol, "?_loader@LoaderLoop@Engine@@1VLoader@2@A") == 0) {
-            if (ConstructLoader(s)) ++g_constructed;
-        } else if (s.symbol && strcmp(s.symbol, "?_rng@Particle@Graphics@@1VRandom@System@@A") == 0) {
-            if (ConstructParticleRng(s)) ++g_constructed;
+        } else if (SymIs(s.symbol, kLoaderSym)) {
+            if (ConstructLoader(s, MintStorageCell(i))) ++g_constructed;
+        } else if (SymIs(s.symbol, kRngSym)) {
+            if (ConstructParticleRng(s, MintStorageCell(i))) ++g_constructed;
         } else {
             // Unreachable via the generator, which refuses to emit an
             // unhandled ctorInit. Kept because "unreachable" is exactly the
@@ -543,13 +563,22 @@ static void MintStorage() {
     // and letting the existing writer fill them. kStorageBytes is a static
     // array and therefore already zero; this loop exists to say so, and to
     // seed the one entry that has a non-null initial value in OUR world.
-    int seeded = 0;
+    //
+    // B.3.9 (D7): a REDIRECTED row is not memset or seeded here. Its cell is a
+    // C++ static the language zeroed and RtMintRedirectStorage() seeded, once,
+    // at the redirect call (rt_mint_redirect.h); writing it now would erase
+    // what CRT-init or the owner's port-init stored since. Its seed still
+    // counts in the boot line, so the line does not move when a row redirects.
+    int seeded = g_redirects.Seeded();
     for (int i = 0; i < kStorageCount; ++i) {
         const RtMintStorage& s = kMintStorage[i];
-        memset(s.storage, 0, s.size);
-        if (s.init && s.initLen && s.initLen <= s.size) {
-            memcpy(s.storage, s.init, s.initLen);
-            ++seeded;
+        void* cell = MintStorageCell(i);
+        if (cell == s.storage) {
+            memset(cell, 0, s.size);
+            if (s.init && s.initLen && s.initLen <= s.size) {
+                memcpy(cell, s.init, s.initLen);
+                ++seeded;
+            }
         }
         // ?_firstTypeInfo@ is the head of the reflection chain. In the DLL it
         // is filled by static initialisers; ours is filled by MintTypeInfos.
@@ -568,13 +597,16 @@ static void MintStorage() {
         // linked real `DEFINE_TYPE` statics into the chain. Overwriting the head
         // would drop them silently, which is exactly the failure mode that has
         // no log line. The 14 minted nodes go in FRONT of whatever is there.
-        if (s.symbol && strcmp(s.symbol, "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA") == 0) {
+        //
+        // B.3.9 (D7): the cell is the redirect RtDataMintInit() makes for this
+        // row, i.e. `Object::BaseTypeInfo::_firstTypeInfo`.
+        if (SymIs(s.symbol, kFirstTiSym)) {
             if (g_mintTypeInfoHead) {
+                RtObject::BaseTypeInfo** head = (RtObject::BaseTypeInfo**)cell;
                 RtObject::BaseTypeInfo* tail = g_mintTypeInfoHead;
                 while (tail->next) tail = tail->next;
-                tail->next = (RtObject::BaseTypeInfo*)::Object::BaseTypeInfo::_firstTypeInfo;
-                ::Object::BaseTypeInfo::_firstTypeInfo =
-                    (::Object::BaseTypeInfo*)g_mintTypeInfoHead;
+                tail->next = *head;
+                *head = g_mintTypeInfoHead;
             }
         }
     }
@@ -624,19 +656,6 @@ struct RtMintRow {
     int                index;     // index within that kind's table
 };
 
-// ENDGAME B.3.3 step 3. The ONE storage row whose bytes are not in
-// `kStorageBytes`: `?_firstTypeInfo@` is `Object::BaseTypeInfo::_firstTypeInfo`,
-// a plain static in runtime/src/object/type_reflection.cpp. Routing it HERE,
-// at the single point `MintRowAt` that both `RegisterMintedData()` and
-// `RtMintRegisterRow()` (and therefore standalone/cutover_manifest.cpp's
-// REQUIRED publish) funnel through, is what makes the name door, the address
-// door 0x1801fc6e0 and the class all answer with the same eight bytes.
-static void* MintStorageCell(const RtMintStorage& s) {
-    if (s.symbol && strcmp(s.symbol, "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA") == 0)
-        return (void*)&::Object::BaseTypeInfo::_firstTypeInfo;
-    return s.storage;
-}
-
 static bool MintRowAt(int kind, int i, RtMintRow* out) {
     if (kind == 0) {
         if (i < 0 || i >= kVtableCount) return false;
@@ -649,7 +668,7 @@ static bool MintRowAt(int kind, int i, RtMintRow* out) {
     } else {
         if (i < 0 || i >= kStorageCount) return false;
         const RtMintStorage& s = kMintStorage[i];
-        *out = { s.symbol, s.dllVa, MintStorageCell(s), "storage", i };
+        *out = { s.symbol, s.dllVa, MintStorageCell(i), "storage", i };
     }
     return true;
 }
@@ -671,23 +690,7 @@ static bool FindMintRow(const char* symbol, RtMintRow* out) {
 // Register ONE row through both doors. `?_loader@` carries two interior
 // offsets that an exact-match address registry cannot cover, so they travel
 // with their row rather than living in a second loop that could be forgotten.
-// WAVE 11 FOLLOW-UP 5 (lane TINFO). Which rows were registered individually,
-// for the readiness report. The bookkeeping lives HERE, at the one choke point
-// every caller goes through.
-static const char* g_armedRows[64];
-static int         g_armedRowCount = 0;
-
-bool RtMintRowIsArmed(const char* symbol) {
-    if (!symbol) return false;
-    for (int i = 0; i < g_armedRowCount; ++i)
-        if (strcmp(g_armedRows[i], symbol) == 0) return true;
-    return false;
-}
-
 static int RegisterOneMintRow(const RtMintRow& r) {
-    if (r.symbol && !RtMintRowIsArmed(r.symbol) &&
-        g_armedRowCount < (int)(sizeof(g_armedRows) / sizeof(g_armedRows[0])))
-        g_armedRows[g_armedRowCount++] = r.symbol;
     int doors = 0;
     if (r.symbol) { RegisterRuntimeExport(r.symbol, r.storage); ++doors; }
     RegisterRuntimeAddr((uintptr_t)r.dllVa, r.storage); ++doors;
@@ -708,58 +711,6 @@ bool RtMintRegisterRow(const char* symbol) {
     return true;
 }
 
-// ---- promotion bookkeeping -------------------------------------------------
-//
-// A PROMOTED row opens its two doors from standalone/reg_mint_promoted.cpp with
-// the symbol spelled as a LITERAL at the RegisterRuntimeExport call site, so
-// tools/runtime_census.py can see it. This function is only the CHECKING half:
-// prove the symbol is really a minted row, prove the VA the promotion file
-// spells matches the generated table, and record it. If the generator ever
-// drops or moves the row, the promotion dies loudly at boot instead of
-// registering storage for something else.
-static const char* g_promoted[64];
-static int         g_promotedCount = 0;
-
-bool RtMintRowIsPromoted(const char* symbol) {
-    if (!symbol) return false;
-    for (int i = 0; i < g_promotedCount; ++i)
-        if (strcmp(g_promoted[i], symbol) == 0) return true;
-    return false;
-}
-
-void* RtMintPromotionStorage(const char* symbol, unsigned long long expectVa) {
-    RtMintRow r;
-    if (!FindMintRow(symbol, &r)) {
-        fprintf(stderr, "[RtMint] FATAL: reg_mint_promoted.cpp promotes \"%s\", "
-                        "which is NOT a minted row. Either the symbol is "
-                        "misspelled or tools/rt_mint_gen.py no longer emits it.\n",
-                symbol);
-        fflush(stderr);
-        abort();
-    }
-    if (r.dllVa != expectVa) {
-        fprintf(stderr, "[RtMint] FATAL: reg_mint_promoted.cpp promotes \"%s\" at "
-                        "0x%llx, but the generated table says 0x%llx. Registering "
-                        "the wrong address would hand one symbol's callers another "
-                        "symbol's storage.\n", symbol, expectVa, r.dllVa);
-        fflush(stderr);
-        abort();
-    }
-    if (g_promotedCount < (int)(sizeof(g_promoted) / sizeof(g_promoted[0])))
-        g_promoted[g_promotedCount++] = r.symbol;
-    return r.storage;
-}
-
-void* RtMintRowStorage(const char* symbol) {
-    RtMintRow r;
-    return FindMintRow(symbol, &r) ? r.storage : nullptr;
-}
-
-unsigned long long RtMintRowDllVa(const char* symbol) {
-    RtMintRow r;
-    return FindMintRow(symbol, &r) ? r.dllVa : 0ull;
-}
-
 static void RegisterMintedData() {
     int names = 0, addrs = 0;
     for (int i = 0; i < kVtableCount; ++i) {
@@ -774,8 +725,9 @@ static void RegisterMintedData() {
     }
     for (int i = 0; i < kStorageCount; ++i) {
         const RtMintStorage& s = kMintStorage[i];
-        if (s.symbol) { RegisterRuntimeExport(s.symbol, s.storage); ++names; }
-        RegisterRuntimeAddr((uintptr_t)s.dllVa, s.storage); ++addrs;
+        void* cell = MintStorageCell(i);
+        if (s.symbol) { RegisterRuntimeExport(s.symbol, cell); ++names; }
+        RegisterRuntimeAddr((uintptr_t)s.dllVa, cell); ++addrs;
     }
     // Interior fields our tree resolves by address. A minted object's BASE
     // address is registered above, but `engine/funcs/engine_funcs.cpp` reads
@@ -786,10 +738,11 @@ static void RegisterMintedData() {
     // reports them.
     for (int i = 0; i < kStorageCount; ++i) {
         const RtMintStorage& s = kMintStorage[i];
-        if (!s.symbol || strcmp(s.symbol, "?_loader@LoaderLoop@Engine@@1VLoader@2@A") != 0)
+        if (!SymIs(s.symbol, kLoaderSym))
             continue;
-        RegisterRuntimeAddr((uintptr_t)s.dllVa + 0x08, (char*)s.storage + 0x08);
-        RegisterRuntimeAddr((uintptr_t)s.dllVa + 0x28, (char*)s.storage + 0x28);
+        char* cell = (char*)MintStorageCell(i);
+        RegisterRuntimeAddr((uintptr_t)s.dllVa + 0x08, cell + 0x08);
+        RegisterRuntimeAddr((uintptr_t)s.dllVa + 0x28, cell + 0x28);
         addrs += 2;
     }
     printf("[RtMint] registered %d by name, %d by address\n", names, addrs);
@@ -853,6 +806,15 @@ static void RtMintReportTypeInfoFactories() {
 
 void RtDataMintInit() {
     if (g_minted) return;
+
+    // ENDGAME B.3.3 step 3, expressed as a B.3.9 (D7) redirect: the ONE
+    // storage row whose bytes were never in `kStorageBytes`.
+    // `?_firstTypeInfo@` is `Object::BaseTypeInfo::_firstTypeInfo`, a plain
+    // static (runtime/src/object/type_reflection.cpp) that DEFINE_TYPE
+    // constructors head-insert into at CRT init. Made here, the last moment
+    // before the mint, because it is the mint's own splice that needs it; it
+    // goes with the row in the reflection fold (D6, OBJ W3).
+    RtMintRedirectStorage(kFirstTiSym, (void*)&::Object::BaseTypeInfo::_firstTypeInfo);
     g_minted = true;
 
     MintVtables();

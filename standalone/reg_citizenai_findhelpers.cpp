@@ -35,7 +35,6 @@ extern int64_t*  CitizenAI_helper_e370(int64_t*, int64_t*, uint32_t, int64_t*, f
 void RegisterCitizenAIFindHelpers() {
     RegisterExeAddr(0x14012ac30, reinterpret_cast<uintptr_t>(&ResidenceCheck_2ac30));
     RegisterExeAddr(0x14010db20, reinterpret_cast<uintptr_t>(&CitizenAI_helper_db20));
-    RegisterExeAddr(0x1400170b0, reinterpret_cast<uintptr_t>(&CitizenAI_helper_70b0));
     RegisterExeAddr(0x14008ec70, reinterpret_cast<uintptr_t>(&Entity_impl_ec70));
     RegisterExeAddr(0x14008e370, reinterpret_cast<uintptr_t>(&CitizenAI_helper_e370));
 }

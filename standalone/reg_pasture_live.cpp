@@ -55,14 +55,8 @@ void RegisterPastureLive() {
     // Spawn / stocking
     RegisterExeAddr(0x140128670, reinterpret_cast<uintptr_t>(&Pasture_SpawnLivestock));
     RegisterExeAddr(0x140060290, reinterpret_cast<uintptr_t>(&Pasture_FillAllPastures));
-    RegisterExeAddr(0x140123cc0, reinterpret_cast<uintptr_t>(&Pasture_BindAnimal));
 
     // Controller state machine
-    RegisterExeAddr(0x140127140, reinterpret_cast<uintptr_t>(&Pasture_AdoptWanderers));
-    RegisterExeAddr(0x140127370, reinterpret_cast<uintptr_t>(&Pasture_Reproduce));
-    RegisterExeAddr(0x1401270c0, reinterpret_cast<uintptr_t>(&Pasture_State2Enter));
-    RegisterExeAddr(0x140126e40, reinterpret_cast<uintptr_t>(&Pasture_State3Enter));
-    RegisterExeAddr(0x1401267e0, reinterpret_cast<uintptr_t>(&Pasture_State2PerFrame));
     // Map-cell footprint stamp (shared leaf; also called by HarvestOrchard_impl_0800).
     // Un-no-ops the state-2 per-frame footprint stamp (deferred since the animal wave).
     RegisterExeAddr(0x14009f770, reinterpret_cast<uintptr_t>(&MapGrid_StampCellRefs_9f770));
