@@ -322,8 +322,8 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
                 // Look the type up and BUILD one. `Factory::_singleton`'s tree,
                 // then `BaseTypeInfo::factoryFn` at +0x20 -- the object-creation
                 // path, reached here through the DLL's own typeinfo.
-                const Factory* f =
-                    *RT_DATA_SLOT(Factory**, "?_singleton@Factory@Object@@0PEAV12@EA");
+                const Factory* f = reinterpret_cast<const Factory*>(   // B.3.3 bridge
+                    ::Object::Factory::_singleton);   // class static (B.3.9 OBJ, D7)
                 const TypeNode* n = f->root;
                 const uint32_t want = static_cast<uint32_t>(typeId);
                 while (n != nullptr) {
@@ -347,10 +347,12 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
                           reinterpret_cast<FactoryFn>(info->factoryFn)());   // 1800bc742
                 ++g_lc.created;
 
-                const BaseTypeInfo* extInfo = RT_DATA_SLOT(const BaseTypeInfo*,
-                    "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A");
+                // `External::TypeId()` (0x180029350): the record's +0x00,
+                // through the Object accessor slot (external_class.cpp,
+                // ENDGAME B.3.9 OBJ D6 step 1) -- no lazy RT_DATA_SLOT cache
+                // on the loader thread.
                 const bool isExternal = RT_EXPORT_ONCE(IsDerivedFn,
-                    "?IsDerivedFrom@Base@Object@@QEBA_NI@Z")(obj, extInfo->typeId);
+                    "?IsDerivedFrom@Base@Object@@QEBA_NI@Z")(obj, ::Object::External::TypeId());
                 if (!isExternal || obj == nullptr) {              // 1800bc758/761
                     ++g_lc.notAnExternal;
                     bad = true;
