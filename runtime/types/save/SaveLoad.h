@@ -336,6 +336,11 @@ public:
     // ?Get@SaveLoad@Save@@SAPEAV12@XZ  0x180030d40 — `MOV RAX,[_singleton]`.
     //   saveload.cpp
     static SaveLoad* Get();
+    // ?_singleton@SaveLoad@Save@@0PEAV12@EA (0x1801fc6f0) — the class static (ENDGAME B.3.9 ENG, B39_RULES D7).
+    // The namespace's *PortInit redirects the minted storage row onto it, so
+    // the name door, the address door and this member are the same bytes.
+    // PUBLIC while foreign readers still reach the row through the doors.
+    static SaveLoad* _singleton;
     // ??0SaveLoad@Save@@QEAA@AEBV01@@Z  0x180030d50 — DEEP copy (String AddRef
     // + both Arrays). NOT PORTED, no caller; declared so no C++ code reaches a
     // shallow implicit copy. Deliberately undefined.

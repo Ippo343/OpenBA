@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "../../funcs/rt_port.h"
+#include "../../types/save/SaveLoad.h"   // ENDGAME B.3.9 ENG: the storage redirect
 #include "saveload_internal.h"
 
 // ============================================================================
@@ -39,6 +40,9 @@ extern int RtSaveLoadDrawRegister();   // saveload_draw.cpp (Wave 14 lane DRAW)
 extern int RtSaveInfoRegister();       // saveload_saveinfo.cpp (Wave 24 INTERNAL8)
 
 void RtSavePortInit() {
+    // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
+    // static from here on (name door, address door, manifest publish).
+    RtMintRedirectStorage("?_singleton@SaveLoad@Save@@0PEAV12@EA", &::Save::SaveLoad::_singleton);
     int n = 0;
     n += RtSaveLoadRegister();
     n += RtSaveLoadUpdateRegister();
