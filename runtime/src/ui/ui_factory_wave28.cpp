@@ -74,7 +74,6 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
-#include "../../types/ui/SpriteCapture.h"   // ENDGAME B.3.8 RB: the shared ctor/dtor body
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module m, uintptr_t ghidra_addr);
@@ -266,37 +265,6 @@ extern "C" void* RtUiFact_SpriteSheet_CreateInPlaceObject(void* p) {
 
 
 // --------------------------------------------------------------------------
-// UI::SpriteCapture   allocation 0x58, align 8
-//   ?CreateNewObject@SpriteCapture@UI@@SAPEAVBase@Object@@XZ       0x18003c900 ord 2114
-//   ?CreateInPlaceObject@SpriteCapture@UI@@SAPEAVBase@Object@@PEAX@Z 0x18003c9c0 ord 1977
-//   ??0SpriteCapture@UI@@QEAA@XZ                                   0x1800d9140 ord 403
-void* Ctor_SpriteCapture(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    VPTR(self, "??_7Base@Object@@6B@");
-    VPTR(self, "??_7External@Object@@6B@");
-    U64(self, 0x08, 0);
-    U64(self, 0x10, 0);
-    U64(self, 0x18, 0);
-    VPTR(self, "??_7SpriteCapture@UI@@6B@");
-    // ENDGAME B.3.8 block RB (RULE B8-1): +0x20..+0x57 are ONE body with the
-    // real constructor `UI::SpriteCapture()` (SpriteCapture.h, InitFields).
-    UI::SpriteCapture::DoorBody::Init(reinterpret_cast<UI::SpriteCapture*>(p));   // B.3.8 bridge
-    return p;
-}
-
-extern "C" void* RtUiFact_SpriteCapture_CreateNewObject() {
-    ++g_new;
-    void* q = FactoryNew(0x58, &Ctor_SpriteCapture);
-    if (!q) ++g_newNull;
-    return q;
-}
-extern "C" void* RtUiFact_SpriteCapture_CreateInPlaceObject(void* p) {
-    ++g_inplace;
-    if (!p) { ++g_inplaceNull; return nullptr; }
-    return FactoryInPlace(p, &Ctor_SpriteCapture);
-}
-
-// --------------------------------------------------------------------------
 // UI::ToolTipDialog   allocation 0xc0, align 8
 //   ?CreateNewObject@ToolTipDialog@UI@@SAPEAVBase@Object@@XZ       0x18004d0b0 ord 2124
 //   ?CreateInPlaceObject@ToolTipDialog@UI@@SAPEAVBase@Object@@PEAX@Z 0x18004d140 ord 1987
@@ -329,15 +297,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@SpriteSheet@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_SpriteSheet_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180003000ull, (void*)&RtUiFact_SpriteSheet_CreateInPlaceObject); ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@SpriteCapture@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&RtUiFact_SpriteCapture_CreateNewObject);
-    RegisterRuntimeAddr(0x18003c900ull, (void*)&RtUiFact_SpriteCapture_CreateNewObject); ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@SpriteCapture@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&RtUiFact_SpriteCapture_CreateInPlaceObject);
-    RegisterRuntimeAddr(0x18003c9c0ull, (void*)&RtUiFact_SpriteCapture_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0SpriteCapture@UI@@QEAA@XZ", (void*)&Ctor_SpriteCapture);
-    RegisterRuntimeAddr(0x1800d9140ull, (void*)&Ctor_SpriteCapture); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@ToolTipDialog@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_ToolTipDialog_CreateNewObject);

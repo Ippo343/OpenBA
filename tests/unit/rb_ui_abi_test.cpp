@@ -434,11 +434,8 @@ UNIT_TEST(rb_spritecapture_ctor_is_retail_0x1800d9140_and_concrete) {
     UI::SpriteCapture* c = ::new (static_cast<void*>(buf)) UI::SpriteCapture();
     CHECK(VptrOf(c) == &g_rbScVtGroup[2]);
     for (size_t off = 0x08; off < 0x58; off += 8) CHECK_EQ(Q(c, off), (uint64_t)0);
-    alignas(8) unsigned char raw[sizeof(UI::SpriteCapture)];
-    std::memset(raw, 0xCD, sizeof raw);
-    *reinterpret_cast<const void**>(raw) = kFakeMinted;
-    UI::SpriteCapture::DoorBody::Init(reinterpret_cast<UI::SpriteCapture*>(raw));
-    CHECK(std::memcmp(buf + 0x20, raw + 0x20, sizeof raw - 0x20) == 0);
+    // ENDGAME B.3.9 UI-D: the DoorBody bridge is retired with the ctor door;
+    // the real ctor is the only body.
     c->DeletingDtor(0);
 
     void* mem = Object::detail::InternalMemAlloc(sizeof(UI::SpriteCapture), 8);

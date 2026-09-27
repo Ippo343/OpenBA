@@ -138,20 +138,9 @@ extern int RtUiSpriteSheetNewRegister();   // spritesheet_new.cpp (lane SMALLBOD
 // here at all:
 // standalone/resolve_standalone.cpp:333 (RtUiPortInit) precedes :406 (the mint).
 extern int RtUiStringTableFactoryRegister(); // stringtable_factory.cpp (FACTORY)
-// Same file, second pass: the three ??_7StringTable@UI@@6B@ slots that read the
-// class's own ?_typeInfo@ node (slots 1/2/3). One class, one cutover wall:
-// a factory without the vtable slots produces the exact state attempt 28 hit,
-// a constructed object whose vptr nothing fills.
-extern int RtUiStringTableAccessorsRegister(); // stringtable_factory.cpp (FACTORY)
-// Same file, third pass: slots 6/7/8 (Reconstruct/Destruct/Construct). Same
-// switch again, same reason. The row is 7/9 after these; slot 0 (the deleting
-// dtor) and Serialize are NOT ported and are named in WAVE26_LANE_FACTORY.md.
-extern int RtUiStringTableLifecycleRegister(); // stringtable_factory.cpp (FACTORY)
-// WAVE 27 lane FRONTIER, fourth pass: the LAST TWO ??_7StringTable@UI@@6B@
-// slots -- slot 0 (0x180002740, the scalar/vector deleting dtor) and slot 5
-// (?Serialize@, 0x18011d940). Takes the row to 9/9 on the static screen; it
-// does NOT promote it (see WAVE27_LANE_FRONTIER.md).
-extern int RtUiStringTableSlotsRegister(); // stringtable_factory.cpp (FRONTIER)
+// ENDGAME B.3.9 UI-D: the three later passes (the slot doors of the minted
+// ??_7StringTable@UI@@6B@) are retired with that row; the class is concrete and
+// RtUiStringTableFactoryRegister now registers the class's own factory pair.
 // WAVE 28 lane MISC, fifth pass, and the only one in its OWN file
 // (stringtable_lifecycle.cpp -- separate purely to keep three factory lanes off
 // stringtable_factory.cpp's tail this wave): ??1StringTable@UI@@UEAA@XZ
@@ -273,9 +262,6 @@ void RtUiPortInit() {
     n += RtUiGraphDescriptionRegister();
     n += RtUiLabelDescriptionRegister();
     n += RtUiStringTableFactoryRegister();
-    n += RtUiStringTableAccessorsRegister();  // same switch (FACTORY)
-    n += RtUiStringTableLifecycleRegister();  // same switch (FACTORY)
-    n += RtUiStringTableSlotsRegister();  // same switch (FRONTIER)
     n += RtUiStringTableLifecycleDtorRegister();  // same switch (MISC)
     n += RtUiFactory1Register();
     n += RtUiFactory2Register();

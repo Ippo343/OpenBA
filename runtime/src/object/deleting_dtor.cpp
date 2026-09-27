@@ -963,10 +963,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // three Arrays whose buffers came from the Runtime heap, and ~Font does
     // both. A fabricated subject would decrement a refcount nothing
     // incremented and free garbage pointers.
-    RT_DELDTOR(0x180032130, 0x1801175a0, 0x090, "UI::Font"),
-    RT_DELDTOR(0x1800378a0, 0x1800cb840, 0x028, "UI::CharacterSet"),
-    RT_DELDTOR(0x18003b3a0, 0x1800cd1c0, 0x030, "UI::Cursor"),
-    RT_DELDTOR(0x18003ccf0, 0x1800d91b0, 0x058, "UI::SpriteCapture"),
     // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12), rows 85..98 ---------
     // Slot 0 of the fourteen UI widget vtables ported by
     // runtime/src/ui/<class>element.cpp. APPENDED, never inserted: the table is
@@ -1464,22 +1460,6 @@ void* RtDelDtor_PointList(void* self, unsigned flags) {
 // UI TEXT PIPELINE batch (2026-09-12). Indices 71-74, counted off the MERGED
 // table rather than assumed: this is the fourth batch to append here today and
 // the previous three each started at the same index on their own branch.
-// UI::Font          ~Font          = 0x1801175a0  (PORTED, runtime/src/ui/font.cpp)
-void* RtDelDtor_Font(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180032130>());
-}
-// UI::CharacterSet  ~CharacterSet  = 0x1800cb840  (PORTED, runtime/src/ui/characterset.cpp)
-void* RtDelDtor_CharacterSet(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800378a0>());
-}
-// UI::Cursor        ~Cursor        = 0x1800cd1c0  (PORTED, runtime/src/ui/cursor.cpp)
-void* RtDelDtor_Cursor(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003b3a0>());
-}
-// UI::SpriteCapture ~SpriteCapture = 0x1800d91b0  (PORTED, runtime/src/ui/spritecapture_class.cpp)
-void* RtDelDtor_SpriteCapture(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003ccf0>());
-}
 
 // ---------------------------------------------------------------------------
 // 2026-09-12, VTABLE BATCH 1 -- ten UI::*Description classes, indices 71..80.
@@ -1661,10 +1641,6 @@ void RtObjectDeletingDtorPortInit() {
     // is closed before the first Dtor(i) lookup can cache a null.
     RtObjectDeletingDtorLeavesRegister();
     // UI TEXT PIPELINE batch, rows 71-74 (wrappers above).
-    RegisterRuntimeAddr(0x180032130, (void*)&RtDelDtor_Font);
-    RegisterRuntimeAddr(0x1800378a0, (void*)&RtDelDtor_CharacterSet);
-    RegisterRuntimeAddr(0x18003b3a0, (void*)&RtDelDtor_Cursor);
-    RegisterRuntimeAddr(0x18003ccf0, (void*)&RtDelDtor_SpriteCapture);
     RegisterRuntimeAddr(0x180059080, (void*)&RtDelDtor_AmbientLight);          // vtable batch 6
     RegisterRuntimeAddr(0x18001eee0, (void*)&RtDelDtor_GeneratedImageBuffer);  // vtable batch 6
     RegisterRuntimeAddr(0x18001f260, (void*)&RtDelDtor_FrameCopyImageBuffer);  // vtable batch 6

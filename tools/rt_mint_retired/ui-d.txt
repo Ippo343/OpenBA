@@ -1,0 +1,11 @@
+# ENDGAME B.3 step 9 -- the rows block UI-D (branch b39-UID) retired.
+# Format (tools/rt_mint_gen.py banner, B39_RULES.md D3):
+#   <mangled symbol | 0xVA>   <owner block>   <proof>
+# One fragment per block; a key appears once across all fragments.
+
+# -- W1: the UI resources and dialogs made concrete (D1), factory pairs the class's own (D2) --
+??_7CharacterSet@UI@@6B@               UI-D   real ctor + DeletingDtor + ~X (door body); FACTUI1 row, RT_DELDTOR row 0x1800378a0, ??1 door, 7 slot doors deleted
+??_7Cursor@UI@@6B@                     UI-D   real ctor + DeletingDtor + ~X (empty, retail); FACTUI1 row, RT_DELDTOR row 0x18003b3a0, ??1 door, 7 slot doors deleted
+??_7Font@UI@@6B@                       UI-D   real ctor + DeletingDtor + ~X (door body); FACTUI1 row, RT_DELDTOR row 0x180032130, ??1 door, 8 slot doors deleted
+??_7SpriteCapture@UI@@6B@              UI-D   real ctor + DeletingDtor (scalar, exe-built) + ~X (door body); FACTUI2 row + Ctor_SpriteCapture/??0 door, DoorBody, RT_DELDTOR row 0x18003ccf0, ??1 door, 7 slot doors deleted
+??_7StringTable@UI@@6B@                UI-D   real ctor + DeletingDtor + ~X (door body); ??0 door + ConstructBody, slot-0 body RtUiStringTable_ScalarDelete (0x180002740, no RT_DELDTOR row), ??1 door, 8 slot doors deleted
