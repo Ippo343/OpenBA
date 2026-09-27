@@ -19,7 +19,7 @@
 //                 offset (B6-8: do not invent names).
 //
 // `??_7CharacterSet@UI@@6B@` @ 0x180156220, NINE slots (B36_SLOTS.md):
-//   [0] +0x00 0x1800378a0  (unexported) vector deleting dtor — RT_DELDTOR row
+//   [0] +0x00 0x1800378a0  (unexported) vector deleting dtor — the class's own (B.3.9)
 //   [1] +0x08 0x180037450  ?TypeName@CharacterSet@UI@@UEBAPEBDXZ
 //   [2] +0x10 0x180037430  ?Type@CharacterSet@UI@@UEBAIXZ
 //   [3] +0x18 0x1800cb830  ?GetFileVersion@CharacterSet@UI@@UEBAHXZ  (MOV EAX,1)
@@ -30,17 +30,22 @@
 //   [8] +0x40 0x1800376b0  ?Construct@CharacterSet@UI@@UEAAPEAVExternal@Object@@XZ
 //                          — INTRODUCED HERE (RULE B6-1.1: slot 8 on a resource)
 //
-// ABSTRACT (slot 0 `= 0`): nothing holds a CharacterSet by value, and slot 0 is
-// the `RT_DELDTOR` row the mint owns (B36_RULES section 7). NO REAL
-// CONSTRUCTOR: live objects are built by the factory/ctor doors and wear the
-// MINTED table (B4b-2, B6-3). The protected `= default` constructor exists for
-// the unit test's probe subclass only.
+// ENDGAME B.3 step 9 (block UI-D, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's constructor body minus its vptr stores (retail has NO
+// out-of-line `??0CharacterSet`: the body is inlined into Construct 0x1800376b0,
+// Reconstruct 0x180037650 and both factory statics — seven stores, of which the
+// last is +0x20 = 0); slot 0 is the class's own vector deleting dtor;
+// ~CharacterSet is protected, non-virtual and holds the retired ??1 door's
+// body. The factory pair is the class's own (characterset.cpp), replacing the
+// FACTUI1 row; the minted `??_7CharacterSet@UI@@6B@` and its RT_DELDTOR row
+// are retired.
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
 
 #include "../object/External.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 #include "../system/String.h"   // RtSystem::String — the POD, trivially destructible
 
 namespace System { class Filename; }
@@ -49,8 +54,26 @@ namespace UI {
 
 class CharacterSet : public Object::External {
 public:
-    // [0] 0x1800378a0 — pure on purpose; the deleting-dtor row is not retired.
-    Object::Base* DeletingDtor(unsigned flags) override = 0;
+    // The REAL constructor: External() (+0x08..+0x18 zero), then the one own
+    // store, +0x20 = 0 (0x1800376fa in Construct's inlined copy).
+    CharacterSet() : Object::External() { _string20.data = nullptr; }
+
+    // [0] 0x1800378a0 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x28`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<CharacterSet*>(self + static_cast<int64_t>(i) * 0x28)
+                    ->~CharacterSet();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~CharacterSet();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char* TypeName() const override;              // [1] 0x180037450
     uint32_t    Type() const override;                  // [2] 0x180037430
@@ -64,21 +87,22 @@ public:
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     CharacterSet(const CharacterSet& src);              // 0x180037720
     CharacterSet& operator=(const CharacterSet& src);   // 0x1800377b0
-    static uint32_t TypeId();                           // 0x180037440
+    // 0x180037440 — the minted record's type id (characterset.cpp).
+    static uint32_t TypeId();
     // The reflection block's statics go through `System::MemoryAllocator`,
-    // a door for the whole of step 6 (B36_RULES section 7).
+    // a door for the whole of step 6 (B36_RULES section 7). Placement is
+    // spelt `::new (p) CharacterSet()` (B9-5): these stay undefined.
     static void* operator new(std::size_t bytes);              // 0x180037460
     static void* operator new(std::size_t bytes, void* place); // 0x1800374d0
     static void  operator delete(void* p);                     // 0x1800374e0
+    // Retail's factory pair (B39_RULES D2): MemAlloc(0x28, 8) + the ctor, and
+    // the null-tested in-place ctor. Defined and registered in characterset.cpp.
     static Object::Base* CreateNewObject();                    // 0x180037540
     static Object::Base* CreateInPlaceObject(void* place);     // 0x1800375f0
 
 protected:
-    // NOT retail's `??0CharacterSet@UI@@QEAA@XZ` (0x1800cb8a0) — see the banner.
-    CharacterSet() = default;
-    // `??1CharacterSet@UI@@UEAA@XZ` 0x1800cb840. NON-VIRTUAL, DEFINED EMPTY: the
-    // registered dtor door releases +0x20 and chains to ~External by hand for
-    // the minted objects that are the only live ones (the Material precedent).
+    // `??1CharacterSet@UI@@UEAA@XZ` 0x1800cb840. NON-VIRTUAL; holds the retired
+    // dtor door's body (the +0x20 release); the compiler chains ~External.
     ~CharacterSet();
 
 public:

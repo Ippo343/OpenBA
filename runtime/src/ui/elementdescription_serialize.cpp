@@ -194,9 +194,6 @@ void RecUInt(ReaderWriter* rw, void* v) {
     reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, v, nullptr);
 }
 
-const char* const kMangled =
-    "?Serialize@ElementDescription@UI@@UEAA_NAEAVStream@IO@@@Z";
-
 }  // namespace
 
 // ============================================================================
@@ -234,34 +231,17 @@ bool ElementDescription::Serialize(void* streamArg) {
     return true;
 }
 
-// `??1ElementDescription@UI@@UEAA@XZ` (the C++ destructor) is DECLARED and
-// deliberately NOT defined in the real build: a definition would reference
-// `vtable for UI::ElementDescription`, which GCC emits only beside the key
-// function `TypeName` — still the dialog.cpp door until the fragment pass.
-// Nothing destroys an ElementDescription as a C++ object; the retail body
-// (0x180116100) is the registered door `RtUiElementDescription_Dtor`.
+// (`~ElementDescription` is inline in ElementDescription.h; its body,
+// `ReleaseFields`, is in dialog.cpp beside the key function.)
 
 }  // namespace UI
 
-// ---- the DOOR: registered name and address unchanged, a QUALIFIED delegation.
-// Every leaf Description's Serialize reaches this one too (description_common.h's
-// `ElementDescriptionSerialize`), so the qualification is load-bearing: the
-// receiver wears the LEAF's minted table, whose slot 5 is the LEAF's body.
-bool RtUi_ElementDescription_Serialize(RtUI::ElementDescription* self, Stream* stream) {
-    return reinterpret_cast<UI::ElementDescription*>(self)                   // B.3.6 bridge
-        ->UI::ElementDescription::Serialize(stream);
-}
+// (ENDGAME B.3.9 UI-D: the slot door `RtUi_ElementDescription_Serialize` is
+// retired with the minted `??_7ElementDescription@UI@@6B@`; every leaf's
+// Serialize calls the member QUALIFIED, and the exe import slot that once
+// bound the name is gone.)
 
 // ---- Registration ----------------------------------------------------------
-//
-// BY NAME and BY ADDRESS. The name is what `standalone/address_registry.cpp:1109`
-// and `engine/funcs/engine_funcs.cpp:4063` reach for (both through the exe
-// import slot 0x1401518c8 — see the blast-radius block above); the address is
-// registered so a vtable slot read out of the DLL and called back through the
-// address registry lands here too.
 int RtUiElementDescriptionSerializeRegister() {
-    int n = 0;
-    RegisterRuntimeExport(kMangled, (void*)&RtUi_ElementDescription_Serialize); ++n;
-    RegisterRuntimeAddr(0x180116b00, (void*)&RtUi_ElementDescription_Serialize);
-    return n;
+    return 0;
 }

@@ -234,7 +234,11 @@ namespace UI {
 
 // ---- slot 2  ?Type@Element@UI@@UEBAIXZ  0x180035420 ------------------------
 //   MOV EAX,dword ptr [0x1801fab30] / RET     — RCX is never read.
-uint32_t Element::Type() const {
+uint32_t Element::Type() const { return TypeId(); }
+
+// ?TypeId@Element@UI@@SAIXZ 0x180035430 — the same record's first dword
+// (ENDGAME B.3.9 UI-D).
+uint32_t Element::TypeId() {
     uint32_t id = 0;
     std::memcpy(&id, ElementTypeInfo(), sizeof id);
     return id;
@@ -246,8 +250,8 @@ uint32_t Element::Type() const {
 // binary consumes a BaseTypeInfo::name by pointer (WAVE10C_LANE_TIDENT.md).
 //
 // This is the class's KEY FUNCTION (the first non-pure, non-inline virtual), so
-// GCC emits `vtable for UI::Element` in this translation unit. Nothing stamps
-// it: every live Element wears the minted table (the ctor door).
+// GCC emits `vtable for UI::Element` in this translation unit; the real
+// constructor stamps it (ENDGAME B.3.9 UI-D retired the minted table).
 const char* Element::TypeName() const {
     const char* name = nullptr;
     std::memcpy(&name, ElementTypeInfo() + 8, sizeof name);
@@ -598,48 +602,9 @@ void Element::Update(const System::Time& time, UserInterface* ui,
 
 }  // namespace UI
 
-// ============================================================================
-// The DOORS — registered names and addresses unchanged, each a one-line
-// QUALIFIED delegation onto the member above.
-// ============================================================================
-extern "C" uint32_t RtUi_Element_Type(const void* self) {
-    return reinterpret_cast<const Element*>(self)->UI::Element::Type();   // B.3.6 bridge
-}
-
-extern "C" const char* RtUi_Element_TypeName(const void* self) {
-    return reinterpret_cast<const Element*>(self)->UI::Element::TypeName();   // B.3.6 bridge
-}
-
-extern "C" void RtUi_Element_SetColor(Element* self, uint32_t color) {
-    self->UI::Element::SetColor(color);
-}
-
-// RDX is the caller's slot; the member writes it and hands it back (B6-2).
-extern "C" void** RtUi_Element_GetBorder(const Element* self, void** ret) {
-    return reinterpret_cast<void**>(self->UI::Element::GetBorder(
-        reinterpret_cast<Object::InternalPtr<Element>*>(ret)));   // B.3.6 bridge
-}
-
-extern "C" void RtUi_Element_Enable(Element* self, bool enable) {
-    self->UI::Element::Enable(enable);
-}
-
-extern "C" bool RtUi_Element_Contains(const Element* self, int32_t x, int32_t y,
-                                      void* ui) {
-    return self->UI::Element::Contains(x, y, static_cast<UI::UserInterface*>(ui));
-}
-
-extern "C" void RtUi_Element_Persist(void* self, void* stream) {
-    reinterpret_cast<Element*>(self)->UI::Element::Persist(stream);   // B.3.6 bridge
-}
-
-extern "C" void RtUi_Element_Update(Element* self, const void* time, void* ui,
-                                    void** dlgPtr, const Element::UpdateState* state) {
-    self->UI::Element::Update(
-        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr),   // B.3.6 bridge
-        *state);
-}
+// (ENDGAME B.3.9 UI-D: the eight slot doors that stood here -- TypeName,
+// Type, Persist, Update, Enable, Contains, SetColor, GetBorder -- are
+// retired with the minted `??_7Element@UI@@6B@`; nothing else reached them.)
 
 // ============================================================================
 // Registration
@@ -653,39 +618,9 @@ extern "C" void RtUi_Element_Update(Element* self, const void* time, void* ui,
 int RtUiElementVtableRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("?TypeName@Element@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_Element_TypeName); ++n;
-    RegisterRuntimeAddr(0x180035440, (void*)&RtUi_Element_TypeName);
-
-    RegisterRuntimeExport("?Type@Element@UI@@UEBAIXZ",
-                          (void*)&RtUi_Element_Type); ++n;
-    RegisterRuntimeAddr(0x180035420, (void*)&RtUi_Element_Type);
-
-    RegisterRuntimeExport("?Persist@Element@UI@@UEAAXAEAVStream@IO@@@Z",
-                          (void*)&RtUi_Element_Persist); ++n;
-    RegisterRuntimeAddr(0x180116870, (void*)&RtUi_Element_Persist);
-
-    RegisterRuntimeExport(
-        "?Update@Element@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@"
-        "V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@12@@Z",
-        (void*)&RtUi_Element_Update); ++n;
-    RegisterRuntimeAddr(0x180116270, (void*)&RtUi_Element_Update);
-
-    RegisterRuntimeExport("?Enable@Element@UI@@UEAAX_N@Z",
-                          (void*)&RtUi_Element_Enable); ++n;
-    RegisterRuntimeAddr(0x180116910, (void*)&RtUi_Element_Enable);
-
-    RegisterRuntimeExport("?Contains@Element@UI@@UEBA_NHHPEAVUserInterface@2@@Z",
-                          (void*)&RtUi_Element_Contains); ++n;
-    RegisterRuntimeAddr(0x1801169e0, (void*)&RtUi_Element_Contains);
-
-    RegisterRuntimeExport("?SetColor@Element@UI@@UEAAXI@Z",
-                          (void*)&RtUi_Element_SetColor); ++n;
-    RegisterRuntimeAddr(0x180035620, (void*)&RtUi_Element_SetColor);
-
-    RegisterRuntimeExport("?GetBorder@Element@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@XZ",
-                          (void*)&RtUi_Element_GetBorder); ++n;
-    RegisterRuntimeAddr(0x180035630, (void*)&RtUi_Element_GetBorder);
+    RegisterRuntimeExport("?TypeId@Element@UI@@SAIXZ",
+                          (void*)&UI::Element::TypeId); ++n;
+    RegisterRuntimeAddr(0x180035430, (void*)&UI::Element::TypeId);
 
     return n;
 }

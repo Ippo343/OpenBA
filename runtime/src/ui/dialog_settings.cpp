@@ -197,12 +197,9 @@ extern "C" void RtUi_DialogInstance_SaveSettings(DialogInstance* self) {
 }
 
 // ---------------------------------------------------------------------------
-// ?OnClosed@DialogInstance@UI@@UEAAXXZ   0x180115330
+// ?OnClosed@DialogInstance@UI@@UEAAXXZ   0x180115330  (the member, below; its
+// slot door is retired with the minted table, ENDGAME B.3.9 UI-D)
 // ---------------------------------------------------------------------------
-extern "C" void RtUi_DialogInstance_OnClosed(DialogInstance* self) {
-    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
-        ->UI::DialogInstance::OnClosed();
-}
 
 // ---------------------------------------------------------------------------
 // ?OnOpened@DialogInstance@UI@@UEAAXXZ   0x180114fb0     WAVE 10B LANE DLGV
@@ -303,11 +300,8 @@ struct OpenCounts {
 OpenCounts g_openCounts;
 }  // namespace
 
-extern "C" void RtUi_DialogInstance_OnOpened(DialogInstance* self) {
-    ++g_openCounts.entries;
-    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
-        ->UI::DialogInstance::OnOpened();
-}
+// (ENDGAME B.3.9 UI-D: the slot door `RtUi_DialogInstance_OnOpened` is retired
+// with the minted table; its entry count moved into the member.)
 
 }  // namespace RtUi
 
@@ -400,6 +394,7 @@ void DialogInstance::OnClosed() {                              // [5]
 // ?OnOpened@DialogInstance@UI@@UEAAXXZ   0x180114fb0 — see the door.
 void DialogInstance::OnOpened() {                              // [4]
     using namespace RtUi;
+    ++g_openCounts.entries;
     for (int32_t i = 0; i < _controllers._size; ++i)
         _controllers._data[i]->OnOpened();                     // controller slot 5
 
@@ -481,17 +476,8 @@ int RtUiDialogSettingsRegister() {
                           (void*)&RtUi_DialogInstance_SaveSettings); ++n;
     RegisterRuntimeAddr(0x180114240, (void*)&RtUi_DialogInstance_SaveSettings);
 
-    RegisterRuntimeExport("?OnClosed@DialogInstance@UI@@UEAAXXZ",
-                          (void*)&RtUi_DialogInstance_OnClosed); ++n;
-    RegisterRuntimeAddr(0x180115330, (void*)&RtUi_DialogInstance_OnClosed);
-
-    // Wave 10B lane DLGV — the read half. Both doors, for the same two reasons
-    // the write half needs both: engine/funcs and the exe-side dialog vtable
-    // builders ask by NAME, and the minted `??_7DialogInstance@UI@@6B@` fills
-    // its slot 4 by ADDRESS through RtPortLookupAddr.
-    RegisterRuntimeExport("?OnOpened@DialogInstance@UI@@UEAAXXZ",
-                          (void*)&RtUi_DialogInstance_OnOpened); ++n;
-    RegisterRuntimeAddr(0x180114fb0, (void*)&RtUi_DialogInstance_OnOpened);
+    // (ENDGAME B.3.9 UI-D: the OnClosed / OnOpened slot doors went with the
+    // minted `??_7DialogInstance@UI@@6B@`; nothing else reached them.)
 
     return n;
 }

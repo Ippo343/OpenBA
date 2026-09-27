@@ -64,6 +64,7 @@
 
 #include "../collection/Collection.h"
 #include "../object/External.h"     // Object::External, ExternalPtr<T>
+#include "../object/Internal.h"     // Object::detail::InternalMemFree
 #include "../system/String.h"       // RtSystem::String — trivially destructible
 
 namespace RtUI {
@@ -120,13 +121,6 @@ static_assert(offsetof(FontLayout, _lineWidths._size) == 0x20,
               "Layout::_lineWidths._size @ +0x20 (MOV EDX,[RDI+0x20] at 0x180117190)");
 static_assert(sizeof(FontLayout) == 0x28, "sizeof(UI::Font::Layout) == 0x28");
 
-// The three vtables UI::Font's constructor stamps, in the order it stamps them
-// (0x180031cf6, 0x180031d00, 0x180031d20). All three are exported, so the port
-// resolves them by name and the mint supplies them at cutover.
-constexpr const char* kVtblFontBase     = "??_7Base@Object@@6B@";      // 0x180154788
-constexpr const char* kVtblFontExternal = "??_7External@Object@@6B@";  // 0x1801547a0
-constexpr const char* kVtblFont         = "??_7Font@UI@@6B@";          // 0x180155b50
-
 // UI::Font::Justify, the W4 enum ComputeStringLayout's fifth parameter carries.
 // Only two values are ever tested (0x1801174c5 and 0x1801174d8); 0 is every
 // other value and is the do-nothing case, so it is named for what it does.
@@ -146,7 +140,7 @@ enum FontJustify : int32_t {
 // definition of the layout, and every offset above is re-asserted below.
 //
 // `??_7Font@UI@@6B@` @ 0x180155b50 (B36_SLOTS.md section 1):
-//   [0] +0x00 0x180032130  (unexported) vector deleting dtor — RT_DELDTOR row
+//   [0] +0x00 0x180032130  (unexported) vector deleting dtor — the class's own (B.3.9)
 //   [1] +0x08 0x1800319c0  ?TypeName@Font@UI@@UEBAPEBDXZ
 //   [2] +0x10 0x1800319a0  ?Type@Font@UI@@UEBAIXZ
 //   [3] +0x18 0x1801176b0  ?GetFileVersion@Font@UI@@UEBAHXZ  (MOV EAX,8)
@@ -170,8 +164,12 @@ enum FontJustify : int32_t {
 //   ?GetSpriteSheet@Font@UI@@…       0x180031d90  MOV RAX,[RCX+0x60]; MOV [RDX],RAX
 //                                    — a hidden RETSLOT
 //
-// ABSTRACT, no real constructor, empty non-virtual destructor — the
-// CharacterSet.h shape and reasons.
+// ENDGAME B.3 step 9 (block UI-D, B39_RULES D1/D2): CONCRETE, the
+// CharacterSet.h shape. The real public ctor is the inlined one (21 stores in
+// Construct 0x180031ce0; +0x5c is NOT written), slot 0 the class's own vector
+// deleting dtor, ~Font protected and non-virtual with the retired ??1 door's
+// body. The factory pair is the class's own (font.cpp), replacing the FACTUI1
+// row; the minted `??_7Font@UI@@6B@` and its RT_DELDTOR row are retired.
 // ############################################################################
 
 namespace System { class Filename; class String; }
@@ -188,7 +186,40 @@ public:
     using Layout  = RtUI::FontLayout;
     using Justify = int32_t;   // W4 enum: EAX-sized; see RtUI::FontJustify
 
-    Object::Base* DeletingDtor(unsigned flags) override = 0;   // [0] 0x180032130
+    // The REAL constructor (the 21 stores of 0x180031cf6..0x180031d67 minus the
+    // three vptr stores): External() zeroes +0x08..+0x18; the two Arrays and the
+    // ExternalPtr zero themselves (+0x30/+0x38, +0x40/+0x48, +0x60); +0x58 is a
+    // DWORD store and +0x5c is NEVER written (retail — `_spaceWidth` is what
+    // the allocator left until Serialize fills it).
+    Font() : Object::External() {
+        _string20.data = nullptr;                        // 180031d2a
+        _field28       = nullptr;                        // 180031d2e
+        _lineHeight    = 0;                              // 180031d42 (qword: +0x50/+0x54)
+        _baseLine      = 0;
+        _ellipsisWidth = 0;                              // 180031d46 DWORD
+        _material      = nullptr;                        // 180031d4d
+        _field70       = 0;                              // 180031d51 (qword: +0x70/+0x74)
+        _field74       = 0;
+        _string78.data = nullptr;                        // 180031d55
+        _string80.data = nullptr;                        // 180031d59
+        _string88.data = nullptr;                        // 180031d60
+    }
+
+    // [0] 0x180032130 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x90`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<Font*>(self + static_cast<int64_t>(i) * 0x90)->~Font();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~Font();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char* TypeName() const override;              // [1] 0x1800319c0
     uint32_t    Type() const override;                  // [2] 0x1800319a0
@@ -229,16 +260,20 @@ public:
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     Font(const Font& src);                              // 0x180031e10
     Font& operator=(const Font& src);                   // 0x180031f60
-    static uint32_t TypeId();                           // 0x1800319b0
+    // 0x1800319b0 — the minted record's type id (font.cpp).
+    static uint32_t TypeId();
+    // Placement is spelt `::new (p) Font()` (B9-5): these stay undefined.
     static void* operator new(std::size_t bytes);              // 0x1800319d0
     static void* operator new(std::size_t bytes, void* place); // 0x180031a40
     static void  operator delete(void* p);                     // 0x180031a50
+    // Retail's factory pair (B39_RULES D2), defined and registered in font.cpp.
     static Object::Base* CreateNewObject();                    // 0x180031ab0
     static Object::Base* CreateInPlaceObject(void* place);     // 0x180031ba0
 
 protected:
-    Font() = default;   // NOT retail's 0x180117510 — see the banner
-    ~Font();            // 0x1801175a0, empty (the door keeps the body)
+    // 0x1801175a0 — the retired door's body (font.cpp); the compiler runs the
+    // two ~Array and chains ~External.
+    ~Font();
 
 public:
     // ---- the 0x70 bytes Font adds (public: the doors and AddFont read them) --

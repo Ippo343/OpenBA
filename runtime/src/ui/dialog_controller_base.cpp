@@ -139,42 +139,6 @@ namespace RtUi {
 
 namespace {
 
-// ---------------------------------------------------------------------------
-// ATTENDANCE COUNTERS — the EFFECTIVENESS CONTROL for the promotion A/B, and
-// NOT a verification of anything.
-// ---------------------------------------------------------------------------
-// Nine of these bodies read nothing and write nothing, so an A/B of the boot
-// with and without `??_7DialogController@UI@@6B@` registered is IDENTICAL
-// whether our slots ran a thousand times or never once. Without a counter, "the
-// candidate run reached the same place as the control" cannot tell a safe
-// promotion from a promotion that was never exercised — the same shape as
-// reference_probe_needs_an_effectiveness_control.md, and the same reason
-// runtime/src/io/encoding.cpp carries its own ATTENDANCE block.
-//
-// These count ENTRIES, unconditionally, on every build.
-struct CtrlCounts {
-    unsigned long long typeName = 0, type = 0, onCreated = 0, onOpened = 0,
-                       onClosed = 0, onUpdateLayout = 0, onUpdate = 0,
-                       onElementEvent = 0, onSerializeSettings = 0;
-    ~CtrlCounts() {
-        const unsigned long long total = typeName + type + onCreated + onOpened +
-                                         onClosed + onUpdateLayout + onUpdate +
-                                         onElementEvent + onSerializeSettings;
-        if (total == 0) {
-            printf("[DlgCtrl] ATTENDANCE: none of the nine bodies was entered "
-                   "in this run.\n");
-            return;
-        }
-        printf("[DlgCtrl] ATTENDANCE (entries, not comparisons): total=%llu "
-               "TypeName=%llu Type=%llu OnCreated=%llu OnOpened=%llu "
-               "OnClosed=%llu OnUpdateLayout=%llu OnUpdate=%llu "
-               "OnElementEvent=%llu OnSerializeSettings=%llu\n",
-               total, typeName, type, onCreated, onOpened, onClosed,
-               onUpdateLayout, onUpdate, onElementEvent, onSerializeSettings);
-    }
-};
-CtrlCounts g_counts;
-
 // `Object::BaseTypeInfo` layout (runtime/types/object/TypeInfo.h): +0x00 typeId
 // (uint32), +0x04 an unused word, +0x08 `const char* name`. Spelled as constants
 // here for the same reason dialog.cpp spells them: that header cannot be pulled
@@ -195,16 +159,20 @@ inline const uint8_t* DialogControllerTypeInfo() {
 
 // ============================================================================
 // ENDGAME B.3.6 block B — the NINE bodies are members of UI::DialogController
-// now (runtime/types/ui/DialogController.h). Each registered door below keeps
-// its attendance counter and delegates with a QUALIFIED call: the live objects
-// wear hand-built/minted tables whose slots resolve back to these doors, so an
-// unqualified call would dispatch into itself.
+// (runtime/types/ui/DialogController.h). ENDGAME B.3.9 block UI-D: the minted
+// `??_7DialogController@UI@@6B@` is retired, and with it the six slot doors
+// whose only reader it was and the `[DlgCtrl] ATTENDANCE` counters that
+// measured its promotion. Three doors STAY (below): OnOpened, OnClosed and
+// OnSerializeSettings are reached BY ADDRESS from standalone/dlgctrl_route.cpp
+// (block RF's, env-gated) — a door reached by address survives (B9-6).
 // ============================================================================
 namespace UI {
 
 // slot 2 — ?Type@DialogController@UI@@UEBAIXZ            0x18003b6b0
 //     MOV EAX,dword ptr [0x1801f9e48] / RET
-uint32_t DialogController::Type() const {
+uint32_t DialogController::Type() const { return TypeId(); }
+// ?TypeId@DialogController@UI@@SAIXZ 0x18003b6c0 — the same dword.
+uint32_t DialogController::TypeId() {
     return *reinterpret_cast<const uint32_t*>(
         RtUi::DialogControllerTypeInfo() + RtUi::kBaseTypeInfoTypeId);
 }
@@ -232,10 +200,15 @@ void DialogController::OnElementEvent(Object::InternalPtr<Element>* /*element*/,
 // is exactly why each controller's settings record can be EMPTY and still framed.
 void DialogController::OnSerializeSettings(void* /*stream*/) {}
 
-// ??1DialogController@UI@@UEAA@XZ 0x1800cd2f0 — EMPTY on purpose: the door
-// `RtUiDialogController_Dtor` (dialog.cpp) stamps the minted table and chains
-// to ~Internal by name for the minted objects that are the only live ones; a
-// real destructor chain would stamp GCC's tables instead.
+// ?CreateNewObject@ / ?CreateInPlaceObject@DialogController@UI@@
+// 0x18003b6e0 / 0x18003b6f0: each is `XOR EAX,EAX ; RET` — the base is never
+// built by reflection (the FACTUI1 row this replaces returned null too).
+Object::Base* DialogController::CreateNewObject() { return nullptr; }
+Object::Base* DialogController::CreateInPlaceObject(void*) { return nullptr; }
+
+// ??1DialogController@UI@@UEAA@XZ 0x1800cd2f0 — EMPTY, retail's body: the
+// restamp and the inlined ~Internal are the compiler's (ENDGAME B.3.9 UI-D:
+// the retired `RtUiDialogController_Dtor` door did the same two by hand).
 DialogController::~DialogController() {}
 
 }  // namespace UI
@@ -249,44 +222,13 @@ inline const UI::DialogController* AsController(const void* self) {
 }
 }  // namespace
 
-extern "C" uint32_t RtUiDialogController_Type(const void* self) {
-    ++RtUi::g_counts.type;
-    return AsController(self)->UI::DialogController::Type();
-}
-extern "C" const char* RtUiDialogController_TypeName(const void* self) {
-    ++RtUi::g_counts.typeName;
-    return AsController(self)->UI::DialogController::TypeName();
-}
-extern "C" void RtUiDialogController_OnCreated(void* self) {
-    ++RtUi::g_counts.onCreated;
-    AsController(self)->UI::DialogController::OnCreated();
-}
 extern "C" void RtUiDialogController_OnOpened(void* self) {
-    ++RtUi::g_counts.onOpened;
     AsController(self)->UI::DialogController::OnOpened();
 }
 extern "C" void RtUiDialogController_OnClosed(void* self) {
-    ++RtUi::g_counts.onClosed;
     AsController(self)->UI::DialogController::OnClosed();
 }
-extern "C" void RtUiDialogController_OnUpdateLayout(void* self) {
-    ++RtUi::g_counts.onUpdateLayout;
-    AsController(self)->UI::DialogController::OnUpdateLayout();
-}
-extern "C" void RtUiDialogController_OnUpdate(void* self, const void* time) {
-    ++RtUi::g_counts.onUpdate;
-    AsController(self)->UI::DialogController::OnUpdate(
-        *static_cast<const System::Time*>(time));
-}
-extern "C" void RtUiDialogController_OnElementEvent(void* self, void* element,
-                                                    int a, int b, int c, int d,
-                                                    int e, void* userData) {
-    ++RtUi::g_counts.onElementEvent;
-    AsController(self)->UI::DialogController::OnElementEvent(
-        static_cast<Object::InternalPtr<UI::Element>*>(element), a, b, c, d, e, userData);
-}
 extern "C" void RtUiDialogController_OnSerializeSettings(void* self, void* stream) {
-    ++RtUi::g_counts.onSerializeSettings;
     AsController(self)->UI::DialogController::OnSerializeSettings(stream);
 }
 
@@ -301,20 +243,14 @@ extern "C" void RtUiDialogController_OnSerializeSettings(void* self, void* strea
 //                  ONLY door the mint readiness screen consults. A body ported
 //                  but registered under one door only would still read TRAP.
 int RtUiDialogControllerRegister() {
-    using namespace RtUi;
     int n = 0;
-
-    RegisterRuntimeExport("?TypeName@DialogController@UI@@UEBAPEBDXZ",
-                          (void*)&RtUiDialogController_TypeName);
-    RegisterRuntimeAddr(0x18003b6d0, (void*)&RtUiDialogController_TypeName); ++n;
-
-    RegisterRuntimeExport("?Type@DialogController@UI@@UEBAIXZ",
-                          (void*)&RtUiDialogController_Type);
-    RegisterRuntimeAddr(0x18003b6b0, (void*)&RtUiDialogController_Type); ++n;
-
-    RegisterRuntimeExport("?OnCreated@DialogController@UI@@UEAAXXZ",
-                          (void*)&RtUiDialogController_OnCreated);
-    RegisterRuntimeAddr(0x1800cd2b0, (void*)&RtUiDialogController_OnCreated); ++n;
+    // The factory pair (B39_RULES D2), the class's own statics.
+    RegisterRuntimeExport("?CreateNewObject@DialogController@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::DialogController::CreateNewObject);
+    RegisterRuntimeAddr(0x18003b6e0, (void*)&UI::DialogController::CreateNewObject); ++n;
+    RegisterRuntimeExport("?CreateInPlaceObject@DialogController@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::DialogController::CreateInPlaceObject);
+    RegisterRuntimeAddr(0x18003b6f0, (void*)&UI::DialogController::CreateInPlaceObject); ++n;
 
     RegisterRuntimeExport("?OnOpened@DialogController@UI@@UEAAXXZ",
                           (void*)&RtUiDialogController_OnOpened);
@@ -323,18 +259,6 @@ int RtUiDialogControllerRegister() {
     RegisterRuntimeExport("?OnClosed@DialogController@UI@@UEAAXXZ",
                           (void*)&RtUiDialogController_OnClosed);
     RegisterRuntimeAddr(0x1800cd290, (void*)&RtUiDialogController_OnClosed); ++n;
-
-    RegisterRuntimeExport("?OnUpdateLayout@DialogController@UI@@UEAAXXZ",
-                          (void*)&RtUiDialogController_OnUpdateLayout);
-    RegisterRuntimeAddr(0x1800cd280, (void*)&RtUiDialogController_OnUpdateLayout); ++n;
-
-    RegisterRuntimeExport("?OnUpdate@DialogController@UI@@UEAAXAEBVTime@System@@@Z",
-                          (void*)&RtUiDialogController_OnUpdate);
-    RegisterRuntimeAddr(0x1800cd270, (void*)&RtUiDialogController_OnUpdate); ++n;
-
-    RegisterRuntimeExport("?OnElementEvent@DialogController@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z",
-                          (void*)&RtUiDialogController_OnElementEvent);
-    RegisterRuntimeAddr(0x1800cd260, (void*)&RtUiDialogController_OnElementEvent); ++n;
 
     RegisterRuntimeExport("?OnSerializeSettings@DialogController@UI@@UEAAXAEAVStream@IO@@@Z",
                           (void*)&RtUiDialogController_OnSerializeSettings);

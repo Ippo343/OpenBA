@@ -158,10 +158,6 @@ inline uint32_t ModulateColor(uint32_t c, uint8_t alpha) {
 // ---------------------------------------------------------------------------
 // The Runtime functions these bodies call.
 // ---------------------------------------------------------------------------
-using ElementUpdateFn  = void (*)(void* self, const void* time, void* ui,
-                                  void* dlgInternalPtr, const void* updateState);
-using ElementCtorFn    = void (*)(void* self);
-using ElementDtorFn    = void (*)(void* self);
 using GetPaddedSizeFn  = void (*)(void* self, int32_t* w, int32_t* h);
 using AdjustUpperLeftFn= void (*)(void* self, int32_t dx, int32_t dy);
 using PlayFn           = void (*)(void* ui, int32_t soundId);
@@ -188,11 +184,6 @@ using AddFontFn    = void (*)(void* ctx, void* font, const void* str, uint8_t wr
                               int32_t a, int32_t justify, int32_t width,
                               int32_t x, int32_t y, uint32_t c);
 
-inline void ElementUpdate(void* self, const void* time, void* ui, void* dlg, const void* st) {
-    RtAddr<ElementUpdateFn>(0x180116270ull)(self, time, ui, dlg, st);
-}
-inline void ElementCtor(void* self) { RtAddr<ElementCtorFn>(0x180115e50ull)(self); }
-inline void ElementDtor(void* self) { RtAddr<ElementDtorFn>(0x1801161a0ull)(self); }
 inline void MemFree(void* p)        { RtAddr<MemFreeFn>(0x1800c7ad0ull)(p); }
 
 // ---------------------------------------------------------------------------

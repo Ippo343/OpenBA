@@ -29,6 +29,9 @@
 // ============================================================================
 #include "element_common.h"
 #include "../../types/ui/ComboElement.h"
+#include "../../types/ui/ComboDialog.h"
+#include "../../types/ui/Dialog.h"
+#include <new>
 
 using namespace rtuielem;
 
@@ -80,14 +83,10 @@ uint32_t TextElementTypeId() {
 
 
 using IsDerivedFromFn = bool  (*)(const void* self, uint32_t typeId);
-using DialogCtorFn     = void* (*)(void* self);
-using DialogDtorFn     = void  (*)(void* self);
 using StringAssignFn   = void* (*)(void* dst, const void* src);
 using CacheTextFn      = void  (*)(void* textElement);
 using ListAddItemFn    = void  (*)(void* list, void** item, int flags);
 using OperatorNewFn    = void* (*)(uint64_t size);
-using ComboDialogCtorFn = void* (*)(void* self, void* ui, void** list,
-                                    void** dlgInstance, void** owner);
 using SetUpperLeftFn   = void  (*)(void* dlgInstance, int x, int y, bool centre);
 using DynArrayPushFn   = void  (*)(void* array, int newSize, const void* fill);
 using CloseDialogFn    = void  (*)(void* ui, void** dlgInstance);
@@ -159,8 +158,7 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
 
     if (open) {
         alignas(16) uint8_t dialogBuf[kDialogSize];
-        RtAddr<DialogCtorFn>(0x180112db0ull)(dialogBuf);
-        const Dialog* stackDialog = reinterpret_cast<const Dialog*>(dialogBuf);
+        Dialog* const stackDialog = ::new (static_cast<void*>(dialogBuf)) Dialog();   // ??0Dialog
 
         const auto isDerived = RtAddr<IsDerivedFromFn>(0x1800c0390ull);
 
@@ -212,11 +210,10 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
         void* combo = RtAddr<OperatorNewFn>(0x180074770ull)(kDialogSize);
         void* made2 = nullptr;
         if (combo != nullptr) {
-            void* owner = this;
-            void* dlgInst = *reinterpret_cast<void* const*>(dialog);
-            void* listArg = list;
-            made2 = RtAddr<ComboDialogCtorFn>(0x180111d00ull)(
-                combo, ui, &listArg, &dlgInst, &owner);
+            // ENDGAME B.3.9 UI-D (B9-13 foreign site): ??0ComboDialog, the real ctor.
+            made2 = ::new (combo) ComboDialog(
+                ui, Object::InternalPtr<Element>(static_cast<Element*>(list)),
+                *dialog, Object::InternalPtr<ComboElement>(this));
         }
         _openDialog = made2;
 
@@ -229,7 +226,7 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
         RtAddr<DynArrayPushFn>(0x18007a0d0ull)(u + kUiDialogs,
                                                I32(u, kUiDialogCount) + 1, &pushed);
 
-        RtAddr<DialogDtorFn>(0x180112e40ull)(dialogBuf);
+        stackDialog->DeletingDtor(0);                                // ??1Dialog
     }
 
     Object::InternalPtr<DialogInstance> dlgCopy = *dialog;

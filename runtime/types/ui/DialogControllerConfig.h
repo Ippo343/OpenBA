@@ -27,21 +27,40 @@
 // StatusIconUIConfig, UpgradeUIConfig — EXE_SUBCLASSES.md 1C) place their own
 // fields at +0x20 and build their bases through `fn_External_External`.
 //
-// ABSTRACT twice over: slots 3/5/6/7 are pure in retail, and slot 0 is the
-// mint's row (B6-3). Real (empty) constructor since ENDGAME B.3.8 block RB.
+// ABSTRACT (slots 3/5/6/7 are pure in retail; its factory pair is
+// `xor eax,eax ; ret`). ENDGAME B.3 step 9 (block UI-D, B39_RULES D1/D2): slot 0
+// is the class's own vector deleting dtor, the minted
+// `??_7DialogControllerConfig@UI@@6B@` and its RT_DELDTOR row are retired, and
+// the factory pair is the class's own (dialogcontrollerconfig.cpp). Real
+// (empty) constructor since ENDGAME B.3.8 block RB.
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
 
 #include "../object/External.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI {
 
 class DialogControllerConfig : public Object::External {
 public:
-    // [0] 0x18003b600 — pure on purpose; the RT_DELDTOR row is not retired.
-    Object::Base* DeletingDtor(unsigned flags) override = 0;
+    // [0] 0x18003b600 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x20`, the element size).
+    // The class's OWN (B9-4): the four exe configs declare theirs.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<DialogControllerConfig*>(self + static_cast<int64_t>(i) * 0x20)->~DialogControllerConfig();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~DialogControllerConfig();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char* TypeName() const override;                        // [1] 0x18003b470
     uint32_t    Type() const override;                            // [2] 0x18003b450
@@ -51,7 +70,10 @@ public:
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     DialogControllerConfig(const DialogControllerConfig& other);            // 0x18003b520
     DialogControllerConfig& operator=(const DialogControllerConfig& other); // 0x18003b590
-    static uint32_t      TypeId();                                // 0x18003b460
+    // 0x18003b460 — the minted record's type id (dialogcontrollerconfig.cpp).
+    static uint32_t      TypeId();
+    // Retail's factory pair (B39_RULES D2): both are `XOR EAX,EAX ; RET` (the
+    // class is abstract). Defined and registered in dialogcontrollerconfig.cpp.
     static Object::Base* CreateNewObject();                       // 0x18003b480
     static Object::Base* CreateInPlaceObject(void* storage);      // 0x18003b490
 
@@ -64,9 +86,7 @@ protected:
     // their base through `fn_External_External`, EXE_SUBCLASSES.md 1C).
     DialogControllerConfig() {}
     // `??1DialogControllerConfig@UI@@UEAA@XZ` 0x18003b4f0. EMPTY, which is
-    // retail's body (restamp + ~External, both the compiler's). The registered
-    // door `RtUi_DialogControllerConfig_Dtor` does those two by hand for the
-    // minted objects.
+    // retail's body (restamp + ~External, both the compiler's).
     ~DialogControllerConfig();
 
     // RULE B5-15 / B6-7, COPIED from B36_SLOTS section 3:

@@ -9,8 +9,7 @@
 // the PLAYBACK body that turns a recording back into draw calls.
 //
 // ??_7SpriteCapture@UI@@6B@ (retail 0x1801566a0):
-//   0  deleting dtor      0x18003ccf0  deleting_dtor.cpp row (~Class 0x1800d91b0,
-//                                      sizeof 0x58 — both read off its own bytes)
+//   0  deleting dtor      0x18003ccf0  SpriteCapture.h (the class's own)
 //   1  TypeName           0x18003c810  here
 //   2  Type               0x18003c7f0  here
 //   3  GetFileVersion     0x1800d9520  here  (returns 1)
@@ -22,12 +21,13 @@
 // plus ??1SpriteCapture@UI@@UEAA@XZ       0x1800d91b0  here
 //  and ?Draw@SpriteCapture@UI@@QEBAXAEAVSpriteContext@2@HH@Z 0x1800d9230  here.
 //
-// The CONSTRUCTOR is already ported and registered, table-driven, by
-// runtime/src/ui/ui_factory_wave28.cpp (`Ctor_SpriteCapture`, twelve stores,
-// `??0SpriteCapture@UI@@QEAA@XZ` 0x1800d9140). Construct and Reconstruct below
-// INLINE the same twelve stores rather than calling it — that is what retail
-// does (0x18003cad6..0x18003cb26 is straight-line code, not a CALL), so the
-// stores are transcribed again here.
+// The CONSTRUCTOR `??0SpriteCapture@UI@@QEAA@XZ` (0x1800d9140) is the class's
+// real one (SpriteCapture.h). Construct and Reconstruct INLINE the same twelve
+// stores in retail (0x18003cad6..0x18003cb26 is straight-line code); here they
+// are `::new (this) SpriteCapture()`, the same stores. ENDGAME B.3.9 block
+// UI-D: the factory pair is defined and registered here (B39_RULES D2); the
+// slot doors, the ??1 door and the FACTUI2 row whose only reader was the
+// minted `??_7SpriteCapture@UI@@6B@` are retired with it.
 //
 // THREE ARRAYS, THREE DIFFERENT DESTRUCTORS. ~SpriteCapture destroys
 // `_sprites` (+0x40) with 0x180037310, `_entries` (+0x30) with 0x18003e4a0 and
@@ -51,15 +51,12 @@
 #include "../../types/ui/Sprite.h"
 #include "../../types/system/String.h"
 #include "../../types/video/Context.h"   // Video::Viewport
+#include <new>
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
-
-void* VtBase()          { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* VtExternal()      { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* VtSpriteCapture() { return RT_DATA_SLOT(void*, "??_7SpriteCapture@UI@@6B@"); }
 
 const uint8_t* SpriteCaptureTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*,
@@ -85,29 +82,6 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
-using Slot0Fn = void* (*)(void* self, unsigned flag);
-void CallSlot0(void* self, unsigned flag) {
-    reinterpret_cast<Slot0Fn>(VTableOf(self)[0])(self, flag);
-}
-
-// The twelve stores retail inlines into Construct (0x18003cad6..0x18003cb26)
-// and, identically, into Reconstruct (0x18003ca5e..0x18003caae).
-void InlineCtorStores(uint8_t* p) {
-    *reinterpret_cast<void**>(p)        = VtBase();          // 18003cad6
-    *reinterpret_cast<void**>(p)        = VtExternal();      // 18003cae0
-    *reinterpret_cast<void**>(p + 0x08) = nullptr;           // 18003caf5
-    *reinterpret_cast<void**>(p + 0x10) = nullptr;           // 18003caf8
-    *reinterpret_cast<void**>(p + 0x18) = nullptr;           // 18003cafc
-    *reinterpret_cast<void**>(p)        = VtSpriteCapture(); // 18003cb00
-    *reinterpret_cast<void**>(p + 0x20) = nullptr;           // 18003cb0a
-    *reinterpret_cast<void**>(p + 0x28) = nullptr;           // 18003cb0e
-    *reinterpret_cast<void**>(p + 0x30) = nullptr;           // 18003cb12
-    *reinterpret_cast<void**>(p + 0x38) = nullptr;           // 18003cb16
-    *reinterpret_cast<void**>(p + 0x40) = nullptr;           // 18003cb1a
-    *reinterpret_cast<void**>(p + 0x48) = nullptr;           // 18003cb1e
-    *reinterpret_cast<void**>(p + 0x50) = nullptr;           // 18003cb22
-}
-
 // The int32 slot every scalar goes through. See the QWORD/DWORD note on Draw's
 // sibling in runtime/src/ui/animatedimagedescription.cpp.
 using ScalarFn = void (*)(void* rw, void* value, const char* name);
@@ -121,7 +95,9 @@ using ScalarFn = void (*)(void* rw, void* value, const char* name);
 // ############################################################################
 namespace UI {
 
-uint32_t SpriteCapture::Type() const {
+uint32_t SpriteCapture::Type() const { return TypeId(); }
+// ?TypeId@SpriteCapture@UI@@SAIXZ 0x18003c800 — the same first dword.
+uint32_t SpriteCapture::TypeId() {
     const uint8_t* ti = SpriteCaptureTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
@@ -132,79 +108,46 @@ const char* SpriteCapture::TypeName() const {
 // 0x1800d9520: `MOV EAX,0x1 ; RET`.
 int32_t SpriteCapture::GetFileVersion() const { return 1; }
 
-// 0x18003cac0
-// Retail's null test (18003cad1 TEST/JZ) is in the DOOR.
+// 0x18003cac0: the inlined constructor, then `MOV RAX,RCX`. (The null test
+// sat in the retired door; a virtual call always has a `this`.)
 Object::External* SpriteCapture::Construct() {
-    InlineCtorStores(reinterpret_cast<uint8_t*>(this));
-    return this;                                             // 18003cb26
+    return ::new (this) SpriteCapture();                     // 18003cad6..18003cb26
 }
-// 0x18003ca40: slot0(this, 0), then the same inlined constructor, open-coded.
+// 0x18003ca40: slot0(this, 0) — VIRTUALLY — then the same inlined ctor.
 Object::External* SpriteCapture::Reconstruct() {
-    CallSlot0(this, 0);                                      // 18003ca57
-    InlineCtorStores(reinterpret_cast<uint8_t*>(this));
-    return this;                                             // 18003caae
+    DeletingDtor(0);                                         // 18003ca57
+    return ::new (this) SpriteCapture();                     // 18003ca5e..18003caae
 }
 // 0x18003cb40: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void SpriteCapture::Destruct() { CallSlot0(this, 0); }
+void SpriteCapture::Destruct() { DeletingDtor(0); }
 
-// ~SpriteCapture: NON-VIRTUAL and EMPTY; the registered dtor door below does
-// retail's three ~Array calls and the chain to ~External.
-// ENDGAME B.3.8 block RB: ~SpriteCapture's body is `ReleaseFields` (below),
-// ONE body with the door `RtUi_SpriteCapture_Dtor`; the restamp and the
-// ~External tail are the compiler's.
-SpriteCapture::~SpriteCapture() { ReleaseFields(); }
-
-}  // namespace UI
-
-extern "C" uint32_t RtUi_SpriteCapture_Type(const void* selfv) {
-    return reinterpret_cast<const UI::SpriteCapture*>(selfv)                // B.3.6 bridge
-               ->UI::SpriteCapture::Type();
+// ?CreateNewObject@SpriteCapture@UI@@SAPEAVBase@Object@@XZ  0x18003c900
+// The FACTUI2 row this replaces: the locked MemAlloc of 0x58 bytes, align 8;
+// retail's null branch; then the constructor.
+Object::Base* SpriteCapture::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(SpriteCapture), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) SpriteCapture();
 }
-extern "C" const char* RtUi_SpriteCapture_TypeName(const void* selfv) {
-    return reinterpret_cast<const UI::SpriteCapture*>(selfv)                // B.3.6 bridge
-               ->UI::SpriteCapture::TypeName();
-}
-extern "C" int32_t RtUi_SpriteCapture_GetFileVersion(const void* selfv) {
-    return reinterpret_cast<const UI::SpriteCapture*>(selfv)                // B.3.6 bridge
-               ->UI::SpriteCapture::GetFileVersion();
-}
-extern "C" void* RtUi_SpriteCapture_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                    // 18003cad1 TEST/JZ
-    return reinterpret_cast<UI::SpriteCapture*>(selfv)                      // B.3.6 bridge
-               ->UI::SpriteCapture::Construct();
-}
-extern "C" void* RtUi_SpriteCapture_Reconstruct(void* selfv) {
-    return reinterpret_cast<UI::SpriteCapture*>(selfv)                      // B.3.6 bridge
-               ->UI::SpriteCapture::Reconstruct();
-}
-extern "C" void RtUi_SpriteCapture_Destruct(void* selfv) {
-    reinterpret_cast<UI::SpriteCapture*>(selfv)->UI::SpriteCapture::Destruct();  // B.3.6 bridge
+// ?CreateInPlaceObject@SpriteCapture@UI@@SAPEAVBase@Object@@PEAX@Z  0x18003c9c0
+Object::Base* SpriteCapture::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) SpriteCapture();
 }
 
-// ============================================================================
-// ??1SpriteCapture@UI@@UEAA@XZ   0x1800d91b0
-// ============================================================================
-extern "C" void RtUi_SpriteCapture_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-
-    *reinterpret_cast<void**>(p) = VtSpriteCapture();        // 1800d91cd
-
-    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with `~SpriteCapture()`.
-    UI::SpriteCapture::DoorBody::Release(reinterpret_cast<UI::SpriteCapture*>(selfv));   // B.3.8 bridge
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800d91f6 JMP
-}
-
-// ??1SpriteCapture 0x1800d91b0 between the restamp and the ~External tail:
-// the three retail ~Array calls, in retail's order (ENDGAME B.3.8 block RB).
-void UI::SpriteCapture::ReleaseFields() {
+// ??1SpriteCapture@UI@@UEAA@XZ   0x1800d91b0 — between the restamp and the
+// ~External tail (the compiler's): the three retail ~Array calls, in retail's
+// order. ENDGAME B.3.9 UI-D: the retired `RtUi_SpriteCapture_Dtor` door ran
+// this same body by hand.
+SpriteCapture::~SpriteCapture() {
     uint8_t* p = reinterpret_cast<uint8_t*>(this);
     using ArrayDtorFn = void* (*)(void*);
     RtAddr<ArrayDtorFn>(0x180037310ull)(p + 0x40);           // 1800d91d4  ~Array<Sprite>
     RtAddr<ArrayDtorFn>(0x18003e4a0ull)(p + 0x30);           // 1800d91de  ~Array<CaptureEntry>
     RtAddr<ArrayDtorFn>(0x18003da00ull)(p + 0x20);           // 1800d91e8  ~Array<ExternalPtr<SpriteSheet>>
 }
+
+}  // namespace UI
 
 // ============================================================================
 // ?Serialize@SpriteCapture@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800d9530
@@ -327,11 +270,6 @@ bool SpriteCapture::Serialize(void* streamv) {
 }
 
 }  // namespace UI
-
-extern "C" bool RtUi_SpriteCapture_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<UI::SpriteCapture*>(selfv)                      // B.3.6 bridge
-               ->UI::SpriteCapture::Serialize(streamv);
-}
 
 // ============================================================================
 // ?Draw@SpriteCapture@UI@@QEBAXAEAVSpriteContext@2@HH@Z   0x1800d9230
@@ -527,37 +465,13 @@ int RtUiSpriteCaptureClassRegister() {
     // translation unit), so the address is the only door.
     RegisterRuntimeAddr(0x18004c0d0ull, (void*)&RtUi_SpriteCapture_SerializeEntries); ++n;
 
-    RegisterRuntimeExport("?Type@SpriteCapture@UI@@UEBAIXZ",
-                          (void*)&RtUi_SpriteCapture_Type);                 ++n;
-    RegisterRuntimeAddr(0x18003c7f0ull, (void*)&RtUi_SpriteCapture_Type);
-
-    RegisterRuntimeExport("?TypeName@SpriteCapture@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_SpriteCapture_TypeName);             ++n;
-    RegisterRuntimeAddr(0x18003c810ull, (void*)&RtUi_SpriteCapture_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@SpriteCapture@UI@@UEBAHXZ",
-                          (void*)&RtUi_SpriteCapture_GetFileVersion);       ++n;
-    RegisterRuntimeAddr(0x1800d9520ull, (void*)&RtUi_SpriteCapture_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@SpriteCapture@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_SpriteCapture_Construct);            ++n;
-    RegisterRuntimeAddr(0x18003cac0ull, (void*)&RtUi_SpriteCapture_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@SpriteCapture@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_SpriteCapture_Reconstruct);          ++n;
-    RegisterRuntimeAddr(0x18003ca40ull, (void*)&RtUi_SpriteCapture_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@SpriteCapture@UI@@UEAAXXZ",
-                          (void*)&RtUi_SpriteCapture_Destruct);             ++n;
-    RegisterRuntimeAddr(0x18003cb40ull, (void*)&RtUi_SpriteCapture_Destruct);
-
-    RegisterRuntimeExport("??1SpriteCapture@UI@@UEAA@XZ",
-                          (void*)&RtUi_SpriteCapture_Dtor);                 ++n;
-    RegisterRuntimeAddr(0x1800d91b0ull, (void*)&RtUi_SpriteCapture_Dtor);
-
-    RegisterRuntimeExport("?Serialize@SpriteCapture@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_SpriteCapture_Serialize);            ++n;
-    RegisterRuntimeAddr(0x1800d9530ull, (void*)&RtUi_SpriteCapture_Serialize);
+    // ENDGAME B.3.9 UI-D: the factory pair, the class's own (B39_RULES D2).
+    RegisterRuntimeExport("?CreateNewObject@SpriteCapture@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::SpriteCapture::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x18003c900ull, (void*)&UI::SpriteCapture::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@SpriteCapture@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::SpriteCapture::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x18003c9c0ull, (void*)&UI::SpriteCapture::CreateInPlaceObject);
 
     RegisterRuntimeExport("?Draw@SpriteCapture@UI@@QEBAXAEAVSpriteContext@2@HH@Z",
                           (void*)&RtUi_SpriteCapture_Draw);                 ++n;

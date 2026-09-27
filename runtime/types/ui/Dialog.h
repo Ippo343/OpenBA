@@ -270,12 +270,16 @@ static_assert(sizeof(Dialog) == 0x88,
 //                           — INTRODUCED HERE (RULE B6-1.1: slot 8 on the
 //                           External resources)
 //
-// THE MINT ROW STAYS WITHHELD. `tools/cutover_manifest.py` tags
-// `??_7Dialog@UI@@6B@` WITHHELD; nothing here changes that row.
-//
-// ABSTRACT, NO REAL CONSTRUCTOR: `Construct`/`Reconstruct` re-stamp the
-// three vtables by hand out of the mint on objects that ALREADY exist, the
-// factory doors build through `RtUiDialog_Ctor`, and slot 0 is the mint's.
+// ENDGAME B.3 step 9 (block UI-D, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0Dialog@UI@@QEAA@XZ` (0x180112db0) minus its three vptr
+// stores; slot 0 is the class's own vector deleting dtor; ~Dialog is
+// protected, non-virtual and holds the retired ??1 door's body
+// (dialog_ctor_dtor.cpp). Construct/Reconstruct and the stack temporaries
+// retail inlines (AddController, ElementDescription::CreateInstance,
+// ComboElement::Update, TabElement::AddTab) spell `::new (p) UI::Dialog()` and
+// destroy with `DeletingDtor(0)`. The factory pair is the class's own
+// (dialog_factory.cpp); the minted `??_7Dialog@UI@@6B@` (manifest WITHHELD)
+// and its RT_DELDTOR row are retired with the ??0/??1 doors.
 // ############################################################################
 
 namespace System { class String; }
@@ -294,8 +298,46 @@ public:
     // INFERRED from those two exports' shapes, not from a body read.
     using ElementController = RtUI::DialogControllerConfigEntry;
 
-    // [0] 0x180038b20 — pure on purpose; the RT_DELDTOR row is not retired.
-    Object::Base* DeletingDtor(unsigned flags) override = 0;
+    // ??0Dialog@UI@@QEAA@XZ 0x180112db0 — the REAL constructor: External()
+    // (+0x08..+0x18), then +0x20..+0x80 zero EXCEPT +0x30 = -1 (the background
+    // colour) and +0x44..+0x47, which retail NEVER writes (+0x40 is a DWORD
+    // store and the next is a QWORD at +0x48).
+    Dialog() : Object::External() {
+        _spriteSheet           = nullptr;                   // 180112df5
+        _spriteName            = nullptr;                   // 180112df9
+        _backgroundColor       = 0xFFFFFFFFu;               // 180112dfd  -1, NOT 0
+        _drawLevel             = 0;                         // 180112e04
+        _rootDescription       = nullptr;                   // 180112e07
+        _defaultFlags          = 0;                         // 180112e0b  DWORD
+        _controllerConfigs     = nullptr;                   // 180112e0e .. 180112e2a
+        _controllerCount       = 0;
+        _controllerCapacity    = 0;
+        _namedTemplates        = nullptr;
+        _namedTemplateCount    = 0;
+        _namedTemplateCapacity = 0;
+        _templates             = nullptr;
+        _templateCount         = 0;
+        _templateCapacity      = 0;
+        _references            = nullptr;
+        _referenceCount        = 0;
+        _referenceCapacity     = 0;
+    }
+
+    // [0] 0x180038b20 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x88`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<Dialog*>(self + static_cast<int64_t>(i) * 0x88)->~Dialog();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~Dialog();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char* TypeName() const override;                        // [1] 0x180038440
     uint32_t    Type() const override;                            // [2] 0x180038420
@@ -328,20 +370,19 @@ public:
     bool     PerElementCapture() const;                                        // 0x180038830
     Dialog(const Dialog& other);                                               // 0x180038920
     Dialog& operator=(const Dialog& other);                                    // 0x180038a30
-    // MemoryAllocator statics (B36_RULES 7). CreateNewObject /
-    // CreateInPlaceObject ARE ported — as the doors in dialog_factory.cpp.
+    // MemoryAllocator statics (B36_RULES 7). Placement is spelt
+    // `::new (p) Dialog()` (B9-5): these stay undefined.
     static void* operator new(std::size_t bytes);                 // 0x180038450
     static void* operator new(std::size_t bytes, void* place);    // 0x1800384c0
     static void  operator delete(void* p);                        // 0x1800384d0
+    // Retail's factory pair (B39_RULES D2): MemAlloc(0x88, 8) + the ctor, and
+    // the null-tested in-place ctor. Defined and registered in dialog_factory.cpp.
     static Object::Base* CreateNewObject();                       // 0x180038530
     static Object::Base* CreateInPlaceObject(void* storage);      // 0x180038610
 
 protected:
-    // NOT retail's `??0Dialog@UI@@QEAA@XZ` (0x180112db0, the door
-    // `RtUiDialog_Ctor`) — see the banner.
-    Dialog() = default;
-    // `??1Dialog@UI@@UEAA@XZ` 0x180112e40. Defined EMPTY; the door
-    // `RtUiDialog_Dtor` releases the arrays and the String by hand.
+    // `??1Dialog@UI@@UEAA@XZ` 0x180112e40 — the four ~Array and the +0x28
+    // String release (dialog_ctor_dtor.cpp), then the compiler chains ~External.
     ~Dialog();
 
     // RULE B5-15 / B6-7, COPIED from B36_SLOTS section 3:

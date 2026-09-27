@@ -223,12 +223,15 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
             }
             void* entityPtr = *reinterpret_cast<void**>(entityIBP);  // dataSource (ctor arg5)
             void* extRes = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(obj) + 0x28);
-            uint64_t nullParent = 0;
-            if (fn_InternalBasePtr_Ctor) new (&nullParent) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            fn_DialogInstance_Ctor(dlg, ui, extRes, &nullParent, entityPtr, ctrlData,
-                                   static_cast<int>(ctrlCount));
-            *reinterpret_cast<uintptr_t*>(dlg) = g_ToolUI_ChildDialog_Vtable;
-            newDialog = dlg;
+            // ENDGAME B.3.9 UI-D (B9-13 foreign site): the real 6-arg ctor
+            // (0x180114870); its compiler table is the one retail's copy at
+            // 0x14015f5a0 describes, so the hand stamp is gone.
+            newDialog = ::new (dlg) UI::DialogInstance(
+                ui,
+                reinterpret_cast<const UI::Dialog*>(extRes),             // B.3.8 bridge
+                Object::InternalPtr<UI::DialogInstance>(),               // parent: null
+                reinterpret_cast<Object::Base*>(entityPtr),              // B.3.8 bridge
+                ctrlData, static_cast<int32_t>(ctrlCount));
         }
 
         // Wrap in IBP; if null (alloc failed) -> abort before finalize.

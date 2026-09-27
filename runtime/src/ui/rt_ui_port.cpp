@@ -40,10 +40,8 @@ extern int RtUiDrawRegister();             // userinterface_draw.cpp (lane UIDRA
 // Wave 10 lane CLOSEDLG: ?CloseDialog@UserInterface@UI@@, the last of lane C's
 // four UserInterface rows that had a live route.
 extern int RtUiCloseDialogRegister();      // userinterface_close.cpp (lane CLOSEDLG)
-// Wave 10 lane DLG2: ??0Dialog@UI@@ and ??1Dialog@UI@@, the two rows that
-// ENTERED the census when UI3 replaced retail's INLINED UI::Dialog temporary
-// with a call to the out-of-line exports.
-extern int RtUiDialogCtorDtorRegister();   // dialog_ctor_dtor.cpp (lane DLG2)
+// Wave 10 lane DLG2's ??0Dialog@UI@@ / ??1Dialog@UI@@ doors are retired
+// (ENDGAME B.3.9 UI-D): they are UI::Dialog's real ctor and dtor.
 // Wave 10B lane SHOW: ?ShowDialog@UserInterface@UI@@, the last UI CODE row.
 // It is the only body in the namespace that re-enters
 // Engine::MainLoop::Frame and mutates MainLoop's callback arrays.
@@ -138,20 +136,9 @@ extern int RtUiSpriteSheetNewRegister();   // spritesheet_new.cpp (lane SMALLBOD
 // here at all:
 // standalone/resolve_standalone.cpp:333 (RtUiPortInit) precedes :406 (the mint).
 extern int RtUiStringTableFactoryRegister(); // stringtable_factory.cpp (FACTORY)
-// Same file, second pass: the three ??_7StringTable@UI@@6B@ slots that read the
-// class's own ?_typeInfo@ node (slots 1/2/3). One class, one cutover wall:
-// a factory without the vtable slots produces the exact state attempt 28 hit,
-// a constructed object whose vptr nothing fills.
-extern int RtUiStringTableAccessorsRegister(); // stringtable_factory.cpp (FACTORY)
-// Same file, third pass: slots 6/7/8 (Reconstruct/Destruct/Construct). Same
-// switch again, same reason. The row is 7/9 after these; slot 0 (the deleting
-// dtor) and Serialize are NOT ported and are named in WAVE26_LANE_FACTORY.md.
-extern int RtUiStringTableLifecycleRegister(); // stringtable_factory.cpp (FACTORY)
-// WAVE 27 lane FRONTIER, fourth pass: the LAST TWO ??_7StringTable@UI@@6B@
-// slots -- slot 0 (0x180002740, the scalar/vector deleting dtor) and slot 5
-// (?Serialize@, 0x18011d940). Takes the row to 9/9 on the static screen; it
-// does NOT promote it (see WAVE27_LANE_FRONTIER.md).
-extern int RtUiStringTableSlotsRegister(); // stringtable_factory.cpp (FRONTIER)
+// ENDGAME B.3.9 UI-D: the three later passes (the slot doors of the minted
+// ??_7StringTable@UI@@6B@) are retired with that row; the class is concrete and
+// RtUiStringTableFactoryRegister now registers the class's own factory pair.
 // WAVE 28 lane MISC, fifth pass, and the only one in its OWN file
 // (stringtable_lifecycle.cpp -- separate purely to keep three factory lanes off
 // stringtable_factory.cpp's tail this wave): ??1StringTable@UI@@UEAA@XZ
@@ -160,17 +147,10 @@ extern int RtUiStringTableSlotsRegister(); // stringtable_factory.cpp (FRONTIER)
 // passes above -- one class, one cutover wall. These are not vtable slots; the
 // row was already 9/9 before this wave.
 extern int RtUiStringTableLifecycleDtorRegister(); // stringtable_lifecycle.cpp (MISC)
-// WAVE 28 lane FACTUI1: the `?CreateNewObject@`/`?CreateInPlaceObject@` pair for
-// the 31 UI classes of the absent-factory roster sorting strictly before
-// `ImageDescription`, plus the 14 out-of-line constructors they call. It must
-// register BEFORE RtDataMintInit(), which is
-// why it lives here: standalone/resolve_standalone.cpp:333 (RtUiPortInit)
-// precedes :406 (the mint). See docs/runtime_port/WAVE28_LANE_FACTUI1.md.
-extern int RtUiFactory1Register();         // factory_ui1.cpp (lane FACTUI1)
-// WAVE 28 lane FACTUI2: the CreateNewObject/CreateInPlaceObject pair for the UI
-// classes in the minted-BaseTypeInfo absent-factory roster sorting at or after
-// `ImageDescription`. SpriteSheet is the live cutover wall (attempt 30).
-extern int RtUiFactory2Register();         // ui_factory_wave28.cpp (FACTUI2)
+// (WAVE 28 lanes FACTUI1 / FACTUI2 -- factory_ui1.cpp + factory_ui1_tables.inc
+// and ui_factory_wave28.cpp -- are gone: ENDGAME B.3.9 moved every row onto
+// the class's own CreateNewObject / CreateInPlaceObject statics, registered by
+// each class's file from RtUiPortInit, still before RtDataMintInit().)
 
 // 2026-09-12, VTABLE BATCH 3 - the UI::*Element widget runtime, first half.
 // Thirteen classes, one file each (runtime/src/ui/<class>element.cpp), each
@@ -228,7 +208,6 @@ void RtUiPortInit() {
     n += RtUiDialogCreateRegister();
     n += RtUiDrawRegister();
     n += RtUiCloseDialogRegister();
-    n += RtUiDialogCtorDtorRegister();
     n += RtUiShowDialogRegister();
     n += RtUiElementVtableRegister();
     n += RtUiDialogControllerRegister();
@@ -273,12 +252,7 @@ void RtUiPortInit() {
     n += RtUiGraphDescriptionRegister();
     n += RtUiLabelDescriptionRegister();
     n += RtUiStringTableFactoryRegister();
-    n += RtUiStringTableAccessorsRegister();  // same switch (FACTORY)
-    n += RtUiStringTableLifecycleRegister();  // same switch (FACTORY)
-    n += RtUiStringTableSlotsRegister();  // same switch (FRONTIER)
     n += RtUiStringTableLifecycleDtorRegister();  // same switch (MISC)
-    n += RtUiFactory1Register();
-    n += RtUiFactory2Register();
     n += RtUiImageElementRegister();          // vtable batch 3 (UI::*Element)
     n += RtUiAnimatedImageElementRegister();
     n += RtUiBorderElementRegister();
@@ -304,7 +278,6 @@ void RtUiPortInit() {
     extern int RtUiCursorRegister();               // cursor.cpp
     extern int RtUiSpriteCaptureClassRegister();   // spritecapture_class.cpp
     extern int RtUiFontRegister();                 // font.cpp
-    extern int RtUiDescriptionDtorsRegister();     // description_dtors.cpp
     extern int RtUiDocumentTextRegister();         // documenttext.cpp
     extern int RtUiSpriteContextAddRegister();     // spritecontext_add.cpp
     extern int RtUiElementBodiesB5Register();      // element_bodies_b5.cpp
@@ -317,7 +290,6 @@ void RtUiPortInit() {
     n += RtUiCursorRegister();               // UI::Cursor, whole class
     n += RtUiSpriteCaptureClassRegister();   // UI::SpriteCapture vtable + Draw
     n += RtUiFontRegister();                 // UI::Font, whole class + metrics
-    n += RtUiDescriptionDtorsRegister();     // 26 ??1<Class>@UI@@ destructors
     n += RtUiDocumentTextRegister();         // UI::DocumentTextElement pipeline
     n += RtUiSpriteContextAddRegister();     // SpriteContext AddSprite x3 + AddFont
     n += RtUiElementBodiesB5Register();      // assorted *Element / *Description

@@ -28,20 +28,54 @@
 //     them either. So they are named `_unknownB8`/`_unknownBC` (RULE B6-8: a
 //     writer exists — the copy ctor — but nothing names them).
 //
-// ABSTRACT, no real ctor (B6-3; slot 0 is the mint's RT_DELDTOR row).
+// ENDGAME B.3 step 9 (block UI-D, B39_RULES D1/D2): CONCRETE. Retail's two
+// ctors are real: the default one (0x1800dad00: DialogInstance() + stamp) and
+// the 4-argument one BeginToolTip inlines (0x1800daca0: the 6-argument
+// DialogInstance ctor with (dataSource = *element, userData = 0, flags = 0) +
+// stamp); slot 0 the class's own vector deleting dtor; ~ToolTipDialog
+// protected and empty (restamp + tail-JMP ~DialogInstance, the compiler's).
+// The minted `??_7ToolTipDialog@UI@@6B@`, its RT_DELDTOR row, its ??1 door
+// (deleting_dtor_leaves.cpp) and the FACTUI2 row are retired.
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
 
 #include "DialogInstance.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI {
 
 class ToolTipDialog : public DialogInstance {
 public:
-    // [0] 0x18004d270 — pure on purpose; the RT_DELDTOR row is not retired.
-    Object::Base* DeletingDtor(unsigned flags) override = 0;
+    // ??0ToolTipDialog@UI@@QEAA@XZ 0x1800dad00 — DialogInstance() + the stamp.
+    // +0xb8 / +0xbc are NOT written (retail).
+    ToolTipDialog() : DialogInstance() {}
+    // 0x1800daca0 (read this pass): `CALL 0x180114870` (the 6-argument
+    // DialogInstance ctor) with RDX/R8/R9 passed through, dataSource = the
+    // element the 5th argument's InternalPtr holds, userData = 0, flags = 0;
+    // then the stamp. The InternalPtrs arrive by hidden reference in retail.
+    ToolTipDialog(UserInterface* ui, const Dialog* dialog,
+                  Object::InternalPtr<DialogInstance> parent,
+                  Object::InternalPtr<Element> element)
+        : DialogInstance(ui, dialog, parent,
+                         reinterpret_cast<Object::Base*>(element.Get()), nullptr, 0) {}
+
+    // [0] 0x18004d270 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0xc0`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<ToolTipDialog*>(self + static_cast<int64_t>(i) * 0xc0)->~ToolTipDialog();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~ToolTipDialog();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char* TypeName() const override;                        // [1] 0x18004cfc0
     uint32_t    Type() const override;                            // [2] 0x18004cfa0
@@ -55,10 +89,11 @@ public:
     void SetPosition(int32_t x, int32_t y);                       // 0x1800dac50
     ToolTipDialog(const ToolTipDialog& other);                    // 0x18004d180
     ToolTipDialog& operator=(const ToolTipDialog& other);         // 0x18004d1e0
-    static uint32_t      TypeId();                                // 0x18004cfb0
+    // 0x18004cfb0 — the minted record's type id (tooltipdialog.cpp).
+    static uint32_t      TypeId();
     // MemoryAllocator statics (B36_RULES 7): `??2` 0x18004cfd0 is the door
-    // `RtUi_ToolTipDialog_OperatorNew` (tooltipdialog.cpp); CreateNewObject /
-    // CreateInPlaceObject are doors in ui_factory_wave28.cpp.
+    // `RtUi_ToolTipDialog_OperatorNew` (tooltipdialog.cpp). The factory pair is
+    // the class's own (B39_RULES D2), defined and registered in tooltipdialog.cpp.
     static void* operator new(std::size_t bytes);                 // 0x18004cfd0
     static void* operator new(std::size_t bytes, void* place);    // 0x18004d040
     static void  operator delete(void* p);                        // 0x18004d050
@@ -66,10 +101,8 @@ public:
     static Object::Base* CreateInPlaceObject(void* storage);      // 0x18004d140
 
 protected:
-    // NOT retail's ctors (0x1800daca0, 0x1800dad00) — B6-3.
-    ToolTipDialog() = default;
     // `??1ToolTipDialog@UI@@UEAA@XZ` 0x1800dac70 (stamp + tail-JMP to
-    // ~DialogInstance). Defined EMPTY; its row is deleting_dtor_leaves.cpp's.
+    // ~DialogInstance, both the compiler's). EMPTY, retail's body.
     ~ToolTipDialog();
 
     // RULE B5-15 / B6-7, COPIED from B36_SLOTS section 3:
