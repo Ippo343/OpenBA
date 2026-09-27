@@ -28,7 +28,6 @@ extern int RtAudioStreamRegister();         // audio_stream_win.cpp (Wave 24)
 // vtable 0x180157c60, one record per channel inside Audio::Device. Own file and
 // own switch: address doors only (nothing here is exported) and it needs
 // <windows.h> for SetEvent, which audio.cpp must stay free of.
-extern int RtAudioVoiceCallbackRegister();  // audio_voice_callback_win.cpp
 // WAVE 29 lane AVBODY: Scene::GetAttenuatedVolume + Scene::OnSoundEnded (two of
 // Audio's three remaining BODY rows), plus Scene::GetVolumeForPosition -- which
 // was NOT on the work list. It is the helper GetAttenuatedVolume calls twice,
@@ -66,7 +65,6 @@ void RtAudioPortInit() {
     // 0x1800a0d90). Own file + own switch -- both bodies are KERNEL32
     // synchronisation and audio.cpp must stay free of <windows.h>.
     n += RtAudioStreamRegister();
-    n += RtAudioVoiceCallbackRegister();
     // batch 7: Audio's last two unported BODY rows. Registered unconditionally
     // (DIRECTION.md: a port registers unconditionally, no new kill switches).
     n += RtAudioStreamPlayRegister();

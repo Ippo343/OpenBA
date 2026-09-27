@@ -79,6 +79,7 @@
 #include <cstring>
 #include <cstdint>
 #include <cstddef>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 
@@ -91,6 +92,7 @@
 #include "../../types/video/Device.h"
 #include "../../types/input/Input.h"
 #include "../../types/audio/Audio.h"
+#include "../../types/audio/Device.h"
 
 // ----------------------------------------------------------------------------
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
@@ -750,10 +752,14 @@ void* Ctor_AudioConfiguration(void* self) {
 // the Stream by value at +0xa00. This constructor is still the DOOR (B7-12: no
 // real Device ctor this step), so it keeps writing the offsets it transcribed.
 // ===========================================================================
+// ENDGAME B.3.9 ENG: loop 2's vptr + two zero stores are
+// `Audio::Device::PlatformChannel`'s real constructor now -- `::new` into each
+// record -- so every record wears the class's (COM-shaped) table, and the
+// by-address read of the minted unnamed row (a function-local lazy cache, B9-10)
+// is gone with that row.
 void* Ctor_AudioDevice(void* self) {
     using StreamCtorFn = void* (*)(void*);
-    static const void* slotVtable =
-        reinterpret_cast<const void*>(ResolveAddr(Module::Runtime, 0x180157c60));
+    Audio::Device* const dev = static_cast<Audio::Device*>(self);
 
     for (int i = 0; i < 64; ++i) {
         const size_t base = static_cast<size_t>(i) * 0x28;
@@ -765,12 +771,8 @@ void* Ctor_AudioDevice(void* self) {
     }
     RT_EXPORT_ONCE(StreamCtorFn, "??0Stream@Audio@@QEAA@XZ")(
         static_cast<uint8_t*>(self) + 0xa00);
-    for (int i = 0; i < 64; ++i) {
-        const size_t base = 0xa98 + static_cast<size_t>(i) * 0x20;
-        WP (self, base + 0x00, slotVtable);
-        W64(self, base + 0x08, 0);
-        W64(self, base + 0x18, 0);
-    }
+    for (int i = 0; i < 64; ++i)
+        ::new (static_cast<void*>(&dev->_platformChannels[i])) Audio::Device::PlatformChannel();
     Publish(SlotAudioDevice(), self);
     W64(self, 0xa88, 0);
     W64(self, 0xa90, 0);

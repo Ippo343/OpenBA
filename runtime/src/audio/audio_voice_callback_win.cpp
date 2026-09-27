@@ -155,25 +155,26 @@
 // cutover runs our code rather than aborting.
 // ============================================================================
 
+// ---------------------------------------------------------------------------
+// 6. ENDGAME B.3.9 ENG -- THE CLASS IS REAL, THE MINTED ROW IS RETIRED
+// ---------------------------------------------------------------------------
+// `Audio::Device::PlatformChannel` (runtime/types/audio/Device.h) declares the
+// seven slots as virtual members in this order, and `Ctor_AudioDevice`
+// placement-news every record, so each record's vptr is the COMPILER's table
+// -- a COM-compatible IXAudio2VoiceCallback table -- instead of the minted
+// unnamed row 0x180157c60 (tools/rt_mint_retired/eng.txt). The seven
+// address registrations below it (0x1800501c0..0x180050230) are gone with the
+// row: their only reader was that row's slot fill.
+// ============================================================================
+
 #include <windows.h>
 
 #include <cstddef>
 #include <cstdint>
-#include <cstdio>
 
-#include "../../funcs/rt_port.h"
 #include "../../types/audio/Device.h"
 
-namespace RtAudio {
-
-// The per-channel XAudio2 voice-callback record. ENDGAME B.3.7 block B4: it is
-// `Audio::Device::PlatformChannel` (runtime/types/audio/Device.h) — the retail
-// name `?GetPlatformChannel@Device@Audio@@QEAAPEAUPlatformChannel@12@H@Z`
-// (0x18000c720: `SHL RAX,5 ; ADD RAX,0xa98 ; ADD RAX,RCX`) gives the 0x20
-// record whose first qword is this table. The layout moved there (B6-8); the
-// descriptive `VoiceCallback` spelling is kept as an alias for this file. The
-// seven slot bodies stay here as they are (B37_RULES section 7).
-using VoiceCallback = Audio::Device::PlatformChannel;
+namespace Audio {
 
 // The bit slot 2 raises. `audio_device.cpp`'s `Update` tests `flags & 2` as
 // "finished, reap me" and its reap clears bits 0 and 1 (`and $0xfffffffc`).
@@ -182,16 +183,12 @@ static const uint32_t kChannelFinished = 0x2u;
 
 // ---- slot 0  0x180050200 ---------------------------------------------------
 // IXAudio2VoiceCallback::OnVoiceProcessingPassStart(UINT32 BytesRequired)
-extern "C" void RtAudio_VoiceCallback_OnVoiceProcessingPassStart(void* self,
-                                                                 uint32_t bytesRequired) {
-    (void)self; (void)bytesRequired;   // retail: `ret` — RCX and EDX never read
-}
+// retail: `ret` -- RCX and EDX never read.
+void Device::PlatformChannel::OnVoiceProcessingPassStart(uint32_t) {}
 
 // ---- slot 1  0x1800501f0 ---------------------------------------------------
 // IXAudio2VoiceCallback::OnVoiceProcessingPassEnd()
-extern "C" void RtAudio_VoiceCallback_OnVoiceProcessingPassEnd(void* self) {
-    (void)self;
-}
+void Device::PlatformChannel::OnVoiceProcessingPassEnd() {}
 
 // ---- slot 2  0x1800501c0 ---------------------------------------------------
 // IXAudio2VoiceCallback::OnStreamEnd()
@@ -201,16 +198,13 @@ extern "C" void RtAudio_VoiceCallback_OnVoiceProcessingPassEnd(void* self) {
 // 64 records at its own AudioChannel before any voice can exist. A guard here
 // would not restore the behaviour, it would skip it (CLAUDE.md, "Don't 'fix' a
 // faithful crash with a null check").
-extern "C" void RtAudio_VoiceCallback_OnStreamEnd(void* self) {
-    VoiceCallback* cb = static_cast<VoiceCallback*>(self);
-    cb->channel->flags |= kChannelFinished;
+void Device::PlatformChannel::OnStreamEnd() {
+    channel->flags |= kChannelFinished;
 }
 
 // ---- slot 3  0x180050210 ---------------------------------------------------
 // IXAudio2VoiceCallback::OnBufferStart(void* pBufferContext)
-extern "C" void RtAudio_VoiceCallback_OnBufferStart(void* self, void* bufferContext) {
-    (void)self; (void)bufferContext;
-}
+void Device::PlatformChannel::OnBufferStart(void*) {}
 
 // ---- slot 4  0x1800501d0 ---------------------------------------------------
 // IXAudio2VoiceCallback::OnBufferEnd(void* pBufferContext)
@@ -218,61 +212,18 @@ extern "C" void RtAudio_VoiceCallback_OnBufferStart(void* self, void* bufferCont
 // The null test IS retail's own (`test %rcx,%rcx ; je`), not a port's caution:
 // the Device constructor zeroes `+0x18` and only `Stream::Run` ever fills it,
 // so a non-streamed voice reaches here with a null handle every time.
-// `pBufferContext` is ignored by retail — RDX is never read.
-extern "C" void RtAudio_VoiceCallback_OnBufferEnd(void* self, void* bufferContext) {
-    (void)bufferContext;
-    VoiceCallback* cb = static_cast<VoiceCallback*>(self);
-    if (cb->bufferEvent != nullptr)
-        SetEvent(static_cast<HANDLE>(cb->bufferEvent));   // tail-jmp *[0x18014b368] in retail
+// `pBufferContext` is ignored by retail -- RDX is never read.
+void Device::PlatformChannel::OnBufferEnd(void*) {
+    if (bufferEvent != nullptr)
+        SetEvent(static_cast<HANDLE>(bufferEvent));   // tail-jmp *[0x18014b368] in retail
 }
 
 // ---- slot 5  0x180050220 ---------------------------------------------------
 // IXAudio2VoiceCallback::OnLoopEnd(void* pBufferContext)
-extern "C" void RtAudio_VoiceCallback_OnLoopEnd(void* self, void* bufferContext) {
-    (void)self; (void)bufferContext;
-}
+void Device::PlatformChannel::OnLoopEnd(void*) {}
 
 // ---- slot 6  0x180050230 ---------------------------------------------------
 // IXAudio2VoiceCallback::OnVoiceError(void* pBufferContext, HRESULT Error)
-extern "C" void RtAudio_VoiceCallback_OnVoiceError(void* self, void* bufferContext,
-                                                   int32_t error) {
-    (void)self; (void)bufferContext; (void)error;
-}
+void Device::PlatformChannel::OnVoiceError(void*, int32_t) {}
 
-}  // namespace RtAudio
-
-// ============================================================================
-// Registration — ADDRESS DOORS ONLY, because there is no name to register.
-// ============================================================================
-// Not one of the seven is exported: checked against the retail export directory
-// with pefile (4,926 named exports scanned; none resolves to any of these VAs,
-// and the nearest preceding export to 0x1800501a0 is
-// `??4VideoProgram@Video@@QEAAAEAV01@AEBV01@@Z` +0x12a0, i.e. far away).
-// `AEAA` means PRIVATE, not unexported — so "unexported" was MEASURED here
-// rather than inferred from a mangling
-// (reference_aeaa_is_private_not_unexported.md).
-//
-// An `RT_MINT_UNNAMED` slot resolves through `RtPortLookupAddr` on its `dllVa`,
-// so these seven `RegisterRuntimeAddr` calls are exactly what turns
-// `kVSlots2[0..6]` from `RtMintTrapStub_2_*` aborts into our bodies. Same door
-// `encoding.cpp` uses for the five slots of 0x1801554a8.
-// ============================================================================
-int RtAudioVoiceCallbackRegister() {
-    using namespace RtAudio;
-    int n = 0;
-    RegisterRuntimeAddr(0x180050200,
-        (void*)&RtAudio_VoiceCallback_OnVoiceProcessingPassStart); ++n;
-    RegisterRuntimeAddr(0x1800501f0,
-        (void*)&RtAudio_VoiceCallback_OnVoiceProcessingPassEnd);   ++n;
-    RegisterRuntimeAddr(0x1800501c0,
-        (void*)&RtAudio_VoiceCallback_OnStreamEnd);                ++n;
-    RegisterRuntimeAddr(0x180050210,
-        (void*)&RtAudio_VoiceCallback_OnBufferStart);              ++n;
-    RegisterRuntimeAddr(0x1800501d0,
-        (void*)&RtAudio_VoiceCallback_OnBufferEnd);                ++n;
-    RegisterRuntimeAddr(0x180050220,
-        (void*)&RtAudio_VoiceCallback_OnLoopEnd);                  ++n;
-    RegisterRuntimeAddr(0x180050230,
-        (void*)&RtAudio_VoiceCallback_OnVoiceError);               ++n;
-    return n;
-}
+}  // namespace Audio

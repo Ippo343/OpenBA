@@ -12,3 +12,4 @@
 ??_7GoalInstance@Achievement@@6B@      ENG     real ctor + DeletingDtor; FACTREST row, RT_DELDTOR row, ??0/??1 doors, 6 slot doors deleted
 ??_7Achievement@0@6B@                  ENG     real ctor + DeletingDtor; FACTREST row, RT_DELDTOR row, ??0/??1 doors, 7 slot doors deleted
 ??_7AchievementInstance@Achievement@@6B@  ENG   ctor door -> ::new (CreateInstance); FACTREST row, RT_DELDTOR row, ??0/??1 doors, 3 slot doors deleted
+0x180157c60                            ENG     the Audio device voice-callback table: Device::PlatformChannel is a real class, Ctor_AudioDevice placement-news it; 7 address slot doors deleted

@@ -521,3 +521,47 @@ UNIT_TEST(b39_eng_soundbuffer_deletingdtor_frees_both_arms) {
 UNIT_TEST(b39_eng_soundeffect_deletingdtor_frees_both_arms) {
     CheckBothArms<Audio::SoundEffect, 0x40>();
 }
+
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.9 ENG -- Audio::Device::PlatformChannel is a real polymorphic
+// class (the retired unnamed mint row 0x180157c60): seven virtuals in the
+// IXAudio2VoiceCallback order, no destructor slot, and the ctor's loop-2
+// stores (vptr, +0x08, +0x18; +0x10 is loop 3's and stays untouched).
+// ---------------------------------------------------------------------------
+namespace Audio {
+void Device::PlatformChannel::OnVoiceProcessingPassStart(uint32_t) { Note(this, 60); }
+void Device::PlatformChannel::OnVoiceProcessingPassEnd() { Note(this, 61); }
+void Device::PlatformChannel::OnStreamEnd() { Note(this, 62); }
+void Device::PlatformChannel::OnBufferStart(void*) { Note(this, 63); }
+void Device::PlatformChannel::OnBufferEnd(void*) { Note(this, 64); }
+void Device::PlatformChannel::OnLoopEnd(void*) { Note(this, 65); }
+void Device::PlatformChannel::OnVoiceError(void*, int32_t) { Note(this, 66); }
+}  // namespace Audio
+
+UNIT_TEST(b39_eng_platformchannel_slot_order_by_pmf) {
+    using PC = Audio::Device::PlatformChannel;
+    CHECK(std::is_polymorphic<PC>::value);
+    CHECK(!std::has_virtual_destructor<PC>::value);
+    CHECK_EQ(PmfSlot(&PC::OnVoiceProcessingPassStart), (uintptr_t)0x00);   // 0x180050200
+    CHECK_EQ(PmfSlot(&PC::OnVoiceProcessingPassEnd),   (uintptr_t)0x08);   // 0x1800501f0
+    CHECK_EQ(PmfSlot(&PC::OnStreamEnd),                (uintptr_t)0x10);   // 0x1800501c0
+    CHECK_EQ(PmfSlot(&PC::OnBufferStart),              (uintptr_t)0x18);   // 0x180050210
+    CHECK_EQ(PmfSlot(&PC::OnBufferEnd),                (uintptr_t)0x20);   // 0x1800501d0
+    CHECK_EQ(PmfSlot(&PC::OnLoopEnd),                  (uintptr_t)0x28);   // 0x180050220
+    CHECK_EQ(PmfSlot(&PC::OnVoiceError),               (uintptr_t)0x30);   // 0x180050230
+}
+
+UNIT_TEST(b39_eng_platformchannel_ctor_makes_loop2_stores) {
+    alignas(8) uint8_t buf[2 * 0x20];
+    std::memset(buf, 0xCD, sizeof buf);
+    auto* a = ::new (static_cast<void*>(buf)) Audio::Device::PlatformChannel();
+    auto* b = ::new (static_cast<void*>(buf + 0x20)) Audio::Device::PlatformChannel();
+    CHECK(a->voice == nullptr);
+    CHECK(a->bufferEvent == nullptr);
+    for (int i = 0x10; i < 0x18; ++i) CHECK_EQ((int)buf[i], 0xCD);   // loop 3's field
+    CHECK(VTableOf(a) != nullptr);
+    CHECK(VTableOf(a) == VTableOf(b));
+    // A raw COM-shaped call through slot 2 lands in the member with `this`.
+    using VoidFn = void (*)(void*);
+    Reset(); SlotAt<VoidFn>(a, 0x10)(a); CHECK_EQ(g_lastMark, 62); CHECK(g_lastSelf == a);
+}
