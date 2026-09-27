@@ -19,6 +19,9 @@
 //
 
 #include "engine_funcs.h"
+#include "Action/PerformWork.h"   // ENDGAME B.3.8 CB3
+#include "Action/PickupRawMaterial.h"   // ENDGAME B.3.8 CB3
+#include "Action/PlayAnimation.h"   // ENDGAME B.3.8 CB3
 #include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
@@ -114,10 +117,6 @@ static WA_fn_ObjectInternal_Ctor_t  s_fn_ObjInternalCtor = nullptr;
 static WA_fn_Time_Ctor_t            s_fn_TimeCtor        = nullptr;
 
 // Inline-object vtables + globals (exe .rdata).
-static void* s_vtable_Action        = nullptr;  // 0x14015faa0
-static void* s_vtable_PerformWork   = nullptr;  // 0x14015fea0
-static void* s_vtable_PlayAnimation = nullptr;  // 0x140158950
-static void* s_vtable_PickupRawMaterial = nullptr; // 0x14015ff10 (LEA @0x1400c9bb0)
 static const float* s_pf_172124 = nullptr;      // 0x140172124 (c0ad0 PerformWork time)
 static const uint32_t* s_pTid_c7b68 = nullptr;  // 0x1401c7b68 (PerformWork target derive check)
 static const uint32_t* s_pDword_c70e8 = nullptr;// 0x1401c70e8 (SendComponentMessage target type-id = CitizenAIComponent)
@@ -158,10 +157,6 @@ static void ResolveAll() {
     if (!s_fn_ObjInternalCtor) s_fn_ObjInternalCtor = reinterpret_cast<WA_fn_ObjectInternal_Ctor_t>(fn_ObjectInternal_Ctor);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b00)) s_fn_TimeCtor        = *reinterpret_cast<WA_fn_Time_Ctor_t*>(s);
 
-    s_vtable_Action        = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14015faa0));
-    s_vtable_PerformWork   = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14015fea0));
-    s_vtable_PlayAnimation = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x140158950));
-    s_vtable_PickupRawMaterial = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14015ff10));
     s_pf_172124    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172124));
     s_pTid_c7b68   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7b68));
     s_pDword_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
@@ -311,20 +306,9 @@ void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targ
         if (inlineObj) {
             uint32_t resKind = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(derivedTarget) + 0x80);
             uint64_t res70   = *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(derivedTarget) + 0x70);
-            if (s_fn_ObjInternalCtor) s_fn_ObjInternalCtor(inlineObj);
-            uintptr_t o = reinterpret_cast<uintptr_t>(inlineObj);
-            *reinterpret_cast<void**>(o)          = s_vtable_Action;
-            *reinterpret_cast<uint64_t*>(o + 0x10) = 0;
-            *reinterpret_cast<uint8_t*>(o + 0x18)  = 0;
-            *reinterpret_cast<void**>(o)          = s_vtable_PerformWork;
-            *reinterpret_cast<uint64_t*>(o + 0x20) = 0;
-            *reinterpret_cast<uintptr_t*>(o + 0x20) = *reinterpret_cast<uintptr_t*>(citizenIBP);  // entity inner
-            *reinterpret_cast<float*>(o + 0x28)    = heading;
-            *reinterpret_cast<int*>(o + 0x2c)      = pwParam;
-            *reinterpret_cast<uint64_t*>(o + 0x30) = res70;
-            *reinterpret_cast<uint64_t*>(o + 0x38) = 0;
-            *reinterpret_cast<uint8_t*>(o + 0x40)  = 0;
-            *reinterpret_cast<uint32_t*>(o + 0x44) = resKind;
+            // the inlined PerformWork ctor 0x1400c9720 (useTool = 0, +0x44 = resKind): the real ctor.
+            new (inlineObj) PerformWork(citizenIBP, heading, static_cast<uint32_t>(pwParam),
+                                        static_cast<int64_t>(res70), 0, static_cast<int>(resKind));
             pw = inlineObj;
         }
         WA_IbpCtor(&ibpA, pw);
@@ -425,18 +409,12 @@ void* WorkAct_PickupRawMaterialCopyCtor_c9b70(void* self, void* p2, void* p3) {
     ResolveAll();
     if (!self) return nullptr;
 
-    if (s_fn_ObjInternalCtor) s_fn_ObjInternalCtor(self);
-
-    uintptr_t o = reinterpret_cast<uintptr_t>(self);
-    *reinterpret_cast<void**>(o)           = s_vtable_Action;
-    *reinterpret_cast<uint64_t*>(o + 0x10) = 0;
-    *reinterpret_cast<uint8_t*>(o + 0x18)  = 0;
-    *reinterpret_cast<void**>(o)           = s_vtable_PickupRawMaterial;
-    *reinterpret_cast<uint64_t*>(o + 0x20) = 0;
-    *reinterpret_cast<uintptr_t*>(o + 0x20) = p2 ? *reinterpret_cast<uintptr_t*>(p2) : 0;
-    *reinterpret_cast<uint64_t*>(o + 0x28) = 0;
-    *reinterpret_cast<uintptr_t*>(o + 0x28) = p3 ? *reinterpret_cast<uintptr_t*>(p3) : 0;
-    return self;
+    // The real ctor (Action(): Internal, +0x10/+0x18 = 0; +0x20/+0x28 zeroed), then
+    // the two field copies.
+    PickupRawMaterial* a = new (self) PickupRawMaterial();
+    a->_field20 = p2 ? *reinterpret_cast<void**>(p2) : nullptr;
+    a->_field28 = p3 ? *reinterpret_cast<void**>(p3) : nullptr;
+    return static_cast<Object::Base*>(a);
 }
 
 // ============================================================
@@ -526,20 +504,8 @@ void WorkAct_PerformWorkCtor9_c0ad0(void* citizenIBP, uint32_t workId, void* tar
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
         uint64_t timeVal = 0;
         if (s_fn_TimeCtor) s_fn_TimeCtor(&timeVal, WA_C_172124());
-        if (s_fn_ObjInternalCtor) s_fn_ObjInternalCtor(obj);
-        uintptr_t o = reinterpret_cast<uintptr_t>(obj);
-        *reinterpret_cast<void**>(o)           = s_vtable_Action;
-        *reinterpret_cast<uint64_t*>(o + 0x10) = 0;
-        *reinterpret_cast<uint8_t*>(o + 0x18)  = 0;
-        *reinterpret_cast<void**>(o)           = s_vtable_PerformWork;
-        *reinterpret_cast<uint64_t*>(o + 0x20) = 0;
-        *reinterpret_cast<uintptr_t*>(o + 0x20) = entityInner;
-        *reinterpret_cast<float*>(o + 0x28)    = heading;
-        *reinterpret_cast<int*>(o + 0x2c)      = 7;
-        *reinterpret_cast<uint64_t*>(o + 0x30) = timeVal;
-        *reinterpret_cast<uint64_t*>(o + 0x38) = 0;
-        *reinterpret_cast<uint8_t*>(o + 0x40)  = 0;
-        *reinterpret_cast<uint32_t*>(o + 0x44) = 0xffffffffu;
+        // the inlined PerformWork ctor 0x1400c9720 (useTool = 0, +0x44 = -1): the real ctor.
+        new (obj) PerformWork(&entityInner, heading, 7, static_cast<int64_t>(timeVal), 0, -1);
         pw7 = obj;
     }
     WA_IbpCtor(&ibpA, pw7);
@@ -586,20 +552,8 @@ void WorkAct_PerformWorkCtor9_c0ad0(void* citizenIBP, uint32_t workId, void* tar
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
         uint64_t timeVal = 0;
         if (s_fn_TimeCtor) s_fn_TimeCtor(&timeVal, WA_C_172124());
-        if (s_fn_ObjInternalCtor) s_fn_ObjInternalCtor(obj);
-        uintptr_t o = reinterpret_cast<uintptr_t>(obj);
-        *reinterpret_cast<void**>(o)           = s_vtable_Action;
-        *reinterpret_cast<uint64_t*>(o + 0x10) = 0;
-        *reinterpret_cast<uint8_t*>(o + 0x18)  = 0;
-        *reinterpret_cast<void**>(o)           = s_vtable_PerformWork;
-        *reinterpret_cast<uint64_t*>(o + 0x20) = 0;
-        *reinterpret_cast<uintptr_t*>(o + 0x20) = entityInner;
-        *reinterpret_cast<float*>(o + 0x28)    = heading;
-        *reinterpret_cast<int*>(o + 0x2c)      = 6;
-        *reinterpret_cast<uint64_t*>(o + 0x30) = timeVal;
-        *reinterpret_cast<uint64_t*>(o + 0x38) = 0;
-        *reinterpret_cast<uint8_t*>(o + 0x40)  = 0;
-        *reinterpret_cast<uint32_t*>(o + 0x44) = 0xffffffffu;
+        // the inlined PerformWork ctor 0x1400c9720 (useTool = 0, +0x44 = -1): the real ctor.
+        new (obj) PerformWork(&entityInner, heading, 6, static_cast<int64_t>(timeVal), 0, -1);
         pw6 = obj;
     }
     WA_IbpCtor(&ibpA, pw6);
@@ -688,16 +642,10 @@ void WorkAct_PlayAnimationCtor_c2490(void* citizenIBP, uint32_t priority, uint32
         uint64_t timeVal = 0;
         if (s_fn_TimeCtor) s_fn_TimeCtor(&timeVal, s_pf_172100 ? *s_pf_172100 : 0.0f);
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
-        if (s_fn_ObjInternalCtor) s_fn_ObjInternalCtor(inlineObj);
-        uintptr_t o = reinterpret_cast<uintptr_t>(inlineObj);
-        *reinterpret_cast<void**>(o)          = s_vtable_Action;
-        *reinterpret_cast<uint64_t*>(o + 0x10) = 0;
-        *reinterpret_cast<uint8_t*>(o + 0x18)  = 0;
-        *reinterpret_cast<void**>(o)          = s_vtable_PlayAnimation;
-        *reinterpret_cast<uintptr_t*>(o + 0x20) = entityInner;
-        *reinterpret_cast<uint32_t*>(o + 0x28) = 0;
-        *reinterpret_cast<uint64_t*>(o + 0x30) = timeVal;
-        *reinterpret_cast<uint64_t*>(o + 0x38) = 0;
+        // The real ctor (Action(), fields zeroed; +0x28 animation = 0), then the stores.
+        PlayAnimation* a = new (inlineObj) PlayAnimation();
+        a->_field20 = reinterpret_cast<void*>(entityInner);
+        a->_field30 = reinterpret_cast<void*>(timeVal);
         pa = inlineObj;
     }
     WA_IbpCtor(&ibpRes20, pa);

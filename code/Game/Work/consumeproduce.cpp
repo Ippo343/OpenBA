@@ -376,10 +376,7 @@ static int FinalizeAction(ConsumeProduce* self, void* entityIBP, void* actionIBP
     uintptr_t citizenEntity = *(uintptr_t*)entityIBP;
 
     // Call vtable slot +0x50 (Shared method)
-    uintptr_t vtable = *(uintptr_t*)self;
-    typedef uint64_t* (*VtSlot50_t)(ConsumeProduce*, void*);
-    VtSlot50_t vtShared = *(VtSlot50_t*)(vtable + 0x50);
-    uint64_t* result = vtShared(self, actionIBP);
+    uint64_t* result = static_cast<uint64_t*>(self->GetTarget(actionIBP));
 
     uint64_t actionPtr = *result;
     *(uint32_t*)(citizenEntity + 0x54) |= 4;
@@ -1286,10 +1283,8 @@ DEFINE_EXE_VTABLE(ConsumeProduce, "_ZTV14ConsumeProduce")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x140161220 is still read back BY ADDRESS — ConsumeProduceComponent's
-// CreateWork (resourceproduce_creatework.cpp, block MI-B) builds the work by hand and
-// stamps it — so the exe address serves the COMPILER's table.
 extern "C" void RegisterConsumeProduceVtable() {
-    RegisterExeAddr(ConsumeProduceAddr::Vtable, reinterpret_cast<uintptr_t>(ConsumeProduce::Vtable()));   // 0x140161220
+    // ENDGAME B.3.8 CB3: the retail-table row is gone -- no by-address reader of
+    // it is left. The call in address_registry.cpp is the coordinator's to drop.
 }
 DEFINE_EXE_TYPE(ConsumeProduce, "Work")

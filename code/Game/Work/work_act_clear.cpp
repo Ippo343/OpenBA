@@ -29,6 +29,9 @@
 // guarded call is skipped (project norm).
 
 #include "engine_funcs.h"
+#include "Action/Action.h"   // ENDGAME B.3.8 CB3
+#include "Action/RemoveNaturalResource.h"   // ENDGAME B.3.8 CB3
+#include "Action/ShowTool.h"   // ENDGAME B.3.8 CB3
 #include "resolve.h"
 #include "Component/coll_bridge.h"
 #include <cstdint>
@@ -98,9 +101,6 @@ static s_wac_ObjInternalCtor_t s_wac_ObjInternalCtor= nullptr;
 static s_wac_MemFree_t         s_wac_MemFree        = nullptr;
 
 // Inline-object vtables + globals (exe .rdata).
-static void* s_wac_vtable_Action               = nullptr; // 0x14015faa0 (inline base)
-static void* s_wac_vtable_RemoveNaturalResource= nullptr;  // 0x140160050 (loop inline action)
-static void* s_wac_vtable_ShowTool             = nullptr;  // 0x1401589b0 (tail inline ShowTool)
 static const uint32_t* s_wac_pTid_c7b68 = nullptr;         // 0x1401c7b68 (target derive type id)
 static const uint32_t* s_wac_pMsgId_c70e8 = nullptr;       // 0x1401c70e8 (SendComponentMessage target type-id = CitizenAIComponent)
 static const float*    s_wac_pf_172280 = nullptr;          // 0x140172280 (MoveTo speed = -1.0f)
@@ -136,9 +136,6 @@ static void s_wac_ResolveAll() {
     if (!s_wac_ObjInternalCtor && fn_ObjectInternal_Ctor) s_wac_ObjInternalCtor = reinterpret_cast<s_wac_ObjInternalCtor_t>(fn_ObjectInternal_Ctor);
     if (!s_wac_IsDerivedFrom   && fn_IsDerivedFrom)       s_wac_IsDerivedFrom   = reinterpret_cast<s_wac_IsDerivedFrom_t>(fn_IsDerivedFrom);
 
-    s_wac_vtable_Action                = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14015faa0));
-    s_wac_vtable_RemoveNaturalResource = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x140160050));
-    s_wac_vtable_ShowTool              = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x1401589b0));
     s_wac_pTid_c7b68   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7b68));
     s_wac_pMsgId_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
     s_wac_pf_172280    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172280));
@@ -196,10 +193,9 @@ static void WAC_AppendInline(uintptr_t aiComp, void** plVar15, uintptr_t actionI
              node = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(node) + 0x10)) {
             if (*reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(node) + 0x18) != 0) {
                 *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(node) + 0x18) = 0;
-                // virtual call vtable+0x38(node, plVar15)
-                void** vt = *reinterpret_cast<void***>(node);
-                typedef void (*Slot38_t)(void* self, void* list);
-                reinterpret_cast<Slot38_t>(vt[0x38 / 8])(node, plVar15);
+                // slot 7 (vtable +0x38) Action::Exit(list): the node is an action on the
+                // citizen's action stack (+0x10 next, +0x18 _status, as the walk 0x1400c4f10)
+                reinterpret_cast<Action*>(node)->Exit(plVar15);   // B.3.8 bridge
             }
         }
     }
@@ -300,17 +296,12 @@ void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3,
             void* obj = WAC_Alloc(0x38, 8); // MOV EDX,8; LEA ECX,[RDX+0x30] @0x1400c174a = 8+0x30 = 0x38
             uintptr_t actionObj = 0;        // R14 (the built action, or 0)
             if (obj) {
-                uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(param_1); // RBX = *(*param_1)
-                if (s_wac_ObjInternalCtor) s_wac_ObjInternalCtor(obj);
-                uintptr_t o = reinterpret_cast<uintptr_t>(obj);
-                *reinterpret_cast<void**>(o)           = s_wac_vtable_Action;                // 0x14015faa0 @0x1400c176d
-                *reinterpret_cast<uint64_t*>(o + 0x10) = 0;
-                *reinterpret_cast<uint8_t*>(o + 0x18)  = 0;
-                *reinterpret_cast<void**>(o)           = s_wac_vtable_RemoveNaturalResource; // 0x140160050 @0x1400c1784
-                *reinterpret_cast<uintptr_t*>(o + 0x20)= entityInner;                        // citizen inner
-                *reinterpret_cast<uintptr_t*>(o + 0x28)= innerR4;                            // param_4[i] inner
-                *reinterpret_cast<uint8_t*>(o + 0x30)  = 1;                                  // @0x1400c1796
-                actionObj = o;
+                uint64_t entityInner = *reinterpret_cast<uintptr_t*>(param_1); // RBX = *(*param_1)
+                uint64_t targetInner = innerR4;
+                // 0x1400c176d..0x1400c1796: the inlined RemoveNaturalResource ctor
+                // (+0x20 citizen inner, +0x28 param_4[i] inner, +0x30 = 1) — the real ctor.
+                new (obj) RemoveNaturalResource(&targetInner, &entityInner, 1);
+                actionObj = reinterpret_cast<uintptr_t>(obj);
             }
             WAC_IbpCtor(&ibpA, reinterpret_cast<void*>(actionObj)); // &local_res8 → ibpA scratch
 
@@ -405,14 +396,9 @@ void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3,
         if (obj) {
             uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(param_1);            // RBX
             uint32_t toolType = derived ? *reinterpret_cast<uint32_t*>(local_60 + 0x80) : 0; // EDI = [R15+0x80]
-            if (s_wac_ObjInternalCtor) s_wac_ObjInternalCtor(obj);
+            // 0x1400c1d1e..0x1400c1d3f: the inlined ShowTool ctor — the real ctor.
+            new (obj) ShowTool(&entityInner, static_cast<int>(toolType));
             uintptr_t o = reinterpret_cast<uintptr_t>(obj);
-            *reinterpret_cast<void**>(o)           = s_wac_vtable_Action;   // 0x14015faa0 @0x1400c1d1e
-            *reinterpret_cast<uint64_t*>(o + 0x10) = 0;
-            *reinterpret_cast<uint8_t*>(o + 0x18)  = 0;
-            *reinterpret_cast<void**>(o)           = s_wac_vtable_ShowTool; // 0x1401589b0 @0x1400c1d31
-            *reinterpret_cast<uintptr_t*>(o + 0x20)= entityInner;
-            *reinterpret_cast<uint32_t*>(o + 0x28) = toolType;             // dword @0x1400c1d3f
             stIbp = o;
             WAC_IbpCtor(&ibpB, reinterpret_cast<void*>(o)); // &local_res20
             stIbp = ibpB;

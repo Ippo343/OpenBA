@@ -729,12 +729,8 @@ int ClearArea::Execute(void* actionStack, void* time, uint64_t /*arg3*/) {
                 void* citizenObj = *(void**)actionStack;
 
                 // Call vtable[10] (+0x50) on this — Work::GetTarget(this, &workIBP)
-                typedef void* (*fn_VTable50_t)(void* self, void* retBuf);
-                void* vtable = *(void**)this;
-                fn_VTable50_t fn_getTarget = reinterpret_cast<fn_VTable50_t>(
-                    *(void**)((uintptr_t)vtable + 0x50));
                 uint64_t workIBP = 0;
-                void* workResult = fn_getTarget(this, &workIBP);
+                void* workResult = GetTarget(&workIBP);
                 uint64_t workEntity2 = *(uint64_t*)workResult;
 
                 // Set fields on citizen: +0x30 = workId, +0x54 |= 4, +0xb0 = 0
@@ -834,12 +830,8 @@ int ClearArea::Execute(void* actionStack, void* time, uint64_t /*arg3*/) {
                 void* citizenObj = *(void**)actionStack;
 
                 // Call vtable[10] (+0x50) — Work::GetTarget
-                typedef void* (*fn_VTable50_t)(void* self, void* retBuf);
-                void* vtable = *(void**)this;
-                fn_VTable50_t fn_getTarget = reinterpret_cast<fn_VTable50_t>(
-                    *(void**)((uintptr_t)vtable + 0x50));
                 uint64_t workIBP = 0;
-                void* workResult = fn_getTarget(this, &workIBP);
+                void* workResult = GetTarget(&workIBP);
                 uint64_t workEntity2 = *(uint64_t*)workResult;
 
                 *(int*)((uintptr_t)citizenObj + 0x30) = workIdSaved;

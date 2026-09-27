@@ -32,6 +32,7 @@
 #include "resolve.h"
 #include "Component/coll_bridge.h"
 #include <cstdint>
+#include "Component/BuildDescription.h"   // ENDGAME B.3.8 CB3: BuildDescription::TypeId()
 
 #include "Object/factory_registration.h"
 
@@ -49,7 +50,7 @@ typedef void* (*GRMC_FindCompStorage_t)(uintptr_t entity, void* retIBP); // 0x14
 // (the raw .rdata global is null).
 // ENDGAME B.3.8: read per call (the function-local lazy cache is gone, B38 D7).
 static uint32_t GRMC_BuildDescTypeId() {
-    return ::Object::GetTypeIdByName("BuildDescription");
+    return BuildDescription::TypeId();
 }
 
 // The base ctor is Work(buildEntityIBP) = Work_Ctor25 (0x1400f72e0) on a temp IBP

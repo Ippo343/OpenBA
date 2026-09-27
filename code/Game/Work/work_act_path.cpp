@@ -17,6 +17,7 @@
 // All disasm citations are exe addresses (base 0x140000000).
 
 #include "engine_funcs.h"
+#include "Action/PerformWork.h"   // ENDGAME B.3.8 CB3
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -109,8 +110,6 @@ static WAP2_ObjInternalCtor_t     s_wap2_ObjInternalCtor   = nullptr;
 static WAP2_TimeCtor_t            s_wap2_TimeCtor          = nullptr;
 
 // Inline-object vtables (exe .rdata).
-static void* s_wap2_vtable_Action      = nullptr; // 0x14015faa0 (0xbf990)
-static void* s_wap2_vtable_PerformWork = nullptr; // 0x14015fea0 (0xbf9a3)
 
 // Runtime CRC type-id / message-id globals — read LIVE (these are 0 at static-init, the
 // engine fills them with real CRC ids after Object::Factory::Startup).
@@ -151,8 +150,6 @@ static void ResolveAll() {
     if (!s_wap2_IbpDelete)       s_wap2_IbpDelete       = reinterpret_cast<WAP2_IbpDelete_t>(fn_InternalBasePtr_DeletePtr);
     if (!s_wap2_ObjInternalCtor) s_wap2_ObjInternalCtor = reinterpret_cast<WAP2_ObjInternalCtor_t>(fn_ObjectInternal_Ctor);
 
-    s_wap2_vtable_Action      = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14015faa0));
-    s_wap2_vtable_PerformWork = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14015fea0));
     s_wap2_pMsgId_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
     s_wap2_pMsgId_c7158 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
     s_wap2_pf_172124    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172124));
@@ -271,20 +268,9 @@ extern "C" void* WorkAct_GatherRawMatCtor_bf790(
     if (obj) {
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(entity);  // *(entity) (0xbf96f)
         int64_t timeVal = WAP2_MakeTime(kTime075);                      // System::Time::Time(_,0.75) (0xbf97d)
-        if (s_wap2_ObjInternalCtor) s_wap2_ObjInternalCtor(obj);        // (0xbf989)
-        uintptr_t o = reinterpret_cast<uintptr_t>(obj);
-        *reinterpret_cast<void**>(o)           = s_wap2_vtable_Action;      // (0xbf990)
-        *reinterpret_cast<uint64_t*>(o + 0x10) = 0;                         // (0xbf99a)
-        *reinterpret_cast<uint8_t*>(o + 0x18)  = 0;                         // (0xbf99e)
-        *reinterpret_cast<void**>(o)           = s_wap2_vtable_PerformWork; // (0xbf9a3)
-        *reinterpret_cast<uint64_t*>(o + 0x20) = 0;                         // (0xbf9ad)
-        *reinterpret_cast<uintptr_t*>(o + 0x20) = entityInner;             // (0xbf9b5)
-        *reinterpret_cast<float*>(o + 0x28)    = headingSrc;               // (0xbf9b9)
-        *reinterpret_cast<int*>(o + 0x2c)      = 7;                         // (0xbf9bf)
-        *reinterpret_cast<int64_t*>(o + 0x30)  = timeVal;                  // (0xbf9c7)
-        *reinterpret_cast<uint64_t*>(o + 0x38) = 0;                         // (0xbf9cb)
-        *reinterpret_cast<uint8_t*>(o + 0x40)  = 0;                         // (0xbf9cf)
-        *reinterpret_cast<uint32_t*>(o + 0x44) = 0xffffffff;               // (0xbf9d4)
+        // (0xbf989..0xbf9d4) the inlined PerformWork ctor 0x1400c9720 with useTool = 0,
+        // +0x44 = -1 — the real ctor.
+        new (obj) PerformWork(&entityInner, headingSrc, 7, timeVal, 0, -1);
         pw1 = obj;
     }
     WAP2_IbpCtor(&ibpB, pw1);
@@ -383,20 +369,9 @@ extern "C" void* WorkAct_GatherRawMatCtor_bf790(
     if (obj) {
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(entity);  // *(entity) (0xbfc5f)
         int64_t timeVal = WAP2_MakeTime(kTime075);                      // (0xbfc6d)
-        if (s_wap2_ObjInternalCtor) s_wap2_ObjInternalCtor(obj);        // (0xbfc79)
-        uintptr_t o = reinterpret_cast<uintptr_t>(obj);
-        *reinterpret_cast<void**>(o)           = s_wap2_vtable_Action;      // (0xbfc80)
-        *reinterpret_cast<uint64_t*>(o + 0x10) = 0;                         // (0xbfc8a)
-        *reinterpret_cast<uint8_t*>(o + 0x18)  = 0;                         // (0xbfc8e)
-        *reinterpret_cast<void**>(o)           = s_wap2_vtable_PerformWork; // (0xbfc93)
-        *reinterpret_cast<uint64_t*>(o + 0x20) = 0;                         // (0xbfc9d)
-        *reinterpret_cast<uintptr_t*>(o + 0x20) = entityInner;             // (0xbfca5)
-        *reinterpret_cast<float*>(o + 0x28)    = headingDst;               // (0xbfca9)
-        *reinterpret_cast<int*>(o + 0x2c)      = 7;                         // (0xbfcaf)
-        *reinterpret_cast<int64_t*>(o + 0x30)  = timeVal;                  // (0xbfcb7)
-        *reinterpret_cast<uint64_t*>(o + 0x38) = 0;                         // (0xbfcbb)
-        *reinterpret_cast<uint8_t*>(o + 0x40)  = 0;                         // (0xbfcbf)
-        *reinterpret_cast<uint32_t*>(o + 0x44) = 0xffffffff;               // (0xbfcc4)
+        // (0xbfc79..0xbfcc4) the inlined PerformWork ctor 0x1400c9720 with useTool = 0,
+        // +0x44 = -1 — the real ctor.
+        new (obj) PerformWork(&entityInner, headingDst, 7, timeVal, 0, -1);
         pw2 = obj;
     }
     WAP2_IbpCtor(&ibpB, pw2);

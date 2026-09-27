@@ -192,9 +192,7 @@ static void* FindComponentOnEntity(uintptr_t entity, uint32_t typeId) {
     for (int i = 0; i < count; i++) {
         uintptr_t* ibpSlot = (uintptr_t*)(arrayPtr + (uintptr_t)i * 8);
         uintptr_t comp = *ibpSlot;
-        uintptr_t vtable = *(uintptr_t*)comp;
-        typedef uint32_t (*GetTypeId_t)();
-        uint32_t compTypeId = ((GetTypeId_t)(*(uintptr_t*)(vtable + 0x10)))();
+        uint32_t compTypeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (compTypeId == typeId) {
             ibpSlot = (uintptr_t*)(arrayPtr + (uintptr_t)i * 8);
             void* result = (void*)*ibpSlot;
@@ -217,9 +215,7 @@ static void* FindComponentOnSubObject(uintptr_t subObj, uint32_t typeId) {
 
     for (int i = 0; i < count; i++) {
         uintptr_t comp = *(uintptr_t*)(arrayPtr + (uintptr_t)i * 8);
-        uintptr_t vtable = *(uintptr_t*)comp;
-        typedef uint32_t (*GetTypeId_t)();
-        uint32_t compTypeId = ((GetTypeId_t)(*(uintptr_t*)(vtable + 0x10)))();
+        uint32_t compTypeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (compTypeId == typeId) {
             void* c = *(void**)(arrayPtr + (uintptr_t)i * 8);
             if (fn_IsDerivedFrom(c, typeId)) {
@@ -469,9 +465,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/, uint64_t /*arg3*/) {
                 int priority = (int)selfQ[4];  // +0x20
                 uintptr_t ce = *(uintptr_t*)citizenIBP;
 
-                uintptr_t vt = *(uintptr_t*)this;
-                typedef uint64_t* (*VtSlot50_t)(FishingWork*, void*);
-                uint64_t* res = (*(VtSlot50_t*)(vt + 0x50))(this, &entityRef);
+                uint64_t* res = static_cast<uint64_t*>(GetTarget(&entityRef));
                 uint64_t actionVal = *res;
 
                 *(uint32_t*)(ce + 0x54) |= 4;
@@ -497,9 +491,7 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/, uint64_t /*arg3*/) {
                 int priority = (int)selfQ[4];
                 uintptr_t ce = *(uintptr_t*)citizenIBP;
 
-                uintptr_t vt = *(uintptr_t*)this;
-                typedef uint64_t* (*VtSlot50_t)(FishingWork*, void*);
-                uint64_t* res = (*(VtSlot50_t*)(vt + 0x50))(this, &citizenRef2);
+                uint64_t* res = static_cast<uint64_t*>(GetTarget(&citizenRef2));
                 uint64_t actionVal = *res;
 
                 *(uint32_t*)(ce + 0x54) |= 4;
@@ -601,9 +593,8 @@ int FishingWork::Execute(void* citizenIBP, void* /*time*/, uint64_t /*arg3*/) {
             for (int j = 0; j < compCount; j++) {
                 uintptr_t* ibpSlot = (uintptr_t*)(compArray + (uintptr_t)j * 8);
                 uintptr_t comp = *ibpSlot;
-                uintptr_t vt = *(uintptr_t*)comp;
-                typedef uint32_t (*GetTypeId_t)();
-                uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(vt + 0x10)))();
+                // slot 2 Type() on a component-array element (an exe Component)
+                uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
                 if (tid == *s_typeId_1401c8070) {
                     ibpSlot = (uintptr_t*)(compArray + (uintptr_t)j * 8);
                     void* c = (void*)*ibpSlot;
@@ -957,11 +948,9 @@ int FishingWork::OnCancel(void* param2, void* param3, int arg3) {
     uintptr_t copy2 = *(uintptr_t*)param2;
     uintptr_t copy3 = *(uintptr_t*)param3;
 
-    // Call vtable slot +0x30 (Slot6) with the packed slot word forwarded.
-    uintptr_t vt = *(uintptr_t*)this;
-    typedef int (*VtSlot30_t)(FishingWork*, void*, void*, uint32_t);
-    (*(VtSlot30_t*)(vt + 0x30))(this, &copy2, &copy3, param4);
-    return 0;
+    // Dispatch slot 6 OnComplete with the packed slot word forwarded; retail
+    // returns its result (0 on every path).
+    return OnComplete(&copy2, &copy3, static_cast<int>(param4));
 }
 
 // ============================================================
@@ -1073,10 +1062,8 @@ DEFINE_EXE_VTABLE(FishingWork, "_ZTV11FishingWork")
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// B38 D5: 0x140161320 is still read back BY ADDRESS — FishingComponent's CreateWork
-// (resourceproduce_creatework.cpp, block MI-B) builds the work by hand and stamps it —
-// so the exe address serves the COMPILER's table.
 extern "C" void RegisterFishingWorkVtable() {
-    RegisterExeAddr(FishingWorkAddr::Vtable, reinterpret_cast<uintptr_t>(FishingWork::Vtable()));   // 0x140161320
+    // ENDGAME B.3.8 CB3: the retail-table row is gone -- no by-address reader of
+    // it is left. The call in address_registry.cpp is the coordinator's to drop.
 }
 DEFINE_EXE_TYPE(FishingWork, "Work")
