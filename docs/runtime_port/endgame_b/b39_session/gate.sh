@@ -68,7 +68,7 @@ warncheck() {
 say "== gate $LABEL @ $(git rev-parse --short HEAD) $(date +%H:%M:%S) mode=${MODE:-full}"
 if [ -z "$MODE" ]; then
   for t in standalone-debug standalone standalone-perf unit; do
-    $MK -j12 $t > "$OUT/build_$t.log" 2>&1; rc=$?
+    $MK -j4 $t > "$OUT/build_$t.log" 2>&1; rc=$?
     say "build $t: exit $rc"
     [ $rc -ne 0 ] && { tail -30 "$OUT/build_$t.log" | tee -a "$SUM"; say "GATE RESULT: build failed"; exit 1; }
   done
