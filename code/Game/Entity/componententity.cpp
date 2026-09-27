@@ -153,7 +153,7 @@ ComponentEntity::ComponentEntity(ComponentDescription* description)
         // ever created, masking the missing CheckPtr below.
         void* newComp = nullptr;
         if (newObj && Object::IsDerivedFromOrTrust(
-                          newObj, g_TypeId_ComponentBase ? *g_TypeId_ComponentBase : 0)) {
+                          newObj, Component::TypeId())) {   // cell 0x1401c72a8 (ENDGAME B.3.9 RF)
             newComp = newObj;
         }
 
@@ -567,8 +567,8 @@ void ComponentEntity::Persist(void* stream) {
             // Verify component is derived from Component base; null out if not
             void* comp = *(void**)ibpAddr;
             if (comp != nullptr) {
-                if (fn_IsDerivedFrom && g_TypeId_ComponentBase) {
-                    bool isDerived = fn_IsDerivedFrom(comp, *g_TypeId_ComponentBase);
+                if (fn_IsDerivedFrom) {
+                    bool isDerived = fn_IsDerivedFrom(comp, Component::TypeId());   // cell 0x1401c72a8
                     if (!isDerived) {
                         *(void**)ibpAddr = nullptr;
                     }
@@ -623,8 +623,8 @@ void ComponentEntity::Persist(void* stream) {
 
                 // Verify it's a Component
                 void* newComp = nullptr;
-                if (newObj && fn_IsDerivedFrom && g_TypeId_ComponentBase) {
-                    if (fn_IsDerivedFrom(newObj, *g_TypeId_ComponentBase)) {
+                if (newObj && fn_IsDerivedFrom) {
+                    if (fn_IsDerivedFrom(newObj, Component::TypeId())) {   // cell 0x1401c72a8
                         newComp = newObj;
                     }
                 }
