@@ -50,3 +50,21 @@ line, the registered count (311) and the resave (5/5) are unchanged. New baselin
 | b39-CG3 (g_TypeId_* / g_tid_* reads: Player / Tutorial / Entity / Component / Work / Action / Game) | 2472cb06 | ok | 0 | 905 | clean (5683 / 5773/12) | 5/5 | 6/103/30 | 5 | tools x3 exit 0 | 0 |
 | b39-CG1 (g_TypeId_* reads: code/Game/Dialog a-o, 338 sites) | ca6bfa7b | ok | 0 | 905 | clean | 5/5 | 6/103/30 | 5 | — | 0 |
 | b39-CG2 (g_TypeId_* reads: code/Game/Dialog p-z) | fa7beb85 | ok | 0 | 905 | clean | 5/5 | 6/103/30 | 5 | Mods, Quit / Options / Achievements exit 0; GoalDialog opens; tools x3 exit 0 | 0 |
+| b39-RF ALONE (behaviour: exe type records are class statics built at static init; abstract bases have TypeId(); chain 414; order-free dump; boot check VerifyExeTypeInfos) | efc4fb72 | ok | 0 | 905 | 5683/0 · 5773/12 · 4766 | 5/5 | 6/103/30 | 5 | Mods, Quit / Options / Achievements exit 0; GoalDialog opens; tools x3 exit 0 | 0 after the re-cut below |
+
+**Typetable baseline RE-CUT (2026-09-27, with the RF merge efc4fb72), in writing.** The gate reported 1
+problem, the designed one: the type table's FORMAT changed (B39_RULES D6/D9). Old table 32 lines, new 433
+(md5 728a74b9; committed beside this file as `TYPETABLE_414.txt`). Line by line:
+- `[FactoryReg] Registered 311 types into Runtime _firstTypeInfo` → `Registered 310 exe type records in
+  _firstTypeInfo` (the non-retail `StandaloneFactoryTest` is deleted);
+- `Post-Startup _firstTypeInfo: 415 entries, 415 …` → `414 entries, 414 have non-FF typeId`;
+- the 10 first-ten lines `[GameMain]   typeId=0x%08X name=X` are replaced by 414 order-free lines
+  `typeId=%08X name=X parent=P`, one per chain record. Checked: all 10 old id/name pairs are present with
+  the SAME id; 414 distinct ids, 414 distinct names, 0 `FFFFFFFF`;
+- three `ResolveTypeIdByNameLazy` lines gone (`"StringTable"` — batch CG; `"Tool"`, `"ToolSetting"` — RF:
+  the readers are `X::TypeId()` now); the other 15 lazy lines are byte-identical;
+- the `[GUL::DiseaseList]` / `[GUL::Help]` lines are unchanged.
+Resave 5/5 == golden and `calls=5683` / `5773 openFileFail=12` unchanged: ids are `~CRC32(name)` and no name
+changed. B39_RULES §5 item 1 (no reader of an exe type id before `Factory::Startup`) is now CONFIRMED BY A
+RUN: new game, tutorial, Load Game, Mods, the front-end routes and the tool routes are clean and
+`VerifyExeTypeInfos` (fatal in every build) did not fire.
