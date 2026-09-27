@@ -115,21 +115,9 @@ constexpr float kMonthsPerYear     = 12.0f;     // DAT_1401721b8
 // resolved, all 15 tracks parsed, the month/mood filter selected one and
 // Audio::Scene::PlayEffect returned a live handle.
 
-// CitizenDescription type id (DWORD_1401c7190). Prefer the exe .rdata global;
-// fall back to the REGISTER_TYPE name lookup the citizenai_* files use, since
-// that global is often unfilled in standalone.
+// DWORD_1401c7190 is CitizenDescription's type-id cell (Table 1).
 uint32_t CitizenDescriptionTypeId() {
-    static uint32_t cached = 0;
-    static bool tried = false;
-    if (!tried) {
-        tried = true;
-        if (uintptr_t g = ResolveAddr(Module::Exe, 0x1401c7190)) {
-            uint32_t v = *reinterpret_cast<uint32_t*>(g);
-            if (v != 0 && v != 0xFFFFFFFFu) cached = v;
-        }
-        if (cached == 0) cached = CitizenDescription::TypeId();   // caller batch CB6: was by name
-    }
-    return cached;
+    return CitizenDescription::TypeId();
 }
 
 // See the DEVIATION note in the file header. Retail's GameUpdateLoop::Load

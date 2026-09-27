@@ -3436,14 +3436,11 @@ extern "C" void StartTown_DeferredSpawn_Tick(int frameNum) {
     const int mapW = *(int32_t*)game;
     const int w = g_deferredLodge.w, h = g_deferredLodge.h;
 
-    // The search type the hunt itself uses: *DAT_1401c8000, read exactly as
-    // huntanimal.cpp reads it, so the scorer cannot disagree with the query about what
-    // it is looking for. Cross-checked against the by-name id, because a by-name resolve
-    // of a misnamed global returns a real id of the WRONG class and every null test
-    // still passes.
-    int wantType = 0;
-    if (int* p = reinterpret_cast<int*>(ResolveAddr(Module::Exe, 0x1401c8000))) wantType = *p;
+    // The search type the hunt itself uses. DAT_1401c8000 is WildAnimalComponent's
+    // type-id cell (Table 1) — read directly so the scorer cannot disagree with the
+    // query about what it is looking for.
     const uint32_t byName = WildAnimalComponent::TypeId();
+    int wantType = static_cast<int>(byName);
 
     std::vector<DL_AnimalPos> animals;
     int live = 0;
