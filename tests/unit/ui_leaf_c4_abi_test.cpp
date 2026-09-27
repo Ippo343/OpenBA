@@ -32,6 +32,7 @@
 //   delegate `->UI::X::M(…)` or it re-enters itself.
 // ============================================================================
 #include "unit.h"
+#include "b39_uib_test_util.h"   // ENDGAME B.3.9 UI-B: the concrete-class checks
 
 #include "runtime/types/ui/ContainerDescription.h"
 #include "runtime/types/ui/ContainerElement.h"
@@ -158,7 +159,7 @@ struct BareExternalProbe final : Object::External {
         return ret;                                                                         \
     }                                                                                       \
     Object::External* UI::CLS::Construct() { Note(this, TAG * 100 + 9); return this; }      \
-    UI::CLS::~CLS() {}
+    UI::CLS::~CLS() { B39NoteDtor(this); }
 C4_DESC_MARKERS(ContainerDescription, kContainerD)
 C4_DESC_MARKERS(LayoutDescription,    kLayoutD)
 C4_DESC_MARKERS(ListDescription,      kListD)
@@ -174,7 +175,7 @@ C4_DESC_MARKERS(TableDescription,     kTableD)
         Note(this, TAG * 100 + 5, (long long)x * 1000 + h); }                               \
     void UI::CLS::Draw(UI::SpriteContext&, uint8_t alpha) const {                           \
         Note(this, TAG * 100 + 6, alpha); }                                                 \
-    UI::CLS::~CLS() {}
+    UI::CLS::~CLS() { B39NoteDtor(this); }
 #define C4_UPDATE_MARKER(CLS, TAG)                                                         \
     void UI::CLS::Update(const System::Time&, UI::UserInterface*,                           \
                          Object::InternalPtr<UI::DialogInstance>* dialog,                   \
@@ -217,21 +218,80 @@ UNIT_TEST(ui_c4_sizes_match_retail) {
 }
 
 UNIT_TEST(ui_c4_classes_are_abstract_single_base_no_virtual_dtor) {
+    // ENDGAME B.3.9 UI-B: the converted classes are CONCRETE (their own
+    // test below); the rest stay abstract until their commit.
 #define C4_SHAPE(CLS, BASE)                                                 \
     CHECK(std::is_abstract<UI::CLS>::value);                                \
     CHECK(!std::has_virtual_destructor<UI::CLS>::value);                    \
     CHECK((std::is_base_of<UI::BASE, UI::CLS>::value));
-    C4_SHAPE(ContainerDescription, ElementDescription)
+#define C4_CONCRETE(CLS, BASE)                                              \
+    CHECK(B39IsConcreteShape<UI::CLS>());                                   \
+    CHECK((std::is_base_of<UI::BASE, UI::CLS>::value));
+    C4_CONCRETE(ContainerDescription, ElementDescription)
     C4_SHAPE(LayoutDescription,    ElementDescription)
     C4_SHAPE(ListDescription,      ElementDescription)
     C4_SHAPE(ScrollDescription,    ElementDescription)
     C4_SHAPE(TableDescription,     ElementDescription)
-    C4_SHAPE(ContainerElement,     Element)
+    C4_CONCRETE(ContainerElement,  Element)
     C4_SHAPE(LayoutElement,        Element)
     C4_SHAPE(ListElement,          Element)
     C4_SHAPE(ScrollElement,        Element)
     C4_SHAPE(TableElement,         Element)
 #undef C4_SHAPE
+#undef C4_CONCRETE
+}
+
+// ===========================================================================
+// ENDGAME B.3.9 block UI-B (B39_RULES D1, rule B9-16): the concrete classes —
+// slot order by PMF on the real header, the real ctor's retail stores, both
+// DeletingDtor arms.
+// ===========================================================================
+UNIT_TEST(b39_uib_c4_slot_order_by_pmf) {
+    B39CheckDescriptionPmf<UI::ContainerDescription>();
+    B39CheckElementPmf<UI::ContainerElement>();
+}
+
+UNIT_TEST(b39_uib_c4_container_ctor_stores) {
+    FactoryScope scope;
+    // ??0ContainerDescription 0x1800cd060: +0x68/+0x6c = 0x64, +0x70 WORD 0,
+    // +0x74 0, +0x78..+0x8f 0; +0x72/+0x73 written by nothing.
+    alignas(8) uint8_t d[0x90];
+    std::memset(d, 0xCD, sizeof d);
+    auto* cd = ::new (static_cast<void*>(d)) UI::ContainerDescription();
+    CHECK_EQ(cd->_requestedWidth, 0x64);
+    CHECK_EQ(cd->_requestedHeight, 0x64);
+    CHECK_EQ((int)cd->_clampWidth, 0);
+    CHECK_EQ((int)cd->_clampHeight, 0);
+    CHECK_EQ((int)d[0x72], 0xCD);
+    CHECK_EQ((int)d[0x73], 0xCD);
+    CHECK_EQ(cd->_barSize, 0);
+    for (int i = 0; i < 3; ++i) CHECK(cd->_partDescs[i] == nullptr);
+    CHECK_EQ(cd->_id, -1);                  // ElementDescription's real ctor
+    CHECK_EQ((int)cd->_elementType, 3);
+    cd->DeletingDtor(0);
+
+    // ??0ContainerElement 0x1800ccb40: +0xc8 0, +0xcc WORD 0, +0xd0 0;
+    // +0xc0/+0xc4 and the pads are NOT written.
+    alignas(8) uint8_t e[0xd8];
+    std::memset(e, 0xCD, sizeof e);
+    auto* ce = ::new (static_cast<void*>(e)) UI::ContainerElement();
+    CHECK_EQ(ce->_barSize, 0);
+    CHECK_EQ((int)ce->_clampWidth, 0);
+    CHECK_EQ((int)ce->_clampHeight, 0);
+    CHECK_EQ(ce->_wheelImpulse, 0);
+    CHECK_EQ((int)e[0xc0], 0xCD);
+    CHECK_EQ((int)e[0xc4], 0xCD);
+    CHECK_EQ((int)e[0xce], 0xCD);
+    CHECK_EQ((int)e[0xd4], 0xCD);
+    ce->DeletingDtor(0);
+}
+
+UNIT_TEST(b39_uib_c4_container_deletingdtor_arms) {
+    FactoryScope scope;
+    ContainerDProbe dp;
+    B39CheckDeletingDtorArms<UI::ContainerDescription, 0x90>(VTableOf(&dp));
+    ContainerEProbe ep;
+    B39CheckDeletingDtorArms<UI::ContainerElement, 0xd8>(VTableOf(&ep));
 }
 
 UNIT_TEST(ui_c4_description_field_offsets) {

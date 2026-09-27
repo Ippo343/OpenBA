@@ -951,7 +951,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x1800489c0, 0x180111620, 0x0a8, "UI::CheckDescription"),
     RT_DELDTOR(0x180037eb0, 0x1800cc0d0, 0x078, "UI::ClipRegionDescription"),
     RT_DELDTOR(0x180074e70, 0x180112370, 0x0b8, "UI::ComboDescription"),
-    RT_DELDTOR(0x180039c00, 0x1800ccff0, 0x090, "UI::ContainerDescription"),
     RT_DELDTOR(0x18003bd90, 0x1800cfb30, 0x0e8, "UI::DocumentTextDescription"),
     RT_DELDTOR(0x18003fa20, 0x1800d11f0, 0x088, "UI::EditDescription"),
     RT_DELDTOR(0x1800403a0, 0x1800d1b30, 0x088, "UI::GraphDescription"),
@@ -1141,7 +1140,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180048d80, 0x180111700, 0x0e0, "UI::CheckElement"),
     RT_DELDTOR(0x180038370, 0x1800cbe30, 0x0d8, "UI::ClipRegionElement"),
     RT_DELDTOR(0x180075390, 0x180112490, 0x128, "UI::ComboElement"),
-    RT_DELDTOR(0x18003a050, 0x1800ccb10, 0x0d8, "UI::ContainerElement"),
     RT_DELDTOR(0x18003c650, 0x1800cf320, 0x1c8, "UI::DocumentTextElement"),
     RT_DELDTOR(0x18003fed0, 0x1800d0e50, 0x0f8, "UI::EditElement"),
     RT_DELDTOR(0x1800408b0, 0x1800d1840, 0x100, "UI::GraphElement"),
@@ -1619,10 +1617,6 @@ void* RtDelDtor_ClipRegionDescription(void* self, unsigned flags) {
 void* RtDelDtor_ComboDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180074e70>());
 }
-// UI::ContainerDescription  ~ = 0x1800ccff0   (PORTED, containerdescription.cpp)
-void* RtDelDtor_ContainerDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180039c00>());
-}
 // UI::DocumentTextDescription ~ = 0x1800cfb30 (PORTED, documenttextdescription.cpp)
 void* RtDelDtor_DocumentTextDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18003bd90>());
@@ -1711,10 +1705,6 @@ void* RtDelDtor_ClipRegionElement(void* self, unsigned flags) {
 // UI::ComboElement  ~ComboElement = 0x180112490  (PORTED, runtime/src/ui/)
 void* RtDelDtor_ComboElement(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180075390>());
-}
-// UI::ContainerElement  ~ContainerElement = 0x1800ccb10  (PORTED, runtime/src/ui/)
-void* RtDelDtor_ContainerElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003a050>());
 }
 // UI::DocumentTextElement  ~DocumentTextElement = 0x1800cf320  (PORTED, runtime/src/ui/)
 void* RtDelDtor_DocumentTextElement(void* self, unsigned flags) {
@@ -1924,7 +1914,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x1800489c0, (void*)&RtDelDtor_CheckDescription);
     RegisterRuntimeAddr(0x180037eb0, (void*)&RtDelDtor_ClipRegionDescription);
     RegisterRuntimeAddr(0x180074e70, (void*)&RtDelDtor_ComboDescription);
-    RegisterRuntimeAddr(0x180039c00, (void*)&RtDelDtor_ContainerDescription);
     RegisterRuntimeAddr(0x18003bd90, (void*)&RtDelDtor_DocumentTextDescription);
     RegisterRuntimeAddr(0x18003fa20, (void*)&RtDelDtor_EditDescription);
     RegisterRuntimeAddr(0x1800403a0, (void*)&RtDelDtor_GraphDescription);
@@ -1974,7 +1963,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180048d80, (void*)&RtDelDtor_CheckElement);
     RegisterRuntimeAddr(0x180038370, (void*)&RtDelDtor_ClipRegionElement);
     RegisterRuntimeAddr(0x180075390, (void*)&RtDelDtor_ComboElement);
-    RegisterRuntimeAddr(0x18003a050, (void*)&RtDelDtor_ContainerElement);
     RegisterRuntimeAddr(0x18003c650, (void*)&RtDelDtor_DocumentTextElement);
     RegisterRuntimeAddr(0x18003fed0, (void*)&RtDelDtor_EditElement);
     RegisterRuntimeAddr(0x1800408b0, (void*)&RtDelDtor_GraphElement);

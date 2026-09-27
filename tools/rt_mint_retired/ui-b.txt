@@ -1,0 +1,8 @@
+# ENDGAME B.3 step 9 -- the rows block UI-B retired (branch b39-UIB).
+# Format (tools/rt_mint_gen.py banner, B39_RULES.md D3):
+#   <mangled symbol | 0xVA>   <owner block>   <proof>
+# One fragment per block; a key appears once across all fragments.
+
+# -- W1: the widget pairs made concrete (D1), factory pairs the class's own (D2) --
+??_7ContainerDescription@UI@@6B@       UI-B   real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x180039c00, ??0/??1 doors, 8 slot doors deleted
+??_7ContainerElement@UI@@6B@           UI-B   real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x18003a050, ??0/copy/??1 doors, 6 slot doors deleted; CreateInstance builds ::new ContainerElement()
