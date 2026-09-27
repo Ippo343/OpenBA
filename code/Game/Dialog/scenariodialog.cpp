@@ -406,9 +406,9 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         fflush(stderr);
         {
             const char* missing = nullptr;
-            if (!g_pSaveLoadSingleton || !*g_pSaveLoadSingleton) missing = "SaveLoad singleton";
-            else if (!g_pPersistenceSingleton || !*g_pPersistenceSingleton) missing = "Persistence singleton";
-            else if (!g_pFileSystemSingleton2 || !*g_pFileSystemSingleton2) missing = "FileSystem singleton";
+            if (!::Save::SaveLoad::_singleton) missing = "SaveLoad singleton";
+            else if (!::IO::Persistence::_singleton) missing = "Persistence singleton";
+            else if (!::IO::FileSystem::_singleton) missing = "FileSystem singleton";
             else if (!fn_Time_Ctor_Float) missing = "Time::Time(float)";
             if (missing) {
                 fprintf(stderr, "[ScenarioDialog] SAVED branch ABORTED - %s is NULL\n", missing);
@@ -416,7 +416,7 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
                 return;
             }
         }
-        void* saveLoad = *g_pSaveLoadSingleton;
+        void* saveLoad = ::Save::SaveLoad::_singleton;
         reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetOperation(static_cast<Save::SaveLoad::Operation>(3), 0);  // B.3.7 bridge
         reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetSaveName(saveNameStr, 2);  // B.3.7 bridge
 
@@ -433,7 +433,7 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         // type (per Persistence::GetSavePath's export signature) is System::String;
         // String and Filename share the exact same 8-byte layout and release
         // sequence (Filename.h), so this was always safe, just misnamed.
-        void* persistence = *g_pPersistenceSingleton;
+        void* persistence = ::IO::Persistence::_singleton;
         System::String savePathBuf;  // kept alive until after the SaveLoad::Update loop
         // B.3.4 bridge. This IS the door's own body moved to the call site: the
         // member returns `System::String` BY VALUE through MSVC's hidden return
@@ -443,9 +443,9 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         ::new (&savePathBuf) System::String(
             reinterpret_cast<const IO::Persistence*>(persistence)->GetSavePath());
         // B.3.1 bridge: raw exe-struct SystemString field, not owned here.
-        System::String& persistenceDataDir = *reinterpret_cast<System::String*>(*(uintptr_t*)g_pPersistenceSingleton + 0x90);
+        System::String& persistenceDataDir = *reinterpret_cast<System::String*>(reinterpret_cast<uintptr_t>(::IO::Persistence::_singleton) + 0x90);
         {
-            void* fileSystem = *g_pFileSystemSingleton2;
+            void* fileSystem = ::IO::FileSystem::_singleton;
             System::String dataDirBuf;  // destroyed at the end of this block (matches retail's early release)
             // B.3.4 bridge. The member returns `System::Filename` by value; the
             // door placement-constructed it into this very slot, and a Filename

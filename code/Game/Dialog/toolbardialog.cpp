@@ -59,6 +59,7 @@
 #include "Player/Tool.h"
 #include "Player/ToolSetting.h"   // ToolSetting::TypeId() (ENDGAME B.3.9 RF)
 #include "Component/UIDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
 
 
 #ifdef _DEBUG
@@ -460,10 +461,9 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
     }
 
     // Step 6: Create ToolController via Factory::CreateObject
-    // g_pFactorySingleton is dispatch table → points to Factory::_singleton → holds Factory*
-    // Need double-deref: *(void**)*g_pFactorySingleton to get the actual Factory object
+    // Retail: **import slot 0x140152760 = Object::Factory::_singleton (the class static).
     uint32_t factoryTypeId = *(uint32_t*)(foundNode + 0x08);
-    void* newObj = reinterpret_cast<const ::Object::Factory*>(*(void**)*g_pFactorySingleton)->CreateObject(
+    void* newObj = ::Object::Factory::_singleton->CreateObject(
         factoryTypeId);   // B.3.3 bridge
     // IsDerivedFrom check for ToolController type
     bool isToolCtrl = fn_IsDerivedFrom(newObj, Tool::TypeId());   // cell 0x1401c6eb8 (ENDGAME B.3.9 RF)
@@ -490,7 +490,7 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
             uint32_t settingFactoryId = reinterpret_cast<Tool*>(ctrl)->GetSettingType(&settingBuf)->_type;
 
             // Create the ToolSetting object
-            void* settingObj = reinterpret_cast<const ::Object::Factory*>(*(void**)*g_pFactorySingleton)->CreateObject(
+            void* settingObj = ::Object::Factory::_singleton->CreateObject(
                 settingFactoryId);   // B.3.3 bridge
             bool isToolSetting = fn_IsDerivedFrom(settingObj, ToolSetting::TypeId());   // cell 0x1401c6ef0
             void* toolSetting = isToolSetting ? settingObj : nullptr;
@@ -921,9 +921,9 @@ extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
     System::Filename filename("Dialog/Pause.rsc");
 
     void* externalRes = nullptr;
-    if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
+    if (::Object::ExternalFactory::_singleton) {
         externalRes = const_cast<::Object::External*>(
-            reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+            ::Object::ExternalFactory::_singleton   // B.3.3 bridge
                 ->FindOrLoad(filename));
     }
 
@@ -1105,7 +1105,7 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
 
     // --- Step 5: Collect all Toolbar items matching our group ID ---
     // Use ExternalFactory::FindNext to iterate all Toolbar externals
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     uint32_t toolbarTypeId = *g_TypeId_ToolbarItem;
 
     // Temporary dynamic array for matching toolbar items
@@ -1694,7 +1694,7 @@ void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
                 int elemWidth = *(int32_t*)(localElemRef + 0x70);
 
                 // Calculate horizontal position: center sub-dialog on button
-                void* videoDevice = *g_pVideoDeviceSingleton;
+                void* videoDevice = ::Video::Device::_singleton;
                 float uiScale = *(float*)(*(uintptr_t*)(s + 0x10) + 0xDC);
                 int screenWidth = *(int32_t*)((uintptr_t)videoDevice + 4);
                 int xPos = (int)((float)screenWidth * uiScale) -
