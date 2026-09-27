@@ -20,6 +20,59 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **B.3.8 CLOSED (2026-09-26, step close partial — see "Step close" below):** every exe-phase class in
+  `code/Game` is a real C++ class with a COMPILER-GENERATED vtable, on the Runtime bases steps 3-7 made
+  real: 310 of 310 reflected exe classes (components, descriptions, actions, works, tools, dialogs, panels,
+  goals, scenario, tutorial, world externals) + the five loops, the controller members, the exe Geometry /
+  Particle / Thread subclasses — each with a real ctor, `DeletingDtor(unsigned)` + protected dtor chaining
+  its base, `DEFINE_EXE_TYPE` (literals exact), header `code/Game/<Dir>/<Class>.h`, all agreeing with the
+  retail dump (parent, sizeof, slot count). **Hand-built vtables 306 → 3, none serving an exe class.** Rule
+  sheet `endgame_b/B38_RULES.md` (D1-D10, B8-1..14, corrections §8/§11, run log §9, what stays §10), retail
+  dump `B38_SLOTS.md`, file map `B38_FILEMAP.md`, kit `endgame_b/b38_session/` (BLOCK_BRIEF,
+  CALLER_BATCH_BRIEF, CLOSING_BRIEF, INVENTORY_A/B, SEAM_AND_FILEMAP, CALLER_SURFACE, GATE_TABLE,
+  CLOSE_NUMBERS, gate.sh, stepclose.sh, toolroutes.sh, `ghidra/Step8Appendix.java`). Plan for the last B.3
+  step: `endgame_b/NEXT_SESSION.md`.
+  **Found at block 0, retail-proved twice: there is NO multiple inheritance in the exe** (ENDGAME B.1
+  decision 2 corrected): the "56 `ControllerComponent` types" are 29 classes embedding a controller MEMBER
+  (9-slot interface 0x14015f070) at a per-class offset (+0x28 … +0x88); slot 17 returns its address.
+  **Shape.** Block 0 (four read-only inventories + the Ghidra EXE dump) → one owner: rule sheet + a PILOT
+  (Component, ControllerComponent, Description, Well leaves) → 14 class blocks on worktrees (RB Runtime
+  bases' real ctors; K1 80 descriptions + ComponentEntity; ACT 18; WRK 23; TOOL 12; CIT 19; DLG 19; PNL 42;
+  LOOP loops + 11 externals + Tornado/geometry/pathfinder; VIS 25; MI-A 13; MI-B 15; GOAL 27) → 7 caller +
+  fold batches (CB1a/b, CB2-CB6: raw dispatches → virtuals, by-name type ids → `X::TypeId()`, delegating
+  members' bodies moved in, loop fields named) → one closing owner. Every merge gated by the coordinator
+  (`b38_session/GATE_TABLE.md`): 0 problems except four, each resolved — (1) CIT: the StateMachine lazy
+  linker called controller slot 17 on every sibling, safe only while every component had a 48-slot padded
+  table (fixed on main: ask `IsDerivedFrom(ControllerComponent)` first, as retail); (2) DLG: type table
+  312→311 (AutoSaveDialog's duplicate registration removed, intended); (3) LOOP: every route crashed —
+  the splash's newly-running base dtor evicted the menu scene the standalone had loaded under the splash's
+  factory bit (fixed at the root: mark the menu loop's bit as `Loader::Run` would); merge undone, re-merged
+  after the fix; (4) LOOP: resave DIFF — 128 main-menu UI objects no longer leaked (retail frees them), the
+  golden re-cut `757e48a1` → `dd3893af` in its own commit (758597e2). New invariants: new-game `calls=5683
+  openFileFail=0`, tutorial `5773/12`.
+  **Numbers** (`b38_session/CLOSE_NUMBERS.md`): B.4 cast metric **36,450 → 32,057** (first step where it
+  FELL: code −4,129) with 621 `// B.3.8 bridge`; `RegisterExeAddr` 1,390 → 1,007 (exe vtable rows 199 → 6);
+  `REGISTER_TYPE` 289 → 3 / `DEFINE_EXE_TYPE` 296; `GetTypeIdByName("…")` 535 → 17; delegating members
+  401 → 12; `engine/types` headers 147 → 28; unit tests 516 → 736, 0 failures; 142 PORT GAP + 49
+  STANDALONE DEVIATION markers (the honest ceiling: retail bodies the tree still stubs, 38 of them leaking
+  dtors). **Behaviour changes, each titled and gated with resave x5:** base dtors now run where hand-built
+  slot 0s skipped them (panels, dialogs, loops, descriptions, PastureWork …); retail ctor defaults and
+  dtor frees (CIT, ACT, MI-A, MI-B, DLG, TOOL); D9 port bugs (Action base-table stamp, ComponentEntity's
+  own table, Tool/DragTool null restamps, EditTool/PathTool slot 13, the External triad, controller slot
+  1/8, AbsorbResource / MarketLocation / MultiObject members, ClearArea/ConsumeProduce OnCancel, Nomad
+  slot 7, TimeGoal meetable, Goal/Scenario null slots); `BANISHED_LIVE_TUTORIALINSTANCE_VT` retired.
+  **Step close** (`b38_session/stepclose.sh` on `e24d1e7c`): Mods route with `.pkm` exit 0; front-end Quit,
+  Options, Achievements exit 0, `[RtResolve] 0 misses`, 0 TRAP; **GoalDialog from a tutorial game's pause
+  menu** (owed since B.3.6) opens with no crash; placement / road / removal tool routes exit 0; in-game save
+  SAVE OPERATION COMPLETE, crash log 0; `sa-stress` exit 0 (update 1.85 ms/frame vs baseline 1.92, p95
+  2.50 vs 2.40, draw 1.17 vs 1.38 — recorded, not chased); clean rebuild of debug / perf / unit from an
+  empty obj dir exit 0, and on it 0 new warnings (debug, perf), 736 tests 0 failures, dispatch 0, manifest
+  OK. **OWED — the run was stopped by the harness for low system memory:** the true release compile died
+  with the compiler processes failing to start (0xC0000142 after 13 files, 0 errors / 0 warnings reported —
+  an environment failure, not a code result), and the clean-built exe's routes / resave, the stub-set diff
+  and the tutorial census line never ran. Re-run `b38_session/stepclose.sh` (from a scratchpad copy) when
+  the machine has memory to spare. The last full gate that ran, on the merged close `e24d1e7c`: 0
+  problems, 736 tests, resave 5/5.
 - **B.3.7 CLOSED (2026-09-26):** `Engine`, `Save`, `Achievement`, `Audio`, `Input`, `Pathfinding`,
   `Picking` and `Application` are real C++ classes under retail's names — 15 polymorphic
   (`UpdateLoop`/`LoaderLoop`/`DialogLoopT`/`DialogLoaderLoopT` as their OWN root, `Loader` and

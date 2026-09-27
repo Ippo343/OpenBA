@@ -1,215 +1,165 @@
-# Next session plan (written 2026-09-26, at the B.3.7 close)
+# Next session plan (written 2026-09-26, at the B.3.8 close)
 
-State and counts live in `../STATUS.md`; this file is only the plan. Delete it (or replace
-it) when the session it describes has started.
+State and counts live in `../STATUS.md` (the B.3.8 block) and `b38_session/CLOSE_NUMBERS.md`; this file is
+only the plan. Delete it (or replace it) when the session it describes has started.
 
-## 0. Sync (5 minutes)
+**What step 8 left behind, in one line:** every class the game instantiates now has a compiler-generated
+vtable (`b38_session/CLOSE_NUMBERS.md` §3: 306 hand-built tables → 3, none serving an exe class; 310 of 310
+reflected exe classes agree with retail). What is left of B.3 is the SCAFFOLDING the migration needed
+while hand-built and compiler tables coexisted: the mint, the `_typeInfo` / `RT_DELDTOR` rows, the ctor /
+dtor doors, the exe-address registrations, the type-id cells and the singleton storage. B.3's last step
+retires them. After it, the normal-virtual cutover and the registry teardown are mechanical.
 
-- `git log --oneline -8`, `git worktree list` (only the main tree: step 7's fourteen agent
-  worktrees were removed as each merged; every `b37-*` branch is merged into main — prune them
-  with `git branch -d`), `git branch --no-merged main` (expect none). Old branches that are NOT
-  this plan's: `endgame-a3`, `wave29/base`, `defects-open-5` (merged; can go, local and `origin`).
-- Greps over `standalone/` or `tests/` exclude `standalone/build*/` and `tests/unit/build/`;
-  never `find /`.
-- Ghidra: check the bridge FIRST (`mcp__ghidra-mcp__check_connection`; `tasklist` shows NO
-  `java.exe` while Ghidra is up — memory `reference_ghidra_running_check`); only if it is down,
-  `nohup "C:/tools/ghidra_12.0.3_PUBLIC/ghidraRun.bat" Banished_RE.gpr &` from the repo root
-  (~60 s). `switch_program` is GLOBAL: every agent asserts `get_current_program_info` before each
-  read batch (retail `Runtime-x64.dll` 15290 functions; profile 16002 is names only;
-  `Application-x64.exe` 11473) and switches BACK. Scripts are JAVA; the dual-mode
-  `b37_session/ghidra/Step7Appendix.java` (DLL mode: vtables terminated on the next `??_7`/`??_R`
-  symbol, sizeof from slot 0, parents from the literals, retslot exports, by-value-argument
-  prologues, ctor stamp chains; EXE mode: exe-side tables and import stubs) is the model — step 8 is
-  almost entirely EXE mode.
-- The gate is `b34_session/gate.sh` (copy it, `reftable_diff.py`, `b37_session/{mergegate.sh
-  shape, stepclose.sh, mods_route.sh}` into the session scratchpad; `<label> <n resaves>
-  [skipbuild|resaveonly|warnbaseline]` — the ARGUMENT ORDER matters: a mode in the count slot
-  runs a full gate); cut the warning baseline from a `make clean` rebuild FIRST
-  (`gate.sh baseline 3 warnbaseline` after building with logs into `runs/baseline/`); the compiler
-  is behind `ccache`, so a clean rebuild takes ~25 s and replays cached warnings honestly;
-  `rt_mint_gen --check` rewrites `standalone/rt_export_addrs.inc` line endings — `git checkout --`
-  it after every gate.
-- Agents: EVERY prompt says the lock acquire, the run and the `boot_state.sh --wait` poll happen in
-  the FOREGROUND. Three of step 7's four wave-1 blocks went idle waiting on a background watcher
-  that never fired and held the game-dir lock idle for 10+ minutes; the coordinator checks
-  `tools/game_dir_lock.sh status` (empty `exe_pids` + old `last_write` = an idle holder) and a
-  message resumes the idle agent. Caller batches are static-gate only. Two batches editing the same
-  file's include block conflict trivially (keep both sides).
+## 0. FIRST: finish the B.3.8 step close (owed)
 
-## 1. Carry-overs (each its own gated change; none blocks step 8)
+The step-close run on `e24d1e7c` was stopped by the harness for low system memory (STATUS B.3.8 block,
+`b38_session/GATE_TABLE.md` tail). Done: Mods, Quit, Options, Achievements, GoalDialog, the three tool
+routes, the in-game save, `sa-stress`, the clean rebuild (+ its warning diff, unit, dispatch, manifest).
+Owed: the true release compile from a clean obj dir (then `make clean`), the clean-built exe's gate routes +
+resave, `rt_mint_gen --check`, the `NOT IMPLEMENTED` stub-set diff and the tutorial `[TownCensus]` line.
+Close other memory-heavy programs, then run `stepclose.sh` from a scratchpad copy of `b38_session/`
+(it needs `gate.sh`'s `runs/baseline` from the clean-rebuild baseline — cut it first, §1 below) and record
+the result in STATUS and GATE_TABLE. A failure there is a step-8 finding, fixed before the next step.
 
-Unchanged from before (details in the B.3.4 / B.3.5 / B.3.6 blocks of `STATUS.md`,
-`B34B_RULES.md`, `B35_RULES.md` section 11, `B36_RULES.md` section 12):
-1. The IAT-cached `fn_InternalBasePtr_Ctor` / `_DeletePtr` callers in ten files.
-2. One `?_typeInfo@` record per name (`Base`, `External`, `ExternalList`, `CompiledExternal`,
-   `Internal`): owner task, `rt_data_mint.cpp` + `rt_mint_gen.py` + a live type-table comparison.
-3. `ExternalList::Find`'s second parameter is `Object::Type` by value (`runtime/types/object/Type.h`
-   now exists — B3 added it).
-4. `System::MemoryAllocator` — deferred on purpose (~1,146 sites); the `iatMemAlloc` fallback in
-   `gatherrawmaterials.cpp` / `foresterwork.cpp`; `singleton_ctors.cpp` stamps its ctor too.
-5. The singleton STORAGE: eleven `CUTOVER_REQUIRED` System statics + ten Video/Graphics + the nine
-   step-7 rows (`AchievementManager`, `Application`, `Audio::Configuration`/`Device`,
-   `LoaderLoop::_loader`, `Engine`, `MainLoop`, `Input::Configuration`/`Device`) plus
-   `?_singleton@SaveLoad@Save@@` (0x1801fc6f0, read through `RT_DATA_SLOT`, NO manifest row):
-   `MintStorageCell` redirect at the class-static conversion, the END of B.3 (after step 8).
-6. `System::Configuration::CurrentBuildId` stays a free door.
-7. The 125 call sites through the twelve `ExternalPtr` exe-side doors; `Geometry.h`'s
-   `Graphics::ExternalPtrHandle` alias.
-8. Small: eight direction reads with an unproved receiver (`d6ee7bfc`); `standalone/res_load_lock.{h,cpp}`
-   live-or-dead; `Time::AsSeconds` / the `Time` ctor reach `System::Timer` by name; `Camera.h`'s
-   eight wrong POD field names; `scene_watch.{h,cpp}`'s ~60 raw-offset reads; `boot_window.cpp`'s
-   `Configuration+0x42` write; `InterpolatedStateT` vs `InterpolatedState<T>`; the nine int64
-   `ReaderWriter` slot calls (five left); `runtime/types/common.h`'s global forward declarations
-   clash with `video/ImageBuffer.h`'s global `using` (B1 dropped the include from `MainLoop.h`).
-9. **THE DEVICE-LOST / LOADER RACE NEEDS THE USER'S DECISION, NOT A PATCH**
-   (`endgame_b/DEVICE_LOST_LOADER_RACE.md`; retail has the same window; step 7 moved no call in
-   `Loader::Run`'s bracket).
-10. The concrete dx11 `*Data` classes and the 84-slot seam stay (RULE B5-8). dx11's import table
-    is down to the `appSingleton` data row for `Application` (K5 converted the three function rows).
-11. Quit-during-splash exposure; `e353fb15`'s Mods-route timing. (MenuDLT `Stub_Shutdown`'s leak,
-    the old carry-over 11, is CLOSED: B1 transcribed retail's 12-step teardown.)
-12. UI (step 6): 76 live by-address calls to NON-ctor UI members inside `runtime/src/ui`
-    (`SpriteContext::AddSprite` x27, `Dialog::CreateElement` x8, `UserInterface::Play` x7 …) plus
-    69 ctor/dtor ones; 103 exported UI members declared and not ported; four `RtUI::` PODs still
-    embed `RtUI::Element base;`; `g_TypeId_Element`'s lazy fallback; `TextDescription::CreateInstance`
-    stays a door; the owed routes (a `GoalDialog` route from a scenario game's PAUSE menu; an Options
-    route that changes a setting and saves — the menu driver has no token for `OptionsDialog`
-    elements, so this needs a driver token first, a small deliberate instrument exception or a
-    manual run).
-13. Step 7 (`B37_RULES.md` section 12, `b37_session/CLOSE_NUMBERS.md`): 105 exported members
-    declared and not ported (`Pathfinding::Scene` 15 dead in retail, `MainLoop` 12, `Audio::Device`
-    11, `Input::Device` 10 …) and 8 undefined dtors that stay doors (`~Engine`, `~Application`,
-    `Input::~Configuration`, `~KeyMap`, `Audio::~Device`); `KeyMap`'s two split fields vs a
-    `Collection::Set<Binding>` (needs a byte-key compare policy); the 19 `rtpickgrid::` free
-    functions; the 38 address-documentation constants in `runtime/types/engine/`;
-    `Math::Vector3::operator==` (exe slot 0x140152a70) still unregistered, which keeps the
-    `MoveEmitter` loop in `citizen_assignworkplace.cpp` dead; `gameupdateloop_load.cpp`'s
-    `BuildSkyMesh_Step28` two loader-thread lazy resolves (Graphics/System symbols); the four
-    defined non-polymorphic dtor doors still called from `code/Game` (`Audio::Scene`, `Picking::Scene`,
-    `SaveLoad`, `SavedState` — the calls replicate exe import calls on exe-held objects: decide with
-    the holders in step 8).
-14. All mint / `_typeInfo` / `RT_DELDTOR` rows (300 / 104 / 138 tree-wide today) retire at the END
-    of B.3 with the rest; the four minted-table slot-copy sites of step 6 must convert first.
+## 1. Sync (5 minutes)
 
-## 2. B.3 step 8 — `code/Game`: the exe-phase classes become real C++ subclasses
+- `git log --oneline -8`; `git worktree list` (step 8's 24 agent worktrees were auto-created by the
+  Agent tool under `.claude/worktrees/`: remove them with `git worktree remove` and prune the
+  `worktree-agent-*` and `b38-*` branches with `git branch -d` — every one is merged into main;
+  `git branch --no-merged main` must be empty).
+- Greps over `standalone/` or `tests/` exclude `standalone/build*/` and `tests/unit/build/`; never `find /`.
+- Ghidra: check the bridge FIRST (`mcp__ghidra-mcp__check_connection`; `tasklist` shows `javaw.exe`, not
+  `java.exe`, while it is up). Pass `program="Application-x64.exe"` / `"Runtime-x64.dll"` on every call that
+  takes it instead of `switch_program` (GLOBAL); step 8's agents did, and nobody collided.
+- The gate is `b38_session/gate.sh` (it has the step-8 typetable rule: a diff made only of removed
+  `ResolveTypeIdByNameLazy` lines is equal). Copy it, `reftable_diff.py`, `mods_route.sh`, `stepclose.sh`
+  and `toolroutes.sh` into the session scratchpad, cut the warning baseline from a `make clean` rebuild
+  FIRST (`gate.sh baseline 3 warnbaseline`, then `gate.sh baseline 3 skipbuild` for the typetable and
+  route baselines). **Invariants changed in step 8** (LOOP, `758597e2`): new-game `calls=5683
+  openFileFail=0`, tutorial `calls=5773 openFileFail=12` (Load Game floats 4758-4789); the resave golden
+  md5 is `dd3893af7772e3f58a3bb51dd5c29a9f` (the `.bin` is git-ignored: if the golden is missing in a
+  fresh checkout, run the resave gate twice — the first run cuts it, its md5 must equal the committed one).
+- Agents: the `isolation: "worktree"` Agent option worked well in step 8 (24 worktrees, no collisions) —
+  but a worktree is cut from HEAD, so COMMIT any doc an agent must read before launching it. Class blocks
+  ran static-gate only; the coordinator alone takes the game-dir lock (the one exception: a block whose
+  merge broke every route got the lock to bisect its own fix). Blocks that write helper scripts must use
+  `C:/Users/USPC/AppData/Local/Temp/claude/<branch>/`, not the coordinator's scratchpad.
 
-`ENDGAME.md` B.3 line 8: "`code/Game`: components and dialogs, the 56 multiple-inheritance types
-last." This is the last conversion step of B.3; after it the END-of-B.3 retirement (mint rows,
-`_typeInfo`, `RT_DELDTOR`, singleton storage → class statics, the normal-virtual cutover) is its
-own closing step. Same shape that has now worked nine times: read-only inventory -> committed rule
-sheet `B38_RULES.md` (+ `B38_SLOTS.md` from the EXE, `B38_FILEMAP.md`) -> ONE owner for the
-question pass -> class blocks by DISJOINT FILE SET on worktrees -> coordinator gates each merge ->
-fragment pass(es) -> caller batches -> one closing owner -> step close. Session kit: `b37_session/`
-(`BLOCK_BRIEF.md`, `CALLER_BATCH_BRIEF.md`, `CLOSING_BRIEF.md`, the dual-mode Ghidra script,
-`CLOSE_NUMBERS.md` as the measurement template, `stepclose.sh`), `b36_session/EXE_SUBCLASSES.md`
-and `b37_session/EXE_SUBCLASSES.md` (the two enumerations of what step 8 converts).
+## 2. Carry-overs (each its own gated change; none blocks the next step unless marked)
 
-### 2a. What is already known (both `EXE_SUBCLASSES.md` files; sizes measured 2026-09-26)
-- **The Runtime bases are all real now**: `Object::{Base,External,CompiledExternal,Internal}`,
-  the 68 `UI::*` classes, `Engine::{UpdateLoop,LoaderLoop,DialogLoopT,DialogLoaderLoopT}`,
-  `Achievement::{Achievement,AchievementInstance,Goal,GoalInstance}` — each abstract-by-policy
-  with slot 0 `= 0`, a ctor door, and QUALIFIED calls already in place inside the exe slot
-  bodies (30 UI sites, 25 step-7 sites). Step 8 replaces the hand-built tables with
-  compiler-generated vtables by deriving real C++ classes from those bases.
-- **The exe population**: `code/Game` 543 `.cpp`; **188 hand-built vtable arrays** in `code/Game`
-  (+ the `standalone/*_stubs.cpp` loop tables); 1,401 `RegisterExeAddr` calls; `engine/types` 143
-  headers / 248 structs (the exe-phase PODs — `Dialogs.h`, `Panels.h`, `Elements.h`,
-  `Descriptions.h`, `AchievementGoals.h`, `TutorialGoals.h`, `GameUpdateLoop.h`, the component
-  headers); 164 `standalone/reg_*.cpp`. Known subclass sets: 20 `UI::DialogInstance`, 38-39
-  `UI::DialogController`, 4 `UI::DialogControllerConfig`, 2 `UI::Element`, 2 `UI::ElementDescription`;
-  `GameUpdateLoop`, `MenuDialogLoopT`, the splash loop, two `LoaderLoop` tables; 5 `Goal` + 2
-  `GoalInstance` subclasses, `Scenario` (`Achievement::Achievement`), the never-registered exe
-  `AchievementInstance` table 0x14015e350; and the big one, the **components**: `Component`
-  subclasses with the 56 secondary-vptr (`ControllerComponent`) types — no inventory exists yet.
-- **Retail facts already read** that constrain the shape: the retail Scenario table has 9 slots (the
-  tree's has 13), the retail Goal tables 11 (the tree's arrays run into the next table);
-  `GameUpdateLoop` has 12 slots; slot 1 (`TypeName`) is null in every hand-built Goal table and
-  `FinishTutorialGoal` leaves 4 and 7 null; five slot-0 bodies skip their base dtor (MenuDLT, splash,
-  two LoaderLoops, `TutorialHighlightDialog`); `Dialogs.h:23` and `Panels.h:22` both claim
-  0x14015b070; `::TutorialSetupDialog` is defined twice (`engine/types/ui/Dialogs.h:468` vs
-  `engine/types/TutorialSetups.h:90` — a live ODR violation); the `AchievementDialog` / `ModDialog`
-  multiple-inheritance hint; the four minted-table slot-copy sites (`tool_base_toolui.cpp`,
-  `frustumoutlineelement.cpp`, `thumb_vtables.cpp`, `dialog_controller_vtable.cpp`); no
-  `DialogController` subclass runs `~DialogController` today.
-- **The RtEngine loop PODs** stay until the loop subclasses convert: 95 `m_` field uses in 7 files
-  (`gameupdateloop.cpp` 44, `splash_loop_stubs.cpp` 31, `loader_loop_stubs.cpp` 12, …).
+From before step 8, still open (details in `B37_RULES.md` §12 and the old carry-over list in git history of
+this file, `git show 1d7866d4:docs/runtime_port/endgame_b/NEXT_SESSION.md`):
+1. `System::MemoryAllocator` (~1,146 sites) — deferred on purpose.
+2. `System::Configuration::CurrentBuildId` stays a free door.
+3. The 125 `ExternalPtr` exe-side door call sites; `Geometry.h`'s `Graphics::ExternalPtrHandle` alias.
+4. The small list (receiver-unproved direction reads, `res_load_lock`, `Time` by name, `Camera.h` names,
+   `scene_watch` raw reads, `boot_window.cpp`'s `Configuration+0x42`, `InterpolatedStateT`, the five int64
+   `ReaderWriter` slot calls, `common.h` vs `ImageBuffer.h`).
+5. **THE DEVICE-LOST / LOADER RACE NEEDS THE USER'S DECISION, NOT A PATCH**
+   (`DEVICE_LOST_LOADER_RACE.md`).
+6. dx11 `*Data` classes and the 84-slot seam (RULE B5-8); dx11's `appSingleton` data row.
+7. Quit-during-splash exposure; `e353fb15`'s Mods-route timing.
+8. UI (step 6): 76 by-address non-ctor UI calls inside `runtime/src/ui`, 103 exported UI members declared
+   and not ported, four `RtUI::` PODs embedding `RtUI::Element base;`; the Options-change route (the menu
+   driver still has no `OptionsDialog` token). **The `GoalDialog` route is CLOSED** (step 8: pause-menu
+   id 10 in a tutorial scenario game, in `b38_session/stepclose.sh`).
+9. Step 7: 105 exported members declared and not ported; `KeyMap`'s split fields; the 19 `rtpickgrid::`
+   free functions; `Math::Vector3::operator==` (0x140152a70) unregistered (keeps `MoveEmitter` dead).
 
-### 2b. Block 0 — the inventory and the question pass (read-only, then ONE opus owner into `B38_RULES.md`)
-1. **The exe class inventory** (no map exists): every hand-built vtable array in `code/Game` and
-   `standalone/`, its retail exe vtable address (`RegisterExeAddr`), slot count, the Runtime base it
-   derives from (or the exe base — `Component`, `ControllerComponent`, `Tool`, `Dialog*` intermediates),
-   its `engine/types` POD, alloc size, ctor door, how many slots are own bodies vs base vs nop; the
-   exe's own hierarchy read from `Application-x64.exe` (the `_ParentTypeName` literals the exe
-   emits, the `??_7` tables with their slot lists terminated on the next symbol — EXE mode of
-   `Step7Appendix.java`), including which tables carry a SECONDARY vptr (the 56
-   `ControllerComponent` types: `class X : public Component, public ControllerComponent` — GCC
-   lays non-virtual bases out in declaration order and emits the this-adjusting thunks retail
-   hand-wrote; ENDGAME B.1 decision 2) — read every exe ctor's stamp chain for a store at a non-zero
-   `this` offset.
-2. **Which exe classes are reflected** (`DECLARE_TYPE`-shaped: a `_typeInfo` record, `TypeName`/
-   `GetTypeId`, a factory registration keyed by the CRC of the class name — saves depend on the
-   NAME, so the literal is copied from the exe) vs plain subclasses.
-3. **Order of conversion**: bases first (`Component` and the exe intermediates), then leaves; the
-   dialogs/controllers cluster (UI bases), the Goal/Scenario cluster (Achievement bases), the loop
-   cluster (Engine bases — this retires the `RtEngine::` PODs and the five stub tables), the
-   components (largest; the 56 multiple-inheritance types LAST, each pinned by a unit test that
-   reads the secondary vptr offset and the thunk adjust).
-4. **What the hand-built tables do that a compiler vtable will not**: null slots (Goal slot 1),
-   print-once nop stubs, tables sized past retail's (Scenario 13 vs 9), slot-0 bodies that skip
-   the base dtor, tables filled at init from a Runtime object (`FillBaseSlots`, `Apply()`, the four
-   slot-copy sites) — each is a behaviour decision to write down before a block starts (retail's
-   behaviour wins unless the standalone genuinely differs, per CLAUDE.md).
-5. **The `RegisterExeAddr` seam**: an exe function the exe reaches by address today keeps its
-   registration as a door delegating to the member (the step-6/7 shape); which registrations are
-   reached ONLY through the hand-built table (and so die with it) vs by address from elsewhere.
-6. **Threading**: the loader thread constructs `GameUpdateLoop`'s world (components, dialogs) while
-   the menu draws; B6-5 applies to every exe member.
-7. **File ownership** (`B38_FILEMAP.md`): `code/Game/<Dir>/` is mostly one class per file, but
-   `engine/types/*.h` PODs are shared headers (`Dialogs.h` 20 classes, `Panels.h` 38) — the B6-4.4
-   rule (leaf blocks author per-class headers; a shared POD header becomes aliases in the closing
-   pass) decides.
-8. **The END-of-B.3 retirement plan**, written now so step 8's blocks do not fight it: when a class
-   has a compiler-generated vtable, its mint row, `RT_DELDTOR` row and `_typeInfo` row can retire
-   ONLY after the four slot-copy sites and every by-address reader of the table are gone; the order
-   of retirements per class is part of the rule sheet.
+From step 8 (`B38_RULES.md` §10, sizes there):
+10. **142 PORT GAP slots** (Component 104, Dialog 30 …), 38 of them leaking dtors; **49 STANDALONE
+    DEVIATION** overrides (PNL). Each transcription is its own titled behaviour commit, gated with resave
+    x5. This is B.4-adjacent quality work: it can run as parallel blocks by directory at any time.
+11. **36 lazy `X_ResolveFuncs` resolvers (137 calls)** — B6-5 surface on the loader thread.
+12. **238 raw dispatch sites** left unproved or excluded (75 candidates needing proof); **12 delegating
+    members** (`CharacterComponent`'s 256-line body the largest).
+13. The 3 remaining by-name concrete lookups (`Disease`, `Toolbar` ×2); 10 zero-reference `engine_funcs`
+    globals not owned by a converted class + 8 type-id / ctor slot globals; 237 reader-less registry rows
+    whose symbol names no converted class; the dead `ControllerLive::Dispatcher<Tag>` template.
+14. **~270 `g_pGameWorldSingleton + off` raw reads outside `code/Game/Game`** (Component 96, Player 61,
+    Dialog 45, Action 23 …; CB6's count) — `GameUpdateLoop` now declares those fields.
+15. B38_RULES §6 still NOT VERIFIED: 2 (type-table order sensitivity — MEASURE IT FIRST in the next step,
+    decision 4's `DEFINE_TYPE` fold depends on it), 4, 5, 7, 9.
 
-### 2c. Standing rules every prompt carries (B34B_RULES, B35_RULES section 11, B36_RULES sections 8/10/14, B37_RULES sections 8/10/14 hold; these are step 7's additions)
-- The four Engine loops are their OWN root (slot 1 `Startup`), not `Object::Base` (B7-1); `Goal` slot
-  8 is `CheckGoalState`, not `Construct` (B37_RULES 10); `Goal::GetInstanceType` is the one virtual
-  retslot in the batch — `Object::Type* M(Object::Type* ret) const` on every override (B7-4).
-- By-value ARGUMENTS per type (B7-5): `ExternalPtr` and `System::Time` in a REGISTER; `InternalPtr`,
-  `Collection::Array`, `UI::Sprite` and **`System::String` (8 bytes!)** by HIDDEN POINTER. Read the
-  prologue per member.
-- Every copy ctor read in these namespaces was DEEP; no class was trivially copyable — assert
-  `!is_trivially_copyable`, never the opposite, until read (B7-8).
-- A POD that holds a polymorphic POD by value (`Audio::Device` → `Stream`) keeps the POD twin
-  cross-asserted beside the class (B7-12); an abstract class is never an alias target of an
-  embedded POD (B36_RULES 10).
-- Name sweeps match back-references (`@Achievement@1@`, `@Application@1@`, `@Engine@1@`,
-  `??_7Achievement@0@6B@`); hex sweeps anchor on the DEMANGLED OWNER of the name, not on `@NS@`
-  (B37_RULES 14.6 — K1/K2's sweep missed ordinary class-scoped names, K3's missed back-references;
-  the close's `hexall.py` shape is right).
-- A warning A/B across a header change compiles the BASE in its own worktree (B37_RULES 14.7).
-- A door that never resolves in standalone (an unregistered exe import slot) is a PORT GAP, not a
-  design choice: converting it to the member makes retail's path live — do it, in its own commit
-  titled as a behaviour change, and gate it (step 7: dragtool key release, citizen emitter teardown,
-  the tutorial-instance type check).
-- Before writing "not exported", check `rt_export_addrs.inc` (B37_RULES 14.4: five `MainLoop`
-  members and `Input::Device::PlatformUpdate` were filed as unexported while exported).
+## 3. B.3 step 9 — END of B.3: retire the migration scaffolding
 
-### 2d. The gate for every merge (coordinator only)
-Unchanged: debug + release + perf build exit 0 · new-warning set diff vs a clean-rebuild baseline ·
-`make unit` · new game + pause-menu quit · tutorial · Load Game dialog · resave gate PASS x3 (x5 for
-anything on a serialize or load path — the components ARE that path in step 8) · pointer-free type
-table vs baseline · `[RtResolve] 0 misses`, no `[RtMint] TRAP`, 0 GATE WARN, new-game `calls=5686`,
-tutorial `calls=5776 openFileFail=15` (Load Game floats 4760-4789) · `dispatch_slot_map.py --check`
-0 · cutover manifest gate · `rt_mint_gen --check` · `git diff --stat` against the agent's file set.
-At the step close (`b37_session/stepclose.sh`: Mods route with `.pkm` mounted, front-end Quit /
-Options / Achievements routes, an in-game save through `Save::SaveLoad` (resave gate file mode),
-one `make sa-stress` recorded never chased, true release compile from a clean obj dir FOLLOWED by
-`make clean`, clean rebuild of debug/perf/unit, the full gate again on the clean-built exe, the
-`Audio::Device` construction check and the `NOT IMPLEMENTED` stub-set diff on the new-game log).
-For step 8 add: a component-heavy route (the tutorial save's 5,354 entities load every component
-type — `BANISHED_AUTOTUTORIAL` already does; check the entity/component counts in the log against
-the baseline), the `GoalDialog` route from a scenario game's pause menu, and per multiple-inheritance
-class a unit test that reads the secondary vptr through the base pointer.
+`ENDGAME.md` B.3 is complete as a list of hierarchies; `B38_RULES.md` D10 wrote the retirement order. This
+step is mostly DELETION, like phase A, but every deletion is gated because the scaffolding is live.
+Acceptance: `rt_data_mint_tables.inc` has no `??_7` vtable row and no `?_typeInfo@` row;
+`deleting_dtor.cpp`'s `RT_DELDTOR` table is empty; no `RegisterExeAddr` of a vtable address; no
+`ResolveAddr(Module::Exe, 0x1401c…)` type-id cell read; the singleton storage lives in class statics; the
+gate (routes + resave x5) passes. Then B.3 is CLOSED and the normal-virtual cutover (`DeletingDtor` →
+`virtual ~T()`, `Object::Destroy` → `delete`) becomes legal — it is its own mechanical step, right after.
+
+### 3a. What is already known (measured 2026-09-26 at the close)
+- `rt_data_mint_tables.inc`: 152 minted vtables, 104 `BaseTypeInfo` records, 48 storage cells;
+  `deleting_dtor.cpp` 137 `RT_DELDTOR` rows (+1 in `deleting_dtor_leaves.cpp`, which still has five
+  separate dtor doors — RB's note); `rt_export_addrs.inc` 4,932 generated rows; `standalone/address_registry.cpp`
+  1,617 lines; `engine_funcs.{h,cpp}` 4,292 + 2,576 lines; 145 `standalone/reg_*.cpp`; 58
+  `CUTOVER_REQUIRED` manifest rows.
+- Why the mint is still live: every Runtime class's ctor DOOR stamps its minted table (RB kept the doors
+  for "unconverted subclasses"; after step 8 there are none in the exe), and the Runtime's own
+  `Object::Factory` create/create-in-place functions build Runtime classes through those doors. A minted
+  row retires when (a) no door stamps it — the door placement-news the real class instead — and (b) no
+  `ResolveExport("??_7…")` / `RT_VTABLE_ONCE` / slot-copy site reads it. The six slot-copy sites of step 8
+  are gone except the `Video::ImageBuffer` copy (0x14015c8c0) and `thumb_vtables.cpp`'s SpriteSheet /
+  MaterialInstance copies (DLG left both: protected ctors) — those three go first.
+- The exe vtable rows left (6): the four loop tables (read by 18 door-then-stamp loop builders in
+  `mainmenudialog.cpp`, `newgamedialog.cpp`, `saveloaddialog.cpp`, `tutorialui.cpp`,
+  `tutorial_next_scenario.cpp` and `engine_funcs.h`'s inline `MenuDialogLoopT_Ctor` — make them real loop
+  ctors), `StatGoal` (read by `RunFactorySelfTest`), the ImageBuffer copy.
+- Type-id cells: 100 `g_tid_*` + 111 `g_TypeId_*` names, 423 `ResolveAddr(Module::Exe, 0x1401c…/0x1401d…)`
+  sites. Each becomes `X::TypeId()` (exe class) or the Runtime class's static; the `.data` rows retire.
+- Reflection: exe classes are on `DEFINE_EXE_TYPE` (296) over the FactoryRegistration list, which feeds the
+  DLL-shaped `BaseTypeInfo` chain; Runtime classes are on the 104 minted `_typeInfo` records. ENDGAME B.1
+  decision 4 folds both into one `DEFINE_TYPE` — ONLY after the type-table order question (§6 item 2) is
+  answered by a measurement (reorder registrations in a throwaway build, compare the pointer-free type
+  table AND a resave).
+- Singleton storage: 9 `CUTOVER_REQUIRED` System statics + 10 Video/Graphics + 9 step-7 rows +
+  `?_singleton@SaveLoad@Save@@` (no manifest row) → class statics via the `MintStorageCell` redirect.
+
+### 3b. Block 0 — the inventory and the question pass (read-only, then ONE opus owner into `B39_RULES.md`)
+1. Per minted vtable row (152): the class, every stamper (its ctor door + any other), every reader
+   (`ResolveExport("??_7…")`, `RT_VTABLE_ONCE`, copy sites, `Vtable()`-style comparisons), who creates the
+   class (factory create / create-in-place / exe code / Runtime code), and whether it has a real C++ ctor
+   today. Output: the retirement order per row (D10: copy sites → subclasses → exe registrations →
+   `g_tid_*` → mint vt rows → `RT_DELDTOR` → `_typeInfo` → `Object::Base` last → singleton storage).
+2. Per ctor/dtor door still registered (the "doors kept by design" lists of steps 6-8): callers by
+   binding; which become `::new (p) X(…)` / `Object::Destroy` at the call site; which are reached only
+   through the mint and die with it.
+3. The `RT_DELDTOR` table: which rows a compiler `DeletingDtor` already supersedes (every class with a real
+   slot 0) and which dispatches still reach a row.
+4. Type-id cells and the reflection fold: the order measurement (§6 item 2); the `DEFINE_TYPE` shape for
+   Runtime + exe classes together; `Factory::Startup`'s chain walk and the AVL tree.
+5. Singleton storage: each cell's readers by binding; the class-static spelling; the manifest rows that go.
+6. What stays in `rt_export_addrs.inc` / `address_registry.cpp` / `engine_funcs` after the step (the
+   by-address doors the exe-phase code still calls, e.g. `ExternalPtr` doors, `MemoryAllocator`) — so the
+   registry teardown that follows B.3 knows its size.
+7. File ownership: the retirement is by BASE (per Runtime namespace), so blocks are namespace-disjoint
+   (Object, System, IO, Collection, Video/Graphics, UI, Engine/Save/Achievement/Audio/Input/Pathfinding/
+   Picking) plus one exe-side block (loop builders, type-id cells, the last copy sites) — `B39_FILEMAP.md`.
+
+### 3c. Standing rules every prompt carries (B34B, B35 §11, B36 §8/10/14, B37 §8/10/14, B38 §4/§8/§11 hold)
+- Step 8's additions: exe classes have REAL ctors; slot 0 is `DeletingDtor(unsigned)` with a protected
+  non-virtual dtor (no virtual dtor until the cutover); a Runtime base's door and its real ctor share ONE
+  body (`X::DoorBody`); `UI::DialogInstance::operator new(size_t, void*)` is declared but undefined — write
+  `::new (p) X(…)`; a class's real table ENDS at its retail slot count — before deleting a padded table,
+  grep the whole tree for dispatches past it (the CIT lesson); a teardown that now RUNS (a base dtor that a
+  hand-built slot 0 used to skip) can free something another owner still uses — the LOOP lesson (the
+  menu scene evicted by the splash's `ExternalFactory::Clean`): find the owner, never add a guard.
+- Retail wins; every behaviour change is its own titled commit, gated with resave x5; a resave DIFF is
+  localised (`reftable_diff.py`, then the object census) before any golden re-cut, and a re-cut is its own
+  commit with the evidence in the message.
+
+### 3d. The gate for every merge (coordinator only)
+Unchanged from step 8 (`b38_session/gate.sh`): debug + release + perf build exit 0 · new-warning set diff
+vs a clean-rebuild baseline · `make unit` · new game + pause-menu quit · tutorial · Load Game · resave x5 ·
+pointer-free type table vs baseline (lazy-lookup-only diffs allowed) · `[RtResolve] 0 misses`, no
+`[RtMint] TRAP`, 0 GATE WARN, new-game `calls=5683`, tutorial `calls=5773 openFileFail=12` ·
+`dispatch_slot_map.py --check` 0 · cutover manifest gate · `rt_mint_gen --check` (this step CHANGES the
+mint: regenerate with `rt_mint_gen.py`, never hand-edit) · `git diff --stat` against the agent's file set.
+Retiring the mint also changes `[RtMint]` / `[RtResolve]` boot lines: re-cut the route expectations from
+the first block's gate, in writing. At the step close: `b38_session/stepclose.sh` (Mods with `.pkm`,
+Quit / Options / Achievements, GoalDialog from a tutorial game's pause menu, the three tool routes, an
+in-game save, `sa-stress` recorded never chased, true release compile then `make clean`, clean rebuild +
+full gate, the `NOT IMPLEMENTED` stub-set diff and the tutorial `[TownCensus]` line).
