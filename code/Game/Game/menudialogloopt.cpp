@@ -266,7 +266,7 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
     // 1. Allocate + construct MeshInstance.
     void* inst = fn_MemAlloc(g_pMemAllocSingleton, 0x120, 8);
     if (!inst) return 0;
-    fn_Graphics_MeshInstance_Ctor(inst);
+    ::new (inst) Graphics::MeshInstance();   // B.3.9 EXA: the real class (exe table 0x14015e240 is its own)
 
     // 2. Append to MenuDLT+0xbe0 (shared instance list).
     AppendToDynArray<void*>(self, offsetof(MenuDialogLoopT, _instanceArray), inst);
@@ -390,13 +390,12 @@ void MenuDialogLoopT_PhaseB_InitState(MenuDialogLoopT_PhaseBState* state,
 
     if (!self || !menuScene || !scene) return;
     // B.3.5: SetMesh / Scene::AddObject / Geometry::SetTransform are members now,
-    // so their readiness terms and their `%p`s are gone. The MeshInstance CTOR
-    // door, MemoryAllocator and the Time ctor stay.
-    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_Graphics_MeshInstance_Ctor ||
-        !fn_Time_Ctor_Float) {
+    // so their readiness terms and their `%p`s are gone; B.3.9 EXA took the
+    // MeshInstance ctor door's (the class is constructed). MemoryAllocator and the
+    // Time ctor stay.
+    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_Time_Ctor_Float) {
         printf("[MenuDLT::PhaseB] missing required fn ptrs "
-               "(MICtor=%p TimeC=%p) — skipping\n",
-               (void*)fn_Graphics_MeshInstance_Ctor,
+               "(TimeC=%p) — skipping\n",
                (void*)fn_Time_Ctor_Float);
         return;
     }
@@ -641,7 +640,7 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     // Required Runtime functions
     if (!fn_MemAlloc || !g_pMemAllocSingleton ||
         !fn_Graphics_Renderer_Ctor || !fn_Graphics_Scene_Ctor ||
-        !fn_Graphics_SunLight_Ctor || !fn_Graphics_MeshInstance_Ctor ||
+        !fn_Graphics_SunLight_Ctor ||
         // B.3.5: SetMesh and Scene::AddGlobalObject are members now.
         !fn_Time_Ctor_Float) {
         printf("[MenuDLT::LoadScene] missing required fn pointers — bailing out\n");
@@ -746,10 +745,10 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     // --- Allocate MeshInstance (0x120 bytes, alignment 8) ---
     void* mainMesh = fn_MemAlloc(g_pMemAllocSingleton, 0x120, 8);
     if (mainMesh) {
-        fn_Graphics_MeshInstance_Ctor(mainMesh);
-        // Original writes vtable override at +0x00:
-        //   *(MeshInstance*)mainMesh = PTR_EnvironmentDescription_vslot10_14015e240
-        // Skipped for Phase A.
+        // Retail: `??0MeshInstance` then the exe's copy 0x14015e240 of the class's
+        // OWN table (Ghidra: slot 0 the exe scalar deleting dtor 0x140019e80, 1-8
+        // thunks onto MeshInstance / Geometry members) = `new MeshInstance()`.
+        ::new (mainMesh) Graphics::MeshInstance();   // B.3.9 EXA: the real class (exe table 0x14015e240 is its own)
     }
     Loop(self)->_mainMesh = mainMesh;
 

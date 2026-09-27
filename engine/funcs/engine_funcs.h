@@ -1994,9 +1994,8 @@ extern fn_Graphics_SunLight_Ctor_t fn_Graphics_SunLight_Ctor;
 // is GONE — zero callers. `fn_Graphics_SunLight_Ctor` above it STAYS: it is a
 // ctor door with live callers (B4b-2 / B35_RULES section 11).
 
-// Graphics::MeshInstance::MeshInstance() — default ctor. Object size 0x120, alignment 8.
-typedef void* (*fn_Graphics_MeshInstance_Ctor_t)(void* self);
-extern fn_Graphics_MeshInstance_Ctor_t fn_Graphics_MeshInstance_Ctor;
+// (fn_Graphics_MeshInstance_Ctor went at ENDGAME B.3.9 EXA: MenuDialogLoopT's
+// scene build writes `::new (p) Graphics::MeshInstance()`.)
 
 // ENDGAME B.3.5 (b35-K2): `fn_Graphics_MeshInstance_SetMesh`
 // (?SetMesh@MeshInstance@Graphics@@) is GONE — zero callers. It had FOUR in

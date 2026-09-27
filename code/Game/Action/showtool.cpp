@@ -64,9 +64,6 @@ static uint32_t* s_TypeInfo_ShowToolEntity = nullptr;
 // (0x140151370) went with their last callers in ShowTool_ShowCarried, which now
 // call the members. The MeshInstance default-CTOR door below stays: no
 // Video/Graphics class has a real constructor (B35_RULES section 11 / B4b-2).
-typedef void         (*fn_MIDefCtor_t)(void* meshInstance);                      // 0x140151490
-
-static fn_MIDefCtor_t    s_slot_MI_DefCtor = nullptr;
 
 // ModelDescription type-id (DAT_1401c7a88): .rdata resolves NULL in standalone, so fall back to the runtime registry.
 static uint32_t ShowTool_ModelDescTid() {
@@ -135,15 +132,6 @@ bool ShowTool_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x1401176e0));
     s_fn_ShowToolOnEntity = reinterpret_cast<void(*)(void*, int)>(
         ResolveAddr(Module::Exe, 0x1401173b0));
-    // Carry-model dispatch slots (values filled by the runtime into exe .rdata slots;
-    // resolve the slot address, then deref to the fn ptr). Optional for the core action
-    // methods — each is null-guarded at the call site in ShowTool_ShowCarried — so they
-    // are NOT part of the `ok` gate below.
-    auto rslot = [](uintptr_t a) -> void* {
-        uintptr_t s = ResolveAddr(Module::Exe, a);
-        return s ? *reinterpret_cast<void**>(s) : nullptr;
-    };
-    s_slot_MI_DefCtor   = reinterpret_cast<fn_MIDefCtor_t>(rslot(0x140151490));
     // ENDGAME B.3.5 batch K1: the GetNodeIndexFromName / Geometry::Attach dispatch
     // slots were NOT registered in standalone, so this used to fall back to the two
     // Runtime addresses 0x1800fee90 / 0x1800a3fa0. Both are members of real classes
@@ -264,8 +252,8 @@ static void ShowTool_ShowCarried(void* entityV) {
     // same 0x128-byte MeshInstance default-ctor the StorageDisplayComponent pile
     // renderer uses before its own SetMesh+AddObject — with sceneId(+0x120) = -1.
     void** heldVt = *(void***)(e + 0xb8);
-    if (!heldVt && s_slot_MI_DefCtor) {
-        s_slot_MI_DefCtor(e + 0xb8);
+    if (!heldVt) {
+        ::new (static_cast<void*>(e + 0xb8)) Graphics::MeshInstance();   // B.3.9 EXA: the real class
         *(uint32_t*)(e + 0xb8 + 0x120) = 0xffffffff;   // sceneId = -1 (not yet in scene)
     }
 
