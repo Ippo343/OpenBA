@@ -152,7 +152,6 @@ namespace RtUI {
 // against C:\GOG Games\Banished\Runtime-x64.dll), not guessed from the
 // mangling pattern.
 // ---------------------------------------------------------------------------
-constexpr const char* kVtblBorderDescription       = "??_7BorderDescription@UI@@6B@";        // 0x180156980
 constexpr const char* kVtblButtonDescription       = "??_7ButtonDescription@UI@@6B@";        // 0x180157370
 constexpr const char* kVtblCheckDescription        = "??_7CheckDescription@UI@@6B@";         // 0x1801572c0
 constexpr const char* kVtblClipRegionDescription   = "??_7ClipRegionDescription@UI@@6B@";    // 0x180156350

@@ -6,7 +6,7 @@
 //
 //   slot  method                retail       where
 //   ----  --------------------  -----------  ---------------------------------
-//    0    vector deleting dtor  0x1800414f0  deleting_dtor.cpp row
+//    0    vector deleting dtor  0x1800414f0  BorderElement.h (the class's own)
 //    1    TypeName              0x1800410b0  here
 //    2    Type                  0x180041090  here
 //    4    ComputeSize           0x1801101d0  here
@@ -14,14 +14,15 @@
 //    6    Draw                  0x1801103e0  here
 //   (3, 7..11 are UI::Element's own bodies, already ported in element*.cpp)
 //
-// plus ??0BorderElement@UI@@QEAA@AEBV01@@Z  0x180041250 (copy)
-//      ??1BorderElement@UI@@UEAA@XZ         0x180041230
-// (`??0BorderElement@UI@@QEAA@XZ` 0x18010fd40 is factory_ui1.cpp's door.)
+// plus ??1BorderElement@UI@@UEAA@XZ 0x180041230 and the factory pair.
 //
 // ENDGAME B.3.6 block C1: the five slot bodies are MEMBERS of
 // `UI::BorderElement` (runtime/types/ui/BorderElement.h, which now owns the
 // nine-slice layout — nine UI::Sprite at +0xc0..+0x14f, row major — and its
-// evidence). The doors are one-line QUALIFIED delegations.
+// evidence). ENDGAME B.3.9 block UI-A: the class is concrete (its real ctor
+// `??0BorderElement@UI@@QEAA@XZ` 0x18010fd40 is in the header); the slot
+// doors, the copy-ctor door and the ??1 door, read only by the retired minted
+// table / RT_DELDTOR row, are gone.
 // ============================================================================
 #include "element_common.h"
 #include "../../types/ui/BorderElement.h"
@@ -36,22 +37,18 @@ const uint8_t* BorderElementTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_borderTypeInfo, "?_typeInfo@BorderElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
-// The copy-ctor door only.
-void* VtBorderElement() { return RT_DATA_SLOT(void*, "??_7BorderElement@UI@@6B@"); }
-
 // UI::SpriteContext (block D's class), reached by address.
 using AddSpritePtFn   = void (*)(void* ctx, const void* sprite, int x, int y, uint32_t color);
 using AddSpriteRectFn = void (*)(void* ctx, const void* sprite,
                                  int l, int t, int r, int b, uint32_t color);
 
-using ElementCopyCtorFn = void* (*)(void* self, const void* other);
-using ElementDtorFn     = void  (*)(void* self);
-
 }  // namespace
 
 namespace UI {
 
-uint32_t BorderElement::Type() const { return TypeIdOf(BorderElementTypeInfo()); }
+// ?TypeId@BorderElement@UI@@SAIXZ 0x1800410a0 — the minted record's first dword.
+uint32_t BorderElement::TypeId() { return TypeIdOf(BorderElementTypeInfo()); }
+uint32_t BorderElement::Type() const { return TypeId(); }
 const char* BorderElement::TypeName() const { return TypeNameOf(BorderElementTypeInfo()); }
 
 // ============================================================================
@@ -171,86 +168,39 @@ void BorderElement::Draw(SpriteContext& context, uint8_t alpha) const {
 }  // namespace UI
 
 // ============================================================================
-// The DOORS
-// ============================================================================
-extern "C" uint32_t RtUi_BorderElement_Type(const void* self) {
-    return reinterpret_cast<const UI::BorderElement*>(self)->UI::BorderElement::Type();   // B.3.6 bridge
-}
-extern "C" const char* RtUi_BorderElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::BorderElement*>(self)->UI::BorderElement::TypeName();   // B.3.6 bridge
-}
-extern "C" void RtUi_BorderElement_ComputeSize(void* selfv) {
-    reinterpret_cast<UI::BorderElement*>(selfv)->UI::BorderElement::ComputeSize();   // B.3.6 bridge
-}
-extern "C" void RtUi_BorderElement_ComputeLayout(void* selfv, int x, int y, int w, int h) {
-    reinterpret_cast<UI::BorderElement*>(selfv)->UI::BorderElement::ComputeLayout(x, y, w, h);   // B.3.6 bridge
-}
-extern "C" void RtUi_BorderElement_Draw(const void* selfv, void* ctx, uint8_t alpha) {
-    reinterpret_cast<const UI::BorderElement*>(selfv)->UI::BorderElement::Draw(   // B.3.6 bridge
-        *static_cast<UI::SpriteContext*>(ctx), alpha);
-}
-
-// ============================================================================
-// Copy constructor / destructor — DOORS (B4b-2), unchanged
-// ============================================================================
-// ??0BorderElement@UI@@QEAA@AEBV01@@Z   0x180041250
-// Eighteen qword copies, i.e. the nine sprites verbatim INCLUDING each one's
-// pad dword — a memcpy of 0x90 bytes would be equivalent, but the loop keeps
-// the per-field spelling the other copy constructors in this batch use.
-extern "C" void* RtUi_BorderElement_CopyCtor(void* selfv, const void* otherv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    const uint8_t* other = static_cast<const uint8_t*>(otherv);
-    RtAddr<ElementCopyCtorFn>(0x1800358c0ull)(self, other);
-    P(self, 0x00) = VtBorderElement();
-    for (size_t off = offsetof(UI::BorderElement, _topLeft); off < sizeof(UI::BorderElement); off += 8)
-        *reinterpret_cast<uint64_t*>(self + off) =
-            *reinterpret_cast<const uint64_t*>(other + off);
-    return self;
-}
-
-// ============================================================================
 // ??1BorderElement@UI@@UEAA@XZ   0x180041230
 // ============================================================================
 // *** IT DOES NOT RE-STAMP ITS OWN VTABLE. *** Five instructions, all of them
-// frame setup, then `JMP ~Element`. Every other destructor in this batch stamps
-// first; this one does not, and adding the stamp "for consistency" would be a
-// divergence. (The scalar arm of the deleting destructor at 0x180041541 calls
-// ~Element DIRECTLY for the same reason — there is nothing else to do.)
-extern "C" void RtUi_BorderElement_Dtor(void* selfv) {
-    RtAddr<ElementDtorFn>(0x1801161a0ull)(selfv);
+// frame setup, then `JMP ~Element`: the body is EMPTY and the compiler chains
+// ~Element (ENDGAME B.3.9 UI-A; the retired door called it by address).
+namespace UI {
+BorderElement::~BorderElement() {}
+
+// ?CreateNewObject@BorderElement@UI@@SAPEAVBase@Object@@XZ  0x1800411a0
+// The FACTUI1 row this replaces: `?MemAlloc@MemoryAllocator@System@@`
+// (0x1800c7a50) of 0x150 bytes, align 8; retail's null branch; then the ctor.
+Object::Base* BorderElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(BorderElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) BorderElement();
 }
+// ?CreateInPlaceObject@BorderElement@UI@@SAPEAVBase@Object@@PEAX@Z  0x180041220
+Object::Base* BorderElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) BorderElement();
+}
+}  // namespace UI
 
 // ============================================================================
-// Registration
+// Registration: the factory pair only (B39_RULES D2), by name and address.
 // ============================================================================
 int RtUiBorderElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?TypeName@BorderElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_BorderElement_TypeName);      ++n;
-    RegisterRuntimeAddr(0x1800410b0ull, (void*)&RtUi_BorderElement_TypeName);
-
-    RegisterRuntimeExport("?Type@BorderElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_BorderElement_Type);          ++n;
-    RegisterRuntimeAddr(0x180041090ull, (void*)&RtUi_BorderElement_Type);
-
-    RegisterRuntimeExport("?ComputeSize@BorderElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_BorderElement_ComputeSize);   ++n;
-    RegisterRuntimeAddr(0x1801101d0ull, (void*)&RtUi_BorderElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@BorderElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_BorderElement_ComputeLayout); ++n;
-    RegisterRuntimeAddr(0x180110360ull, (void*)&RtUi_BorderElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@BorderElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_BorderElement_Draw);          ++n;
-    RegisterRuntimeAddr(0x1801103e0ull, (void*)&RtUi_BorderElement_Draw);
-
-    RegisterRuntimeExport("??0BorderElement@UI@@QEAA@AEBV01@@Z",
-                          (void*)&RtUi_BorderElement_CopyCtor);      ++n;
-    RegisterRuntimeAddr(0x180041250ull, (void*)&RtUi_BorderElement_CopyCtor);
-
-    RegisterRuntimeExport("??1BorderElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_BorderElement_Dtor);          ++n;
-    RegisterRuntimeAddr(0x180041230ull, (void*)&RtUi_BorderElement_Dtor);
+    RegisterRuntimeExport("?CreateNewObject@BorderElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::BorderElement::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x1800411a0ull, (void*)&UI::BorderElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@BorderElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::BorderElement::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x180041220ull, (void*)&UI::BorderElement::CreateInPlaceObject);
     return n;
 }
