@@ -71,6 +71,7 @@
 #include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "Object/factory_registration.h"
+#include "Work/Work.h"                // Work::TypeId() -- cell 0x1401c6cf8 (ENDGAME B.3.9 RF)
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -105,7 +106,7 @@ static fn_TreeFree_t   s_freeA       = nullptr; // 0x140014c30 (Layout A post-or
 static fn_TreeFree_t   s_freeB       = nullptr; // 0x14000e320 (Layout B post-order free)
 static fn_ExternalRefSerialize_t s_externalRefSerialize = nullptr; // 0x140018020
 
-static uint32_t g_tid_Work = 0; // 0x1401c6cf8 — NEEDS GetTypeIdByName("Work") fill (see header note)
+static uint32_t g_tid_Work = 0; // 0x1401c6cf8 — no reader left in this file (Work::TypeId(), ENDGAME B.3.9 RF); the cell row goes with CLOSE
 
 static bool s_depsInit = false;
 static void EnsureDeps() {
@@ -391,7 +392,7 @@ extern "C" void Goals_SavePrepass_8270(void* selfV) {
 // ============================================================
 // 0x14002d340 — single Layout-B tree serializer (same shape as one d060 slot body).
 // treeField = {root@0, count@8}. On LOAD, rebuilds the tree from the stream; on SAVE,
-// walks it in-order. IsDerivedFrom-filters payload against g_tid_Work (nulls non-Work).
+// walks it in-order. IsDerivedFrom-filters payload against Work::TypeId() (nulls non-Work).
 // ============================================================
 extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serializer) {
     EnsureDeps();
@@ -411,7 +412,7 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(key, nullptr);   // B.3.4 bridge
             void* payload = nullptr;
             reinterpret_cast<Object::InternalBasePtr*>(&payload)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, g_tid_Work)) {
+            if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, Work::TypeId())) {
                 payload = nullptr;
             }
             int32_t* node = LayoutB_Find(root, key);
@@ -471,7 +472,7 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(node), nullptr);   // B.3.4 bridge
             reinterpret_cast<Object::InternalBasePtr*>(node + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             void* payload = *reinterpret_cast<void**>(node + 0x08);
-            if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, g_tid_Work)) {
+            if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, Work::TypeId())) {
                 *reinterpret_cast<void**>(node + 0x08) = nullptr;
             }
         }
@@ -500,7 +501,7 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
                 reinterpret_cast<IO::Serializer*>(serializer)->Serialize(key, nullptr);   // B.3.4 bridge
                 void* payload = nullptr;
                 reinterpret_cast<Object::InternalBasePtr*>(&payload)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-                if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, g_tid_Work)) {
+                if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, Work::TypeId())) {
                     payload = nullptr;
                 }
                 int32_t* root = reinterpret_cast<int32_t*>(slot[0]);
@@ -560,7 +561,7 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
                 reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(node), nullptr);   // B.3.4 bridge
                 reinterpret_cast<Object::InternalBasePtr*>(node + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
                 void* payload = *reinterpret_cast<void**>(node + 0x08);
-                if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, g_tid_Work)) {
+                if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, Work::TypeId())) {
                     *reinterpret_cast<void**>(node + 0x08) = nullptr;
                 }
             }

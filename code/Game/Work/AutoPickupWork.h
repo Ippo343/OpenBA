@@ -23,6 +23,7 @@
 
 #include <cstdint>
 #include "Work/Work.h"
+#include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
 namespace AutoPickupWorkAddr {
     constexpr uintptr_t Ctor         = 0x1400e4050;
@@ -32,10 +33,11 @@ namespace AutoPickupWorkAddr {
 }
 
 class AutoPickupWork : public Work {
+    DECLARE_EXE_TYPE(AutoPickupWork)
+
 public:
     Object::Base* DeletingDtor(unsigned flags) override;   // [0] 0x1400294e0
-    const char*   TypeName() const override;               // [1] 0x1400294d0
-    uint32_t      Type() const override;                   // [2] 0x1400294c0
+    // [1] TypeName 0x1400294d0 and [2] Type 0x1400294c0: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     void          Persist(void* stream) override;          // [3] 0x1400e3f80
     int           Cleanup() override;                      // [8] 0x1400e3f30
 
@@ -47,7 +49,7 @@ protected:
     ~AutoPickupWork() = default;
 
 public:
-    static const void* Vtable();   // served at 0x140160fa0 (B38 D5)
+    // Vtable() (DECLARE_EXE_TYPE): served at 0x140160fa0 (B38 D5)
 };
 
 static_assert(sizeof(AutoPickupWork) == 0x48, "AutoPickupWork adds no bytes to Work");

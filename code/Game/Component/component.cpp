@@ -4,12 +4,14 @@
 
 #include "Component/Component.h"
 #include "Component/ControllerComponent.h"
+#include "Component/Description.h"       // Description::TypeId() (ENDGAME B.3.9 RF)
 #include "Entity/ComponentEntity.h"
 #include "Game/serialize_externals.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "io/Serializer.h"
 #include "resolve.h"
+#include "Object/exe_type.h"   // DEFINE_EXE_ABSTRACT_TYPE
 
 // ============================================================================
 // Component
@@ -33,13 +35,9 @@ Object::Base* Component::DeletingDtor(unsigned flags) {
     return this;
 }
 
-// [1]/[2] 0x140031c40 / 0x140031c30 over Component's BaseTypeInfo. The abstract
-// registration stays in code/Game/Object/factory_registrations_bulk.cpp (B38
-// D4: moving it would move its record in the registration order), so the base
-// reads its id by name. Only a half-built or half-destroyed object ever
-// dispatches here; every leaf overrides both.
-const char* Component::TypeName() const { return "Component"; }
-uint32_t    Component::Type() const { return ::Object::GetTypeIdByName("Component"); }
+// [1] TypeName / [2] Type, the record and retail's abstract factory (create =
+// the logging stub, in-place = null): ENDGAME B.3.9 RF.
+DEFINE_EXE_ABSTRACT_TYPE(Component, "Object::Internal")
 
 // [3] 0x1401189b0 — Component::Persist, the shared base serialize every
 // Component subclass chains to. ENDGAME B.3.8 K1 folded the ported body here
@@ -75,12 +73,12 @@ void Component_SerializeReimpl(void* self, void* stream) {
 // +0x18 description reference; registered in standalone/reg_component_gap_B.cpp).
 // Byte-identical to the other ExternalPtr<T> serialize bodies, so it delegates
 // to the shared ExternalPtrSerializeGeneric with Description's ti cell
-// 0x1401c72e0. B6-5: the cell is resolved per call (was a function-local lazy
-// cache); a null cell loads without validation, as before.
+// 0x1401c72e0, read BY CELL as Description::TypeId() (ENDGAME B.3.9 RF: the
+// abstract base has its record).
 void Component_Helper1d10_Reimpl(void* extRefField, void* serializer) {
-    const uint32_t* typeId = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c72e0));
+    const uint32_t typeId = Description::TypeId();
     ExternalPtrSerializeGeneric(reinterpret_cast<void**>(extRefField), serializer,
-                                typeId, "Description");
+                                &typeId, "Description");
 }
 
 // [4]-[15]: retail's shared no-op bodies (`RET`; [13] `XOR EAX,EAX; RET`).
@@ -108,10 +106,9 @@ Object::Base* ControllerComponent::DeletingDtor(unsigned flags) {
     return this;
 }
 
-const char* ControllerComponent::TypeName() const { return "ControllerComponent"; }       // 0x1400327f0
-uint32_t    ControllerComponent::Type() const {                                           // 0x1400327e0
-    return ::Object::GetTypeIdByName("ControllerComponent");
-}
+// [1] TypeName / [2] Type, the record and retail's abstract factory (create =
+// the logging stub, in-place = null): ENDGAME B.3.9 RF.
+DEFINE_EXE_ABSTRACT_TYPE(ControllerComponent, "Component")
 
 // [3] 0x1401195a0: `CALL 0x1401189b0` (Component::Persist, a direct call — a
 // qualified base call), then one EMPTY Serializer(stream, 0) scope. An empty

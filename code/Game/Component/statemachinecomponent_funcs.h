@@ -11,9 +11,6 @@
 // Size: 0x58 bytes
 // ============================================================
 
-// Resolve the ControllerComponent type id for the two uninstalled reference ports.
-void StateMachineComponent_ResolveHelpers();
-
 // Slot 0 (ScalarDtor 0x1400384a0) and slot 2 (Type 0x1400382b0) are the
 // class's members now (ENDGAME B.3.8 VIS, StateMachineComponent.h).
 

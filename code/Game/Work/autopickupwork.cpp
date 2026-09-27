@@ -29,10 +29,9 @@ Object::Base* AutoPickupWork::DeletingDtor(unsigned flags) {
     return this;
 }
 
-// [1]/[2] 0x1400294d0 / 0x1400294c0 over AutoPickupWork's BaseTypeInfo. The abstract
-// registration stays in factory_registrations_bulk.cpp (B38 D4); every leaf overrides both.
-const char* AutoPickupWork::TypeName() const { return "AutoPickupWork"; }
-uint32_t    AutoPickupWork::Type() const { return ::Object::GetTypeIdByName("AutoPickupWork"); }
+// [1] TypeName / [2] Type, the record and retail's abstract factory (create =
+// the logging stub, in-place = null): ENDGAME B.3.9 RF.
+DEFINE_EXE_ABSTRACT_TYPE(AutoPickupWork, "Work")
 
 // [3] 0x1400e3f80: Work::Persist for the base fields (a direct call in retail — a
 // QUALIFIED call here, or it would recurse through slot 3), then one EMPTY

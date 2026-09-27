@@ -2102,28 +2102,6 @@ extern void** g_pInputConfigSingleton;
 
 // --- Engine::MainLoop ---
 
-// Object::BaseTypeInfo::BaseTypeInfo(this, name, parent, fileExtension, factory, inPlace)
-// ??0BaseTypeInfo@Object@@QEAA@PEBD00P6APEAVBase@1@XZP6APEAV21@PEAX@Z@Z  (Runtime 0x180006320)
-// Builds the linked list at Runtime DLL's _firstTypeInfo. Object::Factory::Startup
-// later walks this list to populate the typeId tree. The 6-arg ctor stores
-// (name, parent[colon-stripped], fileExtension, factoryFn, inPlaceCreateFn) into
-// the 0x38-byte BaseTypeInfo slot pointed to by `self`, then prepends to
-// _firstTypeInfo.
-// The third argument is the FILE EXTENSION the type loads from, or null — NOT an
-// "abstract" flag or name, which is what this declaration called it until Wave 3.
-// Factory::GetTypeIdForFileExtension (Runtime 0x1800c04c0) _stricmp's +0x18
-// against a caller-supplied extension; nothing ever tests it for abstractness.
-// Every Component/Description registration in the exe passes null here; the types
-// that pass a real string are the Externals loaded from disk. See
-// runtime/types/object/TypeInfo.h and docs/runtime_port/WAVE3_LANE_A.md.
-typedef void (*fn_BaseTypeInfo_Ctor_t)(void* self,
-                                       const char* name,
-                                       const char* parent,
-                                       const char* fileExtension,
-                                       void* factoryFn,
-                                       void* inPlaceCreateFn);
-extern fn_BaseTypeInfo_Ctor_t fn_BaseTypeInfo_Ctor;
-
 // Engine::MainLoop::_singleton (protected)
 extern void** g_pMainLoopSingleton;
 

@@ -15,12 +15,9 @@ Object::Base* Action::DeletingDtor(unsigned flags) {
     return this;
 }
 
-// [1]/[2] 0x140021c80 / 0x140021c70 over Action's BaseTypeInfo. The abstract
-// registration stays in factory_registrations_bulk.cpp (B38 D4), so the base
-// reads its id by name; only a half-built or half-destroyed action dispatches
-// here — every leaf overrides both.
-const char* Action::TypeName() const { return "Action"; }
-uint32_t    Action::Type() const { return ::Object::GetTypeIdByName("Action"); }
+// [1] TypeName / [2] Type, the record and retail's abstract factory (create =
+// the logging stub, in-place = null): ENDGAME B.3.9 RF.
+DEFINE_EXE_ABSTRACT_TYPE(Action, "Object::Internal")
 
 // [3] 0x1400c4b40: one Serializer(stream, 0) scope holding the status bool.
 // Retail does NOT call Internal::Persist here.

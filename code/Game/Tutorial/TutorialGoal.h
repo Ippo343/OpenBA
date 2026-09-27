@@ -6,8 +6,8 @@
 //
 // RETAIL (Application-x64.exe, B38_SLOTS.md sections 1 and 6):
 //   reflected "TutorialGoal", parent "Object::External", ti 0x1401c6438,
-//   abstract (create/createInPlace 0x140003730); the registration stays
-//   REGISTER_ABSTRACT_FACTORY in factory_registrations_bulk.cpp (D4).
+//   abstract (create/createInPlace 0x140003730); DEFINE_EXE_TYPE with the
+//   abstract factory (ENDGAME B.3.9 RF).
 //   table 0x1401607a0, 9 slots:
 //     [0] 0x140027220 scalar deleting dtor: stamp, ~External, MemFree on &1
 //     [1] 0x140027210 TypeName  [2] 0x140027200 Type
@@ -23,12 +23,14 @@
 
 #include <cstdint>
 #include "object/External.h"
+#include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
 class TutorialGoal : public Object::External {
+    DECLARE_EXE_TYPE(TutorialGoal)
+
 public:
     Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140027220
-    const char*   TypeName() const override;                       // [1] 0x140027210
-    uint32_t      Type() const override;                           // [2] 0x140027200
+    // [1] TypeName 0x140027210 and [2] Type 0x140027200: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     int32_t       GetFileVersion() const override { return 1; }    // [3] 0x1400dec70
     bool          Serialize(void* stream) override;                // [5] 0x1400dec30
     // [6] Reconstruct, [7] Destruct: pure (External's)

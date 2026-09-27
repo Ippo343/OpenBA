@@ -23,6 +23,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "input/Input.h"        // ENDGAME B.3.7 callers (K3)
+#include "Object/exe_type.h"   // DEFINE_EXE_ABSTRACT_TYPE
 
 // ============================================================
 // DragTool members (dragtool.h). ENDGAME B.3.8 TOOL: the hand-rolled
@@ -37,10 +38,9 @@ Object::Base* DragTool::DeletingDtor(unsigned flags) {
     return this;
 }
 
-// [1]/[2] 0x14002da10 / 0x14002da00. The abstract registration stays in
-// factory_registrations_bulk.cpp (B38 D4); only a half-built object asks.
-const char* DragTool::TypeName() const { return "DragTool"; }
-uint32_t    DragTool::Type() const { return ::Object::GetTypeIdByName("DragTool"); }
+// [1] TypeName / [2] Type, the record and retail's abstract factory (create =
+// the logging stub, in-place = null): ENDGAME B.3.9 RF.
+DEFINE_EXE_ABSTRACT_TYPE(DragTool, "Tool")
 
 // [6] 0x1400fc6b0 OnKey and [9] 0x1400fc640 OnCancel: bodies below.
 

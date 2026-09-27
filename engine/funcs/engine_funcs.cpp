@@ -495,7 +495,6 @@ void** g_pFileSystemSingleton = nullptr;
 void** g_pAppSingleton = nullptr;
 
 void** g_pInputConfigSingleton = nullptr;
-fn_BaseTypeInfo_Ctor_t fn_BaseTypeInfo_Ctor = nullptr;
 void** g_pMainLoopSingleton = nullptr;
 fn_SaveGameSettings_t fn_SaveGameSettings = nullptr;
 fn_ReadGameSettings_t fn_ReadGameSettings = nullptr;
@@ -1843,10 +1842,6 @@ bool EngineFuncsInit() {
     // ENDGAME B.3.4a closing 2d; both were 0-CALL.
 
     // Video::Device
-
-    // Object::BaseTypeInfo
-    fn_BaseTypeInfo_Ctor = reinterpret_cast<fn_BaseTypeInfo_Ctor_t>(
-        ResolveExport("??0BaseTypeInfo@Object@@QEAA@PEBD00P6APEAVBase@1@XZP6APEAV21@PEAX@Z@Z"));
 
     // Engine::MainLoop::_singleton (protected, @1)
     {

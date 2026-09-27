@@ -30,12 +30,14 @@
 #include <cstdint>
 #include "object/External.h"
 #include "object/Type.h"
+#include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
 class Description : public Object::External {
+    DECLARE_EXE_TYPE(Description)
+
 public:
     Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140031c70
-    const char*   TypeName() const override;                      // [1] 0x140031c60
-    uint32_t      Type() const override;                          // [2] 0x140031c50
+    // [1] TypeName 0x140031c60 and [2] Type 0x140031c50: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     // [3] GetFileVersion, [5] Serialize, [6] Reconstruct, [7] Destruct: pure (External's)
     virtual Object::Type* GetComponentType(Object::Type* ret) const = 0;   // [8] pure
 

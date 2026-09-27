@@ -26,6 +26,7 @@
 #include "runtime/types/ui/ComboElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Component/SelectDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
+#include "Object/exe_type.h"   // DEFINE_EXE_ABSTRACT_TYPE
 
 // ============================================================
 // SelectDescription layout (from Ghidra analysis):
@@ -297,10 +298,9 @@ Object::Base* SelectResourceUI::DeletingDtor(unsigned flags) {
     return this;
 }
 
-const char* SelectResourceUI::TypeName() const { return "SelectResourceUI"; }   // 0x140013c90
-uint32_t    SelectResourceUI::Type() const {                                    // 0x140013c80
-    return ::Object::GetTypeIdByName("SelectResourceUI");
-}
+// [1] TypeName / [2] Type, the record and retail's abstract factory (create =
+// the logging stub, in-place = null): ENDGAME B.3.9 RF.
+DEFINE_EXE_ABSTRACT_TYPE(SelectResourceUI, "UI::DialogController")
 
 
 

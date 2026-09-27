@@ -5,8 +5,8 @@
 // `Tool`, the exe's base of the player's world tools (the object EntityUI
 // holds at +0x28 and drives every frame), as a REAL C++ class whose vtable the
 // compiler generates. Global namespace, as in retail (reflected "Tool", parent
-// literal "Object::Internal"; the abstract registration stays in
-// factory_registrations_bulk.cpp this step, B38 D4).
+// literal "Object::Internal"; DEFINE_EXE_TYPE with the abstract factory,
+// ENDGAME B.3.9 RF).
 //
 // RETAIL (Application-x64.exe, B38_SLOTS.md §1, bytes read 2026-09-26):
 //   ctor   inlined into every leaf ctor (e.g. BridgeTool 0x1400fb890):
@@ -43,13 +43,15 @@
 #include <cstddef>
 #include "object/Internal.h"
 #include "object/Type.h"
+#include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
 class Tool : public Object::Internal {
+    DECLARE_EXE_TYPE(Tool)
+
 public:
     // ---- the 13 slots, in retail order -------------------------------------
     Object::Base* DeletingDtor(unsigned flags) override;               // [0]  0x14002e9b0
-    const char*   TypeName() const override;                           // [1]  0x14002e950
-    uint32_t      Type() const override;                               // [2]  0x14002e940
+    // [1] TypeName 0x14002e950 and [2] Type 0x14002e940: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     // [3] Persist — Object::Internal::Persist, inherited (retail IMPORT).
     virtual void  Startup() = 0;                                       // [4]  pure
     virtual void  Shutdown() = 0;                                      // [5]  pure

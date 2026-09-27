@@ -57,6 +57,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 #include "Player/Tool.h"
+#include "Player/ToolSetting.h"   // ToolSetting::TypeId() (ENDGAME B.3.9 RF)
 #include "Component/UIDescription.h"   // X::TypeId() (B.3.8 callers)
 
 
@@ -465,7 +466,7 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
     void* newObj = reinterpret_cast<const ::Object::Factory*>(*(void**)*g_pFactorySingleton)->CreateObject(
         factoryTypeId);   // B.3.3 bridge
     // IsDerivedFrom check for ToolController type
-    bool isToolCtrl = fn_IsDerivedFrom(newObj, *g_TypeId_ToolController);
+    bool isToolCtrl = fn_IsDerivedFrom(newObj, Tool::TypeId());   // cell 0x1401c6eb8 (ENDGAME B.3.9 RF)
     void* toolController = isToolCtrl ? newObj : nullptr;
 
 
@@ -491,7 +492,7 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
             // Create the ToolSetting object
             void* settingObj = reinterpret_cast<const ::Object::Factory*>(*(void**)*g_pFactorySingleton)->CreateObject(
                 settingFactoryId);   // B.3.3 bridge
-            bool isToolSetting = fn_IsDerivedFrom(settingObj, *g_TypeId_ToolSetting);
+            bool isToolSetting = fn_IsDerivedFrom(settingObj, ToolSetting::TypeId());   // cell 0x1401c6ef0
             void* toolSetting = isToolSetting ? settingObj : nullptr;
 
             uint64_t settingRef = 0;

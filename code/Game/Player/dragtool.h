@@ -32,13 +32,15 @@
 #include <cstdint>
 #include <cstddef>
 #include "Player/Tool.h"
+#include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
 class DragTool : public Tool {
+    DECLARE_EXE_TYPE(DragTool)
+
 public:
     // ---- the 15 slots, in retail order (declared here: the ones DragTool fills)
     Object::Base* DeletingDtor(unsigned flags) override;               // [0]  0x14002da20
-    const char*   TypeName() const override;                           // [1]  0x14002da10
-    uint32_t      Type() const override;                               // [2]  0x14002da00
+    // [1] TypeName 0x14002da10 and [2] Type 0x14002da00: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     char          OnKey(char active) override;                         // [6]  0x1400fc6b0
     char          OnCancel() override;                                 // [9]  0x1400fc640
     int           GetCursor() const override { return 5; }             // [12] 0x1400fc9d0
