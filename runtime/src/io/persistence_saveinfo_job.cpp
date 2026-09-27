@@ -126,9 +126,6 @@ using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 // Declared locally rather than by pulling in each owner's header, the same
 // technique persistence_worker_win.cpp uses for the identical set. This one's
 // signature is the retail POD shape and is not this file's to change.
-extern "C" bool RtIo_FileStream_Open(RtIo::FileStream* self, const Filename* path);
-extern "C" BinaryFileStream* RtIo_BinaryFileStream_Ctor(BinaryFileStream* self);
-extern "C" void              RtIo_BinaryFileStream_Dtor(BinaryFileStream* self);
 extern "C" bool RtIo_FileSystem_ReadFile(RtIO::FileSystem* self, RtIO::FileInfo* fi,
                                          int32_t count, void* dst);
 namespace RtIO {
@@ -219,8 +216,12 @@ extern "C" void RtIo_PersistenceWorker_GetSaveInfo(void* worker) {
     const uint8_t savedGate = fs->platformExistsGate;        // 0x1800b65e5
     fs->platformExistsGate = 1;                              // 0x1800b65f5
 
-    BinaryFileStream bfs;
-    RtIo_BinaryFileStream_Ctor(&bfs);                        // inlined 0x1800b6600
+    // ENDGAME B.3.9 IO (W2): the REAL class on raw storage; the body keeps
+    // reading it through the RtIo POD view.
+    alignas(8) unsigned char bfsStorage[sizeof(IO::BinaryFileStream)];
+    IO::BinaryFileStream* const bfsObj =
+        ::new (static_cast<void*>(bfsStorage)) IO::BinaryFileStream();   // inlined 0x1800b6600
+    BinaryFileStream& bfs = *reinterpret_cast<BinaryFileStream*>(bfsObj);
 
     // ---- 1. open pendingFilename ------------------------------------------
     // A raw refcount SHARE of the worker's String (0x1800b666f: `MOV
@@ -240,7 +241,7 @@ extern "C" void RtIo_PersistenceWorker_GetSaveInfo(void* worker) {
         // the two types are the same eight bytes (Filename.h), so the cast is
         // the boundary the pod_bridge itself would spell in the other
         // direction if it needed to.
-        opened = RtIo_FileStream_Open(&bfs.base, reinterpret_cast<const Filename*>(&f));
+        opened = bfsObj->IO::FileStream::Open(f);   // ENDGAME B.3.9 IO: the member
 
         // ~f is retail's release at 0x1800b66a6.
     }
@@ -382,7 +383,7 @@ extern "C" void RtIo_PersistenceWorker_GetSaveInfo(void* worker) {
     // the teardown itself is the same on both paths.
     if (bfs.base.file.handle != -1)
         RtIO::RtIo_FileSystem_CloseFile(fs, &bfs.base.file);            // 0x1800b6942
-    RtIo_BinaryFileStream_Dtor(&bfs);                                   // 0x1800b694f..
+    bfsObj->IO::BinaryFileStream::DeletingDtor(0);                      // 0x1800b694f..
     fs->platformExistsGate = savedGate;                                 // 0x1800b69a3
 }
 

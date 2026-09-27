@@ -96,7 +96,6 @@ using RtSystem::Filename;
 // not through a door: a door would resolve to this same body and add a resolve
 // site the cutover census has to carry
 // (reference_count_the_doors_not_the_calls.md).
-extern "C" bool RtIo_FileStream_Create(FileStream* self, const Filename* path);
 
 // ---- Wave 28 lane SLOTS: the callees slots 2 and 8 need -------------------
 // All three are PORTED and are called DIRECTLY rather than through a door, for
@@ -114,7 +113,6 @@ extern "C" bool RtIo_FileStream_Create(FileStream* self, const Filename* path);
 //   RtIo_FileSystem_ReadFile  extern "C", global      (file_stream.cpp:198 too)
 //   RtIo_FileSystem_CloseFile C++ linkage, namespace RtIO
 //                                        (filesystem_createfile_win.cpp:508)
-extern "C" bool RtIo_FileStream_Open(FileStream* self, const Filename* path);
 void RtIo_FileSystem_CloseFile(RtIO::FileSystem* self, RtIO::FileInfo* info);
 
 // The FileSystem singleton, read exactly where retail reads it
@@ -839,15 +837,11 @@ bool TextFileStream::SetCurrentPos(int pos) {
 bool TextFileStream::Create(const System::Filename& path,
                             int32_t requestedFormat, int32_t activeEncoding) {
     ++RtIO::g_tfs.create;
-    RtIO::TextFileStream* const self =
-        reinterpret_cast<RtIO::TextFileStream*>(this);             // B.3.4 bridge
 
     _requestedFormat = requestedFormat;                      // 1800ba949  +0x68
     _activeEncoding  = activeEncoding;                       // 1800ba94d  +0x6c
 
-    if (!RtIO::RtIo_FileStream_Create(
-            &self->base,
-            reinterpret_cast<const RtSystem::Filename*>(&path))) {  // 1800ba951
+    if (!FileStream::Create(path)) {                         // 1800ba951  (B.3.9 IO: the member)
         ++RtIO::g_tfs.createFailed;
         return false;                                        // 1800ba95a
     }
@@ -966,12 +960,8 @@ bool TextFileStream::Write(int len, const void* buf) {
 // very end.
 bool TextFileStream::OpenWithFormat(const System::Filename& path, int32_t format) {
     ++RtIO::g_tfs.open;
-    RtIO::TextFileStream* const self =
-        reinterpret_cast<RtIO::TextFileStream*>(this);             // B.3.4 bridge
 
-    if (!RtIO::RtIo_FileStream_Open(
-            &self->base,
-            reinterpret_cast<const RtSystem::Filename*>(&path))) {  // 1800ba652
+    if (!FileStream::Open(path)) {                              // 1800ba652  (B.3.9 IO: non-virtual, as the door was)
         ++RtIO::g_tfs.openFailed;
         return false;                                           // 1800ba659
     }

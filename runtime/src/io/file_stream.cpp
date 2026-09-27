@@ -224,15 +224,8 @@ void ReleaseStrSlot(char** slot) {
     reinterpret_cast<System::String*>(slot)->~String();
 }
 
-// ??0FileStream@IO@@QEAA@XZ (0x1800aaa10). ENDGAME B.3.9 IO: the body is
-// `IO::FileStream`'s real constructor (FileStream.h). This door stays because
-// two callers outside the class reach it BY NAME on raw storage --
-// Audio::Stream::Run (vtbatch7b_stream_run_win.cpp) and the persistence loader
-// (closure_batch2b_win.cpp) -- and it is one placement new (B9-6).
-extern "C" FileStream* RtIo_FileStream_Ctor(FileStream* self) {
-    ::new (static_cast<void*>(self)) IO::FileStream();
-    return self;
-}
+// ??0FileStream@IO@@QEAA@XZ (0x1800aaa10): ENDGAME B.3.9 IO (W2) -- the door
+// is gone; Audio::Stream::Run and the persistence loader build the class.
 
 }  // namespace
 
@@ -323,14 +316,10 @@ extern "C" void RtIo_FileInfo_Dtor(FileInfo* self) {
 // through ??1FileStream exactly as retail's 1800bc8c6) and
 // Video::ImageBuffer::SaveImageToFile. Each is one non-virtual slot-0 call with
 // flags 0 -- the destructor chain, no free (B9-6).
-extern "C" void RtIo_FileStream_Dtor(FileStream* self) {
-    reinterpret_cast<IO::FileStream*>(self)->IO::FileStream::DeletingDtor(0);
-}
+// ENDGAME B.3.9 IO (W2): the ??1FileStream / ??1BinaryFileStream doors that
+// stood here are gone -- every caller ends its stream with the class's
+// non-virtual DeletingDtor(0) at the position the door call had.
 
-extern "C" void RtIo_BinaryFileStream_Dtor(BinaryFileStream* self) {
-    ++g_fsc.binDtor;
-    reinterpret_cast<IO::BinaryFileStream*>(self)->IO::BinaryFileStream::DeletingDtor(0);
-}
 
 // Two callees this file does not otherwise use, declared rather than included:
 // both are PORTED and registered by address in their own translation units, and
@@ -347,11 +336,8 @@ extern "C" void RtIo_CompressedStream_Commit(RtIo::CompressedStream* self);
 // Video::ImageBuffer::SaveImageToFile, the persistence jobs): one placement
 // new (B9-6). The TextFileStream ctor door went -- its one caller,
 // ?SaveText@External@, now builds the class itself.
-extern "C" BinaryFileStream* RtIo_BinaryFileStream_Ctor(BinaryFileStream* self) {
-    ++g_fsc.binCtor;
-    ::new (static_cast<void*>(self)) IO::BinaryFileStream();
-    return self;
-}
+// ENDGAME B.3.9 IO (W2): the ??0BinaryFileStream door is gone -- every
+// builder spells `::new (p) IO::BinaryFileStream()`.
 
 // ============================================================================
 // IO::TextFileStream::SetObject(String const&, String const&, int)  0x1800ba280
@@ -496,7 +482,7 @@ extern "C" void RtIo_TextFileStream_SetObject(TextFileStream* self,
 // rsp+0x50) before _name0 (+0x20, at rsp+0x48). That is the inlined ~FileInfo,
 // and it is the same order the standalone one at 0x18000c180 uses.
 // ============================================================================
-extern "C" bool RtIo_FileStream_Create(FileStream* self, const Filename* path) {
+static bool FileStreamCreateBody(FileStream* self, const Filename* path) {
     ++g_fsc.create;
 
     RtIo_FileSystem_CreatePath(Fs(), path);                     // 1800aa919
@@ -537,6 +523,13 @@ void RtIoFileStreamCounters(unsigned long long* out) {
 
 }  // namespace RtIO
 
+// IO::FileStream::Create -- ENDGAME B.3.9 IO (W2): the member is the entry
+// point; the ?Create door that stood on the body above is gone.
+bool IO::FileStream::Create(const System::Filename& path) {
+    return RtIO::FileStreamCreateBody(reinterpret_cast<RtIO::FileStream*>(this),
+                                      reinterpret_cast<const RtSystem::Filename*>(&path));
+}
+
 // ============================================================================
 // Registration — BY NAME *AND* BY ADDRESS for every row.
 //
@@ -548,25 +541,6 @@ void RtIoFileStreamCounters(unsigned long long* out) {
 int RtIoFileStreamRegister() {
     using namespace RtIO;
     int n = 0;
-
-    RegisterRuntimeExport("??0BinaryFileStream@IO@@QEAA@XZ",
-                          (void*)&RtIo_BinaryFileStream_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800a8200, (void*)&RtIo_BinaryFileStream_Ctor);
-    RegisterRuntimeExport("??0FileStream@IO@@QEAA@XZ",
-                          (void*)&RtIo_FileStream_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800aaa10, (void*)&RtIo_FileStream_Ctor);
-
-    RegisterRuntimeExport("??1BinaryFileStream@IO@@UEAA@XZ",
-                          (void*)&RtIo_BinaryFileStream_Dtor); ++n;
-    RegisterRuntimeAddr(0x180023c80, (void*)&RtIo_BinaryFileStream_Dtor);
-
-    RegisterRuntimeExport("??1FileStream@IO@@UEAA@XZ",
-                          (void*)&RtIo_FileStream_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800aaab0, (void*)&RtIo_FileStream_Dtor);
-
-    RegisterRuntimeExport("?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z",
-                          (void*)&RtIo_FileStream_Create); ++n;
-    RegisterRuntimeAddr(0x1800aa8f0, (void*)&RtIo_FileStream_Create);
 
     // ---- Wave 23 lane IOPORT ----
     // RtIo_TextFileStream_Ctor above already CALLS this symbol through
@@ -681,9 +655,8 @@ SlotCounters g_fss{};
 
 // ?Open@FileStream@IO@@UEAA_NAEBVFilename@System@@@Z (0x1800aac70) — slot 7,
 // and slot 7 on THIS branch is Open, not Close.
-extern "C" bool RtIo_FileStream_Open(FileStream* self, const Filename* path) {
-    return reinterpret_cast<IO::FileStream*>(self)->IO::FileStream::Open(Sys(*path));
-}
+// ENDGAME B.3.9 IO (W2): the ?Open@FileStream by-name door is gone -- its
+// callers call IO::FileStream::Open directly.
 
 // Published to the cutover probe alongside the lifecycle counters.
 void RtIoFileStreamSlotCounters(unsigned long long* out) {
@@ -991,15 +964,5 @@ IO::CompressedFileStream::~CompressedFileStream() {
 // BinaryFileStream copy ctor, and file_stream_win.cpp's Write / SetCurrentPos).
 // `?Open@FileStream@` STAYS: Audio::Stream::Run and the persistence loader call
 // it by name on a FileStream they built through `??0FileStream`.
-int RtIoFileStreamSlotsRegister() {
-    using namespace RtIO;
-    int n = 0;
-
-    RegisterRuntimeExport("?Open@FileStream@IO@@UEAA_NAEBVFilename@System@@@Z",
-                          (void*)&RtIo_FileStream_Open); ++n;
-    RegisterRuntimeAddr(0x1800aac70, (void*)&RtIo_FileStream_Open);
-
-    printf("[RtPort]   IO::FileStream vtable slots (wave 19 lane FILE, post-report): "
-           "%d export registered (the by-name Open door)\n", n);
-    return n;
-}
+// ENDGAME B.3.9 IO (W2): RtIoFileStreamSlotsRegister is gone with the one
+// door it registered.

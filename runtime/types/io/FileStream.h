@@ -501,6 +501,14 @@ public:
     // slot 7 +0x38 — FileStream's own first virtual. NOT `Close`.
     virtual bool Open(const System::Filename& path);   //              0x1800aac70
 
+    // ?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z 0x1800aa8f0 --
+    // NON-virtual, `IEAA` (protected) in retail. ENDGAME B.3.9 IO (W2): a
+    // member now (its by-name door is gone); PUBLIC because the callers retail
+    // compiled as friends/derived code (SaveImageToFile, External::SaveText,
+    // the persistence SAVE job, TextFileStream::Create) reach it from outside
+    // this hierarchy in our tree. Out of line in file_stream.cpp.
+    bool Create(const System::Filename& path);
+
     // ---- the 0x50 bytes, at retail's offsets -------------------------------
     char*          _filename;   // +0x18  a System::String — see the banner
     RtIO::FileInfo _file;       // +0x20  0x30 bytes, RtIO::FileInfo

@@ -137,14 +137,11 @@ using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 // same technique modification_refresh.cpp and filesystem_find_win.cpp use.
 // This one's signature is the retail POD shape and is not this file's to
 // change.
-extern "C" bool RtIo_FileStream_Create(RtIo::FileStream* self, const RtSystem::Filename* path);
 namespace RtIO {
     void  RtIo_FileSystem_CloseFile(RtIO::FileSystem* self, RtIO::FileInfo* info);
 }
 using RtIo::BinaryFileStream;
 using RtIo::FileStream;
-extern "C" BinaryFileStream* RtIo_BinaryFileStream_Ctor(BinaryFileStream* self);
-extern "C" void              RtIo_BinaryFileStream_Dtor(BinaryFileStream* self);
 using RtSystem::String;
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
@@ -618,8 +615,12 @@ extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
 
     Persistence* p = FromWorker(worker);
 
-    BinaryFileStream bfs;
-    RtIo_BinaryFileStream_Ctor(&bfs);
+    // ENDGAME B.3.9 IO (W2): the REAL class on raw storage; the body keeps
+    // reading it through the RtIo POD view.
+    alignas(8) unsigned char bfsStorage[sizeof(IO::BinaryFileStream)];
+    IO::BinaryFileStream* const bfsObj =
+        ::new (static_cast<void*>(bfsStorage)) IO::BinaryFileStream();
+    BinaryFileStream& bfs = *reinterpret_cast<BinaryFileStream*>(bfsObj);
 
     bool created;
     {
@@ -632,8 +633,7 @@ extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
         // RtIo_FileStream_Create is a registered entry point owned by another
         // file and keeps its retail (self, const Filename* POD) signature;
         // the two types are the same eight bytes (Filename.h).
-        created = RtIo_FileStream_Create(&bfs.base,
-                                         reinterpret_cast<const RtSystem::Filename*>(&f));
+        created = bfsObj->IO::FileStream::Create(f);   // ENDGAME B.3.9 IO: the member
 
         // ~f is retail's release of the local Filename copy.
     }
@@ -696,7 +696,7 @@ extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
     // leaves the handle open for this same check to close. One site, not
     // three, exactly as FUN_1800b6e00's tail reads.
     if (bfs.base.file.handle != -1) RtIO::RtIo_FileSystem_CloseFile(Fs(), &bfs.base.file);
-    RtIo_BinaryFileStream_Dtor(&bfs);
+    bfsObj->IO::BinaryFileStream::DeletingDtor(0);
 
 }
 

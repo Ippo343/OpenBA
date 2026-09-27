@@ -217,7 +217,6 @@ extern int RtIoCompressedStreamWriteRegister();    // compressed_stream_write.cp
 // 1..7 are byte-identical, so nine functions cover sixteen trap slots). Own
 // switch because it is the only part of this lane that changes what a
 // DISPATCHED vtable slot does, as opposed to what a called export does.
-extern int RtIoFileStreamSlotsRegister();       // file_stream.cpp + file_stream_win.cpp
 
 // Wave 20 lane SAVETEXT. Five of the eight unported slots of
 // ??_7TextFileStream@IO@@6B@ (Read, SetCurrentPos, GetCurrentPos, GetSize,
@@ -263,7 +262,6 @@ void RtIoPortInit() {
     n += RtIoBaseVtablesRegister();
     n += RtIoFileStreamRegister();
     n += RtIoFileSystemCreateFileRegister();
-    n += RtIoFileStreamSlotsRegister();
     n += RtIoTextFileStreamSlotsRegister();
 
     // BATCH 8b. Registers unconditionally (DIRECTION.md §2: a port registers,
