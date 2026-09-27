@@ -21,9 +21,12 @@
 
 #include "Component/citizenaicomponent_funcs.h"
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CIT (TypeId)
+#include "Component/ResidenceComponent.h" // B.3.8 CB1a (TypeId)
+#include "Component/StorageComponent.h"   // B.3.8 CB1a (TypeId)
 #include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -718,13 +721,47 @@ static void* CitizenAI_FindSiblingCitizen(void* ownerEntity) {
     return nullptr;
 }
 
+// ============================================================================
+// ENDGAME B.3.8 CIT — CitizenAIComponent as a REAL class (CitizenAIComponent.h).
+//
+// Before: a hand-expanded COMPONENT_LIVE_FACTORY_S — a 48-slot
+// CitizenAIComponent_LiveVtable filled at every create (slots 3 Serialize,
+// 4 Startup, 9 Update), Inert_ScalarDtor in slot 0. After: the compiler's
+// 16-slot vtable and a real ctor/dtor chain (B38_RULES D1, D2). Slot 3 is wired
+// by construction: a class's table cannot lose its serializer.
+// ============================================================================
+#include "Object/factory_registration.h"
+#include "Component/CitizenAIComponent.h"
+
+// The private type-id cells CitizenAIComponent::Update repoints its lookups at.
+static uint32_t s_caiTidStorage = 0, s_caiTidResidence = 0;
+static std::atomic<int> s_caiForceWorkLog{0};   // the [ForceWork] trace cap
+
+
+// 0x14010fb70. Component() is the CALL 0x1401188b0; the 0x140162470 stamp is
+// the compiler's; flags |= 0x89. The sixteen System::Time() at +0x40 are zero.
+// +0x28 = 0xc (aiState, 0x14010fba0) and +0x2c = -1 (pending state, 0x14010fba7)
+// are the ctor's own stores; Startup (CitizenAIComponent_BodyInit) still
+// re-writes them, as it did when the inert factory zero-filled them.
+CitizenAIComponent::CitizenAIComponent()
+    : aiState(0xc), targetId(-1), data30(0), _pad32{}, data38(0), timers{},
+      dataC0(0), dataC8(0) {
+    OrFlagsInCtor(0x89);
+}
+
+// [0] 0x14002fcf0: restamp + ~Internal (no own work), MemFree on &1.
+Object::Base* CitizenAIComponent::DeletingDtor(unsigned flags) {
+    this->~CitizenAIComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
 // Recipe step 2 (body-init), routed to slot +0x20 (StartupComponents dispatch).
 // Faithful field init from the ctor 0x14010fb70 (the inert factory zeroes the
 // body, so the ctor-set scalars must be re-applied) + the Startup find from
 // 0x14010f920 (sibling CitizenComponent -> +0x38). Idempotent.
-static void CitizenAIComponent_BodyInit(CitizenAIComponent* self) {
-    if (!self) return;
-    uint8_t* base = reinterpret_cast<uint8_t*>(self);
+void CitizenAIComponent::Startup() {
+    uint8_t* base = reinterpret_cast<uint8_t*>(this);
 
     // ctor (0x14010fb70) scalar field init. Flags(0x89) + the 16 Time timers
     // (+0x40..+0xBF) + +0xC0/+0xC8 are already zeroed/flagged by the inert factory.
@@ -738,11 +775,18 @@ static void CitizenAIComponent_BodyInit(CitizenAIComponent* self) {
     *reinterpret_cast<void**>(base + 0x38) = citizen;
 }
 
+// [6] 0x14010f880 (`JMP 0x14010f890` CheckAge). PORT GAP (retail 0x14010f880) —
+// B38 D9: the tree's table held the inert stub here (CheckAge is reached from
+// Update), kept.
+void CitizenAIComponent::OnAdded() {}
+
+// [9] 0x14010f3e0. RDX is a pointer to the elapsed System::Time (EntityList
+// bucket tick 0x1400c42af).
 // Recipe step 1 (Update), routed to slot +0x48. Signature matches the macro's
 // UpdateVSlot adapter: (self, int64_t* time).
-static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* time) {
-    if (!self) return;
-    uint8_t* base = reinterpret_cast<uint8_t*>(self);
+void CitizenAIComponent::Update(void* timeArg) {
+    int64_t* time = static_cast<int64_t*>(timeArg);
+    uint8_t* base = reinterpret_cast<uint8_t*>(this);
 
     EnsureHelpers();
     EnsureCallees();
@@ -752,22 +796,21 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
     // ResidenceComponent(0x1401c7cf0) are unregistered in standalone => their
     // ResolveAddr returns null => Update's home-storage scan derefs null
     // (crash at line ~149). Filling the shared globals would un-dormant their many
-    // readers, so keep them self-contained via GetTypeIdByName (same real-CRC the
+    // readers, so keep them this-contained via GetTypeIdByName (same real-CRC the
     // component factories use). (RawMaterial 0x1401c7cb8 IS already filled.)
-    {
-        static uint32_t s_tidStorage = 0, s_tidResidence = 0;
-        if (s_tidStorage == 0)   s_tidStorage   = ::Object::GetTypeIdByName("StorageComponent");
-        if (s_tidResidence == 0) s_tidResidence = ::Object::GetTypeIdByName("ResidenceComponent");
-        s_pStorageTypeId            = &s_tidStorage;
-        s_TypeId_ResidenceComponent = &s_tidResidence;
-    }
+    // B.3.8 (spelling 5, B6-5): the function-local lazy by-name caches became the
+    // class statics X::TypeId(), copied into namespace-scope cells each call.
+    s_caiTidStorage   = StorageComponent::TypeId();
+    s_caiTidResidence = ResidenceComponent::TypeId();
+    s_pStorageTypeId            = &s_caiTidStorage;
+    s_TypeId_ResidenceComponent = &s_caiTidResidence;
 
     // Lazy body-init: until the sibling CitizenComponent is found at +0x38, retry
     // the find each tick (it may not have been constructed yet at Startup time).
     // Re-running ctor-init while inert is harmless (the guard below bails before
     // Update); once +0x38 != 0 this never runs again.
     if (*reinterpret_cast<void**>(base + 0x38) == nullptr)
-        CitizenAIComponent_BodyInit(self);
+        CitizenAIComponent::Startup();   // the body-init, qualified (was the free call)
 
     void* citizen = *reinterpret_cast<void**>(base + 0x38);
     void* czEntity = nullptr;
@@ -792,11 +835,8 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
     //   +0x68  = housed flag (non-null)                      -> makes Work a candidate
     // One-shot per citizen (only seeds while +0x238 is still empty).
     if (citizen) {
-        static int s_force = -1;
-        if (s_force < 0) {
-            const char* e = Opt().forceWork;
-            s_force = (e && e[0] && e[0] != '0') ? 1 : 0;
-        }
+        const char* e = Opt().forceWork;   // read per call: Options are fixed at boot (B6-5)
+        const int s_force = (e && e[0] && e[0] != '0') ? 1 : 0;
         if (s_force == 1 && g_pForceWorkBuilding) {
             uint8_t* cz = reinterpret_cast<uint8_t*>(citizen);
             if (*reinterpret_cast<int64_t*>(cz + 0x238) == 0) {
@@ -806,8 +846,7 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
                 else
                     *reinterpret_cast<void**>(cz + 0x238) = g_pForceWorkBuilding;
                 *reinterpret_cast<void**>(cz + 0x68) = g_pForceWorkBuilding;  // housed flag
-                static int s_fn = 0;
-                if (s_fn < 6) { ++s_fn;
+                if (s_caiForceWorkLog.fetch_add(1, std::memory_order_relaxed) < 6) {
                     fprintf(stderr, "[ForceWork] citizen=%p workplace+0x238=%p housed+0x68=%p\n",
                             (void*)citizen, g_pForceWorkBuilding, g_pForceWorkBuilding);
                     fflush(stderr);
@@ -819,7 +858,7 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
     // --- PRODUCTION HARNESS (env BANISHED_LIVE_PRODUCTION, default off) --------
     // Phase B of the economy WORK-half: drive ONE faithful log-production accounting
     // event at the force-worked ForesterLodge and prove the town stock count
-    // increments. One-shot (self-gated inside). See production_harness.cpp.
+    // increments. One-shot (this-gated inside). See production_harness.cpp.
 
     // GUARD (crash-safe): Update derefs citizen / its entity(+0x10) / its
     // CitizenDescription(+0x288) / its CharacterComponent(+0x278, Phase-8 alive
@@ -834,54 +873,7 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
     if (StartTown_ForcePushForesterWork(citizen)) return;
     if (StartTown_ForcePushConstructionWork(citizen)) return;
 
-    CitizenAIComponent_Update(self, time);
-}
-
-// ============================================================================
-// ENDGAME B.3.8 CIT — CitizenAIComponent as a REAL class (CitizenAIComponent.h).
-//
-// Before: a hand-expanded COMPONENT_LIVE_FACTORY_S — a 48-slot
-// CitizenAIComponent_LiveVtable filled at every create (slots 3 Serialize,
-// 4 Startup, 9 Update), Inert_ScalarDtor in slot 0. After: the compiler's
-// 16-slot vtable and a real ctor/dtor chain (B38_RULES D1, D2). Slot 3 is wired
-// by construction: a class's table cannot lose its serializer.
-// ============================================================================
-#include "Object/factory_registration.h"
-#include "Component/CitizenAIComponent.h"
-
-// Retail 0x14010f960 (citizenaicomponent_serialize.cpp).
-extern "C" void CitizenAIComponent_Serialize(void* self, void* stream);
-
-// 0x14010fb70. Component() is the CALL 0x1401188b0; the 0x140162470 stamp is
-// the compiler's; flags |= 0x89. The sixteen System::Time() at +0x40 are zero.
-// +0x28 = 0xc (aiState, 0x14010fba0) and +0x2c = -1 (pending state, 0x14010fba7)
-// are the ctor's own stores; Startup (CitizenAIComponent_BodyInit) still
-// re-writes them, as it did when the inert factory zero-filled them.
-CitizenAIComponent::CitizenAIComponent()
-    : aiState(0xc), targetId(-1), data30(0), _pad32{}, data38(0), timers{},
-      dataC0(0), dataC8(0) {
-    OrFlagsInCtor(0x89);
-}
-
-// [0] 0x14002fcf0: restamp + ~Internal (no own work), MemFree on &1.
-Object::Base* CitizenAIComponent::DeletingDtor(unsigned flags) {
-    this->~CitizenAIComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
-void CitizenAIComponent::Persist(void* stream) { CitizenAIComponent_Serialize(this, stream); }   // [3] 0x14010f960
-void CitizenAIComponent::Startup() { CitizenAIComponent_BodyInit(this); }                        // [4] 0x14010f920
-
-// [6] 0x14010f880 (`JMP 0x14010f890` CheckAge). PORT GAP (retail 0x14010f880) —
-// B38 D9: the tree's table held the inert stub here (CheckAge is reached from
-// Update), kept.
-void CitizenAIComponent::OnAdded() {}
-
-// [9] 0x14010f3e0. RDX is a pointer to the elapsed System::Time (EntityList
-// bucket tick 0x1400c42af).
-void CitizenAIComponent::Update(void* time) {
-    CitizenAIComponent_UpdateAdapter(this, static_cast<int64_t*>(time));
+    CitizenAIComponent_Update(this, time);
 }
 
 // [15] 0x14010f340 (150 B). PORT GAP (retail 0x14010f340) — B38 D9: not ported;

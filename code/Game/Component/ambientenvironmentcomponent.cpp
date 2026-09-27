@@ -306,6 +306,11 @@ Object::Base* AmbientEnvironmentComponent::DeletingDtor(unsigned flags) {
 // AmbientEnvironmentComponent::Update (vtable slot [9], 0x140043310)
 // ============================================================
 // The component Update ABI is (self, Time*); the original reads only `self`.
+// The per-emitter biome-scan throttle below (main thread only: slot 9 is the
+// EntityList update walk). Namespace scope, not a function-local static (B6-5).
+struct AmbientThrottleState { int dominant; int countdown; };
+static std::unordered_map<void*, AmbientThrottleState> s_ambientThrottle;
+
 void AmbientEnvironmentComponent::Update(void* /*time*/) {
 
     EnsureResolved();
@@ -335,8 +340,7 @@ void AmbientEnvironmentComponent::Update(void* /*time*/) {
     // crossfade it feeds is inaudible at tick granularity, so the scan is re-run every
     // n-th tick per emitter and the last dominant biome is reused in between. The
     // temperature crossfade factor is still recomputed every tick.
-    struct ThrottleState { int dominant; int countdown; };
-    static std::unordered_map<void*, ThrottleState> s_throttle;
+    auto& s_throttle = s_ambientThrottle;
     const int throttleN = PerfX::AmbientThrottle();
     int cachedDominant = -1;
     if (throttleN > 1) {
@@ -401,7 +405,7 @@ void AmbientEnvironmentComponent::Update(void* /*time*/) {
         for (int k = 1; k < count; ++k) {
             if (hist[k] > best) { best = hist[k]; dominant = k; }
         }
-        if (throttleN > 1) s_throttle[this] = ThrottleState{ dominant, throttleN - 1 };
+        if (throttleN > 1) s_throttle[this] = AmbientThrottleState{ dominant, throttleN - 1 };
     }
 
     // Temperature crossfade factor: (temp - lo) / (hi - lo), clamped [0,1].

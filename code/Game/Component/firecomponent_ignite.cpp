@@ -43,6 +43,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
+#include "Component/FireComponent.h"
 
 // EventLog::AddEvent (0x140095580) — ported by the tornado lane (eventlog.cpp).
 extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);
@@ -608,11 +609,15 @@ extern "C" void FireComponent_Spread_130(void* self) {
 // ============================================================
 // Reached from SendComponentMessage::AbstractImpl with msg == 0, the last action
 // in the bucket-brigade queue PerformWork_Action_CopyCtor builds.
-extern "C" void FireComponent_WaterApplied_090(void* self, int msg) {
-    if (msg != 0) return;
+extern "C" void FireComponent_WaterApplied_090(void* self, int msg) { reinterpret_cast<FireComponent*>(self)->FireComponent::OnMessage(msg, nullptr, 0, 0); }   // B.3.8 bridge
+
+// [15] 0x140049090 — the water-bucket message (SendComponentMessage +0x78). The
+// body reads only the message id.
+void FireComponent::OnMessage(int message, void*, uint32_t, uint32_t) {
+    if (message != 0) return;
     EnsureInit();
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    void* desc = FireDesc(self);
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+    void* desc = FireDesc(this);
     const uintptr_t d = reinterpret_cast<uintptr_t>(desc);
 
     *reinterpret_cast<int32_t*>(s + 0x28) += 1;
@@ -628,5 +633,5 @@ extern "C" void FireComponent_WaterApplied_090(void* self, int msg) {
 
 
     if (timer < 1 || needed <= buckets)
-        FireComponent_Extinguish_4c0(self);
+        FireComponent_Extinguish_4c0(this);
 }

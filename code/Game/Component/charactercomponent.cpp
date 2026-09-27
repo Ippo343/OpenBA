@@ -314,13 +314,9 @@ void CharacterComponent::OnAdded() {}
 void CharacterComponent::OnRemove() {
     uint8_t* p = reinterpret_cast<uint8_t*>(this);
 
-    static fn_ActStackClear_t s_clear = nullptr;
-    static int s_resolved = 0;
-    if (!s_resolved) {
-        s_resolved = 1;
-        s_clear = reinterpret_cast<fn_ActStackClear_t>(ResolveAddr(Module::Exe, 0x1400c5400));
-    }
-    if (s_clear) s_clear(p + 0x48);
+    // Resolved per call, no first-call cache (B6-5).
+    const auto actStackClear = reinterpret_cast<fn_ActStackClear_t>(ResolveAddr(Module::Exe, 0x1400c5400));
+    if (actStackClear) actStackClear(p + 0x48);
 
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     int64_t charMgr = gw ? *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(gw) + 0x88)

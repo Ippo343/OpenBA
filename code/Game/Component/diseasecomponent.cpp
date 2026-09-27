@@ -107,7 +107,6 @@ typedef void  (*fn_GetTilesInArea_t)(void* map, int x, int y, int w, int h,
 typedef void  (*fn_MarkRemoval_t)(void* entity);
 typedef void  (*fn_ArrResizeFill_t)(int64_t* arr, int newCount, void* ibp);
 typedef void  (*fn_ArrErase_t)(int64_t* arr, void* ibp);
-typedef void  (*fn_ComponentSerialize_t)(void* self, void* stream);
 typedef void  (*fn_ExternalPtrSerialize_t)(void* field, void* serializer);
 typedef void  (*fn_SetAnimIndex_t)(int64_t natRes, uint32_t index);
 
@@ -122,7 +121,6 @@ static fn_GetTilesInArea_t      s_getTiles      = nullptr;  // 0x14009fc00
 static fn_MarkRemoval_t         s_markRemoval   = nullptr;  // 0x1400c2ea0
 static fn_ArrResizeFill_t       s_arrResizeFill = nullptr;  // 0x140003110
 static fn_ArrErase_t            s_arrErase      = nullptr;  // 0x140002cc0
-static fn_ComponentSerialize_t  s_compSerialize = nullptr;  // 0x1401189b0
 static fn_ExternalPtrSerialize_t s_extPtrSerialize = nullptr; // 0x140002340
 static fn_SetAnimIndex_t        s_setAnimIndex  = nullptr;  // 0x140126440
 
@@ -169,7 +167,6 @@ static void EnsureInit() {
     s_markRemoval   = R<fn_MarkRemoval_t>(0x1400c2ea0);
     s_arrResizeFill = R<fn_ArrResizeFill_t>(0x140003110);
     s_arrErase      = R<fn_ArrErase_t>(0x140002cc0);
-    s_compSerialize = R<fn_ComponentSerialize_t>(0x1401189b0);
     s_extPtrSerialize = R<fn_ExternalPtrSerialize_t>(0x140002340);
     s_setAnimIndex  = R<fn_SetAnimIndex_t>(0x140126440);
 
@@ -837,26 +834,12 @@ extern "C" void DiseaseComp_ActiveDisease(DiseaseComponent* self, int64_t* delta
 // ============================================================
 // Retail is a 16-byte thunk: CMP qword [RCX+0x30],0 / JG ActiveDisease / JMP InfectionTick.
 // +0x30 is the infestation duration remaining on a FIELD or PASTURE (not a citizen).
-extern "C" void DiseaseComponent_Update(DiseaseComponent* self, int64_t* deltaTime) {
-    if (self->duration > 0) DiseaseComp_ActiveDisease(self, deltaTime);
-    else                    DiseaseComp_InfectionTick(self, deltaTime);
-}
+extern "C" void DiseaseComponent_Update(DiseaseComponent* self, int64_t* deltaTime) { self->DiseaseComponent::Update(deltaTime); }
 
 // ============================================================
 // 0x140048c50 — Startup (vtable slot 4)
 // ============================================================
-extern "C" void DiseaseComponent_Startup(DiseaseComponent* self) {
-    EnsureInit();
-    int64_t pastureIBP = 0;
-    if (s_findPasture) s_findPasture((int64_t)self->_entity, &pastureIBP);
-    self->isPasture = (pastureIBP != 0) ? 1 : 0;
-
-    if (CDTrace()) {
-        printf("[CropDisease] STARTUP self=%p pasture=%d desc=%p entity=%p\n",
-               (void*)self, (int)self->isPasture, self->_description, self->_entity);
-        fflush(stdout);
-    }
-}
+extern "C" void DiseaseComponent_Startup(DiseaseComponent* self) { self->DiseaseComponent::Startup(); }
 
 // ============================================================
 // 0x140048c00 — OnAdded (vtable slot 6): append to the town registry
@@ -864,69 +847,18 @@ extern "C" void DiseaseComponent_Startup(DiseaseComponent* self) {
 // town = *(gw+0xF0); registry DynArray at town+0xF0 {data@+0, count@+8, cap@+0xC}.
 // The disassembly reads the count as [RCX+8] off the array base — not a separate
 // town field — and calls 0x140003110 (ResizeFill).
-extern "C" void DiseaseComponent_OnAdded(DiseaseComponent* self) {
-    EnsureInit();
-    void* gw = GameWorld();
-    if (!gw) return;
-    uintptr_t town = *reinterpret_cast<uintptr_t*>((uintptr_t)gw + 0xF0);
-    if (!town) return;
-    int64_t* reg = reinterpret_cast<int64_t*>(town + 0xF0);
-
-    uint8_t ibp[16] = {0};
-    if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-    int count = *reinterpret_cast<int32_t*>((uintptr_t)reg + 8);
-    if (s_arrResizeFill) s_arrResizeFill(reg, count + 1, ibp);
-
-    if (CDTrace()) {
-        printf("[CropDisease] REGISTER self=%p registry-count=%d\n",
-               (void*)self, count + 1);
-        fflush(stdout);
-    }
-}
+extern "C" void DiseaseComponent_OnAdded(DiseaseComponent* self) { self->DiseaseComponent::OnAdded(); }
 
 // ============================================================
 // 0x140048bb0 — OnRemoved (vtable slot 7): erase from registry, then Cure
 // ============================================================
 // Retail tail-JMPs into Cure (0x140048320) with RCX still == self.
-extern "C" void DiseaseComponent_OnRemoved(DiseaseComponent* self) {
-    EnsureInit();
-    void* gw = GameWorld();
-    if (gw) {
-        uintptr_t town = *reinterpret_cast<uintptr_t*>((uintptr_t)gw + 0xF0);
-        if (town) {
-            uint8_t ibp[16] = {0};
-            if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-            if (s_arrErase) s_arrErase(reinterpret_cast<int64_t*>(town + 0xF0), ibp);
-        }
-    }
-    DiseaseComp_Cure(self);
-}
+extern "C" void DiseaseComponent_OnRemoved(DiseaseComponent* self) { self->DiseaseComponent::OnRemove(); }
 
 // ============================================================
 // 0x140048ca0 — Serialize (vtable slot 3)
 // ============================================================
-extern "C" void DiseaseComponent_Serialize(DiseaseComponent* self, void* stream) {
-    EnsureInit();
-    if (s_compSerialize) s_compSerialize(self, stream);
-
-    alignas(8) uint8_t ser[24] = {0};
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
-    if (s_extPtrSerialize) s_extPtrSerialize(&self->curedIdentity, ser);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(self->isPasture, nullptr);   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(&self->rollAccum)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<System::Time*>(&self->duration)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<System::Time*>(&self->killAccum)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<System::Time*>(&self->spreadAccum)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    // Version-0 saves predate the registry, so re-run OnAdded (vtable +0x30 = slot 6).
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 0 && static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-        void** vt = *reinterpret_cast<void***>(self);
-        typedef void (*fn_slot6_t)(void*);
-        if (vt && vt[6]) reinterpret_cast<fn_slot6_t>(vt[6])(self);
-    }
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
-}
+extern "C" void DiseaseComponent_Serialize(DiseaseComponent* self, void* stream) { self->DiseaseComponent::Persist(stream); }
 
 // ============================================================
 // Init hook (kept for the existing declaration in diseasecomponent_funcs.h)
@@ -968,15 +900,79 @@ Object::Base* DiseaseComponent::DeletingDtor(unsigned flags) {
     return this;
 }
 
-void DiseaseComponent::Persist(void* stream) { DiseaseComponent_Serialize(this, stream); }   // [3] 0x140048ca0
-void DiseaseComponent::Startup()  { DiseaseComponent_Startup(this); }                         // [4] 0x140048c50
-void DiseaseComponent::OnAdded()  { DiseaseComponent_OnAdded(this); }                         // [6] 0x140048c00
-void DiseaseComponent::OnRemove() { DiseaseComponent_OnRemoved(this); }                       // [7] 0x140048bb0
+void DiseaseComponent::Persist(void* stream) {
+    EnsureInit();
+    Component::Persist(stream);   // retail's direct CALL 0x1401189b0
+
+    alignas(8) uint8_t ser[24] = {0};
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+    if (s_extPtrSerialize) s_extPtrSerialize(&curedIdentity, ser);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(isPasture, nullptr);   // B.3.4 bridge
+    reinterpret_cast<System::Time*>(&rollAccum)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(&duration)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(&killAccum)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(&spreadAccum)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    // Version-0 saves predate the registry, so re-run OnAdded (vtable +0x30 = slot 6).
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 0 && static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
+        void** vt = *reinterpret_cast<void***>(this);
+        typedef void (*fn_slot6_t)(void*);
+        if (vt && vt[6]) reinterpret_cast<fn_slot6_t>(vt[6])(this);
+    }
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+}
+void DiseaseComponent::Startup() {
+    EnsureInit();
+    int64_t pastureIBP = 0;
+    if (s_findPasture) s_findPasture((int64_t)_entity, &pastureIBP);
+    isPasture = (pastureIBP != 0) ? 1 : 0;
+
+    if (CDTrace()) {
+        printf("[CropDisease] STARTUP this=%p pasture=%d desc=%p entity=%p\n",
+               (void*)this, (int)isPasture, _description, _entity);
+        fflush(stdout);
+    }
+}
+void DiseaseComponent::OnAdded() {
+    EnsureInit();
+    void* gw = GameWorld();
+    if (!gw) return;
+    uintptr_t town = *reinterpret_cast<uintptr_t*>((uintptr_t)gw + 0xF0);
+    if (!town) return;
+    int64_t* reg = reinterpret_cast<int64_t*>(town + 0xF0);
+
+    uint8_t ibp[16] = {0};
+    if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+    int count = *reinterpret_cast<int32_t*>((uintptr_t)reg + 8);
+    if (s_arrResizeFill) s_arrResizeFill(reg, count + 1, ibp);
+
+    if (CDTrace()) {
+        printf("[CropDisease] REGISTER this=%p registry-count=%d\n",
+               (void*)this, count + 1);
+        fflush(stdout);
+    }
+}
+void DiseaseComponent::OnRemove() {
+    EnsureInit();
+    void* gw = GameWorld();
+    if (gw) {
+        uintptr_t town = *reinterpret_cast<uintptr_t*>((uintptr_t)gw + 0xF0);
+        if (town) {
+            uint8_t ibp[16] = {0};
+            if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
+                reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+            if (s_arrErase) s_arrErase(reinterpret_cast<int64_t*>(town + 0xF0), ibp);
+        }
+    }
+    DiseaseComp_Cure(this);
+}
 
 // [9] 0x140048b90. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).
 void DiseaseComponent::Update(void* time) {
-    DiseaseComponent_Update(this, static_cast<int64_t*>(time));
+    int64_t* deltaTime = static_cast<int64_t*>(time);
+    if (duration > 0) DiseaseComp_ActiveDisease(this, deltaTime);
+    else                    DiseaseComp_InfectionTick(this, deltaTime);
 }
 
 // create 0x140004db0: MemAlloc(0x58, 8), then the ctor.

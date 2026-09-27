@@ -57,14 +57,75 @@ void EnsureInit() {
 }  // namespace
 
 // ============================================================
+// Init: resolve function pointers
+// ============================================================
+void FireComponent_InitFuncs() {
+    EnsureInit();
+}
+
+// ============================================================
+// ENDGAME B.3.8 CIT — FireComponent as a REAL class (FireComponent.h).
+// ============================================================
+// Before: a 48-slot hand-built g_FireComponent_LiveVtable filled at every create
+// (slots 3 Serialize, 9 Update, 15 water applied), Inert_ScalarDtor in slot 0,
+// and registered at the retail table address 0x140159380. After: the compiler's
+// 16-slot vtable and a real ctor/dtor chain (B38_RULES D1, D2). The retail
+// table address had no by-address reader in the tree (every SendComponentMessage
+// +0x78 dispatch goes through the object's own vptr), so its registration went
+// with the hand-built table (B38 D5).
+#include "Object/factory_registration.h"
+#include "Component/FireComponent.h"
+
+// 0x140049b80. Component() is the CALL 0x1401188b0; the 0x140159380 stamp is
+// the compiler's; +0x28..+0x40 = 0; flags |= 0x08 (0x88).
+FireComponent::FireComponent()
+    : bucketsApplied(0), bucketsAtSpread(0), fireTimer(0), spreadTimer(0), igniteAccum(0) {
+    OrFlagsInCtor(0x08);
+}
+
+// [0] 0x140005720: restamp + ~Internal (no own work), MemFree on &1.
+Object::Base* FireComponent::DeletingDtor(unsigned flags) {
+    this->~FireComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// [3] 0x140049a90.
+// ============================================================
+// FireComponent::Shutdown / Serialize (vtable slot 3, 0x140049a90)
+// ============================================================
+// Component_Serialize, then a version-1 Serializer block:
+//   Time  +0x30, Time +0x38, int +0x28,
+//   and, only when the stream version > 0, int +0x2c.
+// This is the third independent body proving +0x28 / +0x2c are two int32s.
+void FireComponent::Persist(void* stream) {
+    if (!stream) return;
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+
+    Component::Persist(stream);   // retail's direct CALL 0x1401189b0 (was the engine_funcs door)
+
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+    reinterpret_cast<System::Time*>(reinterpret_cast<void*>(s + 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(reinterpret_cast<void*>(s + 0x38))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 0)   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x2c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+}
+
+// [9] 0x140048fb0. RDX is a pointer to the elapsed System::Time (EntityList
+// bucket tick 0x1400c42af).
+// ============================================================
 // FireComponent::Update (vtable slot 9, 0x140048fb0)
 // ============================================================
-void FireComponent_Update(FireComponent* self, int64_t* pDeltaTime) {
+void FireComponent::Update(void* time) {
+    int64_t* pDeltaTime = static_cast<int64_t*>(time);
     EnsureInit();
-    if (!self || !pDeltaTime) return;
+    if (!pDeltaTime) return;
 
     const int64_t dt = *pDeltaTime;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
     int64_t* pFireTimer   = reinterpret_cast<int64_t*>(s + 0x30);
     int64_t* pSpreadTimer = reinterpret_cast<int64_t*>(s + 0x38);
     int64_t* pAccum       = reinterpret_cast<int64_t*>(s + 0x40);
@@ -100,7 +161,7 @@ void FireComponent_Update(FireComponent* self, int64_t* pDeltaTime) {
 
         const bool fired = s_probCheck(pAccum, pair, rng);
         if (fired) {
-            FireComponent_Ignite_610(self);
+            FireComponent_Ignite_610(this);
             return;
         }
     } else {
@@ -109,84 +170,13 @@ void FireComponent_Update(FireComponent* self, int64_t* pDeltaTime) {
         *pSpreadTimer -= dt;
 
         if (*pFireTimer > 0 && *pSpreadTimer < 1)
-            FireComponent_Spread_130(self);
+            FireComponent_Spread_130(this);
 
         if (*pFireTimer < 1)
-            FireComponent_Extinguish_4c0(self);
+            FireComponent_Extinguish_4c0(this);
     }
 }
 
-// ============================================================
-// FireComponent::Shutdown / Serialize (vtable slot 3, 0x140049a90)
-// ============================================================
-// Component_Serialize, then a version-1 Serializer block:
-//   Time  +0x30, Time +0x38, int +0x28,
-//   and, only when the stream version > 0, int +0x2c.
-// This is the third independent body proving +0x28 / +0x2c are two int32s.
-void FireComponent_Shutdown(FireComponent* self, void* stream) {
-    if (!self || !stream) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-
-    if (fn_ComponentBase_Serialize) fn_ComponentBase_Serialize(self, stream);
-
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(reinterpret_cast<void*>(s + 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<System::Time*>(reinterpret_cast<void*>(s + 0x38))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
-    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 0)   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x2c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void FireComponent_InitFuncs() {
-    EnsureInit();
-}
-
-// ============================================================
-// ENDGAME B.3.8 CIT — FireComponent as a REAL class (FireComponent.h).
-// ============================================================
-// Before: a 48-slot hand-built g_FireComponent_LiveVtable filled at every create
-// (slots 3 Serialize, 9 Update, 15 water applied), Inert_ScalarDtor in slot 0,
-// and registered at the retail table address 0x140159380. After: the compiler's
-// 16-slot vtable and a real ctor/dtor chain (B38_RULES D1, D2). The retail
-// table address had no by-address reader in the tree (every SendComponentMessage
-// +0x78 dispatch goes through the object's own vptr), so its registration went
-// with the hand-built table (B38 D5).
-#include "Object/factory_registration.h"
-#include "Component/FireComponent.h"
-
-// 0x140049b80. Component() is the CALL 0x1401188b0; the 0x140159380 stamp is
-// the compiler's; +0x28..+0x40 = 0; flags |= 0x08 (0x88).
-FireComponent::FireComponent()
-    : bucketsApplied(0), bucketsAtSpread(0), fireTimer(0), spreadTimer(0), igniteAccum(0) {
-    OrFlagsInCtor(0x08);
-}
-
-// [0] 0x140005720: restamp + ~Internal (no own work), MemFree on &1.
-Object::Base* FireComponent::DeletingDtor(unsigned flags) {
-    this->~FireComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
-// [3] 0x140049a90.
-void FireComponent::Persist(void* stream) { FireComponent_Shutdown(this, stream); }
-
-// [9] 0x140048fb0. RDX is a pointer to the elapsed System::Time (EntityList
-// bucket tick 0x1400c42af).
-void FireComponent::Update(void* time) {
-    FireComponent_Update(this, static_cast<int64_t*>(time));
-}
-
-// [15] 0x140049090 — the water-bucket message (SendComponentMessage +0x78). The
-// body reads only the message id.
-void FireComponent::OnMessage(int message, void*, uint32_t, uint32_t) {
-    FireComponent_WaterApplied_090(this, message);
-}
 
 // create 0x1400055e0: MemAlloc(0x48, 8), then the ctor.
 void* FireComponent::CreateNewObject() {

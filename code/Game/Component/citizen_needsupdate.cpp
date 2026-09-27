@@ -47,6 +47,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Component/CitizenComponent.h"
 
 // From citizencomponent.cpp (faithful port of 0x1401152e0).
 extern void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2);
@@ -217,26 +218,32 @@ void CitizenComp_EatFromStorage(int64_t selfV, void* targetIBP) {
 //   param_4 = int extra (+0x38 of the action), param_5 = +0x3c (unused in retail).
 // ============================================================
 void CitizenComponent_NeedsUpdate(void* selfV, int msg, uint64_t* param_3,
-                                  int param_4, int param_5) {
-    (void)param_5;
-    EnsureNeedsUpdateFuncs();
-    if (static_cast<unsigned>(msg) > 8) return;   // retail: CMP EDX,8 / JA ret
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
+                                  int param_4, int param_5) { reinterpret_cast<CitizenComponent*>(selfV)->CitizenComponent::OnMessage(msg, param_3, param_4, param_5); }   // B.3.8 bridge
 
-    switch (msg) {
+// [15] 0x140112260 — the component message handler SendComponentMessage
+// (0x1400caef0) dispatches: EDX = message id, R8 = &target entity IBP, R9D =
+// extra (read from the retail body's jump table).
+void CitizenComponent::OnMessage(int message, void* data, uint32_t arg0, uint32_t /*arg1*/) {
+    uint64_t* param_3 = static_cast<uint64_t*>(data);
+    int param_4 = static_cast<int>(arg0);
+    EnsureNeedsUpdateFuncs();
+    if (static_cast<unsigned>(message) > 8) return;   // retail: CMP EDX,8 / JA ret
+    uint8_t* p = reinterpret_cast<uint8_t*>(this);
+
+    switch (message) {
     case 0: {   // warm-house: zero thirst if target residence passes 2ac30
         uint64_t local = *param_3;
-        CitizenComp_helper_21e0(reinterpret_cast<int64_t>(selfV), &local);
+        CitizenComp_helper_21e0(reinterpret_cast<int64_t>(this), &local);
         return;
     }
     case 1: {   // happiness credit — helper_fde0 (0x14010fde0), now ported + registered
-        if (s_fn_fde0) s_fn_fde0(reinterpret_cast<int64_t>(selfV), param_4);
+        if (s_fn_fde0) s_fn_fde0(reinterpret_cast<int64_t>(this), param_4);
         else SkipTraceOnce("fde0");
         return;
     }
     case 2: {   // EAT — drain hunger against the target's storage
         uint64_t local = *param_3;
-        CitizenComp_EatFromStorage(reinterpret_cast<int64_t>(selfV), &local);
+        CitizenComp_EatFromStorage(reinterpret_cast<int64_t>(this), &local);
         return;
     }
     case 3: {   // +0x54 |= 0x200 ; +0x50 += DAT_140172114 (0.5f)
@@ -245,12 +252,12 @@ void CitizenComponent_NeedsUpdate(void* selfV, int msg, uint64_t* param_3,
         return;
     }
     case 4: {   // helper_17a0(self) — unported, resolve-or-skip
-        if (s_fn_17a0) s_fn_17a0(reinterpret_cast<int64_t>(selfV));
+        if (s_fn_17a0) s_fn_17a0(reinterpret_cast<int64_t>(this));
         else SkipTraceOnce("17a0");
         return;
     }
     case 5: {   // helper_1540(self) — unported, resolve-or-skip
-        if (s_fn_1540) s_fn_1540(reinterpret_cast<int64_t>(selfV));
+        if (s_fn_1540) s_fn_1540(reinterpret_cast<int64_t>(this));
         else SkipTraceOnce("1540");
         return;
     }
@@ -269,7 +276,7 @@ void CitizenComponent_NeedsUpdate(void* selfV, int msg, uint64_t* param_3,
         return;
     }
 
-    // Shared tail for msg 6/7:
+    // Shared tail for message 6/7:
     //   Time t(desc(+0x288)->+0x130 * DAT_140172234 [300.0f]); +0x88 |= 0x800;
     //   *(Time*)(+0x1e8) = t.
     // Retail derefs +0x288 unguarded; guarded here only against a not-yet-BodyInit'd

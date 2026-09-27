@@ -402,13 +402,9 @@ void CropFieldComponent::Startup() { field50 = nullptr; }
 // therefore greys everything, which is retail behaviour, not a defect.
 uint32_t CropFieldComponent::CommandMask(int command) {
     const uintptr_t self = reinterpret_cast<uintptr_t>(this);
-    static void (*s_findSM)(uintptr_t, uintptr_t*) = nullptr;
-    static bool s_r = false;
-    if (!s_r) {
-        s_findSM = reinterpret_cast<void(*)(uintptr_t, uintptr_t*)>(
-            ResolveAddr(Module::Exe, 0x140003ea0));
-        s_r = true;
-    }
+    void (*s_findSM)(uintptr_t, uintptr_t*) = nullptr;
+    s_findSM = reinterpret_cast<void(*)(uintptr_t, uintptr_t*)>(
+        ResolveAddr(Module::Exe, 0x140003ea0));
     if (!s_findSM) return 0;
     uintptr_t smc = 0;
     s_findSM(*reinterpret_cast<uintptr_t*>(self + 0x10), &smc);
@@ -436,19 +432,15 @@ uint32_t CropFieldComponent::CommandMask(int command) {
 // triggers do.
 void CropFieldComponent::Command(int command) {
     const uintptr_t self = reinterpret_cast<uintptr_t>(this);
-    static void (*s_findSM)(uintptr_t, uintptr_t*)  = nullptr;
-    static void (*s_findWpc)(uintptr_t, uintptr_t*) = nullptr;
-    static void (*s_setAccepting)(uintptr_t, char)  = nullptr;
-    static bool s_r = false;
-    if (!s_r) {
-        s_findSM = reinterpret_cast<void(*)(uintptr_t, uintptr_t*)>(
-            ResolveAddr(Module::Exe, 0x140003ea0));
-        s_findWpc = reinterpret_cast<void(*)(uintptr_t, uintptr_t*)>(
-            ResolveAddr(Module::Exe, 0x140002e10));
-        s_setAccepting = reinterpret_cast<void(*)(uintptr_t, char)>(
-            ResolveAddr(Module::Exe, 0x14012fc00));
-        s_r = true;
-    }
+    void (*s_findSM)(uintptr_t, uintptr_t*)  = nullptr;
+    void (*s_findWpc)(uintptr_t, uintptr_t*) = nullptr;
+    void (*s_setAccepting)(uintptr_t, char)  = nullptr;
+    s_findSM = reinterpret_cast<void(*)(uintptr_t, uintptr_t*)>(
+        ResolveAddr(Module::Exe, 0x140003ea0));
+    s_findWpc = reinterpret_cast<void(*)(uintptr_t, uintptr_t*)>(
+        ResolveAddr(Module::Exe, 0x140002e10));
+    s_setAccepting = reinterpret_cast<void(*)(uintptr_t, char)>(
+        ResolveAddr(Module::Exe, 0x14012fc00));
     if (command != 0 && command != 1 && command != 2) return;
 
     if (command == 2) {
@@ -528,15 +520,11 @@ void CropFieldComponent::OnMessage(int message, void* /*data*/, uint32_t arg0, u
 
     if (message == 1) {
         if (!entity) return;
-        static void (*s_findGrowth)(int64_t, void*) = nullptr;
-        static const float* s_f300 = nullptr;
-        static bool s_r = false;
-        if (!s_r) {
-            s_findGrowth = reinterpret_cast<void(*)(int64_t, void*)>(
-                ResolveAddr(Module::Exe, 0x14000c460));
-            s_f300 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172234));
-            s_r = true;
-        }
+        void (*s_findGrowth)(int64_t, void*) = nullptr;
+        const float* s_f300 = nullptr;
+        s_findGrowth = reinterpret_cast<void(*)(int64_t, void*)>(
+            ResolveAddr(Module::Exe, 0x14000c460));
+        s_f300 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172234));
         if (!s_findGrowth || !s_f300 || !fn_Time_Ctor_Float) return;
         uintptr_t growth = 0;
         s_findGrowth((int64_t)entity, &growth);

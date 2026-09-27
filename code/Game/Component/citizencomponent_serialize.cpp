@@ -57,7 +57,7 @@
 //   +0x34  int
 //
 // Sub-callees:
-//   * Component_SerializeReimpl        — already ported (component_factory_base.cpp)
+//   * Component::Persist               — called qualified (component.cpp)
 //   * ExternalPtrSerializeGeneric       — already ported (Game/serialize_externals.cpp),
 //                                          reused for helper_0790/helper_0990/helper_140018020
 //                                          (all three are the SAME ExternalPtr<T>::Serialize
@@ -87,8 +87,8 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Component/CitizenComponent.h"
 
-extern void Component_SerializeReimpl(void* self, void* stream);
 extern "C" void Reimpl_ExternalPtrArray_Serialize(void* serializer, int count,
                                                   long long arrayBase, void* deadInit);
 
@@ -161,64 +161,65 @@ void SerializeValidatedIBP(void* ibp, void* ser, uintptr_t addr) {
 
 } // namespace
 
-extern "C" void CitizenComponent_Serialize(void* self, void* stream) {
-    if (!self || !stream) return;
+// [3] 0x140114160.
+void CitizenComponent::Persist(void* stream) {
+    if (!stream) return;
     Resolve();
-    Component_SerializeReimpl(self, stream);
+    Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
     alignas(8) uint8_t ser[24];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
 
-    reinterpret_cast<System::String*>(At(self, 0x28))->Serialize(ser);   // B.3.1 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x38)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x3c)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x40)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x44)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x4c)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x50)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(At(self, 0x54)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(At(self, 0x58))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<System::Time*>(At(self, 0x60))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::String*>(At(this, 0x28))->Serialize(ser);   // B.3.1 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x38)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x3c)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x40)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x44)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x48)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x4c)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x50)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(At(this, 0x54)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<System::Time*>(At(this, 0x58))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(At(this, 0x60))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
 
     {
         const uint32_t* tid = reinterpret_cast<const uint32_t*>(
             ResolveAddr(Module::Exe, 0x1401c5948));
-        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(At(self, 0x68)), ser,
+        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(At(this, 0x68)), ser,
                                     tid, "CitizenDisease");
     }
 
-    reinterpret_cast<System::Time*>(At(self, 0x70))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<System::Time*>(At(self, 0x78))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x80)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(At(self, 0x88)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(At(self, 0x90))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(At(this, 0x70))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(At(this, 0x78))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x80)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(At(this, 0x88)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<System::Time*>(At(this, 0x90))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
 
-    int arrCount = *reinterpret_cast<int*>(At(self, 0xa0));
+    int arrCount = *reinterpret_cast<int*>(At(this, 0xa0));
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(arrCount, nullptr);   // B.3.4 bridge
     if (Loading(stream))
-        ResizeCitizenExternalArray(reinterpret_cast<int64_t*>(At(self, 0x98)), arrCount);
+        ResizeCitizenExternalArray(reinterpret_cast<int64_t*>(At(this, 0x98)), arrCount);
     Reimpl_ExternalPtrArray_Serialize(ser, arrCount,
-        *reinterpret_cast<int64_t*>(At(self, 0x98)), nullptr);
+        *reinterpret_cast<int64_t*>(At(this, 0x98)), nullptr);
 
     {
         const uint32_t* tidProf = reinterpret_cast<const uint32_t*>(
             ResolveAddr(Module::Exe, 0x1401c5a98));
-        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(At(self, 0x1f0)), ser,
+        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(At(this, 0x1f0)), ser,
                                     tidProf, "Profession");
     }
 
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0xac)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x1d8)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0xac)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x1d8)), nullptr);   // B.3.4 bridge
     {
         int v = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
-        if (v > 0) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0xa8)), nullptr);   // B.3.4 bridge
+        if (v > 0) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0xa8)), nullptr);   // B.3.4 bridge
     }
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x1e4)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(At(self, 0x1e8))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x1e4)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<System::Time*>(At(this, 0x1e8))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     {
         int v = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
-        if (v > 1) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x1e0)), nullptr);   // B.3.4 bridge
+        if (v > 1) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x1e0)), nullptr);   // B.3.4 bridge
     }
 
     // +0xb0 is a PLAIN UINT, not a MeshInstance (save/load wave 2026-08-28).
@@ -228,46 +229,46 @@ extern "C" void CitizenComponent_Serialize(void* self, void* stream) {
     // it. The previous MeshInstance-dispatch call fed a raw uint's address as
     // a MeshInstance "this" and corrupted the round-trip from +0xb0 onward
     // (wrong citizen clothing after load was the visible symptom).
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(At(self, 0xb0)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(At(this, 0xb0)), nullptr);   // B.3.4 bridge
 
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x30)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x30)), nullptr);   // B.3.4 bridge
 
-    SerializeValidatedIBP(At(self, 0x238), ser, 0x1401c5d70);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x240)), nullptr);   // B.3.4 bridge
-    SerializeValidatedIBP(At(self, 0x250), ser, 0x1401c7158);
-    SerializeValidatedIBP(At(self, 0x258), ser, 0x1401c7158);
-    SerializeValidatedIBP(At(self, 0x260), ser, 0x1401c7158);
-    SerializeValidatedIBP(At(self, 0x268), ser, 0x1401c7158);
-    SerializeValidatedIBP(At(self, 0x270), ser, 0x1401c7158);
-    SerializeValidatedIBP(At(self, 0x248), ser, 0x1401c5d70);
+    SerializeValidatedIBP(At(this, 0x238), ser, 0x1401c5d70);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x240)), nullptr);   // B.3.4 bridge
+    SerializeValidatedIBP(At(this, 0x250), ser, 0x1401c7158);
+    SerializeValidatedIBP(At(this, 0x258), ser, 0x1401c7158);
+    SerializeValidatedIBP(At(this, 0x260), ser, 0x1401c7158);
+    SerializeValidatedIBP(At(this, 0x268), ser, 0x1401c7158);
+    SerializeValidatedIBP(At(this, 0x270), ser, 0x1401c7158);
+    SerializeValidatedIBP(At(this, 0x248), ser, 0x1401c5d70);
 
     {
         const uint32_t* tidProf = reinterpret_cast<const uint32_t*>(
             ResolveAddr(Module::Exe, 0x1401c5a98));
-        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(At(self, 0x1f8)), ser,
+        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(At(this, 0x1f8)), ser,
                                     tidProf, "Profession");
     }
 
-    SerializeValidatedIBP(At(self, 0x208), ser, 0x1401c3f40);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x210)), nullptr);   // B.3.4 bridge
+    SerializeValidatedIBP(At(this, 0x208), ser, 0x1401c3f40);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x210)), nullptr);   // B.3.4 bridge
     {
         int v = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
-        if (v > 2) reinterpret_cast<System::Time*>(At(self, 0x218))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+        if (v > 2) reinterpret_cast<System::Time*>(At(this, 0x218))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     }
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x220)), nullptr);   // B.3.4 bridge
-    SerializeValidatedIBP(At(self, 0x228), ser, 0x1401c3f40);
-    SerializeValidatedIBP(At(self, 0x230), ser, 0x1401c3f40);
-    SerializeValidatedIBP(At(self, 0x278), ser, 0x1401c7078);
-    SerializeValidatedIBP(At(self, 0x280), ser, 0x1401c7e08);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(this, 0x220)), nullptr);   // B.3.4 bridge
+    SerializeValidatedIBP(At(this, 0x228), ser, 0x1401c3f40);
+    SerializeValidatedIBP(At(this, 0x230), ser, 0x1401c3f40);
+    SerializeValidatedIBP(At(this, 0x278), ser, 0x1401c7078);
+    SerializeValidatedIBP(At(this, 0x280), ser, 0x1401c7e08);
 
     {
         const uint32_t* tidDesc = reinterpret_cast<const uint32_t*>(
             ResolveAddr(Module::Exe, 0x1401c7190));
-        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(At(self, 0x288)), ser,
+        ExternalPtrSerializeGeneric(reinterpret_cast<void**>(At(this, 0x288)), ser,
                                     tidDesc, "CitizenDescription");
     }
 
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x34)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x34)), nullptr);   // B.3.4 bridge
 
 
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
