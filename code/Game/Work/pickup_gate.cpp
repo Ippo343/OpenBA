@@ -8,13 +8,12 @@
 // "does this storage location accept this resource category, and can it physically
 // take this amount?".
 //
-// Type-id globals (raw .rdata resolves NULL in standalone — see
-// reference_standalone_rdata_null_fallback — so each falls back to the runtime name
-// lookup; names recovered from their RegisterType DATA writes via Ghidra xrefs):
-//   0x1401c7ee8 = StorageLocationComponent    (StorageLocationComponent_RegisterType)
-//   0x1401c7f20 = StorageLocationDescription  (StorageLocationDescription_Register)
-//   0x1401c7e78 = StorageComponent
-//   0x1401c7cb8 = RawMaterialDescription
+// Type-id cells (ENDGAME B.3.9 D5: read BY CELL through the class's own TypeId(),
+// names recovered from their RegisterType DATA writes via Ghidra xrefs):
+//   0x1401c7ee8 = StorageLocationComponent    (StorageLocationComponent_RegisterType) -- registered
+//   0x1401c7f20 = StorageLocationDescription  (StorageLocationDescription_Register)  -- UNREGISTERED
+//   0x1401c7e78 = StorageComponent            -- registered
+//   0x1401c7cb8 = RawMaterialDescription      -- registered
 //
 // Sub-callees (all already registered): 0x140006270 Entity_FindComponent_Storage,
 // 0x14012cd80 StorageComponent_impl_cd80 (CanAdd). Plus engine dispatch slots
@@ -25,7 +24,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
-#include "Object/factory_registration.h"  // ::Object::GetTypeIdByName (SA type-id fallback)
+#include "Object/factory_registration.h"
 #include "Component/StorageLocationDescription.h"   // ENDGAME B.3.8 CB3: StorageLocationDescription::TypeId()
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.8 CB3: RawMaterialDescription::TypeId()
 #include "Component/StorageLocationComponent.h"   // ENDGAME B.3.8 CB3: StorageLocationComponent::TypeId()
@@ -43,10 +42,6 @@ PG_IsDerivedFrom_t s_pg_IsDerived   = nullptr;
 PG_FindStorage_t   s_pg_FindStorage = nullptr;
 PG_CanAdd_t        s_pg_CanAdd      = nullptr;
 
-const uint32_t* s_pg_pTid_SLComp = nullptr;  // 0x1401c7ee8
-const uint32_t* s_pg_pTid_SLDesc = nullptr;  // 0x1401c7f20
-const uint32_t* s_pg_pTid_Stor   = nullptr;  // 0x1401c7e78
-const uint32_t* s_pg_pTid_RawDsc = nullptr;  // 0x1401c7cb8
 bool s_pg_init = false;
 
 void Ensure_PickupGate() {
@@ -58,15 +53,6 @@ void Ensure_PickupGate() {
     if (!s_pg_IsDerived) s_pg_IsDerived = reinterpret_cast<PG_IsDerivedFrom_t>(fn_IsDerivedFrom);
     s_pg_FindStorage = reinterpret_cast<PG_FindStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
     s_pg_CanAdd      = reinterpret_cast<PG_CanAdd_t>(ResolveAddr(Module::Exe, 0x14012cd80));
-    s_pg_pTid_SLComp = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7ee8));
-    s_pg_pTid_SLDesc = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7f20));
-    s_pg_pTid_Stor   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7e78));
-    s_pg_pTid_RawDsc = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
-}
-
-static uint32_t PG_Tid(const uint32_t* p, uint32_t classTypeId) {
-    if (p && *p) return *p;
-    return classTypeId;   // ENDGAME B.3.8 CB3: X::TypeId() (was the by-name lookup)
 }
 
 // ⚠️ THE TWO SEARCHES BELOW WALK DIFFERENT STRUCTURES WITH DIFFERENT LAYOUTS. They look
@@ -126,7 +112,11 @@ int PickupGate_AcceptMask_12d560(int64_t self) {
     uintptr_t s = static_cast<uintptr_t>(self);
 
     void* obj = *reinterpret_cast<void**>(s + 0x18);
-    uint32_t tidDesc = PG_Tid(s_pg_pTid_SLDesc, StorageLocationDescription::TypeId());
+    // 0x1401c7f20 (StorageLocationDescription's own cell) is UNREGISTERED -- the old
+    // PG_Tid raw-.rdata read always failed and fell through to this same
+    // StorageLocationDescription::TypeId() call, so calling it directly is not a
+    // behaviour change (ENDGAME B.3.9 D5 note).
+    uint32_t tidDesc = StorageLocationDescription::TypeId();
     void* desc = (s_pg_IsDerived && s_pg_IsDerived(obj, tidDesc)) ? obj : nullptr;
 
     int mask = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x20);
@@ -151,7 +141,7 @@ int PickupGate_AcceptMask_12d560(int64_t self) {
 uint64_t PickupGate_Accepts_12d990(int64_t slComp, int64_t resEntity) {
     Ensure_PickupGate();
 
-    uint32_t tidRawDsc = PG_Tid(s_pg_pTid_RawDsc, RawMaterialDescription::TypeId());
+    uint32_t tidRawDsc = RawMaterialDescription::TypeId();
     // NOTE: description-list layout (+0x28/+0x30), NOT the component layout — see the
     // warning above PG_FindCompByTid. `resEntity` here is the entity's description object.
     void* rawDesc = PG_FindDescByTid(static_cast<uintptr_t>(resEntity), tidRawDsc);
@@ -182,8 +172,8 @@ uint64_t PickupGate_TownWants_8d3c0(int64_t townMgr, int64_t resEntity, int amou
     int count = static_cast<int>(*reinterpret_cast<int64_t*>(tm + 0x08));
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(tm + 0x00);
 
-    uint32_t tidSLComp = PG_Tid(s_pg_pTid_SLComp, StorageLocationComponent::TypeId());
-    uint32_t tidStor   = PG_Tid(s_pg_pTid_Stor, StorageComponent::TypeId());
+    uint32_t tidSLComp = StorageLocationComponent::TypeId();
+    uint32_t tidStor   = StorageComponent::TypeId();
 
     for (int i = 0; i < count; ++i) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);

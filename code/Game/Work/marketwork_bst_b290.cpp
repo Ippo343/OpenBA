@@ -35,6 +35,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
 
 // ============================================================
 // External closure — every one of these is already ported + registered
@@ -73,13 +74,11 @@ extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* s
 // MemAlloc/MemFree are dispatch slots 0x140152b60/0x140152b68 in retail; we reach the
 // same Runtime exports through the canonical fn_MemAllocStatic / fn_MemFreeStatic
 // wrappers, exactly as work_leaf_market.cpp does.
-static uint32_t*          s_TypeId_1401c7158 = nullptr;  // DAT_1401c7158
 static bool               s_resolved = false;
 
 static void MarketBst_b290_ResolveFuncs() {
     if (s_resolved) return;
     s_resolved = true;
-    s_TypeId_1401c7158 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
 }
 
 // `*(int32*)(*(void**)serializer + 8) == 0` is the engine-wide "am I loading?" test
@@ -204,7 +203,7 @@ void MarketBst_b290(int64_t* tree, void* serializer) {
             // expected type. Retail overwrites the key with 0 on a type mismatch and
             // still inserts the node — a null-keyed node, not a skipped one.
             reinterpret_cast<Object::InternalBasePtr*>(&key)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            if (key != 0 && !fn_IsDerivedFrom(reinterpret_cast<void*>(key), *s_TypeId_1401c7158)) {
+            if (key != 0 && !fn_IsDerivedFrom(reinterpret_cast<void*>(key), CitizenComponent::TypeId())) {
                 key = 0;
             }
 
@@ -279,7 +278,7 @@ void MarketBst_b290(int64_t* tree, void* serializer) {
             // faithful, and deliberate in retail (it is how stale refs get culled).
             reinterpret_cast<Object::InternalBasePtr*>(reinterpret_cast<void*>(node))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             uintptr_t key = NodeKey(node);
-            if (key != 0 && !fn_IsDerivedFrom(reinterpret_cast<void*>(key), *s_TypeId_1401c7158)) {
+            if (key != 0 && !fn_IsDerivedFrom(reinterpret_cast<void*>(key), CitizenComponent::TypeId())) {
                 *reinterpret_cast<uintptr_t*>(node + 0x00) = 0;
             }
 

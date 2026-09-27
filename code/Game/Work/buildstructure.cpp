@@ -30,6 +30,8 @@
 #include <cstdio>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
+#include "Entity/ComponentEntity.h"       // ENDGAME B.3.9 D5: ComponentEntity::TypeId()
 
 // ============================================================
 // Ctor (0x1400e5a90)
@@ -562,16 +564,11 @@ void* BuildStructure::GetTarget(void* retBuf) {
 // actions, and checks if any match the Work's priority at +0x20.
 // Returns 1 if found (and stores task IBP in *outTask), 0 otherwise.
 
-// TypeInfo_CompleteTask = DWORD_1401c7158 — read through the registry cell per call
-// (ENDGAME B.3.8: the lazy first-use pointer cache is gone, B38 D7).
+// DWORD_1401c7158 = CitizenComponent (ENDGAME B.3.9 D5: by cell, not by the legacy
+// comment name "TypeInfo_CompleteTask" -- CompleteTask has its own cell, 0x1401c5e50).
 static bool CheckCitizenHasTask(BuildStructure* self, void* citizenIBP, uintptr_t* outTask) {
-    const uint32_t* typeIdCell = (const uint32_t*)ResolveAddr(Module::Exe, 0x1401c7158);
-    uint32_t taskTypeId = typeIdCell ? *typeIdCell : 0;
+    uint32_t taskTypeId = CitizenComponent::TypeId();
 
-    // [CITID A/B] Report BOTH arms. With 0x1401c7158 unregistered this returns false for
-    // every citizen, so Validate evicts the whole build BST; with the slot filled the
-    // IsDerivedFrom loop below actually runs. Print the first few outcomes of each arm so
-    // the two runs are comparable rather than both looking silently "fine".
     static int s_dormant = 0, s_kept = 0, s_dropped = 0;
     struct Rep { static void go(uint32_t tid, int d, int k, int dr) {
         fprintf(stderr, "[CITID/BuildValidate] tid=%u dormantSkips=%d kept=%d dropped=%d\n",
@@ -579,15 +576,11 @@ static bool CheckCitizenHasTask(BuildStructure* self, void* citizenIBP, uintptr_
         fflush(stderr);
     } };
 
-    if (taskTypeId == 0) {
-        if (++s_dormant <= 3 || s_dormant % 500 == 0) Rep::go(0, s_dormant, s_kept, s_dropped);
-        return false;
-    }
-
     // Check IBP is valid
     if (*(uintptr_t*)citizenIBP == 0) return false;
 
-    bool isEntity = fn_IsA((void*)*(uintptr_t*)citizenIBP, *g_TypeId_ComponentEntity);
+    // DAT_1401c5d70 = ComponentEntity (ENDGAME B.3.9 D5: by cell).
+    bool isEntity = fn_IsA((void*)*(uintptr_t*)citizenIBP, ComponentEntity::TypeId());
     if (!isEntity) return false;
 
     uintptr_t entity = *(uintptr_t*)citizenIBP;

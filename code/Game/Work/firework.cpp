@@ -26,6 +26,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
+#include "Component/CitizenDescription.h"   // ENDGAME B.3.9 D5: CitizenDescription::TypeId()
+#include "Component/InteractDescription.h"  // ENDGAME B.3.9 D5: InteractDescription::TypeId()
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
@@ -90,9 +92,6 @@ static fn_ValidateFireEntity_t s_fn_ValidateEntity = nullptr;
 typedef void (*fn_BSTRemove_t)(void* bstRoot, void* node);
 static fn_BSTRemove_t s_fn_BSTRemove = nullptr;
 
-// Type IDs for component lookups
-static uint32_t* s_TypeId_PositionComponent = nullptr; // DAT_1401c7938
-static uint32_t* s_TypeId_CitizenComponent  = nullptr; // DWORD_1401c7190
 
 // ============================================================
 // FireWork_ResolveFuncs
@@ -122,16 +121,9 @@ bool FireWork_ResolveFuncs() {
     s_fn_BSTRemove = reinterpret_cast<fn_BSTRemove_t>(
         ResolveAddr(Module::Exe, 0x14001a6e0));
 
-    // Type ID pointers (addresses of static type IDs in .rdata)
-    s_TypeId_PositionComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7938));
-    s_TypeId_CitizenComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7190));
-
     bool ok = s_fn_FindFire && s_fn_PathCheck && s_fn_PathCheckRecursive &&
               s_fn_ValidateAssignment && s_fn_SetupFireActions &&
-              s_fn_RegisterWork && s_fn_ValidateEntity && s_fn_BSTRemove &&
-              s_TypeId_PositionComponent && s_TypeId_CitizenComponent;
+              s_fn_RegisterWork && s_fn_ValidateEntity && s_fn_BSTRemove;
 
 #ifdef _DEBUG
     printf("[FireWork] ResolveFuncs: FindFire=%p PathCheck=%p ValidateAssign=%p "
@@ -209,7 +201,9 @@ int FireWork::Execute(void* citizenIBP, void* time, uint64_t /*arg3*/) {
 
     // Check if citizen is a CitizenComponent (type check)
     void* citizenObj = *(void**)(*(uintptr_t*)citizenIBP + 0x18);
-    bool isCitizen = fn_IsDerivedFrom(citizenObj, *s_TypeId_CitizenComponent);
+    // DWORD_1401c7190 = CitizenDescription (ENDGAME B.3.9 D5: by cell, not by the
+    // legacy variable name "CitizenComponent").
+    bool isCitizen = fn_IsDerivedFrom(citizenObj, CitizenDescription::TypeId());
     void* citizenComp = isCitizen ? citizenObj : nullptr;
 
     // Initialize position buffers (all zeroed — original zeros local_60 before FindFire)
@@ -249,7 +243,9 @@ int FireWork::Execute(void* citizenIBP, void* time, uint64_t /*arg3*/) {
 
     // Check pathfinding accessibility
     void* posComp = *(void**)(posCompIBP + 0x18);
-    bool isPositionComp = fn_IsDerivedFrom(posComp, *s_TypeId_PositionComponent);
+    // DAT_1401c7938 = InteractDescription (ENDGAME B.3.9 D5: by cell, not by the
+    // legacy variable name "PositionComponent").
+    bool isPositionComp = fn_IsDerivedFrom(posComp, InteractDescription::TypeId());
     void* posCompTyped = isPositionComp ? posComp : nullptr;
 
     int bestDist = 0x7fffffff;
