@@ -116,6 +116,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Animation.h"
+#include "../../types/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
 #include "../../types/graphics/Particle.h"
 // ENDGAME B.3.5 block H2: the real `Graphics::ParticleInstance` (block E's
 // class), needed because the two non-constructor particle bodies in this file —
@@ -185,16 +186,9 @@ void* RtParticleSystemInstanceVtable() {
     return v;
 }
 
-// AnimationManager::_singleton, the exported static this class' ctor/dtor
-// maintain. Resolved to the DLL's OWN live global rather than kept as a
-// private copy, so any DLL-internal reader (or another wave's code) agrees
-// with this port on the value. Retail 0x1801fe7b0, ordinal 4799,
-// ?_singleton@AnimationManager@Graphics@@0PEAV12@EA.
-AnimationManager** RtAnimMgrSingletonSlot() {
-    static AnimationManager** p = reinterpret_cast<AnimationManager**>(
-        ResolveAddr(Module::Runtime, 0x1801fe7b0));
-    return p;
-}
+// ENDGAME B.3.9 block GFX (D7 row A44): `RtAnimMgrSingletonSlot` (the lazy
+// by-address cache of 0x1801fe7b0) is gone -- the cell is the class static
+// `Graphics::AnimationManager::_singleton`, defined at the end of this file.
 
 // Graphics::ParticleInstance::_frameIndex, a protected STATIC int (mangling
 // code `1`), not an instance field -- see Particle.h. Resolved once via
@@ -281,8 +275,10 @@ extern "C" AnimationManager* RtGraphics_AnimationManager_Ctor(AnimationManager* 
         self->_rngState[i] = (prev ^ (prev >> 30)) * 0x6c078965u + static_cast<uint32_t>(i);
     }
 
-    AnimationManager** slot = RtAnimMgrSingletonSlot();
-    if (slot) *slot = self;
+    // `MOV [0x1801fe7b0],RBX` -- publish the instance. (B.3.9: the class
+    // static; the POD view `self` is the same object.)
+    Graphics::AnimationManager::_singleton =
+        reinterpret_cast<Graphics::AnimationManager*>(self);   // B.3.9 bridge (POD view)
 
     return self;
 }
@@ -305,8 +301,7 @@ extern "C" AnimationManager* RtGraphics_AnimationManager_Ctor(AnimationManager* 
 // ============================================================================
 extern "C" void RtGraphics_AnimationManager_Dtor(AnimationManager* self) {
 
-    AnimationManager** slot = RtAnimMgrSingletonSlot();
-    if (slot) *slot = nullptr;
+    Graphics::AnimationManager::_singleton = nullptr;   // 0x1801fe7b0 cleared
 
     // ENDGAME B.3.2 step 2 (callers) — NOT converted. 0x18005bf60 is the same
     // retail address `runtime/src/collection/array_destroy.cpp` registers as
@@ -723,3 +718,9 @@ void Graphics::Particle::ReleaseFields() {
     *reinterpret_cast<void**>(self + 0x38) = nullptr;
     *reinterpret_cast<uint64_t*>(self + 0x40) = 0;
 }
+
+// ?_singleton@AnimationManager@Graphics@@0PEAV12@EA  retail 0x1801fe7b0 --
+// the class static (ENDGAME B.3.9 block GFX, B39_RULES D7 row A44). Its mint
+// storage row is retired (rt_mint_retired/gfx.txt): every reader is in this
+// block's files.
+Graphics::AnimationManager* Graphics::AnimationManager::_singleton = nullptr;

@@ -54,6 +54,7 @@
 #include "../../types/graphics/Animation.h"        // Graphics::Animation -- block GC
 #include "../../types/system/Value.h"             // System::Time, ditto
 #include "../../types/graphics/AnimationState.h"
+#include "../../types/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
 #include "../../types/graphics/Camera.h"
 #include "../../types/graphics/Material.h"
 #include "../../types/video/ShaderProgram.h"   // ENDGAME B.3.5 caller batch: Video::ShaderProgram
@@ -656,10 +657,9 @@ using QuatLerpFn = float* (*)(const float* self, float* ret,
 
 // `MOV R15,[0x1801fe7b0]` — ?_singleton@AnimationManager@Graphics@@ (ord 4799),
 // a DATA export. Read through the mint's own slot rather than by address.
+// ENDGAME B.3.9 GFX: the class static, not the mint's slot (D7 row A44).
 inline uint8_t* AnimationGroups() {
-    void** const singleton =
-        RT_DATA_SLOT(void**, "?_singleton@AnimationManager@Graphics@@0PEAV12@EA");
-    uint8_t* const mgr = static_cast<uint8_t*>(*singleton);
+    uint8_t* const mgr = reinterpret_cast<uint8_t*>(Graphics::AnimationManager::_singleton);
     return *reinterpret_cast<uint8_t**>(mgr);        // AnimationManager::_groupData
 }
 

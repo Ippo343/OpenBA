@@ -30,3 +30,6 @@
 0x1801fc6a0                            GFX   GraphicsMesh current mesh -> g_serializeCurrentMesh (graphicsmesh_vtable.cpp), the only site
 0x1801ff30c                            GFX   MeshInstance::Update init guard -> g_updateInitGuard (wave29_lane_slots.cpp), the only site
 0x1801ff310                            GFX   MeshInstance::Update identity table -> g_identityTable (wave29_lane_slots.cpp), the only site
+
+# -- W1 storage (D7): AnimationManager::_singleton -- class static, every reader in GFX files converted --
+?_singleton@AnimationManager@Graphics@@0PEAV12@EA   GFX   class static Graphics::AnimationManager::_singleton (animation.cpp); both writers + 6 readers converted; no foreign reader

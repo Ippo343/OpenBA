@@ -134,6 +134,7 @@
 #include "../../types/graphics/GraphicsMesh.h"   // ENDGAME B.3.5 block G
 // ENDGAME B.3.5 caller batch: the cross-class edges this file opens.
 #include "../../types/graphics/AnimationState.h"  // Graphics::AnimationState
+#include "../../types/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
 #include "../../types/video/Buffers.h"            // Video::{Index,Vertex}Buffer
 
 using RtGraphics::ExternalPtr;
@@ -348,10 +349,9 @@ void* RtObjectExternalVtable() {
 // Graphics::AnimationManager::_singleton, an exported DATA symbol
 // (0x1801fe7b0). GetNodeToWorld and RootAnimationOffset index the instanced
 // pose pool through it.
+// ENDGAME B.3.9 GFX: the class static, not the mint's slot (D7 row A44).
 void* RtAnimationManager() {
-    void** slot = RT_DATA_SLOT(void**,
-        "?_singleton@AnimationManager@Graphics@@0PEAV12@EA");
-    return slot ? *slot : nullptr;
+    return Graphics::AnimationManager::_singleton;
 }
 
 // Byte helpers. Every body below addresses its object through the typed struct

@@ -229,12 +229,11 @@ namespace Graphics {
 // `runtime/src/graphics/animation.cpp` stay free functions; both members are
 // declared here for the record and deliberately left undefined.
 //
-// `?_singleton@AnimationManager@Graphics@@0PEAV12@EA` @ 0x1801fe7b0 STAYS AN
-// `RT_DATA_SLOT` READ — six by-name doors reach it today. Per B35_RULES section
-// 9 and RULE B4b-4 the `MintStorageCell()` redirect that would make the name
-// door, the address door and a C++ `static AnimationManager* _singleton` one
-// cell is OWED at the class-static conversion, the END of B.3, not in step 5.
-// That is why there is no `static AnimationManager* _singleton;` member below.
+// `?_singleton@AnimationManager@Graphics@@0PEAV12@EA` @ 0x1801fe7b0 is the
+// CLASS STATIC `_singleton` below (ENDGAME B.3.9 block GFX, B39_RULES D7 row
+// A44). Every reader and both writers were in this block's files and read it
+// directly now; the mint's storage row is retired in the same commit, so no
+// redirect is needed.
 // ============================================================================
 class AnimationManager {
 public:
@@ -273,11 +272,16 @@ public:
     static void  operator delete(void* p);
 
     // ?Get@AnimationManager@Graphics@@SAPEAV12@XZ   0x18005a690  NOT PORTED
-    //   One load of `_singleton`. Left unported on purpose: the six live
-    //   by-name readers of that cell go through `RT_DATA_SLOT`, and a member
-    //   that returned the cell would be a second door onto it before the
-    //   B4b-4 redirect exists.
+    //   One load of `_singleton`. No caller in the tree.
     static AnimationManager* Get();
+
+    // ?_singleton@AnimationManager@Graphics@@0PEAV12@EA  0x1801fe7b0 — retail's
+    // PRIVATE static (`0`). Public here because its readers are the ported
+    // free-function bodies across this block's files (animation.cpp's ctor /
+    // dtor doors write it; animationstate*.cpp, mesh.cpp, meshinstance_draw.cpp,
+    // wave27_lane_gfxbig.cpp and wave28_lane_gfxbody.cpp read it). Defined in
+    // animation.cpp; zero-initialised, as the mint zeroed it.
+    static AnimationManager* _singleton;
 
     // ?Update@AnimationManager@Graphics@@QEAAXAEBVTime@System@@_N@Z 0x1800fc240
     //   PORTED — the body is this member, in `wave23_lane_gfxbody.cpp`'s
