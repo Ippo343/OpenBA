@@ -946,9 +946,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // releases at least one refcounted String, and ~DocumentTextDescription
     // also destroys four arrays, so running one on a fabricated object would
     // be a manufactured crash rather than a measurement.
-    RT_DELDTOR(0x1800481a0, 0x180110bd0, 0x0a0, "UI::ButtonDescription"),
-    RT_DELDTOR(0x1800489c0, 0x180111620, 0x0a8, "UI::CheckDescription"),
-    RT_DELDTOR(0x180074e70, 0x180112370, 0x0b8, "UI::ComboDescription"),
     RT_DELDTOR(0x180039c00, 0x1800ccff0, 0x090, "UI::ContainerDescription"),
     RT_DELDTOR(0x18003bd90, 0x1800cfb30, 0x0e8, "UI::DocumentTextDescription"),
     RT_DELDTOR(0x1800403a0, 0x1800d1b30, 0x088, "UI::GraphDescription"),
@@ -1131,9 +1128,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // All thirteen ~Class bodies ARE ported (runtime/src/ui/<class>element.cpp),
     // so ResolveAddr hands this file OUR code for every row.
     RT_DELDTOR(0x180036db0, 0x1800cb3a0, 0x100, "UI::AnimatedImageElement"),
-    RT_DELDTOR(0x1800485b0, 0x180110c90, 0x0d8, "UI::ButtonElement"),
-    RT_DELDTOR(0x180048d80, 0x180111700, 0x0e0, "UI::CheckElement"),
-    RT_DELDTOR(0x180075390, 0x180112490, 0x128, "UI::ComboElement"),
     RT_DELDTOR(0x18003a050, 0x1800ccb10, 0x0d8, "UI::ContainerElement"),
     RT_DELDTOR(0x18003c650, 0x1800cf320, 0x1c8, "UI::DocumentTextElement"),
     RT_DELDTOR(0x1800408b0, 0x1800d1840, 0x100, "UI::GraphElement"),
@@ -1589,18 +1583,6 @@ void* RtDelDtor_SpriteCapture(void* self, unsigned flags) {
 // they were unwired when this batch started and are wired above, on main, by
 // the coordinator. A second wrapper would give one row two owners.
 // ---------------------------------------------------------------------------
-// UI::ButtonDescription     ~ = 0x180110bd0   (PORTED, buttondescription.cpp)
-void* RtDelDtor_ButtonDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800481a0>());
-}
-// UI::CheckDescription      ~ = 0x180111620   (PORTED, checkdescription.cpp)
-void* RtDelDtor_CheckDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800489c0>());
-}
-// UI::ComboDescription      ~ = 0x180112370   (PORTED, combodescription.cpp)
-void* RtDelDtor_ComboDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180074e70>());
-}
 // UI::ContainerDescription  ~ = 0x1800ccff0   (PORTED, containerdescription.cpp)
 void* RtDelDtor_ContainerDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180039c00>());
@@ -1669,18 +1651,6 @@ void* RtDelDtor_SpotLight(void* self, unsigned flags) {
 // UI::AnimatedImageElement  ~AnimatedImageElement = 0x1800cb3a0  (PORTED, runtime/src/ui/)
 void* RtDelDtor_AnimatedImageElement(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180036db0>());
-}
-// UI::ButtonElement  ~ButtonElement = 0x180110c90  (PORTED, runtime/src/ui/)
-void* RtDelDtor_ButtonElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800485b0>());
-}
-// UI::CheckElement  ~CheckElement = 0x180111700  (PORTED, runtime/src/ui/)
-void* RtDelDtor_CheckElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180048d80>());
-}
-// UI::ComboElement  ~ComboElement = 0x180112490  (PORTED, runtime/src/ui/)
-void* RtDelDtor_ComboElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180075390>());
 }
 // UI::ContainerElement  ~ContainerElement = 0x1800ccb10  (PORTED, runtime/src/ui/)
 void* RtDelDtor_ContainerElement(void* self, unsigned flags) {
@@ -1875,9 +1845,6 @@ void RtObjectDeletingDtorPortInit() {
 
     // 2026-09-12 VTABLE BATCH 1 — ten UI::*Description classes, rows 71..80.
     // Every address a LITERAL, for the reason the banner above gives.
-    RegisterRuntimeAddr(0x1800481a0, (void*)&RtDelDtor_ButtonDescription);
-    RegisterRuntimeAddr(0x1800489c0, (void*)&RtDelDtor_CheckDescription);
-    RegisterRuntimeAddr(0x180074e70, (void*)&RtDelDtor_ComboDescription);
     RegisterRuntimeAddr(0x180039c00, (void*)&RtDelDtor_ContainerDescription);
     RegisterRuntimeAddr(0x18003bd90, (void*)&RtDelDtor_DocumentTextDescription);
     RegisterRuntimeAddr(0x1800403a0, (void*)&RtDelDtor_GraphDescription);
@@ -1920,9 +1887,6 @@ void RtObjectDeletingDtorPortInit() {
 
     // VTABLE BATCH 3 (2026-09-12), UI::*Element first half.
     RegisterRuntimeAddr(0x180036db0, (void*)&RtDelDtor_AnimatedImageElement);
-    RegisterRuntimeAddr(0x1800485b0, (void*)&RtDelDtor_ButtonElement);
-    RegisterRuntimeAddr(0x180048d80, (void*)&RtDelDtor_CheckElement);
-    RegisterRuntimeAddr(0x180075390, (void*)&RtDelDtor_ComboElement);
     RegisterRuntimeAddr(0x18003a050, (void*)&RtDelDtor_ContainerElement);
     RegisterRuntimeAddr(0x18003c650, (void*)&RtDelDtor_DocumentTextElement);
     RegisterRuntimeAddr(0x1800408b0, (void*)&RtDelDtor_GraphElement);

@@ -13,3 +13,9 @@
 ??_7NumberEditElement@UI@@6B@          UI-A    real ctor + DeletingDtor; FACTUI2 row, RT_DELDTOR row 0x180046540, ??0/??1 doors, 3 slot doors deleted
 ??_7NumberDescription@UI@@6B@          UI-A    real ctor + DeletingDtor; FACTUI2 row (and its ??0 door), RT_DELDTOR row 0x18004a760, ??1 door, 8 slot doors deleted
 ??_7NumberElement@UI@@6B@              UI-A    real ctor + DeletingDtor; FACTUI2 row, RT_DELDTOR row 0x18004ab80, ??0/??1 doors, 5 slot doors deleted
+??_7ButtonDescription@UI@@6B@          UI-A    real ctor + DeletingDtor; FACTUI1 row (+ the two baseCtor strings of Check/Combo), RT_DELDTOR row 0x1800481a0, ??1 door, 8 slot doors deleted
+??_7ButtonElement@UI@@6B@              UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x1800485b0, ??0/copy/??1 doors, 7 slot doors deleted
+??_7CheckDescription@UI@@6B@           UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x1800489c0, ??1 door, 8 slot doors deleted
+??_7CheckElement@UI@@6B@               UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x180048d80, ??0/copy/??1 doors, 6 slot doors deleted
+??_7ComboDescription@UI@@6B@           UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x180074e70, ??1 door, 8 slot doors deleted
+??_7ComboElement@UI@@6B@               UI-A    real ctor + DeletingDtor; FACTUI1 row (+ its ??0 door), RT_DELDTOR row 0x180075390, copy/??1 doors, 3 slot doors deleted

@@ -6,7 +6,7 @@
 //
 //   slot  method                retail       where
 //   ----  --------------------  -----------  ---------------------------------
-//    0    vector deleting dtor  0x1800485b0  deleting_dtor.cpp row
+//    0    vector deleting dtor  0x1800485b0  ButtonElement.h (the class's own)
 //    1    TypeName              0x180048260  here
 //    2    Type                  0x180048240  here
 //    4    ComputeSize           0x180110d10  here
@@ -15,9 +15,9 @@
 //    7    Update                0x1801110b0  here
 //    8    Enable                0x180110cc0  here
 //
-// plus ??0ButtonElement@UI@@QEAA@XZ         0x180110c40
-//      ??0ButtonElement@UI@@QEAA@AEBV01@@Z  0x180048460
-//      ??1ButtonElement@UI@@UEAA@XZ         0x180110c90
+// plus ??1ButtonElement@UI@@UEAA@XZ 0x180110c90 and the factory pair (ENDGAME
+// B.3.9 UI-A: the real ctor ??0 0x180110c40 is in the header; the copy-ctor
+// door is retired).
 //
 // Slots 4/5/6/8 are ALSO ComboElement's and slot 8 is ALSO CheckElement's — the
 // two subclasses repeat these addresses in their own tables. They are
@@ -26,8 +26,8 @@
 // ENDGAME B.3.6 block C1: the seven slot bodies are MEMBERS of
 // `UI::ButtonElement` (runtime/types/ui/ButtonElement.h, which now owns the
 // layout this file used to carry as file-local constants — the per-field
-// evidence is there). The registered doors below are one-line QUALIFIED
-// delegations; the three ctor/dtor doors are kept as they were (B4b-2).
+// evidence is there). ENDGAME B.3.9 UI-A retired the slot doors and the
+// ctor/dtor doors with the minted table: the class is concrete.
 //
 // The four colours are handed to `_children[4]`'s virtual `SetColor` (slot 10),
 // which is what makes `_children[4]` the button's LABEL and `_children[0..3]`
@@ -54,12 +54,6 @@ const uint8_t* ButtonElementTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_buttonTypeInfo, "?_typeInfo@ButtonElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
-// The ctor doors only.
-void* VtButtonElement() { return RT_DATA_SLOT(void*, "??_7ButtonElement@UI@@6B@"); }
-
-using ElementCtorFn     = void* (*)(void* self);
-using ElementCopyCtorFn = void* (*)(void* self, const void* other);
-using ElementDtorFn     = void  (*)(void* self);
 using PlayFn            = void  (*)(void* ui, int soundId);
 // Collection::Array<UI::UserInterface::Event>::SetSize(array, newSize, &fill)
 using EventPushFn       = void  (*)(void* array, int newSize, const void* fill);
@@ -100,7 +94,9 @@ constexpr uint32_t kFlagPressStarted = 0x00200000u;
 // ============================================================================
 namespace UI {
 
-uint32_t ButtonElement::Type() const { return TypeIdOf(ButtonElementTypeInfo()); }
+// ?TypeId@ButtonElement@UI@@SAIXZ 0x180048250 — the record's first dword.
+uint32_t ButtonElement::TypeId() { return TypeIdOf(ButtonElementTypeInfo()); }
+uint32_t ButtonElement::Type() const { return TypeId(); }
 const char* ButtonElement::TypeName() const { return TypeNameOf(ButtonElementTypeInfo()); }
 
 // ============================================================================
@@ -319,108 +315,41 @@ void ButtonElement::Enable(bool enable) {
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, each a one-line
-// QUALIFIED delegation onto the member above.
+// ??1ButtonElement@UI@@UEAA@XZ   0x180110c90 -- restamp, then ~Element.
+// ENDGAME B.3.9 UI-A: EMPTY; the compiler restamps and chains ~Element.
 // ============================================================================
-extern "C" uint32_t RtUi_ButtonElement_Type(const void* self) {
-    return reinterpret_cast<const UI::ButtonElement*>(self)->UI::ButtonElement::Type();   // B.3.6 bridge
+namespace UI {
+ButtonElement::~ButtonElement() {}
+}  // namespace UI
+
+namespace UI {
+// ?CreateNewObject@ButtonElement@UI@@SAPEAVBase@Object@@XZ  0x180048350
+// The factory-interpreter row this replaces: MemAlloc(0xd8, 8), retail's
+// null branch, then the inlined ctor (Element(), -1, 0).
+Object::Base* ButtonElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ButtonElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) ButtonElement();
 }
-extern "C" const char* RtUi_ButtonElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::ButtonElement*>(self)->UI::ButtonElement::TypeName();   // B.3.6 bridge
+// ?CreateInPlaceObject@ButtonElement@UI@@SAPEAVBase@Object@@PEAX@Z  0x1800483f0
+Object::Base* ButtonElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) ButtonElement();
 }
-extern "C" void RtUi_ButtonElement_ComputeSize(void* selfv) {
-    reinterpret_cast<UI::ButtonElement*>(selfv)->UI::ButtonElement::ComputeSize();   // B.3.6 bridge
-}
-extern "C" void RtUi_ButtonElement_ComputeLayout(void* selfv, int x, int y, int w, int h) {
-    reinterpret_cast<UI::ButtonElement*>(selfv)->UI::ButtonElement::ComputeLayout(x, y, w, h);   // B.3.6 bridge
-}
-extern "C" void RtUi_ButtonElement_Draw(const void* selfv, void* ctx, uint8_t alpha) {
-    reinterpret_cast<const UI::ButtonElement*>(selfv)->UI::ButtonElement::Draw(   // B.3.6 bridge
-        *static_cast<UI::SpriteContext*>(ctx), alpha);
-}
-extern "C" void RtUi_ButtonElement_Update(void* selfv, const void* time, void* ui,
-                                          void** dlg, const void* statev) {
-    reinterpret_cast<UI::ButtonElement*>(selfv)->UI::ButtonElement::Update(   // B.3.6 bridge
-        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlg),   // B.3.6 bridge
-        *static_cast<const UI::Element::UpdateState*>(statev));
-}
-extern "C" void RtUi_ButtonElement_Enable(void* selfv, bool enable) {
-    reinterpret_cast<UI::ButtonElement*>(selfv)->UI::ButtonElement::Enable(enable);   // B.3.6 bridge
-}
+}  // namespace UI
 
 // ============================================================================
-// Constructors / destructor — DOORS (B4b-2), unchanged
-// ============================================================================
-extern "C" void* RtUi_ButtonElement_Ctor(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    RtAddr<ElementCtorFn>(0x180115e50ull)(self);
-    P(self, 0x00) = VtButtonElement();
-    I32(self, offsetof(UI::ButtonElement, _keyIndex)) = -1;
-    I32(self, offsetof(UI::ButtonElement, _state))    = 0;
-    return self;
-}
-
-extern "C" void* RtUi_ButtonElement_CopyCtor(void* selfv, const void* otherv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    const uint8_t* other = static_cast<const uint8_t*>(otherv);
-    RtAddr<ElementCopyCtorFn>(0x1800358c0ull)(self, other);
-    P(self, 0x00) = VtButtonElement();
-    for (int off = 0xc0; off <= 0xd4; off += 4)            // _keyIndex .. _stateColor[3]
-        I32(self, off) = I32c(other, off);
-    return self;
-}
-
-extern "C" void RtUi_ButtonElement_Dtor(void* selfv) {
-    P(selfv, 0x00) = VtButtonElement();
-    RtAddr<ElementDtorFn>(0x1801161a0ull)(selfv);
-}
-
-// ============================================================================
-// Registration
+// Registration. ENDGAME B.3.9 UI-A: the seven slot doors (4/5/6/8 were also
+// ComboElement's, 8 also CheckElement's) and the ??0 / copy / ??1 doors, read
+// only by the retired minted tables / RT_DELDTOR rows, are gone.
 // ============================================================================
 int RtUiButtonElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?TypeName@ButtonElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_ButtonElement_TypeName);      ++n;
-    RegisterRuntimeAddr(0x180048260ull, (void*)&RtUi_ButtonElement_TypeName);
-
-    RegisterRuntimeExport("?Type@ButtonElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_ButtonElement_Type);          ++n;
-    RegisterRuntimeAddr(0x180048240ull, (void*)&RtUi_ButtonElement_Type);
-
-    RegisterRuntimeExport("?ComputeSize@ButtonElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_ButtonElement_ComputeSize);   ++n;
-    RegisterRuntimeAddr(0x180110d10ull, (void*)&RtUi_ButtonElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@ButtonElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_ButtonElement_ComputeLayout); ++n;
-    RegisterRuntimeAddr(0x180110e70ull, (void*)&RtUi_ButtonElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@ButtonElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_ButtonElement_Draw);          ++n;
-    RegisterRuntimeAddr(0x180111020ull, (void*)&RtUi_ButtonElement_Draw);
-
-    RegisterRuntimeExport(
-        "?Update@ButtonElement@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@"
-        "V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@Element@2@@Z",
-        (void*)&RtUi_ButtonElement_Update);                          ++n;
-    RegisterRuntimeAddr(0x1801110b0ull, (void*)&RtUi_ButtonElement_Update);
-
-    RegisterRuntimeExport("?Enable@ButtonElement@UI@@UEAAX_N@Z",
-                          (void*)&RtUi_ButtonElement_Enable);        ++n;
-    RegisterRuntimeAddr(0x180110cc0ull, (void*)&RtUi_ButtonElement_Enable);
-
-    RegisterRuntimeExport("??0ButtonElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_ButtonElement_Ctor);          ++n;
-    RegisterRuntimeAddr(0x180110c40ull, (void*)&RtUi_ButtonElement_Ctor);
-
-    RegisterRuntimeExport("??0ButtonElement@UI@@QEAA@AEBV01@@Z",
-                          (void*)&RtUi_ButtonElement_CopyCtor);      ++n;
-    RegisterRuntimeAddr(0x180048460ull, (void*)&RtUi_ButtonElement_CopyCtor);
-
-    RegisterRuntimeExport("??1ButtonElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_ButtonElement_Dtor);          ++n;
-    RegisterRuntimeAddr(0x180110c90ull, (void*)&RtUi_ButtonElement_Dtor);
+    RegisterRuntimeExport("?CreateNewObject@ButtonElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::ButtonElement::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x180048350ull, (void*)&UI::ButtonElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@ButtonElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::ButtonElement::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x1800483f0ull, (void*)&UI::ButtonElement::CreateInPlaceObject);
     return n;
 }

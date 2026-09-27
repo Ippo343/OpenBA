@@ -209,7 +209,7 @@ void ButtonElement::Update(const System::Time&, UserInterface*,
          static_cast<long long>(reinterpret_cast<intptr_t>(dialog->Get())) + state.mouseX);
 }
 void ButtonElement::Enable(bool enable) { Note(this, kButtonE, 8, enable ? 1 : 0); }
-ButtonElement::~ButtonElement() {}
+ButtonElement::~ButtonElement() { B39NoteDtor(this); }
 
 // ---- CheckElement — Update calls its PARENT's body QUALIFIED, as the real one does.
 const char* CheckElement::TypeName() const { Note(this, kCheckE, 1); return "CheckElement"; }
@@ -225,7 +225,7 @@ void CheckElement::Update(const System::Time& time, UserInterface* ui,
     Object::InternalPtr<DialogInstance> copy = *dialog;
     ButtonElement::Update(time, ui, &copy, state);
 }
-CheckElement::~CheckElement() {}
+CheckElement::~CheckElement() { B39NoteDtor(this); }
 
 // ---- ButtonDescription ----
 const char* ButtonDescription::TypeName() const { Note(this, kButtonD, 1); return "ButtonDescription"; }
@@ -244,7 +244,7 @@ Object::InternalPtr<Element>* ButtonDescription::CreateInstance(
     return ret;
 }
 Object::External* ButtonDescription::Construct() { Note(this, kButtonD, 9); return this; }
-ButtonDescription::~ButtonDescription() {}
+ButtonDescription::~ButtonDescription() { B39NoteDtor(this); }
 
 // ---- CheckDescription — Serialize calls ButtonDescription's QUALIFIED.
 const char* CheckDescription::TypeName() const { Note(this, kCheckD, 1); return "CheckDescription"; }
@@ -264,7 +264,7 @@ Object::InternalPtr<Element>* CheckDescription::CreateInstance(
     return ret;
 }
 Object::External* CheckDescription::Construct() { Note(this, kCheckD, 9); return this; }
-CheckDescription::~CheckDescription() {}
+CheckDescription::~CheckDescription() { B39NoteDtor(this); }
 
 // ---- ComboElement: overrides slots 1, 2 and 7 only.
 const char* ComboElement::TypeName() const { Note(this, kComboE, 1); return "ComboElement"; }
@@ -275,7 +275,7 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
     Object::InternalPtr<DialogInstance> copy = *dialog;
     ButtonElement::Update(time, ui, &copy, state);
 }
-ComboElement::~ComboElement() {}
+ComboElement::~ComboElement() { B39NoteDtor(this); }
 
 // ---- ComboDescription — Serialize calls ButtonDescription's QUALIFIED.
 const char* ComboDescription::TypeName() const { Note(this, kComboD, 1); return "ComboDescription"; }
@@ -295,7 +295,7 @@ Object::InternalPtr<Element>* ComboDescription::CreateInstance(
     return ret;
 }
 Object::External* ComboDescription::Construct() { Note(this, kComboD, 9); return this; }
-ComboDescription::~ComboDescription() {}
+ComboDescription::~ComboDescription() { B39NoteDtor(this); }
 
 // ---- BorderElement: overrides 1, 2, 4, 5, 6.
 const char* BorderElement::TypeName() const { Note(this, kBorderE, 1); return "BorderElement"; }
@@ -440,10 +440,14 @@ UNIT_TEST(ui_c1_button_check_sizes_and_parents) {
     CHECK((std::is_base_of<UI::ElementDescription, UI::ButtonDescription>::value));
     CHECK((std::is_base_of<UI::ButtonDescription, UI::CheckDescription>::value));
 
-    CHECK(std::is_abstract<UI::ButtonElement>::value);
-    CHECK(std::is_abstract<UI::CheckElement>::value);
-    CHECK(std::is_abstract<UI::ButtonDescription>::value);
-    CHECK(std::is_abstract<UI::CheckDescription>::value);
+    CHECK(!std::is_abstract<UI::ButtonElement>::value);      // B.3.9 UI-A: concrete
+    CHECK(!std::is_destructible<UI::ButtonElement>::value);  // protected non-virtual dtor
+    CHECK(!std::is_abstract<UI::CheckElement>::value);      // B.3.9 UI-A: concrete
+    CHECK(!std::is_destructible<UI::CheckElement>::value);  // protected non-virtual dtor
+    CHECK(!std::is_abstract<UI::ButtonDescription>::value);      // B.3.9 UI-A: concrete
+    CHECK(!std::is_destructible<UI::ButtonDescription>::value);  // protected non-virtual dtor
+    CHECK(!std::is_abstract<UI::CheckDescription>::value);      // B.3.9 UI-A: concrete
+    CHECK(!std::is_destructible<UI::CheckDescription>::value);  // protected non-virtual dtor
     CHECK(!std::has_virtual_destructor<UI::ButtonElement>::value);
     CHECK(!std::has_virtual_destructor<UI::CheckElement>::value);
     CHECK(!std::has_virtual_destructor<UI::ButtonDescription>::value);
@@ -639,8 +643,10 @@ UNIT_TEST(ui_c1_combo_layout) {
     CHECK_EQ(alignof(UI::ComboDescription), (size_t)8);
     CHECK((std::is_base_of<UI::ButtonElement, UI::ComboElement>::value));
     CHECK((std::is_base_of<UI::ButtonDescription, UI::ComboDescription>::value));
-    CHECK(std::is_abstract<UI::ComboElement>::value);
-    CHECK(std::is_abstract<UI::ComboDescription>::value);
+    CHECK(!std::is_abstract<UI::ComboElement>::value);      // B.3.9 UI-A: concrete
+    CHECK(!std::is_destructible<UI::ComboElement>::value);  // protected non-virtual dtor
+    CHECK(!std::is_abstract<UI::ComboDescription>::value);      // B.3.9 UI-A: concrete
+    CHECK(!std::is_destructible<UI::ComboDescription>::value);  // protected non-virtual dtor
     CHECK(!std::has_virtual_destructor<UI::ComboElement>::value);
     CHECK(!std::has_virtual_destructor<UI::ComboDescription>::value);
 
@@ -1011,4 +1017,86 @@ UNIT_TEST(b39_uia_clipregion_deletingdtor_both_arms) {
     FactoryScope scope;
     B39ExpectBothArms<UI::ClipRegionElement>(0xd8, [](void* p) { return ::new (p) UI::ClipRegionElement(); });
     B39ExpectBothArms<UI::ClipRegionDescription>(0x78, [](void* p) { return ::new (p) UI::ClipRegionDescription(); });
+}
+
+UNIT_TEST(b39_uia_button_family_slot0_by_pmf) {
+    CHECK_EQ(SlotOffset(&UI::ButtonElement::DeletingDtor),     (uintptr_t)0x00);   // 0x1800485b0
+    CHECK_EQ(SlotOffset(&UI::ButtonElement::Enable),           (uintptr_t)0x40);
+    CHECK_EQ(SlotOffset(&UI::CheckElement::DeletingDtor),      (uintptr_t)0x00);   // 0x180048d80
+    CHECK_EQ(SlotOffset(&UI::CheckElement::Update),            (uintptr_t)0x38);
+    CHECK_EQ(SlotOffset(&UI::ComboElement::DeletingDtor),      (uintptr_t)0x00);   // 0x180075390
+    CHECK_EQ(SlotOffset(&UI::ComboElement::Update),            (uintptr_t)0x38);
+    CHECK_EQ(SlotOffset(&UI::ButtonDescription::DeletingDtor), (uintptr_t)0x00);   // 0x1800481a0
+    CHECK_EQ(SlotOffset(&UI::ButtonDescription::Construct),    (uintptr_t)0x48);
+    CHECK_EQ(SlotOffset(&UI::CheckDescription::DeletingDtor),  (uintptr_t)0x00);   // 0x1800489c0
+    CHECK_EQ(SlotOffset(&UI::CheckDescription::Construct),     (uintptr_t)0x48);
+    CHECK_EQ(SlotOffset(&UI::ComboDescription::DeletingDtor),  (uintptr_t)0x00);   // 0x180074e70
+    CHECK_EQ(SlotOffset(&UI::ComboDescription::Construct),     (uintptr_t)0x48);
+}
+
+// The real ctors' stores; untouched bytes stay 0xCD.
+UNIT_TEST(b39_uia_button_family_ctors_make_retails_stores) {
+    FactoryScope scope;
+    {
+        alignas(8) uint8_t buf[0xe0];
+        std::memset(buf, 0xCD, sizeof buf);
+        UI::CheckElement* e = ::new (buf) UI::CheckElement();
+        CHECK_EQ(e->_alignment, 3);
+        CHECK_EQ(e->_keyIndex, -1);
+        CHECK_EQ(e->_state, 0);
+        for (int i = 0; i < 4; ++i) CHECK_EQ(e->_stateColor[i], 0xCDCDCDCDu);   // NOT written
+        CHECK_EQ((int)e->_checked, 0);
+        CHECK_EQ((int)e->_padD9[0], 0xCD);
+        CheckElementProbe probe{};
+        CHECK(VTableOf(e) != VTableOf(&probe));
+        g_b39DtorCount = 0;
+        CHECK(e->DeletingDtor(0) == e);
+        CHECK_EQ(g_b39DtorCount, 2);                  // ~CheckElement, ~ButtonElement
+    }
+    {
+        alignas(8) uint8_t buf[0x128];
+        std::memset(buf, 0xCD, sizeof buf);
+        UI::ComboElement* e = ::new (buf) UI::ComboElement();
+        CHECK_EQ(e->_keyIndex, -1);
+        CHECK(e->_listDesc == nullptr);
+        CHECK(e->_itemDesc == nullptr);
+        CHECK(e->_strings._data == nullptr);
+        CHECK_EQ(e->_strings._size, 0);
+        CHECK(e->_sprites._data == nullptr);
+        CHECK(e->_userData._data == nullptr);
+        CHECK_EQ(e->_currentItem, -1);
+        CHECK_EQ(e->_pad11c, 0xCDCDCDCDu);
+        CHECK(e->_openDialog == nullptr);
+        g_b39DtorCount = 0;
+        CHECK(e->DeletingDtor(0) == e);
+        CHECK_EQ(g_b39DtorCount, 2);                  // ~ComboElement, ~ButtonElement
+    }
+    {
+        alignas(8) uint8_t buf[0xb8];
+        std::memset(buf, 0xCD, sizeof buf);
+        UI::ComboDescription* d = ::new (buf) UI::ComboDescription();
+        CHECK_EQ(d->_id, -1);
+        for (int i = 0; i < 5; ++i) CHECK(d->_childDesc[i] == nullptr);
+        CHECK_EQ(d->_word90, 0); CHECK_EQ(d->_word9c, 0);
+        CHECK(d->_listDesc == nullptr);
+        CHECK(d->_itemDesc == nullptr);
+        CHECK(d->_stringTable == nullptr);
+        g_b39DtorCount = 0;
+        CHECK(d->DeletingDtor(0) == d);
+        CHECK_EQ(g_b39DtorCount, 2);                  // ~ComboDescription, ~ButtonDescription
+    }
+    {
+        alignas(8) uint8_t buf[0xa8];
+        std::memset(buf, 0xCD, sizeof buf);
+        UI::CheckDescription* d = ::new (buf) UI::CheckDescription();
+        CHECK(d->_childDesc[4] == nullptr);
+        CHECK(d->_checkDesc == nullptr);
+        CHECK(d->DeletingDtor(0) == d);
+    }
+}
+
+UNIT_TEST(b39_uia_button_family_deletingdtor_both_arms) {
+    FactoryScope scope;
+    B39ExpectBothArms<UI::ButtonElement>(0xd8, [](void* p) { return ::new (p) UI::ButtonElement(); });
+    B39ExpectBothArms<UI::ButtonDescription>(0xa0, [](void* p) { return ::new (p) UI::ButtonDescription(); });
 }
