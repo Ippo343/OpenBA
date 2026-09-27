@@ -123,9 +123,11 @@ static void EnsureHelpers() {
     s_fn_CheckAge = reinterpret_cast<fn_CheckAge_t>(
         ResolveAddr(Module::Exe, 0x14010f890));
 
-    s_pStorageTypeId = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7e78));
-
+    // ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c7e78 is StorageComponent's registered
+    // type-id cell (INVENTORY_C Table 1). This initial value is always overwritten by
+    // CitizenAIComponent::Update's per-tick repoint (s_pStorageTypeId = &s_caiTidStorage,
+    // below) before any reader sees it, so the direct static call is mechanically
+    // equivalent to the old cell read.
     s_helpersResolved = true;
 }
 
@@ -333,6 +335,8 @@ void CitizenAIComponent_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
 // Shared type-ID globals used by the storage scans / finders.
 static uint32_t* s_TypeId_ResidenceComponent = nullptr; // DAT_1401c7cf0
 static uint32_t* s_TypeId_RawMaterial = nullptr;         // DAT_1401c7cb8
+static uint32_t s_tidResidence_local = 0;   // ENDGAME B.3.9 C1: namespace-scope, no lazy cache (B6-5)
+static uint32_t s_tidRawMaterial_local = 0;
 
 // The REAL StorageComponent finder (0x140006270, tid c7e78) — the exe's
 // Storage_GetResourceCount (0x14012a9d0) calls THIS, not the misnamed
@@ -358,22 +362,16 @@ namespace Object { uint32_t GetTypeIdByName(const char*); }
 static bool s_calleeResolved = false;
 static void EnsureCallees() {
     if (s_calleeResolved) return;
-    s_TypeId_ResidenceComponent = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cf0));
-    s_TypeId_RawMaterial         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
-    // The .rdata type-id globals (c7cf0 ResidenceComponent / c7cb8 RawMaterialDescription)
-    // are 0xFFFFFFFF (unfilled) in standalone, and filling the SHARED globals would
-    // un-dormant ~30 unrelated readers. Repoint to private storage filled from the
-    // real-CRC type tree, exactly like CitizenComp_FindSiblingByName / the citizen bricks.
-    static uint32_t s_tidResidence_local = 0;
-    static uint32_t s_tidRawMaterial_local = 0;
-    if (!s_TypeId_ResidenceComponent || *s_TypeId_ResidenceComponent == 0xFFFFFFFF) {
-        if (s_tidResidence_local == 0) s_tidResidence_local = ResidenceComponent::TypeId();
-        s_TypeId_ResidenceComponent = &s_tidResidence_local;
-    }
-    if (!s_TypeId_RawMaterial || *s_TypeId_RawMaterial == 0xFFFFFFFF) {
-        if (s_tidRawMaterial_local == 0) s_tidRawMaterial_local = RawMaterialDescription::TypeId();
-        s_TypeId_RawMaterial = &s_tidRawMaterial_local;
-    }
+    // ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c7cf0 / 0x1401c7cb8 are registered
+    // type-id cells (INVENTORY_C Table 1: ResidenceComponent, RawMaterialDescription),
+    // read BY CELL as the class's static TypeId() instead of the raw exe address (the
+    // Residence value is unconditionally overwritten again below by ::Update's
+    // per-tick repoint; caching class statics into namespace-scope storage keeps
+    // B6-5's no-lazy-first-use-cache rule).
+    s_tidResidence_local = ResidenceComponent::TypeId();
+    s_tidRawMaterial_local = RawMaterialDescription::TypeId();
+    s_TypeId_ResidenceComponent = &s_tidResidence_local;
+    s_TypeId_RawMaterial = &s_tidRawMaterial_local;
     s_fn_FindStorage6270 = reinterpret_cast<fn_FindComponentStorage_t>(
         ResolveAddr(Module::Exe, 0x140006270));
     s_fn_SetupYoung = reinterpret_cast<fn_SetupYoung_t>(ResolveAddr(Module::Exe, 0x140115110));

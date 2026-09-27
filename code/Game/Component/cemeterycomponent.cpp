@@ -22,6 +22,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <new>
+#include "Component/TombstoneComponent.h"   // ENDGAME B.3.9 C1: 0x1401c4a30 cell class
 
 // ============================================================
 // Resolved helpers
@@ -62,7 +63,6 @@ static fn_CemMemFree_t s_fn_MemFree = nullptr;
 
 // TombstoneComponent type id (.rdata DAT_1401c4a30, storage + fill in
 // standalone/reg_citizen_lifeevent_handler.cpp).
-static const uint32_t* s_pTid_Tombstone = nullptr;
 
 static void** s_g_pGameState = nullptr;
 
@@ -191,9 +191,6 @@ void CemeteryComponent_InitFuncs() {
         ResolveAddr(Module::Exe, 0x1400a6fe0));
     s_fn_FineCellDirty = reinterpret_cast<fn_FineCellDirty_t>(
         ResolveAddr(Module::Exe, 0x1400a8c90));
-    s_pTid_Tombstone = reinterpret_cast<const uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c4a30));
-
     slot = ResolveAddr(Module::Exe, 0x140152b60);
     if (slot) s_fn_MemAlloc = *reinterpret_cast<fn_CemMemAlloc_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152b68);
@@ -258,7 +255,8 @@ extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
         if (occupant) {
             void* probe = occupant;
             bool hasTombstone = false;
-            if (probe && s_pTid_Tombstone) {
+            if (probe) {
+                const uint32_t tidTombstone = TombstoneComponent::TypeId();
                 const uintptr_t ent = reinterpret_cast<uintptr_t>(probe);
                 const int       n   = *reinterpret_cast<int*>(ent + 0x38);
                 const uintptr_t arr = *reinterpret_cast<uintptr_t*>(ent + 0x30);
@@ -267,7 +265,7 @@ extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
                     void* c = *slot;
                     if (!c) continue;
                     const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
-                    if (tid == *s_pTid_Tombstone) { hasTombstone = true; break; }
+                    if (tid == tidTombstone) { hasTombstone = true; break; }
                 }
             }
             if (hasTombstone) continue;
