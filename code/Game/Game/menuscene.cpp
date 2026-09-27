@@ -20,6 +20,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Game/MenuScene.h"
+#include "Game/WorldGeometry.h"   // caller batch CB6: +0x28's class
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "system/String.h"
@@ -136,14 +137,12 @@ Object::External* MenuScene::Construct() {
 // +0x1C8, frees the arrays at +0x60, +0x50, +0x40, +0x30, destroys the String
 // at +0x20; External::~External is the compiler's chain.
 MenuScene::~MenuScene() {
-    // Destroy Geometry object at +0x28 via its vtable scalar deleting dtor
-    // (bridge: the Geometry is still an untyped pointer).
+    // Destroy Geometry object at +0x28 via its vtable scalar deleting dtor.
+    // Caller batch CB6: slot 0 of the proved WorldGeometry (Serialize builds
+    // +0x28 with its ctor); still a virtual call, as retail's is.
     void* geom = _field28;
     if (geom) {
-        typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
-        void** geomVtable = *(void***)geom;
-        fn_ScalarDtor_t geomDtor = (fn_ScalarDtor_t)geomVtable[0];
-        geomDtor(geom, 1);  // flags=1 => free memory
+        static_cast<WorldGeometry*>(geom)->DeletingDtor(1);  // flags=1 => free memory  B.3.8 bridge
     }
 
     // Cleanup tree/map at +0x1E8 and +0x1C8
@@ -279,13 +278,11 @@ bool MenuScene::Serialize(void* stream) {
         } else {
             void* geom = fn_MemAlloc(g_pMemAllocSingleton, 0x230, 8);
             if (geom) {
-                if (fn_Geometry_Init) {
-                    fn_Geometry_Init(geom);
-                } else {
-                    // Fallback: zero-fill. The session 5 helpers should still
-                    // resize correctly given a zeroed header.
-                    memset(geom, 0, 0x230);
-                }
+                // Caller batch CB6: the real ctor (0x1400b00e0), where this went
+                // through the fn_Geometry_Init door (Reimpl_Geometry_Init, which
+                // placement-news the same class) and a zero-fill fallback for an
+                // unresolved door.
+                ::new (geom) WorldGeometry();
                 _field28 = geom;
             } else {
                 printf("[MenuScene::Slot5_Serialize] MemAlloc(0x230) failed — "

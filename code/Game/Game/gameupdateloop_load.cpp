@@ -58,7 +58,6 @@
 // ============================================================
 // Externs from sibling reimpl TUs (already registered/defined)
 // ============================================================
-extern "C" void* Reimpl_Geometry_Init(void* self);            // FUN_1400b00e0 (serialize_arrays.cpp)
 extern "C" void  Reimpl_Array_Resize_Stride04(void*, int);    // FUN_1400021d0 (serialize_resize_helpers.cpp)
 extern "C" void  WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t seed); // worldgen.cpp (M5 5b)
 extern "C" void  MapTileGrid_Build(void* game, int dim);  // maptilegrid.cpp (M5 5c — tile grid Game+0x80)
@@ -1122,10 +1121,12 @@ void GameUpdateLoop::Load() {
         m_animationManager = mem;
     }
 
-    // Step 23 — WorldGeometry (+0x110, 0x230) via the registered Reimpl_Geometry_Init.
+    // Step 23 — WorldGeometry (+0x110, 0x230): the real ctor (0x1400b00e0).
+    // Caller batch CB6: was the Reimpl_Geometry_Init door (kept for its
+    // address-registry row), which placement-news the same class.
     {
         void* mem = AllocSub(0x230, 8);
-        if (mem) Reimpl_Geometry_Init(mem);
+        if (mem) ::new (mem) WorldGeometry();
         m_worldGeometry = mem;
     }
 

@@ -1303,9 +1303,8 @@ post_simulation:
     TRACE("[GameUpdateLoop::Update] calling WorldGeometry::Update...\n");
     {
         // Caller batch CB6: slot 1 (vtable +0x08) of the real class. The receiver is
-        // PROVED: Load's step 23 builds it through Reimpl_Geometry_Init, which
-        // placement-news a WorldGeometry (serialize_arrays.cpp). A virtual call, as
-        // retail's is.
+        // PROVED: Load's step 23 builds it with WorldGeometry's ctor (and Load is
+        // m_worldGeometry's only writer). A virtual call, as retail's is.
         static_cast<WorldGeometry*>(m_worldGeometry)->Update(
             *reinterpret_cast<const System::Time*>(time));   // B.3.8 bridge
     }

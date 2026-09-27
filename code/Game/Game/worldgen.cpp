@@ -38,6 +38,7 @@
 // workflow (notes/WORLDGEN_TERRAIN_BLUEPRINT.md, 2026-05-30).
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "resolve.h"
@@ -291,7 +292,7 @@ static void wg_BaseHeightmap_e5d0(int32_t* hf) {
 // before Load sets the singleton; retail's write is unguarded.
 static void wg_PublishLoadProgress(int stage) {
     if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-        *(int32_t*)((uintptr_t)*g_pGameWorldSingleton + 0x24) = stage;
+        reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->_loadProgress = stage;   // +0x24  B.3.8 bridge
 }
 
 static void wg_HeightmapPipeline_f390(int32_t* hf) {
