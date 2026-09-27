@@ -12,6 +12,8 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/residencecomponent_funcs.h"
+#include "Component/CitizenComponent.h"
+#include "Component/ResidenceDescription.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -40,9 +42,6 @@ static fn_SerializeResidentArray_t s_fn_SerializeResidentArray = nullptr;
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
 
-// DAT_1401c7d28 — ResidenceDescription type ID
-static uint32_t* s_TypeId_ResidenceDescription = nullptr;
-
 // ResidenceComponent_helper_9ef0 — init helper (called before register)
 typedef void (*fn_ResidenceInit_t)(void* self);
 static fn_ResidenceInit_t s_fn_ResidenceInit = nullptr;
@@ -67,10 +66,6 @@ static void EnsureHelpers() {
     // IsDerivedFrom via dispatch slot
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    // ResidenceDescription type ID
-    s_TypeId_ResidenceDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7d28));
 
     s_fn_ResidenceInit = reinterpret_cast<fn_ResidenceInit_t>(
         ResolveAddr(Module::Exe, 0x140129ef0));
@@ -130,8 +125,6 @@ void ResidenceComponent_OnCreate(ResidenceComponent* self) {
 typedef void (*fn_Resident_MoveElem_t)(void* dst, void* src);
 static fn_Resident_MoveElem_t s_fn_Resident_MoveElem = nullptr;
 // Object::InternalBasePtr::Serialize(this, serializer)
-// DWORD_1401c7158 — CitizenComponent (resident) type ID
-static uint32_t* s_TypeId_Resident = nullptr;
 // FindComponent(MeshInstance/...) + worker assignment helpers used by ResidenceInit
 typedef void* (*fn_FindComp_t)(uintptr_t entity, void* retbuf);
 static fn_FindComp_t s_fn_Entity_FindComponent_MeshInstance = nullptr;
@@ -145,8 +138,6 @@ static void EnsureResidentHelpers() {
     if (s_residentHelpersResolved) return;
     s_fn_Resident_MoveElem = reinterpret_cast<fn_Resident_MoveElem_t>(
         ResolveAddr(Module::Exe, 0x140007960));
-    s_TypeId_Resident = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7158));
     s_fn_Entity_FindComponent_MeshInstance = reinterpret_cast<fn_FindComp_t>(
         ResolveAddr(Module::Exe, 0x140002f90));
     s_fn_SetMeshFlag = reinterpret_cast<fn_SetMeshFlag_t>(
@@ -286,8 +277,8 @@ void ResidenceComponent_SerializeResidentArray(void* serializer, int count, void
             // slot exists from startup but only holds the CRC after FillTypeIdGlobals_citizenai.
             // IsDerivedFrom(val, 0) matches nothing, so a bare pointer check would clear
             // every resident ref in that window.
-            if (val && s_TypeId_Resident && *s_TypeId_Resident && fn_IsDerivedFrom &&
-                !fn_IsDerivedFrom(val, *s_TypeId_Resident)) {
+            if (val && fn_IsDerivedFrom &&
+                !fn_IsDerivedFrom(val, CitizenComponent::TypeId())) {
                 *(uint64_t*)ibp = 0;
             }
         }
@@ -558,14 +549,13 @@ void ResidenceComponent::Persist(void* stream) {
 void ResidenceComponent::Startup() {
     EnsureHelpers();
 
-    if (!s_fn_IsDerivedFrom_dispatch || !s_TypeId_ResidenceDescription ||
-        !s_fn_ResizeResidentArray)
+    if (!s_fn_IsDerivedFrom_dispatch || !s_fn_ResizeResidentArray)
         return;
 
     void* obj = _description;
     if (!obj) return;
 
-    bool derived = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_ResidenceDescription);
+    bool derived = s_fn_IsDerivedFrom_dispatch(obj, ResidenceDescription::TypeId());
     void* desc = derived ? obj : nullptr;
     if (!desc) return;
 

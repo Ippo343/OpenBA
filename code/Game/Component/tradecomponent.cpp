@@ -11,6 +11,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/tradecomponent_funcs.h"
+#include "Component/TradeDescription.h"
 #include "Component/coll_bridge.h"
 #include "Work/tradework_funcs.h"
 #include "engine_funcs.h"
@@ -151,7 +152,6 @@ static fn_TC_ResizeItems_t s_tc_ResizeItems = nullptr;
 static fn_TC_GenName_t    s_tc_GenName = nullptr;
 static fn_TC_StrAssign_t  s_tc_StrAssign = nullptr;
 static fn_TC_StrDtor_t    s_tc_StrDtor = nullptr;
-static uint32_t*          s_tc_pTId_TradeDesc = nullptr;  // 0x1401c4bb8
 static bool s_tcSetupResolved = false;
 static void EnsureTradeSetupHelpers() {
     if (s_tcSetupResolved) return;
@@ -163,7 +163,6 @@ static void EnsureTradeSetupHelpers() {
     if (slot) s_tc_StrAssign = *reinterpret_cast<fn_TC_StrAssign_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152af0);
     if (slot) s_tc_StrDtor = *reinterpret_cast<fn_TC_StrDtor_t*>(slot);
-    s_tc_pTId_TradeDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4bb8));
     s_tcSetupResolved = true;
 }
 
@@ -173,8 +172,8 @@ void TradeComponent_Setup(void* selfP) {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
 
     void* descObj = *(void**)(self + 0x18);
-    void* desc = (fn_IsDerivedFrom && s_tc_pTId_TradeDesc &&
-                  fn_IsDerivedFrom(descObj, *s_tc_pTId_TradeDesc)) ? descObj : nullptr;
+    void* desc = (fn_IsDerivedFrom &&
+                  fn_IsDerivedFrom(descObj, TradeDescription::TypeId())) ? descObj : nullptr;
 
     // Resize the name array (+0x30) to desc+0x50
     if (s_tc_ResizeNames)

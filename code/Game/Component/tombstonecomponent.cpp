@@ -11,6 +11,7 @@
 //
 
 #include "Component/tombstonecomponent_funcs.h"
+#include "Component/TombstoneDescription.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -39,9 +40,8 @@ static fn_MarkForRemoval_t s_fn_MarkForRemoval = nullptr;
 // Global: seconds per tick multiplier (DAT_140172234)
 static float* s_pSecondsPerTickMul = nullptr;
 
-// Game state singleton + tombstone type ID
+// Game state singleton
 static void** s_pGameState = nullptr;
-static uint32_t* s_pTombstoneTypeId = nullptr;
 
 static bool s_initialized = false;
 
@@ -54,8 +54,8 @@ void TombstoneComponent_Serialize(TombstoneComponent* self) {
 
     // IsDerivedFrom check for tombstone data type
     void* buildingData = nullptr;
-    if (s_fn_IsDerivedFrom_d && s_pTombstoneTypeId) {
-        bool isDerived = s_fn_IsDerivedFrom_d(baseObj, *s_pTombstoneTypeId);
+    if (s_fn_IsDerivedFrom_d) {
+        bool isDerived = s_fn_IsDerivedFrom_d(baseObj, TombstoneDescription::TypeId());
         if (isDerived) buildingData = baseObj;
     }
 
@@ -89,8 +89,6 @@ void TombstoneComponent_InitFuncs() {
         ResolveAddr(Module::Exe, 0x1400c2ea0));
     s_pGameState = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3dd8));
-    s_pTombstoneTypeId = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c4a68));
     s_pSecondsPerTickMul = reinterpret_cast<float*>(
         ResolveAddr(Module::Exe, 0x140172234));
 
