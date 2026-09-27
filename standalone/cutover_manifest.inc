@@ -37,8 +37,8 @@ CUTOVER_ROW("?_singleton@FileSystem@IO@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1
 CUTOVER_ROW("?_singleton@Modification@IO@@2PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6b0ull, "IO", 6)
 // IO  HARMFUL / DLL-PRESENT  doors=13  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@Persistence@IO@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6b8ull, "IO", 13)
-// Input  HARMFUL (DLL-present) / REQUIRED (cutover) / DLL-PRESENT  doors=11  -- verdict is DLL-PRESENT only and 11 by-name door(s) would resolve NULL at cutover
-CUTOVER_ROW("?_singleton@Configuration@Input@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe768ull, "Input", 11)
+// Input  HARMFUL (DLL-present) / REQUIRED (cutover) / DLL-PRESENT  doors=7  -- verdict is DLL-PRESENT only and 7 by-name door(s) would resolve NULL at cutover
+CUTOVER_ROW("?_singleton@Configuration@Input@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe768ull, "Input", 7)
 // Input  HARMFUL (DLL-present) / REQUIRED (cutover) / DLL-PRESENT  doors=11  -- verdict is DLL-PRESENT only and 11 by-name door(s) would resolve NULL at cutover
 CUTOVER_ROW("?_singleton@Device@Input@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe770ull, "Input", 11)
 // Object  NO-OP / DLL-PRESENT  doors=50  -- verdict is DLL-PRESENT only and 50 by-name door(s) would resolve NULL at cutover

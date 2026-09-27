@@ -568,7 +568,7 @@ void RtInput_Configuration_Save(void* self) {
 void RtInput_Configuration_Dtor(void* /*selfPtr - never read*/) {
           // unconditional; there is no branch
 
-    *RT_DATA_SLOT(void**, "?_singleton@Configuration@Input@@0PEAV12@EA") = nullptr;
+    *reinterpret_cast<void**>(&::Input::Configuration::_singleton) = nullptr;
 
 }
 
@@ -642,3 +642,7 @@ int RtInputRegister() {
 
     return n;
 }
+
+// ?_singleton@Configuration@Input@@0PEAV12@EA (0x1801fe768) -- the class static (ENDGAME B.3.9 ENG, B39_RULES D7);
+// RtInputPortInit redirects the minted storage row onto it.
+::Input::Configuration* ::Input::Configuration::_singleton = nullptr;

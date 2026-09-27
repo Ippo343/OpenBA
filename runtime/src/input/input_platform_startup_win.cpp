@@ -105,7 +105,7 @@ namespace {
 // `?_singleton@Application@1@0PEAV11@EA` @ 0x1801fc678, both through the
 // port-aware door.
 Input::Configuration** InputConfigSlot() {
-    return RT_DATA_SLOT(Input::Configuration**, "?_singleton@Configuration@Input@@0PEAV12@EA");
+    return reinterpret_cast<Input::Configuration**>(&::Input::Configuration::_singleton);
 }
 Application::Application** AppSingletonSlot() {
     return reinterpret_cast<Application::Application**>(&::Application::Application::_singleton);

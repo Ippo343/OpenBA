@@ -163,7 +163,7 @@ void** SlotVideoDevice()     { return RT_DATA_SLOT(void**, "?_singleton@Device@V
 void** SlotVideoConfig()     { return RT_DATA_SLOT(void**, "?_singleton@Configuration@Video@@0PEAV12@EA"); }
 void** SlotApplication()     { return reinterpret_cast<void**>(&::Application::Application::_singleton); }
 void** SlotInputDevice()     { return RT_DATA_SLOT(void**, "?_singleton@Device@Input@@0PEAV12@EA"); }
-void** SlotInputConfig()     { return RT_DATA_SLOT(void**, "?_singleton@Configuration@Input@@0PEAV12@EA"); }
+void** SlotInputConfig()     { return reinterpret_cast<void**>(&::Input::Configuration::_singleton); }
 void** SlotAudioDevice()     { return reinterpret_cast<void**>(&::Audio::Device::_singleton); }
 void** SlotAudioConfig()     { return reinterpret_cast<void**>(&::Audio::Configuration::_singleton); }
 

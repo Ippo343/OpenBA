@@ -174,7 +174,7 @@ inline void** ApplicationSingleton() {
     return reinterpret_cast<void**>(&::Application::Application::_singleton);
 }
 inline Input::Configuration** InputConfigSingleton() {
-    return RT_DATA_SLOT(Input::Configuration**, "?_singleton@Configuration@Input@@0PEAV12@EA");
+    return reinterpret_cast<Input::Configuration**>(&::Input::Configuration::_singleton);
 }
 inline const double* TimerSecondsPerTick() {
     return RT_DATA_SLOT(const double*, "?_secondsPerTick@Timer@System@@0NA");
