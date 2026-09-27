@@ -19,29 +19,19 @@
 #include <cstdio>
 #include <cstdlib>
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/StorageComponent.h"   // X::TypeId() (B.3.9 CG2)
 
 namespace storagecapacityui_sa {
 
-// The exe-.rdata type-id globals Serialize/Startup dereference are null in standalone.
-// Lazy-fill from the live runtime type registry (valid after Object::Factory::Startup).
+// ENDGAME B.3.9 CG2: g_TypeId_ProgressElement -> UI::ProgressElement::TypeId(),
+// g_TypeId_ComponentEntity -> ComponentEntity::TypeId(), g_TypeId_StorageComponent_FC
+// -> StorageComponent::TypeId(). The class statics always answer, so the lazy-fill of
+// the exe-.rdata globals retires.
 void EnsureGlobals() {
-    static uint32_t s_prog = 0, s_ce = 0;
-    if (!g_TypeId_ProgressElement) {
-        s_prog = ::Object::ResolveTypeIdByNameLazy("ProgressElement");
-        if (s_prog) g_TypeId_ProgressElement = &s_prog;
-    }
-    if (!g_TypeId_ComponentEntity) {
-        s_ce = ComponentEntity::TypeId();
-        if (s_ce) g_TypeId_ComponentEntity = &s_ce;
-    }
-    // g_TypeId_StorageComponent_FC (used by fn_FindComponent_Storage) is filled by
-    // engine_funcs init in standalone.
 }
 
 bool Ready() {
-    return g_TypeId_ProgressElement && *g_TypeId_ProgressElement
-        && g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
-        && g_TypeId_StorageComponent_FC && *g_TypeId_StorageComponent_FC;
+    return true;
 }
 
 static void Trace(const char* what, void* self) {
@@ -73,7 +63,7 @@ void StorageCapacityUI::OnCreated() {
     void* dialogElem = *(void**)((uintptr_t)this + 0x20);
 
     // Find ProgressElement by type
-    uint32_t typeId = g_TypeId_ProgressElement ? *g_TypeId_ProgressElement : 0;
+    uint32_t typeId = UI::ProgressElement::TypeId();
     uint64_t findResult = 0;
     ::new (&findResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElementType(typeId));  // B.3.6 bridge
 
@@ -111,7 +101,7 @@ void StorageCapacityUI::OnUpdateLayout() {
 
     // Get entity from controller data (+0x28)
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
 
     // Wrap entity in InternalBasePtr

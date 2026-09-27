@@ -70,15 +70,14 @@ static bool DestroyComponent_CanReclaim_Impl(void* destroyComp)
 static bool DestroyComponent_CanRebuild_Impl(void* destroyComp)
 {
     if (!destroyComp) return false;
-    if (!g_TypeId_DestroyComponent) return false;  // SA-guard (see EnsureGlobals)
 
     // Check if description is of upgrade type
     void* desc = *(void**)((uintptr_t)destroyComp + 0x18);
-    bool isType = fn_IsDerivedFrom(desc, *g_TypeId_DestroyComponent);
+    bool isType = fn_IsDerivedFrom(desc, DestroyDescription::TypeId());
     void* typedDesc = isType ? desc : nullptr;
 
     // Also check separately (decompile does it twice)
-    fn_IsDerivedFrom(*(void**)((uintptr_t)destroyComp + 0x18), *g_TypeId_DestroyComponent);
+    fn_IsDerivedFrom(*(void**)((uintptr_t)destroyComp + 0x18), DestroyDescription::TypeId());
 
     int64_t upgradeRef = *(int64_t*)((uintptr_t)destroyComp + 0x60);
 
@@ -231,29 +230,12 @@ static uint64_t FindElemAsBasePtr(void* dialogElem, const char* name) {
 
 namespace destroyui_sa {
 
-// Standalone-local fallbacks for exe-.rdata type-id globals that resolve NULL.
-static uint32_t s_ceTid = 0;
-static uint32_t s_ddTid = 0;   // DestroyDescription (slot 0x1401c7628 — the
-                               // misleadingly-named g_TypeId_DestroyComponent)
-
-void EnsureGlobals() {
-    if (!g_TypeId_ComponentEntity) {
-        s_ceTid = ComponentEntity::TypeId();
-        if (s_ceTid) g_TypeId_ComponentEntity = &s_ceTid;
-    }
-    // CanRebuild_Impl derefs *g_TypeId_DestroyComponent (= DestroyDescription's
-    // slot 0x1401c7628, null in standalone) — crashed live 2026-07-20 once
-    // Slot7 started running per-frame. Point it at the name-resolved id.
-    if (!g_TypeId_DestroyComponent) {
-        s_ddTid = DestroyDescription::TypeId();
-        if (s_ddTid) g_TypeId_DestroyComponent = &s_ddTid;
-    }
-}
+// ENDGAME B.3.9: ComponentEntity / DestroyDescription (was g_TypeId_DestroyComponent, a
+// misnamed alias for the cell at 0x1401c7628) both have a ported TypeId() now, so the
+// EnsureGlobals() lazy-cache over the exe .rdata globals is dead.
 
 bool Ready() {
-    return g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
-        && g_TypeId_DestroyComponent && *g_TypeId_DestroyComponent
-        && fn_IsDerivedFrom && fn_InternalBasePtr_Ctor;
+    return fn_IsDerivedFrom && fn_InternalBasePtr_Ctor;
 }
 
 // SA-guard: the data-source entity ref (+0x28) is nulled by entity destruction
@@ -286,7 +268,6 @@ bool DataSourceAlive(void* self) {
 
 // [4] 0x140066150
 void DestroyUI::OnCreated() {
-    destroyui_sa::EnsureGlobals();
     if (!destroyui_sa::Ready() || !destroyui_sa::DataSourceAlive(this)) return;
     if (!*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(this) + 0x20))
         return;  // dialog element tree not bound yet
@@ -312,7 +293,7 @@ void DestroyUI::OnCreated() {
 
     // --- Get entity for component checks ---
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
@@ -362,11 +343,10 @@ void DestroyUI::OnCreated() {
 
 // [7] 0x140065b00
 void DestroyUI::OnUpdateLayout() {
-    destroyui_sa::EnsureGlobals();
     if (!destroyui_sa::Ready() || !destroyui_sa::DataSourceAlive(this)) return;
     // Get entity, wrap in InternalBasePtr
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
@@ -549,13 +529,12 @@ void DestroyUI::OnUpdateLayout() {
 // [9] 0x140066080
 void DestroyUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4,
                                int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    destroyui_sa::EnsureGlobals();
     if (!destroyui_sa::Ready() || !destroyui_sa::DataSourceAlive(this)) return;
     if (param3 != 0x12) return;
 
     // Get entity, wrap in InternalBasePtr
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
@@ -592,7 +571,6 @@ void DestroyUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
 
 // [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
 void DestroyUI::OnUpdate(const System::Time& /*time*/) {
-    destroyui_sa::EnsureGlobals();
     if (!destroyui_sa::Ready() || !destroyui_sa::DataSourceAlive(this)) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
     if (*reinterpret_cast<uint64_t*>(s + 0x30) == 0) {

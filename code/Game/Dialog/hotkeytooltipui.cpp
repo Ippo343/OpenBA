@@ -131,33 +131,23 @@ static void FillHotKeyText(void* self, const char* elemName, int paramIndex,
 // display. Construction stays the stub alloc+zero+vtable; the engine fills the
 // base fields (dialog +0x18, datasource +0x28) afterward. Same shape as the
 // BuildRequirementUI promotion above.
-namespace hotkeytooltipui_sa {
-    // The reimpl unconditionally dereferences g_TypeId_Element; in
-    // standalone it resolves from a raw exe .rdata addr -> null. Lazy-fill it
-    // from the live Factory tree (post-Engine::Startup). NB: Object::Internal is
-    // registered under the simple name "Internal". Idempotent.
-    void EnsureTypeIds() {
-        static uint32_t s_internal=0;
-        if (!g_TypeId_Element) {
-            s_internal=::Object::ResolveTypeIdByNameLazy("Internal");
-            if (s_internal) g_TypeId_Element=&s_internal;
-        }
-    }
-}  // namespace uistub_HotKeyToolTipUI
+// ENDGAME B.3.9: the reimpl unconditionally dereferences a type id for the button
+// element. That cell (exref 0x140151660) is UI::Element's own _typeInfo (Table 1 /
+// standalone/reg_element_typeids.cpp), NOT "Internal" as this file's old heal
+// guessed (Object::Internal has no ported TypeId() and the heal never actually ran:
+// the pointer is set at EngineFuncsInit before OnCreated's first call). UI::Element
+// now has a ported TypeId(), so the lazy-cache is dead.
 
 // HotKeyToolTipUI::Serialize — Slot4 (+0x20). self = the controller.
 // [4] 0x14006a980.
 void HotKeyToolTipUI::OnCreated() {
-    hotkeytooltipui_sa::EnsureTypeIds();
-    if (!g_TypeId_Element) return;
-    if (!fn_InternalBasePtr_Ctor || !fn_IsDerivedFrom
-        || !g_TypeId_Element) {
+    if (!fn_InternalBasePtr_Ctor || !fn_IsDerivedFrom) {
         return;
     }
 
     // Resolve the controlled element (the button) and read its shortcut id.
     void* obj = *(void**)((uintptr_t)this + 0x28);
-    void* elem = (obj && fn_IsDerivedFrom(obj, *g_TypeId_Element)) ? obj : nullptr;
+    void* elem = (obj && fn_IsDerivedFrom(obj, UI::Element::TypeId())) ? obj : nullptr;
 
     uint64_t elemIbp = 0;
     new (&elemIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge

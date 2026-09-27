@@ -21,6 +21,8 @@
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ComboElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "Component/SelectDescription.h"   // X::TypeId() (ENDGAME B.3.9)
 
 // ============================================================
 // SelectDescription layout (from Ghidra analysis):
@@ -74,7 +76,7 @@ static int CropUI_IterateResources(CropUI* self, void* combo, int* selectedIndex
     if (!SA_DialogEntityAlive(self)) return 0;
     // Wrap entity at +0x28 in InternalBasePtr (base class requirement)
     void* entity = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
@@ -95,9 +97,9 @@ static int CropUI_IterateResources(CropUI* self, void* combo, int* selectedIndex
             // Virtual call at vtable+0x10 returns type ID
             int subTypeId = reinterpret_cast<Object::Base*>(subComp)->Type();  // B.3.8 bridge
 
-            if (subTypeId == (int)*g_TypeId_SelectDescription) {
+            if (subTypeId == (int)SelectDescription::TypeId()) {
                 void* subObj = *(void**)(subArray + (uintptr_t)j * 8);
-                bool isDerived = fn_IsDerivedFrom(subObj, *g_TypeId_SelectDescription);
+                bool isDerived = fn_IsDerivedFrom(subObj, SelectDescription::TypeId());
                 if (isDerived && subObj != nullptr) {
                     // Check category filter matches
                     int category = *(int*)((uintptr_t)subObj + 0x40);
@@ -231,7 +233,7 @@ void SelectResourceUI::OnUpdateLayout() {
     if (!SA_DialogEntityAlive(this)) return;
     // Wrap entity in InternalBasePtr (base class requirement, not used directly)
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge

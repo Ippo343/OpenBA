@@ -42,6 +42,9 @@
 #include "Game/GameUpdateLoop.h"       // ENDGAME B.3.9 EXA: the real loop classes
 #include "Game/GameLoadDialogLoopT.h"
 #include "Game/GameLoaderLoop.h"
+#include "Game/MapGenerator.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "Game/ClimateGenerator.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "Game/TerrainGenerator.h"   // X::TypeId() (ENDGAME B.3.9)
 
 // ============================================================
 // Helper: find element by name, returns raw element pointer
@@ -54,49 +57,18 @@ static void* FindElement(void* dialog, const char* name) {
     return elem;
 }
 
-// ============================================================
-// Lazy type-ID resolution (standalone safety)
-// ============================================================
-// In standalone the exe .rdata type-ID slots (g_TypeId_MapGenerator etc.) are
-// never populated by Runtime reflection, so they start NULL and every
-// `*g_TypeId_X` deref in Slot4 is a read of address 0 (hard crash). Mirror the
-// OptionsDialog/inputbindings StringTable pattern: lazy-resolve each via
-// Object::Factory::GetTypeIdFromName into a static, then point the global at it.
-static uint32_t* LazyTypeId(uint32_t* current, const char* typeName, uint32_t* storage) {
-    if (current) return current;
-    if (!g_pFactorySingleton || !*g_pFactorySingleton)
-        return nullptr;
-    if (*storage == 0) {
-        void* factoryObj = *(void**)*g_pFactorySingleton;
-        if (factoryObj) {
-            *storage = reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(
-                typeName, true);   // B.3.3 bridge
-            printf("[NewGameDialog] Lazy-resolved %s typeId = %u\n", typeName, *storage);
-        }
-    }
-    return (*storage != 0) ? storage : nullptr;
-}
-
-static void EnsureGeneratorTypeIds() {
-    static uint32_t s_map = 0, s_climate = 0, s_terrain = 0, s_nameDB = 0;
-    if (!g_TypeId_MapGenerator)
-        g_TypeId_MapGenerator = LazyTypeId(g_TypeId_MapGenerator, "MapGenerator", &s_map);
-    if (!g_TypeId_ClimateGenerator)
-        g_TypeId_ClimateGenerator = LazyTypeId(g_TypeId_ClimateGenerator, "ClimateGenerator", &s_climate);
-    if (!g_TypeId_TerrainGenerator)
-        g_TypeId_TerrainGenerator = LazyTypeId(g_TypeId_TerrainGenerator, "TerrainGenerator", &s_terrain);
-    if (!g_TypeId_NameDatabase)
-        g_TypeId_NameDatabase = LazyTypeId(g_TypeId_NameDatabase, "NameDatabase", &s_nameDB);
-}
+// ENDGAME B.3.9: MapGenerator / ClimateGenerator / TerrainGenerator / NameDatabase all
+// have a ported TypeId() now (class statics, always populated), so the
+// EnsureGeneratorTypeIds()/LazyTypeId() lazy-cache over the exe .rdata globals is dead.
 
 // Type-check a loaded resource. In STANDALONE the Runtime factory tree is
 // incomplete, so Object::IsDerivedFrom walks up the type's parent chain into a
 // NULL factory and crashes (NULL-this). Per feedback_factory_cascade_strategy we
-// trust FindOrLoad's result and skip the derivation check. typeIdPtr is passed
-// (not deref'd) so a still-unresolved (NULL) type-ID can't fault at the call site.
-static inline bool ResourceIsType(void* resource, uint32_t* typeIdPtr) {
+// trust FindOrLoad's result and skip the derivation check. typeId is unused (kept
+// as a parameter so every call site still names which type it means).
+static inline bool ResourceIsType(void* resource, uint32_t typeId) {
     if (!resource) return false;
-    (void)typeIdPtr;
+    (void)typeId;
     return true;
 }
 
@@ -138,7 +110,7 @@ static void PopulateGeneratorCombo(void** comboFieldPtr, void* externalList,
 
         // IsDerivedFrom check (trust-helper: skips the crashing walk in standalone)
         void* typed = nullptr;
-        if (ResourceIsType(resource, &typeId)) {
+        if (ResourceIsType(resource, typeId)) {
             typed = resource;
         }
 
@@ -298,9 +270,9 @@ static void GenerateRandomSeed(void* editSeedPtr, void* random) {
 // Helper: update description text from selected map generator
 // ============================================================
 static void UpdateDescription(NewGameDialog* self) {
-    // Standalone safety: skip if the map-generator list/type-ID is unresolved
-    // (covers both Slot4 and the OnEvent combo-change call site).
-    if (!self->mapGeneratorList || !g_TypeId_MapGenerator) return;
+    // Standalone safety: skip if the map-generator list is unresolved (covers both
+    // Slot4 and the OnEvent combo-change call site).
+    if (!self->mapGeneratorList) return;
 
     void* condCombo = self->comboCondition;
 
@@ -310,7 +282,7 @@ static void UpdateDescription(NewGameDialog* self) {
     void* resource = ptrArray[selectedIdx];
 
     void* mapGen = nullptr;
-    if (ResourceIsType(resource, g_TypeId_MapGenerator)) {
+    if (ResourceIsType(resource, MapGenerator::TypeId())) {
         mapGen = resource;
     }
 
@@ -404,9 +376,6 @@ static void SelectStartConditionOverride(NewGameDialog* self) {
 void NewGameDialog::OnOpened() {
     uintptr_t s = (uintptr_t)this;
 
-    // Standalone: lazy-resolve the generator/NameDB type-IDs (the exe .rdata
-    // slots are NULL until resolved via the Factory).
-    EnsureGeneratorTypeIds();
     // Standalone: loading the three generator ExternalLists would populate the
     // combos, BUT ExternalFactory::FindOrLoad runs an internal IsDerivedFrom that
     // NULL-derefs against the incomplete standalone factory tree (the
@@ -440,18 +409,14 @@ void NewGameDialog::OnOpened() {
         this->terrainGeneratorList = *(void**)((uintptr_t)keyMapData + 0x20);
     }
 
-    // --- Populate generator combos. Guarded for standalone: the type-ID pointers
-    //     may still be NULL (deref would crash) and the ExternalLists may be
-    //     unpopulated (PopulateGeneratorCombo null-checks the list internally). ---
-    if (g_TypeId_MapGenerator)
-        PopulateGeneratorCombo((void**)&this->comboCondition, this->mapGeneratorList,
-                               *g_TypeId_MapGenerator, 0x38);
-    if (g_TypeId_ClimateGenerator)
-        PopulateGeneratorCombo((void**)&this->comboClimate, this->climateGeneratorList,
-                               *g_TypeId_ClimateGenerator, 0x30);
-    if (g_TypeId_TerrainGenerator)
-        PopulateGeneratorCombo((void**)&this->comboTerrain, this->terrainGeneratorList,
-                               *g_TypeId_TerrainGenerator, 0x30);
+    // --- Populate generator combos. Guarded for standalone: the ExternalLists may
+    //     be unpopulated (PopulateGeneratorCombo null-checks the list internally). ---
+    PopulateGeneratorCombo((void**)&this->comboCondition, this->mapGeneratorList,
+                           MapGenerator::TypeId(), 0x38);
+    PopulateGeneratorCombo((void**)&this->comboClimate, this->climateGeneratorList,
+                           ClimateGenerator::TypeId(), 0x30);
+    PopulateGeneratorCombo((void**)&this->comboTerrain, this->terrainGeneratorList,
+                           TerrainGenerator::TypeId(), 0x30);
 
     // --- Find button elements ---
     void* buttonNewName = ::FindElement(this, "buttonNewName");
@@ -664,7 +629,7 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     void** mapPtrArray = *(void***)((uintptr_t)self->mapGeneratorList + 0x20);
     void* mapGenResource = mapPtrArray[(intptr_t)mapGenItem];
     void* mapGen = nullptr;
-    if (ResourceIsType(mapGenResource, g_TypeId_MapGenerator)) mapGen = mapGenResource;
+    if (ResourceIsType(mapGenResource, MapGenerator::TypeId())) mapGen = mapGenResource;
 
     // --- Difficulty / StartCondition override (standalone autostart + testing) ---
     // The autostart harness auto-clicks "OK" without choosing a difficulty, and the
@@ -694,7 +659,7 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
                 self->mapGeneratorList)->GetResourceCount();   // B.3.3 bridge
             if (wantIdx < listCount) {
                 void* r = mapPtrArray[wantIdx];
-                if (ResourceIsType(r, g_TypeId_MapGenerator)) {
+                if (ResourceIsType(r, MapGenerator::TypeId())) {
                     mapGen = r;
                     fprintf(stderr, "[NewGameDialog] difficulty override -> listIdx=%d (0=Hard 1=Medium 2=Easy) mapGen=%p\n",
                             wantIdx, mapGen);
@@ -708,13 +673,13 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     void** climatePtrArray = *(void***)((uintptr_t)self->climateGeneratorList + 0x20);
     void* climateResource = climatePtrArray[(intptr_t)climateItem];
     void* climateGen = nullptr;
-    if (ResourceIsType(climateResource, g_TypeId_ClimateGenerator)) climateGen = climateResource;
+    if (ResourceIsType(climateResource, ClimateGenerator::TypeId())) climateGen = climateResource;
 
     void* terrainItem = reinterpret_cast<const UI::ComboElement*>(self->comboTerrain)->GetItemData(terrainIdx);  // B.3.6 bridge
     void** terrainPtrArray = *(void***)((uintptr_t)self->terrainGeneratorList + 0x20);
     void* terrainResource = terrainPtrArray[(intptr_t)terrainItem];
     void* terrainGen = nullptr;
-    if (ResourceIsType(terrainResource, g_TypeId_TerrainGenerator)) terrainGen = terrainResource;
+    if (ResourceIsType(terrainResource, TerrainGenerator::TypeId())) terrainGen = terrainResource;
 
     // Get terrain size index
     uint32_t terrainSize = *(uint32_t*)((uintptr_t)self->comboTerrainSize + 0x118);

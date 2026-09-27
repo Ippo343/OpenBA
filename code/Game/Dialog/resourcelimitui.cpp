@@ -20,6 +20,7 @@
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/SpinnerElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Dialog/ResourceLimitUIConfig.h"   // X::TypeId() (B.3.9 CG2)
 
 // Helper: Find element by name in dialog, return InternalPtr value (8 bytes)
 static uint64_t FindElemByName(void* dialogElem, const char* name) {
@@ -69,8 +70,10 @@ static void SetResourceLimit(void* dataSrc, int value) {
 
 void ResourceLimitUI_Slot4(ResourceLimitUI* self) {
     // Get data source from base class +0x10 and type-check
+    // ENDGAME B.3.9 CG2: g_TypeId_ResourceLimitType binds cell 0x1401c5520, whose
+    // retail class is ResourceLimitUIConfig (Table 1 NAME LIE).
     void* dataSrc = *(void**)((uintptr_t)self + 0x10);
-    bool isType = fn_IsDerivedFrom(dataSrc, *g_TypeId_ResourceLimitType);
+    bool isType = fn_IsDerivedFrom(dataSrc, ResourceLimitUIConfig::TypeId());
     void* typedSrc = isType ? dataSrc : nullptr;
 
     // Find "editLimit" spinner element
@@ -97,7 +100,7 @@ void ResourceLimitUI_Slot4(ResourceLimitUI* self) {
 void ResourceLimitUI_Slot7(ResourceLimitUI* self) {
     // Get data source
     void* dataSrc = *(void**)((uintptr_t)self + 0x10);
-    bool isType = fn_IsDerivedFrom(dataSrc, *g_TypeId_ResourceLimitType);
+    bool isType = fn_IsDerivedFrom(dataSrc, ResourceLimitUIConfig::TypeId());
     void* typedSrc = isType ? dataSrc : nullptr;
 
     void* spinner = (void*)self->data30;
@@ -138,7 +141,7 @@ void ResourceLimitUI_Slot9(ResourceLimitUI* self, void* param2,
 
     // Get data source
     void* dataSrc = *(void**)((uintptr_t)self + 0x10);
-    bool isType = fn_IsDerivedFrom(dataSrc, *g_TypeId_ResourceLimitType);
+    bool isType = fn_IsDerivedFrom(dataSrc, ResourceLimitUIConfig::TypeId());
     void* typedSrc = isType ? dataSrc : nullptr;
 
     // Write spinner value to global limit

@@ -32,6 +32,8 @@
 #include "runtime/types/ui/Element.h"      // ENDGAME B.3.6 UI callers (K1)
 #include "runtime/types/ui/String.h"       // ENDGAME B.3.6 UI callers (K1)
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K1)
+#include "runtime/types/ui/ImageElement.h"  // X::TypeId() (B.3.9 CG2)
+#include "Component/WorkPlaceComponent.h"   // X::TypeId() (B.3.9 CG2)
 
 // AssignHousing (0x140111ee0) — sets citizen+0x248 (workplace roster link); ported in
 // citizencomponent.cpp and registered in standalone. Same decl as citizen_employ_cascade.
@@ -80,8 +82,7 @@ extern "C" void TownHall_GroupRatingInit(void* rating, void* groupIBPPtr) {
         // child(i) -> FindElement("whole") -> cast ImageElement -> push
         uint64_t childBuf[2] = {0, 0};
         ::new (static_cast<void*>(childBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)groupIBPPtr)->Child(i));  // B.3.6 bridge
-        void* whole = FindCastElem(*(void**)childBuf, "whole",
-                                   g_TypeId_ImageElement ? *g_TypeId_ImageElement : 0);
+        void* whole = FindCastElem(*(void**)childBuf, "whole", UI::ImageElement::TypeId());
         uint64_t wholeIBP = 0;
         IbpCtor(&wholeIBP, whole);
         PushPtr(r, wholeIBP);
@@ -89,8 +90,7 @@ extern "C" void TownHall_GroupRatingInit(void* rating, void* groupIBPPtr) {
         // child(i) -> FindElement("half") -> cast ImageElement -> push
         uint64_t childBuf2[2] = {0, 0};
         ::new (static_cast<void*>(childBuf2)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)groupIBPPtr)->Child(i));  // B.3.6 bridge
-        void* half = FindCastElem(*(void**)childBuf2, "half",
-                                  g_TypeId_ImageElement ? *g_TypeId_ImageElement : 0);
+        void* half = FindCastElem(*(void**)childBuf2, "half", UI::ImageElement::TypeId());
         uint64_t halfIBP = 0;
         IbpCtor(&halfIBP, half);
         PushPtr(r + 2, halfIBP);
@@ -398,8 +398,10 @@ typedef uint32_t (*GetTypeId_t)(void*);
 // Find the WorkPlaceComponent (c80e0) on a ComponentEntity (+0x30 IBP array,
 // +0x38 count) — the exe's inline GetTypeId scan + IsDerivedFrom cast.
 void* FindWorkPlaceComp(uintptr_t entity) {
-    if (!entity || !g_TypeId_WorkplaceComponent) return nullptr;
-    uint32_t tid = *g_TypeId_WorkplaceComponent;
+    if (!entity) return nullptr;
+    // ENDGAME B.3.9 CG2: g_TypeId_WorkplaceComponent binds cell 0x1401c80e0, whose
+    // retail class is WorkPlaceComponent -> WorkPlaceComponent::TypeId().
+    uint32_t tid = WorkPlaceComponent::TypeId();
     uintptr_t arr = *(uintptr_t*)(entity + 0x30);
     int cnt = *(int*)(entity + 0x38);
     for (int i = 0; i < cnt; i++) {

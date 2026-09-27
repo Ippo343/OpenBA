@@ -36,6 +36,8 @@
 #include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "Component/BuildComponent.h"   // X::TypeId() (B.3.8 callers)
 #include "Component/BuildDescription.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/ComponentDescription.h"   // X::TypeId() (ENDGAME B.3.9)
+#include "Component/ToolbarDescription.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 #if defined(_DEBUG)
@@ -102,7 +104,7 @@ static void* FindDialogElem(void* dialogInst, const char* name) {
 // Helper: find element by name, wrap as InternalBasePtr
 static uint64_t FindDialogElemAsBasePtr(void* dialogInst, const char* name) {
     void* raw = FindDialogElem(dialogInst, name);
-    bool isInternal = fn_IsDerivedFrom(raw, *g_TypeId_Element);
+    bool isInternal = fn_IsDerivedFrom(raw, UI::Element::TypeId());
     void* checked = isInternal ? raw : nullptr;
     uint8_t bpBuf[8];
     new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
@@ -122,23 +124,15 @@ static uint64_t FindDialogElemAsBasePtr(void* dialogInst, const char* name) {
 // cost labels. Construction stays the stub alloc+zero+vtable; the engine fills the
 // base fields afterward.
 
-namespace buildrequirementui_sa {
-    // Lazy-fill the exe-.rdata type-id globals BuildRequirementUI_Slot4 dereferences.
-    // In standalone these resolve from raw exe .rdata addresses → null, so the real
-    // reimpl's first `*g_TypeId_ComponentDescription_FC` would fault. Fill them from the live
-    // Factory tree (post-Engine::Startup), like ToolbarStandalone_Init. Idempotent.
-    // NB: g_TypeId_ResourceComponent's engine_funcs label is misleading — the id at
-    // .rdata 0x1401c7040 is actually "BuildDescription"; and Object::Internal is
-    // registered under the simple name "Internal".
-    void EnsureTypeIds() {
-        static uint32_t s_build=0, s_entity=0, s_internal=0, s_buildDesc=0, s_rawMat=0;
-        if (!g_TypeId_ComponentDescription_FC)        { s_build=BuildComponent::TypeId();        if(s_build) g_TypeId_ComponentDescription_FC=&s_build; }
-        if (!g_TypeId_ComponentEntity)       { s_entity=ComponentEntity::TypeId();      if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
-        if (!g_TypeId_ResourceComponent)     { s_buildDesc=BuildDescription::TypeId();  if(s_buildDesc) g_TypeId_ResourceComponent=&s_buildDesc; }
-        if (!g_TypeId_RawMaterialDescription){ s_rawMat=RawMaterialDescription::TypeId(); if(s_rawMat) g_TypeId_RawMaterialDescription=&s_rawMat; }
-        if (!g_TypeId_Element)        { s_internal=::Object::ResolveTypeIdByNameLazy("Internal");           if(s_internal) g_TypeId_Element=&s_internal; }
-    }
-}  // namespace uistub_BuildRequirementUI
+// ENDGAME B.3.9: the exe .rdata type-id globals below all have a ported TypeId() now,
+// so the EnsureTypeIds() lazy-cache/heal is dead. NOTE (Table 1/3 correction): this
+// file's old comment claimed g_TypeId_ComponentDescription_FC (cell 0x1401c7318) was
+// "BuildComponent" and healed it with BuildComponent::TypeId() when null — but the
+// cell's real class (its RegisterExeAddr / Fill* binding, reg_tradeui_typeids.cpp:127,
+// game_main.cpp Fill*) is ComponentDescription, and the heal never actually ran (the
+// pointer is non-null from EngineFuncsInit before this file's first call), so no
+// behaviour ever depended on the wrong guess. Converted to ComponentDescription::TypeId()
+// per the cell, not the stale comment.
 
 // ============================================================
 // BuildRequirementUI::Slot4 (vtable +0x20) — Setup/populate
@@ -153,10 +147,6 @@ namespace buildrequirementui_sa {
 // [4] 0x14005e7c0. The body unconditionally dereferences these globals;
 // if any failed to resolve, skip rather than fault (standalone-only).
 void BuildRequirementUI::OnCreated() {
-    buildrequirementui_sa::EnsureTypeIds();
-    if (!g_TypeId_ComponentDescription_FC || !g_TypeId_ComponentEntity
-        || !g_TypeId_Element || !g_TypeId_ToolbarDescription_FC
-        || !g_TypeId_ResourceComponent || !g_TypeId_RawMaterialDescription) return;
     uintptr_t s = (uintptr_t)this;
 
     // --- Resolve description from datasource (+0x28) ---
@@ -174,25 +164,25 @@ void BuildRequirementUI::OnCreated() {
     // dialog can leave +0x28 NULL. Skip all three IsDerivedFrom probes when null — the
     // desc stays unresolved and the function returns cleanly at `if (!desc)` below.
     // Try path 1: datasource IsA BuildComponent
-    bool isBuild = dataSource && fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentDescription_FC);
+    bool isBuild = dataSource && fn_IsDerivedFrom(dataSource, ComponentDescription::TypeId());
     if (isBuild && dataSource) {
         // Re-verify (matches original double-check pattern)
-        isBuild = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentDescription_FC);
+        isBuild = fn_IsDerivedFrom(dataSource, ComponentDescription::TypeId());
         void* desc = isBuild ? dataSource : nullptr;
         *(void**)(s + 0x30) = desc;
     }
     // Try path 2: datasource IsA ComponentEntity
     else {
-        bool isEntity = dataSource && fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
+        bool isEntity = dataSource && fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
         if (isEntity && dataSource) {
             // Re-verify and extract description at entity+0x28
-            isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
+            isEntity = fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
             void* entity = isEntity ? dataSource : nullptr;
             *(void**)(s + 0x30) = *(void**)((uintptr_t)entity + 0x28);
         }
         // Try path 3: datasource IsA Object::Internal (UI Element)
         else {
-            uint32_t internalTypeId = g_TypeId_Element ? *g_TypeId_Element : 0;
+            uint32_t internalTypeId = UI::Element::TypeId();
             bool isInternal = dataSource && fn_IsDerivedFrom(dataSource, internalTypeId);
             void* internalObj = isInternal ? dataSource : nullptr;
 
@@ -206,7 +196,7 @@ void BuildRequirementUI::OnCreated() {
                 // Element_GetUserData can return NULL (element carries no user data);
                 // Runtime IsDerivedFrom has no null-this check (crash READ 0x0 at +0xC039A),
                 // so guard exactly as the +0x28 datasource probes above do.
-                isBuild = userData && fn_IsDerivedFrom(userData, *g_TypeId_ComponentDescription_FC);
+                isBuild = userData && fn_IsDerivedFrom(userData, ComponentDescription::TypeId());
                 void* descResolved = isBuild ? userData : nullptr;
                 // Standalone divergence: the in-game Toolbar sub-item buttons store
                 // their building DESCRIPTION entity as userData (toolbardialog.cpp
@@ -256,7 +246,7 @@ void BuildRequirementUI::OnCreated() {
     if (!desc) return;
 
     // Find ToolbarDescription in description's component list
-    void* buildReqComp = FindCompInDesc(desc, *g_TypeId_ToolbarDescription_FC);
+    void* buildReqComp = FindCompInDesc(desc, ToolbarDescription::TypeId());
 
     // Get dialog instance at +0x18
     void* dialogInst = *(void**)(s + 0x18);
@@ -266,7 +256,7 @@ void BuildRequirementUI::OnCreated() {
         void* imageElem = FindDialogElem(dialogInst, "imageIcon");
 
         // Check if element is an Object::Internal for InternalBasePtr wrapping
-        bool isInternal = fn_IsDerivedFrom(imageElem, *g_TypeId_Element);
+        bool isInternal = fn_IsDerivedFrom(imageElem, UI::Element::TypeId());
         void* checked = isInternal ? imageElem : nullptr;
         uint8_t ibpBuf[8];
         new (ibpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
@@ -294,7 +284,7 @@ void BuildRequirementUI::OnCreated() {
     {
         void* textElem = FindDialogElem(dialogInst, "textTitle");
 
-        bool isInternal = fn_IsDerivedFrom(textElem, *g_TypeId_Element);
+        bool isInternal = fn_IsDerivedFrom(textElem, UI::Element::TypeId());
         void* checked = isInternal ? textElem : nullptr;
         uint8_t ibpBuf[8];
         new (ibpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
@@ -339,7 +329,7 @@ void BuildRequirementUI::OnCreated() {
         while (labelElem) {
 
             // Wrap as InternalBasePtr
-            bool isInternal = fn_IsDerivedFrom(labelElem, *g_TypeId_Element);
+            bool isInternal = fn_IsDerivedFrom(labelElem, UI::Element::TypeId());
             void* checked = isInternal ? labelElem : nullptr;
             uint8_t ibpBuf[8];
             new (ibpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
@@ -373,7 +363,7 @@ void BuildRequirementUI::OnCreated() {
     // multiple times and the empty reference-mode re-loads clobbered the good first
     // pass — fixed in code/Game/Component/builddescription.cpp (keep-populated guard).
     // The null-resType guard below stays as defensive belt-and-suspenders.
-    void* resourceComp = FindCompInDesc(desc, *g_TypeId_ResourceComponent);
+    void* resourceComp = FindCompInDesc(desc, BuildDescription::TypeId());
     if (!resourceComp) return;
 
     // Check resource component has flag at +0x34 and multi-build count
@@ -414,7 +404,7 @@ void BuildRequirementUI::OnCreated() {
             uintptr_t subEntity = *(uintptr_t*)entry;
 
             // Find RawMaterialDescription component in sub-entity's component list
-            void* resType = FindCompInDesc(subEntity, *g_TypeId_RawMaterialDescription);
+            void* resType = FindCompInDesc(subEntity, RawMaterialDescription::TypeId());
 
             // Set sprite on label element — but only if the resource type resolved.
             // With our standalone desc divergence (description used as desc), some

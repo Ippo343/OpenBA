@@ -54,6 +54,9 @@
 #include "runtime/types/ui/TableElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "runtime/types/ui/ElementDescription.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Component/WorkDescription.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/WorkPlaceComponent.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/WorkComponent.h"   // X::TypeId() (B.3.9 CG2)
 
 // ============================================================
 // File-local helper: CalcWorkerSlots (FUN_14012e5c0)
@@ -86,7 +89,7 @@ static int CalcWorkerSlots_Impl(uintptr_t storageLocComp) {
     if (!jobType) return 0;
 
     // IsDerivedFrom check
-    bool isJobType = fn_IsDerivedFrom(jobType, *g_TypeId_WorkDescription);
+    bool isJobType = fn_IsDerivedFrom(jobType, WorkDescription::TypeId());
     if (!isJobType) return 0;
 
     uintptr_t jt = (uintptr_t)jobType;
@@ -283,16 +286,9 @@ static void PushToArray8(uintptr_t self, int ptrOffset, uint64_t value) {
 // tidy). Construction stays the stub alloc+zero+vtable; the framework fills the base
 // dialog/datasource fields afterward — same shape as the MapUI/ImmigrationUI promotions.
 namespace professionui_sa {
-    // NumberEditElement type-id resolves from a double-indirect exref (null in SA).
-    // Slot5 validates a spinner child against it (already guarded, so optional). Fill
-    // it from the live factory tree post-Engine::Startup. Idempotent.
-    void EnsureTypeIds() {
-        static uint32_t s_numEdit=0;
-        if (!g_TypeId_NumberEditElement) {
-            s_numEdit=::Object::ResolveTypeIdByNameLazy("NumberEditElement");
-            if (s_numEdit) g_TypeId_NumberEditElement=&s_numEdit;
-        }
-    }
+    // ENDGAME B.3.9 CG2: EnsureTypeIds retired — it healed g_TypeId_NumberEditElement
+    // (a per-file lazy-fill of the exe-side global) which the conversion below to
+    // UI::NumberEditElement::TypeId() (the ported Runtime static) makes unnecessary.
     void Trace([[maybe_unused]] const char* slot, void* self) {
         static int n=0; if (n>=32) return; ++n;
         uintptr_t s=reinterpret_cast<uintptr_t>(self);
@@ -344,7 +340,6 @@ void ProfessionUI::OnOpened() {
     // subsequent Slot8 then walks 40 half-built spinner IBPs and faults. Skip if
     // setup already ran.
     if (professionui_sa::IsSetUp(this)) { professionui_sa::Trace("Slot5-skip(already set up)", this); return; }
-    professionui_sa::EnsureTypeIds();
     professionui_sa::Trace("Slot5", this);
     uintptr_t s = (uintptr_t)this;
 
@@ -556,9 +551,12 @@ void ProfessionUI::OnOpened() {
         uint64_t numEditBuf = 0;
         ::new (&numEditBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(spinnerBuf)->Child(0));  // B.3.6 bridge
         void* numEditRaw = (void*)numEditBuf;
+        // ENDGAME B.3.9 CG2: g_TypeId_NumberEditElement -> UI::NumberEditElement::TypeId()
+        // (the ported Runtime static always answers; the null-guard on the exe-side
+        // global retires with the conversion).
         void* numEditChecked = nullptr;
-        if (fn_IsDerivedFrom && g_TypeId_NumberEditElement) {
-            if (fn_IsDerivedFrom(numEditRaw, *g_TypeId_NumberEditElement))
+        if (fn_IsDerivedFrom) {
+            if (fn_IsDerivedFrom(numEditRaw, UI::NumberEditElement::TypeId()))
                 numEditChecked = numEditRaw;
         } else {
             numEditChecked = numEditRaw;
@@ -748,8 +746,8 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
                 uintptr_t comp = *(uintptr_t*)compIBP;
                 if (!comp) continue;
                 int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-                if (typeId == (int)*g_TypeId_WorkplaceComponent) {
-                    if (fn_IsDerivedFrom((void*)comp, *g_TypeId_WorkplaceComponent)) {
+                if (typeId == (int)WorkPlaceComponent::TypeId()) {
+                    if (fn_IsDerivedFrom((void*)comp, WorkPlaceComponent::TypeId())) {
                         workplaceComp = comp;
                     }
                     break;
@@ -777,8 +775,8 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
                         uintptr_t comp = *(uintptr_t*)compIBP;
                         if (!comp) continue;
                         int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-                        if (typeId == (int)*g_TypeId_WorkComponent) {
-                            if (fn_IsDerivedFrom((void*)comp, *g_TypeId_WorkComponent)) {
+                        if (typeId == (int)WorkComponent::TypeId()) {
+                            if (fn_IsDerivedFrom((void*)comp, WorkComponent::TypeId())) {
                                 storageLocComp = comp;
                             }
                             break;

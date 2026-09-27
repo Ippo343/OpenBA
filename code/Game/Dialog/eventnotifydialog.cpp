@@ -18,6 +18,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Dialog.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -76,10 +77,9 @@ static void* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventInd
             void* found = const_cast<::Object::External*>(
                 reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
                     ->FindOrLoad(filename));
-            // Accept the loaded resource if it is External-derived — the same guard the
-            // exe applies (IsDerivedFrom(External)) before using it as the popup's
-            // external context. g_TypeId_Dialog is filled by EnsureGlobals each tick.
-            if (found && (!g_TypeId_Dialog || fn_IsDerivedFrom(found, *g_TypeId_Dialog)))
+            // Accept the loaded resource if it is Dialog-derived — the same guard the
+            // exe applies before using it as the popup's external context.
+            if (found && fn_IsDerivedFrom(found, UI::Dialog::TypeId()))
                 s_popupRes = found;
         }
     }
@@ -703,7 +703,7 @@ void EventNotifyDialog::OnUpdateLayout() {
 
         // Check if child4 is an ImageElement; if so, copy sprite to it as well
         {
-            bool isImage = child4 && fn_IsDerivedFrom(child4, g_TypeId_ImageElement ? *g_TypeId_ImageElement : 0u);
+            bool isImage = child4 && fn_IsDerivedFrom(child4, UI::ImageElement::TypeId());
             void* imgChild = isImage ? child4 : nullptr;
             // Construct InternalBasePtr for imgChild on stack
             uint8_t imgChildPtr[16];
@@ -922,22 +922,16 @@ void EventNotifyDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*eleme
 
 namespace eventnotify_sa {
 
-// Slot7 dereferences g_pNotifyTimerDuration (raw exe .rdata -> NULL in standalone)
-// and, on the popup path, g_TypeId_Dialog. Lazy-fill both so the ribbon tick
-// can't null-deref. The timer duration is a byte-faithful 30.0s (exe DAT_1401721cc).
+// Slot7 dereferences g_pNotifyTimerDuration (raw exe .rdata -> NULL in standalone).
+// Lazy-fill so the ribbon tick can't null-deref. The timer duration is a
+// byte-faithful 30.0s (exe DAT_1401721cc).
+// ENDGAME B.3.9: the g_TypeId_Dialog / g_TypeId_ImageElement heals that used to live
+// here are dead -- UI::Dialog / UI::ImageElement have a ported TypeId() now (the old
+// heal's "External" guess for g_TypeId_Dialog was wrong too: that cell is UI::Dialog's
+// own _typeInfo, engine_funcs.cpp:828, and the heal never actually ran).
 void EnsureGlobals() {
     static float s_notifyTimer = 30.0f;
     if (!g_pNotifyTimerDuration) g_pNotifyTimerDuration = &s_notifyTimer;
-    static uint32_t s_ext = 0;
-    if (!g_TypeId_Dialog) {
-        s_ext = ::Object::ResolveTypeIdByNameLazy("External");
-        if (s_ext) g_TypeId_Dialog = &s_ext;
-    }
-    static uint32_t s_img = 0;
-    if (!g_TypeId_ImageElement) {
-        s_img = ::Object::ResolveTypeIdByNameLazy("ImageElement");
-        if (s_img) g_TypeId_ImageElement = &s_img;
-    }
 }
 
 }  // namespace eventnotify_sa

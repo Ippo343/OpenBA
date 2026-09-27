@@ -161,7 +161,7 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
         }
 
         // Check if the found element is a TabElement
-        bool isTabElement = fn_IsA(foundElement, *g_TypeId_TabElement);
+        bool isTabElement = fn_IsA(foundElement, UI::TabElement::TypeId());
 
         if (!isTabElement) {
             // Not a tab — use 6-arg AddController (non-tab path)
@@ -180,7 +180,7 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
 
         // Element is a TabElement — cast via IsDerivedFrom and use tab path
         ++g_uidescTab;
-        bool derived = fn_IsDerivedFrom(foundElement, *g_TypeId_TabElement);
+        bool derived = fn_IsDerivedFrom(foundElement, UI::TabElement::TypeId());
         void* tabElement = derived ? foundElement : nullptr;
 
         // Wrap in InternalBasePtr
@@ -233,25 +233,14 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
 // event to each controller's vtable+0x48, so leaving this a no-op meant the map/
 // Help/etc. dialogs' X button (and every close button) did nothing.
 namespace toolui_sa {
-    // ToolUI_Slot4 + UIDesc_AddControllers_Impl dereference these exe-.rdata type-id
-    // globals (null in standalone). Lazy-fill from the live factory tree post-
-    // Engine::Startup. Idempotent.
+    // ENDGAME B.3.9 CG2: ToolUI_Slot4 + UIDesc_AddControllers_Impl's exe-.rdata
+    // type-id globals -> the class statics (ComponentDescription::TypeId() (cell
+    // 0x1401c7318 — the engine_funcs label matches, verified by
+    // ComponentDescription_Register), ComponentEntity::TypeId(),
+    // ToolbarDescription::TypeId() (cell 0x1401c7f58), UIDescription::TypeId(),
+    // UI::TabElement::TypeId()). All always answer, so EnsureTypeIds's lazy-fill
+    // retires (kept as a no-op call site to avoid touching every caller).
     void EnsureTypeIds() {
-        static uint32_t s_build=0, s_entity=0, s_breq=0, s_uidesc=0, s_tab=0;
-        // NB: g_TypeId_ComponentDescription_FC maps to exe .rdata 0x1401c7318 whose real
-        // identity is ComponentDescription (verified: written by
-        // ComponentDescription_Register; the engine_funcs label now matches).
-        // ToolUI::Slot4 branch-1 tests the datasource against
-        // THIS id (a utility dialog's datasource is a ComponentDescription), so it
-        // must be filled with the ComponentDescription type-id.
-        if (!g_TypeId_ComponentDescription_FC)            { s_build =ComponentDescription::TypeId();      if(s_build)  g_TypeId_ComponentDescription_FC=&s_build; }
-        if (!g_TypeId_ComponentEntity)           { s_entity=ComponentEntity::TypeId();           if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
-        // CORRECTED 2026-07-19: slot 0x1401c7f58's writer is ToolbarDescription_RegisterType;
-        // the old resolve string "BuildRequirementComponent" (an invented name) is not in the
-        // type registry, so this heal always returned 0 and silently never fired.
-        if (!g_TypeId_ToolbarDescription_FC) { s_breq  =ToolbarDescription::TypeId(); if(s_breq)   g_TypeId_ToolbarDescription_FC=&s_breq; }
-        if (!g_TypeId_UIDescription)             { s_uidesc=UIDescription::TypeId();             if(s_uidesc) g_TypeId_UIDescription=&s_uidesc; }
-        if (!g_TypeId_TabElement)                { s_tab   =::Object::ResolveTypeIdByNameLazy("TabElement");                if(s_tab)    g_TypeId_TabElement=&s_tab; }
     }
     // Per-frame update (+0x40). Runtime DialogInstance::OnUpdate dispatches
     // (controller, Time&); the reimpl ignores the Time arg. Idle cost is two flag
@@ -276,11 +265,6 @@ namespace toolui_sa {
 // [4] 0x14007bd70
 void ToolUI::OnCreated() {
     toolui_sa::EnsureTypeIds();
-    // The reimpl unconditionally dereferences these; skip rather than fault if
-    // any failed to resolve.
-    if (!g_TypeId_ComponentDescription_FC || !g_TypeId_ComponentEntity
-        || !g_TypeId_ToolbarDescription_FC || !g_TypeId_UIDescription
-        || !g_TypeId_TabElement) return;
     static bool s_logged=false;
     if(!s_logged && Opt().mapTrace){ s_logged=true;
         printf("[ToolUI::Slot4] dispatched self=%p ds(+0x28)=%p\n",
@@ -289,20 +273,20 @@ void ToolUI::OnCreated() {
 
     // Determine description source from +0x28
     void* dataSource = *(void**)(s + 0x28);
-    bool isBuildComp = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentDescription_FC);
+    bool isBuildComp = fn_IsDerivedFrom(dataSource, ComponentDescription::TypeId());
 
     if (isBuildComp && dataSource != nullptr) {
         // Data source IS the description — check again and store
         void* ds2 = *(void**)(s + 0x28);
-        bool check = fn_IsDerivedFrom(ds2, *g_TypeId_ComponentDescription_FC);
+        bool check = fn_IsDerivedFrom(ds2, ComponentDescription::TypeId());
         *(void**)(s + 0x30) = check ? ds2 : nullptr;
     } else {
         // Check if data source is a ComponentEntity
         void* ds2 = *(void**)(s + 0x28);
-        bool isEntity = fn_IsDerivedFrom(ds2, *g_TypeId_ComponentEntity);
+        bool isEntity = fn_IsDerivedFrom(ds2, ComponentEntity::TypeId());
         if (isEntity && ds2 != nullptr) {
             void* ds3 = *(void**)(s + 0x28);
-            bool check = fn_IsDerivedFrom(ds3, *g_TypeId_ComponentEntity);
+            bool check = fn_IsDerivedFrom(ds3, ComponentEntity::TypeId());
             void* entity = check ? ds3 : nullptr;
             // Store entity's description (+0x28) at self+0x30
             *(void**)(s + 0x30) = *(void**)((uintptr_t)entity + 0x28);
@@ -336,8 +320,8 @@ void ToolUI::OnCreated() {
             // Get TypeId via vtable[2]
             int typeId = reinterpret_cast<Object::Base*>(entry)->Type();  // B.3.8 bridge
 
-            if (typeId == (int)*g_TypeId_ToolbarDescription_FC) {
-                bool check = fn_IsDerivedFrom(entry, *g_TypeId_ToolbarDescription_FC);
+            if (typeId == (int)ToolbarDescription::TypeId()) {
+                bool check = fn_IsDerivedFrom(entry, ToolbarDescription::TypeId());
                 if (check && entry != nullptr) {
                     // Create UI::String from entry's string table (+0x30) and name (+0x38)
                     uint8_t uiStrBuf[16];
@@ -392,7 +376,7 @@ void ToolUI::OnCreated() {
         uintptr_t descArray = *(uintptr_t*)((uintptr_t)desc + 0x28);
         if (Opt().mapTrace)
             printf("[ToolUI_Slot4] desc(self+0x30)=%p descCount=%d uiDescTid=%u\n",
-                   desc, descCount, g_TypeId_UIDescription ? *g_TypeId_UIDescription : 0);
+                   desc, descCount, UIDescription::TypeId());
 
         for (int i = 0; i < descCount; i++) {
             void* entry = *(void**)(descArray + (uintptr_t)i * 8);
@@ -400,8 +384,8 @@ void ToolUI::OnCreated() {
             if (Opt().mapTrace)
                 printf("[ToolUI_Slot4]   descEntry[%d]=%p tid=%d\n", i, entry, typeId);
 
-            if (typeId == (int)*g_TypeId_UIDescription) {
-                bool check = fn_IsDerivedFrom(entry, *g_TypeId_UIDescription);
+            if (typeId == (int)UIDescription::TypeId()) {
+                bool check = fn_IsDerivedFrom(entry, UIDescription::TypeId());
                 if (!check || entry == nullptr) return;
 
                 // Register sub-controllers from UIDescription
@@ -575,10 +559,10 @@ void ToolUI::OnUpdate(const System::Time& /*time*/) {
         void* dataSource = *(void**)(s + 0x28);
         bool isEntity = entityDialog && dataSource != nullptr &&
                         SA_DialogEntityAlive((void*)s) &&
-                        fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
+                        fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
         if (isEntity && dataSource != nullptr) {
             void* ds2 = *(void**)(s + 0x28);
-            bool check = fn_IsDerivedFrom(ds2, *g_TypeId_ComponentEntity);
+            bool check = fn_IsDerivedFrom(ds2, ComponentEntity::TypeId());
             void* entity = check ? ds2 : nullptr;
 
             uint8_t entityBuf[8];
@@ -662,10 +646,10 @@ void ToolUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32
         // would otherwise hit the nulled-class-info AV (see ToolUI_DialogHasEntityUI).
         // On a dead entity the ref-drop is skipped — the EditTool tick's -1-sentinel
         // guard clears the stale tool refs next frame — and the dialog still closes.
-        if (g_TypeId_ComponentEntity && g_pGameWorldSingleton && *g_pGameWorldSingleton &&
+        if (g_pGameWorldSingleton && *g_pGameWorldSingleton &&
             ToolUI_DialogHasEntityUI(s) && SA_DialogEntityAlive((void*)s)) {
             void* ds = *(void**)(s + 0x28);
-            if (ds && fn_IsDerivedFrom(ds, *g_TypeId_ComponentEntity)) {
+            if (ds && fn_IsDerivedFrom(ds, ComponentEntity::TypeId())) {
                 uintptr_t pc = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0x120);
                 if (pc) {
                     void* activeTool = *(void**)(pc + 0x28);
