@@ -13,3 +13,7 @@
 ??_7Achievement@0@6B@                  ENG     real ctor + DeletingDtor; FACTREST row, RT_DELDTOR row, ??0/??1 doors, 7 slot doors deleted
 ??_7AchievementInstance@Achievement@@6B@  ENG   ctor door -> ::new (CreateInstance); FACTREST row, RT_DELDTOR row, ??0/??1 doors, 3 slot doors deleted
 0x180157c60                            ENG     the Audio device voice-callback table: Device::PlatformChannel is a real class, Ctor_AudioDevice placement-news it; 7 address slot doors deleted
+??_7DialogLoaderLoopT@Engine@@6B@      ENG     W2: concrete DeletingDtor (vector arms); the exe splash loop is a real subclass (EXE-1); ??0/??1 doors, RT_DELDTOR row 0x18004d670, 5 slot doors deleted
+??_7DialogLoopT@Engine@@6B@            ENG     W2: concrete DeletingDtor (vector arms); MenuDialogLoopT is a real subclass (EXE-1); ??0/??1 doors, RT_DELDTOR row 0x18004d8b0, 5 slot doors deleted
+??_7LoaderLoop@Engine@@6B@             ENG     W2: concrete class, public real ctor + DeletingDtor (vector arms); ??0/??1 doors, RT_DELDTOR row 0x18004d4f0, 6 slot doors deleted
+??_7UpdateLoop@Engine@@6B@             ENG     W2: concrete DeletingDtor (vector arms); GameUpdateLoop is a real subclass (EXE-1); ??0/??1 doors, RT_DELDTOR row 0x180031900, 6 base slot doors deleted

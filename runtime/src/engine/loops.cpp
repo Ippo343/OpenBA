@@ -190,10 +190,6 @@ std::atomic<void*> g_userInterfaceCtor{nullptr};
 std::atomic<void*> g_userInterfaceDtor{nullptr};
 std::atomic<void*> g_listCleanup{nullptr};
 std::atomic<void*> g_modArrayCopy{nullptr};
-std::atomic<void*> g_vtUpdateLoop{nullptr};
-std::atomic<void*> g_vtLoaderLoop{nullptr};
-std::atomic<void*> g_vtDialogLoopT{nullptr};
-std::atomic<void*> g_vtDialogLoaderLoopT{nullptr};
 std::atomic<void*> g_loaderLoopLoader{nullptr};
 
 FindOrLoadFn FindOrLoad() {
@@ -275,18 +271,12 @@ ModArrayCopyFn ModArrayCopy() {
 // registered in array.cpp for runtime/src/ui/element.cpp's own instantiation.
 
 // ---- exported DATA symbols --------------------------------------------------
-template <typename T>
-T* DataExport(const char* mangled) {
-    return reinterpret_cast<T*>(ResolveExport(mangled));
-}
-
 // Wave 15 lane ORDER converted the three singleton accessors below from
 // `static T** p = DataExport<T*>(...)` — a frozen static, which keeps the FIRST
 // answer including a non-null one — to the caching door that now refuses to
 // freeze a pre-init answer (rt_resolve_cache.cpp §6). All three names are Wave
-// 15 rows. `DataExport` itself is left in place: `VTableUpdateLoop` and friends
-// below resolve a `??_7` symbol whose value is an ADDRESS rather than a live
-// mutable pointer, and freezing that is not the same hazard.
+// 15 rows. (`DataExport` went with its last users, the four `??_7` vtable reads
+// of the retired loop ctor / dtor doors, ENDGAME B.3.9 ENG W2.)
 using ExternalFactorySlot = RtObject::ExternalFactory**;
 using MainLoopSlot        = Engine::MainLoop**;
 RtObject::ExternalFactory* Factory() {
@@ -324,21 +314,6 @@ uint32_t DialogTypeId() {
     const uint32_t* p = RT_DATA_SLOT(const uint32_t*,
         "?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A");
     return p ? *p : 0u;
-}
-
-// ENDGAME B.3.7: the four `??_7` reads are atomic slots too -- the ctor doors
-// run on the loader thread (GameUpdateLoop::Load builds loops there).
-void* VTableUpdateLoop() {
-    return rtengine::AtomicExport(g_vtUpdateLoop, "??_7UpdateLoop@Engine@@6B@");               // 0x180155ba0
-}
-void* VTableLoaderLoop() {
-    return rtengine::AtomicExport(g_vtLoaderLoop, "??_7LoaderLoop@Engine@@6B@");               // 0x180157940
-}
-void* VTableDialogLoopT() {
-    return rtengine::AtomicExport(g_vtDialogLoopT, "??_7DialogLoopT@Engine@@6B@");             // 0x1801579a0
-}
-void* VTableDialogLoaderLoopT() {
-    return rtengine::AtomicExport(g_vtDialogLoaderLoopT, "??_7DialogLoaderLoopT@Engine@@6B@"); // 0x1801578d0
 }
 
 // ============================================================================
@@ -395,114 +370,6 @@ float TicksToSeconds(int64_t ticks) {
     return RT_EXPORT_ONCE(TicksToSecondsFn, "?TicksToSeconds@Timer@System@@SAM_J@Z")(ticks);
 }
 
-// ============================================================================
-// The constructor bodies, factored out of their diffed entry points
-// ============================================================================
-// Retail's derived ctors CALL Engine::UpdateLoop::UpdateLoop. Ours call this
-// helper instead, for the reason Wave 7 lane A gives for FindElement's private
-// recursion: going through the diffed entry point would make every DialogLoopT
-// construction run a nested UpdateLoop build-oracle as well, doubling the work
-// and the scratch traffic for no extra coverage — the derived ctor's own oracle
-// already compares all 0x28 base bytes.
-
-// ??0UpdateLoop@Engine@@QEAA@XZ  0x1800ddd30
-//
-// The bit allocation is the whole of this ctor. ExternalFactory keeps a 32-bit
-// mask at +0x04; the loop scans indices 0..31 for the lowest CLEAR bit with
-// `BT`, sets it, and stores the INDEX at this->_loadBit — or stores -1 when all
-// 32 are taken. Note what is NOT written: +0x20 is written last, from EAX, and
-// the ctor never touches +0x24 after zeroing it.
-void UpdateLoopCtorBody(UpdateLoop* self) {
-    self->_vtable        = VTableUpdateLoop();
-    // ENDGAME B.3.8 block RB (RULE B8-1): the rest is ONE body with the real
-    // constructor: `Engine::UpdateLoop::InitFields`, below the ports banner.
-    Engine::UpdateLoop::DoorBody::Init(reinterpret_cast<Engine::UpdateLoop*>(self));   // B.3.8 bridge
-}
-
-// ??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z  0x1800dc1e0
-void LoaderLoopCtorBody(LoaderLoop* self, void* nextLoop, const ::Time* delay) {
-    UpdateLoopCtorBody(&self->_base);
-    self->_base._vtable = VTableLoaderLoop();
-    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with the real constructor.
-    Engine::LoaderLoop::DoorBody::Init(reinterpret_cast<Engine::LoaderLoop*>(self),   // B.3.8 bridge
-                                       static_cast<Engine::UpdateLoop*>(nextLoop), delay->ticks);
-}
-
-// ??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z  0x1800db3f0
-void DialogLoopTCtorBody(DialogLoopT* self, const RtSystem::String* filename) {
-    UpdateLoopCtorBody(&self->_base);
-    self->_base._vtable   = VTableDialogLoopT();
-    new (&self->_dialogFilename) System::String(RtSystem::Sys(*filename));
-    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with the real constructor
-    // (whose member initialiser is the String copy above).
-    Engine::DialogLoopT::DoorBody::Init(reinterpret_cast<Engine::DialogLoopT*>(self));   // B.3.8 bridge
-}
-
-// ??0DialogLoaderLoopT@Engine@@QEAA@AEBVString@System@@PEAVUpdateLoop@1@AEBVTime@3@@Z
-// 0x1800db0d0
-void DialogLoaderLoopTCtorBody(DialogLoaderLoopT* self, const RtSystem::String* filename,
-                               void* nextLoop, const ::Time* delay) {
-    LoaderLoopCtorBody(&self->_base, nextLoop, delay);
-    self->_base._base._vtable = VTableDialogLoaderLoopT();
-    new (&self->_dialogFilename) System::String(RtSystem::Sys(*filename));
-    Engine::DialogLoaderLoopT::DoorBody::Init(reinterpret_cast<Engine::DialogLoaderLoopT*>(self));   // B.3.8 bridge
-}
-
-// ============================================================================
-// The build oracle
-// ============================================================================
-// A constructor cannot be replayed onto the object it just built, and it cannot
-// be replayed onto a scratch copy either without leaking: every one of these
-// ctors takes a slot out of ExternalFactory's 32-bit allocation mask, and the
-// two dialog ctors also take a reference on the caller's filename String.
-//
-// So this is the Wave 7 "poison twin", with one addition. Two scratch buffers
-// are filled with the SAME poison byte; ours runs on one and the DLL's on the
-// other; all N bytes are compared. The poison makes every byte NEITHER writes
-// compare equal by construction, so no hand-written mask of unwritten ranges is
-// needed at all — which is the trap that read as a catastrophic port defect in
-// Wave 6 and cost a day.
-//
-// The addition: the allocation-mask slot each run takes is UNDONE BETWEEN THE
-// TWO RUNS, so both runs see an identical factory mask and allocate the SAME
-// bit index. Without that, +0x20 would differ for a purely bookkeeping reason
-// and would have to be excluded; with it, `_loadBit` is compared like every
-// other field. The undo is `mask &= ~(1 << bit)` — the last step of
-// ~UpdateLoop, and deliberately NOT the whole destructor: ~UpdateLoop also
-// calls ExternalFactory::Clean(), a real global sweep of unreferenced
-// resources, and a scratch object that never loaded anything has nothing for
-// Clean to collect. Running it would be a behaviour change the oracle imposed
-// on the boot path, not an undo.
-//
-// The string references the two dialog ctors take are released after the
-// comparison, one per run, with the same idiom the destructor uses.
-
-constexpr uint8_t kPoison = 0xCD;
-constexpr size_t  kScratchMax = sizeof(DialogLoaderLoopT);   // 0x188, the largest
-
-alignas(16) uint8_t g_scratchOurs[kScratchMax];
-alignas(16) uint8_t g_scratchTheirs[kScratchMax];
-
-// The lane's ctors nest (DialogLoaderLoopT -> LoaderLoop -> UpdateLoop) but
-// only through the private *CtorBody helpers above, which never touch the
-// scratch. This guard exists so that a future edit that DOES route a nested
-// construction through a diffed entry point degrades to "no oracle for the
-// inner one" rather than to two frames stamping on one buffer.
-int g_scratchDepth = 0;
-
-struct ScratchGuard {
-    bool held;
-    ScratchGuard() : held(g_scratchDepth == 0) { ++g_scratchDepth; }
-    ~ScratchGuard() { --g_scratchDepth; }
-};
-
-void ReleaseBitFor(const UpdateLoop* built) {
-    if (built->_loadBit < 0) return;
-    RtObject::ExternalFactory* factory = Factory();
-    if (!factory) return;
-    factory->_cleanBitMask &= ~(1u << built->_loadBit);
-}
-
 } // namespace
 
 // ============================================================================
@@ -516,10 +383,11 @@ void ReleaseBitFor(const UpdateLoop* built) {
 // loops are the boot path, where retail's unguarded derefs are load bearing.
 
 // ============================================================================
-// ENDGAME B.3.8 block RB (RULE B8-1): the loop bases' shared ctor/dtor bodies.
-// Each is its door's body MINUS the vptr stores, moved verbatim; the real
-// constructors/destructors (runtime/types/engine/UpdateLoop.h) and the doors
-// below both run them.
+// ENDGAME B.3.8 block RB (RULE B8-1): the loop bases' ctor/dtor bodies, each
+// retail's body MINUS the vptr stores; the real constructors / destructors
+// (runtime/types/engine/UpdateLoop.h) run them. Their doors are gone since
+// ENDGAME B.3.9 ENG W2; the split stays so the unit binary can link recording
+// markers in their place (tests/unit/rb_engine_abi_test.cpp).
 // ============================================================================
 // ??0UpdateLoop@Engine@@QEAA@XZ 0x1800ddd30: the clean-bit allocation.
 void Engine::UpdateLoop::InitFields() {
@@ -601,87 +469,6 @@ void Engine::DialogLoaderLoopT::InitFields() {
 void Engine::DialogLoopT::ReleaseFields()       { UserInterfaceDtor()(&_ui); }
 void Engine::DialogLoaderLoopT::ReleaseFields() { UserInterfaceDtor()(&_ui); }
 
-// ---- ??0UpdateLoop@Engine@@QEAA@XZ  0x1800ddd30 ord 468 ---------------------
-extern "C" UpdateLoop* RtEngine_UpdateLoop_Ctor(UpdateLoop* self) {
-    UpdateLoopCtorBody(self);
-
-    return self;
-}
-
-// ---- ??1UpdateLoop@Engine@@UEAA@XZ  0x1800dddb0 ord 704 ---------------------
-// NO REPLAY IS POSSIBLE and none is attempted: running the DLL's destructor
-// beside ours would hand the same bit index back twice and run
-// ExternalFactory::Clean an extra time, which evicts real resources. The oracle
-// is therefore a SHADOW predicate over what the body is supposed to have
-// achieved, and its verdict names every term it tests, so a failure says which
-// one failed rather than "something differed"
-// (reference_shadow_predicate_must_name_its_failing_term.md).
-extern "C" void RtEngine_UpdateLoop_Dtor(UpdateLoop* self) {
-
-    // The standard MSVC base-destructor step: re-stamp the base vtable, so a
-    // virtual dispatched during the rest of the teardown reaches the BASE
-    // implementation and not the already-destroyed derived one.
-    self->_vtable = VTableUpdateLoop();
-
-    // ENDGAME B.3.8 block RB (RULE B8-1): the teardown is ONE body with the
-    // real destructor: `Engine::UpdateLoop::ReleaseFields`.
-    Engine::UpdateLoop::DoorBody::Release(reinterpret_cast<Engine::UpdateLoop*>(self));   // B.3.8 bridge
-}
-
-// ============================================================================
-// BATCH 8: the three remaining family dtors — ~LoaderLoop, ~DialogLoopT,
-// ~DialogLoaderLoopT. All three end in exactly the base cleanup above (the
-// vtable restamp to UpdateLoop's own table, the ExternalFactory bit release,
-// the ListCleanup tail call); factored out so each dtor states only what it
-// adds over that base, matching how retail's decompile actually reads (see
-// the three functions below for the decompiled shape each one open-codes).
-// ============================================================================
-void UpdateLoopBaseTeardown(UpdateLoop* self) {
-    self->_vtable = VTableUpdateLoop();
-    Engine::UpdateLoop::DoorBody::Release(reinterpret_cast<Engine::UpdateLoop*>(self));   // B.3.8 bridge
-}
-
-// ---- ??1LoaderLoop@Engine@@UEAA@XZ  0x1800dc170 ord 626 ---------------------
-// Retail's decompile shows LoaderLoop's OWN vtable stamped and then
-// immediately overwritten with UpdateLoop's, with nothing observable between
-// the two stores: LoaderLoop adds no destructible members over UpdateLoop
-// (a raw pointer and three ints), so MSVC folded ~LoaderLoop's body straight
-// into ~UpdateLoop's rather than emitting a real call down to it. The net
-// effect is UpdateLoopBaseTeardown once LoaderLoop's own vtable has been
-// written, which is reproduced here as two statements rather than one,
-// exactly because retail's own listing has two stores.
-extern "C" void RtEngine_LoaderLoop_Dtor(LoaderLoop* self) {
-    self->_base._vtable = VTableLoaderLoop();
-    UpdateLoopBaseTeardown(&self->_base);
-}
-
-// ---- ??1DialogLoopT@Engine@@UEAA@XZ  0x1800db340 ord 576 --------------------
-// Adds, over the base: destroy the embedded UI::UserInterface at +0x40 (its
-// own exported dtor, already ported — runtime/src/ui/userinterface.cpp), then
-// release `_dialogFilename` (+0x28) with `~String` (0x180006c80) BEFORE the
-// base teardown restamps the vtable to UpdateLoop's and runs the
-// ExternalFactory/ListCleanup pair.
-extern "C" void RtEngine_DialogLoopT_Dtor(DialogLoopT* self) {
-    self->_base._vtable = VTableDialogLoopT();
-    Engine::DialogLoopT::DoorBody::Release(reinterpret_cast<Engine::DialogLoopT*>(self));   // B.3.8 bridge
-    RtSystem::Sys(self->_dialogFilename).~String();
-    UpdateLoopBaseTeardown(&self->_base);
-}
-
-// ---- ??1DialogLoaderLoopT@Engine@@UEAA@XZ  0x1800db060 ord 575 --------------
-// Same shape as ~DialogLoopT, over the LoaderLoop base rather than UpdateLoop
-// directly: own vtable, destroy the UI at +0x60, release `_dialogFilename`
-// (+0x48), then tail into ~LoaderLoop(this) — reproduced here as the same
-// LoaderLoop-vtable restamp plus UpdateLoopBaseTeardown, per the note above
-// ~LoaderLoop on why those two collapse into one sequence.
-extern "C" void RtEngine_DialogLoaderLoopT_Dtor(DialogLoaderLoopT* self) {
-    self->_base._base._vtable = VTableDialogLoaderLoopT();
-    Engine::DialogLoaderLoopT::DoorBody::Release(reinterpret_cast<Engine::DialogLoaderLoopT*>(self));   // B.3.8 bridge
-    RtSystem::Sys(self->_dialogFilename).~String();
-    self->_base._base._vtable = VTableLoaderLoop();
-    UpdateLoopBaseTeardown(&self->_base._base);
-}
-
 // ---- ?IsRunning@UpdateLoop@Engine@@QEBA_NXZ  0x1800dd7b0 ord 3160 -----------
 // The one genuinely const, side-effect-free function in the lane, so it gets a
 // full replay oracle. Note it is a member that tests its own `this` for null:
@@ -700,15 +487,6 @@ extern "C" bool RtEngine_UpdateLoop_IsRunning(const UpdateLoop* self) {
     if (!self) return false;
     return reinterpret_cast<const Engine::UpdateLoop*>(self)
         ->Engine::UpdateLoop::IsRunning();                           // B.3.7 bridge
-}
-
-// ---- ??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z --------
-//      0x1800dc1e0 ord 261
-extern "C" LoaderLoop* RtEngine_LoaderLoop_Ctor(LoaderLoop* self, void* nextLoop,
-                                                const ::Time* delay) {
-    LoaderLoopCtorBody(self, nextLoop, delay);
-
-    return self;
 }
 
 // ---- ?Load@Loader@Engine@@QEAAXPEAVUpdateLoop@2@@Z  0x1800dc050 ord 3204 ----
@@ -770,14 +548,6 @@ extern "C" void RtEngine_Loader_Load(Loader* self, void* loop) {
         static_cast<Engine::UpdateLoop*>(loop));
 }
 
-// ---- ??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z  0x1800db3f0 ord 153 -
-extern "C" DialogLoopT* RtEngine_DialogLoopT_Ctor(DialogLoopT* self,
-                                                  const RtSystem::String* filename) {
-    DialogLoopTCtorBody(self, filename);
-
-    return self;
-}
-
 // ---- ?Load@DialogLoopT@Engine@@UEAAXXZ  0x1800db140 ord 3201 ----------------
 // SHADOW, not replay: FindOrLoad either returns a cached External or LOADS the
 // dialog resource off disk and inserts it into the global resource table.
@@ -801,10 +571,6 @@ void Engine::DialogLoopT::Load() {
         if (IsDerivedFrom()(external, DialogTypeId())) result = external;
     }
     _dialogExternal = result;
-}
-
-extern "C" void RtEngine_DialogLoopT_Load(DialogLoopT* self) {
-    reinterpret_cast<Engine::DialogLoopT*>(self)->Engine::DialogLoopT::Load();  // B.3.7 bridge
 }
 
 // ---- ?Startup@DialogLoopT@Engine@@UEAAXXZ  0x1800db2f0 ord 4093 -------------
@@ -839,10 +605,6 @@ void Engine::DialogLoopT::Startup() {
         ->SetSizeFill(_ui._addDialogs.GetSize() + 1, &ret);
 }
 
-extern "C" void RtEngine_DialogLoopT_Startup(DialogLoopT* self) {
-    reinterpret_cast<Engine::DialogLoopT*>(self)->Engine::DialogLoopT::Startup();  // B.3.7 bridge
-}
-
 // ---- ?Update@DialogLoopT@Engine@@UEAA_NAEBVTime@System@@@Z  0x1800db270 -----
 //      ord 4485
 // Partly oracled, and the split is the point. The body has two halves: a PURE
@@ -864,20 +626,6 @@ bool Engine::DialogLoopT::Update(const System::Time& time) {
     return true;   // MOV AL,1 — unconditional
 }
 
-extern "C" bool RtEngine_DialogLoopT_Update(DialogLoopT* self, const ::Time* time) {
-    return reinterpret_cast<Engine::DialogLoopT*>(self)->Engine::DialogLoopT::Update(  // B.3.7 bridge
-        *reinterpret_cast<const System::Time*>(time));
-}
-
-// ---- ??0DialogLoaderLoopT@Engine@@…  0x1800db0d0 ord 151 --------------------
-extern "C" DialogLoaderLoopT* RtEngine_DialogLoaderLoopT_Ctor(
-        DialogLoaderLoopT* self, const RtSystem::String* filename,
-        void* nextLoop, const ::Time* delay) {
-    DialogLoaderLoopTCtorBody(self, filename, nextLoop, delay);
-
-    return self;
-}
-
 // ---- ?Load@DialogLoaderLoopT@Engine@@UEAAXXZ  0x1800dad50 ord 3200 ----------
 // Byte-for-byte the same body as DialogLoopT::Load with the LoaderLoop base's
 // +0x20 offsets. Written out rather than shared, because retail emitted two
@@ -895,11 +643,6 @@ void Engine::DialogLoaderLoopT::Load() {
         if (IsDerivedFrom()(external, DialogTypeId())) result = external;
     }
     _dialogExternal = result;
-}
-
-extern "C" void RtEngine_DialogLoaderLoopT_Load(DialogLoaderLoopT* self) {
-    reinterpret_cast<Engine::DialogLoaderLoopT*>(self)                // B.3.7 bridge
-        ->Engine::DialogLoaderLoopT::Load();
 }
 
 // ---- ?Startup@DialogLoaderLoopT@Engine@@UEAAXXZ  0x1800db000 ord 4092 -------
@@ -935,11 +678,6 @@ void Engine::DialogLoaderLoopT::Startup() {
     // a direct member call now (it was a function-local `static` export cache
     // -- a B6-5 site -- before).
     LoaderLoopLoader()->Load(_nextLoop);
-}
-
-extern "C" void RtEngine_DialogLoaderLoopT_Startup(DialogLoaderLoopT* self) {
-    reinterpret_cast<Engine::DialogLoaderLoopT*>(self)                // B.3.7 bridge
-        ->Engine::DialogLoaderLoopT::Startup();
 }
 
 // ============================================================================
@@ -1029,32 +767,6 @@ const char* Engine::UpdateLoop::GetResourceFilename() {
 
 bool Engine::UpdateLoop::AllowsModChanges() {
     return false;     // retail 0x180031790: xor al,al ; ret
-}
-
-extern "C" void RtEngine_UpdateLoop_DrawFailed(void* self) {
-    reinterpret_cast<Engine::UpdateLoop*>(self)->Engine::UpdateLoop::DrawFailed();  // B.3.7 bridge
-}
-
-extern "C" void RtEngine_UpdateLoop_SaveRestore(void* self, bool saving,
-                                                void* savedState) {
-    reinterpret_cast<Engine::UpdateLoop*>(self)->Engine::UpdateLoop::SaveRestore(  // B.3.7 bridge
-        saving, static_cast<Save::SavedState*>(savedState));
-}
-
-extern "C" void RtEngine_UpdateLoop_OnVideoError(void* self) {
-    reinterpret_cast<Engine::UpdateLoop*>(self)->Engine::UpdateLoop::OnVideoError();  // B.3.7 bridge
-}
-
-extern "C" void RtEngine_UpdateLoop_OnVideoRestart(void* self) {
-    reinterpret_cast<Engine::UpdateLoop*>(self)->Engine::UpdateLoop::OnVideoRestart();  // B.3.7 bridge
-}
-
-extern "C" const char* RtEngine_UpdateLoop_GetResourceFilename(void* self) {
-    return reinterpret_cast<Engine::UpdateLoop*>(self)->Engine::UpdateLoop::GetResourceFilename();  // B.3.7 bridge
-}
-
-extern "C" bool RtEngine_UpdateLoop_AllowsModChanges(void* self) {
-    return reinterpret_cast<Engine::UpdateLoop*>(self)->Engine::UpdateLoop::AllowsModChanges();  // B.3.7 bridge
 }
 
 
@@ -1192,10 +904,6 @@ void Engine::LoaderLoop::Startup() {
     LoaderLoopLoader()->Load(_nextLoop);
 }
 
-extern "C" void RtEngine_LoaderLoop_Startup(LoaderLoop* self) {
-    reinterpret_cast<Engine::LoaderLoop*>(self)->Engine::LoaderLoop::Startup();  // B.3.7 bridge
-}
-
 // ---- ?Shutdown@LoaderLoop@Engine@@UEAAXXZ  0x1800dc280  ord 4052 ------------
 //     mov  0x1801fe7e0(%rip),%rcx   ; _loader._thread.hFinished
 //     or   $0xffffffff,%edx         ; INFINITE
@@ -1205,10 +913,6 @@ void Engine::LoaderLoop::Shutdown() {
     // ENDGAME B.3.7: `Loader` IS a `System::Thread`; `WaitForFinish` is the
     // base's non-virtual member (thread_win.cpp), called directly.
     LoaderLoopLoader()->WaitForFinish();
-}
-
-extern "C" void RtEngine_LoaderLoop_Shutdown(LoaderLoop* self) {
-    reinterpret_cast<Engine::LoaderLoop*>(self)->Engine::LoaderLoop::Shutdown();  // B.3.7 bridge
 }
 
 // ---- ?OnVideoError@LoaderLoop@Engine@@UEAAXXZ  0x1800dc360  ord 3290 --------
@@ -1223,19 +927,11 @@ void Engine::LoaderLoop::OnVideoError() {
     LoaderLoopLoader()->WaitForFinish();
 }
 
-extern "C" void RtEngine_LoaderLoop_OnVideoError(LoaderLoop* self) {
-    reinterpret_cast<Engine::LoaderLoop*>(self)->Engine::LoaderLoop::OnVideoError();  // B.3.7 bridge
-}
-
 // ---- ?Load@LoaderLoop@Engine@@UEAAXXZ  0x1800dc350  ord 3205 ----------------
 // `ret $0x0` and nothing else. The derived classes override it; LoaderLoop
 // itself loads nothing, because the WORK is done on the loader thread by
 // Loader::Run, which Startup kicks off.
 void Engine::LoaderLoop::Load() {
-}
-
-extern "C" void RtEngine_LoaderLoop_Load(LoaderLoop* self) {
-    reinterpret_cast<Engine::LoaderLoop*>(self)->Engine::LoaderLoop::Load();  // B.3.7 bridge
 }
 
 // ---- ?Update@LoaderLoop@Engine@@UEAA_NAEBVTime@System@@@Z 0x1800dc2a0 -------
@@ -1245,11 +941,6 @@ bool Engine::LoaderLoop::Update(const System::Time& time) {
     SleepFourteen();
     LoaderLoopAdvance(this, time);
     return true;   // `mov $0x1,%al`
-}
-
-extern "C" bool RtEngine_LoaderLoop_Update(LoaderLoop* self, const ::Time* time) {
-    return reinterpret_cast<Engine::LoaderLoop*>(self)->Engine::LoaderLoop::Update(  // B.3.7 bridge
-        *reinterpret_cast<const System::Time*>(time));
 }
 
 // ---- ?Draw@LoaderLoop@Engine@@UEAAXM@Z  0x1800dc310  ord 2250 ---------------
@@ -1266,10 +957,6 @@ void Engine::LoaderLoop::Draw(float /*interpolation*/) {
     RtVideo::Context* ctx = reinterpret_cast<RtVideo::Context*>(ml->_context);
     Video::ContextData* cd = CtxDataOf(ctx);
     cd->Clear(7u, 0u, 1.0f, 0);
-}
-
-extern "C" void RtEngine_LoaderLoop_Draw(LoaderLoop* self, float dt) {
-    reinterpret_cast<Engine::LoaderLoop*>(self)->Engine::LoaderLoop::Draw(dt);  // B.3.7 bridge
 }
 
 // ---- ?Shutdown@DialogLoaderLoopT@Engine@@UEAAXXZ  0x1800dafc0  ord 4045 -----
@@ -1291,11 +978,6 @@ void Engine::DialogLoaderLoopT::Shutdown() {
     LoaderLoopLoader()->WaitForFinish();
 }
 
-extern "C" void RtEngine_DialogLoaderLoopT_Shutdown(DialogLoaderLoopT* self) {
-    reinterpret_cast<Engine::DialogLoaderLoopT*>(self)                // B.3.7 bridge
-        ->Engine::DialogLoaderLoopT::Shutdown();
-}
-
 // ---- ?Update@DialogLoaderLoopT@Engine@@UEAA_N…  0x1800daf20  ord 4484 -------
 // The UI half of DialogLoopT::Update followed by the whole of
 // LoaderLoop::Update, both inlined. The Time round-trip through FLOAT is the
@@ -1314,12 +996,6 @@ bool Engine::DialogLoaderLoopT::Update(const System::Time& time) {
     // LoaderLoop::Update: retail inlined a second copy (no second Sleep).
     LoaderLoopAdvance(this, time);
     return true;
-}
-
-extern "C" bool RtEngine_DialogLoaderLoopT_Update(DialogLoaderLoopT* self,
-                                                  const ::Time* time) {
-    return reinterpret_cast<Engine::DialogLoaderLoopT*>(self)         // B.3.7 bridge
-        ->Engine::DialogLoaderLoopT::Update(*reinterpret_cast<const System::Time*>(time));
 }
 
 // ---- ?Draw@DialogLoaderLoopT@Engine@@UEAAXM@Z  0x1800dae20  ord 2238 --------
@@ -1365,11 +1041,6 @@ void Engine::DialogLoaderLoopT::Draw(float /*interpolation*/) {
     _ui.Draw(*ctx);   // B.3.6: `_ui` IS a UI::UserInterface; RtVideo::Context aliases Video::Context
 }
 
-extern "C" void RtEngine_DialogLoaderLoopT_Draw(DialogLoaderLoopT* self, float dt) {
-    reinterpret_cast<Engine::DialogLoaderLoopT*>(self)                // B.3.7 bridge
-        ->Engine::DialogLoaderLoopT::Draw(dt);
-}
-
 // ---- ?Shutdown@DialogLoopT@Engine@@UEAAXXZ  0x1800db2c0  ord 4046 -----------
 // DialogLoaderLoopT::Shutdown without the thread wait, and at DialogLoopT's own
 // offsets (_dialogInstance +0x38, _ui +0x40 — thirty-two bytes lower than the
@@ -1377,10 +1048,6 @@ extern "C" void RtEngine_DialogLoaderLoopT_Draw(DialogLoaderLoopT* self, float d
 void Engine::DialogLoopT::Shutdown() {
     void* byValue = _dialogInstance;
     _ui.CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&byValue));  // B.3.6 bridge
-}
-
-extern "C" void RtEngine_DialogLoopT_Shutdown(DialogLoopT* self) {
-    reinterpret_cast<Engine::DialogLoopT*>(self)->Engine::DialogLoopT::Shutdown();  // B.3.7 bridge
 }
 
 // ---- ?Draw@DialogLoopT@Engine@@UEAAXM@Z  0x1800db210  ord 2239 --------------
@@ -1398,10 +1065,6 @@ void Engine::DialogLoopT::Draw(float /*interpolation*/) {
     cd->Clear(7u, 0xff808080u, 1.0f, 0);
 
     _ui.Draw(*ctx);   // B.3.6: `_ui` IS a UI::UserInterface; RtVideo::Context aliases Video::Context
-}
-
-extern "C" void RtEngine_DialogLoopT_Draw(DialogLoopT* self, float dt) {
-    reinterpret_cast<Engine::DialogLoopT*>(self)->Engine::DialogLoopT::Draw(dt);  // B.3.7 bridge
 }
 
 // ---- ?Run@Loader@Engine@@UEAAXXZ  0x1800dbfc0  ord 3600 ---------------------
@@ -1630,164 +1293,21 @@ extern "C" void RtEngine_MainLoop_Draw(RtEngine::MainLoop* self, float dt) {
 int RtEngineLoopsRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("??0UpdateLoop@Engine@@QEAA@XZ",
-                          (void*)&RtEngine_UpdateLoop_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800ddd30, (void*)&RtEngine_UpdateLoop_Ctor);
-
-    RegisterRuntimeExport("??1UpdateLoop@Engine@@UEAA@XZ",
-                          (void*)&RtEngine_UpdateLoop_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800dddb0, (void*)&RtEngine_UpdateLoop_Dtor);
-
     RegisterRuntimeExport("?IsRunning@UpdateLoop@Engine@@QEBA_NXZ",
                           (void*)&RtEngine_UpdateLoop_IsRunning); ++n;
     RegisterRuntimeAddr(0x1800dd7b0, (void*)&RtEngine_UpdateLoop_IsRunning);
-
-    RegisterRuntimeExport("??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z",
-                          (void*)&RtEngine_LoaderLoop_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800dc1e0, (void*)&RtEngine_LoaderLoop_Ctor);
 
     RegisterRuntimeExport("?Load@Loader@Engine@@QEAAXPEAVUpdateLoop@2@@Z",
                           (void*)&RtEngine_Loader_Load); ++n;
     RegisterRuntimeAddr(0x1800dc050, (void*)&RtEngine_Loader_Load);
 
-    RegisterRuntimeExport("??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z",
-                          (void*)&RtEngine_DialogLoopT_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800db3f0, (void*)&RtEngine_DialogLoopT_Ctor);
+    // ENDGAME B.3.9 ENG W2: the loops' four ctor doors, four dtor doors and
+    // twenty-two slot doors (the Wave 25 VTIO six, the Wave 27 LOOPS twelve
+    // minus Loader::Run, the four Load/Startup/Update rows) are GONE with the
+    // four minted loop tables and their RT_DELDTOR rows: their only reader was
+    // the mint. The member bodies above are what the compiler tables call.
 
-    RegisterRuntimeExport("?Load@DialogLoopT@Engine@@UEAAXXZ",
-                          (void*)&RtEngine_DialogLoopT_Load); ++n;
-    RegisterRuntimeAddr(0x1800db140, (void*)&RtEngine_DialogLoopT_Load);
-
-    RegisterRuntimeExport("?Startup@DialogLoopT@Engine@@UEAAXXZ",
-                          (void*)&RtEngine_DialogLoopT_Startup); ++n;
-    RegisterRuntimeAddr(0x1800db2f0, (void*)&RtEngine_DialogLoopT_Startup);
-
-    RegisterRuntimeExport("?Update@DialogLoopT@Engine@@UEAA_NAEBVTime@System@@@Z",
-                          (void*)&RtEngine_DialogLoopT_Update); ++n;
-    RegisterRuntimeAddr(0x1800db270, (void*)&RtEngine_DialogLoopT_Update);
-
-    RegisterRuntimeExport(
-        "??0DialogLoaderLoopT@Engine@@QEAA@AEBVString@System@@PEAVUpdateLoop@1@AEBVTime@3@@Z",
-        (void*)&RtEngine_DialogLoaderLoopT_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800db0d0, (void*)&RtEngine_DialogLoaderLoopT_Ctor);
-
-    RegisterRuntimeExport("?Load@DialogLoaderLoopT@Engine@@UEAAXXZ",
-                          (void*)&RtEngine_DialogLoaderLoopT_Load); ++n;
-    RegisterRuntimeAddr(0x1800dad50, (void*)&RtEngine_DialogLoaderLoopT_Load);
-
-    RegisterRuntimeExport("?Startup@DialogLoaderLoopT@Engine@@UEAAXXZ",
-                          (void*)&RtEngine_DialogLoaderLoopT_Startup); ++n;
-    RegisterRuntimeAddr(0x1800db000, (void*)&RtEngine_DialogLoaderLoopT_Startup);
-
-    // ---- BATCH 8: the three remaining family dtors --------------------------
-    RegisterRuntimeExport("??1LoaderLoop@Engine@@UEAA@XZ",
-                          (void*)&RtEngine_LoaderLoop_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800dc170, (void*)&RtEngine_LoaderLoop_Dtor);
-
-    RegisterRuntimeExport("??1DialogLoopT@Engine@@UEAA@XZ",
-                          (void*)&RtEngine_DialogLoopT_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800db340, (void*)&RtEngine_DialogLoopT_Dtor);
-
-    RegisterRuntimeExport("??1DialogLoaderLoopT@Engine@@UEAA@XZ",
-                          (void*)&RtEngine_DialogLoaderLoopT_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800db060, (void*)&RtEngine_DialogLoaderLoopT_Dtor);
-
-    // ---- WAVE 25 lane VTIO: the six shared UpdateLoop base slots ------------
-    // Registered by NAME and by ADDRESS, like every other row in this file.
-    // DECLARED SURFACE GROWTH (WAVE25_KICKOFF §1f), MEASURED by a row-set diff
-    // of `tools/runtime_census.py --csv` across a stash of this change, NOT
-    // reasoned about.  My first draft of this comment claimed **+0** and was
-    // WRONG; the flattering number was the wrong one, exactly as §1f warns.
-    //
-    //   called 1323 -> 1325 (+2)   ported 1171 -> 1173 (+2)   net gap +0
-    //
-    // AND NONE OF THAT IS THESE SIX REGISTRATIONS.  A registration alone does
-    // not create a census row — the population is built from RESOLVE DOORS —
-    // so four of the six (DrawFailed, SaveRestore, OnVideoError,
-    // OnVideoRestart) move NO column at all.  The two rows that appeared are
-    // `?GetResourceFilename@` and `?AllowsModChanges@`, and they appeared
-    // because the ORACLE above opens a real `the raw DLL door` door on each.
-    // They enter `called` and `ported` in the same breath, so the gap is
-    // unchanged; the cost is honest and it belongs to the instrument, not to
-    // the ports.
-    //
-    // What these six DO move is the PROMOTION BACKLOG, which is where an
-    // unpromoted vtable's slot work is supposed to show (Wave 21 lane ENC):
-    //   ??_7UpdateLoop@Engine@@6B@         1/7  -> 7/7  COMPLETE
-    //   ??_7LoaderLoop@Engine@@6B@         1/12 -> 6/12
-    //   ??_7DialogLoopT@Engine@@6B@        4/12 -> 10/12
-    //   ??_7DialogLoaderLoopT@Engine@@6B@  3/12 -> 8/12
-    RegisterRuntimeExport("?DrawFailed@UpdateLoop@Engine@@UEAAXXZ",
-                          (void*)&RtEngine_UpdateLoop_DrawFailed); ++n;
-    RegisterRuntimeAddr(0x180031740, (void*)&RtEngine_UpdateLoop_DrawFailed);
-
-    RegisterRuntimeExport("?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z",
-                          (void*)&RtEngine_UpdateLoop_SaveRestore); ++n;
-    RegisterRuntimeAddr(0x180031750, (void*)&RtEngine_UpdateLoop_SaveRestore);
-
-    RegisterRuntimeExport("?OnVideoError@UpdateLoop@Engine@@UEAAXXZ",
-                          (void*)&RtEngine_UpdateLoop_OnVideoError); ++n;
-    RegisterRuntimeAddr(0x180031760, (void*)&RtEngine_UpdateLoop_OnVideoError);
-
-    RegisterRuntimeExport("?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ",
-                          (void*)&RtEngine_UpdateLoop_OnVideoRestart); ++n;
-    RegisterRuntimeAddr(0x180031770, (void*)&RtEngine_UpdateLoop_OnVideoRestart);
-
-    RegisterRuntimeExport("?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ",
-                          (void*)&RtEngine_UpdateLoop_GetResourceFilename); ++n;
-    RegisterRuntimeAddr(0x180031780, (void*)&RtEngine_UpdateLoop_GetResourceFilename);
-
-    RegisterRuntimeExport("?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ",
-                          (void*)&RtEngine_UpdateLoop_AllowsModChanges); ++n;
-    RegisterRuntimeAddr(0x180031790, (void*)&RtEngine_UpdateLoop_AllowsModChanges);
-
-    // ---- WAVE 27 lane LOOPS: the twelve remaining slot bodies + MainLoop::Draw
-    // Same two-door rule as everything above, and the literals are repeated at
-    // each site because runtime_census.py cannot see a named constant here.
-    RegisterRuntimeExport("?Startup@LoaderLoop@Engine@@UEAAXXZ",
-                          (void*)&RtEngine_LoaderLoop_Startup); ++n;
-    RegisterRuntimeAddr(0x1800dc260, (void*)&RtEngine_LoaderLoop_Startup);
-
-    RegisterRuntimeExport("?Shutdown@LoaderLoop@Engine@@UEAAXXZ",
-                          (void*)&RtEngine_LoaderLoop_Shutdown); ++n;
-    RegisterRuntimeAddr(0x1800dc280, (void*)&RtEngine_LoaderLoop_Shutdown);
-
-    RegisterRuntimeExport("?Update@LoaderLoop@Engine@@UEAA_NAEBVTime@System@@@Z",
-                          (void*)&RtEngine_LoaderLoop_Update); ++n;
-    RegisterRuntimeAddr(0x1800dc2a0, (void*)&RtEngine_LoaderLoop_Update);
-
-    RegisterRuntimeExport("?Draw@LoaderLoop@Engine@@UEAAXM@Z",
-                          (void*)&RtEngine_LoaderLoop_Draw); ++n;
-    RegisterRuntimeAddr(0x1800dc310, (void*)&RtEngine_LoaderLoop_Draw);
-
-    RegisterRuntimeExport("?Load@LoaderLoop@Engine@@UEAAXXZ",
-                          (void*)&RtEngine_LoaderLoop_Load); ++n;
-    RegisterRuntimeAddr(0x1800dc350, (void*)&RtEngine_LoaderLoop_Load);
-
-    RegisterRuntimeExport("?OnVideoError@LoaderLoop@Engine@@UEAAXXZ",
-                          (void*)&RtEngine_LoaderLoop_OnVideoError); ++n;
-    RegisterRuntimeAddr(0x1800dc360, (void*)&RtEngine_LoaderLoop_OnVideoError);
-
-    RegisterRuntimeExport("?Shutdown@DialogLoaderLoopT@Engine@@UEAAXXZ",
-                          (void*)&RtEngine_DialogLoaderLoopT_Shutdown); ++n;
-    RegisterRuntimeAddr(0x1800dafc0, (void*)&RtEngine_DialogLoaderLoopT_Shutdown);
-
-    RegisterRuntimeExport("?Update@DialogLoaderLoopT@Engine@@UEAA_NAEBVTime@System@@@Z",
-                          (void*)&RtEngine_DialogLoaderLoopT_Update); ++n;
-    RegisterRuntimeAddr(0x1800daf20, (void*)&RtEngine_DialogLoaderLoopT_Update);
-
-    RegisterRuntimeExport("?Draw@DialogLoaderLoopT@Engine@@UEAAXM@Z",
-                          (void*)&RtEngine_DialogLoaderLoopT_Draw); ++n;
-    RegisterRuntimeAddr(0x1800dae20, (void*)&RtEngine_DialogLoaderLoopT_Draw);
-
-    RegisterRuntimeExport("?Shutdown@DialogLoopT@Engine@@UEAAXXZ",
-                          (void*)&RtEngine_DialogLoopT_Shutdown); ++n;
-    RegisterRuntimeAddr(0x1800db2c0, (void*)&RtEngine_DialogLoopT_Shutdown);
-
-    RegisterRuntimeExport("?Draw@DialogLoopT@Engine@@UEAAXM@Z",
-                          (void*)&RtEngine_DialogLoopT_Draw); ++n;
-    RegisterRuntimeAddr(0x1800db210, (void*)&RtEngine_DialogLoopT_Draw);
-
+    // Loader::Run -- slot 0 of the minted Loader table (goes with `_loader`).
     RegisterRuntimeExport("?Run@Loader@Engine@@UEAAXXZ",
                           (void*)&RtEngine_Loader_Run); ++n;
     RegisterRuntimeAddr(0x1800dbfc0, (void*)&RtEngine_Loader_Run);
@@ -1798,5 +1318,5 @@ int RtEngineLoopsRegister() {
                           (void*)&RtEngine_MainLoop_Draw); ++n;
     RegisterRuntimeAddr(0x1800dcd40, (void*)&RtEngine_MainLoop_Draw);
 
-    return n;   // 18 (Wave 8+25) + 13 (Wave 27 lane LOOPS) = 31
+    return n;   // IsRunning, Loader::Load, Loader::Run, MainLoop::Draw = 4
 }

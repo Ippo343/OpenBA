@@ -296,10 +296,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180020310, 0x1801041f0, 0x0d8, "Graphics::ParticleInstance"),
     RT_DELDTOR(0x180020ce0, 0x1800a5520, 0x0e0, "Graphics::ParticleSystemInstance"),
     RT_DELDTOR(0x1800244a0, 0x1800a9560, 0x098, "IO::CompressedMemoryStream"),
-    RT_DELDTOR(0x180031900, 0x1800dddb0, 0x028, "Engine::UpdateLoop"),
-    RT_DELDTOR(0x18004d4f0, 0x1800dc170, 0x048, "Engine::LoaderLoop"),
-    RT_DELDTOR(0x18004d670, 0x1800db060, 0x188, "Engine::DialogLoaderLoopT"),
-    RT_DELDTOR(0x18004d8b0, 0x1800db340, 0x168, "Engine::DialogLoopT"),
     // ---- WAVE 10C lane DLG8 -------------------------------------------------
     // Slot 0 of `??_7Dialog@UI@@6B@`, the last of that vtable's eight abort
     // traps and the only one that is not a UI body. It is this family's shape
@@ -1105,22 +1101,6 @@ void* RtDelDtor_ParticleSystemInstance(void* self, unsigned flags) {
 void* RtDelDtor_CompressedMemoryStream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x1800244a0>());
 }
-// Engine::UpdateLoop       ~UpdateLoop = 0x1800dddb0  (PORTED)
-void* RtDelDtor_UpdateLoop(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180031900>());
-}
-// Engine::LoaderLoop       ~LoaderLoop = 0x1800dc170  (PORTED, BATCH 8)
-void* RtDelDtor_LoaderLoop(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004d4f0>());
-}
-// Engine::DialogLoaderLoopT ~DialogLoaderLoopT = 0x1800db060  (PORTED, BATCH 8)
-void* RtDelDtor_DialogLoaderLoopT(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004d670>());
-}
-// Engine::DialogLoopT      ~DialogLoopT = 0x1800db340  (PORTED, BATCH 8)
-void* RtDelDtor_DialogLoopT(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004d8b0>());
-}
 // IO::CompressedStream     ~CompressedStream = 0x1800aa650  (PORTED, lane PKG2)  [Wave 19]
 void* RtDelDtor_CompressedStream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180023fd0>());
@@ -1239,10 +1219,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180020310, (void*)&RtDelDtor_ParticleInstance);
     RegisterRuntimeAddr(0x180020ce0, (void*)&RtDelDtor_ParticleSystemInstance);
     RegisterRuntimeAddr(0x1800244a0, (void*)&RtDelDtor_CompressedMemoryStream);
-    RegisterRuntimeAddr(0x180031900, (void*)&RtDelDtor_UpdateLoop);
-    RegisterRuntimeAddr(0x18004d4f0, (void*)&RtDelDtor_LoaderLoop);
-    RegisterRuntimeAddr(0x18004d670, (void*)&RtDelDtor_DialogLoaderLoopT);
-    RegisterRuntimeAddr(0x18004d8b0, (void*)&RtDelDtor_DialogLoopT);
     RegisterRuntimeAddr(0x180023fd0, (void*)&RtDelDtor_CompressedStream);      // Wave 19 CSTREAM
     RegisterRuntimeAddr(0x1800134b0, (void*)&RtDelDtor_EdgeMesh);              // Wave 27 GFXMESH
     RegisterRuntimeAddr(0x1800175d0, (void*)&RtDelDtor_EdgeMeshInstance);      // Wave 27 GFXMESH

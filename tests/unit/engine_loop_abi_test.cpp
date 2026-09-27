@@ -4,8 +4,8 @@
 //   Engine::MainLoop and Engine::Engine as real classes.
 //
 // PART A — SIZE / ALIGNMENT / SHAPE, read against B37_SLOTS.md sec. 1 / 1a and
-//   B37_RULES sec. 2.3: the four loops are polymorphic and abstract (LoaderLoop
-//   abstract-by-policy, B7-13), Loader is a concrete System::Thread subclass,
+//   B37_RULES sec. 2.3: the four loops are polymorphic; three are abstract as in
+//   retail (LoaderLoop concrete since B.3.9 ENG W2), Loader is a concrete System::Thread subclass,
 //   MainLoop and Engine are NOT polymorphic. Engine's 0x6f8 is the byte count
 //   `??4Engine@0@` (0x18000c7d0) copies.
 // PART B — RETAIL SLOT ORDER, measured WITHOUT an object: MinGW GCC uses the
@@ -71,7 +71,7 @@ UNIT_TEST(engine_loop_sizes_and_shape) {
 
     CHECK(std::is_polymorphic<Engine::UpdateLoop>::value);
     CHECK(std::is_abstract<Engine::UpdateLoop>::value);
-    CHECK(std::is_abstract<Engine::LoaderLoop>::value);          // B7-13, by policy
+    CHECK(!std::is_abstract<Engine::LoaderLoop>::value);         // concrete, as in retail (B.3.9 ENG W2)
     CHECK(std::is_abstract<Engine::DialogLoopT>::value);
     CHECK(std::is_abstract<Engine::DialogLoaderLoopT>::value);
     CHECK((std::is_base_of<Engine::UpdateLoop, Engine::LoaderLoop>::value));
