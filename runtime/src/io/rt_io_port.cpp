@@ -326,10 +326,9 @@ void RtIoPortInit() {
     n += RtIoTextCodecRegister();
     n += RtIoCompressedStreamWriteRegister();
 
-    // ---- VTABLE BATCH 9 (2026-09-12), also unconditional -------------------
-    //   compressedcopyfilestream.cpp   IO::CompressedCopyFileStream Write/Read/Close
-    extern int RtIoCompressedCopyFileStreamRegister();
-    n += RtIoCompressedCopyFileStreamRegister();
+    // VTABLE BATCH 9's compressedcopyfilestream.cpp (IO::CompressedCopyFileStream
+    // Write/Read/Close) is gone: ENDGAME B.3.9 retired ??_7CompressedCopyFileStream
+    // (no stamper, no class, nothing else reached the three slot bodies).
 
     printf("[RtPort] IO: %d exports registered\n", n);
 }

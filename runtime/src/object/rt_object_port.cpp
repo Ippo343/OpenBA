@@ -175,11 +175,12 @@ void RtObjectPortInit() {
 
     // ---- VTABLE BATCH 9 (2026-09-12) ---------------------------------------
     // Registered UNCONDITIONALLY, same reasoning as BATCH 5 above.
-    //   ext_compilers.cpp     Object::ExtensionCompiler + Object::ExternalCompiler
     //   external_list.cpp     Object::ExternalList
-    extern int RtObjectExtCompilersRegister();
+    // (ext_compilers.cpp -- Object::ExtensionCompiler + Object::ExternalCompiler
+    // Type/TypeName and their ??1 doors -- is gone: ENDGAME B.3.9 retired both
+    // minted tables, which were those bodies' only reader; retail's factories
+    // for both return null, so nothing ever built one.)
     extern int RtObjectExternalListRegister();
-    n += RtObjectExtCompilersRegister();
     n += RtObjectExternalListRegister();
 
     // ---- BATCH A_operator_delete (2026-09-12), unconditional ---------------

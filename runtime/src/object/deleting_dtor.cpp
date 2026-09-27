@@ -894,25 +894,17 @@ static constexpr DelDtorSpec kSpecs[] = {
     //     (own body: stamp own vtable, tail into ~External -- already ported,
     //     runtime/src/object/external.cpp)
     RT_DELDTOR(0x18003b600, 0x18003b4f0, 0x020, "UI::DialogControllerConfig"),
-    //   0x18002c300  LEA R9,[0x1800bcac0]  MOV EDX,0x08   ~ExtensionCompiler
-    //     (own body: stamp own vtable, then Base's -- no members beyond vptr)
-    //     tools/rt_deleting_dtor_verify.py reports this row and the next as BAD
-    //     ("restamps 0x180155a88 but its dtor restamps 0x?"): the reader knows
-    //     one restamp per body and these dtors do TWO (own vtable, then
-    //     ??_7Base@Object@@6B@, 0x1800bcac0 / 0x1800bca90 read 2026-09-12). The
-    //     row matches the bytes; the reader does not know the shape.
-    RT_DELDTOR(0x18002c300, 0x1800bcac0, 0x008, "Object::ExtensionCompiler"),
-    //   0x18002c180  LEA R9,[0x1800bca90]  MOV EDX,0x08   ~ExternalCompiler
-    //     (same shape as ExtensionCompiler above)
-    RT_DELDTOR(0x18002c180, 0x1800bca90, 0x008, "Object::ExternalCompiler"),
+    // (ENDGAME B.3.9: the Object::ExtensionCompiler 0x18002c300 and
+    // Object::ExternalCompiler 0x18002c180 rows retired with their minted
+    // tables -- retail's factories for both return null, nothing built one.)
     //   0x180007800  LEA R9,[0x1800076c0]  MOV EDX,0x30   ~ExternalList
     //     (own body: Array<ExternalPtr<External>>::~Array at +0x20 (0x180009460,
     //     already ported), then ~External -- already ported)
     RT_DELDTOR(0x180007800, 0x1800076c0, 0x030, "Object::ExternalList"),
-    //   0x1800245f0  LEA R9,[0x1800a92a0]  MOV EDX,0xc8   ~CompressedCopyFileStream
-    //     (own body: stamp own vtable, tail into ~CompressedFileStream, itself
-    //     an unported export reached by name through the port-aware door)
-    RT_DELDTOR(0x1800245f0, 0x1800a92a0, 0x0c8, "IO::CompressedCopyFileStream"),
+    // (ENDGAME B.3.9: the IO::CompressedCopyFileStream 0x1800245f0 row retired
+    // with its minted table: no class, no stamper, and its ~Class 0x1800a92a0
+    // was never registered, so the row called a NULL dtor -- INVENTORY_B
+    // finding 2.)
     // Vtable batch 8 (2026-09-12), slot 0 of the four spatial classes' vtables.
     // Both constants read from each deleting dtor's own bytes:
     //     0x1800656b0  ~CollisionMesh 0x180065400  MOV EDX,0x70
@@ -1559,21 +1551,9 @@ void* RtDelDtor_ComboDialog(void* self, unsigned flags) {
 void* RtDelDtor_DialogControllerConfig(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18003b600>());
 }
-// Object::ExtensionCompiler ~ExtensionCompiler = 0x1800bcac0      (PORTED, runtime/src/object/ext_compilers.cpp)
-void* RtDelDtor_ExtensionCompiler(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18002c300>());
-}
-// Object::ExternalCompiler  ~ExternalCompiler = 0x1800bca90       (PORTED, runtime/src/object/ext_compilers.cpp)
-void* RtDelDtor_ExternalCompiler(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18002c180>());
-}
 // Object::ExternalList      ~ExternalList = 0x1800076c0           (PORTED, runtime/src/object/external_list.cpp)
 void* RtDelDtor_ExternalList(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180007800>());
-}
-// IO::CompressedCopyFileStream ~CompressedCopyFileStream = 0x1800a92a0 (PORTED, runtime/src/io/compressedcopyfilestream.cpp)
-void* RtDelDtor_CompressedCopyFileStream(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800245f0>());
 }
 // Vtable batch 8 (2026-09-12): Collision2D::CollisionMesh/Surface,
 // Pathfinding::PointList, Picking::PickingMesh. Indices 67-70 (renumbered at
@@ -1936,10 +1916,7 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x1800369e0, (void*)&RtDelDtor_AnimatedImageDescription);
     RegisterRuntimeAddr(0x180074a10, (void*)&RtDelDtor_ComboDialog);
     RegisterRuntimeAddr(0x18003b600, (void*)&RtDelDtor_DialogControllerConfig);
-    RegisterRuntimeAddr(0x18002c300, (void*)&RtDelDtor_ExtensionCompiler);
-    RegisterRuntimeAddr(0x18002c180, (void*)&RtDelDtor_ExternalCompiler);
     RegisterRuntimeAddr(0x180007800, (void*)&RtDelDtor_ExternalList);
-    RegisterRuntimeAddr(0x1800245f0, (void*)&RtDelDtor_CompressedCopyFileStream);
     RegisterRuntimeAddr(0x1800656b0, (void*)&RtDelDtor_CollisionMesh);       // vtable batch 8 SPATIAL
     RegisterRuntimeAddr(0x180064ea0, (void*)&RtDelDtor_Collision2DSurface);  // vtable batch 8 SPATIAL
     RegisterRuntimeAddr(0x1800713b0, (void*)&RtDelDtor_PointList);           // vtable batch 8 SPATIAL

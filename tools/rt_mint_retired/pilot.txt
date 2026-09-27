@@ -1,0 +1,10 @@
+# ENDGAME B.3 step 9 -- the rows the PILOT (branch b39-rules) retired.
+# Format (tools/rt_mint_gen.py banner, B39_RULES.md D3):
+#   <mangled symbol | 0xVA>   <owner block>   <proof>
+# One fragment per block; a key appears once across all fragments.
+
+# -- pilot (a): the four "retire now" rows (INVENTORY_A rows 30/54/56/70) --
+??_7CompressedCopyFileStream@IO@@6B@   PILOT   no class, no stamper; RT_DELDTOR row (NULL ~Class) + 3 slot doors deleted
+??_7ExtensionCompiler@Object@@6B@      PILOT   retail factory returns null; RT_DELDTOR row + ??1 door + Type/TypeName deleted
+??_7ExternalCompiler@Object@@6B@       PILOT   retail factory returns null; RT_DELDTOR row + ??1 door + Type/TypeName deleted
+??_7IPathInfo@Pathfinding@@6B@         PILOT   interface; slot 0 _purecall, no stamper, no RT_DELDTOR row
