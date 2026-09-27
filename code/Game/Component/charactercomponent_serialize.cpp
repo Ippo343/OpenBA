@@ -40,7 +40,7 @@
 //
 // Validation type ids resolved locally (self-contained, matching the house
 // pattern in animalwave_serialize.cpp): 0x1401c7a50 = ModelComponent,
-// g_BaseTypeInfo_PickingComponent's raw slot, TypeInfo_Action's raw slot, and
+// g_BaseTypeInfo_PickingComponent's raw slot, Action's cell (Action::TypeId()), and
 // 0x1401c70b0 = CharacterDescription. These are the SAME raw .rdata addresses
 // already resolved (under different local names) by other files
 // (action_pf_ctors.cpp, boatcomponent_route.cpp, animalcomponent.cpp) — we
@@ -57,6 +57,7 @@
 #include "Component/ModelComponent.h"        // ENDGAME B.3.9 C1: 0x1401c7a50 cell class
 #include "Component/PickingComponent.h"      // ENDGAME B.3.9 C1: 0x1401c7c10 cell class
 #include "Component/CharacterDescription.h"  // ENDGAME B.3.9 C1: 0x1401c70b0 cell class
+#include "Action/Action.h"                   // ENDGAME B.3.9 RF: 0x1401c5da8 cell class
 
 
 // FUN_1400032e0 was Collection::Array<void*>::SetSize(n) monomorphised into
@@ -69,19 +70,9 @@ namespace {
 
 // ENDGAME B.3.9 C1 (B39_RULES.md D5): 0x1401c7a50 (ModelComponent), 0x1401c7c10
 // (PickingComponent) and 0x1401c70b0 (CharacterDescription) are registered
-// type-id cells, read BY CELL as the class's static TypeId(). 0x1401c5da8
-// (Action) is an ABSTRACT-base cell (REGISTER_ABSTRACT_FACTORY) with no static
-// yet -- D6/D5 rule 4: left on the raw ResolveAddr resolution until RF's
-// DECLARE_TYPE lands on the abstract bases.
-const uint32_t* s_tidAction = nullptr;               // TypeInfo_Action slot
-bool s_resolved = false;
-
-void Resolve() {
-    if (s_resolved) return;
-    s_tidAction = reinterpret_cast<const uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c5da8));
-    s_resolved = true;
-}
+// type-id cells, read BY CELL as the class's static TypeId(). 0x1401c5da8 is the
+// ABSTRACT base Action's cell: Action::TypeId() since ENDGAME B.3.9 RF gave the
+// abstract bases their records.
 
 inline uint8_t* At(void* self, ptrdiff_t off) {
     return reinterpret_cast<uint8_t*>(self) + off;
@@ -103,7 +94,6 @@ void SerializeValidatedIBP(void* ibp, void* ser, const uint32_t* tid) {
 // [3] 0x140109ab0.
 void CharacterComponent::Persist(void* stream) {
     if (!stream) return;
-    Resolve();
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
     alignas(8) uint8_t ser[24];
@@ -121,11 +111,12 @@ void CharacterComponent::Persist(void* stream) {
     // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
     if (Loading(stream)) GameColl::AsArray<GameColl::Ptr8>(At(this, 0x48)).SetSize(count);
 
+    const uint32_t tidAction = Action::TypeId();   // cell 0x1401c5da8
     uint8_t* member = *reinterpret_cast<uint8_t**>(At(this, 0x48));
     for (int i = 0; i < count && member; ++i, member += 8)
-        SerializeValidatedIBP(member, ser, s_tidAction);
+        SerializeValidatedIBP(member, ser, &tidAction);
 
-    SerializeValidatedIBP(At(this, 0x58), ser, s_tidAction);
+    SerializeValidatedIBP(At(this, 0x58), ser, &tidAction);
     const uint32_t tidModelComponent = ModelComponent::TypeId();
     SerializeValidatedIBP(At(this, 0x68), ser, &tidModelComponent);
     const uint32_t tidPickingComponent = PickingComponent::TypeId();

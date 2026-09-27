@@ -12,8 +12,8 @@
 //
 // RETAIL (Application-x64.exe, B38_SLOTS.md §1 / §2, bytes read 2026-09-26):
 //   reflected "ResourceProduceComponent", parent "ControllerComponent",
-//   ti 0x1401c7d60, abstract (create = 0x140003730); the abstract row stays in
-//   factory_registrations_bulk.cpp (B38 D4).
+//   ti 0x1401c7d60, abstract (create = 0x140003730); DEFINE_EXE_TYPE with the abstract
+//   factory (ENDGAME B.3.9 RF).
 //   ctor 0x14012b3d0: Component ctor 0x1401188b0; stamps 0x140162b80, 0x1401643f0;
 //     member at +0x28: 0x14015f070, +0x30 = +0x38 = 0, 0x1401643a0, +0x40 = this;
 //     `MOV byte [RBX+0x48],0`. No flag OR.
@@ -38,21 +38,22 @@
 #include <cstddef>
 #include "Component/ControllerComponent.h"
 #include "Component/controller_state_table.h"
+#include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
 // The ONE tag of the shared ResourceProduce state table (was in an anonymous
 // namespace in resourceproducecomponent_states.cpp; the member type needs it).
 struct RPCtrlTag {};
 
 class ResourceProduceComponent : public ControllerComponent {
+    DECLARE_EXE_TYPE(ResourceProduceComponent)
+
 public:
     using StateController = ::ControllerLive::TableController<RPCtrlTag>;
 
     Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x140037d40
-    // [1]/[2]: the abstract base answers its own registration (the abstract
-    // factory row stays in factory_registrations_bulk.cpp, B38 D4); every leaf
-    // overrides both.
-    const char* TypeName() const override;                          // [1]  0x140037d30
-    uint32_t    Type() const override;                              // [2]  0x140037d20
+    // [1]/[2]: the abstract base answers its own record (DEFINE_EXE_TYPE,
+    // ENDGAME B.3.9 RF); every leaf overrides both.
+    // [1] TypeName 0x140037d30 and [2] Type 0x140037d20: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     void        Persist(void* stream) override;                     // [3]  0x14012b4a0
     uint32_t    CommandMask(int command) override;                  // [13] 0x14012b520
     void        Command(int command) override;                      // [14] 0x14012b5a0

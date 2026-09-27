@@ -7,6 +7,7 @@
 #include "Component/Description.h"
 #include "object/Internal.h"      // Object::detail::InternalMemFree
 #include "Object/factory_registration.h"
+#include "Object/exe_type.h"   // DEFINE_EXE_ABSTRACT_TYPE
 
 // [0] 0x140031c70: stamp 0x1401629a0, `~External`, MemFree on &1.
 Object::Base* Description::DeletingDtor(unsigned flags) {
@@ -15,9 +16,6 @@ Object::Base* Description::DeletingDtor(unsigned flags) {
     return this;
 }
 
-// [1]/[2] over Description's BaseTypeInfo; the abstract registration stays in
-// factory_registrations_bulk.cpp (B38 D4). Every leaf overrides both.
-const char* Description::TypeName() const { return "Description"; }          // 0x140031c60
-uint32_t    Description::Type() const {                                      // 0x140031c50
-    return ::Object::GetTypeIdByName("Description");
-}
+// [1] TypeName / [2] Type, the record and retail's abstract factory (create =
+// the logging stub, in-place = null): ENDGAME B.3.9 RF.
+DEFINE_EXE_ABSTRACT_TYPE(Description, "Object::External")

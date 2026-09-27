@@ -4,8 +4,8 @@
 //
 // `Action`, the exe's citizen action-stack node base, as a REAL C++ class whose
 // vtable the compiler generates. Global namespace, as in retail (reflected name
-// "Action", parent literal "Object::Internal"; the abstract registration stays
-// in code/Game/Object/factory_registrations_bulk.cpp, B38 D4).
+// "Action", parent literal "Object::Internal"; the record is DEFINE_EXE_TYPE in
+// action.cpp with retail's abstract factory, ENDGAME B.3.9 RF).
 //
 // RETAIL (Application-x64.exe, B38_SLOTS.md §1/§6, bytes read 2026-09-26):
 //   table 0x14015faa0, 10 slots, pure slot 4, create = 0x140003730 (abstract)
@@ -37,15 +37,17 @@
 #include <cstdint>
 #include <cstddef>
 #include "object/Internal.h"
+#include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
 class Action : public Object::Internal {
+    DECLARE_EXE_TYPE(Action)
+
 public:
     // ---- the 10 slots, in retail order -------------------------------------
     Object::Base* DeletingDtor(unsigned flags) override;         // [0] 0x140021c90
     // [1]/[2]: the abstract base answers its own registration by name (B38 D4,
     // as the pilot's Component); every leaf overrides both.
-    const char* TypeName() const override;                        // [1] 0x140021c80
-    uint32_t    Type() const override;                            // [2] 0x140021c70
+    // [1] TypeName 0x140021c80 and [2] Type 0x140021c70: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     void        Persist(void* stream) override;                   // [3] 0x1400c4b40
     virtual int  AbstractImpl(void* actionStack) = 0;             // [4] _purecall
     virtual int  Execute(void* actionStack, void* time);          // [5] 0x1400c4a90 ret 0
@@ -54,7 +56,6 @@ public:
     virtual void CheckEntity();                                   // [8] 0x1400c4a30 RET
     virtual bool GetTarget(void* param);                          // [9] 0x1400c4a40 ret false
 
-    static const void* Vtable();
 
     // ---- the 0x10 bytes Action adds, retail order ---------------------------
     // PUBLIC while unconverted bodies (the executor, Pf_ActStackWalkClear_4f10)

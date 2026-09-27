@@ -40,12 +40,9 @@ Object::Base* Work::DeletingDtor(unsigned flags) {
     return this;
 }
 
-// [1]/[2] 0x14002ca50 / 0x14002ca40 over Work's BaseTypeInfo. The abstract
-// registration stays in factory_registrations_bulk.cpp (B38 D4), so the base
-// reads its id by name; only a half-built or half-destroyed object dispatches
-// here. The old table answered null / a lazily cached id.
-const char* Work::TypeName() const { return "Work"; }
-uint32_t    Work::Type() const { return ::Object::GetTypeIdByName("Work"); }
+// [1] TypeName / [2] Type, the record and retail's abstract factory (create =
+// the logging stub, in-place = null): ENDGAME B.3.9 RF.
+DEFINE_EXE_ABSTRACT_TYPE(Work, "Object::Internal")
 
 // [5] 0x1400f7540 `XOR AL,AL; RET` (shared by 22 tables).
 int  Work::Slot5(void*, void*) { return 0; }

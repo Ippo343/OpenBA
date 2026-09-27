@@ -39,21 +39,10 @@
 // directly instead of through a lazily resolved pointer (B38 D7 / B6-5).
 void StateMachine_TickReimpl(void* smP, int64_t time, char param3, char param4);
 
-// ControllerComponent type ID at 0x1401c73c0 (filled at runtime by RegisterType).
-// Read only by the two reference ports below that no slot installs
-// (StateMachineComponent_Serialize, StateMachineComponent_OnUpdate2).
-static uint32_t* s_TypeId_ControllerComponent = nullptr;
-static bool s_resolved = false;
-
-// ============================================================
-// Resolve helpers — for the two uninstalled reference ports only.
-// ============================================================
-void StateMachineComponent_ResolveHelpers() {
-    if (s_resolved) return;
-    s_TypeId_ControllerComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c73c0));
-    s_resolved = true;
-}
+// ControllerComponent's type-id cell 0x1401c73c0 is read BY CELL as
+// ControllerComponent::TypeId() (ENDGAME B.3.9 RF), by the two reference ports
+// below that no slot installs (StateMachineComponent_Serialize,
+// StateMachineComponent_OnUpdate2).
 
 
 // ============================================================
@@ -67,7 +56,6 @@ void StateMachineComponent_ResolveHelpers() {
 // because its linker runs at component creation, when +0x52 is factory-zero).
 // ============================================================
 void StateMachineComponent_Serialize(StateMachineComponent* self) {
-    StateMachineComponent_ResolveHelpers();
     uint8_t* base = reinterpret_cast<uint8_t*>(self);
     // Controller sub-object pointer (linked list tail tracker)
     uint8_t* controllerNode = base + 0x28; // starts at controller sub-object
@@ -103,8 +91,8 @@ void StateMachineComponent_Serialize(StateMachineComponent* self) {
 
         // Check if this component is derived from ControllerComponent
         void* candidate = nullptr;
-        if (fn_IsDerivedFrom && s_TypeId_ControllerComponent) {
-            if (fn_IsDerivedFrom(comp, *s_TypeId_ControllerComponent))
+        if (fn_IsDerivedFrom) {
+            if (fn_IsDerivedFrom(comp, ControllerComponent::TypeId()))
                 candidate = comp;
         }
 
@@ -183,7 +171,6 @@ void StateMachineComponent_Update(StateMachineComponent* self, int64_t deltaTime
 // the state machine linked list to dispatch a virtual call.
 // ============================================================
 void StateMachineComponent_OnUpdate2(StateMachineComponent* self) {
-    StateMachineComponent_ResolveHelpers();
     uint8_t* base = reinterpret_cast<uint8_t*>(self);
     uint8_t* controllerNode = base + 0x28;
 
@@ -208,8 +195,8 @@ void StateMachineComponent_OnUpdate2(StateMachineComponent* self) {
             void* comp = tempIBP;
 
             void* candidate = nullptr;
-            if (fn_IsDerivedFrom && s_TypeId_ControllerComponent) {
-                if (fn_IsDerivedFrom(comp, *s_TypeId_ControllerComponent))
+            if (fn_IsDerivedFrom) {
+                if (fn_IsDerivedFrom(comp, ControllerComponent::TypeId()))
                     candidate = comp;
             }
 

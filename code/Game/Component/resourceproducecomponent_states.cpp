@@ -43,6 +43,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "Object/exe_type.h"   // DEFINE_EXE_ABSTRACT_TYPE
 
 // RPCtrlTag lives in ResourceProduceComponent.h (the member type needs it).
 using RPDispatch = ::ControllerLive::Dispatcher<RPCtrlTag>;
@@ -384,10 +385,9 @@ Object::Base* ResourceProduceComponent::DeletingDtor(unsigned flags) {
     return this;
 }
 
-const char* ResourceProduceComponent::TypeName() const { return "ResourceProduceComponent"; }  // 0x140037d30
-uint32_t    ResourceProduceComponent::Type() const {                                            // 0x140037d20
-    return ::Object::GetTypeIdByName("ResourceProduceComponent");
-}
+// [1] TypeName / [2] Type, the record and retail's abstract factory (create =
+// the logging stub, in-place = null): ENDGAME B.3.9 RF.
+DEFINE_EXE_ABSTRACT_TYPE(ResourceProduceComponent, "ControllerComponent")
 
 // [3] 0x14012b4a0: `CALL 0x1401189b0` (Component::Persist), an EMPTY Serializer(0)
 // scope (that pair is ControllerComponent::Persist, 0x1401195a0), then a v0 scope

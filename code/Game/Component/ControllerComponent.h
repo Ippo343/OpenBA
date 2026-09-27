@@ -37,8 +37,11 @@
 #include <cstdint>
 #include <cstddef>
 #include "Component/Component.h"
+#include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
 class ControllerComponent : public Component {
+    DECLARE_EXE_TYPE(ControllerComponent)
+
 public:
     // The 9-slot state-controller interface (0x14015f070). A leaf embeds a
     // concrete subclass by value at its retail offset (D6).
@@ -74,8 +77,7 @@ public:
     };
 
     Object::Base* DeletingDtor(unsigned flags) override;         // [0]  0x140032800
-    const char*   TypeName() const override;                     // [1]  0x1400327f0
-    uint32_t      Type() const override;                         // [2]  0x1400327e0
+    // [1] TypeName 0x1400327f0 and [2] Type 0x1400327e0: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     void          Persist(void* stream) override;                // [3]  0x1401195a0
     virtual int         GetDefaultState() const = 0;             // [16] pure
     virtual Controller* GetController() = 0;                     // [17] pure

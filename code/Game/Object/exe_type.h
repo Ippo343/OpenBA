@@ -76,6 +76,17 @@ private:                                                                        
 #define DEFINE_EXE_TYPE(Class, ParentLiteral)                                     \
     DEFINE_EXE_TYPE_EXT(Class, ParentLiteral, nullptr)
 
+// An ABSTRACT exe base (Action, Work, Tool, Component, ...). Retail registers
+// these with a `_purecall`-shaped factory (0x140003730): the record exists so
+// the base is a parent in the tree and answers slots 1/2, but nothing ever
+// builds one. Create = the logging stub, in-place = a function answering null
+// -- exactly the pair the old REGISTER_ABSTRACT_FACTORY rows passed
+// (ENDGAME B.3.9 RF, B39_RULES D6).
+#define DEFINE_EXE_ABSTRACT_TYPE(Class, ParentLiteral)                            \
+    void* Class::CreateNewObject() { return ::Object::AbstractTypeFactory(#Class); } \
+    void* Class::CreateInPlaceObject(void*) { return nullptr; }                   \
+    DEFINE_EXE_TYPE(Class, ParentLiteral)
+
 // `TVSymbol` is the Itanium name of the class's vtable group, e.g.
 // "_ZTV13WellComponent" (13 = strlen("WellComponent")). x86_64-w64-mingw32 has
 // no user-label prefix, so the asm label is the symbol verbatim.

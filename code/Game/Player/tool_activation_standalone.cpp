@@ -38,6 +38,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "Player/Tool.h"
+#include "Player/ToolSetting.h"
 #include "Player/BridgeTool.h"
 #include "Player/DragPlacementTool.h"
 #include "Player/EditTool.h"
@@ -207,8 +208,8 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     // IsDerivedFrom (0x1401c6eb8="Tool", 0x1401c6ef0="ToolSetting"; both resolve to
     // NULL pointers in standalone since they are raw .rdata constants).
     static uint32_t s_tid_Tool = 0, s_tid_ToolSetting = 0;
-    s_tid_Tool        = ::Object::ResolveTypeIdByNameLazy("Tool");
-    s_tid_ToolSetting = ::Object::ResolveTypeIdByNameLazy("ToolSetting");
+    s_tid_Tool        = Tool::TypeId();          // ENDGAME B.3.9 RF: the abstract base has its record
+    s_tid_ToolSetting = ToolSetting::TypeId();
     if (!g_TypeId_ToolController) g_TypeId_ToolController = &s_tid_Tool;
     if (!g_TypeId_ToolSetting)    g_TypeId_ToolSetting    = &s_tid_ToolSetting;
 

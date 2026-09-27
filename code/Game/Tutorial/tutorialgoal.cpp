@@ -13,6 +13,7 @@
 #include <cstdint>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
+#include "Object/exe_type.h"   // DEFINE_EXE_ABSTRACT_TYPE
 
 // [0] 0x140027220: stamp, ~External, MemFree on &1. Only a half-built or
 // half-destroyed object dispatches here (the class is abstract).
@@ -22,12 +23,9 @@ Object::Base* TutorialGoal::DeletingDtor(unsigned flags) {
     return this;
 }
 
-// [1]/[2] over TutorialGoal's BaseTypeInfo; the abstract registration stays
-// in factory_registrations_bulk.cpp (B38_RULES D4).
-const char* TutorialGoal::TypeName() const { return "TutorialGoal"; }       // 0x140027210
-uint32_t    TutorialGoal::Type() const {                                    // 0x140027200
-    return ::Object::GetTypeIdByName("TutorialGoal");
-}
+// [1] TypeName / [2] Type, the record and retail's abstract factory (create =
+// the logging stub, in-place = null): ENDGAME B.3.9 RF.
+DEFINE_EXE_ABSTRACT_TYPE(TutorialGoal, "Object::External")
 
 // ============================================================
 // TutorialGoal::Serialize (vtable +0x28, 0x1400dec30)

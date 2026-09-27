@@ -18,19 +18,21 @@
 //   The ctor is inlined into RotationSetting's (0x140026d20): `??0Internal`,
 //   stamp 0x140161ee8.
 //
-// The abstract registration stays in factory_registrations_bulk.cpp this step
-// (B38 D4), so the base answers slots 1/2 by name; only a half-built or
-// half-destroyed object ever dispatches there.
+// The abstract record is DEFINE_EXE_TYPE with the abstract factory (ENDGAME
+// B.3.9 RF); slots 1/2 answer it. Only a half-built or half-destroyed object
+// ever dispatches there.
 // ============================================================================
 
 #include <cstdint>
 #include "object/Internal.h"
+#include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
 class ToolSetting : public Object::Internal {
+    DECLARE_EXE_TYPE(ToolSetting)
+
 public:
     Object::Base* DeletingDtor(unsigned flags) override;   // [0] 0x14002e960
-    const char*   TypeName() const override;               // [1] 0x14002e930
-    uint32_t      Type() const override;                   // [2] 0x14002e920
+    // [1] TypeName 0x14002e930 and [2] Type 0x14002e920: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     // [3] Persist — Object::Internal::Persist, inherited (retail IMPORT).
 
 protected:

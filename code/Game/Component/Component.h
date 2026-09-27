@@ -37,15 +37,17 @@
 #include <cstdint>
 #include <cstddef>
 #include "object/Internal.h"
+#include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
 class Component : public Object::Internal {
+    DECLARE_EXE_TYPE(Component)
+
 public:
     // ---- the 16 slots, in retail order -------------------------------------
     Object::Base* DeletingDtor(unsigned flags) override;         // [0]  0x140031cc0
-    // [1] TypeName / [2] Type: the abstract base answers its own registration
-    // (factory_registrations_bulk.cpp keeps it, B38 D4); every leaf overrides.
-    const char* TypeName() const override;                        // [1]  0x140031c40
-    uint32_t    Type() const override;                            // [2]  0x140031c30
+    // [1] TypeName / [2] Type: the abstract base answers its own record
+    // (DEFINE_EXE_TYPE, ENDGAME B.3.9 RF); every leaf overrides.
+    // [1] TypeName 0x140031c40 and [2] Type 0x140031c30: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     void        Persist(void* stream) override;                   // [3]  0x1401189b0
     virtual void     Startup();                                   // [4]  0x140118a50 RET
     virtual void     Slot5();                                     // [5]  0x140118a60 RET

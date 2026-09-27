@@ -39,20 +39,21 @@
 #include <cstdint>
 #include <cstddef>
 #include "object/Internal.h"
+#include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
 namespace WorkAddr {
     constexpr uintptr_t Vtable       = 0x140161a80;
 }
 
 class Work : public Object::Internal {
+    DECLARE_EXE_TYPE(Work)
+
 public:
     // ---- the 13 slots, in retail order -------------------------------------
     Object::Base* DeletingDtor(unsigned flags) override;             // [0]  0x14002ca60
-    // [1]/[2]: the abstract base answers its own registration (the abstract
-    // factory row stays in factory_registrations_bulk.cpp, B38 D4); every leaf
-    // overrides both.
-    const char* TypeName() const override;                            // [1]  0x14002ca50
-    uint32_t    Type() const override;                                // [2]  0x14002ca40
+    // [1]/[2]: the abstract base answers its own record (ENDGAME B.3.9 RF:
+    // DEFINE_EXE_TYPE with retail's abstract factory); every leaf overrides both.
+    // [1] TypeName 0x14002ca50 and [2] Type 0x14002ca40: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     void        Persist(void* stream) override;                       // [3]  0x1400f7400
     virtual int   Execute(void* citizen, void* context, uint64_t arg3) = 0;  // [4]  pure
     virtual int   Slot5(void* citizen, void* context);                // [5]  0x1400f7540 → 0
@@ -98,9 +99,9 @@ protected:
     ~Work() = default;
 
 public:
-    // The compiler's vtable (B38 D5): served at 0x140161a80 while by-address
-    // readers (the unconverted dtors that re-stamp the base) remain.
-    static const void* Vtable();
+    // Vtable() (DECLARE_EXE_TYPE) is the compiler's vtable (B38 D5): served at
+    // 0x140161a80 while by-address readers (the unconverted dtors that re-stamp
+    // the base) remain.
 };
 
 static_assert(sizeof(Work) == 0x48, "Work is 0x48 bytes (0x10 Internal + 0x38)");

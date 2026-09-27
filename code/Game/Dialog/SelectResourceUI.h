@@ -22,21 +22,23 @@
 //   [9] 0x140078d80  OnElementEvent  — a pick -> slot 11
 //   [10] DialogController's (IMPORT, inherited)
 //   [11] [12] [13] _purecall: SetResource / GetResource / GetCategory
-// The reflected registration stays REGISTER_ABSTRACT_FACTORY in
-// factory_registrations_bulk.cpp this step (B38 D4 / B8-7).
+// The reflected record is DEFINE_EXE_TYPE with the abstract factory
+// (ENDGAME B.3.9 RF).
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
 #include "runtime/types/ui/DialogController.h"
+#include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
 
 class SelectResourceUI : public UI::DialogController {
+    DECLARE_EXE_TYPE(SelectResourceUI)
+
 public:
     Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140013ca0
     // [1] / [2]: the abstract base answers its own registration (only a
     // half-built object dispatches here) — the pilot's Component shape.
-    const char* TypeName() const override;                        // [1]  0x140013c90
-    uint32_t    Type() const override;                            // [2]  0x140013c80
+    // [1] TypeName 0x140013c90 and [2] Type 0x140013c80: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
     void OnCreated() override;                                    // [4]  0x140078be0
     void OnUpdateLayout() override;                               // [7]  0x140078cb0
     void OnUpdate(const System::Time& time) override;             // [8]  0x140078d30

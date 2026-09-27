@@ -59,6 +59,10 @@ struct FactoryRegistration {
                         FactoryFn factory, InPlaceCreateFn inPlace);
 };
 
+// The factory of an ABSTRACT exe base (DEFINE_EXE_ABSTRACT_TYPE, exe_type.h):
+// retail's is a `_purecall` stub; ours logs the name to stderr and answers null.
+void* AbstractTypeFactory(const char* typeName);
+
 // Walk the pending list and invoke Runtime DLL's BaseTypeInfo ctor for each.
 // Idempotent — safe to call once, NOPs on subsequent calls.
 // Must run AFTER EngineFuncsInit (needs fn_BaseTypeInfo_Ctor) and BEFORE

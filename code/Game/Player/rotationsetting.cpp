@@ -12,6 +12,7 @@
 #include "Player/RotationSetting.h"
 #include "Object/factory_registration.h"
 #include <new>
+#include "Object/exe_type.h"   // DEFINE_EXE_ABSTRACT_TYPE
 
 // ============================================================================
 // ToolSetting
@@ -24,10 +25,9 @@ Object::Base* ToolSetting::DeletingDtor(unsigned flags) {
     return this;
 }
 
-// [1]/[2] 0x14002e930 / 0x14002e920. The abstract registration stays in
-// factory_registrations_bulk.cpp (B38 D4), so the base answers by name.
-const char* ToolSetting::TypeName() const { return "ToolSetting"; }
-uint32_t    ToolSetting::Type() const { return ::Object::GetTypeIdByName("ToolSetting"); }
+// [1] TypeName / [2] Type, the record and retail's abstract factory (create =
+// the logging stub, in-place = null): ENDGAME B.3.9 RF.
+DEFINE_EXE_ABSTRACT_TYPE(ToolSetting, "Object::Internal")
 
 // ============================================================================
 // RotationSetting

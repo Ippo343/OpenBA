@@ -23,6 +23,8 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "Player/Tool.h"          // Tool::TypeId()        (ENDGAME B.3.9 RF, cell 0x1401c6eb8)
+#include "Player/ToolSetting.h"   // ToolSetting::TypeId() (ENDGAME B.3.9 RF, cell 0x1401c6ef0)
 
 // ============================================================
 // Resolved helpers
@@ -92,8 +94,8 @@ static fn_b60_CreateObject_t s_b60_CreateObject = nullptr; // slot 0x140152778
 static fn_b60_IsDerived_t    s_b60_IsDerived = nullptr;    // slot 0x140152a98
 static fn_b60_IBPCtor_t      s_b60_IBPCtor = nullptr;      // slot 0x140152a90
 static fn_b60_DeletePtr_t    s_b60_DeletePtr = nullptr;    // slot 0x140151ab8
-static uint32_t*         s_b60_TypeId_Controller = nullptr; // DWORD_1401c6eb8
-static uint32_t*         s_b60_TypeId_ToolSetting = nullptr; // DAT_1401c6ef0
+// The two validation ids are read BY CELL (ENDGAME B.3.9 RF): DWORD_1401c6eb8 is
+// Tool's cell (Tool::TypeId()), DAT_1401c6ef0 ToolSetting's (ToolSetting::TypeId()).
 static bool s_b60Resolved = false;
 static void EnsureB60() {
     if (s_b60Resolved) return;
@@ -108,8 +110,6 @@ static void EnsureB60() {
     if (slot) s_b60_IBPCtor = *reinterpret_cast<fn_b60_IBPCtor_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140151ab8);
     if (slot) s_b60_DeletePtr = *reinterpret_cast<fn_b60_DeletePtr_t*>(slot);
-    s_b60_TypeId_Controller  = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6eb8));
-    s_b60_TypeId_ToolSetting = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6ef0));
     s_b60Resolved = true;
 }
 
@@ -201,8 +201,8 @@ void NomadComp_RebuildController_b60(int64_t param_1, int64_t param_2) {
     // --- CreateObject(node->key2) validated against controller type ---
     void* obj = (factory && s_b60_CreateObject) ? s_b60_CreateObject(factory, found[2]) : nullptr;
     void* ctrlObj = nullptr;
-    if (obj && s_b60_IsDerived && s_b60_TypeId_Controller &&
-        s_b60_IsDerived(obj, *s_b60_TypeId_Controller)) {
+    if (obj && s_b60_IsDerived &&
+        s_b60_IsDerived(obj, Tool::TypeId())) {                  // cell 0x1401c6eb8
         ctrlObj = obj;
     }
     int64_t ibpA = 0;
@@ -223,8 +223,8 @@ void NomadComp_RebuildController_b60(int64_t param_1, int64_t param_2) {
             void* setObj = (factory && s_b60_CreateObject)
                                ? s_b60_CreateObject(factory, *setRef) : nullptr;
             void* setValidated = nullptr;
-            if (setObj && s_b60_IsDerived && s_b60_TypeId_ToolSetting &&
-                s_b60_IsDerived(setObj, *s_b60_TypeId_ToolSetting)) {
+            if (setObj && s_b60_IsDerived &&
+                s_b60_IsDerived(setObj, ToolSetting::TypeId())) {   // cell 0x1401c6ef0
                 setValidated = setObj;
             }
             int64_t ibpB = 0;
