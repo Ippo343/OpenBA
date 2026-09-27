@@ -15,6 +15,8 @@
 #include "object/Internal.h"   // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include "Component/ComponentDescription.h"
+#include "Entity/ComponentEntity.h"
 #include <cstdint>
 #include <new>
 
@@ -99,9 +101,9 @@ bool TutorialGoalDialog::IsComplete(void* /*time*/, void* /*instance*/) {
     void* userData = *reinterpret_cast<void**>(dialogPtr + 0x30);
     void* description = nullptr;
     if (userData != nullptr) {
-        if (fn_IsDerivedFrom(userData, *g_TypeId_ComponentDescription_FC)) {
+        if (fn_IsDerivedFrom(userData, ComponentDescription::TypeId())) {
             description = userData;
-        } else if (fn_IsDerivedFrom(userData, *g_TypeId_ComponentEntity)) {
+        } else if (fn_IsDerivedFrom(userData, ComponentEntity::TypeId())) {
             description = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(userData) + 0x28);
         }
     }

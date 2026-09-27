@@ -13,6 +13,7 @@
 
 #include "Player/RemovalTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
+#include "Component/CreateRemovalDescription.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "collection/Collection.h"
@@ -38,7 +39,8 @@ Object::Base* RemovalTool::DeletingDtor(unsigned flags) {
 // RemovalTool::Startup (vtable +0x20, Slot4)
 // ============================================================
 // Searches the entity's component list for a component matching the
-// RemovalDescription type ID (DAT_1401c74a0). Stores the found
+// CreateRemovalDescription type ID (cell 0x1401c74a0; the global name
+// "RemovalDescription" lies — D5, Table 1/3). Stores the found
 // component pointer (or nullptr) in self->removalDesc (+0x38).
 //
 // The entity at self->descriptionPtr (+0x20) is a ComponentEntity with:
@@ -53,14 +55,14 @@ void RemovalTool::Startup() {
     uintptr_t entity = (uintptr_t)descriptionPtr;
     void* result = nullptr;
 
-    if (!entity || !g_TypeId_RemovalDescription || !fn_IsDerivedFrom) {
+    if (!entity || !fn_IsDerivedFrom) {
         removalDesc = nullptr;
         return;
     }
 
     int count = *(int*)(entity + 0x30);
     void** components = *(void***)(entity + 0x28);
-    uint32_t targetTypeId = *g_TypeId_RemovalDescription;
+    uint32_t targetTypeId = CreateRemovalDescription::TypeId();
 
     for (int i = 0; i < count; i++) {
         void* comp = components[i];

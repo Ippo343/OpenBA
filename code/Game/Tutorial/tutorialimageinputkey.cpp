@@ -130,17 +130,16 @@ void* TutorialImageInputKey::CreateElement(void* retIBP, void* dialog) {
     // 3. FindElementType — find TextElement child
     void* element = *(void**)retIBP;
     uint8_t foundIBP[16] = {};
-    if (g_TypeId_TextElement)
-        ::new (foundIBP) Object::InternalPtr<UI::Element>(
-            reinterpret_cast<UI::Element*>(element)->FindElementType(*g_TypeId_TextElement));  // B.3.6 bridge
+    ::new (foundIBP) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<UI::Element*>(element)->FindElementType(UI::TextElement::TypeId()));  // B.3.6 bridge
 
     // 4. CheckPtr on found element
 
     // 5. IsDerivedFrom check — verify it's a TextElement
     void* foundObj = *(void**)foundIBP;
     void* textElement = nullptr;
-    if (fn_IsDerivedFrom && g_TypeId_TextElement && foundObj) {
-        if (fn_IsDerivedFrom(foundObj, *g_TypeId_TextElement))
+    if (fn_IsDerivedFrom && foundObj) {
+        if (fn_IsDerivedFrom(foundObj, UI::TextElement::TypeId()))
             textElement = foundObj;
     }
 

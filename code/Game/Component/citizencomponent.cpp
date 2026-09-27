@@ -1248,7 +1248,7 @@ bool CitizenComponent_ShouldSwitchWorkplace(CitizenComponent* self) {
 
             // Scan for WorkplaceComponent by type ID
             uintptr_t wpComp = 0;
-            uint32_t wpTypeId = *g_TypeId_WorkplaceComponent;
+            uint32_t wpTypeId = WorkPlaceComponent::TypeId();
             for (int ci = 0; ci < compCount; ci++) {
                 uintptr_t* compSlot = (uintptr_t*)(compArray + ci * 8);
                 uintptr_t comp = *compSlot;

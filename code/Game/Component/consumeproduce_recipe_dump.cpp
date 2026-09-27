@@ -35,6 +35,7 @@
 #include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
 #include "ui/StringTable.h"    // ENDGAME B.3.6 UI callers (K4)
+#include "Component/RawMaterialDescription.h"
 
 namespace {
 
@@ -52,10 +53,10 @@ bool ReadRawMat(void* c, const char** outName, unsigned* outFlags) {
 }
 
 bool IsRawMat(void* c) {
-    if (!c || !g_TypeId_RawMaterialDescription) return false;
+    if (!c) return false;
     const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
-    if (tid != *g_TypeId_RawMaterialDescription) return false;
-    return !fn_IsDerivedFrom || fn_IsDerivedFrom(c, *g_TypeId_RawMaterialDescription);
+    if (tid != RawMaterialDescription::TypeId()) return false;
+    return !fn_IsDerivedFrom || fn_IsDerivedFrom(c, RawMaterialDescription::TypeId());
 }
 
 // The recipe table mixes two shapes and the first pass only handled one, which is why
@@ -66,7 +67,7 @@ bool IsRawMat(void* c) {
 void DescribeMaterial(uintptr_t matDesc, const char** outName, unsigned* outFlags) {
     *outName = "?";
     *outFlags = 0;
-    if (!matDesc || !g_TypeId_RawMaterialDescription) return;
+    if (!matDesc) return;
     void* self = reinterpret_cast<void*>(matDesc);
     if (IsRawMat(self)) { ReadRawMat(self, outName, outFlags); return; }
     const int n = *reinterpret_cast<int*>(matDesc + 0x30);
@@ -76,8 +77,8 @@ void DescribeMaterial(uintptr_t matDesc, const char** outName, unsigned* outFlag
         void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(j) * 8);
         if (!c) continue;
         const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
-        if (tid != *g_TypeId_RawMaterialDescription) continue;
-        if (fn_IsDerivedFrom && !fn_IsDerivedFrom(c, *g_TypeId_RawMaterialDescription)) continue;
+        if (tid != RawMaterialDescription::TypeId()) continue;
+        if (fn_IsDerivedFrom && !fn_IsDerivedFrom(c, RawMaterialDescription::TypeId())) continue;
         ReadRawMat(c, outName, outFlags);
         return;
     }

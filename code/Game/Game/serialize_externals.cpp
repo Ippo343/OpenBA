@@ -21,6 +21,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "Component/EnvironmentDescription.h"   // caller batch CB6: TypeId()
+#include "ui/StringTable.h"   // UI::StringTable::TypeId() (D5, ENDGAME B.3.9 CG3)
 #include "Game/serialize_externals.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A — Object::External / ExternalFactory
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
@@ -224,12 +225,12 @@ extern "C" void Reimpl_ExternalPtr_Serialize_Weather(
 // ============================================================
 extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(
     void* refField, void* serializer) {
-    // g_TypeId_StringTable is wired in engine_funcs.cpp (exref 0x140151488).
-    // May be null in standalone until StringTable registers — the generic body
-    // handles that (loads without type validation rather than crashing).
-    const uint32_t* typeIdPtr = g_TypeId_StringTable;
+    // Read directly (D5, ENDGAME B.3.9 CG3): UI::StringTable::TypeId() is the same
+    // Runtime record engine_funcs' g_TypeId_StringTable (exref 0x140151488) points
+    // at. The generic body still handles an unresolved (0) id gracefully.
+    const uint32_t tid = UI::StringTable::TypeId();
     ExternalPtrSerializeGeneric(reinterpret_cast<void**>(refField), serializer,
-                                typeIdPtr, "StringTable");
+                                tid ? &tid : nullptr, "StringTable");
 }
 
 // ============================================================

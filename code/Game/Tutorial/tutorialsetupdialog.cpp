@@ -17,6 +17,8 @@
 #include "Object/factory_registration.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "Component/ComponentDescription.h"
+#include "Entity/ComponentEntity.h"
 #include <cstdint>
 #include <new>
 
@@ -124,7 +126,7 @@ bool TutorialSetupDialog::Serialize(void* stream) {
             ::Object::ExternalFactory* efactory =
                 reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
             void* found = const_cast<void*>(static_cast<const void*>(efactory->Find(filenameBuf)));
-            bool valid = found && fn_IsDerivedFrom(found, *g_TypeId_ComponentDescription_FC);
+            bool valid = found && fn_IsDerivedFrom(found, ComponentDescription::TypeId());
             toolbarCached = valid ? found : nullptr;
             toolbarStamp = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(factory) + 8);
         }
@@ -157,9 +159,9 @@ void TutorialSetupDialog::Begin() {
         void* basePtr = *reinterpret_cast<void**>(instance + 0x30);   // DialogInstance::_dataSource
 
         // Original uses IsA first (null/type-safe), then IsDerivedFrom
-        bool isBuild = fn_IsA(basePtr, *g_TypeId_ComponentDescription_FC);
+        bool isBuild = fn_IsA(basePtr, ComponentDescription::TypeId());
         if (isBuild) {
-            bool derived = fn_IsDerivedFrom(basePtr, *g_TypeId_ComponentDescription_FC);
+            bool derived = fn_IsDerivedFrom(basePtr, ComponentDescription::TypeId());
             void* entityForFollow = derived ? basePtr : nullptr;
             uint64_t retval[2] = {0, 0};
             uintptr_t gameSingleton = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
@@ -167,7 +169,7 @@ void TutorialSetupDialog::Begin() {
             fn_SetFollowBuilding(playerController, retval, reinterpret_cast<uint64_t>(entityForFollow));
         } else {
             // Original: SetEditMode only if IsA(ComponentEntity), but CloseDialog always
-            bool isEntity = fn_IsA(basePtr, *g_TypeId_ComponentEntity);
+            bool isEntity = fn_IsA(basePtr, ComponentEntity::TypeId());
             uintptr_t gameSingleton = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
             if (isEntity) {
                 void* playerController = *reinterpret_cast<void**>(gameSingleton + 0x120);

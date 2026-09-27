@@ -850,49 +850,19 @@ static void EnsureStartupFuncs() {
 
 
 
-    // The four *Description type-id globals Startup's findComp reads are filled in
-    // engine_funcs.cpp via ResolveAddr(Exe, .rdata) — which is NULL in the standalone
-    // exe (raw .rdata constants don't resolve, see reference_standalone_rdata_null_fallback).
-    // They are read by dormant tools that have never run in standalone, so they are
-    // unfilled here. Point them at local storage filled from the LIVE factory tree
-    // (ResolveTypeIdByNameLazy), the proven ToolbarStandalone_Init pattern. The `if
-    // (!global)` guard skips this once the globals are filled.
-    // 🔑 The engine_funcs LABELS for these 4 globals are WRONG (Ghidra-verified via the
-    // RegisterType DATA writers, 2026-07-02). True types, per slot:
-    //   +0x28 descComponent   = DAT_1401c7468 = CreatePlacedDescription (NOT "SizeDescription")
-    //   +0x30 mapComponent    = DAT_1401c7a18 = MapDescription          (NOT "AreaDescription")
-    //   +0x38 createComponent = DAT_1401c7a88 = ModelDescription        (NOT "FenceDescription");
+    // The four *Description type-ids Startup's findComp uses (D5, ENDGAME B.3.9 CG3):
+    // read BY CELL, never by the (wrong) engine_funcs global names.
+    //   +0x28 descComponent   = cell 0x1401c7468 = CreatePlacedDescription (NOT "SizeDescription")
+    //   +0x30 mapComponent    = cell 0x1401c7a18 = MapDescription          (NOT "AreaDescription")
+    //   +0x38 createComponent = cell 0x1401c7a88 = ModelDescription        (NOT "FenceDescription");
     //         Startup derefs createComponent+0x28 (mesh count) UNGUARDED — MUST be present.
-    //   +0x40 radiusComponent = DWORD_1401c4870 = RadiusDescription     (NOT "RadiusComponent")
-    static uint32_t s_tid_CreatePlaced = 0, s_tid_Map = 0, s_tid_Model = 0, s_tid_Radius = 0;
-    s_tid_CreatePlaced = CreatePlacedDescription::TypeId();
-    s_tid_Map          = MapDescription::TypeId();
-    s_tid_Model        = ModelDescription::TypeId();
-    s_tid_Radius       = RadiusDescription::TypeId();
-    // Test the VALUE, not just the pointer. A pointer-only test (`if (!g_TypeId_X)`)
-    // cannot see a slot that IS registered but was filled with 0, and that is exactly
-    // what happened to +0x30 until 2026-07-31: reg_pipeline_typeids.cpp seeded
-    // 0x1401c7a18 by the name "AreaDescription", which does not exist, so the slot held
-    // a real pointer to a zero. This fallback looked like it was covering the case and
-    // silently was not — every player building placement crashed on the first preview
-    // frame, and MapComponent was dead game-wide.
-    if (!g_TypeId_SizeDescription  || !*g_TypeId_SizeDescription)
-        g_TypeId_SizeDescription  = &s_tid_CreatePlaced;  // +0x28
-    if (!g_TypeId_AreaDescription  || !*g_TypeId_AreaDescription)
-        g_TypeId_AreaDescription  = &s_tid_Map;           // +0x30 (MapDescription)
-    if (!g_TypeId_FenceDescription || !*g_TypeId_FenceDescription)
-        g_TypeId_FenceDescription = &s_tid_Model;         // +0x38
-    if (!g_TypeId_RadiusComponent  || !*g_TypeId_RadiusComponent)
-        g_TypeId_RadiusComponent  = &s_tid_Radius;        // +0x40
-    // Report the values findComp will ACTUALLY consult (the globals), not the locals —
-    // the old line printed s_tid_Map, a healthy id, while the consulted global held 0.
-    fprintf(stderr, "[Placement] type-ids CONSULTED: CreatePlaced=%u Map=%u Model=%u Radius=%u"
-            "  (locals: %u/%u/%u/%u)\n",
-            g_TypeId_SizeDescription  ? *g_TypeId_SizeDescription  : 0,
-            g_TypeId_AreaDescription  ? *g_TypeId_AreaDescription  : 0,
-            g_TypeId_FenceDescription ? *g_TypeId_FenceDescription : 0,
-            g_TypeId_RadiusComponent  ? *g_TypeId_RadiusComponent  : 0,
-            s_tid_CreatePlaced, s_tid_Map, s_tid_Model, s_tid_Radius);
+    //   +0x40 radiusComponent = cell 0x1401c4870 = RadiusDescription       (NOT "RadiusComponent")
+    // `X::TypeId()` is always resolved (no ResolveAddr/.rdata fallback needed), so the
+    // old healing block that patched the engine_funcs globals with local storage when
+    // ResolveAddr came back NULL no longer has anything to heal.
+    fprintf(stderr, "[Placement] type-ids: CreatePlaced=%u Map=%u Model=%u Radius=%u\n",
+            CreatePlacedDescription::TypeId(), MapDescription::TypeId(),
+            ModelDescription::TypeId(), RadiusDescription::TypeId());
     fflush(stderr);
 
     s_startupFuncsResolved = true;
@@ -927,17 +897,17 @@ void PlacementTool::Startup() {
         return nullptr;
     };
 
-    // 1. SizeDescription (DAT_1401c7468) -> descComponent (+0x28)
-    descComponent = findComp(*g_TypeId_SizeDescription);
+    // 1. CreatePlacedDescription (cell 0x1401c7468) -> descComponent (+0x28)
+    descComponent = findComp(CreatePlacedDescription::TypeId());
 
-    // 2. AreaDescription (DAT_1401c7a18) -> mapComponent (+0x30)
-    mapComponent = findComp(*g_TypeId_AreaDescription);
+    // 2. MapDescription (cell 0x1401c7a18) -> mapComponent (+0x30)
+    mapComponent = findComp(MapDescription::TypeId());
 
-    // 3. FenceDescription (DAT_1401c7a88) -> createComponent (+0x38)
-    createComponent = findComp(*g_TypeId_FenceDescription);
+    // 3. ModelDescription (cell 0x1401c7a88) -> createComponent (+0x38)
+    createComponent = findComp(ModelDescription::TypeId());
 
-    // 4. RadiusComponent (DWORD_1401c4870) -> radiusComponent (+0x40)
-    radiusComponent = findComp(*g_TypeId_RadiusComponent);
+    // 4. RadiusDescription (cell 0x1401c4870) -> radiusComponent (+0x40)
+    radiusComponent = findComp(RadiusDescription::TypeId());
 
     // --- Resolve RotationSetting IBP ---
     // CheckPtr on IBP at +0x18
@@ -1084,7 +1054,7 @@ DEFINE_EXE_TYPE(PlacementTool, "Tool")
 // ============================================================
 extern "C" int PlacementTool_HarnessStartupProbe(void* toolSelf) {
     PlacementTool* self = (PlacementTool*)toolSelf;
-    EnsureStartupFuncs();  // fills the 4 g_TypeId_* globals (and logs them)
+    EnsureStartupFuncs();  // resolves the ResolveAddr-based helpers (and logs the 4 type-ids)
 
     uintptr_t entity = (uintptr_t)self->descriptionPtr;  // +0x20
     if (!entity) {
@@ -1098,10 +1068,10 @@ extern "C" int PlacementTool_HarnessStartupProbe(void* toolSelf) {
     fprintf(stderr, "[Placement] PROBE: descEntity=%p compArray=%p count=%d\n",
             (void*)entity, (void*)comps, count);
 
-    uint32_t tCreate = g_TypeId_SizeDescription  ? *g_TypeId_SizeDescription  : 0; // CreatePlacedDescription
-    uint32_t tMap    = g_TypeId_AreaDescription   ? *g_TypeId_AreaDescription   : 0; // MapDescription
-    uint32_t tModel  = g_TypeId_FenceDescription  ? *g_TypeId_FenceDescription  : 0; // ModelDescription
-    uint32_t tRadius = g_TypeId_RadiusComponent   ? *g_TypeId_RadiusComponent   : 0; // RadiusDescription
+    uint32_t tCreate = CreatePlacedDescription::TypeId();
+    uint32_t tMap    = MapDescription::TypeId();
+    uint32_t tModel  = ModelDescription::TypeId();
+    uint32_t tRadius = RadiusDescription::TypeId();
 
     bool haveCreate = false, haveMap = false, haveModel = false, haveRadius = false;
     if (comps && count > 0 && count < 256) {

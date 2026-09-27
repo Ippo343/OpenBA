@@ -36,6 +36,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Game/serialize_externals.h"
+#include "Component/ComponentDescription.h"
 #include <cstdint>
 
 // FUN_1400049c0(Serializer* s, int count, longlong arrayBase, void* deadInit)
@@ -45,11 +46,11 @@ extern "C" void Reimpl_ExternalPtrArray_Serialize(
 
     if (count <= 0 || !arrayBase || !serializer) return;
 
-    // Validation typeId = ComponentDescription (DWORD_1401c7318). May be NULL in
-    // standalone (raw .rdata slot — ResolveAddr(Module::Exe, dataAddr) returns
-    // NULL). The generic body then resolves it lazily by name and, failing that,
-    // loads WITHOUT type validation (cascade-safe, never crashes on unresolved).
-    const uint32_t* typeIdPtr = g_TypeId_ComponentDescription_FC;
+    // Validation typeId = ComponentDescription (cell 0x1401c7318), read directly
+    // through the class's own TypeId() (D5, ENDGAME B.3.9 CG3) rather than the
+    // engine_funcs g_TypeId_ComponentDescription_FC global that reads the same cell.
+    const uint32_t tid = ComponentDescription::TypeId();
+    const uint32_t* typeIdPtr = tid ? &tid : nullptr;
 
     void** base = reinterpret_cast<void**>(arrayBase);
     for (int i = 0; i < count; ++i) {

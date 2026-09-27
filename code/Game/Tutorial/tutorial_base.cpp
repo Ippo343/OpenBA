@@ -33,6 +33,7 @@
 #include <cstdio>
 #include "Component/WorkDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "Game/Toolbar.h"                // B.3.9 EXA: Toolbar::TypeId()
+#include "ui/SpinnerElement.h"           // UI::SpinnerElement::TypeId() (D5, ENDGAME B.3.9 CG3)
 
 // ============================================================
 // Family A — ExternalPtr serialize helpers
@@ -139,13 +140,11 @@ extern "C" void TutBase_ResolveToolbarRef(void* stringField) {
         }
     }
 
-    // Validate Toolbar type; trust if the type-id global is unresolved (cascade-safe).
+    // Validate Toolbar type (cell 0x1401c6128; the global "g_TypeId_ToolbarItem" lies — D5).
     void* result = nullptr;
     if (found) {
-        uint32_t tid = (g_TypeId_ToolbarItem && *g_TypeId_ToolbarItem)
-                           ? *g_TypeId_ToolbarItem
-                           : Toolbar::TypeId();   // B.3.9 EXA (was by name)
-        if (!tid || !fn_IsDerivedFrom || fn_IsDerivedFrom(found, tid)) {
+        uint32_t tid = Toolbar::TypeId();
+        if (!fn_IsDerivedFrom || fn_IsDerivedFrom(found, tid)) {
             result = found;
         }
     }
@@ -190,10 +189,10 @@ extern "C" uint32_t TutBase_CountProfessionsByType(uintptr_t worldData, uintptr_
 // Returns null when the type can't be confirmed — safe for the slider-value
 // read path (count stays 0), never feeds a non-slider into Spinner accessors.
 extern "C" void* TutBase_CastToSliderElement(void* element) {
-    if (!element || !fn_IsDerivedFrom || !g_TypeId_SpinnerElement || !*g_TypeId_SpinnerElement) {
+    if (!element || !fn_IsDerivedFrom) {
         return nullptr;
     }
-    return fn_IsDerivedFrom(element, *g_TypeId_SpinnerElement) ? element : nullptr;
+    return fn_IsDerivedFrom(element, UI::SpinnerElement::TypeId()) ? element : nullptr;
 }
 
 // 0x14012e5c0 — WorkComponent::CalcMaxWorkers. Computes a workplace's worker

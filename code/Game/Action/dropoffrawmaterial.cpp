@@ -38,6 +38,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.9 C4: CitizenComponent::TypeId()
+#include "Entity/ComponentEntity.h"
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -86,7 +87,6 @@ bool DropOffRawMaterial_ResolveFuncs() {
     bool ok = s_fn_IBP_DeletePtr &&
               s_fn_DropOffSub &&
               s_fn_DropAllInventory &&
-              g_TypeId_ComponentEntity &&
               fn_IsDerivedFrom &&
               fn_MemFreeStatic && fn_ExternalPtr_BuildSerialize;
 
@@ -94,8 +94,8 @@ bool DropOffRawMaterial_ResolveFuncs() {
     printf("[DropOffRawMaterial] ResolveFuncs: IBPDel=%p DropSub=%p\n",
            (void*)s_fn_IBP_DeletePtr,
            (void*)s_fn_DropOffSub);
-    printf("[DropOffRawMaterial]   DropAll=%p CompEnt=%p\n",
-           (void*)s_fn_DropAllInventory, (void*)g_TypeId_ComponentEntity);
+    printf("[DropOffRawMaterial]   DropAll=%p CompEnt=%08x\n",
+           (void*)s_fn_DropAllInventory, ComponentEntity::TypeId());
     if (!ok) printf("[DropOffRawMaterial] ERROR: some function pointers not resolved!\n");
 #endif
 
@@ -135,7 +135,7 @@ void DropOffRawMaterial::Persist(void* stream) {
     // Serialize source entity ref (+0x38)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x38)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field38 != nullptr) {
-        if (!fn_IsDerivedFrom(_field38, *g_TypeId_ComponentEntity)) {
+        if (!fn_IsDerivedFrom(_field38, ComponentEntity::TypeId())) {
             _field38 = nullptr;
         }
     }

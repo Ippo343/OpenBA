@@ -53,6 +53,7 @@
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K2)
 #include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
+#include "ui/StringTable.h"  // UI::StringTable::TypeId() (D5, ENDGAME B.3.9 CG3)
 
 // ============================================================
 // Externs from sibling reimpl TUs (already registered/defined)
@@ -1210,19 +1211,10 @@ void GameUpdateLoop::Load() {
             ::Object::ExternalFactory* efactory =
                 reinterpret_cast<::Object::ExternalFactory*>(factory);   // B.3.3 bridge
 
-            // Lazy-resolve the StringTable type-id from the factory tree (its exe
-            // .rdata global is null in standalone). Same as optionsdialog.cpp's
-            // LoadStringTable — the IsDerivedFrom validation is what makes FindOrLoad
-            // return the actual :events/:seasons sub-table instead of the wrong level.
-            static uint32_t s_stTid = 0;
-            if (!g_TypeId_StringTable && s_stTid == 0 &&
-                g_pFactorySingleton && *g_pFactorySingleton) {
-                void* factoryObj = *(void**)*g_pFactorySingleton;
-                if (factoryObj) s_stTid = reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(
-                    "StringTable", true);   // B.3.3 bridge
-                if (s_stTid) g_TypeId_StringTable = &s_stTid;
-            }
-            uint32_t stTid = g_TypeId_StringTable ? *g_TypeId_StringTable : 0;
+            // StringTable type-id, read directly (D5): the IsDerivedFrom validation is
+            // what makes FindOrLoad return the actual :events/:seasons sub-table
+            // instead of the wrong level.
+            uint32_t stTid = UI::StringTable::TypeId();
 
             // Load a StringTable sub-resource. AdjustDelimiters normalizes the
             // "rsc:subname" delimiter so FindOrLoad resolves the named sub-table.

@@ -37,6 +37,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "Component/CitizenComponent.h"
 #include "Component/NaturalResourceDescription.h"
+#include "Entity/ComponentEntity.h"
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -88,7 +89,6 @@ bool RemoveNaturalResource_ResolveFuncs() {
     bool ok = s_fn_IBP_DeletePtr &&
               s_fn_FindNRComp &&
               s_fn_NotifyEntityChanged && s_fn_RemoveNatRes &&
-              g_TypeId_ComponentEntity &&
               fn_IsDerivedFrom &&
               fn_MemFreeStatic && g_pGameWorldSingleton;
 
@@ -137,7 +137,7 @@ void RemoveNaturalResource::Persist(void* stream) {
     // Serialize resource entity ref (+0x28)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field28 != nullptr) {
-        if (!fn_IsDerivedFrom(_field28, *g_TypeId_ComponentEntity)) {
+        if (!fn_IsDerivedFrom(_field28, ComponentEntity::TypeId())) {
             _field28 = nullptr;
         }
     }

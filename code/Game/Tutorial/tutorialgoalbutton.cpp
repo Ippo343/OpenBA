@@ -24,6 +24,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B; InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include "ui/Element.h"
 #include <cstdint>
 #include <new>
 
@@ -97,11 +98,11 @@ bool TutorialGoalButton::IsComplete(void* /*time*/, void* /*instance*/) {
 
     // Check if element IsDerivedFrom UI::Element
     uintptr_t element = elementIBP;
-    if (!fn_IsDerivedFrom || !g_TypeId_Element) {
+    if (!fn_IsDerivedFrom) {
         return false;
     }
 
-    bool isDerived = fn_IsDerivedFrom((void*)element, *g_TypeId_Element);
+    bool isDerived = fn_IsDerivedFrom((void*)element, UI::Element::TypeId());
     void* validElement = isDerived ? (void*)element : nullptr;
 
     // Wrap in another InternalBasePtr

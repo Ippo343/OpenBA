@@ -84,10 +84,9 @@ static fn_BoxIntersect_t s_boxIntersect  = nullptr;
 static const float* s_pMonthsPerYear = nullptr;  // 0x1401721b8 = 12.0f
 static const float* s_pSecsPerMonth  = nullptr;  // 0x140172234 = 300.0f
 
-// Type ids. The .rdata globals (0x1401c7158 citizen, 0x1401c5948 disease) are
-// env-gated / unregistered in standalone — resolve by name like the other citizen
-// ports ("private GetTypeIdByName copy" pattern; both types REGISTER_TYPE'd).
-static uint32_t s_tidCitizen = 0;
+// Disease type id. The .rdata global (0x1401c5948) is env-gated / unregistered
+// in standalone — resolve the class's own record instead (D5, ENDGAME B.3.9 CG3;
+// citizen's own 0x1401c7158 now reads CitizenComponent::TypeId() directly).
 static uint32_t s_tidDisease = 0;
 
 static bool s_init = false;
@@ -114,7 +113,6 @@ static void EnsureInit() {
     s_pMonthsPerYear = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401721b8));
     s_pSecsPerMonth  = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172234));
 
-    s_tidCitizen = CitizenComponent::TypeId();
     s_tidDisease = Disease::TypeId();   // B.3.9 EXA: the class's own record (was by name)
 }
 
@@ -655,9 +653,7 @@ extern "C" void CitizenComp_SpreadDisease(void* self) {
     }
 
     float radius = *(float*)((uintptr_t)disease + 0x38);
-    uint32_t typeId = s_tidCitizen;
-    if (g_TypeId_CitizenComponent_FC && *g_TypeId_CitizenComponent_FC)
-        typeId = *g_TypeId_CitizenComponent_FC;   // original reads DAT_1401c7158
+    uint32_t typeId = CitizenComponent::TypeId();   // cell 0x1401c7158 (D5)
     if (typeId == 0) return;
 
     uintptr_t link = *(uintptr_t*)(s + 0x278);

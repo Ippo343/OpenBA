@@ -39,6 +39,7 @@
 #include "Component/CitizenComponent.h"
 #include "Component/RawMaterialDescription.h"
 #include "Component/StorageComponent.h"
+#include "Entity/ComponentEntity.h"
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -77,7 +78,6 @@ bool PickupStoredRawMaterial_ResolveFuncs() {
 
     bool ok = s_fn_Storage_SubtractItem && s_fn_Storage_AddItem &&
               s_fn_ArrayResize16 &&
-              g_TypeId_ComponentEntity &&
               fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom &&
               fn_ExternalPtr_BuildSerialize;
@@ -159,7 +159,7 @@ void PickupStoredRawMaterial::Persist(void* stream) {
     // Serialize pickup entity (+0x28) with ComponentEntity type check
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field28 != nullptr) {
-        if (!fn_IsDerivedFrom(_field28, *g_TypeId_ComponentEntity)) {
+        if (!fn_IsDerivedFrom(_field28, ComponentEntity::TypeId())) {
             _field28 = nullptr;
         }
     }

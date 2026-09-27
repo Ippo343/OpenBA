@@ -45,6 +45,7 @@
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 #include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Element.h"                       // ENDGAME B.3.6 UI callers (K4)
+#include "Entity/ComponentEntity.h"
 #include <new>
 
 namespace {
@@ -76,8 +77,8 @@ int SplitPath(const System::String& path, System::String* parts) {
 
 // 0x1400105B0 — narrow a Base* to ComponentEntity, or null.
 void* NarrowComponentEntity(void* obj) {
-    if (!obj || !fn_IsDerivedFrom || !g_TypeId_ComponentEntity) return nullptr;
-    return fn_IsDerivedFrom(obj, *g_TypeId_ComponentEntity) ? obj : nullptr;
+    if (!obj || !fn_IsDerivedFrom) return nullptr;
+    return fn_IsDerivedFrom(obj, ComponentEntity::TypeId()) ? obj : nullptr;
 }
 
 // The 4-part tail: does this dialog's entity come from the named resource file?

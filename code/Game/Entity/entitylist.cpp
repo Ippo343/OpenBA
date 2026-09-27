@@ -29,6 +29,7 @@
 #include "sampler.h"
 #include <vector>
 #include "Entity/componententity_funcs.h"
+#include "Entity/ComponentEntity.h"
 #include "engine_funcs.h"
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "resolve.h"
@@ -1374,7 +1375,7 @@ void EntityList_Serialize(EntityList* self, void* stream) {
 
             // After loading, verify it's a ComponentEntity
             if (*(void**)currentIBP != nullptr) {
-                bool isDerived = fn_IsDerivedFrom(*(void**)currentIBP, *g_TypeId_ComponentEntity);
+                bool isDerived = fn_IsDerivedFrom(*(void**)currentIBP, ComponentEntity::TypeId());
                 if (!isDerived) {
                     *(uint64_t*)currentIBP = 0;
                 }

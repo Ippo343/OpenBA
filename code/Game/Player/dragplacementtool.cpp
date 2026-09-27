@@ -24,6 +24,8 @@
 
 #include "Player/DragPlacementTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
+#include "Component/CreateDragDescription.h"
+#include "Component/MapDescription.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "collection/Collection.h"
@@ -75,29 +77,23 @@ static void* FindComponentByTypeId(uintptr_t entity, uint32_t targetTypeId) {
 // DragPlacementTool::Startup (vtable +0x20, Slot4)
 // ============================================================
 // Searches entity component list for two description types:
-//   1. CreatePlacementDescription (DAT_1401c7430) -> self->placementDesc (+0x38)
-//   2. AreaDescription (DAT_1401c7a18)            -> self->areaDesc (+0x40)
+//   1. CreateDragDescription (cell 0x1401c7430; the field name/global "CreatePlacementDescription"
+//      lies — D5, Table 1/3) -> self->placementDesc (+0x38)
+//   2. MapDescription (cell 0x1401c7a18; "AreaDescription" also lies) -> self->areaDesc (+0x40)
 //
 // Original: 0x1400fc3e0
 void DragPlacementTool::Startup() {
     uintptr_t entity = (uintptr_t)descriptionPtr;
 
-    // Find CreatePlacementDescription
-    void* foundPlacement = nullptr;
-    if (g_TypeId_CreatePlacementDescription) {
-        foundPlacement = FindComponentByTypeId(entity, *g_TypeId_CreatePlacementDescription);
-    }
+    // Find CreateDragDescription
+    void* foundPlacement = FindComponentByTypeId(entity, CreateDragDescription::TypeId());
 
     // Original re-reads entity pointer after first search
     entity = (uintptr_t)descriptionPtr;
     placementDesc = foundPlacement;
 
-    // Find AreaDescription
-    void* foundArea = nullptr;
-    // Value-check, not just pointer — same registered-but-zero trap as PlacementTool.
-    if (g_TypeId_AreaDescription && *g_TypeId_AreaDescription) {
-        foundArea = FindComponentByTypeId(entity, *g_TypeId_AreaDescription);
-    }
+    // Find MapDescription
+    void* foundArea = FindComponentByTypeId(entity, MapDescription::TypeId());
     areaDesc = foundArea;
 }
 

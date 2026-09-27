@@ -33,6 +33,7 @@
 #include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Sprite.h"         // ENDGAME B.3.6 UI callers (K4)
 #include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "Component/ToolbarDescription.h"
 
 // ============================================================
 // Exe helpers, resolved PER CALL (ENDGAME B.3.8, B6-5). The External ctor
@@ -157,17 +158,16 @@ void* TutorialImageToolbarIcon::CreateElement(void* retIBP, void* dialog) {
     // 3. FindElementType — find ImageElement child
     void* element = *(void**)retIBP;
     uint8_t foundIBP[16] = {};
-    if (g_TypeId_ImageElement)
-        ::new (foundIBP) Object::InternalPtr<UI::Element>(
-            reinterpret_cast<UI::Element*>(element)->FindElementType(*g_TypeId_ImageElement));  // B.3.6 bridge
+    ::new (foundIBP) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<UI::Element*>(element)->FindElementType(UI::ImageElement::TypeId()));  // B.3.6 bridge
 
     // 4. CheckPtr on found element
 
     // 5. IsDerivedFrom check — verify it's an ImageElement
     void* foundObj = *(void**)foundIBP;
     void* imageElement = nullptr;
-    if (fn_IsDerivedFrom && g_TypeId_ImageElement && foundObj) {
-        if (fn_IsDerivedFrom(foundObj, *g_TypeId_ImageElement))
+    if (fn_IsDerivedFrom && foundObj) {
+        if (fn_IsDerivedFrom(foundObj, UI::ImageElement::TypeId()))
             imageElement = foundObj;
     }
 
@@ -216,11 +216,10 @@ void* TutorialImageToolbarIcon::CreateElement(void* retIBP, void* dialog) {
                 // Call GetTypeId (vtable +0x10)
                 uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
-                if (g_TypeId_ToolbarDescription_FC &&
-                    typeId == *g_TypeId_ToolbarDescription_FC) {
+                if (typeId == ToolbarDescription::TypeId()) {
                     // IsDerivedFrom check
                     if (fn_IsDerivedFrom &&
-                        fn_IsDerivedFrom(comp, *g_TypeId_ToolbarDescription_FC)) {
+                        fn_IsDerivedFrom(comp, ToolbarDescription::TypeId())) {
                         matchedComp = comp;
                     }
                     break;

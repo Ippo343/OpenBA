@@ -35,6 +35,7 @@
 #include <cstdint>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
+#include "Entity/ComponentEntity.h"
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -76,7 +77,7 @@ bool ConsumeRawMaterial_ResolveFuncs() {
 
     bool ok = s_fn_Storage_SubtractItem && s_fn_GetResourceCategoryIndex &&
               s_fn_ArrayResize16 &&
-              g_TypeId_ComponentEntity && g_pGameWorldSingleton &&
+              g_pGameWorldSingleton &&
               fn_IsDerivedFrom &&
               fn_ExternalPtr_BuildSerialize;
 
@@ -119,7 +120,7 @@ void ConsumeRawMaterial::Persist(void* stream) {
     // Serialize target entity (+0x20) with ComponentEntity type check
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field20 != nullptr) {
-        if (!fn_IsDerivedFrom(_field20, *g_TypeId_ComponentEntity)) {
+        if (!fn_IsDerivedFrom(_field20, ComponentEntity::TypeId())) {
             _field20 = nullptr;
         }
     }

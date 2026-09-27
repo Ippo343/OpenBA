@@ -58,6 +58,7 @@
 #include <cstdint>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
+#include "Entity/ComponentEntity.h"
 
 // ============================================================
 // External declarations -- functions already ported elsewhere.
@@ -183,15 +184,15 @@ void GameGrid_SerializeCellArray_ac10(void* serializer, int32_t count, int64_t a
     for (int32_t i = 0; i < count; ++i) {
         reinterpret_cast<Object::InternalBasePtr*>(elem + 0x00)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         void* refA = *reinterpret_cast<void**>(elem + 0x00);
-        if (refA != nullptr && fn_IsDerivedFrom && g_TypeId_ComponentEntity &&
-            !fn_IsDerivedFrom(refA, *g_TypeId_ComponentEntity)) {
+        if (refA != nullptr && fn_IsDerivedFrom &&
+            !fn_IsDerivedFrom(refA, ComponentEntity::TypeId())) {
             *reinterpret_cast<void**>(elem + 0x00) = nullptr;
         }
 
         reinterpret_cast<Object::InternalBasePtr*>(elem + 0x08)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         void* refB = *reinterpret_cast<void**>(elem + 0x08);
-        if (refB != nullptr && fn_IsDerivedFrom && g_TypeId_ComponentEntity &&
-            !fn_IsDerivedFrom(refB, *g_TypeId_ComponentEntity)) {
+        if (refB != nullptr && fn_IsDerivedFrom &&
+            !fn_IsDerivedFrom(refB, ComponentEntity::TypeId())) {
             *reinterpret_cast<void**>(elem + 0x08) = nullptr;
         }
 

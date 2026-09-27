@@ -22,6 +22,10 @@
 #include <windows.h>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Random
+#include "Component/StorageComponent.h"
+#include "Component/RawMaterialDescription.h"
+#include "Component/ResidenceComponent.h"
+#include "Component/CitizenDescription.h"
 
 // Tick-driven Builder pool (builder_pool_driver.cpp). No-op unless BANISHED_BUILDER_NATURAL
 // is set. Called at the end of CitizenBehavior_Update.
@@ -902,9 +906,8 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
     // Helper lambda: find a component on an entity by type ID.
     // Entity layout: +0x30 = component array (void**), +0x38 = component count (int).
     // Returns the found component pointer, or nullptr.
-    auto findComponent = [](uintptr_t entity, uint32_t* typeIdPtr) -> void* {
-        if (!entity || !typeIdPtr) return nullptr;
-        uint32_t targetId = *typeIdPtr;
+    auto findComponent = [](uintptr_t entity, uint32_t targetId) -> void* {
+        if (!entity) return nullptr;
         void** compArray = *reinterpret_cast<void***>(entity + 0x30);
         int compCount = *reinterpret_cast<int*>(entity + 0x38);
         for (int i = 0; i < compCount; i++) {
@@ -1007,7 +1010,7 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
 
         // Find StorageComponent on this entity
         void* storageComp = findComponent(static_cast<uintptr_t>(entityIBP),
-                                          g_TypeId_StorageComponent_FC);
+                                          StorageComponent::TypeId());
 
         // Wrap in InternalBasePtr
         int64_t storageIBP = 0;
@@ -1035,8 +1038,7 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
             void* rawMat = nullptr;
             if (itemEntity) {
                 int subCompCount = *reinterpret_cast<int*>(itemEntity + 0x30);
-                uint32_t rawMatTypeId = g_TypeId_RawMaterialDescription ?
-                    *g_TypeId_RawMaterialDescription : 0;
+                uint32_t rawMatTypeId = RawMaterialDescription::TypeId();
                 for (int k = 0; k < subCompCount; k++) {
                     void* subComp = *reinterpret_cast<void**>(
                         *reinterpret_cast<int64_t*>(itemEntity + 0x28) + k * 8);
@@ -1098,7 +1100,7 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
 
         // Find StorageComponent on this entity
         uintptr_t entityAddr = static_cast<uintptr_t>(entityIBP);
-        void* storageComp = findComponent(entityAddr, g_TypeId_StorageComponent_FC);
+        void* storageComp = findComponent(entityAddr, StorageComponent::TypeId());
 
         // Wrap in InternalBasePtr
         int64_t storageIBP = 0;
@@ -1120,8 +1122,7 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
             int64_t itemEntity = itemEntry[0];
             void* rawMat = nullptr;
             if (itemEntity) {
-                uint32_t rawMatTypeId = g_TypeId_RawMaterialDescription ?
-                    *g_TypeId_RawMaterialDescription : 0;
+                uint32_t rawMatTypeId = RawMaterialDescription::TypeId();
                 int subCompCount = *reinterpret_cast<int*>(itemEntity + 0x30);
                 for (int k = 0; k < subCompCount; k++) {
                     void* subComp = *reinterpret_cast<void**>(
@@ -1395,8 +1396,8 @@ void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
         uint64_t firstIBP = *reinterpret_cast<uint64_t*>(self->allCitizensPtr());
         void* descBase = *reinterpret_cast<void**>(static_cast<uintptr_t>(firstIBP) + 0x18);
         void* citizenDesc = nullptr;
-        if (fn_IsDerivedFrom && g_TypeId_CitizenDescription) {
-            if (fn_IsDerivedFrom(descBase, *g_TypeId_CitizenDescription)) {
+        if (fn_IsDerivedFrom) {
+            if (fn_IsDerivedFrom(descBase, CitizenDescription::TypeId())) {
                 citizenDesc = descBase;
             }
         }
@@ -1413,8 +1414,8 @@ void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
         firstIBP = *reinterpret_cast<uint64_t*>(self->allCitizensPtr());
         descBase = *reinterpret_cast<void**>(static_cast<uintptr_t>(firstIBP) + 0x18);
         citizenDesc = nullptr;
-        if (fn_IsDerivedFrom && g_TypeId_CitizenDescription) {
-            if (fn_IsDerivedFrom(descBase, *g_TypeId_CitizenDescription)) {
+        if (fn_IsDerivedFrom) {
+            if (fn_IsDerivedFrom(descBase, CitizenDescription::TypeId())) {
                 citizenDesc = descBase;
             }
         }
@@ -1695,11 +1696,11 @@ void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval,
             // virtual slot 2 (+0x10): Type()
             uint32_t typeId = reinterpret_cast<Object::Base*>(compIBP)->Type();  // B.3.8 bridge
 
-            if (typeId == *g_TypeId_ResidenceComponent) {
+            if (typeId == ResidenceComponent::TypeId()) {
                 // Confirm with IsDerivedFrom
                 compArray = *(void***)(building + 0x30);
                 compIBP = compArray[ci];
-                if (fn_IsDerivedFrom(compIBP, *g_TypeId_ResidenceComponent)) {
+                if (fn_IsDerivedFrom(compIBP, ResidenceComponent::TypeId())) {
                     residenceComp = compIBP;
                 }
                 goto found_residence;
@@ -1924,11 +1925,11 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
             // virtual slot 2 (+0x10): Type()
             uint32_t typeId = reinterpret_cast<Object::Base*>(compIBP)->Type();  // B.3.8 bridge
 
-            if (typeId == *g_TypeId_ResidenceComponent) {
+            if (typeId == ResidenceComponent::TypeId()) {
                 // Re-read and confirm with IsDerivedFrom
                 compArray = *(void***)(school + 0x30);
                 compIBP = compArray[ci];
-                if (fn_IsDerivedFrom(compIBP, *g_TypeId_ResidenceComponent)) {
+                if (fn_IsDerivedFrom(compIBP, ResidenceComponent::TypeId())) {
                     residenceComp = compIBP;
                 }
                 goto found_residence_phase1;
@@ -2003,10 +2004,10 @@ void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval,
 
             uint32_t typeId = reinterpret_cast<Object::Base*>(compIBP)->Type();  // B.3.8 bridge
 
-            if (typeId == *g_TypeId_ResidenceComponent) {
+            if (typeId == ResidenceComponent::TypeId()) {
                 compArray = *(void***)(school + 0x30);
                 compIBP = compArray[ci];
-                if (fn_IsDerivedFrom(compIBP, *g_TypeId_ResidenceComponent)) {
+                if (fn_IsDerivedFrom(compIBP, ResidenceComponent::TypeId())) {
                     residenceComp = compIBP;
                 }
                 goto found_residence_phase2;

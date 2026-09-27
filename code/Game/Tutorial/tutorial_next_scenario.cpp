@@ -47,6 +47,7 @@
 #include "Game/GameUpdateLoop.h"       // ENDGAME B.3.9 EXA: the real loop classes
 #include "Game/GameLoadDialogLoopT.h"
 #include "Game/GameLoaderLoop.h"
+#include "Game/Scenario.h"
 #include "io/Persistence.h"   // ENDGAME B.3.4 caller batch P
 #include "io/FileSystem.h"    // ENDGAME B.3.4 caller batch P
 #include "save/SaveLoad.h"    // ENDGAME B.3.7 callers (K2)
@@ -92,7 +93,6 @@ void* BuildLoaderChain(Engine::UpdateLoop* pGameLoop) {
 const char* MissingDependency(bool needSaveLoad) {
     if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return "KeyMap/scenario-list singleton";
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return "GameWorld singleton";
-    if (!g_TypeId_Scenario) return "Scenario type id (0x1401c5b08)";
     if (!fn_IsDerivedFrom) return "IsDerivedFrom";
     if (!fn_MemAlloc || !g_pMemAllocSingleton) return "MemAlloc";
     if (!fn_Time_Ctor_Float) return "Time::Time(float)";
@@ -146,7 +146,7 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
         reinterpret_cast<uintptr_t>(scenarioList) + 0x20);
     void* resource = *reinterpret_cast<void**>(resArray + static_cast<uintptr_t>(scenIdx) * 8);
 
-    void* scenario = fn_IsDerivedFrom(resource, *g_TypeId_Scenario) ? resource : nullptr;
+    void* scenario = fn_IsDerivedFrom(resource, Scenario::TypeId()) ? resource : nullptr;
     uintptr_t sc = reinterpret_cast<uintptr_t>(scenario);
 
     // 0x140013AA0 -- Scenario::GetSaveName, String(scenario + 0x88). Retail runs
@@ -156,7 +156,7 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
     if (!scenario) {
         fprintf(stderr, "[TutNext] scenario[%d]=%p is not a Scenario (typeId filter %u) "
                         "— cannot start the next tutorial\n",
-                scenIdx, resource, *g_TypeId_Scenario);
+                scenIdx, resource, Scenario::TypeId());
         fflush(stderr);
         return;
     }

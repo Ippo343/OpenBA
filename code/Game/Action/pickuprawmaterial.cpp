@@ -31,6 +31,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
 #include "Component/CitizenComponent.h"
+#include "Entity/ComponentEntity.h"
 #include <cstdio>
 #include <cstdint>
 #include <new>
@@ -81,7 +82,6 @@ bool PickupRawMaterial_ResolveFuncs() {
 
     bool ok = s_fn_FindComponent_7c80 && s_fn_Storage_AddItem &&
               s_fn_EntityFlagSet &&
-              g_TypeId_ComponentEntity &&
               g_pGameWorldSingleton &&
               fn_IsDerivedFrom;
 
@@ -125,7 +125,7 @@ void PickupRawMaterial::Persist(void* stream) {
     // Serialize source entity (+0x28) with ComponentEntity type check
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field28 != nullptr) {
-        if (!fn_IsDerivedFrom(_field28, *g_TypeId_ComponentEntity)) {
+        if (!fn_IsDerivedFrom(_field28, ComponentEntity::TypeId())) {
             _field28 = nullptr;
         }
     }

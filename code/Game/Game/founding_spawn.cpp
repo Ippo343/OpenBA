@@ -103,20 +103,14 @@ static int  s_trace = 0;
 static bool TraceOn() { return s_trace < 24; }   // first-N
 
 // ---------------------------------------------------------------------------
-// Type ids — exe global first (retail's DWORD_), name lookup as the standalone
-// fallback (deviation (a)/(b)).
+// Type ids — read directly (D5, ENDGAME B.3.9 CG3): cells 0x1401c7158 and
+// 0x1401c7190 through the classes' own X::TypeId(), never the engine_funcs
+// g_TypeId_* globals (which read the SAME cells).
 // ---------------------------------------------------------------------------
-// Caller batch CB6: the name lookup is the class's TypeId() (a plain read), and
-// the function-local first-use cache is gone (B6-5): both answers are stable
-// once Factory::Startup has run, so reading them each call returns the same id.
 static uint32_t TidCitizenComponent() {
-    if (g_TypeId_CitizenComponent_FC && *g_TypeId_CitizenComponent_FC)
-        return *g_TypeId_CitizenComponent_FC;
     return CitizenComponent::TypeId();
 }
 static uint32_t TidCitizenDescription() {
-    if (g_TypeId_CitizenDescription && *g_TypeId_CitizenDescription)
-        return *g_TypeId_CitizenDescription;
     return CitizenDescription::TypeId();
 }
 

@@ -159,7 +159,7 @@ extern "C" void FillTypeIdGlobals_fire() {
 static inline void* FireDesc(const void* self) {
     void* obj = *(void**)((uintptr_t)self + 0x18);
     if (!obj) return nullptr;
-    return ::Object::IsDerivedFromOrTrust(obj, g_tid_FireDescription) ? obj : nullptr;
+    return ::Object::IsDerivedFromOrTrust(obj, FireDescription::TypeId()) ? obj : nullptr;
 }
 
 // ============================================================
@@ -572,7 +572,7 @@ extern "C" void FireComponent_Spread_130(void* self) {
             for (int i = 0; i < n; ++i) {
                 uint64_t* slot = reinterpret_cast<uint64_t*>(comps + static_cast<int64_t>(i) * 8);
                 uint32_t tid = reinterpret_cast<Object::Base*>(*slot)->Type();   // B.3.8 bridge (slot 2)
-                if (tid == g_tid_FireComponent) {
+                if (tid == FireComponent::TypeId()) {
                     neighbourFire = *slot;
                     break;
                 }
@@ -582,7 +582,7 @@ extern "C" void FireComponent_Spread_130(void* self) {
         if (occupant != 0 && neighbourFire != 0) {
             void* nDescObj = *reinterpret_cast<void**>(neighbourFire + 0x18);
             void* nDesc = (nDescObj && ::Object::IsDerivedFromOrTrust(
-                               nDescObj, g_tid_FireDescription)) ? nDescObj : nullptr;
+                               nDescObj, FireDescription::TypeId())) ? nDescObj : nullptr;
             const uintptr_t nd = reinterpret_cast<uintptr_t>(nDesc);
 
             float chance = *reinterpret_cast<float*>(nd + FireDescriptionField::SpreadChance);
