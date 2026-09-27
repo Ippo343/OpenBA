@@ -1436,7 +1436,6 @@ extern "C" void RtEngine_DialogLoopT_Draw(DialogLoopT* self, float dt) {
 // it gets the DLL's implementation today and will pick up a port the moment one
 // is registered, with no edit here.
 namespace {
-std::atomic<void*> g_engineSingletonSlot{nullptr};
 std::atomic<void*> g_factorySingletonSlot{nullptr};
 }  // namespace
 
@@ -1447,8 +1446,7 @@ void Engine::Loader::Run() {
     // is a direct member call. The ORDER of the calls below is unchanged
     // (B7-7.4: the device-lost / loader race is the user's decision, and this
     // conversion neither moves nor adds a call in the bracket).
-    void** engineSlot = static_cast<void**>(rtengine::AtomicExport(
-        g_engineSingletonSlot, "?_singleton@Engine@1@0PEAV11@EA"));
+    void** engineSlot = static_cast<void**>(static_cast<void*>(&::Engine::Engine::_singleton));
     void** factorySlot = static_cast<void**>(rtengine::AtomicExport(
         g_factorySingletonSlot, "?_singleton@ExternalFactory@Object@@0PEAV12@EA"));
     if (!engineSlot || !factorySlot) return;

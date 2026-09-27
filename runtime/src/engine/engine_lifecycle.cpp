@@ -289,7 +289,7 @@ void MemFree(void* p) {
 // lane C2's mint. RT_DATA_SLOT is the door that gets both: registry first
 // (the mint, at cutover), the DLL's .data second (today).
 EngineT** EngineSingletonSlot() {
-    return RT_DATA_SLOT(EngineT**, "?_singleton@Engine@1@0PEAV11@EA");
+    return reinterpret_cast<EngineT**>(&::Engine::Engine::_singleton);
 }
 void** ConfigurationSingletonSlot() {
     return RT_DATA_SLOT(void**, "?_singleton@Configuration@System@@0PEAV12@EA");
@@ -1050,3 +1050,7 @@ int RtEngineLifecycleRegister() {
     // that is lane Q's kind of decision, not this lane's.
     return n;
 }
+
+// ?_singleton@Engine@1@0PEAV11@EA (0x1801fe748) -- the class static (ENDGAME B.3.9 ENG, B39_RULES D7);
+// RtEnginePortInit redirects the minted storage row onto it.
+::Engine::Engine* ::Engine::Engine::_singleton = nullptr;
