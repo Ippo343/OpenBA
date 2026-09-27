@@ -2,8 +2,14 @@
 // Clean reimplementation of MenuScene game logic.
 //
 // MenuScene (0x208 bytes) -- main menu scene controller.
-// Extends Object::External (0x20 base).
-// Vtable at 0x14015ede0.
+// Extends Object::External (0x20 base). Vtable at 0x14015ede0.
+//
+// ENDGAME B.3.8 block LOOP: a REAL class (code/Game/Game/MenuScene.h, field
+// layout and retail slot map there) with a compiler-generated vtable. Gone:
+// the 11-slot `g_MenuScene_Vtable_Standalone` (two over-read guards past
+// retail's 9), its trampolines and stubs, the lazy EnsureResolved (a non-atomic
+// first-call cache on the loader thread, B6-5: the External ctor/dtor dispatch
+// slots it read are the compiler's base chain now) and the C entry points.
 //
 // Contains scene geometry (+0x28), dynamic arrays of scene objects
 // (+0x30/+0x40/+0x50/+0x60), an external reference (+0x70),
@@ -13,12 +19,14 @@
 //
 // Decompiled from Application-x64.exe.
 
-#include "Game/menuscene_funcs.h"
+#include "Game/MenuScene.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "system/String.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
+#include "object/Internal.h" // Object::detail::InternalMemAlloc / InternalMemFree
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -31,173 +39,106 @@
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #define RZ_CHECK(tag) RedzoneAlloc_CheckLinks(tag)
 
-// ============================================================
-// Local function typedefs (resolved lazily)
-// ============================================================
-
-// External base ctor -- dispatch slot 0x140151e98
-typedef void (*fn_External_Ctor_t)(void* self);
-static fn_External_Ctor_t s_fn_External_Ctor = nullptr;
-
-// External base dtor -- dispatch slot 0x140151ea0
-typedef void (*fn_External_BaseDtor_t)(void* self);
-static fn_External_BaseDtor_t s_fn_External_BaseDtor = nullptr;
-
-// MenuScene embedded-Transform init helper -- exe 0x140098800 (NOT a
-// Math::Transform method; the name used to read like one)
-typedef void (*fn_MenuSceneTransformInit_t)(void* transform);
-static fn_MenuSceneTransformInit_t s_fn_MenuSceneTransformInit = nullptr;
-
-// Tree/map cleanup helper -- 0x14001b860
-typedef void (*fn_TreeCleanup_t)(void* treeBase);
-static fn_TreeCleanup_t s_fn_TreeCleanup = nullptr;
-
-// Original Slot5/Serialize function -- 0x1400a3630
-// Delegated to directly (201 instructions, too many sub-dependencies).
-typedef void (*fn_MenuScene_Serialize_Orig_t)(void* self, void* stream);
-
-// M3.5 Path B session 8 — top-level Geometry serializers used by the
-// standalone Slot5 branch.
+// M3.5 Path B session 8 — top-level Geometry serializers used by Serialize.
 extern "C" void Reimpl_TradeWork_impl_04d0(void* self, void* stream);
 extern "C" void Reimpl_TradeWork_impl_f1a0(void* self, void* stream);
 
-// ============================================================
-// Lazy-init resolver
-// ============================================================
-// Forward decl — Transform initializer reimplemented locally for standalone.
-// Mirrors FUN_140098800 (exe 0x140098800). Built from engine_funcs primitives
-// (Math::Transform::Transform + Volume::Frustum + Graphics::Camera) so we
-// don't depend on the exe address registry having 0x140098800.
+// FUN_14001b860 — the tree/map cleanup for +0x1C8 / +0x1E8 (game_leaf_helpers.cpp,
+// registered at that address in reg_game_leaf.cpp). Called directly: the old
+// lazily-resolved pointer (a non-atomic first-call cache, B6-5) resolved to it.
+void Game_MenuSceneArrayDtor(void* self);
+
+// Local mirror of FUN_140098800 (below; registered at that address).
 static void MenuScene_TransformInit_Standalone(void* transformObj);
 
-static void EnsureResolved() {
-    if (s_fn_External_Ctor) return;
-
-    // Dispatch slot reads -- these are IAT-style function pointers in .rdata
-    uintptr_t slot;
-
-    slot = ResolveAddr(Module::Exe, 0x140151e98);
-    if (slot) s_fn_External_Ctor = *reinterpret_cast<fn_External_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140151ea0);
-    if (slot) s_fn_External_BaseDtor = *reinterpret_cast<fn_External_BaseDtor_t*>(slot);
-
-    // Standalone: we don't have FUN_140098800 in our exe registry. Use our
-    // local reimplementation instead — it composes the same Runtime DLL
-    // primitives the original does (Transform ctor + Frustum + Camera).
-    s_fn_MenuSceneTransformInit = &MenuScene_TransformInit_Standalone;
-
-    s_fn_TreeCleanup = reinterpret_cast<fn_TreeCleanup_t>(
-        ResolveAddr(Module::Exe, 0x14001b860));
-
-}
+// One-shot log latches for Serialize (namespace scope, atomic: B6-5 — the scene
+// loads on the loader thread).
+namespace {
+std::atomic<bool> s_serializeLogged{false};
+std::atomic<bool> s_cameraLogged{false};
+std::atomic<bool> s_particleLogged{false};
+std::atomic<bool> s_atmosLogged{false};
+std::atomic<bool> s_tailWarned{false};
+}  // namespace
 
 // ============================================================
-// MenuScene::Init (also Slot8 body) -- Constructor
+// MenuScene::MenuScene -- Constructor
 // ============================================================
 // Original: 0x1400a3d70
 //
-// Calls External base ctor, sets MenuScene vtable, zeroes all fields
-// from +0x20 to +0x80, initializes embedded Transform at +0x88,
-// sets atmosphere defaults (colors, fog, intensities), zeroes
-// remaining fields from +0x1B8 to +0x200, and initializes two
-// tree structures at +0x1C8 and +0x1E8.
-void MenuScene_Init(MenuScene* self) {
-    EnsureResolved();
-
-    // External base construction
-    if (s_fn_External_Ctor) {
-        s_fn_External_Ctor(self);
-    }
-
-    // Set MenuScene vtable
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, MenuSceneAddr::Vtable);
-    self->vtable = s_vtable;
-
+// External() and the 0x14015ede0 stamp are the compiler's; then zero all
+// fields from +0x20 to +0x80, initialize the embedded Transform at +0x88,
+// set atmosphere defaults (colors, fog, intensities), zero the remaining
+// fields from +0x1B8 to +0x200, and initialize two tree structures at
+// +0x1C8 and +0x1E8.
+MenuScene::MenuScene() {
     // Zero pointer/array fields (+0x20 through +0x80, skipping +0x78)
-    self->_field20 = nullptr;   // +0x20: String (name)
-    self->_field28 = nullptr;   // +0x28: Geometry* (scene object)
-    self->_field30 = nullptr;   // +0x30: array data ptr
-    self->_field38 = nullptr;   // +0x38: array count/cap
-    self->_field40 = nullptr;   // +0x40: array data ptr
-    self->_field48 = nullptr;   // +0x48: array count/cap
-    self->_field50 = nullptr;   // +0x50: array data ptr
-    self->_field58 = nullptr;   // +0x58: array count/cap
-    self->_field60 = nullptr;   // +0x60: array data ptr
-    self->_field68 = nullptr;   // +0x68: array count/cap
-    self->_field70 = nullptr;   // +0x70: ExternalPtr (typed reference)
-    self->_field80 = nullptr;   // +0x80: ExternalPtr (Weather)
+    _field20 = nullptr;   // +0x20: String (name)
+    _field28 = nullptr;   // +0x28: Geometry* (scene object)
+    _field30 = nullptr;   // +0x30: array data ptr
+    _field38 = nullptr;   // +0x38: array count/cap
+    _field40 = nullptr;   // +0x40: array data ptr
+    _field48 = nullptr;   // +0x48: array count/cap
+    _field50 = nullptr;   // +0x50: array data ptr
+    _field58 = nullptr;   // +0x58: array count/cap
+    _field60 = nullptr;   // +0x60: array data ptr
+    _field68 = nullptr;   // +0x68: array count/cap
+    _field70 = nullptr;   // +0x70: ExternalPtr (typed reference)
+    _field80 = nullptr;   // +0x80: ExternalPtr (Weather)
 
     // Initialize embedded Transform at +0x88
-    if (s_fn_MenuSceneTransformInit) {
-        s_fn_MenuSceneTransformInit(&self->transform);
-    }
+    MenuScene_TransformInit_Standalone(&transform);
 
     // Atmosphere/lighting defaults (same as Weather initial values)
-    self->ambientColor     = 0xff595965;
-    self->sunColor         = 0xffcbcbbc;
-    self->skyColor         = 0xffbfbff2;
-    self->fogStart         = 90.0f;       // 0x42b40000
-    self->fogEnd           = 225.0f;      // 0x43610000
-    self->fogDensity       = 0.95f;       // 0x3f733333
-    self->sunIntensity     = 120.0f;      // 0x42f00000
+    ambientColor     = 0xff595965;
+    sunColor         = 0xffcbcbbc;
+    skyColor         = 0xffbfbff2;
+    fogStart         = 90.0f;       // 0x42b40000
+    fogEnd           = 225.0f;      // 0x43610000
+    fogDensity       = 0.95f;       // 0x3f733333
+    sunIntensity     = 120.0f;      // 0x42f00000
 
     // +0x1B0: ambientIntensity = 65.0f (0x42820000), packed as qword with +0x1B4 = 0
-    self->ambientIntensity = 65.0f;
-    memset(&self->_pad1B4, 0, 4);
+    ambientIntensity = 65.0f;
+    memset(&_pad1B4, 0, 4);
 
     // Zero remaining fields
-    self->_field1B8 = nullptr;  // +0x1B8
-    self->_field1C0 = 0;        // +0x1C0
+    _field1B8 = nullptr;  // +0x1B8
+    _field1C0 = 0;        // +0x1C0
 
-    // Initialize tree/map at +0x1C8 (20 bytes: ptr, ptr, ptr+8, count)
-    // Layout: +0x1C8=data, +0x1D0=data, +0x1D8=root, +0x1E0=count
-    self->_field1C8 = nullptr;
-    self->_field1D0 = nullptr;
-    self->_field1D8 = nullptr;
-    self->_field1E0 = 0;
+    // Tree/map at +0x1C8 (ptr, ptr, root, count)
+    _field1C8 = nullptr;
+    _field1D0 = nullptr;
+    _field1D8 = nullptr;
+    _field1E0 = 0;
 
-    // Initialize tree/map at +0x1E8 (20 bytes: same layout)
-    self->_field1E8 = nullptr;
-    self->_field1F0 = nullptr;
-    self->_field1F8 = nullptr;
-    self->_field200 = 0;
+    // Tree/map at +0x1E8 (same layout)
+    _field1E8 = nullptr;
+    _field1F0 = nullptr;
+    _field1F8 = nullptr;
+    _field200 = 0;
 }
 
 // ============================================================
-// MenuScene::Slot8 (vtable +0x40) -- Null-safe Init
+// MenuScene::Construct (vtable +0x40)
 // ============================================================
-// Original: 0x14001b800
-//
-// If self is null, returns null. Otherwise jumps to Init (constructor).
-void* MenuScene_Slot8(MenuScene* self) {
-    if (!self) return nullptr;
-    MenuScene_Init(self);
-    return self;
+// Original: 0x14001b800 — placement-new of the class on `this` (MSVC's
+// placement new null-checks `this`, as the old slot did).
+Object::External* MenuScene::Construct() {
+    return ::new (static_cast<void*>(this)) MenuScene();
 }
 
 // ============================================================
-// MenuScene::Dtor (vtable +0x00) -- Scalar deleting destructor
+// MenuScene::~MenuScene (body 0x1400a3970) / DeletingDtor (slot 0, 0x14001b830)
 // ============================================================
-// Original: 0x14001b830 (entry) -> 0x1400a3970 (body)
-//
-// Restores vtable, destroys Geometry at +0x28 (scalar delete via vtable),
-// cleans up tree structures at +0x1E8 and +0x1C8, frees arrays at
-// +0x60, +0x50, +0x40, +0x30, destroys String at +0x20, calls
-// External base dtor, and conditionally frees memory.
-void* MenuScene_Dtor(MenuScene* self, uint32_t flags) {
-    EnsureResolved();
-
-    // --- Destructor body (0x1400a3970) ---
-
-    // Restore vtable
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, MenuSceneAddr::Vtable);
-    self->vtable = s_vtable;
-
+// Restores the vtable (the compiler's), destroys the Geometry at +0x28
+// (scalar delete via its vtable), cleans up the tree structures at +0x1E8 and
+// +0x1C8, frees the arrays at +0x60, +0x50, +0x40, +0x30, destroys the String
+// at +0x20; External::~External is the compiler's chain.
+MenuScene::~MenuScene() {
     // Destroy Geometry object at +0x28 via its vtable scalar deleting dtor
-    void* geom = self->_field28;
+    // (bridge: the Geometry is still an untyped pointer).
+    void* geom = _field28;
     if (geom) {
         typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
         void** geomVtable = *(void***)geom;
@@ -206,73 +147,53 @@ void* MenuScene_Dtor(MenuScene* self, uint32_t flags) {
     }
 
     // Cleanup tree/map at +0x1E8 and +0x1C8
-    if (s_fn_TreeCleanup) {
-        s_fn_TreeCleanup(&self->_field1E8);
-        s_fn_TreeCleanup(&self->_field1C8);
-    }
+    Game_MenuSceneArrayDtor(&_field1E8);
+    Game_MenuSceneArrayDtor(&_field1C8);
 
     // Free array at +0x60, zero +0x60/+0x68
-    if (fn_MemFreeStatic && self->_field60) {
-        fn_MemFreeStatic(self->_field60);
-    }
-    self->_field60 = nullptr;
-    self->_field68 = nullptr;
+    if (_field60) Object::detail::InternalMemFree(_field60);
+    _field60 = nullptr;
+    _field68 = nullptr;
 
     // Free array at +0x50, zero +0x50/+0x58
-    if (fn_MemFreeStatic && self->_field50) {
-        fn_MemFreeStatic(self->_field50);
-    }
-    self->_field50 = nullptr;
-    self->_field58 = nullptr;
+    if (_field50) Object::detail::InternalMemFree(_field50);
+    _field50 = nullptr;
+    _field58 = nullptr;
 
     // Free array at +0x40, zero +0x40/+0x48
-    if (fn_MemFreeStatic && self->_field40) {
-        fn_MemFreeStatic(self->_field40);
-    }
-    self->_field40 = nullptr;
-    self->_field48 = nullptr;
+    if (_field40) Object::detail::InternalMemFree(_field40);
+    _field40 = nullptr;
+    _field48 = nullptr;
 
     // Free array at +0x30, zero +0x30/+0x38
-    if (fn_MemFreeStatic && self->_field30) {
-        fn_MemFreeStatic(self->_field30);
-    }
-    self->_field30 = nullptr;
-    self->_field38 = nullptr;
+    if (_field30) Object::detail::InternalMemFree(_field30);
+    _field30 = nullptr;
+    _field38 = nullptr;
 
     // Destroy String at +0x20
     // B.3.1 bridge: MenuScene's String field is still a POD member.
-    reinterpret_cast<System::String*>(&self->_field20)->~String();
+    reinterpret_cast<System::String*>(&_field20)->~String();
+}
 
-    // Call External base destructor
-    if (s_fn_External_BaseDtor) {
-        s_fn_External_BaseDtor(self);
-    }
-
-    // --- End dtor body, back to scalar deleting dtor (0x14001b830) ---
-
-    // Conditional free
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
+Object::Base* MenuScene::DeletingDtor(unsigned flags) {
+    this->~MenuScene();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
-// MenuScene::Cleanup (vtable +0x30, Slot6)
+// MenuScene::Reconstruct (vtable +0x30, Slot6)
 // ============================================================
-// Original: 0x14001b810
-//
-// Calls dtor via vtable with flags=0 (don't free memory), then
-// re-constructs in place via the constructor.
-void MenuScene_Cleanup(MenuScene* self) {
-    // Call dtor through vtable with flags=0
-    typedef void* (*fn_VtableDtor_t)(void* self, uint32_t flags);
-    fn_VtableDtor_t dtor = *(fn_VtableDtor_t*)(*(uintptr_t*)self);
-    dtor(self, 0);
-
-    // Re-construct in place
-    MenuScene_Init(self);
+// Original: 0x14001b810. Destroys the object (slot 0, flags 0: no free) then
+// re-constructs in place.
+Object::External* MenuScene::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) MenuScene();
 }
+
+// [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
+// slot 0 with flags 0 (destroy, no free).
+void MenuScene::Destruct() { DeletingDtor(0); }
 
 // ============================================================
 // MenuScene::Serialize (vtable +0x28, Slot5)
@@ -288,8 +209,7 @@ void MenuScene_Cleanup(MenuScene* self) {
 //
 // Delegated to the original function until those dependencies are
 // available in engine_funcs.h.
-void MenuScene_Serialize(MenuScene* self, void* stream) {
-    EnsureResolved();
+bool MenuScene::Serialize(void* stream) {
 
     // M3.5 Path B session 8 — Geometry deserialize sub-sequence.
     //
@@ -322,16 +242,14 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     // soft-fail per element. The image-buffer upload (TradeWork_sub_c780)
     // soft-fails if VideoDevice::_singleton isn't ready. Worst case: the
     // menu shows the ctor-supplied atmosphere defaults instead of terrain.
-    static bool s_loggedOnce = false;
-    if (!s_loggedOnce) {
+    if (!s_serializeLogged.exchange(true)) {
         printf("[MenuScene::Slot5_Serialize] standalone Geometry-deserialize path "
-               "(self=%p stream=%p)\n", (void*)self, stream);
+               "(self=%p stream=%p)\n", (void*)this, stream);
         fflush(stdout);
-        s_loggedOnce = true;
     }
 
     // (1) Construct an OUTER Serializer (version=2) wrapping `stream`, then
-    // String::Serialize on &self->_field20 to advance the stream cursor past
+    // String::Serialize on &_field20 to advance the stream cursor past
     // the type-name marker that the file format encodes at the start of
     // every External payload. Without this prelude the cursor sits at
     // ASCII type-name bytes ("Gase"/"vers" etc.) and Geometry::Serialize
@@ -345,7 +263,7 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     if (stream) {
         ::new (static_cast<void*>(outer_ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge
         outer_ctored = true;
-        reinterpret_cast<System::String*>(&self->_field20)->Serialize(outer_ser);
+        reinterpret_cast<System::String*>(&_field20)->Serialize(outer_ser);
     } else {
         printf("[MenuScene::Slot5_Serialize] no stream — "
                "skipping outer prelude (terrain will be missing)\n");
@@ -353,7 +271,7 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     }
 
     // (2) Allocate + ctor a Geometry container at +0x28 if needed.
-    if (self->_field28 == nullptr) {
+    if (_field28 == nullptr) {
         if (!fn_MemAlloc || !g_pMemAllocSingleton) {
             printf("[MenuScene::Slot5_Serialize] MemAlloc unavailable — "
                    "skipping Geometry alloc (terrain will be missing)\n");
@@ -368,7 +286,7 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
                     // resize correctly given a zeroed header.
                     memset(geom, 0, 0x230);
                 }
-                self->_field28 = geom;
+                _field28 = geom;
             } else {
                 printf("[MenuScene::Slot5_Serialize] MemAlloc(0x230) failed — "
                        "no Geometry container, skipping deserialize\n");
@@ -401,9 +319,9 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     // the intermittent menu heap crash — see geometry_serialize.cpp for the
     // OOB fix.
     {
-        if (self->_field28 && stream) {
-            Reimpl_TradeWork_impl_04d0(self->_field28, stream);
-            Reimpl_TradeWork_impl_f1a0(self->_field28, stream);
+        if (_field28 && stream) {
+            Reimpl_TradeWork_impl_04d0(_field28, stream);
+            Reimpl_TradeWork_impl_f1a0(_field28, stream);
         }
     }
     RZ_CHECK("Slot5 after geometry deserialize");
@@ -415,7 +333,7 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     // the terrain → black screen. See FUN_1400988c0 in exe + memory file
     // project_terrain_render_status.md (2026-05-01).
     if (stream) {
-        void* xform = reinterpret_cast<uint8_t*>(self) + 0x88;
+        void* xform = reinterpret_cast<uint8_t*>(this) + 0x88;
         // Transform::SerializeWrapper (exe 0x1400988c0) resolves to a
         // NOT_IMPLEMENTED stub via the address registry — DON'T call it, use
         // the inline path.
@@ -443,8 +361,7 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
             *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(xform) + 0x30),
             nullptr);   // B.3.4 bridge
         reinterpret_cast<IO::Serializer*>(inner_ser)->~Serializer();   // B.3.4 bridge
-        static bool s_logged = false;
-        if (!s_logged) {
+        if (!s_cameraLogged.exchange(true)) {
             const float* xf = reinterpret_cast<const float*>(xform);
             printf("[MenuScene::Slot5_Serialize] camera Transform "
                    "deserialized: pos=(%.2f, %.2f, %.2f) "
@@ -455,7 +372,6 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
                    xf[7], xf[8], xf[9],
                    xf[10], xf[11], xf[12]);
             fflush(stdout);
-            s_logged = true;
         }
     }
 
@@ -479,56 +395,56 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     //   Serializer::Serialize_Float(outer, field+0x1A0, NULL) x5
     if (outer_ctored) {
         // ----- Array #1 (+0x30, stride 0x20) -----
-        int count38 = static_cast<int>(reinterpret_cast<uintptr_t>(self->_field38) & 0xFFFFFFFF);
+        int count38 = static_cast<int>(reinterpret_cast<uintptr_t>(_field38) & 0xFFFFFFFF);
         reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(count38, nullptr);   // B.3.4 bridge (cast dropped: count38 is int)
         if (count38 > 0 && fn_Array_Resize_Stride20) {
-            fn_Array_Resize_Stride20(&self->_field30, count38);
+            fn_Array_Resize_Stride20(&_field30, count38);
         }
         if (count38 > 0 && fn_Array_Serialize_Stride20) {
             fn_Array_Serialize_Stride20(outer_ser, static_cast<uint32_t>(count38),
-                                        self->_field30);
+                                        _field30);
         }
 
         RZ_CHECK("Slot5 after arr30 (stride0x20 instances)");
 
         // ----- Array #2 (+0x40, stride 0x08, GraphicsMesh exrefs) -----
-        int count48 = static_cast<int>(reinterpret_cast<uintptr_t>(self->_field48) & 0xFFFFFFFF);
+        int count48 = static_cast<int>(reinterpret_cast<uintptr_t>(_field48) & 0xFFFFFFFF);
         reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(count48, nullptr);   // B.3.4 bridge (cast dropped: count48 is int)
         if (count48 > 0 && fn_Array_Resize_Stride08) {
-            fn_Array_Resize_Stride08(&self->_field40, count48);
+            fn_Array_Resize_Stride08(&_field40, count48);
         }
         if (count48 > 0 && fn_Array_Serialize_External_GraphicsMesh) {
-            fn_Array_Serialize_External_GraphicsMesh(outer_ser, count48, self->_field40);
+            fn_Array_Serialize_External_GraphicsMesh(outer_ser, count48, _field40);
         }
 
         RZ_CHECK("Slot5 after arr40 (GraphicsMesh exrefs)");
 
         // ----- Single ExternalPtr at +0x70 (GraphicsMesh) -----
         if (fn_ExternalPtr_Serialize_GraphicsMesh) {
-            fn_ExternalPtr_Serialize_GraphicsMesh(&self->_field70, outer_ser);
+            fn_ExternalPtr_Serialize_GraphicsMesh(&_field70, outer_ser);
         }
 
         // ----- Atmosphere: Vector4 + 3 Colors + 5 Floats -----
         // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360
         reinterpret_cast<Math::Vector4*>(
-            reinterpret_cast<uint8_t*>(self) + 0x1B4)->Serialize(outer_ser);
-        reinterpret_cast<System::Color*>(&self->ambientColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
-        reinterpret_cast<System::Color*>(&self->sunColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
-        reinterpret_cast<System::Color*>(&self->skyColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
+            reinterpret_cast<uint8_t*>(this) + 0x1B4)->Serialize(outer_ser);
+        reinterpret_cast<System::Color*>(&ambientColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
+        reinterpret_cast<System::Color*>(&sunColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
+        reinterpret_cast<System::Color*>(&skyColor)->Serialize(*reinterpret_cast<IO::Serializer*>(outer_ser));   // B.3.4b bridge
         // Color::Serialize from Runtime appears to write only the RGB
         // bytes and leave alpha at zero; Init defaults use 0xFF and the
         // renderer's uint32→Vector4 conversion treats the alpha byte as
         // the 4th component (which downstream lighting/fog math may
         // multiply against). Force opaque alpha so the deserialized
         // colors land in the same range as the Init defaults.
-        self->ambientColor |= 0xFF000000;
-        self->sunColor     |= 0xFF000000;
-        self->skyColor     |= 0xFF000000;
-        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->fogStart,         nullptr);   // B.3.4 bridge (cast dropped: fogStart is float)
-        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->fogEnd,           nullptr);   // B.3.4 bridge (cast dropped: fogEnd is float)
-        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->fogDensity,       nullptr);   // B.3.4 bridge (cast dropped: fogDensity is float)
-        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->sunIntensity,     nullptr);   // B.3.4 bridge (cast dropped: sunIntensity is float)
-        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->ambientIntensity, nullptr);   // B.3.4 bridge (cast dropped: ambientIntensity is float)
+        ambientColor |= 0xFF000000;
+        sunColor     |= 0xFF000000;
+        skyColor     |= 0xFF000000;
+        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(fogStart,         nullptr);   // B.3.4 bridge (cast dropped: fogStart is float)
+        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(fogEnd,           nullptr);   // B.3.4 bridge (cast dropped: fogEnd is float)
+        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(fogDensity,       nullptr);   // B.3.4 bridge (cast dropped: fogDensity is float)
+        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(sunIntensity,     nullptr);   // B.3.4 bridge (cast dropped: sunIntensity is float)
+        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(ambientIntensity, nullptr);   // B.3.4 bridge (cast dropped: ambientIntensity is float)
 
         // ----- v2-gated tail: Weather extPtr + +0x78 float + particle array
         //                       + particle resource exrefs ----------------
@@ -537,20 +453,20 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
         // dictates serialize behavior internally.
         if (fn_ExternalPtr_Serialize_Weather) {
             // Weather externalPtr at +0x80 (FUN_1400196a0).
-            fn_ExternalPtr_Serialize_Weather(&self->_field80, outer_ser);
+            fn_ExternalPtr_Serialize_Weather(&_field80, outer_ser);
         }
         // Single float at +0x78 (the v2-only "scene-time" or similar).
-        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->_field78, nullptr);   // B.3.4 bridge (cast dropped: _field78 is float)
+        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(_field78, nullptr);   // B.3.4 bridge (cast dropped: _field78 is float)
 
         // ----- Particle element array (+0x50, stride 0x14: 4 floats + 1 int) -----
-        int count58 = static_cast<int>(reinterpret_cast<uintptr_t>(self->_field58) & 0xFFFFFFFF);
+        int count58 = static_cast<int>(reinterpret_cast<uintptr_t>(_field58) & 0xFFFFFFFF);
         reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(count58, nullptr);   // B.3.4 bridge (cast dropped: count58 is int)
         if (count58 > 0 && fn_Array_Resize_Stride14) {
-            fn_Array_Resize_Stride14(&self->_field50, count58);
+            fn_Array_Resize_Stride14(&_field50, count58);
         }
         // Per-element serialize (inlined in original; not a separate helper).
-        if (count58 > 0 && self->_field50) {
-            uint8_t* base = reinterpret_cast<uint8_t*>(self->_field50);
+        if (count58 > 0 && _field50) {
+            uint8_t* base = reinterpret_cast<uint8_t*>(_field50);
             for (int i = 0; i < count58; ++i) {
                 uint8_t* elem = base + static_cast<size_t>(i) * 0x14;
                 reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(*reinterpret_cast<float*>(elem + 0x00), nullptr);   // B.3.4 bridge  offset.x
@@ -564,22 +480,20 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
         RZ_CHECK("Slot5 after particle elem array (+0x50)");
 
         // ----- Particle resource exrefs (+0x60, stride 0x08, FUN_14001bff0) -----
-        int count68 = static_cast<int>(reinterpret_cast<uintptr_t>(self->_field68) & 0xFFFFFFFF);
+        int count68 = static_cast<int>(reinterpret_cast<uintptr_t>(_field68) & 0xFFFFFFFF);
         reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(count68, nullptr);   // B.3.4 bridge (cast dropped: count68 is int)
         if (count68 > 0 && fn_Array_Resize_Stride08) {
-            fn_Array_Resize_Stride08(&self->_field60, count68);
+            fn_Array_Resize_Stride08(&_field60, count68);
         }
         if (count68 > 0 && fn_Array_Serialize_External_Particle) {
-            fn_Array_Serialize_External_Particle(outer_ser, count68, self->_field60);
+            fn_Array_Serialize_External_Particle(outer_ser, count68, _field60);
         }
 
-        static bool s_particleLogged = false;
-        if (!s_particleLogged) {
+        if (!s_particleLogged.exchange(true)) {
             printf("[MenuScene::Slot5_Serialize] particles deserialized: "
                    "count58=%d (elem array) count68=%d (resource exrefs)\n",
                    count58, count68);
             fflush(stdout);
-            s_particleLogged = true;
         }
 
         // 2026-05-02 diagnostic confirmed: even with Init-default atmosphere
@@ -587,32 +501,28 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
         // black. Atmosphere alignment is NOT the screen-black culprit. Bug is
         // downstream in the render path (clear color, depth state, sun light
         // dispatch, or Renderer::Draw consuming our reimpl's geometry).
-        static bool s_atmosLogged = false;
-        if (!s_atmosLogged) {
+        if (!s_atmosLogged.exchange(true)) {
             const float* v4 = reinterpret_cast<const float*>(
-                reinterpret_cast<uint8_t*>(self) + 0x1B4);
+                reinterpret_cast<uint8_t*>(this) + 0x1B4);
             printf("[MenuScene::Slot5_Serialize] atmosphere deserialized: "
                    "amb=0x%08x sun=0x%08x sky=0x%08x "
                    "fogStart=%.2f fogEnd=%.2f fogDensity=%.3f "
                    "sunInt=%.2f ambInt=%.2f "
                    "vec4_at_1b4=(%.3f,%.3f,%.3f,%.3f) "
                    "(arr30 count=%d arr40 count=%d)\n",
-                   self->ambientColor, self->sunColor, self->skyColor,
-                   self->fogStart, self->fogEnd, self->fogDensity,
-                   self->sunIntensity, self->ambientIntensity,
+                   ambientColor, sunColor, skyColor,
+                   fogStart, fogEnd, fogDensity,
+                   sunIntensity, ambientIntensity,
                    v4[0], v4[1], v4[2], v4[3],
                    count38, count48);
             fflush(stdout);
-            s_atmosLogged = true;
         }
     } else {
-        static bool s_warnedTail = false;
-        if (!s_warnedTail) {
+        if (!s_tailWarned.exchange(true)) {
             printf("[MenuScene::Slot5_Serialize] tail unwired "
                    "(outer_ctored=%d) — atmosphere left at Init defaults\n",
                    outer_ctored ? 1 : 0);
             fflush(stdout);
-            s_warnedTail = true;
         }
     }
 
@@ -621,19 +531,8 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
         reinterpret_cast<IO::Serializer*>(outer_ser)->~Serializer();   // B.3.4 bridge
     }
     RZ_CHECK("Slot5 exit");
-    return;
+    return true;   // retail returns AL=1
 }
-
-// ============================================================
-// STANDALONE_EXE: Factory + Vtable + REGISTER_TYPE
-// ============================================================
-// In standalone mode we own the type registration. The factory allocates
-// 0x208 bytes (sizeof(MenuScene)) with 8-byte alignment and runs Init.
-// Mirrors the StatGoal pattern in code/Game/Goal/statgoal.cpp.
-
-
-#include "Object/factory_registration.h"
-#include "address_registry.h"
 
 // Local mirror of FUN_140098800 (exe 0x140098800). Composes the same
 // Runtime DLL primitives (Math::Transform::Transform + Volume::Frustum +
@@ -670,83 +569,33 @@ static void MenuScene_TransformInit_Standalone(void* transformObj) {
     fn_Graphics_Camera_Ctor(cameraObj, frustumBuf, &ident, true);
 }
 
-// Standalone vtable for MenuScene (11 slots; matches Object::External shape).
-// Slots not yet reimplemented are nullptr — the loader's instantiation path
-// only touches Dtor / GetTypeId / Serialize / Cleanup / Slot8.
-static uint32_t MenuScene_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) {
-        cached = ::Object::GetTypeIdByName("MenuScene");
-    }
-    return cached;
+// ============================================================
+// Reflection: create / createInPlace, the registration
+// ============================================================
+void* MenuScene::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(MenuScene), 8);
+    if (!p) return nullptr;
+    Object::Base* obj = ::new (p) MenuScene();
+    printf("[MenuScene::Factory] allocated %p (size=0x%x)\n",
+           p, (unsigned)sizeof(MenuScene));
+    return obj;
+}
+void* MenuScene::CreateInPlaceObject(void* memory) {
+    if (!memory) return nullptr;
+    return static_cast<Object::Base*>(::new (memory) MenuScene());
 }
 
-// Adapter trampolines for vtable slots that don't directly match the
-// (void*, ...) shape the Runtime expects.
-static void* MenuScene_Slot8_Trampoline(void* self) {
-    return MenuScene_Slot8(reinterpret_cast<MenuScene*>(self));
-}
-static void MenuScene_Slot6_Trampoline(void* self) {
-    MenuScene_Cleanup(reinterpret_cast<MenuScene*>(self));
-}
-static void MenuScene_Slot5_Trampoline(void* self, void* stream) {
-    MenuScene_Serialize(reinterpret_cast<MenuScene*>(self), stream);
-}
-static void* MenuScene_Dtor_Trampoline(void* self, uint32_t flags) {
-    return MenuScene_Dtor(reinterpret_cast<MenuScene*>(self), flags);
-}
-
-// Safe stubs for vtable slots whose original implementation is unknown.
-// Runtime's FindOrLoad chain calls some of these on the freshly-allocated
-// MenuScene before Slot5 (Serialize). Originals for Slot3/Slot4 are simple
-// `mov eax,1; ret` (return 1). Others return 0/null.
-static int MenuScene_VtblStub_Return1(void* /*self*/) { return 1; }
-static int MenuScene_VtblStub_Return0(void* /*self*/) { return 0; }
-static void* MenuScene_VtblStub_ReturnNull(void* /*self*/, ...) { return nullptr; }
-
-static void* g_MenuScene_Vtable_Standalone[11] = {
-    reinterpret_cast<void*>(&MenuScene_Dtor_Trampoline),   // +0x00 dtor
-    reinterpret_cast<void*>(&MenuScene_VtblStub_ReturnNull),// +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&MenuScene_GetTypeId),          // +0x10 GetTypeId
-    reinterpret_cast<void*>(&MenuScene_VtblStub_Return1),   // +0x18 Slot3 (mov eax,1; ret)
-    reinterpret_cast<void*>(&MenuScene_VtblStub_Return1),   // +0x20 Slot4 (mov eax,1; ret)
-    reinterpret_cast<void*>(&MenuScene_Slot5_Trampoline),   // +0x28 Slot5 / Serialize
-    reinterpret_cast<void*>(&MenuScene_Slot6_Trampoline),   // +0x30 Slot6 / Cleanup
-    reinterpret_cast<void*>(&MenuScene_VtblStub_Return0),   // +0x38 Slot7 base
-    reinterpret_cast<void*>(&MenuScene_Slot8_Trampoline),   // +0x40 Slot8 / Init
-    reinterpret_cast<void*>(&MenuScene_VtblStub_Return0),   // +0x48 Slot9 (unused)
-    reinterpret_cast<void*>(&MenuScene_VtblStub_ReturnNull),// +0x50 Slot10 (unused)
-};
+DEFINE_EXE_VTABLE(MenuScene, "_ZTV9MenuScene")
 
 extern "C" void RegisterMenuSceneVtable() {
-    RegisterExeAddr(MenuSceneAddr::Vtable,
-                    reinterpret_cast<uintptr_t>(g_MenuScene_Vtable_Standalone));
-    // FUN_140098800 Transform/Camera init — standalone already routes EnsureResolved()
-    // to MenuScene_TransformInit_Standalone directly (the 0x140098800 ResolveAddr
-    // literal lives in the DLL-only #else branch). Register it so the exe address
-    // resolves to our reimpl too, keeping the Game-gap metric honest.
+    // B38_RULES D5: nothing in the tree reads 0x14015ede0 back (swept by hex
+    // and owner); this row is reader-less and serves the compiler table only.
+    // The closing pass deletes it with the call.
+    RegisterExeAddr(0x14015ede0, reinterpret_cast<uintptr_t>(MenuScene::Vtable()));
+    // FUN_140098800 Transform/Camera init — the ctor calls
+    // MenuScene_TransformInit_Standalone directly. Register it so the exe
+    // address resolves to our reimpl too, keeping the Game-gap metric honest.
     RegisterExeAddr(0x140098800, reinterpret_cast<uintptr_t>(&MenuScene_TransformInit_Standalone));
 }
 
-extern "C" void* MenuScene_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) {
-        printf("[MenuScene::Factory] MemAlloc unavailable — returning NULL\n");
-        return nullptr;
-    }
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, sizeof(MenuScene), 8);
-    if (!p) return nullptr;
-    MenuScene_Init(reinterpret_cast<MenuScene*>(p));
-    printf("[MenuScene::Factory] allocated %p (size=0x%x)\n",
-           p, (unsigned)sizeof(MenuScene));
-    return p;
-}
-
-extern "C" void* MenuScene_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    MenuScene_Init(reinterpret_cast<MenuScene*>(memory));
-    return memory;
-}
-
-REGISTER_TYPE(MenuScene, "Object::External",
-              &MenuScene_Factory, &MenuScene_CreateInPlace);
-
+DEFINE_EXE_TYPE(MenuScene, "Object::External")

@@ -42,78 +42,13 @@
 // Field order is load-bearing (it is reverse construction order), so it is kept
 // literal rather than folded into a loop.
 
-#include "resolve.h"
-#include <cstdint>
-
-namespace {
-
-typedef void (*fn_StringDtor_t)(void* str);
-typedef void (*fn_MemFreeStatic_t)(void* p);
-typedef void (*fn_ExternalDtor_t)(void* self);
-typedef void (*fn_ArrayDtor_t)(void* arrayHeader);
-
-fn_StringDtor_t    s_strDtor      = nullptr;   // slot 0x140152af0
-fn_MemFreeStatic_t s_memFree      = nullptr;   // slot 0x140152b68
-fn_ExternalDtor_t  s_externalDtor = nullptr;   // slot 0x140151ea0
-fn_ArrayDtor_t     s_arrayDtor18  = nullptr;   // exe 0x14001b030
-fn_ArrayDtor_t     s_arrayDtor30  = nullptr;   // exe 0x14001b0a0
-bool s_resolved = false;
-
-// Read a Runtime function pointer out of an exe .rdata dispatch slot.
-void* Slot(uintptr_t slotAddr) {
-    uintptr_t slot = ResolveAddr(Module::Exe, slotAddr);
-    return slot ? *reinterpret_cast<void**>(slot) : nullptr;
-}
-
-void EnsureFns() {
-    if (s_resolved) return;
-    s_resolved = true;
-    s_strDtor      = reinterpret_cast<fn_StringDtor_t>(Slot(0x140152af0));
-    s_memFree      = reinterpret_cast<fn_MemFreeStatic_t>(Slot(0x140152b68));
-    s_externalDtor = reinterpret_cast<fn_ExternalDtor_t>(Slot(0x140151ea0));
-    s_arrayDtor18  = reinterpret_cast<fn_ArrayDtor_t>(
-        ResolveAddr(Module::Exe, 0x14001b030));
-    s_arrayDtor30  = reinterpret_cast<fn_ArrayDtor_t>(
-        ResolveAddr(Module::Exe, 0x14001b0a0));
-}
-
-inline void Str(uint8_t* p) { if (s_strDtor) s_strDtor(p); }
-inline void Arr18(uint8_t* p) { if (s_arrayDtor18) s_arrayDtor18(p); }
-
-}  // namespace
+#include "Game/MapGenerator.h"
 
 // FUN_14001aea0 — MapGenerator::~MapGenerator (body only, no deallocation).
+// ENDGAME B.3.8 LOOP: the body is ~MapGenerator (mapgenerator.cpp) now; this
+// registered door delegates. The slot-0 body with flags 0 is exactly the dtor
+// body plus External::~External and no free — what this address ran.
 extern "C" void MapGenerator_DtorBody_1aea0(void* selfV) {
     if (!selfV) return;
-    EnsureFns();
-    uint8_t* s = reinterpret_cast<uint8_t*>(selfV);
-
-    // Three trailing description-file references.
-    Str(s + 0x158);
-    Str(s + 0x138);
-    Str(s + 0x118);
-
-    // Seven resource/biome arrays, high offset first.
-    Arr18(s + 0xd0);
-    Arr18(s + 0xc0);
-    Arr18(s + 0xb0);
-    Arr18(s + 0xa0);
-    Arr18(s + 0x90);
-    if (s_arrayDtor30) s_arrayDtor30(s + 0x80);   // 0x30-byte elements
-    Arr18(s + 0x70);
-
-    // The plain bool/int buffer at +0x60 (header is {data, count} — retail zeroes
-    // both qwords, so +0x68 goes with it).
-    void* buf = *reinterpret_cast<void**>(s + 0x60);
-    if (buf && s_memFree) s_memFree(buf);
-    *reinterpret_cast<uint64_t*>(s + 0x60) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x68) = 0;
-
-    // templateRef / _field30 / _field28.
-    Str(s + 0x48);
-    Str(s + 0x30);
-    Str(s + 0x28);
-
-    // Object::External base (retail tail-JMPs here).
-    if (s_externalDtor) s_externalDtor(s);
+    static_cast<MapGenerator*>(selfV)->DeletingDtor(0);
 }

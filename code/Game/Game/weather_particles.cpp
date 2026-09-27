@@ -16,15 +16,20 @@
 //   +0x08 Update      (exe 0x1400d2e60)  particle integration + spatial wrap
 //   +0x10 Draw        (exe 0x1400d3120)  instanced billboards -> weather_particle_draw.cpp
 //   +0x18 AddDrawItem (exe 0x1400d30b0)  Renderer::AddDrawItem
-//   +0x20..+0x40      inherited Graphics::Geometry base virtuals (reuse GeomDraw_*)
+//   +0x20..+0x40      inherited Graphics::Geometry base virtuals
 //
-// In standalone the exe .text is not loaded, so this backs the vtable directly;
-// the Runtime Graphics/Video primitives are resolved from Runtime-x64.dll.
+// ENDGAME B.3.8 block LOOP: the geometry is the REAL class
+// `WeatherParticleGeometry` (code/Game/Game/WeatherParticleGeometry.h) with a
+// compiler vtable. Gone: the hand-built 9-slot `g_WeatherParticle_Vtable`, the
+// lazy table resolves in the old ctor/dtor, the `??1Geometry` dtor door (the
+// compiler's base chain runs the same body) and the GeomDraw_* forwarders for
+// slots 4..8 (inherited).
 
 // ENDGAME B.3.5 Video/Graphics caller batch: Graphics::Geometry and
 // Graphics::Scene are real classes. Ahead of "resolve.h" — resolve.h pulls
 // <windows.h>, whose <wingdi.h> declares a global `Rectangle` FUNCTION that
 // hides `Volume::Rectangle`'s class name inside Volume.h's own static_asserts.
+#include "Game/WeatherParticleGeometry.h"
 #include "graphics/Scene.h"     // also brings Graphics::Geometry
 #include "graphics/Camera.h"    // ENDGAME B.3.5 batch K1 — Graphics::Renderer
 #include "graphics/Material.h"  // Graphics::MaterialInstance
@@ -33,6 +38,9 @@
 #include "resolve.h"
 #include "collection/Collection.h"
 #include "Component/coll_bridge.h"
+#include "object/Internal.h"     // Object::detail::InternalMemFree
+#include "Object/exe_type.h"     // DEFINE_EXE_VTABLE
+#include <new>
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
@@ -50,31 +58,13 @@ constexpr float kBoundHi  =  1024.0f;  // DAT_140172250 (SetBounds max)
 constexpr float kBoundLo  = -1024.0f;  // DAT_1401722ac (SetBounds min)
 constexpr float kUVScale  = 1.0f;      // g_fUVScale
 
-// Local lazy-resolved Runtime helpers not in engine_funcs.h.
-// ENDGAME B.3.5: the `?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z`
-// cache is GONE — its one caller calls `Graphics::Geometry::SetBounds` directly.
-// `??1Geometry@Graphics@@UEAA@XZ` STAYS a door: it is a DESTRUCTOR, and no
-// Video/Graphics class has a real ctor/dtor (B4b-2, B35_RULES section 11).
-typedef void  (*fn_Geo_BaseDtor_t)(void* geo);                    // ??1Geometry@Graphics@@UEAA@XZ  (Runtime 0x1800a41c0)
-
-fn_Geo_BaseDtor_t       s_fnGeoBaseDtor  = nullptr;
-bool s_resolved = false;
-
-void EnsureResolved() {
-    if (s_resolved) return;
-    s_resolved = true;
-    s_fnGeoBaseDtor = reinterpret_cast<fn_Geo_BaseDtor_t>(
-        ResolveExport("??1Geometry@Graphics@@UEAA@XZ"));
-}
-
 inline uint8_t SettingsByte(int off) {
     if (!g_pGameSettingsPtr || !*g_pGameSettingsPtr) return 0;
     return reinterpret_cast<const uint8_t*>(*g_pGameSettingsPtr)[off];
 }
 }  // namespace
 
-// The weather Geometry vtable address (exe .rdata PTR_FUN_140160240).
-static const uintptr_t kWeatherGeometryVtable = 0x140160240;
+DEFINE_EXE_VTABLE(WeatherParticleGeometry, "_ZTV23WeatherParticleGeometry")
 
 // ============================================================
 // Particle-array (re)alloc — port of FUN_140025090 (stride 0x24).
@@ -130,48 +120,47 @@ static void WeatherParticle_ArrayAlloc(void* header, int newCount) {
 // ============================================================
 // Geometry ctor — port of FUN_1400d3f10 (0xf0 bytes).
 // ============================================================
+// Graphics::Geometry() and the 0x140160240 stamp are the compiler's.
+WeatherParticleGeometry::WeatherParticleGeometry() {
+    _intensity = 0.0f;
+    _fadeDirection = 1.0f;          // fade direction (+1 = fade in)
+    _descriptor = nullptr;
+    _indices = nullptr;             // index buffer
+    _indexCount = 0;
+    _particles = nullptr;           // particle array
+    _particleCountCap = 0;
+}
+
+// Registered at 0x1400d3f10 (DebugUI's draw combo) and used by
+// WeatherEffect_SetEnabled below.
 extern "C" void* WeatherParticle_GeoCtor(void* mem) {
     if (!mem) return nullptr;
-    if (fn_Graphics_Geometry_Ctor) fn_Graphics_Geometry_Ctor(mem);   // base Graphics::Geometry
-    uint8_t* g = reinterpret_cast<uint8_t*>(mem);
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = reinterpret_cast<void*>(ResolveAddr(Module::Exe, kWeatherGeometryVtable));
-    *reinterpret_cast<void**>(g) = s_vtable;
-    *reinterpret_cast<float*>(g + 0xc0) = 0.0f;     // intensity
-    *reinterpret_cast<float*>(g + 0xc4) = 1.0f;     // fade direction (+1 = fade in)
-    *reinterpret_cast<uint64_t*>(g + 0xc8) = 0;     // descriptor
-    *reinterpret_cast<uint64_t*>(g + 0xd0) = 0;     // index buffer
-    *reinterpret_cast<uint64_t*>(g + 0xd8) = 0;
-    *reinterpret_cast<uint64_t*>(g + 0xe0) = 0;     // particle array
-    *reinterpret_cast<uint64_t*>(g + 0xe8) = 0;
-    return mem;
+    return static_cast<Graphics::Geometry*>(::new (mem) WeatherParticleGeometry());
 }
 
 // ============================================================
 // Geometry dtor — port of FUN_1400d3c10 (+ scalar-deleting wrapper 0x140025060).
 // ============================================================
-extern "C" void* WeatherParticle_GeoDtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    EnsureResolved();
-    uint8_t* g = reinterpret_cast<uint8_t*>(self);
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = reinterpret_cast<void*>(ResolveAddr(Module::Exe, kWeatherGeometryVtable));
-    *reinterpret_cast<void**>(g) = s_vtable;
+WeatherParticleGeometry::~WeatherParticleGeometry() {
     // ENDGAME B.3.2 step 2: the particle array at +0xe0 is torn down by
     // `~Array` (MemFree the block, zero data and the count/capacity qword —
     // the same three stores this body made by hand; trivial element, no
     // destroy). The +0xd0 index buffer is not an Array (its +0xd8 is a bare
-    // count) and keeps its hand-written free. B.3.2 bridge: +0xe0 is still
-    // raw bytes in the untyped geometry.
-    reinterpret_cast<WeatherParticleArray*>(g + 0xe0)->~Array();
+    // count) and keeps its hand-written free. B.3.2 bridge: +0xe0 is still a
+    // raw header.
+    reinterpret_cast<WeatherParticleArray*>(&_particles)->~Array();
     if (fn_MemFreeStatic) {
-        if (*reinterpret_cast<void**>(g + 0xd0)) fn_MemFreeStatic(*reinterpret_cast<void**>(g + 0xd0));
+        if (_indices) fn_MemFreeStatic(_indices);
     }
-    *reinterpret_cast<uint64_t*>(g + 0xd0) = 0;
-    *reinterpret_cast<uint64_t*>(g + 0xd8) = 0;
-    if (s_fnGeoBaseDtor) s_fnGeoBaseDtor(self);      // Graphics::Geometry::~Geometry
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+    _indices = nullptr;
+    _indexCount = 0;
+    // Graphics::Geometry::~Geometry: the compiler's chain.
+}
+
+Graphics::Geometry* WeatherParticleGeometry::DeletingDtor(unsigned flags) {
+    this->~WeatherParticleGeometry();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
@@ -180,7 +169,6 @@ extern "C" void* WeatherParticle_GeoDtor(void* self, uint32_t flags) {
 // ============================================================
 extern "C" void WeatherParticle_Config(void* geo, void* descriptor) {
     if (!geo || !descriptor) return;
-    EnsureResolved();
     uint8_t* g = reinterpret_cast<uint8_t*>(geo);
     uint8_t* d = reinterpret_cast<uint8_t*>(descriptor);
 
@@ -275,13 +263,13 @@ extern "C" void WeatherParticle_Config(void* geo, void* descriptor) {
 }
 
 // ============================================================
-// Update (vtable +0x08) — port of FUN_1400d2e60(geo, Time* dt).
+// Update (vtable +0x08) — port of FUN_1400d2e60(geo, const Time& dt).
 // Integrates particle positions and wraps them into the [-half, half] box,
 // carrying prevPos so motion-blur streaks stay continuous.
 // ============================================================
-extern "C" void WeatherParticle_Update(void* geo, void* time) {
-    if (!geo) return;
-    uint8_t* g = reinterpret_cast<uint8_t*>(geo);
+void WeatherParticleGeometry::Update(const System::Time& timeRef) {
+    const System::Time* time = &timeRef;
+    uint8_t* g = reinterpret_cast<uint8_t*>(this);   // bridge: the body reads offsets
     void* desc = *reinterpret_cast<void**>(g + 0xc8);
     if (!desc) return;
     uint8_t* d = reinterpret_cast<uint8_t*>(desc);
@@ -323,10 +311,10 @@ extern "C" void WeatherParticle_Update(void* geo, void* time) {
 // ============================================================
 // AddDrawItem (vtable +0x18) — port of FUN_1400d30b0(geo, unused, Renderer*).
 // ============================================================
-extern "C" void WeatherParticle_AddDrawItem(void* geo, void* /*unused*/, void* renderer) {
-    // B.3.5 batch K1: the `!fn_Renderer_AddDrawItem` readiness term went with the door
-    // call below; the two object tests are retail's and stay.
-    if (!geo || !renderer) return;
+void WeatherParticleGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
+                                           Graphics::Renderer& rendererRef) const {
+    void* geo = const_cast<WeatherParticleGeometry*>(this);
+    void* renderer = &rendererRef;
     if (SettingsByte(0x16) == 0) return;   // weather effects disabled in settings
     uint8_t* g = reinterpret_cast<uint8_t*>(geo);
     void* desc = *reinterpret_cast<void**>(g + 0xc8);
@@ -341,6 +329,13 @@ extern "C" void WeatherParticle_AddDrawItem(void* geo, void* /*unused*/, void* r
 
 // Draw (vtable +0x10) — big instanced-billboard port, in weather_particle_draw.cpp.
 extern "C" void WeatherParticle_Draw(void* geo, void* context, void* camera);
+
+void WeatherParticleGeometry::Draw(Video::Context& context, const Graphics::Camera& camera,
+                                   Graphics::ExternalPtrHandle /*material*/,
+                                   float /*opacity*/, int /*a*/, int /*b*/, int /*c*/) const {
+    WeatherParticle_Draw(const_cast<WeatherParticleGeometry*>(this), &context,
+                         const_cast<Graphics::Camera*>(&camera));
+}
 
 // ============================================================
 // WeatherEffect_SetEnabled — port of ComponentEntity_impl_42c0(sim, slot, enable).
@@ -401,15 +396,6 @@ extern "C" void WeatherEffect_SetEnabled(void* sim, int slot, int enable) {
     // spawned here — audio is out of scope for this task.
 }
 
-// Inherited Graphics::Geometry base virtuals (+0x20..+0x40) — reuse the
-// forwarders from geometry_draw.cpp (identical base vtable tail for all
-// Graphics::Geometry subclasses).
-extern "C" void  GeomDraw_UpdateAttached(void* self);
-extern "C" void* GeomDraw_GetSubTransform(void* self, void* retval, int idx);
-extern "C" void* GeomDraw_GetInstanceTransform(void* self, void* retval, int idx, float t);
-extern "C" int   GeomDraw_SetSharedInstanceData(void* self, void* context, int idx, float t);
-extern "C" bool  GeomDraw_Clean(void* self);
-
 // ============================================================
 // WeatherResize — port of FUN_1400198a0. Stride-0x10 array resize (16-byte
 // {Weather* descriptor, ExternalPtr audioTemplate} elements) used by
@@ -444,21 +430,12 @@ extern "C" void Reimpl_WeatherArray_Resize(void* hdr, int newCount) {
 // ============================================================
 #include "address_registry.h"
 
-static void* g_WeatherParticle_Vtable[9] = {
-    reinterpret_cast<void*>(&WeatherParticle_GeoDtor),         // +0x00
-    reinterpret_cast<void*>(&WeatherParticle_Update),          // +0x08
-    reinterpret_cast<void*>(&WeatherParticle_Draw),            // +0x10
-    reinterpret_cast<void*>(&WeatherParticle_AddDrawItem),     // +0x18
-    reinterpret_cast<void*>(&GeomDraw_UpdateAttached),         // +0x20
-    reinterpret_cast<void*>(&GeomDraw_GetSubTransform),        // +0x28
-    reinterpret_cast<void*>(&GeomDraw_GetInstanceTransform),   // +0x30
-    reinterpret_cast<void*>(&GeomDraw_SetSharedInstanceData),  // +0x38
-    reinterpret_cast<void*>(&GeomDraw_Clean),                  // +0x40
-};
-
 extern "C" void RegisterWeatherParticleVtable() {
-    RegisterExeAddr(kWeatherGeometryVtable,
-                    reinterpret_cast<uintptr_t>(g_WeatherParticle_Vtable));
+    // B38_RULES D5: nothing in the tree reads 0x140160240 back any more (the old
+    // ctor/dtor were its only ResolveAddr readers); reader-less, kept so the
+    // coordinator-owned call links. The closing pass deletes it with the call.
+    RegisterExeAddr(0x140160240,
+                    reinterpret_cast<uintptr_t>(WeatherParticleGeometry::Vtable()));
 
     // The debug-UI draw combo (DebugUI_OnDrawComboChanged) constructs the very
     // same weather-particle Geometry via exe helpers DrawGeometry_Ctor

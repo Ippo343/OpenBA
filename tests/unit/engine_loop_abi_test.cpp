@@ -197,41 +197,17 @@ UNIT_TEST(engine_loop_class_pod_cross_asserts) {
 }
 #undef PIN
 
-// The exe-side mirrors (engine/types) name the same bytes as the classes.
+// The exe-side names (engine/types) ARE the classes since ENDGAME B.3.8 block
+// LOOP: the POD mirrors were retired with their last users and the headers
+// became aliases / forwarders (B8-4).
 UNIT_TEST(engine_exe_side_mirrors_match_the_classes) {
-    CHECK_EQ((int)sizeof(::UpdateLoop), (int)sizeof(Engine::UpdateLoop));
-    CHECK_EQ((int)offsetof(::UpdateLoop, m_resourceList), (int)offsetof(Engine::UpdateLoop, _resourceList));
-    CHECK_EQ((int)offsetof(::UpdateLoop, m_internalListA), (int)offsetof(Engine::UpdateLoop, _internalListA));
-    CHECK_EQ((int)offsetof(::UpdateLoop, m_loadBit), (int)offsetof(Engine::UpdateLoop, _loadBit));
-    CHECK_EQ((int)offsetof(::UpdateLoop, m_loadProgress), (int)offsetof(Engine::UpdateLoop, _loadProgress));
-
-    CHECK_EQ((int)sizeof(::LoaderLoop), (int)sizeof(Engine::LoaderLoop));
-    CHECK_EQ((int)offsetof(::LoaderLoop, m_nextLoop), (int)offsetof(Engine::LoaderLoop, _nextLoop));
-    CHECK_EQ((int)offsetof(::LoaderLoop, m_elapsedTicks), (int)offsetof(Engine::LoaderLoop, _elapsedTicks));
-    CHECK_EQ((int)offsetof(::LoaderLoop, m_delayTicks), (int)offsetof(Engine::LoaderLoop, _delayTicks));
-    CHECK_EQ((int)offsetof(::LoaderLoop, m_autoAdvance), (int)offsetof(Engine::LoaderLoop, _autoAdvance));
-
-    CHECK_EQ((int)sizeof(::DialogLoaderLoopT), (int)sizeof(Engine::DialogLoaderLoopT));
-    CHECK_EQ((int)offsetof(::DialogLoaderLoopT, m_dialogFilename), (int)offsetof(Engine::DialogLoaderLoopT, _dialogFilename));
-    CHECK_EQ((int)offsetof(::DialogLoaderLoopT, m_dialogExternal), (int)offsetof(Engine::DialogLoaderLoopT, _dialogExternal));
-    CHECK_EQ((int)offsetof(::DialogLoaderLoopT, m_dialogInstance), (int)offsetof(Engine::DialogLoaderLoopT, _dialogInstance));
-    CHECK_EQ((int)offsetof(::DialogLoaderLoopT, m_userInterface), (int)offsetof(Engine::DialogLoaderLoopT, _ui));
-
-    CHECK_EQ((int)sizeof(::MainLoop), (int)sizeof(Engine::MainLoop));
-    CHECK_EQ((int)offsetof(::MainLoop, m_context), (int)offsetof(Engine::MainLoop, _context));
-    CHECK_EQ((int)offsetof(::MainLoop, m_quit), (int)offsetof(Engine::MainLoop, _quit));
-    CHECK_EQ((int)offsetof(::MainLoop, m_currentLoop), (int)offsetof(Engine::MainLoop, _currentLoop));
-    CHECK_EQ((int)offsetof(::MainLoop, m_nextLoop), (int)offsetof(Engine::MainLoop, _nextLoop));
-    CHECK_EQ((int)offsetof(::MainLoop, m_deltaTime), (int)offsetof(Engine::MainLoop, _deltaTime));
-    CHECK_EQ((int)offsetof(::MainLoop, m_frameStartTime), (int)offsetof(Engine::MainLoop, _frameStartTicks));
-    CHECK_EQ((int)offsetof(::MainLoop, m_engine), (int)offsetof(Engine::MainLoop, _engine));
-    CHECK_EQ((int)offsetof(::MainLoop, m_postDrawCallbacks), (int)offsetof(Engine::MainLoop, _postDraw));
-    CHECK_EQ((int)offsetof(::MainLoop, m_postUpdateCallbacks), (int)offsetof(Engine::MainLoop, _postUpdate));
-
-    // GameUpdateLoop (exe subclass, step 8) starts with the UpdateLoop base.
-    CHECK_EQ((int)offsetof(::GameUpdateLoop, m_resourceList), (int)offsetof(Engine::UpdateLoop, _resourceList));
-    CHECK_EQ((int)offsetof(::GameUpdateLoop, m_loadBit), (int)offsetof(Engine::UpdateLoop, _loadBit));
-    CHECK_EQ((int)offsetof(::GameUpdateLoop, m_loadProgress), (int)offsetof(Engine::UpdateLoop, _loadProgress));
+    CHECK((std::is_same< ::UpdateLoop, Engine::UpdateLoop>::value));
+    CHECK((std::is_same< ::LoaderLoop, Engine::LoaderLoop>::value));
+    CHECK((std::is_same< ::DialogLoaderLoopT, Engine::DialogLoaderLoopT>::value));
+    CHECK((std::is_same< ::MainLoop, Engine::MainLoop>::value));
+    // GameUpdateLoop is a real Engine::UpdateLoop subclass (engine/types forwards
+    // to code/Game/Game/GameUpdateLoop.h; tests/unit/loop_abi_test.cpp pins it).
+    CHECK((std::is_base_of<Engine::UpdateLoop, ::GameUpdateLoop>::value));
 }
 
 }  // namespace
