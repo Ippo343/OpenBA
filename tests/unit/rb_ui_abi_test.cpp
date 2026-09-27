@@ -415,11 +415,8 @@ UNIT_TEST(rb_spritesheet_ctor_is_retail_0x18011d600_and_concrete) {
     for (size_t off = 0x08; off < 0x50; off += 8) CHECK_EQ(Q(s, off), (uint64_t)0);
     CHECK_EQ((int)By(s, 0x50), 0);
     CHECK_EQ((int)By(s, 0x51), 0xCD);            // never written
-    alignas(8) unsigned char raw[sizeof(UI::SpriteSheet)];
-    std::memset(raw, 0xCD, sizeof raw);
-    *reinterpret_cast<const void**>(raw) = kFakeMinted;
-    UI::SpriteSheet::DoorBody::Init(reinterpret_cast<UI::SpriteSheet*>(raw));
-    CHECK(std::memcmp(buf + 0x20, raw + 0x20, sizeof raw - 0x20) == 0);
+    // ENDGAME B.3.9 UI-D: the DoorBody bridge is retired with the ctor door;
+    // the real ctor is the only body.
     s->DeletingDtor(0);                           // destruct only (stack buffer)
 
     void* mem = Object::detail::InternalMemAlloc(sizeof(UI::SpriteSheet), 8);

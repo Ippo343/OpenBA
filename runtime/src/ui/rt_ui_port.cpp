@@ -154,10 +154,8 @@ extern int RtUiStringTableLifecycleDtorRegister(); // stringtable_lifecycle.cpp 
 // why it lives here: standalone/resolve_standalone.cpp:333 (RtUiPortInit)
 // precedes :406 (the mint). See docs/runtime_port/WAVE28_LANE_FACTUI1.md.
 extern int RtUiFactory1Register();         // factory_ui1.cpp (lane FACTUI1)
-// WAVE 28 lane FACTUI2: the CreateNewObject/CreateInPlaceObject pair for the UI
-// classes in the minted-BaseTypeInfo absent-factory roster sorting at or after
-// `ImageDescription`. SpriteSheet is the live cutover wall (attempt 30).
-extern int RtUiFactory2Register();         // ui_factory_wave28.cpp (FACTUI2)
+// (WAVE 28 lane FACTUI2's ui_factory_wave28.cpp is gone: ENDGAME B.3.9 UI-D
+// moved its last row, SpriteSheet's, onto the class's own statics.)
 
 // 2026-09-12, VTABLE BATCH 3 - the UI::*Element widget runtime, first half.
 // Thirteen classes, one file each (runtime/src/ui/<class>element.cpp), each
@@ -261,7 +259,6 @@ void RtUiPortInit() {
     n += RtUiStringTableFactoryRegister();
     n += RtUiStringTableLifecycleDtorRegister();  // same switch (MISC)
     n += RtUiFactory1Register();
-    n += RtUiFactory2Register();
     n += RtUiImageElementRegister();          // vtable batch 3 (UI::*Element)
     n += RtUiAnimatedImageElementRegister();
     n += RtUiBorderElementRegister();

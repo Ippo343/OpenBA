@@ -83,6 +83,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
@@ -109,60 +110,19 @@ const uint8_t* SheetTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*,
                         "?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A");
 }
-void* BaseVtable()     { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@");     }  // 0x180154788
-void* ExternalVtable() { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }  // 0x1801547a0
-void* SheetVtable()    { return RT_DATA_SLOT(void*, "??_7SpriteSheet@UI@@6B@");  }  // 0x180154590
-
-typedef uint32_t    (*U32ThisFn)(const void*);
-typedef const char* (*CStrThisFn)(const void*);
-typedef int         (*IntThisFn)(const void*);
-typedef void*       (*PtrThisFn)(void*);
-
-// The in-place construct, byte for byte as 0x180003100 spells it — and NOT a
-// call to RtUi_SpriteSheet_Ctor, even though the two are the same instruction
-// sequence. They are two separate inlined copies in the DLL; keeping them two
-// here means a future correction to one cannot silently change the other's
-// meaning, and the oracle checks each against its own export.
-//
-// The two dead intermediate vtable stores are kept for the reason
-// sprite.cpp's constructor already states: they ARE the body, and a debugger
-// break between them would observe the intermediate value.
-void ConstructInPlace(uint8_t* self) {
-    auto qword = [](uint8_t* p, size_t off) -> void*& {
-        return *reinterpret_cast<void**>(p + off);
-    };
-    qword(self, 0x00) = BaseVtable();
-    qword(self, 0x00) = ExternalVtable();
-    qword(self, 0x08) = nullptr;
-    qword(self, 0x10) = nullptr;
-    qword(self, 0x18) = nullptr;
-    qword(self, 0x00) = SheetVtable();
-    qword(self, 0x20) = nullptr;
-    qword(self, 0x28) = nullptr;   // m_spriteCount + m_spriteCapacity, one store
-    qword(self, 0x30) = nullptr;
-    qword(self, 0x38) = nullptr;
-    qword(self, 0x40) = nullptr;
-    qword(self, 0x48) = nullptr;   // m_field48 + m_field4C
-    self[0x50] = 0;                // one byte; +0x51..+0x57 are never stored
-}
-
 }  // namespace
 
 // ############################################################################
 // UI::SpriteSheet's slot bodies (ENDGAME B.3.6 block D), inside `namespace UI`
-// after the anonymous namespace (B34_BRIEFS A.2). Each door below keeps its
-// registered name and address and delegates with a QUALIFIED call: a live
-// SpriteSheet wears the MINTED table, whose slots resolve back to these doors.
+// after the anonymous namespace (B34_BRIEFS A.2). ENDGAME B.3.9 UI-D: a live
+// SpriteSheet wears its COMPILER table; the minted table and the slot doors
+// are retired.
 // ############################################################################
 namespace UI {
 
 // ---- slot 2  ?Type@SpriteSheet@UI@@UEBAIXZ  0x180002e30 --------------------
 //   MOV EAX,dword ptr [0x1801fadd0] / RET     — RCX is never read.
-uint32_t SpriteSheet::Type() const {
-    uint32_t ours = 0;
-    std::memcpy(&ours, SheetTypeInfo(), sizeof ours);
-    return ours;
-}
+uint32_t SpriteSheet::Type() const { return TypeId(); }
 
 // The STATIC spelling of the same two instructions, at its own address
 // (0x180002e40). A separate export with a separate call surface; sharing the
@@ -199,70 +159,45 @@ Object::External::CompileResult SpriteSheet::Compile(const System::Filename&) { 
 // destructor — with flag 0, i.e. "destroy, do not free". Reading the vtable
 // from the OBJECT and not from a resolved constant is load-bearing: a derived
 // SpriteSheet would dispatch to its own slot 0.
-void SpriteSheet::Destruct() {
-    void** const vt = *reinterpret_cast<void***>(this);
-    reinterpret_cast<void (*)(void*, uint32_t)>(vt[0])(this, 0);
-}
+void SpriteSheet::Destruct() { DeletingDtor(0); }
 
 // ---- slot 8  ?Construct@SpriteSheet@UI@@UEAAPEAVExternal@Object@@XZ  0x180003100
-//   if (this) { <the constructor, inlined>; return this; } else return nullptr;
-// The null test is retail's own (0x180003114); it lives in the DOOR.
+//   if (this) { <the constructor, inlined>; return this; } else return nullptr.
+//   A member is never called on null; the constructor is the class's own.
 Object::External* SpriteSheet::Construct() {
-    ConstructInPlace(reinterpret_cast<uint8_t*>(this));
-    return this;
+    return ::new (static_cast<void*>(this)) SpriteSheet();
 }
 
 // ---- slot 6  ?Reconstruct@SpriteSheet@UI@@UEAAPEAVExternal@Object@@XZ  0x180003080
-//   Destruct-then-Construct on the SAME storage, and note the difference from
-//   Construct: there is NO null test on this path (0x180003092 dereferences
-//   RCX immediately). Retail relies on the caller never passing null, and
-//   CLAUDE.md's rule says leave the deref faithful.
+//   Destruct (through slot 0, virtually) then construct on the SAME storage;
+//   no null test on this path (0x180003092 dereferences RCX immediately).
 Object::External* SpriteSheet::Reconstruct() {
-    void** const vt = *reinterpret_cast<void***>(this);
-    reinterpret_cast<void (*)(void*, uint32_t)>(vt[0])(this, 0);
-    ConstructInPlace(reinterpret_cast<uint8_t*>(this));
-    return this;
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) SpriteSheet();
 }
 
-// ~SpriteSheet: NON-VIRTUAL. ENDGAME B.3.8 block RB: its body is
-// `ReleaseFields` (spritesheet_new.cpp), ONE body with the registered door
-// `RtUi_SpriteSheet_Dtor`; the restamp and ~External are the compiler's.
-SpriteSheet::~SpriteSheet() { ReleaseFields(); }
+// ---- the factory pair (ENDGAME B.3.9 UI-D: the class's own statics) --------
+// ?CreateNewObject@SpriteSheet@UI@@SAPEAVBase@Object@@XZ  0x180002f40
+// The retired FACTUI2 row: the locked MemAlloc of 0x58 bytes, align 8
+// (`mov EDX,0x58 / lea R8D,[RDX-0x50]` at 0x180002f71); retail's null branch;
+// then ??0SpriteSheet inlined.
+Object::Base* SpriteSheet::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(SpriteSheet), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) SpriteSheet();
+}
+// ?CreateInPlaceObject@SpriteSheet@UI@@SAPEAVBase@Object@@PEAX@Z  0x180003000
+Object::Base* SpriteSheet::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) SpriteSheet();
+}
 
 }  // namespace UI
 
-// ---- the doors --------------------------------------------------------------
-extern "C" uint32_t RtUi_SpriteSheet_Type(const void* self) {
-    return reinterpret_cast<const UI::SpriteSheet*>(self)->UI::SpriteSheet::Type();  // B.3.6 bridge
-}
+// ---- the doors that stay ----------------------------------------------------
+// ?TypeId@SpriteSheet@UI@@SAIXZ is a STATIC export (no vtable slot).
 extern "C" uint32_t RtUi_SpriteSheet_TypeId() {
     return UI::SpriteSheet::TypeId();
-}
-extern "C" const char* RtUi_SpriteSheet_TypeName(const void* self) {
-    return reinterpret_cast<const UI::SpriteSheet*>(self)                    // B.3.6 bridge
-               ->UI::SpriteSheet::TypeName();
-}
-extern "C" int RtUi_SpriteSheet_GetFileVersion(const void* self) {
-    return reinterpret_cast<const UI::SpriteSheet*>(self)                    // B.3.6 bridge
-               ->UI::SpriteSheet::GetFileVersion();
-}
-// `?AW4CompileResult` is a four-byte enum: returned in EAX, no hidden slot.
-extern "C" int RtUi_SpriteSheet_Compile(void* self, const void* filename) {
-    return static_cast<int>(
-        reinterpret_cast<UI::SpriteSheet*>(self)                              // B.3.6 bridge
-            ->UI::SpriteSheet::Compile(*static_cast<const System::Filename*>(filename)));
-}
-extern "C" void RtUi_SpriteSheet_Destruct(void* self) {
-    reinterpret_cast<UI::SpriteSheet*>(self)->UI::SpriteSheet::Destruct();   // B.3.6 bridge
-}
-extern "C" void* RtUi_SpriteSheet_Construct(void* self) {
-    if (!self) return nullptr;                 // 0x180003114, retail's null test
-    return reinterpret_cast<UI::SpriteSheet*>(self)                          // B.3.6 bridge
-               ->UI::SpriteSheet::Construct();
-}
-extern "C" void* RtUi_SpriteSheet_Reconstruct(void* self) {
-    return reinterpret_cast<UI::SpriteSheet*>(self)                          // B.3.6 bridge
-               ->UI::SpriteSheet::Reconstruct();
 }
 // ============================================================================
 // slot 5  ?Serialize@SpriteSheet@UI@@UEAA_NAEAVStream@IO@@@Z   0x18011d730
@@ -472,9 +407,6 @@ void RecFloatVia(Serializer* ser, float* v) {
     reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarFloat / 8])(rw, v, nullptr);
 }
 
-const char* const kSerializeMangled =
-    "?Serialize@SpriteSheet@UI@@UEAA_NAEAVStream@IO@@@Z";
-
 }  // namespace
 
 // ============================================================================
@@ -611,49 +543,24 @@ bool SpriteSheet::Serialize(void* streamv) {
 
 }  // namespace UI
 
-extern "C" bool RtUi_SpriteSheet_Serialize(void* self, void* stream) {
-    return reinterpret_cast<UI::SpriteSheet*>(self)                          // B.3.6 bridge
-               ->UI::SpriteSheet::Serialize(stream);
-}
-
 // ============================================================================
 // Registration — called from RtUiSpriteCaptureRegister().
 // ============================================================================
 int RtUiSpriteSheetVtableRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@SpriteSheet@UI@@UEBAIXZ",
-                          (void*)&RtUi_SpriteSheet_Type); ++n;
-    RegisterRuntimeAddr(0x180002e30, (void*)&RtUi_SpriteSheet_Type);
     RegisterRuntimeExport("?TypeId@SpriteSheet@UI@@SAIXZ",
                           (void*)&RtUi_SpriteSheet_TypeId); ++n;
     RegisterRuntimeAddr(0x180002e40, (void*)&RtUi_SpriteSheet_TypeId);
-    RegisterRuntimeExport("?TypeName@SpriteSheet@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_SpriteSheet_TypeName); ++n;
-    RegisterRuntimeAddr(0x180002e50, (void*)&RtUi_SpriteSheet_TypeName);
-    RegisterRuntimeExport("?GetFileVersion@SpriteSheet@UI@@UEBAHXZ",
-                          (void*)&RtUi_SpriteSheet_GetFileVersion); ++n;
-    RegisterRuntimeAddr(0x18011d710, (void*)&RtUi_SpriteSheet_GetFileVersion);
-    RegisterRuntimeExport(
-        "?Compile@SpriteSheet@UI@@UEAA?AW4CompileResult@External@Object@@AEBVFilename@System@@@Z",
-        (void*)&RtUi_SpriteSheet_Compile); ++n;
-    RegisterRuntimeAddr(0x18011d720, (void*)&RtUi_SpriteSheet_Compile);
-    RegisterRuntimeExport("?Destruct@SpriteSheet@UI@@UEAAXXZ",
-                          (void*)&RtUi_SpriteSheet_Destruct); ++n;
-    RegisterRuntimeAddr(0x180003180, (void*)&RtUi_SpriteSheet_Destruct);
-    RegisterRuntimeExport("?Construct@SpriteSheet@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_SpriteSheet_Construct); ++n;
-    RegisterRuntimeAddr(0x180003100, (void*)&RtUi_SpriteSheet_Construct);
-    RegisterRuntimeExport("?Reconstruct@SpriteSheet@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_SpriteSheet_Reconstruct); ++n;
-    RegisterRuntimeAddr(0x180003080, (void*)&RtUi_SpriteSheet_Reconstruct);
-    // WAVE 10B lane SS — the ninth slot, and the one that was keeping
-    // ??_7SpriteSheet@UI@@6B@ out of standalone/reg_mint_promoted.cpp.
-    RegisterRuntimeExport(kSerializeMangled, (void*)&RtUi_SpriteSheet_Serialize); ++n;
-    RegisterRuntimeAddr(0x18011d730, (void*)&RtUi_SpriteSheet_Serialize);
-    // BOTH doors on every row, for the reason the mint itself gives: a minted
-    // vtable slot is filled by NAME, but 30-odd sites in this tree reach
-    // exported code by ADDRESS, and a name-only registration leaves those
-    // walking past the port into the DLL.
+    // ENDGAME B.3.9 UI-D: the nine slot doors went with the minted table; the
+    // factory pair is the class's own. BOTH doors on each row: the mint's
+    // BaseTypeInfo record fills its factory pointers by NAME, and a by-address
+    // consumer would otherwise walk past the port into the DLL.
+    RegisterRuntimeExport("?CreateNewObject@SpriteSheet@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::SpriteSheet::CreateNewObject);
+    RegisterRuntimeAddr(0x180002f40, (void*)&UI::SpriteSheet::CreateNewObject);       ++n;
+    RegisterRuntimeExport("?CreateInPlaceObject@SpriteSheet@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::SpriteSheet::CreateInPlaceObject);
+    RegisterRuntimeAddr(0x180003000, (void*)&UI::SpriteSheet::CreateInPlaceObject);   ++n;
 
     // ---- WAVE 29 LANE WALL -------------------------------------------------
     //

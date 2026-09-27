@@ -14,3 +14,6 @@
 ??_7Dialog@UI@@6B@                     UI-D   real ctor + DeletingDtor + ~X (door body); ??0/??1 doors (+ DialogTempCtor, ConstructInPlace), factory doors, RT_DELDTOR row 0x180038b20, 7 slot doors deleted; 4 stack temporaries spell ::new UI::Dialog()
 ??_7ComboDialog@UI@@6B@                UI-D   real ctors (default + ??0 0x180111d00 over DialogInstance's root-Element ctor 0x1801146b0) + DeletingDtor + ~X (empty, retail); FACTUI1 row, ??0ComboDialog / ??0DialogInstance(Element) doors, RT_DELDTOR row 0x180074a10, ??1 door, 5 slot doors deleted; ComboElement::Update spells ::new ComboDialog(...)
 ??_7ToolTipDialog@UI@@6B@              UI-D   real ctors (default 0x1800dad00 + 0x1800daca0) + DeletingDtor + ~X (empty, retail); FACTUI2 row + Ctor_ToolTipDialog, RT_DELDTOR row 0x18004d270, ??1 door (deleting_dtor_leaves.cpp), 2 slot doors deleted; BeginToolTip spells ::new ToolTipDialog(...)
+
+# -- W2: the bases and the remaining factory rows --
+??_7SpriteSheet@UI@@6B@                UI-D   real ctor + DeletingDtor (scalar, exe-built) + ~X (door body); FACTUI2 row (ui_factory_wave28.cpp deleted), ??0 door (sprite.cpp), ??1 door, DoorBody, ConstructInPlace, RT_DELDTOR row 0x1800037b0, 9 slot doors deleted; SaveLoad::Draw spells ::new SpriteSheet()

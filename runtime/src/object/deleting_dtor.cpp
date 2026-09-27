@@ -290,7 +290,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180001d70, 0x18009edb0, 0x030, "Achievement::Goal"),
     RT_DELDTOR(0x1800020c0, 0x18009ef40, 0x020, "Achievement::GoalInstance"),
     RT_DELDTOR(0x180002d60, 0x180103a00, 0x060, "Graphics::MaterialInstance"),
-    RT_DELDTOR(0x1800037b0, 0x18011d670, 0x058, "UI::SpriteSheet"),
     RT_DELDTOR(0x180006440, 0x1800bfdb0, 0x010, "Object::Internal"),
     RT_DELDTOR(0x1800065b0, 0x1800c0360, 0x008, "Object::Base"),   // probe subject
     RT_DELDTOR(0x180006640, 0x1800bc950, 0x020, "Object::External"),
@@ -1200,10 +1199,6 @@ void* RtDelDtor_GoalInstance(void* self, unsigned flags) {
 void* RtDelDtor_MaterialInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180002d60>());
 }
-// UI::SpriteSheet          ~SpriteSheet = 0x18011d670  (PORTED, ui/spritesheet_new.cpp; this note was stale)
-void* RtDelDtor_SpriteSheet(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800037b0>());
-}
 // Object::Internal         ~Internal = 0x1800bfdb0  (PORTED)
 void* RtDelDtor_Internal(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180006440>());
@@ -1539,7 +1534,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180001d70, (void*)&RtDelDtor_Goal);
     RegisterRuntimeAddr(0x1800020c0, (void*)&RtDelDtor_GoalInstance);
     RegisterRuntimeAddr(0x180002d60, (void*)&RtDelDtor_MaterialInstance);
-    RegisterRuntimeAddr(0x1800037b0, (void*)&RtDelDtor_SpriteSheet);
     RegisterRuntimeAddr(0x180006440, (void*)&RtDelDtor_Internal);
     RegisterRuntimeAddr(0x1800065b0, (void*)&RtDelDtor_Base);
     RegisterRuntimeAddr(0x180006640, (void*)&RtDelDtor_External);
