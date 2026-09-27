@@ -10,6 +10,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/system/Timer.h"
 #include "../../types/system/Error.h"
+#include "../../types/system/Configuration.h"
 
 extern int RtSystemStringRegister();      // string.cpp
 extern int RtSystemFilenameRegister();    // filename.cpp
@@ -62,6 +63,7 @@ void RtSystemPortInit() {
     RtMintRedirectStorage("?_errorString@Error@System@@0PADA",     System::Error::_errorString);
     RtMintRedirectStorage("?_hideDisplay@Error@System@@0_NA",      &System::Error::_hideDisplay);
     RtMintRedirectStorage("?_stopApplication@Error@System@@0_NA",  &System::Error::_stopApplication);
+    RtMintRedirectStorage("?_singleton@Configuration@System@@0PEAV12@EA", &System::Configuration::_singleton);
 
     int n = 0;
     n += RtSystemStringRegister();
