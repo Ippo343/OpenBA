@@ -157,9 +157,7 @@ constexpr const char* kVtblButtonDescription       = "??_7ButtonDescription@UI@@
 constexpr const char* kVtblCheckDescription        = "??_7CheckDescription@UI@@6B@";         // 0x1801572c0
 constexpr const char* kVtblClipRegionDescription   = "??_7ClipRegionDescription@UI@@6B@";    // 0x180156350
 constexpr const char* kVtblComboDescription        = "??_7ComboDescription@UI@@6B@";         // 0x180159090
-constexpr const char* kVtblDocumentTextDescription = "??_7DocumentTextDescription@UI@@6B@";  // 0x180156750
 constexpr const char* kVtblEditDescription         = "??_7EditDescription@UI@@6B@";          // 0x180156880
-constexpr const char* kVtblGraphDescription        = "??_7GraphDescription@UI@@6B@";         // 0x180156a30
 constexpr const char* kVtblLabelDescription        = "??_7LabelDescription@UI@@6B@";         // 0x180156b30
 
 constexpr const char* kVtblButtonElement      = "??_7ButtonElement@UI@@6B@";      // 0x180157310

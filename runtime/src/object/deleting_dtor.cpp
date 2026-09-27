@@ -951,9 +951,7 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x1800489c0, 0x180111620, 0x0a8, "UI::CheckDescription"),
     RT_DELDTOR(0x180037eb0, 0x1800cc0d0, 0x078, "UI::ClipRegionDescription"),
     RT_DELDTOR(0x180074e70, 0x180112370, 0x0b8, "UI::ComboDescription"),
-    RT_DELDTOR(0x18003bd90, 0x1800cfb30, 0x0e8, "UI::DocumentTextDescription"),
     RT_DELDTOR(0x18003fa20, 0x1800d11f0, 0x088, "UI::EditDescription"),
-    RT_DELDTOR(0x1800403a0, 0x1800d1b30, 0x088, "UI::GraphDescription"),
     RT_DELDTOR(0x180042730, 0x1800d2960, 0x0b8, "UI::LabelDescription"),
 
     // VTABLE BATCH 7 (2026-09-12), appended AFTER batch 8's four rows above --
@@ -1140,9 +1138,7 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180048d80, 0x180111700, 0x0e0, "UI::CheckElement"),
     RT_DELDTOR(0x180038370, 0x1800cbe30, 0x0d8, "UI::ClipRegionElement"),
     RT_DELDTOR(0x180075390, 0x180112490, 0x128, "UI::ComboElement"),
-    RT_DELDTOR(0x18003c650, 0x1800cf320, 0x1c8, "UI::DocumentTextElement"),
     RT_DELDTOR(0x18003fed0, 0x1800d0e50, 0x0f8, "UI::EditElement"),
-    RT_DELDTOR(0x1800408b0, 0x1800d1840, 0x100, "UI::GraphElement"),
     RT_DELDTOR(0x180046e10, 0x180117cc0, 0x0c0, "UI::GroupElement"),
     RT_DELDTOR(0x180036600, 0x180118470, 0x0e0, "UI::ImageElement"),
     RT_DELDTOR(0x180042bb0, 0x1800d25f0, 0x130, "UI::LabelElement"),
@@ -1617,17 +1613,9 @@ void* RtDelDtor_ClipRegionDescription(void* self, unsigned flags) {
 void* RtDelDtor_ComboDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180074e70>());
 }
-// UI::DocumentTextDescription ~ = 0x1800cfb30 (PORTED, documenttextdescription.cpp)
-void* RtDelDtor_DocumentTextDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003bd90>());
-}
 // UI::EditDescription       ~ = 0x1800d11f0   (PORTED, editdescription.cpp)
 void* RtDelDtor_EditDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18003fa20>());
-}
-// UI::GraphDescription      ~ = 0x1800d1b30   (PORTED, graphdescription.cpp)
-void* RtDelDtor_GraphDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800403a0>());
 }
 // UI::LabelDescription      ~ = 0x1800d2960   (PORTED, labeldescription.cpp)
 void* RtDelDtor_LabelDescription(void* self, unsigned flags) {
@@ -1706,17 +1694,9 @@ void* RtDelDtor_ClipRegionElement(void* self, unsigned flags) {
 void* RtDelDtor_ComboElement(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180075390>());
 }
-// UI::DocumentTextElement  ~DocumentTextElement = 0x1800cf320  (PORTED, runtime/src/ui/)
-void* RtDelDtor_DocumentTextElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003c650>());
-}
 // UI::EditElement  ~EditElement = 0x1800d0e50  (PORTED, runtime/src/ui/)
 void* RtDelDtor_EditElement(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18003fed0>());
-}
-// UI::GraphElement  ~GraphElement = 0x1800d1840  (PORTED, runtime/src/ui/)
-void* RtDelDtor_GraphElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800408b0>());
 }
 // UI::GroupElement  ~GroupElement = 0x180117cc0  (PORTED, runtime/src/ui/)
 void* RtDelDtor_GroupElement(void* self, unsigned flags) {
@@ -1914,9 +1894,7 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x1800489c0, (void*)&RtDelDtor_CheckDescription);
     RegisterRuntimeAddr(0x180037eb0, (void*)&RtDelDtor_ClipRegionDescription);
     RegisterRuntimeAddr(0x180074e70, (void*)&RtDelDtor_ComboDescription);
-    RegisterRuntimeAddr(0x18003bd90, (void*)&RtDelDtor_DocumentTextDescription);
     RegisterRuntimeAddr(0x18003fa20, (void*)&RtDelDtor_EditDescription);
-    RegisterRuntimeAddr(0x1800403a0, (void*)&RtDelDtor_GraphDescription);
     RegisterRuntimeAddr(0x180042730, (void*)&RtDelDtor_LabelDescription);
 
     // VTABLE BATCH 7 (2026-09-12).
@@ -1963,9 +1941,7 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180048d80, (void*)&RtDelDtor_CheckElement);
     RegisterRuntimeAddr(0x180038370, (void*)&RtDelDtor_ClipRegionElement);
     RegisterRuntimeAddr(0x180075390, (void*)&RtDelDtor_ComboElement);
-    RegisterRuntimeAddr(0x18003c650, (void*)&RtDelDtor_DocumentTextElement);
     RegisterRuntimeAddr(0x18003fed0, (void*)&RtDelDtor_EditElement);
-    RegisterRuntimeAddr(0x1800408b0, (void*)&RtDelDtor_GraphElement);
     RegisterRuntimeAddr(0x180046e10, (void*)&RtDelDtor_GroupElement);
     RegisterRuntimeAddr(0x180036600, (void*)&RtDelDtor_ImageElement);
     RegisterRuntimeAddr(0x180042bb0, (void*)&RtDelDtor_LabelElement);

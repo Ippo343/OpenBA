@@ -31,6 +31,7 @@
 // (the factory roster). One address, one owner.
 // ============================================================================
 #include <atomic>
+#include <new>
 
 #include "element_common.h"
 #include "../../types/ui/GraphElement.h"
@@ -48,22 +49,17 @@ static_assert(kSeries == 0xf0 && kSeriesCnt == 0xf8,
 // The two exported DATA slots, in namespace-scope atomics (RULE B6-5: the
 // members below may run on the loader thread).
 std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_vtable{nullptr};
 const uint8_t* GraphElementTypeInfo() {
     return static_cast<const uint8_t*>(
         AtomicExport(g_typeInfo, "?_typeInfo@GraphElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
-void* VtGraphElement() { return AtomicExport(g_vtable, "??_7GraphElement@UI@@6B@"); }
 
 // UI::SpriteContext::AddLine(ctx, const Sprite&, x0, y0, x1, y1, color) — block
 // D's class, reached by address (its door stays a door).
 using AddLineFn = void (*)(void* ctx, const void* sprite,
                            int x0, int y0, int x1, int y1, uint32_t color);
 
-using ElementCopyCtorFn = void* (*)(void* self, const void* other);
-using ElementDtorFn     = void  (*)(void* self);
 using SeriesArrayFn     = void* (*)(void* array);                 // ~Array<GraphSeries>
-using SeriesCopyFn      = void* (*)(void* dst, const void* src);
 
 // 0x180161694 and 0x18016169c, read out of the DLL's float pool for this batch.
 constexpr float kHalf = 0.5f;
@@ -76,6 +72,8 @@ namespace UI {
 // [1] 0x180040460 / [2] 0x180040440 — the BaseTypeInfo's +0x08 name and +0x00 id.
 const char* GraphElement::TypeName() const { return TypeNameOf(GraphElementTypeInfo()); }
 uint32_t    GraphElement::Type() const     { return TypeIdOf(GraphElementTypeInfo()); }
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t    GraphElement::TypeId()          { return TypeIdOf(GraphElementTypeInfo()); }
 
 // ============================================================================
 // [4] ?ComputeSize@GraphElement@UI@@UEAAXXZ   0x1800d1810
@@ -197,94 +195,44 @@ void GraphElement::Draw(SpriteContext& context, uint8_t alpha) const {
     }
 }
 
+// ??1GraphElement@UI@@UEAA@XZ  0x1800d1840 — retail's body, moved from the
+// retired door (ENDGAME B.3.9 UI-B): destroy the series array (0x1800416d0,
+// the same helper `?RemoveGraphs@` tail-calls). The entry restamp and the
+// tail into ~Element are the compiler's.
+GraphElement::~GraphElement() {
+    RtAddr<SeriesArrayFn>(0x1800416d0ull)(reinterpret_cast<uint8_t*>(this) + kSeries);
+}
+
+// ?CreateNewObject@GraphElement@UI@@SAPEAVBase@Object@@XZ 0x180040550 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0x100, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* GraphElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(GraphElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) GraphElement();
+}
+// ?CreateInPlaceObject@GraphElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x1800405d0
+Object::Base* GraphElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) GraphElement();
+}
+
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, each a QUALIFIED
-// one-line delegation: a live GraphElement wears the MINTED table, whose slots
-// resolve back to these very doors.
-// ============================================================================
-extern "C" uint32_t RtUi_GraphElement_Type(const void* self) {
-    return reinterpret_cast<const UI::GraphElement*>(self)->UI::GraphElement::Type();
-}
-extern "C" const char* RtUi_GraphElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::GraphElement*>(self)->UI::GraphElement::TypeName();
-}
-extern "C" void RtUi_GraphElement_ComputeSize(void* self) {
-    reinterpret_cast<UI::GraphElement*>(self)->UI::GraphElement::ComputeSize();
-}
-extern "C" void RtUi_GraphElement_ComputeLayout(void* self, int x, int y, int w, int h) {
-    reinterpret_cast<UI::GraphElement*>(self)->UI::GraphElement::ComputeLayout(x, y, w, h);
-}
-extern "C" void RtUi_GraphElement_Draw(const void* self, void* ctx, uint8_t alpha) {
-    reinterpret_cast<const UI::GraphElement*>(self)->UI::GraphElement::Draw(
-        *static_cast<UI::SpriteContext*>(ctx), alpha);
-}
-
-// ============================================================================
-// Constructors / destructor — DOORS (B4b-2), bodies unchanged.
-// ============================================================================
-
-extern "C" void* RtUi_GraphElement_CopyCtor(void* selfv, const void* otherv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    const uint8_t* other = static_cast<const uint8_t*>(otherv);
-    RtAddr<ElementCopyCtorFn>(0x1800358c0ull)(self, other);
-    P(self, 0x00) = VtGraphElement();
-    I32(self, 0xc0) = I32c(other, 0xc0);
-    I32(self, 0xc4) = I32c(other, 0xc4);
-    I32(self, 0xc8) = I32c(other, 0xc8);
-    I32(self, 0xcc) = I32c(other, 0xcc);
-    *reinterpret_cast<uint64_t*>(self + 0xd0) = *reinterpret_cast<const uint64_t*>(other + 0xd0);
-    *reinterpret_cast<uint64_t*>(self + 0xd8) = *reinterpret_cast<const uint64_t*>(other + 0xd8);
-    I32(self, 0xe0) = I32c(other, 0xe0);
-    I32(self, 0xe4) = I32c(other, 0xe4);
-    I32(self, 0xe8) = I32c(other, 0xe8);
-    *reinterpret_cast<uint64_t*>(self + kSeries)    = 0;
-    *reinterpret_cast<uint64_t*>(self + kSeriesCnt) = 0;
-    RtAddr<SeriesCopyFn>(0x1800415e0ull)(self + kSeries, other + kSeries);
-    return self;
-}
-
-// ??1GraphElement@UI@@UEAA@XZ  0x1800d1840 — own vtable, destroy the series
-// array (0x1800416d0, the same helper `?RemoveGraphs@` tail-calls), ~Element.
-extern "C" void RtUi_GraphElement_Dtor(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    P(self, 0x00) = VtGraphElement();
-    RtAddr<SeriesArrayFn>(0x1800416d0ull)(self + kSeries);
-    RtAddr<ElementDtorFn>(0x1801161a0ull)(self);
-}
-
-// ============================================================================
-// Registration
+// ENDGAME B.3.9 UI-B: the slot doors (Type .. Draw), the copy-ctor door and
+// the ??1 door are gone. Their only readers were the minted
+// `??_7GraphElement@UI@@6B@`, its RT_DELDTOR row and the FACTUI1 row.
 // ============================================================================
 int RtUiGraphElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?TypeName@GraphElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_GraphElement_TypeName);      ++n;
-    RegisterRuntimeAddr(0x180040460ull, (void*)&RtUi_GraphElement_TypeName);
-
-    RegisterRuntimeExport("?Type@GraphElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_GraphElement_Type);          ++n;
-    RegisterRuntimeAddr(0x180040440ull, (void*)&RtUi_GraphElement_Type);
-
-    RegisterRuntimeExport("?ComputeSize@GraphElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_GraphElement_ComputeSize);   ++n;
-    RegisterRuntimeAddr(0x1800d1810ull, (void*)&RtUi_GraphElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@GraphElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_GraphElement_ComputeLayout); ++n;
-    RegisterRuntimeAddr(0x1800d16b0ull, (void*)&RtUi_GraphElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@GraphElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_GraphElement_Draw);          ++n;
-    RegisterRuntimeAddr(0x1800d1360ull, (void*)&RtUi_GraphElement_Draw);
-
-    RegisterRuntimeExport("??0GraphElement@UI@@QEAA@AEBV01@@Z",
-                          (void*)&RtUi_GraphElement_CopyCtor);      ++n;
-    RegisterRuntimeAddr(0x1800406d0ull, (void*)&RtUi_GraphElement_CopyCtor);
-
-    RegisterRuntimeExport("??1GraphElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_GraphElement_Dtor);          ++n;
-    RegisterRuntimeAddr(0x1800d1840ull, (void*)&RtUi_GraphElement_Dtor);
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@GraphElement` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@GraphElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::GraphElement::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x180040550ull, (void*)&UI::GraphElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@GraphElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::GraphElement::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x1800405d0ull, (void*)&UI::GraphElement::CreateInPlaceObject);
     return n;
 }

@@ -28,6 +28,7 @@
 // defined below as MARKERS.
 // ============================================================================
 #include "unit.h"
+#include "b39_uib_test_util.h"   // ENDGAME B.3.9 UI-B: the concrete-class checks
 
 #include "runtime/types/ui/Element.h"
 #include "runtime/types/ui/ElementDescription.h"
@@ -257,7 +258,7 @@ long long UpdateArg(Object::InternalPtr<UI::DialogInstance>* dialog,
         Hit(this, K, 8, reinterpret_cast<intptr_t>(d)); return FillRet(ret);                 \
     }                                                                                        \
     Object::External* UI::C::Construct() { Hit(this, K, 9); return this; }                   \
-    UI::C::~C() {}
+    UI::C::~C() { B39NoteDtor(this); }
 
 #define C5_ELEMENT_MARKERS(C, K)                                                             \
     const char* UI::C::TypeName() const { Hit(this, K, 1); return #C; }                     \
@@ -267,7 +268,7 @@ long long UpdateArg(Object::InternalPtr<UI::DialogInstance>* dialog,
         Hit(this, K, 5, (long long)x * 1000 + h);                                            \
     }                                                                                        \
     void UI::C::Draw(UI::SpriteContext&, uint8_t a) const { Hit(this, K, 6, a); }            \
-    UI::C::~C() {}
+    UI::C::~C() { B39NoteDtor(this); }
 
 #define C5_ELEMENT_UPDATE_MARKER(C, K)                                                       \
     void UI::C::Update(const System::Time&, UI::UserInterface*,                              \
@@ -296,18 +297,24 @@ constexpr unsigned kOwn4567 = kOwn456 | (1u << 7);
 // PART A — LAYOUT
 // ===========================================================================
 template <class C, class Base>
-static void CheckShape(size_t size) {
+static void CheckShape(size_t size, bool concrete = false) {
     CHECK_EQ(sizeof(C), size);
     CHECK_EQ(alignof(C), (size_t)8);
-    CHECK(std::is_abstract<C>::value);
     CHECK(!std::has_virtual_destructor<C>::value);
     CHECK((std::is_base_of<Base, C>::value));
-    CHECK(!std::is_default_constructible<C>::value);   // protected ctor: never built as C++
+    if (concrete) {
+        // ENDGAME B.3.9 UI-B (B39_RULES D1): public real ctor, own slot 0,
+        // protected non-virtual dtor (so not destructible from outside).
+        CHECK(B39IsConcreteShape<C>());
+    } else {
+        CHECK(std::is_abstract<C>::value);
+        CHECK(!std::is_default_constructible<C>::value);   // protected ctor: never built as C++
+    }
 }
 
 UNIT_TEST(ui_c5_graph_layout) {
-    CheckShape<UI::GraphDescription, UI::ElementDescription>(0x88);   // 0x1800403a0
-    CheckShape<UI::GraphElement, UI::Element>(0x100);                 // 0x1800408b0
+    CheckShape<UI::GraphDescription, UI::ElementDescription>(0x88, true);   // 0x1800403a0
+    CheckShape<UI::GraphElement, UI::Element>(0x100, true);                 // 0x1800408b0
     CHECK_EQ(offsetof(UI::GraphDescription, _width), sizeof(UI::ElementDescription));
     CHECK_EQ(offsetof(UI::GraphDescription, _spriteName), (size_t)0x80);
     CHECK_EQ(offsetof(UI::GraphElement, _width), sizeof(UI::Element));
@@ -540,8 +547,8 @@ struct DocumentTextElementProbe final : UI::DocumentTextElement {
 }  // namespace
 
 UNIT_TEST(ui_c5_documenttext_layout) {
-    CheckShape<UI::DocumentTextDescription, UI::ElementDescription>(0xe8);   // 0x18003bd90
-    CheckShape<UI::DocumentTextElement, UI::Element>(0x1c8);                 // 0x18003c66f
+    CheckShape<UI::DocumentTextDescription, UI::ElementDescription>(0xe8, true);   // 0x18003bd90
+    CheckShape<UI::DocumentTextElement, UI::Element>(0x1c8, true);                 // 0x18003c66f
     CHECK_EQ(offsetof(UI::DocumentTextDescription, _documentStringTable),
              sizeof(UI::ElementDescription));
     CHECK_EQ(offsetof(UI::DocumentTextDescription, _linkColor), (size_t)0x98);
@@ -566,4 +573,108 @@ UNIT_TEST(ui_c5_documenttext_slots) {
     DocumentTextElementProbe e{};
     CheckElementSlots(&e, kDocTextE, kOwn4567);     // Update overridden
     CheckUpdateTakesHandleAddress(&e, kDocTextE);
+}
+
+// ===========================================================================
+// ENDGAME B.3.9 block UI-B (B39_RULES D1, rule B9-16): the concrete classes —
+// slot order by PMF on the real header, the real ctor's retail stores, both
+// DeletingDtor arms (the leaves' dtors are the recording markers above).
+// ===========================================================================
+UNIT_TEST(b39_uib_c5_slot_order_by_pmf) {
+    B39CheckDescriptionPmf<UI::GraphDescription>();
+    B39CheckElementPmf<UI::GraphElement>();
+    B39CheckDescriptionPmf<UI::DocumentTextDescription>();
+    B39CheckElementPmf<UI::DocumentTextElement>();
+}
+
+UNIT_TEST(b39_uib_c5_graph_ctor_stores) {
+    FactoryScope scope;
+    // ??0GraphDescription 0x1800d1bd0 tail.
+    alignas(8) uint8_t d[0x88];
+    std::memset(d, 0xCD, sizeof d);
+    auto* gd = ::new (static_cast<void*>(d)) UI::GraphDescription();
+    CHECK_EQ(gd->_width, 100);
+    CHECK_EQ(gd->_height, 100);
+    CHECK_EQ(gd->_tickSize, 4);
+    CHECK_EQ(gd->_unknown74, 0xffffffffu);
+    CHECK(gd->_spriteSheet == nullptr);
+    CHECK(gd->_spriteName == nullptr);
+    CHECK_EQ(gd->_id, -1);
+    gd->DeletingDtor(0);
+
+    // ??0GraphElement 0x1800d1880; +0xec written by nothing.
+    alignas(8) uint8_t e[0x100];
+    std::memset(e, 0xCD, sizeof e);
+    auto* ge = ::new (static_cast<void*>(e)) UI::GraphElement();
+    CHECK_EQ(ge->_width, 100);
+    CHECK_EQ(ge->_height, 100);
+    CHECK_EQ(ge->_tickSize, 4);
+    CHECK_EQ(ge->_unknownCC, -1);
+    CHECK(ge->_lineSprite.spriteSheet == nullptr);
+    CHECK_EQ(ge->_lineSprite.spriteIndex, -1);
+    CHECK(ge->_yRange == 1.0f);
+    CHECK_EQ(ge->_xDivisions, 12);
+    CHECK_EQ(ge->_yDivisions, 4);
+    CHECK_EQ((int)e[0xec], 0xCD);
+    CHECK(ge->_seriesData == nullptr);
+    CHECK_EQ(ge->_seriesCount, 0);
+    CHECK_EQ(ge->_seriesCapacity, 0);
+    ge->DeletingDtor(0);
+}
+
+UNIT_TEST(b39_uib_c5_documenttext_ctor_stores) {
+    FactoryScope scope;
+    // ??0DocumentTextDescription 0x1800cfc30; +0xac written by nothing.
+    alignas(8) uint8_t d[0xe8];
+    std::memset(d, 0xCD, sizeof d);
+    auto* dd = ::new (static_cast<void*>(d)) UI::DocumentTextDescription();
+    CHECK(dd->_documentStringTable == nullptr);
+    CHECK(dd->_frameNamesData == nullptr);
+    CHECK_EQ(dd->_frameNamesCount, 0);
+    CHECK_EQ(dd->_linkColor, 0xffeeee00u);
+    CHECK_EQ(dd->_linkHoverColor, 0xffffff00u);
+    CHECK_EQ(dd->_linkPressedColor, 0xffcccc00u);
+    CHECK_EQ(dd->_tabWidth, 4);
+    CHECK_EQ(dd->_wrapWidth, 0x12c);
+    CHECK_EQ((int)d[0xac], 0xCD);
+    CHECK(dd->_colorsData == nullptr);
+    CHECK(dd->_resourceList == nullptr);
+    dd->DeletingDtor(0);
+
+    // ??0DocumentTextElement 0x1800cf410: nothing in +0x170..+0x197 and
+    // +0x1b0..+0x1c7; +0x1a0 is ONE qword -1.
+    alignas(8) uint8_t e[0x1c8];
+    std::memset(e, 0xCD, sizeof e);
+    auto* de = ::new (static_cast<void*>(e)) UI::DocumentTextElement();
+    CHECK(de->_text.table == nullptr);
+    CHECK_EQ(de->_text.index, -1);
+    CHECK(de->_spriteSheet == nullptr);
+    CHECK(de->_underlineSprite.spriteSheet == nullptr);
+    CHECK_EQ(de->_underlineSprite.spriteIndex, -1);
+    CHECK_EQ(de->_linkColor, 0xffeeee00u);
+    CHECK_EQ(de->_tabWidth, 4);
+    CHECK_EQ(de->_wrapWidth, 0x12c);
+    CHECK(de->_itemsData == nullptr);
+    CHECK(de->_linksData == nullptr);
+    CHECK(de->_sourceText == nullptr);
+    CHECK(de->_openLink.text == nullptr);
+    CHECK_EQ(de->_openLink.firstItem, -1);
+    CHECK_EQ(de->_openLink.lastItem, -1);
+    CHECK_EQ((int)de->_openLink.armed, 0);
+    for (int off = 0x170; off < 0x198; ++off) CHECK_EQ((int)e[off], 0xCD);
+    for (int off = 0x1b0; off < 0x1c8; ++off) CHECK_EQ((int)e[off], 0xCD);
+    CHECK_EQ((int)e[0x10c], 0xCD);
+    de->DeletingDtor(0);
+}
+
+UNIT_TEST(b39_uib_c5_deletingdtor_arms) {
+    FactoryScope scope;
+    GraphDescriptionProbe gdp;
+    B39CheckDeletingDtorArms<UI::GraphDescription, 0x88>(VTableOf(&gdp));
+    GraphElementProbe gep{};
+    B39CheckDeletingDtorArms<UI::GraphElement, 0x100>(VTableOf(&gep));
+    DocumentTextDescriptionProbe ddp;
+    B39CheckDeletingDtorArms<UI::DocumentTextDescription, 0xe8>(VTableOf(&ddp));
+    DocumentTextElementProbe dep{};
+    B39CheckDeletingDtorArms<UI::DocumentTextElement, 0x1c8>(VTableOf(&dep));
 }

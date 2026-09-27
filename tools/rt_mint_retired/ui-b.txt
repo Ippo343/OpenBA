@@ -6,3 +6,7 @@
 # -- W1: the widget pairs made concrete (D1), factory pairs the class's own (D2) --
 ??_7ContainerDescription@UI@@6B@       UI-B   real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x180039c00, ??0/??1 doors, 8 slot doors deleted
 ??_7ContainerElement@UI@@6B@           UI-B   real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x18003a050, ??0/copy/??1 doors, 6 slot doors deleted; CreateInstance builds ::new ContainerElement()
+??_7DocumentTextDescription@UI@@6B@    UI-B   real ctor + DeletingDtor + ~X (door body); FACTUI1 row, RT_DELDTOR row 0x18003bd90, ??0/??1 doors, 8 slot doors deleted
+??_7DocumentTextElement@UI@@6B@        UI-B   real ctor + DeletingDtor + ~X (door body); FACTUI1 row, RT_DELDTOR row 0x18003c650, ??0/copy/??1 doors, 6 slot doors deleted; CreateInstance builds ::new DocumentTextElement()
+??_7GraphDescription@UI@@6B@           UI-B   real ctor + DeletingDtor + ~X (door body); FACTUI1 row, RT_DELDTOR row 0x1800403a0, ??0/??1 doors, 8 slot doors deleted
+??_7GraphElement@UI@@6B@               UI-B   real ctor + DeletingDtor + ~X (door body); FACTUI1 row, RT_DELDTOR row 0x1800408b0, ??0/copy/??1 doors, 5 slot doors deleted; CreateInstance builds ::new GraphElement()

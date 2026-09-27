@@ -108,8 +108,38 @@ namespace UI {
 
 class GraphElement : public Element {
 public:
+    // ??0GraphElement@UI@@QEAA@XZ 0x1800d1880 -- the REAL ctor (ENDGAME B.3.9
+    // UI-B): `CALL ??0Element`, then retail's stores; the UI::Sprite member's
+    // own ctor writes +0xd0 = 0 / +0xd8 = -1. +0xec is written by nothing.
+    GraphElement() : Element() {
+        _width          = 100;
+        _height         = 100;
+        _tickSize       = 4;
+        _unknownCC      = -1;
+        _yRange         = 1.0f;
+        _xDivisions     = 12;
+        _yDivisions     = 4;
+        _seriesData     = nullptr;
+        _seriesCount    = 0;
+        _seriesCapacity = 0;
+    }
+
     // ---- the twelve slots, in retail order --------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x1800408b0
+    // [0] 0x1800408b0 -- MSVC's VECTOR deleting destructor, both arms exactly as the
+    // retired RT_DELDTOR row ran them (`MOV EDX,0x100` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<GraphElement*>(self + static_cast<int64_t>(i) * 0x100)->~GraphElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~GraphElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180040460
     uint32_t    Type() const override;                            // [2] 0x180040440
     // [3] Persist — Element's
@@ -130,15 +160,16 @@ public:
     void SetXDivisions(int32_t n)    { _xDivisions = n; }         // 0x1800405f0 MOV [RCX+0xe4],EDX
     void SetYDivisions(int32_t n)    { _xDivisions = n; }         // 0x180040600 MOV [RCX+0xe4],EDX (sic)
 
-    GraphElement(const GraphElement& src);    // 0x1800406d0  door RtUi_GraphElement_CopyCtor
+    GraphElement(const GraphElement& src);    // 0x1800406d0  not ported (no caller)
     GraphElement& operator=(const GraphElement& src);             // 0x1800407a0  not ported
-    static uint32_t TypeId();                                     // not ported
-    static Object::Base* CreateNewObject();                       // 0x180040550  factory door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x1800405d0  factory door
+    static uint32_t TypeId();                                     // over the minted record until W3
+    static Object::Base* CreateNewObject();                       // 0x180040550  (D2)
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x1800405d0  (D2)
 
 protected:
-    GraphElement() = default;   // NOT ??0GraphElement (0x1800d1880, a door)
-    ~GraphElement();            // ??1GraphElement 0x1800d1840 — the door; declared only
+    // ??1GraphElement 0x1800d1840 -- NON-VIRTUAL; retail's body in
+    // graphelement.cpp, the compiler chains ~Element (retail's tail call).
+    ~GraphElement();
 
 private:
     static const char* _TypeName();                               // 0x180040420 -> "GraphElement"

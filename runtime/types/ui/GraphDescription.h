@@ -27,8 +27,11 @@
 // `??0GraphDescription@UI@@QEAA@XZ` door (0x1800d1bd0, factory_ui1.cpp) and
 // wears the MINTED table.
 //
-// The destructor is declared only: `??1GraphDescription` (0x1800d1b30) is the
-// registered door, and a C++ dtor body would stamp GCC's table, not the mint's.
+// ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2): CONCRETE. A real public
+// ctor (retail's 0x1800d1bd0 stores), its own slot 0, the factory pair as the
+// class's own statics; ~GraphDescription holds the retired ??1 door's body. The
+// minted `??_7GraphDescription@UI@@6B@`, its RT_DELDTOR row 0x1800403a0, the
+// FACTUI1 row and the ctor / dtor / slot doors are retired.
 // ============================================================================
 
 #include <cstddef>
@@ -41,8 +44,33 @@ namespace UI {
 
 class GraphDescription : public ElementDescription {
 public:
+    // ??0GraphDescription@UI@@QEAA@XZ 0x1800d1bd0 -- the REAL ctor:
+    // ElementDescription's (inlined in retail), then the six tail stores.
+    GraphDescription() : ElementDescription() {
+        _width       = 100;
+        _height      = 100;
+        _tickSize    = 4;
+        _unknown74   = 0xffffffffu;
+        _spriteSheet = nullptr;
+        _spriteName  = nullptr;
+    }
+
     // ---- the ten slots, in retail order -----------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x1800403a0
+    // [0] 0x1800403a0 -- MSVC's VECTOR deleting destructor, both arms exactly as the
+    // retired RT_DELDTOR row ran them (`MOV EDX,0x88` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<GraphDescription*>(self + static_cast<int64_t>(i) * 0x88)->~GraphDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~GraphDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180040090
     uint32_t    Type() const override;                            // [2] 0x180040070
     int32_t     GetFileVersion() const override;                  // [3] 0x1800d1b20
@@ -57,13 +85,14 @@ public:
 
     GraphDescription(const GraphDescription& src);                // 0x180040250  not ported
     GraphDescription& operator=(const GraphDescription& src);     // 0x1800402d0  not ported
-    static uint32_t TypeId();                                     // not ported
-    static Object::Base* CreateNewObject();                       // 0x180040180  factory door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180040200  factory door
+    static uint32_t TypeId();                                     // over the minted record until W3
+    static Object::Base* CreateNewObject();                       // 0x180040180  (D2)
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x180040200  (D2)
 
 protected:
-    GraphDescription() = default;   // NOT ??0GraphDescription (0x1800d1bd0, a door)
-    ~GraphDescription();            // ??1GraphDescription 0x1800d1b30 — the door; declared only
+    // ??1GraphDescription 0x1800d1b30 -- NON-VIRTUAL; retail's body in
+    // graphdescription.cpp, the compiler chains ~ElementDescription / ~External.
+    ~GraphDescription();
 
 private:
     static const char* _TypeName();                               // 0x180040050 -> "GraphDescription"

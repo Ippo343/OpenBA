@@ -46,19 +46,10 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_vtable{nullptr};
-std::atomic<void*> g_ctor{nullptr};
 
-void* VtGraphDescription() { return AtomicExport(g_vtable, RtUI::kVtblGraphDescription); }
 const uint8_t* GraphTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@GraphDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
-// ??0GraphDescription@UI@@QEAA@XZ (0x1800d1bd0) — the ctor DOOR (B4b-2).
-void* GraphCtor(void* self) {
-    using CtorFn = void* (*)(void*);
-    return reinterpret_cast<CtorFn>(AtomicExport(g_ctor, "??0GraphDescription@UI@@QEAA@XZ"))(self);
 }
 
 }  // namespace
@@ -72,18 +63,22 @@ const char* GraphDescription::TypeName() const {
 uint32_t GraphDescription::Type() const {
     uint32_t v = 0; __builtin_memcpy(&v, GraphTypeInfo(), sizeof v); return v;
 }
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t GraphDescription::TypeId() {
+    uint32_t v = 0; __builtin_memcpy(&v, GraphTypeInfo(), sizeof v); return v;
+}
 // [3] 0x1800d1b20
 int32_t GraphDescription::GetFileVersion() const { return 0x104; }
 
-// [9] 0x180040230 — `TEST RCX,RCX ; JZ` then a JMP to the ctor. The null-`this`
-// test stays in the door; the member is the JMP.
+// [9] 0x180040230 — `TEST RCX,RCX ; JZ` then a JMP to the ctor: placement
+// (the null test sat in the retired door; a virtual call has a `this`).
 Object::External* GraphDescription::Construct() {
-    return reinterpret_cast<Object::External*>(GraphCtor(this));      // 180040239 JMP
+    return ::new (this) GraphDescription();                            // 180040239 JMP
 }
 // [6] 0x180040210 — destroy in place through slot 0 (flag 0), re-run the ctor.
 Object::External* GraphDescription::Reconstruct() {
     DeletingDtor(0);                                                    // 18004021e slot 0
-    return reinterpret_cast<Object::External*>(GraphCtor(this));      // 180040228 JMP
+    return ::new (this) GraphDescription();                            // 180040228 JMP
 }
 // [7] 0x180040240
 void GraphDescription::Destruct() { DeletingDtor(0); }
@@ -132,11 +127,8 @@ Object::InternalPtr<Element>* GraphDescription::CreateInstance(
     void* raw = MemAlloc(0x100, 8);                                     // 1800d1961
 
     GraphElement* elem = static_cast<GraphElement*>(raw);
-    if (raw != nullptr) {                                               // 1800d198c
-        using GraphElementCtorFn = void* (*)(void*);
-        elem = static_cast<GraphElement*>(
-            RtAddr<GraphElementCtorFn>(0x1800d1880ull)(raw));           // 1800d1991
-    }
+    if (raw != nullptr)                                                 // 1800d198c
+        elem = ::new (raw) GraphElement();                              // 1800d1991 ??0 (out of line)
 
     void* slot = elem;                                                  // 1800d1999
     // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
@@ -163,94 +155,45 @@ Object::InternalPtr<Element>* GraphDescription::CreateInstance(
 
 }  // namespace UI
 
-// ============================================================================
-// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
-// ============================================================================
-extern "C" uint32_t RtUi_GraphDescription_Type(const void* self) {
-    return reinterpret_cast<const UI::GraphDescription*>(self)->UI::GraphDescription::Type();
-}
-extern "C" const char* RtUi_GraphDescription_TypeName(const void* self) {
-    return reinterpret_cast<const UI::GraphDescription*>(self)->UI::GraphDescription::TypeName();
-}
-extern "C" int32_t RtUi_GraphDescription_GetFileVersion(const void* self) {
-    return reinterpret_cast<const UI::GraphDescription*>(self)->UI::GraphDescription::GetFileVersion();
-}
-extern "C" void* RtUi_GraphDescription_Construct(void* self) {
-    if (self == nullptr) return nullptr;                                // 180040233 (retail null test)
-    return reinterpret_cast<UI::GraphDescription*>(self)->UI::GraphDescription::Construct();
-}
-extern "C" void* RtUi_GraphDescription_Reconstruct(void* self) {
-    return reinterpret_cast<UI::GraphDescription*>(self)->UI::GraphDescription::Reconstruct();
-}
-extern "C" void RtUi_GraphDescription_Destruct(void* self) {
-    reinterpret_cast<UI::GraphDescription*>(self)->UI::GraphDescription::Destruct();
-}
-extern "C" bool RtUi_GraphDescription_Serialize(void* self, void* stream) {
-    return reinterpret_cast<UI::GraphDescription*>(self)->UI::GraphDescription::Serialize(stream);
-}
-extern "C" void** RtUi_GraphDescription_CreateInstance(const void* self, void** ret,
-                                                       const void* dialog) {
-    return reinterpret_cast<void**>(
-        reinterpret_cast<const UI::GraphDescription*>(self)->UI::GraphDescription::CreateInstance(
-            reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
-            static_cast<const UI::Dialog*>(dialog)));
+namespace UI {
+
+// ??1GraphDescription@UI@@UEAA@XZ   0x1800d1b30 — retail's body, moved from the
+// retired door (ENDGAME B.3.9 UI-B): the +0x80 String; the base restamp, the
+// base's +0x60 String and the tail JMP into ~External are the compiler's chain.
+GraphDescription::~GraphDescription() {
+    ReleaseStringField(reinterpret_cast<uint8_t*>(this), 0x80);        // 1800d1b50
 }
 
-// ============================================================================
-// ??1GraphDescription@UI@@UEAA@XZ   0x1800d1b30 — a DOOR (B4b-2), unchanged.
-// ============================================================================
-extern "C" void RtUi_GraphDescription_Dtor(void* selfv) {
-    using namespace rtdesc;
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtGraphDescription();                               // 1800d1b4d
-    ReleaseStringField(p, 0x80);                             // 1800d1b50
-    *v = VtElementDescription();                             // 1800d1b8d
-    ReleaseStringField(p, 0x60);                             // 1800d1b90
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800d1bc2 JMP
+// ?CreateNewObject@GraphDescription@UI@@SAPEAVBase@Object@@XZ 0x180040180 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0x88, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* GraphDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(GraphDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) GraphDescription();
+}
+// ?CreateInPlaceObject@GraphDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x180040200
+Object::Base* GraphDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) GraphDescription();
 }
 
+}  // namespace UI
+
+// ============================================================================
+// ENDGAME B.3.9 UI-B: the slot doors (Type .. CreateInstance), the ??1 door
+// and the FACTUI1 ??0 door are gone. Their only readers were the minted
+// `??_7GraphDescription@UI@@6B@`, its RT_DELDTOR row and the FACTUI1 row.
+// ============================================================================
 int RtUiGraphDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@GraphDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_GraphDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x180040070ull, (void*)&RtUi_GraphDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@GraphDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_GraphDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x180040090ull, (void*)&RtUi_GraphDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@GraphDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_GraphDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x1800d1b20ull, (void*)&RtUi_GraphDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@GraphDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_GraphDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x180040230ull, (void*)&RtUi_GraphDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@GraphDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_GraphDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x180040210ull, (void*)&RtUi_GraphDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@GraphDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_GraphDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x180040240ull, (void*)&RtUi_GraphDescription_Destruct);
-
-    RegisterRuntimeExport("??1GraphDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_GraphDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x1800d1b30ull, (void*)&RtUi_GraphDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@GraphDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_GraphDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x1800d1a30ull, (void*)&RtUi_GraphDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@GraphDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_GraphDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x1800d1920ull, (void*)&RtUi_GraphDescription_CreateInstance);
-
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@GraphDescription` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@GraphDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::GraphDescription::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x180040180ull, (void*)&UI::GraphDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@GraphDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::GraphDescription::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x180040200ull, (void*)&UI::GraphDescription::CreateInPlaceObject);
     return n;
 }

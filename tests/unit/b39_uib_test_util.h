@@ -16,6 +16,7 @@
 #include <type_traits>
 
 #include "runtime/types/object/Internal.h"
+#include "runtime/types/ui/ElementDescription.h"   // UI::Element / UI::Dialog (declared)
 
 inline int         g_b39DtorCount = 0;
 inline const void* g_b39DtorOrder[8] = {};
@@ -53,7 +54,10 @@ void B39CheckDescriptionPmf() {
     CHECK_EQ(B39SlotOffset(&T::Serialize),      (uintptr_t)0x28);
     CHECK_EQ(B39SlotOffset(&T::Reconstruct),    (uintptr_t)0x30);
     CHECK_EQ(B39SlotOffset(&T::Destruct),       (uintptr_t)0x38);
-    CHECK_EQ(B39SlotOffset(&T::CreateInstance), (uintptr_t)0x40);
+    // (static_cast: a leaf may also declare the non-virtual applier overload)
+    using CreateFn = Object::InternalPtr<UI::Element>* (T::*)(
+        Object::InternalPtr<UI::Element>*, const UI::Dialog*) const;
+    CHECK_EQ(B39SlotOffset(static_cast<CreateFn>(&T::CreateInstance)), (uintptr_t)0x40);
     CHECK_EQ(B39SlotOffset(&T::Construct),      (uintptr_t)0x48);
 }
 
