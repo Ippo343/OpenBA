@@ -63,7 +63,7 @@ static void* PopulationFindComponent(int64_t entity, uint32_t typeId) {
         void** slot = reinterpret_cast<void**>(list + (int64_t)i * 8);
         void* comp = *slot;
         if (!comp) continue;
-        uint32_t t = (*reinterpret_cast<uint32_t (**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (t != typeId) continue;
         void* c = *slot;
         return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;

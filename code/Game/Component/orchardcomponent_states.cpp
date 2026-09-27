@@ -67,6 +67,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
+#include "Component/ControllerComponent.h"
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
@@ -196,11 +197,9 @@ void OrchardRequestState(void* sm, int wantId) {
     }
     void*  chainHead = *reinterpret_cast<void**>(sm);
     if (!chainHead) return;
-    void** vt = *reinterpret_cast<void***>(chainHead);
-    if (!vt || !vt[1]) return;
-    typedef int (*fn_RequestTransition_t)(void* node, int curIdx, int* pWant);
-    int idx = reinterpret_cast<fn_RequestTransition_t>(vt[1])(
-                  chainHead, static_cast<int>(static_cast<int8_t>(smb[9])), &want);
+    // chainHead = the first controller member the SM linked (D6); slot 1 FindTransition.
+    int idx = reinterpret_cast<ControllerComponent::Controller*>(chainHead)->FindTransition(   // B.3.8 bridge
+                  static_cast<int>(static_cast<int8_t>(smb[9])), &want);
     if (idx >= 0) {
         smb[0x0b] = static_cast<uint8_t>(idx);
         smb[0x0a] = static_cast<uint8_t>(want);
