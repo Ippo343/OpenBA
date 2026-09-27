@@ -31,6 +31,26 @@
 void RtDataMintInit();
 
 // ============================================================================
+// B.3.9 (D7) -- THE STORAGE REDIRECT
+// ============================================================================
+// Make `cell` (a class static / file static the caller owns) the storage of
+// the minted storage row `symbol` -- its mangled name, or "0x<VA>" for a row
+// the mint carries by address only. Call it from a `*PortInit()` (they all run
+// before RtDataMintInit()); from then on the name door, the address door, the
+// manifest publish and the class answer with the same bytes.
+//
+// Seeding rule (full text: standalone/rt_mint_redirect.h): the mint never
+// memsets or re-seeds a redirected cell. Zero comes from the language (static
+// storage); a row's kInit seed is copied in HERE, once, if the cell is still
+// all-zero (or verified if the class's own initialiser already holds it); what
+// the owner writes after this call is never overwritten. Aborts at boot on an
+// unknown row, a null cell, a second different cell, a row the mint constructs
+// (`_loader`, `_rng`), a seed conflict, or a call after the mint ran.
+//
+// Declared byte-identically in runtime/funcs/rt_port.h for the runtime tree.
+void RtMintRedirectStorage(const char* symbol, void* cell);
+
+// ============================================================================
 // PER-ROW REGISTRATION
 // ============================================================================
 
