@@ -140,13 +140,9 @@ using PtrThisFn  = void* (*)(void*);
 // data symbols — checked by VA with pefile), so a minted/promoted row is used
 // where one exists and the DLL's own table otherwise.
 // ---------------------------------------------------------------------------
-void* VtParticle()                { return RT_DATA_SLOT(void*, "??_7Particle@Graphics@@6B@"); }
-void* VtParticleSystem()          { return RT_DATA_SLOT(void*, "??_7ParticleSystem@Graphics@@6B@"); }
 void* VtParticleInstance()        { return RT_DATA_SLOT(void*, "??_7ParticleInstance@Graphics@@6B@"); }
 void* VtParticleSystemInstance()  { return RT_DATA_SLOT(void*, "??_7ParticleSystemInstance@Graphics@@6B@"); }
 void* VtEdgeMesh()                { return RT_DATA_SLOT(void*, "??_7EdgeMesh@Graphics@@6B@"); }
-void* VtObjectExternal()          { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* VtObjectBase()              { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
 
 // ---------------------------------------------------------------------------
 // Named dependencies. RT_EXPORT_ONCE (port-registry first) for everything with
@@ -261,12 +257,6 @@ void ReleaseString(void** slot, bool checkZeroAfterAdjust) {
 
 }  // namespace
 
-// ~Particle is defined below; ~ParticleSystem TAIL-JUMPS it (0x1800a530d
-// `JMP 0x180103c70`). Called DIRECTLY rather than through ResolveAddr, because
-// a resolve-by-address here would be a port reaching past its own sibling
-// registration into the DLL (reference_bypassed_port_needs_a_source_checker.md).
-extern "C" void RtGraphics_Particle_Dtor(void* selfv);
-
 // ############################################################################
 // Graphics::MaterialInstance::GenerateTextures
 // ?GenerateTextures@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z
@@ -348,123 +338,13 @@ extern "C" void RtGraphics_ParticleSystemInstance_Dtor(void* selfv) {
 }
 
 // ############################################################################
-// Graphics::ParticleSystem::~ParticleSystem
-// ??1ParticleSystem@Graphics@@UEAA@XZ           retail 0x1800a51c0, ordinal 645
+// ??1ParticleSystem@Graphics@@UEAA@XZ 0x1800a51c0 / ??1Particle@Graphics@@UEAA@XZ
+// 0x180103c70 -- the two transcribed DOORS are gone (ENDGAME B.3.9 block GFX).
+// Their callers were the retired RT_DELDTOR rows 0x180020a70 / 0x180020160 and
+// each other. The bodies live on as `~ParticleSystem` (the owned pool walk,
+// vtbatch7_animgroup_particlesystem.cpp) and `~Particle` (`ReleaseFields`,
+// animation.cpp); retail's inlined ~External is the compiler's ~External.
 // ############################################################################
-//
-//   this->vtable = ??_7ParticleSystem@
-//   for (i = 0; i < this->[0x100]; ++i) {         // bound RE-READ each pass
-//       e = ((void**)this->[0xf8])[i];            // base RE-READ each pass
-//       if (!e) continue;
-//       if (e[0]) MemFree(e[0]);
-//       e[0] = 0; e[1] = 0;
-//       MemFree(e);
-//   }
-//   if (this->[0xf8]) MemFree(this->[0xf8]);
-//   this->[0xf8] = 0; this->[0x100] = 0;          // ONE qword: size AND capacity
-//   tail ~Particle(this)
-//
-// i.e. an `Array<Array<T>*>` of OWNED inner arrays. The lock/Free/unlock triple
-// retail inlines at each of the four free sites IS `MemFree` (0x1800c7ad0)
-// instruction for instruction — goal_list.cpp:194 already records that — so
-// rtcoll::MemFree reproduces it, including its own internal null test.
-// ############################################################################
-extern "C" void RtGraphics_ParticleSystem_Dtor(void* selfv) {
-    uint8_t* const self = static_cast<uint8_t*>(selfv);
-
-    *reinterpret_cast<void**>(self) = VtParticleSystem();
-
-    for (int32_t i = 0; i < *reinterpret_cast<const int32_t*>(self + 0x100); ++i) {
-        void** const data = *reinterpret_cast<void***>(self + 0xf8);
-        void** const e = static_cast<void**>(data[i]);
-        if (e == nullptr) continue;
-        if (e[0] != nullptr) rtcoll::MemFree(e[0]);
-        e[0] = nullptr;
-        e[1] = nullptr;
-        rtcoll::MemFree(e);
-    }
-
-    if (*reinterpret_cast<void**>(self + 0xf8) != nullptr)
-        rtcoll::MemFree(*reinterpret_cast<void**>(self + 0xf8));
-    *reinterpret_cast<void**>(self + 0xf8) = nullptr;
-    *reinterpret_cast<uint64_t*>(self + 0x100) = 0;      // _size AND _capacity
-
-    RtGraphics_Particle_Dtor(self);                      // JMP 0x180103c70
-
-}
-
-// ############################################################################
-// Graphics::Particle::~Particle
-// ??1Particle@Graphics@@UEAA@XZ                 retail 0x180103c70, ordinal 643
-// ############################################################################
-//
-//   this->vtable = ??_7Particle@
-//   for (i = 0; i < this->[0x40]; ++i) {          // same owned-array walk as
-//       e = ((uint8**)this->[0x38])[i];           // ~ParticleSystem's, except
-//       if (!e) continue;                         // the inner Array lives at
-//       if (e[0x18]) MemFree(e[0x18]);            // element+0x18, not +0x00
-//       e[0x18] = 0; e[0x20] = 0;
-//       MemFree(e);
-//   }
-//   if (this->[0x38]) MemFree(this->[0x38]);
-//   this->[0x38] = 0; this->[0x40] = 0;
-//   -- Object::External::~External, FULLY INLINED (not called): --
-//   this->vtable = ??_7External@Object@@6B@
-//   DestroyRefRange(this, this->_refs._data, this->_refs._size)   ; 0x180006ac0
-//   if (this->_refs._data) MemFree(...)
-//   this->_refs._data = 0; this->_refs._size/_capacity = 0
-//   ReleaseString(&this->_path)
-//   this->vtable = ??_7Base@Object@@6B@
-//
-// The External teardown is INLINED by the shipped compiler, so it is
-// transcribed here rather than delegated to the ported ??1External — the two
-// are not the same function and a call would stamp the External vtable twice.
-// ############################################################################
-extern "C" void RtGraphics_Particle_Dtor(void* selfv) {
-    uint8_t* const self = static_cast<uint8_t*>(selfv);
-
-    *reinterpret_cast<void**>(self) = VtParticle();
-
-    for (int32_t i = 0; i < *reinterpret_cast<const int32_t*>(self + 0x40); ++i) {
-        uint8_t** const data = *reinterpret_cast<uint8_t***>(self + 0x38);
-        uint8_t* const e = data[i];
-        if (e == nullptr) continue;
-        void** const inner = reinterpret_cast<void**>(e + 0x18);
-        if (inner[0] != nullptr) rtcoll::MemFree(inner[0]);
-        inner[0] = nullptr;                               // e+0x18
-        *reinterpret_cast<void**>(e + 0x20) = nullptr;    // e+0x20
-        rtcoll::MemFree(e);
-    }
-
-    if (*reinterpret_cast<void**>(self + 0x38) != nullptr)
-        rtcoll::MemFree(*reinterpret_cast<void**>(self + 0x38));
-    *reinterpret_cast<void**>(self + 0x38) = nullptr;
-    *reinterpret_cast<uint64_t*>(self + 0x40) = 0;
-
-    // ---- Object::External::~External, inlined by retail --------------------
-    *reinterpret_cast<void**>(self) = VtObjectExternal();
-
-    // 0x180006ac0 — the 0x10-stride range destroy. PORTED AND REGISTERED
-    // (array_destroy.cpp, Body B / kD_Str_10); ResolveAddr is registry-first so
-    // this reaches our body.
-    {
-        using RangeDtorFn = void (*)(void*, void*, int32_t);
-        RtAddr<RangeDtorFn>(0x180006ac0ull)(
-            self,
-            *reinterpret_cast<void**>(self + 0x10),
-            *reinterpret_cast<const int32_t*>(self + 0x18));
-    }
-    if (*reinterpret_cast<void**>(self + 0x10) != nullptr)
-        rtcoll::MemFree(*reinterpret_cast<void**>(self + 0x10));
-    *reinterpret_cast<void**>(self + 0x10) = nullptr;
-    *reinterpret_cast<uint64_t*>(self + 0x18) = 0;
-
-    ReleaseString(reinterpret_cast<void**>(self + 0x08), /*checkZeroAfterAdjust=*/true);
-
-    *reinterpret_cast<void**>(self) = VtObjectBase();
-
-}
-
 // ############################################################################
 // Graphics::Animation::Animation(const Animation&)
 // ??0Animation@Graphics@@QEAA@AEBV01@@Z         retail 0x1800160a0, ordinal 38
@@ -1198,13 +1078,7 @@ extern "C" int RtGraphicsBatchCLeavesRegister() {
                           (void*)&RtGraphics_ParticleSystemInstance_Dtor); ++n;
     RegisterRuntimeAddr(0x1800a5520ull, (void*)&RtGraphics_ParticleSystemInstance_Dtor);
 
-    RegisterRuntimeExport("??1ParticleSystem@Graphics@@UEAA@XZ",
-                          (void*)&RtGraphics_ParticleSystem_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800a51c0ull, (void*)&RtGraphics_ParticleSystem_Dtor);
 
-    RegisterRuntimeExport("??1Particle@Graphics@@UEAA@XZ",
-                          (void*)&RtGraphics_Particle_Dtor); ++n;
-    RegisterRuntimeAddr(0x180103c70ull, (void*)&RtGraphics_Particle_Dtor);
 
     RegisterRuntimeExport("??0Animation@Graphics@@QEAA@AEBV01@@Z",
                           (void*)&RtGraphics_Animation_CopyCtor); ++n;

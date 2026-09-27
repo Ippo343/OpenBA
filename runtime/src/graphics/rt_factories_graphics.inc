@@ -180,42 +180,6 @@ extern "C" void* RtFactNew_Graphics_MaterialInstance()          { return RtFacto
 extern "C" void* RtFactIP_Graphics_MaterialInstance(void* p)    { return RtFactoryInPlace(kClsGraphics_MaterialInstance, p); }
 
 // --------------------------------------------------------------------------
-// Graphics::Particle
-//   ?CreateNewObject@Particle@Graphics@@SAPEAVBase@Object@@XZ  0x18001ff40
-//   ?CreateInPlaceObject@Particle@Graphics@@SAPEAVBase@Object@@PEAX@Z  0x18001ff50
-// --------------------------------------------------------------------------
-static uint64_t kCountGraphics_Particle[3];
-static const RtFactoryClass kClsGraphics_Particle = {
-    "Graphics::Particle", 0x0, 0,
-    nullptr, nullptr,
-    0x18001ff40ull, 0x18001ff50ull, kCountGraphics_Particle,
-};
-extern "C" void* RtFactNew_Graphics_Particle()          { return RtFactoryNew(kClsGraphics_Particle); }
-extern "C" void* RtFactIP_Graphics_Particle(void* p)    { return RtFactoryInPlace(kClsGraphics_Particle, p); }
-
-// --------------------------------------------------------------------------
-// Graphics::ParticleSystem
-//   ?CreateNewObject@ParticleSystem@Graphics@@SAPEAVBase@Object@@XZ  0x1800204d0
-//   ?CreateInPlaceObject@ParticleSystem@Graphics@@SAPEAVBase@Object@@PEAX@Z  0x180020550
-// --------------------------------------------------------------------------
-static const RtCtorStep kStepsGraphics_ParticleSystem_New[] = {
-    { RtFactOp::Call, 8, 0, 0, "??0ParticleSystem@Graphics@@QEAA@XZ", 0x180020531ull },
-    { RtFactOp::End, 0, 0, 0, nullptr, 0 },
-};
-static const RtCtorStep kStepsGraphics_ParticleSystem_IP[] = {
-    { RtFactOp::Call, 8, 0, 0, "??0ParticleSystem@Graphics@@QEAA@XZ", 0x180020553ull },
-    { RtFactOp::End, 0, 0, 0, nullptr, 0 },
-};
-static uint64_t kCountGraphics_ParticleSystem[3];
-static const RtFactoryClass kClsGraphics_ParticleSystem = {
-    "Graphics::ParticleSystem", 0x108, 8,
-    kStepsGraphics_ParticleSystem_New, kStepsGraphics_ParticleSystem_IP,
-    0x1800204d0ull, 0x180020550ull, kCountGraphics_ParticleSystem,
-};
-extern "C" void* RtFactNew_Graphics_ParticleSystem()          { return RtFactoryNew(kClsGraphics_ParticleSystem); }
-extern "C" void* RtFactIP_Graphics_ParticleSystem(void* p)    { return RtFactoryInPlace(kClsGraphics_ParticleSystem, p); }
-
-// --------------------------------------------------------------------------
 // Graphics::ReflectionImageBuffer
 //   ?CreateNewObject@ReflectionImageBuffer@Graphics@@SAPEAVBase@Object@@XZ  0x1800222c0
 //   ?CreateInPlaceObject@ReflectionImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z  0x180022370
@@ -265,10 +229,6 @@ static const RtFactoryReg kRegs[] = {
       "?CreateInPlaceObject@Material@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180011a70ull, (void*)&RtFactIP_Graphics_Material, &kClsGraphics_Material },
     { "?CreateNewObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@XZ", 0x180002900ull, (void*)&RtFactNew_Graphics_MaterialInstance,
       "?CreateInPlaceObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x1800029d0ull, (void*)&RtFactIP_Graphics_MaterialInstance, &kClsGraphics_MaterialInstance },
-    { "?CreateNewObject@Particle@Graphics@@SAPEAVBase@Object@@XZ", 0x18001ff40ull, (void*)&RtFactNew_Graphics_Particle,
-      "?CreateInPlaceObject@Particle@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x18001ff50ull, (void*)&RtFactIP_Graphics_Particle, &kClsGraphics_Particle },
-    { "?CreateNewObject@ParticleSystem@Graphics@@SAPEAVBase@Object@@XZ", 0x1800204d0ull, (void*)&RtFactNew_Graphics_ParticleSystem,
-      "?CreateInPlaceObject@ParticleSystem@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180020550ull, (void*)&RtFactIP_Graphics_ParticleSystem, &kClsGraphics_ParticleSystem },
     { "?CreateNewObject@ReflectionImageBuffer@Graphics@@SAPEAVBase@Object@@XZ", 0x1800222c0ull, (void*)&RtFactNew_Graphics_ReflectionImageBuffer,
       "?CreateInPlaceObject@ReflectionImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180022370ull, (void*)&RtFactIP_Graphics_ReflectionImageBuffer, &kClsGraphics_ReflectionImageBuffer },
 };

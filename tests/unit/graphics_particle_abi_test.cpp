@@ -491,8 +491,11 @@ UNIT_TEST(graphics_particle_branch_is_abstract) {
     // slot 0 alone, exactly as `AnimationGroup` is: nothing holds either by value
     // (B34_BRIEFS §A.4 as amended) and their deleting-dtor bodies are minted rows
     // B35_RULES §11 forbids retiring.
+    // ENDGAME B.3.9 GFX: ParticleSystem is CONCRETE now (its own slot 0, a real
+    // ctor, the rows retired -- rb_graphics_abi_test b39_gfx_particlesystem_*);
+    // Particle stays abstract through its three pure slots.
     CHECK(std::is_abstract<Graphics::Particle>::value);
-    CHECK(std::is_abstract<Graphics::ParticleSystem>::value);
+    CHECK(!std::is_abstract<Graphics::ParticleSystem>::value);
 
     // And no real constructor on either (B4b-2): the ctor doors at 0x180103e80
     // and 0x1800a5320 stay, because both are called on memory that already wears

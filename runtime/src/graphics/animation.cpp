@@ -159,7 +159,6 @@ namespace {
 // ============================================================================
 const char* const kAnimMgrCtor     = "??0AnimationManager@Graphics@@QEAA@XZ";
 const char* const kAnimMgrDtor     = "??1AnimationManager@Graphics@@QEAA@XZ";
-const char* const kParticleCtor    = "??0Particle@Graphics@@QEAA@XZ";
 const char* const kPIctor          = "??0ParticleInstance@Graphics@@QEAA@XZ";
 const char* const kPIupdate        = "?Update@ParticleInstance@Graphics@@QEAA_NXZ";
 const char* const kPIincrement     = "?IncrementInstanceIndex@ParticleInstance@Graphics@@SAXXZ";
@@ -177,10 +176,6 @@ const char* const kFrameIndexData  = "?_frameIndex@ParticleInstance@Graphics@@1H
 // program="Runtime-x64.dll"), not inferred from the decompile's `_vftable_`
 // symbol name alone.
 // ============================================================================
-void* RtParticleVtable() {
-    static void* v = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180155130));
-    return v;
-}
 void* RtParticleInstanceVtable() {
     static void* v = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801550e0));
     return v;
@@ -356,19 +351,11 @@ extern "C" void RtGraphics_AnimationManager_Dtor(AnimationManager* self) {
 // skips both gaps instead of raw-memcmp'ing the whole struct.
 //
 // ORACLE: full, scratch-object, minus the [0x21,0x24) and [0x2c,0x30) gaps.
+//
+// ENDGAME B.3.9 block GFX: the DOOR is gone. Its body was already ONE body with
+// the real protected `Particle()` (Particle.h, InitFields); its callers were
+// the factory interpreter (via ParticleSystem) and nothing else.
 // ============================================================================
-extern "C" Particle* RtGraphics_Particle_Ctor(Particle* self) {
-
-    self->vtable = RtParticleVtable();
-    self->_f08 = 0;
-    self->_f10 = 0;
-    self->_f18 = 0;
-    // ENDGAME B.3.8 block RB (RULE B8-1): +0x20..+0x47 are ONE body with the
-    // real constructor `Graphics::Particle()` (Particle.h, `InitFields`).
-    ::Graphics::Particle::DoorBody::Init(reinterpret_cast<::Graphics::Particle*>(self));   // B.3.8 bridge
-
-    return self;
-}
 
 // ============================================================================
 // Graphics::ParticleInstance::ParticleInstance()
@@ -681,9 +668,6 @@ int RtGraphicsAnimationRegister() {
 
     RegisterRuntimeExport("??1AnimationManager@Graphics@@QEAA@XZ", (void*)&RtGraphics_AnimationManager_Dtor); ++count;
     RegisterRuntimeAddr(0x1800fc400, (void*)&RtGraphics_AnimationManager_Dtor);
-
-    RegisterRuntimeExport("??0Particle@Graphics@@QEAA@XZ", (void*)&RtGraphics_Particle_Ctor); ++count;
-    RegisterRuntimeAddr(0x180103e80, (void*)&RtGraphics_Particle_Ctor);
 
     RegisterRuntimeExport("??0ParticleInstance@Graphics@@QEAA@XZ", (void*)&RtGraphics_ParticleInstance_Ctor); ++count;
     RegisterRuntimeAddr(0x180104130, (void*)&RtGraphics_ParticleInstance_Ctor);

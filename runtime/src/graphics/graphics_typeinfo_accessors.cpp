@@ -107,9 +107,6 @@
 extern "C" uint32_t    RtGraphics_MaterialInstance_Type(const void*);
 extern "C" const char* RtGraphics_MaterialInstance_TypeName(const void*);
 extern "C" int32_t     RtGraphics_MaterialInstance_GetFileVersion(const void*);
-extern "C" uint32_t    RtGraphics_Particle_Type(const void*);
-extern "C" const char* RtGraphics_Particle_TypeName(const void*);
-extern "C" int32_t     RtGraphics_Particle_GetFileVersion(const void*);
 
 namespace {
 
@@ -204,20 +201,6 @@ extern "C" int32_t RtGraphics_MaterialInstance_GetFileVersion(const void* self) 
                ->Graphics::MaterialInstance::GetFileVersion();
 }
 
-extern "C" uint32_t RtGraphics_Particle_Type(const void* self) {
-    return reinterpret_cast<const Graphics::Particle*>(self)              // B.3.5 bridge
-               ->Graphics::Particle::Type();
-}
-
-extern "C" const char* RtGraphics_Particle_TypeName(const void* self) {
-    return reinterpret_cast<const Graphics::Particle*>(self)              // B.3.5 bridge
-               ->Graphics::Particle::TypeName();
-}
-
-extern "C" int32_t RtGraphics_Particle_GetFileVersion(const void* self) {
-    return reinterpret_cast<const Graphics::Particle*>(self)              // B.3.5 bridge
-               ->Graphics::Particle::GetFileVersion();
-}
 
 // ============================================================================
 // REGISTRATION — by NAME and by ADDRESS, both, for every body.
@@ -247,17 +230,8 @@ int RtGraphicsTypeInfoAccessorsRegister() {
                           (void*)&RtGraphics_MaterialInstance_GetFileVersion); ++n;
     RegisterRuntimeAddr(0x180103a60ull, (void*)&RtGraphics_MaterialInstance_GetFileVersion);
 
-    RegisterRuntimeExport("?Type@Particle@Graphics@@UEBAIXZ",
-                          (void*)&RtGraphics_Particle_Type); ++n;
-    RegisterRuntimeAddr(0x18001ff10ull, (void*)&RtGraphics_Particle_Type);
-
-    RegisterRuntimeExport("?TypeName@Particle@Graphics@@UEBAPEBDXZ",
-                          (void*)&RtGraphics_Particle_TypeName); ++n;
-    RegisterRuntimeAddr(0x18001ff30ull, (void*)&RtGraphics_Particle_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@Particle@Graphics@@UEBAHXZ",
-                          (void*)&RtGraphics_Particle_GetFileVersion); ++n;
-    RegisterRuntimeAddr(0x180104080ull, (void*)&RtGraphics_Particle_GetFileVersion);
+    // (ENDGAME B.3.9 block GFX: AnimationEvent's two and Particle's three
+    // slot doors are retired with their minted tables.)
 
     return n;
 }
@@ -304,6 +278,9 @@ int32_t MaterialInstance::GetFileVersion() const { return 4; }
 // [1] ?TypeName@ 0x18001ff30
 uint32_t    Particle::Type() const     { return ReadTypeId(ParticleTypeInfo()); }
 const char* Particle::TypeName() const { return ReadTypeName(ParticleTypeInfo()); }
+// ?TypeId@Particle@Graphics@@SAIXZ 0x18001ff20 -- the static twin of slot 2
+// (ENDGAME B.3.9 GFX, D6 step 1: over the minted record until the W3 fold).
+uint32_t    Particle::TypeId()         { return ReadTypeId(ParticleTypeInfo()); }
 
 // [3] ?GetFileVersion@ 0x180104080 -- `MOV EAX,0x1000 ; RET`, 4096, and it is NOT
 // the same constant as MaterialInstance's 4. The two were decoded separately and

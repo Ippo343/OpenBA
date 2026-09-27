@@ -13,3 +13,7 @@
 
 # -- W1: AnimationGroup concrete (D1), factory pair the class own (D2) --
 ??_7AnimationGroup@Graphics@@6B@       GFX   real ctor + DeletingDtor + ~X (door body) + TypeId; FACTREST row, RT_DELDTOR row 0x1800167f0, ??1 leaves door, 8 slot doors deleted; Construct/Reconstruct placement-new
+
+# -- W1: ParticleSystem concrete (D1/D2); Particle slot 0 concrete (the class stays abstract) --
+??_7ParticleSystem@Graphics@@6B@       GFX   real ctor (door body) + DeletingDtor + ~X (door body) + TypeId; FACTREST row, RT_DELDTOR row 0x180020a70, ??0/??1 doors, 8 slot doors deleted; Construct/Reconstruct placement-new
+??_7Particle@Graphics@@6B@             GFX   concrete DeletingDtor + TypeId + factory pair (null stubs); FACTREST row, RT_DELDTOR row 0x180020160, ??0/??1 doors, DoorBody, 4 slot doors deleted

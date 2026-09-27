@@ -29,6 +29,7 @@
 // `<windows.h>` through `standalone/resolve.h`. (`AnimationGroup.h` already
 // proves the pairing — `vtbatch7` includes it after `resolve.h` and builds.)
 #include "../object/External.h"       // Object::External, the proved parent
+#include "../object/Internal.h"       // B.3.9: InternalMemFree (the concrete slot 0s)
 #include "../collection/Collection.h" // Collection::Array<T>, the +0x38 header
 
 namespace RtGraphics {
@@ -397,10 +398,30 @@ class ParticleInstance;
 // named pads rather than left to C++'s natural alignment (see the POD's banner
 // above for the disassembled store list that found them one at a time).
 // ============================================================================
+//
+// ENDGAME B.3 step 9 (block GFX, B39_RULES D1/D2): slot 0 is now the class's
+// OWN vector deleting dtor; the class stays ABSTRACT through Reconstruct /
+// Destruct / CreateSystem. The ??0 / ??1 doors, the four slot doors, the
+// FACTREST row, the RT_DELDTOR row 0x180020160 and the minted
+// `??_7Particle@Graphics@@6B@` are retired (tools/rt_mint_retired/gfx.txt).
 class Particle : public Object::External {
 public:
-    // [0] 0x180020160 — pure on purpose; the RT_DELDTOR row is not retired.
-    Object::Base* DeletingDtor(unsigned flags) override = 0;
+    // [0] 0x180020160 -- MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x48` = the element size).
+    // Every subclass (ParticleSystem, the exe's Tornado) declares its own.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<Particle*>(self + static_cast<int64_t>(i) * 0x48)->~Particle();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~Particle();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     // [1] 0x18001ff30 / [2] 0x18001ff10 / [3] 0x180104080.
     //   MEMBERS THAT FORWARD, not doors that delegate: all three bodies live in
@@ -432,10 +453,13 @@ public:
     //
     // ?IsInstanced@Particle@Graphics@@QEBA_NXZ            0x18001ff60 — NOT PORTED
     bool IsInstanced() const;
-    // ?TypeId@Particle@Graphics@@SAIXZ                    0x18001ff20 — NOT PORTED
+    // ?TypeId@Particle@Graphics@@SAIXZ                    0x18001ff20 — B.3.9 GFX,
+    //   over the minted `?_typeInfo@` record until the W3 fold
     static uint32_t TypeId();
-    // ?CreateNewObject@…SAPEAVBase@Object@@XZ             0x18001ff40 — NOT PORTED
-    // ?CreateInPlaceObject@…SAPEAVBase@Object@@PEAX@Z     0x18001ff50 — NOT PORTED
+    // ?CreateNewObject@…SAPEAVBase@Object@@XZ             0x18001ff40 — B.3.9 GFX
+    // ?CreateInPlaceObject@…SAPEAVBase@Object@@PEAX@Z     0x18001ff50 — B.3.9 GFX
+    //   ENDGAME B.3.9: retail's ABSTRACT pair, both `XOR EAX,EAX ; RET`
+    //   (wave27_lane_gfxpart.cpp). The note below is the pre-B.3.9 reading.
     //   The reflection block's two factories. Both go through
     //   `System::MemoryAllocator`, which B35_RULES section 11 keeps as doors for
     //   the whole of step 5. Note what is ABSENT: `Particle` has no `??2`/`??3`
@@ -448,10 +472,7 @@ public:
     Particle(const Particle& src);
     Particle& operator=(const Particle& src);
 
-    // The ctor door's way onto the shared body (ENDGAME B.3.8 block RB,
-    // B38_RULES D1): `RtGraphics_Particle_Ctor` (animation.cpp) stamps the
-    // MINTED table and does the inlined External stores, then runs this.
-    struct DoorBody { static void Init(Particle* p) { p->InitFields(); } };
+    // (ENDGAME B.3.9 GFX: `DoorBody` went with the ??0 door it served.)
 
 protected:
     // ??0Particle@Graphics@@QEAA@XZ  0x180103e80 — the REAL constructor
@@ -465,9 +486,8 @@ protected:
     // (animation.cpp): free each pool record's +0x18 buffer, zero the record's
     // +0x18/+0x20, free the record, then free `_records` and zero its header.
     // The External half that follows in retail is the compiler's ~External.
-    // No door exists (0x180103c70 is still reached only through the mint's
-    // RT_DELDTOR row, unregistered), so this body has one entry point: the
-    // real destructor, which only a converted subclass (LOOP's Tornado) runs.
+    // ENDGAME B.3.9 GFX: the transcribed door in batchc_gfx_leaves.cpp is gone
+    // with the RT_DELDTOR row; this is the only destructor.
     ~Particle() { ReleaseFields(); }
 
 private:
@@ -580,10 +600,36 @@ static_assert(offsetof(Particle, _active) == sizeof(Object::External),
 // as ONE qword of -1 and then the int64 at +0xe8). `Serialize` skips both as
 // well. They are named pads, which says exactly as much as is known.
 // ============================================================================
+//
+// ENDGAME B.3 step 9 (block GFX, B39_RULES D1/D2) -- the "no real constructor"
+// and "slot 0 pure" paragraphs are HISTORY. The class is CONCRETE: a real
+// public ctor (retail 0x1800a5320, vtbatch7_animgroup_particlesystem.cpp), its
+// own vector slot 0, a protected non-virtual ~ParticleSystem holding the
+// retired ??1 door's body, the factory pair as the class's own statics. The
+// minted table, its RT_DELDTOR row 0x180020a70, the FACTREST row and the ctor /
+// dtor / slot doors are retired (tools/rt_mint_retired/gfx.txt).
 class ParticleSystem : public Particle {
 public:
-    // [0] 0x180020a70 — pure on purpose; the RT_DELDTOR row is not retired.
-    Object::Base* DeletingDtor(unsigned flags) override = 0;
+    // ??0ParticleSystem@Graphics@@QEAA@XZ 0x1800a5320 -- the REAL ctor (also
+    // inlined by retail into both factories and Construct / Reconstruct).
+    // Out of line: it reads `System::Timer::_secondsPerTick`.
+    ParticleSystem();
+
+    // [0] 0x180020a70 -- MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x108` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<ParticleSystem*>(self + static_cast<int64_t>(i) * 0x108)->~ParticleSystem();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~ParticleSystem();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char* TypeName() const override;                  // [1] 0x1800203e0
     uint32_t    Type() const override;                      // [2] 0x1800203c0
@@ -600,15 +646,15 @@ public:
     virtual Object::External* Construct();                  // [9] 0x180020580
 
     // ---- the non-slot exported members -------------------------------------
-    // ?TypeId@ParticleSystem@Graphics@@SAIXZ                 0x1800203d0 — NOT PORTED
+    // ?TypeId@ParticleSystem@Graphics@@SAIXZ                 0x1800203d0 — B.3.9
+    //   GFX, over the minted `?_typeInfo@` record until the W3 fold
     static uint32_t TypeId();
     // ??2ParticleSystem@Graphics@@SAPEAX_K@Z                 0x1800203f0 — NOT PORTED
     // ??2ParticleSystem@Graphics@@SAPEAX_KPEAX@Z             0x180020460 — NOT PORTED
     // ??3ParticleSystem@Graphics@@SAXPEAX@Z                  0x180020470 — NOT PORTED
-    // ?CreateNewObject@…SAPEAVBase@Object@@XZ                0x1800204d0 — NOT PORTED
-    // ?CreateInPlaceObject@…SAPEAVBase@Object@@PEAX@Z        0x180020550 — NOT PORTED
-    //   The reflection block's five statics; each goes through
-    //   `System::MemoryAllocator`, doors for all of step 5 (section 11).
+    // ?CreateNewObject@…SAPEAVBase@Object@@XZ                0x1800204d0 — (D2) the class's own
+    // ?CreateInPlaceObject@…SAPEAVBase@Object@@PEAX@Z        0x180020550 — (D2) the class's own
+    //   The three operators stay declared and undefined: placement is `::new`.
     static void* operator new(std::size_t bytes);
     static void* operator new(std::size_t bytes, void* place);
     static void  operator delete(void* p);
@@ -616,11 +662,10 @@ public:
     static Object::Base* CreateInPlaceObject(void* place);
 
 protected:
-    // NOT retail's 0x1800a5320 — the ctor door stays (see the banner).
-    ParticleSystem() = default;
-    // ??1ParticleSystem@Graphics@@UEAA@XZ  0x1800a51c0. NON-virtual, and not
-    // ported anywhere in the tree; defined EMPTY beside the other members in
-    // `vtbatch7_animgroup_particlesystem.cpp`, for `~AnimationGroup`'s reason.
+    // ??1ParticleSystem@Graphics@@UEAA@XZ  0x1800a51c0. NON-virtual (no virtual
+    // dtor until the normal-virtual cutover). Retail's body -- the owned pool
+    // walk -- is in vtbatch7_animgroup_particlesystem.cpp; the compiler chains
+    // ~Particle (retail's tail jump 0x1800a530d).
     ~ParticleSystem();
 
 public:

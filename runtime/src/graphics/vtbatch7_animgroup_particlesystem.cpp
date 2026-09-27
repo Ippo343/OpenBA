@@ -219,14 +219,9 @@ void DestroyReaderWriter(ReaderWriter* rw) {
     reinterpret_cast<DtorFn>(rw->vtable[0])(rw, 1);
 }
 
-void* BaseVTable()     { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* ExternalVTable() { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-
-using Slot0Fn = void* (*)(void* self, int flag);
-void CallSlot0(void* self, int flag) {
-    void** vt = *reinterpret_cast<void***>(self);
-    reinterpret_cast<Slot0Fn>(vt[0])(self, flag);
-}
+// (ENDGAME B.3.9 block GFX: the minted Base / External stamp accessors and
+// `CallSlot0` went with the two ConstructBody helpers; slot 0 is a virtual
+// call on the class now.)
 
 }  // namespace
 
@@ -536,25 +531,11 @@ const uint8_t* ParticleSystemTypeInfo() {
 
 }  // namespace
 
-// ENDGAME B.3.5 block H2: ALL EIGHT NON-DESTRUCTOR SLOT BODIES MOVED onto the
-// members further down. Every registered door below keeps its mangled name AND
-// its retail address and is now a one-line QUALIFIED, non-virtual delegation.
-// THE QUALIFICATION IS LOAD-BEARING (B34_BRIEFS A.1): a live `ParticleSystem`
-// wears the MINTED `??_7ParticleSystem@Graphics@@6B@`, whose slots resolve back
-// to these very doors, so an unqualified virtual call inside a door would
-// dispatch into itself instead of delegating.
-extern "C" uint32_t RtGraphics_ParticleSystem_Type(const void* selfv) {
-    return reinterpret_cast<const ::Graphics::ParticleSystem*>(selfv)     // B.3.5 bridge
-               ->::Graphics::ParticleSystem::Type();
-}
-extern "C" const char* RtGraphics_ParticleSystem_TypeName(const void* selfv) {
-    return reinterpret_cast<const ::Graphics::ParticleSystem*>(selfv)     // B.3.5 bridge
-               ->::Graphics::ParticleSystem::TypeName();
-}
-extern "C" int32_t RtGraphics_ParticleSystem_GetFileVersion(const void* selfv) {
-    return reinterpret_cast<const ::Graphics::ParticleSystem*>(selfv)     // B.3.5 bridge
-               ->::Graphics::ParticleSystem::GetFileVersion();
-}
+// ENDGAME B.3.9 block GFX: ParticleSystem's slot doors (Type, TypeName,
+// GetFileVersion, Serialize, Reconstruct, Destruct, CreateSystem, Construct)
+// and its ??0 / ??1 doors are gone -- their only readers were the minted
+// `??_7ParticleSystem@Graphics@@6B@`, its RT_DELDTOR row and FACTREST. Every
+// live ParticleSystem wears the compiler's table.
 
 // ============================================================================
 // ??0ParticleSystem@Graphics@@QEAA@XZ — retail 0x1800a5320, ord 302.
@@ -566,10 +547,9 @@ extern "C" int32_t RtGraphics_ParticleSystem_GetFileVersion(const void* selfv) {
 // +0xdc), which are written here as the two 4-byte fields they cover.
 //
 // FOUR vtable stamps, in retail's order (Object::Base, Object::External,
-// Graphics::Particle, Graphics::ParticleSystem). Retail stamps each with a
-// RIP-relative LEA, which is NOT a door; porting the ctor converts all four
-// into RT_DATA_SLOT lookups that resolve to the mint the day it has rows
-// (reference_a_ported_row_can_be_permanently_unpromotable.md).
+// Graphics::Particle, Graphics::ParticleSystem) -- the compiler's, since
+// ENDGAME B.3.9 block GFX made this body the REAL constructor: `Particle()` in
+// the init list is the inlined External() plus Particle's six stores.
 //
 // THE TWO .rdata DOUBLES WERE READ, NOT RECOGNISED (pefile, raw section bytes):
 //     0x180161760 = 00 00 00 00 00 00 f0 bf = -1.0
@@ -581,40 +561,18 @@ extern "C" int32_t RtGraphics_ParticleSystem_GetFileVersion(const void* selfv) {
 // ============================================================================
 namespace {
 
-void* ParticleSystemVTable() { return RT_DATA_SLOT(void*, "??_7ParticleSystem@Graphics@@6B@"); }
-void* ParticleVTable()       { return RT_DATA_SLOT(void*, "??_7Particle@Graphics@@6B@"); }
-
 double SecondsPerTick() {
     double* slot = RT_DATA_SLOT(double*, "?_secondsPerTick@Timer@System@@0NA");
     return slot ? *slot : 1.0;
 }
 
-// THE FOUR VTABLE STAMPS STAY HAND-WRITTEN AND THEY STAY POINTED AT THE MINT —
-// the same decision, for the same reason, as `AnimGroupConstructBody` above
-// (B34_RULES section 4.3): `Construct` and `Reconstruct` run on an object that
-// ALREADY EXISTS and that the rest of the tree expects to be wearing
-// `??_7ParticleSystem@Graphics@@6B@` out of `rt_data_mint_tables.inc`. A member
-// constructor here would stamp GCC's tables instead, which is why B4b-2 keeps the
-// ctor door. The fields are spelled through `Graphics::ParticleSystem` now; the
-// STORES are byte for byte batch 7b's.
-void ParticleSystemConstructBody(ParticleSystem* self) {
-    void** vp = reinterpret_cast<void**>(self);
-    *vp = BaseVTable();                                   // 1800a5338  0x180154788
-    *vp = ExternalVTable();                               // 1800a5342  0x1801547a0
-    self->_path.data      = nullptr;                      // 1800a5350  +0x08
-    self->_refs._data     = nullptr;                      // 1800a5353  +0x10
-    self->_refs._size     = 0;                            // 1800a5357  +0x18
-    self->_refs._capacity = 0;                            //            +0x1c
-    *vp = ParticleVTable();                               // 1800a5362  0x180155130
-    self->_active     = 1;                                // 1800a5365  byte
-    self->_recordCount = 1;                               // 1800a5369
-    self->_subCount   = 0xf;                              // 1800a5370
-    self->_material   = nullptr;                          // 1800a5377
-    self->_records._data     = nullptr;                   // 1800a537b
-    self->_records._size     = 0;                         // 1800a537f
-    self->_records._capacity = 0;                         //            one qword with _size
-    *vp = ParticleSystemVTable();                         // 1800a538a  0x180155090
+}  // namespace
 
+// ENDGAME B.3.9 block GFX: batch 7b's `ParticleSystemConstructBody` (the four
+// minted stamps and the 60 stores) IS the real constructor now. The stores are
+// byte for byte batch 7b's; +0x54 and +0xe4 stay unwritten.
+Graphics::ParticleSystem::ParticleSystem() : Particle() {
+    ParticleSystem* const self = this;
     const double spt = SecondsPerTick();
 
     self->_f48 = 5.0f;  self->_rateAccelA = 0.0f;         // 1800a538d  one qword
@@ -652,78 +610,23 @@ void ParticleSystemConstructBody(ParticleSystem* self) {
     self->_pool._capacity = 0;                            //            +0x104
 }
 
-}  // namespace
-
-extern "C" void* RtGraphics_ParticleSystem_Ctor(void* selfv) {
-    // Retail has NO null check (`MOV [RCX],RAX` on the first instruction).
-    ParticleSystemConstructBody(static_cast<ParticleSystem*>(selfv));
-    return selfv;                                          // 1800a54a6  MOV RAX,RCX
-}
-
 // Construct/Reconstruct/Destruct are vtable slots [9]/[6]/[7]; each is retail's
 // `JMP 0x1800a5320` (Construct) / `vtable[0](this,0)` then the same ctor
-// (Reconstruct) / a tail call to `vtable[0](this,0)` (Destruct). ENDGAME B.3.5
-// block H2: the bodies moved onto the members and each door is a one-line
-// QUALIFIED delegation. The retail null test in `Construct` stays IN THE DOOR
-// (B35 class-block brief).
-extern "C" void* RtGraphics_ParticleSystem_Construct(void* selfv) {
-    if (!selfv) return nullptr;
-    return reinterpret_cast<::Graphics::ParticleSystem*>(selfv)           // B.3.5 bridge
-               ->::Graphics::ParticleSystem::Construct();
-}
-extern "C" void* RtGraphics_ParticleSystem_Reconstruct(void* selfv) {
-    return reinterpret_cast<::Graphics::ParticleSystem*>(selfv)           // B.3.5 bridge
-               ->::Graphics::ParticleSystem::Reconstruct();
-}
-extern "C" void RtGraphics_ParticleSystem_Destruct(void* selfv) {
-    reinterpret_cast<::Graphics::ParticleSystem*>(selfv)                  // B.3.5 bridge
-        ->::Graphics::ParticleSystem::Destruct();
-}
-
-// ============================================================================
-// ?CreateSystem@ParticleSystem@Graphics@@ — retail 0x1800a5140, ord 2134.
+// (Reconstruct) / a tail call to `vtable[0](this,0)` (Destruct).
 //
-// Also a batch-7 thunk, also ported here. Eleven instructions:
+// ?CreateSystem@ParticleSystem@Graphics@@ — retail 0x1800a5140, ord 2134.
+// Eleven instructions:
 //
 //   1800a5154  RBX = *0x1801fc718 + 0x640          the allocator's own CS
 //   1800a516a  EnterCriticalSection(RBX)
 //   1800a5183  MemAlloc(_singleton, 0xe0, 8)       0x1800c6e60
 //   1800a518e  LeaveCriticalSection(RBX)
-//   1800a519c  if (result) 0x1800a55a0(result)     ParticleInstance's ctor
+//   1800a519c  if (result) 0x1800a55a0(result)     ParticleSystemInstance's ctor
 //              else EAX = 0
-//   1800a51b5  RET (the allocation, or the ctor's return, which is the same
-//              pointer)
+//   1800a51b5  RET
 //
-// `this` IS NEVER READ. Retail's CreateSystem ignores the ParticleSystem it is
-// called on entirely — the returned instance is bound to its system later, by
-// the caller. Reproduced, parameter deliberately unnamed.
-//
-// The Enter/Alloc/Leave triple goes through `rtcoll::MemAlloc` (array.cpp's
-// accessor, declared in deleting_dtor_internal.h), which IS that triple on the
-// same singleton, rather than re-opening four new address doors onto
-// 0x1801fc718 / 0x18014b390 / 0x1800c6e60 / 0x18014b388 that array.cpp already
-// owns. Same reasoning the Serialize tail below states for its own allocation.
-//
-// 0x1800a55a0 (`Graphics::ParticleInstance::ParticleInstance`) is NOT this
-// batch's row and is reached BY ADDRESS — ResolveAddr consults the port
-// registry first, so the day wave28_lane_partsys.cpp's class gets a ctor this
-// call site picks it up with no edit here.
-// ============================================================================
-// ENDGAME B.3.5 block H2: BODY MOVED onto the member. *** THIS IS SLOT 8, NOT
-// SLOT 9 — RULE B5-16's trap. *** `Particle` introduced `CreateSystem` PURE at
-// slot 8, so `Construct` sits one slot further along, at 9, on this class alone.
-// The return type is `ParticleInstance*`, NOT `Object::External*`; swapping the
-// two slots would produce a `CreateSystem` that hands callers an `External*`
-// through the right vtable index, which is silent.
-extern "C" void* RtGraphics_ParticleSystem_CreateSystem(void* selfv) {
-    return reinterpret_cast<const ::Graphics::ParticleSystem*>(selfv)      // B.3.5 bridge
-               ->::Graphics::ParticleSystem::CreateSystem();
-}
-
-extern "C" bool RtGraphics_ParticleSystem_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<::Graphics::ParticleSystem*>(selfv)            // B.3.5 bridge
-               ->::Graphics::ParticleSystem::Serialize(streamv);
-}
+// `this` IS NEVER READ; the returned instance is bound to its system later, by
+// the caller. SLOT 8, NOT SLOT 9 (RULE B5-16's trap).
 
 // ############################################################################
 // ENDGAME B.3.5 step 5, block H2 — `Graphics::ParticleSystem`'s member bodies.
@@ -731,9 +634,9 @@ extern "C" bool RtGraphics_ParticleSystem_Serialize(void* selfv, void* streamv) 
 // Their own `namespace Graphics { }` block, after the anonymous namespace above
 // has closed, because a member definition has to appear in a namespace ENCLOSING
 // the class and `Graphics` / `RtGraphics` are siblings (B34_BRIEFS section A.2).
-// The anonymous namespace's helpers — `ParticleSystemConstructBody`, `CallSlot0`,
-// `ParticleSystemTypeInfo`, `MakeReaderWriter`, `RwScalar`, `RwFloats`,
-// `IsReading`, `RtAddr` — are reachable from here unqualified.
+// The anonymous namespace's helpers — `ParticleSystemTypeInfo`,
+// `MakeReaderWriter`, `RwScalar`, `RwFloats`, `IsReading`, `RtAddr` — are
+// reachable from here unqualified.
 //
 // `Graphics::Particle` GETS NO BODIES HERE. Its `Serialize` and its three
 // type-info forwarders are in `wave27_lane_gfxpart.cpp` (also block H2's), which
@@ -760,10 +663,10 @@ uint32_t ParticleSystem::Type() const {
 int32_t ParticleSystem::GetFileVersion() const { return 0x1001; }
 
 // [9] ?Construct@ParticleSystem@Graphics@@UEAAPEAVExternal@Object@@XZ 0x180020580
-//     `JMP 0x1800a5320` — the constructor body, in place. SLOT NINE.
+//     `JMP 0x1800a5320` — the constructor body, in place. SLOT NINE. `::new`:
+//     the class declares its own, undefined, placement operator new.
 Object::External* ParticleSystem::Construct() {
-    ParticleSystemConstructBody(this);
-    return this;
+    return ::new (this) ParticleSystem();
 }
 
 // [6] ?Reconstruct@ParticleSystem@Graphics@@UEAAPEAVExternal@Object@@XZ 0x180020560
@@ -771,19 +674,65 @@ Object::External* ParticleSystem::Construct() {
 //     VIRTUALLY on purpose — retail dispatches it, and a subclass's deleting
 //     destructor is what has to run.
 Object::External* ParticleSystem::Reconstruct() {
-    CallSlot0(this, 0);
-    ParticleSystemConstructBody(this);
-    return this;
+    DeletingDtor(0);
+    return ::new (this) ParticleSystem();
 }
 
 // [7] ?Destruct@ParticleSystem@Graphics@@UEAAXXZ  0x180020590
-void ParticleSystem::Destruct() { CallSlot0(this, 0); }
+void ParticleSystem::Destruct() { DeletingDtor(0); }
 
-// ??1ParticleSystem@Graphics@@UEAA@XZ  0x1800a51c0 — NOT ported anywhere in the
-// tree and not started here. EMPTY for `~AnimationGroup`'s reason: the retail
-// body stamps the MINTED table, which is right for a minted object and wrong for
-// a converted one, and a real destructor chain emits GCC's stamps for free.
-ParticleSystem::~ParticleSystem() {}
+// ??1ParticleSystem@Graphics@@UEAA@XZ  0x1800a51c0 — retail's body, moved here
+// from the retired door in batchc_gfx_leaves.cpp (ENDGAME B.3.9 block GFX):
+//
+//   for (i = 0; i < this->[0x100]; ++i) {         // bound RE-READ each pass
+//       e = ((void**)this->[0xf8])[i];            // base RE-READ each pass
+//       if (!e) continue;
+//       if (e[0]) MemFree(e[0]);
+//       e[0] = 0; e[1] = 0;
+//       MemFree(e);
+//   }
+//   if (this->[0xf8]) MemFree(this->[0xf8]);
+//   this->[0xf8] = 0; this->[0x100] = 0;          // ONE qword: size AND capacity
+//   tail ~Particle(this)
+//
+// i.e. an `Array<Array<T>*>` of OWNED inner arrays. The restamp is the
+// compiler's, and so is the tail into ~Particle. The member `_pool`'s implicit
+// ~Array then sees the zeroed header: a no-op.
+ParticleSystem::~ParticleSystem() {
+    for (int32_t i = 0; i < _pool._size; ++i) {
+        void** const data = reinterpret_cast<void**>(_pool._data);
+        void** const e = static_cast<void**>(data[i]);
+        if (e == nullptr) continue;
+        if (e[0] != nullptr) rtcoll::MemFree(e[0]);
+        e[0] = nullptr;
+        e[1] = nullptr;
+        rtcoll::MemFree(e);
+    }
+    if (_pool._data != nullptr) rtcoll::MemFree(_pool._data);
+    _pool._data     = nullptr;
+    _pool._size     = 0;                                  // _size AND _capacity
+    _pool._capacity = 0;
+}
+
+// ?TypeId@ParticleSystem@Graphics@@SAIXZ 0x1800203d0 -- the static twin of slot
+// 2: the minted record's +0x00 until the W3 fold (B39_RULES D6 step 1).
+uint32_t ParticleSystem::TypeId() {
+    uint32_t v = 0; std::memcpy(&v, ParticleSystemTypeInfo(), sizeof v); return v;
+}
+
+// ?CreateNewObject@ParticleSystem@Graphics@@SAPEAVBase@Object@@XZ 0x1800204d0
+// -- the FACTREST row it replaces called ??0ParticleSystem after the locked
+// MemAlloc(0x108, 8); retail's null branch (B39_RULES D2).
+Object::Base* ParticleSystem::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ParticleSystem), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) ParticleSystem();
+}
+// ?CreateInPlaceObject@ParticleSystem@Graphics@@SAPEAVBase@Object@@PEAX@Z 0x180020550
+Object::Base* ParticleSystem::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) ParticleSystem();
+}
 
 // [8] ?CreateSystem@ParticleSystem@Graphics@@UEBAPEAVParticleInstance@2@XZ
 //     retail 0x1800a5140. `this` IS NEVER READ (see the banner above the door):
@@ -813,17 +762,13 @@ ParticleInstance* ParticleSystem::CreateSystem() const {
 bool ParticleSystem::Serialize(void* streamv) {
     Stream* stream = static_cast<Stream*>(streamv);
 
-    // `Particle::Serialize` (0x180103f00) — the base slot, reached BY ADDRESS
-    // exactly as retail's `CALL` does. It IS ported now, as
-    // `Graphics::Particle::Serialize` in `wave27_lane_gfxpart.cpp` (also block
-    // H2's file), and ResolveAddr consults the port registry first
-    // (reference_resolveaddr_consults_port_registry_first.md), so this call site
-    // lands on that member's door with no edit here. It is deliberately NOT
-    // rewritten as `Particle::Serialize(streamv)`: retail's own instruction is an
-    // indirect call at that address, and a direct qualified call would bypass the
-    // registry — the one place where the door, not the C++ base, decides.
-    using BaseSerFn = void (*)(void*, void*);
-    RtAddr<BaseSerFn>(0x180103f00ull)(this, stream);
+    // `Particle::Serialize` (0x180103f00) — the base slot. Retail's `CALL` is a
+    // direct call of the base body; until ENDGAME B.3.9 this reached it BY
+    // ADDRESS through the registered door. Block GFX retired that door with the
+    // minted `??_7Particle@` (its only other reader), so the call is the
+    // qualified member -- the same body, no registry hop. The bool is discarded,
+    // as retail discards it.
+    (void)Particle::Serialize(streamv);
 
     Serializer ser{};
     ReaderWriter* rw = MakeReaderWriter(&ser, stream);
@@ -942,24 +887,13 @@ int RtGraphicsBatch7AnimGroupParticleSystemRegister() {
     RegisterRuntimeAddr  (0x1800164d0ull, (void*)&::Graphics::AnimationGroup::CreateInPlaceObject);
     RegisterRuntimeAddr  (0x18005a040ull, (void*)&RtGraphics_AnimationGroup_SerializeClips); ++n;
 
-    RegisterRuntimeExport("?TypeName@ParticleSystem@Graphics@@UEBAPEBDXZ", (void*)&RtGraphics_ParticleSystem_TypeName); ++n;
-    RegisterRuntimeAddr  (0x1800203e0ull, (void*)&RtGraphics_ParticleSystem_TypeName);
-    RegisterRuntimeExport("?Type@ParticleSystem@Graphics@@UEBAIXZ", (void*)&RtGraphics_ParticleSystem_Type); ++n;
-    RegisterRuntimeAddr  (0x1800203c0ull, (void*)&RtGraphics_ParticleSystem_Type);
-    RegisterRuntimeExport("?GetFileVersion@ParticleSystem@Graphics@@UEBAHXZ", (void*)&RtGraphics_ParticleSystem_GetFileVersion); ++n;
-    RegisterRuntimeAddr  (0x1800a4d10ull, (void*)&RtGraphics_ParticleSystem_GetFileVersion);
-    RegisterRuntimeExport("?Serialize@ParticleSystem@Graphics@@UEAA_NAEAVStream@IO@@@Z", (void*)&RtGraphics_ParticleSystem_Serialize); ++n;
-    RegisterRuntimeAddr  (0x1800a4d20ull, (void*)&RtGraphics_ParticleSystem_Serialize);
-    RegisterRuntimeExport("?Reconstruct@ParticleSystem@Graphics@@UEAAPEAVExternal@Object@@XZ", (void*)&RtGraphics_ParticleSystem_Reconstruct); ++n;
-    RegisterRuntimeAddr  (0x180020560ull, (void*)&RtGraphics_ParticleSystem_Reconstruct);
-    RegisterRuntimeExport("?Destruct@ParticleSystem@Graphics@@UEAAXXZ", (void*)&RtGraphics_ParticleSystem_Destruct); ++n;
-    RegisterRuntimeAddr  (0x180020590ull, (void*)&RtGraphics_ParticleSystem_Destruct);
-    RegisterRuntimeExport("?CreateSystem@ParticleSystem@Graphics@@UEBAPEAVParticleInstance@2@XZ", (void*)&RtGraphics_ParticleSystem_CreateSystem); ++n;
-    RegisterRuntimeAddr  (0x1800a5140ull, (void*)&RtGraphics_ParticleSystem_CreateSystem);
-    // VTABLE BATCH 7b — the real ctor, now a body rather than a thunk.
-    RegisterRuntimeExport("??0ParticleSystem@Graphics@@QEAA@XZ", (void*)&RtGraphics_ParticleSystem_Ctor); ++n;
-    RegisterRuntimeAddr  (0x1800a5320ull, (void*)&RtGraphics_ParticleSystem_Ctor);
-    RegisterRuntimeExport("?Construct@ParticleSystem@Graphics@@UEAAPEAVExternal@Object@@XZ", (void*)&RtGraphics_ParticleSystem_Construct); ++n;
-    RegisterRuntimeAddr  (0x180020580ull, (void*)&RtGraphics_ParticleSystem_Construct);
+    // ParticleSystem: the factory pair (B39_RULES D2), the class's own statics,
+    // by name AND address. Its ctor / slot doors are retired (above).
+    RegisterRuntimeExport("?CreateNewObject@ParticleSystem@Graphics@@SAPEAVBase@Object@@XZ",
+                          (void*)&::Graphics::ParticleSystem::CreateNewObject); ++n;
+    RegisterRuntimeAddr  (0x1800204d0ull, (void*)&::Graphics::ParticleSystem::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@ParticleSystem@Graphics@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&::Graphics::ParticleSystem::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr  (0x180020550ull, (void*)&::Graphics::ParticleSystem::CreateInPlaceObject);
     return n;
 }
