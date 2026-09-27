@@ -342,17 +342,12 @@ using CameraCtorFn = void  (*)(void*, const Frustum*, const Transform3*, bool); 
 // Neither of these two rows is promoted today; the conversion is for the shape,
 // so a future promotion of Device@Video or Configuration@Video cannot strand
 // this file's readers on the DLL's `.data` (and so [RtSlotAudit] can see them).
-using DeviceSlot = RtVideo::Device**;
-using ConfigSlot = RtVideo::Configuration**;
+// ENDGAME B.3.9 SS1 (B39_RULES D7): both class statics now, read fresh.
 RtVideo::Device* DeviceSingleton() {
-    DeviceSlot p = RT_DATA_SLOT(DeviceSlot,
-        "?_singleton@Device@Video@@0PEAV12@EA");                         // 0x1801fe7a8
-    return p ? *p : nullptr;
+    return reinterpret_cast<RtVideo::Device*>(::Video::Device::_singleton);
 }
 RtVideo::Configuration* ConfigurationSingleton() {
-    ConfigSlot p = RT_DATA_SLOT(ConfigSlot,
-        "?_singleton@Configuration@Video@@0PEAV12@EA");                  // 0x1801fe7a0
-    return p ? *p : nullptr;
+    return reinterpret_cast<RtVideo::Configuration*>(::Video::Configuration::_singleton);
 }
 
 // (The vtable-stamp helpers VtBase / VtExternal / VtSpriteSheet /

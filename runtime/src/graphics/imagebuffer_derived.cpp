@@ -656,8 +656,8 @@ void GroupArraySetSize(void* arrayHdr, int n, const void* fill) {
 // exported private static and a name door is the one that follows a promotion
 // (reference_aeaa_is_private_not_unexported.md).
 const uint8_t* VideoConfiguration() {
-    return *RT_DATA_SLOT(const uint8_t* const*,
-                         "?_singleton@Configuration@Video@@0PEAV12@EA");
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+    return reinterpret_cast<const uint8_t*>(::Video::Configuration::_singleton);
 }
 
 constexpr uint32_t kCameraSize = 0xd8;   // group +0x010 .. +0x0e7
