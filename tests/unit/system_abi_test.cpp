@@ -80,6 +80,9 @@ int g_probeRunCalls = 0;
 int g_probeOnCompletedCalls = 0;
 
 struct ThreadProbe : System::Thread {
+    // ENDGAME B.3.9 ENG W2: the transitional `Thread() = default` is gone; the
+    // real base ctor runs system_abi_stubs.cpp's recording InitFields.
+    ThreadProbe() : System::Thread(0x40000u) {}
     void Run() override         { ++g_probeRunCalls; }
     void OnCompleted() override { ++g_probeOnCompletedCalls; }
 };

@@ -438,8 +438,6 @@ VTABLE_EXTENT = {
 KNOWN_CTORS = {
     "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA":
         "MintTypeInfos() — head of our own BaseTypeInfo chain",
-    "?_loader@LoaderLoop@Engine@@1VLoader@2@A":
-        "MintConstructedStatics() — Thread ctor + Loader vtable + _loop=0",
 }
 
 

@@ -25,6 +25,7 @@
 #include "unit.h"
 
 #include "runtime/types/engine/UpdateLoop.h"
+#include "system_abi_stubs.h"   // recording Thread InitFields / ReleaseFields
 
 #include <cstdint>
 #include <cstddef>
@@ -107,6 +108,9 @@ void DialogLoaderLoopT::Shutdown() {}
 bool DialogLoaderLoopT::Update(const System::Time&) { return false; }
 void DialogLoaderLoopT::Draw(float) {}
 void DialogLoaderLoopT::Load() {}
+
+int g_rbLoaderRunCalls = 0;
+void Loader::Run() { ++g_rbLoaderRunCalls; }
 }  // namespace Engine
 
 namespace {
@@ -297,6 +301,29 @@ UNIT_TEST(rb_loop_bases_shape) {
     CHECK(!std::has_virtual_destructor<Engine::DialogLoaderLoopT>::value);
     CHECK_EQ(sizeof(RbGameLoop), (size_t)0x28);     // a subclass adds nothing by itself
     CHECK_EQ(sizeof(RbSplashLoop), (size_t)0x188);
+}
+
+// ENDGAME B.3.9 ENG W2: Engine::Loader's REAL ctor (retail 0x1800dc0f0):
+// System::Thread(0x40000) runs once under THREAD's table, then _loop = null;
+// the object wears the compiler's Loader table (slot 0 Run). ~Loader is the
+// base chain only (retail 0x18004d330).
+UNIT_TEST(b39_eng_loader_real_ctor_on_thread_0x40000) {
+    g_systemStub_InitFields    = {};
+    g_systemStub_ReleaseFields = {};
+    alignas(8) unsigned char buf[sizeof(Engine::Loader)];
+    std::memset(buf, 0xCD, sizeof(buf));
+    Engine::Loader* l = ::new (static_cast<void*>(buf)) Engine::Loader();
+    CHECK_EQ(g_systemStub_InitFields.calls, 1);
+    CHECK_EQ(g_systemStub_InitFields.stackSize, 0x40000u);
+    CHECK(g_systemStub_InitFields.vptrAtCall != VptrOf(l));
+    CHECK(l->_loop == nullptr);
+    using SlotFn = void (*)(void*);
+    Engine::g_rbLoaderRunCalls = 0;
+    reinterpret_cast<SlotFn>((*reinterpret_cast<void* const* const*>(l))[0])(l);
+    CHECK_EQ(Engine::g_rbLoaderRunCalls, 1);
+    l->~Loader();
+    CHECK_EQ(g_systemStub_ReleaseFields.calls, 1);
+    CHECK(g_systemStub_ReleaseFields.vptrAtCall == g_systemStub_InitFields.vptrAtCall);
 }
 
 }  // namespace

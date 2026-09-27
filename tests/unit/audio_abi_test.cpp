@@ -318,7 +318,10 @@ UNIT_TEST(audio_stream_slot0_is_run_and_slot1_is_threads_oncompleted) {
     CHECK(g_lastSelf == raw);
     // Slot 1 is System::Thread's own OnCompleted: the same pointer the
     // Thread-derived Engine::Loader-shaped probe carries at +0x08.
-    struct OtherThread final : System::Thread { void Run() override {} };
+    struct OtherThread final : System::Thread {
+        OtherThread() : System::Thread(0x40000u) {}
+        void Run() override {}
+    };
     OtherThread other;
     CHECK(VTableOf(raw)[1] == VTableOf(static_cast<void*>(&other))[1]);
     CHECK(VTableOf(raw)[0] != VTableOf(static_cast<void*>(&other))[0]);

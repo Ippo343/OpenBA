@@ -3,6 +3,7 @@
 
 #include "engine_loader_gate.h"
 #include "engine_funcs.h"
+#include "engine/UpdateLoop.h"   // -Iruntime/types: Engine::LoaderLoop::_loader
 
 #include <atomic>
 #include <cstdio>
@@ -27,8 +28,8 @@ void NoteKicked() {
 bool IsBusy() {
     if (!g_kicked.load(std::memory_order_acquire)) return false;
 
-    HANDLE finished =
-        g_pLoaderCompletionEvent ? *g_pLoaderCompletionEvent : nullptr;
+    // ENDGAME B.3.9 ENG W2: the class static's hFinished (Thread +0x28).
+    HANDLE finished = static_cast<HANDLE>(Engine::LoaderLoop::_loader._hFinished);
     if (!finished) {
         // No loader thread exists in this build. Nothing to be exclusive with,
         // and blocking forever on an object that will never signal would be a

@@ -303,14 +303,6 @@ protected:
     // [RCX],RAX`); the body is InitFields. Protected: the class is abstract.
     explicit Thread(unsigned int stackSize) { InitFields(stackSize); }
 
-    // TRANSITIONAL — NOT A RETAIL CTOR, AND IT RUNS NOTHING. The three C++
-    // subclasses (`Engine::Loader`, `Audio::Stream`, the exe `PathfinderThread`)
-    // still declare `X() = default` and are built through the DOOR; their unit
-    // tests construct probes through that defaulted ctor. Their owners give
-    // them real ctors (`: System::Thread(stackSize)`) in W2; this goes with the
-    // last of them, at the latest with row 140 (W3). Never call it from new code.
-    Thread() = default;
-
     // ??1Thread@System@@QEAA@XZ  retail 0x1800ca590. ENDGAME decision 2's base
     // shape: NON-virtual (Itanium spends two slots on a virtual destructor,
     // which would push `OnCompleted` off slot 1 and silently mis-aim every

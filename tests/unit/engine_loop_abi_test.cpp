@@ -82,7 +82,7 @@ UNIT_TEST(engine_loop_sizes_and_shape) {
     // Loader: the REAL System::Thread is its base, not a POD member.
     CHECK((std::is_base_of<System::Thread, Engine::Loader>::value));
     CHECK(!std::is_abstract<Engine::Loader>::value);
-    CHECK(!std::is_default_constructible<Engine::Loader>::value);   // protected (B4b-2)
+    CHECK(std::is_default_constructible<Engine::Loader>::value);    // real public ctor (B.3.9 ENG W2)
 
     // No virtual destructor anywhere in the family (ENDGAME B.2).
     CHECK(!std::has_virtual_destructor<Engine::UpdateLoop>::value);
