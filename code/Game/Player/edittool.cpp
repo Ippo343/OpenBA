@@ -43,7 +43,6 @@ static int SelDiagOn() {
 }
 
 // Forward decl (full header is included in the STANDALONE factory block at file end).
-namespace Object { uint32_t GetTypeIdByName(const char* name); }
 void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
 
 // ============================================================

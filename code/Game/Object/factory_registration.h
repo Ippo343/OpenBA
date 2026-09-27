@@ -54,21 +54,6 @@ uint32_t GetTypeIdByName(const char* name);
 // codebase has repeatedly mis-labelled a DAT_ type-id global in comments.
 const char* GetTypeNameById(uint32_t typeId);
 
-// Description vtable +0x40 ("GetComponentTypeId") contract. The real exe slot is
-// `void f(self=RCX, uint32_t* out=RDX) { *out = <Component>TypeId; return out; }`
-// — ComponentEntity_CopyCtor (0x1400c3720) calls it on each of a template's
-// description sub-blocks and only instantiates a component when *out != 0. Our
-// Foundation-C description factories stubbed this slot to return null, so every
-// spawned entity came out with zero components. Each description that maps to a
-// component installs a +0x40 that calls this with its component's registered name;
-// data-only descriptions (Size/Value/CreatePlaced/...) leave the stub (returns
-// null → no component). For an unregistered name GetTypeIdByName returns 0, which
-// also correctly yields "no component".
-inline void* WriteComponentTypeId(void* out, const char* componentName) {
-    if (out) *reinterpret_cast<uint32_t*>(out) = GetTypeIdByName(componentName);
-    return out;
-}
-
 // Lazy resolve a type ID at runtime via Object::Factory::GetTypeIdFromName.
 // Walks the live factory tree, so it sees the exe records AND the Runtime
 // classes' records (Graphics::MaterialInstance / GraphicsMesh / Particle ...).

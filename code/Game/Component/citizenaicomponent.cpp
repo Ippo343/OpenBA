@@ -357,7 +357,6 @@ typedef void (*fn_BuildCandidateList_t)(void* self, int64_t* outList, char param
 static fn_ValidateEnterState_t s_fn_ValidateEnterState = nullptr;
 static fn_BuildCandidateList_t s_fn_BuildCandidateList = nullptr;
 
-namespace Object { uint32_t GetTypeIdByName(const char*); }
 
 static bool s_calleeResolved = false;
 static void EnsureCallees() {

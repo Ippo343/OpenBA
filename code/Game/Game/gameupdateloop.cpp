@@ -102,12 +102,6 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context, void* worldGe
                                 // (NAMESPACE HAZARD: spell ::Object::X everywhere
                                 // in this file, even at global scope)
 
-// Runtime type-id lookup (body in code/Game/Object/factory_registration.cpp) —
-// used as a standalone fallback for the Dialog type-id when the exe data slot
-// isn't registered. ResolveTypeIdByNameLazy walks the LIVE Runtime factory tree,
-// so it sees Runtime-self-registered types like "Dialog" (GetTypeIdByName only
-// knows our exe-side REGISTER_TYPE entries and returns 0 for Dialog).
-namespace Object { uint32_t ResolveTypeIdByNameLazy(const char* simpleName); }
 
 // ============================================================
 // Exe globals (resolved at init time from .rdata/.data addresses)
