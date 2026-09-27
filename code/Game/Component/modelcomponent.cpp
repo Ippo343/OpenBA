@@ -22,6 +22,7 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "Component/ModelDescription.h"   // ENDGAME B.3.9 CB: 0x1401c7a88 cell class
 #include "perf_experimental.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -56,9 +57,6 @@ static fn_ModelHelper_2b70_t s_fn_ModelHelper_2b70 = nullptr;
 typedef void (*fn_EntityNotify_t)(void* entity);
 static fn_EntityNotify_t s_fn_EntityNotify = nullptr;
 
-// DAT_1401c7a88 — MultiObjectDescription type ID
-static uint32_t* s_TypeId_MultiObjDesc = nullptr;
-
 static bool s_helpersResolved = false;
 
 static void EnsureHelpers() {
@@ -77,10 +75,6 @@ static void EnsureHelpers() {
 
     s_fn_EntityNotify = reinterpret_cast<fn_EntityNotify_t>(
         ResolveAddr(Module::Exe, 0x1400c3470));
-
-    // Type ID pointer
-    s_TypeId_MultiObjDesc = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7a88));
 
     s_helpersResolved = true;
 }
@@ -373,8 +367,9 @@ void ModelComponent::OnAdded() {
 
     if (modelVariant >= 0 && modelId < 0) {
         // IsDerivedFrom check (result unused in original — just side effect?)
-        if (fn_IsDerivedFrom && s_TypeId_MultiObjDesc) {
-            fn_IsDerivedFrom(*(void**)(s + 0x18), *s_TypeId_MultiObjDesc);
+        // cell 0x1401c7a88 = ModelDescription (the old "MultiObjDesc" name lied)
+        if (fn_IsDerivedFrom) {
+            fn_IsDerivedFrom(*(void**)(s + 0x18), ModelDescription::TypeId());
         }
 
         // Set transform on the geometry sub-object

@@ -27,6 +27,7 @@
 #include "Component/WorkComponent.h"           // ENDGAME B.3.9 C1: 0x1401c8070 cell class
 #include "Component/RawMaterialDescription.h"  // ENDGAME B.3.9 C1: 0x1401c7cb8 cell class
 #include "Component/CitizenComponent.h"        // ENDGAME B.3.9 C1: 0x1401c7158 cell class
+#include "Component/AttendanceDescription.h"   // ENDGAME B.3.9 CB: 0x1401c3f78 cell class
 #include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -1388,7 +1389,6 @@ static fn_DetachWorkplace7e0_t   s_fn_DetachWorkplace7e0 = nullptr;
 static fn_AttachWorkplacea20_t   s_fn_AttachWorkplacea20 = nullptr;
 static fn_PathCost8830_t         s_fn_PathCost8830 = nullptr;
 static fn_Entity_FindPos_ed0_t   s_fn_Entity_FindPos_ed0 = nullptr;
-static uint32_t*                 s_TypeId_AttendanceDesc3f78 = nullptr; // DWORD_1401c3f78 = AttendanceDescription (factory_registrations.csv:9), NOT Residence (sub_40f0)
 // .rdata float/double constants used by ConsumeFood / ConsumeFuel.
 static float*  s_DAT_140172180 = nullptr;
 static float*  s_DAT_1401721a8 = nullptr;
@@ -1435,7 +1435,6 @@ static void EnsureCallees() {
     s_fn_AttachWorkplacea20  = reinterpret_cast<fn_AttachWorkplacea20_t>(ResolveAddr(Module::Exe, 0x14012fa20));
     s_fn_PathCost8830        = reinterpret_cast<fn_PathCost8830_t>(ResolveAddr(Module::Exe, 0x140008830));
     s_fn_Entity_FindPos_ed0  = reinterpret_cast<fn_Entity_FindPos_ed0_t>(ResolveAddr(Module::Exe, 0x140002ed0));
-    s_TypeId_AttendanceDesc3f78 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c3f78)); // AttendanceDescription; registered+filled in reg_economy_typeids.cpp
     // Time::Time(float) from its .rdata dispatch slot (used by FUN_14012c3f0).
     // ⚠ was 0x140152a80 — which this file's own note (lines ~218-221) identifies as
     // SoundEffect::_typeInfo, NOT the Time ctor. It was harmless only because that slot
@@ -2625,7 +2624,7 @@ bool CitizenComp_sub_40f0(int64_t param_1, void* param_2) {
     g_sub40f0_exit = 0;
     uint8_t* cp = reinterpret_cast<uint8_t*>(param_1);
     void* obj = *reinterpret_cast<void**>(cp + 0x18);
-    uint32_t attTid = s_TypeId_AttendanceDesc3f78 ? *s_TypeId_AttendanceDesc3f78 : 0;
+    uint32_t attTid = AttendanceDescription::TypeId();   // cell 0x1401c3f78 (NOT Residence)
     void* res = (obj && attTid && fn_IsDerivedFrom(obj, attTid)) ? obj : nullptr;
     int cap = res ? *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(res) + 0x20) : 0;
     g_sub40f0_attTid = (int)attTid;

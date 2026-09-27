@@ -54,6 +54,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Dialog.h"         // ENDGAME B.3.9 CB: UI::Dialog::TypeId()
 #include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
 #include "ui/StringTable.h"    // ENDGAME B.3.6 UI callers (K4)
 #include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K2)
@@ -390,8 +391,12 @@ static fn_ExternalList_Find_t fn_ExternalList_Find = nullptr;
 
 // fn_InternalBasePtr_Ctor — available from engine_funcs.h
 
-// Dialog type ID pointer (exref in exe .rdata)
-static uint32_t* g_pDialogTypeId = nullptr;
+// ENDGAME B.3.9 CB: the toolbar lookup's type id is UI::Dialog's. Retail reads it
+// through the import slot ?_typeInfo@Dialog@UI (0x140151728) at 0x140097c83 /
+// 0x140097cae (FUN_140097c00). The tree used to resolve exe cell 0x1401c4138 instead --
+// that is CreatePathDescription's record (CreatePathDescription_RegisterType
+// 0x14014ab25; its only reader is EntityUI_impl_1ee0), unregistered, so the read
+// always failed and a by-name "Dialog" fallback supplied the value.
 
 // ============================================================
 // Float constants from exe .rdata
@@ -564,18 +569,6 @@ static void EnsureInit() {
     }
     // fn_Filename_Dtor — resolved by EngineFuncsInit()
     // fn_InternalBasePtr_Ctor — resolved by EngineFuncsInit()
-
-    // Dialog type ID
-    g_pDialogTypeId = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4138));
-    // Standalone: the exe's Dialog type-id storage at 0x1401c4138 is unregistered,
-    // so ResolveAddr returns 0. Fall back to the runtime type registry — "Dialog"
-    // (parent External) is self-registered by Runtime at startup, so
-    // GetTypeIdByName yields the same id the exe slot would hold.
-    if (!g_pDialogTypeId) {
-        static uint32_t s_dialogTypeId = 0;
-        if (s_dialogTypeId == 0) s_dialogTypeId = ::Object::ResolveTypeIdByNameLazy("Dialog");
-        g_pDialogTypeId = &s_dialogTypeId;
-    }
 
     // Bulk null-check all ResolveExport pointers
     #define CHECK_FN(fn) if (!(fn)) TRACE("[GameUpdateLoop] WARNING: " #fn " is NULL!\n")
@@ -2058,15 +2051,15 @@ void GameUpdateLoop::Startup() {
             s_diag = true;
             void* rl = _resourceList;
             fprintf(stderr, "[HUD-DIAG] probe: m_resourceList=%p Find=%p "
-                    "DialogTypeId=%p(val=%u) ToolbarCtor=%p IsDerivedFrom=%p\n",
-                    rl, (void*)fn_ExternalList_Find, (void*)g_pDialogTypeId,
-                    g_pDialogTypeId ? *g_pDialogTypeId : 0u,
+                    "DialogTypeId=%u ToolbarCtor=%p IsDerivedFrom=%p\n",
+                    rl, (void*)fn_ExternalList_Find,
+                    UI::Dialog::TypeId(),
                     (void*)fn_ToolbarDialog_Ctor, (void*)fn_IsDerivedFrom);
             fflush(stderr);
             if (rl && fn_ExternalList_Find) {
                 System::Filename fnbuf("Dialog/Toolbar.rsc");
                 void* foundBase = nullptr;
-                uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0u;
+                uint32_t typeInfo = UI::Dialog::TypeId();
                 fn_ExternalList_Find(rl, &foundBase, &fnbuf, &typeInfo);
                 fprintf(stderr, "[HUD-DIAG] ExternalList::Find(\"Dialog/Toolbar.rsc\") -> foundBase=%p\n",
                         foundBase);
@@ -2114,7 +2107,7 @@ void GameUpdateLoop::Startup() {
         // ExternalFactory::FindOrLoad (the path OpenToolDialog/ToggleAll use — loads
         // the .rsc directly, robust in standalone where m_resourceList is empty).
         void* foundBase = nullptr;
-        uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0; // [GUARD-M5] slot 0x1401c4138 unregistered
+        uint32_t typeInfo = UI::Dialog::TypeId();   // retail: [?_typeInfo@Dialog@UI] (0x140097c83)
         if (_resourceList && fn_ExternalList_Find)
             fn_ExternalList_Find(_resourceList, &foundBase, &filename, &typeInfo);
         if (foundBase == nullptr &&
@@ -2126,8 +2119,8 @@ void GameUpdateLoop::Startup() {
         }
 
         void* dialogRes = nullptr;
-        if (foundBase != nullptr && g_pDialogTypeId) {
-            if (fn_IsDerivedFrom(foundBase, *g_pDialogTypeId)) {
+        if (foundBase != nullptr) {
+            if (fn_IsDerivedFrom(foundBase, UI::Dialog::TypeId())) {   // 0x140097cba
                 dialogRes = foundBase;
             }
         }
@@ -2139,10 +2132,10 @@ void GameUpdateLoop::Startup() {
         // Allocate and construct ToolbarDialog (0x108 bytes). [GUARD-M5]
         void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x108, 8);
         void* toolbar = nullptr;
-        // Require a valid dialog resource — ToolbarDialog_Ctor_Impl reads the
-        // toolbar item list out of it and faults on null. If type-id resolution
-        // failed (dialogRes null), skip construction rather than crash.
-        if (mem != nullptr && fn_ToolbarDialog_Ctor && dialogRes != nullptr) {
+        // Retail (0x140097cf1) constructs whenever the allocation succeeded; the
+        // `dialogRes != nullptr` skip that sat here coped with a failed type-id
+        // resolution, which cannot happen now (ENDGAME B.3.9 CB).
+        if (mem != nullptr && fn_ToolbarDialog_Ctor) {
             int64_t nullParent[1] = {0};
             new (nullParent) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             toolbar = fn_ToolbarDialog_Ctor(mem, m_userInterface, dialogRes, nullParent, nullptr);
@@ -2178,7 +2171,7 @@ void GameUpdateLoop::Startup() {
     if (g_ribbonParentToolbar != nullptr) {
         System::Filename filename("Dialog/EventNotify.rsc");
         void* foundBase = nullptr;
-        uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0;
+        uint32_t typeInfo = UI::Dialog::TypeId();   // retail: [?_typeInfo@Dialog@UI]
         if (_resourceList && fn_ExternalList_Find)
             fn_ExternalList_Find(_resourceList, &foundBase, &filename, &typeInfo);
         if (foundBase == nullptr &&
@@ -2189,7 +2182,7 @@ void GameUpdateLoop::Startup() {
                     ->FindOrLoad(filename));                                 // B.3.3 bridge
         }
         void* dialogRes = nullptr;
-        if (foundBase != nullptr && g_pDialogTypeId && fn_IsDerivedFrom(foundBase, *g_pDialogTypeId))
+        if (foundBase != nullptr && fn_IsDerivedFrom(foundBase, UI::Dialog::TypeId()))
             dialogRes = foundBase;
 
         fprintf(stderr, "[HUD] EventNotify: foundBase=%p dialogRes=%p parentToolbar=%p\n",
@@ -2232,7 +2225,7 @@ void GameUpdateLoop::Startup() {
     {
         System::Filename filename("Dialog/AutoSave.rsc");
         void* foundBase = nullptr;
-        uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0;
+        uint32_t typeInfo = UI::Dialog::TypeId();   // retail: [?_typeInfo@Dialog@UI]
         if (_resourceList && fn_ExternalList_Find)
             fn_ExternalList_Find(_resourceList, &foundBase, &filename, &typeInfo);
         if (foundBase == nullptr &&
@@ -2243,7 +2236,7 @@ void GameUpdateLoop::Startup() {
                     ->FindOrLoad(filename));                                 // B.3.3 bridge
         }
         void* dialogRes = nullptr;
-        if (foundBase != nullptr && g_pDialogTypeId && fn_IsDerivedFrom(foundBase, *g_pDialogTypeId))
+        if (foundBase != nullptr && fn_IsDerivedFrom(foundBase, UI::Dialog::TypeId()))
             dialogRes = foundBase;
 
         void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xD0, 8);

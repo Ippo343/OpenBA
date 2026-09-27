@@ -43,23 +43,6 @@
 // Description) resolvable in SA and provide a throttled diagnostic trace.
 
 
-// ModelDescription type-id (DAT_1401c7a88) — used by cbd0 to find a material entity's
-// display model. The raw .rdata slot resolves NULL in the standalone exe, so fall
-// back to the runtime type registry (valid after
-// Object::Factory::Startup). Never writes the shared .rdata global.
-static uint32_t* s_pModelDescTid_rdata = nullptr;
-static bool      s_modelDescRdataResolved = false;
-static uint32_t SDD_ModelDescTypeId() {
-    if (!s_modelDescRdataResolved) {
-        s_pModelDescTid_rdata = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
-        s_modelDescRdataResolved = true;
-    }
-    if (s_pModelDescTid_rdata && *s_pModelDescTid_rdata != 0 && *s_pModelDescTid_rdata != 0xFFFFFFFF)
-        return *s_pModelDescTid_rdata;
-    const uint32_t id = ModelDescription::TypeId();
-    if (id != 0xFFFFFFFF) return id;
-    return 0;
-}
 
 // RawMaterialDescription type-id (DAT_1401c7cb8, exposed as g_TypeId_RawMaterialDescription)
 // — used by Update to size each material's pile. Same fallback as above.
@@ -388,9 +371,8 @@ static void EnsureSlotHelpers() {
 // global resolved at call time. Faithful 1:1 port of the Ghidra decompile.
 // ============================================================
 void* StorageDisplay_EntityFindByType_cbd0(void* hostP, void* retbuf) {
-    // DAT_1401c7a88 = ModelDescription. Resolved via the runtime registry
-    // fallback (SDD_ModelDescTypeId).
-    const uint32_t modelTid = SDD_ModelDescTypeId();
+    // DAT_1401c7a88 = ModelDescription.
+    const uint32_t modelTid = ModelDescription::TypeId();
     uint8_t* host = reinterpret_cast<uint8_t*>(hostP);
     void* found = nullptr;
     if (host && modelTid) {

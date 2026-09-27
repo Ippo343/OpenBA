@@ -44,7 +44,6 @@ static void (*s_fn_HideTool)(void* entity) = nullptr;
 static void (*s_fn_ShowToolOnEntity)(void* entity, int toolId) = nullptr;
 
 // DAT_1401c7158 -- TypeInfo for entity type check
-static uint32_t* s_TypeInfo_ShowToolEntity = nullptr;
 
 // ---- Carry-model path (ShowTool with toolId < 0) --------------------------------
 // The retail show function (Entity_impl_73b0) reads the carried resource's mesh from
@@ -65,25 +64,6 @@ static uint32_t* s_TypeInfo_ShowToolEntity = nullptr;
 // call the members. The MeshInstance default-CTOR door below stays: no
 // Video/Graphics class has a real constructor (B35_RULES section 11 / B4b-2).
 
-// ModelDescription type-id (DAT_1401c7a88): .rdata resolves NULL in standalone, so fall back to the runtime registry.
-static uint32_t ShowTool_ModelDescTid() {
-    uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
-    if (p && *p && *p != 0xFFFFFFFF) return *p;
-    const uint32_t c = ModelDescription::TypeId();   // B.3.8: no lazy cache (B6-5)
-    if (c != 0xFFFFFFFF) return c;
-    return 0;
-}
-// RawMaterialDescription type-id (DWORD_1401c7cb8 / g_TypeId_RawMaterialDescription).
-static uint32_t ShowTool_RawMatTid() {
-    if (g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription
-        && *g_TypeId_RawMaterialDescription != 0xFFFFFFFF)
-        return *g_TypeId_RawMaterialDescription;
-    uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
-    if (p && *p && *p != 0xFFFFFFFF) return *p;
-    const uint32_t c = RawMaterialDescription::TypeId();   // B.3.8: no lazy cache (B6-5)
-    if (c != 0xFFFFFFFF) return c;
-    return 0;
-}
 
 // Scan an entity's component list (count@+0x30, IBP array@+0x28) for the first
 // component whose runtime type-id (vtable+0x10 == GetTypeId) equals `tid`. Faithful to
@@ -111,23 +91,6 @@ static bool s_showtool_funcs_resolved = false;
 bool ShowTool_ResolveFuncs() {
     if (s_showtool_funcs_resolved) return true;
 
-    s_TypeInfo_ShowToolEntity = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7158);
-    // DAT_1401c7158 is the CitizenComponent type-id (verified: CitizenComponent_
-    // RegisterType writes it). In standalone that raw exe .rdata slot is null, so
-    // resolve the id from the runtime registry and hand out a pointer to our own
-    // storage. This is used ONLY by ShowTool::Serialize's entity type-check — the
-    // carry path never touches it — but it's in the `ok` gate below, so leaving it
-    // null makes ShowTool_ResolveFuncs fail and AbstractImpl bail before ever
-    // running ShowCarried (the held-item model never appears).
-    if (!s_TypeInfo_ShowToolEntity || !*s_TypeInfo_ShowToolEntity
-        || *s_TypeInfo_ShowToolEntity == 0xFFFFFFFF) {
-        static uint32_t s_citizenTid = 0;
-        uint32_t tid = CitizenComponent::TypeId();
-        if (tid && tid != 0xFFFFFFFF) {
-            s_citizenTid = tid;
-            s_TypeInfo_ShowToolEntity = &s_citizenTid;
-        }
-    }
     s_fn_HideTool = reinterpret_cast<void(*)(void*)>(
         ResolveAddr(Module::Exe, 0x1401176e0));
     s_fn_ShowToolOnEntity = reinterpret_cast<void(*)(void*, int)>(
@@ -137,14 +100,13 @@ bool ShowTool_ResolveFuncs() {
     // Runtime addresses 0x1800fee90 / 0x1800a3fa0. Both are members of real classes
     // now, so neither the slot read nor the fallback is needed.
 
-    bool ok = s_TypeInfo_ShowToolEntity &&
-              s_fn_HideTool && s_fn_ShowToolOnEntity &&
+    bool ok = s_fn_HideTool && s_fn_ShowToolOnEntity &&
               fn_IsDerivedFrom;
 
 #ifdef _DEBUG
-    printf("[ShowTool] ResolveFuncs: HideTool=%p ShowTool=%p TypeInfo=%p\n",
+    printf("[ShowTool] ResolveFuncs: HideTool=%p ShowTool=%p\n",
            (void*)s_fn_HideTool,
-           (void*)s_fn_ShowToolOnEntity, (void*)s_TypeInfo_ShowToolEntity);
+           (void*)s_fn_ShowToolOnEntity);
     if (!ok) printf("[ShowTool] ERROR: some function pointers not resolved!\n");
 #endif
 
@@ -172,7 +134,7 @@ void ShowTool::Persist(void* stream) {
     ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (_field20 != nullptr) {
-        if (!fn_IsDerivedFrom(_field20, *s_TypeInfo_ShowToolEntity)) {
+        if (!fn_IsDerivedFrom(_field20, CitizenComponent::TypeId())) {   // cell 0x1401c7158
             _field20 = nullptr;
         }
     }
@@ -229,9 +191,9 @@ static void ShowTool_ShowCarried(void* entityV) {
 
     if (!bestItem) return;
     // --- Resolve the display mesh (ModelDescription) + carry-scale (RawMaterial). ---
-    void* modelDesc = ShowTool_FindComponentByTid(bestItem, ShowTool_ModelDescTid());
+    void* modelDesc = ShowTool_FindComponentByTid(bestItem, ModelDescription::TypeId());   // cell 0x1401c7a88
     if (!modelDesc) return;                       // SA guard: no display model -> nothing shown
-    void* rawMat = ShowTool_FindComponentByTid(bestItem, ShowTool_RawMatTid());
+    void* rawMat = ShowTool_FindComponentByTid(bestItem, RawMaterialDescription::TypeId());   // cell 0x1401c7cb8
     if (!rawMat) return;                          // SA guard
     float carryScale = *(float*)((uint8_t*)rawMat + 0x50);
 

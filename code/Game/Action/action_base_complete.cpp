@@ -39,6 +39,8 @@
 #include "system/Value.h"       // System::Time, for Geometry::Update's argument
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/ModelDescription.h"         // ENDGAME B.3.9 CB: 0x1401c7a88 cell class
+#include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 CB: 0x1401c7cb8 cell class
 #include "math/Math.h"
 #include <cstdint>
 #include <cstdio>
@@ -344,8 +346,6 @@ typedef void  (*fn_TimeCtor_t)(void* retTime, float seconds);            // 0x14
 
 static fn_TimeCtor_t         s_TimeCtorMesh   = nullptr;  // 0x140152b00 (MeshInstance update arg)
 static float*                s_pUVScale       = nullptr;  // g_fUVScale (DAT_14017214c)
-static uint32_t*             s_pTid_FenceDesc = nullptr;  // DAT_1401c7a88
-static uint32_t*             s_pTid_RawMat    = nullptr;  // DAT_1401c7cb8
 static bool                  s_showInit       = false;
 
 static void EnsureShow() {
@@ -368,8 +368,6 @@ static void EnsureShow() {
     // tools/export_name_audit.py; reference_resolveexport_phantom_names.md). Both are
     // members of the real `Graphics::Geometry` now, so the phantom cannot come back.
     s_pUVScale       = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
-    s_pTid_FenceDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
-    s_pTid_RawMat    = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
     s_showInit = true;
 }
 
@@ -461,17 +459,19 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
         if (bestItem == nullptr) return;
         uintptr_t item = reinterpret_cast<uintptr_t>(bestItem);
 
-        // locate FenceDescription component for the mesh
+        // locate the ModelDescription component for the mesh (cell 0x1401c7a88 --
+        // the old "FenceDesc" name lied, INVENTORY_C Table 1)
+        const uint32_t tidModelDesc = ModelDescription::TypeId();
         void* fenceComp = nullptr;
-        if (s_pTid_FenceDesc && *reinterpret_cast<int*>(item + 0x30) > 0) {
+        if (*reinterpret_cast<int*>(item + 0x30) > 0) {
             int n = *reinterpret_cast<int*>(item + 0x30);
             uintptr_t arr = *reinterpret_cast<uintptr_t*>(item + 0x28);
             for (int i = 0; i < n; i++) {
                 void* comp = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
                 uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
-                if (t == *s_pTid_FenceDesc) {
+                if (t == tidModelDesc) {
                     void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-                    if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_pTid_FenceDesc)) fenceComp = c;
+                    if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidModelDesc)) fenceComp = c;
                     break;
                 }
             }
@@ -479,16 +479,17 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
         meshPtr = **reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(fenceComp) + 0x20 + 8);
 
         // locate RawMaterialDescription component for the UV scale
+        const uint32_t tidRawMat = RawMaterialDescription::TypeId();
         void* rawComp = nullptr;
-        if (s_pTid_RawMat && *reinterpret_cast<int*>(item + 0x30) > 0) {
+        if (*reinterpret_cast<int*>(item + 0x30) > 0) {
             int n = *reinterpret_cast<int*>(item + 0x30);
             uintptr_t arr = *reinterpret_cast<uintptr_t*>(item + 0x28);
             for (int i = 0; i < n; i++) {
                 void* comp = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
                 uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
-                if (t == *s_pTid_RawMat) {
+                if (t == tidRawMat) {
                     void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-                    if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_pTid_RawMat)) rawComp = c;
+                    if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidRawMat)) rawComp = c;
                     break;
                 }
             }

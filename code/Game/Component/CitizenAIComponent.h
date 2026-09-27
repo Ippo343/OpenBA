@@ -55,6 +55,20 @@ protected:
     ~CitizenAIComponent() = default;                              // no own work
 };
 
+// PORT GAP (ENDGAME B.3.9 CB): the SendComponentMessage actions the work / AI action
+// ctors build (retail: ~27 readers of [0x1401c70e8], e.g. PerformWork_Action_CopyCtor
+// 0x1400baa7e, Pathfinding_FindPath 0x1400bf81e, RemoveAnimal_Action_Ctor 0x1400bbf30)
+// target CitizenAIComponent, and retail delivers them to its slot-15 OnMessage
+// 0x14010f340 (150 B: Update the sibling CitizenComponent (+0x38) with a zero
+// System::Time, then -- unless the entity is marked for removal (+0x40 bit 10) --
+// this->Update(zero Time): an immediate AI re-decision). That body is not ported
+// (OnMessage below is the inert stub), so the tree keeps the target id at 0: the
+// scan in SendComponentMessage::AbstractImpl finds no component and the action
+// answers 2, exactly as it did while the cell read 0. Flip this to
+// CitizenAIComponent::TypeId() in the same commit that ports 0x14010f340.
+constexpr uint32_t kCitizenAIMessageTargetTypeId =
+    /* CitizenAIComponent::TypeId() once CitizenAIComponent::OnMessage (0x14010f340) is ported */ 0u;
+
 static_assert(sizeof(CitizenAIComponent) == 0xD0, "CitizenAIComponent is 0xd0 (create 0x14002fb20)");
 static_assert(alignof(CitizenAIComponent) == 8, "CitizenAIComponent alignment");
 static_assert(offsetof(CitizenAIComponent, aiState)  == 0x28, "");

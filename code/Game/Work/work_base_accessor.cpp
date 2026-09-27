@@ -19,6 +19,7 @@
 #include "Component/CropFieldComponent.h"       // ENDGAME B.3.9 D5
 #include "Component/OrchardComponent.h"         // ENDGAME B.3.9 D5
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 D5
+#include "Component/AutoPickupComponent.h"      // ENDGAME B.3.9 CB: 0x1401c3fb0 cell class
 
 // ============================================================
 // FindComponent family (clones of the WorkBase_FindComponent_* set in
@@ -31,33 +32,6 @@
 // an out InternalBasePtr. Caller signature (all variants):
 //   void* fn(uintptr_t entity, void* retIBP)
 //
-// pTypeId points at the exe's type-ID storage global (a uint32_t filled in by the
-// component's RegisterType at startup). Kept pointer-based for the one remaining
-// UNREGISTERED cell below (AutoPickupComponent, 0x1401c3fb0) -- its cell always
-// resolves null, so converting it to a direct TypeId() call would be a behaviour
-// change (D5), left for a titled behaviour commit.
-static void* FindComponentByTypeId(uintptr_t entity, void* retIBP, const uint32_t* pTypeId) {
-    void* found = nullptr;
-    if (pTypeId) {
-        int n = *reinterpret_cast<int*>(entity + 0x38);
-        uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-        for (int i = 0; i < n; i++) {
-            void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);
-            void* comp = *slot;
-            // GetTypeId is component vtable slot +0x10.
-            uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
-            if (t == *pTypeId) {
-                void* c = *slot;
-                found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTypeId)) ? c : nullptr;
-                break;
-            }
-        }
-    }
-    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
-    return retIBP;
-}
-
 // ENDGAME B.3.9 D5: same scan, but the type-id is a class's own TypeId() value
 // (registered cell, always available -- no resolve/null-gate needed).
 static void* FindComponentByTypeIdVal(uintptr_t entity, void* retIBP, uint32_t typeId) {
@@ -79,16 +53,6 @@ static void* FindComponentByTypeIdVal(uintptr_t entity, void* retIBP, uint32_t t
     return retIBP;
 }
 
-// AutoPickupComponent's cell (0x1401c3fb0) is UNREGISTERED -- left pointer-based.
-static const uint32_t* s_pTid_22520 = nullptr; // 0x1401c3fb0  (AutoPickupComponent)
-static bool s_tidInit = false;
-
-static void EnsureTypeIds() {
-    if (s_tidInit) return;
-    s_pTid_22520 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c3fb0));
-    s_tidInit = true;
-}
-
 // Reimpl of FUN_140005380 — FindComponent (type-ID DAT_1401c7510, CropFieldComponent)
 void* WorkAcc_FindComponent_5380(uintptr_t entity, void* retIBP) {
     return FindComponentByTypeIdVal(entity, retIBP, CropFieldComponent::TypeId());
@@ -99,10 +63,14 @@ void* WorkAcc_FindComponent_5440(uintptr_t entity, void* retIBP) {
     return FindComponentByTypeIdVal(entity, retIBP, OrchardComponent::TypeId());
 }
 
-// Reimpl of FUN_140022520 — FindComponent (type-ID DAT_1401c3fb0, AutoPickupComponent)
+// Reimpl of FUN_140022520 — FindComponent<AutoPickupComponent>: retail compares against
+// [0x1401c3fb0] at 0x140022563 and IsDerivedFrom-checks with it at 0x1400225bc.
+// ENDGAME B.3.9 CB: that cell is unregistered, so the old pointer-based scan was
+// skipped outright and this finder answered null for every entity. It now finds the
+// component (AutoPickupWork::Cleanup, WorkGrid_AutoPickup_e3db0, CreateNaturalResource
+// and CreateRawMaterial reach it through the registered 0x140022520).
 void* WorkAcc_FindComponent_22520(uintptr_t entity, void* retIBP) {
-    EnsureTypeIds();
-    return FindComponentByTypeId(entity, retIBP, s_pTid_22520);
+    return FindComponentByTypeIdVal(entity, retIBP, AutoPickupComponent::TypeId());
 }
 
 // ============================================================

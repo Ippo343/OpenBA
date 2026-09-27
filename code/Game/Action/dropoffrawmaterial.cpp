@@ -61,8 +61,9 @@ static s_fn_DropOffSub_t s_fn_DropOffSub = nullptr;
 typedef void (*s_fn_DropAllInventory_t)(void* self);
 static s_fn_DropAllInventory_t s_fn_DropAllInventory = nullptr;
 
-// TypeInfo for BaseDtor (slot 2) — DAT_1401c5f38
-static uint32_t* s_typeInfo_DropOffRawMaterial = nullptr;
+// ENDGAME B.3.9 CB: retail reads this record field ONLY in the class's own TypeName
+// slot (0x1401c5f38 = the NAME field (+8) of DropOffRawMaterial's record, read by
+// DropOffRawMaterial_Slot1 0x1400225f0); DECLARE_EXE_TYPE answers that slot, so the tree's copy of it is gone.
 
 static bool s_funcs_resolved = false;
 
@@ -82,15 +83,10 @@ bool DropOffRawMaterial_ResolveFuncs() {
     // Entity_impl_7570 — drop all inventory
     s_fn_DropAllInventory = (s_fn_DropAllInventory_t)ResolveAddr(Module::Exe, 0x1400c7570);
 
-    // TypeInfo for BaseDtor — read from [0x1401c5f38]
-    s_typeInfo_DropOffRawMaterial = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c5f38));
-
     bool ok = s_fn_IBP_DeletePtr &&
               s_fn_DropOffSub &&
               s_fn_DropAllInventory &&
               g_TypeId_ComponentEntity &&
-              s_typeInfo_DropOffRawMaterial &&
               fn_IsDerivedFrom &&
               fn_MemFreeStatic && fn_ExternalPtr_BuildSerialize;
 

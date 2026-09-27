@@ -51,18 +51,17 @@
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
 #include "Player/EditTool.h"   // X::TypeId() (B.3.8 callers)
 
-// #6a: g_TypeId_CitizenAIComponent (exe .rdata DAT_1401c70e8) is the CitizenAIComponent
-// type id — the component whose +0x28 holds the citizen's current action-state index
-// (drives the Action text on the panel and the Follow dialog). It is NULL in standalone
-// (raw .rdata constant → ResolveAddr returns 0), so fn_FindComponent_CitizenAI yields
-// null and the Action line can't resolve. Resolve it lazily from the live Runtime
-// factory tree on first panel update.
-static void CitizenUI_EnsureProfessionTypeId() {
-    if (g_TypeId_CitizenAIComponent) return;  // already wired
-    static uint32_t s_profTid = 0;
-    if (s_profTid == 0)
-        s_profTid = CitizenAIComponent::TypeId();
-    if (s_profTid) g_TypeId_CitizenAIComponent = &s_profTid;
+// FUN_140011050 — Entity::FindComponent<CitizenAIComponent>, the component whose +0x28
+// holds the citizen's current action-state index (the Action text on this panel and on
+// the Follow dialog). Retail compares against [0x1401c70e8] = CitizenAIComponent's
+// type id (0x140011093) and IsDerivedFrom-checks with it (0x1400110ec).
+// ENDGAME B.3.9 CB: by the class static. The old spelling went through
+// g_TypeId_CitizenAIComponent, which EnsureGlobals() below pointed at a
+// "ProfessionComponent" by-name id (no such class) or a static 0, so the finder found
+// nothing and the Action line was skipped.
+void fn_FindComponent_CitizenAI(void* entity, void* retval) {
+    uint32_t tid = CitizenAIComponent::TypeId();
+    Entity_FindComponentByExeTypeId(entity, retval, &tid);
 }
 
 // A partially-initialized standalone citizen can leave CitizenAI description/pointer
@@ -187,8 +186,7 @@ namespace citizenui_sa {
 static float s_ageMul = 1.0f;
 
 void EnsureGlobals() {
-    static uint32_t s_ce = 0, s_cd = 0, s_cai = 0, s_prof = 0, s_ext = 0;
-    static uint32_t s_profZero = 0;  // safe no-op type-id for fn_FindComponent_CitizenAI
+    static uint32_t s_ce = 0, s_cd = 0, s_cai = 0, s_ext = 0;
     if (!g_TypeId_ComponentEntity)        { s_ce  = ComponentEntity::TypeId();    if (s_ce)   g_TypeId_ComponentEntity = &s_ce; }
     if (!g_TypeId_CitizenDescription)     { s_cd  = CitizenDescription::TypeId(); if (s_cd)   g_TypeId_CitizenDescription = &s_cd; }
     // g_TypeId_CitizenComponent_FC is DAT_1401c7158 — its name says "CitizenComponent"
@@ -201,14 +199,6 @@ void EnsureGlobals() {
     // the founding writer's TypeId lookup) so the dialog reads the citizen data that
     // was actually filled in.
     if (!g_TypeId_CitizenComponent_FC)    { s_cai = CitizenComponent::TypeId(); if (s_cai)  g_TypeId_CitizenComponent_FC = &s_cai; }
-    if (!g_TypeId_CitizenAIComponent)     { s_prof= ::Object::ResolveTypeIdByNameLazy("ProfessionComponent");if (s_prof) g_TypeId_CitizenAIComponent = &s_prof; }
-    // ProfessionComponent's registered name doesn't resolve in the standalone factory
-    // tree (0x1401c70e8 is settled as CitizenAIComponent's BaseTypeInfo — writer
-    // CitizenAIComponent_RegisterType). It's used ONLY by the Slot7 action-text lookup, which
-    // is now null-guarded (skips if the component isn't found). Point the global at a
-    // static 0 so fn_FindComponent_CitizenAI is a safe no-op (finds nothing) instead of
-    // dereferencing a null type-id pointer.
-    if (!g_TypeId_CitizenAIComponent)     { g_TypeId_CitizenAIComponent = &s_profZero; }
     if (!g_TypeId_Dialog)               { s_ext = ::Object::ResolveTypeIdByNameLazy("External");           if (s_ext)  g_TypeId_Dialog = &s_ext; }
     // The Home/Profession(workplace) buttons call Toolbar_CenterOnEntity_Impl, whose
     // EditTool re-select derefs *g_TypeId_EditTool — NULL in standalone (raw exe .rdata).
@@ -325,14 +315,10 @@ void CitizenUI::OnClosed() {
 // [7] 0x140064ae0
 void CitizenUI::OnUpdateLayout() {
     citizenui_sa::EnsureGlobals();
-    // ProfessionComponent is not required — its only use (action text) is null-guarded
-    // and its global has a safe static-0 fallback (see EnsureGlobals).
     if (!g_TypeId_ComponentEntity || !g_TypeId_CitizenDescription
         || !g_TypeId_CitizenComponent_FC) return;
     if (!SA_DialogEntityAlive(this)) return;
     uintptr_t s = (uintptr_t)this;
-
-    CitizenUI_EnsureProfessionTypeId();
 
     // Get entity from data source (+0x28), cast to ComponentEntity
     void* entityBase = *(void**)(s + 0x28);
@@ -552,20 +538,18 @@ void CitizenUI::OnUpdateLayout() {
     // — so skip it in standalone. (The original keeps the CheckPtr + set here.)
 
     // --- Action text ---
-    // Get entity reference from CitizenAI+0x10, find profession component
+    // Get entity reference from CitizenComponent+0x10, find its CitizenAIComponent
+    // (FUN_140011050 at 0x140064fc2).
     uintptr_t entityFromAI = *(uintptr_t*)(ai + 0x10);
     uint64_t profCompRef = 0;
     // Guard the entity backref (component-list walk dereferences entity+0x30/+0x38);
     // a partially-initialized standalone citizen can leave it as garbage.
-    if (CitUI_OkPtr(entityFromAI))
-        fn_FindComponent_CitizenAI((void*)entityFromAI, &profCompRef);
+    if (CitUI_OkPtr(entityFromAI)) {
+    fn_FindComponent_CitizenAI((void*)entityFromAI, &profCompRef);
 
-    // The profession component may be absent — profCompRef null — when the citizen
-    // has no profession (child) or, in standalone, when the ProfessionComponent
-    // type-id could not be resolved from the factory tree (fn_FindComponent_CitizenAI
-    // then finds nothing). Skip the action text rather than dereferencing null+0x28.
-    if (profCompRef != 0) {
-    // Read action index from profession component (+0x28)
+    // Read action index from CitizenAIComponent+0x28 -- unguarded, as retail
+    // (0x140064fd6): every citizen carries one. ENDGAME B.3.9 CB removed the
+    // `profCompRef != 0` skip, which only ever fired because the type id read 0.
     int actionIndex = *(int*)(*(uintptr_t*)&profCompRef + 0x28);
 
     // Special case: if action is 9 (idle/searching), check if citizen has a home tile
@@ -608,7 +592,7 @@ void CitizenUI::OnUpdateLayout() {
             reinterpret_cast<UI::TextElement*>(actionElem)->SetText(reinterpret_cast<const UI::String*>(textVal));  // B.3.6 bridge
         }
     }
-    }  // if (profCompRef != 0)
+    }  // if (CitUI_OkPtr(entityFromAI))
 }
 
 // ============================================================
@@ -635,8 +619,6 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
     if (param3 != 0x12) return;
 
     uintptr_t s = (uintptr_t)this;
-
-    CitizenUI_EnsureProfessionTypeId();
 
     if (param4 == 0x227) {
         // --- buttonProfession: go to workplace/job ---

@@ -110,6 +110,14 @@
 #include "Component/PopulationComponent.h"
 #include "Component/BuildComponent.h"
 #include "Component/MapComponent.h"
+#include "Component/HealerComponent.h"       // ENDGAME B.3.9 CB: 0x1401c4330 cell class
+#include "Component/WellComponent.h"         // ENDGAME B.3.9 CB: 0x1401c4c28 cell class
+#include "Component/HappinessComponent.h"    // ENDGAME B.3.9 CB: 0x1401c42c0 cell class
+#include "Component/CitizenComponent.h"      // ENDGAME B.3.9 CB: 0x1401c7158 cell class
+#include "Component/PastureComponent.h"      // ENDGAME B.3.9 CB: 0x1401c7ba0 cell class
+#include "Component/CemeteryComponent.h"     // ENDGAME B.3.9 CB: 0x1401c4090 cell class
+#include "Component/AttendanceComponent.h"   // ENDGAME B.3.9 CB: 0x1401c3f40 cell class
+#include "Entity/ComponentEntity.h"          // ENDGAME B.3.9 CB: 0x1401c5d70 cell class
 #include <cstdint>
 #include <cstring>
 #include <new>
@@ -140,18 +148,12 @@ fn_KeyResolve_t s_fn_StringTableKeyResolve = nullptr;   // 0x140018020 (TREE #1 
 typedef void (*fn_TreeRetraceE360_t)(int64_t* root, int64_t* nodeVarAddr);
 fn_TreeRetraceE360_t s_fn_TreeRetrace_e360 = nullptr;    // 0x14000e360 (DEAD-PATH tree)
 
+// Storage the 0x1401c4330 / 0x1401c4c28 registrations below point at. Nothing ever
+// FILLED them (they read 0), and ENDGAME B.3.9 CB removed their last readers: the
+// serializer now validates by the class statics. The storage and its RegisterExeAddr
+// lines are the closing step's to delete.
 uint32_t g_tid_HealerComponent = 0;   // 0x1401c4330 — HealerComponent BaseTypeInfo
 uint32_t g_tid_WellComponent   = 0;   // 0x1401c4c28 — WellComponent BaseTypeInfo
-// 0x1401c42c0 (HappinessComponent) is UNREGISTERED (ENDGAME C.2 deleted its opt-in
-// fill on purpose) — BEHAVIOUR-LEFT, kept as a raw resolve (ENDGAME B.3.9 C5).
-const uint32_t* s_tid_HappinessComponent = nullptr;
-uint32_t s_tid_LivestockComponent_v, s_tid_HerdComponent_v, s_tid_DiseaseComponent_v,
-         s_tid_PopulationComponent_v, s_tid_BuildComponent_v;
-const uint32_t* s_tid_LivestockComponent = &s_tid_LivestockComponent_v;   // 0x1401c7970
-const uint32_t* s_tid_HerdComponent      = &s_tid_HerdComponent_v;        // 0x1401c7820
-const uint32_t* s_tid_DiseaseComponent   = &s_tid_DiseaseComponent_v;     // 0x1401c4170
-const uint32_t* s_tid_PopulationComponent= &s_tid_PopulationComponent_v;  // 0x1401c4790
-const uint32_t* s_tid_BuildComponent     = &s_tid_BuildComponent_v;       // 0x1401c7008
 
 bool s_resolved = false;
 void EnsureResolved() {
@@ -160,12 +162,6 @@ void EnsureResolved() {
         ResolveAddr(Module::Exe, 0x140018020));
     s_fn_TreeRetrace_e360 = reinterpret_cast<fn_TreeRetraceE360_t>(
         ResolveAddr(Module::Exe, 0x14000e360));
-    s_tid_HappinessComponent  = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c42c0));
-    s_tid_LivestockComponent_v  = LivestockComponent::TypeId();
-    s_tid_HerdComponent_v       = HerdComponent::TypeId();
-    s_tid_DiseaseComponent_v    = DiseaseComponent::TypeId();
-    s_tid_PopulationComponent_v = PopulationComponent::TypeId();
-    s_tid_BuildComponent_v      = BuildComponent::TypeId();
     s_resolved = true;
 }
 
@@ -198,7 +194,12 @@ void RegistryCensus(uint8_t* base, const char* leg, const char* when) {
 //   for each slot: InternalBasePtr::Serialize(slot); if (!IsDerivedFrom(typeId)) slot=null;
 // hdr points at a 0x10-byte {void* data, int32 count, int32 cap} header.
 // ------------------------------------------------------------
-void SerializeIBPArray(uint8_t* hdr, void* serializer, const uint32_t* typeIdPtr) {
+// ENDGAME B.3.9 CB: takes the type id by VALUE (the class static of the cell retail
+// reads) and validates unconditionally, as retail does (0x14008f760: every array's
+// `if (p && !IsDerivedFrom(p, [cell])) p = 0`). The old pointer form skipped the check
+// whenever the cell read 0 -- which it always did for Healer (0x1401c4330), Well
+// (0x1401c4c28) and Happiness (0x1401c42c0), so those three arrays were never validated.
+void SerializeIBPArray(uint8_t* hdr, void* serializer, uint32_t typeId) {
     int32_t count = *reinterpret_cast<int32_t*>(hdr + 8);
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
     bool loading = SerializerLoading(serializer);
@@ -211,8 +212,8 @@ void SerializeIBPArray(uint8_t* hdr, void* serializer, const uint32_t* typeIdPtr
         uint8_t* elem = arr + static_cast<size_t>(i) * 8;
         reinterpret_cast<Object::InternalBasePtr*>(elem)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         void* val = *reinterpret_cast<void**>(elem);
-        if (val != nullptr && typeIdPtr && *typeIdPtr) {
-            if (!fn_IsDerivedFrom(val, *typeIdPtr)) {
+        if (val != nullptr) {
+            if (!fn_IsDerivedFrom(val, typeId)) {
                 *reinterpret_cast<uint64_t*>(elem) = 0;
             }
         }
@@ -451,7 +452,7 @@ void SerializeCompRefTree(uint8_t* hdr, void* serializer, fn_KeyResolve_t keyFn)
             uint64_t key = 0;
             if (keyFn) keyFn(&key, serializer);
             uint8_t valBuf[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-            SerializeIBPArray(valBuf, serializer, g_TypeId_ComponentEntity);
+            SerializeIBPArray(valBuf, serializer, ComponentEntity::TypeId());
 
             uint64_t** rootPtr = reinterpret_cast<uint64_t**>(hdr);
             if (*rootPtr == nullptr) {
@@ -495,7 +496,7 @@ void SerializeCompRefTree(uint8_t* hdr, void* serializer, fn_KeyResolve_t keyFn)
         uint64_t* node = CompRefTreeMin(root);
         while (node) {
             if (keyFn) keyFn(node, serializer);
-            SerializeIBPArray(reinterpret_cast<uint8_t*>(node) + 8, serializer, g_TypeId_ComponentEntity);
+            SerializeIBPArray(reinterpret_cast<uint8_t*>(node) + 8, serializer, ComponentEntity::TypeId());
             node = CompRefTreeSucc(node);
         }
     }
@@ -599,29 +600,29 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
     const char* leg = SerializerLoading(ser) ? "LOAD" : "SAVE";
     RegistryCensus(base, leg, "enter");
 
-    SerializeIBPArray(base + 0x00, ser, g_TypeId_ComponentEntity);
-    SerializeIBPArray(base + 0x10, ser, g_TypeId_ComponentEntity);
-    SerializeIBPArray(base + 0x30, ser, g_TypeId_ComponentEntity);
-    SerializeIBPArray(base + 0x20, ser, g_TypeId_ComponentEntity);
-    SerializeIBPArray(base + 0x70, ser, &g_tid_HealerComponent);
-    SerializeIBPArray(base + 0xa0, ser, g_TypeId_CitizenComponent_FC);
+    SerializeIBPArray(base + 0x00, ser, ComponentEntity::TypeId());
+    SerializeIBPArray(base + 0x10, ser, ComponentEntity::TypeId());
+    SerializeIBPArray(base + 0x30, ser, ComponentEntity::TypeId());
+    SerializeIBPArray(base + 0x20, ser, ComponentEntity::TypeId());
+    SerializeIBPArray(base + 0x70, ser, HealerComponent::TypeId());
+    SerializeIBPArray(base + 0xa0, ser, CitizenComponent::TypeId());
 
     // Unconditional TREE #1 (residence/path-graph style, string-table key).
     SerializeCompRefTree(base + 0x100, ser, s_fn_StringTableKeyResolve);
 
-    SerializeIBPArray(base + 0x90, ser, g_TypeId_PastureComponent);
-    SerializeIBPArray(base + 0x40, ser, g_TypeId_CemeteryComponent);
-    SerializeIBPArray(base + 0x50, ser, s_tid_HappinessComponent);
-    SerializeIBPArray(base + 0x60, ser, g_TypeId_AttendanceComponent);
-    SerializeIBPArray(base + 0x80, ser, s_tid_LivestockComponent);
-    SerializeIBPArray(base + 0xb0, ser, s_tid_HerdComponent);
+    SerializeIBPArray(base + 0x90, ser, PastureComponent::TypeId());
+    SerializeIBPArray(base + 0x40, ser, CemeteryComponent::TypeId());
+    SerializeIBPArray(base + 0x50, ser, HappinessComponent::TypeId());
+    SerializeIBPArray(base + 0x60, ser, AttendanceComponent::TypeId());
+    SerializeIBPArray(base + 0x80, ser, LivestockComponent::TypeId());
+    SerializeIBPArray(base + 0xb0, ser, HerdComponent::TypeId());
 
     if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 0) {   // B.3.4 bridge
-        SerializeIBPArray(base + 0xf0, ser, s_tid_DiseaseComponent);
+        SerializeIBPArray(base + 0xf0, ser, DiseaseComponent::TypeId());
     }
 
-    SerializeIBPArray(base + 0xc0, ser, s_tid_PopulationComponent);
-    SerializeIBPArray(base + 0xd0, ser, s_tid_BuildComponent);
+    SerializeIBPArray(base + 0xc0, ser, PopulationComponent::TypeId());
+    SerializeIBPArray(base + 0xd0, ser, BuildComponent::TypeId());
 
     // ExternalPtr<ComponentDescription>[] arrays, resized via Array<Ptr8>::SetSize
     // (FUN_140001bb0) then bulk-serialized via Reimpl_ExternalPtrArray_Serialize
@@ -670,7 +671,7 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
         ResizeStride0x10(base + 0x160 /*unused for v==5 clamp — mirrors 0x28 below*/, 0);
     }
 
-    SerializeIBPArray(base + 0xe0, ser, &g_tid_WellComponent);
+    SerializeIBPArray(base + 0xe0, ser, WellComponent::TypeId());
 
     // Stride-8 int-pair array at +0x130.
     {

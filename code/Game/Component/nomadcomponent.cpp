@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Entity/ComponentEntity.h"   // ENDGAME B.3.9 CB: ComponentEntity::TypeId()
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 
@@ -37,7 +38,6 @@ typedef void (*fn_RegisterNomad_t)(void* nomadList, void* ibp);
 static fn_RegisterNomad_t s_fn_RegisterNomad = nullptr;
 
 static void** s_pGameState = nullptr;
-static uint32_t* s_pComponentEntityTypeId = nullptr;
 
 static bool s_initialized = false;
 
@@ -444,8 +444,6 @@ void NomadComponent_InitFuncs() {
         ResolveAddr(Module::Exe, 0x140103480));
     s_pGameState = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3dd8));
-    s_pComponentEntityTypeId = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c72e8));
 
     uintptr_t slot;
     slot = ResolveAddr(Module::Exe, 0x140152a98);
@@ -532,9 +530,13 @@ void NomadComponent::Persist(void* stream) {
     reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x28))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4 bridge
 
     // Validate IBP after deserialize
+    // ENDGAME B.3.9 CB: retail validates this IBP with IsDerivedFrom(ptr, [0x1401c5d70]) =
+    // ComponentEntity::TypeId() (Persist 0x14004fc40, at 0x14004fca5). The tree read 0x1401c72e8 instead -- the NAME
+    // field (+8) of Description's record, whose only retail reader is Description's
+    // TypeName slot 0x140031c60 -- which is unregistered, so the check never ran.
     void* ibpVal = *(void**)(selfAddr + 0x28);
-    if (ibpVal != nullptr && s_fn_IsDerivedFrom_d && s_pComponentEntityTypeId) {
-        if (!s_fn_IsDerivedFrom_d(ibpVal, *s_pComponentEntityTypeId)) {
+    if (ibpVal != nullptr && s_fn_IsDerivedFrom_d) {
+        if (!s_fn_IsDerivedFrom_d(ibpVal, ComponentEntity::TypeId())) {
             *(uintptr_t*)(selfAddr + 0x28) = 0;
         }
     }

@@ -11,6 +11,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/AutoPickupComponent.h"
+#include "Component/AutoPickupDescription.h"   // ENDGAME B.3.9 CB: 0x1401c3fe8 cell class
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -31,15 +32,13 @@
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
 
-// Type ID for AutoPickupDescription at DAT_1401c3fe8
-static uint32_t* s_TypeId_AutoPickupDesc = nullptr;
-
 static bool s_initialized = false;
 
 // ============================================================
 // AutoPickupComponent::Serialize (vtable slot [4], 0x140044990)
 // ============================================================
-// Checks IsDerivedFrom on +0x18 with type DAT_1401c3fe8,
+// Checks IsDerivedFrom on +0x18 with type DAT_1401c3fe8 (AutoPickupDescription::TypeId();
+// ENDGAME B.3.9 CB -- the cell is unregistered, so the old pointer read made this a no-op),
 // reads byte at +0x20 from the derived object and stores in isEnabled (+0x28).
 void AutoPickupComponent_InitFuncs();
 void AutoPickupComponent_Serialize(AutoPickupComponent* self) {
@@ -49,8 +48,8 @@ void AutoPickupComponent_Serialize(AutoPickupComponent* self) {
     void* obj = *(void**)(selfAddr + 0x18);
     void* config = nullptr;
 
-    if (obj && s_fn_IsDerivedFrom_dispatch && s_TypeId_AutoPickupDesc) {
-        bool derived = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_AutoPickupDesc);
+    if (obj && s_fn_IsDerivedFrom_dispatch) {
+        bool derived = s_fn_IsDerivedFrom_dispatch(obj, AutoPickupDescription::TypeId());
         if (derived) config = obj;
     }
 
@@ -70,15 +69,8 @@ void AutoPickupComponent_InitFuncs() {
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
 
-    s_TypeId_AutoPickupDesc = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c3fe8));
-
     s_initialized = true;
 
-#ifdef _DEBUG
-    printf("[AutoPickupComponent] Funcs resolved: TypeId=%p\n",
-           (void*)s_TypeId_AutoPickupDesc);
-#endif
 }
 
 // ============================================================================

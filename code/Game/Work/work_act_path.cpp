@@ -19,6 +19,7 @@
 #include "engine_funcs.h"
 #include "Action/PerformWork.h"   // ENDGAME B.3.8 CB3
 #include "resolve.h"
+#include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -112,7 +113,6 @@ static WAP2_TimeCtor_t            s_wap2_TimeCtor          = nullptr;
 
 // Runtime CRC type-id / message-id globals — read LIVE (these are 0 at static-init, the
 // engine fills them with real CRC ids after Object::Factory::Startup).
-static const uint32_t* s_wap2_pMsgId_c70e8 = nullptr; // DWORD_1401c70e8 (0xbf81e) -- CitizenAIComponent, UNREGISTERED, left for a behaviour commit
 
 // Float .rdata constants (bit-exact).
 static const float* s_wap2_pf_172124 = nullptr; // DAT_140172124 = 0.75f (0xbf962)
@@ -146,7 +146,6 @@ static void ResolveAll() {
     if (!s_wap2_IbpCtor)         s_wap2_IbpCtor         = reinterpret_cast<WAP2_IbpCtor_t>(fn_InternalBasePtr_Ctor);
     if (!s_wap2_IbpDelete)       s_wap2_IbpDelete       = reinterpret_cast<WAP2_IbpDelete_t>(fn_InternalBasePtr_DeletePtr);
 
-    s_wap2_pMsgId_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
     s_wap2_pf_172124    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172124));
     s_wap2_pf_172280    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172280));
 }
@@ -213,7 +212,7 @@ extern "C" void* WorkAct_GatherRawMatCtor_bf790(
     if (obj) {
         ibpInner = 0;
         WAP2_IbpCtor(&ibpInner, nullptr);
-        uint32_t msgId = s_wap2_pMsgId_c70e8 ? *s_wap2_pMsgId_c70e8 : 0; // DWORD_1401c70e8 (0xbf81e)
+        uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
         void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(entity) + 0x10);
         if (s_wap2_SendCompMsg) sm = s_wap2_SendCompMsg(obj, &entityInner, &msgId, 0, &ibpInner, 0);
     }

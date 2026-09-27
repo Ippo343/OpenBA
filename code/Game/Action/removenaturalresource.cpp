@@ -60,8 +60,9 @@ static void (*s_fn_NotifyEntityChanged)(void* entity) = nullptr;
 typedef void (*s_fn_RemoveNatRes_t)(void* natResComp, void* citizenIBP, char harvestFlag);
 static s_fn_RemoveNatRes_t s_fn_RemoveNatRes = nullptr;
 
-// TypeInfo for BaseDtor (slot 2)
-static uint32_t* s_typeInfo_RemoveNaturalResource = nullptr;  // DAT_1401c60c0
+// ENDGAME B.3.9 CB: retail reads this record field ONLY in the class's own TypeName
+// slot (0x1401c60c0 = the NAME field (+8) of RemoveNaturalResource's record, read by
+// RemoveNaturalResource_Slot1 0x140022f60); DECLARE_EXE_TYPE answers that slot, so the tree's copy of it is gone.
 
 static bool s_funcs_resolved = false;
 
@@ -84,15 +85,10 @@ bool RemoveNaturalResource_ResolveFuncs() {
     // FUN_1401260f0 — remove natural resource
     s_fn_RemoveNatRes = (s_fn_RemoveNatRes_t)ResolveAddr(Module::Exe, 0x1401260f0);
 
-    // TypeInfo for BaseDtor
-    s_typeInfo_RemoveNaturalResource = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c60c0));
-
     bool ok = s_fn_IBP_DeletePtr &&
               s_fn_FindNRComp &&
               s_fn_NotifyEntityChanged && s_fn_RemoveNatRes &&
               g_TypeId_ComponentEntity &&
-              s_typeInfo_RemoveNaturalResource &&
               fn_IsDerivedFrom &&
               fn_MemFreeStatic && g_pGameWorldSingleton;
 

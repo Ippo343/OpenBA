@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
+#include "Entity/ComponentEntity.h"   // ENDGAME B.3.9 CB: ComponentEntity::TypeId()
 
 // ============================================================
 // Resolved helpers
@@ -33,7 +34,6 @@ typedef void (*fn_MarkForRemoval_t)(void* entity);
 static fn_MarkForRemoval_t s_fn_MarkForRemoval = nullptr;
 
 static void** s_pGameState = nullptr;
-static uint32_t* s_pComponentEntityTypeId = nullptr;  // TypeInfo_ComponentEntity
 
 static bool s_initialized = false;
 
@@ -86,10 +86,6 @@ void MultiObjectComponent_InitFuncs() {
     uintptr_t slot;
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_d = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    // TypeInfo_ComponentEntity
-    s_pComponentEntityTypeId = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c72e8));
 
     s_initialized = true;
 }
@@ -249,9 +245,13 @@ void MultiObjectComponent::Persist(void* stream) {
             reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4 bridge
 
             // Validate: if not ComponentEntity, null it out
+            // ENDGAME B.3.9 CB: retail validates this IBP with IsDerivedFrom(ptr, [0x1401c5d70]) =
+            // ComponentEntity::TypeId() (Persist 0x140125880, at 0x140125936). The tree read 0x1401c72e8 instead -- the NAME
+            // field (+8) of Description's record, whose only retail reader is Description's
+            // TypeName slot 0x140031c60 -- which is unregistered, so the check never ran.
             void* ptr = *(void**)ibp;
-            if (ptr != nullptr && s_fn_IsDerivedFrom_d && s_pComponentEntityTypeId) {
-                if (!s_fn_IsDerivedFrom_d(ptr, *s_pComponentEntityTypeId)) {
+            if (ptr != nullptr && s_fn_IsDerivedFrom_d) {
+                if (!s_fn_IsDerivedFrom_d(ptr, ComponentEntity::TypeId())) {
                     *(uintptr_t*)ibp = 0;
                 }
             }
