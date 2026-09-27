@@ -851,13 +851,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // ~GroupDescription, MOV EDX,0x78; a scalar arm whose class-specific
     // ??3GroupDescription (0x1800466f0) is the same single MemFree -- was retired
     // by ENDGAME B.3.9 UI-A: slot 0 is the class's own.)
-    // 2026-09-12: slot 0 of ??_7RibbonDescription@UI@@6B@ (0x180156ed0), the
-    // wall after GroupDescription. Read from 0x180044620's own bytes:
-    //     0x180044638  LEA R9,[0x1800d5c90]     ~RibbonDescription
-    //     0x18004463f  MOV EDX,0x80             sizeof
-    // Same two-arm shape as the (retired) GroupDescription row; not a probe
-    // subject, for the same reason.
-    RT_DELDTOR(0x180044620, 0x1800d5c90, 0x080, "UI::RibbonDescription"),
     // (UI::ImageDescription / UI::AnimatedImageDescription's two rows were
     // retired by ENDGAME B.3.9 UI-A: slot 0 is each class's own.)
     // MERGE 2026-09-12: batch 9's six rows come FIRST so their indices
@@ -914,19 +907,13 @@ static constexpr DelDtorSpec kSpecs[] = {
     //     0x1800489c0  LEA R9,[0x180111620]  MOV EDX,0xa8   CheckDescription
     //     0x180037eb0  LEA R9,[0x1800cc0d0]  MOV EDX,0x78   ClipRegionDescription
     //     0x180074e70  LEA R9,[0x180112370]  MOV EDX,0xb8   ComboDescription
-    //     0x180039c00  LEA R9,[0x1800ccff0]  MOV EDX,0x90   ContainerDescription
-    //     0x18003bd90  LEA R9,[0x1800cfb30]  MOV EDX,0xe8   DocumentTextDescription
     //     0x18003fa20  LEA R9,[0x1800d11f0]  MOV EDX,0x88   EditDescription
-    //     0x1800403a0  LEA R9,[0x1800d1b30]  MOV EDX,0x88   GraphDescription
     //     0x180042730  LEA R9,[0x1800d2960]  MOV EDX,0xb8   LabelDescription
     //
     // None of the ten is a probe subject: every one of these destructors
     // releases at least one refcounted String, and ~DocumentTextDescription
     // also destroys four arrays, so running one on a fabricated object would
     // be a manufactured crash rather than a measurement.
-    RT_DELDTOR(0x180039c00, 0x1800ccff0, 0x090, "UI::ContainerDescription"),
-    RT_DELDTOR(0x18003bd90, 0x1800cfb30, 0x0e8, "UI::DocumentTextDescription"),
-    RT_DELDTOR(0x1800403a0, 0x1800d1b30, 0x088, "UI::GraphDescription"),
 
     // VTABLE BATCH 7 (2026-09-12), appended AFTER batch 8's four rows above --
     // indices 71-74. Four more classes' slot0, read the same way as every row
@@ -990,19 +977,10 @@ static constexpr DelDtorSpec kSpecs[] = {
     // and the `MOV EDX,sizeof` that the shared `eh vector destructor iterator`
     // at 0x18007ec98 is handed:
     //
-    //   0x180043570  LEA R9,[0x1800d32a0]  MOV EDX,0xd0    UI::LayoutElement
-    //   0x180045320  LEA R9,[0x1800d4530]  MOV EDX,0x100   UI::ListElement
     //   0x180046540  LEA R9,[0x1800d4c40]  MOV EDX,0x100   UI::NumberEditElement
     //   0x18004ab80  LEA R9,[0x180118ce0]  MOV EDX,0xe8    UI::NumberElement
     //   0x180047540  LEA R9,[0x1800d5220]  MOV EDX,0xc8    UI::PageElement
-    //   0x180078150  LEA R9,[0x180077ef0]  MOV EDX,0x130   UI::ProgressElement
     //   0x180047d50  LEA R9,[0x1800d5820]  MOV EDX,0xd8    UI::RadioElement
-    //   0x180044ac0  LEA R9,[0x1800d5d70]  MOV EDX,0xd8    UI::RibbonElement
-    //   0x18003adc0  LEA R9,[0x18011a900]  MOV EDX,0x178   UI::ScrollElement
-    //   0x18004a180  LEA R9,[0x180049ee0]  MOV EDX,0x130   UI::SliderElement
-    //   0x18004b3b0  LEA R9,[0x1800d8640]  MOV EDX,0xc8    UI::SpinnerElement
-    //   0x18004ca90  LEA R9,[0x1800da360]  MOV EDX,0x108   UI::TabElement
-    //   0x180079600  LEA R9,[0x18011e2a0]  MOV EDX,0xf0    UI::TableElement
     //   0x1800422f0  LEA R9,[0x18011eda0]  MOV EDX,0x100   UI::TextElement
     //
     // ALL FOURTEEN ~Class bodies are PORTED by that batch and registered by
@@ -1025,15 +1003,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // "restamps then inlines"), so it declines to classify. The two constants
     // it DOES check -- dtor VA and sizeof -- are re-derived and correct for
     // both rows.
-    RT_DELDTOR(0x180043570, 0x1800d32a0, 0x0d0, "UI::LayoutElement"),
-    RT_DELDTOR(0x180045320, 0x1800d4530, 0x100, "UI::ListElement"),
-    RT_DELDTOR(0x180078150, 0x180077ef0, 0x130, "UI::ProgressElement"),
-    RT_DELDTOR(0x180044ac0, 0x1800d5d70, 0x0d8, "UI::RibbonElement"),
-    RT_DELDTOR(0x18003adc0, 0x18011a900, 0x178, "UI::ScrollElement"),
-    RT_DELDTOR(0x18004a180, 0x180049ee0, 0x130, "UI::SliderElement"),
-    RT_DELDTOR(0x18004b3b0, 0x1800d8640, 0x0c8, "UI::SpinnerElement"),
-    RT_DELDTOR(0x18004ca90, 0x1800da360, 0x108, "UI::TabElement"),
-    RT_DELDTOR(0x180079600, 0x18011e2a0, 0x0f0, "UI::TableElement"),
     // ---- Vtable batch 6 (2026-09-12): graphics buffers, meshes and lights ----
     // INDICES 103-108, appended after batch 4 elem_B's 89-102. The table is
     // POSITIONAL and these six have been RE-COUNTED TWICE: 71-76 -> 89-94 ->
@@ -1085,10 +1054,7 @@ static constexpr DelDtorSpec kSpecs[] = {
     //   0x180048d80  LEA R9,[0x180111700]  MOV EDX,0x0e0  UI::CheckElement
     //   0x180038370  LEA R9,[0x1800cbe30]  MOV EDX,0x0d8  UI::ClipRegionElement
     //   0x180075390  LEA R9,[0x180112490]  MOV EDX,0x128  UI::ComboElement
-    //   0x18003a050  LEA R9,[0x1800ccb10]  MOV EDX,0x0d8  UI::ContainerElement
-    //   0x18003c650  LEA R9,[0x1800cf320]  MOV EDX,0x1c8  UI::DocumentTextElement
     //   0x18003fed0  LEA R9,[0x1800d0e50]  MOV EDX,0x0f8  UI::EditElement
-    //   0x1800408b0  LEA R9,[0x1800d1840]  MOV EDX,0x100  UI::GraphElement
     //   0x180046e10  LEA R9,[0x180117cc0]  MOV EDX,0x0c0  UI::GroupElement
     //   0x180036600  LEA R9,[0x180118470]  MOV EDX,0x0e0  UI::ImageElement
     //   0x180042bb0  LEA R9,[0x1800d25f0]  MOV EDX,0x130  UI::LabelElement
@@ -1101,9 +1067,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // entry -- the same disqualification runtime/types/ui/Element.h records.
     // All thirteen ~Class bodies ARE ported (runtime/src/ui/<class>element.cpp),
     // so ResolveAddr hands this file OUR code for every row.
-    RT_DELDTOR(0x18003a050, 0x1800ccb10, 0x0d8, "UI::ContainerElement"),
-    RT_DELDTOR(0x18003c650, 0x1800cf320, 0x1c8, "UI::DocumentTextElement"),
-    RT_DELDTOR(0x1800408b0, 0x1800d1840, 0x100, "UI::GraphElement"),
     // 2026-09-12, VTABLE BATCH 2 (the UI::*Description second half), rows
     // 103..115 -- APPENDED AFTER every row main already had, and the entry
     // points below were renumbered to match at the merge (the table is
@@ -1120,14 +1083,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // came from the Runtime heap (most do both), so a fabricated subject would
     // decrement a refcount nothing incremented and free a garbage pointer —
     // the same test the UI::ElementDescription row applies.
-    RT_DELDTOR(0x1800431d0, 0x1800d3a10, 0x078, "UI::LayoutDescription"),
-    RT_DELDTOR(0x180044ed0, 0x1800d4910, 0x090, "UI::ListDescription"),
-    RT_DELDTOR(0x180077c80, 0x18011a080, 0x0b0, "UI::ProgressDescription"),
-    RT_DELDTOR(0x18003a790, 0x18011a5d0, 0x0c8, "UI::ScrollDescription"),
-    RT_DELDTOR(0x180049c60, 0x1800d7a00, 0x0b8, "UI::SliderDescription"),
-    RT_DELDTOR(0x18004b050, 0x1800d8950, 0x088, "UI::SpinnerDescription"),
-    RT_DELDTOR(0x18004c640, 0x1800da8e0, 0x0b8, "UI::TabDescription"),
-    RT_DELDTOR(0x180079210, 0x18011e6f0, 0x098, "UI::TableDescription"),
 };
 // ENDGAME B.3 step 9 (B39_RULES.md D4): the count is the table's, and every
 // wrapper finds its row BY ADDRESS at compile time -- deleting a row renumbers
@@ -1479,9 +1434,6 @@ void* RtDelDtor_RenderState(void* self, unsigned flags) {
 // walked that afternoon. Their table rows landed with the class ports but the
 // wrapper + RegisterRuntimeAddr pair did not, so slot 0 of each minted vtable
 // stayed a trap; wired here by the coordinator when batch 9's merge exposed it.
-void* RtDelDtor_RibbonDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180044620>());
-}
 
 // VTABLE BATCH 9 (2026-09-12). Indices 61-66, appended after rows 57-60
 // (wired above, after this batch's merge found them without wrappers).
@@ -1541,18 +1493,6 @@ void* RtDelDtor_SpriteCapture(void* self, unsigned flags) {
 // they were unwired when this batch started and are wired above, on main, by
 // the coordinator. A second wrapper would give one row two owners.
 // ---------------------------------------------------------------------------
-// UI::ContainerDescription  ~ = 0x1800ccff0   (PORTED, containerdescription.cpp)
-void* RtDelDtor_ContainerDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180039c00>());
-}
-// UI::DocumentTextDescription ~ = 0x1800cfb30 (PORTED, documenttextdescription.cpp)
-void* RtDelDtor_DocumentTextDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003bd90>());
-}
-// UI::GraphDescription      ~ = 0x1800d1b30   (PORTED, graphdescription.cpp)
-void* RtDelDtor_GraphDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800403a0>());
-}
 
 // VTABLE BATCH 7 (2026-09-12). Indices 81-84 (renumbered at this merge: batch
 // 8 took 67-70 on main first, concurrently with this batch's own claim on the
@@ -1602,69 +1542,15 @@ void* RtDelDtor_SpotLight(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x1800642b0>());
 }
 
-// UI::ContainerElement  ~ContainerElement = 0x1800ccb10  (PORTED, runtime/src/ui/)
-void* RtDelDtor_ContainerElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003a050>());
-}
-// UI::DocumentTextElement  ~DocumentTextElement = 0x1800cf320  (PORTED, runtime/src/ui/)
-void* RtDelDtor_DocumentTextElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003c650>());
-}
-// UI::GraphElement  ~GraphElement = 0x1800d1840  (PORTED, runtime/src/ui/)
-void* RtDelDtor_GraphElement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800408b0>());
-}
 
 // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12), rows 85..98 ------------
 // All fourteen ~Class bodies are PORTED (runtime/src/ui/<class>element.cpp).
-void* RtDelDtor_LayoutElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x180043570>()); }
-void* RtDelDtor_ListElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, Row<0x180045320>()); }
-void* RtDelDtor_ProgressElement(void* self, unsigned flags)   { return DeletingDtorCore(self, flags, Row<0x180078150>()); }
-void* RtDelDtor_RibbonElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x180044ac0>()); }
-void* RtDelDtor_ScrollElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x18003adc0>()); }
-void* RtDelDtor_SliderElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, Row<0x18004a180>()); }
-void* RtDelDtor_SpinnerElement(void* self, unsigned flags)    { return DeletingDtorCore(self, flags, Row<0x18004b3b0>()); }
-void* RtDelDtor_TabElement(void* self, unsigned flags)        { return DeletingDtorCore(self, flags, Row<0x18004ca90>()); }
-void* RtDelDtor_TableElement(void* self, unsigned flags)      { return DeletingDtorCore(self, flags, Row<0x180079600>()); }
 
 // ---------------------------------------------------------------------------
 // VTABLE BATCH 2 (the UI::*Description second half), table rows 103..115.
 // The indices below were RE-DERIVED after merging main, not carried over
 // from the branch: main had grown the table to 103 rows in the meantime and
 // a stale index dispatches the WRONG destructor with no diagnostic.
-// RtDelDtor_RibbonDescription is NOT here -- main wired it (index 58).
-// UI::LayoutDescription       ~LayoutDescription = 0x1800d3a10
-void* RtDelDtor_LayoutDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800431d0>());
-}
-// UI::ListDescription         ~ListDescription = 0x1800d4910
-void* RtDelDtor_ListDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180044ed0>());
-}
-// UI::ProgressDescription     ~ProgressDescription = 0x18011a080
-void* RtDelDtor_ProgressDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180077c80>());
-}
-// UI::ScrollDescription       ~ScrollDescription = 0x18011a5d0
-void* RtDelDtor_ScrollDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003a790>());
-}
-// UI::SliderDescription       ~SliderDescription = 0x1800d7a00
-void* RtDelDtor_SliderDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180049c60>());
-}
-// UI::SpinnerDescription      ~SpinnerDescription = 0x1800d8950
-void* RtDelDtor_SpinnerDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004b050>());
-}
-// UI::TabDescription          ~TabDescription = 0x1800da8e0
-void* RtDelDtor_TabDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004c640>());
-}
-// UI::TableDescription        ~TableDescription = 0x18011e6f0
-void* RtDelDtor_TableDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180079210>());
-}
 
 const DelDtorSpec* Specs() { return kSpecs; }
 
@@ -1755,7 +1641,6 @@ void RtObjectDeletingDtorPortInit() {
 
     // VTABLE BATCH 9
     // Rows 57-60, the UI::*Description four (wrappers above).
-    RegisterRuntimeAddr(0x180044620, (void*)&RtDelDtor_RibbonDescription);
     RegisterRuntimeAddr(0x180074a10, (void*)&RtDelDtor_ComboDialog);
     RegisterRuntimeAddr(0x18003b600, (void*)&RtDelDtor_DialogControllerConfig);
     RegisterRuntimeAddr(0x180007800, (void*)&RtDelDtor_ExternalList);
@@ -1765,9 +1650,6 @@ void RtObjectDeletingDtorPortInit() {
 
     // 2026-09-12 VTABLE BATCH 1 — ten UI::*Description classes, rows 71..80.
     // Every address a LITERAL, for the reason the banner above gives.
-    RegisterRuntimeAddr(0x180039c00, (void*)&RtDelDtor_ContainerDescription);
-    RegisterRuntimeAddr(0x18003bd90, (void*)&RtDelDtor_DocumentTextDescription);
-    RegisterRuntimeAddr(0x1800403a0, (void*)&RtDelDtor_GraphDescription);
 
     // VTABLE BATCH 7 (2026-09-12).
     RegisterRuntimeAddr(0x1800167f0, (void*)&RtDelDtor_AnimationGroup);
@@ -1791,29 +1673,9 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x1800642b0, (void*)&RtDelDtor_SpotLight);             // vtable batch 6
 
     // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12) --------------------
-    RegisterRuntimeAddr(0x180043570, (void*)&RtDelDtor_LayoutElement);
-    RegisterRuntimeAddr(0x180045320, (void*)&RtDelDtor_ListElement);
-    RegisterRuntimeAddr(0x180078150, (void*)&RtDelDtor_ProgressElement);
-    RegisterRuntimeAddr(0x180044ac0, (void*)&RtDelDtor_RibbonElement);
-    RegisterRuntimeAddr(0x18003adc0, (void*)&RtDelDtor_ScrollElement);
-    RegisterRuntimeAddr(0x18004a180, (void*)&RtDelDtor_SliderElement);
-    RegisterRuntimeAddr(0x18004b3b0, (void*)&RtDelDtor_SpinnerElement);
-    RegisterRuntimeAddr(0x18004ca90, (void*)&RtDelDtor_TabElement);
-    RegisterRuntimeAddr(0x180079600, (void*)&RtDelDtor_TableElement);
 
     // VTABLE BATCH 3 (2026-09-12), UI::*Element first half.
-    RegisterRuntimeAddr(0x18003a050, (void*)&RtDelDtor_ContainerElement);
-    RegisterRuntimeAddr(0x18003c650, (void*)&RtDelDtor_DocumentTextElement);
-    RegisterRuntimeAddr(0x1800408b0, (void*)&RtDelDtor_GraphElement);
     // ---- VTABLE BATCH 2 (the UI::*Description second half), rows 103..115 --
-    RegisterRuntimeAddr(0x1800431d0, (void*)&RtDelDtor_LayoutDescription);
-    RegisterRuntimeAddr(0x180044ed0, (void*)&RtDelDtor_ListDescription);
-    RegisterRuntimeAddr(0x180077c80, (void*)&RtDelDtor_ProgressDescription);
-    RegisterRuntimeAddr(0x18003a790, (void*)&RtDelDtor_ScrollDescription);
-    RegisterRuntimeAddr(0x180049c60, (void*)&RtDelDtor_SliderDescription);
-    RegisterRuntimeAddr(0x18004b050, (void*)&RtDelDtor_SpinnerDescription);
-    RegisterRuntimeAddr(0x18004c640, (void*)&RtDelDtor_TabDescription);
-    RegisterRuntimeAddr(0x180079210, (void*)&RtDelDtor_TableDescription);
 
     // The count is taken from kSpecCount rather than typed, so a row added
     // without touching this line cannot make the log say the wrong number --

@@ -36,7 +36,6 @@ extern void RegisterGameTerrainReimpls();
 void RegisterGameLeafBatch() {
     // mapgenerator.cpp
     RegisterExeAddr(0x14001b030, reinterpret_cast<uintptr_t>(&Game_DestroyStringArray18));
-    RegisterExeAddr(0x14001b0a0, reinterpret_cast<uintptr_t>(&Game_DestroyStringArray30));
 
     // gameupdateloop.cpp (shutdown sub-functions)
     RegisterExeAddr(0x14000a8a0, reinterpret_cast<uintptr_t>(&Game_EventNotifierCleanup));
@@ -45,12 +44,9 @@ void RegisterGameLeafBatch() {
     RegisterExeAddr(0x140093eb0, reinterpret_cast<uintptr_t>(&Game_WeatherDtor));
 
     // menuscene.cpp
-    RegisterExeAddr(0x14001b860, reinterpret_cast<uintptr_t>(&Game_MenuSceneArrayDtor));
 
     // toolbar.cpp — ExternalPtr<Toolbar>::Serialize (canonical generic body).
-    RegisterExeAddr(0x140024c70, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_Toolbar));
 
     // terraingenerator.cpp — legacy-v0 material resolve + the two data-array reimpls.
-    RegisterExeAddr(0x14001fd10, reinterpret_cast<uintptr_t>(&Game_TerrainResolveMaterial));
     RegisterGameTerrainReimpls();
 }

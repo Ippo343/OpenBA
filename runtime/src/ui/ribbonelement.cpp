@@ -30,6 +30,7 @@
 // ============================================================================
 
 #include <atomic>
+#include <new>
 
 #include "widget_common.h"
 #include "../../types/ui/RibbonElement.h"
@@ -58,12 +59,10 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_vtable{nullptr};
 const uint8_t* RibbonTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@RibbonElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
-void* VtRibbonElement() { return AtomicExport(g_vtable, "??_7RibbonElement@UI@@6B@"); }
 
 }  // namespace
 
@@ -74,6 +73,10 @@ const char* RibbonElement::TypeName() const {
     const char* v = nullptr; __builtin_memcpy(&v, RibbonTypeInfo() + 8, sizeof v); return v;
 }
 uint32_t RibbonElement::Type() const {
+    uint32_t v = 0; __builtin_memcpy(&v, RibbonTypeInfo(), sizeof v); return v;
+}
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t RibbonElement::TypeId() {
     uint32_t v = 0; __builtin_memcpy(&v, RibbonTypeInfo(), sizeof v); return v;
 }
 
@@ -214,79 +217,45 @@ void RibbonElement::Draw(SpriteContext& context, uint8_t alpha) const {
     }
 }
 
+// ??1RibbonElement@UI@@UEAA@XZ   0x1800d5d70 — retail's body, moved from the
+// retired door (ENDGAME B.3.9 UI-B): the extent Array through 0x18001c750. The
+// restamp and the tail into ~Element are the compiler's.
+RibbonElement::~RibbonElement() {
+    RtAddr<ArrayDtorFn>(0x18001c750ull)(B(this, kExtents));
+}
+
+// ?CreateNewObject@RibbonElement@UI@@SAPEAVBase@Object@@XZ 0x1800447d0 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0xd8, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* RibbonElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(RibbonElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) RibbonElement();
+}
+// ?CreateInPlaceObject@RibbonElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180044880
+Object::Base* RibbonElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) RibbonElement();
+}
+
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
+// ENDGAME B.3.9 UI-B: the slot doors, the ctor / dtor doors and the
+// factory-interpreter row are gone. Their only readers were the minted
+// `??_7RibbonElement@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
+// RibbonElement now wears the compiler's table.
 // ============================================================================
-extern "C" uint32_t RtUi_RibbonElement_Type(const void* self) {
-    return reinterpret_cast<const UI::RibbonElement*>(self)->UI::RibbonElement::Type();
-}
-extern "C" const char* RtUi_RibbonElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::RibbonElement*>(self)->UI::RibbonElement::TypeName();
-}
-extern "C" void RtUi_RibbonElement_ComputeSize(void* self) {
-    reinterpret_cast<UI::RibbonElement*>(self)->UI::RibbonElement::ComputeSize();
-}
-extern "C" void RtUi_RibbonElement_ComputeLayout(void* self, int32_t x, int32_t y,
-                                                 int32_t right, int32_t bottom) {
-    reinterpret_cast<UI::RibbonElement*>(self)->UI::RibbonElement::ComputeLayout(
-        x, y, right, bottom);
-}
-extern "C" void RtUi_RibbonElement_Draw(const void* self, void* ctx, uint8_t alpha) {
-    reinterpret_cast<const UI::RibbonElement*>(self)->UI::RibbonElement::Draw(
-        *static_cast<UI::SpriteContext*>(ctx), alpha);
-}
 
-// ??0RibbonElement@UI@@QEAA@XZ   0x1800d5d10 — a DOOR (B4b-2), unchanged.
-extern "C" void* RtUi_RibbonElement_Ctor(void* self) {   // returns this in RAX, as every MSVC ctor does
-    ElementCtor(self);
-    PTR(self, 0x00) = VtRibbonElement();
-    U8(self, kVertical) = 0;          // one 2-byte store covers both bools
-    U8(self, kUniform)  = 0;
-    I32(self, kSpacing) = 0;
-    PTR(self, kExtents)     = nullptr;
-    PTR(self, kExtents + 8) = nullptr;
-    return self;
-}
-
-// ??1RibbonElement@UI@@UEAA@XZ   0x1800d5d70 — a DOOR (B4b-2), unchanged.
-extern "C" void RtUi_RibbonElement_Dtor(void* self) {
-    PTR(self, 0x00) = VtRibbonElement();
-    RtAddr<ArrayDtorFn>(0x18001c750ull)(B(self, kExtents));
-    ElementDtor(self);
-}
-
-// ============================================================================
 int RtUiRibbonElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@RibbonElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_RibbonElement_Type);          ++n;
-    RegisterRuntimeAddr(0x1800446c0ull, (void*)&RtUi_RibbonElement_Type);
-
-    RegisterRuntimeExport("?TypeName@RibbonElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_RibbonElement_TypeName);      ++n;
-    RegisterRuntimeAddr(0x1800446e0ull, (void*)&RtUi_RibbonElement_TypeName);
-
-    RegisterRuntimeExport("??0RibbonElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_RibbonElement_Ctor);          ++n;
-    RegisterRuntimeAddr(0x1800d5d10ull, (void*)&RtUi_RibbonElement_Ctor);
-
-    RegisterRuntimeExport("??1RibbonElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_RibbonElement_Dtor);          ++n;
-    RegisterRuntimeAddr(0x1800d5d70ull, (void*)&RtUi_RibbonElement_Dtor);
-
-    RegisterRuntimeExport("?ComputeSize@RibbonElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_RibbonElement_ComputeSize);   ++n;
-    RegisterRuntimeAddr(0x1800d6190ull, (void*)&RtUi_RibbonElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@RibbonElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_RibbonElement_ComputeLayout); ++n;
-    RegisterRuntimeAddr(0x1800d6410ull, (void*)&RtUi_RibbonElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@RibbonElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_RibbonElement_Draw);          ++n;
-    RegisterRuntimeAddr(0x1800d6740ull, (void*)&RtUi_RibbonElement_Draw);
-
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@RibbonElement` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@RibbonElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::RibbonElement::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x1800447d0ull, (void*)&UI::RibbonElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@RibbonElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::RibbonElement::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x180044880ull, (void*)&UI::RibbonElement::CreateInPlaceObject);
     return n;
 }

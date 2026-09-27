@@ -89,8 +89,6 @@ void RegisterComponentGap_A() {
     RegisterExeAddr(0x140172100, reinterpret_cast<uintptr_t>(&k_rdata_172100));
 
     // cascade round (snapshot3): citizen-lifecycle finder chain (bottom-up)
-    RegisterExeAddr(0x1400440f0, reinterpret_cast<uintptr_t>(&CitizenComp_sub_40f0));       // reachability test
-    RegisterExeAddr(0x140111930, reinterpret_cast<uintptr_t>(&CitizenComp_sub_1930));       // closest-building scan
     RegisterExeAddr(0x140111590, reinterpret_cast<uintptr_t>(&CitizenComp_FindCareBuilding));
     RegisterExeAddr(0x1401116f0, reinterpret_cast<uintptr_t>(&CitizenComp_FindStorage));
     RegisterExeAddr(0x140111840, reinterpret_cast<uintptr_t>(&CitizenComp_TryEnrolInSchool));

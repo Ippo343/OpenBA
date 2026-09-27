@@ -3,7 +3,6 @@
 //
 //   0x1401c6240  TypeInfo_FinishTutorialGoal      (writer FinishTutorialGoal_RegisterType
 //                0x14014d550, factory_registrations.csv:168)
-//   0x1401c6278  TypeInfo_FinishTutorialInstance  (writer 0x14014d590, csv:169)
 //   0x1401c6668  TypeInfo_TutorialInstance        (writer 0x14014da10, csv:187)
 //
 // All three existed only as CSV rows — ResolveAddr(Exe, ...) returned 0 for each, so
@@ -32,7 +31,6 @@
 #include <cstdio>
 
 static uint32_t g_tid_FinishTutorialGoal     = 0;  // 0x1401c6240
-static uint32_t g_tid_FinishTutorialInstance = 0;  // 0x1401c6278
 static uint32_t g_tid_TutorialInstance       = 0;  // 0x1401c6668
 
 // ── Profession (0x1401c5a98) — was registered NOWHERE ────────────────────────
@@ -60,7 +58,6 @@ static uint32_t g_tid_Profession            = 0;  // 0x1401c5a98
 extern "C" void FillTypeIdGlobals_tutorial() {
     struct { const char* name; uint32_t* slot; uintptr_t addr; } kIds[] = {
         { "FinishTutorialGoal",     &g_tid_FinishTutorialGoal,     0x1401c6240 },
-        { "FinishTutorialInstance", &g_tid_FinishTutorialInstance, 0x1401c6278 },
         { "TutorialInstance",       &g_tid_TutorialInstance,       0x1401c6668 },
         { "Profession",             &g_tid_Profession,             0x1401c5a98 },
     };
@@ -79,7 +76,6 @@ extern "C" void FillTypeIdGlobals_tutorial() {
 
 void RegisterTutorialTypeIds() {
     RegisterExeAddr(0x1401c6240, reinterpret_cast<uintptr_t>(&g_tid_FinishTutorialGoal));
-    RegisterExeAddr(0x1401c6278, reinterpret_cast<uintptr_t>(&g_tid_FinishTutorialInstance));
     RegisterExeAddr(0x1401c6668, reinterpret_cast<uintptr_t>(&g_tid_TutorialInstance));
     RegisterExeAddr(0x1401c5a98, reinterpret_cast<uintptr_t>(&g_tid_Profession));
 }

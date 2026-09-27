@@ -146,17 +146,8 @@ namespace RtUI {
 // RtUI::LabelDescription is now an ALIAS of the real class UI::LabelDescription (LabelDescription.h);
 // see the alias block at the bottom of this file.
 
-// ---------------------------------------------------------------------------
-// The exported vtables and BaseTypeInfo statics these ten classes stamp and
-// read. Every name was read out of the retail export directory by RVA (pefile
-// against C:\GOG Games\Banished\Runtime-x64.dll), not guessed from the
-// mangling pattern.
-// ---------------------------------------------------------------------------
-constexpr const char* kVtblContainerDescription    = "??_7ContainerDescription@UI@@6B@";     // 0x180156510
-constexpr const char* kVtblDocumentTextDescription = "??_7DocumentTextDescription@UI@@6B@";  // 0x180156750
-constexpr const char* kVtblGraphDescription        = "??_7GraphDescription@UI@@6B@";         // 0x180156a30
-
-constexpr const char* kVtblContainerElement   = "??_7ContainerElement@UI@@6B@";   // 0x1801564b0
+// (The ten classes' `kVtbl*` vtable-name constants were retired by ENDGAME
+// B.3.9 UI-A / UI-B with the minted tables they named.)
 
 }  // namespace RtUI
 

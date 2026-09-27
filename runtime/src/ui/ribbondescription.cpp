@@ -52,6 +52,7 @@
 
 #include <atomic>
 #include <new>
+#include <new>
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -70,16 +71,6 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     }
     return p;
 }
-std::atomic<void*> g_vtBase{nullptr};
-std::atomic<void*> g_vtExternal{nullptr};
-std::atomic<void*> g_vtElementDescription{nullptr};
-std::atomic<void*> g_vtRibbonDescription{nullptr};
-std::atomic<void*> g_vtRibbonElement{nullptr};
-void* VtBase()               { return AtomicExport(g_vtBase, "??_7Base@Object@@6B@"); }
-void* VtExternal()           { return AtomicExport(g_vtExternal, "??_7External@Object@@6B@"); }
-void* VtElementDescription() { return AtomicExport(g_vtElementDescription, "??_7ElementDescription@UI@@6B@"); }
-void* VtRibbonDescription()  { return AtomicExport(g_vtRibbonDescription, "??_7RibbonDescription@UI@@6B@"); }
-void* VtRibbonElement()      { return AtomicExport(g_vtRibbonElement, "??_7RibbonElement@UI@@6B@"); }
 
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
@@ -104,76 +95,7 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
-
-// The inlined constructor, transcribed from 0x18004448a..0x180044501. Identical
-// to GroupDescription's through +0x60 (the ElementDescription part), then:
-//   0x1800444f6  MOV word  [RCX+0x68],DX      ONE 16-bit store, both bools
-//   0x1800444fa  MOV dword [RCX+0x6c],EDX
-//   0x1800444fd  MOV qword [RCX+0x70],RDX
-//   0x180044501  MOV qword [RCX+0x78],RDX     _size + _capacity
-// +0x6a..+0x6b IS NEVER WRITTEN. Zeroing it would be a divergence and comparing
-// it would be the "diff bytes neither side wrote" mistake.
-void ConstructBody(uint8_t* p) {
-    void** v = reinterpret_cast<void**>(p);
-
-    *v = VtBase();                                              // 18004448a
-    *v = VtExternal();                                          // 180044494
-    *reinterpret_cast<uint64_t*>(p + 0x08) = 0;                 // 1800444a9
-    *reinterpret_cast<uint64_t*>(p + 0x10) = 0;                 // 1800444ac
-    *reinterpret_cast<uint64_t*>(p + 0x18) = 0;                 // 1800444b0
-    *v = VtElementDescription();                                // 1800444b4
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;                 // 1800444be
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;                 // 1800444c2
-    *reinterpret_cast<uint64_t*>(p + 0x30) = 0;                 // 1800444c6
-    *reinterpret_cast<int32_t*>(p + 0x38)  = 0;                 // 1800444ca  DWORD
-    *reinterpret_cast<int32_t*>(p + 0x3c)  = -1;                // 1800444cd  DWORD
-    *reinterpret_cast<uint64_t*>(p + 0x40) = 3;                 // 1800444d4  ONE QWORD
-    *reinterpret_cast<uint64_t*>(p + 0x48) = 0;                 // 1800444dc
-    *reinterpret_cast<uint64_t*>(p + 0x50) = 0;                 // 1800444e0
-    *reinterpret_cast<uint64_t*>(p + 0x58) = 0;                 // 1800444e4
-    *reinterpret_cast<uint64_t*>(p + 0x60) = 0;                 // 1800444e8
-    *v = VtRibbonDescription();                                 // 1800444ec
-    *reinterpret_cast<uint16_t*>(p + 0x68) = 0;                 // 1800444f6  WORD
-    *reinterpret_cast<int32_t*>(p + 0x6c)  = 0;                 // 1800444fa
-    *reinterpret_cast<uint64_t*>(p + 0x70) = 0;                 // 1800444fd
-    *reinterpret_cast<uint64_t*>(p + 0x78) = 0;                 // 180044501
-}
-
 }  // namespace
-
-// ============================================================================
-// ??1RibbonDescription@UI@@UEAA@XZ   0x1800d5c90
-// ============================================================================
-// The child array is at +0x70 here (GroupDescription's is at +0x68); everything
-// else is the same sequence, including retail's asymmetric String release at
-// ElementDescription::_textName (+0x60) — freed field moved to `data-8` on the
-// last reference, NULLED otherwise — and the tail JMP to ??1External@Object@@.
-extern "C" void RtUi_RibbonDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtRibbonDescription();                                // 1800d5cad
-
-    using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x180039440ull)(p + 0x70);             // 1800d5cb4
-
-    *v = VtElementDescription();                               // 1800d5cc1
-
-    char*& s = *reinterpret_cast<char**>(p + 0x60);
-    if (s != nullptr) {                                        // 1800d5cc8
-        --*reinterpret_cast<int32_t*>(s - 4);                  // 1800d5ccd
-        if (*reinterpret_cast<int32_t*>(s - 4) == 0) {         // 1800d5cd0
-            s = s - 8;                                         // 1800d5cd6
-            using MemFreeFn = void (*)(void*);
-            RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(s);
-        } else {
-            s = nullptr;                                       // 1800d5ce6
-        }
-    }
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800d5cf6 JMP
-}
 
 // ============================================================================
 // The MEMBERS
@@ -195,21 +117,23 @@ const char* RibbonDescription::TypeName() const {
 uint32_t RibbonDescription::Type() const {
     uint32_t v = 0; __builtin_memcpy(&v, RibbonTypeInfo(), sizeof v); return v;
 }
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t RibbonDescription::TypeId() {
+    uint32_t v = 0; __builtin_memcpy(&v, RibbonTypeInfo(), sizeof v); return v;
+}
 // [3] 0x1800d5ef0: `MOV EAX,0x204 ; RET`. 0x204, not GroupDescription's 0x104 —
 // the file version is per class and the two must not be shared.
 int32_t RibbonDescription::GetFileVersion() const { return 0x204; }
 
-// [9] 0x180044470 — the ctor INLINED (ConstructBody); the null-`this` test
-// stays in the door.
+// [9] 0x180044470 — the ctor INLINED in retail: placement-new the class (the
+// null-`this` test sat in the retired door; a virtual call has a `this`).
 Object::External* RibbonDescription::Construct() {
-    ConstructBody(reinterpret_cast<uint8_t*>(this));
-    return this;
+    return ::new (this) RibbonDescription();
 }
 // [6] 0x1800443c0 — destroy in place through slot 0 (flag 0), re-run the ctor.
 Object::External* RibbonDescription::Reconstruct() {
     DeletingDtor(0);                                                    // 1800443d7
-    ConstructBody(reinterpret_cast<uint8_t*>(this));
-    return this;
+    return ::new (this) RibbonDescription();
 }
 // [7] 0x180044520 is three instructions: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`
 // — a tail jump into slot 0 with flag 0, i.e. destroy without freeing.
@@ -292,18 +216,10 @@ Object::InternalPtr<Element>* RibbonDescription::CreateInstance(
     using MemAllocFn = void* (*)(uint64_t size, int align);
     void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0xd8, 8);           // 1800d6048
 
+    // Retail inlines ??0RibbonElement (0x1800d6078 .. 0x1800d60a0): the real ctor.
     RibbonElement* elem = nullptr;
-    if (raw != nullptr) {                                               // 1800d6070
-        using ElementCtorFn = void* (*)(void*);
-        RtAddr<ElementCtorFn>(0x180115e50ull)(raw);                     // 1800d6078 ??0Element
-        uint8_t* e = static_cast<uint8_t*>(raw);
-        *reinterpret_cast<void**>(e) = VtRibbonElement();              // 1800d6085
-        *reinterpret_cast<uint16_t*>(e + 0xc0) = 0;                     // 1800d6088  WORD
-        elem = static_cast<RibbonElement*>(raw);
-        elem->_spacing         = 0;                                     // 1800d6093
-        elem->_extentsData     = nullptr;                               // 1800d6099 (qword)
-        *reinterpret_cast<uint64_t*>(&elem->_extentsCount) = 0;         // 1800d60a0 (qword)
-    }
+    if (raw != nullptr)                                                 // 1800d6070
+        elem = ::new (raw) RibbonElement();                             // 1800d6078 ??0Element + stores
 
     void* slot = elem;                                                  // 1800d60ad [RSP+0x50]
 
@@ -344,81 +260,47 @@ Object::InternalPtr<Element>* RibbonDescription::CreateInstance(
     return ret;
 }
 
+// ??1RibbonDescription@UI@@UEAA@XZ   0x1800d5c90 — retail's body, moved from
+// the retired door (ENDGAME B.3.9 UI-B): the child Array at +0x70 through
+// 0x180039440. The restamps, the base's asymmetric _textName (+0x60) release
+// and the tail JMP into ~External are the compiler's chain.
+RibbonDescription::~RibbonDescription() {
+    using ArrayDtorFn = void* (*)(void*);
+    RtAddr<ArrayDtorFn>(0x180039440ull)(reinterpret_cast<uint8_t*>(this) + 0x70);   // 1800d5cb4
+}
+
+// ?CreateNewObject@RibbonDescription@UI@@SAPEAVBase@Object@@XZ 0x180044220 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0x80, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* RibbonDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(RibbonDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) RibbonDescription();
+}
+// ?CreateInPlaceObject@RibbonDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x180044310
+Object::Base* RibbonDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) RibbonDescription();
+}
+
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
+// ENDGAME B.3.9 UI-B: the slot doors, the ctor / dtor doors and the
+// factory-interpreter row are gone. Their only readers were the minted
+// `??_7RibbonDescription@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
+// RibbonDescription now wears the compiler's table.
 // ============================================================================
-extern "C" uint32_t RtUi_RibbonDescription_Type(const void* self) {
-    return reinterpret_cast<const UI::RibbonDescription*>(self)->UI::RibbonDescription::Type();
-}
-extern "C" const char* RtUi_RibbonDescription_TypeName(const void* self) {
-    return reinterpret_cast<const UI::RibbonDescription*>(self)->UI::RibbonDescription::TypeName();
-}
-extern "C" int32_t RtUi_RibbonDescription_GetFileVersion(const void* self) {
-    return reinterpret_cast<const UI::RibbonDescription*>(self)
-        ->UI::RibbonDescription::GetFileVersion();
-}
-extern "C" void* RtUi_RibbonDescription_Construct(void* self) {
-    if (self == nullptr) return nullptr;                                // 180044481 (retail null test)
-    return reinterpret_cast<UI::RibbonDescription*>(self)->UI::RibbonDescription::Construct();
-}
-extern "C" void* RtUi_RibbonDescription_Reconstruct(void* self) {
-    return reinterpret_cast<UI::RibbonDescription*>(self)->UI::RibbonDescription::Reconstruct();
-}
-extern "C" void RtUi_RibbonDescription_Destruct(void* self) {
-    reinterpret_cast<UI::RibbonDescription*>(self)->UI::RibbonDescription::Destruct();
-}
-extern "C" bool RtUi_RibbonDescription_Serialize(void* self, void* stream) {
-    return reinterpret_cast<UI::RibbonDescription*>(self)->UI::RibbonDescription::Serialize(stream);
-}
-extern "C" void** RtUi_RibbonDescription_CreateInstance(const void* self, void** ret,
-                                                        const void* dialog) {
-    return reinterpret_cast<void**>(
-        reinterpret_cast<const UI::RibbonDescription*>(self)
-            ->UI::RibbonDescription::CreateInstance(
-                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
-                static_cast<const UI::Dialog*>(dialog)));
-}
 
 int RtUiRibbonDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@RibbonDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_RibbonDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x180044110ull, (void*)&RtUi_RibbonDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@RibbonDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_RibbonDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x180044130ull, (void*)&RtUi_RibbonDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@RibbonDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_RibbonDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x1800d5ef0ull, (void*)&RtUi_RibbonDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@RibbonDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_RibbonDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x180044470ull, (void*)&RtUi_RibbonDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@RibbonDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_RibbonDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x1800443c0ull, (void*)&RtUi_RibbonDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@RibbonDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_RibbonDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x180044520ull, (void*)&RtUi_RibbonDescription_Destruct);
-
-    RegisterRuntimeExport("??1RibbonDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_RibbonDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x1800d5c90ull, (void*)&RtUi_RibbonDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@RibbonDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_RibbonDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x1800d5f00ull, (void*)&RtUi_RibbonDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@RibbonDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_RibbonDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x1800d6000ull, (void*)&RtUi_RibbonDescription_CreateInstance);
-
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@RibbonDescription` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@RibbonDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::RibbonDescription::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x180044220ull, (void*)&UI::RibbonDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@RibbonDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::RibbonDescription::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x180044310ull, (void*)&UI::RibbonDescription::CreateInPlaceObject);
     return n;
 }

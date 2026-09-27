@@ -18,9 +18,6 @@ extern void  Pf_CoarseCellFreeTail_e420(int64_t, int64_t, int);                 
 extern int64_t* Pf_IntArrayClone_f9e0(int64_t*, int64_t*);                            // 0x14000f9e0
 
 void RegisterRegionGraphBuildBatch() {
-    RegisterExeAddr(0x1400a8670, reinterpret_cast<uintptr_t>(&Pf_RegionGraphCtor_8670));
-    RegisterExeAddr(0x14001e060, reinterpret_cast<uintptr_t>(&Pf_CoarseCellResize_e060));
-    RegisterExeAddr(0x14001e420, reinterpret_cast<uintptr_t>(&Pf_CoarseCellFreeTail_e420));
     // 0x14000f9e0 (Pf_IntArrayClone_f9e0) is owned by reg_pf_pools.cpp — same symbol,
     // registered there first. Duplicate registration removed 2026-08-30.
 }

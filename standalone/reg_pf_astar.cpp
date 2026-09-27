@@ -35,13 +35,7 @@ extern void  Pf_FloodFillRegion_9c170(int*, uint32_t, uint16_t, int);       // 0
 
 void RegisterPfAstarBatch() {
     // Group A
-    RegisterExeAddr(0x14001d040, reinterpret_cast<uintptr_t>(&Pf_AstarCore_d040));
-    RegisterExeAddr(0x14001ce00, reinterpret_cast<uintptr_t>(&Pf_AstarRun_ce00));
-    RegisterExeAddr(0x14001d320, reinterpret_cast<uintptr_t>(&Pf_AstarRelax_d320));
-    RegisterExeAddr(0x14001d450, reinterpret_cast<uintptr_t>(&Pf_AvlInsert_d450));
-    RegisterExeAddr(0x14001d550, reinterpret_cast<uintptr_t>(&Pf_AvlDelete_d550));
     // Group B
-    RegisterExeAddr(0x14001dcd0, reinterpret_cast<uintptr_t>(&Pf_RegionAstarCore_dcd0));
     RegisterExeAddr(0x14001dc00, reinterpret_cast<uintptr_t>(&Pf_RegionAstarRun_dc00));
     // Group C
     RegisterExeAddr(0x1400a6430, reinterpret_cast<uintptr_t>(&Pf_WorkerApplyCmd_a6430));
@@ -50,6 +44,5 @@ void RegisterPfAstarBatch() {
     RegisterExeAddr(0x1400a6a30, reinterpret_cast<uintptr_t>(&Pf_EnqueueCmd1_a6a30));
     RegisterExeAddr(0x1400a6b20, reinterpret_cast<uintptr_t>(&Pf_EnqueueCmd0_a6b20));
     RegisterExeAddr(0x1400a6c10, reinterpret_cast<uintptr_t>(&Pf_EnqueueTradeRoute_a6c10));
-    RegisterExeAddr(0x1400a6240, reinterpret_cast<uintptr_t>(&Pf_AllocTradeSlot_a6240));
     RegisterExeAddr(0x14009c170, reinterpret_cast<uintptr_t>(&Pf_FloodFillRegion_9c170));
 }

@@ -50,12 +50,6 @@ void RegisterUnregLane3() {
     // table faithfully and costs nothing if some other/future caller reads the
     // slot directly without a name fallback.
     // ------------------------------------------------------------------
-    RegisterLane3Slot(0x1401522d8,
-        (uintptr_t)ResolveExport("??0Vector2@Math@@QEAA@AEBVScalar@1@0@Z"));   // Vector2(Scalar,Scalar)
-    RegisterLane3Slot(0x140152420,
-        (uintptr_t)ResolveExport("?Abs@Scalar@Math@@QEBA?AV12@XZ"));           // Scalar::Abs
-    RegisterLane3Slot(0x1401526a8,
-        (uintptr_t)ResolveExport("?Cross@Vector3@Math@@QEBA?AV12@AEBV12@@Z")); // Vector3::Cross
     RegisterLane3Slot(0x140151e80,
         (uintptr_t)ResolveExport("?Intersect@Box@Volume@@QEBA_NAEBV12@@Z"));   // Box::Intersect
 
@@ -117,8 +111,6 @@ void RegisterUnregLane3() {
     // None of these three call sites has a ResolveExport fallback, so this was
     // a hard behavioral gap (deterministic 0 instead of retail's randomized
     // value) on every hit, not just a dormant path.
-    RegisterLane3Slot(0x140151400,
-        (uintptr_t)ResolveExport("?RandFloatTol@Random@System@@QEAAMXZ"));
 
     // ------------------------------------------------------------------
     // Engine::UpdateLoop::IsRunning — REAL FIX (history: since B.3.7 the one
@@ -134,8 +126,6 @@ void RegisterUnregLane3() {
     // which retail's decompile explicitly guards against. Registering
     // restores the retail guard; this is the textbook "null-guard-and-skip is
     // safe to fix" case from the wave brief.
-    RegisterLane3Slot(0x140152850,
-        (uintptr_t)ResolveExport("?IsRunning@UpdateLoop@Engine@@QEBA_NXZ"));
 
     // ------------------------------------------------------------------
     // Graphics::MaterialInstance ctor / SetMaterial / AddTexture /
@@ -148,12 +138,6 @@ void RegisterUnregLane3() {
     // pointer either way — but completes the PE table faithfully.
     // (0x140151838 ??0MaterialInstance: row deleted at ENDGAME B.3.9 EXA — its
     // one reader, engine_funcs' fn_MaterialInstance_Ctor, went with the builders.)
-    RegisterLane3Slot(0x140151870,
-        (uintptr_t)ResolveExport("?SetMaterial@MaterialInstance@Graphics@@QEAAXV?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z"));
-    RegisterLane3Slot(0x140151878,
-        (uintptr_t)ResolveExport("?AddTexture@MaterialInstance@Graphics@@QEAAXAEBVString@System@@V?$ExternalPtr@VImageBuffer@Video@@@Object@@@Z"));
-    RegisterLane3Slot(0x140151880,
-        (uintptr_t)ResolveExport("?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ"));
 
     // MaterialInstance::_typeInfo (data slot). g_ppTypeInfo_MaterialInstance's
     // only two consumers (serialize_struct60b_serialize.cpp, engine_funcs.cpp's
@@ -252,14 +236,10 @@ void RegisterUnregLane3() {
     // same 0x140151a08 slot as fn_String_Concat but has no callers found.
     RegisterLane3Slot(0x140151a08,
         (uintptr_t)ResolveExport("??HSystem@@YA?AVString@0@AEBV10@PEBD@Z"));  // operator+(String,const char*)
-    RegisterLane3Slot(0x140151a10,
-        (uintptr_t)ResolveExport("??HSystem@@YA?AVString@0@AEBV10@0@Z"));    // operator+(String,String)
 
     // System::Filename::operator= — already has a full ResolveExport fallback
     // in engine_funcs.cpp (~line 5058-5063), so this is a no-op; registered
     // for PE-table completeness only.
-    RegisterLane3Slot(0x1401529e0,
-        (uintptr_t)ResolveExport("??4Filename@System@@QEAAAEAV01@AEBV01@@Z"));
 
     // ------------------------------------------------------------------
     // DELIBERATELY NOT REGISTERED — see report for the two addresses this

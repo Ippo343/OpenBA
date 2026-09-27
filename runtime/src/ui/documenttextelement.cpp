@@ -72,6 +72,7 @@
 // (the factory roster). One address, one owner.
 // ============================================================================
 #include <atomic>
+#include <new>
 
 #include "element_common.h"
 #include "../../types/ui/DocumentTextElement.h"
@@ -107,7 +108,6 @@ constexpr int32_t kEventActivated = 0x12;
 
 // RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
 std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_vtable{nullptr};
 std::atomic<void*> g_captureTypeInfo{nullptr};
 std::atomic<void*> g_secondsPerTick{nullptr};
 std::atomic<void*> g_memFree{nullptr};
@@ -116,7 +116,6 @@ const uint8_t* DocumentTextElementTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@DocumentTextElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
-void* VtDocumentTextElement() { return AtomicExport(g_vtable, "??_7DocumentTextElement@UI@@6B@"); }
 
 uint32_t SpriteCaptureTypeId() {
     const uint32_t* p = static_cast<const uint32_t*>(AtomicExport(
@@ -139,10 +138,7 @@ using AddSpritePtFn   = void (*)(void* ctx, const void* sprite, int x, int y, ui
 using AddSpriteRectFn = void (*)(void* ctx, const void* sprite,
                                  int l, int t, int r, int b, uint32_t color);
 using CaptureDrawFn   = void (*)(void* capture, void* ctx, int x, int y);
-using ElementCopyCtorFn = void* (*)(void* self, const void* other);
-using ElementDtorFn     = void  (*)(void* self);
 using ArrayDtorFn       = void* (*)(void* array);
-using ArrayCopyFn       = void* (*)(void* dst, const void* src);
 using EventPushFn       = void  (*)(void* array, int newSize, const void* fill);
 
 struct Event {
@@ -424,107 +420,15 @@ void DocumentTextElement::Update(const System::Time& time, UserInterface* ui,
     }
 }
 
-}  // namespace UI
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t DocumentTextElement::TypeId() { return TypeIdOf(DocumentTextElementTypeInfo()); }
 
-// ============================================================================
-// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
-// ============================================================================
-extern "C" uint32_t RtUi_DocumentTextElement_Type(const void* self) {
-    return reinterpret_cast<const UI::DocumentTextElement*>(self)->UI::DocumentTextElement::Type();
-}
-extern "C" const char* RtUi_DocumentTextElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::DocumentTextElement*>(self)
-        ->UI::DocumentTextElement::TypeName();
-}
-extern "C" void RtUi_DocumentTextElement_ComputeSize(void* self) {
-    reinterpret_cast<UI::DocumentTextElement*>(self)->UI::DocumentTextElement::ComputeSize();
-}
-extern "C" void RtUi_DocumentTextElement_ComputeLayout(void* self, int x, int y, int w, int h) {
-    reinterpret_cast<UI::DocumentTextElement*>(self)->UI::DocumentTextElement::ComputeLayout(
-        x, y, w, h);
-}
-extern "C" void RtUi_DocumentTextElement_Draw(const void* self, void* ctx, uint8_t alpha) {
-    reinterpret_cast<const UI::DocumentTextElement*>(self)->UI::DocumentTextElement::Draw(
-        *static_cast<UI::SpriteContext*>(ctx), alpha);
-}
-extern "C" void RtUi_DocumentTextElement_Update(void* self, const void* time, void* ui,
-                                                void** dlg, const void* state) {
-    reinterpret_cast<UI::DocumentTextElement*>(self)->UI::DocumentTextElement::Update(
-        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlg),   // B.3.6 bridge
-        *static_cast<const UI::Element::UpdateState*>(state));
-}
-
-// ============================================================================
-// Constructors / destructor — DOORS (B4b-2), bodies unchanged.
-// ============================================================================
-
-extern "C" void* RtUi_DocumentTextElement_CopyCtor(void* selfv, const void* otherv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    const uint8_t* other = static_cast<const uint8_t*>(otherv);
-    RtAddr<ElementCopyCtorFn>(0x1800358c0ull)(self, other);
-    P(self, 0x00) = VtDocumentTextElement();
-
-    for (int off = 0xc0; off <= 0xe0; off += 8)
-        *reinterpret_cast<uint64_t*>(self + off) = *reinterpret_cast<const uint64_t*>(other + off);
-
-    *reinterpret_cast<uint64_t*>(self + 0xe8) = 0;
-    *reinterpret_cast<uint64_t*>(self + 0xf0) = 0;
-    RtAddr<ArrayCopyFn>(0x180037020ull)(self + 0xe8, other + 0xe8);
-
-    for (int off = 0xf8; off <= 0x108; off += 4)
-        I32(self, off) = I32c(other, off);
-
-    *reinterpret_cast<uint64_t*>(self + 0x110) = 0;
-    *reinterpret_cast<uint64_t*>(self + 0x118) = 0;
-    RtAddr<ArrayCopyFn>(0x18003ce30ull)(self + 0x110, other + 0x110);
-
-    *reinterpret_cast<uint64_t*>(self + 0x120) = 0;
-    *reinterpret_cast<uint64_t*>(self + 0x128) = 0;
-    RtAddr<ArrayCopyFn>(0x18003cf20ull)(self + 0x120, other + 0x120);
-
-    *reinterpret_cast<uint64_t*>(self + 0x130) = 0;
-    *reinterpret_cast<uint64_t*>(self + 0x138) = 0;
-    RtAddr<ArrayCopyFn>(0x18003d010ull)(self + 0x130, other + 0x130);
-
-    *reinterpret_cast<uint64_t*>(self + 0x140) = *reinterpret_cast<const uint64_t*>(other + 0x140);
-
-    *reinterpret_cast<uint64_t*>(self + 0x148) = 0;
-    *reinterpret_cast<uint64_t*>(self + 0x150) = 0;
-    RtAddr<ArrayCopyFn>(0x18003d0f0ull)(self + 0x148, other + 0x148);
-
-    *reinterpret_cast<uint64_t*>(self + 0x158) = 0;
-    *reinterpret_cast<uint64_t*>(self + 0x160) = 0;
-    RtAddr<ArrayCopyFn>(0x18003d360ull)(self + 0x158, other + 0x158);
-
-    // The two String fields: zero, then take a reference if the source has one.
-    P(self, 0x168) = nullptr;
-    if (Pc(other, 0x168) != nullptr) {
-        P(self, 0x168) = Pc(other, 0x168);
-        ++*reinterpret_cast<int32_t*>(static_cast<uint8_t*>(P(self, 0x168)) - 4);
-    }
-    for (int off = 0x170; off <= 0x190; off += 4)
-        I32(self, off) = I32c(other, off);
-    P(self, 0x198) = nullptr;
-    if (Pc(other, 0x198) != nullptr) {
-        P(self, 0x198) = Pc(other, 0x198);
-        ++*reinterpret_cast<int32_t*>(static_cast<uint8_t*>(P(self, 0x198)) - 4);
-    }
-    I32(self, 0x1a0) = I32c(other, 0x1a0);
-    I32(self, 0x1a4) = I32c(other, 0x1a4);
-    self[0x1a8] = other[0x1a8];
-    for (int off = 0x1b0; off <= 0x1c4; off += 4)
-        I32(self, off) = I32c(other, off);
-    return self;
-}
-
-// ??1DocumentTextElement@UI@@UEAA@XZ  0x1800cf320 — own vtable, both Strings
-// released, six arrays destroyed in retail's order, then a TAIL JUMP to
-// ~Element.
-extern "C" void RtUi_DocumentTextElement_Dtor(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    P(self, 0x00) = VtDocumentTextElement();
-
+// ??1DocumentTextElement@UI@@UEAA@XZ  0x1800cf320 — retail's body, moved from
+// the retired door (ENDGAME B.3.9 UI-B): both Strings released, six arrays
+// destroyed in retail's order. The entry restamp and the TAIL JUMP to ~Element
+// are the compiler's.
+DocumentTextElement::~DocumentTextElement() {
+    uint8_t* self = reinterpret_cast<uint8_t*>(this);
     ReleaseString(reinterpret_cast<void**>(self + 0x198));
     ReleaseString(reinterpret_cast<void**>(self + 0x168));
 
@@ -534,47 +438,42 @@ extern "C" void RtUi_DocumentTextElement_Dtor(void* selfv) {
     RtAddr<ArrayDtorFn>(0x18003da00ull)(self + 0x120);
     RtAddr<ArrayDtorFn>(0x18003d8c0ull)(self + 0x110);
     RtAddr<ArrayDtorFn>(0x180037310ull)(self + 0x0e8);
-
-    RtAddr<ElementDtorFn>(0x1801161a0ull)(self);
 }
+
+// ?CreateNewObject@DocumentTextElement@UI@@SAPEAVBase@Object@@XZ 0x18003bf40 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0x1c8, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* DocumentTextElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(DocumentTextElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) DocumentTextElement();
+}
+// ?CreateInPlaceObject@DocumentTextElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x18003bfc0
+Object::Base* DocumentTextElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) DocumentTextElement();
+}
+
+}  // namespace UI
+
+// ============================================================================
+// ENDGAME B.3.9 UI-B: the slot doors (Type .. Update), the copy-ctor door and
+// the ??1 door are gone. Their only readers were the minted
+// `??_7DocumentTextElement@UI@@6B@`, its RT_DELDTOR row and the FACTUI1 row.
+// ============================================================================
 
 // ============================================================================
 // Registration
 // ============================================================================
 int RtUiDocumentTextElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?TypeName@DocumentTextElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_DocumentTextElement_TypeName);      ++n;
-    RegisterRuntimeAddr(0x18003be50ull, (void*)&RtUi_DocumentTextElement_TypeName);
-
-    RegisterRuntimeExport("?Type@DocumentTextElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_DocumentTextElement_Type);          ++n;
-    RegisterRuntimeAddr(0x18003be30ull, (void*)&RtUi_DocumentTextElement_Type);
-
-    RegisterRuntimeExport("?ComputeSize@DocumentTextElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_DocumentTextElement_ComputeSize);   ++n;
-    RegisterRuntimeAddr(0x1800cdb60ull, (void*)&RtUi_DocumentTextElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@DocumentTextElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_DocumentTextElement_ComputeLayout); ++n;
-    RegisterRuntimeAddr(0x1800cda00ull, (void*)&RtUi_DocumentTextElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@DocumentTextElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_DocumentTextElement_Draw);          ++n;
-    RegisterRuntimeAddr(0x1800cd7a0ull, (void*)&RtUi_DocumentTextElement_Draw);
-
-    RegisterRuntimeExport(
-        "?Update@DocumentTextElement@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@"
-        "V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@Element@2@@Z",
-        (void*)&RtUi_DocumentTextElement_Update);                          ++n;
-    RegisterRuntimeAddr(0x1800cd360ull, (void*)&RtUi_DocumentTextElement_Update);
-
-    RegisterRuntimeExport("??0DocumentTextElement@UI@@QEAA@AEBV01@@Z",
-                          (void*)&RtUi_DocumentTextElement_CopyCtor);      ++n;
-    RegisterRuntimeAddr(0x18003c140ull, (void*)&RtUi_DocumentTextElement_CopyCtor);
-
-    RegisterRuntimeExport("??1DocumentTextElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_DocumentTextElement_Dtor);          ++n;
-    RegisterRuntimeAddr(0x1800cf320ull, (void*)&RtUi_DocumentTextElement_Dtor);
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@DocumentTextElement` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@DocumentTextElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::DocumentTextElement::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x18003bf40ull, (void*)&UI::DocumentTextElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@DocumentTextElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::DocumentTextElement::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x18003bfc0ull, (void*)&UI::DocumentTextElement::CreateInPlaceObject);
     return n;
 }

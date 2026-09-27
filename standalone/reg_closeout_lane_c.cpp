@@ -22,7 +22,6 @@
 extern "C" void EventLog_OnAchievementAwarded(int achievementId);  // 0x140096960
 
 extern "C" void RegisterCloseoutLaneC() {
-    RegisterExeAddr(0x140096960, reinterpret_cast<uintptr_t>(&EventLog_OnAchievementAwarded));
 }
 
 namespace {

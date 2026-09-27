@@ -33,9 +33,8 @@
 // block C4; cross-asserted against DescriptionsBatch1.h's POD). sizeof 0x90.
 //
 // ENDGAME B.3.6 block C4: every body below is a MEMBER of
-// UI::ContainerDescription; each registered door is a one-line QUALIFIED
-// delegation (a live description wears the MINTED table, whose slots resolve
-// back to these doors). RULE B6-5: the vtables, the type-info record and the
+// UI::ContainerDescription. (ENDGAME B.3.9 UI-B: the class is concrete; the
+// doors and the minted table are retired.) RULE B6-5: the vtables, the type-info record and the
 // ctor door the members reach are cached in namespace-scope std::atomic slots,
 // never in a function-local static.
 // ============================================================================
@@ -68,25 +67,11 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 
-std::atomic<void*> g_vtContainerDescription{nullptr};
-std::atomic<void*> g_vtContainerElement{nullptr};
 std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_ctor{nullptr};
 
-void* VtContainerDescription() {
-    return AtomicExport(g_vtContainerDescription, RtUI::kVtblContainerDescription);
-}
-void* VtContainerElement()  { return AtomicExport(g_vtContainerElement, RtUI::kVtblContainerElement); }
 const uint8_t* ContainerTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@ContainerDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
-// ??0ContainerDescription@UI@@QEAA@XZ (0x1800cd060) — factory_ui1.cpp's door.
-void* ContainerCtor(void* self) {
-    using CtorFn = void* (*)(void*);
-    return reinterpret_cast<CtorFn>(
-        AtomicExport(g_ctor, "??0ContainerDescription@UI@@QEAA@XZ"))(self);
 }
 
 }  // namespace
@@ -104,17 +89,23 @@ const char* ContainerDescription::TypeName() const {
     const uint8_t* ti = ContainerTypeInfo();
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
 }
+// static 0x1800398c0 -- the same read as slot 2 (the minted record until W3).
+uint32_t ContainerDescription::TypeId() {
+    const uint8_t* ti = ContainerTypeInfo();
+    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
+}
 int32_t ContainerDescription::GetFileVersion() const { return 0x204; }
 
-// 0x180039a70 — the null test stays in the door.
+// 0x180039a70 — the ctor, placement. (Retail's `TEST RCX,RCX` sat in the
+// retired door; a virtual call always has a `this`.)
 Object::External* ContainerDescription::Construct() {
-    return static_cast<Object::External*>(ContainerCtor(this));    // 180039a68 JMP
+    return ::new (this) ContainerDescription();             // 180039a68 JMP
 }
 // 0x180039a50 — slot 0 with flag 0 (destroy, do not free), then the ctor. The
-// slot-0 call is VIRTUAL, as in retail: it runs the minted deleting-dtor row.
+// slot-0 call is VIRTUAL, as in retail.
 Object::External* ContainerDescription::Reconstruct() {
     DeletingDtor(0);                                        // 180039a5e
-    return static_cast<Object::External*>(ContainerCtor(this));    // 180039a68 JMP
+    return ::new (this) ContainerDescription();             // 180039a68 JMP
 }
 // 0x180039a80
 void ContainerDescription::Destruct() { DeletingDtor(0); }
@@ -187,17 +178,11 @@ bool ContainerDescription::Serialize(void* streamv) {
 Object::InternalPtr<Element>* ContainerDescription::CreateInstance(
         Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
     // ---- 1. the container ---------------------------------------------------
+    // Retail inlines ??0ContainerElement (0x1800ccc06..ccc25): the real ctor.
     void* rawC = MemAlloc(0xd8, 8);                         // 1800ccbd6
     ContainerElement* container = nullptr;
-    if (rawC != nullptr) {                                  // 1800ccc01
-        ElementCtor(rawC);                                  // 1800ccc06
-        *reinterpret_cast<void**>(rawC) = VtContainerElement();          // 1800ccc13
-        container = reinterpret_cast<ContainerElement*>(rawC);           // B.3.6 bridge
-        container->_barSize      = 0;                                    // 1800ccc18
-        container->_clampWidth   = 0;                                    // 1800ccc1e WORD
-        container->_clampHeight  = 0;
-        container->_wheelImpulse = 0;                                    // 1800ccc25
-    }
+    if (rawC != nullptr)                                    // 1800ccc01
+        container = ::new (rawC) ContainerElement();        // 1800ccc06 .. 1800ccc25
 
     // ---- 2. the base applier ------------------------------------------------
     // ?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@… (0x180115ad0)
@@ -268,96 +253,43 @@ Object::InternalPtr<Element>* ContainerDescription::CreateInstance(
 
 }  // namespace UI
 
-// ============================================================================
-// The DOORS — registered names and addresses unchanged, each a one-line
-// QUALIFIED delegation onto the member above.
-// ============================================================================
-using UI::ContainerDescription;
+namespace UI {
 
-extern "C" uint32_t RtUi_ContainerDescription_Type(const ContainerDescription* self) {
-    return self->UI::ContainerDescription::Type();
+// ??1ContainerDescription@UI@@UEAA@XZ 0x1800ccff0 -- retail's body is the two
+// restamps, ~ElementDescription's +0x60 String release and the tail into
+// ~External: all the compiler's chain now.
+ContainerDescription::~ContainerDescription() {}
+
+// ?CreateNewObject@ContainerDescription@UI@@SAPEAVBase@Object@@XZ 0x1800399c0 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0x90, align 8; retail's null
+// branch; the out-of-line ctor. Replaces the FACTUI1 row (B39_RULES D2).
+Object::Base* ContainerDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ContainerDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) ContainerDescription();
 }
-extern "C" const char* RtUi_ContainerDescription_TypeName(const ContainerDescription* self) {
-    return self->UI::ContainerDescription::TypeName();
+// ?CreateInPlaceObject@ContainerDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x180039a40
+Object::Base* ContainerDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) ContainerDescription();
 }
-extern "C" int32_t RtUi_ContainerDescription_GetFileVersion(const ContainerDescription* self) {
-    return self->UI::ContainerDescription::GetFileVersion();
-}
-extern "C" void* RtUi_ContainerDescription_Construct(ContainerDescription* self) {
-    if (self == nullptr) return nullptr;                    // 180039a73
-    return self->UI::ContainerDescription::Construct();
-}
-extern "C" void* RtUi_ContainerDescription_Reconstruct(ContainerDescription* self) {
-    return self->UI::ContainerDescription::Reconstruct();
-}
-extern "C" void RtUi_ContainerDescription_Destruct(ContainerDescription* self) {
-    self->UI::ContainerDescription::Destruct();
-}
-extern "C" bool RtUi_ContainerDescription_Serialize(ContainerDescription* self, void* stream) {
-    return self->UI::ContainerDescription::Serialize(stream);
-}
-// RDX is the caller's slot; the member writes it and hands it back (B6-2).
-extern "C" void** RtUi_ContainerDescription_CreateInstance(const ContainerDescription* self,
-                                                           void** ret,
-                                                           const void* dialog) {
-    return reinterpret_cast<void**>(self->UI::ContainerDescription::CreateInstance(
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),        // B.3.6 bridge
-        static_cast<const UI::Dialog*>(dialog)));
-}
+
+}  // namespace UI
 
 // ============================================================================
-// ??1ContainerDescription@UI@@UEAA@XZ   0x1800ccff0 — stays a DOOR (B4b-2)
+// ENDGAME B.3.9 UI-B: the slot doors (Type .. CreateInstance), the ??1 door and
+// the FACTUI1 ??0 door are gone. Their only readers were the minted
+// `??_7ContainerDescription@UI@@6B@`, its RT_DELDTOR row and the FACTUI1 row.
 // ============================================================================
-extern "C" void RtUi_ContainerDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtContainerDescription();                          // 1800cd00d
-    *v = VtElementDescription();                            // 1800cd017
-    ReleaseStringField(p, 0x60);                            // 1800cd01a
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800cd04c JMP
-}
-
 int RtUiContainerDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@ContainerDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_ContainerDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x1800398b0ull, (void*)&RtUi_ContainerDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@ContainerDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_ContainerDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x1800398d0ull, (void*)&RtUi_ContainerDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@ContainerDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_ContainerDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x1800ccfe0ull, (void*)&RtUi_ContainerDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@ContainerDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_ContainerDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x180039a70ull, (void*)&RtUi_ContainerDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@ContainerDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_ContainerDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x180039a50ull, (void*)&RtUi_ContainerDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@ContainerDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_ContainerDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x180039a80ull, (void*)&RtUi_ContainerDescription_Destruct);
-
-    RegisterRuntimeExport("??1ContainerDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_ContainerDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x1800ccff0ull, (void*)&RtUi_ContainerDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@ContainerDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_ContainerDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x1800cced0ull, (void*)&RtUi_ContainerDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@ContainerDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_ContainerDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x1800ccb90ull, (void*)&RtUi_ContainerDescription_CreateInstance);
-
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@ContainerDescription` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@ContainerDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::ContainerDescription::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x1800399c0ull, (void*)&UI::ContainerDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@ContainerDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::ContainerDescription::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x180039a40ull, (void*)&UI::ContainerDescription::CreateInPlaceObject);
     return n;
 }

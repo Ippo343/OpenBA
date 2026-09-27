@@ -32,6 +32,7 @@
 //   delegate `->UI::X::M(…)` or it re-enters itself.
 // ============================================================================
 #include "unit.h"
+#include "b39_uib_test_util.h"   // ENDGAME B.3.9 UI-B: the concrete-class checks
 
 #include "runtime/types/ui/ContainerDescription.h"
 #include "runtime/types/ui/ContainerElement.h"
@@ -158,7 +159,7 @@ struct BareExternalProbe final : Object::External {
         return ret;                                                                         \
     }                                                                                       \
     Object::External* UI::CLS::Construct() { Note(this, TAG * 100 + 9); return this; }      \
-    UI::CLS::~CLS() {}
+    UI::CLS::~CLS() { B39NoteDtor(this); }
 C4_DESC_MARKERS(ContainerDescription, kContainerD)
 C4_DESC_MARKERS(LayoutDescription,    kLayoutD)
 C4_DESC_MARKERS(ListDescription,      kListD)
@@ -174,7 +175,7 @@ C4_DESC_MARKERS(TableDescription,     kTableD)
         Note(this, TAG * 100 + 5, (long long)x * 1000 + h); }                               \
     void UI::CLS::Draw(UI::SpriteContext&, uint8_t alpha) const {                           \
         Note(this, TAG * 100 + 6, alpha); }                                                 \
-    UI::CLS::~CLS() {}
+    UI::CLS::~CLS() { B39NoteDtor(this); }
 #define C4_UPDATE_MARKER(CLS, TAG)                                                         \
     void UI::CLS::Update(const System::Time&, UI::UserInterface*,                           \
                          Object::InternalPtr<UI::DialogInstance>* dialog,                   \
@@ -217,21 +218,144 @@ UNIT_TEST(ui_c4_sizes_match_retail) {
 }
 
 UNIT_TEST(ui_c4_classes_are_abstract_single_base_no_virtual_dtor) {
+    // ENDGAME B.3.9 UI-B: the converted classes are CONCRETE (their own
+    // test below); the rest stay abstract until their commit.
 #define C4_SHAPE(CLS, BASE)                                                 \
     CHECK(std::is_abstract<UI::CLS>::value);                                \
     CHECK(!std::has_virtual_destructor<UI::CLS>::value);                    \
     CHECK((std::is_base_of<UI::BASE, UI::CLS>::value));
-    C4_SHAPE(ContainerDescription, ElementDescription)
-    C4_SHAPE(LayoutDescription,    ElementDescription)
-    C4_SHAPE(ListDescription,      ElementDescription)
-    C4_SHAPE(ScrollDescription,    ElementDescription)
-    C4_SHAPE(TableDescription,     ElementDescription)
-    C4_SHAPE(ContainerElement,     Element)
-    C4_SHAPE(LayoutElement,        Element)
-    C4_SHAPE(ListElement,          Element)
-    C4_SHAPE(ScrollElement,        Element)
-    C4_SHAPE(TableElement,         Element)
+#define C4_CONCRETE(CLS, BASE)                                              \
+    CHECK(B39IsConcreteShape<UI::CLS>());                                   \
+    CHECK((std::is_base_of<UI::BASE, UI::CLS>::value));
+    C4_CONCRETE(ContainerDescription, ElementDescription)
+    C4_CONCRETE(LayoutDescription, ElementDescription)
+    C4_CONCRETE(ListDescription,   ElementDescription)
+    C4_CONCRETE(ScrollDescription, ElementDescription)
+    C4_CONCRETE(TableDescription,  ElementDescription)
+    C4_CONCRETE(ContainerElement,  Element)
+    C4_CONCRETE(LayoutElement,     Element)
+    C4_CONCRETE(ListElement,       Element)
+    C4_CONCRETE(ScrollElement,     Element)
+    C4_CONCRETE(TableElement,      Element)
 #undef C4_SHAPE
+#undef C4_CONCRETE
+}
+
+// ===========================================================================
+// ENDGAME B.3.9 block UI-B (B39_RULES D1, rule B9-16): the concrete classes —
+// slot order by PMF on the real header, the real ctor's retail stores, both
+// DeletingDtor arms.
+// ===========================================================================
+UNIT_TEST(b39_uib_c4_slot_order_by_pmf) {
+    B39CheckDescriptionPmf<UI::ContainerDescription>();
+    B39CheckElementPmf<UI::ContainerElement>();
+    B39CheckDescriptionPmf<UI::LayoutDescription>();
+    B39CheckElementPmf<UI::LayoutElement>();
+    B39CheckDescriptionPmf<UI::ListDescription>();
+    B39CheckElementPmf<UI::ListElement>();
+}
+
+UNIT_TEST(b39_uib_c4_layout_list_ctor_stores) {
+    FactoryScope scope;
+    // ??0LayoutDescription 0x1800d3a90 / ??0LayoutElement 0x1800d32e0: the
+    // array headers zero.
+    alignas(8) uint8_t ld[0x78];
+    std::memset(ld, 0xCD, sizeof ld);
+    auto* lds = ::new (static_cast<void*>(ld)) UI::LayoutDescription();
+    CHECK(lds->_entries._data == nullptr);
+    CHECK_EQ(lds->_entries._size, 0);
+    CHECK_EQ(lds->_entries._capacity, 0);
+    CHECK_EQ(lds->_id, -1);
+    lds->DeletingDtor(0);
+    alignas(8) uint8_t le[0xd0];
+    std::memset(le, 0xCD, sizeof le);
+    auto* les = ::new (static_cast<void*>(le)) UI::LayoutElement();
+    CHECK(les->_childRecords._data == nullptr);
+    CHECK_EQ(les->_childRecords._size, 0);
+    CHECK_EQ(les->_childRecords._capacity, 0);
+    les->DeletingDtor(0);
+
+    // ??0ListDescription 0x1800d49b0.
+    alignas(8) uint8_t d[0x90];
+    std::memset(d, 0xCD, sizeof d);
+    auto* lsd = ::new (static_cast<void*>(d)) UI::ListDescription();
+    CHECK(lsd->_partDescs[0] == nullptr);
+    CHECK(lsd->_partDescs[1] == nullptr);
+    CHECK(lsd->_spriteSheet == nullptr);
+    CHECK(lsd->_spriteName == nullptr);
+    CHECK_EQ(lsd->_hoverColor, 0xff808080u);
+    CHECK_EQ(lsd->_selectColor, 0xffffffffu);
+    lsd->DeletingDtor(0);
+    // ??0ListElement 0x1800d4570.
+    alignas(8) uint8_t e[0x100];
+    std::memset(e, 0xCD, sizeof e);
+    auto* lse = ::new (static_cast<void*>(e)) UI::ListElement();
+    CHECK(lse->_highlight.spriteSheet == nullptr);
+    CHECK_EQ(lse->_highlight.spriteIndex, -1);
+    CHECK_EQ(lse->_hoverColor, 0xff808080u);
+    CHECK_EQ(lse->_selectColor, 0xffffffffu);
+    CHECK_EQ(lse->_selectedIndex, -1);
+    CHECK_EQ(lse->_hoverIndex, -1);
+    CHECK(lse->_userData._data == nullptr);
+    CHECK_EQ(lse->_userData._size, 0);
+    CHECK(lse->_ribbon == nullptr);
+    CHECK(lse->_clip == nullptr);
+    lse->DeletingDtor(0);
+}
+
+UNIT_TEST(b39_uib_c4_layout_list_deletingdtor_arms) {
+    FactoryScope scope;
+    LayoutDProbe ldp;
+    B39CheckDeletingDtorArms<UI::LayoutDescription, 0x78>(VTableOf(&ldp));
+    LayoutEProbe lep;
+    B39CheckDeletingDtorArms<UI::LayoutElement, 0xd0>(VTableOf(&lep));
+    ListDProbe sdp;
+    B39CheckDeletingDtorArms<UI::ListDescription, 0x90>(VTableOf(&sdp));
+    ListEProbe sep;
+    B39CheckDeletingDtorArms<UI::ListElement, 0x100>(VTableOf(&sep));
+}
+
+UNIT_TEST(b39_uib_c4_container_ctor_stores) {
+    FactoryScope scope;
+    // ??0ContainerDescription 0x1800cd060: +0x68/+0x6c = 0x64, +0x70 WORD 0,
+    // +0x74 0, +0x78..+0x8f 0; +0x72/+0x73 written by nothing.
+    alignas(8) uint8_t d[0x90];
+    std::memset(d, 0xCD, sizeof d);
+    auto* cd = ::new (static_cast<void*>(d)) UI::ContainerDescription();
+    CHECK_EQ(cd->_requestedWidth, 0x64);
+    CHECK_EQ(cd->_requestedHeight, 0x64);
+    CHECK_EQ((int)cd->_clampWidth, 0);
+    CHECK_EQ((int)cd->_clampHeight, 0);
+    CHECK_EQ((int)d[0x72], 0xCD);
+    CHECK_EQ((int)d[0x73], 0xCD);
+    CHECK_EQ(cd->_barSize, 0);
+    for (int i = 0; i < 3; ++i) CHECK(cd->_partDescs[i] == nullptr);
+    CHECK_EQ(cd->_id, -1);                  // ElementDescription's real ctor
+    CHECK_EQ((int)cd->_elementType, 3);
+    cd->DeletingDtor(0);
+
+    // ??0ContainerElement 0x1800ccb40: +0xc8 0, +0xcc WORD 0, +0xd0 0;
+    // +0xc0/+0xc4 and the pads are NOT written.
+    alignas(8) uint8_t e[0xd8];
+    std::memset(e, 0xCD, sizeof e);
+    auto* ce = ::new (static_cast<void*>(e)) UI::ContainerElement();
+    CHECK_EQ(ce->_barSize, 0);
+    CHECK_EQ((int)ce->_clampWidth, 0);
+    CHECK_EQ((int)ce->_clampHeight, 0);
+    CHECK_EQ(ce->_wheelImpulse, 0);
+    CHECK_EQ((int)e[0xc0], 0xCD);
+    CHECK_EQ((int)e[0xc4], 0xCD);
+    CHECK_EQ((int)e[0xce], 0xCD);
+    CHECK_EQ((int)e[0xd4], 0xCD);
+    ce->DeletingDtor(0);
+}
+
+UNIT_TEST(b39_uib_c4_container_deletingdtor_arms) {
+    FactoryScope scope;
+    ContainerDProbe dp;
+    B39CheckDeletingDtorArms<UI::ContainerDescription, 0x90>(VTableOf(&dp));
+    ContainerEProbe ep;
+    B39CheckDeletingDtorArms<UI::ContainerElement, 0xd8>(VTableOf(&ep));
 }
 
 UNIT_TEST(ui_c4_description_field_offsets) {
@@ -505,4 +629,83 @@ UNIT_TEST(ui_c4_inline_accessors_read_the_retail_offsets) {
     s.SetCurrentValue(2.5f);
     CHECK(s._currentValue == 2.5f);          // 0x18003aa10
     CHECK(s.GetCurrentValue() == 2.5f);      // 0x18003aa20
+}
+
+// ---- Scroll (ENDGAME B.3.9 UI-B) -------------------------------------------
+UNIT_TEST(b39_uib_c4_scroll) {
+    B39CheckDescriptionPmf<UI::ScrollDescription>();
+    B39CheckElementPmf<UI::ScrollElement>();
+
+    FactoryScope scope;
+    // ??0ScrollDescription 0x18011a4e0: +0xb9..+0xbb written by nothing.
+    alignas(8) uint8_t d[0xc8];
+    std::memset(d, 0xCD, sizeof d);
+    auto* sd = ::new (static_cast<void*>(d)) UI::ScrollDescription();
+    CHECK(sd->_spriteSheet == nullptr);
+    for (int i = 0; i < 9; ++i) CHECK(sd->_spriteNames[i] == nullptr);
+    CHECK_EQ((int)sd->_vertical, 1);
+    CHECK_EQ((int)d[0xb9], 0xCD);
+    CHECK_EQ(sd->_inset, 1);
+    CHECK_EQ(sd->_barColor, 0xffffffffu);
+    CHECK_EQ(sd->_unknownC4, 0xffffffffu);
+    sd->DeletingDtor(0);
+    // ??0ScrollElement 0x18011a7f0: _inset (+0x15c) NOT written.
+    alignas(8) uint8_t e[0x178];
+    std::memset(e, 0xCD, sizeof e);
+    auto* se = ::new (static_cast<void*>(e)) UI::ScrollElement();
+    CHECK(se->_trackStart.spriteSheet == nullptr);
+    CHECK_EQ(se->_hotEnd.spriteIndex, -1);
+    CHECK_EQ((int)se->_vertical, 1);
+    CHECK_EQ(se->_barColor, 0xffffffffu);
+    CHECK_EQ(se->_unknown158, 0xffffffffu);
+    CHECK_EQ((int)e[0x15c], 0xCD);
+    CHECK(se->_currentValue == 0.0f);
+    CHECK(se->_displayPercent == 0.33333334f);
+    CHECK(se->_maxValue == 4.0f);
+    CHECK(se->_dragAnchor == 0.0f);
+    CHECK(se->_dragValue == 0.0f);
+    se->DeletingDtor(0);
+
+    ScrollDProbe dp;
+    B39CheckDeletingDtorArms<UI::ScrollDescription, 0xc8>(VTableOf(&dp));
+    ScrollEProbe ep;
+    B39CheckDeletingDtorArms<UI::ScrollElement, 0x178>(VTableOf(&ep));
+}
+
+// ---- Table (ENDGAME B.3.9 UI-B) --------------------------------------------
+UNIT_TEST(b39_uib_c4_table) {
+    B39CheckDescriptionPmf<UI::TableDescription>();
+    B39CheckElementPmf<UI::TableElement>();
+
+    FactoryScope scope;
+    // ??0TableDescription 0x18011e7a0: +0x74 not written.
+    alignas(8) uint8_t d[0x98];
+    std::memset(d, 0xCD, sizeof d);
+    auto* td = ::new (static_cast<void*>(d)) UI::TableDescription();
+    CHECK_EQ(td->_columnCount, 1);
+    CHECK_EQ(td->_rowCount, 1);
+    CHECK_EQ(td->_spacing, 0);
+    CHECK_EQ((int)d[0x74], 0xCD);
+    CHECK(td->_cells._data == nullptr);
+    CHECK_EQ(td->_cells._size, 0);
+    CHECK_EQ(td->_unknown88, 0ull);
+    CHECK(td->_unknown90 == nullptr);
+    td->DeletingDtor(0);
+    // ??0TableElement 0x18011e2f0: +0xcc not written.
+    alignas(8) uint8_t e[0xf0];
+    std::memset(e, 0xCD, sizeof e);
+    auto* te = ::new (static_cast<void*>(e)) UI::TableElement();
+    CHECK_EQ(te->_rowCount, 0);
+    CHECK_EQ(te->_columnCount, 0);
+    CHECK_EQ(te->_spacing, 0);
+    CHECK_EQ((int)e[0xcc], 0xCD);
+    CHECK(te->_rowSizes._data == nullptr);
+    CHECK(te->_columnSizes._data == nullptr);
+    CHECK_EQ(te->_columnSizes._capacity, 0);
+    te->DeletingDtor(0);
+
+    TableDProbe dp;
+    B39CheckDeletingDtorArms<UI::TableDescription, 0x98>(VTableOf(&dp));
+    TableEProbe ep;
+    B39CheckDeletingDtorArms<UI::TableElement, 0xf0>(VTableOf(&ep));
 }

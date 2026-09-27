@@ -68,18 +68,4 @@ void RegisterBoatCtrlAddrs() {
     RegisterExeAddr(0x1401720fc, reinterpret_cast<uintptr_t>(&k_rdata_1720fc));
     RegisterExeAddr(0x14017210c, reinterpret_cast<uintptr_t>(&k_rdata_17210c));
 
-    RegisterExeAddr(0x1400453f0, reinterpret_cast<uintptr_t>(&BoatCtrl_State0_Enter));
-    RegisterExeAddr(0x140045190, reinterpret_cast<uintptr_t>(&BoatCtrl_State0_Update));
-    RegisterExeAddr(0x140045250, reinterpret_cast<uintptr_t>(&BoatCtrl_State0_Tick));
-    RegisterExeAddr(0x140045150, reinterpret_cast<uintptr_t>(&BoatCtrl_State1_Enter));
-    RegisterExeAddr(0x140044ff0, reinterpret_cast<uintptr_t>(&BoatCtrl_State1_Tick));
-    RegisterExeAddr(0x140044f70, reinterpret_cast<uintptr_t>(&BoatCtrl_State2_Enter));
-    RegisterExeAddr(0x140044f00, reinterpret_cast<uintptr_t>(&BoatCtrl_State2_Event0));
-    RegisterExeAddr(0x140045670, reinterpret_cast<uintptr_t>(&BoatCtrl_Event1_Abort));
-    RegisterExeAddr(0x140044ec0, reinterpret_cast<uintptr_t>(&BoatCtrl_State3_Enter));
-    RegisterExeAddr(0x140044d10, reinterpret_cast<uintptr_t>(&BoatCtrl_State3_Tick));
-    RegisterExeAddr(0x140044cd0, reinterpret_cast<uintptr_t>(&BoatCtrl_State4_Enter));
-    RegisterExeAddr(0x140044c40, reinterpret_cast<uintptr_t>(&BoatCtrl_State4_Tick));
-    RegisterExeAddr(0x1400a70c0, reinterpret_cast<uintptr_t>(&BoatCtrl_NextRoutePoint));
-    RegisterExeAddr(0x14010a0e0, reinterpret_cast<uintptr_t>(&BoatCtrl_DriveToward));
 }

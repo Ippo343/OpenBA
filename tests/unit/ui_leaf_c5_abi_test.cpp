@@ -28,6 +28,7 @@
 // defined below as MARKERS.
 // ============================================================================
 #include "unit.h"
+#include "b39_uib_test_util.h"   // ENDGAME B.3.9 UI-B: the concrete-class checks
 
 #include "runtime/types/ui/Element.h"
 #include "runtime/types/ui/ElementDescription.h"
@@ -257,7 +258,7 @@ long long UpdateArg(Object::InternalPtr<UI::DialogInstance>* dialog,
         Hit(this, K, 8, reinterpret_cast<intptr_t>(d)); return FillRet(ret);                 \
     }                                                                                        \
     Object::External* UI::C::Construct() { Hit(this, K, 9); return this; }                   \
-    UI::C::~C() {}
+    UI::C::~C() { B39NoteDtor(this); }
 
 #define C5_ELEMENT_MARKERS(C, K)                                                             \
     const char* UI::C::TypeName() const { Hit(this, K, 1); return #C; }                     \
@@ -267,7 +268,7 @@ long long UpdateArg(Object::InternalPtr<UI::DialogInstance>* dialog,
         Hit(this, K, 5, (long long)x * 1000 + h);                                            \
     }                                                                                        \
     void UI::C::Draw(UI::SpriteContext&, uint8_t a) const { Hit(this, K, 6, a); }            \
-    UI::C::~C() {}
+    UI::C::~C() { B39NoteDtor(this); }
 
 #define C5_ELEMENT_UPDATE_MARKER(C, K)                                                       \
     void UI::C::Update(const System::Time&, UI::UserInterface*,                              \
@@ -296,18 +297,24 @@ constexpr unsigned kOwn4567 = kOwn456 | (1u << 7);
 // PART A — LAYOUT
 // ===========================================================================
 template <class C, class Base>
-static void CheckShape(size_t size) {
+static void CheckShape(size_t size, bool concrete = false) {
     CHECK_EQ(sizeof(C), size);
     CHECK_EQ(alignof(C), (size_t)8);
-    CHECK(std::is_abstract<C>::value);
     CHECK(!std::has_virtual_destructor<C>::value);
     CHECK((std::is_base_of<Base, C>::value));
-    CHECK(!std::is_default_constructible<C>::value);   // protected ctor: never built as C++
+    if (concrete) {
+        // ENDGAME B.3.9 UI-B (B39_RULES D1): public real ctor, own slot 0,
+        // protected non-virtual dtor (so not destructible from outside).
+        CHECK(B39IsConcreteShape<C>());
+    } else {
+        CHECK(std::is_abstract<C>::value);
+        CHECK(!std::is_default_constructible<C>::value);   // protected ctor: never built as C++
+    }
 }
 
 UNIT_TEST(ui_c5_graph_layout) {
-    CheckShape<UI::GraphDescription, UI::ElementDescription>(0x88);   // 0x1800403a0
-    CheckShape<UI::GraphElement, UI::Element>(0x100);                 // 0x1800408b0
+    CheckShape<UI::GraphDescription, UI::ElementDescription>(0x88, true);   // 0x1800403a0
+    CheckShape<UI::GraphElement, UI::Element>(0x100, true);                 // 0x1800408b0
     CHECK_EQ(offsetof(UI::GraphDescription, _width), sizeof(UI::ElementDescription));
     CHECK_EQ(offsetof(UI::GraphDescription, _spriteName), (size_t)0x80);
     CHECK_EQ(offsetof(UI::GraphElement, _width), sizeof(UI::Element));
@@ -352,8 +359,8 @@ struct ProgressElementProbe final : UI::ProgressElement {
 }  // namespace
 
 UNIT_TEST(ui_c5_progress_layout) {
-    CheckShape<UI::ProgressDescription, UI::ElementDescription>(0xb0);   // 0x180077c80
-    CheckShape<UI::ProgressElement, UI::Element>(0x130);                 // 0x180078150
+    CheckShape<UI::ProgressDescription, UI::ElementDescription>(0xb0, true);   // 0x180077c80
+    CheckShape<UI::ProgressElement, UI::Element>(0x130, true);                 // 0x180078150
     CHECK_EQ(offsetof(UI::ProgressDescription, _unknown68), sizeof(UI::ElementDescription));
     CHECK_EQ(offsetof(UI::ProgressDescription, _spriteSheet), (size_t)0x70);
     CHECK_EQ(offsetof(UI::ProgressDescription, _childDescription), (size_t)0xa8);
@@ -392,8 +399,8 @@ struct SpinnerElementProbe final : UI::SpinnerElement {
 }  // namespace
 
 UNIT_TEST(ui_c5_spinner_layout) {
-    CheckShape<UI::SpinnerDescription, UI::ElementDescription>(0x88);   // 0x18004b050
-    CheckShape<UI::SpinnerElement, UI::Element>(0xc8);                  // 0x18004b3b0
+    CheckShape<UI::SpinnerDescription, UI::ElementDescription>(0x88, true);   // 0x18004b050
+    CheckShape<UI::SpinnerElement, UI::Element>(0xc8, true);                  // 0x18004b3b0
     CHECK_EQ(offsetof(UI::SpinnerDescription, _editDescription), sizeof(UI::ElementDescription));
     CHECK_EQ(offsetof(UI::SpinnerDescription, _increment), (size_t)0x80);
     CHECK_EQ(offsetof(UI::SpinnerElement, _increment), sizeof(UI::Element));
@@ -428,8 +435,8 @@ struct SliderElementProbe final : UI::SliderElement {
 }  // namespace
 
 UNIT_TEST(ui_c5_slider_layout) {
-    CheckShape<UI::SliderDescription, UI::ElementDescription>(0xb8);   // 0x180049c60
-    CheckShape<UI::SliderElement, UI::Element>(0x130);                 // 0x18004a180
+    CheckShape<UI::SliderDescription, UI::ElementDescription>(0xb8, true);   // 0x180049c60
+    CheckShape<UI::SliderElement, UI::Element>(0x130, true);                 // 0x18004a180
     CHECK_EQ(offsetof(UI::SliderDescription, _childDescription), sizeof(UI::ElementDescription));
     CHECK_EQ(offsetof(UI::SliderDescription, _steps), (size_t)0xb0);
     CHECK_EQ(offsetof(UI::SliderElement, _trackStart), sizeof(UI::Element));
@@ -467,8 +474,8 @@ struct RibbonElementProbe final : UI::RibbonElement {
 }  // namespace
 
 UNIT_TEST(ui_c5_ribbon_layout) {
-    CheckShape<UI::RibbonDescription, UI::ElementDescription>(0x80);   // 0x180044620
-    CheckShape<UI::RibbonElement, UI::Element>(0xd8);                  // 0x180044ac0
+    CheckShape<UI::RibbonDescription, UI::ElementDescription>(0x80, true);   // 0x180044620
+    CheckShape<UI::RibbonElement, UI::Element>(0xd8, true);                  // 0x180044ac0
     CHECK_EQ(offsetof(UI::RibbonDescription, _vertical), sizeof(UI::ElementDescription));
     CHECK_EQ(offsetof(UI::RibbonDescription, _itemsData), (size_t)0x70);
     CHECK_EQ(offsetof(UI::RibbonElement, _vertical), sizeof(UI::Element));
@@ -502,8 +509,8 @@ struct TabElementProbe final : UI::TabElement {
 }  // namespace
 
 UNIT_TEST(ui_c5_tab_layout) {
-    CheckShape<UI::TabDescription, UI::ElementDescription>(0xb8);   // 0x18004c640
-    CheckShape<UI::TabElement, UI::Element>(0x108);                 // 0x18004ca90
+    CheckShape<UI::TabDescription, UI::ElementDescription>(0xb8, true);   // 0x18004c640
+    CheckShape<UI::TabElement, UI::Element>(0x108, true);                 // 0x18004ca90
     CHECK_EQ(offsetof(UI::TabDescription, _stripBackdropDescription), sizeof(UI::ElementDescription));
     CHECK_EQ(offsetof(UI::TabDescription, _gap), (size_t)0xa0);
     CHECK_EQ(offsetof(UI::TabDescription, _tabsCount), (size_t)0xb0);
@@ -540,8 +547,8 @@ struct DocumentTextElementProbe final : UI::DocumentTextElement {
 }  // namespace
 
 UNIT_TEST(ui_c5_documenttext_layout) {
-    CheckShape<UI::DocumentTextDescription, UI::ElementDescription>(0xe8);   // 0x18003bd90
-    CheckShape<UI::DocumentTextElement, UI::Element>(0x1c8);                 // 0x18003c66f
+    CheckShape<UI::DocumentTextDescription, UI::ElementDescription>(0xe8, true);   // 0x18003bd90
+    CheckShape<UI::DocumentTextElement, UI::Element>(0x1c8, true);                 // 0x18003c66f
     CHECK_EQ(offsetof(UI::DocumentTextDescription, _documentStringTable),
              sizeof(UI::ElementDescription));
     CHECK_EQ(offsetof(UI::DocumentTextDescription, _linkColor), (size_t)0x98);
@@ -566,4 +573,279 @@ UNIT_TEST(ui_c5_documenttext_slots) {
     DocumentTextElementProbe e{};
     CheckElementSlots(&e, kDocTextE, kOwn4567);     // Update overridden
     CheckUpdateTakesHandleAddress(&e, kDocTextE);
+}
+
+// ===========================================================================
+// ENDGAME B.3.9 block UI-B (B39_RULES D1, rule B9-16): the concrete classes —
+// slot order by PMF on the real header, the real ctor's retail stores, both
+// DeletingDtor arms (the leaves' dtors are the recording markers above).
+// ===========================================================================
+UNIT_TEST(b39_uib_c5_slot_order_by_pmf) {
+    B39CheckDescriptionPmf<UI::GraphDescription>();
+    B39CheckElementPmf<UI::GraphElement>();
+    B39CheckDescriptionPmf<UI::DocumentTextDescription>();
+    B39CheckElementPmf<UI::DocumentTextElement>();
+}
+
+UNIT_TEST(b39_uib_c5_graph_ctor_stores) {
+    FactoryScope scope;
+    // ??0GraphDescription 0x1800d1bd0 tail.
+    alignas(8) uint8_t d[0x88];
+    std::memset(d, 0xCD, sizeof d);
+    auto* gd = ::new (static_cast<void*>(d)) UI::GraphDescription();
+    CHECK_EQ(gd->_width, 100);
+    CHECK_EQ(gd->_height, 100);
+    CHECK_EQ(gd->_tickSize, 4);
+    CHECK_EQ(gd->_unknown74, 0xffffffffu);
+    CHECK(gd->_spriteSheet == nullptr);
+    CHECK(gd->_spriteName == nullptr);
+    CHECK_EQ(gd->_id, -1);
+    gd->DeletingDtor(0);
+
+    // ??0GraphElement 0x1800d1880; +0xec written by nothing.
+    alignas(8) uint8_t e[0x100];
+    std::memset(e, 0xCD, sizeof e);
+    auto* ge = ::new (static_cast<void*>(e)) UI::GraphElement();
+    CHECK_EQ(ge->_width, 100);
+    CHECK_EQ(ge->_height, 100);
+    CHECK_EQ(ge->_tickSize, 4);
+    CHECK_EQ(ge->_unknownCC, -1);
+    CHECK(ge->_lineSprite.spriteSheet == nullptr);
+    CHECK_EQ(ge->_lineSprite.spriteIndex, -1);
+    CHECK(ge->_yRange == 1.0f);
+    CHECK_EQ(ge->_xDivisions, 12);
+    CHECK_EQ(ge->_yDivisions, 4);
+    CHECK_EQ((int)e[0xec], 0xCD);
+    CHECK(ge->_seriesData == nullptr);
+    CHECK_EQ(ge->_seriesCount, 0);
+    CHECK_EQ(ge->_seriesCapacity, 0);
+    ge->DeletingDtor(0);
+}
+
+UNIT_TEST(b39_uib_c5_documenttext_ctor_stores) {
+    FactoryScope scope;
+    // ??0DocumentTextDescription 0x1800cfc30; +0xac written by nothing.
+    alignas(8) uint8_t d[0xe8];
+    std::memset(d, 0xCD, sizeof d);
+    auto* dd = ::new (static_cast<void*>(d)) UI::DocumentTextDescription();
+    CHECK(dd->_documentStringTable == nullptr);
+    CHECK(dd->_frameNamesData == nullptr);
+    CHECK_EQ(dd->_frameNamesCount, 0);
+    CHECK_EQ(dd->_linkColor, 0xffeeee00u);
+    CHECK_EQ(dd->_linkHoverColor, 0xffffff00u);
+    CHECK_EQ(dd->_linkPressedColor, 0xffcccc00u);
+    CHECK_EQ(dd->_tabWidth, 4);
+    CHECK_EQ(dd->_wrapWidth, 0x12c);
+    CHECK_EQ((int)d[0xac], 0xCD);
+    CHECK(dd->_colorsData == nullptr);
+    CHECK(dd->_resourceList == nullptr);
+    dd->DeletingDtor(0);
+
+    // ??0DocumentTextElement 0x1800cf410: nothing in +0x170..+0x197 and
+    // +0x1b0..+0x1c7; +0x1a0 is ONE qword -1.
+    alignas(8) uint8_t e[0x1c8];
+    std::memset(e, 0xCD, sizeof e);
+    auto* de = ::new (static_cast<void*>(e)) UI::DocumentTextElement();
+    CHECK(de->_text.table == nullptr);
+    CHECK_EQ(de->_text.index, -1);
+    CHECK(de->_spriteSheet == nullptr);
+    CHECK(de->_underlineSprite.spriteSheet == nullptr);
+    CHECK_EQ(de->_underlineSprite.spriteIndex, -1);
+    CHECK_EQ(de->_linkColor, 0xffeeee00u);
+    CHECK_EQ(de->_tabWidth, 4);
+    CHECK_EQ(de->_wrapWidth, 0x12c);
+    CHECK(de->_itemsData == nullptr);
+    CHECK(de->_linksData == nullptr);
+    CHECK(de->_sourceText == nullptr);
+    CHECK(de->_openLink.text == nullptr);
+    CHECK_EQ(de->_openLink.firstItem, -1);
+    CHECK_EQ(de->_openLink.lastItem, -1);
+    CHECK_EQ((int)de->_openLink.armed, 0);
+    for (int off = 0x170; off < 0x198; ++off) CHECK_EQ((int)e[off], 0xCD);
+    for (int off = 0x1b0; off < 0x1c8; ++off) CHECK_EQ((int)e[off], 0xCD);
+    CHECK_EQ((int)e[0x10c], 0xCD);
+    de->DeletingDtor(0);
+}
+
+UNIT_TEST(b39_uib_c5_deletingdtor_arms) {
+    FactoryScope scope;
+    GraphDescriptionProbe gdp;
+    B39CheckDeletingDtorArms<UI::GraphDescription, 0x88>(VTableOf(&gdp));
+    GraphElementProbe gep{};
+    B39CheckDeletingDtorArms<UI::GraphElement, 0x100>(VTableOf(&gep));
+    DocumentTextDescriptionProbe ddp;
+    B39CheckDeletingDtorArms<UI::DocumentTextDescription, 0xe8>(VTableOf(&ddp));
+    DocumentTextElementProbe dep{};
+    B39CheckDeletingDtorArms<UI::DocumentTextElement, 0x1c8>(VTableOf(&dep));
+}
+
+// ---- Progress / Ribbon (ENDGAME B.3.9 UI-B) --------------------------------
+UNIT_TEST(b39_uib_c5_progress_ribbon_pmf_and_ctors) {
+    B39CheckDescriptionPmf<UI::ProgressDescription>();
+    B39CheckElementPmf<UI::ProgressElement>();
+    B39CheckDescriptionPmf<UI::RibbonDescription>();
+    B39CheckElementPmf<UI::RibbonElement>();
+
+    FactoryScope scope;
+    // ??0ProgressDescription 0x18011a210: +0x68 ONE dword, +0x6c untouched.
+    alignas(8) uint8_t pd[0xb0];
+    std::memset(pd, 0xCD, sizeof pd);
+    auto* p = ::new (static_cast<void*>(pd)) UI::ProgressDescription();
+    CHECK_EQ(p->_unknown68, 0u);
+    CHECK_EQ((int)pd[0x6c], 0xCD);
+    CHECK(p->_spriteSheet == nullptr);
+    CHECK(p->_fillLeftName == nullptr);
+    CHECK(p->_trackRightName == nullptr);
+    CHECK(p->_childDescription == nullptr);
+    p->DeletingDtor(0);
+    // ??0ProgressElement 0x180119c40: six {null, -1} sprites, the three tail
+    // stores, +0x12c untouched.
+    alignas(8) uint8_t pe[0x130];
+    std::memset(pe, 0xCD, sizeof pe);
+    auto* e = ::new (static_cast<void*>(pe)) UI::ProgressElement();
+    CHECK(e->_fillLeft.spriteSheet == nullptr);
+    CHECK_EQ(e->_fillLeft.spriteIndex, -1);
+    CHECK_EQ(e->_trackRight.spriteIndex, -1);
+    CHECK_EQ(e->_backgroundColor, 0xffffffffu);
+    CHECK(e->_maxValue == 1.0f);
+    CHECK(e->_currentValue == 0.25f);
+    CHECK_EQ((int)pe[0x12c], 0xCD);
+    e->DeletingDtor(0);
+
+    // ??0RibbonDescription 0x1800d5bf0: +0x6a/+0x6b never written.
+    alignas(8) uint8_t rd[0x80];
+    std::memset(rd, 0xCD, sizeof rd);
+    auto* r = ::new (static_cast<void*>(rd)) UI::RibbonDescription();
+    CHECK_EQ((int)r->_vertical, 0);
+    CHECK_EQ((int)r->_uniform, 0);
+    CHECK_EQ((int)rd[0x6a], 0xCD);
+    CHECK_EQ((int)rd[0x6b], 0xCD);
+    CHECK_EQ(r->_spacing, 0);
+    CHECK(r->_itemsData == nullptr);
+    CHECK_EQ(r->_itemsCount, 0);
+    r->DeletingDtor(0);
+    // ??0RibbonElement 0x1800d5d10: +0xc2/+0xc3 never written.
+    alignas(8) uint8_t re[0xd8];
+    std::memset(re, 0xCD, sizeof re);
+    auto* q = ::new (static_cast<void*>(re)) UI::RibbonElement();
+    CHECK_EQ((int)q->_vertical, 0);
+    CHECK_EQ((int)q->_uniform, 0);
+    CHECK_EQ((int)re[0xc2], 0xCD);
+    CHECK_EQ(q->_spacing, 0);
+    CHECK(q->_extentsData == nullptr);
+    CHECK_EQ(q->_extentsCapacity, 0);
+    q->DeletingDtor(0);
+}
+
+UNIT_TEST(b39_uib_c5_progress_ribbon_deletingdtor_arms) {
+    FactoryScope scope;
+    ProgressDescriptionProbe pdp;
+    B39CheckDeletingDtorArms<UI::ProgressDescription, 0xb0>(VTableOf(&pdp));
+    ProgressElementProbe pep{};
+    B39CheckDeletingDtorArms<UI::ProgressElement, 0x130>(VTableOf(&pep));
+    RibbonDescriptionProbe rdp;
+    B39CheckDeletingDtorArms<UI::RibbonDescription, 0x80>(VTableOf(&rdp));
+    RibbonElementProbe rep{};
+    B39CheckDeletingDtorArms<UI::RibbonElement, 0xd8>(VTableOf(&rep));
+}
+
+// ---- Slider (ENDGAME B.3.9 UI-B) -------------------------------------------
+UNIT_TEST(b39_uib_c5_slider) {
+    B39CheckDescriptionPmf<UI::SliderDescription>();
+    B39CheckElementPmf<UI::SliderElement>();
+
+    FactoryScope scope;
+    // ??0SliderDescription 0x1800d7b60: +0xb4 written by nothing.
+    alignas(8) uint8_t d[0xb8];
+    std::memset(d, 0xCD, sizeof d);
+    auto* sd = ::new (static_cast<void*>(d)) UI::SliderDescription();
+    CHECK(sd->_childDescription == nullptr);
+    CHECK(sd->_thumbHotName == nullptr);
+    CHECK_EQ(sd->_trackOffsetY, 0);
+    CHECK_EQ(sd->_thumbMargin, 0);
+    CHECK(sd->_minimum == 0.0f);
+    CHECK(sd->_maximum == 1.0f);
+    CHECK_EQ(sd->_steps, 10);
+    CHECK_EQ((int)d[0xb4], 0xCD);
+    sd->DeletingDtor(0);
+    // ??0SliderElement 0x1800d7570: +0x125..+0x127 and +0x12c NOT written.
+    alignas(8) uint8_t e[0x130];
+    std::memset(e, 0xCD, sizeof e);
+    auto* se = ::new (static_cast<void*>(e)) UI::SliderElement();
+    CHECK(se->_thumb.spriteSheet == nullptr);
+    CHECK_EQ(se->_thumbHot.spriteIndex, -1);
+    CHECK(se->_maximum == 1.0f);
+    CHECK_EQ(se->_steps, 10);
+    CHECK_EQ((int)se->_hovered, 0);
+    CHECK(se->_value == 0.25f);
+    CHECK_EQ((int)e[0x125], 0xCD);
+    CHECK_EQ((int)e[0x12c], 0xCD);
+    se->DeletingDtor(0);
+
+    SliderDescriptionProbe dp;
+    B39CheckDeletingDtorArms<UI::SliderDescription, 0xb8>(VTableOf(&dp));
+    SliderElementProbe ep{};
+    B39CheckDeletingDtorArms<UI::SliderElement, 0x130>(VTableOf(&ep));
+}
+
+// ---- Spinner / Tab (ENDGAME B.3.9 UI-B) ------------------------------------
+UNIT_TEST(b39_uib_c5_spinner_tab) {
+    B39CheckDescriptionPmf<UI::SpinnerDescription>();
+    B39CheckElementPmf<UI::SpinnerElement>();
+    B39CheckDescriptionPmf<UI::TabDescription>();
+    B39CheckElementPmf<UI::TabElement>();
+
+    FactoryScope scope;
+    // ??0SpinnerDescription 0x1800d89c0: +0x84 not written.
+    alignas(8) uint8_t sd[0x88];
+    std::memset(sd, 0xCD, sizeof sd);
+    auto* s = ::new (static_cast<void*>(sd)) UI::SpinnerDescription();
+    CHECK(s->_editDescription == nullptr);
+    CHECK(s->_upDescription == nullptr);
+    CHECK(s->_downDescription == nullptr);
+    CHECK_EQ(s->_increment, 1);
+    CHECK_EQ((int)sd[0x84], 0xCD);
+    s->DeletingDtor(0);
+    // ??0SpinnerElement 0x1800d8670: +0xc4 not written.
+    alignas(8) uint8_t se[0xc8];
+    std::memset(se, 0xCD, sizeof se);
+    auto* sp = ::new (static_cast<void*>(se)) UI::SpinnerElement();
+    CHECK_EQ(sp->_increment, 1);
+    CHECK_EQ((int)se[0xc4], 0xCD);
+    sp->DeletingDtor(0);
+
+    // ??0TabDescription 0x1800daa00: +0xa0 (_gap) and +0xa4 NOT written.
+    alignas(8) uint8_t td[0xb8];
+    std::memset(td, 0xCD, sizeof td);
+    auto* t = ::new (static_cast<void*>(td)) UI::TabDescription();
+    CHECK(t->_stripBackdropDescription == nullptr);
+    CHECK(t->_spriteSheet == nullptr);
+    CHECK(t->_edgeRightName == nullptr);
+    CHECK_EQ((int)td[0xa0], 0xCD);
+    CHECK_EQ((int)td[0xa4], 0xCD);
+    CHECK(t->_tabsData == nullptr);
+    CHECK_EQ(t->_tabsCount, 0);
+    t->DeletingDtor(0);
+    // ??0TabElement 0x1800da390: +0x104 not written.
+    alignas(8) uint8_t te[0x108];
+    std::memset(te, 0xCD, sizeof te);
+    auto* tb = ::new (static_cast<void*>(te)) UI::TabElement();
+    CHECK_EQ(tb->_tabCount, 0);
+    CHECK_EQ(tb->_gap, 0);
+    CHECK(tb->_edgeLeft.spriteSheet == nullptr);
+    CHECK_EQ(tb->_edgeRight.spriteIndex, -1);
+    CHECK_EQ(tb->_activeTab, 0);
+    CHECK_EQ(tb->_tabBarHeight, 0);
+    CHECK_EQ(tb->_tabBarWidth, 0);
+    CHECK_EQ((int)te[0x104], 0xCD);
+    tb->DeletingDtor(0);
+
+    SpinnerDescriptionProbe sdp;
+    B39CheckDeletingDtorArms<UI::SpinnerDescription, 0x88>(VTableOf(&sdp));
+    SpinnerElementProbe sep{};
+    B39CheckDeletingDtorArms<UI::SpinnerElement, 0xc8>(VTableOf(&sep));
+    TabDescriptionProbe tdp;
+    B39CheckDeletingDtorArms<UI::TabDescription, 0xb8>(VTableOf(&tdp));
+    TabElementProbe tep{};
+    B39CheckDeletingDtorArms<UI::TabElement, 0x108>(VTableOf(&tep));
 }
