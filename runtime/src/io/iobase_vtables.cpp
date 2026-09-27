@@ -319,8 +319,7 @@ extern "C" int32_t RtIo_Stream_GetDirection(const void* self) {
 // ===========================================================================
 extern "C" void RtIo_Modification_Dtor(RtIO::Modification* self) {
     // Publish into the DLL's exported slot; see header §5.
-    void** singleton = RT_DATA_SLOT(void**, "?_singleton@Modification@IO@@2PEAV12@EA");
-    if (singleton) *singleton = nullptr;                        // 1800b0486
+    ::IO::Modification::_singleton = nullptr;                   // 1800b0486  (B.3.9 IO: the class static)
 
     ArrayModDtor(&self->savedMods);                             // 1800b0495  +0x18
     ArrayModDtor(&self->mods);                                  // 1800b04a4  +0x08  TAIL

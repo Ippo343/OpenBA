@@ -156,7 +156,7 @@ inline void WP (void* p, size_t o, const void* v) { std::memcpy(static_cast<uint
 // a phantom name (reference_resolveexport_phantom_names.md).
 // ---------------------------------------------------------------------------
 void** SlotMemoryAllocator() { return RT_DATA_SLOT(void**, "?_singleton@MemoryAllocator@System@@0PEAV12@EA"); }
-void** SlotModification()    { return RT_DATA_SLOT(void**, "?_singleton@Modification@IO@@2PEAV12@EA"); }
+void** SlotModification()    { return reinterpret_cast<void**>(&::IO::Modification::_singleton); }   // B.3.9 IO: class static
 void** SlotFactory()         { return RT_DATA_SLOT(void**, "?_singleton@Factory@Object@@0PEAV12@EA"); }
 void** SlotExternalFactory() { return RT_DATA_SLOT(void**, "?_singleton@ExternalFactory@Object@@0PEAV12@EA"); }
 void** SlotInternalFactory() { return RT_DATA_SLOT(void**, "?_singleton@InternalFactory@Object@@0PEAV12@EA"); }

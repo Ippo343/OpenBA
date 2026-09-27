@@ -818,6 +818,10 @@ namespace IO {
 
 // ?GetCount@Modification@IO@@QEBAHXZ                        retail 0x18000da90
 //     MOV EAX,[RCX+0x10] ; RET
+// ?_singleton@Modification@IO@@2PEAV12@EA (0x1801fc6b0) -- the class static
+// (ENDGAME B.3.9 IO, D7); RtIoPortInit redirects the minted row onto it.
+Modification* Modification::_singleton = nullptr;
+
 int Modification::GetCount() const {
     return _count;
 }
