@@ -31,11 +31,11 @@
 //       0x20 record whose first qword is the UNEXPORTED `IXAudio2VoiceCallback`
 //       table 0x180157c60 is `Audio::Device::PlatformChannel`. B37_RULES
 //       section 1 calls that class "no name in the binary"; the class name of
-//       the TABLE's owner is this nested struct (a finding of this block, in its
-//       report). Its seven slot bodies stay as they are in
-//       audio_voice_callback_win.cpp (B37_RULES section 7): the record is
-//       modelled as a POD whose first field is the table pointer, not as a
-//       C++ polymorphic class, because nothing here ever constructs one.
+//       the TABLE's owner is this nested struct (a finding of block B4).
+//       ENDGAME B.3.9 ENG: it is a REAL polymorphic class now -- its seven
+//       virtuals are the IXAudio2VoiceCallback slots (bodies in
+//       audio_voice_callback_win.cpp), the Device ctor door placement-news all
+//       64 records, and the minted unnamed row 0x180157c60 is retired.
 //
 // HOLDS THE POLYMORPHIC STREAM BY VALUE (RULE B7-12): the Device holds the
 // `RtAudio::Stream` POD (B4b-3), the Stream keeps its ctor door, and the
@@ -97,12 +97,30 @@ public:
 
     // ------------------------------------------------------------------------
     // Audio::Device::PlatformChannel — 0x20 bytes, 64 at +0xa98. The object
-    // XAudio2 calls back: its first qword is the unexported 7-slot
-    // `IXAudio2VoiceCallback` table 0x180157c60 (ctor loop 2), and PlayPlatform
-    // hands `&_platformChannels[i]` to CreateSourceVoice as `pCallback`.
+    // XAudio2 calls back: PlayPlatform hands `&_platformChannels[i]` to
+    // CreateSourceVoice as `pCallback`, so its vptr IS an
+    // `IXAudio2VoiceCallback` table (retail's unexported 0x180157c60, seven
+    // slots, no destructor slot). ENDGAME B.3.9 ENG (B39_RULES D1): a real
+    // class whose seven virtuals are those slots, in the interface's order
+    // (audio_voice_callback_win.cpp has the bodies and the evidence). A GCC
+    // vtable of a class with only virtual member functions and no virtual
+    // destructor is a COM vtable: `this` in RCX, the slots from vptr[0].
+    // NO destructor slot and no destructor body: retail's record has none.
     // ------------------------------------------------------------------------
     struct PlatformChannel {
-        const void*   vtable;       // +0x00  0x180157c60 (minted, unnamed row)
+        // The record's part of `??0Device@Audio@@` loop 2 (0x1800de3fd..):
+        // the vptr, then +0x08 and +0x18 zero; +0x10 is loop 3's (the Device
+        // ctor door points it at `_channels[i]`), so it is NOT written here.
+        PlatformChannel() : voice(nullptr), bufferEvent(nullptr) {}
+
+        virtual void OnVoiceProcessingPassStart(uint32_t bytesRequired);   // [0] 0x180050200
+        virtual void OnVoiceProcessingPassEnd();                           // [1] 0x1800501f0
+        virtual void OnStreamEnd();                                        // [2] 0x1800501c0
+        virtual void OnBufferStart(void* bufferContext);                   // [3] 0x180050210
+        virtual void OnBufferEnd(void* bufferContext);                     // [4] 0x1800501d0
+        virtual void OnLoopEnd(void* bufferContext);                       // [5] 0x180050220
+        virtual void OnVoiceError(void* bufferContext, int32_t error);     // [6] 0x180050230
+
         void*         voice;        // +0x08  IXAudio2SourceVoice*
         AudioChannel* channel;      // +0x10  &_channels[i] (ctor loop 3)
         void*         bufferEvent;  // +0x18  HANDLE: Stream::_bufferEvent, or null
@@ -134,6 +152,11 @@ public:
 
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     static Device* Get();                                                          // 0x18000c740 (reads _singleton)
+    // ?_singleton@Device@Audio@@0PEAV12@EA (0x1801fe760) — the class static (ENDGAME B.3.9 ENG, B39_RULES D7).
+    // The namespace's *PortInit redirects the minted storage row onto it, so
+    // the name door, the address door and this member are the same bytes.
+    // PUBLIC while foreign readers still reach the row through the doors.
+    static Device* _singleton;
     void SetChannelVolume(AudioChannel* channel, float volume);                    // 0x1800de1b0
     AudioChannel* Play(Object::ExternalPtr<SoundBuffer> buffer, const System::Time& start,
                        float volume, float pitch, float unused, Callback onComplete,

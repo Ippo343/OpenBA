@@ -289,14 +289,10 @@ void MemFree(void* p) {
 // lane C2's mint. RT_DATA_SLOT is the door that gets both: registry first
 // (the mint, at cutover), the DLL's .data second (today).
 EngineT** EngineSingletonSlot() {
-    return RT_DATA_SLOT(EngineT**, "?_singleton@Engine@1@0PEAV11@EA");
+    return reinterpret_cast<EngineT**>(&::Engine::Engine::_singleton);
 }
 void** ConfigurationSingletonSlot() {
     return RT_DATA_SLOT(void**, "?_singleton@Configuration@System@@0PEAV12@EA");
-}
-void** AchievementManagerSingletonSlot() {
-    return RT_DATA_SLOT(void**,
-        "?_singleton@AchievementManager@Achievement@@0PEAV12@EA");
 }
 bool* ErrorHideDisplaySlot() {
     return RT_DATA_SLOT(bool*, "?_hideDisplay@Error@System@@0_NA");
@@ -370,7 +366,7 @@ extern "C" void* RtAchievement_AchievementManager_Ctor(void* self) {
     m->_updateTimes._size     = 0;         // +0x38
     m->_updateTimes._capacity = 0;         // +0x3c
     m->_lastAchievementUpdate = 0;         // +0x40
-    if (void** slot = AchievementManagerSingletonSlot()) *slot = self;
+    Achievement::AchievementManager::_singleton = m;   // class static (B.3.9 ENG)
     return self;
 }
 
@@ -1054,3 +1050,7 @@ int RtEngineLifecycleRegister() {
     // that is lane Q's kind of decision, not this lane's.
     return n;
 }
+
+// ?_singleton@Engine@1@0PEAV11@EA (0x1801fe748) -- the class static (ENDGAME B.3.9 ENG, B39_RULES D7);
+// RtEnginePortInit redirects the minted storage row onto it.
+::Engine::Engine* ::Engine::Engine::_singleton = nullptr;

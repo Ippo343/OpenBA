@@ -12,8 +12,8 @@
 // PART A — RETAIL'S BYTES: a test subclass built over a 0xCD-poisoned buffer
 //   carries exactly retail's writes (0x18009e240, 0x18009ed50, 0x18009ef00,
 //   0x18009e3b0) and leaves the bytes retail leaves (GoalInstance +0x14).
-// PART B — DOOR == CTOR: the same bytes come out of the door shape (stand-in
-//   minted stamp + the inherited base's stores + `DoorBody::Init`).
+// PART B — (retired in ENDGAME B.3.9 ENG with the ??0 doors; it compared the
+//   door shape against the ctor.)
 // PART C — AchievementInstance is CONCRETE: slot 0 is the exe's scalar
 //   deleting dtor 0x140019d90 (~AchievementInstance, MemFree on flags & 1).
 //
@@ -50,6 +50,14 @@ struct FactoryScope {
     ~FactoryScope() { ::Object::detail::g_unitInternalFactory = saved; }
 };
 int g_aiDtorRuns = 0;
+// ENDGAME B.3.9 ENG: the Goal / GoalInstance destructor markers RECORD each
+// call, so the real inline DeletingDtors can be seen running per element.
+int         g_dtorCount = 0;
+const void* g_dtorOrder[8] = {};
+void NoteDtor(const void* self) {
+    if (g_dtorCount < 8) g_dtorOrder[g_dtorCount] = self;
+    ++g_dtorCount;
+}
 }  // namespace
 
 // ===========================================================================
@@ -63,7 +71,7 @@ bool        Achievement::Serialize(void*) { return true; }
 Object::External* Achievement::Reconstruct() { return this; }
 void        Achievement::Destruct() {}
 Object::External* Achievement::Construct() { return this; }
-Achievement::~Achievement() {}
+Achievement::~Achievement() { NoteDtor(this); }
 
 const char* AchievementInstance::TypeName() const { return "AchievementInstance"; }
 uint32_t    AchievementInstance::Type() const { return 0; }
@@ -75,7 +83,7 @@ uint32_t    Goal::Type() const { return 0; }
 int32_t     Goal::GetFileVersion() const { return 0x10000; }
 bool        Goal::Serialize(void*) { return true; }
 Object::Type* Goal::GetInstanceType(Object::Type* ret) const { return ret; }
-Goal::~Goal() {}
+Goal::~Goal() { NoteDtor(this); }
 
 const char* GoalInstance::TypeName() const { return "GoalInstance"; }
 uint32_t    GoalInstance::Type() const { return 0; }
@@ -83,7 +91,7 @@ void        GoalInstance::Persist(void*) {}
 void        GoalInstance::Startup() {}
 void        GoalInstance::Update(const System::Time&, const GoalList&) {}
 Goal::GoalState GoalInstance::CheckGoalState() const { return Goal::kNotMet; }
-GoalInstance::~GoalInstance() {}
+GoalInstance::~GoalInstance() { NoteDtor(this); }
 
 GoalList::GoalList() {}
 GoalList::~GoalList() {}
@@ -116,54 +124,94 @@ uint64_t Q(const void* p, size_t off) {
 uint32_t D(const void* p, size_t off) {
     uint32_t v; std::memcpy(&v, static_cast<const unsigned char*>(p) + off, 4); return v;
 }
-const void* const kFakeMinted[4] = {};
 
 // ===========================================================================
 // PART A + B
 // ===========================================================================
-UNIT_TEST(rb_achievement_ctor_is_retail_0x18009e240_and_the_door_body) {
+// ENDGAME B.3.9 ENG: the ??0 doors are retired; the ctors are the only bodies.
+UNIT_TEST(rb_achievement_ctor_is_retail_0x18009e240) {
     alignas(8) unsigned char a[sizeof(RbScenario)];
     RbScenario* s = BuildIn<RbScenario>(a);
     for (size_t off = 0x08; off < 0x58; off += 8) CHECK_EQ(Q(s, off), (uint64_t)0);
-
-    alignas(8) unsigned char b[sizeof(RbScenario)];
-    std::memset(b, 0xCD, sizeof b);
-    *reinterpret_cast<const void**>(b) = kFakeMinted;
-    std::memset(b + 0x08, 0, 0x18);   // the door's inlined External stores
-    ::Achievement::Achievement::DoorBody::Init(reinterpret_cast<::Achievement::Achievement*>(b));
-    CHECK(std::memcmp(a + 8, b + 8, sizeof(RbScenario) - 8) == 0);
     s->~RbScenario();
 }
 
-UNIT_TEST(rb_goal_ctor_is_retail_0x18009ed50_and_the_door_body) {
+// ENDGAME B.3.9 ENG: the ??0Goal / ??0GoalInstance doors are retired (the
+// ctors are the only bodies); the door-shape halves of these two tests went
+// with them.
+UNIT_TEST(rb_goal_ctor_is_retail_0x18009ed50) {
     alignas(8) unsigned char a[sizeof(RbGoal)];
     RbGoal* g = BuildIn<RbGoal>(a);
     for (size_t off = 0x08; off < 0x30; off += 8) CHECK_EQ(Q(g, off), (uint64_t)0);
-
-    alignas(8) unsigned char b[sizeof(RbGoal)];
-    std::memset(b, 0xCD, sizeof b);
-    *reinterpret_cast<const void**>(b) = kFakeMinted;
-    std::memset(b + 0x08, 0, 0x18);
-    Goal::DoorBody::Init(reinterpret_cast<Goal*>(b));
-    CHECK(std::memcmp(a + 8, b + 8, sizeof(RbGoal) - 8) == 0);
     g->~RbGoal();
 }
 
-UNIT_TEST(rb_goalinstance_ctor_is_retail_0x18009ef00_and_the_door_body) {
+UNIT_TEST(rb_goalinstance_ctor_is_retail_0x18009ef00) {
     FactoryScope scope;
     alignas(8) unsigned char a[sizeof(RbGoalInstance)];
     RbGoalInstance* g = BuildIn<RbGoalInstance>(a);
     CHECK_EQ(D(g, 0x10), 0u);             // _flags (a DWORD store)
     CHECK_EQ(D(g, 0x14), 0xCDCDCDCDu);    // +0x14 NEVER written
     CHECK_EQ(Q(g, 0x18), (uint64_t)0);    // _goal
-
-    alignas(8) unsigned char b[sizeof(RbGoalInstance)];
-    std::memcpy(b, a, 0x10);              // the same Internal half
-    std::memset(b + 0x10, 0xCD, sizeof b - 0x10);
-    *reinterpret_cast<const void**>(b) = kFakeMinted;
-    GoalInstance::DoorBody::Init(reinterpret_cast<GoalInstance*>(b));
-    CHECK(std::memcmp(a + 0x10, b + 0x10, sizeof(RbGoalInstance) - 0x10) == 0);
     g->~RbGoalInstance();
+}
+
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.9 ENG (B39_RULES D1, rule B9-16): Goal / GoalInstance's own
+// slot 0 -- retail's VECTOR deleting destructors (element 0x30 / 0x20).
+// ---------------------------------------------------------------------------
+// A Goal leaf that does NOT override slot 0, so Goal::DeletingDtor runs.
+struct GoalLeaf final : Goal {
+    Object::External* Reconstruct() override { return this; }
+    void Destruct() override {}
+    GoalState CheckGoalState() const override { return kNotMet; }
+};
+
+template <class T, int kSize>
+void CheckBothArms() {
+    void* m = Object::detail::InternalMemAlloc(kSize, 8);
+    CHECK(m != nullptr);
+    T* p = ::new (m) T();
+    g_dtorCount = 0;
+    CHECK(static_cast<void*>(p->DeletingDtor(1)) == m);
+    CHECK_EQ(g_dtorCount, 1);
+    unsigned char* block = static_cast<unsigned char*>(Object::detail::InternalMemAlloc(8 + 3 * kSize, 8));
+    CHECK(block != nullptr);
+    const int64_t cookie = 3;
+    std::memcpy(block, &cookie, sizeof cookie);
+    T* e[3];
+    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * kSize) T();
+    g_dtorCount = 0;
+    CHECK(reinterpret_cast<unsigned char*>(e[0]->DeletingDtor(3)) == block);
+    CHECK_EQ(g_dtorCount, 3);
+    CHECK(g_dtorOrder[0] == static_cast<const void*>(e[2]));
+    CHECK(g_dtorOrder[1] == static_cast<const void*>(e[1]));
+    CHECK(g_dtorOrder[2] == static_cast<const void*>(e[0]));
+}
+
+UNIT_TEST(b39_eng_goal_deletingdtor_frees_both_arms) {
+    CHECK_EQ(sizeof(GoalLeaf), (size_t)0x30);
+    CheckBothArms<GoalLeaf, 0x30>();
+}
+
+UNIT_TEST(b39_eng_goalinstance_deletingdtor_frees_both_arms) {
+    FactoryScope scope;
+    CheckBothArms<GoalInstance, 0x20>();
+}
+
+// GoalInstance is concrete now: two instances share the compiler's table.
+UNIT_TEST(b39_eng_goalinstance_ctor_is_the_class_table) {
+    FactoryScope scope;
+    alignas(8) unsigned char a[0x20], b[0x20];
+    GoalInstance* x = ::new (static_cast<void*>(a)) GoalInstance();
+    GoalInstance* y = ::new (static_cast<void*>(b)) GoalInstance();
+    RbGoalInstance probe;
+    CHECK(*reinterpret_cast<const void* const*>(x) == *reinterpret_cast<const void* const*>(y));
+    CHECK(*reinterpret_cast<const void* const*>(x) != *reinterpret_cast<const void* const*>(&probe));
+    g_dtorCount = 0;
+    x->DeletingDtor(0);
+    y->DeletingDtor(0);
+    CHECK_EQ(g_dtorCount, 2);
 }
 
 UNIT_TEST(rb_achievementinstance_ctor_is_retail_0x18009e3b0) {
@@ -173,19 +221,9 @@ UNIT_TEST(rb_achievementinstance_ctor_is_retail_0x18009e3b0) {
     AchievementInstance* ai = ::new (static_cast<void*>(a)) AchievementInstance();
     CHECK(*reinterpret_cast<const void* const*>(ai) == &g_rbAiVtGroup[2]);
     for (size_t off = 0x10; off < 0x28; off += 8) CHECK_EQ(Q(ai, off), (uint64_t)0);
-
-    alignas(8) unsigned char b[sizeof(AchievementInstance)];
-    std::memcpy(b, a, 0x10);
-    std::memset(b + 0x10, 0xCD, sizeof b - 0x10);
-    *reinterpret_cast<const void**>(b) = kFakeMinted;
-    AchievementInstance::DoorBody::Init(reinterpret_cast<AchievementInstance*>(b));
-    CHECK(std::memcmp(a + 0x10, b + 0x10, sizeof(AchievementInstance) - 0x10) == 0);
     ai->DeletingDtor(0);   // destruct only (flags 0: no free of a stack buffer)
 }
 
-// ===========================================================================
-// PART C
-// ===========================================================================
 UNIT_TEST(rb_achievementinstance_slot0_is_the_exe_scalar_deleting_dtor) {
     FactoryScope scope;
     g_aiDtorRuns = 0;
@@ -198,11 +236,16 @@ UNIT_TEST(rb_achievementinstance_slot0_is_the_exe_scalar_deleting_dtor) {
 }
 
 UNIT_TEST(rb_achievement_bases_shape) {
-    CHECK(std::is_abstract<::Achievement::Achievement>::value);
-    CHECK(std::is_abstract<Goal>::value);
-    CHECK(std::is_abstract<GoalInstance>::value);
+    CHECK(!std::is_abstract<::Achievement::Achievement>::value);   // ENDGAME B.3.9 ENG
+    CHECK(!std::is_destructible<::Achievement::Achievement>::value);
+    CHECK(!std::has_virtual_destructor<::Achievement::Achievement>::value);
+    CHECK(std::is_abstract<Goal>::value);                // slots 6-8 pure, as retail
+    CHECK(!std::is_abstract<GoalInstance>::value);       // ENDGAME B.3.9 ENG
+    CHECK(!std::is_destructible<Goal>::value);           // protected dtor
+    CHECK(!std::is_destructible<GoalInstance>::value);
+    CHECK(!std::has_virtual_destructor<GoalInstance>::value);
     CHECK(!std::is_abstract<AchievementInstance>::value);
-    CHECK((std::is_default_constructible<AchievementInstance>::value));
+    CHECK(!std::is_destructible<AchievementInstance>::value);   // protected dtor (B.3.9 ENG)
     CHECK(!std::has_virtual_destructor<AchievementInstance>::value);
     CHECK(!std::has_virtual_destructor<Goal>::value);
     CHECK_EQ(sizeof(RbScenario), (size_t)0x58);
@@ -210,4 +253,24 @@ UNIT_TEST(rb_achievement_bases_shape) {
     CHECK_EQ(sizeof(RbGoalInstance), (size_t)0x20);
 }
 
+// ENDGAME B.3.9 ENG: Achievement's own slot 0 -- retail's VECTOR deleting
+// destructor (element 0x58), both arms; two instances share the class table.
+UNIT_TEST(b39_eng_achievement_deletingdtor_frees_both_arms) {
+    using Ach = ::Achievement::Achievement;
+    alignas(8) unsigned char x[0x58], y[0x58];
+    Ach* a1 = ::new (static_cast<void*>(x)) Ach();
+    Ach* a2 = ::new (static_cast<void*>(y)) Ach();
+    RbScenario probe;
+    CHECK(*reinterpret_cast<const void* const*>(a1) == *reinterpret_cast<const void* const*>(a2));
+    CHECK(*reinterpret_cast<const void* const*>(a1) != *reinterpret_cast<const void* const*>(&probe));
+    g_dtorCount = 0;
+    a1->DeletingDtor(0);
+    a2->DeletingDtor(0);
+    CHECK_EQ(g_dtorCount, 2);
+    CheckBothArms<Ach, 0x58>();
+}
+
+// ===========================================================================
+// PART C
+// ===========================================================================
 }  // namespace

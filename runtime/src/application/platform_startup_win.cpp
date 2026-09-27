@@ -114,7 +114,7 @@ static_assert(sizeof(Element) == 0x10, "Set element is 0x10 bytes");
 // a minted run and a DLL run both land on whatever storage the ported ctor
 // (singleton_ctors.cpp) published into.
 App** AppSingletonSlot() {
-    return RT_DATA_SLOT(App**, "?_singleton@Application@1@0PEAV11@EA");
+    return reinterpret_cast<App**>(&::Application::Application::_singleton);
 }
 
 // `?SetText@Error@System@@SAXPEBD_N@Z` @ 0x1800c5fa0 — ported in Wave 2

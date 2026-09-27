@@ -798,8 +798,7 @@ static void* AudioDeviceSingleton() {
     // ?_singleton@Device@Audio@@0PEAV12@EA (ord 4805) is an exported DATA
     // symbol: the export address IS the pointer slot, so this is one deref,
     // matching retail's `MOV RBX,qword ptr [0x1801fe760]`.
-    void** slot = RT_DATA_SLOT(void**,
-        "?_singleton@Device@Audio@@0PEAV12@EA");
+    void** slot = reinterpret_cast<void**>(&::Audio::Device::_singleton);
     return slot ? *slot : nullptr;
 }
 
@@ -1238,7 +1237,7 @@ int RtAudioSceneRegister() {
 // ---------------------------------------------------------------------------
 // `this` is genuinely unused - retail's two instructions never touch RCX.
 Audio::Configuration::~Configuration() {
-    *RT_DATA_SLOT(void**, "?_singleton@Configuration@Audio@@0PEAV12@EA") = nullptr;
+    *reinterpret_cast<void**>(&::Audio::Configuration::_singleton) = nullptr;
 }
 
 void RtAudio_Configuration_Dtor(void* selfPtr) {
@@ -1257,3 +1256,7 @@ int RtAudioConfigurationRegister() {
     return n;
 }
 
+
+// ?_singleton@Configuration@Audio@@0PEAV12@EA (0x1801fe758) -- the class static (ENDGAME B.3.9 ENG, B39_RULES D7);
+// RtAudioPortInit redirects the minted storage row onto it.
+::Audio::Configuration* ::Audio::Configuration::_singleton = nullptr;

@@ -240,6 +240,11 @@ public:
 
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     static Engine* Get();                                         // 0x18000c7c0
+    // ?_singleton@Engine@1@0PEAV11@EA (0x1801fe748) — the class static (ENDGAME B.3.9 ENG, B39_RULES D7).
+    // The namespace's *PortInit redirects the minted storage row onto it, so
+    // the name door, the address door and this member are the same bytes.
+    // PUBLIC while foreign readers still reach the row through the doors.
+    static Engine* _singleton;
     bool Update(const System::Time& time);                        // 0x1800db4a0
     void NotifyBeginLoad();                                       // 0x1800db480
     void NotifyEndLoad();                                         // 0x1800db460

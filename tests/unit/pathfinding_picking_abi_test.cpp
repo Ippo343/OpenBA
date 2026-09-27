@@ -130,7 +130,21 @@ bool PointList::Serialize(void*) { Note(this, 5); return true; }
 Object::External* PointList::Reconstruct() { Note(this, 6); return this; }
 void PointList::Destruct() { Note(this, 7); }
 Object::External* PointList::Construct() { Note(this, 8); return this; }
-PointList::~PointList() {}
+}  // namespace Pathfinding
+
+namespace {
+// ENDGAME B.3.9 ENG: the destructor marker RECORDS each call, so the real
+// `DeletingDtor` (inline in PointList.h, the one under test) can be seen
+// running ~PointList once per element and in retail's DESCENDING order.
+int         g_plDtorCount = 0;
+const void* g_plDtorOrder[8] = {};
+}  // namespace
+
+namespace Pathfinding {
+PointList::~PointList() {
+    if (g_plDtorCount < 8) g_plDtorOrder[g_plDtorCount] = this;
+    ++g_plDtorCount;
+}
 }  // namespace Pathfinding
 
 namespace {
@@ -168,8 +182,11 @@ UNIT_TEST(pathfinding_pointlist_layout) {
     CHECK_EQ((int)(offsetof(Pathfinding::PointList, _points) +
                    offsetof(Collection::Array<Pathfinding::PointList::Point>, _size)), 0x38);
     CHECK((std::is_base_of<Object::External, Pathfinding::PointList>::value));
-    CHECK(std::is_abstract<Pathfinding::PointList>::value);
-    CHECK(!std::is_default_constructible<Pathfinding::PointList>::value);
+    // ENDGAME B.3.9 ENG (B39_RULES D1): CONCRETE, retail's public default
+    // ctor; the destructor is PROTECTED and non-virtual (deletion is slot 0).
+    CHECK(!std::is_abstract<Pathfinding::PointList>::value);
+    CHECK(!std::is_destructible<Pathfinding::PointList>::value);
+    CHECK(!std::has_virtual_destructor<Pathfinding::PointList>::value);
 }
 
 // The two reference getters return the members retail's LEAs name
@@ -213,6 +230,85 @@ UNIT_TEST(pathfinding_pointlist_qualified_call_does_not_reenter_the_door) {
     CHECK_EQ(v, 5);                      // retail's literal (0x18010f880)
 
     *reinterpret_cast<const void* const**>(raw) = real;
+}
+
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.9 ENG (B39_RULES D1/D2, rule B9-16) -- the concrete PointList.
+// ---------------------------------------------------------------------------
+namespace {
+template <typename PMF>
+uintptr_t PlSlotOffset(PMF pmf) {
+    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
+    uintptr_t words[2];
+    std::memcpy(words, &pmf, sizeof words);
+    if ((words[0] & 1u) == 0) return ~uintptr_t(0);
+    if (words[1] != 0) return ~uintptr_t(0);
+    return words[0] - 1;
+}
+}  // namespace
+
+UNIT_TEST(b39_pointlist_slot_order_by_pmf) {
+    using PL = Pathfinding::PointList;
+    CHECK_EQ(PlSlotOffset(&PL::DeletingDtor),   (uintptr_t)0x00);   // 0x1800713b0
+    CHECK_EQ(PlSlotOffset(&PL::TypeName),       (uintptr_t)0x08);   // 0x180070e40
+    CHECK_EQ(PlSlotOffset(&PL::Type),           (uintptr_t)0x10);   // 0x180070e20
+    CHECK_EQ(PlSlotOffset(&PL::GetFileVersion), (uintptr_t)0x18);   // 0x18010f880
+    CHECK_EQ(PlSlotOffset(&PL::Compile),        (uintptr_t)0x20);   // 0x18010f6d0
+    CHECK_EQ(PlSlotOffset(&PL::Serialize),      (uintptr_t)0x28);   // 0x18010f6e0
+    CHECK_EQ(PlSlotOffset(&PL::Reconstruct),    (uintptr_t)0x30);   // 0x180071060
+    CHECK_EQ(PlSlotOffset(&PL::Destruct),       (uintptr_t)0x38);   // 0x180071150
+    CHECK_EQ(PlSlotOffset(&PL::Construct),      (uintptr_t)0x40);   // 0x1800710e0
+}
+
+// The real constructor makes retail's factory stores (0x180070f93..fd4): six
+// zero qwords +0x20..+0x48 after External's, and the compiler's table -- the
+// same one for every instance, not the probe's.
+UNIT_TEST(b39_pointlist_ctor_makes_retails_stores) {
+    alignas(8) uint8_t buf[0x50];
+    std::memset(buf, 0xCD, sizeof buf);
+    Pathfinding::PointList* p = ::new (buf) Pathfinding::PointList();
+    CHECK(static_cast<void*>(p) == static_cast<void*>(buf));
+    for (int off = 0x08; off < 0x50; off += 8) {
+        uint64_t q = 1;
+        std::memcpy(&q, buf + off, sizeof q);
+        CHECK_EQ(q, (uint64_t)0);
+    }
+    alignas(8) uint8_t buf2[0x50];
+    Pathfinding::PointList* p2 = ::new (buf2) Pathfinding::PointList();
+    PointListProbe probe;
+    CHECK(VTableOf(p) != nullptr);
+    CHECK(VTableOf(p) == VTableOf(p2));
+    CHECK(VTableOf(p) != VTableOf(&probe));
+
+    g_plDtorCount = 0;
+    CHECK(p->DeletingDtor(0) == p);        // flags 0: destroy, no free
+    CHECK(p2->DeletingDtor(0) == p2);
+    CHECK_EQ(g_plDtorCount, 2);
+}
+
+// Slot 0 frees on `flags & 1`; the ARRAY arm reads the int32 count at
+// `this - 8`, destroys DOWNWARD with stride 0x50, frees and returns `this - 8`
+// -- both arms exactly as the retired RT_DELDTOR row 0x1800713b0 ran them.
+UNIT_TEST(b39_pointlist_deletingdtor_frees_both_arms) {
+    void* m = Object::detail::InternalMemAlloc(sizeof(Pathfinding::PointList), 8);
+    CHECK(m != nullptr);
+    Pathfinding::PointList* p = ::new (m) Pathfinding::PointList();
+    g_plDtorCount = 0;
+    CHECK(p->DeletingDtor(1) == p);
+    CHECK_EQ(g_plDtorCount, 1);
+
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0x50, 8));
+    CHECK(block != nullptr);
+    const int64_t cookie = 3;
+    std::memcpy(block, &cookie, sizeof cookie);
+    Pathfinding::PointList* e[3];
+    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * 0x50) Pathfinding::PointList();
+    g_plDtorCount = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
+    CHECK_EQ(g_plDtorCount, 3);
+    CHECK(g_plDtorOrder[0] == e[2]);
+    CHECK(g_plDtorOrder[1] == e[1]);
+    CHECK(g_plDtorOrder[2] == e[0]);
 }
 
 // ---------------------------------------------------------------------------

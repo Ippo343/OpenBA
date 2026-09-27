@@ -36,9 +36,11 @@
 //   +0x30 Array<Sample>  GetSoundCount `MOV EAX,[RCX+0x38]`; GetStartTime(i)
 //                is `samples[i].startSeconds` at stride 0x18
 //
-// ABSTRACT (slot 0 `= 0`), NO REAL CONSTRUCTOR, empty non-virtual destructor —
-// the SoundBuffer.h shape. The dtor body (`??1SoundEffect@Audio@@UEAA@XZ`,
-// 0x1800e0880) is the coordinator's `deleting_dtor_leaves.cpp` door.
+// ENDGAME B.3 step 9, block ENG (B39_RULES.md D1/D2): CONCRETE. Retail's real
+// public constructor (??0SoundEffect 0x1800e0810), its own slot 0, and the
+// factory pair as its own statics: every live SoundEffect wears the COMPILER's
+// table. The minted row, its RT_DELDTOR row 0x180050820, the ??1 door
+// (deleting_dtor_leaves.cpp) and the eight slot doors are retired.
 //
 // PORTABILITY: no <windows.h>.
 // ============================================================================
@@ -47,6 +49,7 @@
 #include <cstddef>
 
 #include "../object/External.h"
+#include "../object/Internal.h"                // Object::detail::InternalMemFree
 #include "../collection/Collection.h"
 
 namespace System { class Filename; class Time; class Random; }
@@ -74,8 +77,34 @@ public:
         Collection::Array<Variant> variants;       // +0x08  data, size@+0x10
     };
 
+    // ??0SoundEffect@Audio@@QEAA@XZ 0x1800e0810 -- the REAL constructor. Its
+    // stores are the ones retail's factory pair inlines (0x180050493..4d0):
+    // External(), SoundEffect's vptr (the compiler's), then ONE qword
+    // immediate 0x3f800000 over +0x20/+0x24 (radius 1.0f, inner radius 0.0f),
+    // a zero +0x28 and the Array header +0x30/+0x38.
+    SoundEffect() : Object::External(), _samples() {
+        _radius = 1.0f;
+        _innerRadius = 0.0f;
+        _maxLength = 0;
+    }
+
     // ---- the nine slots, in measured order ----
-    Object::Base* DeletingDtor(unsigned flags) override = 0;   // [0] 0x180050820
+    // [0] 0x180050820 -- MSVC's VECTOR deleting destructor (`TEST DL,2`, the
+    // eh-vector dtor over ~SoundEffect 0x1800e0880, element 0x40), both arms
+    // as the retired RT_DELDTOR row ran them. Nothing `new[]`s one.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<SoundEffect*>(self + static_cast<int64_t>(i) * 0x40)->~SoundEffect();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~SoundEffect();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char*   TypeName() const override;                   // [1] 0x180050340
     uint32_t      Type() const override;                       // [2] 0x180050320
@@ -103,23 +132,26 @@ public:
                                                     float& unused) const;
     SoundEffect(const SoundEffect& src);                       // 0x1800506c0
     SoundEffect& operator=(const SoundEffect& src);            // 0x180050770
-    static uint32_t TypeId();                                  // 0x180050330
     static void* operator new(std::size_t bytes);              // 0x180050350
     static void* operator new(std::size_t bytes, void* place); // 0x1800503c0
     static void  operator delete(void* p);                     // 0x1800503d0
-    // Ported table-driven by runtime/src/audio/rt_factories_audio.inc.
+    // Retail's factory pair (B39_RULES D2), defined in
+    // vtbatch7_soundbuffer_soundeffect.cpp. Placement spells `::new (p)`.
     static Object::Base* CreateNewObject();                    // 0x180050430
     static Object::Base* CreateInPlaceObject(void* place);     // 0x1800504f0
+    // 0x180050330 -- `MOV EAX,[_typeInfo]` over the (still minted)
+    // `?_typeInfo@SoundEffect@Audio@@` record (B39_RULES D6 step 1).
+    static uint32_t TypeId();
 
 private:
     static const char* _TypeName();                            // 0x180050300 "SoundEffect"
     static const char* _ParentTypeName();                      // 0x180050310 "Object::External"
 
 protected:
-    // NOT retail's `??0SoundEffect@Audio@@QEAA@XZ` (0x1800e0810).
-    SoundEffect() = default;
-    // `??1SoundEffect@Audio@@UEAA@XZ` 0x1800e0880 — NON-VIRTUAL, DEFINED EMPTY;
-    // the registered door lives in runtime/src/object/deleting_dtor_leaves.cpp.
+    // `??1SoundEffect@Audio@@UEAA@XZ` 0x1800e0880 -- NON-VIRTUAL. The body
+    // (vtbatch7_soundbuffer_soundeffect.cpp, moved from the retired
+    // deleting_dtor_leaves.cpp door) destroys `_samples` through 0x1800516c0;
+    // the compiler chains ~External.
     ~SoundEffect();
 
 public:

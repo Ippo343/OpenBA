@@ -142,16 +142,16 @@ void** VideoConfigSingletonSlot() {
     return RT_DATA_SLOT(void**, "?_singleton@Configuration@Video@@0PEAV12@EA");
 }
 void** AudioConfigSingletonSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Configuration@Audio@@0PEAV12@EA");
+    return reinterpret_cast<void**>(&::Audio::Configuration::_singleton);
 }
 void** InputConfigSingletonSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Configuration@Input@@0PEAV12@EA");
+    return reinterpret_cast<void**>(&::Input::Configuration::_singleton);
 }
 void** PersistenceSingletonSlot() {
     return RT_DATA_SLOT(void**, "?_singleton@Persistence@IO@@0PEAV12@EA");
 }
 EngineT** EngineSingletonSlot() {
-    return RT_DATA_SLOT(EngineT**, "?_singleton@Engine@1@0PEAV11@EA");
+    return reinterpret_cast<EngineT**>(&::Engine::Engine::_singleton);
 }
 
 // `GetCommandLineString(cfg, &ret, &key)` — THREE arguments. The hidden return

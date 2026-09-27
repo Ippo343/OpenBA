@@ -162,6 +162,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/AchievementManager.h"
@@ -175,10 +176,8 @@ using rt::io::Stream;
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-// achievement_manager.cpp — the byte-faithful ??0Achievement@0@QEAA@XZ
-// (0x18009e240) and its thirteen stores. A constructor DOOR, not a member: it
-// stamps the MINTED tables (B4b-2 / B7-3).
-extern void* RtAch_Achievement_Ctor(void* selfRaw);
+// (ENDGAME B.3.9 ENG: the thirteen stores are the real constructor
+// `Achievement()` now; the ??0 door that stamped the MINTED tables is retired.)
 
 namespace {
 
@@ -256,8 +255,7 @@ void Achievement::Destruct() {
 // ============================================================================
 Object::External* Achievement::Reconstruct() {
     DeletingDtor(0);
-    RtAch_Achievement_Ctor(this);
-    return this;
+    return ::new (this) Achievement();
 }
 
 // ============================================================================
@@ -268,8 +266,7 @@ Object::External* Achievement::Reconstruct() {
 // cannot be called on a null `this`.
 // ============================================================================
 Object::External* Achievement::Construct() {
-    RtAch_Achievement_Ctor(this);
-    return this;
+    return ::new (this) Achievement();
 }
 
 // ============================================================================
@@ -325,45 +322,8 @@ void AchievementInstance::Persist(void* streamv) {
 }  // namespace Achievement
 
 // ============================================================================
-// The registered doors — QUALIFIED delegations.
+// ENDGAME B.3.9 ENG: the four slot doors (Construct, Reconstruct, Destruct,
+// AchievementInstance::Persist) and `RtAchVtableRegister` are gone -- their
+// only reader was the minted `??_7Achievement@0@6B@` /
+// `??_7AchievementInstance@Achievement@@6B@` tables.
 // ============================================================================
-extern "C" void RtAch_Achievement_Destruct(Achievement::Achievement* self) {
-    self->Achievement::Achievement::Destruct();
-}
-
-extern "C" void* RtAch_Achievement_Reconstruct(Achievement::Achievement* self) {
-    return self->Achievement::Achievement::Reconstruct();
-}
-
-extern "C" void* RtAch_Achievement_Construct(Achievement::Achievement* self) {
-    // The retail null test (0x180001301) stays IN THE DOOR.
-    if (!self) return nullptr;
-    return self->Achievement::Achievement::Construct();
-}
-
-extern "C" void RtAch_AchievementInstance_Persist(Achievement::AchievementInstance* self, void* stream) {
-    self->Achievement::AchievementInstance::Persist(stream);
-}
-
-// ---- Registration (unchanged) ----------------------------------------------
-int RtAchVtableRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("?Construct@Achievement@1@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtAch_Achievement_Construct); ++n;
-    RegisterRuntimeAddr(0x1800012f0ull, (void*)&RtAch_Achievement_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@Achievement@1@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtAch_Achievement_Reconstruct); ++n;
-    RegisterRuntimeAddr(0x180001270ull, (void*)&RtAch_Achievement_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@Achievement@1@UEAAXXZ",
-                          (void*)&RtAch_Achievement_Destruct); ++n;
-    RegisterRuntimeAddr(0x180001370ull, (void*)&RtAch_Achievement_Destruct);
-
-    RegisterRuntimeExport("?Persist@AchievementInstance@Achievement@@UEAAXAEAVStream@IO@@@Z",
-                          (void*)&RtAch_AchievementInstance_Persist); ++n;
-    RegisterRuntimeAddr(0x18009e4a0ull, (void*)&RtAch_AchievementInstance_Persist);
-
-    return n;
-}

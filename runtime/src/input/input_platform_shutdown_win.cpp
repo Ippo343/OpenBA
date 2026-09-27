@@ -164,7 +164,7 @@ inline Set* CallbackSet(Application::Application* app) {
 // DATA door so a minted run and a DLL run both land on whatever storage the
 // ported ctor published into (platform_startup_win.cpp:112 uses the same door).
 Application::Application** AppSingletonSlot() {
-    return RT_DATA_SLOT(Application::Application**, "?_singleton@Application@1@0PEAV11@EA");
+    return reinterpret_cast<Application::Application**>(&::Application::Application::_singleton);
 }
 
 // ---- attendance ------------------------------------------------------------

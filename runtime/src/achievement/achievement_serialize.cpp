@@ -240,9 +240,9 @@ void AchievementManager::Persist(IO::Stream& streamRef) {
 }  // namespace Achievement
 
 // ---- The registered doors — QUALIFIED delegations --------------------------
-bool RtAch_Achievement_Serialize(Achievement::Achievement* self, void* stream) {
-    return self->Achievement::Achievement::Serialize(stream);
-}
+// (ENDGAME B.3.9 ENG: the `?Serialize@Achievement@1@` slot door is gone with
+// the minted `??_7Achievement@0@6B@` row, its only reader; Scenario calls the
+// member QUALIFIED.)
 
 void RtAch_AchievementManager_Persist(Achievement::AchievementManager* self, IO::Stream* stream) {
     self->Achievement::AchievementManager::Persist(*stream);
@@ -253,10 +253,6 @@ void RtAch_AchievementManager_Persist(Achievement::AchievementManager* self, IO:
 // gameupdateloop_serialize.cpp resolves it by name on every save and load.
 int RtAchSerializeRegister() {
     int n = 0;
-
-    RegisterRuntimeExport("?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtAch_Achievement_Serialize); ++n;
-    RegisterRuntimeAddr(0x18009e070, (void*)&RtAch_Achievement_Serialize);
 
     RegisterRuntimeExport("?Persist@AchievementManager@Achievement@@QEAAXAEAVStream@IO@@@Z",
                           (void*)&RtAch_AchievementManager_Persist); ++n;

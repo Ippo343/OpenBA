@@ -285,10 +285,6 @@ namespace rtdtor {
 #define RT_DELDTOR(ADDR, DTOR, SIZE, NAME) { (ADDR), (DTOR), (SIZE), NAME }
 
 static constexpr DelDtorSpec kSpecs[] = {
-    RT_DELDTOR(0x180001680, 0x18009e180, 0x058, "Achievement::Achievement"),
-    RT_DELDTOR(0x180001a90, 0x18009e400, 0x028, "Achievement::AchievementInstance"),
-    RT_DELDTOR(0x180001d70, 0x18009edb0, 0x030, "Achievement::Goal"),
-    RT_DELDTOR(0x1800020c0, 0x18009ef40, 0x020, "Achievement::GoalInstance"),
     RT_DELDTOR(0x180002d60, 0x180103a00, 0x060, "Graphics::MaterialInstance"),
     RT_DELDTOR(0x1800037b0, 0x18011d670, 0x058, "UI::SpriteSheet"),
     RT_DELDTOR(0x180006440, 0x1800bfdb0, 0x010, "Object::Internal"),
@@ -811,9 +807,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // All four destructors are ported in runtime/src/collision2d/, pathfinding/, picking/.
     // None is a probe subject: each releases owned Array buffers and/or refcounted
     // Strings, so a fabricated subject would free/decrement garbage.
-    RT_DELDTOR(0x1800656b0, 0x180065400, 0x070, "Collision2D::CollisionMesh"),
-    RT_DELDTOR(0x180064ea0, 0x18010ca00, 0x030, "Collision2D::Surface"),
-    RT_DELDTOR(0x1800713b0, 0x18010f8e0, 0x050, "Pathfinding::PointList"),
     // (ENDGAME B.3.9 PILOT: the Picking::PickingMesh row 0x180072050 retired --
     // the class's own DeletingDtor (PickingMesh.h) carries both arms.)
 
@@ -850,8 +843,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // the DLL through ResolveAddr, exactly like most of the rows above.
     RT_DELDTOR(0x1800167f0, 0x1800fb620, 0x058, "Graphics::AnimationGroup"),
     RT_DELDTOR(0x180020a70, 0x1800a51c0, 0x108, "Graphics::ParticleSystem"),
-    RT_DELDTOR(0x18000bef0, 0x1800e03b0, 0x080, "Audio::SoundBuffer"),
-    RT_DELDTOR(0x180050820, 0x1800e0880, 0x040, "Audio::SoundEffect"),
     // 2026-09-12, the UI TEXT PIPELINE batch. APPENDED AFTER the batch-8 and
     // batch-9 rows above at merge time: kSpecs is POSITIONAL and three batches
     // each started appending at the same index on their own branch, so the
@@ -1112,22 +1103,6 @@ void* DeletingDtorCore(void* self, unsigned flags, int i) {
     return DeletingDtorCoreWith(self, flags, i, Dtor(i));
 }
 
-// Achievement::Achievement ~Achievement = 0x18009e180  (PORTED)
-void* RtDelDtor_Achievement(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180001680>());
-}
-// Achievement::AchievementInstance ~AchievementInstance = 0x18009e400  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
-void* RtDelDtor_AchievementInstance(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180001a90>());
-}
-// Achievement::Goal        ~Goal = 0x18009edb0  (PORTED)
-void* RtDelDtor_Goal(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180001d70>());
-}
-// Achievement::GoalInstance ~GoalInstance = 0x18009ef40  (PORTED)
-void* RtDelDtor_GoalInstance(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800020c0>());
-}
 // Graphics::MaterialInstance ~MaterialInstance = 0x180103a00  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
 void* RtDelDtor_MaterialInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180002d60>());
@@ -1352,15 +1327,6 @@ void* RtDelDtor_ExternalList(void* self, unsigned flags) {
 // Vtable batch 8 (2026-09-12): Collision2D::CollisionMesh/Surface,
 // Pathfinding::PointList, Picking::PickingMesh. Indices 67-70 (renumbered at
 // the merge: batch 9 took 61-66 on main first).
-void* RtDelDtor_CollisionMesh(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800656b0>());
-}
-void* RtDelDtor_Collision2DSurface(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180064ea0>());
-}
-void* RtDelDtor_PointList(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800713b0>());
-}
 // UI TEXT PIPELINE batch (2026-09-12). Indices 71-74, counted off the MERGED
 // table rather than assumed: this is the fourth batch to append here today and
 // the previous three each started at the same index on their own branch.
@@ -1406,16 +1372,6 @@ void* RtDelDtor_AnimationGroup(void* self, unsigned flags) {
 //                          "NOT ported")
 void* RtDelDtor_ParticleSystem(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180020a70>());
-}
-// Audio::SoundBuffer        ~SoundBuffer = 0x1800e03b0     (PORTED, BATCH C
-//                          2026-09-12, audio/batchc_audio_leaves.cpp; was
-//                          "NOT ported")
-void* RtDelDtor_SoundBuffer(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18000bef0>());
-}
-// Audio::SoundEffect        ~SoundEffect = 0x1800e0880     (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
-void* RtDelDtor_SoundEffect(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180050820>());
 }
 // Vtable batch 6 (2026-09-12): the graphics buffer / mesh / light slot-0 rows.
 // INDICES 103-108, RE-COUNTED OFF THE TABLE AFTER THE THIRD MERGE OF main.
@@ -1479,10 +1435,6 @@ const DelDtorSpec* Specs() { return kSpecs; }
 void RtObjectDeletingDtorPortInit() {
     using namespace rtdtor;
 
-    RegisterRuntimeAddr(0x180001680, (void*)&RtDelDtor_Achievement);
-    RegisterRuntimeAddr(0x180001a90, (void*)&RtDelDtor_AchievementInstance);
-    RegisterRuntimeAddr(0x180001d70, (void*)&RtDelDtor_Goal);
-    RegisterRuntimeAddr(0x1800020c0, (void*)&RtDelDtor_GoalInstance);
     RegisterRuntimeAddr(0x180002d60, (void*)&RtDelDtor_MaterialInstance);
     RegisterRuntimeAddr(0x1800037b0, (void*)&RtDelDtor_SpriteSheet);
     RegisterRuntimeAddr(0x180006440, (void*)&RtDelDtor_Internal);
@@ -1540,9 +1492,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180074a10, (void*)&RtDelDtor_ComboDialog);
     RegisterRuntimeAddr(0x18003b600, (void*)&RtDelDtor_DialogControllerConfig);
     RegisterRuntimeAddr(0x180007800, (void*)&RtDelDtor_ExternalList);
-    RegisterRuntimeAddr(0x1800656b0, (void*)&RtDelDtor_CollisionMesh);       // vtable batch 8 SPATIAL
-    RegisterRuntimeAddr(0x180064ea0, (void*)&RtDelDtor_Collision2DSurface);  // vtable batch 8 SPATIAL
-    RegisterRuntimeAddr(0x1800713b0, (void*)&RtDelDtor_PointList);           // vtable batch 8 SPATIAL
 
     // 2026-09-12 VTABLE BATCH 1 — ten UI::*Description classes, rows 71..80.
     // Every address a LITERAL, for the reason the banner above gives.
@@ -1550,8 +1499,6 @@ void RtObjectDeletingDtorPortInit() {
     // VTABLE BATCH 7 (2026-09-12).
     RegisterRuntimeAddr(0x1800167f0, (void*)&RtDelDtor_AnimationGroup);
     RegisterRuntimeAddr(0x180020a70, (void*)&RtDelDtor_ParticleSystem);
-    RegisterRuntimeAddr(0x18000bef0, (void*)&RtDelDtor_SoundBuffer);
-    RegisterRuntimeAddr(0x180050820, (void*)&RtDelDtor_SoundEffect);
     // 2026-09-12 cutover walk: the six scalar dtors this table still resolved
     // to NULL (deleting_dtor_leaves.cpp). Registered here so the address door
     // is closed before the first Dtor(i) lookup can cache a null.

@@ -405,3 +405,7 @@ int RtAudioDeviceRegister() {
     RegisterRuntimeAddr(0x1800dea20, (void*)&RtAudio_Device_StopPlatform); ++n;
     return n;
 }
+
+// ?_singleton@Device@Audio@@0PEAV12@EA (0x1801fe760) -- the class static (ENDGAME B.3.9 ENG, B39_RULES D7);
+// RtAudioPortInit redirects the minted storage row onto it.
+::Audio::Device* ::Audio::Device::_singleton = nullptr;

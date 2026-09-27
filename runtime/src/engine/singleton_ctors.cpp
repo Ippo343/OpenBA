@@ -79,8 +79,11 @@
 #include <cstring>
 #include <cstdint>
 #include <cstddef>
+#include <new>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/input/Device.h"   // ENDGAME B.3.9 ENG: the class static
+#include "../../types/application/Application.h"   // ENDGAME B.3.9 ENG: the class static
 
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/io/Modification.h"
@@ -91,6 +94,7 @@
 #include "../../types/video/Device.h"
 #include "../../types/input/Input.h"
 #include "../../types/audio/Audio.h"
+#include "../../types/audio/Device.h"
 
 // ----------------------------------------------------------------------------
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
@@ -158,11 +162,11 @@ void** SlotFileSystem()      { return RT_DATA_SLOT(void**, "?_singleton@FileSyst
 void** SlotPersistence()     { return RT_DATA_SLOT(void**, "?_singleton@Persistence@IO@@0PEAV12@EA"); }
 void** SlotVideoDevice()     { return RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA"); }
 void** SlotVideoConfig()     { return RT_DATA_SLOT(void**, "?_singleton@Configuration@Video@@0PEAV12@EA"); }
-void** SlotApplication()     { return RT_DATA_SLOT(void**, "?_singleton@Application@1@0PEAV11@EA"); }
-void** SlotInputDevice()     { return RT_DATA_SLOT(void**, "?_singleton@Device@Input@@0PEAV12@EA"); }
-void** SlotInputConfig()     { return RT_DATA_SLOT(void**, "?_singleton@Configuration@Input@@0PEAV12@EA"); }
-void** SlotAudioDevice()     { return RT_DATA_SLOT(void**, "?_singleton@Device@Audio@@0PEAV12@EA"); }
-void** SlotAudioConfig()     { return RT_DATA_SLOT(void**, "?_singleton@Configuration@Audio@@0PEAV12@EA"); }
+void** SlotApplication()     { return reinterpret_cast<void**>(&::Application::Application::_singleton); }
+void** SlotInputDevice()     { return reinterpret_cast<void**>(&::Input::Device::_singleton); }
+void** SlotInputConfig()     { return reinterpret_cast<void**>(&::Input::Configuration::_singleton); }
+void** SlotAudioDevice()     { return reinterpret_cast<void**>(&::Audio::Device::_singleton); }
+void** SlotAudioConfig()     { return reinterpret_cast<void**>(&::Audio::Configuration::_singleton); }
 
 // The one store this whole lane is about. Written once, called fourteen times,
 // so there is exactly one place to read to know how the criterion is met.
@@ -750,10 +754,14 @@ void* Ctor_AudioConfiguration(void* self) {
 // the Stream by value at +0xa00. This constructor is still the DOOR (B7-12: no
 // real Device ctor this step), so it keeps writing the offsets it transcribed.
 // ===========================================================================
+// ENDGAME B.3.9 ENG: loop 2's vptr + two zero stores are
+// `Audio::Device::PlatformChannel`'s real constructor now -- `::new` into each
+// record -- so every record wears the class's (COM-shaped) table, and the
+// by-address read of the minted unnamed row (a function-local lazy cache, B9-10)
+// is gone with that row.
 void* Ctor_AudioDevice(void* self) {
     using StreamCtorFn = void* (*)(void*);
-    static const void* slotVtable =
-        reinterpret_cast<const void*>(ResolveAddr(Module::Runtime, 0x180157c60));
+    Audio::Device* const dev = static_cast<Audio::Device*>(self);
 
     for (int i = 0; i < 64; ++i) {
         const size_t base = static_cast<size_t>(i) * 0x28;
@@ -765,12 +773,8 @@ void* Ctor_AudioDevice(void* self) {
     }
     RT_EXPORT_ONCE(StreamCtorFn, "??0Stream@Audio@@QEAA@XZ")(
         static_cast<uint8_t*>(self) + 0xa00);
-    for (int i = 0; i < 64; ++i) {
-        const size_t base = 0xa98 + static_cast<size_t>(i) * 0x20;
-        WP (self, base + 0x00, slotVtable);
-        W64(self, base + 0x08, 0);
-        W64(self, base + 0x18, 0);
-    }
+    for (int i = 0; i < 64; ++i)
+        ::new (static_cast<void*>(&dev->_platformChannels[i])) Audio::Device::PlatformChannel();
     Publish(SlotAudioDevice(), self);
     W64(self, 0xa88, 0);
     W64(self, 0xa90, 0);

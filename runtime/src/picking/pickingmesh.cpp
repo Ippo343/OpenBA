@@ -237,9 +237,11 @@ void SerializeSubMeshesBody(Serializer* ser, int32_t count, SubMesh* base) {
 namespace Picking {
 
 // [2] 0x180071a90: `MOV EAX,[_typeInfo] ; RET`.
-uint32_t PickingMesh::Type() const {
+// 0x180071aa0: the static accessor, the same load (B39_RULES D6 step 1).
+uint32_t PickingMesh::TypeId() {
     uint32_t v = 0; std::memcpy(&v, PickingMeshTypeInfo(), sizeof v); return v;
 }
+uint32_t PickingMesh::Type() const { return TypeId(); }
 // [1] 0x180071ab0: the same node at +8.
 const char* PickingMesh::TypeName() const {
     const char* v = nullptr; std::memcpy(&v, PickingMeshTypeInfo() + 8, sizeof v); return v;
