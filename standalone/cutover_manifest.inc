@@ -7,7 +7,7 @@
 // REASON CLASS and a measured by-name-door count -- never asserted
 // here.  standalone/cutover_manifest.cpp consumes this.
 
-// REQUIRED 55 | WITHHELD 1   (of 56 rows)
+// REQUIRED 54 | WITHHELD 1   (of 55 rows)
 
 // Achievement  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=4  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@AchievementManager@Achievement@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc670ull, "Achievement", 4)
@@ -75,8 +75,6 @@ CUTOVER_ROW("?_singleton@MemoryAllocator@System@@0PEAV12@EA", CUTOVER_REQUIRED, 
 CUTOVER_ROW("?_stopApplication@Error@System@@0_NA", CUTOVER_REQUIRED, true, 0x1801fc70aull, "System", 2)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=2  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_systemInitialTick@Timer@System@@0_JA", CUTOVER_REQUIRED, true, 0x1801fe738ull, "System", 2)
-// System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=2  -- verdict is DLL-PRESENT only and 2 by-name door(s) would resolve NULL at cutover
-CUTOVER_ROW("?_systemSecondsPerTick@Timer@System@@0NA", CUTOVER_REQUIRED, true, 0x1801fe740ull, "System", 2)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=2  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_systemTicksPerSecond@Timer@System@@0_JA", CUTOVER_REQUIRED, true, 0x1801fe730ull, "System", 2)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=2  -- tag states the verdict inverts at cutover
