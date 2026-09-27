@@ -73,19 +73,11 @@ static float* s_fYawMin = nullptr;
 // DAT_140172220 -- float constant 180.0f (yaw upper bound)
 static float* s_fYawMax = nullptr;
 
-// TypeInfo for IsDerivedFrom check in Serialize -- DAT_1401c7158 (CitizenComponent_FC).
-// engine_funcs.h has it as g_TypeId_CitizenComponent_FC, but that global is filled from
-// exe slot 0x1401c7158, whose registration is env-gated (BANISHED_LIVE_CITIZENAI_CITID,
-// standalone/reg_citizenai_typeids.cpp). That gate GRADUATED 2026-08-26 and is default-on,
-// so the slot is normally live now -- but its kill-switch (=0) still yields NULL, and
-// Serialize derefs it unguarded exactly as retail does, so keep the private by-name copy.
-// Verified in the graduation A/B: the by-name CRC and the slot value are the same number
-// (2704017556), so the two paths agree.
-// Same CRC as retail's slot (0x14014e7b5 = Object::BaseTypeInfo(&DWORD_1401c7158,
-// "CitizenComponent", ...), +0x00 is the type id), and no blast radius on the ~30 other
-// readers the gate exists to hold back.
-static uint32_t  s_tid_CitizenComponent_storage = 0;
-static uint32_t* s_tid_CitizenComponent = nullptr;
+// TypeInfo for IsDerivedFrom check in Serialize -- cell 0x1401c7158, read directly
+// through CitizenComponent::TypeId() (D5, ENDGAME B.3.9 CG3). The env-gated
+// g_TypeId_CitizenComponent_FC / by-name fallback pair this used to juggle read the
+// SAME cell and always agreed (verified in the 2026-08-26 graduation A/B), so there
+// is nothing left to fall back to.
 
 // ENDGAME B.3.9 CB: retail reads this record field ONLY in the class's own TypeName
 // slot (0x1401c5fe0 = the NAME field (+8) of PerformWork's record, read by
@@ -138,24 +130,11 @@ bool PerformWork_ResolveFuncs() {
     s_fYawMax = (float*)ResolveAddr(Module::Exe, 0x140172220);
     if (!s_fYawMax) s_fYawMax = &s_fbYawMax;
 
-    // CitizenComponent type id: prefer the real .rdata slot when the gate published it,
-    // otherwise resolve by name into private storage (see the declaration above).
-    // GetTypeIdByName only returns a real CRC after Object::Factory::Startup, so only
-    // latch a non-zero result -- a failed attempt just retries on the next call.
-    s_tid_CitizenComponent = g_TypeId_CitizenComponent_FC;
-    if (!s_tid_CitizenComponent) {
-        if (!s_tid_CitizenComponent_storage)
-            s_tid_CitizenComponent_storage = CitizenComponent::TypeId();
-        if (s_tid_CitizenComponent_storage)
-            s_tid_CitizenComponent = &s_tid_CitizenComponent_storage;
-    }
-
     bool ok = s_fn_IBP_DeletePtr &&
               s_fn_FindFamily &&
               s_fn_SetAnimation && s_fn_SetFacingDirection &&
               s_fn_FromYawPitch && s_fn_CitizenBreakCheck &&
               s_fConst1 && s_fYawMin && s_fYawMax &&
-              s_tid_CitizenComponent &&
               fn_IsDerivedFrom && fn_MemFreeStatic;
 
 #ifdef _DEBUG
@@ -178,8 +157,6 @@ bool PerformWork_ResolveFuncs() {
                 { "fConst1",               (const void*)s_fConst1 },
                 { "fYawMin",               (const void*)s_fYawMin },
                 { "fYawMax",               (const void*)s_fYawMax },
-                { "TypeId_CitizenComponent (0x1401c7158 / by-name)",
-                                           (const void*)s_tid_CitizenComponent },
                 { "IsDerivedFrom",         (const void*)fn_IsDerivedFrom },
                 { "MemFreeStatic",         (const void*)fn_MemFreeStatic },
             };
@@ -216,7 +193,7 @@ void PerformWork::Persist(void* stream) {
     // Serialize work target entity ref (+0x20)
     reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser2));   // B.3.4 bridge
     if (workTarget != nullptr) {
-        if (!fn_IsDerivedFrom(workTarget, *s_tid_CitizenComponent)) {
+        if (!fn_IsDerivedFrom(workTarget, CitizenComponent::TypeId())) {
             workTarget = nullptr;
         }
     }
