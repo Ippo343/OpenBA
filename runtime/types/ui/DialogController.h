@@ -36,13 +36,13 @@
 // sizeof 0x30: the deleting dtor's `MOV EDX,0x30` AND all 38 exe panel structs
 // in engine/types/ui/Panels.h start their own members at +0x30.
 //
-// ABSTRACT (RULE B6-3): the exe panel classes derive it as real C++ classes
-// (ENDGAME B.3.8 block PNL; the hand-built tables and
-// code/Game/Dialog/dialog_controller_vtable.cpp are gone) and slot 0 is the
-// mint's `RT_DELDTOR` row until END of B.3. The exe
-// never instantiates the base itself (no exe copy of its table, B38_SLOTS
-// section 4), so slot 0 stays `= 0`. ENDGAME B.3.8 block RB gave it retail's
-// REAL constructor (0x1800cd320) for PNL's converted panels.
+// A BASE: the exe panel classes derive it as real C++ classes (ENDGAME B.3.8
+// block PNL) and the exe never instantiates the base itself (its factory pair
+// is `xor eax,eax ; ret`). ENDGAME B.3.8 block RB gave it retail's REAL
+// constructor (0x1800cd320). ENDGAME B.3 step 9 (block UI-D, B39_RULES D1/D2):
+// slot 0 is the class's own vector deleting dtor, the minted
+// `??_7DialogController@UI@@6B@` and its RT_DELDTOR row are retired, and the
+// factory pair is the class's own (dialog_controller_base.cpp).
 //
 // ONE ABI NOTE, carried by slot 9: `InternalPtr<Element>` is BY VALUE in the
 // mangled name, but MSVC passes an 8-byte class with a user-declared copy
@@ -69,8 +69,22 @@ class Element;                  // block A — runtime/types/ui/Element.h
 
 class DialogController : public Object::Internal {
 public:
-    // [0] 0x18003b800 — pure on purpose; the RT_DELDTOR row is not retired.
-    Object::Base* DeletingDtor(unsigned flags) override = 0;
+    // [0] 0x18003b800 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x30`, the element size).
+    // The class's OWN (B9-4): every exe panel declares its own.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<DialogController*>(self + static_cast<int64_t>(i) * 0x30)->~DialogController();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~DialogController();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char* TypeName() const override;                        // [1] 0x18003b6d0
     uint32_t    Type() const override;                            // [2] 0x18003b6b0
@@ -101,9 +115,12 @@ public:
     DialogController(const DialogController& other);              // 0x18003b710
     DialogController& operator=(const DialogController& other);   // 0x18003b780
 
-    static uint32_t      TypeId();                                // 0x18003b6c0  not ported
-    static Object::Base* CreateNewObject();                       // 0x18003b6e0  not ported
-    static Object::Base* CreateInPlaceObject(void* storage);      // 0x18003b6f0  not ported
+    // 0x18003b6c0 — the minted record's type id (dialog_controller_base.cpp).
+    static uint32_t      TypeId();
+    // Retail's factory pair (B39_RULES D2): both are `XOR EAX,EAX ; RET`.
+    // Defined and registered in dialog_controller_base.cpp.
+    static Object::Base* CreateNewObject();                       // 0x18003b6e0
+    static Object::Base* CreateInPlaceObject(void* storage);      // 0x18003b6f0
 
 protected:
     // ??0DialogController@UI@@QEAA@XZ  0x1800cd320 — the REAL constructor
@@ -119,9 +136,7 @@ protected:
     DialogController() : _config(), _dialog(nullptr), _container(nullptr) {}
     // `??1DialogController@UI@@UEAA@XZ` 0x1800cd2f0. NON-VIRTUAL (decision 2)
     // and EMPTY, which is retail's body: 0x1800cd2f0 is the restamp plus the
-    // inlined ~Internal, both emitted by the compiler chain. The registered
-    // door `RtUiDialogController_Dtor` (dialog.cpp) does the same two things
-    // by hand for the minted objects (body in dialog_controller_base.cpp).
+    // inlined ~Internal, both emitted by the compiler chain.
     ~DialogController();
 
     // RULE B5-15 / B6-7, both COPIED from B36_SLOTS section 3:

@@ -286,7 +286,6 @@ namespace rtdtor {
 
 static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180002d60, 0x180103a00, 0x060, "Graphics::MaterialInstance"),
-    RT_DELDTOR(0x1800037b0, 0x18011d670, 0x058, "UI::SpriteSheet"),
     RT_DELDTOR(0x180006440, 0x1800bfdb0, 0x010, "Object::Internal"),
     RT_DELDTOR(0x1800065b0, 0x1800c0360, 0x008, "Object::Base"),   // probe subject
     RT_DELDTOR(0x180006640, 0x1800bc950, 0x020, "Object::External"),
@@ -297,9 +296,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180020310, 0x1801041f0, 0x0d8, "Graphics::ParticleInstance"),
     RT_DELDTOR(0x180020ce0, 0x1800a5520, 0x0e0, "Graphics::ParticleSystemInstance"),
     RT_DELDTOR(0x180031900, 0x1800dddb0, 0x028, "Engine::UpdateLoop"),
-    RT_DELDTOR(0x180035c10, 0x1801161a0, 0x0c0, "UI::Element"),
-    RT_DELDTOR(0x18003b800, 0x1800cd2f0, 0x030, "UI::DialogController"),
-    RT_DELDTOR(0x1800458c0, 0x180114d40, 0x0b8, "UI::DialogInstance"),
     RT_DELDTOR(0x18004d4f0, 0x1800dc170, 0x048, "Engine::LoaderLoop"),
     RT_DELDTOR(0x18004d670, 0x1800db060, 0x188, "Engine::DialogLoaderLoopT"),
     RT_DELDTOR(0x18004d8b0, 0x1800db340, 0x168, "Engine::DialogLoopT"),
@@ -327,7 +323,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // ten and to ?MemFree@MemoryAllocator@System@@SAXPEAX@Z. Nothing about the
     // port changes; the banner's "per-translation-unit copies" is just an
     // incomplete description of the set.
-    RT_DELDTOR(0x180038b20, 0x180112e40, 0x088, "UI::Dialog"),
     // ---- WAVE 10D lane TIP --------------------------------------------------
     // Slot 0 of `??_7ToolTipDialog@UI@@6B@` (0x180157880), the only one of that
     // vtable's three CODE slots that is not a UI body — the other two,
@@ -366,7 +361,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // UI::Dialog row above is appended: kProbeSubjects is a list of TABLE
     // INDICES and a mid-table insert silently re-points all twelve
     // Video::*Data probe subjects at the wrong rows.
-    RT_DELDTOR(0x18004d270, 0x1800dac70, 0x0c0, "UI::ToolTipDialog"),
     // ---- WAVE 19 lane CSTREAM -----------------------------------------------
     // Slot 0 of `??_7CompressedStream@IO@@6B@` (0x180155640) and of
     // `??_7CompressedFileStream@IO@@6B@` (0x1801555f0). The THIRD member of that
@@ -721,11 +715,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // at +0x60 and chains to ~External. Run over a fabricated subject that
     // decrements a refcount that was never incremented and frees a garbage
     // pointer. A probe subject must be SAFE TO RUN; this one is not.
-    RT_DELDTOR(0x180035350, 0x180116100, 0x068, "UI::ElementDescription"),
-    // (The Video resource family's six rows -- VideoProgram 0x18004efb0,
-    // VertexLayout 0x18004e000, ShaderProgram 0x18004e360, VertexProgram
-    // 0x18004e810, PixelProgram 0x18004eb90, RenderState 0x18004b9d0 -- were
-    // retired by ENDGAME B.3.9 VID: slot 0 is each class's own.)
     // (UI::GroupDescription's row -- 0x180046af0: LEA R9,[0x180117c00]
     // ~GroupDescription, MOV EDX,0x78; a scalar arm whose class-specific
     // ??3GroupDescription (0x1800466f0) is the same single MemFree -- was retired
@@ -742,11 +731,9 @@ static constexpr DelDtorSpec kSpecs[] = {
     //   0x180074a10  LEA R9,[0x180111cd0]  MOV EDX,0xd0   ~ComboDialog
     //     (own body: stamp own vtable, tail into ~DialogInstance -- already
     //     ported, runtime/src/ui/dialog.cpp)
-    RT_DELDTOR(0x180074a10, 0x180111cd0, 0x0d0, "UI::ComboDialog"),
     //   0x18003b600  LEA R9,[0x18003b4f0]  MOV EDX,0x20   ~DialogControllerConfig
     //     (own body: stamp own vtable, tail into ~External -- already ported,
     //     runtime/src/object/external.cpp)
-    RT_DELDTOR(0x18003b600, 0x18003b4f0, 0x020, "UI::DialogControllerConfig"),
     // (ENDGAME B.3.9: the Object::ExtensionCompiler 0x18002c300 and
     // Object::ExternalCompiler 0x18002c180 rows retired with their minted
     // tables -- retail's factories for both return null, nothing built one.)
@@ -835,10 +822,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // three Arrays whose buffers came from the Runtime heap, and ~Font does
     // both. A fabricated subject would decrement a refcount nothing
     // incremented and free garbage pointers.
-    RT_DELDTOR(0x180032130, 0x1801175a0, 0x090, "UI::Font"),
-    RT_DELDTOR(0x1800378a0, 0x1800cb840, 0x028, "UI::CharacterSet"),
-    RT_DELDTOR(0x18003b3a0, 0x1800cd1c0, 0x030, "UI::Cursor"),
-    RT_DELDTOR(0x18003ccf0, 0x1800d91b0, 0x058, "UI::SpriteCapture"),
     // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12), rows 85..98 ---------
     // Slot 0 of the fourteen UI widget vtables ported by
     // runtime/src/ui/<class>element.cpp. APPENDED, never inserted: the table is
@@ -1061,10 +1044,6 @@ void* DeletingDtorCore(void* self, unsigned flags, int i) {
 void* RtDelDtor_MaterialInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180002d60>());
 }
-// UI::SpriteSheet          ~SpriteSheet = 0x18011d670  (PORTED, ui/spritesheet_new.cpp; this note was stale)
-void* RtDelDtor_SpriteSheet(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800037b0>());
-}
 // Object::Internal         ~Internal = 0x1800bfdb0  (PORTED)
 void* RtDelDtor_Internal(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180006440>());
@@ -1107,18 +1086,6 @@ void* RtDelDtor_ParticleSystemInstance(void* self, unsigned flags) {
 void* RtDelDtor_UpdateLoop(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180031900>());
 }
-// UI::Element              ~Element = 0x1801161a0  (PORTED, ui/element.cpp; this note was stale)
-void* RtDelDtor_Element(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180035c10>());
-}
-// UI::DialogController     ~DialogController = 0x1800cd2f0  (PORTED)
-void* RtDelDtor_DialogController(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003b800>());
-}
-// UI::DialogInstance       ~DialogInstance = 0x180114d40  (PORTED, ui/dialog.cpp; this note was stale)
-void* RtDelDtor_DialogInstance(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800458c0>());
-}
 // Engine::LoaderLoop       ~LoaderLoop = 0x1800dc170  (PORTED, BATCH 8)
 void* RtDelDtor_LoaderLoop(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18004d4f0>());
@@ -1131,13 +1098,7 @@ void* RtDelDtor_DialogLoaderLoopT(void* self, unsigned flags) {
 void* RtDelDtor_DialogLoopT(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18004d8b0>());
 }
-// UI::Dialog               ~Dialog = 0x180112e40  (PORTED, lane DLG2)  [Wave 10C]
-void* RtDelDtor_Dialog(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180038b20>());
 }
-// UI::ToolTipDialog        ~ToolTipDialog = 0x1800dac70  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)  [Wave 10D]
-void* RtDelDtor_ToolTipDialog(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004d270>());
 }
 // IO::CompressedStream     ~CompressedStream = 0x1800aa650  (PORTED, lane PKG2)  [Wave 19]
 void* RtDelDtor_CompressedStream(void* self, unsigned flags) {
@@ -1157,10 +1118,6 @@ void* RtDelDtor_MeshInstance(void* self, unsigned flags) {
 }
 
 
-// UI::ElementDescription   ~ElementDescription = 0x180116100  (PORTED)  [Wave 27 IOTEXT]
-void* RtDelDtor_ElementDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180035350>());
-}
 
 
 // Rows 57-60 (2026-09-12): the four UI::*Description classes the cutover boot
@@ -1170,14 +1127,6 @@ void* RtDelDtor_ElementDescription(void* self, unsigned flags) {
 
 // VTABLE BATCH 9 (2026-09-12). Indices 61-66, appended after rows 57-60
 // (wired above, after this batch's merge found them without wrappers).
-// UI::ComboDialog          ~ComboDialog = 0x180111cd0             (PORTED, runtime/src/ui/combodialog.cpp)
-void* RtDelDtor_ComboDialog(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180074a10>());
-}
-// UI::DialogControllerConfig ~DialogControllerConfig = 0x18003b4f0  (PORTED, runtime/src/ui/dialogcontrollerconfig.cpp)
-void* RtDelDtor_DialogControllerConfig(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003b600>());
-}
 // Object::ExternalList      ~ExternalList = 0x1800076c0           (PORTED, runtime/src/object/external_list.cpp)
 void* RtDelDtor_ExternalList(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180007800>());
@@ -1188,22 +1137,6 @@ void* RtDelDtor_ExternalList(void* self, unsigned flags) {
 // UI TEXT PIPELINE batch (2026-09-12). Indices 71-74, counted off the MERGED
 // table rather than assumed: this is the fourth batch to append here today and
 // the previous three each started at the same index on their own branch.
-// UI::Font          ~Font          = 0x1801175a0  (PORTED, runtime/src/ui/font.cpp)
-void* RtDelDtor_Font(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180032130>());
-}
-// UI::CharacterSet  ~CharacterSet  = 0x1800cb840  (PORTED, runtime/src/ui/characterset.cpp)
-void* RtDelDtor_CharacterSet(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800378a0>());
-}
-// UI::Cursor        ~Cursor        = 0x1800cd1c0  (PORTED, runtime/src/ui/cursor.cpp)
-void* RtDelDtor_Cursor(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003b3a0>());
-}
-// UI::SpriteCapture ~SpriteCapture = 0x1800d91b0  (PORTED, runtime/src/ui/spritecapture_class.cpp)
-void* RtDelDtor_SpriteCapture(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18003ccf0>());
-}
 
 // ---------------------------------------------------------------------------
 // 2026-09-12, VTABLE BATCH 1 -- ten UI::*Description classes, indices 71..80.
@@ -1272,7 +1205,6 @@ void RtObjectDeletingDtorPortInit() {
     using namespace rtdtor;
 
     RegisterRuntimeAddr(0x180002d60, (void*)&RtDelDtor_MaterialInstance);
-    RegisterRuntimeAddr(0x1800037b0, (void*)&RtDelDtor_SpriteSheet);
     RegisterRuntimeAddr(0x180006440, (void*)&RtDelDtor_Internal);
     RegisterRuntimeAddr(0x1800065b0, (void*)&RtDelDtor_Base);
     RegisterRuntimeAddr(0x180006640, (void*)&RtDelDtor_External);
@@ -1283,27 +1215,19 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180020310, (void*)&RtDelDtor_ParticleInstance);
     RegisterRuntimeAddr(0x180020ce0, (void*)&RtDelDtor_ParticleSystemInstance);
     RegisterRuntimeAddr(0x180031900, (void*)&RtDelDtor_UpdateLoop);
-    RegisterRuntimeAddr(0x180035c10, (void*)&RtDelDtor_Element);
-    RegisterRuntimeAddr(0x18003b800, (void*)&RtDelDtor_DialogController);
-    RegisterRuntimeAddr(0x1800458c0, (void*)&RtDelDtor_DialogInstance);
     RegisterRuntimeAddr(0x18004d4f0, (void*)&RtDelDtor_LoaderLoop);
     RegisterRuntimeAddr(0x18004d670, (void*)&RtDelDtor_DialogLoaderLoopT);
     RegisterRuntimeAddr(0x18004d8b0, (void*)&RtDelDtor_DialogLoopT);
-    RegisterRuntimeAddr(0x180038b20, (void*)&RtDelDtor_Dialog);   // Wave 10C DLG8
-    RegisterRuntimeAddr(0x18004d270, (void*)&RtDelDtor_ToolTipDialog);  // Wave 10D TIP
     RegisterRuntimeAddr(0x180023fd0, (void*)&RtDelDtor_CompressedStream);      // Wave 19 CSTREAM
     RegisterRuntimeAddr(0x1800134b0, (void*)&RtDelDtor_EdgeMesh);              // Wave 27 GFXMESH
     RegisterRuntimeAddr(0x1800175d0, (void*)&RtDelDtor_EdgeMeshInstance);      // Wave 27 GFXMESH
     RegisterRuntimeAddr(0x180017330, (void*)&RtDelDtor_MeshInstance);          // Wave 27 GFXMESH
 
 
-    RegisterRuntimeAddr(0x180035350, (void*)&RtDelDtor_ElementDescription);    // Wave 27 IOTEXT
 
 
     // VTABLE BATCH 9
     // Rows 57-60, the UI::*Description four (wrappers above).
-    RegisterRuntimeAddr(0x180074a10, (void*)&RtDelDtor_ComboDialog);
-    RegisterRuntimeAddr(0x18003b600, (void*)&RtDelDtor_DialogControllerConfig);
     RegisterRuntimeAddr(0x180007800, (void*)&RtDelDtor_ExternalList);
 
     // 2026-09-12 VTABLE BATCH 1 — ten UI::*Description classes, rows 71..80.
@@ -1315,10 +1239,6 @@ void RtObjectDeletingDtorPortInit() {
     // is closed before the first Dtor(i) lookup can cache a null.
     RtObjectDeletingDtorLeavesRegister();
     // UI TEXT PIPELINE batch, rows 71-74 (wrappers above).
-    RegisterRuntimeAddr(0x180032130, (void*)&RtDelDtor_Font);
-    RegisterRuntimeAddr(0x1800378a0, (void*)&RtDelDtor_CharacterSet);
-    RegisterRuntimeAddr(0x18003b3a0, (void*)&RtDelDtor_Cursor);
-    RegisterRuntimeAddr(0x18003ccf0, (void*)&RtDelDtor_SpriteCapture);
     RegisterRuntimeAddr(0x18001eee0, (void*)&RtDelDtor_GeneratedImageBuffer);  // vtable batch 6
     RegisterRuntimeAddr(0x18001f260, (void*)&RtDelDtor_FrameCopyImageBuffer);  // vtable batch 6
 

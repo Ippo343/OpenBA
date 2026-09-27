@@ -6,8 +6,7 @@
 // ElementDescription family, because UI::Font is a direct Object::External
 // subclass and has no `CreateInstance`:
 //
-//   0  deleting dtor      0x180032130  NOT HERE — runtime/src/object/
-//                                      deleting_dtor*.cpp owns that table. Its
+//   0  deleting dtor      0x180032130  Font.h (the class's own, B.3.9). Its
 //                                      array arm encodes ~Font 0x1801175a0 and
 //                                      sizeof 0x90 (`LEA R9,[0x1801175a0]` and
 //                                      `MOV EDX,0x90` at 0x180032148/0x18003214f).
@@ -28,13 +27,11 @@
 //   ?ComputeLineLayout@Font@UI@@                  0x180116c70  here
 //   ?ComputeCharacterPosition@Font@UI@@           0x180116ee0  here
 //
-// NOT HERE, and deliberately: `?CreateNewObject@Font@UI@@` (0x180031ab0) and
-// `?CreateInPlaceObject@Font@UI@@` (0x180031ba0) are ALREADY ported and
-// registered, table-driven, by runtime/src/ui/factory_ui1.cpp — the `"Font"`
-// row of factory_ui1_tables.inc, whose `kFont` store table carries the same 21
-// constructor stores `Construct` transcribes below. `??3Font@UI@@SAXPEAX@Z`
-// (0x180031a50), the class operator delete, is ported in
-// runtime/src/ui/ui_operator_delete.cpp.
+// and the factory pair `?CreateNewObject@Font@UI@@` (0x180031ab0) /
+// `?CreateInPlaceObject@Font@UI@@` (0x180031ba0) — ENDGAME B.3.9 block UI-D
+// (B39_RULES D2): the class's own statics, replacing the FACTUI1 row.
+// `??3Font@UI@@SAXPEAX@Z` (0x180031a50), the class operator delete, is ported
+// in runtime/src/ui/ui_operator_delete.cpp.
 //
 // Layout: runtime/types/ui/Font.h (sizeof 0x90).
 //
@@ -43,10 +40,9 @@
 // ----------------------------------------------------------------------------
 // `Construct` (0x180031ce0), `Reconstruct` (0x180031c40) and both already-
 // ported factory steps each open-code the same 21 stores; the DLL exports no
-// `??0Font@UI@@`. `InlineCtorStores` below is that sequence transcribed from
-// the disassembly at 0x180031cf6..0x180031d67, exactly as
-// runtime/src/ui/characterset.cpp's sibling does for its own class. Two details
-// worth keeping visible:
+// `??0Font@UI@@`. ENDGAME B.3.9 block UI-D: that sequence (0x180031cf6..
+// 0x180031d67) is the class's REAL constructor, in Font.h, and every live Font
+// wears the COMPILER's table. Two details worth keeping visible:
 //   * `+0x00` is written THREE TIMES (Object::Base's vtable, then
 //     Object::External's, then Font's). Those are the two inlined base
 //     constructors followed by this class's own stamp; all three stores run.
@@ -76,15 +72,12 @@
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/Font.h"
 #include "../../types/system/String.h"
+#include <new>
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
-
-void* VtBase()     { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* VtExternal() { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* VtFont()     { return RT_DATA_SLOT(void*, "??_7Font@UI@@6B@"); }
 
 const uint8_t* FontTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@Font@UI@@0VBaseTypeInfo@Object@@A");
@@ -111,11 +104,6 @@ static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +
 static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
-
-using Slot0Fn = void* (*)(void* self, unsigned flag);
-void CallSlot0(void* self, unsigned flag) {
-    reinterpret_cast<Slot0Fn>(VTableOf(self)[0])(self, flag);
-}
 
 // ---- the dependencies these bodies call, all by address ---------------------
 //
@@ -163,55 +151,6 @@ int32_t DecodeUtf8(const void* src, const void* end, int32_t* cp) {
 // CONTENT, and the content is three dots and a space.
 const char kEllipsisText[] = "...";
 const char kSpaceText[]    = " ";
-
-// The 21 constructor stores, from 0x180031cf6..0x180031d67. `Reconstruct`
-// carries a byte-identical copy at 0x180031c5e..0x180031ccf.
-void InlineCtorStores(uint8_t* p) {
-    *reinterpret_cast<void**>(p)          = VtBase();      // 180031cfd
-    *reinterpret_cast<void**>(p)          = VtExternal();  // 180031d07
-    *reinterpret_cast<void**>(p + 0x08)   = nullptr;       // 180031d15
-    *reinterpret_cast<void**>(p + 0x10)   = nullptr;       // 180031d18
-    *reinterpret_cast<void**>(p + 0x18)   = nullptr;       // 180031d1c
-    *reinterpret_cast<void**>(p)          = VtFont();      // 180031d27
-    *reinterpret_cast<void**>(p + 0x20)   = nullptr;       // 180031d2a
-    *reinterpret_cast<void**>(p + 0x28)   = nullptr;       // 180031d2e
-    *reinterpret_cast<void**>(p + 0x30)   = nullptr;       // 180031d32
-    *reinterpret_cast<void**>(p + 0x38)   = nullptr;       // 180031d36  _size+_capacity
-    *reinterpret_cast<void**>(p + 0x40)   = nullptr;       // 180031d3a
-    *reinterpret_cast<void**>(p + 0x48)   = nullptr;       // 180031d3e  _size+_capacity
-    *reinterpret_cast<void**>(p + 0x50)   = nullptr;       // 180031d42  +0x50 and +0x54
-    *reinterpret_cast<int32_t*>(p + 0x58) = 0;             // 180031d46  DWORD; +0x5c is NOT written
-    *reinterpret_cast<void**>(p + 0x60)   = nullptr;       // 180031d49
-    *reinterpret_cast<void**>(p + 0x68)   = nullptr;       // 180031d4d
-    *reinterpret_cast<void**>(p + 0x70)   = nullptr;       // 180031d51  +0x70 and +0x74
-    *reinterpret_cast<void**>(p + 0x78)   = nullptr;       // 180031d55
-    *reinterpret_cast<void**>(p + 0x80)   = nullptr;       // 180031d59
-    *reinterpret_cast<void**>(p + 0x88)   = nullptr;       // 180031d60
-}
-
-// The System::String release the destructor performs four times over, from
-// 0x1801175c5..0x1801175f8 (the +0x88 copy; the other three are identical).
-// `data[-4]` is the refcount and `data-8` is the allocation base — see
-// PLAN.md §4.3 risk 2, which records that `str-4`/`str-8` is String's header
-// and NOT the allocator's.
-//
-// TWO ASYMMETRIES ARE RETAIL'S, NOT TYPOS. The refcount-hits-zero arm frees
-// and leaves the field pointing 8 bytes BELOW the freed block; the
-// still-shared arm nulls the field instead. Reproduced as written.
-void ReleaseStringField(uint8_t* p, size_t off) {
-    uint8_t** slot = reinterpret_cast<uint8_t**>(p + off);
-    uint8_t*  data = *slot;
-    if (data == nullptr) return;                                     // 1801175ce
-
-    int32_t* refs = reinterpret_cast<int32_t*>(data - 4);
-    --*refs;                                                         // 1801175d3
-    if (*refs == 0) {                                                // 1801175d6
-        *slot -= 8;                                                  // 1801175db
-        MemFree(*slot);                                              // 1801175ea
-    } else {
-        *slot = nullptr;                                             // 1801175f1
-    }
-}
 
 // ---- the reader/writer's scalar and array doors ----------------------------
 using ScalarFn = void (*)(void* rw, void* value, const char* name);
@@ -269,7 +208,9 @@ int32_t MeasureLiteral(const uint8_t* self, const char* text, int32_t bytes) {
 // with a QUALIFIED call (a live Font wears the MINTED table).
 namespace UI {
 
-uint32_t Font::Type() const {
+uint32_t Font::Type() const { return TypeId(); }
+// ?TypeId@Font@UI@@SAIXZ 0x1800319b0 — the same first dword.
+uint32_t Font::TypeId() {
     const uint8_t* ti = FontTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
@@ -289,62 +230,57 @@ Object::External::CompileResult Font::Compile(const System::Filename&) { return 
 // Construct / Reconstruct / Destruct
 // ============================================================================
 // 0x180031ce0: `TEST RCX,RCX ; JZ ret0`, then the inlined constructor, then
-// `MOV RAX,RCX`. The null arm returns 0 (`XOR EDX,EDX ; MOV EAX,EDX`).
-// Retail's null test (180031cf1) is in the DOOR.
+// `MOV RAX,RCX`. (The null test sat in the retired door; a virtual call always
+// has a `this`.)
 Object::External* Font::Construct() {
-    InlineCtorStores(reinterpret_cast<uint8_t*>(this));
-    return this;                                                     // 180031d67
+    return ::new (this) Font();                                      // 180031cf6..180031d67
 }
 // 0x180031c40: slot0(this, 0) — the deleting destructor with the free bit
-// CLEAR, i.e. destroy in place — and then the same inlined constructor. NOT a
-// tail jump: there is no out-of-line ctor to jump to.
+// CLEAR, i.e. destroy in place, VIRTUALLY — and then the same inlined
+// constructor. NOT a tail jump: there is no out-of-line ctor to jump to.
 Object::External* Font::Reconstruct() {
-    CallSlot0(this, 0);                                              // 180031c57
-    InlineCtorStores(reinterpret_cast<uint8_t*>(this));
-    return this;                                                     // 180031ccf
+    DeletingDtor(0);                                                 // 180031c57
+    return ::new (this) Font();                                      // 180031c5e..180031ccf
 }
 // 0x180031d80: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void Font::Destruct() { CallSlot0(this, 0); }
+void Font::Destruct() { DeletingDtor(0); }
 
-// ~Font: NON-VIRTUAL and EMPTY; the registered dtor door below does retail's
-// four String releases, two ~Array calls and the chain to ~External.
-Font::~Font() {}
-
-}  // namespace UI
+// ?CreateNewObject@Font@UI@@SAPEAVBase@Object@@XZ  0x180031ab0
+// The FACTUI1 row this replaces: the locked MemAlloc of 0x90 bytes, align 8;
+// retail's null branch; then the inlined constructor.
+Object::Base* Font::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(Font), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) Font();
+}
+// ?CreateInPlaceObject@Font@UI@@SAPEAVBase@Object@@PEAX@Z  0x180031ba0
+Object::Base* Font::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) Font();
+}
 
 // ============================================================================
-// ??1Font@UI@@UEAA@XZ   0x1801175a0
-// ============================================================================
-// Stamp, then tear down in REVERSE declaration order except that the three
-// trailing strings go first:
-//     [this] = ??_7Font@UI@@6B@                          ; 1801175c2
+// ??1Font@UI@@UEAA@XZ   0x1801175a0 — retail's body, moved here from the
+// retired `RtUi_Font_Dtor` door (ENDGAME B.3.9 UI-D). Retail's sequence:
 //     release String +0x88, +0x80, +0x78                 ; 1801175c5..18011764c
 //     Array<FontGlyph>::~Array(this + 0x40)   0x180033c50 ; 180117654
 //     Array<int32>::~Array   (this + 0x30)    0x18001c750 ; 18011765e
 //     release String +0x20                                ; 180117664
 //     JMP ~External                           0x1800bc950 ; 180117697
-// The two array destructors are DIFFERENT functions and the difference is not
-// cosmetic: 0x18001c750 is the plain `MemFree(_data); _data = 0; _size = 0`
-// our tree already ports, while 0x180033c50 is the same body compiled for the
-// 16-byte element. Both leave `_capacity` alone.
-extern "C" void RtUi_Font_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-
-    *reinterpret_cast<void**>(p) = VtFont();                         // 1801175c2
-
-    ReleaseStringField(p, 0x88);                                     // 1801175c5
-    ReleaseStringField(p, 0x80);                                     // 1801175f8
-    ReleaseStringField(p, 0x78);                                     // 18011762a
-
-    using ArrayDtorFn = void (*)(void*);
-    RtAddr<ArrayDtorFn>(0x180033c50ull)(p + 0x40);                   // 180117654
-    RtAddr<ArrayDtorFn>(0x18001c750ull)(p + 0x30);                   // 18011765e
-
-    ReleaseStringField(p, 0x20);                                     // 180117664
-
-    using BaseDtorFn = void (*)(void*);
-    RtAddr<BaseDtorFn>(0x1800bc950ull)(p);                           // 180117697 JMP
+// Here the two ~Array are the MEMBERS' own destructors (Collection::Array:
+// free `_data`, `_capacity` left alone — the same body both retail copies
+// compile to), which the compiler runs AFTER this body, then ~External. So the
+// one visible difference is ORDER: the +0x20 release now precedes the two
+// array frees instead of following them. The four releases and two frees are
+// of independent blocks; nothing reads between them.
+Font::~Font() {
+    System::StringPrivateAccess::Release(*reinterpret_cast<System::String*>(&_string88));   // 1801175c5
+    System::StringPrivateAccess::Release(*reinterpret_cast<System::String*>(&_string80));   // 1801175f8
+    System::StringPrivateAccess::Release(*reinterpret_cast<System::String*>(&_string78));   // 18011762a
+    System::StringPrivateAccess::Release(*reinterpret_cast<System::String*>(&_string20));   // 180117664
 }
+
+}  // namespace UI
 
 // ============================================================================
 // ?Serialize@Font@UI@@UEAA_NAEAVStream@IO@@@Z   0x1801176d0
@@ -892,45 +828,12 @@ void Font::ComputeStringLayout(const System::String& text, bool multiline,
 }  // namespace UI
 
 // ============================================================================
-// Registration. Both doors for every row: the mangled name (which is what the
-// minted BaseTypeInfo and the minted vtable ask for first) and the address
-// (which is what a ported caller's `ResolveAddr` literal asks for).
-// Unconditional — no kill switch, no env gate (DIRECTION.md §2).
-//
-// The deleting destructor 0x180032130 is deliberately absent: that table is
-// owned by runtime/src/object/deleting_dtor*.cpp.
+// THE DOORS. ENDGAME B.3.9 UI-D: the eight slot doors and the ??1 door are
+// gone -- their only reader was the minted `??_7Font@UI@@6B@` (and, for ??1,
+// its RT_DELDTOR row). The three metric exports are NOT slots and keep their
+// doors (reached by name/address); each delegates with a QUALIFIED
+// non-virtual call. None of the three is a retslot (the banner).
 // ============================================================================
-// ============================================================================
-// THE DOORS. Each keeps its registered name and address and delegates with a
-// QUALIFIED non-virtual call. `?AW4CompileResult` is an EAX-returned enum and
-// none of the three metric exports is a retslot (the banner).
-// ============================================================================
-extern "C" uint32_t RtUi_Font_Type(const void* selfv) {
-    return reinterpret_cast<const UI::Font*>(selfv)->UI::Font::Type();               // B.3.6 bridge
-}
-extern "C" const char* RtUi_Font_TypeName(const void* selfv) {
-    return reinterpret_cast<const UI::Font*>(selfv)->UI::Font::TypeName();           // B.3.6 bridge
-}
-extern "C" int32_t RtUi_Font_GetFileVersion(const void* selfv) {
-    return reinterpret_cast<const UI::Font*>(selfv)->UI::Font::GetFileVersion();     // B.3.6 bridge
-}
-extern "C" uint32_t RtUi_Font_Compile(void* selfv, const void* filename) {
-    return reinterpret_cast<UI::Font*>(selfv)                                        // B.3.6 bridge
-               ->UI::Font::Compile(*static_cast<const System::Filename*>(filename));
-}
-extern "C" void* RtUi_Font_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                            // 180031cf1
-    return reinterpret_cast<UI::Font*>(selfv)->UI::Font::Construct();                // B.3.6 bridge
-}
-extern "C" void* RtUi_Font_Reconstruct(void* selfv) {
-    return reinterpret_cast<UI::Font*>(selfv)->UI::Font::Reconstruct();              // B.3.6 bridge
-}
-extern "C" void RtUi_Font_Destruct(void* selfv) {
-    reinterpret_cast<UI::Font*>(selfv)->UI::Font::Destruct();                        // B.3.6 bridge
-}
-extern "C" bool RtUi_Font_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<UI::Font*>(selfv)->UI::Font::Serialize(streamv);         // B.3.6 bridge
-}
 extern "C" int32_t RtUi_Font_ComputeLineLayout(const void* selfv, const char* text,
                                                int32_t count, int32_t startX,
                                                int32_t baseY, int32_t maxWidth,
@@ -959,43 +862,12 @@ extern "C" void RtUi_Font_ComputeStringLayout(const void* selfv, const void* str
 
 int RtUiFontRegister() {
     int n = 0;
-
-    RegisterRuntimeExport("?TypeName@Font@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_Font_TypeName);                        ++n;
-    RegisterRuntimeAddr(0x1800319c0ull, (void*)&RtUi_Font_TypeName);
-
-    RegisterRuntimeExport("?Type@Font@UI@@UEBAIXZ",
-                          (void*)&RtUi_Font_Type);                            ++n;
-    RegisterRuntimeAddr(0x1800319a0ull, (void*)&RtUi_Font_Type);
-
-    RegisterRuntimeExport("?GetFileVersion@Font@UI@@UEBAHXZ",
-                          (void*)&RtUi_Font_GetFileVersion);                  ++n;
-    RegisterRuntimeAddr(0x1801176b0ull, (void*)&RtUi_Font_GetFileVersion);
-
-    RegisterRuntimeExport(
-        "?Compile@Font@UI@@UEAA?AW4CompileResult@External@Object@@AEBVFilename@System@@@Z",
-        (void*)&RtUi_Font_Compile);                                           ++n;
-    RegisterRuntimeAddr(0x1801176c0ull, (void*)&RtUi_Font_Compile);
-
-    RegisterRuntimeExport("?Serialize@Font@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_Font_Serialize);                       ++n;
-    RegisterRuntimeAddr(0x1801176d0ull, (void*)&RtUi_Font_Serialize);
-
-    RegisterRuntimeExport("?Reconstruct@Font@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_Font_Reconstruct);                     ++n;
-    RegisterRuntimeAddr(0x180031c40ull, (void*)&RtUi_Font_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@Font@UI@@UEAAXXZ",
-                          (void*)&RtUi_Font_Destruct);                        ++n;
-    RegisterRuntimeAddr(0x180031d80ull, (void*)&RtUi_Font_Destruct);
-
-    RegisterRuntimeExport("?Construct@Font@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_Font_Construct);                       ++n;
-    RegisterRuntimeAddr(0x180031ce0ull, (void*)&RtUi_Font_Construct);
-
-    RegisterRuntimeExport("??1Font@UI@@UEAA@XZ",
-                          (void*)&RtUi_Font_Dtor);                            ++n;
-    RegisterRuntimeAddr(0x1801175a0ull, (void*)&RtUi_Font_Dtor);
+    RegisterRuntimeExport("?CreateNewObject@Font@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::Font::CreateNewObject);                 ++n;
+    RegisterRuntimeAddr(0x180031ab0ull, (void*)&UI::Font::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@Font@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::Font::CreateInPlaceObject);             ++n;
+    RegisterRuntimeAddr(0x180031ba0ull, (void*)&UI::Font::CreateInPlaceObject);
 
     RegisterRuntimeExport(
         "?ComputeStringLayout@Font@UI@@QEBAXAEBVString@System@@_NHHW4Justify@12@AEAH3PEAULayout@12@@Z",

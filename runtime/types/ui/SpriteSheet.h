@@ -18,8 +18,9 @@
 //
 // VTABLE: `??_7SpriteSheet@UI@@6B@` IS EXPORTED (retail 0x180154590, per
 // PLAN.md §2.2 item D / §4.3 risk 3 -- "147 ??_7 symbols are exported", of
-// which SpriteSheet is one of the two the PLAN calls out by name). The ctor
-// below stamps this symbol; a port does not need to mint or clone a vtable.
+// which SpriteSheet is one of the two the PLAN calls out by name). Since
+// ENDGAME B.3.9 UI-D the class wears its compiler table; that export is not
+// minted any more.
 //
 // *** CORRECTION (Wave 7 lane F, 2026-09-07): the SpriteInfo layout below was
 // WRONG in two ways in the version this replaces. It said width/height sat at
@@ -150,7 +151,7 @@ static_assert(offsetof(SpriteInfo, v1) == 0x30, "v1 at +0x30");
 // `::SpriteInfo` stay as global transition aliases below).
 //
 // `??_7SpriteSheet@UI@@6B@` @ 0x180154590 (B36_SLOTS.md section 1):
-//   [0] +0x00 0x1800037b0  (unexported) vector deleting dtor — RT_DELDTOR row
+//   [0] +0x00 0x1800037b0  (unexported) vector deleting dtor
 //                          (~SpriteSheet 0x18011d670, sizeof 0x58)
 //   [1] +0x08 0x180002e50  ?TypeName@SpriteSheet@UI@@UEBAPEBDXZ
 //   [2] +0x10 0x180002e30  ?Type@SpriteSheet@UI@@UEBAIXZ
@@ -161,11 +162,11 @@ static_assert(offsetof(SpriteInfo, v1) == 0x30, "v1 at +0x30");
 //   [7] +0x38 0x180003180  ?Destruct@SpriteSheet@UI@@UEAAXXZ
 //   [8] +0x40 0x180003100  ?Construct@SpriteSheet@UI@@UEAAPEAVExternal@Object@@XZ — B6-1.1
 //
-// ABSTRACT (slot 0 `= 0`, the RT_DELDTOR row stays), NO REAL CONSTRUCTOR: the
-// exe's `thumb_vtables.cpp` constructs bare SpriteSheets through the
-// `??0SpriteSheet@UI@@QEAA@XZ` DOOR and copies slots 1..8 off the minted
-// table (B6-3, B36_RULES 3.3), and `saveload_draw.cpp` stamps the minted table
-// by hand. The protected `= default` ctor exists for the unit test's probe.
+// CONCRETE (ENDGAME B.3.9 UI-D): the minted table, its RT_DELDTOR row and the
+// ??0 / ??1 doors are retired. Every construction spells `::new (p)
+// UI::SpriteSheet()` -- the exe's thumbnail loaders (B.3.9 EXA), the factory
+// pair below, Construct / Reconstruct, and SaveLoad::Draw's one-sprite sheet
+// (saveload_draw.cpp).
 //
 // THE FIELD NAMES ARE THE ONES THE TREE ALREADY SPELLS, and they stay public:
 // ~16 unconverted runtime/src/ui TUs and saveload_draw.cpp read them through
@@ -183,7 +184,8 @@ public:
     // instantiates the class itself (its table copy 0x14015c3b0; ModDialog,
     // FrustumOutlineDescription, the thumb loaders), whose slot 0 is the exe
     // scalar deleting dtor 0x1400121e0 (~SpriteSheet; MemFree on flags & 1).
-    // The DLL's 0x1800037b0 stays the mint's RT_DELDTOR row for the doors.
+    // The class keeps that SCALAR arm (B.3.9: an exe-built class); the DLL's
+    // vector 0x1800037b0 and its RT_DELDTOR row are retired.
     Object::Base* DeletingDtor(unsigned flags) override {
         this->~SpriteSheet();
         if (flags & 1) Object::detail::InternalMemFree(this);
@@ -222,36 +224,19 @@ public:
     void    SetMaterial(Object::ExternalPtr<Graphics::MaterialInstance> material); // 0x1800034a0
     SpriteSheet(const SpriteSheet& src);                    // 0x1800035d0
     SpriteSheet& operator=(const SpriteSheet& src);         // 0x1800036b0
-    // The reflection statics keep their DOORS (B36_RULES section 7):
-    // `??2`/`??3` in spritesheet_new.cpp, the two factories in
-    // ui_factory_wave28.cpp (the fragment pass's).
+    // `??2`/`??3` keep their DOORS in spritesheet_new.cpp (B36_RULES
+    // section 7). The factory pair is the class's own (ENDGAME B.3.9 UI-D,
+    // spritesheet_vtable.cpp), registered by name and address.
     static void* operator new(std::size_t bytes);              // 0x180002e60  (door)
     static void* operator new(std::size_t bytes, void* place); // 0x180002ed0
     static void  operator delete(void* p);                     // 0x180002ee0  (door)
-    static Object::Base* CreateNewObject();                    // 0x180002f40  (door)
-    static Object::Base* CreateInPlaceObject(void* place);     // 0x180003000  (door)
+    static Object::Base* CreateNewObject();                    // 0x180002f40
+    static Object::Base* CreateInPlaceObject(void* place);     // 0x180003000
 
-    // `??0SpriteSheet@UI@@QEAA@XZ` 0x18011d600 — the REAL constructor (ENDGAME
-    // B.3.8 block RB, RULE B8-1), PUBLIC: the class is concrete. External()
-    // and the stamps are the compiler's; the zero stores are ONE body with the
-    // door `RtUi_SpriteSheet_Ctor` (sprite.cpp).
-    SpriteSheet() { InitFields(); }
-
-    // The doors' way onto the shared bodies.
-    struct DoorBody {
-        static void Init(SpriteSheet* s)    { s->InitFields(); }
-        static void Release(SpriteSheet* s) { s->ReleaseFields(); }
-    };
-
-protected:
-    // `??1SpriteSheet@UI@@UEAA@XZ` 0x18011d670. NON-VIRTUAL; its body
-    // (spritesheet_vtable.cpp) is `ReleaseFields`, ONE body with the door
-    // `RtUi_SpriteSheet_Dtor` (spritesheet_new.cpp); ~External is the chain's.
-    ~SpriteSheet();
-
-private:
-    // 0x18011d600's stores after the stamps; +0x51..+0x57 are never written.
-    void InitFields() {
+    // `??0SpriteSheet@UI@@QEAA@XZ` 0x18011d600 — the REAL constructor, PUBLIC:
+    // External() and the stamps are the compiler's, then the stores below;
+    // +0x51..+0x57 are never written.
+    SpriteSheet() {
         m_sprites = nullptr;                  // +0x20
         m_spriteCount = 0;                    // +0x28 } one qword
         m_spriteCapacity = 0;                 //       }
@@ -262,7 +247,12 @@ private:
         m_field4C = 0;                        //       }
         m_field50 = 0;                        // +0x50 (BYTE)
     }
-    void ReleaseFields();   // 0x18011d670 minus the stamp and ~External (spritesheet_new.cpp)
+
+protected:
+    // `??1SpriteSheet@UI@@UEAA@XZ` 0x18011d670. NON-VIRTUAL; its body is in
+    // spritesheet_new.cpp (the two String releases, then ~Array<SpriteInfo>);
+    // ~External is the chain's.
+    ~SpriteSheet();
 
 public:
     // ---- the 0x38 bytes SpriteSheet adds after Object::External ------------

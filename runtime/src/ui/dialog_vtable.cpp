@@ -198,6 +198,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
@@ -215,33 +216,6 @@ namespace RtUiDlgV {
 
 namespace {
 
-// ---------------------------------------------------------------------------
-// ATTENDANCE COUNTERS — the EFFECTIVENESS CONTROL for the promotion A/B, and
-// NOT a verification of anything. See the banner.
-// ---------------------------------------------------------------------------
-struct DlgCounts {
-    unsigned long long typeName = 0, type = 0, typeId = 0, fileVersion = 0,
-                       serialize = 0, reconstruct = 0, destruct = 0,
-                       construct = 0, constructNull = 0;
-    ~DlgCounts() {
-        const unsigned long long total = typeName + type + typeId + fileVersion +
-                                         serialize + reconstruct + destruct +
-                                         construct + constructNull;
-        if (total == 0) {
-            printf("[DlgVtbl] ATTENDANCE: none of the seven bodies was entered "
-                   "in this run.\n");
-            return;
-        }
-        printf("[DlgVtbl] ATTENDANCE (entries, not comparisons): total=%llu "
-               "TypeName=%llu Type=%llu TypeId=%llu GetFileVersion=%llu "
-               "Serialize=%llu Reconstruct=%llu Destruct=%llu Construct=%llu "
-               "ConstructNull=%llu\n",
-               total, typeName, type, typeId, fileVersion, serialize,
-               reconstruct, destruct, construct, constructNull);
-    }
-};
-DlgCounts g_counts;
-
 // ---- the exported DATA these bodies read -----------------------------------
 // `?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A` is spelled `0V…A`, the
 // PRIVATE static form — and this DLL exports its private members, so a name
@@ -251,14 +225,6 @@ const uint8_t* DialogTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*,
                         "?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A");
 }
-void* BaseVtable()     { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@");     }  // 0x180154788
-void* ExternalVtable() { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }  // 0x1801547a0
-void* DialogVtable()   { return RT_DATA_SLOT(void*, "??_7Dialog@UI@@6B@");       }  // 0x1801562a0
-
-typedef uint32_t    (*U32ThisFn)(const void*);
-typedef const char* (*CStrThisFn)(const void*);
-typedef int         (*IntThisFn)(const void*);
-typedef void*       (*PtrThisFn)(void*);
 
 // `Object::BaseTypeInfo` (runtime/types/object/TypeInfo.h): +0x00 typeId
 // (uint32), +0x08 `const char* name`. Spelled as constants for the reason
@@ -266,144 +232,21 @@ typedef void*       (*PtrThisFn)(void*);
 constexpr int kBaseTypeInfoTypeId = 0x00;
 constexpr int kBaseTypeInfoName   = 0x08;
 
-// ---------------------------------------------------------------------------
-// The in-place construct, byte for byte as 0x180038750 spells it.
-//
-// It is instruction-for-instruction identical to `??0Dialog@UI@@QEAA@XZ`
-// (0x180112db0), which lane DLG2 already ported as RtUiDialog_Ctor — and this
-// is deliberately NOT a call to that port. They are two separate INLINED copies
-// in the DLL, and keeping them two here means a future correction to one cannot
-// silently change the other's meaning. That is lane SS's argument for the same
-// pair one class over, and it applies unchanged.
-//
-// The two dead intermediate vtable stores at +0x00 (Base, then External, then
-// Dialog) are kept: they ARE the body, and a debugger break between them would
-// observe the intermediate value.
-//
-// TWO NON-ZERO / NON-QWORD STORES, both of which a copied SpriteSheet body
-// would have got wrong — see banner difference (1) and (2):
-//     +0x30  DWORD 0xFFFFFFFF     (not zero)
-//     +0x34  DWORD 0
-//     +0x40  DWORD 0              (+0x44..0x47 NEVER WRITTEN by retail)
-// ---------------------------------------------------------------------------
-void ConstructInPlace(uint8_t* self) {
-    auto qword = [](uint8_t* p, size_t off) -> void*& {
-        return *reinterpret_cast<void**>(p + off);
-    };
-    auto dword = [](uint8_t* p, size_t off) -> uint32_t& {
-        return *reinterpret_cast<uint32_t*>(p + off);
-    };
-    qword(self, 0x00) = BaseVtable();       // 180038766
-    qword(self, 0x00) = ExternalVtable();   // 180038770
-    qword(self, 0x08) = nullptr;            // 180038785 (via LEA RAX,[RCX+8])
-    qword(self, 0x10) = nullptr;
-    qword(self, 0x18) = nullptr;
-    qword(self, 0x00) = DialogVtable();  // 180038790
-    qword(self, 0x20) = nullptr;            // _spriteSheet
-    qword(self, 0x28) = nullptr;            // _spriteName
-    dword(self, 0x30) = 0xFFFFFFFFu;        // 1800387a2  _backgroundColor
-    dword(self, 0x34) = 0;                  // 1800387a9  _drawLevel
-    qword(self, 0x38) = nullptr;            // _rootDescription
-    dword(self, 0x40) = 0;                  // 1800387b0  DWORD only; +0x44 untouched
-    qword(self, 0x48) = nullptr;
-    qword(self, 0x50) = nullptr;
-    qword(self, 0x58) = nullptr;
-    qword(self, 0x60) = nullptr;
-    qword(self, 0x68) = nullptr;
-    qword(self, 0x70) = nullptr;
-    qword(self, 0x78) = nullptr;
-    qword(self, 0x80) = nullptr;            // 1800387cf  the last store
-}
-
-// The two windows `Construct`'s oracle may compare: everything retail writes,
-// and nothing it does not. +0x44..+0x47 is the one four-byte hole
-// (reference_oracle_must_not_compare_unwritten_bytes.md — this exact class of
-// window cost the Wave 7 run a 100% false divergence).
-constexpr size_t kWrittenLo   = 0x00;
-constexpr size_t kWrittenLoEnd = 0x44;
-constexpr size_t kWrittenHi   = 0x48;
-constexpr size_t kWrittenHiEnd = 0x88;
-
 }  // namespace
 }  // namespace RtUiDlgV
 
-// ---- slot 2  ?Type@Dialog@UI@@UEBAIXZ  0x180038420 -------------------------
-//   MOV EAX,dword ptr [0x1801faa88] / RET     — RCX is never read.
-// SAME SHAPE as SpriteSheet's slot 2 (0x180002e30): two instructions, the
-// class's own `_typeInfo` at +0x00.
-extern "C" uint32_t RtUiDialog_Type(const void* self) {
-    ++RtUiDlgV::g_counts.type;
-    return reinterpret_cast<const UI::Dialog*>(self)->UI::Dialog::Type();   // B.3.6 bridge
-}
-
-// The STATIC spelling of the same two instructions, at its own address
-// (0x180038430, `?TypeId@Dialog@UI@@SAIXZ`). NOT a vtable slot — it is a free
-// symbol this lane closes because it is the same two instructions and because
-// leaving it on the DLL while slot 2 is ours is a split nobody wants to reason
-// about. Lane SS did the same for `?TypeId@SpriteSheet@UI@@SAIXZ`.
+// ============================================================================
+// ENDGAME B.3.9 block UI-D: the slot doors that stood here (Type, TypeName,
+// GetFileVersion, Destruct, Construct, Reconstruct, and Serialize below) and
+// their `[DlgVtbl] ATTENDANCE` counters are RETIRED with the minted
+// `??_7Dialog@UI@@6B@`, their only reader. Construct is `::new (this)
+// Dialog()` — the same stores the in-place copy at 0x180038750 inlines (its
+// null test sat in the door; a virtual call always has a `this`). ONE door
+// stays: `?TypeId@Dialog@UI@@SAIXZ` (0x180038430) is a static export, not a
+// slot.
+// ============================================================================
 extern "C" uint32_t RtUiDialog_TypeId() {
-    ++RtUiDlgV::g_counts.typeId;
     return UI::Dialog::TypeId();
-}
-
-// ---- slot 1  ?TypeName@Dialog@UI@@UEBAPEBDXZ  0x180038440 ------------------
-//   MOV RAX,qword ptr [0x1801faa90] / RET     — `_typeInfo + 8`, RCX unread.
-// SAME SHAPE as SpriteSheet's slot 1 (0x180002e50).
-extern "C" const char* RtUiDialog_TypeName(const void* self) {
-    ++RtUiDlgV::g_counts.typeName;
-    return reinterpret_cast<const UI::Dialog*>(self)->UI::Dialog::TypeName();   // B.3.6 bridge
-}
-
-// ---- slot 3  ?GetFileVersion@Dialog@UI@@UEBAHXZ  0x1801130b0 ---------------
-//   MOV EAX,6 / RET. The dialog resource's on-disk format version.
-// SAME SHAPE as SpriteSheet's slot 3 (0x18011d710) — and, by coincidence, the
-// same CONSTANT. That the two happen to agree is not a reason to share a body:
-// they are two independent resource formats that both reached version 6.
-extern "C" int RtUiDialog_GetFileVersion(const void* self) {
-    ++RtUiDlgV::g_counts.fileVersion;
-    return reinterpret_cast<const UI::Dialog*>(self)->UI::Dialog::GetFileVersion();   // B.3.6 bridge
-}
-
-// ---- slot 7  ?Destruct@Dialog@UI@@UEAAXXZ  0x1800387f0 ---------------------
-//   MOV RAX,[RCX] / XOR EDX,EDX / JMP qword ptr [RAX]
-// INSTRUCTION-IDENTICAL to SpriteSheet's slot 7 (0x180003180): a tail jump into
-// SLOT 0 of the object's own vtable — the vector deleting destructor — with
-// flag 0, i.e. "destroy, do not free". Reading the vtable from the OBJECT and
-// not from a resolved constant is load-bearing: a derived Dialog would dispatch
-// to its own slot 0, and hard-coding ours would break that silently.
-//
-// NOT REPLAYED. Its effect is to run a destructor on the live object, and
-// calling the shipped body a second time would run it twice — a double free of
-// the four arrays a Dialog owns.
-extern "C" void RtUiDialog_Destruct(void* self) {
-    ++RtUiDlgV::g_counts.destruct;
-    reinterpret_cast<UI::Dialog*>(self)->UI::Dialog::Destruct();   // B.3.6 bridge
-}
-
-// ---- slot 8  ?Construct@Dialog@UI@@UEAAPEAVExternal@Object@@XZ  0x180038750 -
-//   if (this) { <the constructor, inlined>; return this; } else return nullptr;
-// The null test at 0x180038761 is retail's own, not a guard added here.
-extern "C" void* RtUiDialog_Construct(void* self) {
-    if (!self) {                           // retail's own null test, kept in the door
-        ++RtUiDlgV::g_counts.constructNull;
-        return nullptr;
-    }
-    ++RtUiDlgV::g_counts.construct;
-    return reinterpret_cast<UI::Dialog*>(self)->UI::Dialog::Construct();   // B.3.6 bridge
-}
-
-// ---- slot 6  ?Reconstruct@Dialog@UI@@UEAAPEAVExternal@Object@@XZ  0x1800386b0
-//   Destruct-then-Construct on the SAME storage. Note the difference from
-//   Construct, which SpriteSheet's pair has too: there is NO null test on this
-//   path (0x1800386c2 dereferences RCX immediately). Retail relies on the
-//   caller never passing null, and CLAUDE.md's rule says leave the deref
-//   faithful — do not "fix" a faithful crash with a null check.
-//
-// NOT REPLAYED, for Destruct's reason: the destructor half runs on the live
-// object and cannot be run twice.
-extern "C" void* RtUiDialog_Reconstruct(void* self) {
-    ++RtUiDlgV::g_counts.reconstruct;
-    return reinterpret_cast<UI::Dialog*>(self)->UI::Dialog::Reconstruct();   // B.3.6 bridge
 }
 
 // ============================================================================
@@ -606,12 +449,6 @@ const char* const kSerializeMangled =
 }  // namespace
 }  // namespace RtUiDlgV
 
-extern "C" bool RtUiDialog_Serialize(RtUI::Dialog* self, rt::io::Stream* stream) {
-    ++RtUiDlgV::g_counts.serialize;
-    // B.3.6: the body is UI::Dialog::Serialize (below). QUALIFIED: the live
-    // object's minted slot 5 resolves back to this door.
-    return reinterpret_cast<UI::Dialog*>(self)->UI::Dialog::Serialize(stream);   // B.3.6 bridge
-}
 
 // ############################################################################
 // ENDGAME B.3.6 block B — the eight slot bodies are UI::Dialog members now
@@ -623,12 +460,7 @@ extern "C" bool RtUiDialog_Serialize(RtUI::Dialog* self, rt::io::Stream* stream)
 // ############################################################################
 namespace UI {
 
-uint32_t Dialog::Type() const {                                // [2] 0x180038420
-    uint32_t ours = 0;
-    std::memcpy(&ours, RtUiDlgV::DialogTypeInfo() + RtUiDlgV::kBaseTypeInfoTypeId,
-                sizeof ours);
-    return ours;
-}
+uint32_t Dialog::Type() const { return TypeId(); }             // [2] 0x180038420
 
 uint32_t Dialog::TypeId() {                                    // static 0x180038430
     uint32_t ours = 0;
@@ -651,15 +483,12 @@ void Dialog::Destruct() {                                      // [7] 0x1800387f
 }
 
 Object::External* Dialog::Construct() {                        // [8] 0x180038750
-    // The null-`this` test (0x180038761) stays in the door.
-    RtUiDlgV::ConstructInPlace(reinterpret_cast<uint8_t*>(this));
-    return this;
+    return ::new (this) Dialog();   // the inlined ctor, 180038766..1800387cf
 }
 
 Object::External* Dialog::Reconstruct() {                      // [6] 0x1800386b0
     DeletingDtor(0);          // NO null test on this path — retail's
-    RtUiDlgV::ConstructInPlace(reinterpret_cast<uint8_t*>(this));
-    return this;
+    return ::new (this) Dialog();
 }
 
 bool Dialog::Serialize(void* streamv) {                        // [5] 0x1801130c0
@@ -734,9 +563,7 @@ bool Dialog::Serialize(void* streamv) {                        // [5] 0x1801130c
     return true;
 }
 
-// ??1Dialog@UI@@UEAA@XZ 0x180112e40 — EMPTY on purpose; the door
-// `RtUiDialog_Dtor` (dialog_ctor_dtor.cpp) does the teardown.
-Dialog::~Dialog() {}
+// ??1Dialog@UI@@UEAA@XZ 0x180112e40 is in dialog_ctor_dtor.cpp.
 
 }  // namespace UI
 
@@ -751,29 +578,8 @@ Dialog::~Dialog() {}
 // ============================================================================
 int RtUiDialogVtableRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@Dialog@UI@@UEBAIXZ",
-                          (void*)&RtUiDialog_Type); ++n;
-    RegisterRuntimeAddr(0x180038420, (void*)&RtUiDialog_Type);
     RegisterRuntimeExport("?TypeId@Dialog@UI@@SAIXZ",
                           (void*)&RtUiDialog_TypeId); ++n;
     RegisterRuntimeAddr(0x180038430, (void*)&RtUiDialog_TypeId);
-    RegisterRuntimeExport("?TypeName@Dialog@UI@@UEBAPEBDXZ",
-                          (void*)&RtUiDialog_TypeName); ++n;
-    RegisterRuntimeAddr(0x180038440, (void*)&RtUiDialog_TypeName);
-    RegisterRuntimeExport("?GetFileVersion@Dialog@UI@@UEBAHXZ",
-                          (void*)&RtUiDialog_GetFileVersion); ++n;
-    RegisterRuntimeAddr(0x1801130b0, (void*)&RtUiDialog_GetFileVersion);
-    RegisterRuntimeExport("?Destruct@Dialog@UI@@UEAAXXZ",
-                          (void*)&RtUiDialog_Destruct); ++n;
-    RegisterRuntimeAddr(0x1800387f0, (void*)&RtUiDialog_Destruct);
-    RegisterRuntimeExport("?Construct@Dialog@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUiDialog_Construct); ++n;
-    RegisterRuntimeAddr(0x180038750, (void*)&RtUiDialog_Construct);
-    RegisterRuntimeExport("?Reconstruct@Dialog@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUiDialog_Reconstruct); ++n;
-    RegisterRuntimeAddr(0x1800386b0, (void*)&RtUiDialog_Reconstruct);
-    RegisterRuntimeExport("?Serialize@Dialog@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUiDialog_Serialize); ++n;
-    RegisterRuntimeAddr(0x1801130c0, (void*)&RtUiDialog_Serialize);
     return n;
 }

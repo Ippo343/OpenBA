@@ -288,18 +288,15 @@ enum ElementFlag : uint32_t {
 //
 // ABSTRACT, exactly as retail: slot 4 `ComputeSize` is `_purecall`
 // (0x18007ec28) in `??_7Element@UI@@6B@`, and every one of the 27 subclasses
-// overrides or inherits an override (RULE B6-1.3). Slot 0 is also `= 0`: its
-// body is `RT_DELDTOR(0x180035c10, …, "UI::Element")` in
-// runtime/src/object/deleting_dtor.cpp, a mint row step 6 does not retire.
-// Nothing constructs a `UI::Element` as a C++ object: every live one is built
-// by the `??0Element` DOOR (element.cpp, `RtUi_Element_Ctor`) and wears the
-// MINTED table, which is why every door below delegates with a QUALIFIED call.
+// overrides or inherits an override (RULE B6-1.3). Every live Element is one
+// of those subclasses, built by its real constructor and wearing its COMPILER
+// table (ENDGAME B.3.9 UI-D retired the minted `??_7Element@UI@@6B@`, its
+// RT_DELDTOR row, the ??0 / ??1 doors and the slot doors).
 //
-// REAL CONSTRUCTOR AND DESTRUCTOR since ENDGAME B.3.8 block RB (B38_RULES D1,
-// RULE B8-1): protected, sharing ONE body each with the `??0Element` /
-// `??1Element` doors (`InitFields` / `ReleaseFields`), for the two exe-side
-// subclasses of step 8 (VIS). The destructor is NON-virtual (decision 2). The
-// exe never instantiates `UI::Element` itself, so slot 0 stays pure.
+// REAL CONSTRUCTOR AND DESTRUCTOR (ENDGAME B.3.8 block RB): protected; their
+// bodies are the private `InitFields` / `ReleaseFields`. The destructor is
+// NON-virtual (decision 2). Slot 0 is the class's own vector deleting dtor
+// (B9-4), reached only through a subclass that does not declare one.
 //
 // TWO SLOTS THAT PASS OR RETURN A CLASS, AND WHY BOTH TAKE A POINTER:
 //   * slot 11 `GetBorder` returns `InternalPtr<Element>` BY VALUE through a
@@ -370,8 +367,21 @@ public:
     };
 
     // ---- the twelve slots, in measured order ------------------------------
-    // [0] 0x180035c10 — pure on purpose; the deleting-dtor row is not retired.
-    Object::Base* DeletingDtor(unsigned flags) override = 0;
+    // [0] 0x180035c10 — MSVC's VECTOR deleting destructor, both arms exactly
+    // as the retired RT_DELDTOR row ran them (`MOV EDX,0xc0`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<Element*>(self + static_cast<int64_t>(i) * 0xc0)->~Element();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~Element();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180035440
     uint32_t    Type() const override;                            // [2] 0x180035420
     void        Persist(void* stream) override;                   // [3] 0x180116870  (IO::Stream&)
@@ -477,29 +487,19 @@ public:
     Element& operator=(const Element& src);                       // 0x180035a50  not ported
 
     // Reflection statics (retail's DECLARE_TYPE block). `_typeInfo` is still the
-    // MINTED record the slot-1/2 bodies read by name; none is defined here.
-    static uint32_t TypeId();                                     // 0x180035430  not ported
-    static Object::Base* CreateNewObject();                       // 0x180035450  not ported
-
-    // The doors' way onto the shared bodies (ENDGAME B.3.8 block RB, B38_RULES
-    // D1): `RtUi_Element_Ctor` / `RtUi_Element_Dtor` (element.cpp) run the
-    // Internal ctor / dtor and stamp the MINTED table themselves, for the
-    // still-unconverted subclasses, then call these. Nothing else may.
-    struct DoorBody {
-        static void Init(Element* e)    { e->InitFields(); }
-        static void Release(Element* e) { e->ReleaseFields(); }
-    };
+    // MINTED record TypeId reads by name.
+    static uint32_t TypeId();                                     // 0x180035430  element_vtable.cpp
+    // Abstract: retail's factory is `xor eax,eax; ret` (element.cpp).
+    static Object::Base* CreateNewObject();                       // 0x180035450  element.cpp
 
 protected:
-    // `??0Element@UI@@QEAA@XZ` (0x180115e50) — the REAL constructor (ENDGAME
-    // B.3.8 block RB, RULE B8-1): the compiler stamps Base -> Internal ->
-    // Element where retail's `CALL ??0Internal` and `??_7Element` store are;
-    // the body is ONE body with the door `RtUi_Element_Ctor`.
+    // `??0Element@UI@@QEAA@XZ` (0x180115e50) — the REAL constructor: the
+    // compiler stamps Base -> Internal -> Element where retail's `CALL
+    // ??0Internal` and `??_7Element` store are; the body is `InitFields`.
     Element() { InitFields(); }
     // `??1Element@UI@@UEAA@XZ` (0x1801161a0). NON-VIRTUAL; the compiler
     // restamps on entry and chains ~Array (a no-op on the header the body
-    // zeroes) and ~Internal (retail's tail JMP) after it. ONE body with the
-    // door `RtUi_Element_Dtor`.
+    // zeroes) and ~Internal (retail's tail JMP) after it.
     ~Element() { ReleaseFields(); }
 
 private:

@@ -28,10 +28,9 @@
 //                 0x180002160).
 //
 // `??_7StringTable@UI@@6B@` @ 0x180154630, NINE slots (B36_SLOTS.md):
-//   [0] +0x00 0x180002740  (unexported) vector deleting dtor — its body is the
-//                          INLINE `RtUiStringTable_ScalarDelete` in
-//                          runtime/src/ui/stringtable_factory.cpp (the 68th
-//                          slot-0 body, NOT an RT_DELDTOR row: B36_FILEMAP §6)
+//   [0] +0x00 0x180002740  (unexported) vector deleting dtor — the class's own
+//                          (B.3.9); it had no RT_DELDTOR row, its body was the
+//                          by-address `RtUiStringTable_ScalarDelete` (retired)
 //   [1] +0x08 0x180002190  ?TypeName@StringTable@UI@@UEBAPEBDXZ
 //   [2] +0x10 0x180002170  ?Type@StringTable@UI@@UEBAIXZ
 //   [3] +0x18 0x18011d930  ?GetFileVersion@StringTable@UI@@UEBAHXZ  (MOV EAX,1)
@@ -41,15 +40,19 @@
 //   [7] +0x38 0x180002460  ?Destruct@StringTable@UI@@UEAAXXZ
 //   [8] +0x40 0x180002400  ?Construct@StringTable@UI@@UEAAPEAVExternal@Object@@XZ — B6-1.1
 //
-// ABSTRACT, no real constructor (the ctor/factory doors build live objects,
-// wearing the MINTED table), empty non-virtual destructor — the
-// CharacterSet.h shape and reasons.
+// ENDGAME B.3 step 9 (block UI-D, B39_RULES D1/D2): CONCRETE, the
+// CharacterSet.h shape. The real public ctor is retail's `??0StringTable`
+// (0x18011d890) minus its vptr stores; slot 0 the class's own vector deleting
+// dtor; ~StringTable protected and non-virtual with the retired ??1 door's
+// body. The factory pair is the class's own (stringtable_factory.cpp); the
+// minted `??_7StringTable@UI@@6B@` is retired.
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
 
 #include "../object/External.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace System { class String; }
 
@@ -64,8 +67,27 @@ public:
         char* text;   // +0x08  System::String data ptr (refcounted value, NULL = empty)
     };
 
-    // [0] 0x180002740 — pure on purpose; `RtUiStringTable_ScalarDelete` is the body.
-    Object::Base* DeletingDtor(unsigned flags) override = 0;
+    // ??0StringTable@UI@@QEAA@XZ 0x18011d890 — the REAL constructor: External()
+    // (+0x08..+0x18), then +0x20 = 0 and ONE 8-byte store covering _size and
+    // _capacity (18011d8d5 / 18011d8d9).
+    StringTable() : Object::External() { _data = nullptr; _size = 0; _capacity = 0; }
+
+    // [0] 0x180002740 — MSVC's VECTOR deleting destructor (`MOV EDX,0x30`, the
+    // element size; the scalar arm is ??1 inlined, then ??3StringTable — one
+    // body with the global MemFree, stringtable_lifecycle.cpp's banner).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<StringTable*>(self + static_cast<int64_t>(i) * 0x30)->~StringTable();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~StringTable();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char* TypeName() const override;              // [1] 0x180002190
     uint32_t    Type() const override;                  // [2] 0x180002170
@@ -84,23 +106,25 @@ public:
     System::String GetText(const System::String& name) const;       // 0x1800025b0
     int32_t GetIndexFromName(const System::String& name) const;     // 0x180002470
 
-    // ---- exported, NOT PORTED as members ------------------------------------
-    // The ctor/dtor and the reflection statics keep their registered DOORS
-    // (B36_RULES section 7): `??0` in stringtable_factory.cpp, `??1` / `??3` in
-    // stringtable_lifecycle.cpp, `CreateNewObject` / `CreateInPlaceObject` in
-    // stringtable_factory.cpp. Declared so no caller edits this header.
+    // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     StringTable(const StringTable& src);                // 0x180002620  not ported
     StringTable& operator=(const StringTable& src);     // 0x1800026b0  not ported
-    static uint32_t TypeId();                           // 0x180002180  not ported
+    // 0x180002180 — the minted record's type id (stringtable_factory.cpp).
+    static uint32_t TypeId();
+    // Placement is spelt `::new (p) StringTable()` (B9-5): these stay undefined;
+    // `??3` keeps its registered door in stringtable_lifecycle.cpp.
     static void* operator new(std::size_t bytes);              // 0x1800021a0
     static void* operator new(std::size_t bytes, void* place); // 0x180002210
     static void  operator delete(void* p);                     // 0x180002220  (door)
-    static Object::Base* CreateNewObject();                    // 0x180002280  (door)
-    static Object::Base* CreateInPlaceObject(void* place);     // 0x180002330  (door)
+    // Retail's factory pair (B39_RULES D2), defined and registered in
+    // stringtable_factory.cpp.
+    static Object::Base* CreateNewObject();                    // 0x180002280
+    static Object::Base* CreateInPlaceObject(void* place);     // 0x180002330
 
 protected:
-    StringTable() = default;   // NOT retail's 0x18011d890 (the door) — see CharacterSet.h
-    ~StringTable();            // 0x18011d8f0, empty (the door keeps the body)
+    // 0x18011d8f0 — ~Array<TextEntry> (stringtable_factory.cpp), then the
+    // compiler chains ~External.
+    ~StringTable();
 
 public:
     // ---- the 0x10 bytes StringTable adds: Collection::Array<TextEntry> -----

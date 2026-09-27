@@ -4,6 +4,11 @@
 //                        `??3StringTable@UI@@SAXPEAX@Z`
 // ============================================================================
 //
+// ENDGAME B.3.9 block UI-D: the `??1` DOOR IS RETIRED — its body is the real
+// `UI::StringTable::~StringTable` (stringtable_factory.cpp) and its only
+// reader, slot 0 of the minted table, is retired with the row. The banner
+// below is the Wave 28 record of both bodies; only `??3` is still here.
+//
 // These were the WHOLE wave's only DTOR gap row and only OPNEWDEL gap row
 // (WAVE28_KICKOFF.md section 1: "gap 153 = 26 BODY + 1 DTOR + 1 OPNEWDEL + ...").
 // Both belong to UI::StringTable, whose factory, accessors and nine vtable
@@ -128,66 +133,24 @@ uintptr_t ResolveAddr(Module m, uintptr_t ghidra_addr);
 
 namespace {
 
-uint64_t g_dtorEntries   = 0;
 uint64_t g_deleteEntries = 0;
 uint64_t g_deleteNull    = 0;   // retail's own null branch was taken
 
 using VoidPtrFn = void (*)(void*);
 
 void StringTableLifecycleReport() {
-    printf("[RtPort] UI::StringTable lifecycle ATTENDANCE: dtor=%llu "
+    printf("[RtPort] UI::StringTable lifecycle ATTENDANCE: "
                 "operator-delete=%llu (null=%llu)\n",
-                (unsigned long long)g_dtorEntries,
                 (unsigned long long)g_deleteEntries,
                 (unsigned long long)g_deleteNull);
     fflush(stdout);
 }
 struct LifecycleReport {
-    ~LifecycleReport() { if (g_dtorEntries || g_deleteEntries) StringTableLifecycleReport(); }
+    ~LifecycleReport() { if (g_deleteEntries) StringTableLifecycleReport(); }
 };
 LifecycleReport g_lifecycleReport;
 
 }  // namespace
-
-// ============================================================================
-// ??1StringTable@UI@@UEAA@XZ                                    0x18011d8f0
-// ============================================================================
-extern "C" void RtUiStringTable_Dtor(void* selfv) {
-    ++g_dtorEntries;
-    UI::StringTable* self = reinterpret_cast<UI::StringTable*>(selfv);   // B.3.6 bridge
-
-    // 18011d906 / 18011d90d -- re-stamp OUR vptr before the members go.
-    *reinterpret_cast<void**>(self) = RT_DATA_SLOT(void*, "??_7StringTable@UI@@6B@");
-
-    // 18011d910 / 18011d914 -- ~Array<TextEntry> on the array at +0x20. The
-    // callee releases both refcounted strings of every entry, frees the block
-    // under the allocator lock, and zeroes _data/_size/_capacity; it is ported
-    // (array_destroy.cpp J2 0x180004a90) and reached registry-first.
-    //
-    // ENDGAME B.3.2 step 2 — left as a free-function call, deliberately. This
-    // J2 entry drives `ReleaseStringsCounted` off a `DestroySpec`
-    // (`kD_Str2_10`), a different type/dispatch from the `rtcoll::ArraySpec`
-    // `Collection::Array<T>::~Array()` calls, and no `kSpec_*` row exists for
-    // it — per the batch rule, a "DtorElem" helper may not be convertible at
-    // all, so `self->_data` (a real `Collection::Array<TextEntry>`
-    // by layout) stays reached through the seam rather than `.~Array()`.
-    static VoidPtrFn arrayDtor = nullptr;
-    if (!arrayDtor)
-        arrayDtor = reinterpret_cast<VoidPtrFn>(ResolveAddr(Module::Runtime, 0x180004a90));
-    if (arrayDtor) {
-        arrayDtor(&self->_data);
-    } else {
-        // Not a guard around a faithful deref -- this is a RESOLVE failing, a
-        // condition retail cannot have. Reported rather than silently skipped,
-        // because a silently skipped array teardown is a leak with no symptom.
-        std::fprintf(stderr, "[RtPort] ~StringTable: 0x180004a90 resolved NULL -- "
-                             "the entry array was NOT destroyed\n");
-    }
-
-    // 18011d91a / 18011d922 -- TAIL-JMP ~External. By NAME: 0x1800bc950 IS
-    // exported as ??1External@Object@@UEAA@XZ (ord 588), checked with pefile.
-    RT_EXPORT_ONCE(VoidPtrFn, "??1External@Object@@UEAA@XZ")(self);
-}
 
 // ============================================================================
 // ??3StringTable@UI@@SAXPEAX@Z                                  0x180002220
@@ -224,9 +187,6 @@ extern "C" void RtUiStringTable_OperatorDelete(void* p) {
 //  each name is spelled as its own string literal here).
 int RtUiStringTableLifecycleDtorRegister() {
     int n = 0;
-    RegisterRuntimeExport("??1StringTable@UI@@UEAA@XZ", (void*)&RtUiStringTable_Dtor);
-    RegisterRuntimeAddr(0x18011d8f0ull, (void*)&RtUiStringTable_Dtor);              ++n;
-
     RegisterRuntimeExport("??3StringTable@UI@@SAXPEAX@Z", (void*)&RtUiStringTable_OperatorDelete);
     RegisterRuntimeAddr(0x180002220ull, (void*)&RtUiStringTable_OperatorDelete);    ++n;
 

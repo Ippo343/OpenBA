@@ -97,12 +97,6 @@ inline void* Field(void* self, size_t off) {
 
 }  // namespace
 
-// ??1ToolTipDialog@UI@@UEAA@XZ   0x1800dac70
-extern "C" void RtUi_ToolTipDialog_Dtor(void* self) {
-    STAMP(self, "??_7ToolTipDialog@UI@@6B@");
-    RT_EXPORT_ONCE(DtorFn, "??1DialogInstance@UI@@UEAA@XZ")(self);
-}
-
 // ??1SunLight@Graphics@@UEAA@XZ 0x180108160 -- REMOVED (ENDGAME B.3.9 pilot):
 // the name and address were registered TWICE, here and by block RB's one-body
 // door `Graphics_SunLight_Dtor` (runtime/src/graphics/sunlight.cpp), and this
@@ -150,7 +144,5 @@ int RtObjectDeletingDtorLeavesRegister() {
     RegisterRuntimeAddr  (0x1800b9a40ull,                                  (void*)&RtIo_Stream_Dtor);
     RegisterRuntimeExport("??1ParticleInstance@Graphics@@UEAA@XZ",        (void*)&RtGraphics_ParticleInstance_Dtor);
     RegisterRuntimeAddr  (0x1801041f0ull,                                  (void*)&RtGraphics_ParticleInstance_Dtor);
-    RegisterRuntimeExport("??1ToolTipDialog@UI@@UEAA@XZ",        (void*)&RtUi_ToolTipDialog_Dtor);
-    RegisterRuntimeAddr  (0x1800dac70ull,                          (void*)&RtUi_ToolTipDialog_Dtor);
-    return 5;
+    return 4;
 }
