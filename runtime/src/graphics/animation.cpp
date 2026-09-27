@@ -669,6 +669,42 @@ void Graphics::Particle::ReleaseFields() {
 // block's files.
 Graphics::AnimationManager* Graphics::AnimationManager::_singleton = nullptr;
 
+// ?_rng@Particle@Graphics@@1VRandom@System@@A  retail 0x1801fe7f0 -- the class
+// static (ENDGAME B.3.9 block GFX, B39_RULES D7 row A46). Static storage, so it
+// starts all-zero exactly like retail's BSS; `_index` (+0x00) stays 0, which
+// forces the first draw to run NextGroup. Its mint storage row is retired with
+// every reader (rt_mint_retired/gfx.txt), and the mint's ConstructParticleRng
+// with it.
+System::Random Graphics::Particle::_rng;
+
+namespace {
+
+// Retail's CRT initialiser 0x180149650 for `_rng`, read this pass:
+//
+//     mt[0] = (uint32)_time64(NULL);                      // CALL 0x18007fb9c
+//     for (i = 1; i < 0x270; ++i)
+//         mt[i] = 0x6c078965 * (mt[i-1] ^ (mt[i-1] >> 30)) + i;
+//
+// i.e. `System::Random::Random()` (0x1800c7f20) inlined with its `index = 0`
+// store dropped (the storage is already zero). It is transcribed as this ONE
+// seeder rather than given to `System::Random` as a real constructor: that class
+// is SYS's, it is held by value in MenuDialogLoopT / GameLoadDialogLoopT and
+// asserted trivially default-constructible, so a real ctor there would seed
+// those holders a second time (B4b-2). The seed is the wall clock, so the value
+// never matched retail's and need not; being seeded at all is what matters (an
+// all-zero MT19937 twists to all-zero forever).
+struct ParticleRngSeed {
+    ParticleRngSeed() {
+        uint32_t* const mt = Graphics::Particle::_rng._mt;
+        mt[0] = static_cast<uint32_t>(std::time(nullptr));
+        for (uint32_t i = 1; i < 0x270u; ++i)
+            mt[i] = 0x6c078965u * (mt[i - 1] ^ (mt[i - 1] >> 30)) + i;
+    }
+};
+const ParticleRngSeed s_particleRngSeed;   // runs once, at this TU's CRT init
+
+}  // namespace
+
 // ?_frameIndex@ParticleInstance@Graphics@@1HA  retail 0x1801fe77c -- the class
 // static (ENDGAME B.3.9 block GFX, B39_RULES D7 row A37), redirected onto the
 // mint's storage row by RtGraphicsPortInit (foreign readers remain).

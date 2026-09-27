@@ -239,34 +239,12 @@ Fn RtAddr(uintptr_t ghidra) {
 // ---------------------------------------------------------------------------
 using NextGroupFn = void (*)(void* rng);
 
-void* ParticleRng() {
-    // DATA DOOR — SYMBOL: ?_rng@Particle@Graphics@@1VRandom@System@@A
-    // (retail 0x1801fe7f0). Resolved BY NAME through ResolveExport, which is
-    // registry-aware, so a minted copy is followed at cutover and the DLL's is
-    // followed today. It is tagged RT_UNPROMOTABLE | HARMFUL on the
-    // DLL-PRESENT route precisely because in-DLL RIP-relative readers keep
-    // using the DLL's copy; that tag INVERTS to REQUIRED at cutover
-    // (reference_unpromotable_is_route_scoped_not_permanent.md).
-    // CONSEQUENCE of NULL: every draw returns 0 and every particle spawns
-    // identically. Said once on stderr rather than faulting.
-    static void* p = nullptr;
-    static bool  tried = false;
-    if (!tried) {
-        tried = true;
-        p = ResolveExport("?_rng@Particle@Graphics@@1VRandom@System@@A");
-        if (!p)
-            std::fprintf(stderr,
-                "[PARTSYS28] ?_rng@Particle@Graphics@@ resolved NULL -- every "
-                "ParticleSystemInstance::Update spawn will draw 0 and particle "
-                "placement will not match retail\n");
-    }
-    return p;
-}
+// (`ParticleRng()`, the lazy name door onto ?_rng@Particle@Graphics@@, is gone:
+// ENDGAME B.3.9 GFX made it the class static `Graphics::Particle::_rng`.)
 
 // One draw, byte-for-byte retail's inlined sequence.
 uint32_t RngNext(void* rngv) {
-    uint8_t* rng = B(rngv);
-    if (!rng) return 0u;
+    uint8_t* rng = B(rngv);   // Particle::_rng: never null (B.3.9 GFX; the NULL-door guard is gone)
     int32_t index = I32(rng, 0);
     if (index == 0) {
         // NAME DOOR — SYMBOL: ?NextGroup@Random@System@@AEAAXXZ (0x1800c7dd0).
@@ -715,7 +693,7 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
     // whose CVTTSD2SI is 0x8000000000000000. Faithful.
     const int64_t interval = SecondsToTicks(kOne / F(emitter, kEmit_Rate));
 
-    void* rng = ParticleRng();
+    void* rng = &Graphics::Particle::_rng;   // ?_rng@Particle@Graphics@@ (0x1801fe7f0)
 
     // --- D : the spawn loop ------------------------------------------------
     // `while (pool.spawnAccum > interval && pool.live < pool.capacity)`.

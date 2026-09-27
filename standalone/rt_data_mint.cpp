@@ -143,18 +143,18 @@ static bool g_minted = false;
 static RtMintRedirect::Table<64> g_redirects;
 
 static const char kLoaderSym[] = "?_loader@LoaderLoop@Engine@@1VLoader@2@A";
-static const char kRngSym[]    = "?_rng@Particle@Graphics@@1VRandom@System@@A";
 static const char kFirstTiSym[] = "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA";
 
 static bool SymIs(const char* sym, const char* want) {
     return sym && strcmp(sym, want) == 0;
 }
 
-// The two statics MintConstructedStatics() BUILDS (a Thread object, a seeded
-// MT19937). `_firstTypeInfo` also carries a ctorInit but is only spliced, not
-// constructed, so it may be redirected.
+// The static MintConstructedStatics() BUILDS (a Thread object). `_firstTypeInfo`
+// also carries a ctorInit but is only spliced, not constructed, so it may be
+// redirected. (The seeded MT19937, ?_rng@Particle@Graphics@@, is a class static
+// since ENDGAME B.3.9 GFX; its row is retired.)
 static bool MintConstructs(const RtMintStorage& s) {
-    return SymIs(s.symbol, kLoaderSym) || SymIs(s.symbol, kRngSym);
+    return SymIs(s.symbol, kLoaderSym);
 }
 
 // The cell the row lives in: the owner's redirected static, else the mint's.
@@ -491,40 +491,10 @@ static bool ConstructLoader(const RtMintStorage& s, void* cell) {
     return true;
 }
 
-// FUN_180149650, the initialiser that seeds ?_rng@Particle@Graphics@@,
-// transcribed:
-//
-//     mt[0] = (uint32)_time64(NULL);
-//     for (i = 1; i < 0x270; ++i)
-//         mt[i] = 0x6c078965 * (mt[i-1] ^ (mt[i-1] >> 30)) + i;
-//
-// i.e. MT19937's standard init_genrand, seeded from the WALL CLOCK. Two
-// consequences, both worth stating because this lane got them wrong in both
-// directions before measuring:
-//
-//  * The VALUE cannot match retail's and does not need to. The seed is
-//    time(), so two runs of the SHIPPED DLL do not match each other either.
-//    Nobody should later "fix" a mismatch here.
-//  * Seeding at all is NOT optional. An all-zero MT19937 twists to an all-zero
-//    state forever (NextGroup, 0x1800c7dd0, is a pure twist with no seeding
-//    path), so zeroed storage would make every Graphics::Particle draw return
-//    0 -- plausible numbers, no crash, no symptom a test would catch.
-//
-// `index` at +0x00 is deliberately NOT written: retail leaves it zero from BSS,
-// which is what forces the first Rand() to regenerate.
-static bool ConstructParticleRng(const RtMintStorage& s, void* cell) {
-    if (s.size < 4 + 624 * 4) {
-        fprintf(stderr, "[RtMint] CANNOT construct %s: minted storage is %u bytes, "
-                        "MT19937 needs %u\n", s.symbol, s.size, 4u + 624u * 4u);
-        return false;
-    }
-    unsigned int* mt = (unsigned int*)((char*)cell + 4);        // +0x04 .. +0x9c4
-    mt[0] = (unsigned int)time(nullptr);
-    for (unsigned int i = 1; i < 624; ++i)
-        mt[i] = 0x6c078965u * (mt[i - 1] ^ (mt[i - 1] >> 30)) + i;
-    return true;
-}
-
+// (ConstructParticleRng, the transcription of initialiser 0x180149650 that
+// seeded ?_rng@Particle@Graphics@@, is gone: ENDGAME B.3.9 GFX. The row is
+// retired and `Graphics::Particle::_rng` is a class static seeded once at CRT
+// init beside its definition in runtime/src/graphics/animation.cpp.)
 static int g_constructed = 0;
 
 static void MintConstructedStatics() {
@@ -535,8 +505,6 @@ static void MintConstructedStatics() {
             ++g_constructed;              // MintTypeInfos() already built it
         } else if (SymIs(s.symbol, kLoaderSym)) {
             if (ConstructLoader(s, MintStorageCell(i))) ++g_constructed;
-        } else if (SymIs(s.symbol, kRngSym)) {
-            if (ConstructParticleRng(s, MintStorageCell(i))) ++g_constructed;
         } else {
             // Unreachable via the generator, which refuses to emit an
             // unhandled ctorInit. Kept because "unreachable" is exactly the

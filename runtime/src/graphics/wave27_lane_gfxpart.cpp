@@ -241,27 +241,8 @@ constexpr size_t kRec_SizePrv   = 0x54;
 // ---------------------------------------------------------------------------
 using NextGroupFn = void (*)(void* rng);
 
-void* ParticleRng() {
-    // ADDRESS DOOR / DATA DOOR — SYMBOL: ?_rng@Particle@Graphics@@1VRandom@System@@A
-    // (retail 0x1801fe7f0).  CONDITION: resolved by NAME through ResolveExport,
-    // which is registry-aware, so when standalone/rt_data_mint.cpp mints this
-    // symbol at cutover we follow the minted storage and when the DLL is present
-    // we follow the DLL's.  CONSEQUENCE: if it ever resolves NULL this body
-    // returns index 0 for every particle (see the caller) instead of faulting,
-    // and says so once on stderr. Same door as code/Game/Game/tornado.cpp:253.
-    static void* p = nullptr;
-    static bool  tried = false;
-    if (!tried) {
-        tried = true;
-        p = ResolveExport("?_rng@Particle@Graphics@@1VRandom@System@@A");
-        if (!p)
-            std::fprintf(stderr,
-                "[GFXPART27] ?_rng@Particle@Graphics@@ resolved NULL -- every "
-                "ParticleInstance::SetParticle will pick index 0 and particle "
-                "placement will not match retail\n");
-    }
-    return p;
-}
+// (`ParticleRng()`, the lazy name door onto ?_rng@Particle@Graphics@@, is gone:
+// ENDGAME B.3.9 GFX made it the class static `Graphics::Particle::_rng`.)
 
 // One MT19937 draw, exactly as retail inlines it (five call sites in
 // SetParticle/Update share the identical instruction sequence). Returns the
@@ -779,12 +760,8 @@ void ParticleInstance::SetParticle(ExternalPtrHandle particle) {
         const int32_t n = I32(p, kParticle_Count);
         uint32_t idx = 0;
         if (n != 0) {
-            void* rng = ParticleRng();
-            if (rng) {
-                idx = RngNext(rng) % static_cast<uint32_t>(n);
-                ++g_piSetParticleRand;
-            }
-            // rng == nullptr keeps idx 0; ParticleRng() already said so once.
+            idx = RngNext(&Graphics::Particle::_rng) % static_cast<uint32_t>(n);
+            ++g_piSetParticleRand;
         }
         pi->_index = static_cast<int32_t>(idx);
         void** base = *reinterpret_cast<void***>(p + kParticle_RecordArray);

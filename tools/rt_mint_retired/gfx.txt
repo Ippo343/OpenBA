@@ -54,3 +54,6 @@
 
 # -- W2: Geometry (base, last Graphics row) -- slot 0 the class's own; ctor / dtor / copy ctor bodies are the members --
 ??_7Geometry@Graphics@@6B@              GFX   own vector DeletingDtor (class stays abstract, slots 1-3 pure); real ctor / ~X / member copy ctor (door bodies); RT_DELDTOR row 0x180015e90, ??0 / ??1 / copy ??0 doors (names + 0x1800a4270 / 0x1800a41c0 / 0x180015b60) and both minted-table helpers deleted
+
+# -- W2: Particle::_rng (D7 special case, one commit, no redirect) --
+?_rng@Particle@Graphics@@1VRandom@System@@A   GFX   class static Graphics::Particle::_rng (animation.cpp), seeded once at CRT init by the transcription of initialiser 0x180149650 (the only seeder); readers wave27 SetParticle, wave28 emitter, exe tornado.cpp converted; ConstructParticleRng + KNOWN_CTORS entry deleted
