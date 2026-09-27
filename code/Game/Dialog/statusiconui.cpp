@@ -53,9 +53,9 @@ static uint32_t s_tidEntityUI = 0;
 namespace statusiconui_sa {
 
 void EnsureGlobals() {
-    static uint32_t s_ce = 0, s_dc = 0, s_pt = 0;
-    // ComponentEntity is required — Startup casts the panel's data source (+0x28) to it.
-    if (!g_TypeId_ComponentEntity) { s_ce = ComponentEntity::TypeId(); if (s_ce) g_TypeId_ComponentEntity = &s_ce; }
+    static uint32_t s_dc = 0, s_pt = 0;
+    // ENDGAME B.3.9 CG2: g_TypeId_ComponentEntity (cell 0x1401c5d70) -> ComponentEntity::
+    // TypeId(); the class static always answers, so the lazy-fill of the global retires.
     // These two are the REAL types the page gate needs (see the note at the top of this
     // file). The gate is not cosmetic: without it the title-bar mount of the icons ribbon
     // draws on the main info page and the stop-work icon appears twice.
@@ -146,12 +146,12 @@ void StatusIconUI::OnCreated() {
 // [7] 0x14007b0a0
 void StatusIconUI::OnUpdateLayout() {
     statusiconui_sa::EnsureGlobals();
-    if (!g_TypeId_ComponentEntity || !SA_DialogEntityAlive(this)) return;
+    if (!SA_DialogEntityAlive(this)) return;
     if (*reinterpret_cast<uint64_t*>((char*)this + 0x30) == 0)
         StatusIconUI::OnCreated();
     // Get entity from controller data (+0x28)
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
 
     // Wrap entity in InternalBasePtr

@@ -66,18 +66,10 @@ static uint64_t StorageUI_FindElemAsBasePtr(void* parentElem, const char* name) 
 
 namespace storageui_sa {
 
+// ENDGAME B.3.9 CG2: g_TypeId_ComponentEntity -> ComponentEntity::TypeId(),
+// g_TypeId_RawMaterialDescription -> RawMaterialDescription::TypeId(). Both class
+// statics always answer, so the lazy-fill retires.
 void EnsureGlobals() {
-    static uint32_t s_ce = 0, s_raw = 0;
-    if (!g_TypeId_ComponentEntity) {
-        s_ce = ComponentEntity::TypeId();
-        if (s_ce) g_TypeId_ComponentEntity = &s_ce;
-    }
-    // RawMaterialDescription (0x1401c7cb8) is normally registered in standalone
-    // (reg_action_child_ctors2.cpp), but lazy-resolve as a belt-and-braces fallback.
-    if (!g_TypeId_RawMaterialDescription) {
-        s_raw = RawMaterialDescription::TypeId();
-        if (s_raw) g_TypeId_RawMaterialDescription = &s_raw;
-    }
     // g_TypeId_StorageComponent_FC (0x1401c7e78, used by fn_FindComponent_Storage)
     // and g_pExternalFactorySingleton are filled by engine_funcs init in standalone.
 }
@@ -85,9 +77,7 @@ void EnsureGlobals() {
 // All globals StorageUI_Serialize/Startup dereference must be live before we run,
 // or a null-deref would fault (MinGW has no __try/__except to catch it).
 bool Ready() {
-    return g_TypeId_ComponentEntity
-        && g_TypeId_RawMaterialDescription
-        && g_TypeId_StorageComponent_FC
+    return g_TypeId_StorageComponent_FC
         && g_pExternalFactorySingleton && *g_pExternalFactorySingleton;
 }
 
@@ -142,10 +132,10 @@ void StorageUI::OnCreated() {
     const ::Object::ExternalFactory* efactory =
         reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
     const ::Object::External* ext =
-        efactory->FindNext(*g_TypeId_RawMaterialDescription, nullptr);
+        efactory->FindNext(RawMaterialDescription::TypeId(), nullptr);
     while (ext != nullptr) {
         resourceTypeCount++;
-        ext = efactory->FindNext(*g_TypeId_RawMaterialDescription, ext);
+        ext = efactory->FindNext(RawMaterialDescription::TypeId(), ext);
     }
 
     // Get column count from table element +0xC4
@@ -237,7 +227,7 @@ void StorageUI::OnUpdateLayout() {
 
     // Get entity, check ComponentEntity
     void* entityRaw = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entityRaw, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(entityRaw, ComponentEntity::TypeId());
     void* entity = isEntity ? entityRaw : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -280,8 +270,8 @@ void StorageUI::OnUpdateLayout() {
                 for (int c = 0; c < compCount; c++) {
                     void* comp = *(void**)(*(uintptr_t*)(resEntry + 0x28) + c * 8);
                     int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
-                    if (typeId == (int)*g_TypeId_RawMaterialDescription) {
-                        if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription)) {
+                    if (typeId == (int)RawMaterialDescription::TypeId()) {
+                        if (fn_IsDerivedFrom(comp, RawMaterialDescription::TypeId())) {
                             resType = comp;
                         }
                         break;
