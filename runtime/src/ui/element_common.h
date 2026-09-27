@@ -43,6 +43,7 @@
 // ENDGAME B.3.6 block A: the real `UI::Element` class, so the two inline
 // helpers below dispatch slots 4/5 as member calls instead of raw slot reads.
 #include "../../types/ui/Element.h"
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
 
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
 // — that header drags in <windows.h>, which PLAN.md §4.1 keeps out of
@@ -189,14 +190,11 @@ inline void StoreFlags(void* self, uint32_t newFlags) {
 // `Video::Device::_singleton` (exported data, retail 0x1801fe7a8). The screen
 // size lives at +0x04 / +0x08 of the pointed-to Device.
 // ---------------------------------------------------------------------------
-// RULE B6-5 (closing pass): InlineGetPaddedSize reaches this from member bodies
-// that run on the loader thread, so the slot lives in a namespace-scope atomic
-// (was RT_DATA_SLOT's function-local static).
-inline std::atomic<void*> g_videoDeviceSingletonSlot{nullptr};
+// ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh every
+// call -- InlineGetPaddedSize reaches this from member bodies that run on the
+// LOADER THREAD (B9-10: no lazy cache).
 inline void* VideoDeviceSingleton() {
-    void** p = static_cast<void**>(
-        AtomicExport(g_videoDeviceSingletonSlot, "?_singleton@Device@Video@@0PEAV12@EA"));
-    return p ? *p : nullptr;
+    return ::Video::Device::_singleton;
 }
 
 // ---------------------------------------------------------------------------

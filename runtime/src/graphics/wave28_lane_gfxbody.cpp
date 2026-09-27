@@ -58,6 +58,7 @@
 #include "../../types/graphics/Camera.h"
 #include "../../types/graphics/Material.h"
 #include "../../types/video/ShaderProgram.h"   // ENDGAME B.3.5 caller batch: Video::ShaderProgram
+#include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "../collection/array_internal.h"
 #include "../system/string.h"
 
@@ -71,8 +72,8 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 // lifted: RVA 0x1fe728 lies BEYOND `.data`'s SizeOfRawData, i.e. in the
 // uninitialised tail, so there are no bytes in the file to read and a port that
 // baked in "the constant" would have baked in ZERO (WAVE27_LANE_GFXBIG.md §4).
-// The tree already resolves it at engine/funcs/engine_funcs.cpp:1546.
-extern double* g_Timer_secondsPerTick;
+// ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now (redirect in SYS's
+// *PortInit); the `engine_funcs.cpp` global this used to read is dropped.
 
 namespace rtgfxbody28 {
 
@@ -945,7 +946,7 @@ void AnimationState::UpdateRootOnly(float dt, Math::Vector3& rootOffsetOut) {
         } else {
             const float secs = dt * L->speed;         // MULSS XMM0,[R8+0x10]
             const int64_t delta = static_cast<int64_t>(
-                static_cast<double>(secs) / *g_Timer_secondsPerTick);
+                static_cast<double>(secs) / ::System::Timer::_secondsPerTick);
             // B.3.5 bridge — ?GetRootPoseAtTime@Animation@Graphics@@QEBA?AVTransform@
             // Math@@AEBVTime@System@@0@Z (0x1800faaa0). A HIDDEN-RETSLOT door, so the
             // conversion uses the "door body moved to the call site" shape: EXACTLY
@@ -974,7 +975,7 @@ void AnimationState::UpdateRootOnly(float dt, Math::Vector3& rootOffsetOut) {
     // `_secondsPerTick` is hoisted into XMM10 before the loop (0x1800fc9e6) and
     // RE-LOADED after every GetRootPoseAtTime call (0x1800fca9f) because XMM10
     // is volatile. A single local is the same thing.
-    const double spt = *g_Timer_secondsPerTick;
+    const double spt = ::System::Timer::_secondsPerTick;
     for (int32_t i = _layers._size - 2; i >= 0; --i) {
         RtGraphics::AnimationLayer* const L = &RTGC_LAYERS()[i];   // re-read each pass
         const void* const clip = rtgfxbody28::LayerClip(L);
@@ -1158,7 +1159,7 @@ void Animation::ApplyEvents(const Math::Transform& base, const System::Time& fro
         const float den   = static_cast<float>(clip->frameLast - clip->frameFirst);
         const float secs  = ((num / den) * rate) * clip->loopScale;
         const int64_t t   = static_cast<int64_t>(
-            static_cast<double>(secs) / *g_Timer_secondsPerTick);
+            static_cast<double>(secs) / ::System::Timer::_secondsPerTick);
 
         bool fire = false;
         if (t >= *fromTime && t < *toTime) {

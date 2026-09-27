@@ -587,14 +587,14 @@ ReaderWriter* MakeReaderWriter(Serializer* ser) {
 }
 
 // `?_singleton@Device@Video@@0PEAV12@EA` @ 0x1801fe7a8; Device+0xF8 is
-// `activeInterface` (runtime/types/video/Device.h). Same accessor
-// shaderprogram.cpp carries, including the null test's justification: retail's
-// own static could not be null, but RT_DATA_SLOT can hand back an unfilled mint
-// slot.
+// `activeInterface` (runtime/types/video/Device.h). ENDGAME B.3.9 SS1
+// (B39_RULES D7): the class static now -- the null test this used to carry
+// was, by its own comment, justified only because RT_DATA_SLOT could hand
+// back an unfilled mint slot ("retail's own static could not be null"); that
+// reason is gone, so the guard goes with it and retail's unguarded deref is
+// restored.
 int32_t ActiveInterface() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
-    void* device = slot ? *slot : nullptr;
-    if (!device) return -1;
+    void* device = ::Video::Device::_singleton;
     return *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(device) + 0xF8);
 }
 

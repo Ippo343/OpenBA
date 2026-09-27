@@ -46,6 +46,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/save/SaveLoad.h"
 #include "../../types/video/ImageBuffer.h"
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
 #include "saveload_internal.h"   // RtSaveDetail::AtomicAddr (RULE B6-5)
 
 using RtSave::SaveInfo;
@@ -82,7 +83,6 @@ namespace {
 // follow each resolve are the pre-existing miss contract, unchanged.
 std::atomic<void*> g_memAllocSlot{nullptr};
 std::atomic<void*> g_imageBufferCtorSlot{nullptr};
-std::atomic<void*> g_deviceSingletonSlot{nullptr};
 
 void* SaveInfoMemAlloc(uint64_t bytes, int align) {
     using Fn = void* (*)(uint64_t, int);
@@ -100,9 +100,9 @@ void ImageBufferCtor(void* self) {
 }
 
 // ?_singleton@Device@Video@@0PEAV12@EA, 0x1801fe7a8 — the SLOT, not the Device.
+// ENDGAME B.3.9 SS1 (B39_RULES D7): the class static's address IS this cell.
 void** DeviceSingletonSlot() {
-    return reinterpret_cast<void**>(
-        RtSaveDetail::AtomicAddr(g_deviceSingletonSlot, Module::Runtime, 0x1801fe7a8));
+    return reinterpret_cast<void**>(&::Video::Device::_singleton);
 }
 
 // ---------------------------------------------------------------------------

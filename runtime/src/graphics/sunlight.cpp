@@ -166,7 +166,8 @@ void RenderBufferPlatformDestructPort(void* rb) {
 // tables the retired doors stamped -- are gone; the compiler stamps both.)
 
 RtVideo::Device** DeviceSlot() {
-    return RT_DATA_SLOT(RtVideo::Device**, "?_singleton@Device@Video@@0PEAV12@EA");
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now.
+    return reinterpret_cast<RtVideo::Device**>(&::Video::Device::_singleton);
 }
 
 // `dd->vtable[6]()` — the capability gate. See the header block: this is
