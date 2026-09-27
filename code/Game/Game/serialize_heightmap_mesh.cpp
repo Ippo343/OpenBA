@@ -882,10 +882,3 @@ extern "C" void Reimpl_FUN_1400ac880(void* self,
 extern "C" void* Reimpl_TradeWork_helper_e270(void* self, void* retbuf, int col, int row) {
     return TradeWork_helper_e270_Body(self, retbuf, col, row);
 }
-
-// Door: registered at 0x1400aad50 / 0x1400aed40 (address_registry.cpp) and
-// read by name there, so it stays (qualified, non-virtual: the body).
-extern "C" void Reimpl_GeometryChunkUpdate(void* self) {
-    if (!self) return;
-    reinterpret_cast<WorldGeometry*>(self)->RebuildDirtyChunks();   // B.3.8 bridge
-}

@@ -75,9 +75,6 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 
-// Exposed by moddialog.cpp so the retail address 0x14006eec0 can be registered.
-extern "C" void ModDialog_RefreshDisplay(void* self);
-
 // ENDGAME B.3.8 block DLG: both classes are real (Dialog/ModDialog.h,
 // Dialog/ModDetailsDialog.h). The two hand-built tables, the by-name base-slot
 // fills and the zero+stamp factories are gone: every slot the tables filled
@@ -376,9 +373,6 @@ extern "C" void ModDialog_CloseAndReload(void* self) {
 // ===========================================================================
 extern "C" void* ModDialog_LastOpened()        { return g_lastModDialog; }
 extern "C" void* ModDetailsDialog_LastOpened() { return g_lastModDetails; }
-// reg_mods.cpp registers this at 0x14015c670; engine_funcs.cpp reads it back
-// (g_ModDetailsDialog_Vtable), so the exe address serves the COMPILER table (B38 D5).
-extern "C" void* ModDetailsDialog_GetVtable() { return const_cast<void*>(ModDetailsDialog::Vtable()); }
 
 DEFINE_EXE_TYPE(ModDialog,        "UI::DialogInstance")
 DEFINE_EXE_TYPE(ModDetailsDialog, "UI::DialogInstance")

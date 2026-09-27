@@ -52,12 +52,10 @@ extern "C" void SetStandaloneKeyMap(void* keyMap) {
 // reimplementation in code/Game/<Module>/<Class>.cpp.
 extern "C" {
     void RegisterStatGoalVtable();
-    void RegisterMainMenuDialogVtable();
     void RegisterOptionsDialogVtable();
     void RegisterNewGameDialogVtable();
     void RegisterOptionInputBindDialogVtable();
     void RegisterMessageDialogVtable();
-    void RegisterMenuDialogVtables();
     void RegisterMenuSceneVtable();
 
     // M5 5c Foundation C — entity description types (template sub-descriptions).
@@ -99,7 +97,6 @@ extern "C" {
 // (decompiled bodies live in code/Game/Game/serialize_arrays.cpp +
 //  code/Game/Game/serialize_externals.cpp)
 extern "C" {
-    void Reimpl_Geometry_Init(void* self);
     void Reimpl_Transform_SerializeWrapper(void* transform, void* stream);
     void Reimpl_Array_Resize_Stride20(void* arrayHeader, int newCount);
     void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount);
@@ -164,17 +161,7 @@ extern "C" {
 // M3.5 Path B session 6 — heightmap mesh-build path helpers
 // (decompiled bodies live in code/Game/Game/serialize_heightmap_mesh.cpp)
 extern "C" {
-    void  Reimpl_TradeWork_sub_c1e0(void* self);
-    void  Reimpl_FUN_1400ac880(void* self, int colStart, int rowStart,
-                               int cellSize_x, int cellSize_y, int16_t* vertOut);
     void* Reimpl_TradeWork_helper_e270(void* self, void* retbuf, int col, int row);
-    void  Reimpl_GeometryChunkUpdate(void* self);
-}
-
-// M3.5 Path B session 7 — image-buffer heightmap upload helper
-// (decompiled body lives in code/Game/Game/serialize_image_upload.cpp)
-extern "C" {
-    void Reimpl_TradeWork_sub_c780(void* self);
 }
 
 // M3.5 Path B session 8 — Geometry::Serialize body + version-gated extra
@@ -395,7 +382,6 @@ extern void RegisterUnregLane3();
 extern "C" void RegisterUnregLane1Batch();     // Lane 1: save/load + object core
 extern void RegisterUnregLane4TypeIds();   // Lane 4: 30 exe type-id storage slots + 3 .rdata float consts          // Lane 3: graphics/math gaps — Vector3/Rectangle ctors, RandFloatTol, IsRunning, Material typeid, String/Filename ops
 extern void RegisterGameLeafBatch();       // Game gap: closure-safe leaf dtors/teardown + terrain reimpls
-extern void RegisterDebugMenuBatch();      // Lane 3: built-in DebugUI/Game debug-cheat cluster (11 addrs)
 extern void RegisterPlayerDragBatch();     // Player wave (drag): FindDescription/sounds/CloseDialog/ClearPathEntities (6)
 extern void RegisterPlayerPlaceBatch();    // Player wave (place): FlipVariant (1) + UpdateHierarchy dispatch slot
 extern void RegisterPlayerEditBatch();     // Player wave (edit): EntityAtCell/AvgTerrainHeight/FencedAnchorCalc (3)
@@ -699,7 +685,6 @@ static void RegisterCodeFunctions() {
 
     // Lane 3 wave — built-in DebugUI / Game debug-cheat cluster. See
     // notes/wave_remaining/LANE3_DEBUGMENU_REPORT.md.
-    RegisterDebugMenuBatch();
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));
@@ -751,7 +736,6 @@ static void RegisterCodeFunctions() {
     // ============================================================
     // M3.5 — MenuScene::Serialize generic helpers
     // ============================================================
-    RegisterExeAddr(0x1400b00e0, reinterpret_cast<uintptr_t>(&Reimpl_Geometry_Init));
     RegisterExeAddr(0x1400988c0, reinterpret_cast<uintptr_t>(&Reimpl_Transform_SerializeWrapper));
     RegisterExeAddr(0x14001baf0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride20));
     RegisterExeAddr(0x140001bb0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride08));
@@ -819,31 +803,12 @@ static void RegisterCodeFunctions() {
 
     // ============================================================
     // M3.5 Path B session 6 — heightmap mesh-build path helpers
-    //   sub_c1e0     — top-level mesh builder (allocates Vertex/IndexBuffers)
-    //   FUN_ac880    — per-cell vertex compute
-    //   helper_e270  — vertex normal compute via heightmap deltas
+    //   helper_e270  — vertex normal compute via heightmap deltas (read back by
+    //                  action_pf_road.cpp). The sub_c1e0 / FUN_ac880 / sub_c780 and
+    //                  chunk-update 0x1400aad50 / 0x1400aed40 rows went at the B.3.8
+    //                  close with the dead engine_funcs pointers that read them.
     // ============================================================
-    RegisterExeAddr(0x1400ac1e0, reinterpret_cast<uintptr_t>(&Reimpl_TradeWork_sub_c1e0));
-    RegisterExeAddr(0x1400ac880, reinterpret_cast<uintptr_t>(&Reimpl_FUN_1400ac880));
     RegisterExeAddr(0x1400ae270, reinterpret_cast<uintptr_t>(&Reimpl_TradeWork_helper_e270));
-
-    // ============================================================
-    // M3.5 — Geometry chunk-streaming (per-frame dirty-chunk upload)
-    //   0x1400aad50 — body (called via JMP thunk from vtable +0x08)
-    //   0x1400aed40 — JMP thunk (the actual vtable target)
-    // The vtable slot in g_Geometry_Vtable_Standalone already routes to
-    // GeomDraw_ChunkUpdate -> Reimpl_GeometryChunkUpdate, so registering
-    // these addresses is for any out-of-band callers using ResolveAddr.
-    // ============================================================
-    RegisterExeAddr(0x1400aad50, reinterpret_cast<uintptr_t>(&Reimpl_GeometryChunkUpdate));
-    RegisterExeAddr(0x1400aed40, reinterpret_cast<uintptr_t>(&Reimpl_GeometryChunkUpdate));
-
-    // ============================================================
-    // M3.5 Path B session 7 — image-buffer heightmap upload helper
-    //   sub_c780     — alloc ImageBuffer, set NoiseUI vtable, Create + upload
-    //                  (heightmap raw bytes -> Video texture)
-    // ============================================================
-    RegisterExeAddr(0x1400ac780, reinterpret_cast<uintptr_t>(&Reimpl_TradeWork_sub_c780));
 
     // ============================================================
     // M3.5 Path B session 8 — Geometry::Serialize body + version-gated extra
@@ -1611,12 +1576,10 @@ static void RegisterVtablesAndTypeIds() {
     // Per-class vtables defined alongside their reimplementation in
     // code/Game/<Module>/<Class>.cpp — declared at file scope above.
     RegisterStatGoalVtable();
-    RegisterMainMenuDialogVtable();
     RegisterOptionsDialogVtable();
     RegisterNewGameDialogVtable();
     RegisterOptionInputBindDialogVtable();
     RegisterMessageDialogVtable();
-    RegisterMenuDialogVtables();
     RegisterMenuSceneVtable();   // MenuScene transform-init door 0x140098800 (the table row is gone)
 
     // Description-side helper doors (the description classes are real classes;

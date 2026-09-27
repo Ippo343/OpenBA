@@ -925,15 +925,11 @@ void MainMenuDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*
         // case all along, but that switch is NOT the handler the vtable installs --
         // so the Achievements button (front end AND in-game pause menu, same dialog
         // class) silently fell through to `default` and logged "not yet wired".
-        // AchievementDialog's vtable is registered at its retail .rdata address by
-        // RegisterMenuDialogVtables (menu_dialog_standalone_vtables.cpp) and all four
-        // of its slots are ported, so the opener works as-is.
         printf("[MainMenuDialog::OnCommand] -> OpenAchievement (AchievementDialog)\n");
         MainMenuDialog_OpenAchievement(this);
         break;
     case kButton_Goal:
         // Same story as Achievement: present in the dead retail switch, missing here.
-        // GoalDialog's vtable comes from the same registration and its slots are ported.
         printf("[MainMenuDialog::OnCommand] -> OpenGoal (GoalDialog)\n");
         MainMenuDialog_OpenGoal(this);
         break;
@@ -1030,13 +1026,6 @@ void* MainMenuDialog::CreateInPlaceObject(void* storage) {
 }
 
 DEFINE_EXE_VTABLE(MainMenuDialog, "_ZTV14MainMenuDialog")
-
-// B38 D5: the vtable row this registered had no by-address reader left and is
-// gone (CB2 caller batch); only the call from standalone keeps the empty body.
-extern "C" void RegisterMainMenuDialogVtable() {
-    // Emptied by the B.3.8 CB2 caller batch: the row had no by-address reader left
-    // (CALLER_SURFACE section 5). The closing pass deletes this function and its call.
-}
 
 // Public entry called from MenuDLT::CreateDialog (standalone/menudialogloopt_stubs.cpp).
 // The loop's dialog resource (+0x30) is always loaded by then; a loop without one

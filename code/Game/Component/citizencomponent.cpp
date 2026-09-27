@@ -111,7 +111,7 @@ static fn_HealthSetFlag_t s_fn_HealthSetFlag = nullptr;
 // runs stay byte-identical when unset. Depends on BANISHED_LIVE_STATUSICON + _DRAW for
 // the citizen StatusIconComponent to be live + renderable (same infra as the building
 // occupancy warning), and on LIVE_CITIZEN(_UPDATE) for the driving fields to tick.
-struct StatusIconComponent;
+class StatusIconComponent;
 void StatusIcon_Toggle(StatusIconComponent* self, int bit, bool setFlag);
 
 // Adapter matching fn_HealthSetFlag_t. Null-guards the cached StatusIconComponent IBP

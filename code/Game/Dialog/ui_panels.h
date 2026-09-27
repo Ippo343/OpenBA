@@ -18,13 +18,6 @@
 // ============================================================
 
 // ============================================================
-// ConsumeProduceUI
-// ============================================================
-
-// Slot4 (vtable +0x20): Setup — finds combo/progress elements, populates combo with products.
-void ConsumeProduceUI_Slot4(ConsumeProduceUI* self);
-
-// ============================================================
 // StorageCapacityUI
 // ============================================================
 
@@ -220,20 +213,6 @@ void DebugUI_Slot9(DebugUI* self, uint64_t param2, int param3, int param4);
 // ToggleDebugFlag: helper for checkbox cases in Slot9 — reads checkbox state,
 // sets/clears a bit in game world debug flags at game+0xD0.
 void DebugUI_ToggleDebugFlag(void* checkboxElement, uint32_t flag);
-
-// Address-registry entry points (Lane 3 wave). Thin wrappers around the
-// static *_Impl bodies in debugui.cpp; see notes/wave_remaining/LANE3_DEBUGMENU_REPORT.md.
-void DebugUI_OnDiseaseComboChanged(DebugUI* self);          // 0x14005fc60
-void Game_SpawnTornado(void* unused);                       // 0x14005fd20
-void Game_InfectRandomCitizen(void* unused);                // 0x14005fe10
-void Game_StartRandomFire(void* unused);                    // 0x14005feb0
-void DebugUI_TriggerDisasterOnBuilding(DebugUI* self);      // 0x14005ff30
-void Game_KillAllCitizens();                                // 0x140060000 (destroys raw materials — see report)
-void Game_TriggerDisasterByType(void* unused, int type);    // 0x140060110
-void Game_SpawnCitizens();                                  // 0x140060380
-void DebugUI_OnDaySliderChanged(DebugUI* self);              // 0x1400607e0
-void DebugUI_WriteLightingColors(DebugUI* self, int month);  // 0x140061530
-void DebugUI_SetDayLighting(DebugUI* self, int month);       // 0x140061780
 
 // ============================================================
 // Unhookable no-op stubs for standalone exe

@@ -64,8 +64,8 @@
 // (code/Game/Game/WorldGeometry.h). Graphics::Geometry() and the 0x14015f110
 // stamp are the compiler's (the old body ran the base ctor door and then
 // stamped the hand-built table registered at 0x14015f110); the field stores are
-// unchanged. Reimpl_Geometry_Init (registered at 0x1400b00e0, reached through
-// fn_Geometry_Init and GameUpdateLoop::Load) placement-news the class.
+// unchanged. (The Reimpl_Geometry_Init door registered at 0x1400b00e0 went at the
+// B.3.8 close with fn_Geometry_Init, its only reader.)
 WorldGeometry::WorldGeometry() {
     _gridSize = 0;  _fieldC4 = 0;       // qword +0xc0
     _chunkSize = 0; _fieldCC = 0;       // qword +0xc8
@@ -88,28 +88,6 @@ WorldGeometry::WorldGeometry() {
     for (Header& h : _arrays) { h.data = nullptr; h.sizeCap = 0; }   // +0x1a0..+0x228
 
     _materialTypeFlags = 1;             // +0x30 (Graphics::Geometry's)
-}
-
-namespace { std::atomic<bool> s_geomInitWarned{false}; }
-
-extern "C" void Reimpl_Geometry_Init(void* self) {
-    if (!self) return;
-
-    if (!fn_Graphics_Geometry_Ctor || !fn_Video_VertexBuffer_Ctor ||
-        !fn_Video_IndexBuffer_Ctor) {
-        if (!s_geomInitWarned.exchange(true)) {
-            printf("[Geometry::Init] Runtime ctors unresolved "
-                   "(GeomC=%p VB=%p IB=%p) — zero-fill fallback (self=%p)\n",
-                   (void*)fn_Graphics_Geometry_Ctor,
-                   (void*)fn_Video_VertexBuffer_Ctor,
-                   (void*)fn_Video_IndexBuffer_Ctor, self);
-            fflush(stdout);
-        }
-        memset(self, 0, 0x230);
-        return;
-    }
-
-    ::new (self) WorldGeometry();
 }
 
 // ============================================================

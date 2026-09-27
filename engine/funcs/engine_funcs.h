@@ -375,14 +375,6 @@ extern uint32_t* g_TypeId_AreaDescription;            // DAT_1401c7a18 (shared: 
 extern uint32_t* g_TypeId_FenceDescription;           // DAT_1401c7a88 (FencedTool::Startup)
 extern uint32_t* g_TypeId_SizeDescription;            // DAT_1401c7468 (FencedTool::Startup)
 
-// FencedTool::OnKey calls DragTool::OnKey as base class
-typedef uint64_t (*fn_DragTool_OnKey_t)(void* self, char key);
-extern fn_DragTool_OnKey_t fn_DragTool_OnKey;
-
-// FencedTool::Shutdown calls DragTool::Shutdown (0x1400fc640)
-typedef void (*fn_DragTool_Shutdown_t)(void* self);
-extern fn_DragTool_Shutdown_t fn_DragTool_Shutdown;
-
 // ============================================================
 // Game Singletons (Phase A3 — exe global pointers)
 // ============================================================
@@ -729,7 +721,7 @@ extern fn_DateTime_AsString_t fn_DateTime_AsString;
 // Old typedef kept for reference:
 // typedef void (*fn_SaveLoadDialog_PopulateFileList_t)(void* self);
 // extern fn_SaveLoadDialog_PopulateFileList_t fn_SaveLoadDialog_PopulateFileList;
-struct SaveLoadDialog;
+class SaveLoadDialog;
 void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self);
 
 // Input::Device singleton — accessed via exe exref at 0x140151b80 (double-indirect)
@@ -758,17 +750,9 @@ extern fn_LoadScenarioFromSave_t fn_LoadScenarioFromSave;
 // REPLACED: now inline ModDetailsDialog_OpenUpdateDialog_Impl() in moddetailsdialog.cpp
 // REPLACED: now inline ModDetailsDialog_DeleteMod_Impl() in moddetailsdialog.cpp
 
-// ModUpdateDialog vtable pointer (PTR_FUN_14015c6c0 in exe .rdata)
-extern uintptr_t g_ModUpdateDialog_Vtable;
-
 // SelectResourceUI::GetResourceCount(self) -> int
 // FUN_140078a40 — counts expected resources for combo (shared by Orchard/Pasture)
 typedef int (*fn_SelectResourceUI_GetResourceCount_t)(void* self);
-
-// SelectResourceUI::PopulateCombo(self)
-// FUN_140078830 — repopulates combo element with current resources
-typedef void (*fn_SelectResourceUI_PopulateCombo_t)(void* self);
-extern fn_SelectResourceUI_PopulateCombo_t fn_SelectResourceUI_PopulateCombo;
 
 // ============================================================
 // Video::ImageBuffer (Runtime DLL exports, used by MapUI/NoiseUI/SpriteCaptureUI)
@@ -917,11 +901,6 @@ extern fn_AVL_Rebalance_0x38_t fn_AVL_Rebalance_0x38;
 // fn_UpgradeUI_Serialize — now inline as UpgradeUI_Serialize in upgradeui.cpp
 // fn_UpgradeUI_OnRemove — now inline as UpgradeUI_OnRemove in upgradeui.cpp
 
-// ConsumeProduceUI::Slot4 — combo setup with resource sprites
-// 0x14005F3D0
-typedef void (*fn_ConsumeProduceUI_Slot4_t)(void* self);
-extern fn_ConsumeProduceUI_Slot4_t fn_ConsumeProduceUI_Slot4;
-
 // HelpUI_Slot4 — now inline as HelpUI_Slot4 in helpui.cpp
 // HelpUI_Slot9 — now inline as HelpUI_Slot9 in helpui.cpp
 
@@ -960,23 +939,6 @@ extern fn_ToolbarDialog_Ctor_t fn_ToolbarDialog_Ctor;
 // Using our reimpl causes state desync (pc+0x20/0x28 overwritten by original callers).
 typedef void (*fn_Toolbar_ShowGroup_t)(void* gameSubsys, int64_t groupId);
 extern fn_Toolbar_ShowGroup_t fn_Toolbar_ShowGroup;
-
-// Case 2: Utility action
-// REPLACED: now Toolbar_Utility_Impl() in code/Game/Dialog/toolbardialog.cpp
-typedef void (*fn_Toolbar_Utility_t)(void* gameSubsys, void* retBuf, uint64_t param);
-extern fn_Toolbar_Utility_t fn_Toolbar_Utility;
-
-// Case 3: Toggle all
-// FULLY REIMPLEMENTED: Toolbar_ToggleAll_Impl() in code/Game/Dialog/toolbardialog.cpp
-// Kept as fallback only — fn_Toolbar_ToggleAll is no longer called by Toolbar_ToggleAll_Impl.
-typedef void (*fn_Toolbar_ToggleAll_t)(void* gameSubsys);
-extern fn_Toolbar_ToggleAll_t fn_Toolbar_ToggleAll;
-
-// ToolbarDialog vtable pointer (PTR_FUN_14015fa00 in exe .rdata)
-extern uintptr_t g_ToolbarDialog_Vtable;
-
-// PauseDialog vtable pointer (PTR_FUN_14015f550 in exe .rdata)
-extern uintptr_t g_PauseDialog_Vtable;
 
 // ToolUI child dialog vtable (PTR_FUN_14015f5a0 in exe .rdata) — used by Toolbar_Utility
 extern uintptr_t g_ToolUI_ChildDialog_Vtable;
@@ -1050,12 +1012,6 @@ extern uint32_t* g_TypeId_ComboElement;
 
 // fn_GetCurrentProductIndex — inline defined later (after fn_Random_RandFloat)
 // FUN_140119470: if +0x50 != 0xffffffff return it; else weighted random pick from +0x58 array.
-
-// FindDialogByName (FUN_1400e1600 in exe) — REPLACED with FindDialogByName_Impl (Phase H)
-// See inline FindDialogByName_Impl() near end of this file.
-// Old fn_* pointer kept for backward compat; callers should use FindDialogByName_Impl().
-typedef void* (*fn_FindDialogByName_t)(void* retval, void* name);
-extern fn_FindDialogByName_t fn_FindDialogByName;
 
 // ResolveExternalByName (FUN_14001b1d0 in exe) — REPLACED with inline C++
 // Resolves and caches an External object by filename.
@@ -1196,10 +1152,6 @@ extern uint32_t* g_TypeId_StatusIconComponent;  // DAT_1401c7e08
 extern uint32_t* g_TypeId_CitizenAIComponent;  // DAT_1401c70e8
 extern uint32_t* g_TypeId_ProfessionDescription;  // DAT_1401c5a98 (profession type in TutorialGoalCount)
 
-// FollowDialog vtable pointer (resolved from 0x14015be00)
-// Used by CitizenUI_Slot9 to manually construct FollowDialog instances.
-extern void** g_FollowDialog_Vtable;
-
 // StatusBarUI_StatusIconHandler (FUN_14007a120) — status icon click handler
 // REPLACED: now static StatusBarUI_StatusIconHandler_Impl() in code/Game/Dialog/statusbarui.cpp
 // Iterates citizens starting at self->statusCitizenIndex, finds next citizen whose
@@ -1339,14 +1291,6 @@ extern fn_MapParamsDialog_Ctor_t fn_MapParamsDialog_Ctor;  // 0x14006bd80
 typedef void* (*fn_ModDialog_Ctor_t)(void* self, void* ui, void* extRes, void* parentIBP,
                                       void* parentMenuIBP);
 extern fn_ModDialog_Ctor_t fn_ModDialog_Ctor;  // 0x140070030
-
-// AchievementDialog vtable: PTR_FUN_14015b020. Uses DialogInstance_Ctor directly + vtable patch.
-// Size 0xD0. Extra fields zeroed: +0xB8, +0xC0, +0xC8.
-extern void** g_AchievementDialog_Vtable;  // 0x14015b020
-
-// GoalDialog vtable: PTR_FUN_14015beb0. Uses DialogInstance_Ctor directly + vtable patch.
-// Size 0xC8 (200 decimal). Extra fields zeroed: +0xB8, +0xC0.
-extern void** g_GoalDialog_Vtable;  // 0x14015beb0
 
 // ============================================================
 // NewGameDialog support functions
@@ -1622,16 +1566,9 @@ typedef void (*fn_ModDialog_RefreshDisplay_t)(void* self);  // kept for referenc
 // FUN_14006ea70: Apply mod changes (save, reload if needed)
 // REPLACED: now inline ModDialog_Apply_Impl() in code/Game/Dialog/moddialog.cpp
 
-// ModDetailsDialog vtable pointer (PTR_FUN_14015c670 in exe .rdata)
-extern uintptr_t g_ModDetailsDialog_Vtable;
-
 // ModDialog_CloseAndReload (FUN_14006e9b0) — closes dialog and triggers UI reload
 typedef void (*fn_ModDialog_CloseAndReload_t)(void* self);
 extern fn_ModDialog_CloseAndReload_t fn_ModDialog_CloseAndReload;
-
-// ModDialog_RefreshDisplay original (FUN_14006eec0) — for A/B testing
-typedef void (*fn_ModDialog_RefreshDisplay_Orig_t)(void* self);
-extern fn_ModDialog_RefreshDisplay_Orig_t fn_ModDialog_RefreshDisplay_Orig;
 
 // MainMenu_Reload (FUN_1400b4790) — reloads from main menu context
 typedef void (*fn_MainMenu_Reload_t)(void* self);
@@ -1644,9 +1581,6 @@ extern fn_Game_ReloadWithSave_t fn_Game_ReloadWithSave;
 // Save::SavedState::SavedState() — default ctor (0x10 bytes)
 typedef void* (*fn_SavedState_Ctor_t)(void* self);
 extern fn_SavedState_Ctor_t fn_SavedState_Ctor;
-
-// ReloadDialog vtable pointer (PTR_FUN_14015c480 in exe .rdata)
-extern uintptr_t g_ReloadDialog_Vtable;
 
 // ============================================================
 // IO::Serializer — save/load serialization (shared globals): ALL GONE
@@ -1669,7 +1603,7 @@ extern uint32_t* g_TypeId_TabElement;
 
 // --- Reimplemented TownHallUI functions (clean C++ in townhallui.cpp) ---
 // Forward-declared here; defined in code/Game/Dialog/townhallui.cpp.
-struct TownHallUI;  // forward decl
+class TownHallUI;  // forward decl
 void TownHallUI_InitGeneral(TownHallUI* self);           // was FUN_1400807f0
 void TownHallUI_InitGraph(TownHallUI* self);             // was FUN_14007f0a0
 void TownHallUI_InitProfessions(TownHallUI* self);       // was FUN_140080160
@@ -1964,12 +1898,6 @@ extern fn_PerlinNoise_Generate_t fn_PerlinNoise_Generate;
 typedef void (*fn_Weather_ResetTime_t)(void* weatherMgrPtr, void* timePtr);
 extern fn_Weather_ResetTime_t fn_Weather_ResetTime;
 
-// DebugUI_SetDayLighting (FUN_140061780) — reads lighting data from weather table
-// for given month index, sets slider values on sun/amb/fog color elements.
-// RCX=self(DebugUI*), EDX=monthIndex(int)
-typedef void (*fn_DebugUI_SetDayLighting_t)(void* self, int monthIndex);
-extern fn_DebugUI_SetDayLighting_t fn_DebugUI_SetDayLighting;
-
 // TypeId for DiseaseDescription — DAT_1401c5948
 extern uint32_t* g_TypeId_DiseaseDescription;
 
@@ -1985,53 +1913,6 @@ extern uint32_t* g_TypeId_DrawableType;
 // Old fn_* pointer kept for backward compat; callers should use Game_SpawnResources_Impl().
 typedef void (*fn_Game_SpawnResources_t)(void* citizenList, uint32_t resourceFlag, int count);
 extern fn_Game_SpawnResources_t fn_Game_SpawnResources;
-
-// Game_TriggerDisasterByType (0x140060110) — REPLACED with Game_TriggerDisasterByType_Impl (Phase H)
-// See inline Game_TriggerDisasterByType_Impl() near end of this file.
-// Old fn_* pointer kept for backward compat; callers should use Game_TriggerDisasterByType_Impl().
-// ABI FIX (lane RETSLOT): this is a __thiscall member, so the type goes in
-// EDX, not RCX. All three retail call sites emit `MOV EDX,<type>; CALL`
-// (0x140060e3e XOR EDX,EDX / 0x140060e4b MOV EDX,1 / 0x140060e5b MOV EDX,2)
-// and the body reads param_2 and never param_1. The old one-argument form
-// passed the type in RCX and left EDX garbage. LATENT: nothing calls this
-// pointer today (the live path is Game_TriggerDisasterByType_Impl below),
-// which is why it survived -- fixed before something starts calling it.
-typedef void (*fn_Game_TriggerDisasterByType_t)(void* game, int type);
-extern fn_Game_TriggerDisasterByType_t fn_Game_TriggerDisasterByType;
-
-// Game_DestroyAllRawMaterials (0x140060000) — destroys all loose raw material entities
-typedef void (*fn_Game_DestroyAllRawMaterials_t)(void);
-extern fn_Game_DestroyAllRawMaterials_t fn_Game_DestroyAllRawMaterials;
-
-// Game_SpawnItemsInStorage (0x140060290) — spawns items in storage buildings
-typedef void (*fn_Game_SpawnItemsInStorage_t)(void);
-extern fn_Game_SpawnItemsInStorage_t fn_Game_SpawnItemsInStorage;
-
-// Game_SpawnCitizens (0x140060380) — spawns new citizens at random buildings
-typedef void (*fn_Game_SpawnCitizens_t)(void);
-extern fn_Game_SpawnCitizens_t fn_Game_SpawnCitizens;
-
-// DebugUI_TriggerDisasterOnBuilding (0x14005FF30) — triggers disaster on random building
-// RCX=self(DebugUI*)
-typedef void (*fn_DebugUI_TriggerDisasterOnBuilding_t)(void* self);
-extern fn_DebugUI_TriggerDisasterOnBuilding_t fn_DebugUI_TriggerDisasterOnBuilding;
-
-// Game_StartRandomFire (0x14005FEB0) — ignites a random building
-typedef void (*fn_Game_StartRandomFire_t)(void);
-extern fn_Game_StartRandomFire_t fn_Game_StartRandomFire;
-
-// Game_SpawnTornado (0x14005FD20) — spawns a tornado entity
-typedef void (*fn_Game_SpawnTornado_t)(void);
-extern fn_Game_SpawnTornado_t fn_Game_SpawnTornado;
-
-// Game_InfectRandomCitizen (0x14005FE10) — infects a random citizen with disease
-typedef void (*fn_Game_InfectRandomCitizen_t)(void);
-extern fn_Game_InfectRandomCitizen_t fn_Game_InfectRandomCitizen;
-
-// DebugUI_OnDiseaseComboChanged (0x14005FC60) — handles disease combo selection
-// RCX=self(DebugUI*)
-typedef void (*fn_DebugUI_OnDiseaseComboChanged_t)(void* self);
-extern fn_DebugUI_OnDiseaseComboChanged_t fn_DebugUI_OnDiseaseComboChanged;
 
 // DebugUI_OnDrawComboChanged — now reimplemented in code/Game/Dialog/debugui.cpp
 // Sub-functions needed by the reimplementation:
@@ -2149,16 +2030,6 @@ extern fn_Graphics_Camera_Ctor_t fn_Graphics_Camera_Ctor;
 // These back the AmbientEnvironmentComponent / AmbientEmitterComponent audio
 // (biome wind/nature beds, per-building loops). All are Runtime-x64.dll exports;
 // resolved by mangled name so both DLL and standalone builds share the pointer.
-
-// DebugUI_OnDaySliderChanged (0x1400607E0) — handles day slider change, updates time/weather
-// RCX=self(DebugUI*)
-typedef void (*fn_DebugUI_OnDaySliderChanged_t)(void* self);
-extern fn_DebugUI_OnDaySliderChanged_t fn_DebugUI_OnDaySliderChanged;
-
-// DebugUI_WriteLightingColors (0x140061530) — writes color slider values to weather table
-// RCX=self(DebugUI*), EDX=monthIndex(int)
-typedef void (*fn_DebugUI_WriteLightingColors_t)(void* self, int monthIndex);
-extern fn_DebugUI_WriteLightingColors_t fn_DebugUI_WriteLightingColors;
 
 // Game_GetMonthFromTime (0x1400932A0) — converts game time to month index (0-11)
 // RCX=weatherMgr(void*)
@@ -2569,11 +2440,6 @@ extern fn_MessageDialog_Ctor_t fn_MessageDialog_Ctor;
 // (dispatch table reads from Application-x64.exe .rdata)
 // ============================================================
 
-// FrustumOutlineElement frustum-to-screen projection helper (exe function)
-// FUN_14006c5b0(outVec3Array) — reads camera frustum, projects 4 corners to screen-space
-typedef void (*fn_FrustumProject_t)(void* outVec3Array);
-extern fn_FrustumProject_t fn_FrustumProject;
-
 // ============================================================
 // Description class reimpl support (shared serialization helpers)
 // ============================================================
@@ -2615,10 +2481,6 @@ extern fn_ExternalRefArray_Serialize_t fn_ExternalRefArray_Serialize;
 // REMOVED, ENDGAME B.3.4a closing 2d (0 CALLs). Its slot 0x140152400 stays
 // registered in standalone/address_registry.cpp.
 
-// Component_Serialize(this, Stream*) — Component base serialize (exe function 0x14012e2a0 or similar)
-typedef void (*fn_ComponentBase_Serialize_t)(void* self, void* stream);
-extern fn_ComponentBase_Serialize_t fn_ComponentBase_Serialize;
-
 // FUN_14000a590(arrayPtr, newCount) — dynamic array resize (exe function)
 typedef void (*fn_DynArray_Resize_t)(void* arrayPtr, int newCount);
 extern fn_DynArray_Resize_t fn_DynArray_Resize;
@@ -2642,12 +2504,6 @@ extern fn_WeatherResize_t fn_WeatherResize;
 // Serializes a weather dynamic array entry (External reference).
 typedef void (*fn_WeatherExternalSerialize_t)(void* entry, void* serializer);
 extern fn_WeatherExternalSerialize_t fn_WeatherExternalSerialize;
-
-// FUN_14012db70(self) — ToolbarDescription internal cleanup helper (exe, unhookable)
-// Sets vtable, destroys String array at +0x50, destroys strings at +0x48/+0x40/+0x38/+0x28,
-// resets base vtable, calls External::~External. Called from ToolbarDescription::Dtor.
-typedef void (*fn_ToolbarDescription_cleanup_t)(void* self);
-extern fn_ToolbarDescription_cleanup_t fn_ToolbarDescription_cleanup;
 
 // FUN_1400328c0(self) — CreateBridgeDescription::CreateInPlace (exe, unhookable, 12 bytes)
 // Called from CreateBridgeDescription::Cleanup to re-construct in place.
@@ -2692,11 +2548,6 @@ extern fn_TSD_SetDialogFlags_t fn_TSD_SetDialogFlags;
 // Writes InternalBasePtr to *retval; sets null if not found.
 typedef void (*fn_TSD_FindInstance_t)(void* self, void* retval);
 extern fn_TSD_FindInstance_t fn_TSD_FindInstance;
-
-// FUN_1400e1600(retval, string_ptr) — find open dialog instance by type string
-// Parses type name from string, walks open dialog list for matching IsA.
-typedef void (*fn_TSD_FindByString_t)(void* retval, void* string_ptr);
-extern fn_TSD_FindByString_t fn_TSD_FindByString;
 
 // FUN_140101a80(entityUI, retval, description) — toolbar UTILITY PANEL toggler.
 // ⚠ The old name/description here ("set player follow-building") was a MISNOMER.
@@ -2892,7 +2743,7 @@ inline void Storage_AddItem(void* storageComp, void* entityPtr, int quantity) {
 // Parses dialog name string (splits on ':'), gets type IDs via Factory::GetTypeIdFromName,
 // walks UI::UserInterface dialog linked list with IsA checks, optionally matches controller type.
 // Non-trivial return: RCX=retval(InternalBasePtr*), RDX=name(String*)
-// NOTE: replaces both fn_FindDialogByName and fn_TSD_FindByString.
+// NOTE: the body of exe 0x1400e1600 (the two door pointers once bound to it are gone).
 inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
     uintptr_t ret = (uintptr_t)retval;
     uintptr_t namePtr = *(uintptr_t*)nameStr;
@@ -3718,10 +3569,6 @@ extern fn_Entity_GetPosition_t fn_Entity_GetPosition;
 // BuildStructure support (code/Game/Work/buildstructure.cpp)
 // ============================================================
 
-// Work::Serialize base (0x1400f7400) — serializes Work base fields
-typedef void (*fn_Work_SerializeBase_t)(void* self, void* stream);
-extern fn_Work_SerializeBase_t fn_Work_SerializeBase;
-
 // BST serialize helper (0x1400296b0) — serializes InternalBasePtr BST
 typedef void (*fn_BST_SerializeHelper_t)(void* bstRoot, void* serializer);
 extern fn_BST_SerializeHelper_t fn_BST_SerializeHelper;
@@ -3897,9 +3744,6 @@ extern uint32_t* g_TypeId_FinishTutorialGoal;
 // Deref pattern: *(void**)(*(void**)slot + 4) gives screen height or similar int
 extern void** g_pSingletonExref_151a80;
 
-// TutorialInstance vtable pointer — 0x140160bf8 in exe .rdata
-extern void** g_TutorialInstanceVtable;
-
 // FUN_1400e1870(outIBP, elementPath, outDialogPtr) — find UI element by dotted path string.
 // Parses "DialogType.ElementName" (or "DialogType.Controller.ElementName"),
 // searches open dialogs for matching type, then finds child element by name.
@@ -4052,23 +3896,12 @@ extern fn_EdgeMeshInstance_Ctor_t fn_EdgeMeshInstance_Ctor;
 typedef void (*fn_TileRender_t)(void* self, void* context, void* tileArray1, void* tileArray2);
 extern fn_TileRender_t fn_TileRender;
 
-// CharacterComponent_impl_f5d0 (0x14009f5d0) — single-tile terrain validity check
-// Returns true if tile at (x,y) is valid for placement given terrain masks + height constraints.
-typedef bool (*fn_TileValidityCheck_t)(int* mapGrid, int x, int y, uint32_t terrainMask,
-    float heightRef, float heightTol, float param7, char param8, char param9, int64_t param10);
-extern fn_TileValidityCheck_t fn_TileValidityCheck;
-
 // FUN_1400dbf90 — fenced placement region parameter computation
 // Computes fence layout params (bounds, rotation, etc.) from FencedTool state.
 // Returns bool (true=valid placement).
 typedef bool (*fn_FencedPlacementParams_t)(void* self, uint32_t* outParam2, uint32_t* outParam3,
     uint32_t* outParam4, uint32_t* outParam5, float* outParam6, uint32_t* outParam7);
 extern fn_FencedPlacementParams_t fn_FencedPlacementParams;
-
-// TradeWork_impl_0d00 (0x1400b0d00) — remove radius/highlight overlay
-// RCX=*(g_pGameWorldSingleton+0x110), EDX=overlayId
-typedef void (*fn_HighlightRemove_t)(void* highlightMgr, int overlayId);
-extern fn_HighlightRemove_t fn_HighlightRemove;
 
 // ============================================================
 // EntityList dependencies (Agent A)
@@ -4146,14 +3979,8 @@ extern fn_CitizenComponent_AssignHousing_t fn_CitizenComponent_AssignHousing;
 // dynamic-array resize/serialize, ExternalPtr serialize)
 // ============================================================
 
-// Geometry init helper — FUN_1400b00e0. Initializes a Graphics::Geometry-derived
-// scene-mesh container at +0x230 bytes. Calls Graphics::Geometry base ctor, sets
-// vtable, zeros internal fields, constructs embedded VertexBuffer/IndexBuffer pairs.
-typedef void* (*fn_Geometry_Init_t)(void* self);
-extern fn_Geometry_Init_t fn_Geometry_Init;
-
 // Runtime DLL ctors used by Reimpl_Geometry_Init when the cleaned body runs
-// (standalone mode, where fn_Geometry_Init resolves back to the wrapper).
+// (standalone mode: exe 0x1400b00e0 is registered to the wrapper).
 //   ??0Geometry@Graphics@@QEAA@XZ      — Runtime 0x1800a4270
 //   ??0VertexBuffer@Video@@QEAA@XZ     — Runtime 0x1800f55f0
 //   ??0IndexBuffer@Video@@QEAA@XZ      — Runtime 0x1800f3490
@@ -4359,90 +4186,6 @@ extern uint32_t** g_ppTypeInfo_MaterialInstance;  // .rdata slot 0x140151350
 // Used by Geometry::Serialize step 13 for the +0x210 array (count +0x218).
 // The fn_Array_Serialize_External_MaterialInstance pointer onto it went with the
 // B.3.2 closing pass (zero callers; geometry_serialize.cpp drives it directly).
-
-// ============================================================
-// M3.5 Path B session 6 — heightmap mesh-build path
-// ============================================================
-//
-// Three exe-internal helpers from `TradeWork_impl_04d0` step 5 (mesh-build
-// pipeline). All three live in the 0x1400acxxx / 0x1400aexxx range — NOT
-// the 0x1400Cxxxx area the original recon claimed.
-//
-// Verified addresses (Ghidra search_functions_enhanced):
-//   sub_c1e0     @ 0x1400ac1e0 — top-level mesh builder (~150 instr, 5 xrefs)
-//   FUN_ac880    @ 0x1400ac880 — per-cell vertex compute (~70 instr)
-//   helper_e270  @ 0x1400ae270 — vertex normal compute (~40 instr, 3 xrefs)
-//
-// Math constants used by the per-cell compute (also verified in Ghidra):
-//   g_fUVScale       @ 0x14017214c = 1.0f
-//   DAT_140172214    @ 0x140172214 = 127.5f
-//   DAT_140172264    @ 0x140172264 = 16384.0f
-//   DAT_140172270    @ 0x140172270 = -1/256.0
-//   DAT_140172174    @ 0x140172174 = 2.0f
-// (Embedded inline as constexpr in code/Game/Game/serialize_heightmap_mesh.cpp.)
-//
-// Runtime DLL primitives invoked (resolved via dispatch slots and/or mangled
-// export fallback in the reimpl body itself — no global wiring needed):
-//   ?Create@VertexBuffer@Video@@QEAA_NH_NPEAX@Z   (slot 0x140152668)
-//   ?Set@VertexBuffer@Video@@QEAA_NHHPEAX@Z       (slot 0x140152690)
-//   ?Create@IndexBuffer@Video@@QEAA_NH_NPEAX@Z    (slot 0x140152660)
-//   ?Set@IndexBuffer@Video@@QEAA_NHHPEAX@Z        (slot 0x140152698)
-//   ?Normalize@Vector3@Math@@QEBA?AV12@XZ         (slot 0x1401512c0)
-typedef void  (*fn_TradeWork_sub_c1e0_t)   (void* self);
-typedef void  (*fn_TradeWork_FUN_ac880_t)  (void* self, int colStart, int rowStart,
-                                             int cellSize_x, int cellSize_y,
-                                             int16_t* vertOut);
-typedef void* (*fn_TradeWork_helper_e270_t)(void* self, void* retbuf, int col, int row);
-typedef void  (*fn_Geometry_ChunkUpdate_t) (void* self);
-extern fn_TradeWork_sub_c1e0_t    fn_TradeWork_sub_c1e0;     // 0x1400ac1e0  M3.5 Path B session 6
-extern fn_TradeWork_FUN_ac880_t   fn_TradeWork_FUN_ac880;    // 0x1400ac880  M3.5 Path B session 6
-extern fn_TradeWork_helper_e270_t fn_TradeWork_helper_e270;  // 0x1400ae270  M3.5 Path B session 6
-extern fn_Geometry_ChunkUpdate_t  fn_Geometry_ChunkUpdate;   // 0x1400aad50  M3.5 — chunk-streaming
-
-// ============================================================
-// M3.5 Path B session 7 — image-buffer heightmap upload helper
-// ============================================================
-//
-// `TradeWork_impl_sub_c780` @ 0x1400ac780 (~30 instructions). Called from
-// Geometry::Serialize step 14 (final IsLoading-only block) to upload the
-// heightmap raw bytes at self+0x140 into a Video::ImageBuffer at self+0x148
-// using the custom NoiseUI ImageBuffer vtable (g_NoiseUI_ImageBufferVtable @
-// 0x14015c8c0 — exe-resident, also already used by NoiseUI / ModDialog).
-//
-// Body shape (verified via Ghidra disassembly @ 0x1400ac780):
-//   1. img = MemAlloc(0x68, 8)
-//   2. ImageBuffer::ImageBuffer(img)              // Runtime DLL ctor
-//   3. *(void**)img = &g_NoiseUI_ImageBufferVtable
-//   4. self+0x148 = img
-//   5. img->vtbl[0x48/8](img, 0, 2, 5, 0, w, w, 2, 1, 1, 1, 0)
-//        // Create(type=0, usage=2, format=5, mipLevels=0, w, h, FilterMode=2,
-//        //        AddressMode=1, AddressMode=1, AddressMode=1, mipData=null)
-//   6. Device::Lock(*Device::_singleton)
-//   7. ImageBuffer::CopyToTexture(img, self+0x140, w, w)
-//   8. Device::Unlock(*Device::_singleton)
-//
-// All Runtime primitives needed are ALREADY wired in engine_funcs.h:
-//   fn_ImageBuffer_Ctor          (??0ImageBuffer@Video@@QEAA@XZ)
-//   g_pVideoDeviceSingleton      (Runtime 0x1801fe7a8)
-//   g_NoiseUI_ImageBufferVtable  (exe 0x14015c8c0, set in Phase Q)
-//
-// The vtable +0x48 slot ("Create") is reached via the exe-resident vtable —
-// see code/Game/Dialog/noiseui.cpp lines 290-299 for the established pattern
-// of dispatching through `*(void**)imageBuffer` slot index 9. The thin exe
-// thunk at 0x14003aa20 forwards to Runtime via .rdata slot 0x140151a88; the
-// underlying Runtime export is:
-//   ?Create@ImageBuffer@Video@@UEAA_NW4ImageType@12@W4Usage@12@W4Format@12@
-//      IHHW4FilterMode@12@W4AddressMode@12@44PEAV?$Array@V?$Array@E@
-//      Collection@@@Collection@@@Z
-//
-// In standalone mode the vtable storage at 0x14015c8c0 needs to live in our
-// .data and contain function pointers we provide (or thin pass-throughs that
-// resolve the Runtime exports at call-time). Since NoiseUI/ModDialog already
-// dereference the vtable directly via slot index 9, the standalone-side
-// vtable scaffolding is shared — see standalone/address_registry.cpp
-// `RegisterNoiseUIImageBufferVtable` (added in this session).
-typedef void (*fn_TradeWork_sub_c780_t)(void* self);
-extern fn_TradeWork_sub_c780_t fn_TradeWork_sub_c780;  // 0x1400ac780  M3.5 Path B session 7
 
 // ============================================================
 // M3.5 Path B session 8 — final assembly: Geometry::Serialize body + extra

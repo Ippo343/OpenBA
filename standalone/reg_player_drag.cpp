@@ -24,14 +24,6 @@ extern void  DragTool_PlayErrorSound_100140(uint64_t);         // 0x140100140
 // dragplacementtool.cpp helper (tool_base_drag.cpp)
 extern void  DragPlacementTool_ClearPathEntities_1018d0(void*, int, int, int, int, int64_t); // 0x1401018d0
 
-// dragtool.cpp — the SHARED DragTool cancel-drag / "can-deactivate?" slot-9 body.
-// Every DragTool subclass vtable holds this address at +0x48 (Bridge/Road/Removal/
-// DragPlacement), and FencedTool's own slot 9 (0x1400dcd10) TAIL-JUMPS to it. It was
-// registered nowhere, so any caller reaching it by address (engine_funcs'
-// fn_DragTool_Shutdown) got NULL: mid-drag the drag was never cancelled and the
-// CreateBar cost dialog was never closed before the tool was deleted.
-extern "C" int DragTool_CancelDrag_Impl(void*);                // 0x1400fc640
-
 // NOTE — the P1 defers below have all since been REGISTERED by later waves:
 //   0x1400ff9e0 OpenToolDialog  — reg_player_toolui.cpp (r2c): registered with a
 //       faithful standalone child-dialog vtable written directly by the reimpl; the
@@ -51,5 +43,4 @@ void RegisterPlayerDragBatch() {
     RegisterExeAddr(0x1401000f0, reinterpret_cast<uintptr_t>(&DragTool_PlayPlaceSound_1000f0));
     RegisterExeAddr(0x140100140, reinterpret_cast<uintptr_t>(&DragTool_PlayErrorSound_100140));
     RegisterExeAddr(0x1401018d0, reinterpret_cast<uintptr_t>(&DragPlacementTool_ClearPathEntities_1018d0));
-    RegisterExeAddr(0x1400fc640, reinterpret_cast<uintptr_t>(&DragTool_CancelDrag_Impl));
 }

@@ -14,7 +14,7 @@
 // whose correct fix is deleting the resolve, not filling it in.
 
 #include "resolve.h"
-#include "engine_funcs.h"                 // FindDialogByName_Impl (inline)
+#include "engine_funcs.h"
 #include "Entity/entitylist_funcs.h"      // EntityList_Update
 #include <cstdint>
 
@@ -23,12 +23,6 @@ extern "C" void MusicPlayer_Update(void* musicPlayer);
 // code/Game/Game/minimap_paint.cpp
 extern "C" void Minimap_PaintTerrain(void* minimap, void* context, void* worldGeom,
                                      void* sunLight);
-
-// FindDialogByName_Impl is an inline in engine_funcs.h; give it one out-of-line
-// address so RegisterExeAddr has something stable to publish.
-static void* Lane5_FindDialogByName(void* retval, void* nameStr) {
-    return FindDialogByName_Impl(retval, nameStr);
-}
 
 extern "C" void RegisterCodeLane5Batch() {
     // ---------------------------------------------------------------------
@@ -72,20 +66,6 @@ extern "C" void RegisterCodeLane5Batch() {
     // Registered so the census row closes and so any future retail-shaped
     // caller lands on our reimpl instead of NotImplementedStub (returns 0).
     RegisterExeAddr(0x1400c4090, reinterpret_cast<uintptr_t>(&EntityList_Update));
-
-    // ---------------------------------------------------------------------
-    // 0x1400e1600  FindDialogByName / TSD_FindByString
-    // ---------------------------------------------------------------------
-    // NO behaviour change: fully reimplemented as the inline
-    // FindDialogByName_Impl in engine_funcs.h, and both retail callers
-    // (TutorialGoalDialog_OnRemove 0x1400deef2, TutorialSetupDialog_OnRemove
-    // 0x1400e2630) are ported and call the Impl directly
-    // (tutorialgoaldialog.cpp:181, tutorialsetupdialog.cpp:355). The two
-    // `fn_*` pointers resolved from this address — fn_FindDialogByName
-    // (engine_funcs.cpp:2887) and fn_TSD_FindByString (:4528) — have ZERO call
-    // sites; they are what makes this address show up TWICE in the census.
-    // Signature matches both typedefs exactly: (void* retval, void* nameStr).
-    RegisterExeAddr(0x1400e1600, reinterpret_cast<uintptr_t>(&Lane5_FindDialogByName));
 
     // ---------------------------------------------------------------------
     // NOT registered, deliberately — see the lane report for the full argument:

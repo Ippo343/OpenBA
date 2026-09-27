@@ -15,6 +15,10 @@
 // rows is the single InitFuncs resolve, which is why none of them has ever
 // produced an EXEC-of-0.)
 //
+// ENDGAME B.3.8 close: the DragTool::OnKey, EntityUI::OpenPauseMenu and
+// ToolbarDescription cleanup rows went with the dead engine_funcs pointers that were
+// their only readers; the DecalComponent::Draw row is what is left.
+//
 // The other three rows of the lane are DELIBERATE leaves and are NOT registered
 // here — see the report / the notes at their call sites:
 //   0x1400fcc90  EditTool deselect+close      — a live cc90 fires EVERY FRAME from
@@ -33,46 +37,12 @@
 #include "resolve.h"
 #include <cstdint>
 
-#include "Player/dragtool.h"                       // DragTool_OnKey
 #include "Component/decalcomponent_funcs.h"        // DecalComponent_Draw
 #include "Component/statusiconcomponent_funcs.h"   // StatusIconComponent type
-#include "Component/ToolbarDescription.h"
 
 // central live-feature gate (default-on table + env kill-switch)
 
-// The in-game pause-menu opener (code/Game/Dialog/toolbardialog.cpp). Retail is
-// void(gameSubsys); ours hands the dialog back so an unattended driver can address
-// it — a wider return is ABI-compatible with a void call site.
-extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys);
-
-// ToolbarDescription is a real class (code/Game/Component/ToolbarDescription.h): its
-// slot 0 is the SCALAR-deleting dtor (flags&1 = MemFree self). Retail 0x14012db70 is
-// the CLEANUP half only and takes ONE argument — calling a two-arg form directly from
-// a one-arg retail call site would read a stale RDX and could MemFree a stack/embedded
-// object. Adapt explicitly: flags 0 = do NOT free the storage.
-static void ToolbarDescription_Cleanup_Adapter(void* self) {
-    reinterpret_cast<ToolbarDescription*>(self)->ToolbarDescription::DeletingDtor(0u);   // B.3.8 bridge
-}
-
 void RegisterCodeLane6Batch() {
-    // 0x1400fc6b0 — DragTool::OnKey, the shared drag state machine for
-    // BridgeTool / RoadTool / FencedTool / DragPlacementTool (retail vtables
-    // 0x140161b30 / 0x140161bc0 / 0x140161c40 / 0x140161e10 all hold it at +0x30).
-    // Ported in full as DragTool_OnKey (code/Game/Player/dragtool.cpp) and wired
-    // into each of our tool vtables by symbol. The address stayed unregistered, so
-    // engine_funcs.cpp's fn_DragTool_OnKey has been null since it was added; it has
-    // no callers today, which is the only reason that never showed up as a dead drag.
-    RegisterExeAddr(0x1400fc6b0, reinterpret_cast<uintptr_t>(&DragTool_OnKey));
-
-    // 0x140101ce0 — EntityUI::OpenPauseMenu (the IN-GAME menu: Resume / Save /
-    // Options / Quit to Menu). Retail's two callers are ToolbarDialog_OnRemove case 3
-    // (0x1400b96ae) and EntityUI::Update's lost-focus branch (0x140102740). Fully
-    // ported as EntityUI_OpenPauseMenu; both of our call sites reach it by symbol.
-    // engine_funcs.cpp still resolves this address into fn_Toolbar_ToggleAll — a
-    // MISNOMER left over from when the function was thought to be a toolbar toggle
-    // (see the header note above its typedef); that pointer has no callers.
-    RegisterExeAddr(0x140101ce0, reinterpret_cast<uintptr_t>(&EntityUI_OpenPauseMenu));
-
     // 0x14011b560 — DecalComponent::Draw (the terrain ground decal: a StorageYard's
     // brown dirt foundation and every other DecalDescription-bearing building).
     // Fully ported as DecalComponent_Draw and installed into DecalComponent's live
@@ -84,13 +54,4 @@ void RegisterCodeLane6Batch() {
     // 0x14012bbd0 — StatusIconComponent slot 8 (the icon POSITIONING pass) is a real
     // virtual since ENDGAME B.3.8 and statusiconcomponent.cpp no longer reads its own
     // address back, so its row is gone.
-
-    // 0x14012db70 — ToolbarDescription::~ToolbarDescription (the cleanup half: destroy
-    // the String array at +0x50 and free it, destroy the four Strings at +0x48/+0x40/
-    // +0x38/+0x28, restore the base vtable, chain to External::~External). The class's
-    // DeletingDtor; registered through the one-arg adapter above because retail's
-    // signature has no flags word.
-    // engine_funcs.cpp's fn_ToolbarDescription_cleanup has no callers.
-    RegisterExeAddr(0x14012db70,
-                    reinterpret_cast<uintptr_t>(&ToolbarDescription_Cleanup_Adapter));
 }

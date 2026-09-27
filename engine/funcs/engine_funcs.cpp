@@ -164,10 +164,6 @@ uint32_t* g_TypeId_AreaDescription = nullptr;
 uint32_t* g_TypeId_FenceDescription = nullptr;
 uint32_t* g_TypeId_SizeDescription = nullptr;
 
-// DragPlacementTool/FencedTool function pointers
-fn_DragTool_OnKey_t fn_DragTool_OnKey = nullptr;
-fn_DragTool_Shutdown_t fn_DragTool_Shutdown = nullptr;
-
 // ============================================================
 // Game Singletons (Phase A3)
 // ============================================================
@@ -227,8 +223,6 @@ fn_DateTime_AsString_t fn_DateTime_AsString = nullptr;
 void** g_pInputDeviceSingleton = nullptr;
 void** g_pFileSystemSingleton2 = nullptr;
 fn_LoadScenarioFromSave_t fn_LoadScenarioFromSave = nullptr;
-uintptr_t g_ModUpdateDialog_Vtable = 0;  // PTR_FUN_14015c6c0
-fn_SelectResourceUI_PopulateCombo_t fn_SelectResourceUI_PopulateCombo = nullptr;
 void*** g_ppAchievementManager = nullptr;
 // fn_FollowDialog_Close — inlined in followdialog.cpp Slot7
 
@@ -262,7 +256,6 @@ fn_AVL_Rebalance_0x38_t fn_AVL_Rebalance_0x38 = nullptr;
 // fn_GameWorld_GetMapName — inlined in mapparamsdialog.cpp
 // fn_UpgradeUI_Serialize — inlined as UpgradeUI_Serialize in upgradeui.cpp
 // fn_UpgradeUI_OnRemove — inlined as UpgradeUI_OnRemove in upgradeui.cpp
-fn_ConsumeProduceUI_Slot4_t fn_ConsumeProduceUI_Slot4 = nullptr;
 // fn_HelpUI_Slot4 — now inline as HelpUI_Slot4 in helpui.cpp
 // fn_HelpUI_Slot9 — now inline as HelpUI_Slot9 in helpui.cpp
 
@@ -274,10 +267,6 @@ uint32_t* g_TypeId_Scenario = nullptr;
 // fn_EventNotifyDialog_ArrayRemove — inlined as EventNotifyDialog_ArrayRemove_Impl in eventnotifydialog.cpp
 fn_ToolbarDialog_Ctor_t fn_ToolbarDialog_Ctor = nullptr;
 fn_Toolbar_ShowGroup_t fn_Toolbar_ShowGroup = nullptr;
-fn_Toolbar_Utility_t fn_Toolbar_Utility = nullptr;
-fn_Toolbar_ToggleAll_t fn_Toolbar_ToggleAll = nullptr;
-uintptr_t g_ToolbarDialog_Vtable = 0;   // PTR_FUN_14015fa00
-uintptr_t g_PauseDialog_Vtable = 0;     // PTR_FUN_14015f550
 uintptr_t g_ToolUI_ChildDialog_Vtable = 0; // PTR_FUN_14015f5a0
 // fn_Factory_CreateObject, g_TypeId_ToolController, g_TypeId_ToolSetting — defined above (entityui section)
 uint32_t* g_TypeId_ToolbarExternal = nullptr;
@@ -294,7 +283,6 @@ fn_CameraSys_ComputeViewTransform_t fn_CameraSys_ComputeViewTransform = nullptr;
 uint32_t* g_TypeId_CheckElement = nullptr;
 uint32_t* g_TypeId_ToolbarDialogParent = nullptr;
 uint32_t* g_TypeId_ComboElement = nullptr;
-fn_FindDialogByName_t fn_FindDialogByName = nullptr;
 // fn_ResolveExternalByName — REPLACED with inline ResolveExternalByName_Impl in engine_funcs.h
 fn_External_External_t fn_External_External = nullptr;
 fn_External_Dtor_t fn_External_Dtor = nullptr;
@@ -363,9 +351,7 @@ fn_EdgeMesh_TriangleVertex_Ctor_t  fn_EdgeMesh_TriangleVertex_Ctor = nullptr;
 fn_EdgeMesh_EdgeVertex_Ctor_t      fn_EdgeMesh_EdgeVertex_Ctor = nullptr;
 fn_EdgeMeshInstance_Ctor_t         fn_EdgeMeshInstance_Ctor = nullptr;
 fn_TileRender_t fn_TileRender = nullptr;
-fn_TileValidityCheck_t fn_TileValidityCheck = nullptr;
 fn_FencedPlacementParams_t fn_FencedPlacementParams = nullptr;
-fn_HighlightRemove_t fn_HighlightRemove = nullptr;
 
 fn_Configuration_GetVersionString_t fn_Configuration_GetVersionString = nullptr;
 // ModDetails_StringArrayPush — now static inline in moddetailsdialog.cpp
@@ -374,7 +360,6 @@ fn_Configuration_GetVersionString_t fn_Configuration_GetVersionString = nullptr;
 uint32_t* g_TypeId_CitizenDescription = nullptr;
 uint32_t* g_TypeId_StatusIconComponent = nullptr;
 uint32_t* g_TypeId_CitizenAIComponent = nullptr;
-void** g_FollowDialog_Vtable = nullptr;
 // fn_StatusBarUI_StatusIconHandler — REPLACED with static StatusBarUI_StatusIconHandler_Impl() in statusbarui.cpp
 
 // ProductionUI support
@@ -397,8 +382,6 @@ fn_OptionsDialog_Ctor_t fn_OptionsDialog_Ctor = nullptr;
 fn_ScenarioDialog_Ctor_t fn_ScenarioDialog_Ctor = nullptr;
 fn_MapParamsDialog_Ctor_t fn_MapParamsDialog_Ctor = nullptr;
 fn_ModDialog_Ctor_t fn_ModDialog_Ctor = nullptr;
-void** g_AchievementDialog_Vtable = nullptr;
-void** g_GoalDialog_Vtable = nullptr;
 
 // ModDialog support
 void** g_ppModificationSingleton = nullptr;
@@ -408,13 +391,10 @@ void** g_ppModificationSingleton = nullptr;
 // fn_ModDialog_MoveToTop — REPLACED with inline impl in moddialog.cpp
 // fn_ModDialog_ShowDetails — REPLACED with inline impl in moddialog.cpp
 // fn_ModDialog_Apply — REPLACED with inline impl in moddialog.cpp
-uintptr_t g_ModDetailsDialog_Vtable = 0;  // PTR_FUN_14015c670
 fn_ModDialog_CloseAndReload_t fn_ModDialog_CloseAndReload = nullptr;
-fn_ModDialog_RefreshDisplay_Orig_t fn_ModDialog_RefreshDisplay_Orig = nullptr;
 fn_MainMenu_Reload_t fn_MainMenu_Reload = nullptr;
 fn_Game_ReloadWithSave_t fn_Game_ReloadWithSave = nullptr;
 fn_SavedState_Ctor_t fn_SavedState_Ctor = nullptr;
-uintptr_t g_ReloadDialog_Vtable = 0;  // PTR_FUN_14015c480
 
 // IO::Serializer shared globals — all five removed, ENDGAME B.3.4a closing 2d.
 
@@ -498,19 +478,9 @@ uint32_t* g_TypeId_BrowserController = nullptr;
 uint32_t* g_TypeId_Material = nullptr;
 float* g_fUVScale = nullptr;
 fn_Weather_ResetTime_t fn_Weather_ResetTime = nullptr;
-fn_DebugUI_SetDayLighting_t fn_DebugUI_SetDayLighting = nullptr;
 uint32_t* g_TypeId_DiseaseDescription = nullptr;
 uint32_t* g_TypeId_DrawableType = nullptr;
 fn_Game_SpawnResources_t fn_Game_SpawnResources = nullptr;
-fn_Game_TriggerDisasterByType_t fn_Game_TriggerDisasterByType = nullptr;
-fn_Game_DestroyAllRawMaterials_t fn_Game_DestroyAllRawMaterials = nullptr;
-fn_Game_SpawnItemsInStorage_t fn_Game_SpawnItemsInStorage = nullptr;
-fn_Game_SpawnCitizens_t fn_Game_SpawnCitizens = nullptr;
-fn_DebugUI_TriggerDisasterOnBuilding_t fn_DebugUI_TriggerDisasterOnBuilding = nullptr;
-fn_Game_StartRandomFire_t fn_Game_StartRandomFire = nullptr;
-fn_Game_SpawnTornado_t fn_Game_SpawnTornado = nullptr;
-fn_Game_InfectRandomCitizen_t fn_Game_InfectRandomCitizen = nullptr;
-fn_DebugUI_OnDiseaseComboChanged_t fn_DebugUI_OnDiseaseComboChanged = nullptr;
 // fn_DebugUI_OnDrawComboChanged removed — now reimplemented in code/Game/Dialog/debugui.cpp
 fn_DrawGeometry_Ctor_t fn_DrawGeometry_Ctor = nullptr;
 fn_DrawGeometry_Init_t fn_DrawGeometry_Init = nullptr;
@@ -528,8 +498,6 @@ fn_Graphics_MeshInstance_Ctor_t  fn_Graphics_MeshInstance_Ctor  = nullptr;
 fn_Volume_Frustum_Ctor_t         fn_Volume_Frustum_Ctor         = nullptr;
 fn_Graphics_Camera_Ctor_t        fn_Graphics_Camera_Ctor        = nullptr;
 
-fn_DebugUI_OnDaySliderChanged_t fn_DebugUI_OnDaySliderChanged = nullptr;
-fn_DebugUI_WriteLightingColors_t fn_DebugUI_WriteLightingColors = nullptr;
 fn_Game_GetMonthFromTime_t fn_Game_GetMonthFromTime = nullptr;
 
 // --- DebugUI deep-reimpl helpers ---
@@ -599,8 +567,6 @@ fn_UpdateAutoSaveTimer_t fn_UpdateAutoSaveTimer = nullptr;
 uint32_t* g_TypeId_AutoSaveDialogType = nullptr;
 fn_RegisterDefaultInputBindings_t fn_RegisterDefaultInputBindings = nullptr;
 
-fn_FrustumProject_t fn_FrustumProject = nullptr;
-
 fn_ElementDescription_Dtor_t fn_ElementDescription_Dtor = nullptr;
 fn_ElementDescription_Ctor_t fn_ElementDescription_Ctor = nullptr;
 fn_Element_Ctor_t fn_Element_Ctor = nullptr;
@@ -608,13 +574,11 @@ fn_ExternalPtr_Serialize_t fn_ExternalPtr_Serialize = nullptr;
 fn_ExternalPtr_Serialize2_t fn_ExternalPtr_Serialize2 = nullptr;
 fn_ExternalPtr_Serialize3_t fn_ExternalPtr_Serialize3 = nullptr;
 fn_ExternalRefArray_Serialize_t fn_ExternalRefArray_Serialize = nullptr;
-fn_ComponentBase_Serialize_t fn_ComponentBase_Serialize = nullptr;
 fn_DynArray_Resize_t fn_DynArray_Resize = nullptr;
 fn_StringArray_Resize_t fn_StringArray_Resize = nullptr;
 fn_ExternalPtr_BuildSerialize_t fn_ExternalPtr_BuildSerialize = nullptr;
 fn_WeatherResize_t fn_WeatherResize = nullptr;
 fn_WeatherExternalSerialize_t fn_WeatherExternalSerialize = nullptr;
-fn_ToolbarDescription_cleanup_t fn_ToolbarDescription_cleanup = nullptr;
 
 // TutorialSetupDialog helpers
 fn_SerializeExternalPtr_t fn_SerializeExternalPtr = nullptr;
@@ -622,7 +586,6 @@ fn_TSD_Slot9Helper_t fn_TSD_Slot9Helper = nullptr;
 fn_TSD_OpenDialog_t fn_TSD_OpenDialog = nullptr;
 fn_TSD_SetDialogFlags_t fn_TSD_SetDialogFlags = nullptr;
 fn_TSD_FindInstance_t fn_TSD_FindInstance = nullptr;
-fn_TSD_FindByString_t fn_TSD_FindByString = nullptr;
 fn_SetFollowBuilding_t fn_SetFollowBuilding = nullptr;
 fn_SetEditMode_t fn_SetEditMode = nullptr;
 
@@ -659,8 +622,6 @@ fn_FindComponent_RawMaterialC_t fn_FindComponent_RawMaterialC = nullptr;
 fn_GetRemainingCapacity_t fn_GetRemainingCapacity = nullptr;
 fn_BuildRoad_QueryStorage_t fn_BuildRoad_QueryStorage = nullptr;
 
-// BuildStructure support
-fn_Work_SerializeBase_t fn_Work_SerializeBase = nullptr;
 fn_BST_SerializeHelper_t fn_BST_SerializeHelper = nullptr;
 fn_Entity_FindComponent_Position_t fn_Entity_FindComponent_Position = nullptr;
 fn_Entity_FindComponent_Build_t fn_Entity_FindComponent_Build = nullptr;
@@ -691,7 +652,6 @@ fn_TutorialTreeInsert_t fn_TutorialTreeInsert = nullptr;
 fn_TutorialStepExecute_t fn_TutorialStepExecute = nullptr;
 uint32_t* g_TypeId_FinishTutorialGoal = nullptr;
 void** g_pSingletonExref_151a80 = nullptr;
-void** g_TutorialInstanceVtable = nullptr;
 
 // ComponentEntity dependencies
 uint32_t* g_TypeId_ComponentBase = nullptr;
@@ -842,10 +802,6 @@ fn_TreeRecursiveFree_t fn_TreeRecursiveFree = nullptr;
 fn_ObjectInternal_Dtor_t fn_ObjectInternal_Dtor = nullptr;
 fn_StateMachine_ReleaseTasks_t fn_StateMachine_ReleaseTasks = nullptr;
 
-// ============================================================
-// M3.5 — MenuScene::Serialize generic helpers
-// ============================================================
-fn_Geometry_Init_t fn_Geometry_Init = nullptr;
 fn_Graphics_Geometry_Ctor_t fn_Graphics_Geometry_Ctor = nullptr;
 fn_Video_VertexBuffer_Ctor_t fn_Video_VertexBuffer_Ctor = nullptr;
 fn_Video_IndexBuffer_Ctor_t fn_Video_IndexBuffer_Ctor = nullptr;
@@ -877,15 +833,6 @@ uint32_t** g_ppTypeInfo_MaterialInstance = nullptr;
 // M3.5 Path B session 5 — additional Geometry::Serialize resize helpers.
 fn_Array_Resize_t fn_Array_Resize_Stride02       = nullptr;  // 0x14001c890
 fn_Array_Resize_t fn_Array_Resize_Stride16B      = nullptr;  // 0x14001ef10
-
-// M3.5 Path B session 6 — heightmap mesh-build path helpers.
-fn_TradeWork_sub_c1e0_t    fn_TradeWork_sub_c1e0    = nullptr;  // 0x1400ac1e0
-fn_TradeWork_FUN_ac880_t   fn_TradeWork_FUN_ac880   = nullptr;  // 0x1400ac880
-fn_TradeWork_helper_e270_t fn_TradeWork_helper_e270 = nullptr;  // 0x1400ae270
-fn_Geometry_ChunkUpdate_t  fn_Geometry_ChunkUpdate  = nullptr;  // 0x1400aad50  M3.5 chunk-stream
-
-// M3.5 Path B session 7 — image-buffer heightmap upload helper.
-fn_TradeWork_sub_c780_t fn_TradeWork_sub_c780 = nullptr;  // 0x1400ac780
 
 // M3.5 Path B session 8 — the promoted IO::Serializer dispatch-slot pointers
 // are all gone now; see the banner on the (former) typedef block in
@@ -1073,12 +1020,6 @@ bool EngineFuncsInit() {
     g_TypeId_SizeDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7468));
 
-    // DragPlacementTool/FencedTool function pointers
-    fn_DragTool_OnKey = reinterpret_cast<fn_DragTool_OnKey_t>(
-        ResolveAddr(Module::Exe, 0x1400fc6b0));  // DragTool::OnKey
-    fn_DragTool_Shutdown = reinterpret_cast<fn_DragTool_Shutdown_t>(
-        ResolveAddr(Module::Exe, 0x1400fc640));  // DragTool::Shutdown (Slot9)
-
     // CheckboxElement type ID: exref at 0x1401516a8 → pointer → uint32_t typeId
     {
         void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401516a8));
@@ -1245,13 +1186,6 @@ bool EngineFuncsInit() {
     fn_LoadScenarioFromSave = reinterpret_cast<fn_LoadScenarioFromSave_t>(
         ResolveAddr(Module::Exe, 0x1400b49f0));
 
-    // ModDetailsDialog/ModUpdateDialog vtable — exe .rdata pointers
-    g_ModUpdateDialog_Vtable = ResolveAddr(Module::Exe, 0x14015c6c0);
-
-    // SelectResourceUI helpers — exe functions (shared by Orchard/Pasture)
-    fn_SelectResourceUI_PopulateCombo = reinterpret_cast<fn_SelectResourceUI_PopulateCombo_t>(
-        ResolveAddr(Module::Exe, 0x140078830));
-
     // AchievementManager singleton (double-indirect .rdata dispatch at 0x1401514f0)
     g_ppAchievementManager = reinterpret_cast<void***>(
         ResolveAddr(Module::Exe, 0x1401514f0));
@@ -1296,14 +1230,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140025920));
     // fn_GetDescPage/fn_BuildComplete: now static impls in buildui.cpp
 
-    // Phase F Wave 1: MapParamsDialog / UpgradeUI / ConsumeProduceUI / HelpUI
-    // fn_MapParamsDialog_OnOk (0x14006b690) — inlined in mapparamsdialog.cpp
-    // fn_MapParamsDialog_OnNewName (0x14006b700) — inlined in mapparamsdialog.cpp
-    // fn_GameWorld_GetMapName (0x140011f90) — inlined in mapparamsdialog.cpp
-    // fn_UpgradeUI_Serialize (0x140086d90) — inlined in upgradeui.cpp
-    // fn_UpgradeUI_OnRemove (0x140086c90) — inlined in upgradeui.cpp
-    fn_ConsumeProduceUI_Slot4 = reinterpret_cast<fn_ConsumeProduceUI_Slot4_t>(
-        ResolveAddr(Module::Exe, 0x14005F3D0));
     // HelpUI_Slot4 and HelpUI_Slot9 now inline in helpui.cpp
 
     // GoalDialog_ArrayPush, EventNotifyDialog_ArrayPush, ScenarioDialog_ArrayPush
@@ -1321,13 +1247,6 @@ bool EngineFuncsInit() {
     // fn_Toolbar_ShowGroup — must call original (15+ direct callers share state)
     fn_Toolbar_ShowGroup = reinterpret_cast<fn_Toolbar_ShowGroup_t>(
         ResolveAddr(Module::Exe, 0x140102b60));
-    fn_Toolbar_Utility = reinterpret_cast<fn_Toolbar_Utility_t>(
-        ResolveAddr(Module::Exe, 0x140101a80));
-    fn_Toolbar_ToggleAll = reinterpret_cast<fn_Toolbar_ToggleAll_t>(
-        ResolveAddr(Module::Exe, 0x140101ce0));
-    // Vtable pointers for toolbar-related dialogs
-    g_ToolbarDialog_Vtable = ResolveAddr(Module::Exe, 0x14015fa00);
-    g_PauseDialog_Vtable = ResolveAddr(Module::Exe, 0x14015f550);
     // 0x14015f5a0 is the shared ToolUI child-dialog vtable. In standalone it is
     // DELIBERATELY left unregistered (registering it poisons the menu's BuildId
     // child — see reg_player_toolui.cpp), so ResolveAddr returns 0 here; only
@@ -1388,10 +1307,6 @@ bool EngineFuncsInit() {
             g_TypeId_ComboElement = reinterpret_cast<uint32_t*>(*exref);
         }
     }
-    // ConsumeProduceUI helper: get current product index — inline in engine_funcs.h
-    // TutorialGoalDialog helpers
-    fn_FindDialogByName = reinterpret_cast<fn_FindDialogByName_t>(
-        ResolveAddr(Module::Exe, 0x1400e1600));
     // fn_ResolveExternalByName — REPLACED with inline ResolveExternalByName_Impl in engine_funcs.h
     // Object::External::External — runtime dispatch at 0x140151e98
     {
@@ -1490,8 +1405,6 @@ bool EngineFuncsInit() {
     // fn_FindComponent_CitizenAI — inline in engine_funcs.h (uses g_TypeId_CitizenAIComponent)
     g_TypeId_ProfessionDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5a98));
-    g_FollowDialog_Vtable = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x14015be00));
     // fn_StatusBarUI_StatusIconHandler — REPLACED with static impl in statusbarui.cpp
 
     // StringTable type ID: exref at 0x140151488 -> pointer -> uint32_t typeId
@@ -1559,10 +1472,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14006bd80));
     fn_ModDialog_Ctor = reinterpret_cast<fn_ModDialog_Ctor_t>(
         ResolveAddr(Module::Exe, 0x140070030));
-    g_AchievementDialog_Vtable = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x14015b020));
-    g_GoalDialog_Vtable = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x14015beb0));
 
     // --- NewGameDialog support ---
     g_pNewGameSettings = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3de0));
@@ -1646,23 +1555,17 @@ bool EngineFuncsInit() {
     fn_TileRender = reinterpret_cast<fn_TileRender_t>(
         ResolveAddr(Module::Exe, 0x1401008c0));
     // CharacterComponent_impl_f5d0 (0x14009f5d0) — single-tile terrain validity check (exe function)
-    fn_TileValidityCheck = reinterpret_cast<fn_TileValidityCheck_t>(
-        ResolveAddr(Module::Exe, 0x14009f5d0));
     // FUN_1400dbf90 — fenced placement parameter computation (exe function)
     fn_FencedPlacementParams = reinterpret_cast<fn_FencedPlacementParams_t>(
         ResolveAddr(Module::Exe, 0x1400dbf90));
     // TradeWork_impl_0d00 (0x1400b0d00) — highlight/overlay removal (exe function)
-    fn_HighlightRemove = reinterpret_cast<fn_HighlightRemove_t>(
-        ResolveAddr(Module::Exe, 0x1400b0d00));
 #ifdef _DEBUG
     printf("[EngineFuncs] Player/Tool APIs resolved:\n");
     printf("  SceneAddObject            = %p\n", (void*)fn_SceneAddObject);
     printf("  SceneRemoveObject         = %p\n", (void*)fn_SceneRemoveObject);
     printf("  MeshInstance_UpdateHier   = %p\n", (void*)fn_MeshInstance_UpdateHierarchy);
     printf("  TileRender                = %p\n", (void*)fn_TileRender);
-    printf("  TileValidityCheck         = %p\n", (void*)fn_TileValidityCheck);
     printf("  FencedPlacementParams     = %p\n", (void*)fn_FencedPlacementParams);
-    printf("  HighlightRemove           = %p\n", (void*)fn_HighlightRemove);
 #endif
 
     fn_Configuration_GetVersionString = reinterpret_cast<fn_Configuration_GetVersionString_t>(
@@ -1701,17 +1604,8 @@ bool EngineFuncsInit() {
     // fn_DialogInstance_AddController6 until the ENDGAME B.3.6 closing pass, which
     // retired it with zero callers; UIDesc_AddControllers_Impl calls the member.)
 
-    // --- ModDialog helper functions ---
-    // fn_ModDialog_RefreshDisplay — REPLACED with static impl in moddialog.cpp
-    // fn_ModDialog_ToggleMod — REPLACED with inline impl in moddialog.cpp
-    // fn_ModDialog_MoveToTop — REPLACED with inline impl in moddialog.cpp
-    // fn_ModDialog_ShowDetails — REPLACED with inline impl in moddialog.cpp
-    // fn_ModDialog_Apply — REPLACED with inline impl in moddialog.cpp
-    g_ModDetailsDialog_Vtable = ResolveAddr(Module::Exe, 0x14015c670);
     fn_ModDialog_CloseAndReload = reinterpret_cast<fn_ModDialog_CloseAndReload_t>(
         ResolveAddr(Module::Exe, 0x14006e9b0));
-    fn_ModDialog_RefreshDisplay_Orig = reinterpret_cast<fn_ModDialog_RefreshDisplay_Orig_t>(
-        ResolveAddr(Module::Exe, 0x14006eec0));
     fn_MainMenu_Reload = reinterpret_cast<fn_MainMenu_Reload_t>(
         ResolveAddr(Module::Exe, 0x1400b4790));
     fn_Game_ReloadWithSave = reinterpret_cast<fn_Game_ReloadWithSave_t>(
@@ -1739,7 +1633,6 @@ bool EngineFuncsInit() {
     // export and a second door earns nothing.
     fn_SavedState_Ctor = reinterpret_cast<fn_SavedState_Ctor_t>(
         ResolveExport("??0SavedState@Save@@QEAA@XZ"));
-    g_ReloadDialog_Vtable = ResolveAddr(Module::Exe, 0x14015c480);
 
     // --- IO::Serializer (shared globals) ---
     // The five ??0Serializer / ??1Serializer / Serialize(int&) / Serialize(bool&)
@@ -1954,8 +1847,6 @@ bool EngineFuncsInit() {
     // Weather_ResetTime (exe 0x1400944e0)
     fn_Weather_ResetTime = reinterpret_cast<fn_Weather_ResetTime_t>(
         ResolveAddr(Module::Exe, 0x1400944e0));
-    fn_DebugUI_SetDayLighting = reinterpret_cast<fn_DebugUI_SetDayLighting_t>(
-        ResolveAddr(Module::Exe, 0x140061780));
     // DiseaseDescription type ID (DAT_1401c5948)
     g_TypeId_DiseaseDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5948));
@@ -1966,24 +1857,6 @@ bool EngineFuncsInit() {
     // --- DebugUI Slot9 sub-functions ---
     fn_Game_SpawnResources = reinterpret_cast<fn_Game_SpawnResources_t>(
         ResolveAddr(Module::Exe, 0x140091660));
-    fn_Game_TriggerDisasterByType = reinterpret_cast<fn_Game_TriggerDisasterByType_t>(
-        ResolveAddr(Module::Exe, 0x140060110));
-    fn_Game_DestroyAllRawMaterials = reinterpret_cast<fn_Game_DestroyAllRawMaterials_t>(
-        ResolveAddr(Module::Exe, 0x140060000));
-    fn_Game_SpawnItemsInStorage = reinterpret_cast<fn_Game_SpawnItemsInStorage_t>(
-        ResolveAddr(Module::Exe, 0x140060290));
-    fn_Game_SpawnCitizens = reinterpret_cast<fn_Game_SpawnCitizens_t>(
-        ResolveAddr(Module::Exe, 0x140060380));
-    fn_DebugUI_TriggerDisasterOnBuilding = reinterpret_cast<fn_DebugUI_TriggerDisasterOnBuilding_t>(
-        ResolveAddr(Module::Exe, 0x14005FF30));
-    fn_Game_StartRandomFire = reinterpret_cast<fn_Game_StartRandomFire_t>(
-        ResolveAddr(Module::Exe, 0x14005FEB0));
-    fn_Game_SpawnTornado = reinterpret_cast<fn_Game_SpawnTornado_t>(
-        ResolveAddr(Module::Exe, 0x14005FD20));
-    fn_Game_InfectRandomCitizen = reinterpret_cast<fn_Game_InfectRandomCitizen_t>(
-        ResolveAddr(Module::Exe, 0x14005FE10));
-    fn_DebugUI_OnDiseaseComboChanged = reinterpret_cast<fn_DebugUI_OnDiseaseComboChanged_t>(
-        ResolveAddr(Module::Exe, 0x14005FC60));
     // fn_DebugUI_OnDrawComboChanged removed — now reimplemented
     // Sub-functions for the reimplementation:
     fn_DrawGeometry_Ctor = reinterpret_cast<fn_DrawGeometry_Ctor_t>(
@@ -2031,10 +1904,6 @@ bool EngineFuncsInit() {
     // `fn_Graphics_Camera_SetFrustum` are GONE — zero callers tree-wide. The three
     // ctor doors in this block stay.
 
-    fn_DebugUI_OnDaySliderChanged = reinterpret_cast<fn_DebugUI_OnDaySliderChanged_t>(
-        ResolveAddr(Module::Exe, 0x1400607E0));
-    fn_DebugUI_WriteLightingColors = reinterpret_cast<fn_DebugUI_WriteLightingColors_t>(
-        ResolveAddr(Module::Exe, 0x140061530));
     fn_Game_GetMonthFromTime = reinterpret_cast<fn_Game_GetMonthFromTime_t>(
         ResolveAddr(Module::Exe, 0x1400932A0));
 
@@ -2236,9 +2105,6 @@ bool EngineFuncsInit() {
     fn_MessageDialog_Ctor = reinterpret_cast<fn_MessageDialog_Ctor_t>(
         ResolveAddr(Module::Exe, 0x14006d300));
 
-    fn_FrustumProject = reinterpret_cast<fn_FrustumProject_t>(
-        ResolveAddr(Module::Exe, 0x14006c5b0));
-
     fn_ElementDescription_Dtor = *reinterpret_cast<fn_ElementDescription_Dtor_t*>(
         ResolveAddr(Module::Exe, 0x1401518b8));
     fn_ElementDescription_Ctor = *reinterpret_cast<fn_ElementDescription_Ctor_t*>(
@@ -2257,8 +2123,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140007140));
     fn_ExternalRefArray_Serialize = reinterpret_cast<fn_ExternalRefArray_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1400049c0));
-    fn_ComponentBase_Serialize = reinterpret_cast<fn_ComponentBase_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
     fn_DynArray_Resize = reinterpret_cast<fn_DynArray_Resize_t>(
         ResolveAddr(Module::Exe, 0x14000a590));
     fn_StringArray_Resize = reinterpret_cast<fn_StringArray_Resize_t>(
@@ -2269,8 +2133,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400198a0));
     fn_WeatherExternalSerialize = reinterpret_cast<fn_WeatherExternalSerialize_t>(
         ResolveAddr(Module::Exe, 0x1400196a0));
-    fn_ToolbarDescription_cleanup = reinterpret_cast<fn_ToolbarDescription_cleanup_t>(
-        ResolveAddr(Module::Exe, 0x14012db70));
 
     // TutorialSetupDialog helpers (exe-internal)
     fn_SerializeExternalPtr = reinterpret_cast<fn_SerializeExternalPtr_t>(
@@ -2283,8 +2145,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400e2330));
     fn_TSD_FindInstance = reinterpret_cast<fn_TSD_FindInstance_t>(
         ResolveAddr(Module::Exe, 0x1400e24f0));
-    fn_TSD_FindByString = reinterpret_cast<fn_TSD_FindByString_t>(
-        ResolveAddr(Module::Exe, 0x1400e1600));
     fn_SetFollowBuilding = reinterpret_cast<fn_SetFollowBuilding_t>(
         ResolveAddr(Module::Exe, 0x140101a80));
     fn_SetEditMode = reinterpret_cast<fn_SetEditMode_t>(
@@ -2372,8 +2232,6 @@ bool EngineFuncsInit() {
     printf("[EngineFuncs] Phase I: Work class helpers resolved\n");
 #endif
     // --- BuildStructure support ---
-    fn_Work_SerializeBase = reinterpret_cast<fn_Work_SerializeBase_t>(
-        ResolveAddr(Module::Exe, 0x1400f7400));
     fn_BST_SerializeHelper = reinterpret_cast<fn_BST_SerializeHelper_t>(
         ResolveAddr(Module::Exe, 0x1400296b0));
     fn_Entity_FindComponent_Position = reinterpret_cast<fn_Entity_FindComponent_Position_t>(
@@ -2459,9 +2317,6 @@ bool EngineFuncsInit() {
     g_pSingletonExref_151a80 = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x140151a80));
 
-    // TutorialInstance vtable at 0x140160bf8
-    g_TutorialInstanceVtable = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140160bf8));
 #ifdef _DEBUG
     printf("[EngineFuncs] Phase K: Tutorial goal helpers resolved\n");
     printf("  FindUIElementByPath   = %p\n", (void*)fn_FindUIElementByPath);
@@ -2470,7 +2325,6 @@ bool EngineFuncsInit() {
     printf("  TutorialStepExecute   = %p\n", (void*)fn_TutorialStepExecute);
     printf("  TypeId_FTGoal         = %p\n", (void*)g_TypeId_FinishTutorialGoal);
     printf("  SingletonExref_151a80 = %p\n", (void*)g_pSingletonExref_151a80);
-    printf("  TutInstVtable         = %p\n", (void*)g_TutorialInstanceVtable);
 #endif
 
     // ================================================================
@@ -2562,11 +2416,6 @@ bool EngineFuncsInit() {
     printf("  AssignHousing      = %p\n", (void*)fn_CitizenComponent_AssignHousing);
 #endif
 
-    // ============================================================
-    // M3.5 — MenuScene::Serialize generic helpers
-    // ============================================================
-    fn_Geometry_Init = reinterpret_cast<fn_Geometry_Init_t>(
-        ResolveAddr(Module::Exe, 0x1400b00e0));
     // Runtime ctors used by the standalone Reimpl_Geometry_Init body.
     fn_Graphics_Geometry_Ctor = reinterpret_cast<fn_Graphics_Geometry_Ctor_t>(
         ResolveExport("??0Geometry@Graphics@@QEAA@XZ"));
@@ -2663,7 +2512,6 @@ bool EngineFuncsInit() {
 
 #ifdef _DEBUG
     printf("[EngineFuncs] M3.5 MenuScene::Serialize helpers resolved\n");
-    printf("  Geometry_Init           = %p\n", (void*)fn_Geometry_Init);
     printf("  Graphics_Geometry_Ctor  = %p\n", (void*)fn_Graphics_Geometry_Ctor);
     printf("  Video_VertexBuffer_Ctor = %p\n", (void*)fn_Video_VertexBuffer_Ctor);
     printf("  Video_IndexBuffer_Ctor  = %p\n", (void*)fn_Video_IndexBuffer_Ctor);
@@ -2691,50 +2539,6 @@ bool EngineFuncsInit() {
     // ============================================================
 #ifdef _DEBUG
     printf("[EngineFuncs] M3.5 Path B session 4 (0x60B serialize) resolved\n");
-#endif
-
-    // ============================================================
-    // M3.5 Path B session 6 — heightmap mesh-build path helpers.
-    // ============================================================
-    // sub_c1e0 (0x1400ac1e0) — top-level mesh builder. Called from
-    // Geometry::Serialize step 5 to allocate VertexBuffer/IndexBuffer at
-    // self+0x100/+0x120 and fill them from the deserialized heightmap.
-    fn_TradeWork_sub_c1e0 = reinterpret_cast<fn_TradeWork_sub_c1e0_t>(
-        ResolveAddr(Module::Exe, 0x1400ac1e0));
-    // FUN_1400ac880 — per-cell vertex-block compute (writes 16-byte verts).
-    fn_TradeWork_FUN_ac880 = reinterpret_cast<fn_TradeWork_FUN_ac880_t>(
-        ResolveAddr(Module::Exe, 0x1400ac880));
-    // helper_e270 (0x1400ae270) — vertex normal compute via heightmap deltas.
-    fn_TradeWork_helper_e270 = reinterpret_cast<fn_TradeWork_helper_e270_t>(
-        ResolveAddr(Module::Exe, 0x1400ae270));
-    // Chunk-streaming (0x1400aad50, dispatched via JMP thunk 0x1400aed40 from
-    // Geometry vtable +0x08). Per-frame walk of dirty-chunk tree at self+0xE8
-    // that re-uploads regenerated vertex data via Video::VertexBuffer::Set.
-    fn_Geometry_ChunkUpdate = reinterpret_cast<fn_Geometry_ChunkUpdate_t>(
-        ResolveAddr(Module::Exe, 0x1400aad50));
-#ifdef _DEBUG
-    printf("[EngineFuncs] M3.5 Path B session 6 (heightmap mesh build) resolved\n");
-    printf("  TradeWork_sub_c1e0      = %p\n", (void*)fn_TradeWork_sub_c1e0);
-    printf("  TradeWork_FUN_ac880     = %p\n", (void*)fn_TradeWork_FUN_ac880);
-    printf("  TradeWork_helper_e270   = %p\n", (void*)fn_TradeWork_helper_e270);
-    printf("  Geometry_ChunkUpdate    = %p\n", (void*)fn_Geometry_ChunkUpdate);
-#endif
-
-    // ============================================================
-    // M3.5 Path B session 7 — image-buffer heightmap upload helper.
-    // ============================================================
-    // sub_c780 (0x1400ac780) — final IsLoading-only step in
-    // Geometry::Serialize that allocates a Video::ImageBuffer at self+0x148,
-    // sets the custom NoiseUI vtable, and uploads the heightmap raw bytes
-    // (self+0x140) into a texture via Device::Lock + CopyToTexture +
-    // Device::Unlock. Those three are members of the real Video classes since
-    // ENDGAME B.3.5; what is still wired here is fn_ImageBuffer_Ctor (a ctor door),
-    // g_pVideoDeviceSingleton and g_NoiseUI_ImageBufferVtable.
-    fn_TradeWork_sub_c780 = reinterpret_cast<fn_TradeWork_sub_c780_t>(
-        ResolveAddr(Module::Exe, 0x1400ac780));
-#ifdef _DEBUG
-    printf("[EngineFuncs] M3.5 Path B session 7 (image-buffer upload) resolved\n");
-    printf("  TradeWork_sub_c780      = %p\n", (void*)fn_TradeWork_sub_c780);
 #endif
 
     // ============================================================

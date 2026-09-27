@@ -398,9 +398,3 @@ void ResourceProduceComponent::Persist(void* stream) {
     scope.Serialize(*reinterpret_cast<bool*>(&produceFlag), nullptr);
 }
 
-// The by-address door of slot 3 (standalone/reg_component_economy.cpp:97). No
-// reader of 0x14012b4a0 remains in the tree (the six leaf Persist bodies call
-// ResourceProduceComponent::Persist directly); the row can go at the closing pass.
-void ResourceProduceComponent_BaseShutdown(void* self, void* stream) {
-    reinterpret_cast<ResourceProduceComponent*>(self)->ResourceProduceComponent::Persist(stream);   // B.3.8 bridge
-}

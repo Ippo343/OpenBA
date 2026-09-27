@@ -50,7 +50,7 @@
 
 // The instant footprint sweep lives in clearareacomponent.cpp (also used by the
 // harness + the _flag5 instant path). Reused here for the guarded sweep.
-struct ClearAreaComponent;
+class ClearAreaComponent;
 extern int ClearAreaComponent_FootprintSweep(ClearAreaComponent* self);
 
 // ============================================================
