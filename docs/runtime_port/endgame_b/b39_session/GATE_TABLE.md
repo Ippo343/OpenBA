@@ -26,3 +26,8 @@ loader path (`ModelComponent::Startup` → `MeshInstance::SetMesh` → `ArrayAss
 `DXGI_ERROR_DEVICE_REMOVED` (0x887a0005) recoveries repeat (main 76 in 600 s, baseline 34 in 420 s) and the
 scripted pause-menu quit is never reached on either. The step-9 gate for seam-touching merges is (3):
 INJECT=1, COMPLETE>=1, crash log 0.
+
+| merge | main | builds | warnings new | unit | routes (new game / tutorial / load) | resave | mint (vt/ti/storage) | RT_DELDTOR | extra routes | problems |
+|---|---|---|---|---|---|---|---|---|---|---|
+| b39-SYS (W1: System::Thread real ctor/dtor; Timer x5, Error x3, Configuration class statics) | 27b8ca2a | ok | 0 | 836 | 5683/0 · 5773/12 · 4766 | 5/5 | 58/104/38 | 53 | — | 0 |
+| b39-C45 (caller batches C4+C5: Action / Goal / Entity / Dialog / Player / Tutorial / Game type-id cells) | 5f13d9b1 | ok | 0 | 836 | 5683/0 · 5773/12 · 4758 | 5/5 | 58/104/38 | 53 | tools x3 exit 0; Mods, Quit / Options / Achievements exit 0; GoalDialog opens | 0 |
