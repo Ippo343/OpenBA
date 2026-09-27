@@ -18,6 +18,7 @@
 
 #include "Player/BridgeTool.h"
 #include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
+#include "Component/CreateBridgeDescription.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -55,14 +56,14 @@ void BridgeTool::Startup() {
     uintptr_t entity = (uintptr_t)descriptionPtr;
     void* result = nullptr;
 
-    if (!entity || !g_TypeId_CreateBridgeDescription || !fn_IsDerivedFrom) {
+    if (!entity || !fn_IsDerivedFrom) {
         bridgeDesc = nullptr;
         return;
     }
 
     int count = *(int*)(entity + 0x30);
     void** components = *(void***)(entity + 0x28);
-    uint32_t targetTypeId = *g_TypeId_CreateBridgeDescription;
+    uint32_t targetTypeId = CreateBridgeDescription::TypeId();  // cell 0x1401c73f8
 
     for (int i = 0; i < count; i++) {
         void* comp = components[i];

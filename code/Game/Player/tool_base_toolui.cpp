@@ -18,6 +18,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/ToolbarDescription.h"   // X::TypeId() (B.3.8 callers)
 #include "ui/DialogInstance.h"  // ENDGAME B.3.8 CB4: the real UI::DialogInstance
+#include "ui/Dialog.h"          // UI::Dialog::TypeId() (D5, ENDGAME B.3.9 CG3)
 #include <new>
 
 // ============================================================
@@ -83,7 +84,7 @@ extern "C" uintptr_t ToolUI_ChildDialogVtable() {
 //     fn_MemAlloc, fn_UI_AddDialog  — engine_funcs exports; UI::DialogInstance's
 //     real ctor (block RB)
 //   - ::Object::ExternalFactory::FindOrLoad — member call (B.3.3)
-//   - g_pGameWorldSingleton, g_pExternalFactorySingleton, g_TypeId_Dialog,
+//   - g_pGameWorldSingleton, g_pExternalFactorySingleton, UI::Dialog::TypeId(),
 //     g_pMemAllocSingleton  — singleton globals
 //   - DWORD_1401c7f58  — exe type-id storage global (ResolveAddr, lazily)
 //   No unregistered exe sub-calls.
@@ -115,8 +116,8 @@ extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint6
                 reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton);  // B.3.3 bridge
             obj = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fname)));
         }
-        if (obj && fn_IsDerivedFrom && g_TypeId_Dialog &&
-            fn_IsDerivedFrom(obj, *g_TypeId_Dialog)) {
+        if (obj && fn_IsDerivedFrom &&
+            fn_IsDerivedFrom(obj, UI::Dialog::TypeId())) {
             resource = obj;
         }
     }

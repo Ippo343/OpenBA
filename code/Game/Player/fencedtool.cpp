@@ -27,6 +27,10 @@
 #include "math/Math.h"
 #include "resolve.h"
 #include "Player/RotationSetting.h"   // ENDGAME B.3.9 CB: 0x1401c63c8 cell class
+#include "Component/CreateFencedDescription.h"
+#include "Component/MapDescription.h"
+#include "Component/ModelDescription.h"
+#include "Component/CreatePlacedDescription.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -769,10 +773,13 @@ static void* FencedFindComponent(uintptr_t entity, uint32_t targetTypeId) {
 // setting its mesh from the FenceDescription's model.
 //
 // Component lookups:
-//   1. CreateFencedDescription (DAT_1401c4100) on self->entity -> self->fencedDesc (+0x38)
-//   2. AreaDescription (DAT_1401c7a18) on self->entity -> self->areaDesc (+0x40)
-//   3. FenceDescription (DAT_1401c7a88) on fencedDesc->entity -> self->fenceDesc (+0x48)
-//   4. SizeDescription (DAT_1401c7468) on fencedDesc->entity -> self->_field5C, _field60
+//   1. CreateFencedDescription (cell 0x1401c4100) on self->entity -> self->fencedDesc (+0x38)
+//   2. MapDescription (cell 0x1401c7a18; global "AreaDescription" lies — D5) on
+//      self->entity -> self->areaDesc (+0x40)
+//   3. ModelDescription (cell 0x1401c7a88; global "FenceDescription" lies) on
+//      fencedDesc->entity -> self->fenceDesc (+0x48)
+//   4. CreatePlacedDescription (cell 0x1401c7468; global "SizeDescription" lies) on
+//      fencedDesc->entity -> self->_field5C, _field60
 //
 // Also resolves RotationSetting IBP from toolSetting and allocates MeshInstance.
 // Original: 0x1400dcd50
@@ -780,10 +787,7 @@ void FencedTool::Startup() {
 
     // 1. Find CreateFencedDescription on self->entity (+0x20)
     uintptr_t entity = (uintptr_t)descriptionPtr;
-    void* fencedDesc = nullptr;
-    if (g_TypeId_CreateFencedDescription) {
-        fencedDesc = FencedFindComponent(entity, *g_TypeId_CreateFencedDescription);
-    }
+    void* fencedDesc = FencedFindComponent(entity, CreateFencedDescription::TypeId());
     this->fencedDesc = fencedDesc;
     // SA guard (retail would fault): without the CreateFencedDescription every
     // later step derefs null+0x28. Reachable when the 0x1401c4100 type-id
@@ -791,27 +795,19 @@ void FencedTool::Startup() {
     // createfenced block. Trace loudly — a silent bail here cost a crash-debug.
     if (!fencedDesc) {
         fprintf(stderr, "[FencedTool] Startup: no CreateFencedDescription on entity=%p "
-                "(tid ptr=%p) — tool left un-wired\n", (void*)entity,
-                (void*)g_TypeId_CreateFencedDescription);
+                "(tid=0x%x) — tool left un-wired\n", (void*)entity,
+                CreateFencedDescription::TypeId());
         return;
     }
 
-    // 2. Find AreaDescription on self->entity (+0x20)
+    // 2. Find MapDescription on self->entity (+0x20)
     entity = (uintptr_t)descriptionPtr;
-    void* areaDesc = nullptr;
-    // Value-check, not just pointer: a registered-but-zero slot would make this search
-    // for type-id 0 and match nothing forever (see reg_pipeline_typeids.cpp 0x1401c7a18).
-    if (g_TypeId_AreaDescription && *g_TypeId_AreaDescription) {
-        areaDesc = FencedFindComponent(entity, *g_TypeId_AreaDescription);
-    }
+    void* areaDesc = FencedFindComponent(entity, MapDescription::TypeId());
     this->areaDesc = areaDesc;
 
-    // 3. Find FenceDescription on fencedDesc->entity (+0x28)
+    // 3. Find ModelDescription on fencedDesc->entity (+0x28)
     uintptr_t fencedDescEntity = *(uintptr_t*)((uintptr_t)this->fencedDesc + 0x28);
-    void* fenceDesc = nullptr;
-    if (g_TypeId_FenceDescription) {
-        fenceDesc = FencedFindComponent(fencedDescEntity, *g_TypeId_FenceDescription);
-    }
+    void* fenceDesc = FencedFindComponent(fencedDescEntity, ModelDescription::TypeId());
     this->fenceDesc = fenceDesc;
 
     // 4. Resolve RotationSetting from toolSetting IBP (+0x18)
@@ -832,22 +828,16 @@ void FencedTool::Startup() {
         rotationSetting = localIBP;
     }
 
-    // 5. Find SizeDescription on fencedDesc->entity -> read +0x44 and +0x48
+    // 5. Find CreatePlacedDescription on fencedDesc->entity -> read +0x44 and +0x48
     uintptr_t fencedDescEntity2 = *(uintptr_t*)((uintptr_t)this->fencedDesc + 0x28);
-    void* sizeDesc1 = nullptr;
-    if (g_TypeId_SizeDescription) {
-        sizeDesc1 = FencedFindComponent(fencedDescEntity2, *g_TypeId_SizeDescription);
-    }
-    // Read field +0x44 from SizeDescription -> self->_field5C
+    void* sizeDesc1 = FencedFindComponent(fencedDescEntity2, CreatePlacedDescription::TypeId());
+    // Read field +0x44 from CreatePlacedDescription -> self->_field5C
     _field5C = *(uint32_t*)((uintptr_t)sizeDesc1 + 0x44);
 
-    // Find SizeDescription again for +0x48 (original code does two separate lookups)
+    // Find CreatePlacedDescription again for +0x48 (original code does two separate lookups)
     uintptr_t fencedDescEntity3 = *(uintptr_t*)((uintptr_t)this->fencedDesc + 0x28);
-    void* sizeDesc2 = nullptr;
-    if (g_TypeId_SizeDescription) {
-        sizeDesc2 = FencedFindComponent(fencedDescEntity3, *g_TypeId_SizeDescription);
-    }
-    // Read field +0x48 from SizeDescription -> self->_field60
+    void* sizeDesc2 = FencedFindComponent(fencedDescEntity3, CreatePlacedDescription::TypeId());
+    // Read field +0x48 from CreatePlacedDescription -> self->_field60
     _field60 = *(uint32_t*)((uintptr_t)sizeDesc2 + 0x48);
 
     // 6. Allocate MeshInstance (0x120 bytes, alignment 8)
