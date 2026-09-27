@@ -847,14 +847,11 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?Serialize@Type@Object@@QEAAXAEAVSerializer@IO@@@Z"));
     RegisterDispatchSlot(0x1401518c8,
         (uintptr_t)ResolveExport("?Serialize@ElementDescription@UI@@UEAA_NAEAVStream@IO@@@Z"));
-    RegisterDispatchSlot(0x1401518b8,
-        (uintptr_t)ResolveExport("??1ElementDescription@UI@@UEAA@XZ"));
-    RegisterDispatchSlot(0x1401518b0,
-        (uintptr_t)ResolveExport("??0ElementDescription@UI@@QEAA@XZ"));
+    // (0x1401518b8 ??1ElementDescription / 0x1401518b0 ??0ElementDescription /
+    // 0x1401518d8 ??0Element: rows deleted at ENDGAME B.3.9 EXA — their only
+    // readers were engine_funcs door globals with no callers.)
     RegisterDispatchSlot(0x1401518d0,
         (uintptr_t)ResolveExport("?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z"));
-    RegisterDispatchSlot(0x1401518d8,
-        (uintptr_t)ResolveExport("??0Element@UI@@QEAA@XZ"));
     RegisterDispatchSlot(0x1401518e0,
         (uintptr_t)ResolveExport("??1Element@UI@@UEAA@XZ"));
     RegisterDispatchSlot(0x1401518e8,
@@ -1307,20 +1304,9 @@ static void RegisterDispatchSlots() {
     // leave this slot zero-filled until something else needs it.
     RegisterDispatchSlot(0x140151728, 0);
 
-    // Object::External::External — dispatch slot for the External base ctor.
-    // engine_funcs.cpp reads it (EngineFuncsInit):
-    //   dispatch = ResolveAddr(Module::Exe, 0x140151e98);
-    //   fn_External_External = *(fn_t*)dispatch;
-    // So the slot must hold a pointer to the Runtime's External::External.
-    // Mangled: ??0External@Object@@QEAA@XZ (default ctor, public non-virtual).
-    RegisterDispatchSlot(0x140151e98,
-        (uintptr_t)ResolveExport("??0External@Object@@QEAA@XZ"));
-
-    // Object::External::~External — paired dtor for the same dispatch pattern.
-    // engine_funcs.cpp (fn_External_Dtor) and controller_live_base.cpp read slot
-    // 0x140151ea0 the same way.
-    RegisterDispatchSlot(0x140151ea0,
-        (uintptr_t)ResolveExport("??1External@Object@@UEAA@XZ"));
+    // (0x140151e98 ??0External / 0x140151ea0 ??1External: rows deleted at
+    // ENDGAME B.3.9 EXA — their only readers, engine_funcs' fn_External_External
+    // / fn_External_Dtor, had no callers.)
 
     // Object::Base::IsA — dispatch slot 0x140151410, read as `CALL qword ptr [...]`.
     // The slot was bound to exe 0x140002d40, which is NOT IsA (it is

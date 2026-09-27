@@ -273,10 +273,6 @@ extern void** g_pAppSingleton;
 // UI infrastructure (DialogController, Element, TextElement)
 // ============================================================
 
-// UI::DialogInstance::~DialogInstance(this) — virtual base dtor
-// Resets vtable to DialogInstance, cleans up dialog fields, calls Internal::~Internal
-typedef void (*fn_DialogInstance_Dtor_t)(void* self);
-extern fn_DialogInstance_Dtor_t fn_DialogInstance_Dtor;
 
 // System::MemoryAllocator::MemFree(ptr) — static, gets singleton internally
 // Used by scalar deleting destructors for conditional free
@@ -1055,15 +1051,9 @@ inline void ResolveExternalByName_Impl(void* nameString) {
     *(int32_t*)(s + 0x08) = factoryGen;
 }
 
-// Object::External::External(this) — base class constructor/reinit
-// Runtime function at dispatch table 0x140151e98
-typedef void (*fn_External_External_t)(void* self);
-extern fn_External_External_t fn_External_External;
-
-// Object::External::~External(this) — base class destructor
-// Runtime function at dispatch table 0x140151ea0
-typedef void (*fn_External_Dtor_t)(void* self);
-extern fn_External_Dtor_t fn_External_Dtor;
+// (fn_External_External / fn_External_Dtor — the ??0/??1External doors read
+// through exe slots 0x140151e98 / 0x140151ea0 — went at ENDGAME B.3.9 EXA:
+// zero readers.)
 
 // ============================================================
 // Phase F Wave 2C: EntityUI::Slot8, ResidenceUI::Slot7, EventNotifyDialog::Slot7
@@ -1958,13 +1948,6 @@ extern fn_Entity_FindAudioComponent_t fn_Entity_FindAudioComponent;
 typedef void* (*fn_Graphics_ParticleSystemInstance_Ctor_t)(void* self);
 extern fn_Graphics_ParticleSystemInstance_Ctor_t fn_Graphics_ParticleSystemInstance_Ctor;
 
-// Graphics::Particle::Particle() — default ctor for the Particle base class
-// (Runtime 0x180103e80, export ??0Particle@Graphics@@QEAA@XZ). Initializes the
-// [0x00,0x48) base region + base vtable. Used by the standalone Tornado factory
-// (code/Game/Game/tornado.cpp), which then fills the Tornado-specific float
-// block at +0x48.. — mirrors the exe ctor FUN_1400d23c0's first call.
-typedef void* (*fn_Graphics_Particle_Ctor_t)(void* self);
-extern fn_Graphics_Particle_Ctor_t fn_Graphics_Particle_Ctor;
 
 // ENDGAME B.3.5 (b35-K2): `fn_Graphics_ParticleInstance_IncrementInstanceIndex`
 // (?IncrementInstanceIndex@ParticleInstance@Graphics@@SAXXZ) is GONE — zero
@@ -2358,17 +2341,9 @@ extern fn_MessageDialog_Ctor_t fn_MessageDialog_Ctor;
 // Description class reimpl support (shared serialization helpers)
 // ============================================================
 
-// UI::ElementDescription::~ElementDescription(this) — base destructor
-typedef void (*fn_ElementDescription_Dtor_t)(void* self);
-extern fn_ElementDescription_Dtor_t fn_ElementDescription_Dtor;
-
-// UI::ElementDescription::ElementDescription(this) — base constructor
-typedef void (*fn_ElementDescription_Ctor_t)(void* self);
-extern fn_ElementDescription_Ctor_t fn_ElementDescription_Ctor;
-
-// UI::Element::Element(this) — Element base constructor
-typedef void (*fn_Element_Ctor_t)(void* self);
-extern fn_Element_Ctor_t fn_Element_Ctor;
+// (fn_ElementDescription_Dtor / _Ctor and fn_Element_Ctor — doors read through
+// exe slots 0x1401518b8 / 0x1401518b0 / 0x1401518d8 — went at ENDGAME B.3.9
+// EXA: zero readers.)
 
 // SerializerEncodingVCall — REMOVED, ENDGAME B.3.4a closing 2d. It hand-rolled
 // a virtual dispatch through the 24-byte Serializer's encoding sub-object at
@@ -3600,11 +3575,6 @@ extern fn_FindWorkplaceComp_t fn_FindWorkplaceComp;
 // Achievement Goal support (code/Game/Goal/)
 // ============================================================
 
-// Achievement::Goal::Goal() (Runtime 0x18009ed50, ordinal 207)
-// ??0Goal@Achievement@@QEAA@XZ — default ctor, zeroes base fields (a ctor
-// mangles as ??0; this line said "?Goal@..." until 2026-09-06)
-typedef void (*fn_Goal_BaseCtor_t)(void* self);
-extern fn_Goal_BaseCtor_t fn_Goal_BaseCtor;
 
 // Object::InternalBasePtr::Serialize — REMOVED, ENDGAME B.3.4a closing 2d
 // (0 CALLs; every site is now a member call on a real InternalBasePtr).
@@ -3895,11 +3865,9 @@ extern fn_CitizenComponent_AssignHousing_t fn_CitizenComponent_AssignHousing;
 
 // Runtime DLL ctors used by Reimpl_Geometry_Init when the cleaned body runs
 // (standalone mode: exe 0x1400b00e0 is registered to the wrapper).
-//   ??0Geometry@Graphics@@QEAA@XZ      — Runtime 0x1800a4270
 //   ??0VertexBuffer@Video@@QEAA@XZ     — Runtime 0x1800f55f0
 //   ??0IndexBuffer@Video@@QEAA@XZ      — Runtime 0x1800f3490
-typedef void (*fn_Graphics_Geometry_Ctor_t)(void* self);
-extern fn_Graphics_Geometry_Ctor_t fn_Graphics_Geometry_Ctor;
+// (fn_Graphics_Geometry_Ctor went at ENDGAME B.3.9 EXA: zero readers.)
 typedef void (*fn_Video_VertexBuffer_Ctor_t)(void* self);
 extern fn_Video_VertexBuffer_Ctor_t fn_Video_VertexBuffer_Ctor;
 typedef void (*fn_Video_IndexBuffer_Ctor_t)(void* self);

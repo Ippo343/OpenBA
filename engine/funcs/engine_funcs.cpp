@@ -89,7 +89,6 @@ fn_ParseValue_t fn_ParseValue = nullptr;
 // Persistence
 void** g_pPersistenceSingleton = nullptr;
 
-fn_DialogInstance_Dtor_t fn_DialogInstance_Dtor = nullptr;
 fn_MemFreeStatic_t fn_MemFreeStatic = nullptr;
 fn_InternalBasePtr_Ctor_t fn_InternalBasePtr_Ctor = nullptr;
 
@@ -283,8 +282,6 @@ uint32_t* g_TypeId_CheckElement = nullptr;
 uint32_t* g_TypeId_ToolbarDialogParent = nullptr;
 uint32_t* g_TypeId_ComboElement = nullptr;
 // fn_ResolveExternalByName — REPLACED with inline ResolveExternalByName_Impl in engine_funcs.h
-fn_External_External_t fn_External_External = nullptr;
-fn_External_Dtor_t fn_External_Dtor = nullptr;
 
 fn_EditTool_SelectEntity_t fn_EditTool_SelectEntity = nullptr;
 float* g_pAgeMultiplier = nullptr;
@@ -485,7 +482,6 @@ fn_AudioObjectGroup_Ctor_t fn_AudioObjectGroup_Ctor = nullptr;
 fn_AudioScene_RegisterObject_t fn_AudioScene_RegisterObject = nullptr;
 fn_Entity_FindAudioComponent_t fn_Entity_FindAudioComponent = nullptr;
 fn_Graphics_ParticleSystemInstance_Ctor_t fn_Graphics_ParticleSystemInstance_Ctor = nullptr;
-fn_Graphics_Particle_Ctor_t fn_Graphics_Particle_Ctor = nullptr;
 
 // --- MenuScene 3D rendering (Phase A) ---
 fn_Graphics_Renderer_Ctor_t      fn_Graphics_Renderer_Ctor      = nullptr;
@@ -556,9 +552,6 @@ fn_UpdateAutoSaveTimer_t fn_UpdateAutoSaveTimer = nullptr;
 uint32_t* g_TypeId_AutoSaveDialogType = nullptr;
 fn_RegisterDefaultInputBindings_t fn_RegisterDefaultInputBindings = nullptr;
 
-fn_ElementDescription_Dtor_t fn_ElementDescription_Dtor = nullptr;
-fn_ElementDescription_Ctor_t fn_ElementDescription_Ctor = nullptr;
-fn_Element_Ctor_t fn_Element_Ctor = nullptr;
 fn_ExternalPtr_Serialize_t fn_ExternalPtr_Serialize = nullptr;
 fn_ExternalPtr_Serialize2_t fn_ExternalPtr_Serialize2 = nullptr;
 fn_ExternalPtr_Serialize3_t fn_ExternalPtr_Serialize3 = nullptr;
@@ -632,7 +625,6 @@ fn_CitizenComponent_CheckWorkplaceValid_t fn_CitizenComponent_CheckWorkplaceVali
 fn_FindStorageLocationComp_t fn_FindStorageLocationComp = nullptr;
 fn_FindWorkplaceComp_t fn_FindWorkplaceComp = nullptr;
 
-fn_Goal_BaseCtor_t fn_Goal_BaseCtor = nullptr;
 fn_ExternalPtr_SerializeTutorial_t fn_ExternalPtr_SerializeTutorial = nullptr;
 fn_BuildingTypeArray_Dtor_t fn_BuildingTypeArray_Dtor = nullptr;
 fn_FindUIElementByPath_t fn_FindUIElementByPath = nullptr;
@@ -791,7 +783,6 @@ fn_TreeRecursiveFree_t fn_TreeRecursiveFree = nullptr;
 fn_ObjectInternal_Dtor_t fn_ObjectInternal_Dtor = nullptr;
 fn_StateMachine_ReleaseTasks_t fn_StateMachine_ReleaseTasks = nullptr;
 
-fn_Graphics_Geometry_Ctor_t fn_Graphics_Geometry_Ctor = nullptr;
 fn_Video_VertexBuffer_Ctor_t fn_Video_VertexBuffer_Ctor = nullptr;
 fn_Video_IndexBuffer_Ctor_t fn_Video_IndexBuffer_Ctor = nullptr;
 
@@ -905,9 +896,6 @@ bool EngineFuncsInit() {
 
     // --- UI infrastructure ---
 
-    // UI::DialogInstance::~DialogInstance — virtual base dtor
-    fn_DialogInstance_Dtor = reinterpret_cast<fn_DialogInstance_Dtor_t>(
-        ResolveExport("??1DialogInstance@UI@@UEAA@XZ"));
 
     // System::MemoryAllocator::MemFree — static, single arg
     fn_MemFreeStatic = reinterpret_cast<fn_MemFreeStatic_t>(
@@ -1297,20 +1285,6 @@ bool EngineFuncsInit() {
         }
     }
     // fn_ResolveExternalByName — REPLACED with inline ResolveExternalByName_Impl in engine_funcs.h
-    // Object::External::External — runtime dispatch at 0x140151e98
-    {
-        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151e98));
-        if (dispatch && *dispatch) {
-            fn_External_External = reinterpret_cast<fn_External_External_t>(*dispatch);
-        }
-    }
-    // Object::External::~External — runtime dispatch at 0x140151ea0
-    {
-        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151ea0));
-        if (dispatch && *dispatch) {
-            fn_External_Dtor = reinterpret_cast<fn_External_Dtor_t>(*dispatch);
-        }
-    }
 
     fn_EditTool_SelectEntity = reinterpret_cast<fn_EditTool_SelectEntity_t>(
         ResolveAddr(Module::Exe, 0x1400fd3b0));
@@ -1843,13 +1817,9 @@ bool EngineFuncsInit() {
     // doors keep their rows.
     fn_Graphics_ParticleSystemInstance_Ctor = reinterpret_cast<fn_Graphics_ParticleSystemInstance_Ctor_t>(
         ResolveExport("??0ParticleSystemInstance@Graphics@@QEAA@XZ"));
-    fn_Graphics_Particle_Ctor = reinterpret_cast<fn_Graphics_Particle_Ctor_t>(
-        ResolveExport("??0Particle@Graphics@@QEAA@XZ"));
     printf("[EngineFuncs] MenuDLT static-mesh + particle helpers:\n"
-           "  ParticleSystemInstance::Ctor  = %p\n"
-           "  Particle::Ctor                = %p\n",
-           (void*)fn_Graphics_ParticleSystemInstance_Ctor,
-           (void*)fn_Graphics_Particle_Ctor);
+           "  ParticleSystemInstance::Ctor  = %p\n",
+           (void*)fn_Graphics_ParticleSystemInstance_Ctor);
     fflush(stdout);
 
     // --- MenuScene 3D rendering (Phase A) ---
@@ -2053,12 +2023,6 @@ bool EngineFuncsInit() {
     fn_MessageDialog_Ctor = reinterpret_cast<fn_MessageDialog_Ctor_t>(
         ResolveAddr(Module::Exe, 0x14006d300));
 
-    fn_ElementDescription_Dtor = *reinterpret_cast<fn_ElementDescription_Dtor_t*>(
-        ResolveAddr(Module::Exe, 0x1401518b8));
-    fn_ElementDescription_Ctor = *reinterpret_cast<fn_ElementDescription_Ctor_t*>(
-        ResolveAddr(Module::Exe, 0x1401518b0));
-    fn_Element_Ctor = *reinterpret_cast<fn_Element_Ctor_t*>(
-        ResolveAddr(Module::Exe, 0x1401518d8));
     // fn_Serializer_SerializeBulk read slot 0x140152400 here until ENDGAME
     // B.3.4a closing 2d; it was 0-CALL. The slot row itself stays registered.
 
@@ -2220,8 +2184,6 @@ bool EngineFuncsInit() {
     printf("[EngineFuncs] Phase I+J: All work class + BuildStructure helpers resolved\n");
 #endif
 
-    fn_Goal_BaseCtor = reinterpret_cast<fn_Goal_BaseCtor_t>(
-        ResolveExport("??0Goal@Achievement@@QEAA@XZ"));
 
     // InternalBasePtr::Serialize was resolved here until ENDGAME B.3.4a
     // closing 2d; it was 0-CALL.
@@ -2235,7 +2197,6 @@ bool EngineFuncsInit() {
 
 #ifdef _DEBUG
     printf("[EngineFuncs] Achievement Goal support resolved\n");
-    printf("  Goal::Goal()        = %p\n", (void*)fn_Goal_BaseCtor);
 #endif
 
     // --- Phase K: Tutorial Goal helpers ---
@@ -2365,8 +2326,6 @@ bool EngineFuncsInit() {
 #endif
 
     // Runtime ctors used by the standalone Reimpl_Geometry_Init body.
-    fn_Graphics_Geometry_Ctor = reinterpret_cast<fn_Graphics_Geometry_Ctor_t>(
-        ResolveExport("??0Geometry@Graphics@@QEAA@XZ"));
     fn_Video_VertexBuffer_Ctor = reinterpret_cast<fn_Video_VertexBuffer_Ctor_t>(
         ResolveExport("??0VertexBuffer@Video@@QEAA@XZ"));
     fn_Video_IndexBuffer_Ctor = reinterpret_cast<fn_Video_IndexBuffer_Ctor_t>(
@@ -2460,7 +2419,6 @@ bool EngineFuncsInit() {
 
 #ifdef _DEBUG
     printf("[EngineFuncs] M3.5 MenuScene::Serialize helpers resolved\n");
-    printf("  Graphics_Geometry_Ctor  = %p\n", (void*)fn_Graphics_Geometry_Ctor);
     printf("  Video_VertexBuffer_Ctor = %p\n", (void*)fn_Video_VertexBuffer_Ctor);
     printf("  Video_IndexBuffer_Ctor  = %p\n", (void*)fn_Video_IndexBuffer_Ctor);
     printf("  Array_Resize_S20/S08/S14= %p / %p / %p\n",
