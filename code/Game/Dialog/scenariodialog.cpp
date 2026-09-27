@@ -37,6 +37,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Game/Scenario.h"   // X::TypeId() (B.3.9 CG2)
 
 // ============================================================
 // ScenarioDialog::Slot4 (vtable +0x20) — Setup
@@ -113,19 +114,15 @@ void ScenarioDialog::OnOpened() {
         // Get resource[i] from ExternalList: *(array+0x20)[i*8]
         void* resource = *(void**)(*(uintptr_t*)((uintptr_t)scenarioList + 0x20) + (uintptr_t)i * 8);
 
-        // Check IsDerivedFrom(Scenario)
-        // These two rejections used to be silent, which made an empty scenario table
-        // indistinguishable from "no scenarios installed". Report them once.
-        if (!g_TypeId_Scenario) {
-            static bool warned = false;
-            if (!warned) { warned = true;
-                fprintf(stderr, "[ScenarioDialog] g_TypeId_Scenario is NULL (exe slot 0x1401c5b08 unregistered) - every scenario will be skipped\n"); fflush(stderr); }
-            continue;
-        }
-        bool isScenario = fn_IsDerivedFrom(resource, *g_TypeId_Scenario);
+        // Check IsDerivedFrom(Scenario). ENDGAME B.3.9 CG2: g_TypeId_Scenario (cell
+        // 0x1401c5b08) -> Scenario::TypeId(); the "unregistered" null guard was
+        // scaffolding for the unresolved global and goes with the conversion.
+        // This rejection used to be silent, which made an empty scenario table
+        // indistinguishable from "no scenarios installed". Report it once.
+        bool isScenario = fn_IsDerivedFrom(resource, Scenario::TypeId());
         void* scenario = isScenario ? resource : nullptr;
         if (!scenario) {
-            fprintf(stderr, "[ScenarioDialog] resource[%d]=%p rejected by IsDerivedFrom(typeId=%u)\n", i, resource, *g_TypeId_Scenario);
+            fprintf(stderr, "[ScenarioDialog] resource[%d]=%p rejected by IsDerivedFrom(typeId=%u)\n", i, resource, Scenario::TypeId());
             fflush(stderr);
             continue;
         }

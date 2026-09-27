@@ -62,20 +62,11 @@ static int SelectResourceUI_IterateResources(void* self, void* combo, int* selec
     int count = 0;
     int selectedIdx = -1;
 
-    // Belt-and-braces: the .rdata type-id globals are null until seeded
-    // (reg_pipeline_typeids.cpp registers 0x1401c48a8); lazy-resolve by name so
-    // the combo populate never derefs a null pointer (StorageUI EnsureGlobals
-    // pattern).
-    static uint32_t s_sd = 0, s_ce = 0;
-    if (!g_TypeId_SelectDescription) {
-        s_sd = SelectDescription::TypeId();
-        if (s_sd) g_TypeId_SelectDescription = &s_sd;
-    }
-    if (!g_TypeId_ComponentEntity) {
-        s_ce = ComponentEntity::TypeId();
-        if (s_ce) g_TypeId_ComponentEntity = &s_ce;
-    }
-    if (!g_TypeId_SelectDescription || !g_TypeId_ComponentEntity) return 0;
+    // ENDGAME B.3.9 CG2: g_TypeId_SelectDescription (cell 0x1401c48a8) and
+    // g_TypeId_ComponentEntity (cell 0x1401c5d70) -> SelectDescription::TypeId()
+    // / ComponentEntity::TypeId(). The lazy-resolve/heal block that patched the
+    // exe-side globals from the class statics is retired with this conversion;
+    // the statics always answer.
 
     // Get resource type list from game world
     void* gameWorld = *g_pGameWorldSingleton;
@@ -96,7 +87,7 @@ static int SelectResourceUI_IterateResources(void* self, void* combo, int* selec
 
     // Wrap entity at +0x28 in InternalBasePtr (base class requirement)
     void* entity = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
@@ -117,9 +108,9 @@ static int SelectResourceUI_IterateResources(void* self, void* combo, int* selec
             // Virtual call at vtable+0x10 returns type ID
             int subTypeId = reinterpret_cast<Object::Base*>(subComp)->Type();  // B.3.8 bridge
 
-            if (subTypeId == (int)*g_TypeId_SelectDescription) {
+            if (subTypeId == (int)SelectDescription::TypeId()) {
                 void* subObj = *(void**)(subArray + (uintptr_t)j * 8);
-                bool isDerived = fn_IsDerivedFrom(subObj, *g_TypeId_SelectDescription);
+                bool isDerived = fn_IsDerivedFrom(subObj, SelectDescription::TypeId());
                 if (isDerived && subObj != nullptr) {
                     // Check category filter matches
                     int category = *(int*)((uintptr_t)subObj + 0x40);

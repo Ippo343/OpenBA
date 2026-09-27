@@ -23,31 +23,22 @@
 #include "Object/factory_registration.h"
 #include "Dialog/UpgradeUIConfig.h"   // X::TypeId() (B.3.8 callers)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
+#include "runtime/types/ui/ButtonElement.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/ToolbarDescription.h"   // X::TypeId() (B.3.9 CG2)
 
 namespace upgradeui_sa {
 
-// Standalone-local fallbacks for type-id globals that resolve NULL.
-static uint32_t s_cfgTid = 0;   // UpgradeUIConfig
-static uint32_t s_ceTid  = 0;   // ComponentEntity
-
+// ENDGAME B.3.9 CG2: g_TypeId_UpgradeUIConfig -> UpgradeUIConfig::TypeId(),
+// g_TypeId_ComponentEntity -> ComponentEntity::TypeId(), g_TypeId_HelpButtonElem
+// (shares its initialiser exref 0x1401514f8 with g_TypeId_ButtonElement) ->
+// UI::ButtonElement::TypeId(), g_TypeId_ImageElement -> UI::ImageElement::TypeId(),
+// g_TypeId_ToolbarDescription_FC -> ToolbarDescription::TypeId(). The class statics
+// always answer, so the lazy-fill retires.
 void EnsureGlobals() {
-    if (!g_TypeId_UpgradeUIConfig || !*g_TypeId_UpgradeUIConfig) {
-        s_cfgTid = UpgradeUIConfig::TypeId();
-        if (s_cfgTid) g_TypeId_UpgradeUIConfig = &s_cfgTid;
-    }
-    if (!g_TypeId_ComponentEntity) {
-        s_ceTid = ComponentEntity::TypeId();
-        if (s_ceTid) g_TypeId_ComponentEntity = &s_ceTid;
-    }
 }
 
 bool Ready() {
-    return g_TypeId_UpgradeUIConfig && *g_TypeId_UpgradeUIConfig
-        && g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
-        && g_TypeId_HelpButtonElem && *g_TypeId_HelpButtonElem
-        && g_TypeId_ImageElement && *g_TypeId_ImageElement
-        && g_TypeId_ToolbarDescription_FC && *g_TypeId_ToolbarDescription_FC
-        && fn_IsDerivedFrom && fn_InternalBasePtr_Ctor;
+    return fn_IsDerivedFrom && fn_InternalBasePtr_Ctor;
 }
 
 // Serialize is only safe when the bound config is an UpgradeUIConfig with a
@@ -56,7 +47,7 @@ bool Ready() {
 bool ConfigOk(void* self) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* cfg = *reinterpret_cast<void**>(s + 0x10);
-    if (!cfg || !fn_IsDerivedFrom(cfg, *g_TypeId_UpgradeUIConfig)) return false;
+    if (!cfg || !fn_IsDerivedFrom(cfg, UpgradeUIConfig::TypeId())) return false;
     return *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(cfg) + 0x20) != nullptr;
 }
 
@@ -86,14 +77,14 @@ void UpgradeUI::OnCreated() {
 
     // Check if config is an UpgradeUIConfig (its +0x20 holds the upgrade
     // target ComponentEntity template)
-    bool isUpgrade = fn_IsDerivedFrom(desc, *g_TypeId_UpgradeUIConfig);
+    bool isUpgrade = fn_IsDerivedFrom(desc, UpgradeUIConfig::TypeId());
     void* upgradeDesc = isUpgrade ? desc : nullptr;
 
     // CheckPtr on the InternalBasePtr at +0x20 before reading
     void* elem = *(void**)(s + 0x20);
 
     // Check if element is a ButtonElement (exref 0x1401514f8)
-    bool isButton = fn_IsDerivedFrom(elem, *g_TypeId_HelpButtonElem);
+    bool isButton = fn_IsDerivedFrom(elem, UI::ButtonElement::TypeId());
     void* checkedElem = isButton ? elem : nullptr;
 
     // Properly construct InternalBasePtr at +0x30 (button reference)
@@ -111,7 +102,7 @@ void UpgradeUI::OnCreated() {
 
     // Check if child is an ImageElement type
     void* childElem = *(void**)childBuf;
-    bool isImage = fn_IsDerivedFrom(childElem, *g_TypeId_ImageElement);
+    bool isImage = fn_IsDerivedFrom(childElem, UI::ImageElement::TypeId());
     void* checkedImage = isImage ? childElem : nullptr;
 
     // Construct an IBP for the image element
@@ -134,8 +125,8 @@ void UpgradeUI::OnCreated() {
             // Call component vtable[2] to get type ID
             uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
-            if (typeId == *g_TypeId_ToolbarDescription_FC) {
-                void* checked = fn_IsDerivedFrom(comp, *g_TypeId_ToolbarDescription_FC)
+            if (typeId == ToolbarDescription::TypeId()) {
+                void* checked = fn_IsDerivedFrom(comp, ToolbarDescription::TypeId())
                     ? comp : nullptr;
                 buildReqComp = checked;
                 break;
@@ -199,7 +190,7 @@ void UpgradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_
         return;
 
     // Check if data source is a ComponentEntity
-    if (!fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity))
+    if (!fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId()))
         return;
 
     // Find DestroyComponent on the entity
@@ -219,7 +210,7 @@ void UpgradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_
         return;
 
     // Check if config is an UpgradeUIConfig
-    if (!fn_IsDerivedFrom(desc, *g_TypeId_UpgradeUIConfig))
+    if (!fn_IsDerivedFrom(desc, UpgradeUIConfig::TypeId()))
         return;
 
     // Set the upgrade target on DestroyComponent

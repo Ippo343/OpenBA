@@ -50,6 +50,7 @@
 #include "resolve.h"
 #include "object/Internal.h"   // Object::Base::Type (B.3.8 callers)
 #include "engine_funcs.h"
+#include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.9 CG2)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -117,9 +118,7 @@ extern "C" int TradeUI_GetResourcePrice_a520(void* tradeState, void* resourceEnt
     }
 
     // ── Merchant docked: the RawMaterialDescription supplies the category flags.
-    void* rawMat = g_TypeId_RawMaterialDescription
-        ? PriceFindComponentByTypeId(resourceEntity, *g_TypeId_RawMaterialDescription)
-        : nullptr;
+    void* rawMat = PriceFindComponentByTypeId(resourceEntity, RawMaterialDescription::TypeId());
     const uint32_t flags = rawMat
         ? *reinterpret_cast<const uint32_t*>(reinterpret_cast<uint8_t*>(rawMat) + 0x5c)
         : 0;

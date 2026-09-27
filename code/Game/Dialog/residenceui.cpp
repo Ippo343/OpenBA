@@ -71,29 +71,20 @@ static uint64_t FindElemAsBasePtr(void* parentElem, const char* name) {
 
 namespace residenceui_sa {
 
-// Standalone-local fallbacks for exe-.rdata globals that resolve NULL in standalone.
-static uint32_t s_resTid = 0;       // ResidenceComponent type-id
-static uint32_t s_ceTid  = 0;       // ComponentEntity type-id
+// Standalone-local fallback for an exe-.rdata global that resolves NULL in standalone.
 static float    s_ageMul = 1.0f;    // matches citizenui.cpp's SA age-multiplier fallback
 
+// ENDGAME B.3.9 CG2: g_TypeId_ComponentEntity / g_TypeId_ResidenceComponent no longer
+// need healing here — ComponentEntity::TypeId() / ResidenceComponent::TypeId() (the
+// class statics) always answer, so the s_ceTid/s_resTid lazy-fill retires.
 void EnsureGlobals() {
-    if (!g_TypeId_ComponentEntity) {
-        s_ceTid = ComponentEntity::TypeId();
-        if (s_ceTid) g_TypeId_ComponentEntity = &s_ceTid;
-    }
-    if (!g_TypeId_ResidenceComponent) {
-        s_resTid = ResidenceComponent::TypeId();
-        if (s_resTid) g_TypeId_ResidenceComponent = &s_resTid;
-    }
     // g_pAgeMultiplier (0x140172198) is zero-fill in standalone; point it at the same
     // 1.0 fallback citizenui.cpp uses so resident ages match the citizen dialog.
     if (!g_pAgeMultiplier) g_pAgeMultiplier = &s_ageMul;
 }
 
 bool Ready() {
-    return g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
-        && g_TypeId_ResidenceComponent && *g_TypeId_ResidenceComponent
-        && g_pAgeMultiplier
+    return g_pAgeMultiplier
         && g_pGameWorldSingleton && *g_pGameWorldSingleton;
 }
 
@@ -246,7 +237,7 @@ void ResidenceUI::OnUpdateLayout() {
 
     // Get entity from data source +0x28
     void* dataSource = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -255,7 +246,8 @@ void ResidenceUI::OnUpdateLayout() {
     // Find ResidenceComponent — original uses type ID at 0x1401c7cf0 (ResidenceComponent),
     // NOT StorageComponent (0x1401c7e78). Different component with room data at +0x50/+0x58.
     uintptr_t storageComp = 0;
-    Entity_FindComponentByExeTypeId((void*)entityPtr, &storageComp, g_TypeId_ResidenceComponent);
+    uint32_t residenceComponentTypeId = ResidenceComponent::TypeId();
+    Entity_FindComponentByExeTypeId((void*)entityPtr, &storageComp, &residenceComponentTypeId);
 
 #ifdef _DEBUG
 #endif
@@ -495,7 +487,7 @@ static void ResidenceUI_GoToCitizen(ResidenceUI* self, int citizenIndex) {
 
     // Get entity from data source +0x28
     void* dataSource = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge

@@ -26,6 +26,8 @@
 #include "runtime/types/ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/EditElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "input/Input.h"  // ENDGAME B.3.7 callers (K3)
+#include "runtime/types/ui/ButtonElement.h"  // X::TypeId() (B.3.9 CG2)
+#include "Component/CaptureBoxElement.h"   // X::TypeId() (B.3.9 CG2)
 
 // ============================================================
 // SpriteCaptureUI::Serialize (vtable +0x20, 0x140079640)
@@ -43,10 +45,8 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     void* elem = *(void**)foundBuf;
 
     void* editElem = nullptr;
-    if (elem && g_TypeId_EditElement) {
-        if (fn_IsDerivedFrom(elem, *g_TypeId_EditElement))
-            editElem = elem;
-    }
+    if (elem && fn_IsDerivedFrom(elem, UI::EditElement::TypeId()))
+        editElem = elem;
 
     uint64_t tempIBP = 0;
     new (&tempIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(editElem));   // B.3.3 bridge
@@ -61,11 +61,12 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
 
     elem = *(void**)foundBuf;
 
+    // ENDGAME B.3.9 CG2: g_TypeId_HelpButtonElem shares its initialiser (exref
+    // 0x1401514f8) with g_TypeId_ButtonElement -> UI::ButtonElement::TypeId()
+    // (Table 3 name lie: this is not a distinct "help button" element class).
     void* buttonElem = nullptr;
-    if (elem && g_TypeId_HelpButtonElem) {
-        if (fn_IsDerivedFrom(elem, *g_TypeId_HelpButtonElem))
-            buttonElem = elem;
-    }
+    if (elem && fn_IsDerivedFrom(elem, UI::ButtonElement::TypeId()))
+        buttonElem = elem;
 
     tempIBP = 0;
     new (&tempIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(buttonElem));   // B.3.3 bridge
@@ -81,10 +82,8 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     elem = *(void**)foundBuf;
 
     void* captureBoxElem = nullptr;
-    if (elem && g_TypeId_CaptureBoxElement) {
-        if (fn_IsDerivedFrom(elem, *g_TypeId_CaptureBoxElement))
-            captureBoxElem = elem;
-    }
+    if (elem && fn_IsDerivedFrom(elem, CaptureBoxElement::TypeId()))
+        captureBoxElem = elem;
 
     tempIBP = 0;
     new (&tempIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(captureBoxElem));   // B.3.3 bridge

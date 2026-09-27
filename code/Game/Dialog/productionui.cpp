@@ -28,6 +28,9 @@
 #include "runtime/types/ui/LabelElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "runtime/types/ui/NumberElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/RawMaterialDescription.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/TrackerComponent.h"   // X::TypeId() (B.3.9 CG2)
 
 // ============================================================
 // ProductionUI struct layout:
@@ -62,25 +65,17 @@ static void PushElementPair(uintptr_t self, int arrayOffset,
 // (UI::NumberElement — the engine_funcs label "SpinnerElement" is a known
 // misnomer, see standalone/reg_element_typeids.cpp:35).
 //
-// That element-type-id table is registered by reg_element_typeids.cpp, gated on
-// BANISHED_LIVE_ELEMENT_TIDS. That gate GRADUATED into the default-on table 2026-08-22, so by
-// default both globals are now POPULATED; they are null only when someone A/Bs with
-// BANISHED_LIVE_ELEMENT_TIDS=0. We resolve PRIVATE copies by name rather than filling
-// g_TypeId_LabelElement / g_TypeId_NumberElement, because those globals are
-// shared with townhallui / helpui / toolbardialog and waking them on the default
-// path is precisely the broad change that gate exists to hold back. When the gate
-// IS on we use the registry value, so the two paths cannot disagree.
+// ENDGAME B.3.9 CG2: g_TypeId_LabelElement / g_TypeId_NumberElement -> the ported
+// Runtime statics UI::LabelElement::TypeId() / UI::NumberElement::TypeId(). That
+// static is a source independent of the exe-side reflection cell (and the
+// BANISHED_LIVE_ELEMENT_TIDS gate) this file used to read through the shared
+// global via a private by-name fallback; it answers correctly either way, so the
+// ResolveTypeIdByNameLazy fallback retires with this conversion.
 static uint32_t ProductionUI_LabelElementTypeId() {
-    if (g_TypeId_LabelElement && *g_TypeId_LabelElement) return *g_TypeId_LabelElement;
-    static uint32_t s_local = 0;
-    if (!s_local) s_local = ::Object::ResolveTypeIdByNameLazy("LabelElement");
-    return s_local;
+    return UI::LabelElement::TypeId();
 }
 static uint32_t ProductionUI_NumberElementTypeId() {
-    if (g_TypeId_NumberElement && *g_TypeId_NumberElement) return *g_TypeId_NumberElement;
-    static uint32_t s_local = 0;
-    if (!s_local) s_local = ::Object::ResolveTypeIdByNameLazy("NumberElement");
-    return s_local;
+    return UI::NumberElement::TypeId();
 }
 
 // Gate helper for the promotion in ui_dialog_stub_factories.cpp.
@@ -125,19 +120,17 @@ namespace productionui_sa {
     // deliberately NOT published into g_TypeId_LabelElement / g_TypeId_NumberElement,
     // which reg_element_typeids.cpp owns and keeps behind BANISHED_LIVE_ELEMENT_TIDS.
     bool Ready() {
-        bool ok = g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity != 0
-                  && g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription != 0
-                  && g_TypeId_TrackerComponent && *g_TypeId_TrackerComponent != 0
-                  && ProductionUI_TypeIdsReady()
-                  && g_pGameWorldSingleton;
+        // ENDGAME B.3.9 CG2: g_TypeId_ComponentEntity, g_TypeId_RawMaterialDescription,
+        // g_TypeId_TrackerComponent -> the class statics, which always answer.
+        bool ok = g_pGameWorldSingleton;
         static bool s_logged = false;
         if (!s_logged) {
             s_logged = true;
             fprintf(stderr, "[ProductionUI] Ready=%d entity=%u rawmat=%u tracker=%u elementIds=%d\n",
                     (int)ok,
-                    g_TypeId_ComponentEntity        ? *g_TypeId_ComponentEntity        : 0u,
-                    g_TypeId_RawMaterialDescription ? *g_TypeId_RawMaterialDescription : 0u,
-                    g_TypeId_TrackerComponent       ? *g_TypeId_TrackerComponent       : 0u,
+                    ComponentEntity::TypeId(),
+                    RawMaterialDescription::TypeId(),
+                    TrackerComponent::TypeId(),
                     (int)ProductionUI_TypeIdsReady());
             fflush(stderr);
         }
@@ -277,7 +270,7 @@ void ProductionUI::OnCreated() {
 static void UpdateProductionList(uintptr_t self, int listIndex) {
     // Get entity from controller data (+0x28)
     void* entity = *(void**)(self + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
 
     uint64_t entityBP = 0;
@@ -351,8 +344,8 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
             void* subEntry = *(void**)(subArray + (uintptr_t)j * 8);
             // Call GetTypeId virtual (vtable+0x10)
             int typeId = reinterpret_cast<Object::Base*>(subEntry)->Type();  // B.3.8 bridge
-            if (typeId == (int)*g_TypeId_RawMaterialDescription) {
-                if (fn_IsDerivedFrom(subEntry, *g_TypeId_RawMaterialDescription)) {
+            if (typeId == (int)RawMaterialDescription::TypeId()) {
+                if (fn_IsDerivedFrom(subEntry, RawMaterialDescription::TypeId())) {
                     resourceDesc = subEntry;
                 }
                 break;

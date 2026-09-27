@@ -29,6 +29,7 @@
 #include <cstddef>
 #include "Component/WorkPlaceComponent.h"   // X::TypeId() (B.3.8 callers)
 #include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.8 callers)
+#include "Component/WorkDescription.h"   // X::TypeId() (B.3.9 CG2)
 
 // Original FUN_14000d6c0 — FindComponent with type DAT_1401c7008 (guard check only)
 typedef void* (*fn_OrigFindComp_t)(void* entity, void* retval);
@@ -62,7 +63,7 @@ static void WorkplaceUI_AdjustWorkerCount_Impl(void* self, int delta)
 
     // Get entity from panel+0x28
     void* dataSource = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -105,7 +106,7 @@ static void WorkplaceUI_ToggleWorkplace_Impl(void* self)
 
     // Get entity from panel+0x28
     void* dataSource = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -160,25 +161,14 @@ static uint64_t FindElemAsBasePtr(void* dialogElem, const char* name) {
 
 namespace workplaceui_sa {
 
-// The exe-.rdata type-id globals the visibility check dereferences are NULL in
-// standalone. Lazy-fill from the live runtime type registry (valid after
-// Object::Factory::Startup). "WorkPlaceComponent" is the registered name that
-// fn_FindComponent_WorkPlace searches by (slot 0x1401c80e0).
+// ENDGAME B.3.9 CG2: g_TypeId_ComponentEntity -> ComponentEntity::TypeId(),
+// g_TypeId_WorkplaceComponent -> WorkPlaceComponent::TypeId() (cell 0x1401c80e0).
+// Both class statics always answer, so the lazy-fill retires.
 void EnsureGlobals() {
-    static uint32_t s_ce = 0, s_wpc = 0;
-    if (!g_TypeId_ComponentEntity) {
-        s_ce = ComponentEntity::TypeId();
-        if (s_ce) g_TypeId_ComponentEntity = &s_ce;
-    }
-    if (!g_TypeId_WorkplaceComponent) {
-        s_wpc = WorkPlaceComponent::TypeId();
-        if (s_wpc) g_TypeId_WorkplaceComponent = &s_wpc;
-    }
 }
 
 bool Ready() {
-    return g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
-        && g_TypeId_WorkplaceComponent && *g_TypeId_WorkplaceComponent;
+    return true;
 }
 
 // Faithful visibility subset of WorkplaceUI_Startup (0x140087080): show the
@@ -191,7 +181,7 @@ void UpdateVisibility(void* self) {
 
     // Resolve the bound entity (data source at +0x28).
     void* dataSource = *reinterpret_cast<void**>(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -259,7 +249,7 @@ void PopulateCounts(void* self) {
 
     // Bound entity (data source at +0x28).
     void* dataSource = *reinterpret_cast<void**>(s + 0x28);
-    if (!fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity)) return;
+    if (!fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId())) return;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dataSource));   // B.3.3 bridge
     void* entityPtr = *reinterpret_cast<void**>(entityBuf);
@@ -323,16 +313,17 @@ void PopulateCounts(void* self) {
     // resolves it on the WPC's parent entity (WPC+0x10) and lazily CalcMaxWorkers's
     // the +0x30 cache. The natural-builder flow (FindAvailableBuilding) usually has
     // already primed +0x30, so it is read directly; StorageCountQuery only fills it
-    // when still zero, and only when its type-id deps are live (else capacity=0).
+    // when still zero. ENDGAME B.3.9 CG2: the "only when its type-id deps are live"
+    // g_TypeId_WorkDescription readiness gate retired — WorkDescription::TypeId()
+    // (the class static) always answers.
     uint32_t capacity = 0;
-    if (g_TypeId_WorkComponent && *g_TypeId_WorkComponent) {
+    {
         void* parentEntity = *reinterpret_cast<void**>(w + 0x10);
         uint64_t workC = 0;
         fn_FindComponent_Work(parentEntity, &workC);
         if (workC) {
             uintptr_t c = static_cast<uintptr_t>(workC);
-            if (*reinterpret_cast<int*>(c + 0x30) == 0 &&
-                g_TypeId_WorkDescription && *g_TypeId_WorkDescription) {
+            if (*reinterpret_cast<int*>(c + 0x30) == 0) {
                 int n = fn_StorageCountQuery(reinterpret_cast<void*>(c));
                 *reinterpret_cast<int*>(c + 0x30) = n;
             }
@@ -427,7 +418,7 @@ static void SA_AdjustJobCount(void* self, int delta) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
 
     void* dataSource = *reinterpret_cast<void**>(s + 0x28);
-    if (!fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity)) return;
+    if (!fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId())) return;
     uint8_t eb[8];
     new (eb) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dataSource));   // B.3.3 bridge
     void* entityPtr = *reinterpret_cast<void**>(eb);
@@ -455,8 +446,9 @@ static void SA_AdjustJobCount(void* self, int delta) {
         return;
     }
     uintptr_t c = static_cast<uintptr_t>(workC);
-    if (*reinterpret_cast<int*>(c + 0x30) == 0 &&
-        g_TypeId_WorkDescription && *g_TypeId_WorkDescription) {
+    // ENDGAME B.3.9 CG2: g_TypeId_WorkDescription readiness gate retired —
+    // WorkDescription::TypeId() (the class static) always answers.
+    if (*reinterpret_cast<int*>(c + 0x30) == 0) {
         *reinterpret_cast<int*>(c + 0x30) = fn_StorageCountQuery(reinterpret_cast<void*>(c));
     }
     const int cur = *reinterpret_cast<int*>(c + 0x30);
@@ -522,7 +514,7 @@ void WorkPlaceUI::OnCreated() {
 
     // --- Check entity component for job count visibility ---
     void* entity = *(void**)((uintptr_t)this + 0x28);
-    bool isEntity = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
     void* entityPtr = isEntity ? entity : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entityPtr));   // B.3.3 bridge
@@ -545,7 +537,7 @@ void WorkPlaceUI::OnCreated() {
     // for those buildings rather than a behaviour change.
     if (!workComp) return;
     void* subComp = *(void**)((uintptr_t)workComp + 0x18);
-    bool isJobType = fn_IsDerivedFrom(subComp, *g_TypeId_WorkDescription);
+    bool isJobType = fn_IsDerivedFrom(subComp, WorkDescription::TypeId());
 
     if (isJobType && *(uint8_t*)((uintptr_t)subComp + 0x20) == 0) {
         // Hide job count up/down buttons if sub-component flag is zero
@@ -573,7 +565,7 @@ void WorkPlaceUI::OnUpdateLayout() {
 
     // Get entity from data source
     void* dataSource = *(void**)(s + 0x28);
-    bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
+    bool isEntity = fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId());
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
     new (entityBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -590,7 +582,7 @@ void WorkPlaceUI::OnUpdateLayout() {
 
     // Get the WorkDescription off the WorkComponent: +0x18
     void* jobSubComp = *(void**)((uintptr_t)workComp + 0x18);
-    bool isJobType = fn_IsDerivedFrom(jobSubComp, *g_TypeId_WorkDescription);
+    bool isJobType = fn_IsDerivedFrom(jobSubComp, WorkDescription::TypeId());
     void* jobType = isJobType ? jobSubComp : nullptr;
 
     // Check if building is complete: wpComp +0x48 (profession ptr) must be non-null
@@ -927,7 +919,7 @@ void WorkPlaceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, 
 
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
     void* dataSource = *reinterpret_cast<void**>(s + 0x28);
-    if (!fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity)) return;
+    if (!fn_IsDerivedFrom(dataSource, ComponentEntity::TypeId())) return;
     uint8_t eb[8];
     new (eb) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dataSource));   // B.3.3 bridge
     void* entityPtr = *reinterpret_cast<void**>(eb);
