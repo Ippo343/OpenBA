@@ -71,7 +71,6 @@ static fn_ShowTool_t s_fn_ShowToolOnEntity = nullptr;  // 0x1401173b0
 static fn_SetupAge_t        s_fn_SetupElder      = nullptr;
 static fn_AssignHousing_t   s_fn_AssignHousing   = nullptr;
 static fn_AnimInit_t        s_fn_AnimA1f0        = nullptr;
-static const uint32_t*      s_pTid_WorkComp      = nullptr;  // 0x1401c8070 (WorkComponent type-id; unused directly — see note)
 static bool s_lifecycleResolved = false;
 
 static void EnsureLifecycleFuncs() {
@@ -89,7 +88,6 @@ static void EnsureLifecycleFuncs() {
     s_fn_ShowToolOnEntity= reinterpret_cast<fn_ShowTool_t>(ResolveAddr(Module::Exe, 0x1401173b0));
     s_fn_AssignHousing   = reinterpret_cast<fn_AssignHousing_t>(ResolveAddr(Module::Exe, 0x140111ee0));
     s_fn_AnimA1f0        = reinterpret_cast<fn_AnimInit_t>(ResolveAddr(Module::Exe, 0x14010a1f0));
-    s_pTid_WorkComp      = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c8070));
 }
 
 

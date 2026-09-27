@@ -48,6 +48,10 @@
 #include <cstring>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/NaturalResourceComponent.h"     // ENDGAME B.3.9 C1: 0x1401c7b30 cell class
+#include "Component/NaturalResourceDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7b68 cell class
+#include "Component/RawMaterialDescription.h"       // ENDGAME B.3.9 C1: 0x1401c7cb8 cell class
+#include "Component/ClearAreaDescription.h"         // ENDGAME B.3.9 C1: 0x1401c7200 cell class
 
 // The instant footprint sweep lives in clearareacomponent.cpp (also used by the
 // harness + the _flag5 instant path). Reused here for the guarded sweep.
@@ -63,23 +67,12 @@ typedef void  (*fn_WorkSchedPost_t)(uintptr_t workComp, uint32_t code, // ec60
 
 static fn_FindWorkComp_t   s_FindWorkComp   = nullptr;   // 0x140003050
 static fn_WorkSchedPost_t  s_WorkSchedPost  = nullptr;   // 0x14012ec60
-static uint32_t s_tidNatResDesc  = 0;   // 0x1401c7b68  NaturalResourceDescription
-static uint32_t s_tidRawMatDesc  = 0;   // 0x1401c7cb8  RawMaterialDescription
-static uint32_t s_tidNatResComp  = 0;   // 0x1401c7b30  NaturalResourceComponent
 static bool s_resolved = false;
-
-static uint32_t DerefTid(uintptr_t rdata) {
-    uintptr_t g = ResolveAddr(Module::Exe, rdata);
-    return g ? *reinterpret_cast<uint32_t*>(g) : 0;
-}
 
 static void ResolveStates() {
     if (s_resolved) return;
     s_FindWorkComp  = reinterpret_cast<fn_FindWorkComp_t>(ResolveAddr(Module::Exe, 0x140003050));
     s_WorkSchedPost = reinterpret_cast<fn_WorkSchedPost_t>(ResolveAddr(Module::Exe, 0x14012ec60));
-    s_tidNatResDesc = DerefTid(0x1401c7b68);
-    s_tidRawMatDesc = DerefTid(0x1401c7cb8);
-    s_tidNatResComp = DerefTid(0x1401c7b30);
     s_resolved = true;
 }
 
@@ -148,7 +141,8 @@ static bool Grid_AllEmpty(int* grid, int x1, int y1, int w, int h, void* selfEnt
 
 // Scan an entity's component list for a NaturalResourceComponent (type 1c7b30).
 static bool EntityHasNatResComp(void* entity) {
-    if (!entity || !s_tidNatResComp) return false;
+    if (!entity) return false;
+    const uint32_t tidNatResComp = NaturalResourceComponent::TypeId();
     uintptr_t e = reinterpret_cast<uintptr_t>(entity);
     int count = *reinterpret_cast<int*>(e + 0x38);
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(e + 0x30);
@@ -158,8 +152,8 @@ static bool EntityHasNatResComp(void* entity) {
         void* comp = *slot;
         if (!comp) continue;
         uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
-        if (tid == s_tidNatResComp)
-            return fn_IsDerivedFrom && fn_IsDerivedFrom(comp, s_tidNatResComp);
+        if (tid == tidNatResComp)
+            return fn_IsDerivedFrom && fn_IsDerivedFrom(comp, tidNatResComp);
     }
     return false;
 }
@@ -268,7 +262,9 @@ static int ClearArea_CountRemaining(void* comp) {
 // ============================================================
 static uint32_t ClearArea_ScanKindFlags(void* comp, int* grid, int x1, int y1, int w, int h) {
     uint32_t kind = 1;
-    if (!comp || !grid || !s_tidNatResDesc || !s_tidRawMatDesc) return kind;
+    if (!comp || !grid) return kind;
+    const uint32_t tidNatResDesc = NaturalResourceDescription::TypeId();
+    const uint32_t tidRawMatDesc = RawMaterialDescription::TypeId();
     int width = *grid;
     uintptr_t tiles = GridTiles(grid);
     for (int row = 0; row < h; ++row) {
@@ -287,8 +283,8 @@ static uint32_t ClearArea_ScanKindFlags(void* comp, int* grid, int x1, int y1, i
             for (int j = 0; j < subCount; ++j) {
                 void* sub = *reinterpret_cast<void**>(subArr + static_cast<uintptr_t>(j) * 8);
                 if (!sub) continue;
-                if (reinterpret_cast<Object::Base*>(sub)->Type() == s_tidNatResDesc) {   // B.3.8 bridge (slot 2)
-                    if (fn_IsDerivedFrom && fn_IsDerivedFrom(sub, s_tidNatResDesc)) natRes = sub;
+                if (reinterpret_cast<Object::Base*>(sub)->Type() == tidNatResDesc) {   // B.3.8 bridge (slot 2)
+                    if (fn_IsDerivedFrom && fn_IsDerivedFrom(sub, tidNatResDesc)) natRes = sub;
                     break;
                 }
             }
@@ -302,8 +298,8 @@ static uint32_t ClearArea_ScanKindFlags(void* comp, int* grid, int x1, int y1, i
             for (int k = 0; k < rCount; ++k) {
                 void* rm = *reinterpret_cast<void**>(rArr + static_cast<uintptr_t>(k) * 8);
                 if (!rm) continue;
-                if (reinterpret_cast<Object::Base*>(rm)->Type() == s_tidRawMatDesc) {   // B.3.8 bridge (slot 2)
-                    if (fn_IsDerivedFrom && fn_IsDerivedFrom(rm, s_tidRawMatDesc)) {
+                if (reinterpret_cast<Object::Base*>(rm)->Type() == tidRawMatDesc) {   // B.3.8 bridge (slot 2)
+                    if (fn_IsDerivedFrom && fn_IsDerivedFrom(rm, tidRawMatDesc)) {
                         uint32_t f = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(rm) + 0x5c);
                         uint32_t u;
                         if ((f >> 10) & 1)      u = 0x400;
@@ -352,7 +348,7 @@ extern "C" char ClearArea_State0Enter(void* data, void* sm) {
 
     void* descObj = *reinterpret_cast<void**>(c + 0x18);
     bool descIsCA = descObj && fn_IsDerivedFrom &&
-                    fn_IsDerivedFrom(descObj, DerefTid(0x1401c7200));
+                    fn_IsDerivedFrom(descObj, ClearAreaDescription::TypeId());
     uint8_t* desc = descIsCA ? reinterpret_cast<uint8_t*>(descObj) : nullptr;
 
     // (1) Guarded instant sweep: only when global instant bit or _flag5(+0x2d) set.
@@ -492,7 +488,7 @@ void ClearArea_Finalize8270(void* comp) {
     if (!comp) return;
     uintptr_t c = reinterpret_cast<uintptr_t>(comp);
     void* descObj = *reinterpret_cast<void**>(c + 0x18);
-    bool isCA = descObj && fn_IsDerivedFrom && fn_IsDerivedFrom(descObj, DerefTid(0x1401c7200));
+    bool isCA = descObj && fn_IsDerivedFrom && fn_IsDerivedFrom(descObj, ClearAreaDescription::TypeId());
     if (!isCA) return;
     uint8_t flag2c = *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(descObj) + 0x2c);
     if (flag2c == 0) return;

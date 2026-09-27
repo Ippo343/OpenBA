@@ -19,6 +19,9 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <new>
+#include "Entity/ComponentEntity.h"                 // ENDGAME B.3.9 C1: 0x1401c5d70 cell class
+#include "Component/NaturalResourceComponent.h"     // ENDGAME B.3.9 C1: 0x1401c7b30 cell class
+#include "Component/CropFieldDescription.h"         // ENDGAME B.3.9 C1: 0x1401c7548 cell class
 
 // ============================================================
 // Resolved helpers
@@ -86,10 +89,9 @@ static fn_Base_IsA_t s_fn_Base_IsA = nullptr;
 // dispatch slots ac8, ac8, aa0, a98, aa0, a98, a58 — i.e. two Serialize(int&),
 // two InternalBasePtr::Serialize with an IsDerivedFrom check after each, and one
 // Serialize(bool&). All of those are real C++ members now.
-// Type-id globals consulted by the helpers.
-static uint32_t* s_pTypeId_ComponentEntity = nullptr;  // DWORD_1401c5d70
-static uint32_t* s_pTypeId_BuildStateComp = nullptr;   // DAT_1401c7b30
-static uint32_t* s_pTypeId_CropFieldDescription = nullptr;  // DAT_1401c7548
+// ENDGAME B.3.9 C1 (B39_RULES.md D5): the three cells below are registered
+// type-id cells (INVENTORY_C Table 1), read BY CELL. 0x1401c7b30 is
+// NaturalResourceComponent (not "BuildStateComp" as the old local name said).
 
 static bool s_cropExtraInit = false;
 static void EnsureCropExtras() {
@@ -111,12 +113,6 @@ static void EnsureCropExtras() {
     uintptr_t slot = ResolveAddr(Module::Exe, 0x140151410);
     if (slot) s_fn_Base_IsA = *reinterpret_cast<fn_Base_IsA_t*>(slot);
     if (!s_fn_Base_IsA) s_fn_Base_IsA = reinterpret_cast<fn_Base_IsA_t>(fn_IsA);
-    s_pTypeId_ComponentEntity = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c5d70));
-    s_pTypeId_BuildStateComp = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7b30));
-    s_pTypeId_CropFieldDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7548));
     s_cropExtraInit = true;
 }
 
@@ -142,8 +138,8 @@ void CropFieldComponent_ValidateEntityRefs(uintptr_t self) {
         void* obj = *(void**)(*(uintptr_t*)(map + 0x80) + 8 + (int64_t)id * 0x30);
         bool keep = false;
         if (obj != nullptr) {
-            if (s_fn_Base_IsA && s_pTypeId_ComponentEntity &&
-                s_fn_Base_IsA(obj, *s_pTypeId_ComponentEntity)) {
+            if (s_fn_Base_IsA &&
+                s_fn_Base_IsA(obj, ComponentEntity::TypeId())) {
                 uint8_t outIBP[8] = {0};
                 if (s_fn_FindComp_BS_local)
                     s_fn_FindComp_BS_local((int64_t)obj, outIBP);
@@ -225,14 +221,15 @@ void CropFieldComponent_SerializeEntityList(void* serializer, int count, uintptr
         reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(int*)(entry + 4), nullptr);   // B.3.4 bridge
         // IBP #1 -> ComponentEntity
         reinterpret_cast<Object::InternalBasePtr*>((void*)(entry + 8))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-        if (*(void**)(entry + 8) != nullptr && s_pTypeId_ComponentEntity &&
-            !fn_IsDerivedFrom(*(void**)(entry + 8), *s_pTypeId_ComponentEntity)) {
+        if (*(void**)(entry + 8) != nullptr &&
+            !fn_IsDerivedFrom(*(void**)(entry + 8), ComponentEntity::TypeId())) {
             *(uint64_t*)(entry + 8) = 0;
         }
-        // IBP #2 -> BuildStateComponent
+        // IBP #2 -> NaturalResourceComponent (0x1401c7b30; the old local name here
+        // said "BuildStateComp", but INVENTORY_C Table 1 says NaturalResourceComponent)
         reinterpret_cast<Object::InternalBasePtr*>((void*)(entry + 0x10))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-        if (*(void**)(entry + 0x10) != nullptr && s_pTypeId_BuildStateComp &&
-            !fn_IsDerivedFrom(*(void**)(entry + 0x10), *s_pTypeId_BuildStateComp)) {
+        if (*(void**)(entry + 0x10) != nullptr &&
+            !fn_IsDerivedFrom(*(void**)(entry + 0x10), NaturalResourceComponent::TypeId())) {
             *(uint64_t*)(entry + 0x10) = 0;
         }
         reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(bool*)(entry + 0x18), nullptr);   // B.3.4 bridge
@@ -531,9 +528,8 @@ void CropFieldComponent::OnMessage(int message, void* /*data*/, uint32_t arg0, u
         if (!growth) return;
 
         void* desc = *reinterpret_cast<void**>(self + 0x18);
-        const uint32_t tidCropDesc =
-            s_pTypeId_CropFieldDescription ? *s_pTypeId_CropFieldDescription : 0;
-        if (!(desc && fn_IsDerivedFrom && tidCropDesc && fn_IsDerivedFrom(desc, tidCropDesc)))
+        const uint32_t tidCropDesc = CropFieldDescription::TypeId();
+        if (!(desc && fn_IsDerivedFrom && fn_IsDerivedFrom(desc, tidCropDesc)))
             return;
 
         const float rate = *reinterpret_cast<float*>(
