@@ -91,6 +91,7 @@
 #include <initializer_list>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
 #include "../../types/video/Context.h"
 #include "../../types/engine/MainLoop.h"   // ENDGAME B.3.7: Engine::MainLoop::CreateVideoContext
 // ENDGAME B.3.5 block VC — the three headers the converted call sites need:
@@ -192,7 +193,7 @@ inline void* At(void* p, size_t off) { return static_cast<uint8_t*>(p) + off; }
 // `?_singleton@Device@Video@@0PEAV12@EA` — a MINTED data slot, the same door
 // sunlight.cpp and singleton_ctors.cpp use.
 void** DeviceSingletonSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+    return reinterpret_cast<void**>(&::Video::Device::_singleton);
 }
 
 // ---------------------------------------------------------------------------

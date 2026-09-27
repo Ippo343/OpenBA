@@ -392,6 +392,13 @@ public:
     static void ReleaseDynamic();          // 0x1800f2e80
     static void RecreateDynamic();         // 0x1800f2d90
 
+    // ?_firstSurface@ImageBuffer@Video@@0PEAV12@EA (0x1801fe780) — the head of
+    // the live-surface list PlatformConstruct / PlatformDestruct link into and the
+    // two sweeps walk (device-lost recovery). The class static since ENDGAME
+    // B.3.9 VID (B39_RULES D7), defined in dynamic_resources.cpp; private in
+    // retail, PUBLIC here because the walkers are free functions.
+    static ImageBuffer* _firstSurface;
+
     // `??0ImageBuffer@Video@@QEAA@AEBV01@@Z` (0x18001eb80) and
     // `??4ImageBuffer@Video@@QEAAAEAV01@AEBV01@@Z` (0x18001ec50) are REAL,
     // EXPORTED bodies, not compiler defaults — the situation RULE B5-10 records

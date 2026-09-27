@@ -9,7 +9,7 @@
 // two shorter than VertexLayout's and why rt_factories_video.inc gives
 // Video::ShaderProgram a null step list.
 //
-//   0  deleting dtor        0x18004e360  runtime/src/object/deleting_dtor.cpp
+//   0  deleting dtor        0x18004e360  ShaderProgram.h (inline, B.3.9)
 //   1  TypeName             0x18004e0c0  here
 //   2  Type                 0x18004e0a0  here
 //   3  _purecall            0x18007ec28  (GetFileVersion — subclass supplies it)
@@ -23,6 +23,11 @@
 // nine non-virtual accessors the export table names.
 //
 // Layout: runtime/types/video/ShaderProgram.h (sizeof 0x50).
+//
+// ENDGAME B.3.9 block VID: the ctor door (and the ConstructBody the two
+// subclasses' doors reused), the dtor door and the Type / TypeName / Serialize
+// slot doors are GONE with ??_7ShaderProgram@Video@@6B@. The real constructor is
+// protected in the header; the exported non-virtual members keep their doors.
 //
 // ============================================================================
 // ENDGAME B.3.5 BLOCK B — THE BODIES MOVED INTO THE MEMBERS.
@@ -127,11 +132,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/video/ShaderProgram.h"
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
 
 // standalone/resolve.h is DELIBERATELY NOT INCLUDED — it drags in <windows.h>,
 // and <wingdi.h> declares a function called `AlphaBlend`, which would make
@@ -149,10 +156,6 @@ using rt::io::ReaderWriter;
 using Collection::Array;
 using ShaderParameter = Video::ShaderProgram::Parameter;
 
-void* BaseVTable()             { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* ExternalVTable()         { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* CompiledExternalVTable() { return RT_DATA_SLOT(void*, "??_7CompiledExternal@Object@@6B@"); }
-void* ShaderProgramVTable()    { return RT_DATA_SLOT(void*, "??_7ShaderProgram@Video@@6B@"); }
 const uint8_t* ShaderProgramTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@ShaderProgram@Video@@0VBaseTypeInfo@Object@@A");
 }
@@ -160,7 +163,7 @@ const uint8_t* ShaderProgramTypeInfo() {
 // `?_singleton@Device@Video@@` is the ADDRESS of the Device* static;
 // Device+0xF8 is `activeInterface` (runtime/types/video/Device.h).
 int32_t ActiveInterface() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+    void** slot = reinterpret_cast<void**>(&::Video::Device::_singleton);
     void* device = slot ? *slot : nullptr;
     // Retail derefs the singleton unguarded here (MOV RAX,[0x1801fe7a8] then
     // CMP dword [RAX+0xF8]); the null test exists only because RT_DATA_SLOT can
@@ -256,75 +259,19 @@ void PlatformSerializeArm(Video::ShaderProgram* self, Serializer* outer, int32_t
     DeleteRw(rw);
 }
 
-void ConstructBody(Video::ShaderProgram* self) {
-    void** vp = reinterpret_cast<void**>(self);
-    *vp = BaseVTable();
-    *vp = ExternalVTable();
-    self->_path.data      = nullptr;   // +0x08
-    self->_refs._data     = nullptr;   // +0x10
-    self->_refs._size     = 0;         // +0x18
-    self->_refs._capacity = 0;
-    *vp = CompiledExternalVTable();
-    *vp = ShaderProgramVTable();
-    self->_textures._data      = nullptr;   // +0x20
-    self->_textures._size      = 0;         // +0x28
-    self->_textures._capacity  = 0;
-    self->_constants._data     = nullptr;   // +0x30
-    self->_constants._size     = 0;         // +0x38
-    self->_constants._capacity = 0;
-    self->_byteCode._data      = nullptr;   // +0x40
-    self->_byteCode._size      = 0;         // +0x48
-    self->_byteCode._capacity  = 0;
-}
-
 }  // namespace
-
-// ---------------------------------------------------------------------------
-// The one piece the two subclasses still reuse verbatim. NOT a member: this is
-// retail's ??0ShaderProgram inlined into ??0VertexProgram / ??0PixelProgram, and
-// the first thing it writes is the vptr — which a C++ constructor cannot write
-// to the MINTED address (B4b-2). vertexprogram.cpp and pixelprogram.cpp call it
-// from their own ctor doors, exactly as retail's compiler did.
-//
-// (`RtVideo_ShaderProgram_DestroyArrays` USED to live beside this for the same
-// reason. It is gone: the teardown is `~ShaderProgram()` now and the subclass
-// destructors reach it through the chain.)
-// ---------------------------------------------------------------------------
-extern "C" void RtVideo_ShaderProgram_ConstructBody(void* selfv) {
-    ConstructBody(reinterpret_cast<Video::ShaderProgram*>(selfv));   // B.3.5 bridge
-}
 
 // ---------------------------------------------------------------------------
 // The registered doors. Each is one line over the member of the same name.
 // ---------------------------------------------------------------------------
-extern "C" uint32_t RtVideo_ShaderProgram_Type(const void* selfv) {
-    return reinterpret_cast<const Video::ShaderProgram*>(selfv)
-               ->Video::ShaderProgram::Type();                       // B.3.5 bridge
-}
 extern "C" uint32_t RtVideo_ShaderProgram_TypeId() {
     return Video::ShaderProgram::TypeId();
-}
-extern "C" const char* RtVideo_ShaderProgram_TypeName(const void* selfv) {
-    return reinterpret_cast<const Video::ShaderProgram*>(selfv)
-               ->Video::ShaderProgram::TypeName();                   // B.3.5 bridge
 }
 // ?_TypeName@ / ?_ParentTypeName@ return string literals out of .rdata
 // (0x180157a28 and 0x180154930); the bytes were read from the shipped file.
 // RULE B5-15: the literal is COPIED, never derived from the C++ base name.
 extern "C" const char* RtVideo_ShaderProgram_StaticTypeName()   { return Video::ShaderProgram::_TypeName(); }
 extern "C" const char* RtVideo_ShaderProgram_ParentTypeName()   { return Video::ShaderProgram::_ParentTypeName(); }
-
-// ??0ShaderProgram@Video@@QEAA@XZ (0x1800f5030) — a ctor DOOR, not a ctor.
-extern "C" void* RtVideo_ShaderProgram_Ctor(void* selfv) {
-    ConstructBody(reinterpret_cast<Video::ShaderProgram*>(selfv));   // B.3.5 bridge
-    return selfv;
-}
-
-// ??1ShaderProgram@Video@@UEAA@XZ (0x1800f50b0)
-extern "C" void RtVideo_ShaderProgram_Dtor(void* selfv) {
-    reinterpret_cast<Video::ShaderProgram*>(selfv)
-        ->Video::ShaderProgram::~ShaderProgram();                    // B.3.5 bridge
-}
 
 // ---- the nine non-virtual accessors ---------------------------------------
 extern "C" bool RtVideo_ShaderProgram_IsValid(const void* selfv) {
@@ -370,12 +317,6 @@ extern "C" void RtVideo_ShaderProgram_PlatformSerialize(void* selfv, void* serv)
         ->Video::ShaderProgram::PlatformSerialize(serv);             // B.3.5 bridge
 }
 
-// ?Serialize@ShaderProgram@Video@@UEAA_NAEAVStream@IO@@@Z (0x1800f5110)
-extern "C" bool RtVideo_ShaderProgram_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<Video::ShaderProgram*>(selfv)
-               ->Video::ShaderProgram::Serialize(streamv);           // B.3.5 bridge
-}
-
 // ============================================================================
 // THE MEMBER BODIES — `Video::ShaderProgram::*`.
 //
@@ -395,12 +336,8 @@ const char* ShaderProgram::TypeName() const {
     return v;
 }
 
-// slot 2 — ?Type@ShaderProgram@Video@@UEBAIXZ  0x18004e0a0
-uint32_t ShaderProgram::Type() const {
-    uint32_t v = 0;
-    std::memcpy(&v, ShaderProgramTypeInfo(), sizeof v);
-    return v;
-}
+// slot 2 — ?Type@ShaderProgram@Video@@UEBAIXZ  0x18004e0a0, the same load as TypeId.
+uint32_t ShaderProgram::Type() const { return TypeId(); }
 
 // ?TypeId@ShaderProgram@Video@@SAIXZ  0x18004e0b0 — the same record's +0x00.
 uint32_t ShaderProgram::TypeId() {
@@ -415,11 +352,10 @@ uint32_t ShaderProgram::TypeId() {
 const char* ShaderProgram::_TypeName()       { return "ShaderProgram"; }
 const char* ShaderProgram::_ParentTypeName() { return "Object::CompiledExternal"; }
 
-// ??1ShaderProgram@Video@@UEAA@XZ (0x1800f50b0) — see the file banner for which
-// of retail's four steps are written here and which the chain emits.
+// ??1ShaderProgram@Video@@UEAA@XZ (0x1800f50b0). Retail: stamp ??_7ShaderProgram,
+// the three arrays newest-first, stamp ??_7CompiledExternal, tail-JMP ~External.
+// Both stamps and the tail are the destructor chain's (the compiler's tables).
 ShaderProgram::~ShaderProgram() {
-    *reinterpret_cast<void**>(this) = ShaderProgramVTable();
-
     // The three Array teardowns, in retail's order (+0x40 first, then +0x30,
     // then +0x20). Each registered body ends in `ArrayDtorImpl`, which zeroes
     // the header, so the compiler-emitted `~Array` that follows frees nothing.
@@ -428,6 +364,11 @@ ShaderProgram::~ShaderProgram() {
     RtAddr<ArrayDtorFn>(0x18004fb00ull)(&_constants);   // ~Array<Parameter>
     RtAddr<ArrayDtorFn>(0x18004fb00ull)(&_textures);    // ~Array<Parameter>
 }
+
+// ?CreateNewObject@ / ?CreateInPlaceObject@ (0x18004e0d0 / 0x18004e0e0): the
+// abstract class's factory pair, `XOR EAX,EAX ; RET` both (B39_RULES D2).
+Object::Base* ShaderProgram::CreateNewObject() { return nullptr; }
+Object::Base* ShaderProgram::CreateInPlaceObject(void*) { return nullptr; }
 
 // ?IsValid@ShaderProgram@Video@@QEBA_NXZ  0x18004e0f0 — `+0x48 > 0`.
 bool ShaderProgram::IsValid() const { return _byteCode._size > 0; }
@@ -486,27 +427,21 @@ bool ShaderProgram::Serialize(void* streamv) {
 
 int RtVideoShaderProgramRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@ShaderProgram@Video@@UEBAIXZ",        (void*)&RtVideo_ShaderProgram_Type);     ++n;
-    RegisterRuntimeAddr  (0x18004e0a0ull,                              (void*)&RtVideo_ShaderProgram_Type);
+    // ENDGAME B.3.9 VID: the (null) factory pair by retail NAME and VA (B39_RULES D2).
+    RegisterRuntimeExport("?CreateNewObject@ShaderProgram@Video@@SAPEAVBase@Object@@XZ",
+                          (void*)&Video::ShaderProgram::CreateNewObject); ++n;
+    RegisterRuntimeAddr  (0x18004e0d0ull, (void*)&Video::ShaderProgram::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@ShaderProgram@Video@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&Video::ShaderProgram::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr  (0x18004e0e0ull, (void*)&Video::ShaderProgram::CreateInPlaceObject);
     RegisterRuntimeExport("?TypeId@ShaderProgram@Video@@SAIXZ",        (void*)&RtVideo_ShaderProgram_TypeId);   ++n;
     RegisterRuntimeAddr  (0x18004e0b0ull,                              (void*)&RtVideo_ShaderProgram_TypeId);
-    RegisterRuntimeExport("?TypeName@ShaderProgram@Video@@UEBAPEBDXZ", (void*)&RtVideo_ShaderProgram_TypeName); ++n;
-    RegisterRuntimeAddr  (0x18004e0c0ull,                              (void*)&RtVideo_ShaderProgram_TypeName);
     RegisterRuntimeExport("?_TypeName@ShaderProgram@Video@@CAPEBDXZ",       (void*)&RtVideo_ShaderProgram_StaticTypeName); ++n;
     RegisterRuntimeAddr  (0x18004e080ull,                                   (void*)&RtVideo_ShaderProgram_StaticTypeName);
     RegisterRuntimeExport("?_ParentTypeName@ShaderProgram@Video@@CAPEBDXZ", (void*)&RtVideo_ShaderProgram_ParentTypeName); ++n;
     RegisterRuntimeAddr  (0x18004e090ull,                                   (void*)&RtVideo_ShaderProgram_ParentTypeName);
 
-    RegisterRuntimeExport("??0ShaderProgram@Video@@QEAA@XZ", (void*)&RtVideo_ShaderProgram_Ctor); ++n;
-    RegisterRuntimeAddr  (0x1800f5030ull,                    (void*)&RtVideo_ShaderProgram_Ctor);
-    // UEAA, not QEAA: ~ShaderProgram is virtual
-    // (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
-    RegisterRuntimeExport("??1ShaderProgram@Video@@UEAA@XZ", (void*)&RtVideo_ShaderProgram_Dtor); ++n;
-    RegisterRuntimeAddr  (0x1800f50b0ull,                    (void*)&RtVideo_ShaderProgram_Dtor);
 
-    RegisterRuntimeExport("?Serialize@ShaderProgram@Video@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtVideo_ShaderProgram_Serialize); ++n;
-    RegisterRuntimeAddr  (0x1800f5110ull, (void*)&RtVideo_ShaderProgram_Serialize);
     RegisterRuntimeExport("?PlatformSerialize@ShaderProgram@Video@@QEAAXAEAVSerializer@IO@@@Z",
                           (void*)&RtVideo_ShaderProgram_PlatformSerialize); ++n;
     RegisterRuntimeAddr  (0x1800f52b0ull, (void*)&RtVideo_ShaderProgram_PlatformSerialize);

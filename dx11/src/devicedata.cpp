@@ -233,13 +233,9 @@ struct Imports {
     // `?GetInstance@Application@1@`. `Application::Application` is a real C++
     // class since B.3.7 block B1 (runtime/types/application/Application.h), and
     // the plugin calls the three members directly on the object read through
-    // `appSingleton` below. That DATA slot (0x180013310) stays a slot until the
-    // class-static conversion at the end of B.3 (carry-over 5).
-
-    // --- the three singleton slots ---------------------------------------
-    void** appSingleton;                               // 0x180013310
-    void** configSingleton;                            // 0x180013480
-    void** deviceSingleton;                            // 0x1800134b8
+    // `Application::Application::_singleton`, the class static since ENDGAME
+    // B.3.9 (ENG made it one; VID's commit dropped the import row, AppOf below).
+    // The Video::Device and Video::Configuration slots went the same way.
 };
 
 Imports g_im;
@@ -279,9 +275,6 @@ const Imports* GetImports() {
         { (void**)&g_im.DisplayModeDtor,        "??1DisplayMode@Device@Video@@QEAA@XZ",                          0x1800132f8 },
 
 
-        { (void**)&g_im.appSingleton,           "?_singleton@Application@1@0PEAV11@EA",                          0x180013310 },
-        { (void**)&g_im.configSingleton,        "?_singleton@Configuration@Video@@0PEAV12@EA",                   0x180013480 },
-        { (void**)&g_im.deviceSingleton,        "?_singleton@Device@Video@@0PEAV12@EA",                          0x1800134b8 },
     };
     g_imOk = true;
     for (const Entry& e : table) {
@@ -453,8 +446,10 @@ inline ::Video::Device* VDev(void* device) {
 inline ::Video::ImageBuffer* VImg(void* imageBuffer) {
     return reinterpret_cast< ::Video::ImageBuffer*>(imageBuffer);  // B.3.5 bridge
 }
-inline void* ConfigOf(const Imports* im) { return *im->configSingleton; }
-inline void* AppOf(const Imports* im)    { return *im->appSingleton; }
+// ENDGAME B.3.9 VID: Video::Configuration::_singleton is the class static; the
+// import row that resolved it by name is gone.
+inline void* ConfigOf(const Imports*)    { return ::Video::Configuration::_singleton; }
+inline void* AppOf(const Imports*)       { return ::Application::Application::_singleton; }
 
 // ============================================================
 // Runtime value types this file constructs on the stack
@@ -1063,7 +1058,7 @@ int __cdecl DeviceData_OnActivate(HWND /*hwnd*/, unsigned /*msg*/,
     if (!im) return 1;
 
     void* cfg = ConfigOf(im);
-    void* dev = *im->deviceSingleton;
+    void* dev = ::Video::Device::_singleton;   // the class static (B.3.9 VID)
     DeviceData* dd = Field<DeviceData*>(dev, Dev::kActiveDeviceData);
 
     if (Field<uint8_t>(cfg, Cfg::kFullscreen) == 0 && dd->wasFullscreen == 0)
@@ -1096,7 +1091,7 @@ int __cdecl DeviceData_OnSetCursor(HWND /*hwnd*/, unsigned /*msg*/,
     const Imports* im = GetImports();
     if (!im) return 1;
 
-    void* dev = *im->deviceSingleton;
+    void* dev = ::Video::Device::_singleton;   // the class static (B.3.9 VID)
     DeviceData* dd = Field<DeviceData*>(dev, Dev::kActiveDeviceData);
 
     SetCursor(static_cast<HCURSOR>(dd->cursor));

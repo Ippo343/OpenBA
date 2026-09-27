@@ -1,0 +1,36 @@
+# ENDGAME B.3 step 9 -- the rows block VID (branch b39-VID) retired (B39_RULES.md D3).
+# Format: <mangled symbol | 0xVA>   <owner block>   <proof>
+# One fragment per block; a key appears once across all fragments.
+
+# -- the Video resource classes (rows 148/144/112/146/102/118) --
+??_7VideoProgram@Video@@6B@   VID   real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR 0x18004efb0, ??0/??1 doors, 7 slot doors deleted
+??_7VertexLayout@Video@@6B@   VID   real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR 0x18004e000, ??0/??1 doors, 7 slot doors deleted
+??_7RenderState@Video@@6B@    VID   real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR 0x18004b9d0, ??0/??1 doors, 7 slot doors deleted
+??_7VertexProgram@Video@@6B@  VID   real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR 0x18004e810, ??0/??1 doors, 7 slot doors deleted
+??_7PixelProgram@Video@@6B@   VID   real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR 0x18004eb90, ??0/??1 doors, 7 slot doors deleted
+??_7ShaderProgram@Video@@6B@  VID   abstract base: protected real ctor + DeletingDtor; null factory pair own statics; RT_DELDTOR 0x18004e360, ??0/??1 doors (+ConstructBody), 3 slot doors deleted
+
+# -- the twelve Video::*Data companion bases (rows 39/37/72/75/143/34/111/145/147/103/113/149).
+#    Proof that no dx11 table is filled from a minted ??_7*Data row (B39_RULES section 5 item 4):
+#    dx11_seam.cpp builds its twelve tables ONLY from DX11_REGISTER_SLOT registrations at
+#    Dx11SeamInstall; every dx11 factory (devicedata.cpp AllocData, exports.cpp) overwrites the
+#    base ctor's vptr with Dx11LiveVtable on the next line; dx11 names no ??_7 and no 0x18015xxxx.
+??_7DeviceData@Video@@6B@           VID   concrete (_purecall bodies, own slot 0); ??0 door stays (dx11 import struct) as ::new; RT_DELDTOR 0x180058b10 + ??1 door deleted
+??_7ContextData@Video@@6B@          VID   concrete (_purecall bodies, own slot 0); ??0 door stays (dx11 import struct) as ::new; RT_DELDTOR 0x180058a90 + ??1 door deleted
+??_7ImageBufferData@Video@@6B@      VID   concrete (_purecall bodies, own slot 0); ??0 door stays (dx11 import struct) as ::new; RT_DELDTOR 0x180058a10 + ??1 door deleted
+??_7IndexBufferData@Video@@6B@      VID   concrete (_purecall bodies, own slot 0); ??0 door stays (dx11 import struct) as ::new; RT_DELDTOR 0x180058910 + ??1 door deleted
+??_7VertexBufferData@Video@@6B@     VID   concrete (_purecall bodies, own slot 0); ??0 door stays (dx11 import struct) as ::new; RT_DELDTOR 0x180058890 + ??1 door deleted
+??_7ConstantBufferData@Video@@6B@   VID   concrete (_purecall bodies, own slot 0); ??0 door stays (dx11 import struct) as ::new; RT_DELDTOR 0x180058990 + ??1 door deleted
+??_7RenderBufferData@Video@@6B@     VID   concrete (_purecall bodies, own slot 0); ??0 door stays (dx11 import struct) as ::new; RT_DELDTOR 0x180058590 + ??1 door deleted
+??_7VertexLayoutData@Video@@6B@     VID   concrete (_purecall bodies, own slot 0); ??0 door stays (dx11 import struct) as ::new; RT_DELDTOR 0x180058810 + ??1 door deleted
+??_7VertexProgramData@Video@@6B@    VID   concrete (_purecall bodies, own slot 0); ??0 door stays (dx11 import struct) as ::new; RT_DELDTOR 0x180058790 + ??1 door deleted
+??_7PixelProgramData@Video@@6B@     VID   concrete (_purecall bodies, own slot 0); ??0 door stays (dx11 import struct) as ::new; RT_DELDTOR 0x180058710 + ??1 door deleted
+??_7RenderStateData@Video@@6B@      VID   concrete (_purecall bodies, own slot 0); ??0 door stays (dx11 import struct) as ::new; RT_DELDTOR 0x180058690 + ??1 door deleted
+??_7VideoProgramData@Video@@6B@     VID   concrete (_purecall bodies, own slot 0); ??0 door stays (dx11 import struct) as ::new; RT_DELDTOR 0x180058610 + ??1 door deleted
+
+# -- storage: the four Video list heads, together (device-lost recovery walks them); every reader
+#    was in VID's files (buffers.cpp links, dynamic_resources.cpp sweeps) and is the class static now --
+?_firstSurface@ImageBuffer@Video@@0PEAV12@EA             VID   class static Video::ImageBuffer::_firstSurface; readers buffers.cpp + dynamic_resources.cpp converted
+?_firstBuffer@IndexBuffer@Video@@0PEAV12@EA              VID   class static Video::IndexBuffer::_firstBuffer; readers converted
+?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA       VID   class static Video::RenderBuffer::_firstRenderBuffer; readers converted
+?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA             VID   class static Video::VertexBuffer::_firstBuffer; readers converted

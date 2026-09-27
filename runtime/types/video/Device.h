@@ -166,11 +166,10 @@ class VideoProgramData;
 //   ??2Device@Video@@SAPEAX_KPEAX@Z            0x18000ca20  UNPORTED (placement new)
 //   ??3Device@Video@@SAXPEAX@Z                 0x18000ca30  UNPORTED (operator delete)
 //
-// STATIC DATA — `?_singleton@Device@Video@@0PEAV12@EA` @ 0x1801fe7a8 stays an
-// `RT_DATA_SLOT` read (RULE B4b-4 / B35_RULES §9: the `MintStorageCell()`
-// redirect is OWED at the class-static conversion, the end of B.3, and this is
-// the manifest's highest-traffic row at 36 by-name doors plus dx11's by-address
-// `kRt_VideoDeviceSingleton`). It is NOT declared as a C++ static member here.
+// STATIC DATA — `?_singleton@Device@Video@@0PEAV12@EA` @ 0x1801fe7a8 is the
+// class static `Device::_singleton` (ENDGAME B.3.9 VID, B39_RULES D7): the
+// minted row is redirected onto it, so the name door, the address door and the
+// member are the same bytes while foreign readers still reach it by name.
 // ----------------------------------------------------------------------------
 class Device {
 public:
@@ -511,9 +510,15 @@ public:
 
     // ---- the singleton accessor ---------------------------------------------
     // ?Get@Device@Video@@SAPEAV12@XZ             0x18000d260  NOT PORTED
-    //   Reads `?_singleton@Device@Video@@` — see the note in this class's banner
-    //   on why that cell is not a C++ static member yet (RULE B4b-4).
+    //   Reads `_singleton` below.
     static Device* Get();
+
+    // ?_singleton@Device@Video@@0PEAV12@EA (0x1801fe7a8) — the class static
+    // (ENDGAME B.3.9 VID, B39_RULES D7). RtVideoPortInit redirects the minted
+    // storage row onto it, so the name door, the address door and this member
+    // are the same bytes. Written by the ctor door (singleton_ctors.cpp, type 0
+    // only) and cleared by ~Device. PUBLIC while foreign readers remain.
+    static Device* _singleton;
 
     // ========================================================================
     // Data — retail layout, unchanged from Wave 6 lane B.
@@ -612,8 +617,8 @@ public:
 //   ??4Configuration@Video@@QEAAAEAV01@AEBV01@@Z    0x18000d520  UNPORTED
 //
 // STATIC DATA — `?_singleton@Configuration@Video@@0PEAV12@EA` @ 0x1801fe7a0
-// stays an `RT_DATA_SLOT` read (RULE B4b-4 / B35_RULES §9, 16 by-name doors and
-// dx11 reads it by name too). Not a C++ static member yet.
+// is the class static `Configuration::_singleton` (ENDGAME B.3.9 VID, B39_RULES
+// D7): the minted row is redirected onto it.
 // ----------------------------------------------------------------------------
 class Configuration {
 public:
@@ -627,6 +632,14 @@ public:
 
     // ?Get@Configuration@Video@@SAPEAV12@XZ    0x18000d590  NOT PORTED
     static Configuration* Get();
+
+    // ?_singleton@Configuration@Video@@0PEAV12@EA (0x1801fe7a0) — the class
+    // static (ENDGAME B.3.9 VID, B39_RULES D7). RtVideoPortInit redirects the
+    // minted storage row onto it, so the name door, the address door and this
+    // member are the same bytes. Written by the ctor door (singleton_ctors.cpp)
+    // and cleared by Engine's platform shutdown. PUBLIC while foreign readers
+    // remain.
+    static Configuration* _singleton;
 
     // ---- the eighteen accessor pairs, 0x18000d5a0..0x18000d7f0 -------------
     // Sixteen-byte stubs, each a single `MOV EAX,[RCX+off]` / `MOVZX EAX,byte
@@ -762,6 +775,10 @@ public:
     static void RecreateDynamic();
     // ?ReleaseDynamic@RenderBuffer@Video@@SAXXZ   0x1800f40c0  dynamic_resources.cpp
     static void ReleaseDynamic();
+    // ?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA (0x1801fe790) — the
+    // list head (ENDGAME B.3.9 VID class static, B39_RULES D7;
+    // dynamic_resources.cpp).
+    static RenderBuffer* _firstRenderBuffer;
 
     // ---- the two class allocation operators --------------------------------
     // ENDGAME B.3.5 block VC. Both are STATIC members and neither changes a

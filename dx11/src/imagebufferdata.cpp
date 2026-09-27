@@ -154,6 +154,7 @@
 // ENDGAME B.3.5 block J, RULE B5-14: the real `Video::ImageBuffer`, whose nine
 // query members replace nine of this file's table-driven Runtime imports.
 #include "video/ImageBuffer.h"
+#include "video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
 
 #include <windows.h>
 #include <d3d11.h>
@@ -195,8 +196,6 @@ struct Imports {
     // The Runtime base is a real class now; see `Destructor` below.
     void* (*MemAlloc)(uint64_t, int);// ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z
     void  (*MemFree)(void*);         // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
-    void** deviceSingleton;          // ?_singleton@Device@Video@@0PEAV12@EA
-    void** configSingleton;          // ?_singleton@Configuration@Video@@0PEAV12@EA
 };
 
 Imports  g_im;
@@ -213,8 +212,6 @@ const Imports* GetImports() {
 
         g_im.MemAlloc       = (void* (*)(uint64_t, int))ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
         g_im.MemFree        = (void  (*)(void*))ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
-        g_im.deviceSingleton = (void**)ResolveExport("?_singleton@Device@Video@@0PEAV12@EA");
-        g_im.configSingleton = (void**)ResolveExport("?_singleton@Configuration@Video@@0PEAV12@EA");
 
         const void* const* p = reinterpret_cast<const void* const*>(&g_im);
         g_imOk = true;
@@ -242,7 +239,9 @@ inline const ::Video::ImageBuffer* ImgOf(void* imageBuffer) {
 
 // Video::Device* (never null once the video interface exists — the shipped code
 // does not check either).
-inline void* VideoDevice(const Imports* im) { return *im->deviceSingleton; }
+// ENDGAME B.3.9 VID: Video::Device::_singleton is the class static; the import
+// row that resolved it by name is gone.
+inline void* VideoDevice(const Imports*) { return ::Video::Device::_singleton; }
 
 // Active Video::DeviceData* at Video::Device+0x100.
 inline DeviceData* ActiveDeviceData(void* device) {
@@ -346,7 +345,8 @@ void CreateSamplerState(ImageBufferData* self, const Imports* im) {
                             D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT, // 0x14
                             D3D11_FILTER_ANISOTROPIC };       // 0x55
 
-    int aniso = *reinterpret_cast<int*>(static_cast<uint8_t*>(*im->configSingleton) + 0x28);
+    int aniso = *reinterpret_cast<int*>(
+        reinterpret_cast<uint8_t*>(::Video::Configuration::_singleton) + 0x28);   // B.3.9 VID: the class static
     const uint32_t flags = IbU32(ib, 0x34);
     const bool comparison = ((flags >> 6) & 1) != 0;
 

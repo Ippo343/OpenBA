@@ -137,10 +137,10 @@ using VoidThisFn = void (*)(void*);
 // RT_DATA_SLOT, which is mint-aware and never caches a null.
 // ---------------------------------------------------------------------------
 void** ConfigSingletonSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Configuration@Video@@0PEAV12@EA");
+    return reinterpret_cast<void**>(&::Video::Configuration::_singleton);
 }
 void** DeviceSingletonSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+    return reinterpret_cast<void**>(&::Video::Device::_singleton);
 }
 
 // ---------------------------------------------------------------------------

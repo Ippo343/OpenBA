@@ -65,30 +65,16 @@
 // the literal "ShaderProgram" (0x18004e530 / 0x18004e8b0).
 //
 // ============================================================================
-// *** NOT CONSTRUCTIBLE, AND SLOT 0 IS PURE. *** (B34_BRIEFS A.4)
+// ENDGAME B.3 step 9, block VID (B39_RULES.md D1/D2)
 // ============================================================================
-// All three classes are ABSTRACT in C++ even though retail's VertexProgram and
-// PixelProgram are concrete, and the reason is slot 0. Retail's slot 0 is a real
-// per-class body (0x18004e360 / 0x18004e810 / 0x18004eb90) but OURS is not a
-// per-class function at all: it is one table-driven body in
-// `runtime/src/object/deleting_dtor.cpp`, registered BY ADDRESS through the
-// `RT_DELDTOR(deletingDtor, dtor, size, name)` rows at lines 843-845, and
-// ENDGAME B.2.5 / B35_RULES 11 keep every one of those rows for the whole of
-// step 5. So slot 0 is declared `override = 0` — exactly the shape B.3.4 settled
-// on for `IO::BinaryReader` — and that is also what makes the vtable EMITTABLE
-// once `~ShaderProgram()` exists: defining a destructor on a polymorphic class
-// makes GCC emit a vptr store, which needs `vtable for Video::ShaderProgram`,
-// which needs every non-pure slot to have a body. Block A hit the same wall on
-// the twelve `*Data` bases and answered it the same way.
-//
-// Abstract costs nothing here because NOTHING constructs one of these as a C++
-// object: every live instance is allocated by `Object::ExternalFactory` /
-// `rt_factories_video.inc` and built by the registered ctor DOORS in
-// `runtime/src/video/{shaderprogram,vertexprogram,pixelprogram}.cpp`, which
-// stamp the MINTED `??_7…@Video@@6B@` addresses. A real constructor cannot write
-// a minted vtable address, which is B4b-2's rule and why those doors stay doors.
-// The `protected = default` constructors are there so a probe SUBCLASS in
-// `tests/unit/` can still reach them.
+// VertexProgram and PixelProgram are CONCRETE: retail's real public
+// constructors (??0VertexProgram 0x1800f6100 / ??0PixelProgram 0x1800f3950),
+// their own slot 0, their factory pairs as their own statics, so every live
+// shader wears the COMPILER's table. ShaderProgram stays ABSTRACT in both
+// retail's sense and C++'s (slots 3/6/7 are `_purecall`) with a PROTECTED real
+// constructor (??0ShaderProgram 0x1800f5030) and its own concrete slot 0
+// (0x18004e360). The three minted rows, their RT_DELDTOR rows, the ??0 / ??1
+// doors and the slot doors are retired (tools/rt_mint_retired/vid.txt).
 //
 // NO VIRTUAL DESTRUCTOR (ENDGAME B.1 decision 2): slot 0 is
 // `DeletingDtor(unsigned)`; `~ShaderProgram()` is non-virtual and has no slot.
@@ -104,6 +90,7 @@
 
 #include "../collection/Collection.h"
 #include "../object/External.h"
+#include "../object/Internal.h"                // Object::detail::InternalMemFree
 #include "../system/String.h"
 
 namespace Video {
@@ -163,7 +150,24 @@ public:
     // abstract in retail's sense as well as C++'s. Slot 4 is
     // `Object::External::Compile`, INHERITED (retail's slot 4 is 0x1800066e0,
     // External's own body).
-    Object::Base* DeletingDtor(unsigned flags) override = 0;  // [0] 0x18004e360
+    //
+    // [0] 0x18004e360 -- MSVC's VECTOR deleting destructor (`MOV EDX,0x50`, the
+    // eh-vector dtor over ~ShaderProgram 0x1800f50b0), both arms as the retired
+    // RT_DELDTOR row ran them. Reached only on a ShaderProgram-typed object,
+    // which nothing builds (the class is abstract); each subclass has its own.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<ShaderProgram*>(self + static_cast<int64_t>(i) * 0x50)->~ShaderProgram();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~ShaderProgram();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char*   TypeName() const override;                  // [1] 0x18004e0c0
     uint32_t      Type() const override;                      // [2] 0x18004e0a0
     bool          Serialize(void* stream) override;           // [5] 0x1800f5110
@@ -202,10 +206,10 @@ public:
     static uint32_t TypeId();                                     // 0x18004e0b0
 
     // `?CreateNewObject@` / `?CreateInPlaceObject@` exist for every external;
-    // ShaderProgram's are the ABSTRACT class's and `rt_factories_video.inc`
-    // gives Video::ShaderProgram a null step list, so nothing calls them.
-    static Object::Base* CreateNewObject();                       // 0x18004e0d0 — not ported
-    static Object::Base* CreateInPlaceObject(void* storage);      // 0x18004e0e0 — not ported
+    // ShaderProgram's are the ABSTRACT class's: `XOR EAX,EAX ; RET` both
+    // (B39_RULES D2 -- the class's own statics, shaderprogram.cpp).
+    static Object::Base* CreateNewObject();                       // 0x18004e0d0
+    static Object::Base* CreateInPlaceObject(void* storage);      // 0x18004e0e0
 
     // ??0ShaderProgram@Video@@QEAA@AEBV01@@Z (0x18004e200) and
     // ??4ShaderProgram@Video@@QEAAAEAV01@AEBV01@@Z (0x18004e290) are REAL,
@@ -217,27 +221,22 @@ public:
     ShaderProgram(const ShaderProgram& other);                    // 0x18004e200 — not ported
     ShaderProgram& operator=(const ShaderProgram& other);         // 0x18004e290 — not ported
 
-    // ??1ShaderProgram@Video@@UEAA@XZ (0x1800f50b0). NON-virtual (`UEAA` is the
-    // mangling of a virtual dtor in retail, where slot 0 reaches it — here slot
-    // 0's table row reaches it instead; see
-    // reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
-    //
-    // PUBLIC, for the reason block A's `Video::XData::~XData()` is public: the
-    // REGISTERED DOOR that fills `??1ShaderProgram@Video@@UEAA@XZ` is a free
-    // function, not a member or a friend, and it has to spell
-    // `->Video::ShaderProgram::~ShaderProgram()`. The same applies below to
-    // every member a door calls, including the two static `_*TypeName` reflection
-    // companions retail spells `CA` (private static). The one thing that stays
-    // inaccessible is the CONSTRUCTOR, which is the property that matters.
-    ~ShaderProgram();
 
     static const char* _TypeName();        // 0x18004e080 -> "ShaderProgram"   (retail: CA, private)
     static const char* _ParentTypeName();  // 0x18004e090 -> "Object::CompiledExternal"
 
 protected:
-    // See the "NOT CONSTRUCTIBLE" banner. ??0ShaderProgram@Video@@QEAA@XZ
-    // (0x1800f5030) stays a registered ctor DOOR (B4b-2 / B35_RULES 11).
-    ShaderProgram() = default;
+    // ??0ShaderProgram@Video@@QEAA@XZ 0x1800f5030 -- the REAL constructor,
+    // PROTECTED on the abstract base. CompiledExternal() (Base's, External's and
+    // CompiledExternal's vptrs, External's zero stores), ShaderProgram's vptr
+    // (the compiler's), then the three Array headers +0x20..+0x4f zeroed by their
+    // own constructors -- retail's six qword stores. +0x50 is never touched.
+    ShaderProgram() : Object::CompiledExternal(), _textures(), _constants(), _byteCode() {}
+
+    // ??1ShaderProgram@Video@@UEAA@XZ (0x1800f50b0). NON-virtual (no virtual dtor
+    // until the normal-virtual cutover); reached by slot 0 and as the subclasses'
+    // base destructor.
+    ~ShaderProgram();
 
 public:
     // ---- the 0x30 bytes ShaderProgram adds ------------------------------
@@ -276,8 +275,32 @@ static_assert(std::is_trivially_copyable<ShaderProgram::Parameter>::value,
 // ============================================================
 class VertexProgram : public ShaderProgram {
 public:
+    // ??0VertexProgram@Video@@QEAA@XZ 0x1800f6100 -- the REAL constructor: ShaderProgram()
+    // inlined (five vptr stamps in all, the compiler's), this class's own vptr,
+    // then PlatformConstruct fills +0x50.
+    VertexProgram() : ShaderProgram() {
+        PlatformConstruct();   // +0x50
+    }
+
     // Slot 4 is `Object::External::Compile`, inherited through ShaderProgram.
-    Object::Base*     DeletingDtor(unsigned flags) override = 0;  // [0] 0x18004e810
+    //
+    // [0] 0x18004e810 -- MSVC's VECTOR deleting destructor (`MOV EDX,0x58`, the
+    // eh-vector dtor over ~VertexProgram 0x1800f61b0), both arms as the retired
+    // RT_DELDTOR row ran them. The scalar arm's class-specific operator delete is
+    // the locked MemFree. Nothing `new[]`s one.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<VertexProgram*>(self + static_cast<int64_t>(i) * 0x58)->~VertexProgram();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~VertexProgram();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char*       TypeName() const override;                  // [1] 0x18004e560
     uint32_t          Type() const override;                      // [2] 0x18004e540
     int32_t           GetFileVersion() const override;            // [3] 0x1800f6230 — `MOV EAX,5`
@@ -295,8 +318,10 @@ public:
     void Bind(void* context, int32_t permutation) const;
 
     static uint32_t      TypeId();                                // 0x18004e550
-    static Object::Base* CreateNewObject();                       // 0x18004e650 — rt_factories_video.inc
-    static Object::Base* CreateInPlaceObject(void* storage);      // 0x18004e6d0 — rt_factories_video.inc
+    // Retail's factory pair (B39_RULES D2), the class's own statics. The class
+    // declares its own placement `operator new` (not ported): `::new (p)`.
+    static Object::Base* CreateNewObject();                       // 0x18004e650
+    static Object::Base* CreateInPlaceObject(void* storage);      // 0x18004e6d0
     static void*         operator new(size_t size);               // 0x18004e570 — not ported
     static void*         operator new(size_t size, void* storage);// 0x18004e5e0 — not ported
     static void          operator delete(void* p);                // 0x18004e5f0 — class_operator_delete.cpp
@@ -305,11 +330,9 @@ public:
     VertexProgram(const VertexProgram& other);                    // 0x18004e730 — not ported
     VertexProgram& operator=(const VertexProgram& other);         // 0x18004e780 — not ported
 
-    ~VertexProgram();            // ??1VertexProgram@Video@@UEAA@XZ 0x1800f61b0
-
     // The three platform halves. `AEAA` is PRIVATE IN RETAIL, not unexported
     // (reference_aeaa_is_private_not_unexported.md) — so each has its own
-    // registered door, which is why they are public here (see ~ShaderProgram).
+    // registered door, which is why they are public here.
     void PlatformConstruct();    // 0x1800f65e0
     void PlatformDestruct();     // 0x1800f6620
     bool PlatformCreate();       // 0x1800f6640 — returns the companion's slot 1
@@ -319,7 +342,9 @@ public:
     static const char* _FileExtension();   // 0x18004e510 -> "srsl"
 
 protected:
-    VertexProgram() = default;   // ??0VertexProgram…@XZ 0x1800f6100 stays a DOOR
+    // ??1VertexProgram@Video@@UEAA@XZ 0x1800f61b0. NON-virtual; reached through slot 0.
+    // ~ShaderProgram / ~CompiledExternal / ~External are the chain.
+    ~VertexProgram();
 
 public:
     void* _data;   // +0x50  Video::VertexProgramData*, from DeviceData slot +0x78
@@ -337,7 +362,32 @@ static_assert(offsetof(VertexProgram, _data) == 0x50,
 // ============================================================
 class PixelProgram : public ShaderProgram {
 public:
-    Object::Base*     DeletingDtor(unsigned flags) override = 0;  // [0] 0x18004eb90
+    // ??0PixelProgram@Video@@QEAA@XZ 0x1800f3950 -- the REAL constructor: ShaderProgram()
+    // inlined (five vptr stamps in all, the compiler's), this class's own vptr,
+    // then PlatformConstruct fills +0x50.
+    PixelProgram() : ShaderProgram() {
+        PlatformConstruct();   // +0x50
+    }
+
+    // Slot 4 is `Object::External::Compile`, inherited through ShaderProgram.
+    //
+    // [0] 0x18004eb90 -- MSVC's VECTOR deleting destructor (`MOV EDX,0x58`, the
+    // eh-vector dtor over ~PixelProgram 0x1800f3a00), both arms as the retired
+    // RT_DELDTOR row ran them. The scalar arm's class-specific operator delete is
+    // the locked MemFree. Nothing `new[]`s one.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<PixelProgram*>(self + static_cast<int64_t>(i) * 0x58)->~PixelProgram();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~PixelProgram();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char*       TypeName() const override;                  // [1] 0x18004e8e0
     uint32_t          Type() const override;                      // [2] 0x18004e8c0
     int32_t           GetFileVersion() const override;            // [3] 0x1800f3a80 — `MOV EAX,5`
@@ -352,16 +402,16 @@ public:
     void Bind(void* context, int32_t permutation) const;
 
     static uint32_t      TypeId();                                // 0x18004e8d0
-    static Object::Base* CreateNewObject();                       // 0x18004e9d0 — rt_factories_video.inc
-    static Object::Base* CreateInPlaceObject(void* storage);      // 0x18004ea50 — rt_factories_video.inc
+    // Retail's factory pair (B39_RULES D2), the class's own statics. The class
+    // declares its own placement `operator new` (not ported): `::new (p)`.
+    static Object::Base* CreateNewObject();                       // 0x18004e9d0
+    static Object::Base* CreateInPlaceObject(void* storage);      // 0x18004ea50
     static void*         operator new(size_t size);               // 0x18004e8f0 — not ported
     static void*         operator new(size_t size, void* storage);// 0x18004e960 — not ported
     static void          operator delete(void* p);                // 0x18004e970 — class_operator_delete.cpp
 
     PixelProgram(const PixelProgram& other);                      // 0x18004eab0 — not ported
     PixelProgram& operator=(const PixelProgram& other);           // 0x18004eb00 — not ported
-
-    ~PixelProgram();             // ??1PixelProgram@Video@@UEAA@XZ 0x1800f3a00
 
     void PlatformConstruct();    // 0x1800f3e40
     void PlatformDestruct();     // 0x1800f3e90
@@ -372,7 +422,9 @@ public:
     static const char* _FileExtension();   // 0x18004e890 -> "srsl"
 
 protected:
-    PixelProgram() = default;    // ??0PixelProgram…@XZ 0x1800f3950 stays a DOOR
+    // ??1PixelProgram@Video@@UEAA@XZ 0x1800f3a00. NON-virtual; reached through slot 0.
+    // ~ShaderProgram / ~CompiledExternal / ~External are the chain.
+    ~PixelProgram();
 
 public:
     void* _data;   // +0x50  Video::PixelProgramData*, from DeviceData slot +0x80

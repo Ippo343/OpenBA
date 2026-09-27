@@ -76,9 +76,18 @@
 //
 // NEW LANE-D ROW: exactly one, `0x180010760`, named below.
 // ============================================================================
+//
+// ENDGAME B.3.9 block VID (B39_RULES D1, section 5 item 4): the twelve classes
+// are CONCRETE (CompanionData.h). The twelve ctor DOORS stay -- dx11 reaches them
+// through its import struct (devicedata.cpp AllocData, exports.cpp) -- each now
+// the one line `::new (self) XData(owner)` (B9-6). The minted-table accessors,
+// the hand stores of the MINTED `??_7XData` in the ctors and the dtors, and the
+// ten `??1XData` doors below (their one caller was the RT_DELDTOR row) are GONE
+// with the twelve mint rows. The table above is the retail evidence and stays.
 
 #include <cstdint>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Buffers.h"
@@ -102,42 +111,9 @@ using RtVideo::DisplayMode;
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-namespace {
-
-using CompanionCtorFn = void* (*)(void*, void*);
-using CompanionDtorFn = void  (*)(void*);
-
-// ----------------------------------------------------------------------------
-// The twelve exported base vtables, one accessor each, resolved once.
-//
-// SPELLED OUT RATHER THAN BUILT BY THE MACRO, deliberately. The obvious
-// version pastes the class name into the mangled string inside the ctor macro
-// — and it works, and `tools/export_name_audit.py` then cannot see a
-// single one of these twelve names, because it scans SOURCE for a literal
-// argument and stringization hides them. That is exactly the shape of
-// reference_census_cannot_see_nonliteral_registrations.md, where twelve live
-// ports were invisible to the census because the name was a named constant.
-// Twelve one-line functions cost nothing and keep the audit able to do its job.
-//
-// The accessors follow buffers.cpp's existing ImageBufferDataVtable() idiom.
-// ----------------------------------------------------------------------------
-void* Vt_RenderBufferData()   { static void* v = ResolveExport("??_7RenderBufferData@Video@@6B@");   return v; }
-void* Vt_VideoProgramData()   { static void* v = ResolveExport("??_7VideoProgramData@Video@@6B@");   return v; }
-void* Vt_RenderStateData()    { static void* v = ResolveExport("??_7RenderStateData@Video@@6B@");    return v; }
-void* Vt_PixelProgramData()   { static void* v = ResolveExport("??_7PixelProgramData@Video@@6B@");   return v; }
-void* Vt_VertexProgramData()  { static void* v = ResolveExport("??_7VertexProgramData@Video@@6B@");  return v; }
-void* Vt_VertexLayoutData()   { static void* v = ResolveExport("??_7VertexLayoutData@Video@@6B@");   return v; }
-void* Vt_VertexBufferData()   { static void* v = ResolveExport("??_7VertexBufferData@Video@@6B@");   return v; }
-void* Vt_IndexBufferData()    { static void* v = ResolveExport("??_7IndexBufferData@Video@@6B@");    return v; }
-void* Vt_ConstantBufferData() { static void* v = ResolveExport("??_7ConstantBufferData@Video@@6B@"); return v; }
-void* Vt_ImageBufferData()    { static void* v = ResolveExport("??_7ImageBufferData@Video@@6B@");    return v; }
-void* Vt_ContextData()        { static void* v = ResolveExport("??_7ContextData@Video@@6B@");        return v; }
-void* Vt_DeviceData()         { static void* v = ResolveExport("??_7DeviceData@Video@@6B@");         return v; }
-
-}  // namespace
-
 // ============================================================================
-// The twelve companion-base constructors.
+// The twelve companion-base constructors -- DOORS dx11 calls by its import
+// struct, so they stay (B39_RULES D1.4), each the class's real constructor.
 //
 //   1800f8cd0  LEA RAX,[0x180158c30]      ; ??_7DeviceData@Video@@6B@
 //   1800f8cd7  MOV qword ptr [RCX+0x8],RDX
@@ -145,161 +121,56 @@ void* Vt_DeviceData()         { static void* v = ResolveExport("??_7DeviceData@V
 //   1800f8cde  MOV RAX,RCX
 //   1800f8ce1  RET
 //
-// Note retail's store ORDER: owner first, then the vtable. Reproduced here
-// even though nothing can observe the difference in a single-threaded ctor —
-// a port that is faithful only where it is observable is a port whose
-// faithfulness nobody can check.
-//
-// The macro emits one function per class rather than one shared body with a
-// vtable parameter, deliberately: each needs its own RT_DIFF site so the
-// summary says which of the twelve diverged, and each resolves its own
-// exported vtable, which is the thing under test.
+// `::new` into the storage dx11 allocated; the vptr is the compiler's, and dx11
+// overwrites it with its own derived table on the next line (AllocData).
 // ============================================================================
-#define RT_COMPANION_CTOR(CLASS, OWNER)                                        \
+#define RT_COMPANION_CTOR(CLASS)                                               \
     void* Video_##CLASS##_Ctor(CompanionData* self, void* owner) {             \
-                           \
-        self->owner  = owner;                                                  \
-        self->vtable = Vt_##CLASS();                                           \
-                                                                      \
-        return self;                                                           \
+        return ::new (static_cast<void*>(self)) Video::CLASS(owner);           \
     }
 
-RT_COMPANION_CTOR(RenderBufferData,   RenderBuffer)
-RT_COMPANION_CTOR(VideoProgramData,   VideoProgram)
-RT_COMPANION_CTOR(RenderStateData,    RenderState)
-RT_COMPANION_CTOR(PixelProgramData,   PixelProgram)
-RT_COMPANION_CTOR(VertexProgramData,  VertexProgram)
-RT_COMPANION_CTOR(VertexLayoutData,   VertexLayout)
-RT_COMPANION_CTOR(VertexBufferData,   VertexBuffer)
-RT_COMPANION_CTOR(IndexBufferData,    IndexBuffer)
-RT_COMPANION_CTOR(ConstantBufferData, ConstantBuffer)
-RT_COMPANION_CTOR(ImageBufferData,    ImageBuffer)
-RT_COMPANION_CTOR(ContextData,        Context)
-RT_COMPANION_CTOR(DeviceData,         Device)
+RT_COMPANION_CTOR(RenderBufferData)
+RT_COMPANION_CTOR(VideoProgramData)
+RT_COMPANION_CTOR(RenderStateData)
+RT_COMPANION_CTOR(PixelProgramData)
+RT_COMPANION_CTOR(VertexProgramData)
+RT_COMPANION_CTOR(VertexLayoutData)
+RT_COMPANION_CTOR(VertexBufferData)
+RT_COMPANION_CTOR(IndexBufferData)
+RT_COMPANION_CTOR(ConstantBufferData)
+RT_COMPANION_CTOR(ImageBufferData)
+RT_COMPANION_CTOR(ContextData)
+RT_COMPANION_CTOR(DeviceData)
 
 #undef RT_COMPANION_CTOR
 
 // ============================================================================
-// The ten companion-base destructors (ImageBufferData's and RenderStateData's
-// are already ported elsewhere — see the banner).
+// The twelve member bodies -- `Video::XData::~XData()`.
 //
 //   1800f8cf0  LEA RAX,[0x180158c30]      ; ??_7DeviceData@Video@@6B@
 //   1800f8cf7  MOV qword ptr [RCX],RAX
 //   1800f8cfa  RET
 //
-// The whole body is the base-class vtable re-stamp: the standard MSVC idiom of
-// running a dtor body under its OWN class's vtable rather than a derived
-// override. There is nothing else to free — these bases own no memory; the
-// derived dx11 object's scalar-deleting dtor does the MemFree, and it
-// tail-calls this export as its `im->BaseDtor(self)`.
-//
-// The `owner` field at +0x08 is deliberately LEFT ALONE. Retail does not clear
-// it and neither do we — reference_oracle_must_not_compare_unwritten_bytes.md
-// is the mirror of this: comparing a field neither side writes is the failure,
-// and so is writing one retail leaves.
-// ============================================================================
-// ENDGAME B.3.5 block A — THE BODY MOVED INTO THE MEMBER. `~XData()` is now a
-// real, non-virtual, public destructor on the real abstract class
-// (runtime/types/video/CompanionData.h); the twelve member bodies are at the
-// bottom of this file, inside `namespace Video`, and each door below is a
-// one-line QUALIFIED non-virtual delegation.
-//
-// WHY THE QUALIFICATION IS LOAD-BEARING HERE TOO (B34_BRIEFS A.1): a live
-// `*Data` object wears dx11's vtable, whose slot 0 is the derived scalar
-// deleting destructor, which is what CALLS this door. An unqualified virtual
-// call would dispatch back into it. `~XData()` is not in any slot, so the
-// qualification is what keeps this a base-subobject destructor call and not a
-// re-entry — the same reason RULE B5-3 forbids `DeletingDtor(0)` on the dx11
-// side.
-//
-// The receiver is still a `CompanionData*` because the ctor doors above hand
-// out that view and dx11 hands us a raw pointer, so each door bridges with a
-// `reinterpret_cast` (`// B.3.5 bridge`, which is what the B.4 metric counts).
-#define RT_COMPANION_DTOR(CLASS)                                               \
-    void Video_##CLASS##_Dtor(CompanionData* self) {                           \
-        reinterpret_cast<Video::CLASS*>(self)->Video::CLASS::~CLASS();  /* B.3.5 bridge */ \
-    }
-
-RT_COMPANION_DTOR(RenderBufferData)
-RT_COMPANION_DTOR(VideoProgramData)
-RT_COMPANION_DTOR(PixelProgramData)
-RT_COMPANION_DTOR(VertexProgramData)
-RT_COMPANION_DTOR(VertexLayoutData)
-RT_COMPANION_DTOR(VertexBufferData)
-RT_COMPANION_DTOR(IndexBufferData)
-RT_COMPANION_DTOR(ConstantBufferData)
-RT_COMPANION_DTOR(ContextData)
-RT_COMPANION_DTOR(DeviceData)
-
-#undef RT_COMPANION_DTOR
-
-// ============================================================================
-// The twelve member bodies — `Video::XData::~XData()`.
-//
-// This block is at `namespace Video` scope and comes AFTER the `RtVideo`
-// using-declarations and the anonymous namespace, per B34_BRIEFS A.2: a member
-// of `Video::X` cannot be defined inside a sibling namespace, and the
-// anonymous-namespace helpers above are still reachable here by unqualified
-// name because they are members of the global namespace's declarative region.
-//
-// THE WHOLE BODY IS THE BASE-CLASS VPTR RE-STAMP, as retail's is:
-//
-//   1800f8cf0  LEA RAX,[0x180158c30]      ; ??_7DeviceData@Video@@6B@
-//   1800f8cf7  MOV qword ptr [RCX],RAX
-//   1800f8cfa  RET
-//
-// the standard MSVC idiom of running a destructor body under its OWN class's
-// vtable rather than a derived override. There is nothing else to free — these
-// bases own no memory; the derived dx11 object's scalar deleting destructor
-// does the `MemFree`, and it calls this as its base-destructor step.
-//
-// THE STORE IS WRITTEN OUT BY HAND AND IS NOT LEFT TO THE COMPILER. GCC emits
-// its own vptr store at the top of a polymorphic destructor, but it stores
-// GCC's vtable for the class — and these twelve objects are expected by the
-// rest of the tree, by `standalone/rt_data_mint_tables.inc` and by the
-// `RT_DELDTOR` rows to be wearing the MINTED `??_7XData@Video@@6B@` address
-// (B35_RULES 11 keeps those rows for the whole of step 5). So the address the
-// accessors above resolve is stored explicitly, last, exactly as retail's LEA
-// operand does. The per-class operand table is in this file's banner and every
-// one of the twelve was checked against its own ctor AND dtor.
-//
-// The `owner` field at +0x08 is deliberately LEFT ALONE. Retail does not clear
-// it and neither do we — reference_oracle_must_not_compare_unwritten_bytes.md
-// is the mirror of this: comparing a field neither side writes is the failure,
-// and so is writing one retail leaves.
+// The whole of retail's body is the base-class vptr re-stamp, which is the
+// compiler's own entry store now (ENDGAME B.3.9 VID: no hand store of the
+// minted table). These bases own no memory; the derived dx11 object's slot 0
+// does the MemFree and calls this as its base-destructor step (RULE B5-3). The
+// `owner` field at +0x08 is deliberately LEFT ALONE, as retail leaves it.
 // ============================================================================
 namespace Video {
 
-#define RT_COMPANION_DTOR_BODY(CLASS)                                          \
-    CLASS::~CLASS() {                                                          \
-        *reinterpret_cast<void**>(this) = Vt_##CLASS();                        \
-    }
-
-RT_COMPANION_DTOR_BODY(RenderBufferData)
-RT_COMPANION_DTOR_BODY(VideoProgramData)
-RT_COMPANION_DTOR_BODY(PixelProgramData)
-RT_COMPANION_DTOR_BODY(VertexProgramData)
-RT_COMPANION_DTOR_BODY(VertexLayoutData)
-RT_COMPANION_DTOR_BODY(VertexBufferData)
-RT_COMPANION_DTOR_BODY(IndexBufferData)
-RT_COMPANION_DTOR_BODY(ConstantBufferData)
-RT_COMPANION_DTOR_BODY(ContextData)
-RT_COMPANION_DTOR_BODY(DeviceData)
-
-// The remaining two. Their registered DOORS are elsewhere and this block does
-// NOT touch them: `??1ImageBufferData` is `Video_ImageBufferData_Dtor` in
-// `buffers.cpp` (Wave 6 lane C) and `??1RenderStateData` is in `device.cpp`
-// (Wave 6 lane B) — see this file's banner on why registering a name twice is
-// silent. The member has to exist for all twelve or `Video::ImageBufferData`
-// would be a class whose declared destructor never links, so the bodies live
-// here with the other ten and those two doors become one-line delegations when
-// block C takes `buffers.cpp` and block D takes `device.cpp`. Until then the
-// same three-instruction store exists in two places, which is a duplicate of
-// four instructions and not of a decision.
-RT_COMPANION_DTOR_BODY(ImageBufferData)
-RT_COMPANION_DTOR_BODY(RenderStateData)
-
-#undef RT_COMPANION_DTOR_BODY
+RenderBufferData::~RenderBufferData()     {}
+VideoProgramData::~VideoProgramData()     {}
+PixelProgramData::~PixelProgramData()     {}
+VertexProgramData::~VertexProgramData()   {}
+VertexLayoutData::~VertexLayoutData()     {}
+VertexBufferData::~VertexBufferData()     {}
+IndexBufferData::~IndexBufferData()       {}
+ConstantBufferData::~ConstantBufferData() {}
+ContextData::~ContextData()               {}
+DeviceData::~DeviceData()                 {}
+ImageBufferData::~ImageBufferData()       {}
+RenderStateData::~RenderStateData()       {}
 
 }  // namespace Video
 
@@ -550,56 +421,6 @@ int RtVideoCompanionRegister() {
     RegisterRuntimeExport("??0DeviceData@Video@@QEAA@PEAVDevice@1@@Z",
                           (void*)&Video_DeviceData_Ctor);
     RegisterRuntimeAddr(0x1800f8cd0, (void*)&Video_DeviceData_Ctor);
-    n++;
-
-    RegisterRuntimeExport("??1DeviceData@Video@@UEAA@XZ",
-                          (void*)&Video_DeviceData_Dtor);
-    RegisterRuntimeAddr(0x1800f8cf0, (void*)&Video_DeviceData_Dtor);
-    n++;
-
-    RegisterRuntimeExport("??1VertexProgramData@Video@@UEAA@XZ",
-                          (void*)&Video_VertexProgramData_Dtor);
-    RegisterRuntimeAddr(0x1800f8d10, (void*)&Video_VertexProgramData_Dtor);
-    n++;
-
-    RegisterRuntimeExport("??1VertexLayoutData@Video@@UEAA@XZ",
-                          (void*)&Video_VertexLayoutData_Dtor);
-    RegisterRuntimeAddr(0x1800f8d30, (void*)&Video_VertexLayoutData_Dtor);
-    n++;
-
-    RegisterRuntimeExport("??1VertexBufferData@Video@@UEAA@XZ",
-                          (void*)&Video_VertexBufferData_Dtor);
-    RegisterRuntimeAddr(0x1800f8d50, (void*)&Video_VertexBufferData_Dtor);
-    n++;
-
-    RegisterRuntimeExport("??1VideoProgramData@Video@@UEAA@XZ",
-                          (void*)&Video_VideoProgramData_Dtor);
-    RegisterRuntimeAddr(0x1800f8d90, (void*)&Video_VideoProgramData_Dtor);
-    n++;
-
-    RegisterRuntimeExport("??1RenderBufferData@Video@@UEAA@XZ",
-                          (void*)&Video_RenderBufferData_Dtor);
-    RegisterRuntimeAddr(0x1800f8db0, (void*)&Video_RenderBufferData_Dtor);
-    n++;
-
-    RegisterRuntimeExport("??1PixelProgramData@Video@@UEAA@XZ",
-                          (void*)&Video_PixelProgramData_Dtor);
-    RegisterRuntimeAddr(0x1800f8dd0, (void*)&Video_PixelProgramData_Dtor);
-    n++;
-
-    RegisterRuntimeExport("??1IndexBufferData@Video@@UEAA@XZ",
-                          (void*)&Video_IndexBufferData_Dtor);
-    RegisterRuntimeAddr(0x1800f8df0, (void*)&Video_IndexBufferData_Dtor);
-    n++;
-
-    RegisterRuntimeExport("??1ContextData@Video@@UEAA@XZ",
-                          (void*)&Video_ContextData_Dtor);
-    RegisterRuntimeAddr(0x1800f8e30, (void*)&Video_ContextData_Dtor);
-    n++;
-
-    RegisterRuntimeExport("??1ConstantBufferData@Video@@UEAA@XZ",
-                          (void*)&Video_ConstantBufferData_Dtor);
-    RegisterRuntimeAddr(0x1800f8e50, (void*)&Video_ConstantBufferData_Dtor);
     n++;
 
 
