@@ -57,9 +57,6 @@ static fn_RemoveFloorMesh_t s_fn_RemoveFloorMesh = nullptr;
 typedef void (*fn_FloorSubF390_t)(void* self);
 static fn_FloorSubF390_t s_fn_FloorSubF390 = nullptr;
 
-// Type ID for floor-related building type (DAT_1401c7708)
-static uint32_t* s_pFloorBuildingTypeId = nullptr;
-
 // Game state singleton
 static void** s_pGameState = nullptr;
 
@@ -78,8 +75,8 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x14011F390));
     s_pGameState = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3dd8));
-    s_pFloorBuildingTypeId = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7708));
+    // ENDGAME B.3.9 C1 (D5): 0x1401c7708 (FloorDescription) had zero readers --
+    // resolved but never dereferenced anywhere in this file -- removed outright.
 
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_d = reinterpret_cast<fn_IsDerivedFrom_dispatch_t>(
@@ -118,10 +115,9 @@ static void EnsureHelpers() {
 // Reimplemented exe helpers (callee bodies for the guarded call sites above)
 // ============================================================
 
-// Type ID globals used by the helpers.
-// DWORD_1401c79e0 -- NaturalResource entity-data component type ID (FindComponentByType).
-static uint32_t* s_pNatResTypeId = nullptr;
-// DAT_1401c7708 -- FloorDescription type ID (already resolved as s_pFloorBuildingTypeId).
+// ENDGAME B.3.9 C1 (D5): 0x1401c79e0 is MapComponent (INVENTORY_C Table 1, not
+// "NaturalResource" as the old comment/local name guessed) -- resolved but never
+// dereferenced anywhere in this file, so removed outright rather than converted.
 // Picking::Scene::AddMesh (Runtime export) + the ModelComponent finder.
 //
 // ⚠ The finder is Entity_ClearPathQueue = FUN_140003f60 (type id DWORD_1401c7a50 =
@@ -137,7 +133,6 @@ static fn_EntityAccessor_t s_fn_EntityAccessor = nullptr;
 static bool s_subResolved = false;
 static void EnsureSubHelpers() {
     if (s_subResolved) return;
-    s_pNatResTypeId   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c79e0));
     s_fn_EntityAccessor = reinterpret_cast<fn_EntityAccessor_t>(ResolveAddr(Module::Exe, 0x140003f60));
     // Picking::Scene::AddMesh / RemoveMesh — Runtime exports.
     // 0x1801252e0, NOT 0x1800f8d80. The latter is int3 PADDING, not a function entry —

@@ -33,6 +33,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Component/FruitDescription.h"   // ENDGAME B.3.9 C1: 0x1401c4288 cell class
 
 // ============================================================
 // Resolved helpers (.rdata constants + globals)
@@ -49,9 +50,6 @@ static float* s_fFreezeThreshold = nullptr;    // 0x1401721d0 -> 32.0f
 static float* s_fFrostDamage = nullptr;        // 0x140172288 -> -10.0f
 // DAT_1401722b0 -- double mask for fabs (0x7FFFFFFFFFFFFFFF)
 static uint64_t* s_dblAbsMask = nullptr;       // 0x1401722b0
-
-// FruitDescription type-id (DAT_1401c4288), written by FruitDescription_Register.
-static uint32_t* s_pFruitDescTypeId = nullptr; // 0x1401c4288
 
 // Game world singleton (DAT_1401c3dd8 == g_pGameWorldSingleton)
 //   +0x128: pointer to the season-time object (+8 = Time value)
@@ -76,7 +74,6 @@ static void EnsureHelpers() {
     s_fFrostDamage     = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172288));
     s_dblAbsMask       = reinterpret_cast<uint64_t*>(ResolveAddr(Module::Exe, 0x1401722b0));
 
-    s_pFruitDescTypeId = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4288));
     s_pGameWorld       = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3dd8));
 
     s_fn_FindNatResSibling = reinterpret_cast<fn_FindNatResSibling_t>(
@@ -106,9 +103,9 @@ static inline float AbsViaMask(float v) {
 void FruitComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[FruitComponent] Funcs resolved: GameWorld=%p FruitDescTypeId=%p "
+    printf("[FruitComponent] Funcs resolved: GameWorld=%p FruitDescTypeId=%u "
            "FindNatResSibling=%p UVScale=%p\n",
-           (void*)s_pGameWorld, (void*)s_pFruitDescTypeId,
+           (void*)s_pGameWorld, FruitDescription::TypeId(),
            (void*)s_fn_FindNatResSibling, (void*)s_fUVScale);
 #endif
 }
@@ -193,8 +190,8 @@ void FruitComponent::Update(void* time) {
     // resData = IsDerivedFrom(_description, FruitDescription) ? _description : 0
     void* baseObj = _description;
     void* resData = nullptr;
-    if (baseObj && fn_IsDerivedFrom && s_pFruitDescTypeId) {
-        if (fn_IsDerivedFrom(baseObj, *s_pFruitDescTypeId))
+    if (baseObj && fn_IsDerivedFrom) {
+        if (fn_IsDerivedFrom(baseObj, FruitDescription::TypeId()))
             resData = baseObj;
     }
     // [STANDALONE TRUST] The factory/type tree can be incomplete in standalone, so

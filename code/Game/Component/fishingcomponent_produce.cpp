@@ -19,6 +19,8 @@
 #include <cstdlib>
 #include <cstring>
 #include "Component/FishingComponent.h"
+#include "Component/RadiusDescription.h"    // ENDGAME B.3.9 C1: 0x1401c4870 cell class
+#include "Component/FishingDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7698 cell class
 
 namespace {
 
@@ -31,8 +33,6 @@ typedef void (*fn_FindComp_t)(uintptr_t entity, uintptr_t* out);   // 0x14000468
 
 fn_BrushTile_t s_brush   = nullptr;
 fn_FindComp_t  s_findMap = nullptr;
-uint32_t*      s_tidRadiusDesc  = nullptr;   // 0x1401c4870 RadiusDescription
-uint32_t*      s_tidFishingDesc = nullptr;   // 0x1401c7698 FishingDescription
 bool           s_resolved = false;
 
 constexpr int kFishingCoverageState = 8;
@@ -41,8 +41,6 @@ void Resolve() {
     if (s_resolved) return;
     s_brush   = reinterpret_cast<fn_BrushTile_t>(ResolveAddr(Module::Exe, 0x14009f990));
     s_findMap = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140004680));
-    s_tidRadiusDesc  = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4870));
-    s_tidFishingDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7698));
     s_resolved = true;
 }
 
@@ -54,7 +52,6 @@ void Resolve() {
 // build a dock whose description set is still partly inert; see the callers.
 int RadiusOf(uintptr_t comp) {
     Resolve();
-    if (!s_tidRadiusDesc || !*s_tidRadiusDesc) return -1;
     const uintptr_t entity = *reinterpret_cast<uintptr_t*>(comp + 0x10);
     if (!entity) return -1;
     const uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x28);
@@ -65,7 +62,7 @@ int RadiusOf(uintptr_t comp) {
     for (int i = 0; i < n; ++i) {
         void* obj = items[i];
         if (!obj) continue;
-        if (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, *s_tidRadiusDesc))
+        if (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, RadiusDescription::TypeId()))
             return *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(obj) + 0x28);
     }
     return -1;
@@ -158,8 +155,8 @@ char FishingComponent::ProduceTick(void* /*time*/) {
     // would read a null otherwise.
     void* descObj = *reinterpret_cast<void**>(comp + 0x18);
     uint32_t mask = 0;
-    if (descObj && fn_IsDerivedFrom && s_tidFishingDesc && *s_tidFishingDesc &&
-        fn_IsDerivedFrom(descObj, *s_tidFishingDesc))
+    if (descObj && fn_IsDerivedFrom &&
+        fn_IsDerivedFrom(descObj, FishingDescription::TypeId()))
         mask = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(descObj) + 0x2c);
 
     int total = 0, matching = 0;

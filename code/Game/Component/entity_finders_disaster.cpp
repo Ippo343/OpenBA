@@ -65,6 +65,8 @@
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/FireComponent.h"      // ENDGAME B.3.9 C1: 0x1401c41e0 cell class
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.9 C1: 0x1401c7158 cell class
 
 namespace {
 
@@ -105,15 +107,16 @@ void* FindByTypeId(uintptr_t entity, void* retIBP, uint32_t typeId) {
 }  // namespace
 
 // FUN_140005840 — Entity::FindComponent<FireComponent>
+// ENDGAME B.3.9 C1 (B39_RULES.md D5): 0x1401c41e0 is FireComponent's registered
+// type-id cell (INVENTORY_C Table 1) -- read BY CELL as the class's static.
 extern "C" void* Entity_FindComponent_Fire_5840(uintptr_t entity, void* retIBP) {
-    static uint32_t cache = 0;
-    return FindByTypeId(entity, retIBP, ResolveTid(0x1401c41e0, "FireComponent", &cache));
+    return FindByTypeId(entity, retIBP, FireComponent::TypeId());
 }
 
 // FUN_140009790 — Entity::FindComponent<CitizenComponent>
+// 0x1401c7158 is CitizenComponent's registered type-id cell.
 extern "C" void* Entity_FindComponent_Citizen_9790(uintptr_t entity, void* retIBP) {
-    static uint32_t cache = 0;
-    return FindByTypeId(entity, retIBP, ResolveTid(0x1401c7158, "CitizenComponent", &cache));
+    return FindByTypeId(entity, retIBP, CitizenComponent::TypeId());
 }
 
 // FUN_140002280 — Entity::FindComponent<AmbientEmitterComponent>
@@ -121,6 +124,16 @@ extern "C" void* Entity_FindComponent_Citizen_9790(uintptr_t entity, void* retIB
 // audio arm (tornadocomponent.cpp), and the occupied-building emitter upkeep on
 // worker assign/unassign (citizen_assignworkplace.cpp). All were guarded, so the
 // only symptom was silence.
+//
+// ENDGAME B.3.9 C1: 0x1401c3e60 (AmbientEmitterComponent) is one of the 13
+// UNREGISTERED type-id cells (B39_RULES.md D5) -- LEFT, not converted, per the
+// caller-batch rule (a behaviour site needs the retail caller read first). Left
+// on its ResolveTid(cell, name, cache) fallback, which already resolves to the
+// real class id via GetTypeIdByName when the cell reads 0 -- BUT this finder
+// itself is registered NOWHERE (grep of standalone/reg_*.cpp: only 5840/9790 are
+// RegisterExeAddr'd, never 2280), so nothing calls it and the conversion would
+// be behaviourally inert either way; still listed as BEHAVIOUR-LEFT for the
+// coordinator/opus batch to confirm.
 extern "C" void* Entity_FindComponent_AmbientEmitter_2280(uintptr_t entity, void* retIBP) {
     static uint32_t cache = 0;
     return FindByTypeId(entity, retIBP,

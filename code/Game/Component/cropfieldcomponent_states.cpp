@@ -74,6 +74,8 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Component/NaturalResourceDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7b68 cell class
+#include "Component/RawMaterialDescription.h"        // ENDGAME B.3.9 C1: 0x1401c7cb8 cell class
 
 // Work reimpl resolvers — see the note in CF_MakeAreaWork.
 bool PlantArea_ResolveFuncs();
@@ -166,8 +168,6 @@ fn_SlotOccupied_t    s_slotOccupied = nullptr;   // 0x14012ead0
 fn_SlotRelease_t     s_slotRelease  = nullptr;   // 0x14012eb50
 fn_MapInit_t         s_mapInit      = nullptr;   // 0x140124750
 const float*         s_fRipe        = nullptr;   // 0x140172144 = 0.99f
-uint32_t*            s_tidCropDesc  = nullptr;   // 0x1401c7b68
-uint32_t*            s_tidRawMatDesc= nullptr;   // 0x1401c7cb8
 bool                 s_res2         = false;
 
 void CF_Resolve2() {
@@ -182,8 +182,6 @@ void CF_Resolve2() {
     s_slotRelease  = reinterpret_cast<fn_SlotRelease_t>(ResolveAddr(Module::Exe, 0x14012eb50));
     s_mapInit      = reinterpret_cast<fn_MapInit_t>(ResolveAddr(Module::Exe, 0x140124750));
     s_fRipe        = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172144));
-    s_tidCropDesc  = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7b68));
-    s_tidRawMatDesc= reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
     s_res2 = true;
 }
 
@@ -451,10 +449,14 @@ static char CropField_State9Enter(void* self, void* /*sm*/) {
             ? fn_MemAlloc(g_pMemAllocSingleton, count, 1) : nullptr);
     if (!marks) return 1;
 
-    // Crop type: CropFieldDescription (0x1401c7b68) in the desc list at self+0x50, then
-    // its +0x20. Null means "no crop chosen" — the field stays bare and +0x49 clears.
+    // Crop type: ENDGAME B.3.9 C1 (D5) -- 0x1401c7b68 is NaturalResourceDescription
+    // (INVENTORY_C Table 1), NOT CropFieldDescription as the old local name/comment
+    // said; the cell is what retail's FUN_14012ea70-family reads here, and BY CELL
+    // is the rule, not the name a prior pass guessed. In the desc list at self+0x50,
+    // then its +0x20. Null means "no crop chosen" — the field stays bare and +0x49
+    // clears.
     void* cropDesc = FindInDescList(*reinterpret_cast<uintptr_t*>(comp + 0x50),
-                                    s_tidCropDesc ? *s_tidCropDesc : 0);
+                                    NaturalResourceDescription::TypeId());
     uintptr_t cropList = cropDesc
         ? *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(cropDesc) + 0x20) : 0;
 
@@ -463,7 +465,7 @@ static char CropField_State9Enter(void* self, void* /*sm*/) {
         for (int i = 0; i < count; ++i) marks[i] = 0;
     } else {
         *reinterpret_cast<uint8_t*>(comp + 0x49) = 1;
-        void* rawMat = FindInDescList(cropList, s_tidRawMatDesc ? *s_tidRawMatDesc : 0);
+        void* rawMat = FindInDescList(cropList, RawMaterialDescription::TypeId());
         const int spacing = rawMat
             ? *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(rawMat) + 0x4c) : 1;
         for (int i = 0; i < count; ++i)

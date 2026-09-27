@@ -41,14 +41,6 @@ extern "C" void* g_pConstructionDemoSite;
 // Type ID globals needed by BuildComponent
 // ============================================================
 
-// DWORD_1401c7a50 — ModelComponent type ID (for IsDerivedFrom check on array1 elements)
-static uint32_t* s_TypeId_ModelComp2 = nullptr;
-// DAT_1401c7c10 — PickingComponent type ID (for IsDerivedFrom check on array2 elements)
-static uint32_t* s_TypeId_PickingComp = nullptr;
-// DWORD_1401c7ac0 — MultiObjectComponent type ID (for Draw function)
-static uint32_t* s_TypeId_MultiObjComp = nullptr;
-// DWORD_1401c7a88 — ModelDescription type ID
-static uint32_t* s_TypeId_ModelDesc2 = nullptr;
 
 // ============================================================
 // Helper function pointers (resolved once)
@@ -58,13 +50,6 @@ static bool s_helpersResolved = false;
 
 static void EnsureHelpers() {
     if (s_helpersResolved) return;
-
-    // Type IDs from exe .rdata
-    s_TypeId_ModelComp2 = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7a50);
-    s_TypeId_PickingComp = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7c10);
-    s_TypeId_MultiObjComp = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7ac0);
-    s_TypeId_ModelDesc2 = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7a88);
-
     s_helpersResolved = true;
 }
 
@@ -331,16 +316,17 @@ void BuildComponent_DrawReimpl(void* selfP) {
 // Returns retbuf (caller passes &out).
 void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf) {
     void* found = nullptr;
-    if (s_TypeId_PickingComp) {
+    {
+        const uint32_t tidPicking = PickingComponent::TypeId();
         int count = *(int*)(compHost + 0x38);
         int64_t arr = *(int64_t*)(compHost + 0x30);
         for (int i = 0; i < count; i++) {
             int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
             void* comp = (void*)*slot;
             uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
-            if (tid == *s_TypeId_PickingComp) {
+            if (tid == tidPicking) {
                 void* c = (void*)*slot;
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_TypeId_PickingComp))
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidPicking))
                     found = c;
                 break;
             }
@@ -358,8 +344,8 @@ void BuildComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
     printf("[BuildComponent] Funcs resolved: "
-           "TypeId_Build=%p TypeId_Storage=%p\n",
-           (void*)s_TypeId_ModelComp2, (void*)s_TypeId_PickingComp);
+           "TypeId_Build=%u TypeId_Storage=%u\n",
+           ModelComponent::TypeId(), PickingComponent::TypeId());
 #endif
 }
 
