@@ -19,6 +19,7 @@
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ComboElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "Entity/ComponentEntity.h"   // X::TypeId() (ENDGAME B.3.9)
 
 // Retail's Slot4 filters the "yield" FindElement result through
 // IsDerivedFrom(elem, *g_TypeId_ProgressElement) before storing it at +0x38.
@@ -30,16 +31,10 @@
 // See [[reference-gated-element-typeid-disables-controller]] — the same null field
 // that made every pasture ControlUI button inert.
 //
-// Resolve a PRIVATE copy by name rather than publishing into the shared global:
-// other dialogs read it and currently rely on the null as a no-op. Prefer the
-// registry value when the gate IS on so the two paths can never disagree.
-// Same idiom as controlui.cpp / pagetoggleui.cpp / productionui.cpp.
+// ENDGAME B.3.9: UI::ProgressElement now has a ported TypeId() (a class static,
+// always populated), so the gated-global-vs-private-resolve split collapses to it.
 static uint32_t OrchardUI_ProgressElementTypeId() {
-    if (g_TypeId_ProgressElement && *g_TypeId_ProgressElement)
-        return *g_TypeId_ProgressElement;          // gate on: use the real slot
-    static uint32_t s_local = 0;
-    if (!s_local) s_local = ::Object::ResolveTypeIdByNameLazy("ProgressElement");
-    return s_local;
+    return UI::ProgressElement::TypeId();
 }
 
 namespace orchardui_sa {
@@ -121,7 +116,7 @@ void OrchardUI::OnUpdateLayout() {
 
     // Get entity at +0x28, check ComponentEntity
     void* entity = (void*)*(uint64_t*)(s + 0x28);
-    uint32_t entityTypeId = g_TypeId_ComponentEntity ? *g_TypeId_ComponentEntity : 0;
+    uint32_t entityTypeId = ComponentEntity::TypeId();
     void* checkedEntity = nullptr;
     if (fn_IsDerivedFrom(entity, entityTypeId)) {
         checkedEntity = entity;
@@ -176,7 +171,7 @@ void OrchardUI::SetResource(int64_t param2) {
 
     // Get entity at +0x28, check ComponentEntity
     void* entity = (void*)*(uint64_t*)(s + 0x28);
-    uint32_t entityTypeId = g_TypeId_ComponentEntity ? *g_TypeId_ComponentEntity : 0;
+    uint32_t entityTypeId = ComponentEntity::TypeId();
     void* checkedEntity = nullptr;
     if (fn_IsDerivedFrom(entity, entityTypeId)) {
         checkedEntity = entity;
@@ -220,7 +215,7 @@ void* OrchardUI::GetResource(void* param2) {
 
     // Get entity at +0x28, check ComponentEntity
     void* entity = (void*)*(uint64_t*)(s + 0x28);
-    uint32_t entityTypeId = g_TypeId_ComponentEntity ? *g_TypeId_ComponentEntity : 0;
+    uint32_t entityTypeId = ComponentEntity::TypeId();
     void* checkedEntity = nullptr;
     if (fn_IsDerivedFrom(entity, entityTypeId)) {
         checkedEntity = entity;

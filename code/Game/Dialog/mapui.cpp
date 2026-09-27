@@ -82,7 +82,7 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
             ->FindOrLoad(filenameObj));
     void* material = nullptr;
     if (ext) {
-        if (g_TypeId_Material && fn_IsDerivedFrom(ext, *g_TypeId_Material)) {
+        if (fn_IsDerivedFrom(ext, Graphics::Material::TypeId())) {
             material = ext;
         }
     }
@@ -153,8 +153,7 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
 
     // Cast to ImageElement via IsDerivedFrom
     void* imageElem = nullptr;
-    if (rawElem && g_TypeId_ImageElement &&
-        fn_IsDerivedFrom(rawElem, *g_TypeId_ImageElement)) {
+    if (rawElem && fn_IsDerivedFrom(rawElem, UI::ImageElement::TypeId())) {
         imageElem = rawElem;
     }
     if (Opt().mapTrace)
@@ -251,15 +250,8 @@ void MapUI_HandleClick(void* param1, int clickX, int clickY, int mapWidth, int m
 // buffers are created by Minimap_CreateAndUpload (code/Game/Game/minimap_upload.cpp);
 // SetupImage is standalone-guarded (skips if the buffer is null / vtables absent).
 namespace mapui_sa {
-    // SetupImage dereferences g_TypeId_Material / g_TypeId_ImageElement (both
-    // resolve from raw exe .rdata/exref → null in standalone). Lazy-fill from the
-    // live factory tree post-Engine::Startup. g_fUVScale has a 1.0 fallback in
-    // mapui.cpp already. Idempotent.
-    void EnsureTypeIds() {
-        static uint32_t s_mat=0, s_img=0;
-        if (!g_TypeId_Material)     { s_mat=::Object::ResolveTypeIdByNameLazy("Material");     if(s_mat) g_TypeId_Material=&s_mat; }
-        if (!g_TypeId_ImageElement) { s_img=::Object::ResolveTypeIdByNameLazy("ImageElement"); if(s_img) g_TypeId_ImageElement=&s_img; }
-    }
+    // ENDGAME B.3.9: Graphics::Material / UI::ImageElement both have a ported TypeId()
+    // now, so the EnsureTypeIds() lazy-cache over the exe .rdata globals is dead.
 }
 
 // ============================================================
@@ -274,15 +266,14 @@ namespace mapui_sa {
 
 // [4] 0x14006ca80
 void MapUI::OnCreated() {
-    mapui_sa::EnsureTypeIds();
     static bool s_logged = false;
     if (!s_logged && Opt().mapTrace) {
         s_logged = true;
         void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
         [[maybe_unused]] void* mapObj = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x148) : nullptr;
-        printf("[MapUI::Slot4] dispatched self=%p mat_tid=%p img_tid=%p "
+        printf("[MapUI::Slot4] dispatched self=%p mat_tid=%u img_tid=%u "
                "terrBuf=%p ovrBuf=%p\n", (void*)this,
-               (void*)g_TypeId_Material, (void*)g_TypeId_ImageElement,
+               Graphics::Material::TypeId(), UI::ImageElement::TypeId(),
                mapObj ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(mapObj) + 0x08) : nullptr,
                mapObj ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(mapObj) + 0x10) : nullptr);
         fflush(stdout);
