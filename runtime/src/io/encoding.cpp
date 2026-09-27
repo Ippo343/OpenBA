@@ -131,151 +131,41 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 
-// ResolveExport / the raw export door already come from rt_port.h; only the
-// address door needs declaring here, and it carries Module with it.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module module, uintptr_t ghidraAddr);
-
 namespace RtIo {
-
-using rt::io::BinaryCodec;
-using rt::io::Serializer;
 
 namespace {
 
 using MemAllocFn = void* (*)(uint64_t, int);
 
-// The three vtables, all EXPORTED (verified against the export directory by
-// address: 0x1801553b0 / 0x1801552e0 / 0x180155210 each resolve to exactly the
-// name used here). Resolved once through the port-aware door so a later port of
-// the tables themselves is picked up with no change here.
-void** VtblReaderWriter() {
-    static void** v = reinterpret_cast<void**>(ResolveExport("??_7ReaderWriter@IO@@6B@"));
-    return v;
-}
-void** VtblBinaryReader() {
-    static void** v = reinterpret_cast<void**>(ResolveExport("??_7BinaryReader@IO@@6B@"));
-    return v;
-}
-void** VtblBinaryWriter() {
-    static void** v = reinterpret_cast<void**>(ResolveExport("??_7BinaryWriter@IO@@6B@"));
-    return v;
-}
-
-// The three IO::Stream virtuals these constructors dispatch through. Offsets
-// are RETAIL's; the profile build's Encoding/ReaderWriter tables disagree and
-// must NOT be used to check these (its NAMES win, its OFFSETS do not).
-using StreamRwFn  = bool (*)(void* self, int32_t size, void* buf);
-using StreamPosFn = int32_t (*)(void* self);
-
-constexpr int kStreamWrite  = 0x10;
-constexpr int kStreamRead   = 0x18;
-constexpr int kStreamGetPos = 0x28;
-
-inline void* VSlot(void* obj, int off) {
-    return (*reinterpret_cast<void***>(obj))[off / 8];
-}
-
-inline bool StreamRead(void* s, int32_t n, void* dst) {
-    return reinterpret_cast<StreamRwFn>(VSlot(s, kStreamRead))(s, n, dst);
-}
-inline bool StreamWrite(void* s, int32_t n, void* src) {
-    return reinterpret_cast<StreamRwFn>(VSlot(s, kStreamWrite))(s, n, src);
-}
-inline int32_t StreamGetPos(void* s) {
-    return reinterpret_cast<StreamPosFn>(VSlot(s, kStreamGetPos))(s);
-}
-
 // ---------------------------------------------------------------------------
 // ATTENDANCE COUNTERS — NOT A VERIFICATION
 // ---------------------------------------------------------------------------
-// These count how many times each of the four bodies was ENTERED. They compare
-// nothing and they prove nothing about correctness; encoding_probe.cpp is the
-// only thing in this lane that compares behaviour.
-//
-// They exist because "the probe is green" and "the port runs" are DIFFERENT
-// claims and a green probe over a port nothing calls is worthless. The two
-// numbers are deliberately produced by different machinery and printed under
-// different labels so that neither can be read as the other.
-//
-// They are also NOT the diff oracle sites on purpose. An the diff oracle site only increments its
-// `calls` counter from inside a COMPARISON, so a site that declared work but
-// never compared would print `calls=0 worked=N` — which reads as "never ran"
-// and means the opposite.
+// These count how many times each factory was ENTERED. They compare nothing.
+// ENDGAME B.3.9 IO: the two constructor counters went with the constructor
+// doors -- the ctors are now `IO::BinaryReader` / `IO::BinaryWriter`'s own
+// (runtime/types/io/Serializer.h), reached only from these two factories, so
+// their counts equalled CreateReader / CreateWriter's.
 struct EncCounts {
     unsigned long long createReader = 0, createWriter = 0;
-    unsigned long long ctorReader   = 0, ctorWriter   = 0;
     ~EncCounts() {
-        if ((createReader | createWriter | ctorReader | ctorWriter) == 0) {
-            printf("[Encoding] ATTENDANCE: none of the four bodies was "
+        if ((createReader | createWriter) == 0) {
+            printf("[Encoding] ATTENDANCE: neither factory was "
                         "entered in this run.\n");
             return;
         }
         printf("[Encoding] ATTENDANCE (entries, not comparisons): "
-                    "CreateReader=%llu CreateWriter=%llu "
-                    "BinaryReader::ctor=%llu BinaryWriter::ctor=%llu\n",
-                    createReader, createWriter, ctorReader, ctorWriter);
+                    "CreateReader=%llu CreateWriter=%llu\n",
+                    createReader, createWriter);
     }
 };
 EncCounts g_encCounts;
 
 }  // namespace
-
-// ---------------------------------------------------------------------------
-// ??0BinaryReader@IO@@QEAA@AEAVSerializer@1@H@Z   0x1800a8340
-// ---------------------------------------------------------------------------
-extern "C" BinaryCodec* RtIo_BinaryReader_Ctor(BinaryCodec* self, Serializer* ser,
-                                               int32_t version) {
-    self->base.vtable = VtblReaderWriter();   // the inlined ReaderWriter base ctor
-    self->base.allowCustomSerialize = 0;      // BYTE store
-    self->base.serializer = ser;
-    self->base.stream     = ser->stream;      // *(void**)ser
-    ++g_encCounts.ctorReader;
-    self->base.vtable = VtblBinaryReader();   // concrete table, overwriting it
-
-    self->word20  = 0;        // retail: ONE qword zeroing +0x20..+0x27
-    self->word24  = 0;
-    self->version = version;  // dead on every successful call — see the header
-
-    void* s = self->base.stream;
-    int32_t magic;                     // retail's RSP+0x50: written by the Read,
-    StreamRead(s, 4, &magic);          // never inspected. Consumed, not checked.
-    (void)magic;
-    StreamRead(s, 4, &self->word20);
-    self->word24 = StreamGetPos(s);
-    StreamRead(s, 4, &self->version);
-    return self;
-}
-
-// ---------------------------------------------------------------------------
-// ??0BinaryWriter@IO@@QEAA@AEAVSerializer@1@H@Z   0x1800a8a30
-// ---------------------------------------------------------------------------
-extern "C" BinaryCodec* RtIo_BinaryWriter_Ctor(BinaryCodec* self, Serializer* ser,
-                                               int32_t version) {
-    self->base.vtable = VtblReaderWriter();   // the inlined ReaderWriter base ctor
-    self->base.allowCustomSerialize = 0;      // BYTE store
-    self->base.serializer = ser;
-    self->base.stream     = ser->stream;
-    ++g_encCounts.ctorWriter;
-    self->base.vtable = VtblBinaryWriter();   // concrete table, overwriting it
-
-    self->word20  = 0;        // retail: two SEPARATE dword stores here
-    self->word24  = -1;       // the placeholder value that is about to be emitted
-    self->version = version;
-
-    void* s = self->base.stream;
-    int32_t magic = static_cast<int32_t>(0xaaaaaaaau);   // built on the stack
-    StreamWrite(s, 4, &magic);
-    self->word20 = StreamGetPos(s);      // where the placeholder lands
-    StreamWrite(s, 4, &self->word24);    // emit the -1 placeholder
-    self->word24 = StreamGetPos(s);
-    StreamWrite(s, 4, &self->version);
-    return self;
-}
 
 // ---------------------------------------------------------------------------
 // THE FIVE BINARY-ENCODING SLOTS ARE `IO::BinaryEncoding`'s METHODS.
@@ -299,59 +189,30 @@ extern "C" BinaryCodec* RtIo_BinaryWriter_Ctor(BinaryCodec* self, Serializer* se
 // Byte-for-byte what the two `extern "C"` doors held before B.3.4 block 1; only
 // the enclosing declaration changed. `this` is accepted and ignored because
 // retail's 0x1800a8120 / 0x1800a8080 overwrite RCX before first use.
-//
-// The two `reinterpret_cast`s in each body are B.3.4 bridges and they are
-// TRANSITIONAL BY CONSTRUCTION: `IO::ReaderWriter` becomes a real class in
-// block 2 and `IO::Serializer` in block 3, and each block deletes one of them
-// without touching this file's logic or the header's five signatures. The casts
-// are honest because `Serializer.h` cross-asserts every layout involved.
 namespace IO {
 
+// MemAlloc(0x30, 4) -- the alignment is `LEA R8D,[RDX-0x2c]` off the size
+// register -- then the real constructor in place. A failed allocation returns
+// null unconstructed (retail's XOR EAX,EAX path, unguarded).
 ReaderWriter* BinaryEncoding::CreateReader(Serializer& ser, int version) {
     ++RtIo::g_encCounts.createReader;
     void* p = RT_EXPORT_ONCE(RtIo::MemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(sizeof(rt::io::BinaryCodec), 4);
-    if (p == nullptr) return nullptr;    // retail's XOR EAX,EAX path, unguarded
-    return reinterpret_cast<ReaderWriter*>(                         // B.3.4 bridge
-        RtIo::RtIo_BinaryReader_Ctor(static_cast<rt::io::BinaryCodec*>(p),
-                                     reinterpret_cast<rt::io::Serializer*>(&ser),
-                                     version));
+        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(sizeof(BinaryReader), 4);
+    if (p == nullptr) return nullptr;
+    return ::new (p) BinaryReader(ser, version);
 }
 
 ReaderWriter* BinaryEncoding::CreateWriter(Serializer& ser, int version) {
     ++RtIo::g_encCounts.createWriter;
     void* p = RT_EXPORT_ONCE(RtIo::MemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(sizeof(rt::io::BinaryCodec), 4);
-    if (p == nullptr) return nullptr;    // retail's XOR EAX,EAX path, unguarded
-    return reinterpret_cast<ReaderWriter*>(                         // B.3.4 bridge
-        RtIo::RtIo_BinaryWriter_Ctor(static_cast<rt::io::BinaryCodec*>(p),
-                                     reinterpret_cast<rt::io::Serializer*>(&ser),
-                                     version));
+        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(sizeof(BinaryWriter), 4);
+    if (p == nullptr) return nullptr;
+    return ::new (p) BinaryWriter(ser, version);
 }
 
 }  // namespace IO
 
-// ============================================================================
-// Registration
-// ============================================================================
-// The two CONSTRUCTORS are exported, so they get both doors: the name flips
-// every ResolveExport call site, the address covers anything reaching them by
-// Ghidra address.
-//
-// The encoding's own five slots are no longer registered: the only caller of
-// those addresses was the minted unexported table 0x1801554a8, retired in
-// ENDGAME B.3.9 IO once every stream constructor built `IO::BinaryEncoding`.
-int RtIoEncodingRegister() {
-    using namespace RtIo;
-    int n = 0;
-
-    RegisterRuntimeExport("??0BinaryReader@IO@@QEAA@AEAVSerializer@1@H@Z",
-                          (void*)&RtIo_BinaryReader_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800a8340, (void*)&RtIo_BinaryReader_Ctor);
-
-    RegisterRuntimeExport("??0BinaryWriter@IO@@QEAA@AEAVSerializer@1@H@Z",
-                          (void*)&RtIo_BinaryWriter_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800a8a30, (void*)&RtIo_BinaryWriter_Ctor);
-
-    return n;
-}
+// ENDGAME B.3.9 IO: nothing in this file is registered any more. The two
+// constructor doors (??0BinaryReader 0x1800a8340, ??0BinaryWriter 0x1800a8a30)
+// had the two factories above as their only callers and died with the minted
+// ReaderWriter-family rows; the five encoding slot doors died with 0x1801554a8.

@@ -51,38 +51,23 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
+#include <new>
 
 namespace RtIo {
-
-using rt::io::Serializer;
-using rt::io::VisitorCodec;
 
 namespace {
 
 using MemAllocFn = void* (*)(uint64_t, int);
 
-void** VtblReaderWriterV() {
-    static void** v = reinterpret_cast<void**>(ResolveExport("??_7ReaderWriter@IO@@6B@"));
-    return v;
-}
-void** VtblVisitor() {
-    static void** v = reinterpret_cast<void**>(ResolveExport(rt::io::kVisitorVtableName));
-    return v;
-}
-
-// The shared body of 0x1800baf00 and 0x1800bae40 (byte-identical).
-VisitorCodec* MakeVisitor(Serializer* ser, int32_t version) {
+// The shared body of 0x1800baf00 and 0x1800bae40 (byte-identical):
+// MemAlloc(0x28,4), then (ENDGAME B.3.9 IO) the real `IO::Visitor` ctor in
+// place -- the ReaderWriter base stores (1800baeb3..c1) and the version dword
+// (1800baecf). A failed allocation returns null unconstructed.
+IO::ReaderWriter* MakeVisitor(IO::Serializer& ser, int32_t version) {
     void* p = RT_EXPORT_ONCE(MemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(sizeof(VisitorCodec), 4);
+        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(sizeof(IO::Visitor), 4);
     if (p == nullptr) return nullptr;                      // XOR EAX,EAX path
-    VisitorCodec* c = static_cast<VisitorCodec*>(p);
-    c->base.vtable               = VtblReaderWriterV();    // 1800baeb3
-    c->base.allowCustomSerialize = 0;                      // 1800baeb6 BYTE
-    c->base.serializer           = ser;                    // 1800baeba
-    c->base.stream               = ser->stream;            // 1800baec1
-    c->base.vtable               = VtblVisitor();          // 1800baecc
-    c->version                   = version;                // 1800baecf
-    return c;
+    return ::new (p) IO::Visitor(ser, version);
 }
 
 }  // namespace
@@ -109,13 +94,11 @@ VisitorCodec* MakeVisitor(Serializer* ser, int32_t version) {
 namespace IO {
 
 ReaderWriter* VisitorEncoding::CreateReader(Serializer& ser, int version) {
-    return reinterpret_cast<ReaderWriter*>(                        // B.3.4 bridge
-        RtIo::MakeVisitor(reinterpret_cast<rt::io::Serializer*>(&ser), version));
+    return RtIo::MakeVisitor(ser, version);
 }
 
 ReaderWriter* VisitorEncoding::CreateWriter(Serializer& ser, int version) {
-    return reinterpret_cast<ReaderWriter*>(                        // B.3.4 bridge
-        RtIo::MakeVisitor(reinterpret_cast<rt::io::Serializer*>(&ser), version));
+    return RtIo::MakeVisitor(ser, version);
 }
 
 ReaderWriter* TextEncoding::CreateReader(Serializer& ser, int version) {

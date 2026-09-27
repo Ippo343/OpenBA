@@ -1057,10 +1057,6 @@ int RtMintRegisterPromotedRows() {
     // READY and unpromoted since Wave 17; see WAVE19_LANE_IOBASE.md for the
     // route question, which is answered there and is NOT answered by this
     // comment.
-    PromoteVtableGuarded("??_7BinaryReader@IO@@6B@", 0x1801552e0ull, &n);
-
-    PromoteVtableGuarded("??_7Visitor@IO@@6B@", 0x1801558b0ull, &n);
-
     PromoteVtableGuarded("??_7MemoryStream@IO@@6B@", 0x1801555b0ull, &n);
 
     PromoteVtableGuarded("??_7VisitorStream@IO@@6B@", 0x180155a20ull, &n);
@@ -1114,7 +1110,6 @@ int RtMintRegisterPromotedRows() {
     // If nothing ever dispatches it, promoting changes nothing. If something
     // does, it changes from the DLL's table to one with no traps in it. Neither
     // outcome is a regression, and leaving it unpromoted would not verify it.
-    PromoteVtableGuarded("??_7BinaryWriter@IO@@6B@", 0x180155210ull, &n);
 
     // ========================================================================
     // WAVE 20 LANE PROMOTE — ??_7BinaryFileStream@IO@@6B@, and it is the ONLY

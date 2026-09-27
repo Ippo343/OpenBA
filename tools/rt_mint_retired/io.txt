@@ -5,3 +5,9 @@
 0x1801554a8   IO   IO::BinaryEncoding: every stamper (4 stream ctors + UI SaveAllSettings) is ::new (p) IO::BinaryEncoding(); 5 slot doors deleted
 0x1801559d0   IO   IO::TextEncoding: TextFileStream ctor is ::new (p) IO::TextEncoding(); 5 slot doors deleted
 0x1801559f8   IO   IO::VisitorEncoding: VisitorStream ctor is ::new (p) IO::VisitorEncoding(); 5 slot doors deleted
+
+# -- the ReaderWriter family (rows 14/15/150, then their base 109) --
+??_7BinaryReader@IO@@6B@   IO   BinaryEncoding::CreateReader builds ::new (p) BinaryReader(ser, v); ??0/??1 doors, direct slot-0 body 0x180023a10, 25 slot doors deleted
+??_7BinaryWriter@IO@@6B@   IO   BinaryEncoding::CreateWriter builds ::new (p) BinaryWriter(ser, v); ??0/??1 doors, direct slot-0 body 0x180023b50, 25 slot doors deleted (binary_writer.cpp)
+??_7Visitor@IO@@6B@        IO   VisitorEncoding factories build ::new (p) Visitor(ser, v); ??1 door, direct slot-0 body 0x18002b710, 25 slot doors deleted
+??_7ReaderWriter@IO@@6B@   IO   abstract base, stamped only by the three leaves' doors (gone); RT_DELDTOR row 0x180023bd0 + ??1 door 0x1800b9150 deleted

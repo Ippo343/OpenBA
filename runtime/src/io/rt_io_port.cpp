@@ -146,26 +146,10 @@ namespace RtIO { void RtIo_CompressedStreamReadProbe(); }
 // registry behaves the same as one that falls through to the DLL.
 namespace RtIO { int RtIoModificationRegister(); }   // modification.cpp (lane MOD)
 
-// Wave 9 lane ENC: the two IO::Encoding factories (slots 3 and 4 of the shared
-// vtable 0x1801554a8, both UNEXPORTED) and the two BinaryReader/BinaryWriter
-// constructors they call. Its own switch because it is the first lane to make
-// the shared Encoding vtable partly FUNCTIONAL rather than merely minted, and
-// an A/B on it isolates the save/load header path from every other IO row.
-extern int RtIoEncodingRegister();          // encoding.cpp (lane ENC)
-
-// Wave 9 lane ENC-2: the four BinaryWriter bodies SaveSettings dispatches into
-// on the write path (two Serialize slots, the back-patching destructor, and the
-// unexported deleting destructor at vtable slot 0). Separate switch from ENC so
-// the framing tail can be A/B tested without turning the factories off.
-extern int RtIoBinaryWriterRegister();      // binary_writer.cpp (lane ENC-2)
-
-// Wave 9 lane SERIAL: the other 73 slots of the IO scalar-serialization
-// dispatch family -- IO::BinaryReader (25), IO::BinaryWriter (23; the two
-// ENC-2 owns are excluded) and IO::Visitor (25). Its own switch so the family
-// can be turned off without turning off ENC-2's framing tail underneath it and
-// vice versa: the two files register DISJOINT slots of the SAME vtables, so an
-// A/B that could only move both together could not attribute anything.
-extern int RtIoSerializeFamilyRegister();   // serialize_family.cpp (lane SERIAL)
+// ENDGAME B.3.9 IO: encoding.cpp (lane ENC), binary_writer.cpp (lane ENC-2,
+// deleted) and serialize_family.cpp (lane SERIAL) register nothing any more.
+// Their doors filled the minted Encoding / ReaderWriter-family tables, which
+// were retired once the objects were built by the classes' real constructors.
 
 // Wave 19 lane CSTREAM: the IO::CompressedStream WRITE path -- the twelve
 // bodies compressed_stream_read.cpp explicitly listed as owed (?Commit,
@@ -279,9 +263,6 @@ void RtIoPortInit() {
     n += RtIoCompressedStreamOpenRegister();
     n += RtIoPackageFileReadRegister();
     n += RtIO::RtIoModificationRegister();
-    n += RtIoEncodingRegister();
-    n += RtIoBinaryWriterRegister();
-    n += RtIoSerializeFamilyRegister();
     n += RtIoCompressedStreamWriteRegister();
 
     n += RtIoBaseVtablesRegister();

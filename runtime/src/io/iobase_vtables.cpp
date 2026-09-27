@@ -258,23 +258,11 @@ uintptr_t ResolveAddr(Module module, uintptr_t ghidraAddr);
 
 namespace RtIo {
 
-using rt::io::BinaryCodec;
-
 namespace {
 
 using MemFreeFn  = void  (*)(void*);
 using MemAllocFn = void* (*)(uint64_t, int);
-using StreamReadFn = bool (*)(void* self, int32_t size, void* buf);
 using VoidThisFn   = void  (*)(void*);
-
-// Slot indices on the IO::Stream family table, in BYTES, as Stream.h numbers
-// them. Spelled here rather than shared, per this directory's house style of
-// self-contained files (binary_writer.cpp:135 does the same for Write/SetPos).
-constexpr int kStreamRead = 0x18;   // [3]
-
-inline void* VSlot(void* obj, int off) {
-    return (*reinterpret_cast<void***>(obj))[off / 8];
-}
 
 inline void MemFree(void* p) {
     // Null-tested INSIDE the callee in retail; handing it a null is faithful.
@@ -286,17 +274,6 @@ inline void MemFree(void* p) {
 // later still be picked up.
 inline const void* VtblStream() {
     return RT_DATA_SLOT(const void*, "??_7Stream@IO@@6B@");
-}
-// The three ReaderWriter-family tables are typed `void**` because
-// `rt::io::ReaderWriter::vtable` is, so the stamp is a plain assignment.
-inline void** VtblBinaryReader() {
-    return RT_DATA_SLOT(void**, "??_7BinaryReader@IO@@6B@");
-}
-inline void** VtblReaderWriter() {
-    return RT_DATA_SLOT(void**, "??_7ReaderWriter@IO@@6B@");
-}
-inline void** VtblVisitor() {
-    return RT_DATA_SLOT(void**, "??_7Visitor@IO@@6B@");
 }
 inline const void* VtblVisitorStream() {
     return RT_DATA_SLOT(const void*, "??_7VisitorStream@IO@@6B@");
@@ -391,53 +368,6 @@ extern "C" void* RtIo_MemoryStream_DeletingDtor(MemoryStream* self, unsigned int
                             "every producer stack-constructs one or embeds it "
                             "at CompressedMemoryStream+0x68, which");
     RT_EXPORT_ONCE(VoidThisFn, "??1MemoryStream@IO@@UEAA@XZ")(self);
-    if (flags & 1u) MemFree(self);
-    return self;
-}
-
-// ===========================================================================
-// ??1BinaryReader@IO@@UEAA@XZ   0x1800a82f0   — swallows the trailer
-// ===========================================================================
-extern "C" void RtIo_BinaryReader_Dtor(BinaryCodec* self) {
-    self->base.vtable = VtblBinaryReader();                    // 1800a8306
-
-    // Read four bytes and DISCARD them: the read-side mirror of
-    // ~BinaryWriter's 0xBBBBBBBB trailer. `scratch` is a real local because
-    // Stream::Read genuinely stores through the pointer.
-    void* s = self->base.stream;
-    int32_t scratch = 0;
-    reinterpret_cast<StreamReadFn>(VSlot(s, kStreamRead))(s, 4, &scratch);
-    (void)scratch;
-
-    self->base.vtable = VtblReaderWriter();                    // 1800a8325
-}
-
-// BinaryReader vector deleting destructor   0x180023a10   — vtable slot 0
-extern "C" void* RtIo_BinaryReader_DeletingDtor(BinaryCodec* self, unsigned int flags) {
-    if (flags & 2u)
-        ArrayArmUnreachable("BinaryReader",
-                            "the only producer is IO::Encoding::CreateReader's "
-                            "MemAlloc(0x30,4), which");
-    RtIo_BinaryReader_Dtor(self);
-    if (flags & 1u) MemFree(self);
-    return self;
-}
-
-// ===========================================================================
-// ??1Visitor@IO@@UEAA@XZ   0x1800bac90   — two stamps, nothing else
-// ===========================================================================
-extern "C" void RtIo_Visitor_Dtor(BinaryCodec* self) {
-    self->base.vtable = VtblVisitor();                         // 1800baca1
-    self->base.vtable = VtblReaderWriter();                    // 1800bacab
-}
-
-// Visitor vector deleting destructor   0x18002b710   — vtable slot 0
-extern "C" void* RtIo_Visitor_DeletingDtor(BinaryCodec* self, unsigned int flags) {
-    if (flags & 2u)
-        ArrayArmUnreachable("Visitor",
-                            "the only producer is the Visitor encoding's "
-                            "MemAlloc(0x28,4), which");
-    RtIo_Visitor_Dtor(self);
     if (flags & 1u) MemFree(self);
     return self;
 }
@@ -611,18 +541,6 @@ int RtIoBaseVtablesRegister() {
     // ---- MemoryStream ------------------------------------------------------
     // ??1MemoryStream is lane W's, registered in compressedstream.cpp:963.
     RegisterRuntimeAddr(0x1800242a0, (void*)&RtIo_MemoryStream_DeletingDtor); ++n;
-
-    // ---- BinaryReader ------------------------------------------------------
-    RegisterRuntimeExport("??1BinaryReader@IO@@UEAA@XZ",
-                          (void*)&RtIo_BinaryReader_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800a82f0, (void*)&RtIo_BinaryReader_Dtor);
-    RegisterRuntimeAddr(0x180023a10, (void*)&RtIo_BinaryReader_DeletingDtor); ++n;
-
-    // ---- Visitor (a BONUS row: ??_7Visitor@IO@@6B@ is not in the plan's 36)
-    RegisterRuntimeExport("??1Visitor@IO@@UEAA@XZ",
-                          (void*)&RtIo_Visitor_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800bac90, (void*)&RtIo_Visitor_Dtor);
-    RegisterRuntimeAddr(0x18002b710, (void*)&RtIo_Visitor_DeletingDtor); ++n;
 
     // ---- VisitorStream -----------------------------------------------------
     RegisterRuntimeExport("?GetSize@VisitorStream@IO@@UEBAIXZ",
