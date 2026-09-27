@@ -166,7 +166,7 @@ void LoadInputNameTables() {
         printf("[InputBindings] LoadInputNameTables: KeyMap container NULL\n");
         return;
     }
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+    if (!::Object::ExternalFactory::_singleton) {
         printf("[InputBindings] LoadInputNameTables: ExternalFactory or string "
                "fns not resolved\n");
         return;
@@ -175,9 +175,8 @@ void LoadInputNameTables() {
     // Lazy-resolve StringTable type ID once via Factory::GetTypeIdFromName
     // (Factory::Startup has already run by this point).
     static uint32_t s_stringTableTypeId = 0;
-    if (s_stringTableTypeId == 0
-            && g_pFactorySingleton && *g_pFactorySingleton) {
-        void* factoryObj = *(void**)*g_pFactorySingleton;
+    if (s_stringTableTypeId == 0) {
+        void* factoryObj = ::Object::Factory::_singleton;
         if (factoryObj) {
             s_stringTableTypeId =
                 reinterpret_cast<const ::Object::Factory*>(factoryObj)->GetTypeIdFromName(
@@ -193,7 +192,7 @@ void LoadInputNameTables() {
         System::Filename fnameBuf(path);
         // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
         void* ext = const_cast<::Object::External*>(
-            reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+            ::Object::ExternalFactory::_singleton
                 ->FindOrLoad(fnameBuf));                                    // B.3.3 bridge
         if (!ext) {
             printf("[InputBindings]   '%s' -> NOT FOUND\n", path);

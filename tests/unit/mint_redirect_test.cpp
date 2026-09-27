@@ -10,8 +10,8 @@ namespace {
 const unsigned char kSeed[8] = { 0x40, 0x42, 0x0f, 0, 0, 0, 0, 0 };   // 1000000
 
 const RtMintRedirect::RowView kRows[] = {
-    { "?_singleton@Foo@NS@@0PEAV12@EA", 0x1801fc670ull, 8, nullptr, 0, false },
-    { nullptr,                          0x1801fc6d0ull, 8, nullptr, 0, false },   // by address
+    { "?_singleton@Foo@NS@@0PEAV12@EA", 0x1801f0670ull, 8, nullptr, 0, false },   // synthetic VAs (rows 0/1): the real rows are retired
+    { nullptr,                          0x1801f06d0ull, 8, nullptr, 0, false },   // by address
     { "?_ticks@Timer@NS@@0_JA",         0x1801fe720ull, 8, kSeed,   8, false },   // kInit row
     { "?_loader@X@@1VLoader@2@A",       0x190000000ull, 8, nullptr, 0, true  },   // constructed (synthetic VA: the real _loader row is retired)
 };
@@ -22,10 +22,10 @@ const int kN = (int)(sizeof(kRows) / sizeof(kRows[0]));
 UNIT_TEST(b39_mintredirect_find_by_name_and_by_address) {
     using namespace RtMintRedirect;
     CHECK_EQ(FindRow("?_singleton@Foo@NS@@0PEAV12@EA", kRows, kN), 0);
-    CHECK_EQ(FindRow("0x1801fc6d0", kRows, kN), 1);
-    CHECK_EQ(FindRow("0x1801FC6D0", kRows, kN), 1);
+    CHECK_EQ(FindRow("0x1801f06d0", kRows, kN), 1);
+    CHECK_EQ(FindRow("0x1801F06D0", kRows, kN), 1);
     // a NAMED row is not found by its VA: its name is the literal the retirement scans for
-    CHECK_EQ(FindRow("0x1801fc670", kRows, kN), -1);
+    CHECK_EQ(FindRow("0x1801f0670", kRows, kN), -1);
     CHECK_EQ(FindRow("?_singleton@Bar@NS@@0PEAV12@EA", kRows, kN), -1);
     CHECK_EQ(FindRow(nullptr, kRows, kN), -1);
     CHECK_EQ(FindRow("0x", kRows, kN), -1);
@@ -55,7 +55,7 @@ UNIT_TEST(b39_mintredirect_never_zeroes_a_written_cell) {
     // a cell something wrote before the redirect (the _firstTypeInfo chain at CRT init):
     // no seed on the row, so the table neither zeroes nor rejects it
     static uint64_t cell = 0xdeadbeefull;
-    CHECK_EQ(t.Add("0x1801fc6d0", &cell, kRows, kN, false), kOk);
+    CHECK_EQ(t.Add("0x1801f06d0", &cell, kRows, kN, false), kOk);
     CHECK_EQ(cell, 0xdeadbeefull);
     CHECK(t.CellFor(1) == (void*)&cell);
     CHECK_EQ(t.Seeded(), 0);
@@ -96,5 +96,5 @@ UNIT_TEST(b39_mintredirect_table_full) {
     static void* a = nullptr;
     static void* b = nullptr;
     CHECK_EQ(t.Add("?_singleton@Foo@NS@@0PEAV12@EA", &a, kRows, kN, false), kOk);
-    CHECK_EQ(t.Add("0x1801fc6d0", &b, kRows, kN, false), kTableFull);
+    CHECK_EQ(t.Add("0x1801f06d0", &b, kRows, kN, false), kTableFull);
 }

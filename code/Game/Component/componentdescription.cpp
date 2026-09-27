@@ -54,11 +54,11 @@ static std::atomic<bool> s_warnedUnwired{false};
 
 extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayBase) {
     if (!serializer || count <= 0 || !arrayBase) return;
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+    if (!::Object::ExternalFactory::_singleton) {
         if (!s_warnedUnwired.exchange(true)) { fprintf(stderr, "[ComponentDescription] sub-array primitives unwired — skip %d\n", count); fflush(stderr); }
         return;
     }
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     ::Object::ExternalFactory* efactory =
         reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
 
@@ -212,7 +212,7 @@ DEFINE_EXE_TYPE(ComponentDescription, "Object::External")
 // moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.
 void ResolveExternalByName_Impl(void* nameString) {
     uintptr_t s = (uintptr_t)nameString;
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;   // ENDGAME B.3.9 SS2 (merged)
     if (!factory) return;
 
     // Check generation counter: if matches, cached value is still valid

@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "input/Device.h"   // ENDGAME B.3.9 SS2: Input::Device::_singleton
 
 // ============================================================
 // [7] OnUpdate (0x140071c80): scan for key/mouse input releases
@@ -34,7 +35,7 @@
 // the key index at +0xC0, input type (1=keyboard, 2=mouse) at +0xC4,
 // and calls [10] OnOk (through the vtable) to close with result=1.
 void OptionInputBindDialog::OnUpdate(const System::Time& /*time*/) {
-    void* inputDevice = *g_pInputDeviceSingleton;
+    void* inputDevice = ::Input::Device::_singleton;
 
     // Scan keyboard keys (InputDevice=1, keys 0..0x68)
     for (int key = 0; key < 0x69; key++) {

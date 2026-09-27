@@ -99,9 +99,9 @@ const char* MissingDependency(bool needSaveLoad) {
     if (!fn_Random_Default_Ctor) return "Random::Random";
     if (!fn_InternalBasePtr_Ctor) return "InternalBasePtr::InternalBasePtr";
     if (!needSaveLoad) return nullptr;
-    if (!g_pSaveLoadSingleton || !*g_pSaveLoadSingleton) return "SaveLoad singleton";
-    if (!g_pPersistenceSingleton || !*g_pPersistenceSingleton) return "Persistence singleton";
-    if (!g_pFileSystemSingleton2 || !*g_pFileSystemSingleton2) return "FileSystem singleton";
+    if (!::Save::SaveLoad::_singleton) return "SaveLoad singleton";
+    if (!::IO::Persistence::_singleton) return "Persistence singleton";
+    if (!::IO::FileSystem::_singleton) return "FileSystem singleton";
     return nullptr;
 }
 
@@ -214,7 +214,7 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
             return;
         }
 
-        void* saveLoad = *g_pSaveLoadSingleton;
+        void* saveLoad = ::Save::SaveLoad::_singleton;
         reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetOperation(static_cast<Save::SaveLoad::Operation>(3), 0);   // B.3.7 bridge
         reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetSaveName(saveNameStr, 2);   // B.3.7 bridge
 
@@ -223,7 +223,7 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
         // to ScenarioDialog::LoadSelected -- including that GetSavePath returns a
         // System::String (destroyed with String::~String at the very end) while
         // the GetDataDirectory temp is a Filename.
-        void* persistence = *g_pPersistenceSingleton;
+        void* persistence = ::IO::Persistence::_singleton;
         System::String savePathBuf;
         // B.3.4 bridge, twice. Each member returns BY VALUE through MSVC's
         // hidden return slot, and the buffer below is the slot the door was
@@ -232,12 +232,12 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
         // own destructor is the one release it always was.
         ::new (&savePathBuf) System::String(
             reinterpret_cast<const IO::Persistence*>(persistence)->GetSavePath());
-        void* fileSystem = *g_pFileSystemSingleton2;
+        void* fileSystem = ::IO::FileSystem::_singleton;
         System::Filename dataDirBuf;
         ::new (&dataDirBuf) System::Filename(
             reinterpret_cast<const IO::FileSystem*>(fileSystem)->GetDataDirectory());
         *reinterpret_cast<System::String*>(
-            *reinterpret_cast<uintptr_t*>(g_pPersistenceSingleton) + 0x90) =
+            reinterpret_cast<uintptr_t>(::IO::Persistence::_singleton) + 0x90) =
             dataDirBuf.AsString();
 
         int operation = static_cast<int>(reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetOperation());   // B.3.7 bridge
@@ -253,7 +253,7 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
         fflush(stderr);
 
         *reinterpret_cast<System::String*>(
-            *reinterpret_cast<uintptr_t*>(g_pPersistenceSingleton) + 0x90) = savePathBuf;
+            reinterpret_cast<uintptr_t>(::IO::Persistence::_singleton) + 0x90) = savePathBuf;
 
         void* savedState = reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetSaveState();   // B.3.7 bridge
 

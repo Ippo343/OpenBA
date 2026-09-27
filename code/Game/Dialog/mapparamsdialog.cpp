@@ -303,7 +303,7 @@ void MapParamsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element
             {
                 System::Filename fnBuf("Game/Names/Cities.ndb");
                 void* nameDB = const_cast<::Object::External*>(
-                    reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+                    ::Object::ExternalFactory::_singleton   // B.3.3 bridge
                         ->FindOrLoad(fnBuf));
                 // The IsDerivedFrom type-check retail runs here is skipped, as in
                 // NewGameDialog::GenerateTownName and citizen_names.cpp: the

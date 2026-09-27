@@ -84,6 +84,7 @@
 #include "../../types/volume/Volume.h"
 #include "../../types/graphics/Camera.h"
 #include "../../types/graphics/SunLight.h"
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device/Configuration::_singleton
 #include "../crt/msvc_libm.h"
 
 #include <cstddef>
@@ -121,8 +122,9 @@ inline float AbsF(float v) {
 using CameraCtorFn = Camera* (*)(Camera*, const Frustum*, const Transform3*, bool);
 using GetCornersFn = void (*)(const Frustum*, Vector3*);
 
-void** SlotVideoDevice() { return RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA"); }
-void** SlotVideoConfig() { return RT_DATA_SLOT(void**, "?_singleton@Configuration@Video@@0PEAV12@EA"); }
+// ENDGAME B.3.9 SS1 (B39_RULES D7): both class statics now.
+void** SlotVideoDevice() { return reinterpret_cast<void**>(&::Video::Device::_singleton); }
+void** SlotVideoConfig() { return reinterpret_cast<void**>(&::Video::Configuration::_singleton); }
 
 }  // namespace
 

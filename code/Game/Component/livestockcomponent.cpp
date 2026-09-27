@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Timer.h"   // ENDGAME B.3.9 SS2: System::Timer::_secondsPerTick
 
 // ============================================================
 // Resolved helpers
@@ -149,7 +150,7 @@ void LivestockComponent::Update(void* time) {
     }
 
     // Verify fn_IsDerivedFrom and globals are available
-    if (!fn_IsDerivedFrom || !s_pTimeMultiplier || !g_Timer_secondsPerTick) {
+    if (!fn_IsDerivedFrom || !s_pTimeMultiplier) {
         return;
     }
 
@@ -179,7 +180,7 @@ void LivestockComponent::Update(void* time) {
         reinterpret_cast<uintptr_t>(configComponent) + 0x2C);
     float thresholdSeconds = intervalSeconds * (*s_pTimeMultiplier);
     int64_t thresholdTicks = static_cast<int64_t>(
-        static_cast<double>(thresholdSeconds) / (*g_Timer_secondsPerTick));
+        static_cast<double>(thresholdSeconds) / ::System::Timer::_secondsPerTick);
 
     // Fire birth events while accumulator exceeds threshold
     if (thresholdTicks < static_cast<int64_t>(data30)) {

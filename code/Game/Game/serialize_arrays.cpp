@@ -362,7 +362,7 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
 
     // Required Runtime primitives. If any are missing, log once and bail.
     if (!fn_IsDerivedFrom ||
-        !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+        !::Object::ExternalFactory::_singleton) {
         static bool s_warned = false;
         if (!s_warned) {
             printf("[Array::Serialize_External<%s>] runtime primitives unwired — "
@@ -374,7 +374,7 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
         return;
     }
 
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     // ENDGAME B.3.3 step 6A: member calls on the real Object::ExternalFactory.
     // The singleton is still read through the EXISTING door, so the guards
     // above still gate the same cell and the same registered body still runs.

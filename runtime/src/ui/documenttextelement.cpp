@@ -76,6 +76,7 @@
 
 #include "element_common.h"
 #include "../../types/ui/DocumentTextElement.h"
+#include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 
 using namespace rtuielem;
 
@@ -109,7 +110,6 @@ constexpr int32_t kEventActivated = 0x12;
 // RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
 std::atomic<void*> g_typeInfo{nullptr};
 std::atomic<void*> g_captureTypeInfo{nullptr};
-std::atomic<void*> g_secondsPerTick{nullptr};
 std::atomic<void*> g_memFree{nullptr};
 
 const uint8_t* DocumentTextElementTypeInfo() {
@@ -123,9 +123,8 @@ uint32_t SpriteCaptureTypeId() {
     return p ? *p : 0u;
 }
 double SecondsPerTick() {
-    const double* p = static_cast<const double*>(AtomicExport(
-        g_secondsPerTick, "?_secondsPerTick@Timer@System@@0NA"));
-    return p ? *p : 0.0;
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, no lazy cache.
+    return ::System::Timer::_secondsPerTick;
 }
 
 using IsDerivedFromFn = bool  (*)(const void* self, uint32_t typeId);

@@ -12,17 +12,8 @@
 // (ENDGAME B.3.8 close: the vtable_ModDetailsDialog 0x14015c670 and
 //  ModDialog::RefreshDisplay 0x14006eec0 rows are gone -- their only readers were
 //  dead engine_funcs pointers.)
-//   0x1401519e8  .rdata exref -> IO::Modification::_singleton (Runtime 0x1801fc6b0)
-//
-// The last one is a DISPATCH-SLOT registration, not a code address: engine_funcs.cpp
-// reads `exref = ResolveAddr(Exe, 0x1401519e8); g_ppModificationSingleton = *exref;`
-// so the slot must hold the ADDRESS of the Runtime's `Modification* _singleton`
-// variable. Verified in Runtime-x64.dll: `IO::Modification::Get` (0x18000dab0) is
-// literally `MOV RAX, qword ptr [0x1801fc6b0]; RET`. Without this registration
-// g_ppModificationSingleton stays null and every ModDialog/ModDetailsDialog body
-// null-derefs on its first `*g_ppModificationSingleton`. Only those two files read
-// the global (grep: 8 sites, all in code/Game/Dialog/mod*.cpp), so publishing it
-// cannot perturb anything else.
+// (The 0x1401519e8 IO::Modification::_singleton exref row and its backing cell
+//  went at ENDGAME B.3.9 SS2: ModDialog / ModDetailsDialog read the class static.)
 //
 // NOT registered here, deliberately — the three remaining entries of
 // notes/wave_remaining/lane4_mods.txt are Ghidra MIS-LABELS, not ModDialog code:
@@ -65,10 +56,6 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
 class MainMenuDialog;
 void MainMenuDialog_ReturnToMenu(MainMenuDialog* self);
 
-// Backing storage for the IO::Modification singleton exref slot. Must outlive the
-// process; a file-scope static is exactly the .rdata cell the exe would have had.
-static uintptr_t g_slot_ModificationSingleton = 0;
-
 void RegisterModsBatch() {
     RegisterExeAddr(0x140070030, reinterpret_cast<uintptr_t>(&ModDialog_Ctor_Standalone));
 
@@ -87,8 +74,4 @@ void RegisterModsBatch() {
     // Engine::Startup to publish IO::Modification::_singleton, then dumps the mod
     // list + the FileSystem package list. No click, no BANISHED_LIVE_MODDIALOG.
     // No-op unless BANISHED_MOD_PROBE is set.
-
-    g_slot_ModificationSingleton = ResolveAddr(Module::Runtime, 0x1801fc6b0);
-    RegisterExeAddr(0x1401519e8,
-                    reinterpret_cast<uintptr_t>(&g_slot_ModificationSingleton));
 }

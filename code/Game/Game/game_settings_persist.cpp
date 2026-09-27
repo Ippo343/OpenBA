@@ -35,8 +35,7 @@
 namespace {
 
 void* PersistenceSingleton() {
-    return (g_pPersistenceSingleton && *g_pPersistenceSingleton) ? *g_pPersistenceSingleton
-                                                                 : nullptr;
+    return ::IO::Persistence::_singleton;
 }
 
 // The 16 keys in retail's order. Order matters only for log readability, but

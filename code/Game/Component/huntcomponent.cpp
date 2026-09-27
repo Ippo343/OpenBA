@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <new>
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "system/Timer.h"   // ENDGAME B.3.9 SS2: System::Timer::_secondsPerTick
 
 // ============================================================
 // Resolved helpers
@@ -105,8 +106,7 @@ void HuntComponent::Update(void* time) {
     const int64_t deltaTime = static_cast<int64_t>(reinterpret_cast<intptr_t>(time));   // the elapsed ticks travel in the pointer slot
     EnsureHelpers();
 
-    if (!s_fn_FindComponent1 || !s_fn_FindComponent2 || !s_fn_CalcMaxWorkers ||
-        !g_Timer_secondsPerTick)
+    if (!s_fn_FindComponent1 || !s_fn_FindComponent2 || !s_fn_CalcMaxWorkers)
         return;
 
     // Find the terrain/character component on our owner entity
@@ -136,13 +136,13 @@ void HuntComponent::Update(void* time) {
 
     // Convert delta time to seconds (inline Time::AsSeconds)
     float deltaSeconds = static_cast<float>(
-        static_cast<double>(deltaTime) * (*g_Timer_secondsPerTick));
+        static_cast<double>(deltaTime) * ::System::Timer::_secondsPerTick);
 
     // Scale by terrain speed ratio and convert back to ticks
     float scaledSeconds = deltaSeconds * (static_cast<float>(terrainBaseSpeed) /
                                            static_cast<float>(terrainSpeed));
     int64_t scaledTicks = static_cast<int64_t>(
-        static_cast<double>(scaledSeconds) / (*g_Timer_secondsPerTick));
+        static_cast<double>(scaledSeconds) / ::System::Timer::_secondsPerTick);
 
     // Accumulate into hunt progress at +0x50
     *reinterpret_cast<int64_t*>(

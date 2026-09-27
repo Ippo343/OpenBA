@@ -23,6 +23,7 @@
 #include <cstdlib>
 #include <cmath>
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
+#include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
 
 // ============================================================
 // Locally-resolved dispatch-slot helpers (Runtime exports behind exe .rdata slots)
@@ -217,7 +218,7 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
 extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(void* /*param_1*/, float* outOrigin, float* outDir) {
     EnsureRayExports();
 
-    if (!g_pInputConfigSingletonExref || !g_pVideoDeviceSingleton) return 0;
+    if (!g_pInputConfigSingletonExref) return 0;
 
     // KeyMap = triple-deref of the exref (matches the working dialog pattern
     // ***(void****)g_pInputConfigSingletonExref: slot -> slot value -> exref -> object).
@@ -226,7 +227,7 @@ extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(void* /*param_1*/, float* outOri
         void**** p = reinterpret_cast<void****>(g_pInputConfigSingletonExref);
         if (p && *p && **p && ***p) keyMap = ***p;
     }
-    void* display = *g_pVideoDeviceSingleton;        // Video::Device instance
+    void* display = ::Video::Device::_singleton;        // Video::Device instance
     uintptr_t camHolder = reinterpret_cast<uintptr_t>(
         g_pGameWorldSingleton ? *reinterpret_cast<void**>(GameWorld() + 0xe0) : nullptr);
     if (!keyMap || !display || !camHolder) return 0;

@@ -72,6 +72,7 @@
 #include "../../types/video/Device.h"
 #include "../../types/video/ImageBuffer.h"
 #include "../../types/video/CompanionData.h"   // ENDGAME B.3.5: Video::RenderBufferData
+#include "../../types/io/Persistence.h"        // ENDGAME B.3.9 SS1: Persistence::_singleton
 
 using RtVideo::Adapter;
 using RtVideo::Configuration;
@@ -153,9 +154,8 @@ Configuration** ConfigSingletonSlot() {
     return p;
 }
 void** PersistenceSingletonSlot() {
-    void** p = RT_DATA_SLOT(void**,
-        "?_singleton@Persistence@IO@@0PEAV12@EA");
-    return p;
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now.
+    return reinterpret_cast<void**>(&::IO::Persistence::_singleton);
 }
 
 }  // namespace

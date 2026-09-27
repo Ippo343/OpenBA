@@ -64,6 +64,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
+#include "../../types/io/FileSystem.h"   // ENDGAME B.3.9 SS1: FileSystem::_singleton
 #include "../system/string.h"
 #include "../system/setupdir_helpers.h"
 #include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
@@ -88,11 +89,10 @@ const char* const kUnderscore = "_";
 const char* const kCrs        = ".crs";
 
 // `?_singleton@FileSystem@IO@@0PEAV12@EA`, retail 0x1801fc6a8 — the qword the
-// `MOV RCX,qword ptr [0x1801fc6a8]` at 0x1800bec75 loads. Through the
-// port-aware data door so it follows the mint at cutover.
+// `MOV RCX,qword ptr [0x1801fc6a8]` at 0x1800bec75 loads. The class static now
+// (ENDGAME B.3.9 SS1, B39_RULES D7); read fresh, no lazy cache.
 inline const void* FileSystemSingleton() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@FileSystem@IO@@0PEAV12@EA");
-    return slot ? *slot : nullptr;
+    return ::IO::FileSystem::_singleton;
 }
 
 

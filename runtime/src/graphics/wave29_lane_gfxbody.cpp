@@ -169,6 +169,7 @@
 #include "../../types/graphics/Scene.h"    // Scene, _globals @ +0x60
 #include "../../types/math/Math.h"         // Math::Transform (0x1c), GLOBAL scope
 #include "../../types/system/Value.h"      // System::Time -- ENDGAME B.3.5 block GC
+#include "../../types/system/Timer.h"      // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 
 // Byte-identical to standalone/resolve.h's declaration; the linker checks the
 // two against each other. Not included, for the <wingdi.h> `Rectangle` reason
@@ -252,8 +253,8 @@ const float kOne = FromBits(0x3f800000u);   // 0x18016169c
 // (reference_resolveexport_phantom_names.md).
 // ---------------------------------------------------------------------------
 inline double SecondsPerTick() {
-    const double* p = RT_DATA_SLOT(const double*, "?_secondsPerTick@Timer@System@@0NA");
-    return *p;
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+    return ::System::Timer::_secondsPerTick;
 }
 
 // ---------------------------------------------------------------------------

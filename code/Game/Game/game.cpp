@@ -43,10 +43,10 @@ extern "C" void* Game_Ctor(void* self) {
 
 // moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.
 void Game_TriggerDisasterByType_Impl(int disasterType) {
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
+    if (!::Object::ExternalFactory::_singleton) return;   // ENDGAME B.3.9 SS2 (merged)
     if (!fn_IsDerivedFrom) return;
 
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     void* gameWorld = *g_pGameWorldSingleton;
     if (!gameWorld) return;
     void* entityList = *(void**)((uintptr_t)gameWorld + 0xf0);

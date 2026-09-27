@@ -379,9 +379,8 @@ extern "C" void GameDtor_DrainQueue_a6690(int64_t thread) {
             count = *reinterpret_cast<int*>(thread + 0x70);
         }
         if (count == 0) break;
-        // YieldToThreads(*g_pAppSingleton)
-        if (g_pAppSingleton)
-            reinterpret_cast< ::Application::Application*>(*reinterpret_cast<void**>(g_pAppSingleton))->YieldToThreads();   // B.3.7 bridge
+        // YieldToThreads(Application::_singleton)
+        ::Application::Application::_singleton->YieldToThreads();
         reinterpret_cast<System::CriticalSection*>(reinterpret_cast<void*>(thread + 0x30))->Unlock();   // B.3.4b bridge
     }
     reinterpret_cast<System::CriticalSection*>(reinterpret_cast<void*>(thread + 0x30))->Unlock();   // B.3.4b bridge

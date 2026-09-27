@@ -159,14 +159,14 @@ void TownHallUI_InitGraph(TownHallUI* self) {
     {
         System::Filename filenameBuf("Dialog/StringTable.rsc:graphYears");
         void* ext = const_cast<::Object::External*>(
-            reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+            ::Object::ExternalFactory::_singleton   // B.3.3 bridge
                 ->FindOrLoad(filenameBuf));
         self->graphYearsTable = (ext && fn_IsDerivedFrom(ext, UI::StringTable::TypeId())) ? (uint64_t)ext : 0;
     }
     {
         System::Filename filenameBuf("Dialog/StringTable.rsc:graphTypes");
         void* ext = const_cast<::Object::External*>(
-            reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+            ::Object::ExternalFactory::_singleton   // B.3.3 bridge
                 ->FindOrLoad(filenameBuf));
         self->graphTypesTable = (ext && fn_IsDerivedFrom(ext, UI::StringTable::TypeId())) ? (uint64_t)ext : 0;
     }
@@ -518,7 +518,7 @@ void TownHallUI_InitProduction(TownHallUI* self) {
     // Load graphYears string table and populate combo
     System::Filename fnameBuf("Dialog/StringTable.rsc:graphYears");
     void* ext = const_cast<::Object::External*>(
-        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+        ::Object::ExternalFactory::_singleton   // B.3.3 bridge
             ->FindOrLoad(fnameBuf));
     uint64_t yearsTable = 0;
     if (ext && fn_IsDerivedFrom(ext, UI::StringTable::TypeId())) {
@@ -561,7 +561,7 @@ void TownHallUI_InitInventory(TownHallUI* self) {
 
     // Count resource types via ExternalFactory::FindNext
     int resourceCount = 0;
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     uint32_t resTypeId = RawMaterialDescription::TypeId();
     const ::Object::ExternalFactory* efactory =
         reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
@@ -633,7 +633,7 @@ void TownHallUI_InitInventory(TownHallUI* self) {
     // Load inventoryType string table
     System::Filename fnameBuf("Dialog/StringTable.rsc:inventoryType");
     void* extST = const_cast<::Object::External*>(
-        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+        ::Object::ExternalFactory::_singleton   // B.3.3 bridge
             ->FindOrLoad(fnameBuf));
     uint64_t invTypeTable = 0;
     if (extST && fn_IsDerivedFrom(extST, UI::StringTable::TypeId())) {
@@ -684,7 +684,7 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
         reinterpret_cast<RtObject::Internal*>((void*)tableElem));   // B.3.3 bridge
 
     // Iterate ExternalFactory for ComponentDescription entities
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     uint32_t buildTypeId = ComponentDescription::TypeId();
     uint32_t selectDescId = SelectDescription::TypeId();
 
@@ -2028,7 +2028,7 @@ bool Ready() {
           fn_BST_Insert_0x14 && fn_BST_FreeNodes && fn_QueryProductionStat &&
           fn_InventorySort_Asc && fn_InventorySort_Desc && fn_DynArray_Resize))
         return false;
-    if (!(g_pExternalFactorySingleton && *g_pExternalFactorySingleton)) return false;
+    if (!(::Object::ExternalFactory::_singleton)) return false;
     return true;
 }
 
@@ -2093,7 +2093,7 @@ void DiagPrint(const char* where, void* self) {
             self ? (Bound(self) ? 1 : 0) : -1,
             self ? (Built(self) ? 1 : 0) : -1,
             Ready() ? 1 : 0, TownReady() ? 1 : 0,
-            (g_pExternalFactorySingleton && *g_pExternalFactorySingleton) ? 1 : 0);
+            (::Object::ExternalFactory::_singleton) ? 1 : 0);
     for (const N& f : fns)
         if (!f.p) fprintf(stderr, "[TownHallSA]   MISSING fn: %s\n", f.n);
     if (g_pGameSingleton && *g_pGameSingleton) {

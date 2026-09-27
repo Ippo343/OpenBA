@@ -79,7 +79,7 @@ void EnsureGlobals() {
 bool Ready() {
     // ENDGAME B.3.9 TR: the StorageComponent type-id conjunct is gone -- the class
     // static always answers (the cell pointer it tested was never null).
-    return g_pExternalFactorySingleton && *g_pExternalFactorySingleton;
+    return ::Object::ExternalFactory::_singleton != nullptr;
 }
 
 static void Trace(const char* what, void* self) {
@@ -129,7 +129,7 @@ void StorageUI::OnCreated() {
 
     // Count resource types via ExternalFactory::FindNext
     uint32_t resourceTypeCount = 0;
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     const ::Object::ExternalFactory* efactory =
         reinterpret_cast<const ::Object::ExternalFactory*>(factory);   // B.3.3 bridge
     const ::Object::External* ext =

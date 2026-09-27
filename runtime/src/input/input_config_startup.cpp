@@ -112,6 +112,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/input/Input.h"
+#include "../../types/io/Persistence.h"   // ENDGAME B.3.9 SS1: Persistence::_singleton
 
 // The unexported KeyMap scalar deleting destructor 0x180053440, ported in
 // keymap_save.cpp and registered there BY ADDRESS. Startup's re-entry arm used
@@ -123,11 +124,6 @@ namespace {
 
 typedef void* (*MemAllocFn)(uint64_t, int);
 typedef bool  (*GetBoolFn)(void* self, const char* section, const char* key, bool* out);
-
-// ?_singleton@Persistence@IO@@0PEAV12@EA, ord 4816, retail 0x1801fc6b8.
-void** PersistenceSingletonSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Persistence@IO@@0PEAV12@EA");
-}
 
 // The four literals, read out of the DLL rather than retyped from a header.
 const char kSection[]      = "Input";          // 0x180155200
@@ -150,17 +146,15 @@ void Configuration::Load() {
     _keyMap->Load();
 
     // Retail reads Persistence::_singleton ONCE into RBX and uses it for all
-    // three calls; the slot guard is ours (the variable does not exist without
-    // the DLL unless the mint provides it), the null `this` it may hold is
-    // retail's and stays unguarded.
-    if (void** pSlot = PersistenceSingletonSlot()) {
-        void* persistence = *pSlot;
-        GetBoolFn get = RT_EXPORT_ONCE(GetBoolFn,
-            "?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z");
-        get(persistence, kSection, kMouseClipping, &_mouseClipping);
-        get(persistence, kSection, kLegacy,        &_legacy);
-        get(persistence, kSection, kMouseDisplay,  &_mouseDisplay);
-    }
+    // three calls. ENDGAME B.3.9 SS1 (B39_RULES D7): the cell is the class
+    // static now, so the slot-existence guard this used to need is gone; the
+    // null `this` it may still hold is retail's and stays unguarded.
+    void* persistence = ::IO::Persistence::_singleton;
+    GetBoolFn get = RT_EXPORT_ONCE(GetBoolFn,
+        "?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z");
+    get(persistence, kSection, kMouseClipping, &_mouseClipping);
+    get(persistence, kSection, kLegacy,        &_legacy);
+    get(persistence, kSection, kMouseDisplay,  &_mouseDisplay);
 }
 
 // ============================================================================

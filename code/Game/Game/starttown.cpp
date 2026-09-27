@@ -551,9 +551,9 @@ static void* StartTown_ResolveTemplate(uint8_t* entry) {
     ResolveExternalByName_Impl(entry);                       // try the cheap cached path first
     void* tmpl = *(void**)(entry + EXTREF_TEMPLATE);
     if (tmpl) return tmpl;
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton)
+    if (!::Object::ExternalFactory::_singleton)
         return nullptr;
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     // The singleton is still read through the EXISTING door, so the guard
     // above still gates the same cell and the same registered body still runs.
@@ -3622,9 +3622,9 @@ extern "C" void StartTown_DeferredSpawn_Tick(int frameNum) {
 // Resolve a template by its full "Template\Name.rsc" path (FindOrLoad-by-cstring),
 // mirroring StartTown_ResolveTemplate but without a pool-entry String.
 static void* ResolveTemplateByPath(const char* path) {
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton)
+    if (!::Object::ExternalFactory::_singleton)
         return nullptr;
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     System::Filename fname(path);
     void* tmpl = const_cast<::Object::External*>(
@@ -5427,7 +5427,7 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     fprintf(stderr, "[startTown::spawn] fns: CreateEntity=%p Register=%p IBPCtor=%p MemAlloc=%p ExtFactory=%p\n",
             (void*)fn_EntityFactory_CreateEntity, (void*)fn_EntityList_RegisterEntity,
             (void*)fn_InternalBasePtr_Ctor, (void*)fn_MemAlloc,
-            g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
+            ::Object::ExternalFactory::_singleton);
     // Probe: resolve the first entry of each pool + the mapGen _citizen ref
     // (+0x48, a known "Template\Citizen.rsc" reference). Dump the String text so
     // we can tell a deserialize bug (garbage text) from a missing-resource issue

@@ -417,9 +417,9 @@ void TickMenu(void* menuDLT) {
         // Pick the save whose SaveInfo name (+0x38 String) matches s_loadName;
         // fall back to index 0.
         int pick = 0;
-        if (g_pSaveLoadSingleton && *g_pSaveLoadSingleton) {
+        if (::Save::SaveLoad::_singleton) {
             for (int i = 0; i < saveCount; i++) {
-                const void* info = &reinterpret_cast<const Save::SaveLoad*>(*g_pSaveLoadSingleton)->GetSaveInfo(i);  // B.3.7 bridge
+                const void* info = &::Save::SaveLoad::_singleton->GetSaveInfo(i);  // B.3.7 bridge
                 const char* nm = info ? *reinterpret_cast<const char* const*>(
                     reinterpret_cast<uintptr_t>(info) + 0x38) : nullptr;
                 if (nm && std::strcmp(nm, s_loadName) == 0) { pick = i; break; }

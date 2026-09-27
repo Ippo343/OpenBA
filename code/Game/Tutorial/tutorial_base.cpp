@@ -85,8 +85,8 @@ extern "C" void TutBase_SerializeImageRef(void* fieldPtr, void* serializer) {
 // the Toolbar type instead of BuildComponent.
 //   stringField layout: +0x00 String, +0x08 cached generation, +0x10 cached External*.
 extern "C" void TutBase_ResolveToolbarRef(void* stringField) {
-    if (!stringField || !g_pExternalFactorySingleton) return;
-    void* factory = *g_pExternalFactorySingleton;
+    if (!stringField) return;
+    void* factory = ::Object::ExternalFactory::_singleton;
     if (!factory) return;
 
     uintptr_t s = reinterpret_cast<uintptr_t>(stringField);

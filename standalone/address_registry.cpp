@@ -771,13 +771,9 @@ static void RegisterDispatchSlots() {
     // Each entry maps an exe .rdata dispatch slot to a Runtime DLL function.
     // EngineFuncsInit and Description reimpls read these via:
     //   fn = *(fn_t*)ResolveAddr(Module::Exe, 0x14015XXXX);
-    // Graphics::MeshInstance::_rootOnlyUpdates (a Runtime static BOOL, not a function).
-    // Retail GameUpdateLoop::Update (0x140096380) writes `*slot = (iter < N-1)` every
-    // speed iteration and the character move-tick (0x1401094c0) reads it; with the slot
-    // unregistered the flag stayed false, so at speed 10 every iteration did the full
-    // skeleton/terrain/picking update retail only does on the LAST one (2026-09-04, stress).
-    RegisterDispatchSlot(0x140151f30,
-        (uintptr_t)ResolveExport("?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA"));
+    // (0x140151f30 Graphics::MeshInstance::_rootOnlyUpdates: row deleted at ENDGAME
+    // B.3.9 SS2 — its readers, GameUpdateLoop::Update, the character move-tick and
+    // PerfX, read the class static.)
     // Object::Type::Serialize — slot 0x1401516b0. Used by UIDescription (entity
     // element +0x00), ConsumeProduce, SendComponentMessage, ConsumeProduceDescription.
     // UNREGISTERED previously → those reimpls' `if (s_fn_Type_Serialize)` guard
@@ -979,16 +975,8 @@ static void RegisterDispatchSlots() {
     // dt_sec 0.0f => needs never climb (Phase-3 accumulation bug). Ghidra: first
     // indirect CALL in Update @0x140112eb4 = CALL [0x140151318] -> Time::AsSeconds.
 
-    // Video::Device singleton POINTER VARIABLE, not a function: retail reads it as
-    //   MOV RAX,[0x140151a80]   ; RAX = &Video::Device::_singleton
-    //   MOV RCX,[RAX]           ; RCX = the Device
-    // so the slot holds the ADDRESS of the exported variable and every reader does a
-    // double deref. Unregistered, g_pSingletonExref_151a80 was null and EVERY screen
-    // -dimension read in the port silently produced 0x0: camera_input.cpp ScreenSize,
-    // tool_base_screenrect.cpp (entity screen rects), gameupdateloop_load.cpp, and
-    // the tutorial highlight ring, which is where it was finally caught.
-    RegisterDispatchSlot(0x140151a80,                       // Video::Device::_singleton
-        (uintptr_t)ResolveExport("?_singleton@Device@Video@@0PEAV12@EA"));
+    // (0x140151a80 Video::Device::_singleton: row deleted at ENDGAME B.3.9 SS2 — every
+    // screen-dimension reader reads the class static.)
 
     // UI::Dialog::CreateElement — builds an Element from an ElementDescription
     // ExternalPtr. Every TutorialImage* slot 9 opens with it, and those slots only
@@ -1085,24 +1073,8 @@ static void RegisterDispatchSlots() {
     // It iterates the manager's animation-group array (this+0x00, count this+0x08) and
     // advances each AnimationState; no-ops when no MeshInstance has registered a group.
 
-    // Application::Application::_singleton — Runtime data variable holding the
-    // Application*. The exe normally has a .rdata exref at 0x140152368 that
-    // points to this Runtime variable. engine_funcs.cpp reads:
-    //   exref       = ResolveAddr(Exe, 0x140152368)         -> our slot storage
-    //   *exref      = ResolveAddr(Runtime, 0x1801fc678)     -> &Application::_singleton
-    //   g_pAppSingleton = *exref                             -> &Application::_singleton
-    //   *g_pAppSingleton                                    -> Application*
-    // Without this registration MainMenuDialog::OnCommand can't reach App::Quit.
-    RegisterDispatchSlot(0x140152368,
-        ResolveAddr(Module::Runtime, 0x1801fc678));
-
-    // Object::Factory::_singleton — same pattern.
-    // engine_funcs.cpp Phase H reads slot 0x140152760, expecting **slot to
-    // be the live Factory*. Without this, Object::Factory::GetTypeIdFromName +
-    // singleton are unusable, blocking the type-ID fallback in
-    // LoadDialogResource (and many other Factory consumers).
-    RegisterDispatchSlot(0x140152760,
-        ResolveAddr(Module::Runtime, 0x1801fc6e8));
+    // (0x140152368 Application::_singleton and 0x140152760 Object::Factory::_singleton:
+    // rows deleted at ENDGAME B.3.9 SS2 — their readers read the class statics.)
 
     // (0x140151728, the UI::Dialog type-info import slot: row deleted at ENDGAME
     // B.3.9 TR -- its two readers, mainmenudialog.cpp / mod_dialog_vtables.cpp

@@ -97,6 +97,7 @@
 #include "ui/UserInterface.h"
 #include "ui/DialogInstance.h"
 #include "engine/MainLoop.h"   // ENDGAME B.3.7 callers (K5): Engine::MainLoop::Frame
+#include "system/Timer.h"      // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 
 // ENDGAME B.3.6 block E: the three UserInterface doors this body used to reach
 // by name are members or doors of the same class now. The ctor and the dtor
@@ -158,8 +159,6 @@ typedef void  (*fn_MemFreeS_t)(void* p);
 std::atomic<void*> g_memAllocSlot{nullptr};
 std::atomic<void*> g_memFreeSlot{nullptr};
 std::atomic<void*> g_setSizeSlot{nullptr};
-std::atomic<void*> g_mlSingletonSlot{nullptr};
-std::atomic<void*> g_sptSlot{nullptr};
 
 void* AtomicByName(std::atomic<void*>& slot, const char* mangled) {
     void* p = slot.load(std::memory_order_acquire);
@@ -211,8 +210,9 @@ typedef void  (*fn_SetSize_t)(void* arr, int newCount, const void* fill);
 // ENDGAME B.3.7 callers (K5): the fourth, the `MainLoop::Frame` name door, is a
 // member call on the real class now.)
 fn_SetSize_t  SetSizeDoor()   { return (fn_SetSize_t)AtomicByAddr(g_setSizeSlot, kAddDialogsSetSize); }
-void**        MainLoopSlot()  { return (void**)AtomicByName(g_mlSingletonSlot, "?_singleton@MainLoop@Engine@@1PEAV12@EA"); }
-const double* SecondsPerTick(){ return (const double*)AtomicByName(g_sptSlot, "?_secondsPerTick@Timer@System@@0NA"); }
+// ENDGAME B.3.9 SS1 (B39_RULES D7): both class statics now, no lazy cache.
+void**        MainLoopSlot()  { return reinterpret_cast<void**>(&::Engine::MainLoop::_singleton); }
+const double* SecondsPerTick(){ return &::System::Timer::_secondsPerTick; }
 
 // Retail's inlined callback-array append, transcribed.
 // 0x18011fe7d..0x18011ffd6 (draw) and 0x18011ffe7..0x18012013e (update) are the

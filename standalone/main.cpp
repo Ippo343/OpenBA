@@ -14,6 +14,7 @@
 // pulls in — <wingdi.h> declares a FUNCTION named Rectangle, which breaks
 // Volume.h's Volume::Rectangle (B35 caller brief, the <windows.h> trap).
 #include "video/Context.h"
+#include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device / Configuration::_singleton
 #include "options.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -35,6 +36,7 @@
 #include "Object/factory_registration.h"
 #include "Goal/StatGoal.h"             // ENDGAME B.3.9 EXA: StatGoal::Vtable() for the self-test
 #include "object/TypeInfo.h"           // ENDGAME B.3.9 RF: BaseTypeInfo::_firstTypeInfo for the self-test
+#include "engine/MainLoop.h"   // ENDGAME B.3.9 SS2: Engine::MainLoop::_singleton
 // WAVE 11 follow-up 5 (lane TINFO): the BaseTypeInfo::factoryFn dispatch census.
 
 // Wave 9 lane N's work-scheduler probe tally (code/Game/Action/action_base_complete.cpp).
@@ -763,13 +765,8 @@ static bool RunFactorySelfTest(const char* typeName,
 // "DX9 or DX11" question that drives the +0x267E crash.
 // ============================================================
 static void DumpVideoState() {
-    void** devSlot = reinterpret_cast<void**>(
-        ResolveAddr(Module::Runtime, 0x1801fe7a8));
-    void** cfgSlot = reinterpret_cast<void**>(
-        ResolveAddr(Module::Runtime, 0x1801fe7a0));
-
-    void* device = devSlot ? *devSlot : nullptr;
-    void* config = cfgSlot ? *cfgSlot : nullptr;
+    void* device = ::Video::Device::_singleton;
+    void* config = ::Video::Configuration::_singleton;
     printf("\n[VideoProbe] Configuration::_singleton = %p\n", config);
     if (config) {
         int interfaceIdx = *reinterpret_cast<int*>((uintptr_t)config + 4);
@@ -950,11 +947,11 @@ static_assert(offsetof(ProbeDxgiSwapChainDesc, Windowed) == 56,
               "Windowed offset mismatch");
 
 static void DumpSwapChainState(const char* tag) {
-    if (!g_pVideoDeviceSingleton || !*g_pVideoDeviceSingleton) {
+    if (!::Video::Device::_singleton) {
         printf("[SwapProbe %s] device singleton not populated\n", tag);
         return;
     }
-    void* device = *g_pVideoDeviceSingleton;
+    void* device = ::Video::Device::_singleton;
     void* activeDD = *reinterpret_cast<void**>((uintptr_t)device + 0x100);
     if (!activeDD) {
         printf("[SwapProbe %s] activeDeviceData NULL (Device+0x100)\n", tag);
@@ -1029,8 +1026,8 @@ static const char* WMNameForFocus(UINT m) {
 static bool g_bootedExclusiveFullscreen = false;
 
 static void CaptureBootFullscreenMode() {
-    if (!g_pVideoDeviceSingleton || !*g_pVideoDeviceSingleton) return;
-    void* device = *g_pVideoDeviceSingleton;
+    if (!::Video::Device::_singleton) return;
+    void* device = ::Video::Device::_singleton;
     void* activeDD = *reinterpret_cast<void**>((uintptr_t)device + 0x100);
     if (!activeDD) return;
     void* swapChain = *reinterpret_cast<void**>((uintptr_t)activeDD + 0x18);
@@ -1059,8 +1056,8 @@ static void CaptureBootFullscreenMode() {
 // back buffer across focus events in that mode.
 static void ForceVideoContextReset(const char* tag) {
     if (!g_bootedExclusiveFullscreen) return;
-    if (!g_pMainLoopSingleton || !*g_pMainLoopSingleton) return;
-    uint8_t* ml = reinterpret_cast<uint8_t*>(*g_pMainLoopSingleton);
+    if (!::Engine::MainLoop::_singleton) return;
+    uint8_t* ml = reinterpret_cast<uint8_t*>(::Engine::MainLoop::_singleton);
     void* ctx = *reinterpret_cast<void**>(ml + 0x10);
     if (!ctx) return;
     *(ml + 0x18) = 0;  // engine clears m_videoContextDirty before Reset
@@ -1090,9 +1087,7 @@ static bool IsEngineWindow(HWND hwnd) {
     if (GetClassNameW(hwnd, cls, 64) > 0 && wcscmp(cls, L"Banished") == 0)
         return true;
 
-    void** devSlot = reinterpret_cast<void**>(
-        ResolveAddr(Module::Runtime, 0x1801fe7a8));
-    void* device = devSlot ? *devSlot : nullptr;
+    void* device = ::Video::Device::_singleton;
     if (!device) return false;
     HWND devHwnd = *reinterpret_cast<HWND*>((uintptr_t)device + 0x90);
     return devHwnd && devHwnd == hwnd;

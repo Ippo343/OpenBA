@@ -68,3 +68,5 @@ Resave 5/5 == golden and `calls=5683` / `5773 openFileFail=12` unchanged: ids ar
 changed. B39_RULES §5 item 1 (no reader of an exe type id before `Factory::Startup`) is now CONFIRMED BY A
 RUN: new game, tutorial, Load Game, Mods, the front-end routes and the tool routes are clean and
 `VerifyExeTypeInfos` (fatal in every build) did not fire.
+| b39-VS (VID W2 + SYS W3: Video::ImageBuffer and System::Thread rows retired) | a99bb175 | ok | 0 | 906 | 5683/0 · 5773/12 · 4766 | 5/5 | 4/103/30 | 4 | in-game save COMPLETE, crash log 0; forced device-lost in game: round trip COMPLETE, crash log 0 | 0 |
+| b39-SS1 (storage sweep, Runtime side: Timer x5, Video::Device / Configuration, the Object / IO / Input / Engine singletons — no reader under runtime/ goes through a storage door) | 8a9400dc | ok | 0 | 906 | 5683/0 · 5773/12 · 4766 | 5/5 | 4/103/30 | 4 | Mods, Quit / Options / Achievements exit 0; GoalDialog opens; forced device-lost in game: round trip COMPLETE, crash log 0 | 0 |

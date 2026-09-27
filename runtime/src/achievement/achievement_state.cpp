@@ -86,6 +86,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/AchievementManager.h"
+#include "../../types/io/Persistence.h"   // ENDGAME B.3.9 SS1: Persistence::_singleton
 #include "../../types/system/String.h"
 
 // ENDGAME B.3.7 block B3: the five bodies are MEMBERS now. The three by-address
@@ -108,8 +109,9 @@ using PersistGetBoolFn = bool (*)(const void*, const char*, const char*, bool*);
 using PersistSetBoolFn = void (*)(void*, const char*, const char*, bool);
 using PersistWriteFn   = void (*)(const void*);
 
-void** PersistenceSingletonCell() {
-    return RT_DATA_SLOT(void**, "?_singleton@Persistence@IO@@0PEAV12@EA");
+// ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+void* PersistenceSingleton() {
+    return ::IO::Persistence::_singleton;
 }
 
 // The two string literals both bodies pass, read out of .rdata by the lane that
@@ -165,7 +167,7 @@ void AchievementManager::RemoveAll() {
 // bool into the flag itself. `_completed._data` is dereferenced UNGUARDED.
 // ============================================================================
 void AchievementManager::ReadAchievements() {
-    void* persistence = *PersistenceSingletonCell();
+    void* persistence = PersistenceSingleton();
 
     auto getFn = RT_EXPORT_ONCE(PersistGetBoolFn,
                                 "?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z");
@@ -189,7 +191,7 @@ void AchievementManager::ReadAchievements() {
 bool AchievementManager::SetAchievementMet(int index) {
     _completed._data[index] = true;
 
-    void* persistence = *PersistenceSingletonCell();
+    void* persistence = PersistenceSingleton();
 
     System::String key = System::String::Format(kIndexFormat, index);
 

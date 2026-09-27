@@ -109,7 +109,6 @@ static_assert(offsetof(Modification, m_savedCapacity) == 0x24, "m_savedCapacity 
 
 // Address constants
 namespace ModificationAddr {
-    constexpr uintptr_t Singleton             = 0x1801fc6b0;
     constexpr uintptr_t Find                  = 0x1800aea10;
     constexpr uintptr_t Enable                = 0x1800aeab0;
     constexpr uintptr_t DisableAll            = 0x1800b05b0;

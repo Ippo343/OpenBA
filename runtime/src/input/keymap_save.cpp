@@ -127,6 +127,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/input/Input.h"
+#include "../../types/io/Persistence.h"   // ENDGAME B.3.9 SS1: Persistence::_singleton
 #include "../collection/set_avl_e24.h"
 #include "../system/string.h"
 
@@ -234,8 +235,8 @@ namespace Input {
 
 void KeyMap::Save() {
 
-    void** persistenceSlot = RT_DATA_SLOT(void**, "?_singleton@Persistence@IO@@0PEAV12@EA");
-    void*  persistence = persistenceSlot ? *persistenceSlot : nullptr;
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+    void* persistence = ::IO::Persistence::_singleton;
 
     // KeyMap::_root is at +0x08 (0x1800a7548 `MOV RBX,[RCX+8]`).
     BindingNode* root = _root;

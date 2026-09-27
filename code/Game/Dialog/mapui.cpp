@@ -78,7 +78,7 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
 
     MAPTRC("material alloc+ctor done");
     void* ext = const_cast<::Object::External*>(
-        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
+        ::Object::ExternalFactory::_singleton   // B.3.3 bridge
             ->FindOrLoad(filenameObj));
     void* material = nullptr;
     if (ext) {

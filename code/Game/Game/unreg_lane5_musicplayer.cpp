@@ -128,9 +128,9 @@ void EnsureTrackList(uint8_t* mp) {
     if (attempted) return;              // one shot — never re-hit the loader
     attempted = true;
 
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+    if (!::Object::ExternalFactory::_singleton) {
         fprintf(stderr, "[MusicPlayer] SKIP — factory unavailable (factory=%p)\n",
-                g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
+                ::Object::ExternalFactory::_singleton);
         fflush(stderr);
         return;
     }
@@ -138,7 +138,7 @@ void EnsureTrackList(uint8_t* mp) {
     System::Filename fname("Game/MusicTracks.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     void* list = const_cast<::Object::External*>(
-        reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)
+        ::Object::ExternalFactory::_singleton
             ->FindOrLoad(fname));                                            // B.3.3 bridge
     *reinterpret_cast<void**>(mp + 0x08) = list;
 

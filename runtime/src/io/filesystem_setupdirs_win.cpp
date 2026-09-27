@@ -121,6 +121,7 @@
 #include "../../types/io/FileSystem.h"
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
+#include "../../types/system/Configuration.h"   // ENDGAME B.3.9 SS1: Configuration::_singleton
 #include "../../src/system/string.h"
 #include "../../src/system/pod_bridge.h"
 #include "../../src/system/widestring.h"
@@ -189,15 +190,11 @@ typedef void* (*MapFindFn)(void* map, const System::String* wanted);
 typedef void  (*SetupDirectoriesFn)(FileSystem*);
 
 // `?_singleton@Configuration@System@@0PEAV12@EA`, ord 4803, retail 0x1801fc6f8.
-// Read through the PORT-AWARE door so it follows the mint at cutover, exactly
-// as runtime/src/io/filesystem_startup.cpp reads it.
-void** ConfigurationSingletonSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Configuration@System@@0PEAV12@EA");
-}
-
+// ENDGAME B.3.9 SS1 (B39_RULES D7): the class static `::System::Configuration::_singleton`
+// IS this cell now (name door, address door and this member are the same eight
+// bytes) -- read fresh, no lazy cache, exactly as filesystem_startup.cpp reads it.
 void* ConfigurationSingleton() {
-    void** slot = ConfigurationSingletonSlot();
-    return slot ? *slot : nullptr;
+    return ::System::Configuration::_singleton;
 }
 
 // ENDGAME B.3.1 step 2: the file-local `AssignInline` is gone. Retail's INLINED
@@ -213,7 +210,10 @@ void* ConfigurationSingleton() {
 // `SysFile(<the FileSystem String member>)`.
 
 bool ConfigHasKey(void* cfg, const char* key) {
-    if (cfg == nullptr) return false;      // see the header note on the mint
+    // ENDGAME B.3.9 SS1: the `cfg == nullptr` guard this used to carry was the
+    // "belt" for the storage row not existing at all (see the header note);
+    // that reason is gone now that `?_singleton@Configuration@System@@` is the
+    // class static, so retail's genuinely-unguarded dereference is restored.
     System::String k(key);
     void* map = static_cast<uint8_t*>(cfg) + 0x10;
     // Unexported (no name in either build), so by address. ResolveAddr consults

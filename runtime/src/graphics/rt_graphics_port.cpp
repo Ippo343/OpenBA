@@ -92,10 +92,6 @@ void RtGraphicsPortInit() {
     // ENDGAME B.3.9 GFX (B39_RULES D7): the minted storage row IS the class
     // static from here on (name door, address door, manifest publish). Both
     // rows keep foreign readers, so they retire later (STORAGE-LAST).
-    RtMintRedirectStorage("?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA",
-                          &::Graphics::MeshInstance::_rootOnlyUpdates);
-    RtMintRedirectStorage("?_frameIndex@ParticleInstance@Graphics@@1HA",
-                          &::Graphics::ParticleInstance::_frameIndex);
     // BATCH C — the ten named Graphics leaves of batchc_gfx_leaves.cpp.
     // Registered BEFORE the namespace kill switch and outside every per-lane
     // switch, because DIRECTION.md §2.3 says a port registers unconditionally

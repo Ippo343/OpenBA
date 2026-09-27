@@ -56,6 +56,7 @@
 #include "../../types/collection/Collection.h"
 #include "../../types/video/CompanionData.h"  // ENDGAME B.3.5: Video::ImageBufferData
 #include "../../types/video/ImageBuffer.h"     // ENDGAME B.3.5: Video::ImageBuffer
+#include "../../types/video/Device.h"          // ENDGAME B.3.9 SS1: Video::Device::_singleton
 #include "../collection/array_internal.h"   // rtcoll::AsArray, ArraySpec -- B.3.2 step 2
 #include "../system/string.h"              // RtString_ReleaseInline
 #include "resolve.h"   // ResolveAddr / Module -- the port-aware address door
@@ -110,8 +111,9 @@ using BeginDeleteFn = bool (*)(void* persistence, const char** name);
 // the prologue), not an argument.
 
 // Wave 15 lane ORDER: was a frozen static (see saveload_internal.h's note).
+// ENDGAME B.3.9 SS1 (B39_RULES D7): the class static's address IS this cell.
 void** DeviceSingletonSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+    return reinterpret_cast<void**>(&::Video::Device::_singleton);
 }
 
 // ---------------------------------------------------------------------------

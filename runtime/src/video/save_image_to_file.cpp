@@ -111,6 +111,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/FileStream.h"
+#include "../../types/io/FileSystem.h"   // ENDGAME B.3.9 SS1: FileSystem::_singleton
 #include "../../types/system/Filename.h"
 // ENDGAME B.3.5 block C — the real `Video::ImageBuffer`, whose STATIC member
 // this body now is.
@@ -132,8 +133,9 @@ using StreamCreateFn     = bool  (*)(void* self, const void* filename);
 using StreamDtorFn       = void  (*)(void* self);
 using CloseFileFn        = void  (*)(void* fileSystem, void* fileInfo);
 
-void** FileSystemSingletonSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@FileSystem@IO@@0PEAV12@EA");
+// ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+void* FileSystemSingleton() {
+    return ::IO::FileSystem::_singleton;
 }
 
 // ---------------------------------------------------------------------------
@@ -274,8 +276,7 @@ bool ImageBuffer::SaveImageToFile(const System::Filename& pathRef,
     //
     // NOTE THE ARGUMENT: CreatePath is given `path`, the function's ORIGINAL
     // argument, not the `.bmp` target built above (0x1800f29e6 `MOV RDX,R14`).
-    void** fsSlot = FileSystemSingletonSlot();
-    void* fs = fsSlot ? *fsSlot : nullptr;
+    void* fs = FileSystemSingleton();
     RT_EXPORT_ONCE(CreatePathFn, "?CreatePath@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z")(
         fs, path);   // IO::FileSystem is another batch's; still a name lookup
 

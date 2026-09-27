@@ -90,21 +90,16 @@ extern "C" void SaveLoadHarness_Tick(void* gul, int frameNum) {
     static int  s_lastOp = -999;
     static int  s_triggeredFrame = 0;
 
-    // g_pSaveLoadSingleton depends on exe exref slot 0x140151610, which is not
-    // registered in standalone — resolve Save::SaveLoad::_singleton directly
-    // from the Runtime export instead (written by the SaveLoad ctor in
-    // GameUpdateLoop::Load step 25).
-    static void** s_pSingleton = nullptr;
-    if (!s_pSingleton) {
-        s_pSingleton = reinterpret_cast<void**>(
-            ResolveExport("?_singleton@SaveLoad@Save@@0PEAV12@EA"));
-        fprintf(stderr, "[SaveTest] armed (trigger frame %d): singleton export=%p "
-                        "g_pSaveLoadSingleton=%p\n",
-                trigger, (void*)s_pSingleton, (void*)g_pSaveLoadSingleton);
+    // Save::SaveLoad::_singleton, the class static (written by the SaveLoad ctor
+    // in GameUpdateLoop::Load step 25).
+    static bool s_armed = false;
+    if (!s_armed) {
+        s_armed = true;
+        fprintf(stderr, "[SaveTest] armed (trigger frame %d)\n", trigger);
         fflush(stderr);
     }
-    if (!s_pSingleton || !*s_pSingleton) return;
-    void* saveLoad = *s_pSingleton;
+    void* saveLoad = ::Save::SaveLoad::_singleton;
+    if (!saveLoad) return;
 
     if (s_state == 0) {
         if (frameNum < trigger) return;

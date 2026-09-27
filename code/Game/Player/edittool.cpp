@@ -34,6 +34,7 @@
 #include "ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K4)
 #include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
+#include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
 
 // BANISHED_SELECT_DIAG=1 traces the live EditTool pick path (A/B-safe: off by default).
 static int SelDiagOn() {
@@ -548,8 +549,8 @@ void EditTool::Update(void*, char) {
     // single projected point rather than a clamped footprint box. Clamp the upper-left to
     // [0, screen-dialog] in UI space so the whole panel stays visible. Positions already
     // inside the screen are unaffected, so building placement is unchanged.
-    if (uiScale > 0.0f && g_pVideoDeviceSingleton && *g_pVideoDeviceSingleton) {
-        uintptr_t disp = (uintptr_t)*g_pVideoDeviceSingleton;
+    if (uiScale > 0.0f && ::Video::Device::_singleton) {
+        uintptr_t disp = (uintptr_t)::Video::Device::_singleton;
         int screenW = *(int*)(disp + 4);
         int screenH = *(int*)(disp + 8);
         if (screenW > 0 && screenH > 0) {

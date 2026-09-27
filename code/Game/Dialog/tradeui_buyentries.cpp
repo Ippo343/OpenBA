@@ -166,8 +166,8 @@ extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray) {
     }
 
     // ── 2 & 3. Walk every ComponentDescription the ExternalFactory knows ──────
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
-    void* factory = *g_pExternalFactorySingleton;
+    if (!::Object::ExternalFactory::_singleton) return;
+    void* factory = ::Object::ExternalFactory::_singleton;
     const uint32_t tidComponentDesc = ComponentDescription::TypeId();
 
     const uint32_t rawMatMask = *reinterpret_cast<const uint32_t*>(M + 0x10);

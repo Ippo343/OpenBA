@@ -126,12 +126,11 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
         return outElementIBP;
     }
 
-    if (!g_pFactorySingleton || !*g_pFactorySingleton ||
-        !g_pGameWorldSingleton || !*g_pGameWorldSingleton ||
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton ||
         !fn_IsA) {
         return outElementIBP;
     }
-    void* factory = *reinterpret_cast<void**>(*g_pFactorySingleton);
+    void* factory = ::Object::Factory::_singleton;
     if (!factory) return outElementIBP;
 
     uint32_t dialogTypeId = reinterpret_cast<const ::Object::Factory*>(factory)->GetTypeIdFromName(

@@ -120,6 +120,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/ComboDialog.h"
+#include "../../types/input/Device.h"   // ENDGAME B.3.9 SS1: Input::Device::_singleton
 
 namespace RtUI {
 
@@ -221,8 +222,8 @@ void ComboDialog::OnUpdateLayout() {
 // (feedback_ghidra_dropped_args.md). Now passed, as UI::DialogInstance::
 // Contains passes them. ***
 void ComboDialog::OnUpdate(const System::Time& /*time*/) {
-    void** devSlot = RT_DATA_SLOT(void**, "?_singleton@Device@Input@@0PEAV12@EA");
-    uint8_t* dev = devSlot ? *reinterpret_cast<uint8_t**>(devSlot) : nullptr;
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+    uint8_t* dev = reinterpret_cast<uint8_t*>(::Input::Device::_singleton);
     if (dev == nullptr) return;   // pre-existing; retail derefs it unconditionally
 
     const float scale = *reinterpret_cast<const float*>(static_cast<const uint8_t*>(_ui) + 0xdc);

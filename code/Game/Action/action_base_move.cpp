@@ -122,9 +122,9 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
         if (*pSlot == 0) return;
         System::Filename fnStorage;  // Filename retbuf (local_res18 in the original)
         fnStorage = reinterpret_cast<const ::Object::External*>(*pSlot)->GetPath();  // B.3.3 bridge
-        if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
+        if (::Object::ExternalFactory::_singleton) {
             ::Object::ExternalFactory* efactory =
-                reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton);  // B.3.3 bridge
+                ::Object::ExternalFactory::_singleton;  // B.3.3 bridge
             void* found = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fnStorage)));
             if (found && fn_IsDerivedFrom) fn_IsDerivedFrom(found, typeId);
         }
@@ -134,8 +134,7 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
     // Filename local (default-constructed) used to carry the path through the stream.
     System::Filename fnLocal;
 
-    void* factory = (g_pExternalFactorySingleton && *g_pExternalFactorySingleton)
-                        ? *g_pExternalFactorySingleton : nullptr;
+    void* factory = ::Object::ExternalFactory::_singleton;
     ::Object::ExternalFactory* efactory =
         reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
     bool refMode = (factory)
@@ -189,7 +188,7 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
         int streamFlag = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         if (streamFlag == 0) {
             void* found = nullptr;
-            if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton)
+            if (::Object::ExternalFactory::_singleton)
                 found = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fnLocal)));
             uintptr_t result = 0;
             if (found && fn_IsDerivedFrom && fn_IsDerivedFrom(found, typeId))

@@ -56,7 +56,7 @@ void AchievementDialog::OnOpened() {
     *(uint32_t*)((uintptr_t)buttonOk + 0xC0) = 8;
 
     // Get AchievementManager singleton
-    void* manager = **g_ppAchievementManager;
+    void* manager = ::Achievement::AchievementManager::_singleton;
 
     // Find "tableAchievement" element
     uint64_t tableResult = 0;
@@ -201,7 +201,7 @@ void AchievementDialog::OnUpdateLayout() {
     uintptr_t s = (uintptr_t)this;
 
     // Get AchievementManager singleton (double-indirect via .rdata dispatch)
-    void* manager = **g_ppAchievementManager;
+    void* manager = ::Achievement::AchievementManager::_singleton;
 
     int count = *(int*)(s + 0xC8);
     uintptr_t entryArray = *(uintptr_t*)(s + 0xC0);

@@ -50,8 +50,7 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(void* fieldPtr, void* seriali
     if (!fieldPtr || !serializer) return;
     void** field = reinterpret_cast<void**>(fieldPtr);
 
-    void* factory = (g_pExternalFactorySingleton && *g_pExternalFactorySingleton)
-        ? *g_pExternalFactorySingleton : nullptr;
+    void* factory = ::Object::ExternalFactory::_singleton;
     ::Object::ExternalFactory* efactory =
         reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
 

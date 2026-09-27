@@ -85,6 +85,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/engine/Engine.h"
 #include "../../types/video/Device.h"      // ENDGAME B.3.5: Video::Device / Configuration
+#include "../../types/io/Persistence.h"    // ENDGAME B.3.9 SS1: Persistence::_singleton
 #include "../../types/audio/Audio.h"       // ENDGAME B.3.7 callers (K4): Audio::Configuration
 #include "../../types/input/Input.h"       // ENDGAME B.3.7 callers (K5): Input::Configuration
 #include "../../types/system/String.h"
@@ -133,10 +134,10 @@ void MemFree(void* p) {
     RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
 }
 
-// The exported DATA slots, through the port-aware door so a promoted mint row
-// is honoured at cutover and the DLL's own .data is written today.
+// The exported DATA slots -- all class statics now (ENDGAME B.3.9 SS1,
+// B39_RULES D7): the address-of IS the redirected cell.
 void** VideoDeviceSingletonSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+    return reinterpret_cast<void**>(&::Video::Device::_singleton);
 }
 void** VideoConfigSingletonSlot() {
     return reinterpret_cast<void**>(&::Video::Configuration::_singleton);
@@ -148,7 +149,7 @@ void** InputConfigSingletonSlot() {
     return reinterpret_cast<void**>(&::Input::Configuration::_singleton);
 }
 void** PersistenceSingletonSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Persistence@IO@@0PEAV12@EA");
+    return reinterpret_cast<void**>(&::IO::Persistence::_singleton);
 }
 EngineT** EngineSingletonSlot() {
     return reinterpret_cast<EngineT**>(&::Engine::Engine::_singleton);

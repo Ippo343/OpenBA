@@ -53,8 +53,6 @@ extern "C" int RtAchBatchCGoalListDtorRegister();
 void RtAchievementPortInit() {
     // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
     // static from here on (name door, address door, manifest publish).
-    RtMintRedirectStorage("?_singleton@AchievementManager@Achievement@@0PEAV12@EA",
-                          &Achievement::AchievementManager::_singleton);
     // BATCH C — Achievement::GoalList::~GoalList. Unconditional, see
     // DIRECTION.md §2.3.
     {
