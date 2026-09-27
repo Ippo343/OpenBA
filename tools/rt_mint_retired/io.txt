@@ -10,4 +10,5 @@
 ??_7BinaryReader@IO@@6B@   IO   BinaryEncoding::CreateReader builds ::new (p) BinaryReader(ser, v); ??0/??1 doors, direct slot-0 body 0x180023a10, 25 slot doors deleted
 ??_7BinaryWriter@IO@@6B@   IO   BinaryEncoding::CreateWriter builds ::new (p) BinaryWriter(ser, v); ??0/??1 doors, direct slot-0 body 0x180023b50, 25 slot doors deleted (binary_writer.cpp)
 ??_7Visitor@IO@@6B@        IO   VisitorEncoding factories build ::new (p) Visitor(ser, v); ??1 door, direct slot-0 body 0x18002b710, 25 slot doors deleted
+??_7VisitorStream@IO@@6B@  IO   ExternalFactory::Add (foreign site external_add.cpp) builds ::new IO::VisitorStream(); ctor/dtor/slot-0/5 slot doors deleted
 ??_7ReaderWriter@IO@@6B@   IO   abstract base, stamped only by the three leaves' doors (gone); RT_DELDTOR row 0x180023bd0 + ??1 door 0x1800b9150 deleted

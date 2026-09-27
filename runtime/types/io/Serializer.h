@@ -938,7 +938,10 @@ static_assert(std::is_standard_layout<Serializer>::value,
 }  // namespace IO
 
 namespace RtSystem {
-void RtMemFree(void* p);   // runtime/src/system/string.cpp (malloc seam under make unit)
+// runtime/src/system/string.cpp: the exported ?MemAlloc@/?MemFree@
+// MemoryAllocator doors (a malloc seam under make unit).
+void* RtMemAlloc(uint64_t size, int align);
+void  RtMemFree(void* p);
 }
 
 namespace IO {

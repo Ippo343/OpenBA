@@ -1059,8 +1059,6 @@ int RtMintRegisterPromotedRows() {
     // comment.
     PromoteVtableGuarded("??_7MemoryStream@IO@@6B@", 0x1801555b0ull, &n);
 
-    PromoteVtableGuarded("??_7VisitorStream@IO@@6B@", 0x180155a20ull, &n);
-
     // ---- ??_7BinaryWriter@IO@@6B@ — the row that was READY since Wave 17 ----
     //
     // This one is NOT unblocked by this lane's bodies: it has read 26/26 TRAP=0

@@ -458,10 +458,21 @@ public:
     Encoding* _encoding;    // +0x10  the encoding POLICY object, owned
 
 protected:
+    // ENDGAME B.3.9 IO -- ??0Stream@IO@@QEAA@XZ 0x1800b99d0, the base ctor
+    // every concrete stream opens with: +0x08 = 0, +0x10 = null (+0x0c is not
+    // written). Protected: the class is abstract.
+    Stream() : _direction(0), _encoding(nullptr) {}
+
+    // ??1Stream@IO@@UEAA@XZ 0x1800b9a40: frees the owned encoding with a
+    // direct MemFree (an Encoding has no destructor slot -- Serializer.h).
     // Decision 2's base shape: non-virtual (Itanium spends TWO slots on a
     // virtual destructor, which would shift every slot after it) and protected,
-    // because nothing deletes a Stream through this type.
-    ~Stream() = default;
+    // because nothing deletes a Stream through this type. The registered
+    // `??1Stream` door (deleting_dtor_leaves.cpp) still serves the minted
+    // Stream row until it retires (W2).
+    ~Stream() {
+        if (_encoding) RtSystem::RtMemFree(_encoding);
+    }
 };
 
 static_assert(sizeof(Stream) == 0x18, "IO::Stream is 0x18 bytes");

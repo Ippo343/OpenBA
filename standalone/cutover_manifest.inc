@@ -31,8 +31,8 @@ CUTOVER_ROW("?_rng@Particle@Graphics@@1VRandom@System@@A", CUTOVER_REQUIRED, tru
 CUTOVER_ROW("?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA", CUTOVER_REQUIRED, true, 0x1801fc70bull, "Graphics", 4)
 // Graphics  HARMFUL / DLL-PRESENT  doors=6  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@AnimationManager@Graphics@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe7b0ull, "Graphics", 6)
-// IO  NO-OP / DLL-PRESENT  doors=10  -- verdict is DLL-PRESENT only and 10 by-name door(s) would resolve NULL at cutover
-CUTOVER_ROW("??_7Stream@IO@@6B@", CUTOVER_REQUIRED, true, 0x1801549a0ull, "IO", 10)
+// IO  NO-OP / DLL-PRESENT  doors=8  -- verdict is DLL-PRESENT only and 8 by-name door(s) would resolve NULL at cutover
+CUTOVER_ROW("??_7Stream@IO@@6B@", CUTOVER_REQUIRED, true, 0x1801549a0ull, "IO", 8)
 // IO  HARMFUL / DLL-PRESENT  doors=27  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@FileSystem@IO@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6a8ull, "IO", 27)
 // IO  HARMFUL / DLL-PRESENT  doors=6  -- tag states the verdict inverts at cutover

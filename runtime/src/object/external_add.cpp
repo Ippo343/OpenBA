@@ -79,6 +79,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 
 #include "external_set.h"
 #include "../system/string.h"
@@ -124,20 +125,6 @@ namespace {
 // so RCX is `this` and RDX is the slot, and the copy-ctor below takes the
 // returned RAX as its source.
 using GetPathFn = Filename* (*)(const External* self, Filename* ret);
-
-// `??0VisitorStream@IO@@QEAA@XZ`. Returns `this` in RAX; no hidden slot.
-using VisitorCtorFn = void* (*)(RtIo::VisitorStream* self);
-
-// The Encoding's deleting destructor at 0x180006a10 — the same guarded object
-// free `~MemoryStream`, `~CompressedStream` and `~VisitorStream` all tail into.
-// Reached by address because it has no exported name; already registered by
-// lane E, so this resolves to our own body and not to the DLL's.
-void EncodingDelete(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180006a10));
-    fn(p);
-}
 
 // External vtable slot +0x28 — `Serialize(IO::Stream&)`. The same slot
 // `External::Load` drives and the one External.h names.
@@ -286,31 +273,20 @@ extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* ex
             ++g_ac.hitVisited;
 
             // ---- the stack-constructed IO::VisitorStream ----------------
-            // 0x18 bytes, and DELIBERATELY not zero-initialised: the ctor
-            // writes every field it uses (vptr, direction, encoding) and
-            // `Stream::pad0c` is one retail never touches. A `= {}` here would
-            // be a behavioural difference from retail, not tidiness — the same
-            // position saveload_meta.cpp takes on CompressedStream +0x18/+0x24.
-            RtIo::VisitorStream vs;
-            RT_EXPORT_ONCE(VisitorCtorFn, "??0VisitorStream@IO@@QEAA@XZ")(&vs);
+            // 0x18 bytes of stack, built by the REAL constructor (ENDGAME
+            // B.3.9 IO: retail's ??0VisitorStream 0x1800bb090 -- vptr,
+            // direction 1, the Visitor encoding). `Stream::pad0c` is not
+            // written, as in retail.
+            alignas(8) unsigned char vsMem[sizeof(IO::VisitorStream)];
+            IO::VisitorStream* vs = ::new (vsMem) IO::VisitorStream();
 
-            ExternalSerialize(external, &vs);                   // 1800be6a9
+            ExternalSerialize(external, vs);                    // 1800be6a9
 
-            // ---- the INLINED ~VisitorStream -----------------------------
-            // The inherited draft claimed retail's inlined copy makes ONE
-            // vtable stamp and emitted only the second. It makes TWO, exactly
-            // like the out-of-line `??1VisitorStream` (0x1800bb040):
-            //     1800be673  lea rax,[rip+...]  # 0x180155a20  ??_7VisitorStream
-            //     1800be67a  mov [rbp-0x18],rax
-            //     1800be67e  lea rax,[rip+...]  # 0x1801549a0  ??_7Stream
-            //     1800be685  mov [rbp-0x18],rax
-            // Nothing between the two stores can observe the intermediate, so
-            // this is not a behavioural fix -- but the draft's claim was a
-            // statement about retail that was false, and the transcription is
-            // free.
-            vs.base.vptr = RT_DATA_SLOT(const void*, "??_7VisitorStream@IO@@6B@");  // 1800be67a
-            vs.base.vptr = RT_DATA_SLOT(const void*, "??_7Stream@IO@@6B@");         // 1800be685
-            if (vs.base.encoding) EncodingDelete(vs.base.encoding);
+            // ---- the INLINED ~VisitorStream (1800be673..) ----------------
+            // Retail's two table stores and the encoding free are
+            // ~VisitorStream -> ~Stream; slot 0 with flags 0 runs exactly that
+            // (called non-virtually, as retail's inlined copy is).
+            vs->IO::VisitorStream::DeletingDtor(0);
         } else {
             ++g_ac.hitSkipped;
         }

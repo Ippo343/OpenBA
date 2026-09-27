@@ -3,8 +3,8 @@
 // harvest of Runtime-x64.dll) re-verified against the DLL at generation
 // time. Regenerate with:
 //   tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py
-// Counts: 139 vtables, 104 BaseTypeInfo, 48 storage symbols.
-// Retired (ENDGAME B.3 step 9): 13 row(s), listed in tools/rt_mint_retired/*.txt.
+// Counts: 138 vtables, 104 BaseTypeInfo, 48 storage symbols.
+// Retired (ENDGAME B.3 step 9): 14 row(s), listed in tools/rt_mint_retired/*.txt.
 
 // ---- Per-slot traps. One function per (vtable, slot) so an unreachable
 // slot that DOES get called names itself instead of aborting anonymously.
@@ -1322,13 +1322,6 @@ RT_MINT_TRAP(136,8)
 RT_MINT_TRAP(137,0)
 RT_MINT_TRAP(137,1)
 RT_MINT_TRAP(137,2)
-RT_MINT_TRAP(138,0)
-RT_MINT_TRAP(138,1)
-RT_MINT_TRAP(138,2)
-RT_MINT_TRAP(138,3)
-RT_MINT_TRAP(138,4)
-RT_MINT_TRAP(138,5)
-RT_MINT_TRAP(138,6)
 
 // (unexported, carried by address)  DLL 0x180155860  2 slots  [tail-not-a-pointer]
 static const RtMintVSlot kVSlots0[] = {
@@ -3472,19 +3465,6 @@ static const RtMintVSlot kVSlots137[] = {
 static void* kVTable137[3];
 static const RtMintTrapFn kVTraps137[] = { &RtMintTrapStub_137_0, &RtMintTrapStub_137_1, &RtMintTrapStub_137_2 };
 
-// ??_7VisitorStream@IO@@6B@  DLL 0x180155a20  7 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots138[] = {
-    { nullptr, 0x18002bf80ull, RT_MINT_UNNAMED },
-    { "?GetSource@Stream@IO@@UEBA?AVString@System@@XZ", 0x18000c6a0ull, RT_MINT_NAMED },
-    { "?Write@VisitorStream@IO@@UEAA_NHPEBX@Z", 0x1800bb030ull, RT_MINT_NAMED },
-    { "?Read@VisitorStream@IO@@UEAA_NHPEAX@Z", 0x1800bb020ull, RT_MINT_NAMED },
-    { "?SetCurrentPos@VisitorStream@IO@@UEAA_NH@Z", 0x1800bb010ull, RT_MINT_NAMED },
-    { "?GetCurrentPos@VisitorStream@IO@@UEBAIXZ", 0x1800bb000ull, RT_MINT_NAMED },
-    { "?GetSize@VisitorStream@IO@@UEBAIXZ", 0x1800baff0ull, RT_MINT_NAMED },
-};
-static void* kVTable138[7];
-static const RtMintTrapFn kVTraps138[] = { &RtMintTrapStub_138_0, &RtMintTrapStub_138_1, &RtMintTrapStub_138_2, &RtMintTrapStub_138_3, &RtMintTrapStub_138_4, &RtMintTrapStub_138_5, &RtMintTrapStub_138_6 };
-
 static RtMintVtable kMintVtables[] = {
     { nullptr, 0x180155860ull, 2, kVSlots0, kVTable0, kVTraps0, "tail-not-a-pointer" },
     { nullptr, 0x180157c60ull, 7, kVSlots1, kVTable1, kVTraps1, "tail-not-a-pointer" },
@@ -3624,7 +3604,6 @@ static RtMintVtable kMintVtables[] = {
     { "??_7VertexProgramData@Video@@6B@", 0x180158a90ull, 3, kVSlots135, kVTable135, kVTraps135, "adjacent-export:??_7VertexLayoutData@Video@@6B@" },
     { "??_7VideoProgram@Video@@6B@", 0x180157a70ull, 9, kVSlots136, kVTable136, kVTraps136, "tail-not-a-pointer" },
     { "??_7VideoProgramData@Video@@6B@", 0x180158a48ull, 3, kVSlots137, kVTable137, kVTraps137, "adjacent-export:??_7RenderStateData@Video@@6B@" },
-    { "??_7VisitorStream@IO@@6B@", 0x180155a20ull, 7, kVSlots138, kVTable138, kVTraps138, "tail-not-a-pointer" },
 };
 
 // ---- Object::BaseTypeInfo. Fields are link-time constants copied from

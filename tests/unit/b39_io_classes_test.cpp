@@ -15,6 +15,7 @@
 #include "unit.h"
 
 #include "runtime/types/io/Serializer.h"
+#include "runtime/types/io/FileStream.h"
 
 #include <cstdint>
 #include <cstdlib>
@@ -302,4 +303,38 @@ UNIT_TEST(b39_io_visitor_ctor_stores_and_both_arms) {
         if (i == 0) e0 = e;
     }
     CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3)) == block);   // freed
+}
+
+// ===========================================================================
+// IO::VisitorStream -- row 151. `?Add@ExternalFactory@` stack-builds one.
+// ===========================================================================
+UNIT_TEST(b39_io_visitorstream_ctor_and_both_arms) {
+    CHECK(!std::is_abstract<IO::VisitorStream>::value);
+    CHECK(!std::is_destructible<IO::VisitorStream>::value);
+    CHECK(!std::has_virtual_destructor<IO::VisitorStream>::value);
+    CHECK_EQ(SlotOffset(&IO::VisitorStream::DeletingDtor),  (uintptr_t)0x00);
+    CHECK_EQ(SlotOffset(&IO::VisitorStream::GetSource),     (uintptr_t)0x08);
+    CHECK_EQ(SlotOffset(&IO::VisitorStream::Write),         (uintptr_t)0x10);
+    CHECK_EQ(SlotOffset(&IO::VisitorStream::GetSize),       (uintptr_t)0x30);
+
+    // 0x1800bb090: +0x08 = 1 (WRITING), +0x10 = a fresh VISITOR encoding,
+    // +0x0c never written.
+    alignas(8) uint8_t mem[0x18];
+    std::memset(mem, 0xCD, sizeof mem);
+    IO::VisitorStream* vs = ::new (mem) IO::VisitorStream();
+    CHECK_EQ(vs->_direction, 1);
+    CHECK_EQ(vs->GetDirection(), IO::kWriting);
+    for (int i = 0x0c; i < 0x10; ++i) CHECK_EQ((int)mem[i], 0xCD);
+    CHECK(vs->_encoding != nullptr);
+    CHECK_EQ(vs->_encoding->GetKind(), 3);
+    CHECK(!vs->_encoding->IsBinary());
+    CHECK(vs->DeletingDtor(0) == vs);          // ~VisitorStream -> ~Stream frees the encoding
+
+    // The vector arm (0x18002bf80: stride 0x18).
+    uint8_t* block = static_cast<uint8_t*>(std::malloc(8 + 2 * 0x18));
+    const int64_t cookie = 2;
+    std::memcpy(block, &cookie, sizeof cookie);
+    IO::VisitorStream* e0 = ::new (block + 8) IO::VisitorStream();
+    ::new (block + 8 + 0x18) IO::VisitorStream();
+    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3)) == block);
 }

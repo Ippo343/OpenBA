@@ -61,6 +61,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <new>          // ENDGAME B.3.9 IO: VisitorStream's ctor places its encoding
 
 #include "Stream.h"      // RtIo::Stream, RtIo::CompressedStream, IO::Stream
 #include "FileSystem.h"  // RtIO::FileInfo   (note the capital O — a different
@@ -413,7 +414,6 @@ constexpr uintptr_t kAddrVtblFileStream           = 0x180154960;  // ??_7FileStr
 constexpr uintptr_t kAddrVtblBinaryFileStream     = 0x1801554d0;  // ??_7BinaryFileStream@IO@@6B@
 constexpr uintptr_t kAddrVtblCompressedFileStream = 0x1801555f0;  // ??_7CompressedFileStream@IO@@6B@
 constexpr uintptr_t kAddrVtblTextFileStream       = 0x180155980;  // ??_7TextFileStream@IO@@6B@
-constexpr uintptr_t kAddrVtblVisitorStream        = 0x180155a20;  // ??_7VisitorStream@IO@@6B@
 
 // FileStream's slot 7 is Open, NOT Close. Named so a call site cannot repeat
 // the mistake the comment on FileStream warns about; Stream.h's
@@ -710,9 +710,35 @@ static_assert(offsetof(TextFileStream, _bufCursor) == 0x7c,
 // the two are not related by inheritance.
 class VisitorStream : public Stream {
 public:
-    // slot 0  +0x00  0x18002bf80 — PURE; body registered by address, and it
-    // fills slot 0 of the live minted table (rt_data_mint_tables.inc:3872).
-    Stream* DeletingDtor(unsigned flags) override = 0;
+    // ENDGAME B.3.9 IO -- ??0VisitorStream@IO@@QEAA@XZ 0x1800bb090, in retail's
+    // store order after the base ctor: `_direction = 1` (WRITING), then
+    // MemAlloc(8,4) and the VISITOR encoding in it (null on a failed
+    // allocation -- retail's branch), then the dead free of the previous
+    // encoding (always null here) and the store.
+    VisitorStream() {
+        _direction = 1;                                         // 1800bb0d3
+        void* e = RtSystem::RtMemAlloc(8, 4);                   // 1800bb107
+        if (e) ::new (e) VisitorEncoding();                     // 1800bb118
+        if (_encoding) RtSystem::RtMemFree(_encoding);          // 1800bb127
+        _encoding = static_cast<Encoding*>(e);                  // 1800bb135
+    }
+
+    // slot 0  +0x00  0x18002bf80 — MSVC's vector deleting dtor, stride 0x18
+    // (the eh_vector_dtor element size). `?Add@ExternalFactory@` destroys its
+    // stack instance through the inlined dtor, i.e. flags 0.
+    Stream* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<VisitorStream*>(self + static_cast<int64_t>(i) * 0x18)->~VisitorStream();
+            if (flags & 1u) RtSystem::RtMemFree(self - 8);
+            return reinterpret_cast<Stream*>(self - 8);
+        }
+        this->~VisitorStream();
+        if (flags & 1u) RtSystem::RtMemFree(this);
+        return this;
+    }
     // slot 1  +0x08  0x18000c6a0 — IO::Stream::GetSource, NOT overridden.
     bool     Write(int n, const void* src) override;   // slot 2 +0x10  0x1800bb030
     bool     Read(int n, void* dst) override;          // slot 3 +0x18  0x1800bb020
@@ -725,6 +751,8 @@ public:
     // which spans exactly vptr / direction / encoding.
 
 protected:
+    // ??1VisitorStream@IO@@UEAA@XZ 0x1800bb040: two table stamps, then
+    // ~Stream frees the encoding -- exactly the compiler's chain.
     ~VisitorStream() = default;
 };
 
