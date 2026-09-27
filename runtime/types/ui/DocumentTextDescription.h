@@ -34,9 +34,11 @@
 // retail passes as the ADDRESS of the caller's handle (block A's finding), so
 // it is declared with `InternalPtr<DocumentTextElement>*`.
 //
-// ABSTRACT (slot 0 `= 0`), NO real ctor (the `??0` door, 0x1800cfc30 in
-// factory_ui1.cpp, builds every live one). The destructor is declared only:
-// `??1` (0x1800cfb30) is the registered door.
+// ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2): CONCRETE. A real public
+// ctor (retail's 0x1800cfc30 stores), its own slot 0, the factory pair as the
+// class's own statics; ~DocumentTextDescription holds the retired ??1 door's
+// body. The minted `??_7DocumentTextDescription@UI@@6B@`, its RT_DELDTOR row
+// 0x18003bd90, the FACTUI1 row and the ctor / dtor / slot doors are retired.
 // ============================================================================
 
 #include <cstddef>
@@ -51,7 +53,44 @@ class DocumentTextElement;
 
 class DocumentTextDescription : public ElementDescription {
 public:
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x18003bd90
+    // ??0DocumentTextDescription@UI@@QEAA@XZ 0x1800cfc30 -- the REAL ctor:
+    // ElementDescription's (inlined in retail), then +0x68..+0x97 zero, the
+    // three link colours, tab width 4, wrap width 300, +0xb0..+0xe7 zero.
+    // +0xac is written by nothing.
+    DocumentTextDescription() : ElementDescription() {
+        _documentStringTable = nullptr;
+        _documentTextName    = nullptr;
+        _spriteSheet         = nullptr;
+        _underlineSpriteName = nullptr;
+        _frameNamesData      = nullptr;
+        _frameNamesCount     = 0;
+        _frameNamesCapacity  = 0;
+        _linkColor           = 0xffeeee00u;
+        _linkHoverColor      = 0xffffff00u;
+        _linkPressedColor    = 0xffcccc00u;
+        _tabWidth            = 4;
+        _wrapWidth           = 0x12c;
+        _fontsData = nullptr;  _fontsCount = 0;  _fontsCapacity = 0;
+        _sheetsData = nullptr; _sheetsCount = 0; _sheetsCapacity = 0;
+        _colorsData = nullptr; _colorsCount = 0; _colorsCapacity = 0;
+        _resourceList        = nullptr;
+    }
+
+    // [0] 0x18003bd90 -- MSVC's VECTOR deleting destructor, both arms exactly as the
+    // retired RT_DELDTOR row ran them (`MOV EDX,0xe8` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<DocumentTextDescription*>(self + static_cast<int64_t>(i) * 0xe8)->~DocumentTextDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~DocumentTextDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x18003b900
     uint32_t    Type() const override;                            // [2] 0x18003b8e0
     int32_t     GetFileVersion() const override;                  // [3] 0x1800cfb20
@@ -69,13 +108,14 @@ public:
 
     DocumentTextDescription(const DocumentTextDescription& src);  // 0x18003bac0  not ported
     DocumentTextDescription& operator=(const DocumentTextDescription& src); // 0x18003bc00 not ported
-    static uint32_t TypeId();                                     // not ported
-    static Object::Base* CreateNewObject();                       // 0x18003b9f0  factory door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x18003ba70  factory door
+    static uint32_t TypeId();                                     // over the minted record until W3
+    static Object::Base* CreateNewObject();                       // 0x18003b9f0  (D2)
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x18003ba70  (D2)
 
 protected:
-    DocumentTextDescription() = default;   // NOT ??0 (0x1800cfc30, a door)
-    ~DocumentTextDescription();            // ??1 0x1800cfb30 — the door; declared only
+    // ??1 0x1800cfb30 -- NON-VIRTUAL; retail's body (documenttextdescription.cpp),
+    // the compiler chains ~ElementDescription and ~External.
+    ~DocumentTextDescription();
 
 private:
     static const char* _TypeName();                               // 0x18003b8c0

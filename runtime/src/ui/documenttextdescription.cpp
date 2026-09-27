@@ -67,22 +67,9 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_vtable{nullptr};
-std::atomic<void*> g_ctor{nullptr};
-
-void* VtDocumentTextDescription() {
-    return AtomicExport(g_vtable, RtUI::kVtblDocumentTextDescription);
-}
 const uint8_t* DocumentTextTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@DocumentTextDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
-
-// ??0DocumentTextDescription@UI@@QEAA@XZ (0x1800cfc30) — the ctor DOOR (B4b-2).
-void* DocumentTextCtor(void* self) {
-    using CtorFn = void* (*)(void*);
-    return reinterpret_cast<CtorFn>(
-        AtomicExport(g_ctor, "??0DocumentTextDescription@UI@@QEAA@XZ"))(self);
 }
 
 }  // namespace
@@ -96,17 +83,22 @@ const char* DocumentTextDescription::TypeName() const {
 uint32_t DocumentTextDescription::Type() const {
     uint32_t v = 0; __builtin_memcpy(&v, DocumentTextTypeInfo(), sizeof v); return v;
 }
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t DocumentTextDescription::TypeId() {
+    uint32_t v = 0; __builtin_memcpy(&v, DocumentTextTypeInfo(), sizeof v); return v;
+}
 // [3] 0x1800cfb20
 int32_t DocumentTextDescription::GetFileVersion() const { return 0x204; }
 
-// [9] 0x18003baa0 — the null-`this` test stays in the door; the member is the JMP.
+// [9] 0x18003baa0 — the ctor, placement (retail's null test sat in the
+// retired door; a virtual call always has a `this`).
 Object::External* DocumentTextDescription::Construct() {
-    return reinterpret_cast<Object::External*>(DocumentTextCtor(this));   // 18003baa9 JMP
+    return ::new (this) DocumentTextDescription();                        // 18003baa9 JMP
 }
 // [6] 0x18003ba80 — destroy in place through slot 0 (flag 0), re-run the ctor.
 Object::External* DocumentTextDescription::Reconstruct() {
     DeletingDtor(0);                                                        // 18003ba8e slot 0
-    return reinterpret_cast<Object::External*>(DocumentTextCtor(this));   // 18003ba98 JMP
+    return ::new (this) DocumentTextDescription();                        // 18003ba98 JMP
 }
 // [7] 0x18003bab0
 void DocumentTextDescription::Destruct() { DeletingDtor(0); }
@@ -341,11 +333,8 @@ Object::InternalPtr<Element>* DocumentTextDescription::CreateInstance(
     void* raw = MemAlloc(0x1c8, 8);                         // 1800cf822
 
     DocumentTextElement* elem = nullptr;
-    if (raw != nullptr) {                                   // 1800cf84d
-        using DtElementCtorFn = void* (*)(void*);
-        elem = static_cast<DocumentTextElement*>(
-            RtAddr<DtElementCtorFn>(0x1800cf410ull)(raw));  // 1800cf852
-    }
+    if (raw != nullptr)                                     // 1800cf84d
+        elem = ::new (raw) DocumentTextElement();           // 1800cf852 ??0 (out of line)
 
     Object::InternalPtr<DocumentTextElement> slot(elem);    // 1800cf85e
     CreateInstance(&slot, dialog);                          // 1800cf86e the applier, now a member
@@ -356,37 +345,49 @@ Object::InternalPtr<Element>* DocumentTextDescription::CreateInstance(
 
 }  // namespace UI
 
+namespace UI {
+
+// ??1DocumentTextDescription@UI@@UEAA@XZ   0x1800cfb30 — retail's body, moved
+// from the retired door (ENDGAME B.3.9 UI-B). Four array destructors in
+// DESCENDING offset order, then two String releases; the base restamp, the
+// base's _textName (+0x60) and the tail JMP into ~External are the compiler's
+// chain. The +0x68 ExternalPtr<StringTable> and the +0x78
+// ExternalPtr<SpriteSheet> are NOT released — the same asymmetry
+// ~ImageDescription has.
+DocumentTextDescription::~DocumentTextDescription() {
+    uint8_t* p = reinterpret_cast<uint8_t*>(this);
+    using ArrayDtorFn = void* (*)(void*);
+    RtAddr<ArrayDtorFn>(0x18003db40ull)(p + 0xd0);          // 1800cfb57
+    RtAddr<ArrayDtorFn>(0x18003da00ull)(p + 0xc0);          // 1800cfb64
+    RtAddr<ArrayDtorFn>(0x18003d8c0ull)(p + 0xb0);          // 1800cfb71
+    RtAddr<ArrayDtorFn>(0x180010ab0ull)(p + 0x88);          // 1800cfb7e  element-destroying
+    ReleaseStringField(p, 0x80);                            // 1800cfb84
+    ReleaseStringField(p, 0x70);                            // 1800cfbba
+}
+
+// ?CreateNewObject@DocumentTextDescription@UI@@SAPEAVBase@Object@@XZ 0x18003b9f0 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0xe8, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* DocumentTextDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(DocumentTextDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) DocumentTextDescription();
+}
+// ?CreateInPlaceObject@DocumentTextDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x18003ba70
+Object::Base* DocumentTextDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) DocumentTextDescription();
+}
+
+}  // namespace UI
+
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
+// ENDGAME B.3.9 UI-B: the slot doors (Type .. CreateInstance), the ??1 door
+// and the FACTUI1 ??0 door are gone (their only readers were the minted
+// `??_7DocumentTextDescription@UI@@6B@`, its RT_DELDTOR row and the FACTUI1
+// row). The applier door stays: it is a non-virtual member, registered by
+// address, not mint scaffolding.
 // ============================================================================
-extern "C" uint32_t RtUi_DocumentTextDescription_Type(const void* self) {
-    return reinterpret_cast<const UI::DocumentTextDescription*>(self)
-        ->UI::DocumentTextDescription::Type();
-}
-extern "C" const char* RtUi_DocumentTextDescription_TypeName(const void* self) {
-    return reinterpret_cast<const UI::DocumentTextDescription*>(self)
-        ->UI::DocumentTextDescription::TypeName();
-}
-extern "C" int32_t RtUi_DocumentTextDescription_GetFileVersion(const void* self) {
-    return reinterpret_cast<const UI::DocumentTextDescription*>(self)
-        ->UI::DocumentTextDescription::GetFileVersion();
-}
-extern "C" void* RtUi_DocumentTextDescription_Construct(void* self) {
-    if (self == nullptr) return nullptr;                    // 18003baa3 (retail null test)
-    return reinterpret_cast<UI::DocumentTextDescription*>(self)
-        ->UI::DocumentTextDescription::Construct();
-}
-extern "C" void* RtUi_DocumentTextDescription_Reconstruct(void* self) {
-    return reinterpret_cast<UI::DocumentTextDescription*>(self)
-        ->UI::DocumentTextDescription::Reconstruct();
-}
-extern "C" void RtUi_DocumentTextDescription_Destruct(void* self) {
-    reinterpret_cast<UI::DocumentTextDescription*>(self)->UI::DocumentTextDescription::Destruct();
-}
-extern "C" bool RtUi_DocumentTextDescription_Serialize(void* self, void* stream) {
-    return reinterpret_cast<UI::DocumentTextDescription*>(self)
-        ->UI::DocumentTextDescription::Serialize(stream);
-}
 extern "C" void RtUi_DocumentTextDescription_ApplyToElement(const void* self, void** elemPtr,
                                                             const void* dialog) {
     reinterpret_cast<const UI::DocumentTextDescription*>(self)
@@ -394,83 +395,17 @@ extern "C" void RtUi_DocumentTextDescription_ApplyToElement(const void* self, vo
             reinterpret_cast<Object::InternalPtr<UI::DocumentTextElement>*>(elemPtr),  // B.3.6 bridge
             static_cast<const UI::Dialog*>(dialog));
 }
-extern "C" void** RtUi_DocumentTextDescription_CreateInstance(const void* self, void** ret,
-                                                              const void* dialog) {
-    return reinterpret_cast<void**>(
-        reinterpret_cast<const UI::DocumentTextDescription*>(self)
-            ->UI::DocumentTextDescription::CreateInstance(
-                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
-                static_cast<const UI::Dialog*>(dialog)));
-}
-
-// ============================================================================
-// ??1DocumentTextDescription@UI@@UEAA@XZ   0x1800cfb30 — a DOOR (B4b-2), unchanged.
-// ============================================================================
-// Four array destructors in DESCENDING offset order, then two String releases,
-// then the base vtable and the base's _textName, then the tail JMP.
-// The +0x68 ExternalPtr<StringTable> and the +0x78 ExternalPtr<SpriteSheet> are
-// NOT released — the same asymmetry ~ImageDescription has.
-extern "C" void RtUi_DocumentTextDescription_Dtor(void* selfv) {
-    using namespace rtdesc;
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtDocumentTextDescription();                       // 1800cfb4d
-
-    using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x18003db40ull)(p + 0xd0);          // 1800cfb57
-    RtAddr<ArrayDtorFn>(0x18003da00ull)(p + 0xc0);          // 1800cfb64
-    RtAddr<ArrayDtorFn>(0x18003d8c0ull)(p + 0xb0);          // 1800cfb71
-    RtAddr<ArrayDtorFn>(0x180010ab0ull)(p + 0x88);          // 1800cfb7e  element-destroying
-
-    ReleaseStringField(p, 0x80);                            // 1800cfb84
-    ReleaseStringField(p, 0x70);                            // 1800cfbba
-
-    *v = VtElementDescription();                            // 1800cfbeb
-    ReleaseStringField(p, 0x60);                            // 1800cfbee
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800cfc20 JMP
-}
 
 int RtUiDocumentTextDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@DocumentTextDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_DocumentTextDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x18003b8e0ull, (void*)&RtUi_DocumentTextDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@DocumentTextDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_DocumentTextDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x18003b900ull, (void*)&RtUi_DocumentTextDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@DocumentTextDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_DocumentTextDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x1800cfb20ull, (void*)&RtUi_DocumentTextDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@DocumentTextDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_DocumentTextDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x18003baa0ull, (void*)&RtUi_DocumentTextDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@DocumentTextDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_DocumentTextDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x18003ba80ull, (void*)&RtUi_DocumentTextDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@DocumentTextDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_DocumentTextDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x18003bab0ull, (void*)&RtUi_DocumentTextDescription_Destruct);
-
-    RegisterRuntimeExport("??1DocumentTextDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_DocumentTextDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x1800cfb30ull, (void*)&RtUi_DocumentTextDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@DocumentTextDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_DocumentTextDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x1800cf8a0ull, (void*)&RtUi_DocumentTextDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@DocumentTextDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_DocumentTextDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x1800cf7e0ull, (void*)&RtUi_DocumentTextDescription_CreateInstance);
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@DocumentTextDescription` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@DocumentTextDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::DocumentTextDescription::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x18003b9f0ull, (void*)&UI::DocumentTextDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@DocumentTextDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::DocumentTextDescription::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x18003ba70ull, (void*)&UI::DocumentTextDescription::CreateInPlaceObject);
 
     // ADDRESS ONLY: the applier has no export name.
     RegisterRuntimeAddr(0x1800cf520ull,

@@ -149,8 +149,11 @@ constexpr int kCaptureHeight   = 0x54;
 // (`AEAUDocumentItem@12@` in GetNextItem's mangling). `UI::DocumentItem`
 // remains as an alias for the transition.
 //
-// ABSTRACT (slot 0 `= 0`), NO real ctor (the `??0DocumentTextElement` door
-// builds every live one; it wears the MINTED table).
+// ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2): CONCRETE. A real public
+// ctor (retail's 0x1800cf410 stores), its own slot 0, the factory pair as the
+// class's own statics; ~DocumentTextElement holds the retired ??1 door's body.
+// The minted `??_7DocumentTextElement@UI@@6B@`, its RT_DELDTOR row 0x18003c650
+// and the ctor / copy / dtor / slot doors are retired.
 // ############################################################################
 #include <cstddef>
 #include "Sprite.h"
@@ -187,8 +190,49 @@ public:
         Link& operator=(const Link& src);                         // 0x18003c760
     };
 
+    // ??0DocumentTextElement@UI@@QEAA@XZ 0x1800cf410 -- the REAL ctor:
+    // `CALL ??0Element`, then +0xc0..+0x168 (the UI::String and UI::Sprite
+    // members' own ctors write {0, -1}) and +0x198..+0x1a8; NOTHING in
+    // +0x170..+0x197 or +0x1b0..+0x1c7 (GenerateItems resets those).
+    DocumentTextElement() : Element() {
+        _spriteSheet        = nullptr;
+        _frameTableData     = nullptr;
+        _frameTableCount    = 0;
+        _frameTableCapacity = 0;
+        _linkColor          = 0xffeeee00u;
+        _linkHoverColor     = 0xffffff00u;
+        _linkPressedColor   = 0xffcccc00u;
+        _tabWidth           = 4;
+        _wrapWidth          = 0x12c;
+        _fontsData = nullptr;  _fontsCount = 0;  _fontsCapacity = 0;
+        _sheetsData = nullptr; _sheetsCount = 0; _sheetsCapacity = 0;
+        _colorsData = nullptr; _colorsCount = 0; _colorsCapacity = 0;
+        _resourceList       = nullptr;
+        _itemsData = nullptr;  _itemsCount = 0;  _itemsCapacity = 0;
+        _linksData = nullptr;  _linksCount = 0;  _linksCapacity = 0;
+        _sourceText         = nullptr;
+        _openLink.text      = nullptr;
+        _openLink.firstItem = -1;                // one QWORD -1 store with lastItem
+        _openLink.lastItem  = -1;
+        _openLink.armed     = 0;
+    }
+
     // ---- the twelve slots, in retail order --------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x18003c650
+    // [0] 0x18003c650 -- MSVC's VECTOR deleting destructor, both arms exactly as the
+    // retired RT_DELDTOR row ran them (`MOV EDX,0x1c8` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<DocumentTextElement*>(self + static_cast<int64_t>(i) * 0x1c8)->~DocumentTextElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~DocumentTextElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x18003be50
     uint32_t    Type() const override;                            // [2] 0x18003be30
     void ComputeSize() override;                                  // [4] 0x1800cdb60
@@ -210,11 +254,11 @@ public:
     // takes the pointer (fragment pass F1; was declared by value).
     void SetText(const UI::String* text);                         // 0x18003bfd0
 
-    DocumentTextElement(const DocumentTextElement& src);          // 0x18003c140  door (copy ctor)
+    DocumentTextElement(const DocumentTextElement& src);          // 0x18003c140  not ported (no caller)
     DocumentTextElement& operator=(const DocumentTextElement& src); // 0x18003c3d0 not ported
-    static uint32_t TypeId();                                     // not ported
-    static Object::Base* CreateNewObject();                       // 0x18003bf40  factory door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x18003bfc0  factory door
+    static uint32_t TypeId();                                     // over the minted record until W3
+    static Object::Base* CreateNewObject();                       // 0x18003bf40  (D2)
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x18003bfc0  (D2)
 
     // ---- the private text pipeline (`AEAA` in retail) ----------------------
     // Public here only because each keeps a registered door that reaches it.
@@ -229,8 +273,9 @@ public:
     bool    IsWhiteSpace(char c) const;                           // 0x1800cf030  not ported
 
 protected:
-    DocumentTextElement() = default;   // NOT ??0 (0x1800cf410, a door)
-    ~DocumentTextElement();            // ??1 0x1800cf320 — the door; declared only
+    // ??1 0x1800cf320 -- NON-VIRTUAL; retail's body (documenttextelement.cpp),
+    // the compiler chains ~Element (retail's tail JMP).
+    ~DocumentTextElement();
 
 private:
     static const char* _TypeName();                               // 0x18003be10

@@ -56,6 +56,7 @@
 // the members read are cached in namespace-scope std::atomic slots.
 // ============================================================================
 #include <atomic>
+#include <new>
 
 #include "element_common.h"
 #include "../../types/ui/ContainerElement.h"
@@ -77,7 +78,6 @@ constexpr int kClipOffX   = 0xd0;
 constexpr int kClipOffY   = 0xd4;
 
 std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_vtable{nullptr};
 std::atomic<void*> g_clipTypeInfo{nullptr};
 std::atomic<void*> g_scrollTypeInfo{nullptr};
 std::atomic<void*> g_deviceSingleton{nullptr};
@@ -85,9 +85,6 @@ std::atomic<void*> g_deviceSingleton{nullptr};
 const uint8_t* ContainerElementTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@ContainerElement@UI@@0VBaseTypeInfo@Object@@A"));
-}
-void* VtContainerElement() {
-    return AtomicExport(g_vtable, "??_7ContainerElement@UI@@6B@");
 }
 uint32_t ClipRegionTypeId() {
     const uint32_t* p = static_cast<const uint32_t*>(AtomicExport(
@@ -106,9 +103,6 @@ const uint8_t* VideoDevice() {
 }
 
 using IsDerivedFromFn   = bool  (*)(const void* self, uint32_t typeId);
-using ElementCtorFn     = void* (*)(void* self);
-using ElementCopyCtorFn = void* (*)(void* self, const void* other);
-using ElementDtorFn     = void  (*)(void* self);
 
 // `CMOVNZ`: the child on a passed type test, NULL on a failed one — and retail
 // then dereferences the NULL (see ComputeSize).
@@ -140,6 +134,8 @@ const uint8_t* ScaleOwnerOf(const UI::Element* e) {
 namespace UI {
 
 uint32_t ContainerElement::Type() const { return TypeIdOf(ContainerElementTypeInfo()); }
+// static 0x180039cb0 -- the same read as slot 2 (the minted record until W3).
+uint32_t ContainerElement::TypeId() { return TypeIdOf(ContainerElementTypeInfo()); }
 const char* ContainerElement::TypeName() const { return TypeNameOf(ContainerElementTypeInfo()); }
 
 // ============================================================================
@@ -386,115 +382,45 @@ void ContainerElement::Update(const System::Time& time, UserInterface* ui,
     UI::Element::Update(time, ui, &dialogCopy, state);     // qualified: 0x180116270
 }
 
+// ??1ContainerElement@UI@@UEAA@XZ 0x1800ccb10 -- retail's body is the entry
+// restamp and the tail into ~Element (0x1801161a0); both are the compiler's.
+ContainerElement::~ContainerElement() {}
+
+// ?CreateNewObject@ContainerElement@UI@@SAPEAVBase@Object@@XZ 0x180039db0 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0xd8, align 8; retail's null
+// branch; the inlined ctor. Replaces the FACTUI1 row (B39_RULES D2).
+Object::Base* ContainerElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ContainerElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) ContainerElement();
+}
+// ?CreateInPlaceObject@ContainerElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180039e50
+Object::Base* ContainerElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) ContainerElement();
+}
+
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, each a one-line
-// QUALIFIED delegation onto the member above.
+// ENDGAME B.3.9 UI-B: the slot doors (Type .. Update), the ??0 / copy-ctor /
+// ??1 doors are gone. Their only reader was the minted
+// `??_7ContainerElement@UI@@6B@` (and its RT_DELDTOR row): every live
+// ContainerElement now wears the compiler's table.
 // ============================================================================
-using UI::ContainerElement;
-
-extern "C" uint32_t RtUi_ContainerElement_Type(const ContainerElement* self) {
-    return self->UI::ContainerElement::Type();
-}
-extern "C" const char* RtUi_ContainerElement_TypeName(const ContainerElement* self) {
-    return self->UI::ContainerElement::TypeName();
-}
-extern "C" void RtUi_ContainerElement_ComputeSize(ContainerElement* self) {
-    self->UI::ContainerElement::ComputeSize();
-}
-extern "C" void RtUi_ContainerElement_ComputeLayout(ContainerElement* self,
-                                                    int x, int y, int w, int h) {
-    self->UI::ContainerElement::ComputeLayout(x, y, w, h);
-}
-extern "C" void RtUi_ContainerElement_Draw(const ContainerElement* self, void* ctx, uint8_t alpha) {
-    self->UI::ContainerElement::Draw(*static_cast<UI::SpriteContext*>(ctx), alpha);
-}
-extern "C" void RtUi_ContainerElement_Update(ContainerElement* self, const void* time, void* ui,
-                                             void** dlg, const UI::Element::UpdateState* state) {
-    self->UI::ContainerElement::Update(
-        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlg),   // B.3.6 bridge
-        *state);
-}
-
-// ============================================================================
-// Constructors / destructor — DOORS (B4b-2), unchanged in behaviour
-// ============================================================================
-// The default constructor writes THREE things: +0xc8 (dword 0), +0xcc as a
-// SINGLE WORD (`MOV word [RBX+0xcc],AX` — both bool flags in one store) and
-// +0xd0. It does NOT touch +0xc0/+0xc4; see the header.
-extern "C" void* RtUi_ContainerElement_Ctor(void* selfv) {
-    RtAddr<ElementCtorFn>(0x180115e50ull)(selfv);
-    *reinterpret_cast<void**>(selfv) = VtContainerElement();
-    ContainerElement* self = reinterpret_cast<ContainerElement*>(selfv);   // B.3.6 bridge
-    self->_barSize      = 0;
-    self->_clampWidth   = 0;
-    self->_clampHeight  = 0;
-    self->_wheelImpulse = 0;
-    return self;
-}
-
-extern "C" void* RtUi_ContainerElement_CopyCtor(void* selfv, const void* otherv) {
-    RtAddr<ElementCopyCtorFn>(0x1800358c0ull)(selfv, otherv);
-    *reinterpret_cast<void**>(selfv) = VtContainerElement();
-    ContainerElement* self = reinterpret_cast<ContainerElement*>(selfv);             // B.3.6 bridge
-    const ContainerElement* other = reinterpret_cast<const ContainerElement*>(otherv); // B.3.6 bridge
-    self->_requestedWidth  = other->_requestedWidth;
-    self->_requestedHeight = other->_requestedHeight;
-    self->_barSize         = other->_barSize;
-    self->_clampWidth      = other->_clampWidth;
-    self->_clampHeight     = other->_clampHeight;
-    self->_wheelImpulse    = other->_wheelImpulse;
-    return self;
-}
-
-extern "C" void RtUi_ContainerElement_Dtor(void* selfv) {
-    *reinterpret_cast<void**>(selfv) = VtContainerElement();
-    RtAddr<ElementDtorFn>(0x1801161a0ull)(selfv);
-}
 
 // ============================================================================
 // Registration
 // ============================================================================
 int RtUiContainerElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?TypeName@ContainerElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_ContainerElement_TypeName);      ++n;
-    RegisterRuntimeAddr(0x180039cc0ull, (void*)&RtUi_ContainerElement_TypeName);
-
-    RegisterRuntimeExport("?Type@ContainerElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_ContainerElement_Type);          ++n;
-    RegisterRuntimeAddr(0x180039ca0ull, (void*)&RtUi_ContainerElement_Type);
-
-    RegisterRuntimeExport("?ComputeSize@ContainerElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_ContainerElement_ComputeSize);   ++n;
-    RegisterRuntimeAddr(0x1800cc850ull, (void*)&RtUi_ContainerElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@ContainerElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_ContainerElement_ComputeLayout); ++n;
-    RegisterRuntimeAddr(0x1800cc620ull, (void*)&RtUi_ContainerElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@ContainerElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_ContainerElement_Draw);          ++n;
-    RegisterRuntimeAddr(0x1800cc590ull, (void*)&RtUi_ContainerElement_Draw);
-
-    RegisterRuntimeExport(
-        "?Update@ContainerElement@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@"
-        "V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@Element@2@@Z",
-        (void*)&RtUi_ContainerElement_Update);                          ++n;
-    RegisterRuntimeAddr(0x1800cc2d0ull, (void*)&RtUi_ContainerElement_Update);
-
-    RegisterRuntimeExport("??0ContainerElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_ContainerElement_Ctor);          ++n;
-    RegisterRuntimeAddr(0x1800ccb40ull, (void*)&RtUi_ContainerElement_Ctor);
-
-    RegisterRuntimeExport("??0ContainerElement@UI@@QEAA@AEBV01@@Z",
-                          (void*)&RtUi_ContainerElement_CopyCtor);      ++n;
-    RegisterRuntimeAddr(0x180039f00ull, (void*)&RtUi_ContainerElement_CopyCtor);
-
-    RegisterRuntimeExport("??1ContainerElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_ContainerElement_Dtor);          ++n;
-    RegisterRuntimeAddr(0x1800ccb10ull, (void*)&RtUi_ContainerElement_Dtor);
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@ContainerElement` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@ContainerElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::ContainerElement::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x180039db0ull, (void*)&UI::ContainerElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@ContainerElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::ContainerElement::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x180039e50ull, (void*)&UI::ContainerElement::CreateInPlaceObject);
     return n;
 }

@@ -21,6 +21,13 @@
 //   [7] 0x18003a2d0 Destruct             [8] 0x18011aac0 CreateInstance RETSLOT
 //   [9] 0x18003a2c0 Construct            INTRODUCED by the leaf (RULE B6-1.1)
 //
+// ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2) -- the paragraph below is
+// HISTORY: the class is now CONCRETE. A real public ctor (retail's stores), its
+// own slot 0 (the vector deleting dtor), a protected non-virtual ~ScrollDescription holding
+// the retired ??1 door's body, and the factory pair as the class's own statics;
+// every live one wears the COMPILER's table. The minted `??_7ScrollDescription@UI@@6B@`,
+// its RT_DELDTOR row 0x18003a790 and the ctor / dtor / slot doors are retired
+// (tools/rt_mint_retired/ui-b.txt).
 // ABSTRACT (slot 0 pure), no real ctor: every live one is built by the
 // `??0ScrollDescription` DOOR (scrolldescription.cpp) and wears the MINTED table.
 //
@@ -48,7 +55,34 @@ class Element;
 class ScrollDescription : public ElementDescription {
 public:
     // ---- the ten slots, in measured order ----------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x18003a790
+    // ??0ScrollDescription@UI@@QEAA@XZ 0x18011a4e0 -- the REAL ctor:
+    // ElementDescription's stores (inlined in retail), then the sheet, the
+    // nine names, +0xb8 BYTE 1, +0xbc DWORD 1, and ONE QWORD of -1 over
+    // +0xc0/+0xc4. +0xb9..+0xbb are written by nothing.
+    ScrollDescription() : ElementDescription() {
+        _spriteSheet = nullptr;
+        for (int i = 0; i < 9; ++i) _spriteNames[i] = nullptr;
+        _vertical  = 1;
+        _inset     = 1;
+        _barColor  = 0xffffffffu;
+        _unknownC4 = 0xffffffffu;
+    }
+
+    // [0] 0x18003a790 -- MSVC's VECTOR deleting destructor, both arms exactly as the
+    // retired RT_DELDTOR row ran them (`MOV EDX,0xc8` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<ScrollDescription*>(self + static_cast<int64_t>(i) * 0xc8)->~ScrollDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~ScrollDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char*   TypeName() const override;                      // [1] 0x18003a120
     uint32_t      Type() const override;                          // [2] 0x18003a100
     int32_t       GetFileVersion() const override;                // [3] 0x18011a930
@@ -63,15 +97,14 @@ public:
     // ---- exported, not ported: declared, deliberately undefined ------------
     ScrollDescription(const ScrollDescription& src);              // 0x18003a2e0
     ScrollDescription& operator=(const ScrollDescription& src);   // 0x18003a450
-    static uint32_t      TypeId();                                // 0x18003a110
-    static Object::Base* CreateNewObject();                       // 0x18003a210  ui_factory_wave28.cpp door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x18003a290  ui_factory_wave28.cpp door
+    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
+    static Object::Base* CreateNewObject();                       // (D2) the class's own
+    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
-    // NOT retail's `??0ScrollDescription@UI@@QEAA@XZ` (0x18011a4e0, the door).
-    ScrollDescription() = default;
-    // `??1ScrollDescription@UI@@UEAA@XZ` (0x18011a5d0): non-virtual, not
-    // defined in the real build; the door `RtUi_ScrollDescription_Dtor` is.
+    // `??1ScrollDescription@UI@@UEAA@XZ` (0x18011a5d0): NON-VIRTUAL (no virtual dtor until
+    // the normal-virtual cutover). Retail's body is in scrolldescription.cpp;
+    // the compiler chains the base's.
     ~ScrollDescription();
 
 private:

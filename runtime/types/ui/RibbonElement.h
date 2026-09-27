@@ -32,6 +32,13 @@
 //   [4] 0x1800d6190 ComputeSize [5] 0x1800d6410 ComputeLayout
 //   [6] 0x1800d6740 Draw        [7..11] Element's (inherited — Update too)
 //
+// ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2) -- the paragraph below is
+// HISTORY: the class is now CONCRETE. A real public ctor (retail's stores), its
+// own slot 0 (the vector deleting dtor), a protected non-virtual ~RibbonElement holding
+// the retired ??1 door's body, and the factory pair as the class's own statics;
+// every live one wears the COMPILER's table. The minted `??_7RibbonElement@UI@@6B@`,
+// its RT_DELDTOR row 0x180044ac0 and the ctor / dtor / slot doors are retired
+// (tools/rt_mint_retired/ui-b.txt).
 // ABSTRACT (slot 0 `= 0`), NO real ctor (the `??0RibbonElement` door builds
 // every live one; it wears the MINTED table).
 // ============================================================================
@@ -45,7 +52,33 @@ namespace UI {
 
 class RibbonElement : public Element {
 public:
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180044ac0
+    // ??0RibbonElement@UI@@QEAA@XZ 0x1800d5d10 -- the REAL ctor: `CALL
+    // ??0Element`, ONE WORD over both bools (+0xc2/+0xc3 never written),
+    // +0xc4, and the extent Array header (two qwords).
+    RibbonElement() : Element() {
+        _vertical        = 0;
+        _uniform         = 0;
+        _spacing         = 0;
+        _extentsData     = nullptr;
+        _extentsCount    = 0;
+        _extentsCapacity = 0;
+    }
+
+    // [0] 0x180044ac0 -- MSVC's VECTOR deleting destructor, both arms exactly as the
+    // retired RT_DELDTOR row ran them (`MOV EDX,0xd8` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<RibbonElement*>(self + static_cast<int64_t>(i) * 0xd8)->~RibbonElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~RibbonElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x1800446e0
     uint32_t    Type() const override;                            // [2] 0x1800446c0
     void ComputeSize() override;                                  // [4] 0x1800d6190
@@ -63,13 +96,15 @@ public:
 
     RibbonElement(const RibbonElement& src);                      // 0x180044980  not ported
     RibbonElement& operator=(const RibbonElement& src);           // 0x180044a00  not ported
-    static uint32_t TypeId();                                     // not ported
-    static Object::Base* CreateNewObject();                       // 0x1800447d0  factory door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180044880  factory door
+    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
+    static Object::Base* CreateNewObject();                       // (D2) the class's own
+    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
-    RibbonElement() = default;   // NOT ??0RibbonElement (0x1800d5d10, a door)
-    ~RibbonElement();            // ??1RibbonElement 0x1800d5d70 — the door; declared only
+    // `??1RibbonElement@UI@@UEAA@XZ` (0x1800d5d70): NON-VIRTUAL (no virtual dtor until
+    // the normal-virtual cutover). Retail's body is in ribbonelement.cpp;
+    // the compiler chains the base's.
+    ~RibbonElement();
 
 private:
     static const char* _TypeName();                               // 0x1800446a0 -> "RibbonElement"

@@ -33,6 +33,7 @@
 // ui_factory_wave28.cpp), so this file adds none.
 // ============================================================================
 #include <atomic>
+#include <new>
 #include <cstddef>
 #include <cstdint>
 
@@ -62,19 +63,10 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 
-std::atomic<void*> g_vtBase{nullptr};
-std::atomic<void*> g_vtExternal{nullptr};
-std::atomic<void*> g_vtElementDescription{nullptr};
-std::atomic<void*> g_vtScrollDescription{nullptr};
 std::atomic<void*> g_typeInfo{nullptr};
 std::atomic<void*> g_getSpriteIndex{nullptr};
 std::atomic<void*> g_memFree{nullptr};
-std::atomic<void*> g_externalDtor{nullptr};
 
-void* VtBase()              { return AtomicExport(g_vtBase, "??_7Base@Object@@6B@"); }
-void* VtExternal()          { return AtomicExport(g_vtExternal, "??_7External@Object@@6B@"); }
-void* VtElementDescription(){ return AtomicExport(g_vtElementDescription, "??_7ElementDescription@UI@@6B@"); }
-void* VtScrollDescription() { return AtomicExport(g_vtScrollDescription, "??_7ScrollDescription@UI@@6B@"); }
 const uint8_t* ScrollDescriptionTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@ScrollDescription@UI@@0VBaseTypeInfo@Object@@A"));
@@ -115,39 +107,6 @@ void ReleaseStringField(char** field) {
 
 }  // namespace
 
-// ??0ScrollDescription@UI@@QEAA@XZ  retail 0x18011a4e0 — a DOOR (B4b-2)
-extern "C" void* RtUi_ScrollDescription_Ctor(void* selfv) {
-    uint8_t* p = static_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtBase();                                              // 18011a4f1
-    *v = VtExternal();                                          // 18011a4fb
-    *reinterpret_cast<uint64_t*>(p + 0x08) = 0;                 // 18011a510
-    *reinterpret_cast<uint64_t*>(p + 0x10) = 0;                 // 18011a513
-    *reinterpret_cast<uint64_t*>(p + 0x18) = 0;                 // 18011a517
-    *v = VtElementDescription();                                // 18011a51b
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;                 // 18011a525
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;                 // 18011a529
-    *reinterpret_cast<uint64_t*>(p + 0x30) = 0;                 // 18011a52d
-    *reinterpret_cast<int32_t*>(p + 0x38)  = 0;                 // 18011a531  DWORD
-    *reinterpret_cast<int32_t*>(p + 0x3c)  = -1;                // 18011a534  DWORD
-    *reinterpret_cast<uint64_t*>(p + 0x40) = 3;                 // 18011a53b  ONE QWORD
-    *reinterpret_cast<uint64_t*>(p + 0x48) = 0;                 // 18011a543
-    *reinterpret_cast<uint64_t*>(p + 0x50) = 0;                 // 18011a547
-    *reinterpret_cast<uint64_t*>(p + 0x58) = 0;                 // 18011a54b
-    *reinterpret_cast<uint64_t*>(p + 0x60) = 0;                 // 18011a54f
-    *v = VtScrollDescription();                                 // 18011a553
-
-    UI::ScrollDescription* self = reinterpret_cast<UI::ScrollDescription*>(p);   // B.3.6 bridge
-    self->_spriteSheet = nullptr;                               // 18011a55d
-    for (int i = 0; i < 9; ++i) self->_spriteNames[i] = nullptr;   // 18011a561 .. 18011a593
-    self->_vertical = 1;                                        // 18011a59a  BYTE
-    self->_inset = 1;                                           // 18011a5a1  DWORD
-    // ONE QWORD of -1 at +0xc0 (18011a5ab): both halves start at 0xffffffff.
-    self->_barColor  = 0xffffffffu;
-    self->_unknownC4 = 0xffffffffu;
-    return p;                                                   // 18011a5b6
-}
 
 // ============================================================================
 // The member bodies (ENDGAME B.3.6 block C4)
@@ -158,20 +117,25 @@ uint32_t ScrollDescription::Type() const {
     const uint8_t* ti = ScrollDescriptionTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t ScrollDescription::TypeId() {
+    const uint8_t* ti = ScrollDescriptionTypeInfo();
+    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
+}
 const char* ScrollDescription::TypeName() const {
     const uint8_t* ti = ScrollDescriptionTypeInfo();
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
 }
 int32_t ScrollDescription::GetFileVersion() const { return 0x104; }
 
-// 0x18003a2c0 — the null test stays in the door.
+// 0x18003a2c0 — the ctor, placement (the null test sat in the retired door).
 Object::External* ScrollDescription::Construct() {
-    return static_cast<Object::External*>(RtUi_ScrollDescription_Ctor(this));
+    return ::new (this) ScrollDescription();
 }
-// 0x18003a2a0 — slot 0 (VIRTUAL, the minted row) with flag 0, then the ctor.
+// 0x18003a2a0 — slot 0 (VIRTUAL) with flag 0, then the ctor.
 Object::External* ScrollDescription::Reconstruct() {
     DeletingDtor(0);
-    return static_cast<Object::External*>(RtUi_ScrollDescription_Ctor(this));
+    return ::new (this) ScrollDescription();
 }
 // 0x18003a2d0
 void ScrollDescription::Destruct() { DeletingDtor(0); }
@@ -231,10 +195,8 @@ Object::InternalPtr<Element>* ScrollDescription::CreateInstance(
     void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0x178, 8);  // 18011ab00 (inlined)
 
     void* obj = raw;
-    if (raw != nullptr) {                                      // 18011ab2a
-        using ScrollElementCtorFn = void* (*)(void*);
-        obj = RtAddr<ScrollElementCtorFn>(0x18011a7f0ull)(raw);    // 18011ab2f
-    }
+    if (raw != nullptr)                                        // 18011ab2a
+        obj = ::new (raw) ScrollElement();                     // 18011ab2f ??0 (out of line)
     ScrollElement* elem = reinterpret_cast<ScrollElement*>(obj);   // B.3.6 bridge
 
     void* slot = elem;                                         // 18011ab37
@@ -273,105 +235,48 @@ Object::InternalPtr<Element>* ScrollDescription::CreateInstance(
     return ret;
 }
 
+// ??1ScrollDescription@UI@@UEAA@XZ  0x18011a5d0 — retail's body, moved from
+// the retired door (ENDGAME B.3.9 UI-B): the nine Strings in REVERSE order
+// (+0xb0 down to +0x70). The restamps, the base's _textName (+0x60) and the
+// tail JMP into ~External are the compiler's chain; the ExternalPtr at +0x68
+// is not released.
+ScrollDescription::~ScrollDescription() {
+    for (int i = 8; i >= 0; --i)                               // 18011a5f5 .. 18011a77a
+        ReleaseStringField(&_spriteNames[i]);
+}
+
+// ?CreateNewObject@ScrollDescription@UI@@SAPEAVBase@Object@@XZ 0x18003a210 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0xc8, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* ScrollDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ScrollDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) ScrollDescription();
+}
+// ?CreateInPlaceObject@ScrollDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x18003a290
+Object::Base* ScrollDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) ScrollDescription();
+}
+
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, each a one-line
-// QUALIFIED delegation onto the member above.
+// ENDGAME B.3.9 UI-B: the slot doors, the ctor / dtor doors and the
+// factory-interpreter row are gone. Their only readers were the minted
+// `??_7ScrollDescription@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
+// ScrollDescription now wears the compiler's table.
 // ============================================================================
-using UI::ScrollDescription;
-
-extern "C" uint32_t RtUi_ScrollDescription_Type(const ScrollDescription* self) {
-    return self->UI::ScrollDescription::Type();
-}
-extern "C" const char* RtUi_ScrollDescription_TypeName(const ScrollDescription* self) {
-    return self->UI::ScrollDescription::TypeName();
-}
-extern "C" int32_t RtUi_ScrollDescription_GetFileVersion(const ScrollDescription* self) {
-    return self->UI::ScrollDescription::GetFileVersion();
-}
-extern "C" void* RtUi_ScrollDescription_Construct(ScrollDescription* self) {
-    if (self == nullptr) return nullptr;                       // 18003a2c0
-    return self->UI::ScrollDescription::Construct();
-}
-extern "C" void* RtUi_ScrollDescription_Reconstruct(ScrollDescription* self) {
-    return self->UI::ScrollDescription::Reconstruct();
-}
-extern "C" void RtUi_ScrollDescription_Destruct(ScrollDescription* self) {
-    self->UI::ScrollDescription::Destruct();
-}
-extern "C" bool RtUi_ScrollDescription_Serialize(ScrollDescription* self, void* stream) {
-    return self->UI::ScrollDescription::Serialize(stream);
-}
-// RDX is the caller's slot; R8 (the Dialog) is forwarded and never read (B6-2).
-extern "C" void** RtUi_ScrollDescription_CreateInstance(const ScrollDescription* self,
-                                                        void** ret, const void* dialog) {
-    return reinterpret_cast<void**>(self->UI::ScrollDescription::CreateInstance(
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),        // B.3.6 bridge
-        static_cast<const UI::Dialog*>(dialog)));
-}
-
-// ??1ScrollDescription@UI@@UEAA@XZ  0x18011a5d0 — a DOOR (B4b-2). The nine
-// Strings in REVERSE order (+0xb0 down to +0x70) under this class's vtable,
-// then the base's _textName at +0x60. The ExternalPtr at +0x68 is not released.
-extern "C" void RtUi_ScrollDescription_Dtor(void* selfv) {
-    ScrollDescription* self = reinterpret_cast<ScrollDescription*>(selfv);   // B.3.6 bridge
-    void** v = reinterpret_cast<void**>(selfv);
-
-    *v = VtScrollDescription();                                // 18011a5eb
-    for (int i = 8; i >= 0; --i)                               // 18011a5f5 .. 18011a77a
-        ReleaseStringField(&self->_spriteNames[i]);
-
-    *v = VtElementDescription();                               // 18011a7a0
-    ReleaseStringField(&self->_textName);                      // 18011a7aa
-
-    using ExtDtorFn = void (*)(void*);
-    reinterpret_cast<ExtDtorFn>(AtomicExport(
-        g_externalDtor, "??1External@Object@@UEAA@XZ"))(selfv);   // 18011a7dd JMP
-}
 
 int RtUiScrollDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@ScrollDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_ScrollDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x18003a100ull, (void*)&RtUi_ScrollDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@ScrollDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_ScrollDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x18003a120ull, (void*)&RtUi_ScrollDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@ScrollDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_ScrollDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x18011a930ull, (void*)&RtUi_ScrollDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@ScrollDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_ScrollDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x18003a2c0ull, (void*)&RtUi_ScrollDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@ScrollDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_ScrollDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x18003a2a0ull, (void*)&RtUi_ScrollDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@ScrollDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_ScrollDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x18003a2d0ull, (void*)&RtUi_ScrollDescription_Destruct);
-
-    RegisterRuntimeExport("??0ScrollDescription@UI@@QEAA@XZ",
-                          (void*)&RtUi_ScrollDescription_Ctor);            ++n;
-    RegisterRuntimeAddr(0x18011a4e0ull, (void*)&RtUi_ScrollDescription_Ctor);
-
-    RegisterRuntimeExport("??1ScrollDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_ScrollDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x18011a5d0ull, (void*)&RtUi_ScrollDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@ScrollDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_ScrollDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x18011a940ull, (void*)&RtUi_ScrollDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@ScrollDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_ScrollDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x18011aac0ull, (void*)&RtUi_ScrollDescription_CreateInstance);
-
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@ScrollDescription` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@ScrollDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::ScrollDescription::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x18003a210ull, (void*)&UI::ScrollDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@ScrollDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::ScrollDescription::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x18003a290ull, (void*)&UI::ScrollDescription::CreateInPlaceObject);
     return n;
 }
