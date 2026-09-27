@@ -33,14 +33,17 @@
 //   [0x140151730] AddDialog: RCX=ui RDX=&ref -> fn_UI_AddDialog
 //   vtable overwrite LEA 0x14015f5a0 -> g_ToolUI_ChildDialog_Vtable
 //
-// Type-id .rdata reads (NULL in standalone -> filled lazily via Object::GetTypeIdByName,
-// the proven toolbardialog.cpp/Toolbar_Utility_Impl pattern):
+// Type ids (ENDGAME B.3.9 CB: the class statics of the cells retail reads):
 //   DWORD_1401c4f00 = EntityUI     (writer: RegisterType_EntityUI)
 //   DWORD_1401c7f90 = UIDescription
 //   DAT_1401c7fc8   = UIComponent  (writer: UIComponent_RegisterType, used by db60)
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/UIComponent.h"     // ENDGAME B.3.9 CB: 0x1401c7fc8 cell class
+#include "Component/UIDescription.h"   // ENDGAME B.3.9 CB: 0x1401c7f90 cell class
+#include "Dialog/EntityUI.h"           // ENDGAME B.3.9 CB: 0x1401c4f00 cell class
+#include "Dialog/ToolUI.h"             // ENDGAME B.3.9 CB: 0x1401c5788 cell class
 #include "Object/factory_registration.h"
 #include "ui/UserInterface.h"
 #include <cstdint>
@@ -68,26 +71,11 @@ fn_void_self_t s_fn_cb40 = nullptr;   // 0x1400fcb40 (clear highlight on self+0x
 fn_void_self_t s_fn_c9e0 = nullptr;   // 0x1400fc9e0
 bool s_resolved = false;
 
-uint32_t s_tid_EntityUI = 0;       // DWORD_1401c4f00
-uint32_t s_tid_UIDescription = 0;  // DWORD_1401c7f90
-uint32_t s_tid_UIComponent = 0;    // DAT_1401c7fc8
-uint32_t s_tid_ToolUI = 0;         // DWORD_1401c5788 (cc90 close-prev-dialog gate)
-
 void EnsureFuncs() {
     if (s_resolved) return;
     s_fn_cb40 = reinterpret_cast<fn_void_self_t>(ResolveAddr(Module::Exe, 0x1400fcb40));
     s_fn_c9e0 = reinterpret_cast<fn_void_self_t>(ResolveAddr(Module::Exe, 0x1400fc9e0));
     s_resolved = true;
-}
-
-// Resolve a class type-id: prefer the raw .rdata DWORD; in the standalone exe that
-// pointer is NULL, so fall back to the live factory tree.
-uint32_t ResolveTypeId(uintptr_t rdataAddr, const char* name, uint32_t* cache) {
-    if (*cache) return *cache;
-    uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, rdataAddr));
-    if (p && *p) { *cache = *p; return *cache; }
-    *cache = ::Object::GetTypeIdByName(name);
-    return *cache;
 }
 
 typedef uint32_t (*GetTypeId_t)(void* obj);
@@ -98,7 +86,7 @@ typedef uint32_t (*GetTypeId_t)(void* obj);
 // component (or null) into *outIBP as an InternalBasePtr. Faithful 1:1 (offsets
 // verified: FUN_140004740 uses the same entity+0x30/+0x38 component-list layout).
 void EntityFindUIComponent(uint64_t entity, uint64_t* outIBP) {
-    const uint32_t tidUIComp = ResolveTypeId(0x1401c7fc8, "UIComponent", &s_tid_UIComponent);
+    const uint32_t tidUIComp = UIComponent::TypeId();   // cell 0x1401c7fc8
     void* found = nullptr;
     int count = *reinterpret_cast<int32_t*>(entity + 0x38);
     for (int i = 0; i < count; i++) {
@@ -156,7 +144,7 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
     if (fn_InternalBasePtr_Ctor) new (&resultDialog) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
     // 4. Walk the open-dialog list for an existing EntityUI dialog bound to this entity.
-    const uint32_t tidEntityUI = ResolveTypeId(0x1401c4f00, "EntityUI", &s_tid_EntityUI);
+    const uint32_t tidEntityUI = EntityUI::TypeId();   // cell 0x1401c4f00
     // `_dialogs.GetFirst()` IS retail's GetFirstDialog (0x180031150 = `*retval =
     // this->_dialogs._head`); the iterator is the bare node pointer, so `it.node`
     // is the address retail passes to CheckPtr and `it.node->element` is node[0].
@@ -191,7 +179,7 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
         //    UIDescription child, then build a fresh DialogInstance.
         uintptr_t descList = *reinterpret_cast<uintptr_t*>(*entityIBP + 0x28);  // *(entity+0x28)
         int count = *reinterpret_cast<int32_t*>(descList + 0x30);
-        const uint32_t tidUIDesc = ResolveTypeId(0x1401c7f90, "UIDescription", &s_tid_UIDescription);
+        const uint32_t tidUIDesc = UIDescription::TypeId();   // cell 0x1401c7f90
 
         void* obj = nullptr;
         for (int i = 0; i < count; i++) {
@@ -265,7 +253,7 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
     //     a user-pinned panel is left open — matching retail.
     void* oldDialog = *reinterpret_cast<void**>(self + 0x28);
     if (oldDialog && oldDialog != reinterpret_cast<void*>(resultDialog)) {
-        const uint32_t tidToolUI = ResolveTypeId(0x1401c5788, "ToolUI", &s_tid_ToolUI);
+        const uint32_t tidToolUI = ToolUI::TypeId();   // cell 0x1401c5788
         uint64_t ctrlBuf = 0;
         ::new (&ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(oldDialog)->GetController(tidToolUI));  // B.3.6 bridge
         void* ctrl = nullptr;

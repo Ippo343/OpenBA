@@ -56,9 +56,6 @@ static fn_PastureHelper5ed0_t s_fn_PastureHelper5ed0 = nullptr;
 typedef void (*fn_ReassignEntityRef_t)(uintptr_t entityPtr);
 static fn_ReassignEntityRef_t s_fn_ReassignEntityRef = nullptr;
 
-// Type ID for component lookup — 0x1401c6f98 (unused: no reader in this file)
-static uint32_t* s_TypeId_PastureSubComp = nullptr;
-
 static bool s_initialized = false;
 
 static void EnsureHelpers() {
@@ -83,9 +80,6 @@ static void EnsureHelpers() {
 
     s_fn_ReassignEntityRef = reinterpret_cast<fn_ReassignEntityRef_t>(
         ResolveAddr(Module::Exe, 0x1401240a0));
-
-    s_TypeId_PastureSubComp = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c6f98));
 
     s_initialized = true;
 }

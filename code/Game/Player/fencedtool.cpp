@@ -26,6 +26,7 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "Player/RotationSetting.h"   // ENDGAME B.3.9 CB: 0x1401c63c8 cell class
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -731,19 +732,6 @@ after_check:
 // Local function pointers for Startup
 // ============================================================
 
-// RotationSetting type ID — DAT_1401c63c8
-static uint32_t* s_TypeId_RotationSetting = nullptr;
-
-static bool s_startupFuncsResolved = false;
-
-static void EnsureStartupHelpers() {
-    if (s_startupFuncsResolved) return;
-
-    // RotationSetting type ID at DAT_1401c63c8
-    s_TypeId_RotationSetting = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c63c8);
-
-    s_startupFuncsResolved = true;
-}
 
 // ============================================================
 // Helper: search entity component list for a specific type ID
@@ -789,8 +777,6 @@ static void* FencedFindComponent(uintptr_t entity, uint32_t targetTypeId) {
 // Also resolves RotationSetting IBP from toolSetting and allocates MeshInstance.
 // Original: 0x1400dcd50
 void FencedTool::Startup() {
-    EnsureStartupHelpers();
-
 
     // 1. Find CreateFencedDescription on self->entity (+0x20)
     uintptr_t entity = (uintptr_t)descriptionPtr;
@@ -832,8 +818,8 @@ void FencedTool::Startup() {
     //    CheckPtr on the IBP first, then IsDerivedFrom, then construct new IBP at +0x50
     void* toolSettingVal = toolSetting;
     void* rotSetting = nullptr;
-    if (s_TypeId_RotationSetting && fn_IsDerivedFrom && toolSettingVal) {
-        bool isDerived = fn_IsDerivedFrom(toolSettingVal, *s_TypeId_RotationSetting);
+    if (fn_IsDerivedFrom && toolSettingVal) {
+        bool isDerived = fn_IsDerivedFrom(toolSettingVal, RotationSetting::TypeId());   // cell 0x1401c63c8
         if (isDerived) {
             rotSetting = toolSettingVal;
         }
