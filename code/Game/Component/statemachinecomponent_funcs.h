@@ -17,11 +17,6 @@ void StateMachineComponent_ResolveHelpers();
 // Slot 0 (ScalarDtor 0x1400384a0) and slot 2 (Type 0x1400382b0) are the
 // class's members now (ENDGAME B.3.8 VIS, StateMachineComponent.h).
 
-// Shutdown (vtable slot [3], 0x14012b940):
-// Calls Component base serialize, then IO::Serializer to serialize 4 state bytes
-// at offsets +0x50, +0x51, +0x52, +0x53 (stateFlags decomposed as bytes).
-void StateMachineComponent_Shutdown(StateMachineComponent* self, void* stream);
-
 // Serialize (vtable slot [4], 0x14012b6a0):
 // Post-deserialization re-linking: iterates entity's components, finds
 // ControllerComponents via IsDerivedFrom, calls virtual +0x80 (GetDefaultState)

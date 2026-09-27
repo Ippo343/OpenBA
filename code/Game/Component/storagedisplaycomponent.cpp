@@ -76,10 +76,6 @@ static uint32_t SDD_RawMatDescTypeId() {
 // Resolved helpers
 // ============================================================
 
-// Component_Serialize at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
 // FUN_140004680 — FindComponent (MapComponent type)
 typedef void* (*fn_FindComponent_Map_t)(uintptr_t entity, void* retval);
 static fn_FindComponent_Map_t s_fn_FindComponent_Map = nullptr;
@@ -113,9 +109,6 @@ static bool s_initialized = false;
 
 static void EnsureHelpers() {
     if (s_initialized) return;
-
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
 
     s_fn_FindComponent_Map = reinterpret_cast<fn_FindComponent_Map_t>(
         ResolveAddr(Module::Exe, 0x140004680));
@@ -151,187 +144,8 @@ static void EnsureHelpers() {
     s_initialized = true;
 }
 
-// ============================================================
-// StorageDisplayComponent::Shutdown (vtable slot [3], 0x140056970)
-// ============================================================
-// Simple: Component_Serialize + one empty Serializer block (version 0).
-
-void StorageDisplayComponent_Shutdown(StorageDisplayComponent* self, void* stream) {
-    EnsureHelpers();
-
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
-
-    alignas(8) uint8_t serializerBuf[24];
-    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
-}
-
-// ============================================================
-// StorageDisplayComponent::Draw (vtable slot [6], 0x140056730)
-// ============================================================
-// Grid-based rendering: computes world positions for each display object
-// from building tile dimensions, creates rotated transforms, applies to geometry.
-//
-// Original logic:
-//   1. CheckPtr + FindComponent(MapComponent) on entity
-//   2. Read tile dimensions (width at +0x2c, height at +0x2e)
-//   3. Resize display array to width*height
-//   4. Read map info from gameState->+0xf8
-//   5. For each display object:
-//      a. Compute tile coords from linear index (col = i % width, row = i / width)
-//      b. Add building origin offset (tileX0, tileY0)
-//      c. Compute world position via tile-to-world conversion
-//      d. Apply yaw rotation (alternating checkerboard pattern)
-//      e. Build transform and set on geometry
-
-void StorageDisplayComponent_Draw(StorageDisplayComponent* self) {
-    EnsureHelpers();
-
-    uintptr_t selfAddr = (uintptr_t)self;
-
-#ifdef _DEBUG
-    printf("[StorageDisplayComp::Draw] ENTER self=%p MeshResize=%p\n",
-           (void*)selfAddr, (void*)s_fn_MeshArrayResize);
-    fflush(stdout);
-#endif
-
-    // CheckPtr on entity ref
-
-    // Find MapComponent on entity
-    uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
-    uintptr_t mapCompBuf[2] = {0, 0};
-    if (s_fn_FindComponent_Map) {
-        s_fn_FindComponent_Map(entity, (void*)mapCompBuf);
-    }
 
 
-    uintptr_t mapComp = mapCompBuf[0];
-    if (!mapComp) return;
-
-    int width = (int)*(int16_t*)(mapComp + 0x2c);
-    int16_t tileX0 = *(int16_t*)(mapComp + 0x28);
-    int16_t tileY0 = *(int16_t*)(mapComp + 0x2a);
-    int colCount = width;
-
-    // CheckPtr again for height
-
-    int height = (int)*(int16_t*)(mapComp + 0x2e);
-
-    // Resize display array to width * height
-    int totalSlots = width * height;
-#ifdef _DEBUG
-    printf("[StorageDisplayComp::Draw]   w=%d h=%d total=%d arrayBase=%p\n",
-           width, height, totalSlots, (void*)(selfAddr + 0x28));
-    fflush(stdout);
-#endif
-    if (s_fn_MeshArrayResize) {
-        s_fn_MeshArrayResize((void*)(selfAddr + 0x28), totalSlots);
-    }
-#ifdef _DEBUG
-    printf("[StorageDisplayComp::Draw]   MeshResize done\n");
-    fflush(stdout);
-#endif
-
-    // Get map info from game state
-    if (!s_pGameState || !*s_pGameState) return;
-    uintptr_t gameState = (uintptr_t)*s_pGameState;
-    int* mapInfo = *(int**)(gameState + 0xf8);
-    if (!mapInfo) return;
-
-    // Real-value fallbacks: these raw .rdata floats resolve NULL in standalone
-    // (ResolveAddr on a .rdata constant returns null), so use the true retail values
-    // instead of 0 — else piles shift by a half-tile and lose the checkerboard yaw.
-    //   DAT_140172204 = 0x42b40000 = 90.0f (per-cell checkerboard yaw, degrees)
-    //   DAT_140172114 = 0x3f000000 = 0.5f  (half-tile center bias)
-    float yawAngle = (s_pYawConstant   && *s_pYawConstant   != 0.0f) ? *s_pYawConstant   : 90.0f;
-    float halfTile = (s_pHalfTileOffset && *s_pHalfTileOffset != 0.0f) ? *s_pHalfTileOffset : 0.5f;
-
-    int displayCount = *(int*)(selfAddr + 0x30);
-    if (displayCount <= 0) return;
-
-    int mapSize = *mapInfo;
-    float halfMap = (float)(mapSize >> 1) - halfTile;
-
-    // Anchor trace: the yard's OWN world position (tile->world of its origin cell), so
-    // per-pile world positions below can be compared against where the yard sits.
-
-    for (int i = 0; i < displayCount; i++) {
-        int row = i / colCount + (int)tileY0;
-        int col = i % colCount + (int)tileX0;
-        int tileIndex = mapSize * row + col;
-
-        // Build position vector from tile
-        Math::Vector3 vec3Buf((float)(tileIndex % mapSize) - halfMap,
-                              (float)(tileIndex / mapSize) - halfMap,
-                              0.0f);
-
-        // Convert tile to world position (f3e0). worldPos[0]/[1] are the world X/Y
-        // on the yard footprint; the original drops worldPos[2] and uses z=0.
-        float worldPos[4] = {0.f, 0.f, 0.f, 0.f};
-        if (s_fn_TileToWorld) {
-            s_fn_TileToWorld(mapInfo, worldPos, &vec3Buf.x, '\0', nullptr);
-        }
-
-        // Build transform with yaw rotation
-        // Alternating checkerboard: if (row + col) is odd, use zero yaw
-        uint32_t yawBits = 0;
-        uint32_t pitchBits = *(uint32_t*)&yawAngle;
-        if ((row + col) & 1) {
-            pitchBits = 0;
-        }
-
-        uintptr_t displayArray = *(uintptr_t*)(selfAddr + 0x28);
-        // FromYawPitchOffset(retbuf, yaw=&pitchBits, pitch=&yawBits[=0], offset).
-        // (Names are swapped to match the original's arg order.) The OFFSET is the
-        // per-cell world position {worldPos.x, worldPos.y, 0} — verified in the real
-        // Draw disassembly (0x1400568c9/cf write worldPos.x/.y into the offset vec,
-        // 0x1400568ba forces offset.z=0). The prior port passed a ZERO offset here,
-        // which placed every pile mesh at the world origin (invisible on the yard).
-        Math::Vector3 offset(worldPos[0], worldPos[1], 0.0f);
-        Math::Transform transform = Math::Transform::FromYawPitchOffset(
-            *reinterpret_cast<const Math::Scalar*>(&pitchBits),
-            *reinterpret_cast<const Math::Scalar*>(&yawBits), offset);   // B.3.1 bridge
-
-        // Apply transform to geometry
-        reinterpret_cast<Graphics::Geometry*>(displayArray + (uintptr_t)i * 0x128)
-            ->SetTransform(transform);   // B.3.5 bridge
-
-    }
-}
-
-// ============================================================
-// StorageDisplayComponent::OnCreate (vtable slot [7], 0x1400566b0)
-// ============================================================
-// Iterates display objects, removes each from the graphics scene
-// if its scene ID is valid (>= 0). Resets each to -1 after removal.
-// Display objects are 0x128-byte entries in array at +0x28, count at +0x30.
-// Scene ID is at entry+0x120.
-
-void StorageDisplayComponent_OnCreate(StorageDisplayComponent* self) {
-    EnsureHelpers();
-
-    uintptr_t selfAddr = (uintptr_t)self;
-    int count = *(int*)(selfAddr + 0x30);
-    uintptr_t arrayBase = *(uintptr_t*)(selfAddr + 0x28);
-
-    if (!s_pGameState || !*s_pGameState) return;
-
-    // Get the graphics scene from game state
-    uintptr_t gameState = (uintptr_t)*s_pGameState;
-    void* scene = *(void**)(gameState + 0x60);
-
-    for (int i = 0; i < count; i++) {
-        uintptr_t entry = arrayBase + (uintptr_t)i * 0x128;
-        uint32_t sceneId = *(uint32_t*)(entry + 0x120);
-
-        if ((int32_t)sceneId >= 0) {
-            reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject(sceneId);   // B.3.5 bridge
-            *(uint32_t*)(entry + 0x120) = 0xFFFFFFFF; // Reset to -1
-        }
-    }
-}
 
 // ============================================================
 // StorageDisplayComponent::Update (vtable slot [9], 0x1400563e0)
@@ -468,28 +282,6 @@ fill_remaining:
     }
 }
 
-// ============================================================
-// StorageDisplayComponent::OnUpdate2 (vtable slot [11], 0x140056940)
-// ============================================================
-// Calls vtable Draw then Update (display rebuild + content refresh).
-//
-// Original disassembly:
-//   MOV RAX,[RCX]            ; vtable
-//   CALL [RAX+0x30]          ; vtable->Draw(self)
-//   JMP Entity_impl_63e0     ; tail call to Update logic
-
-void StorageDisplayComponent_OnUpdate2(StorageDisplayComponent* self) {
-    // Call Draw through vtable
-    uintptr_t vtable = *(uintptr_t*)self;
-    typedef void (*fn_Draw_t)(void* self);
-    fn_Draw_t drawFn = *(fn_Draw_t*)(vtable + 0x30);
-    if (drawFn) {
-        drawFn(self);
-    }
-
-    // Call Update
-    StorageDisplayComponent_Update(self);
-}
 
 // ============================================================
 // Reimpl of FUN_14000ca10 (StorageDisplayComponent mesh-array resize:
@@ -686,10 +478,9 @@ void StorageDisplayComponent_InitFuncs() {
 #ifdef _DEBUG
     // Scene::RemoveObject is a member now (B.3.5 caller batch I2), so it is no
     // longer a pointer this can print.
-    printf("[StorageDisplayComponent] Funcs resolved: Component_Serialize=%p "
+    printf("[StorageDisplayComponent] Funcs resolved: "
            "FindComponent_Map=%p MeshArrayResize=%p "
            "SetDisplayMesh=%p pGameState=%p\n",
-           (void*)s_fn_Component_Serialize,
            (void*)s_fn_FindComponent_Map, (void*)s_fn_MeshArrayResize,
            (void*)s_fn_SetDisplayMesh, (void*)s_pGameState);
 #endif
@@ -717,31 +508,213 @@ StorageDisplayComponent::StorageDisplayComponent()
     OrFlagsInCtor(0xcb);
 }
 
-// [3] 0x140056970 — Component::Persist plus one empty Serializer scope (16 real
-// bytes in the save encoding).
-void StorageDisplayComponent::Persist(void* stream) { StorageDisplayComponent_Shutdown(this, stream); }
+// ============================================================
+// StorageDisplayComponent::Persist (vtable slot [3], 0x140056970)
+// ============================================================
+// Simple: Component_Serialize + one empty Serializer block (version 0).
+
+void StorageDisplayComponent::Persist(void* stream) {
+    EnsureHelpers();
+
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    alignas(8) uint8_t serializerBuf[24];
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
+}
 // [4] 0x140056930 — the class's own `RET` body.
 void StorageDisplayComponent::Startup() {}
-// [6] 0x140056730 — Draw: grid position layout.
-void StorageDisplayComponent::OnAdded() { StorageDisplayComponent_Draw(this); }
+// ============================================================
+// StorageDisplayComponent::OnAdded (vtable slot [6], 0x140056730)
+// ============================================================
+// Grid-based rendering: computes world positions for each display object
+// from building tile dimensions, creates rotated transforms, applies to geometry.
+//
+// Original logic:
+//   1. CheckPtr + FindComponent(MapComponent) on entity
+//   2. Read tile dimensions (width at +0x2c, height at +0x2e)
+//   3. Resize display array to width*height
+//   4. Read map info from gameState->+0xf8
+//   5. For each display object:
+//      a. Compute tile coords from linear index (col = i % width, row = i / width)
+//      b. Add building origin offset (tileX0, tileY0)
+//      c. Compute world position via tile-to-world conversion
+//      d. Apply yaw rotation (alternating checkerboard pattern)
+//      e. Build transform and set on geometry
 
-// [7] 0x1400566b0 — removed-from-world: Scene::RemoveObject every pile-display
-// entry (ids at entry+0x120). MarkForRemoval (0x1400c2ea0) dispatches it for
-// each component with capability bit 1 (0xcb has it) BEFORE the 0x400 bit;
-// leaving it inert left freed pile meshes in the renderer's draw list.
-void StorageDisplayComponent::OnRemove() { StorageDisplayComponent_OnCreate(this); }
+void StorageDisplayComponent::OnAdded() {
+    EnsureHelpers();
+
+    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
+
+#ifdef _DEBUG
+    printf("[StorageDisplayComp::Draw] ENTER self=%p MeshResize=%p\n",
+           (void*)selfAddr, (void*)s_fn_MeshArrayResize);
+    fflush(stdout);
+#endif
+
+    // CheckPtr on entity ref
+
+    // Find MapComponent on entity
+    uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
+    uintptr_t mapCompBuf[2] = {0, 0};
+    if (s_fn_FindComponent_Map) {
+        s_fn_FindComponent_Map(entity, (void*)mapCompBuf);
+    }
+
+
+    uintptr_t mapComp = mapCompBuf[0];
+    if (!mapComp) return;
+
+    int width = (int)*(int16_t*)(mapComp + 0x2c);
+    int16_t tileX0 = *(int16_t*)(mapComp + 0x28);
+    int16_t tileY0 = *(int16_t*)(mapComp + 0x2a);
+    int colCount = width;
+
+    // CheckPtr again for height
+
+    int height = (int)*(int16_t*)(mapComp + 0x2e);
+
+    // Resize display array to width * height
+    int totalSlots = width * height;
+#ifdef _DEBUG
+    printf("[StorageDisplayComp::Draw]   w=%d h=%d total=%d arrayBase=%p\n",
+           width, height, totalSlots, (void*)(selfAddr + 0x28));
+    fflush(stdout);
+#endif
+    if (s_fn_MeshArrayResize) {
+        s_fn_MeshArrayResize((void*)(selfAddr + 0x28), totalSlots);
+    }
+#ifdef _DEBUG
+    printf("[StorageDisplayComp::Draw]   MeshResize done\n");
+    fflush(stdout);
+#endif
+
+    // Get map info from game state
+    if (!s_pGameState || !*s_pGameState) return;
+    uintptr_t gameState = (uintptr_t)*s_pGameState;
+    int* mapInfo = *(int**)(gameState + 0xf8);
+    if (!mapInfo) return;
+
+    // Real-value fallbacks: these raw .rdata floats resolve NULL in standalone
+    // (ResolveAddr on a .rdata constant returns null), so use the true retail values
+    // instead of 0 — else piles shift by a half-tile and lose the checkerboard yaw.
+    //   DAT_140172204 = 0x42b40000 = 90.0f (per-cell checkerboard yaw, degrees)
+    //   DAT_140172114 = 0x3f000000 = 0.5f  (half-tile center bias)
+    float yawAngle = (s_pYawConstant   && *s_pYawConstant   != 0.0f) ? *s_pYawConstant   : 90.0f;
+    float halfTile = (s_pHalfTileOffset && *s_pHalfTileOffset != 0.0f) ? *s_pHalfTileOffset : 0.5f;
+
+    int displayCount = *(int*)(selfAddr + 0x30);
+    if (displayCount <= 0) return;
+
+    int mapSize = *mapInfo;
+    float halfMap = (float)(mapSize >> 1) - halfTile;
+
+    // Anchor trace: the yard's OWN world position (tile->world of its origin cell), so
+    // per-pile world positions below can be compared against where the yard sits.
+
+    for (int i = 0; i < displayCount; i++) {
+        int row = i / colCount + (int)tileY0;
+        int col = i % colCount + (int)tileX0;
+        int tileIndex = mapSize * row + col;
+
+        // Build position vector from tile
+        Math::Vector3 vec3Buf((float)(tileIndex % mapSize) - halfMap,
+                              (float)(tileIndex / mapSize) - halfMap,
+                              0.0f);
+
+        // Convert tile to world position (f3e0). worldPos[0]/[1] are the world X/Y
+        // on the yard footprint; the original drops worldPos[2] and uses z=0.
+        float worldPos[4] = {0.f, 0.f, 0.f, 0.f};
+        if (s_fn_TileToWorld) {
+            s_fn_TileToWorld(mapInfo, worldPos, &vec3Buf.x, '\0', nullptr);
+        }
+
+        // Build transform with yaw rotation
+        // Alternating checkerboard: if (row + col) is odd, use zero yaw
+        uint32_t yawBits = 0;
+        uint32_t pitchBits = *(uint32_t*)&yawAngle;
+        if ((row + col) & 1) {
+            pitchBits = 0;
+        }
+
+        uintptr_t displayArray = *(uintptr_t*)(selfAddr + 0x28);
+        // FromYawPitchOffset(retbuf, yaw=&pitchBits, pitch=&yawBits[=0], offset).
+        // (Names are swapped to match the original's arg order.) The OFFSET is the
+        // per-cell world position {worldPos.x, worldPos.y, 0} — verified in the real
+        // Draw disassembly (0x1400568c9/cf write worldPos.x/.y into the offset vec,
+        // 0x1400568ba forces offset.z=0). The prior port passed a ZERO offset here,
+        // which placed every pile mesh at the world origin (invisible on the yard).
+        Math::Vector3 offset(worldPos[0], worldPos[1], 0.0f);
+        Math::Transform transform = Math::Transform::FromYawPitchOffset(
+            *reinterpret_cast<const Math::Scalar*>(&pitchBits),
+            *reinterpret_cast<const Math::Scalar*>(&yawBits), offset);   // B.3.1 bridge
+
+        // Apply transform to geometry
+        reinterpret_cast<Graphics::Geometry*>(displayArray + (uintptr_t)i * 0x128)
+            ->SetTransform(transform);   // B.3.5 bridge
+
+    }
+}
+
+// ============================================================
+// StorageDisplayComponent::OnRemove (vtable slot [7], 0x1400566b0)
+// ============================================================
+// Iterates display objects, removes each from the graphics scene
+// if its scene ID is valid (>= 0). Resets each to -1 after removal.
+// Display objects are 0x128-byte entries in array at +0x28, count at +0x30.
+// Scene ID is at entry+0x120.
+
+void StorageDisplayComponent::OnRemove() {
+    EnsureHelpers();
+
+    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
+    int count = *(int*)(selfAddr + 0x30);
+    uintptr_t arrayBase = *(uintptr_t*)(selfAddr + 0x28);
+
+    if (!s_pGameState || !*s_pGameState) return;
+
+    // Get the graphics scene from game state
+    uintptr_t gameState = (uintptr_t)*s_pGameState;
+    void* scene = *(void**)(gameState + 0x60);
+
+    for (int i = 0; i < count; i++) {
+        uintptr_t entry = arrayBase + (uintptr_t)i * 0x128;
+        uint32_t sceneId = *(uint32_t*)(entry + 0x120);
+
+        if ((int32_t)sceneId >= 0) {
+            reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject(sceneId);   // B.3.5 bridge
+            *(uint32_t*)(entry + 0x120) = 0xFFFFFFFF; // Reset to -1
+        }
+    }
+}
 
 // [9] 0x1400566a0 (`JMP 0x1400563e0`) — the NATIVE +0x48 driver. The tree's
 // body lays out the w*h pile grid (Draw) and then allocates the pile meshes
 // from the StorageComponent contents (Update); both early-out cheaply when
 // unchanged.
 void StorageDisplayComponent::Update(void* /*time*/) {
-    StorageDisplayComponent_Draw(this);
+    StorageDisplayComponent::OnAdded();   // the slot-6 body, called directly
     StorageDisplayComponent_Update(this);
 }
 
-// [11] 0x140056940 — OnUpdate2: retail Draw+Update refresh (event/broadcast path).
-void StorageDisplayComponent::Slot11() { StorageDisplayComponent_OnUpdate2(this); }
+// ============================================================
+// StorageDisplayComponent::Slot11 (vtable slot [11], 0x140056940)
+// ============================================================
+// Calls vtable Draw then Update (display rebuild + content refresh).
+//
+// Original disassembly:
+//   MOV RAX,[RCX]            ; vtable
+//   CALL [RAX+0x30]          ; vtable->Draw(self)
+//   JMP Entity_impl_63e0     ; tail call to Update logic
+
+void StorageDisplayComponent::Slot11() {
+    // Call Draw through vtable
+    OnAdded();   // vtable +0x30 (slot 6), a virtual dispatch in retail
+
+    // Call Update
+    StorageDisplayComponent_Update(this);
+}
 
 // [0] 0x14000c940: ~StorageDisplayComponent (0x1400569b0; its array teardown is a PORT GAP, see the header), MemFree on &1.
 Object::Base* StorageDisplayComponent::DeletingDtor(unsigned flags) {
