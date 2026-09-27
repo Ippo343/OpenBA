@@ -20,6 +20,13 @@
 //   [6] 0x1800d2a40 Draw                 [7] Element::Update INHERITED
 //   [8]..[11] Element's, INHERITED
 //
+// ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2) -- the paragraph below is
+// HISTORY: the class is now CONCRETE. A real public ctor (retail's stores), its
+// own slot 0 (the vector deleting dtor), a protected non-virtual ~LayoutElement holding
+// the retired ??1 door's body, and the factory pair as the class's own statics;
+// every live one wears the COMPILER's table. The minted `??_7LayoutElement@UI@@6B@`,
+// its RT_DELDTOR row 0x180043570 and the ctor / dtor / slot doors are retired
+// (tools/rt_mint_retired/ui-b.txt).
 // ABSTRACT (slot 0 pure), no real ctor: every live one is built by the
 // `??0LayoutElement` DOOR (layoutelement.cpp) or inline by
 // LayoutDescription::CreateInstance, and wears the MINTED table.
@@ -67,7 +74,25 @@ public:
     };
 
     // ---- the twelve slots, in measured order -------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180043570
+    // ??0LayoutElement@UI@@QEAA@XZ 0x1800d32e0 -- the REAL ctor: `CALL
+    // ??0Element`, then _childRecords' three zero stores (the Array's own ctor).
+    LayoutElement() : Element() {}
+
+    // [0] 0x180043570 -- MSVC's VECTOR deleting destructor, both arms exactly as the
+    // retired RT_DELDTOR row ran them (`MOV EDX,0xd0` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<LayoutElement*>(self + static_cast<int64_t>(i) * 0xd0)->~LayoutElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~LayoutElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180043290
     uint32_t    Type() const override;                            // [2] 0x180043270
     void ComputeSize() override;                                  // [4] 0x1800d3100
@@ -89,15 +114,14 @@ public:
 
     LayoutElement(const LayoutElement& src);                      // 0x180043470  not ported
     LayoutElement& operator=(const LayoutElement& src);           // 0x1800434d0  not ported
-    static uint32_t      TypeId();                                // 0x180043280  not ported
-    static Object::Base* CreateNewObject();                       // 0x180043380  ui_factory_wave28.cpp door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180043420  ui_factory_wave28.cpp door
+    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
+    static Object::Base* CreateNewObject();                       // (D2) the class's own
+    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
-    // NOT retail's `??0LayoutElement@UI@@QEAA@XZ` (0x1800d32e0, the door).
-    LayoutElement() = default;
-    // `??1LayoutElement@UI@@UEAA@XZ` (0x1800d32a0): non-virtual, not defined in
-    // the real build; the retail body is the door `RtUi_LayoutElement_Dtor`.
+    // `??1LayoutElement@UI@@UEAA@XZ` (0x1800d32a0): NON-VIRTUAL (no virtual dtor until
+    // the normal-virtual cutover). Retail's body is in layoutelement.cpp;
+    // the compiler chains the base's.
     ~LayoutElement();
 
 private:

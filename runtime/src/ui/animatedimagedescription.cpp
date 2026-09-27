@@ -10,7 +10,7 @@
 //   [RtMint]   target : ?Type@AnimatedImageDescription@UI@@UEBAIXZ
 //
 // ??_7AnimatedImageDescription@UI@@6B@ (retail 0x180156060), ten slots:
-//   0  deleting dtor      0x1800369e0  deleting_dtor.cpp row (sizeof 0x98)
+//   0  deleting dtor      0x1800369e0  AnimatedImageDescription.h (the class's own)
 //   1  TypeName           0x1800366d0  here
 //   2  Type               0x1800366b0  here
 //   3  GetFileVersion     0x1800cb6a0  here  (returns 0x10204)
@@ -20,7 +20,7 @@
 //   7  Destruct           0x180036880  here
 //   8  CreateInstance     0x1800cb480  here
 //   9  Construct          0x180036870  here
-// plus ??1AnimatedImageDescription@UI@@UEAA@XZ 0x1800cb6b0 (a DOOR, B4b-2).
+// plus ??1AnimatedImageDescription@UI@@UEAA@XZ 0x1800cb6b0 and the factory pair.
 //
 // THIS CLASS DERIVES FROM UI::ImageDescription (the ctor stamps
 // ??_7ImageDescription@UI@@6B@ first; ~AnimatedImageDescription TAIL-JUMPS to
@@ -34,9 +34,8 @@
 // `??0AnimatedImageDescription@UI@@QEAA@XZ` (0x1800cb6f0) is a real exported
 // function, and `Construct` (0x180036870) is a four-instruction thunk:
 //     TEST RCX,RCX ; JNZ 0x1800cb6f0 ; XOR EAX,EAX ; RET
-// It is ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
-// (a ctor door, not retired in step 6), and reached here through `ResolveAddr`,
-// which is registry-first.
+// ENDGAME B.3.9 UI-A: it is the class's real ctor (the header); Construct and
+// Reconstruct spell it. The FACTUI1 row and its door are retired.
 //
 // ENDGAME B.3.6 block C2: every slot body is a MEMBER of
 // `UI::AnimatedImageDescription`; the registered doors are one-line QUALIFIED
@@ -46,6 +45,10 @@
 // applier is name-hidden by this class's slot-8 override; the per-frame
 // `GetSpriteIndexFromName` (RT_EXPORT_ONCE) is the real `UI::SpriteSheet`
 // member.
+//
+// ENDGAME B.3.9 block UI-A (B39_RULES D1/D2): the class is CONCRETE; the slot
+// doors and the ??1 door, read only by the retired minted table and its
+// RT_DELDTOR row, are gone.
 // ============================================================================
 #include <atomic>
 #include <cstddef>
@@ -74,17 +77,6 @@ const uint8_t* AnimatedImageDescriptionTypeInfo() {
     return static_cast<const uint8_t*>(p);
 }
 
-// Door-only (the dtor door is not a member).
-void* VtAnimatedImageDescription() {
-    return RT_DATA_SLOT(void*, "??_7AnimatedImageDescription@UI@@6B@");
-}
-
-// ??0AnimatedImageDescription@UI@@QEAA@XZ, 0x1800cb6f0 — see the banner.
-void* CallCtor(void* self) {
-    using CtorFn = void* (*)(void*);
-    return RtAddr<CtorFn>(0x1800cb6f0ull)(self);
-}
-
 }  // namespace
 
 // ============================================================================
@@ -92,7 +84,9 @@ void* CallCtor(void* self) {
 // ============================================================================
 namespace UI {
 
-uint32_t AnimatedImageDescription::Type() const {              // 0x1800366b0
+uint32_t AnimatedImageDescription::Type() const { return TypeId(); }  // 0x1800366b0
+// ?TypeId@AnimatedImageDescription@UI@@SAIXZ 0x1800366c0 — the record's first dword.
+uint32_t AnimatedImageDescription::TypeId() {
     const uint8_t* ti = AnimatedImageDescriptionTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
@@ -104,16 +98,16 @@ const char* AnimatedImageDescription::TypeName() const {       // 0x1800366d0
 // 0x1800cb6a0: `MOV EAX,0x10204 ; RET` — a THIRD distinct value in this family.
 int32_t AnimatedImageDescription::GetFileVersion() const { return 0x10204; }
 
-// 0x180036870: the null test is the DOOR's; then a tail jump to the ctor,
-// whose return value (this) IS this function's.
+// 0x180036870: the null test sat in the retired door; then a tail jump to the
+// ctor, whose return value (this) IS this function's.
 Object::External* AnimatedImageDescription::Construct() {
-    return static_cast<Object::External*>(CallCtor(this));     // 180036873 JNZ
+    return ::new (this) AnimatedImageDescription();            // 180036873 JNZ
 }
 // 0x180036850: slot0(this, 0) through the object's own table, then a TAIL JUMP
 // to the same ctor.
 Object::External* AnimatedImageDescription::Reconstruct() {
     DeletingDtor(0);                                           // 18003685e
-    return static_cast<Object::External*>(CallCtor(this));     // 180036868 JMP
+    return ::new (this) AnimatedImageDescription();            // 180036868 JMP
 }
 // 0x180036880: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
 void AnimatedImageDescription::Destruct() { DeletingDtor(0); }
@@ -165,7 +159,7 @@ bool AnimatedImageDescription::Serialize(void* streamv) {
 //
 // AnimatedImageElement is 0x100 bytes (`MOV EDX,0x100` at 0x1800cb4c1) and its
 // constructor is CALLED, not inlined: `??0AnimatedImageElement@UI@@QEAA@XZ`
-// (0x1800cb3f0), a factory_ui1.cpp door. The ctor RETURNS `this` and retail
+// (0x1800cb3f0), the real ctor since B.3.9. The ctor RETURNS `this` and retail
 // keeps the returned RAX (0x1800cb4f8).
 //
 // Then the applier (ImageDescription::CreateInstance, 0x180118570), then the
@@ -185,11 +179,8 @@ Object::InternalPtr<Element>* AnimatedImageDescription::CreateInstance(
     void* raw = rtdesc::MemAlloc(0x100, 8);                    // 1800cb4c1
 
     AnimatedImageElement* elem = nullptr;
-    if (raw != nullptr) {                                      // 1800cb4eb
-        using ElemCtorFn = void* (*)(void*);
-        elem = reinterpret_cast<AnimatedImageElement*>(        // B.3.6 bridge
-            rtdesc::RtAddr<ElemCtorFn>(0x1800cb3f0ull)(raw));  // 1800cb4f3, keeps RAX
-    }
+    if (raw != nullptr)                                        // 1800cb4eb
+        elem = ::new (raw) AnimatedImageElement();             // 1800cb4f3, keeps RAX
 
     Object::InternalPtr<ImageElement> slot(elem);              // 1800cb500
     ImageDescription::CreateInstance(&slot);                   // 1800cb50d  (name-hidden: qualified)
@@ -227,106 +218,52 @@ Object::InternalPtr<Element>* AnimatedImageDescription::CreateInstance(
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — each a one-line QUALIFIED delegation.
+// ??1AnimatedImageDescription@UI@@UEAA@XZ   0x1800cb6b0 -- retail's body, moved
+// here from the retired door (ENDGAME B.3.9 UI-A)
 // ============================================================================
-extern "C" uint32_t RtUi_AnimatedImageDescription_Type(const void* self) {
-    return reinterpret_cast<const UI::AnimatedImageDescription*>(self)          // B.3.6 bridge
-        ->UI::AnimatedImageDescription::Type();
-}
-extern "C" const char* RtUi_AnimatedImageDescription_TypeName(const void* self) {
-    return reinterpret_cast<const UI::AnimatedImageDescription*>(self)          // B.3.6 bridge
-        ->UI::AnimatedImageDescription::TypeName();
-}
-extern "C" int32_t RtUi_AnimatedImageDescription_GetFileVersion(const void* self) {
-    return reinterpret_cast<const UI::AnimatedImageDescription*>(self)          // B.3.6 bridge
-        ->UI::AnimatedImageDescription::GetFileVersion();
-}
-extern "C" void* RtUi_AnimatedImageDescription_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                      // 180036870
-    return reinterpret_cast<UI::AnimatedImageDescription*>(selfv)               // B.3.6 bridge
-        ->UI::AnimatedImageDescription::Construct();
-}
-extern "C" void* RtUi_AnimatedImageDescription_Reconstruct(void* selfv) {
-    return reinterpret_cast<UI::AnimatedImageDescription*>(selfv)               // B.3.6 bridge
-        ->UI::AnimatedImageDescription::Reconstruct();
-}
-extern "C" void RtUi_AnimatedImageDescription_Destruct(void* selfv) {
-    reinterpret_cast<UI::AnimatedImageDescription*>(selfv)                      // B.3.6 bridge
-        ->UI::AnimatedImageDescription::Destruct();
-}
-extern "C" bool RtUi_AnimatedImageDescription_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<UI::AnimatedImageDescription*>(selfv)               // B.3.6 bridge
-        ->UI::AnimatedImageDescription::Serialize(streamv);
-}
-extern "C" void** RtUi_AnimatedImageDescription_CreateInstance(const void* selfv, void** ret,
-                                                               const void* dialog) {
-    return reinterpret_cast<void**>(
-        reinterpret_cast<const UI::AnimatedImageDescription*>(selfv)            // B.3.6 bridge
-            ->UI::AnimatedImageDescription::CreateInstance(
-                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
-                static_cast<const UI::Dialog*>(dialog)));
-}
-
-// ============================================================================
-// ??1AnimatedImageDescription@UI@@UEAA@XZ   0x1800cb6b0   — a DTOR DOOR (B4b-2)
-// ============================================================================
-//     stamp ??_7AnimatedImageDescription@UI@@6B@             ; 1800cb6cd
+//     stamp ??_7AnimatedImageDescription@UI@@6B@             ; 1800cb6cd (compiler's)
 //     Array<String>::~Array(this + 0x80)                     ; 1800cb6d4
-//     JMP ~ImageDescription                                  ; 1800cb6e2
+//     JMP ~ImageDescription                                  ; 1800cb6e2 (compiler's)
 // 0x180010ab0 is the Array destructor that ALSO destroys its elements
 // (array_destroy.cpp's J2 entry point); the plain Array::~Array the other
 // classes use is 0x180039440. Using the wrong one here would leak a
-// System::String per frame name.
-extern "C" void RtUi_AnimatedImageDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-
-    *reinterpret_cast<void**>(p) = VtAnimatedImageDescription();   // 1800cb6cd
-
+// System::String per frame name. It ZEROES the array header, so the
+// compiler-emitted member `~Array` that runs after this body sees an empty
+// array (no element destroy, MemFree(null)).
+namespace UI {
+AnimatedImageDescription::~AnimatedImageDescription() {
     using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x180010ab0ull)(p + 0x80);                 // 1800cb6d4
-
-    using BaseDtorFn = void (*)(void*);
-    RtAddr<BaseDtorFn>(0x180118370ull)(p);                         // 1800cb6e2 JMP
+    RtAddr<ArrayDtorFn>(0x180010ab0ull)(&_frameNames);             // 1800cb6d4
 }
+}  // namespace UI
 
+namespace UI {
+// ?CreateNewObject@AnimatedImageDescription@UI@@SAPEAVBase@Object@@XZ  0x1800367c0
+// The factory-interpreter row this replaces: MemAlloc(0x98, 8), retail's
+// null branch, then the out-of-line ctor ??0AnimatedImageDescription (0x1800cb6f0).
+Object::Base* AnimatedImageDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(AnimatedImageDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) AnimatedImageDescription();
+}
+// ?CreateInPlaceObject@AnimatedImageDescription@UI@@SAPEAVBase@Object@@PEAX@Z  0x180036840
+Object::Base* AnimatedImageDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) AnimatedImageDescription();
+}
+}  // namespace UI
+
+// ============================================================================
+// Registration: the factory pair only (B39_RULES D2). The slot doors and the
+// ??1 door (and FACTUI1's ??0 door) are gone.
+// ============================================================================
 int RtUiAnimatedImageDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@AnimatedImageDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_AnimatedImageDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x1800366b0ull, (void*)&RtUi_AnimatedImageDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@AnimatedImageDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_AnimatedImageDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x1800366d0ull, (void*)&RtUi_AnimatedImageDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@AnimatedImageDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_AnimatedImageDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x1800cb6a0ull, (void*)&RtUi_AnimatedImageDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@AnimatedImageDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_AnimatedImageDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x180036870ull, (void*)&RtUi_AnimatedImageDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@AnimatedImageDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_AnimatedImageDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x180036850ull, (void*)&RtUi_AnimatedImageDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@AnimatedImageDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_AnimatedImageDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x180036880ull, (void*)&RtUi_AnimatedImageDescription_Destruct);
-
-    RegisterRuntimeExport("??1AnimatedImageDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_AnimatedImageDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x1800cb6b0ull, (void*)&RtUi_AnimatedImageDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@AnimatedImageDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_AnimatedImageDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x1800cb5c0ull, (void*)&RtUi_AnimatedImageDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@AnimatedImageDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_AnimatedImageDescription_CreateInstance);            ++n;
-    RegisterRuntimeAddr(0x1800cb480ull, (void*)&RtUi_AnimatedImageDescription_CreateInstance);
-
+    RegisterRuntimeExport("?CreateNewObject@AnimatedImageDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::AnimatedImageDescription::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x1800367c0ull, (void*)&UI::AnimatedImageDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@AnimatedImageDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::AnimatedImageDescription::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x180036840ull, (void*)&UI::AnimatedImageDescription::CreateInPlaceObject);
     return n;
 }

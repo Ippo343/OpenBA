@@ -9,7 +9,7 @@
 //
 //   slot  method                retail       where
 //   ----  --------------------  -----------  ---------------------------------
-//    0    vector deleting dtor  0x180038370  deleting_dtor.cpp row
+//    0    vector deleting dtor  0x180038370  ClipRegionElement.h (the class's own)
 //    1    TypeName              0x180037f70  here
 //    2    Type                  0x180037f50  here
 //    4    ComputeSize           0x1800cbc60  here
@@ -18,14 +18,14 @@
 //    7    Update                0x1800cbd70  here
 //    9    Contains              0x1800cbcc0  here
 //
-// plus ??0ClipRegionElement@UI@@QEAA@XZ         0x1800cbe60
-//      ??0ClipRegionElement@UI@@QEAA@AEBV01@@Z  0x180038220
-//      ??1ClipRegionElement@UI@@UEAA@XZ         0x1800cbe30
+// plus ??1ClipRegionElement@UI@@UEAA@XZ 0x1800cbe30 and the factory pair.
 //
 // ENDGAME B.3.6 block C1: the seven slot bodies are MEMBERS of
 // `UI::ClipRegionElement` (runtime/types/ui/ClipRegionElement.h, which now
 // owns the six-dword layout and its evidence). The base calls in Update and
 // Contains are QUALIFIED member calls (they were `ResolveAddr` by address).
+// ENDGAME B.3.9 UI-A: the class is concrete (real ctor ??0 0x1800cbe60 in the
+// header); the slot, ctor, copy-ctor and dtor doors are retired.
 // ============================================================================
 #include "element_common.h"
 #include "../../types/ui/ClipRegionElement.h"
@@ -52,12 +52,6 @@ const uint8_t* ClipRegionElementTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_clipTypeInfo, "?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
-// The ctor/dtor doors only.
-void* VtClipRegionElement() { return RT_DATA_SLOT(void*, "??_7ClipRegionElement@UI@@6B@"); }
-
-using ElementCtorFn     = void* (*)(void* self);
-using ElementCopyCtorFn = void* (*)(void* self, const void* other);
-using ElementDtorFn     = void  (*)(void* self);
 // UI::SpriteContext::SetScissor(ctx, Viewport& out, const Viewport& in) —
 // returns the PREVIOUS scissor by value through the hidden slot in RDX.
 // Block D's class, reached by address.
@@ -71,7 +65,9 @@ using Viewport = ::Video::Viewport;
 
 namespace UI {
 
-uint32_t ClipRegionElement::Type() const { return TypeIdOf(ClipRegionElementTypeInfo()); }
+// ?TypeId@ClipRegionElement@UI@@SAIXZ 0x180037f60 — the record's first dword.
+uint32_t ClipRegionElement::TypeId() { return TypeIdOf(ClipRegionElementTypeInfo()); }
+uint32_t ClipRegionElement::Type() const { return TypeId(); }
 const char* ClipRegionElement::TypeName() const { return TypeNameOf(ClipRegionElementTypeInfo()); }
 
 // ============================================================================
@@ -232,117 +228,41 @@ bool ClipRegionElement::Contains(int32_t x, int32_t y, UserInterface* ui) const 
 }  // namespace UI
 
 // ============================================================================
-// The DOORS
+// ??1ClipRegionElement@UI@@UEAA@XZ   0x1800cbe30
 // ============================================================================
-extern "C" uint32_t RtUi_ClipRegionElement_Type(const void* self) {
-    return reinterpret_cast<const UI::ClipRegionElement*>(self)->UI::ClipRegionElement::Type();   // B.3.6 bridge
+// Restamp, then `JMP ~Element`: nothing of its own. ENDGAME B.3.9 UI-A: the
+// body is EMPTY and the compiler restamps and chains ~Element.
+namespace UI {
+ClipRegionElement::~ClipRegionElement() {}
+
+// ?CreateNewObject@ClipRegionElement@UI@@SAPEAVBase@Object@@XZ  0x180038060
+// The FACTUI1 row this replaces: MemAlloc(0xd8, 8), retail's null branch,
+// then the inlined constructor (the same stores as ??0 0x1800cbe60).
+Object::Base* ClipRegionElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ClipRegionElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) ClipRegionElement();
 }
-extern "C" const char* RtUi_ClipRegionElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::ClipRegionElement*>(self)->UI::ClipRegionElement::TypeName();   // B.3.6 bridge
+// ?CreateInPlaceObject@ClipRegionElement@UI@@SAPEAVBase@Object@@PEAX@Z  0x180038110
+Object::Base* ClipRegionElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) ClipRegionElement();
 }
-extern "C" void RtUi_ClipRegionElement_ComputeSize(void* selfv) {
-    reinterpret_cast<UI::ClipRegionElement*>(selfv)->UI::ClipRegionElement::ComputeSize();   // B.3.6 bridge
-}
-extern "C" void RtUi_ClipRegionElement_ComputeLayout(void* selfv, int x, int y, int w, int h) {
-    reinterpret_cast<UI::ClipRegionElement*>(selfv)->UI::ClipRegionElement::ComputeLayout(x, y, w, h);   // B.3.6 bridge
-}
-extern "C" void RtUi_ClipRegionElement_Draw(const void* selfv, void* ctx, uint8_t alpha) {
-    reinterpret_cast<const UI::ClipRegionElement*>(selfv)->UI::ClipRegionElement::Draw(   // B.3.6 bridge
-        *static_cast<UI::SpriteContext*>(ctx), alpha);
-}
-extern "C" void RtUi_ClipRegionElement_Update(void* selfv, const void* time, void* ui,
-                                              void** dlg, const void* statev) {
-    reinterpret_cast<UI::ClipRegionElement*>(selfv)->UI::ClipRegionElement::Update(   // B.3.6 bridge
-        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlg),   // B.3.6 bridge
-        *static_cast<const UI::Element::UpdateState*>(statev));
-}
-extern "C" bool RtUi_ClipRegionElement_Contains(const void* selfv, int x, int y, void* ui) {
-    return reinterpret_cast<const UI::ClipRegionElement*>(selfv)          // B.3.6 bridge
-        ->UI::ClipRegionElement::Contains(x, y, static_cast<UI::UserInterface*>(ui));
-}
+}  // namespace UI
 
 // ============================================================================
-// Constructors / destructor — DOORS (B4b-2), unchanged
-// ============================================================================
-// The default constructor writes +0xc4 and +0xc8 as ONE QWORD of 100
-// (`MOV qword [RCX+0xc4],0x64`), so +0xc8 is set to 0 by the upper half — the
-// inner width starts at zero, not at 100. Transcribed as the two fields it
-// covers rather than as the qword, which is byte-identical.
-extern "C" void* RtUi_ClipRegionElement_Ctor(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    RtAddr<ElementCtorFn>(0x180115e50ull)(self);
-    P(self, 0x00) = VtClipRegionElement();
-    UI::ClipRegionElement* e = reinterpret_cast<UI::ClipRegionElement*>(self);   // B.3.6 bridge
-    e->_reqWidth    = 100;
-    e->_reqHeight   = 100;
-    e->_innerWidth  = 0;
-    e->_innerHeight = 0;
-    e->_offsetX     = 0;
-    e->_offsetY     = 0;
-    return self;
-}
-
-extern "C" void* RtUi_ClipRegionElement_CopyCtor(void* selfv, const void* otherv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    const uint8_t* other = static_cast<const uint8_t*>(otherv);
-    RtAddr<ElementCopyCtorFn>(0x1800358c0ull)(self, other);
-    P(self, 0x00) = VtClipRegionElement();
-    for (int off = 0xc0; off <= 0xd4; off += 4)             // _reqWidth .. _offsetY
-        I32(self, off) = I32c(other, off);
-    return self;
-}
-
-extern "C" void RtUi_ClipRegionElement_Dtor(void* selfv) {
-    P(selfv, 0x00) = VtClipRegionElement();
-    RtAddr<ElementDtorFn>(0x1801161a0ull)(selfv);
-}
-
-// ============================================================================
-// Registration
+// Registration. ENDGAME B.3.9 UI-A: the seven slot doors, the ??0 / copy /
+// ??1 doors are gone -- their only readers were the minted
+// `??_7ClipRegionElement@UI@@6B@`, its RT_DELDTOR row and the FACTUI1 row.
+// The factory pair (B39_RULES D2) is the class's own.
 // ============================================================================
 int RtUiClipRegionElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?TypeName@ClipRegionElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_ClipRegionElement_TypeName);      ++n;
-    RegisterRuntimeAddr(0x180037f70ull, (void*)&RtUi_ClipRegionElement_TypeName);
-
-    RegisterRuntimeExport("?Type@ClipRegionElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_ClipRegionElement_Type);          ++n;
-    RegisterRuntimeAddr(0x180037f50ull, (void*)&RtUi_ClipRegionElement_Type);
-
-    RegisterRuntimeExport("?ComputeSize@ClipRegionElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_ClipRegionElement_ComputeSize);   ++n;
-    RegisterRuntimeAddr(0x1800cbc60ull, (void*)&RtUi_ClipRegionElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@ClipRegionElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_ClipRegionElement_ComputeLayout); ++n;
-    RegisterRuntimeAddr(0x1800cba00ull, (void*)&RtUi_ClipRegionElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@ClipRegionElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_ClipRegionElement_Draw);          ++n;
-    RegisterRuntimeAddr(0x1800cb900ull, (void*)&RtUi_ClipRegionElement_Draw);
-
-    RegisterRuntimeExport(
-        "?Update@ClipRegionElement@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@"
-        "V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@Element@2@@Z",
-        (void*)&RtUi_ClipRegionElement_Update);                          ++n;
-    RegisterRuntimeAddr(0x1800cbd70ull, (void*)&RtUi_ClipRegionElement_Update);
-
-    RegisterRuntimeExport("?Contains@ClipRegionElement@UI@@UEBA_NHHPEAVUserInterface@2@@Z",
-                          (void*)&RtUi_ClipRegionElement_Contains);      ++n;
-    RegisterRuntimeAddr(0x1800cbcc0ull, (void*)&RtUi_ClipRegionElement_Contains);
-
-    RegisterRuntimeExport("??0ClipRegionElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_ClipRegionElement_Ctor);          ++n;
-    RegisterRuntimeAddr(0x1800cbe60ull, (void*)&RtUi_ClipRegionElement_Ctor);
-
-    RegisterRuntimeExport("??0ClipRegionElement@UI@@QEAA@AEBV01@@Z",
-                          (void*)&RtUi_ClipRegionElement_CopyCtor);      ++n;
-    RegisterRuntimeAddr(0x180038220ull, (void*)&RtUi_ClipRegionElement_CopyCtor);
-
-    RegisterRuntimeExport("??1ClipRegionElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_ClipRegionElement_Dtor);          ++n;
-    RegisterRuntimeAddr(0x1800cbe30ull, (void*)&RtUi_ClipRegionElement_Dtor);
+    RegisterRuntimeExport("?CreateNewObject@ClipRegionElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::ClipRegionElement::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x180038060ull, (void*)&UI::ClipRegionElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@ClipRegionElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::ClipRegionElement::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x180038110ull, (void*)&UI::ClipRegionElement::CreateInPlaceObject);
     return n;
 }

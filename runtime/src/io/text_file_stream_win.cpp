@@ -215,15 +215,8 @@ uint64_t g_tfsAtt = 0;
 // only visible in the export directory: a one-instruction body cannot show a
 // return type.
 // ============================================================================
-extern "C" uint32_t RtIo_TextFileStream_GetSize(const TextFileStream* self) {
-    return reinterpret_cast<const IO::TextFileStream*>(self)
-               ->IO::TextFileStream::GetSize();
-}
-
-extern "C" uint32_t RtIo_TextFileStream_GetCurrentPos(const TextFileStream* self) {
-    return reinterpret_cast<const IO::TextFileStream*>(self)
-               ->IO::TextFileStream::GetCurrentPos();
-}
+// (ENDGAME B.3.9 IO: the two slot doors that delegated here went with the
+// minted table; the bodies are the members at the bottom of this file.)
 
 // ============================================================================
 // IO::TextFileStream::Read(int, void*)                   retail 0x1800ba900
@@ -259,10 +252,6 @@ extern "C" uint32_t RtIo_TextFileStream_GetCurrentPos(const TextFileStream* self
 // and with the prologue. It is another row's file and this lane has not touched
 // it; flagged for whoever owns it.
 // ============================================================================
-extern "C" bool RtIo_TextFileStream_Read(TextFileStream* self, int32_t len, void* buf) {
-    return reinterpret_cast<IO::TextFileStream*>(self)
-               ->IO::TextFileStream::Read(len, buf);
-}
 
 // ============================================================================
 // IO::TextFileStream::SetCurrentPos(int)                 retail 0x1800babd0
@@ -295,10 +284,6 @@ extern "C" bool RtIo_TextFileStream_Read(TextFileStream* self, int32_t len, void
 // caller that seeks to EOF and trusts the return would stop early, and one that
 // ignores the return would still be correctly positioned.
 // ============================================================================
-extern "C" bool RtIo_TextFileStream_SetCurrentPos(TextFileStream* self, int32_t pos) {
-    return reinterpret_cast<IO::TextFileStream*>(self)
-               ->IO::TextFileStream::SetCurrentPos(pos);
-}
 
 // ============================================================================
 // IO::TextFileStream::Create(Filename const&, Text::Format, Text::Format)
@@ -356,13 +341,6 @@ extern "C" bool RtIo_TextFileStream_SetCurrentPos(TextFileStream* self, int32_t 
 // what the machine ends up doing; the aliasing is retail's stack economy, not
 // semantics, and nothing observable depends on it.
 // ============================================================================
-extern "C" bool RtIo_TextFileStream_Create(TextFileStream* self, const Filename* path,
-                                           int32_t requestedFormat,
-                                           int32_t activeEncoding) {
-    return reinterpret_cast<IO::TextFileStream*>(self)->IO::TextFileStream::Create(
-        reinterpret_cast<const System::Filename&>(*path),   // B.3.4 bridge
-        requestedFormat, activeEncoding);
-}
 
 // ============================================================================
 // WAVE 28 LANE SLOTS — the last two slots of ??_7TextFileStream@IO@@6B@
@@ -560,11 +538,6 @@ using FnMemFree  = void  (*)(void*);
 // `DetectFormat` consulted; the detected format both selects the decoder and
 // decides how many BOM bytes to skip.
 // ============================================================================
-extern "C" bool RtIo_TextFileStream_Write(TextFileStream* self, int32_t len,
-                                          const void* buf) {
-    return reinterpret_cast<IO::TextFileStream*>(self)
-               ->IO::TextFileStream::Write(len, buf);
-}
 
 // ============================================================================
 // IO::TextFileStream::Open(Filename const&, Text::Format)  retail 0x1800ba640
@@ -614,13 +587,6 @@ extern "C" bool RtIo_TextFileStream_Write(TextFileStream* self, int32_t len,
 // `DetectFormat` returns something different the second time, which on the same
 // bytes it cannot; the guard is there anyway and is reproduced anyway.
 // ============================================================================
-extern "C" bool RtIo_TextFileStream_Open(TextFileStream* self, const Filename* path,
-                                         int32_t format) {
-    return reinterpret_cast<IO::TextFileStream*>(self)
-               ->IO::TextFileStream::OpenWithFormat(
-                     reinterpret_cast<const System::Filename&>(*path),  // B.3.4 bridge
-                     format);
-}
 
 
 // ============================================================================
@@ -1156,68 +1122,18 @@ int RtIoTextFileStreamSlotsRegister() {
     using namespace RtIO;
     int n = 0;
 
-    RegisterRuntimeExport("?Read@TextFileStream@IO@@UEAA_NHPEAX@Z",
-                          (void*)&RtIo_TextFileStream_Read); ++n;
-    RegisterRuntimeAddr(0x1800ba900, (void*)&RtIo_TextFileStream_Read);
-
-    RegisterRuntimeExport("?SetCurrentPos@TextFileStream@IO@@UEAA_NH@Z",
-                          (void*)&RtIo_TextFileStream_SetCurrentPos); ++n;
-    RegisterRuntimeAddr(0x1800babd0, (void*)&RtIo_TextFileStream_SetCurrentPos);
-
-    RegisterRuntimeExport("?GetCurrentPos@TextFileStream@IO@@UEBAIXZ",
-                          (void*)&RtIo_TextFileStream_GetCurrentPos); ++n;
-    RegisterRuntimeAddr(0x1800bac30, (void*)&RtIo_TextFileStream_GetCurrentPos);
-
-    RegisterRuntimeExport("?GetSize@TextFileStream@IO@@UEBAIXZ",
-                          (void*)&RtIo_TextFileStream_GetSize); ++n;
-    RegisterRuntimeAddr(0x1800ba8e0, (void*)&RtIo_TextFileStream_GetSize);
-
-    RegisterRuntimeExport(
-        "?Create@TextFileStream@IO@@UEAA_NAEBVFilename@System@@W4Format@Text@4@1@Z",
-        (void*)&RtIo_TextFileStream_Create); ++n;
-    RegisterRuntimeAddr(0x1800ba940, (void*)&RtIo_TextFileStream_Create);
-
-    // ---- WAVE 28 LANE SLOTS -----------------------------------------------
-    // Both mangled names were RE-DERIVED against the shipped export directory
-    // with pefile, at the VAs the vtable holds, rather than assembled by
-    // analogy with their neighbours: `UEAA` vs `QEAA`/`UEBA` by analogy cost
-    // Wave 27 a dark port, and `ResolveExport` returns NULL silently for a name
-    // the DLL lacks while the ResolveAddr fallback hides it
-    // (reference_resolveexport_phantom_names.md).
-    //   ?Write@TextFileStream@IO@@UEAA_NHPEBX@Z                  ord 4556
-    //   ?Open@TextFileStream@IO@@UEAA_NAEBVFilename@System@@W4Format@Text@4@@Z
-    //                                                            ord 3308
-    // Each is spelled ON ONE LINE because runtime_census.py cannot see a
-    // mangled name split across a string-literal concatenation
-    // (reference_census_three_blind_spots.md).
-    RegisterRuntimeExport("?Write@TextFileStream@IO@@UEAA_NHPEBX@Z",
-                          (void*)&RtIo_TextFileStream_Write); ++n;
-    RegisterRuntimeAddr(0x1800ba9f0, (void*)&RtIo_TextFileStream_Write);
-
-    RegisterRuntimeExport("?Open@TextFileStream@IO@@UEAA_NAEBVFilename@System@@W4Format@Text@4@@Z",
-                          (void*)&RtIo_TextFileStream_Open); ++n;
-    RegisterRuntimeAddr(0x1800ba640, (void*)&RtIo_TextFileStream_Open);
-
-    // ---- WAVE 29 LANE IOLANE ----------------------------------------------
-    // The three NON-VTABLE accessors. They are NOT slots of
-    // ??_7TextFileStream@IO@@6B@ and they do not change its 10/10 tally; the
-    // printf below therefore does not count them, and the line says so.
+    // ENDGAME B.3.9 IO: the seven vtable-slot doors (Read, SetCurrentPos,
+    // GetCurrentPos, GetSize, Create, Write, Open) had the minted TextFileStream
+    // table as their only caller and were deleted with it -- the class is built
+    // by its real constructor and its slots reach the members directly.
     //
-    // Each mangled name was taken from the SHIPPED EXPORT DIRECTORY with
-    // pefile at the VA whose bytes are transcribed above, not assembled by
-    // analogy: `QEBA` here vs the `UEAA` of every slot in this file is exactly
-    // the kind of difference analogy gets wrong, and ResolveExport returns NULL
-    // SILENTLY for a name the DLL lacks while the ResolveAddr fallback hides it
-    // (reference_resolveexport_phantom_names.md,
-    //  reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
+    // The three NON-VTABLE accessors stay (WAVE 29 LANE IOLANE). Each mangled
+    // name was taken from the SHIPPED EXPORT DIRECTORY with pefile:
     //   ?GetObjectVersion@TextFileStream@IO@@QEBAHXZ                 0x1800ba250
     //   ?GetObjectType@TextFileStream@IO@@QEBAAEBVString@System@@XZ  0x1800ba260
     //   ?GetObjectName@TextFileStream@IO@@QEBAAEBVString@System@@XZ  0x1800ba270
-    // BY NAME *AND* BY ADDRESS for all three, because a caller arriving by
-    // address is invisible to a name-only registration and dies at cutover
-    // (reference_count_the_doors_not_the_calls.md). Each name is spelled on ONE
-    // line: tools/runtime_census.py cannot see a mangled name split across a
-    // string-literal concatenation.
+    // Each name is spelled on ONE line: tools/runtime_census.py cannot see a
+    // mangled name split across a string-literal concatenation.
     RegisterRuntimeExport("?GetObjectVersion@TextFileStream@IO@@QEBAHXZ",
                           (void*)&RtIo_TextFileStream_GetObjectVersion); ++n;
     RegisterRuntimeAddr(0x1800ba250, (void*)&RtIo_TextFileStream_GetObjectVersion);
@@ -1230,14 +1146,8 @@ int RtIoTextFileStreamSlotsRegister() {
                           (void*)&RtIo_TextFileStream_GetObjectName); ++n;
     RegisterRuntimeAddr(0x1800ba270, (void*)&RtIo_TextFileStream_GetObjectName);
 
-    // A count of what registered is a fact this line can state; a slot tally in
-    // a printf is a comment on its way to becoming a lie, and this one already
-    // was one (it still said "7/10, slots 0, 2, 8 still trap" three waves after
-    // lane ENC closed slot 0). Corrected on the surface the next person REACHES
-    // -- the log line -- not only in a doc (kickoff warning 15).
     printf("[RtPort]   IO::TextFileStream (waves 20 SAVETEXT, 21 ENC, "
-           "28 SLOTS, 29 IOLANE): %d exports registered here, of which 3 are "
-           "the NON-VTABLE accessors GetObjectName/Type/Version; "
-           "??_7TextFileStream@IO@@6B@ is 10/10 COMPLETE, NOT promoted\n", n);
+           "28 SLOTS, 29 IOLANE): %d exports registered here -- the NON-VTABLE "
+           "accessors GetObjectName/Type/Version\n", n);
     return n;
 }

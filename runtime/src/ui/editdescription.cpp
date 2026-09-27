@@ -3,7 +3,7 @@
 // ============================================================================
 //
 // ??_7EditDescription@UI@@6B@ (retail 0x180156880), ten slots:
-//   0  deleting dtor      0x18003fa20  runtime/src/object/deleting_dtor.cpp row
+//   0  deleting dtor      0x18003fa20  EditDescription.h (the class's own)
 //   1  TypeName           0x18003f6d0  here
 //   2  Type               0x18003f6b0  here
 //   3  GetFileVersion     0x1800d11e0  here  (returns 0x204)
@@ -21,7 +21,8 @@
 // 0xf8 layout).
 //
 // The constructor is OUT OF LINE (`??0EditDescription@UI@@QEAA@XZ`,
-// 0x1800d12c0) and is ported by runtime/src/ui/factory_ui1.cpp.
+// 0x1800d12c0). ENDGAME B.3.9 UI-A: it is the real ctor (EditDescription.h);
+// the class is concrete, its factory pair its own, the doors retired.
 //
 // THIS CLASS HAS NO SEPARATE APPLIER. Its CreateInstance is the only one in the
 // batch that open-codes TWO refcounted String ASSIGNMENTS (not releases) — the
@@ -37,8 +38,6 @@ namespace {
 
 using namespace rtdesc;
 
-void* VtEditDescription() { return RT_DATA_SLOT(void*, RtUI::kVtblEditDescription); }
-
 // RULE B6-5: member bodies resolve through namespace-scope atomics (same
 // contract as element_common.h's rtuielem::AtomicExport, which cannot be
 // included beside description_common.h — both declare Module).
@@ -52,7 +51,6 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 std::atomic<void*> g_typeInfoSlot{nullptr};
-std::atomic<void*> g_ctorSlot{nullptr};
 std::atomic<void*> g_memFreeSlot{nullptr};
 
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z through an atomic slot:
@@ -69,11 +67,20 @@ const uint8_t* EditTypeInfo() {
         g_typeInfoSlot, "?_typeInfo@EditDescription@UI@@0VBaseTypeInfo@Object@@A"));
 }
 
-// ??0EditDescription@UI@@QEAA@XZ — a ctor DOOR (factory_ui1.cpp).
-void* EditCtor(void* self) {
-    using CtorFn = void* (*)(void*);
-    return reinterpret_cast<CtorFn>(AtomicExport(
-        g_ctorSlot, "??0EditDescription@UI@@QEAA@XZ"))(self);
+// The refcounted System::String RELEASE (retail's asymmetry: the freeing
+// branch leaves the field at `data - 8`, the sharing branch nulls it), through
+// the atomic MemFree slot so a member body keeps no first-call static.
+void ReleaseStringFieldAtomic(uint8_t* p, size_t off) {
+    char*& s = *reinterpret_cast<char**>(p + off);
+    if (s != nullptr) {
+        --*reinterpret_cast<int32_t*>(s - 4);
+        if (*reinterpret_cast<int32_t*>(s - 4) == 0) {
+            s = s - 8;
+            FreeStringBlock(s);
+        } else {
+            s = nullptr;
+        }
+    }
 }
 
 // The refcounted System::String ASSIGNMENT retail open-codes twice in
@@ -101,7 +108,9 @@ void AssignStringField(char*& d, char* const s) {
 
 namespace UI {
 
-uint32_t EditDescription::Type() const {
+uint32_t EditDescription::Type() const { return TypeId(); }
+// ?TypeId@EditDescription@UI@@SAIXZ 0x18003f6c0 — the record's first dword.
+uint32_t EditDescription::TypeId() {
     uint32_t v = 0; __builtin_memcpy(&v, EditTypeInfo(), sizeof v); return v;
 }
 const char* EditDescription::TypeName() const {
@@ -109,15 +118,13 @@ const char* EditDescription::TypeName() const {
 }
 int32_t EditDescription::GetFileVersion() const { return 0x204; }
 
-// 0x18003f870: null test (in the DOOR), then a JMP to the ctor.
+// 0x18003f870: null test (it sat in the retired door), then a JMP to the ctor.
 Object::External* EditDescription::Construct() {
-    EditCtor(this);                                          // 18003f879 JMP
-    return this;
+    return ::new (this) EditDescription();                   // 18003f879 JMP
 }
 Object::External* EditDescription::Reconstruct() {
     DeletingDtor(0);                                         // 18003f85e
-    EditCtor(this);                                          // 18003f868 JMP
-    return this;
+    return ::new (this) EditDescription();                   // 18003f868 JMP
 }
 void EditDescription::Destruct() { DeletingDtor(0); }
 
@@ -154,7 +161,7 @@ bool EditDescription::Serialize(void* streamv) {
 // RETSLOT (B6-2). R8 (the Dialog) is never read — no children.
 //
 // EditElement is 0xf8 and its constructor is OUT OF LINE
-// (`??0EditElement@UI@@QEAA@XZ`, 0x1800d0f10, a door in factory_ui1.cpp);
+// (`??0EditElement@UI@@QEAA@XZ`, 0x1800d0f10; the real ctor since B.3.9);
 // retail takes its RETURN value as the element. The base applier is the
 // non-virtual `ElementDescription::CreateInstance(InternalPtr<Element>)`
 // (0x180115ad0) — a QUALIFIED member call since fragment pass F2.
@@ -166,11 +173,8 @@ Object::InternalPtr<Element>* EditDescription::CreateInstance(
     void* raw = MemAlloc(0xf8, 8);                           // 1800d0fd1
 
     EditElement* elem = nullptr;
-    if (raw != nullptr) {                                    // 1800d0ffc
-        using EditElementCtorFn = void* (*)(void*);
-        elem = static_cast<EditElement*>(
-            RtAddr<EditElementCtorFn>(0x1800d0f10ull)(raw)); // 1800d1001
-    }
+    if (raw != nullptr)                                      // 1800d0ffc
+        elem = ::new (raw) EditElement();                    // 1800d1001 ??0EditElement
 
     void* slot = elem;                                       // 1800d100d
     UI::ElementDescription::CreateInstance(                   // 1800d101a
@@ -189,97 +193,46 @@ Object::InternalPtr<Element>* EditDescription::CreateInstance(
 }  // namespace UI
 
 // ============================================================================
-// ??1EditDescription@UI@@UEAA@XZ   0x1800d11f0 — a DOOR BODY (no real dtor)
+// ??1EditDescription@UI@@UEAA@XZ   0x1800d11f0 — retail's body, moved here
+// from the retired door (ENDGAME B.3.9 UI-A)
 // ============================================================================
-// TWO String releases (+0x80 then +0x70) under this class's own vtable, then
-// the base vtable and the base's _textName. The +0x68 external is NOT released.
-extern "C" void RtUi_EditDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtEditDescription();                                // 1800d120d
-    ReleaseStringField(p, offsetof(UI::EditDescription, _string80));   // 1800d1210
-    ReleaseStringField(p, offsetof(UI::EditDescription, _string70));   // 1800d1246
-    *v = VtElementDescription();                             // 1800d1277
-    ReleaseStringField(p, offsetof(UI::ElementDescription, _textName)); // 1800d127a
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800d12ac JMP
+// TWO String releases (+0x80 then +0x70). The restamps are the compiler's, and
+// so is the chain into ~ElementDescription (the base's _textName) and
+// ~External (retail's tail JMP at 0x1800d12ac). The +0x68 external is NOT
+// released.
+namespace UI {
+EditDescription::~EditDescription() {
+    uint8_t* p = reinterpret_cast<uint8_t*>(this);
+    ReleaseStringFieldAtomic(p, offsetof(EditDescription, _string80));   // 1800d1210
+    ReleaseStringFieldAtomic(p, offsetof(EditDescription, _string70));   // 1800d1246
 }
+
+// ?CreateNewObject@EditDescription@UI@@SAPEAVBase@Object@@XZ  0x18003f7c0
+// The FACTUI1 row this replaces: MemAlloc(0x88, 8), retail's null branch,
+// then the out-of-line ctor.
+Object::Base* EditDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(EditDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) EditDescription();
+}
+// ?CreateInPlaceObject@EditDescription@UI@@SAPEAVBase@Object@@PEAX@Z  0x18003f840
+Object::Base* EditDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) EditDescription();
+}
+}  // namespace UI
 
 // ============================================================================
-// The registered doors — one QUALIFIED delegation each.
+// Registration: the factory pair only (B39_RULES D2). The slot doors and the
+// ??1 door, read only by the retired minted table / RT_DELDTOR row, are gone.
 // ============================================================================
-extern "C" uint32_t RtUi_EditDescription_Type(const void* self) {
-    return reinterpret_cast<const UI::EditDescription*>(self)->UI::EditDescription::Type();   // B.3.6 bridge
-}
-extern "C" const char* RtUi_EditDescription_TypeName(const void* self) {
-    return reinterpret_cast<const UI::EditDescription*>(self)->UI::EditDescription::TypeName();   // B.3.6 bridge
-}
-extern "C" int32_t RtUi_EditDescription_GetFileVersion(const void* self) {
-    return reinterpret_cast<const UI::EditDescription*>(self)->UI::EditDescription::GetFileVersion();   // B.3.6 bridge
-}
-extern "C" void* RtUi_EditDescription_Construct(void* self) {
-    if (self == nullptr) return nullptr;                     // 18003f873
-    return reinterpret_cast<UI::EditDescription*>(self)->UI::EditDescription::Construct();   // B.3.6 bridge
-}
-extern "C" void* RtUi_EditDescription_Reconstruct(void* self) {
-    return reinterpret_cast<UI::EditDescription*>(self)->UI::EditDescription::Reconstruct();   // B.3.6 bridge
-}
-extern "C" void RtUi_EditDescription_Destruct(void* self) {
-    reinterpret_cast<UI::EditDescription*>(self)->UI::EditDescription::Destruct();   // B.3.6 bridge
-}
-extern "C" bool RtUi_EditDescription_Serialize(void* self, void* stream) {
-    return reinterpret_cast<UI::EditDescription*>(self)->UI::EditDescription::Serialize(stream);   // B.3.6 bridge
-}
-// RDX is the caller's slot; the member writes it and hands it back (B6-2).
-// R8 (the Dialog) is forwarded although the body never reads it.
-extern "C" void** RtUi_EditDescription_CreateInstance(const void* self, void** ret,
-                                                      const void* dialog) {
-    return reinterpret_cast<void**>(
-        reinterpret_cast<const UI::EditDescription*>(self)->UI::EditDescription::CreateInstance(   // B.3.6 bridge
-            reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
-            static_cast<const UI::Dialog*>(dialog)));
-}
-
 int RtUiEditDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@EditDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_EditDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x18003f6b0ull, (void*)&RtUi_EditDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@EditDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_EditDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x18003f6d0ull, (void*)&RtUi_EditDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@EditDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_EditDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x1800d11e0ull, (void*)&RtUi_EditDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@EditDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_EditDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x18003f870ull, (void*)&RtUi_EditDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@EditDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_EditDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x18003f850ull, (void*)&RtUi_EditDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@EditDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_EditDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x18003f880ull, (void*)&RtUi_EditDescription_Destruct);
-
-    RegisterRuntimeExport("??1EditDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_EditDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x1800d11f0ull, (void*)&RtUi_EditDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@EditDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_EditDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x1800d1110ull, (void*)&RtUi_EditDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@EditDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_EditDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x1800d0f90ull, (void*)&RtUi_EditDescription_CreateInstance);
-
+    RegisterRuntimeExport("?CreateNewObject@EditDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::EditDescription::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x18003f7c0ull, (void*)&UI::EditDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@EditDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::EditDescription::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x18003f840ull, (void*)&UI::EditDescription::CreateInPlaceObject);
     return n;
 }

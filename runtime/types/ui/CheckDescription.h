@@ -16,7 +16,7 @@
 // `??_7CheckDescription@UI@@6B@` @ 0x1801572c0, TEN slots (sizeof from
 // `MOV EDX,0xa8` in slot 0 0x1800489c0):
 //
-//   [0] 0x1800489c0  (unexported) vector deleting dtor — RT_DELDTOR row, kept
+//   [0] 0x1800489c0  (unexported) vector deleting dtor — the class's own (B.3.9)
 //   [1] 0x180048680  TypeName
 //   [2] 0x180048660  Type
 //   [3] 0x180111920  GetFileVersion  (`return 0x1104` — NOT the base's 0x104)
@@ -32,6 +32,13 @@
 // section 7). checkdescription.cpp's banner said the DLL exports none — that
 // was wrong; nothing registers it, and `Construct`/`Reconstruct` open-code the
 // same two stores.
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0CheckDescription@UI@@QEAA@XZ` (0x1801115e0) minus its vptr stores;
+// slot 0 is the class's own vector deleting dtor; ~CheckDescription is protected and
+// non-virtual. The factory pair is the class's own; the minted
+// `??_7CheckDescription@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
+// the doors are retired.
 // ============================================================================
 
 #include <cstdint>
@@ -40,13 +47,36 @@
 
 #include "ButtonDescription.h"
 #include "DescriptionsBatch1.h"   // kVtbl* names; RtUI::CheckDescription aliases this class
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI {
 
 class CheckDescription : public ButtonDescription {
 public:
+    // ??0CheckDescription@UI@@QEAA@XZ 0x1801115e0 — the REAL constructor, the
+    // same stores Construct / Reconstruct inline: CALL ??0ButtonDescription
+    // (ButtonDescription()), then +0xa0 zero (0x1800488cc).
+    CheckDescription() : ButtonDescription() {
+        _checkDesc = nullptr;
+    }
+
     // ---- the ten slots, in measured order ---------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x1800489c0
+    // [0] 0x1800489c0 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0xa8`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<CheckDescription*>(self + static_cast<int64_t>(i) * 0xa8)
+                    ->~CheckDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~CheckDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180048680
     uint32_t    Type() const override;                            // [2] 0x180048660
     int32_t     GetFileVersion() const override;                  // [3] 0x180111920
@@ -63,15 +93,14 @@ public:
     CheckDescription(const CheckDescription& src);                // 0x180048900  not ported
     CheckDescription& operator=(const CheckDescription& src);     // 0x180048950  not ported
 
-    static uint32_t TypeId();                                     // 0x180048670  not ported
-    static Object::Base* CreateNewObject();                       // 0x180048770  factory_ui1.cpp door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180048800  factory_ui1.cpp door
+    static uint32_t TypeId();                                     // 0x180048670  ported over the minted record
+    static Object::Base* CreateNewObject();                       // 0x180048770  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x180048800  the class's own (B39 D2)
 
 protected:
-    // NOT retail's `??0CheckDescription@UI@@QEAA@XZ` (0x1801115e0, unported).
-    CheckDescription() = default;
-    // `??1CheckDescription@UI@@UEAA@XZ` (0x180111620), declared only; the
-    // retail body is the door `RtUi_CheckDescription_Dtor`.
+    // `??1CheckDescription@UI@@UEAA@XZ` (0x180111620). NON-VIRTUAL and EMPTY
+    // (checkdescription.cpp): three restamps and the base's +0x60, all the
+    // compiler's chain; the +0xa0 child description is NOT released.
     ~CheckDescription();
 
 private:
@@ -88,6 +117,7 @@ static_assert(sizeof(CheckDescription) == 0xa8,
               "UI::CheckDescription is 0xa8 bytes (MOV EDX,0xa8 in 0x1800489c0)");
 static_assert(alignof(CheckDescription) == 8, "UI::CheckDescription aligns to 8");
 static_assert(!std::has_virtual_destructor<CheckDescription>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<CheckDescription>::value, "B39 D1: concrete");
 static_assert(offsetof(CheckDescription, _checkDesc) == sizeof(ButtonDescription), "");
 static_assert(offsetof(CheckDescription, _checkDesc) == 0xa0, "");
 

@@ -3,7 +3,7 @@
 // ============================================================================
 //
 // ??_7ClipRegionDescription@UI@@6B@ (retail 0x180156350), ten slots:
-//   0  deleting dtor      0x180037eb0  runtime/src/object/deleting_dtor.cpp row
+//   0  deleting dtor      0x180037eb0  ClipRegionDescription.h (the class's own)
 //   1  TypeName           0x180037990  here
 //   2  Type               0x180037970  here
 //   3  GetFileVersion     0x1800cc0c0  here  (returns 0x104)
@@ -17,23 +17,21 @@
 //
 // ENDGAME B.3.6 block C1: the bodies are MEMBERS of
 // `UI::ClipRegionDescription` (runtime/types/ui/ClipRegionDescription.h); the
-// doors are one-line QUALIFIED delegations.
+// doors were one-line QUALIFIED delegations; ENDGAME B.3.9 UI-A retired them
+// with the minted table (the class is concrete, ClipRegionDescription.h).
 //
 // ----------------------------------------------------------------------------
 // THE CONSTRUCTOR IS INLINED INTO Construct / Reconstruct / both factory steps
 // ----------------------------------------------------------------------------
-// Each open-codes the same store sequence; the kClipRegionDescription row in
-// runtime/src/ui/factory_ui1_tables.inc has a null ctor for that reason.
+// Each open-codes the same store sequence. ENDGAME B.3.9 UI-A: that sequence
+// is the real ctor now (ClipRegionDescription.h), and all four sites are
+// `::new (p) ClipRegionDescription()`.
 // (`??0ClipRegionDescription@UI@@QEAA@XZ` DOES exist and IS exported —
 // 0x1800cc140, B36_SLOTS.md sections 6/7 — the old banner here said it did
-// not. Nothing calls it from the tree.) `ConstructBody` below is that sequence
-// written once, transcribed from 0x180037cfa..0x180037d78. Two details
-// Ghidra's C loses:
-//   * `+0x40` is written as ONE QWORD holding 3 (`MOV qword [RCX+0x40],3` at
-//     0x180037d44), covering both dwords there;
-//   * `+0x38` and `+0x3c` are two SEPARATE DWORDS (0 and -1).
-// The three dead base-vtable stamps (Base, then External over it unread, then
-// ElementDescription) are reproduced.
+// not. Nothing calls it from the tree.) The sequence, 0x180037cfa..0x180037d78:
+// the base stores ElementDescription() makes (`+0x40` as ONE QWORD holding 3,
+// `+0x38` / `+0x3c` two separate DWORDs 0 and -1), then the class's own three.
+// The dead Base / External / ElementDescription stamps are the compiler's.
 //
 // Layout: runtime/types/ui/ClipRegionDescription.h over DescriptionsBatch1.h.
 // sizeof 0x78. Both ints start at 0x64 — 100, the default clip extent.
@@ -61,70 +59,20 @@ void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 
-std::atomic<void*> g_vtBase{nullptr};
-std::atomic<void*> g_vtExternal{nullptr};
-std::atomic<void*> g_vtElementDescription{nullptr};
-std::atomic<void*> g_vtClipRegionDescription{nullptr};
-std::atomic<void*> g_vtClipRegionElement{nullptr};
 std::atomic<void*> g_clipTypeInfo{nullptr};
 
-void* VtBaseAtomic()     { return AtomicResolve(g_vtBase, "??_7Base@Object@@6B@"); }
-void* VtExternalAtomic() { return AtomicResolve(g_vtExternal, "??_7External@Object@@6B@"); }
-void* VtElementDescriptionAtomic() {
-    return AtomicResolve(g_vtElementDescription, "??_7ElementDescription@UI@@6B@");
-}
-void* VtClipRegionDescription() {
-    return AtomicResolve(g_vtClipRegionDescription, RtUI::kVtblClipRegionDescription);
-}
-void* VtClipRegionElement() {
-    return AtomicResolve(g_vtClipRegionElement, RtUI::kVtblClipRegionElement);
-}
 const uint8_t* ClipRegionTypeInfo() {
     return static_cast<const uint8_t*>(AtomicResolve(
         g_clipTypeInfo, "?_typeInfo@ClipRegionDescription@UI@@0VBaseTypeInfo@Object@@A"));
 }
 
-// The inlined constructor, over raw bytes: it writes the vptr three times and
-// every byte of the base, which no field-by-field member spelling can express.
-void ConstructBody(uint8_t* p) {
-    void** v = reinterpret_cast<void**>(p);
-
-    *v = VtBaseAtomic();                                    // 180037d01
-    *v = VtExternalAtomic();                                // 180037d0b
-    // `LEA RAX,[RCX+8]` then `MOV [RAX],RDX` — retail writes +0x08 through an
-    // intermediate pointer (the SEH frame's visible temporary) and +0x10/+0x18
-    // directly. Byte-identical; the temporary costs nothing to drop.
-    *reinterpret_cast<uint64_t*>(p + 0x08) = 0;             // 180037d19
-    *reinterpret_cast<uint64_t*>(p + 0x10) = 0;             // 180037d1c
-    *reinterpret_cast<uint64_t*>(p + 0x18) = 0;             // 180037d20
-    *v = VtElementDescriptionAtomic();                      // 180037d2b
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;             // 180037d2e
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;             // 180037d32
-    *reinterpret_cast<uint64_t*>(p + 0x30) = 0;             // 180037d36
-    *reinterpret_cast<int32_t*>(p + 0x38)  = 0;             // 180037d3a  DWORD
-    *reinterpret_cast<int32_t*>(p + 0x3c)  = -1;            // 180037d3d  DWORD
-    *reinterpret_cast<uint64_t*>(p + 0x40) = 3;             // 180037d44  ONE QWORD
-    *reinterpret_cast<uint64_t*>(p + 0x48) = 0;             // 180037d4c
-    *reinterpret_cast<uint64_t*>(p + 0x50) = 0;             // 180037d50
-    *reinterpret_cast<uint64_t*>(p + 0x58) = 0;             // 180037d54
-    *reinterpret_cast<uint64_t*>(p + 0x60) = 0;             // 180037d58
-    *v = VtClipRegionDescription();                         // 180037d63
-    *reinterpret_cast<int32_t*>(p + 0x68)  = 0x64;          // 180037d66  DWORD
-    *reinterpret_cast<int32_t*>(p + 0x6c)  = 0x64;          // 180037d6d  DWORD
-    *reinterpret_cast<uint64_t*>(p + 0x70) = 0;             // 180037d74
-}
-static_assert(offsetof(UI::ClipRegionDescription, _width) == 0x68 &&
-              offsetof(UI::ClipRegionDescription, _childDesc) == 0x70,
-              "ConstructBody's tail stores are the class's fields");
-
-// The dtor door only.
-void* VtClipRegionDescriptionDoor() { return RT_DATA_SLOT(void*, RtUI::kVtblClipRegionDescription); }
-
 }  // namespace
 
 namespace UI {
 
-uint32_t ClipRegionDescription::Type() const {
+uint32_t ClipRegionDescription::Type() const { return TypeId(); }
+// ?TypeId@ClipRegionDescription@UI@@SAIXZ 0x180037980 — the record's first dword.
+uint32_t ClipRegionDescription::TypeId() {
     const uint8_t* ti = ClipRegionTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
@@ -134,16 +82,15 @@ const char* ClipRegionDescription::TypeName() const {
 }
 int32_t ClipRegionDescription::GetFileVersion() const { return 0x104; }
 
-// 0x180037ce0 (the null test at 0x180037cf4 is the DOOR's).
+// 0x180037ce0: the inlined constructor (the null test at 0x180037cf4 sat in
+// the retired door; a virtual call always has a `this`).
 Object::External* ClipRegionDescription::Construct() {
-    ConstructBody(reinterpret_cast<uint8_t*>(this));
-    return this;                                            // 180037d78
+    return ::new (this) ClipRegionDescription();            // 180037cfa..180037d78
 }
-// 0x180037c30: slot 0 with flag 0, then the same body. No null test.
+// 0x180037c30: slot 0 with flag 0, then the same inlined ctor. No null test.
 Object::External* ClipRegionDescription::Reconstruct() {
     DeletingDtor(0);                                        // 180037c47
-    ConstructBody(reinterpret_cast<uint8_t*>(this));
-    return this;                                            // 180037ccc
+    return ::new (this) ClipRegionDescription();
 }
 void ClipRegionDescription::Destruct() { DeletingDtor(0); }
 
@@ -175,13 +122,14 @@ bool ClipRegionDescription::Serialize(void* streamv) {
 // ============================================================================
 // RCX = this, RDX = the hidden return slot, R8 = Dialog* (RULE B6-2).
 //
-// ClipRegionElement is 0xd8 and its constructor is INLINED here, with THREE
+// ClipRegionElement is 0xd8 and its constructor is INLINED here (the real
+// ctor in ClipRegionElement.h makes the same stores), with THREE
 // stores whose widths are not uniform and one of which is UNALIGNED:
 //     1800cbf42  MOV dword [RDI+0xc0],0x64
 //     1800cbf4c  MOV qword [RDI+0xc4],0x64     <- UNALIGNED, covers +0xc4/+0xc8
 //     1800cbf59  MOV qword [RDI+0xcc],0        <- UNALIGNED, covers +0xcc/+0xd0
 //     1800cbf60  MOV dword [RDI+0xd4],0
-// The two overlapping qwords are written as memcpy at the exact offsets.
+// The two overlapping qwords cover exactly the six int fields the ctor sets.
 //
 // THE NULL-ALLOCATION ARM CLEARS ONLY THE LOW 32 BITS (`XOR EAX,EAX ;
 // MOV EDI,EAX` at 0x1800cbf68) — which zeroes all 64 on x64, so it is the same
@@ -192,18 +140,8 @@ Object::InternalPtr<Element>* ClipRegionDescription::CreateInstance(
     void* raw = MemAlloc(0xd8, 8);                          // 1800cbf02
 
     ClipRegionElement* elem = nullptr;
-    if (raw != nullptr) {                                   // 1800cbf2d
-        ElementCtor(raw);                                   // 1800cbf32
-        ClipRegionElement* e = reinterpret_cast<ClipRegionElement*>(raw);   // B.3.6 bridge
-        uint8_t* eb = static_cast<uint8_t*>(raw);
-        *reinterpret_cast<void**>(e) = VtClipRegionElement();       // 1800cbf3f
-        e->_reqWidth = 0x64;                                        // 1800cbf42
-        const uint64_t k64 = 0x64, kZero = 0;
-        __builtin_memcpy(eb + offsetof(ClipRegionElement, _reqHeight), &k64, 8);   // 1800cbf4c
-        __builtin_memcpy(eb + offsetof(ClipRegionElement, _innerHeight), &kZero, 8); // 1800cbf59
-        e->_offsetY = 0;                                            // 1800cbf60
-        elem = e;
-    }
+    if (raw != nullptr)                                     // 1800cbf2d
+        elem = ::new (raw) ClipRegionElement();             // 1800cbf32 .. 1800cbf60 (inlined ctor)
 
     void* slot = static_cast<Element*>(elem);               // 1800cbf6c
     UI::ElementDescription::CreateInstance(                   // 1800cbf79
@@ -224,103 +162,44 @@ Object::InternalPtr<Element>* ClipRegionDescription::CreateInstance(
 }  // namespace UI
 
 // ============================================================================
-// The DOORS
+// ??1ClipRegionDescription@UI@@UEAA@XZ   0x1800cc0d0
 // ============================================================================
-extern "C" uint32_t RtUi_ClipRegionDescription_Type(const void* self) {
-    return reinterpret_cast<const UI::ClipRegionDescription*>(self)      // B.3.6 bridge
-        ->UI::ClipRegionDescription::Type();
-}
-extern "C" const char* RtUi_ClipRegionDescription_TypeName(const void* self) {
-    return reinterpret_cast<const UI::ClipRegionDescription*>(self)      // B.3.6 bridge
-        ->UI::ClipRegionDescription::TypeName();
-}
-extern "C" int32_t RtUi_ClipRegionDescription_GetFileVersion(const void* self) {
-    return reinterpret_cast<const UI::ClipRegionDescription*>(self)      // B.3.6 bridge
-        ->UI::ClipRegionDescription::GetFileVersion();
-}
+// Retail's body releases nothing of its own: restamp, restamp the base, the
+// base's `_textName` (+0x60), then the tail JMP into ~External (0x1800cc12c).
+// ENDGAME B.3.9 UI-A: the body is EMPTY and the compiler chains
+// ~ElementDescription (the +0x60 release) and ~External; the retired door did
+// the same by hand.
+namespace UI {
+ClipRegionDescription::~ClipRegionDescription() {}
 
-extern "C" void* RtUi_ClipRegionDescription_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                   // 180037cf4
-    return reinterpret_cast<UI::ClipRegionDescription*>(selfv)           // B.3.6 bridge
-        ->UI::ClipRegionDescription::Construct();
+// ?CreateNewObject@ClipRegionDescription@UI@@SAPEAVBase@Object@@XZ  0x180037a80
+// The FACTUI1 row this replaces: `?MemAlloc@MemoryAllocator@System@@`
+// (0x1800c7a50) of 0x78 bytes, align 8; retail's null branch; then the
+// inlined constructor.
+Object::Base* ClipRegionDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ClipRegionDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) ClipRegionDescription();
 }
-extern "C" void* RtUi_ClipRegionDescription_Reconstruct(void* selfv) {
-    return reinterpret_cast<UI::ClipRegionDescription*>(selfv)           // B.3.6 bridge
-        ->UI::ClipRegionDescription::Reconstruct();
+// ?CreateInPlaceObject@ClipRegionDescription@UI@@SAPEAVBase@Object@@PEAX@Z  0x180037b80
+Object::Base* ClipRegionDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) ClipRegionDescription();
 }
-extern "C" void RtUi_ClipRegionDescription_Destruct(void* selfv) {
-    reinterpret_cast<UI::ClipRegionDescription*>(selfv)                  // B.3.6 bridge
-        ->UI::ClipRegionDescription::Destruct();
-}
+}  // namespace UI
 
 // ============================================================================
-// ??1ClipRegionDescription@UI@@UEAA@XZ   0x1800cc0d0   — a DTOR DOOR (B4b-2)
+// Registration. ENDGAME B.3.9 UI-A: the eight slot doors and the ??1 door are
+// gone -- their only reader was the minted `??_7ClipRegionDescription@UI@@6B@`
+// (and its RT_DELDTOR row). The factory pair (B39_RULES D2) is the class's own.
 // ============================================================================
-extern "C" void RtUi_ClipRegionDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtClipRegionDescriptionDoor();                     // 1800cc0ed
-    *v = VtElementDescription();                            // 1800cc0f7
-    ReleaseStringField(p, 0x60);                            // 1800cc0fa
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800cc12c JMP
-}
-
-extern "C" bool RtUi_ClipRegionDescription_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<UI::ClipRegionDescription*>(selfv)           // B.3.6 bridge
-        ->UI::ClipRegionDescription::Serialize(streamv);
-}
-
-extern "C" void** RtUi_ClipRegionDescription_CreateInstance(const void* selfv,
-                                                            void** ret,
-                                                            const void* dialog) {
-    return reinterpret_cast<void**>(
-        reinterpret_cast<const UI::ClipRegionDescription*>(selfv)        // B.3.6 bridge
-            ->UI::ClipRegionDescription::CreateInstance(
-                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
-                static_cast<const UI::Dialog*>(dialog)));
-}
-
 int RtUiClipRegionDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@ClipRegionDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_ClipRegionDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x180037970ull, (void*)&RtUi_ClipRegionDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@ClipRegionDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_ClipRegionDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x180037990ull, (void*)&RtUi_ClipRegionDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@ClipRegionDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_ClipRegionDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x1800cc0c0ull, (void*)&RtUi_ClipRegionDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@ClipRegionDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_ClipRegionDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x180037ce0ull, (void*)&RtUi_ClipRegionDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@ClipRegionDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_ClipRegionDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x180037c30ull, (void*)&RtUi_ClipRegionDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@ClipRegionDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_ClipRegionDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x180037d90ull, (void*)&RtUi_ClipRegionDescription_Destruct);
-
-    RegisterRuntimeExport("??1ClipRegionDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_ClipRegionDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x1800cc0d0ull, (void*)&RtUi_ClipRegionDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@ClipRegionDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_ClipRegionDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x1800cc010ull, (void*)&RtUi_ClipRegionDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@ClipRegionDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_ClipRegionDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x1800cbec0ull, (void*)&RtUi_ClipRegionDescription_CreateInstance);
-
+    RegisterRuntimeExport("?CreateNewObject@ClipRegionDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::ClipRegionDescription::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x180037a80ull, (void*)&UI::ClipRegionDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@ClipRegionDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::ClipRegionDescription::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x180037b80ull, (void*)&UI::ClipRegionDescription::CreateInPlaceObject);
     return n;
 }

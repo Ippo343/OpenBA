@@ -5,14 +5,14 @@
 // `??_7RadioElement@UI@@6B@` (retail 0x1801573c0). Slots 4/5/6 are
 // `UI::GroupElement`'s (groupelement.cpp), which the class does not override:
 //
-//   0  vector deleting dtor  0x180047d50  -> deleting_dtor.cpp row
+//   0  vector deleting dtor  0x180047d50  -> RadioElement.h (the class's own)
 //   1  TypeName              0x180047a00  here
 //   2  Type                  0x1800479e0  here
 //   4..6                     GroupElement's
 //   7  Update                0x1800d5580  here
 //
-// plus ??0RadioElement (0x1800d5870) and ??1RadioElement (0x1800d5820), both
-// DOORS (B4b-2).
+// plus ??0RadioElement (0x1800d5870, the real ctor in the header since B.3.9),
+// ??1RadioElement (0x1800d5820) and the factory pair.
 //
 // NOT HERE: the two `?FindCheckBoxes@RadioElement@UI@@` (public 0x180047c00,
 // private 0x1800d5750) and `?SetActiveRadio@` (0x1800d56f0) — widgets_input.cpp
@@ -25,6 +25,10 @@
 // registered doors are one-line QUALIFIED delegations. Update's base call (the
 // by-address `ElementUpdate` door before) is the qualified member
 // `GroupElement::Update`, i.e. `Element::Update` (0x180116270).
+//
+// ENDGAME B.3.9 block UI-A: the class is CONCRETE; the slot doors and the
+// ??0 / ??1 doors, read only by the retired minted table, its RT_DELDTOR row and
+// ui_factory_wave28.cpp's row, are gone.
 // ============================================================================
 
 #include <atomic>
@@ -36,11 +40,6 @@
 using namespace rtui;
 
 namespace {
-
-constexpr int kCheckBoxes  = 0xC0;
-constexpr int kActiveIndex = 0xD0;
-static_assert(kCheckBoxes  == offsetof(UI::RadioElement, _checkBoxes), "");
-static_assert(kActiveIndex == offsetof(UI::RadioElement, _activeIndex), "");
 
 constexpr int kCheckBoxChecked = 0xD8;   // CheckElement's own "is checked" byte
 
@@ -76,15 +75,13 @@ const uint8_t* RadioElementTypeInfo() {
     return static_cast<const uint8_t*>(p);
 }
 
-// Door-only.
-void* Vtable()      { return RT_DATA_SLOT(void*, "??_7RadioElement@UI@@6B@"); }
-void* VtableGroup() { return RT_DATA_SLOT(void*, "??_7GroupElement@UI@@6B@"); }
-
 }  // namespace
 
 namespace UI {
 
-uint32_t RadioElement::Type() const {                           // 0x1800479e0
+uint32_t RadioElement::Type() const { return TypeId(); }       // 0x1800479e0
+// ?TypeId@RadioElement@UI@@SAIXZ 0x1800479f0 — the record's first dword.
+uint32_t RadioElement::TypeId() {
     const uint8_t* ti = RadioElementTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
@@ -101,8 +98,8 @@ const char* RadioElement::TypeName() const {                    // 0x180047a00
 // becomes the selection (if it is now checked) or clears it (-1). On a change
 // the other boxes are unchecked and ONE event of kind 0x16 is queued.
 //
-// The base call is QUALIFIED (this object wears the minted table, whose slot
-// 7 is this very function). The handle is copied into a local and the local's
+// The base call is QUALIFIED (slot 7 of this object's table is this very
+// function). The handle is copied into a local and the local's
 // ADDRESS forwarded, as retail's frame does (RULE B6-11).
 // ---------------------------------------------------------------------------
 void RadioElement::Update(const System::Time& time, UserInterface* ui,
@@ -152,68 +149,42 @@ void RadioElement::Update(const System::Time& time, UserInterface* ui,
         B(ui, kUiEvents), I32(ui, kUiEventCount) + 1, &ev);
 }
 
+// ============================================================================
+// ??1RadioElement@UI@@UEAA@XZ   0x1800d5820
+// ============================================================================
+// Retail: own stamp, the check-box array's J1 `~Array` (0x1800490e0), the
+// GroupElement stamp, ~Element. ENDGAME B.3.9 UI-A: EMPTY; the member
+// `_checkBoxes.~Array()` is that J1 body for a trivially destructible element
+// (Collection.h), and the restamps and ~Element are the compiler's chain
+// through ~GroupElement.
+RadioElement::~RadioElement() {}
+
+// ?CreateNewObject@RadioElement@UI@@SAPEAVBase@Object@@XZ  0x180047af0
+// The factory-interpreter row this replaces: MemAlloc(0xd8, 8), retail's
+// null branch, then the out-of-line ctor ??0RadioElement (0x1800d5870).
+Object::Base* RadioElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(RadioElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) RadioElement();
+}
+// ?CreateInPlaceObject@RadioElement@UI@@SAPEAVBase@Object@@PEAX@Z  0x180047ba0
+Object::Base* RadioElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) RadioElement();
+}
+
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — each a one-line QUALIFIED delegation.
-// ============================================================================
-extern "C" uint32_t RtUi_RadioElement_Type(const void* self) {
-    return reinterpret_cast<const UI::RadioElement*>(self)->UI::RadioElement::Type();       // B.3.6 bridge
-}
-extern "C" const char* RtUi_RadioElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::RadioElement*>(self)->UI::RadioElement::TypeName();   // B.3.6 bridge
-}
-extern "C" void RtUi_RadioElement_Update(void* self, const void* time, void* ui,
-                                         void** dlgPtr, const void* state) {
-    reinterpret_cast<UI::RadioElement*>(self)->UI::RadioElement::Update(                   // B.3.6 bridge
-        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr),
-        *static_cast<const UI::Element::UpdateState*>(state));
-}
-
-// ??0RadioElement@UI@@QEAA@XZ   0x1800d5870   — a CTOR DOOR (B4b-2)
-extern "C" void* RtUi_RadioElement_Ctor(void* self) {   // returns this in RAX, as every MSVC ctor does
-    ElementCtor(self);
-    PTR(self, 0x00) = VtableGroup();
-    PTR(self, 0x00) = Vtable();
-    PTR(self, kCheckBoxes)     = nullptr;
-    PTR(self, kCheckBoxes + 8) = nullptr;   // size and capacity, one qword
-    I32(self, kActiveIndex)    = -1;
-    return self;
-}
-
-// ??1RadioElement@UI@@UEAA@XZ   0x1800d5820   — a DTOR DOOR (B4b-2)
-extern "C" void RtUi_RadioElement_Dtor(void* self) {
-    PTR(self, 0x00) = Vtable();
-    RtAddr<ArrayDtorFn>(0x1800490e0ull)(B(self, kCheckBoxes));
-    PTR(self, 0x00) = VtableGroup();
-    ElementDtor(self);
-}
-
+// Registration: the factory pair only (B39_RULES D2).
 // ============================================================================
 int RtUiRadioElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@RadioElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_RadioElement_Type);        ++n;
-    RegisterRuntimeAddr(0x1800479e0ull, (void*)&RtUi_RadioElement_Type);
-
-    RegisterRuntimeExport("?TypeName@RadioElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_RadioElement_TypeName);    ++n;
-    RegisterRuntimeAddr(0x180047a00ull, (void*)&RtUi_RadioElement_TypeName);
-
-    RegisterRuntimeExport("??0RadioElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_RadioElement_Ctor);        ++n;
-    RegisterRuntimeAddr(0x1800d5870ull, (void*)&RtUi_RadioElement_Ctor);
-
-    RegisterRuntimeExport("??1RadioElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_RadioElement_Dtor);        ++n;
-    RegisterRuntimeAddr(0x1800d5820ull, (void*)&RtUi_RadioElement_Dtor);
-
-    RegisterRuntimeExport(
-        "?Update@RadioElement@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@"
-        "V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@Element@2@@Z",
-        (void*)&RtUi_RadioElement_Update);                        ++n;
-    RegisterRuntimeAddr(0x1800d5580ull, (void*)&RtUi_RadioElement_Update);
-
+    RegisterRuntimeExport("?CreateNewObject@RadioElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::RadioElement::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x180047af0ull, (void*)&UI::RadioElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@RadioElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::RadioElement::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x180047ba0ull, (void*)&UI::RadioElement::CreateInPlaceObject);
     return n;
 }

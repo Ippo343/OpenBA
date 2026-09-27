@@ -56,10 +56,6 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-void* VtBase()               { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* VtExternal()           { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* VtElementDescription() { return RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@"); }
-void* VtSliderDescription()  { return RT_DATA_SLOT(void*, "??_7SliderDescription@UI@@6B@"); }
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
@@ -98,66 +94,7 @@ void ReleaseStringField(char** field) {
 
 }  // namespace
 
-// ============================================================================
-// ??0SliderDescription@UI@@QEAA@XZ   retail 0x1800d7b60
-// ============================================================================
-extern "C" void* RtUi_SliderDescription_Ctor(void* selfv) {
-    uint8_t* p = static_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
 
-    *v = VtBase();                                              // 1800d7b71
-    *v = VtExternal();                                          // 1800d7b7b
-    *reinterpret_cast<uint64_t*>(p + 0x08) = 0;                 // 1800d7b90
-    *reinterpret_cast<uint64_t*>(p + 0x10) = 0;                 // 1800d7b93
-    *reinterpret_cast<uint64_t*>(p + 0x18) = 0;                 // 1800d7b97
-    *v = VtElementDescription();                                // 1800d7b9b
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;                 // 1800d7ba5
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;                 // 1800d7ba9
-    *reinterpret_cast<uint64_t*>(p + 0x30) = 0;                 // 1800d7bad
-    *reinterpret_cast<int32_t*>(p + 0x38)  = 0;                 // 1800d7bb1  DWORD
-    *reinterpret_cast<int32_t*>(p + 0x3c)  = -1;                // 1800d7bb4  DWORD
-    *reinterpret_cast<uint64_t*>(p + 0x40) = 3;                 // 1800d7bbb  ONE QWORD
-    *reinterpret_cast<uint64_t*>(p + 0x48) = 0;                 // 1800d7bc3
-    *reinterpret_cast<uint64_t*>(p + 0x50) = 0;                 // 1800d7bc7
-    *reinterpret_cast<uint64_t*>(p + 0x58) = 0;                 // 1800d7bcb
-    *reinterpret_cast<uint64_t*>(p + 0x60) = 0;                 // 1800d7bcf
-    *v = VtSliderDescription();                                 // 1800d7bd3
-    *reinterpret_cast<uint64_t*>(p + 0x68) = 0;                 // 1800d7bdd
-    *reinterpret_cast<uint64_t*>(p + 0x70) = 0;                 // 1800d7be1
-    *reinterpret_cast<uint64_t*>(p + 0x78) = 0;                 // 1800d7be5
-    *reinterpret_cast<uint64_t*>(p + 0x80) = 0;                 // 1800d7be9
-    *reinterpret_cast<uint64_t*>(p + 0x88) = 0;                 // 1800d7bf0
-    *reinterpret_cast<uint64_t*>(p + 0x90) = 0;                 // 1800d7bf7
-    *reinterpret_cast<uint64_t*>(p + 0x98) = 0;                 // 1800d7bfe
-    *reinterpret_cast<uint64_t*>(p + 0xa0) = 0;                 // 1800d7c05  _i a0 + a4
-    *reinterpret_cast<int32_t*>(p + 0xa8)  = 0;                 // 1800d7c0c  DWORD (0.0f)
-    *reinterpret_cast<int32_t*>(p + 0xac)  = 0x3f800000;        // 1800d7c12  1.0f, stored
-                                                                //            as an integer
-    *reinterpret_cast<int32_t*>(p + 0xb0)  = 0xa;               // 1800d7c1c
-    return p;                                                   // 1800d7c26
-}
-
-// ??1SliderDescription@UI@@UEAA@XZ  0x1800d7a00
-extern "C" void RtUi_SliderDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtSliderDescription();                                // 1800d7a1b
-
-    // REVERSE ORDER, 0x98 down to 0x78 — retail's, and the order is visible in
-    // the addresses below.
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x98));    // 1800d7a25
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x90));    // 1800d7a58
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x88));    // 1800d7a8a
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x80));    // 1800d7abc
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x78));    // 1800d7aee
-
-    *v = VtElementDescription();                               // 1800d7b14
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x60));    // 1800d7b1e
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800d7b51 JMP
-}
 
 // ============================================================================
 // The MEMBERS
@@ -203,16 +140,20 @@ const char* SliderDescription::TypeName() const {
 uint32_t SliderDescription::Type() const {
     uint32_t v = 0; __builtin_memcpy(&v, SliderTypeInfo(), sizeof v); return v;
 }
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t SliderDescription::TypeId() {
+    uint32_t v = 0; __builtin_memcpy(&v, SliderTypeInfo(), sizeof v); return v;
+}
 int32_t SliderDescription::GetFileVersion() const { return 0x304; }
 
-// [9] 0x1800498f0 — the null-`this` test stays in the door.
+// [9] 0x1800498f0 — the ctor, placement (the null test sat in the retired door).
 Object::External* SliderDescription::Construct() {
-    return reinterpret_cast<Object::External*>(RtUi_SliderDescription_Ctor(this));
+    return ::new (this) SliderDescription();
 }
 // [6] 0x1800498d0 — destroy in place through slot 0 (flag 0), re-run the ctor.
 Object::External* SliderDescription::Reconstruct() {
     DeletingDtor(0);
-    return reinterpret_cast<Object::External*>(RtUi_SliderDescription_Ctor(this));
+    return ::new (this) SliderDescription();
 }
 // [7] 0x180049900
 void SliderDescription::Destruct() { DeletingDtor(0); }
@@ -282,11 +223,8 @@ Object::InternalPtr<Element>* SliderDescription::CreateInstance(
     void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0x130, 8);          // 1800d7679 (inlined)
 
     SliderElement* elem = static_cast<SliderElement*>(raw);
-    if (raw != nullptr) {                                               // 1800d76a3
-        using SliderElementCtorFn = void* (*)(void*);
-        elem = static_cast<SliderElement*>(
-            RtAddr<SliderElementCtorFn>(0x1800d7570ull)(raw));          // 1800d76a8
-    }
+    if (raw != nullptr)                                                 // 1800d76a3
+        elem = ::new (raw) SliderElement();                             // 1800d76a8 ??0 (out of line)
 
     void* slot = elem;                                                  // 1800d76b0
     // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
@@ -343,85 +281,51 @@ Object::InternalPtr<Element>* SliderDescription::CreateInstance(
     return ret;
 }
 
+// ??1SliderDescription@UI@@UEAA@XZ  0x1800d7a00 — retail's body, moved from
+// the retired door (ENDGAME B.3.9 UI-B): the five Strings in REVERSE order,
+// 0x98 down to 0x78. The restamps, the base's _textName (+0x60) and the tail
+// JMP into ~External are the compiler's chain.
+SliderDescription::~SliderDescription() {
+    uint8_t* p = reinterpret_cast<uint8_t*>(this);
+    ReleaseStringField(reinterpret_cast<char**>(p + 0x98));    // 1800d7a25
+    ReleaseStringField(reinterpret_cast<char**>(p + 0x90));    // 1800d7a58
+    ReleaseStringField(reinterpret_cast<char**>(p + 0x88));    // 1800d7a8a
+    ReleaseStringField(reinterpret_cast<char**>(p + 0x80));    // 1800d7abc
+    ReleaseStringField(reinterpret_cast<char**>(p + 0x78));    // 1800d7aee
+}
+
+// ?CreateNewObject@SliderDescription@UI@@SAPEAVBase@Object@@XZ 0x180049840 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0xb8, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* SliderDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(SliderDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) SliderDescription();
+}
+// ?CreateInPlaceObject@SliderDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x1800498c0
+Object::Base* SliderDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) SliderDescription();
+}
+
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
+// ENDGAME B.3.9 UI-B: the slot doors, the ctor / dtor doors and the
+// factory-interpreter row are gone. Their only readers were the minted
+// `??_7SliderDescription@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
+// SliderDescription now wears the compiler's table.
 // ============================================================================
-extern "C" uint32_t RtUi_SliderDescription_Type(const void* self) {
-    return reinterpret_cast<const UI::SliderDescription*>(self)->UI::SliderDescription::Type();
-}
-extern "C" const char* RtUi_SliderDescription_TypeName(const void* self) {
-    return reinterpret_cast<const UI::SliderDescription*>(self)->UI::SliderDescription::TypeName();
-}
-extern "C" int32_t RtUi_SliderDescription_GetFileVersion(const void* self) {
-    return reinterpret_cast<const UI::SliderDescription*>(self)
-        ->UI::SliderDescription::GetFileVersion();
-}
-extern "C" void* RtUi_SliderDescription_Construct(void* self) {
-    if (self == nullptr) return nullptr;                                // 1800498f0 (retail null test)
-    return reinterpret_cast<UI::SliderDescription*>(self)->UI::SliderDescription::Construct();
-}
-extern "C" void* RtUi_SliderDescription_Reconstruct(void* self) {
-    return reinterpret_cast<UI::SliderDescription*>(self)->UI::SliderDescription::Reconstruct();
-}
-extern "C" void RtUi_SliderDescription_Destruct(void* self) {
-    reinterpret_cast<UI::SliderDescription*>(self)->UI::SliderDescription::Destruct();
-}
-extern "C" bool RtUi_SliderDescription_Serialize(void* self, void* stream) {
-    return reinterpret_cast<UI::SliderDescription*>(self)->UI::SliderDescription::Serialize(stream);
-}
-extern "C" void** RtUi_SliderDescription_CreateInstance(const void* self, void** ret,
-                                                        const void* dialog) {
-    return reinterpret_cast<void**>(
-        reinterpret_cast<const UI::SliderDescription*>(self)
-            ->UI::SliderDescription::CreateInstance(
-                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
-                static_cast<const UI::Dialog*>(dialog)));
-}
 
 int RtUiSliderDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@SliderDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_SliderDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x180049730ull, (void*)&RtUi_SliderDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@SliderDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_SliderDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x180049750ull, (void*)&RtUi_SliderDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@SliderDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_SliderDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x1800d79f0ull, (void*)&RtUi_SliderDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@SliderDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_SliderDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x1800498f0ull, (void*)&RtUi_SliderDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@SliderDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_SliderDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x1800498d0ull, (void*)&RtUi_SliderDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@SliderDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_SliderDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x180049900ull, (void*)&RtUi_SliderDescription_Destruct);
-
-    RegisterRuntimeExport("??0SliderDescription@UI@@QEAA@XZ",
-                          (void*)&RtUi_SliderDescription_Ctor);            ++n;
-    RegisterRuntimeAddr(0x1800d7b60ull, (void*)&RtUi_SliderDescription_Ctor);
-
-    RegisterRuntimeExport("??1SliderDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_SliderDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x1800d7a00ull, (void*)&RtUi_SliderDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@SliderDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_SliderDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x1800d7890ull, (void*)&RtUi_SliderDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@SliderDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_SliderDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x1800d7630ull, (void*)&RtUi_SliderDescription_CreateInstance);
-
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@SliderDescription` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@SliderDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::SliderDescription::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x180049840ull, (void*)&UI::SliderDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@SliderDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::SliderDescription::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x1800498c0ull, (void*)&UI::SliderDescription::CreateInPlaceObject);
     return n;
 }

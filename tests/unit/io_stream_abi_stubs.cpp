@@ -36,6 +36,7 @@
 
 #include "runtime/types/io/Stream.h"
 #include "runtime/types/io/FileStream.h"
+#include "runtime/types/io/PackageFile.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -57,10 +58,7 @@ namespace {
 namespace IO {
 
 // ---- IO::MemoryStream (runtime/src/io/memory_stream.cpp) -------------------
-// Slot 0's real body is the registered thunk at 0x1800242a0 in
-// iobase_vtables.cpp; the class names it rather than restating it, and neither
-// that registration nor the thunk exists on the host.
-Stream* MemoryStream::DeletingDtor(unsigned) { StubReached("MemoryStream::DeletingDtor"); }
+// Slot 0 is the class's own inline DeletingDtor (ENDGAME B.3.9 IO).
 bool     MemoryStream::Write(int, const void*) { StubReached("MemoryStream::Write"); }
 bool     MemoryStream::Read(int, void*)        { StubReached("MemoryStream::Read"); }
 bool     MemoryStream::SetCurrentPos(int)      { StubReached("MemoryStream::SetCurrentPos"); }
@@ -81,10 +79,22 @@ bool     FileStream::Open(const System::Filename&) { StubReached("FileStream::Op
 // ---- IO::BinaryFileStream --------------------------------------------------
 // Its ONE override, slot 0, whose real body is the registered thunk at
 // 0x180023d80 in file_stream.cpp.
-Stream* BinaryFileStream::DeletingDtor(unsigned) { StubReached("BinaryFileStream::DeletingDtor"); }
+// ENDGAME B.3.9 IO: BinaryFileStream::DeletingDtor is inline now (retail's
+// vector deleting dtor). The three out-of-line lifecycle bodies below are
+// file_stream.cpp's, which stands on the FileSystem singleton and the port
+// registry; the host versions touch no file. ~FileStream's host body releases
+// nothing because no probe opens a file or names one. The TextFileStream
+// ctor makes retail's own-field stores but installs NO encoding and skips
+// SetObject (the probes read neither).
+FileStream::~FileStream() {}
+TextFileStream::TextFileStream(const System::String&, const System::String&, int)
+    : _objectName(nullptr), _objectType(nullptr), _requestedFormat(6),
+      _activeEncoding(6), _buffer(nullptr), _bufSize(0), _bufCursor(0) {}
+TextFileStream::~TextFileStream() {}
 
 // ---- IO::CompressedStream (compressed_stream_{write,read}.cpp) -------------
-// Slot 0 is PURE on all three compressed classes, so none of them needs one.
+// Slot 0 is PURE on CompressedStream / CompressedMemoryStream and inline on
+// CompressedFileStream (B.3.9 IO), so none of them needs one.
 bool     CompressedStream::Write(int, const void*) { StubReached("CompressedStream::Write"); }
 bool     CompressedStream::Read(int, void*)        { StubReached("CompressedStream::Read"); }
 bool     CompressedStream::SetCurrentPos(int)      { StubReached("CompressedStream::SetCurrentPos"); }
@@ -97,6 +107,13 @@ void     CompressedStream::PreCommit()             { StubReached("CompressedStre
 void CompressedMemoryStream::Close()     { StubReached("CompressedMemoryStream::Close"); }
 void CompressedMemoryStream::PreCommit() { StubReached("CompressedMemoryStream::PreCommit"); }
 void CompressedFileStream::Close()       { StubReached("CompressedFileStream::Close"); }
+
+// ENDGAME B.3.9 IO: the two out-of-line destructors (compressed_stream_release.cpp,
+// file_stream.cpp) stand on Release / Commit / the FileSystem singleton and the
+// port registry. No probe writes a header, opens a file or grows an array, so
+// the host bodies have nothing to release; ~Stream still frees the encoding.
+CompressedStream::~CompressedStream() {}
+CompressedFileStream::~CompressedFileStream() {}
 
 // ---- IO::TextFileStream (runtime/src/io/text_file_stream_win.cpp) ----------
 // Slot 0 is PURE on this class. Slots 1 and 7 are FileStream's, above. What is
@@ -124,5 +141,23 @@ bool     VisitorStream::Read(int, void*)        { StubReached("VisitorStream::Re
 bool     VisitorStream::SetCurrentPos(int)      { StubReached("VisitorStream::SetCurrentPos"); }
 uint32_t VisitorStream::GetCurrentPos() const   { StubReached("VisitorStream::GetCurrentPos"); }
 uint32_t VisitorStream::GetSize() const         { StubReached("VisitorStream::GetSize"); }
+
+// ---- IO::PackageFile (runtime/src/io/package_file*.cpp) --------------------
+// ENDGAME B.3.9 IO: the class is concrete, so the b39_io_packagefile test
+// builds the REAL class and the link needs its vtable (key function
+// TypeName, in package_file.cpp, which stands on the port registry). The
+// constructor and slot 0 are inline and real; the destructor's host body
+// releases nothing because a freshly built package holds nothing.
+const char*   PackageFile::TypeName() const             { StubReached("PackageFile::TypeName"); }
+uint32_t      PackageFile::Type() const                 { StubReached("PackageFile::Type"); }
+int32_t       PackageFile::GetFileVersion() const       { StubReached("PackageFile::GetFileVersion"); }
+Object::External::CompileResult PackageFile::Compile(const System::Filename&) {
+    StubReached("PackageFile::Compile");
+}
+bool          PackageFile::Serialize(void*)             { StubReached("PackageFile::Serialize"); }
+Object::External* PackageFile::Reconstruct()            { StubReached("PackageFile::Reconstruct"); }
+void          PackageFile::Destruct()                   { StubReached("PackageFile::Destruct"); }
+Object::External* PackageFile::Construct()              { StubReached("PackageFile::Construct"); }
+PackageFile::~PackageFile() {}
 
 }  // namespace IO

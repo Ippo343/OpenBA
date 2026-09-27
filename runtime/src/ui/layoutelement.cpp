@@ -47,6 +47,7 @@
 // ============================================================================
 
 #include <atomic>
+#include <new>
 
 #include "widget_common.h"
 #include "../../types/ui/LayoutElement.h"
@@ -56,7 +57,6 @@ using namespace rtui;
 namespace {
 
 std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_vtable{nullptr};
 
 void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     void* p = slot.load(std::memory_order_acquire);
@@ -71,7 +71,6 @@ const uint8_t* TypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@LayoutElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
-void* Vtable() { return AtomicExport(g_vtable, "??_7LayoutElement@UI@@6B@"); }
 
 // `?GetChildLayout@LayoutElement@UI@@AEAAXHHHHHH_N@Z` (0x1800d2dc0) — declared
 // on the class, body still element_bodies_b5.cpp's door (fragment pass).
@@ -92,6 +91,11 @@ void RowsDtor(void* hdr) { RtAddr<ArrayDtorFn>(0x180043cb0ull)(hdr); }
 namespace UI {
 
 uint32_t LayoutElement::Type() const {
+    const uint8_t* ti = TypeInfo();
+    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
+}
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t LayoutElement::TypeId() {
     const uint8_t* ti = TypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
@@ -239,86 +243,46 @@ void LayoutElement::Draw(SpriteContext& context, uint8_t alpha) const {
     }
 }
 
+// ??1LayoutElement@UI@@UEAA@XZ   0x1800d32a0 — retail's body, moved from the
+// retired door (ENDGAME B.3.9 UI-B): the record Array through 0x180043cb0
+// (frees and zeroes the header, so the compiler's `_childRecords.~Array()` is
+// a no-op). The restamp and the tail into ~Element are the compiler's.
+LayoutElement::~LayoutElement() {
+    RowsDtor(&_childRecords);
+}
+
+// ?CreateNewObject@LayoutElement@UI@@SAPEAVBase@Object@@XZ 0x180043380 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0xd0, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* LayoutElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(LayoutElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) LayoutElement();
+}
+// ?CreateInPlaceObject@LayoutElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180043420
+Object::Base* LayoutElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) LayoutElement();
+}
+
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, each a one-line
-// QUALIFIED delegation onto the member above.
+// ENDGAME B.3.9 UI-B: the slot doors, the ctor / dtor doors and the
+// factory-interpreter row are gone. Their only readers were the minted
+// `??_7LayoutElement@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
+// LayoutElement now wears the compiler's table.
 // ============================================================================
-using UI::LayoutElement;
 
-extern "C" uint32_t RtUi_LayoutElement_Type(const LayoutElement* self) {
-    return self->UI::LayoutElement::Type();
-}
-extern "C" const char* RtUi_LayoutElement_TypeName(const LayoutElement* self) {
-    return self->UI::LayoutElement::TypeName();
-}
-extern "C" void RtUi_LayoutElement_ComputeSize(LayoutElement* self) {
-    self->UI::LayoutElement::ComputeSize();
-}
-extern "C" void RtUi_LayoutElement_ComputeLayout(LayoutElement* self, int32_t x, int32_t y,
-                                                 int32_t right, int32_t bottom) {
-    self->UI::LayoutElement::ComputeLayout(x, y, right, bottom);
-}
-extern "C" void RtUi_LayoutElement_Draw(const LayoutElement* self, void* ctx, uint8_t alpha) {
-    self->UI::LayoutElement::Draw(*static_cast<UI::SpriteContext*>(ctx), alpha);
-}
-
-// ---------------------------------------------------------------------------
-// ??0LayoutElement@UI@@QEAA@XZ   0x1800d32e0 — a DOOR (B4b-2)
-// ---------------------------------------------------------------------------
-extern "C" void* RtUi_LayoutElement_Ctor(void* selfv) {   // returns this in RAX, as every MSVC ctor does
-    ElementCtor(selfv);                      // 1800d32f6  CALL 0x180115e50
-    PTR(selfv, 0x00) = Vtable();             // 1800d32fb  LEA/MOV
-    LayoutElement* self = reinterpret_cast<LayoutElement*>(selfv);   // B.3.6 bridge
-    self->_childRecords._data     = nullptr; // +0xC0
-    self->_childRecords._size     = 0;       // +0xC8  size and capacity, one qword
-    self->_childRecords._capacity = 0;
-    return selfv;
-}
-
-// ---------------------------------------------------------------------------
-// ??1LayoutElement@UI@@UEAA@XZ   0x1800d32a0 — a DOOR (B4b-2)
-// ---------------------------------------------------------------------------
-extern "C" void RtUi_LayoutElement_Dtor(void* selfv) {
-    PTR(selfv, 0x00) = Vtable();
-    RowsDtor(&reinterpret_cast<LayoutElement*>(selfv)->_childRecords);   // B.3.6 bridge
-    ElementDtor(selfv);
-}
-
-
-// ============================================================================
-// Registration — both doors for every body.
-// ============================================================================
 int RtUiLayoutElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@LayoutElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_LayoutElement_Type);            ++n;
-    RegisterRuntimeAddr(0x180043270ull, (void*)&RtUi_LayoutElement_Type);
-
-    RegisterRuntimeExport("?TypeName@LayoutElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_LayoutElement_TypeName);        ++n;
-    RegisterRuntimeAddr(0x180043290ull, (void*)&RtUi_LayoutElement_TypeName);
-
-    RegisterRuntimeExport("??0LayoutElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_LayoutElement_Ctor);            ++n;
-    RegisterRuntimeAddr(0x1800d32e0ull, (void*)&RtUi_LayoutElement_Ctor);
-
-    RegisterRuntimeExport("??1LayoutElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_LayoutElement_Dtor);            ++n;
-    RegisterRuntimeAddr(0x1800d32a0ull, (void*)&RtUi_LayoutElement_Dtor);
-
-    RegisterRuntimeExport("?ComputeSize@LayoutElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_LayoutElement_ComputeSize);     ++n;
-    RegisterRuntimeAddr(0x1800d3100ull, (void*)&RtUi_LayoutElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@LayoutElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_LayoutElement_ComputeLayout);   ++n;
-    RegisterRuntimeAddr(0x1800d2af0ull, (void*)&RtUi_LayoutElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@LayoutElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_LayoutElement_Draw);            ++n;
-    RegisterRuntimeAddr(0x1800d2a40ull, (void*)&RtUi_LayoutElement_Draw);
-
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@LayoutElement` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@LayoutElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::LayoutElement::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x180043380ull, (void*)&UI::LayoutElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@LayoutElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::LayoutElement::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x180043420ull, (void*)&UI::LayoutElement::CreateInPlaceObject);
     return n;
 }

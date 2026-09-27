@@ -27,6 +27,8 @@
 
 #include <atomic>
 
+#include <new>
+
 #include "widget_common.h"
 #include "../../types/ui/ProgressElement.h"
 
@@ -61,12 +63,10 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_vtable{nullptr};
 const uint8_t* ProgressTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@ProgressElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
-void* VtProgressElement() { return AtomicExport(g_vtable, "??_7ProgressElement@UI@@6B@"); }
 
 // A sprite's frame width / height (widget_common.h's reader, handed the sprite
 // itself at offset 0).
@@ -82,6 +82,10 @@ const char* ProgressElement::TypeName() const {
     const char* v = nullptr; __builtin_memcpy(&v, ProgressTypeInfo() + 8, sizeof v); return v;
 }
 uint32_t ProgressElement::Type() const {
+    uint32_t v = 0; __builtin_memcpy(&v, ProgressTypeInfo(), sizeof v); return v;
+}
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t ProgressElement::TypeId() {
     uint32_t v = 0; __builtin_memcpy(&v, ProgressTypeInfo(), sizeof v); return v;
 }
 
@@ -254,81 +258,42 @@ void ProgressElement::Draw(SpriteContext& context, uint8_t alpha) const {
     }
 }
 
+// ??1ProgressElement@UI@@UEAA@XZ   0x180077ef0 — retail's body is a BARE TAIL
+// JUMP to ~Element with no restamp: the compiler's chain is all of it.
+ProgressElement::~ProgressElement() {}
+
+// ?CreateNewObject@ProgressElement@UI@@SAPEAVBase@Object@@XZ 0x180077e30 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0x130, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* ProgressElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ProgressElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) ProgressElement();
+}
+// ?CreateInPlaceObject@ProgressElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180077eb0
+Object::Base* ProgressElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) ProgressElement();
+}
+
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
+// ENDGAME B.3.9 UI-B: the slot doors, the ctor / dtor doors and the
+// factory-interpreter row are gone. Their only readers were the minted
+// `??_7ProgressElement@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
+// ProgressElement now wears the compiler's table.
 // ============================================================================
-extern "C" uint32_t RtUi_ProgressElement_Type(const void* self) {
-    return reinterpret_cast<const UI::ProgressElement*>(self)->UI::ProgressElement::Type();
-}
-extern "C" const char* RtUi_ProgressElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::ProgressElement*>(self)->UI::ProgressElement::TypeName();
-}
-extern "C" void RtUi_ProgressElement_ComputeSize(void* self) {
-    reinterpret_cast<UI::ProgressElement*>(self)->UI::ProgressElement::ComputeSize();
-}
-extern "C" void RtUi_ProgressElement_ComputeLayout(void* self, int32_t x, int32_t y,
-                                                   int32_t right, int32_t bottom) {
-    reinterpret_cast<UI::ProgressElement*>(self)->UI::ProgressElement::ComputeLayout(
-        x, y, right, bottom);
-}
-extern "C" void RtUi_ProgressElement_Draw(const void* self, void* ctx, uint8_t alpha) {
-    reinterpret_cast<const UI::ProgressElement*>(self)->UI::ProgressElement::Draw(
-        *static_cast<UI::SpriteContext*>(ctx), alpha);
-}
 
-// ??0ProgressElement@UI@@QEAA@XZ   0x180119c40 — a DOOR (B4b-2), unchanged.
-extern "C" void* RtUi_ProgressElement_Ctor(void* self) {   // returns this in RAX, as every MSVC ctor does
-    ElementCtor(self);
-    PTR(self, 0x00) = VtProgressElement();
-    const int sprites[6] = { kFillLeft, kFillMiddle, kFillRight,
-                             kTrackLeft, kTrackMiddle, kTrackRight };
-    for (int off : sprites) {
-        PTR(self, off + kSpriteSheet) = nullptr;
-        I32(self, off + kSpriteIndex) = -1;
-    }
-    U32(self, kBackColor) = 0xffffffffu;
-    F32(self, kMaxValue)  = 1.0f;      // 0x3f800000
-    F32(self, kCurValue)  = 0.25f;     // 0x3e800000
-    return self;
-}
-
-// ??1ProgressElement@UI@@UEAA@XZ   0x180077ef0 — tail jump, no restamp. A DOOR.
-extern "C" void RtUi_ProgressElement_Dtor(void* self) {
-    ElementDtor(self);
-}
-
-// ============================================================================
 int RtUiProgressElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@ProgressElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_ProgressElement_Type);          ++n;
-    RegisterRuntimeAddr(0x180077d20ull, (void*)&RtUi_ProgressElement_Type);
-
-    RegisterRuntimeExport("?TypeName@ProgressElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_ProgressElement_TypeName);      ++n;
-    RegisterRuntimeAddr(0x180077d40ull, (void*)&RtUi_ProgressElement_TypeName);
-
-    RegisterRuntimeExport("??0ProgressElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_ProgressElement_Ctor);          ++n;
-    RegisterRuntimeAddr(0x180119c40ull, (void*)&RtUi_ProgressElement_Ctor);
-
-    RegisterRuntimeExport("??1ProgressElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_ProgressElement_Dtor);          ++n;
-    RegisterRuntimeAddr(0x180077ef0ull, (void*)&RtUi_ProgressElement_Dtor);
-
-    RegisterRuntimeExport("?ComputeSize@ProgressElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_ProgressElement_ComputeSize);   ++n;
-    RegisterRuntimeAddr(0x1801198f0ull, (void*)&RtUi_ProgressElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@ProgressElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_ProgressElement_ComputeLayout); ++n;
-    RegisterRuntimeAddr(0x180119610ull, (void*)&RtUi_ProgressElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@ProgressElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_ProgressElement_Draw);          ++n;
-    RegisterRuntimeAddr(0x1801192c0ull, (void*)&RtUi_ProgressElement_Draw);
-
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@ProgressElement` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@ProgressElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::ProgressElement::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x180077e30ull, (void*)&UI::ProgressElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@ProgressElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::ProgressElement::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x180077eb0ull, (void*)&UI::ProgressElement::CreateInPlaceObject);
     return n;
 }

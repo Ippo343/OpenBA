@@ -31,6 +31,7 @@
 // ============================================================================
 
 #include <atomic>
+#include <new>
 
 #include "widget_common.h"
 #include "../../types/ui/TabElement.h"
@@ -68,12 +69,10 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_vtable{nullptr};
 const uint8_t* TabTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@TabElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
-void* VtTabElement() { return AtomicExport(g_vtable, "??_7TabElement@UI@@6B@"); }
 
 int32_t SpriteW(const ::Sprite& s) { return SpriteWidth(&s, 0); }
 
@@ -86,6 +85,10 @@ const char* TabElement::TypeName() const {
     const char* v = nullptr; __builtin_memcpy(&v, TabTypeInfo() + 8, sizeof v); return v;
 }
 uint32_t TabElement::Type() const {
+    uint32_t v = 0; __builtin_memcpy(&v, TabTypeInfo(), sizeof v); return v;
+}
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t TabElement::TypeId() {
     uint32_t v = 0; __builtin_memcpy(&v, TabTypeInfo(), sizeof v); return v;
 }
 
@@ -289,102 +292,53 @@ void TabElement::Update(const System::Time& time, UserInterface* ui,
     UpdateContainers();
 }
 
+// ??1TabElement@UI@@UEAA@XZ   0x1800da360 — retail's body is the restamp and
+// the tail into ~Element: the compiler's chain is all of it.
+TabElement::~TabElement() {}
+
+// ?CreateNewObject@TabElement@UI@@SAPEAVBase@Object@@XZ 0x18004c7f0 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0x108, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* TabElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TabElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) TabElement();
+}
+// ?CreateInPlaceObject@TabElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x18004c870
+Object::Base* TabElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) TabElement();
+}
+
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
+// ENDGAME B.3.9 UI-B: the slot doors, the ctor / dtor doors and the
+// factory-interpreter row are gone. Their only readers were the minted
+// `??_7TabElement@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
+// TabElement now wears the compiler's table.
 // ============================================================================
-extern "C" uint32_t RtUi_TabElement_Type(const void* self) {
-    return reinterpret_cast<const UI::TabElement*>(self)->UI::TabElement::Type();
-}
-extern "C" const char* RtUi_TabElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::TabElement*>(self)->UI::TabElement::TypeName();
-}
+
+// ?UpdateContainers@TabElement@UI@@AEAAXXZ 0x1800d9710 — a non-virtual private
+// member's door (not mint scaffolding): it stays.
 extern "C" void RtUi_TabElement_UpdateContainers(void* self) {
     reinterpret_cast<UI::TabElement*>(self)->UI::TabElement::UpdateContainers();
 }
-extern "C" void RtUi_TabElement_ComputeSize(void* self) {
-    reinterpret_cast<UI::TabElement*>(self)->UI::TabElement::ComputeSize();
-}
-extern "C" void RtUi_TabElement_ComputeLayout(void* self, int32_t x, int32_t y,
-                                              int32_t right, int32_t bottom) {
-    reinterpret_cast<UI::TabElement*>(self)->UI::TabElement::ComputeLayout(x, y, right, bottom);
-}
-extern "C" void RtUi_TabElement_Draw(const void* self, void* ctx, uint8_t alpha) {
-    reinterpret_cast<const UI::TabElement*>(self)->UI::TabElement::Draw(
-        *static_cast<UI::SpriteContext*>(ctx), alpha);
-}
-extern "C" void RtUi_TabElement_Update(void* self, const void* time, void* ui,
-                                       void** dlgPtr, const void* state) {
-    reinterpret_cast<UI::TabElement*>(self)->UI::TabElement::Update(
-        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr),   // B.3.6 bridge
-        *static_cast<const UI::Element::UpdateState*>(state));
-}
 
-// ??0TabElement@UI@@QEAA@XZ   0x1800da390 — a DOOR (B4b-2), unchanged.
-extern "C" void* RtUi_TabElement_Ctor(void* self) {   // returns this in RAX, as every MSVC ctor does
-    ElementCtor(self);
-    PTR(self, 0x00) = VtTabElement();
-    I32(self, kTabCount) = 0;
-    I32(self, kGap)      = 0;
-    const int edgeSprites[3] = { kEdgeLeft, kEdgeMiddle, kEdgeRight };
-    for (int off : edgeSprites) {
-        PTR(self, off + kSpriteSheet) = nullptr;
-        I32(self, off + kSpriteIndex) = -1;
-    }
-    I32(self, kActiveTab)    = 0;
-    I32(self, kTabBarHeight) = 0;
-    I32(self, kTabBarWidth)  = 0;
-    return self;
-}
-
-// ??1TabElement@UI@@UEAA@XZ   0x1800da360 — a DOOR (B4b-2), unchanged.
-extern "C" void RtUi_TabElement_Dtor(void* self) {
-    PTR(self, 0x00) = VtTabElement();
-    ElementDtor(self);
-}
-
-// ============================================================================
 int RtUiTabElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@TabElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_TabElement_Type);              ++n;
-    RegisterRuntimeAddr(0x18004c6e0ull, (void*)&RtUi_TabElement_Type);
-
-    RegisterRuntimeExport("?TypeName@TabElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_TabElement_TypeName);          ++n;
-    RegisterRuntimeAddr(0x18004c700ull, (void*)&RtUi_TabElement_TypeName);
-
-    RegisterRuntimeExport("??0TabElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_TabElement_Ctor);              ++n;
-    RegisterRuntimeAddr(0x1800da390ull, (void*)&RtUi_TabElement_Ctor);
-
-    RegisterRuntimeExport("??1TabElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_TabElement_Dtor);              ++n;
-    RegisterRuntimeAddr(0x1800da360ull, (void*)&RtUi_TabElement_Dtor);
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@TabElement` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@TabElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::TabElement::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x18004c7f0ull, (void*)&UI::TabElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@TabElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::TabElement::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x18004c870ull, (void*)&UI::TabElement::CreateInPlaceObject);
 
     RegisterRuntimeExport("?UpdateContainers@TabElement@UI@@AEAAXXZ",
                           (void*)&RtUi_TabElement_UpdateContainers);  ++n;
     RegisterRuntimeAddr(0x1800d9710ull, (void*)&RtUi_TabElement_UpdateContainers);
-
-    RegisterRuntimeExport("?ComputeSize@TabElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_TabElement_ComputeSize);       ++n;
-    RegisterRuntimeAddr(0x1800d9ea0ull, (void*)&RtUi_TabElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@TabElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_TabElement_ComputeLayout);     ++n;
-    RegisterRuntimeAddr(0x1800d9b20ull, (void*)&RtUi_TabElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@TabElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_TabElement_Draw);              ++n;
-    RegisterRuntimeAddr(0x1800d98b0ull, (void*)&RtUi_TabElement_Draw);
-
-    RegisterRuntimeExport(
-        "?Update@TabElement@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@"
-        "V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@Element@2@@Z",
-        (void*)&RtUi_TabElement_Update);                              ++n;
-    RegisterRuntimeAddr(0x1800d9810ull, (void*)&RtUi_TabElement_Update);
 
     return n;
 }

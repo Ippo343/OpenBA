@@ -3,7 +3,7 @@
 // ============================================================================
 //
 // ??_7ComboDescription@UI@@6B@ (retail 0x180159090), ten slots:
-//   0  deleting dtor      0x180074e70  runtime/src/object/deleting_dtor.cpp row
+//   0  deleting dtor      0x180074e70  ComboDescription.h (the class's own)
 //   1  TypeName           0x180074ae0  here
 //   2  Type               0x180074ac0  here
 //   3  GetFileVersion     0x1801129b0  here  (returns 0x2104)
@@ -69,20 +69,12 @@ void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 
-std::atomic<void*> g_vtComboDescription{nullptr};
 std::atomic<void*> g_comboTypeInfo{nullptr};
-std::atomic<void*> g_buttonCtor{nullptr};
 std::atomic<void*> g_memFree{nullptr};
 
-void* VtComboDescription() { return AtomicResolve(g_vtComboDescription, RtUI::kVtblComboDescription); }
 const uint8_t* ComboTypeInfo() {
     return static_cast<const uint8_t*>(AtomicResolve(
         g_comboTypeInfo, "?_typeInfo@ComboDescription@UI@@0VBaseTypeInfo@Object@@A"));
-}
-void* ButtonCtor(void* self) {
-    using CtorFn = void* (*)(void*);
-    return reinterpret_cast<CtorFn>(AtomicResolve(
-        g_buttonCtor, "??0ButtonDescription@UI@@QEAA@XZ"))(self);
 }
 // rtdesc::MemFree's twin without its function-local cache (it runs inside a
 // member body on the loader thread).
@@ -92,14 +84,13 @@ void MemFreeAtomic(void* p) {
         g_memFree, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(p);
 }
 
-// The dtor door only.
-void* VtButtonDescription() { return RT_DATA_SLOT(void*, RtUI::kVtblButtonDescription); }
-
 }  // namespace
 
 namespace UI {
 
-uint32_t ComboDescription::Type() const {
+uint32_t ComboDescription::Type() const { return TypeId(); }
+// ?TypeId@ComboDescription@UI@@SAIXZ 0x180074ad0 — the record's first dword.
+uint32_t ComboDescription::TypeId() {
     const uint8_t* ti = ComboTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
@@ -112,22 +103,13 @@ int32_t ComboDescription::GetFileVersion() const { return 0x2104; }
 // The four stores ComboDescription adds on top of its base's constructor,
 // transcribed from 0x180074d42..0x180074d63 (Construct; the null test is the
 // door's) and identically inside Reconstruct.
+// ENDGAME B.3.9 UI-A: that sequence is the real ctor (ComboDescription.h).
 Object::External* ComboDescription::Construct() {
-    ButtonCtor(this);                                          // 180074d3c
-    *reinterpret_cast<void**>(this) = VtComboDescription();    // 180074d49
-    _listDesc    = nullptr;                                    // 180074d4e
-    _itemDesc    = nullptr;                                    // 180074d55
-    _stringTable = nullptr;                                    // 180074d5c
-    return this;                                               // 180074d63
+    return ::new (this) ComboDescription();                    // 180074d3c..180074d63
 }
 Object::External* ComboDescription::Reconstruct() {
     DeletingDtor(0);                                           // 180074cd7
-    ButtonCtor(this);                                          // 180074ce1
-    *reinterpret_cast<void**>(this) = VtComboDescription();
-    _listDesc    = nullptr;
-    _itemDesc    = nullptr;
-    _stringTable = nullptr;
-    return this;                                               // 180074d08
+    return ::new (this) ComboDescription();                    // 180074ce1..180074d08
 }
 void ComboDescription::Destruct() { DeletingDtor(0); }
 
@@ -160,8 +142,8 @@ bool ComboDescription::Serialize(void* streamv) {
 // RCX = this (RBP), RDX = the hidden return slot (RSI), R8 = Dialog* (R14).
 //
 // ComboElement is 0x128 and its constructor is OUT OF LINE
-// (`??0ComboElement@UI@@QEAA@XZ`, 0x1801123f0, a door ported by
-// runtime/src/ui/factory_ui1.cpp); retail takes its RETURN value as the element.
+// (`??0ComboElement@UI@@QEAA@XZ`, 0x1801123f0, the real ctor since B.3.9);
+// retail takes its RETURN value as the element.
 //
 // After the shared ButtonDescription applier, the body POPULATES THE COMBO FROM
 // ITS STRING TABLE: for every entry i of `_stringTable` it builds a
@@ -190,11 +172,8 @@ Object::InternalPtr<Element>* ComboDescription::CreateInstance(
     void* raw = MemAlloc(0x128, 8);                         // 180112ab3
 
     ComboElement* elem = nullptr;                           // R12 == 0
-    if (raw != nullptr) {                                   // 180112ae4
-        using ComboElementCtorFn = void* (*)(void*);
-        elem = static_cast<ComboElement*>(
-            RtAddr<ComboElementCtorFn>(0x1801123f0ull)(raw));  // 180112ae9
-    }
+    if (raw != nullptr)                                     // 180112ae4
+        elem = ::new (raw) ComboElement();                  // 180112ae9 ??0ComboElement
 
     void* slot = static_cast<ButtonElement*>(elem);         // 180112af6  [RSP+0x90]
     ButtonDescription::CreateInstance(
@@ -273,106 +252,40 @@ Object::InternalPtr<Element>* ComboDescription::CreateInstance(
 
 }  // namespace UI
 
-// ============================================================================
-// The DOORS
-// ============================================================================
-extern "C" uint32_t RtUi_ComboDescription_Type(const void* self) {
-    return reinterpret_cast<const UI::ComboDescription*>(self)           // B.3.6 bridge
-        ->UI::ComboDescription::Type();
-}
-extern "C" const char* RtUi_ComboDescription_TypeName(const void* self) {
-    return reinterpret_cast<const UI::ComboDescription*>(self)           // B.3.6 bridge
-        ->UI::ComboDescription::TypeName();
-}
-extern "C" int32_t RtUi_ComboDescription_GetFileVersion(const void* self) {
-    return reinterpret_cast<const UI::ComboDescription*>(self)           // B.3.6 bridge
-        ->UI::ComboDescription::GetFileVersion();
-}
+// ??1ComboDescription@UI@@UEAA@XZ   0x180112370 -- three restamps, the base's
+// _textName, the tail JMP into ~External. ENDGAME B.3.9 UI-A: EMPTY; all of it
+// is the compiler's chain.
+namespace UI {
+ComboDescription::~ComboDescription() {}
+}  // namespace UI
 
-// 0x180074d20: the retail null test stays in the door (180074d3a).
-extern "C" void* RtUi_ComboDescription_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;
-    return reinterpret_cast<UI::ComboDescription*>(selfv)                // B.3.6 bridge
-        ->UI::ComboDescription::Construct();
+namespace UI {
+// ?CreateNewObject@ComboDescription@UI@@SAPEAVBase@Object@@XZ  0x180074bd0
+// The factory-interpreter row this replaces: MemAlloc(0xb8, 8), retail's
+// null branch, then ??0ButtonDescription and the three stores.
+Object::Base* ComboDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ComboDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) ComboDescription();
 }
-extern "C" void* RtUi_ComboDescription_Reconstruct(void* selfv) {
-    return reinterpret_cast<UI::ComboDescription*>(selfv)                // B.3.6 bridge
-        ->UI::ComboDescription::Reconstruct();
+// ?CreateInPlaceObject@ComboDescription@UI@@SAPEAVBase@Object@@PEAX@Z  0x180074c70
+Object::Base* ComboDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) ComboDescription();
 }
-extern "C" void RtUi_ComboDescription_Destruct(void* selfv) {
-    reinterpret_cast<UI::ComboDescription*>(selfv)                       // B.3.6 bridge
-        ->UI::ComboDescription::Destruct();
-}
+}  // namespace UI
 
 // ============================================================================
-// ??1ComboDescription@UI@@UEAA@XZ   0x180112370   — a DTOR DOOR (B4b-2), kept
+// Registration: the factory pair only (B39_RULES D2). The slot doors and the
+// ??1 door, read only by the retired minted table / RT_DELDTOR row, are gone.
 // ============================================================================
-extern "C" void RtUi_ComboDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtComboDescription();                              // 18011238d
-    *v = VtButtonDescription();                             // 180112397
-    *v = VtElementDescription();                            // 1801123a1
-    ReleaseStringField(p, 0x60);                            // 1801123a4
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1801123d6 JMP
-}
-
-extern "C" bool RtUi_ComboDescription_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<UI::ComboDescription*>(selfv)                // B.3.6 bridge
-        ->UI::ComboDescription::Serialize(streamv);
-}
-
-extern "C" void** RtUi_ComboDescription_CreateInstance(const void* selfv,
-                                                       void** ret,
-                                                       const void* dialog) {
-    return reinterpret_cast<void**>(
-        reinterpret_cast<const UI::ComboDescription*>(selfv)             // B.3.6 bridge
-            ->UI::ComboDescription::CreateInstance(
-                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
-                static_cast<const UI::Dialog*>(dialog)));
-}
-
 int RtUiComboDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@ComboDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_ComboDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x180074ac0ull, (void*)&RtUi_ComboDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@ComboDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_ComboDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x180074ae0ull, (void*)&RtUi_ComboDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@ComboDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_ComboDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x1801129b0ull, (void*)&RtUi_ComboDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@ComboDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_ComboDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x180074d20ull, (void*)&RtUi_ComboDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@ComboDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_ComboDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x180074cc0ull, (void*)&RtUi_ComboDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@ComboDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_ComboDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x180074d70ull, (void*)&RtUi_ComboDescription_Destruct);
-
-    RegisterRuntimeExport("??1ComboDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_ComboDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x180112370ull, (void*)&RtUi_ComboDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@ComboDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_ComboDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x1801129c0ull, (void*)&RtUi_ComboDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@ComboDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_ComboDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x180112a70ull, (void*)&RtUi_ComboDescription_CreateInstance);
-
+    RegisterRuntimeExport("?CreateNewObject@ComboDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::ComboDescription::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x180074bd0ull, (void*)&UI::ComboDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@ComboDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::ComboDescription::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x180074c70ull, (void*)&UI::ComboDescription::CreateInPlaceObject);
     return n;
 }

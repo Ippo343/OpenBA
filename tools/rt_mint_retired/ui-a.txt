@@ -1,0 +1,35 @@
+# ENDGAME B.3 step 9 -- the rows block UI-A (branch b39-UIA, wave W1) retired.
+# Format (tools/rt_mint_gen.py banner, B39_RULES.md D3):
+#   <mangled symbol | 0xVA>   <owner block>   <proof>
+# One fragment per block; a key appears once across all fragments.
+
+??_7BorderDescription@UI@@6B@          UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x180040ff0, ??1 door, 8 slot doors deleted
+??_7BorderElement@UI@@6B@              UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x1800414f0, ??1/copy doors, 5 slot doors deleted
+??_7ClipRegionDescription@UI@@6B@      UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x180037eb0, ??1 door, 8 slot doors deleted
+??_7ClipRegionElement@UI@@6B@          UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x180038370, ??0/copy/??1 doors, 7 slot doors deleted; ContainerDescription builder (UI-B file) spells the ctor
+??_7EditDescription@UI@@6B@            UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x18003fa20, ??1 door, 8 slot doors deleted
+??_7EditElement@UI@@6B@                UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x18003fed0, ??1/copy doors, 7 slot doors deleted
+??_7NumberEditDescription@UI@@6B@      UI-A    real ctor + DeletingDtor; FACTUI2 row, RT_DELDTOR row 0x180046190, ??0/??1 doors, 8 slot doors deleted
+??_7NumberEditElement@UI@@6B@          UI-A    real ctor + DeletingDtor; FACTUI2 row, RT_DELDTOR row 0x180046540, ??0/??1 doors, 3 slot doors deleted
+??_7NumberDescription@UI@@6B@          UI-A    real ctor + DeletingDtor; FACTUI2 row (and its ??0 door), RT_DELDTOR row 0x18004a760, ??1 door, 8 slot doors deleted
+??_7NumberElement@UI@@6B@              UI-A    real ctor + DeletingDtor; FACTUI2 row, RT_DELDTOR row 0x18004ab80, ??0/??1 doors, 5 slot doors deleted
+??_7ButtonDescription@UI@@6B@          UI-A    real ctor + DeletingDtor; FACTUI1 row (+ the two baseCtor strings of Check/Combo), RT_DELDTOR row 0x1800481a0, ??1 door, 8 slot doors deleted
+??_7ButtonElement@UI@@6B@              UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x1800485b0, ??0/copy/??1 doors, 7 slot doors deleted
+??_7CheckDescription@UI@@6B@           UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x1800489c0, ??1 door, 8 slot doors deleted
+??_7CheckElement@UI@@6B@               UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x180048d80, ??0/copy/??1 doors, 6 slot doors deleted
+??_7ComboDescription@UI@@6B@           UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x180074e70, ??1 door, 8 slot doors deleted
+??_7ComboElement@UI@@6B@               UI-A    real ctor + DeletingDtor; FACTUI1 row (+ its ??0 door), RT_DELDTOR row 0x180075390, copy/??1 doors, 3 slot doors deleted
+??_7ImageDescription@UI@@6B@           UI-A    real ctor + DeletingDtor; FACTUI2 row (and its ??0 door), RT_DELDTOR row 0x1800361f0, ??1 door, 8 slot doors deleted
+??_7ImageElement@UI@@6B@               UI-A    real ctor + DeletingDtor; FACTUI2 row (and its ??0 door), RT_DELDTOR row 0x180036600, copy/??1 doors, 5 slot doors deleted
+??_7AnimatedImageDescription@UI@@6B@   UI-A    real ctor + DeletingDtor; FACTUI1 row (+ its ??0 door), RT_DELDTOR row 0x1800369e0, ??1 door, 8 slot doors deleted
+??_7AnimatedImageElement@UI@@6B@       UI-A    real ctor + DeletingDtor; FACTUI1 row (+ its ??0 door), RT_DELDTOR row 0x180036db0, copy/??1 doors, 3 slot doors deleted
+??_7GroupDescription@UI@@6B@           UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x180046af0, ??1 door, 8 slot doors deleted; RtUI::kVtblGroup* deleted
+??_7GroupElement@UI@@6B@               UI-A    real ctor + DeletingDtor; FACTUI1 row, RT_DELDTOR row 0x180046e10, ??0/copy/??1 doors, 5 slot doors deleted
+??_7PageDescription@UI@@6B@            UI-A    real ctor + DeletingDtor; FACTUI2 row, RT_DELDTOR row 0x1800471a0, ??0/??1 doors, 8 slot doors deleted
+??_7PageElement@UI@@6B@                UI-A    real ctor + DeletingDtor; FACTUI2 row, RT_DELDTOR row 0x180047540, ??0/??1 doors, 2 slot doors deleted
+??_7RadioDescription@UI@@6B@           UI-A    real ctor + DeletingDtor; FACTUI2 row, RT_DELDTOR row 0x180047930, ??0/??1 doors, 8 slot doors deleted
+??_7RadioElement@UI@@6B@               UI-A    real ctor + DeletingDtor; FACTUI2 row, RT_DELDTOR row 0x180047d50, ??0/??1 doors, 3 slot doors deleted
+??_7TextDescription@UI@@6B@            UI-A    real ctor + DeletingDtor; FACTUI2 row, RT_DELDTOR row 0x180041e30, ??0/??1 doors, 8 slot doors deleted
+??_7TextElement@UI@@6B@                UI-A    real ctor + DeletingDtor; FACTUI2 row, RT_DELDTOR row 0x1800422f0, ??0 (element_bodies_b5.cpp)/??1 doors, 5 slot doors deleted
+??_7LabelDescription@UI@@6B@           UI-A    real ctor + DeletingDtor; FACTUI2 row (and its ??0 door), RT_DELDTOR row 0x180042730, ??1 door, 8 slot doors deleted; kVtblLabelDescription deleted
+??_7LabelElement@UI@@6B@               UI-A    real ctor + DeletingDtor; FACTUI2 row (and its ??0 door), RT_DELDTOR row 0x180042bb0, copy/??1 doors, 6 slot doors deleted

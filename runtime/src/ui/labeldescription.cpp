@@ -3,7 +3,7 @@
 // ============================================================================
 //
 // ??_7LabelDescription@UI@@6B@ (retail 0x180156b30), ten slots:
-//   0  deleting dtor      0x180042730  runtime/src/object/deleting_dtor.cpp row
+//   0  deleting dtor      0x180042730  LabelDescription.h (the class's own)
 //   1  TypeName           0x1800423b0  here
 //   2  Type               0x180042390  here
 //   3  GetFileVersion     0x1800d2950  here  (returns 0x2304)
@@ -13,19 +13,22 @@
 //   7  Destruct           0x180042560  here
 //   8  CreateInstance     0x1800d26b0  here
 //   9  Construct          0x180042550  here
-// plus ??1LabelDescription@UI@@UEAA@XZ (0x1800d2960).
+// plus ??1LabelDescription@UI@@UEAA@XZ (0x1800d2960) and the factory pair.
 //
 // ENDGAME B.3.6 block C3: every slot body is a `UI::LabelDescription` member
 // (runtime/types/ui/LabelDescription.h) and the doors delegate with a
 // QUALIFIED call. It DERIVES FROM UI::TextDescription, a real class in the same
 // block now, so Serialize's base call is the qualified member
-// `UI::TextDescription::Serialize`. Two TextDescription bodies stay DOORS and
-// are still reached by address:
-//     0x18011eae0   ~TextDescription   (the dtor's TAIL JUMP — a door body)
-//     0x18011ef70   the TextDescription applier (element_bodies_b5.cpp's door)
+// `UI::TextDescription::Serialize`. The TextDescription applier
+// (0x18011ef70, element_bodies_b5.cpp's non-slot door) is still reached by
+// address.
 //
-// The constructor is OUT OF LINE (`??0LabelDescription@UI@@QEAA@XZ`,
-// 0x1800d29d0) and is ported by runtime/src/ui/ui_factory_wave28.cpp.
+// ENDGAME B.3.9 block UI-A (B39_RULES D1/D2): the class is CONCRETE. The
+// out-of-line ctor (`??0LabelDescription@UI@@QEAA@XZ`, 0x1800d29d0) is the
+// real one in the header; ~LabelDescription chains ~TextDescription as a
+// compiler base call; the factory pair is the class's own. The slot doors, the
+// ??1 door and ui_factory_wave28.cpp's ??0 row, read only by the retired
+// minted table, its RT_DELDTOR row and the interpreter, are gone.
 //
 // GetFileVersion is 0x2304 — the largest constant in this batch, and read from
 // this class's own body. It is NOT its base's.
@@ -42,8 +45,6 @@ namespace {
 
 using namespace rtdesc;
 
-void* VtLabelDescription() { return RT_DATA_SLOT(void*, RtUI::kVtblLabelDescription); }
-
 // RULE B6-5: member bodies resolve through namespace-scope atomics (the same
 // never-cache-a-null contract as element_common.h's rtuielem::AtomicExport,
 // which cannot be included beside description_common.h — both declare Module).
@@ -57,25 +58,19 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 std::atomic<void*> g_typeInfoSlot{nullptr};
-std::atomic<void*> g_ctorSlot{nullptr};
 
 const uint8_t* LabelTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfoSlot, "?_typeInfo@LabelDescription@UI@@0VBaseTypeInfo@Object@@A"));
 }
 
-// ??0LabelDescription@UI@@QEAA@XZ — a ctor DOOR (ui_factory_wave28.cpp).
-void* LabelCtor(void* self) {
-    using CtorFn = void* (*)(void*);
-    return reinterpret_cast<CtorFn>(AtomicExport(
-        g_ctorSlot, "??0LabelDescription@UI@@QEAA@XZ"))(self);
-}
-
 }  // namespace
 
 namespace UI {
 
-uint32_t LabelDescription::Type() const {
+uint32_t LabelDescription::Type() const { return TypeId(); }
+// ?TypeId@LabelDescription@UI@@SAIXZ 0x1800423a0 — the record's first dword.
+uint32_t LabelDescription::TypeId() {
     uint32_t v = 0; __builtin_memcpy(&v, LabelTypeInfo(), sizeof v); return v;
 }
 const char* LabelDescription::TypeName() const {
@@ -83,15 +78,13 @@ const char* LabelDescription::TypeName() const {
 }
 int32_t LabelDescription::GetFileVersion() const { return 0x2304; }
 
-// 0x180042550: null test (in the DOOR), then a JMP to the ctor.
+// 0x180042550: null test (it sat in the retired door), then a JMP to the ctor.
 Object::External* LabelDescription::Construct() {
-    LabelCtor(this);                                         // 180042559 JMP
-    return this;
+    return ::new (this) LabelDescription();                  // 180042559 JMP
 }
 Object::External* LabelDescription::Reconstruct() {
     DeletingDtor(0);                                         // 18004253e
-    LabelCtor(this);                                         // 180042548 JMP
-    return this;
+    return ::new (this) LabelDescription();                  // 180042548 JMP
 }
 void LabelDescription::Destruct() { DeletingDtor(0); }
 
@@ -128,7 +121,7 @@ bool LabelDescription::Serialize(void* streamv) {
 // ?CreateInstance@LabelDescription@UI@@...   retail 0x1800d26b0  (slot 8)
 // ============================================================================
 // RETSLOT (B6-2). LabelElement is 0x130 and its constructor is OUT OF LINE
-// (0x1800d2620, a door). The base applier is TextDescription's (0x18011ef70,
+// (0x1800d2620, the real ctor since B.3.9). The base applier is TextDescription's (0x18011ef70,
 // element_bodies_b5.cpp's door, reached by address) and it DOES take the Dialog.
 //
 // THE SPRITE ASSIGNMENT IS GUARDED BY A CHANGE TEST, and the two halves of the
@@ -146,11 +139,8 @@ Object::InternalPtr<Element>* LabelDescription::CreateInstance(
     void* raw = MemAlloc(0x130, 8);                          // 1800d26f2
 
     LabelElement* elem = static_cast<LabelElement*>(raw);
-    if (raw != nullptr) {                                    // 1800d271d
-        using LabelElementCtorFn = void* (*)(void*);
-        elem = static_cast<LabelElement*>(
-            RtAddr<LabelElementCtorFn>(0x1800d2620ull)(raw));  // 1800d2722
-    }
+    if (raw != nullptr)                                      // 1800d271d
+        elem = ::new (raw) LabelElement();                   // 1800d2722 ??0LabelElement
 
     void* slot = elem;                                       // 1800d272a
     using TextApplyFn = void (*)(const void*, void**, const void*);
@@ -192,94 +182,46 @@ Object::InternalPtr<Element>* LabelDescription::CreateInstance(
 }  // namespace UI
 
 // ============================================================================
-// ??1LabelDescription@UI@@UEAA@XZ   0x1800d2960 — a DOOR BODY (no real dtor)
+// ??1LabelDescription@UI@@UEAA@XZ   0x1800d2960 -- retail's body, moved here
+// from the retired door (ENDGAME B.3.9 UI-A)
 // ============================================================================
-// Stamp own vtable, release the sprite name at +0xb0, TAIL-JUMP to
-// ~TextDescription (0x18011eae0). It does NOT stamp a base vtable itself and it
-// does NOT touch +0x60 — its base does both. The +0xa8 ExternalPtr is not
-// released.
-extern "C" void RtUi_LabelDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-
-    *reinterpret_cast<void**>(p) = VtLabelDescription();     // 1800d297d
-    rtdesc::ReleaseStringField(p, offsetof(UI::LabelDescription, _spriteName));  // 1800d2980
-
-    using BaseDtorFn = void (*)(void*);
-    rtdesc::RtAddr<BaseDtorFn>(0x18011eae0ull)(p);           // 1800d29be JMP
+// Stamp own vtable (the compiler's), release the sprite name at +0xb0 through
+// System::String's own Release, TAIL-JUMP to ~TextDescription (0x18011eae0) --
+// the compiler's base call, which restamps and releases +0x78 and +0x60. The
+// +0xa8 ExternalPtr is not released.
+namespace UI {
+LabelDescription::~LabelDescription() {
+    System::StringPrivateAccess::Release(
+        *reinterpret_cast<System::String*>(&_spriteName));   // 1800d2980
 }
+}  // namespace UI
+
+namespace UI {
+// ?CreateNewObject@LabelDescription@UI@@SAPEAVBase@Object@@XZ  0x1800424a0
+// The factory-interpreter row this replaces: MemAlloc(0xb8, 8), retail's
+// null branch, then the out-of-line ctor ??0LabelDescription (0x1800d29d0).
+Object::Base* LabelDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(LabelDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) LabelDescription();
+}
+// ?CreateInPlaceObject@LabelDescription@UI@@SAPEAVBase@Object@@PEAX@Z  0x180042520
+Object::Base* LabelDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) LabelDescription();
+}
+}  // namespace UI
 
 // ============================================================================
-// The registered doors — one QUALIFIED delegation each.
+// Registration: the factory pair only (B39_RULES D2).
 // ============================================================================
-extern "C" uint32_t RtUi_LabelDescription_Type(const void* self) {
-    return reinterpret_cast<const UI::LabelDescription*>(self)->UI::LabelDescription::Type();   // B.3.6 bridge
-}
-extern "C" const char* RtUi_LabelDescription_TypeName(const void* self) {
-    return reinterpret_cast<const UI::LabelDescription*>(self)->UI::LabelDescription::TypeName();   // B.3.6 bridge
-}
-extern "C" int32_t RtUi_LabelDescription_GetFileVersion(const void* self) {
-    return reinterpret_cast<const UI::LabelDescription*>(self)->UI::LabelDescription::GetFileVersion();   // B.3.6 bridge
-}
-extern "C" void* RtUi_LabelDescription_Construct(void* self) {
-    if (self == nullptr) return nullptr;                     // 180042553
-    return reinterpret_cast<UI::LabelDescription*>(self)->UI::LabelDescription::Construct();   // B.3.6 bridge
-}
-extern "C" void* RtUi_LabelDescription_Reconstruct(void* self) {
-    return reinterpret_cast<UI::LabelDescription*>(self)->UI::LabelDescription::Reconstruct();   // B.3.6 bridge
-}
-extern "C" void RtUi_LabelDescription_Destruct(void* self) {
-    reinterpret_cast<UI::LabelDescription*>(self)->UI::LabelDescription::Destruct();   // B.3.6 bridge
-}
-extern "C" bool RtUi_LabelDescription_Serialize(void* self, void* stream) {
-    return reinterpret_cast<UI::LabelDescription*>(self)->UI::LabelDescription::Serialize(stream);   // B.3.6 bridge
-}
-// RDX is the caller's slot; the member writes it and hands it back (B6-2).
-extern "C" void** RtUi_LabelDescription_CreateInstance(const void* self, void** ret,
-                                                       const void* dialog) {
-    return reinterpret_cast<void**>(
-        reinterpret_cast<const UI::LabelDescription*>(self)->UI::LabelDescription::CreateInstance(   // B.3.6 bridge
-            reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
-            static_cast<const UI::Dialog*>(dialog)));
-}
-
 int RtUiLabelDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@LabelDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_LabelDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x180042390ull, (void*)&RtUi_LabelDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@LabelDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_LabelDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x1800423b0ull, (void*)&RtUi_LabelDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@LabelDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_LabelDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x1800d2950ull, (void*)&RtUi_LabelDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@LabelDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_LabelDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x180042550ull, (void*)&RtUi_LabelDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@LabelDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_LabelDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x180042530ull, (void*)&RtUi_LabelDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@LabelDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_LabelDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x180042560ull, (void*)&RtUi_LabelDescription_Destruct);
-
-    RegisterRuntimeExport("??1LabelDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_LabelDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x1800d2960ull, (void*)&RtUi_LabelDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@LabelDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_LabelDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x1800d2820ull, (void*)&RtUi_LabelDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@LabelDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_LabelDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x1800d26b0ull, (void*)&RtUi_LabelDescription_CreateInstance);
-
+    RegisterRuntimeExport("?CreateNewObject@LabelDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::LabelDescription::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x1800424a0ull, (void*)&UI::LabelDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@LabelDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::LabelDescription::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x180042520ull, (void*)&UI::LabelDescription::CreateInPlaceObject);
     return n;
 }

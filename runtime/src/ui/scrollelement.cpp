@@ -49,6 +49,7 @@
 // std::atomic slots.
 // ============================================================================
 #include <atomic>
+#include <new>
 
 #include "widget_common.h"
 #include "../../types/ui/ScrollElement.h"
@@ -77,7 +78,6 @@ SpriteCopy LoadSprite(const ::Sprite& src) {
 }
 
 std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_vtable{nullptr};
 
 void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     void* p = slot.load(std::memory_order_acquire);
@@ -92,7 +92,6 @@ const uint8_t* TypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
-void* Vtable() { return AtomicExport(g_vtable, "??_7ScrollElement@UI@@6B@"); }
 
 // `?GetBarLayout@ScrollElement@UI@@AEBAXAEAH000@Z` (0x18011a2d0) — declared on
 // the class, body still element_bodies_b5.cpp's door (fragment pass).
@@ -107,6 +106,11 @@ using GetBarLayoutFn = void (*)(const void* self, int32_t* x0, int32_t* y0,
 namespace UI {
 
 uint32_t ScrollElement::Type() const {
+    const uint8_t* ti = TypeInfo();
+    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
+}
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t ScrollElement::TypeId() {
     const uint8_t* ti = TypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
@@ -349,104 +353,42 @@ void ScrollElement::Update(const System::Time& time, UserInterface* ui,
     }
 }
 
+// ??1ScrollElement@UI@@UEAA@XZ   0x18011a900 — retail's body is the restamp
+// and the tail into ~Element: the compiler's chain is all of it.
+ScrollElement::~ScrollElement() {}
+
+// ?CreateNewObject@ScrollElement@UI@@SAPEAVBase@Object@@XZ 0x18003a940 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0x178, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* ScrollElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ScrollElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) ScrollElement();
+}
+// ?CreateInPlaceObject@ScrollElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x18003a9c0
+Object::Base* ScrollElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) ScrollElement();
+}
+
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, each a one-line
-// QUALIFIED delegation onto the member above.
+// ENDGAME B.3.9 UI-B: the slot doors, the ctor / dtor doors and the
+// factory-interpreter row are gone. Their only readers were the minted
+// `??_7ScrollElement@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
+// ScrollElement now wears the compiler's table.
 // ============================================================================
-using UI::ScrollElement;
 
-extern "C" uint32_t RtUi_ScrollElement_Type(const ScrollElement* self) {
-    return self->UI::ScrollElement::Type();
-}
-extern "C" const char* RtUi_ScrollElement_TypeName(const ScrollElement* self) {
-    return self->UI::ScrollElement::TypeName();
-}
-extern "C" void RtUi_ScrollElement_ComputeSize(ScrollElement* self) {
-    self->UI::ScrollElement::ComputeSize();
-}
-extern "C" void RtUi_ScrollElement_ComputeLayout(ScrollElement* self, int32_t x, int32_t y,
-                                                 int32_t right, int32_t bottom) {
-    self->UI::ScrollElement::ComputeLayout(x, y, right, bottom);
-}
-extern "C" void RtUi_ScrollElement_Draw(const ScrollElement* self, void* ctx, uint8_t alpha) {
-    self->UI::ScrollElement::Draw(*static_cast<UI::SpriteContext*>(ctx), alpha);
-}
-extern "C" void RtUi_ScrollElement_Update(ScrollElement* self, const void* time, void* ui,
-                                          void** dlgPtr, const UI::Element::UpdateState* state) {
-    self->UI::ScrollElement::Update(
-        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr),   // B.3.6 bridge
-        *state);
-}
-
-// ??0ScrollElement@UI@@QEAA@XZ   0x18011a7f0 — a DOOR (B4b-2)
-extern "C" void* RtUi_ScrollElement_Ctor(void* selfv) {   // returns this in RAX, as every MSVC ctor does
-    ElementCtor(selfv);
-    PTR(selfv, 0x00) = Vtable();
-    ScrollElement* self = reinterpret_cast<ScrollElement*>(selfv);   // B.3.6 bridge
-    ::Sprite* const sprites[9] = {
-        &self->_trackStart, &self->_trackMiddle, &self->_trackEnd,
-        &self->_thumbStart, &self->_thumbMiddle, &self->_thumbEnd,
-        &self->_hotStart,   &self->_hotMiddle,   &self->_hotEnd };
-    for (::Sprite* s : sprites) {
-        s->spriteSheet = nullptr;
-        s->spriteIndex = -1;
-    }
-    self->_vertical       = 1;
-    self->_barColor       = 0xffffffffu;   // one unaligned qword of -1 ...
-    self->_unknown158     = 0xffffffffu;   // ... covering both
-    self->_currentValue   = 0.0f;
-    self->_displayPercent = 0.33333334f;   // 0x3eaaaaab
-    self->_maxValue       = 4.0f;          // 0x40800000
-    self->_dragAnchor     = 0.0f;          // the high half of that qword
-    self->_dragValue      = 0.0f;
-    return selfv;
-}
-
-// ??1ScrollElement@UI@@UEAA@XZ   0x18011a900 — a DOOR (B4b-2)
-extern "C" void RtUi_ScrollElement_Dtor(void* self) {
-    PTR(self, 0x00) = Vtable();
-    ElementDtor(self);
-}
-
-// ============================================================================
 int RtUiScrollElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@ScrollElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_ScrollElement_Type);          ++n;
-    RegisterRuntimeAddr(0x18003a830ull, (void*)&RtUi_ScrollElement_Type);
-
-    RegisterRuntimeExport("?TypeName@ScrollElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_ScrollElement_TypeName);      ++n;
-    RegisterRuntimeAddr(0x18003a850ull, (void*)&RtUi_ScrollElement_TypeName);
-
-    RegisterRuntimeExport("??0ScrollElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_ScrollElement_Ctor);          ++n;
-    RegisterRuntimeAddr(0x18011a7f0ull, (void*)&RtUi_ScrollElement_Ctor);
-
-    RegisterRuntimeExport("??1ScrollElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_ScrollElement_Dtor);          ++n;
-    RegisterRuntimeAddr(0x18011a900ull, (void*)&RtUi_ScrollElement_Dtor);
-
-    RegisterRuntimeExport("?ComputeSize@ScrollElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_ScrollElement_ComputeSize);   ++n;
-    RegisterRuntimeAddr(0x18011ad80ull, (void*)&RtUi_ScrollElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@ScrollElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_ScrollElement_ComputeLayout); ++n;
-    RegisterRuntimeAddr(0x18011af20ull, (void*)&RtUi_ScrollElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@ScrollElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_ScrollElement_Draw);          ++n;
-    RegisterRuntimeAddr(0x18011b0b0ull, (void*)&RtUi_ScrollElement_Draw);
-
-    RegisterRuntimeExport(
-        "?Update@ScrollElement@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@"
-        "V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@Element@2@@Z",
-        (void*)&RtUi_ScrollElement_Update);                          ++n;
-    RegisterRuntimeAddr(0x18011b620ull, (void*)&RtUi_ScrollElement_Update);
-
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@ScrollElement` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@ScrollElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::ScrollElement::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x18003a940ull, (void*)&UI::ScrollElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@ScrollElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::ScrollElement::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x18003a9c0ull, (void*)&UI::ScrollElement::CreateInPlaceObject);
     return n;
 }

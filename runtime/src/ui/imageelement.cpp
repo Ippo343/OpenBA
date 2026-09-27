@@ -7,7 +7,7 @@
 //
 //   slot  method                       retail       where
 //   ----  ---------------------------  -----------  --------------------------
-//    0    vector deleting dtor         0x180036600  deleting_dtor.cpp row
+//    0    vector deleting dtor         0x180036600  ImageElement.h (the class's own)
 //    1    TypeName                     0x1800362b0  here
 //    2    Type                         0x180036290  here
 //    3    Element::Persist             0x180116870  element_vtable.cpp
@@ -16,8 +16,9 @@
 //    6    Draw                         0x180118850  here
 //    7..11                             Element's
 //
-// plus ??0ImageElement@UI@@QEAA@AEBV01@@Z  0x1800364c0  (copy ctor, a DOOR)
-//      ??1ImageElement@UI@@UEAA@XZ         0x180118470  (a DOOR)
+// plus ??1ImageElement@UI@@UEAA@XZ 0x180118470 and the factory pair (ENDGAME
+// B.3.9 UI-A: the real ctor ??0 0x180118410 is in the header; the copy-ctor
+// door is retired).
 //
 // Layout: runtime/types/ui/ImageElement.h (0xE0 = UI::Element 0xC0 + a
 // UI::Sprite at +0xC0, a float rotation at +0xD0 and the width/height
@@ -27,8 +28,6 @@
 // repeats these three addresses (the subclass overrides only Update), so they
 // are registered ONCE, here; in C++ the subclass simply does not override them.
 //
-// `??0ImageElement@UI@@QEAA@XZ` (0x180118410) is NOT here: it is ported and
-// registered, table-driven, by runtime/src/ui/ui_factory_wave28.cpp.
 // `GetSprite` / `SetRotation` / `SetSprite` / `SetWidthHeight` are
 // widgets_layout.cpp's doors (fragment pass).
 //
@@ -36,6 +35,10 @@
 // the registered doors are one-line QUALIFIED delegations. The border's raw
 // slot-6 read is a virtual member call; the rotated AddSprite (by address
 // 0x18011cb10 before) is the real `UI::SpriteContext` member.
+//
+// ENDGAME B.3.9 block UI-A: the class is CONCRETE; the slot doors and the
+// copy / ??1 doors, read only by the retired minted tables and RT_DELDTOR row,
+// are gone (slots 4/5/6 were also AnimatedImageElement's).
 // ============================================================================
 #include "element_common.h"
 #include "../../types/ui/ImageElement.h"
@@ -52,17 +55,13 @@ const uint8_t* ImageElementTypeInfoAtomic() {
         g_imageElementTypeInfo, "?_typeInfo@ImageElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
 
-// Door-only.
-void* VtImageElement() { return RT_DATA_SLOT(void*, "??_7ImageElement@UI@@6B@"); }
-
-using ElementCopyCtorFn = void* (*)(void* self, const void* other);
-using ElementDtorFn     = void  (*)(void* self);
-
 }  // namespace
 
 namespace UI {
 
-uint32_t ImageElement::Type() const {                           // 0x180036290
+uint32_t ImageElement::Type() const { return TypeId(); }      // 0x180036290
+// ?TypeId@ImageElement@UI@@SAIXZ 0x1800362a0 — the record's first dword.
+uint32_t ImageElement::TypeId() {
     return rtuielem::TypeIdOf(ImageElementTypeInfoAtomic());
 }
 // The key function: GCC emits `vtable for UI::ImageElement` here.
@@ -139,85 +138,40 @@ void ImageElement::Draw(SpriteContext& context, uint8_t alpha) const {
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — each a one-line QUALIFIED delegation.
+// ??1ImageElement@UI@@UEAA@XZ   0x180118470 -- restamp, then ~Element.
+// ENDGAME B.3.9 UI-A: EMPTY; the compiler restamps and chains ~Element. The
+// class owns no refcounted member: the Sprite is two plain words.
 // ============================================================================
-extern "C" uint32_t RtUi_ImageElement_Type(const void* self) {
-    return reinterpret_cast<const UI::ImageElement*>(self)->UI::ImageElement::Type();       // B.3.6 bridge
+namespace UI {
+ImageElement::~ImageElement() {}
+}  // namespace UI
+
+namespace UI {
+// ?CreateNewObject@ImageElement@UI@@SAPEAVBase@Object@@XZ  0x1800363a0
+// The factory-interpreter row this replaces: MemAlloc(0xe0, 8), retail's
+// null branch, then the ctor's stores (ui_factory_wave28.cpp's retired row).
+Object::Base* ImageElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ImageElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) ImageElement();
 }
-extern "C" const char* RtUi_ImageElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::ImageElement*>(self)->UI::ImageElement::TypeName();   // B.3.6 bridge
+// ?CreateInPlaceObject@ImageElement@UI@@SAPEAVBase@Object@@PEAX@Z  0x180036450
+Object::Base* ImageElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) ImageElement();
 }
-extern "C" void RtUi_ImageElement_ComputeSize(void* selfv) {
-    reinterpret_cast<UI::ImageElement*>(selfv)->UI::ImageElement::ComputeSize();           // B.3.6 bridge
-}
-extern "C" void RtUi_ImageElement_ComputeLayout(void* self, int x, int y, int w, int h) {
-    reinterpret_cast<UI::ImageElement*>(self)                                              // B.3.6 bridge
-        ->UI::ImageElement::ComputeLayout(x, y, w, h);
-}
-extern "C" void RtUi_ImageElement_Draw(const void* selfv, void* ctx, uint8_t alpha) {
-    reinterpret_cast<const UI::ImageElement*>(selfv)                                       // B.3.6 bridge
-        ->UI::ImageElement::Draw(*static_cast<UI::SpriteContext*>(ctx), alpha);
-}
+}  // namespace UI
 
 // ============================================================================
-// ??0ImageElement@UI@@QEAA@AEBV01@@Z   0x1800364c0   — a CTOR DOOR (B4b-2)
-// ============================================================================
-// +0xC0 and +0xC8 are copied as two qwords (+0xC8 covers index AND pad), then
-// +0xD0/+0xD4/+0xD8 as three separate dwords. Transcribed as written.
-extern "C" void* RtUi_ImageElement_CopyCtor(void* selfv, const void* otherv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    const uint8_t* other = static_cast<const uint8_t*>(otherv);
-    RtAddr<ElementCopyCtorFn>(0x1800358c0ull)(self, other);
-    P(self, 0x00) = VtImageElement();
-    *reinterpret_cast<uint64_t*>(self + 0xc0) = *reinterpret_cast<const uint64_t*>(other + 0xc0);
-    *reinterpret_cast<uint64_t*>(self + 0xc8) = *reinterpret_cast<const uint64_t*>(other + 0xc8);
-    I32(self, 0xd0) = I32c(other, 0xd0);
-    I32(self, 0xd4) = I32c(other, 0xd4);
-    I32(self, 0xd8) = I32c(other, 0xd8);
-    return self;
-}
-
-// ============================================================================
-// ??1ImageElement@UI@@UEAA@XZ   0x180118470   — a DTOR DOOR (B4b-2)
-// ============================================================================
-// Re-stamp own vtable, then TAIL-JUMP to ~Element. The class owns no
-// refcounted member: the Sprite is two plain words.
-extern "C" void RtUi_ImageElement_Dtor(void* selfv) {
-    P(selfv, 0x00) = VtImageElement();
-    RtAddr<ElementDtorFn>(0x1801161a0ull)(selfv);
-}
-
-// ============================================================================
-// Registration — both doors for every row.
+// Registration: the factory pair only (B39_RULES D2).
 // ============================================================================
 int RtUiImageElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?TypeName@ImageElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_ImageElement_TypeName);       ++n;
-    RegisterRuntimeAddr(0x1800362b0ull, (void*)&RtUi_ImageElement_TypeName);
-
-    RegisterRuntimeExport("?Type@ImageElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_ImageElement_Type);           ++n;
-    RegisterRuntimeAddr(0x180036290ull, (void*)&RtUi_ImageElement_Type);
-
-    RegisterRuntimeExport("?ComputeSize@ImageElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_ImageElement_ComputeSize);    ++n;
-    RegisterRuntimeAddr(0x180118650ull, (void*)&RtUi_ImageElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@ImageElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_ImageElement_ComputeLayout);  ++n;
-    RegisterRuntimeAddr(0x1801186f0ull, (void*)&RtUi_ImageElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@ImageElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_ImageElement_Draw);           ++n;
-    RegisterRuntimeAddr(0x180118850ull, (void*)&RtUi_ImageElement_Draw);
-
-    RegisterRuntimeExport("??0ImageElement@UI@@QEAA@AEBV01@@Z",
-                          (void*)&RtUi_ImageElement_CopyCtor);       ++n;
-    RegisterRuntimeAddr(0x1800364c0ull, (void*)&RtUi_ImageElement_CopyCtor);
-
-    RegisterRuntimeExport("??1ImageElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_ImageElement_Dtor);           ++n;
-    RegisterRuntimeAddr(0x180118470ull, (void*)&RtUi_ImageElement_Dtor);
+    RegisterRuntimeExport("?CreateNewObject@ImageElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::ImageElement::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x1800363a0ull, (void*)&UI::ImageElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@ImageElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::ImageElement::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x180036450ull, (void*)&UI::ImageElement::CreateInPlaceObject);
     return n;
 }

@@ -41,7 +41,7 @@
 //
 // `??_7GroupDescription@UI@@6B@` @ 0x180157190, TEN slots (B36_SLOTS.md
 // section 1):
-//   [0] 0x180046af0  (unexported) vector deleting dtor — RT_DELDTOR row, kept
+//   [0] 0x180046af0  (unexported) vector deleting dtor — the class's own (B.3.9)
 //   [1] 0x180046660  TypeName
 //   [2] 0x180046640  Type
 //   [3] 0x180117cf0  GetFileVersion  (`MOV EAX,0x104`)
@@ -52,16 +52,24 @@
 //   [8] 0x180117dc0  CreateInstance(const Dialog*) -> InternalPtr<Element>  RETSLOT (B6-2)
 //   [9] 0x180046980  Construct — INTRODUCED here (`virtual`, B6-1.1)
 //
-// ABSTRACT (slot 0 `= 0`). NO REAL CTOR: retail exports no out-of-line
+// (Until ENDGAME B.3.9:) ABSTRACT (slot 0 `= 0`). NO REAL CTOR: retail exports no out-of-line
 // `??0GroupDescription` at all — `Construct`, `Reconstruct` and the two factory
 // steps each inline the same 19 stores. Every live one wears the MINTED table,
 // so every door in groupdescription.cpp delegates with a QUALIFIED call.
 //
 // THE POD IS GONE. `RtUI::GroupDescription` had ONE user (groupdescription.cpp)
 // and nothing embedded it, so the class takes the layout outright (B6-4.1);
-// the two vtable-name constants stay in `RtUI::`.
+// the two vtable-name constants stayed in `RtUI::` until B.3.9.
 //
 // PORTABILITY: no <windows.h>, per PLAN.md §4.1 decision 1.
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is the inlined store sequence (retail has no out-of-line ??0) minus its
+// vptr stores; slot 0 is the class's own vector deleting dtor;
+// ~GroupDescription is protected and non-virtual. The factory pair is the
+// class's own; the minted `??_7GroupDescription@UI@@6B@`, its RT_DELDTOR row,
+// the factory-interpreter row and the doors are retired, and with them the
+// two `RtUI::kVtbl*` names this header carried.
 // ============================================================================
 #pragma once
 
@@ -71,14 +79,7 @@
 
 #include "ElementDescription.h"
 #include "../collection/Collection.h"
-
-namespace RtUI {
-
-// The two vtables the class's bodies name. Both exported.
-constexpr const char* kVtblGroupDescription = "??_7GroupDescription@UI@@6B@";   // 0x180157190
-constexpr const char* kVtblGroupElement     = "??_7GroupElement@UI@@6B@";       // 0x180157130
-
-}  // namespace RtUI
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI {
 
@@ -87,8 +88,30 @@ class Element;
 
 class GroupDescription : public ElementDescription {
 public:
+    // The REAL constructor. Retail exports no out-of-line ??0GroupDescription:
+    // Construct, Reconstruct and both factory steps each INLINE the same
+    // nineteen stores (0x180046996..0x180046a06) -- ElementDescription()'s,
+    // then the child array's two QWORD zeros (Collection::Array's own default
+    // ctor). Nothing else.
+    GroupDescription() : ElementDescription() {}
+
     // ---- the ten slots, in measured order ---------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180046af0
+    // [0] 0x180046af0 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x78`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<GroupDescription*>(self + static_cast<int64_t>(i) * 0x78)
+                    ->~GroupDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~GroupDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180046660
     uint32_t    Type() const override;                            // [2] 0x180046640
     int32_t     GetFileVersion() const override;                  // [3] 0x180117cf0
@@ -104,16 +127,15 @@ public:
     // ---- exported, NOT PORTED as members ----------------------------------
     GroupDescription(const GroupDescription& src);                // 0x180046a30  not ported
     GroupDescription& operator=(const GroupDescription& src);     // 0x180046a90  not ported
-    static uint32_t TypeId();                                     // 0x180046650  not ported
-    static Object::Base* CreateNewObject();                       // 0x180046750  factory_ui1.cpp door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180046840  factory_ui1.cpp door
+    static uint32_t TypeId();                                     // 0x180046650  ported over the minted record
+    static Object::Base* CreateNewObject();                       // 0x180046750  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x180046840  the class's own (B39 D2)
 
 protected:
-    // NOT a retail ctor (retail has none out of line — see the banner).
-    GroupDescription() = default;
-    // `??1GroupDescription@UI@@UEAA@XZ` (0x180117c00). NON-VIRTUAL, NOT defined
-    // in the real build (the base's is not either); the retail body is the
-    // door `RtUi_GroupDescription_Dtor`.
+    // `??1GroupDescription@UI@@UEAA@XZ` (0x180117c00). NON-VIRTUAL and EMPTY
+    // (groupdescription.cpp): the child array's J1 ~Array (retail 0x180039440)
+    // is the compiler's member ~Array; ~ElementDescription (+0x60) and
+    // ~External are the compiler's chain.
     ~GroupDescription();
 
 private:
@@ -132,6 +154,7 @@ static_assert(sizeof(GroupDescription) == 0x78,
               "sizeof(UI::GroupDescription) == 0x78 (MOV EDX,0x78 at 0x180046b0f)");
 static_assert(alignof(GroupDescription) == 8, "UI::GroupDescription aligns to 8");
 static_assert(!std::has_virtual_destructor<GroupDescription>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<GroupDescription>::value, "B39 D1: concrete");
 static_assert(offsetof(GroupDescription, _children) == sizeof(ElementDescription),
               "GroupDescription's own field begins at the end of ElementDescription");
 static_assert(offsetof(GroupDescription, _children) == 0x68,

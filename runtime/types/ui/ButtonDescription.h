@@ -18,7 +18,7 @@
 // `??_7ButtonDescription@UI@@6B@` @ 0x180157370, TEN slots (B36_SLOTS.md
 // section 1; sizeof from `MOV EDX,0xa0` in slot 0 0x1800481a0):
 //
-//   [0] 0x1800481a0  (unexported) vector deleting dtor — RT_DELDTOR row, kept
+//   [0] 0x1800481a0  (unexported) vector deleting dtor — the class's own (B.3.9)
 //   [1] 0x180047e30  TypeName
 //   [2] 0x180047e10  Type
 //   [3] 0x1801113d0  GetFileVersion  (`return 0x104`)
@@ -45,8 +45,15 @@
 // The DESTRUCTOR is the one member that stays undefined: a body would chain to
 // `~ElementDescription`, which is not defined in the real build.
 //
-// ABSTRACT: slot 0 `= 0`; no real ctor (`??0ButtonDescription` 0x180110b10 is
+// (Until ENDGAME B.3.9:) ABSTRACT: slot 0 `= 0`; no real ctor (`??0ButtonDescription` 0x180110b10 is
 // the factory_ui1.cpp door that `Construct`/`Reconstruct` tail-jump into).
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0ButtonDescription@UI@@QEAA@XZ` (0x180110b10) minus its vptr stores;
+// slot 0 is the class's own vector deleting dtor; ~ButtonDescription is protected and
+// non-virtual. The factory pair is the class's own; the minted
+// `??_7ButtonDescription@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
+// the doors are retired.
 // ============================================================================
 
 #include <cstdint>
@@ -55,6 +62,7 @@
 
 #include "ElementDescription.h"
 #include "DescriptionsBatch1.h"   // kVtbl* names; RtUI::ButtonDescription aliases this class
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI {
 
@@ -64,8 +72,34 @@ class ButtonElement;   // ButtonElement.h
 
 class ButtonDescription : public ElementDescription {
 public:
+    // ??0ButtonDescription@UI@@QEAA@XZ 0x180110b10 — the REAL constructor:
+    // ElementDescription()'s stores, then +0x68..+0x98 as seven QWORD zeros
+    // (0x180110b8d..0x180110bae): the five child handles and the four colours.
+    ButtonDescription() : ElementDescription() {
+        for (int i = 0; i < 5; ++i) _childDesc[i] = nullptr;
+        _word90 = 0;
+        _word94 = 0;
+        _word98 = 0;
+        _word9c = 0;
+    }
+
     // ---- the ten slots, in measured order ---------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x1800481a0
+    // [0] 0x1800481a0 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0xa0`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<ButtonDescription*>(self + static_cast<int64_t>(i) * 0xa0)
+                    ->~ButtonDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~ButtonDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180047e30
     uint32_t    Type() const override;                            // [2] 0x180047e10
     int32_t     GetFileVersion() const override;                  // [3] 0x1801113d0
@@ -92,16 +126,14 @@ public:
     ButtonDescription(const ButtonDescription& src);              // 0x180047ff0  not ported
     ButtonDescription& operator=(const ButtonDescription& src);   // 0x180048090  not ported
 
-    static uint32_t TypeId();                                     // 0x180047e20  not ported
-    static Object::Base* CreateNewObject();                       // 0x180047f20  factory_ui1.cpp door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180047fa0  factory_ui1.cpp door
+    static uint32_t TypeId();                                     // 0x180047e20  ported over the minted record
+    static Object::Base* CreateNewObject();                       // 0x180047f20  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x180047fa0  the class's own (B39 D2)
 
 protected:
-    // NOT retail's `??0ButtonDescription@UI@@QEAA@XZ` (0x180110b10).
-    ButtonDescription() = default;
-    // `??1ButtonDescription@UI@@UEAA@XZ` (0x180110bd0). NON-VIRTUAL, NOT defined
-    // in the real build (the base's dtor is not either); the retail body is
-    // the door `RtUi_ButtonDescription_Dtor`.
+    // `??1ButtonDescription@UI@@UEAA@XZ` (0x180110bd0). NON-VIRTUAL and EMPTY
+    // (buttondescription.cpp): nothing of its own is released; the compiler
+    // chains ~ElementDescription (+0x60) and ~External.
     ~ButtonDescription();
 
 private:
@@ -129,6 +161,7 @@ static_assert(sizeof(ButtonDescription) == 0xa0,
               "UI::ButtonDescription is 0xa0 bytes (MOV EDX,0xa0 in 0x1800481a0)");
 static_assert(alignof(ButtonDescription) == 8, "UI::ButtonDescription aligns to 8");
 static_assert(!std::has_virtual_destructor<ButtonDescription>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<ButtonDescription>::value, "B39 D1: concrete");
 static_assert(offsetof(ButtonDescription, _childDesc) == sizeof(ElementDescription), "");
 // The POD offsets, absolute (RtUI::ButtonDescription is an ALIAS since fragment pass F2).
 static_assert(offsetof(ButtonDescription, _childDesc) == 0x68, "");

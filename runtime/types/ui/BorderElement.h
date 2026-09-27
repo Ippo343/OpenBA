@@ -16,7 +16,7 @@
 // `??_7BorderElement@UI@@6B@` @ 0x180156920, TWELVE slots (sizeof from
 // `MOV EDX,0x150` in slot 0 0x1800414f0):
 //
-//   [ 0] 0x1800414f0  (unexported) vector deleting dtor — RT_DELDTOR row, kept
+//   [ 0] 0x1800414f0  (unexported) vector deleting dtor — the class's own (B.3.9)
 //   [ 1] 0x1800410b0  TypeName
 //   [ 2] 0x180041090  Type
 //   [ 3] 0x180116870  Element::Persist     INHERITED
@@ -29,8 +29,13 @@
 //   [10] 0x180035620  Element::SetColor    INHERITED
 //   [11] 0x180035630  Element::GetBorder   INHERITED (RETSLOT)
 //
-// ABSTRACT, no real ctor (`??0BorderElement@UI@@QEAA@XZ` 0x18010fd40 is the
-// factory_ui1.cpp door BorderDescription::CreateInstance calls).
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0BorderElement@UI@@QEAA@XZ` (0x18010fd40) minus its vptr
+// store; slot 0 is the class's own vector deleting dtor; ~BorderElement is
+// protected and non-virtual. BorderDescription::CreateInstance and the class's
+// own factory pair (borderelement.cpp) build it; the minted
+// `??_7BorderElement@UI@@6B@`, its RT_DELDTOR row, the FACTUI1 row and the
+// doors are retired.
 //
 // ---------------------------------------------------------------------------
 // LAYOUT — 0x150 bytes = UI::Element's 0xC0 + NINE UI::Sprite values
@@ -53,13 +58,35 @@
 
 #include "Element.h"
 #include "Sprite.h"      // ::Sprite (block D folds it into UI::Sprite)
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI {
 
 class BorderElement : public Element {
 public:
+    // ??0BorderElement@UI@@QEAA@XZ 0x18010fd40 — the REAL constructor: CALL
+    // ??0Element (Element()), then the nine Sprites {sheet 0, index -1}
+    // (0x18010fd68..0x18010fdf7) — exactly `UI::Sprite()`'s two stores, so the
+    // members' own default ctors are the body. Each pad dword stays unwritten.
+    BorderElement() : Element() {}
+
     // ---- the twelve slots, in measured order ------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x1800414f0
+    // [0] 0x1800414f0 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x150`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<BorderElement*>(self + static_cast<int64_t>(i) * 0x150)
+                    ->~BorderElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~BorderElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x1800410b0
     uint32_t    Type() const override;                            // [2] 0x180041090
     void ComputeSize() override;                                  // [4] 0x1801101d0
@@ -68,19 +95,17 @@ public:
     void Draw(SpriteContext& context, uint8_t alpha) const override; // [6] 0x1801103e0
     // [3], [7] .. [11] — Element's, inherited.
 
-    BorderElement(const BorderElement& src);                      // 0x180041250  door (borderelement.cpp)
+    BorderElement(const BorderElement& src);                      // 0x180041250  not ported (door retired, no caller)
     BorderElement& operator=(const BorderElement& src);           // 0x180041390  not ported
 
-    static uint32_t TypeId();                                     // 0x1800410a0  not ported
-    static Object::Base* CreateNewObject();                       // 0x1800411a0  factory_ui1.cpp door
-    static Object::Base* CreateInPlaceObject(void* place);        // 0x180041220  factory_ui1.cpp door
+    static uint32_t TypeId();                                     // 0x1800410a0  borderelement.cpp
+    // Retail's factory pair (B39_RULES D2), borderelement.cpp.
+    static Object::Base* CreateNewObject();                       // 0x1800411a0
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x180041220
 
 protected:
-    // NOT retail's `??0BorderElement@UI@@QEAA@XZ` (0x18010fd40).
-    BorderElement() = default;
-    // `??1BorderElement@UI@@UEAA@XZ` (0x180041230), declared only; the retail
-    // body (no own-table stamp, straight to ~Element) is the door
-    // `RtUi_BorderElement_Dtor`.
+    // `??1BorderElement@UI@@UEAA@XZ` (0x180041230). NON-VIRTUAL. Retail's body
+    // is only the tail into ~Element, which the compiler chains.
     ~BorderElement();
 
 private:
@@ -105,6 +130,7 @@ static_assert(sizeof(BorderElement) == 0x150,
               "UI::BorderElement is 0x150 bytes (MOV EDX,0x150 in 0x1800414f0)");
 static_assert(alignof(BorderElement) == 8, "UI::BorderElement aligns to 8");
 static_assert(!std::has_virtual_destructor<BorderElement>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<BorderElement>::value, "B39 D1: concrete");
 static_assert(offsetof(BorderElement, _topLeft) == sizeof(Element),
               "BorderElement's own fields begin at the end of UI::Element");
 static_assert(offsetof(BorderElement, _topLeft)     == 0x0c0, "");

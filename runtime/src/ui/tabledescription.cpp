@@ -43,6 +43,7 @@
 // ??0TableElement@UI@@ (0x18011e2f0) is already ported (ui_factory_wave28.cpp).
 // ============================================================================
 #include <atomic>
+#include <new>
 #include <cstddef>
 #include <cstdint>
 
@@ -72,18 +73,9 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 
-std::atomic<void*> g_vtBase{nullptr};
-std::atomic<void*> g_vtExternal{nullptr};
-std::atomic<void*> g_vtElementDescription{nullptr};
-std::atomic<void*> g_vtTableDescription{nullptr};
 std::atomic<void*> g_typeInfo{nullptr};
 std::atomic<void*> g_memFree{nullptr};
-std::atomic<void*> g_externalDtor{nullptr};
 
-void* VtBase()               { return AtomicExport(g_vtBase, "??_7Base@Object@@6B@"); }
-void* VtExternal()           { return AtomicExport(g_vtExternal, "??_7External@Object@@6B@"); }
-void* VtElementDescription() { return AtomicExport(g_vtElementDescription, "??_7ElementDescription@UI@@6B@"); }
-void* VtTableDescription()   { return AtomicExport(g_vtTableDescription, "??_7TableDescription@UI@@6B@"); }
 const uint8_t* TableDescriptionTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@TableDescription@UI@@0VBaseTypeInfo@Object@@A"));
@@ -124,44 +116,6 @@ void ReleaseStringField(char** field) {
 
 }  // namespace
 
-// ============================================================================
-// ??0TableDescription@UI@@QEAA@XZ   retail 0x18011e7a0 — a DOOR (B4b-2)
-// ============================================================================
-extern "C" void* RtUi_TableDescription_Ctor(void* selfv) {
-    uint8_t* p = static_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtBase();                                              // 18011e7b1
-    *v = VtExternal();                                          // 18011e7bb
-    *reinterpret_cast<uint64_t*>(p + 0x08) = 0;                 // 18011e7d0
-    *reinterpret_cast<uint64_t*>(p + 0x10) = 0;                 // 18011e7d3
-    *reinterpret_cast<uint64_t*>(p + 0x18) = 0;                 // 18011e7d7
-    *v = VtElementDescription();                                // 18011e7db
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;                 // 18011e7e5
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;                 // 18011e7e9
-    *reinterpret_cast<uint64_t*>(p + 0x30) = 0;                 // 18011e7ed
-    *reinterpret_cast<int32_t*>(p + 0x38)  = 0;                 // 18011e7f1  DWORD
-    *reinterpret_cast<int32_t*>(p + 0x3c)  = -1;                // 18011e7f4  DWORD
-    *reinterpret_cast<uint64_t*>(p + 0x40) = 3;                 // 18011e7fb  ONE QWORD
-    *reinterpret_cast<uint64_t*>(p + 0x48) = 0;                 // 18011e803
-    *reinterpret_cast<uint64_t*>(p + 0x50) = 0;                 // 18011e807
-    *reinterpret_cast<uint64_t*>(p + 0x58) = 0;                 // 18011e80b
-    *reinterpret_cast<uint64_t*>(p + 0x60) = 0;                 // 18011e80f
-    *v = VtTableDescription();                                  // 18011e813
-
-    UI::TableDescription* self = reinterpret_cast<UI::TableDescription*>(p);   // B.3.6 bridge
-    self->_columnCount = 1;                                     // 18011e81d  DWORD
-    // ONE UNALIGNED QWORD covering +0x6c..+0x73: _rowCount = 1 and _spacing = 0.
-    // _pad74 is left as it was — see the header.
-    self->_rowCount = 1;                                        // 18011e824
-    self->_spacing  = 0;
-    self->_cells._data     = nullptr;                           // 18011e82c
-    self->_cells._size     = 0;                                 // 18011e830  _size + _cap
-    self->_cells._capacity = 0;
-    self->_unknown88 = 0;                                       // 18011e837
-    self->_unknown90 = nullptr;                                 // 18011e83e
-    return p;                                                   // 18011e845
-}
 
 // ============================================================================
 // The member bodies (ENDGAME B.3.6 block C4)
@@ -172,20 +126,25 @@ uint32_t TableDescription::Type() const {
     const uint8_t* ti = TableDescriptionTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t TableDescription::TypeId() {
+    const uint8_t* ti = TableDescriptionTypeInfo();
+    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
+}
 const char* TableDescription::TypeName() const {
     const uint8_t* ti = TableDescriptionTypeInfo();
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
 }
 int32_t TableDescription::GetFileVersion() const { return 0x204; }
 
-// 0x180079070 — the null test stays in the door.
+// 0x180079070 — the ctor, placement (the null test sat in the retired door).
 Object::External* TableDescription::Construct() {
-    return static_cast<Object::External*>(RtUi_TableDescription_Ctor(this));
+    return ::new (this) TableDescription();
 }
-// 0x180079050 — slot 0 (VIRTUAL, the minted row) with flag 0, then the ctor.
+// 0x180079050 — slot 0 (VIRTUAL) with flag 0, then the ctor.
 Object::External* TableDescription::Reconstruct() {
     DeletingDtor(0);
-    return static_cast<Object::External*>(RtUi_TableDescription_Ctor(this));
+    return ::new (this) TableDescription();
 }
 // 0x180079080
 void TableDescription::Destruct() { DeletingDtor(0); }
@@ -275,11 +234,8 @@ Object::InternalPtr<Element>* TableDescription::CreateInstance(
     void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0xf0, 8);   // 18011e398 (inlined)
 
     TableElement* elem = nullptr;
-    if (raw != nullptr) {                                      // 18011e3c3
-        using TableElementCtorFn = void* (*)(void*);
-        elem = reinterpret_cast<TableElement*>(                // B.3.6 bridge
-            RtAddr<TableElementCtorFn>(0x18011e2f0ull)(raw));  // 18011e3c8
-    }
+    if (raw != nullptr)                                        // 18011e3c3
+        elem = ::new (raw) TableElement();                     // 18011e3c8 ??0 (out of line)
 
     void* slot = elem;                                         // 18011e3d5
     UI::ElementDescription::CreateInstance(                   // 18011e3e2
@@ -362,107 +318,49 @@ Object::InternalPtr<Element>* TableDescription::CreateInstance(
     return ret;
 }
 
+// ??1TableDescription@UI@@UEAA@XZ  0x18011e6f0 — retail's body, moved from the
+// retired door (ENDGAME B.3.9 UI-B): the String at +0x90 FIRST, then the cell
+// Array through 0x180079870 (frees and zeroes the header; the compiler's
+// `_cells.~Array()` afterwards is a no-op). The restamps, the base's
+// _textName (+0x60) and the tail JMP into ~External are the compiler's chain.
+TableDescription::~TableDescription() {
+    ReleaseStringField(&_unknown90);                           // 18011e710
+    using ArrayDtorFn = void* (*)(void*);
+    RtAddr<ArrayDtorFn>(0x180079870ull)(&_cells);              // 18011e74a
+}
+
+// ?CreateNewObject@TableDescription@UI@@SAPEAVBase@Object@@XZ 0x180078fc0 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0x98, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* TableDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TableDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) TableDescription();
+}
+// ?CreateInPlaceObject@TableDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x180079040
+Object::Base* TableDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) TableDescription();
+}
+
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, each a one-line
-// QUALIFIED delegation onto the member above.
+// ENDGAME B.3.9 UI-B: the slot doors, the ctor / dtor doors and the
+// factory-interpreter row are gone. Their only readers were the minted
+// `??_7TableDescription@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
+// TableDescription now wears the compiler's table.
 // ============================================================================
-using UI::TableDescription;
-
-extern "C" uint32_t RtUi_TableDescription_Type(const TableDescription* self) {
-    return self->UI::TableDescription::Type();
-}
-extern "C" const char* RtUi_TableDescription_TypeName(const TableDescription* self) {
-    return self->UI::TableDescription::TypeName();
-}
-extern "C" int32_t RtUi_TableDescription_GetFileVersion(const TableDescription* self) {
-    return self->UI::TableDescription::GetFileVersion();
-}
-extern "C" void* RtUi_TableDescription_Construct(TableDescription* self) {
-    if (self == nullptr) return nullptr;                       // 180079070
-    return self->UI::TableDescription::Construct();
-}
-extern "C" void* RtUi_TableDescription_Reconstruct(TableDescription* self) {
-    return self->UI::TableDescription::Reconstruct();
-}
-extern "C" void RtUi_TableDescription_Destruct(TableDescription* self) {
-    self->UI::TableDescription::Destruct();
-}
-extern "C" bool RtUi_TableDescription_Serialize(TableDescription* self, void* stream) {
-    return self->UI::TableDescription::Serialize(stream);
-}
-// RDX is the caller's slot; the member writes it and hands it back (B6-2).
-extern "C" void** RtUi_TableDescription_CreateInstance(const TableDescription* self, void** ret,
-                                                       const void* dialog) {
-    return reinterpret_cast<void**>(self->UI::TableDescription::CreateInstance(
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),        // B.3.6 bridge
-        static_cast<const UI::Dialog*>(dialog)));
-}
-
-// ??1TableDescription@UI@@UEAA@XZ  0x18011e6f0 — a DOOR (B4b-2). Release the
-// String at +0x90 FIRST, then destroy the cell Array, then the base's _textName
-// at +0x60 under the base vtable, then tail JMP.
-extern "C" void RtUi_TableDescription_Dtor(void* selfv) {
-    TableDescription* self = reinterpret_cast<TableDescription*>(selfv);   // B.3.6 bridge
-    void** v = reinterpret_cast<void**>(selfv);
-
-    *v = VtTableDescription();                                 // 18011e706
-    ReleaseStringField(&self->_unknown90);                     // 18011e710
-
-    using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x180079870ull)(&self->_cells);        // 18011e74a
-
-    *v = VtElementDescription();                               // 18011e750
-    ReleaseStringField(&self->_textName);                      // 18011e75a
-
-    using ExtDtorFn = void (*)(void*);
-    reinterpret_cast<ExtDtorFn>(AtomicExport(
-        g_externalDtor, "??1External@Object@@UEAA@XZ"))(selfv);   // 18011e78c JMP
-}
 
 int RtUiTableDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@TableDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_TableDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x180078eb0ull, (void*)&RtUi_TableDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@TableDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_TableDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x180078ed0ull, (void*)&RtUi_TableDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@TableDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_TableDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x18011e6e0ull, (void*)&RtUi_TableDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@TableDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_TableDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x180079070ull, (void*)&RtUi_TableDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@TableDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_TableDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x180079050ull, (void*)&RtUi_TableDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@TableDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_TableDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x180079080ull, (void*)&RtUi_TableDescription_Destruct);
-
-    RegisterRuntimeExport("??0TableDescription@UI@@QEAA@XZ",
-                          (void*)&RtUi_TableDescription_Ctor);            ++n;
-    RegisterRuntimeAddr(0x18011e7a0ull, (void*)&RtUi_TableDescription_Ctor);
-
-    RegisterRuntimeExport("??1TableDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_TableDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x18011e6f0ull, (void*)&RtUi_TableDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@TableDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_TableDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x18011e590ull, (void*)&RtUi_TableDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@TableDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_TableDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x18011e350ull, (void*)&RtUi_TableDescription_CreateInstance);
-
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@TableDescription` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@TableDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::TableDescription::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x180078fc0ull, (void*)&UI::TableDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@TableDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::TableDescription::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x180079040ull, (void*)&UI::TableDescription::CreateInPlaceObject);
     return n;
 }

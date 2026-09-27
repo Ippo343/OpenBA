@@ -584,12 +584,10 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     reinterpret_cast<StreamCloseFn>(
         ReadVtableSlot(&cs.memoryStream, RtIo::kStreamVtblCloseSlot * 8))(&cs.memoryStream);
 
-    cs.memoryStream.base.vptr = RT_VTABLE_ONCE("??_7MemoryStream@IO@@6B@");
-    if (cs.memoryStream.ownsData != 0 && cs.memoryStream.data != nullptr) {
-        MemFree(cs.memoryStream.data);
-    }
-    cs.memoryStream.base.vptr = RT_VTABLE_ONCE("??_7Stream@IO@@6B@");
-    if (cs.memoryStream.base.encoding != nullptr) MemFree(cs.memoryStream.base.encoding);
+    // ~MemoryStream then ~Stream on the embedded stream: ENDGAME B.3.9 IO, the
+    // class's own destructor chain (the same two frees, same order) through a
+    // non-virtual slot-0 call with flags 0 -- no free of the member itself.
+    reinterpret_cast<IO::MemoryStream*>(&cs.memoryStream)->IO::MemoryStream::DeletingDtor(0);
 
     cs.base.base.vptr = RT_VTABLE_ONCE("??_7CompressedStream@IO@@6B@");
     RT_EXPORT_ONCE(ReleaseFn, "?Release@CompressedStream@IO@@QEAAXXZ")(&cs.base);

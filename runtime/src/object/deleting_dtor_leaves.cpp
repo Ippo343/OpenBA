@@ -103,11 +103,6 @@ extern "C" void RtUi_ToolTipDialog_Dtor(void* self) {
     RT_EXPORT_ONCE(DtorFn, "??1DialogInstance@UI@@UEAA@XZ")(self);
 }
 
-// ??1ReaderWriter@IO@@UEAA@XZ   0x1800b9150
-extern "C" void RtIo_ReaderWriter_Dtor(void* self) {
-    STAMP(self, "??_7ReaderWriter@IO@@6B@");
-}
-
 // ??1Light@Graphics@@UEAA@XZ   0x180058d20  — no restamp, straight to Geometry
 extern "C" void RtGraphics_Light_Dtor(void* self) {
     RT_EXPORT_ONCE(DtorFn, "??1Geometry@Graphics@@UEAA@XZ")(self);
@@ -172,11 +167,9 @@ int RtObjectDeletingDtorLeavesRegister() {
     RegisterRuntimeAddr  (0x1801041f0ull,                                  (void*)&RtGraphics_ParticleInstance_Dtor);
     RegisterRuntimeExport("??1ToolTipDialog@UI@@UEAA@XZ",        (void*)&RtUi_ToolTipDialog_Dtor);
     RegisterRuntimeAddr  (0x1800dac70ull,                          (void*)&RtUi_ToolTipDialog_Dtor);
-    RegisterRuntimeExport("??1ReaderWriter@IO@@UEAA@XZ",         (void*)&RtIo_ReaderWriter_Dtor);
-    RegisterRuntimeAddr  (0x1800b9150ull,                          (void*)&RtIo_ReaderWriter_Dtor);
     RegisterRuntimeExport("??1Light@Graphics@@UEAA@XZ",          (void*)&RtGraphics_Light_Dtor);
     RegisterRuntimeAddr  (0x180058d20ull,                          (void*)&RtGraphics_Light_Dtor);
     RegisterRuntimeExport("??1AnimationGroup@Graphics@@UEAA@XZ", (void*)&RtGraphics_AnimationGroup_Dtor);
     RegisterRuntimeAddr  (0x1800fb620ull,                          (void*)&RtGraphics_AnimationGroup_Dtor);
-    return 8;
+    return 7;
 }

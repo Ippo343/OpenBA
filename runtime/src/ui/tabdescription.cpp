@@ -56,10 +56,6 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-void* VtBase()               { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* VtExternal()           { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* VtElementDescription() { return RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@"); }
-void* VtTabDescription()     { return RT_DATA_SLOT(void*, "??_7TabDescription@UI@@6B@"); }
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
@@ -116,68 +112,7 @@ void AddChild(const void* dialog, void** slot, UI::Element* elem, void* childDes
 
 }  // namespace
 
-// ============================================================================
-// ??0TabDescription@UI@@QEAA@XZ   retail 0x1800daa00
-// ============================================================================
-extern "C" void* RtUi_TabDescription_Ctor(void* selfv) {
-    uint8_t* p = static_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
 
-    *v = VtBase();                                              // 1800daa11
-    *v = VtExternal();                                          // 1800daa1b
-    *reinterpret_cast<uint64_t*>(p + 0x08) = 0;                 // 1800daa30
-    *reinterpret_cast<uint64_t*>(p + 0x10) = 0;                 // 1800daa33
-    *reinterpret_cast<uint64_t*>(p + 0x18) = 0;                 // 1800daa37
-    *v = VtElementDescription();                                // 1800daa3b
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;                 // 1800daa45
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;                 // 1800daa49
-    *reinterpret_cast<uint64_t*>(p + 0x30) = 0;                 // 1800daa4d
-    *reinterpret_cast<int32_t*>(p + 0x38)  = 0;                 // 1800daa51  DWORD
-    *reinterpret_cast<int32_t*>(p + 0x3c)  = -1;                // 1800daa54  DWORD
-    *reinterpret_cast<uint64_t*>(p + 0x40) = 3;                 // 1800daa5b  ONE QWORD
-    *reinterpret_cast<uint64_t*>(p + 0x48) = 0;                 // 1800daa63
-    *reinterpret_cast<uint64_t*>(p + 0x50) = 0;                 // 1800daa67
-    *reinterpret_cast<uint64_t*>(p + 0x58) = 0;                 // 1800daa6b
-    *reinterpret_cast<uint64_t*>(p + 0x60) = 0;                 // 1800daa6f
-    *v = VtTabDescription();                                    // 1800daa73
-    *reinterpret_cast<uint64_t*>(p + 0x68) = 0;                 // 1800daa7d
-    *reinterpret_cast<uint64_t*>(p + 0x70) = 0;                 // 1800daa81
-    *reinterpret_cast<uint64_t*>(p + 0x78) = 0;                 // 1800daa85
-    *reinterpret_cast<uint64_t*>(p + 0x80) = 0;                 // 1800daa89
-    *reinterpret_cast<uint64_t*>(p + 0x88) = 0;                 // 1800daa90
-    *reinterpret_cast<uint64_t*>(p + 0x90) = 0;                 // 1800daa97
-    *reinterpret_cast<uint64_t*>(p + 0x98) = 0;                 // 1800daa9e
-    // +0xa0 SKIPPED — see the banner.
-    *reinterpret_cast<uint64_t*>(p + 0xa8) = 0;                 // 1800daaa5
-    *reinterpret_cast<uint64_t*>(p + 0xb0) = 0;                 // 1800daaac  _size + _cap
-    return p;                                                   // 1800daab3
-}
-
-// ??1TabDescription@UI@@UEAA@XZ   0x1800da8e0
-// ============================================================================
-// Restamp, destroy the tab Array (0x18004cc90 — frees the buffer and does NOT
-// visit the pairs), release the three Strings in REVERSE order (+0x98, +0x90,
-// +0x88), restamp the base vtable, release _textName at +0x60, tail JMP.
-// The four ExternalPtrs at +0x68..+0x80 are not released.
-extern "C" void RtUi_TabDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtTabDescription();                                   // 1800da8fb
-
-    using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x18004cc90ull)(p + 0xa8);             // 1800da90c
-
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x98));    // 1800da912
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x90));    // 1800da945
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x88));    // 1800da977
-
-    *v = VtElementDescription();                               // 1800da9a9
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x60));    // 1800da9b3
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800da9e6 JMP
-}
 
 // ============================================================================
 // ============================================================================
@@ -218,16 +153,20 @@ const char* TabDescription::TypeName() const {
 uint32_t TabDescription::Type() const {
     uint32_t v = 0; __builtin_memcpy(&v, TabTypeInfo(), sizeof v); return v;
 }
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t TabDescription::TypeId() {
+    uint32_t v = 0; __builtin_memcpy(&v, TabTypeInfo(), sizeof v); return v;
+}
 int32_t TabDescription::GetFileVersion() const { return 0x104; }
 
-// [9] 0x18004c390 — the null-`this` test stays in the door.
+// [9] 0x18004c390 — the ctor, placement (the null test sat in the retired door).
 Object::External* TabDescription::Construct() {
-    return reinterpret_cast<Object::External*>(RtUi_TabDescription_Ctor(this));
+    return ::new (this) TabDescription();
 }
 // [6] 0x18004c370 — destroy in place through slot 0 (flag 0), re-run the ctor.
 Object::External* TabDescription::Reconstruct() {
     DeletingDtor(0);
-    return reinterpret_cast<Object::External*>(RtUi_TabDescription_Ctor(this));
+    return ::new (this) TabDescription();
 }
 // [7] 0x18004c3a0
 void TabDescription::Destruct() { DeletingDtor(0); }
@@ -317,11 +256,8 @@ Object::InternalPtr<Element>* TabDescription::CreateInstance(
     void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0x108, 8);          // 1800da454 (inlined)
 
     TabElement* elem = nullptr;
-    if (raw != nullptr) {                                               // 1800da481
-        using TabElementCtorFn = void* (*)(void*);
-        elem = static_cast<TabElement*>(
-            RtAddr<TabElementCtorFn>(0x1800da390ull)(raw));             // 1800da486
-    }
+    if (raw != nullptr)                                                 // 1800da481
+        elem = ::new (raw) TabElement();                                // 1800da486 ??0 (out of line)
 
     void* slotA = elem;                                                 // [RSP+0x70]
     void* slotB = nullptr;                                              // [RSP+0x78]
@@ -372,85 +308,53 @@ Object::InternalPtr<Element>* TabDescription::CreateInstance(
     return ret;
 }
 
+// ??1TabDescription@UI@@UEAA@XZ   0x1800da8e0 — retail's body, moved from the
+// retired door (ENDGAME B.3.9 UI-B): destroy the tab Array (0x18004cc90 —
+// frees the buffer and does NOT visit the pairs), then the three Strings in
+// REVERSE order (+0x98, +0x90, +0x88). The restamps, the base's _textName
+// (+0x60) and the tail JMP into ~External are the compiler's chain. The four
+// ExternalPtrs at +0x68..+0x80 are not released.
+TabDescription::~TabDescription() {
+    uint8_t* p = reinterpret_cast<uint8_t*>(this);
+    using ArrayDtorFn = void* (*)(void*);
+    RtAddr<ArrayDtorFn>(0x18004cc90ull)(p + 0xa8);             // 1800da90c
+    ReleaseStringField(reinterpret_cast<char**>(p + 0x98));    // 1800da912
+    ReleaseStringField(reinterpret_cast<char**>(p + 0x90));    // 1800da945
+    ReleaseStringField(reinterpret_cast<char**>(p + 0x88));    // 1800da977
+}
+
+// ?CreateNewObject@TabDescription@UI@@SAPEAVBase@Object@@XZ 0x18004c2e0 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0xb8, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* TabDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TabDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) TabDescription();
+}
+// ?CreateInPlaceObject@TabDescription@UI@@SAPEAVBase@Object@@PEAX@Z 0x18004c360
+Object::Base* TabDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) TabDescription();
+}
+
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
+// ENDGAME B.3.9 UI-B: the slot doors, the ctor / dtor doors and the
+// factory-interpreter row are gone. Their only readers were the minted
+// `??_7TabDescription@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
+// TabDescription now wears the compiler's table.
 // ============================================================================
-extern "C" uint32_t RtUi_TabDescription_Type(const void* self) {
-    return reinterpret_cast<const UI::TabDescription*>(self)->UI::TabDescription::Type();
-}
-extern "C" const char* RtUi_TabDescription_TypeName(const void* self) {
-    return reinterpret_cast<const UI::TabDescription*>(self)->UI::TabDescription::TypeName();
-}
-extern "C" int32_t RtUi_TabDescription_GetFileVersion(const void* self) {
-    return reinterpret_cast<const UI::TabDescription*>(self)
-        ->UI::TabDescription::GetFileVersion();
-}
-extern "C" void* RtUi_TabDescription_Construct(void* self) {
-    if (self == nullptr) return nullptr;                                // 18004c390 (retail null test)
-    return reinterpret_cast<UI::TabDescription*>(self)->UI::TabDescription::Construct();
-}
-extern "C" void* RtUi_TabDescription_Reconstruct(void* self) {
-    return reinterpret_cast<UI::TabDescription*>(self)->UI::TabDescription::Reconstruct();
-}
-extern "C" void RtUi_TabDescription_Destruct(void* self) {
-    reinterpret_cast<UI::TabDescription*>(self)->UI::TabDescription::Destruct();
-}
-extern "C" bool RtUi_TabDescription_Serialize(void* self, void* stream) {
-    return reinterpret_cast<UI::TabDescription*>(self)->UI::TabDescription::Serialize(stream);
-}
-extern "C" void** RtUi_TabDescription_CreateInstance(const void* self, void** ret,
-                                                     const void* dialog) {
-    return reinterpret_cast<void**>(
-        reinterpret_cast<const UI::TabDescription*>(self)
-            ->UI::TabDescription::CreateInstance(
-                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
-                static_cast<const UI::Dialog*>(dialog)));
-}
 
 int RtUiTabDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@TabDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_TabDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x18004c1d0ull, (void*)&RtUi_TabDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@TabDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_TabDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x18004c1f0ull, (void*)&RtUi_TabDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@TabDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_TabDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x1800da8d0ull, (void*)&RtUi_TabDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@TabDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_TabDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x18004c390ull, (void*)&RtUi_TabDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@TabDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_TabDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x18004c370ull, (void*)&RtUi_TabDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@TabDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_TabDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x18004c3a0ull, (void*)&RtUi_TabDescription_Destruct);
-
-    RegisterRuntimeExport("??0TabDescription@UI@@QEAA@XZ",
-                          (void*)&RtUi_TabDescription_Ctor);            ++n;
-    RegisterRuntimeAddr(0x1800daa00ull, (void*)&RtUi_TabDescription_Ctor);
-
-    RegisterRuntimeExport("??1TabDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_TabDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x1800da8e0ull, (void*)&RtUi_TabDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@TabDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_TabDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x1800da760ull, (void*)&RtUi_TabDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@TabDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_TabDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x1800da410ull, (void*)&RtUi_TabDescription_CreateInstance);
-
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@TabDescription` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@TabDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::TabDescription::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x18004c2e0ull, (void*)&UI::TabDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@TabDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::TabDescription::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x18004c360ull, (void*)&UI::TabDescription::CreateInPlaceObject);
     return n;
 }

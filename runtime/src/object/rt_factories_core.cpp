@@ -234,7 +234,9 @@ void RtFactoriesPortInit() {
     n += RtFactoriesObjectRegister();
     n += RtFactoriesGraphicsRegister();
     n += RtFactoriesVideoRegister();
-    n += RtFactoriesIoRegister();
+    // IO:: has no row left: ENDGAME B.3.9 IO made IO::PackageFile a real class
+    // whose own CreateNewObject / CreateInPlaceObject register from
+    // runtime/src/io/package_file.cpp (B39_RULES D2).
     // Picking:: has no row left: ENDGAME B.3.9's pilot made Picking::PickingMesh
     // a real class whose own CreateNewObject / CreateInPlaceObject register from
     // runtime/src/picking/pickingmesh.cpp (B39_RULES D2).

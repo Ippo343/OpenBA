@@ -9,7 +9,7 @@
 //
 //   slot  method                       retail       where
 //   ----  ---------------------------  -----------  --------------------------
-//    0    vector deleting dtor         0x180036db0  deleting_dtor.cpp row
+//    0    vector deleting dtor         0x180036db0  AnimatedImageElement.h (the class's own)
 //    1    TypeName                     0x180036ab0  here
 //    2    Type                         0x180036a90  here
 //    4    ImageElement::ComputeSize    0x180118650  imageelement.cpp
@@ -17,9 +17,9 @@
 //    6    ImageElement::Draw           0x180118850  imageelement.cpp
 //    7    Update                       0x1800cb290  here
 //
-// plus ??0AnimatedImageElement@UI@@QEAA@AEBV01@@Z 0x180036c30 (copy ctor, a DOOR)
-//      ??1AnimatedImageElement@UI@@UEAA@XZ        0x1800cb3a0 (a DOOR)
-// `??0AnimatedImageElement@UI@@QEAA@XZ` (0x1800cb3f0) is factory_ui1.cpp's.
+// plus ??1AnimatedImageElement@UI@@UEAA@XZ 0x1800cb3a0 and the factory pair
+// (ENDGAME B.3.9 UI-A: the real ctor ??0 0x1800cb3f0 is in the header; the
+// copy-ctor door and FACTUI1's ??0 door are retired).
 //
 // LAYOUT: runtime/types/ui/AnimatedImageElement.h — ImageElement (0xE0) plus
 // `_frames` (Array<Sprite>, +0xE0), `_framesPerSecond` (+0xF0, ctor 30) and
@@ -30,6 +30,10 @@
 // `UI::AnimatedImageElement`; the registered doors are one-line QUALIFIED
 // delegations. Update's base call (by address 0x180116270 before) is the
 // qualified `ImageElement::Update`, i.e. `Element::Update`.
+//
+// ENDGAME B.3.9 block UI-A: the class is CONCRETE; the slot doors and the
+// copy / ??1 doors, read only by the retired minted table and its RT_DELDTOR
+// row, are gone.
 // ============================================================================
 #include "element_common.h"
 #include "../../types/ui/AnimatedImageElement.h"
@@ -37,14 +41,6 @@
 using namespace rtuielem;
 
 namespace {
-
-constexpr int kFrames      = 0xe0;   // Array<Sprite>::_data
-constexpr int kFrameCount  = 0xe8;   // Array<Sprite>::_size
-constexpr int kFps         = 0xf0;
-constexpr int kAccumTicks  = 0xf8;
-static_assert(kFrames     == offsetof(UI::AnimatedImageElement, _frames), "");
-static_assert(kFps        == offsetof(UI::AnimatedImageElement, _framesPerSecond), "");
-static_assert(kAccumTicks == offsetof(UI::AnimatedImageElement, _accumTicks), "");
 
 // RULE B6-5: namespace-scope atomic caches for the member bodies.
 std::atomic<void*> g_animatedImageElementTypeInfo{nullptr};
@@ -63,20 +59,15 @@ double SecondsPerTick() {
     return p ? *p : 0.0;
 }
 
-// Door-only.
-void* VtAnimatedImageElement() { return RT_DATA_SLOT(void*, "??_7AnimatedImageElement@UI@@6B@"); }
-void* VtImageElementBase()     { return RT_DATA_SLOT(void*, "??_7ImageElement@UI@@6B@"); }
-
 using ArrayDtorFn     = void* (*)(void* array);
-using ArrayCopyFn     = void* (*)(void* dst, const void* src);
-using ImageCopyCtorFn = void* (*)(void* self, const void* other);
-using ElementDtorFn   = void (*)(void* self);
 
 }  // namespace
 
 namespace UI {
 
-uint32_t AnimatedImageElement::Type() const {                   // 0x180036a90
+uint32_t AnimatedImageElement::Type() const { return TypeId(); }   // 0x180036a90
+// ?TypeId@AnimatedImageElement@UI@@SAIXZ 0x180036aa0 — the record's first dword.
+uint32_t AnimatedImageElement::TypeId() {
     return rtuielem::TypeIdOf(AnimatedImageElementTypeInfoAtomic());
 }
 // The key function: GCC emits `vtable for UI::AnimatedImageElement` here.
@@ -155,84 +146,46 @@ void AnimatedImageElement::Update(const System::Time& time, UserInterface* ui,
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — each a one-line QUALIFIED delegation.
+// ??1AnimatedImageElement@UI@@UEAA@XZ   0x1800cb3a0 -- retail's body, moved here
+// from the retired door (ENDGAME B.3.9 UI-A)
 // ============================================================================
-extern "C" uint32_t RtUi_AnimatedImageElement_Type(const void* self) {
-    return reinterpret_cast<const UI::AnimatedImageElement*>(self)                          // B.3.6 bridge
-        ->UI::AnimatedImageElement::Type();
+// Own vtable (the compiler's entry restamp), destroy the frame array through
+// retail's Array<Sprite> dtor (0x180037310, which ZEROES the header, so the
+// compiler-emitted member `~Array` after this body is a no-op), then the BASE
+// (ImageElement) restamp and ~Element -- the compiler's chain.
+namespace UI {
+AnimatedImageElement::~AnimatedImageElement() {
+    RtAddr<ArrayDtorFn>(0x180037310ull)(&_frames);
 }
-extern "C" const char* RtUi_AnimatedImageElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::AnimatedImageElement*>(self)                          // B.3.6 bridge
-        ->UI::AnimatedImageElement::TypeName();
+}  // namespace UI
+
+namespace UI {
+// ?CreateNewObject@AnimatedImageElement@UI@@SAPEAVBase@Object@@XZ  0x180036ba0
+// The factory-interpreter row this replaces: MemAlloc(0x100, 8), retail's
+// null branch, then the out-of-line ctor ??0AnimatedImageElement (0x1800cb3f0).
+Object::Base* AnimatedImageElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(AnimatedImageElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) AnimatedImageElement();
 }
-extern "C" void RtUi_AnimatedImageElement_Update(void* selfv, const void* time,
-                                                 void* ui, void** dlg,
-                                                 const void* state) {
-    reinterpret_cast<UI::AnimatedImageElement*>(selfv)->UI::AnimatedImageElement::Update(   // B.3.6 bridge
-        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlg),
-        *static_cast<const UI::Element::UpdateState*>(state));
+// ?CreateInPlaceObject@AnimatedImageElement@UI@@SAPEAVBase@Object@@PEAX@Z  0x180036c20
+Object::Base* AnimatedImageElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) AnimatedImageElement();
 }
+}  // namespace UI
 
 // ============================================================================
-// ??0AnimatedImageElement@UI@@QEAA@AEBV01@@Z   0x180036c30   — a CTOR DOOR
-// ============================================================================
-// Chains to ??0ImageElement (the COPY ctor, out of line this time), then
-// deep-copies the frame array with Collection::Array<Sprite>::operator=
-// (0x180037020) onto a zeroed target.
-extern "C" void* RtUi_AnimatedImageElement_CopyCtor(void* selfv, const void* otherv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    const uint8_t* other = static_cast<const uint8_t*>(otherv);
-    RtAddr<ImageCopyCtorFn>(0x1800364c0ull)(self, other);
-    P(self, 0x00) = VtAnimatedImageElement();
-    *reinterpret_cast<uint64_t*>(self + kFrames)     = 0;
-    *reinterpret_cast<uint64_t*>(self + kFrameCount) = 0;
-    RtAddr<ArrayCopyFn>(0x180037020ull)(self + kFrames, other + kFrames);
-    I32(self, kFps) = I32c(other, kFps);
-    *reinterpret_cast<uint64_t*>(self + kAccumTicks) =
-        *reinterpret_cast<const uint64_t*>(other + kAccumTicks);
-    return self;
-}
-
-// ============================================================================
-// ??1AnimatedImageElement@UI@@UEAA@XZ   0x1800cb3a0   — a DTOR DOOR (B4b-2)
-// ============================================================================
-// Own vtable, destroy the frame array, re-stamp the BASE (ImageElement) vtable,
-// then ~Element.
-extern "C" void RtUi_AnimatedImageElement_Dtor(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    P(self, 0x00) = VtAnimatedImageElement();
-    RtAddr<ArrayDtorFn>(0x180037310ull)(self + kFrames);
-    P(self, 0x00) = VtImageElementBase();
-    RtAddr<ElementDtorFn>(0x1801161a0ull)(self);
-}
-
-// ============================================================================
-// Registration. Slots 4/5/6 are NOT registered here — they are ImageElement's
-// addresses and imageelement.cpp owns them.
+// Registration: the factory pair only (B39_RULES D2). Slots 4/5/6 were
+// ImageElement's addresses; every slot door is retired with the tables.
 // ============================================================================
 int RtUiAnimatedImageElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?TypeName@AnimatedImageElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_AnimatedImageElement_TypeName);   ++n;
-    RegisterRuntimeAddr(0x180036ab0ull, (void*)&RtUi_AnimatedImageElement_TypeName);
-
-    RegisterRuntimeExport("?Type@AnimatedImageElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_AnimatedImageElement_Type);       ++n;
-    RegisterRuntimeAddr(0x180036a90ull, (void*)&RtUi_AnimatedImageElement_Type);
-
-    RegisterRuntimeExport(
-        "?Update@AnimatedImageElement@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@"
-        "V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@Element@2@@Z",
-        (void*)&RtUi_AnimatedImageElement_Update);                        ++n;
-    RegisterRuntimeAddr(0x1800cb290ull, (void*)&RtUi_AnimatedImageElement_Update);
-
-    RegisterRuntimeExport("??0AnimatedImageElement@UI@@QEAA@AEBV01@@Z",
-                          (void*)&RtUi_AnimatedImageElement_CopyCtor);    ++n;
-    RegisterRuntimeAddr(0x180036c30ull, (void*)&RtUi_AnimatedImageElement_CopyCtor);
-
-    RegisterRuntimeExport("??1AnimatedImageElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_AnimatedImageElement_Dtor);        ++n;
-    RegisterRuntimeAddr(0x1800cb3a0ull, (void*)&RtUi_AnimatedImageElement_Dtor);
+    RegisterRuntimeExport("?CreateNewObject@AnimatedImageElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::AnimatedImageElement::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x180036ba0ull, (void*)&UI::AnimatedImageElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@AnimatedImageElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::AnimatedImageElement::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x180036c20ull, (void*)&UI::AnimatedImageElement::CreateInPlaceObject);
     return n;
 }

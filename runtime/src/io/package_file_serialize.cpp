@@ -256,46 +256,9 @@ inline void*   FieldAt(void* self, int off) {
 
 }  // namespace
 
-// ============================================================================
-// bool IO::PackageFile::Serialize(IO::Stream&)
-// ============================================================================
-// ENDGAME B.3.4 PACKAGE+FS commit 3: the body is now
-// `IO::PackageFile::Serialize(void*)` -- vtable slot 5, i.e.
-// `Object::External::Serialize` -- at the bottom of this file. The door keeps
-// its name and both registrations and delegates.
-//
-// *** THE QUALIFIED `IO::PackageFile::` IS LOAD-BEARING. *** A live PackageFile
-// wears the MINTED `??_7PackageFile@IO@@6B@`, whose slot 5 resolves back to
-// THIS DOOR. A plain virtual call here would dispatch through that minted table
-// into itself -- infinite recursion, not delegation (B34_BRIEFS section A.1).
-extern "C" bool RtIo_PackageFile_Serialize(void* self, Stream* stream) {
-    return reinterpret_cast<IO::PackageFile*>(self)->IO::PackageFile::Serialize(stream);
-}
-
-// ---- Registration ----------------------------------------------------------
-// BY NAME *AND* BY ADDRESS, as every other row in this class: the minted
-// `??_7PackageFile@IO@@6B@` fills this NAMED slot through the name, while a
-// caller that read the DLL's own .rdata table arrives by address, and a
-// name-only registration is invisible to the second door and dies at cutover
-// (reference_count_the_doors_not_the_calls.md).
-//
-// THIS IS THE NINTH OF NINE SLOTS. With it, `??_7PackageFile@IO@@6B@` is
-// COMPLETE in tools/runtime_census.py's sense. COMPLETE IS THE STATIC HALF OF
-// READINESS ONLY — it says promoting the table would put no trap in it. It does
-// NOT say the row is promotable; that turns on owning the function that STAMPS
-// the table, which no source scan can answer
-// (reference_a_green_readiness_screen_is_not_a_route.md). This file claims the
-// slot and nothing about promotion.
-int RtIoPackageFileSerializeRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?Serialize@PackageFile@IO@@UEAA_NAEAVStream@2@@Z",
-                          (void*)&RtIo_PackageFile_Serialize); ++n;
-    RegisterRuntimeAddr(0x1800b60a0, (void*)&RtIo_PackageFile_Serialize);
-    printf("[RtPort]   IO::PackageFile::Serialize (Wave 27 lane IOTEXT): "
-                "%d export registered -- ??_7PackageFile@IO@@6B@ 8/9 -> 9/9; "
-                "opens ONE new address door, 0x180029bb0 (unported)\n", n);
-    return n;
-}
+// ENDGAME B.3.9 IO: the ?Serialize@PackageFile slot door and its registration
+// are gone with the minted ??_7PackageFile row, their only reader; the body is
+// the member below, reached through the class's own table.
 
 // ============================================================================
 // ENDGAME B.3.4 PACKAGE+FS — `IO::PackageFile::Serialize`, vtable slot 5

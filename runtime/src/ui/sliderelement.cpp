@@ -30,6 +30,7 @@
 // ============================================================================
 
 #include <atomic>
+#include <new>
 
 #include "widget_common.h"
 #include "../../types/ui/SliderElement.h"
@@ -87,12 +88,10 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 std::atomic<void*> g_typeInfo{nullptr};
-std::atomic<void*> g_vtable{nullptr};
 const uint8_t* SliderTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@SliderElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
-void* VtSliderElement() { return AtomicExport(g_vtable, "??_7SliderElement@UI@@6B@"); }
 
 // ?UpdateNumber@SliderElement@UI@@AEAAXXZ (0x1800d6c20) — its body is
 // element_bodies_b5.cpp's door (fragment pass); reached by address.
@@ -139,6 +138,10 @@ const char* SliderElement::TypeName() const {
     const char* v = nullptr; __builtin_memcpy(&v, SliderTypeInfo() + 8, sizeof v); return v;
 }
 uint32_t SliderElement::Type() const {
+    uint32_t v = 0; __builtin_memcpy(&v, SliderTypeInfo(), sizeof v); return v;
+}
+// static -- the same read as slot 2 (the minted record until W3).
+uint32_t SliderElement::TypeId() {
     uint32_t v = 0; __builtin_memcpy(&v, SliderTypeInfo(), sizeof v); return v;
 }
 
@@ -345,97 +348,42 @@ void SliderElement::Update(const System::Time& time, UserInterface* ui,
     RtAddr<UpdateNumberFn>(0x1800d6c20ull)(this);
 }
 
+// ??1SliderElement@UI@@UEAA@XZ   0x180049ee0 — retail's body is a BARE TAIL
+// JUMP to ~Element with no restamp: the compiler's chain is all of it.
+SliderElement::~SliderElement() {}
+
+// ?CreateNewObject@SliderElement@UI@@SAPEAVBase@Object@@XZ 0x180049e10 --
+// `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0x130, align 8; retail's null
+// branch; the ctor. Replaces the factory interpreter row (B39_RULES D2).
+Object::Base* SliderElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(SliderElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) SliderElement();
+}
+// ?CreateInPlaceObject@SliderElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180049e90
+Object::Base* SliderElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) SliderElement();
+}
+
 }  // namespace UI
 
 // ============================================================================
-// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
+// ENDGAME B.3.9 UI-B: the slot doors, the ctor / dtor doors and the
+// factory-interpreter row are gone. Their only readers were the minted
+// `??_7SliderElement@UI@@6B@`, its RT_DELDTOR row and FACTUI2: every live
+// SliderElement now wears the compiler's table.
 // ============================================================================
-extern "C" uint32_t RtUi_SliderElement_Type(const void* self) {
-    return reinterpret_cast<const UI::SliderElement*>(self)->UI::SliderElement::Type();
-}
-extern "C" const char* RtUi_SliderElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::SliderElement*>(self)->UI::SliderElement::TypeName();
-}
-extern "C" void RtUi_SliderElement_ComputeSize(void* self) {
-    reinterpret_cast<UI::SliderElement*>(self)->UI::SliderElement::ComputeSize();
-}
-extern "C" void RtUi_SliderElement_ComputeLayout(void* self, int32_t x, int32_t y,
-                                                 int32_t right, int32_t bottom) {
-    reinterpret_cast<UI::SliderElement*>(self)->UI::SliderElement::ComputeLayout(
-        x, y, right, bottom);
-}
-extern "C" void RtUi_SliderElement_Draw(const void* self, void* ctx, uint8_t alpha) {
-    reinterpret_cast<const UI::SliderElement*>(self)->UI::SliderElement::Draw(
-        *static_cast<UI::SpriteContext*>(ctx), alpha);
-}
-extern "C" void RtUi_SliderElement_Update(void* self, const void* time, void* ui,
-                                          void** dlgPtr, const void* state) {
-    reinterpret_cast<UI::SliderElement*>(self)->UI::SliderElement::Update(
-        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr),   // B.3.6 bridge
-        *static_cast<const UI::Element::UpdateState*>(state));
-}
 
-// ??0SliderElement@UI@@QEAA@XZ   0x1800d7570 — a DOOR (B4b-2), unchanged.
-extern "C" void* RtUi_SliderElement_Ctor(void* self) {   // returns this in RAX, as every MSVC ctor does
-    ElementCtor(self);
-    PTR(self, 0x00) = VtSliderElement();
-    const int sprites[5] = { kTrackStart, kTrackMiddle, kTrackEnd, kThumb, kThumbHot };
-    for (int off : sprites) {
-        PTR(self, off + kSpriteSheet) = nullptr;
-        I32(self, off + kSpriteIndex) = -1;
-    }
-    I32(self, kTrackOffY)   = 0;
-    I32(self, kThumbMargin) = 0;
-    F32(self, kMinimum)     = 0.0f;
-    F32(self, kMaximum)     = 1.0f;     // 0x3f800000
-    I32(self, kSteps)       = 10;
-    U8(self, kHovered)      = 0;
-    F32(self, kValue)       = 0.25f;    // 0x3e800000
-    return self;
-}
-
-// ??1SliderElement@UI@@UEAA@XZ   0x180049ee0 — tail jump, no restamp. A DOOR.
-extern "C" void RtUi_SliderElement_Dtor(void* self) {
-    ElementDtor(self);
-}
-
-// ============================================================================
 int RtUiSliderElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@SliderElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_SliderElement_Type);          ++n;
-    RegisterRuntimeAddr(0x180049d00ull, (void*)&RtUi_SliderElement_Type);
-
-    RegisterRuntimeExport("?TypeName@SliderElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_SliderElement_TypeName);      ++n;
-    RegisterRuntimeAddr(0x180049d20ull, (void*)&RtUi_SliderElement_TypeName);
-
-    RegisterRuntimeExport("??0SliderElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_SliderElement_Ctor);          ++n;
-    RegisterRuntimeAddr(0x1800d7570ull, (void*)&RtUi_SliderElement_Ctor);
-
-    RegisterRuntimeExport("??1SliderElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_SliderElement_Dtor);          ++n;
-    RegisterRuntimeAddr(0x180049ee0ull, (void*)&RtUi_SliderElement_Dtor);
-
-    RegisterRuntimeExport("?ComputeSize@SliderElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_SliderElement_ComputeSize);   ++n;
-    RegisterRuntimeAddr(0x1800d7380ull, (void*)&RtUi_SliderElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@SliderElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_SliderElement_ComputeLayout); ++n;
-    RegisterRuntimeAddr(0x1800d6fc0ull, (void*)&RtUi_SliderElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@SliderElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_SliderElement_Draw);          ++n;
-    RegisterRuntimeAddr(0x1800d6d40ull, (void*)&RtUi_SliderElement_Draw);
-
-    RegisterRuntimeExport(
-        "?Update@SliderElement@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@"
-        "V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@Element@2@@Z",
-        (void*)&RtUi_SliderElement_Update);                          ++n;
-    RegisterRuntimeAddr(0x1800d67e0ull, (void*)&RtUi_SliderElement_Update);
-
+    // The factory pair (B39_RULES D2), the class's own statics, by name AND
+    // address; the minted `?_typeInfo@SliderElement` record resolves them.
+    RegisterRuntimeExport("?CreateNewObject@SliderElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::SliderElement::CreateNewObject);      ++n;
+    RegisterRuntimeAddr(0x180049e10ull, (void*)&UI::SliderElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@SliderElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::SliderElement::CreateInPlaceObject);  ++n;
+    RegisterRuntimeAddr(0x180049e90ull, (void*)&UI::SliderElement::CreateInPlaceObject);
     return n;
 }

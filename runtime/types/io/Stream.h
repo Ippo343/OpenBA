@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <type_traits>   // B.3.4 block 4: the "the PODs stay trivial" pins
+#include <new>           // ENDGAME B.3.9 IO: MemoryStream places its encoding
 
 // ENDGAME B.3.4 block 4 (STREAMS). `IO::Stream` carries an `IO::Encoding*` at
 // +0x10 and `IO::Stream::GetSource()` returns a `System::String` by value, so
@@ -372,18 +373,15 @@ constexpr size_t kStreamVtblCloseSlot = 7;
 // ill-formed, so MemoryStream must be concrete — which means BOTH inherited
 // pure virtuals it does not override must be real:
 //
-//   * slot 0 is a one-line delegation to `RtIo_MemoryStream_DeletingDtor`
-//     (0x1800242a0), the body `iobase_vtables.cpp` already registers. Nothing
-//     is re-registered, re-implemented or retired; the class simply names the
-//     door that is already there.
+//   * slot 0 is the class's own inline vector deleting dtor (0x1800242a0;
+//     ENDGAME B.3.9 IO retired the registered door it used to name).
 //   * slot 1 `GetSource` is not overridden by MemoryStream at all — its table
 //     carries `IO::Stream`'s own 0x18000c6a0 — so `IO::Stream::GetSource` is
 //     the one base slot with a real body (see the note on it below).
 //
-// And section A.3's rule applies for the same reason: a class held BY VALUE
-// needs a PUBLIC destructor, so `~MemoryStream` is public and still NON-virtual
-// (`IO::Stream`'s stays protected). The same pair of facts will hold for
-// `IO::BinaryFileStream` inside `IO::CompressedFileStream`.
+// The by-value holder reaches the protected, non-virtual `~MemoryStream` as a
+// friend (B.3.9 IO); the same holds for `IO::BinaryFileStream` inside
+// `IO::CompressedFileStream`.
 // ===========================================================================
 
 namespace IO {
@@ -458,10 +456,21 @@ public:
     Encoding* _encoding;    // +0x10  the encoding POLICY object, owned
 
 protected:
+    // ENDGAME B.3.9 IO -- ??0Stream@IO@@QEAA@XZ 0x1800b99d0, the base ctor
+    // every concrete stream opens with: +0x08 = 0, +0x10 = null (+0x0c is not
+    // written). Protected: the class is abstract.
+    Stream() : _direction(0), _encoding(nullptr) {}
+
+    // ??1Stream@IO@@UEAA@XZ 0x1800b9a40: frees the owned encoding with a
+    // direct MemFree (an Encoding has no destructor slot -- Serializer.h).
     // Decision 2's base shape: non-virtual (Itanium spends TWO slots on a
     // virtual destructor, which would shift every slot after it) and protected,
-    // because nothing deletes a Stream through this type.
-    ~Stream() = default;
+    // because nothing deletes a Stream through this type. The registered
+    // `??1Stream` door (deleting_dtor_leaves.cpp) still serves the minted
+    // Stream row until it retires (W2).
+    ~Stream() {
+        if (_encoding) RtSystem::RtMemFree(_encoding);
+    }
 };
 
 static_assert(sizeof(Stream) == 0x18, "IO::Stream is 0x18 bytes");
@@ -476,31 +485,39 @@ static_assert(offsetof(Stream, _encoding)  == 0x10, "?SetEncoding@Stream@IO@@ wr
 // Compressed branch is the one with nine slots. Note that the SAME slot 7 is
 // `Open` on the FileStream branch (B34_RULES section 1.3); the two are not the
 // same slot meaning and `FileStream.h` says so again from its side.
-// ⚠⚠ NOT CONSTRUCTIBLE IN B.3.4 — live objects are built by the ported ctor
-// doors and wear the MINTED table; see B34_RULES section 4.3. ⚠⚠
-//
-// This class is CONCRETE (see the banner above: CompressedMemoryStream holds
-// one by value), and a concrete polymorphic class would otherwise have an
-// implicit PUBLIC default constructor — so `IO::MemoryStream ms;` would compile
-// and stamp GCC's vtable on an object the rest of the tree expects to be
-// wearing 0x1801555b0. That is the one thing section 4.3 forbids, and it would
-// produce no build error at all.
-//
-// So the default constructor is PROTECTED. `IO::MemoryStream ms;` and
-// `new IO::MemoryStream` are now COMPILE ERRORS, while the two things that must
-// keep working still do:
-//   * a probe SUBCLASS (tests/unit/io_vtable_abi_test.cpp PART G) reaches a
-//     protected constructor through inheritance;
-//   * `IO::CompressedMemoryStream`, which holds one BY VALUE, reaches it as a
-//     FRIEND. Without the friendship its own implicit constructor would be
-//     defined as deleted and its order probe could not be built.
-// It is `= default`, so the class stays trivially default-constructible and no
-// layout pin moves.
+// ENDGAME B.3.9 IO: CONSTRUCTIBLE. The minted ??_7MemoryStream row is retired;
+// the public constructor below is retail's and stores the compiler's table.
+// The destructor is protected and non-virtual (Decision 2): a stack instance
+// is built with placement new into raw storage and ended by a non-virtual
+// `DeletingDtor(0)`, exactly as retail's inlined teardown frees it.
 class MemoryStream : public Stream {
 public:
-    // slot 0  +0x00  0x1800242a0 — delegates to the registered thunk, see the
-    // banner. NOT pure, because CompressedMemoryStream embeds this class.
-    Stream* DeletingDtor(unsigned flags) override;
+    // ENDGAME B.3.9 IO -- ??0MemoryStream@IO@@QEAA@XZ 0x1800ae710: after the
+    // Stream base, +0x18 = null, +0x20 = 0 (ONE byte), +0x24..+0x2b = 0 (one
+    // qword), then MemAlloc(8,4) and the BINARY encoding (null on a failed
+    // allocation), the dead free of the previous encoding, the store.
+    // +0x21..0x23 and +0x2c are not written.
+    MemoryStream() : _data(nullptr), _ownsData(0), _cursor(0), _size(0) {
+        void* enc = RtSystem::RtMemAlloc(8, 4);
+        if (enc) ::new (enc) BinaryEncoding();
+        if (_encoding) RtSystem::RtMemFree(_encoding);
+        _encoding = static_cast<Encoding*>(enc);
+    }
+
+    // slot 0  +0x00  0x1800242a0 — MSVC's vector deleting dtor, stride 0x30.
+    Stream* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<MemoryStream*>(self + static_cast<int64_t>(i) * 0x30)->~MemoryStream();
+            if (flags & 1u) RtSystem::RtMemFree(self - 8);
+            return reinterpret_cast<Stream*>(self - 8);
+        }
+        this->~MemoryStream();
+        if (flags & 1u) RtSystem::RtMemFree(this);
+        return this;
+    }
     // slot 1 is NOT overridden: 0x1801555b0[1] is IO::Stream's own 0x18000c6a0.
     bool     Write(int n, const void* src) override;   // slot 2 +0x10  0x1800ae8f0
     bool     Read(int n, void* dst) override;          // slot 3 +0x18  0x1800ae950
@@ -510,21 +527,21 @@ public:
     // slot 7 +0x38 — MemoryStream's own first virtual. A BARE RET in retail.
     virtual void Close();                              //              0x1800ae9e0
 
-    // PUBLIC and non-virtual (B34_BRIEFS section A.3): CompressedMemoryStream
-    // holds one by value, and a protected destructor would make the enclosing
-    // class uninstantiable. There is no C++ constructor to pair it with — the
-    // ported ctor/dtor doors in compressedstream.cpp stay exactly as they are.
-    ~MemoryStream() = default;
-
     void*    _data;        // +0x18  the buffer
-    uint8_t  _ownsData;    // +0x20  free _data in the dtor door
+    uint8_t  _ownsData;    // +0x20  free _data in the dtor
     uint8_t  _pad21[3];    // +0x21
     uint32_t _cursor;      // +0x24  position IN THE BUFFER
     uint32_t _size;        // +0x28  bytes valid in _data
     uint32_t _pad2c;       // +0x2C
 
 protected:
-    MemoryStream() = default;      // see the banner — NOT public on purpose
+    // ??1MemoryStream@IO@@UEAA@XZ 0x1800ae890: free the buffer when owned
+    // (the pointer is left dangling, as in retail), then ~Stream frees the
+    // encoding. Non-virtual; CompressedMemoryStream, which holds one by value
+    // at +0x68, reaches it as a friend.
+    ~MemoryStream() {
+        if (_ownsData && _data != nullptr) RtSystem::RtMemFree(_data);
+    }
     friend class CompressedMemoryStream;   // the by-value holder, +0x68
 };
 
@@ -679,7 +696,30 @@ public:
     void*    _compression;    // +0x60  System::Compression*, owned
 
 protected:
-    ~CompressedStream() = default;
+    // ENDGAME B.3.9 IO -- ??0CompressedStream@IO@@QEAA@XZ 0x1800aa3d0, the
+    // base ctor CompressedFileStream's opens with: after the Stream base,
+    // +0x1c = 0, +0x20 = -1, +0x28..+0x67 = 0 (eight qwords), then
+    // MemAlloc(8,4) + the BINARY encoding, the dead free of the previous one,
+    // the store. +0x18 and +0x24 are not written. Protected: abstract class.
+    CompressedStream()
+        : _position(0), _activeWindow(-1), _source(nullptr),
+          _windowData(nullptr), _windowSize(0), _windowCap(0),
+          _headerData(nullptr), _headerSize(0), _headerCap(0),
+          _blockData(nullptr), _blockSize(0), _blockCap(0),
+          _compression(nullptr) {
+        void* enc = RtSystem::RtMemAlloc(8, 4);
+        if (enc) ::new (enc) BinaryEncoding();
+        if (_encoding) RtSystem::RtMemFree(_encoding);
+        _encoding = static_cast<Encoding*>(enc);
+    }
+
+    // ??1CompressedStream@IO@@UEAA@XZ 0x1800aa650 without its two restamps and
+    // the encoding free (that is ~Stream): Release, then the three Array
+    // destructors (+0x50, +0x40, +0x30). Out of line in
+    // compressed_stream_release.cpp; non-virtual (Decision 2). The registered
+    // ??1CompressedStream door still serves the minted CompressedStream /
+    // CompressedMemoryStream rows until they retire (W2).
+    ~CompressedStream();
 };
 
 static_assert(sizeof(CompressedStream) == 0x68, "IO::CompressedStream is 0x68 bytes");
@@ -714,9 +754,9 @@ public:
     void PreCommit() override;                           // slot 8  0x1800a9660
 
     // +0x68 — a MEMBER, not a second base. See B34_BRIEFS section A.3: this is
-    // the by-value containment that forces `IO::MemoryStream` to be concrete
-    // with a public destructor, and that this class must be a `friend` of to
-    // reach its protected default constructor at all.
+    // the by-value containment that forces `IO::MemoryStream` to be concrete,
+    // and that this class must be a `friend` of to reach its protected
+    // destructor (B.3.9 IO).
     MemoryStream _memoryStream;
 
 protected:

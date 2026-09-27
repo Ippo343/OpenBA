@@ -32,6 +32,13 @@
 //   [7] 0x180044520 Destruct        [8] 0x1800d6000 CreateInstance RETSLOT (B6-2)
 //   [9] 0x180044470 Construct — INTRODUCED here (B6-1.1)
 //
+// ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2) -- the paragraph below is
+// HISTORY: the class is now CONCRETE. A real public ctor (retail's stores), its
+// own slot 0 (the vector deleting dtor), a protected non-virtual ~RibbonDescription holding
+// the retired ??1 door's body, and the factory pair as the class's own statics;
+// every live one wears the COMPILER's table. The minted `??_7RibbonDescription@UI@@6B@`,
+// its RT_DELDTOR row 0x180044620 and the ctor / dtor / slot doors are retired
+// (tools/rt_mint_retired/ui-b.txt).
 // ABSTRACT (slot 0 `= 0`), NO real ctor. The destructor is declared only:
 // `??1` (0x1800d5c90) is the registered door.
 // ============================================================================
@@ -45,7 +52,34 @@ namespace UI {
 
 class RibbonDescription : public ElementDescription {
 public:
-    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180044620
+    // ??0RibbonDescription@UI@@QEAA@XZ 0x1800d5bf0 -- the REAL ctor (retail
+    // also inlines it into Construct / Reconstruct, 0x18004448a..0x180044501):
+    // ElementDescription's stores, then ONE WORD over both bools (+0x6a/+0x6b
+    // never written), +0x6c, and the item Array header.
+    RibbonDescription() : ElementDescription() {
+        _vertical      = 0;
+        _uniform       = 0;
+        _spacing       = 0;
+        _itemsData     = nullptr;
+        _itemsCount    = 0;
+        _itemsCapacity = 0;
+    }
+
+    // [0] 0x180044620 -- MSVC's VECTOR deleting destructor, both arms exactly as the
+    // retired RT_DELDTOR row ran them (`MOV EDX,0x80` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<RibbonDescription*>(self + static_cast<int64_t>(i) * 0x80)->~RibbonDescription();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~RibbonDescription();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                        // [1] 0x180044130
     uint32_t    Type() const override;                            // [2] 0x180044110
     int32_t     GetFileVersion() const override;                  // [3] 0x1800d5ef0
@@ -59,13 +93,15 @@ public:
 
     RibbonDescription(const RibbonDescription& src);              // 0x180044530  not ported
     RibbonDescription& operator=(const RibbonDescription& src);   // 0x1800445a0  not ported
-    static uint32_t TypeId();                                     // not ported
-    static Object::Base* CreateNewObject();                       // factory door
-    static Object::Base* CreateInPlaceObject(void* place);        // factory door
+    static uint32_t      TypeId();          // over the minted `?_typeInfo@` record until W3
+    static Object::Base* CreateNewObject();                       // (D2) the class's own
+    static Object::Base* CreateInPlaceObject(void* place);        // (D2) the class's own
 
 protected:
-    RibbonDescription() = default;   // NOT ??0RibbonDescription (0x1800d5bf0, a door)
-    ~RibbonDescription();            // ??1RibbonDescription 0x1800d5c90 — the door
+    // `??1RibbonDescription@UI@@UEAA@XZ` (0x1800d5c90): NON-VIRTUAL (no virtual dtor until
+    // the normal-virtual cutover). Retail's body is in ribbondescription.cpp;
+    // the compiler chains the base's.
+    ~RibbonDescription();
 
 private:
     static const char* _TypeName();                               // 0x1800440f0
