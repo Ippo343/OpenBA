@@ -96,6 +96,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/object/External.h"   // the Object record accessors (D6 step 1)
+#include "../../types/object/Internal.h"   // Object::Internal's class record (DEFINE_TYPE)
 
 // Forward declarations: the positive control at the bottom of the anonymous
 // namespace calls these, and they are defined below it.
@@ -114,10 +115,8 @@ namespace {
 // records are read through the Object accessor slots in external_class.cpp
 // (`Object::External::TypeId()`, `Object::CompiledExternal::TypeId()`, and the
 // `*TypeInfoRecord()->name` beside them), not through RT_DATA_SLOT caches.
-const uint8_t* InternalTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@Internal@Object@@0VBaseTypeInfo@2@A");
-}
+// Object::Internal's record is the class's own `DEFINE_TYPE` static
+// (internal_class.cpp) since ENDGAME B.3.9 OBJ retired the minted duplicate.
 
 typedef uint32_t    (*U32ThisFn)(const void*);
 typedef const char* (*CStrThisFn)(const void*);
@@ -243,17 +242,13 @@ extern "C" const char* RtObject_External_TypeName(const void* self) {
 // ?Type@Internal@Object@@UEBAIXZ  0x1800064d0  MOV EAX,[node+0x00].
 extern "C" uint32_t RtObject_Internal_Type(const void* self) {
     Attend(3, self);
-    uint32_t ours = 0;
-    std::memcpy(&ours, InternalTypeInfo(), sizeof ours);
-    return ours;
+    return ::Object::Internal::TypeId();
 }
 
 // ?TypeName@Internal@Object@@UEBAPEBDXZ  0x1800064c0  MOV RAX,[node+0x08].
 extern "C" const char* RtObject_Internal_TypeName(const void* self) {
     Attend(3, self);
-    const char* ours = nullptr;
-    std::memcpy(&ours, InternalTypeInfo() + 8, sizeof ours);
-    return ours;
+    return ::Object::Internal::GetTypeInfo().name;
 }
 
 // ============================================================================
