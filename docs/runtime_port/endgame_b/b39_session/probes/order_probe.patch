@@ -1,0 +1,57 @@
+diff -ru a/code/Game/Game/game_main.cpp b/code/Game/Game/game_main.cpp
+--- a/code/Game/Game/game_main.cpp	2026-09-27 00:07:56.481832500 -0400
++++ b/code/Game/Game/game_main.cpp	2026-09-27 00:08:19.046509300 -0400
+@@ -45,6 +45,7 @@
+ #include "Game/GameLoaderLoop.h"    // ENDGAME B.3.8 LOOP
+ #include "Game/GameLoadDialogLoopT.h"   // ENDGAME B.3.8 LOOP
+ #include "Game/MenuDialogLoopT.h"       // ENDGAME B.3.8 LOOP
++#include "object/TypeInfo.h"   // B.3.9 ORDER PROBE (throwaway)
+ #include "stall_debug.h"
+ #include "boot_state_watchdog.h"
+ #include <cstdio>
+@@ -501,6 +502,25 @@
+             printf("[GameMain]   typeId=0x%08X name=%s\n", p->typeId,
+                    p->name ? p->name : "?");
+         }
++        // B.3.9 ORDER PROBE (throwaway, block 0C; never commit). Pointer-free.
++        //   [OrderProbe]      one line per chain record: its id, the tree's answer for
++        //                     that id (parent id, which record WON the node, the
++        //                     children in the tree's own array order). `sort` it.
++        //   [OrderProbeChain] the chain in walk order: proves a reorder took effect.
++        {
++            const ::Object::Factory* fac = ::Object::Factory::Get();
++            int k = 0;
++            for (Probe* p = head; p && fac && k < 1000; p = p->next, ++k) {
++                const uint32_t id = p->typeId;
++                const int32_t nc = fac->GetChildTypeCount(id);
++                printf("[OrderProbe] id=0x%08X name=%s parent=0x%08X winner=%s children=%d:",
++                       id, p->name ? p->name : "?", fac->GetParentType(id),
++                       fac->GetTypeName(id) == p->name ? "self" : "other", nc);
++                for (int32_t i = 0; i < nc; ++i) printf(" 0x%08X", fac->GetChildType(id, i));
++                printf("\n");
++                printf("[OrderProbeChain] #%03d %s\n", k, p->name ? p->name : "?");
++            }
++        }
+     }
+ 
+     // Now that Object::Factory::Startup has assigned the real CRC type ids (the
+diff -ru a/code/Game/Object/factory_registration.cpp b/code/Game/Object/factory_registration.cpp
+--- a/code/Game/Object/factory_registration.cpp	2026-09-27 00:07:56.491831500 -0400
++++ b/code/Game/Object/factory_registration.cpp	2026-09-27 00:08:19.054509100 -0400
+@@ -34,8 +34,15 @@
+         return 0;
+     }
+ 
++    // B.3.9 ORDER PROBE A (throwaway, block 0C; never commit): drain the pending
++    // list in REVERSE, so the 311 exe records enter _firstTypeInfo in the opposite
++    // order. Same set, same records.
++    static FactoryRegistration* s_rev[1024];
++    int m = 0;
++    for (FactoryRegistration* r = g_pending; r != nullptr && m < 1024; r = r->next) s_rev[m++] = r;
+     int n = 0;
+-    for (FactoryRegistration* r = g_pending; r != nullptr; r = r->next) {
++    for (int k = m - 1; k >= 0; --k) {
++        FactoryRegistration* r = s_rev[k];
+         std::memset(&r->storage, 0, sizeof(r->storage));
+         fn_BaseTypeInfo_Ctor(&r->storage,
+                              r->typeName,
