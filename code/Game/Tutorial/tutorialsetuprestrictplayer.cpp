@@ -33,6 +33,7 @@
 #include <new>
 #include <cstdlib>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include "Component/ComponentDescription.h"
 
 // ============================================================
 // ENDGAME B.3.8: the String::Serialize / Filename ctor+dtor dispatch-slot
@@ -98,9 +99,8 @@ static void TutRestrict_ResolveRefOrLoad(void* ref) {
 
     void* result = nullptr;
     if (found) {
-        if (!g_TypeId_ComponentDescription_FC ||
-            !fn_IsDerivedFrom ||
-            fn_IsDerivedFrom(found, *g_TypeId_ComponentDescription_FC)) {
+        if (!fn_IsDerivedFrom ||
+            fn_IsDerivedFrom(found, ComponentDescription::TypeId())) {
             result = found;
         }
     }

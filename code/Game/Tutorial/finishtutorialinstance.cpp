@@ -141,8 +141,8 @@ void FinishTutorialInstance::Startup() {
     // Step 5: IsDerivedFrom check on self+0x18 (goal pointer) against FinishTutorialGoal
     void* goalObj = *(void**)(s + 0x18);
     void* ftGoal = nullptr;
-    if (fn_IsDerivedFrom && g_TypeId_FinishTutorialGoal && goalObj) {
-        bool isDerived = fn_IsDerivedFrom(goalObj, *g_TypeId_FinishTutorialGoal);
+    if (fn_IsDerivedFrom && goalObj) {
+        bool isDerived = fn_IsDerivedFrom(goalObj, FinishTutorialGoal::TypeId());
         if (isDerived) {
             ftGoal = goalObj;
         }
@@ -163,7 +163,7 @@ void FinishTutorialInstance::Startup() {
                              "tutDef=%p (goalTid=%u) treeInsert=%p\n",
                 (void*)self, (void*)tutInst, goalObj, ftGoal,
                 tutInst ? *(void**)(tutInst + 0x30) : nullptr,
-                g_TypeId_FinishTutorialGoal ? *g_TypeId_FinishTutorialGoal : 0u,
+                FinishTutorialGoal::TypeId(),
                 (void*)fn_TutorialTreeInsert);
         std::fflush(stderr); } }
 
