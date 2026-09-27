@@ -164,6 +164,26 @@ static_assert(std::is_trivially_destructible<CriticalSection>::value,
 // Nothing constructs a `System::Thread` as a C++ object; `sizeof` works on an
 // abstract class, so every layout pin below holds.
 // ============================================================================
+//
+// *** ENDGAME B.3.9 SYS W1 — `System::Thread` HAS ITS REAL CTOR AND DTOR. ***
+// ----------------------------------------------------------------------------
+// The B.3.4b ban above is lifted by B39_RULES D1 / RULE B8-1: the class gets a
+// PROTECTED `Thread(unsigned int stackSize)` (retail 0x1800ca4e0 minus its
+// vptr store) and a protected NON-virtual `~Thread()` (retail 0x1800ca590
+// minus its vptr store), both sharing ONE body with the two registered doors
+// through `InitFields` / `ReleaseFields`. The doors stay (their callers --
+// `Engine::Loader`'s mint construction, `Audio::Stream`, the exe pathfinder,
+// `IO::Persistence`'s worker -- convert in W2) and stamp the MINTED table
+// before calling the shared body, exactly as before. The class stays ABSTRACT
+// (retail's slot 0 is `_purecall`) and has NO `DeletingDtor`: its table has
+// two slots, `Run` and `OnCompleted`, and no deleting-dtor slot at all, like
+// both subclasses' (UpdateLoop.h / Stream.h "NO deleting dtor").
+// ============================================================================
+
+// The two registered doors (runtime/src/system/thread_win.cpp) — declared here
+// only so the class can befriend them: they reach the shared bodies.
+RtSystem::Thread* RtSystem_Thread_Ctor(RtSystem::Thread* self, unsigned int stackSize);
+void RtSystem_Thread_Dtor(RtSystem::Thread* self);
 
 namespace System {
 
@@ -209,11 +229,10 @@ static_assert(std::is_trivially_destructible<CriticalSection>::value,
 // ----------------------------------------------------------------------------
 // System::Thread — vtable ??_7Thread@System@@6B@ 0x180155f20, 2 slots, 0x30.
 // ----------------------------------------------------------------------------
-// ⚠⚠ NOT CONSTRUCTIBLE IN B.3.4b — live objects are built by the ported ctor
-// door and wear the MINTED table; see B34_RULES §4.3 and B34B_RULES rule B4b-2.
-// The class is ABSTRACT, which makes `System::Thread t;` and `new System::Thread`
-// hard compile errors, so the rule is enforced by the compiler and not only by
-// this banner. ⚠⚠
+// B.3.9: a subclass builds its base with `: System::Thread(stackSize)` and wears
+// the compiler's tables; an object still built by the ctor DOOR wears the MINTED
+// table (the door stamps it, then runs the same InitFields). The class stays
+// ABSTRACT, so `System::Thread t;` is still a hard compile error.
 //
 // The two slots, from `standalone/rt_data_mint_tables.inc:3711-3717`:
 //   [0] +0x00  0x18007ec28 `_purecall`  -> pure here, see below
@@ -279,13 +298,35 @@ public:
     void*    _hFinished;   // +0x28  HANDLE
 
 protected:
-    // ENDGAME decision 2's base shape: NON-virtual (Itanium spends two slots on
-    // a virtual destructor, which would push `OnCompleted` off slot 1 and
-    // silently mis-aim every reader of the minted table) and protected, because
-    // nothing deletes a Thread through this type. Teardown is the registered
-    // `??1Thread@System@@QEAA@XZ` door (0x1800ca590), which is a free function
-    // and stays one — B4b-2.
-    ~Thread() = default;
+    // ??0Thread@System@@QEAA@I@Z  retail 0x1800ca4e0 — the ONE retail ctor.
+    // The compiler stamps the vptr (retail's `LEA RAX,[0x180155f20]; MOV
+    // [RCX],RAX`); the body is InitFields. Protected: the class is abstract.
+    explicit Thread(unsigned int stackSize) { InitFields(stackSize); }
+
+    // TRANSITIONAL — NOT A RETAIL CTOR, AND IT RUNS NOTHING. The three C++
+    // subclasses (`Engine::Loader`, `Audio::Stream`, the exe `PathfinderThread`)
+    // still declare `X() = default` and are built through the DOOR; their unit
+    // tests construct probes through that defaulted ctor. Their owners give
+    // them real ctors (`: System::Thread(stackSize)`) in W2; this goes with the
+    // last of them, at the latest with row 140 (W3). Never call it from new code.
+    Thread() = default;
+
+    // ??1Thread@System@@QEAA@XZ  retail 0x1800ca590. ENDGAME decision 2's base
+    // shape: NON-virtual (Itanium spends two slots on a virtual destructor,
+    // which would push `OnCompleted` off slot 1 and silently mis-aim every
+    // reader of the minted table) and protected, because nothing deletes a
+    // Thread through this type. The compiler re-stamps this class's vptr on
+    // entry, as retail does; the body is ReleaseFields.
+    ~Thread() { ReleaseFields(); }
+
+private:
+    // The door bodies MINUS their vptr stores (RULE B8-1): one body, two entry
+    // points. Defined in runtime/src/system/thread_win.cpp.
+    void InitFields(unsigned int stackSize);
+    void ReleaseFields();
+
+    friend RtSystem::Thread* ::RtSystem_Thread_Ctor(RtSystem::Thread* self, unsigned int stackSize);
+    friend void ::RtSystem_Thread_Dtor(RtSystem::Thread* self);
 };
 
 static_assert(sizeof(Thread) == 0x30, "System::Thread is 0x30 bytes");
@@ -297,6 +338,10 @@ static_assert(std::is_polymorphic<Thread>::value,
 static_assert(std::is_abstract<Thread>::value,
               "B4b-3: abstract is what makes `System::Thread t;` a compile error, "
               "and retail's slot 0 really is _purecall");
+static_assert(!std::is_destructible<Thread>::value,
+              "B.3.9 D1.3: the destructor is protected");
+static_assert(!std::has_virtual_destructor<Thread>::value,
+              "B.3.9 D1.3: non-virtual until the normal-virtual cutover");
 static_assert(offsetof(Thread, _runFlags)  == 0x08, "Thread::runFlags @ +0x08");
 static_assert(offsetof(Thread, _pad0c)     == 0x0c, "the gap the ctor never writes");
 static_assert(offsetof(Thread, _hThread)   == 0x10, "Thread::hThread @ +0x10");

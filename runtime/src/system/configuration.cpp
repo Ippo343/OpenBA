@@ -132,6 +132,11 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 // `RtSystem::String` in full wherever it means the POD.
 using RtSystem::String;
 
+// ?_singleton@Configuration@System@@0PEAV12@EA  0x1801fc6f8 — the class static
+// (ENDGAME B.3.9 SYS, B39_RULES D7); RtSystemPortInit redirects the minted row
+// onto it, so the name door, the address door and this member are one cell.
+System::Configuration* System::Configuration::_singleton = nullptr;
+
 namespace {
 
 // ENDGAME B.3.1 step 2: the `??1String@System@@QEAA@XZ` door typedef is gone

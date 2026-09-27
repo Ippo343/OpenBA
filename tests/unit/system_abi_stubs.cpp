@@ -45,6 +45,8 @@
 #include "system_abi_stubs.h"
 
 int g_systemStub_OnCompletedCalls = 0;
+SystemStubThreadCall g_systemStub_InitFields    = {};
+SystemStubThreadCall g_systemStub_ReleaseFields = {};
 
 namespace System {
 
@@ -52,6 +54,24 @@ namespace System {
 // FUNCTION that pulls `vtable for System::Thread` into this TU.
 void Thread::OnCompleted() {
     ++g_systemStub_OnCompletedCalls;
+}
+
+// ENDGAME B.3.9 SYS W1 — the shared ctor / dtor bodies (retail 0x1800ca4e0 /
+// 0x1800ca590 minus their vptr stores). The real ones start an OS thread and
+// create / close four HANDLEs, which no host test does; these RECORD instead,
+// so the tests can pin that the real `Thread(unsigned)` / `~Thread()` run them
+// exactly once, with the argument, while the object wears the BASE's table.
+void Thread::InitFields(unsigned int stackSize) {
+    ++g_systemStub_InitFields.calls;
+    g_systemStub_InitFields.self       = this;
+    g_systemStub_InitFields.vptrAtCall = *reinterpret_cast<void* const*>(this);
+    g_systemStub_InitFields.stackSize  = stackSize;
+}
+
+void Thread::ReleaseFields() {
+    ++g_systemStub_ReleaseFields.calls;
+    g_systemStub_ReleaseFields.self       = this;
+    g_systemStub_ReleaseFields.vptrAtCall = *reinterpret_cast<void* const*>(this);
 }
 
 // The three that cannot run on the host. Retail addresses kept so the reader
