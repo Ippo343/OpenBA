@@ -999,3 +999,164 @@ kept as the question pass wrote it.
 8. Historical (the question pass's own side effect).
 9. **OPEN.** No well was demolished in any gate run; the component `DeletingDtor` chains ran at teardown and in the
    leaf dtors MI-A transcribed (706058a1), but a live demolish of a converted controller was not observed.
+
+---
+
+## 9. The blocks, the batches and the close, as run
+
+Every block ran on its own worktree branch under `b38_session/BLOCK_BRIEF.md` (block 0 under `BLOCK0_BRIEF.md`,
+the caller/fold batches under `CALLER_BATCH_BRIEF.md`); every merge was gated by the coordinator on the merged tree
+(`b38_session/gate.sh`). The measurements are `b38_session/CLOSE_NUMBERS.md`.
+
+| order | block(s) | what it converted |
+|---|---|---|
+| 0 | block 0 (0A, 0B, 0C, 0D; `bc57c0a5`), the question pass + PILOT (`b38-rules`, merged `addb4dfd`) | inventories, `B38_SLOTS.md` + `step8_appendix_raw.txt`, the seam and file map; this sheet; `Component`, `ControllerComponent` (+ `Controller`), `Description`, `WellComponent`, `WellDescription`, `exe_type.h`, `TableController<Tag>` |
+| 1 | RB part 1 (`3f090079`, UI bases for DLG/PNL/VIS), then RB (`65eafdc0`) | the D1 `InitFields` split and real ctors/dtors on the Runtime bases the exe derives or instantiates: UI (DialogInstance, DialogController, DialogControllerConfig, Element, ElementDescription, SpriteSheet, SpriteCapture), Engine loops, Achievement (4), Graphics (AnimationEvent, Particle, ParticleInstance, Geometry, MeshInstance, SunLight, FrameCopyImageBuffer + GeneratedImageBuffer, MaterialInstance), `Video::ImageBuffer` |
+| 1 | CIT (`e61cae1a`), ACT (`45b8cc2e`), TOOL (`bb0ee047`), K1 (`fc92ee69`), WRK (`3eb4c02b`) | 19 Component leaves; `Action` + 17 (D9 #1 first); `Tool`/`DragTool`/`ToolSetting` + 9 (D9 #3, #4); 80 descriptions + `ComponentEntity` (D9 #2, #10); `Work` + `AutoPickupWork` + 21 |
+| 2 | PNL (`03e6799f`), MI-A (`95128b08`), DLG (`877f68c3`), VIS (`e3f09481`) | 42 DialogController/Config subclasses (D9 #7); 13 town controllers (D9 #8, #9); 19 DialogInstance subclasses (D4 AutoSaveDialog, D9 #12, #13); 20 presentation components + 5 UI/Graphics strays (D9 #11) |
+| 3 | MI-B (`73142f29`), GOAL (`9fb05e19`), LOOP (`7bdc92fd` UNDONE, then `a9937675` with fix `723b0232`) | `ResourceProduceComponent` + 14 controller leaves; goals, Scenario, 19 tutorial classes (D9 #5, #6, #14); the five loops, 11 world externals, Tornado, the geometries, the pathfinder thread; the menu-scene factory-bit fix |
+| 4 | coordinator | resave golden re-cut (`758597e2`); CALLER_SURFACE (`aed7d537`), CALLER_BATCH_BRIEF (`e8f9da72`) |
+| 5 | CB3 (`69c0bf3c`), CB1b (`98edc88f`), CB4 (`f3bec4e4`), CB6 (`f7f7181f`), CB5 (`bda29cbd`), CB1a (`8b282a76`), CB2 (`abae0ac2`) | fold + callers: Work/Action; Component m-z; tools + Player/Entity callers + 119 dead forwarders; loops/world to named fields; standalone callers, dead rows/stubs, `BANISHED_LIVE_TUTORIALINSTANCE_VT` retired; Component a-l; Dialog/Tutorial/Goal |
+| 6 | close (`b38-close`, commits 1–5) | below |
+
+The closing pass: (1) the `engine_funcs` zero-caller sweep by binding — 42 globals bound to a converted class's
+code or table deleted whole, then the rows and doors only they read (27 rows, the DebugUI registrar and its 11
+wrappers, 15 other doors, the empty menu registrars); (2) dead code — 90 reader-less rows of converted classes (8 vtable rows, 82 member rows),
+the registrars and doors left empty or orphaned by them, `component_factory_base.*` / `controller_live_base.*`
+(one harness use left), `HerdComponent_Startup`, stale banners; (3) §8; (4) `CLOSE_NUMBERS.md`; (5) §9–§11.
+
+**Coordinator's gate table (2026-09-26, `b38_session/GATE_TABLE.md` verbatim). Every gate = debug + release + perf
+build, warning diff vs a clean-rebuild baseline, unit, `dispatch_slot_map --check`, cutover manifest,
+`rt_mint_gen --check`, new-game / tutorial / Load Game routes, pointer-free type table vs baseline, resave ×3 (×5
+from CIT on).**
+
+| merge | unit | result |
+|---|---:|---|
+| baseline (1d7866d4) | 516 | 0 problems |
+| pilot b38-rules (addb4dfd) | 523 | 0 problems, resave 3/3 |
+| RB part 1 UI bases (3f090079) | 533 | 0 problems, resave 3/3 |
+| CIT (e61cae1a) | 537 | 9 problems: newgame EXEC past 16-slot table (StateMachine lazy linker); fixed on main |
+| CIT + linker fix | 537 | 0 problems, resave 5/5 |
+| ACT (45b8cc2e) | 557 | 0 problems, resave 5/5 |
+| TOOL (bb0ee047) | 567 | 0 problems, resave 5/5 |
+| RB (65eafdc0) | 594 | 0 problems, resave 5/5 |
+| PNL (03e6799f) | 634 | 0 problems, resave 5/5 |
+| K1 (fc92ee69) | 645 | 0 problems, resave 5/5 |
+| WRK (3eb4c02b) | 670 | 0 problems, resave 5/5 |
+| MI-A (95128b08) | 676 | 0 problems, resave 5/5; tutorial TownCensus entA=1 |
+| DLG (877f68c3) | 691 | 1 problem = typetable 312->311 registered / 417->416 chain: AutoSaveDialog duplicate removed (D4, intended; baseline re-cut); resave 5/5; Mods route exit 0 |
+| VIS (e3f09481) | 699 | 0 problems, resave 5/5 |
+| MI-B (73142f29) | 709 | 0 problems, resave 5/5 |
+| LOOP (7bdc92fd) | 722 | 18 problems: every route exit 3 at ~7s, EXEC 0x3 in Graphics::Scene::Clean geo->Clean() slot 8 from MenuDialogLoopT_TickParticles; merge UNDONE (main reset to 73142f29), sent back to LOOP |
+| GOAL (9fb05e19) | 723 | 0 problems, resave 5/5 |
+| LOOP (a9937675, fix 723b0232) | 736 | 1 problem = resave DIFF: 128 leaked menu UI objects now freed (retail); golden re-cut 758597e2 (757e48a1 -> dd3893af); resave 5/5 on new golden; new-game calls 5686->5683 openFileFail 3->0, tutorial 5776/15 -> 5773/12 |
+| CB3 (69c0bf3c) | 736 | 0 problems, resave 5/5 |
+| CB1b (98edc88f) | 736 | 0 problems, resave 5/5 |
+| CB4 (f3bec4e4) | 736 | 1 problem = typetable minus 15 ResolveTypeIdByNameLazy log lines (lookups now X::TypeId(); counts/chain/ids unchanged) -> gate taught; resave 5/5 |
+| CB4 tool routes | - | placement/road/removal harness exit 0, crash 0 |
+| CB6 (f7f7181f) | 736 | 0 problems, resave 5/5, Mods route exit 0 |
+| CB5 (bda29cbd) | 736 | 0 problems, resave 5/5 |
+| CB1a (8b282a76) | 736 | 0 problems, resave 5/5 |
+| CB2 (abae0ac2) | 736 | 0 problems, resave 5/5, Mods route exit 0 |
+| close (b38-close, commits 1–5) | 736 | static gate per commit (below); the step close is the coordinator's |
+
+The closing pass ran the static gate only, per commit: `standalone-debug`, `standalone-perf`, `unit` (736 / 0
+failures), `dispatch_slot_map --check` (0), `cutover_manifest --gate` (OK, 59 rows), `rt_mint_gen --check` (UP TO
+DATE), and a warning diff of both builds against a build of the branch point (591be5ed): 0 new. No game run.
+
+## 10. Deliberately left (sizes measured at the close; `b38_session/CLOSE_NUMBERS.md`)
+
+**PORT GAP slots: 142 markers** (Component 104, Dialog 30, Work 4, Game 2, standalone 2) — slots retail implements
+whose tree body the conversion kept (D3.2); each transcription is its own titled behaviour commit. Of them, **38
+name a dtor / free / leak**: the components, panels and works whose retail dtor frees members the tree still leaks
+(PNL's 12 panel dtor frees; VIS's UI, Tracker, Interact, AutoPickup, Storage, StorageDisplay, Terraform, Highlight
+dtors; WRK's FireWork/FishingWork; HerdComponent's +0x38 array; …). **49 STANDALONE DEVIATION markers** (Dialog 40:
+PNL's slot overrides where the standalone differs on purpose).
+
+**The lazy `X_ResolveFuncs` resolvers: 36 definitions, 137 calls** (`code/Game`), each a function-local or
+file-static first-use resolve of exe/Runtime addresses into file statics, called from the members (WRK and the
+action/work families). They are B6-5 surface where a loader-thread construction reaches them; converting each to a
+namespace-scope resolve at registration is the END-of-B.3 / B.4 sweep.
+
+**Type-id cells: 100 `g_tid_*` names and 111 `g_TypeId_*` names; 423 `ResolveAddr(Module::Exe, 0x1401c…/0x1401d…)`
+sites** (D4/D10 (c): END of B.3). The concrete-class by-name lookups left: `Disease` (`citizen_updatehealth.cpp`),
+`Toolbar` ×2 (`toolbar_vtable_standalone.cpp`, `tutorial_base.cpp`).
+
+**Exe vtable rows kept, each with its reader (6):** `GameUpdateLoop` 0x14015e2f0, `GameLoaderLoop` 0x1401588d0,
+`GameLoadDialogLoopT` 0x140158800, `MenuDialogLoopT` 0x14015ed00 — the door-then-stamp loop builders in
+`mainmenudialog.cpp`, `newgamedialog.cpp`, `saveloaddialog.cpp`, `tutorialui.cpp`, `tutorial_next_scenario.cpp`
+and `engine_funcs.h`'s inline `MenuDialogLoopT_Ctor` (18 sites, through `engine_funcs` `g_*_Vtable`); `StatGoal`
+0x1401604c0 (`standalone/main.cpp` `RunFactorySelfTest`); the `Video::ImageBuffer` copy 0x14015c8c0
+(`g_NoiseUI_ImageBufferVtable`, the ModDialog/NoiseUI/MapUI thumbnails; a Runtime-class copy site). Plus 237
+reader-less rows whose symbol names no converted class (out of step 8's population).
+
+**Hand-built tables left (3):** the dead `ControllerLive::Dispatcher<Tag>::vtbl` / `Vtable()` template in
+`controller_state_table.h` (no caller: every controller embeds `TableController`), the ImageBuffer copy above, and
+`factory_enum_stub.cpp`'s `g_EnumStub_Vtable` (not an exe class).
+
+**The mint / `_typeInfo` / `RT_DELDTOR` rows of the step-8 Runtime bases (D10):** 23 mint `??_7` rows of the bases
+RB touched (UI 7, Engine loops 4, Achievement 4, Graphics 7, `Video::ImageBuffer`) and 15 `?_typeInfo` rows stay in
+`rt_data_mint_tables.inc`; up to 57 of the 137 `RT_DELDTOR` rows in `deleting_dtor.cpp` name one of those bases or a
+Runtime subclass of theirs (substring count, an upper bound). They retire in D10's order at the END of B.3.
+`RtUI::DialogController` and the `RtEngine::` loop PODs stay with them (§8).
+
+**Singleton storage (carry-over 5 of step 7):** unchanged by step 8 — the 9 `CUTOVER_REQUIRED` manifest rows, the
+`engine_funcs` storage globals, `?_singleton@SaveLoad@Save@@`.
+
+**Unproved raw dispatches (CALLER_SURFACE §2's families, re-run on the close tree): 238 sites** (609 at 9fb05e19):
+excluded by construction 136 (NOT-VPTR 80, RUNTIME 56); proved but left 27 (TYPE-ARRAY 23 — 7 of them in
+`engine`, 2 SELF, 2 CTRL); candidates needing proof 75 (NAMED 26, TYPE-OTHER 24, OTHER 18, TOOL 7). Per directory:
+Work 75 (55 NOT-VPTR), Dialog 58 (25 RUNTIME, 18 NOT-VPTR), Component 40, standalone 26, Player 14, Game 13,
+engine 7, Tutorial 3, Goal 1, Object 1.
+
+**Delegating members: 12** (CLOSE_NUMBERS §7; `CharacterComponent`'s 256-line body the largest).
+
+**`engine_funcs` zero-reference globals not owned by a converted class (10):** `fn_BuildingList_CheckCondition`,
+`fn_Building_RemoveBuyOrder`, `fn_CitizenBehavior_{CheckThresholds,CollectStats,CountResources}`,
+`fn_CitizenList_AssignWorker`, `fn_Game_GetMonthFromTime`, `fn_Game_SpawnResources`, `fn_GetInputKeyName`,
+`fn_Struct60B_Resize`; and 8 zero-reference type-id / Runtime-ctor slot globals (`g_TypeId_DialogController`,
+`_ModelComponent`, `_PageToggleUI`, `_PickingComponent`, `_ProfessionDescription`, `fn_Element_Ctor`,
+`fn_ElementDescription_Ctor/_Dtor`) — END of B.3 / B.4.
+
+**Unused address constants:** the `XAddr::Vtable` / member constants in `engine/types/ui/{Dialogs,Panels}.h` and the
+code/Game headers (CALLER_SURFACE G.7 counted 551 at 9fb05e19; CB4 deleted most with the 119 forwarders) — the
+survivors are documentation, deleted with their headers.
+
+**Retail slips transcribed, not fixed; tree in-place construction kept (B8-13, now proved faithful for the tools,
+§8).**
+
+## 11. Corrections from the closing pass (2026-09-26, `b38-close`)
+
+1. **Controller member slot 8 (§2.3, D9 #9, MI-A 54b28f75) reads the table's BUILT flag**, not its count — re-read
+   by the close (§8). The tree's `count != 0` is equivalent for every table it builds.
+2. **CALLER_SURFACE G.3's "NOT dead" pair died with the batches.** `g_FollowDialog_Vtable` (CB2 converted
+   `citizenui.cpp`) and `fn_ComponentBase_Serialize` (the 5 calls became `Component::Persist`) were at zero
+   references by the close's branch point; commit 1 deleted both. The engine_funcs zero-reference population grew
+   from 40 (step start) to 52 (branch point) because the batches converted callers but deleted no global (the
+   brief's rule), exactly as in step 7.
+3. **CB1b's "~86 users" of the inert helpers** were 23 files that still INCLUDED `component_factory_base.h` /
+   `controller_live_base.h` and one real API use (`food_placement_harness.cpp`'s `InertStubSlot()` comparison) —
+   an include is not a user. Both pairs are deleted (commit 2).
+4. **The LEFTOVERS "CLOSE items" had mostly been done by the batches.** At the branch point the AchievementDialog /
+   GoalDialog / MainMenuDialog rows, `reg_w2_lane1.cpp` (`g_PurecallVtable`), `reg_w2_lane2.cpp`,
+   `reg_fruit_happiness_serialize.cpp`, `reg_cemetery_healer_serialize.cpp`, the Attendance / Forester /
+   ResourceProduce rows, `RegisterAnimAudioEventVtable` / `RegisterCaptureBoxDescriptionVtable`, `UI_DIALOG_STUB`
+   and the 10 MI-B Work vtable rows were already gone; only empty functions, doors and a few rows remained. The
+   LEFTOVERS line numbers (`herdcomponent.cpp:1080`, `reg_code_lane5.cpp:81`, `toolbardescription.cpp:243`) had
+   moved; the banners were found by content.
+5. **A printf argument is not a caller, but a `(void*)fn_X` in a `_DEBUG` dump keeps a naive count at 1**
+   (`fn_Geometry_Init`, `fn_Geometry_ChunkUpdate`, `g_TutorialInstanceVtable`). The close's sweep excludes a use on
+   a `printf(` line whose argument is `(void*)NAME`; the DiagPrint rows went with their globals.
+6. **Reader sweeps must see file-local constants.** A row is reader-less only if no other code-only occurrence of
+   the literal exists anywhere AND no constant holding it is used (qualified `NS::X`, or bare within its own file).
+   `rows.py` counts address-table initialisers and helper-wrapper literals (`R<>(0x…)`, `ResolveSlotPtr(0x…)`) as
+   readers, so a row read through a computed address (`base + i*8`) would be missed — none was found.
+7. **This pass's own miscount:** commit 2's message says the 82 member rows were "in 30 files"; they were in 34
+   (42 files with the 8 vtable rows).
+8. **The start-of-step tree was measured from `git archive 1d7866d4`** extracted into the scratch directory, not
+   from a `git worktree add` (equivalent content; nothing to remove from the repository).
+9. **`HerdComponent_Startup`** (the ctor tail the inert factory could not express) had been dead since CIT gave
+   `HerdComponent` its real ctor (which stores +0x4c = -1); deleted in commit 2.
+10. **Deleted `standalone/reg_*` registrars and boot output.** Commits 1 and 2 delete 117 `RegisterExeAddr` rows
+    (27 + 90) and ten registrar files; the address-registry size the boot prints drops accordingly. No deleted row
+    had a reader, so no `NOT IMPLEMENTED` line can appear; the coordinator's step close checks the stub set.
