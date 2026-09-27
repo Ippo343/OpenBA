@@ -22,6 +22,7 @@
 #include "engine_funcs.h"
 #include "Action/Action.h"   // ENDGAME B.3.8 CB3
 #include "resolve.h"
+#include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
 #include "Component/coll_bridge.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -110,7 +111,6 @@ static WCP_fn_TimeCtor_t      s_wcp_TimeCtor       = nullptr;
 static WCP_fn_IsDerivedFrom_t s_wcp_IsDerivedFrom  = nullptr;
 
 // Runtime-filled globals (read live via pointer; read 0 at static-link time).
-static const uint32_t* s_wcp_pMsgId_c70e8 = nullptr;  // 0x1401c70e8 (SendComponentMessage #1 target type-id = CitizenAIComponent -- UNREGISTERED, left for a behaviour commit)
 // 0x1401c7388 = ConsumeProduceDescription (ENDGAME B.3.9 D5: by cell, not "component
 // type id" -- read directly below).
 // Float .rdata constants.
@@ -145,7 +145,6 @@ static void WCP_ResolveAll() {
     // Fallback: engine_funcs IsDerivedFrom (same Runtime target) if the slot isn't a dispatch slot in standalone.
     if (!s_wcp_IsDerivedFrom) s_wcp_IsDerivedFrom = reinterpret_cast<WCP_fn_IsDerivedFrom_t>(fn_IsDerivedFrom);
 
-    s_wcp_pMsgId_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
     s_wcp_pf_17214c    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
     s_wcp_pf_172280    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172280));
 }
@@ -270,7 +269,7 @@ void WorkAct_ConsumeProduceCtor_bef70(void* param_1, uint32_t param_2, void* par
     if (obj) {
         uintptr_t innerIbp = 0;
         WCP_IbpCtor(&innerIbp, nullptr);
-        uint32_t msgId = s_wcp_pMsgId_c70e8 ? *s_wcp_pMsgId_c70e8 : 0;  // DWORD_1401c70e8
+        uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(param_1) + 0x10);
         if (s_wcp_SendCompMsg) sm1 = s_wcp_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0);
     }

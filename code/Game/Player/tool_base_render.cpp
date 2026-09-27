@@ -82,6 +82,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // [diag] last entities committed into EditTool+0x30 (edittool_select.cpp step 6).
@@ -428,7 +429,7 @@ void Impl_b930(int64_t self) {
     // Allocate + construct a fresh EdgeMesh.
     void* mesh = fn_MemAllocStatic ? fn_MemAllocStatic(0x180, 8) : nullptr;
     if (mesh) {
-        if (fn_EdgeMesh_Ctor) fn_EdgeMesh_Ctor(mesh);
+        ::new (mesh) Graphics::EdgeMesh();   // B.3.9 GFX: the real ctor (was the ??0 door)
     }
     *reinterpret_cast<void**>(self + 0xf8) = mesh;
 
@@ -509,7 +510,7 @@ void Impl_c4a0(int64_t self) {
     // -1. (Without the -1, the RemoveObject block below would delete live scene
     // object id 0 — e.g. the storage barn — and corrupt the scene / freeze.)
     if (*reinterpret_cast<void**>(self + 0x28) == nullptr) {
-        if (fn_EdgeMeshInstance_Ctor) fn_EdgeMeshInstance_Ctor(reinterpret_cast<void*>(self + 0x28));
+        ::new (reinterpret_cast<void*>(self + 0x28)) Graphics::EdgeMeshInstance();   // B.3.9 GFX: the real ctor
         *reinterpret_cast<int32_t*>(self + 0x120) = -1;
     }
 

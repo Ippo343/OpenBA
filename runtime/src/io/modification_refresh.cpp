@@ -181,6 +181,8 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Modification.h"
+#include "../../types/io/Persistence.h"   // ENDGAME B.3.9 IO: the class static
+#include "../../types/io/FileSystem.h"    // ENDGAME B.3.9 IO: the class static
 #include "../../types/io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
 #include "../../types/system/Filename.h"
 #include "../../types/collection/Collection.h"   // ENDGAME B.3.2 closing pass
@@ -917,8 +919,8 @@ void Modification::RefreshList() {
     // The two singletons retail loads at 0x1800af648 / 0x1800af64f. Read through
     // the exported data slots rather than the raw addresses so a standalone run
     // sees the objects Engine::Startup actually constructed.
-    void** const fsSlot = RT_DATA_SLOT(void**, "?_singleton@FileSystem@IO@@0PEAV12@EA");
-    void** const psSlot = RT_DATA_SLOT(void**, "?_singleton@Persistence@IO@@0PEAV12@EA");
+    void** const fsSlot = reinterpret_cast<void**>(&::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
+    void** const psSlot = reinterpret_cast<void**>(&::IO::Persistence::_singleton);   // ENDGAME B.3.9 IO (D7): the class static
     void* const fs   = fsSlot ? *fsSlot : nullptr;
     void* const pers = psSlot ? *psSlot : nullptr;
 

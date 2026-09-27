@@ -298,11 +298,11 @@ static_assert(sizeof(SaveGameInfo) == 0x10, "sizeof(IO::Persistence::SaveGameInf
 // worker table 0x180155860 over `this+0x10` — the field comment above says so
 // and pins it. So `IO::Persistence` EMBEDS a `System::Thread`-derived save/load
 // worker at +0x10; it does not derive from one, and +0x00 is a tree root, not a
-// vptr. `_workerVtable` therefore stays a plain `void*` FIELD, and
-// `persistence_worker_win.cpp`'s teardown re-stamp of the BASE `System::Thread`
-// vtable 0x180155f20 BY ADDRESS (:585-589) stays exactly as it is, as does
-// `engine/singleton_ctors.cpp`'s construction of the object: `System::Thread` is
-// B.3 step 4b and `singleton_ctors.cpp` is outside this block's file set.
+// vptr. `_workerVtable` therefore stays a plain `void*` FIELD. ENDGAME B.3.9
+// IO (W2): the worker is a real class, `IO::PersistenceWorker`
+// (PersistenceWorker.h) -- `engine/singleton_ctors.cpp` placement-constructs it
+// at +0x10 and `~Persistence` ends it directly; the by-address vtable stamps
+// (0x180155860, 0x180155f20) are the compiler's own stores now.
 //
 // *** THIS DECLARATION IS DELIBERATELY PARTIAL AND CARRIES NO `sizeof` ASSERT
 // *** AGAINST A LITERAL, AND THAT IS THIS HEADER'S OWN STANDING RULE. *** The
@@ -438,6 +438,14 @@ public:
     int32_t             _saveCount;          // +0x88
     uint8_t             _pad8c[0x04];        // +0x8C — NOT pinned
     RtSystem::String    _savePath;           // +0x90 — POD; ~Persistence frees it
+
+    // ?_singleton@Persistence@IO@@0PEAV12@EA (0x1801fc6b8) -- the class static
+    // (ENDGAME B.3.9 IO, B39_RULES D7). Defined in persistence.cpp;
+    // RtIoPortInit redirects the minted row onto it, so the name door, the
+    // address door, the manifest publish and this member are the same eight
+    // bytes. Written by the ??0Persistence door (engine/singleton_ctors.cpp).
+    // PUBLIC while foreign readers still reach it (retail: private `0`).
+    static Persistence* _singleton;
 };
 
 // The `sizeof` assert is an EQUALITY WITH THE POD, never a literal: nothing in

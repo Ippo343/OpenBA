@@ -35,6 +35,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -71,13 +72,13 @@ fn_complete_t s_complete = nullptr;
 fn_showtool_t s_showtool = nullptr;
 fn_perform_t  s_perform  = nullptr;
 fn_moveto_t   s_moveto   = nullptr;
-uint32_t s_msg70e8 = 0, s_msg7008 = 0, s_msg75f0 = 0;
+uint32_t s_msg7008 = 0, s_msg75f0 = 0;
 bool s_init = false;
 // ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c7008 and 0x1401c75f0 are registered type-id
 // cells (BuildComponent, DestroyComponent) that always hold that class's id once
 // Fill* runs, so reading them via the cell is behaviour-neutral with a direct
-// Class::TypeId() call. 0x1401c70e8 (CitizenAIComponent) is UNREGISTERED and reads 0
-// -- left alone (behaviour site, not converted here).
+// Class::TypeId() call. 0x1401c70e8 (CitizenAIComponent) is unregistered; its lead
+// message keeps the PORT GAP constant (ENDGAME B.3.9 CB, see CitizenAIComponent.h).
 
 void EnsureInit() {
     if (s_init) return;
@@ -90,12 +91,6 @@ void EnsureInit() {
     s_showtool = reinterpret_cast<fn_showtool_t>(ResolveAddr(Module::Exe, 0x140042890));
     s_perform  = reinterpret_cast<fn_perform_t>(ResolveAddr(Module::Exe, 0x1400c9720));
     s_moveto   = reinterpret_cast<fn_moveto_t>(ResolveAddr(Module::Exe, 0x1400c9170));
-    // msg-id globals: read the .rdata DWORD (0 in the static image / unfilled in SA).
-    auto rd = [](uintptr_t a) -> uint32_t {
-        uintptr_t p = ResolveAddr(Module::Exe, a);
-        return p ? *reinterpret_cast<uint32_t*>(p) : 0;
-    };
-    s_msg70e8 = rd(0x1401c70e8);
     // c7008 = BuildComponent type-id (the state-8 message target).
     s_msg7008 = BuildComponent::TypeId();
     // c75f0 = DestroyComponent type-id -- the altAnim/demolition variant of the same
@@ -136,7 +131,7 @@ extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t p
         void* act = nullptr;
         if (mem && s_sendmsg) {
             int64_t outIBP = 0; Ctor(&outIBP, nullptr);
-            uint32_t msgId = s_msg70e8;
+            uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
             int64_t targetEntity = *reinterpret_cast<int64_t*>(citizenEntity + 0x10);  // *(citizenEntity+0x10)
             act = s_sendmsg(mem, &targetEntity, &msgId, 0, &outIBP, 0);
         }

@@ -325,7 +325,6 @@ void ModInfoArraySetSize(ModInfoArray* a, int32_t newSize) {
 using CtorFn        = void* (*)(void* self);
 using SetWindowsFn  = void  (*)(void* self, int count);
 using CommitFn      = void  (*)(void* self);
-using ReleaseFn     = void  (*)(void* self);
 // ENDGAME B.3.1 step 2: the String::Serialize and String::Set door typedefs
 // are gone with their call sites — both are class members now.
 
@@ -343,20 +342,8 @@ using DeletingDtorFn = void (*)(void* self, int flags);
 // IO::Stream vtable slot 7 (+0x38) is Close() on every concrete Stream.
 using StreamCloseFn = void (*)(void* stream);
 
-// The four vtables retail stamps by RIP-relative LEA. All four are EXPORTED
-// symbols (??_7...@6B@), so they are resolved by name like everything else.
-// Resolve-and-cache, NEVER caching a null — the same contract RT_EXPORT_ONCE
-// has, spelled for a DATA symbol. ResolveExport is GetProcAddress: an
-// export-table binary search under the loader lock, every call
-// (reference_rtoriginal_is_getprocaddress.md). Six of them per save would not
-// be measurable, but the house rule is to resolve once and the cheap version is
-// the same length as the expensive one.
-#define RT_VTABLE_ONCE(MANGLED)                                                \
-    ([]() -> const void* {                                                     \
-        static void* rt_vtable_once__ = nullptr;                               \
-        return reinterpret_cast<const void*>(                                  \
-            RtResolveCached((MANGLED), &rt_vtable_once__));                    \
-    }())
+// ENDGAME B.3.9 IO (W2): the RT_VTABLE_ONCE by-name vtable stamps went with
+// the inlined CompressedMemoryStream ctor/dtor -- the real class stores its own.
 
 inline void* ReadVtableSlot(const void* obj, int byteOffset) {
     void* const* vtbl = *reinterpret_cast<void* const* const*>(obj);
@@ -379,11 +366,13 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     // CompressedStream+0x18 or +0x24 (runtime/types/io/Stream.h records both as
     // never-initialised), so a `= {}` here would be a behavioural difference,
     // not tidiness.
-    RtIo::CompressedMemoryStream cs;
-
-    RT_EXPORT_ONCE(CtorFn, "??0CompressedStream@IO@@QEAA@XZ")(&cs.base);
-    cs.base.base.vptr = RT_VTABLE_ONCE("??_7CompressedMemoryStream@IO@@6B@");
-    RT_EXPORT_ONCE(CtorFn, "??0MemoryStream@IO@@QEAA@XZ")(&cs.memoryStream);
+    // ENDGAME B.3.9 IO (W2, foreign site): the REAL class on the same raw
+    // storage -- base ctor, vptr, member ctor, the same three steps; the body
+    // keeps reading it through the RtIo POD view.
+    alignas(16) unsigned char csStorage[sizeof(IO::CompressedMemoryStream)];
+    IO::CompressedMemoryStream* const csObj =
+        ::new (static_cast<void*>(csStorage)) IO::CompressedMemoryStream();
+    RtIo::CompressedMemoryStream& cs = *reinterpret_cast<RtIo::CompressedMemoryStream*>(csObj);
 
     cs.base.base.direction = 1;                 // 1 == writing
     cs.base.source         = &cs.memoryStream.base;
@@ -574,58 +563,14 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     // now, called directly (it was an RT_EXPORT_ONCE door onto our own port).
     _embeddedState.Store(*reinterpret_cast<IO::MemoryStream*>(&cs.memoryStream));   // B.3.7 bridge
 
-    // ---- inlined ~CompressedMemoryStream / ~CompressedStream / ~MemoryStream
-    // Every one of these vtable re-stamps is a real store in retail (an object
-    // under destruction reverts to each base's table in turn). They are not
-    // decoration: ?Close@CompressedMemoryStream is virtual, and the second
-    // Close below dispatches through the table stamped on the line above it.
-    cs.base.base.vptr = RT_VTABLE_ONCE("??_7CompressedMemoryStream@IO@@6B@");
-    if (cs.base.headerSize > 0 && cs.base.base.direction == 1) commit(&cs.base);
-    reinterpret_cast<StreamCloseFn>(
-        ReadVtableSlot(&cs.memoryStream, RtIo::kStreamVtblCloseSlot * 8))(&cs.memoryStream);
-
-    // ~MemoryStream then ~Stream on the embedded stream: ENDGAME B.3.9 IO, the
-    // class's own destructor chain (the same two frees, same order) through a
-    // non-virtual slot-0 call with flags 0 -- no free of the member itself.
-    reinterpret_cast<IO::MemoryStream*>(&cs.memoryStream)->IO::MemoryStream::DeletingDtor(0);
-
-    cs.base.base.vptr = RT_VTABLE_ONCE("??_7CompressedStream@IO@@6B@");
-    RT_EXPORT_ONCE(ReleaseFn, "?Release@CompressedStream@IO@@QEAAXXZ")(&cs.base);
-
-    // *** EVERY FREE BELOW THIS LINE IS DEAD, AND THAT IS RETAIL'S DOING. ***
-    // ?Release@CompressedStream (0x1800aa100) already freed all three arrays
-    // AND the Compression at +0x60, and ZEROED every one of those pointers
-    // before returning. What follows is the inlined ~CompressedStream running
-    // straight afterwards over the corpse: each `if (ptr != nullptr)` sees the
-    // null Release just wrote and does nothing.
-    //
-    // It is transcribed rather than deleted for the reason PLAN §6 step 8 gives
-    // about comments, applied to code: "these frees cannot fire" is a claim
-    // about ?Release's CURRENT body, not about this function. Deleting them
-    // would silently make this port depend on that, and nothing would notice if
-    // Release ever stopped zeroing.
-    //
-    // NOTE THE ONE POINTER NOT FREED ANYWHERE IN THIS EPILOGUE: the Compression
-    // at CompressedStream+0x60. It is not leaked — Release owns it (it frees
-    // the object's first qword, then the object). A reader auditing this
-    // epilogue for balance will not find its free here and should not add one.
-    if (cs.base.blockData != nullptr) MemFree(cs.base.blockData);
-    cs.base.blockData = nullptr;
-    cs.base.blockSize = 0;
-    cs.base.blockCap  = 0;
-
-    if (cs.base.headerData != nullptr) MemFree(cs.base.headerData);
-    cs.base.headerData = nullptr;
-    cs.base.headerSize = 0;
-    cs.base.headerCap  = 0;
-
-    if (cs.base.windowData != nullptr) MemFree(cs.base.windowData);
-    cs.base.windowData = nullptr;
-    cs.base.windowSize = 0;
-    cs.base.windowCap  = 0;
-
-    cs.base.base.vptr = RT_VTABLE_ONCE("??_7Stream@IO@@6B@");
-    if (cs.base.base.encoding != nullptr) MemFree(cs.base.base.encoding);
+    // ---- ~CompressedMemoryStream (retail inlines it here) ------------------
+    // ENDGAME B.3.9 IO (W2, foreign site): the class's own destructor chain at
+    // the position the inlined one had, through a non-virtual slot-0 call with
+    // flags 0 (no free of the stack object): the Close guard + Commit, the
+    // member's virtual Close, ~MemoryStream (+ its encoding), Release and the
+    // three array destructors (all no-ops over what Release zeroed -- the dead
+    // frees retail ships), then the base encoding free. Same steps, same order.
+    csObj->IO::CompressedMemoryStream::DeletingDtor(0);
 
     // ---- destroy the BY-VALUE String argument ------------------------------
     // See the banner. This is the callee's half of a contract whose caller half

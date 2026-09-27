@@ -71,6 +71,7 @@
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Persistence.h"
+#include "../../types/io/PersistenceWorker.h"   // ENDGAME B.3.9 IO (W2)
 #include "../system/string.h"
 #include "../system/pod_bridge.h"
 
@@ -91,7 +92,6 @@ namespace {
 using EnqueueDeleteFn = void (*)(void* worker, const System::String* filename);
 using EnqueueLoadFn   = void (*)(void* worker, const System::String* filename,
                                  int blockCount, const SaveBlock* blocks);
-using WorkerDtorFn    = void (*)(void* worker);
 using MapClearFn      = void (*)(void* self);
 
 EnqueueDeleteFn EnqueueDelete() {   // 0x1800b7390 — command 2
@@ -102,11 +102,6 @@ EnqueueDeleteFn EnqueueDelete() {   // 0x1800b7390 — command 2
 EnqueueLoadFn EnqueueLoad() {       // 0x1800b7460 — command 1
     static auto fn = reinterpret_cast<EnqueueLoadFn>(
         ResolveAddr(Module::Runtime, 0x1800b7460));
-    return fn;
-}
-WorkerDtorFn WorkerDtor() {         // 0x1800b7740 — the embedded worker's dtor
-    static auto fn = reinterpret_cast<WorkerDtorFn>(
-        ResolveAddr(Module::Runtime, 0x1800b7740));
     return fn;
 }
 // ENDGAME B.3.2 step 2 (2026-09-13) — NOT CONVERTED to `Collection::Set<T>`,
@@ -340,7 +335,9 @@ Persistence::~Persistence() {
     // bridge, BY HAND, exactly here. Retyping it would add an implicit member
     // destructor running in ADDITION to this line.
     ::Sys(_savePath).~String();
-    ::WorkerDtor()(&_workerVtable);
+    // ENDGAME B.3.9 IO (W2): the embedded worker's destructor (0x1800b7740),
+    // called directly where retail calls it -- the class's own, not a door.
+    reinterpret_cast<PersistenceWorker*>(&_workerVtable)->~PersistenceWorker();
     ::MapClear()(this);
 }
 

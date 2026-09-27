@@ -117,7 +117,6 @@ const char* const kGetFrustum        = "?GetFrustum@Camera@Graphics@@QEBA?AVFrus
 const char* const kRendererCtor      = "??0Renderer@Graphics@@QEAA@XZ";
 const char* const kGetCullCamera     = "?GetCullCamera@Renderer@Graphics@@QEAAAEBVCamera@2@XZ";
 const char* const kGetShader         = "?GetShader@Renderer@Graphics@@QEBAHXZ";
-const char* const kMaterialInstCtor  = "??0MaterialInstance@Graphics@@QEAA@XZ";
 const char* const kSetMaterial =
     "?SetMaterial@MaterialInstance@Graphics@@QEAAXV?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z";
 
@@ -629,26 +628,12 @@ extern "C" int RtGraphics_Renderer_GetFrameIndex(const Renderer* self) {
 //      not a MaterialInstance one, and is not affected by this port at all.
 //   4. The ctor allocates nothing and installs nothing global, so a
 //      RT_GFXRENDER=0 run and a default run produce the same object.
-extern "C" MaterialInstance* RtGraphics_MaterialInstance_Ctor(MaterialInstance* self) {
-    MaterialInstance before;
-
-    static void* const vtBase = ResolveExport("??_7Base@Object@@6B@");
-    static void* const vtExternal = ResolveExport("??_7External@Object@@6B@");
-    static void* const vtMaterialInstance = ResolveExport("??_7MaterialInstance@Graphics@@6B@");
-
-    self->vptr = vtBase;
-    self->vptr = vtExternal;
-    self->external_08 = nullptr;
-    self->external_10 = nullptr;
-    self->external_18 = nullptr;
-    self->vptr = vtMaterialInstance;
-    // ENDGAME B.3.8 block RB (RULE B8-1): the field stores are ONE body with
-    // the real constructor `Graphics::MaterialInstance()` (Material.h).
-    ::Graphics::MaterialInstance::DoorBody::Init(
-        reinterpret_cast<::Graphics::MaterialInstance*>(self));   // B.3.8 bridge
-
-    return self;
-}
+//
+// ENDGAME B.3.9 block GFX: the door that transcribed this is RETIRED. The three
+// stamps are the compiler's chain of the real `Graphics::MaterialInstance()`
+// (Material.h), whose body is the field stores; every builder -- the factory
+// pair, Construct / Reconstruct, SaveLoad::Draw and the four exe dialogs --
+// spells `::new (p) Graphics::MaterialInstance()`.
 
 // ============================================================================
 // Graphics::MaterialInstance::~MaterialInstance — 0x180103a00 (ENDGAME B.3.8
@@ -656,15 +641,13 @@ extern "C" MaterialInstance* RtGraphics_MaterialInstance_Ctor(MaterialInstance* 
 //     0x180004d60 (+0x50 _textures), 0x180004c80 (+0x40 _constants),
 //     0x180004b70 (+0x30 _parameters)
 // then ~External. The restamp and ~External are the compiler's chain; the
-// three calls are `ReleaseFields`, reached BY ADDRESS exactly as the door in
-// deleting_dtor_leaves.cpp reaches them (each resolves to its ported J-row,
-// which zeroes the header, so the compiler's implicit member ~Arrays after
-// the body are no-ops).
+// three calls are the body, reached BY ADDRESS (each resolves to its ported
+// J-row, which zeroes the header, so the compiler's implicit member ~Arrays
+// after the body are no-ops). ENDGAME B.3.9 GFX: the `ReleaseFields` split and
+// the ??1 door in deleting_dtor_leaves.cpp are gone.
 // ============================================================================
 namespace Graphics {
-MaterialInstance::~MaterialInstance() { ReleaseFields(); }
-
-void MaterialInstance::ReleaseFields() {
+MaterialInstance::~MaterialInstance() {
     using ArrayDtorFn = void* (*)(void*);
     uint8_t* const d = reinterpret_cast<uint8_t*>(this);
     reinterpret_cast<ArrayDtorFn>(ResolveAddr(Module::Runtime, 0x180004d60))(d + 0x50);
@@ -1124,10 +1107,8 @@ int RtGraphicsRendererRegister() {
                           (void*)&RtGraphics_Renderer_GetFrameIndex); ++count;
     RegisterRuntimeAddr(0x180018080, (void*)&RtGraphics_Renderer_GetFrameIndex);
 
-    // --- Graphics::MaterialInstance (3 of the 5 rows this lane owns) --------
-    RegisterRuntimeExport("??0MaterialInstance@Graphics@@QEAA@XZ",
-                          (void*)&RtGraphics_MaterialInstance_Ctor); ++count;
-    RegisterRuntimeAddr(0x180103980, (void*)&RtGraphics_MaterialInstance_Ctor);
+    // --- Graphics::MaterialInstance (2 rows; ENDGAME B.3.9 GFX: the ??0 door
+    // 0x180103980 is retired -- the class is built by its real ctor) --------
 
     RegisterRuntimeExport("?SetMaterial@MaterialInstance@Graphics@@QEAAXV?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z",
                           (void*)&RtGraphics_MaterialInstance_SetMaterial); ++count;

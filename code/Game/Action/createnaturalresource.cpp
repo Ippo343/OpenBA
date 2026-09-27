@@ -266,8 +266,6 @@ int  CreateNaturalResource::AbstractImpl(void* actionStack) {
             // it misses on every entity (reference_registered_but_filled_with_zero). Separate
             // them by re-scanning with the by-NAME id, which does not depend on that slot.
             const uint32_t tidByName = GrowthComponent::TypeId();
-            const uint32_t* pSlot = reinterpret_cast<const uint32_t*>(
-                ResolveAddr(Module::Exe, 0x1401c77b0));
             int compN = newEntity ? *(int32_t*)((uint8_t*)newEntity + 0x38) : 0;
             uintptr_t compA = newEntity ? *(uintptr_t*)((uint8_t*)newEntity + 0x30) : 0;
             int growthByName = 0;
@@ -277,10 +275,9 @@ int  CreateNaturalResource::AbstractImpl(void* actionStack) {
                 uint32_t t = (*(uint32_t(**)(void*))(*(uintptr_t*)c + 0x10))(c);
                 if (tidByName && t == tidByName) ++growthByName;
             }
-            std::fprintf(stderr, "[CreateNR]   finder slot 0x1401c77b0 -> storage=%p value=%u | "
-                         "GetTypeIdByName(\"GrowthComponent\")=%u | components on entity=%d, "
+            std::fprintf(stderr, "[CreateNR]   GrowthComponent::TypeId()=%u | components on entity=%d, "
                          "matching by NAME=%d  => %s\n",
-                         (const void*)pSlot, pSlot ? *pSlot : 0u, tidByName, compN, growthByName,
+                         tidByName, compN, growthByName,
                          growthByName > 0 ? "THE TEMPLATE HAS ONE — the finder's type-id slot is "
                                             "the bug" : "the template genuinely has no "
                                             "GrowthComponent — look upstream at the description");

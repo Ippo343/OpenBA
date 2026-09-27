@@ -121,6 +121,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Persistence.h"
+#include "../../types/io/PersistenceWorker.h"   // ENDGAME B.3.9 IO (W2)
 #include "../../types/io/FileStream.h"
 #include "../../types/system/Filename.h"
 #include "../system/string.h"
@@ -136,14 +137,11 @@ using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 // same technique modification_refresh.cpp and filesystem_find_win.cpp use.
 // This one's signature is the retail POD shape and is not this file's to
 // change.
-extern "C" bool RtIo_FileStream_Create(RtIo::FileStream* self, const RtSystem::Filename* path);
 namespace RtIO {
     void  RtIo_FileSystem_CloseFile(RtIO::FileSystem* self, RtIO::FileInfo* info);
 }
 using RtIo::BinaryFileStream;
 using RtIo::FileStream;
-extern "C" BinaryFileStream* RtIo_BinaryFileStream_Ctor(BinaryFileStream* self);
-extern "C" void              RtIo_BinaryFileStream_Dtor(BinaryFileStream* self);
 using RtSystem::String;
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
@@ -157,9 +155,7 @@ namespace {
 // rather than shared across TUs — same reasoning as this file's other
 // doors).
 RtIO::FileSystem* Fs() {
-    RtIO::FileSystem** slot = RT_DATA_SLOT(RtIO::FileSystem**,
-                                           "?_singleton@FileSystem@IO@@0PEAV12@EA");
-    return slot ? *slot : nullptr;
+    return reinterpret_cast<RtIO::FileSystem*>(::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
 }
 
 // ---- CRC-32, reflected table (polynomial 0xEDB88320) -----------------------
@@ -548,14 +544,19 @@ extern "C" void RtIo_PersistenceWorker_EnqueueSave(void* worker, const String* f
 // are inlined here, and the base dtor's own work — if any — is not reached.
 // Reproduced as written.
 // ============================================================================
-extern "C" void RtIo_PersistenceWorker_Dtor(void* worker) {
+// ENDGAME B.3.9 IO (W2): THE CLASS DESTRUCTOR. The door that stood here
+// stamped 0x180155860 on entry and 0x180155f20 (System::Thread's table) half
+// way, both BY ADDRESS; the first is the compiler's own store on entry to
+// ~PersistenceWorker, and the second -- with the SetEvent / Wait / four
+// CloseHandles after it -- is exactly System::Thread::~Thread (ReleaseFields,
+// runtime/src/system/thread_win.cpp: SetEvent(hStop = worker+0x20),
+// WaitForSingleObject(hThread = worker+0x10, INFINITE), CloseHandle on
+// +0x10 / +0x18 / +0x20 / +0x28 in that order), which the compiler runs after
+// this body with its own base-vptr store. The fields are read through the
+// Persistence POD view, as every job body here reads them.
+IO::PersistenceWorker::~PersistenceWorker() {
 
-    Persistence* p = FromWorker(worker);
-
-    // *worker = 0x180155860 (the derived worker vtable)
-    static void* kDerivedVtable =
-        reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180155860));
-    p->workerVtable = kDerivedVtable;
+    RtIo::Persistence* p = FromWorker(this);
 
     // retail 0x18002ac40 — the SAME Array<SaveGameInfo> as
     // 0x18002ae20/0x18002aae0 (array_destroy.cpp's J2_ENTRY table); NOT
@@ -566,40 +567,11 @@ extern "C" void RtIo_PersistenceWorker_Dtor(void* worker) {
     reinterpret_cast<Collection::Array<BlockDesc12>*>(&p->blockDescData)->~Array();  // 0x18002a930, worker+0x50
 
     // The inline String release on worker+0x30 == pendingFilename IS
-    // `String::Release()` (retail's inline, string.cpp) -- the transient
-    // `block` value and the else-arm null store both live inside that body.
-    // `expectFilename` is read BEFORE the release runs (Release() itself
-    // decides fresh whether it frees), so it is computed by peeking at the
-    // refcount rather than duplicating Release()'s own arithmetic.
-    char* expectFilename = nullptr;   // what retail LEAVES in the field, below
-    if (p->pendingFilename.data != nullptr &&
-        RtSystem::StringRefCount(p->pendingFilename.data) == 1) {
-        // NOT nulled afterwards: the field keeps pointing at the freed
-        // block. Asserting `== nullptr` here would assert a store retail
-        // does not make (reference_oracle_must_not_compare_unwritten_bytes.md
-        // in the mirror direction -- a predicate on a value nobody writes).
-        expectFilename = p->pendingFilename.data - 8;
-    }
+    // `String::Release()` (retail's inline, string.cpp); the field keeps
+    // pointing at the freed block, as in retail.
     Sys(p->pendingFilename).~String();
 
-    // *worker = 0x180155f20 (the base System::Thread vtable)
-    static void* kBaseThreadVtable =
-        reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180155f20));
-    p->workerVtable = kBaseThreadVtable;
-
-    // The teardown handshake, in retail's exact order. Any reordering here is
-    // a hang or a use-after-close, not a style difference.
-    ::SetEvent(static_cast<HANDLE>(p->readyEvent));                        // +0x30
-    ::WaitForSingleObject(static_cast<HANDLE>(p->threadHandle), INFINITE); // +0x20
-    ::CloseHandle(static_cast<HANDLE>(p->threadHandle));                   // +0x20
-    ::CloseHandle(static_cast<HANDLE>(p->workEvent));                      // +0x28
-    ::CloseHandle(static_cast<HANDLE>(p->readyEvent));                     // +0x30
-    ::CloseHandle(static_cast<HANDLE>(p->doneEvent));                      // +0x38 (tail JMP)
-
-    // Retail leaves all four handle fields holding their now-closed values —
-    // it does NOT null them. Asserting that is the only post-condition this
-    // body has that a shadow can check; asserting "they are null" would be
-    // asserting a store retail does not make.
+    // ~System::Thread follows (the compiler's): see the banner.
 }
 
 // ============================================================================
@@ -643,8 +615,12 @@ extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
 
     Persistence* p = FromWorker(worker);
 
-    BinaryFileStream bfs;
-    RtIo_BinaryFileStream_Ctor(&bfs);
+    // ENDGAME B.3.9 IO (W2): the REAL class on raw storage; the body keeps
+    // reading it through the RtIo POD view.
+    alignas(8) unsigned char bfsStorage[sizeof(IO::BinaryFileStream)];
+    IO::BinaryFileStream* const bfsObj =
+        ::new (static_cast<void*>(bfsStorage)) IO::BinaryFileStream();
+    BinaryFileStream& bfs = *reinterpret_cast<BinaryFileStream*>(bfsObj);
 
     bool created;
     {
@@ -657,8 +633,7 @@ extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
         // RtIo_FileStream_Create is a registered entry point owned by another
         // file and keeps its retail (self, const Filename* POD) signature;
         // the two types are the same eight bytes (Filename.h).
-        created = RtIo_FileStream_Create(&bfs.base,
-                                         reinterpret_cast<const RtSystem::Filename*>(&f));
+        created = bfsObj->IO::FileStream::Create(f);   // ENDGAME B.3.9 IO: the member
 
         // ~f is retail's release of the local Filename copy.
     }
@@ -721,7 +696,7 @@ extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
     // leaves the handle open for this same check to close. One site, not
     // three, exactly as FUN_1800b6e00's tail reads.
     if (bfs.base.file.handle != -1) RtIO::RtIo_FileSystem_CloseFile(Fs(), &bfs.base.file);
-    RtIo_BinaryFileStream_Dtor(&bfs);
+    bfsObj->IO::BinaryFileStream::DeletingDtor(0);
 
 }
 
@@ -844,43 +819,34 @@ extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
 // `MemFree` helper at the top of this file, which guards because a missing
 // allocator is a tooling failure with no behaviour to preserve.)
 // ============================================================================
-extern "C" void RtIo_PersistenceWorker_Run(void* worker) {
-    Persistence* p = reinterpret_cast<Persistence*>(
-        reinterpret_cast<char*>(worker) - 0x10);
+// ENDGAME B.3.9 IO (W2): slot 0 of the class's compiler table. The door that
+// stood here was registered BY ADDRESS (0x1800b7260) so the minted 0x180155860
+// table's unnamed slot 0 reached it; that table is retired. The four arms that
+// are not this file's resolve PER CALL (no function-local cache, B9-10).
+void IO::PersistenceWorker::Run() {
+    void* const worker = this;
 
     using JobFn = void (*)(void*);
 
-    switch (p->command) {
+    switch (_command) {
         case 0:   // SAVE — see the encoding note above (INFERRED, absence-based)
             // PORTED (BATCH 8): RtIo_PersistenceWorker_SaveJob, above. Called
             // directly rather than through ResolveAddr — this file both
             // defines the arm and dispatches to it now.
             RtIo_PersistenceWorker_SaveJob(worker);
             return;
-        case 1: {   // LOAD
-            static JobFn f = reinterpret_cast<JobFn>(
-                ResolveAddr(Module::Runtime, 0x1800b6aa0));
-            f(worker);   // retail tail-JMPs: NO null test, deliberately
-            return;
-        }
-        case 2: {   // DELETE
-            static JobFn f = reinterpret_cast<JobFn>(
-                ResolveAddr(Module::Runtime, 0x1800b69c0));
-            f(worker);   // retail tail-JMPs: NO null test, deliberately
-            return;
-        }
-        case 3: {   // GET SAVE INFO
-            static JobFn f = reinterpret_cast<JobFn>(
-                ResolveAddr(Module::Runtime, 0x1800b65b0));
-            f(worker);   // retail tail-JMPs: NO null test, deliberately
-            return;
-        }
-        case 4: {   // GET SAVE LIST
-            static JobFn f = reinterpret_cast<JobFn>(
-                ResolveAddr(Module::Runtime, 0x1800b6290));
-            f(worker);   // retail tail-JMPs: NO null test, deliberately
-            return;
-        }
+        case 1:   // LOAD
+            reinterpret_cast<JobFn>(ResolveAddr(Module::Runtime, 0x1800b6aa0))(worker);
+            return;   // retail tail-JMPs: NO null test, deliberately
+        case 2:   // DELETE
+            reinterpret_cast<JobFn>(ResolveAddr(Module::Runtime, 0x1800b69c0))(worker);
+            return;   // retail tail-JMPs: NO null test, deliberately
+        case 3:   // GET SAVE INFO
+            reinterpret_cast<JobFn>(ResolveAddr(Module::Runtime, 0x1800b65b0))(worker);
+            return;   // retail tail-JMPs: NO null test, deliberately
+        case 4:   // GET SAVE LIST
+            reinterpret_cast<JobFn>(ResolveAddr(Module::Runtime, 0x1800b6290))(worker);
+            return;   // retail tail-JMPs: NO null test, deliberately
         default:
             // retail's `repz ret` — every other command value is a no-op.
             return;
@@ -894,13 +860,10 @@ int RtIoPersistenceWorkerRegister() {
     RegisterRuntimeAddr(0x1800b7390, (void*)&RtIo_PersistenceWorker_EnqueueDelete);
     RegisterRuntimeAddr(0x1800b7460, (void*)&RtIo_PersistenceWorker_EnqueueLoad);
     RegisterRuntimeAddr(0x1800b75c0, (void*)&RtIo_PersistenceWorker_EnqueueSave);
-    RegisterRuntimeAddr(0x1800b7740, (void*)&RtIo_PersistenceWorker_Dtor);
-    // Wave 28 lane SLOTS: slot 0 of the worker vtable 0x180155860. Registering
-    // the ADDRESS is what turns the minted table's RT_MINT_UNNAMED slot 0 from
-    // an abort trap into this body -- the same door encoding.cpp uses for the
-    // five slots of the unexported 0x1801554a8.
-    RegisterRuntimeAddr(0x1800b7260, (void*)&RtIo_PersistenceWorker_Run);
+    // ENDGAME B.3.9 IO (W2): the destructor (0x1800b7740) and Run (0x1800b7260)
+    // doors are the class's own members now (PersistenceWorker.h); ??1Persistence
+    // ends the worker directly and the compiler table carries Run.
     // BATCH 8: the SAVE job, `Run`'s command-0 arm.
     RegisterRuntimeAddr(0x1800b6e00, (void*)&RtIo_PersistenceWorker_SaveJob);
-    return 6;
+    return 4;
 }

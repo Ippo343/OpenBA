@@ -37,6 +37,7 @@
 #include "Component/AnimalComponent.h"
 #include "Component/LivestockDescription.h"
 #include "Component/RawMaterialComponent.h"
+#include "Component/AutoPickupComponent.h"   // ENDGAME B.3.9 CB: 0x1401c3fb0 cell class
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"
 #include "resolve.h"
@@ -124,17 +125,12 @@ fn_EntityCopyCtor_t     s_EntityCopy   = nullptr;
 uint32_t s_tidAnimalComp   = 0;   // 0x1401c6f98  AnimalComponent
 uint32_t s_tidLivestockDsc = 0;   // 0x1401c79a8  LivestockDescription
 uint32_t s_tidRawMatComp   = 0;   // 0x1401c7c80  RawMaterialComponent
-uint32_t s_tidWorkComp     = 0;   // 0x1401c3fb0  (work/production component)
 // 0x140172204 = 90.0f — the quarter-turn the dropped pile is rotated by.
 const float* s_pQuarterTurn = nullptr;
 
 bool s_resolved = false;
 
 template <class T> T R(uintptr_t a) { return reinterpret_cast<T>(ResolveAddr(Module::Exe, a)); }
-uint32_t Tid(uintptr_t rdata) {
-    uintptr_t g = ResolveAddr(Module::Exe, rdata);
-    return g ? *reinterpret_cast<uint32_t*>(g) : 0u;
-}
 
 void Resolve() {
     if (s_resolved) return;
@@ -170,11 +166,6 @@ void Resolve() {
     s_tidAnimalComp   = AnimalComponent::TypeId();       // cell 0x1401c6f98 (D5)
     s_tidLivestockDsc = LivestockDescription::TypeId();  // cell 0x1401c79a8 (D5)
     s_tidRawMatComp   = RawMaterialComponent::TypeId();  // cell 0x1401c7c80 (D5)
-    // s_tidWorkComp (cell 0x1401c3fb0 = AutoPickupComponent) is UNREGISTERED
-    // (ResolveAddr answers 0): a BEHAVIOUR site (D5 Notes) — left for the
-    // dedicated behaviour batch after the retail caller is read. See
-    // BEHAVIOUR-LEFT in this batch's report.
-    s_tidWorkComp     = Tid(0x1401c3fb0);
     s_pQuarterTurn    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172204));
 }
 
@@ -703,6 +694,22 @@ void PastureProduce(void* self) {
                 *pStock += perUnit;
             }
         }
+        // ---- retail tail 0x140126d2e..0x140126dee (ENDGAME B.3.9 CB) ----
+        // The pasture's AutoPickupComponent (an inlined FindComponent over
+        // [0x1401c3fb0] at 0x140126d58 / 0x140126d89) records the new pile:
+        // FUN_140003050 on the pile -> that component's +0x28, handed to
+        // FUN_140044810 (which appends it only while the auto-pickup is enabled).
+        // The tree had dropped this block (it only ever resolved the cell into an
+        // unused variable, and the cell is unregistered).
+        if (void* autoPickup = FindCompOnEntity(static_cast<uintptr_t>(pastureEntity),
+                                                AutoPickupComponent::TypeId())) {
+            uint64_t found = 0;
+            void* compRef = s_FindWork(static_cast<int64_t>(entIBP), &found);
+            const uint32_t v = *reinterpret_cast<uint32_t*>(
+                *reinterpret_cast<uintptr_t*>(compRef) + 0x28);
+            s_WorkSetAmt(reinterpret_cast<int64_t>(autoPickup), v);
+        }
+
         std::fprintf(stderr, "[Pasture] produce: pasture=%p resource=%p cell=%d "
                      "(accum now %d)\n", self, (void*)produced, placedCell, PastureAccum(self));
         std::fflush(stderr);

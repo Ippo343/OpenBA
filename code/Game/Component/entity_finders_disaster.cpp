@@ -38,8 +38,8 @@
 //
 // The third finder is PORTED BELOW BUT DELIBERATELY NOT REGISTERED. Its old
 // "NOT ported here" note blamed the unregistered type-id global DWORD_1401c3e60.
-// That reason is FALSE — ResolveTid() below falls back to GetTypeIdByName for
-// exactly this case (as the Fire/Citizen finders do), and
+// That reason is FALSE — the finder keys on AmbientEmitterComponent::TypeId()
+// (ENDGAME B.3.9 CB; it used a by-name fallback before), and
 // ambientenvironmentcomponent.cpp:68 already resolves "AmbientEmitterComponent"
 // by that same name.
 //
@@ -67,19 +67,9 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/FireComponent.h"      // ENDGAME B.3.9 C1: 0x1401c41e0 cell class
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.9 C1: 0x1401c7158 cell class
+#include "Component/AmbientEmitterComponent.h"   // ENDGAME B.3.9 CB: 0x1401c3e60 cell class
 
 namespace {
-
-// A .rdata type-id global that never got seeded reads back 0 / 0xFFFFFFFF, and an
-// equality test against it matches nothing — silently deleting the search. Fall
-// back to the name registry, as action_base_rawmat.cpp does.
-uint32_t ResolveTid(uintptr_t ghidraGlobal, const char* name, uint32_t* cache) {
-    uintptr_t p = ResolveAddr(Module::Exe, ghidraGlobal);
-    uint32_t t = p ? *reinterpret_cast<uint32_t*>(p) : 0;
-    if (t != 0 && t != 0xFFFFFFFFu) return t;
-    if (*cache == 0) *cache = ::Object::GetTypeIdByName(name);
-    return *cache;
-}
 
 void* FindByTypeId(uintptr_t entity, void* retIBP, uint32_t typeId) {
     void* found = nullptr;
@@ -125,17 +115,11 @@ extern "C" void* Entity_FindComponent_Citizen_9790(uintptr_t entity, void* retIB
 // worker assign/unassign (citizen_assignworkplace.cpp). All were guarded, so the
 // only symptom was silence.
 //
-// ENDGAME B.3.9 C1: 0x1401c3e60 (AmbientEmitterComponent) is one of the 13
-// UNREGISTERED type-id cells (B39_RULES.md D5) -- LEFT, not converted, per the
-// caller-batch rule (a behaviour site needs the retail caller read first). Left
-// on its ResolveTid(cell, name, cache) fallback, which already resolves to the
-// real class id via GetTypeIdByName when the cell reads 0 -- BUT this finder
-// itself is registered NOWHERE (grep of standalone/reg_*.cpp: only 5840/9790 are
-// RegisterExeAddr'd, never 2280), so nothing calls it and the conversion would
-// be behaviourally inert either way; still listed as BEHAVIOUR-LEFT for the
-// coordinator/opus batch to confirm.
+// ENDGAME B.3.9 CB: 0x1401c3e60 (AmbientEmitterComponent, unregistered) is read as
+// the class static. The old ResolveTid(cell, name, cache) fallback already produced
+// the same id by name, and this finder is registered NOWHERE (see the file header:
+// register 0x140002280 only after AmbientEmitterComponent::OnAdded 0x140042e10 is
+// ported), so the conversion is inert.
 extern "C" void* Entity_FindComponent_AmbientEmitter_2280(uintptr_t entity, void* retIBP) {
-    static uint32_t cache = 0;
-    return FindByTypeId(entity, retIBP,
-                        ResolveTid(0x1401c3e60, "AmbientEmitterComponent", &cache));
+    return FindByTypeId(entity, retIBP, AmbientEmitterComponent::TypeId());   // cell 0x1401c3e60
 }

@@ -87,8 +87,9 @@ static float* s_fYawMax = nullptr;
 static uint32_t  s_tid_CitizenComponent_storage = 0;
 static uint32_t* s_tid_CitizenComponent = nullptr;
 
-// TypeInfo for BaseDtor (slot 2) -- DAT at TypeInfo_PerformWork
-static uint32_t* s_typeInfo_PerformWork = nullptr;
+// ENDGAME B.3.9 CB: retail reads this record field ONLY in the class's own TypeName
+// slot (0x1401c5fe0 = the NAME field (+8) of PerformWork's record, read by
+// PerformWork_Slot1 0x140022b80); DECLARE_EXE_TYPE answers that slot, so the tree's copy of it is gone.
 
 static bool s_funcs_resolved = false;
 
@@ -136,13 +137,6 @@ bool PerformWork_ResolveFuncs() {
     if (!s_fYawMin) s_fYawMin = &s_fbYawMin;
     s_fYawMax = (float*)ResolveAddr(Module::Exe, 0x140172220);
     if (!s_fYawMax) s_fYawMax = &s_fbYawMax;
-
-    // TypeInfo for BaseDtor -- read from PerformWork slot 2 return value address
-    // Slot 2 at 0x140022B70 returns TypeInfo_PerformWork which is DAT at that location
-    // Actually the decompilation shows it returns TypeInfo_PerformWork directly
-    // We can get it from the vtable slot 1 return: DAT_1401c5fe0
-    s_typeInfo_PerformWork = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c5fe0));
 
     // CitizenComponent type id: prefer the real .rdata slot when the gate published it,
     // otherwise resolve by name into private storage (see the declaration above).

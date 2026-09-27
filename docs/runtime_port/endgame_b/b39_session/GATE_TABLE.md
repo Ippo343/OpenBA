@@ -42,3 +42,5 @@ the retired duplicate: the minted `?_typeInfo@Internal@Object@@` record is gone 
 `DEFINE_TYPE(Object::Internal)` is the one `Internal` record (OBJ commit 14769fe2, B39_RULES D6;
 `ORDER_MEASUREMENT.md` variant C measured that either winner gives the same tree and resave). Every id/name
 line, the registered count (311) and the resave (5/5) are unchanged. New baseline: 32 lines, md5 201d7aa7.
+| b39-CB (behaviour type-id sites: 9 commits, each read against its retail caller; CitizenAI / Happiness message targets stay 0 behind named PORT GAP constants) | 020c883e | ok | 0 | 894 | 5683/0 · 5773/12 · 4787 | 5/5 | 25/103/34 | 21 | tools x3 exit 0; Mods, Quit / Options / Achievements exit 0; GoalDialog opens | 0 |
+| b39-IO2 (W2: every IO vtable row retired; PersistenceWorker a real class; FileSystem / Modification / Persistence class statics; 1 behaviour commit) | 204b5776 | ok | 0 | 896 | 5683/0 · 5773/12 · 4758 | 5/5 | 21/103/34 | 18 | Mods, Quit / Options / Achievements exit 0; GoalDialog opens; in-game save COMPLETE, crash log 0 | 0 |

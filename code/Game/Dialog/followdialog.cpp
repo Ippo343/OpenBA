@@ -185,10 +185,10 @@ void FollowDialog::OnUpdateLayout() {
     uint64_t profCompRef = 0;
     fn_FindComponent_CitizenAI((void*)entityRef, &profCompRef);
 
-    // Read action index from CitizenAIComponent+0x28.
-    // Guard: FindProfessionComponent yields null if the type-id is unresolved
-    // (standalone) — deref of null+0x28 would fault.
-    int actionIndex = profCompRef ? *(int*)((uintptr_t)profCompRef + 0x28) : 0;
+    // Read action index from CitizenAIComponent+0x28 -- unguarded, as retail
+    // (0x140069121). ENDGAME B.3.9 CB: the finder now keys on
+    // CitizenAIComponent::TypeId(), so the old null-if-unresolved fallback is gone.
+    int actionIndex = *(int*)((uintptr_t)profCompRef + 0x28);
 
     // Special case: action 9 (idle/searching for home)
     // Check if citizen's home tile entity has a different profession — if so, show index 0x10

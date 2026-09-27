@@ -92,11 +92,12 @@ static s_fn_FindHerdComp_t s_fn_FindHerdComp = nullptr;
 // HerdComponent_StartMigration (0x140122340) -- triggers herd migration after kill
 static void (*s_fn_StartMigration)(void* herdComp) = nullptr;
 
-// Type IDs
-
-// TypeInfo for slots 1/2
-static uint64_t* s_dat_VectorDtorReturn = nullptr;    // DAT_1401c5f70
-static uint32_t* s_typeInfo_HuntAnimal = nullptr;      // DAT_1401c5f68
+// ENDGAME B.3.9 CB: the two "TypeInfo for slots 1/2" reads that sat here are gone.
+// Retail's only readers of HuntAnimal's record are its own slots -- the type-id cell
+// 0x1401c5f68 is read by HuntAnimal_Slot2 (0x1400226e0) and the NAME field +8
+// (0x1401c5f70) by HuntAnimal_Slot1 (0x1400226f0) -- and DECLARE_EXE_TYPE answers
+// both slots (HuntAnimal::TypeId() / TypeName()). Both cells are unregistered, so
+// the reads only ever held nullptr and kept the `ok` conjunct below false.
 
 // Float constants
 static float* s_searchRadius = nullptr;     // DAT_1401721a8 = 8.0f
@@ -122,10 +123,6 @@ bool HuntAnimal_ResolveFuncs() {
     s_fn_FindHerdComp = (s_fn_FindHerdComp_t)ResolveAddr(Module::Exe, 0x1400227e0);
     s_fn_StartMigration = (void(*)(void*))ResolveAddr(Module::Exe, 0x140122340);
 
-    // TypeInfo for slots 1/2
-    s_dat_VectorDtorReturn = reinterpret_cast<uint64_t*>(ResolveAddr(Module::Exe, 0x1401c5f70));
-    s_typeInfo_HuntAnimal = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5f68));
-
     // Float constants
     s_searchRadius = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401721a8));
     s_halfOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
@@ -134,7 +131,6 @@ bool HuntAnimal_ResolveFuncs() {
               s_fn_GetModelComp && s_fn_FindPathCost &&
               s_fn_CheckPathValid && s_fn_GridToWorld &&
               s_fn_SpawnCorpse && s_fn_FindHerdComp && s_fn_StartMigration &&
-              s_dat_VectorDtorReturn && s_typeInfo_HuntAnimal &&
               s_searchRadius && s_halfOffset &&
               fn_InternalBasePtr_DeletePtr &&
               fn_InternalBasePtr_Ctor && fn_IsDerivedFrom &&

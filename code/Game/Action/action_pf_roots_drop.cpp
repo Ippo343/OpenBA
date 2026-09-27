@@ -42,6 +42,7 @@
 #include "Action/RemoveAnimal.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
 #include <cstdint>
 #include <new>
 #include <cstdio>
@@ -58,7 +59,6 @@ static const float* s_pDAT_172194 = nullptr;  // PerformWork Time seconds (bbea0
 static const float* s_pDAT_1722a8 = nullptr;  // PerformWork animIndex float (bbea0)
 static const float* s_pUVScale_17214c = nullptr;  // g_fUVScale — CreateRawMaterial CopyCtor float arg
 // --- Type-id global (exe .rdata) for bbea0's SendComponentMessage message id. ---
-static const uint32_t* s_pDAT_1c70e8 = nullptr;  // DWORD_1401c70e8
 // --- Vtable addresses (exe .rdata). ---
 
 // --- Registered exe sub-callees, resolved lazily via ResolveAddr. ---
@@ -120,7 +120,6 @@ static void EnsureInit() {
     s_pDAT_172194 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172194));
     s_pDAT_1722a8 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401722a8));
     s_pUVScale_17214c = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
-    s_pDAT_1c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
 
     s_fn_bd40           = reinterpret_cast<fn_bd40_t>(ResolveAddr(Module::Exe, 0x14009bd40));
     s_fn_entityCopyCtor = reinterpret_cast<fn_entityCopyCtor_t>(ResolveAddr(Module::Exe, 0x1400c3720));
@@ -341,7 +340,7 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
         local_68 = pIVar7;
         if (pIVar7 != nullptr) {
             if (fn_InternalBasePtr_Ctor) new (&local_res8_v) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            uint32_t msgId = s_pDAT_1c70e8 ? *s_pDAT_1c70e8 : 0;  // param_7 = DWORD_1401c70e8
+            uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
             local_78 = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
             pIVar8 = s_fn_sendMsgCtor ? s_fn_sendMsgCtor(pIVar7, reinterpret_cast<uint64_t*>(&local_78),
                                                          &msgId, 0, reinterpret_cast<uint64_t*>(&local_res8_v), 0)

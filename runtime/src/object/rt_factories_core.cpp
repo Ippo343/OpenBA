@@ -232,8 +232,9 @@ int RtFactoriesObjectRegister() {
 void RtFactoriesPortInit() {
     int n = 0;
     n += RtFactoriesObjectRegister();
-    n += RtFactoriesGraphicsRegister();
     n += RtFactoriesVideoRegister();
+    // Graphics:: has no row left: ENDGAME B.3.9 GFX made its last FACTREST
+    // classes (EdgeMesh, FrameCopy/Generated/MaterialInstance) register their own.
     // IO:: has no row left: ENDGAME B.3.9 IO made IO::PackageFile a real class
     // whose own CreateNewObject / CreateInPlaceObject register from
     // runtime/src/io/package_file.cpp (B39_RULES D2).

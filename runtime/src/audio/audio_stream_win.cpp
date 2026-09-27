@@ -228,15 +228,11 @@
 // ---------------------------------------------------------------------------
 // ============================================================================
 
-// ENDGAME B.3.7 block B4: the ctor and dtor STAY DOORS (B4b-2: a polymorphic
-// Thread subclass has no real constructor; `Ctor_AudioDevice` builds the one
-// Stream in place). The `kStream*` offsets that lived here are the fields of
-// `Audio::Stream` (runtime/types/audio/Stream.h, B6-8). Three first-call
-// caches went with them (B6-5 / B7-11, hex literals checked against
-// standalone/rt_export_addrs.inc):
-//   0x180154950 `??_7Stream@Audio@@6B@` -> RT_DATA_SLOT by name (the minted row)
-//   0x18000c4a0 (the +0x30 `~Array`, J1) -> `rtcoll::ArrayDtorImpl`, the J1 body
-// `??0/??1Thread@System@@` stay RT_EXPORT_ONCE name doors.
+// ENDGAME B.3.9 ENG W2: the ctor and dtor are the class's REAL ones (on
+// `System::Thread(0x10000)`); `Ctor_AudioDevice` placement-news the one Stream.
+// The `kStream*` offsets that lived here are the fields of `Audio::Stream`
+// (runtime/types/audio/Stream.h, B6-8). The +0x30 `~Array` (0x18000c4a0, J1)
+// is `rtcoll::ArrayDtorImpl`, the J1 body.
 
 #include <cstdint>
 #include <cstdio>
@@ -277,104 +273,56 @@ struct AudioStreamSummary {
 };
 AudioStreamSummary g_summary;
 
-// `??_7Stream@Audio@@6B@` @ 0x180154950 — minted since B.3.6 (the Wave 24
-// HANDOVER below is discharged), so it is asked for BY NAME like every other
-// vtable stamp in this directory.
-void* StreamVtable() { return RT_DATA_SLOT(void*, "??_7Stream@Audio@@6B@"); }
-
-// `??0Thread@System@@QEAA@I@Z` @ 0x1800ca4e0 — PORTED and registered
-// (runtime/src/system/thread_win.cpp). Reached BY NAME.
-void ThreadCtor(void* self, uint32_t stackSize) {
-    using Fn = void* (*)(void*, uint32_t);
-    Fn fn = RT_EXPORT_ONCE(Fn, "??0Thread@System@@QEAA@I@Z");
-    if (fn) fn(self, stackSize);
-}
-
-// `??1Thread@System@@QEAA@XZ` @ 0x1800ca590 — PORTED and registered. Retail
-// INLINES it into the Stream dtor; the two are the same twelve steps.
-void ThreadDtor(void* self) {
-    using Fn = void (*)(void*);
-    Fn fn = RT_EXPORT_ONCE(Fn, "??1Thread@System@@QEAA@XZ");
-    if (fn) fn(self);
-}
-
 }  // namespace
 
 // ============================================================================
 // ??0Stream@Audio@@QEAA@XZ                                 retail 0x1800a0e30
 // ============================================================================
-extern "C" void* RtAudio_Stream_Ctor(void* selfv) {
+// ENDGAME B.3.9 ENG W2: the REAL constructor. `System::Thread(0x10000)` is the
+// init list (retail 0x1800a0e55 CALL ??0Thread, EDX = 0x10000); the Stream
+// vptr store (0x1800a0e62) is the compiler's. The body is the old door's,
+// unchanged. MAIN THREAD (Ctor_AudioDevice), once.
+Audio::Stream::Stream() : System::Thread(kStreamStackSize) {
     ++g_ctorEntries;
-    Audio::Stream* const self = reinterpret_cast<Audio::Stream*>(selfv);   // B.3.7 bridge
-
-    ThreadCtor(self, kStreamStackSize);                  // 0x1800a0e55
-    *reinterpret_cast<void**>(self) = StreamVtable();    // 0x1800a0e62
-    self->_buffers = nullptr;                            // 0x1800a0e67 (qword)
-    self->_buffersSize = 0; self->_buffersCapacity = 0;  // 0x1800a0e6b (ONE qword store at +0x38)
+    _buffers = nullptr;                                  // 0x1800a0e67 (qword)
+    _buffersSize = 0; _buffersCapacity = 0;              // 0x1800a0e6b (ONE qword store at +0x38)
     InitializeCriticalSection(                           // 0x1800a0e73
-        reinterpret_cast<CRITICAL_SECTION*>(self->_lock));
+        reinterpret_cast<CRITICAL_SECTION*>(_lock));
     SetCriticalSectionSpinCount(                         // 0x1800a0e82
-        reinterpret_cast<CRITICAL_SECTION*>(self->_lock), kStreamSpinCount);
+        reinterpret_cast<CRITICAL_SECTION*>(_lock), kStreamSpinCount);
 
-    self->_bytePosition = 0; self->_channel = 0;        // 0x1800a0e89 (ONE qword store at +0x78)
-    self->_stopping = 0;                                 // 0x1800a0e8d, a BYTE store
+    _bytePosition = 0; _channel = 0;                     // 0x1800a0e89 (ONE qword store at +0x78)
+    _stopping = 0;                                       // 0x1800a0e8d, a BYTE store
 
     // Both auto-reset, both initially non-signalled. +0x48 FIRST, then +0x40 —
     // the order retail creates them in.
-    self->_bufferEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);   // 0x1800a0ea4
-    self->_wakeEvent   = CreateEventW(nullptr, FALSE, FALSE, nullptr);   // 0x1800a0eb8
+    _bufferEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);   // 0x1800a0ea4
+    _wakeEvent   = CreateEventW(nullptr, FALSE, FALSE, nullptr);   // 0x1800a0eb8
 
-    if (self->_bufferEvent == nullptr || self->_wakeEvent == nullptr)
+    if (_bufferEvent == nullptr || _wakeEvent == nullptr)
         ++g_ctorEventFail;
-
-    return self;                                         // 0x1800a0ebc
 }
 
 // ============================================================================
 // ??1Stream@Audio@@QEAA@XZ                                 retail 0x1800a0d90
 // ============================================================================
-extern "C" void RtAudio_Stream_Dtor(void* selfv) {
+// The restamp (0x1800a0dad) is the compiler's; the inlined ~Thread
+// (0x1800a0dda..0x1800a0e22: the Thread restamp, SetEvent(hStop), the join and
+// the four base CloseHandles) is the compiler's base chain after this body.
+Audio::Stream::~Stream() {
     ++g_dtorEntries;
-    Audio::Stream* const self = reinterpret_cast<Audio::Stream*>(selfv);   // B.3.7 bridge
+    const HANDLE hFirst  = static_cast<HANDLE>(_bufferEvent);
+    const HANDLE hSecond = static_cast<HANDLE>(_wakeEvent);
 
-    const HANDLE hFirst  = static_cast<HANDLE>(self->_bufferEvent);
-    const HANDLE hSecond = static_cast<HANDLE>(self->_wakeEvent);
-
-    *reinterpret_cast<void**>(self) = StreamVtable();     // 0x1800a0dad
     CloseHandle(hFirst);                                  // 0x1800a0db4, +0x48
     CloseHandle(hSecond);                                 // 0x1800a0dbe, +0x40
     DeleteCriticalSection(                                // 0x1800a0dc9
-        reinterpret_cast<CRITICAL_SECTION*>(self->_lock));
+        reinterpret_cast<CRITICAL_SECTION*>(_lock));
     // 0x1800a0dd4 CALL 0x18000c4a0 — the +0x30 `Array<Block>::~Array`, a J1
     // body (free the buffer, zero the header; no element destroy).
-    rtcoll::ArrayDtorImpl(reinterpret_cast<rtcoll::ArrayHdr*>(&self->_buffers));
-
-    // The inlined ~Thread: the 0x180155f20 re-stamp, SetEvent(hStop),
-    // WaitForSingleObject(hThread, INFINITE) and all FOUR base CloseHandles.
-    ThreadDtor(self);                                     // 0x1800a0dda..0x1800a0e22
+    rtcoll::ArrayDtorImpl(reinterpret_cast<rtcoll::ArrayHdr*>(&_buffers));
 }
 
-// ============================================================================
-// Registration. BOTH doors for both rows — BY NAME and BY ADDRESS.
-// ============================================================================
-// The dtor's mangling was RE-DERIVED against the shipped export directory, not
-// inherited: `??1Stream@Audio@@QEAA@XZ` is `QEAA` — NON-VIRTUAL — and it is
-// present at 0x1800a0d90 / ordinal 688. The lane brief warns that the wrong one
-// of `QEAA`/`UEAA` resolves NULL silently
-// (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md,
-//  reference_resolveexport_phantom_names.md). Checked by reading the export
-// table directly: `??1Stream@Audio@@UEAA@XZ` is ABSENT from this DLL, and
-// `??1Stream@Audio@@QEAA@XZ` is present — so `QEAA` is the spelling, and the
-// sibling row `??1PackageFile@IO@@` genuinely takes the OTHER one.
-// ============================================================================
-int RtAudioStreamRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("??0Stream@Audio@@QEAA@XZ", (void*)&RtAudio_Stream_Ctor);
-    RegisterRuntimeAddr(0x1800a0e30, (void*)&RtAudio_Stream_Ctor);   ++n;
-
-    RegisterRuntimeExport("??1Stream@Audio@@QEAA@XZ", (void*)&RtAudio_Stream_Dtor);
-    RegisterRuntimeAddr(0x1800a0d90, (void*)&RtAudio_Stream_Dtor);   ++n;
-
-    return n;
-}
+// ENDGAME B.3.9 ENG W2: the `??0Stream` / `??1Stream` DOORS and their name +
+// address registrations are gone (their two callers construct / destroy the
+// class), and so is `RtAudioStreamRegister`.

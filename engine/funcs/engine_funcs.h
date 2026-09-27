@@ -473,13 +473,12 @@ inline void fn_FindComponent_MeshInstance(void* entity, void* retval) {
 inline void fn_FindComponent_Character(void* entity, void* retval) {
     Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_ModelComponent_FC);
 }
-// fn_FindComponent_CitizenAI — DAT_1401c70e8 = g_TypeId_CitizenAIComponent,
-// CitizenAIComponent's BaseTypeInfo (writer CitizenAIComponent_RegisterType
-// 0x14014e735); the finder returns the CitizenAIComponent, where profession data lives.
-// Original FUN_140011050.
-inline void fn_FindComponent_CitizenAI(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_CitizenAIComponent);
-}
+// fn_FindComponent_CitizenAI — FUN_140011050, Entity::FindComponent<CitizenAIComponent>
+// (compares against [0x1401c70e8] at 0x140011093, IsDerivedFrom at 0x1400110ec).
+// ENDGAME B.3.9 CB: defined in code/Game/Dialog/citizenui.cpp over
+// CitizenAIComponent::TypeId(); the cell is unregistered, so the old inline over
+// g_TypeId_CitizenAIComponent only worked when a dialog re-pointed that global.
+void fn_FindComponent_CitizenAI(void* entity, void* retval);
 
 // ============================================================
 // Dynamic array helpers — Reimplemented in clean C++
@@ -1835,10 +1834,6 @@ extern fn_Entity_FindAudioComponent_t fn_Entity_FindAudioComponent;
 // The first two were the two HEAVIEST doors in B35_RULES section 7's table (12
 // and 7 call sites); both are at zero now. Their registered doors are untouched.
 
-// Graphics::ParticleSystemInstance::ParticleSystemInstance() — default ctor.
-// Object size 0xe0, alignment 8.
-typedef void* (*fn_Graphics_ParticleSystemInstance_Ctor_t)(void* self);
-extern fn_Graphics_ParticleSystemInstance_Ctor_t fn_Graphics_ParticleSystemInstance_Ctor;
 
 
 // ENDGAME B.3.5 (b35-K2): `fn_Graphics_ParticleInstance_IncrementInstanceIndex`
@@ -3581,10 +3576,8 @@ extern fn_Box_Extend_t fn_Box_Extend;
 typedef void* (*fn_Box_Assign_t)(void* dst, const void* src);
 extern fn_Box_Assign_t fn_Box_Assign;
 
-// Graphics::EdgeMesh::EdgeMesh() — ctor. exe slot 0x140151338
-// ??0EdgeMesh@Graphics@@QEAA@XZ
-typedef void* (*fn_EdgeMesh_Ctor_t)(void* self);
-extern fn_EdgeMesh_Ctor_t fn_EdgeMesh_Ctor;
+// Graphics::EdgeMesh::EdgeMesh() (fn_EdgeMesh_Ctor) is GONE in ENDGAME B.3.9 GFX:
+// the class is concrete; its one caller placement-news it.
 
 // Graphics::EdgeMesh::TriangleVertex::TriangleVertex(const Vector3&). exe slot 0x140151378
 // ??0TriangleVertex@EdgeMesh@Graphics@@QEAA@AEBVVector3@Math@@@Z   -> returns this (8-byte vtx)
@@ -3608,16 +3601,8 @@ extern fn_EdgeMesh_EdgeVertex_Ctor_t fn_EdgeMesh_EdgeVertex_Ctor;
 
 // ENDGAME B.3.5 (b35-K2): `fn_EdgeMeshInstance_SetMesh`
 // (?SetMesh@EdgeMeshInstance@Graphics@@, exe slot 0x140151368) is GONE — zero
-// callers. `fn_EdgeMeshInstance_Ctor` above it STAYS (ctor door, live callers).
-
-// Graphics::EdgeMeshInstance::EdgeMeshInstance() — default ctor (constructs the
-// HighlightComponent+0x28 sub-object, which is zeroed under COMPONENT_INERT_FACTORY).
-// ??0EdgeMeshInstance@Graphics@@QEAA@XZ   (Runtime 0x1800a3ab0, ordinal 163)
-// ADDRESS CORRECTED 2026-09-07 (Wave 6 lane E, WAVE6_LANE_E.md §6.1): this line
-// used to say 0x1800174f0, which is the COPY ctor
-// (??0EdgeMeshInstance@Graphics@@QEAA@AEBV01@@Z, ordinal 162).
-typedef void* (*fn_EdgeMeshInstance_Ctor_t)(void* self);
-extern fn_EdgeMeshInstance_Ctor_t fn_EdgeMeshInstance_Ctor;
+// callers. `fn_EdgeMeshInstance_Ctor` is GONE too (ENDGAME B.3.9 GFX): the class
+// is concrete; HighlightComponent placement-news it at +0x28.
 
 // CharacterComponent_impl_08c0 (0x1401008c0) — tile debug overlay rendering
 // Submits colored tile arrays to the scene. Used by all Draw functions.

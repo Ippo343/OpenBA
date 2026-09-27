@@ -389,7 +389,8 @@ public:
     // instantiates the class itself (its table copy 0x14015c400; ModDialog,
     // FrustumOutlineDescription and two more stampers), whose slot 0 is the
     // exe scalar deleting dtor 0x1400121a0 (~MaterialInstance; MemFree on
-    // flags & 1). The DLL's 0x180002d60 stays the mint's RT_DELDTOR row.
+    // flags & 1). ENDGAME B.3.9 GFX: the minted table and its RT_DELDTOR row
+    // 0x180002d60 are retired; the class keeps the exe's SCALAR arm (D1.2).
     Object::Base* DeletingDtor(unsigned flags) override {
         this->~MaterialInstance();
         if (flags & 1) Object::detail::InternalMemFree(this);
@@ -447,42 +448,36 @@ public:
 
     static uint32_t TypeId();                               // 0x180002800  not ported
     // `??2MaterialInstance@Graphics@@SAPEAX_K@Z` (0x180002820) IS ported, in
-    // `wave21_lane_gfxbody.cpp`; the other four reflection statics are not.
-    // All five are declared so no caller batch edits this header.
+    // `wave21_lane_gfxbody.cpp`; ENDGAME B.3.9 GFX: the factory pair is the
+    // class's own (wave24_lane_gfxmat.cpp, B39_RULES D2).
     static void* operator new(std::size_t bytes);            // 0x180002820  wave21
     static void* operator new(std::size_t bytes, void* place);// 0x180002890
     static void  operator delete(void* p);                   // 0x1800028a0
     static Object::Base* CreateNewObject();                  // 0x180002900
     static Object::Base* CreateInPlaceObject(void* place);    // 0x1800029d0
 
-    // ??0MaterialInstance@Graphics@@QEAA@XZ 0x180103980 — the REAL constructor
-    // (ENDGAME B.3.8 block RB, RULE B8-1), PUBLIC: the class is concrete.
-    // External() and the stamps are the compiler's; the field stores are ONE
-    // body with the door `RtGraphics_MaterialInstance_Ctor` (renderer.cpp).
-    MaterialInstance() { InitFields(); }
-
-    struct DoorBody { static void Init(MaterialInstance* m) { m->InitFields(); } };
-
-protected:
-    // ??1MaterialInstance@Graphics@@UEAA@XZ 0x180103a00: restamp, the three
-    // retail ~Array calls (+0x50, +0x40, +0x30), ~External. The body is
-    // `ReleaseFields` (renderer.cpp); the restamp and ~External are the
-    // compiler's. Its registered door `RtGraphics_MaterialInstance_Dtor` is in
-    // runtime/src/object/deleting_dtor_leaves.cpp (coordinator-owned, not
-    // edited by RB) and spells the same three calls.
-    ~MaterialInstance();
-
-private:
-    void InitFields() {
+    // ??0MaterialInstance@Graphics@@QEAA@XZ 0x180103980 — the REAL constructor,
+    // PUBLIC: the class is concrete. External() and the stamps are the
+    // compiler's; the field stores are the body (retail also inlines it into
+    // both factories, Construct and Reconstruct). ENDGAME B.3.9 GFX: the ??0
+    // door, its three minted stamps and `DoorBody` are retired.
+    MaterialInstance() {
         _shaderClass = 0;                                 // +0x20
-        _hasRenderTexture = 0;                            // +0x24
-        _hasRenderedTexture = 0;                          // +0x25
-        *reinterpret_cast<void**>(&_material) = nullptr;  // +0x28 (raw: the door runs this on raw storage)
+        _hasRenderTexture = 0;                            // +0x24 } one WORD store
+        _hasRenderedTexture = 0;                          // +0x25 }
+        *reinterpret_cast<void**>(&_material) = nullptr;  // +0x28 (raw storage)
         _parameters._data = nullptr; _parameters._size = 0; _parameters._capacity = 0;   // +0x30
         _constants._data  = nullptr; _constants._size  = 0; _constants._capacity  = 0;   // +0x40
         _textures._data   = nullptr; _textures._size   = 0; _textures._capacity   = 0;   // +0x50
     }
-    void ReleaseFields();   // renderer.cpp
+
+protected:
+    // ??1MaterialInstance@Graphics@@UEAA@XZ 0x180103a00: restamp, the three
+    // retail ~Array calls (+0x50, +0x40, +0x30), ~External. The three calls are
+    // the body (renderer.cpp); the restamp and ~External are the compiler's.
+    // ENDGAME B.3.9 GFX: the ??1 door (deleting_dtor_leaves.cpp) is retired
+    // with the RT_DELDTOR row it served.
+    ~MaterialInstance();
 
 public:
     // ---- the 0x40 bytes MaterialInstance adds ------------------------------

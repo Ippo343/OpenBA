@@ -170,6 +170,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Material.h"
@@ -234,19 +235,9 @@ uint64_t g_oracleRuns       = 0;   // the effectiveness counter (instrument rule
 // screen and the 0x58 payload bytes on another
 // (reference_union_control_hides_a_blind_screen.md).
 // ---------------------------------------------------------------------------
-void* BaseVTable() {
-    return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@");
-}
-void* ExternalVTable() {
-    return RT_DATA_SLOT(void*, "??_7External@Object@@6B@");
-}
-void* MaterialInstanceVTable() {
-    return RT_DATA_SLOT(void*, "??_7MaterialInstance@Graphics@@6B@");
-}
-
-// Vtable slot 0 of Object::Base is the scalar-deleting destructor:
-//   flag 0 = destroy in place, flag 1 = destroy and free.
-using Slot0Fn = void* (*)(void* self, int flag);
+// ENDGAME B.3.9 block GFX: `BaseVTable` / `ExternalVTable` /
+// `MaterialInstanceVTable` (the minted tables, by name) and `Slot0Fn` are gone:
+// the class is built by its real ctor and destroyed through `DeletingDtor`.
 
 // ---------------------------------------------------------------------------
 // ?Construct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ
@@ -275,34 +266,11 @@ using Slot0Fn = void* (*)(void* self, int flag);
 // them separately (`hasRenderTexture` / `hasRenderedTexture`) and this body is
 // the writer that proves the split: a dword store would have clobbered +0x26.
 // ---------------------------------------------------------------------------
-// ENDGAME B.3.5 block G: retyped to the real `Graphics::MaterialInstance`. IT
-// STAYS A FREE HELPER AND DOES NOT BECOME A CONSTRUCTOR (B4b-2): the three vptr
-// stores name the MINTED tables, which is right for every object that reaches
-// this body, and a member constructor would stamp GCC's instead.
-void ConstructBody(Graphics::MaterialInstance* self) {
-    // Caller-visible effect only; the null test is retail's own.
-    void** vp = reinterpret_cast<void**>(self);
-    *vp = BaseVTable();
-    *vp = ExternalVTable();
-    self->_path.data      = nullptr;              // +0x08  Object::External's
-    self->_refs._data     = nullptr;              // +0x10  three zeroed qwords
-    self->_refs._size     = 0;                    // +0x18  (one qword with cap)
-    self->_refs._capacity = 0;
-    *vp = MaterialInstanceVTable();
-    self->_shaderClass        = 0;                // dword at +0x20
-    self->_hasRenderTexture   = 0;                // the WORD at +0x24 is TWO
-    self->_hasRenderedTexture = 0;                // separate bytes, not an int
-    self->_material           = nullptr;          // +0x28
-    self->_parameters._data     = nullptr;
-    self->_parameters._size     = 0;
-    self->_parameters._capacity = 0;
-    self->_constants._data      = nullptr;
-    self->_constants._size      = 0;
-    self->_constants._capacity  = 0;
-    self->_textures._data       = nullptr;
-    self->_textures._size       = 0;
-    self->_textures._capacity   = 0;
-}
+// ENDGAME B.3.9 block GFX: `ConstructBody` (these stores with the three MINTED
+// vptr stamps) is gone. The listing above IS the real `MaterialInstance()`
+// inlined: Object::Base's and Object::External's stamps and External's three
+// zero qwords are the compiler's base chain, the MaterialInstance stamp is the
+// compiler's, and the field stores are the ctor's body (Material.h).
 
 // ---------------------------------------------------------------------------
 // THE IN-BODY DIFFERENTIAL ORACLE for the three slot bodies.
@@ -365,15 +333,10 @@ void PrepareArena(uint8_t* arena) {
 // The four `??_7MaterialInstance@Graphics@@6B@` slot bodies.
 // ---------------------------------------------------------------------------
 
-// ENDGAME B.3.5 block G: BODY MOVED to `Graphics::MaterialInstance::Construct`.
-// The door keeps its name, its address, its counter AND retail's own null test,
-// which is where retail put it.
-extern "C" void* RtGraphics_MaterialInstance_Construct(void* selfv) {
-    ++g_constructCalls;
-    if (!selfv) return nullptr;                 // retail's own null test
-    return reinterpret_cast<Graphics::MaterialInstance*>(selfv)      // B.3.5 bridge
-               ->Graphics::MaterialInstance::Construct();
-}
+// ENDGAME B.3.9 block GFX: the four slot doors (Construct, Destruct,
+// Reconstruct, Serialize) are RETIRED -- their only reader was the minted
+// `??_7MaterialInstance@Graphics@@6B@`. The listings stay here as the record;
+// the entry counters moved into the members.
 
 // ?Destruct@MaterialInstance@Graphics@@UEAAXXZ, retail 0x180002b50, slot 7.
 //
@@ -383,11 +346,6 @@ extern "C" void* RtGraphics_MaterialInstance_Construct(void* selfv) {
 // down because it means this row can NEVER be detoured: the smallest inline
 // detour this tree installs is twelve. A registration is its only door, and
 // (rel32 = 0) a registration reaches every caller there is.
-extern "C" void RtGraphics_MaterialInstance_Destruct(void* selfv) {
-    ++g_destructCalls;
-    reinterpret_cast<Graphics::MaterialInstance*>(selfv)             // B.3.5 bridge
-        ->Graphics::MaterialInstance::Destruct();
-}
 
 // ?Reconstruct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ,
 // retail 0x180002a50, ordinal 3391, slot 6.
@@ -400,11 +358,6 @@ extern "C" void RtGraphics_MaterialInstance_Destruct(void* selfv) {
 // (CLAUDE.md, "Don't fix a faithful crash with a null check").
 // NO null test, unlike Construct one slot over. That asymmetry is retail's and
 // is kept: reconstructing a null faults here exactly as it faults in the DLL.
-extern "C" void* RtGraphics_MaterialInstance_Reconstruct(void* selfv) {
-    ++g_reconstructCalls;
-    return reinterpret_cast<Graphics::MaterialInstance*>(selfv)      // B.3.5 bridge
-               ->Graphics::MaterialInstance::Reconstruct();
-}
 
 // ---------------------------------------------------------------------------
 // ?Serialize@MaterialInstance@Graphics@@UEAA_NAEAVStream@IO@@@Z
@@ -535,17 +488,16 @@ Fn RtAddr(uintptr_t ghidra) {
 namespace Graphics {
 
 // ---------------------------------------------------------------------------
-// The three lifecycle slots, 8 / 7 / 6. Bodies moved here from the doors above;
-// `ConstructBody` stays a free helper because its three vptr stores name the
-// MINTED tables (B4b-2 -- see its banner).
+// The three lifecycle slots, 8 / 7 / 6. ENDGAME B.3.9 GFX: placement new of the
+// class and `DeletingDtor(0)`; the doors are retired.
 // ---------------------------------------------------------------------------
 
 // [8] ?Construct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ 0x180002ad0
-//     The null test is retail's and lives in the DOOR, which is where retail put
-//     it (`TEST RCX,RCX ; JZ -> return 0`).
+//     MSVC's placement-new codegen (`TEST RCX,RCX ; JZ -> return 0`, then the
+//     inlined ctor); a virtual is never entered with null.
 Object::External* MaterialInstance::Construct() {
-    ConstructBody(this);
-    return this;
+    ++g_constructCalls;
+    return ::new (this) MaterialInstance();
 }
 
 // [7] ?Destruct@MaterialInstance@Graphics@@UEAAXXZ 0x180002b50
@@ -555,8 +507,8 @@ Object::External* MaterialInstance::Construct() {
 //     dispatched VIRTUALLY on purpose: a subclass's deleting destructor is what
 //     has to run.
 void MaterialInstance::Destruct() {
-    void** vp = reinterpret_cast<void**>(this);
-    reinterpret_cast<Slot0Fn>(static_cast<void**>(*vp)[0])(this, 0);
+    ++g_destructCalls;
+    DeletingDtor(0u);
 }
 
 // [6] ?Reconstruct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ 0x180002a50
@@ -564,10 +516,23 @@ void MaterialInstance::Destruct() {
 //     Construct body. NO null test, unlike Construct one slot over; retail's
 //     asymmetry, kept.
 Object::External* MaterialInstance::Reconstruct() {
-    void** vp = reinterpret_cast<void**>(this);
-    reinterpret_cast<Slot0Fn>(static_cast<void**>(*vp)[0])(this, 0);
-    ConstructBody(this);
-    return this;
+    ++g_reconstructCalls;
+    DeletingDtor(0u);
+    return ::new (this) MaterialInstance();
+}
+
+// ?CreateNewObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@XZ 0x180002900
+// -- `??2MaterialInstance` (MemAlloc 0x60, align 8), the null branch, the
+// inlined ctor (the FACTREST row's transcription). Replaces that row (D2).
+Object::Base* MaterialInstance::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(MaterialInstance), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) MaterialInstance();
+}
+// ?CreateInPlaceObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@PEAX@Z 0x1800029d0
+Object::Base* MaterialInstance::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) MaterialInstance();
 }
 
 bool MaterialInstance::Serialize(void* streamv) {
@@ -653,10 +618,6 @@ bool MaterialInstance::Serialize(void* streamv) {
 
 }  // namespace Graphics
 
-extern "C" bool RtGraphics_MaterialInstance_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<Graphics::MaterialInstance*>(selfv)        // B.3.5 bridge
-               ->Graphics::MaterialInstance::Serialize(streamv);
-}
 
 // ---------------------------------------------------------------------------
 // ?Serialize@MeshInstance@Graphics@@QEAAXAEAVSerializer@IO@@@Z
@@ -812,20 +773,20 @@ extern "C" void RtGraphics_AnimationManager_Serialize(void* selfv, void* serv) {
 int RtGraphicsWave24GfxmatRegister() {
     int count = 0;
 
-    RegisterRuntimeExport("?Construct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtGraphics_MaterialInstance_Construct); ++count;
-    RegisterRuntimeExport("?Reconstruct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtGraphics_MaterialInstance_Reconstruct); ++count;
-    RegisterRuntimeExport("?Destruct@MaterialInstance@Graphics@@UEAAXXZ",
-                          (void*)&RtGraphics_MaterialInstance_Destruct); ++count;
-    RegisterRuntimeExport("?Serialize@MaterialInstance@Graphics@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtGraphics_MaterialInstance_Serialize); ++count;
+    // ENDGAME B.3.9 GFX: the four MaterialInstance slot doors are retired; the
+    // factory pair (B39_RULES D2) is the class's own, by name AND address.
+    RegisterRuntimeExport("?CreateNewObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@XZ",
+                          (void*)&Graphics::MaterialInstance::CreateNewObject); ++count;
+    RegisterRuntimeAddr(0x180002900ull, (void*)&Graphics::MaterialInstance::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&Graphics::MaterialInstance::CreateInPlaceObject); ++count;
+    RegisterRuntimeAddr(0x1800029d0ull, (void*)&Graphics::MaterialInstance::CreateInPlaceObject);
     RegisterRuntimeExport("?Serialize@MeshInstance@Graphics@@QEAAXAEAVSerializer@IO@@@Z",
                           (void*)&RtGraphics_MeshInstance_Serialize); ++count;
     RegisterRuntimeExport("?Serialize@AnimationManager@Graphics@@QEAAXAEAVSerializer@IO@@@Z",
                           (void*)&RtGraphics_AnimationManager_Serialize); ++count;
 
-    return count;   // 6
+    return count;   // 4
 }
 
 // A run that entered none of these says so rather than staying silent, and the

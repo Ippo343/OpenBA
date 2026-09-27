@@ -61,6 +61,7 @@
 #include <windows.h>   // QueryPerformanceCounter for the BANISHED_SAVE_TIMING probe
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
+#include "io/Stream.h"       // ENDGAME B.3.9 IO: IO::CompressedMemoryStream
 #include "graphics/AnimationManager.h"   // ENDGAME B.3.5 Video/Graphics caller batch
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K4)
@@ -87,25 +88,15 @@ typedef void  (*fn_SerializeRefTable_t)(void* extFactory, void* stream);
 typedef void  (*fn_ResetPersist_t)(void* intFactory, void* stream);
 typedef void  (*fn_ClearPersist_t)(void* intFactory);
 
-typedef void* (*fn_CMS_Ctor_t)(void* self);
-typedef void  (*fn_CMS_Dtor_t)(void* self);
-typedef bool  (*fn_CMS_Open_t)(void* self);
-typedef bool  (*fn_CMS_Create_t)(void* self);
-typedef void  (*fn_CMS_Close_t)(void* self);
-typedef void* (*fn_CMS_GetMemStream_t)(void* self);
+// ENDGAME B.3.9 IO (W2): the six IO::CompressedMemoryStream door typedefs and
+// their resolved statics are gone -- SaveRestoreOut and the roundtrip check
+// build the real class (runtime/types/io/Stream.h) and call its members.
 
 
 static fn_EnableRefMode_t       s_fn_EnableRefMode = nullptr;
 static fn_SerializeRefTable_t   s_fn_SerializeRefTable = nullptr;
 static fn_ResetPersist_t        s_fn_ResetPersist = nullptr;
 static fn_ClearPersist_t        s_fn_ClearPersist = nullptr;
-
-static fn_CMS_Ctor_t            s_fn_CMS_Ctor = nullptr;
-static fn_CMS_Dtor_t            s_fn_CMS_Dtor = nullptr;
-static fn_CMS_Open_t            s_fn_CMS_Open = nullptr;
-static fn_CMS_Create_t          s_fn_CMS_Create = nullptr;
-static fn_CMS_Close_t           s_fn_CMS_Close = nullptr;
-static fn_CMS_GetMemStream_t    s_fn_CMS_GetMemStream = nullptr;
 
 static void**                   s_ppIntFactory = nullptr;   // InternalFactory::_singleton cell
 static void**                   s_ppAchMgr = nullptr;       // AchievementManager::_singleton cell
@@ -156,19 +147,6 @@ void EnsureResolved() {
     s_fn_ClearPersist = reinterpret_cast<fn_ClearPersist_t>(
         ResolveExport("?ClearPersistState@InternalFactory@Object@@QEAAXXZ"));
 
-    s_fn_CMS_Ctor = reinterpret_cast<fn_CMS_Ctor_t>(
-        ResolveExport("??0CompressedMemoryStream@IO@@QEAA@XZ"));
-    s_fn_CMS_Dtor = reinterpret_cast<fn_CMS_Dtor_t>(
-        ResolveExport("??1CompressedMemoryStream@IO@@UEAA@XZ"));
-    s_fn_CMS_Open = reinterpret_cast<fn_CMS_Open_t>(
-        ResolveExport("?Open@CompressedMemoryStream@IO@@QEAA_NXZ"));
-    s_fn_CMS_Create = reinterpret_cast<fn_CMS_Create_t>(
-        ResolveExport("?Create@CompressedMemoryStream@IO@@QEAA_NXZ"));
-    s_fn_CMS_Close = reinterpret_cast<fn_CMS_Close_t>(
-        ResolveExport("?Close@CompressedMemoryStream@IO@@UEAAXXZ"));
-    s_fn_CMS_GetMemStream = reinterpret_cast<fn_CMS_GetMemStream_t>(
-        ResolveExport("?GetMemoryStream@CompressedMemoryStream@IO@@QEAAAEAVMemoryStream@2@XZ"));
-
     s_ppIntFactory = reinterpret_cast<void**>(
         ResolveExport("?_singleton@InternalFactory@Object@@0PEAV12@EA"));
     s_ppAchMgr = reinterpret_cast<void**>(
@@ -195,12 +173,10 @@ void EnsureResolved() {
     s_fn_AvlFixup_5920 = reinterpret_cast<fn_AvlFixup_5920_t>(R(0x140025920));
 
     fprintf(stderr, "[GUL::Serialize] resolved: refMode=%p refTable=%p persist=%p/%p "
-            "cms=%p/%p "
             "subs: cit=%p grid=%p goals=%p citPost=%p envPtr=%p\n",
             (void*)s_fn_EnableRefMode, (void*)s_fn_SerializeRefTable,
             (void*)s_fn_ResetPersist, (void*)s_fn_ClearPersist,
-            (void*)s_fn_CMS_Ctor,
-            (void*)s_fn_CMS_Open, (void*)s_fn_CitList_8f760,
+            (void*)s_fn_CitList_8f760,
             (void*)s_fn_Grid_9f100, (void*)s_fn_Goals_f9240,
             (void*)s_fn_CitPost_8f580, (void*)s_fn_EnvPtrSer_192a0);
     fflush(stderr);
@@ -908,32 +884,28 @@ extern "C" void GameUpdateLoop_Serialize_95a90(GameUpdateLoop* self, void* strea
 // RegisterExeAddr(0x1400959c0) row went with it.
 void GameUpdateLoop::SaveRestoreOut(bool save, Save::SavedState* savedState, int* outParam) {
     EnsureResolved();
-    if (!s_fn_CMS_Ctor || !s_fn_CMS_GetMemStream) {
-        fprintf(stderr, "[GUL::SaveRestore] MISSING Runtime exports — no-op\n");
-        fflush(stderr);
-        return;
-    }
 
-    // sizeof(IO::CompressedMemoryStream) == 0x98, MEASURED: its deleting-dtor
-    // thunk (Runtime 0x1800244a0) passes 0x98 as the eh_vector_destructor
-    // stride. 0x68 CompressedStream base + 0x30 embedded MemoryStream at +0x68.
-    // Layout: runtime/types/io/Stream.h.
-    alignas(16) uint8_t cms[0x100];
-    s_fn_CMS_Ctor(cms);
+    // ENDGAME B.3.9 IO (W2, foreign site): the REAL IO::CompressedMemoryStream
+    // (0x98 bytes: the 0x68 CompressedStream base + the MemoryStream member at
+    // +0x68; runtime/types/io/Stream.h) built on stack storage where the door
+    // built it, its members called where the doors were, and ended by a
+    // non-virtual DeletingDtor(0) (the destructor chain, no free) where
+    // ??1CompressedMemoryStream was.
+    alignas(16) uint8_t cmsStorage[sizeof(IO::CompressedMemoryStream)];
+    IO::CompressedMemoryStream* const cms =
+        ::new (static_cast<void*>(cmsStorage)) IO::CompressedMemoryStream();
     if (!save) {
-        savedState->Retrieve(
-            *reinterpret_cast<IO::MemoryStream*>(s_fn_CMS_GetMemStream(cms)));
-        s_fn_CMS_Open(cms);
+        savedState->Retrieve(cms->GetMemoryStream());
+        cms->Open();
         GameUpdateLoop_Serialize_95a90(this, cms, savedState, outParam);
-        s_fn_CMS_Close(cms);
+        cms->IO::CompressedMemoryStream::Close();
     } else {
-        s_fn_CMS_Create(cms);
+        cms->Create();
         GameUpdateLoop_Serialize_95a90(this, cms, savedState, outParam);
-        s_fn_CMS_Close(cms);
-        savedState->Store(
-            *reinterpret_cast<IO::MemoryStream*>(s_fn_CMS_GetMemStream(cms)));
+        cms->IO::CompressedMemoryStream::Close();
+        savedState->Store(cms->GetMemoryStream());
     }
-    s_fn_CMS_Dtor(cms);
+    cms->IO::CompressedMemoryStream::DeletingDtor(0);
 }
 
 // ============================================================
@@ -948,29 +920,20 @@ void GameUpdateLoop::SaveRestoreOut(bool save, Save::SavedState* savedState, int
 // are all out of the picture: a difference here is a Serialize body that does
 // not round-trip its own state. Both raw images are written next to the logs
 // so a difference can be diffed offline.
-typedef bool     (*fn_CS_Read_t)(void* cs, int n, void* dst);
-typedef uint32_t (*fn_CS_GetSize_t)(void* cs);
-
+// ENDGAME B.3.9 IO (W2): the ?Read / ?GetSize@CompressedStream doors it
+// resolved by name are the class's own members now, called non-virtually.
 static bool RoundtripDecompress(void* savedState, uint8_t** outData, uint32_t* outSize) {
-    static fn_CS_Read_t    s_read = nullptr;
-    static fn_CS_GetSize_t s_size = nullptr;
-    if (!s_read) {
-        s_read = reinterpret_cast<fn_CS_Read_t>(
-            ResolveExport("?Read@CompressedStream@IO@@UEAA_NHPEAX@Z"));
-        s_size = reinterpret_cast<fn_CS_GetSize_t>(
-            ResolveExport("?GetSize@CompressedStream@IO@@UEBAIXZ"));
-    }
-    if (!s_read || !s_size) return false;
-    alignas(16) uint8_t cms[0x100];
-    s_fn_CMS_Ctor(cms);
+    alignas(16) uint8_t cmsStorage[sizeof(IO::CompressedMemoryStream)];
+    IO::CompressedMemoryStream* const cms =
+        ::new (static_cast<void*>(cmsStorage)) IO::CompressedMemoryStream();
     reinterpret_cast<Save::SavedState*>(savedState)->Retrieve(   // B.3.7 bridge
-        *reinterpret_cast<IO::MemoryStream*>(s_fn_CMS_GetMemStream(cms)));
-    if (!s_fn_CMS_Open(cms)) { s_fn_CMS_Dtor(cms); return false; }
-    const uint32_t size = s_size(cms);
+        cms->GetMemoryStream());
+    if (!cms->Open()) { cms->IO::CompressedMemoryStream::DeletingDtor(0); return false; }
+    const uint32_t size = cms->IO::CompressedStream::GetSize();
     uint8_t* data = static_cast<uint8_t*>(std::malloc(size ? size : 1));
-    const bool ok = size == 0 || s_read(cms, static_cast<int>(size), data);
-    s_fn_CMS_Close(cms);
-    s_fn_CMS_Dtor(cms);
+    const bool ok = size == 0 || cms->IO::CompressedStream::Read(static_cast<int>(size), data);
+    cms->IO::CompressedMemoryStream::Close();
+    cms->IO::CompressedMemoryStream::DeletingDtor(0);
     *outData = data; *outSize = size;
     return ok;
 }

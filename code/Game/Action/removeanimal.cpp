@@ -55,11 +55,9 @@ static void (*s_fn_NotifyEntityChanged)(void* entity) = nullptr;
 
 // DAT_1401c4218 is FireDescription's cell (the variable name below lies — Table 1).
 
-// TypeInfo_RemoveAnimal (DAT_1401c6080)
-static uint32_t* s_typeInfo_RemoveAnimal = nullptr;
-
-// DAT_1401c6088 -- VectorDtor return value
-static uint64_t* s_dat_VectorDtorReturn = nullptr;
+// ENDGAME B.3.9 CB: retail reads this record field ONLY in the class's own TypeName
+// slot (the type-id cell 0x1401c6080 by RemoveAnimal_Slot2 0x140022e50 and the
+// NAME field 0x1401c6088 (+8) by RemoveAnimal_Slot1 0x140022e60 -- both slots); DECLARE_EXE_TYPE answers that slot, so the tree's copy of it is gone.
 
 static bool s_funcs_resolved = false;
 
@@ -79,16 +77,8 @@ bool RemoveAnimal_ResolveFuncs() {
     // FUN_1400c3470 -- notify entity changed
     s_fn_NotifyEntityChanged = (void(*)(void*))ResolveAddr(Module::Exe, 0x1400c3470);
 
-    // Type IDs
-    s_typeInfo_RemoveAnimal = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c6080));
-    s_dat_VectorDtorReturn = reinterpret_cast<uint64_t*>(
-        ResolveAddr(Module::Exe, 0x1401c6088));
-
     bool ok = s_fn_MarkEntityRemoval &&
               s_fn_GetModelComp && s_fn_NotifyEntityChanged &&
-              s_typeInfo_RemoveAnimal &&
-              s_dat_VectorDtorReturn &&
               fn_InternalBasePtr_DeletePtr &&
               fn_IsDerivedFrom && fn_MemFreeStatic &&
               g_pGameWorldSingleton;
@@ -96,9 +86,8 @@ bool RemoveAnimal_ResolveFuncs() {
 #ifdef _DEBUG
     printf("[RemoveAnimal] ResolveFuncs: MarkRemove=%p\n",
            (void*)s_fn_MarkEntityRemoval);
-    printf("[RemoveAnimal]   GetModel=%p Notify=%p typeInfoRA=%p\n",
-           (void*)s_fn_GetModelComp, (void*)s_fn_NotifyEntityChanged,
-           (void*)s_typeInfo_RemoveAnimal);
+    printf("[RemoveAnimal]   GetModel=%p Notify=%p\n",
+           (void*)s_fn_GetModelComp, (void*)s_fn_NotifyEntityChanged);
     if (!ok) printf("[RemoveAnimal] ERROR: some function pointers not resolved!\n");
 #endif
 

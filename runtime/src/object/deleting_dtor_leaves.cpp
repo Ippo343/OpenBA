@@ -106,43 +106,17 @@ inline void* Field(void* self, size_t off) {
 
 
 
-// ??1MaterialInstance@Graphics@@UEAA@XZ   0x180103a00
-extern "C" void RtGraphics_MaterialInstance_Dtor(void* self) {
-    STAMP(self, "??_7MaterialInstance@Graphics@@6B@");
-    uint8_t* d = static_cast<uint8_t*>(self);
-    ByAddr(0x180004d60ull)(d + 0x50);
-    ByAddr(0x180004c80ull)(d + 0x40);
-    ByAddr(0x180004b70ull)(d + 0x30);
-    RT_EXPORT_ONCE(DtorFn, "??1External@Object@@UEAA@XZ")(self);
-}
-
 // ??1Base@Object@@UEAA@XZ   0x1800c0360
 extern "C" void RtObject_Base_Dtor(void* self) {
     STAMP(self, "??_7Base@Object@@6B@");
 }
 
-// ??1Stream@IO@@UEAA@XZ   0x1800b9a40
-extern "C" void RtIo_Stream_Dtor(void* self) {
-    STAMP(self, "??_7Stream@IO@@6B@");
-    if (void* enc = Field(self, 0x10))
-        RT_EXPORT_ONCE(DtorFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(enc);
-}
-
-// ??1ParticleInstance@Graphics@@UEAA@XZ   0x1801041f0
-extern "C" void RtGraphics_ParticleInstance_Dtor(void* self) {
-    STAMP(self, "??_7ParticleInstance@Graphics@@6B@");
-    reinterpret_cast<Graphics::ParticleInstance*>(self)->RemoveState();  // B.3.5 bridge
-    RT_EXPORT_ONCE(DtorFn, "??1Geometry@Graphics@@UEAA@XZ")(self);
-}
+// ??1Stream@IO@@UEAA@XZ 0x1800b9a40: ENDGAME B.3.9 IO (W2) -- the door went
+// with the minted ??_7Stream@IO row and its RT_DELDTOR row, its only callers;
+// the body is IO::Stream::~Stream (runtime/types/io/Stream.h).
 
 int RtObjectDeletingDtorLeavesRegister() {
-    RegisterRuntimeExport("??1MaterialInstance@Graphics@@UEAA@XZ",        (void*)&RtGraphics_MaterialInstance_Dtor);
-    RegisterRuntimeAddr  (0x180103a00ull,                                  (void*)&RtGraphics_MaterialInstance_Dtor);
     RegisterRuntimeExport("??1Base@Object@@UEAA@XZ",                      (void*)&RtObject_Base_Dtor);
     RegisterRuntimeAddr  (0x1800c0360ull,                                  (void*)&RtObject_Base_Dtor);
-    RegisterRuntimeExport("??1Stream@IO@@UEAA@XZ",                        (void*)&RtIo_Stream_Dtor);
-    RegisterRuntimeAddr  (0x1800b9a40ull,                                  (void*)&RtIo_Stream_Dtor);
-    RegisterRuntimeExport("??1ParticleInstance@Graphics@@UEAA@XZ",        (void*)&RtGraphics_ParticleInstance_Dtor);
-    RegisterRuntimeAddr  (0x1801041f0ull,                                  (void*)&RtGraphics_ParticleInstance_Dtor);
-    return 4;
+    return 1;
 }

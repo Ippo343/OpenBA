@@ -21,6 +21,7 @@
 #include <cstring>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
+#include "Entity/ComponentEntity.h"   // ENDGAME B.3.9 CB: ComponentEntity::TypeId()
 #include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 
 // ============================================================
@@ -30,8 +31,6 @@
 // IsDerivedFrom
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
-
-static uint32_t* s_pComponentEntityTypeId = nullptr;
 
 static bool s_initialized = false;
 
@@ -213,9 +212,6 @@ void PickingComponent_RegisterMeshForEntity(void* entity) {
 void PickingComponent_InitFuncs() {
     if (s_initialized) return;
 
-    s_pComponentEntityTypeId = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c72e8));
-
     uintptr_t slot;
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_d = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
@@ -262,9 +258,13 @@ void PickingComponent::Persist(void* stream) {
     reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
 
     // Validate: if not ComponentEntity, null it out
+    // ENDGAME B.3.9 CB: retail validates this IBP with IsDerivedFrom(ptr, [0x1401c5d70]) =
+    // ComponentEntity::TypeId() (Persist 0x140128bb0, at 0x140128bf9). The tree read 0x1401c72e8 instead -- the NAME
+    // field (+8) of Description's record, whose only retail reader is Description's
+    // TypeName slot 0x140031c60 -- which is unregistered, so the check never ran.
     void* ibpVal = *(void**)(selfAddr + 0x30);
-    if (ibpVal != nullptr && s_fn_IsDerivedFrom_d && s_pComponentEntityTypeId) {
-        if (!s_fn_IsDerivedFrom_d(ibpVal, *s_pComponentEntityTypeId)) {
+    if (ibpVal != nullptr && s_fn_IsDerivedFrom_d) {
+        if (!s_fn_IsDerivedFrom_d(ibpVal, ComponentEntity::TypeId())) {
             *(uintptr_t*)(selfAddr + 0x30) = 0;
         }
     }

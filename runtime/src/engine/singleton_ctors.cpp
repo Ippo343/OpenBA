@@ -90,6 +90,7 @@
 #include "../../types/io/Modification.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/io/Persistence.h"
+#include "../../types/io/PersistenceWorker.h"   // ENDGAME B.3.9 IO (W2)
 #include "../../types/object/External.h"
 #include "../../types/object/Internal.h"
 #include "../../types/video/Device.h"
@@ -155,12 +156,12 @@ inline void WP (void* p, size_t o, const void* v) { std::memcpy(static_cast<uint
 // a phantom name (reference_resolveexport_phantom_names.md).
 // ---------------------------------------------------------------------------
 void** SlotMemoryAllocator() { return RT_DATA_SLOT(void**, "?_singleton@MemoryAllocator@System@@0PEAV12@EA"); }
-void** SlotModification()    { return RT_DATA_SLOT(void**, "?_singleton@Modification@IO@@2PEAV12@EA"); }
+void** SlotModification()    { return reinterpret_cast<void**>(&::IO::Modification::_singleton); }   // B.3.9 IO: class static
 void** SlotFactory()         { return reinterpret_cast<void**>(&::Object::Factory::_singleton); }
 void** SlotExternalFactory() { return reinterpret_cast<void**>(&::Object::ExternalFactory::_singleton); }
 void** SlotInternalFactory() { return reinterpret_cast<void**>(&::Object::InternalFactory::_singleton); }
-void** SlotFileSystem()      { return RT_DATA_SLOT(void**, "?_singleton@FileSystem@IO@@0PEAV12@EA"); }
-void** SlotPersistence()     { return RT_DATA_SLOT(void**, "?_singleton@Persistence@IO@@0PEAV12@EA"); }
+void** SlotFileSystem()      { return reinterpret_cast<void**>(&::IO::FileSystem::_singleton); }   // B.3.9 IO: class static
+void** SlotPersistence()     { return reinterpret_cast<void**>(&::IO::Persistence::_singleton); }   // B.3.9 IO: class static
 void** SlotVideoDevice()     { return reinterpret_cast<void**>(&::Video::Device::_singleton); }
 void** SlotVideoConfig()     { return reinterpret_cast<void**>(&::Video::Configuration::_singleton); }
 void** SlotApplication()     { return reinterpret_cast<void**>(&::Application::Application::_singleton); }
@@ -444,24 +445,12 @@ void* Ctor_FileSystem(void* self) {
 // something this body can fix, and a silent `if (v)` here would only hide it.
 // ===========================================================================
 void* Ctor_Persistence(void* self) {
-    using ThreadCtorFn = void* (*)(void*, uint32_t);
-    static const void* baseVtable =
-        reinterpret_cast<const void*>(ResolveAddr(Module::Runtime, 0x180155860));
-
     W64(self, 0x00, 0);
     W32(self, 0x08, 0);
-    RT_EXPORT_ONCE(ThreadCtorFn, "??0Thread@System@@QEAA@I@Z")(
-        static_cast<uint8_t*>(self) + 0x10, 0x10000);
-    WP (self, 0x10, baseVtable);
-    W64(self, 0x40, 0);
-    W64(self, 0x48, 1);
-    W32(self, 0x50, 0);
-    W64(self, 0x60, 0);
-    W64(self, 0x68, 0);
-    W64(self, 0x70, 0);
-    W64(self, 0x78, 0);
-    W64(self, 0x80, 0);
-    W64(self, 0x88, 0);
+    // ENDGAME B.3.9 IO (W2, foreign site): the embedded worker is the REAL
+    // class -- ??0Thread(0x10000), its vptr, the +0x40..+0x88 stores
+    // (runtime/types/io/PersistenceWorker.h), the same steps in the same order.
+    ::new (static_cast<uint8_t*>(self) + 0x10) IO::PersistenceWorker();
     W64(self, 0x90, 0);
     Publish(SlotPersistence(), self);
     return self;
@@ -761,7 +750,6 @@ void* Ctor_AudioConfiguration(void* self) {
 // by-address read of the minted unnamed row (a function-local lazy cache, B9-10)
 // is gone with that row.
 void* Ctor_AudioDevice(void* self) {
-    using StreamCtorFn = void* (*)(void*);
     Audio::Device* const dev = static_cast<Audio::Device*>(self);
 
     for (int i = 0; i < 64; ++i) {
@@ -772,8 +760,9 @@ void* Ctor_AudioDevice(void* self) {
         W32(self, base + 0x18, 0);
         W64(self, base + 0x20, 0);
     }
-    RT_EXPORT_ONCE(StreamCtorFn, "??0Stream@Audio@@QEAA@XZ")(
-        static_cast<uint8_t*>(self) + 0xa00);
+    // ENDGAME B.3.9 ENG W2: `??0Stream` is the class's real ctor now (it was
+    // the door, by name); built in place at +0xa00 as retail's LEA/CALL does.
+    ::new (static_cast<void*>(static_cast<uint8_t*>(self) + 0xa00)) Audio::Stream();
     for (int i = 0; i < 64; ++i)
         ::new (static_cast<void*>(&dev->_platformChannels[i])) Audio::Device::PlatformChannel();
     Publish(SlotAudioDevice(), self);

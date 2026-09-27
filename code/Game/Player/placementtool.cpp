@@ -835,8 +835,6 @@ void PlacementTool::Draw(void* context, char param3) {
 //
 // Original: 0x1400fe580
 
-// Local function pointers for Startup (resolved from IAT dispatch slots)
-static uint32_t* s_pTypeId_RotationSetting = nullptr;
 static bool s_startupFuncsResolved = false;
 
 static void EnsureStartupFuncs() {
@@ -850,17 +848,6 @@ static void EnsureStartupFuncs() {
     // sat beside it had NO caller left -- batch I2 converted its one call site and left
     // the resolve behind, so it was dead on arrival. Typedef, static and resolve removed.
 
-    // RotationSetting type ID at 0x1401c63c8 (read as uint32_t*)
-    s_pTypeId_RotationSetting = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c63c8);
-    // 0x1401c63c8 is a raw .rdata constant → NULL in standalone. Without it Startup's
-    // IsDerivedFrom(setting, RotationSetting) is skipped → rotationIBP (+0x48) wraps
-    // null → sub_da00 crashes on rot+0x10 (the orientation read). Fill from the live
-    // factory tree, same as the *Description type-ids above.
-    if (!s_pTypeId_RotationSetting) {
-        static uint32_t s_tid_RotationSetting = 0;
-        s_tid_RotationSetting = RotationSetting::TypeId();
-        s_pTypeId_RotationSetting = &s_tid_RotationSetting;
-    }
 
 
     // The four *Description type-id globals Startup's findComp reads are filled in
@@ -958,8 +945,8 @@ void PlacementTool::Startup() {
     // Read resolved pointer, check IsDerivedFrom RotationSetting
     void* ibpVal = toolSetting;
     void* rotSetting = nullptr;
-    if (fn_IsDerivedFrom && s_pTypeId_RotationSetting && ibpVal) {
-        bool isDerived = fn_IsDerivedFrom(ibpVal, *s_pTypeId_RotationSetting);
+    if (fn_IsDerivedFrom && ibpVal) {
+        bool isDerived = fn_IsDerivedFrom(ibpVal, RotationSetting::TypeId());   // cell 0x1401c63c8
         if (isDerived) {
             rotSetting = ibpVal;
         }

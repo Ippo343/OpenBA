@@ -327,7 +327,8 @@ struct TornadoInstFuncs {
     fn_IsDerived_t    isDerived;
     fn_TimeCtor_t     timeCtor;
     fn_BoxExtend_t    boxExtend;
-    void*             rng;        // Graphics::Particle::_rng, the static the retail body uses
+    // (`rng`, the name door onto Graphics::Particle::_rng, is gone: ENDGAME B.3.9
+    // GFX made it the class static, read directly below.)
     bool              ok;
 };
 
@@ -341,14 +342,13 @@ void ResolveInstFuncs() {
     f.isDerived    = (fn_IsDerived_t)   ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z");
     f.timeCtor     = (fn_TimeCtor_t)    ResolveExport("??0Time@System@@QEAA@M@Z");
     f.boxExtend    = (fn_BoxExtend_t)   ResolveExport("?Extend@Box@Volume@@QEBA?AV12@AEBVVector3@Math@@@Z");
-    f.rng          =                    ResolveExport("?_rng@Particle@Graphics@@1VRandom@System@@A");
-    f.ok = f.isDerived && f.timeCtor && f.boxExtend && f.rng;
+    f.ok = f.isDerived && f.timeCtor && f.boxExtend;
     if (!f.ok) {
         fprintf(stderr, "[Tornado/particle] Update UNRESOLVED leaf: isDerived=%p "
                 "timeCtor=%p extend=%p "
-                "rng=%p -- the funnel will stand still\n",
+                "-- the funnel will stand still\n",
                 (void*)f.isDerived, (void*)f.timeCtor,
-                (void*)f.boxExtend, f.rng);
+                (void*)f.boxExtend);
         fflush(stderr);
     }
 }
@@ -418,7 +418,7 @@ void TornadoInstance::Update(const System::Time& time) {
         p->age = 0;
 
         int64_t life = 0;
-        f.timeCtor(&life, res->_particleLifeTime + reinterpret_cast<System::Random*>(f.rng)->RandFloatTol() * res->_particleLifeTimeTol);   // B.3.4b bridge
+        f.timeCtor(&life, res->_particleLifeTime + Graphics::Particle::_rng.RandFloatTol() * res->_particleLifeTimeTol);
         p->lifetime = life;
 
         p->alpha = p->prevAlpha = 0.0f;                 // retail: one 8-byte zero at +0x40
@@ -432,7 +432,7 @@ void TornadoInstance::Update(const System::Time& time) {
         p->pos[1] = p->prevPos[1] = z.y;
         p->pos[2] = p->prevPos[2] = z.z;
 
-        p->angle = p->prevAngle = reinterpret_cast<System::Random*>(f.rng)->RandFloatTol() * 180.0f;   // B.3.4b bridge
+        p->angle = p->prevAngle = Graphics::Particle::_rng.RandFloatTol() * 180.0f;
         p->size  = p->prevSize  = res->_particleStartSize;      // _particleStartSize
     }
 

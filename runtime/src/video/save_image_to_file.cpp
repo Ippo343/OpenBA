@@ -284,12 +284,11 @@ bool ImageBuffer::SaveImageToFile(const System::Filename& pathRef,
     // FileStream.h describes and saveload_meta.cpp already uses.
     alignas(8) uint8_t streamStorage[sizeof(RtIo::BinaryFileStream)];
     uint8_t* const stream = streamStorage;
-    RT_EXPORT_ONCE(StreamCtorFn, "??0BinaryFileStream@IO@@QEAA@XZ")(stream);
+    IO::BinaryFileStream* const streamObj =
+        ::new (static_cast<void*>(streamStorage)) IO::BinaryFileStream();   // B.3.9 IO: the class
 
     // Retail calls FileStream::Create, NOT BinaryFileStream::Create.
-    bool ok = RT_EXPORT_ONCE(
-        StreamCreateFn, "?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z")(
-            stream, &target);
+    bool ok = streamObj->IO::FileStream::Create(target);   // B.3.9 IO: the member
 
     if (ok) {
         // Both offsets are FileStream.h's, asserted there against three
@@ -391,7 +390,7 @@ bool ImageBuffer::SaveImageToFile(const System::Filename& pathRef,
     //   Enter/Free/Leave written out. The only difference is that the inlined
     //   copy stamps FileStream's table directly instead of arriving there
     //   through the thunk, which is the same store.
-    RT_EXPORT_ONCE(StreamDtorFn, "??1BinaryFileStream@IO@@UEAA@XZ")(stream);
+    streamObj->IO::BinaryFileStream::DeletingDtor(0);   // B.3.9 IO: ~BinaryFileStream, no free
     // …then the Filename: `target`'s destructor runs here, after the stream's,
     // which is retail's order.
 

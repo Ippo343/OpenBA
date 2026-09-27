@@ -171,8 +171,6 @@ namespace {
 // 21/41 when it was really 27/41
 // (reference_census_cannot_see_nonliteral_registrations.md).
 // ============================================================================
-const char* const kGeoCtor      = "??0Geometry@Graphics@@QEAA@XZ";
-const char* const kGeoDtor      = "??1Geometry@Graphics@@UEAA@XZ";
 const char* const kGeoClean     = "?Clean@Geometry@Graphics@@UEAA_NXZ";
 const char* const kGeoGetSub    = "?GetSubTransform@Geometry@Graphics@@UEBA?AVTransform@Math@@H@Z";
 const char* const kGeoGetXform  = "?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ";
@@ -205,15 +203,9 @@ const float kBigNeg       = -1.0e8f;
 // cost Wave 2 five points of sim time, invisible to both profilers).
 // ============================================================================
 
-// The base Geometry vtable, ??_7Geometry@Graphics@@6B@ (0x180154e60,
-// ordinal 1439). An exported DATA symbol, so this could be a ResolveExport —
-// but ResolveExport is GetProcAddress and this is on the ctor's hot path, so
-// it is resolved by address and cached. See the vtable-ownership note above for
-// why the port stamps the DLL's table and not one of its own.
-void* RtGeometryVtable() {
-    static void* vt = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180154e60));
-    return vt;
-}
+// (`RtGeometryVtable`, the minted ??_7Geometry@Graphics@@6B@ the ctor / dtor
+// doors stamped, is gone with them: ENDGAME B.3.9 GFX. Every Geometry wears a
+// compiler table now; the vtable-ownership banner above is history.)
 
 // ENDGAME B.3.2 step 2 (callers) — the three Array forwarders that used to sit
 // here (0x18001f990 SetSize(n,&fill), 0x180023830 the stride-4 sibling, and
@@ -562,33 +554,16 @@ void DetachBody(::Graphics::Geometry* self, ::Graphics::Geometry* child) {
 // Graphics::Geometry::Geometry()
 // retail 0x1800a4270, ordinal 205   ??0Geometry@Graphics@@QEAA@XZ
 //
-// Forty-six field stores and nothing else. Transcribed in retail's own order so
-// the ported body is the retail body; the two holes it leaves (+0x14, +0xbc)
-// are left alone here too, which is why the oracle below skips them.
+// Forty-six field stores and nothing else, after the vptr store (the
+// compiler's). Transcribed in retail's own order, through the field-identical
+// `RtGraphics::Geometry` POD view (cross-asserted in Geometry.h); the two holes
+// retail leaves (+0x14, +0xbc) stay unwritten.
 //
-// ORACLE: FULL, against a private scratch Geometry. The ctor mutates only the
-// object it is handed and allocates nothing, so the original can be run for
-// real into a stack Geometry and compared byte for byte. The scratch needs no
-// destructor: its _attached Array is null.
+// ENDGAME B.3.9 GFX: the ??0 door (`RtGraphics_Geometry_Ctor`, which stamped
+// the minted `??_7Geometry@Graphics@@6B@`) and the InitFields / DoorBody split
+// are retired; this member is the only body.
 // ============================================================================
-extern "C" Geometry* RtGraphics_Geometry_Ctor(Geometry* self) {
-
-    self->_vtable            = RtGeometryVtable();
-    // ENDGAME B.3.8 block RB (RULE B8-1): the 46 field stores are ONE body
-    // with the real constructor `Graphics::Geometry()` — `InitFields`, below.
-    ::Graphics::Geometry::DoorBody::Init(reinterpret_cast<::Graphics::Geometry*>(self));   // B.3.8 bridge
-
-    return self;   // retail returns `this` in RAX
-}
-
-// ============================================================================
-// Graphics::Geometry::InitFields — ??0Geometry 0x1800a4270 after the vptr
-// store (ENDGAME B.3.8 block RB, RULE B8-1). Shared by `Geometry()`
-// (Geometry.h) and the door above. MOVED VERBATIM, through the field-identical
-// `RtGraphics::Geometry` POD view (cross-asserted in Geometry.h), in retail's
-// order; +0x14 and +0xbc stay unwritten.
-// ============================================================================
-void Graphics::Geometry::InitFields() {
+Graphics::Geometry::Geometry() {
     RtGraphics::Geometry* const self = reinterpret_cast<RtGraphics::Geometry*>(this);   // B.3.8 bridge (the POD view)
     self->_attachParent      = nullptr;
     self->_attachNode        = -1;
@@ -644,56 +619,22 @@ void Graphics::Geometry::InitFields() {
 // Graphics::Geometry::~Geometry()
 // retail 0x1800a41c0, ordinal 599   ??1Geometry@Graphics@@UEAA@XZ
 //
-// Re-stamp the base vtable, then detach every child (the Detach body inlined,
-// always removing element 0), then free the child array. It does NOT detach
-// itself from its own parent — a Geometry destroyed while attached leaves a
-// dangling pointer in the parent's array, and that is retail's behaviour, not
-// an oversight to be fixed here.
+// Re-stamp the base vtable (the compiler's), then detach every child (the
+// Detach body inlined, always removing element 0), then free the child array
+// (retail 0x18001bf50, the ~Array tail call). It does NOT detach itself from
+// its own parent — a Geometry destroyed while attached leaves a dangling
+// pointer in the parent's array, and that is retail's behaviour, not an
+// oversight to be fixed here. ~Array's own body is spelled as `ClearCallback`
+// so that the implicit ~Array after it is a no-op on the zeroed header rather
+// than a second lifetime end.
 //
-// ORACLE: post-state only, and that is all it can be. Running the original
-// afterwards would double-free the child array. What is checked is what
-// retail's body must leave behind.
+// ENDGAME B.3.9 GFX: the ??1 door (`RtGraphics_Geometry_Dtor`, which restamped
+// the minted table) and the ReleaseFields / DoorBody split are retired.
 // ============================================================================
-// *** THIS DOOR KEEPS ITS BODY, AND THE MEMBER GOES ON DELEGATING INTO IT. ***
-// THREE independent reasons, all of them structural:
-//
-//  1. `Graphics::Geometry::~Geometry()` is PROTECTED (block E; ENDGAME §B.1
-//     decision 2 makes it non-virtual and a base's destructor protected), so a
-//     free function — which is what every registered door is — cannot call it.
-//     A `friend` declaration would be a change to block E's header, and a
-//     derived-class accessor cannot reach a protected base member through a
-//     pointer to the base either.
-//  2. The body's FIRST ACT is to re-stamp `??_7Geometry@Graphics@@6B@` over the
-//     object's vptr. On the real class the vptr is implicit and there is no
-//     member to assign; only the POD spells `_vtable`.
-//  3. `code/Game/Game/weather_particles.cpp:69` resolves this door BY ADDRESS
-//     (0x1800a41c0), so it must remain a callable free function whatever else
-//     happens.
-//
-// So `closure_batch2b.cpp`'s `Geometry::~Geometry()` stays the reverse delegation
-// block E wrote. It is one of the TWO of block E's seven that block F could not
-// flip; the other is the copy constructor, for the abstract-class reason recorded
-// there. Both are in block F's report.
-extern "C" void RtGraphics_Geometry_Dtor(Geometry* self) {
-
-    self->_vtable = RtGeometryVtable();
-    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with the real destructor
-    // `Graphics::Geometry::~Geometry()` — `ReleaseFields`, below.
-    ::Graphics::Geometry::DoorBody::Release(reinterpret_cast<::Graphics::Geometry*>(self));   // B.3.8 bridge
-}
-
-// ============================================================================
-// Graphics::Geometry::ReleaseFields — ??1Geometry 0x1800a41c0 after the
-// restamp: detach every child (always element 0), then free the attach array
-// (retail 0x18001bf50, the ~Array tail call). ~Array's own body is spelled as
-// `ClearCallback` so that the real destructor's implicit ~Array after it is a
-// no-op on the zeroed header rather than a second lifetime end.
-// ============================================================================
-void Graphics::Geometry::ReleaseFields() {
+Graphics::Geometry::~Geometry() {
     while (_attached.GetSize() > 0)
         DetachBody(this, _attached[0]);
     decltype(_attached)::ClearCallback(reinterpret_cast<rtcoll::ArrayHdr*>(&_attached));
-
 }
 
 // ============================================================================
@@ -1656,18 +1597,16 @@ void Scene::AddDrawItems(Renderer& renderer) const {
 // because tools/runtime_census.py cannot see through a named constant
 // (reference_census_cannot_see_nonliteral_registrations.md).
 //
-// `count` counts NAMES, one per distinct exported function: 19.
+// `count` counts NAMES, one per distinct exported function: 17 (the ??0 / ??1
+// Geometry doors retired, ENDGAME B.3.9 GFX).
 // ============================================================================
 int RtGraphicsSceneRegister() {
     int count = 0;
 
     // ---- Graphics::Geometry ----
-    RegisterRuntimeExport("??0Geometry@Graphics@@QEAA@XZ", (void*)&RtGraphics_Geometry_Ctor); ++count;
-    RegisterRuntimeAddr(0x1800a4270, (void*)&RtGraphics_Geometry_Ctor);
-
-    RegisterRuntimeExport("??1Geometry@Graphics@@UEAA@XZ", (void*)&RtGraphics_Geometry_Dtor); ++count;
-    RegisterRuntimeAddr(0x1800a41c0, (void*)&RtGraphics_Geometry_Dtor);
-
+    // ENDGAME B.3.9 GFX: the ??0 (0x1800a4270) and ??1 (0x1800a41c0) doors are
+    // retired -- `Geometry()` / `~Geometry()` are the members below, and their
+    // one address reader (the RT_DELDTOR row 0x180015e90) is retired with them.
     RegisterRuntimeExport("?Attach@Geometry@Graphics@@QEAAXPEAV12@H@Z", (void*)&RtGraphics_Geometry_Attach); ++count;
     RegisterRuntimeAddr(0x1800a3fa0, (void*)&RtGraphics_Geometry_Attach);
 

@@ -25,7 +25,6 @@ extern int RtAudioConfigurationRegister();  // audio.cpp
 // .cpp because they need <windows.h> for the Device+0xA50 critical section and
 // audio.cpp must stay free of it (PLAN.md §4.1 decision 1).
 extern int RtAudioDeviceRegister();         // audio_device.cpp
-extern int RtAudioStreamRegister();         // audio_stream_win.cpp (Wave 24)
 // Wave 28 lane SLOTS: the 7 slots of the UNEXPORTED XAudio2 voice-callback
 // vtable 0x180157c60, one record per channel inside Audio::Device. Own file and
 // own switch: address doors only (nothing here is exported) and it needs
@@ -50,9 +49,8 @@ extern int RtAudioPlayPlatformRegister();   // audio_play_platform.cpp
 extern "C" int RtAudioBatchCLeavesRegister();
 
 void RtAudioPortInit() {
-    // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
-    // static from here on (name door, address door, manifest publish).
-    RtMintRedirectStorage("?_singleton@Device@Audio@@0PEAV12@EA", &::Audio::Device::_singleton);
+    // ENDGAME B.3.9 ENG W2: `?_singleton@Device@Audio@@` is RETIRED (eng.txt): its
+    // last reader was this redirect; every site reads Audio::Device::_singleton.
     // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
     // static from here on (name door, address door, manifest publish).
     RtMintRedirectStorage("?_singleton@Configuration@Audio@@0PEAV12@EA", &::Audio::Configuration::_singleton);
@@ -69,10 +67,9 @@ void RtAudioPortInit() {
     n += RtAudioSceneUpdateRegister();   // owns RT_AUDIOSCENEUPDATE
     n += RtAudioConfigurationRegister();
     n += RtAudioDeviceRegister();
-    // Wave 24 lane SMALLBODY: Audio::Stream's ctor and dtor (0x1800a0e30 /
-    // 0x1800a0d90). Own file + own switch -- both bodies are KERNEL32
-    // synchronisation and audio.cpp must stay free of <windows.h>.
-    n += RtAudioStreamRegister();
+    // ENDGAME B.3.9 ENG W2: Audio::Stream's ctor / dtor doors (0x1800a0e30 /
+    // 0x1800a0d90) and its ?Run@ slot door (0x1800a0f60) are gone: the class
+    // has its real ctor / dtor and the compiler table dispatches Run.
     // batch 7: Audio's last two unported BODY rows. Registered unconditionally
     // (DIRECTION.md: a port registers unconditionally, no new kill switches).
     n += RtAudioStreamPlayRegister();
@@ -86,12 +83,6 @@ void RtAudioPortInit() {
     // (vtbatch7_soundbuffer_soundeffect.cpp). Unconditional, same reason.
     extern int RtAudioBatch7SoundBufferSoundEffectRegister();
     n += RtAudioBatch7SoundBufferSoundEffectRegister();
-    // VTABLE BATCH 7b (2026-09-12): ?Run@Stream@Audio@@ (0x1800a0f60), the
-    // streaming worker's thread body — the last unported member of the
-    // Audio::Stream trio whose ctor/dtor (audio_stream_win.cpp) and Play
-    // (audio_stream_play_win.cpp) were already ours. Unconditional.
-    { extern int RtAudioStreamRunRegister();
-      n += RtAudioStreamRunRegister(); }
     // Wave 29 lane AVBODY.
     n += RtAudioWave29AvbodyRegister();
     // The denominator was a hardcoded 22 -- Wave 8's own scope -- and Wave 9

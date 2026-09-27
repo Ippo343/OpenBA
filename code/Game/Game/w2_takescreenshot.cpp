@@ -90,8 +90,9 @@ namespace {
 typedef void* (*MemAllocS_t)(uint64_t size, int alignment);          // 0x140152b60
 typedef void  (*MemFreeS_t)(void* ptr);                              // 0x140152b68
 
-typedef void* (*FCIB_Ctor_t)(void* self);                            // 0x140151f40
-typedef void  (*FCIB_Dtor_t)(void* self);                            // 0x140151f48
+// ENDGAME B.3.9 GFX: the FrameCopyImageBuffer ??0 / ??1 door typedefs
+// (0x140151f40 / 0x140151f48) are gone -- the class is built by its real ctor
+// and destroyed through its own slot 0.
 
 // ENDGAME B.3.5 closing pass: the `Create` (0x1401520b0) and `Generate`
 // (0x1401520b8) door typedefs and their two caches are GONE with the last thing
@@ -126,8 +127,6 @@ typedef void  (*FN_Dtor_t)(void* self);                              // 0x140152
 
 MemAllocS_t           s_MemAlloc          = nullptr;
 MemFreeS_t            s_MemFree           = nullptr;
-FCIB_Ctor_t           s_FCIB_Ctor         = nullptr;
-FCIB_Dtor_t           s_FCIB_Dtor         = nullptr;
 StrPlusCStr_t         s_StrPlusCStr       = nullptr;
 StrPlusStr_t          s_StrPlusStr        = nullptr;
 StrFormat_t           s_StrFormat         = nullptr;
@@ -148,8 +147,6 @@ bool ResolveFuncs() {
 
     s_MemAlloc         = (MemAllocS_t)          ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
     s_MemFree          = (MemFreeS_t)           ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
-    s_FCIB_Ctor        = (FCIB_Ctor_t)          ResolveExport("??0FrameCopyImageBuffer@Graphics@@QEAA@XZ");
-    s_FCIB_Dtor        = (FCIB_Dtor_t)          ResolveExport("??1FrameCopyImageBuffer@Graphics@@UEAA@XZ");
     s_StrPlusCStr      = (StrPlusCStr_t)        ResolveExport("??HSystem@@YA?AVString@0@AEBV10@PEBD@Z");
     s_StrPlusStr       = (StrPlusStr_t)         ResolveExport("??HSystem@@YA?AVString@0@AEBV10@0@Z");
     s_StrFormat        = (StrFormat_t)          ResolveExport("?Format@String@System@@SA?AV12@PEBDZZ");
@@ -166,10 +163,9 @@ bool ResolveFuncs() {
     // sites and kept the caches only because this `s_ok` chain and the printf below
     // still read the pointers; a readiness test on a door nobody calls, and a
     // diagnostic that prints its address, are not users worth keeping a cache for.
-    // The ctor and dtor doors (`s_FCIB_Ctor` / `s_FCIB_Dtor`) STAY -- no
-    // Video/Graphics class has a real ctor or dtor (B35_RULES section 11) -- and so
-    // does every System::String / Filename / MemoryAllocator term, not this step's.
-    s_ok = s_MemAlloc && s_MemFree && s_FCIB_Ctor && s_FCIB_Dtor && s_StrPlusCStr &&
+    // ENDGAME B.3.9 GFX: the FrameCopyImageBuffer ctor / dtor doors went too (the
+    // class is real). Every System::String / Filename / MemoryAllocator term, not this step's.
+    s_ok = s_MemAlloc && s_MemFree && s_StrPlusCStr &&
            s_StrPlusStr && s_StrFormat && s_StrDtor && s_Filename_Ctor &&
            s_Filename_CtorStr && s_Filename_Assign && s_Filename_Dtor &&
            s_pFileSystemSingleton &&
@@ -181,10 +177,10 @@ bool ResolveFuncs() {
 
     if (!s_ok) {
         printf("[TakeScreenshot] primitives unresolved — screenshot disabled\n"
-                    "  alloc=%p free=%p ctor=%p dtor=%p\n"
+                    "  alloc=%p free=%p\n"
                     "  s+c=%p s+s=%p fmt=%p ~str=%p fn()=%p fn(s)=%p fn==%p ~fn=%p fs=%p\n"
                     "  device=%p mainloop=%p\n",
-                    (void*)s_MemAlloc, (void*)s_MemFree, (void*)s_FCIB_Ctor, (void*)s_FCIB_Dtor,
+                    (void*)s_MemAlloc, (void*)s_MemFree,
                     (void*)s_StrPlusCStr, (void*)s_StrPlusStr, (void*)s_StrFormat,
                     (void*)s_StrDtor, (void*)s_Filename_Ctor, (void*)s_Filename_CtorStr,
                     (void*)s_Filename_Assign, (void*)s_Filename_Dtor,
@@ -228,9 +224,11 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
     // --- Grab the back buffer into a FrameCopyImageBuffer ---------------------
     void* frameCopy = s_MemAlloc(0x88, 8);
     if (frameCopy) {
-        s_FCIB_Ctor(frameCopy);
-        // Retail additionally stores &PTR_FUN_14015e370 over the vptr here; see
-        // departure (1). The ctor-installed Runtime vptr is kept instead.
+        // ENDGAME B.3.9 GFX (B9-13): the real class's ctor, not the ??0 door.
+        // Retail's exe-side table copy 0x14015e370 is what the object then
+        // wears; ours wears the class's compiler table, whose slot 0 is that
+        // copy's scalar deleting dtor (FrameCopyImageBuffer.h).
+        ::new (frameCopy) Graphics::FrameCopyImageBuffer();
     }
 
     // Retail's literal arg list: (imageType=0, usage=4, format=5, mip=0x100,
@@ -301,8 +299,8 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
 
 
     // --- Teardown: exactly what the exe vtable's slot 0 (0x140019d50) does ----
-    s_FCIB_Dtor(frameCopy);
-    s_MemFree(frameCopy);
+    // ENDGAME B.3.9 GFX: that slot 0 IS ~FrameCopyImageBuffer then MemFree.
+    reinterpret_cast<Graphics::FrameCopyImageBuffer*>(frameCopy)->DeletingDtor(1u);
 
     // The ONLY clearer of m_quickSavePressed / m_quickLoadPressed. Retail stores
     // a single 16-bit zero over both bytes at self+0xC0.

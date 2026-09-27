@@ -36,9 +36,11 @@
 // =====================================================================
 #include <cstdio>
 #include "../../funcs/rt_port.h"
+#include "../../types/io/FileSystem.h"   // ENDGAME B.3.9 IO: the storage class statics
+#include "../../types/io/Modification.h"
+#include "../../types/io/Persistence.h"
 
 extern int RtIoSerializerRegister();    // serializer.cpp    (lane A)
-extern int RtIoCompressedStreamRegister();  // compressedstream.cpp (lane B)
 extern int RtIoPersistenceRegister();   // persistence.cpp   (lane C)
 extern int RtIoFileSystemRegister();    // filesystem.cpp    (lane D)
 // Wave 19 lane PERSIST: the save-ENUMERATION and request-ISSUE half of
@@ -215,7 +217,6 @@ extern int RtIoCompressedStreamWriteRegister();    // compressed_stream_write.cp
 // 1..7 are byte-identical, so nine functions cover sixteen trap slots). Own
 // switch because it is the only part of this lane that changes what a
 // DISPATCHED vtable slot does, as opposed to what a called export does.
-extern int RtIoFileStreamSlotsRegister();       // file_stream.cpp + file_stream_win.cpp
 
 // Wave 20 lane SAVETEXT. Five of the eight unported slots of
 // ??_7TextFileStream@IO@@6B@ (Read, SetCurrentPos, GetCurrentPos, GetSize,
@@ -228,9 +229,17 @@ extern int RtIoFileStreamSlotsRegister();       // file_stream.cpp + file_stream
 extern int RtIoTextFileStreamSlotsRegister();   // text_file_stream_win.cpp
 
 void RtIoPortInit() {
+    // ENDGAME B.3.9 IO (B39_RULES D7): the minted storage row IS the class
+    // static from here on (name door, address door, manifest publish).
+    RtMintRedirectStorage("?_singleton@FileSystem@IO@@0PEAV12@EA",
+                          &IO::FileSystem::_singleton);
+    RtMintRedirectStorage("?_singleton@Modification@IO@@2PEAV12@EA",
+                          &IO::Modification::_singleton);
+    RtMintRedirectStorage("?_singleton@Persistence@IO@@0PEAV12@EA",
+                          &IO::Persistence::_singleton);
+
     int n = 0;
     n += RtIoSerializerRegister();
-    n += RtIoCompressedStreamRegister();
     n += RtIoPersistenceRegister();
     n += RtIoPersistenceSavesRegister();
     n += RtIoPersistenceWorkerRegister();
@@ -253,7 +262,6 @@ void RtIoPortInit() {
     n += RtIoBaseVtablesRegister();
     n += RtIoFileStreamRegister();
     n += RtIoFileSystemCreateFileRegister();
-    n += RtIoFileStreamSlotsRegister();
     n += RtIoTextFileStreamSlotsRegister();
 
     // BATCH 8b. Registers unconditionally (DIRECTION.md §2: a port registers,

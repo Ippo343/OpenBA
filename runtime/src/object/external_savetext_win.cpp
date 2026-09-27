@@ -279,9 +279,7 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
     ts->_activeEncoding  = 2;                        // 1800bba90: [+0x6c] = 2
     if (g_stCtl == 3) { ++g_stAtt; ts->_activeEncoding = 3; }  // see the control note
 
-    if (RT_EXPORT_ONCE(FsCreateFn,
-            "?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z")(
-                reinterpret_cast<RtIo::TextFileStream*>(ts), path)) {
+    if (ts->IO::FileStream::Create(*reinterpret_cast<const System::Filename*>(path))) {   // B.3.9 IO: the member
 
         // ---- 1800bbaa3..1800bbb05 ---------------------------------------
         // The byte-order mark. `_activeEncoding` ALONE selects it — not
