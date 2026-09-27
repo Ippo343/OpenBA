@@ -75,6 +75,7 @@
 #include "Component/NaturalResourceDescription.h"
 #include "Component/LivestockDescription.h"
 #include "Component/TradeDescription.h"
+#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.9 CG2)
 #include "runtime/types/ui/SpinnerElement.h"    // ENDGAME B.3.6 UI callers round 2 (K1)
 
 // ── Cross-module reimpls this calls ──────────────────────────────────────────
@@ -230,7 +231,7 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
 
     // The panel's subject entity (self+0x28), narrowed to a ComponentEntity.
     void* subject = *reinterpret_cast<void**>(s + 0x28);
-    void* entity  = fn_IsDerivedFrom(subject, *g_TypeId_ComponentEntity) ? subject : nullptr;
+    void* entity  = fn_IsDerivedFrom(subject, ComponentEntity::TypeId()) ? subject : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
     new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
