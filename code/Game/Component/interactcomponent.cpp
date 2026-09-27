@@ -26,9 +26,6 @@
 // Resolved helpers
 // ============================================================
 
-// Component_Serialize (base class) -- at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
 // IsDerivedFrom -- dispatch slot
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
@@ -56,8 +53,6 @@ static void EnsureHelpers() {
 
     uintptr_t slot;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
 
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
@@ -96,62 +91,6 @@ static void EnsureHelpers() {
 // marketwork_bst_b290.cpp's SerIsLoading and pasturecomponent.cpp et al.
 static inline bool SerializerIsLoading(void* serializer) {
     return static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-}
-
-void InteractComponent_Shutdown(InteractComponent* self, void* stream) {
-    EnsureHelpers();
-
-    // Call base Component_Serialize
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
-
-    // Create local IO::Serializer (24 bytes on stack)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // Serialize count
-    int32_t count = *reinterpret_cast<int32_t*>(
-        reinterpret_cast<uint8_t*>(self) + 0x30);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
-
-    // "Am I loading?" is `*(int32*)(*(void**)serializer + 8) == 0` -- deref the
-    // Serializer to reach its STREAM, then read the stream's +8. This read was
-    // missing that dereference and tested the Serializer's own +8, which is
-    // m_encoding, not a loading flag (see
-    // reference_serializer_plus8_is_encoding_not_loading_flag -- the same trap,
-    // found here a second time). With the wrong field the resize below never ran
-    // on a real load, so the array at +0x28 stayed NULL while `count` came back
-    // non-zero from the stream, and the element loop dereferenced null.
-    if (SerializerIsLoading(serializer)) {
-        // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
-        GameColl::AsArray<GameColl::Ptr8>(
-            reinterpret_cast<uint8_t*>(self) + 0x28).SetSize(count);
-    }
-
-    // Serialize each InternalBasePtr element and validate
-    uint8_t* arrayBase = *reinterpret_cast<uint8_t**>(
-        reinterpret_cast<uint8_t*>(self) + 0x28);
-    for (int i = 0; i < count; i++) {
-        uint8_t* element = arrayBase + i * 8;
-
-        // Serialize InternalBasePtr
-        reinterpret_cast<Object::InternalBasePtr*>(element)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-
-        // Validate with IsDerivedFrom
-        void* ptr = *reinterpret_cast<void**>(element);
-        if (ptr != nullptr) {
-            if (s_fn_IsDerivedFrom_dispatch && s_TypeId_Interact) {
-                bool valid = s_fn_IsDerivedFrom_dispatch(ptr, *s_TypeId_Interact);
-                if (!valid) {
-                    *reinterpret_cast<uint64_t*>(element) = 0;
-                }
-            }
-        }
-    }
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -193,9 +132,105 @@ void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf) {
 // owner's MultiObject children. For each child's MapComponent (DAT_1401c7900),
 // scan its job hosts for an InteractComponent and append it to the +0x28 list.
 // Faithful port of the Ghidra decompilation.
-void InteractComponent_Draw(InteractComponent* self) {
+void InteractComponent_Draw(InteractComponent* self) { self->InteractComponent::OnAdded(); }
+
+// ============================================================
+// Init: resolve function pointers
+// ============================================================
+void InteractComponent_InitFuncs() {
     EnsureHelpers();
-    uintptr_t selfA = (uintptr_t)self;
+
+#ifdef _DEBUG
+    printf("[InteractComponent] Funcs resolved: "
+           "FindWorkplace=%p TypeId=%p\n",
+           (void*)s_fn_FindMultiObjComp,
+           (void*)s_TypeId_Interact);
+#endif
+}
+
+// ============================================================================
+// ENDGAME B.3.8 VIS — InteractComponent as a REAL class (InteractComponent.h).
+//
+// Before: a 48-slot InteractComponent_InertVtable filled per create,
+// Inert_ScalarDtor in slot 0 (only ~Internal).
+// After: the compiler's 16-slot vtable and a real ctor/dtor chain
+// (B38_RULES D1, D2); slot bodies are the ones the old table installed.
+// ============================================================================
+#include "Object/factory_registration.h"
+#include "Component/InteractComponent.h"
+
+// Slot 6 is the ON-ADDED broadcast: ComponentEntity_OnAddedPass (FUN_1400c2f60, the
+// tail of EntityList::RegisterEntity 0x1400c48a0) calls it on every component whose
+// capability flags (+0x20) have bit 0 — InteractComponent's 0x81 qualifies. The body
+// rebuilds the owner's interact use-location list (+0x28 array / +0x30 count) from the
+// owner's MultiObjectComponent children; FUN_140122b00 (CalcChildTargetPos) recurses
+// over that list to find a tile a worker can stand on (bridge bank end-pieces, fenced
+// pasture masters).
+
+// 0x140123480: Component() is the CALL 0x1401188b0; the 0x1401638b0 stamp is
+// the compiler's; +0x28 = +0x30 = 0; flags |= 1 (0x81).
+InteractComponent::InteractComponent() : field28(nullptr), field30(nullptr) {
+    OrFlagsInCtor(0x1);
+}
+
+// [3] 0x140123340 — the use-location IBP array (+0x28/+0x30) round-trips here.
+void InteractComponent::Persist(void* stream) {
+    EnsureHelpers();
+
+    // Call base Component_Serialize
+    Component::Persist(stream);   // retail's direct CALL 0x1401189b0
+
+    // Create local IO::Serializer (24 bytes on stack)
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    // Serialize count
+    int32_t count = *reinterpret_cast<int32_t*>(
+        reinterpret_cast<uint8_t*>(this) + 0x30);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
+
+    // "Am I loading?" is `*(int32*)(*(void**)serializer + 8) == 0` -- deref the
+    // Serializer to reach its STREAM, then read the stream's +8. This read was
+    // missing that dereference and tested the Serializer's own +8, which is
+    // m_encoding, not a loading flag (see
+    // reference_serializer_plus8_is_encoding_not_loading_flag -- the same trap,
+    // found here a second time). With the wrong field the resize below never ran
+    // on a real load, so the array at +0x28 stayed NULL while `count` came back
+    // non-zero from the stream, and the element loop dereferenced null.
+    if (SerializerIsLoading(serializer)) {
+        // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
+        GameColl::AsArray<GameColl::Ptr8>(
+            reinterpret_cast<uint8_t*>(this) + 0x28).SetSize(count);
+    }
+
+    // Serialize each InternalBasePtr element and validate
+    uint8_t* arrayBase = *reinterpret_cast<uint8_t**>(
+        reinterpret_cast<uint8_t*>(this) + 0x28);
+    for (int i = 0; i < count; i++) {
+        uint8_t* element = arrayBase + i * 8;
+
+        // Serialize InternalBasePtr
+        reinterpret_cast<Object::InternalBasePtr*>(element)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+
+        // Validate with IsDerivedFrom
+        void* ptr = *reinterpret_cast<void**>(element);
+        if (ptr != nullptr) {
+            if (s_fn_IsDerivedFrom_dispatch && s_TypeId_Interact) {
+                bool valid = s_fn_IsDerivedFrom_dispatch(ptr, *s_TypeId_Interact);
+                if (!valid) {
+                    *reinterpret_cast<uint64_t*>(element) = 0;
+                }
+            }
+        }
+    }
+
+    // Destroy serializer
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+}
+// [6] 0x140123110
+void InteractComponent::OnAdded() {
+    EnsureHelpers();
+    uintptr_t selfA = (uintptr_t)this;
 
     int64_t multiBuf = 0;
     if (s_fn_FindMultiObjComp) s_fn_FindMultiObjComp(*(uintptr_t*)(selfA + 0x10), &multiBuf);
@@ -260,51 +295,6 @@ void InteractComponent_Draw(InteractComponent* self) {
         }
     }
 }
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void InteractComponent_InitFuncs() {
-    EnsureHelpers();
-
-#ifdef _DEBUG
-    printf("[InteractComponent] Funcs resolved: Serialize=%p "
-           "FindWorkplace=%p TypeId=%p\n",
-           (void*)s_fn_Component_Serialize,
-           (void*)s_fn_FindMultiObjComp,
-           (void*)s_TypeId_Interact);
-#endif
-}
-
-// ============================================================================
-// ENDGAME B.3.8 VIS — InteractComponent as a REAL class (InteractComponent.h).
-//
-// Before: a 48-slot InteractComponent_InertVtable filled per create,
-// Inert_ScalarDtor in slot 0 (only ~Internal).
-// After: the compiler's 16-slot vtable and a real ctor/dtor chain
-// (B38_RULES D1, D2); slot bodies are the ones the old table installed.
-// ============================================================================
-#include "Object/factory_registration.h"
-#include "Component/InteractComponent.h"
-
-// Slot 6 is the ON-ADDED broadcast: ComponentEntity_OnAddedPass (FUN_1400c2f60, the
-// tail of EntityList::RegisterEntity 0x1400c48a0) calls it on every component whose
-// capability flags (+0x20) have bit 0 — InteractComponent's 0x81 qualifies. The body
-// rebuilds the owner's interact use-location list (+0x28 array / +0x30 count) from the
-// owner's MultiObjectComponent children; FUN_140122b00 (CalcChildTargetPos) recurses
-// over that list to find a tile a worker can stand on (bridge bank end-pieces, fenced
-// pasture masters).
-
-// 0x140123480: Component() is the CALL 0x1401188b0; the 0x1401638b0 stamp is
-// the compiler's; +0x28 = +0x30 = 0; flags |= 1 (0x81).
-InteractComponent::InteractComponent() : field28(nullptr), field30(nullptr) {
-    OrFlagsInCtor(0x1);
-}
-
-// [3] 0x140123340 — the use-location IBP array (+0x28/+0x30) round-trips here.
-void InteractComponent::Persist(void* stream) { InteractComponent_Shutdown(this, stream); }
-// [6] 0x140123110
-void InteractComponent::OnAdded() { InteractComponent_Draw(this); }
 
 // [0] 0x1400352f0: ~InteractComponent (0x140123420; its array free is a PORT GAP, see the header), MemFree on &1.
 Object::Base* InteractComponent::DeletingDtor(unsigned flags) {

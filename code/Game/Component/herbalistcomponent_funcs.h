@@ -11,9 +11,5 @@
 // Size: 0x50 bytes
 // ============================================================
 
-// Shutdown (vtable slot [3], 0x14004b200): Calls parent
-// ResourceProduceComponent::Shutdown, then creates an empty serializer block.
-void HerbalistComponent_Shutdown(HerbalistComponent* self, void* stream);
-
 // Init: resolve all internal function pointers (called once at startup)
 void HerbalistComponent_InitFuncs();

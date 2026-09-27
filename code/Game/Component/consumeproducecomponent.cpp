@@ -67,52 +67,6 @@ static void EnsureHelpers() {
 //   - consumeState (+0x68)
 //   - Version-0 migration: if consumeResourceId < 0 on load, reset to 0
 
-void ConsumeProduceComponent_Shutdown(ConsumeProduceComponent* self, void* stream) {
-    EnsureHelpers();
-
-    // Base ResourceProduceComponent::Shutdown (0x14012b4a0), a direct call in retail.
-    self->ResourceProduceComponent::Persist(stream);
-
-    // Create versioned serializer (version 1)
-    alignas(8) uint8_t serBuf[24];
-    int64_t* pSerData = (int64_t*)serBuf;
-    ::new (static_cast<void*>(serBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
-
-    // Serialize consumeResourceId at +0x50
-    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(self->consumeResourceId, nullptr);   // B.3.4 bridge
-
-    // Copy consume count to local (original uses local_res8, NOT direct field access).
-    // On load, the resize function reads +0x60 internally as old count to decide
-    // whether reallocation is needed. Writing directly to +0x60 before resize would
-    // make old == new, causing resize to skip reallocation.
-    int localCount = self->consumeCount;
-    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(localCount, nullptr);   // B.3.4 bridge
-
-    // On load (direction == 0): resize array if needed
-    if (*(int*)(pSerData[0] + 8) == 0) {
-        // B.3.2 bridge: exe 0x140023a00 IS Collection::Array<float>::SetSize(n)
-        // (bare float — see the derived-row note above the typedefs).
-        GameColl::AsArray<float>(&self->consumeRates).SetSize(localCount);
-    }
-
-    // Serialize float array using local count and rates pointer
-    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(localCount, self->consumeRates, nullptr);   // B.3.4 bridge
-
-    // Serialize consumeState at +0x68
-    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(self->consumeState, nullptr);   // B.3.4 bridge
-
-    // Version-0 migration: on load, if consumeResourceId < 0, reset to 0
-    int version = reinterpret_cast<IO::Serializer*>(serBuf)->GetVersion();   // B.3.4 bridge
-    if (version == 0 && self->consumeResourceId < 0) {
-        // Check if we're loading (stream direction == 0)
-        if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-            self->consumeResourceId = 0;
-        }
-    }
-
-    reinterpret_cast<IO::Serializer*>(serBuf)->~Serializer();   // B.3.4 bridge
-}
-
 // ============================================================
 // ConsumeProduceComponent::Serialize (vtable slot [4], 0x140118ef0)
 // ============================================================
@@ -136,77 +90,6 @@ void ConsumeProduceComponent_Shutdown(ConsumeProduceComponent* self, void* strea
 //   self->consumeResourceId = *(desc+0x4c)        // resource ID from description
 //   for i in range(self->consumeCount):
 //     consumeRates[i] = 1.0f
-
-void ConsumeProduceComponent_Serialize(ConsumeProduceComponent* self) {
-    EnsureHelpers();
-
-    if (!s_fn_IsDerivedFrom_dispatch || !s_TypeId_ConsumeProduceDescription)
-        return;
-
-    void* entity = self->_entity;
-    if (!entity) return;
-
-    // Walk the entity DESCRIPTION's child list, not the component array.
-    //
-    // ComponentEntity keeps its description at +0x28 and its COMPONENT array at +0x30
-    // (count +0x38); a description keeps its CHILD list at +0x28 with the count at
-    // +0x30. What is being searched for here is ConsumeProduce*Description*, so retail
-    // costs one extra deref: 0x140118ef0 does `RBP = *(entity+0x28)` and only then
-    // reads [RBP+0x30] as the count and [RBP+0x28] as the array. Its slot-18 sibling
-    // (0x140118d00) does exactly the same.
-    //
-    // This read the two fields straight off the entity, so `compCount` was the low half
-    // of the component-array POINTER (a huge positive number) and `compArray` was the
-    // description object -- the very first iteration would have called GetTypeId on the
-    // description's own vtable pointer. It never faulted only because slot 4 was wired
-    // nowhere and this whole body was dead. See the two-lists note in the wave memo.
-    uintptr_t entityAddr = (uintptr_t)entity;
-    uintptr_t descRoot = *(uintptr_t*)(entityAddr + 0x28);
-    if (!descRoot) return;
-    void** compArray = *(void***)(descRoot + 0x28);
-    int compCount = *(int*)(descRoot + 0x30);
-
-    // Find ConsumeProduceDescription in component list
-    void* desc = nullptr;
-    uint32_t targetTypeId = *s_TypeId_ConsumeProduceDescription;
-
-    for (int i = 0; i < compCount; i++) {
-        void* comp = compArray[i];
-        if (!comp) continue;
-
-        // Call GetTypeId virtual at vtable+0x10
-        uintptr_t vtable = *(uintptr_t*)comp;
-        typedef uint32_t (*fn_GetTypeId_t)(void*);
-        fn_GetTypeId_t getTypeId = *(fn_GetTypeId_t*)(vtable + 0x10);
-        uint32_t typeId = getTypeId(comp);
-
-        if (typeId == targetTypeId) {
-            // Verify with IsDerivedFrom
-            if (s_fn_IsDerivedFrom_dispatch(comp, targetTypeId)) {
-                desc = comp;
-            }
-            break;
-        }
-    }
-
-    if (!desc) return;
-
-    // Resize consume array from description count at +0x30
-    int descCount = *(int*)((uintptr_t)desc + 0x30);
-    // B.3.2 bridge: exe 0x140023a00 IS Collection::Array<float>::SetSize(n).
-    GameColl::AsArray<float>((void*)((uintptr_t)self + 0x58)).SetSize(descCount);
-
-    // Copy resource ID from description at +0x4c
-    self->consumeResourceId = *(int*)((uintptr_t)desc + 0x4c);
-
-    // Initialize all consume rates to 1.0f
-    float* rates = self->consumeRates;
-    if (rates && self->consumeCount > 0) {
-        for (int i = 0; i < self->consumeCount; i++) {
-            rates[i] = 1.0f;
-        }
-    }
-}
 
 // ============================================================
 // Reimpl of FUN_140023a00 (ConsumeProduceComponent_sub_3a00:
@@ -312,8 +195,121 @@ void* ConsumeProduceComponent::CreateInPlaceObject(void* storage) {
 
 // [3] 0x140118e00 (serialize) and [4] 0x140118ef0 (Startup: init the consume config
 // from the building's ConsumeProduceDescription).
-void       ConsumeProduceComponent::Persist(void* stream)     { ConsumeProduceComponent_Shutdown(this, stream); }
-void       ConsumeProduceComponent::Startup()                 { ConsumeProduceComponent_Serialize(this); }
+void       ConsumeProduceComponent::Persist(void* stream) {
+    EnsureHelpers();
+
+    // Base ResourceProduceComponent::Shutdown (0x14012b4a0), a direct call in retail.
+    ResourceProduceComponent::Persist(stream);
+
+    // Create versioned serializer (version 1)
+    alignas(8) uint8_t serBuf[24];
+    int64_t* pSerData = (int64_t*)serBuf;
+    ::new (static_cast<void*>(serBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+
+    // Serialize consumeResourceId at +0x50
+    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(consumeResourceId, nullptr);   // B.3.4 bridge
+
+    // Copy consume count to local (original uses local_res8, NOT direct field access).
+    // On load, the resize function reads +0x60 internally as old count to decide
+    // whether reallocation is needed. Writing directly to +0x60 before resize would
+    // make old == new, causing resize to skip reallocation.
+    int localCount = consumeCount;
+    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(localCount, nullptr);   // B.3.4 bridge
+
+    // On load (direction == 0): resize array if needed
+    if (*(int*)(pSerData[0] + 8) == 0) {
+        // B.3.2 bridge: exe 0x140023a00 IS Collection::Array<float>::SetSize(n)
+        // (bare float — see the derived-row note above the typedefs).
+        GameColl::AsArray<float>(&consumeRates).SetSize(localCount);
+    }
+
+    // Serialize float array using local count and rates pointer
+    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(localCount, consumeRates, nullptr);   // B.3.4 bridge
+
+    // Serialize consumeState at +0x68
+    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(consumeState, nullptr);   // B.3.4 bridge
+
+    // Version-0 migration: on load, if consumeResourceId < 0, reset to 0
+    int version = reinterpret_cast<IO::Serializer*>(serBuf)->GetVersion();   // B.3.4 bridge
+    if (version == 0 && consumeResourceId < 0) {
+        // Check if we're loading (stream direction == 0)
+        if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
+            consumeResourceId = 0;
+        }
+    }
+
+    reinterpret_cast<IO::Serializer*>(serBuf)->~Serializer();   // B.3.4 bridge
+}
+void       ConsumeProduceComponent::Startup() {
+    EnsureHelpers();
+
+    if (!s_fn_IsDerivedFrom_dispatch || !s_TypeId_ConsumeProduceDescription)
+        return;
+
+    void* entity = _entity;
+    if (!entity) return;
+
+    // Walk the entity DESCRIPTION's child list, not the component array.
+    //
+    // ComponentEntity keeps its description at +0x28 and its COMPONENT array at +0x30
+    // (count +0x38); a description keeps its CHILD list at +0x28 with the count at
+    // +0x30. What is being searched for here is ConsumeProduce*Description*, so retail
+    // costs one extra deref: 0x140118ef0 does `RBP = *(entity+0x28)` and only then
+    // reads [RBP+0x30] as the count and [RBP+0x28] as the array. Its slot-18 sibling
+    // (0x140118d00) does exactly the same.
+    //
+    // This read the two fields straight off the entity, so `compCount` was the low half
+    // of the component-array POINTER (a huge positive number) and `compArray` was the
+    // description object -- the very first iteration would have called GetTypeId on the
+    // description's own vtable pointer. It never faulted only because slot 4 was wired
+    // nowhere and this whole body was dead. See the two-lists note in the wave memo.
+    uintptr_t entityAddr = (uintptr_t)entity;
+    uintptr_t descRoot = *(uintptr_t*)(entityAddr + 0x28);
+    if (!descRoot) return;
+    void** compArray = *(void***)(descRoot + 0x28);
+    int compCount = *(int*)(descRoot + 0x30);
+
+    // Find ConsumeProduceDescription in component list
+    void* desc = nullptr;
+    uint32_t targetTypeId = *s_TypeId_ConsumeProduceDescription;
+
+    for (int i = 0; i < compCount; i++) {
+        void* comp = compArray[i];
+        if (!comp) continue;
+
+        // Call GetTypeId virtual at vtable+0x10
+        uintptr_t vtable = *(uintptr_t*)comp;
+        typedef uint32_t (*fn_GetTypeId_t)(void*);
+        fn_GetTypeId_t getTypeId = *(fn_GetTypeId_t*)(vtable + 0x10);
+        uint32_t typeId = getTypeId(comp);
+
+        if (typeId == targetTypeId) {
+            // Verify with IsDerivedFrom
+            if (s_fn_IsDerivedFrom_dispatch(comp, targetTypeId)) {
+                desc = comp;
+            }
+            break;
+        }
+    }
+
+    if (!desc) return;
+
+    // Resize consume array from description count at +0x30
+    int descCount = *(int*)((uintptr_t)desc + 0x30);
+    // B.3.2 bridge: exe 0x140023a00 IS Collection::Array<float>::SetSize(n).
+    GameColl::AsArray<float>((void*)((uintptr_t)this + 0x58)).SetSize(descCount);
+
+    // Copy resource ID from description at +0x4c
+    consumeResourceId = *(int*)((uintptr_t)desc + 0x4c);
+
+    // Initialize all consume rates to 1.0f
+    float* rates = consumeRates;
+    if (rates && consumeCount > 0) {
+        for (int i = 0; i < consumeCount; i++) {
+            rates[i] = 1.0f;
+        }
+    }
+}
 uintptr_t* ConsumeProduceComponent::CreateWork(uintptr_t* out) { return ConsumeProduceComponent_CreateWork(this, out); }  // [18] 0x140118d00
 
 DEFINE_EXE_VTABLE(ConsumeProduceComponent, "_ZTV23ConsumeProduceComponent")

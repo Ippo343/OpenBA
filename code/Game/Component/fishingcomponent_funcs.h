@@ -11,10 +11,5 @@
 // Size: 0x58 bytes
 // ============================================================
 
-// Shutdown (vtable slot [3], 0x14011f050): Serialization.
-// ResourceProduceComponent::Shutdown (base) + own serializer with
-// fishingFlag (bool at +0x50) and fishingRate (float at +0x54).
-void FishingComponent_Shutdown(FishingComponent* self, void* stream);
-
 // Init: resolve all internal function pointers (called once at startup)
 void FishingComponent_InitFuncs();

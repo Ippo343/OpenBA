@@ -24,9 +24,6 @@
 // Resolved helpers
 // ============================================================
 
-// Component_Serialize at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
 // FUN_14011aa20 — validate entity references
 typedef void (*fn_ValidateEntityRefs_t)(uintptr_t self);
@@ -49,8 +46,6 @@ static bool s_initialized = false;
 static void EnsureHelpers() {
     if (s_initialized) return;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
 
     s_fn_ValidateEntityRefs = reinterpret_cast<fn_ValidateEntityRefs_t>(
         ResolveAddr(Module::Exe, 0x14011aa20));
@@ -259,74 +254,15 @@ void CropFieldComponent_SerializeEntityList(void* serializer, int count, uintptr
 //      e. On load: resize entity list at +0x58
 //      f. CropFieldComponent_helper_36c0 — serialize entity list entries
 
-void CropFieldComponent_Shutdown(CropFieldComponent* self, void* stream) {
-    EnsureHelpers();
-
-    // Base Component serialization
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
-
-    // Empty serializer block (version 0, immediately destroyed)
-    alignas(8) uint8_t emptySerializer[24];
-    ::new (static_cast<void*>(emptySerializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(emptySerializer)->~Serializer();   // B.3.4 bridge
-
-    // Main serializer block (version 0)
-    alignas(8) uint8_t serializer[16];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // Validate entity references
-    if (s_fn_ValidateEntityRefs) {
-        s_fn_ValidateEntityRefs((uintptr_t)self);
-    }
-
-    // Serialize cropFlags as two bools (+0x48 and +0x49)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(bool*)((uintptr_t)self + 0x48), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(bool*)((uintptr_t)self + 0x49), nullptr);   // B.3.4 bridge
-
-    // Serialize InternalBasePtr array at +0x50
-    if (s_fn_SerializeIBPArray) {
-        s_fn_SerializeIBPArray((void*)((uintptr_t)self + 0x50), serializer);
-    }
-
-    // Serialize entity count from +0x60
-    int entityCount = *(int*)((uintptr_t)self + 0x60);
-    int countBuf = entityCount;
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(countBuf, nullptr);   // B.3.4 bridge
-
-    // On load, resize the entity list to the count just read.
-    // ⚠ IO::Serializer +0x08 is m_encoding (a POINTER, never 0) — testing it as
-    // the loading flag leaves this load-only branch dead on BOTH legs, so the
-    // array is never grown and the loop below silently skips reading the IBPs
-    // the save wrote -> stream desync. The flag is on the STREAM (+0x08).
-    // Same defect as WorkPlaceComponent (21b3b33); see
-    // reference_serializer_plus8_is_encoding_not_loading_flag.
-    const uintptr_t cfStream = *(uintptr_t*)serializer;
-    if (cfStream && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        if (s_fn_ResizeEntityList) {
-            s_fn_ResizeEntityList((void*)((uintptr_t)self + 0x58), countBuf);
-        }
-    }
-
-    // Serialize entity list entries
-    if (s_fn_SerializeEntityList) {
-        uintptr_t entityArray = *(uintptr_t*)((uintptr_t)self + 0x58);
-        s_fn_SerializeEntityList(serializer, countBuf, entityArray);
-    }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-}
-
 // ============================================================
 // Init: resolve function pointers
 // ============================================================
 void CropFieldComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[CropFieldComponent] Funcs resolved: Component_Serialize=%p ValidateEntityRefs=%p "
+    printf("[CropFieldComponent] Funcs resolved: ValidateEntityRefs=%p "
            "SerializeIBPArray=%p ResizeEntityList=%p SerializeEntityList=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_ValidateEntityRefs,
+           (void*)s_fn_ValidateEntityRefs,
            (void*)s_fn_SerializeIBPArray, (void*)s_fn_ResizeEntityList,
            (void*)s_fn_SerializeEntityList);
 #endif
@@ -335,185 +271,6 @@ void CropFieldComponent_InitFuncs() {
 // ===== ENDGAME B.3.8 MI-B — CropFieldComponent's own slot bodies =====
 // The class (CropFieldComponent.h) reaches these three through its members
 // (OnMessage / CommandMask / Command, below the bodies).
-
-// ── slot 15 — OnMessage — retail 0x14011ab50 ──────────────────────────────────────
-// OnMessage(self, msgId, sender, slotIndex). Two messages, both addressed at ONE slot
-// of the field's grid (self+0x58, stride 0x20, indexed by the 4th argument):
-//
-//   msg 0 — PLANT BOUND. The PlantArea work has just created the crop entity on this
-//           slot's cell, so bind it: state (+0x04) = 1 "growing", stash the entity at
-//           +0x08 and its NaturalResource component at +0x10, then copy the slot's
-//           plant-mark byte (+0x18) into that component's +0x2d. This is what moves a
-//           slot from "empty" to "growing", which is in turn what the state-9
-//           per-frame handler counts to decide the field is planted and advance to
-//           state 10. Without it a field plants and never progresses.
-//
-//   msg 1 — GROW TICK. Find the slot entity's growth component, then advance it by
-//           Time(growthComp+0x28 * 300.0f * CropFieldDescription+0x24) through that
-//           component's own vtable slot 9 (+0x48). 300.0f is 0x140172234.
-//
-// Retail's profile build carries two assertion strings for this function — "message
-// send to planter harvester is wrong" and "map componment isn't initalized correctly!"
-// [sic] — i.e. it treats a bad slot index or an uninitialised map as programmer error
-// and derefs regardless. Kept unguarded to match, except where our standalone can
-// legitimately have no entity on the cell (msg 1 already tests that in retail too).
-extern "C" void CropFieldComponent_OnMessageVSlot(void* selfV, int msgId,
-                                                  void* /*sender*/, unsigned int slotIdx) {
-    EnsureHelpers();
-    EnsureCropExtras();
-    const uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-
-    const uintptr_t map = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
-    if (!map) return;
-    const uintptr_t grid = *reinterpret_cast<uintptr_t*>(map + 0x80);
-    const uintptr_t slots = *reinterpret_cast<uintptr_t*>(self + 0x58);
-    if (!grid || !slots) return;
-
-    uint8_t* slot = reinterpret_cast<uint8_t*>(slots + (uintptr_t)slotIdx * 0x20);
-    const int cell = *reinterpret_cast<int32_t*>(slot + 0x00);
-    const uintptr_t entity = *reinterpret_cast<uintptr_t*>(grid + 8 + (uintptr_t)cell * 0x30);
-
-    if (msgId == 0) {
-        uintptr_t nrIbp = 0;
-        if (s_fn_FindComp_BS_local) s_fn_FindComp_BS_local((int64_t)entity, &nrIbp);
-        *reinterpret_cast<int32_t*>(slot + 0x04)   = 1;          // growing
-        *reinterpret_cast<uintptr_t*>(slot + 0x08) = entity;
-        *reinterpret_cast<uintptr_t*>(slot + 0x10) = nrIbp;
-        if (nrIbp)
-            *reinterpret_cast<char*>(nrIbp + 0x2d) = static_cast<char>(slot[0x18]);
-        return;
-    }
-
-    if (msgId == 1) {
-        if (!entity) return;
-        static void (*s_findGrowth)(int64_t, void*) = nullptr;
-        static const float* s_f300 = nullptr;
-        static bool s_r = false;
-        if (!s_r) {
-            s_findGrowth = reinterpret_cast<void(*)(int64_t, void*)>(
-                ResolveAddr(Module::Exe, 0x14000c460));
-            s_f300 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172234));
-            s_r = true;
-        }
-        if (!s_findGrowth || !s_f300 || !fn_Time_Ctor_Float) return;
-        uintptr_t growth = 0;
-        s_findGrowth((int64_t)entity, &growth);
-        if (!growth) return;
-
-        void* desc = *reinterpret_cast<void**>(self + 0x18);
-        const uint32_t tidCropDesc =
-            s_pTypeId_CropFieldDescription ? *s_pTypeId_CropFieldDescription : 0;
-        if (!(desc && fn_IsDerivedFrom && tidCropDesc && fn_IsDerivedFrom(desc, tidCropDesc)))
-            return;
-
-        const float rate = *reinterpret_cast<float*>(
-            *reinterpret_cast<uintptr_t*>(growth + 0x38) + 0x28);
-        const float mult = *reinterpret_cast<float*>(
-            reinterpret_cast<uintptr_t>(desc) + 0x24);
-        int64_t t = 0;
-        fn_Time_Ctor_Float(&t, rate * (*s_f300) * mult);
-
-        void** gvt = *reinterpret_cast<void***>(growth);
-        if (gvt && gvt[9])
-            reinterpret_cast<void (*)(void*, void*)>(gvt[9])(
-                reinterpret_cast<void*>(growth), &t);
-    }
-}
-
-// ── slot 13 — CanCommand — retail 0x14011ada0 ─────────────────────────────────────
-// Decides which of the crop-field panel's three buttons are enabled. Unlike the
-// ResourceProduce family's slot 13 (which ignores its argument and returns a mask),
-// this one IS a per-command query:
-//   cmd 0 (plant)   enabled when the SM sits in state 2  AND the field has slots
-//   cmd 1 (harvest) enabled when the SM sits in state 10 AND the field has slots
-//   cmd 2 (toggle)  returns a two-bit value: bit 1 = currently on (+0x48), bit 0 =
-//                   selectable at all (has slots). Retail computes it as
-//                   `-(+0x48 != 0) & 2 | hasSlots`, i.e. a MASK, not a boolean — the
-//                   panel reads bit 1 to draw the toggle's state and bit 0 to enable
-//                   it. Returning a plain bool here would collapse "on" and
-//                   "available" into one and mis-draw the button.
-// "Has slots" is self+0x50 != 0 — the slot array state 9 builds. An unplanted field
-// therefore greys everything, which is retail behaviour, not a defect.
-extern "C" uint8_t CropFieldComponent_CanCommandVSlot(void* selfV, int cmdId) {
-    const uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
-    static void (*s_findSM)(uintptr_t, uintptr_t*) = nullptr;
-    static bool s_r = false;
-    if (!s_r) {
-        s_findSM = reinterpret_cast<void(*)(uintptr_t, uintptr_t*)>(
-            ResolveAddr(Module::Exe, 0x140003ea0));
-        s_r = true;
-    }
-    if (!s_findSM) return 0;
-    uintptr_t smc = 0;
-    s_findSM(*reinterpret_cast<uintptr_t*>(self + 0x10), &smc);
-    if (!smc) return 0;
-
-    int8_t cur = *reinterpret_cast<int8_t*>(smc + 0x52);
-    if (cur < 0) cur = *reinterpret_cast<int8_t*>(smc + 0x50);
-    const bool hasSlots = (*reinterpret_cast<uintptr_t*>(self + 0x50) != 0);
-
-    switch (cmdId) {
-        case 0:  return (cur == 2  && hasSlots) ? 1 : 0;
-        case 1:  return (cur == 10 && hasSlots) ? 1 : 0;
-        case 2:  return static_cast<uint8_t>(
-                     ((*reinterpret_cast<char*>(self + 0x48) != 0) ? 2 : 0) |
-                     (hasSlots ? 1 : 0));
-        default: return 0;
-    }
-}
-
-// ── slot 14 — Command — retail 0x14011acc0 ────────────────────────────────────────
-//   cmd 0 -> post node event 3 (PLANT)    — the event state 2 registers
-//   cmd 1 -> post node event 4 (HARVEST)  — the event state 10 registers
-//   cmd 2 -> flip +0x48 and push it straight into the workplace accepting flag
-// The two event ids line up exactly with the state table in
-// cropfieldcomponent_states.cpp, so the panel drives the same paths the seasonal
-// triggers do.
-extern "C" void CropFieldComponent_CommandVSlot(void* selfV, int cmdId) {
-    const uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
-    static void (*s_findSM)(uintptr_t, uintptr_t*)  = nullptr;
-    static void (*s_findWpc)(uintptr_t, uintptr_t*) = nullptr;
-    static void (*s_setAccepting)(uintptr_t, char)  = nullptr;
-    static bool s_r = false;
-    if (!s_r) {
-        s_findSM = reinterpret_cast<void(*)(uintptr_t, uintptr_t*)>(
-            ResolveAddr(Module::Exe, 0x140003ea0));
-        s_findWpc = reinterpret_cast<void(*)(uintptr_t, uintptr_t*)>(
-            ResolveAddr(Module::Exe, 0x140002e10));
-        s_setAccepting = reinterpret_cast<void(*)(uintptr_t, char)>(
-            ResolveAddr(Module::Exe, 0x14012fc00));
-        s_r = true;
-    }
-    if (cmdId != 0 && cmdId != 1 && cmdId != 2) return;
-
-    if (cmdId == 2) {
-        char* master = reinterpret_cast<char*>(self + 0x48);
-        *master = (*master == 0) ? 1 : 0;
-        if (!s_findWpc || !s_setAccepting) return;
-        uintptr_t wpc = 0;
-        s_findWpc(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpc);
-        if (!wpc) return;
-        s_setAccepting(wpc, *master);
-        return;
-    }
-
-    if (!s_findSM) return;
-    uintptr_t smc = 0;
-    s_findSM(*reinterpret_cast<uintptr_t*>(self + 0x10), &smc);
-    if (!smc) return;
-
-    const uintptr_t sm = smc + 0x48;
-    void* node = *reinterpret_cast<void**>(sm);
-    if (!node) return;
-    void** nvt = *reinterpret_cast<void***>(node);
-    if (!nvt || !nvt[2]) return;
-    const int curIdx  = *reinterpret_cast<int8_t*>(smc + 0x51);
-    const int eventId = (cmdId == 0) ? 3 : 4;
-    reinterpret_cast<char (*)(void*, void*, int, int)>(nvt[2])(
-        node, reinterpret_cast<void*>(sm), curIdx, eventId);
-}
 
 // ============================================================================
 // ENDGAME B.3.8 MI-B — CropFieldComponent as a REAL class (CropFieldComponent.h).
@@ -569,17 +326,240 @@ void* CropFieldComponent::CreateInPlaceObject(void* storage) {
 
 // [3] 0x14011ae70. The body resolves its helpers at its top (slot 3 is the first
 // call into this class on a load-from-save).
-void CropFieldComponent::Persist(void* stream) { CropFieldComponent_Shutdown(this, stream); }
+void CropFieldComponent::Persist(void* stream) {
+    EnsureHelpers();
+
+    // Base Component serialization
+    Component::Persist(stream);   // retail's direct CALL 0x1401189b0
+
+    // Empty serializer block (version 0, immediately destroyed)
+    alignas(8) uint8_t emptySerializer[24];
+    ::new (static_cast<void*>(emptySerializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(emptySerializer)->~Serializer();   // B.3.4 bridge
+
+    // Main serializer block (version 0)
+    alignas(8) uint8_t serializer[16];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    // Validate entity references
+    if (s_fn_ValidateEntityRefs) {
+        s_fn_ValidateEntityRefs((uintptr_t)this);
+    }
+
+    // Serialize cropFlags as two bools (+0x48 and +0x49)
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(bool*)((uintptr_t)this + 0x48), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(bool*)((uintptr_t)this + 0x49), nullptr);   // B.3.4 bridge
+
+    // Serialize InternalBasePtr array at +0x50
+    if (s_fn_SerializeIBPArray) {
+        s_fn_SerializeIBPArray((void*)((uintptr_t)this + 0x50), serializer);
+    }
+
+    // Serialize entity count from +0x60
+    int entityCount = *(int*)((uintptr_t)this + 0x60);
+    int countBuf = entityCount;
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(countBuf, nullptr);   // B.3.4 bridge
+
+    // On load, resize the entity list to the count just read.
+    // ⚠ IO::Serializer +0x08 is m_encoding (a POINTER, never 0) — testing it as
+    // the loading flag leaves this load-only branch dead on BOTH legs, so the
+    // array is never grown and the loop below silently skips reading the IBPs
+    // the save wrote -> stream desync. The flag is on the STREAM (+0x08).
+    // Same defect as WorkPlaceComponent (21b3b33); see
+    // reference_serializer_plus8_is_encoding_not_loading_flag.
+    const uintptr_t cfStream = *(uintptr_t*)serializer;
+    if (cfStream && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+        if (s_fn_ResizeEntityList) {
+            s_fn_ResizeEntityList((void*)((uintptr_t)this + 0x58), countBuf);
+        }
+    }
+
+    // Serialize entity list entries
+    if (s_fn_SerializeEntityList) {
+        uintptr_t entityArray = *(uintptr_t*)((uintptr_t)this + 0x58);
+        s_fn_SerializeEntityList(serializer, countBuf, entityArray);
+    }
+
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+}
 // [4] 0x14011ae60: `MOV qword [RCX+0x50],0` — one store, nothing else.
 void CropFieldComponent::Startup() { field50 = nullptr; }
 // [13] 0x14011ada0 / [14] 0x14011acc0 / [15] 0x14011ab50 — the bodies above. The
 // OnMessage body takes the slot index from the base's third register (R9 = arg0).
+// ── slot 13 — CanCommand — retail 0x14011ada0 ─────────────────────────────────────
+// Decides which of the crop-field panel's three buttons are enabled. Unlike the
+// ResourceProduce family's slot 13 (which ignores its argument and returns a mask),
+// this one IS a per-command query:
+//   cmd 0 (plant)   enabled when the SM sits in state 2  AND the field has slots
+//   cmd 1 (harvest) enabled when the SM sits in state 10 AND the field has slots
+//   cmd 2 (toggle)  returns a two-bit value: bit 1 = currently on (+0x48), bit 0 =
+//                   selectable at all (has slots). Retail computes it as
+//                   `-(+0x48 != 0) & 2 | hasSlots`, i.e. a MASK, not a boolean — the
+//                   panel reads bit 1 to draw the toggle's state and bit 0 to enable
+//                   it. Returning a plain bool here would collapse "on" and
+//                   "available" into one and mis-draw the button.
+// "Has slots" is self+0x50 != 0 — the slot array state 9 builds. An unplanted field
+// therefore greys everything, which is retail behaviour, not a defect.
 uint32_t CropFieldComponent::CommandMask(int command) {
-    return CropFieldComponent_CanCommandVSlot(this, command);
+    const uintptr_t self = reinterpret_cast<uintptr_t>(this);
+    static void (*s_findSM)(uintptr_t, uintptr_t*) = nullptr;
+    static bool s_r = false;
+    if (!s_r) {
+        s_findSM = reinterpret_cast<void(*)(uintptr_t, uintptr_t*)>(
+            ResolveAddr(Module::Exe, 0x140003ea0));
+        s_r = true;
+    }
+    if (!s_findSM) return 0;
+    uintptr_t smc = 0;
+    s_findSM(*reinterpret_cast<uintptr_t*>(self + 0x10), &smc);
+    if (!smc) return 0;
+
+    int8_t cur = *reinterpret_cast<int8_t*>(smc + 0x52);
+    if (cur < 0) cur = *reinterpret_cast<int8_t*>(smc + 0x50);
+    const bool hasSlots = (*reinterpret_cast<uintptr_t*>(self + 0x50) != 0);
+
+    switch (command) {
+        case 0:  return (cur == 2  && hasSlots) ? 1 : 0;
+        case 1:  return (cur == 10 && hasSlots) ? 1 : 0;
+        case 2:  return static_cast<uint8_t>(
+                     ((*reinterpret_cast<char*>(self + 0x48) != 0) ? 2 : 0) |
+                     (hasSlots ? 1 : 0));
+        default: return 0;
+    }
 }
-void CropFieldComponent::Command(int command) { CropFieldComponent_CommandVSlot(this, command); }
-void CropFieldComponent::OnMessage(int message, void* data, uint32_t arg0, uint32_t /*arg1*/) {
-    CropFieldComponent_OnMessageVSlot(this, message, data, arg0);
+// ── slot 14 — Command — retail 0x14011acc0 ────────────────────────────────────────
+//   cmd 0 -> post node event 3 (PLANT)    — the event state 2 registers
+//   cmd 1 -> post node event 4 (HARVEST)  — the event state 10 registers
+//   cmd 2 -> flip +0x48 and push it straight into the workplace accepting flag
+// The two event ids line up exactly with the state table in
+// cropfieldcomponent_states.cpp, so the panel drives the same paths the seasonal
+// triggers do.
+void CropFieldComponent::Command(int command) {
+    const uintptr_t self = reinterpret_cast<uintptr_t>(this);
+    static void (*s_findSM)(uintptr_t, uintptr_t*)  = nullptr;
+    static void (*s_findWpc)(uintptr_t, uintptr_t*) = nullptr;
+    static void (*s_setAccepting)(uintptr_t, char)  = nullptr;
+    static bool s_r = false;
+    if (!s_r) {
+        s_findSM = reinterpret_cast<void(*)(uintptr_t, uintptr_t*)>(
+            ResolveAddr(Module::Exe, 0x140003ea0));
+        s_findWpc = reinterpret_cast<void(*)(uintptr_t, uintptr_t*)>(
+            ResolveAddr(Module::Exe, 0x140002e10));
+        s_setAccepting = reinterpret_cast<void(*)(uintptr_t, char)>(
+            ResolveAddr(Module::Exe, 0x14012fc00));
+        s_r = true;
+    }
+    if (command != 0 && command != 1 && command != 2) return;
+
+    if (command == 2) {
+        char* master = reinterpret_cast<char*>(self + 0x48);
+        *master = (*master == 0) ? 1 : 0;
+        if (!s_findWpc || !s_setAccepting) return;
+        uintptr_t wpc = 0;
+        s_findWpc(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpc);
+        if (!wpc) return;
+        s_setAccepting(wpc, *master);
+        return;
+    }
+
+    if (!s_findSM) return;
+    uintptr_t smc = 0;
+    s_findSM(*reinterpret_cast<uintptr_t*>(self + 0x10), &smc);
+    if (!smc) return;
+
+    const uintptr_t sm = smc + 0x48;
+    void* node = *reinterpret_cast<void**>(sm);
+    if (!node) return;
+    void** nvt = *reinterpret_cast<void***>(node);
+    if (!nvt || !nvt[2]) return;
+    const int curIdx  = *reinterpret_cast<int8_t*>(smc + 0x51);
+    const int eventId = (command == 0) ? 3 : 4;
+    reinterpret_cast<char (*)(void*, void*, int, int)>(nvt[2])(
+        node, reinterpret_cast<void*>(sm), curIdx, eventId);
+}
+// ── slot 15 — OnMessage — retail 0x14011ab50 ──────────────────────────────────────
+// OnMessage(self, msgId, sender, slotIndex). Two messages, both addressed at ONE slot
+// of the field's grid (self+0x58, stride 0x20, indexed by the 4th argument):
+//
+//   msg 0 — PLANT BOUND. The PlantArea work has just created the crop entity on this
+//           slot's cell, so bind it: state (+0x04) = 1 "growing", stash the entity at
+//           +0x08 and its NaturalResource component at +0x10, then copy the slot's
+//           plant-mark byte (+0x18) into that component's +0x2d. This is what moves a
+//           slot from "empty" to "growing", which is in turn what the state-9
+//           per-frame handler counts to decide the field is planted and advance to
+//           state 10. Without it a field plants and never progresses.
+//
+//   msg 1 — GROW TICK. Find the slot entity's growth component, then advance it by
+//           Time(growthComp+0x28 * 300.0f * CropFieldDescription+0x24) through that
+//           component's own vtable slot 9 (+0x48). 300.0f is 0x140172234.
+//
+// Retail's profile build carries two assertion strings for this function — "message
+// send to planter harvester is wrong" and "map componment isn't initalized correctly!"
+// [sic] — i.e. it treats a bad slot index or an uninitialised map as programmer error
+// and derefs regardless. Kept unguarded to match, except where our standalone can
+// legitimately have no entity on the cell (msg 1 already tests that in retail too).
+void CropFieldComponent::OnMessage(int message, void* /*data*/, uint32_t arg0, uint32_t /*arg1*/) {
+    EnsureHelpers();
+    EnsureCropExtras();
+    const uintptr_t self = reinterpret_cast<uintptr_t>(this);
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+
+    const uintptr_t map = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+    if (!map) return;
+    const uintptr_t grid = *reinterpret_cast<uintptr_t*>(map + 0x80);
+    const uintptr_t slots = *reinterpret_cast<uintptr_t*>(self + 0x58);
+    if (!grid || !slots) return;
+
+    uint8_t* slot = reinterpret_cast<uint8_t*>(slots + (uintptr_t)arg0 * 0x20);
+    const int cell = *reinterpret_cast<int32_t*>(slot + 0x00);
+    const uintptr_t entity = *reinterpret_cast<uintptr_t*>(grid + 8 + (uintptr_t)cell * 0x30);
+
+    if (message == 0) {
+        uintptr_t nrIbp = 0;
+        if (s_fn_FindComp_BS_local) s_fn_FindComp_BS_local((int64_t)entity, &nrIbp);
+        *reinterpret_cast<int32_t*>(slot + 0x04)   = 1;          // growing
+        *reinterpret_cast<uintptr_t*>(slot + 0x08) = entity;
+        *reinterpret_cast<uintptr_t*>(slot + 0x10) = nrIbp;
+        if (nrIbp)
+            *reinterpret_cast<char*>(nrIbp + 0x2d) = static_cast<char>(slot[0x18]);
+        return;
+    }
+
+    if (message == 1) {
+        if (!entity) return;
+        static void (*s_findGrowth)(int64_t, void*) = nullptr;
+        static const float* s_f300 = nullptr;
+        static bool s_r = false;
+        if (!s_r) {
+            s_findGrowth = reinterpret_cast<void(*)(int64_t, void*)>(
+                ResolveAddr(Module::Exe, 0x14000c460));
+            s_f300 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172234));
+            s_r = true;
+        }
+        if (!s_findGrowth || !s_f300 || !fn_Time_Ctor_Float) return;
+        uintptr_t growth = 0;
+        s_findGrowth((int64_t)entity, &growth);
+        if (!growth) return;
+
+        void* desc = *reinterpret_cast<void**>(self + 0x18);
+        const uint32_t tidCropDesc =
+            s_pTypeId_CropFieldDescription ? *s_pTypeId_CropFieldDescription : 0;
+        if (!(desc && fn_IsDerivedFrom && tidCropDesc && fn_IsDerivedFrom(desc, tidCropDesc)))
+            return;
+
+        const float rate = *reinterpret_cast<float*>(
+            *reinterpret_cast<uintptr_t*>(growth + 0x38) + 0x28);
+        const float mult = *reinterpret_cast<float*>(
+            reinterpret_cast<uintptr_t>(desc) + 0x24);
+        int64_t t = 0;
+        fn_Time_Ctor_Float(&t, rate * (*s_f300) * mult);
+
+        void** gvt = *reinterpret_cast<void***>(growth);
+        if (gvt && gvt[9])
+            reinterpret_cast<void (*)(void*, void*)>(gvt[9])(
+                reinterpret_cast<void*>(growth), &t);
+    }
 }
 
 DEFINE_EXE_VTABLE(CropFieldComponent, "_ZTV18CropFieldComponent")
