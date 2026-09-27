@@ -584,7 +584,6 @@ public:
     // news one as a C++ object (see the ABSTRACT banner above). Recorded here so
     // the omission is a decision, not a gap.
 
-protected:
     // `??1MeshInstance@Graphics@@UEAA@XZ` @ 0x180017060, `UEAA` because retail's
     // is virtual — the non-virtual `QEAA` spelling is a name the DLL does not
     // contain (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md). NON-VIRTUAL
@@ -593,6 +592,13 @@ protected:
     // door `RtGraphics_MeshInstance_Dtor`; each of those zeroes its header, so
     // the compiler's implicit member ~Arrays after it are no-ops, and then
     // ~Geometry runs — retail's order.
+    //
+    // PUBLIC since ENDGAME B.3.9 block GFX (coordinator ruling 4): retail's is
+    // public (`U` = public virtual) and the exe calls it DIRECTLY on MeshInstance
+    // objects EMBEDDED in its components (ModelComponent +0x28, its dtor
+    // 0x140124cd0; StorageDisplayComponent's 0x128-stride array) through import
+    // slot 0x1401514a8 -- a plain destructor call, never a delete. The C++
+    // spelling of that call is `mi->~MeshInstance()`, which needs it public.
     ~MeshInstance() { ReleaseFields(); }
 
 private:
