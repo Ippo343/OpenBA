@@ -855,3 +855,78 @@ UNIT_TEST(b39_gfx_particleinstance_slot0_is_the_classs_own_both_arms) {
 }
 
 }  // namespace
+
+// ===========================================================================
+// ENDGAME B.3.9 block GFX -- EdgeMeshInstance CONCRETE (retail ctor 0x1800a3ab0,
+// slot 0 0x1800175d0 vector, element 0xd0). Its out-of-line members are
+// markers here (mesh.cpp / meshinstance_draw.cpp do not link).
+// ===========================================================================
+namespace {
+int         g_emiDtor = 0;
+const void* g_emiDtorVptr = nullptr;
+const void* g_emiDtorOrder[4] = {};
+}  // namespace
+namespace Graphics {
+void EdgeMeshInstance::Update(const System::Time&) {}
+void EdgeMeshInstance::Draw(Video::Context&, const Camera&, ExternalPtrHandle,
+                            float, int, int, int) const {}
+void EdgeMeshInstance::AddDrawItems(const Scene&, Renderer&) const {}
+Math::Matrix* EdgeMeshInstance::GetInstanceTransform(Math::Matrix* ret, int, float) const {
+    return ret;
+}
+EdgeMeshInstance::~EdgeMeshInstance() {
+    if (g_emiDtor < 4) g_emiDtorOrder[g_emiDtor] = this;
+    ++g_emiDtor; g_emiDtorVptr = *static_cast<const void* const*>(static_cast<const void*>(this));
+}
+}  // namespace Graphics
+
+extern const void* const g_rbEmiVtGroup[] __asm__("_ZTVN8Graphics16EdgeMeshInstanceE");
+
+namespace {
+
+UNIT_TEST(b39_gfx_edgemeshinstance_concrete_ctor_and_both_slot0_arms) {
+    using E = Graphics::EdgeMeshInstance;
+    CHECK(!std::is_abstract<E>::value);
+    CHECK(!std::is_destructible<E>::value);
+    CHECK(!std::has_virtual_destructor<E>::value);
+    CHECK_EQ(GfxSlotOffset(&E::DeletingDtor),         (uintptr_t)0x00);   // 0x1800175d0
+    CHECK_EQ(GfxSlotOffset(&E::GetInstanceTransform), (uintptr_t)0x30);   // 0x1800a3840 RETSLOT
+
+    // Retail 0x1800a3ab0: Geometry(), +0xc0 = 0; +0xc8 NOT written.
+    g_n = 0;
+    alignas(8) unsigned char buf[sizeof(E)];
+    std::memset(buf, 0xCD, sizeof buf);
+    E* p = ::new (static_cast<void*>(buf)) E();
+    CHECK_EQ(g_n, 1);
+    CHECK_EQ(g_log[0].ev, (int)kGeoInit);
+    CHECK(g_log[0].vptr == GeoVt());
+    CHECK(VptrOf(p) == &g_rbEmiVtGroup[2]);
+    CHECK_EQ(Q(p, 0xc0), (uint64_t)0);
+    CHECK_EQ(Q(p, 0xc8), (uint64_t)0xCDCDCDCDCDCDCDCDull);   // not written
+
+    // Slot 0, flags 0: ~EMI under EMI's table, then Geometry's release; nothing freed.
+    g_n = 0; g_emiDtor = 0;
+    CHECK(static_cast<void*>(p->DeletingDtor(0u)) == static_cast<void*>(buf));
+    CHECK_EQ(g_emiDtor, 1);
+    CHECK(g_emiDtorVptr == &g_rbEmiVtGroup[2]);
+    CHECK_EQ(g_n, 1);
+    CHECK_EQ(g_log[0].ev, (int)kGeoRel); CHECK(g_log[0].vptr == GeoVt());
+
+    void* m = Object::detail::InternalMemAlloc(sizeof(E), 8);
+    E* h = ::new (m) E();
+    CHECK(static_cast<void*>(h->DeletingDtor(1u)) == m);
+
+    // Vector arm: stride 0xd0, downward, block freed.
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0xd0, 8));
+    const int64_t cookie = 3;
+    std::memcpy(block, &cookie, sizeof cookie);
+    E* e[3];
+    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * 0xd0) E();
+    g_emiDtor = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3u)) == block);
+    CHECK_EQ(g_emiDtor, 3);
+    CHECK(g_emiDtorOrder[0] == e[2]);
+    CHECK(g_emiDtorOrder[2] == e[0]);
+}
+
+}  // namespace

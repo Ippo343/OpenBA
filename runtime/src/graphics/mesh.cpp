@@ -209,9 +209,6 @@ ArrayResizeFn RtTriListArrayResize() { static ArrayResizeFn f = RtAddr<ArrayResi
 // The exported neighbours, by mangled name. Each is a direct internal CALL in
 // the retail body it replaces, so going to the DLL is the byte-faithful choice
 // as well as the one that removes a cross-lane registration-order dependency.
-typedef void  (*GeometryCtorFn)(void* self);
-typedef void  (*GeometryCopyCtorFn)(void* self, const void* other);
-typedef void  (*GeometryDtorFn)(void* self);
 // NOTE: the "going to the DLL is the byte-faithful choice" sentence above is
 // about the CALL being a direct internal one in retail, not about which door
 // resolves it. ENDGAME B.3.5 caller batch: the two AnimationState typedefs that
@@ -238,21 +235,10 @@ inline void* QuaternionRotate(const void* self, void* ret, const void* vec) {
 // MeshInstance::UpdateHierarchy was running the DLL's Quaternion::operator* on
 // every node of every model while Wave 1's port of it sat registered and
 // unreached. A dependency belongs on the seam.
-GeometryCtorFn RtGeometryCtor() {
-    return RT_EXPORT_ONCE(GeometryCtorFn, "??0Geometry@Graphics@@QEAA@XZ");
-}
-GeometryCopyCtorFn RtGeometryCopyCtor() {
-    // A3: was the raw DLL door (the raw door) while every sibling here was
-    // already on the registry seam. It is a DEPENDENCY call, not an oracle --
-    // MeshInstance/EdgeMeshInstance copy-construct their Geometry base through
-    // it -- and the body is ported (closure_batch2b.cpp registers this exact
-    // name at 0x180015b60), so the raw door was both a port bypass and a call
-    // through null the moment Runtime-x64.dll went away.
-    return RT_EXPORT_ONCE(GeometryCopyCtorFn, "??0Geometry@Graphics@@QEAA@AEBV01@@Z");
-}
-GeometryDtorFn RtGeometryDtor() {
-    return RT_EXPORT_ONCE(GeometryDtorFn, "??1Geometry@Graphics@@UEAA@XZ");
-}
+// ENDGAME B.3.9 block GFX: `RtGeometryCtor` / `RtGeometryCopyCtor` /
+// `RtGeometryDtor` (the three Geometry name doors the MeshInstance /
+// EdgeMeshInstance ctor, copy-ctor and dtor doors called) are gone with those
+// doors; the real classes chain Geometry's members.
 // ENDGAME B.3.5 caller batch: `?SetBounds@Geometry@Graphics@@` is a DEFINED
 // member of the real `Graphics::Geometry` (scene.cpp:1373), and its one caller in
 // this file is `EdgeMeshInstance::SetMesh`, whose `this` IS a Geometry — so the
@@ -323,24 +309,10 @@ GeometryDtorFn RtGeometryDtor() {
 // GetProcAddress, so while the DLL is loaded and the mint unregistered this is
 // the identical pointer -- the change is a no-op today and a crash avoided at
 // cutover. Audited by tools/rt_data_door_audit.py.
-void* RtVtable(const char* mangled) { return ResolveExport(mangled); }
-
-void* RtEdgeMeshInstanceVtable() {
-    static void* v = RtVtable("??_7EdgeMeshInstance@Graphics@@6B@");    // 0x180154d70
-    return v;
-}
-void* RtEdgeMeshVtable() {
-    static void* v = RtVtable("??_7EdgeMesh@Graphics@@6B@");            // 0x180154c70
-    return v;
-}
-void* RtObjectBaseVtable() {
-    static void* v = RtVtable("??_7Base@Object@@6B@");                  // 0x180154788
-    return v;
-}
-void* RtObjectExternalVtable() {
-    static void* v = RtVtable("??_7External@Object@@6B@");              // 0x1801547a0
-    return v;
-}
+// ENDGAME B.3.9 block GFX: `RtVtable` and the five lazy vtable caches
+// (MeshInstance, EdgeMeshInstance, EdgeMesh, Object::Base, Object::External)
+// are gone -- every class these ctors built is real and the stamps are the
+// compiler's.
 
 // Graphics::AnimationManager::_singleton, an exported DATA symbol
 // (0x1801fe7b0). GetNodeToWorld and RootAnimationOffset index the instanced
@@ -1053,16 +1025,16 @@ static void RtGraphics_EdgeMesh_SetMaterials(void* self, ExternalPtr m0, Externa
 // that the eight PlatformConstruct calls are unchecked because they are the
 // DLL's own, called unchanged.
 // ============================================================================
-static void* RtGraphics_EdgeMesh_Ctor(void* self) {
+//
+// ENDGAME B.3.9 block GFX: the door is RETIRED; this is the real
+// `Graphics::EdgeMesh()`. The three stamps and External's three zero qwords are
+// the compiler's base chain (Object::External()); the body is the rest, in
+// retail's order, through the field-identical POD view.
+Graphics::EdgeMesh::EdgeMesh() {
+    RtGraphics::EdgeMesh* const em =
+        reinterpret_cast<RtGraphics::EdgeMesh*>(this);                 // B.3.9 bridge (the POD view)
+    void* const self = static_cast<void*>(this);
 
-    EdgeMesh* em = reinterpret_cast<EdgeMesh*>(self);
-
-    em->_vtable = RtObjectBaseVtable();
-    em->_vtable = RtObjectExternalVtable();
-    em->_externalA = nullptr;
-    em->_externalB = nullptr;
-    em->_externalC = nullptr;
-    em->_vtable = RtEdgeMeshVtable();
     em->_reserved20 = nullptr;
     em->_material0.p = nullptr;
     em->_material1.p = nullptr;
@@ -1096,8 +1068,6 @@ static void* RtGraphics_EdgeMesh_Ctor(void* self) {
     const uint32_t kMinus = 0xccbebc20u;   //  -1e8f
     for (int i = 0; i < 3; ++i) std::memcpy(&bounds[i],     &kPlus,  4);
     for (int i = 0; i < 3; ++i) std::memcpy(&bounds[3 + i], &kMinus, 4);
-
-    return self;
 }
 
 // ============================================================================
@@ -1183,16 +1153,10 @@ static bool RtGraphics_EdgeMesh_Set(void* self,
 // different stacks hold two different pieces of garbage there, and comparing
 // them would report a divergence on every single call.
 // ============================================================================
-static void* RtGraphics_EdgeMeshInstance_Ctor(void* self) {
-
-    EdgeMeshInstance* emi = reinterpret_cast<EdgeMeshInstance*>(self);
-    RtGeometryCtor()(self);
-    emi->_base._vtable = RtEdgeMeshInstanceVtable();
-    emi->_mesh.p = nullptr;
-    // NO STORE TO _followed (+0xc8). See the banner.
-
-    return self;
-}
+//
+// ENDGAME B.3.9 block GFX: the door is RETIRED; the real public
+// `EdgeMeshInstance()` (Mesh.h) is this body -- Geometry() and the stamp the
+// compiler's, `_mesh = 0` its one store, NO store to `_followed`.
 
 // ============================================================================
 // Graphics::EdgeMeshInstance::EdgeMeshInstance(const EdgeMeshInstance&)
@@ -1219,17 +1183,14 @@ static void* RtGraphics_EdgeMeshInstance_Ctor(void* self) {
 // ctor: destroying a scratch copy would run Geometry::~Geometry over an attach
 // array shared with the source and clear live siblings' parent links.
 // ============================================================================
-static void* RtGraphics_EdgeMeshInstance_CopyCtor(void* self, const void* other) {
-
-    EdgeMeshInstance* emi = reinterpret_cast<EdgeMeshInstance*>(self);
-    const EdgeMeshInstance* src = reinterpret_cast<const EdgeMeshInstance*>(other);
-
-    RtGeometryCopyCtor()(self, other);
-    emi->_base._vtable = RtEdgeMeshInstanceVtable();
-    emi->_mesh = src->_mesh;
-    emi->_followed = src->_followed;
-
-    return self;
+//
+// ENDGAME B.3.9 block GFX: the door is RETIRED; its body is the real member
+// copy constructor -- Geometry's copy ctor in the init list, the stamp the
+// compiler's, then +0xc0 and +0xc8.
+Graphics::EdgeMeshInstance::EdgeMeshInstance(const EdgeMeshInstance& other)
+    : Geometry(other) {
+    _mesh     = other._mesh;
+    _followed = other._followed;
 }
 
 // ============================================================================
@@ -1248,9 +1209,6 @@ static void* RtGraphics_EdgeMeshInstance_CopyCtor(void* self, const void* other)
 // still destroys, is the same tail into ~Geometry by address (the
 // ~MeshInstance door's shape). Row and door both go with the W2 mint row.
 // ============================================================================
-static void RtGraphics_EdgeMeshInstance_Dtor(void* self) {
-    RtGeometryDtor()(self);                         // JMP 0x1800a41c0
-}
 
 // ============================================================================
 // Graphics::EdgeMeshInstance::SetMesh(ExternalPtr<EdgeMesh>, MeshInstance*)
@@ -2156,8 +2114,6 @@ int RtGraphicsMeshRegister() {
     RegisterRuntimeAddr(0x1800fee90, (void*)&RtGraphics_GraphicsMesh_GetNodeIndexFromName);
 
     // ---- Graphics::EdgeMesh ----
-    RegisterRuntimeExport("??0EdgeMesh@Graphics@@QEAA@XZ",
-                          (void*)&RtGraphics_EdgeMesh_Ctor); ++count;
     RegisterRuntimeExport("??0TriangleVertex@EdgeMesh@Graphics@@QEAA@AEBVVector3@Math@@@Z",
                           (void*)&RtGraphics_EdgeMesh_TriangleVertex_Ctor); ++count;
     RegisterRuntimeExport("??0EdgeVertex@EdgeMesh@Graphics@@QEAA@AEBUTriangleVertex@12@0H@Z",
@@ -2170,20 +2126,13 @@ int RtGraphicsMeshRegister() {
                           (void*)&RtGraphics_EdgeMesh_SetMaterials); ++count;
 
     // ---- Graphics::EdgeMeshInstance ----
-    RegisterRuntimeExport("??0EdgeMeshInstance@Graphics@@QEAA@XZ",
-                          (void*)&RtGraphics_EdgeMeshInstance_Ctor); ++count;
-    RegisterRuntimeExport("??0EdgeMeshInstance@Graphics@@QEAA@AEBV01@@Z",
-                          (void*)&RtGraphics_EdgeMeshInstance_CopyCtor); ++count;
     RegisterRuntimeExport("?SetMesh@EdgeMeshInstance@Graphics@@QEAAXV?$ExternalPtr@"
                           "VEdgeMesh@Graphics@@@Object@@PEAVMeshInstance@2@@Z",
                           (void*)&RtGraphics_EdgeMeshInstance_SetMesh); ++count;
-    // ENDGAME B.3.9 GFX: by name AND by address -- the RT_DELDTOR row resolves
-    // ~Class BY ADDRESS (ResolveAddr, registry-first).
-    RegisterRuntimeExport("??1EdgeMeshInstance@Graphics@@UEAA@XZ",
-                          (void*)&RtGraphics_EdgeMeshInstance_Dtor); ++count;
-    RegisterRuntimeAddr(0x1800174d0ull, (void*)&RtGraphics_EdgeMeshInstance_Dtor);
+    // ENDGAME B.3.9 GFX (W2): the EdgeMesh ??0 door and the EdgeMeshInstance
+    // ??0 / copy ??0 / ??1 doors are retired with their minted tables.
 
-    return count;   // 18
+    return count;   // 14
 }
 
 // ============================================================================

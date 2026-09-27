@@ -99,7 +99,7 @@ size_t RtFactoryRoster(const RtFactoryReg** out, size_t cap);
 
 // Per-namespace registrars, all called from RtFactoriesPortInit().
 int RtFactoriesObjectRegister();
-int RtFactoriesGraphicsRegister();
 int RtFactoriesVideoRegister();
+// (RtFactoriesGraphicsRegister retired with its last row, ENDGAME B.3.9 GFX.)
 // (RtFactoriesIoRegister retired with its last row, ENDGAME B.3.9 IO.)
 // (RtFactoriesPickingRegister retired with its last row, ENDGAME B.3.9 pilot.)

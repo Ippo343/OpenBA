@@ -658,19 +658,44 @@ static_assert(offsetof(MeshInstance, _mesh) == sizeof(Geometry),
 // below therefore declares slot 6 and NOT slot 5.
 //
 // `_followed` (+0xc8) IS LEFT UNINITIALISED BY THE DEFAULT CONSTRUCTOR and the
-// port must not zero it — see the POD's banner above. That is why there is no
-// real default constructor here either (there would be none anyway: ENDGAME
-// decision 2 and B35_RULES §11 keep the ctor door).
+// port must not zero it — see the POD's banner above.
+//
+// ENDGAME B.3 step 9 (block GFX, B39_RULES D1): CONCRETE. A real public ctor
+// (retail 0x1800a3ab0: `_mesh = 0` and nothing else), a real member copy ctor
+// (0x1800174f0), its own VECTOR slot 0; the ??0 / copy ??0 / ??1 doors, the
+// RT_DELDTOR row 0x1800175d0 and the minted table are retired
+// (tools/rt_mint_retired/gfx.txt). The exe's HighlightComponent builds its
+// embedded +0x28 instance with `::new (p) EdgeMeshInstance()`.
 // ============================================================================
 class EdgeMeshInstance : public Geometry {
 public:
-    // `??0EdgeMeshInstance@Graphics@@QEAA@AEBV01@@Z` @ 0x1800174f0 — PORTED,
-    // body in `mesh.cpp`. It writes +0xc0 AND +0xc8, where the default ctor
-    // writes only +0xc0.
+    // `??0EdgeMeshInstance@Graphics@@QEAA@AEBV01@@Z` @ 0x1800174f0 — the REAL
+    // member copy constructor (mesh.cpp). It writes +0xc0 AND +0xc8, where the
+    // default ctor writes only +0xc0.
     EdgeMeshInstance(const EdgeMeshInstance& src);
     EdgeMeshInstance& operator=(const EdgeMeshInstance& src);  // 0x180017550  not ported
 
-    Geometry* DeletingDtor(unsigned flags) override = 0;                 // [0] 0x1800175d0
+    // ??0EdgeMeshInstance@Graphics@@QEAA@XZ 0x1800a3ab0 — the REAL constructor:
+    // Geometry() and the stamp are the compiler's; `_mesh = 0` is the whole
+    // body. `_followed` (+0xc8) is deliberately NOT written (retail's own).
+    EdgeMeshInstance() { _mesh.p = nullptr; }
+
+    // [0] 0x1800175d0 -- MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0xd0` = the element size).
+    Geometry* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<EdgeMeshInstance*>(self + static_cast<int64_t>(i) * 0xd0)
+                    ->~EdgeMeshInstance();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Geometry*>(self - 8);
+        }
+        this->~EdgeMeshInstance();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     void Update(const System::Time& time) override;                      // [1] 0x1800a39b0
     void Draw(Video::Context& context, const Camera& camera,
               ExternalPtrHandle material,
@@ -692,7 +717,7 @@ public:
 protected:
     // 0x1800174d0 -- PORTED (ENDGAME B.3.9 GFX, mesh.cpp): retail's body is a
     // bare tail into ~Geometry, so the member is empty and the chain is the
-    // compiler's; its ??1 door is registered by name and address.
+    // compiler's. (Its ??1 door is retired with the RT_DELDTOR row.)
     ~EdgeMeshInstance();
 
 public:
@@ -809,7 +834,22 @@ public:
     using EdgeVertex     = RtGraphics::EdgeVertex;
 
     // ---- the nine slots, in measured retail order --------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;  // [0] 0x1800134b0
+    // [0] 0x1800134b0 -- MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x180` = the element size).
+    // ENDGAME B.3.9 GFX: concrete (B39_RULES D1).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<EdgeMesh*>(self + static_cast<int64_t>(i) * 0x180)->~EdgeMesh();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~EdgeMesh();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char* TypeName() const override;                 // [1] 0x180012c90
     uint32_t    Type() const override;                     // [2] 0x180012c70
@@ -911,28 +951,28 @@ public:
     EdgeMesh(const EdgeMesh& src);                          // 0x180012f70  not ported
     EdgeMesh& operator=(const EdgeMesh& src);               // 0x180013230  not ported
 
-    static uint32_t TypeId();                               // 0x180012c80  not ported
-    // The reflection block's five statics; each goes through
-    // `System::MemoryAllocator`, which B35_RULES section 11 keeps as a door for
-    // the whole of step 5.
+    static uint32_t TypeId();                               // 0x180012c80  B.3.9 GFX: minted record until W3
+    // The reflection block's five statics. ENDGAME B.3.9 GFX: the factory pair
+    // is the class's own (edgemesh_vtable.cpp, B39_RULES D2); the three
+    // operators stay declared and undefined (placement is `::new`).
     static void* operator new(std::size_t bytes);            // 0x180012ca0
     static void* operator new(std::size_t bytes, void* place);// 0x180012d10
     static void  operator delete(void* p);                   // 0x180012d20
     static Object::Base* CreateNewObject();                  // 0x180012d80
     static Object::Base* CreateInPlaceObject(void* place);   // 0x180012e00
 
-protected:
-    // NOT retail's 0x1800a2830 — see the banner. `= default` keeps the class
-    // trivially default-constructible so no layout pin moves.
-    EdgeMesh() = default;
+    // ??0EdgeMesh@Graphics@@QEAA@XZ 0x1800a2830 — the REAL constructor
+    // (ENDGAME B.3.9 GFX; mesh.cpp): External() and the three stamps are the
+    // compiler's chain; the body is the retired door's -- the five zeroed
+    // pointers, the eight (header, PlatformConstruct) pairs, the two lists and
+    // the empty box. The "NO REAL CONSTRUCTOR" paragraph above is history.
+    EdgeMesh();
 
-    // `??1EdgeMesh@Graphics@@UEAA@XZ` @ 0x1800a2780. NON-VIRTUAL (decision 2),
-    // DEFINED EMPTY: `RtGraphics_EdgeMesh_Dtor` in
-    // `runtime/src/graphics/batchc_gfx_leaves.cpp` keeps its hand-written body,
-    // which stamps the MINTED table, runs the eight
-    // `Video::{Vertex,Index}Buffer::PlatformDestruct` calls in retail's order and
-    // frees the two list arrays. A compiler-emitted chain would stamp GCC's
-    // tables and would not run the eight platform destructs at all.
+protected:
+    // `??1EdgeMesh@Graphics@@UEAA@XZ` @ 0x1800a2780. NON-VIRTUAL (decision 2).
+    // ENDGAME B.3.9 GFX: the retired door's body (batchc_gfx_leaves.cpp) -- the
+    // two list arrays and the eight PlatformDestructs in retail's order; the
+    // restamp and the tail ~External are the compiler's chain.
     ~EdgeMesh();
 
 public:

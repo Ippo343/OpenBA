@@ -317,10 +317,8 @@ fn_MemAllocStatic_t                fn_MemAllocStatic = nullptr;
 fn_Box_Ctor_t                      fn_Box_Ctor = nullptr;
 fn_Box_Extend_t                    fn_Box_Extend = nullptr;
 fn_Box_Assign_t                    fn_Box_Assign = nullptr;
-fn_EdgeMesh_Ctor_t                 fn_EdgeMesh_Ctor = nullptr;
 fn_EdgeMesh_TriangleVertex_Ctor_t  fn_EdgeMesh_TriangleVertex_Ctor = nullptr;
 fn_EdgeMesh_EdgeVertex_Ctor_t      fn_EdgeMesh_EdgeVertex_Ctor = nullptr;
-fn_EdgeMeshInstance_Ctor_t         fn_EdgeMeshInstance_Ctor = nullptr;
 fn_TileRender_t fn_TileRender = nullptr;
 fn_FencedPlacementParams_t fn_FencedPlacementParams = nullptr;
 
@@ -1420,23 +1418,10 @@ bool EngineFuncsInit() {
         ResolveExport("?Extend@Box@Volume@@QEBA?AV12@AEBVVector3@Math@@@Z"));
     fn_Box_Assign = reinterpret_cast<fn_Box_Assign_t>(
         ResolveExport("??4Box@Volume@@QEAAAEAV01@AEBV01@@Z"));
-    fn_EdgeMesh_Ctor = reinterpret_cast<fn_EdgeMesh_Ctor_t>(
-        ResolveExport("??0EdgeMesh@Graphics@@QEAA@XZ"));
     fn_EdgeMesh_TriangleVertex_Ctor = reinterpret_cast<fn_EdgeMesh_TriangleVertex_Ctor_t>(
         ResolveExport("??0TriangleVertex@EdgeMesh@Graphics@@QEAA@AEBVVector3@Math@@@Z"));
     fn_EdgeMesh_EdgeVertex_Ctor = reinterpret_cast<fn_EdgeMesh_EdgeVertex_Ctor_t>(
         ResolveExport("??0EdgeVertex@EdgeMesh@Graphics@@QEAA@AEBUTriangleVertex@12@0H@Z"));
-    fn_EdgeMeshInstance_Ctor = reinterpret_cast<fn_EdgeMeshInstance_Ctor_t>(
-        ResolveExport("??0EdgeMeshInstance@Graphics@@QEAA@XZ"));
-    // NO FALLBACK. There used to be a `if (!fn_EdgeMeshInstance_Ctor)` branch here
-    // resolving Runtime 0x1800174f0 — which is the COPY ctor
-    // (??0EdgeMeshInstance@Graphics@@QEAA@AEBV01@@Z, ordinal 162), not the default
-    // ctor (0x1800a3ab0, ordinal 163). Latent, never live, because the name above
-    // resolves; had it ever fired it would have run the copy ctor with an
-    // uninitialised RDX and dereferenced it twice. Removed 2026-09-07, Wave 6
-    // lane E (docs/runtime_port/WAVE6_LANE_E.md §6.1): the name is present in the
-    // shipped DLL and is now also in the runtime port registry, so the fallback
-    // could only ever be wrong.
     // CharacterComponent_impl_08c0 (0x1401008c0) — tile debug overlay rendering (exe function)
     fn_TileRender = reinterpret_cast<fn_TileRender_t>(
         ResolveAddr(Module::Exe, 0x1401008c0));

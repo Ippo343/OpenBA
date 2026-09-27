@@ -47,3 +47,7 @@
 
 # -- W2: MeshInstance -- the ctor / copy ctor / dtor bodies are the members; exe builders converted (EXA + storagedisplay) --
 ??_7MeshInstance@Graphics@@6B@          GFX   real ctor + member copy ctor + public ~X (door bodies); RT_DELDTOR row 0x180017330, ??0/copy ??0/??1 doors deleted; exe slots 0x140151490/4a0/4a8 rows deleted after MeshArrayResize converted
+
+# -- W2: EdgeMesh + EdgeMeshInstance -- ctor / dtor bodies are the members; exe tool_base_render builders converted; rt_factories_graphics.* deleted (D2) --
+??_7EdgeMeshInstance@Graphics@@6B@      GFX   real ctor + member copy ctor + DeletingDtor; RT_DELDTOR row 0x1800175d0, ??0/copy ??0/??1 doors deleted; exe HighlightComponent +0x28 placement-new; fn_EdgeMeshInstance_Ctor deleted
+??_7EdgeMesh@Graphics@@6B@              GFX   real ctor + DeletingDtor + ~X (door body) + factory pair; RT_DELDTOR row 0x1800134b0, ??0/??1 doors, 8 slot doors, last FACTREST row deleted; exe tool_base_render placement-new; fn_EdgeMesh_Ctor deleted

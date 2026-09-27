@@ -746,7 +746,7 @@ UNIT_TEST(graphics_geometry_tree_is_abstract_and_polymorphic) {
     // test is where that decision has to be recorded.
     CHECK(std::is_abstract<Graphics::Geometry>::value);
     CHECK(!std::is_abstract<Graphics::MeshInstance>::value);   // concrete since B.3.8 RB (exe table copy 0x14015e240)
-    CHECK(std::is_abstract<Graphics::EdgeMeshInstance>::value);
+    CHECK(!std::is_abstract<Graphics::EdgeMeshInstance>::value);   // concrete since B.3.9 GFX (rb_graphics_abi_test b39_gfx_*)
     CHECK(std::is_abstract<Graphics::ParticleInstance>::value);
     CHECK(!std::is_abstract<Graphics::ParticleSystemInstance>::value);   // concrete since B.3.9 GFX (rb_graphics_abi_test b39_gfx_*)
     CHECK(std::is_abstract<Graphics::Light>::value);

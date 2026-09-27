@@ -142,7 +142,6 @@ using PtrThisFn  = void* (*)(void*);
 // ---------------------------------------------------------------------------
 // (ENDGAME B.3.9 GFX: `VtParticleInstance` / `VtParticleSystemInstance` are
 // gone with the ??1ParticleSystemInstance door that restamped them.)
-void* VtEdgeMesh()                { return RT_DATA_SLOT(void*, "??_7EdgeMesh@Graphics@@6B@"); }
 
 // ---------------------------------------------------------------------------
 // Named dependencies. RT_EXPORT_ONCE (port-registry first) for everything with
@@ -154,9 +153,8 @@ void* VtEdgeMesh()                { return RT_DATA_SLOT(void*, "??_7EdgeMesh@Gra
 // (ENDGAME B.3.9 GFX: `GeometryDtor`, the ??1Geometry door call of the retired
 // ??1ParticleSystemInstance door, is gone; the real dtor chains ~Geometry.)
 
-// `??1External@Object@@UEAA@XZ` 0x1800bc950 — PORTED AND REGISTERED BY BOTH
-// DOORS (external.cpp:753/778). ~EdgeMesh tail-jumps it.
-void ExternalDtor(void* p) { RT_EXPORT_ONCE(VoidThisFn, "??1External@Object@@UEAA@XZ")(p); }
+// (ENDGAME B.3.9 GFX: `ExternalDtor`, the ??1External door the retired ??1EdgeMesh
+// door tail-called, is gone; the real ~EdgeMesh chains ~External.)
 
 
 // Video::{Index,Vertex}Buffer::PlatformDestruct — 0x1800f3760 / 0x1800f58c0,
@@ -452,10 +450,13 @@ extern "C" void RtGraphics_Animation_Dtor(void* selfv) {
 // DESCENDING ADDRESS ORDER, INDICES BEFORE VERTS within each pair — the exact
 // reverse of the constructor's build order (Mesh.h's EdgeMesh banner).
 // ############################################################################
-extern "C" void RtGraphics_EdgeMesh_Dtor(void* selfv) {
-    EdgeMesh* const self = static_cast<EdgeMesh*>(selfv);
-
-    self->_vtable = VtEdgeMesh();
+//
+// ENDGAME B.3.9 block GFX: the door is RETIRED with the RT_DELDTOR row
+// 0x1800134b0 it served; its body is the real protected `~EdgeMesh()`. The
+// restamp and the tail ~External are the compiler's chain.
+Graphics::EdgeMesh::~EdgeMesh() {
+    RtGraphics::EdgeMesh* const self =
+        reinterpret_cast<RtGraphics::EdgeMesh*>(this);                 // B.3.9 bridge (the POD view)
 
     // 0x180013e70 — Array<T>::~Array for the two list arrays. An unexported
     // template instantiation, still the DLL's, reached registry-first.
@@ -470,9 +471,6 @@ extern "C" void RtGraphics_EdgeMesh_Dtor(void* selfv) {
     VertexBufferPlatformDestruct(&self->_edgeVerts);
     IndexBufferPlatformDestruct(&self->_triIndices);
     VertexBufferPlatformDestruct(&self->_triVerts);
-
-    ExternalDtor(self);                                   // JMP 0x1800bc950
-
 }
 
 // ############################################################################
@@ -1075,9 +1073,7 @@ extern "C" int RtGraphicsBatchCLeavesRegister() {
                           (void*)&RtGraphics_Animation_Dtor); ++n;
     RegisterRuntimeAddr(0x1800fb290ull, (void*)&RtGraphics_Animation_Dtor);
 
-    RegisterRuntimeExport("??1EdgeMesh@Graphics@@UEAA@XZ",
-                          (void*)&RtGraphics_EdgeMesh_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800a2780ull, (void*)&RtGraphics_EdgeMesh_Dtor);
+    // (ENDGAME B.3.9 GFX: the ??1EdgeMesh door is retired.)
 
     RegisterRuntimeExport("?CreateTargets@SpotLight@Graphics@@AEAAXXZ",
                           (void*)&RtGraphics_SpotLight_CreateTargets); ++n;
