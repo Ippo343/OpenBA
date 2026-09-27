@@ -926,13 +926,17 @@ class ExternalFactory {
 public:
     ExternalFactory();
 
-    // ?_singleton@ExternalFactory@Object@@0PEAV12@EA — retail 0x1801fc6c8, and
-    // note the `0PEAV12@EA` spelling (the obvious `1PEAV12@A` is not an
-    // export). Read through the existing port door at RUNTIME, exactly as
-    // `Object::Factory::Get()` does; B.3.3 step 3 moved ONE data cell
-    // (`_firstTypeInfo`) and only because its writer runs at CRT-init, which
-    // this one does not.
+    // ?Get@ExternalFactory@Object@@SAPEAV12@XZ — `return _singleton;`.
     static ExternalFactory* Get();
+
+    // ?_singleton@ExternalFactory@Object@@0PEAV12@EA — retail 0x1801fc6c8 (note
+    // the `0PEAV12@EA` spelling; the obvious `1PEAV12@A` is not an export).
+    // The CLASS STATIC since ENDGAME B.3.9 OBJ (B39_RULES D7): defined in
+    // external_class_doors.cpp, and RtObjectPortInit redirects the minted row
+    // onto it, so the name door, the address door and this member are the
+    // same eight bytes. Written by the ctor door (engine/singleton_ctors.cpp).
+    // PUBLIC while foreign readers still reach the cell through the doors.
+    static ExternalFactory* _singleton;
 
     // ---- the read-only half (ported bodies, runtime/src/object/external.cpp)
     const External* Find(const System::Filename& path) const;      // 0x1800bdeb0

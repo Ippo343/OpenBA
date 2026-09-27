@@ -227,17 +227,12 @@ Filename* CallGetPathForReferenceId(const ExternalFactory* f, Filename* ret, uin
 // `path.AsString().Serialize(ser)` — the same body, and retail passing the
 // Filename straight into String::Serialize is exactly what `AsString()` is.
 
-// `?_singleton@ExternalFactory@Object@@0PEAV12@EA` — note the `0…EA` spelling;
-// the obvious `1PEAV12@A` guess is not an export (External.h records this).
-// The export ADDRESS is the slot, so this is a pointer to the pointer.
-ExternalFactory** SingletonSlot() {
-    using FactorySlot = ExternalFactory**;
-    return RT_DATA_SLOT(FactorySlot, "?_singleton@ExternalFactory@Object@@0PEAV12@EA");
-}
-
+// `?_singleton@ExternalFactory@Object@@0PEAV12@EA` is the class static
+// `Object::ExternalFactory::_singleton` (ENDGAME B.3.9 OBJ, B39_RULES D7).
+// The class and the POD are asserted field for field in External.h.
 ExternalFactory* Factory() {
-    ExternalFactory** slot = SingletonSlot();
-    return slot ? *slot : nullptr;
+    return reinterpret_cast<ExternalFactory*>(                       // B.3.3 bridge
+        ::Object::ExternalFactory::_singleton);
 }
 
 // ENDGAME B.3.1 step 2 removed this file's `AssignFilename` helper. Retail's

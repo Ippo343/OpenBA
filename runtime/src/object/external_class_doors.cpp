@@ -172,12 +172,16 @@ ExternalFactory::ExternalFactory()
       _resources(), _references(), _pathStack(),
       _referenceModeEnabled(false), _loadEnabled(false), _simpleLoadEnabled(false) {}
 
-// ?_singleton@ExternalFactory@Object@@0PEAV12@EA — retail 0x1801fc6c8.
-// A RUNTIME read through the existing port door, exactly as
-// runtime/src/engine/singleton_ctors.cpp:155 and four other sites do it.
+// ?_singleton@ExternalFactory@Object@@0PEAV12@EA — retail 0x1801fc6c8. The
+// class static (ENDGAME B.3.9 OBJ, B39_RULES D7); the minted row is redirected
+// onto it in RtObjectPortInit, so the name and address doors answer these
+// bytes. The mint never zeroes or re-seeds it; the language zero-initialises
+// it and the ctor door publishes into it.
+ExternalFactory* ExternalFactory::_singleton = nullptr;
+
+// ?Get@ExternalFactory@Object@@SAPEAV12@XZ — `MOV RAX,[_singleton]; RET`.
 ExternalFactory* ExternalFactory::Get() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@ExternalFactory@Object@@0PEAV12@EA");
-    return slot ? reinterpret_cast<ExternalFactory*>(*slot) : nullptr;
+    return _singleton;
 }
 
 const External* ExternalFactory::Find(const System::Filename& path) const {
