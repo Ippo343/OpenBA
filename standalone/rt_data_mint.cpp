@@ -281,28 +281,6 @@ static const char* StripParent(const char* p) {
     return q;
 }
 
-// WAVE 25 lane VTGFX. Per-row unported-trap count, recorded while MintVtables
-// fills. This exists so a PROMOTION can refuse itself at runtime.
-//
-// THE HAZARD IT CLOSES, and it is one no build check can see (kickoff §3.6):
-// a promoted vtable's slots are filled from the LIVE port registry, so any
-// registration that does not land turns that row's slots into
-// named abort traps -- and the promotion would then publish a TRAP TABLE into
-// live objects. The build is clean, the link succeeds, and the first virtual
-// call aborts. `??_7BinaryFileStream@IO@@6B@` and the other five promoted
-// vtables have carried that exposure unguarded since Wave 19; this counter is
-// the first thing in the tree that can answer the question at all.
-static int g_vtableTraps[kVtableCount];
-
-int RtMintVtableTrapCount(const char* symbol) {
-    if (!symbol) return -1;
-
-    for (int i = 0; i < kVtableCount; ++i)
-        if (kMintVtables[i].symbol && strcmp(kMintVtables[i].symbol, symbol) == 0)
-            return g_vtableTraps[i];
-    return -1;   // not a minted VTABLE row -- NOT "zero traps"
-}
-
 static void MintVtables() {
     for (int vi = 0; vi < kVtableCount; ++vi) {
         const RtMintVtable& v = kMintVtables[vi];
@@ -325,7 +303,6 @@ static void MintVtables() {
                 ++missing;
             }
         }
-        g_vtableTraps[vi] = missing;
         if (missing == 0) ++g_counts.vtablesComplete;
     }
 }
@@ -713,23 +690,7 @@ static bool FindMintRow(const char* symbol, RtMintRow* out) {
 // Register ONE row through both doors. `?_loader@` carries two interior
 // offsets that an exact-match address registry cannot cover, so they travel
 // with their row rather than living in a second loop that could be forgotten.
-// WAVE 11 FOLLOW-UP 5 (lane TINFO). Which rows were registered individually,
-// for the readiness report. The bookkeeping lives HERE, at the one choke point
-// every caller goes through.
-static const char* g_armedRows[64];
-static int         g_armedRowCount = 0;
-
-bool RtMintRowIsArmed(const char* symbol) {
-    if (!symbol) return false;
-    for (int i = 0; i < g_armedRowCount; ++i)
-        if (strcmp(g_armedRows[i], symbol) == 0) return true;
-    return false;
-}
-
 static int RegisterOneMintRow(const RtMintRow& r) {
-    if (r.symbol && !RtMintRowIsArmed(r.symbol) &&
-        g_armedRowCount < (int)(sizeof(g_armedRows) / sizeof(g_armedRows[0])))
-        g_armedRows[g_armedRowCount++] = r.symbol;
     int doors = 0;
     if (r.symbol) { RegisterRuntimeExport(r.symbol, r.storage); ++doors; }
     RegisterRuntimeAddr((uintptr_t)r.dllVa, r.storage); ++doors;
@@ -748,58 +709,6 @@ bool RtMintRegisterRow(const char* symbol) {
     if (!FindMintRow(symbol, &r)) return false;
     RegisterOneMintRow(r);
     return true;
-}
-
-// ---- promotion bookkeeping -------------------------------------------------
-//
-// A PROMOTED row opens its two doors from standalone/reg_mint_promoted.cpp with
-// the symbol spelled as a LITERAL at the RegisterRuntimeExport call site, so
-// tools/runtime_census.py can see it. This function is only the CHECKING half:
-// prove the symbol is really a minted row, prove the VA the promotion file
-// spells matches the generated table, and record it. If the generator ever
-// drops or moves the row, the promotion dies loudly at boot instead of
-// registering storage for something else.
-static const char* g_promoted[64];
-static int         g_promotedCount = 0;
-
-bool RtMintRowIsPromoted(const char* symbol) {
-    if (!symbol) return false;
-    for (int i = 0; i < g_promotedCount; ++i)
-        if (strcmp(g_promoted[i], symbol) == 0) return true;
-    return false;
-}
-
-void* RtMintPromotionStorage(const char* symbol, unsigned long long expectVa) {
-    RtMintRow r;
-    if (!FindMintRow(symbol, &r)) {
-        fprintf(stderr, "[RtMint] FATAL: reg_mint_promoted.cpp promotes \"%s\", "
-                        "which is NOT a minted row. Either the symbol is "
-                        "misspelled or tools/rt_mint_gen.py no longer emits it.\n",
-                symbol);
-        fflush(stderr);
-        abort();
-    }
-    if (r.dllVa != expectVa) {
-        fprintf(stderr, "[RtMint] FATAL: reg_mint_promoted.cpp promotes \"%s\" at "
-                        "0x%llx, but the generated table says 0x%llx. Registering "
-                        "the wrong address would hand one symbol's callers another "
-                        "symbol's storage.\n", symbol, expectVa, r.dllVa);
-        fflush(stderr);
-        abort();
-    }
-    if (g_promotedCount < (int)(sizeof(g_promoted) / sizeof(g_promoted[0])))
-        g_promoted[g_promotedCount++] = r.symbol;
-    return r.storage;
-}
-
-void* RtMintRowStorage(const char* symbol) {
-    RtMintRow r;
-    return FindMintRow(symbol, &r) ? r.storage : nullptr;
-}
-
-unsigned long long RtMintRowDllVa(const char* symbol) {
-    RtMintRow r;
-    return FindMintRow(symbol, &r) ? r.dllVa : 0ull;
 }
 
 static void RegisterMintedData() {

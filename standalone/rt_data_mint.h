@@ -59,42 +59,6 @@ void RtMintRedirectStorage(const char* symbol, void* cell);
 // out. standalone/cutover_manifest.cpp publishes its REQUIRED rows this way.
 bool RtMintRegisterRow(const char* symbol);
 
-// The minted storage / the DLL VA for one row, or nullptr / 0 when the symbol
-// is not minted.
-void*              RtMintRowStorage(const char* symbol);
-unsigned long long RtMintRowDllVa(const char* symbol);
-
-// The CHECKING half of a promotion: proves `symbol` is a minted row and that
-// `expectVa` is the VA the generated table carries, records it as promoted, and
-// returns the minted storage. Aborts on either failure. The two Register* calls
-// are made by reg_mint_promoted.cpp itself, with the symbol spelled as a
-// LITERAL, so tools/runtime_census.py can see the port.
-void* RtMintPromotionStorage(const char* symbol, unsigned long long expectVa);
-
-// True once RtMintPromotionStorage has accepted this symbol.
-bool RtMintRowIsPromoted(const char* symbol);
-
-// WAVE 25 lane VTGFX. How many slots of the minted VTABLE row `symbol` the
-// mint had to fill with a named abort trap because no port was registered by
-// the time RtDataMintInit() ran. Valid only AFTER RtDataMintInit().
-//
-//   >= 0   a minted vtable row; 0 means every non-purecall slot is ours
-//   -1     `symbol` is not a minted VTABLE row at all -- which is NOT the
-//          same answer as "zero traps", and a caller that conflates the two
-//          would read a typo as a green light.
-//
-int RtMintVtableTrapCount(const char* symbol);
-
-// True once RtMintRegisterRow has registered this symbol.
-bool RtMintRowIsArmed(const char* symbol);
-
-// Defined in standalone/reg_mint_promoted.cpp. Returns the number of rows
-// promoted. NOT CALLED since ENDGAME A.1: with no DLL the mint publishes every
-// row unconditionally, so a promotion would be a no-op re-registration. The
-// file is kept because its per-row RT_UNPROMOTABLE tags are the source the
-// build gate (tools/cutover_manifest.py --gate) parses.
-int RtMintRegisterPromotedRows();
-
 // ============================================================================
 // WAVE 11 FOLLOW-UP 5 (lane TINFO) — the minted-node predicate
 // ============================================================================
