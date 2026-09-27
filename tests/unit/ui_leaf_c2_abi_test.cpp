@@ -185,6 +185,18 @@ Object::InternalPtr<UI::Element>* WriteMarkerHandle(Object::InternalPtr<UI::Elem
 
 }  // namespace
 
+// ENDGAME B.3.9 UI-A: the destructor markers RECORD each call, so the real
+// `DeletingDtor` of a concrete class (inline in its header) can be seen
+// running ~X once per element, in retail's DESCENDING order.
+namespace {
+int         g_b39DtorCount = 0;
+const void* g_b39DtorOrder[8] = {};
+void B39NoteDtor(const void* self) {
+    if (g_b39DtorCount < 8) g_b39DtorOrder[g_b39DtorCount] = self;
+    ++g_b39DtorCount;
+}
+}  // namespace
+
 // ===========================================================================
 // The leaves' out-of-line members, AS MARKERS.
 // ===========================================================================
@@ -198,12 +210,12 @@ void GroupElement::ComputeLayout(int32_t x, int32_t, int32_t, int32_t h) {
     Note(this, kGroupE, 5, (long long)x * 1000 + h);
 }
 void GroupElement::Draw(SpriteContext&, uint8_t alpha) const { Note(this, kGroupE, 6, alpha); }
-GroupElement::~GroupElement() {}
+GroupElement::~GroupElement() { B39NoteDtor(this); }
 
 // ---- PageElement ----
 const char* PageElement::TypeName() const { Note(this, kPageE, 1); return "PageElement"; }
 uint32_t PageElement::Type() const { Note(this, kPageE, 2); return 0x9Eu; }
-PageElement::~PageElement() {}
+PageElement::~PageElement() { B39NoteDtor(this); }
 
 // ---- RadioElement — Update calls its parent's (Element's) body QUALIFIED.
 const char* RadioElement::TypeName() const { Note(this, kRadioE, 1); return "RadioElement"; }
@@ -213,7 +225,7 @@ void RadioElement::Update(const System::Time&, UserInterface*,
     Note(this, kRadioE, 7,
          static_cast<long long>(reinterpret_cast<intptr_t>(dialog->Get())) + state.mouseX);
 }
-RadioElement::~RadioElement() {}
+RadioElement::~RadioElement() { B39NoteDtor(this); }
 
 // ---- GroupDescription ----
 const char* GroupDescription::TypeName() const { Note(this, kGroupD, 1); return "GroupDescription"; }
@@ -230,7 +242,7 @@ Object::InternalPtr<Element>* GroupDescription::CreateInstance(
     return WriteMarkerHandle(ret, 0x6D6D6D6D);
 }
 Object::External* GroupDescription::Construct() { Note(this, kGroupD, 9); return this; }
-GroupDescription::~GroupDescription() {}
+GroupDescription::~GroupDescription() { B39NoteDtor(this); }
 
 // ---- PageDescription — Serialize calls the PARENT's body QUALIFIED, as the real one does.
 const char* PageDescription::TypeName() const { Note(this, kPageD, 1); return "PageDescription"; }
@@ -248,7 +260,7 @@ Object::InternalPtr<Element>* PageDescription::CreateInstance(
     return WriteMarkerHandle(ret, 0x9D9D9D9D);
 }
 Object::External* PageDescription::Construct() { Note(this, kPageD, 9); return this; }
-PageDescription::~PageDescription() {}
+PageDescription::~PageDescription() { B39NoteDtor(this); }
 
 // ---- RadioDescription ----
 const char* RadioDescription::TypeName() const { Note(this, kRadioD, 1); return "RadioDescription"; }
@@ -266,7 +278,7 @@ Object::InternalPtr<Element>* RadioDescription::CreateInstance(
     return WriteMarkerHandle(ret, 0xADADADAD);
 }
 Object::External* RadioDescription::Construct() { Note(this, kRadioD, 9); return this; }
-RadioDescription::~RadioDescription() {}
+RadioDescription::~RadioDescription() { B39NoteDtor(this); }
 
 // ---- ImageElement ----
 const char* ImageElement::TypeName() const { Note(this, kImageE, 1); return "ImageElement"; }
@@ -276,7 +288,7 @@ void ImageElement::ComputeLayout(int32_t x, int32_t, int32_t, int32_t h) {
     Note(this, kImageE, 5, (long long)x * 1000 + h);
 }
 void ImageElement::Draw(SpriteContext&, uint8_t alpha) const { Note(this, kImageE, 6, alpha); }
-ImageElement::~ImageElement() {}
+ImageElement::~ImageElement() { B39NoteDtor(this); }
 
 // ---- AnimatedImageElement ----
 const char* AnimatedImageElement::TypeName() const { Note(this, kAnimE, 1); return "AnimatedImageElement"; }
@@ -287,7 +299,7 @@ void AnimatedImageElement::Update(const System::Time&, UserInterface*,
     Note(this, kAnimE, 7,
          static_cast<long long>(reinterpret_cast<intptr_t>(dialog->Get())) + state.mouseX);
 }
-AnimatedImageElement::~AnimatedImageElement() {}
+AnimatedImageElement::~AnimatedImageElement() { B39NoteDtor(this); }
 
 // ---- ImageDescription (+ the non-virtual applier, marker slot 80) ----
 const char* ImageDescription::TypeName() const { Note(this, kImageD, 1); return "ImageDescription"; }
@@ -307,7 +319,7 @@ void ImageDescription::CreateInstance(Object::InternalPtr<ImageElement>* element
     Note(this, kImageD, 80, reinterpret_cast<intptr_t>(element->Get()));
 }
 Object::External* ImageDescription::Construct() { Note(this, kImageD, 9); return this; }
-ImageDescription::~ImageDescription() {}
+ImageDescription::~ImageDescription() { B39NoteDtor(this); }
 
 // ---- AnimatedImageDescription — Serialize and slot 8 call the parent QUALIFIED.
 const char* AnimatedImageDescription::TypeName() const { Note(this, kAnimD, 1); return "AnimatedImageDescription"; }
@@ -329,7 +341,7 @@ Object::InternalPtr<Element>* AnimatedImageDescription::CreateInstance(
     return WriteMarkerHandle(ret, 0xA1A1A1A1);
 }
 Object::External* AnimatedImageDescription::Construct() { Note(this, kAnimD, 9); return this; }
-AnimatedImageDescription::~AnimatedImageDescription() {}
+AnimatedImageDescription::~AnimatedImageDescription() { B39NoteDtor(this); }
 
 }  // namespace UI
 
@@ -411,12 +423,18 @@ UNIT_TEST(ui_leaf_c2_group_chain_sizes_match_retail) {
     CHECK((std::is_base_of<UI::GroupElement, UI::PageElement>::value));
     CHECK((std::is_base_of<UI::GroupElement, UI::RadioElement>::value));
 
-    CHECK(std::is_abstract<UI::GroupDescription>::value);
-    CHECK(std::is_abstract<UI::PageDescription>::value);
-    CHECK(std::is_abstract<UI::RadioDescription>::value);
-    CHECK(std::is_abstract<UI::GroupElement>::value);
-    CHECK(std::is_abstract<UI::PageElement>::value);
-    CHECK(std::is_abstract<UI::RadioElement>::value);
+    CHECK(!std::is_abstract<UI::GroupDescription>::value);      // B.3.9 UI-A: concrete
+    CHECK(!std::is_destructible<UI::GroupDescription>::value);  // protected non-virtual dtor
+    CHECK(!std::is_abstract<UI::PageDescription>::value);      // B.3.9 UI-A: concrete
+    CHECK(!std::is_destructible<UI::PageDescription>::value);  // protected non-virtual dtor
+    CHECK(!std::is_abstract<UI::RadioDescription>::value);      // B.3.9 UI-A: concrete
+    CHECK(!std::is_destructible<UI::RadioDescription>::value);  // protected non-virtual dtor
+    CHECK(!std::is_abstract<UI::GroupElement>::value);      // B.3.9 UI-A: concrete
+    CHECK(!std::is_destructible<UI::GroupElement>::value);  // protected non-virtual dtor
+    CHECK(!std::is_abstract<UI::PageElement>::value);      // B.3.9 UI-A: concrete
+    CHECK(!std::is_destructible<UI::PageElement>::value);  // protected non-virtual dtor
+    CHECK(!std::is_abstract<UI::RadioElement>::value);      // B.3.9 UI-A: concrete
+    CHECK(!std::is_destructible<UI::RadioElement>::value);  // protected non-virtual dtor
     CHECK(!std::has_virtual_destructor<UI::GroupDescription>::value);
     CHECK(!std::has_virtual_destructor<UI::PageElement>::value);
     CHECK(!std::has_virtual_destructor<UI::RadioElement>::value);
@@ -587,10 +605,14 @@ UNIT_TEST(ui_leaf_c2_image_chain_sizes_match_retail) {
     CHECK((std::is_base_of<UI::ImageDescription,   UI::AnimatedImageDescription>::value));
     CHECK((std::is_base_of<UI::Element,      UI::ImageElement>::value));
     CHECK((std::is_base_of<UI::ImageElement, UI::AnimatedImageElement>::value));
-    CHECK(std::is_abstract<UI::ImageDescription>::value);
-    CHECK(std::is_abstract<UI::AnimatedImageDescription>::value);
-    CHECK(std::is_abstract<UI::ImageElement>::value);
-    CHECK(std::is_abstract<UI::AnimatedImageElement>::value);
+    CHECK(!std::is_abstract<UI::ImageDescription>::value);      // B.3.9 UI-A: concrete
+    CHECK(!std::is_destructible<UI::ImageDescription>::value);  // protected non-virtual dtor
+    CHECK(!std::is_abstract<UI::AnimatedImageDescription>::value);      // B.3.9 UI-A: concrete
+    CHECK(!std::is_destructible<UI::AnimatedImageDescription>::value);  // protected non-virtual dtor
+    CHECK(!std::is_abstract<UI::ImageElement>::value);      // B.3.9 UI-A: concrete
+    CHECK(!std::is_destructible<UI::ImageElement>::value);  // protected non-virtual dtor
+    CHECK(!std::is_abstract<UI::AnimatedImageElement>::value);      // B.3.9 UI-A: concrete
+    CHECK(!std::is_destructible<UI::AnimatedImageElement>::value);  // protected non-virtual dtor
     CHECK(!std::has_virtual_destructor<UI::ImageElement>::value);
     CHECK(!std::has_virtual_destructor<UI::AnimatedImageDescription>::value);
 }
@@ -670,4 +692,221 @@ UNIT_TEST(ui_leaf_c2_image_elements_slot_order) {
     CHECK_EQ(g_arg, 0x9000 + 2);
 
     CHECK(static_cast<void*>(static_cast<UI::Element*>(&anim)) == an);
+}
+
+// ===========================================================================
+// ENDGAME B.3.9 UI-A (B39_RULES D1/D2, rule B9-16) — the CONCRETE classes.
+// ===========================================================================
+namespace {
+template <typename PMF>
+uintptr_t SlotOffset(PMF pmf) {
+    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
+    uintptr_t words[2];
+    std::memcpy(words, &pmf, sizeof words);
+    if ((words[0] & 1u) == 0) return ~uintptr_t(0);
+    if (words[1] != 0) return ~uintptr_t(0);
+    return words[0] - 1;
+}
+
+template <typename T, typename Make>
+void B39ExpectBothArms(size_t elemSize, Make make) {
+    void* p = Object::detail::InternalMemAlloc(elemSize, 8);
+    CHECK(p != nullptr);
+    T* one = make(p);
+    g_b39DtorCount = 0;
+    CHECK(one->DeletingDtor(1) == one);
+    CHECK(g_b39DtorCount >= 1);
+
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * elemSize, 8));
+    CHECK(block != nullptr);
+    const int64_t cookie = 3;
+    std::memcpy(block, &cookie, sizeof cookie);
+    T* e[3];
+    for (int i = 0; i < 3; ++i) e[i] = make(block + 8 + i * elemSize);
+    g_b39DtorCount = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
+    CHECK_EQ(g_b39DtorCount, 3);
+    CHECK(g_b39DtorOrder[0] == e[2]);
+    CHECK(g_b39DtorOrder[1] == e[1]);
+    CHECK(g_b39DtorOrder[2] == e[0]);
+}
+}  // namespace
+
+UNIT_TEST(b39_uia_image_family_slot0_by_pmf) {
+    CHECK_EQ(SlotOffset(&UI::ImageDescription::DeletingDtor),         (uintptr_t)0x00);   // 0x1800361f0
+    CHECK_EQ(SlotOffset(&UI::ImageDescription::Serialize),            (uintptr_t)0x28);
+    CHECK_EQ(SlotOffset(&UI::ImageDescription::Construct),            (uintptr_t)0x48);
+    CHECK_EQ(SlotOffset(&UI::AnimatedImageDescription::DeletingDtor), (uintptr_t)0x00);   // 0x1800369e0
+    CHECK_EQ(SlotOffset(&UI::AnimatedImageDescription::Construct),    (uintptr_t)0x48);
+    CHECK_EQ(SlotOffset(&UI::ImageElement::DeletingDtor),             (uintptr_t)0x00);   // 0x180036600
+    CHECK_EQ(SlotOffset(&UI::ImageElement::Draw),                     (uintptr_t)0x30);
+    CHECK_EQ(SlotOffset(&UI::AnimatedImageElement::DeletingDtor),     (uintptr_t)0x00);   // 0x180036db0
+    CHECK_EQ(SlotOffset(&UI::AnimatedImageElement::Update),           (uintptr_t)0x38);
+}
+
+// The real ctors' stores (each header cites the transcribed instructions);
+// untouched bytes stay 0xCD.
+UNIT_TEST(b39_uia_image_family_ctors_make_retails_stores) {
+    FactoryScope scope;
+    {
+        alignas(8) uint8_t buf[0x80];
+        std::memset(buf, 0xCD, sizeof buf);
+        UI::ImageDescription* d = ::new (buf) UI::ImageDescription();
+        CHECK_EQ(d->_id, -1);                         // ElementDescription() ran
+        CHECK(d->_spriteSheet == nullptr);
+        CHECK(d->_spriteName == nullptr);
+        CHECK_EQ(d->_width, -1);
+        CHECK_EQ(d->_height, -1);
+        ImageDescriptionProbe probe;
+        CHECK(VTableOf(d) != VTableOf(&probe));
+        g_b39DtorCount = 0;
+        CHECK(d->DeletingDtor(0) == d);
+        CHECK_EQ(g_b39DtorCount, 1);
+    }
+    {
+        alignas(8) uint8_t buf[0x98];
+        std::memset(buf, 0xCD, sizeof buf);
+        UI::AnimatedImageDescription* d = ::new (buf) UI::AnimatedImageDescription();
+        CHECK_EQ(d->_width, -1);                      // ImageDescription() ran
+        CHECK(d->_frameNames._data == nullptr);
+        CHECK_EQ(d->_frameNames._size, 0);
+        CHECK_EQ(d->_framesPerSecond, 0x1e);
+        CHECK_EQ(d->_pad94, 0xCDCDCDCDu);             // NOT written
+        g_b39DtorCount = 0;
+        CHECK(d->DeletingDtor(0) == d);
+        CHECK_EQ(g_b39DtorCount, 2);                  // ~AnimatedImageDescription, ~ImageDescription
+    }
+    {
+        alignas(8) uint8_t buf[0xe0];
+        std::memset(buf, 0xCD, sizeof buf);
+        UI::ImageElement* e = ::new (buf) UI::ImageElement();
+        CHECK_EQ(e->_alignment, 3);                   // Element() ran
+        CHECK(e->_sprite.spriteSheet == nullptr);
+        CHECK_EQ(e->_sprite.spriteIndex, -1);
+        CHECK_EQ((uint32_t)e->_sprite.pad0C, 0xCDCDCDCDu);   // NOT written
+        CHECK(e->_rotation == 0.0f);
+        CHECK_EQ(e->_width, -1);
+        CHECK_EQ(e->_height, -1);
+        CHECK_EQ(e->_padDC, 0xCDCDCDCDu);             // NOT written
+        ImageElementProbe probe{};
+        CHECK(VTableOf(e) != VTableOf(&probe));
+        g_b39DtorCount = 0;
+        CHECK(e->DeletingDtor(0) == e);
+        CHECK_EQ(g_b39DtorCount, 1);
+    }
+    {
+        alignas(8) uint8_t buf[0x100];
+        std::memset(buf, 0xCD, sizeof buf);
+        UI::AnimatedImageElement* e = ::new (buf) UI::AnimatedImageElement();
+        CHECK_EQ(e->_width, -1);                      // ImageElement() ran
+        CHECK(e->_frames._data == nullptr);
+        CHECK_EQ(e->_frames._size, 0);
+        CHECK_EQ(e->_framesPerSecond, 0x1e);
+        CHECK_EQ(e->_padF4, 0xCDCDCDCDu);             // NOT written
+        CHECK_EQ(e->_accumTicks, 0);
+        g_b39DtorCount = 0;
+        CHECK(e->DeletingDtor(0) == e);
+        CHECK_EQ(g_b39DtorCount, 2);                  // ~AnimatedImageElement, ~ImageElement
+    }
+}
+
+UNIT_TEST(b39_uia_image_family_deletingdtor_both_arms) {
+    FactoryScope scope;
+    B39ExpectBothArms<UI::ImageDescription>(0x80, [](void* p) { return ::new (p) UI::ImageDescription(); });
+    B39ExpectBothArms<UI::ImageElement>(0xe0, [](void* p) { return ::new (p) UI::ImageElement(); });
+}
+
+UNIT_TEST(b39_uia_group_family_slot0_by_pmf) {
+    CHECK_EQ(SlotOffset(&UI::GroupDescription::DeletingDtor), (uintptr_t)0x00);   // 0x180046af0
+    CHECK_EQ(SlotOffset(&UI::GroupDescription::Construct),    (uintptr_t)0x48);
+    CHECK_EQ(SlotOffset(&UI::PageDescription::DeletingDtor),  (uintptr_t)0x00);   // 0x1800471a0
+    CHECK_EQ(SlotOffset(&UI::PageDescription::Serialize),     (uintptr_t)0x28);
+    CHECK_EQ(SlotOffset(&UI::RadioDescription::DeletingDtor), (uintptr_t)0x00);   // 0x180047930
+    CHECK_EQ(SlotOffset(&UI::RadioDescription::Construct),    (uintptr_t)0x48);
+    CHECK_EQ(SlotOffset(&UI::GroupElement::DeletingDtor),     (uintptr_t)0x00);   // 0x180046e10
+    CHECK_EQ(SlotOffset(&UI::GroupElement::Draw),             (uintptr_t)0x30);
+    CHECK_EQ(SlotOffset(&UI::PageElement::DeletingDtor),      (uintptr_t)0x00);   // 0x180047540
+    CHECK_EQ(SlotOffset(&UI::PageElement::Type),              (uintptr_t)0x10);
+    CHECK_EQ(SlotOffset(&UI::RadioElement::DeletingDtor),     (uintptr_t)0x00);   // 0x180047d50
+    CHECK_EQ(SlotOffset(&UI::RadioElement::Update),           (uintptr_t)0x38);
+}
+
+UNIT_TEST(b39_uia_group_family_ctors_make_retails_stores) {
+    FactoryScope scope;
+    {
+        alignas(8) uint8_t buf[0x78];
+        std::memset(buf, 0xCD, sizeof buf);
+        UI::GroupDescription* d = ::new (buf) UI::GroupDescription();
+        CHECK_EQ(d->_id, -1);                         // ElementDescription() ran
+        CHECK(d->_children._data == nullptr);
+        CHECK_EQ(d->_children._size, 0);
+        CHECK_EQ(d->_children._capacity, 0);
+        GroupDescriptionProbe probe;
+        CHECK(VTableOf(d) != VTableOf(&probe));
+        g_b39DtorCount = 0;
+        CHECK(d->DeletingDtor(0) == d);
+        CHECK_EQ(g_b39DtorCount, 1);
+    }
+    {
+        alignas(8) uint8_t buf[0x80];
+        std::memset(buf, 0xCD, sizeof buf);
+        UI::PageDescription* d = ::new (buf) UI::PageDescription();
+        CHECK(d->_children._data == nullptr);         // GroupDescription() ran
+        CHECK_EQ(d->_activePage, 0);
+        CHECK_EQ(d->_pad7c, 0xCDCDCDCDu);             // NOT written
+        g_b39DtorCount = 0;
+        CHECK(d->DeletingDtor(0) == d);
+        CHECK_EQ(g_b39DtorCount, 2);                  // ~PageDescription, ~GroupDescription
+    }
+    {
+        alignas(8) uint8_t buf[0x80];
+        std::memset(buf, 0xCD, sizeof buf);
+        UI::RadioDescription* d = ::new (buf) UI::RadioDescription();
+        CHECK_EQ(d->_activeRadio, -1);
+        CHECK_EQ(d->_pad7c, 0xCDCDCDCDu);             // NOT written
+        g_b39DtorCount = 0;
+        CHECK(d->DeletingDtor(0) == d);
+        CHECK_EQ(g_b39DtorCount, 2);                  // ~RadioDescription, ~GroupDescription
+    }
+    {
+        alignas(8) uint8_t buf[0xc0];
+        std::memset(buf, 0xCD, sizeof buf);
+        UI::GroupElement* e = ::new (buf) UI::GroupElement();
+        CHECK_EQ(e->_alignment, 3);                   // Element() ran
+        GroupElementProbe probe{};
+        CHECK(VTableOf(e) != VTableOf(&probe));
+        g_b39DtorCount = 0;
+        CHECK(e->DeletingDtor(0) == e);
+        CHECK_EQ(g_b39DtorCount, 1);
+    }
+    {
+        alignas(8) uint8_t buf[0xc8];
+        std::memset(buf, 0xCD, sizeof buf);
+        UI::PageElement* e = ::new (buf) UI::PageElement();
+        CHECK_EQ(e->_alignment, 3);
+        CHECK_EQ(e->_activePage, 0);
+        CHECK_EQ(e->_padC4, 0xCDCDCDCDu);             // NOT written
+        g_b39DtorCount = 0;
+        CHECK(e->DeletingDtor(0) == e);
+        CHECK_EQ(g_b39DtorCount, 2);                  // ~PageElement, ~GroupElement
+    }
+    {
+        alignas(8) uint8_t buf[0xd8];
+        std::memset(buf, 0xCD, sizeof buf);
+        UI::RadioElement* e = ::new (buf) UI::RadioElement();
+        CHECK_EQ(e->_alignment, 3);
+        CHECK(e->_checkBoxes._data == nullptr);
+        CHECK_EQ(e->_checkBoxes._size, 0);
+        CHECK_EQ(e->_activeIndex, -1);
+        CHECK_EQ(e->_padD4, 0xCDCDCDCDu);             // NOT written
+        g_b39DtorCount = 0;
+        CHECK(e->DeletingDtor(0) == e);
+        CHECK_EQ(g_b39DtorCount, 2);                  // ~RadioElement, ~GroupElement
+    }
+}
+
+UNIT_TEST(b39_uia_group_family_deletingdtor_both_arms) {
+    FactoryScope scope;
+    B39ExpectBothArms<UI::GroupDescription>(0x78, [](void* p) { return ::new (p) UI::GroupDescription(); });
+    B39ExpectBothArms<UI::GroupElement>(0xc0, [](void* p) { return ::new (p) UI::GroupElement(); });
 }

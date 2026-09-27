@@ -4,14 +4,14 @@
 //
 // `??_7TextElement@UI@@6B@` (retail 0x180156b80):
 //
-//   0  vector deleting dtor  0x1800422f0  -> deleting_dtor.cpp row
+//   0  vector deleting dtor  0x1800422f0  -> TextElement.h (the class's own)
 //   1  TypeName              0x180041ef0  here
 //   2  Type                  0x180041ed0  here
 //   4  ComputeSize           0x18011f060  here
 //   5  ComputeLayout         0x18011f120  here
 //   6  Draw                  0x18011f280  here
 //
-// plus ??1TextElement@UI@@UEAA@XZ (0x18011eda0), here (a DOOR body).
+// plus ??1TextElement@UI@@UEAA@XZ (0x18011eda0) and the factory pair, here.
 //
 // ENDGAME B.3.6 block C3: the five slot bodies are `UI::TextElement` members
 // (runtime/types/ui/TextElement.h carries the layout, pinned from the ctor
@@ -20,8 +20,13 @@
 // both real classes); the border and slot-4 dispatches are C++ virtual calls
 // (they read the object's MINTED table, exactly as retail's `CALL [RAX+..]`).
 //
+// ENDGAME B.3.9 block UI-A (B39_RULES D1/D2): the class is CONCRETE; the real
+// ctor `??0TextElement@UI@@QEAA@XZ` (0x18011eb80) is in the header, and the
+// slot doors, the ??1 door and element_bodies_b5.cpp's ??0 door, read only by
+// the retired minted table, its RT_DELDTOR row and the interpreter rows, are
+// gone.
+//
 // NOT HERE, and deliberately:
-//   * `??0TextElement@UI@@QEAA@XZ` (0x18011eb80) — element_bodies_b5.cpp.
 //   * `?CacheText@` / `?SetParameterCount@` — textelement_cachetext.cpp.
 //   * `?SetParameter@` / `?SetText@` — widgets_layout.cpp's doors (fragment pass).
 //
@@ -50,11 +55,8 @@ const uint8_t* TypeInfo() {
     return static_cast<const uint8_t*>(rtuielem::AtomicExport(
         g_typeInfoSlot, "?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
-void* Vtable() { return RT_DATA_SLOT(void*, "??_7TextElement@UI@@6B@"); }
 
 using ArrayDtorFn = void (*)(void* hdr);
-using ElementDtorFn = void (*)(void* self);
-using MemFreeFn = void (*)(void* p);
 
 // System::String is ONE char* (runtime/types/system/String.h): the member
 // fields are spelled `char*`, so the Font/SpriteContext calls see them as the
@@ -68,13 +70,24 @@ const System::String& AsString(char* const& field) {
 namespace UI {
 
 // slot 2 — 0x180041ed0 / slot 1 — 0x180041ef0: the minted BaseTypeInfo's first
-// dword and its +8 name. TypeName is the key function (GCC emits the table here;
-// nothing stamps it).
-uint32_t TextElement::Type() const { return rtuielem::TypeIdOf(TypeInfo()); }
+// dword and its +8 name. TypeName is the key function (GCC emits the table here).
+uint32_t TextElement::Type() const { return TypeId(); }
+// ?TypeId@TextElement@UI@@SAIXZ 0x180041ee0 — the record's first dword.
+uint32_t TextElement::TypeId() { return rtuielem::TypeIdOf(TypeInfo()); }
 const char* TextElement::TypeName() const { return rtuielem::TypeNameOf(TypeInfo()); }
 
-// Non-virtual, EMPTY: the dtor door below keeps retail's body.
-TextElement::~TextElement() {}
+// ??1TextElement@UI@@UEAA@XZ   0x18011eda0 — retail's body, moved here from the
+// retired door (ENDGAME B.3.9 UI-A). The entry restamp is the compiler's. The
+// cached text at +0xf8 is released through System::String's own Release
+// (retail's asymmetric idiom: `data - 8` freed on the last reference, the field
+// NULLED otherwise); the parameter Strings through 0x180010ab0, the
+// element-destroying ~Array (`_params` is a plain three-field header, so no
+// member ~Array follows); then the compiler chains ~Element (0x1801161a0).
+TextElement::~TextElement() {
+    System::StringPrivateAccess::Release(
+        *reinterpret_cast<System::String*>(&_cachedText));
+    rtuielem::RtAddr<ArrayDtorFn>(0x180010ab0ull)(&_params);
+}
 
 // slot 4 — 0x18011f060
 void TextElement::ComputeSize() {
@@ -155,74 +168,31 @@ void TextElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
                 rtuielem::ComputeColor(raw, alpha));
 }
 
+// ?CreateNewObject@TextElement@UI@@SAPEAVBase@Object@@XZ  0x180041fe0
+// The factory-interpreter row this replaces: MemAlloc(0x100, 8), retail's
+// null branch, then the out-of-line ctor ??0TextElement (0x18011eb80).
+Object::Base* TextElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TextElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) TextElement();
+}
+// ?CreateInPlaceObject@TextElement@UI@@SAPEAVBase@Object@@PEAX@Z  0x180042060
+Object::Base* TextElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) TextElement();
+}
 }  // namespace UI
 
-// ??1TextElement@UI@@UEAA@XZ   0x18011eda0 — a DOOR BODY (no real dtor).
-extern "C" void RtUi_TextElement_Dtor(void* selfv) {
-    UI::TextElement* self = reinterpret_cast<UI::TextElement*>(selfv);   // B.3.6 bridge
-    *reinterpret_cast<void**>(selfv) = Vtable();
-
-    char*& cached = self->_cachedText;                         // retail's asymmetric release
-    if (cached != nullptr) {
-        int32_t* rc = reinterpret_cast<int32_t*>(cached - 4);
-        if (--*rc == 0) {
-            cached = cached - 8;
-            rtuielem::RtAddr<MemFreeFn>(0x1800c7ad0ull)(cached);
-        } else {
-            cached = nullptr;
-        }
-    }
-    rtuielem::RtAddr<ArrayDtorFn>(0x180010ab0ull)(&self->_params);
-    rtuielem::RtAddr<ElementDtorFn>(0x1801161a0ull)(selfv);    // ??1Element
-}
-
 // ============================================================================
-// The registered doors — one QUALIFIED delegation each.
-// ============================================================================
-extern "C" uint32_t RtUi_TextElement_Type(const void* self) {
-    return reinterpret_cast<const UI::TextElement*>(self)->UI::TextElement::Type();   // B.3.6 bridge
-}
-extern "C" const char* RtUi_TextElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::TextElement*>(self)->UI::TextElement::TypeName();   // B.3.6 bridge
-}
-extern "C" void RtUi_TextElement_ComputeSize(void* self) {
-    reinterpret_cast<UI::TextElement*>(self)->UI::TextElement::ComputeSize();   // B.3.6 bridge
-}
-extern "C" void RtUi_TextElement_ComputeLayout(void* self, int32_t x, int32_t y,
-                                               int32_t right, int32_t bottom) {
-    reinterpret_cast<UI::TextElement*>(self)->UI::TextElement::ComputeLayout(x, y, right, bottom);   // B.3.6 bridge
-}
-extern "C" void RtUi_TextElement_Draw(const void* self, void* ctx, uint8_t alpha) {
-    reinterpret_cast<const UI::TextElement*>(self)->UI::TextElement::Draw(   // B.3.6 bridge
-        *static_cast<UI::SpriteContext*>(ctx), alpha);
-}
-
+// Registration: the factory pair only (B39_RULES D2).
 // ============================================================================
 int RtUiTextElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@TextElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_TextElement_Type);            ++n;
-    RegisterRuntimeAddr(0x180041ed0ull, (void*)&RtUi_TextElement_Type);
-
-    RegisterRuntimeExport("?TypeName@TextElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_TextElement_TypeName);        ++n;
-    RegisterRuntimeAddr(0x180041ef0ull, (void*)&RtUi_TextElement_TypeName);
-
-    RegisterRuntimeExport("??1TextElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_TextElement_Dtor);            ++n;
-    RegisterRuntimeAddr(0x18011eda0ull, (void*)&RtUi_TextElement_Dtor);
-
-    RegisterRuntimeExport("?ComputeSize@TextElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_TextElement_ComputeSize);     ++n;
-    RegisterRuntimeAddr(0x18011f060ull, (void*)&RtUi_TextElement_ComputeSize);
-
-    RegisterRuntimeExport("?ComputeLayout@TextElement@UI@@UEAAXHHHH@Z",
-                          (void*)&RtUi_TextElement_ComputeLayout);   ++n;
-    RegisterRuntimeAddr(0x18011f120ull, (void*)&RtUi_TextElement_ComputeLayout);
-
-    RegisterRuntimeExport("?Draw@TextElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
-                          (void*)&RtUi_TextElement_Draw);            ++n;
-    RegisterRuntimeAddr(0x18011f280ull, (void*)&RtUi_TextElement_Draw);
-
+    RegisterRuntimeExport("?CreateNewObject@TextElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::TextElement::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x180041fe0ull, (void*)&UI::TextElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@TextElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::TextElement::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x180042060ull, (void*)&UI::TextElement::CreateInPlaceObject);
     return n;
 }

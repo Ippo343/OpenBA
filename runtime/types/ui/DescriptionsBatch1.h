@@ -146,23 +146,8 @@ namespace RtUI {
 // RtUI::LabelDescription is now an ALIAS of the real class UI::LabelDescription (LabelDescription.h);
 // see the alias block at the bottom of this file.
 
-// ---------------------------------------------------------------------------
-// The exported vtables and BaseTypeInfo statics these ten classes stamp and
-// read. Every name was read out of the retail export directory by RVA (pefile
-// against C:\GOG Games\Banished\Runtime-x64.dll), not guessed from the
-// mangling pattern.
-// ---------------------------------------------------------------------------
-constexpr const char* kVtblBorderDescription       = "??_7BorderDescription@UI@@6B@";        // 0x180156980
-constexpr const char* kVtblButtonDescription       = "??_7ButtonDescription@UI@@6B@";        // 0x180157370
-constexpr const char* kVtblCheckDescription        = "??_7CheckDescription@UI@@6B@";         // 0x1801572c0
-constexpr const char* kVtblClipRegionDescription   = "??_7ClipRegionDescription@UI@@6B@";    // 0x180156350
-constexpr const char* kVtblComboDescription        = "??_7ComboDescription@UI@@6B@";         // 0x180159090
-constexpr const char* kVtblEditDescription         = "??_7EditDescription@UI@@6B@";          // 0x180156880
-constexpr const char* kVtblLabelDescription        = "??_7LabelDescription@UI@@6B@";         // 0x180156b30
-
-constexpr const char* kVtblButtonElement      = "??_7ButtonElement@UI@@6B@";      // 0x180157310
-constexpr const char* kVtblCheckElement       = "??_7CheckElement@UI@@6B@";       // 0x180157260
-constexpr const char* kVtblClipRegionElement  = "??_7ClipRegionElement@UI@@6B@";  // 0x1801562f0
+// (The ten classes' `kVtbl*` vtable-name constants were retired by ENDGAME
+// B.3.9 UI-A / UI-B with the minted tables they named.)
 
 }  // namespace RtUI
 

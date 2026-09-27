@@ -44,6 +44,7 @@
 #include "description_common.h"
 #include "../../types/ui/ContainerDescription.h"
 #include "../../types/ui/ContainerElement.h"
+#include "../../types/ui/ClipRegionElement.h"
 
 // UI::ClipRegionElement is block C1's class. CreateInstance builds one inline
 // (retail inlines its ctor); its own bytes are reached raw below, exactly as
@@ -66,10 +67,8 @@ void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     return p;
 }
 
-std::atomic<void*> g_vtClipRegionElement{nullptr};
 std::atomic<void*> g_typeInfo{nullptr};
 
-void* VtClipRegionElement() { return AtomicExport(g_vtClipRegionElement, RtUI::kVtblClipRegionElement); }
 const uint8_t* ContainerTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfo, "?_typeInfo@ContainerDescription@UI@@0VBaseTypeInfo@Object@@A"));
@@ -196,17 +195,8 @@ Object::InternalPtr<Element>* ContainerDescription::CreateInstance(
     // ---- 3. the clip region -------------------------------------------------
     void* rawR = MemAlloc(0xd8, 8);                         // 1800ccc60
     uint8_t* clip = nullptr;
-    if (rawR != nullptr) {                                  // 1800ccc8b
-        ElementCtor(rawR);                                  // 1800ccc90
-        uint8_t* e = static_cast<uint8_t*>(rawR);
-        *reinterpret_cast<void**>(e) = VtClipRegionElement();           // 1800ccc9d
-        *reinterpret_cast<int32_t*>(e + 0xc0) = 0x64;                   // 1800ccca0
-        const uint64_t k64 = 0x64, kZero = 0;
-        __builtin_memcpy(e + 0xc4, &k64, 8);                            // 1800cccaa
-        __builtin_memcpy(e + 0xcc, &kZero, 8);                          // 1800cccb5
-        *reinterpret_cast<int32_t*>(e + 0xd4) = 0;                      // 1800cccc0
-        clip = e;
-    }
+    if (rawR != nullptr)                                    // 1800ccc8b
+        clip = reinterpret_cast<uint8_t*>(::new (rawR) UI::ClipRegionElement());   // 1800ccc90..1800cccc0 inlined ctor (B.3.9 UI-A)
     Element* const clipElem = reinterpret_cast<Element*>(clip);         // B.3.6 bridge
 
     // ---- 4. the clip region's child -----------------------------------------

@@ -78,8 +78,6 @@
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-// The other destructor in this file that a tail-jump reaches directly.
-extern "C" void RtUi_TextDescription_Dtor(void* selfv);
 // Ten sibling ??1 bodies (Border, Button, Check, ClipRegion, Combo, Container,
 // DocumentText, Edit, Graph, Label) live in their own class files under
 // runtime/src/ui/ (vtable batch 1); they were duplicated here and dropped at
@@ -130,10 +128,6 @@ void TailElementDtor(uint8_t* p) {
 // They were duplicated here and dropped at the merge (2026-09-12): one
 // registration per address, and the class file is the one place the rest of
 // that class's evidence already lives.
-//
-// `RtUi_TextDescription_Dtor` is still DECLARED above because
-// labeldescription.cpp tail-jumps straight into it; it is DEFINED in
-// runtime/src/ui/textdescription.cpp.
 // ============================================================================
 
 

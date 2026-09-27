@@ -55,10 +55,12 @@
 // below warns about is therefore CLOSED: the two classes are unrelated and
 // both readings were right. See runtime/src/ui/textelement.cpp.
 
+#include <type_traits>
 #include <cstdint>
 #include <cstddef>
 #include "Element.h"
 #include "String.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI { namespace TextElementOffsets {
 
@@ -115,9 +117,16 @@ constexpr uint32_t kDirtyBit  = UI::kElementFlagNeedsSizeCalc;
 // banner and textelement.cpp already carried; `TextElementOffsets` above is now
 // asserted against these fields.
 //
-// ABSTRACT in C++ (slot 0 `= 0`); no real ctor: live TextElements are built by
+// (Until ENDGAME B.3.9:) ABSTRACT in C++ (slot 0 `= 0`); no real ctor: live TextElements are built by
 // the `??0TextElement` door (element_bodies_b5.cpp) and wear the MINTED table,
 // so every door delegates with a QUALIFIED call.
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0TextElement@UI@@QEAA@XZ` (0x18011eb80) minus its vptr stores;
+// slot 0 is the class's own vector deleting dtor; ~TextElement is protected and
+// non-virtual. The factory pair is the class's own; the minted
+// `??_7TextElement@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
+// the doors are retired.
 // ############################################################################
 namespace UI {
 
@@ -135,8 +144,41 @@ public:
         int32_t _capacity;   // +0x0c
     };
 
+    // ??0TextElement@UI@@QEAA@XZ 0x18011eb80 — the REAL constructor: CALL
+    // ??0Element (Element()), then the stores the banner lists at retail's
+    // widths (`_text` is UI::String's own default ctor, {nullptr, -1}; +0xe4
+    // and +0xea..+0xeb NOT written), then `CALL 0x18011ec10` — CacheText.
+    TextElement() : Element() {
+        _font = nullptr;
+        _params._data     = nullptr;
+        _params._size     = 0;
+        _params._capacity = 0;
+        _drawShadow  = 0;
+        _wrap        = 0;
+        _lineSpacing = 0x64;
+        _maxWidth    = -1;
+        _justify     = 0;
+        _cachedText  = nullptr;
+        CacheText();                                             // 18011ebf9
+    }
+
     // ---- the twelve slots (own ones declared) ------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;     // [0] 0x1800422f0
+    // [0] 0x1800422f0 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x100`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<TextElement*>(self + static_cast<int64_t>(i) * 0x100)
+                    ->~TextElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~TextElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                       // [1] 0x180041ef0
     uint32_t    Type() const override;                           // [2] 0x180041ed0
     void ComputeSize() override;                                 // [4] 0x18011f060
@@ -167,16 +209,19 @@ public:
 
     TextElement(const TextElement& src);                         // 0x1800420d0  not ported
     TextElement& operator=(const TextElement& src);              // 0x1800421c0  not ported
-    static uint32_t TypeId();                                    // 0x180041ee0  not ported
-    static Object::Base* CreateNewObject();                      // 0x180041fe0  ui_factory_wave28.cpp door
-    static Object::Base* CreateInPlaceObject(void* place);       // 0x180042060  ui_factory_wave28.cpp door
+    static uint32_t TypeId();                                    // 0x180041ee0  ported over the minted record
+    static Object::Base* CreateNewObject();                      // 0x180041fe0  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);       // 0x180042060  the class's own (B39 D2)
     static void* operator new(std::size_t bytes);                // 0x180041f00  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x180041f70  not ported
     static void  operator delete(void* p);                       // 0x180041f80  not ported
 
 protected:
-    TextElement() = default;   // NOT retail's 0x18011eb80 (element_bodies_b5.cpp door)
-    ~TextElement();            // 0x18011eda0 — empty; the door keeps the body
+    // `??1TextElement@UI@@UEAA@XZ` (0x18011eda0). NON-VIRTUAL
+    // (textelement.cpp): releases the cached text at +0xf8, destroys the
+    // parameter Strings through retail's element-destroying Array dtor; the
+    // compiler chains ~Element.
+    ~TextElement();
 
 private:
     static const char* _TypeName();                              // 0x180041eb0 -> "TextElement"
@@ -200,6 +245,8 @@ public:
 static_assert(sizeof(TextElement) == 0x100,
               "UI::TextElement is 0x100 (MOV EDX,0x100 at 0x18004230f)");
 static_assert(alignof(TextElement) == 8, "UI::TextElement aligns to 8");
+static_assert(!std::has_virtual_destructor<TextElement>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<TextElement>::value, "B39 D1: concrete");
 static_assert(offsetof(TextElement, _font) == sizeof(Element),
               "TextElement's own fields begin at the end of Element");
 static_assert(offsetof(TextElement, _font)        == 0xc0, "");

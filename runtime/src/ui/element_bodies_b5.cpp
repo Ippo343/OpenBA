@@ -12,7 +12,6 @@
 //
 //   retail       mangled name                                            note
 //   -----------  ------------------------------------------------------  ----
-//   0x18011eb80  ??0TextElement@UI@@QEAA@XZ                              ctor
 //   0x180118c70  ??0NumberElement@UI@@QEAA@XZ                            ctor
 //   0x18011e090  ?GetRowHeight@TableElement@UI@@QEAAHH@Z
 //   0x18011e1a0  ?GetColumnWidth@TableElement@UI@@QEAAHH@Z
@@ -98,8 +97,8 @@
 // DrawHighlight, ScrollElement::GetBarLayout, TextDescription's non-virtual
 // CreateInstance applier, LayoutElement::GetChildLayout, EditElement::
 // SelectCharacter) and reaches fields by name; each registered door is a
-// one-line QUALIFIED delegation. `??0TextElement` STAYS a door (B4b-2: no real
-// ctor on a polymorphic class). The ButtonDescription and NumberElement notes
+// one-line QUALIFIED delegation. (`??0TextElement`'s door was retired by
+// ENDGAME B.3.9 UI-A: TextElement's real ctor.) The ButtonDescription and NumberElement notes
 // above are history: that applier moved to buttondescription.cpp in block C1,
 // and the NumberElement ctor/CacheText live in numberelement.cpp.
 // ============================================================================
@@ -218,12 +217,6 @@ uint32_t NumberElementTypeId() {
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
 
-// ---- ported dependencies, all reached through a registry-first door --------
-using ElementCtorFn = void* (*)(void*);
-void* CallElementCtor(void* self) {        // 0x180115e50, runtime/src/ui/element.cpp
-    return RT_EXPORT_ONCE(ElementCtorFn, "??0Element@UI@@QEAA@XZ")(self);
-}
-
 // `?IsDerivedFrom@Base@Object@@QEBA_NI@Z` (0x1800c0390) is `Object::Base::
 // IsDerivedFrom`, and `?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@
 // System@@@Z` (0x180002470) is `UI::StringTable::GetIndexFromName`
@@ -252,59 +245,6 @@ void ArrayGrow4 (void* a, int32_t n, const void* v) { RtAddr<ArrayGrowFn>(0x1800
 void ArrayGrow8 (void* a, int32_t n, const void* v) { RtAddr<ArrayGrowFn>(0x180024fe0ull)(a, n, v); }
 
 }  // namespace
-
-// ============================================================================
-// ??0TextElement@UI@@QEAA@XZ                                 retail 0x18011eb80
-// ============================================================================
-// `??_7TextElement@UI@@6B@` is retail 0x180156b80 — the exact address the ctor
-// stamps — and it is an exported data symbol, so this port stamps the DLL's own
-// table rather than minting a second one (the Wave 6 `??_7Geometry` lever).
-//
-// The written extent, store by store and AT RETAIL'S WIDTHS:
-//     +0xc0  qword 0     the font pointer (NumberElement.h names the same slot)
-//     +0xc8  qword 0     Array<System::String> _parameters._data
-//     +0xd0  qword 0     ._size / ._capacity, written as ONE qword
-//     +0xd8  qword 0     UI::String _text  .table
-//     +0xe0  dword -1    UI::String _text  .index          (dword, not qword)
-//     +0xe8  WORD  0     two independent bytes, +0xe8 and +0xe9 — and
-//                        TextDescription::CreateInstance below writes them
-//                        SEPARATELY as bytes, which is what proves they are two
-//                        fields rather than one short
-//     +0xec  dword 0x64  100. The only non-zero non-sentinel initialiser here.
-//     +0xf0  dword -1
-//     +0xf4  dword 0
-//     +0xf8  qword 0     the owned, refcounted cached display text
-// *** +0xe2..+0xe7 and +0xe4 ARE NEVER WRITTEN *** (the ctor jumps from the
-// word at +0xe8 straight to +0xec). Do not compare them against a fresh object.
-//
-// The `MOV qword ptr [RSP+0x20],-0x2` at 0x18011eb8a is the MSVC SEH state
-// marker for the unwind funclet, not a store into the object.
-extern "C" void* RtUi_TextElement_Ctor(void* selfv) {
-    uint8_t* p = static_cast<uint8_t*>(selfv);
-
-    CallElementCtor(p);                                            // 18011eb96
-
-    SetPtr(p, 0x00, RT_DATA_SLOT(void*, "??_7TextElement@UI@@6B@"));// 18011eba3
-
-    SetPtr (p, 0xc0, nullptr);                                     // 18011eba8
-    SetPtr (p, 0xc8, nullptr);                                     // 18011ebaf
-    SetPtr (p, 0xd0, nullptr);                                     // 18011ebb6
-    SetPtr (p, 0xd8, nullptr);                                     // 18011ebbd
-    SetI32 (p, 0xe0, -1);                                          // 18011ebc4
-    const uint16_t zero16 = 0;
-    __builtin_memcpy(p + 0xe8, &zero16, sizeof zero16);            // 18011ebce  WORD
-    SetI32 (p, 0xec, 0x64);                                        // 18011ebd5
-    SetI32 (p, 0xf0, -1);                                          // 18011ebdf
-    SetI32 (p, 0xf4, 0);                                           // 18011ebe9
-    SetPtr (p, 0xf8, nullptr);                                     // 18011ebef
-
-    // ?CacheText@TextElement@UI@@AEAAXXZ — `UI::TextElement::CacheText`
-    // (runtime/src/ui/textelement_cachetext.cpp), a member call.
-    reinterpret_cast<UI::TextElement*>(p)->UI::TextElement::CacheText();   // 18011ebf9  B.3.6 bridge
-
-    return p;                                                      // 18011ebff
-}
-
 
 // ============================================================================
 // ?GetRowHeight@TableElement@UI@@QEAAHH@Z                    retail 0x18011e090
@@ -1053,11 +993,6 @@ extern "C" char RtUi_EditElement_SelectCharacter(const void* self, int32_t key) 
 // ============================================================================
 int RtUiElementBodiesB5Register() {
     int n = 0;
-
-    RegisterRuntimeExport("??0TextElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_TextElement_Ctor);                        ++n;
-    RegisterRuntimeAddr(0x18011eb80ull, (void*)&RtUi_TextElement_Ctor);
-
 
     RegisterRuntimeExport("?GetRowHeight@TableElement@UI@@QEAAHH@Z",
                           (void*)&RtUi_TableElement_GetRowHeight);               ++n;

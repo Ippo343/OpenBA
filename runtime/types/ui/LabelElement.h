@@ -40,14 +40,23 @@
 // Draw; `_iconColor` is also `?SetSpriteColor@` (0x1800429f0:
 // `MOV [RCX+0x128],EDX / RET`).
 // SIZE 0x130: `MOV EDX,0x130` in the slot-0 vector deleting dtor 0x180042bb0.
+//
+// ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
+// ctor is retail's `??0LabelElement@UI@@QEAA@XZ` (0x1800d2620) minus its vptr stores;
+// slot 0 is the class's own vector deleting dtor; ~LabelElement is protected and
+// non-virtual. The factory pair is the class's own; the minted
+// `??_7LabelElement@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
+// the doors are retired.
 // ============================================================================
 
+#include <type_traits>
 #include <cstdint>
 #include <cstddef>
 
 #include "Element.h"
 #include "TextElement.h"
 #include "Sprite.h"
+#include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 // ############################################################################
 // RtUI::LabelElement — the old bare POD, moved (B4b-1), names corrected.
@@ -125,14 +134,45 @@ static_assert(offsetof(LabelElement, field12C)        == 0x12C, "field12C at +0x
 // [4] 0x1800d2490 ComputeSize · [5] 0x1800d2330 ComputeLayout · [6] 0x1800d1c80
 // Draw · [10] 0x180042970 SetColor — the rest inherited through TextElement.
 //
-// ABSTRACT in C++; no real ctor: live ones are built by the `??0LabelElement`
+// (Until ENDGAME B.3.9:) ABSTRACT in C++; no real ctor: live ones are built by the `??0LabelElement`
 // door (ui_factory_wave28.cpp) and wear the MINTED table.
 // ############################################################################
 namespace UI {
 
 class LabelElement : public TextElement {
 public:
-    Object::Base* DeletingDtor(unsigned flags) override = 0;     // [0] 0x180042bb0
+    // ??0LabelElement@UI@@QEAA@XZ 0x1800d2620 — the REAL constructor: CALL
+    // ??0TextElement (TextElement()), then the icon Sprite's own default ctor
+    // ({nullptr, -1}; +0x10c NOT written), +0x110 DWORD 3, ONE QWORD 1 over
+    // +0x114/+0x118, +0x11c DWORD 2, ONE QWORD -1 over +0x120/+0x124, +0x128
+    // DWORD -1, +0x12c DWORD 0.
+    LabelElement() : TextElement() {
+        _align        = 3;
+        _mode         = 1;
+        _minTextWidth = 0;
+        _gap          = 2;
+        _iconWidth    = -1;
+        _iconHeight   = -1;
+        _iconColor    = 0xffffffffu;
+        _textWidth    = 0;
+    }
+
+    // [0] 0x180042bb0 — MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x130`, the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<LabelElement*>(self + static_cast<int64_t>(i) * 0x130)
+                    ->~LabelElement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~LabelElement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                       // [1] 0x1800427f0
     uint32_t    Type() const override;                           // [2] 0x1800427d0
     void ComputeSize() override;                                 // [4] 0x1800d2490
@@ -154,18 +194,20 @@ public:
     // `MOV [RCX+0x128],EDX / RET`, the whole body.
     void SetSpriteColor(uint32_t color) { _iconColor = color; }
 
-    LabelElement(const LabelElement& src);                       // 0x180042a00  labelelement.cpp door
+    LabelElement(const LabelElement& src);                       // 0x180042a00  not ported (door retired: no caller)
     LabelElement& operator=(const LabelElement& src);            // 0x180042ac0  not ported
-    static uint32_t TypeId();                                    // 0x1800427e0  not ported
-    static Object::Base* CreateNewObject();                      // 0x1800428e0  ui_factory_wave28.cpp door
-    static Object::Base* CreateInPlaceObject(void* place);       // 0x180042960  ui_factory_wave28.cpp door
+    static uint32_t TypeId();                                    // 0x1800427e0  ported over the minted record
+    static Object::Base* CreateNewObject();                      // 0x1800428e0  the class's own (B39 D2)
+    static Object::Base* CreateInPlaceObject(void* place);       // 0x180042960  the class's own (B39 D2)
     static void* operator new(std::size_t bytes);                // 0x180042800  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x180042870  not ported
     static void  operator delete(void* p);                       // 0x180042880  not ported
 
 protected:
-    LabelElement() = default;   // NOT retail's 0x1800d2620 (ui_factory_wave28.cpp door)
-    ~LabelElement();            // 0x1800d25f0 — empty; the door keeps the body
+    // `??1LabelElement@UI@@UEAA@XZ` (0x1800d25f0). NON-VIRTUAL and EMPTY
+    // (labelelement.cpp): restamp, then the tail JMP to ~TextElement, which the
+    // compiler chains.
+    ~LabelElement();
 
 private:
     static const char* _TypeName();                              // 0x1800427b0 -> "LabelElement"
@@ -188,6 +230,8 @@ public:
 static_assert(sizeof(LabelElement) == 0x130,
               "UI::LabelElement is 0x130 (MOV EDX,0x130 in 0x180042bb0)");
 static_assert(alignof(LabelElement) == 8, "UI::LabelElement aligns to 8");
+static_assert(!std::has_virtual_destructor<LabelElement>::value, "ENDGAME decision 2");
+static_assert(!std::is_abstract<LabelElement>::value, "B39 D1: concrete");
 static_assert(offsetof(LabelElement, _sprite) == sizeof(TextElement),
               "LabelElement's own fields begin at the end of TextElement");
 static_assert(offsetof(LabelElement, _sprite)       == 0x100, "");

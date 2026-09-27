@@ -6,24 +6,29 @@
 // own; 4/5/6 are `UI::GroupElement`'s bodies (0x180117f00 / 0x180118050 /
 // 0x1801181c0) in groupelement.cpp, which the class simply does not override:
 //
-//   0  vector deleting dtor  0x180047540  -> deleting_dtor.cpp row
+//   0  vector deleting dtor  0x180047540  -> PageElement.h (the class's own)
 //   1  TypeName              0x180047270  here
 //   2  Type                  0x180047250  here
 //   4..6                     GroupElement's
 //
-// plus ??0PageElement (0x1800d5260) and ??1PageElement (0x1800d5220), both
-// DOORS (B4b-2). `GetActivePage` is inline in PageElement.h; `SetActivePage`
+// plus ??0PageElement (0x1800d5260, the real ctor in the header since B.3.9),
+// ??1PageElement (0x1800d5220) and the factory pair. `GetActivePage` is inline in PageElement.h; `SetActivePage`
 // is widgets_layout.cpp's door (fragment pass).
 //
-// THE DOUBLE VTABLE STAMP IS REAL AND IS REPRODUCED. Both the ctor and the
-// dtor write `??_7GroupElement@UI@@6B@` and `??_7PageElement@UI@@6B@` into
-// +0x00 back to back (ctor: Group then Page; dtor: Page then Group). That is
-// MSVC emitting the base's stamp and the derived's over it.
+// THE DOUBLE VTABLE STAMP IS REAL. Both the ctor and the dtor write
+// `??_7GroupElement@UI@@6B@` and `??_7PageElement@UI@@6B@` into +0x00 back to
+// back (ctor: Group then Page; dtor: Page then Group). That is MSVC emitting
+// the base's stamp and the derived's over it -- exactly what the compiler's
+// ctor / dtor chains through GroupElement do since B.3.9.
 //
 // LAYOUT: runtime/types/ui/PageElement.h — sizeof 0xC8, `_activePage` at +0xC0.
 //
 // ENDGAME B.3.6 block C2: slots 1/2 are MEMBERS of `UI::PageElement`; the
 // registered doors are one-line QUALIFIED delegations.
+//
+// ENDGAME B.3.9 block UI-A: the class is CONCRETE; the two slot doors and the
+// ??0 / ??1 doors, read only by the retired minted table, its RT_DELDTOR row and
+// ui_factory_wave28.cpp's row, are gone.
 // ============================================================================
 
 #include <atomic>
@@ -47,15 +52,13 @@ const uint8_t* PageElementTypeInfo() {
     return static_cast<const uint8_t*>(p);
 }
 
-// Door-only.
-void* Vtable()      { return RT_DATA_SLOT(void*, "??_7PageElement@UI@@6B@"); }
-void* VtableGroup() { return RT_DATA_SLOT(void*, "??_7GroupElement@UI@@6B@"); }
-
 }  // namespace
 
 namespace UI {
 
-uint32_t PageElement::Type() const {                            // 0x180047250
+uint32_t PageElement::Type() const { return TypeId(); }        // 0x180047250
+// ?TypeId@PageElement@UI@@SAIXZ 0x180047260 — the record's first dword.
+uint32_t PageElement::TypeId() {
     const uint8_t* ti = PageElementTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
@@ -65,49 +68,37 @@ const char* PageElement::TypeName() const {                     // 0x180047270
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
 }
 
+// ??1PageElement@UI@@UEAA@XZ   0x1800d5220 -- Page stamp, Group stamp,
+// ~Element. ENDGAME B.3.9 UI-A: EMPTY; the compiler's chain through
+// ~GroupElement makes the same two restamps.
+PageElement::~PageElement() {}
+
+// ?CreateNewObject@PageElement@UI@@SAPEAVBase@Object@@XZ  0x180047360
+// The factory-interpreter row this replaces: MemAlloc(0xc8, 8), retail's
+// null branch, then the out-of-line ctor ??0PageElement (0x1800d5260).
+Object::Base* PageElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(PageElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) PageElement();
+}
+// ?CreateInPlaceObject@PageElement@UI@@SAPEAVBase@Object@@PEAX@Z  0x180047400
+Object::Base* PageElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) PageElement();
+}
+
 }  // namespace UI
 
-extern "C" uint32_t RtUi_PageElement_Type(const void* self) {
-    return reinterpret_cast<const UI::PageElement*>(self)->UI::PageElement::Type();       // B.3.6 bridge
-}
-extern "C" const char* RtUi_PageElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::PageElement*>(self)->UI::PageElement::TypeName();   // B.3.6 bridge
-}
-
-// ??0PageElement@UI@@QEAA@XZ   0x1800d5260   — a CTOR DOOR (B4b-2)
-extern "C" void* RtUi_PageElement_Ctor(void* self) {   // returns this in RAX, as every MSVC ctor does
-    ElementCtor(self);
-    PTR(self, 0x00) = VtableGroup();
-    PTR(self, 0x00) = Vtable();
-    I32(self, UI::PageElementOffsets::kActivePage) = 0;
-    return self;
-}
-
-// ??1PageElement@UI@@UEAA@XZ   0x1800d5220   — a DTOR DOOR (B4b-2)
-extern "C" void RtUi_PageElement_Dtor(void* self) {
-    PTR(self, 0x00) = Vtable();
-    PTR(self, 0x00) = VtableGroup();
-    ElementDtor(self);
-}
-
+// ============================================================================
+// Registration: the factory pair only (B39_RULES D2).
 // ============================================================================
 int RtUiPageElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@PageElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_PageElement_Type);        ++n;
-    RegisterRuntimeAddr(0x180047250ull, (void*)&RtUi_PageElement_Type);
-
-    RegisterRuntimeExport("?TypeName@PageElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_PageElement_TypeName);    ++n;
-    RegisterRuntimeAddr(0x180047270ull, (void*)&RtUi_PageElement_TypeName);
-
-    RegisterRuntimeExport("??0PageElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_PageElement_Ctor);        ++n;
-    RegisterRuntimeAddr(0x1800d5260ull, (void*)&RtUi_PageElement_Ctor);
-
-    RegisterRuntimeExport("??1PageElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_PageElement_Dtor);        ++n;
-    RegisterRuntimeAddr(0x1800d5220ull, (void*)&RtUi_PageElement_Dtor);
-
+    RegisterRuntimeExport("?CreateNewObject@PageElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::PageElement::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x180047360ull, (void*)&UI::PageElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@PageElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::PageElement::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x180047400ull, (void*)&UI::PageElement::CreateInPlaceObject);
     return n;
 }

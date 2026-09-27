@@ -56,14 +56,8 @@
 
 namespace {
 
-void* VtElementDescription() { return RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@"); }
-
 // RULE B6-5: the members resolve through namespace-scope atomics.
 std::atomic<void*> g_typeInfoSlot{nullptr};
-std::atomic<void*> g_vtBaseSlot{nullptr};
-std::atomic<void*> g_vtExternalSlot{nullptr};
-std::atomic<void*> g_vtElementDescriptionSlot{nullptr};
-std::atomic<void*> g_vtNumberDescriptionSlot{nullptr};
 
 const uint8_t* NumberDescriptionTypeInfo() {
     return static_cast<const uint8_t*>(rtuielem::AtomicExport(
@@ -89,42 +83,13 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
-// Transcribed from 0x18004a586..0x18004a600 (Construct's copy); Reconstruct's
-// copy at 0x18004a4de.. agrees instruction for instruction. Called from the
-// two MEMBERS, so its vtable lookups go through the atomic slots.
-void ConstructBody(uint8_t* p) {
-    void** v = reinterpret_cast<void**>(p);
-
-    *v = rtuielem::AtomicExport(g_vtBaseSlot, "??_7Base@Object@@6B@");          // 18004a586
-    *v = rtuielem::AtomicExport(g_vtExternalSlot, "??_7External@Object@@6B@");  // 18004a590
-    *reinterpret_cast<uint64_t*>(p + 0x08) = 0;                 // 18004a5a5
-    *reinterpret_cast<uint64_t*>(p + 0x10) = 0;                 // 18004a5a8
-    *reinterpret_cast<uint64_t*>(p + 0x18) = 0;                 // 18004a5ac
-    *v = rtuielem::AtomicExport(g_vtElementDescriptionSlot,
-                                "??_7ElementDescription@UI@@6B@");               // 18004a5b0
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;                 // 18004a5ba
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;                 // 18004a5be
-    *reinterpret_cast<uint64_t*>(p + 0x30) = 0;                 // 18004a5c2
-    *reinterpret_cast<int32_t*>(p + 0x38)  = 0;                 // 18004a5c6  DWORD
-    *reinterpret_cast<int32_t*>(p + 0x3c)  = -1;                // 18004a5c9  DWORD
-    *reinterpret_cast<uint64_t*>(p + 0x40) = 3;                 // 18004a5d0  ONE QWORD
-    *reinterpret_cast<uint64_t*>(p + 0x48) = 0;                 // 18004a5d8
-    *reinterpret_cast<uint64_t*>(p + 0x50) = 0;                 // 18004a5dc
-    *reinterpret_cast<uint64_t*>(p + 0x58) = 0;                 // 18004a5e0
-    *reinterpret_cast<uint64_t*>(p + 0x60) = 0;                 // 18004a5e4
-    *v = rtuielem::AtomicExport(g_vtNumberDescriptionSlot,
-                                "??_7NumberDescription@UI@@6B@");                // 18004a5e8
-    *reinterpret_cast<uint64_t*>(p + 0x68) = 0;                 // 18004a5f2  _font
-    *reinterpret_cast<uint64_t*>(p + 0x70) = 0;                 // 18004a5f6  _u70 + _i74
-    *reinterpret_cast<int32_t*>(p + 0x78)  = 0;                 // 18004a5fa  _f78 DWORD
-    p[0x7c] = 0;                                                // 18004a5fd  _b7c BYTE
-}
-
 }  // namespace
 
 namespace UI {
 
-uint32_t NumberDescription::Type() const {
+uint32_t NumberDescription::Type() const { return TypeId(); }
+// ?TypeId@NumberDescription@UI@@SAIXZ 0x18004a230 — the record's first dword.
+uint32_t NumberDescription::TypeId() {
     uint32_t v = 0; __builtin_memcpy(&v, NumberDescriptionTypeInfo(), sizeof v); return v;
 }
 const char* NumberDescription::TypeName() const {
@@ -133,14 +98,14 @@ const char* NumberDescription::TypeName() const {
 int32_t NumberDescription::GetFileVersion() const { return 0x104; }
 
 // 0x18004a570: null test (in the DOOR), the INLINED ctor, `MOV RAX,RCX`.
+// The inlined ctor (0x18004a586..0x18004a600, Reconstruct's copy at
+// 0x18004a4de agrees) is the real ctor now (NumberDescription.h).
 Object::External* NumberDescription::Construct() {
-    ConstructBody(reinterpret_cast<uint8_t*>(this));
-    return this;                                               // 18004a600
+    return ::new (this) NumberDescription();                   // 18004a600
 }
 Object::External* NumberDescription::Reconstruct() {
     DeletingDtor(0);                                           // 18004a4d7
-    ConstructBody(reinterpret_cast<uint8_t*>(this));
-    return this;                                               // 18004a558
+    return ::new (this) NumberDescription();                   // 18004a558
 }
 void NumberDescription::Destruct() { DeletingDtor(0); }
 
@@ -193,7 +158,7 @@ bool NumberDescription::Serialize(void* streamv) {
 // RETSLOT (B6-2); R8 (the Dialog) is never read.
 //
 // NumberElement is 0xe8 bytes (`MOV EDX,0xe8` at 0x180118f51) and its
-// constructor is CALLED out of line (0x180118c70, a door), not inlined.
+// constructor is CALLED out of line (0x180118c70, the real ctor), not inlined.
 //
 // THE FIVE COPIES ARE NOT AT MATCHING OFFSETS on the two objects, and the gap
 // is not uniform: _font -> +0xc0, _u70 -> _mode (+0xc8), _i74 -> _intValue
@@ -204,11 +169,8 @@ Object::InternalPtr<Element>* NumberDescription::CreateInstance(
     void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0xe8, 8);   // 180118f51 (inlined)
 
     NumberElement* elem = nullptr;
-    if (raw != nullptr) {                                      // 180118f7c
-        using NumberElementCtorFn = void* (*)(void*);
-        elem = static_cast<NumberElement*>(
-            RtAddr<NumberElementCtorFn>(0x180118c70ull)(raw)); // 180118f81
-    }
+    if (raw != nullptr)                                        // 180118f7c
+        elem = ::new (raw) NumberElement();                    // 180118f81 ??0NumberElement
 
     void* slot = elem;                                         // 180118f8d
     // The non-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
@@ -229,106 +191,43 @@ Object::InternalPtr<Element>* NumberDescription::CreateInstance(
 }  // namespace UI
 
 // ============================================================================
-// ??1NumberDescription@UI@@UEAA@XZ   0x180118c00 — a DOOR BODY
+// ??1NumberDescription@UI@@UEAA@XZ   0x180118c00
 // ============================================================================
 // ONE String release — ElementDescription's _textName at +0x60, under the BASE
-// vtable — then a tail JMP to ??1External@Object@@. The ExternalPtr<Font> at
+// vtable — then a tail JMP to ??1External. ENDGAME B.3.9 UI-A: EMPTY; the
+// compiler chains ~ElementDescription and ~External. The ExternalPtr<Font> at
 // +0x68 is not released; that is retail's.
-extern "C" void RtUi_NumberDescription_Dtor(void* selfv) {
-    UI::NumberDescription* self = reinterpret_cast<UI::NumberDescription*>(selfv);   // B.3.6 bridge
-    void** v = reinterpret_cast<void**>(selfv);
-    using MemFreeFn = void (*)(void*);
+namespace UI {
+NumberDescription::~NumberDescription() {}
 
-    *v = RT_DATA_SLOT(void*, "??_7NumberDescription@UI@@6B@");   // 180118c16
-    *v = VtElementDescription();                               // 180118c20
-
-    char*& text = self->_textName;
-    if (text != nullptr) {                                     // 180118c2e
-        --*reinterpret_cast<int32_t*>(text - 4);               // 180118c33
-        if (*reinterpret_cast<int32_t*>(text - 4) == 0) {      // 180118c36
-            text = text - 8;                                   // 180118c3c
-            RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(text);
-        } else {
-            text = nullptr;                                    // 180118c4c
-        }
-    }
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(selfv);   // 180118c5c JMP
+// ?CreateNewObject@NumberDescription@UI@@SAPEAVBase@Object@@XZ  0x18004a330
+// The FACTUI2 row this replaces: MemAlloc(0x88, 8), retail's null branch,
+// then the inlined ctor.
+Object::Base* NumberDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(NumberDescription), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) NumberDescription();
 }
+// ?CreateInPlaceObject@NumberDescription@UI@@SAPEAVBase@Object@@PEAX@Z  0x18004a420
+Object::Base* NumberDescription::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) NumberDescription();
+}
+}  // namespace UI
 
 // ============================================================================
-// The registered doors — one QUALIFIED delegation each.
+// Registration. ENDGAME B.3.9 UI-A: the slot doors and the ??1 door (and the
+// FACTUI2 row's ??0 door), read only by the retired minted table / RT_DELDTOR
+// row / factory interpreter, are gone. The factory pair (B39_RULES D2) is the
+// class's own.
 // ============================================================================
-extern "C" uint32_t RtUi_NumberDescription_Type(const void* self) {
-    return reinterpret_cast<const UI::NumberDescription*>(self)->UI::NumberDescription::Type();   // B.3.6 bridge
-}
-extern "C" const char* RtUi_NumberDescription_TypeName(const void* self) {
-    return reinterpret_cast<const UI::NumberDescription*>(self)->UI::NumberDescription::TypeName();   // B.3.6 bridge
-}
-extern "C" int32_t RtUi_NumberDescription_GetFileVersion(const void* self) {
-    return reinterpret_cast<const UI::NumberDescription*>(self)->UI::NumberDescription::GetFileVersion();   // B.3.6 bridge
-}
-extern "C" void* RtUi_NumberDescription_Construct(void* self) {
-    if (self == nullptr) return nullptr;                       // 18004a581
-    return reinterpret_cast<UI::NumberDescription*>(self)->UI::NumberDescription::Construct();   // B.3.6 bridge
-}
-extern "C" void* RtUi_NumberDescription_Reconstruct(void* self) {
-    return reinterpret_cast<UI::NumberDescription*>(self)->UI::NumberDescription::Reconstruct();   // B.3.6 bridge
-}
-extern "C" void RtUi_NumberDescription_Destruct(void* self) {
-    reinterpret_cast<UI::NumberDescription*>(self)->UI::NumberDescription::Destruct();   // B.3.6 bridge
-}
-extern "C" bool RtUi_NumberDescription_Serialize(void* self, void* stream) {
-    return reinterpret_cast<UI::NumberDescription*>(self)->UI::NumberDescription::Serialize(stream);   // B.3.6 bridge
-}
-// RDX is the caller's slot; the member writes it and hands it back (B6-2).
-extern "C" void** RtUi_NumberDescription_CreateInstance(const void* self, void** ret,
-                                                        const void* dialog) {
-    return reinterpret_cast<void**>(
-        reinterpret_cast<const UI::NumberDescription*>(self)->UI::NumberDescription::CreateInstance(   // B.3.6 bridge
-            reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
-            static_cast<const UI::Dialog*>(dialog)));
-}
-
 int RtUiNumberDescriptionRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@NumberDescription@UI@@UEBAIXZ",
-                          (void*)&RtUi_NumberDescription_Type);            ++n;
-    RegisterRuntimeAddr(0x18004a220ull, (void*)&RtUi_NumberDescription_Type);
-
-    RegisterRuntimeExport("?TypeName@NumberDescription@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_NumberDescription_TypeName);        ++n;
-    RegisterRuntimeAddr(0x18004a240ull, (void*)&RtUi_NumberDescription_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@NumberDescription@UI@@UEBAHXZ",
-                          (void*)&RtUi_NumberDescription_GetFileVersion);  ++n;
-    RegisterRuntimeAddr(0x180118e20ull, (void*)&RtUi_NumberDescription_GetFileVersion);
-
-    RegisterRuntimeExport("?Construct@NumberDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_NumberDescription_Construct);       ++n;
-    RegisterRuntimeAddr(0x18004a570ull, (void*)&RtUi_NumberDescription_Construct);
-
-    RegisterRuntimeExport("?Reconstruct@NumberDescription@UI@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtUi_NumberDescription_Reconstruct);     ++n;
-    RegisterRuntimeAddr(0x18004a4c0ull, (void*)&RtUi_NumberDescription_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@NumberDescription@UI@@UEAAXXZ",
-                          (void*)&RtUi_NumberDescription_Destruct);        ++n;
-    RegisterRuntimeAddr(0x18004a610ull, (void*)&RtUi_NumberDescription_Destruct);
-
-    RegisterRuntimeExport("??1NumberDescription@UI@@UEAA@XZ",
-                          (void*)&RtUi_NumberDescription_Dtor);            ++n;
-    RegisterRuntimeAddr(0x180118c00ull, (void*)&RtUi_NumberDescription_Dtor);
-
-    RegisterRuntimeExport("?Serialize@NumberDescription@UI@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtUi_NumberDescription_Serialize);       ++n;
-    RegisterRuntimeAddr(0x180118e30ull, (void*)&RtUi_NumberDescription_Serialize);
-
-    RegisterRuntimeExport(
-        "?CreateInstance@NumberDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_NumberDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x180118f10ull, (void*)&RtUi_NumberDescription_CreateInstance);
-
+    RegisterRuntimeExport("?CreateNewObject@NumberDescription@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::NumberDescription::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x18004a330ull, (void*)&UI::NumberDescription::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@NumberDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::NumberDescription::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x18004a420ull, (void*)&UI::NumberDescription::CreateInPlaceObject);
     return n;
 }

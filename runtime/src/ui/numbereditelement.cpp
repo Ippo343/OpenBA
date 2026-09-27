@@ -7,15 +7,16 @@
 // (0x1800d0c10 / 0x1800d0ab0 / 0x1800d0820 / 0x1800d0220), INHERITED in C++
 // exactly as in the table:
 //
-//   0  vector deleting dtor  0x180046540  -> deleting_dtor.cpp row
+//   0  vector deleting dtor  0x180046540  -> NumberEditElement.h (the class's own)
 //   1  TypeName              0x180046250  here
 //   2  Type                  0x180046230  here
 //   4..7                     EditElement's (editelement.cpp)
 //   12 FinalizeText          0x1800d4a60  here  (overrides EditElement's
 //                                               0x1800d0da0)
 //
-// plus ??0NumberEditElement (0x1800d4c70) and ??1NumberEditElement
-// (0x1800d4c40), both DOOR bodies (no real ctor/dtor).
+// plus ??1NumberEditElement (0x1800d4c40) and the factory pair. ENDGAME B.3.9
+// UI-A: concrete, the real ctor ??0NumberEditElement (0x1800d4c70) is in the
+// header; the doors are retired.
 //
 // ENDGAME B.3.6 block C3: the three slot bodies are `UI::NumberEditElement`
 // members (runtime/types/ui/NumberEditElement.h). LAYOUT: sizeof 0x100 over
@@ -39,10 +40,6 @@ const uint8_t* TypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
         g_typeInfoSlot, "?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
-void* Vtable() { return RT_DATA_SLOT(void*, "??_7NumberEditElement@UI@@6B@"); }
-
-using CtorFn    = void* (*)(void* self);
-using DtorFn    = void  (*)(void* self);
 using ToIntegerFn = int32_t (*)(const char* s);
 using MemFreeFn = void (*)(void* p);
 // `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730) returns a
@@ -80,10 +77,14 @@ void ReleaseStringLocal(void** slot) {
 
 namespace UI {
 
-uint32_t NumberEditElement::Type() const { return TypeIdOf(TypeInfo()); }
+// ?TypeId@NumberEditElement@UI@@SAIXZ 0x180046240 — the record's first dword.
+uint32_t NumberEditElement::TypeId() { return TypeIdOf(TypeInfo()); }
+uint32_t NumberEditElement::Type() const { return TypeId(); }
 const char* NumberEditElement::TypeName() const { return TypeNameOf(TypeInfo()); }
 
-// Non-virtual, EMPTY: the dtor door keeps retail's body.
+// ??1NumberEditElement@UI@@UEAA@XZ 0x1800d4c40 — restamp, then the tail into
+// ~EditElement: EMPTY here, the compiler chains ~EditElement (ENDGAME B.3.9
+// UI-A; the retired door called it by address).
 NumberEditElement::~NumberEditElement() {}
 
 // ---------------------------------------------------------------------------
@@ -112,57 +113,34 @@ void NumberEditElement::FinalizeText() {
 
 }  // namespace UI
 
-// ??0NumberEditElement@UI@@QEAA@XZ   0x1800d4c70 — a DOOR BODY (no real ctor).
-extern "C" void* RtUi_NumberEditElement_Ctor(void* selfv) {   // returns this in RAX
-    RtAddr<CtorFn>(0x1800d0f10ull)(selfv);                     // ??0EditElement@UI@@QEAA@XZ
-    UI::NumberEditElement* self = reinterpret_cast<UI::NumberEditElement*>(selfv);   // B.3.6 bridge
-    *reinterpret_cast<void**>(selfv) = Vtable();
-    self->_min = static_cast<int32_t>(0xffff8001u);            // -32767
-    self->_max = 0x8000;                                       //  32768
-    return selfv;
+namespace UI {
+// ?CreateNewObject@NumberEditElement@UI@@SAPEAVBase@Object@@XZ  0x180046340 —
+// the FACTUI2 row this replaces: MemAlloc(0x100, 8), retail's null branch,
+// then the out-of-line ctor ??0NumberEditElement (0x1800d4c70).
+Object::Base* NumberEditElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(NumberEditElement), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) NumberEditElement();
 }
-
-// ??1NumberEditElement@UI@@UEAA@XZ   0x1800d4c40 (tail-jumps ~EditElement) — a DOOR BODY.
-extern "C" void RtUi_NumberEditElement_Dtor(void* self) {
-    *reinterpret_cast<void**>(self) = Vtable();
-    RtAddr<DtorFn>(0x1800d0e50ull)(self);                      // ??1EditElement@UI@@UEAA@XZ
+// ?CreateInPlaceObject@NumberEditElement@UI@@SAPEAVBase@Object@@PEAX@Z  0x1800463e0
+Object::Base* NumberEditElement::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) NumberEditElement();
 }
+}  // namespace UI
 
 // ============================================================================
-// The registered doors — one QUALIFIED delegation each.
-// ============================================================================
-extern "C" uint32_t RtUi_NumberEditElement_Type(const void* self) {
-    return reinterpret_cast<const UI::NumberEditElement*>(self)->UI::NumberEditElement::Type();   // B.3.6 bridge
-}
-extern "C" const char* RtUi_NumberEditElement_TypeName(const void* self) {
-    return reinterpret_cast<const UI::NumberEditElement*>(self)->UI::NumberEditElement::TypeName();   // B.3.6 bridge
-}
-extern "C" void RtUi_NumberEditElement_FinalizeText(void* self) {
-    reinterpret_cast<UI::NumberEditElement*>(self)->UI::NumberEditElement::FinalizeText();   // B.3.6 bridge
-}
-
+// Registration. ENDGAME B.3.9 UI-A: the slot doors, the ??0 and ??1 doors,
+// read only by the retired minted table / RT_DELDTOR row / FACTUI2 row, are
+// gone. The factory pair (B39_RULES D2) is the class's own.
 // ============================================================================
 int RtUiNumberEditElementRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@NumberEditElement@UI@@UEBAIXZ",
-                          (void*)&RtUi_NumberEditElement_Type);        ++n;
-    RegisterRuntimeAddr(0x180046230ull, (void*)&RtUi_NumberEditElement_Type);
-
-    RegisterRuntimeExport("?TypeName@NumberEditElement@UI@@UEBAPEBDXZ",
-                          (void*)&RtUi_NumberEditElement_TypeName);    ++n;
-    RegisterRuntimeAddr(0x180046250ull, (void*)&RtUi_NumberEditElement_TypeName);
-
-    RegisterRuntimeExport("??0NumberEditElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_NumberEditElement_Ctor);        ++n;
-    RegisterRuntimeAddr(0x1800d4c70ull, (void*)&RtUi_NumberEditElement_Ctor);
-
-    RegisterRuntimeExport("??1NumberEditElement@UI@@UEAA@XZ",
-                          (void*)&RtUi_NumberEditElement_Dtor);        ++n;
-    RegisterRuntimeAddr(0x1800d4c40ull, (void*)&RtUi_NumberEditElement_Dtor);
-
-    RegisterRuntimeExport("?FinalizeText@NumberEditElement@UI@@UEAAXXZ",
-                          (void*)&RtUi_NumberEditElement_FinalizeText); ++n;
-    RegisterRuntimeAddr(0x1800d4a60ull, (void*)&RtUi_NumberEditElement_FinalizeText);
-
+    RegisterRuntimeExport("?CreateNewObject@NumberEditElement@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::NumberEditElement::CreateNewObject);        ++n;
+    RegisterRuntimeAddr(0x180046340ull, (void*)&UI::NumberEditElement::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@NumberEditElement@UI@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&UI::NumberEditElement::CreateInPlaceObject);    ++n;
+    RegisterRuntimeAddr(0x1800463e0ull, (void*)&UI::NumberEditElement::CreateInPlaceObject);
     return n;
 }
