@@ -66,6 +66,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/CitizenComponent.h"
 
 namespace {
 
@@ -158,10 +159,12 @@ bool RingProgress(const char* what, int64_t before, int64_t after, int& iteratio
 // ============================================================
 // CitizenComponent::OnRemove (0x140113ca0) — vtable slot 7 (+0x38)
 // ============================================================
-extern "C" void CitizenComponent_OnRemove(void* selfV) {
-    if (!selfV) return;
+
+// [7] 0x140113ca0 — the removed-from-world broadcast (MarkForRemoval 0x1400c2ea0,
+// flags bit 1): leave the town citizen list.
+void CitizenComponent::OnRemove() {
     EnsureResolved();
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
+    uint8_t* p = reinterpret_cast<uint8_t*>(this);
 
     // ---- 1. prologue teardown -------------------------------------------------
     // DEVIATION (uninitialized-body guard): HideTool walks +0x278 -> +0x68 -> +0x28
@@ -174,22 +177,22 @@ extern "C" void CitizenComponent_OnRemove(void* selfV) {
     // genuinely owns id 0 (the exact in-world freeze fixed in 0f97d16). Skip the call
     // when the body was never populated; nothing of ours is in the scene in that case.
     if (s_hideTool && *reinterpret_cast<void**>(p + 0x278) != nullptr)
-        s_hideTool(selfV);
-    if (s_releasePartner)  s_releasePartner(selfV, '\0');   // +0x208
-    if (s_releaseLink59b0) s_releaseLink59b0(selfV);        // +0x228
-    if (s_releaseLink1650) s_releaseLink1650(selfV);        // +0x230
+        s_hideTool(this);
+    if (s_releasePartner)  s_releasePartner(this, '\0');   // +0x208
+    if (s_releaseLink59b0) s_releaseLink59b0(this);        // +0x228
+    if (s_releaseLink1650) s_releaseLink1650(this);        // +0x230
 
     // ---- 2. workplace link (+0x238 / +0x240) ----------------------------------
     {
         int64_t nullIBP = 0;
         Ctor(&nullIBP, nullptr);
-        if (s_assignWorkplace) s_assignWorkplace(selfV, &nullIBP, -1);
+        if (s_assignWorkplace) s_assignWorkplace(this, &nullIBP, -1);
     }
 
     // ---- 3. leave the host's roster ring (+0x258 back-ref) --------------------
     if (*reinterpret_cast<int64_t*>(p + 0x258) != 0) {
         int64_t selfIBP = 0;
-        Ctor(&selfIBP, selfV);
+        Ctor(&selfIBP, this);
         if (s_leaveRoster) s_leaveRoster(*reinterpret_cast<int64_t*>(p + 0x258), &selfIBP);
     }
 
@@ -267,7 +270,7 @@ extern "C" void CitizenComponent_OnRemove(void* selfV) {
     if (formerHouse != 0) {
         int64_t nullIBP = 0;
         Ctor(&nullIBP, nullptr);
-        if (s_assignHousing) s_assignHousing(selfV, &nullIBP);
+        if (s_assignHousing) s_assignHousing(this, &nullIBP);
     }
 
     // ---- 6. profession list ---------------------------------------------------
@@ -290,7 +293,7 @@ extern "C" void CitizenComponent_OnRemove(void* selfV) {
             int   eventType;
             const char* name;
             if (replacement == 0) {
-                target = selfV; eventType = 0x10; name = nullptr;   // nobody to take the job
+                target = this; eventType = 0x10; name = nullptr;   // nobody to take the job
             } else {
                 name = *reinterpret_cast<const char**>(p + 0x28);   // the deceased's name
                 target = reinterpret_cast<void*>(replacement);
@@ -305,7 +308,7 @@ extern "C" void CitizenComponent_OnRemove(void* selfV) {
 
         // ---- 8. the town citizen list (townMgr+0xa0) — the whole point ---------
         int64_t selfIBP = 0;
-        Ctor(&selfIBP, selfV);
+        Ctor(&selfIBP, this);
         int64_t townMgr = *reinterpret_cast<int64_t*>(gw + 0xf0);
         if (s_listErase && townMgr)
             s_listErase(reinterpret_cast<int64_t*>(townMgr + 0xa0), &selfIBP);

@@ -26,51 +26,9 @@
 #include "Component/FrustumOutlineElement.h"
 #include <cstdint>
 
-// ---------------------------------------------------------------------------
-// UI::Element is ABSTRACT: slot 4 (+0x20 ComputeSize) is pure, and 5/6
-// (+0x28 ComputeLayout, +0x30 Draw) are the base's. When the minimap's
-// Ribbon/GroupElement lays out its children it calls each child's ComputeSize;
-// on the bare base table that was _purecall -> the R6025 MessageBox (verified
-// under GDB). Before ENDGAME B.3.8 VIS the tree built a per-type table by
-// copying 24 entries of the minted base table (12 past its end, B38 D9 #11) and
-// patching 4/5/6; the class's compiler table carries them now.
-// ---------------------------------------------------------------------------
-// Slot 4 (+0x20) — ComputeSize (exe 0x14006c290). If the "size-pending" flag
-// (bit 27 of +0x34) is set, copy the element's intrinsic width/height (+0xd0/+0xd4)
-// into its size fields (+0x60/+0x64) and clear the flag. Pure field arithmetic —
-// no engine deps. (RibbonElement::ComputeSize clears the same bit 27 after it.)
-static void Frustum_ComputeSize(void* self) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uint32_t flags = *reinterpret_cast<uint32_t*>(s + 0x34);
-    if ((flags >> 27) & 1u) {
-        *reinterpret_cast<uint32_t*>(s + 0x60) = *reinterpret_cast<uint32_t*>(s + 0xd0);
-        *reinterpret_cast<uint32_t*>(s + 0x34) = flags & ~(1u << 27);
-        *reinterpret_cast<uint32_t*>(s + 0x64) = *reinterpret_cast<uint32_t*>(s + 0xd4);
-    }
-}
-
 // UI::Element::GetAlignedPosition (member overload, Runtime 0x180115ff0). Computes the
 // element's aligned screen rect from its size (+0x60/+0x64), margins (+0x18..+0x24) and
 // alignment (+0x30) within the parent-allocated (x,y,w,h).
-
-// Slot 5 (+0x28) — ComputeLayout (exe 0x14006c1c0). Faithful port: run the base
-// UI::Element::ComputeLayout, then compute the aligned screen rect via GetAlignedPosition
-// and store it at +0x68 (left) / +0x6c (top) / +0x70 (right) / +0x74 (bottom). The outline
-// Draw reads +0x68/+0x6c as the absolute pixel offset for its lines and scissor — without
-// this write they stay 0 and the frustum draws relative to screen origin instead of the
-// inset minimap rect (renders too high/left).
-static void Frustum_ComputeLayout(void* self, int x, int y, int w, int h) {
-    // base — QUALIFIED: this body IS slot 5 of FrustumOutlineElement.
-    reinterpret_cast<UI::Element*>(self)->UI::Element::ComputeLayout(x, y, w, h);  // B.3.6 bridge
-    int outX = 0, outY = 0, outW = 0, outH = 0;
-    reinterpret_cast<UI::Element*>(self)->GetAlignedPosition(  // B.3.6 bridge
-        x, y, w, h, 0, 0, outX, outY, outW, outH, false, false);
-    uint8_t* e = reinterpret_cast<uint8_t*>(self);
-    *reinterpret_cast<int*>(e + 0x68) = outX;
-    *reinterpret_cast<int*>(e + 0x70) = outX + outW;
-    *reinterpret_cast<int*>(e + 0x6c) = outY;
-    *reinterpret_cast<int*>(e + 0x74) = outY + outH;
-}
 
 // ===========================================================================
 // Camera-frustum ground-projection — port of FrustumOutlineElement_helper_c5b0
@@ -143,16 +101,73 @@ extern "C" void FrustumOutline_ProjectCorners(float* out) {
     }
 }
 
+// ============================================================================
+// The class.
+// ============================================================================
+
+// 0x14006c2f0 / create 0x140012400: Element() is `??0Element@UI@@`; the
+// 0x14015c2a0 stamp is the compiler's; Sprite() on +0xc0; +0xd0 (qword) = -1.
+FrustumOutlineElement::FrustumOutlineElement()
+    : _lineSprite(), _width(-1), _height(-1) {}
+
+// [0] 0x140012560: restamp, ~Element, MemFree on &1.
+Object::Base* FrustumOutlineElement::DeletingDtor(unsigned flags) {
+    this->~FrustumOutlineElement();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// [4] 0x14006c290
+// ---------------------------------------------------------------------------
+// UI::Element is ABSTRACT: slot 4 (+0x20 ComputeSize) is pure, and 5/6
+// (+0x28 ComputeLayout, +0x30 Draw) are the base's. When the minimap's
+// Ribbon/GroupElement lays out its children it calls each child's ComputeSize;
+// on the bare base table that was _purecall -> the R6025 MessageBox (verified
+// under GDB). Before ENDGAME B.3.8 VIS the tree built a per-type table by
+// copying 24 entries of the minted base table (12 past its end, B38 D9 #11) and
+// patching 4/5/6; the class's compiler table carries them now.
+// ---------------------------------------------------------------------------
+// Slot 4 (+0x20) — ComputeSize (exe 0x14006c290). If the "size-pending" flag
+// (bit 27 of +0x34) is set, copy the element's intrinsic width/height (+0xd0/+0xd4)
+// into its size fields (+0x60/+0x64) and clear the flag. Pure field arithmetic —
+// no engine deps. (RibbonElement::ComputeSize clears the same bit 27 after it.)
+void FrustumOutlineElement::ComputeSize() {
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
+    uint32_t flags = *reinterpret_cast<uint32_t*>(s + 0x34);
+    if ((flags >> 27) & 1u) {
+        *reinterpret_cast<uint32_t*>(s + 0x60) = *reinterpret_cast<uint32_t*>(s + 0xd0);
+        *reinterpret_cast<uint32_t*>(s + 0x34) = flags & ~(1u << 27);
+        *reinterpret_cast<uint32_t*>(s + 0x64) = *reinterpret_cast<uint32_t*>(s + 0xd4);
+    }
+}
+// [5] 0x14006c1c0
+// Slot 5 (+0x28) — ComputeLayout (exe 0x14006c1c0). Faithful port: run the base
+// UI::Element::ComputeLayout, then compute the aligned screen rect via GetAlignedPosition
+// and store it at +0x68 (left) / +0x6c (top) / +0x70 (right) / +0x74 (bottom). The outline
+// Draw reads +0x68/+0x6c as the absolute pixel offset for its lines and scissor — without
+// this write they stay 0 and the frustum draws relative to screen origin instead of the
+// inset minimap rect (renders too high/left).
+void FrustumOutlineElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
+    // base — QUALIFIED: this body IS slot 5 of FrustumOutlineElement.
+    reinterpret_cast<UI::Element*>(this)->UI::Element::ComputeLayout(x, y, w, h);  // B.3.6 bridge
+    int outX = 0, outY = 0, outW = 0, outH = 0;
+    reinterpret_cast<UI::Element*>(this)->GetAlignedPosition(  // B.3.6 bridge
+        x, y, w, h, 0, 0, outX, outY, outW, outH, false, false);
+    uint8_t* e = reinterpret_cast<uint8_t*>(this);
+    *reinterpret_cast<int*>(e + 0x68) = outX;
+    *reinterpret_cast<int*>(e + 0x70) = outX + outW;
+    *reinterpret_cast<int*>(e + 0x6c) = outY;
+    *reinterpret_cast<int*>(e + 0x74) = outY + outH;
+}
+// [6] 0x14006be90
 // Slot 6 (+0x30) — Draw. Port of FrustumOutlineElement_Draw (exe 0x14006be90):
 // draws the camera view-frustum footprint as a 4-line wire quad clipped to the
 // minimap rect. (AddLine no-ops on a spriteless sprite — CreateElement wires the
 // element's line sprite from the description; see frustumoutlinedescription.cpp.)
-static void Frustum_Draw(void* self, void* ctx, uint8_t alpha) {
-    uint8_t* e = reinterpret_cast<uint8_t*>(self);
+void FrustumOutlineElement::Draw(UI::SpriteContext& context, uint8_t alpha) const {
+    uint8_t* e = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(this));   // the body reads raw offsets
     // base element draw — QUALIFIED: this body IS slot 6 of FrustumOutlineElement.
-    reinterpret_cast<const UI::Element*>(self)->UI::Element::Draw(  // B.3.6 bridge
-        *reinterpret_cast<UI::SpriteContext*>(ctx), alpha);
-    if (!self || !ctx) return;
+    reinterpret_cast<const UI::Element*>(this)->UI::Element::Draw(context, alpha);  // B.3.6 bridge
 
     // Line color = element+0x38 modulated by alpha (halved if flag bit 18 set).
     uint32_t a32 = alpha;
@@ -190,7 +205,7 @@ static void Frustum_Draw(void* self, void* ctx, uint8_t alpha) {
     auto ix = [&](int i){ return (int)pts[i * 3 + 0] + ex; };
     auto iy = [&](int i){ return (int)pts[i * 3 + 1] + ey; };
 
-    UI::SpriteContext* sc = reinterpret_cast<UI::SpriteContext*>(ctx);  // B.3.6 bridge
+    UI::SpriteContext* sc = &context;
     const UI::Sprite& lineSprite = *reinterpret_cast<const UI::Sprite*>(sprite);  // B.3.6 bridge
     uint8_t savedVP[24] = {0}, scratchVP[24] = {0};
     ::new (savedVP) Video::Viewport(sc->SetScissor(ex, ey, width, height));
@@ -203,33 +218,6 @@ static void Frustum_Draw(void* self, void* ctx, uint8_t alpha) {
 
     ::new (scratchVP) Video::Viewport(
         sc->SetScissor(*reinterpret_cast<const Video::Viewport*>(savedVP)));
-}
-
-// ============================================================================
-// The class.
-// ============================================================================
-
-// 0x14006c2f0 / create 0x140012400: Element() is `??0Element@UI@@`; the
-// 0x14015c2a0 stamp is the compiler's; Sprite() on +0xc0; +0xd0 (qword) = -1.
-FrustumOutlineElement::FrustumOutlineElement()
-    : _lineSprite(), _width(-1), _height(-1) {}
-
-// [0] 0x140012560: restamp, ~Element, MemFree on &1.
-Object::Base* FrustumOutlineElement::DeletingDtor(unsigned flags) {
-    this->~FrustumOutlineElement();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
-// [4] 0x14006c290
-void FrustumOutlineElement::ComputeSize() { Frustum_ComputeSize(this); }
-// [5] 0x14006c1c0
-void FrustumOutlineElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
-    Frustum_ComputeLayout(this, x, y, w, h);
-}
-// [6] 0x14006be90
-void FrustumOutlineElement::Draw(UI::SpriteContext& context, uint8_t alpha) const {
-    Frustum_Draw(const_cast<FrustumOutlineElement*>(this), &context, alpha);
 }
 
 // create 0x140012400: MemAlloc(0xd8, 8), then the (inlined) ctor.

@@ -28,9 +28,6 @@
 // Resolved helpers
 // ============================================================
 
-// Component_Serialize (base class) -- at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
 // 0x140002cc0 DynArray8_EraseByValue -- REMOVES every element equal to *value, shifting
 // the tail down and decrementing the count. It is NOT a push, despite the name this
@@ -80,8 +77,6 @@ static void EnsureHelpers() {
 
     uintptr_t slot;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
 
     s_fn_ArrayEraseByValue = reinterpret_cast<fn_ArrayEraseByValue_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));
@@ -107,7 +102,7 @@ static void EnsureHelpers() {
 }
 
 // ============================================================
-// HappinessComponent::Shutdown (vtable slot [3], 0x14004aa80)
+// HappinessComponent::Shutdown (vtable slot [3], 0x14004aa80) — the Persist member below
 // ============================================================
 // Ghidra decompilation:
 //   Component_Serialize(param_1, param_2)
@@ -116,28 +111,8 @@ static void EnsureHelpers() {
 //   Serialize(local_30, param_1+0x28, nullptr)  // happinessFlag as bool
 //   ~Serializer(local_30)
 
-void HappinessComponent_Shutdown(HappinessComponent* self, void* stream) {
-    EnsureHelpers();
-
-    // Call base Component_Serialize
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
-
-    // Empty serializer block (controller compat)
-    alignas(8) uint8_t serializer1[24];
-    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();                                       // B.3.4 bridge
-
-    // Serialize happinessFlag (bool at +0x28)
-    alignas(8) uint8_t serializer2[24];
-    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<bool*>(&self->happinessFlag), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
-}
-
 // ============================================================
-// HappinessComponent::OnRemove (vtable slot [7], 0x14004aa20)
+// HappinessComponent::OnRemove (vtable slot [7], 0x14004aa20) — the member below
 // ============================================================
 // Ghidra decompilation:
 //   if (param_1[0x28] != 0) {
@@ -146,44 +121,6 @@ void HappinessComponent_Shutdown(HappinessComponent* self, void* stream) {
 //     FishingComponent_impl_a300(param_1, -1)
 //     param_1[0x28] = 0
 //   }
-
-void HappinessComponent_OnRemove(HappinessComponent* self) {
-    EnsureHelpers();
-
-    if (self->happinessFlag != 0) {
-        // Create InternalBasePtr from self (the component, passed as entity ref)
-        uint8_t basePtr[24];
-        if (fn_InternalBasePtr_Ctor) {
-            new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        }
-
-        // ERASE from the happiness list at (gameWorld->+0xF0)->+0x50.
-        //
-        // This said "Push" until 2026-08-25 and the function was called OnCreate.
-        // Both were wrong and they were the SAME wrong: 0x140002cc0 is
-        // DynArray8_EraseByValue, so a slot that erases, sets the entity index to
-        // -1 and clears the registered flag is the REMOVE side. Ghidra mislabels
-        // this pair on several components (its own plate comment on the callee
-        // records two more), and the mislabel is load-bearing here because the
-        // file already refers to 0x14004aa20 as "the slot-7 removal hook"
-        // elsewhere -- the name and the behaviour disagreed in one file.
-        if (s_fn_ArrayEraseByValue && s_pGameWorld && *s_pGameWorld) {
-            void* manager = *s_pGameWorld;
-            void* happinessArray = reinterpret_cast<void*>(
-                *reinterpret_cast<uintptr_t*>(
-                    reinterpret_cast<uintptr_t>(manager) + 0xF0) + 0x50);
-            s_fn_ArrayEraseByValue(happinessArray, basePtr);
-        }
-
-        // Set entity index to -1
-        if (s_fn_SetEntityIndex) {
-            s_fn_SetEntityIndex(self, -1);
-        }
-
-        // Clear the flag
-        self->happinessFlag = 0;
-    }
-}
 
 // ============================================================
 // Reimpl of FUN_14004a300 (FishingComponent_impl_a300: notify the population
@@ -269,8 +206,7 @@ void FishingComponent_NotifyTile(void* selfP, int16_t param2) {
         int64_t arr = *(int64_t*)(host + 0x28);
         for (int i = 0; i < count; i++) {
             void* comp = *(void**)(arr + (int64_t)i * 8);
-            typedef uint32_t (*GetTypeId_t)(void*);
-            uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == *s_fc_pTId_Target) {
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *s_fc_pTId_Target))
                     targetComp = comp;
@@ -301,18 +237,6 @@ void FishingComponent_NotifyTile(void* selfP, int16_t param2) {
 
     if (s_fc_Helper)
         s_fc_Helper(*(int**)((uintptr_t)*s_pGameWorld + 0xf8), state, x, y, resourceId, param2);
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void HappinessComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[HappinessComponent] Funcs resolved: Serialize=%p ArrayPush=%p SetIdx=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_ArrayEraseByValue,
-           (void*)s_fn_SetEntityIndex);
-#endif
 }
 
 // ============================================================
@@ -390,11 +314,7 @@ extern "C" bool HappinessComponent_IsActive(void* selfV) {
             for (int j = 0; j < n; ++j) {
                 void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(j) * 8);
                 if (!c) continue;
-                typedef uint32_t (*GetTypeId_t)(void*);
-                const uint32_t tid =
-                    (reinterpret_cast<GetTypeId_t>(
-                        *reinterpret_cast<uintptr_t*>(
-                            *reinterpret_cast<uintptr_t*>(c) + 0x10)))(c);
+                const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
                 if (tid == *s_pTid_RawMatDesc) {
                     if (s_fn_IsDerivedFrom && s_fn_IsDerivedFrom(c, *s_pTid_RawMatDesc))
                         rawMatDesc = reinterpret_cast<uintptr_t>(c);
@@ -508,7 +428,7 @@ extern "C" char HappinessComponent_Tick38(void* comp, void* /*sm*/, void* /*time
 // HappinessComponent state-3 "demolish" enter -- 0x14004a940. Byte-identical to the
 // slot-7 removal hook (0x14004aa20), guard included.
 extern "C" char HappinessComponent_EnterDemolish(void* comp, void* /*sm*/) {
-    HappinessComponent_OnRemove(reinterpret_cast<HappinessComponent*>(comp));
+    reinterpret_cast<HappinessComponent*>(comp)->HappinessComponent::OnRemove();   // B.3.8 bridge (state enters take void*)
     return 0;
 }
 
@@ -579,11 +499,41 @@ void* HappinessComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HappinessComponent());
 }
 
-// [3] 0x14004aa80 — happinessFlag round-trips (save/load wave 2026-08-28).
-void HappinessComponent::Persist(void* stream) { HappinessComponent_Shutdown(this, stream); }
+extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);   // 0x140002cc0
 
-// [7] 0x14004aa20.
-void HappinessComponent::OnRemove() { HappinessComponent_OnRemove(this); }
+// [3] 0x14004aa80 — happinessFlag round-trips (save/load wave 2026-08-28):
+// Component::Persist (a direct CALL 0x1401189b0), an empty controller scope,
+// then a scope carrying happinessFlag (+0x28) as a bool.
+void HappinessComponent::Persist(void* stream) {
+    Component::Persist(stream);
+    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);         // B.3.8 bridge
+    ser.Serialize(*reinterpret_cast<bool*>(&happinessFlag), nullptr);
+}
+
+// [7] 0x14004aa20 — if registered: ERASE this component from the happiness list
+// at (gameWorld+0xF0)+0x50, set the entity index to -1, clear the flag.
+//
+// This said "Push" until 2026-08-25 and the function was called OnCreate. Both
+// were wrong and they were the SAME wrong: 0x140002cc0 is DynArray8_EraseByValue,
+// so a slot that erases, sets the entity index to -1 and clears the registered
+// flag is the REMOVE side.
+void HappinessComponent::OnRemove() {
+    if (happinessFlag == 0) return;
+    uint8_t basePtr[24];
+    if (fn_InternalBasePtr_Ctor) {
+        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+    }
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        void* happinessArray = reinterpret_cast<void*>(
+            *reinterpret_cast<uintptr_t*>(
+                reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xF0) + 0x50);
+        CemeteryListErase_Reimpl(happinessArray, basePtr);   // 0x140002cc0
+    }
+    FishingComponent_NotifyTile(this, -1);                    // 0x14004a300 (entity index)
+    happinessFlag = 0;
+}
+
 
 // [15] 0x14004a780 — PORT GAP (HappinessComponent.h): the tree's slot 15 was the
 // inert stub, kept; porting retail's body is its own titled commit.

@@ -38,6 +38,8 @@
 // Faithful offset-by-offset port.
 
 #include "engine_funcs.h"
+#include "Work/Work.h"   // B.3.8 CB1a (Vtable)
+#include "Work/ClearArea.h"   // B.3.8 CB1a (Vtable)
 #include "resolve.h"
 #include "clearareacomponent_funcs.h"
 #include <cstdint>
@@ -79,7 +81,7 @@ static void ResolveStates() {
     s_WorkSchedPost = reinterpret_cast<fn_WorkSchedPost_t>(ResolveAddr(Module::Exe, 0x14012ec60));
     uintptr_t ctorSlot = ResolveAddr(Module::Exe, 0x140152768);
     if (ctorSlot) s_ObjInternalCtor = *reinterpret_cast<fn_ObjInternalCtor_t*>(ctorSlot);
-    s_ClearAreaWorkVtable = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x140161110));
+    s_ClearAreaWorkVtable = const_cast<void*>(ClearArea::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
     s_tidNatResDesc = DerefTid(0x1401c7b68);
     s_tidRawMatDesc = DerefTid(0x1401c7cb8);
     s_tidNatResComp = DerefTid(0x1401c7b30);
@@ -160,9 +162,7 @@ static bool EntityHasNatResComp(void* entity) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
         void* comp = *slot;
         if (!comp) continue;
-        void** vt = *reinterpret_cast<void***>(comp);
-        if (!vt || !vt[2]) continue;
-        uint32_t tid = reinterpret_cast<uint32_t(*)(void*)>(vt[2])(comp);
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (tid == s_tidNatResComp)
             return fn_IsDerivedFrom && fn_IsDerivedFrom(comp, s_tidNatResComp);
     }
@@ -292,9 +292,7 @@ static uint32_t ClearArea_ScanKindFlags(void* comp, int* grid, int x1, int y1, i
             for (int j = 0; j < subCount; ++j) {
                 void* sub = *reinterpret_cast<void**>(subArr + static_cast<uintptr_t>(j) * 8);
                 if (!sub) continue;
-                void** vt = *reinterpret_cast<void***>(sub);
-                if (!vt || !vt[2]) continue;
-                if (reinterpret_cast<uint32_t(*)(void*)>(vt[2])(sub) == s_tidNatResDesc) {
+                if (reinterpret_cast<Object::Base*>(sub)->Type() == s_tidNatResDesc) {   // B.3.8 bridge (slot 2)
                     if (fn_IsDerivedFrom && fn_IsDerivedFrom(sub, s_tidNatResDesc)) natRes = sub;
                     break;
                 }
@@ -309,9 +307,7 @@ static uint32_t ClearArea_ScanKindFlags(void* comp, int* grid, int x1, int y1, i
             for (int k = 0; k < rCount; ++k) {
                 void* rm = *reinterpret_cast<void**>(rArr + static_cast<uintptr_t>(k) * 8);
                 if (!rm) continue;
-                void** vt = *reinterpret_cast<void***>(rm);
-                if (!vt || !vt[2]) continue;
-                if (reinterpret_cast<uint32_t(*)(void*)>(vt[2])(rm) == s_tidRawMatDesc) {
+                if (reinterpret_cast<Object::Base*>(rm)->Type() == s_tidRawMatDesc) {   // B.3.8 bridge (slot 2)
                     if (fn_IsDerivedFrom && fn_IsDerivedFrom(rm, s_tidRawMatDesc)) {
                         uint32_t f = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(rm) + 0x5c);
                         uint32_t u;
@@ -339,7 +335,7 @@ static void* ClearArea_BuildWork(void* work, void* ownerEnt, uint64_t descRef,
     uintptr_t w = reinterpret_cast<uintptr_t>(work);
     // --- Work_Ctor25(work, &ownerEnt) ---
     if (s_ObjInternalCtor) s_ObjInternalCtor(work);
-    *reinterpret_cast<void**>(w + 0x00) = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x140161a80)); // vtable_Work
+    *reinterpret_cast<void**>(w + 0x00) = const_cast<void*>(Work::Vtable()); // vtable_Work   // B.3.8: the compiler vtable (same bytes, B8-5)
     *reinterpret_cast<uint64_t*>(w + 0x10) = reinterpret_cast<uint64_t>(ownerEnt);
     *reinterpret_cast<uint64_t*>(w + 0x18) = 0;
     *reinterpret_cast<int32_t*>(w + 0x20) = -1;

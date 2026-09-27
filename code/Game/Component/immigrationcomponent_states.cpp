@@ -61,6 +61,12 @@
 // `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
 // been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Mesh.h"
+#include "Component/ResidenceComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/NomadDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/NomadComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/InteractDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/ImmigrationDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/CitizenDescription.h"   // B.3.8 CB1a (TypeId)
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Component/coll_bridge.h"
@@ -125,15 +131,15 @@ void Resolve() {
 
 // Type ids by name, resolved lazily from the live factory tree (the exe .rdata
 // globals are not all registered in standalone; see the ImmigrationUI stub note).
-uint32_t TidImmDesc()   { static uint32_t t = 0; if (!t) t = ::Object::ResolveTypeIdByNameLazy("ImmigrationDescription"); return t; }
-uint32_t TidNomadDesc() { static uint32_t t = 0; if (!t) t = ::Object::ResolveTypeIdByNameLazy("NomadDescription");       return t; }
-uint32_t TidNomadComp() { static uint32_t t = 0; if (!t) t = ::Object::ResolveTypeIdByNameLazy("NomadComponent");         return t; }
-uint32_t TidResidence() { static uint32_t t = 0; if (!t) t = ::Object::ResolveTypeIdByNameLazy("ResidenceComponent");     return t; }
-uint32_t TidCitDesc()   { static uint32_t t = 0; if (!t) t = ::Object::ResolveTypeIdByNameLazy("CitizenDescription");     return t; }
+uint32_t TidImmDesc()   { static uint32_t t = 0; if (!t) t = ImmigrationDescription::TypeId(); return t; }
+uint32_t TidNomadDesc() { static uint32_t t = 0; if (!t) t = NomadDescription::TypeId();       return t; }
+uint32_t TidNomadComp() { static uint32_t t = 0; if (!t) t = NomadComponent::TypeId();         return t; }
+uint32_t TidResidence() { static uint32_t t = 0; if (!t) t = ResidenceComponent::TypeId();     return t; }
+uint32_t TidCitDesc()   { static uint32_t t = 0; if (!t) t = CitizenDescription::TypeId();     return t; }
 uint32_t TidInteractDesc() {
     if (g_TypeId_InteractDescription_FC && *g_TypeId_InteractDescription_FC)
         return *g_TypeId_InteractDescription_FC;
-    static uint32_t t = 0; if (!t) t = ::Object::ResolveTypeIdByNameLazy("InteractDescription"); return t;
+    static uint32_t t = 0; if (!t) t = InteractDescription::TypeId(); return t;
 }
 
 // ---------------------------------------------------------------- small accessors
@@ -176,8 +182,7 @@ void* FindComponentByTid(void* entity, uint32_t tid) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
         void* c = *slot;
         if (!c) continue;
-        void** vt = *reinterpret_cast<void***>(c);
-        uint32_t got = reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c);
+        uint32_t got = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
         if (got != tid) continue;
         c = *slot;
         return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? c : nullptr;

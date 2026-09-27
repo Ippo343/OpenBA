@@ -23,6 +23,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/AmbientEmitterDescription.h"
+#include "Component/AmbientEmitterComponent.h"   // B.3.8 CB1a (TypeId)
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -110,7 +111,7 @@ void AmbientEmitterDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140001650: AmbientEmitterComponent's type id through the hidden return slot.
 Object::Type* AmbientEmitterDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("AmbientEmitterComponent");
+    ret->_type = AmbientEmitterComponent::TypeId();
     return ret;
 }
 

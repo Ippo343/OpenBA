@@ -46,6 +46,7 @@
 // `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
 // been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Mesh.h"
+#include "Component/PickingDescription.h"   // B.3.8 CB1a (TypeId)
 #include <new>
 #include "engine_funcs.h"
 #include "options.h"
@@ -368,7 +369,7 @@ static void EnsureTailInit() {
     s_slot_max      = reinterpret_cast<fn_scalarMax_t>(ResolveSlot(0x140151e78));
     // Picking-registration closure (port of Entity_impl_8f50 = PickingComponent OnAdded).
     s_slot_isDerived = reinterpret_cast<fn_isDerived_t>(ResolveSlot(0x140152a98));
-    s_tidPickingDesc = ::Object::GetTypeIdByName("PickingDescription");
+    s_tidPickingDesc = PickingDescription::TypeId();
     s_tailInit = true;
 }
 

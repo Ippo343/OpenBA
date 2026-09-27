@@ -29,16 +29,6 @@
 // Calls parent ResourceProduceComponent::Shutdown, then creates
 // an empty serializer block (no additional data to serialize).
 
-void HerbalistComponent_Shutdown(HerbalistComponent* self, void* stream) {
-    // Base ResourceProduceComponent::Shutdown (0x14012b4a0), a direct call in retail.
-    self->ResourceProduceComponent::Persist(stream);
-
-    // Empty serializer block (subclass compat)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-}
-
 // ============================================================
 // Init: nothing left to resolve (the base Persist is a direct member call now)
 // ============================================================
@@ -80,7 +70,15 @@ void* HerbalistComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HerbalistComponent());
 }
 
-void       HerbalistComponent::Persist(void* stream)     { HerbalistComponent_Shutdown(this, stream); }        // [3]  0x14004b200
+void       HerbalistComponent::Persist(void* stream) {
+    // Base ResourceProduceComponent::Shutdown (0x14012b4a0), a direct call in retail.
+    ResourceProduceComponent::Persist(stream);
+
+    // Empty serializer block (subclass compat)
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+}
 uintptr_t* HerbalistComponent::CreateWork(uintptr_t* out) { return HerbalistComponent_CreateWork(this, out); } // [18] 0x14004b160
 
 DEFINE_EXE_VTABLE(HerbalistComponent, "_ZTV18HerbalistComponent")

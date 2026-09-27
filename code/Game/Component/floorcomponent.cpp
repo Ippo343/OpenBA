@@ -18,6 +18,9 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/floorcomponent_funcs.h"
+#include "Component/MapComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/FloorDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/ModelComponent.h"   // B.3.8 CB1a (TypeId)
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"          // GetTypeIdByName
@@ -31,26 +34,12 @@
 
 // BANISHED_FLOOR_TRACE (code/Game/Game/mapquery.cpp) — shared with the consumer side.
 
-// Standalone-safe type-id resolution. Both ids the retail bodies read live in raw
-// .rdata (DAT_1401c7708 FloorDescription, DWORD_1401c79e0 MapComponent); ResolveAddr
-// on a .rdata address returns null unless a reg_*.cpp explicitly maps it, and a
-// registered-but-unfilled slot reads 0 — either way every IsDerivedFrom/GetTypeId
-// compare below would silently fail. Fall back to the standalone type registry.
-static uint32_t FloorTypeIdByName(const char* name, uint32_t* rdataSlot) {
-    if (rdataSlot && *rdataSlot != 0 && *rdataSlot != 0xFFFFFFFFu) return *rdataSlot;
-    uint32_t id = ::Object::GetTypeIdByName(name);
-    return (id == 0xFFFFFFFFu) ? 0 : id;
-}
-
 static void EnsureSubHelpers();
 
 // ============================================================
 // Resolved helpers
 // ============================================================
 
-// Component_Serialize (base class) -- at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
 // IsDerivedFrom -- dispatch slot at 0x140152a98
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
@@ -82,8 +71,6 @@ static void EnsureHelpers() {
 
     uintptr_t slot;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
     s_fn_GetEntityData = reinterpret_cast<fn_GetEntityData_t>(
         ResolveAddr(Module::Exe, 0x140004680));
     s_fn_RemoveFloorMesh = reinterpret_cast<fn_RemoveFloorMesh_t>(
@@ -107,19 +94,6 @@ static void EnsureHelpers() {
 // ============================================================
 // Serializes base component, then serializes floorFlag (bool at +0x28).
 
-void FloorComponent_Shutdown(FloorComponent* self, void* stream) {
-    EnsureHelpers();
-
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
-
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&self->floorFlag), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-}
-
 // ============================================================
 // FloorComponent::Draw (vtable slot [6], 0x14011F340)
 // ============================================================
@@ -135,76 +109,11 @@ void FloorComponent_Shutdown(FloorComponent* self, void* stream) {
 //   JZ skip
 //   CALL FloorComponent_sub_f390
 
-void FloorComponent_Draw(FloorComponent* self) {
-    EnsureHelpers();
-    EnsureSubHelpers();
-
-    const uint32_t descTid = FloorTypeIdByName("FloorDescription", s_pFloorBuildingTypeId);
-    if (!s_fn_IsDerivedFrom_d || !descTid) {
-        return;
-    }
-
-    void* obj = self->_description;
-    bool isDerived = s_fn_IsDerivedFrom_d(obj, descTid);
-    void* building = isDerived ? obj : nullptr;
-
-    // Retail dereferences `building+0x28` unconditionally (CMOVNZ leaves RDX=0 on a
-    // failed cast and it reads [0x28]) because its data guarantees a FloorComponent's
-    // +0x18 IS a FloorDescription. Keep the null test — a standalone entity can carry
-    // the component without the description surviving the copy-ctor.
-    if (!building) {
-        return;
-    }
-
-    // desc+0x28 is the FloorDescription bool — "this structure has a walkable floor".
-    uint8_t flag = *(uint8_t*)((uintptr_t)building + 0x28);
-    if (flag != 0) {
-        if (s_fn_FloorSubF390) {
-            s_fn_FloorSubF390(self);
-        }
-    }
-}
-
 // ============================================================
 // FloorComponent::OnCreate (vtable slot [7], 0x14011F2A0)
 // ============================================================
 // If floorId >= 0, removes the existing floor mesh from the picking
 // scene, then resets floorId to -1 and floorFlag to 0.
-
-void FloorComponent_OnCreate(FloorComponent* self) {
-    EnsureHelpers();
-
-    if (self->floorId >= 0) {
-        // Get scene from game state
-        int* pScene = *(int**)((uintptr_t)*s_pGameState + 0xF8);
-
-        // Check owner pointer
-
-        // Get entity data from owner
-        uintptr_t entityData = 0;
-        if (s_fn_GetEntityData) {
-            s_fn_GetEntityData(*(void**)((uintptr_t)self + 0x10), &entityData);
-        }
-
-        // [SA-GUARD] Same MapComponent-may-be-missing case as f390: without the
-        // footprint we cannot decrement the per-cell counters, but we must still drop
-        // the mesh and reset the id or the scene keeps a dangling deck.
-        if (entityData != 0) {
-            int16_t x = *(int16_t*)(entityData + 0x28);
-            int16_t y = *(int16_t*)(entityData + 0x2a);
-            int16_t w = *(int16_t*)(entityData + 0x2c);
-            int16_t h = *(int16_t*)(entityData + 0x2e);
-
-            if (s_fn_RemoveFloorMesh) {
-                s_fn_RemoveFloorMesh(pScene, (uint32_t)self->floorId,
-                    (int)x, (int)y, (int)w, (int)h);
-            }
-        }
-
-        self->floorId = -1;
-        self->floorFlag = 0;
-    }
-}
 
 // ============================================================
 // Reimplemented exe helpers (callee bodies for the guarded call sites above)
@@ -254,7 +163,7 @@ void* FloorComponent_FindResData(void* owner, void* outIBP) {
     EnsureHelpers(); EnsureSubHelpers();
     uintptr_t o = reinterpret_cast<uintptr_t>(owner);
     void* found = nullptr;
-    uint32_t wantTypeId = FloorTypeIdByName("MapComponent", s_pNatResTypeId);
+    uint32_t wantTypeId = MapComponent::TypeId();
     int count = *reinterpret_cast<int*>(o + 0x38);
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(o + 0x30);
     for (int i = 0; i < count; ++i) {
@@ -335,7 +244,7 @@ void FloorComponent_SubF390(void* selfV) {
     if (ent == 0) {
         static uint32_t s_tidModel = 0;
         if (s_tidModel == 0 || s_tidModel == 0xFFFFFFFFu)
-            s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
+            s_tidModel = ModelComponent::TypeId();
         uintptr_t owner = *reinterpret_cast<uintptr_t*>(self + 2);
         if (owner && s_tidModel && s_tidModel != 0xFFFFFFFFu) {
             int n = *reinterpret_cast<int*>(owner + 0x38);
@@ -343,9 +252,7 @@ void FloorComponent_SubF390(void* selfV) {
             for (int k = 0; k < n && arr; ++k) {
                 void* c = *reinterpret_cast<void**>(arr + (uintptr_t)k * 8);
                 if (!c) continue;
-                uintptr_t vt = *reinterpret_cast<uintptr_t*>(c);
-                typedef uint32_t (*getTid_t)(void*);
-                if ((*reinterpret_cast<getTid_t*>(vt + 0x10))(c) == s_tidModel) {
+                if (reinterpret_cast<Object::Base*>(c)->Type() == s_tidModel) {   // B.3.8 bridge (slot 2)
                     ent = reinterpret_cast<uintptr_t>(c);
                     break;
                 }
@@ -362,7 +269,7 @@ void FloorComponent_SubF390(void* selfV) {
         xform[k] = *reinterpret_cast<uint32_t*>(ent + 0x148 + (uintptr_t)k * 4);
 
     void* building = *reinterpret_cast<void**>(self + 3);
-    const uint32_t descTid = FloorTypeIdByName("FloorDescription", s_pFloorBuildingTypeId);
+    const uint32_t descTid = FloorDescription::TypeId();
     void* meshOwner = (descTid && fn_IsDerivedFrom &&
                        fn_IsDerivedFrom(building, descTid)) ? building : nullptr;
     void* mesh = meshOwner ? *reinterpret_cast<void**>((uintptr_t)meshOwner + 0x20) : nullptr;
@@ -399,8 +306,8 @@ void FloorComponent_SubF390(void* selfV) {
 void FloorComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[FloorComponent] Funcs resolved: Serialize=%p FloorSub=%p RemoveMesh=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_FloorSubF390,
+    printf("[FloorComponent] Funcs resolved: FloorSub=%p RemoveMesh=%p\n",
+           (void*)s_fn_FloorSubF390,
            (void*)s_fn_RemoveFloorMesh);
 #endif
 }
@@ -481,11 +388,81 @@ FloorComponent::FloorComponent() : floorFlag(0), _pad29{}, floorId(-1) {
 }
 
 // [3] 0x14011f560 — floorFlag round-trips a save.
-void FloorComponent::Persist(void* stream) { FloorComponent_Shutdown(this, stream); }
+void FloorComponent::Persist(void* stream) {
+    EnsureHelpers();
+
+    Component::Persist(stream);   // retail's direct CALL 0x1401189b0
+
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&floorFlag), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+}
 // [6] 0x14011f340
-void FloorComponent::OnAdded() { FloorComponent_Draw(this); }
+void FloorComponent::OnAdded() {
+    EnsureHelpers();
+    EnsureSubHelpers();
+
+    const uint32_t descTid = FloorDescription::TypeId();
+    if (!s_fn_IsDerivedFrom_d || !descTid) {
+        return;
+    }
+
+    void* obj = _description;
+    bool isDerived = s_fn_IsDerivedFrom_d(obj, descTid);
+    void* building = isDerived ? obj : nullptr;
+
+    // Retail dereferences `building+0x28` unconditionally (CMOVNZ leaves RDX=0 on a
+    // failed cast and it reads [0x28]) because its data guarantees a FloorComponent's
+    // +0x18 IS a FloorDescription. Keep the null test — a standalone entity can carry
+    // the component without the description surviving the copy-ctor.
+    if (!building) {
+        return;
+    }
+
+    // desc+0x28 is the FloorDescription bool — "this structure has a walkable floor".
+    uint8_t flag = *(uint8_t*)((uintptr_t)building + 0x28);
+    if (flag != 0) {
+        if (s_fn_FloorSubF390) {
+            s_fn_FloorSubF390(this);
+        }
+    }
+}
 // [7] 0x14011f2a0
-void FloorComponent::OnRemove() { FloorComponent_OnCreate(this); }
+void FloorComponent::OnRemove() {
+    EnsureHelpers();
+
+    if (floorId >= 0) {
+        // Get scene from game state
+        int* pScene = *(int**)((uintptr_t)*s_pGameState + 0xF8);
+
+        // Check owner pointer
+
+        // Get entity data from owner
+        uintptr_t entityData = 0;
+        if (s_fn_GetEntityData) {
+            s_fn_GetEntityData(*(void**)((uintptr_t)this + 0x10), &entityData);
+        }
+
+        // [SA-GUARD] Same MapComponent-may-be-missing case as f390: without the
+        // footprint we cannot decrement the per-cell counters, but we must still drop
+        // the mesh and reset the id or the scene keeps a dangling deck.
+        if (entityData != 0) {
+            int16_t x = *(int16_t*)(entityData + 0x28);
+            int16_t y = *(int16_t*)(entityData + 0x2a);
+            int16_t w = *(int16_t*)(entityData + 0x2c);
+            int16_t h = *(int16_t*)(entityData + 0x2e);
+
+            if (s_fn_RemoveFloorMesh) {
+                s_fn_RemoveFloorMesh(pScene, (uint32_t)floorId,
+                    (int)x, (int)y, (int)w, (int)h);
+            }
+        }
+
+        floorId = -1;
+        floorFlag = 0;
+    }
+}
 // [12] 0x14011f520: `if (msg != 1) return;` followed by a verbatim inline copy
 // of f390 — so delegate rather than duplicate the body.
 void FloorComponent::OnEvent(int msgId) {

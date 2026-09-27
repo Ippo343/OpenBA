@@ -64,6 +64,11 @@
 
 
 #include "engine_funcs.h"
+#include "Component/MapComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/InteractComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/HappinessDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/HappinessComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/CitizenDescription.h"   // B.3.8 CB1a (TypeId)
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -134,11 +139,11 @@ static void EnsureInit() {
     s_7fb0        = reinterpret_cast<fn_7fb0_t>(ResolveAddr(Module::Exe, 0x140087fb0));
     s_checkWork   = reinterpret_cast<fn_checkWork_t>(ResolveAddr(Module::Exe, 0x1401158d0));
     s_bstInsert   = reinterpret_cast<fn_bstInsert_t>(ResolveAddr(Module::Exe, 0x140021a30));
-    if (s_tid_CitizenDescription == 0)   s_tid_CitizenDescription   = ::Object::GetTypeIdByName("CitizenDescription");
-    if (s_tid_HappinessDescription == 0) s_tid_HappinessDescription = ::Object::GetTypeIdByName("HappinessDescription");
-    if (s_tid_HappinessComponent == 0)   s_tid_HappinessComponent   = ::Object::GetTypeIdByName("HappinessComponent");
-    if (s_tid_MapComponent == 0)         s_tid_MapComponent         = ::Object::GetTypeIdByName("MapComponent");
-    if (s_tid_InteractComponent == 0)    s_tid_InteractComponent    = ::Object::GetTypeIdByName("InteractComponent");
+    if (s_tid_CitizenDescription == 0)   s_tid_CitizenDescription   = CitizenDescription::TypeId();
+    if (s_tid_HappinessDescription == 0) s_tid_HappinessDescription = HappinessDescription::TypeId();
+    if (s_tid_HappinessComponent == 0)   s_tid_HappinessComponent   = HappinessComponent::TypeId();
+    if (s_tid_MapComponent == 0)         s_tid_MapComponent         = MapComponent::TypeId();
+    if (s_tid_InteractComponent == 0)    s_tid_InteractComponent    = InteractComponent::TypeId();
     s_init = true;
 }
 
@@ -154,13 +159,10 @@ static inline int64_t CellArrayBase(int* mapGrid) {
 // Virtual GetTypeId: original is `(**(code**)(**slot + 0x10))()` where slot is &entry,
 // *slot is the object, **slot is its vtable, vtable+0x10 (index 2) is GetTypeId, called
 // with the object as `this`. Returns the runtime type id of the object at *slot.
-typedef uint32_t (*fn_getTypeId_t)(void* self);
 static inline uint32_t VGetTypeId(int64_t* slot) {
     void* obj = *reinterpret_cast<void**>(slot);
     if (obj == nullptr) return 0xffffffff;
-    void** vt = *reinterpret_cast<void***>(obj);
-    fn_getTypeId_t f = reinterpret_cast<fn_getTypeId_t>(vt[2]);  // +0x10
-    return f(obj);
+    return reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.8 bridge (slot 2)
 }
 
 // Scan a component array [base @+arrOff, count @+cntOff of `node`] for the first entry

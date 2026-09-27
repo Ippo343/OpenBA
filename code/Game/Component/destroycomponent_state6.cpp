@@ -66,6 +66,9 @@
 // `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
 // been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/GraphicsMesh.h"
+#include "Component/ModelDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/DestroyDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/DecalComponent.h"   // B.3.8 CB1a (TypeId)
 #include "graphics/Mesh.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -119,24 +122,14 @@ static void EnsureResolved() {
     s_tidDecalComp   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7580));
 }
 
-// A .rdata type-id global that never got seeded reads back 0 / 0xFFFFFFFF, and an
-// IsDerivedFrom against it returns false — which silently DELETES the test it
-// guards and hands the caller a null. Fall back to the name registry (the proven
-// pattern from action_base_rawmat.cpp).
-static uint32_t TypeIdCached(uint32_t* slot, const char* name, uint32_t* cache) {
-    uint32_t t = slot ? *slot : 0;
-    if (t != 0 && t != 0xFFFFFFFFu) return t;
-    if (*cache == 0) *cache = ::Object::GetTypeIdByName(name);
-    return *cache;
-}
 static uint32_t TidDestroyDesc() {
-    static uint32_t c = 0; return TypeIdCached(s_tidDestroyDesc, "DestroyDescription", &c);
+    return DestroyDescription::TypeId();
 }
 static uint32_t TidModelDesc() {
-    static uint32_t c = 0; return TypeIdCached(s_tidModelDesc, "ModelDescription", &c);
+    return ModelDescription::TypeId();
 }
 static uint32_t TidDecalComp() {
-    static uint32_t c = 0; return TypeIdCached(s_tidDecalComp, "DecalComponent", &c);
+    return DecalComponent::TypeId();
 }
 
 // Retail's `IsDerivedFrom(p, tid) ? p : nullptr` idiom.
@@ -178,7 +171,7 @@ extern "C" void* Destroy_FindDecalComponent_b630(uintptr_t entity, void* retIBP)
             void** ibp = reinterpret_cast<void**>(base + static_cast<uintptr_t>(i) * 8);
             void* obj = *ibp;
             if (!obj) continue;
-            uint32_t t = (*reinterpret_cast<uint32_t (**)(void*)>(*reinterpret_cast<uintptr_t*>(obj) + 0x10))(obj);
+            uint32_t t = reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.8 bridge (slot 2)
             if (t == typeId) {
                 void* o = *ibp;
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(o, typeId)) found = o;
@@ -407,11 +400,10 @@ extern "C" void Destroy_RubbleStep_d5d0(void* destroyComp) {
     if (next < rubbleMeshFloor) next = rubbleMeshFloor;
 
     if (next != cur) {
-        void** vt = *reinterpret_cast<void***>(mc);
-        // vtable +0x38 (slot 7) removes the current geometry from Graphics::Scene and
-        // +0x30 (slot 6) adds the new one back — modelcomponent.cpp implements both
-        // (ModelComponent_OnCreate / ModelComponent_Draw).
-        if (cur >= 0 && vt && vt[7]) reinterpret_cast<void (*)(void*)>(vt[7])(modelComp);
+        // Slot 7 (OnRemove) removes the current geometry from Graphics::Scene and
+        // slot 6 (OnAdded) adds the new one back — ModelComponent's members.
+        ::Component* model = reinterpret_cast<::Component*>(modelComp);   // B.3.8 bridge (a ModelComponent find)
+        if (cur >= 0) model->OnRemove();
         *reinterpret_cast<int16_t*>(mc + 0x166) = static_cast<int16_t>(next);
         if (next >= 0) {
             void* modelDesc = AsType(*reinterpret_cast<void**>(mc + 0x18), TidModelDesc());
@@ -420,7 +412,7 @@ extern "C" void Destroy_RubbleStep_d5d0(void* destroyComp) {
                                            static_cast<int16_t>(next));
             reinterpret_cast<Graphics::MeshInstance*>(mc + 0x28)
                 ->SetMesh(Graphics::ExternalPtrHandle{mesh});   // B.3.5 bridge
-            if (vt && vt[6]) reinterpret_cast<void (*)(void*)>(vt[6])(modelComp);
+            model->OnAdded();
         }
         if (Milestone()) {
             std::fprintf(stderr, "[Collapse] rubble step comp=%p mesh variant %d -> %d "
@@ -464,9 +456,9 @@ extern "C" void Destroy_RubbleStep_d5d0(void* destroyComp) {
         if (rubbleDecalState != *reinterpret_cast<int*>(dc + 0x28)) {
             *reinterpret_cast<int*>(dc + 0x28) = rubbleDecalState;
             if (*reinterpret_cast<int*>(dc + 0x2c) >= 0) {
-                void** vt = *reinterpret_cast<void***>(dc);
-                if (vt && vt[7]) reinterpret_cast<void (*)(void*)>(vt[7])(decalIbp);
-                if (vt && vt[6]) reinterpret_cast<void (*)(void*)>(vt[6])(decalIbp);
+                ::Component* decal = reinterpret_cast<::Component*>(decalIbp);   // B.3.8 bridge (the DecalComponent find)
+                decal->OnRemove();
+                decal->OnAdded();
             }
         }
     }

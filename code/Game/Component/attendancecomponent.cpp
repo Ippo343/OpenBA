@@ -42,49 +42,6 @@ static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self
                                                        int32_t queueCount);
 
 // ============================================================
-// AttendanceComponent::Update (vtable slot [9], 0x140044370)
-// ============================================================
-void AttendanceComponent_Update(AttendanceComponent* self) {
-    // Resolve the helpers on first use. AttendanceComponent_InitFuncs had NO caller
-    // anywhere (found 2026-09-03 by the BANISHED_STRESS town): every Update ran with
-    // s_fn_GetBuildingComponent == null, so buildingPtr stayed 0 and the +0x60 read
-    // below faulted the first time any attendance queue was non-empty. It never showed
-    // before because no run had ever STAFFED a chapel/school/hospital, and an unstaffed
-    // one never gets a queue, so the early-out above hid it. Idempotent after the first call.
-    AttendanceComponent_InitFuncs();
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    // Check if queue count at +0x30 (as int32) is nonzero
-    int32_t queueCount = *(int32_t*)(selfAddr + 0x30);
-    if (queueCount == 0)
-        return;
-
-    // Get entity pointer
-    void* entity = *(void**)(selfAddr + 0x10);
-
-    // Get building component from entity
-    int64_t buildingPtr = 0;
-    if (s_fn_GetBuildingComponent)
-        s_fn_GetBuildingComponent(entity, &buildingPtr);
-
-    // DIAGNOSTIC ONLY (the deref below stays faithful): retail relies on every attendance
-    // building carrying a WorkPlaceComponent, so a null here means something upstream
-    // handed this component an entity without one. Say WHICH entity before faulting,
-    // because the crash log alone cannot (first seen in the BANISHED_STRESS town).
-    if (buildingPtr == 0) {
-        AttendanceComponent_ReportMissingWorkplace(self, entity, queueCount);
-    }
-
-    // Check if building is idle (building+0x60 == 0)
-    int32_t busyState = *(int32_t*)(buildingPtr + 0x60);
-    if (busyState == 0) {
-        // Building is idle -- process the attendance queue
-        if (s_fn_ProcessAttendanceQueue)
-            s_fn_ProcessAttendanceQueue(self);
-    }
-}
-
-// ============================================================
 // Reimpl helpers for the attendance functions
 // ============================================================
 // DWORD_1401c80e0 — job-host component type ID
@@ -105,8 +62,7 @@ static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self
         for (int i = 0; comps && i < n && i < 32; ++i) {
             int64_t c = comps[i];
             if (!c) { fprintf(stderr, " <null>"); continue; }
-            void** vt = *reinterpret_cast<void***>(c);
-            const uint32_t tid = (vt && vt[2]) ? reinterpret_cast<uint32_t(*)(void*)>(vt[2])(reinterpret_cast<void*>(c)) : 0;
+            const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
             const char* nm = ::Object::GetTypeNameById(tid);
             const bool isHost = s_pTId_JobHost && tid == *s_pTId_JobHost;
             fprintf(stderr, " %s(%u%s)", (nm && nm[0]) ? nm : "?", tid,
@@ -142,17 +98,13 @@ static fn_AC_TryEnrolInSchool_t s_fn_AC_TryEnrolInSchool = nullptr;
 // Component_Serialize 0x1401189b0; the queue
 // array grow 0x1400032e0; and DWORD_1401c7158, the CitizenComponent type id the
 // per-entry filter tests against.
-typedef void  (*fn_Component_Serialize_t)(void* self, void* stream);
 // 0x1400032e0 was Collection::Array<void*>::SetSize(n) monomorphised into the
 // exe (ENDGAME B.3.2 step 2) — converted at its call site below.
-static fn_Component_Serialize_t     s_fn_Component_Serialize     = nullptr;
 static uint32_t*                    s_pTId_CitizenComponent      = nullptr;  // 0x1401c7158
 
 static bool s_acHelpersResolved = false;
 static void EnsureAcHelpers() {
     if (s_acHelpersResolved) return;
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
     s_pTId_CitizenComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7158));
     s_pTId_JobHost = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c80e0));
@@ -258,8 +210,7 @@ void AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr) {
         for (int i = 0; i < count; i++) {
             int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
             void* comp = (void*)*slot;
-            typedef uint32_t (*GetTypeId_t)(void*);
-            uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == *s_pTId_JobHost) {
                 void* c = (void*)*slot;
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_pTId_JobHost)) found = c;
@@ -348,14 +299,6 @@ extern void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting);  // 0
 // ⚠ The `wpc+0x50` deref is UNGUARDED in retail and left unguarded here: retail relies on
 // an attendance building always carrying a WorkPlaceComponent. If this ever faults, the
 // fault is an entity built without a WPC upstream — do not paper over it here.
-extern "C" uint8_t AttendanceComponent_CommandMask(void* selfP, int /*cmd*/) {
-    AttendanceComponent_InitFuncs();
-    const uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
-    if (!s_fn_GetBuildingComponent) return 0;
-    int64_t wpcIbp = 0;
-    s_fn_GetBuildingComponent(*reinterpret_cast<void**>(self + 0x10), &wpcIbp);
-    return *reinterpret_cast<char*>(wpcIbp + 0x50) ? 3 : 1;
-}
 
 // ── slot 14 — retail 0x140043e80 — flip the workplace's accepting flag ────────────
 // Retail body:
@@ -371,17 +314,6 @@ extern "C" uint8_t AttendanceComponent_CommandMask(void* selfP, int /*cmd*/) {
 // is nothing to drain.
 //
 // ⚠ Retail ignores the command id here too.
-extern "C" void AttendanceComponent_Command(void* selfP, int /*cmd*/) {
-    AttendanceComponent_InitFuncs();
-    const uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
-    if (!s_fn_GetBuildingComponent) return;
-    int64_t wpcIbp = 0;
-    s_fn_GetBuildingComponent(*reinterpret_cast<void**>(self + 0x10), &wpcIbp);
-    const char cur = *reinterpret_cast<char*>(wpcIbp + 0x50);
-    WorkPlaceComponent_SetAccepting(wpcIbp, cur == 0);
-    if (*reinterpret_cast<char*>(wpcIbp + 0x50) == 0)
-        AttendanceComponent_ProcessQueue(selfP);
-}
 
 // ============================================================
 // Vtable slot 7 — retail 0x1400443d0 — leave the town attendance registry
@@ -395,17 +327,6 @@ extern "C" void AttendanceComponent_Command(void* selfP, int /*cmd*/) {
 //
 // It is also called directly by state 3's enter (through the vtable), which is the
 // "close for the night" path — so this is not only teardown.
-extern "C" void AttendanceComponent_Unregister(void* selfP) {
-    EnsureAcHelpers();
-    if (!s_fn_AC_002cc0 || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    const uintptr_t town = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
-    if (!town) return;
-    int64_t selfIbp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&selfIbp) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(selfP));   // B.3.3 bridge
-    s_fn_AC_002cc0(reinterpret_cast<int64_t*>(town + 0x60), &selfIbp);
-}
 
 // ============================================================
 // Vtable slot 3 — retail 0x140044410 — Shutdown / Serialize
@@ -424,51 +345,6 @@ extern "C" void AttendanceComponent_Unregister(void* selfP) {
 // The IsDerivedFrom filter is a load-bearing part of load, not a sanity check: a saved
 // queue entry whose citizen no longer exists deserializes to some other object, and
 // retail nulls the slot rather than letting ProcessQueue dispatch on it.
-extern "C" void AttendanceComponent_SerializeSlot(void* selfP, void* stream) {
-    AttendanceComponent_InitFuncs();
-    EnsureAcHelpers();
-    const uintptr_t self = reinterpret_cast<uintptr_t>(selfP);
-
-    if (s_fn_Component_Serialize) s_fn_Component_Serialize(selfP, stream);
-
-    // Empty block — retail opens and closes a Serializer with nothing in it.
-    alignas(8) uint8_t empty[24];
-    ::new (static_cast<void*>(empty)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(empty)->~Serializer();                                       // B.3.4 bridge
-
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    int32_t count = *reinterpret_cast<int32_t*>(self + 0x30);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
-
-    // The queue array has to be grown to the deserialized count before the
-    // per-entry loop writes into it.
-    // ⚠ IO::Serializer +0x08 is m_encoding (a POINTER, never 0) — testing it as
-    // the loading flag leaves this load-only branch dead on BOTH legs, so the
-    // array is never grown and the loop below silently skips reading the IBPs
-    // the save wrote -> stream desync. The flag is on the STREAM (+0x08).
-    // Same defect as WorkPlaceComponent (21b3b33); see
-    // reference_serializer_plus8_is_encoding_not_loading_flag.
-    const uintptr_t acStream = *reinterpret_cast<uintptr_t*>(ser);
-    if (acStream && static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
-        GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(self + 0x28)).SetSize(count);
-    }
-
-    int64_t* q = *reinterpret_cast<int64_t**>(self + 0x28);
-    for (int32_t i = 0; i < count && q; ++i, ++q) {
-        reinterpret_cast<Object::InternalBasePtr*>(q)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-        if (*q == 0) continue;
-        // Value check, not just pointer: a registered-but-unfilled slot reads 0 and
-        // IsDerivedFrom(x, 0) would drop every attendee.
-        if (s_pTId_CitizenComponent && *s_pTId_CitizenComponent && fn_IsDerivedFrom &&
-            !fn_IsDerivedFrom(reinterpret_cast<void*>(*q), *s_pTId_CitizenComponent))
-            *q = 0;
-    }
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();                                       // B.3.4 bridge
-}
 
 // ============================================================================
 // ENDGAME B.3.8 MI-A — AttendanceComponent as a REAL class (AttendanceComponent.h).
@@ -531,22 +407,132 @@ void* AttendanceComponent::CreateInPlaceObject(void* storage) {
 }
 
 // [3] 0x140044410.
-void AttendanceComponent::Persist(void* stream) { AttendanceComponent_SerializeSlot(this, stream); }
+void AttendanceComponent::Persist(void* stream) {
+    AttendanceComponent_InitFuncs();
+    EnsureAcHelpers();
+    const uintptr_t self = reinterpret_cast<uintptr_t>(this);
+
+    Component::Persist(stream);   // retail's direct CALL 0x1401189b0
+
+    // Empty block — retail opens and closes a Serializer with nothing in it.
+    alignas(8) uint8_t empty[24];
+    ::new (static_cast<void*>(empty)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(empty)->~Serializer();                                       // B.3.4 bridge
+
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    int32_t count = *reinterpret_cast<int32_t*>(self + 0x30);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
+
+    // The queue array has to be grown to the deserialized count before the
+    // per-entry loop writes into it.
+    // ⚠ IO::Serializer +0x08 is m_encoding (a POINTER, never 0) — testing it as
+    // the loading flag leaves this load-only branch dead on BOTH legs, so the
+    // array is never grown and the loop below silently skips reading the IBPs
+    // the save wrote -> stream desync. The flag is on the STREAM (+0x08).
+    // Same defect as WorkPlaceComponent (21b3b33); see
+    // reference_serializer_plus8_is_encoding_not_loading_flag.
+    const uintptr_t acStream = *reinterpret_cast<uintptr_t*>(ser);
+    if (acStream && static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+        // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
+        GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(self + 0x28)).SetSize(count);
+    }
+
+    int64_t* q = *reinterpret_cast<int64_t**>(self + 0x28);
+    for (int32_t i = 0; i < count && q; ++i, ++q) {
+        reinterpret_cast<Object::InternalBasePtr*>(q)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
+        if (*q == 0) continue;
+        // Value check, not just pointer: a registered-but-unfilled slot reads 0 and
+        // IsDerivedFrom(x, 0) would drop every attendee.
+        if (s_pTId_CitizenComponent && *s_pTId_CitizenComponent && fn_IsDerivedFrom &&
+            !fn_IsDerivedFrom(reinterpret_cast<void*>(*q), *s_pTId_CitizenComponent))
+            *q = 0;
+    }
+
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();                                       // B.3.4 bridge
+}
 
 // [7] 0x1400443d0 — leave the town attendance registry (state 3's enter also calls
 // it through the vtable).
-void AttendanceComponent::OnRemove() { AttendanceComponent_Unregister(this); }
+void AttendanceComponent::OnRemove() {
+    EnsureAcHelpers();
+    if (!s_fn_AC_002cc0 || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    const uintptr_t town = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+    if (!town) return;
+    int64_t selfIbp = 0;
+    if (fn_InternalBasePtr_Ctor) new (&selfIbp) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+    s_fn_AC_002cc0(reinterpret_cast<int64_t*>(town + 0x60), &selfIbp);
+}
 
 // [9] 0x140044370 — the elapsed-time argument is not read by retail's body.
-void AttendanceComponent::Update(void* /*time*/) { AttendanceComponent_Update(this); }
+// ============================================================
+// AttendanceComponent::Update (vtable slot [9], 0x140044370)
+// ============================================================
+void AttendanceComponent::Update(void* /*time*/) {
+    // Resolve the helpers on first use. AttendanceComponent_InitFuncs had NO caller
+    // anywhere (found 2026-09-03 by the BANISHED_STRESS town): every Update ran with
+    // s_fn_GetBuildingComponent == null, so buildingPtr stayed 0 and the +0x60 read
+    // below faulted the first time any attendance queue was non-empty. It never showed
+    // before because no run had ever STAFFED a chapel/school/hospital, and an unstaffed
+    // one never gets a queue, so the early-out above hid it. Idempotent after the first call.
+    AttendanceComponent_InitFuncs();
+    uintptr_t selfAddr = (uintptr_t)this;
+
+    // Check if queue count at +0x30 (as int32) is nonzero
+    int32_t queueCount = *(int32_t*)(selfAddr + 0x30);
+    if (queueCount == 0)
+        return;
+
+    // Get entity pointer
+    void* entity = *(void**)(selfAddr + 0x10);
+
+    // Get building component from entity
+    int64_t buildingPtr = 0;
+    if (s_fn_GetBuildingComponent)
+        s_fn_GetBuildingComponent(entity, &buildingPtr);
+
+    // DIAGNOSTIC ONLY (the deref below stays faithful): retail relies on every attendance
+    // building carrying a WorkPlaceComponent, so a null here means something upstream
+    // handed this component an entity without one. Say WHICH entity before faulting,
+    // because the crash log alone cannot (first seen in the BANISHED_STRESS town).
+    if (buildingPtr == 0) {
+        AttendanceComponent_ReportMissingWorkplace(this, entity, queueCount);
+    }
+
+    // Check if building is idle (building+0x60 == 0)
+    int32_t busyState = *(int32_t*)(buildingPtr + 0x60);
+    if (busyState == 0) {
+        // Building is idle -- process the attendance queue
+        if (s_fn_ProcessAttendanceQueue)
+            s_fn_ProcessAttendanceQueue(this);
+    }
+}
 
 // [13] 0x140043f10 — `accepting ? 3 : 1`; the command id is ignored, as in retail.
-uint32_t AttendanceComponent::CommandMask(int command) {
-    return AttendanceComponent_CommandMask(this, command);
+uint32_t AttendanceComponent::CommandMask(int /*command*/) {
+    AttendanceComponent_InitFuncs();
+    const uintptr_t self = reinterpret_cast<uintptr_t>(this);
+    if (!s_fn_GetBuildingComponent) return 0;
+    int64_t wpcIbp = 0;
+    s_fn_GetBuildingComponent(*reinterpret_cast<void**>(self + 0x10), &wpcIbp);
+    return *reinterpret_cast<char*>(wpcIbp + 0x50) ? 3 : 1;
 }
 
 // [14] 0x140043e80 — flip the workplace's accepting flag; drain on the OFF edge.
-void AttendanceComponent::Command(int command) { AttendanceComponent_Command(this, command); }
+void AttendanceComponent::Command(int /*command*/) {
+    AttendanceComponent_InitFuncs();
+    const uintptr_t self = reinterpret_cast<uintptr_t>(this);
+    if (!s_fn_GetBuildingComponent) return;
+    int64_t wpcIbp = 0;
+    s_fn_GetBuildingComponent(*reinterpret_cast<void**>(self + 0x10), &wpcIbp);
+    const char cur = *reinterpret_cast<char*>(wpcIbp + 0x50);
+    WorkPlaceComponent_SetAccepting(wpcIbp, cur == 0);
+    if (*reinterpret_cast<char*>(wpcIbp + 0x50) == 0)
+        AttendanceComponent_ProcessQueue(this);
+}
 
 DEFINE_EXE_VTABLE(AttendanceComponent, "_ZTV19AttendanceComponent")
 DEFINE_EXE_TYPE(AttendanceComponent, "ControllerComponent")

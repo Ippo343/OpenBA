@@ -28,6 +28,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/ImmigrationDescription.h"
+#include "Component/ImmigrationComponent.h"   // B.3.8 CB1a (TypeId)
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -120,7 +121,7 @@ void ImmigrationDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140007af0: ImmigrationComponent's type id through the hidden return slot.
 Object::Type* ImmigrationDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("ImmigrationComponent");
+    ret->_type = ImmigrationComponent::TypeId();
     return ret;
 }
 

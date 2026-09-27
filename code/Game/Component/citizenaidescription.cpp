@@ -16,6 +16,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/CitizenAIDescription.h"
+#include "Component/CitizenAIComponent.h"   // B.3.8 CB1a (TypeId)
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -53,7 +54,7 @@ void CitizenAIDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x14002fc80: CitizenAIComponent's type id through the hidden return slot.
 Object::Type* CitizenAIDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("CitizenAIComponent");
+    ret->_type = CitizenAIComponent::TypeId();
     return ret;
 }
 

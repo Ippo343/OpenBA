@@ -34,6 +34,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/CitizenDescription.h"
+#include "Component/CitizenComponent.h"   // B.3.8 CB1a (TypeId)
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -235,7 +236,7 @@ void CitizenDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x1400301e0: CitizenComponent's type id through the hidden return slot.
 Object::Type* CitizenDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("CitizenComponent");
+    ret->_type = CitizenComponent::TypeId();
     return ret;
 }
 

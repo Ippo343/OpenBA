@@ -5,12 +5,6 @@
 #include "AmbientEnvironmentComponent.h"
 #include <cstdint>
 
-// Update (vtable slot [9], 0x140043310): Samples terrain grid for dominant biome,
-// blends day/night ambient sounds based on temperature, driving the sibling
-// AmbientEmitterComponent through the world Audio::Scene. Faithful reimpl.
-// The component Update ABI is (self, Time*); the original reads only `self`.
-void AmbientEnvironmentComponent_Update(AmbientEnvironmentComponent* self, int64_t* time);
-
 // InitRegion (port of the region/position half of AmbientEnvironmentComponent_
 // impl_36a0, exe 0x1400436a0): stamps the biome-sample grid region (comp+0x28
 // gridX, +0x2c gridY, +0x30 rw, +0x34 rh), computes the region-center world

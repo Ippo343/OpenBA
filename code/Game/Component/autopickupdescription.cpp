@@ -14,6 +14,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/AutoPickupDescription.h"
+#include "Component/AutoPickupComponent.h"   // B.3.8 CB1a (TypeId)
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -53,7 +54,7 @@ void AutoPickupDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140003520: AutoPickupComponent's type id through the hidden return slot.
 Object::Type* AutoPickupDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("AutoPickupComponent");
+    ret->_type = AutoPickupComponent::TypeId();
     return ret;
 }
 

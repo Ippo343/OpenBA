@@ -67,6 +67,9 @@
 
 
 #include "engine_funcs.h"
+#include "Action/PlayAnimation.h"   // B.3.8 CB1a (Vtable)
+#include "Action/PerformWork.h"   // B.3.8 CB1a (Vtable)
+#include "Action/Action.h"   // B.3.8 CB1a (Vtable)
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName (c7158 heal)
 #include <cstdint>
@@ -142,9 +145,9 @@ static void EnsureInit() {
     s_fn_consumeRaw   = reinterpret_cast<fn_consumeRaw_t  >(ResolveAddr(Module::Exe, 0x1400c63b0));
     s_fn_pickupStored = reinterpret_cast<fn_pickupStored_t>(ResolveAddr(Module::Exe, 0x1400ca520));
     s_fn_showTool     = reinterpret_cast<fn_showTool_t    >(ResolveAddr(Module::Exe, 0x140042890));
-    s_vt_Action        = ResolveAddr(Module::Exe, 0x14015faa0);
-    s_vt_PerformWork   = ResolveAddr(Module::Exe, 0x14015fea0);
-    s_vt_PlayAnimation = ResolveAddr(Module::Exe, 0x140158950);
+    s_vt_Action        = reinterpret_cast<uintptr_t>(Action::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
+    s_vt_PerformWork   = reinterpret_cast<uintptr_t>(PerformWork::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
+    s_vt_PlayAnimation = reinterpret_cast<uintptr_t>(PlayAnimation::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
     s_pMsgId_70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
     s_pMsgId_7158 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
     s_pMsgId_42c0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c42c0));
@@ -263,7 +266,7 @@ static void* FindLimitComponent(int64_t listObj) {
         for (;;) {
             int64_t arr = *reinterpret_cast<int64_t*>(listObj + 0x28);
             void* child = *reinterpret_cast<void**>(arr + byteOff);
-            uint32_t tid = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<int64_t*>(child) + 0x10))(child);
+            uint32_t tid = reinterpret_cast<Object::Base*>(child)->Type();   // B.3.8 bridge (slot 2)
             if (tid == want) {
                 int64_t arr2 = *reinterpret_cast<int64_t*>(listObj + 0x28);
                 void* match = *reinterpret_cast<void**>(arr2 + static_cast<int64_t>(idx) * 8);

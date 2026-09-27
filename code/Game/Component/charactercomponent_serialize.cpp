@@ -36,7 +36,7 @@
 // fn_InternalBasePtr_Serialize, fn_IsDerivedFrom, fn_InternalBasePtr_Ctor, and
 // the array-resize helper FUN_1400032e0 (already ported/registered elsewhere —
 // see animalwave_serialize.cpp's s_Resize8 use of the same address).
-// Component_SerializeReimpl is the already-ported Component base (+0x18 default).
+// The base serialize (0x1401189b0) is Component::Persist, called qualified.
 //
 // Validation type ids resolved locally (self-contained, matching the house
 // pattern in animalwave_serialize.cpp): 0x1401c7a50 = ModelComponent,
@@ -53,8 +53,8 @@
 #include <cstdint>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/CharacterComponent.h"
 
-extern void Component_SerializeReimpl(void* self, void* stream);
 
 // FUN_1400032e0 was Collection::Array<void*>::SetSize(n) monomorphised into
 // the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
@@ -103,50 +103,51 @@ void SerializeValidatedIBP(void* ibp, void* ser, const uint32_t* tid) {
 
 } // namespace
 
-extern "C" void CharacterComponent_Serialize(void* self, void* stream) {
-    if (!self || !stream) return;
+// [3] 0x140109ab0.
+void CharacterComponent::Persist(void* stream) {
+    if (!stream) return;
     Resolve();
-    Component_SerializeReimpl(self, stream);
+    Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
     alignas(8) uint8_t ser[24];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800150e0
-    reinterpret_cast<Math::Vector3*>(At(self, 0x2c))->Serialize(ser);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x3c)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x38)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x28)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x60)), nullptr);    // B.3.4 bridge
+    reinterpret_cast<Math::Vector3*>(At(this, 0x2c))->Serialize(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x3c)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x38)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(this, 0x28)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x60)), nullptr);    // B.3.4 bridge
 
-    int count = *reinterpret_cast<int*>(At(self, 0x50));
+    int count = *reinterpret_cast<int*>(At(this, 0x50));
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
     // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
-    if (Loading(stream)) GameColl::AsArray<GameColl::Ptr8>(At(self, 0x48)).SetSize(count);
+    if (Loading(stream)) GameColl::AsArray<GameColl::Ptr8>(At(this, 0x48)).SetSize(count);
 
-    uint8_t* member = *reinterpret_cast<uint8_t**>(At(self, 0x48));
+    uint8_t* member = *reinterpret_cast<uint8_t**>(At(this, 0x48));
     for (int i = 0; i < count && member; ++i, member += 8)
         SerializeValidatedIBP(member, ser, s_tidAction);
 
-    SerializeValidatedIBP(At(self, 0x58), ser, s_tidAction);
-    SerializeValidatedIBP(At(self, 0x68), ser, s_tidModelComponent);
-    SerializeValidatedIBP(At(self, 0x70), ser, s_tidPickingComponent);
+    SerializeValidatedIBP(At(this, 0x58), ser, s_tidAction);
+    SerializeValidatedIBP(At(this, 0x68), ser, s_tidModelComponent);
+    SerializeValidatedIBP(At(this, 0x70), ser, s_tidPickingComponent);
 
     if (Loading(stream)) {
-        void* owner = *reinterpret_cast<void**>(At(self, 0x18));
+        void* owner = *reinterpret_cast<void**>(At(this, 0x18));
         bool isDesc = owner && fn_IsDerivedFrom && s_tidCharacterDescription &&
                      *s_tidCharacterDescription &&
                      fn_IsDerivedFrom(owner, *s_tidCharacterDescription);
-        *reinterpret_cast<void**>(At(self, 0x78)) = isDesc ? owner : nullptr;
+        *reinterpret_cast<void**>(At(this, 0x78)) = isDesc ? owner : nullptr;
 
         if (fn_InternalBasePtr_Ctor) {
             int64_t selfIbp = 0;
-            new (&selfIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
+            new (&selfIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
             void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
             float* charMgr = gw ? reinterpret_cast<float*>(
                 *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(gw) + 0x88)) : nullptr;
             if (charMgr) {
                 int64_t ibpArg = selfIbp;
-                *reinterpret_cast<int32_t*>(At(self, 0x40)) =
+                *reinterpret_cast<int32_t*>(At(this, 0x40)) =
                     static_cast<int32_t>(CharMgr_sub_83f0(charMgr, &ibpArg));
             }
         }

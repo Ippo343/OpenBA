@@ -181,10 +181,7 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
                                static_cast<uintptr_t>(i) * 8;
         const uintptr_t obj = *reinterpret_cast<uintptr_t*>(slot);
         if (!obj) continue;
-        typedef uint32_t (*GetTypeId_t)(void*);
-        GetTypeId_t getTypeId =
-            *reinterpret_cast<GetTypeId_t*>(*reinterpret_cast<uintptr_t*>(obj) + 0x10);
-        if (getTypeId && getTypeId(reinterpret_cast<void*>(obj)) == wantedTid) {
+        if (reinterpret_cast<Object::Base*>(obj)->Type() == wantedTid) {   // B.3.8 bridge (slot 2)
             void* cand = *reinterpret_cast<void**>(slot);
             model = (fn_IsDerivedFrom && fn_IsDerivedFrom(cand, wantedTid)) ? cand : nullptr;
             break;
@@ -246,10 +243,7 @@ extern "C" void* BoatRoute_FindBoatComponent(int64_t entity, void* outIBP) {
                                static_cast<uintptr_t>(i) * 8;
         const uintptr_t obj = *reinterpret_cast<uintptr_t*>(slot);
         if (!obj) continue;
-        typedef uint32_t (*GetTypeId_t)(void*);
-        GetTypeId_t getTypeId =
-            *reinterpret_cast<GetTypeId_t*>(*reinterpret_cast<uintptr_t*>(obj) + 0x10);
-        if (getTypeId && getTypeId(reinterpret_cast<void*>(obj)) == wanted) {
+        if (reinterpret_cast<Object::Base*>(obj)->Type() == wanted) {   // B.3.8 bridge (slot 2)
             void* cand = *reinterpret_cast<void**>(slot);
             found = (fn_IsDerivedFrom && fn_IsDerivedFrom(cand, wanted)) ? cand : nullptr;
             break;

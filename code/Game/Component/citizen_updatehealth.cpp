@@ -38,6 +38,8 @@
 // 0x14017214c=1.0f, DAT_140172174=2.0f, DAT_140172280=-1.0f (inlined bit-exact).
 
 #include "engine_funcs.h"
+#include "Component/WorkPlaceComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/CitizenComponent.h"   // B.3.8 CB1a (TypeId)
 #include "options.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
@@ -111,7 +113,7 @@ static void EnsureInit() {
     s_pMonthsPerYear = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401721b8));
     s_pSecsPerMonth  = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172234));
 
-    s_tidCitizen = ::Object::GetTypeIdByName("CitizenComponent");
+    s_tidCitizen = CitizenComponent::TypeId();
     s_tidDisease = ::Object::GetTypeIdByName("Disease");
 }
 
@@ -235,7 +237,7 @@ static void PlagueHospitalCensus(void* gw, void* healerProf) {
 
     // Registry is populated — an answer here is now meaningful.
     s_censusDone = true;
-    uint32_t tidWpc = ::Object::GetTypeIdByName("WorkPlaceComponent");
+    uint32_t tidWpc = WorkPlaceComponent::TypeId();
     uintptr_t arr = *(uintptr_t*)(mgr + 0x60);
     int withWpc = 0, matches = 0;
     for (int i = 0; i < attendance && arr && tidWpc; i++) {
@@ -248,8 +250,7 @@ static void PlagueHospitalCensus(void* gw, void* healerProf) {
         for (int j = 0; j < n && comps; j++) {
             uintptr_t c = *(uintptr_t*)(comps + (uintptr_t)j * 8);
             if (!c) continue;
-            uint32_t (*getTid)(void*) = *(uint32_t(**)(void*))(*(uintptr_t*)c + 0x10);
-            if (!getTid || getTid((void*)c) != tidWpc) continue;
+            if (reinterpret_cast<Object::Base*>(c)->Type() != tidWpc) continue;   // B.3.8 bridge (slot 2)
             ++withWpc;
             if (*(void**)(c + 0x48) == healerProf && healerProf != nullptr) ++matches;
             break;
@@ -417,10 +418,7 @@ extern "C" void* Map_RadiusQuery_92990(float* map, void** out, float* pos, float
                     for (int c = 0; c < compCount; c++) {
                         void* compSlot = (void*)(comps + (uintptr_t)c * 8);
                         uintptr_t comp = *(uintptr_t*)compSlot;
-                        typedef int (*fn_GetTypeId_t)(void* self);
-                        fn_GetTypeId_t getId =
-                            *(fn_GetTypeId_t*)(*(uintptr_t*)comp + 0x10);
-                        if (getId((void*)comp) == typeId) { accept = true; break; }
+                        if (static_cast<int>(reinterpret_cast<Object::Base*>(comp)->Type()) == typeId) { accept = true; break; }   // B.3.8 bridge (slot 2)
                     }
                 }
 

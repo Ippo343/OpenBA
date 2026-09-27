@@ -96,143 +96,9 @@ static inline float AbsViaMask(float v) {
 }
 
 // ============================================================
-// FruitComponent::Startup / OnCreate (vtable slot [4], +0x20, original 0x14004a030)
-// ============================================================
-// Body-init: populate self->field28 (+0x28) with the sibling
-// NaturalResourceComponent's InternalBasePtr from the owning entity (+0x10).
-//
-//   CheckPtr(self+0x10);
-//   ibp = FUN_1400052c0(*(self+0x10), &local);   // first sibling NatResComp
-//   self+0x28 = *(void**)ibp;                     // the wrapped component ptr
-//
-// Called at spawn by ComponentEntity_StartupComponents (vtable+0x20). _unk18
-// (+0x18, the FruitDescription) is set earlier by the base Component copy-ctor
-// (ComponentEntity_CtorFromDescription).
-void FruitComponent_Startup(FruitComponent* self) {
-    EnsureHelpers();
-    uint8_t* comp = reinterpret_cast<uint8_t*>(self);
-
-    void* owner = *reinterpret_cast<void**>(comp + 0x10);
-    if (!owner) return;   // not yet wired into an entity
-
-
-    // FUN_1400052c0 returns an InternalBasePtr (out-param); its first qword is the
-    // wrapped component pointer, which the original stores into self+0x28.
-    int64_t ibp = 0;
-    if (s_fn_FindNatResSibling)
-        s_fn_FindNatResSibling(owner, &ibp);
-    *reinterpret_cast<void**>(comp + 0x28) = reinterpret_cast<void*>(ibp);
-}
-
-// ============================================================
 // FruitComponent::Update (vtable slot [9], +0x48, 0x140049de0)
 // ============================================================
 // Fruit ripening simulation with temperature-dependent growth.
-
-void FruitComponent_Update(FruitComponent* self, int64_t* pDeltaTime) {
-    EnsureHelpers();
-
-    uint8_t* comp = reinterpret_cast<uint8_t*>(self);
-
-    // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
-    // body is zeroed unless Startup ran. _unk18(+0x18) is the FruitDescription set
-    // by the copy-ctor; field28(+0x28) is the sibling NaturalResourceComponent IBP
-    // populated by FruitComponent_Startup (slot 4), which the spawn pipeline
-    // invokes via vtable+0x20 in ComponentEntity_StartupComponents. Belt-and-
-    // suspenders: if +0x28 is still null but the description(+0x18) is present, run
-    // the body-init now (idempotent); if still incomplete, bail safely -- the math
-    // below divides by resData->+0x20 and derefs *(self+0x28). See growthcomponent.cpp
-    // for the worked example / notes/STANDALONE_REG_WAVES_PLAN.md.
-    if (*(uintptr_t*)(comp + 0x28) == 0) {
-        if (*(uintptr_t*)(comp + 0x18) != 0)
-            FruitComponent_Startup(self);
-        if (*(uintptr_t*)(comp + 0x28) == 0)
-            return;
-    }
-
-    const float fUV = s_fUVScale ? *s_fUVScale : 0.98f;  // ~1.0 comparison/clamp
-
-    // resData = IsDerivedFrom(self->_description, FruitDescription) ? self->_description : 0
-    void* baseObj = self->_description;
-    void* resData = nullptr;
-    if (baseObj && fn_IsDerivedFrom && s_pFruitDescTypeId) {
-        if (fn_IsDerivedFrom(baseObj, *s_pFruitDescTypeId))
-            resData = baseObj;
-    }
-    // [STANDALONE TRUST] The factory/type tree can be incomplete in standalone, so
-    // IsDerivedFrom on a description is unreliable (see growthcomponent.cpp / the
-    // SpawnComponent precedent). _unk18 is the FruitDescription the copy-ctor stored
-    // at +0x18 — trust it as a fallback so a present fruit entity still simulates.
-    if (!resData && baseObj) resData = baseObj;
-    if (!resData) return;  // original derefs resData->+0x20/+0x24/+0x28 below
-
-    // ripeningSpeed = g_fUVScale / (resData->+0x20 * SECS_PER_SEASON)
-    float secsPerSeason = s_fSecsPerSeason ? *s_fSecsPerSeason : 300.0f;
-    float ripeningSpeed = fUV / (*(float*)((uintptr_t)resData + 0x20) * secsPerSeason);
-
-    // Seasonal flag-clear: when fruitFlag(+0x34) set, clear it once the month index
-    // leaves the fruit-bearing window.  month = (seasonSecs/3600)*12 - 7; clear if
-    // (uint)month > 4.
-    if (self->fruitFlag != 0) {
-        if (s_pGameWorld && *s_pGameWorld) {
-            uintptr_t world = (uintptr_t)*s_pGameWorld;
-            void* seasonTime = (void*)(*(uintptr_t*)(world + 0x128) + 8);
-            float seasonSecs = reinterpret_cast<const System::Time*>(seasonTime)->AsSeconds();   // B.3.4b bridge
-            float secsPerYear   = s_fSecsPerYear   ? *s_fSecsPerYear   : 3600.0f;
-            float monthsPerYear = s_fMonthsPerYear ? *s_fMonthsPerYear : 12.0f;
-            unsigned int monthIdx =
-                (unsigned int)((int)((seasonSecs / secsPerYear) * monthsPerYear) - 7);
-            if (monthIdx > 4)
-                self->fruitFlag = 0;
-        }
-    }
-
-    // currentTemp = *(*(world+0x130)+0x18)
-    float currentTemp = 0.0f;
-    if (s_pGameWorld && *s_pGameWorld) {
-        uintptr_t world = (uintptr_t)*s_pGameWorld;
-        currentTemp = *(float*)(*(uintptr_t*)(world + 0x130) + 0x18);
-    }
-
-    // tempDelta = |currentTemp - resData->+0x24| / resData->+0x28
-    float optimalTemp = *(float*)((uintptr_t)resData + 0x24);
-    float tempRange   = *(float*)((uintptr_t)resData + 0x28);
-    float tempDelta   = AbsViaMask(currentTemp - optimalTemp) / tempRange;
-
-    float growthFactor = 0.0f;
-    if (self->fruitFlag == 0) {
-        // growth rate lives at (*(self+0x28))->+0x28 (the linked NatResComp).
-        float growthRate = *(float*)(*(uintptr_t*)(comp + 0x28) + 0x28);
-        if (growthRate >= fUV) {
-            if (tempDelta >= 0.0f && tempDelta <= fUV) {
-                // Quadratic falloff: g_fUVScale - delta^2
-                growthFactor = fUV - tempDelta * tempDelta;
-            } else {
-                growthFactor = 0.0f;
-                float freezeTemp = s_fFreezeThreshold ? *s_fFreezeThreshold : 32.0f;
-                if (currentTemp <= freezeTemp)
-                    growthFactor = s_fFrostDamage ? *s_fFrostDamage : -10.0f;
-            }
-        }
-        // growthRate < g_fUVScale -> growthFactor stays 0.0
-    }
-
-    // effRate = min((*(self+0x28))->+0x28, g_fUVScale)
-    float effRate = *(float*)(*(uintptr_t*)(comp + 0x28) + 0x28);
-    if (effRate >= fUV) effRate = fUV;
-
-    // ripeness(+0x30) += dtSeconds * effRate * ripeningSpeed * growthFactor
-    float dtSeconds = reinterpret_cast<const System::Time*>(pDeltaTime)->AsSeconds();   // B.3.4b bridge
-    float* pRipeness = reinterpret_cast<float*>(&self->field30);
-    float newRipeness = dtSeconds * effRate * ripeningSpeed * growthFactor + *pRipeness;
-    *pRipeness = newRipeness;
-
-    // Clamp to [0.0, 1.0]: < 0 -> 0; > g_fUVScale -> exactly 1.0.
-    if (*pRipeness < 0.0f)
-        *pRipeness = 0.0f;
-    if (*pRipeness > fUV)
-        *pRipeness = 1.0f;
-}
 
 // ============================================================
 // Init: resolve function pointers
@@ -254,8 +120,6 @@ void FruitComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/FruitComponent.h"
 
-// Retail 0x14004a070 (fruitcomponent_serialize.cpp).
-extern "C" void FruitComponent_Serialize(void* self, void* stream);
 
 // 0x14004a160. Component() is the CALL 0x1401188b0; the 0x140159450 stamp is
 // the compiler's; +0x28 = 0, +0x30 (dword) = 0, +0x34 (byte) = 0; flags |= 0x88.
@@ -271,13 +135,141 @@ Object::Base* FruitComponent::DeletingDtor(unsigned flags) {
     return this;
 }
 
-void FruitComponent::Persist(void* stream) { FruitComponent_Serialize(this, stream); }   // [3] 0x14004a070
-void FruitComponent::Startup() { FruitComponent_Startup(this); }                          // [4] 0x14004a030
+// ============================================================
+// FruitComponent::Startup / OnCreate (vtable slot [4], +0x20, original 0x14004a030)
+// ============================================================
+// Body-init: populate self->field28 (+0x28) with the sibling
+// NaturalResourceComponent's InternalBasePtr from the owning entity (+0x10).
+//
+//   CheckPtr(self+0x10);
+//   ibp = FUN_1400052c0(*(self+0x10), &local);   // first sibling NatResComp
+//   self+0x28 = *(void**)ibp;                     // the wrapped component ptr
+//
+// Called at spawn by ComponentEntity_StartupComponents (vtable+0x20). _unk18
+// (+0x18, the FruitDescription) is set earlier by the base Component copy-ctor
+// (ComponentEntity_CtorFromDescription).
+void FruitComponent::Startup() {
+    EnsureHelpers();
+    uint8_t* comp = reinterpret_cast<uint8_t*>(this);
+
+    void* owner = *reinterpret_cast<void**>(comp + 0x10);
+    if (!owner) return;   // not yet wired into an entity
+
+
+    // FUN_1400052c0 returns an InternalBasePtr (out-param); its first qword is the
+    // wrapped component pointer, which the original stores into this+0x28.
+    int64_t ibp = 0;
+    if (s_fn_FindNatResSibling)
+        s_fn_FindNatResSibling(owner, &ibp);
+    *reinterpret_cast<void**>(comp + 0x28) = reinterpret_cast<void*>(ibp);
+}
 
 // [9] 0x140049de0. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).
 void FruitComponent::Update(void* time) {
-    FruitComponent_Update(this, static_cast<int64_t*>(time));
+    int64_t* pDeltaTime = static_cast<int64_t*>(time);
+    EnsureHelpers();
+
+    uint8_t* comp = reinterpret_cast<uint8_t*>(this);
+
+    // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
+    // body is zeroed unless Startup ran. _unk18(+0x18) is the FruitDescription set
+    // by the copy-ctor; field28(+0x28) is the sibling NaturalResourceComponent IBP
+    // populated by FruitComponent_Startup (slot 4), which the spawn pipeline
+    // invokes via vtable+0x20 in ComponentEntity_StartupComponents. Belt-and-
+    // suspenders: if +0x28 is still null but the description(+0x18) is present, run
+    // the body-init now (idempotent); if still incomplete, bail safely -- the math
+    // below divides by resData->+0x20 and derefs *(this+0x28). See growthcomponent.cpp
+    // for the worked example / notes/STANDALONE_REG_WAVES_PLAN.md.
+    if (*(uintptr_t*)(comp + 0x28) == 0) {
+        if (*(uintptr_t*)(comp + 0x18) != 0)
+            FruitComponent::Startup();
+        if (*(uintptr_t*)(comp + 0x28) == 0)
+            return;
+    }
+
+    const float fUV = s_fUVScale ? *s_fUVScale : 0.98f;  // ~1.0 comparison/clamp
+
+    // resData = IsDerivedFrom(_description, FruitDescription) ? _description : 0
+    void* baseObj = _description;
+    void* resData = nullptr;
+    if (baseObj && fn_IsDerivedFrom && s_pFruitDescTypeId) {
+        if (fn_IsDerivedFrom(baseObj, *s_pFruitDescTypeId))
+            resData = baseObj;
+    }
+    // [STANDALONE TRUST] The factory/type tree can be incomplete in standalone, so
+    // IsDerivedFrom on a description is unreliable (see growthcomponent.cpp / the
+    // SpawnComponent precedent). _unk18 is the FruitDescription the copy-ctor stored
+    // at +0x18 — trust it as a fallback so a present fruit entity still simulates.
+    if (!resData && baseObj) resData = baseObj;
+    if (!resData) return;  // original derefs resData->+0x20/+0x24/+0x28 below
+
+    // ripeningSpeed = g_fUVScale / (resData->+0x20 * SECS_PER_SEASON)
+    float secsPerSeason = s_fSecsPerSeason ? *s_fSecsPerSeason : 300.0f;
+    float ripeningSpeed = fUV / (*(float*)((uintptr_t)resData + 0x20) * secsPerSeason);
+
+    // Seasonal flag-clear: when fruitFlag(+0x34) set, clear it once the month index
+    // leaves the fruit-bearing window.  month = (seasonSecs/3600)*12 - 7; clear if
+    // (uint)month > 4.
+    if (fruitFlag != 0) {
+        if (s_pGameWorld && *s_pGameWorld) {
+            uintptr_t world = (uintptr_t)*s_pGameWorld;
+            void* seasonTime = (void*)(*(uintptr_t*)(world + 0x128) + 8);
+            float seasonSecs = reinterpret_cast<const System::Time*>(seasonTime)->AsSeconds();   // B.3.4b bridge
+            float secsPerYear   = s_fSecsPerYear   ? *s_fSecsPerYear   : 3600.0f;
+            float monthsPerYear = s_fMonthsPerYear ? *s_fMonthsPerYear : 12.0f;
+            unsigned int monthIdx =
+                (unsigned int)((int)((seasonSecs / secsPerYear) * monthsPerYear) - 7);
+            if (monthIdx > 4)
+                fruitFlag = 0;
+        }
+    }
+
+    // currentTemp = *(*(world+0x130)+0x18)
+    float currentTemp = 0.0f;
+    if (s_pGameWorld && *s_pGameWorld) {
+        uintptr_t world = (uintptr_t)*s_pGameWorld;
+        currentTemp = *(float*)(*(uintptr_t*)(world + 0x130) + 0x18);
+    }
+
+    // tempDelta = |currentTemp - resData->+0x24| / resData->+0x28
+    float optimalTemp = *(float*)((uintptr_t)resData + 0x24);
+    float tempRange   = *(float*)((uintptr_t)resData + 0x28);
+    float tempDelta   = AbsViaMask(currentTemp - optimalTemp) / tempRange;
+
+    float growthFactor = 0.0f;
+    if (fruitFlag == 0) {
+        // growth rate lives at (*(this+0x28))->+0x28 (the linked NatResComp).
+        float growthRate = *(float*)(*(uintptr_t*)(comp + 0x28) + 0x28);
+        if (growthRate >= fUV) {
+            if (tempDelta >= 0.0f && tempDelta <= fUV) {
+                // Quadratic falloff: g_fUVScale - delta^2
+                growthFactor = fUV - tempDelta * tempDelta;
+            } else {
+                growthFactor = 0.0f;
+                float freezeTemp = s_fFreezeThreshold ? *s_fFreezeThreshold : 32.0f;
+                if (currentTemp <= freezeTemp)
+                    growthFactor = s_fFrostDamage ? *s_fFrostDamage : -10.0f;
+            }
+        }
+        // growthRate < g_fUVScale -> growthFactor stays 0.0
+    }
+
+    // effRate = min((*(this+0x28))->+0x28, g_fUVScale)
+    float effRate = *(float*)(*(uintptr_t*)(comp + 0x28) + 0x28);
+    if (effRate >= fUV) effRate = fUV;
+
+    // ripeness(+0x30) += dtSeconds * effRate * ripeningSpeed * growthFactor
+    float dtSeconds = reinterpret_cast<const System::Time*>(pDeltaTime)->AsSeconds();   // B.3.4b bridge
+    float* pRipeness = reinterpret_cast<float*>(&field30);
+    float newRipeness = dtSeconds * effRate * ripeningSpeed * growthFactor + *pRipeness;
+    *pRipeness = newRipeness;
+
+    // Clamp to [0.0, 1.0]: < 0 -> 0; > g_fUVScale -> exactly 1.0.
+    if (*pRipeness < 0.0f)
+        *pRipeness = 0.0f;
+    if (*pRipeness > fUV)
+        *pRipeness = 1.0f;
 }
 
 // create 0x140005920: MemAlloc(0x38, 8), then the ctor.

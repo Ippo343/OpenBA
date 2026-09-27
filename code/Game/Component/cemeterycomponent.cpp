@@ -16,6 +16,7 @@
 #include "engine_funcs.h"
 #include "perf_terrain.h"
 #include "resolve.h"
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -26,8 +27,6 @@
 // Resolved helpers
 // ============================================================
 
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
 // FUN_1400021d0 was Collection::Array<int32>::SetSize monomorphised into the
 // exe (ENDGAME B.3.2 step 2) — converted at its call site below.
@@ -76,39 +75,6 @@ static bool s_initialized = false;
 //   1. Component_Serialize base
 //   2. Empty serializer block (controller compat stub)
 //   3. Serializer(version=0): count from +0x50, resize on load, bulk serialize int array
-void CemeteryComponent_Shutdown(CemeteryComponent* self, void* stream) {
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    if (s_fn_Component_Serialize)
-        s_fn_Component_Serialize(self, stream);
-
-    // Empty serializer block (controller compat stub)
-    alignas(8) uint8_t serializer1[24];
-    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
-
-    // Serialize tile index array
-    alignas(8) uint8_t serializer2[24];
-    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    int localCount = *(int*)(selfAddr + 0x50);
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(localCount, nullptr);   // B.3.4 bridge
-
-    // If reading, resize array
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer2)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        // B.3.2 bridge: exe 0x1400021d0 IS Collection::Array<int32>::SetSize(n), called
-        // here at 14004763a. I32NoInit — a grown tail is left as the allocation found
-        // it, like retail. Safe: this arm runs only when reading, and the bulk int
-        // deserialize below writes all localCount tile indices before any is read.
-        GameColl::AsArray<GameColl::I32NoInit>((void*)(selfAddr + 0x48)).SetSize(localCount);
-    }
-
-    // Bulk-serialize all int elements
-    int* array = *(int**)(selfAddr + 0x48);
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(localCount, array, nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
-}
 
 // ============================================================
 // DynArray<int>::Push -- inlined by the plot-grid builder at 0x1400473a2
@@ -167,91 +133,11 @@ static void CemeteryComponent_PushPlot(CemeteryComponent* self, int cell) {
 //
 // Which axis the door is measured on, and which loop steps by two, swaps with rotation:
 // rot 0/180 walk rows outer, rot 90/270 walk columns outer. Both arms are transcribed.
-#define CEM_TRACE(fmt, ...) do { static int _n = 0; if (_n < 12) { ++_n; \
+// Per-site trace cap; the counter is a constant-initialised atomic (no first-call
+// race, B6-5: OnAdded runs on the loader thread).
+#define CEM_TRACE(fmt, ...) do { static std::atomic<int> _n{0}; \
+    if (_n.fetch_add(1, std::memory_order_relaxed) < 12) { \
     fprintf(stderr, "[CemeteryPlots] " fmt "\n", ##__VA_ARGS__); fflush(stderr); } } while (0)
-void CemeteryComponent_BuildPlotGrid(CemeteryComponent* self) {
-    CemeteryComponent_InitFuncs();
-    CEM_TRACE("enter comp=%p owner=%p", (void*)self, self->_entity);
-    if (!s_fn_FindMapComp || !s_fn_FindMultiComp || !s_g_pGameState || !*s_g_pGameState) {
-        CEM_TRACE("BAIL deps: findMap=%p findMulti=%p gs=%p",
-                  (void*)s_fn_FindMapComp, (void*)s_fn_FindMultiComp,
-                  (void*)(s_g_pGameState ? *s_g_pGameState : nullptr));
-        return;
-    }
-
-    const uintptr_t entity = reinterpret_cast<uintptr_t>(self->_entity);
-
-    void* mapIbp = nullptr;
-    s_fn_FindMapComp(entity, &mapIbp);
-    if (!mapIbp) { CEM_TRACE("BAIL no MapComponent"); return; }
-    const uintptr_t map = reinterpret_cast<uintptr_t>(mapIbp);
-
-    int x0  = *reinterpret_cast<int16_t*>(map + 0x28);
-    int y0  = *reinterpret_cast<int16_t*>(map + 0x2a);
-    int w   = *reinterpret_cast<int16_t*>(map + 0x2c);
-    int h   = *reinterpret_cast<int16_t*>(map + 0x2e);
-    const int rot = *reinterpret_cast<int*>(map + 0x30);
-
-    const uintptr_t world = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*s_g_pGameState) + 0xF8);
-    if (!world) { CEM_TRACE("BAIL no world"); return; }
-    const int mapWidth = *reinterpret_cast<int*>(world);
-
-    // The gate child: multi->children[0], then that entity's MapComponent.
-    uint8_t multiIbp[24] = {};
-    s_fn_FindMultiComp(entity, multiIbp);
-    const uintptr_t multi = *reinterpret_cast<uintptr_t*>(multiIbp);
-    if (!multi) { CEM_TRACE("BAIL no MultiObjectComponent"); return; }
-    const uintptr_t childArr = *reinterpret_cast<uintptr_t*>(multi + 0x48);
-    if (!childArr) { CEM_TRACE("BAIL no child array"); return; }
-    // Retail copies children[0] into a local and calls CheckPtr on THAT COPY
-    // (0x1400472a7..0x1400472af) before using it -- the child slot holds a lazy/weak
-    // InternalBasePtr, and reading it raw yields an unresolved value. Skipping this
-    // step produced a gate 37 tiles outside a 12-wide footprint (door=38), so the two
-    // path-in columns were never excluded and every tile became a plot.
-    void* gateEnt = *reinterpret_cast<void**>(childArr);
-    if (!gateEnt) { CEM_TRACE("BAIL no child[0]"); return; }
-
-    void* gateIbp = nullptr;
-    s_fn_FindMapComp(reinterpret_cast<uintptr_t>(gateEnt), &gateIbp);
-    if (!gateIbp) { CEM_TRACE("BAIL gate has no MapComponent"); return; }
-    // NOT `*(uintptr_t*)gateIbp`. Retail's RBX is the ADDRESS of the out buffer, so its
-    // `mov rax,[rbx]` yields the component pointer; `gateIbp` here IS that pointer
-    // already. Dereferencing it once more hands back the component's VTABLE, and
-    // [vtable+0x28] is a slice of a function pointer -- which read as door=38 on a
-    // 12-wide footprint and door=383 on a 6-wide one, so the two path-in columns were
-    // never excluded and every tile became a grave plot.
-    const uintptr_t gateMap = reinterpret_cast<uintptr_t>(gateIbp);
-    if (!gateMap) { CEM_TRACE("BAIL gate map null"); return; }
-
-    // Door offset along the axis the footprint runs on for this rotation.
-    const bool rotated = (rot != 0 && rot != 180);
-    int door = rotated ? (*reinterpret_cast<int16_t*>(gateMap + 0x2a) - y0)
-                       : (*reinterpret_cast<int16_t*>(gateMap + 0x28) - x0);
-
-    // Inset by one tile all round; the door pair moves with it.
-    ++door; ++x0; ++y0; w -= 2; h -= 2;
-    const int doorPrev = door - 1;
-
-    CEM_TRACE("footprint x0=%d y0=%d w=%d h=%d rot=%d door=%d mapWidth=%d",
-              x0, y0, w, h, rot, door, mapWidth);
-    if (rotated) {
-        // 90 / 270: outer walks the width by twos, inner walks the height.
-        for (int col = 0; col < w; col += 2)
-            for (int row = 0; row < h; ++row) {
-                if (row == door || row == doorPrev) continue;
-                CemeteryComponent_PushPlot(self, (row + y0) * mapWidth + col + x0);
-            }
-    } else {
-        // 0 / 180: outer walks the height by twos, inner walks the width.
-        for (int row = 0; row < h; row += 2)
-            for (int col = 0; col < w; ++col) {
-                if (col == door || col == doorPrev) continue;
-                CemeteryComponent_PushPlot(self, (row + y0) * mapWidth + col + x0);
-            }
-    }
-    CEM_TRACE("built plots=%d cap=%d", self->plotCount, self->plotCapacity);
-}
 
 // ============================================================
 // CemeteryComponent::OnRemove (vtable slot [7], 0x1400471C0)
@@ -259,18 +145,6 @@ void CemeteryComponent_BuildPlotGrid(CemeteryComponent* self) {
 // UNregisters from the TownManager cemetery list at *(GameWorld+0xF0)+0x40.
 // Ghidra labels the slot OnCreate; 0x140002cc0 is the ERASE (see the 1:1 port of it
 // further down this file). The matching REGISTER is the state-2 enter at the bottom.
-void CemeteryComponent_OnRemove(CemeteryComponent* self) {
-    uint8_t ptrBuf[8];
-    if (fn_InternalBasePtr_Ctor)
-        new (ptrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self->_entity));   // B.3.3 bridge
-
-    if (s_g_pGameState && *s_g_pGameState && s_fn_ListAdd) {
-        void* gameState = *s_g_pGameState;
-        void* subObj = *(void**)((uintptr_t)gameState + 0xF0);
-        void* cemeteryListBase = (void*)((uintptr_t)subObj + 0x40);
-        s_fn_ListAdd(cemeteryListBase, ptrBuf);
-    }
-}
 
 // ============================================================
 // Reimpl of FUN_140002cc0 (CemeteryComponent list erase-by-pointer)
@@ -303,8 +177,6 @@ extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue) {
 void CemeteryComponent_InitFuncs() {
     if (s_initialized) return;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
 
     uintptr_t slot;
 
@@ -333,8 +205,8 @@ void CemeteryComponent_InitFuncs() {
     s_initialized = true;
 
 #ifdef _DEBUG
-    printf("[CemeteryComponent] Funcs resolved: CompSerialize=%p Erase=%p FindMap=%p FindMulti=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_ListAdd, (void*)s_fn_FindMapComp,
+    printf("[CemeteryComponent] Funcs resolved: Erase=%p FindMap=%p FindMulti=%p\n",
+           (void*)s_fn_ListAdd, (void*)s_fn_FindMapComp,
            (void*)s_fn_FindMultiComp);
 #endif
 }
@@ -394,11 +266,7 @@ extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
                     void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(j) * 8);
                     void* c = *slot;
                     if (!c) continue;
-                    typedef uint32_t (*GetTypeId_t)(void*);
-                    const uint32_t tid =
-                        (reinterpret_cast<GetTypeId_t>(
-                            *reinterpret_cast<uintptr_t*>(
-                                *reinterpret_cast<uintptr_t*>(c) + 0x10)))(c);
+                    const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
                     if (tid == *s_pTid_Tombstone) { hasTombstone = true; break; }
                 }
             }
@@ -444,7 +312,7 @@ extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
 // CemeteryComponent state-3 "demolish" enter -- 0x140046f80. Byte-identical to the
 // slot-7 removal hook (0x1400471c0): wrap the component, call the erase.
 extern "C" char CemeteryComponent_EnterDemolish(void* comp, void* /*sm*/) {
-    CemeteryComponent_OnRemove(reinterpret_cast<CemeteryComponent*>(comp));
+    reinterpret_cast<CemeteryComponent*>(comp)->CemeteryComponent::OnRemove();   // B.3.8 bridge (state enters take void*)
     return 0;
 }
 
@@ -524,16 +392,123 @@ void* CemeteryComponent::CreateInPlaceObject(void* storage) {
 // tick. Until the resolver runs every s_fn_* is null and the fully null-guarded
 // body consumes ZERO bytes, so the stream desyncs several records later. Rule, from
 // uicomponent_serialize.cpp: resolve unconditionally at the top of every call.
+// Body: Component::Persist (a direct CALL 0x1401189b0), an empty controller scope,
+// then the plot tile-index array (count +0x50, resized on a read, bulk ints).
 void CemeteryComponent::Persist(void* stream) {
     CemeteryComponent_InitFuncs();
-    CemeteryComponent_Shutdown(this, stream);
+    Component::Persist(stream);
+    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);         // B.3.8 bridge
+    int count = plotCount;
+    ser.Serialize(count, nullptr);
+    if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+        // B.3.2 bridge: exe 0x1400021d0 IS Collection::Array<int32>::SetSize(n), called
+        // here at 14004763a. I32NoInit — a grown tail is left as the allocation found
+        // it, like retail. Safe: this arm runs only when reading, and the bulk int
+        // deserialize below writes all `count` tile indices before any is read.
+        GameColl::AsArray<GameColl::I32NoInit>(&plots).SetSize(count);
+    }
+    ser.Serialize(count, plots, nullptr);
 }
 
 // [6] 0x140047200 — build the grave-plot grid from the footprint.
-void CemeteryComponent::OnAdded() { CemeteryComponent_BuildPlotGrid(this); }
+void CemeteryComponent::OnAdded() {
+    CemeteryComponent_InitFuncs();
+    CEM_TRACE("enter comp=%p owner=%p", (void*)this, _entity);
+    if (!s_fn_FindMapComp || !s_fn_FindMultiComp || !s_g_pGameState || !*s_g_pGameState) {
+        CEM_TRACE("BAIL deps: findMap=%p findMulti=%p gs=%p",
+                  (void*)s_fn_FindMapComp, (void*)s_fn_FindMultiComp,
+                  (void*)(s_g_pGameState ? *s_g_pGameState : nullptr));
+        return;
+    }
+
+    const uintptr_t entity = reinterpret_cast<uintptr_t>(_entity);
+
+    void* mapIbp = nullptr;
+    s_fn_FindMapComp(entity, &mapIbp);
+    if (!mapIbp) { CEM_TRACE("BAIL no MapComponent"); return; }
+    const uintptr_t map = reinterpret_cast<uintptr_t>(mapIbp);
+
+    int x0  = *reinterpret_cast<int16_t*>(map + 0x28);
+    int y0  = *reinterpret_cast<int16_t*>(map + 0x2a);
+    int w   = *reinterpret_cast<int16_t*>(map + 0x2c);
+    int h   = *reinterpret_cast<int16_t*>(map + 0x2e);
+    const int rot = *reinterpret_cast<int*>(map + 0x30);
+
+    const uintptr_t world = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(*s_g_pGameState) + 0xF8);
+    if (!world) { CEM_TRACE("BAIL no world"); return; }
+    const int mapWidth = *reinterpret_cast<int*>(world);
+
+    // The gate child: multi->children[0], then that entity's MapComponent.
+    uint8_t multiIbp[24] = {};
+    s_fn_FindMultiComp(entity, multiIbp);
+    const uintptr_t multi = *reinterpret_cast<uintptr_t*>(multiIbp);
+    if (!multi) { CEM_TRACE("BAIL no MultiObjectComponent"); return; }
+    const uintptr_t childArr = *reinterpret_cast<uintptr_t*>(multi + 0x48);
+    if (!childArr) { CEM_TRACE("BAIL no child array"); return; }
+    // Retail copies children[0] into a local and calls CheckPtr on THAT COPY
+    // (0x1400472a7..0x1400472af) before using it -- the child slot holds a lazy/weak
+    // InternalBasePtr, and reading it raw yields an unresolved value. Skipping this
+    // step produced a gate 37 tiles outside a 12-wide footprint (door=38), so the two
+    // path-in columns were never excluded and every tile became a plot.
+    void* gateEnt = *reinterpret_cast<void**>(childArr);
+    if (!gateEnt) { CEM_TRACE("BAIL no child[0]"); return; }
+
+    void* gateIbp = nullptr;
+    s_fn_FindMapComp(reinterpret_cast<uintptr_t>(gateEnt), &gateIbp);
+    if (!gateIbp) { CEM_TRACE("BAIL gate has no MapComponent"); return; }
+    // NOT `*(uintptr_t*)gateIbp`. Retail's RBX is the ADDRESS of the out buffer, so its
+    // `mov rax,[rbx]` yields the component pointer; `gateIbp` here IS that pointer
+    // already. Dereferencing it once more hands back the component's VTABLE, and
+    // [vtable+0x28] is a slice of a function pointer -- which read as door=38 on a
+    // 12-wide footprint and door=383 on a 6-wide one, so the two path-in columns were
+    // never excluded and every tile became a grave plot.
+    const uintptr_t gateMap = reinterpret_cast<uintptr_t>(gateIbp);
+    if (!gateMap) { CEM_TRACE("BAIL gate map null"); return; }
+
+    // Door offset along the axis the footprint runs on for this rotation.
+    const bool rotated = (rot != 0 && rot != 180);
+    int door = rotated ? (*reinterpret_cast<int16_t*>(gateMap + 0x2a) - y0)
+                       : (*reinterpret_cast<int16_t*>(gateMap + 0x28) - x0);
+
+    // Inset by one tile all round; the door pair moves with it.
+    ++door; ++x0; ++y0; w -= 2; h -= 2;
+    const int doorPrev = door - 1;
+
+    CEM_TRACE("footprint x0=%d y0=%d w=%d h=%d rot=%d door=%d mapWidth=%d",
+              x0, y0, w, h, rot, door, mapWidth);
+    if (rotated) {
+        // 90 / 270: outer walks the width by twos, inner walks the height.
+        for (int col = 0; col < w; col += 2)
+            for (int row = 0; row < h; ++row) {
+                if (row == door || row == doorPrev) continue;
+                CemeteryComponent_PushPlot(this, (row + y0) * mapWidth + col + x0);
+            }
+    } else {
+        // 0 / 180: outer walks the height by twos, inner walks the width.
+        for (int row = 0; row < h; row += 2)
+            for (int col = 0; col < w; ++col) {
+                if (col == door || col == doorPrev) continue;
+                CemeteryComponent_PushPlot(this, (row + y0) * mapWidth + col + x0);
+            }
+    }
+    CEM_TRACE("built plots=%d cap=%d", plotCount, plotCapacity);
+}
 
 // [7] 0x1400471c0.
-void CemeteryComponent::OnRemove() { CemeteryComponent_OnRemove(this); }
+void CemeteryComponent::OnRemove() {
+    uint8_t ptrBuf[8];
+    if (fn_InternalBasePtr_Ctor)
+        new (ptrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(_entity));   // B.3.3 bridge
+
+    if (s_g_pGameState && *s_g_pGameState && s_fn_ListAdd) {
+        void* gameState = *s_g_pGameState;
+        void* subObj = *(void**)((uintptr_t)gameState + 0xF0);
+        void* cemeteryListBase = (void*)((uintptr_t)subObj + 0x40);
+        s_fn_ListAdd(cemeteryListBase, ptrBuf);
+    }
+}
 
 DEFINE_EXE_VTABLE(CemeteryComponent, "_ZTV17CemeteryComponent")
 DEFINE_EXE_TYPE(CemeteryComponent, "ControllerComponent")

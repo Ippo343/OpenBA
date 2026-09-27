@@ -24,6 +24,9 @@
 // exe-internal helpers are resolved guarded; if one is unavailable the step is skipped.
 
 #include "engine_funcs.h"
+#include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/BuildDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/ModelComponent.h"   // B.3.8 CB1a (TypeId)
 #include "resolve.h"
 #include "Component/coll_bridge.h"
 #include <cstdint>
@@ -64,11 +67,6 @@ typedef void* (*BCS1_FindStorage_t)(uintptr_t entity, void* retIBP);
 // Collection::Array<Bytes<0x10,8>>::SetSize monomorphised into the exe
 // (ENDGAME B.3.2 step 2: stride 0x10, align 8, zero tail) — converted below.
 
-static uint32_t BCS1_TypeId(const char* name, uintptr_t rdataGlobal) {
-    (void)rdataGlobal;
-    return ::Object::GetTypeIdByName(name);
-}
-
 // Scan a material entity's component list (+0x28 array, +0x30 count) for the first
 // component whose GetTypeId (vtable+0x10) == tid; verify with IsDerivedFrom. Mirrors
 // the material-scan the exe does twice in 0x140108290 (and gather Execute's finder).
@@ -80,8 +78,7 @@ static void* BCS1_FindRawMatDesc(uintptr_t matEntity, uint32_t tid) {
     for (int i = 0; i < count; i++) {
         void* comp = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
         if (!comp) continue;
-        typedef uint32_t (*GetTypeId_t)(void*);
-        uint32_t t = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (t == tid) {
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, tid)) return comp;
             return nullptr;
@@ -114,7 +111,7 @@ extern "C" { void* g_pConstructionDemoEntity = nullptr; }
 static bool BCS1_IsModelComplete(uintptr_t buildComp) {
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(buildComp + 0x10);
     if (!entity) return false;
-    uint32_t tidModel = ::Object::GetTypeIdByName("ModelComponent");
+    uint32_t tidModel = ModelComponent::TypeId();
     if (!tidModel) return false;
     int count = *reinterpret_cast<int*>(entity + 0x38);
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(entity + 0x30);
@@ -124,8 +121,7 @@ static bool BCS1_IsModelComplete(uintptr_t buildComp) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
         void* comp = *slot;
         if (!comp) continue;
-        typedef uint32_t (*GT_t)(void*);
-        uint32_t t = ((GT_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (t == tidModel) { model = comp; break; }
     }
     if (!model) return false;
@@ -324,7 +320,7 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
 
         // configure the site StorageComponent accept-mask + capacity
         void* descObj = *reinterpret_cast<void**>(self + 0x18);
-        uint32_t buildDescTid = BCS1_TypeId("BuildDescription", 0x1401c7040);
+        uint32_t buildDescTid = BuildDescription::TypeId();
         void* buildDesc = (descObj && fn_IsDerivedFrom && buildDescTid &&
                            fn_IsDerivedFrom(descObj, buildDescTid)) ? descObj : nullptr;
 
@@ -339,7 +335,7 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
             uint32_t acceptMask = 0;
             int totalQty = 0;
             int multiplier = *reinterpret_cast<int*>(self + 0x4c);
-            uint32_t rawMatTid = BCS1_TypeId("RawMaterialDescription", 0x1401c7cb8);
+            uint32_t rawMatTid = RawMaterialDescription::TypeId();
 
             int matCount = buildDesc ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(buildDesc) + 0x28) : 0;
             uintptr_t matArr = buildDesc ? *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(buildDesc) + 0x20) : 0;

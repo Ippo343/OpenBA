@@ -30,13 +30,13 @@
 #include <cstdint>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
+#include "Component/FruitComponent.h"
 
 namespace {
 
-typedef void (*fn_ComponentSerialize_t)(void* self, void* stream);
 typedef bool (*fn_IsDerived_t)(void* obj, uint32_t typeId);
 
-fn_ComponentSerialize_t s_Base      = nullptr;  // 0x1401189b0
+// (The base serialize 0x1401189b0 is Component::Persist, called qualified.)
 fn_IsDerived_t          s_IsDerived = nullptr;  // slot 0x140152a98
 
 const uint32_t* s_tidResource = nullptr;  // 0x1401c7b30  NaturalResourceComponent sibling
@@ -45,9 +45,6 @@ bool s_resolved = false;
 
 void Resolve() {
     if (s_resolved) return;
-    s_Base = reinterpret_cast<fn_ComponentSerialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-
     uintptr_t slot;
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_IsDerived = *reinterpret_cast<fn_IsDerived_t*>(slot);
@@ -72,17 +69,18 @@ inline uint8_t* At(void* self, ptrdiff_t off) {
 // ============================================================
 // FruitComponent::Serialize (vtable slot [3], 0x14004a070)
 // ============================================================
-extern "C" void FruitComponent_Serialize(void* self, void* stream) {
+
+void FruitComponent::Persist(void* stream) {
     Resolve();
-    if (!self || !stream) return;
-    if (s_Base) s_Base(self, stream);
+    if (!stream) return;
+    Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
     alignas(8) uint8_t ser[24];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    SerializeValidatedIBP(At(self, 0x28), ser, s_tidResource);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x30)), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x34)), nullptr);   // B.3.4 bridge
+    SerializeValidatedIBP(At(this, 0x28), ser, s_tidResource);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(this, 0x30)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(this, 0x34)), nullptr);   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }

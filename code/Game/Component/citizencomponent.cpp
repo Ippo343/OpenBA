@@ -16,6 +16,7 @@
 // `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
 // been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Scene.h"
+#include "Component/StorageComponent.h"   // B.3.8 CB1a (TypeId)
 #include "graphics/Mesh.h"
 #include "Component/citizencomponent_funcs.h"
 #include "Component/coll_bridge.h"
@@ -1460,9 +1461,7 @@ static void* FindCompByTypeId(int64_t entity, uint32_t typeId) {
     for (int i = 0; i < count; i++) {
         void** ibp = reinterpret_cast<void**>(arr + (int64_t)i * 8);
         int64_t comp = *reinterpret_cast<int64_t*>(ibp);
-        int64_t vt = *reinterpret_cast<int64_t*>(comp);
-        typedef uint32_t (*getType_t)(void*);
-        uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(reinterpret_cast<void*>(comp));
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (tid == typeId) {
             void** ibp2 = reinterpret_cast<void**>(arr + (int64_t)i * 8);
             void* resolved = *ibp2;
@@ -2002,9 +2001,6 @@ void CitizenComp_helper_1b90(int64_t selfV) {
 // Forward decl (factory_registration.h is only included further down, in the
 // factory section) — the standalone type-name -> CRC registry lookup.
 namespace Object { uint32_t GetTypeIdByName(const char* name); }
-static inline uint32_t StandaloneTypeIdByName(const char* n) {
-    return ::Object::GetTypeIdByName(n);
-}
 // [SCOPED STANDALONE FALLBACK] self-contained StorageComponent find on an entity
 // (+0x30 comp array / +0x38 count). The registered 6270 port (work_base_reimpl.cpp)
 // reads its type-id from raw .rdata 0x1401c7e78 which is UNREGISTERED in standalone,
@@ -2013,7 +2009,7 @@ static inline uint32_t StandaloneTypeIdByName(const char* n) {
 // (EatFromStorage + Entity_impl_ef40).
 static int64_t StandaloneFindStorageComp(void* entity) {
     if (!entity) return 0;
-    uint32_t tidStorage = StandaloneTypeIdByName("StorageComponent");
+    uint32_t tidStorage = StorageComponent::TypeId();
     if (tidStorage == 0) return 0;
     uint8_t* ent = reinterpret_cast<uint8_t*>(entity);
     int cnt = *reinterpret_cast<int32_t*>(ent + 0x38);
@@ -2021,9 +2017,7 @@ static int64_t StandaloneFindStorageComp(void* entity) {
     for (int i = 0; i < cnt && arr; ++i) {
         void* comp = *reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
         if (!comp) continue;
-        uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
-        typedef uint32_t (*getTid_t)(void*);
-        if ((*reinterpret_cast<getTid_t*>(vt + 0x10))(comp) == tidStorage)
+        if (reinterpret_cast<Object::Base*>(comp)->Type() == tidStorage)   // B.3.8 bridge (slot 2)
             return reinterpret_cast<int64_t>(comp);
     }
     return 0;
@@ -2119,9 +2113,7 @@ void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
                        ? *reinterpret_cast<int*>(work + 0x30) : 0;
         for (int i = 0; i < rows; i++) {
             int64_t comp = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(work + 0x28) + (int64_t)i * 8);
-            int64_t vt = *reinterpret_cast<int64_t*>(comp);
-            typedef uint32_t (*getType_t)(void*);
-            uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(reinterpret_cast<void*>(comp));
+            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == matTid) {
                 void* obj = reinterpret_cast<void*>(comp);
                 mat = fn_IsDerivedFrom(obj, matTid) ? obj : nullptr;
@@ -2195,9 +2187,7 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
             void** ibp = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
             int64_t comp = *reinterpret_cast<int64_t*>(ibp);
             if (comp == 0) continue;
-            int64_t vt = *reinterpret_cast<int64_t*>(comp);
-            typedef uint32_t (*getType_t)(void*);
-            uint32_t ctid = (*reinterpret_cast<getType_t*>(vt + 0x10))(reinterpret_cast<void*>(comp));
+            uint32_t ctid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (ctid == tid) {
                 void** ibp2 = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
                 void* resolved = *ibp2;
@@ -2413,9 +2403,7 @@ int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* par
         int64_t arr = *reinterpret_cast<int64_t*>(taskEntity + 0x28);
         for (int i = 0; i < rows; i++) {
             int64_t comp = *reinterpret_cast<int64_t*>(arr + (int64_t)i * 8);
-            int64_t vt = *reinterpret_cast<int64_t*>(comp);
-            typedef uint32_t (*getType_t)(void*);
-            uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(reinterpret_cast<void*>(comp));
+            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == rawMatTid) {
                 void* obj = reinterpret_cast<void*>(comp);
                 return fn_IsDerivedFrom(obj, rawMatTid) ? obj : nullptr;
@@ -2726,8 +2714,7 @@ int64_t* CitizenComp_sub_1930(int64_t param_1, int64_t* param_2, void* param_3, 
         for (int j = 0; j < rows; j++) {
             void** ibp = reinterpret_cast<void**>(arr + (int64_t)j * 8);
             int64_t comp = *reinterpret_cast<int64_t*>(ibp);
-            typedef uint32_t (*getType_t)(void*);
-            uint32_t tid = (*reinterpret_cast<getType_t*>(*reinterpret_cast<int64_t*>(comp) + 0x10))(reinterpret_cast<void*>(comp));
+            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == wpTid) {
                 void** ibp2 = reinterpret_cast<void**>(arr + (int64_t)j * 8);
                 void* o = *ibp2;
@@ -2989,21 +2976,70 @@ static void* CitizenComp_FindSiblingByName(int64_t ownerEntity, const char* type
         void** ibp = reinterpret_cast<void**>(arr + (int64_t)i * 8);
         void* comp = *ibp;
         if (!comp) continue;
-        uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
-        typedef uint32_t (*getType_t)(void*);
-        uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(comp);
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (tid == want)
             return fn_IsDerivedFrom(comp, want) ? comp : nullptr;
     }
     return nullptr;
 }
 
+// ------------------------------------------------------------------
+// ENDGAME B.3.8 CIT — CitizenComponent as a REAL class (CitizenComponent.h).
+//
+// Before: a manual COMPONENT_LIVE_FACTORY_S expansion — a 48-slot
+// CitizenComponent_LiveVtable filled at every create (slots 3 Serialize,
+// 4 Startup, 6 OnAdd, 7 OnRemove, 9 Update, 11 post-load re-apply, 15 message
+// handler), Inert_ScalarDtor in slot 0, and CitizenComponent_CtorScalars patched
+// in after the zero-fill. After: the compiler's 16-slot vtable, a real ctor
+// (the scalars are the ctor's own) and a real dtor chain (B38_RULES D1, D2).
+// ------------------------------------------------------------------
+#include "Component/CitizenComponent.h"
+
+
+// 0x140114770. Component() is the CALL 0x1401188b0; the 0x140162580 stamp is
+// the compiler's; flags |= 0xcb. The scalars are retail's and MUST be set at
+// CONSTRUCTION, not at Startup: retail's load path (ComponentEntity::Serialize
+// 0x1400c3140) rebuilds a stream-restored component through
+// Object::Factory::CreateObject -> ctor and then calls ONLY RefreshEntityFlags —
+// Startup is never dispatched for it. Retail's serializer (0x140114160)
+// re-supplies +0x30/+0xa8/+0x1e0 from the stream but deliberately SKIPS +0x1dc,
+// the live Graphics::Scene object handle, because the ctor already put -1 there.
+// With +0x1dc = 0 on a load, HideTool (0x1401176e0) passed its `>= 0` guard and
+// called Scene::RemoveObject(scene, 0) on a handle the scene never issued, whose
+// parent walk never terminates (the post-load freeze).
+//   +0x30 = -1, +0xa8 = -1, +0x1d8 = -1 (qword: toolId AND sceneObjectId),
+//   +0x1e0 = 4, everything else 0.
+// PORT GAP (retail 0x140114808): retail runs Graphics::MeshInstance::MeshInstance()
+// on +0xb8; the tree keeps those 0x120 bytes zero-filled (CitizenComponent.h).
+CitizenComponent::CitizenComponent()
+    : data28(0), data30(-1), data34(0), data38(0), data3C(0), data40(0), data44(0),
+      data48(0), data4C(0), data50(0), data54(0), data58(0), data60(0), data68(0),
+      data70(0), data78(0), data80(0), _pad84{}, data88(0), _pad8C{}, data90(0),
+      data98(0), dataA0(0), dataA8(-1), dataAC(0), dataB0(0), _padB4{},
+      meshInstance{}, data1D8(~uint64_t(0)), data1E0(4), data1E8(0), data1F0(0),
+      data1F8(0), data200(0), data208(0), data210(0), _pad214{}, data218(0),
+      data220(0), _pad221{}, data228(0), data230(0), data238(0), _pad240{},
+      data248(0), data250(0), data258(0), data260(0), data268(0), data270(0),
+      data278(0), data280(0), data288(0) {
+    OrFlagsInCtor(0xcb);
+}
+
+// [0] 0x140030270 = the dtor 0x1401146f0 + MemFree on &1. PORT GAP (retail's
+// dtor runs ~MeshInstance(+0xb8), frees the +0x98 array and releases the +0x28
+// InternalBasePtr) — the tree's Inert_ScalarDtor never did; kept.
+Object::Base* CitizenComponent::DeletingDtor(unsigned flags) {
+    this->~CitizenComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+
+// [4] 0x140114050.
 // Faithful port of CitizenComponent::Startup (0x140114050) + the ctor scalar init
 // (0x140114770) the inert factory zeroed. The two sibling finds are done
 // self-contained (see above) instead of via the global-keyed exe finders.
-static void CitizenComponent_BodyInit(CitizenComponent* self) {
-    if (!self) return;
-    uint8_t* p = reinterpret_cast<uint8_t*>(self);
+void CitizenComponent::Startup() {
+    uint8_t* p = reinterpret_cast<uint8_t*>(this);
 
     // ctor scalars moved to CitizenComponent_CtorScalars — see the note there.
 
@@ -3048,9 +3084,12 @@ static void CitizenComponent_BodyInit(CitizenComponent* self) {
         // immediately once a non-zero adult age is present. Default-off so a plain
         // BANISHED_LIVE_CITIZEN run stays byte-identical.
     }
-
 }
 
+
+
+// [9] 0x140112e70. RDX is a pointer to the elapsed System::Time (EntityList
+// bucket tick 0x1400c42af).
 // ------------------------------------------------------------------
 // Phase 3 / Keystone D — CitizenComponent UPDATE live-wiring (work/economy loop).
 //
@@ -3061,105 +3100,19 @@ static void CitizenComponent_BodyInit(CitizenComponent* self) {
 // and/or EMPLOYED (+0x238 != 0) — both assigned here. Inert until now.
 //
 // Crash-safe guards bail until the body is populated + the world singleton is live.
-static void CitizenComponent_UpdateAdapter(CitizenComponent* self, int64_t* time) {
-    if (!self) return;
-    uint8_t* p = reinterpret_cast<uint8_t*>(self);
+void CitizenComponent::Update(void* timeArg) {
+    int64_t* time = static_cast<int64_t*>(timeArg);
+    uint8_t* p = reinterpret_cast<uint8_t*>(this);
     // GUARD: Update derefs the CitizenDescription (+0x288, set by BodyInit), the
     // owner entity (+0x10), and the GameWorld weather (+0x130). Bail until ready.
     if (*reinterpret_cast<void**>(p + 0x288) == nullptr) return;
     if (*reinterpret_cast<void**>(p + 0x10)  == nullptr) return;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
 
-    CitizenComponent_Update(self, reinterpret_cast<void*>(time));
+    CitizenComponent_Update(this, reinterpret_cast<void*>(time));
 }
 
-// ------------------------------------------------------------------
-// ENDGAME B.3.8 CIT — CitizenComponent as a REAL class (CitizenComponent.h).
-//
-// Before: a manual COMPONENT_LIVE_FACTORY_S expansion — a 48-slot
-// CitizenComponent_LiveVtable filled at every create (slots 3 Serialize,
-// 4 Startup, 6 OnAdd, 7 OnRemove, 9 Update, 11 post-load re-apply, 15 message
-// handler), Inert_ScalarDtor in slot 0, and CitizenComponent_CtorScalars patched
-// in after the zero-fill. After: the compiler's 16-slot vtable, a real ctor
-// (the scalars are the ctor's own) and a real dtor chain (B38_RULES D1, D2).
-// ------------------------------------------------------------------
-#include "Component/CitizenComponent.h"
 
-extern void CitizenComponent_NeedsUpdate(void*, int, uint64_t*, int, int); // citizen_needsupdate.cpp
-extern "C" void CitizenComponent_OnRemove(void*);                          // citizen_onremove.cpp
-extern "C" void CitizenComponent_OnAdd(void* citizenComp);                 // 0x140114000
-extern "C" void CitizenComponent_Serialize(void* self, void* stream);      // 0x140114160
-extern "C" void CitizenComponent_PostLoadApply(void* self);                // citizencomponent_lifecycle.cpp
-
-// 0x140114770. Component() is the CALL 0x1401188b0; the 0x140162580 stamp is
-// the compiler's; flags |= 0xcb. The scalars are retail's and MUST be set at
-// CONSTRUCTION, not at Startup: retail's load path (ComponentEntity::Serialize
-// 0x1400c3140) rebuilds a stream-restored component through
-// Object::Factory::CreateObject -> ctor and then calls ONLY RefreshEntityFlags —
-// Startup is never dispatched for it. Retail's serializer (0x140114160)
-// re-supplies +0x30/+0xa8/+0x1e0 from the stream but deliberately SKIPS +0x1dc,
-// the live Graphics::Scene object handle, because the ctor already put -1 there.
-// With +0x1dc = 0 on a load, HideTool (0x1401176e0) passed its `>= 0` guard and
-// called Scene::RemoveObject(scene, 0) on a handle the scene never issued, whose
-// parent walk never terminates (the post-load freeze).
-//   +0x30 = -1, +0xa8 = -1, +0x1d8 = -1 (qword: toolId AND sceneObjectId),
-//   +0x1e0 = 4, everything else 0.
-// PORT GAP (retail 0x140114808): retail runs Graphics::MeshInstance::MeshInstance()
-// on +0xb8; the tree keeps those 0x120 bytes zero-filled (CitizenComponent.h).
-CitizenComponent::CitizenComponent()
-    : data28(0), data30(-1), data34(0), data38(0), data3C(0), data40(0), data44(0),
-      data48(0), data4C(0), data50(0), data54(0), data58(0), data60(0), data68(0),
-      data70(0), data78(0), data80(0), _pad84{}, data88(0), _pad8C{}, data90(0),
-      data98(0), dataA0(0), dataA8(-1), dataAC(0), dataB0(0), _padB4{},
-      meshInstance{}, data1D8(~uint64_t(0)), data1E0(4), data1E8(0), data1F0(0),
-      data1F8(0), data200(0), data208(0), data210(0), _pad214{}, data218(0),
-      data220(0), _pad221{}, data228(0), data230(0), data238(0), _pad240{},
-      data248(0), data250(0), data258(0), data260(0), data268(0), data270(0),
-      data278(0), data280(0), data288(0) {
-    OrFlagsInCtor(0xcb);
-}
-
-// [0] 0x140030270 = the dtor 0x1401146f0 + MemFree on &1. PORT GAP (retail's
-// dtor runs ~MeshInstance(+0xb8), frees the +0x98 array and releases the +0x28
-// InternalBasePtr) — the tree's Inert_ScalarDtor never did; kept.
-Object::Base* CitizenComponent::DeletingDtor(unsigned flags) {
-    this->~CitizenComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
-// [3] 0x140114160.
-void CitizenComponent::Persist(void* stream) { CitizenComponent_Serialize(this, stream); }
-
-// [4] 0x140114050.
-void CitizenComponent::Startup() { CitizenComponent_BodyInit(this); }
-
-// [6] 0x140114000 — the ADDED-to-world broadcast (ComponentEntity_OnAddedPass,
-// flags bit 0): append to the town citizen list townMgr+0xa0, the list the
-// census, the town-hall stats and every population system read.
-void CitizenComponent::OnAdded() { CitizenComponent_OnAdd(this); }
-
-// [7] 0x140113ca0 — the removed-from-world broadcast (MarkForRemoval 0x1400c2ea0,
-// flags bit 1): leave the town citizen list.
-void CitizenComponent::OnRemove() { CitizenComponent_OnRemove(this); }
-
-// [9] 0x140112e70. RDX is a pointer to the elapsed System::Time (EntityList
-// bucket tick 0x1400c42af).
-void CitizenComponent::Update(void* time) {
-    CitizenComponent_UpdateAdapter(this, static_cast<int64_t*>(time));
-}
-
-// [11] 0x1401140f0 — the LOAD-TIME visual re-apply (clothing colour, age scale,
-// carried tool), dispatched by the load-only EntityList pass.
-void CitizenComponent::Slot11() { CitizenComponent_PostLoadApply(this); }
-
-// [15] 0x140112260 — the component message handler SendComponentMessage
-// (0x1400caef0) dispatches: EDX = message id, R8 = &target entity IBP, R9D =
-// extra (read from the retail body's jump table).
-void CitizenComponent::OnMessage(int message, void* data, uint32_t arg0, uint32_t arg1) {
-    CitizenComponent_NeedsUpdate(this, message, static_cast<uint64_t*>(data),
-                                 static_cast<int>(arg0), static_cast<int>(arg1));
-}
 
 // create 0x140030110: MemAlloc(0x290, 8), then the ctor.
 void* CitizenComponent::CreateNewObject() {

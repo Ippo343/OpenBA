@@ -53,9 +53,7 @@ bool ReadRawMat(void* c, const char** outName, unsigned* outFlags) {
 
 bool IsRawMat(void* c) {
     if (!c || !g_TypeId_RawMaterialDescription) return false;
-    typedef uint32_t (*GetTypeId_t)(void*);
-    const uint32_t tid = (reinterpret_cast<GetTypeId_t>(
-        *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(c) + 0x10)))(c);
+    const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
     if (tid != *g_TypeId_RawMaterialDescription) return false;
     return !fn_IsDerivedFrom || fn_IsDerivedFrom(c, *g_TypeId_RawMaterialDescription);
 }
@@ -77,9 +75,7 @@ void DescribeMaterial(uintptr_t matDesc, const char** outName, unsigned* outFlag
     for (int j = 0; j < n; ++j) {
         void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(j) * 8);
         if (!c) continue;
-        typedef uint32_t (*GetTypeId_t)(void*);
-        const uint32_t tid = (reinterpret_cast<GetTypeId_t>(
-            *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(c) + 0x10)))(c);
+        const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
         if (tid != *g_TypeId_RawMaterialDescription) continue;
         if (fn_IsDerivedFrom && !fn_IsDerivedFrom(c, *g_TypeId_RawMaterialDescription)) continue;
         ReadRawMat(c, outName, outFlags);

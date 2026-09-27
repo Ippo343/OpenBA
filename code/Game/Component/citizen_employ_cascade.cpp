@@ -25,6 +25,7 @@
 //   Entity_impl_7fb0 0x140087fb0, CalcDistance 0x140008830, arrayAdd 0x140003110
 
 #include "resolve.h"
+#include "Component/ResidenceComponent.h"   // B.3.8 CB1a (TypeId)
 #include "engine_funcs.h"
 #include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
@@ -33,6 +34,7 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Component/CitizenComponent.h"
 
 // ---- deps ported elsewhere (link to them) ----
 struct CitizenComponent;   // opaque — only for matching the AssignHousing mangled name
@@ -64,7 +66,7 @@ void EnsureFns() {
     s_anchor7fb0   = reinterpret_cast<fn_Anchor7fb0_t>(ResolveAddr(Module::Exe, 0x140087fb0));
     s_calcDist8830 = reinterpret_cast<fn_CalcDist8830_t>(ResolveAddr(Module::Exe, 0x140008830));
     s_assignWorkplace = reinterpret_cast<fn_AssignWorkplace_t>(ResolveAddr(Module::Exe, 0x1401163d0));
-    if (s_tidResidence == 0) s_tidResidence = ::Object::GetTypeIdByName("ResidenceComponent");
+    if (s_tidResidence == 0) s_tidResidence = ResidenceComponent::TypeId();
     s_init = true;
 }
 
@@ -364,17 +366,6 @@ void* Strat_c5f0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
 // ============================================================================
 // 0x140114000 — CitizenComponent_OnAdd: append the citizen to townMgr+0xa0.
 // ============================================================================
-extern "C" void CitizenComponent_OnAdd(void* citizenComp) {
-    EnsureFns();
-    if (!citizenComp || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    int64_t townMgr = TownMgr();
-    if (townMgr == 0) return;
-    int64_t ref[2] = { 0, 0 };
-    Ctor(ref, citizenComp);
-    // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0xa0))
-        .SetSizeFill(*reinterpret_cast<int*>(townMgr + 0xa8) + 1, ref);
-}
 
 // ============================================================================
 // 0x140129de0 — ResidenceDescription_helper_9de0: append a built house's
@@ -643,4 +634,19 @@ extern "C" void* CitizenList_AssignWorker_c3d0(int64_t townMgr, void* out, int64
     }
     *reinterpret_cast<int64_t*>(out) = won;
     return out;
+}
+
+// [6] 0x140114000 — the ADDED-to-world broadcast (ComponentEntity_OnAddedPass,
+// flags bit 0): append to the town citizen list townMgr+0xa0, the list the
+// census, the town-hall stats and every population system read.
+void CitizenComponent::OnAdded() {
+    EnsureFns();
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    int64_t townMgr = TownMgr();
+    if (townMgr == 0) return;
+    int64_t ref[2] = { 0, 0 };
+    Ctor(ref, this);
+    // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0xa0))
+        .SetSizeFill(*reinterpret_cast<int*>(townMgr + 0xa8) + 1, ref);
 }

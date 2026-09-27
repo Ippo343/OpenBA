@@ -77,6 +77,8 @@
 // <windows.h> has been seen through resolve.h, which breaks Volume.h's own
 // `sizeof(Rectangle)` assert.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Scene.h"
+#include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/CitizenDescription.h"   // B.3.8 CB1a (TypeId)
 #include "graphics/Mesh.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -168,8 +170,8 @@ static void EnsureInit() {
     s_findPath   = reinterpret_cast<fn_findPath_t>(ResolveAddr(Module::Exe, 0x1400bf790));
     s_ltp        = reinterpret_cast<fn_ltp_t>(ResolveAddr(Module::Exe, 0x140115e60));
     s_getCount2  = &Storage_GetResourceCount2;
-    if (s_tid_CitizenDescription == 0)     s_tid_CitizenDescription     = ::Object::GetTypeIdByName("CitizenDescription");
-    if (s_tid_RawMaterialDescription == 0) s_tid_RawMaterialDescription = ::Object::GetTypeIdByName("RawMaterialDescription");
+    if (s_tid_CitizenDescription == 0)     s_tid_CitizenDescription     = CitizenDescription::TypeId();
+    if (s_tid_RawMaterialDescription == 0) s_tid_RawMaterialDescription = RawMaterialDescription::TypeId();
     s_init = true;
 }
 
@@ -279,8 +281,7 @@ static void* FindRawMaterialChild(int64_t entity) {
     for (int i = 0; i < count; ++i) {
         int64_t child = *reinterpret_cast<int64_t*>(slots + (int64_t)i * 8);
         if (child == 0) continue;
-        typedef uint32_t (*typeId_t)(int64_t);
-        uint32_t tid = (*reinterpret_cast<typeId_t*>(*reinterpret_cast<int64_t*>(child) + 0x10))(child);
+        uint32_t tid = reinterpret_cast<Object::Base*>(child)->Type();   // B.3.8 bridge (slot 2)
         if (tid == s_tid_RawMaterialDescription) {
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(reinterpret_cast<void*>(child), s_tid_RawMaterialDescription))
                 return reinterpret_cast<void*>(child);

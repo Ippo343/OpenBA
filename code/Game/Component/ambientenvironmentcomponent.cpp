@@ -39,6 +39,9 @@
 //
 
 #include "Component/ambientenvironmentcomponent_funcs.h"
+#include "Component/AmbientEnvironmentDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/AmbientEmitterDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/AmbientEmitterComponent.h"   // B.3.8 CB1a (TypeId)
 #include "perf_experimental.h"
 #include <unordered_map>
 #include "engine_funcs.h"
@@ -67,9 +70,9 @@ bool s_resolved = false;
 
 void EnsureResolved() {
     if (s_resolved) return;
-    s_tidEnvDesc     = ::Object::GetTypeIdByName("AmbientEnvironmentDescription");
-    s_tidEmitterComp = ::Object::GetTypeIdByName("AmbientEmitterComponent");
-    s_tidEmitterDesc = ::Object::GetTypeIdByName("AmbientEmitterDescription");
+    s_tidEnvDesc     = AmbientEnvironmentDescription::TypeId();
+    s_tidEmitterComp = AmbientEmitterComponent::TypeId();
+    s_tidEmitterDesc = AmbientEmitterDescription::TypeId();
     // Only latch as resolved once the factory registry has frozen the ids
     // (they start at the 0xFFFFFFFF sentinel before Factory::Startup).
     if (s_tidEnvDesc != 0 && s_tidEnvDesc != 0xFFFFFFFFu)
@@ -196,9 +199,8 @@ void* FindSiblingEmitter(void* self) {
         void** ibp = &list[i];
         void* comp = *ibp;
         if (!comp) continue;
-        void** vt = *reinterpret_cast<void***>(comp);
         // component->GetTypeId() is vtable slot +0x10.
-        uint32_t tid = reinterpret_cast<uint32_t(*)(void*)>(vt[2])(comp);
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (tid == s_tidEmitterComp)
             return (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, s_tidEmitterComp)) ? comp : nullptr;
     }
@@ -206,132 +208,6 @@ void* FindSiblingEmitter(void* self) {
 }
 
 }  // namespace
-
-// ============================================================
-// AmbientEnvironmentComponent::Update (vtable slot [9], 0x140043310)
-// ============================================================
-// The component Update ABI is (self, Time*); the original reads only `self`.
-void AmbientEnvironmentComponent_Update(AmbientEnvironmentComponent* selfC, int64_t* /*time*/) {
-    if (!selfC) return;
-
-    EnsureResolved();
-
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    if (!fn_IsDerivedFrom || !s_tidEnvDesc || !fn_MemAlloc || !g_pMemAllocSingleton) return;
-
-    uint8_t* self = reinterpret_cast<uint8_t*>(selfC);
-    uint8_t* gw   = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
-
-    // Grid (Game object at gameWorld+0xf8): +0x00 width, +0x80 cells (stride 0x30).
-    uint8_t* grid = *reinterpret_cast<uint8_t**>(gw + 0xf8);
-    if (!grid) return;
-    int gridWidth = *reinterpret_cast<int*>(grid + 0x00);
-    uint8_t* cells = *reinterpret_cast<uint8_t**>(grid + 0x80);
-
-    // Biome config description at self+0x18.
-    void* descRaw = *reinterpret_cast<void**>(self + 0x18);
-    void* desc = fn_IsDerivedFrom(descRaw, s_tidEnvDesc) ? descRaw : nullptr;
-    if (!desc) return;
-    int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x28);
-    uint8_t* table = *reinterpret_cast<uint8_t**>(reinterpret_cast<uintptr_t>(desc) + 0x20);
-    if (count <= 0 || !table) return;
-
-    // [PerfX AMBIENT_THROTTLE -- NON-RETAIL] the biome histogram over the emitter's tile
-    // region only changes when the map does (trees cut, buildings placed) and the audio
-    // crossfade it feeds is inaudible at tick granularity, so the scan is re-run every
-    // n-th tick per emitter and the last dominant biome is reused in between. The
-    // temperature crossfade factor is still recomputed every tick.
-    struct ThrottleState { int dominant; int countdown; };
-    static std::unordered_map<void*, ThrottleState> s_throttle;
-    const int throttleN = PerfX::AmbientThrottle();
-    int cachedDominant = -1;
-    if (throttleN > 1) {
-        auto it = s_throttle.find(selfC);
-        if (it != s_throttle.end() && it->second.countdown > 0) {
-            --it->second.countdown;
-            cachedDominant = it->second.dominant;
-            PerfX::Count(PerfX::kCntAmbientSkipped);
-        }
-    }
-
-    int gridX = *reinterpret_cast<int*>(self + 0x28);
-    int gridY = *reinterpret_cast<int*>(self + 0x2c);
-    int rw    = *reinterpret_cast<int*>(self + 0x30);
-    int rh    = *reinterpret_cast<int*>(self + 0x34);
-
-    int* hist = nullptr;
-    if (cachedDominant < 0) {
-    hist = reinterpret_cast<int*>(fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 4, 4));
-    if (!hist) return;
-    for (int i = 0; i < count; ++i) hist[i] = 0;
-
-    if (cells) {
-        for (int y = 0; y < rh; ++y) {
-            for (int x = 0; x < rw; ++x) {
-                intptr_t ci = (intptr_t)(gridY + y) * gridWidth + (gridX + x);
-                uint8_t* cell = cells + ci * 0x30;
-                uint8_t bits = cell[0x29];
-
-                // Cell's entity reference (cell+0x00, else cell+0x08).
-                void* ent = *reinterpret_cast<void**>(cell + 0x00);
-                if (!ent) ent = *reinterpret_cast<void**>(cell + 0x08);
-
-                for (int k = 0; k < count; ++k) {
-                    uint8_t* bt = table + (intptr_t)k * 0x28;
-                    uint32_t mask = *reinterpret_cast<uint32_t*>(bt + 0x00);
-                    if ((mask & (1u << (bits & 0x1f))) == 0) continue;
-                    // Entity filter: no filter, or the cell entity matches bt+0x08.
-                    void* filt = *reinterpret_cast<void**>(bt + 0x08);
-                    bool match = (ent == nullptr) || (filt == nullptr);
-                    if (!match) {
-                        // ent+0x28 == filter target?
-                        match = (*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(ent) + 0x28) == filt);
-                    }
-                    if (match) {
-                        hist[k] += *reinterpret_cast<int*>(bt + 0x20);
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    } // cachedDominant < 0
-
-    // Dominant biome = argmax(hist).
-    int dominant = 0;
-    if (cachedDominant >= 0 && cachedDominant < count) {
-        dominant = cachedDominant;
-    } else {
-        int best = hist[0];
-        for (int k = 1; k < count; ++k) {
-            if (hist[k] > best) { best = hist[k]; dominant = k; }
-        }
-        if (throttleN > 1) s_throttle[selfC] = ThrottleState{ dominant, throttleN - 1 };
-    }
-
-    // Temperature crossfade factor: (temp - lo) / (hi - lo), clamped [0,1].
-    float unit = g_fUVScale ? *g_fUVScale : 1.0f;
-    void* weather = *reinterpret_cast<void**>(gw + 0x130);
-    float f = 0.0f;
-    if (weather) {
-        float temp = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(weather) + 0x18);
-        float lo = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x30);
-        float hi = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x34);
-        float denom = hi - lo;
-        f = saturate((denom != 0.0f) ? (temp - lo) / denom : 0.0f, unit);
-    }
-
-    // Drive the sibling AmbientEmitterComponent: slot 0 = day, slot 1 = night.
-    void* emitter = FindSiblingEmitter(self);
-    if (emitter) {
-        uint64_t daySound   = *reinterpret_cast<uint64_t*>(table + (intptr_t)dominant * 0x28 + 0x10);
-        uint64_t nightSound = *reinterpret_cast<uint64_t*>(table + (intptr_t)dominant * 0x28 + 0x18);
-        SetSlot(emitter, 0, daySound,   f);
-        SetSlot(emitter, 1, nightSound, unit - f);
-    }
-    if (hist && fn_MemFreeStatic) fn_MemFreeStatic(hist);
-}
 
 // ============================================================
 // AmbientEnvironmentComponent::InitRegion
@@ -409,8 +285,6 @@ void AmbientEnvironmentComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/AmbientEnvironmentComponent.h"
 
-// Retail 0x1400437e0 (ambientenvironmentcomponent_serialize.cpp).
-extern "C" void AmbientEnvironmentComponent_Serialize(void* self, void* stream);
 
 // 0x1400438d0. Component() is the CALL 0x1401188b0; the 0x140158b70 stamp is
 // the compiler's; +0x38 = 0, +0x40 (dword) = 0; flags |= 0x88. Retail leaves
@@ -427,15 +301,136 @@ Object::Base* AmbientEnvironmentComponent::DeletingDtor(unsigned flags) {
     return this;
 }
 
-// [3] 0x1400437e0.
-void AmbientEnvironmentComponent::Persist(void* stream) {
-    AmbientEnvironmentComponent_Serialize(this, stream);
-}
 
 // [9] 0x140043690 (`JMP 0x140043310`). RDX is a pointer to the elapsed
 // System::Time (EntityList bucket tick 0x1400c42af).
-void AmbientEnvironmentComponent::Update(void* time) {
-    AmbientEnvironmentComponent_Update(this, static_cast<int64_t*>(time));
+// ============================================================
+// AmbientEnvironmentComponent::Update (vtable slot [9], 0x140043310)
+// ============================================================
+// The component Update ABI is (self, Time*); the original reads only `self`.
+// The per-emitter biome-scan throttle below (main thread only: slot 9 is the
+// EntityList update walk). Namespace scope, not a function-local static (B6-5).
+struct AmbientThrottleState { int dominant; int countdown; };
+static std::unordered_map<void*, AmbientThrottleState> s_ambientThrottle;
+
+void AmbientEnvironmentComponent::Update(void* /*time*/) {
+
+    EnsureResolved();
+
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (!fn_IsDerivedFrom || !s_tidEnvDesc || !fn_MemAlloc || !g_pMemAllocSingleton) return;
+
+    uint8_t* self = reinterpret_cast<uint8_t*>(this);
+    uint8_t* gw   = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+
+    // Grid (Game object at gameWorld+0xf8): +0x00 width, +0x80 cells (stride 0x30).
+    uint8_t* grid = *reinterpret_cast<uint8_t**>(gw + 0xf8);
+    if (!grid) return;
+    int gridWidth = *reinterpret_cast<int*>(grid + 0x00);
+    uint8_t* cells = *reinterpret_cast<uint8_t**>(grid + 0x80);
+
+    // Biome config description at self+0x18.
+    void* descRaw = *reinterpret_cast<void**>(self + 0x18);
+    void* desc = fn_IsDerivedFrom(descRaw, s_tidEnvDesc) ? descRaw : nullptr;
+    if (!desc) return;
+    int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x28);
+    uint8_t* table = *reinterpret_cast<uint8_t**>(reinterpret_cast<uintptr_t>(desc) + 0x20);
+    if (count <= 0 || !table) return;
+
+    // [PerfX AMBIENT_THROTTLE -- NON-RETAIL] the biome histogram over the emitter's tile
+    // region only changes when the map does (trees cut, buildings placed) and the audio
+    // crossfade it feeds is inaudible at tick granularity, so the scan is re-run every
+    // n-th tick per emitter and the last dominant biome is reused in between. The
+    // temperature crossfade factor is still recomputed every tick.
+    auto& s_throttle = s_ambientThrottle;
+    const int throttleN = PerfX::AmbientThrottle();
+    int cachedDominant = -1;
+    if (throttleN > 1) {
+        auto it = s_throttle.find(this);
+        if (it != s_throttle.end() && it->second.countdown > 0) {
+            --it->second.countdown;
+            cachedDominant = it->second.dominant;
+            PerfX::Count(PerfX::kCntAmbientSkipped);
+        }
+    }
+
+    int gridX = *reinterpret_cast<int*>(self + 0x28);
+    int gridY = *reinterpret_cast<int*>(self + 0x2c);
+    int rw    = *reinterpret_cast<int*>(self + 0x30);
+    int rh    = *reinterpret_cast<int*>(self + 0x34);
+
+    int* hist = nullptr;
+    if (cachedDominant < 0) {
+    hist = reinterpret_cast<int*>(fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 4, 4));
+    if (!hist) return;
+    for (int i = 0; i < count; ++i) hist[i] = 0;
+
+    if (cells) {
+        for (int y = 0; y < rh; ++y) {
+            for (int x = 0; x < rw; ++x) {
+                intptr_t ci = (intptr_t)(gridY + y) * gridWidth + (gridX + x);
+                uint8_t* cell = cells + ci * 0x30;
+                uint8_t bits = cell[0x29];
+
+                // Cell's entity reference (cell+0x00, else cell+0x08).
+                void* ent = *reinterpret_cast<void**>(cell + 0x00);
+                if (!ent) ent = *reinterpret_cast<void**>(cell + 0x08);
+
+                for (int k = 0; k < count; ++k) {
+                    uint8_t* bt = table + (intptr_t)k * 0x28;
+                    uint32_t mask = *reinterpret_cast<uint32_t*>(bt + 0x00);
+                    if ((mask & (1u << (bits & 0x1f))) == 0) continue;
+                    // Entity filter: no filter, or the cell entity matches bt+0x08.
+                    void* filt = *reinterpret_cast<void**>(bt + 0x08);
+                    bool match = (ent == nullptr) || (filt == nullptr);
+                    if (!match) {
+                        // ent+0x28 == filter target?
+                        match = (*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(ent) + 0x28) == filt);
+                    }
+                    if (match) {
+                        hist[k] += *reinterpret_cast<int*>(bt + 0x20);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    } // cachedDominant < 0
+
+    // Dominant biome = argmax(hist).
+    int dominant = 0;
+    if (cachedDominant >= 0 && cachedDominant < count) {
+        dominant = cachedDominant;
+    } else {
+        int best = hist[0];
+        for (int k = 1; k < count; ++k) {
+            if (hist[k] > best) { best = hist[k]; dominant = k; }
+        }
+        if (throttleN > 1) s_throttle[this] = AmbientThrottleState{ dominant, throttleN - 1 };
+    }
+
+    // Temperature crossfade factor: (temp - lo) / (hi - lo), clamped [0,1].
+    float unit = g_fUVScale ? *g_fUVScale : 1.0f;
+    void* weather = *reinterpret_cast<void**>(gw + 0x130);
+    float f = 0.0f;
+    if (weather) {
+        float temp = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(weather) + 0x18);
+        float lo = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x30);
+        float hi = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x34);
+        float denom = hi - lo;
+        f = saturate((denom != 0.0f) ? (temp - lo) / denom : 0.0f, unit);
+    }
+
+    // Drive the sibling AmbientEmitterComponent: slot 0 = day, slot 1 = night.
+    void* emitter = FindSiblingEmitter(self);
+    if (emitter) {
+        uint64_t daySound   = *reinterpret_cast<uint64_t*>(table + (intptr_t)dominant * 0x28 + 0x10);
+        uint64_t nightSound = *reinterpret_cast<uint64_t*>(table + (intptr_t)dominant * 0x28 + 0x18);
+        SetSlot(emitter, 0, daySound,   f);
+        SetSlot(emitter, 1, nightSound, unit - f);
+    }
+    if (hist && fn_MemFreeStatic) fn_MemFreeStatic(hist);
 }
 
 // create 0x140001ee0: MemAlloc(0x48, 8), then the ctor.

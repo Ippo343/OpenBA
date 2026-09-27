@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "Component/FishingComponent.h"
 
 namespace {
 
@@ -107,6 +108,26 @@ void StampCoverage(uintptr_t comp, short delta) {
 
 }  // namespace
 
+// [19] 0x14011ee80
+// ── slot 19 (+0x98) OnEnterProducing — retail 0x14011ee80 ─────────────────────────
+char FishingComponent::OnEnterProducing() {
+    const uintptr_t comp = reinterpret_cast<uintptr_t>(this);
+    if (*reinterpret_cast<uint8_t*>(comp + 0x50) != 0) return 0;   // already registered
+    StampCoverage(comp, +1);
+    FishingComponent::ProduceTick(nullptr);                        // retail: Time(0.0); qualified, as the free call was
+    *reinterpret_cast<uint8_t*>(comp + 0x50) = 1;
+    return 0;
+}
+// [20] 0x14011ee50
+// ── slot 20 (+0xa0) OnExitProducing — retail 0x14011ee50 ──────────────────────────
+char FishingComponent::OnExitProducing() {
+    const uintptr_t comp = reinterpret_cast<uintptr_t>(this);
+    if (*reinterpret_cast<uint8_t*>(comp + 0x50) == 0) return 0;   // not registered
+    StampCoverage(comp, -1);
+    *reinterpret_cast<uint8_t*>(comp + 0x50) = 0;
+    return 0;
+}
+// [21] 0x14011ec10
 // ── slot 21 (+0xa8) ProduceTick — retail 0x14011ec10 ──────────────────────────────
 // Recomputes the dock's fishing rate: over the disk of the RadiusDescription radius,
 // count in-bounds tiles (total) and those whose terrain byte (cell+0x29) is set in the
@@ -114,9 +135,9 @@ void StampCoverage(uintptr_t comp, short delta) {
 //     +0x54 = matching / (total * 0.5)          [DAT_140172114 = 0.5f]
 // A dock with no water in range therefore rates 0 and produces nothing — which is the
 // retail behaviour players see when a dock is placed too far up the bank.
-extern "C" char FishingComponent_ProduceTick(void* self, void* /*time*/) {
+char FishingComponent::ProduceTick(void* /*time*/) {
     Resolve();
-    const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
+    const uintptr_t comp = reinterpret_cast<uintptr_t>(this);
 
     const int r = RadiusOf(comp);
     int cx = 0, cy = 0;
@@ -157,24 +178,5 @@ extern "C" char FishingComponent_ProduceTick(void* self, void* /*time*/) {
     const float rate = (total > 0) ? (float)matching / ((float)total * 0.5f) : 0.0f;
     *reinterpret_cast<float*>(comp + 0x54) = rate;
 
-    return 0;
-}
-
-// ── slot 19 (+0x98) OnEnterProducing — retail 0x14011ee80 ─────────────────────────
-extern "C" char FishingComponent_OnEnterProducing(void* self) {
-    const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
-    if (*reinterpret_cast<uint8_t*>(comp + 0x50) != 0) return 0;   // already registered
-    StampCoverage(comp, +1);
-    FishingComponent_ProduceTick(self, nullptr);                   // retail: Time(0.0)
-    *reinterpret_cast<uint8_t*>(comp + 0x50) = 1;
-    return 0;
-}
-
-// ── slot 20 (+0xa0) OnExitProducing — retail 0x14011ee50 ──────────────────────────
-extern "C" char FishingComponent_OnExitProducing(void* self) {
-    const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
-    if (*reinterpret_cast<uint8_t*>(comp + 0x50) == 0) return 0;   // not registered
-    StampCoverage(comp, -1);
-    *reinterpret_cast<uint8_t*>(comp + 0x50) = 0;
     return 0;
 }

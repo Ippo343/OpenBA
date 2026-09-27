@@ -189,7 +189,7 @@ static void* HerdFindComponent(int64_t entity, uint32_t* pTypeId) {
     for (int i = 0; i < n; i++) {
         void** slot = (void**)(list + (int64_t)i * 8);
         void* comp = *slot;
-        uint32_t t = (*(uint32_t(**)(void*))(*(uintptr_t*)comp + 0x10))(comp);
+        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (t == *pTypeId) {
             void* c = *slot;
             return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTypeId)) ? c : nullptr;
@@ -769,21 +769,6 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
 // Appends this herd (as an InternalBasePtr) to the town manager's herd list at
 // (GameWorld+0xf0)+0xb0, count at +0xb8.
 // ============================================================
-void HerdComponent_OnAdd(void* selfV) {
-    EnsureHelpers();
-    EnsureHerdExtras();
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
-    uint8_t* townMgr = *(uint8_t**)(gw + 0xf0);
-    if (!townMgr) return;
-
-    uint64_t selfRef = 0;
-    if (fn_InternalBasePtr_Ctor) new (&selfRef) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(selfV));   // B.3.3 bridge
-    // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0xb0))
-        .SetSizeFill(*(int*)(townMgr + 0xb8) + 1, &selfRef);
-}
 
 // ============================================================
 // Reimpl of FUN_140121e20 — HerdComponent::OnRemove (vtable slot 7).
@@ -895,137 +880,6 @@ static bool IsTileValid(HerdComponent* self) {
 // HerdComponent::Update (vtable slot [9], 0x140121bf0)
 // ============================================================
 
-void HerdComponent_Update(HerdComponent* self, int64_t* deltaTime) {
-    EnsureHelpers();
-
-    // Every branch below reaches the owning PopulationComponent through +0x28
-    // (food sampling, tile validity, migration retarget), which retail derefs
-    // unconditionally. A herd whose Populate never ran has +0x28 == 0, so bail
-    // rather than fault; the herd simply stays idle.
-    // Update-entry census. The [Herd] census line below only prints once the
-    // respawn timer fires, so its absence cannot distinguish "Update never ran"
-    // from "ran but the timer never expired" from "bailed on a null +0x28".
-    static long long g_hu_calls = 0, g_hu_noPop = 0, g_hu_noCfg = 0, g_hu_fired = 0;
-    ++g_hu_calls;
-    if (self->data28 == 0) {
-        ++g_hu_noPop;
-        if ((g_hu_noPop % 2000) == 1) {
-            fprintf(stderr, "[HerdUpd] calls=%lld noPop=%lld noCfg=%lld fired=%lld\n",
-                    g_hu_calls, g_hu_noPop, g_hu_noCfg, g_hu_fired);
-            fflush(stderr);
-        }
-        return;
-    }
-
-    // Get config object via IsDerivedFrom check
-    void* unk18 = self->_description;
-    bool isDerived = fn_IsDerivedFrom(unk18, *s_pHerdTypeId);
-    uint8_t* config = isDerived ? reinterpret_cast<uint8_t*>(unk18) : nullptr;
-    if (!config) ++g_hu_noCfg;
-
-    // === Timer tick: accumulate time at +0x58 ===
-    int64_t* spawnTimer = reinterpret_cast<int64_t*>(&self->data58);
-    *spawnTimer += *deltaTime;
-
-    // Compute interval from config+0x3C (in game minutes, convert to ticks)
-    float intervalMinutes = *reinterpret_cast<float*>(config + 0x3C);
-    int64_t intervalTicks;
-    fn_Time_Ctor_Float(&intervalTicks, intervalMinutes * *s_f300);
-
-    if ((g_hu_calls % 25) == 1) {
-        fprintf(stderr, "[HerdUpd] calls=%lld noPop=%lld noCfg=%lld fired=%lld | "
-                "herd=%p members=%d timer=%lld interval=%lld cfgMin=%.3f\n",
-                g_hu_calls, g_hu_noPop, g_hu_noCfg, g_hu_fired, (void*)self,
-                *reinterpret_cast<int32_t*>(&self->data40),
-                (long long)*spawnTimer, (long long)intervalTicks, intervalMinutes);
-        fflush(stderr);
-    }
-
-    if (intervalTicks < *spawnTimer) {
-        ++g_hu_fired;
-        fprintf(stderr, "[HerdUpd] FIRED #%lld herd=%p members=%d (calls=%lld)\n",
-                g_hu_fired, (void*)self,
-                *reinterpret_cast<int32_t*>(&self->data40), g_hu_calls);
-        fflush(stderr);
-        // Timer fired -- subtract interval
-        *spawnTimer -= intervalTicks;
-
-        // Check food availability
-        float foodScore = s_fn_CheckFood(
-            static_cast<int64_t>(self->data28),
-            *reinterpret_cast<int32_t*>(&self->data30));
-
-        // Compute food modifier: if food < threshold, scale it
-        float foodModifier = *s_fOne;
-        if (foodScore < *s_fFoodThreshold) {
-            foodModifier = foodScore * *s_fFoodScale;
-        }
-
-        // Target size: current * 2 (minimum 2)
-        int currentTarget = *reinterpret_cast<int32_t*>(&self->data40) * 2;
-        if (currentTarget == 0) {
-            currentTarget = 2;
-        }
-
-        // Max size from config+0x28, scaled by food modifier
-        int maxSize = static_cast<int>(
-            static_cast<float>(*reinterpret_cast<int32_t*>(config + 0x28)) *
-            foodModifier + *s_fFoodThreshold);
-        if (maxSize < currentTarget) {
-            currentTarget = maxSize;
-        }
-
-        s_fn_AdjustSize(self, currentTarget);
-    }
-
-    // === Phase logic ===
-    if (self->data48 == 0) {
-        // Grazing phase: countdown timer at +0x50
-        int64_t* grazeTimer = reinterpret_cast<int64_t*>(&self->data50);
-        *grazeTimer -= *deltaTime;
-
-        if (*grazeTimer > 0) {
-            // Timer still running -- check terrain validity
-            if (IsTileValid(self)) {
-                return;  // Valid terrain, stay grazing
-            }
-        }
-
-        // Timer expired or invalid terrain -- start migration
-        s_fn_StartMigration(reinterpret_cast<int64_t>(self));
-        *reinterpret_cast<int64_t*>(&self->data50) = 0;
-        self->data48 = 1;  // Switch to migrating phase
-    } else {
-        // Migrating phase: check if done
-        char done = s_fn_CheckMigrationDone(reinterpret_cast<int64_t>(self));
-
-        if (done != 0) {
-            // Migration complete -- randomize graze timer and switch back
-            void* world = *s_pWorldSingleton;
-            void* random = *reinterpret_cast<void**>(
-                reinterpret_cast<uint8_t*>(world) + 0xD8);
-
-            float randVal = reinterpret_cast<System::Random*>(random)->RandFloat();   // B.3.4b bridge
-            float baseTime = *reinterpret_cast<float*>(config + 0x30);
-            float randRange = *reinterpret_cast<float*>(config + 0x34);
-            float grazeSeconds = (randVal * randRange + baseTime) * *s_f300;
-
-            int64_t grazeTicks;
-            fn_Time_Ctor_Float(&grazeTicks, grazeSeconds);
-
-            self->data48 = 0;  // Back to grazing
-            *reinterpret_cast<int64_t*>(&self->data50) = grazeTicks;
-            return;
-        }
-
-        // Still migrating -- check terrain validity at current position
-        if (!IsTileValid(self)) {
-            // Tile became invalid -- restart migration
-            s_fn_StartMigration(reinterpret_cast<int64_t>(self));
-        }
-    }
-}
-
 // ============================================================
 // Init: resolve function pointers
 // ============================================================
@@ -1050,8 +904,6 @@ void HerdComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/HerdComponent.h"
 
-// Retail 0x140121f90 (animalwave_serialize.cpp).
-extern "C" void HerdComponent_Serialize(void* self, void* stream);
 
 // 0x140122150. Component() is the CALL 0x1401188b0; the 0x140163680 stamp is
 // the compiler's; +0x28, +0x38, +0x40, +0x48 (byte), +0x50, +0x58 = 0; flags |=
@@ -1073,8 +925,21 @@ Object::Base* HerdComponent::DeletingDtor(unsigned flags) {
     return this;
 }
 
-void HerdComponent::Persist(void* stream) { HerdComponent_Serialize(this, stream); }   // [3] 0x140121f90
-void HerdComponent::OnAdded() { HerdComponent_OnAdd(this); }     // [6] 0x140121f40
+void HerdComponent::OnAdded() {
+    EnsureHelpers();
+    EnsureHerdExtras();
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint8_t* townMgr = *(uint8_t**)(gw + 0xf0);
+    if (!townMgr) return;
+
+    uint64_t selfRef = 0;
+    if (fn_InternalBasePtr_Ctor) new (&selfRef) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+    // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0xb0))
+        .SetSizeFill(*(int*)(townMgr + 0xb8) + 1, &selfRef);
+}
 
 // [7] 0x140121e20. PORT GAP (retail 0x140121e20) — B38 D9: the body is ported
 // (HerdComponent_OnRemove, registered at 0x140121e20 by reg_herd_live.cpp) but
@@ -1084,8 +949,141 @@ void HerdComponent::OnRemove() {}
 
 // [9] 0x140121bf0. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).
+// HerdComponent::Update's diagnostic counters (main thread only: the update walk),
+// at namespace scope rather than function-local statics (B6-5).
+static long long s_herdUpdCalls = 0, s_herdUpdNoPop = 0, s_herdUpdNoCfg = 0, s_herdUpdFired = 0;
+
 void HerdComponent::Update(void* time) {
-    HerdComponent_Update(this, static_cast<int64_t*>(time));
+    int64_t* deltaTime = static_cast<int64_t*>(time);
+    EnsureHelpers();
+
+    // Every branch below reaches the owning PopulationComponent through +0x28
+    // (food sampling, tile validity, migration retarget), which retail derefs
+    // unconditionally. A herd whose Populate never ran has +0x28 == 0, so bail
+    // rather than fault; the herd simply stays idle.
+    // Update-entry census. The [Herd] census line below only prints once the
+    // respawn timer fires, so its absence cannot distinguish "Update never ran"
+    // from "ran but the timer never expired" from "bailed on a null +0x28".
+    auto& g_hu_calls = s_herdUpdCalls; auto& g_hu_noPop = s_herdUpdNoPop;
+    auto& g_hu_noCfg = s_herdUpdNoCfg; auto& g_hu_fired = s_herdUpdFired;
+    ++g_hu_calls;
+    if (data28 == 0) {
+        ++g_hu_noPop;
+        if ((g_hu_noPop % 2000) == 1) {
+            fprintf(stderr, "[HerdUpd] calls=%lld noPop=%lld noCfg=%lld fired=%lld\n",
+                    g_hu_calls, g_hu_noPop, g_hu_noCfg, g_hu_fired);
+            fflush(stderr);
+        }
+        return;
+    }
+
+    // Get config object via IsDerivedFrom check
+    void* unk18 = _description;
+    bool isDerived = fn_IsDerivedFrom(unk18, *s_pHerdTypeId);
+    uint8_t* config = isDerived ? reinterpret_cast<uint8_t*>(unk18) : nullptr;
+    if (!config) ++g_hu_noCfg;
+
+    // === Timer tick: accumulate time at +0x58 ===
+    int64_t* spawnTimer = reinterpret_cast<int64_t*>(&data58);
+    *spawnTimer += *deltaTime;
+
+    // Compute interval from config+0x3C (in game minutes, convert to ticks)
+    float intervalMinutes = *reinterpret_cast<float*>(config + 0x3C);
+    int64_t intervalTicks;
+    fn_Time_Ctor_Float(&intervalTicks, intervalMinutes * *s_f300);
+
+    if ((g_hu_calls % 25) == 1) {
+        fprintf(stderr, "[HerdUpd] calls=%lld noPop=%lld noCfg=%lld fired=%lld | "
+                "herd=%p members=%d timer=%lld interval=%lld cfgMin=%.3f\n",
+                g_hu_calls, g_hu_noPop, g_hu_noCfg, g_hu_fired, (void*)this,
+                *reinterpret_cast<int32_t*>(&data40),
+                (long long)*spawnTimer, (long long)intervalTicks, intervalMinutes);
+        fflush(stderr);
+    }
+
+    if (intervalTicks < *spawnTimer) {
+        ++g_hu_fired;
+        fprintf(stderr, "[HerdUpd] FIRED #%lld herd=%p members=%d (calls=%lld)\n",
+                g_hu_fired, (void*)this,
+                *reinterpret_cast<int32_t*>(&data40), g_hu_calls);
+        fflush(stderr);
+        // Timer fired -- subtract interval
+        *spawnTimer -= intervalTicks;
+
+        // Check food availability
+        float foodScore = s_fn_CheckFood(
+            static_cast<int64_t>(data28),
+            *reinterpret_cast<int32_t*>(&data30));
+
+        // Compute food modifier: if food < threshold, scale it
+        float foodModifier = *s_fOne;
+        if (foodScore < *s_fFoodThreshold) {
+            foodModifier = foodScore * *s_fFoodScale;
+        }
+
+        // Target size: current * 2 (minimum 2)
+        int currentTarget = *reinterpret_cast<int32_t*>(&data40) * 2;
+        if (currentTarget == 0) {
+            currentTarget = 2;
+        }
+
+        // Max size from config+0x28, scaled by food modifier
+        int maxSize = static_cast<int>(
+            static_cast<float>(*reinterpret_cast<int32_t*>(config + 0x28)) *
+            foodModifier + *s_fFoodThreshold);
+        if (maxSize < currentTarget) {
+            currentTarget = maxSize;
+        }
+
+        s_fn_AdjustSize(this, currentTarget);
+    }
+
+    // === Phase logic ===
+    if (data48 == 0) {
+        // Grazing phase: countdown timer at +0x50
+        int64_t* grazeTimer = reinterpret_cast<int64_t*>(&data50);
+        *grazeTimer -= *deltaTime;
+
+        if (*grazeTimer > 0) {
+            // Timer still running -- check terrain validity
+            if (IsTileValid(this)) {
+                return;  // Valid terrain, stay grazing
+            }
+        }
+
+        // Timer expired or invalid terrain -- start migration
+        s_fn_StartMigration(reinterpret_cast<int64_t>(this));
+        *reinterpret_cast<int64_t*>(&data50) = 0;
+        data48 = 1;  // Switch to migrating phase
+    } else {
+        // Migrating phase: check if done
+        char done = s_fn_CheckMigrationDone(reinterpret_cast<int64_t>(this));
+
+        if (done != 0) {
+            // Migration complete -- randomize graze timer and switch back
+            void* world = *s_pWorldSingleton;
+            void* random = *reinterpret_cast<void**>(
+                reinterpret_cast<uint8_t*>(world) + 0xD8);
+
+            float randVal = reinterpret_cast<System::Random*>(random)->RandFloat();   // B.3.4b bridge
+            float baseTime = *reinterpret_cast<float*>(config + 0x30);
+            float randRange = *reinterpret_cast<float*>(config + 0x34);
+            float grazeSeconds = (randVal * randRange + baseTime) * *s_f300;
+
+            int64_t grazeTicks;
+            fn_Time_Ctor_Float(&grazeTicks, grazeSeconds);
+
+            data48 = 0;  // Back to grazing
+            *reinterpret_cast<int64_t*>(&data50) = grazeTicks;
+            return;
+        }
+
+        // Still migrating -- check terrain validity at current position
+        if (!IsTileValid(this)) {
+            // Tile became invalid -- restart migration
+            s_fn_StartMigration(reinterpret_cast<int64_t>(this));
+        }
+    }
 }
 
 // create 0x140034cd0: MemAlloc(0x60, 8), then the ctor.

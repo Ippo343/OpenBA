@@ -11,10 +11,5 @@
 // Size: 0x38 bytes
 // ============================================================
 
-// Update (vtable slot [9], 0x140049de0): Fruit ripening simulation.
-// Accumulates growth progress each tick based on temperature sensitivity
-// and seasonal growth factor. Uses quadratic temperature curve.
-void FruitComponent_Update(FruitComponent* self, int64_t* pDeltaTime);
-
 // Init: resolve all internal function pointers (called once at startup)
 void FruitComponent_InitFuncs();

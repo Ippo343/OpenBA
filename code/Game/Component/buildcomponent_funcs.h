@@ -18,19 +18,6 @@ inline void BuildComponent_Serialize(BuildComponent* /*self*/, void* /*stream*/)
 // OnUpdate2 (vtable slot [11], 0x140108D70): 3-byte RET 0 no-op.
 inline void BuildComponent_OnUpdate2(BuildComponent* /*self*/) {}
 
-// Shutdown (vtable slot [3], 0x140108D80): Serializes BuildComponent fields.
-// Component_Serialize base call, then version 0 empty block, then version 1
-// block with buildState, buildProgress, buildFlag, two InternalBasePtr arrays
-// with IsDerivedFrom validation.
-void BuildComponent_Shutdown(BuildComponent* self, void* stream);
-
-// Draw (vtable slot [6], 0x140108D40): Complex worker assignment logic.
-// Checks game flags, iterates multi-object children, finds BuildComponents
-// and StorageComponents, manages worker assignments and draw calls.
-void BuildComponent_Draw(BuildComponent* self);
-
-// OnCreate (vtable slot [7], 0x140108CB0): Removes component from removal queue.
-void BuildComponent_OnCreate(BuildComponent* self);
 
 // Init: resolve all internal function pointers (called once at startup)
 void BuildComponent_InitFuncs();

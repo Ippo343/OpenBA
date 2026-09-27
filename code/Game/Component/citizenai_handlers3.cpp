@@ -53,6 +53,8 @@
 
 
 #include "engine_funcs.h"
+#include "Component/InteractDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/CitizenDescription.h"   // B.3.8 CB1a (TypeId)
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -125,8 +127,8 @@ static void EnsureInit() {
     s_ctor8     = reinterpret_cast<fn_ctor8_t>(ResolveAddr(Module::Exe, 0x1400bd790));
     s_navTo     = reinterpret_cast<fn_navTo_t>(ResolveAddr(Module::Exe, 0x1400bda50));
     s_walk      = reinterpret_cast<fn_walk_t>(ResolveAddr(Module::Exe, 0x1400bb490));
-    if (s_tid_InteractDescription == 0) s_tid_InteractDescription = ::Object::GetTypeIdByName("InteractDescription");
-    if (s_tid_CitizenDescription == 0)  s_tid_CitizenDescription  = ::Object::GetTypeIdByName("CitizenDescription");
+    if (s_tid_InteractDescription == 0) s_tid_InteractDescription = InteractDescription::TypeId();
+    if (s_tid_CitizenDescription == 0)  s_tid_CitizenDescription  = CitizenDescription::TypeId();
     s_init = true;
 }
 

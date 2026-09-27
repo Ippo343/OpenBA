@@ -40,6 +40,7 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Component/CitizenComponent.h"
 
 // Clean C++ name generator (code/Game/Game/citizen_names.cpp) — replaces the retail
 // name-gen chain (FUN_1400a4c60/a4b30/a4880) that 0x140117080 would otherwise call.
@@ -320,6 +321,8 @@ void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
                       g_fUVScale ? *g_fUVScale : 1.0f, 0.0f);
 }
 
+// [11] 0x1401140f0 — the LOAD-TIME visual re-apply (clothing colour, age scale,
+// carried tool), dispatched by the load-only EntityList pass.
 // ============================================================
 // CitizenComponent vtable slot 11 (+0x58) — retail 0x1401140f0
 // ============================================================
@@ -345,9 +348,9 @@ void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
 // MeshInstance ctor default, drifting back one at a time as they go idle.
 //
 // Byte-faithful to retail, including the unguarded +0x288 description deref.
-extern "C" void CitizenComponent_PostLoadApply(void* selfV) {
+void CitizenComponent::Slot11() {
     EnsureLifecycleFuncs();
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
+    uint8_t* p = reinterpret_cast<uint8_t*>(this);
     if (!p) return;
 
     const int64_t desc   = *reinterpret_cast<int64_t*>(p + 0x288);

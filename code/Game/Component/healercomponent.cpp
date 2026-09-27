@@ -20,68 +20,18 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-// Component_Serialize (base class) -- at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
 // FUN_140002cc0 -- ERASE-by-value from an InternalBasePtr array {ptr@+0, count@+8}.
-// (The legacy name here said "push"; the body at 0x140002cc0 scans for a matching
-// resolved pointer, shifts the tail down and decrements the count -- see the 1:1 port
-// in cemeterycomponent.cpp CemeteryListErase_Reimpl. It is the UNregister.)
-typedef void (*fn_ArrayEraseBasePtr_t)(void* arrayBase, void* internalBasePtr);
-static fn_ArrayEraseBasePtr_t s_fn_ArrayEraseBasePtr = nullptr;
+// (The legacy name said "push"; the body at 0x140002cc0 scans for a matching
+// resolved pointer, shifts the tail down and decrements the count -- the 1:1 port
+// is cemeterycomponent.cpp's CemeteryListErase_Reimpl. It is the UNregister.)
+extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);   // 0x140002cc0
 
 // FUN_140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
 // into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
-
-// Global: DAT_1401c3dd8 -- pointer to game world/population manager
-static void** s_pWorldManager = nullptr;
-
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-
-    s_fn_ArrayEraseBasePtr = reinterpret_cast<fn_ArrayEraseBasePtr_t>(
-        ResolveAddr(Module::Exe, 0x140002cc0));
-
-    s_pWorldManager = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401c3dd8));
-
-    s_initialized = true;
-}
+// DAT_1401c3dd8 (the game world) is engine_funcs' g_pGameWorldSingleton.
 
 // ============================================================
-// HealerComponent::Shutdown (vtable slot [3], 0x14004aeb0)
-// ============================================================
-// Same pattern as WellComponent: Component_Serialize + two empty serializer blocks.
-
-void HealerComponent_Shutdown(HealerComponent* self, void* stream) {
-    EnsureHelpers();
-
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
-
-    // Two empty serializer blocks (component section + controller section)
-    alignas(8) uint8_t serializer1[24];
-    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
-
-    alignas(8) uint8_t serializer2[24];
-    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
-}
-
-// ============================================================
-// HealerComponent::OnRemove (vtable slot [7], 0x14004ae70)
+// HealerComponent::OnRemove (vtable slot [7], 0x14004ae70) — the member below
 // ============================================================
 // UNregisters from the TownManager healer list at *(GameWorld+0xF0)+0x70.
 //
@@ -97,35 +47,6 @@ void HealerComponent_Shutdown(HealerComponent* self, void* stream) {
 //   * 0x140002cc0 is the erase, not a push. It was being called as if it appended.
 // Latent until now: slot 7 was never installed while the component was inert.
 
-void HealerComponent_OnRemove(HealerComponent* self) {
-    EnsureHelpers();
-
-    uint8_t basePtr[24] = {};
-    if (fn_InternalBasePtr_Ctor) {
-        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-    }
-
-    if (s_fn_ArrayEraseBasePtr && s_pWorldManager && *s_pWorldManager) {
-        void* gameWorld = *s_pWorldManager;
-        uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-            reinterpret_cast<uintptr_t>(gameWorld) + 0xF0);
-        if (townMgr)
-            s_fn_ArrayEraseBasePtr(reinterpret_cast<void*>(townMgr + 0x70), basePtr);
-    }
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void HealerComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[HealerComponent] Funcs resolved: Serialize=%p Erase=%p WorldMgr=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_ArrayEraseBasePtr,
-           (void*)s_pWorldManager);
-#endif
-}
-
 // ============================================================
 // HealerComponent state-2 "built" enter -- 0x14004ae30
 // ============================================================
@@ -139,15 +60,14 @@ void HealerComponent_InitFuncs() {
 // component inert nothing ever entered state 2, so the healer array at townMgr+0x70
 // stayed empty for the life of the save and the sick had nowhere to be sent.
 extern "C" char HealerComponent_EnterBuilt(void* comp, void* /*sm*/) {
-    HealerComponent_InitFuncs();
     if (!fn_InternalBasePtr_Ctor ||
-        !s_pWorldManager || !*s_pWorldManager) return 0;
+        !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
 
     uint8_t ibp[24] = {};
     new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
 
     uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*s_pWorldManager) + 0xF0);
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xF0);
     if (!townMgr) return 0;
 
     const int count = *reinterpret_cast<int*>(townMgr + 0x78);
@@ -170,7 +90,7 @@ extern "C" char HealerComponent_EnterBuilt(void* comp, void* /*sm*/) {
 // HealerComponent state-3 "demolish" enter -- 0x14004adf0. Byte-identical to the
 // slot-7 removal hook (0x14004ae70): wrap the component, call the erase.
 extern "C" char HealerComponent_EnterDemolish(void* comp, void* /*sm*/) {
-    HealerComponent_OnRemove(reinterpret_cast<HealerComponent*>(comp));
+    reinterpret_cast<HealerComponent*>(comp)->HealerComponent::OnRemove();   // B.3.8 bridge (state enters take void*)
     return 0;
 }
 
@@ -237,12 +157,32 @@ void* HealerComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) HealerComponent());
 }
 
-// [3] 0x14004aeb0. Slot 3 is the first call into the class on a load; the body
-// resolves its own helpers.
-void HealerComponent::Persist(void* stream) { HealerComponent_Shutdown(this, stream); }
+// [3] 0x14004aeb0 — EMPTY: Component::Persist (a direct CALL 0x1401189b0) plus two
+// empty Serializer scopes (component section + controller section), the same
+// pattern as WellComponent.
+void HealerComponent::Persist(void* stream) {
+    Component::Persist(stream);
+    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
+    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge
+}
 
-// [7] 0x14004ae70 — leave the town healer registry.
-void HealerComponent::OnRemove() { HealerComponent_OnRemove(this); }
+// [7] 0x14004ae70 — leave the town healer registry: wrap THIS component in an
+// InternalBasePtr and erase it from *(GameWorld+0xF0)+0x70.
+void HealerComponent::OnRemove() {
+    uint8_t basePtr[24] = {};
+    if (fn_InternalBasePtr_Ctor) {
+        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+    }
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
+            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xF0);
+        if (townMgr)
+            CemeteryListErase_Reimpl(reinterpret_cast<void*>(townMgr + 0x70), basePtr);
+    }
+}
+
+// Doors kept for their by-address rows (B.3.8): standalone/reg_cemetery_healer_serialize.cpp
+// (0x14004aeb0) and standalone/reg_town_services.cpp (0x14004ae70).
 
 DEFINE_EXE_VTABLE(HealerComponent, "_ZTV15HealerComponent")
 DEFINE_EXE_TYPE(HealerComponent, "ControllerComponent")

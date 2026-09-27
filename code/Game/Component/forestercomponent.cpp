@@ -26,23 +26,6 @@
 // s.Serialize(&self[0x51], null)  // bool at +0x51 (foresterFlags high byte)
 // ~Serializer()
 
-void ForesterComponent_Shutdown(ForesterComponent* self, void* stream) {
-    // Base ResourceProduceComponent::Shutdown (0x14012b4a0), a direct call in retail.
-    self->ResourceProduceComponent::Persist(stream);
-
-    // Serialize ForesterComponent's own fields
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // foresterFlags at +0x50 is uint16, serialized as two individual bools
-    bool* flagLow  = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x50);
-    bool* flagHigh = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x51);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagLow, nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagHigh, nullptr);  // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-}
-
 // ============================================================
 // Init: nothing left to resolve (the base Persist is a direct member call now)
 // ============================================================
@@ -154,7 +137,22 @@ void* ForesterComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ForesterComponent());
 }
 
-void       ForesterComponent::Persist(void* stream)     { ForesterComponent_Shutdown(this, stream); }        // [3]  0x14011f960
+void       ForesterComponent::Persist(void* stream) {
+    // Base ResourceProduceComponent::Shutdown (0x14012b4a0), a direct call in retail.
+    ResourceProduceComponent::Persist(stream);
+
+    // Serialize ForesterComponent's own fields
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    // foresterFlags at +0x50 is uint16, serialized as two individual bools
+    bool* flagLow  = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(this) + 0x50);
+    bool* flagHigh = reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(this) + 0x51);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagLow, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*flagHigh, nullptr);  // B.3.4 bridge
+
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+}
 uintptr_t* ForesterComponent::CreateWork(uintptr_t* out) { return ForesterComponent_CreateWork(this, out); } // [18] 0x14011f780
 
 DEFINE_EXE_VTABLE(ForesterComponent, "_ZTV17ForesterComponent")

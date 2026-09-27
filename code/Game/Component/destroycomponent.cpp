@@ -12,7 +12,8 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/destroycomponent_funcs.h"
+#include "Component/DestroyComponent.h"
+#include "Component/DestroyDescription.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -20,122 +21,6 @@
 #include <cstdio>
 #include <new>
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
-
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-// Component_Serialize (base class) -- at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
-// FUN_140002340 -- serialize InternalBasePtr (field60)
-typedef void (*fn_SerializeInternalBasePtr_t)(void* ptrField, void* serializer);
-static fn_SerializeInternalBasePtr_t s_fn_SerializeInternalBasePtr = nullptr;
-
-// IsDerivedFrom -- dispatch slot at 0x140152a98
-typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* self, uint32_t typeId);
-static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
-
-// Type ID for building component type (DAT_1401c7628)
-static uint32_t* s_pBuildingCompTypeId = nullptr;
-
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-    s_fn_SerializeInternalBasePtr = reinterpret_cast<fn_SerializeInternalBasePtr_t>(
-        ResolveAddr(Module::Exe, 0x140002340));
-    s_pBuildingCompTypeId = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7628));
-
-    uintptr_t slot;
-
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom_d = reinterpret_cast<fn_IsDerivedFrom_dispatch_t>(
-        *reinterpret_cast<uintptr_t*>(slot));
-
-    s_initialized = true;
-}
-
-// ============================================================
-// DestroyComponent::Shutdown (vtable slot [3], 0x14011DB50)
-// ============================================================
-// Full serialization of destroy state:
-//   1. Component_Serialize
-//   2. Empty serializer block (controller compat)
-//   3. Serializer(version=0): field54 (int), field58 (int),
-//      field51 (bool), field60 (InternalBasePtr via FUN_140002340),
-//      destroyFlags at +0x50 (bool), field48 (Time)
-
-void DestroyComponent_Shutdown(DestroyComponent* self, void* stream) {
-    EnsureHelpers();
-
-    // Call base Component_Serialize
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
-
-    // Empty serializer block (controller format compat)
-    alignas(8) uint8_t serializer1[24];
-    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
-
-    // Serialize destroy state fields
-    alignas(8) uint8_t serializer2[24];
-    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>(&self->field54), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>((uintptr_t)self + 0x58), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<bool*>((uintptr_t)self + 0x51), nullptr);   // B.3.4 bridge
-
-    if (s_fn_SerializeInternalBasePtr) {
-        s_fn_SerializeInternalBasePtr((void*)((uintptr_t)self + 0x60), serializer2);
-    }
-
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<bool*>(&self->destroyFlags), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<System::Time*>((void*)&self->field48)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4b bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
-}
-
-// ============================================================
-// DestroyComponent::Serialize (vtable slot [4], 0x14011DB00)
-// ============================================================
-// Copies mesh reference from building data. Reads _unk18,
-// does IsDerivedFrom check, copies 8 bytes from building+0x20
-// into field60.
-
-void DestroyComponent_Serialize(DestroyComponent* self) {
-    EnsureHelpers();
-
-    void* baseObj = self->_description;
-    if (!s_fn_IsDerivedFrom_d || !s_pBuildingCompTypeId) return;
-
-    bool isDerived = s_fn_IsDerivedFrom_d(baseObj, *s_pBuildingCompTypeId);
-    void* buildingData = isDerived ? baseObj : nullptr;
-
-    if (buildingData) {
-        // Copy mesh reference from building data +0x20 into field60
-        *(uint64_t*)&self->field60 = *(uint64_t*)((uintptr_t)buildingData + 0x20);
-    }
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void DestroyComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[DestroyComponent] Funcs resolved: Serialize=%p IsDerivedFrom=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_IsDerivedFrom_d);
-#endif
-}
 
 // ============================================================================
 // ENDGAME B.3.8 MI-A — DestroyComponent as a REAL class (DestroyComponent.h).
@@ -189,12 +74,31 @@ void* DestroyComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) DestroyComponent());
 }
 
-// [3] 0x14011db50 — save serialization.
-void DestroyComponent::Persist(void* stream) { DestroyComponent_Shutdown(this, stream); }
+// [3] 0x14011db50 — save serialization: Component::Persist (a direct CALL
+// 0x1401189b0), an empty controller scope, then one scope carrying field54 (int),
+// +0x58 (int), +0x51 (bool), the +0x60 ExternalPtr (0x140002340), destroyFlags
+// (+0x50, bool) and the Time at +0x48.
+void DestroyComponent::Persist(void* stream) {
+    Component::Persist(stream);
+    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);         // B.3.8 bridge
+    ser.Serialize(*reinterpret_cast<int*>(&field54), nullptr);
+    ser.Serialize(*reinterpret_cast<int*>(&field58), nullptr);
+    ser.Serialize(*reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(&destroyFlags) + 1), nullptr);   // +0x51
+    if (fn_ExternalPtr_BuildSerialize)
+        fn_ExternalPtr_BuildSerialize(&field60, &ser);
+    ser.Serialize(*reinterpret_cast<bool*>(&destroyFlags), nullptr);
+    reinterpret_cast<System::Time*>(&field48)->Serialize(ser);   // B.3.8 bridge (field48 is a Time)
+}
 
 // [4] 0x14011db00 — copies the DestroyDescription's default target (desc+0x20)
 // into +0x60; dispatched at spawn by ComponentEntity_StartupComponents.
-void DestroyComponent::Startup() { DestroyComponent_Serialize(this); }
+void DestroyComponent::Startup() {
+    void* desc = _description;
+    if (!fn_IsDerivedFrom) return;
+    if (fn_IsDerivedFrom(desc, DestroyDescription::TypeId()))
+        field60 = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(desc) + 0x20);
+}
 
 // [15] 0x14011daf0: `if (msgCode == 0) ++*(int*)(self + 0x54);` — the demolition-
 // progress credit, destroy-side twin of BuildComponent::OnMessage. The demolition

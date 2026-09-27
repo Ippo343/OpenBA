@@ -63,28 +63,6 @@ static void EnsureHelpers() {
 //   ADD RSP,0x28
 //   RET
 
-void CharacterComponent_Update(CharacterComponent* self, int64_t deltaTime) {
-    EnsureHelpers();
-
-    if (self->data60 >= 0) {
-        if (!s_fn_Character_UpdateAnimation) return;
-
-        // data48 is a pointer to an array of object pointers
-        // data60 is the index into that array
-        void** objArray = *reinterpret_cast<void***>(&self->data48);
-        void* obj = objArray[self->data60];
-
-        // Character_UpdateAnimation expects a pointer to the object pointer
-        // (InternalBasePtr is just a pointer-sized wrapper)
-        void* localPtr = obj;
-        s_fn_Character_UpdateAnimation(
-            reinterpret_cast<void*>(&self->data48),
-            &localPtr,
-            deltaTime
-        );
-    }
-}
-
 // ============================================================
 // Reimpl of Character_UpdateAnimation (0x1400c4f80) — Component reg wave "people"
 // Walks the linked list of character objects starting at *param_2; for each node
@@ -147,9 +125,7 @@ static void* CharComp_FindSiblingByName(int64_t ownerEntity, const char* typeNam
         void** ibp = reinterpret_cast<void**>(arr + (int64_t)i * 8);
         void* comp = *ibp;
         if (!comp) continue;
-        uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
-        typedef uint32_t (*getType_t)(void*);
-        uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(comp);
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (tid == want)
             return fn_IsDerivedFrom(comp, want) ? comp : nullptr;
     }
@@ -159,9 +135,90 @@ static void* CharComp_FindSiblingByName(int64_t ownerEntity, const char* typeNam
 // Char spatial-hash manager registrar (charmanager.cpp) — allocates the char render-index.
 extern "C" int64_t CharMgr_sub_83f0(float* mgr, int64_t* ibp);
 
-static void CharacterComponent_BodyInit(CharacterComponent* self) {
-    if (!self) return;
-    uint8_t* p = reinterpret_cast<uint8_t*>(self);
+// ------------------------------------------------------------------
+// Brick 4b — per-tick move/anim tick + action executor (0x1401094c0).
+// The Update slot (+0x48 / vtable slot 9) routes to the move-tick, which runs the
+// action executor over the stack at CharacterComponent+0x48 when it is non-empty
+// (+0x60 >= 0), then early-returns when the char render-index (+0x40) is < 0 —
+// which it always is in standalone (BodyInit sets -1), so the inert-ModelComponent
+// transform tail is skipped (crash-safe). With no actions pushed yet the move-tick
+// is a per-frame no-op; it begins executing actions once the CitizenAI state
+// handlers push them.
+//
+// ------------------------------------------------------------------
+extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time);
+
+// RETAIL SLOT WIRING (ENDGAME B.3.8 CIT: the class's compiler vtable carries it —
+// CharacterComponent.h; the members are at the bottom of this file).
+// Retail vtable 0x140162370:
+//   slot 8 (+0x40) = 0x1401094c0 move-tick — dispatched EVERY FRAME by the
+//                    EntityList update-TREE walk (component flag bit 2);
+//   slot 9 (+0x48) = 0x140109480 Update — dispatched at the THROTTLED 5-bucket
+//                    round-robin rate (component flag bit 3, processCount quotas).
+// The original port installed the move-tick at slot 9, so every character
+// integrated movement at the BUCKET rate: citizens at roughly half speed, and
+// Fifth-priority animals (quota 2/frame, ~120 animals) at ~1/60 speed —
+// visually frozen. Slot 8 full-rate dispatch is the fix (2026-07-30).
+// Slot 9's faithful body (CharacterComponent_Update -> action +0x30 tick) is
+// GRADUATED (2026-08-18): BANISHED_LIVE_CHARACTER_UPDATE9 is in the default-on table and
+// the env var is now a kill-switch (=0). It is the ONLY dispatcher of an action's
+// +0x30 slot, so while it was opt-in every action's Enter was dead code — most
+// visibly HuntAnimal::Enter, which is the kill step: hunters chased deer forever and
+// the hunting cabin's production panel read 0. A/B evidence is in the default-on table.
+// ------------------------------------------------------------------
+// Slot 7 (+0x38) — CharacterComponent::OnRemove (retail 0x140109980), the RELEASE half
+// of the char-index allocation BodyInit folds in above. Retail body is exactly:
+//     FUN_1400c5400(self + 0x48);                       // tear down the action stack
+//     CharMgr_impl_8560(*(gw + 0x88), *(int*)(self+0x40));  // unlink from its cell list
+//     *(int*)(self + 0x40) = -1;
+//
+// Without it we allocate a char-index for every character and never give one back, so a
+// dead character's slot keeps a dangling InternalBasePtr AND stays linked in its spatial
+// cell. Nothing walked those lists until the action +0x30 tick went live (both callers of
+// the proximity query 0x140092260 are +0x30 slots), which is why this was invisible: the
+// query then reads the stale slot's entity +0x68 -> +0x160 and faults on freed memory.
+// Gated with the same flag as the allocation so the two halves can never be on separately.
+// ------------------------------------------------------------------
+typedef void (*fn_ActStackClear_t)(void* stackAt48);
+extern "C" void CharMgr_impl_8560(int64_t mgr, int idx);
+
+// ============================================================================
+// ENDGAME B.3.8 CIT — CharacterComponent as a REAL class (CharacterComponent.h).
+//
+// Before: a hand-rolled 48-slot CharacterComponent_LiveVtable filled at every
+// create (slots 3 Serialize, 4 Startup, 7 OnRemove, 8 move-tick, 9 Update),
+// Inert_ScalarDtor in slot 0. After: the compiler's 16-slot vtable and a real
+// ctor/dtor chain (B38_RULES D1, D2).
+// ============================================================================
+#include "Component/CharacterComponent.h"
+
+
+// 0x140109d20. Component() is the CALL 0x1401188b0; the 0x140162370 stamp is
+// the compiler's; flags |= 0x8f.
+// +0x40 = -1 (char index, 0x140109d59) and +0x60 = -1 (action-stack top,
+// 0x140109d74) are the ctor's own stores; Startup (CharacterComponent_BodyInit)
+// still re-writes both, as it did when the inert factory zero-filled them.
+CharacterComponent::CharacterComponent()
+    : data28(0), _pad29{}, data2C(0), data30(0), data34(0), data38(0), _pad3C{},
+      data40(-1), _pad44{}, data48(0), data50(0), data58(0), data60(-1), _pad64{},
+      data68(0), data70(0), data78(0) {
+    OrFlagsInCtor(0x8f);
+}
+
+// [0] 0x14002faa0. PORT GAP (retail releases the +0x48 action stack via
+// 0x1400c5150 first) — the tree's Inert_ScalarDtor never did; kept
+// (CharacterComponent.h).
+Object::Base* CharacterComponent::DeletingDtor(unsigned flags) {
+    this->~CharacterComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+
+// [4] 0x140109a30 — sibling finds + description adoption; the tree also folds the
+// OnAdd char-index allocation in here (see CharacterComponent_BodyInit).
+void CharacterComponent::Startup() {
+    uint8_t* p = reinterpret_cast<uint8_t*>(this);
 
     // ctor (0x140109d20) sentinels: +0x40 grid-index = -1, +0x60 action-stack top
     // = -1 (EMPTY stack — a freshly spawned citizen has no queued actions). This is
@@ -222,9 +279,9 @@ static void CharacterComponent_BodyInit(CharacterComponent* self) {
         if (model && charMgr && fn_InternalBasePtr_Ctor) {
             // facing init: CharacterComponent+0x3c = ModelComponent+0x168.
             *reinterpret_cast<int32_t*>(p + 0x3c) = *reinterpret_cast<int32_t*>(model + 0x168);
-            // wrap self as an InternalBasePtr, register with the manager -> char-index.
+            // wrap this as an InternalBasePtr, register with the manager -> char-index.
             int64_t selfIbp = 0;
-            new (&selfIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
+            new (&selfIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
             int64_t ibpArg = selfIbp;
             *reinterpret_cast<int32_t*>(p + 0x40) =
                 static_cast<int32_t>(CharMgr_sub_83f0(reinterpret_cast<float*>(charMgr), &ibpArg));
@@ -234,87 +291,36 @@ static void CharacterComponent_BodyInit(CharacterComponent* self) {
             // and cannot answer that).
             if (Opt().movetickTrace) {
                 fprintf(stderr, "[CharIdx] idx=%d char=%p entity=%p model=%p\n",
-                        *reinterpret_cast<int32_t*>(p + 0x40), (void*)self,
+                        *reinterpret_cast<int32_t*>(p + 0x40), (void*)this,
                         (void*)owner, (void*)model);
             }
         }
         else if (Opt().movetickTrace) {
             fprintf(stderr, "[CharIdx] SKIPPED char=%p entity=%p model=%p charMgr=%p\n",
-                    (void*)self, (void*)owner, (void*)*reinterpret_cast<int64_t*>(p + 0x68),
+                    (void*)this, (void*)owner, (void*)*reinterpret_cast<int64_t*>(p + 0x68),
                     (void*)charMgr);
         }
     }
 }
 
-// ------------------------------------------------------------------
-// Brick 4b — per-tick move/anim tick + action executor (0x1401094c0).
-// The Update slot (+0x48 / vtable slot 9) routes to the move-tick, which runs the
-// action executor over the stack at CharacterComponent+0x48 when it is non-empty
-// (+0x60 >= 0), then early-returns when the char render-index (+0x40) is < 0 —
-// which it always is in standalone (BodyInit sets -1), so the inert-ModelComponent
-// transform tail is skipped (crash-safe). With no actions pushed yet the move-tick
-// is a per-frame no-op; it begins executing actions once the CitizenAI state
-// handlers push them.
-//
-// ------------------------------------------------------------------
-extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time);
+// [6] 0x1401099c0 (char-index allocation, 98 B). PORT GAP (retail 0x1401099c0) —
+// B38 D9: the tree folds this body into Startup (BodyInit) and its table held the
+// inert stub here, kept.
+void CharacterComponent::OnAdded() {}
 
-static void CharacterComponent_UpdateAdapter(CharacterComponent* self, int64_t* time) {
-    if (!self) return;
-    CharacterComponent_MoveTick_1094c0(reinterpret_cast<uint8_t*>(self), time);
-}
+// [7] 0x140109980 — release the char index (the other half of the allocation).
+void CharacterComponent::OnRemove() {
+    uint8_t* p = reinterpret_cast<uint8_t*>(this);
 
-// RETAIL SLOT WIRING (ENDGAME B.3.8 CIT: the class's compiler vtable carries it —
-// CharacterComponent.h; the members are at the bottom of this file).
-// Retail vtable 0x140162370:
-//   slot 8 (+0x40) = 0x1401094c0 move-tick — dispatched EVERY FRAME by the
-//                    EntityList update-TREE walk (component flag bit 2);
-//   slot 9 (+0x48) = 0x140109480 Update — dispatched at the THROTTLED 5-bucket
-//                    round-robin rate (component flag bit 3, processCount quotas).
-// The original port installed the move-tick at slot 9, so every character
-// integrated movement at the BUCKET rate: citizens at roughly half speed, and
-// Fifth-priority animals (quota 2/frame, ~120 animals) at ~1/60 speed —
-// visually frozen. Slot 8 full-rate dispatch is the fix (2026-07-30).
-// Slot 9's faithful body (CharacterComponent_Update -> action +0x30 tick) is
-// GRADUATED (2026-08-18): BANISHED_LIVE_CHARACTER_UPDATE9 is in the default-on table and
-// the env var is now a kill-switch (=0). It is the ONLY dispatcher of an action's
-// +0x30 slot, so while it was opt-in every action's Enter was dead code — most
-// visibly HuntAnimal::Enter, which is the kill step: hunters chased deer forever and
-// the hunting cabin's production panel read 0. A/B evidence is in the default-on table.
-// ------------------------------------------------------------------
-// Slot 7 (+0x38) — CharacterComponent::OnRemove (retail 0x140109980), the RELEASE half
-// of the char-index allocation BodyInit folds in above. Retail body is exactly:
-//     FUN_1400c5400(self + 0x48);                       // tear down the action stack
-//     CharMgr_impl_8560(*(gw + 0x88), *(int*)(self+0x40));  // unlink from its cell list
-//     *(int*)(self + 0x40) = -1;
-//
-// Without it we allocate a char-index for every character and never give one back, so a
-// dead character's slot keeps a dangling InternalBasePtr AND stays linked in its spatial
-// cell. Nothing walked those lists until the action +0x30 tick went live (both callers of
-// the proximity query 0x140092260 are +0x30 slots), which is why this was invisible: the
-// query then reads the stale slot's entity +0x68 -> +0x160 and faults on freed memory.
-// Gated with the same flag as the allocation so the two halves can never be on separately.
-// ------------------------------------------------------------------
-typedef void (*fn_ActStackClear_t)(void* stackAt48);
-extern "C" void CharMgr_impl_8560(int64_t mgr, int idx);
-
-static void CharacterComponent_OnRemoveImpl(void* s) {
-    if (!s) return;
-    uint8_t* p = reinterpret_cast<uint8_t*>(s);
-
-    static fn_ActStackClear_t s_clear = nullptr;
-    static int s_resolved = 0;
-    if (!s_resolved) {
-        s_resolved = 1;
-        s_clear = reinterpret_cast<fn_ActStackClear_t>(ResolveAddr(Module::Exe, 0x1400c5400));
-    }
-    if (s_clear) s_clear(p + 0x48);
+    // Resolved per call, no first-call cache (B6-5).
+    const auto actStackClear = reinterpret_cast<fn_ActStackClear_t>(ResolveAddr(Module::Exe, 0x1400c5400));
+    if (actStackClear) actStackClear(p + 0x48);
 
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     int64_t charMgr = gw ? *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(gw) + 0x88)
                          : 0;
     int idx = *reinterpret_cast<int32_t*>(p + 0x40);
-    // DEVIATION (ours, not retail's): retail passes +0x40 through unguarded, and
+    // DEVIATION (ours, not retail'this): retail passes +0x40 through unguarded, and
     // impl_8560 writes `slots + idx*0x18` and pushes idx onto the free list without
     // checking it -- so a -1 corrupts memory ahead of the slot array. Retail can do that
     // because its OnAdd always allocated an index. Ours cannot: BodyInit only allocates
@@ -326,59 +332,10 @@ static void CharacterComponent_OnRemoveImpl(void* s) {
     *reinterpret_cast<int32_t*>(p + 0x40) = -1;
 }
 
-// ============================================================================
-// ENDGAME B.3.8 CIT — CharacterComponent as a REAL class (CharacterComponent.h).
-//
-// Before: a hand-rolled 48-slot CharacterComponent_LiveVtable filled at every
-// create (slots 3 Serialize, 4 Startup, 7 OnRemove, 8 move-tick, 9 Update),
-// Inert_ScalarDtor in slot 0. After: the compiler's 16-slot vtable and a real
-// ctor/dtor chain (B38_RULES D1, D2).
-// ============================================================================
-#include "Component/CharacterComponent.h"
-
-// Retail 0x140109ab0 (charactercomponent_serialize.cpp).
-extern "C" void CharacterComponent_Serialize(void* self, void* stream);
-
-// 0x140109d20. Component() is the CALL 0x1401188b0; the 0x140162370 stamp is
-// the compiler's; flags |= 0x8f.
-// +0x40 = -1 (char index, 0x140109d59) and +0x60 = -1 (action-stack top,
-// 0x140109d74) are the ctor's own stores; Startup (CharacterComponent_BodyInit)
-// still re-writes both, as it did when the inert factory zero-filled them.
-CharacterComponent::CharacterComponent()
-    : data28(0), _pad29{}, data2C(0), data30(0), data34(0), data38(0), _pad3C{},
-      data40(-1), _pad44{}, data48(0), data50(0), data58(0), data60(-1), _pad64{},
-      data68(0), data70(0), data78(0) {
-    OrFlagsInCtor(0x8f);
-}
-
-// [0] 0x14002faa0. PORT GAP (retail releases the +0x48 action stack via
-// 0x1400c5150 first) — the tree's Inert_ScalarDtor never did; kept
-// (CharacterComponent.h).
-Object::Base* CharacterComponent::DeletingDtor(unsigned flags) {
-    this->~CharacterComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
-// [3] 0x140109ab0.
-void CharacterComponent::Persist(void* stream) { CharacterComponent_Serialize(this, stream); }
-
-// [4] 0x140109a30 — sibling finds + description adoption; the tree also folds the
-// OnAdd char-index allocation in here (see CharacterComponent_BodyInit).
-void CharacterComponent::Startup() { CharacterComponent_BodyInit(this); }
-
-// [6] 0x1401099c0 (char-index allocation, 98 B). PORT GAP (retail 0x1401099c0) —
-// B38 D9: the tree folds this body into Startup (BodyInit) and its table held the
-// inert stub here, kept.
-void CharacterComponent::OnAdded() {}
-
-// [7] 0x140109980 — release the char index (the other half of the allocation).
-void CharacterComponent::OnRemove() { CharacterComponent_OnRemoveImpl(this); }
-
 // [8] 0x1401094c0 — the move-tick, EVERY FRAME from the EntityList tree walk
 // (flag bit 2; 0x1400c2e5d passes the update's time pointer through).
 void CharacterComponent::Tick(void* time) {
-    CharacterComponent_UpdateAdapter(this, static_cast<int64_t*>(time));
+    CharacterComponent_MoveTick_1094c0(reinterpret_cast<uint8_t*>(this), time);
 }
 
 // [9] 0x140109480 — the bucket-rate Update. Retail forwards the Time operand RAW:
@@ -386,7 +343,26 @@ void CharacterComponent::Tick(void* time) {
 // same value to the action's +0x30 as param_3, so it is passed through, not
 // dereferenced.
 void CharacterComponent::Update(void* time) {
-    CharacterComponent_Update(this, reinterpret_cast<int64_t>(time));
+    const int64_t deltaTime = reinterpret_cast<int64_t>(time);   // forwarded raw (see above)
+    EnsureHelpers();
+
+    if (data60 >= 0) {
+        if (!s_fn_Character_UpdateAnimation) return;
+
+        // data48 is a pointer to an array of object pointers
+        // data60 is the index into that array
+        void** objArray = *reinterpret_cast<void***>(&data48);
+        void* obj = objArray[data60];
+
+        // Character_UpdateAnimation expects a pointer to the object pointer
+        // (InternalBasePtr is just a pointer-sized wrapper)
+        void* localPtr = obj;
+        s_fn_Character_UpdateAnimation(
+            reinterpret_cast<void*>(&data48),
+            &localPtr,
+            deltaTime
+        );
+    }
 }
 
 // create 0x14002f960: MemAlloc(0x80, 8), then the ctor.

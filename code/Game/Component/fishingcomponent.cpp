@@ -27,22 +27,6 @@
 // s.Serialize(&self[0x54], null)  // float: fishingRate
 // ~Serializer()
 
-void FishingComponent_Shutdown(FishingComponent* self, void* stream) {
-    // Base ResourceProduceComponent::Shutdown (0x14012b4a0), a direct call in retail.
-    self->ResourceProduceComponent::Persist(stream);
-
-    // Serialize FishingComponent's own fields
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    bool* pFishingFlag = reinterpret_cast<bool*>(&self->fishingFlag);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*pFishingFlag, nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->fishingRate, nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-}
-
 // ============================================================
 // Init: nothing left to resolve (the base Persist is a direct member call now)
 // ============================================================
@@ -62,9 +46,6 @@ void FishingComponent_InitFuncs() {}
 
 // Slots 18-21: the retail bodies, ported elsewhere and reached through these.
 extern "C" uintptr_t* FishingComponent_CreateWork(void*, uintptr_t*);   // resourceproduce_creatework.cpp
-extern "C" char  FishingComponent_OnEnterProducing(void* self);        // fishingcomponent_produce.cpp
-extern "C" char  FishingComponent_OnExitProducing(void* self);
-extern "C" char  FishingComponent_ProduceTick(void* self, void* time);
 
 // 0x14011f130: the RP ctor (CALL 0x14012b3d0), the compiler's stamp, then
 // `MOV byte [RBX+0x50],0`. Retail leaves +0x54 unwritten; the tree's factory
@@ -92,11 +73,25 @@ void* FishingComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) FishingComponent());
 }
 
-void       FishingComponent::Persist(void* stream)     { FishingComponent_Shutdown(this, stream); }  // [3]  0x14011f050
+void       FishingComponent::Persist(void* stream) {
+    // Base ResourceProduceComponent::Shutdown (0x14012b4a0), a direct call in retail.
+    ResourceProduceComponent::Persist(stream);
+
+    // Serialize FishingComponent's own fields
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    bool* pFishingFlag = reinterpret_cast<bool*>(&fishingFlag);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*pFishingFlag, nullptr);   // B.3.4 bridge
+
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(fishingRate, nullptr);   // B.3.4 bridge
+
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+}
 uintptr_t* FishingComponent::CreateWork(uintptr_t* out) { return FishingComponent_CreateWork(this, out); }  // [18] 0x14011efe0
-char       FishingComponent::OnEnterProducing()        { return FishingComponent_OnEnterProducing(this); }  // [19] 0x14011ee80
-char       FishingComponent::OnExitProducing()         { return FishingComponent_OnExitProducing(this); }   // [20] 0x14011ee50
-char       FishingComponent::ProduceTick(void* time)   { return FishingComponent_ProduceTick(this, time); } // [21] 0x14011ec10
+// [19] 0x14011ee80 / [20] 0x14011ee50 / [21] 0x14011ec10: OnEnterProducing,
+// OnExitProducing and ProduceTick live in fishingcomponent_produce.cpp with the
+// coverage helpers they share.
 
 DEFINE_EXE_VTABLE(FishingComponent, "_ZTV16FishingComponent")
 DEFINE_EXE_TYPE(FishingComponent, "ResourceProduceComponent")

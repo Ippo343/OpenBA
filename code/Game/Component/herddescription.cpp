@@ -18,6 +18,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/HerdDescription.h"
+#include "Component/HerdComponent.h"   // B.3.8 CB1a (TypeId)
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -71,7 +72,7 @@ void HerdDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140034e30: HerdComponent's type id through the hidden return slot.
 Object::Type* HerdDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("HerdComponent");
+    ret->_type = HerdComponent::TypeId();
     return ret;
 }
 

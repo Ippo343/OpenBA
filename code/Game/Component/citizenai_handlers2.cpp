@@ -61,6 +61,8 @@
 // `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
 // been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Scene.h"
+#include "Component/InteractDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/CitizenDescription.h"   // B.3.8 CB1a (TypeId)
 #include "graphics/Mesh.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -129,9 +131,9 @@ static void EnsureInit() {
     s_fn_115a50  = reinterpret_cast<fn_115a50_t>(ResolveAddr(Module::Exe, 0x140115a50));
     s_fn_c3470   = reinterpret_cast<fn_c3470_t>(ResolveAddr(Module::Exe, 0x1400c3470));
     if (s_tid_InteractDescription == 0)
-        s_tid_InteractDescription = ::Object::GetTypeIdByName("InteractDescription");
+        s_tid_InteractDescription = InteractDescription::TypeId();
     if (s_tid_CitizenDescription == 0)
-        s_tid_CitizenDescription = ::Object::GetTypeIdByName("CitizenDescription");
+        s_tid_CitizenDescription = CitizenDescription::TypeId();
     s_pf_1721fc = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401721fc));
     s_init = true;
 }

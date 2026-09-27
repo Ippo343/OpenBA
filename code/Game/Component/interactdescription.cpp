@@ -33,6 +33,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/InteractDescription.h"
+#include "Component/InteractComponent.h"   // B.3.8 CB1a (TypeId)
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -159,7 +160,7 @@ void InteractDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140035270: InteractComponent's type id through the hidden return slot.
 Object::Type* InteractDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("InteractComponent");
+    ret->_type = InteractComponent::TypeId();
     return ret;
 }
 

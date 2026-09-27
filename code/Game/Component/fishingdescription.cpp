@@ -18,6 +18,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/FishingDescription.h"
+#include "Component/FishingComponent.h"   // B.3.8 CB1a (TypeId)
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -63,7 +64,7 @@ void FishingDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x1400344f0: FishingComponent's type id through the hidden return slot.
 Object::Type* FishingDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("FishingComponent");
+    ret->_type = FishingComponent::TypeId();
     return ret;
 }
 

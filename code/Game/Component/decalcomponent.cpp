@@ -13,6 +13,8 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/decalcomponent_funcs.h"
+#include "Component/ModelComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/DecalDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -27,8 +29,6 @@
 // Resolved helpers
 // ============================================================
 
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
 // IsDerivedFrom dispatch slot at 0x140152a98
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
@@ -36,10 +36,6 @@ static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
 
 // Type ID for DecalDescription at DAT_1401c75b8
 static uint32_t* s_TypeId_DecalDesc = nullptr;
-
-// Original Draw function (too complex: 111 instrs, terrain decal rendering)
-typedef void (*fn_DecalDraw_t)(void* self);
-static fn_DecalDraw_t s_fn_OriginalDraw = nullptr;
 
 // Terrain decal remove: FUN_1400b0d00(terrainDecalSys, decalId)
 typedef void (*fn_TerrainDecalRemove_t)(void* terrainDecalSys, int decalId);
@@ -89,33 +85,6 @@ static void* GetDecalDescription(void* self) {
         return nullptr;
     bool derived = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_DecalDesc);
     return derived ? obj : nullptr;
-}
-
-// ============================================================
-// DecalComponent::Shutdown (vtable slot [3], 0x14011b820)
-// ============================================================
-// Serializes:
-//   1. Component_Serialize base
-//   2. Serializer(version=1): serialize decalScale (float at +0x30)
-//   3. If version > 0: serialize decalState (int at +0x28)
-void DecalComponent_Shutdown(DecalComponent* self, void* stream) {
-    DecalComponent_InitFuncs();
-    if (s_fn_Component_Serialize)
-        s_fn_Component_Serialize(self, stream);
-
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
-
-    // Serialize decalScale (float at +0x30)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->decalScale, nullptr);   // B.3.4 bridge
-
-    // Version-gated: if version > 0, also serialize decalState
-    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
-    if (version > 0) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&self->decalState), nullptr);   // B.3.4 bridge
-    }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -174,7 +143,7 @@ static uint32_t DecalDescTypeId() {
     if (s_TypeId_DecalDesc && *s_TypeId_DecalDesc != 0 && *s_TypeId_DecalDesc != 0xFFFFFFFF)
         return *s_TypeId_DecalDesc;
     static uint32_t cached = 0;
-    if (cached == 0 || cached == 0xFFFFFFFF) cached = ::Object::GetTypeIdByName("DecalDescription");
+    if (cached == 0 || cached == 0xFFFFFFFF) cached = DecalDescription::TypeId();
     if (cached != 0xFFFFFFFF) return cached;
     return 0;
 }
@@ -218,7 +187,7 @@ static void* FindModelComponentOnOwner(void* ownerEnt) {
     }
     static uint32_t s_tidModel = 0;
     if (s_tidModel == 0 || s_tidModel == 0xFFFFFFFF)
-        s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
+        s_tidModel = ModelComponent::TypeId();
     if (!ownerEnt || s_tidModel == 0 || s_tidModel == 0xFFFFFFFF) return nullptr;
     uint8_t* e = reinterpret_cast<uint8_t*>(ownerEnt);
     int count = *reinterpret_cast<int32_t*>(e + 0x38);
@@ -227,9 +196,7 @@ static void* FindModelComponentOnOwner(void* ownerEnt) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
         void* comp = *slot;
         if (!comp) continue;
-        uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
-        typedef uint32_t (*fn_GetTypeId_t)(void*);
-        uint32_t id = (*reinterpret_cast<fn_GetTypeId_t*>(vt + 0x10))(comp);
+        uint32_t id = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (id == s_tidModel) {
             return *slot;
         }
@@ -237,132 +204,7 @@ static void* FindModelComponentOnOwner(void* ownerEnt) {
     return nullptr;
 }
 
-void DecalComponent_Draw(DecalComponent* self) {
-    EnsureDrawHelpers();
-    if (!self || !s_pGameStateDraw || !*s_pGameStateDraw) {
-        return;
-    }
-    uintptr_t selfA = reinterpret_cast<uintptr_t>(self);
-
-    // CheckPtr(owner) then FindComponent(MapComponent) for the tile footprint.
-    uintptr_t mapBuf[2] = {0, 0};
-    if (s_fn_FindComp_Map) s_fn_FindComp_Map(*reinterpret_cast<void**>(selfA + 0x10), mapBuf);
-    uintptr_t mapComp = mapBuf[0];
-    if (!mapComp) {
-        return;
-    }
-
-    int minX   = *reinterpret_cast<int16_t*>(mapComp + 0x28);
-    int minY   = *reinterpret_cast<int16_t*>(mapComp + 0x2a);
-    int width  = *reinterpret_cast<int16_t*>(mapComp + 0x2c);
-    int height = *reinterpret_cast<int16_t*>(mapComp + 0x2e);
-    uint32_t rotation = *reinterpret_cast<uint32_t*>(mapComp + 0x30);
-
-    // FindComponent(ModelComponent) → per-variant UV rect index (+0x164). This is the
-    // per-building visual style StartTown randomises (ComponentEntity_impl_1fc0 in
-    // retail); it selects which atlas cell of the tiled-decal material this building's
-    // foundation samples. Defaults to 0 if no ModelComponent is found.
-    int variant = 0;
-    void* modelComp = FindModelComponentOnOwner(*reinterpret_cast<void**>(selfA + 0x10));
-    if (modelComp != nullptr) {
-        uintptr_t mc = reinterpret_cast<uintptr_t>(modelComp);
-        variant   = *reinterpret_cast<int16_t*>(mc + 0x164);
-    }
-
-    // DecalDescription = IsDerivedFrom(self+0x18, DecalDescription typeId) ? self+0x18 : null.
-    void* obj = *reinterpret_cast<void**>(selfA + 0x18);
-    uint32_t decalTid = DecalDescTypeId();
-    void* decalDesc = nullptr;
-    if (s_fn_IsDerivedFrom_dispatch && decalTid && obj &&
-        s_fn_IsDerivedFrom_dispatch(obj, decalTid))
-        decalDesc = obj;
-    if (!decalDesc) {
-        return;
-    }
-    uintptr_t dd = reinterpret_cast<uintptr_t>(decalDesc);
-
-    // Decal alpha (+0x30 decalScale, used as decalScale*255 -> the vertex alpha /
-    // shader lightFogAlpha.w). Retail lifecycle:
-    //   * Serialize seeds it from DecalDescription._initialAlpha (dd+0x20 = 0.5) — the
-    //     DURING-CONSTRUCTION (half-built, translucent foundation) value.
-    //   * When the building COMPLETES, DecalComponent Slot12(msg=1) sets +0x30 = 1.0
-    //     (0x3f800000) and re-adds the decal -> a fully-opaque finished foundation.
-    // This used to hardcode 1.0 because nothing drove the completion ramp, and
-    // _initialAlpha=0.5 then left every FINISHED foundation washed out. The ramp is now
-    // wired (DecalComponent_EnterBuiltState below, driven from BuildComponent's 8->2
-    // State8Finalize and from start-town's force-complete stamp), so seed the authored
-    // value like retail: a building under construction paints its footprint at
-    // _initialAlpha and goes fully opaque when it completes. Templates that are never
-    // "built" author _initialAlpha=1.0 themselves (e.g. Pasture), so they are unaffected.
-    //
-    // This is what the 2026-08-23 "rebuilt house shows the OLD decal" report was: the
-    // replacement is a fresh FOUNDATION, but it painted the completed building's
-    // full-opacity footprint immediately, so the ground looked unchanged from before the
-    // fire. Material/tile/rotation/variant were all already correct (traced).
-    if (self->decalScale == 0.0f) {
-        float initialAlpha = *reinterpret_cast<float*>(dd + 0x20);   // _initialAlpha
-        self->decalScale = (initialAlpha > 0.0f) ? initialAlpha : 1.0f;
-    }
-
-    // Per-variant UV rect (defaults {0,0,uvScale,uvScale} when variant >= count).
-    float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
-    float uv[4] = {0.0f, 0.0f, uvScale, uvScale};
-    int variantCount = *reinterpret_cast<int*>(dd + 0x40);
-    if (variant < variantCount) {
-        uintptr_t varr = *reinterpret_cast<uintptr_t*>(dd + 0x38);
-        if (varr) {
-            float* e = reinterpret_cast<float*>(varr + static_cast<uintptr_t>(variant) * 0x10);
-            uv[0] = e[0]; uv[1] = e[1]; uv[2] = e[2]; uv[3] = e[3];
-        }
-    }
-
-    uintptr_t gs = reinterpret_cast<uintptr_t>(*s_pGameStateDraw);
-    uintptr_t decalSys = *reinterpret_cast<uintptr_t*>(gs + 0x110);
-    if (!decalSys) {
-        return;
-    }
-
-    // material = DecalDescription material-array[decalState].
-    uintptr_t matArray = *reinterpret_cast<uintptr_t*>(dd + 0x28);
-    if (!matArray) {
-        return;
-    }
-    int64_t material = *reinterpret_cast<int64_t*>(matArray + static_cast<uintptr_t>(self->decalState) * 8);
-
-    uint8_t  tiledFlag = *reinterpret_cast<uint8_t*>(dd + 0x24);
-    uint8_t  p19       = *reinterpret_cast<uint8_t*>(dd + 0x25);
-    uint32_t p10       = *reinterpret_cast<uint32_t*>(dd + 0x48);
-    int alpha = static_cast<int>(self->decalScale * 255.0f);   // DAT_14017222c = 255.0f
-
-    int id = TradeWork_impl_0d80(
-        static_cast<int64_t>(decalSys), minX, minY,
-        width - 1 + minX, height - 1 + minY,
-        static_cast<uint8_t>(alpha), rotation, material, tiledFlag,
-        p10,
-        *reinterpret_cast<uint32_t*>(&uv[0]), *reinterpret_cast<uint32_t*>(&uv[1]),
-        *reinterpret_cast<uint32_t*>(&uv[2]), *reinterpret_cast<uint32_t*>(&uv[3]),
-        '\0', 0, 0, 0, p19);
-    self->decalId = id;
-}
-
-// ============================================================
-// DecalComponent::OnCreate (vtable slot [7], 0x14011b510)
-// ============================================================
-// If decalId >= 0, removes the decal from terrain, resets decalId to -1.
-void DecalComponent_OnCreate(DecalComponent* self) {
-    // lazy-resolve (nothing calls InitFuncs; without this the terrain-decal remover
-    // stays null and every released clear-job icon persists on screen forever)
-    DecalComponent_InitFuncs();
-    if (self->decalId >= 0) {
-        // Remove decal from terrain decal subsystem
-        if (s_fn_TerrainDecalRemove && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-            void* terrainDecalSys = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x110);
-            if (terrainDecalSys)
-                s_fn_TerrainDecalRemove(terrainDecalSys, self->decalId);
-        }
-    }
-    self->decalId = -1;
-}
+void DecalComponent_Draw(DecalComponent* self) { self->DecalComponent::OnAdded(); }
 
 // ============================================================
 // Init: resolve function pointers
@@ -370,8 +212,6 @@ void DecalComponent_OnCreate(DecalComponent* self) {
 void DecalComponent_InitFuncs() {
     if (s_initialized) return;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
 
     uintptr_t slot;
 
@@ -381,17 +221,13 @@ void DecalComponent_InitFuncs() {
     s_TypeId_DecalDesc = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c75b8));
 
-    s_fn_OriginalDraw = reinterpret_cast<fn_DecalDraw_t>(
-        ResolveAddr(Module::Exe, 0x14011b560));
-
     s_fn_TerrainDecalRemove = reinterpret_cast<fn_TerrainDecalRemove_t>(
         ResolveAddr(Module::Exe, 0x1400b0d00));
 
     s_initialized = true;
 
 #ifdef _DEBUG
-    printf("[DecalComponent] Funcs resolved: CompSerialize=%p Draw=%p DecalRemove=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_OriginalDraw,
+    printf("[DecalComponent] Funcs resolved: DecalRemove=%p\n",
            (void*)s_fn_TerrainDecalRemove);
 #endif
 }
@@ -458,21 +294,167 @@ static void DecalComponent_SetDrawFlag(void* s, bool on) {
 }
 
 // [3] 0x14011b820 — decalScale/decalState round-trip here.
-void DecalComponent::Persist(void* stream) { DecalComponent_Shutdown(this, stream); }
+// ============================================================
+// DecalComponent::Shutdown (vtable slot [3], 0x14011b820)
+// ============================================================
+// Serializes:
+//   1. Component_Serialize base
+//   2. Serializer(version=1): serialize decalScale (float at +0x30)
+//   3. If version > 0: serialize decalState (int at +0x28)
+void DecalComponent::Persist(void* stream) {
+    DecalComponent_InitFuncs();
+    Component::Persist(stream);   // retail's direct CALL 0x1401189b0
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+
+    // Serialize decalScale (float at +0x30)
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(decalScale, nullptr);   // B.3.4 bridge
+
+    // Version-gated: if version > 0, also serialize decalState
+    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
+    if (version > 0) {
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&decalState), nullptr);   // B.3.4 bridge
+    }
+
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+}
 // [4] TREE DIVERGENCE (retail 0x14011b7d0): bucket the owner so the tree walk
 // drives the build-once.
 void DecalComponent::Startup() { DecalComponent_SetDrawFlag(this, true); }
 // [6] 0x14011b560 — Draw: build + submit the terrain decal.
-void DecalComponent::OnAdded() { DecalComponent_Draw(this); }
+void DecalComponent::OnAdded() {
+    EnsureDrawHelpers();
+    if (!s_pGameStateDraw || !*s_pGameStateDraw) {
+        return;
+    }
+    uintptr_t selfA = reinterpret_cast<uintptr_t>(this);
+
+    // CheckPtr(owner) then FindComponent(MapComponent) for the tile footprint.
+    uintptr_t mapBuf[2] = {0, 0};
+    if (s_fn_FindComp_Map) s_fn_FindComp_Map(*reinterpret_cast<void**>(selfA + 0x10), mapBuf);
+    uintptr_t mapComp = mapBuf[0];
+    if (!mapComp) {
+        return;
+    }
+
+    int minX   = *reinterpret_cast<int16_t*>(mapComp + 0x28);
+    int minY   = *reinterpret_cast<int16_t*>(mapComp + 0x2a);
+    int width  = *reinterpret_cast<int16_t*>(mapComp + 0x2c);
+    int height = *reinterpret_cast<int16_t*>(mapComp + 0x2e);
+    uint32_t rotation = *reinterpret_cast<uint32_t*>(mapComp + 0x30);
+
+    // FindComponent(ModelComponent) → per-variant UV rect index (+0x164). This is the
+    // per-building visual style StartTown randomises (ComponentEntity_impl_1fc0 in
+    // retail); it selects which atlas cell of the tiled-decal material this building's
+    // foundation samples. Defaults to 0 if no ModelComponent is found.
+    int variant = 0;
+    void* modelComp = FindModelComponentOnOwner(*reinterpret_cast<void**>(selfA + 0x10));
+    if (modelComp != nullptr) {
+        uintptr_t mc = reinterpret_cast<uintptr_t>(modelComp);
+        variant   = *reinterpret_cast<int16_t*>(mc + 0x164);
+    }
+
+    // DecalDescription = IsDerivedFrom(this+0x18, DecalDescription typeId) ? this+0x18 : null.
+    void* obj = *reinterpret_cast<void**>(selfA + 0x18);
+    uint32_t decalTid = DecalDescTypeId();
+    void* decalDesc = nullptr;
+    if (s_fn_IsDerivedFrom_dispatch && decalTid && obj &&
+        s_fn_IsDerivedFrom_dispatch(obj, decalTid))
+        decalDesc = obj;
+    if (!decalDesc) {
+        return;
+    }
+    uintptr_t dd = reinterpret_cast<uintptr_t>(decalDesc);
+
+    // Decal alpha (+0x30 decalScale, used as decalScale*255 -> the vertex alpha /
+    // shader lightFogAlpha.w). Retail lifecycle:
+    //   * Serialize seeds it from DecalDescription._initialAlpha (dd+0x20 = 0.5) — the
+    //     DURING-CONSTRUCTION (half-built, translucent foundation) value.
+    //   * When the building COMPLETES, DecalComponent Slot12(msg=1) sets +0x30 = 1.0
+    //     (0x3f800000) and re-adds the decal -> a fully-opaque finished foundation.
+    // This used to hardcode 1.0 because nothing drove the completion ramp, and
+    // _initialAlpha=0.5 then left every FINISHED foundation washed out. The ramp is now
+    // wired (DecalComponent_EnterBuiltState below, driven from BuildComponent's 8->2
+    // State8Finalize and from start-town's force-complete stamp), so seed the authored
+    // value like retail: a building under construction paints its footprint at
+    // _initialAlpha and goes fully opaque when it completes. Templates that are never
+    // "built" author _initialAlpha=1.0 themselves (e.g. Pasture), so they are unaffected.
+    //
+    // This is what the 2026-08-23 "rebuilt house shows the OLD decal" report was: the
+    // replacement is a fresh FOUNDATION, but it painted the completed building's
+    // full-opacity footprint immediately, so the ground looked unchanged from before the
+    // fire. Material/tile/rotation/variant were all already correct (traced).
+    if (decalScale == 0.0f) {
+        float initialAlpha = *reinterpret_cast<float*>(dd + 0x20);   // _initialAlpha
+        decalScale = (initialAlpha > 0.0f) ? initialAlpha : 1.0f;
+    }
+
+    // Per-variant UV rect (defaults {0,0,uvScale,uvScale} when variant >= count).
+    float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+    float uv[4] = {0.0f, 0.0f, uvScale, uvScale};
+    int variantCount = *reinterpret_cast<int*>(dd + 0x40);
+    if (variant < variantCount) {
+        uintptr_t varr = *reinterpret_cast<uintptr_t*>(dd + 0x38);
+        if (varr) {
+            float* e = reinterpret_cast<float*>(varr + static_cast<uintptr_t>(variant) * 0x10);
+            uv[0] = e[0]; uv[1] = e[1]; uv[2] = e[2]; uv[3] = e[3];
+        }
+    }
+
+    uintptr_t gs = reinterpret_cast<uintptr_t>(*s_pGameStateDraw);
+    uintptr_t decalSys = *reinterpret_cast<uintptr_t*>(gs + 0x110);
+    if (!decalSys) {
+        return;
+    }
+
+    // material = DecalDescription material-array[decalState].
+    uintptr_t matArray = *reinterpret_cast<uintptr_t*>(dd + 0x28);
+    if (!matArray) {
+        return;
+    }
+    int64_t material = *reinterpret_cast<int64_t*>(matArray + static_cast<uintptr_t>(decalState) * 8);
+
+    uint8_t  tiledFlag = *reinterpret_cast<uint8_t*>(dd + 0x24);
+    uint8_t  p19       = *reinterpret_cast<uint8_t*>(dd + 0x25);
+    uint32_t p10       = *reinterpret_cast<uint32_t*>(dd + 0x48);
+    int alpha = static_cast<int>(decalScale * 255.0f);   // DAT_14017222c = 255.0f
+
+    int id = TradeWork_impl_0d80(
+        static_cast<int64_t>(decalSys), minX, minY,
+        width - 1 + minX, height - 1 + minY,
+        static_cast<uint8_t>(alpha), rotation, material, tiledFlag,
+        p10,
+        *reinterpret_cast<uint32_t*>(&uv[0]), *reinterpret_cast<uint32_t*>(&uv[1]),
+        *reinterpret_cast<uint32_t*>(&uv[2]), *reinterpret_cast<uint32_t*>(&uv[3]),
+        '\0', 0, 0, 0, p19);
+    decalId = id;
+}
 // [7] 0x14011b510 — OnCreate: release the decal slot.
-void DecalComponent::OnRemove() { DecalComponent_OnCreate(this); }
+// ============================================================
+// DecalComponent::OnCreate (vtable slot [7], 0x14011b510)
+// ============================================================
+// If decalId >= 0, removes the decal from terrain, resets decalId to -1.
+void DecalComponent::OnRemove() {
+    // lazy-resolve (nothing calls InitFuncs; without this the terrain-decal remover
+    // stays null and every released clear-job icon persists on screen forever)
+    DecalComponent_InitFuncs();
+    if (decalId >= 0) {
+        // Remove decal from terrain decal subsystem
+        if (s_fn_TerrainDecalRemove && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+            void* terrainDecalSys = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x110);
+            if (terrainDecalSys)
+                s_fn_TerrainDecalRemove(terrainDecalSys, decalId);
+        }
+    }
+    decalId = -1;
+}
 // index 8 (+0x40) — per-frame draw-tick, dispatched by the EntityList tree walk once the
 // owner is bucketed. Build-once: attempt the build until placed (Draw self-guards if the
 // scene/material aren't ready), then un-bucket so the tree stops ticking this component
 // (the placed decal is thereafter rendered by GeomDraw_CollectDraw, not the update tree).
 // TREE DIVERGENCE: retail's slot 8 is Component's `RET`.
 void DecalComponent::Tick(void* /*time*/) {
-    if (decalId < 0) DecalComponent_Draw(this);                  // retry the build until the material is ready
+    if (decalId < 0) DecalComponent::OnAdded();                  // retry the build until the material is ready
     if (decalId >= 0) DecalComponent_SetDrawFlag(this, false);   // placed -> un-bucket
 }
 // [11] 0x14011b810. PORT GAP (retail 0x14011b810, 7 B) — B38 D9: never ported;
@@ -494,7 +476,7 @@ extern "C" void DecalComponent_EnterBuiltState(void* s) {
     if (!cc) return;
     if (cc->decalScale == 1.0f) return;          // already opaque — nothing to redo
     cc->decalScale = 1.0f;
-    DecalComponent_OnCreate(cc);                 // release the current slot (decalId = -1)
+    cc->DecalComponent::OnRemove();              // release the current slot (decalId = -1)
     DecalComponent_SetDrawFlag(s, true);         // re-bucket: the tick rebuilds it at 1.0
 }
 
@@ -511,8 +493,7 @@ extern "C" void DecalComponent_MarkOwnerBuilt(void* entity) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
         void* comp = *slot;
         if (!comp) continue;
-        typedef uint32_t (*GT_t)(void*);
-        if (((GT_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp) != tid) continue;
+        if (reinterpret_cast<Object::Base*>(comp)->Type() != tid) continue;   // B.3.8 bridge (slot 2)
         DecalComponent_EnterBuiltState(comp);
         return;
     }

@@ -48,61 +48,6 @@ static void EnsureHelpers() {
 // Reproduction timer: accumulates delta time, fires birth event
 // when threshold exceeded (configInterval * 300.0f seconds -> ticks).
 
-void LivestockComponent_Update(LivestockComponent* self, int64_t deltaTime) {
-    EnsureHelpers();
-
-    // Early out: no herd component pointer
-    if (self->data28 == 0) {
-        return;
-    }
-
-    // Verify fn_IsDerivedFrom and globals are available
-    if (!fn_IsDerivedFrom || !s_pLivestockConfigTypeId || !s_pTimeMultiplier || !g_Timer_secondsPerTick) {
-        return;
-    }
-
-    // Get the related component from _unk18 and check its type
-    void* relatedComponent = self->_description;
-    bool isDerived = fn_IsDerivedFrom(relatedComponent, *s_pLivestockConfigTypeId);
-
-    void* configComponent = isDerived ? relatedComponent : nullptr;
-
-    // Check if config component has valid data at +0x20
-    if (configComponent == nullptr) {
-        return;
-    }
-    int64_t configDataPtr = *reinterpret_cast<int64_t*>(
-        reinterpret_cast<uintptr_t>(configComponent) + 0x20);
-    if (configDataPtr == 0) {
-        return;
-    }
-
-    // Accumulate delta time into reproduction timer
-    self->data30 += static_cast<uint64_t>(deltaTime);
-
-    // Compute reproduction threshold in ticks:
-    //   threshold = Time(config[+0x2C] * timeMultiplier)
-    //   Time(float seconds) = (int64_t)((double)seconds / _secondsPerTick)
-    float intervalSeconds = *reinterpret_cast<float*>(
-        reinterpret_cast<uintptr_t>(configComponent) + 0x2C);
-    float thresholdSeconds = intervalSeconds * (*s_pTimeMultiplier);
-    int64_t thresholdTicks = static_cast<int64_t>(
-        static_cast<double>(thresholdSeconds) / (*g_Timer_secondsPerTick));
-
-    // Fire birth events while accumulator exceeds threshold
-    if (thresholdTicks < static_cast<int64_t>(self->data30)) {
-        do {
-            // Increment birth counter at herdComponent+0x44
-            int32_t* birthCounter = reinterpret_cast<int32_t*>(
-                self->data28 + 0x44);
-            *birthCounter = *birthCounter + 1;
-
-            // Subtract threshold from accumulator
-            self->data30 -= static_cast<uint64_t>(thresholdTicks);
-        } while (thresholdTicks < static_cast<int64_t>(self->data30));
-    }
-}
-
 // ============================================================
 // Init: resolve function pointers
 // ============================================================
@@ -127,24 +72,6 @@ void LivestockComponent_InitFuncs() {
 //
 // FUN_140003110 is DynArray8_ResizeFill; called with count+1 it appends.
 
-void LivestockComponent_OnAdd(LivestockComponent* self) {
-    if (!self || self->data28 != 0) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-
-    uintptr_t gs = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
-    if (!gs) return;
-    uint64_t ibp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-    else ibp = reinterpret_cast<uint64_t>(self);
-    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(gs + 0x80))
-        .SetSizeFill(*reinterpret_cast<int*>(gs + 0x88) + 1, &ibp);
-    std::fprintf(stderr, "[Pasture] livestock %p joined the free-roaming pool (now %d)\n",
-                 (void*)self, *reinterpret_cast<int*>(gs + 0x88));
-    std::fflush(stderr);
-}
 
 // ============================================================
 // LivestockComponent::OnRemove (vtable slot [7], 0x140123c00)
@@ -153,29 +80,6 @@ void LivestockComponent_OnAdd(LivestockComponent* self) {
 // pasture, otherwise its pasture's animal list (pasture+0x30 / count +0x38).
 // FUN_140002cc0 is DynArray8_EraseByValue.
 
-void LivestockComponent_OnRemove(LivestockComponent* self) {
-    if (!self) return;
-    typedef void (*fn_Erase_t)(void* arrayField, void* valueIBP);
-    static fn_Erase_t s_erase = nullptr;
-    static bool s_res = false;
-    if (!s_res) { s_res = true;
-        s_erase = reinterpret_cast<fn_Erase_t>(ResolveAddr(Module::Exe, 0x140002cc0)); }
-    if (!s_erase) return;
-
-    uint64_t ibp = 0;
-    if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
-        reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-    else ibp = reinterpret_cast<uint64_t>(self);
-
-    if (self->data28 == 0) {
-        if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-        uintptr_t gs = *reinterpret_cast<uintptr_t*>(
-            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
-        if (gs) s_erase(reinterpret_cast<void*>(gs + 0x80), &ibp);
-        return;
-    }
-    s_erase(reinterpret_cast<void*>(static_cast<uintptr_t>(self->data28) + 0x30), &ibp);
-}
 
 // ===== ENDGAME B.3.8 CIT — LivestockComponent as a REAL class (LivestockComponent.h) =====
 // Before: a 48-slot hand-built LivestockComponent_LiveVtable filled at every
@@ -185,8 +89,6 @@ void LivestockComponent_OnRemove(LivestockComponent* self) {
 #include "Object/factory_registration.h"
 #include "Component/LivestockComponent.h"
 
-// Retail 0x140123e10 (animalwave_serialize.cpp).
-extern "C" void LivestockComponent_Serialize(void* self, void* stream);
 
 // 0x140123ee0. Component() is the CALL 0x1401188b0; the 0x1401639b0 stamp is
 // the compiler's; +0x28 = +0x30 = 0; flags |= 0x0b (0x8b).
@@ -201,14 +103,102 @@ Object::Base* LivestockComponent::DeletingDtor(unsigned flags) {
     return this;
 }
 
-void LivestockComponent::Persist(void* stream) { LivestockComponent_Serialize(this, stream); }   // [3] 0x140123e10
-void LivestockComponent::OnAdded()  { LivestockComponent_OnAdd(this); }                          // [6] 0x140123c70
-void LivestockComponent::OnRemove() { LivestockComponent_OnRemove(this); }                       // [7] 0x140123c00
+void LivestockComponent::OnAdded() {
+    if (data28 != 0) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+
+    uintptr_t gs = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+    if (!gs) return;
+    uint64_t ibp = 0;
+    if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+    else ibp = reinterpret_cast<uint64_t>(this);
+    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
+    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(gs + 0x80))
+        .SetSizeFill(*reinterpret_cast<int*>(gs + 0x88) + 1, &ibp);
+    std::fprintf(stderr, "[Pasture] livestock %p joined the free-roaming pool (now %d)\n",
+                 (void*)this, *reinterpret_cast<int*>(gs + 0x88));
+    std::fflush(stderr);
+}
+extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);   // 0x140002cc0
+
+void LivestockComponent::OnRemove() {
+    // 0x140002cc0 is CemeteryListErase_Reimpl (cemeterycomponent.cpp): called
+    // directly, no first-call cache (B.3.8, B6-5).
+    const auto s_erase = &CemeteryListErase_Reimpl;
+
+    uint64_t ibp = 0;
+    if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+    else ibp = reinterpret_cast<uint64_t>(this);
+
+    if (data28 == 0) {
+        if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+        uintptr_t gs = *reinterpret_cast<uintptr_t*>(
+            reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+        if (gs) s_erase(reinterpret_cast<void*>(gs + 0x80), &ibp);
+        return;
+    }
+    s_erase(reinterpret_cast<void*>(static_cast<uintptr_t>(data28) + 0x30), &ibp);
+}
 
 // [9] 0x140123b50. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af); the ported body takes the Time by value.
 void LivestockComponent::Update(void* time) {
-    LivestockComponent_Update(this, time ? *static_cast<int64_t*>(time) : 0);
+    const int64_t deltaTime = time ? *static_cast<int64_t*>(time) : 0;
+    EnsureHelpers();
+
+    // Early out: no herd component pointer
+    if (data28 == 0) {
+        return;
+    }
+
+    // Verify fn_IsDerivedFrom and globals are available
+    if (!fn_IsDerivedFrom || !s_pLivestockConfigTypeId || !s_pTimeMultiplier || !g_Timer_secondsPerTick) {
+        return;
+    }
+
+    // Get the related component from _unk18 and check its type
+    void* relatedComponent = _description;
+    bool isDerived = fn_IsDerivedFrom(relatedComponent, *s_pLivestockConfigTypeId);
+
+    void* configComponent = isDerived ? relatedComponent : nullptr;
+
+    // Check if config component has valid data at +0x20
+    if (configComponent == nullptr) {
+        return;
+    }
+    int64_t configDataPtr = *reinterpret_cast<int64_t*>(
+        reinterpret_cast<uintptr_t>(configComponent) + 0x20);
+    if (configDataPtr == 0) {
+        return;
+    }
+
+    // Accumulate delta time into reproduction timer
+    data30 += static_cast<uint64_t>(deltaTime);
+
+    // Compute reproduction threshold in ticks:
+    //   threshold = Time(config[+0x2C] * timeMultiplier)
+    //   Time(float seconds) = (int64_t)((double)seconds / _secondsPerTick)
+    float intervalSeconds = *reinterpret_cast<float*>(
+        reinterpret_cast<uintptr_t>(configComponent) + 0x2C);
+    float thresholdSeconds = intervalSeconds * (*s_pTimeMultiplier);
+    int64_t thresholdTicks = static_cast<int64_t>(
+        static_cast<double>(thresholdSeconds) / (*g_Timer_secondsPerTick));
+
+    // Fire birth events while accumulator exceeds threshold
+    if (thresholdTicks < static_cast<int64_t>(data30)) {
+        do {
+            // Increment birth counter at herdComponent+0x44
+            int32_t* birthCounter = reinterpret_cast<int32_t*>(
+                data28 + 0x44);
+            *birthCounter = *birthCounter + 1;
+
+            // Subtract threshold from accumulator
+            data30 -= static_cast<uint64_t>(thresholdTicks);
+        } while (thresholdTicks < static_cast<int64_t>(data30));
+    }
 }
 
 // create 0x140035480: MemAlloc(0x38, 8), then the ctor.

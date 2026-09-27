@@ -19,6 +19,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/LivestockDescription.h"
+#include "Component/LivestockComponent.h"   // B.3.8 CB1a (TypeId)
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -64,7 +65,7 @@ void LivestockDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140035610: LivestockComponent's type id through the hidden return slot.
 Object::Type* LivestockDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("LivestockComponent");
+    ret->_type = LivestockComponent::TypeId();
     return ret;
 }
 

@@ -9,64 +9,12 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/clearresourcecomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
 #include <new>
-
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
-static bool s_initialized = false;
-
-// ============================================================
-// ClearResourceComponent::Shutdown (vtable slot [3], 0x1401185E0)
-// ============================================================
-// Same pattern as AbsorbResourceComponent: Component_Serialize + two empty blocks.
-void ClearResourceComponent_Shutdown(ClearResourceComponent* self, void* stream) {
-    // Slot-3 serializers are dispatched straight off the vtable by the entity
-    // stream, so nothing else ever reaches this file. Resolving here is what
-    // keeps the pointers below non-null -- when they were null the whole body
-    // read ZERO bytes and silently desynced every object after it.
-    ClearResourceComponent_InitFuncs();
-    if (s_fn_Component_Serialize)
-        s_fn_Component_Serialize(self, stream);
-
-    // First empty serializer block (version 0)
-    alignas(8) uint8_t serializer1[24];
-    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
-
-    // Second empty serializer block (version 0)
-    alignas(8) uint8_t serializer2[24];
-    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void ClearResourceComponent_InitFuncs() {
-    if (s_initialized) return;
-
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-
-    s_initialized = true;
-
-#ifdef _DEBUG
-    printf("[ClearResourceComponent] Funcs resolved: CompSerialize=%p\n",
-           (void*)s_fn_Component_Serialize);
-#endif
-}
-
 // ============================================================================
 // ENDGAME B.3.8 MI-A — ClearResourceComponent as a REAL class (ClearResourceComponent.h).
 //
@@ -122,9 +70,13 @@ void* ClearResourceComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ClearResourceComponent());
 }
 
-// [3] 0x1401185e0: Component::Persist plus TWO empty Serializer scopes (the body
-// resolves its own helpers first: slot 3 is the first call on a load).
-void ClearResourceComponent::Persist(void* stream) { ClearResourceComponent_Shutdown(this, stream); }
+// [3] 0x1401185e0: Component::Persist (a direct CALL 0x1401189b0) and two empty
+// Serializer scopes (each still occupies bytes in the save encoding).
+void ClearResourceComponent::Persist(void* stream) {
+    Component::Persist(stream);
+    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
+    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge
+}
 
 DEFINE_EXE_VTABLE(ClearResourceComponent, "_ZTV22ClearResourceComponent")
 DEFINE_EXE_TYPE(ClearResourceComponent, "ControllerComponent")

@@ -12,14 +12,6 @@
 // byte-verified table. Slots 4-8 and 10-14 are bare `RET` base stubs.
 // ============================================================
 
-// Update (slot 9, 0x140048fb0): idle => accumulate + roll for ignition;
-// burning => count down, spread, extinguish.
-void FireComponent_Update(FireComponent* self, int64_t* pDeltaTime);
-
-// Shutdown / Serialize (slot 3, 0x140049a90): Time +0x30, Time +0x38, int +0x28,
-// and int +0x2c when the stream version > 0.
-void FireComponent_Shutdown(FireComponent* self, void* stream);
-
 // Resolve internal function pointers (called once at startup).
 void FireComponent_InitFuncs();
 
@@ -27,7 +19,6 @@ void FireComponent_InitFuncs();
 extern "C" void FireComponent_Ignite_610(void* self);          // 0x140049610
 extern "C" void FireComponent_Spread_130(void* self);          // 0x140049130
 extern "C" void FireComponent_Extinguish_4c0(void* self);      // 0x1400494c0
-extern "C" void FireComponent_WaterApplied_090(void* self, int msg);  // 0x140049090
 extern "C" void FireComp_MarkDanger_99c0(void* self, short delta);    // 0x1400499c0
 extern "C" void FireComp_StampDangerRect_9fa80(int* grid, uint64_t unused,
                                                int xMin, int yMin, int xMax, int yMax,

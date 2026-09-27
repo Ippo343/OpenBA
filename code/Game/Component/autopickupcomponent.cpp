@@ -10,7 +10,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/autopickupcomponent_funcs.h"
+#include "Component/AutoPickupComponent.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -22,9 +22,6 @@
 // ============================================================
 // Resolved helpers
 // ============================================================
-
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
 // The +0x30 int array. ENDGAME B.3.2 step 2: FUN_1400021d0 IS
 // `Collection::Array<int32>::SetSize`, MSVC-monomorphised into the exe, so the
@@ -40,58 +37,13 @@ static uint32_t* s_TypeId_AutoPickupDesc = nullptr;
 static bool s_initialized = false;
 
 // ============================================================
-// AutoPickupComponent::Shutdown (vtable slot [3], 0x1400449d0)
-// ============================================================
-// Serializes:
-//   1. Component_Serialize base
-//   2. Serializer(version=0): serialize isEnabled bool at +0x28
-//   3. Read count from +0x38, serialize it
-//   4. If loading: resize array at +0x30 via FUN_1400021d0
-//   5. Bulk-serialize int array elements
-void AutoPickupComponent_Shutdown(AutoPickupComponent* self, void* stream) {
-    // resolver call added at top, save/load wave 2026-08-28: InitFuncs was declared
-    // but never called anywhere, so every s_fn_* below stayed null and load silently
-    // skipped this component's fields.
-    AutoPickupComponent_InitFuncs();
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    if (s_fn_Component_Serialize)
-        s_fn_Component_Serialize(self, stream);
-
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // Serialize isEnabled bool at +0x28
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(selfAddr + 0x28), nullptr);   // B.3.4 bridge
-
-    // Read count from +0x38, serialize it
-    int localCount = *(int*)(selfAddr + 0x38);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount, nullptr);   // B.3.4 bridge
-
-    // If loading (stream mode == 0), resize array at +0x30
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        // B.3.2 bridge: +0x30 is the { int32* data; int32 size; int32 capacity }
-        // header; AutoPickupComponent is not a real class yet (§B.2). I32NoInit — exe
-        // 0x1400021d0 (called here at 140044a40) copies only the old prefix and leaves a
-        // grown tail as-found. Safe: this arm runs only when loading, and the bulk int
-        // read immediately below (140044a55) writes all localCount elements from the
-        // stream before any of them is read.
-        GameColl::AsArray<GameColl::I32NoInit>((void*)(selfAddr + 0x30)).SetSize(localCount);
-    }
-
-    // Bulk-serialize int array
-    int* arrayPtr = *(int**)(selfAddr + 0x30);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount, arrayPtr, nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
-}
-
-// ============================================================
 // AutoPickupComponent::Serialize (vtable slot [4], 0x140044990)
 // ============================================================
 // Checks IsDerivedFrom on +0x18 with type DAT_1401c3fe8,
 // reads byte at +0x20 from the derived object and stores in isEnabled (+0x28).
+void AutoPickupComponent_InitFuncs();
 void AutoPickupComponent_Serialize(AutoPickupComponent* self) {
+    AutoPickupComponent_InitFuncs();   // its only user now (B.3.8: Persist is folded into the member)
     uintptr_t selfAddr = (uintptr_t)self;
 
     void* obj = *(void**)(selfAddr + 0x18);
@@ -113,9 +65,6 @@ void AutoPickupComponent_Serialize(AutoPickupComponent* self) {
 void AutoPickupComponent_InitFuncs() {
     if (s_initialized) return;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-
     uintptr_t slot;
 
     slot = ResolveAddr(Module::Exe, 0x140152a98);
@@ -127,8 +76,8 @@ void AutoPickupComponent_InitFuncs() {
     s_initialized = true;
 
 #ifdef _DEBUG
-    printf("[AutoPickupComponent] Funcs resolved: CompSerialize=%p TypeId=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_TypeId_AutoPickupDesc);
+    printf("[AutoPickupComponent] Funcs resolved: TypeId=%p\n",
+           (void*)s_TypeId_AutoPickupDesc);
 #endif
 }
 
@@ -152,8 +101,25 @@ AutoPickupComponent::AutoPickupComponent()
     OrFlagsInCtor(0x80);
 }
 
-// [3] 0x1400449d0 — isEnabled bool + the int array.
-void AutoPickupComponent::Persist(void* stream) { AutoPickupComponent_Shutdown(this, stream); }
+// [3] 0x1400449d0 — Component::Persist (a direct CALL 0x1401189b0), then ONE
+// Serializer scope: isEnabled (+0x28), the int array's count (+0x38; on a load the
+// +0x30 array is resized to it) and the array elements in bulk.
+void AutoPickupComponent::Persist(void* stream) {
+    Component::Persist(stream);
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
+    ser.Serialize(*reinterpret_cast<bool*>(&isEnabled), nullptr);
+    int count = *reinterpret_cast<int*>(&field38);
+    ser.Serialize(count, nullptr);
+    if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+        // B.3.2 bridge: +0x30 is the { int32* data; int32 size; int32 capacity }
+        // header. I32NoInit — exe 0x1400021d0 (called at 140044a40) copies only the
+        // old prefix and leaves a grown tail as-found. Safe: this arm runs only when
+        // loading, and the bulk read below (140044a55) writes all `count` elements
+        // from the stream before any of them is read.
+        GameColl::AsArray<GameColl::I32NoInit>(&field30).SetSize(count);
+    }
+    ser.Serialize(count, *reinterpret_cast<int**>(&field30), nullptr);
+}
 
 // [4] 0x140044990. PORT GAP (retail 0x140044990) — B38 D9: the body is ported
 // above (AutoPickupComponent_Serialize: isEnabled from the description) but the

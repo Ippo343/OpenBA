@@ -31,6 +31,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/DecalDescription.h"
+#include "Component/DecalComponent.h"   // B.3.8 CB1a (TypeId)
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -140,7 +141,7 @@ void DecalDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140033890: DecalComponent's type id through the hidden return slot.
 Object::Type* DecalDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("DecalComponent");
+    ret->_type = DecalComponent::TypeId();
     return ret;
 }
 
