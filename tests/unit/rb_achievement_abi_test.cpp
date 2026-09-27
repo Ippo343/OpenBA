@@ -12,8 +12,8 @@
 // PART A — RETAIL'S BYTES: a test subclass built over a 0xCD-poisoned buffer
 //   carries exactly retail's writes (0x18009e240, 0x18009ed50, 0x18009ef00,
 //   0x18009e3b0) and leaves the bytes retail leaves (GoalInstance +0x14).
-// PART B — DOOR == CTOR: the same bytes come out of the door shape (stand-in
-//   minted stamp + the inherited base's stores + `DoorBody::Init`).
+// PART B — (retired in ENDGAME B.3.9 ENG with the ??0 doors; it compared the
+//   door shape against the ctor.)
 // PART C — AchievementInstance is CONCRETE: slot 0 is the exe's scalar
 //   deleting dtor 0x140019d90 (~AchievementInstance, MemFree on flags & 1).
 //
@@ -71,7 +71,7 @@ bool        Achievement::Serialize(void*) { return true; }
 Object::External* Achievement::Reconstruct() { return this; }
 void        Achievement::Destruct() {}
 Object::External* Achievement::Construct() { return this; }
-Achievement::~Achievement() {}
+Achievement::~Achievement() { NoteDtor(this); }
 
 const char* AchievementInstance::TypeName() const { return "AchievementInstance"; }
 uint32_t    AchievementInstance::Type() const { return 0; }
@@ -124,22 +124,15 @@ uint64_t Q(const void* p, size_t off) {
 uint32_t D(const void* p, size_t off) {
     uint32_t v; std::memcpy(&v, static_cast<const unsigned char*>(p) + off, 4); return v;
 }
-const void* const kFakeMinted[4] = {};
 
 // ===========================================================================
 // PART A + B
 // ===========================================================================
-UNIT_TEST(rb_achievement_ctor_is_retail_0x18009e240_and_the_door_body) {
+// ENDGAME B.3.9 ENG: the ??0 doors are retired; the ctors are the only bodies.
+UNIT_TEST(rb_achievement_ctor_is_retail_0x18009e240) {
     alignas(8) unsigned char a[sizeof(RbScenario)];
     RbScenario* s = BuildIn<RbScenario>(a);
     for (size_t off = 0x08; off < 0x58; off += 8) CHECK_EQ(Q(s, off), (uint64_t)0);
-
-    alignas(8) unsigned char b[sizeof(RbScenario)];
-    std::memset(b, 0xCD, sizeof b);
-    *reinterpret_cast<const void**>(b) = kFakeMinted;
-    std::memset(b + 0x08, 0, 0x18);   // the door's inlined External stores
-    ::Achievement::Achievement::DoorBody::Init(reinterpret_cast<::Achievement::Achievement*>(b));
-    CHECK(std::memcmp(a + 8, b + 8, sizeof(RbScenario) - 8) == 0);
     s->~RbScenario();
 }
 
@@ -228,19 +221,9 @@ UNIT_TEST(rb_achievementinstance_ctor_is_retail_0x18009e3b0) {
     AchievementInstance* ai = ::new (static_cast<void*>(a)) AchievementInstance();
     CHECK(*reinterpret_cast<const void* const*>(ai) == &g_rbAiVtGroup[2]);
     for (size_t off = 0x10; off < 0x28; off += 8) CHECK_EQ(Q(ai, off), (uint64_t)0);
-
-    alignas(8) unsigned char b[sizeof(AchievementInstance)];
-    std::memcpy(b, a, 0x10);
-    std::memset(b + 0x10, 0xCD, sizeof b - 0x10);
-    *reinterpret_cast<const void**>(b) = kFakeMinted;
-    AchievementInstance::DoorBody::Init(reinterpret_cast<AchievementInstance*>(b));
-    CHECK(std::memcmp(a + 0x10, b + 0x10, sizeof(AchievementInstance) - 0x10) == 0);
     ai->DeletingDtor(0);   // destruct only (flags 0: no free of a stack buffer)
 }
 
-// ===========================================================================
-// PART C
-// ===========================================================================
 UNIT_TEST(rb_achievementinstance_slot0_is_the_exe_scalar_deleting_dtor) {
     FactoryScope scope;
     g_aiDtorRuns = 0;
@@ -253,14 +236,16 @@ UNIT_TEST(rb_achievementinstance_slot0_is_the_exe_scalar_deleting_dtor) {
 }
 
 UNIT_TEST(rb_achievement_bases_shape) {
-    CHECK(std::is_abstract<::Achievement::Achievement>::value);
+    CHECK(!std::is_abstract<::Achievement::Achievement>::value);   // ENDGAME B.3.9 ENG
+    CHECK(!std::is_destructible<::Achievement::Achievement>::value);
+    CHECK(!std::has_virtual_destructor<::Achievement::Achievement>::value);
     CHECK(std::is_abstract<Goal>::value);                // slots 6-8 pure, as retail
     CHECK(!std::is_abstract<GoalInstance>::value);       // ENDGAME B.3.9 ENG
     CHECK(!std::is_destructible<Goal>::value);           // protected dtor
     CHECK(!std::is_destructible<GoalInstance>::value);
     CHECK(!std::has_virtual_destructor<GoalInstance>::value);
     CHECK(!std::is_abstract<AchievementInstance>::value);
-    CHECK((std::is_default_constructible<AchievementInstance>::value));
+    CHECK(!std::is_destructible<AchievementInstance>::value);   // protected dtor (B.3.9 ENG)
     CHECK(!std::has_virtual_destructor<AchievementInstance>::value);
     CHECK(!std::has_virtual_destructor<Goal>::value);
     CHECK_EQ(sizeof(RbScenario), (size_t)0x58);
@@ -268,4 +253,24 @@ UNIT_TEST(rb_achievement_bases_shape) {
     CHECK_EQ(sizeof(RbGoalInstance), (size_t)0x20);
 }
 
+// ENDGAME B.3.9 ENG: Achievement's own slot 0 -- retail's VECTOR deleting
+// destructor (element 0x58), both arms; two instances share the class table.
+UNIT_TEST(b39_eng_achievement_deletingdtor_frees_both_arms) {
+    using Ach = ::Achievement::Achievement;
+    alignas(8) unsigned char x[0x58], y[0x58];
+    Ach* a1 = ::new (static_cast<void*>(x)) Ach();
+    Ach* a2 = ::new (static_cast<void*>(y)) Ach();
+    RbScenario probe;
+    CHECK(*reinterpret_cast<const void* const*>(a1) == *reinterpret_cast<const void* const*>(a2));
+    CHECK(*reinterpret_cast<const void* const*>(a1) != *reinterpret_cast<const void* const*>(&probe));
+    g_dtorCount = 0;
+    a1->DeletingDtor(0);
+    a2->DeletingDtor(0);
+    CHECK_EQ(g_dtorCount, 2);
+    CheckBothArms<Ach, 0x58>();
+}
+
+// ===========================================================================
+// PART C
+// ===========================================================================
 }  // namespace

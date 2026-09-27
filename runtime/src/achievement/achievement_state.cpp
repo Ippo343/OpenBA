@@ -94,10 +94,9 @@
 // `rtcoll::ArrayDtorImpl` (free then zero; the specs have no element destroy),
 // run in REVERSE DECLARATION ORDER, which is retail's +0x30, +0x18, +0x08.
 
-// runtime/src/achievement/achievement_manager.cpp — the AchievementInstance
-// constructor DOOR (stamps the MINTED vtable; B4b-2). CreateInstance's inlined
-// construction is those same stores.
-Achievement::AchievementInstance* RtAch_AchievementInstance_Ctor(Achievement::AchievementInstance* self);
+// (ENDGAME B.3.9 ENG: CreateInstance's inlined construction is the class's
+// real constructor, `::new (p) AchievementInstance()`; the ctor door that
+// stamped the MINTED table is retired.)
 
 namespace {
 
@@ -226,7 +225,7 @@ bool AchievementManager::SetAchievementMet(int index) {
 Object::InternalPtr<AchievementInstance> Achievement::CreateInstance() const {
     auto* inst = static_cast<AchievementInstance*>(rtcoll::MemAlloc(0x28, 8));
     if (inst != nullptr)
-        RtAch_AchievementInstance_Ctor(inst);
+        ::new (static_cast<void*>(inst)) AchievementInstance();
 
     Object::InternalPtr<AchievementInstance> result(inst);
     inst->_achievement = const_cast<Achievement*>(this);   // faithful: not guarded

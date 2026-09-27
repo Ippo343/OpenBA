@@ -234,7 +234,6 @@ void RtFactoriesPortInit() {
     n += RtFactoriesObjectRegister();
     n += RtFactoriesGraphicsRegister();
     n += RtFactoriesVideoRegister();
-    n += RtFactoriesAchievementRegister();
     n += RtFactoriesIoRegister();
     // Picking:: has no row left: ENDGAME B.3.9's pilot made Picking::PickingMesh
     // a real class whose own CreateNewObject / CreateInPlaceObject register from

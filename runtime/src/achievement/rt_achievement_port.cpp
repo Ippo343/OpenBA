@@ -30,15 +30,6 @@ extern int RtAchManagerRegister();    // achievement_manager.cpp (lane B)
 // atomicity (PLAN �4.1 decision 5) puts them on one switch.
 extern int RtAchStateRegister();          // achievement_state.cpp     (Wave 23)
 extern int RtAchSerializeRegister();      // achievement_serialize.cpp (Wave 23)
-// Wave 27 lane ACHIEVE — achievement_typeinfo_accessors.cpp. ONE file, TWO
-// register functions, because its eleven slot bodies span all four Achievement
-// vtable rows and those rows sit on DIFFERENT kill switches. Splitting the
-// registration rather than the file is what keeps class atomicity (PLAN §4.1
-// decision 5) while the eleven bodies — which are the same two-instruction
-// shape — stay together where they can be read side by side.
-extern int RtAchManagerTypeInfoAccessorsRegister();  // Achievement + …Instance
-// Wave 27 lane ACHIEVE — achievement_vtable.cpp (the four non-accessor slots).
-extern int RtAchVtableRegister();
 // Wave 27 lane ACHIEVE — goal_list.cpp (GoalList::Initialize, a BODY gap row).
 extern int RtAchGoalListRegister();
 // NO ??0AchievementManager@Achievement@@ HERE, DELIBERATELY. Wave 27 lane
@@ -72,7 +63,5 @@ void RtAchievementPortInit() {
     n += RtAchManagerRegister();
     n += RtAchStateRegister();
     n += RtAchSerializeRegister();
-    n += RtAchManagerTypeInfoAccessorsRegister();
-    n += RtAchVtableRegister();
     printf("[RtPort] Achievement: %d exports registered\n", n);
 }

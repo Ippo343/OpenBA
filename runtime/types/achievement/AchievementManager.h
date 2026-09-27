@@ -39,8 +39,11 @@ class AchievementInstance;
 // Achievement::Achievement — an Object::External subclass, 0x58 bytes. NINE
 // slots. RULE B7-3: POLYMORPHIC (the inventory missed it — its vftable is
 // mangled with the back-reference `??_7Achievement@0@6B@`, B7-11), and the exe
-// builds `Scenario` on it (0x14015f020, code/Game/Game/scenario.cpp), so it is
-// ABSTRACT-BY-POLICY: slot 0 `= 0`, ctor door kept, no real constructor.
+// builds `Scenario` on it (code/Game/Game/scenario.cpp, a C++ subclass whose
+// ctor chains this class's real one). ENDGAME B.3.9 ENG (B39_RULES D1/D2):
+// CONCRETE -- retail's own slot 0 and public real ctor, the factory pair the
+// class's own; the minted row, its RT_DELDTOR row, the ??0 / ??1 doors and the
+// slot doors are retired.
 //
 // `??_7Achievement@0@6B@` @ 0x180154740 (B37_SLOTS.md §1):
 //   [0] +0x00 0x180001680  vector deleting dtor (MOV EDX,0x58)
@@ -61,8 +64,30 @@ class AchievementInstance;
 // ============================================================================
 class Achievement : public Object::External {
 public:
+    // ??0Achievement@0@QEAA@XZ 0x18009e240 — the REAL constructor, PUBLIC:
+    // External() and the three stamps are the compiler's; then the seven qword
+    // zero stores +0x20..+0x50 (the two ExternalPtrs, the three Strings, the
+    // goal array's header).
+    Achievement()
+        : Object::External(), _stringTable(), _title(), _description(),
+          _spriteSheet(), _spriteName(), _goals() {}
+
     // ---- the nine slots, in retail order -----------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override = 0;  // [0] 0x180001680 — pure (B7-3/B7-13)
+    // [0] 0x180001680 — MSVC's VECTOR deleting destructor (MOV EDX,0x58), both
+    //     arms as the retired RT_DELDTOR row ran them. Scenario declares its own.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
+            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<Achievement*>(self + static_cast<int64_t>(i) * 0x58)->~Achievement();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~Achievement();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                    // [1] 0x180001040
     uint32_t    Type() const override;                        // [2] 0x180001020
     int32_t     GetFileVersion() const override;              // [3] 0x18009e170
@@ -84,52 +109,29 @@ public:
     // ?CreateInstance@Achievement@1@QEBA?AV?$InternalPtr@VAchievementInstance@… 0x18009df80
     Object::InternalPtr<AchievementInstance> CreateInstance() const;
 
-    static uint32_t TypeId();                                 // 0x180001030 — not ported
+    // 0x180001030 — `MOV EAX,[_typeInfo]` over the (still minted)
+    // `?_typeInfo@Achievement@1@` record (B39_RULES D6 step 1).
+    static uint32_t TypeId();
     static void* operator new(std::size_t bytes);             // 0x180001050 — not ported
     static void* operator new(std::size_t bytes, void* place);// 0x1800010c0 — not ported
     static void  operator delete(void* p);                    // 0x1800010d0 — not ported
-    // 0x180001130 / 0x1800011f0 — ported as the generated factory rows in
-    // rt_factories_achievement.inc (RtFactNew_/RtFactIP_Achievement_Achievement),
-    // which stamp the MINTED tables; not members.
+    // 0x180001130 / 0x1800011f0 — retail's factory pair (B39_RULES D2):
+    // MemAlloc(0x58, 8) + the ctor, and the null-tested in-place ctor
+    // (achievement_manager.cpp). The class declares its own placement new:
+    // placement construction spells `::new (p) Achievement()`.
     static Object::Base* CreateNewObject();
     static Object::Base* CreateInPlaceObject(void* place);
     Achievement(const Achievement& other);                    // 0x180001470 — not ported
     Achievement& operator=(const Achievement& other);         // 0x180001550 — not ported
 
-    // ??1Achievement@0@UEAA@XZ  0x18009e180. NON-virtual, PUBLIC (the exe's
-    // Scenario slot 0 runs it explicitly — scenario.cpp:112, a caller-batch
-    // site). Retail: re-stamp, ~Array(+0x48), release +0x40, +0x30, +0x28,
+protected:
+    // ??1Achievement@0@UEAA@XZ  0x18009e180. NON-virtual; the exe's Scenario
+    // chains it. Retail: re-stamp, ~Array(+0x48), release +0x40, +0x30, +0x28,
     // then ~External. The body is EMPTY: the compiler destroys the members in
     // REVERSE DECLARATION ORDER — `_goals`, `_spriteName`, `_description`,
     // `_title` (the two ExternalPtrs are trivial) — which is exactly retail's
     // order, then runs ~External().
     ~Achievement();
-
-    // The door's way onto the shared body (ENDGAME B.3.8 block RB, B38_RULES
-    // D1): `RtAch_Achievement_Ctor` stamps the MINTED tables and does the
-    // inlined External stores, then runs this. Nothing else may.
-    struct DoorBody { static void Init(Achievement* a) { a->InitFields(); } };
-
-protected:
-    // ??0Achievement@0@QEAA@XZ 0x18009e240 — the REAL constructor (ENDGAME
-    // B.3.8 block RB, RULE B8-1): External() and the three stamps are the
-    // compiler's; the seven zero stores +0x20..+0x50 are ONE body with the
-    // door. (The members' own default ctors wrote the same zeros first.)
-    Achievement() { InitFields(); }
-
-private:
-    // The seven qword zero stores of 0x18009e240, as the field writes they are.
-    // Raw member writes, not assignments: the door runs this over raw storage.
-    void InitFields() {
-        _stringTable._ptr = nullptr;              // +0x20
-        *reinterpret_cast<void**>(&_title) = nullptr;         // +0x28
-        *reinterpret_cast<void**>(&_description) = nullptr;   // +0x30
-        _spriteSheet._ptr = nullptr;              // +0x38
-        *reinterpret_cast<void**>(&_spriteName) = nullptr;    // +0x40
-        _goals._data = nullptr;                   // +0x48
-        _goals._size = 0;                         // +0x50 } one qword
-        _goals._capacity = 0;                     //       }
-    }
 
 private:
     //   0x180001000  ?_TypeName@Achievement@1@       -> "Achievement"
@@ -160,7 +162,10 @@ static_assert(offsetof(Achievement, _goals)       == 0x48, "Achievement::_goals 
 // GameUpdateLoop's slot-6 Load ON THE LOADER THREAD); the standalone never
 // registers that table, so the object keeps the Runtime one. CONCRETE since
 // ENDGAME B.3.8 block RB (slot 0 is the exe's scalar deleting dtor), so LOOP
-// can build it as `::new (p) Achievement::AchievementInstance()` (D8).
+// can build it as `::new (p) Achievement::AchievementInstance()` (D8). ENDGAME
+// B.3.9 ENG: the ctor door and the MINTED row are retired -- every instance
+// (Achievement::CreateInstance's, LOOP's, the factory's) wears this class's
+// table.
 //
 // `??_7AchievementInstance@Achievement@@6B@` @ 0x180154700:
 //   [0] +0x00 0x180001a90  vector deleting dtor (MOV EDX,0x28; ~GoalList(+0x10), ~Internal)
@@ -178,8 +183,9 @@ public:
     // [0] CONCRETE (ENDGAME B.3.8 block RB, B38_RULES D1/D2): the exe
     // instantiates the class itself (its table copy 0x14015e350, built in
     // GameUpdateLoop's Load), whose slot 0 is the exe scalar deleting dtor
-    // 0x140019d90: CALL [??1AchievementInstance]; if (flags & 1) MemFree.
-    // The DLL's 0x180001a90 stays the mint's RT_DELDTOR row for the doors.
+    // 0x140019d90: CALL [??1AchievementInstance]; if (flags & 1) MemFree. An
+    // exe-built class keeps the SCALAR arms (B39_RULES D1.2); the DLL's vector
+    // row 0x180001a90 is retired (ENDGAME B.3.9 ENG).
     Object::Base* DeletingDtor(unsigned flags) override {
         this->~AchievementInstance();
         if (flags & 1) Object::detail::InternalMemFree(this);
@@ -199,38 +205,30 @@ public:
     // — ExternalPtr by value arrives BARE in RDX (B7-5): a register value here.
     void SetAchievement(Object::ExternalPtr<Achievement> achievement);
 
-    static uint32_t TypeId();                                 // 0x1800017b0 — not ported
+    // 0x1800017b0 — `MOV EAX,[_typeInfo]` over the (still minted)
+    // `?_typeInfo@AchievementInstance@Achievement@@` record (D6 step 1).
+    static uint32_t TypeId();
     static void* operator new(std::size_t bytes);             // 0x1800017d0 — not ported
     static void* operator new(std::size_t bytes, void* place);// 0x180001840 — not ported
     static void  operator delete(void* p);                    // 0x180001850 — not ported
-    static Object::Base* CreateNewObject();                   // 0x1800018b0 — factory row
+    // 0x1800018b0 — MemAlloc(0x28, 8) + the ctor (achievement_manager.cpp,
+    // B39_RULES D2); the in-place half is Internal's shared one.
+    static Object::Base* CreateNewObject();
     AchievementInstance(const AchievementInstance& other);    // 0x180001970 — not ported
     AchievementInstance& operator=(const AchievementInstance& other);  // 0x1800019f0 — not ported
 
-    // ??1AchievementInstance@Achievement@@UEAA@XZ  0x18009e400. NON-virtual,
-    // PUBLIC. Retail: re-stamp, ~GoalList(this+0x10), tail-jump ~Internal.
-    // EMPTY body: the compiler destroys `_goalList` (a real GoalList — its
-    // ~GoalList deletes every instance) and then runs ~Internal(). The
-    // REGISTERED door for this address is `RtAchievement_AchievementInstance_Dtor`
-    // in runtime/src/object/deleting_dtor_leaves.cpp (the coordinator's file)
-    // and is untouched by this block.
-    ~AchievementInstance();
-
     // ??0AchievementInstance@Achievement@@QEAA@XZ 0x18009e3b0 — the REAL
-    // constructor (ENDGAME B.3.8 block RB, RULE B8-1), PUBLIC: the class is
-    // concrete. Internal() and the stamp are the compiler's; the four zero
-    // stores are ONE body with the door `RtAch_AchievementInstance_Ctor`.
-    AchievementInstance() { InitFields(); }
+    // constructor, PUBLIC: Internal() (CALL ??0Internal) and the stamp are the
+    // compiler's; then the GoalList's two zero qwords (+0x10/+0x18) and the
+    // Achievement pointer (+0x20).
+    AchievementInstance() : Object::Internal(), _goalList(), _achievement() {}
 
-    struct DoorBody { static void Init(AchievementInstance* a) { a->InitFields(); } };
-
-private:
-    void InitFields() {
-        _goalList._goals._data     = nullptr;   // +0x10
-        _goalList._goals._size     = 0;         // +0x18 } one qword
-        _goalList._goals._capacity = 0;         //       }
-        _achievement._ptr          = nullptr;   // +0x20
-    }
+protected:
+    // ??1AchievementInstance@Achievement@@UEAA@XZ  0x18009e400. NON-virtual.
+    // Retail: re-stamp, ~GoalList(this+0x10), tail-jump ~Internal. EMPTY body:
+    // the compiler destroys `_goalList` (a real GoalList — its ~GoalList
+    // deletes every instance) and then runs ~Internal().
+    ~AchievementInstance();
 
 private:
     //   0x180001780  ?_TypeName@AchievementInstance@…       -> "AchievementInstance"

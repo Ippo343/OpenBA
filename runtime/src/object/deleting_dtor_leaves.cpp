@@ -131,14 +131,6 @@ extern "C" void RtGraphics_AnimationGroup_Dtor(void* self) {
 }
 
 
-// ??1AchievementInstance@Achievement@@UEAA@XZ   0x18009e400
-extern "C" void RtAchievement_AchievementInstance_Dtor(void* self) {
-    STAMP(self, "??_7AchievementInstance@Achievement@@6B@");
-    // GoalList is a VALUE type with a real dtor (B37_RULES B7-8), held at +0x10.
-    reinterpret_cast< ::Achievement::GoalList*>(static_cast<uint8_t*>(self) + 0x10)
-        ->Achievement::GoalList::~GoalList();  // B.3.7 bridge
-    RT_EXPORT_ONCE(DtorFn, "??1Internal@Object@@UEAA@XZ")(self);
-}
 
 // ??1MaterialInstance@Graphics@@UEAA@XZ   0x180103a00
 extern "C" void RtGraphics_MaterialInstance_Dtor(void* self) {
@@ -170,8 +162,6 @@ extern "C" void RtGraphics_ParticleInstance_Dtor(void* self) {
 }
 
 int RtObjectDeletingDtorLeavesRegister() {
-    RegisterRuntimeExport("??1AchievementInstance@Achievement@@UEAA@XZ", (void*)&RtAchievement_AchievementInstance_Dtor);
-    RegisterRuntimeAddr  (0x18009e400ull,                                  (void*)&RtAchievement_AchievementInstance_Dtor);
     RegisterRuntimeExport("??1MaterialInstance@Graphics@@UEAA@XZ",        (void*)&RtGraphics_MaterialInstance_Dtor);
     RegisterRuntimeAddr  (0x180103a00ull,                                  (void*)&RtGraphics_MaterialInstance_Dtor);
     RegisterRuntimeExport("??1Base@Object@@UEAA@XZ",                      (void*)&RtObject_Base_Dtor);
@@ -188,5 +178,5 @@ int RtObjectDeletingDtorLeavesRegister() {
     RegisterRuntimeAddr  (0x180058d20ull,                          (void*)&RtGraphics_Light_Dtor);
     RegisterRuntimeExport("??1AnimationGroup@Graphics@@UEAA@XZ", (void*)&RtGraphics_AnimationGroup_Dtor);
     RegisterRuntimeAddr  (0x1800fb620ull,                          (void*)&RtGraphics_AnimationGroup_Dtor);
-    return 9;
+    return 8;
 }

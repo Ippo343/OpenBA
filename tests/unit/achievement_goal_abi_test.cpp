@@ -117,7 +117,7 @@ UNIT_TEST(achievement_class_shape_rules) {
     CHECK(std::is_polymorphic<Goal>::value);
     CHECK(std::is_abstract<Goal>::value);
     CHECK(!std::is_abstract<GoalInstance>::value);        // concrete since B.3.9 ENG
-    CHECK(std::is_abstract<AchClass>::value);
+    CHECK(!std::is_abstract<AchClass>::value);            // concrete since B.3.9 ENG
     CHECK(!std::is_abstract<AchievementInstance>::value);   // concrete since B.3.8 RB (exe table copy 0x14015e350)
     CHECK(!std::has_virtual_destructor<Goal>::value);
     CHECK(!std::has_virtual_destructor<GoalInstance>::value);
