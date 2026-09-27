@@ -92,6 +92,7 @@
 #include <new>                                       // placement new, for the
                                                      // hidden-retslot door below
 #include "../../types/system/Value.h"                // System::Time, ditto
+#include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -212,8 +213,8 @@ AnimationManagerView* AnimationManagerSingleton() {
 // is a DIVIDE by it here (`DIVSD`), where GetPoseAtTime next door multiplies;
 // both spellings are retail's, in the direction each needs.
 double SecondsPerTick() {
-    double* p = RT_DATA_SLOT(double*, "?_secondsPerTick@Timer@System@@0NA");
-    return p ? *p : 0.0;
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+    return ::System::Timer::_secondsPerTick;
 }
 
 // `CVTTSD2SI` after a `DIVSD` — seconds to System::Time ticks, truncating.

@@ -143,6 +143,9 @@
 // `Module` / `ResolveAddr` declaration every other runtime/src file uses (the
 // address door lives in standalone/), and the RULE B6-5 atomic door caches.
 #include "element_common.h"
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "../../types/input/Device.h"   // ENDGAME B.3.9 SS1: Input::Device::_singleton
+#include "../../types/input/Input.h"    // ENDGAME B.3.9 SS1: Input::Configuration::_singleton
 
 #include <atomic>
 
@@ -160,23 +163,19 @@ using UI::SpriteDraw;
 // ENDGAME B.3.6 (RULE B6-5): namespace-scope atomic slots, not RT_DATA_SLOT /
 // RT_EXPORT_ONCE function-local statics — the member body runs on UI objects
 // the loader thread constructs.
-std::atomic<void*> g_videoDeviceSlot{nullptr};
-std::atomic<void*> g_inputDeviceSlot{nullptr};
-std::atomic<void*> g_inputConfigSlot{nullptr};
 std::atomic<void*> g_cameraCtorSlot{nullptr};
 std::atomic<void*> g_memFreeSlot{nullptr};
 std::atomic<void*> g_spriteDrawSetSize0Slot{nullptr};
+// ENDGAME B.3.9 SS1 (B39_RULES D7): all three are class statics now, no lazy
+// AtomicExport cache (B9-10).
 inline void** VideoDeviceSingleton() {          // 0x1801fe7a8
-    return static_cast<void**>(
-        rtuielem::AtomicExport(g_videoDeviceSlot, "?_singleton@Device@Video@@0PEAV12@EA"));
+    return reinterpret_cast<void**>(&::Video::Device::_singleton);
 }
 inline void** InputDeviceSingleton() {          // 0x1801fe770
-    return static_cast<void**>(
-        rtuielem::AtomicExport(g_inputDeviceSlot, "?_singleton@Device@Input@@0PEAV12@EA"));
+    return reinterpret_cast<void**>(&::Input::Device::_singleton);
 }
 inline void** InputConfigSingleton() {          // 0x1801fe768
-    return static_cast<void**>(
-        rtuielem::AtomicExport(g_inputConfigSlot, "?_singleton@Configuration@Input@@0PEAV12@EA"));
+    return reinterpret_cast<void**>(&::Input::Configuration::_singleton);
 }
 
 // ---- the callees ------------------------------------------------------------

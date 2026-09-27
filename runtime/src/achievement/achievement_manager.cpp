@@ -83,9 +83,10 @@ namespace {
 // — i.e. retail's static accessor `Achievement::TypeId()` (0x180001030).
 uint32_t AchievementTypeId() { return Achievement::Achievement::TypeId(); }
 
-// ?_singleton@FileSystem@IO@@0PEAV12@EA  (0x1801fc6a8)
-RtIO::FileSystem** FileSystemSingletonCell() {
-    return RT_DATA_SLOT(RtIO::FileSystem**, "?_singleton@FileSystem@IO@@0PEAV12@EA");
+// ?_singleton@FileSystem@IO@@0PEAV12@EA (0x1801fc6a8) -- the class static now
+// (ENDGAME B.3.9 SS1, B39_RULES D7): read fresh, no lazy cache.
+RtIO::FileSystem* FileSystemSingleton() {
+    return reinterpret_cast<RtIO::FileSystem*>(::IO::FileSystem::_singleton);
 }
 
 // AchievementManager::Update's gate, inlined in retail as `CMP dword
@@ -195,7 +196,7 @@ void AchievementManager::Reset() {
 // retail's and faults when SetAchievements never ran.
 // ============================================================================
 void AchievementManager::Update(const System::Time& time) {
-    if (UserPackFilesEnabled(*FileSystemSingletonCell())) return;
+    if (UserPackFilesEnabled(FileSystemSingleton())) return;
 
     const int count = _instances._size;
     for (int i = 0; i < count; ++i) {

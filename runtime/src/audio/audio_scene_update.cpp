@@ -213,6 +213,7 @@
 #include "../../types/audio/SoundBuffer.h"
 #include "../../types/audio/SoundEffect.h"
 #include "../../types/system/Value.h"          // System::Time, System::Random
+#include "../../types/system/Timer.h"          // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "../engine/mainloop_internal.h"       // rtengine::AtomicResolve (B6-5)
 #include <atomic>
 
@@ -309,9 +310,9 @@ void* ConfigurationSingleton() {
 double SecondsPerTick() {
     // ?_secondsPerTick@Timer@System@@0NA (ord 4797) -- a DOUBLE, and retail
     // divides by it rather than multiplying by its reciprocal. Kept as a
-    // division: the two are not the same float.
-    double* slot = RT_DATA_SLOT(double*, "?_secondsPerTick@Timer@System@@0NA");
-    return slot ? *slot : 0.0;
+    // division: the two are not the same float. ENDGAME B.3.9 SS1 (B39_RULES
+    // D7): the class static now, read fresh.
+    return ::System::Timer::_secondsPerTick;
 }
 
 // The static callback retail stamps into each device slot's +0x20:

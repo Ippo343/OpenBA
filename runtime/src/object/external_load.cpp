@@ -178,8 +178,8 @@ void ArraySetSize(void* arr, int32_t n) {
 
 void CloseIfOpen(RtIO::FileInfo* fi) {
     if (fi->handle == -1) return;
-    RtIO::FileSystem* fs = *RT_DATA_SLOT(RtIO::FileSystem**,
-                                         "?_singleton@FileSystem@IO@@0PEAV12@EA");
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+    RtIO::FileSystem* fs = reinterpret_cast<RtIO::FileSystem*>(::IO::FileSystem::_singleton);
     RT_EXPORT_ONCE(CloseFileFn,
         "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z")(fs, fi);
 }

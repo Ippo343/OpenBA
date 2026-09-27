@@ -153,6 +153,7 @@
 // dependency the whole tree is arranged around), and the RULE B6-5 atomic
 // door caches `rtuielem::AtomicExport` / `AtomicAddr`.
 #include "element_common.h"
+#include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 
 #include <atomic>
 
@@ -164,14 +165,13 @@ using UI::UserInterface;
 
 // RULE B6-5: namespace-scope atomic slots (the member body runs on UI objects
 // the loader thread constructs), not RT_DATA_SLOT / RT_EXPORT_ONCE statics.
-std::atomic<void*> g_sptSlot{nullptr};
 std::atomic<void*> g_memFreeSlot{nullptr};
 std::atomic<void*> g_eventsSetSizeSlot{nullptr};
 std::atomic<void*> g_dynArrayPushSlot{nullptr};
 
+// ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, no lazy cache.
 inline const double* TimerSecondsPerTick() {
-    return static_cast<const double*>(
-        rtuielem::AtomicExport(g_sptSlot, "?_secondsPerTick@Timer@System@@0NA"));
+    return &::System::Timer::_secondsPerTick;
 }
 
 // ---- the callees ------------------------------------------------------------

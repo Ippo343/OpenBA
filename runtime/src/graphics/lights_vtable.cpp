@@ -277,12 +277,12 @@ void SetSizeWithFill(uintptr_t va, void* arr, int32_t n, const void* fill) {
 // The two Video singletons the dimension logic reads. Both are pointers TO the
 // object, so each read is a double indirection.
 // ---------------------------------------------------------------------------
+// ENDGAME B.3.9 SS1 (B39_RULES D7): both class statics now, read fresh.
 const uint8_t* VideoDevice() {
-    return *RT_DATA_SLOT(const uint8_t* const*, "?_singleton@Device@Video@@0PEAV12@EA");
+    return reinterpret_cast<const uint8_t*>(::Video::Device::_singleton);
 }
 const uint8_t* VideoConfiguration() {
-    return *RT_DATA_SLOT(const uint8_t* const*,
-                         "?_singleton@Configuration@Video@@0PEAV12@EA");
+    return reinterpret_cast<const uint8_t*>(::Video::Configuration::_singleton);
 }
 
 // ---------------------------------------------------------------------------

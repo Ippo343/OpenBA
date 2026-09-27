@@ -133,6 +133,7 @@
 #include "../../types/system/String.h"
 #include "../../types/audio/SoundBuffer.h"
 #include "../../types/audio/SoundEffect.h"
+#include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
@@ -397,8 +398,8 @@ Object::Base* SoundEffect::CreateInPlaceObject(void* place) {
 // `_maxLength` / `_samples`; the SoundBuffer's +0x20/+0x24 are `_loopForever`
 // and `_durationSeconds`.)
 Object::External::CompileResult SoundEffect::Compile(const System::Filename&) {
-    double* secondsPerTickSlot = RT_DATA_SLOT(double*, "?_secondsPerTick@Timer@System@@0NA");
-    const double secondsPerTick = secondsPerTickSlot ? *secondsPerTickSlot : 1.0;
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+    const double secondsPerTick = ::System::Timer::_secondsPerTick;
     _maxLength = static_cast<int64_t>(0.0 / secondsPerTick);          // 1800e09bc
 
     const int32_t sampleCount = _samples._size;                        // 1800e09c0

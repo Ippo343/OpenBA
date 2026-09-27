@@ -131,13 +131,11 @@ inline bool ExistsInPackfile(const RtIO::FileSystem* fs, const Filename* f) {
 }
 
 // `?_singleton@FileSystem@IO@@0PEAV12@EA`, retail 0x1801fc6a8 — the qword
-// `MOV R14,qword ptr [0x1801fc6a8]` at 0x1800bd5e3 loads. Read through the
-// port-aware data door so it follows the mint at cutover, exactly as
+// `MOV R14,qword ptr [0x1801fc6a8]` at 0x1800bd5e3 loads. The class static now
+// (ENDGAME B.3.9 SS1, B39_RULES D7): read fresh, exactly as
 // runtime/src/io/filesystem_packages.cpp does.
 inline RtIO::FileSystem* FileSystemSingleton() {
-    RtIO::FileSystem** slot =
-        RT_DATA_SLOT(RtIO::FileSystem**, "?_singleton@FileSystem@IO@@0PEAV12@EA");
-    return slot ? *slot : nullptr;
+    return reinterpret_cast<RtIO::FileSystem*>(::IO::FileSystem::_singleton);
 }
 
 // ---------------------------------------------------------------------------

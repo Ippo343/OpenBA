@@ -28,6 +28,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/input/Device.h"   // ENDGAME B.3.9 ENG: the class static
 #include "../../types/input/Input.h"
+#include "../../types/io/Persistence.h"   // ENDGAME B.3.9 SS1: Persistence::_singleton
 
 using Input::Binding;
 using Input::BindingNode;
@@ -454,9 +455,8 @@ void Device::ResetState() {
 void Configuration::Save() {
     _keyMap->Save();
 
-    uint8_t** persistenceSlot = RT_DATA_SLOT(uint8_t**,
-        "?_singleton@Persistence@IO@@0PEAV12@EA");
-    void* persistence = persistenceSlot ? *persistenceSlot : nullptr;
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+    void* persistence = ::IO::Persistence::_singleton;
 
     RtIo_Persistence_SetBool(persistence, "Input", "MouseClipping", _mouseClipping);
     RtIo_Persistence_SetBool(persistence, "Input", "Legacy", _legacy);

@@ -207,6 +207,8 @@
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/ui/ElementDescription.h"
 #include "../../types/ui/StringTable.h"   // WAVE 10 LANE UIF — the twin's table
+#include "../../types/system/Timer.h"     // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "../../types/video/Device.h"     // ENDGAME B.3.9 SS1: Video::Device::_singleton
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Event30
 // ⚠ WAVE 9 LANE Z — `runtime/types/object/TypeInfo.h` IS NOT INCLUDABLE HERE,
 // and the reason is a real defect in another lane's header rather than anything
@@ -355,7 +357,8 @@ void ReleaseStringLocal(char*& p) {
 // RT_DATA_SLOT door runtime/src/ui/userinterface.cpp uses rather than by a raw
 // address read, so it is satisfied at cutover and never caches a null.
 inline void** VideoDeviceSingleton() {
-    return RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now.
+    return reinterpret_cast<void**>(&::Video::Device::_singleton);
 }
 
 // ---- Wave 9 lane Z: the exported DATA slot ?TypeName@ reads ----------------
@@ -1706,7 +1709,8 @@ void DialogInstance::Update(const System::Time& time, UserInterface* ui,
 
         const uint8_t* us = updateState;
         const int64_t timeTicks = *reinterpret_cast<const int64_t*>(&time);  // System::Time: one int64
-        const double secondsPerTick = *RT_DATA_SLOT(double*, "?_secondsPerTick@Timer@System@@0NA");
+        // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+        const double secondsPerTick = ::System::Timer::_secondsPerTick;
         // DAT_1801616b8: a double, read directly out of the shipped DLL
         // (0.25 seconds) — no export names it, so it is a literal here.
         constexpr double kTooltipDelaySeconds = 0.25;

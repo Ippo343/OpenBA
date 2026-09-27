@@ -187,12 +187,14 @@
 
 #include <cstdint>
 #include "../system/timer.h"
+#include "../../types/system/Timer.h"   // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include <cstddef>
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/engine/Engine.h"
 #include "../../types/engine/MainLoop.h"
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
 
 // ----------------------------------------------------------------------------
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
@@ -236,9 +238,8 @@ MainLoop** MainLoopSingletonSlot() {
 // into the pointed-at Device at +0x50/+0x58 — the profile build calls that
 // setter `Video::Device::SetVideoErrorFuncs` (0x1800fd860); retail inlines it.
 void** VideoDeviceSingletonSlot() {
-    void** p = RT_DATA_SLOT(void**,
-        "?_singleton@Device@Video@@0PEAV12@EA");
-    return p;
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now.
+    return reinterpret_cast<void**>(&::Video::Device::_singleton);
 }
 
 // System::Timer::_secondsPerTick — the divisor in the inlined SecondsToTicks.
@@ -247,8 +248,9 @@ void** VideoDeviceSingletonSlot() {
 // from us; the value is the compile-time constant 1e-6 either way, and ours is
 // never the zero the DLL's slot holds before Engine::Startup.
 const double* SecondsPerTick() {
-    static const double p = RtSystem::TimerSecondsPerTick();
-    return &p;
+    // ENDGAME B.3.9 SS1 (B39_RULES D7, B9-10): no lazy cache -- the class
+    // static (System::Timer::_secondsPerTick) is read fresh every call.
+    return &::System::Timer::_secondsPerTick;
 }
 
 // The two clock constants, as the exact doubles retail loads. These are

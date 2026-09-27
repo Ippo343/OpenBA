@@ -61,6 +61,7 @@
 #include "element_common.h"
 #include "../../types/ui/ContainerElement.h"
 #include "../../types/ui/ScrollElement.h"
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
 
 namespace UI { class ClipRegionElement; }   // block C1
 
@@ -80,7 +81,6 @@ constexpr int kClipOffY   = 0xd4;
 std::atomic<void*> g_typeInfo{nullptr};
 std::atomic<void*> g_clipTypeInfo{nullptr};
 std::atomic<void*> g_scrollTypeInfo{nullptr};
-std::atomic<void*> g_deviceSingleton{nullptr};
 
 const uint8_t* ContainerElementTypeInfo() {
     return static_cast<const uint8_t*>(AtomicExport(
@@ -97,9 +97,8 @@ uint32_t ScrollTypeId() {
     return p ? *p : 0u;
 }
 const uint8_t* VideoDevice() {
-    void** p = static_cast<void**>(AtomicExport(
-        g_deviceSingleton, "?_singleton@Device@Video@@0PEAV12@EA"));
-    return static_cast<const uint8_t*>(p ? *p : nullptr);
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, no lazy cache.
+    return reinterpret_cast<const uint8_t*>(::Video::Device::_singleton);
 }
 
 using IsDerivedFromFn   = bool  (*)(const void* self, uint32_t typeId);

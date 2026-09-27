@@ -238,9 +238,9 @@ namespace Input {
 void KeyMap::Load() {
 
     // Retail hoists the singleton once, before the traversal
-    // (0x1800A71AA), and re-reads the map root on every lookup.
-    void** persistenceSlot = RT_DATA_SLOT(void**, "?_singleton@Persistence@IO@@0PEAV12@EA");
-    void*  persistence = persistenceSlot ? *persistenceSlot : nullptr;
+    // (0x1800A71AA), and re-reads the map root on every lookup. ENDGAME
+    // B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+    void* persistence = ::IO::Persistence::_singleton;
 
     // KeyMap::_root is at +0x08 (Input.h, pinned by every ported KeyMap point
     // function). Retail loads `[RCX+8]` at 0x1800A71B1.

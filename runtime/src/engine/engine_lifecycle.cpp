@@ -210,6 +210,7 @@
 #include "../../types/system/String.h"
 #include "../../types/system/Error.h"      // ENDGAME B.3.9 SYS: Error::_hideDisplay
 #include "../../types/system/Configuration.h"   // ENDGAME B.3.9 SYS: Configuration::_singleton
+#include "../../types/object/TypeInfo.h"        // ENDGAME B.3.9 SS1: Object::Factory::_compilerModule
 
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
 // — same reasoning engine.cpp gives (resolve.h drags in <windows.h>, and
@@ -837,15 +838,15 @@ void Engine::Engine::Shutdown() {
     if (_factory != nullptr) {
         // 0x1800db62d: FreeLibrary on a module held in an UNEXPORTED global at
         // 0x1801fc6d0 — the only address in these four bodies with no name in
-        // either build. At cutover ResolveAddr hands back 0 for it (the module
-        // is not mapped) and this step is skipped. That is a genuine
-        // standalone-vs-retail difference, not a defensive guard: retail always
-        // has its own .data and we, with no DLL, have no such variable at all.
-        if (uintptr_t g = ResolveAddr(Module::Runtime, 0x1801fc6d0)) {
-            void** slot = reinterpret_cast<void**>(g);
-            if (*slot) RtEngineLifecyclePlatformFreeLibrary(*slot);
-            *slot = nullptr;
-        }
+        // either build. ENDGAME B.3.9 SS1 (B39_RULES D7): the cell is
+        // `Object::Factory::_compilerModule` now, a class static that always
+        // exists (the "standalone has no such variable at all" gap the old
+        // comment described is closed); the value stays null unless something
+        // in this tree ever ports LoadCompilers, so `*slot` is unguarded here
+        // exactly as retail's own deref of its always-live global is.
+        void** slot = reinterpret_cast<void**>(&::Object::Factory::_compilerModule);
+        if (*slot) RtEngineLifecyclePlatformFreeLibrary(*slot);
+        *slot = nullptr;
         ++steps;
     }
     if (void* p = _modification) {

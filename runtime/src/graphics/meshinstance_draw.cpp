@@ -69,6 +69,7 @@
 #include "../../types/graphics/Mesh.h"
 #include "../../types/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
 #include "../../types/video/Context.h"   // ENDGAME B.3.5 caller batch: Video::Context
+#include "../../types/video/Device.h"    // ENDGAME B.3.9 SS1: Video::Device::_singleton
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -168,8 +169,9 @@ void ContextSetTransformScale(void* ctx, int32_t slot, const void* matrix,
 // `EdgeMeshInstance::Draw` calls it directly and qualified. Its `NodeToWorldFn`
 // typedef went with it.
 
+// ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
 const uint8_t* VideoDevice() {
-    return *RT_DATA_SLOT(const uint8_t* const*, "?_singleton@Device@Video@@0PEAV12@EA");
+    return reinterpret_cast<const uint8_t*>(::Video::Device::_singleton);
 }
 // ENDGAME B.3.9 GFX: the class static, not the mint's slot (D7 row A44).
 const uint8_t* AnimationManager() {

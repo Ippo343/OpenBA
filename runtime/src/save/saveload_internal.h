@@ -32,6 +32,8 @@
 #include "../../types/save/SaveLoad.h"
 #include "../../types/io/Stream.h"
 #include "../../types/io/Persistence.h"   // SaveBlock — SetupLoadFn's return
+#include "../../types/io/FileSystem.h"    // ENDGAME B.3.9 SS1: FileSystem::_singleton
+#include "../../types/io/Modification.h"  // ENDGAME B.3.9 SS1: Modification::_singleton
 #include "../system/string.h"
 #include "../system/timer.h"
 
@@ -113,17 +115,16 @@ using SaveLoadSlot = SaveLoad**;
 inline SaveLoad** SaveLoadSingletonSlot() {
     return reinterpret_cast<SaveLoadSlot>(&::Save::SaveLoad::_singleton);
 }
+// ENDGAME B.3.9 SS1 (B39_RULES D7): the three below are class statics now
+// (redirect in their namespace's *PortInit) -- read fresh, no lazy cache.
 inline void* FileSystemSingleton() {
-    void** p = RT_DATA_SLOT(void**, "?_singleton@FileSystem@IO@@0PEAV12@EA");
-    return p ? *p : nullptr;
+    return ::IO::FileSystem::_singleton;
 }
 inline uint8_t* ModificationSingleton() {
-    uint8_t** p = RT_DATA_SLOT(uint8_t**, "?_singleton@Modification@IO@@2PEAV12@EA");
-    return p ? *p : nullptr;
+    return reinterpret_cast<uint8_t*>(::IO::Modification::_singleton);
 }
 inline uint8_t* PersistenceSingleton() {
-    uint8_t** p = RT_DATA_SLOT(uint8_t**, "?_singleton@Persistence@IO@@0PEAV12@EA");
-    return p ? *p : nullptr;
+    return reinterpret_cast<uint8_t*>(::IO::Persistence::_singleton);
 }
 
 inline double SecondsPerTick() { return RtSystem::TimerSecondsPerTick(); }

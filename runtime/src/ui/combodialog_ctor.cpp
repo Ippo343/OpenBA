@@ -144,6 +144,7 @@
 #include "../../types/ui/ComboDialog.h"
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/ui/Element.h"   // ENDGAME B.3.6 closing pass: FindElementType
+#include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
 #include <new>
 
 // ResolveAddr / ResolveExport live in standalone/resolve.h, which drags in
@@ -328,8 +329,8 @@ inline uint32_t TypeIdContainerElement() {
 // door so a minted run and a DLL run both land on whatever storage the Device
 // actually published into.
 void* DeviceSingleton() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
-    return slot ? *slot : nullptr;
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+    return ::Video::Device::_singleton;
 }
 
 // ---- virtual dispatch ------------------------------------------------------

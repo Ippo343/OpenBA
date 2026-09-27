@@ -53,6 +53,7 @@
 #include "../../types/system/Value.h"
 #include "../../types/ui/UserInterface.h"
 #include "../../types/audio/Audio.h"   // ENDGAME B.3.7 callers (K4): Audio::Scene
+#include "../../types/system/Timer.h"  // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 // ENDGAME B.3.6 block E: the RULE B6-5 atomic door caches.
 #include "element_common.h"
 
@@ -92,7 +93,6 @@ constexpr uintptr_t kUI_AudioScene = 0x90;   // UserInterface::_audioScene
 
 // RULE B6-5: namespace-scope atomic slots for the doors other namespaces own.
 std::atomic<void*> g_randomCtorSlot{nullptr};
-std::atomic<void*> g_sptSlot{nullptr};
 
 }  // namespace
 
@@ -144,9 +144,8 @@ void UI::UserInterface::UpdateStandAloneUI(const System::Time& timeRef, void* ui
     if (scene) {                                                       // 0x18012038f
         ++g_updWithScene;
         const float listener[3] = { 0.0f, 0.0f, 0.0f };                // 0x1801203a7
-        const double* const spt = static_cast<const double*>(
-            rtuielem::AtomicExport(g_sptSlot, "?_secondsPerTick@Timer@System@@0NA"));
-        const int64_t elapsed = static_cast<int64_t>(0.0 / *spt);      // 0x1801203b0
+        // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+        const int64_t elapsed = static_cast<int64_t>(0.0 / ::System::Timer::_secondsPerTick);      // 0x1801203b0
         System::Time now;     now._ticks     = *reinterpret_cast<const int64_t*>(time);
         System::Time elapsedT; elapsedT._ticks = elapsed;
         reinterpret_cast<Audio::Scene*>(scene)->Update(
