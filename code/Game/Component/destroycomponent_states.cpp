@@ -71,6 +71,8 @@
 #include "engine_funcs.h"
 #include "Work/ClearStorage.h"   // B.3.8 CB1a (Vtable)
 #include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/DestroyDescription.h"       // ENDGAME B.3.9 C1: 0x1401c7628 cell class
+#include "Component/ModelDescription.h"         // ENDGAME B.3.9 C1: 0x1401c7a88 cell class
 #include "resolve.h"
 #include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (type-id fallback)
@@ -117,7 +119,6 @@ static fn_FindIBP_t         s_find3f60  = nullptr;  // model/transform comp (Cle
 static fn_FindIBP_t         s_find2f90  = nullptr;  // Entity_FindComponent_MeshInstance
 typedef void (*fn_MeshSetFlag_t)(void* meshComp, uint8_t flagIdx, char value); // 0x14012c3f0
 static fn_MeshSetFlag_t     s_meshFlag  = nullptr;
-static uint32_t*            s_tidModelDesc = nullptr;      // DWORD_1401c7a88 (ModelDescription)
 static fn_HasWork_t         s_ead0      = nullptr;
 static fn_StopWork_t        s_eb50      = nullptr;
 static fn_PostWork_t        s_ec60      = nullptr;
@@ -130,7 +131,6 @@ static fn_SetTransform_t    s_setTransform = nullptr;
 static fn_SetOrient_t       s_setOrient = nullptr;
 static fn_Work_Ctor25_t     s_workCtor25 = nullptr;
 static void*                s_clearStorageVtbl = nullptr;  // 0x1401611a0
-static uint32_t*            s_tidDestroyDesc = nullptr;    // DWORD_1401c7628
 
 static bool s_resolved = false;
 static void EnsureResolved() {
@@ -144,7 +144,6 @@ static void EnsureResolved() {
     s_find3f60  = reinterpret_cast<fn_FindIBP_t>(ResolveAddr(Module::Exe, 0x140003f60));
     s_find2f90  = reinterpret_cast<fn_FindIBP_t>(ResolveAddr(Module::Exe, 0x140002f90));
     s_meshFlag  = reinterpret_cast<fn_MeshSetFlag_t>(ResolveAddr(Module::Exe, 0x14012c3f0));
-    s_tidModelDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
     s_ead0      = reinterpret_cast<fn_HasWork_t>(ResolveAddr(Module::Exe, 0x14012ead0));
     s_eb50      = reinterpret_cast<fn_StopWork_t>(ResolveAddr(Module::Exe, 0x14012eb50));
     s_ec60      = reinterpret_cast<fn_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
@@ -157,7 +156,6 @@ static void EnsureResolved() {
     s_setOrient = reinterpret_cast<fn_SetOrient_t>(ResolveAddr(Module::Exe, 0x1401253d0));
     s_workCtor25 = reinterpret_cast<fn_Work_Ctor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
     s_clearStorageVtbl = const_cast<void*>(ClearStorage::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
-    s_tidDestroyDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7628));
 }
 
 // starttown.cpp — world-registration (region-map cells + pick mesh) for a building
@@ -259,8 +257,8 @@ static char Destroy_ReclaimPending_ea20(int64_t yard) {
 extern "C" char Destroy_TargetDiffers_e600(int64_t comp) {
     EnsureResolved();
     void* desc = *reinterpret_cast<void**>(comp + 0x18);
-    void* typed = (desc && fn_IsDerivedFrom && s_tidDestroyDesc && *s_tidDestroyDesc &&
-                   fn_IsDerivedFrom(desc, *s_tidDestroyDesc)) ? desc : nullptr;
+    void* typed = (desc && fn_IsDerivedFrom &&
+                   fn_IsDerivedFrom(desc, DestroyDescription::TypeId())) ? desc : nullptr;
     int64_t target = *reinterpret_cast<int64_t*>(comp + 0x60);
     int64_t entity = OwnerEntity(static_cast<uintptr_t>(comp));
     if (entity && target == *reinterpret_cast<int64_t*>(entity + 0x28)) return 0;
@@ -291,28 +289,22 @@ typedef float* (*fn_GridToWorld_t)(int* grid, float* out3, float* in2, char flag
 typedef void   (*fn_Pos9760_t)(int64_t rawMatComp, int cell, float yaw);
 static fn_GridToWorld_t s_gridToWorld   = nullptr;  // 0x14009f3e0
 static fn_Pos9760_t     s_pos9760       = nullptr;  // 0x140129760
-static const uint32_t*  s_tidRawMatDesc = nullptr;  // 0x1401c7cb8
-static const uint32_t*  s_tidBuildDesc  = nullptr;  // 0x1401c7040
 static bool s_scatterResolved = false;
 static void EnsureScatterResolved() {
     if (s_scatterResolved) return;
     s_scatterResolved = true;
     s_gridToWorld   = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
     s_pos9760       = reinterpret_cast<fn_Pos9760_t>(ResolveAddr(Module::Exe, 0x140129760));
-    s_tidRawMatDesc = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
-    s_tidBuildDesc  = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7040));
 }
 
-// RawMaterialDescription type-id, with the proven GetTypeIdByName fallback for the
-// standalone case where the shared .rdata global is left unfilled (0/0xFFFFFFFF).
+// ENDGAME B.3.9 C1 (B39_RULES.md D5): 0x1401c7cb8 is RawMaterialDescription's
+// registered type-id cell (INVENTORY_C Table 1); it always holds
+// RawMaterialDescription's id once Fill* runs, so the raw-read-with-fallback
+// this used to be is now mechanically equivalent to the direct static call.
+// 0x1401c7040 (BuildDescription) had no reader at all (kept only for parity via
+// a `(void)` cast) -- removed outright rather than converted.
 static uint32_t RawMatDescTid() {
-    uint32_t t = s_tidRawMatDesc ? *s_tidRawMatDesc : 0;
-    if (t == 0 || t == 0xFFFFFFFFu) {
-        static uint32_t cached = 0;
-        if (cached == 0) cached = RawMaterialDescription::TypeId();
-        t = cached;
-    }
-    return t;
+    return RawMaterialDescription::TypeId();
 }
 
 // Find the RawMaterialDescription in a resource TEMPLATE's component-description
@@ -363,12 +355,10 @@ static void Destroy_ScatterContents_c530(int64_t comp, int baseX, int baseY,
     if (!buildComp) return;
     void* rawDesc = *reinterpret_cast<void**>(buildComp + 0x18);
     if (!rawDesc) return;
-    // Retail narrows the desc to BuildDescription (DWORD_1401c7040) but then derefs
+    // Retail narrows the desc to BuildDescription (0x1401c7040) but then derefs
     // it unconditionally (required@+0x30, recipe@+0x20/+0x28) — the invariant is that
     // a BuildComponent always carries a BuildDescription. We trust the pointer (the
-    // derive check would only null it, which retail never survives). s_tidBuildDesc
-    // is resolved for parity / future use.
-    (void)s_tidBuildDesc;
+    // derive check would only null it, which retail never survives).
     uintptr_t desc = reinterpret_cast<uintptr_t>(rawDesc);
 
     int delivered = *reinterpret_cast<int*>(buildComp + 0x48);
@@ -1056,8 +1046,8 @@ extern "C" char Destroy_State45Event0_Cancel_bcc0(void* data, void* sm) {
         int16_t modelVariant = *reinterpret_cast<int16_t*>(model + 0x166);
         int16_t variantIdx   = *reinterpret_cast<int16_t*>(model + 0x164);
         void*   obj = *reinterpret_cast<void**>(model + 0x18);
-        void*   modelDesc = (fn_IsDerivedFrom && s_tidModelDesc &&
-                             fn_IsDerivedFrom(obj, *s_tidModelDesc)) ? obj : nullptr;
+        void*   modelDesc = (fn_IsDerivedFrom &&
+                             fn_IsDerivedFrom(obj, ModelDescription::TypeId())) ? obj : nullptr;
 
         if (modelVariant < 0) {
             next = 0;                       // no mesh chosen yet — back to the start

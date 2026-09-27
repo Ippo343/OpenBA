@@ -39,9 +39,6 @@ static fn_SerializeExternalRef_t s_fn_SerializeExternalRef = nullptr;
 
 // fn_IsDerivedFrom — already in engine_funcs.h
 
-// StorageDescription type ID at 0x1401c7eb0
-static uint32_t* s_TypeId_StorageDescription = nullptr;
-
 // FUN_14012d000 — add storage slot entry
 typedef void (*fn_StorageAddSlot_t)(void* self, uintptr_t materialType, int count);
 static fn_StorageAddSlot_t s_fn_StorageAddSlot = nullptr;
@@ -58,9 +55,6 @@ static void EnsureHelpers() {
     s_fn_SerializeExternalRef = reinterpret_cast<fn_SerializeExternalRef_t>(
         ResolveAddr(Module::Exe, 0x140002340));
 
-    s_TypeId_StorageDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7eb0));
-
     s_fn_StorageAddSlot = reinterpret_cast<fn_StorageAddSlot_t>(
         ResolveAddr(Module::Exe, 0x14012d000));
 
@@ -71,18 +65,14 @@ static void EnsureHelpers() {
 }
 
 // ============================================================
-// Effective type-ids — the raw 0x1401c7xxx .rdata addresses resolve to NULL in the
-// standalone exe, so use ::Object::GetTypeIdByName (the shared
-// globals are never written).
+// Effective type-ids — cells 0x1401c7eb0 (StorageDescription) and 0x1401c7cb8
+// (RawMaterialDescription) both fell back to Class::TypeId() unconditionally
+// (D5 exception: mechanically equivalent).
 // ============================================================
 static uint32_t EffTid_StorageDescription() {
-    if (s_TypeId_StorageDescription && *s_TypeId_StorageDescription)
-        return *s_TypeId_StorageDescription;
     return StorageDescription::TypeId();
 }
 static uint32_t EffTid_RawMaterialDescription() {
-    if (g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription)
-        return *g_TypeId_RawMaterialDescription;
     return RawMaterialDescription::TypeId();
 }
 
@@ -251,9 +241,9 @@ void StorageComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
     printf("[StorageComponent] Funcs resolved: "
-           "StorageAddSlot=%p TypeId_StorageDesc=%p\n",
+           "StorageAddSlot=%p TypeId_StorageDesc=%u\n",
            (void*)s_fn_StorageAddSlot,
-           (void*)s_TypeId_StorageDescription);
+           StorageDescription::TypeId());
 #endif
 }
 

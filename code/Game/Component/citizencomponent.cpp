@@ -20,6 +20,13 @@
 #include "graphics/Mesh.h"
 #include "Component/citizencomponent_funcs.h"
 #include "Component/coll_bridge.h"
+#include "Component/InteractComponent.h"       // ENDGAME B.3.9 C1: 0x1401c7900 cell class
+#include "Component/ResidenceComponent.h"      // ENDGAME B.3.9 C1: 0x1401c7cf0 cell class
+#include "Component/ResidenceDescription.h"    // ENDGAME B.3.9 C1: 0x1401c7d28 cell class
+#include "Component/WorkPlaceComponent.h"      // ENDGAME B.3.9 C1: 0x1401c80e0 cell class
+#include "Component/WorkComponent.h"           // ENDGAME B.3.9 C1: 0x1401c8070 cell class
+#include "Component/RawMaterialDescription.h"  // ENDGAME B.3.9 C1: 0x1401c7cb8 cell class
+#include "Component/CitizenComponent.h"        // ENDGAME B.3.9 C1: 0x1401c7158 cell class
 #include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -1309,14 +1316,11 @@ bool CitizenComponent_ShouldSwitchWorkplace(CitizenComponent* self) {
 // ============================================================
 
 // --- exe-internal globals / sub-functions used by the reimpls below ---
-static uint32_t* s_TypeId_Workplace   = nullptr; // DAT_1401c80e0 (WorkplaceComponent)
-static uint32_t* s_TypeId_StorageLoc  = nullptr; // DAT_1401c8070 (StorageLocationComponent)
-static uint32_t* s_TypeId_Residence   = nullptr; // DAT_1401c7cf0 (ResidenceComponent)
-static uint32_t* s_TypeId_Position    = nullptr; // DAT_1401c7900
-static uint32_t* s_TypeId_AIComp      = nullptr; // DAT_1401c7158 (CitizenAIComponent)
-static uint32_t* s_TypeId_ResidenceDesc7d28 = nullptr; // DAT_1401c7d28
-static uint32_t* s_TypeId_RawMat1c7cb8  = nullptr; // DAT_1401c7cb8 (RawMaterialDescription)
-static uint32_t* s_TypeId_1c7cb8b     = nullptr; // DAT_1401c7cb8 (workplace-job in ReleaseWorkplace)
+// ENDGAME B.3.9 C1 (B39_RULES.md D5): the eight cells below are registered type-id
+// cells (INVENTORY_C Table 1), read BY CELL as the class's static TypeId(). Two of
+// the old local names lied about the class at their cell: 0x1401c8070 is
+// WorkComponent (not "StorageLocationComponent") and 0x1401c7158 is CitizenComponent
+// (not "CitizenAIComponent") -- both already converted below.
 static uint32_t* s_pDAT_1401722b0     = nullptr; // abs-value mask used by helper_fe40
 static float*    s_pUVScale           = nullptr; // g_fUVScale (DAT_14017214c)
 
@@ -1396,14 +1400,6 @@ static float*  s_DAT_1401720ec = nullptr;
 static bool s_calleeResolved = false;
 static void EnsureCallees() {
     if (s_calleeResolved) return;
-    s_TypeId_Workplace   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c80e0));
-    s_TypeId_StorageLoc  = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c8070));
-    s_TypeId_Residence   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cf0));
-    s_TypeId_Position    = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7900));
-    s_TypeId_AIComp      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
-    s_TypeId_ResidenceDesc7d28 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7d28));
-    s_TypeId_RawMat1c7cb8  = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
-    s_TypeId_1c7cb8b     = s_TypeId_RawMat1c7cb8;
     s_pDAT_1401722b0     = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401722b0));
     s_pUVScale           = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
 
@@ -1535,7 +1531,7 @@ bool CitizenComp_helper_a4f0(int64_t self, int param2) {
     EnsureCallees();
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     void* obj = *reinterpret_cast<void**>(s + 0x18);
-    void* res = (s_TypeId_ResidenceDesc7d28 && fn_IsDerivedFrom(obj, *s_TypeId_ResidenceDesc7d28)) ? obj : nullptr;
+    void* res = fn_IsDerivedFrom(obj, ResidenceDescription::TypeId()) ? obj : nullptr;
     int eduLevel = res ? *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(res) + 0x24) : 0;
     int cap = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(s + 0x50) + 8 + (int64_t)param2 * 0x10);
     return eduLevel <= cap;
@@ -1578,14 +1574,14 @@ int64_t* CitizenComp_sub_ffc0(int64_t param_1, int64_t* param_2) {
         int64_t entryIBP = *reinterpret_cast<int64_t*>(node[1] + i * 8);
 
         // find WorkplaceComponent (DAT_1401c80e0) on the entry
-        void* wp = FindCompByTypeId(entryIBP, s_TypeId_Workplace ? *s_TypeId_Workplace : 0);
+        void* wp = FindCompByTypeId(entryIBP, WorkPlaceComponent::TypeId());
         int64_t wpIBP = 0;
         new (&wpIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(wp));   // B.3.3 bridge
         int curWorkers = *reinterpret_cast<int*>(wpIBP + 0x60);
 
         // find StorageLocationComponent (DAT_1401c8070) on wp's sub-entity (+0x10)
         int64_t sub = *reinterpret_cast<int64_t*>(wpIBP + 0x10);
-        void* sloc = FindCompByTypeId(sub, s_TypeId_StorageLoc ? *s_TypeId_StorageLoc : 0);
+        void* sloc = FindCompByTypeId(sub, WorkComponent::TypeId()  /* ENDGAME B.3.9 C1: 0x1401c8070 is WorkComponent (INVENTORY_C Table 1), not StorageLocationComponent -- the old local name lied */);
         int64_t slocIBP = 0;
         new (&slocIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(sloc));   // B.3.3 bridge
         int maxSlots = *reinterpret_cast<int*>(slocIBP + 0x30);
@@ -1656,13 +1652,13 @@ int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2) {
         if (!node) break;
         int64_t entryIBP = *reinterpret_cast<int64_t*>(node[1] + i * 8);
 
-        void* wp = FindCompByTypeId(entryIBP, s_TypeId_Workplace ? *s_TypeId_Workplace : 0);
+        void* wp = FindCompByTypeId(entryIBP, WorkPlaceComponent::TypeId());
         int64_t wpIBP = 0;
         new (&wpIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(wp));   // B.3.3 bridge
         int curWorkers = *reinterpret_cast<int*>(wpIBP + 0x60);
 
         int64_t sub = *reinterpret_cast<int64_t*>(wpIBP + 0x10);
-        void* sloc = FindCompByTypeId(sub, s_TypeId_StorageLoc ? *s_TypeId_StorageLoc : 0);
+        void* sloc = FindCompByTypeId(sub, WorkComponent::TypeId()  /* ENDGAME B.3.9 C1: 0x1401c8070 is WorkComponent (INVENTORY_C Table 1), not StorageLocationComponent -- the old local name lied */);
         int64_t slocIBP = 0;
         new (&slocIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(sloc));   // B.3.3 bridge
         int maxSlots = *reinterpret_cast<int*>(slocIBP + 0x30);
@@ -1705,11 +1701,11 @@ int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2) {
     }
     for (int k = 0; k < candCount; k++) {
         int64_t entryIBP = cand[k];
-        void* wp = FindCompByTypeId(entryIBP, s_TypeId_Workplace ? *s_TypeId_Workplace : 0);
+        void* wp = FindCompByTypeId(entryIBP, WorkPlaceComponent::TypeId());
         int64_t wpIBP = 0;
         new (&wpIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(wp));   // B.3.3 bridge
         int64_t sub = *reinterpret_cast<int64_t*>(wpIBP + 0x10);
-        void* sloc = FindCompByTypeId(sub, s_TypeId_StorageLoc ? *s_TypeId_StorageLoc : 0);
+        void* sloc = FindCompByTypeId(sub, WorkComponent::TypeId()  /* ENDGAME B.3.9 C1: 0x1401c8070 is WorkComponent (INVENTORY_C Table 1), not StorageLocationComponent -- the old local name lied */);
         int64_t slocIBP = 0;
         new (&slocIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(sloc));   // B.3.3 bridge
         int maxSlots = *reinterpret_cast<int*>(slocIBP + 0x30);
@@ -1941,8 +1937,10 @@ void CitizenComp_helper_1b90(int64_t selfV) {
     // build 2026-07-25). Fall back to the self-contained name→CRC lookup — the same
     // pattern CitizenComp_FindSiblingByName uses — instead of filling the shared global,
     // which would un-dormant ~30 unrelated readers.
-    uint32_t tidCitizen = (s_TypeId_AIComp && *s_TypeId_AIComp) ? *s_TypeId_AIComp
-                                                                : CitizenComponent::TypeId();
+    // ENDGAME B.3.9 C1: 0x1401c7158 IS CitizenComponent (INVENTORY_C Table 1, not
+    // "CitizenAIComponent" as the old local name said), so the fallback above is
+    // mechanically equivalent to the direct static call.
+    uint32_t tidCitizen = CitizenComponent::TypeId();
     void* aiComp = FindCompByTypeId(childIBP, tidCitizen);
     int64_t aiIBP = 0;
     new (&aiIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(aiComp));   // B.3.3 bridge
@@ -2108,7 +2106,7 @@ void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
         // Engine::Startup in standalone); skip the scan while it is unfilled
         // (0 / 0xFFFFFFFF) so a zero id can't false-match an inert stub component.
         void* mat = nullptr;
-        uint32_t matTid = s_TypeId_RawMat1c7cb8 ? *s_TypeId_RawMat1c7cb8 : 0;
+        uint32_t matTid = RawMaterialDescription::TypeId();
         int rows = (matTid != 0 && matTid != 0xFFFFFFFFu)
                        ? *reinterpret_cast<int*>(work + 0x30) : 0;
         for (int i = 0; i < rows; i++) {
@@ -2178,9 +2176,8 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
 
     // Component finder on an entry entity (comp list +0x30 array / +0x38 count,
     // GetTypeId via vtable+0x10, then IsDerivedFrom). Matches Entity_FindComponent_*.
-    auto FindEntityComp = [](int64_t entity, uint32_t* typeIdPtr) -> void* {
-        if (!typeIdPtr || *typeIdPtr == 0) return nullptr;
-        uint32_t tid = *typeIdPtr;
+    auto FindEntityComp = [](int64_t entity, uint32_t tid) -> void* {
+        if (tid == 0) return nullptr;
         int cnt = *reinterpret_cast<int*>(entity + 0x38);
         int64_t arr = *reinterpret_cast<int64_t*>(entity + 0x30);
         for (int i = 0; i < cnt; i++) {
@@ -2256,7 +2253,7 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
             int64_t entry = *reinterpret_cast<int64_t*>(
                 *reinterpret_cast<int64_t*>(townMgr + 0x20) + entryIdx * 8);  // local_98
 
-            void* resComp = FindEntityComp(entry, s_TypeId_Residence);   // DWORD_1401c7cf0
+            void* resComp = FindEntityComp(entry, ResidenceComponent::TypeId());   // 0x1401c7cf0
             if (!resComp) continue;   // registered entries always carry one; guard.
             int64_t resIBP = 0;
             new (&resIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(resComp));   // B.3.3 bridge
@@ -2269,7 +2266,7 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
             }
             if (!consider) continue;
 
-            void* interactComp = FindEntityComp(entry, s_TypeId_Position);  // DAT_1401c7900
+            void* interactComp = FindEntityComp(entry, InteractComponent::TypeId());  // 0x1401c7900
             int64_t interactIBP = 0;
             new (&interactIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(interactComp));   // B.3.3 bridge
@@ -2372,7 +2369,7 @@ int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* par
     EnsureCallees();
     (void)param_1;
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
-    uint32_t rawMatTid = s_TypeId_RawMat1c7cb8 ? *s_TypeId_RawMat1c7cb8 : 0;
+    uint32_t rawMatTid = RawMaterialDescription::TypeId();
 
     // Category -> capability bit-shift of material flags (+0x5c).
     auto catShift = [&](int cat) -> int {
@@ -2700,7 +2697,7 @@ int64_t* CitizenComp_sub_1930(int64_t param_1, int64_t* param_2, void* param_3, 
         int64_t srcIBP = srcWp;
         srcRegion = (uint32_t)(s_fn_Entity_impl_7fb0 ? s_fn_Entity_impl_7fb0(&srcIBP, nullptr) : 0);
     }
-    uint32_t wpTid = s_TypeId_Workplace ? *s_TypeId_Workplace : 0;
+    uint32_t wpTid = WorkPlaceComponent::TypeId();
 
     for (int i = 0; i < count; i++) {
         int64_t cand = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(list + 0x60) + (int64_t)i * 8);

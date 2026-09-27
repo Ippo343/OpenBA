@@ -11,6 +11,8 @@
 // Original: 0x140055ad0 (114 instructions)
 
 #include "Component/spawncomponent_funcs.h"
+#include "Component/SpawnDescription.h"
+#include "Component/GrowthDescription.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -36,10 +38,6 @@ static fn_GetLinkedObject_t s_fn_GetLinkedObject = nullptr;
 // FUN_140055780 — performs actual spawn operation
 typedef void (*fn_DoSpawn_t)(void* self, void* resourceData, int entryIndex, char flag);
 static fn_DoSpawn_t s_fn_DoSpawn = nullptr;
-
-// Type IDs
-static uint32_t* s_pSpawnResourceTypeId = nullptr;   // DAT_1401c4918 = SpawnDescription
-static uint32_t* s_pSpawnTemplateTypeId = nullptr;    // DAT_1401c77e8 = GrowthDescription
 
 // FUN_140001bb0 — dynamic Time-array resize (stride 8). Sizes the per-entry timer
 // array at self+0x28 in the OnCreate/Startup body-init. ENDGAME B.3.2 step 2:
@@ -96,7 +94,7 @@ static void EnsureSpawnHelpers();   // defined with the DoSpawn closure below
 void SpawnComponent_InitialSpawn(SpawnComponent* self) {
     SpawnComponent_InitFuncs();
     EnsureSpawnHelpers();
-    if (!self || !s_fn_DoSpawn || !s_pSpawnResourceTypeId || !s_pSpawnTemplateTypeId) return;
+    if (!self || !s_fn_DoSpawn) return;
 
     uintptr_t comp = reinterpret_cast<uintptr_t>(self);
 
@@ -111,7 +109,7 @@ void SpawnComponent_InitialSpawn(SpawnComponent* self) {
     void* baseObj = self->_description;
     if (!baseObj) return;
     void* spawnDesc = baseObj;
-    if (fn_IsDerivedFrom && fn_IsDerivedFrom(baseObj, *s_pSpawnResourceTypeId))
+    if (fn_IsDerivedFrom && fn_IsDerivedFrom(baseObj, SpawnDescription::TypeId()))
         spawnDesc = baseObj;
 
     const int entryCount = *(int*)((uintptr_t)spawnDesc + 0x28);
@@ -134,7 +132,7 @@ void SpawnComponent_InitialSpawn(SpawnComponent* self) {
             void* c = *(void**)(compArr + (int64_t)j * 8);
             if (!c) continue;
             const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge
-            if (tid == *s_pSpawnTemplateTypeId) {
+            if (tid == GrowthDescription::TypeId()) {
                 growthDesc = c;   // trust it; IsDerivedFrom is unreliable here
                 break;
             }
@@ -160,10 +158,6 @@ void SpawnComponent_InitFuncs() {
         ResolveAddr(Module::Exe, 0x1400052c0));
     s_fn_DoSpawn = reinterpret_cast<fn_DoSpawn_t>(
         ResolveAddr(Module::Exe, 0x140055780));
-    s_pSpawnResourceTypeId = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c4918));
-    s_pSpawnTemplateTypeId = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c77e8));
 
     {
         uintptr_t slot;
@@ -291,14 +285,14 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
 
     // Find the template component (type DAT_1401c77e8) on the entry entity
     void* templ = nullptr;
-    if (s_pSpawnTemplateTypeId) {
+    {
         int count = *(int*)(host + 0x30);
         int64_t arr = *(int64_t*)(host + 0x28);
         for (int i = 0; i < count; i++) {
             void* comp = *(void**)(arr + (int64_t)i * 8);
             uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
-            if (tid == *s_pSpawnTemplateTypeId) {
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *s_pSpawnTemplateTypeId)) templ = comp;
+            if (tid == GrowthDescription::TypeId()) {
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, GrowthDescription::TypeId())) templ = comp;
                 break;
             }
         }
@@ -457,8 +451,8 @@ void SpawnComponent::Persist(void* stream) {
     if (Loading(stream)) {
         void* desc = *reinterpret_cast<void**>(comp + 0x18);
         void* validated = nullptr;
-        if (desc && s_fn_IsDerived && s_pSpawnResourceTypeId && *s_pSpawnResourceTypeId &&
-            s_fn_IsDerived(desc, *s_pSpawnResourceTypeId))
+        if (desc && s_fn_IsDerived &&
+            s_fn_IsDerived(desc, SpawnDescription::TypeId()))
             validated = desc;
         int descCount = validated
             ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(validated) + 0x28)
@@ -527,10 +521,10 @@ void SpawnComponent::Update(void* timeV) {
 
     // Get resource data via IsDerivedFrom check on _unk18
     void* baseObj = _description;
-    if (!fn_IsDerivedFrom || !s_pSpawnResourceTypeId || !s_pSpawnTemplateTypeId) {
+    if (!fn_IsDerivedFrom) {
         return;
     }
-    bool isDerived = fn_IsDerivedFrom(baseObj, *s_pSpawnResourceTypeId);
+    bool isDerived = fn_IsDerivedFrom(baseObj, SpawnDescription::TypeId());
     void* resourceData = isDerived ? baseObj : nullptr;
     // [STANDALONE TRUST] The factory tree can be incomplete in standalone, making
     // IsDerivedFrom on a description unreliable (see growthcomponent.cpp Startup).
@@ -585,8 +579,8 @@ void SpawnComponent::Update(void* timeV) {
             void* comp = *(void**)(*(uintptr_t*)(templateData + 0x28) + (uintptr_t)j * 8);
             uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
 
-            if (typeId == *s_pSpawnTemplateTypeId) {
-                if (fn_IsDerivedFrom(comp, *s_pSpawnTemplateTypeId)) {
+            if (typeId == GrowthDescription::TypeId()) {
+                if (fn_IsDerivedFrom(comp, GrowthDescription::TypeId())) {
                     spawnIntervalComp = comp;
                 }
                 break;

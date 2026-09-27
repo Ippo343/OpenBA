@@ -750,9 +750,9 @@ UNIT_TEST(graphics_geometry_tree_is_abstract_and_polymorphic) {
     CHECK(std::is_abstract<Graphics::ParticleInstance>::value);
     CHECK(std::is_abstract<Graphics::ParticleSystemInstance>::value);
     CHECK(std::is_abstract<Graphics::Light>::value);
-    CHECK(std::is_abstract<Graphics::AmbientLight>::value);
-    CHECK(std::is_abstract<Graphics::SpotLight>::value);
-    CHECK(!std::is_abstract<Graphics::SunLight>::value);       // concrete since B.3.8 RB (exe table copy 0x14015e290)
+    CHECK(!std::is_abstract<Graphics::AmbientLight>::value);   // concrete since B.3.9 GFX (rb_graphics_abi_test b39_gfx_*)
+    CHECK(!std::is_abstract<Graphics::SpotLight>::value);      // concrete since B.3.9 GFX
+    CHECK(!std::is_abstract<Graphics::SunLight>::value);      // concrete since B.3.8 RB (exe table copy 0x14015e290)
 
     CHECK(std::is_polymorphic<Graphics::Geometry>::value);
     CHECK(std::is_polymorphic<Graphics::SunLight>::value);

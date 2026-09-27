@@ -23,6 +23,9 @@
 #include <cstring>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/HappinessDescription.h"     // ENDGAME B.3.9 C1: 0x1401c42f8 cell class
+#include "Component/RadiusDescription.h"        // ENDGAME B.3.9 C1: 0x1401c4870 cell class
+#include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7cb8 cell class
 
 // ============================================================
 // Resolved helpers
@@ -62,10 +65,9 @@ static fn_FindStorage_t s_fn_FindStorage = nullptr;
 typedef bool (*fn_IsDerivedFrom_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_t s_fn_IsDerivedFrom = nullptr;
 
-// Type-id .rdata globals: HappinessDescription (0x1401c42f8) and the
-// RawMaterialDescription (0x1401c7cb8) whose +0x5c flags the goods test masks.
-static const uint32_t* s_pTid_HappinessDesc = nullptr;
-static const uint32_t* s_pTid_RawMatDesc    = nullptr;
+// ENDGAME B.3.9 C1 (D5): 0x1401c42f8 (HappinessDescription) and 0x1401c7cb8
+// (RawMaterialDescription, whose +0x5c flags the goods test masks) are read
+// BY CELL below, as the class's static TypeId().
 
 // Global: DAT_1401c3dd8 -- pointer to game world/population manager
 static void** s_pGameWorld = nullptr;
@@ -90,10 +92,6 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x140002e10));
     s_fn_FindStorage = reinterpret_cast<fn_FindStorage_t>(
         ResolveAddr(Module::Exe, 0x140006270));
-    s_pTid_HappinessDesc = reinterpret_cast<const uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c42f8));
-    s_pTid_RawMatDesc = reinterpret_cast<const uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7cb8));
 
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom = *reinterpret_cast<fn_IsDerivedFrom_t*>(slot);
@@ -126,24 +124,23 @@ static void EnsureHelpers() {
 // Reimpl of FUN_14004a300 (FishingComponent_impl_a300: notify the population
 //   manager of a fishing tile, mapping the description's mode to a state id)
 // ============================================================
-// Despite the local typedef name (SetEntityIndex), this reads the FishingDescription
-// off owner+0x18 (type 0x1401c42f8), locates the fishing-target component (type
-// 0x1401c4870) on the host, the MapComponent (FUN_140004680) for tile coords, maps
-// desc+0x20 (0..4) to a state id, and calls FishingComponent_helper_f990 (0x14009f990).
+// Despite the local typedef/function names (borrowed from the fishing lane's
+// near-identical shape), this reads a HappinessDescription off owner+0x18 (type
+// 0x1401c42f8 -- INVENTORY_C Table 1 says HappinessDescription, not
+// "FishingDescription" as the old comment guessed), locates the RadiusDescription
+// (type 0x1401c4870 -- Table 1, not a generic "fishing-target component") on the
+// host, the MapComponent (FUN_140004680) for tile coords, maps desc+0x20 (0..4)
+// to a state id, and calls the helper below (0x14009f990).
 typedef void* (*fn_FC_FindMap_t)(uintptr_t entity, void* retbuf);   // 0x140004680
 typedef void (*fn_FC_Helper_f990_t)(int* mgr, int state, int x, int y,
                                     int resourceId, short param6);    // 0x14009f990
 static fn_FC_FindMap_t      s_fc_FindMap = nullptr;
 static fn_FC_Helper_f990_t  s_fc_Helper = nullptr;
-static uint32_t*            s_fc_pTId_FishingDesc = nullptr;   // 0x1401c42f8
-static uint32_t*            s_fc_pTId_Target = nullptr;        // 0x1401c4870
 static bool s_fcResolved = false;
 static void EnsureFishingHelpers() {
     if (s_fcResolved) return;
     s_fc_FindMap = reinterpret_cast<fn_FC_FindMap_t>(ResolveAddr(Module::Exe, 0x140004680));
     s_fc_Helper  = reinterpret_cast<fn_FC_Helper_f990_t>(ResolveAddr(Module::Exe, 0x14009f990));
-    s_fc_pTId_FishingDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c42f8));
-    s_fc_pTId_Target      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4870));
     s_fcResolved = true;
 }
 
@@ -194,21 +191,22 @@ void FishingComponent_NotifyTile(void* selfP, int16_t param2) {
     if (!s_pGameWorld || !*s_pGameWorld) return;
 
     void* descObj = *(void**)(self + 0x18);
-    void* desc = (fn_IsDerivedFrom && s_fc_pTId_FishingDesc &&
-                  fn_IsDerivedFrom(descObj, *s_fc_pTId_FishingDesc)) ? descObj : nullptr;
+    void* desc = (fn_IsDerivedFrom &&
+                  fn_IsDerivedFrom(descObj, HappinessDescription::TypeId())) ? descObj : nullptr;
 
     int64_t host = *(int64_t*)(*(int64_t*)(self + 0x10) + 0x28);
 
-    // Find the fishing-target component (type 0x1401c4870) on the host
+    // Find the RadiusDescription (0x1401c4870) on the host
     void* targetComp = nullptr;
-    if (s_fc_pTId_Target) {
+    {
+        const uint32_t tidTarget = RadiusDescription::TypeId();
         int count = *(int*)(host + 0x30);
         int64_t arr = *(int64_t*)(host + 0x28);
         for (int i = 0; i < count; i++) {
             void* comp = *(void**)(arr + (int64_t)i * 8);
             uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
-            if (tid == *s_fc_pTId_Target) {
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *s_fc_pTId_Target))
+            if (tid == tidTarget) {
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, tidTarget))
                     targetComp = comp;
                 break;
             }
@@ -269,8 +267,8 @@ extern "C" bool HappinessComponent_IsActive(void* selfV) {
     const uintptr_t su = reinterpret_cast<uintptr_t>(self);
     void* descRaw = *reinterpret_cast<void**>(su + 0x18);
     const uintptr_t desc =
-        (descRaw && s_fn_IsDerivedFrom && s_pTid_HappinessDesc &&
-         s_fn_IsDerivedFrom(descRaw, *s_pTid_HappinessDesc))
+        (descRaw && s_fn_IsDerivedFrom &&
+         s_fn_IsDerivedFrom(descRaw, HappinessDescription::TypeId()))
             ? reinterpret_cast<uintptr_t>(descRaw) : 0;
 
     if (*reinterpret_cast<int*>(desc + 0x20) == 5) return true;
@@ -308,15 +306,16 @@ extern "C" bool HappinessComponent_IsActive(void* selfV) {
         const uintptr_t good  = *reinterpret_cast<uintptr_t*>(slots + static_cast<uintptr_t>(i) * 0x10);
 
         uintptr_t rawMatDesc = 0;
-        if (good && s_pTid_RawMatDesc) {
+        if (good) {
+            const uint32_t  tidRawMat = RawMaterialDescription::TypeId();
             const int       n   = *reinterpret_cast<int*>(good + 0x30);
             const uintptr_t arr = *reinterpret_cast<uintptr_t*>(good + 0x28);
             for (int j = 0; j < n; ++j) {
                 void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(j) * 8);
                 if (!c) continue;
                 const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
-                if (tid == *s_pTid_RawMatDesc) {
-                    if (s_fn_IsDerivedFrom && s_fn_IsDerivedFrom(c, *s_pTid_RawMatDesc))
+                if (tid == tidRawMat) {
+                    if (s_fn_IsDerivedFrom && s_fn_IsDerivedFrom(c, tidRawMat))
                         rawMatDesc = reinterpret_cast<uintptr_t>(c);
                     break;
                 }

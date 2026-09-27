@@ -54,6 +54,9 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"        // ENDGAME B.3.9 C1: 0x1401c7a50 cell class
+#include "Component/PickingComponent.h"      // ENDGAME B.3.9 C1: 0x1401c7c10 cell class
+#include "Component/CharacterDescription.h"  // ENDGAME B.3.9 C1: 0x1401c70b0 cell class
 
 
 // FUN_1400032e0 was Collection::Array<void*>::SetSize(n) monomorphised into
@@ -64,25 +67,19 @@ extern "C" int64_t CharMgr_sub_83f0(float* mgrF, int64_t* ibp);
 
 namespace {
 
-const uint32_t* s_tidModelComponent = nullptr;      // 0x1401c7a50
-const uint32_t* s_tidPickingComponent = nullptr;    // g_BaseTypeInfo_PickingComponent slot
+// ENDGAME B.3.9 C1 (B39_RULES.md D5): 0x1401c7a50 (ModelComponent), 0x1401c7c10
+// (PickingComponent) and 0x1401c70b0 (CharacterDescription) are registered
+// type-id cells, read BY CELL as the class's static TypeId(). 0x1401c5da8
+// (Action) is an ABSTRACT-base cell (REGISTER_ABSTRACT_FACTORY) with no static
+// yet -- D6/D5 rule 4: left on the raw ResolveAddr resolution until RF's
+// DECLARE_TYPE lands on the abstract bases.
 const uint32_t* s_tidAction = nullptr;               // TypeInfo_Action slot
-const uint32_t* s_tidCharacterDescription = nullptr; // 0x1401c70b0
 bool s_resolved = false;
 
 void Resolve() {
     if (s_resolved) return;
-    s_tidModelComponent = reinterpret_cast<const uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7a50));
-    // Verified against disassembly (the MOV EDX,[addr] immediately preceding each
-    // CALL [0x140152a98]/IsDerivedFrom site): Action = 0x1401c5da8 (array loop +
-    // +0x58), PickingComponent = 0x1401c7c10 (+0x70).
-    s_tidPickingComponent = reinterpret_cast<const uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7c10));
     s_tidAction = reinterpret_cast<const uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5da8));
-    s_tidCharacterDescription = reinterpret_cast<const uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c70b0));
     s_resolved = true;
 }
 
@@ -129,14 +126,15 @@ void CharacterComponent::Persist(void* stream) {
         SerializeValidatedIBP(member, ser, s_tidAction);
 
     SerializeValidatedIBP(At(this, 0x58), ser, s_tidAction);
-    SerializeValidatedIBP(At(this, 0x68), ser, s_tidModelComponent);
-    SerializeValidatedIBP(At(this, 0x70), ser, s_tidPickingComponent);
+    const uint32_t tidModelComponent = ModelComponent::TypeId();
+    SerializeValidatedIBP(At(this, 0x68), ser, &tidModelComponent);
+    const uint32_t tidPickingComponent = PickingComponent::TypeId();
+    SerializeValidatedIBP(At(this, 0x70), ser, &tidPickingComponent);
 
     if (Loading(stream)) {
         void* owner = *reinterpret_cast<void**>(At(this, 0x18));
-        bool isDesc = owner && fn_IsDerivedFrom && s_tidCharacterDescription &&
-                     *s_tidCharacterDescription &&
-                     fn_IsDerivedFrom(owner, *s_tidCharacterDescription);
+        bool isDesc = owner && fn_IsDerivedFrom &&
+                     fn_IsDerivedFrom(owner, CharacterDescription::TypeId());
         *reinterpret_cast<void**>(At(this, 0x78)) = isDesc ? owner : nullptr;
 
         if (fn_InternalBasePtr_Ctor) {

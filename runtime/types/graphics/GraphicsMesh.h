@@ -136,6 +136,7 @@
 
 #include "../../../engine/types/common.h"  // ::Vector3
 #include "../object/External.h"            // Object::CompiledExternal, ExternalPtr<T>
+#include "../object/Internal.h"            // B.3.9: InternalMemFree (the concrete slot 0)
 #include "../collection/Collection.h"      // Collection::Array
 #include "../math/Math.h"                  // ::Transform
 #include "../volume/Volume.h"              // ::Box
@@ -324,10 +325,50 @@ public:
         uint32_t _padAC;                 // +0xac  no body read touches it
     };
 
+    // ---- ENDGAME B.3 step 9 (block GFX, B39_RULES D1/D2): CONCRETE ----------
+    // A real public ctor (retail 0x1800ff170), its own vector slot 0, a
+    // protected non-virtual ~GraphicsMesh holding the retired ??1 door's body,
+    // the factory pair as the class's own statics; Construct / Reconstruct
+    // placement-new the class. The minted `??_7GraphicsMesh@Graphics@@6B@`, its
+    // RT_DELDTOR row 0x180012bd0, the FACTREST row and the ctor / dtor / slot
+    // doors are retired (tools/rt_mint_retired/gfx.txt).
+    //
+    // ??0GraphicsMesh@Graphics@@QEAA@XZ 0x1800ff170 -- the REAL ctor (retail
+    // also calls it from both factories and tail-jumps it from Construct).
+    // Retail open-codes External() and the four stamps (the compiler's here),
+    // then: +0x20 name null; +0x28 (1,1,1); +0x34 (-1,-1,-1); +0x40 = 1; +0x44
+    // 1.0f; +0x48 10000.0f (0x461c4000); the three Array headers zero (their own
+    // ctors); +0x80 (1e8 x3, 0x4cbebc20) and +0x8c (-1e8 x3). +0x4c is written by
+    // nothing. Every float is exact, so the decimal spellings carry retail's bits.
+    GraphicsMesh() : CompiledExternal() {
+        _name.data = nullptr;
+        _vector28.x = 1.0f;  _vector28.y = 1.0f;  _vector28.z = 1.0f;
+        _vector34.x = -1.0f; _vector34.y = -1.0f; _vector34.z = -1.0f;
+        _field40          = 1;
+        _scale            = 1.0f;
+        _maxDepthDistance = 10000.0f;
+        _aabb.min.x = 1e8f;  _aabb.min.y = 1e8f;  _aabb.min.z = 1e8f;
+        _aabb.max.x = -1e8f; _aabb.max.y = -1e8f; _aabb.max.z = -1e8f;
+    }
+
     // ---- the nine slots, in measured retail order --------------------------
-    // Slot 0 is `DeletingDtor(unsigned)`, NOT a virtual destructor
-    // (ENDGAME section B.1 decision 2), and pure — see the ABSTRACT banner.
-    Object::Base* DeletingDtor(unsigned flags) override = 0;  // [0] 0x180012bd0
+    // Slot 0 is `DeletingDtor(unsigned)`, NOT a virtual destructor (ENDGAME
+    // section B.1 decision 2). [0] 0x180012bd0 -- MSVC's VECTOR deleting
+    // destructor, both arms exactly as the retired RT_DELDTOR row ran them
+    // (`MOV EDX,0x98` = the element size).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<GraphicsMesh*>(self + static_cast<int64_t>(i) * 0x98)->~GraphicsMesh();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~GraphicsMesh();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char* TypeName() const override;                 // [1] 0x180012390
     uint32_t    Type() const override;                     // [2] 0x180012370
@@ -395,10 +436,9 @@ public:
     GraphicsMesh(const GraphicsMesh& src);                 // 0x180012970  not ported
     GraphicsMesh& operator=(const GraphicsMesh& src);      // 0x180012a90  not ported
 
-    static uint32_t TypeId();                              // 0x180012380  not ported
-    // The reflection block's five statics. Each goes through
-    // `System::MemoryAllocator`, which B35_RULES section 11 keeps as a door for
-    // the whole of step 5, so all five are declared and left undefined.
+    static uint32_t TypeId();                              // 0x180012380  B.3.9: minted record until W3
+    // The three operators stay declared and undefined (placement is `::new`);
+    // the factory pair is the class's own (B39_RULES D2, graphicsmesh_vtable.cpp).
     static void* operator new(std::size_t bytes);           // 0x1800123a0
     static void* operator new(std::size_t bytes, void* place);// 0x180012410
     static void  operator delete(void* p);                  // 0x180012420
@@ -424,17 +464,12 @@ private:
                         void* skinVertices, int32_t skinVertexCount, int32_t e);
 
 protected:
-    // NOT retail's 0x1800ff170 — see the banner. `= default` keeps the class
-    // trivially default-constructible so no layout pin moves.
-    GraphicsMesh() = default;
-
     // `??1GraphicsMesh@Graphics@@UEAA@XZ` @ 0x1800ff270. NON-VIRTUAL (decision
-    // 2), and DEFINED EMPTY, the `Object::External` / `AnimationGroup`
-    // precedent: `RtGraphics_GraphicsMesh_Dtor` in `graphicsmesh_vtable.cpp`
-    // stamps the MINTED tables, destroys the three arrays in retail's REVERSE
-    // order through their own out-of-line `~Array`s and releases `_name` with
-    // the asymmetric `str-8` idiom. A real destructor chain would stamp GCC's
-    // tables and run each `~Array` a second time.
+    // 2). ENDGAME B.3.9 GFX: the retired door's body (graphicsmesh_vtable.cpp)
+    // -- the three arrays in retail's REVERSE order through their own
+    // out-of-line `~Array`s (each zeroes its header, so the members' implicit
+    // ~Array is a no-op), `_name` with the asymmetric `str-8` idiom; the
+    // restamps and ~CompiledExternal are the compiler's chain.
     ~GraphicsMesh();
 
 public:

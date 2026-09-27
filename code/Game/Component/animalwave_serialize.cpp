@@ -44,6 +44,11 @@
 #include "Component/AnimalComponent.h"
 #include "Component/HerdComponent.h"
 #include "Component/LivestockComponent.h"
+#include "Component/WildAnimalComponent.h"     // ENDGAME B.3.9 C1: 0x1401c8000 cell class
+#include "Component/PopulationComponent.h"     // ENDGAME B.3.9 C1: 0x1401c4790 cell class
+#include "Component/PastureComponent.h"        // ENDGAME B.3.9 C1: 0x1401c7ba0 cell class
+#include "Entity/ComponentEntity.h"            // ENDGAME B.3.9 C1: 0x1401c5d70 cell class
+#include "Component/PopulationDescription.h"   // ENDGAME B.3.9 C1: 0x1401c47c8 cell class
 
 namespace {
 
@@ -57,13 +62,6 @@ typedef bool (*fn_IsDerived_t)(void* obj, uint32_t typeId);
 fn_ComponentSerialize_t s_Base       = nullptr;  // 0x1401189b0
 fn_IsDerived_t          s_IsDerived  = nullptr;  // slot 0x140152a98
 
-// type-id storage (null when the owning reg wave is off; see header note)
-const uint32_t* s_tidWildAnimal = nullptr;  // 0x1401c8000  herd members
-const uint32_t* s_tidPopulation = nullptr;  // 0x1401c4790  herd/animal backref
-const uint32_t* s_tidPasture    = nullptr;  // 0x1401c7ba0  livestock backref
-const uint32_t* s_tidEntity     = nullptr;  // 0x1401c5d70  ComponentEntity base
-const uint32_t* s_tidPopDesc    = nullptr;  // 0x1401c47c8  PopulationDescription
-
 bool s_resolved = false;
 
 void Resolve() {
@@ -75,11 +73,6 @@ void Resolve() {
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_IsDerived = *reinterpret_cast<fn_IsDerived_t*>(slot);
 
-    s_tidWildAnimal = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c8000));
-    s_tidPopulation = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4790));
-    s_tidPasture    = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7ba0));
-    s_tidEntity     = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5d70));
-    s_tidPopDesc    = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c47c8));
     s_resolved = true;
 }
 
@@ -91,10 +84,10 @@ inline bool Loading(void* ser) {
 
 // Serialize one InternalBasePtr and apply retail's post-load type validation
 // (null the ref when the pointee is not derived from *tid).
-inline void SerializeValidatedIBP(void* ibp, void* ser, const uint32_t* tid) {
+inline void SerializeValidatedIBP(void* ibp, void* ser, uint32_t tid) {
     reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     void* obj = *reinterpret_cast<void**>(ibp);
-    if (obj && s_IsDerived && tid && *tid && !s_IsDerived(obj, *tid))
+    if (obj && s_IsDerived && tid && !s_IsDerived(obj, tid))
         *reinterpret_cast<uint64_t*>(ibp) = 0;
 }
 
@@ -144,8 +137,12 @@ extern "C" void PopulationComponent_Serialize_Real(void* self, void* stream) {
     alignas(8) uint8_t ser[24];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
+    // ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c47c8 is PopulationDescription's
+    // registered type-id cell (INVENTORY_C Table 1); ExternalPtrSerializeGeneric
+    // (code/Game/Game, out of C1's file set) still wants a pointer.
+    const uint32_t tidPopDesc = PopulationDescription::TypeId();
     ExternalPtrSerializeGeneric(reinterpret_cast<void**>(At(self, 0x28)), ser,
-                                s_tidPopDesc, "PopulationDescription");
+                                &tidPopDesc, "PopulationDescription");
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x30)), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
 
@@ -167,7 +164,7 @@ extern "C" void PopulationComponent_Serialize_Real(void* self, void* stream) {
     if (Loading(ser)) GameColl::AsArray<GameColl::Ptr8>(At(self, 0x50)).SetSize(herds);
     uint8_t* herd = *reinterpret_cast<uint8_t**>(At(self, 0x50));
     for (int i = 0; i < herds && herd; ++i, herd += 8)
-        SerializeValidatedIBP(herd, ser, s_tidEntity);
+        SerializeValidatedIBP(herd, ser, ComponentEntity::TypeId());
 
     reinterpret_cast<System::Time*>(At(self, 0x60))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x68)), nullptr);   // B.3.4 bridge
@@ -199,8 +196,8 @@ void AnimalComponent::Persist(void* stream) {
         // and drops the value; the local never leaves the frame).
         uint64_t legacy = 0;
         reinterpret_cast<Object::InternalBasePtr*>(&legacy)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-        if (legacy && s_IsDerived && s_tidPopulation && *s_tidPopulation)
-            s_IsDerived(reinterpret_cast<void*>(legacy), *s_tidPopulation);
+        if (legacy && s_IsDerived)
+            s_IsDerived(reinterpret_cast<void*>(legacy), PopulationComponent::TypeId());
     }
 
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
@@ -221,13 +218,13 @@ void HerdComponent::Persist(void* stream) {
 
     uint8_t* member = *reinterpret_cast<uint8_t**>(At(this, 0x38));
     for (int i = 0; i < count && member; ++i, member += 8)
-        SerializeValidatedIBP(member, ser, s_tidWildAnimal);
+        SerializeValidatedIBP(member, ser, WildAnimalComponent::TypeId());
 
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(this, 0x48)), nullptr);   // B.3.4 bridge
     reinterpret_cast<System::Time*>(At(this, 0x50))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     reinterpret_cast<System::Time*>(At(this, 0x58))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x4c)), nullptr);   // B.3.4 bridge
-    SerializeValidatedIBP(At(this, 0x28), ser, s_tidPopulation);
+    SerializeValidatedIBP(At(this, 0x28), ser, PopulationComponent::TypeId());
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(this, 0x30)), nullptr);   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
@@ -240,7 +237,7 @@ void LivestockComponent::Persist(void* stream) {
 
     alignas(8) uint8_t ser[24];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    SerializeValidatedIBP(At(this, 0x28), ser, s_tidPasture);
+    SerializeValidatedIBP(At(this, 0x28), ser, PastureComponent::TypeId());
     reinterpret_cast<System::Time*>(At(this, 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }

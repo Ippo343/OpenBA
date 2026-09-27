@@ -335,19 +335,10 @@ inline int64_t SecondsToTicks(float s) {
 // frame tag so a system shared by several instances updates ONCE per frame.
 // Also tagged RT_UNPROMOTABLE on the DLL-PRESENT route.
 // ---------------------------------------------------------------------------
+// ENDGAME B.3.9 GFX (D7 row A37): the class static, not a lazy ResolveExport
+// cache.
 int32_t* FrameIndexPtr() {
-    static int32_t* p = nullptr;
-    static bool tried = false;
-    if (!tried) {
-        tried = true;
-        p = reinterpret_cast<int32_t*>(
-            ResolveExport("?_frameIndex@ParticleInstance@Graphics@@1HA"));
-        if (!p)
-            std::fprintf(stderr,
-                "[PARTSYS28] ?_frameIndex@ParticleInstance@Graphics@@ resolved NULL -- "
-                "ParticleSystemInstance::Update cannot de-duplicate per frame\n");
-    }
-    return p;
+    return &Graphics::ParticleInstance::_frameIndex;
 }
 
 // `?_typeInfo@ParticleSystem@Graphics@@0VBaseTypeInfo@Object@@A` (0x1801f9a58),

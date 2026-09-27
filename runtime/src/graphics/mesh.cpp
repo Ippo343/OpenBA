@@ -134,6 +134,7 @@
 #include "../../types/graphics/GraphicsMesh.h"   // ENDGAME B.3.5 block G
 // ENDGAME B.3.5 caller batch: the cross-class edges this file opens.
 #include "../../types/graphics/AnimationState.h"  // Graphics::AnimationState
+#include "../../types/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
 #include "../../types/video/Buffers.h"            // Video::{Index,Vertex}Buffer
 
 using RtGraphics::ExternalPtr;
@@ -348,10 +349,9 @@ void* RtObjectExternalVtable() {
 // Graphics::AnimationManager::_singleton, an exported DATA symbol
 // (0x1801fe7b0). GetNodeToWorld and RootAnimationOffset index the instanced
 // pose pool through it.
+// ENDGAME B.3.9 GFX: the class static, not the mint's slot (D7 row A44).
 void* RtAnimationManager() {
-    void** slot = RT_DATA_SLOT(void**,
-        "?_singleton@AnimationManager@Graphics@@0PEAV12@EA");
-    return slot ? *slot : nullptr;
+    return Graphics::AnimationManager::_singleton;
 }
 
 // Byte helpers. Every body below addresses its object through the typed struct
@@ -1245,6 +1245,26 @@ static void* RtGraphics_EdgeMeshInstance_CopyCtor(void* self, const void* other)
     emi->_followed = src->_followed;
 
     return self;
+}
+
+// ============================================================================
+// Graphics::EdgeMeshInstance::~EdgeMeshInstance()
+//   ??1EdgeMeshInstance@Graphics@@UEAA@XZ   retail 0x1800174d0, ordinal 581
+//
+// ENDGAME B.3.9 block GFX (INVENTORY_B finding 2): until now NOTHING registered
+// this address, so RT_DELDTOR row 0x1800175d0 (slot 0 of the minted
+// ??_7EdgeMeshInstance@) resolved its ~Class to NULL. Retail's whole body, read
+// from the listing:
+//     MOV [RSP+8],RCX ; SUB RSP,0x38 ; MOV qword [RSP+0x20],-2
+//     ADD RSP,0x38    ; JMP 0x1800a41c0                     ; ~Geometry
+// No restamp, and `_mesh` (+0xc0) is NOT released -- the ExternalPtr is a plain
+// handle to retail's dtor. The member (below) is therefore empty and the chain
+// into ~Geometry is the compiler's; this door, for the minted objects the row
+// still destroys, is the same tail into ~Geometry by address (the
+// ~MeshInstance door's shape). Row and door both go with the W2 mint row.
+// ============================================================================
+static void RtGraphics_EdgeMeshInstance_Dtor(void* self) {
+    RtGeometryDtor()(self);                         // JMP 0x1800a41c0
 }
 
 // ============================================================================
@@ -2190,8 +2210,13 @@ int RtGraphicsMeshRegister() {
     RegisterRuntimeExport("?SetMesh@EdgeMeshInstance@Graphics@@QEAAXV?$ExternalPtr@"
                           "VEdgeMesh@Graphics@@@Object@@PEAVMeshInstance@2@@Z",
                           (void*)&RtGraphics_EdgeMeshInstance_SetMesh); ++count;
+    // ENDGAME B.3.9 GFX: by name AND by address -- the RT_DELDTOR row resolves
+    // ~Class BY ADDRESS (ResolveAddr, registry-first).
+    RegisterRuntimeExport("??1EdgeMeshInstance@Graphics@@UEAA@XZ",
+                          (void*)&RtGraphics_EdgeMeshInstance_Dtor); ++count;
+    RegisterRuntimeAddr(0x1800174d0ull, (void*)&RtGraphics_EdgeMeshInstance_Dtor);
 
-    return count;   // 20
+    return count;   // 21
 }
 
 // ============================================================================
@@ -2770,6 +2795,11 @@ void MeshInstance::AddDrawItems(const Scene& scene, Renderer& renderer) const {
     }
 }
 
+// ??1EdgeMeshInstance@Graphics@@UEAA@XZ 0x1800174d0 -- retail's body is the
+// bare tail into ~Geometry (see `RtGraphics_EdgeMeshInstance_Dtor`), which the
+// compiler's chain is. Empty. (ENDGAME B.3.9 block GFX.)
+EdgeMeshInstance::~EdgeMeshInstance() {}
+
 // ---------------------------------------------------------------------------
 // ?Update@EdgeMeshInstance@Graphics@@UEAAXAEBVTime@System@@@Z          [slot 1]
 //                                                        retail 0x1800a39b0
@@ -3090,3 +3120,8 @@ void EdgeMesh::SetMaterials(Object::ExternalPtr<MaterialInstance> mask,
 }
 
 }  // namespace Graphics
+
+// ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA  retail 0x1801fc70b -- the
+// class static (ENDGAME B.3.9 block GFX, B39_RULES D7 row A22), redirected onto
+// the mint's storage row by RtGraphicsPortInit (foreign readers remain).
+bool Graphics::MeshInstance::_rootOnlyUpdates = false;
