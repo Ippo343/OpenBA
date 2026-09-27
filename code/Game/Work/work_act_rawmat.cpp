@@ -20,6 +20,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/OrchardComponent.h"   // ENDGAME B.3.9 D5
@@ -88,7 +89,6 @@ static WAR_fn_Time_Ctor_t           s_war_TimeCtor         = nullptr;
 
 // Runtime type-id dwords (CRC values filled after Engine::Startup). Read via pointer
 // at call time, never inlined (they are 0 in the static image).
-static const uint32_t* s_war_pMsgId1_c70e8 = nullptr; // 0x1401c70e8 (SendComponentMessage #1 target type-id = CitizenAIComponent, both fns -- UNREGISTERED, left for a behaviour commit)
 // 0x1401c46b0 = OrchardComponent, 0x1401c7660 = FishingComponent (ENDGAME B.3.9 D5:
 // read directly below).
 // Float .rdata constants (bit-exact from read_memory).
@@ -117,7 +117,6 @@ static void ResolveAll() {
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140151ab8)) s_war_IbpDeleteSlot  = *reinterpret_cast<WAR_fn_IbpDeleteSlot_t*>(s);
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b00)) s_war_TimeCtor       = *reinterpret_cast<WAR_fn_Time_Ctor_t*>(s);
 
-    s_war_pMsgId1_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
     s_war_pf_172280     = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172280));
 }
 
@@ -181,7 +180,7 @@ void WorkAct_GatherWorkCtor_bb7b0(void* citizenIBP, uint32_t workId, int64_t* wo
     if (obj) {
         uintptr_t innerIbp = 0;            // [RBP-0x29]
         WAR_IbpCtor(&innerIbp, nullptr);
-        uint32_t msgId = s_war_pMsgId1_c70e8 ? *s_war_pMsgId1_c70e8 : 0; // [0x1401c70e8] -> [RBP+0x47]
+        uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
         void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10); // [RBP-0x21]
         if (s_war_SendCompMsg) sm = s_war_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0);
     }
@@ -308,7 +307,7 @@ void WorkAct_FishWorkCtor_beae0(void* citizenIBP, uint32_t workId, int64_t* work
     if (obj) {
         uintptr_t innerIbp = 0;          // [RBP+0x50]
         WAR_IbpCtor(&innerIbp, nullptr);
-        uint32_t msgId = s_war_pMsgId1_c70e8 ? *s_war_pMsgId1_c70e8 : 0;     // [0x1401c70e8] -> [RBP+0x40]
+        uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
         void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10); // [RBP-0x20]
         if (s_war_SendCompMsg) sm = s_war_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0);
     }

@@ -71,6 +71,8 @@
 #include "Action/PerformWork.h"   // B.3.8 CB1a (Vtable)
 #include "Action/Action.h"   // B.3.8 CB1a (Vtable)
 #include "resolve.h"
+#include "Component/HappinessComponent.h"   // ENDGAME B.3.9 CB: kHappinessMessageTargetTypeId
+#include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName (c7158 heal)
 #include <cstdint>
 #include <cstdio>
@@ -115,10 +117,8 @@ static fn_pickupStored_t s_fn_pickupStored= nullptr;
 static fn_showTool_t     s_fn_showTool    = nullptr;
 
 
-// --- message-id / type-id globals (exe .rdata). Self-contained bricks: 70e8/7158/42c0
-//     are unregistered (read 0); 7cb8 (RawMaterialDescription) is registered+filled. ---
-static const uint32_t* s_pMsgId_70e8 = nullptr;  // DWORD_1401c70e8
-static const uint32_t* s_pMsgId_42c0 = nullptr;  // DAT_1401c42c0 (HappinessComponent id)
+// --- message targets: 70e8 (CitizenAIComponent) / 42c0 (HappinessComponent) are the
+//     PORT GAP constants of their class headers (ENDGAME B.3.9 CB). ---
 
 // --- float consts (exe .rdata) ---
 static const float* s_pf_172124 = nullptr;  // 0.75
@@ -142,8 +142,6 @@ static void EnsureInit() {
     s_fn_consumeRaw   = reinterpret_cast<fn_consumeRaw_t  >(ResolveAddr(Module::Exe, 0x1400c63b0));
     s_fn_pickupStored = reinterpret_cast<fn_pickupStored_t>(ResolveAddr(Module::Exe, 0x1400ca520));
     s_fn_showTool     = reinterpret_cast<fn_showTool_t    >(ResolveAddr(Module::Exe, 0x140042890));
-    s_pMsgId_70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
-    s_pMsgId_42c0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c42c0));
     s_pf_172124 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172124));
     s_pf_172174 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172174));
     s_pf_172194 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172194));
@@ -153,8 +151,6 @@ static void EnsureInit() {
     s_init = true;
 }
 
-// Convenience: guarded reads.
-static inline uint32_t MsgId(const uint32_t* p) { return p ? *p : 0u; }
 
 // ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c7158 is CitizenComponent's registered
 // type-id cell (INVENTORY_C Table 1); it always holds CitizenComponent's id after
@@ -204,7 +200,7 @@ static void InstallLeadMessage(void* param_1, int64_t ch) {
     if (mem) {
         int64_t destIBP = 0;
         if (fn_InternalBasePtr_Ctor) new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        uint32_t msgId = MsgId(s_pMsgId_70e8);
+        uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
         uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
         act = s_fn_sendMsg ? s_fn_sendMsg(mem, &entityIBP, &msgId, 0, &destIBP, 0) : mem;
     }
@@ -856,7 +852,7 @@ void CitizenAI_PlayAnimationCtor4_ba6b0(void* param_1, int64_t* param_2, uint32_
         if (mem) {
             int64_t destIBP = 0;
             if (fn_InternalBasePtr_Ctor) new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            uint32_t msgId = MsgId(s_pMsgId_42c0);
+            uint32_t msgId = kHappinessMessageTargetTypeId;  // PORT GAP: HappinessComponent::OnMessage (see HappinessComponent.h)
             uint64_t entityIBP = *reinterpret_cast<uint64_t*>(param_2);  // local_res10 = *param_2
             act = s_fn_sendMsg ? s_fn_sendMsg(mem, &entityIBP, &msgId, 0, &destIBP, 0) : mem;
         }

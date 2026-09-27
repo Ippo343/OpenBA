@@ -29,6 +29,7 @@
 #include "Action/PlayAnimation.h"   // B.3.8 CB1a (Vtable)
 #include "Action/Action.h"   // B.3.8 CB1a (Vtable)
 #include "resolve.h"
+#include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -60,7 +61,6 @@ static fn_terrainPos_t      s_fn_terrainPos     = nullptr;
 
 
 // --- float / dword constants (exe .rdata) ---
-static const uint32_t* s_pMsgId_c70e8 = nullptr;  // DWORD_1401c70e8 (SendComponentMessage id)
 static const float*    s_pf_172114    = nullptr;   // 0.5  (cell-centre bias)
 static const float*    s_pf_172180    = nullptr;   // 3.0  (anim-time base)
 static const float*    s_pf_1721a0    = nullptr;   // 7.0  (anim-time scale)
@@ -76,7 +76,6 @@ static void EnsureInit() {
     s_fn_moveToCtor  = reinterpret_cast<fn_moveToCtor_t>(ResolveAddr(Module::Exe, 0x1400c9170));
     s_fn_findCell    = reinterpret_cast<fn_findCell_t>(ResolveAddr(Module::Exe, 0x14009ccf0));
     s_fn_terrainPos  = reinterpret_cast<fn_terrainPos_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_pMsgId_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
     s_pf_172114 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
     s_pf_172180 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172180));
     s_pf_1721a0 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401721a0));
@@ -120,7 +119,7 @@ void CitizenAI_PlayAnimationActionCtor5(void* param_1, float* dest, float animTi
     if (mem) {
         int64_t destIBP = 0;
         if (fn_InternalBasePtr_Ctor) new (&destIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        uint32_t msgId[2] = { s_pMsgId_c70e8 ? *s_pMsgId_c70e8 : 0u, 0u };
+        uint32_t msgId[2] = { kCitizenAIMessageTargetTypeId, 0u };  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
         uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_1) + 0x10);
         msgAction = s_fn_sendMsgCopy
                     ? s_fn_sendMsgCopy(mem, &entityIBP, msgId, 0, reinterpret_cast<uint64_t*>(&destIBP), 0)

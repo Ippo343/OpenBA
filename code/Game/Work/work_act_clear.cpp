@@ -33,6 +33,7 @@
 #include "Action/RemoveNaturalResource.h"   // ENDGAME B.3.8 CB3
 #include "Action/ShowTool.h"   // ENDGAME B.3.8 CB3
 #include "resolve.h"
+#include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
 #include "Component/coll_bridge.h"
 #include "Component/NaturalResourceDescription.h"   // ENDGAME B.3.9 D5
 #include <cstdint>
@@ -101,7 +102,6 @@ static s_wac_MemFree_t         s_wac_MemFree        = nullptr;
 
 // Inline-object vtables + globals (exe .rdata).
 // 0x1401c7b68 = NaturalResourceDescription (ENDGAME B.3.9 D5: read directly below).
-static const uint32_t* s_wac_pMsgId_c70e8 = nullptr;       // 0x1401c70e8 (SendComponentMessage target type-id = CitizenAIComponent -- UNREGISTERED, left for a behaviour commit)
 static const float*    s_wac_pf_172280 = nullptr;          // 0x140172280 (MoveTo speed = -1.0f)
 
 static bool s_wac_resolved = false;
@@ -133,7 +133,6 @@ static void s_wac_ResolveAll() {
     if (!s_wac_DeletePtr && fn_InternalBasePtr_DeletePtr) s_wac_DeletePtr = reinterpret_cast<s_wac_DeletePtr_t>(fn_InternalBasePtr_DeletePtr);
     if (!s_wac_IsDerivedFrom   && fn_IsDerivedFrom)       s_wac_IsDerivedFrom   = reinterpret_cast<s_wac_IsDerivedFrom_t>(fn_IsDerivedFrom);
 
-    s_wac_pMsgId_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
     s_wac_pf_172280    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172280));
 }
 
@@ -244,7 +243,7 @@ void WorkAct_HarvestAreaCtor_c1530(void* param_1, uint32_t param_2, int param_3,
         if (obj) {
             uintptr_t innerIbp = 0;
             WAC_IbpCtor(&innerIbp, nullptr);
-            uint32_t msgId = s_wac_pMsgId_c70e8 ? *s_wac_pMsgId_c70e8 : 0; // DWORD_1401c70e8
+            uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
             uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(param_1) + 0x10);
             if (s_wac_SendCompMsg) sm = s_wac_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0);
         }

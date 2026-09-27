@@ -60,6 +60,15 @@ protected:
     ~HappinessComponent();                                // 0x14004ab00
 };
 
+// PORT GAP (ENDGAME B.3.9 CB): PlayAnimation_Action_Ctor4 (0x1400ba856) builds a
+// SendComponentMessage whose target is [0x1401c42c0] = HappinessComponent; retail
+// delivers it to HappinessComponent's slot-15 OnMessage 0x14004a780 (437 B), which
+// is not ported (the tree's OnMessage is the inert stub). The tree keeps the target
+// id at 0 -- the message finds no component and answers 2, as it did while the cell
+// read 0. Flip this to HappinessComponent::TypeId() with the port of 0x14004a780.
+constexpr uint32_t kHappinessMessageTargetTypeId =
+    /* HappinessComponent::TypeId() once HappinessComponent::OnMessage (0x14004a780) is ported */ 0u;
+
 static_assert(sizeof(HappinessComponent) == 0x50, "HappinessComponent is 0x50 (create 0x140005ba0)");
 static_assert(alignof(HappinessComponent) == 8, "HappinessComponent alignment");
 static_assert(offsetof(HappinessComponent, _controller) == 0x30,
