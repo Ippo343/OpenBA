@@ -80,7 +80,6 @@ uintptr_t ResolveAddr(Module module, uintptr_t ghidraAddr);
 namespace {
 
 using DtorFn      = void (*)(void*);
-using DelDtorFn   = void* (*)(void*, unsigned int);
 using ArrayDtorFn = void (*)(void*);
 
 // One RT_DATA_SLOT per call site: the macro caches per expansion, so a
@@ -94,11 +93,6 @@ inline ArrayDtorFn ByAddr(uintptr_t a) {
 
 inline void* Field(void* self, size_t off) {
     return *reinterpret_cast<void**>(static_cast<uint8_t*>(self) + off);
-}
-
-inline void DeleteVia0(void* obj) {
-    void** vt = *reinterpret_cast<void***>(obj);
-    reinterpret_cast<DelDtorFn>(vt[0])(obj, 1u);
 }
 
 }  // namespace
@@ -119,17 +113,11 @@ extern "C" void RtGraphics_Light_Dtor(void* self) {
     RT_EXPORT_ONCE(DtorFn, "??1Geometry@Graphics@@UEAA@XZ")(self);
 }
 
-// ??1SunLight@Graphics@@UEAA@XZ   0x180108160
-extern "C" void RtGraphics_SunLight_Dtor(void* self) {
-    STAMP(self, "??_7SunLight@Graphics@@6B@");
-    if (void* a = Field(self, 0xf0)) DeleteVia0(a);
-    if (void* b = Field(self, 0xf8)) DeleteVia0(b);
-    if (void* rb = Field(self, 0x100)) {
-        reinterpret_cast<Video::RenderBuffer*>(rb)->PlatformDestruct();  // B.3.5 bridge
-        RT_EXPORT_ONCE(DtorFn, "??3RenderBuffer@Video@@SAXPEAX@Z")(rb);
-    }
-    RT_EXPORT_ONCE(DtorFn, "??1Geometry@Graphics@@UEAA@XZ")(self);
-}
+// ??1SunLight@Graphics@@UEAA@XZ 0x180108160 -- REMOVED (ENDGAME B.3.9 pilot):
+// the name and address were registered TWICE, here and by block RB's one-body
+// door `Graphics_SunLight_Dtor` (runtime/src/graphics/sunlight.cpp), and this
+// older transcription won by running later (INVENTORY_B finding 1). RB's body
+// -- `~SunLight`'s ReleaseFields, shared with the real destructor -- is THE body.
 
 // ??1AnimationGroup@Graphics@@UEAA@XZ   0x1800fb620
 extern "C" void RtGraphics_AnimationGroup_Dtor(void* self) {
@@ -203,11 +191,9 @@ int RtObjectDeletingDtorLeavesRegister() {
     RegisterRuntimeAddr  (0x1800b9150ull,                          (void*)&RtIo_ReaderWriter_Dtor);
     RegisterRuntimeExport("??1Light@Graphics@@UEAA@XZ",          (void*)&RtGraphics_Light_Dtor);
     RegisterRuntimeAddr  (0x180058d20ull,                          (void*)&RtGraphics_Light_Dtor);
-    RegisterRuntimeExport("??1SunLight@Graphics@@UEAA@XZ",       (void*)&RtGraphics_SunLight_Dtor);
-    RegisterRuntimeAddr  (0x180108160ull,                          (void*)&RtGraphics_SunLight_Dtor);
     RegisterRuntimeExport("??1AnimationGroup@Graphics@@UEAA@XZ", (void*)&RtGraphics_AnimationGroup_Dtor);
     RegisterRuntimeAddr  (0x1800fb620ull,                          (void*)&RtGraphics_AnimationGroup_Dtor);
     RegisterRuntimeExport("??1SoundEffect@Audio@@UEAA@XZ",       (void*)&RtAudio_SoundEffect_Dtor);
     RegisterRuntimeAddr  (0x1800e0880ull,                          (void*)&RtAudio_SoundEffect_Dtor);
-    return 11;
+    return 10;
 }
