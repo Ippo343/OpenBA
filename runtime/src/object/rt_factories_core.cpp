@@ -235,7 +235,6 @@ void RtFactoriesPortInit() {
     n += RtFactoriesGraphicsRegister();
     n += RtFactoriesVideoRegister();
     n += RtFactoriesAchievementRegister();
-    n += RtFactoriesCollision2DRegister();
     n += RtFactoriesAudioRegister();
     n += RtFactoriesIoRegister();
     // Picking:: has no row left: ENDGAME B.3.9's pilot made Picking::PickingMesh

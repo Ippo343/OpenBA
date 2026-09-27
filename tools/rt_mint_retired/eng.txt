@@ -4,3 +4,5 @@
 # One fragment per block; a key appears once across all fragments.
 
 ??_7PointList@Pathfinding@@6B@         ENG     real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR row, ??1 door, 8 slot doors deleted
+??_7CollisionMesh@Collision2D@@6B@     ENG     class defined (was a file-local POD); real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR row, ??1 door, 8 slot doors deleted
+??_7Surface@Collision2D@@6B@           ENG     class defined (was a file-local POD); real ctor + DeletingDtor; FACTREST pair, RT_DELDTOR row, ??1 door, 7 slot doors deleted

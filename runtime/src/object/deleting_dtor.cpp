@@ -917,8 +917,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // All four destructors are ported in runtime/src/collision2d/, pathfinding/, picking/.
     // None is a probe subject: each releases owned Array buffers and/or refcounted
     // Strings, so a fabricated subject would free/decrement garbage.
-    RT_DELDTOR(0x1800656b0, 0x180065400, 0x070, "Collision2D::CollisionMesh"),
-    RT_DELDTOR(0x180064ea0, 0x18010ca00, 0x030, "Collision2D::Surface"),
     // (ENDGAME B.3.9 PILOT: the Picking::PickingMesh row 0x180072050 retired --
     // the class's own DeletingDtor (PickingMesh.h) carries both arms.)
 
@@ -1557,12 +1555,6 @@ void* RtDelDtor_ExternalList(void* self, unsigned flags) {
 // Vtable batch 8 (2026-09-12): Collision2D::CollisionMesh/Surface,
 // Pathfinding::PointList, Picking::PickingMesh. Indices 67-70 (renumbered at
 // the merge: batch 9 took 61-66 on main first).
-void* RtDelDtor_CollisionMesh(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800656b0>());
-}
-void* RtDelDtor_Collision2DSurface(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180064ea0>());
-}
 // UI TEXT PIPELINE batch (2026-09-12). Indices 71-74, counted off the MERGED
 // table rather than assumed: this is the fourth batch to append here today and
 // the previous three each started at the same index on their own branch.
@@ -1909,8 +1901,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180074a10, (void*)&RtDelDtor_ComboDialog);
     RegisterRuntimeAddr(0x18003b600, (void*)&RtDelDtor_DialogControllerConfig);
     RegisterRuntimeAddr(0x180007800, (void*)&RtDelDtor_ExternalList);
-    RegisterRuntimeAddr(0x1800656b0, (void*)&RtDelDtor_CollisionMesh);       // vtable batch 8 SPATIAL
-    RegisterRuntimeAddr(0x180064ea0, (void*)&RtDelDtor_Collision2DSurface);  // vtable batch 8 SPATIAL
 
     // 2026-09-12 VTABLE BATCH 1 — ten UI::*Description classes, rows 71..80.
     // Every address a LITERAL, for the reason the banner above gives.

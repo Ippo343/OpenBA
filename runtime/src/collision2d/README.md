@@ -18,4 +18,5 @@ confirm against the retail DLL before porting one.
 
 ## Ported here
 
-_nothing yet_
+- `collisionmesh.cpp` (`Collision2D::CollisionMesh`, runtime/types/collision2d/CollisionMesh.h)
+- `surface.cpp` (`Collision2D::Surface`, runtime/types/collision2d/Surface.h)

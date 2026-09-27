@@ -53,6 +53,14 @@
 // EXTPTR, runtime/src/object/external_ptr_serialize.cpp), confirmed by reading
 // FUN_1800667f0's typeInfo global (0x1801fa820) against Surface::Type's own body
 // (0x180064a50: `MOV EAX,[0x1801fa820]; RET`) -- same address, so T == Surface.
+//
+// ENDGAME B.3.9 ENG (B39_RULES D1/D2): the file-local POD became the real class
+// `Collision2D::CollisionMesh` (runtime/types/collision2d/CollisionMesh.h). Its
+// constructor holds the factory rows' stores, its DeletingDtor the retired
+// RT_DELDTOR row, and the slot bodies are its members: every live
+// CollisionMesh wears the COMPILER's table. The eight slot doors, the ??1 door,
+// `ConstructBody` and `CallSlot0` went with the minted
+// `??_7CollisionMesh@Collision2D@@6B@` row and the FACTREST pair.
 // ============================================================================
 #include <cstddef>
 #include <cstdint>
@@ -69,6 +77,7 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
 #include "../../types/system/String.h"
+#include "../../types/collision2d/CollisionMesh.h"
 #include "../system/string.h"
 
 namespace {
@@ -83,94 +92,17 @@ using rt::io::Stream;
 // The generic Object::ExternalPtr<T>::Serialize body (Wave 10 lane EXTPTR).
 extern "C" void RtObject_ExternalPtr_Serialize(External** self, Serializer* ser, const void* typeInfo);
 
-struct Vec2 { float x, y; };
-static_assert(sizeof(Vec2) == 8, "Vec2 is 8 bytes");
+using CollisionMesh = Collision2D::CollisionMesh;
+using Vec2    = CollisionMesh::Vec2;
+using Triple3 = CollisionMesh::Triple3;
+using Quad4   = CollisionMesh::Quad4;
+using Face    = CollisionMesh::Face;
 
-struct Triple3 { uint16_t a, b, c; };
-static_assert(sizeof(Triple3) == 6, "Triple3 is 6 bytes");
-
-struct Quad4 { uint16_t a, b, c, d; };
-static_assert(sizeof(Quad4) == 8, "Quad4 is 8 bytes");
-
-struct Face {
-    int32_t                   field0;    // +0x00
-    int32_t                   _pad04;    // +0x04
-    Collection::Array<Triple3> triples;  // +0x08
-    Collection::Array<Quad4>   quads;    // +0x18
-};
-static_assert(sizeof(Face) == 0x28, "CollisionMesh::Face is 0x28 bytes");
-static_assert(offsetof(Face, triples) == 0x08, "+0x08");
-static_assert(offsetof(Face, quads)   == 0x18, "+0x18");
-
-struct CollisionMesh {
-    External                    base;       // +0x00
-    // ENDGAME B.3.1 step 2: the comment became the type. This struct is this
-    // port's file-local model of the object and nothing bulk-copies it — it is
-    // built by `ConstructBody` and torn down by the destructor below, both in
-    // this file — so the two fields carry the real class.
-    System::String              _name1;     // +0x20
-    System::String              _name2;     // +0x28
-    Collection::Array<Vec2>     _ptsA;      // +0x30
-    Collection::Array<Vec2>     _ptsB;      // +0x40
-    Collection::Array<Face>     _faces;     // +0x50
-    Collection::Array<void*>    _surfaces;  // +0x60  ExternalPtr<Surface>
-};
-static_assert(sizeof(CollisionMesh) == 0x70, "Collision2D::CollisionMesh is 0x70 bytes");
-static_assert(offsetof(CollisionMesh, _name1)    == 0x20, "+0x20");
-static_assert(offsetof(CollisionMesh, _name2)    == 0x28, "+0x28");
-static_assert(offsetof(CollisionMesh, _ptsA)     == 0x30, "+0x30");
-static_assert(offsetof(CollisionMesh, _ptsB)     == 0x40, "+0x40");
-static_assert(offsetof(CollisionMesh, _faces)    == 0x50, "+0x50");
-static_assert(offsetof(CollisionMesh, _surfaces) == 0x60, "+0x60");
-
-void* BaseVTable()          { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* ExternalVTable()      { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* CollisionMeshVTable() { return RT_DATA_SLOT(void*, "??_7CollisionMesh@Collision2D@@6B@"); }
 const uint8_t* CollisionMeshTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@CollisionMesh@Collision2D@@0VBaseTypeInfo@Object@@A");
 }
 const void* SurfaceTypeInfo() {
     return RT_DATA_SLOT(const void*, "?_typeInfo@Surface@Collision2D@@0VBaseTypeInfo@Object@@A");
-}
-
-using Slot0Fn = void* (*)(void* self, int flag);
-void CallSlot0(void* self, int flag) {
-    void** vt = *reinterpret_cast<void***>(self);
-    reinterpret_cast<Slot0Fn>(vt[0])(self, flag);
-}
-
-// ---- allocator boundary, by address (array.cpp's banner: heap cannot be half-ours) --
-void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50ull));
-    return fn(bytes, align);
-}
-void MemFree(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0ull));
-    fn(p);
-}
-
-void ConstructBody(CollisionMesh* self) {
-    void** vp = reinterpret_cast<void**>(self);
-    *vp = BaseVTable();
-    *vp = ExternalVTable();
-    self->base._path.data      = nullptr;
-    self->base._refs._data     = nullptr;
-    self->base._refs._size     = 0;
-    self->base._refs._capacity = 0;
-    *vp = CollisionMeshVTable();
-    // Retail writes one null qword per field; the default constructor
-    // (0x180006760) is that one store, placement-constructed because the
-    // object body is raw memory at this point.
-    new (&self->_name1) System::String();
-    new (&self->_name2) System::String();
-    self->_ptsA._data = nullptr;     self->_ptsA._size = 0;     self->_ptsA._capacity = 0;
-    self->_ptsB._data = nullptr;     self->_ptsB._size = 0;     self->_ptsB._capacity = 0;
-    self->_faces._data = nullptr;    self->_faces._size = 0;    self->_faces._capacity = 0;
-    self->_surfaces._data = nullptr; self->_surfaces._size = 0; self->_surfaces._capacity = 0;
 }
 
 // ---- the Collection::Array<T> instantiations, by ADDRESS -------------------
@@ -311,48 +243,73 @@ void SerializeFacesBody(Serializer* ser, int32_t count, Face* base) {
 
 }  // namespace
 
-extern "C" uint32_t RtCollision2D_CollisionMesh_Type(const void*) {
+namespace Collision2D {
+
+// 0x180064f60: `MOV EAX,[_typeInfo] ; RET` -- the static accessor.
+uint32_t CollisionMesh::TypeId() {
     uint32_t v = 0; std::memcpy(&v, CollisionMeshTypeInfo(), sizeof v); return v;
 }
-extern "C" const char* RtCollision2D_CollisionMesh_TypeName(const void*) {
+// [2] 0x180064f50: the same load.
+uint32_t CollisionMesh::Type() const { return TypeId(); }
+// [1] 0x180064f70: the name pointer at +8 of the same record.
+const char* CollisionMesh::TypeName() const {
     const char* v = nullptr; std::memcpy(&v, CollisionMeshTypeInfo() + 8, sizeof v); return v;
 }
-extern "C" int32_t RtCollision2D_CollisionMesh_GetFileVersion(const void*) { return 3; }
-extern "C" int32_t RtCollision2D_CollisionMesh_Compile(void*, const void*) { return 1; }
+// [3] 0x180108cc0: `MOV EAX,3 ; RET`.
+int32_t CollisionMesh::GetFileVersion() const { return 3; }
+// [4] 0x180108cb0: returns 1.
+Object::External::CompileResult CollisionMesh::Compile(const System::Filename&) { return 1; }
 
-extern "C" void* RtCollision2D_CollisionMesh_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;
-    ConstructBody(static_cast<CollisionMesh*>(selfv)); return selfv;
+// [8] 0x180065240 -- the inlined constructor, i.e. placement construction.
+// (Retail's null test sat in the retired door; a virtual call always has a
+// `this`.) `::new`: the class declares its own placement new.
+Object::External* CollisionMesh::Construct() {
+    return ::new (this) CollisionMesh();
 }
-extern "C" void* RtCollision2D_CollisionMesh_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);
-    ConstructBody(static_cast<CollisionMesh*>(selfv)); return selfv;
+// [6] 0x1800651b0: slot0(this, 0) dispatched VIRTUALLY, then the same stores.
+Object::External* CollisionMesh::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (this) CollisionMesh();
 }
-extern "C" void RtCollision2D_CollisionMesh_Destruct(void* selfv) { CallSlot0(selfv, 0); }
+// [7] 0x1800652c0: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
+void CollisionMesh::Destruct() { DeletingDtor(0); }
 
-// ??1CollisionMesh@Collision2D@@UEAA@XZ (0x180065400)
-extern "C" void RtCollision2D_CollisionMesh_Dtor(void* selfv) {
-    CollisionMesh* self = static_cast<CollisionMesh*>(selfv);
+// ?CreateNewObject@CollisionMesh@Collision2D@@SAPEAVBase@Object@@XZ  0x180065060
+// The FACTREST row this replaces: MemAlloc of 0x70 bytes, align 8 (the locked
+// `?MemAlloc@MemoryAllocator@System@@` Object::detail::InternalMemAlloc
+// reaches); retail's null branch; then the inlined constructor.
+Object::Base* CollisionMesh::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(CollisionMesh), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) CollisionMesh();
+}
+// ?CreateInPlaceObject@CollisionMesh@Collision2D@@SAPEAVBase@Object@@PEAX@Z  0x180065130
+Object::Base* CollisionMesh::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) CollisionMesh();
+}
+
+// ??1CollisionMesh@Collision2D@@UEAA@XZ (0x180065400) -- retail's body, moved
+// here from the retired `RtCollision2D_CollisionMesh_Dtor` door.
+CollisionMesh::~CollisionMesh() {
     // The four `~Array` calls retail makes, through the ported bodies rather
     // than inlined. The pairing is read from retail's own CALLs at 0x18006541a
     // / 0x180065424 / 0x18006542e / 0x180065438, NOT guessed from the member
     // order: _surfaces (+0x60) goes through 0x180065e80, _faces (+0x50)
     // through the element-destroy pair 0x180065d40, and BOTH _ptsB (+0x40) and
-    // _ptsA (+0x30) through the single body 0x180065bf0.
-    PlainArrayDtor(&self->_surfaces, 0x180065e80ull);
-    FaceArrayDtor(&self->_faces);
-    PlainArrayDtor(&self->_ptsB, 0x180065bf0ull);
-    PlainArrayDtor(&self->_ptsA, 0x180065bf0ull);
-    // The release idiom IS `~String` (0x180006c80), asymmetry included.
-    self->_name2.~String();
-    self->_name1.~String();
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(self);
+    // _ptsA (+0x30) through the single body 0x180065bf0. Each frees and ZEROES
+    // its header, so the compiler-emitted member `~Array`s that follow are
+    // no-ops (MemFree of null). The compiler then releases `_name2` and
+    // `_name1` (`~String` 0x180006c80) and chains ~External: retail's order.
+    PlainArrayDtor(&_surfaces, 0x180065e80ull);
+    FaceArrayDtor(&_faces);
+    PlainArrayDtor(&_ptsB, 0x180065bf0ull);
+    PlainArrayDtor(&_ptsA, 0x180065bf0ull);
 }
 
 // ?Serialize@CollisionMesh@Collision2D@@UEAA_NAEAVStream@IO@@@Z (0x180108cd0)
-extern "C" bool RtCollision2D_CollisionMesh_Serialize(void* selfv, void* streamv) {
-    CollisionMesh* self = static_cast<CollisionMesh*>(selfv);
+bool CollisionMesh::Serialize(void* streamv) {
+    CollisionMesh* self = this;
     Stream* stream = static_cast<Stream*>(streamv);
 
     Serializer ser = { stream, nullptr };
@@ -403,7 +360,7 @@ extern "C" bool RtCollision2D_CollisionMesh_Serialize(void* selfv, void* streamv
     const void* surfaceTypeInfo = SurfaceTypeInfo();
     for (int32_t i = 0; i < nS; ++i) {
         RtObject_ExternalPtr_Serialize(
-            reinterpret_cast<External**>(&self->_surfaces._data[i]), &ser, surfaceTypeInfo);
+            reinterpret_cast<RtObject::External**>(&self->_surfaces._data[i]), &ser, surfaceTypeInfo);
     }
 
     if (rw != nullptr) {
@@ -412,6 +369,8 @@ extern "C" bool RtCollision2D_CollisionMesh_Serialize(void* selfv, void* streamv
     }
     return true;
 }
+
+}  // namespace Collision2D
 
 // ---- CUTOVER CLOSURE BATCH D2: the two registered Serialize halves --------
 // Retail's signatures exactly (RCX = the Serializer, R8 = the element base),
@@ -425,25 +384,16 @@ extern "C" void RtCollision2D_CollisionMesh_SerializeQuads(void* ser, int32_t co
 
 int RtCollision2DCollisionMeshRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@CollisionMesh@Collision2D@@UEBAIXZ",           (void*)&RtCollision2D_CollisionMesh_Type);           ++n;
-    RegisterRuntimeAddr  (0x180064f50ull,                                      (void*)&RtCollision2D_CollisionMesh_Type);
-    RegisterRuntimeExport("?TypeName@CollisionMesh@Collision2D@@UEBAPEBDXZ",    (void*)&RtCollision2D_CollisionMesh_TypeName);       ++n;
-    RegisterRuntimeAddr  (0x180064f70ull,                                      (void*)&RtCollision2D_CollisionMesh_TypeName);
-    RegisterRuntimeExport("?GetFileVersion@CollisionMesh@Collision2D@@UEBAHXZ", (void*)&RtCollision2D_CollisionMesh_GetFileVersion); ++n;
-    RegisterRuntimeAddr  (0x180108cc0ull,                                      (void*)&RtCollision2D_CollisionMesh_GetFileVersion);
-    RegisterRuntimeExport("?Compile@CollisionMesh@Collision2D@@UEAA?AW4CompileResult@External@Object@@AEBVFilename@System@@@Z",
-                          (void*)&RtCollision2D_CollisionMesh_Compile); ++n;
-    RegisterRuntimeAddr  (0x180108cb0ull,                                      (void*)&RtCollision2D_CollisionMesh_Compile);
-    RegisterRuntimeExport("?Construct@CollisionMesh@Collision2D@@UEAAPEAVExternal@Object@@XZ",   (void*)&RtCollision2D_CollisionMesh_Construct);   ++n;
-    RegisterRuntimeAddr  (0x180065240ull,                                                        (void*)&RtCollision2D_CollisionMesh_Construct);
-    RegisterRuntimeExport("?Reconstruct@CollisionMesh@Collision2D@@UEAAPEAVExternal@Object@@XZ", (void*)&RtCollision2D_CollisionMesh_Reconstruct); ++n;
-    RegisterRuntimeAddr  (0x1800651b0ull,                                                        (void*)&RtCollision2D_CollisionMesh_Reconstruct);
-    RegisterRuntimeExport("?Destruct@CollisionMesh@Collision2D@@UEAAXXZ",       (void*)&RtCollision2D_CollisionMesh_Destruct);       ++n;
-    RegisterRuntimeAddr  (0x1800652c0ull,                                      (void*)&RtCollision2D_CollisionMesh_Destruct);
-    RegisterRuntimeExport("??1CollisionMesh@Collision2D@@UEAA@XZ",              (void*)&RtCollision2D_CollisionMesh_Dtor);           ++n;
-    RegisterRuntimeAddr  (0x180065400ull,                                      (void*)&RtCollision2D_CollisionMesh_Dtor);
-    RegisterRuntimeExport("?Serialize@CollisionMesh@Collision2D@@UEAA_NAEAVStream@IO@@@Z", (void*)&RtCollision2D_CollisionMesh_Serialize); ++n;
-    RegisterRuntimeAddr  (0x180108cd0ull,                                                       (void*)&RtCollision2D_CollisionMesh_Serialize);
+    // ---- the factory pair (B39_RULES D2): the class's OWN statics, both
+    // doors, replacing the FACTREST row. The minted `?_typeInfo@CollisionMesh`
+    // record's factoryFn / inPlaceFactoryFn resolve these by name
+    // (MintTypeInfos runs after every *PortInit).
+    RegisterRuntimeExport("?CreateNewObject@CollisionMesh@Collision2D@@SAPEAVBase@Object@@XZ",
+                          (void*)&Collision2D::CollisionMesh::CreateNewObject); ++n;
+    RegisterRuntimeAddr  (0x180065060ull, (void*)&Collision2D::CollisionMesh::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@CollisionMesh@Collision2D@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&Collision2D::CollisionMesh::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr  (0x180065130ull, (void*)&Collision2D::CollisionMesh::CreateInPlaceObject);
     // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) --------------
     // The two out-of-line halves of Serialize. Unexported in both builds, so
     // RegisterRuntimeAddr only. Their Array callees are registered by

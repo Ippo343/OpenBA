@@ -2,120 +2,101 @@
 // runtime/src/collision2d/surface.cpp — Collision2D::Surface, the whole class
 // ============================================================================
 //
-// Vtable batch 8. ??_7Surface@Collision2D@@6B@ (retail), eight slots:
+// Vtable batch 8. ??_7Surface@Collision2D@@6B@ (retail), nine slots:
 //
-//   0  deleting dtor        0x180064ea0  deleting_dtor.cpp row (this file registers ~Surface)
+//   0  deleting dtor        0x180064ea0  Surface::DeletingDtor (Surface.h)
 //   1  TypeName             0x180064a70  here
 //   2  Type                 0x180064a50  here
 //   3  GetFileVersion       0x18010ca30  here  (returns 1)
-//   4  Compile              -- NOT a Surface slot (retail's kStepsCollision2D_Surface size
-//                              0x30 has no Compile row in the batch list; Surface inherits
-//                              External::Compile, already ported elsewhere)
+//   4  Compile              -- NOT a Surface slot: retail's table holds
+//                              External::Compile (0x1800066e0) there
 //   5  Serialize            0x18010ca40  here
 //   6  Reconstruct          0x180064c70  here
 //   7  Destruct             0x180064d40  here
 //   8  Construct            0x180064ce0  here
 //
-// plus ~Surface (0x18010ca00), registered here and appended to
-// runtime/src/object/deleting_dtor.cpp's kSpecs (row for 0x180064ea0).
+// plus ~Surface (0x18010ca00) here.
 //
-// Layout (sizeof 0x30; factory step table runtime/src/collision2d/rt_factories_collision2d.inc
-// zeroes +0x20 as one qword and +0x28 as one dword, matching Construct/Reconstruct below):
-//   +0x00  Object::External           (0x20)
-//   +0x20  uint32_t  _f20             Serialize order: _f20, _f28, _f24
-//   +0x24  uint32_t  _f24
-//   +0x28  uint32_t  _f28
-//   +0x2c  uint32_t  _pad2c           never written; makes the struct 8-aligned to 0x30
-// None of the three fields is named by any body this port read; Serialize is the only
-// reader/writer and it treats them as three independent uint scalars.
+// ENDGAME B.3.9 ENG (B39_RULES D1/D2): the file-local POD became the real class
+// `Collision2D::Surface` (runtime/types/collision2d/Surface.h). Its constructor
+// holds the factory rows' stores, its DeletingDtor the retired RT_DELDTOR row,
+// and the slot bodies are its members: every live Surface wears the COMPILER's
+// table. The eight slot doors, the ??1 door, `ConstructBody` and `CallSlot0`
+// went with the minted `??_7Surface@Collision2D@@6B@` row and the FACTREST
+// pair (rt_factories_collision2d.{cpp,inc}).
 // ============================================================================
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
-#include "../../types/object/External.h"
+#include "../../types/collision2d/Surface.h"
 
 namespace {
 
-using RtObject::External;
-using rt::io::Encoding;
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
 
-struct Surface {
-    External base;      // +0x00
-    uint32_t _f20;       // +0x20
-    uint32_t _f24;       // +0x24
-    uint32_t _f28;       // +0x28
-    uint32_t _pad2c;      // +0x2c
-};
-static_assert(sizeof(Surface) == 0x30, "Collision2D::Surface is 0x30 bytes");
-static_assert(offsetof(Surface, _f20) == 0x20, "+0x20");
-static_assert(offsetof(Surface, _f24) == 0x24, "+0x24");
-static_assert(offsetof(Surface, _f28) == 0x28, "+0x28");
-
-void* BaseVTable()     { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* ExternalVTable() { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* SurfaceVTable()  { return RT_DATA_SLOT(void*, "??_7Surface@Collision2D@@6B@"); }
 const uint8_t* SurfaceTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@Surface@Collision2D@@0VBaseTypeInfo@Object@@A");
 }
 
-using Slot0Fn = void* (*)(void* self, int flag);
-void CallSlot0(void* self, int flag) {
-    void** vt = *reinterpret_cast<void***>(self);
-    reinterpret_cast<Slot0Fn>(vt[0])(self, flag);
-}
-
-void ConstructBody(Surface* self) {
-    void** vp = reinterpret_cast<void**>(self);
-    *vp = BaseVTable();
-    *vp = ExternalVTable();
-    self->base._path.data      = nullptr;
-    self->base._refs._data     = nullptr;
-    self->base._refs._size     = 0;
-    self->base._refs._capacity = 0;
-    *vp = SurfaceVTable();
-    self->_f20 = 0;
-    self->_f24 = 0;
-    self->_f28 = 0;
-}
-
 }  // namespace
 
-extern "C" uint32_t RtCollision2D_Surface_Type(const void*) {
+namespace Collision2D {
+
+// 0x180064a60: `MOV EAX,[_typeInfo] ; RET` -- the static accessor.
+uint32_t Surface::TypeId() {
     uint32_t v = 0; std::memcpy(&v, SurfaceTypeInfo(), sizeof v); return v;
 }
-extern "C" const char* RtCollision2D_Surface_TypeName(const void*) {
+// [2] 0x180064a50: the same load.
+uint32_t Surface::Type() const { return TypeId(); }
+// [1] 0x180064a70: the name pointer at +8 of the same record.
+const char* Surface::TypeName() const {
     const char* v = nullptr; std::memcpy(&v, SurfaceTypeInfo() + 8, sizeof v); return v;
 }
-extern "C" int32_t RtCollision2D_Surface_GetFileVersion(const void*) { return 1; }
+// [3] 0x18010ca30: `MOV EAX,1 ; RET`.
+int32_t Surface::GetFileVersion() const { return 1; }
 
-extern "C" void* RtCollision2D_Surface_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;
-    ConstructBody(static_cast<Surface*>(selfv)); return selfv;
+// [8] 0x180064ce0 -- the inlined constructor, i.e. placement construction.
+// (Retail's null test sat in the retired door; a virtual call always has a
+// `this`.) `::new`: the class declares its own placement new.
+Object::External* Surface::Construct() {
+    return ::new (this) Surface();
 }
-extern "C" void* RtCollision2D_Surface_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);
-    ConstructBody(static_cast<Surface*>(selfv)); return selfv;
+// [6] 0x180064c70: slot0(this, 0) dispatched VIRTUALLY, then the same stores.
+Object::External* Surface::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (this) Surface();
 }
-extern "C" void RtCollision2D_Surface_Destruct(void* selfv) { CallSlot0(selfv, 0); }
+// [7] 0x180064d40: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
+void Surface::Destruct() { DeletingDtor(0); }
+
+// ?CreateNewObject@Surface@Collision2D@@SAPEAVBase@Object@@XZ  0x180064b60
+// The FACTREST row this replaces: MemAlloc of 0x30 bytes, align 8 (the locked
+// `?MemAlloc@MemoryAllocator@System@@` Object::detail::InternalMemAlloc
+// reaches); retail's null branch; then the inlined constructor.
+Object::Base* Surface::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(Surface), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) Surface();
+}
+// ?CreateInPlaceObject@Surface@Collision2D@@SAPEAVBase@Object@@PEAX@Z  0x180064c10
+Object::Base* Surface::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) Surface();
+}
 
 // ??1Surface@Collision2D@@UEAA@XZ (0x18010ca00): restamp own vtable, chain to
-// ~External. No owned resource of its own — three plain uint32 fields.
-extern "C" void RtCollision2D_Surface_Dtor(void* selfv) {
-    Surface* self = static_cast<Surface*>(selfv);
-    *reinterpret_cast<void**>(self) = SurfaceVTable();
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(self);
-}
+// ~External. No owned resource of its own -- three plain uint32 fields. The
+// restamp and the chain are the compiler's.
+Surface::~Surface() {}
 
 // ?Serialize@Surface@Collision2D@@UEAA_NAEAVStream@IO@@@Z (0x18010ca40)
-extern "C" bool RtCollision2D_Surface_Serialize(void* selfv, void* streamv) {
-    Surface* self = static_cast<Surface*>(selfv);
+bool Surface::Serialize(void* streamv) {
     Stream* stream = static_cast<Stream*>(streamv);
 
     Serializer ser = { stream, nullptr };
@@ -127,9 +108,9 @@ extern "C" bool RtCollision2D_Surface_Serialize(void* selfv, void* streamv) {
     ser.readerWriter = rw;
 
     using ScalarFn = void (*)(ReaderWriter*, uint32_t*, const char*);
-    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &self->_f20, nullptr);
-    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &self->_f28, nullptr);
-    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &self->_f24, nullptr);
+    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &_f20, nullptr);
+    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &_f28, nullptr);
+    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &_f24, nullptr);
 
     if (rw != nullptr) {
         using DeleteFn = void (*)(ReaderWriter*, int);
@@ -138,23 +119,19 @@ extern "C" bool RtCollision2D_Surface_Serialize(void* selfv, void* streamv) {
     return true;
 }
 
+}  // namespace Collision2D
+
 int RtCollision2DSurfaceRegister() {
     int n = 0;
-    RegisterRuntimeExport("?Type@Surface@Collision2D@@UEBAIXZ",           (void*)&RtCollision2D_Surface_Type);           ++n;
-    RegisterRuntimeAddr  (0x180064a50ull,                                 (void*)&RtCollision2D_Surface_Type);
-    RegisterRuntimeExport("?TypeName@Surface@Collision2D@@UEBAPEBDXZ",    (void*)&RtCollision2D_Surface_TypeName);       ++n;
-    RegisterRuntimeAddr  (0x180064a70ull,                                 (void*)&RtCollision2D_Surface_TypeName);
-    RegisterRuntimeExport("?GetFileVersion@Surface@Collision2D@@UEBAHXZ", (void*)&RtCollision2D_Surface_GetFileVersion); ++n;
-    RegisterRuntimeAddr  (0x18010ca30ull,                                 (void*)&RtCollision2D_Surface_GetFileVersion);
-    RegisterRuntimeExport("?Construct@Surface@Collision2D@@UEAAPEAVExternal@Object@@XZ",   (void*)&RtCollision2D_Surface_Construct);   ++n;
-    RegisterRuntimeAddr  (0x180064ce0ull,                                                  (void*)&RtCollision2D_Surface_Construct);
-    RegisterRuntimeExport("?Reconstruct@Surface@Collision2D@@UEAAPEAVExternal@Object@@XZ", (void*)&RtCollision2D_Surface_Reconstruct); ++n;
-    RegisterRuntimeAddr  (0x180064c70ull,                                                  (void*)&RtCollision2D_Surface_Reconstruct);
-    RegisterRuntimeExport("?Destruct@Surface@Collision2D@@UEAAXXZ",       (void*)&RtCollision2D_Surface_Destruct);       ++n;
-    RegisterRuntimeAddr  (0x180064d40ull,                                 (void*)&RtCollision2D_Surface_Destruct);
-    RegisterRuntimeExport("??1Surface@Collision2D@@UEAA@XZ",              (void*)&RtCollision2D_Surface_Dtor);           ++n;
-    RegisterRuntimeAddr  (0x18010ca00ull,                                 (void*)&RtCollision2D_Surface_Dtor);
-    RegisterRuntimeExport("?Serialize@Surface@Collision2D@@UEAA_NAEAVStream@IO@@@Z", (void*)&RtCollision2D_Surface_Serialize); ++n;
-    RegisterRuntimeAddr  (0x18010ca40ull,                                                    (void*)&RtCollision2D_Surface_Serialize);
+    // ---- the factory pair (B39_RULES D2): the class's OWN statics, both
+    // doors, replacing the FACTREST row. The minted `?_typeInfo@Surface`
+    // record's factoryFn / inPlaceFactoryFn resolve these by name (MintTypeInfos
+    // runs after every *PortInit), so `Object::Factory` builds a real Surface.
+    RegisterRuntimeExport("?CreateNewObject@Surface@Collision2D@@SAPEAVBase@Object@@XZ",
+                          (void*)&Collision2D::Surface::CreateNewObject); ++n;
+    RegisterRuntimeAddr  (0x180064b60ull, (void*)&Collision2D::Surface::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@Surface@Collision2D@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&Collision2D::Surface::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr  (0x180064c10ull, (void*)&Collision2D::Surface::CreateInPlaceObject);
     return n;
 }
