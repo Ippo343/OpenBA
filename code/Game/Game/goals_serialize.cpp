@@ -79,6 +79,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
+#include "Component/WorkComponent.h"
 #include <new>
 
 
@@ -735,9 +736,9 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
                         void* compVtbl = *reinterpret_cast<void**>(comp);
                         typedef uint32_t (*fn_GetTypeId_t)(void*);
                         uint32_t tid = reinterpret_cast<fn_GetTypeId_t>(*reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(compVtbl) + 0x10))(comp);
-                        if (g_TypeId_WorkComponent && tid == *g_TypeId_WorkComponent) {
+                        if (tid == WorkComponent::TypeId()) {
                             void* obj = *slot;
-                            bool derived = fn_IsDerivedFrom && fn_IsDerivedFrom(obj, *g_TypeId_WorkComponent);
+                            bool derived = fn_IsDerivedFrom && fn_IsDerivedFrom(obj, WorkComponent::TypeId());
                             workComponent = derived ? obj : nullptr;
                             break;
                         }
