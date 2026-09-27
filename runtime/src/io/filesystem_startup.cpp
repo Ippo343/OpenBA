@@ -62,6 +62,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/FileSystem.h"
 #include "../../types/system/String.h"
+#include "../../types/system/Configuration.h"   // ENDGAME B.3.9 SS1: Configuration::_singleton
 
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
 // (that header drags in <windows.h>, and PLAN §4.1 requires runtime/src/ to stay
@@ -75,14 +76,6 @@ namespace {
 
 typedef void  (*VoidThisFn)(void*);
 typedef void* (*MapFindFn)(void* map, const System::String* wanted);
-
-// `?_singleton@Configuration@System@@0PEAV12@EA`, ord 4803, retail 0x1801fc6f8.
-// Written by `??0Configuration@System@@QEAA@XZ`, which lane ENG ported in
-// runtime/src/engine/engine_lifecycle.cpp; read here through the PORT-AWARE
-// door so it follows lane C2's mint at cutover.
-void** ConfigurationSingletonSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Configuration@System@@0PEAV12@EA");
-}
 
 }  // namespace
 
@@ -135,25 +128,19 @@ bool FileSystem::Startup() {
 
     // Retail: `MOV RCX,[0x1801fc6f8]; ADD RCX,0x10` -- the map lives at
     // Configuration + 0x10, and retail dereferences the singleton without a
-    // check. The DEREFERENCE stays unguarded, faithfully. What is guarded is
-    // whether the SLOT EXISTS: with no DLL the variable at 0x1801fc6f8 does not
-    // exist at all unless lane C2's mint provides it, and as of this commit
-    // `?_singleton@Configuration@System@@0PEAV12@EA` is NOT in
-    // rt_data_mint_tables.inc. That is our difference from retail, not a guard
-    // over retail's logic; when the mint row lands this branch stops being
-    // reachable, because lane ENG's ported ctor writes the slot.
+    // check. ENDGAME B.3.9 SS1 (B39_RULES D7): `?_singleton@Configuration@System@@`
+    // IS `::System::Configuration::_singleton` now (class static, always exists) --
+    // the existence guard the door version needed is gone, so the deref below is
+    // retail's true unguarded one.
     //
     // The find itself (0x18002ace0) has NO export name in either build, so it
     // goes by address. `ResolveAddr(Module::Runtime, ...)` consults the port
     // registry FIRST (reference_resolveaddr_consults_port_registry_first.md),
     // and runtime/src/system/configuration.cpp registers that address, so this
     // reaches OUR port both today and at cutover.
-    bool found = false;
-    if (void** cfgSlot = ::ConfigurationSingletonSlot()) {
-        void* map = static_cast<uint8_t*>(*cfgSlot) + 0x10;
-        found = reinterpret_cast<::MapFindFn>(
-                    ResolveAddr(Module::Runtime, 0x18002ace0))(map, &tmp) != nullptr;
-    }
+    void* map = reinterpret_cast<uint8_t*>(::System::Configuration::_singleton) + 0x10;
+    bool found = reinterpret_cast<::MapFindFn>(
+                ResolveAddr(Module::Runtime, 0x18002ace0))(map, &tmp) != nullptr;
 
     if (found) _platformExistsGate = 0;
 

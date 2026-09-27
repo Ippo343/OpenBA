@@ -414,12 +414,9 @@ void Modification::SetupFileSystem() {
     using namespace RtIO;
     if (_dirty == 0) return;                              // 0x1800aebd8
 
-    // The three singletons, all exported DATA symbols, so the NAME door is the
-    // right door and the three addresses in the listing (0x1801fc6a8,
-    // 0x1801fc6c8, 0x1801fc6e8) need no address doors. Each is a POINTER CELL,
-    // not the object, hence the extra dereference.
-    static void* extFactorySingCache   = nullptr;
-    static void* factorySingletonCache = nullptr;
+    // The three singletons, all exported DATA symbols, all class statics now
+    // (ENDGAME B.3.9 SS1, B39_RULES D7) — read fresh every call, no lazy cache
+    // (B9-10).
 
     // *** `RtIO::` IN FULL, AND THE COMPILER IS WHY. *** This body lives in a
     // `namespace IO` block (B34_BRIEFS section A.2), and since B.3.4 PACKAGE+FS
@@ -430,14 +427,12 @@ void Modification::SetupFileSystem() {
     // the POD namespace out.
     RtIO::FileSystem* const fs =
         reinterpret_cast<RtIO::FileSystem*>(::IO::FileSystem::_singleton);   // ENDGAME B.3.9 IO (D7): the class static.
-    void* const extFactory = *reinterpret_cast<void**>(RtResolveCached(
-        "?_singleton@ExternalFactory@Object@@0PEAV12@EA", &extFactorySingCache));
+    void* const extFactory = ::Object::ExternalFactory::_singleton;
     // `Object::Factory::_singleton` is captured HERE, at 0x1800aebef, and used
     // only in act 4. Retail spills it to [RBP-0x39] across the whole function
     // rather than re-reading it, and so does this.
     const RtObject::Factory* const factory =
-        *reinterpret_cast<RtObject::Factory**>(RtResolveCached(
-            "?_singleton@Factory@Object@@0PEAV12@EA", &factorySingletonCache));
+        reinterpret_cast<RtObject::Factory*>(::Object::Factory::_singleton);
 
     // `?_typeInfo@External@Object@@0VBaseTypeInfo@2@A` + 0x00 — the type id
     // FindNext filters on. Read through the NAME door so a promotion of the row
