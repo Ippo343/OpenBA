@@ -31,15 +31,6 @@ uint32_t ResolveExeTypeId(uintptr_t rdataAddr, const char* name, uint32_t* cache
 }
 
 // ============================================================
-// Timer globals — addresses in Runtime-x64.dll
-// ============================================================
-// System::Timer::_secondsPerTick         @ 0x1801fe728 -- the other three Timer
-// globals went at ENDGAME B.3.9 SS2 (readers read System::Timer's class statics);
-// this one stays while runtime/src/graphics/wave28_lane_gfxbody.cpp reads it.
-
-double*  g_Timer_secondsPerTick       = nullptr;
-
-// ============================================================
 // Engine function pointers
 // ============================================================
 
@@ -744,9 +735,6 @@ fn_Frustum_MulTransform3_t             fn_Frustum_MulTransform3            = nul
 // ============================================================
 
 bool EngineFuncsInit() {
-    // --- Timer globals (direct memory addresses) ---
-    g_Timer_secondsPerTick       = reinterpret_cast<double*> (ResolveAddr(Module::Runtime, 0x1801fe728));
-
     // --- Function pointers (resolve by mangled name, fall back to RVA) ---
 
     // Video::Context lifecycle — the five resolves that used to sit here are GONE
@@ -1624,9 +1612,6 @@ bool EngineFuncsInit() {
         ResolveExport("??0Scene@Audio@@QEAA@XZ"));
 
 #ifdef _DEBUG
-    printf("[EngineFuncs] Timer globals:\n");
-    printf("  _secondsPerTick       @ %p = %f\n", (void*)g_Timer_secondsPerTick,
-           g_Timer_secondsPerTick ? *g_Timer_secondsPerTick : -1.0);
     printf("[EngineFuncs] Functions:\n");
     printf("  MemAlloc                  = %p\n", (void*)fn_MemAlloc);
     printf("  MemAllocSingleton         = %p\n", g_pMemAllocSingleton);

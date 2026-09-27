@@ -37,14 +37,6 @@
 #include "graphics/Camera.h"   // ::Graphics::Camera
 
 // ============================================================
-// Timer globals (in Runtime-x64.dll .data section)
-// Used by MainLoop for QPC-to-tick conversion.
-// ============================================================
-
-// System::Timer::_secondsPerTick — 1.0 / ticksPerSecond (double)
-extern double* g_Timer_secondsPerTick;
-
-// ============================================================
 // Engine function pointers
 // ============================================================
 
