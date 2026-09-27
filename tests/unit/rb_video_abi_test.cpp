@@ -12,7 +12,10 @@
 //   table (CompiledExternal() and the stamp first, External's three zero
 //   stores before it), and the object ends on the subclass's table.
 // PART B — slot 0 destroys (ReleaseFields under ImageBuffer's table) and frees.
-// PART C — the doors reach the same bodies with a stand-in minted table.
+// (PART C, the doors reaching the same bodies, went with the doors and the
+// minted row at ENDGAME B.3.9 VS.) PART D (b39_vs_*) — B9-16: the retired
+// row's shape (not abstract, protected non-virtual dtor) and the ctor's
+// retail stores.
 //
 // MARKERS: the class's virtuals, ~ImageBuffer and the two shared bodies live
 // in runtime/src/video/buffers.cpp, which does not link here.
@@ -37,7 +40,6 @@ const void* VptrOf(const void* p) { return *static_cast<const void* const*>(p); 
 int g_init = 0, g_rel = 0;
 const void* g_initVptr = nullptr;
 const void* g_relVptr = nullptr;
-const void* const kFakeMinted[4] = {};
 }  // namespace
 
 namespace Video {
@@ -101,16 +103,36 @@ UNIT_TEST(rb_imagebuffer_slot0_is_the_exe_scalar_deleting_dtor) {
     CHECK(g_relVptr == IbVt());
 }
 
-UNIT_TEST(rb_imagebuffer_doors_reach_the_same_bodies) {
-    alignas(8) unsigned char raw[sizeof(Video::ImageBuffer)] = {};
-    *reinterpret_cast<const void**>(raw) = kFakeMinted;
+UNIT_TEST(b39_vs_imagebuffer_is_concrete_with_a_protected_dtor) {
+    CHECK(!std::is_abstract<Video::ImageBuffer>::value);
+    CHECK(!std::is_destructible<Video::ImageBuffer>::value);      // D1.3: protected
+    CHECK(!std::has_virtual_destructor<Video::ImageBuffer>::value);
+    CHECK((std::is_base_of<Object::CompiledExternal, Video::ImageBuffer>::value));
+}
+
+// The retail stores of 0x1800f2580 the stand-in InitFields above does NOT make:
+// External's three qwords (+0x08/+0x10/+0x18) are the compiler's base ctors, and
+// the vptr is the class's own table from the first byte the body sees.
+UNIT_TEST(b39_vs_imagebuffer_ctor_stores_and_table) {
     g_init = g_rel = 0;
-    Video::ImageBuffer::DoorBody::Init(reinterpret_cast<Video::ImageBuffer*>(raw));
-    Video::ImageBuffer::DoorBody::Release(reinterpret_cast<Video::ImageBuffer*>(raw));
+    void* mem = Object::detail::InternalMemAlloc(sizeof(Video::ImageBuffer), 8);
+    std::memset(mem, 0xCD, sizeof(Video::ImageBuffer));
+    Video::ImageBuffer* ib = ::new (mem) Video::ImageBuffer();
     CHECK_EQ(g_init, 1);
+    CHECK(g_initVptr == IbVt());
+    CHECK(VptrOf(ib) == IbVt());
+    uint64_t q;
+    for (size_t off = 0x08; off < 0x20; off += 8) {
+        std::memcpy(&q, static_cast<unsigned char*>(mem) + off, 8);
+        CHECK_EQ(q, (uint64_t)0);
+    }
+    CHECK_EQ(ib->_kind, 2);
+    CHECK_EQ(ib->_filter, 1);
+    CHECK(ib->_sourceName == nullptr);
+    // slot 0 with flags 0: destroy in place, keep the storage (Reconstruct's arm)
+    CHECK(static_cast<void*>(ib->DeletingDtor(0u)) == mem);
     CHECK_EQ(g_rel, 1);
-    CHECK(g_initVptr == static_cast<const void*>(kFakeMinted));
-    CHECK(g_relVptr == static_cast<const void*>(kFakeMinted));
+    Object::detail::InternalMemFree(mem);
 }
 
 UNIT_TEST(rb_imagebuffer_shape) {

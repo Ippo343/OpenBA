@@ -208,14 +208,11 @@ namespace Video {
 // Video::ImageBuffer — one image/texture resource. 0x68 bytes,
 // `Object::CompiledExternal` base (which adds no bytes over `External`'s 0x20).
 //
-// *** NOT CONSTRUCTIBLE IN B.3.5. *** Every live `ImageBuffer` is built by
-// `??0ImageBuffer@Video@@QEAA@XZ` (0x1800f2580, ported in
-// `runtime/src/video/buffers.cpp`) or by the factory rows in
-// `runtime/src/video/rt_factories_video.inc`, and wears the MINTED
-// `??_7ImageBuffer@Video@@6B@` table rather than GCC's. A `Video::ImageBuffer
-// ib;` would stamp GCC's table on an object the rest of the tree reads through
-// the minted one, with no build error — so the default constructor is
-// `protected` and `= default` (B34_BRIEFS A.4).
+// ENDGAME B.3.9 VS: every live `ImageBuffer` is built by the real public
+// constructor (`::new (p) Video::ImageBuffer()` at every builder, Runtime and
+// exe, and by the class's own `CreateNewObject` / `CreateInPlaceObject`) and
+// wears the compiler's table. The `??0` / `??1` doors, the FACTREST row, the
+// `RT_DELDTOR` row and the minted `??_7ImageBuffer@Video@@6B@` are retired.
 //
 // NO VIRTUAL DESTRUCTOR (ENDGAME B.1 decision 2): slot 0 is
 // `DeletingDtor(unsigned)`. `~ImageBuffer()` is non-virtual and has no slot.
@@ -270,8 +267,10 @@ public:
     // ITSELF (its table copy 0x14015c8c0; ModDialog, NoiseUI, TradeWork), so
     // slot 0 is now CONCRETE — the exe copy's own slot 0 0x1400129d0, the
     // scalar deleting dtor (`~ImageBuffer`; MemFree on flags & 1). Inline, so
-    // the key function (TypeName) and the vtable's TU do not move. The mint's
-    // RT_DELDTOR row still serves the minted objects the door builds.
+    // the key function (TypeName) and the vtable's TU do not move. ENDGAME
+    // B.3.9 VS: the mint's RT_DELDTOR row (the DLL table's VECTOR slot 0
+    // 0x18001ed20) is retired; every object wears this table, and the two
+    // arms differ only on flags & 2, which nothing passes (B39_RULES D1.2).
     Object::Base* DeletingDtor(unsigned flags) override {             // [0]
         this->~ImageBuffer();
         if (flags & 1) Object::detail::InternalMemFree(this);
@@ -413,8 +412,8 @@ public:
 
     // The static reflection companions retail emits.
     static uint32_t      TypeId();                              // 0x18001e8f0
-    static Object::Base* CreateNewObject();                     // rt_factories_video.inc
-    static Object::Base* CreateInPlaceObject(void* storage);    // rt_factories_video.inc
+    static Object::Base* CreateNewObject();                     // 0x18001e9f0 — buffers.cpp
+    static Object::Base* CreateInPlaceObject(void* storage);    // 0x18001ea70 — buffers.cpp
     // ??2ImageBuffer@Video@@SAPEAX_K@Z 0x18001e910 — the body moved onto this
     // member by block VC; the door is `runtime/src/video/context_ctor.cpp`'s
     // `RtVideo_ImageBuffer_OperatorNew`, which keeps its name and both rows.
@@ -438,28 +437,27 @@ public:
     // therefore public, exactly as `Video::VertexLayout` made the same three
     // public in b35-B and for the same reason. The CONSTRUCTOR stays protected.
     //
-    // ??1ImageBuffer@Video@@UEAA@XZ (0x1800f2610) — NON-virtual, in no slot;
-    // reached by `DeletingDtor` (the deleting_dtor.cpp row) and by `Destruct`.
-    ~ImageBuffer();
     void PlatformConstruct();                  // 0x1800f2f40 (was 0x1800f2ba0) — buffers.cpp
     void PlatformDestruct();                   // 0x1800f3020 (was 0x1800f2c40) — buffers.cpp
 
     // ??0ImageBuffer@Video@@QEAA@XZ 0x1800f2580 — the REAL constructor
-    // (ENDGAME B.3.8 block RB, RULE B8-1), PUBLIC: the class is concrete now
-    // (slot 0 above). CompiledExternal() and the stamp are the compiler's; the
-    // field stores and `PlatformConstruct` are ONE body with the door
-    // `Video_ImageBuffer_Ctor` (buffers.cpp), which keeps the minted stamp.
+    // (ENDGAME B.3.8 block RB), PUBLIC: the class is concrete. CompiledExternal()
+    // and the stamp are the compiler's; the field stores and `PlatformConstruct`
+    // are `InitFields`. ENDGAME B.3.9 VS: the ctor door is gone.
     ImageBuffer() { InitFields(); }
 
-    // The doors' way onto the shared bodies.
-    struct DoorBody {
-        static void Init(ImageBuffer* b)    { b->InitFields(); }
-        static void Release(ImageBuffer* b) { b->ReleaseFields(); }
-    };
+protected:
+    // ??1ImageBuffer@Video@@UEAA@XZ (0x1800f2610) — NON-virtual, in no slot,
+    // PROTECTED (B39_RULES D1.3; retail's is protected too): reached by slot 0
+    // (`DeletingDtor`, so `Destruct` / `Reconstruct` too) and by the three
+    // Graphics subclasses' destructor chains. Its door is gone (ENDGAME B.3.9 VS).
+    ~ImageBuffer();
 
 private:
-    void InitFields();      // 0x1800f2580 minus the External stores + stamp (buffers.cpp)
-    void ReleaseFields();   // 0x1800f2610 minus the stamps + ~External (buffers.cpp)
+    // The ctor / dtor bodies minus the compiler's stores, out of line (buffers.cpp)
+    // only so the unit tests can link recording stand-ins (no Video::Device there).
+    void InitFields();      // 0x1800f2580 minus the External stores + stamp
+    void ReleaseFields();   // 0x1800f2610 minus the stamps + ~External
 
 protected:
     // The registered doors over the protected surface. See the banner on the

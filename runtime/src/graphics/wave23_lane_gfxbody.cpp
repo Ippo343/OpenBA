@@ -140,8 +140,9 @@ void* MemAlloc(uint64_t bytes, int align) {
 // ---------------------------------------------------------------------------
 using VoidThisFn  = void (*)(void*);
 
+// ENDGAME B.3.9 VS: `::new (p) Video::ImageBuffer()` -- the ??0 door and the minted row are retired.
 void ImageBufferCtor(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "??0ImageBuffer@Video@@QEAA@XZ")(p);
+    ::new (p) Video::ImageBuffer();
 }
 // (ENDGAME B.3.9 GFX: `ImageBufferDtor` went with the ??1 door; the real
 // ~FrameCopyImageBuffer chains ~ImageBuffer itself.)

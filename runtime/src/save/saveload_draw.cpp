@@ -479,7 +479,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
         void* p = RT_EXPORT_ONCE(OpNewFn, "??2ImageBuffer@Video@@SAPEAX_K@Z")(0x68);
         if (p != nullptr) {
             // Same rule as above: `p`, never the constructor's return.
-            RT_EXPORT_ONCE(VoidThisFn, "??0ImageBuffer@Video@@QEAA@XZ")(p);
+            ::new (p) Video::ImageBuffer();   // ENDGAME B.3.9 VS: `::new (p) Video::ImageBuffer()` -- the ??0 door and the minted row are retired
             target = static_cast<ImageBuffer*>(p);
         }
     }
