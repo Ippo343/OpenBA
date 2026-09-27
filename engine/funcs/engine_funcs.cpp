@@ -492,15 +492,6 @@ void** g_pFileSystemSingleton = nullptr;
 // Engine globals
 // ============================================================
 
-// Engine::Loader instance (_loader) @ 0x1801fe7b8
-void* g_pLoader = nullptr;
-
-// _loader.m_flags @ 0x1801fe7c0
-uint32_t* g_pLoaderFlags = nullptr;
-
-// _loader.m_completionEvent @ 0x1801fe7e0
-HANDLE* g_pLoaderCompletionEvent = nullptr;
-
 // Application::Application::_singleton @ 0x1801fc678 (Runtime export
 // ?_singleton@Application@1@0PEAV11@EA -- corrected by Wave 8 lane E; the
 // previous address here was stale and unused by any resolve call).
@@ -1792,9 +1783,6 @@ bool EngineFuncsInit() {
         ResolveExport("??0Scene@Audio@@QEAA@XZ"));
 
     // --- Engine globals (direct memory addresses) ---
-    g_pLoader              = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe7b8));
-    g_pLoaderFlags         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Runtime, 0x1801fe7c0));
-    g_pLoaderCompletionEvent = reinterpret_cast<HANDLE*>(ResolveAddr(Module::Runtime, 0x1801fe7e0));
     // Application singleton: exe exref at 0x140152368 contains a pointer to
     // Application::_singleton (in Runtime DLL). Dereference once at init to get
     // the actual singleton variable, so *g_pAppSingleton yields Application*.
@@ -1850,11 +1838,6 @@ bool EngineFuncsInit() {
            g_TypeId_CemeteryComponent ? *g_TypeId_CemeteryComponent : 0);
     // DestroyComponent_Reclaim/Rebuild/Destroy: now implemented as statics in destroyui.cpp
     printf("[EngineFuncs] Globals:\n");
-    printf("  _loader                   = %p\n", g_pLoader);
-    printf("  _loader.m_flags           = %p -> 0x%x\n", (void*)g_pLoaderFlags,
-           g_pLoaderFlags ? *g_pLoaderFlags : 0);
-    printf("  _loader.m_completionEvent = %p -> %p\n", (void*)g_pLoaderCompletionEvent,
-           g_pLoaderCompletionEvent ? *g_pLoaderCompletionEvent : nullptr);
     printf("  App::_singleton           = %p -> %p\n", (void*)g_pAppSingleton,
            g_pAppSingleton ? *g_pAppSingleton : nullptr);
 #endif

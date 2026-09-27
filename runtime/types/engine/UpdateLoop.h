@@ -140,10 +140,8 @@ enum : int {
 // concrete" is about a REAL CLASS holding a REAL CLASS — a POD mirror holding
 // the POD is not that case. `System::Thread` is ABSTRACT (retail's slot 0 is
 // `_purecall`, and no base body exists to delegate to), so spelling this member
-// as the class would be ill-formed. `ConstructLoader`
-// (standalone/rt_data_mint.cpp:434-461) still builds this object through the
-// registered `??0Thread@System@@QEAA@I@Z` door and stamps
-// `??_7Loader@Engine@@6B@` over +0x00 itself; nothing about that moves.
+// as the class would be ill-formed. ENDGAME B.3.9 ENG W2: the live object is
+// the real class `Engine::LoaderLoop::_loader` (below); this POD only pins it.
 struct Loader {
     RtSystem::Thread _thread; // +0x00 .. +0x2f  (vtable, runFlags, 4 HANDLEs)
     void*            _loop;   // +0x30  UpdateLoop* — the loop being loaded
@@ -389,23 +387,28 @@ public:
 // `??_7Loader@Engine@@6B@` 0x180157a08: [0] 0x1800dbfc0 Run, [1] 0x18000c590
 // `System::Thread::OnCompleted` (inherited). RULE B7-1.4: slot 0 is `Run`,
 // there is no deleting-dtor slot, and `??1Loader@Engine@@QEAA@XZ` (0x18004d330)
-// is a non-virtual `QEAA` export. The only instance is the static
-// `?_loader@LoaderLoop@Engine@@1VLoader@2@A` (0x1801fe7b8), built by
-// `ConstructLoader` (standalone/rt_data_mint.cpp) through the Thread ctor door,
-// never as a C++ object (B4b-2), and read through its RT_DATA_SLOT
-// (carry-over 5).
+// is a non-virtual `QEAA` export. The only instance is the class static
+// `LoaderLoop::_loader` (`?_loader@LoaderLoop@Engine@@1VLoader@2@A`,
+// 0x1801fe7b8). ENDGAME B.3.9 ENG W2: it is a C++ object built by the real ctor
+// below at CRT init (retail: initialiser 0x180148fe0 at DLL load, before the
+// exe's main) and destroyed by ~Loader at exit (retail: atexit 0x18014a580).
 class Loader : public System::Thread {
 public:
     void Run() override;                                           // [0] 0x1800dbfc0  LOADER THREAD
     void Load(UpdateLoop* loop);                                   // 0x1800dc050      main thread
 
-protected:
-    // `??0Loader@Engine@@QEAA@XZ` 0x1800dc0f0 / `??1Loader@Engine@@QEAA@XZ`
-    // 0x18004d330: neither is ported; the one object is built by ConstructLoader.
-    Loader() = default;
+    // `??0Loader@Engine@@QEAA@XZ` 0x1800dc0f0: `System::Thread(0x40000)` (a
+    // 256 KB stack), the vptr (the compiler's), `_loop = nullptr` (+0x30).
+    // The Thread body creates the worker SUSPENDED, makes its three events,
+    // then resumes it parked on {hStart, hStop}; it touches no MemoryAllocator
+    // (thread_win.cpp InitFields), so it is safe before main.
+    Loader() : System::Thread(0x40000u), _loop(nullptr) {}
+    // `??1Loader@Engine@@QEAA@XZ` 0x18004d330: the Thread restamp and the
+    // inlined ~Thread (SetEvent hStop, join, four CloseHandles) -- nothing of
+    // Loader's own; the compiler's base chain. PUBLIC, like retail's QEAA:
+    // the static's destructor is run by the CRT at exit.
     ~Loader() = default;
 
-public:
     UpdateLoop* _loop;   // +0x30  the loop being loaded (Load's store, Run's read)
 };
 
@@ -452,9 +455,12 @@ public:
     LoaderLoop(const LoaderLoop& other);                           // 0x18004d3a0
     LoaderLoop& operator=(const LoaderLoop& other);                // 0x18004d430
 
-    // `?_loader@LoaderLoop@Engine@@1VLoader@2@A` (0x1801fe7b8, a protected
-    // static in retail) STAYS a data slot until the end of B.3 (carry-over 5):
-    // loops.cpp reads it through `RT_DATA_SLOT`, never as a C++ static member.
+    // `?_loader@LoaderLoop@Engine@@1VLoader@2@A` (0x1801fe7b8) -- the ONE loader
+    // (ENDGAME B.3.9 ENG W2: the class static, no longer minted). A PROTECTED
+    // static in retail; PUBLIC here because the standalone's two loader-loop
+    // stubs and the engine loader gate (standalone/) read it too. LIVE THREAD:
+    // no lock (retail takes none); LoaderLoop::Shutdown joins it before ~Engine.
+    static Loader _loader;
 
 protected:
     // `??1LoaderLoop@Engine@@UEAA@XZ` 0x1800dc170: its own restamp, then

@@ -190,7 +190,6 @@ std::atomic<void*> g_userInterfaceCtor{nullptr};
 std::atomic<void*> g_userInterfaceDtor{nullptr};
 std::atomic<void*> g_listCleanup{nullptr};
 std::atomic<void*> g_modArrayCopy{nullptr};
-std::atomic<void*> g_loaderLoopLoader{nullptr};
 
 FindOrLoadFn FindOrLoad() {
     return reinterpret_cast<FindOrLoadFn>(rtengine::AtomicExport(g_findOrLoad,
@@ -673,10 +672,8 @@ void Engine::DialogLoaderLoopT::Startup() {
         ->SetSizeFill(_ui._addDialogs.GetSize() + 1, &ret);
 
     // The tail call `LEA RCX,[LoaderLoop::_loader]; JMP Loader::Load`.
-    // `_loader` is the DLL-data slot (carry-over 5), resolved through the
-    // port-aware door and never minted by this file; ENDGAME B.3.7: `Load` is
-    // a direct member call now (it was a function-local `static` export cache
-    // -- a B6-5 site -- before).
+    // `_loader` is the class static (ENDGAME B.3.9 ENG W2); `Load` a direct
+    // member call (ENDGAME B.3.7).
     LoaderLoopLoader()->Load(_nextLoop);
 }
 
@@ -804,28 +801,13 @@ bool Engine::UpdateLoop::AllowsModChanges() {
 
 namespace {
 
-// ---- ?_loader@LoaderLoop@Engine@@1VLoader@2@A  0x1801fe7b8  ord 4794 --------
-// ADDRESS DOOR NOTE (kickoff §4 #10 shape) — this is a NAME door, not an
-// address door, and that is deliberate:
-//   SYMBOL      ?_loader@LoaderLoop@Engine@@1VLoader@2@A (DATA, ord 4794)
-//   CONDITION   the row is currently RT_UNPROMOTABLE in reg_mint_promoted.cpp,
-//               so ResolveExport falls through to the DLL's own static object.
-//   CONSEQUENCE that is REQUIRED, not tolerated: the DLL's loader thread was
-//               created on THAT object and waits on ITS events. If the row is
-//               ever promoted while the DLL is present, every body below would
-//               silently start operating on a different, unwatched Loader and
-//               the loading screen would hang forever rather than crash.
-// The existing `?Startup@DialogLoaderLoopT@` port above resolves the same
-// symbol the same way; this helper just gives the four new users one spelling.
-// ENDGAME B.3.7 (RULE B7-7.1): this was `static Loader* p = ResolveExport(...)`,
-// a function-local lazy initialiser read from Update/Draw on the main thread
-// AND from Startup chains the loader thread can reach; now a namespace-scope
-// atomic slot. The object is the real `Engine::Loader` class (a
-// `System::Thread`), still the DLL-data slot, never a C++ static member
-// (carry-over 5).
+// ---- LoaderLoop::_loader (0x1801fe7b8) ---------------------------------------
+// ENDGAME B.3.9 ENG W2: the minted DLL-data slot (and its caching name door) is
+// RETIRED; `_loader` is the class static defined below, constructed at CRT init
+// by Loader's real ctor. One spelling for the bodies below (main thread: the
+// Update / Draw / Shutdown bodies; the Startup chains). No cache, no lock.
 Engine::Loader* LoaderLoopLoader() {
-    return static_cast<Engine::Loader*>(rtengine::AtomicExport(g_loaderLoopLoader,
-        "?_loader@LoaderLoop@Engine@@1VLoader@2@A"));
+    return &::Engine::LoaderLoop::_loader;
 }
 
 using CurrentTimeTicksFn  = int64_t (*)();
@@ -1152,11 +1134,14 @@ void Engine::Loader::Run() {
     reinterpret_cast<SetModeFn>((*reinterpret_cast<void***>(mode2))[4])(mode2, false);
 }
 
-extern "C" void RtEngine_Loader_Run(Loader* self) {
-    // QUALIFIED: the live object wears the minted `??_7Loader` table whose
-    // slot 0 is THIS door (B34_BRIEFS A.1).
-    reinterpret_cast<Engine::Loader*>(self)->Engine::Loader::Run();  // B.3.7 bridge
-}
+// ---- ?_loader@LoaderLoop@Engine@@1VLoader@2@A  0x1801fe7b8 -------------------
+// ENDGAME B.3.9 ENG W2 (B39_RULES D7 special case): THE class static, built by
+// `Engine::Loader()` at CRT init -- retail's initialiser 0x180148fe0 runs at DLL
+// load, i.e. before the exe's main and so before Engine::Startup; this keeps
+// that order. It wears the COMPILER's Loader table (slot 0 Run, slot 1 Thread's
+// OnCompleted), so the `?Run@Loader` slot door and the minted `??_7Loader` row
+// are gone. Destroyed by ~Loader at exit (retail: its atexit 0x18014a580).
+Engine::Loader Engine::LoaderLoop::_loader;
 
 // ---- ?Draw@MainLoop@Engine@@QEAAXM@Z  0x1800dcd40  ord 2251 -----------------
 // The census BODY row, and the per-frame draw half of the main loop.
@@ -1277,15 +1262,8 @@ extern "C" void RtEngine_MainLoop_Draw(RtEngine::MainLoop* self, float dt) {
 // NOT REGISTERED, deliberately:
 //
 //   ?_loader@LoaderLoop@Engine@@1VLoader@2@A  (0x1801fe7b8, ord 4794)
-//     This is DATA — the DLL's one static Engine::Loader instance, 0x38 bytes,
-//     constructed during the DLL's own startup. Registering it would mean
-//     handing every caller a DIFFERENT object from the one the DLL's loader
-//     thread was created on and waits on: the thread would sleep on one pair of
-//     events forever while Loader::Load signalled another. There is nothing to
-//     "port" about a static object; what a port can own is the CODE that
-//     touches it, and Loader::Load above does. This file therefore RESOLVES the
-//     symbol (in DialogLoaderLoopT::Startup) and never registers it. That is
-//     the finished state, not an omission.
+//     Nothing to register: since ENDGAME B.3.9 ENG W2 it is the class static
+//     Engine::LoaderLoop::_loader (defined above), read directly.
 //
 //   ?LoadResources@UpdateLoop@Engine@@QEAAXXZ  (0x1800dd7d0, ord 3210)
 //     Held back. See docs/runtime_port/WAVE8_LANE_A.md §3.
@@ -1307,16 +1285,11 @@ int RtEngineLoopsRegister() {
     // four minted loop tables and their RT_DELDTOR rows: their only reader was
     // the mint. The member bodies above are what the compiler tables call.
 
-    // Loader::Run -- slot 0 of the minted Loader table (goes with `_loader`).
-    RegisterRuntimeExport("?Run@Loader@Engine@@UEAAXXZ",
-                          (void*)&RtEngine_Loader_Run); ++n;
-    RegisterRuntimeAddr(0x1800dbfc0, (void*)&RtEngine_Loader_Run);
-
     // NOT a vtable slot — the census BODY row. Exported (ord 2251) despite
     // MainLoop.h having filed it under "Internal, NOT exported"; see the body.
     RegisterRuntimeExport("?Draw@MainLoop@Engine@@QEAAXM@Z",
                           (void*)&RtEngine_MainLoop_Draw); ++n;
     RegisterRuntimeAddr(0x1800dcd40, (void*)&RtEngine_MainLoop_Draw);
 
-    return n;   // IsRunning, Loader::Load, Loader::Run, MainLoop::Draw = 4
+    return n;   // IsRunning, Loader::Load, MainLoop::Draw = 3
 }

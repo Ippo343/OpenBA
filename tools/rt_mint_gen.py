@@ -438,8 +438,6 @@ VTABLE_EXTENT = {
 KNOWN_CTORS = {
     "?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA":
         "MintTypeInfos() — head of our own BaseTypeInfo chain",
-    "?_loader@LoaderLoop@Engine@@1VLoader@2@A":
-        "MintConstructedStatics() — Thread ctor + Loader vtable + _loop=0",
     "?_rng@Particle@Graphics@@1VRandom@System@@A":
         "ConstructParticleRng() - MT19937 init_genrand seeded from time(), "
         "transcribed from initialiser 0x180149650",
