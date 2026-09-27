@@ -215,7 +215,6 @@ using ModArray = Collection::Array<ModInfo>;
 // none of them returns a class by value — so not one has a hidden return slot
 // (tools/abi_retslot_audit.py agrees; a typedef that omits one is a wild write
 // that still returns the right answer, reference_hidden_retslot_wild_write).
-using MsOpenFn    = bool (*)(MemoryStream*, int);
 // ENDGAME B.3.1 step 2: the String::Serialize door typedef is gone with its
 // three call sites — all three are `System::String::Serialize` now.
 // ENDGAME B.3.2 step 2: the `SetSizeFn` door typedef is gone with its one call
@@ -295,8 +294,7 @@ void Save::SaveLoad::LoadMetaData(System::String& description, void** pixels,
     // reads `_embeddedState._size` a SECOND time from memory (`MOV R8D,[R14+0x2c]`
     // at 0x1800c1b95, after the Open call), and is transcribed with the same
     // second read. 0x18008a290 is memmove, not memcpy (runtime/src/system/error.cpp).
-    RT_EXPORT_ONCE(MsOpenFn, "?Open@MemoryStream@IO@@QEAA_NH@Z")(
-        &cms->memoryStream, static_cast<int>(_embeddedState._size));
+    cmsObj->_memoryStream.Open(static_cast<int>(_embeddedState._size));   // ENDGAME B.3.9 IO: the member
     std::memmove(cms->memoryStream.data,
                  _embeddedState._data,
                  _embeddedState._size);

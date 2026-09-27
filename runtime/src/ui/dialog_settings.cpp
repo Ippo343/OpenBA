@@ -153,8 +153,6 @@ using RtUI::DialogInstance;
 
 namespace {
 
-using MsCtorFn  = void* (*)(void*);
-using MsDtorFn  = void  (*)(void*);
 using SerCtorFn = void* (*)(void* self, void* stream, int version);
 
 // Virtual-call shapes used below. All are RETAIL offsets.
@@ -319,11 +317,13 @@ OpenCounts g_openCounts;
 // ############################################################################
 namespace {
 
+// ENDGAME B.3.9 IO (W2, foreign site): the real class; the ??0 / ??1 doors are
+// gone. The destructor is the non-virtual slot-0 call with flags 0.
 inline void MsCtor(void* ms) {
-    RT_EXPORT_ONCE(RtUi::MsCtorFn, "??0MemoryStream@IO@@QEAA@XZ")(ms);
+    ::new (ms) IO::MemoryStream();
 }
 inline void MsDtor(void* ms) {
-    RT_EXPORT_ONCE(RtUi::MsDtorFn, "??1MemoryStream@IO@@UEAA@XZ")(ms);
+    static_cast<IO::MemoryStream*>(ms)->IO::MemoryStream::DeletingDtor(0);
 }
 inline void SerCtor(void* ser, void* ms) {
     RT_EXPORT_ONCE(RtUi::SerCtorFn, "??0Serializer@IO@@QEAA@AEAVStream@1@H@Z")(ser, ms, 0);

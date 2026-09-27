@@ -38,7 +38,6 @@
 #include "../../funcs/rt_port.h"
 
 extern int RtIoSerializerRegister();    // serializer.cpp    (lane A)
-extern int RtIoCompressedStreamRegister();  // compressedstream.cpp (lane B)
 extern int RtIoPersistenceRegister();   // persistence.cpp   (lane C)
 extern int RtIoFileSystemRegister();    // filesystem.cpp    (lane D)
 // Wave 19 lane PERSIST: the save-ENUMERATION and request-ISSUE half of
@@ -230,7 +229,6 @@ extern int RtIoTextFileStreamSlotsRegister();   // text_file_stream_win.cpp
 void RtIoPortInit() {
     int n = 0;
     n += RtIoSerializerRegister();
-    n += RtIoCompressedStreamRegister();
     n += RtIoPersistenceRegister();
     n += RtIoPersistenceSavesRegister();
     n += RtIoPersistenceWorkerRegister();

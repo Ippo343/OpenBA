@@ -149,7 +149,6 @@ using RtSaveDetail::MemFreeFn;
 using RtSaveDetail::GetDataDirectoryFn;
 using RtSaveDetail::ConcatFn;
 using RtSaveDetail::AdjustDelimsFn;
-using RtSaveDetail::MemStreamOpenFn;
 using RtSaveDetail::SaveLoadVoidFn;
 using RtSaveDetail::MemAlloc;
 using RtSaveDetail::MemFree;
@@ -1017,9 +1016,8 @@ void RtSave_SavedState_Store(SavedState* self, MemoryStream* stream) {
 // free it. Both runs only read `*this`.
 // ============================================================================
 void Save::SavedState::Retrieve(IO::MemoryStream& stream) {
-    // ?Open@MemoryStream@IO@@ is IO's, not this block's: still its door.
-    RT_EXPORT_ONCE(MemStreamOpenFn, "?Open@MemoryStream@IO@@QEAA_NH@Z")(
-        reinterpret_cast<MemoryStream*>(&stream), static_cast<int>(_size));
+    // ENDGAME B.3.9 IO (W2, foreign site): ?Open@MemoryStream is the member.
+    stream.Open(static_cast<int>(_size));
     std::memcpy(stream._data, _data, _size);
 }
 

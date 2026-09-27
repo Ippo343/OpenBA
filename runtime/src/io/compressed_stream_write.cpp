@@ -225,7 +225,6 @@ typedef void* (*MemAllocFn)(uint64_t, int32_t);
 typedef void  (*MemFreeFn)(void*);
 typedef void* (*CompressionCtorFn)(void*);
 typedef int   (*CompressFn)(void*, const void*, uint32_t, void*, uint32_t);
-typedef bool  (*MemStreamCreateFn)(void*, int32_t);
 typedef void  (*CloseFileFn)(void*, void*);
 
 }  // namespace
@@ -774,12 +773,9 @@ void CompressedMemoryStream::PreCommit() {
             total += RtIo::StoredLength(h[k]);           // 1800a9683..93
     }
 
-    // `this + 0x68` is the embedded MemoryStream, and it is now a real member
-    // rather than an offset — but ?Create@MemoryStream is NOT part of this
-    // block's conversion (it keeps its free-function door), so the call stays
-    // the door it was. Same target, same argument, one fewer literal offset.
-    RT_EXPORT_ONCE(RtIo::MemStreamCreateFn, "?Create@MemoryStream@IO@@QEAA_NH@Z")(
-        &_memoryStream, static_cast<int32_t>(total));    // 1800a969b..a2  ADD RCX,0x68 ; JMP
+    // `this + 0x68` is the embedded MemoryStream; ENDGAME B.3.9 IO (W2):
+    // ?Create@MemoryStream is its member now (the door is gone).
+    _memoryStream.Create(static_cast<int32_t>(total));  // 1800a969b..a2  ADD RCX,0x68 ; JMP
 }
 
 // ?Close@CompressedStream@IO@@UEAAXXZ                        retail 0x1800aa8d0

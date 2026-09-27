@@ -158,14 +158,15 @@ uint32_t InternalRand(::Random* random) {
 // constructor, and every construction site keeps going through the ported ctor
 // door on a POD local. `IO::MemoryStream`'s default constructor is PROTECTED
 // precisely so that `IO::MemoryStream ms;` is a compile error here.
-typedef void* (*MemoryStreamCtorFn)(void*);
-typedef void  (*MemoryStreamDtorFn)(void*);
 
+// ENDGAME B.3.9 IO (W2, foreign site): the real class -- the ??0 / ??1 doors
+// are gone. The destructor is the non-virtual slot-0 call with flags 0 (the
+// destructor chain, no free of the stack object).
 void* MemoryStreamCtor(void* self) {
-    return RT_EXPORT_ONCE(MemoryStreamCtorFn, "??0MemoryStream@IO@@QEAA@XZ")(self);
+    return ::new (self) IO::MemoryStream();
 }
 void MemoryStreamDtor(void* self) {
-    RT_EXPORT_ONCE(MemoryStreamDtorFn, "??1MemoryStream@IO@@UEAA@XZ")(self);
+    static_cast<IO::MemoryStream*>(self)->IO::MemoryStream::DeletingDtor(0);
 }
 
 #endif

@@ -523,6 +523,13 @@ public:
     // slot 7 +0x38 — MemoryStream's own first virtual. A BARE RET in retail.
     virtual void Close();                              //              0x1800ae9e0
 
+    // ENDGAME B.3.9 IO (W2) -- the two non-virtual buffer openers, members
+    // now (their by-name doors are gone). Out of line in compressedstream.cpp.
+    // ?Open@MemoryStream@IO@@QEAA_NH@Z   0x1800ae670: READING (direction 0).
+    bool Open(int size);
+    // ?Create@MemoryStream@IO@@QEAA_NH@Z 0x1800ae7f0: WRITING (direction 1).
+    bool Create(int size);
+
     void*    _data;        // +0x18  the buffer
     uint8_t  _ownsData;    // +0x20  free _data in the dtor
     uint8_t  _pad21[3];    // +0x21

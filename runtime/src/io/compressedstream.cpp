@@ -279,10 +279,6 @@ CompressedMemoryStream::~CompressedMemoryStream() {
 // 0x1801554a8 is UNEXPORTED, so the only port-aware door to it is the ADDRESS
 // one -- which is exactly the door lane C2's address-keyed mint registers.
 // ----------------------------------------------------------------------------
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module module, uintptr_t ghidraAddr);
-
-using MemAllocFn = void* (*)(uint64_t, int);
 
 // ?Open@MemoryStream@IO@@QEAA_NH@Z — 0x1800ae670.
 //
@@ -312,15 +308,16 @@ using MemAllocFn = void* (*)(uint64_t, int);
 // The scratch is destroyed with the DLL's own destructor, so nothing leaks and
 // nothing live is touched. Every call reaching the guard does the comparison,
 // so `calls=` counts work rather than entry.
-extern "C" bool RtIo_MemoryStream_Open(MemoryStream* self, int size) {
-
-    self->data = RT_EXPORT_ONCE(MemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(static_cast<uint64_t>(size), 4);
-    self->size = static_cast<uint32_t>(size);
-    self->cursor = 0;
-    self->base.direction = 0;
-    self->ownsData = 1;
-
+// ENDGAME B.3.9 IO (W2): the member; the ?Open door that stood here is gone
+// with its by-name callers (SavedState::Retrieve, LoadMetaData). The allocation
+// is the same ?MemAlloc@MemoryAllocator (RtSystem::RtMemAlloc), the size
+// sign-extended exactly as `MOVSXD` does.
+bool IO::MemoryStream::Open(int size) {
+    _data = RtSystem::RtMemAlloc(static_cast<uint64_t>(size), 4);
+    _size = static_cast<uint32_t>(size);
+    _cursor = 0;
+    _direction = 0;
+    _ownsData = 1;
     return true;
 }
 
@@ -383,15 +380,14 @@ extern "C" bool RtIo_MemoryStream_Open(MemoryStream* self, int size) {
 // the probe comment warns about, and this oracle is positioned to catch it.
 // What the oracle does NOT cover: the allocator call itself (size and alignment
 // reaching MemAlloc) is compared only indirectly, through _size.
-extern "C" bool RtIo_MemoryStream_Create(MemoryStream* self, int size) {
-
-    self->data = RT_EXPORT_ONCE(MemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(static_cast<uint64_t>(size), 4);
-    self->size = static_cast<uint32_t>(size);
-    self->cursor = 0;
-    self->base.direction = 1;          // 1800ae860 — WRITING. Open stores 0 here.
-    self->ownsData = 1;
-
+// ENDGAME B.3.9 IO (W2): the member; the ?Create door that stood here is gone
+// with its by-name caller (CompressedMemoryStream::PreCommit).
+bool IO::MemoryStream::Create(int size) {
+    _data = RtSystem::RtMemAlloc(static_cast<uint64_t>(size), 4);   // 1800ae852
+    _size = static_cast<uint32_t>(size);                               // 1800ae856
+    _cursor = 0;                                                       // 1800ae859
+    _direction = 1;          // 1800ae860 — WRITING. Open stores 0 here.
+    _ownsData = 1;                                                     // 1800ae867
     return true;
 }
 
@@ -406,9 +402,9 @@ extern "C" bool RtIo_MemoryStream_Create(MemoryStream* self, int size) {
 // (CompressedMemoryStream's dtor above, Object::Internal::Clone, the dialog
 // settings load) and is one non-virtual slot-0 call with flags 0: the
 // destructor chain, no free (B9-6).
-extern "C" void RtIo_MemoryStream_Dtor(MemoryStream* self) {
-    reinterpret_cast<IO::MemoryStream*>(self)->IO::MemoryStream::DeletingDtor(0);
-}
+// ENDGAME B.3.9 IO (W2): the ??1MemoryStream door that stood here is gone --
+// Object::Internal::Clone and the dialog-settings load end their stack
+// streams with the class's non-virtual DeletingDtor(0).
 
 // ============================================================================
 // Wave 9 lane W, round 2 — ??0MemoryStream and ??0CompressedStream
@@ -504,10 +500,8 @@ extern "C" void RtIo_MemoryStream_Dtor(MemoryStream* self) {
 // reached by name on raw storage from CompressedMemoryStream's ctor (above),
 // Save::SaveLoad::SaveMetaData, Object::Internal::Clone, the dialog-settings
 // load and PackageFile::ReadPackfile -- one placement new (B9-6).
-extern "C" MemoryStream* RtIo_MemoryStream_Ctor(MemoryStream* self) {
-    ::new (static_cast<void*>(self)) IO::MemoryStream();
-    return self;
-}
+// ENDGAME B.3.9 IO (W2): the ??0MemoryStream door that stood here is gone --
+// every builder spells `::new (p) IO::MemoryStream()`.
 
 // ENDGAME B.3.9 IO (W2): the ??0CompressedStream door (0x1800aa3d0) that stood
 // here is gone with its last caller; the body is IO::CompressedStream's real
@@ -555,44 +549,6 @@ void CompressedMemoryStream::Close() {
 
 }  // namespace IO
 
-// RegisterRuntimeExport flips every ResolveExport call site in our tree; the
-// paired RegisterRuntimeAddr covers anything that asks for the same function by
-// Ghidra address. No detour is installed: per the vtable-ownership argument at
-// the top of this file the DLL's own callers are self-contained, and a detour on
-// a virtual whose vtable slot we deliberately leave pointing at the DLL would
-// make the two paths disagree about which body runs for no benefit.
-int RtIoCompressedStreamRegister() {
-    int n = 0;
-
-    // ENDGAME B.3.9 IO (W2): the six CompressedMemoryStream doors (??0 / ??1 /
-    // ?Create / ?Open / ?Close / ?GetMemoryStream) are gone -- the class's own
-    // members, reached directly by every builder.
-
-    // ---- Wave 9 lane W ----
-    RegisterRuntimeExport("??0MemoryStream@IO@@QEAA@XZ",
-                          (void*)&RtIo_MemoryStream_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800ae710, (void*)&RtIo_MemoryStream_Ctor);
-
-    RegisterRuntimeExport("?Open@MemoryStream@IO@@QEAA_NH@Z",
-                          (void*)&RtIo_MemoryStream_Open); ++n;
-    RegisterRuntimeAddr(0x1800ae670, (void*)&RtIo_MemoryStream_Open);
-
-    // ---- Wave 23 lane IOPORT: the write-side twin of Open, above. ----
-    RegisterRuntimeExport("?Create@MemoryStream@IO@@QEAA_NH@Z",
-                          (void*)&RtIo_MemoryStream_Create); ++n;
-    RegisterRuntimeAddr(0x1800ae7f0, (void*)&RtIo_MemoryStream_Create);
-
-    RegisterRuntimeExport("??1MemoryStream@IO@@UEAA@XZ",
-                          (void*)&RtIo_MemoryStream_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800ae890, (void*)&RtIo_MemoryStream_Dtor);
-    // NOTE: ??_7MemoryStream@IO@@6B@ slot 0 is the DELETING destructor thunk
-    // (0x1800242a0), NOT this body, so registering ??1 does not change what a
-    // virtual `delete` dispatches to. That is the same vtable-ownership
-    // argument this file makes at the top for CompressedMemoryStream, and it is
-    // why no detour is installed here either.
-
-    printf("[RtPort]   IO::CompressedMemoryStream: %d exports registered "
-           "(SAVE PATH ONLY -- a plain autostart session never reaches them; "
-           "needs a save or a load, see WAVE4_LANE_B.md)\n", n);
-    return n;
-}
+// ENDGAME B.3.9 IO (W2): RtIoCompressedStreamRegister is gone -- every door it
+// registered (the six CompressedMemoryStream doors, ??0CompressedStream and the
+// four MemoryStream doors) is a class member now, reached directly.
