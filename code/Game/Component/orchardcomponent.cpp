@@ -9,6 +9,11 @@
 //
 
 #include "Component/orchardcomponent_funcs.h"
+#include "Entity/ComponentEntity.h"
+#include "Component/NaturalResourceComponent.h"
+#include "Component/FruitComponent.h"
+#include "Component/FruitDescription.h"
+#include "Component/OrchardDescription.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -61,9 +66,6 @@ static fn_IBPAccessor_t s_fn_IBPAccessor52c0 = nullptr;
 // filter simply rejected everything: reference_wrong_but_nonzero_typeid. The slot the two
 // sites test is a tile record's +0x08, which holds the ENTITY standing on the tile (dc20
 // stores the owner IBP from MapComponent+0x10) — an entity is never a MapComponent.
-static uint32_t* s_pTypeComponentEntity = nullptr;  // 0x1401c5d70 = ComponentEntity
-static uint32_t* s_pType7b30 = nullptr;             // DAT_1401c7b30
-static uint32_t* s_pType4250 = nullptr;             // DAT_1401c4250
 static void**    s_pWorldSingleton2 = nullptr;      // g_pGameWorldSingleton (0x1401c3dd8)
 
 static bool s_subResolved = false;
@@ -82,9 +84,6 @@ static void EnsureSubHelpers() {
         if (!s_fn_BaseIsA) s_fn_BaseIsA = reinterpret_cast<fn_BaseIsA_t>(fn_IsA);
     }
     s_fn_IBPAccessor52c0  = reinterpret_cast<fn_IBPAccessor_t>(ResolveAddr(Module::Exe, 0x1400052c0));
-    s_pTypeComponentEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5d70));
-    s_pType7b30           = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7b30));
-    s_pType4250           = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4250));
     s_pWorldSingleton2    = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3dd8));
     s_subResolved = true;
 }
@@ -136,18 +135,18 @@ void OrchardComponent_SerializeRefEntries(void* serializer, int count, void* arr
         reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 4), nullptr);   // B.3.4 bridge
 
         reinterpret_cast<Object::InternalBasePtr*>(e + 8)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-        if (*reinterpret_cast<void**>(e + 8) != nullptr && s_pTypeComponentEntity &&
-            !(fn_IsDerivedFrom && fn_IsDerivedFrom(*reinterpret_cast<void**>(e + 8), *s_pTypeComponentEntity)))
+        if (*reinterpret_cast<void**>(e + 8) != nullptr &&
+            !(fn_IsDerivedFrom && fn_IsDerivedFrom(*reinterpret_cast<void**>(e + 8), ComponentEntity::TypeId())))
             *reinterpret_cast<void**>(e + 8) = nullptr;
 
         reinterpret_cast<Object::InternalBasePtr*>(e + 0x10)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-        if (*reinterpret_cast<void**>(e + 0x10) != nullptr && s_pType7b30 &&
-            !(fn_IsDerivedFrom && fn_IsDerivedFrom(*reinterpret_cast<void**>(e + 0x10), *s_pType7b30)))
+        if (*reinterpret_cast<void**>(e + 0x10) != nullptr &&
+            !(fn_IsDerivedFrom && fn_IsDerivedFrom(*reinterpret_cast<void**>(e + 0x10), NaturalResourceComponent::TypeId())))
             *reinterpret_cast<void**>(e + 0x10) = nullptr;
 
         reinterpret_cast<Object::InternalBasePtr*>(e + 0x18)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-        if (*reinterpret_cast<void**>(e + 0x18) != nullptr && s_pType4250 &&
-            !(fn_IsDerivedFrom && fn_IsDerivedFrom(*reinterpret_cast<void**>(e + 0x18), *s_pType4250)))
+        if (*reinterpret_cast<void**>(e + 0x18) != nullptr &&
+            !(fn_IsDerivedFrom && fn_IsDerivedFrom(*reinterpret_cast<void**>(e + 0x18), FruitComponent::TypeId())))
             *reinterpret_cast<void**>(e + 0x18) = nullptr;
 
         reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(e + 0x20), nullptr);   // B.3.4 bridge
@@ -173,8 +172,8 @@ void OrchardComponent_ValidateRefs(void* selfV) {
             *reinterpret_cast<uintptr_t*>(resMgr + 0x80) + 8 + (uintptr_t)tile * 0x30);
         bool ok = false;
         if (live) {
-            if (s_fn_BaseIsA && s_pTypeComponentEntity &&
-                s_fn_BaseIsA(live, *s_pTypeComponentEntity)) {
+            if (s_fn_BaseIsA &&
+                s_fn_BaseIsA(live, ComponentEntity::TypeId())) {
                 int64_t accBuf = 0;
                 void* acc = s_fn_IBPAccessor52c0 ? s_fn_IBPAccessor52c0((int64_t)live, &accBuf) : nullptr;
                 if (acc && *reinterpret_cast<int64_t*>(acc) != 0) {
@@ -192,9 +191,9 @@ void OrchardComponent_ValidateRefs(void* selfV) {
                 void* bound = *reinterpret_cast<void**>(entry + 8);
                 std::fprintf(stderr, "[OrchardValidate] slot=%d tile=%d DEMOTING 1->2: live=%p "
                              "bound=%p typeIdCompEntity=%u isA=%d liveEqBound=%d\n",
-                             i, tile, live, bound, s_pTypeComponentEntity ? *s_pTypeComponentEntity : 0u,
-                             (live && s_fn_BaseIsA && s_pTypeComponentEntity)
-                                 ? (int)s_fn_BaseIsA(live, *s_pTypeComponentEntity) : -1,
+                             i, tile, live, bound, ComponentEntity::TypeId(),
+                             (live && s_fn_BaseIsA)
+                                 ? (int)s_fn_BaseIsA(live, ComponentEntity::TypeId()) : -1,
                              (int)(live == bound));
                 std::fflush(stderr);
             }
@@ -269,7 +268,7 @@ float OrchardComponent_GetGrowth(void* selfV) {
     uintptr_t tiles = *reinterpret_cast<uintptr_t*>(map + 0x80);
     if (!tiles) return 0.0f;
 
-    const uint32_t tidEntity = g_TypeId_ComponentEntity ? *g_TypeId_ComponentEntity : 0;
+    const uint32_t tidEntity = ComponentEntity::TypeId();   // cell 0x1401c5d70 (D5)
     const float maxGrowth = g_fUVScale ? *g_fUVScale : 1.0f;
 
     // FUN_1400052c0 — FindComponent(NaturalResourceComponent), member ABI
@@ -340,8 +339,6 @@ float OrchardComponent_GetGrowth(void* selfV) {
 // FUN_14000a0b0 — sibling FruitComponent finder (type id DAT_1401c4250).
 typedef void* (*fn_FindFruit_a0b0_t)(int64_t entity, void* outIBP);
 static fn_FindFruit_a0b0_t s_fn_FindFruit_a0b0 = nullptr;
-static uint32_t* s_pTypeFruitDesc = nullptr;    // DAT_1401c4288 FruitDescription
-static uint32_t* s_pTypeOrchardDesc = nullptr;  // DAT_1401c46e8 OrchardDescription
 static float*    s_pf_172234 = nullptr;         // 300.0f
 static bool s_msgResolved = false;
 static void EnsureMsgHelpers() {
@@ -349,8 +346,6 @@ static void EnsureMsgHelpers() {
     s_msgResolved = true;
     s_fn_FindFruit_a0b0 = reinterpret_cast<fn_FindFruit_a0b0_t>(
         ResolveAddr(Module::Exe, 0x14000a0b0));
-    s_pTypeFruitDesc   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4288));
-    s_pTypeOrchardDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c46e8));
     s_pf_172234        = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172234));
 }
 
@@ -361,7 +356,7 @@ static void OrchardComponent_BoostFruit_49fc0(int64_t* fruitComp, float scale) {
     EnsureMsgHelpers();
     void* desc = reinterpret_cast<void*>(fruitComp[3]);          // +0x18
     void* validated = nullptr;
-    if (fn_IsDerivedFrom && s_pTypeFruitDesc && fn_IsDerivedFrom(desc, *s_pTypeFruitDesc))
+    if (fn_IsDerivedFrom && fn_IsDerivedFrom(desc, FruitDescription::TypeId()))
         validated = desc;
     const float rate  = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(validated) + 0x20);
     const float secs  = rate * (s_pf_172234 ? *s_pf_172234 : 300.0f) * scale;
@@ -812,7 +807,7 @@ void OrchardComponent::OnMessage(int msgId, void* /*srcEntityRef*/, uint32_t slo
         if (fruitIBP == 0) return;
         void* desc = *reinterpret_cast<void**>(self + 0x18);
         void* validated = nullptr;
-        if (fn_IsDerivedFrom && s_pTypeOrchardDesc && fn_IsDerivedFrom(desc, *s_pTypeOrchardDesc))
+        if (fn_IsDerivedFrom && fn_IsDerivedFrom(desc, OrchardDescription::TypeId()))
             validated = desc;
         OrchardComponent_BoostFruit_49fc0(reinterpret_cast<int64_t*>(fruitIBP),
             *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(validated) + 0x2c));

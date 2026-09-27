@@ -10,6 +10,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/livestockcomponent_funcs.h"
+#include "Component/LivestockDescription.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -22,10 +23,6 @@
 // Resolved helpers
 // ============================================================
 
-// Type ID for the config component checked via IsDerivedFrom.
-// Located at 0x1401c79a8 — runtime-filled by RegisterType.
-static uint32_t* s_pLivestockConfigTypeId = nullptr;
-
 // Time multiplier constant: 300.0f at 0x140172234 (.rdata)
 static float* s_pTimeMultiplier = nullptr;
 
@@ -34,8 +31,6 @@ static bool s_initialized = false;
 static void EnsureHelpers() {
     if (s_initialized) return;
 
-    s_pLivestockConfigTypeId = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c79a8));
     s_pTimeMultiplier = reinterpret_cast<float*>(
         ResolveAddr(Module::Exe, 0x140172234));
 
@@ -54,9 +49,8 @@ static void EnsureHelpers() {
 void LivestockComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[LivestockComponent] Funcs resolved: ConfigTypeId=%p(%u) TimeMultiplier=%p(%f)\n",
-           (void*)s_pLivestockConfigTypeId,
-           s_pLivestockConfigTypeId ? *s_pLivestockConfigTypeId : 0u,
+    printf("[LivestockComponent] Funcs resolved: ConfigTypeId=%u TimeMultiplier=%p(%f)\n",
+           LivestockDescription::TypeId(),
            (void*)s_pTimeMultiplier,
            s_pTimeMultiplier ? *s_pTimeMultiplier : 0.0f);
 #endif
@@ -155,13 +149,13 @@ void LivestockComponent::Update(void* time) {
     }
 
     // Verify fn_IsDerivedFrom and globals are available
-    if (!fn_IsDerivedFrom || !s_pLivestockConfigTypeId || !s_pTimeMultiplier || !g_Timer_secondsPerTick) {
+    if (!fn_IsDerivedFrom || !s_pTimeMultiplier || !g_Timer_secondsPerTick) {
         return;
     }
 
     // Get the related component from _unk18 and check its type
     void* relatedComponent = _description;
-    bool isDerived = fn_IsDerivedFrom(relatedComponent, *s_pLivestockConfigTypeId);
+    bool isDerived = fn_IsDerivedFrom(relatedComponent, LivestockDescription::TypeId());
 
     void* configComponent = isDerived ? relatedComponent : nullptr;
 

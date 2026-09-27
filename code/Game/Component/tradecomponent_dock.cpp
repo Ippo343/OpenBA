@@ -61,6 +61,7 @@
 
 #include "engine_funcs.h"
 #include "Component/ControllerComponent.h"
+#include "Component/RawMaterialDescription.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -563,7 +564,7 @@ extern "C" void TradeComponent_AutoTrade(void* selfV) {
     int volume = s_QueryCount ? s_QueryCount(reinterpret_cast<void*>(storage)) : 0;
     const int volumeCap = *reinterpret_cast<int32_t*>(storage + 0x38);
 
-    const uint32_t tidRawMat = g_TypeId_RawMaterialDescription ? *g_TypeId_RawMaterialDescription : 0;
+    const uint32_t tidRawMat = RawMaterialDescription::TypeId();   // cell 0x1401c7cb8 (D5)
 
     // What the merchant is actually offering, with the raw-material flag word that each
     // order mask is tested against. Without this, a "0 delivered" outcome cannot be told

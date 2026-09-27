@@ -137,16 +137,6 @@ float AsFloat(uint32_t bits) { float f; std::memcpy(&f, &bits, 4); return f; }
 // ---------------------------------------------------------------------------
 using VoidThisFn = void (*)(void*);
 
-// `??0Geometry@Graphics@@QEAA@XZ` 0x1800a4270 and `??1Geometry@…` 0x1800a41c0,
-// both PORTED. The two light constructors CALL the first; the AmbientLight
-// destructor thunk TAIL-JUMPS the second, and so does SpotLight's.
-void GeometryCtor(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "??0Geometry@Graphics@@QEAA@XZ")(p);
-}
-void GeometryDtor(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "??1Geometry@Graphics@@UEAA@XZ")(p);
-}
-
 // `?CreateTargets@SpotLight@Graphics@@AEAAXXZ` 0x180106050 — **PORTED**
 // (runtime/src/graphics/batchc_gfx_leaves.cpp, BATCH C 2026-09-12), reached BY
 // NAME because `AEAA` is PRIVATE, not unexported, and this DLL exports its
@@ -156,11 +146,9 @@ void GeometryDtor(void* p) {
 // Video side of that is ported"; the Video side it named (ImageBuffer /
 // RenderBuffer operator new, ctor, PlatformConstruct and Create) was already
 // ported, which is what made the port possible.
-// ENDGAME B.3.5 caller batch: a DEFINED member (batchc_gfx_leaves.cpp:885), so
-// this is a member call; the door stays registered for callers outside the file.
-void SpotLightCreateTargets(void* p) {
-    reinterpret_cast<Graphics::SpotLight*>(p)->CreateTargets();   // B.3.5 bridge
-}
+// ENDGAME B.3.5 caller batch: a DEFINED member (batchc_gfx_leaves.cpp:885).
+// ENDGAME B.3.9 block GFX: the real `SpotLight()` calls it as a member; the
+// file-local bridge went with the ??0 door. Its own door stays registered.
 
 // ENDGAME B.3.5 caller batch: `Video::RenderBuffer::PlatformDestruct` is a
 // DEFINED member (runtime/src/video/buffers_win.cpp).
@@ -456,65 +444,26 @@ const uint8_t* DrawGroup(const void* renderer, int32_t index) {
 // ############################################################################
 
 // ============================================================================
-// ??0AmbientLight@Graphics@@QEAA@XZ                  retail 0x1800fa940
-//
-//     CALL 0x1800a4270                 ; ??0Geometry@Graphics@@
-//     LEA RAX,[0x180158d30]            ; ??_7Light@Graphics@@6B@       (dead)
-//     LEA RAX,[0x180158cd0]            ; ??_7AmbientLight@Graphics@@6B@
-//     [+0xc0] = 0 ; [+0xc8] = 0        ; the colour Vector4
-//     [+0xd0] = 0x41200000             ; 10.0f
-//     [+0x30] = 0x8000
-//     MOV RAX,RBX                      ; returns `this`
+// ??0AmbientLight@Graphics@@QEAA@XZ 0x1800fa940 / ??1AmbientLight@Graphics@@UEAA@XZ
+// 0x180058f30 -- the two DOORS are gone (ENDGAME B.3.9 block GFX, B39_RULES D1).
+// The ctor's body is the real `AmbientLight()` (Light.h); the destructor thunk
+// (five instructions, a tail jump onto ~Geometry that the linker folded) is the
+// empty `~AmbientLight()` below plus the compiler's chain. Nothing in retail or
+// the tree ever called ??0AmbientLight.
 // ============================================================================
-extern "C" void* RtGraphics_AmbientLight_Ctor(void* self) {
-    uint8_t* const d = static_cast<uint8_t*>(self);
-    GeometryCtor(self);
-    *reinterpret_cast<void**>(d) = reinterpret_cast<void*>(
-        ResolveAddr(Module::Runtime, 0x180158d30ull));       // dead, transcribed
-    *reinterpret_cast<void**>(d) = reinterpret_cast<void*>(
-        ResolveAddr(Module::Runtime, 0x180158cd0ull));
-    *reinterpret_cast<uint64_t*>(d + 0xc0) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0xc8) = 0;
-    *reinterpret_cast<uint32_t*>(d + 0xd0) = 0x41200000u;    // 10.0f
-    *reinterpret_cast<uint32_t*>(d + 0x30) = 0x8000u;
-    return self;
-}
-
-// ============================================================================
-// ??1AmbientLight@Graphics@@UEAA@XZ                  retail 0x180058f30
-//
-//     MOV [RSP+8],RCX ; SUB RSP,0x38 ; MOV [RSP+0x20],-2 ; ADD RSP,0x38
-//     JMP 0x1800a41c0                  ; ??1Geometry@Graphics@@UEAA@XZ
-//
-// Five instructions, four of which are the MSVC unwind marker. AmbientLight
-// adds no destructible member, so the linker folded its destructor onto
-// ~Geometry and left this thunk behind. See the file banner.
-// ============================================================================
-extern "C" void RtGraphics_AmbientLight_Dtor(void* self) {
-    GeometryDtor(self);
-}
 
 // ############################################################################
 // ENDGAME B.3.5 block E — the Light-branch bodies, MOVED ONTO THE MEMBERS
 // ############################################################################
 //
-// Every body below moved onto `Graphics::AmbientLight`, `Graphics::SpotLight` or
-// `Graphics::SunLight`; each registered door keeps its name and its address and
-// delegates with a QUALIFIED non-virtual call.
+// Every body below is a member of `Graphics::AmbientLight`, `Graphics::SpotLight`
+// or `Graphics::SunLight`. ENDGAME B.3.9 block GFX: AmbientLight and SpotLight
+// are concrete and wear the compiler's table, so their slot doors are gone;
+// SunLight's two slot doors below are the pilot's (c2) to settle.
 //
 // RULE B5-17 IS APPLIED HERE. Retail names slot 2 and slot 10 both `Draw`. Slot
 // 2 keeps the retail spelling; slot 10 is `DrawLight`. Both mangled names are
-// unchanged in every registration, so nothing outside this file moves. The doors
-// keep their existing distinct C names (`..._DrawItem` for slot 2 and `..._Draw`
-// for slot 10), which is the same distinction one layer down.
-//
-// WHAT DID NOT MOVE: `??0AmbientLight`, `??1AmbientLight`, `??0SpotLight` and
-// `??1SpotLight`. ENDGAME B.1 decision 2 and B35_RULES section 11 keep the
-// constructor and destructor doors, and both classes are ABSTRACT (slot 0's body
-// is a `deleting_dtor.cpp` row), so a door cannot placement-new one. The
-// destructors additionally must not move: SpotLight's destroys three owned
-// resources through two different idioms and then tail-jumps ~Geometry, and
-// AmbientLight's IS a five-instruction linker-folded thunk onto ~Geometry.
+// unchanged in every registration, so nothing outside this file moves.
 //
 // The `Video::Context&` and `Graphics::Renderer&` parameters are the real retail
 // types, forward-declared: blocks D and F own those classes, so each body takes
@@ -524,33 +473,9 @@ extern "C" void RtGraphics_AmbientLight_Dtor(void* self) {
 
 // slot 1 — `RET`. Empty in the shipped build; an ambient light has nothing to
 // tick (reference_retail_ships_empty_bodies.md).
-extern "C" void RtGraphics_AmbientLight_Update(const void* self, const void* time) {
-    const_cast<::Graphics::AmbientLight*>(
-        reinterpret_cast<const ::Graphics::AmbientLight*>(self))
-        ->::Graphics::AmbientLight::Update(*reinterpret_cast<const System::Time*>(time));
-}
-
 // slot 2 — `RET`. The per-item Draw arm; an ambient light emits no draw items,
 // only the light state its slot-10 Draw sets.
-extern "C" void RtGraphics_AmbientLight_DrawItem(const void* self, void* ctx,
-                                                 const void* camera, void* material,
-                                                 float a, int32_t b, int32_t c, int32_t d) {
-    RtGraphics::ExternalPtr mat; mat.p = material;
-    reinterpret_cast<const ::Graphics::AmbientLight*>(self)
-        ->::Graphics::AmbientLight::Draw(*reinterpret_cast<Video::Context*>(ctx),
-                                         *reinterpret_cast<const ::Graphics::Camera*>(camera),
-                                         mat, a, b, c, d);
-}
-
 // slot 9 — `RET`. An ambient light casts no shadow.
-extern "C" void RtGraphics_AmbientLight_DrawShadowMap(const void* self, void* ctx,
-                                                      void* renderer, int32_t a, int32_t b) {
-    reinterpret_cast<const ::Graphics::AmbientLight*>(self)
-        ->::Graphics::AmbientLight::DrawShadowMap(
-              *reinterpret_cast<Video::Context*>(ctx),
-              *reinterpret_cast<::Graphics::Renderer*>(renderer), a, b);
-}
-
 // ============================================================================
 // slot 3 — ?AddDrawItems@AmbientLight@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
 //                                                    retail 0x1800fa890
@@ -570,23 +495,22 @@ extern "C" void RtGraphics_AmbientLight_DrawShadowMap(const void* self, void* ct
 // own `_size`, the second is `renderer->[0x28]`. Swapping them would be
 // invisible at a single light and wrong at two.
 // ============================================================================
-extern "C" void RtGraphics_AmbientLight_AddDrawItems(void* self, const void* scene,
-                                                     void* renderer) {
-    reinterpret_cast<const ::Graphics::AmbientLight*>(self)
-        ->::Graphics::AmbientLight::AddDrawItems(
-              *reinterpret_cast<const ::Graphics::Scene*>(scene),
-              *reinterpret_cast<::Graphics::Renderer*>(renderer));
-}
-
 namespace Graphics {
 
 // `??1Light@Graphics@@UEAA@XZ` 0x180058d20 is a bare tail into ~Geometry with
-// NO restamp of its own (its door is `RtGraphics_Light_Dtor` in
-// runtime/src/object/deleting_dtor_leaves.cpp, the coordinator's file).
-// ENDGAME B.3.8 block RB defines the C++ destructor EMPTY so the real
-// `~SunLight()` chain links; the compiler adds a Light restamp retail does not
-// make, between two restamps, with nothing dispatching in between.
+// NO restamp of its own. ENDGAME B.3.8 block RB defines the C++ destructor
+// EMPTY so the real subclass chains link; the compiler adds a Light restamp
+// retail does not make, between two restamps, with nothing dispatching in
+// between. (ENDGAME B.3.9 block GFX: its door `RtGraphics_Light_Dtor` and the
+// Light RT_DELDTOR row are retired with the minted `??_7Light@` -- every Light
+// subclass is concrete and the compiler stamps the Light table in passing.)
 Light::~Light() {}
+
+// ??1AmbientLight@Graphics@@UEAA@XZ 0x180058f30 -- five instructions, four of
+// them the MSVC unwind marker, then `JMP ??1Geometry`: AmbientLight adds no
+// destructible member and the linker folded its destructor onto ~Geometry. The
+// empty body plus the compiler's ~Light / ~Geometry chain is all of it.
+AmbientLight::~AmbientLight() {}
 
 void AmbientLight::Update(const System::Time& time) { (void)time; }
 
@@ -666,16 +590,6 @@ void AmbientLight::DrawLight(Video::Context& context, Renderer& renderer,
 
 }  // namespace Graphics
 
-// slot 10 — the door. RULE B5-17: retail's name is `Draw`; the member is
-// `DrawLight`, eight slots away from the slot-2 `Draw` above.
-extern "C" void RtGraphics_AmbientLight_Draw(void* self, void* ctx, void* renderer,
-                                             int32_t a4, int32_t a5, int32_t a6, int32_t a7) {
-    reinterpret_cast<const ::Graphics::AmbientLight*>(self)
-        ->::Graphics::AmbientLight::DrawLight(
-              *reinterpret_cast<Video::Context*>(ctx),
-              *reinterpret_cast<::Graphics::Renderer*>(renderer), a4, a5, a6, a7);
-}
-
 // ############################################################################
 // Graphics::SpotLight
 // ############################################################################
@@ -690,32 +604,11 @@ extern "C" void RtGraphics_AmbientLight_Draw(void* self, void* ctx, void* render
 //
 // +0x158 is NOT zeroed by the ctor (the run of stores skips from +0x150 to
 // +0x160). CreateTargets fills it. Recorded, not helpfully zeroed.
+//
+// ENDGAME B.3.9 block GFX: that body IS the real `SpotLight()` (Light.h); the
+// door that stamped the minted tables is gone.
 // ============================================================================
-extern "C" void* RtGraphics_SpotLight_Ctor(void* self) {
-    uint8_t* const d = static_cast<uint8_t*>(self);
-    GeometryCtor(self);
-    *reinterpret_cast<void**>(d) = reinterpret_cast<void*>(
-        ResolveAddr(Module::Runtime, 0x180158d30ull));       // ??_7Light@, dead
-    *reinterpret_cast<void**>(d) = reinterpret_cast<void*>(
-        ResolveAddr(Module::Runtime, 0x180158db0ull));       // ??_7SpotLight@
-
-    for (uint32_t o = 0xc0; o <= 0x118; o += 8)
-        *reinterpret_cast<uint64_t*>(d + o) = 0;
-
-    d[0x120] = 1;                                            // MOV byte,1
-    *reinterpret_cast<uint32_t*>(d + 0x128) = 0x3dcccccdu;   // 0.1f
-    *reinterpret_cast<uint32_t*>(d + 0x12c) = 0x41200000u;   // 10.0f
-
-    *reinterpret_cast<uint64_t*>(d + 0x138) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x140) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x148) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x150) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x160) = 0;             // +0x158 SKIPPED
-
-    SpotLightCreateTargets(self);
-    *reinterpret_cast<uint32_t*>(d + 0x30) = 0x8000u;        // AFTER the call
-    return self;
-}
+namespace Graphics {
 
 // ============================================================================
 // ??1SpotLight@Graphics@@UEAA@XZ                     retail 0x180106270
@@ -724,44 +617,26 @@ extern "C" void* RtGraphics_SpotLight_Ctor(void* self) {
 // ~Geometry. TWO DESTROY IDIOMS again: the two ImageBuffers go through their
 // own vtable slot 0 with flags = 1 (destroy AND free), the RenderBuffer goes
 // the long way because it has no virtual destructor.
+//
+// ENDGAME B.3.9 block GFX: the body moved here from the retired ??1 door. The
+// restamp and the tail into ~Light (empty) / ~Geometry are the compiler's.
 // ============================================================================
-extern "C" void RtGraphics_SpotLight_Dtor(void* self) {
-    uint8_t* const d = static_cast<uint8_t*>(self);
-    *reinterpret_cast<void**>(d) = reinterpret_cast<void*>(
-        ResolveAddr(Module::Runtime, 0x180158db0ull));
-
-    static const uint32_t kOwnedImages[2] = { 0x148u, 0x150u };
-    for (uint32_t off : kOwnedImages) {
-        void* const img = *reinterpret_cast<void**>(d + off);
+SpotLight::~SpotLight() {
+    void* const* const owned[2] = { &_shadowMap, &_shadowDepth };   // +0x148, +0x150
+    for (void* const* slot : owned) {
+        void* const img = *slot;
         if (img == nullptr) continue;
         void** const vt = *reinterpret_cast<void***>(img);
         reinterpret_cast<void* (*)(void*, unsigned)>(vt[0])(img, 1u);
     }
-    void* const rb = *reinterpret_cast<void**>(d + 0x158);
+    void* const rb = _shadowTarget;                          // +0x158
     if (rb != nullptr) {
         RenderBufferPlatformDestruct(rb);
         RenderBufferOperatorDelete(rb);
     }
-    GeometryDtor(self);                                      // JMP 0x1800a41c0
 }
 
 // slot 1 / slot 2 — both `RET`, like AmbientLight's.
-extern "C" void RtGraphics_SpotLight_Update(const void* self, const void* time) {
-    const_cast<::Graphics::SpotLight*>(reinterpret_cast<const ::Graphics::SpotLight*>(self))
-        ->::Graphics::SpotLight::Update(*reinterpret_cast<const System::Time*>(time));
-}
-extern "C" void RtGraphics_SpotLight_DrawItem(const void* self, void* ctx,
-                                              const void* camera, void* material,
-                                              float a, int32_t b, int32_t c, int32_t d) {
-    RtGraphics::ExternalPtr mat; mat.p = material;
-    reinterpret_cast<const ::Graphics::SpotLight*>(self)
-        ->::Graphics::SpotLight::Draw(*reinterpret_cast<Video::Context*>(ctx),
-                                      *reinterpret_cast<const ::Graphics::Camera*>(camera),
-                                      mat, a, b, c, d);
-}
-
-namespace Graphics {
-
 void SpotLight::Update(const System::Time& time) { (void)time; }
 
 void SpotLight::Draw(Video::Context& context, const Camera& camera,
@@ -795,14 +670,6 @@ void SpotLight::Draw(Video::Context& context, const Camera& camera,
 // the second stays the light's. Its flags are 3/3 where the first pass used
 // 1/1, and its render target is NULL (`XOR EDX,EDX`).
 // ============================================================================
-extern "C" void RtGraphics_SpotLight_AddDrawItems(void* self, const void* scene,
-                                                  void* renderer) {
-    reinterpret_cast<const ::Graphics::SpotLight*>(self)
-        ->::Graphics::SpotLight::AddDrawItems(
-              *reinterpret_cast<const ::Graphics::Scene*>(scene),
-              *reinterpret_cast<::Graphics::Renderer*>(renderer));
-}
-
 namespace Graphics {
 
 void SpotLight::AddDrawItems(const Scene& sceneRef, Renderer& rendererRef) const {
@@ -860,14 +727,6 @@ void SpotLight::AddDrawItems(const Scene& sceneRef, Renderer& rendererRef) const
 // an omission, it is the calling convention being used as a pass-through, and
 // it is spelled as an explicit argument here.
 // ============================================================================
-extern "C" void RtGraphics_SpotLight_DrawShadowMap(void* self, void* ctx, void* renderer,
-                                                   int32_t a4, int32_t a5) {
-    reinterpret_cast<const ::Graphics::SpotLight*>(self)
-        ->::Graphics::SpotLight::DrawShadowMap(
-              *reinterpret_cast<Video::Context*>(ctx),
-              *reinterpret_cast<::Graphics::Renderer*>(renderer), a4, a5);
-}
-
 namespace Graphics {
 
 void SpotLight::DrawShadowMap(Video::Context& context, Renderer& renderer,
@@ -913,14 +772,6 @@ void SpotLight::DrawShadowMap(Video::Context& context, Renderer& renderer,
 // The tail is `DrawItemList(renderer, ctx, arg5 + 1, arg6, arg7)` — note the
 // **+ 1**, which SunLight's tail does not have.
 // ============================================================================
-extern "C" void RtGraphics_SpotLight_Draw(void* self, void* ctx, void* renderer,
-                                          int32_t a4, int32_t a5, int32_t a6, int32_t a7) {
-    reinterpret_cast<const ::Graphics::SpotLight*>(self)
-        ->::Graphics::SpotLight::DrawLight(
-              *reinterpret_cast<Video::Context*>(ctx),
-              *reinterpret_cast<::Graphics::Renderer*>(renderer), a4, a5, a6, a7);
-}
-
 namespace Graphics {
 
 void SpotLight::DrawLight(Video::Context& context, Renderer& rendererRef,
@@ -1130,68 +981,11 @@ void SunLight::DrawShadowMap(Video::Context& context, Renderer& rendererRef,
 int RtGraphicsLightsVtableRegister() {
     int n = 0;
 
-    // ---- Graphics::AmbientLight --------------------------------------------
-    RegisterRuntimeExport("??0AmbientLight@Graphics@@QEAA@XZ",
-                          (void*)&RtGraphics_AmbientLight_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800fa940ull, (void*)&RtGraphics_AmbientLight_Ctor);
-
-    // BOTH doors for the destructor, and that matters here more than usual:
-    // deleting_dtor.cpp's AmbientLight row names the THUNK (0x180058f30) while
-    // 0x180059080's scalar arm calls ~Geometry (0x1800a41c0) directly. The
-    // thunk address is registered so the row lands on our body; ~Geometry's own
-    // address is NOT registered here — it belongs to the Geometry port.
-    RegisterRuntimeExport("??1AmbientLight@Graphics@@UEAA@XZ",
-                          (void*)&RtGraphics_AmbientLight_Dtor); ++n;
-    RegisterRuntimeAddr(0x180058f30ull, (void*)&RtGraphics_AmbientLight_Dtor);
-
-    RegisterRuntimeExport("?Update@AmbientLight@Graphics@@UEAAXAEBVTime@System@@@Z",
-                          (void*)&RtGraphics_AmbientLight_Update); ++n;
-    RegisterRuntimeAddr(0x1800fa7a0ull, (void*)&RtGraphics_AmbientLight_Update);
-
-    RegisterRuntimeExport("?Draw@AmbientLight@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z",
-                          (void*)&RtGraphics_AmbientLight_DrawItem); ++n;
-    RegisterRuntimeAddr(0x1800fa790ull, (void*)&RtGraphics_AmbientLight_DrawItem);
-
-    RegisterRuntimeExport("?AddDrawItems@AmbientLight@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z",
-                          (void*)&RtGraphics_AmbientLight_AddDrawItems); ++n;
-    RegisterRuntimeAddr(0x1800fa890ull, (void*)&RtGraphics_AmbientLight_AddDrawItems);
-
-    RegisterRuntimeExport("?DrawShadowMap@AmbientLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HH@Z",
-                          (void*)&RtGraphics_AmbientLight_DrawShadowMap); ++n;
-    RegisterRuntimeAddr(0x1800fa880ull, (void*)&RtGraphics_AmbientLight_DrawShadowMap);
-
-    RegisterRuntimeExport("?Draw@AmbientLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HHHH@Z",
-                          (void*)&RtGraphics_AmbientLight_Draw); ++n;
-    RegisterRuntimeAddr(0x1800fa7b0ull, (void*)&RtGraphics_AmbientLight_Draw);
-
-    // ---- Graphics::SpotLight -----------------------------------------------
-    RegisterRuntimeExport("??0SpotLight@Graphics@@QEAA@XZ",
-                          (void*)&RtGraphics_SpotLight_Ctor); ++n;
-    RegisterRuntimeAddr(0x180106690ull, (void*)&RtGraphics_SpotLight_Ctor);
-
-    RegisterRuntimeExport("??1SpotLight@Graphics@@UEAA@XZ",
-                          (void*)&RtGraphics_SpotLight_Dtor); ++n;
-    RegisterRuntimeAddr(0x180106270ull, (void*)&RtGraphics_SpotLight_Dtor);
-
-    RegisterRuntimeExport("?Update@SpotLight@Graphics@@UEAAXAEBVTime@System@@@Z",
-                          (void*)&RtGraphics_SpotLight_Update); ++n;
-    RegisterRuntimeAddr(0x180105950ull, (void*)&RtGraphics_SpotLight_Update);
-
-    RegisterRuntimeExport("?Draw@SpotLight@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z",
-                          (void*)&RtGraphics_SpotLight_DrawItem); ++n;
-    RegisterRuntimeAddr(0x180105940ull, (void*)&RtGraphics_SpotLight_DrawItem);
-
-    RegisterRuntimeExport("?AddDrawItems@SpotLight@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z",
-                          (void*)&RtGraphics_SpotLight_AddDrawItems); ++n;
-    RegisterRuntimeAddr(0x180105e30ull, (void*)&RtGraphics_SpotLight_AddDrawItems);
-
-    RegisterRuntimeExport("?DrawShadowMap@SpotLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HH@Z",
-                          (void*)&RtGraphics_SpotLight_DrawShadowMap); ++n;
-    RegisterRuntimeAddr(0x180105d00ull, (void*)&RtGraphics_SpotLight_DrawShadowMap);
-
-    RegisterRuntimeExport("?Draw@SpotLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HHHH@Z",
-                          (void*)&RtGraphics_SpotLight_Draw); ++n;
-    RegisterRuntimeAddr(0x180105960ull, (void*)&RtGraphics_SpotLight_Draw);
+    // ---- Graphics::AmbientLight / Graphics::SpotLight ----------------------
+    // ENDGAME B.3.9 block GFX: nothing. The ??0 / ??1 doors and the five slot
+    // doors of each class are gone: their only readers were the minted
+    // `??_7AmbientLight@` / `??_7SpotLight@` tables and their RT_DELDTOR rows,
+    // all retired (tools/rt_mint_retired/gfx.txt). The bodies are the members.
 
     // ---- Graphics::SunLight -------------------------------------------------
     RegisterRuntimeExport("?DrawShadowMap@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HH@Z",

@@ -107,6 +107,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/AnimationState.h"
+#include "../../types/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
 #include "../../types/graphics/Animation.h"   // ENDGAME B.3.5 closing pass:
                                               // Graphics::Animation, the clip record
                                               // ApplyEvents is called on
@@ -646,11 +647,11 @@ inline double SecondsPerTick() {
 // `Graphics::AnimationManager::_singleton`, retail 0x1801fe7b0 — the same global
 // animation.cpp:179 already resolves. Read here only to reach the 0x30-stride
 // group record a dying layer's handle names.
+// ENDGAME B.3.9 GFX: the class static, not the lazy by-address cache (D7 A44).
 inline uint8_t* AnimManagerGroups() {
-    static uint8_t** p = nullptr;
-    if (!p) p = reinterpret_cast<uint8_t**>(ResolveAddr(Module::Runtime, 0x1801fe7b0));
-    if (!p || !*p) return nullptr;
-    return *reinterpret_cast<uint8_t**>(*p);       // _singleton->_groupData
+    uint8_t* const mgr = reinterpret_cast<uint8_t*>(Graphics::AnimationManager::_singleton);
+    if (!mgr) return nullptr;
+    return *reinterpret_cast<uint8_t**>(mgr);      // _singleton->_groupData
 }
 
 }  // namespace

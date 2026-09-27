@@ -116,6 +116,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Animation.h"
+#include "../../types/graphics/AnimationManager.h"   // B.3.9: AnimationManager::_singleton
 #include "../../types/graphics/Particle.h"
 // ENDGAME B.3.5 block H2: the real `Graphics::ParticleInstance` (block E's
 // class), needed because the two non-constructor particle bodies in this file —
@@ -157,12 +158,8 @@ namespace {
 // tools/runtime_census.py (reference_census_cannot_see_nonliteral_registrations.md);
 // kept as named constants here only for the diff-oracle the raw DLL door<> calls.
 // ============================================================================
-const char* const kAnimEventCtor   = "??0AnimationEvent@Graphics@@QEAA@XZ";
-const char* const kAnimEventDtor   = "??1AnimationEvent@Graphics@@UEAA@XZ";
-const char* const kExternalDtor    = "??1External@Object@@UEAA@XZ";
 const char* const kAnimMgrCtor     = "??0AnimationManager@Graphics@@QEAA@XZ";
 const char* const kAnimMgrDtor     = "??1AnimationManager@Graphics@@QEAA@XZ";
-const char* const kParticleCtor    = "??0Particle@Graphics@@QEAA@XZ";
 const char* const kPIctor          = "??0ParticleInstance@Graphics@@QEAA@XZ";
 const char* const kPIupdate        = "?Update@ParticleInstance@Graphics@@QEAA_NXZ";
 const char* const kPIincrement     = "?IncrementInstanceIndex@ParticleInstance@Graphics@@SAXXZ";
@@ -170,7 +167,6 @@ const char* const kPSIctor         = "??0ParticleSystemInstance@Graphics@@QEAA@X
 const char* const kGeometryCtor    = "??0Geometry@Graphics@@QEAA@XZ";
 // ENDGAME B.3.5 caller batch: `kSetBounds` is gone with its door — the member call
 // spells the name it no longer needs.
-const char* const kFrameIndexData  = "?_frameIndex@ParticleInstance@Graphics@@1HA";
 
 // ============================================================================
 // Retail vtable constants -- resolved once through ResolveAddr(Module::Runtime,
@@ -180,14 +176,6 @@ const char* const kFrameIndexData  = "?_frameIndex@ParticleInstance@Graphics@@1H
 // program="Runtime-x64.dll"), not inferred from the decompile's `_vftable_`
 // symbol name alone.
 // ============================================================================
-void* RtAnimationEventVtable() {
-    static void* v = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180154bf0));
-    return v;
-}
-void* RtParticleVtable() {
-    static void* v = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180155130));
-    return v;
-}
 void* RtParticleInstanceVtable() {
     static void* v = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801550e0));
     return v;
@@ -197,26 +185,14 @@ void* RtParticleSystemInstanceVtable() {
     return v;
 }
 
-// AnimationManager::_singleton, the exported static this class' ctor/dtor
-// maintain. Resolved to the DLL's OWN live global rather than kept as a
-// private copy, so any DLL-internal reader (or another wave's code) agrees
-// with this port on the value. Retail 0x1801fe7b0, ordinal 4799,
-// ?_singleton@AnimationManager@Graphics@@0PEAV12@EA.
-AnimationManager** RtAnimMgrSingletonSlot() {
-    static AnimationManager** p = reinterpret_cast<AnimationManager**>(
-        ResolveAddr(Module::Runtime, 0x1801fe7b0));
-    return p;
-}
+// ENDGAME B.3.9 block GFX (D7 row A44): `RtAnimMgrSingletonSlot` (the lazy
+// by-address cache of 0x1801fe7b0) is gone -- the cell is the class static
+// `Graphics::AnimationManager::_singleton`, defined at the end of this file.
 
-// Graphics::ParticleInstance::_frameIndex, a protected STATIC int (mangling
-// code `1`), not an instance field -- see Particle.h. Resolved once via
-// the raw DLL door (a real export, unlike the .rdata data slot addresses this
-// project has elsewhere found to resolve NULL -- checked present in the
-// export table before this file was written).
-int* RtFrameIndexSlot() {
-    static int* p = reinterpret_cast<int*>(ResolveExport(kFrameIndexData));
-    return p;
-}
+// ENDGAME B.3.9 block GFX (D7 row A37): `RtFrameIndexSlot` (a lazy
+// function-local ResolveExport cache) is gone -- the cell is the class static
+// `Graphics::ParticleInstance::_frameIndex`, defined at the end of this file
+// and redirected onto the mint's row by RtGraphicsPortInit.
 
 // ============================================================================
 // Graphics::Geometry::Geometry(void) -- retail 0x1800a4270, ordinal 205,
@@ -246,58 +222,15 @@ void RtGeometryCtor(void* self) {
 }  // namespace
 
 // ============================================================================
-// Graphics::AnimationEvent::AnimationEvent()
-// retail 0x1800a2150, ordinal 41
-//
-// Reduces to four stores. The retail body ALSO stores two intermediate base
-// vtables (Object::Base's, then Object::External's) before its own -- both
-// are Ghidra's rendering of Object::External::External() folded fully
-// inline, and neither survives past the function's last instruction (see
-// Animation.h). Reproducing only the LAST vtable value is therefore
-// byte-exact with retail's observable result, not a shortcut around it.
-//
-// ORACLE: full, scratch-object. Geometry::Geometry-style ctors in this file
-// are proven pure (no external calls, no globals touched -- confirmed by
-// decompile) so a scratch instance can be constructed on the stack, memcmp'd
-// whole, and simply discarded (External's default-constructed state holds no
-// resource, so no dtor call is needed to avoid a leak here).
+// ??0AnimationEvent@Graphics@@QEAA@XZ 0x1800a2150 / ??1AnimationEvent@Graphics@@
+// UEAA@XZ 0x1800a2120 -- the two DOORS are gone (ENDGAME B.3.9 block GFX,
+// B39_RULES D1). Retail's ctor is External() inlined plus the stamps and
+// nothing else; its dtor is the restamp plus a tail jump into ~External. Both
+// are the compiler's work on the real protected `AnimationEvent()` and the
+// empty `~AnimationEvent()` below. Their callers were the retired RT_DELDTOR
+// row 0x180011800 and nothing else (the exe's AnimAudioEvent uses the C++
+// base ctor since B.3.8 VIS).
 // ============================================================================
-extern "C" AnimationEvent* RtGraphics_AnimationEvent_Ctor(AnimationEvent* self) {
-
-    self->vtable = RtAnimationEventVtable();
-    self->_f08 = 0;
-    self->_f10 = 0;
-    self->_f18 = 0;
-
-    return self;
-}
-
-// ============================================================================
-// Graphics::AnimationEvent::~AnimationEvent()
-// retail 0x1800a2120, ordinal 526 (virtual, UEAA)
-//
-// Two instructions: stamp the AnimationEvent vtable, then TAIL-JMP into
-// Object::External::~External (retail 0x1800bc950, EXPORTED, ordinal 588 --
-// found by disassembling this dtor, not guessed). This port calls that same
-// export rather than re-deriving External's teardown, which this lane does
-// not own the layout of.
-//
-// ORACLE: structural, not runtime. The entire computed part of this function
-// is delegation into the identical retail internal both implementations
-// would call; there is no second run to diff without a double-free (External
-// may release a resource), and nothing else in AnimationEvent's own state is
-// owned by this lane to check independently. Registered so calls= is visible
-// in the diff summary, but the verdict is not evidence of anything beyond
-// "did not crash".
-// ============================================================================
-extern "C" void RtGraphics_AnimationEvent_Dtor(AnimationEvent* self) {
-
-    self->vtable = RtAnimationEventVtable();
-    typedef void (*ExternalDtorFn)(AnimationEvent*);
-    RT_EXPORT_ONCE(ExternalDtorFn, kExternalDtor)(self);   // ported; see RtGeometryCtor
-
-}
-
 // ============================================================================
 // Graphics::AnimationManager::AnimationManager()
 // retail 0x1800fc430, ordinal 45
@@ -336,8 +269,10 @@ extern "C" AnimationManager* RtGraphics_AnimationManager_Ctor(AnimationManager* 
         self->_rngState[i] = (prev ^ (prev >> 30)) * 0x6c078965u + static_cast<uint32_t>(i);
     }
 
-    AnimationManager** slot = RtAnimMgrSingletonSlot();
-    if (slot) *slot = self;
+    // `MOV [0x1801fe7b0],RBX` -- publish the instance. (B.3.9: the class
+    // static; the POD view `self` is the same object.)
+    Graphics::AnimationManager::_singleton =
+        reinterpret_cast<Graphics::AnimationManager*>(self);   // B.3.9 bridge (POD view)
 
     return self;
 }
@@ -360,8 +295,7 @@ extern "C" AnimationManager* RtGraphics_AnimationManager_Ctor(AnimationManager* 
 // ============================================================================
 extern "C" void RtGraphics_AnimationManager_Dtor(AnimationManager* self) {
 
-    AnimationManager** slot = RtAnimMgrSingletonSlot();
-    if (slot) *slot = nullptr;
+    Graphics::AnimationManager::_singleton = nullptr;   // 0x1801fe7b0 cleared
 
     // ENDGAME B.3.2 step 2 (callers) — NOT converted. 0x18005bf60 is the same
     // retail address `runtime/src/collection/array_destroy.cpp` registers as
@@ -406,19 +340,11 @@ extern "C" void RtGraphics_AnimationManager_Dtor(AnimationManager* self) {
 // skips both gaps instead of raw-memcmp'ing the whole struct.
 //
 // ORACLE: full, scratch-object, minus the [0x21,0x24) and [0x2c,0x30) gaps.
+//
+// ENDGAME B.3.9 block GFX: the DOOR is gone. Its body was already ONE body with
+// the real protected `Particle()` (Particle.h, InitFields); its callers were
+// the factory interpreter (via ParticleSystem) and nothing else.
 // ============================================================================
-extern "C" Particle* RtGraphics_Particle_Ctor(Particle* self) {
-
-    self->vtable = RtParticleVtable();
-    self->_f08 = 0;
-    self->_f10 = 0;
-    self->_f18 = 0;
-    // ENDGAME B.3.8 block RB (RULE B8-1): +0x20..+0x47 are ONE body with the
-    // real constructor `Graphics::Particle()` (Particle.h, `InitFields`).
-    ::Graphics::Particle::DoorBody::Init(reinterpret_cast<::Graphics::Particle*>(self));   // B.3.8 bridge
-
-    return self;
-}
 
 // ============================================================================
 // Graphics::ParticleInstance::ParticleInstance()
@@ -600,6 +526,10 @@ extern "C" ParticleSystemInstance* RtGraphics_ParticleSystemInstance_Ctor(
 //  * THE CONSTRUCTOR DOOR IS NOT A DELEGATION EITHER (B4b-2). It is called on
 //    raw memory by `code/Game/Component/animaudioevent.cpp:45`, which then
 //    stamps its own subclass table; the class has no real constructor at all.
+//
+// ENDGAME B.3.9 block GFX: the last two bullets are HISTORY. Both doors are
+// retired with the minted table (the exe builds through the real protected
+// ctor since B.3.8), so the empty destructor below is the only one.
 // ############################################################################
 
 namespace Graphics {
@@ -618,6 +548,13 @@ namespace Graphics {
 // `~External` (the chain emits that on exit). Writing either by hand would name
 // the minted table, which is the one thing a converted object must not carry.
 AnimationEvent::~AnimationEvent() {}
+
+// ?CreateNewObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@XZ 0x180011700 and
+// ?CreateInPlaceObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@PEAX@Z
+// 0x180011710: the ABSTRACT factory pair, both `XOR EAX,EAX ; RET` in retail
+// (the FACTREST row they replace carried no steps for exactly that reason).
+Object::Base* AnimationEvent::CreateNewObject() { return nullptr; }
+Object::Base* AnimationEvent::CreateInPlaceObject(void* place) { (void)place; return nullptr; }
 
 // ############################################################################
 // ENDGAME B.3.5 step 5, block H2 — the two NON-CONSTRUCTOR particle bodies this
@@ -639,10 +576,9 @@ AnimationEvent::~AnimationEvent() {}
 //    in this step either (B35_RULES section 11). They keep the POD spelling and
 //    their diff oracles' byte ranges unchanged.
 //
-//  * `?_frameIndex@ParticleInstance@Graphics@@1HA` (0x1801fe77c) STAYS AN
-//    `RT_DATA_SLOT`-style read through `RtFrameIndexSlot()` and does NOT become
-//    a real `static int` member — B35_RULES section 9 / RULE B4b-4: the redirect
-//    is owed at the class-static conversion, the END of B.3, not in step 5.
+//  * `?_frameIndex@ParticleInstance@Graphics@@1HA` (0x1801fe77c) is the class
+//    static `ParticleInstance::_frameIndex` since ENDGAME B.3.9 block GFX (D7),
+//    redirected onto the mint's row.
 // ############################################################################
 
 // ?Update@ParticleInstance@Graphics@@QEAA_NXZ  retail 0x180104180.
@@ -663,9 +599,8 @@ bool ParticleInstance::Update() {
         _boundsPtr = resource->_boxes[_index];               // +0x38 array, +0xd0 index
     }
 
-    int* frameIndex = RtFrameIndexSlot();
     bool needsUpdate;
-    if (resource->_active != 0 && _boundsPtr->frameTag == *frameIndex) {
+    if (resource->_active != 0 && _boundsPtr->frameTag == _frameIndex) {
         // `Geometry::SetBounds(const Volume::Box&)`, exactly as retail does —
         // a QUALIFIED non-virtual member call since the ENDGAME B.3.5 caller
         // batch. `this` IS the Geometry base (offset zero), so the cast the POD
@@ -674,7 +609,7 @@ bool ParticleInstance::Update() {
             *reinterpret_cast<const ::Box*>(_boundsPtr));
         needsUpdate = false;
     } else {
-        _boundsPtr->frameTag = *frameIndex;                  // unguarded, faithful
+        _boundsPtr->frameTag = _frameIndex;                  // unguarded, faithful
         needsUpdate = true;
     }
 
@@ -682,11 +617,10 @@ bool ParticleInstance::Update() {
 }
 
 // ?IncrementInstanceIndex@ParticleInstance@Graphics@@SAXXZ  retail 0x1800201f0.
-// One line: `_frameIndex += 1`, on the SAME live static the DLL itself reads.
+// One line: `_frameIndex += 1` (ENDGAME B.3.9 GFX: the class static; the
+// null-tolerant slot read went with the lazy cache -- the cell always exists).
 void ParticleInstance::IncrementInstanceIndex() {
-    int* slot = RtFrameIndexSlot();
-    const int before = slot ? *slot : 0;
-    if (slot) *slot = before + 1;
+    ++_frameIndex;
 }
 
 }  // namespace Graphics
@@ -705,20 +639,21 @@ void ParticleInstance::IncrementInstanceIndex() {
 int RtGraphicsAnimationRegister() {
     int count = 0;
 
-    RegisterRuntimeExport("??0AnimationEvent@Graphics@@QEAA@XZ", (void*)&RtGraphics_AnimationEvent_Ctor); ++count;
-    RegisterRuntimeAddr(0x1800a2150, (void*)&RtGraphics_AnimationEvent_Ctor);
-
-    RegisterRuntimeExport("??1AnimationEvent@Graphics@@UEAA@XZ", (void*)&RtGraphics_AnimationEvent_Dtor); ++count;
-    RegisterRuntimeAddr(0x1800a2120, (void*)&RtGraphics_AnimationEvent_Dtor);
+    // ENDGAME B.3.9 block GFX: AnimationEvent's factory pair, the class's own
+    // statics (B39_RULES D2), replacing its FACTREST row. The ??0 / ??1 doors
+    // are retired (above).
+    RegisterRuntimeExport("?CreateNewObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@XZ",
+                          (void*)&::Graphics::AnimationEvent::CreateNewObject); ++count;
+    RegisterRuntimeAddr(0x180011700, (void*)&::Graphics::AnimationEvent::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&::Graphics::AnimationEvent::CreateInPlaceObject); ++count;
+    RegisterRuntimeAddr(0x180011710, (void*)&::Graphics::AnimationEvent::CreateInPlaceObject);
 
     RegisterRuntimeExport("??0AnimationManager@Graphics@@QEAA@XZ", (void*)&RtGraphics_AnimationManager_Ctor); ++count;
     RegisterRuntimeAddr(0x1800fc430, (void*)&RtGraphics_AnimationManager_Ctor);
 
     RegisterRuntimeExport("??1AnimationManager@Graphics@@QEAA@XZ", (void*)&RtGraphics_AnimationManager_Dtor); ++count;
     RegisterRuntimeAddr(0x1800fc400, (void*)&RtGraphics_AnimationManager_Dtor);
-
-    RegisterRuntimeExport("??0Particle@Graphics@@QEAA@XZ", (void*)&RtGraphics_Particle_Ctor); ++count;
-    RegisterRuntimeAddr(0x180103e80, (void*)&RtGraphics_Particle_Ctor);
 
     RegisterRuntimeExport("??0ParticleInstance@Graphics@@QEAA@XZ", (void*)&RtGraphics_ParticleInstance_Ctor); ++count;
     RegisterRuntimeAddr(0x180104130, (void*)&RtGraphics_ParticleInstance_Ctor);
@@ -774,3 +709,14 @@ void Graphics::Particle::ReleaseFields() {
     *reinterpret_cast<void**>(self + 0x38) = nullptr;
     *reinterpret_cast<uint64_t*>(self + 0x40) = 0;
 }
+
+// ?_singleton@AnimationManager@Graphics@@0PEAV12@EA  retail 0x1801fe7b0 --
+// the class static (ENDGAME B.3.9 block GFX, B39_RULES D7 row A44). Its mint
+// storage row is retired (rt_mint_retired/gfx.txt): every reader is in this
+// block's files.
+Graphics::AnimationManager* Graphics::AnimationManager::_singleton = nullptr;
+
+// ?_frameIndex@ParticleInstance@Graphics@@1HA  retail 0x1801fe77c -- the class
+// static (ENDGAME B.3.9 block GFX, B39_RULES D7 row A37), redirected onto the
+// mint's storage row by RtGraphicsPortInit (foreign readers remain).
+int Graphics::ParticleInstance::_frameIndex = 0;

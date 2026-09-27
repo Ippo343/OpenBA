@@ -34,6 +34,9 @@
 
 #include "Component/controller_state_table.h"
 #include "Component/PastureComponent.h"
+#include "Component/AnimalComponent.h"
+#include "Component/LivestockDescription.h"
+#include "Component/RawMaterialComponent.h"
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"
 #include "resolve.h"
@@ -164,9 +167,13 @@ void Resolve() {
     s_WorkSetAmt   = R<fn_WorkSetAmount_t>(0x140044810);
     s_RegEntity    = R<fn_RegisterEntity_t>(0x1400c48a0);
     s_EntityCopy   = R<fn_EntityCopyCtor_t>(0x1400c3720);
-    s_tidAnimalComp   = Tid(0x1401c6f98);
-    s_tidLivestockDsc = Tid(0x1401c79a8);
-    s_tidRawMatComp   = Tid(0x1401c7c80);
+    s_tidAnimalComp   = AnimalComponent::TypeId();       // cell 0x1401c6f98 (D5)
+    s_tidLivestockDsc = LivestockDescription::TypeId();  // cell 0x1401c79a8 (D5)
+    s_tidRawMatComp   = RawMaterialComponent::TypeId();  // cell 0x1401c7c80 (D5)
+    // s_tidWorkComp (cell 0x1401c3fb0 = AutoPickupComponent) is UNREGISTERED
+    // (ResolveAddr answers 0): a BEHAVIOUR site (D5 Notes) — left for the
+    // dedicated behaviour batch after the retail caller is read. See
+    // BEHAVIOUR-LEFT in this batch's report.
     s_tidWorkComp     = Tid(0x1401c3fb0);
     s_pQuarterTurn    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172204));
 }

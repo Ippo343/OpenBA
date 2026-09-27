@@ -13,6 +13,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/mapcomponent_funcs.h"
+#include "Component/MapDescription.h"
 #include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -41,9 +42,6 @@ static fn_MapInit_t s_fn_MapInit = nullptr;
 typedef void (*fn_TerrainClear_t)(void* terrainPtr, int param2, int x0, int y0, int x1, int y1);
 static fn_TerrainClear_t s_fn_TerrainClear = nullptr;
 
-// TypeId for MapDescription — at 0x1401c7a18
-static uint32_t* s_TypeId_MapDescription = nullptr;
-
 static bool s_helpersResolved = false;
 
 static void EnsureHelpers() {
@@ -65,10 +63,6 @@ static void EnsureHelpers() {
 
     s_fn_TerrainClear = reinterpret_cast<fn_TerrainClear_t>(
         ResolveAddr(Module::Exe, 0x1400a4d30));
-
-    // Type ID pointer
-    s_TypeId_MapDescription = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7a18));
 
     s_helpersResolved = true;
 }
@@ -101,12 +95,12 @@ extern "C" void MapTerrainClear_Reimpl(void* gridPtr, int value, int x, int y,
 // Returns the component pointer if type matches, else nullptr.
 static void* GetMapDescription(MapComponent* self) {
     EnsureHelpers();
-    if (!s_fn_IsDerivedFrom_dispatch || !s_TypeId_MapDescription) return nullptr;
+    if (!s_fn_IsDerivedFrom_dispatch) return nullptr;
 
     void* obj = self->_description;
     if (!obj) return nullptr;
 
-    bool derived = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_MapDescription);
+    bool derived = s_fn_IsDerivedFrom_dispatch(obj, MapDescription::TypeId());
     return derived ? obj : nullptr;
 }
 

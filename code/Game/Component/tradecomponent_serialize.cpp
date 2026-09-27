@@ -75,6 +75,7 @@
 // instead of replicating that specific piece of undefined behaviour.
 
 #include "Component/tradecomponent_funcs.h"
+#include "Entity/ComponentEntity.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
@@ -441,8 +442,8 @@ void TradeComponent::Persist(void* stream) {
     reinterpret_cast<Object::InternalBasePtr*>(At(this, 0x80))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     {
         void* obj = *reinterpret_cast<void**>(At(this, 0x80));
-        if (obj && fn_IsDerivedFrom && g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity &&
-            !fn_IsDerivedFrom(obj, *g_TypeId_ComponentEntity))
+        if (obj && fn_IsDerivedFrom &&
+            !fn_IsDerivedFrom(obj, ComponentEntity::TypeId()))
             *reinterpret_cast<uint64_t*>(At(this, 0x80)) = 0;
     }
 

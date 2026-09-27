@@ -23,6 +23,8 @@
 #include <cstdio>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/WorkPlaceComponent.h"   // ENDGAME B.3.9 C1: 0x1401c80e0 cell class
+#include "Component/CitizenComponent.h"     // ENDGAME B.3.9 C1: 0x1401c7158 cell class
 
 // ============================================================
 // Resolved helpers
@@ -44,8 +46,6 @@ static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self
 // ============================================================
 // Reimpl helpers for the attendance functions
 // ============================================================
-// DWORD_1401c80e0 — job-host component type ID
-static uint32_t* s_pTId_JobHost = nullptr;
 
 // Pre-fault report for AttendanceComponent_Update (see the call site).
 static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self, void* entity,
@@ -64,13 +64,13 @@ static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self
             if (!c) { fprintf(stderr, " <null>"); continue; }
             const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
             const char* nm = ::Object::GetTypeNameById(tid);
-            const bool isHost = s_pTId_JobHost && tid == *s_pTId_JobHost;
+            const bool isHost = tid == WorkPlaceComponent::TypeId();
             fprintf(stderr, " %s(%u%s)", (nm && nm[0]) ? nm : "?", tid,
                     isHost ? (fn_IsDerivedFrom && fn_IsDerivedFrom(reinterpret_cast<void*>(c), tid)
                               ? ",HOST,derived" : ",HOST,NOT-derived") : "");
         }
         fprintf(stderr, "\n[AttendanceComponent::Update]   jobHost tid(1401c80e0)=%u finder=%p\n",
-                s_pTId_JobHost ? *s_pTId_JobHost : 0, (void*)s_fn_GetBuildingComponent);
+                WorkPlaceComponent::TypeId(), (void*)s_fn_GetBuildingComponent);
     }
     fflush(stderr);
 }
@@ -96,18 +96,14 @@ static fn_AC_TryEnrolInSchool_t s_fn_AC_TryEnrolInSchool = nullptr;
 
 // Slot-3 (Shutdown/Serialize) helpers — see AttendanceComponent_SerializeSlot below.
 // Component_Serialize 0x1401189b0; the queue
-// array grow 0x1400032e0; and DWORD_1401c7158, the CitizenComponent type id the
-// per-entry filter tests against.
+// array grow 0x1400032e0; and CitizenComponent::TypeId() (0x1401c7158), the type
+// id the per-entry filter tests against.
 // 0x1400032e0 was Collection::Array<void*>::SetSize(n) monomorphised into the
 // exe (ENDGAME B.3.2 step 2) — converted at its call site below.
-static uint32_t*                    s_pTId_CitizenComponent      = nullptr;  // 0x1401c7158
 
 static bool s_acHelpersResolved = false;
 static void EnsureAcHelpers() {
     if (s_acHelpersResolved) return;
-    s_pTId_CitizenComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7158));
-    s_pTId_JobHost = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c80e0));
     s_fn_AC_115a50 = reinterpret_cast<fn_AC_115a50_t>(ResolveAddr(Module::Exe, 0x140115a50));
     s_fn_AC_59b0   = reinterpret_cast<fn_AC_59b0_t>(ResolveAddr(Module::Exe, 0x1401159b0));
     s_fn_AC_1650   = reinterpret_cast<fn_AC_1650_t>(ResolveAddr(Module::Exe, 0x140111650));
@@ -203,7 +199,8 @@ void AttendanceComponent_ReleaseLink59b0(void* workerP) {
 void AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr) {
     EnsureAcHelpers();
     void* found = nullptr;
-    if (s_pTId_JobHost) {
+    {
+        const uint32_t tidJobHost = WorkPlaceComponent::TypeId();
         int64_t host = (int64_t)entity;
         int count = *(int*)(host + 0x38);
         int64_t arr = *(int64_t*)(host + 0x30);
@@ -211,9 +208,9 @@ void AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr) {
             int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
             void* comp = (void*)*slot;
             uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
-            if (tid == *s_pTId_JobHost) {
+            if (tid == tidJobHost) {
                 void* c = (void*)*slot;
-                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_pTId_JobHost)) found = c;
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidJobHost)) found = c;
                 break;
             }
         }
@@ -443,10 +440,8 @@ void AttendanceComponent::Persist(void* stream) {
     for (int32_t i = 0; i < count && q; ++i, ++q) {
         reinterpret_cast<Object::InternalBasePtr*>(q)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
         if (*q == 0) continue;
-        // Value check, not just pointer: a registered-but-unfilled slot reads 0 and
-        // IsDerivedFrom(x, 0) would drop every attendee.
-        if (s_pTId_CitizenComponent && *s_pTId_CitizenComponent && fn_IsDerivedFrom &&
-            !fn_IsDerivedFrom(reinterpret_cast<void*>(*q), *s_pTId_CitizenComponent))
+        if (fn_IsDerivedFrom &&
+            !fn_IsDerivedFrom(reinterpret_cast<void*>(*q), CitizenComponent::TypeId()))
             *q = 0;
     }
 

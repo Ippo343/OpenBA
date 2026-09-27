@@ -36,6 +36,12 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Component/HerdDescription.h"        // ENDGAME B.3.9 C1: 0x1401c7858 cell class
+#include "Component/WildAnimalComponent.h"    // ENDGAME B.3.9 C1: 0x1401c8000 cell class
+#include "Component/AnimalComponent.h"        // ENDGAME B.3.9 C1: 0x1401c6f98 cell class
+#include "Component/CharacterComponent.h"     // ENDGAME B.3.9 C1: 0x1401c7078 cell class
+#include "Component/AnimalDescription.h"      // ENDGAME B.3.9 C1: 0x1401c6fd0 cell class
+#include "Component/ModelDescription.h"       // ENDGAME B.3.9 C1: 0x1401c7a88 cell class
 
 // ============================================================
 // Resolved helpers
@@ -59,7 +65,6 @@ static fn_CheckMigrationDone_t s_fn_CheckMigrationDone = nullptr;
 
 // Globals
 static void** s_pWorldSingleton = nullptr;   // DAT_1401c3dd8
-static uint32_t* s_pHerdTypeId = nullptr;    // DAT_1401c7858
 // DAT_140172234 = 300.0f — the minutes->seconds scale every herd/growth timer
 // multiplies its description interval by. (Old comments here said 60.0f; the
 // .rdata word is 0x43960000 = 300.0f and PopulationComponent_Update uses the
@@ -85,8 +90,6 @@ static void EnsureHelpers() {
 
     s_pWorldSingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3dd8));
-    s_pHerdTypeId = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7858));
 
     s_f300 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172234));
     s_fOne = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
@@ -116,11 +119,6 @@ typedef char (*fn_Herd_helper6b10_t)(int64_t ref);
 static fn_Herd_helper6b10_t s_fn_Herd_helper6b10 = nullptr;
 
 // Type-id globals used by the helpers.
-static uint32_t* s_pTypeId_1c8000 = nullptr;  // WildAnimalComponent (herd back-ref)
-static uint32_t* s_pTypeId_1c6f98 = nullptr;  // AnimalComponent (pose/bounds/behavior)
-static uint32_t* s_pTypeId_1c7078 = nullptr;  // CharacterComponent
-static uint32_t* s_pTypeId_1c6fd0 = nullptr;  // AnimalDescription
-static uint32_t* s_pTypeId_1c7a88 = nullptr;  // ModelDescription
 static float* s_fSpread = nullptr;            // DAT_140172220 = 180.0f, spawn yaw scale
 static float* s_fScatter = nullptr;           // DAT_140172110 = 0.4f, populate jitter
 
@@ -157,11 +155,6 @@ static void EnsureHerdExtras() {
         ResolveAddr(Module::Exe, 0x1400c48a0));
     s_fn_Herd_helper6b10 = reinterpret_cast<fn_Herd_helper6b10_t>(
         ResolveAddr(Module::Exe, 0x140106b10));
-    s_pTypeId_1c8000 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c8000));
-    s_pTypeId_1c6f98 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6f98));
-    s_pTypeId_1c7078 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7078));
-    s_pTypeId_1c6fd0 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6fd0));
-    s_pTypeId_1c7a88 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
     s_fSpread = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172220));
     s_fScatter = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172110));
 
@@ -182,17 +175,17 @@ static void EnsureHerdExtras() {
 
 // Find a component of `typeId` on a ComponentEntity (list at +0x30, count at +0x38).
 // Mirrors the inlined search loop used throughout these helpers.
-static void* HerdFindComponent(int64_t entity, uint32_t* pTypeId) {
-    if (!pTypeId) return nullptr;
+static void* HerdFindComponent(int64_t entity, uint32_t typeId) {
+    if (!typeId) return nullptr;
     int n = *(int*)(entity + 0x38);
     uintptr_t list = *(uintptr_t*)(entity + 0x30);
     for (int i = 0; i < n; i++) {
         void** slot = (void**)(list + (int64_t)i * 8);
         void* comp = *slot;
         uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
-        if (t == *pTypeId) {
+        if (t == typeId) {
             void* c = *slot;
-            return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTypeId)) ? c : nullptr;
+            return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
         }
     }
     return nullptr;
@@ -313,8 +306,8 @@ void HerdComponent_Helper7400(int64_t animalComp, void* pos, float yaw, char pos
         model = *(int64_t*)&modelIbp;
 
         void* descObj = *(void**)(model + 0x18);
-        void* modelDesc = (fn_IsDerivedFrom && s_pTypeId_1c7a88 &&
-                           fn_IsDerivedFrom(descObj, *s_pTypeId_1c7a88))
+        void* modelDesc = (fn_IsDerivedFrom &&
+                           fn_IsDerivedFrom(descObj, ModelDescription::TypeId()))
                               ? descObj : nullptr;
         int variant = *(int16_t*)(model + 0x164);
         uintptr_t variantTable = modelDesc ? *(uintptr_t*)((uintptr_t)modelDesc + 0x20) : 0;
@@ -337,8 +330,8 @@ void HerdComponent_Helper7400(int64_t animalComp, void* pos, float yaw, char pos
                 *(int16_t*)(model + 0x166) = 1;
 
                 void* d2 = *(void**)(model + 0x18);
-                void* md2 = (fn_IsDerivedFrom && s_pTypeId_1c7a88 &&
-                             fn_IsDerivedFrom(d2, *s_pTypeId_1c7a88)) ? d2 : nullptr;
+                void* md2 = (fn_IsDerivedFrom &&
+                             fn_IsDerivedFrom(d2, ModelDescription::TypeId())) ? d2 : nullptr;
                 int meshIdx = *(int16_t*)(model + 0x166);
                 int v2 = *(int16_t*)(model + 0x164);
                 uintptr_t table2 = md2 ? *(uintptr_t*)((uintptr_t)md2 + 0x20) : 0;
@@ -378,15 +371,15 @@ void HerdComponent_Helper7400(int64_t animalComp, void* pos, float yaw, char pos
 char HerdComponent_CheckMigrationDone(int64_t herdComp) {
     EnsureHerdExtras();
     uint8_t* self = reinterpret_cast<uint8_t*>(herdComp);
-    if (fn_IsDerivedFrom && s_pHerdTypeId)
-        fn_IsDerivedFrom(*(void**)(self + 0x18), *s_pHerdTypeId);
+    if (fn_IsDerivedFrom)
+        fn_IsDerivedFrom(*(void**)(self + 0x18), HerdDescription::TypeId());
 
     int count = *(int*)(self + 0x40);
     for (int64_t i = 0; i < count; i++) {
         uintptr_t arr = *(uintptr_t*)(self + 0x38);
         int64_t entity = *(int64_t*)(*(int64_t*)(arr + i * 8) + 0x10);
 
-        void* member = HerdFindComponent(entity, s_pTypeId_1c6f98);
+        void* member = HerdFindComponent(entity, AnimalComponent::TypeId());
         uint64_t memberRef = 0;
         if (fn_InternalBasePtr_Ctor) new (&memberRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(member));   // B.3.3 bridge
@@ -406,8 +399,7 @@ void HerdComponent_AdjustSize(void* herdComp, int targetSize) {
     EnsureHerdExtras();
     uint8_t* self = reinterpret_cast<uint8_t*>(herdComp);
 
-    void* cfgObj = (fn_IsDerivedFrom && s_pHerdTypeId &&
-                    fn_IsDerivedFrom(*(void**)(self + 0x18), *s_pHerdTypeId))
+    void* cfgObj = (fn_IsDerivedFrom && fn_IsDerivedFrom(*(void**)(self + 0x18), HerdDescription::TypeId()))
                        ? *(void**)(self + 0x18) : nullptr;
     if (!cfgObj) return;
     int64_t descr = *(int64_t*)((uintptr_t)cfgObj + 0x20);
@@ -438,25 +430,25 @@ void HerdComponent_AdjustSize(void* herdComp, int targetSize) {
         // the WildAnimalComponent is what gets linked back to the herd, and the
         // AnimalComponent is what gets placed. The CharacterComponent lookup is
         // performed and discarded — kept so the search order matches.
-        void* wildComp = HerdFindComponent(entObj, s_pTypeId_1c8000);
+        void* wildComp = HerdFindComponent(entObj, WildAnimalComponent::TypeId());
         uint64_t wildRef = 0;
         if (fn_InternalBasePtr_Ctor) new (&wildRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(wildComp));   // B.3.3 bridge
 
-        void* animalComp = HerdFindComponent(entObj, s_pTypeId_1c6f98);
+        void* animalComp = HerdFindComponent(entObj, AnimalComponent::TypeId());
         uint64_t animalRef = 0;
         if (fn_InternalBasePtr_Ctor) new (&animalRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(animalComp));   // B.3.3 bridge
 
-        void* charComp = HerdFindComponent(entObj, s_pTypeId_1c7078);
+        void* charComp = HerdFindComponent(entObj, CharacterComponent::TypeId());
         uint64_t charRef = 0;
         if (fn_InternalBasePtr_Ctor) new (&charRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(charComp));   // B.3.3 bridge
         (void)charRef;
 
         // Spread radius from the herd config animal count.
-        void* cfg2 = (fn_IsDerivedFrom && s_pHerdTypeId &&
-                      fn_IsDerivedFrom(*(void**)(self + 0x18), *s_pHerdTypeId))
+        void* cfg2 = (fn_IsDerivedFrom &&
+                      fn_IsDerivedFrom(*(void**)(self + 0x18), HerdDescription::TypeId()))
                          ? *(void**)(self + 0x18) : nullptr;
         int animalArea = *(int*)((uintptr_t)cfg2 + 0x38);
         int mapDim = *mapDimPtr;
@@ -489,8 +481,8 @@ void HerdComponent_AdjustSize(void* herdComp, int targetSize) {
         HerdComponent_Helper7400((int64_t)animalRef, spawnVec, rz * spread, altFlag);
         altFlag = (altFlag == 0) ? 1 : 0;
 
-        if (fn_IsDerivedFrom && s_pHerdTypeId)
-            fn_IsDerivedFrom(*(void**)(self + 0x18), *s_pHerdTypeId);
+        if (fn_IsDerivedFrom)
+            fn_IsDerivedFrom(*(void**)(self + 0x18), HerdDescription::TypeId());
         uint64_t selfRef = 0;
         if (fn_InternalBasePtr_Ctor) new (&selfRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
@@ -545,8 +537,8 @@ void HerdComponent_Helper1ad0(int64_t herdComp, void* animalIbp) {
         .SetSizeFill(*(int*)(self + 0x40) + 1, animalIbp);
 
     void* cfgObj = *(void**)(self + 0x18);
-    void* cfg = (fn_IsDerivedFrom && s_pHerdTypeId &&
-                 fn_IsDerivedFrom(cfgObj, *s_pHerdTypeId)) ? cfgObj : nullptr;
+    void* cfg = (fn_IsDerivedFrom &&
+                 fn_IsDerivedFrom(cfgObj, HerdDescription::TypeId())) ? cfgObj : nullptr;
     int spread = *(int*)((uintptr_t)cfg + 0x38);
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     int mapDim = **(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
@@ -621,8 +613,8 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
     uint8_t* self = reinterpret_cast<uint8_t*>(herdComp);
 
     void* cfgObj = *(void**)(self + 0x18);
-    void* herdDesc = (fn_IsDerivedFrom && s_pHerdTypeId &&
-                      fn_IsDerivedFrom(cfgObj, *s_pHerdTypeId)) ? cfgObj : nullptr;
+    void* herdDesc = (fn_IsDerivedFrom &&
+                      fn_IsDerivedFrom(cfgObj, HerdDescription::TypeId())) ? cfgObj : nullptr;
 
     if (s_fn_StartMigration) s_fn_StartMigration(herdComp);
 
@@ -686,12 +678,12 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
         int64_t entObj = (int64_t)entRef;
         if (!entObj) continue;
 
-        void* animalComp = HerdFindComponent(entObj, s_pTypeId_1c6f98);
+        void* animalComp = HerdFindComponent(entObj, AnimalComponent::TypeId());
         uint64_t animalRef = 0;
         if (fn_InternalBasePtr_Ctor) new (&animalRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(animalComp));   // B.3.3 bridge
 
-        void* wildComp = HerdFindComponent(entObj, s_pTypeId_1c8000);
+        void* wildComp = HerdFindComponent(entObj, WildAnimalComponent::TypeId());
         uint64_t wildRef = 0;
         if (fn_InternalBasePtr_Ctor) new (&wildRef) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(wildComp));   // B.3.3 bridge
@@ -730,8 +722,8 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
         // Randomize the animal's starting appetite from AnimalDescription+0x28.
         if (animalRef) {
             void* aDescObj = *(void**)((uintptr_t)animalRef + 0x18);
-            void* animalDesc = (fn_IsDerivedFrom && s_pTypeId_1c6fd0 &&
-                                fn_IsDerivedFrom(aDescObj, *s_pTypeId_1c6fd0))
+            void* animalDesc = (fn_IsDerivedFrom &&
+                                fn_IsDerivedFrom(aDescObj, AnimalDescription::TypeId()))
                                    ? aDescObj : nullptr;
             float r = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
             if (animalDesc)
@@ -878,8 +870,7 @@ void HerdComponent_InitFuncs() {
            "StartMigration=%p CheckDone=%p\n",
            (void*)s_fn_CheckFood, (void*)s_fn_AdjustSize,
            (void*)s_fn_StartMigration, (void*)s_fn_CheckMigrationDone);
-    printf("[HerdComponent]   HerdTypeId=%p -> 0x%x\n",
-           (void*)s_pHerdTypeId, s_pHerdTypeId ? *s_pHerdTypeId : 0);
+    printf("[HerdComponent]   HerdTypeId=0x%x\n", HerdDescription::TypeId());
 #endif
 }
 
@@ -967,7 +958,7 @@ void HerdComponent::Update(void* time) {
 
     // Get config object via IsDerivedFrom check
     void* unk18 = _description;
-    bool isDerived = fn_IsDerivedFrom(unk18, *s_pHerdTypeId);
+    bool isDerived = fn_IsDerivedFrom(unk18, HerdDescription::TypeId());
     uint8_t* config = isDerived ? reinterpret_cast<uint8_t*>(unk18) : nullptr;
     if (!config) ++g_hu_noCfg;
 

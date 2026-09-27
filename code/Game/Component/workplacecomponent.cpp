@@ -16,6 +16,8 @@
 #include "graphics/Scene.h"
 #include "graphics/Mesh.h"
 #include "Component/workplacecomponent_funcs.h"
+#include "Component/WorkPlaceDescription.h"
+#include "Component/CitizenComponent.h"
 #include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include "engine_funcs.h"
@@ -52,10 +54,6 @@ static fn_RemoveFromList_t s_fn_RemoveFromList = nullptr;
 typedef void (*fn_OnCreateFallback_t)(void* self);
 static fn_OnCreateFallback_t s_fn_OnCreateFallback = nullptr;
 
-// Type IDs
-static uint32_t* s_TypeId_WorkerType = nullptr;  // 0x1401c7158 — for IsDerivedFrom validation
-static uint32_t* s_TypeId_WorkPlaceDesc = nullptr; // 0x1401c8118 — for version < 1 fallback
-
 static bool s_initialized = false;
 
 static void EnsureHelpers() {
@@ -75,11 +73,6 @@ static void EnsureHelpers() {
     s_fn_OnCreateFallback = reinterpret_cast<fn_OnCreateFallback_t>(
         ResolveAddr(Module::Exe, 0x14012ee60));
 
-    s_TypeId_WorkerType = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7158));
-    s_TypeId_WorkPlaceDesc = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c8118));
-
     s_initialized = true;
 }
 
@@ -95,28 +88,25 @@ typedef void (*fn_WPC_Detach_t)(int64_t comp, void* workerIbp);     // 0x14012f7
 typedef void (*fn_WPC_Attach_t)(int64_t comp, void* workerIbp);     // 0x14012fa20
 static fn_WPC_Detach_t s_fn_WPC_Detach = nullptr;
 static fn_WPC_Attach_t s_fn_WPC_Attach = nullptr;
-static uint32_t* s_pTId_JobHostComp = nullptr;  // DWORD_1401c80e0
 static bool s_wpcEe60Resolved = false;
 static void EnsureEe60Helpers() {
     if (s_wpcEe60Resolved) return;
     s_fn_WPC_Detach = reinterpret_cast<fn_WPC_Detach_t>(ResolveAddr(Module::Exe, 0x14012f7e0));
     s_fn_WPC_Attach = reinterpret_cast<fn_WPC_Attach_t>(ResolveAddr(Module::Exe, 0x14012fa20));
-    s_pTId_JobHostComp = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c80e0));
     s_wpcEe60Resolved = true;
 }
 
 // Find the first component on `host` whose GetTypeId (vtable+0x10) == typeId.
-static void* WPC_FindJobHostComponent(int64_t host, uint32_t* pTypeId) {
-    if (!pTypeId) return nullptr;
+static void* WPC_FindJobHostComponent(int64_t host, uint32_t typeId) {
     int count = *(int*)(host + 0x38);
     int64_t arr = *(int64_t*)(host + 0x30);
     for (int i = 0; i < count; i++) {
         int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
         void* comp = (void*)*slot;
         uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
-        if (tid == *pTypeId) {
+        if (tid == typeId) {
             void* c = (void*)*slot;
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTypeId)) return c;
+            if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) return c;
             return nullptr;
         }
     }
@@ -233,8 +223,8 @@ void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
     // Guard descObj before IsDerivedFrom (Runtime IsDerivedFrom has no null-check) and
     // desc before the +0x20 deref: an inert standalone workplace can carry a null/absent
     // description. A null desc means the job can't match -> skip the visual tail.
-    void* desc = (descObj && fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc &&
-                  fn_IsDerivedFrom(descObj, *s_TypeId_WorkPlaceDesc)) ? descObj : nullptr;
+    void* desc = (descObj && fn_IsDerivedFrom &&
+                  fn_IsDerivedFrom(descObj, WorkPlaceDescription::TypeId())) ? descObj : nullptr;
     if (!desc || jobSlot != *(int64_t*)((uintptr_t)desc + 0x20)) return;
 
     uint64_t meshIbp2 = 0;
@@ -317,8 +307,8 @@ void WorkplaceComponent_Attach(int64_t comp, void* workerIbp) {
             int64_t jobSlot = *(int64_t*)(comp + 0x48);
             // Guard descObj before IsDerivedFrom (no null-check) and desc before the +0x20
             // deref — an inert standalone workplace may have a null description.
-            void* desc = (descObj && fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc &&
-                          fn_IsDerivedFrom(descObj, *s_TypeId_WorkPlaceDesc)) ? descObj : nullptr;
+            void* desc = (descObj && fn_IsDerivedFrom &&
+                          fn_IsDerivedFrom(descObj, WorkPlaceDescription::TypeId())) ? descObj : nullptr;
             if (desc && jobSlot == *(int64_t*)((uintptr_t)desc + 0x20)) {
                 if (s_fn_WPC_ModelKick) s_fn_WPC_ModelKick(*(int64_t*)(comp + 0x10), 2);
             }
@@ -503,8 +493,8 @@ void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting) {
         // Raise the "no workers" warning (bit 4) only for an UNSTAFFED workplace still on
         // its designated job (roster empty && jobSlot == desc.job) — the faithful raise.
         void* descObj = *(void**)(comp + 0x18);
-        void* desc = (fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc &&
-                      fn_IsDerivedFrom(descObj, *s_TypeId_WorkPlaceDesc)) ? descObj : nullptr;
+        void* desc = (fn_IsDerivedFrom &&
+                      fn_IsDerivedFrom(descObj, WorkPlaceDescription::TypeId())) ? descObj : nullptr;
         if (desc && *(int64_t*)(comp + 0x48) == *(int64_t*)((uintptr_t)desc + 0x20)) {
             // Re-find the mesh (mirrors the original's per-call finder) and raise bit 4. The
             // cull-guard + Scene Add + positioning + entity-notify all run inside the toggle.
@@ -543,8 +533,8 @@ void WorkplaceComponent_ApplyOccupiedVisual(int64_t comp) {
     // no visible change yet — it's correct scaffolding awaiting those components' bring-up.
     void* descObj = *(void**)(comp + 0x18);
     int64_t jobSlot = *(int64_t*)(comp + 0x48);
-    void* desc = (fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc &&
-                  fn_IsDerivedFrom(descObj, *s_TypeId_WorkPlaceDesc)) ? descObj : nullptr;
+    void* desc = (fn_IsDerivedFrom &&
+                  fn_IsDerivedFrom(descObj, WorkPlaceDescription::TypeId())) ? descObj : nullptr;
     if (desc && jobSlot == *(int64_t*)((uintptr_t)desc + 0x20)) {
         if (s_fn_WPC_ModelKick) s_fn_WPC_ModelKick(*(int64_t*)(comp + 0x10), 2);
     }
@@ -585,7 +575,7 @@ void WorkPlaceComponent_OnCreateInit(void* selfP) {
 
         if (*pJobHost != 0) {
             int64_t host = *pJobHost;
-            void* comp = WPC_FindJobHostComponent(host, s_pTId_JobHostComp);
+            void* comp = WPC_FindJobHostComponent(host, WorkPlaceComponent::TypeId());
             int64_t compIbp = 0;
             if (fn_InternalBasePtr_Ctor) new (&compIbp) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
@@ -598,7 +588,7 @@ void WorkPlaceComponent_OnCreateInit(void* selfP) {
         *pJobHost = emptyIbp;
         if (emptyIbp != 0) {
             int64_t host = *pJobHost;
-            void* comp = WPC_FindJobHostComponent(host, s_pTId_JobHostComp);
+            void* comp = WPC_FindJobHostComponent(host, WorkPlaceComponent::TypeId());
             int64_t compIbp = 0;
             if (fn_InternalBasePtr_Ctor) new (&compIbp) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(comp));   // B.3.3 bridge
@@ -688,14 +678,14 @@ extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {
     // MapComponent_DetachOccupancy_4750), log once and trust the linked description anyway.
     // A genuinely null desc yields key 0 = "no profession", the correct end state for a house.
     void* desc = *reinterpret_cast<void**>(self + 0x18);
-    if (desc && fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc && *s_TypeId_WorkPlaceDesc &&
-        !fn_IsDerivedFrom(desc, *s_TypeId_WorkPlaceDesc)) {
+    if (desc && fn_IsDerivedFrom &&
+        !fn_IsDerivedFrom(desc, WorkPlaceDescription::TypeId())) {
         static bool s_warnedDesc = false;
         if (!s_warnedDesc) {
             s_warnedDesc = true;
             printf("[WorkPlaceComponent] LeaveBuilderProfession: WPC+0x18=%p is not a "
                    "WorkPlaceDescription (type id %u) — retail would fault here; trusting "
-                   "it and reading +0x20 anyway\n", desc, *s_TypeId_WorkPlaceDesc);
+                   "it and reading +0x20 anyway\n", desc, WorkPlaceDescription::TypeId());
         }
     }
     uint64_t naturalKey = desc
@@ -1049,11 +1039,8 @@ void WorkPlaceComponent::Persist(void* stream) {
             reinterpret_cast<Object::InternalBasePtr*>((void*)ptr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             // Validate: if ptr dereferences to non-null, check IsDerivedFrom
             void* obj = *(void**)ptr;
-            // s_TypeId_WorkerType must hold a CRC, not merely be a registered slot —
-            // IsDerivedFrom(obj, 0) never matches and would null out every worker ref.
-            if (obj != nullptr && s_fn_IsDerivedFrom_dispatch &&
-                s_TypeId_WorkerType && *s_TypeId_WorkerType) {
-                bool valid = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_WorkerType);
+            if (obj != nullptr && s_fn_IsDerivedFrom_dispatch) {
+                bool valid = s_fn_IsDerivedFrom_dispatch(obj, CitizenComponent::TypeId());
                 if (!valid) {
                     *(uint64_t*)ptr = 0;  // Clear invalid reference
                 }
@@ -1070,8 +1057,8 @@ void WorkPlaceComponent::Persist(void* stream) {
     if (version < 1) {
         // Legacy path: read from description component via IsDerivedFrom
         void* obj = _description;
-        if (s_fn_IsDerivedFrom_dispatch && s_TypeId_WorkPlaceDesc) {
-            bool derived = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_WorkPlaceDesc);
+        if (s_fn_IsDerivedFrom_dispatch) {
+            bool derived = s_fn_IsDerivedFrom_dispatch(obj, WorkPlaceDescription::TypeId());
             void* descComp = derived ? obj : nullptr;
             if (descComp) {
                 *(uint64_t*)&workerData = *(uint64_t*)((uintptr_t)descComp + 0x20);

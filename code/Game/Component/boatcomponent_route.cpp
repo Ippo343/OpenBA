@@ -58,6 +58,9 @@
 #include <cstdlib>
 #include <cmath>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/InteractDescription.h"   // ENDGAME B.3.9 C1: 0x1401c7938 cell class
+#include "Component/ModelComponent.h"        // ENDGAME B.3.9 C1: 0x1401c7a50 cell class
+#include "Component/BoatComponent.h"         // ENDGAME B.3.9 C1: 0x1401c4020 cell class
 
 // ── Resolved leaves ──────────────────────────────────────────────────────────────
 namespace {
@@ -77,9 +80,6 @@ fn_GridToWorld_t      s_GridToWorld    = nullptr;
 fn_PfSetCost_t        s_PfSetCost      = nullptr;
 fn_PfFlags_t          s_PfFlags        = nullptr;
 fn_PfRun_t            s_PfRun          = nullptr;
-const uint32_t*       s_pTid_InteractDescription = nullptr;   // 0x1401c7938
-const uint32_t*       s_pTid_ModelComponent      = nullptr;   // 0x1401c7a50
-const uint32_t*       s_pTid_BoatComponent       = nullptr;   // 0x1401c4020
 const float*          s_pHalfTileBias            = nullptr;   // 0x140172114 == 0.5f
 bool                  s_resolved = false;
 
@@ -98,12 +98,6 @@ void ResolveOnce() {
     s_PfSetCost     = reinterpret_cast<fn_PfSetCost_t>(ResolveAddr(Module::Exe, 0x1400a6a30));
     s_PfFlags       = reinterpret_cast<fn_PfFlags_t>(ResolveAddr(Module::Exe, 0x1400a68b0));
     s_PfRun         = reinterpret_cast<fn_PfRun_t>(ResolveAddr(Module::Exe, 0x1400a6e30));
-    s_pTid_InteractDescription =
-        reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7938));
-    s_pTid_ModelComponent =
-        reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a50));
-    s_pTid_BoatComponent =
-        reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4020));
     s_pHalfTileBias = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
 }
 
@@ -138,8 +132,8 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
     // empty (count 0 -> no name matched -> recurse).
     void* descRaw = *reinterpret_cast<void**>(comp + 0x18);
     void* desc = nullptr;
-    if (fn_IsDerivedFrom && s_pTid_InteractDescription &&
-        fn_IsDerivedFrom(descRaw, *s_pTid_InteractDescription)) {
+    if (fn_IsDerivedFrom &&
+        fn_IsDerivedFrom(descRaw, InteractDescription::TypeId())) {
         desc = descRaw;
     }
 
@@ -173,7 +167,7 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
 
     // Found the name. Its position is relative to the owning entity's ModelComponent.
     const uintptr_t entity = *reinterpret_cast<uintptr_t*>(comp + 0x10);
-    const uint32_t wantedTid = s_pTid_ModelComponent ? *s_pTid_ModelComponent : 0;
+    const uint32_t wantedTid = ModelComponent::TypeId();
     void* model = nullptr;
     const int compCount = entity ? *reinterpret_cast<int*>(entity + 0x38) : 0;
     for (int i = 0; i < compCount; ++i) {
@@ -235,7 +229,7 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
 // seeds it behind BANISHED_LIVE_TRADE_TIDS.
 extern "C" void* BoatRoute_FindBoatComponent(int64_t entity, void* outIBP) {
     ResolveOnce();
-    const uint32_t wanted = s_pTid_BoatComponent ? *s_pTid_BoatComponent : 0;
+    const uint32_t wanted = BoatComponent::TypeId();
     void* found = nullptr;
     const int n = entity ? *reinterpret_cast<int*>(entity + 0x38) : 0;
     for (int i = 0; i < n; ++i) {

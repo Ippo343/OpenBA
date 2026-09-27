@@ -12,6 +12,8 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/pasturecomponent_funcs.h"
+#include "Component/AnimalDescription.h"
+#include "Component/LivestockComponent.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -54,10 +56,7 @@ static fn_PastureHelper5ed0_t s_fn_PastureHelper5ed0 = nullptr;
 typedef void (*fn_ReassignEntityRef_t)(uintptr_t entityPtr);
 static fn_ReassignEntityRef_t s_fn_ReassignEntityRef = nullptr;
 
-// Type ID for entity validation — 0x1401c7970
-static uint32_t* s_TypeId_PastureAnimal = nullptr;
-
-// Type ID for component lookup — 0x1401c6f98
+// Type ID for component lookup — 0x1401c6f98 (unused: no reader in this file)
 static uint32_t* s_TypeId_PastureSubComp = nullptr;
 
 static bool s_initialized = false;
@@ -84,9 +83,6 @@ static void EnsureHelpers() {
 
     s_fn_ReassignEntityRef = reinterpret_cast<fn_ReassignEntityRef_t>(
         ResolveAddr(Module::Exe, 0x1401240a0));
-
-    s_TypeId_PastureAnimal = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7970));
 
     s_TypeId_PastureSubComp = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c6f98));
@@ -123,9 +119,6 @@ static fn_AnimalSetBounds_t s_fn_AnimalSetBounds = nullptr;
 typedef void* (*fn_Time_CtorF_t)(void* out, float seconds);
 static fn_Time_CtorF_t s_fn_Time_CtorF = nullptr;
 
-// Type id consulted by capacity / helper (DWORD_1401c6fd0).
-static uint32_t* s_pTypeId_1c6fd0 = nullptr;
-
 static bool s_pastureExtraInit = false;
 static void EnsurePastureExtras() {
     if (s_pastureExtraInit) return;
@@ -141,8 +134,6 @@ static void EnsurePastureExtras() {
         ResolveAddr(Module::Exe, 0x140105e20));
     uintptr_t slot = ResolveAddr(Module::Exe, 0x140152b00);
     if (slot) s_fn_Time_CtorF = *reinterpret_cast<fn_Time_CtorF_t*>(slot);
-    s_pTypeId_1c6fd0 = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c6fd0));
     s_pastureExtraInit = true;
 }
 
@@ -193,9 +184,9 @@ uint64_t PastureComponent_ComputeCapacity(uintptr_t self) {
     for (int i = 0; i < n; i++) {
         void* comp = *(void**)(list + (int64_t)i * 8);
         uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
-        if (s_pTypeId_1c6fd0 && t == *s_pTypeId_1c6fd0) {
+        if (t == AnimalDescription::TypeId()) {
             void* cand = *(void**)(list + (int64_t)idx * 8);
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(cand, *s_pTypeId_1c6fd0)) found = cand;
+            if (fn_IsDerivedFrom && fn_IsDerivedFrom(cand, AnimalDescription::TypeId())) found = cand;
             break;
         }
         idx++;
@@ -239,8 +230,8 @@ void PastureComponent_Helper5ed0(void* entityRef) {
 
     void* tmpl = *(void**)(p + 0x18);
     *(int*)(p + 0x28) = mapW * y + x;
-    void* animalTmpl = (s_fn_IsDerivedFrom_dispatch && s_pTypeId_1c6fd0 &&
-                        s_fn_IsDerivedFrom_dispatch(tmpl, *s_pTypeId_1c6fd0)) ? tmpl : nullptr;
+    void* animalTmpl = (s_fn_IsDerivedFrom_dispatch &&
+                        s_fn_IsDerivedFrom_dispatch(tmpl, AnimalDescription::TypeId())) ? tmpl : nullptr;
     if (s_fn_AnimalSetBounds) {
         s_fn_AnimalSetBounds(p, (short*)(p + 0x38), (short*)(p + 0x3a),
                              (short*)(p + 0x3c), (short*)(p + 0x3e),
@@ -437,8 +428,8 @@ void PastureComponent::Persist(void* stream) {
         for (int64_t i = 0; i < count; i++) {
             reinterpret_cast<Object::InternalBasePtr*>((void*)ptr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             void* obj = *(void**)ptr;
-            if (obj != nullptr && s_fn_IsDerivedFrom_dispatch && s_TypeId_PastureAnimal) {
-                bool valid = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_PastureAnimal);
+            if (obj != nullptr && s_fn_IsDerivedFrom_dispatch) {
+                bool valid = s_fn_IsDerivedFrom_dispatch(obj, LivestockComponent::TypeId());
                 if (!valid) {
                     *(uint64_t*)ptr = 0;
                 }

@@ -81,6 +81,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
+#include <new>
 #include <type_traits>
 
 namespace {
@@ -118,6 +119,15 @@ constexpr int kSerialize      = 0x28;
 constexpr int kReconstruct    = 0x30;
 constexpr int kDestruct       = 0x38;
 constexpr int kConstruct      = 0x40;   // introduced per branch — RULE B5-16
+
+// ENDGAME B.3.9 GFX: the destructor markers RECORD each call, so the real
+// inline `DeletingDtor`s can be seen running them once per element, downward.
+int         g_gfxDtorCount = 0;
+const void* g_gfxDtorOrder[4] = {};
+void NoteDtor(const void* self) {
+    if (g_gfxDtorCount < 4) g_gfxDtorOrder[g_gfxDtorCount] = self;
+    ++g_gfxDtorCount;
+}
 
 // ---------------------------------------------------------------------------
 // A bare `Object::External` leaf, existing only so PART B has something to read
@@ -326,9 +336,9 @@ UNIT_TEST(graphics_material_layout) {
     CHECK((std::is_base_of<Object::External, Graphics::Material>::value));
     CHECK((!std::is_base_of<Object::CompiledExternal, Graphics::Material>::value));
 
-    // Abstract by slot 0, which is what keeps the deleting-dtor row alive
-    // (B35_RULES section 11): `Graphics::Material m;` must not compile.
-    CHECK(std::is_abstract<Graphics::Material>::value);
+    // ENDGAME B.3.9 GFX: CONCRETE now (its own slot 0; the RT_DELDTOR row and
+    // the mint row are retired) -- b39_gfx_material_* below.
+    CHECK(!std::is_abstract<Graphics::Material>::value);
     CHECK(std::is_polymorphic<Graphics::Material>::value);
 
     // The pass array's element is eight bytes — the `MOV RAX,[RAX+RDX*8]` at
@@ -454,7 +464,7 @@ UNIT_TEST(graphics_graphicsmesh_layout) {
     CHECK_EQ((int)offsetof(Graphics::GraphicsMesh, _name),
              (int)sizeof(Object::CompiledExternal));
 
-    CHECK(std::is_abstract<Graphics::GraphicsMesh>::value);
+    CHECK(!std::is_abstract<Graphics::GraphicsMesh>::value);   // concrete since B.3.9 GFX
 
     // The two nested value types, and the detail-level record the +0x50 array
     // holds. `graphicsmesh_vtable.cpp` used to call that array an
@@ -668,6 +678,105 @@ UNIT_TEST(graphics_block_g_all_four_introduce_construct_at_slot8) {
     }
 }
 
+// ===========================================================================
+// ENDGAME B.3.9 block GFX -- Material / GraphicsMesh CONCRETE (D1, B9-16).
+// ===========================================================================
+template <class PMF> uintptr_t GfxSlotOffset(PMF pmf) {
+    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
+    uintptr_t words[2];
+    std::memcpy(words, &pmf, sizeof words);
+    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
+    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
+    return words[0] - 1;
+}
+
+template <class T> void CheckBothSlot0Arms(size_t stride) {
+    void* m = Object::detail::InternalMemAlloc(sizeof(T), 8);
+    T* h = ::new (m) T();
+    g_gfxDtorCount = 0;
+    CHECK(static_cast<void*>(h->DeletingDtor(1)) == m);
+    CHECK_EQ(g_gfxDtorCount, 1);
+
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * stride, 8));
+    const int64_t cookie = 3;
+    std::memcpy(block, &cookie, sizeof cookie);
+    T* e[3];
+    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * stride) T();
+    g_gfxDtorCount = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
+    CHECK_EQ(g_gfxDtorCount, 3);
+    CHECK(g_gfxDtorOrder[0] == e[2]);
+    CHECK(g_gfxDtorOrder[1] == e[1]);
+    CHECK(g_gfxDtorOrder[2] == e[0]);
+}
+
+UNIT_TEST(b39_gfx_material_concrete_ctor_stores_and_both_slot0_arms) {
+    using M = Graphics::Material;
+    CHECK(!std::is_destructible<M>::value);
+    CHECK(!std::has_virtual_destructor<M>::value);
+    CHECK_EQ(GfxSlotOffset(&M::DeletingDtor),   (uintptr_t)0x00);   // 0x180011d20
+    CHECK_EQ(GfxSlotOffset(&M::TypeName),       (uintptr_t)0x08);
+    CHECK_EQ(GfxSlotOffset(&M::Type),           (uintptr_t)0x10);
+    CHECK_EQ(GfxSlotOffset(&M::GetFileVersion), (uintptr_t)0x18);
+    CHECK_EQ(GfxSlotOffset(&M::Serialize),      (uintptr_t)0x28);
+    CHECK_EQ(GfxSlotOffset(&M::Reconstruct),    (uintptr_t)0x30);
+    CHECK_EQ(GfxSlotOffset(&M::Destruct),       (uintptr_t)0x38);
+    CHECK_EQ(GfxSlotOffset(&M::Construct),      (uintptr_t)0x40);
+
+    // retail 0x1801029a0 / the FACTREST steps: External's three zero qwords,
+    // +0x20 dword 0, +0x24 untouched, +0x28 / +0x30 zero.
+    alignas(8) uint8_t buf[0x38];
+    std::memset(buf, 0xCD, sizeof buf);
+    M* m = ::new (static_cast<void*>(buf)) M();
+    for (size_t off = 0x08; off < 0x20; off += 8)
+        CHECK_EQ(*reinterpret_cast<const uint64_t*>(buf + off), (uint64_t)0);
+    CHECK_EQ(*reinterpret_cast<const uint32_t*>(buf + 0x20), 0u);
+    CHECK_EQ(*reinterpret_cast<const uint32_t*>(buf + 0x24), 0xCDCDCDCDu);
+    CHECK_EQ(*reinterpret_cast<const uint64_t*>(buf + 0x28), (uint64_t)0);
+    CHECK_EQ(*reinterpret_cast<const uint64_t*>(buf + 0x30), (uint64_t)0);
+    g_gfxDtorCount = 0;
+    CHECK(static_cast<void*>(m->DeletingDtor(0)) == static_cast<void*>(buf));
+    CHECK_EQ(g_gfxDtorCount, 1);
+
+    CheckBothSlot0Arms<M>(0x38);
+}
+
+UNIT_TEST(b39_gfx_graphicsmesh_concrete_ctor_stores_and_both_slot0_arms) {
+    using G = Graphics::GraphicsMesh;
+    CHECK(!std::is_destructible<G>::value);
+    CHECK(!std::has_virtual_destructor<G>::value);
+    CHECK_EQ(GfxSlotOffset(&G::DeletingDtor),   (uintptr_t)0x00);   // 0x180012bd0
+    CHECK_EQ(GfxSlotOffset(&G::TypeName),       (uintptr_t)0x08);
+    CHECK_EQ(GfxSlotOffset(&G::Type),           (uintptr_t)0x10);
+    CHECK_EQ(GfxSlotOffset(&G::GetFileVersion), (uintptr_t)0x18);
+    CHECK_EQ(GfxSlotOffset(&G::Serialize),      (uintptr_t)0x28);
+    CHECK_EQ(GfxSlotOffset(&G::Reconstruct),    (uintptr_t)0x30);
+    CHECK_EQ(GfxSlotOffset(&G::Destruct),       (uintptr_t)0x38);
+    CHECK_EQ(GfxSlotOffset(&G::Construct),      (uintptr_t)0x40);
+
+    // retail 0x1800ff170, the store list read as bit patterns.
+    alignas(8) uint8_t buf[0x98];
+    std::memset(buf, 0xCD, sizeof buf);
+    G* g = ::new (static_cast<void*>(buf)) G();
+    auto D = [&](size_t off) { uint32_t v; std::memcpy(&v, buf + off, 4); return v; };
+    auto Q = [&](size_t off) { uint64_t v; std::memcpy(&v, buf + off, 8); return v; };
+    for (size_t off = 0x08; off < 0x28; off += 8) CHECK_EQ(Q(off), (uint64_t)0);   // External + _name
+    for (size_t off = 0x28; off < 0x34; off += 4) CHECK_EQ(D(off), 0x3f800000u);   // ( 1, 1, 1)
+    for (size_t off = 0x34; off < 0x40; off += 4) CHECK_EQ(D(off), 0xbf800000u);   // (-1,-1,-1)
+    CHECK_EQ(D(0x40), 1u);
+    CHECK_EQ(D(0x44), 0x3f800000u);
+    CHECK_EQ(D(0x48), 0x461c4000u);                                                 // 10000.0f
+    CHECK_EQ(D(0x4c), 0xCDCDCDCDu);                                                 // never written
+    for (size_t off = 0x50; off < 0x80; off += 8) CHECK_EQ(Q(off), (uint64_t)0);   // three Arrays
+    for (size_t off = 0x80; off < 0x8c; off += 4) CHECK_EQ(D(off), 0x4cbebc20u);   //  1e8f
+    for (size_t off = 0x8c; off < 0x98; off += 4) CHECK_EQ(D(off), 0xccbebc20u);   // -1e8f
+    g_gfxDtorCount = 0;
+    CHECK(static_cast<void*>(g->DeletingDtor(0)) == static_cast<void*>(buf));
+    CHECK_EQ(g_gfxDtorCount, 1);
+
+    CheckBothSlot0Arms<G>(0x98);
+}
+
 }  // namespace
 
 // ############################################################################
@@ -689,7 +798,7 @@ bool        Material::Serialize(void*) { Note(this, kSerialize / 8); return true
 Object::External* Material::Reconstruct() { Note(this, kReconstruct / 8); return this; }
 void        Material::Destruct() { Note(this, kDestruct / 8); }
 Object::External* Material::Construct() { Note(this, kConstruct / 8); return this; }
-Material::~Material() {}
+Material::~Material() { NoteDtor(this); }
 
 const char* MaterialInstance::TypeName() const { Note(this, kTypeName / 8); return "MaterialInstance"; }
 uint32_t    MaterialInstance::Type() const { Note(this, kType / 8); return 0u; }
@@ -707,7 +816,7 @@ bool        GraphicsMesh::Serialize(void*) { Note(this, kSerialize / 8); return 
 Object::External* GraphicsMesh::Reconstruct() { Note(this, kReconstruct / 8); return this; }
 void        GraphicsMesh::Destruct() { Note(this, kDestruct / 8); }
 Object::External* GraphicsMesh::Construct() { Note(this, kConstruct / 8); return this; }
-GraphicsMesh::~GraphicsMesh() {}
+GraphicsMesh::~GraphicsMesh() { NoteDtor(this); }
 
 const char* EdgeMesh::TypeName() const { Note(this, kTypeName / 8); return "EdgeMesh"; }
 uint32_t    EdgeMesh::Type() const { Note(this, kType / 8); return 0u; }

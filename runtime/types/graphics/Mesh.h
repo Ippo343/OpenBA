@@ -561,12 +561,19 @@ public:
     int      GetBones(float t, const Math::Transform& xf,
                       Math::Matrix* out) const;              // 0x180100070
 
-    // The two CLASS STATICS over `?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA`
-    // (0x1801fc70b). Exported, not ported, no caller as members — the flag
-    // itself is read through `RT_DATA_SLOT` in `wave29_lane_slots.cpp` and owes
-    // a `MintStorageCell()` redirect at the END of B.3 (RULE B4b-4).
+    // The two CLASS STATIC accessors over `_rootOnlyUpdates`. Exported, not
+    // ported, no caller as members.
     static void EnableRootOnlyUpdates(bool enable);          // 0x180017040
     static bool AreRootOnlyUpdateEnabled();                  // 0x180017050
+
+    // ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA  0x1801fc70b — retail's
+    // PRIVATE static bool (`0`). ENDGAME B.3.9 block GFX (B39_RULES D7 row A22):
+    // the class static, defined in mesh.cpp and REDIRECTED onto the mint's
+    // storage row by RtGraphicsPortInit, so the name / address doors the
+    // foreign readers use (citizenai_executor.cpp, address_registry.cpp,
+    // perf_experimental.cpp) and this member are ONE byte. Public because its
+    // reader in this block is a free-function body (wave29_lane_slots.cpp).
+    static bool _rootOnlyUpdates;
 
     // `??2MeshInstance@Graphics@@SAPEAX_K@Z` (0x180016940),
     // `??2…@SAPEAX_KPEAX@Z` (0x1800169b0) and `??3…@SAXPEAX@Z` (0x1800169c0) are
@@ -577,7 +584,6 @@ public:
     // news one as a C++ object (see the ABSTRACT banner above). Recorded here so
     // the omission is a decision, not a gap.
 
-protected:
     // `??1MeshInstance@Graphics@@UEAA@XZ` @ 0x180017060, `UEAA` because retail's
     // is virtual — the non-virtual `QEAA` spelling is a name the DLL does not
     // contain (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md). NON-VIRTUAL
@@ -586,6 +592,13 @@ protected:
     // door `RtGraphics_MeshInstance_Dtor`; each of those zeroes its header, so
     // the compiler's implicit member ~Arrays after it are no-ops, and then
     // ~Geometry runs — retail's order.
+    //
+    // PUBLIC since ENDGAME B.3.9 block GFX (coordinator ruling 4): retail's is
+    // public (`U` = public virtual) and the exe calls it DIRECTLY on MeshInstance
+    // objects EMBEDDED in its components (ModelComponent +0x28, its dtor
+    // 0x140124cd0; StorageDisplayComponent's 0x128-stride array) through import
+    // slot 0x1401514a8 -- a plain destructor call, never a delete. The C++
+    // spelling of that call is `mi->~MeshInstance()`, which needs it public.
     ~MeshInstance() { ReleaseFields(); }
 
 private:
@@ -684,7 +697,10 @@ public:
     // are deliberately not declared; see MeshInstance's note above.
 
 protected:
-    ~EdgeMeshInstance();    // 0x1800174d0  exported, NOT PORTED, no caller
+    // 0x1800174d0 -- PORTED (ENDGAME B.3.9 GFX, mesh.cpp): retail's body is a
+    // bare tail into ~Geometry, so the member is empty and the chain is the
+    // compiler's; its ??1 door is registered by name and address.
+    ~EdgeMeshInstance();
 
 public:
     RtGraphics::ExternalPtr _mesh;      // +0xc0  ExternalPtr<EdgeMesh>; ctor 0

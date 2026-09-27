@@ -370,25 +370,10 @@ void SerScalar(ReaderWriter* rw, size_t slot, void* field) {
 //
 // THREE ADDRESS DOORS, all commented at their call sites below.
 // ============================================================================
-// ENDGAME B.3.5 block H2: the three type-info doors `Graphics::Particle`'s
-// slots 1/2/3 forward to. They are defined in
-// `runtime/src/graphics/graphics_typeinfo_accessors.cpp` (NOT this block's file
-// set) and registered there; declared here at NAMESPACE scope with `extern "C"`
-// so the member definitions below bind to that file's C-linkage symbols and not
-// to a mangled name in this translation unit's anonymous namespace.
-extern "C" uint32_t    RtGraphics_Particle_Type(const void* self);
-extern "C" const char* RtGraphics_Particle_TypeName(const void* self);
-extern "C" int32_t     RtGraphics_Particle_GetFileVersion(const void* self);
-
-// ENDGAME B.3.5 block H2: BODY MOVED onto the member below; the door keeps its
-// name, its address and its registration and delegates with a QUALIFIED
-// non-virtual call (the qualification stops it re-entering itself through the
-// minted table, B34_BRIEFS section A.1). Retail has no null test on `this` here
-// (`MOV [RSP+0x10],RBX` then a straight `MOV RBX,RDX`), so none is added.
-extern "C" bool RtGraphics_Particle_Serialize(void* selfv, void* streamv) {
-    return reinterpret_cast<::Graphics::Particle*>(selfv)          // B.3.5 bridge
-               ->::Graphics::Particle::Serialize(streamv);
-}
+// ENDGAME B.3.9 block GFX: the slot-5 door `RtGraphics_Particle_Serialize` is
+// gone with the minted `??_7Particle@Graphics@@6B@` (its only reader besides
+// ParticleSystem::Serialize, which now calls the member). Retail has no null
+// test on `this` here (`MOV [RSP+0x10],RBX` then a straight `MOV RBX,RDX`).
 
 namespace Graphics {
 
@@ -500,6 +485,13 @@ bool Particle::Serialize(void* streamv) {
 // evidence, and each door is a one-line qualified delegation.
 // ENDGAME B.3.8 block RB: `~Particle()` is inline in Particle.h now, its body
 // (retail 0x180103c70) ported as `Particle::ReleaseFields` in animation.cpp.
+
+// ?CreateNewObject@Particle@Graphics@@SAPEAVBase@Object@@XZ 0x18001ff40 and
+// ?CreateInPlaceObject@Particle@Graphics@@SAPEAVBase@Object@@PEAX@Z 0x18001ff50:
+// the ABSTRACT factory pair, both `XOR EAX,EAX ; RET` in retail (the FACTREST
+// row they replace carried no steps for that reason). ENDGAME B.3.9 GFX, D2.
+Object::Base* Particle::CreateNewObject() { return nullptr; }
+Object::Base* Particle::CreateInPlaceObject(void* place) { (void)place; return nullptr; }
 
 }  // namespace Graphics
 
@@ -1360,8 +1352,14 @@ int RtGraphicsWave27GfxpartRegister() {
     RegisterRuntimeAddr(0x180020d60ull, (void*)&RtGraphics_Emitter_DeleteDtor);     ++count;
 
 
-    RegisterRuntimeExport("?Serialize@Particle@Graphics@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtGraphics_Particle_Serialize); ++count;
+    // ENDGAME B.3.9 block GFX: Particle's factory pair (D2), the class's own
+    // statics, replacing its FACTREST row; the Serialize slot door is retired.
+    RegisterRuntimeExport("?CreateNewObject@Particle@Graphics@@SAPEAVBase@Object@@XZ",
+                          (void*)&::Graphics::Particle::CreateNewObject); ++count;
+    RegisterRuntimeAddr(0x18001ff40ull, (void*)&::Graphics::Particle::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@Particle@Graphics@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&::Graphics::Particle::CreateInPlaceObject); ++count;
+    RegisterRuntimeAddr(0x18001ff50ull, (void*)&::Graphics::Particle::CreateInPlaceObject);
     RegisterRuntimeExport(
         "?Draw@ParticleInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@"
         "V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z",
@@ -1388,7 +1386,7 @@ int RtGraphicsWave27GfxpartRegister() {
     RegisterRuntimeAddr(0x180061a80, (void*)&RtGraphics_ParticlePool_OperatorNew);
     RegisterRuntimeAddr(0x180103bf0, (void*)&RtGraphics_ParticlePoolRecord_Ctor);
 
-    return count;   // 6 exports + 3 batch-D1 addresses + 2 batch-D2
+    return count;   // 7 exports + 3 batch-D1 addresses (batch-D2 not counted)
 }
 
 // The attendance line names THIS lane, so a run log carries a line only this

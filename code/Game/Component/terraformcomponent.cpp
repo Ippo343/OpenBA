@@ -10,6 +10,7 @@
 //
 
 #include "Component/terraformcomponent_funcs.h"
+#include "Component/TerraformDescription.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
@@ -171,7 +172,6 @@ static fn_TerrainSample_t   s_fn_TerrainSample   = nullptr;  // 0x14009f3e0
 static fn_TfMemAlloc_t      s_fn_MemAlloc        = nullptr;  // slot 0x140152b60
 static fn_TfMemFree_t       s_fn_MemFree         = nullptr;  // slot 0x140152b68
 static fn_IsDerivedFromId_t s_fn_IsDerivedFrom   = nullptr;  // slot 0x140152a98
-static const uint32_t*      s_pTid_TerraformDesc = nullptr;  // 0x1401c49f8
 static const float*         s_pVertexBias        = nullptr;  // 0x140172100 == 0.25f
 static const float*         s_pCellStep          = nullptr;  // 0x14017214c == 1.0f (g_fUVScale)
 
@@ -179,7 +179,6 @@ static void TerraformDeformResolve() {
     s_fn_FindComp_Model = reinterpret_cast<fn_FindCompOut_t>(ResolveAddr(Module::Exe, 0x140003f60));
     s_fn_FindComp_Map   = reinterpret_cast<fn_FindCompOut_t>(ResolveAddr(Module::Exe, 0x140004680));
     s_fn_TerrainSample  = reinterpret_cast<fn_TerrainSample_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_pTid_TerraformDesc = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c49f8));
     s_pVertexBias       = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172100));
     s_pCellStep         = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
 
@@ -273,11 +272,8 @@ void TerraformComponent_MeshPass(TerraformComponent* self, bool ceiling) {
     // OUR resolution failures, not retail's, which is why they bail rather than fault.
     void* descRaw = *reinterpret_cast<void**>(selfA + 0x18);
     if (!s_fn_IsDerivedFrom)    { bail("IsDerivedFrom slot 0x140152a98 unresolved"); return; }
-    if (!s_pTid_TerraformDesc || *s_pTid_TerraformDesc == 0) {
-        bail("TerraformDescription type id (0x1401c49f8) is null/zero"); return;
-    }
     if (!descRaw) { bail("component +0x18 description is null"); return; }
-    if (!s_fn_IsDerivedFrom(descRaw, *s_pTid_TerraformDesc)) {
+    if (!s_fn_IsDerivedFrom(descRaw, TerraformDescription::TypeId())) {
         bail("description is not a TerraformDescription"); return;
     }
     void* desc = descRaw;

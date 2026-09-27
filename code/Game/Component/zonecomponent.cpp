@@ -55,10 +55,6 @@ static fn_ZoneRaster_t s_fn_ZoneRaster = nullptr;
 typedef void (*fn_NodeFinalize_t)(void* listPtr, void* entityRef);
 static fn_NodeFinalize_t s_fn_NodeFinalize = nullptr;
 
-// FUN_140004680 result consumer in OnCreate/Draw reads map fields via this lookup.
-// DAT_1401c7a18 — type id checked for the zone description (IsDerivedFrom).
-static uint32_t* s_pZoneDescTypeId = nullptr;
-
 static void** s_pGameState = nullptr;
 
 static bool s_initialized = false;
@@ -163,8 +159,6 @@ static void EnsureZoneHelpers() {
         ResolveAddr(Module::Exe, 0x14009d360));
     s_fn_NodeFinalize = reinterpret_cast<fn_NodeFinalize_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));
-    s_pZoneDescTypeId = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7a18));
 
     s_initialized = true;
 }

@@ -44,6 +44,7 @@
 // ENDGAME B.3.8 MI-A: the tag lives with the class (its controller member is
 // ControllerLive::TableController<AttendanceCtrlTag>, AttendanceComponent.h).
 #include "Component/AttendanceComponent.h"
+#include "Component/AttendanceDescription.h"   // ENDGAME B.3.9 C1: 0x1401c3f78 cell class
 using AttendanceDispatch = ::ControllerLive::Dispatcher<AttendanceCtrlTag>;
 
 // Ported in attendancecomponent.cpp — state 3's enter drains the waiting queue.
@@ -73,7 +74,6 @@ static fn_PostWork_t     s_postWork     = nullptr;
 static fn_SetAccepting_t s_setAccepting = nullptr;
 static fn_FindComp_t     s_findMesh     = nullptr;
 static fn_MeshSetFlag_t  s_meshSetFlag  = nullptr;
-static uint32_t*         s_tidAttendanceDesc = nullptr;   // 0x1401c3f78
 static uintptr_t         s_locationWorkVtable = 0;        // 0x1401616a0
 static bool              s_resolved     = false;
 
@@ -88,7 +88,6 @@ static void AC_Resolve() {
     s_setAccepting = reinterpret_cast<fn_SetAccepting_t>(ResolveAddr(Module::Exe, 0x14012fc00));
     s_findMesh     = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140002f90));
     s_meshSetFlag  = reinterpret_cast<fn_MeshSetFlag_t>(ResolveAddr(Module::Exe, 0x14012c3f0));
-    s_tidAttendanceDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c3f78));
     s_locationWorkVtable = reinterpret_cast<uintptr_t>(LocationWork::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
     s_resolved = true;
 }
@@ -133,8 +132,8 @@ extern "C" char AttendanceComponent_AllFull(void* selfP) {
         if (*reinterpret_cast<uintptr_t*>(entry + 0x18) != myDesc) continue;
 
         void* desc = *reinterpret_cast<void**>(entry + 0x18);
-        if (s_tidAttendanceDesc && fn_IsDerivedFrom &&
-            !fn_IsDerivedFrom(desc, *s_tidAttendanceDesc))
+        if (fn_IsDerivedFrom &&
+            !fn_IsDerivedFrom(desc, AttendanceDescription::TypeId()))
             desc = nullptr;
         const int capacity = *reinterpret_cast<int32_t*>(
             reinterpret_cast<uintptr_t>(desc) + 0x20);
