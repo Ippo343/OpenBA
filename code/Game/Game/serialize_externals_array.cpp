@@ -24,7 +24,7 @@
 //
 // Validation type = "ComponentDescription" (DWORD_1401c7318, base Object::External;
 // written by ComponentDescription_Register @0x14014ea60). The engine_funcs global
-// g_TypeId_ComponentDescription_FC points at that BaseTypeInfo; *g_TypeId_ComponentDescription_FC is
+// TypeId_ComponentDescription_FC points at that BaseTypeInfo; *TypeId_ComponentDescription_FC is
 // the typeId dword the disasm reads (MOV EDX,[0x1401c7318]).
 //
 // Standalone impact: this exe addr was NULL, so Create{Removal,Bridge,Fenced}
@@ -48,7 +48,7 @@ extern "C" void Reimpl_ExternalPtrArray_Serialize(
 
     // Validation typeId = ComponentDescription (cell 0x1401c7318), read directly
     // through the class's own TypeId() (D5, ENDGAME B.3.9 CG3) rather than the
-    // engine_funcs g_TypeId_ComponentDescription_FC global that reads the same cell.
+    // engine_funcs TypeId_ComponentDescription_FC global that reads the same cell.
     const uint32_t tid = ComponentDescription::TypeId();
     const uint32_t* typeIdPtr = tid ? &tid : nullptr;
 

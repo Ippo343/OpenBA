@@ -130,18 +130,6 @@ inline int64_t MakeTime(float seconds) {
 // ============================================================
 // Type ids this lane reads out of exe .rdata.
 // ============================================================
-// DAT_1401c4218 = FireDescription's BaseTypeInfo. Every FireComponent body
-// validates its +0x18 description against it. Unregistered, ResolveAddr hands back
-// 0 and IsDerivedFrom can never match — which is exactly what used to make the
-// ignition roll unreachable. Filled after Engine::Startup (the factory only
-// assigns real CRC ids then), same shape as the other FillTypeIdGlobals_* waves.
-uint32_t g_tid_FireDescription = 0;   // 0x1401c4218
-uint32_t g_tid_FireComponent   = 0;   // 0x1401c41e0
-
-extern "C" void FillTypeIdGlobals_fire() {
-    g_tid_FireDescription = FireDescription::TypeId();
-    g_tid_FireComponent   = FireComponent::TypeId();
-}
 
 // The +0x18 description, validated the way retail validates it.
 //
@@ -312,7 +300,6 @@ extern "C" void FireComponent_Extinguish_4c0(void* self) {
     EnsureInit();
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* ibpSlot = reinterpret_cast<void*>(s + 0x10);
-
 
     *reinterpret_cast<int64_t*>(s + 0x30) = 0;
     *reinterpret_cast<int64_t*>(s + 0x38) = 0;
@@ -630,7 +617,6 @@ void FireComponent::OnMessage(int message, void*, uint32_t, uint32_t) {
 
     const int32_t buckets = *reinterpret_cast<int32_t*>(s + 0x28);
     const int64_t timer   = *reinterpret_cast<int64_t*>(s + 0x30);
-
 
     if (timer < 1 || needed <= buckets)
         FireComponent_Extinguish_4c0(this);

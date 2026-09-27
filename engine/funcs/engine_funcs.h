@@ -173,10 +173,6 @@ extern void** g_pExternalFactorySingleton;
 typedef bool (*fn_IsDerivedFrom_t)(void* self, uint32_t typeId);
 extern fn_IsDerivedFrom_t fn_IsDerivedFrom;
 
-// UI::Dialog's type info (?_typeInfo@Dialog@UI@@ @ Runtime 0x1801faa88): the
-// dialog Load methods' IsDerivedFrom check on a loaded External. Named
-// g_pExternalTypeId until the ENDGAME B.3.6 closing pass (rename only).
-extern uint32_t* g_TypeId_Dialog;
 
 // ============================================================
 // Mod entry lifecycle (for Modification::Swap)
@@ -233,36 +229,8 @@ extern fn_InternalBasePtr_Ctor_t fn_InternalBasePtr_Ctor;
 // ============================================================
 // Exe Type IDs (Phase A2 — .rdata pointers in Application-x64.exe)
 // ============================================================
-
-extern uint32_t* g_TypeId_ComponentEntity;       // DAT_1401c5d70
-extern uint32_t* g_TypeId_ProgressElement;       // exref at 0x1401515b8 (double-indirect)
-extern uint32_t* g_TypeId_ComponentDescription_FC;         // DAT_1401c7318
-extern uint32_t* g_TypeId_ConsumeProduceComponent;// DAT_1401c7388
-extern uint32_t* g_TypeId_RadiusComponent;        // DAT_1401c4870
-extern uint32_t* g_TypeId_ToolbarDescription_FC;// DAT_1401c7f58
-extern uint32_t* g_TypeId_ResourceComponent;      // DAT_1401c7040
-extern uint32_t* g_TypeId_RawMaterialDescription;           // DAT_1401c7cb8
-// Prefer the raw .rdata DWORD; if that slot is unregistered or filled with 0, fall back to
-// the live factory tree by name. Caches into *cache. Defined in engine_funcs.cpp.
-// (edittool_select.cpp has an identical private helper in an anonymous namespace — this is
-// the shared, externally-linkable one. Guards the VALUE, not the pointer.)
-uint32_t ResolveExeTypeId(uintptr_t rdataAddr, const char* name, uint32_t* cache);
-extern uint32_t* g_TypeId_MeshInstanceComponent;  // DAT_1401c7e40
-extern uint32_t* g_TypeId_DestroyComponent;       // DAT_1401c7628
-extern uint32_t* g_TypeId_WorkplaceComponent;     // DAT_1401c80e0
-extern uint32_t* g_TypeId_WorkComponent;// DAT_1401c8070
-extern uint32_t* g_TypeId_WorkDescription;       // DAT_1401c80a8
-extern uint32_t* g_TypeId_AttendanceDescription;      // DAT_1401c3f78
-extern uint32_t* g_TypeId_ResourceLimitType;      // DAT_1401c5520
-extern uint32_t* g_TypeId_ToolUI;                 // DAT_1401c5788
-
-// BridgeTool-related type IDs
-extern uint32_t* g_TypeId_CreateBridgeDescription; // DAT_1401c73f8 (Startup component lookup)
-
-// RemovalTool-related type IDs
-extern uint32_t* g_TypeId_RemovalDescription;      // DAT_1401c74a0 (RemovalTool::Startup component lookup)
-// g_TypeId_MapComponent_FC (DAT_1401c79e0 = MapComponent) — declared with the FindComponent type-ids below
-// g_TypeId_MultiObjectComponent (DAT_1401c7ac0) — already declared below (~line 1448)
+// ENDGAME B.3.9 TR: the type-id cell pointers that stood here are
+// gone; readers use X::TypeId() of the class at the cell (INVENTORY_C Table 1).
 
 // BridgeTool helper functions (internal to exe)
 // BridgeTool_SnapEndCell (0x1400fb710): snaps end cell to same row or column as drag start
@@ -277,14 +245,6 @@ extern fn_BridgeTool_ValidatePath_t fn_BridgeTool_ValidatePath;
 
 // === DragPlacementTool/FencedTool dependencies ===
 
-// DragPlacementTool type IDs
-extern uint32_t* g_TypeId_CreatePlacementDescription; // DAT_1401c7430 (DragPlacementTool::Startup)
-
-// FencedTool type IDs
-extern uint32_t* g_TypeId_CreateFencedDescription;    // DAT_1401c4100 (FencedTool::Startup)
-extern uint32_t* g_TypeId_AreaDescription;            // DAT_1401c7a18 (shared: DragPlacementTool + FencedTool)
-extern uint32_t* g_TypeId_FenceDescription;           // DAT_1401c7a88 (FencedTool::Startup)
-extern uint32_t* g_TypeId_SizeDescription;            // DAT_1401c7468 (FencedTool::Startup)
 
 // ============================================================
 // Game Singletons (Phase A3 — exe global pointers)
@@ -320,30 +280,6 @@ extern void** g_pInputConfigSingletonExref;
 // REIMPLEMENTED: decompiled from all FindComponent_X variants (identical algorithm).
 void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeIdPtr);
 
-// Type ID globals used by FindComponent variants.
-// Resolved from exe .rdata (direct DAT_ addresses, not double-indirect exrefs).
-// Names reflect which component each FindComponent function actually searches for.
-extern uint32_t* g_TypeId_MapComponent_FC;     // DAT_1401c79e0 (fn_FindComponent_Build)
-extern uint32_t* g_TypeId_StateMachineComponent_FC;      // DAT_1401c7d98 (fn_FindComponent_BuildState)
-extern uint32_t* g_TypeId_ConsumeProduceComponent_FC; // DAT_1401c7350 (fn_FindComponent_ConsumeProduce)
-extern uint32_t* g_TypeId_BuildComponent_FC;        // DAT_1401c7008 (fn_FindComponent_Position)
-extern uint32_t* g_TypeId_DestroyComponent_FC;      // DAT_1401c75f0 (fn_FindComponent_Destroy)
-extern uint32_t* g_TypeId_TradeComponent_FC;        // DAT_1401c4b80 (fn_FindComponent_Building)
-extern uint32_t* g_TypeId_AttendanceComponent;      // DAT_1401c3f40 (fn_FindComponent_Attendance)
-extern uint32_t* g_TypeId_PastureComponent;         // DAT_1401c7ba0 (fn_FindComponent_Pasture)
-extern uint32_t* g_TypeId_AnimalDescription;        // DAT_1401c6fd0 (used by PastureCalcMaxCount)
-extern uint32_t* g_TypeId_OrchardComponent;         // DAT_1401c46b0 (fn_FindComponent_Orchard)
-extern uint32_t* g_TypeId_ClearAreaComponent_FC;              // DAT_1401c71c8 (fn_FindComponent_SM)
-extern uint32_t* g_TypeId_CitizenComponent_FC;      // DAT_1401c7158 — CitizenComponent's
-    // BaseTypeInfo (writer CitizenComponent_RegisterType 0x14014e7b5).
-    // Null unless BANISHED_LIVE_CITIZENAI_TIDS registers the slot (reg_citizenai_typeids.cpp).
-extern uint32_t* g_TypeId_StorageComponent_FC;      // DAT_1401c7e78 (fn_FindComponent_Storage/Residence)
-extern uint32_t* g_TypeId_ResidenceComponent;        // DAT_1401c7cf0
-extern uint32_t* g_TypeId_CemeteryComponent;        // DAT_1401c4090 (fn_FindComponent_Cemetery)
-extern uint32_t* g_TypeId_TombstoneComponent;       // DAT_1401c4a30
-extern uint32_t* g_TypeId_ImmigrationComponent;     // DAT_1401c4480 (fn_FindComponent_Immigration)
-extern uint32_t* g_TypeId_TrackerComponent;         // DAT_1401c4b10 (fn_FindComponent_Tracker)
-extern uint32_t* g_TypeId_ModelComponent_FC;       // DAT_1401c7a50 (fn_FindComponent_Character)
 
 // Typedef kept for any existing code that uses fn_FindComponent_t as a type.
 typedef void (*fn_FindComponent_t)(void* entity, void* retval);
@@ -353,7 +289,7 @@ typedef void (*fn_FindComponent_t)(void* entity, void* retval);
 
 // fn_FindComponent_Build — DAT_1401c79e0, original FUN_140004680. MISNOMER: the type id at
 // DAT_1401c79e0 is MapComponent, not BuildComponent (registrar MapComponent_RegisterType
-// 0x14014f375; the declaration above already names it g_TypeId_MapComponent_FC).
+// 0x14014f375). Bodies: code/Game/Entity/entity_findcomponent.cpp.
 void fn_FindComponent_Build(void* entity, void* retval);
 // fn_FindComponent_BuildState — DAT_1401c7d98, original FUN_140003ea0
 void fn_FindComponent_BuildState(void* entity, void* retval);
@@ -407,10 +343,7 @@ void fn_FindComponent_Cemetery(void* entity, void* retval);
 void fn_FindComponent_Immigration(void* entity, void* retval);
 // fn_FindComponent_Tracker — DAT_1401c4b10, original FUN_140013320
 void fn_FindComponent_Tracker(void* entity, void* retval);
-// Forward declarations needed by inline helpers below (defined later in this file)
-extern uint32_t* g_TypeId_StatusIconComponent;
-extern uint32_t* g_TypeId_CitizenAIComponent;
-// fn_FindComponent_MeshInstance — DAT_1401c7e08 = g_TypeId_StatusIconComponent,
+// fn_FindComponent_MeshInstance — DAT_1401c7e08,
 // StatusIconComponent's BaseTypeInfo (writer StatusIconComponent_RegisterType
 // 0x14014fab5; real HappinessComponent id is 0x1401c42c0). Original FUN_140002f90.
 void fn_FindComponent_MeshInstance(void* entity, void* retval);
@@ -422,7 +355,7 @@ void fn_FindComponent_Character(void* entity, void* retval);
 // (compares against [0x1401c70e8] at 0x140011093, IsDerivedFrom at 0x1400110ec).
 // ENDGAME B.3.9 CB: defined in code/Game/Dialog/citizenui.cpp over
 // CitizenAIComponent::TypeId(); the cell is unregistered, so the old inline over
-// g_TypeId_CitizenAIComponent only worked when a dialog re-pointed that global.
+// the cell pointer only worked when a dialog re-pointed that global.
 void fn_FindComponent_CitizenAI(void* entity, void* retval);
 
 // ============================================================
@@ -471,23 +404,11 @@ extern fn_GetActiveProductIndex_t fn_GetActiveProductIndex; // FUN_140119470
 
 // --- UI::Element type IDs (exref, double-indirect) ---
 
-// CheckboxElement type ID at exref 0x1401516a8
-extern uint32_t* g_TypeId_CheckboxElement;
-
-// UI::ButtonElement type info, exe slot 0x1401514f8 (used by ControlUI).
-// Named g_TypeId_UIElementBase until the B.3.6 closing pass (rename only).
-extern uint32_t* g_TypeId_ButtonElement;
-
-// UI::ImageElement type ID at exref 0x140151500 (used by EventNotifyDialog::Update,
-// ScenarioDialog, and many other dialog Update functions to check child element types)
-extern uint32_t* g_TypeId_ImageElement;
 
 // ============================================================
 // Additional Exe Type IDs (Phase D additions)
 // ============================================================
 
-// ControlComponent type ID at DAT_1401c4e20 (direct)
-extern uint32_t* g_TypeId_ControlComponent;
 
 // ============================================================
 // Additional Exe Functions (Phase D additions)
@@ -644,11 +565,6 @@ inline bool SA_DialogEntityAlive(void* self) {
 // UpgradeUI helpers
 // ============================================================
 
-// UpgradeUIConfig type ID at DAT_1401c5868 (registered by 0x14014ca00 as
-// "UpgradeUIConfig" / "UI::DialogControllerConfig"). No "UpgradeDescription"
-// class exists in retail — the upgrade target at UpgradeUIConfig+0x20 is a
-// plain ComponentEntity template pointer, not a description struct.
-extern uint32_t* g_TypeId_UpgradeUIConfig;
 
 // 0x14011dfa0 ("StartUpgrade" — misnomer; the generic BuildState state-machine
 // driver): ported disasm-faithfully as RemovalCalc_StateMachine_dfa0 in
@@ -684,8 +600,6 @@ extern fn_CitizenList_RequestWorker_t fn_CitizenList_RequestWorker;
 typedef void (*fn_CitizenList_RemoveWorker_t)(void* citizenList, uint64_t professionId);
 extern fn_CitizenList_RemoveWorker_t fn_CitizenList_RemoveWorker;
 
-// EditTool type ID at g_TypeId_EditTool
-extern uint32_t* g_TypeId_EditTool;  // resolved from _typeInfo_exref for EditTool checks
 
 // ============================================================
 // EntityUI helpers
@@ -704,11 +618,6 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
 // Used by SetEditMode to create tool controller objects.
 // Ordinal for Object::Factory::CreateObject
 
-// ToolController type ID — DAT_1401c6eb8 (IsDerivedFrom check on Factory::CreateObject result)
-extern uint32_t* g_TypeId_ToolController;
-
-// ToolSetting type ID — TypeInfo_ToolSetting (used to IsDerivedFrom check on created setting)
-extern uint32_t* g_TypeId_ToolSetting;
 
 // AVL tree rebalance for 0x38-byte nodes (entity tracking BST)
 // FUN_140025920: walks up tree fixing balance factors, does rotations
@@ -748,8 +657,6 @@ extern fn_AVL_Rebalance_0x38_t fn_AVL_Rebalance_0x38;
 typedef int (*fn_ExternalList_GetResourceCount_t)(void* self);
 extern fn_ExternalList_GetResourceCount_t fn_ExternalList_GetResourceCount;
 
-// Scenario type ID pointer (for IsDerivedFrom check in ScenarioDialog)
-extern uint32_t* g_TypeId_Scenario;  // from exref in ScenarioDialog::Slot4
 
 // fn_EventNotifyDialog_ArrayRemove — now inline as EventNotifyDialog_ArrayRemove_Impl in eventnotifydialog.cpp
 
@@ -774,14 +681,9 @@ extern fn_Toolbar_ShowGroup_t fn_Toolbar_ShowGroup;
 // ToolUI child dialog vtable (PTR_FUN_14015f5a0 in exe .rdata) — used by Toolbar_Utility
 extern uintptr_t g_ToolUI_ChildDialog_Vtable;
 
-// fn_Factory_CreateObject, g_TypeId_ToolController, g_TypeId_ToolSetting — declared above (entityui section)
-
 // Toolbar item sort function (FUN_140021790) — sorts toolbar items by priority
 typedef void (*fn_ToolbarSort_t)(void* array, int count);
 
-// Toolbar type ID at DAT_1401c6128 — used by ExternalFactory::FindNext and IsDerivedFrom
-// in ToolbarDialog_Ctor to iterate all Toolbar items matching a group
-extern uint32_t* g_TypeId_ToolbarItem;
 
 // FUN_140100270: Find open dialog by controller type matching group ID
 // Searches all open dialogs for one whose controller matches a specific type
@@ -794,8 +696,6 @@ extern fn_FindDialogByControllerType_t fn_FindDialogByControllerType;
 
 // --- Sub-dependencies for Toolbar_CenterOnEntity_Impl ---
 
-// MultiObjectComponent type ID — DAT_1401c7ac0 (multi-tile buildings: Cemetery, Pasture, Tunnel, Bridge)
-extern uint32_t* g_TypeId_MultiObjectComponent;
 
 // FindComponent_MultiObject — inline wrapper for MultiObjectComponent lookup
 void fn_FindComponent_MultiObject(void* entity, void* retval);
@@ -824,17 +724,6 @@ extern fn_CameraSys_ComputeViewTransform_t fn_CameraSys_ComputeViewTransform;
 // ToolbarDialog update button states helper (FUN_1400b8fd0)
 // REPLACED: now ToolbarDialog_UpdateButtons_Impl() in code/Game/Dialog/toolbardialog.cpp
 
-// UI::CheckElement type info, exe slot 0x1401516a8 — ToolbarDialog's
-// IsDerivedFrom checks on toolbar buttons. Named g_TypeId_ToolbarElement until
-// the B.3.6 closing pass (rename only). Same slot as g_TypeId_CheckboxElement,
-// resolved separately (that one is filled at a different point).
-extern uint32_t* g_TypeId_CheckElement;  // _typeInfo_exref in ToolbarDialog Update/OnEvent
-
-// ToolbarDialog parent type ID (DAT_1401c5d38) — for IsDerivedFrom in case 5 (CenterOnPoint)
-extern uint32_t* g_TypeId_ToolbarDialogParent;
-
-// ComboElement type ID: exref at 0x140151690 — for IsDerivedFrom checks on combo elements
-extern uint32_t* g_TypeId_ComboElement;
 
 // fn_GetCurrentProductIndex — inline defined later (after fn_Random_RandFloat)
 // FUN_140119470: if +0x50 != 0xffffffff return it; else weighted random pick from +0x58 array.
@@ -847,8 +736,8 @@ extern uint32_t* g_TypeId_ComboElement;
 //   +0x10: void*  — cached External* result
 // If the generation counter matches the factory's, the cached result is still valid.
 // Otherwise, looks up the External by converting the String to a Filename and calling
-// ExternalFactory::Find. If found and passes IsDerivedFrom(g_TypeId_ComponentDescription_FC),
-// caches the result; otherwise caches nullptr.
+// ExternalFactory::Find. If found and passes IsDerivedFrom(ComponentDescription::TypeId()),
+// caches the result; otherwise caches nullptr. Body: code/Game/Component/componentdescription.cpp.
 typedef void (*fn_ResolveExternalByName_t)(void* nameString); // kept for ABI reference
 void ResolveExternalByName_Impl(void* nameString);
 
@@ -903,18 +792,6 @@ extern fn_Time_Ctor_Float_t fn_Time_Ctor_Float;
 // HelpUI support functions
 // ============================================================
 
-// StringTable type ID — resolved from _typeInfo_exref at 0x140151488
-// Used for IsDerivedFrom checks on ExternalList entries
-extern uint32_t* g_TypeId_StringTable;
-
-// HelpUI element type IDs — resolved from _typeInfo_exref addresses in exe
-// Used by Slot4's FindElementType calls to find typed UI elements
-extern uint32_t* g_TypeId_HelpFirstElem;      // exref 0x1401517e8 -> +0x30
-extern uint32_t* g_TypeId_HelpComboElem;       // exref 0x140151690 -> +0x40
-extern uint32_t* g_TypeId_HelpDocTextElem;     // exref 0x1401517f0 -> +0x38
-extern uint32_t* g_TypeId_HelpContainerElem;   // exref 0x1401517f8 -> +0x58
-// Type ID used for IsDerivedFrom on named button elements (buttonBack/buttonForward)
-extern uint32_t* g_TypeId_HelpButtonElem;      // exref 0x1401514f8 (same used in Slot9 back/fwd)
 
 // HelpUI_ArrayResize — now inline as HelpUI_ArrayResize_Impl in helpui.cpp
 
@@ -926,18 +803,6 @@ extern uint32_t* g_TypeId_HelpButtonElem;      // exref 0x1401514f8 (same used i
 // CitizenUI helpers
 // ============================================================
 
-// FindComponent_CitizenAI — finds CitizenAIComponent on entity
-// FUN_140009790: entity(longlong), retval(InternalBasePtr*)
-// CitizenDescription type ID at DAT_1401c7190 (used for IsDerivedFrom in Slot7)
-extern uint32_t* g_TypeId_CitizenDescription;  // DAT_1401c7190
-
-// StatusIconComponent type ID at DAT_1401c7e08 (used for FindComponent in StatusBarUI)
-extern uint32_t* g_TypeId_StatusIconComponent;  // DAT_1401c7e08
-
-// DAT_1401c70e8 = g_TypeId_CitizenAIComponent, CitizenAIComponent's BaseTypeInfo+0
-// (writer CitizenAIComponent_RegisterType) — see reg_citizenai_typeids.cpp. Null unless
-// BANISHED_LIVE_CITIZENAI_TIDS/_AIID registers it.
-extern uint32_t* g_TypeId_CitizenAIComponent;  // DAT_1401c70e8
 
 // StatusBarUI_StatusIconHandler (FUN_14007a120) — status icon click handler
 // REPLACED: now static StatusBarUI_StatusIconHandler_Impl() in code/Game/Dialog/statusbarui.cpp
@@ -1147,8 +1012,6 @@ typedef void* (*fn_NameDB_GenerateName_t)(void* retStr, void* nameDB, void* rand
                                            int minSyllables, int maxChars);
 extern fn_NameDB_GenerateName_t fn_NameDB_GenerateName;  // 0x1400a4b30
 
-// TypeInfo for NameDatabase IsDerivedFrom check
-extern uint32_t* g_TypeId_NameDatabase;  // DAT_1401c5a60
 
 // Start game handler: FUN_1400b4540
 // Constructs GameUpdateLoop -> GameLoadDialogLoopT -> LoaderLoop chain and sets next loop.
@@ -1160,10 +1023,6 @@ typedef void (*fn_StartNewGame_t)(void* worldSetup, void* nameStr, uint32_t seed
                                    void* terrain, void* climate, uint32_t scenarioIdx, void* retvalIBP);
 extern fn_StartNewGame_t fn_StartNewGame;
 
-// TypeInfo IDs for generator IsDerivedFrom checks
-extern uint32_t* g_TypeId_MapGenerator;      // DAT_1401c59b8
-extern uint32_t* g_TypeId_ClimateGenerator;  // DAT_1401c5910
-extern uint32_t* g_TypeId_TerrainGenerator;  // DAT_1401c5b40
 
 // ============================================================
 // OptionsDialog support — Runtime DLL exports for video/audio config
@@ -1231,8 +1090,6 @@ extern fn_MapUI_ProjectCornersToGround_t fn_MapUI_ProjectCornersToGround;
 // Old fn_* pointer removed; replaced by UIDesc_AddControllers_Impl().
 void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSource);
 
-// TypeId for UIDescription — DAT_1401c7f90
-extern uint32_t* g_TypeId_UIDescription;
 
 // ============================================================
 // DragTool support functions
@@ -1355,8 +1212,6 @@ extern fn_SavedState_Ctor_t fn_SavedState_Ctor;
 // TownHallUI support functions
 // ============================================================
 
-// TabElement type ID: exref at 0x140151de0 (double-indirect)
-extern uint32_t* g_TypeId_TabElement;
 
 // --- Reimplemented TownHallUI functions (clean C++ in townhallui.cpp) ---
 // Forward-declared here; defined in code/Game/Dialog/townhallui.cpp.
@@ -1462,11 +1317,6 @@ extern void** g_pGameSingleton;  // 0x1401c3dd8
 // SpriteCaptureUI support functions
 // ============================================================
 
-// EditElement type ID: exref at 0x140151b50 (double-indirect: ptr -> ptr -> typeId)
-extern uint32_t* g_TypeId_EditElement;
-
-// CaptureBoxElement type ID: DAT_1401c5638 (direct dword in .data)
-extern uint32_t* g_TypeId_CaptureBoxElement;
 
 // ============================================================
 // TradeUI support functions
@@ -1476,11 +1326,6 @@ extern uint32_t* g_TypeId_CaptureBoxElement;
 // fn_TradeUI_RefreshDisplay pointer kept for reference / fallback only.
 typedef void (*fn_TradeUI_RefreshDisplay_t)(void* self, uint64_t p2, uint64_t p3, int64_t p4);
 
-// ValueDescription type ID — DAT_1401c4bf0 (sprite + name on trade entity descriptions)
-extern uint32_t* g_TypeInfo_ValueDescription;
-
-// TradeDescription type ID — DAT_1401c4bb8 (trade order data on TradeComponent)
-extern uint32_t* g_TypeInfo_TradeDescription;
 
 // DynArray clear for 0x18-byte stride arrays (FUN_140016200)
 // Resets count to 0. arrayStruct = pointer to {dataPtr, ..., count(+8), capacity(+C)}.
@@ -1521,39 +1366,8 @@ extern fn_Building_GetBuyEntries_t fn_Building_GetBuyEntries;
 typedef void (*fn_TradeUI_OnTradeButton_t)(void* self, void* p2, void* p3, int64_t p4);
 extern fn_TradeUI_OnTradeButton_t fn_TradeUI_OnTradeButton;   // 0x140081420
 
-// TradeUI type IDs used in IsDerivedFrom checks
-// TableElement type ID — exref 0x140151510
-extern uint32_t* g_TypeId_TableElement;
 
-// UI::NumberElement type info — exe slot 0x1401516c8. Named
-// g_TypeId_SpinnerElement until the B.3.6 closing pass (rename only).
-extern uint32_t* g_TypeId_NumberElement;
 
-// TextElement type ID — exref 0x140151508
-extern uint32_t* g_TypeId_TextElement;
-
-// LabelElement type ID — exref 0x140151668
-extern uint32_t* g_TypeId_LabelElement;
-
-// NumberEditElement type ID — exref 0x140151cb0
-extern uint32_t* g_TypeId_NumberEditElement;
-
-// UI::SpinnerElement type info — exe slot 0x140151cf0 (NOT SliderElement,
-// whose slot is 0x1401516d0). Named g_TypeId_SliderElement until the B.3.6
-// closing pass (rename only; the value never changed).
-// Used in TradeUI inner loops (tablePurchase child(2), tableStorage child(1),
-// tableSell child(3), tableBuy child(3))
-extern uint32_t* g_TypeId_SpinnerElement;
-
-// ButtonElement type ID — exref 0x1401514f8 (same as g_TypeId_HelpButtonElem)
-// Already available as g_TypeId_HelpButtonElem
-
-// ComboElement type ID — exref 0x140151690 (same as g_TypeId_HelpComboElem)
-// Already available as g_TypeId_HelpComboElem
-
-// SelectDescription type ID — DAT_1401c48a8
-// Used in Serialize ExternalFactory loop to count selectable build types
-extern uint32_t* g_TypeId_SelectDescription;
 
 // FUN_14005a520: (tradeState, resourceEntityTemplate) -> int
 //
@@ -1561,7 +1375,7 @@ extern uint32_t* g_TypeId_SelectDescription;
 // "sellable count". It is the per-resource PRICE/VALUE lookup for the trade panel.
 // Verified from the 0x14005a520 decompile (2026-07-30):
 //   * When tradeState+0x2c < 0 (no merchant docked) it finds the resource's
-//     ValueDescription (g_TypeInfo_ValueDescription) and returns desc+0x40 — the
+//     ValueDescription (DWORD_1401c4bf0) and returns desc+0x40 — the
 //     base value.
 //   * Otherwise it finds the resource's RawMaterial-ish component (DWORD_1401c7cb8)
 //     and tests that component's category flags at +0x5c against the docked
@@ -1638,11 +1452,6 @@ extern fn_PerlinNoise_Generate_t fn_PerlinNoise_Generate;
 typedef void (*fn_Weather_ResetTime_t)(void* weatherMgrPtr, void* timePtr);
 extern fn_Weather_ResetTime_t fn_Weather_ResetTime;
 
-// TypeId for DiseaseDescription — DAT_1401c5948
-extern uint32_t* g_TypeId_DiseaseDescription;
-
-// TypeId for DrawableType (used in drawCombo population) — DAT_1401c47c8
-extern uint32_t* g_TypeId_DrawableType;
 
 // ============================================================
 // DebugUI Slot9 sub-functions (Application-x64.exe)
@@ -1690,7 +1499,6 @@ extern fn_Entity_FindAudioComponent_t fn_Entity_FindAudioComponent;
 //   fn_Graphics_MeshInstance_SetMaterialInstance (?SetMaterialInstance@MeshInstance@Graphics@@)
 // The first two were the two HEAVIEST doors in B35_RULES section 7's table (12
 // and 7 call sites); both are at zero now. Their registered doors are untouched.
-
 
 
 // ENDGAME B.3.5 (b35-K2): `fn_Graphics_ParticleInstance_IncrementInstanceIndex`
@@ -1754,8 +1562,6 @@ extern fn_Graphics_Camera_Ctor_t fn_Graphics_Camera_Ctor;
 // DebugUI deep-reimpl helper functions (exe sub-functions)
 // ============================================================
 
-// FireComponent type ID — DAT_1401c41e0 (used by FindComponent_Fire)
-extern uint32_t* g_TypeId_FireComponent;
 
 // fn_FindComponent_Fire — searches entity for FireComponent (DAT_1401c41e0)
 void fn_FindComponent_Fire(void* entity, void* retval);
@@ -1797,14 +1603,10 @@ extern fn_EntityFactory_CreateEntity_t fn_EntityFactory_CreateEntity;
 typedef void (*fn_EntityList_RegisterEntity_t)(void* entityList, void* entityPtrRef, int categoryId);
 extern fn_EntityList_RegisterEntity_t fn_EntityList_RegisterEntity;
 
-// InteractComponent type ID — DAT_1401c7900 (used by SpawnCitizens)
-extern uint32_t* g_TypeId_InteractComponent_FC;
 
 // fn_FindComponent_ResidenceFC — searches entity for InteractComponent (DAT_1401c7900);
 // function name kept for callers.
 
-// InteractDescription type ID — DAT_1401c7938 (used by SpawnCitizens)
-extern uint32_t* g_TypeId_InteractDescription_FC;
 
 // ResidenceComponent_GetOccupantCount (FUN_140123070) — returns current occupant count
 // RCX=residenceComponent, EDX=mode(0=current)
@@ -1918,12 +1720,6 @@ inline void* GetLoadingSoundString(void* retStr) {
 typedef void (*fn_ModDialog_ArrayPush_t)(void* arrayHeader, int newCount, void* entry);
 extern fn_ModDialog_ArrayPush_t fn_ModDialog_ArrayPush;  // 0x140012a60
 
-// Browser controller type ID — DAT_1401c5210
-// Used by AddController to attach the mod browser controller.
-extern uint32_t* g_TypeId_BrowserController;  // 0x1401c5210
-
-// Material type ID for IsDerivedFrom check in ModDialog (dispatch 0x140151858)
-extern uint32_t* g_TypeId_Material;
 
 // DAT_14017214c — UV scale constant (= 1.0f used in SpriteSheet::SetSpriteInfo)
 extern float* g_fUVScale;  // DAT_14017214c
@@ -1969,14 +1765,6 @@ extern void** g_pInputConfigSingleton;
 // Engine::MainLoop::_singleton (protected)
 extern void** g_pMainLoopSingleton;
 
-// UI::Element type info — exe slot 0x140151660 (?_typeInfo@Element@UI@@).
-// Used for IsDerivedFrom checks before InternalBasePtr wrapping / GetUserData.
-// Named g_TypeId_ObjectInternal until the B.3.6 closing pass (rename only).
-// NOTE: with the exe slot unfilled (BANISHED_LIVE_ELEMENT_TIDS off) two
-// lazy fallbacks (ui_dialog_stub_factories.cpp EnsureTypeIds, debugui.cpp's
-// heal table) fill it with Object::Internal's id instead - a live divergence
-// from the slot's class, recorded in B36_RULES section 12, not changed here.
-extern uint32_t* g_TypeId_Element;
 
 // ============================================================
 // Stage 3: OptionsDialog Apply/Restore exe helpers
@@ -2011,8 +1799,6 @@ extern fn_ApplyKeyMapToUI_t fn_ApplyKeyMapToUI;
 typedef void (*fn_UpdateAutoSaveTimer_t)(void* dialogInstance);
 extern fn_UpdateAutoSaveTimer_t fn_UpdateAutoSaveTimer;
 
-// Type ID DAT_1401c4d08 — used for IsDerivedFrom check in ApplyGameSettings dialog iteration
-extern uint32_t* g_TypeId_AutoSaveDialogType;
 
 // RegisterDefaultInputBindings — clears KeyMap, re-registers all default bindings, then loads saved config
 // FUN_1400992f0 in exe (standalone function, no parameters)
@@ -2486,8 +2272,8 @@ void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int c
 // 3. Set camera target and snap camera to new position
 // 4. Get/create EditTool and select entity in it
 //
-// NOTE: g_TypeId_ModelComponent_FC (DAT_1401c7a50) is ModelComponent's TypeInfo.
-// fn_FindComponent_Character keeps its historical name but finds ModelComponent.
+// NOTE: fn_FindComponent_Character keeps its historical name but finds ModelComponent
+// (DAT_1401c7a50). Body: code/Game/Dialog/toolbardialog.cpp.
 
 void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr);
 
@@ -2605,8 +2391,6 @@ extern fn_BuildRoad_QueryStorage_t fn_BuildRoad_QueryStorage;
 // ClearStorage helpers (code/Game/Work/clearstorage.cpp)
 // ============================================================
 
-// FUN_140017980: FindComponent by type ID 0x1401c7ee8 (unknown component type)
-extern uint32_t* g_TypeId_UnknownComp_7ee8;  // DAT_1401c7ee8
 
 void fn_FindComponent_Unknown7ee8(void* entity, void* retval);
 
@@ -2824,8 +2608,6 @@ extern fn_TutorialTreeInsert_t fn_TutorialTreeInsert;
 typedef void (*fn_TutorialStepExecute_t)(void* tutInst, void* param2, void* param3, uint64_t param4);
 extern fn_TutorialStepExecute_t fn_TutorialStepExecute;
 
-// TypeId for FinishTutorialGoal — stored at 0x1401c6240 in exe .rdata
-extern uint32_t* g_TypeId_FinishTutorialGoal;
 
 // Singleton External reference at 0x140151a80 — points to game config/time singleton
 // Deref pattern: *(void**)(*(void**)slot + 4) gives screen height or similar int
@@ -2844,9 +2626,6 @@ extern fn_FindUIElementByPath_t fn_FindUIElementByPath;
 // ComponentEntity dependencies
 // ============================================================
 
-// Component base class type ID (used with fn_IsDerivedFrom to verify components)
-// Stored at exe .rdata 0x1401c72a8, filled at runtime by Component_Register.
-extern uint32_t* g_TypeId_ComponentBase;
 
 // fn_ExeArrayResizeFill (FUN_140003110, the three-argument Array<T>::SetSize(n,
 // fill), stride 8 align 8) went with the B.3.2 closing pass: its six call sites
@@ -3037,8 +2816,6 @@ extern fn_PathDistance_t fn_PathDistance;
 typedef void (*fn_CitizenComponent_AssignHousing_t)(void* citizen, void* housingPtr);
 extern fn_CitizenComponent_AssignHousing_t fn_CitizenComponent_AssignHousing;
 
-// g_TypeId_ResidenceComponent — already declared above (DAT_1401c7cf0)
-
 // ============================================================
 // M3.5 — MenuScene::Serialize generic helpers (Geometry/Transform serialize,
 // dynamic-array resize/serialize, ExternalPtr serialize)
@@ -3210,12 +2987,10 @@ extern fn_Array_Resize_t fn_Array_Resize_Stride16B;      // 0x14001ef10  M3.5 Pa
 // either resolves them from Runtime DLL exports or leaves them null and the
 // helpers gracefully no-op (cascade fix is a later step).
 //
-// The exe disasm reads typeId via a single deref:
-//     MOV RCX,[0x140151f20]  ; pointer to BaseTypeInfo
-//     MOV EDX,[RCX]          ; *(uint*)BaseTypeInfo == typeId
-extern uint32_t** g_ppTypeInfo_GraphicsMesh;   // .rdata slot 0x140151f20
-extern uint32_t** g_ppTypeInfo_Particle;       // .rdata slot 0x140151420
-extern uint32_t*  g_pTypeId_Weather;           // direct dword 0x1401c6198
+// ENDGAME B.3.9 TR: the GraphicsMesh (0x140151f20) / Particle (0x140151420) import-slot
+// pointers and the Weather cell pointer (0x1401c6198) are gone -- their readers use
+// Graphics::GraphicsMesh::TypeId() / Graphics::Particle::TypeId() / Weather::TypeId().
+// MaterialInstance's stays: Graphics::MaterialInstance::TypeId() is not ported yet.
 
 // M3.5 Path B session 3 — additional typed-ExternalPtr serialize helper.
 // FUN_140007140 is byte-identical to FUN_14001b8e0 (helper #9, GraphicsMesh)

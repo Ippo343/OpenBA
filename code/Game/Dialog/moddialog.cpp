@@ -489,7 +489,7 @@ void ModDialog::OnOpened() {
     ModDialog_RefreshDisplay_Impl(this);
 
     // Load "Dialog/Mod.rsc:browser", add as controller with type ModBrowseUI::TypeId()
-    // (cell 0x1401c5210; the g_TypeId_BrowserController name lies -- see Table 1/3)
+    // (cell 0x1401c5210; the TypeId_BrowserController name lies -- see Table 1/3)
     {
         System::Filename filenameBuf("Dialog/Mod.rsc:browser");
         void* extFactory = *(void**)g_pExternalFactorySingleton;

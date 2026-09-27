@@ -33,7 +33,7 @@
 //
 // In standalone the type-id storage slot (0x140152870) is unregistered → null,
 // so the IsDerivedFrom check is skipped and the Find result is trusted — same
-// strategy as ResolveExternalByName_Impl's g_TypeId_ComponentDescription_FC guard.
+// strategy as ResolveExternalByName_Impl's TypeId_ComponentDescription_FC guard.
 void StatGoal_ResolveExternalPtr(void* externalRef) {
     uintptr_t s = reinterpret_cast<uintptr_t>(externalRef);
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
@@ -92,14 +92,10 @@ void StatGoal_ResolveExternalPtr(void* externalRef) {
 
     void* result = nullptr;
     if (found) {
-        // TypeInfo lives at *(*(0x140152870)); type id is its first dword.
-        const uint32_t* pTypeId = nullptr;
-        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152870);
-        if (slot) {
-            void* tinfo = *reinterpret_cast<void**>(slot);
-            if (tinfo) pTypeId = reinterpret_cast<const uint32_t*>(tinfo);
-        }
-        if (!pTypeId || (fn_IsDerivedFrom && fn_IsDerivedFrom(found, *pTypeId))) {
+        // Retail reads the type id through the import slot 0x140152870
+        // (?_typeInfo@External@Object@@). ENDGAME B.3.9 TR: the class accessor; the
+        // slot row (reg_unreg_lane1.cpp) is gone with its last reader.
+        if (fn_IsDerivedFrom && fn_IsDerivedFrom(found, ::Object::External::TypeId())) {
             result = found;
         }
     }

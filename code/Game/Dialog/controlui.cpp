@@ -27,8 +27,8 @@
 // tested by Slot4/Slot7 before touching the checked byte at elem+0xd8). In
 // standalone both live in the element-type-id table in
 // standalone/reg_element_typeids.cpp, which is GATED on BANISHED_LIVE_ELEMENT_TIDS
-// and therefore off by default — so g_TypeId_ButtonElement and
-// g_TypeId_CheckboxElement are both normally null.
+// and therefore off by default — so TypeId_ButtonElement and
+// TypeId_CheckboxElement are both normally null.
 //
 // MEASURED consequence before this fix (BANISHED_CONTROLUI_TRACE, demo pasture):
 // all three pasture ControlUIs reported `elem(+0x30)=0` with a perfectly good

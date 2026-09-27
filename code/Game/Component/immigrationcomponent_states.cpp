@@ -136,7 +136,7 @@ uint32_t TidNomadDesc() { static uint32_t t = 0; if (!t) t = NomadDescription::T
 uint32_t TidNomadComp() { static uint32_t t = 0; if (!t) t = NomadComponent::TypeId();         return t; }
 uint32_t TidResidence() { static uint32_t t = 0; if (!t) t = ResidenceComponent::TypeId();     return t; }
 uint32_t TidCitDesc()   { static uint32_t t = 0; if (!t) t = CitizenDescription::TypeId();     return t; }
-// cell 0x1401c7938 (g_TypeId_InteractDescription_FC) always fell back to
+// cell 0x1401c7938 (TypeId_InteractDescription_FC) always fell back to
 // InteractDescription::TypeId() unconditionally once filled; converting by cell
 // (D5 exception) is mechanically equivalent.
 uint32_t TidInteractDesc() { static uint32_t t = 0; if (!t) t = InteractDescription::TypeId(); return t; }

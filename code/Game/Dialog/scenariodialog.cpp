@@ -114,7 +114,7 @@ void ScenarioDialog::OnOpened() {
         // Get resource[i] from ExternalList: *(array+0x20)[i*8]
         void* resource = *(void**)(*(uintptr_t*)((uintptr_t)scenarioList + 0x20) + (uintptr_t)i * 8);
 
-        // Check IsDerivedFrom(Scenario). ENDGAME B.3.9 CG2: g_TypeId_Scenario (cell
+        // Check IsDerivedFrom(Scenario). ENDGAME B.3.9 CG2: TypeId_Scenario (cell
         // 0x1401c5b08) -> Scenario::TypeId(); the "unregistered" null guard was
         // scaffolding for the unresolved global and goes with the conversion.
         // This rejection used to be silent, which made an empty scenario table

@@ -1032,11 +1032,11 @@ void TradeUI::OnCreated() {
     // --- Phase 1: Find all 15 named elements ---
     void* dialogElemPtr = (void*)(s + 0x20);
 
-    // ENDGAME B.3.9 CG2: g_TypeId_TableElement/NumberElement/TextElement ->
-    // UI::TableElement/NumberElement/TextElement::TypeId(); g_TypeId_HelpButtonElem
-    // shares its initialiser exref (0x1401514f8) with g_TypeId_ButtonElement ->
-    // UI::ButtonElement::TypeId(); g_TypeId_HelpComboElem shares its initialiser
-    // exref (0x140151690) with g_TypeId_ComboElement -> UI::ComboElement::TypeId()
+    // ENDGAME B.3.9 CG2: TypeId_TableElement/NumberElement/TextElement ->
+    // UI::TableElement/NumberElement/TextElement::TypeId(); TypeId_HelpButtonElem
+    // shares its initialiser exref (0x1401514f8) with TypeId_ButtonElement ->
+    // UI::ButtonElement::TypeId(); TypeId_HelpComboElem shares its initialiser
+    // exref (0x140151690) with TypeId_ComboElement -> UI::ComboElement::TypeId()
     // (Table 3 name lies — neither is a distinct "help" element class).
     uint32_t tableElementTypeId = UI::TableElement::TypeId();
     uint32_t numberElementTypeId = UI::NumberElement::TypeId();
@@ -1433,7 +1433,7 @@ void TradeUI::OnCreated() {
 // buy orders: self+0x40 = ptr, self+0x48 = count, stride 0x18
 //   entry[j]: +0x00 = resource entity ptr, +0x10 = quantity int
 // resource entity: +0x28 = component array ptr, +0x30 = component count
-//   component value at +0x48 (identified by vtable+0x10 returning g_TypeId_RawMaterialDescription)
+//   component value at +0x48 (identified by vtable+0x10 returning TypeId_RawMaterialDescription)
 // merchant state check: BuildState component, byte at +0x52 (or +0x50 if negative)
 //   0x13 = merchant arrived (enables dismiss button)
 // storage capacity: StateMachineComp+0x38 vs StorageComponent_QueryCount
@@ -1447,7 +1447,7 @@ static inline void Element_SetEnabled(void* element, bool enabled) {
 }
 
 // Find resource value for a given resource entity ptr by searching its component array
-// Returns 0 if not found. Resource type identified via vtable+0x10 == g_TypeId_RawMaterialDescription.
+// Returns 0 if not found. Resource type identified via vtable+0x10 == TypeId_RawMaterialDescription.
 static int FindResourceValue(void* resourceEntity) {
     if (!resourceEntity) return 0;
     uintptr_t entity = (uintptr_t)resourceEntity;
@@ -2581,7 +2581,7 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
     uint64_t entityPtr[2] = {0, 0};
     new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(compEntity));   // B.3.3 bridge
 
-    // Find TradeComponent (uses g_TypeId_TradeComponent_FC = DAT_1401c4b80)
+    // Find TradeComponent (uses TypeId_TradeComponent_FC = DAT_1401c4b80)
     uint64_t tradePtr[2] = {0, 0};
     fn_FindComponent_Building((void*)entityPtr[0], &tradePtr);
 

@@ -22,7 +22,7 @@
 #include "Entity/ComponentEntity.h"   // X::TypeId() (ENDGAME B.3.9)
 
 // Retail's Slot4 filters the "yield" FindElement result through
-// IsDerivedFrom(elem, *g_TypeId_ProgressElement) before storing it at +0x38.
+// IsDerivedFrom(elem, *TypeId_ProgressElement) before storing it at +0x38.
 // That exe-.rdata slot (0x1401515b8) is filled ONLY by
 // standalone/reg_element_typeids.cpp, which is gated on BANISHED_LIVE_ELEMENT_TIDS
 // and is NOT in the default-on table — so on the default path it is null, and

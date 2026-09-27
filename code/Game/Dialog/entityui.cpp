@@ -69,7 +69,7 @@ static void EntityTrackingSet_Remove_Impl(void* bstRoot, void* key)
 // GetDescPage (0x140011320)
 // ============================================================
 // Searches entity description's component array (+0x28 = ptr, +0x30 = count)
-// for a component with type ID == g_TypeId_UIDescription (DAT_1401c7f90).
+// for a component with type ID == TypeId_UIDescription (DAT_1401c7f90).
 // Returns the found component in retval. Component field +0x40 = page index.
 static void GetDescPage_Impl(void* entityDesc, void* retval)
 {
@@ -319,7 +319,7 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
 // Kept as passthrough via fn_EditTool_SelectEntity.
 
 // ENDGAME B.3.9: ComponentEntity / ToolUI / UIDescription / BuildDescription (was
-// g_TypeId_ResourceComponent, itself healed here under the WRONG by-name guess
+// TypeId_ResourceComponent, itself healed here under the WRONG by-name guess
 // "ResourceComponent" -- Table 1's authority for cell 0x1401c7040 is BuildDescription;
 // the heal never actually ran, since the pointer is set unconditionally at
 // EngineFuncsInit before this ever fires) / ModelComponent / MultiObjectComponent /

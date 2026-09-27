@@ -1394,11 +1394,6 @@ static bool Init() {
     //    Object::Factory::Startup walks the chain and populates the typeId tree;
     //    RunGameMain dumps the whole table, order-free, right after it.
 
-    // NOTE: component type-ID .rdata globals (FillComponentTypeIdGlobals_nature)
-    // are filled later, in RunGameMain right after Engine::Startup —
-    // Object::Factory::Startup assigns the real CRC type ids only then (here they
-    // are still the 0xFFFFFFFF ctor sentinel). See code/Game/Game/game_main.cpp.
-
     // 7. (was SkipPlatformConfigure) The launcher dialog is no longer patched
     //    out. Engine::PlatformConfigure skips it on its own whenever
     //    VideoSettings is false, which a clean Engine::Shutdown now stores —

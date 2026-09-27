@@ -1937,7 +1937,7 @@ void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, vo
         //
         // HISTORY, because this site has now been wrong twice in two different places and
         // the second fix looked complete when it was not:
-        //   * Originally the downstream IsDerivedFrom used g_TypeId_PageToggleUI — a
+        //   * Originally the downstream IsDerivedFrom used TypeId_PageToggleUI — a
         //     different class (own slot 0x1401c5408, which nothing in this tree reads).
         //     That was corrected to tidEntityUI, and the note left behind declared the
         //     "camera centres but never FOLLOWS the entity" bug cured.
@@ -2088,7 +2088,7 @@ void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, vo
     }
 
     // === Section 4: Select entity in EditTool ===
-    // EditTool::TypeId() (cell 0x1401c6dd8). ENDGAME B.3.9 TR: the three `&& g_TypeId_EditTool`
+    // EditTool::TypeId() (cell 0x1401c6dd8). ENDGAME B.3.9 TR: the three `&& TypeId_EditTool`
     // pointer tests went with the pointer (the cell was registered: they never failed).
     void* currentTool = *(void**)(tc + 0x28);
     void* editTool = nullptr;

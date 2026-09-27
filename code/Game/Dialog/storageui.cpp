@@ -66,8 +66,8 @@ static uint64_t StorageUI_FindElemAsBasePtr(void* parentElem, const char* name) 
 
 namespace storageui_sa {
 
-// ENDGAME B.3.9 CG2: g_TypeId_ComponentEntity -> ComponentEntity::TypeId(),
-// g_TypeId_RawMaterialDescription -> RawMaterialDescription::TypeId(). Both class
+// ENDGAME B.3.9 CG2: TypeId_ComponentEntity -> ComponentEntity::TypeId(),
+// TypeId_RawMaterialDescription -> RawMaterialDescription::TypeId(). Both class
 // statics always answer, so the lazy-fill retires.
 void EnsureGlobals() {
     // g_pExternalFactorySingleton is filled by engine_funcs init in standalone.

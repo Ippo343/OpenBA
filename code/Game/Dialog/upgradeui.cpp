@@ -28,11 +28,11 @@
 
 namespace upgradeui_sa {
 
-// ENDGAME B.3.9 CG2: g_TypeId_UpgradeUIConfig -> UpgradeUIConfig::TypeId(),
-// g_TypeId_ComponentEntity -> ComponentEntity::TypeId(), g_TypeId_HelpButtonElem
-// (shares its initialiser exref 0x1401514f8 with g_TypeId_ButtonElement) ->
-// UI::ButtonElement::TypeId(), g_TypeId_ImageElement -> UI::ImageElement::TypeId(),
-// g_TypeId_ToolbarDescription_FC -> ToolbarDescription::TypeId(). The class statics
+// ENDGAME B.3.9 CG2: TypeId_UpgradeUIConfig -> UpgradeUIConfig::TypeId(),
+// TypeId_ComponentEntity -> ComponentEntity::TypeId(), TypeId_HelpButtonElem
+// (shares its initialiser exref 0x1401514f8 with TypeId_ButtonElement) ->
+// UI::ButtonElement::TypeId(), TypeId_ImageElement -> UI::ImageElement::TypeId(),
+// TypeId_ToolbarDescription_FC -> ToolbarDescription::TypeId(). The class statics
 // always answer, so the lazy-fill retires.
 void EnsureGlobals() {
 }

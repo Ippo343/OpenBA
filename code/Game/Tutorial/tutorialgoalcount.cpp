@@ -61,7 +61,7 @@ static fn_GetWorkCapacity_t GetWorkCapacityFn() {
 }
 
 // FUN_140013920 — cast element to SliderElement (returns null if wrong type)
-// IsDerivedFrom check against g_TypeId_SpinnerElement (0x140151cf0).
+// IsDerivedFrom check against TypeId_SpinnerElement (0x140151cf0).
 typedef void* (*fn_CastToSliderElement_t)(void* element);
 static fn_CastToSliderElement_t CastToSliderElementFn() {
     return (fn_CastToSliderElement_t)ResolveAddr(Module::Exe, 0x140013920);

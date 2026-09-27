@@ -57,6 +57,7 @@
 #include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
 #include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
 #include "ui/TextElement.h"    // ENDGAME B.3.6 UI callers (K4)
+#include "ui/ImageElement.h"   // UI::ImageElement::TypeId() (ENDGAME B.3.9 TR)
 #include <new>
 
 namespace {
@@ -111,21 +112,11 @@ uint32_t ToolbarDescTypeId() {
 }
 
 // e360 IsDerivedFrom target — UI::ImageElement type-id. In the exe this is read as
-// *(uint32_t*)*(void**)0x140151500 (slot holds the ImageElement _typeInfo pointer).
+// *(uint32_t*)*(void**)0x140151500 (the import slot holds the ImageElement _typeInfo
+// pointer). ENDGAME B.3.9 TR: the class's own accessor (was the slot, then the
+// ?_typeInfo@ export by name, cached in a function-local static).
 uint32_t ImageElementTypeId() {
-    static uint32_t t = 0;
-    if (!t) {
-        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151500));
-        if (slot && *slot) t = *reinterpret_cast<uint32_t*>(*slot);   // raw .rdata slot (null in standalone)
-        if (!t) {
-            void* ti = ResolveExport("?_typeInfo@ImageElement@UI@@0VBaseTypeInfo@Object@@A");
-            if (ti) t = *reinterpret_cast<uint32_t*>(ti);
-        }
-        // (A third fallback, GetTypeIdByName("ImageElement"), went at ENDGAME
-        // B.3.9 EXA: that walks the EXE registration list, which never holds a
-        // Runtime class, so it always answered 0.)
-    }
-    return t;
+    return UI::ImageElement::TypeId();
 }
 
 // System::String empty test: (*p==0) || (*(int*)(*p - 8) == 0).

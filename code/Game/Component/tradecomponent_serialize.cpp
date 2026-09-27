@@ -43,7 +43,7 @@
 //   +0x78        Time
 //   +0x71        bool
 //   +0x80        InternalBasePtr, validated against ComponentEntity
-//                (g_TypeId_ComponentEntity) and nulled on type mismatch —
+//                (TypeId_ComponentEntity) and nulled on type mismatch —
 //                same SerializeValidatedIBP idiom as animalwave_serialize.cpp.
 //   +0x70        bool
 //

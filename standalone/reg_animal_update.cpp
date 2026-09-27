@@ -32,21 +32,6 @@
 // Same storage+fill pattern as reg_component_animal.cpp: storage registered at
 // AddressRegistryInit, values filled after Engine::Startup.
 // ---------------------------------------------------------------------------
-static uint32_t g_tid_CharacterComponent   = 0;  // 0x1401c7078
-static uint32_t g_tid_CharacterDescription = 0;  // 0x1401c70b0
-
-// Idempotent, and safe to call before Object::Factory::Startup has assigned the
-// real CRC ids — it simply leaves the globals at 0 and retries on the next call.
-// animalcomponent.cpp's EnsureHelpers() calls this on the first live animal tick,
-// which is always post-Startup, so no game_main.cpp hook is required. The symbol
-// is still exported so the integrator CAN add it next to the other
-// FillComponentTypeIdGlobals_* calls for deterministic ordering.
-extern "C" void FillComponentTypeIdGlobals_animal_update() {
-    if (g_tid_CharacterComponent == 0)
-        g_tid_CharacterComponent = CharacterComponent::TypeId();
-    if (g_tid_CharacterDescription == 0)
-        g_tid_CharacterDescription = CharacterDescription::TypeId();
-}
 
 void RegisterAnimalUpdateLive() {
 
@@ -57,6 +42,4 @@ void RegisterAnimalUpdateLive() {
     RegisterExeAddr(0x140107320, reinterpret_cast<uintptr_t>(&AnimalComponent_UpdateBehavior));
 
     // --- type-id storage (values filled post-Startup, see above) ---
-    RegisterExeAddr(0x1401c7078, reinterpret_cast<uintptr_t>(&g_tid_CharacterComponent));
-    RegisterExeAddr(0x1401c70b0, reinterpret_cast<uintptr_t>(&g_tid_CharacterDescription));
 }

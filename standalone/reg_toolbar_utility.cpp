@@ -14,7 +14,7 @@
 //   0x140014890  needs: fn_MemAlloc (Runtime) + the AVL retrace 0x140014b40, which is
 //                  ALREADY registered by reg_keystone_a_restree.cpp — resolvable here.
 //   g_ToolUI_ChildDialog_Vtable is filled by RegisterPlayerToolUIBatch (already wired).
-//   g_TypeId_UIDescription is filled lazily inside Toolbar_Utility_Impl (GetTypeIdByName).
+//   TypeId_UIDescription is filled lazily inside Toolbar_Utility_Impl (GetTypeIdByName).
 //
 // The engine_funcs pointers fn_FindDialogByControllerType / fn_BST_Insert_0x14 read
 // ResolveAddr(Exe, 0x140100270 / 0x140014890) in EngineFuncsInit, which runs AFTER

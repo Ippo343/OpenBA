@@ -28,6 +28,8 @@
 
 #include "Game/WorldGeometry.h"
 #include "engine_funcs.h"
+#include "graphics/GraphicsMesh.h"   // ENDGAME B.3.9 TR: GraphicsMesh::TypeId()
+#include "graphics/Particle.h"       // ENDGAME B.3.9 TR: Particle::TypeId()
 #include "Component/coll_bridge.h"
 #include "system/Filename.h"
 #include "system/String.h"
@@ -533,12 +535,9 @@ extern "C" void Reimpl_Array_Serialize_External_GraphicsMesh(
     void* serializer, int count, void* arrayBase) {
 
 
-    const uint32_t* typeIdPtr = nullptr;
-    if (g_ppTypeInfo_GraphicsMesh && *g_ppTypeInfo_GraphicsMesh) {
-        typeIdPtr = *g_ppTypeInfo_GraphicsMesh;  // BaseTypeInfo*[0] == typeId
-    }
+    const uint32_t tid = Graphics::GraphicsMesh::TypeId();   // ENDGAME B.3.9 TR
     ArraySerializeExternalGeneric(serializer, count, arrayBase,
-                                  typeIdPtr, "Graphics::GraphicsMesh");
+                                  tid ? &tid : nullptr, "Graphics::GraphicsMesh");
 }
 
 // #8 Particle exref array (typeInfo @ slot 0x140151420)
@@ -546,12 +545,9 @@ extern "C" void Reimpl_Array_Serialize_External_Particle(
     void* serializer, int count, void* arrayBase) {
 
 
-    const uint32_t* typeIdPtr = nullptr;
-    if (g_ppTypeInfo_Particle && *g_ppTypeInfo_Particle) {
-        typeIdPtr = *g_ppTypeInfo_Particle;
-    }
+    const uint32_t tid = Graphics::Particle::TypeId();   // ENDGAME B.3.9 TR
     ArraySerializeExternalGeneric(serializer, count, arrayBase,
-                                  typeIdPtr, "Graphics::Particle");
+                                  tid ? &tid : nullptr, "Graphics::Particle");
 }
 
 // ============================================================

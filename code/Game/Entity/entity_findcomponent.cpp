@@ -5,7 +5,7 @@
 // (engine/funcs/engine_funcs.cpp).
 //
 // ENDGAME B.3.9 TR: these were inline bodies in engine_funcs.h reading the
-// g_TypeId_*_FC cell pointers. They read X::TypeId() of the class AT THE CELL now
+// TypeId_*_FC cell pointers. They read X::TypeId() of the class AT THE CELL now
 // (INVENTORY_C Table 1; several finder NAMES are historical misnomers, kept because the
 // callers use them), which needs the class headers -- so the bodies moved here and
 // engine_funcs.h keeps only the declarations.

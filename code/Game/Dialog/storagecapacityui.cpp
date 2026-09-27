@@ -23,8 +23,8 @@
 
 namespace storagecapacityui_sa {
 
-// ENDGAME B.3.9 CG2: g_TypeId_ProgressElement -> UI::ProgressElement::TypeId(),
-// g_TypeId_ComponentEntity -> ComponentEntity::TypeId(), g_TypeId_StorageComponent_FC
+// ENDGAME B.3.9 CG2: TypeId_ProgressElement -> UI::ProgressElement::TypeId(),
+// TypeId_ComponentEntity -> ComponentEntity::TypeId(), TypeId_StorageComponent_FC
 // -> StorageComponent::TypeId(). The class statics always answer, so the lazy-fill of
 // the exe-.rdata globals retires.
 void EnsureGlobals() {

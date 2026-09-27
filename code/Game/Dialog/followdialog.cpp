@@ -398,7 +398,7 @@ void FollowDialog::OnUpdate(const System::Time& /*time*/) {
 // Vtable getter) are gone. 0x14015be00 stays unregistered; engine_funcs.cpp's
 // g_FollowDialog_Vtable has no reader left.
 
-// ENDGAME B.3.9: ModelComponent (cell 0x1401c7a50, the class g_TypeId_ModelComponent_FC
+// ENDGAME B.3.9: ModelComponent (cell 0x1401c7a50, the class TypeId_ModelComponent_FC
 // is really bound to -- Table 1's authority) has a ported TypeId() now, so the
 // EnsureFollowGlobals() lazy-cache is dead.
 

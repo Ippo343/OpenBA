@@ -148,13 +148,6 @@ fn_KeyResolve_t s_fn_StringTableKeyResolve = nullptr;   // 0x140018020 (TREE #1 
 typedef void (*fn_TreeRetraceE360_t)(int64_t* root, int64_t* nodeVarAddr);
 fn_TreeRetraceE360_t s_fn_TreeRetrace_e360 = nullptr;    // 0x14000e360 (DEAD-PATH tree)
 
-// Storage the 0x1401c4330 / 0x1401c4c28 registrations below point at. Nothing ever
-// FILLED them (they read 0), and ENDGAME B.3.9 CB removed their last readers: the
-// serializer now validates by the class statics. The storage and its RegisterExeAddr
-// lines are the closing step's to delete.
-uint32_t g_tid_HealerComponent = 0;   // 0x1401c4330 — HealerComponent BaseTypeInfo
-uint32_t g_tid_WellComponent   = 0;   // 0x1401c4c28 — WellComponent BaseTypeInfo
-
 bool s_resolved = false;
 void EnsureResolved() {
     if (s_resolved) return;
@@ -868,8 +861,7 @@ void RegisterCitizenListSerialize() {
     RegisterExeAddr(0x140017640, reinterpret_cast<uintptr_t>(&ResizeStride0x10));
     RegisterExeAddr(0x1400177c0, reinterpret_cast<uintptr_t>(&ResizeStride0x20));
     RegisterExeAddr(0x140017f60, reinterpret_cast<uintptr_t>(&ResizeStride08Pair));
-
-    // Type-id storage cells nobody registered yet (HealerComponent, WellComponent).
-    RegisterExeAddr(0x1401c4330, reinterpret_cast<uintptr_t>(&g_tid_HealerComponent));
-    RegisterExeAddr(0x1401c4c28, reinterpret_cast<uintptr_t>(&g_tid_WellComponent));
+    // (ENDGAME B.3.9 TR: the never-filled HealerComponent / WellComponent type-id cells
+    // 0x1401c4330 / 0x1401c4c28 and their storage went -- the serializer validates by the
+    // class statics since B.3.9 CB.)
 }

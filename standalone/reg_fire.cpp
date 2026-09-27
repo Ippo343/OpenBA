@@ -20,8 +20,8 @@
 //              read fell back to 0, SendComponentMessage::AbstractImpl matched no
 //              component, and every bucket of water went nowhere — the same failure
 //              mode action_pf_ctors.cpp:354 already documents for the eat path.
-// Both are filled AFTER Engine::Startup (Object::Factory::Startup only assigns the
-// real CRC ids then) by FillTypeIdGlobals_fire(), called from game_main.cpp.
+// ENDGAME B.3.9 TR: both are read as FireDescription::TypeId() / FireComponent::TypeId();
+// the storage and its two rows are gone.
 //
 // ── SHARED WITH THE TORNADO LANE ─────────────────────────────────────────────
 // 0x14011e690 / 0x14011e7b0 / 0x14011ea10 are registered HERE and only here.
@@ -49,10 +49,6 @@ extern "C" void* Entity_FindComponent_Fire_5840(uintptr_t entity, void* retIBP);
 extern "C" void* Entity_FindComponent_Citizen_9790(uintptr_t entity, void* retIBP); // 0x140009790
 extern "C" void* Entity_FindComponent_AmbientEmitter_2280(uintptr_t entity, void* retIBP); // 0x140002280
 
-// ---- type-id global storage (values filled by FillTypeIdGlobals_fire) ----
-extern uint32_t g_tid_FireDescription;   // 0x1401c4218
-extern uint32_t g_tid_FireComponent;     // 0x1401c41e0
-
 // DAT_1401722c0 — the float sign-flip mask (two qwords of 0x80000000 in the image;
 // only the first dword is read).
 static const uint32_t g_DAT_1401722c0 = 0x80000000u;
@@ -73,8 +69,6 @@ void RegisterFireBatch() {
     RegisterExeAddr(0x14011ea10, reinterpret_cast<uintptr_t>(&FireComponent_StopBurning_11ea10));
 
     // --- THE TWO TYPE-ID GLOBALS (breaks #3 and #4) ---
-    RegisterExeAddr(0x1401c4218, reinterpret_cast<uintptr_t>(&g_tid_FireDescription));
-    RegisterExeAddr(0x1401c41e0, reinterpret_cast<uintptr_t>(&g_tid_FireComponent));
 
     // --- THE TWO SHARED FINDERS (code/Game/Component/entity_finders_disaster.cpp) ---
     // 0x140005840 FindComponent<FireComponent> was registered NOWHERE until

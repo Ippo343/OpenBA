@@ -399,7 +399,7 @@ typedef uint32_t (*GetTypeId_t)(void*);
 // +0x38 count) — the exe's inline GetTypeId scan + IsDerivedFrom cast.
 void* FindWorkPlaceComp(uintptr_t entity) {
     if (!entity) return nullptr;
-    // ENDGAME B.3.9 CG2: g_TypeId_WorkplaceComponent binds cell 0x1401c80e0, whose
+    // ENDGAME B.3.9 CG2: TypeId_WorkplaceComponent binds cell 0x1401c80e0, whose
     // retail class is WorkPlaceComponent -> WorkPlaceComponent::TypeId().
     uint32_t tid = WorkPlaceComponent::TypeId();
     uintptr_t arr = *(uintptr_t*)(entity + 0x30);

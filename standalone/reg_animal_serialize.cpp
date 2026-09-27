@@ -22,23 +22,8 @@
 #include <cstdint>
 #include "Component/PopulationComponent.h"
 
-// Serialize-only type-id storage. Values are CRC ids that exist only after
-// Object::Factory startup, so they are filled by the Fill* pass below (same
-// pattern as reg_action_child_ctors2.cpp).
-static uint32_t g_tid_PopulationComponent = 0;  // 0x1401c4790
-static uint32_t g_tid_ComponentBase       = 0;  // 0x1401c72a8
-
-extern "C" void FillComponentTypeIdGlobals_animal_serialize() {
-    if (g_tid_PopulationComponent == 0)
-        g_tid_PopulationComponent = PopulationComponent::TypeId();
-    if (g_tid_ComponentBase == 0)
-        g_tid_ComponentBase = ::Object::GetTypeIdByName("Component");
-}
-
 void RegisterAnimalSerialize() {
     // --- serialize-only type ids ---
-    RegisterExeAddr(0x1401c4790, reinterpret_cast<uintptr_t>(&g_tid_PopulationComponent));
-    RegisterExeAddr(0x1401c72a8, reinterpret_cast<uintptr_t>(&g_tid_ComponentBase));
 
     // --- System::Time::Serialize dispatch slot (verified against Runtime
     //     exports). Same storage shape as address_registry.cpp's

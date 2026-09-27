@@ -2003,18 +2003,18 @@ void TownHallUI_OnProfessionSpinner(TownHallUI* self, int index) {
 namespace townhallui_sa {
 
 // ---- exe-.rdata type-id globals the TownHallUI paths used to dereference ----
-// ENDGAME B.3.9 CG2: every one of the 19 g_TypeId_* globals this lazy-fill
+// ENDGAME B.3.9 CG2: every one of the 19 TypeId_* globals this lazy-fill
 // serviced is now read through its class static (X::TypeId() — either the
 // ported Runtime static for the UI:: widget/element classes, or the exe
 // DECLARE_EXE_TYPE static for the Component/Description classes), which
-// always answers, so EnsureGlobals retires. g_TypeInfo_ValueDescription is
-// a different (non-g_TypeId_) global, out of this batch's scope; it keeps its
+// always answers, so EnsureGlobals retires. TypeInfo_ValueDescription is
+// a different (non-TypeId_) global, out of this batch's scope; it keeps its
 // own by-name resolve below. Registered names Ghidra-verified this session via
 // the .rdata name-table / RegisterType writers (the engine_funcs labels match):
-//   exref 0x1401516c8 "g_TypeId_NumberElement"      -> UI::NumberElement
-//   DAT   0x1401c7d98 "g_TypeId_StateMachineComponent_FC" -> StateMachineComponent
-//   DAT   0x1401c4b80 "g_TypeId_TradeComponent_FC"   -> TradeComponent
-//   DAT   0x1401c7318 "g_TypeId_ComponentDescription_FC"      -> ComponentDescription
+//   exref 0x1401516c8 "TypeId_NumberElement"      -> UI::NumberElement
+//   DAT   0x1401c7d98 "TypeId_StateMachineComponent_FC" -> StateMachineComponent
+//   DAT   0x1401c4b80 "TypeId_TradeComponent_FC"   -> TradeComponent
+//   DAT   0x1401c7318 "TypeId_ComponentDescription_FC"      -> ComponentDescription
 void EnsureGlobals() {
     // ENDGAME B.3.9 TR: the ValueDescription by-name lazy fill is gone -- the readers
     // use ValueDescription::TypeId() (cell 0x1401c4bf0, which was registered).

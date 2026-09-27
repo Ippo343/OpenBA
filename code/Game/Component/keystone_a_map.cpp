@@ -393,7 +393,7 @@ void MapComponent_sub_41b0(int64_t param_1) {
     void* obj = *reinterpret_cast<void**>(param_1 + 0x18);
     int* piVar2 = *reinterpret_cast<int**>(
         reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf8);
-    uint32_t typeId = MapDescription::TypeId();   // cell 0x1401c7a18; g_TypeId_AreaDescription is misnamed (D5)
+    uint32_t typeId = MapDescription::TypeId();   // cell 0x1401c7a18; TypeId_AreaDescription is misnamed (D5)
     bool bVar3 = (fn_IsDerivedFrom && typeId) ? fn_IsDerivedFrom(obj, typeId) : false;
     void* pvVar5 = bVar3 ? obj : nullptr;
 
@@ -445,7 +445,7 @@ void CreateNaturalResource_impl_4750(int64_t param_1) {
     void* obj = *reinterpret_cast<void**>(param_1 + 0x18);
     int* piVar2 = *reinterpret_cast<int**>(
         reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf8);
-    uint32_t typeId = MapDescription::TypeId();   // cell 0x1401c7a18; g_TypeId_AreaDescription is misnamed (D5)
+    uint32_t typeId = MapDescription::TypeId();   // cell 0x1401c7a18; TypeId_AreaDescription is misnamed (D5)
     bool bVar3 = (fn_IsDerivedFrom && typeId) ? fn_IsDerivedFrom(obj, typeId) : false;
     int64_t local_res8 = *reinterpret_cast<int64_t*>(param_1 + 0x10);
     void* pvVar5 = bVar3 ? obj : nullptr;

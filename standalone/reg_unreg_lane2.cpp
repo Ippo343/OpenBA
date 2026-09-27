@@ -87,7 +87,7 @@ void RegisterUnregLane2() {
     // slot would be a no-op (same resulting function pointer). Left unregistered
     // deliberately — see the wave report for the call site read for each:
     //
-    //   0x140151488 _typeInfo@StringTable  — g_TypeId_StringTable (engine_funcs.cpp);
+    //   0x140151488 _typeInfo@StringTable  — TypeId_StringTable (engine_funcs.cpp);
     //       every consumer (optionsdialog.cpp LoadStringTable, inputbindings.cpp
     //       LoadInputNameTables, serialize_externals.cpp) already lazy-resolves the
     //       type id by name via Factory::GetTypeIdFromName/ResolveTypeIdByNameLazy

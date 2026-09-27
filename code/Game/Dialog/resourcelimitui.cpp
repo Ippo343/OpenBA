@@ -70,7 +70,7 @@ static void SetResourceLimit(void* dataSrc, int value) {
 
 void ResourceLimitUI_Slot4(ResourceLimitUI* self) {
     // Get data source from base class +0x10 and type-check
-    // ENDGAME B.3.9 CG2: g_TypeId_ResourceLimitType binds cell 0x1401c5520, whose
+    // ENDGAME B.3.9 CG2: TypeId_ResourceLimitType binds cell 0x1401c5520, whose
     // retail class is ResourceLimitUIConfig (Table 1 NAME LIE).
     void* dataSrc = *(void**)((uintptr_t)self + 0x10);
     bool isType = fn_IsDerivedFrom(dataSrc, ResourceLimitUIConfig::TypeId());

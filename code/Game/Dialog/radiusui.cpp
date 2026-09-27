@@ -61,7 +61,7 @@ void RadiusUI::OnOpened() {
     uint64_t subObj = *(uint64_t*)(entityBasePtr + 0x28);
 
     // Search sub-object's component array (+0x28 base, +0x30 count) for RadiusComponent
-    // ENDGAME B.3.9 CG2: g_TypeId_RadiusComponent binds cell 0x1401c4870, whose retail
+    // ENDGAME B.3.9 CG2: TypeId_RadiusComponent binds cell 0x1401c4870, whose retail
     // class is RadiusDescription (Table 1 NAME LIE — the global's name says
     // RadiusComponent).
     uint32_t radiusTypeId = RadiusDescription::TypeId();

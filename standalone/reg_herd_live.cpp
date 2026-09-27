@@ -41,12 +41,6 @@
 // DAT_140172110 = 0.4f — the sub-tile jitter HerdComponent_Populate adds to each
 // animal's spawn position (verified from retail .rdata: 0x3ECCCCCD).
 static float    g_f_HerdPopulateJitter    = 0.4f;   // 0x140172110
-// DWORD_1401c47c8 = "PopulationDescription" type id (PopulationDescription_Register
-// @0x14014b5e5). PopulationComponent::Startup reads it to validate its +0x18.
-// Filled lazily on first use by PopulationTypeId() in populationcomponent.cpp, so
-// this file only has to provide the storage (no ordering dependency on a Fill*
-// pass in address_registry.cpp).
-static uint32_t g_tid_PopulationDescription = 0;    // 0x1401c47c8
 
 // ---- Trampolines matching the retail calling shapes -------------------------
 
@@ -60,7 +54,6 @@ static void Herd_Populate_Thunk(void* herdComp, int count) {
 void RegisterHerdLive() {
     // Storage first — the ports below read these through ResolveAddr.
     RegisterExeAddr(0x140172110, reinterpret_cast<uintptr_t>(&g_f_HerdPopulateJitter));
-    RegisterExeAddr(0x1401c47c8, reinterpret_cast<uintptr_t>(&g_tid_PopulationDescription));
 
     // HerdComponent_helper_7400 — place one spawned animal (transform + pose mesh
     // + behavior kick). Was the last unported leaf of the spawn path.

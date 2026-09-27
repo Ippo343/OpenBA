@@ -57,7 +57,7 @@
 // the Follow dialog). Retail compares against [0x1401c70e8] = CitizenAIComponent's
 // type id (0x140011093) and IsDerivedFrom-checks with it (0x1400110ec).
 // ENDGAME B.3.9 CB: by the class static. The old spelling went through
-// g_TypeId_CitizenAIComponent, which EnsureGlobals() below pointed at a
+// TypeId_CitizenAIComponent, which EnsureGlobals() below pointed at a
 // "ProfessionComponent" by-name id (no such class) or a static 0, so the finder found
 // nothing and the Action line was skipped.
 void fn_FindComponent_CitizenAI(void* entity, void* retval) {
@@ -187,8 +187,8 @@ namespace citizenui_sa {
 static float s_ageMul = 1.0f;
 
 // ENDGAME B.3.9: ComponentEntity / CitizenDescription / CitizenComponent (was
-// g_TypeId_CitizenComponent_FC) / EditTool all have a ported TypeId() now, and
-// g_TypeId_Dialog is UI::Dialog's own _typeInfo (engine_funcs.cpp:828, a Runtime
+// TypeId_CitizenComponent_FC) / EditTool all have a ported TypeId() now, and
+// TypeId_Dialog is UI::Dialog's own _typeInfo (engine_funcs.cpp:828, a Runtime
 // address, always resolved) — not "External" as this file's old heal guessed (that
 // heal never ran: the pointer is set at EngineFuncsInit before this ever fires).
 // Only the age-multiplier fallback (a different, non-type-id singleton) is left.

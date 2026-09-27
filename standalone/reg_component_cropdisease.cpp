@@ -58,17 +58,6 @@ extern "C" void EventLog_ArrayGrow_Reg(void*, int, const void*);             // 
 extern "C" void EventLog_YearString_Reg(void*, void*);                       // 0x1400951d0
 extern "C" void EventLog_SeasonString_Reg(void*, void*, void*);              // 0x140095230
 
-// Type-id globals this lane's bodies (and the exe's own copies, should any survive)
-// read out of .rdata. Filled after Engine::Startup, when Object::Factory has assigned
-// the real CRC ids — a null type-id global fakes an ordering bug
-// (reference_null_typeid_global_fakes_ordering_bug), so these get storage here and a
-// value later.
-static uint32_t g_tid_DiseaseComponent   = 0;   // 0x1401c4170
-
-extern "C" void FillTypeIdGlobals_cropdisease() {
-    g_tid_DiseaseComponent   = DiseaseComponent::TypeId();
-}
-
 void RegisterCropDiseaseBatch() {
     // Behaviour bodies
     RegisterExeAddr(0x1400483a0, reinterpret_cast<uintptr_t>(&DiseaseComp_Infect));
@@ -77,6 +66,4 @@ void RegisterCropDiseaseBatch() {
 
     // Event-log leaves promoted out of eventlog.cpp's file scope
 
-    // Type-id global storage (values filled by FillTypeIdGlobals_cropdisease)
-    RegisterExeAddr(0x1401c4170, reinterpret_cast<uintptr_t>(&g_tid_DiseaseComponent));
 }

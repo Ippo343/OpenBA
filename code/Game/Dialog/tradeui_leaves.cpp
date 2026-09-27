@@ -368,7 +368,7 @@ extern "C" void* TradeUI_StorageTree_Insert_e1c0(int64_t* tree,
 //                the original set, and the one that must be read from the
 //                DISASSEMBLY: Ghidra renders a joined_r0x000140059767 back-edge that
 //                looks like an infinite loop and is not one. Needs 4 type-id globals
-//                (g_TypeInfo_ValueDescription, DWORD_1401c7cb8, DWORD_1401c7318,
+//                (TypeInfo_ValueDescription, DWORD_1401c7cb8, DWORD_1401c7318,
 //                DWORD_1401c48a8), sub-callees FUN_140001bb0 + FUN_14000ee40,
 //                fn_Sprite_IsValid and a _singleton_exref global. It feeds the buy
 //                table, so a wrong port yields a POPULATED-but-wrong panel rather

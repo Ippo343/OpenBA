@@ -1,12 +1,7 @@
 // standalone/reg_work_tail_trade.cpp
 // Keystone B tail — TradeWork (CitizenComponent work-tracking) AVL serialize cascade.
-// Registers the three exe addresses ported in code/Game/Work/tradework_serialize.cpp and
-// fills the one type-id .rdata global those bodies read (DWORD_1401c7158).
-//
-// Wired via RegisterWorkTailTradeBatch() in RegisterCodeFunctions() and
-// FillTypeIdGlobals_worktail_trade() (alongside the other FillTypeIdGlobals_*) in
-// code/Game/Game/game_main.cpp, AFTER Engine::Startup (Object::Factory::Startup assigns
-// the real CRC type ids only then; before that GetTypeIdByName returns 0).
+// Registers the exe addresses ported in code/Game/Work/tradework_serialize.cpp.
+// Wired via RegisterWorkTailTradeBatch() in RegisterCodeFunctions().
 //
 // Closure (bottom-up): 0x140025920 retrace (already registered by reg_player_trade.cpp),
 // 0x140002340 ExternalPtr serialize (already registered in address_registry.cpp; called
@@ -51,14 +46,6 @@ extern "C" void  TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2);     
 // task. c8a0 (a trade-serialize path autostart does not exercise) uses its own static and
 // skips validation when the id is unresolved (0) — cascade-safe.
 extern "C" {
-uint32_t g_tid_TradeWork_CitizenComponent = 0;  // private c8a0 copy of DWORD_1401c7158
-}
-
-extern "C" void FillTypeIdGlobals_worktail_trade() {
-    // "CitizenComponent", matching the retail slot value (see corrected note above);
-    // was "CitizenAIComponent" — a latent wrong-id in the (autostart-unexercised)
-    // c8a0 serialize validation.
-    g_tid_TradeWork_CitizenComponent = CitizenComponent::TypeId();
 }
 
 void RegisterWorkTailTradeBatch() {

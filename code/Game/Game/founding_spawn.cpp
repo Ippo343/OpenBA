@@ -105,7 +105,7 @@ static bool TraceOn() { return s_trace < 24; }   // first-N
 // ---------------------------------------------------------------------------
 // Type ids — read directly (D5, ENDGAME B.3.9 CG3): cells 0x1401c7158 and
 // 0x1401c7190 through the classes' own X::TypeId(), never the engine_funcs
-// g_TypeId_* globals (which read the SAME cells).
+// TypeId_* globals (which read the SAME cells).
 // ---------------------------------------------------------------------------
 static uint32_t TidCitizenComponent() {
     return CitizenComponent::TypeId();

@@ -74,7 +74,7 @@ namespace residenceui_sa {
 // Standalone-local fallback for an exe-.rdata global that resolves NULL in standalone.
 static float    s_ageMul = 1.0f;    // matches citizenui.cpp's SA age-multiplier fallback
 
-// ENDGAME B.3.9 CG2: g_TypeId_ComponentEntity / g_TypeId_ResidenceComponent no longer
+// ENDGAME B.3.9 CG2: TypeId_ComponentEntity / TypeId_ResidenceComponent no longer
 // need healing here — ComponentEntity::TypeId() / ResidenceComponent::TypeId() (the
 // class statics) always answer, so the s_ceTid/s_resTid lazy-fill retires.
 void EnsureGlobals() {
