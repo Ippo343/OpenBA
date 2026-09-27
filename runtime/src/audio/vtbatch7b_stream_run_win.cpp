@@ -263,8 +263,8 @@ void* AudioDeviceSingleton() {
     return slot ? *slot : nullptr;
 }
 void* FileSystemSingleton() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@FileSystem@IO@@0PEAV12@EA");
-    return slot ? *slot : nullptr;
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now -- same one deref.
+    return ::IO::FileSystem::_singleton;
 }
 
 // The inlined System::String refcount idioms. Written out rather than routed

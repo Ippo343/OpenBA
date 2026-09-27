@@ -75,6 +75,7 @@
 #include "../../types/audio/Audio.h"
 #include "../../../engine/types/common.h"   // Vector3
 #include "../../types/io/Serializer.h"        // Stream / Serializer / rw_vtbl (Wave 4)
+#include "../../types/io/Persistence.h"       // ENDGAME B.3.9 SS1: Persistence::_singleton
 #include "../system/timer.h"                  // Wave 9 lane W: TimerSecondsPerTick
 #include "../collection/array_internal.h"     // ENDGAME B.3.2 step 2: kSpec_EffectSlot bridge
 #include "../../types/audio/Device.h"
@@ -563,9 +564,8 @@ uint32_t Scene::PlayEffect3D(Object::ExternalPtr<SoundEffect> effect, SoundType 
 // ============================================================================
 void Configuration::Save() {
 
-    using SetIntFn = void (*)(void*, const char*, const char*, int);    void** persistenceSingleton = reinterpret_cast<void**>(
-        ResolveExport("?_singleton@Persistence@IO@@0PEAV12@EA"));
-    void* persistence = persistenceSingleton ? *persistenceSingleton : nullptr;
+    using SetIntFn = void (*)(void*, const char*, const char*, int);    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+    void* persistence = ::IO::Persistence::_singleton;
 
     // RT_EXPORT_ONCE: IO::Persistence::Set(int) is ported (io/persistence.cpp:311).
     auto setFn = RT_EXPORT_ONCE(SetIntFn, "?Set@Persistence@IO@@QEAAXPEBD0H@Z");
@@ -590,9 +590,8 @@ void Configuration::Save() {
 bool Configuration::Startup() {
 
     using GetIntFn = bool (*)(void*, const char*, const char*, int*);
-    void** persistenceSingleton = reinterpret_cast<void**>(
-        ResolveExport("?_singleton@Persistence@IO@@0PEAV12@EA"));
-    void* persistence = persistenceSingleton ? *persistenceSingleton : nullptr;
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+    void* persistence = ::IO::Persistence::_singleton;
     auto getFn = RT_EXPORT_ONCE(GetIntFn, "?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z");   // ported
 
     // Retail leaves the field untouched (whatever the ctor/last value set) when
