@@ -779,9 +779,6 @@ extern uintptr_t g_ToolUI_ChildDialog_Vtable;
 // Toolbar item sort function (FUN_140021790) — sorts toolbar items by priority
 typedef void (*fn_ToolbarSort_t)(void* array, int count);
 
-// TypeInfo for Toolbar external — used by ExternalFactory::FindNext
-extern uint32_t* g_TypeId_ToolbarExternal;
-
 // Toolbar type ID at DAT_1401c6128 — used by ExternalFactory::FindNext and IsDerivedFrom
 // in ToolbarDialog_Ctor to iterate all Toolbar items matching a group
 extern uint32_t* g_TypeId_ToolbarItem;

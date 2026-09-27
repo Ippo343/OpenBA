@@ -242,7 +242,6 @@ fn_ToolbarDialog_Ctor_t fn_ToolbarDialog_Ctor = nullptr;
 fn_Toolbar_ShowGroup_t fn_Toolbar_ShowGroup = nullptr;
 uintptr_t g_ToolUI_ChildDialog_Vtable = 0; // PTR_FUN_14015f5a0
 // fn_Factory_CreateObject, g_TypeId_ToolController, g_TypeId_ToolSetting — defined above (entityui section)
-uint32_t* g_TypeId_ToolbarExternal = nullptr;
 uint32_t* g_TypeId_ToolbarItem = nullptr;
 fn_FindDialogByControllerType_t fn_FindDialogByControllerType = nullptr;
 // fn_Toolbar_FindEntity — inlined as Toolbar_FindEntity_Impl in toolbardialog.cpp
@@ -1144,13 +1143,6 @@ bool EngineFuncsInit() {
         g_ToolUI_ChildDialog_Vtable = toolUIChildVt;
     // fn_Factory_CreateObject, g_TypeId_ToolController, g_TypeId_ToolSetting — resolved above (entityui section)
     // Toolbar item sort function
-    // TypeInfo for Toolbar external (used by ExternalFactory::FindNext)
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x14015f980));
-        if (exref && *exref) {
-            g_TypeId_ToolbarExternal = reinterpret_cast<uint32_t*>(*exref);
-        }
-    }
     // Toolbar type ID at DAT_1401c6128 (filled by Toolbar_RegisterType at runtime)
     g_TypeId_ToolbarItem = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c6128));
