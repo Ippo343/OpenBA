@@ -20,55 +20,6 @@
 #include <new>
 
 // ============================================================
-// Resolved helpers
-// ============================================================
-
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
-static bool s_initialized = false;
-
-// ============================================================
-// ClearAreaComponent::Shutdown (vtable slot [3], 0x140117EC0)
-// ============================================================
-// Calls Component_Serialize, then:
-//   1. Empty serializer block (version 0) -- format compat stub
-//   2. Serializer block with clearState at +0x48
-void ClearAreaComponent_Shutdown(ClearAreaComponent* self, void* stream) {
-    ClearAreaComponent_InitFuncs();
-    if (s_fn_Component_Serialize)
-        s_fn_Component_Serialize(self, stream);
-
-    // Empty serializer block (format compatibility stub)
-    alignas(8) uint8_t serializer1[24];
-    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
-
-    // Serialize clearState
-    alignas(8) uint8_t serializer2[24];
-    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>(&self->clearState), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void ClearAreaComponent_InitFuncs() {
-    if (s_initialized) return;
-
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-
-    s_initialized = true;
-
-#ifdef _DEBUG
-    printf("[ClearAreaComponent] Funcs resolved: CompSerialize=%p\n",
-           (void*)s_fn_Component_Serialize);
-#endif
-}
-
-// ============================================================
 // ClearAreaComponent footprint sweep  (ClearAreaDescription_helper_7d60, 0x140117d60)
 // ============================================================
 // The heart of "placing a building marks trees/rocks/iron for removal". Reads the
@@ -210,8 +161,15 @@ void* ClearAreaComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ClearAreaComponent());
 }
 
-// [3] 0x140117ec0 — clearState round-trips (save/load wave 2026-08-28).
-void ClearAreaComponent::Persist(void* stream) { ClearAreaComponent_Shutdown(this, stream); }
+// [3] 0x140117ec0 — clearState round-trips (save/load wave 2026-08-28):
+// Component::Persist (a direct CALL 0x1401189b0), an empty
+// Serializer scope (format stub), then a scope carrying clearState (+0x48).
+void ClearAreaComponent::Persist(void* stream) {
+    Component::Persist(stream);
+    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
+    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);       // B.3.8 bridge
+    scope.Serialize(*reinterpret_cast<int*>(&clearState), nullptr);
+}
 
 DEFINE_EXE_VTABLE(ClearAreaComponent, "_ZTV18ClearAreaComponent")
 DEFINE_EXE_TYPE(ClearAreaComponent, "ControllerComponent")

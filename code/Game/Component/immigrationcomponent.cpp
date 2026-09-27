@@ -23,7 +23,8 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/immigrationcomponent_funcs.h"
+#include "Component/ImmigrationComponent.h"
+#include "Entity/ComponentEntity.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -34,119 +35,9 @@
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-// Component_Serialize (base class) -- at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
-// Object::InternalBasePtr::Serialize is a direct member call since ENDGAME B.3.4 (batch G);
-// the engine_funcs global and its typedef were deleted in closing 2d.
-
-// IsDerivedFrom -- dispatch slot at 0x140152a98
-typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* self, uint32_t typeId);
-static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
-
 // FUN_1400032e0 -- dynamic array resize; this file DEFINES its body as
 // ImmigrationComp_DynArrayResize below (kept, still registered for other
-// callers) — this file's own call site goes straight through the bridge.
-
-// Type ID for ComponentEntity (DAT_1401c5d70)
-static uint32_t* s_pTypeId_ComponentEntity = nullptr;
-
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-    uintptr_t slot;
-
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-    s_pTypeId_ComponentEntity = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c5d70));
-
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom_d = reinterpret_cast<fn_IsDerivedFrom_dispatch_t>(
-        *reinterpret_cast<uintptr_t*>(slot));
-
-    s_initialized = true;
-}
-
-// ============================================================
-// ImmigrationComponent::Shutdown (vtable slot [3], 0x14004e4b0)
-// ============================================================
-// Complex serialization: base + controller block + field50 + entity array + Time.
-
-void ImmigrationComponent_Shutdown(ImmigrationComponent* self, void* stream) {
-    EnsureHelpers();
-
-    // Call base Component_Serialize
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
-
-    // Empty serializer block (controller compat)
-    alignas(8) uint8_t serializer1[24];
-    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();                                       // B.3.4 bridge
-
-    // Main serializer block
-    alignas(8) uint8_t serializer2[24];
-    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // Serialize field50 (int)
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>(&self->field50), nullptr);   // B.3.4 bridge
-
-    // Serialize array count from field60
-    int arrayCount = *(int*)&self->field60;
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(arrayCount, nullptr);   // B.3.4 bridge
-
-    // "Am I loading?" is `*(int32*)(*(void**)serializer + 8) == 0` -- deref the
-    // Serializer to reach its STREAM first, then read the stream's +8. This
-    // tested the Serializer's OWN +8 (m_encoding), so on a real load the resize
-    // below never ran and the element loop walked a NULL array with a non-zero
-    // count straight off the stream. Same trap as interactcomponent.cpp and
-    // reference_serializer_plus8_is_encoding_not_loading_flag.
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer2)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
-        GameColl::AsArray<GameColl::Ptr8>((void*)&self->field58).SetSize(arrayCount);
-    }
-
-    // Serialize each InternalBasePtr element in the array
-    // Array base at +0x58, count = arrayCount
-    void* arrayBase = self->field58;
-    int64_t remaining = (int64_t)arrayCount;
-    if (remaining > 0) {
-        uint8_t* elementPtr = (uint8_t*)arrayBase;
-        do {
-            // InternalBasePtr::Serialize(element, serializer)
-            reinterpret_cast<Object::InternalBasePtr*>(elementPtr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4 bridge
-
-            // Validate: if ptr is non-null but not a ComponentEntity, clear it
-            void* objPtr = *(void**)elementPtr;
-            if (objPtr != nullptr) {
-                if (s_fn_IsDerivedFrom_d && s_pTypeId_ComponentEntity) {
-                    bool isEntity = s_fn_IsDerivedFrom_d(objPtr, *s_pTypeId_ComponentEntity);
-                    if (!isEntity) {
-                        *(uint64_t*)elementPtr = 0;
-                    }
-                }
-            }
-
-            elementPtr += 8;  // InternalBasePtr is 8 bytes
-            remaining--;
-        } while (remaining != 0);
-    }
-
-    // Serialize Time at +0x48
-    reinterpret_cast<System::Time*>((void*)&self->field48)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4b bridge
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
-}
+// callers) — Persist's own call site goes straight through the bridge.
 
 // ============================================================
 // Reimpl of FUN_1400032e0 (Component reg wave "people") — shared DynArray<ptr> resize.
@@ -161,17 +52,6 @@ void ImmigrationComponent_Shutdown(ImmigrationComponent* self, void* stream) {
 // ============================================================
 void ImmigrationComp_DynArrayResize(int64_t* param_1, int newCount) {
     GameColl::AsArray<GameColl::Ptr8>(param_1).SetSize(newCount);
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void ImmigrationComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[ImmigrationComponent] Funcs resolved: Serialize=%p\n",
-           (void*)s_fn_Component_Serialize);
-#endif
 }
 
 // ============================================================================
@@ -226,8 +106,34 @@ void* ImmigrationComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) ImmigrationComponent());
 }
 
-// [3] 0x14004e4b0.
-void ImmigrationComponent::Persist(void* stream) { ImmigrationComponent_Shutdown(this, stream); }
+// [3] 0x14004e4b0: Component::Persist (a direct CALL 0x1401189b0), an empty
+// Serializer scope (the controller block), then one scope carrying field50, the
+// +0x58 entity array (count, resize on a load, each InternalBasePtr — cleared when
+// it is not a ComponentEntity) and the Time at +0x48.
+void ImmigrationComponent::Persist(void* stream) {
+    Component::Persist(stream);
+    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);         // B.3.8 bridge
+    ser.Serialize(*reinterpret_cast<int*>(&field50), nullptr);
+    int arrayCount = *reinterpret_cast<int*>(&field60);
+    ser.Serialize(arrayCount, nullptr);
+    // "Am I loading?" is the STREAM's direction (Serializer -> stream +8), not the
+    // Serializer's own +8 (m_encoding): see
+    // reference_serializer_plus8_is_encoding_not_loading_flag.
+    if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+        // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
+        GameColl::AsArray<GameColl::Ptr8>(&field58).SetSize(arrayCount);
+    }
+    uint8_t* element = static_cast<uint8_t*>(field58);
+    for (int64_t remaining = arrayCount; remaining > 0; --remaining, element += 8) {
+        reinterpret_cast<Object::InternalBasePtr*>(element)->Serialize(ser);   // B.3.8 bridge (the array is raw bytes)
+        void* obj = *reinterpret_cast<void**>(element);
+        if (obj != nullptr && fn_IsDerivedFrom &&
+            !fn_IsDerivedFrom(obj, ComponentEntity::TypeId()))
+            *reinterpret_cast<uint64_t*>(element) = 0;
+    }
+    reinterpret_cast<System::Time*>(&field48)->Serialize(ser);   // B.3.8 bridge (field48 is a Time)
+}
 
 DEFINE_EXE_VTABLE(ImmigrationComponent, "_ZTV20ImmigrationComponent")
 DEFINE_EXE_TYPE(ImmigrationComponent, "ControllerComponent")

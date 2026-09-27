@@ -17,7 +17,7 @@
 // global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once
 // <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Scene.h"
-#include "Component/highlightcomponent_funcs.h"
+#include "Component/HighlightComponent.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4a closing: the stream-scope ctor/dtor pair
@@ -25,70 +25,7 @@
 #include <cstdint>
 #include <cstdio>
 
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-// Component_Serialize (base class) -- at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
 #include <cstdlib>
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-
-    s_initialized = true;
-}
-
-// ============================================================
-// HighlightComponent::Shutdown (vtable slot [3], 0x14004c880)
-// ============================================================
-// Minimal: Component_Serialize + empty Serializer (version 0).
-
-void HighlightComponent_Shutdown(HighlightComponent* self, void* stream) {
-    EnsureHelpers();
-
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
-
-    // ⚠ This ctor/dtor pair is NOT decoration -- it is a STREAM SCOPE.
-    // The save encoding brackets every Serializer scope with sentinels, so an
-    // "empty" scope still occupies 16 bytes (AAAAAAAA open, two dwords,
-    // BBBBBBBB close). Measured on the packaged tutorial save: retail's
-    // HighlightComponent record is 66 bytes, of which Component::Serialize is
-    // 50 and this scope is the remaining 16. Guarding the pair behind a null
-    // test therefore does not 'skip a no-op' -- it silently desyncs the stream
-    // for every object after this one. Use the globals engine_funcs resolves
-    // (the same ones ComponentEntity::Serialize uses) and say so loudly if
-    // they are missing. See reference_null_guard_on_a_serializer_call_is_a_desync.
-    //
-    // ENDGAME B.3.4a closing: the ternary picked the file-static door, else the
-    // global door; the else arm printed the desync warning when BOTH were null.
-    // `IO::Serializer` is a real class, so the scope is emitted unconditionally
-    // and the "ctor/dtor NULL" state the else arm reported no longer exists.
-    // The warning is deleted for that reason — the scope it warned about being
-    // skipped is now the only path.
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void HighlightComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[HighlightComponent] Funcs resolved: Serialize=%p\n",
-           (void*)s_fn_Component_Serialize);
-#endif
-}
 
 // ============================================================
 // HighlightComponent removed-from-world (vtable slot 7, +0x38)
@@ -116,7 +53,6 @@ void HighlightComponent_InitFuncs() {
 // Display 0xCB / StatusIcon 0xC2 all have it). No-ops when no outline is
 // registered (+0x120 < 0), so it is safe on every non-selected teardown.
 void HighlightComponent::OnRemove() {
-    EnsureHelpers();
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
     // A null +0x28 vtable is the "fresh/inert" tell (same test Impl_c4a0 uses):
     // the embedded EdgeMeshInstance was never constructed, so nothing of ours is
@@ -155,9 +91,17 @@ HighlightComponent::HighlightComponent()
     OrFlagsInCtor(0x2);
 }
 
-// [3] 0x14004c880 — Component::Persist PLUS its own (empty) Serializer scope:
-// 16 real bytes in the save encoding (the tutorial save's record is 66 bytes).
-void HighlightComponent::Persist(void* stream) { HighlightComponent_Shutdown(this, stream); }
+// [3] 0x14004c880 — Component::Persist (a direct CALL 0x1401189b0) PLUS its own
+// (empty) Serializer scope. The scope is NOT decoration: the save encoding
+// brackets every scope with sentinels, so an "empty" scope still occupies 16
+// bytes (AAAAAAAA open, two dwords, BBBBBBBB close). Measured on the packaged
+// tutorial save: retail's HighlightComponent record is 66 bytes, of which
+// Component::Persist is 50 and this scope the remaining 16. Skipping it desyncs
+// the stream for every object after this one.
+void HighlightComponent::Persist(void* stream) {
+    Component::Persist(stream);
+    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
+}
 
 // [8] 0x14004c850 / [12] 0x14004c870. PORT GAP — B38 D9: never ported; the
 // tree's table left them inert; kept inert here.

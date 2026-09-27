@@ -11,17 +11,9 @@
 // Size: 0x50 bytes
 // ============================================================
 
-// Shutdown (vtable slot [3], 0x14004aa80): Serializes base component,
-// empty controller block, then happinessFlag (bool at +0x28).
+// Door onto HappinessComponent::Persist (vtable slot [3], 0x14004aa80), kept for
+// its by-address row (B.3.8).
 void HappinessComponent_Shutdown(HappinessComponent* self, void* stream);
-
-// OnCreate (vtable slot [7], 0x14004aa20): If happinessFlag != 0,
-// registers owner with game state happiness list, sets index to -1,
-// then clears flag.
-void HappinessComponent_OnRemove(HappinessComponent* self);
-
-// Init: resolve all internal function pointers (called once at startup)
-void HappinessComponent_InitFuncs();
 
 // ------------------------------------------------------------------
 // Controller state machine (retail table 0x14004ac10)

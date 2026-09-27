@@ -10,7 +10,10 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/boatcomponent_funcs.h"
+#include "Component/BoatComponent.h"
+#include "Component/CharacterComponent.h"
+#include "Component/ModelComponent.h"
+#include "Component/ResidenceComponent.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
@@ -21,134 +24,11 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
-// IsDerivedFrom dispatch slot at 0x140152a98
-typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
-static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
-
 // FUN_14000d030 -- resize Vector3 array. ENDGAME B.3.2 step 2: this IS
 // Collection::Array<Vector3>::SetSize, implemented below as
 // BoatComponent_ResizeVec3Array (kept, and still registered by
-// reg_component_nature.cpp for other callers) — this file's own call site
-// now goes straight through the GameColl bridge instead of resolving itself.
-
-// Type IDs
-static uint32_t* s_TypeId_ComponentEntity = nullptr; // TypeInfo_ComponentEntity
-static uint32_t* s_TypeId_1401c7a50 = nullptr;       // DWORD_1401c7a50
-static uint32_t* s_TypeId_1401c7078 = nullptr;       // DAT_1401c7078
-
-static bool s_initialized = false;
-
-// ============================================================
-// BoatComponent::Shutdown (vtable slot [3], 0x1400465d0)
-// ============================================================
-// Serializes:
-//   1. Component_Serialize base
-//   2. Empty serializer block (version 0) -- format compat
-//   3. Serializer(version=0):
-//      - InternalBasePtr at +0x28 (entity ref, validated vs ComponentEntity)
-//      - Vector3 at +0x40 (position)
-//      - Float at +0x4c
-//      - InternalBasePtr at +0x30 (validated vs type 0x1401c7a50)
-//      - InternalBasePtr at +0x38 (validated vs type 0x1401c7078)
-//      - Vector3 at +0x50 (direction/target)
-//      - Int at +0x70 (dock ID)
-//      - Vector3 array at +0x60 (count at +0x68) -- route waypoints
-void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
-    BoatComponent_InitFuncs();
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    if (s_fn_Component_Serialize)
-        s_fn_Component_Serialize(self, stream);
-
-    // Empty serializer block (format compat)
-    alignas(8) uint8_t serializer1[24];
-    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();                                       // B.3.4 bridge
-
-    // Main serializer block
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // Serialize InternalBasePtr at +0x28 (entity ref)
-    reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x28))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-
-    // Validate +0x28 against ComponentEntity type
-    if (*(void**)(selfAddr + 0x28) != nullptr) {
-        if (s_fn_IsDerivedFrom_dispatch && s_TypeId_ComponentEntity) {
-            bool valid = s_fn_IsDerivedFrom_dispatch(
-                *(void**)(selfAddr + 0x28), *s_TypeId_ComponentEntity);
-            if (!valid)
-                *(uint64_t*)(selfAddr + 0x28) = 0;
-        }
-    }
-
-    // Serialize Vector3 at +0x40 (position) -- slot 0x140152a68
-    reinterpret_cast<Math::Vector3*>(selfAddr + 0x40)->Serialize(serializer);   // B.3.1 bridge
-
-    // Serialize float at +0x4c
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(selfAddr + 0x4c), nullptr);   // B.3.4 bridge
-
-    // Serialize InternalBasePtr at +0x30
-    reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-
-    // Validate +0x30 against type 0x1401c7a50
-    if (*(void**)(selfAddr + 0x30) != nullptr) {
-        if (s_fn_IsDerivedFrom_dispatch && s_TypeId_1401c7a50) {
-            bool valid = s_fn_IsDerivedFrom_dispatch(
-                *(void**)(selfAddr + 0x30), *s_TypeId_1401c7a50);
-            if (!valid)
-                *(uint64_t*)(selfAddr + 0x30) = 0;
-        }
-    }
-
-    // Serialize InternalBasePtr at +0x38
-    reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x38))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-
-    // Validate +0x38 against type 0x1401c7078
-    if (*(void**)(selfAddr + 0x38) != nullptr) {
-        if (s_fn_IsDerivedFrom_dispatch && s_TypeId_1401c7078) {
-            bool valid = s_fn_IsDerivedFrom_dispatch(
-                *(void**)(selfAddr + 0x38), *s_TypeId_1401c7078);
-            if (!valid)
-                *(uint64_t*)(selfAddr + 0x38) = 0;
-        }
-    }
-
-    // Serialize Vector3 at +0x50 (direction/target)
-    reinterpret_cast<Math::Vector3*>(selfAddr + 0x50)->Serialize(serializer);   // B.3.1 bridge
-
-    // Serialize int at +0x70 (dock ID)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x70), nullptr);   // B.3.4 bridge
-
-    // Serialize Vector3 array at +0x60 (count at +0x68)
-    uint32_t localCount = *(uint32_t*)(selfAddr + 0x68);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
-
-    // If loading, resize array
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        // B.3.2 bridge: exe 0x14000d030 IS Collection::Array<Vector3>::SetSize(n).
-        GameColl::AsArray<GameColl::Vec3>((void*)(selfAddr + 0x60)).SetSize((int)localCount);
-    }
-
-    // Serialize each Vector3 in the array (12 bytes each)
-    void* arrayBase = *(void**)(selfAddr + 0x60);
-    if ((int)localCount > 0 && arrayBase) {
-        uint8_t* ptr = (uint8_t*)arrayBase;
-        for (uint32_t i = 0; i < localCount; i++) {
-            reinterpret_cast<Math::Vector3*>(ptr)->Serialize(serializer);   // B.3.1 bridge
-            ptr += 12; // sizeof(Vector3) = 12 bytes
-        }
-    }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-}
+// reg_component_nature.cpp for other callers) — Persist's own call site
+// goes straight through the GameColl bridge instead of resolving itself.
 
 // ============================================================
 // Reimpl of FUN_14000d030 — resize Vector3 array (stride 0xC, align 4)
@@ -198,36 +78,6 @@ void BoatComponent_ResizeVec3Array(void* arrayField, int newCount) {
     if (oldData != arr->data && oldData != nullptr) {
         fn_MemFreeStatic(oldData);
     }
-}
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void BoatComponent_InitFuncs() {
-    if (s_initialized) return;
-
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-
-    uintptr_t slot;
-
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    // Type IDs
-    s_TypeId_ComponentEntity = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7cf0));  // 0x1401c7cf0 = ResidenceComponent (TypeInfo)
-    s_TypeId_1401c7a50 = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7a50));
-    s_TypeId_1401c7078 = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7078));
-
-    s_initialized = true;
-
-#ifdef _DEBUG
-    printf("[BoatComponent] Funcs resolved: CompSerialize=%p\n",
-           (void*)s_fn_Component_Serialize);
-#endif
 }
 
 // ============================================================================
@@ -288,8 +138,43 @@ void* BoatComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) BoatComponent());
 }
 
-// [3] 0x1400465d0 (the body resolves its own helpers first).
-void BoatComponent::Persist(void* stream) { BoatComponent_Shutdown(this, stream); }
+// [3] 0x1400465d0: Component::Persist (a direct CALL 0x1401189b0), an empty
+// Serializer scope (format compat), then one scope carrying: the +0x28 pointer
+// (validated against ti 0x1401c7cf0 = ResidenceComponent, the tree's old name for
+// it was "ComponentEntity"), the +0x40 Vector3, the +0x4c float, the +0x30 pointer
+// (ModelComponent, ti 0x1401c7a50), the +0x38 pointer (CharacterComponent, ti
+// 0x1401c7078), the +0x50 Vector3, the +0x70 route index and the +0x60 Vector3
+// route array (count at +0x68, resized on a load). A pointer whose object fails
+// its IsDerivedFrom check is cleared.
+void BoatComponent::Persist(void* stream) {
+    Component::Persist(stream);
+    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);         // B.3.8 bridge
+    auto persistPtr = [&ser](uint64_t& field, uint32_t typeId) {
+        reinterpret_cast<Object::InternalBasePtr*>(&field)->Serialize(ser);   // B.3.8 bridge (the field is a raw InternalBasePtr)
+        void* obj = reinterpret_cast<void*>(field);
+        if (obj != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(obj, typeId))
+            field = 0;
+    };
+    persistPtr(data28, ResidenceComponent::TypeId());
+    reinterpret_cast<Math::Vector3*>(&data40)->Serialize(&ser);                        // B.3.8 bridge (+0x40 is a Vector3)
+    ser.Serialize(*reinterpret_cast<float*>(&_pad4C), nullptr);                        // +0x4c float
+    persistPtr(data30, ModelComponent::TypeId());
+    persistPtr(data38, CharacterComponent::TypeId());
+    reinterpret_cast<Math::Vector3*>(&data50)->Serialize(&ser);                        // B.3.8 bridge (+0x50 is a Vector3)
+    ser.Serialize(*reinterpret_cast<int*>(&data70), nullptr);
+    uint32_t count = *reinterpret_cast<uint32_t*>(&data68);
+    ser.Serialize(*reinterpret_cast<int*>(&count), nullptr);
+    if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+        // B.3.2 bridge: exe 0x14000d030 IS Collection::Array<Vector3>::SetSize(n).
+        GameColl::AsArray<GameColl::Vec3>(&data60).SetSize(static_cast<int>(count));
+    }
+    uint8_t* route = reinterpret_cast<uint8_t*>(data60);
+    if (static_cast<int>(count) > 0 && route) {
+        for (uint32_t i = 0; i < count; i++, route += 12)   // sizeof(Vector3) = 12
+            reinterpret_cast<Math::Vector3*>(route)->Serialize(&ser);   // B.3.8 bridge
+    }
+}
 
 DEFINE_EXE_VTABLE(BoatComponent, "_ZTV13BoatComponent")
 DEFINE_EXE_TYPE(BoatComponent, "ControllerComponent")

@@ -11,6 +11,8 @@
 // Size: 0x48 bytes
 // ============================================================
 
+// Doors onto HealerComponent::Persist / ::OnRemove, kept for their by-address
+// rows (B.3.8).
 // Shutdown (vtable slot [3], 0x14004aeb0): Component_Serialize + two empty
 // serializer blocks (component section + controller section).
 void HealerComponent_Shutdown(HealerComponent* self, void* stream);
@@ -25,6 +27,3 @@ void HealerComponent_OnRemove(HealerComponent* self);
 //   state 3 "demolish" 0x14004adf0 -- erase it again
 extern "C" char HealerComponent_EnterBuilt(void* comp, void* sm);
 extern "C" char HealerComponent_EnterDemolish(void* comp, void* sm);
-
-// Init: resolve all internal function pointers (called once at startup)
-void HealerComponent_InitFuncs();

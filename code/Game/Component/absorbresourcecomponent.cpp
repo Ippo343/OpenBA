@@ -7,7 +7,6 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/absorbresourcecomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Game/serialize_externals.h"
@@ -16,63 +15,6 @@
 #include <cstdio>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
-
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-// Component_Serialize (base class Shutdown) at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
-static bool s_initialized = false;
-
-// ============================================================
-// AbsorbResourceComponent::Shutdown (vtable slot [3], 0x140105c00)
-// ============================================================
-// Pattern: Component_Serialize + two empty Serializer ctor/dtor pairs.
-// Same pattern as MarketLocationComponent and StorageLocationComponent.
-void AbsorbResourceComponent_Shutdown(AbsorbResourceComponent* self, void* stream) {
-    // Slot-3 serializers are dispatched straight off the vtable by the entity
-    // stream, so nothing else ever reaches this file. Resolving here is what
-    // keeps the pointers below non-null -- when they were null the whole body
-    // read ZERO bytes and silently desynced every object after it.
-    AbsorbResourceComponent_InitFuncs();
-    // Call base Component_Serialize
-    if (s_fn_Component_Serialize)
-        s_fn_Component_Serialize(self, stream);
-
-    // First empty serializer block (version 0)
-    alignas(8) uint8_t serializerBuf1[24];
-    ::new (static_cast<void*>(serializerBuf1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializerBuf1)->~Serializer();                                       // B.3.4 bridge
-
-    // Second empty serializer block (version 0)
-    alignas(8) uint8_t serializerBuf2[24];
-    ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();                                       // B.3.4 bridge
-}
-
-// Component::Persist (0x1401189b0) and ExternalPtr<Description>::Serialize
-// (0x140031d10), whose ported bodies lived here, are in component.cpp
-// (ENDGAME B.3.8 K1); their registered doors keep the old names.
-
-// ============================================================
-// Init: resolve function pointers
-// ============================================================
-void AbsorbResourceComponent_InitFuncs() {
-    if (s_initialized) return;
-
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-
-    s_initialized = true;
-
-#ifdef _DEBUG
-    printf("[AbsorbResourceComponent] Funcs resolved: Serialize=%p\n",
-           (void*)s_fn_Component_Serialize);
-#endif
-}
 
 // ============================================================================
 // ENDGAME B.3.8 MI-A — AbsorbResourceComponent as a REAL class with its
@@ -210,9 +152,13 @@ Object::Base* AbsorbResourceComponent::DeletingDtor(unsigned flags) {
 AbsorbResourceComponent::~AbsorbResourceComponent() = default;
 
 // [3] 0x140105c00: Component::Persist plus TWO empty Serializer scopes — an
-// empty scope still occupies 16 bytes in the save encoding (the body resolves its
-// own helpers first: slot 3 is the first call on a load).
-void AbsorbResourceComponent::Persist(void* stream) { AbsorbResourceComponent_Shutdown(this, stream); }
+// empty scope still occupies 16 bytes in the save encoding. Retail calls
+// 0x1401189b0 (Component::Persist) directly, not ControllerComponent's.
+void AbsorbResourceComponent::Persist(void* stream) {
+    Component::Persist(stream);
+    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge (stream is void* in Internal::Persist)
+    { IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0); }   // B.3.8 bridge
+}
 
 // create 0x14002ea20: MemAlloc(0x48, 8), then the ctor.
 void* AbsorbResourceComponent::CreateNewObject() {
