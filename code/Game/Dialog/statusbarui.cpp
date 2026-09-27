@@ -64,26 +64,10 @@ static void* FindElement(void* dialogController, const char* name) {
 
 namespace statusbarui_sa {
 
-// Backfill the exe-.rdata type-id globals the impl paths dereference:
-//  - DAT_1401c7e08 (g_TypeId_StatusIconComponent) is the StatusIconComponent type id
-//    (Ghidra name-table; see statusiconui.cpp) and is unfilled (0/0xFFFFFFFF) in
-//    standalone -> resolve by TRUE name.
-//  - g_TypeId_CitizenDescription is normally filled by the townhall promotion's
-//    EnsureGlobals; fill it here too so the status dialog works on its own.
+// ENDGAME B.3.9 CG2: g_TypeId_StatusIconComponent (cell 0x1401c7e08) ->
+// StatusIconComponent::TypeId(), g_TypeId_CitizenDescription -> CitizenDescription::
+// TypeId(). Both class statics always answer, so the backfill retires.
 void EnsureGlobals() {
-    static uint32_t s_statusIconTid = 0;
-    if (!g_TypeId_StatusIconComponent || *g_TypeId_StatusIconComponent == 0 ||
-        *g_TypeId_StatusIconComponent == 0xFFFFFFFFu) {
-        if (!s_statusIconTid)
-            s_statusIconTid = StatusIconComponent::TypeId();
-        if (s_statusIconTid) g_TypeId_StatusIconComponent = &s_statusIconTid;
-    }
-    static uint32_t s_citDescTid = 0;
-    if (!g_TypeId_CitizenDescription) {
-        if (!s_citDescTid)
-            s_citDescTid = CitizenDescription::TypeId();
-        if (s_citDescTid) g_TypeId_CitizenDescription = &s_citDescTid;
-    }
 }
 
 // Every function/global the Draw+Startup+event paths dereference unguarded must
@@ -93,7 +77,6 @@ bool Ready() {
           fn_InternalBasePtr_Ctor &&
           fn_MemAlloc && fn_MemFreeStatic && g_pMemAllocSingleton))
         return false;
-    if (!(g_TypeId_StatusIconComponent && g_TypeId_CitizenDescription)) return false;
     return true;
 }
 
@@ -356,9 +339,9 @@ void StatusBarUI::OnUpdateLayout() {
             // Check component type via vtable GetTypeId (vtable +0x10)
             int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
-            if (typeId == (int)*g_TypeId_StatusIconComponent) {
+            if (typeId == (int)StatusIconComponent::TypeId()) {
                 void* pComp = compArray[j];
-                bool isDerived = fn_IsDerivedFrom(pComp, *g_TypeId_StatusIconComponent);
+                bool isDerived = fn_IsDerivedFrom(pComp, StatusIconComponent::TypeId());
                 happyComp = nullptr;
                 if (isDerived) {
                     happyComp = pComp;
@@ -403,7 +386,7 @@ found_happiness:
         uintptr_t firstCitizen = *(uintptr_t*)(*(uintptr_t*)(popList + 0xA0));
         void* desc = *(void**)(firstCitizen + 0x18);
         void* citizenDesc = nullptr;
-        if (fn_IsDerivedFrom(desc, *g_TypeId_CitizenDescription)) {
+        if (fn_IsDerivedFrom(desc, CitizenDescription::TypeId())) {
             citizenDesc = desc;
         }
         CitizenUI_UpdateIconDisplay_Impl(s + 0x108,
@@ -414,7 +397,7 @@ found_happiness:
         firstCitizen = *(uintptr_t*)(*(uintptr_t*)(popList + 0xA0));
         desc = *(void**)(firstCitizen + 0x18);
         citizenDesc = nullptr;
-        if (fn_IsDerivedFrom(desc, *g_TypeId_CitizenDescription)) {
+        if (fn_IsDerivedFrom(desc, CitizenDescription::TypeId())) {
             citizenDesc = desc;
         }
         happySum = happySum / (float)citizenCount;
@@ -650,9 +633,9 @@ static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex)
                 // vtable slot +0x10 (index 2) returns type ID
                 int compTypeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
 
-                if (g_TypeId_StatusIconComponent && (uint32_t)compTypeId == *g_TypeId_StatusIconComponent) {
+                if ((uint32_t)compTypeId == StatusIconComponent::TypeId()) {
                     // Confirm with IsDerivedFrom
-                    if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *g_TypeId_StatusIconComponent)) {
+                    if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, StatusIconComponent::TypeId())) {
                         happinessComp = comp;
                     }
                     break;
