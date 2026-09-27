@@ -102,7 +102,7 @@ void SegInsertBefore(SegNode* at, SegNode* n) {
 
 // ---- component lookup ---------------------------------------------------------
 // ComponentEntity: +0x30 = component IBP array, +0x38 = count. Each component's
-// vtable slot +0x10 is GetTypeId.
+// virtual slot 2 (+0x10) is Type().
 void* FindComponentOn(void* entityIBPSlot, uint32_t typeId) {
     if (!typeId) return nullptr;
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(entityIBPSlot);
@@ -116,9 +116,7 @@ void* FindComponentOn(void* entityIBPSlot, uint32_t typeId) {
         void* slot = reinterpret_cast<void*>(arr + static_cast<int64_t>(i) * 8);
         void* comp = *reinterpret_cast<void**>(slot);
         if (!comp) continue;
-        typedef uint32_t (*GetTypeId_t)(void*);
-        uint32_t id = ((GetTypeId_t)(*reinterpret_cast<uintptr_t*>(
-                          *reinterpret_cast<uintptr_t*>(comp) + 0x10)))(comp);
+        uint32_t id = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (id == typeId) {
             if (fn_IsDerivedFrom && !fn_IsDerivedFrom(comp, typeId)) return nullptr;
             return comp;
@@ -251,16 +249,15 @@ int   g_BridgeLastSegmentCount = 0;
 // ============================================================
 // BridgeTool::CalcPath (vtable +0x68, Slot13) — 0x1400f9cd0
 // ============================================================
-extern "C" uint64_t BridgeTool_CalcPath_Impl(void* selfPtr, int startCell, int endCell) {
-    BridgeTool* self = reinterpret_cast<BridgeTool*>(selfPtr);
-    if (!self || startCell < 0 || endCell < 0) return 0;
+bool BridgeTool::CalcPath(int startCell, int endCell) {
+    if (startCell < 0 || endCell < 0) return 0;
 
-    const int snapped = BridgeTool_SnapEndCell_Impl(self, endCell);
+    const int snapped = BridgeTool_SnapEndCell_Impl(this, endCell);
     int bodyLen = 0;
-    if (!BridgeTool_ValidatePath_Impl(self, startCell, snapped, &bodyLen)) return 0;
+    if (!BridgeTool_ValidatePath_Impl(this, startCell, snapped, &bodyLen)) return 0;
     if (bodyLen <= 0) return 0;
 
-    const uintptr_t desc = reinterpret_cast<uintptr_t>(self->bridgeDesc);
+    const uintptr_t desc = reinterpret_cast<uintptr_t>(bridgeDesc);
     if (!desc) return 0;
     const uint32_t maskBody = *reinterpret_cast<uint32_t*>(desc + 0x20);
     const int      radius   = *reinterpret_cast<int*>(desc + 0x34);
@@ -342,7 +339,7 @@ extern "C" uint64_t BridgeTool_CalcPath_Impl(void* selfPtr, int startCell, int e
     const int stepRow = (bodyRow != maxRow) ? 1 : 0;   // vertical run
 
     // ---- 3. Master entity ----------------------------------------------------------
-    void* master = CloneEntity(self->descriptionPtr);
+    void* master = CloneEntity(descriptionPtr);
     void* masterIBP = nullptr;
     if (fn_InternalBasePtr_Ctor) new (&masterIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(master));   // B.3.3 bridge
@@ -458,7 +455,7 @@ extern "C" uint64_t BridgeTool_CalcPath_Impl(void* selfPtr, int startCell, int e
 
     if (fn_EntityList_RegisterEntity && entityList) {
         const int categoryId = *reinterpret_cast<int*>(
-                                   reinterpret_cast<uintptr_t>(self->descriptionPtr) + 0x20);
+                                   reinterpret_cast<uintptr_t>(descriptionPtr) + 0x20);
         fn_EntityList_RegisterEntity(entityList, &masterIBP, categoryId);
     }
 
@@ -475,4 +472,12 @@ extern "C" uint64_t BridgeTool_CalcPath_Impl(void* selfPtr, int startCell, int e
     fflush(stderr);
 
     return 1;
+}
+
+// By-name door (ENDGAME B.3.8 callers): standalone/reg_player_bridge.cpp registers
+// this name at 0x1400f9cd0. The body is BridgeTool::CalcPath above; the null test is
+// the old entry's (a member cannot test `this`).
+extern "C" uint64_t BridgeTool_CalcPath_Impl(void* selfPtr, int startCell, int endCell) {
+    if (!selfPtr) return 0;
+    return reinterpret_cast<BridgeTool*>(selfPtr)->BridgeTool::CalcPath(startCell, endCell);  // B.3.8 bridge
 }

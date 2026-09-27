@@ -213,7 +213,7 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     // CreateRemovalDescription (0x1401c74a0). The preloaded Dialog/Toolbar.rsc "Remove"
     // button carries that component at item+0x58, so SetEditMode's component-scan matches
     // this node and creates a RemovalTool. RemovalTool extends DragTool, so DragTool_OnKey
-    // drives the drag and calls slot 13 (RemovalTool_CalcPath -> ported RemovalCalc_Slot13)
+    // drives the drag and calls slot 13 (RemovalTool::CalcPath, keystone_a_removalcalcpath.cpp)
     // on drag-release — the whole clearance path. CalcPath cluster is registered
     // (reg_keystone_a_removal.cpp); the 74a0 type-id is wired (reg_economy_typeids.cpp).
     uint32_t tid_CreateRemoval = ::Object::ResolveTypeIdByNameLazy("CreateRemovalDescription");

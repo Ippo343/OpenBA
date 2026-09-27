@@ -195,7 +195,7 @@ extern "C" void UpdateToolUI_e420(void* ctrl, void* costStr) {
         for (int i = 0; i < count; i++) {
             uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(descEntity) + 0x28);
             void* c = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
-            uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(c) + 0x10))(c);
+            uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();  // B.3.8 bridge
             if (t == tid) {
                 void* obj = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
                 comp = (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, tid)) ? obj : nullptr;

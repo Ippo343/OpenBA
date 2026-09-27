@@ -181,8 +181,7 @@ void Sub7080(int64_t container, void* outIBP) {
         uint64_t* slot = reinterpret_cast<uint64_t*>(
             *reinterpret_cast<uintptr_t*>(container + 0x30) + (int64_t)i * 8);
         void* comp = *reinterpret_cast<void**>(slot);
-        uint32_t ct = reinterpret_cast<uint32_t(*)(void*)>(
-            *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        uint32_t ct = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (ct == tid) {
             uint64_t* slot2 = reinterpret_cast<uint64_t*>(
                 *reinterpret_cast<uintptr_t*>(container + 0x30) + (int64_t)i * 8);
@@ -214,8 +213,7 @@ void FindModelComp(int64_t container, void* outIBP) {
         uint64_t* slot = reinterpret_cast<uint64_t*>(
             *reinterpret_cast<uintptr_t*>(container + 0x30) + (int64_t)i * 8);
         void* comp = *reinterpret_cast<void**>(slot);
-        uint32_t ct = reinterpret_cast<uint32_t(*)(void*)>(
-            *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        uint32_t ct = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (ct == tid) {
             void* comp2 = *reinterpret_cast<void**>(slot);
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp2, tid)) found = comp2;
@@ -972,6 +970,6 @@ extern "C" void HighlightRepaint_Impl(void* self)   { Impl_c4a0(reinterpret_cast
 extern "C" void HighlightDeselect_Impl(void* self)  { Impl_cc90(reinterpret_cast<int64_t>(self)); }  // 0x1400fcc90
 
 // Per-frame follow re-sync (NOT an exe address). Called directly from
-// EditTool_Startup_Impl (edittool.cpp) every frame; self-gates on
+// EditTool::Update (edittool.cpp) every frame; self-gates on
 // BANISHED_SELECTION_OUTLINE so it is a no-op unless the outline is enabled.
 extern "C" void HighlightFollow_Impl(void* self)    { Impl_HighlightFollow(reinterpret_cast<int64_t>(self)); }

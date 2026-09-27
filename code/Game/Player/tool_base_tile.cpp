@@ -210,9 +210,7 @@ static void* ToolTile_FindModelComponentScoped(long long entity) {
     for (int k = 0; k < n && arr; ++k) {
         void* c = *reinterpret_cast<void**>(arr + static_cast<long long>(k) * 8);
         if (!c) continue;
-        typedef uint32_t (*getTid_t)(void*);
-        uintptr_t vt = *reinterpret_cast<uintptr_t*>(c);
-        if ((*reinterpret_cast<getTid_t*>(vt + 0x10))(c) == s_tidModel) return c;
+        if (reinterpret_cast<Object::Base*>(c)->Type() == s_tidModel) return c;  // B.3.8 bridge
     }
     return nullptr;
 }
