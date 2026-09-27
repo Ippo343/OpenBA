@@ -151,13 +151,11 @@ bool ConsumeProduce_ResolveFuncs() {
               fn_Entity_GetPosition && fn_Entity_FindComponent_Position &&
               fn_CitizenAI_LongTermPlan && fn_TryAssignWorkplace &&
               fn_Pathfinding_FindPath &&
-              g_pGameWorldSingleton &&
-              g_TypeId_ConsumeProduceComponent &&
-              g_TypeId_StatusIconComponent &&
-              g_TypeId_ConsumeProduceComponent_FC &&
-              g_TypeId_StorageComponent_FC &&
-              g_TypeId_RawMaterialDescription &&
-              g_TypeId_WorkComponent;
+              g_pGameWorldSingleton;
+    // The six *Description/*Component type-ids this file's callers use
+    // (ConsumeProduceComponent/Description, StatusIconComponent, StorageComponent,
+    // RawMaterialDescription, WorkComponent) are read through X::TypeId() at each
+    // call site (D5) -- always resolved, so they dropped out of this gate.
 
 #ifdef _DEBUG
     printf("[ConsumeProduce] ResolveFuncs: TypeSer=%p\n",
