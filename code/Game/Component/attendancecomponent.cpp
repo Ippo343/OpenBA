@@ -62,8 +62,7 @@ static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self
         for (int i = 0; comps && i < n && i < 32; ++i) {
             int64_t c = comps[i];
             if (!c) { fprintf(stderr, " <null>"); continue; }
-            void** vt = *reinterpret_cast<void***>(c);
-            const uint32_t tid = (vt && vt[2]) ? reinterpret_cast<uint32_t(*)(void*)>(vt[2])(reinterpret_cast<void*>(c)) : 0;
+            const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
             const char* nm = ::Object::GetTypeNameById(tid);
             const bool isHost = s_pTId_JobHost && tid == *s_pTId_JobHost;
             fprintf(stderr, " %s(%u%s)", (nm && nm[0]) ? nm : "?", tid,
@@ -99,17 +98,13 @@ static fn_AC_TryEnrolInSchool_t s_fn_AC_TryEnrolInSchool = nullptr;
 // Component_Serialize 0x1401189b0; the queue
 // array grow 0x1400032e0; and DWORD_1401c7158, the CitizenComponent type id the
 // per-entry filter tests against.
-typedef void  (*fn_Component_Serialize_t)(void* self, void* stream);
 // 0x1400032e0 was Collection::Array<void*>::SetSize(n) monomorphised into the
 // exe (ENDGAME B.3.2 step 2) — converted at its call site below.
-static fn_Component_Serialize_t     s_fn_Component_Serialize     = nullptr;
 static uint32_t*                    s_pTId_CitizenComponent      = nullptr;  // 0x1401c7158
 
 static bool s_acHelpersResolved = false;
 static void EnsureAcHelpers() {
     if (s_acHelpersResolved) return;
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
     s_pTId_CitizenComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7158));
     s_pTId_JobHost = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c80e0));
@@ -215,8 +210,7 @@ void AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr) {
         for (int i = 0; i < count; i++) {
             int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
             void* comp = (void*)*slot;
-            typedef uint32_t (*GetTypeId_t)(void*);
-            uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == *s_pTId_JobHost) {
                 void* c = (void*)*slot;
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_pTId_JobHost)) found = c;
@@ -422,7 +416,7 @@ void AttendanceComponent::Persist(void* stream) {
     EnsureAcHelpers();
     const uintptr_t self = reinterpret_cast<uintptr_t>(this);
 
-    if (s_fn_Component_Serialize) s_fn_Component_Serialize(this, stream);
+    Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
     // Empty block — retail opens and closes a Serializer with nothing in it.
     alignas(8) uint8_t empty[24];

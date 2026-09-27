@@ -15,6 +15,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/CemeteryDescription.h"
+#include "Component/CemeteryComponent.h"   // B.3.8 CB1a (TypeId)
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -56,7 +57,7 @@ void CemeteryDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x1400041b0: CemeteryComponent's type id through the hidden return slot.
 Object::Type* CemeteryDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("CemeteryComponent");
+    ret->_type = CemeteryComponent::TypeId();
     return ret;
 }
 

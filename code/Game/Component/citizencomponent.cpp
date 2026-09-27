@@ -16,6 +16,7 @@
 // `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
 // been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Scene.h"
+#include "Component/StorageComponent.h"   // B.3.8 CB1a (TypeId)
 #include "graphics/Mesh.h"
 #include "Component/citizencomponent_funcs.h"
 #include "Component/coll_bridge.h"
@@ -1460,9 +1461,7 @@ static void* FindCompByTypeId(int64_t entity, uint32_t typeId) {
     for (int i = 0; i < count; i++) {
         void** ibp = reinterpret_cast<void**>(arr + (int64_t)i * 8);
         int64_t comp = *reinterpret_cast<int64_t*>(ibp);
-        int64_t vt = *reinterpret_cast<int64_t*>(comp);
-        typedef uint32_t (*getType_t)(void*);
-        uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(reinterpret_cast<void*>(comp));
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (tid == typeId) {
             void** ibp2 = reinterpret_cast<void**>(arr + (int64_t)i * 8);
             void* resolved = *ibp2;
@@ -2002,9 +2001,6 @@ void CitizenComp_helper_1b90(int64_t selfV) {
 // Forward decl (factory_registration.h is only included further down, in the
 // factory section) — the standalone type-name -> CRC registry lookup.
 namespace Object { uint32_t GetTypeIdByName(const char* name); }
-static inline uint32_t StandaloneTypeIdByName(const char* n) {
-    return ::Object::GetTypeIdByName(n);
-}
 // [SCOPED STANDALONE FALLBACK] self-contained StorageComponent find on an entity
 // (+0x30 comp array / +0x38 count). The registered 6270 port (work_base_reimpl.cpp)
 // reads its type-id from raw .rdata 0x1401c7e78 which is UNREGISTERED in standalone,
@@ -2013,7 +2009,7 @@ static inline uint32_t StandaloneTypeIdByName(const char* n) {
 // (EatFromStorage + Entity_impl_ef40).
 static int64_t StandaloneFindStorageComp(void* entity) {
     if (!entity) return 0;
-    uint32_t tidStorage = StandaloneTypeIdByName("StorageComponent");
+    uint32_t tidStorage = StorageComponent::TypeId();
     if (tidStorage == 0) return 0;
     uint8_t* ent = reinterpret_cast<uint8_t*>(entity);
     int cnt = *reinterpret_cast<int32_t*>(ent + 0x38);
@@ -2021,9 +2017,7 @@ static int64_t StandaloneFindStorageComp(void* entity) {
     for (int i = 0; i < cnt && arr; ++i) {
         void* comp = *reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
         if (!comp) continue;
-        uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
-        typedef uint32_t (*getTid_t)(void*);
-        if ((*reinterpret_cast<getTid_t*>(vt + 0x10))(comp) == tidStorage)
+        if (reinterpret_cast<Object::Base*>(comp)->Type() == tidStorage)   // B.3.8 bridge (slot 2)
             return reinterpret_cast<int64_t>(comp);
     }
     return 0;
@@ -2119,9 +2113,7 @@ void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
                        ? *reinterpret_cast<int*>(work + 0x30) : 0;
         for (int i = 0; i < rows; i++) {
             int64_t comp = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(work + 0x28) + (int64_t)i * 8);
-            int64_t vt = *reinterpret_cast<int64_t*>(comp);
-            typedef uint32_t (*getType_t)(void*);
-            uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(reinterpret_cast<void*>(comp));
+            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == matTid) {
                 void* obj = reinterpret_cast<void*>(comp);
                 mat = fn_IsDerivedFrom(obj, matTid) ? obj : nullptr;
@@ -2195,9 +2187,7 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
             void** ibp = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
             int64_t comp = *reinterpret_cast<int64_t*>(ibp);
             if (comp == 0) continue;
-            int64_t vt = *reinterpret_cast<int64_t*>(comp);
-            typedef uint32_t (*getType_t)(void*);
-            uint32_t ctid = (*reinterpret_cast<getType_t*>(vt + 0x10))(reinterpret_cast<void*>(comp));
+            uint32_t ctid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (ctid == tid) {
                 void** ibp2 = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
                 void* resolved = *ibp2;
@@ -2413,9 +2403,7 @@ int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* par
         int64_t arr = *reinterpret_cast<int64_t*>(taskEntity + 0x28);
         for (int i = 0; i < rows; i++) {
             int64_t comp = *reinterpret_cast<int64_t*>(arr + (int64_t)i * 8);
-            int64_t vt = *reinterpret_cast<int64_t*>(comp);
-            typedef uint32_t (*getType_t)(void*);
-            uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(reinterpret_cast<void*>(comp));
+            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == rawMatTid) {
                 void* obj = reinterpret_cast<void*>(comp);
                 return fn_IsDerivedFrom(obj, rawMatTid) ? obj : nullptr;
@@ -2726,8 +2714,7 @@ int64_t* CitizenComp_sub_1930(int64_t param_1, int64_t* param_2, void* param_3, 
         for (int j = 0; j < rows; j++) {
             void** ibp = reinterpret_cast<void**>(arr + (int64_t)j * 8);
             int64_t comp = *reinterpret_cast<int64_t*>(ibp);
-            typedef uint32_t (*getType_t)(void*);
-            uint32_t tid = (*reinterpret_cast<getType_t*>(*reinterpret_cast<int64_t*>(comp) + 0x10))(reinterpret_cast<void*>(comp));
+            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == wpTid) {
                 void** ibp2 = reinterpret_cast<void**>(arr + (int64_t)j * 8);
                 void* o = *ibp2;
@@ -2989,9 +2976,7 @@ static void* CitizenComp_FindSiblingByName(int64_t ownerEntity, const char* type
         void** ibp = reinterpret_cast<void**>(arr + (int64_t)i * 8);
         void* comp = *ibp;
         if (!comp) continue;
-        uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
-        typedef uint32_t (*getType_t)(void*);
-        uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(comp);
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (tid == want)
             return fn_IsDerivedFrom(comp, want) ? comp : nullptr;
     }

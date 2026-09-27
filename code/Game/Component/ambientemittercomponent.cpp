@@ -11,6 +11,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/ambientemittercomponent_funcs.h"
+#include "Component/AmbientEmitterDescription.h"   // B.3.8 CB1a (TypeId)
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
@@ -52,7 +53,7 @@ static uint32_t s_tidEmitterDesc = 0;
 static bool s_tidResolved = false;
 static void EnsureEmitterDescTid() {
     if (s_tidResolved) return;
-    uint32_t t = ::Object::GetTypeIdByName("AmbientEmitterDescription");
+    uint32_t t = AmbientEmitterDescription::TypeId();
     if (t != 0 && t != 0xFFFFFFFFu) { s_tidEmitterDesc = t; s_tidResolved = true; }
 }
 

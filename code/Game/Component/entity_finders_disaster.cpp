@@ -88,8 +88,7 @@ void* FindByTypeId(uintptr_t entity, void* retIBP, uint32_t typeId) {
             void** ibp = reinterpret_cast<void**>(base + static_cast<uintptr_t>(i) * 8);
             void* obj = *ibp;
             if (!obj) continue;
-            const uint32_t t = (*reinterpret_cast<uint32_t (**)(void*)>(
-                *reinterpret_cast<uintptr_t*>(obj) + 0x10))(obj);
+            const uint32_t t = reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.8 bridge (slot 2)
             if (t == typeId) {
                 void* o = *ibp;
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(o, typeId)) found = o;

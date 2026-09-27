@@ -16,6 +16,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/ForesterDescription.h"
+#include "Component/ForesterComponent.h"   // B.3.8 CB1a (TypeId)
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -59,7 +60,7 @@ void ForesterDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140034a00: ForesterComponent's type id through the hidden return slot.
 Object::Type* ForesterDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("ForesterComponent");
+    ret->_type = ForesterComponent::TypeId();
     return ret;
 }
 

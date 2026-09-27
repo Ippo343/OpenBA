@@ -27,8 +27,6 @@
 // Resolved helpers
 // ============================================================
 
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
 // FUN_1400021d0 was Collection::Array<int32>::SetSize monomorphised into the
 // exe (ENDGAME B.3.2 step 2) — converted at its call site below.
@@ -182,8 +180,6 @@ extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue) {
 void CemeteryComponent_InitFuncs() {
     if (s_initialized) return;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
 
     uintptr_t slot;
 
@@ -212,8 +208,8 @@ void CemeteryComponent_InitFuncs() {
     s_initialized = true;
 
 #ifdef _DEBUG
-    printf("[CemeteryComponent] Funcs resolved: CompSerialize=%p Erase=%p FindMap=%p FindMulti=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_ListAdd, (void*)s_fn_FindMapComp,
+    printf("[CemeteryComponent] Funcs resolved: Erase=%p FindMap=%p FindMulti=%p\n",
+           (void*)s_fn_ListAdd, (void*)s_fn_FindMapComp,
            (void*)s_fn_FindMultiComp);
 #endif
 }
@@ -273,11 +269,7 @@ extern "C" char CemeteryComponent_EnterBuilt(void* compV, void* /*sm*/) {
                     void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(j) * 8);
                     void* c = *slot;
                     if (!c) continue;
-                    typedef uint32_t (*GetTypeId_t)(void*);
-                    const uint32_t tid =
-                        (reinterpret_cast<GetTypeId_t>(
-                            *reinterpret_cast<uintptr_t*>(
-                                *reinterpret_cast<uintptr_t*>(c) + 0x10)))(c);
+                    const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
                     if (tid == *s_pTid_Tombstone) { hasTombstone = true; break; }
                 }
             }

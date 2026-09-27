@@ -24,6 +24,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/FireDescription.h"
+#include "Component/FireComponent.h"   // B.3.8 CB1a (TypeId)
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -84,7 +85,7 @@ void FireDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x1400056b0: FireComponent's type id through the hidden return slot.
 Object::Type* FireDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("FireComponent");
+    ret->_type = FireComponent::TypeId();
     return ret;
 }
 

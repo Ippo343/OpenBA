@@ -180,7 +180,7 @@ DEFINE_EXE_TYPE(ClearAreaComponent, "ControllerComponent")
 extern "C" void* ClearAreaComponent_HarnessFind(void* entity, uint32_t* outFlags) {
     if (outFlags) *outFlags = 0;
     if (!entity) return nullptr;
-    uint32_t wantTid = ::Object::GetTypeIdByName("ClearAreaComponent");
+    uint32_t wantTid = ClearAreaComponent::TypeId();
     if (!wantTid) return nullptr;
     uintptr_t e = reinterpret_cast<uintptr_t>(entity);
     e = reinterpret_cast<uintptr_t>(entity);
@@ -191,9 +191,7 @@ extern "C" void* ClearAreaComponent_HarnessFind(void* entity, uint32_t* outFlags
         void* c = comps[i];
         if (!c) continue;
         if (!c) continue;
-        void** vt = *reinterpret_cast<void***>(c);
-        if (!vt || !vt[2]) continue;
-        uint32_t tid = reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c);
+        uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
         if (tid == wantTid) {
             if (outFlags) *outFlags = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(c) + 0x20);
             return c;

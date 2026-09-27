@@ -498,7 +498,7 @@ void GrowthComponent::Startup() {
                 void** slot = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
                 void* c = *slot;
                 if (!c) continue;
-                uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(c) + 0x10))(c);
+                uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
                 if (t == s_tidModel) { new (&res30IBP) ::Object::InternalBasePtr(
                     reinterpret_cast<RtObject::Internal*>(c)); break; }   // B.3.3 bridge
             }

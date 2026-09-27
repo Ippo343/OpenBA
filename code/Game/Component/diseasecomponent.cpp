@@ -175,7 +175,7 @@ static void EnsureInit() {
     s_pSecsPerYear   = R<const float*>(0x14017225c);
     s_pOne           = R<const float*>(0x14017214c);
 
-    s_tidDiseaseComponent = ::Object::GetTypeIdByName("DiseaseComponent");
+    s_tidDiseaseComponent = DiseaseComponent::TypeId();
 }
 
 // An unresolved .rdata constant silently deletes the test it guards
@@ -357,12 +357,7 @@ extern "C" void* DiseaseComp_FindSibling(int64_t entity, void* outIBP) {
         void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
         void* comp = *slot;
         uint32_t id = 0;
-        if (comp) {
-            uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
-            typedef uint32_t (*fn_GetTypeId_t)(void*);
-            fn_GetTypeId_t g = *reinterpret_cast<fn_GetTypeId_t*>(vt + 0x10);
-            if (g) id = g(comp);
-        }
+        if (comp) id = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (id == want) {
             void** ms = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
             if (*ms && fn_IsDerivedFrom && fn_IsDerivedFrom(*ms, want)) found = *ms;

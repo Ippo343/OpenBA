@@ -111,8 +111,7 @@ void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf) {
         for (int i = 0; i < count; i++) {
             int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
             void* comp = (void*)*slot;
-            typedef uint32_t (*GetTypeId_t)(void*);
-            uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == *s_pTId_Workplace) {
                 void* c = (void*)*slot;
                 if (s_fn_IsDerivedFrom_dispatch && s_fn_IsDerivedFrom_dispatch(c, *s_pTId_Workplace))
@@ -252,8 +251,7 @@ void InteractComponent::OnAdded() {
         for (int k = 0; k < hc; k++) {
             int64_t* slot = (int64_t*)(harr + (int64_t)k * 8);
             void* comp = (void*)*slot;
-            typedef uint32_t (*GetTypeId_t)(void*);
-            uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == (s_TypeId_Interact ? *s_TypeId_Interact : 0xffffffff)) {
                 void* c = (void*)*slot;
                 if (s_fn_IsDerivedFrom_dispatch && s_TypeId_Interact &&

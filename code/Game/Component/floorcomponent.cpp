@@ -18,6 +18,9 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/floorcomponent_funcs.h"
+#include "Component/MapComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/FloorDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/ModelComponent.h"   // B.3.8 CB1a (TypeId)
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"          // GetTypeIdByName
@@ -30,17 +33,6 @@
 #include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 
 // BANISHED_FLOOR_TRACE (code/Game/Game/mapquery.cpp) — shared with the consumer side.
-
-// Standalone-safe type-id resolution. Both ids the retail bodies read live in raw
-// .rdata (DAT_1401c7708 FloorDescription, DWORD_1401c79e0 MapComponent); ResolveAddr
-// on a .rdata address returns null unless a reg_*.cpp explicitly maps it, and a
-// registered-but-unfilled slot reads 0 — either way every IsDerivedFrom/GetTypeId
-// compare below would silently fail. Fall back to the standalone type registry.
-static uint32_t FloorTypeIdByName(const char* name, uint32_t* rdataSlot) {
-    if (rdataSlot && *rdataSlot != 0 && *rdataSlot != 0xFFFFFFFFu) return *rdataSlot;
-    uint32_t id = ::Object::GetTypeIdByName(name);
-    return (id == 0xFFFFFFFFu) ? 0 : id;
-}
 
 static void EnsureSubHelpers();
 
@@ -171,7 +163,7 @@ void* FloorComponent_FindResData(void* owner, void* outIBP) {
     EnsureHelpers(); EnsureSubHelpers();
     uintptr_t o = reinterpret_cast<uintptr_t>(owner);
     void* found = nullptr;
-    uint32_t wantTypeId = FloorTypeIdByName("MapComponent", s_pNatResTypeId);
+    uint32_t wantTypeId = MapComponent::TypeId();
     int count = *reinterpret_cast<int*>(o + 0x38);
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(o + 0x30);
     for (int i = 0; i < count; ++i) {
@@ -252,7 +244,7 @@ void FloorComponent_SubF390(void* selfV) {
     if (ent == 0) {
         static uint32_t s_tidModel = 0;
         if (s_tidModel == 0 || s_tidModel == 0xFFFFFFFFu)
-            s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
+            s_tidModel = ModelComponent::TypeId();
         uintptr_t owner = *reinterpret_cast<uintptr_t*>(self + 2);
         if (owner && s_tidModel && s_tidModel != 0xFFFFFFFFu) {
             int n = *reinterpret_cast<int*>(owner + 0x38);
@@ -260,9 +252,7 @@ void FloorComponent_SubF390(void* selfV) {
             for (int k = 0; k < n && arr; ++k) {
                 void* c = *reinterpret_cast<void**>(arr + (uintptr_t)k * 8);
                 if (!c) continue;
-                uintptr_t vt = *reinterpret_cast<uintptr_t*>(c);
-                typedef uint32_t (*getTid_t)(void*);
-                if ((*reinterpret_cast<getTid_t*>(vt + 0x10))(c) == s_tidModel) {
+                if (reinterpret_cast<Object::Base*>(c)->Type() == s_tidModel) {   // B.3.8 bridge (slot 2)
                     ent = reinterpret_cast<uintptr_t>(c);
                     break;
                 }
@@ -279,7 +269,7 @@ void FloorComponent_SubF390(void* selfV) {
         xform[k] = *reinterpret_cast<uint32_t*>(ent + 0x148 + (uintptr_t)k * 4);
 
     void* building = *reinterpret_cast<void**>(self + 3);
-    const uint32_t descTid = FloorTypeIdByName("FloorDescription", s_pFloorBuildingTypeId);
+    const uint32_t descTid = FloorDescription::TypeId();
     void* meshOwner = (descTid && fn_IsDerivedFrom &&
                        fn_IsDerivedFrom(building, descTid)) ? building : nullptr;
     void* mesh = meshOwner ? *reinterpret_cast<void**>((uintptr_t)meshOwner + 0x20) : nullptr;
@@ -413,7 +403,7 @@ void FloorComponent::OnAdded() {
     EnsureHelpers();
     EnsureSubHelpers();
 
-    const uint32_t descTid = FloorTypeIdByName("FloorDescription", s_pFloorBuildingTypeId);
+    const uint32_t descTid = FloorDescription::TypeId();
     if (!s_fn_IsDerivedFrom_d || !descTid) {
         return;
     }

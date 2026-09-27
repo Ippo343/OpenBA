@@ -46,6 +46,12 @@
 
 
 #include "engine_funcs.h"
+#include "Component/StorageLocationDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/StorageLocationComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/StorageComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/RadiusDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/MarketLocationComponent.h"   // B.3.8 CB1a (TypeId)
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -88,19 +94,17 @@ static void EnsureInit() {
     s_fn_sqrtf       = reinterpret_cast<fn_sqrtf_t>(ResolveAddr(Module::Exe, 0x140132010));
     s_fn_findStorage = reinterpret_cast<fn_findStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
 
-    if (s_tid_RadiusDescription == 0)      s_tid_RadiusDescription      = ::Object::GetTypeIdByName("RadiusDescription");
-    if (s_tid_RawMaterialDescription == 0) s_tid_RawMaterialDescription = ::Object::GetTypeIdByName("RawMaterialDescription");
-    if (s_tid_StorageLocationComp == 0)    s_tid_StorageLocationComp    = ::Object::GetTypeIdByName("StorageLocationComponent");
-    if (s_tid_StorageLocationDesc == 0)    s_tid_StorageLocationDesc    = ::Object::GetTypeIdByName("StorageLocationDescription");
-    if (s_tid_MarketLocationComp == 0)     s_tid_MarketLocationComp     = ::Object::GetTypeIdByName("MarketLocationComponent");
+    if (s_tid_RadiusDescription == 0)      s_tid_RadiusDescription      = RadiusDescription::TypeId();
+    if (s_tid_RawMaterialDescription == 0) s_tid_RawMaterialDescription = RawMaterialDescription::TypeId();
+    if (s_tid_StorageLocationComp == 0)    s_tid_StorageLocationComp    = StorageLocationComponent::TypeId();
+    if (s_tid_StorageLocationDesc == 0)    s_tid_StorageLocationDesc    = StorageLocationDescription::TypeId();
+    if (s_tid_MarketLocationComp == 0)     s_tid_MarketLocationComp     = MarketLocationComponent::TypeId();
     s_init = true;
 }
 
 // vtable[+0x10] == Object::Base::GetTypeId(this) — read the runtime type id of a component.
 static inline uint32_t CompTypeId(void* comp) {
-    uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
-    typedef uint32_t (*getType_t)();
-    return (*reinterpret_cast<getType_t*>(vt + 0x10))();
+    return reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
 }
 
 } // namespace
@@ -352,7 +356,7 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                             if (stor == 0) {
                                 static uint32_t s_tidStorageComp = 0;
                                 if (s_tidStorageComp == 0)
-                                    s_tidStorageComp = ::Object::GetTypeIdByName("StorageComponent");
+                                    s_tidStorageComp = StorageComponent::TypeId();
                                 int64_t ownEnt = *reinterpret_cast<int64_t*>(lVarComp + 0x10);
                                 if (ownEnt && s_tidStorageComp) {
                                     int n2 = *reinterpret_cast<int*>(ownEnt + 0x38);

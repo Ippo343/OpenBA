@@ -69,6 +69,8 @@
 // destroycomponent.cpp.
 
 #include "engine_funcs.h"
+#include "Work/ClearStorage.h"   // B.3.8 CB1a (Vtable)
+#include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
 #include "resolve.h"
 #include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (type-id fallback)
@@ -154,7 +156,7 @@ static void EnsureResolved() {
     s_setTransform = reinterpret_cast<fn_SetTransform_t>(ResolveAddr(Module::Exe, 0x140003870));
     s_setOrient = reinterpret_cast<fn_SetOrient_t>(ResolveAddr(Module::Exe, 0x1401253d0));
     s_workCtor25 = reinterpret_cast<fn_Work_Ctor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
-    s_clearStorageVtbl = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x1401611a0));
+    s_clearStorageVtbl = const_cast<void*>(ClearStorage::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
     s_tidDestroyDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7628));
 }
 
@@ -307,7 +309,7 @@ static uint32_t RawMatDescTid() {
     uint32_t t = s_tidRawMatDesc ? *s_tidRawMatDesc : 0;
     if (t == 0 || t == 0xFFFFFFFFu) {
         static uint32_t cached = 0;
-        if (cached == 0) cached = ::Object::GetTypeIdByName("RawMaterialDescription");
+        if (cached == 0) cached = RawMaterialDescription::TypeId();
         t = cached;
     }
     return t;
@@ -323,7 +325,7 @@ static void* FindRawMatDescInTemplate(int64_t tmpl) {
     uintptr_t base = *reinterpret_cast<uintptr_t*>(tmpl + 0x28);
     for (int i = 0; i < n; i++) {
         void* c = *reinterpret_cast<void**>(base + static_cast<uintptr_t>(i) * 8);
-        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(c) + 0x10))(c);
+        uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
         if (t == tid)
             return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? c : nullptr;
     }

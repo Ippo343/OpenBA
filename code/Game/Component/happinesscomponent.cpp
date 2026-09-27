@@ -28,9 +28,6 @@
 // Resolved helpers
 // ============================================================
 
-// Component_Serialize (base class) -- at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
 // 0x140002cc0 DynArray8_EraseByValue -- REMOVES every element equal to *value, shifting
 // the tail down and decrementing the count. It is NOT a push, despite the name this
@@ -80,8 +77,6 @@ static void EnsureHelpers() {
 
     uintptr_t slot;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
 
     s_fn_ArrayEraseByValue = reinterpret_cast<fn_ArrayEraseByValue_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));
@@ -211,8 +206,7 @@ void FishingComponent_NotifyTile(void* selfP, int16_t param2) {
         int64_t arr = *(int64_t*)(host + 0x28);
         for (int i = 0; i < count; i++) {
             void* comp = *(void**)(arr + (int64_t)i * 8);
-            typedef uint32_t (*GetTypeId_t)(void*);
-            uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == *s_fc_pTId_Target) {
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *s_fc_pTId_Target))
                     targetComp = comp;
@@ -320,11 +314,7 @@ extern "C" bool HappinessComponent_IsActive(void* selfV) {
             for (int j = 0; j < n; ++j) {
                 void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(j) * 8);
                 if (!c) continue;
-                typedef uint32_t (*GetTypeId_t)(void*);
-                const uint32_t tid =
-                    (reinterpret_cast<GetTypeId_t>(
-                        *reinterpret_cast<uintptr_t*>(
-                            *reinterpret_cast<uintptr_t*>(c) + 0x10)))(c);
+                const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
                 if (tid == *s_pTid_RawMatDesc) {
                     if (s_fn_IsDerivedFrom && s_fn_IsDerivedFrom(c, *s_pTid_RawMatDesc))
                         rawMatDesc = reinterpret_cast<uintptr_t>(c);

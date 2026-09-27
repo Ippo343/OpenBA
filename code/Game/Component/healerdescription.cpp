@@ -13,6 +13,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/HealerDescription.h"
+#include "Component/HealerComponent.h"   // B.3.8 CB1a (TypeId)
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -44,7 +45,7 @@ void HealerDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x1400065f0: HealerComponent's type id through the hidden return slot.
 Object::Type* HealerDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("HealerComponent");
+    ret->_type = HealerComponent::TypeId();
     return ret;
 }
 

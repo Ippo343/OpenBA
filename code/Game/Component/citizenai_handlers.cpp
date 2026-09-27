@@ -26,6 +26,8 @@
 
 
 #include "engine_funcs.h"
+#include "Action/PlayAnimation.h"   // B.3.8 CB1a (Vtable)
+#include "Action/Action.h"   // B.3.8 CB1a (Vtable)
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -77,8 +79,8 @@ static void EnsureInit() {
     s_fn_moveToCtor  = reinterpret_cast<fn_moveToCtor_t>(ResolveAddr(Module::Exe, 0x1400c9170));
     s_fn_findCell    = reinterpret_cast<fn_findCell_t>(ResolveAddr(Module::Exe, 0x14009ccf0));
     s_fn_terrainPos  = reinterpret_cast<fn_terrainPos_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_vt_Action        = ResolveAddr(Module::Exe, 0x14015faa0);
-    s_vt_PlayAnimation = ResolveAddr(Module::Exe, 0x140158950);
+    s_vt_Action        = reinterpret_cast<uintptr_t>(Action::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
+    s_vt_PlayAnimation = reinterpret_cast<uintptr_t>(PlayAnimation::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
     s_pMsgId_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
     s_pf_172114 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
     s_pf_172180 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172180));

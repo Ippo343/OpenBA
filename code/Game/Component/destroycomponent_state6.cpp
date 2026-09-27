@@ -66,6 +66,9 @@
 // `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
 // been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/GraphicsMesh.h"
+#include "Component/ModelDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/DestroyDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/DecalComponent.h"   // B.3.8 CB1a (TypeId)
 #include "graphics/Mesh.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -119,24 +122,14 @@ static void EnsureResolved() {
     s_tidDecalComp   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7580));
 }
 
-// A .rdata type-id global that never got seeded reads back 0 / 0xFFFFFFFF, and an
-// IsDerivedFrom against it returns false — which silently DELETES the test it
-// guards and hands the caller a null. Fall back to the name registry (the proven
-// pattern from action_base_rawmat.cpp).
-static uint32_t TypeIdCached(uint32_t* slot, const char* name, uint32_t* cache) {
-    uint32_t t = slot ? *slot : 0;
-    if (t != 0 && t != 0xFFFFFFFFu) return t;
-    if (*cache == 0) *cache = ::Object::GetTypeIdByName(name);
-    return *cache;
-}
 static uint32_t TidDestroyDesc() {
-    static uint32_t c = 0; return TypeIdCached(s_tidDestroyDesc, "DestroyDescription", &c);
+    return DestroyDescription::TypeId();
 }
 static uint32_t TidModelDesc() {
-    static uint32_t c = 0; return TypeIdCached(s_tidModelDesc, "ModelDescription", &c);
+    return ModelDescription::TypeId();
 }
 static uint32_t TidDecalComp() {
-    static uint32_t c = 0; return TypeIdCached(s_tidDecalComp, "DecalComponent", &c);
+    return DecalComponent::TypeId();
 }
 
 // Retail's `IsDerivedFrom(p, tid) ? p : nullptr` idiom.
@@ -178,7 +171,7 @@ extern "C" void* Destroy_FindDecalComponent_b630(uintptr_t entity, void* retIBP)
             void** ibp = reinterpret_cast<void**>(base + static_cast<uintptr_t>(i) * 8);
             void* obj = *ibp;
             if (!obj) continue;
-            uint32_t t = (*reinterpret_cast<uint32_t (**)(void*)>(*reinterpret_cast<uintptr_t*>(obj) + 0x10))(obj);
+            uint32_t t = reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.8 bridge (slot 2)
             if (t == typeId) {
                 void* o = *ibp;
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(o, typeId)) found = o;

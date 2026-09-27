@@ -25,6 +25,7 @@
 //   Entity_impl_7fb0 0x140087fb0, CalcDistance 0x140008830, arrayAdd 0x140003110
 
 #include "resolve.h"
+#include "Component/ResidenceComponent.h"   // B.3.8 CB1a (TypeId)
 #include "engine_funcs.h"
 #include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
@@ -65,7 +66,7 @@ void EnsureFns() {
     s_anchor7fb0   = reinterpret_cast<fn_Anchor7fb0_t>(ResolveAddr(Module::Exe, 0x140087fb0));
     s_calcDist8830 = reinterpret_cast<fn_CalcDist8830_t>(ResolveAddr(Module::Exe, 0x140008830));
     s_assignWorkplace = reinterpret_cast<fn_AssignWorkplace_t>(ResolveAddr(Module::Exe, 0x1401163d0));
-    if (s_tidResidence == 0) s_tidResidence = ::Object::GetTypeIdByName("ResidenceComponent");
+    if (s_tidResidence == 0) s_tidResidence = ResidenceComponent::TypeId();
     s_init = true;
 }
 

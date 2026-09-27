@@ -125,9 +125,7 @@ void* FindComponentDerived(void* entity, uint32_t typeId) {
     for (int i = 0; i < count; ++i) {
         void* comp = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
         if (!comp) continue;
-        void** vt = *reinterpret_cast<void***>(comp);
-        typedef uint32_t (*GetTid_t)(void*);
-        uint32_t id = (reinterpret_cast<GetTid_t>(vt[2]))(comp);   // vtable slot +0x10
+        uint32_t id = reinterpret_cast<Object::Base*>(comp)->Type();   // vtable slot +0x10   // B.3.8 bridge (slot 2)
         if (id == typeId) {
             return (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, typeId)) ? comp : nullptr;
         }

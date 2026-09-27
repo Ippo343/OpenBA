@@ -31,6 +31,7 @@
 // component back-pointer to +0x50 (= node + 0x18).
 
 #include "Component/controller_state_table.h"
+#include "Work/LocationWork.h"   // B.3.8 CB1a (Vtable)
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -88,7 +89,7 @@ static void AC_Resolve() {
     s_findMesh     = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140002f90));
     s_meshSetFlag  = reinterpret_cast<fn_MeshSetFlag_t>(ResolveAddr(Module::Exe, 0x14012c3f0));
     s_tidAttendanceDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c3f78));
-    s_locationWorkVtable = ResolveAddr(Module::Exe, 0x1401616a0);
+    s_locationWorkVtable = reinterpret_cast<uintptr_t>(LocationWork::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
     s_resolved = true;
 }
 

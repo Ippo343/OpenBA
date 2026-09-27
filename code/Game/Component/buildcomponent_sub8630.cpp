@@ -28,6 +28,7 @@
 //
 
 #include "engine_funcs.h"
+#include "Component/BuildDescription.h"   // B.3.8 CB1a (TypeId)
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -47,10 +48,7 @@ typedef void* (*BC8630_FindCompStorage_t)(uintptr_t entity, void* retIBP);
 // so the name is verified. Read via GetTypeIdByName (the raw
 // .rdata global resolves to null in the standalone exe).
 static uint32_t BC8630_BuildDescTypeId() {
-    static uint32_t id = 0;
-    if (id != 0 && id != 0xFFFFFFFFu) return id;
-    id = ::Object::GetTypeIdByName("BuildDescription");
-    return id;
+    return BuildDescription::TypeId();   // B.3.8: the lazy cache over it went (B6-5)
 }
 
 extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp) {

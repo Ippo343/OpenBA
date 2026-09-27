@@ -278,10 +278,7 @@ void       ConsumeProduceComponent::Startup() {
         if (!comp) continue;
 
         // Call GetTypeId virtual at vtable+0x10
-        uintptr_t vtable = *(uintptr_t*)comp;
-        typedef uint32_t (*fn_GetTypeId_t)(void*);
-        fn_GetTypeId_t getTypeId = *(fn_GetTypeId_t*)(vtable + 0x10);
-        uint32_t typeId = getTypeId(comp);
+        uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
 
         if (typeId == targetTypeId) {
             // Verify with IsDerivedFrom

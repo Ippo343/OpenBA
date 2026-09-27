@@ -34,6 +34,9 @@
 // listings; do not "improve" the behaviour.
 
 #include "Work/firework_funcs.h"
+#include "Work/FireWork.h"   // B.3.8 CB1a (Vtable)
+#include "Component/FireDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/AmbientEmitterDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/firecomponent_funcs.h"
 #include "Object/factory_registration.h"
 #include "engine/types/FireComponent.h"   // the forwarder: also carries FireDescriptionField
@@ -136,8 +139,8 @@ uint32_t g_tid_FireDescription = 0;   // 0x1401c4218
 uint32_t g_tid_FireComponent   = 0;   // 0x1401c41e0
 
 extern "C" void FillTypeIdGlobals_fire() {
-    g_tid_FireDescription = ::Object::GetTypeIdByName("FireDescription");
-    g_tid_FireComponent   = ::Object::GetTypeIdByName("FireComponent");
+    g_tid_FireDescription = FireDescription::TypeId();
+    g_tid_FireComponent   = FireComponent::TypeId();
 }
 
 // The +0x18 description, validated the way retail validates it.
@@ -242,7 +245,7 @@ extern "C" void FireComp_StartAudioEmitter_42c60(void* ambientComp, int idx) {
     void* obj = *reinterpret_cast<void**>(a + 0x18);
     static uint32_t s_tidEmitterDesc = 0;
     if (s_tidEmitterDesc == 0 || s_tidEmitterDesc == 0xFFFFFFFFu)
-        s_tidEmitterDesc = ::Object::GetTypeIdByName("AmbientEmitterDescription");
+        s_tidEmitterDesc = AmbientEmitterDescription::TypeId();
     void* desc = (obj && ::Object::IsDerivedFromOrTrust(obj, s_tidEmitterDesc)) ? obj : nullptr;
 
     int64_t base = *reinterpret_cast<int64_t*>(a + 0x38);
@@ -294,7 +297,7 @@ extern "C" void* FireWork_CtorFull_e9bd0(void* mem, uint64_t* pEntityIBP, uint32
     s_workCtor25(mem, &local);
     uintptr_t w = reinterpret_cast<uintptr_t>(mem);
     // The Work base ctor installs vtable_Work; retype to FireWork's.
-    uintptr_t vt = ResolveAddr(Module::Exe, 0x1401612a0);
+    uintptr_t vt = reinterpret_cast<uintptr_t>(FireWork::Vtable());   // B.3.8: the compiler vtable (same bytes, B8-5)
     if (vt) *reinterpret_cast<void**>(w) = reinterpret_cast<void*>(vt);
     *reinterpret_cast<uint32_t*>(w + 0x48) = capacity;   // max firefighters
     *reinterpret_cast<uint64_t*>(w + 0x50) = 0;          // assignment BST root
@@ -568,9 +571,7 @@ extern "C" void FireComponent_Spread_130(void* self) {
             int64_t comps = *reinterpret_cast<int64_t*>(occupant + 0x30);
             for (int i = 0; i < n; ++i) {
                 uint64_t* slot = reinterpret_cast<uint64_t*>(comps + static_cast<int64_t>(i) * 8);
-                void** vt = *reinterpret_cast<void***>(*slot);
-                uint32_t tid = reinterpret_cast<uint32_t(*)(void*)>(vt[2])(
-                                   reinterpret_cast<void*>(*slot));
+                uint32_t tid = reinterpret_cast<Object::Base*>(*slot)->Type();   // B.3.8 bridge (slot 2)
                 if (tid == g_tid_FireComponent) {
                     neighbourFire = *slot;
                     break;

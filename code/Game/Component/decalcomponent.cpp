@@ -13,6 +13,8 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/decalcomponent_funcs.h"
+#include "Component/ModelComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/DecalDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -141,7 +143,7 @@ static uint32_t DecalDescTypeId() {
     if (s_TypeId_DecalDesc && *s_TypeId_DecalDesc != 0 && *s_TypeId_DecalDesc != 0xFFFFFFFF)
         return *s_TypeId_DecalDesc;
     static uint32_t cached = 0;
-    if (cached == 0 || cached == 0xFFFFFFFF) cached = ::Object::GetTypeIdByName("DecalDescription");
+    if (cached == 0 || cached == 0xFFFFFFFF) cached = DecalDescription::TypeId();
     if (cached != 0xFFFFFFFF) return cached;
     return 0;
 }
@@ -185,7 +187,7 @@ static void* FindModelComponentOnOwner(void* ownerEnt) {
     }
     static uint32_t s_tidModel = 0;
     if (s_tidModel == 0 || s_tidModel == 0xFFFFFFFF)
-        s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
+        s_tidModel = ModelComponent::TypeId();
     if (!ownerEnt || s_tidModel == 0 || s_tidModel == 0xFFFFFFFF) return nullptr;
     uint8_t* e = reinterpret_cast<uint8_t*>(ownerEnt);
     int count = *reinterpret_cast<int32_t*>(e + 0x38);
@@ -194,9 +196,7 @@ static void* FindModelComponentOnOwner(void* ownerEnt) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
         void* comp = *slot;
         if (!comp) continue;
-        uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
-        typedef uint32_t (*fn_GetTypeId_t)(void*);
-        uint32_t id = (*reinterpret_cast<fn_GetTypeId_t*>(vt + 0x10))(comp);
+        uint32_t id = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (id == s_tidModel) {
             return *slot;
         }
@@ -493,8 +493,7 @@ extern "C" void DecalComponent_MarkOwnerBuilt(void* entity) {
         void** slot = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
         void* comp = *slot;
         if (!comp) continue;
-        typedef uint32_t (*GT_t)(void*);
-        if (((GT_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp) != tid) continue;
+        if (reinterpret_cast<Object::Base*>(comp)->Type() != tid) continue;   // B.3.8 bridge (slot 2)
         DecalComponent_EnterBuiltState(comp);
         return;
     }

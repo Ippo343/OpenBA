@@ -72,6 +72,10 @@
 
 
 #include "engine_funcs.h"
+#include "Component/WorkPlaceComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/StorageComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/CitizenDescription.h"   // B.3.8 CB1a (TypeId)
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -151,10 +155,10 @@ static void EnsureInit() {
     s_8830       = reinterpret_cast<fn_8830_t>(ResolveAddr(Module::Exe, 0x140008830));
     s_a00f0      = reinterpret_cast<fn_a00f0_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
     s_v3ctorScalar = reinterpret_cast<fn_v3ctorScalar_t>(ResolveSlot(0x140151320));
-    if (s_tid_RawMaterialDescription == 0) s_tid_RawMaterialDescription = ::Object::GetTypeIdByName("RawMaterialDescription");
-    if (s_tid_StorageComponent == 0)       s_tid_StorageComponent       = ::Object::GetTypeIdByName("StorageComponent");
-    if (s_tid_WorkPlaceComponent == 0)     s_tid_WorkPlaceComponent     = ::Object::GetTypeIdByName("WorkPlaceComponent");
-    if (s_tid_CitizenDescription == 0)     s_tid_CitizenDescription     = ::Object::GetTypeIdByName("CitizenDescription");
+    if (s_tid_RawMaterialDescription == 0) s_tid_RawMaterialDescription = RawMaterialDescription::TypeId();
+    if (s_tid_StorageComponent == 0)       s_tid_StorageComponent       = StorageComponent::TypeId();
+    if (s_tid_WorkPlaceComponent == 0)     s_tid_WorkPlaceComponent     = WorkPlaceComponent::TypeId();
+    if (s_tid_CitizenDescription == 0)     s_tid_CitizenDescription     = CitizenDescription::TypeId();
     const float* p = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401721fc));
     if (p) s_walkScale = *p;
     s_init = true;
@@ -216,7 +220,7 @@ static void* ScanForType(int64_t node, uint32_t typeId,
         int64_t vt = *reinterpret_cast<int64_t*>(obj);
         if (vt == 0) continue;
         // vtable+0x10 = GetTypeId()
-        uint32_t tid = reinterpret_cast<uint32_t(*)(int64_t)>(*reinterpret_cast<void**>(vt + 0x10))(obj);
+        uint32_t tid = reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.8 bridge (slot 2)
         if (tid == typeId) {
             bool ok = fn_IsDerivedFrom ? fn_IsDerivedFrom(reinterpret_cast<void*>(obj), typeId) : false;
             return ok ? reinterpret_cast<void*>(obj) : nullptr;
@@ -273,8 +277,7 @@ extern "C" void* CitizenAI_Entity_impl_f230(int64_t param_1, void* param_2, uint
         for (int64_t j = 0; j < compArrCount; ++j) {
             int64_t* cslot = reinterpret_cast<int64_t*>(compArr + j * 8);
             int64_t obj = *cslot;
-            int64_t vt = *reinterpret_cast<int64_t*>(obj);
-            uint32_t tid = reinterpret_cast<uint32_t(*)(int64_t)>(*reinterpret_cast<void**>(vt + 0x10))(obj);
+            uint32_t tid = reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.8 bridge (slot 2)
             if (tid == s_tid_WorkPlaceComponent) {
                 bool ok = fn_IsDerivedFrom ? fn_IsDerivedFrom(reinterpret_cast<void*>(obj), s_tid_WorkPlaceComponent) : false;
                 wp = ok ? reinterpret_cast<void*>(obj) : nullptr;

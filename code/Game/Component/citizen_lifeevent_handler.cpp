@@ -110,8 +110,7 @@ static void EnsureResolved() {
 
 // Component vtable slot [2] (offset 0x10) = GetTypeId(this).
 static inline uint32_t CompTypeId(void* comp) {
-    void** vt = *reinterpret_cast<void***>(comp);
-    return reinterpret_cast<uint32_t (*)(void*)>(vt[2])(comp);
+    return reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
 }
 
 // Scan an entity's component array (+0x30 ptr / +0x38 count) for type-id `tid`,

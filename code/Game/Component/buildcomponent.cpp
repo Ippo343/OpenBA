@@ -17,6 +17,8 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/buildcomponent_funcs.h"
+#include "Component/MultiObjectComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/ModelDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/coll_bridge.h"
 #include "Component/ModelComponent.h"
 #include "Component/PickingComponent.h"
@@ -150,20 +152,16 @@ static uint32_t s_tid_ModelComp  = 0;   // DWORD_1401c7a50
 static uint32_t s_tid_Picking    = 0;   // DAT_1401c7c10
 static uint32_t s_tid_MultiObj   = 0;   // DWORD_1401c7ac0
 static bool s_bcDrawResolved = false;
-static uint32_t BC_ResolveTid(uintptr_t rdataGlobal, const char* name) {
-    (void)rdataGlobal;
-    return ::Object::GetTypeIdByName(name);
-}
 static void EnsureDrawHelpers() {
     if (s_bcDrawResolved) return;
     s_fn_BC_FindMulti = reinterpret_cast<fn_BC_FindComp_t>(ResolveAddr(Module::Exe, 0x140003f60));
     s_fn_BC_Find26a30 = reinterpret_cast<fn_BC_FindComp_t>(ResolveAddr(Module::Exe, 0x140026a30));
     s_fn_BC_FindWork  = reinterpret_cast<fn_BC_FindComp_t>(ResolveAddr(Module::Exe, 0x140004740));
     s_fn_BC_Entity8f50 = reinterpret_cast<fn_BC_Entity8f50_t>(ResolveAddr(Module::Exe, 0x140128f50));
-    s_tid_ModelDesc = BC_ResolveTid(0x1401c7a88, "ModelDescription");
-    s_tid_ModelComp = BC_ResolveTid(0x1401c7a50, "ModelComponent");
-    s_tid_Picking   = BC_ResolveTid(0x1401c7c10, "PickingComponent");
-    s_tid_MultiObj  = BC_ResolveTid(0x1401c7ac0, "MultiObjectComponent");
+    s_tid_ModelDesc = ModelDescription::TypeId();
+    s_tid_ModelComp = ModelComponent::TypeId();
+    s_tid_Picking   = PickingComponent::TypeId();
+    s_tid_MultiObj  = MultiObjectComponent::TypeId();
     s_bcDrawResolved = true;
 }
 
@@ -177,8 +175,7 @@ static void* BC_FindComponentByType(int64_t compHost, uint32_t typeId) {
         int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
         void* comp = (void*)*slot;
         if (!comp) continue;
-        typedef uint32_t (*GetTypeId_t)(void*);
-        uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (tid == typeId) {
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, typeId)) return comp;
             return nullptr;
@@ -352,8 +349,7 @@ void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf) {
         for (int i = 0; i < count; i++) {
             int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
             void* comp = (void*)*slot;
-            typedef uint32_t (*GetTypeId_t)(void*);
-            uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
             if (tid == *s_TypeId_PickingComp) {
                 void* c = (void*)*slot;
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_TypeId_PickingComp))

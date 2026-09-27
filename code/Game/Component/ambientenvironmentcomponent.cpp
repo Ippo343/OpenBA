@@ -39,6 +39,9 @@
 //
 
 #include "Component/ambientenvironmentcomponent_funcs.h"
+#include "Component/AmbientEnvironmentDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/AmbientEmitterDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/AmbientEmitterComponent.h"   // B.3.8 CB1a (TypeId)
 #include "perf_experimental.h"
 #include <unordered_map>
 #include "engine_funcs.h"
@@ -67,9 +70,9 @@ bool s_resolved = false;
 
 void EnsureResolved() {
     if (s_resolved) return;
-    s_tidEnvDesc     = ::Object::GetTypeIdByName("AmbientEnvironmentDescription");
-    s_tidEmitterComp = ::Object::GetTypeIdByName("AmbientEmitterComponent");
-    s_tidEmitterDesc = ::Object::GetTypeIdByName("AmbientEmitterDescription");
+    s_tidEnvDesc     = AmbientEnvironmentDescription::TypeId();
+    s_tidEmitterComp = AmbientEmitterComponent::TypeId();
+    s_tidEmitterDesc = AmbientEmitterDescription::TypeId();
     // Only latch as resolved once the factory registry has frozen the ids
     // (they start at the 0xFFFFFFFF sentinel before Factory::Startup).
     if (s_tidEnvDesc != 0 && s_tidEnvDesc != 0xFFFFFFFFu)
@@ -196,9 +199,8 @@ void* FindSiblingEmitter(void* self) {
         void** ibp = &list[i];
         void* comp = *ibp;
         if (!comp) continue;
-        void** vt = *reinterpret_cast<void***>(comp);
         // component->GetTypeId() is vtable slot +0x10.
-        uint32_t tid = reinterpret_cast<uint32_t(*)(void*)>(vt[2])(comp);
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (tid == s_tidEmitterComp)
             return (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, s_tidEmitterComp)) ? comp : nullptr;
     }

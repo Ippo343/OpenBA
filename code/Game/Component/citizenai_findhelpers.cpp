@@ -59,6 +59,13 @@
 
 
 #include "engine_funcs.h"
+#include "Component/StorageLocationDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/StorageLocationComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/StorageComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/ResidenceDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/ResidenceComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/InteractComponent.h"   // B.3.8 CB1a (TypeId)
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -124,20 +131,18 @@ static void EnsureInit() {
     s_fn_d5d0         = reinterpret_cast<fn_d5d0_t>(ResolveAddr(Module::Exe, 0x14012d5d0));
     s_fn_78c0         = reinterpret_cast<fn_78c0_t>(ResolveAddr(Module::Exe, 0x1400178c0));
 
-    if (s_tid_ResidenceDescription == 0) s_tid_ResidenceDescription = ::Object::GetTypeIdByName("ResidenceDescription");
-    if (s_tid_InteractComponent == 0)    s_tid_InteractComponent    = ::Object::GetTypeIdByName("InteractComponent");
-    if (s_tid_RawMaterialDesc == 0)      s_tid_RawMaterialDesc      = ::Object::GetTypeIdByName("RawMaterialDescription");
-    if (s_tid_StorageLocationComp == 0)  s_tid_StorageLocationComp  = ::Object::GetTypeIdByName("StorageLocationComponent");
-    if (s_tid_StorageLocationDesc == 0)  s_tid_StorageLocationDesc  = ::Object::GetTypeIdByName("StorageLocationDescription");
-    if (s_tid_ResidenceComponent == 0)   s_tid_ResidenceComponent   = ::Object::GetTypeIdByName("ResidenceComponent");
+    if (s_tid_ResidenceDescription == 0) s_tid_ResidenceDescription = ResidenceDescription::TypeId();
+    if (s_tid_InteractComponent == 0)    s_tid_InteractComponent    = InteractComponent::TypeId();
+    if (s_tid_RawMaterialDesc == 0)      s_tid_RawMaterialDesc      = RawMaterialDescription::TypeId();
+    if (s_tid_StorageLocationComp == 0)  s_tid_StorageLocationComp  = StorageLocationComponent::TypeId();
+    if (s_tid_StorageLocationDesc == 0)  s_tid_StorageLocationDesc  = StorageLocationDescription::TypeId();
+    if (s_tid_ResidenceComponent == 0)   s_tid_ResidenceComponent   = ResidenceComponent::TypeId();
     s_init = true;
 }
 
 // vtable[+0x10] == Object::Base::GetTypeId(this) — read the runtime type id of a component.
 static inline uint32_t CompTypeId(void* comp) {
-    uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
-    typedef uint32_t (*getType_t)();
-    return (*reinterpret_cast<getType_t*>(vt + 0x10))();
+    return reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
 }
 
 // gameWorld base (g_pGameWorldSingleton is void** → *g_pGameWorldSingleton = the object).
@@ -429,7 +434,7 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
                             if (s == 0) {
                                 static uint32_t s_tidStorageComp = 0;
                                 if (s_tidStorageComp == 0)
-                                    s_tidStorageComp = ::Object::GetTypeIdByName("StorageComponent");
+                                    s_tidStorageComp = StorageComponent::TypeId();
                                 s = reinterpret_cast<int64_t>(
                                     ScanCompList1(*reinterpret_cast<int64_t*>(storC + 0x10),
                                                   s_tidStorageComp));

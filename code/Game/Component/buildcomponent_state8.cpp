@@ -32,6 +32,10 @@
 // `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
 // been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Mesh.h"
+#include "Component/StorageDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/ModelDescription.h"   // B.3.8 CB1a (TypeId)
+#include "Component/MapComponent.h"   // B.3.8 CB1a (TypeId)
+#include "Component/BuildDescription.h"   // B.3.8 CB1a (TypeId)
 #include "engine_funcs.h"
 #include "options.h"
 #include "resolve.h"
@@ -78,12 +82,6 @@ static bool BC8_DemoForce() {
     return s_bc8_force == 1;
 }
 static bool BC8_IsDemo(void* bc) { return g_pConstructionDemoSite && bc == g_pConstructionDemoSite; }
-
-// ---- type ids (runtime registry) ----------------------------
-static uint32_t BC8_TypeId(const char* name, uintptr_t rdataGlobal) {
-    (void)rdataGlobal;
-    return ::Object::GetTypeIdByName(name);
-}
 
 // ---- exe helper pointers ---------------------------------------------------------
 typedef void* (*BC8_Find_t)(uintptr_t entity, void* retIBP);
@@ -138,7 +136,7 @@ static void BC8_StopWorker(uintptr_t bc) {
 // modelDesc of a mesh element (meshElem+0x18, gated to ModelDescription DAT_1401c7a88).
 static void* BC8_MeshModelDesc(uintptr_t meshElem) {
     void* d = *reinterpret_cast<void**>(meshElem + 0x18);
-    uint32_t tid = BC8_TypeId("ModelDescription", 0x1401c7a88);
+    uint32_t tid = ModelDescription::TypeId();
     if (d && tid && fn_IsDerivedFrom && fn_IsDerivedFrom(d, tid)) return d;
     return nullptr;
 }
@@ -204,7 +202,7 @@ static uintptr_t BC8_MeshElem(uintptr_t bc, int i) {
 // matComp (bc+0x18 gated to BuildDescription DWORD_1401c7040) + target labor.
 static void* BC8_MatComp(uintptr_t bc) {
     void* d = *reinterpret_cast<void**>(bc + 0x18);
-    uint32_t tid = BC8_TypeId("BuildDescription", 0x1401c7040);
+    uint32_t tid = BuildDescription::TypeId();
     if (d && tid && fn_IsDerivedFrom && fn_IsDerivedFrom(d, tid)) return d;
     return nullptr;
 }
@@ -580,7 +578,7 @@ static void BuildComponent_State8Finalize(uintptr_t bc) {
     void* desc = nullptr;
     {
         void* d = *reinterpret_cast<void**>(storage + 0x18);
-        uint32_t tid = BC8_TypeId("StorageDescription", 0x1401c7eb0);
+        uint32_t tid = StorageDescription::TypeId();
         if (d && tid && fn_IsDerivedFrom && fn_IsDerivedFrom(d, tid)) desc = d;
     }
     if (!desc) return;
@@ -588,7 +586,7 @@ static void BuildComponent_State8Finalize(uintptr_t bc) {
     if (*reinterpret_cast<char*>((uint8_t*)desc + 0x20) != 0) {
         // sized output: scan storage entity (storage+0x10) for a MapComponent -> footprint.
         uintptr_t ent = *reinterpret_cast<uintptr_t*>(storage + 0x10);
-        uint32_t tidMap = BC8_TypeId("MapComponent", 0x1401c79e0);
+        uint32_t tidMap = MapComponent::TypeId();
         void* mapc = nullptr;
         if (ent && tidMap) {
             int cc = *reinterpret_cast<int32_t*>(ent + 0x38);
@@ -596,8 +594,7 @@ static void BuildComponent_State8Finalize(uintptr_t bc) {
             for (int i = 0; i < cc; ++i) {
                 void* c = *reinterpret_cast<void**>(carr + (int64_t)i * 8);
                 if (!c) continue;
-                typedef uint32_t (*GT_t)(void*);
-                uint32_t t = ((GT_t)(*(uintptr_t*)(*(uintptr_t*)c + 0x10)))(c);
+                uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge (slot 2)
                 if (t == tidMap) { if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidMap)) mapc = c; break; }
             }
         }

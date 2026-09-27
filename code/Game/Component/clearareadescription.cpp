@@ -26,6 +26,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/ClearAreaDescription.h"
+#include "Component/ClearAreaComponent.h"   // B.3.8 CB1a (TypeId)
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -84,7 +85,7 @@ void ClearAreaDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140031050: ClearAreaComponent's type id through the hidden return slot.
 Object::Type* ClearAreaDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("ClearAreaComponent");
+    ret->_type = ClearAreaComponent::TypeId();
     return ret;
 }
 

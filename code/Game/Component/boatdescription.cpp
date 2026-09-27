@@ -13,6 +13,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/BoatDescription.h"
+#include "Component/BoatComponent.h"   // B.3.8 CB1a (TypeId)
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -44,7 +45,7 @@ void BoatDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140003860: BoatComponent's type id through the hidden return slot.
 Object::Type* BoatDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("BoatComponent");
+    ret->_type = BoatComponent::TypeId();
     return ret;
 }
 

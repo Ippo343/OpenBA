@@ -20,6 +20,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/citizenaicomponent_funcs.h"
+#include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CIT (TypeId)
 #include "Component/ResidenceComponent.h" // B.3.8 CB1a (TypeId)
 #include "Component/StorageComponent.h"   // B.3.8 CB1a (TypeId)
@@ -366,11 +367,11 @@ static void EnsureCallees() {
     static uint32_t s_tidResidence_local = 0;
     static uint32_t s_tidRawMaterial_local = 0;
     if (!s_TypeId_ResidenceComponent || *s_TypeId_ResidenceComponent == 0xFFFFFFFF) {
-        if (s_tidResidence_local == 0) s_tidResidence_local = ::Object::GetTypeIdByName("ResidenceComponent");
+        if (s_tidResidence_local == 0) s_tidResidence_local = ResidenceComponent::TypeId();
         s_TypeId_ResidenceComponent = &s_tidResidence_local;
     }
     if (!s_TypeId_RawMaterial || *s_TypeId_RawMaterial == 0xFFFFFFFF) {
-        if (s_tidRawMaterial_local == 0) s_tidRawMaterial_local = ::Object::GetTypeIdByName("RawMaterialDescription");
+        if (s_tidRawMaterial_local == 0) s_tidRawMaterial_local = RawMaterialDescription::TypeId();
         s_TypeId_RawMaterial = &s_tidRawMaterial_local;
     }
     s_fn_FindStorage6270 = reinterpret_cast<fn_FindComponentStorage_t>(
@@ -453,9 +454,7 @@ void* CitizenComp_Entity_FindComponent_Storage(int64_t entity, void* outIBP) {
     for (int i = 0; i < count; i++) {
         void** ibp = reinterpret_cast<void**>(arr + (int64_t)i * 8);
         int64_t comp = *reinterpret_cast<int64_t*>(ibp);
-        int64_t vt = *reinterpret_cast<int64_t*>(comp);
-        typedef uint32_t (*getType_t)(void*);
-        uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(reinterpret_cast<void*>(comp));
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (tid == *s_TypeId_ResidenceComponent) {
             void** ibp2 = reinterpret_cast<void**>(arr + (int64_t)i * 8);
             void* resolved = *ibp2;
@@ -488,9 +487,7 @@ int CitizenComp_StorageComponent_QueryCount(int64_t self) {
             int n = *reinterpret_cast<int*>(inv + 0x30);
             for (int j = 0; j < n; j++) {
                 int64_t* slot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(inv + 0x28) + (int64_t)j * 8);
-                int64_t vt = **reinterpret_cast<int64_t**>(slot);
-                typedef uint32_t (*getType_t)(void*);
-                uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(reinterpret_cast<void*>(*slot));
+                uint32_t tid = reinterpret_cast<Object::Base*>(*slot)->Type();   // B.3.8 bridge (slot 2)
                 if (tid == *s_TypeId_RawMaterial) {
                     void* obj = reinterpret_cast<void*>(*slot);
                     mat = fn_IsDerivedFrom(obj, *s_TypeId_RawMaterial) ? obj : nullptr;
@@ -536,9 +533,7 @@ int CitizenComp_Storage_GetResourceCount(int64_t self) {
             int n = *reinterpret_cast<int*>(inv + 0x30);
             for (int j = 0; j < n; j++) {
                 int64_t* slot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(inv + 0x28) + (int64_t)j * 8);
-                int64_t vt = **reinterpret_cast<int64_t**>(slot);
-                typedef uint32_t (*getType_t)(void*);
-                uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(reinterpret_cast<void*>(*slot));
+                uint32_t tid = reinterpret_cast<Object::Base*>(*slot)->Type();   // B.3.8 bridge (slot 2)
                 if (tid == *s_TypeId_RawMaterial) {
                     void* obj = reinterpret_cast<void*>(*slot);
                     mat = fn_IsDerivedFrom(obj, *s_TypeId_RawMaterial) ? obj : nullptr;
@@ -711,9 +706,7 @@ static void* CitizenAI_FindSiblingCitizen(void* ownerEntity) {
         void** ibp = reinterpret_cast<void**>(arr + (int64_t)i * 8);
         void* comp = *ibp;
         if (!comp) continue;
-        uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
-        typedef uint32_t (*getType_t)(void*);
-        uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(comp);
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge (slot 2)
         if (tid == want) {
             return fn_IsDerivedFrom(comp, want) ? comp : nullptr;
         }

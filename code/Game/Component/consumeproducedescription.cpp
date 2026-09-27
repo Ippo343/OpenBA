@@ -42,6 +42,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/ConsumeProduceDescription.h"
+#include "Component/ConsumeProduceComponent.h"   // B.3.8 CB1a (TypeId)
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -165,7 +166,7 @@ void ConsumeProduceDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x1400323d0: ConsumeProduceComponent's type id through the hidden return slot.
 Object::Type* ConsumeProduceDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("ConsumeProduceComponent");
+    ret->_type = ConsumeProduceComponent::TypeId();
     return ret;
 }
 
