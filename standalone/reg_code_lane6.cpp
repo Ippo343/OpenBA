@@ -45,11 +45,6 @@
 // it — a wider return is ABI-compatible with a void call site.
 extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys);
 
-// The faithful port of the OnRemove body (code/Game/Component/statusiconcomponent.cpp).
-// The one-arg form IS the retail shape; the component's vtable slot 8 takes an extra
-// (ignored) Time* and is a separate thunk in that file.
-void StatusIconComponent_OnRemove_Standalone(StatusIconComponent* self);
-
 // ToolbarDescription is a real class (code/Game/Component/ToolbarDescription.h): its
 // slot 0 is the SCALAR-deleting dtor (flags&1 = MemFree self). Retail 0x14012db70 is
 // the CLEANUP half only and takes ONE argument — calling a two-arg form directly from
@@ -86,16 +81,9 @@ void RegisterCodeLane6Batch() {
     // only by a _DEBUG printf.
     RegisterExeAddr(0x14011b560, reinterpret_cast<uintptr_t>(&DecalComponent_Draw));
 
-    // 0x14012bbd0 — StatusIconComponent::OnRemove (despite the name it is the icon
-    // POSITIONING pass: scene add/remove on the settings visibility byte, then place
-    // the icon over the model bbox / map cell). statusiconcomponent.cpp:250 still
-    // carries a "Delegated to original exe code to avoid incorrect reimplementation"
-    // comment — that comment is STALE: the faithful line-by-line port
-    // (StatusIconComponent_OnRemove_Standalone) landed later in the same file and is
-    // what the live vtable slot 8 calls. The delegating wrapper it describes has zero
-    // callers.
-    RegisterExeAddr(0x14012bbd0,
-                    reinterpret_cast<uintptr_t>(&StatusIconComponent_OnRemove_Standalone));
+    // 0x14012bbd0 — StatusIconComponent slot 8 (the icon POSITIONING pass) is a real
+    // virtual since ENDGAME B.3.8 and statusiconcomponent.cpp no longer reads its own
+    // address back, so its row is gone.
 
     // 0x14012db70 — ToolbarDescription::~ToolbarDescription (the cleanup half: destroy
     // the String array at +0x50 and free it, destroy the four Strings at +0x48/+0x40/

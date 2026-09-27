@@ -71,11 +71,7 @@ extern "C" {
 
     // Factory cascade (notes/FACTORY_CASCADE_145_BRIEF.md) — Action family.
     void RegisterPlayAnimationVtable();
-    void RegisterCreateNaturalResourceVtable();
     void RegisterPerformWorkVtable();
-    void RegisterPickupRawMaterialVtable();
-    void RegisterRemoveNaturalResourceVtable();
-    void RegisterShowToolVtable();
 
     // Factory cascade — Work family (Object::Internal -> Work, 13-slot vtables).
     void RegisterBuildRoadVtable();
@@ -83,7 +79,6 @@ extern "C" {
     void RegisterClearStorageVtable();
     void RegisterFireWorkVtable();
     void RegisterLocationWorkVtable();
-    void RegisterPickupVtable();
     void RegisterPastureWorkVtable();
 
     // Tool family: real classes since ENDGAME B.3.8 (code/Game/Player/*Tool.h);
@@ -1640,14 +1635,10 @@ static void RegisterVtablesAndTypeIds() {
     // the table row is gone). See professionlist.cpp.
     RegisterProfessionListVtable();
 
-    // Action family: real classes (code/Game/Action/<Class>.h). The six rows left
+    // Action family: real classes (code/Game/Action/<Class>.h). The rows left
     // serve tables that callers still stamp by retail address (B38_RULES D5).
     RegisterPlayAnimationVtable();
-    RegisterCreateNaturalResourceVtable();
     RegisterPerformWorkVtable();
-    RegisterPickupRawMaterialVtable();
-    RegisterRemoveNaturalResourceVtable();
-    RegisterShowToolVtable();
 
     // Factory cascade — Work family (Object::Internal -> Work, 13-slot vtables;
     // shared base helpers in code/Game/Work/work_base_standalone.cpp).
@@ -1656,7 +1647,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterClearStorageVtable();
     RegisterFireWorkVtable();
     RegisterLocationWorkVtable();
-    RegisterPickupVtable();
     RegisterPastureWorkVtable();
 
     // Tool family (real classes since ENDGAME B.3.8): only the route-builder door.
