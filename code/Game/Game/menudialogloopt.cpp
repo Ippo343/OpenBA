@@ -17,6 +17,8 @@
 // but is correct for an MVP scene background.
 
 #include "Game/menudialogloopt_funcs.h"
+#include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Configuration::_singleton
+#include "engine/MainLoop.h"   // ENDGAME B.3.9 SS2: Engine::MainLoop::_singleton
 // ENDGAME B.3.5 Video/Graphics caller batch: Graphics::{Camera,Scene,Geometry,
 // MeshInstance,GraphicsMesh,SunLight,ParticleSystemInstance} and Video::Context
 // are real classes. These go AHEAD of "resolve.h" — resolve.h pulls
@@ -151,10 +153,10 @@ static void MenuScene_Helper_8660(void* transformObj, float fovY_deg, float near
     // B.3.5: the `!fn_Graphics_Camera_SetFrustum` readiness term went with the
     // door; the Frustum ctor door and the two singleton object tests stay.
     if (!fn_Volume_Frustum_Ctor ||
-        !g_pVideoConfigSingleton || !*g_pVideoConfigSingleton) {
+        !::Video::Configuration::_singleton) {
         return;
     }
-    void* videoConfig = *g_pVideoConfigSingleton;
+    void* videoConfig = ::Video::Configuration::_singleton;
     int width  = Field<int>(videoConfig, 0x4);
     int height = Field<int>(videoConfig, 0x8);
     // VideoConfig is filled lazily by the runtime in standalone Phase A; until
@@ -647,12 +649,12 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     }
 
     // Required factory
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton || !fn_IsDerivedFrom) {
+    if (!::Object::ExternalFactory::_singleton || !fn_IsDerivedFrom) {
         printf("[MenuDLT::LoadScene] missing factory/filename helpers — bailing out\n");
         return false;
     }
 
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     // The singleton is still read through the EXISTING door, so the guard
     // above still gates the same cell and the same registered body still runs.
@@ -941,9 +943,9 @@ void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context) {
 
     // Mirror the small write the original does into Renderer+0x3C from
     // VideoConfig+0x30. This is a per-frame copy of some video setting.
-    if (g_pVideoConfigSingleton && *g_pVideoConfigSingleton) {
+    if (::Video::Configuration::_singleton) {
         Field<uint32_t>(renderer, 0x3C) =
-            Field<uint32_t>(*g_pVideoConfigSingleton, 0x30);
+            Field<uint32_t>(::Video::Configuration::_singleton, 0x30);
     }
 
     // Camera lives inside the Transform at +0x34.
@@ -1074,7 +1076,7 @@ void MenuDialogLoopT_UpdateCamera_PhaseA(void* self, float deltaSeconds) {
 // helper both confirm +0x6d0. (+0x6e0 is the Input::Device offset.)
 void MenuDialogLoopT_TickAudio(void* time) {
     if (!time) return;
-    if (!g_pMainLoopSingleton || !*g_pMainLoopSingleton) {
+    if (!::Engine::MainLoop::_singleton) {
         static bool warned = false;
         if (!warned) {
             warned = true;
@@ -1082,7 +1084,7 @@ void MenuDialogLoopT_TickAudio(void* time) {
         }
         return;
     }
-    void* mainLoop = *g_pMainLoopSingleton;
+    void* mainLoop = ::Engine::MainLoop::_singleton;
     void* engine   = *reinterpret_cast<void**>(
         reinterpret_cast<uintptr_t>(mainLoop) + 0x78);  // MainLoop::m_engine
     if (!engine) {
@@ -1131,12 +1133,12 @@ void MenuDialogLoopT_TickAudio(void* time) {
 // StartMusic (the original splits Load from the Startup-time PlayEffect).
 bool MenuDialogLoopT_LoadMusic(void* self) {
     if (!self) return false;
-    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+    if (!::Object::ExternalFactory::_singleton) {
         printf("[MenuDLT::LoadMusic] missing factory/filename helpers — skipping\n");
         return false;
     }
 
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     System::Filename fnBuf("Audio/Music/Menu.rsc");  // System::Filename
     void* music = const_cast<::Object::External*>(

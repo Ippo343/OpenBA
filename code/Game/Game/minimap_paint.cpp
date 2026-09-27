@@ -55,6 +55,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Configuration::_singleton
 
 // Shared with minimap_upload.cpp — creates the display GPU buffers at minimap
 // +0x08/+0x10 (ports FUN_1400a4e80) and uploads +0x18/+0x28 into them.
@@ -122,17 +123,16 @@ bool ResolveFuncs() {
            fn_MemAlloc && g_pMemAllocSingleton && fn_MemFreeStatic &&
            // B.3.5: the CopyFromTexture readiness term went with its door.
            fn_Graphics_Camera_Ctor &&
-           fn_Graphics_Renderer_Ctor && fn_Graphics_Scene_Ctor &&
-           // B.3.5 batch K1: the Renderer::Draw readiness term went with its door.
-           g_pVideoConfigSingleton;
+           fn_Graphics_Renderer_Ctor && fn_Graphics_Scene_Ctor;
+           // B.3.5 batch K1: the Renderer::Draw readiness term went with its door;
+           // ENDGAME B.3.9 SS2: the Video::Configuration door term with its door.
 
     if (!s_ok) {
         printf("[MinimapPaint] primitives unresolved — terrain paint disabled\n"
-               "  RB(ctor=%p dtor=%p) Frustum=%p Rdtor=%p Sdtor=%p vcfg=%p\n",
+               "  RB(ctor=%p dtor=%p) Frustum=%p Rdtor=%p Sdtor=%p\n",
                (void*)s_RenderBuffer_Ctor, (void*)s_RenderBuffer_Dtor,
                (void*)s_Frustum_Ortho_Ctor,
-               (void*)s_Renderer_Dtor, (void*)s_Scene_Dtor,
-               (void*)g_pVideoConfigSingleton);
+               (void*)s_Renderer_Dtor, (void*)s_Scene_Dtor);
         fflush(stdout);
     }
     return s_ok;
@@ -277,7 +277,7 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
     *reinterpret_cast<int32_t*>(renderer + 0x3c) = 0;   // renderer shadow flag off
 
     // Temporarily clear VideoConfig+0x34 (disables a render feature during capture).
-    uint8_t* videoConfig = *reinterpret_cast<uint8_t**>(g_pVideoConfigSingleton);
+    uint8_t* videoConfig = reinterpret_cast<uint8_t*>(::Video::Configuration::_singleton);
     int32_t savedCfg = 0;
     if (videoConfig) {
         savedCfg = *reinterpret_cast<int32_t*>(videoConfig + 0x34);

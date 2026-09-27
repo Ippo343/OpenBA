@@ -42,7 +42,7 @@ void ExternalPtrSerializeGeneric(void** refField, void* serializer,
     if (!refField || !serializer) return;
 
     if (!fn_IsDerivedFrom ||
-        !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+        !::Object::ExternalFactory::_singleton) {
         static bool s_warned = false;
         if (!s_warned) {
             printf("[ExternalPtr::Serialize<%s>] runtime primitives unwired — "
@@ -54,7 +54,7 @@ void ExternalPtrSerializeGeneric(void** refField, void* serializer,
         return;
     }
 
-    void* factory = *g_pExternalFactorySingleton;
+    void* factory = ::Object::ExternalFactory::_singleton;
     // ENDGAME B.3.3 step 6A: the resolved-pointer calls below are now member
     // calls on the real `Object::ExternalFactory` / `Object::External`. The
     // singleton is still read through the EXISTING `g_pExternalFactorySingleton`
