@@ -140,8 +140,8 @@ using PtrThisFn  = void* (*)(void*);
 // data symbols — checked by VA with pefile), so a minted/promoted row is used
 // where one exists and the DLL's own table otherwise.
 // ---------------------------------------------------------------------------
-void* VtParticleInstance()        { return RT_DATA_SLOT(void*, "??_7ParticleInstance@Graphics@@6B@"); }
-void* VtParticleSystemInstance()  { return RT_DATA_SLOT(void*, "??_7ParticleSystemInstance@Graphics@@6B@"); }
+// (ENDGAME B.3.9 GFX: `VtParticleInstance` / `VtParticleSystemInstance` are
+// gone with the ??1ParticleSystemInstance door that restamped them.)
 void* VtEdgeMesh()                { return RT_DATA_SLOT(void*, "??_7EdgeMesh@Graphics@@6B@"); }
 
 // ---------------------------------------------------------------------------
@@ -151,20 +151,13 @@ void* VtEdgeMesh()                { return RT_DATA_SLOT(void*, "??_7EdgeMesh@Gra
 // at the ResolveAddr call so tools/addr_door_audit.py can see the door.
 // ---------------------------------------------------------------------------
 
-// `??1Geometry@Graphics@@UEAA@XZ` 0x1800a41c0 — PORTED (scene.cpp).
-void GeometryDtor(void* p) { RT_EXPORT_ONCE(VoidThisFn, "??1Geometry@Graphics@@UEAA@XZ")(p); }
+// (ENDGAME B.3.9 GFX: `GeometryDtor`, the ??1Geometry door call of the retired
+// ??1ParticleSystemInstance door, is gone; the real dtor chains ~Geometry.)
 
 // `??1External@Object@@UEAA@XZ` 0x1800bc950 — PORTED AND REGISTERED BY BOTH
 // DOORS (external.cpp:753/778). ~EdgeMesh tail-jumps it.
 void ExternalDtor(void* p) { RT_EXPORT_ONCE(VoidThisFn, "??1External@Object@@UEAA@XZ")(p); }
 
-// `?RemoveState@ParticleInstance@Graphics@@IEAAXXZ` 0x1801040b0 — PORTED
-// (wave28_lane_partsys.cpp). IEAA is PROTECTED, and this DLL exports its
-// protected members (reference_aeaa_is_private_not_unexported.md).
-// ENDGAME B.3.5 caller batch: a DEFINED member (wave28_lane_partsys.cpp:1051).
-void ParticleInstanceRemoveState(void* p) {
-    reinterpret_cast<Graphics::ParticleInstance*>(p)->RemoveState();   // B.3.5 bridge
-}
 
 // Video::{Index,Vertex}Buffer::PlatformDestruct — 0x1800f3760 / 0x1800f58c0,
 // both PORTED (video/buffers.cpp) and registered by name and address.
@@ -313,14 +306,15 @@ extern "C" void RtGraphics_MaterialInstance_GenerateTextures(const void* selfv,
 // anything attached a resource faults in retail. Reproduced, not guarded
 // (CLAUDE.md: a guard skips the behaviour rather than restoring it).
 // ############################################################################
-extern "C" void RtGraphics_ParticleSystemInstance_Dtor(void* selfv) {
-    uint8_t* const self = static_cast<uint8_t*>(selfv);
-
-    *reinterpret_cast<void**>(self) = VtParticleSystemInstance();
-
-    const uint8_t* const resource = *reinterpret_cast<const uint8_t* const*>(self + 0xc0);
-    if (resource[0x20] == 0) {
-        void* const owned = *reinterpret_cast<void**>(self + 0xd8);
+//
+// ENDGAME B.3.9 block GFX: the door is RETIRED with the RT_DELDTOR row
+// 0x180020ce0 it served; its body is the real protected
+// `~ParticleSystemInstance()` below. The two restamps, RemoveState
+// (~ParticleInstance) and the ~Geometry tail are the compiler's chain.
+Graphics::ParticleSystemInstance::~ParticleSystemInstance() {
+    const uint8_t* const resource = reinterpret_cast<const uint8_t*>(_resource);
+    if (resource[0x20] == 0) {                          // UNGUARDED, as retail
+        void* const owned = _f_d8;
         if (owned != nullptr) {
             // 0x180021490: ~Array<T> for a trivially destructible T — frees
             // [0] and zeroes [0]/[8]. 0x180020600: the matching class
@@ -330,11 +324,6 @@ extern "C" void RtGraphics_ParticleSystemInstance_Dtor(void* selfv) {
             RtAddr<VoidThisFn>(0x180020600ull)(owned);
         }
     }
-
-    *reinterpret_cast<void**>(self) = VtParticleInstance();
-    ParticleInstanceRemoveState(self);
-    GeometryDtor(self);                                 // JMP 0x1800a41c0
-
 }
 
 // ############################################################################
@@ -1074,9 +1063,7 @@ extern "C" int RtGraphicsBatchCLeavesRegister() {
                           (void*)&RtGraphics_MaterialInstance_GenerateTextures); ++n;
     RegisterRuntimeAddr(0x180102eb0ull, (void*)&RtGraphics_MaterialInstance_GenerateTextures);
 
-    RegisterRuntimeExport("??1ParticleSystemInstance@Graphics@@UEAA@XZ",
-                          (void*)&RtGraphics_ParticleSystemInstance_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800a5520ull, (void*)&RtGraphics_ParticleSystemInstance_Dtor);
+    // (ENDGAME B.3.9 GFX: the ??1ParticleSystemInstance door is retired.)
 
 
 

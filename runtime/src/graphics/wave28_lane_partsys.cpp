@@ -138,6 +138,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../funcs/rt_libm.h"
@@ -581,14 +582,22 @@ Vec3f QuatRotate(float qx, float qy, float qz, float qw, const Vec3f& v) {
 // ============================================================================
 // ENDGAME B.3.5 block E: BODY MOVED onto
 // `Graphics::ParticleSystemInstance::Update` (slot 1 — the class that finally
-// FILLS Geometry's pure slot 1). The door keeps its name and its registration.
-extern "C" void RtGraphics_ParticleSystemInstance_Update(void* selfv, const void* timev) {
-    reinterpret_cast<::Graphics::ParticleSystemInstance*>(selfv)
-        ->::Graphics::ParticleSystemInstance::Update(
-              *reinterpret_cast<const System::Time*>(timev));
-}
+// FILLS Geometry's pure slot 1). ENDGAME B.3.9 GFX: the name door is retired
+// with the minted table, its only reader.
 
 namespace Graphics {
+
+// [8] ?CreateSystem@ParticleSystem@Graphics@@UEBAPEAVParticleInstance@2@XZ
+//     retail 0x1800a5140: MemAlloc(0xe0, 8), the null branch, then the
+//     ParticleSystemInstance ctor 0x1800a55a0. `this` is never read. ENDGAME
+//     B.3.9 GFX: moved here from vtbatch7_animgroup_particlesystem.cpp, whose
+//     `<windows.h>` cannot see ParticleInstance.h, so the ctor is the real
+//     class's instead of the by-address ??0 door.
+ParticleInstance* ParticleSystem::CreateSystem() const {
+    void* inst = Object::detail::InternalMemAlloc(0xe0, 8);
+    if (inst == nullptr) return nullptr;                   // 1800a519c -> XOR EAX,EAX
+    return ::new (inst) ParticleSystemInstance();          // 1800a51a1
+}
 
 void ParticleSystemInstance::Update(const System::Time& timeRef) {
     ++g_psiUpdate;
@@ -1219,8 +1228,6 @@ void SunLight::AddDrawItems(const Scene& sceneRef, Renderer& rendererRef) const 
 // ============================================================================
 extern "C" int RtGraphicsWave28PartsysRegister() {
     int count = 0;
-    RegisterRuntimeExport("?Update@ParticleSystemInstance@Graphics@@UEAAXAEBVTime@System@@@Z",
-                          (void*)&RtGraphics_ParticleSystemInstance_Update); ++count;
     RegisterRuntimeExport("?RemoveState@ParticleInstance@Graphics@@IEAAXXZ",
                           (void*)&RtGraphics_ParticleInstance_RemoveState); ++count;
     RegisterRuntimeExport("?Update@SunLight@Graphics@@UEAAXAEBVTime@System@@@Z",

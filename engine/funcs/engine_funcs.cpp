@@ -450,7 +450,6 @@ fn_DrawGeometry_Init_t fn_DrawGeometry_Init = nullptr;
 fn_AudioObjectGroup_Ctor_t fn_AudioObjectGroup_Ctor = nullptr;
 fn_AudioScene_RegisterObject_t fn_AudioScene_RegisterObject = nullptr;
 fn_Entity_FindAudioComponent_t fn_Entity_FindAudioComponent = nullptr;
-fn_Graphics_ParticleSystemInstance_Ctor_t fn_Graphics_ParticleSystemInstance_Ctor = nullptr;
 
 // --- MenuScene 3D rendering (Phase A) ---
 fn_Graphics_Renderer_Ctor_t      fn_Graphics_Renderer_Ctor      = nullptr;
@@ -1731,12 +1730,6 @@ bool EngineFuncsInit() {
     // `fn_Graphics_ParticleInstance_IncrementInstanceIndex` are GONE — zero callers
     // tree-wide — and the dump below lost their five lines with them. The two ctor
     // doors keep their rows.
-    fn_Graphics_ParticleSystemInstance_Ctor = reinterpret_cast<fn_Graphics_ParticleSystemInstance_Ctor_t>(
-        ResolveExport("??0ParticleSystemInstance@Graphics@@QEAA@XZ"));
-    printf("[EngineFuncs] MenuDLT static-mesh + particle helpers:\n"
-           "  ParticleSystemInstance::Ctor  = %p\n",
-           (void*)fn_Graphics_ParticleSystemInstance_Ctor);
-    fflush(stdout);
 
     // --- MenuScene 3D rendering (Phase A) ---
     fn_Graphics_Renderer_Ctor = reinterpret_cast<fn_Graphics_Renderer_Ctor_t>(

@@ -531,11 +531,8 @@ Object::Base* Particle::CreateInPlaceObject(void* place) { (void)place; return n
 // returned again. THIS is the slot the 2026-09-13 perf-only crash came through
 // (`1a4200c3`), and Geometry.h records why a C++ by-value return would be the
 // WRONG fix on a vtable slot under GCC.
-extern "C" Matrix* RtGraphics_ParticleInstance_GetInstanceTransform(
-        void* selfv, Matrix* out, int32_t index, float alpha) {
-    return reinterpret_cast<const ::Graphics::ParticleInstance*>(selfv)
-               ->::Graphics::ParticleInstance::GetInstanceTransform(out, index, alpha);
-}
+// ENDGAME B.3.9 block GFX: the slot door that stood here is RETIRED -- its only
+// reader was the minted ParticleInstance / ParticleSystemInstance table.
 
 namespace Graphics {
 
@@ -639,13 +636,8 @@ Math::Matrix* ParticleInstance::GetInstanceTransform(Math::Matrix* out, int inde
 // name, its address and its registration and delegates with a QUALIFIED
 // non-virtual call (the qualification stops it re-entering itself through the
 // minted table, B34_BRIEFS section A.1).
-extern "C" void RtGraphics_ParticleInstance_AddDrawItems(
-        void* selfv, const void* scene, void* rendererv) {
-    reinterpret_cast<const ::Graphics::ParticleInstance*>(selfv)
-        ->::Graphics::ParticleInstance::AddDrawItems(
-              *reinterpret_cast<const ::Graphics::Scene*>(scene),
-              *reinterpret_cast<::Graphics::Renderer*>(rendererv));
-}
+// ENDGAME B.3.9 block GFX: the slot door that stood here is RETIRED -- its only
+// reader was the minted ParticleInstance / ParticleSystemInstance table.
 
 namespace Graphics {
 
@@ -747,11 +739,8 @@ extern "C" void* RtGraphics_ParticlePool_OperatorNew();
 // name, its address and its registration and delegates with a QUALIFIED
 // non-virtual call (the qualification stops it re-entering itself through the
 // minted table, B34_BRIEFS section A.1).
-extern "C" void RtGraphics_ParticleInstance_SetParticle(void* selfv, void* particlev) {
-    RtGraphics::ExternalPtr h; h.p = particlev;
-    reinterpret_cast<::Graphics::ParticleInstance*>(selfv)
-        ->::Graphics::ParticleInstance::SetParticle(h);
-}
+// ENDGAME B.3.9 block GFX: the slot door that stood here is RETIRED -- its only
+// reader was the minted ParticleInstance / ParticleSystemInstance table.
 
 namespace Graphics {
 
@@ -880,11 +869,8 @@ void ParticleInstance::SetParticle(ExternalPtrHandle particle) {
 // name, its address and its registration and delegates with a QUALIFIED
 // non-virtual call (the qualification stops it re-entering itself through the
 // minted table, B34_BRIEFS section A.1).
-extern "C" void RtGraphics_ParticleSystemInstance_SetParticle(void* selfv, void* particlev) {
-    RtGraphics::ExternalPtr h; h.p = particlev;
-    reinterpret_cast<::Graphics::ParticleSystemInstance*>(selfv)
-        ->::Graphics::ParticleSystemInstance::SetParticle(h);
-}
+// ENDGAME B.3.9 block GFX: the slot door that stood here is RETIRED -- its only
+// reader was the minted ParticleInstance / ParticleSystemInstance table.
 
 namespace Graphics {
 
@@ -1054,16 +1040,8 @@ const float kCornerOffset[8] = { -1.0f, 1.0f, 1.0f, 1.0f, 1.0f, -1.0f, -1.0f, -1
 // name, its address and its registration and delegates with a QUALIFIED
 // non-virtual call (the qualification stops it re-entering itself through the
 // minted table, B34_BRIEFS section A.1).
-extern "C" void RtGraphics_ParticleInstance_Draw(
-        void* selfv, void* contextv, const void* camera,
-        void* material, float alpha, int32_t a5, int32_t a6, int32_t instances) {
-    RtGraphics::ExternalPtr mat; mat.p = material;
-    reinterpret_cast<const ::Graphics::ParticleInstance*>(selfv)
-        ->::Graphics::ParticleInstance::Draw(
-              *reinterpret_cast<Video::Context*>(contextv),
-              *reinterpret_cast<const ::Graphics::Camera*>(camera),
-              mat, alpha, a5, a6, instances);
-}
+// ENDGAME B.3.9 block GFX: the slot door that stood here is RETIRED -- its only
+// reader was the minted ParticleInstance / ParticleSystemInstance table.
 
 namespace Graphics {
 
@@ -1360,24 +1338,9 @@ int RtGraphicsWave27GfxpartRegister() {
     RegisterRuntimeExport("?CreateInPlaceObject@Particle@Graphics@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&::Graphics::Particle::CreateInPlaceObject); ++count;
     RegisterRuntimeAddr(0x18001ff50ull, (void*)&::Graphics::Particle::CreateInPlaceObject);
-    RegisterRuntimeExport(
-        "?Draw@ParticleInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@"
-        "V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z",
-        (void*)&RtGraphics_ParticleInstance_Draw); ++count;
-    RegisterRuntimeExport(
-        "?AddDrawItems@ParticleInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z",
-        (void*)&RtGraphics_ParticleInstance_AddDrawItems); ++count;
-    RegisterRuntimeExport(
-        "?GetInstanceTransform@ParticleInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z",
-        (void*)&RtGraphics_ParticleInstance_GetInstanceTransform); ++count;
-    RegisterRuntimeExport(
-        "?SetParticle@ParticleInstance@Graphics@@UEAAXV?$ExternalPtr@VParticle@Graphics@@"
-        "@Object@@@Z",
-        (void*)&RtGraphics_ParticleInstance_SetParticle); ++count;
-    RegisterRuntimeExport(
-        "?SetParticle@ParticleSystemInstance@Graphics@@UEAAXV?$ExternalPtr@VParticle@"
-        "Graphics@@@Object@@@Z",
-        (void*)&RtGraphics_ParticleSystemInstance_SetParticle); ++count;
+    // (ENDGAME B.3.9 GFX: the four ParticleInstance slot doors and the
+    // ParticleSystemInstance SetParticle door are retired with the two minted
+    // tables, their only reader.)
 
     // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) -------------
     // Unexported in both builds, so RegisterRuntimeAddr only (these do not
@@ -1386,7 +1349,7 @@ int RtGraphicsWave27GfxpartRegister() {
     RegisterRuntimeAddr(0x180061a80, (void*)&RtGraphics_ParticlePool_OperatorNew);
     RegisterRuntimeAddr(0x180103bf0, (void*)&RtGraphics_ParticlePoolRecord_Ctor);
 
-    return count;   // 7 exports + 3 batch-D1 addresses (batch-D2 not counted)
+    return count;   // 2 exports + 3 batch-D1 addresses (batch-D2 not counted)
 }
 
 // The attendance line names THIS lane, so a run log carries a line only this

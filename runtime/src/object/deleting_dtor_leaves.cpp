@@ -124,21 +124,12 @@ extern "C" void RtIo_Stream_Dtor(void* self) {
         RT_EXPORT_ONCE(DtorFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(enc);
 }
 
-// ??1ParticleInstance@Graphics@@UEAA@XZ   0x1801041f0
-extern "C" void RtGraphics_ParticleInstance_Dtor(void* self) {
-    STAMP(self, "??_7ParticleInstance@Graphics@@6B@");
-    reinterpret_cast<Graphics::ParticleInstance*>(self)->RemoveState();  // B.3.5 bridge
-    RT_EXPORT_ONCE(DtorFn, "??1Geometry@Graphics@@UEAA@XZ")(self);
-}
-
 int RtObjectDeletingDtorLeavesRegister() {
     RegisterRuntimeExport("??1Base@Object@@UEAA@XZ",                      (void*)&RtObject_Base_Dtor);
     RegisterRuntimeAddr  (0x1800c0360ull,                                  (void*)&RtObject_Base_Dtor);
     RegisterRuntimeExport("??1Stream@IO@@UEAA@XZ",                        (void*)&RtIo_Stream_Dtor);
     RegisterRuntimeAddr  (0x1800b9a40ull,                                  (void*)&RtIo_Stream_Dtor);
-    RegisterRuntimeExport("??1ParticleInstance@Graphics@@UEAA@XZ",        (void*)&RtGraphics_ParticleInstance_Dtor);
-    RegisterRuntimeAddr  (0x1801041f0ull,                                  (void*)&RtGraphics_ParticleInstance_Dtor);
     RegisterRuntimeExport("??1ToolTipDialog@UI@@UEAA@XZ",        (void*)&RtUi_ToolTipDialog_Dtor);
     RegisterRuntimeAddr  (0x1800dac70ull,                          (void*)&RtUi_ToolTipDialog_Dtor);
-    return 4;
+    return 3;
 }

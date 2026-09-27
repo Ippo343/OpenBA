@@ -160,30 +160,15 @@ namespace {
 // ============================================================================
 const char* const kAnimMgrCtor     = "??0AnimationManager@Graphics@@QEAA@XZ";
 const char* const kAnimMgrDtor     = "??1AnimationManager@Graphics@@QEAA@XZ";
-const char* const kPIctor          = "??0ParticleInstance@Graphics@@QEAA@XZ";
 const char* const kPIupdate        = "?Update@ParticleInstance@Graphics@@QEAA_NXZ";
 const char* const kPIincrement     = "?IncrementInstanceIndex@ParticleInstance@Graphics@@SAXXZ";
-const char* const kPSIctor         = "??0ParticleSystemInstance@Graphics@@QEAA@XZ";
-const char* const kGeometryCtor    = "??0Geometry@Graphics@@QEAA@XZ";
 // ENDGAME B.3.5 caller batch: `kSetBounds` is gone with its door — the member call
 // spells the name it no longer needs.
 
-// ============================================================================
-// Retail vtable constants -- resolved once through ResolveAddr(Module::Runtime,
-// ...) so they carry the DLL's actual loaded (ASLR-relocated) address, not the
-// static analysis-time address. Each was read off a LEA immediately before a
-// vtable store in the retail ctor's disassembly (disassemble_function,
-// program="Runtime-x64.dll"), not inferred from the decompile's `_vftable_`
-// symbol name alone.
-// ============================================================================
-void* RtParticleInstanceVtable() {
-    static void* v = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801550e0));
-    return v;
-}
-void* RtParticleSystemInstanceVtable() {
-    static void* v = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180155040));
-    return v;
-}
+// ENDGAME B.3.9 block GFX: `RtParticleInstanceVtable` /
+// `RtParticleSystemInstanceVtable` (the two minted tables, rebased, with lazy
+// function-local caches) and `RtGeometryCtor` / `kGeometryCtor` / `kPIctor` /
+// `kPSIctor` are gone with the two ctor doors below.
 
 // ENDGAME B.3.9 block GFX (D7 row A44): `RtAnimMgrSingletonSlot` (the lazy
 // by-address cache of 0x1801fe7b0) is gone -- the cell is the class static
@@ -193,23 +178,6 @@ void* RtParticleSystemInstanceVtable() {
 // function-local ResolveExport cache) is gone -- the cell is the class static
 // `Graphics::ParticleInstance::_frameIndex`, defined at the end of this file
 // and redirected onto the mint's row by RtGraphicsPortInit.
-
-// ============================================================================
-// Graphics::Geometry::Geometry(void) -- retail 0x1800a4270, ordinal 205,
-// EXPORTED (??0Geometry@Graphics@@QEAA@XZ). NOT this lane's class (Wave 6
-// lane D owns Graphics::Geometry), called at its own export exactly like
-// scene.cpp calls Picking::Scene's unexported grid internals -- except this
-// one IS exported, so the raw DLL door applies (never the raw DLL door on a normal
-// run path -- reference_rtoriginal_is_getprocaddress.md).
-// ============================================================================
-using GeometryCtorFn = void* (*)(void*);
-void RtGeometryCtor(void* self) {
-    // RT_EXPORT_ONCE, not the raw DLL door (Wave 9 lane R): Graphics::Geometry's
-    // ctor IS ported (runtime/src/graphics/geometry.cpp), and the raw door reached
-    // the DLL's body regardless. Raw is for oracles; a dependency goes through the
-    // port registry.
-    RT_EXPORT_ONCE(GeometryCtorFn, kGeometryCtor)(self);
-}
 
 // Graphics::Geometry::SetBounds(const Volume::Box&) -- retail 0x180015700,
 // ordinal 3836, EXPORTED. Also not this lane's class; called at its own
@@ -374,17 +342,11 @@ extern "C" void RtGraphics_AnimationManager_Dtor(AnimationManager* self) {
 // pure (no external calls in its own disassembly) so building "theirs" on
 // the stack and discarding it remains safe.
 // ============================================================================
-extern "C" ParticleInstance* RtGraphics_ParticleInstance_Ctor(ParticleInstance* self) {
-
-    RtGeometryCtor(&self->base);   // Geometry base, +0x00..+0xbf
-    *reinterpret_cast<void**>(self) = RtParticleInstanceVtable();  // vtable lives at +0x00,
-                                                                    // inside the Geometry base
-    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with `ParticleInstance()`.
-    ::Graphics::ParticleInstance::DoorBody::Init(
-        reinterpret_cast<::Graphics::ParticleInstance*>(self));   // B.3.8 bridge
-
-    return self;
-}
+//
+// ENDGAME B.3.9 block GFX: the door is RETIRED. Geometry() and the stamp are the
+// compiler's chain of the real protected `ParticleInstance()`
+// (ParticleInstance.h), whose body is the three stores; its only builders are
+// the two subclasses' ctors (ParticleSystemInstance, the exe's TornadoInstance).
 
 // ============================================================================
 // Graphics::ParticleInstance::Update()
@@ -483,18 +445,13 @@ extern "C" void RtGraphics_ParticleInstance_IncrementInstanceIndex() {
 // [0xd8, 0xe0) (this class's own `_f_d8`) -- everything this ctor actually
 // writes, and nothing it, or Geometry::Geometry beneath it, leaves untouched.
 // ============================================================================
-extern "C" ParticleSystemInstance* RtGraphics_ParticleSystemInstance_Ctor(
-    ParticleSystemInstance* self) {
-
-    RtGeometryCtor(&self->base.base);
-    self->base._resource  = nullptr;
-    self->base._boundsPtr = nullptr;
-    self->base._index     = -1;
-    *reinterpret_cast<void**>(self) = RtParticleSystemInstanceVtable();  // vtable @ +0x00
-    self->_f_d8 = nullptr;
-
-    return self;
-}
+//
+// ENDGAME B.3.9 block GFX: the door is RETIRED. Retail 0x1800a55a0 is
+// `Geometry(); stamp PI; +0xc0/+0xc8 = 0, +0xd0 = -1; stamp PSI; +0xd8 = 0` --
+// the real public `ParticleSystemInstance()` (ParticleInstance.h) with
+// ParticleInstance() inlined. Its builders -- ParticleSystem::CreateSystem
+// (wave28_lane_partsys.cpp) and the exe menu scene (menudialogloopt.cpp) --
+// spell `::new (p) Graphics::ParticleSystemInstance()`.
 
 // ############################################################################
 // ENDGAME B.3.5 step 5, block H1 — `Graphics::AnimationEvent`'s member bodies.
@@ -655,17 +612,13 @@ int RtGraphicsAnimationRegister() {
     RegisterRuntimeExport("??1AnimationManager@Graphics@@QEAA@XZ", (void*)&RtGraphics_AnimationManager_Dtor); ++count;
     RegisterRuntimeAddr(0x1800fc400, (void*)&RtGraphics_AnimationManager_Dtor);
 
-    RegisterRuntimeExport("??0ParticleInstance@Graphics@@QEAA@XZ", (void*)&RtGraphics_ParticleInstance_Ctor); ++count;
-    RegisterRuntimeAddr(0x180104130, (void*)&RtGraphics_ParticleInstance_Ctor);
-
     RegisterRuntimeExport("?Update@ParticleInstance@Graphics@@QEAA_NXZ", (void*)&RtGraphics_ParticleInstance_Update); ++count;
     RegisterRuntimeAddr(0x180104180, (void*)&RtGraphics_ParticleInstance_Update);
 
     RegisterRuntimeExport("?IncrementInstanceIndex@ParticleInstance@Graphics@@SAXXZ", (void*)&RtGraphics_ParticleInstance_IncrementInstanceIndex); ++count;
     RegisterRuntimeAddr(0x1800201f0, (void*)&RtGraphics_ParticleInstance_IncrementInstanceIndex);
-
-    RegisterRuntimeExport("??0ParticleSystemInstance@Graphics@@QEAA@XZ", (void*)&RtGraphics_ParticleSystemInstance_Ctor); ++count;
-    RegisterRuntimeAddr(0x1800a55a0, (void*)&RtGraphics_ParticleSystemInstance_Ctor);
+    // (ENDGAME B.3.9 GFX: the ??0ParticleInstance / ??0ParticleSystemInstance
+    // doors are retired.)
 
     return count;
 }

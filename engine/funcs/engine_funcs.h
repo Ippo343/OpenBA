@@ -1844,10 +1844,6 @@ extern fn_Entity_FindAudioComponent_t fn_Entity_FindAudioComponent;
 // The first two were the two HEAVIEST doors in B35_RULES section 7's table (12
 // and 7 call sites); both are at zero now. Their registered doors are untouched.
 
-// Graphics::ParticleSystemInstance::ParticleSystemInstance() — default ctor.
-// Object size 0xe0, alignment 8.
-typedef void* (*fn_Graphics_ParticleSystemInstance_Ctor_t)(void* self);
-extern fn_Graphics_ParticleSystemInstance_Ctor_t fn_Graphics_ParticleSystemInstance_Ctor;
 
 
 // ENDGAME B.3.5 (b35-K2): `fn_Graphics_ParticleInstance_IncrementInstanceIndex`

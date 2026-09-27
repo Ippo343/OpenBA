@@ -242,15 +242,9 @@ UNIT_TEST(rb_animationevent_ctor_is_retail_0x1800a2150) {
 // PART B
 // ===========================================================================
 UNIT_TEST(rb_graphics_doors_reach_the_same_bodies) {
-    // ParticleInstance: ctor bytes == door bytes over +0xc0..+0xd7.
-    alignas(8) unsigned char a[sizeof(RbTornadoInstance)];
-    RbTornadoInstance* pi = BuildIn<RbTornadoInstance>(a);
-    alignas(8) unsigned char b[sizeof(RbTornadoInstance)];
-    std::memset(b, 0xCD, sizeof b);
-    *reinterpret_cast<const void**>(b) = kFakeMinted;
-    Graphics::ParticleInstance::DoorBody::Init(reinterpret_cast<Graphics::ParticleInstance*>(b));
-    CHECK(std::memcmp(a + 0xc0, b + 0xc0, 0x18) == 0);
-    pi->~RbTornadoInstance();
+    // ParticleInstance: (ENDGAME B.3.9 GFX) the ??0 door and its DoorBody are
+    // retired; the real ctor is the only builder
+    // (rb_particleinstance_ctor_is_retail_* above).
 
     // Particle: (ENDGAME B.3.9 GFX) the ??0 door and its DoorBody are retired;
     // the real ctor is the only builder (rb_particle_ctor_is_retail_* above).
@@ -759,6 +753,112 @@ UNIT_TEST(b39_gfx_generatedimagebuffer_slot0_is_the_classs_own_both_arms) {
     RbGeneratedLeaf* e0 = ::new (block + 8) RbGeneratedLeaf();
     ::new (block + 8 + 0x70) RbGeneratedLeaf();
     CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3u)) == block);   // stride 0x70, freed
+}
+
+}  // namespace
+
+// ===========================================================================
+// ENDGAME B.3.9 block GFX -- ParticleSystemInstance CONCRETE, ParticleInstance
+// slot 0 concrete (the class stays abstract: slot 1 `_purecall`). PSI's
+// out-of-line members are markers here (wave28 / wave27 / batchc do not link).
+// ===========================================================================
+namespace {
+int         g_psiDtor = 0;
+const void* g_psiDtorVptr = nullptr;
+const void* g_psiDtorOrder[4] = {};
+}  // namespace
+namespace Graphics {
+void ParticleSystemInstance::Update(const System::Time&) {}
+void ParticleSystemInstance::SetParticle(ExternalPtrHandle) {}
+ParticleSystemInstance::~ParticleSystemInstance() {
+    if (g_psiDtor < 4) g_psiDtorOrder[g_psiDtor] = this;
+    ++g_psiDtor; g_psiDtorVptr = *static_cast<const void* const*>(static_cast<const void*>(this));
+}
+}  // namespace Graphics
+
+extern const void* const g_rbPsiVtGroup[] __asm__("_ZTVN8Graphics22ParticleSystemInstanceE");
+
+namespace {
+
+struct RbPiLeaf final : Graphics::ParticleInstance {   // slot 0 NOT overridden
+    void Update(const System::Time&) override {}
+};
+
+UNIT_TEST(b39_gfx_particlesysteminstance_concrete_ctor_and_both_slot0_arms) {
+    using P = Graphics::ParticleSystemInstance;
+    CHECK(!std::is_abstract<P>::value);
+    CHECK(!std::is_destructible<P>::value);
+    CHECK(!std::has_virtual_destructor<P>::value);
+    CHECK_EQ(GfxSlotOffset(&P::DeletingDtor),         (uintptr_t)0x00);   // 0x180020ce0
+    CHECK_EQ(GfxSlotOffset(static_cast<void (P::*)(const System::Time&)>(&P::Update)),
+             (uintptr_t)0x08);                                            // 0x1800a5600
+    CHECK_EQ(GfxSlotOffset(&P::GetInstanceTransform), (uintptr_t)0x30);   // PI 0x1801047f0
+    CHECK_EQ(GfxSlotOffset(&P::SetParticle),          (uintptr_t)0x48);   // 0x1800a6a80
+
+    // Retail 0x1800a55a0: Geometry(), +0xc0/+0xc8 = 0, +0xd0 = -1, +0xd8 = 0.
+    g_n = 0;
+    alignas(8) unsigned char buf[sizeof(P)];
+    std::memset(buf, 0xCD, sizeof buf);
+    P* p = ::new (static_cast<void*>(buf)) P();
+    CHECK_EQ(g_n, 1);
+    CHECK_EQ(g_log[0].ev, (int)kGeoInit);
+    CHECK(g_log[0].vptr == GeoVt());
+    CHECK(VptrOf(p) == &g_rbPsiVtGroup[2]);
+    CHECK_EQ(Q(p, 0xc0), (uint64_t)0);
+    CHECK_EQ(Q(p, 0xc8), (uint64_t)0);
+    CHECK_EQ(D(p, 0xd0), 0xFFFFFFFFu);
+    CHECK_EQ(D(p, 0xd4), 0xCDCDCDCDu);          // not written
+    CHECK_EQ(Q(p, 0xd8), (uint64_t)0);
+
+    // Slot 0, flags 0: ~PSI under PSI's table, then RemoveState under PI's,
+    // then Geometry's release under Geometry's; nothing freed.
+    g_n = 0; g_psiDtor = 0;
+    CHECK(static_cast<void*>(p->DeletingDtor(0u)) == static_cast<void*>(buf));
+    CHECK_EQ(g_psiDtor, 1);
+    CHECK(g_psiDtorVptr == &g_rbPsiVtGroup[2]);
+    CHECK_EQ(g_n, 2);
+    CHECK_EQ(g_log[0].ev, (int)kPiRemoveState); CHECK(g_log[0].vptr == PiVt());
+    CHECK_EQ(g_log[1].ev, (int)kGeoRel);        CHECK(g_log[1].vptr == GeoVt());
+
+    void* m = Object::detail::InternalMemAlloc(sizeof(P), 8);
+    P* h = ::new (m) P();
+    CHECK(static_cast<void*>(h->DeletingDtor(1u)) == m);
+
+    // Vector arm: stride 0xe0, downward, block freed.
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0xe0, 8));
+    const int64_t cookie = 3;
+    std::memcpy(block, &cookie, sizeof cookie);
+    P* e[3];
+    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * 0xe0) P();
+    g_psiDtor = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3u)) == block);
+    CHECK_EQ(g_psiDtor, 3);
+    CHECK(g_psiDtorOrder[0] == e[2]);
+    CHECK(g_psiDtorOrder[2] == e[0]);
+}
+
+UNIT_TEST(b39_gfx_particleinstance_slot0_is_the_classs_own_both_arms) {
+    using PI = Graphics::ParticleInstance;
+    CHECK(std::is_abstract<PI>::value);
+    CHECK(!std::is_destructible<PI>::value);
+    CHECK_EQ(GfxSlotOffset(&PI::DeletingDtor), (uintptr_t)0x00);   // 0x180020310
+    CHECK_EQ(sizeof(RbPiLeaf), (size_t)0xd8);
+
+    void* m = Object::detail::InternalMemAlloc(sizeof(RbPiLeaf), 8);
+    RbPiLeaf* p = ::new (m) RbPiLeaf();
+    g_n = 0;
+    CHECK(static_cast<void*>(p->DeletingDtor(1u)) == m);       // ~PI, freed
+    CHECK_EQ(g_n, 2);
+    CHECK_EQ(g_log[0].ev, (int)kPiRemoveState);
+
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 2 * 0xd8, 8));
+    const int64_t cookie = 2;
+    std::memcpy(block, &cookie, sizeof cookie);
+    RbPiLeaf* e0 = ::new (block + 8) RbPiLeaf();
+    ::new (block + 8 + 0xd8) RbPiLeaf();
+    g_n = 0;
+    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3u)) == block);   // stride 0xd8
+    CHECK_EQ(g_n, 4);
 }
 
 }  // namespace

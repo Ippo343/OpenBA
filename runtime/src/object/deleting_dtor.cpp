@@ -293,8 +293,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x18000c610, 0x1800b9a40, 0x018, "IO::Stream"),
     RT_DELDTOR(0x180015e90, 0x1800a41c0, 0x0c0, "Graphics::Geometry"),
     RT_DELDTOR(0x18001ed20, 0x1800f2610, 0x068, "Video::ImageBuffer"),
-    RT_DELDTOR(0x180020310, 0x1801041f0, 0x0d8, "Graphics::ParticleInstance"),
-    RT_DELDTOR(0x180020ce0, 0x1800a5520, 0x0e0, "Graphics::ParticleSystemInstance"),
     RT_DELDTOR(0x1800244a0, 0x1800a9560, 0x098, "IO::CompressedMemoryStream"),
     RT_DELDTOR(0x180031900, 0x1800dddb0, 0x028, "Engine::UpdateLoop"),
     RT_DELDTOR(0x180035c10, 0x1801161a0, 0x0c0, "UI::Element"),
@@ -1119,16 +1117,6 @@ void* RtDelDtor_Geometry(void* self, unsigned flags) {
 void* RtDelDtor_ImageBuffer(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18001ed20>());
 }
-// Graphics::ParticleInstance ~ParticleInstance = 0x1801041f0  (PORTED 2026-09-12, deleting_dtor_leaves.cpp)
-void* RtDelDtor_ParticleInstance(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180020310>());
-}
-// Graphics::ParticleSystemInstance ~ParticleSystemInstance = 0x1800a5520  (PORTED,
-//                          BATCH C 2026-09-12, graphics/batchc_gfx_leaves.cpp;
-//                          was "still the DLL's")
-void* RtDelDtor_ParticleSystemInstance(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180020ce0>());
-}
 // IO::CompressedMemoryStream ~CompressedMemoryStream = 0x1800a9560  (PORTED)
 void* RtDelDtor_CompressedMemoryStream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x1800244a0>());
@@ -1378,8 +1366,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18000c610, (void*)&RtDelDtor_Stream);
     RegisterRuntimeAddr(0x180015e90, (void*)&RtDelDtor_Geometry);
     RegisterRuntimeAddr(0x18001ed20, (void*)&RtDelDtor_ImageBuffer);
-    RegisterRuntimeAddr(0x180020310, (void*)&RtDelDtor_ParticleInstance);
-    RegisterRuntimeAddr(0x180020ce0, (void*)&RtDelDtor_ParticleSystemInstance);
     RegisterRuntimeAddr(0x1800244a0, (void*)&RtDelDtor_CompressedMemoryStream);
     RegisterRuntimeAddr(0x180031900, (void*)&RtDelDtor_UpdateLoop);
     RegisterRuntimeAddr(0x180035c10, (void*)&RtDelDtor_Element);

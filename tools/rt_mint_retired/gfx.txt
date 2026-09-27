@@ -40,3 +40,7 @@
 
 # -- W2: MaterialInstance concrete (exe scalar slot 0 kept); the exe builders were converted by EXA --
 ??_7MaterialInstance@Graphics@@6B@      GFX   real ctor/dtor (door bodies); FACTREST row, RT_DELDTOR row 0x180002d60, ??0 door (renderer.cpp), ??1 leaves door, 7 slot doors deleted; Construct/Reconstruct placement-new; SaveLoad::Draw inline stamp -> ::new
+
+# -- W2: ParticleSystemInstance concrete + ParticleInstance slot 0 concrete (abstract, as retail) --
+??_7ParticleSystemInstance@Graphics@@6B@  GFX   real ctor + DeletingDtor + ~X (door body); RT_DELDTOR row 0x180020ce0, ??0/??1 doors, Update/SetParticle slot doors deleted; CreateSystem + exe menu scene placement-new; fn_Graphics_ParticleSystemInstance_Ctor deleted
+??_7ParticleInstance@Graphics@@6B@      GFX   stamped only by PSI / TornadoInstance ctors (compiler-built now); RT_DELDTOR row 0x180020310, ??0 door, ??1 leaves door, 4 slot doors deleted
