@@ -259,38 +259,9 @@ UNIT_TEST(rb_elementdescription_ctor_dtor_run_shared_bodies_under_base_table) {
 // ===========================================================================
 // PART B — the door reaches the same body with the MINTED table in place
 // ===========================================================================
-UNIT_TEST(rb_dialoginstance_door_and_ctor_share_one_body) {
-    FactoryScope scope;
-    int dialogToken = 0, dsToken = 0, userToken = 0;
-    Object::InternalPtr<UI::DialogInstance> parent;
-
-    alignas(8) unsigned char viaCtor[sizeof(RbDialog)];
-    std::memset(viaCtor, 0, sizeof viaCtor);
-    g_di = Seen{};
-    RbDialog* d = ::new (static_cast<void*>(viaCtor)) RbDialog(
-        nullptr, reinterpret_cast<const UI::Dialog*>(&dialogToken), parent,
-        reinterpret_cast<Object::Base*>(&dsToken), &userToken, 7);
-
-    alignas(8) unsigned char viaDoor[sizeof(RbDialog)];
-    std::memcpy(viaDoor, viaCtor, sizeof viaDoor);          // same Internal half
-    std::memset(viaDoor + 0x10, 0, sizeof viaDoor - 0x10);  // fields unwritten
-    *reinterpret_cast<const void**>(viaDoor) = kFakeMinted; // the door's stamp
-    g_di = Seen{};
-    UI::DialogInstance::DoorBody::Init(
-        reinterpret_cast<UI::DialogInstance*>(viaDoor), nullptr,
-        reinterpret_cast<const UI::Dialog*>(&dialogToken), &parent,
-        reinterpret_cast<Object::Base*>(&dsToken), &userToken, 7);
-    CHECK_EQ(g_di.initCalls, 1);
-    CHECK(g_di.initVptr == static_cast<const void*>(kFakeMinted));
-    // Same body, same arguments -> the same bytes after the vptr.
-    CHECK(std::memcmp(viaCtor + 0x10, viaDoor + 0x10, sizeof(UI::DialogInstance) - 0x10) == 0);
-
-    g_di = Seen{};
-    UI::DialogInstance::DoorBody::Release(reinterpret_cast<UI::DialogInstance*>(viaDoor));
-    CHECK_EQ(g_di.releaseCalls, 1);
-    CHECK(g_di.releaseVptr == static_cast<const void*>(kFakeMinted));
-    d->~RbDialog();
-}
+// (ENDGAME B.3.9 UI-D: DialogInstance's ctor / dtor doors are retired, so
+// its door-vs-ctor comparison went with them; PART A still pins the body's
+// stamp order through the real constructor.)
 
 UNIT_TEST(rb_element_and_description_doors_reach_the_same_body) {
     alignas(8) unsigned char raw[sizeof(UI::Element)] = {};

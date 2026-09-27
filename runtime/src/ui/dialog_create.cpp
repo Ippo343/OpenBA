@@ -227,14 +227,6 @@ template <class T> inline const T& F(const void* p, size_t off) {
 //
 // No `ExplicitSpec` bridge needed at any of the three call sites below.
 
-// ??0Internal@Object@@QEAA@XZ   0x1800bfd10   (an EXPORT — checked)
-void* InternalCtor(void* self) {
-    using Fn = void* (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveExport("??0Internal@Object@@QEAA@XZ"));
-    return fn(self);
-}
-
 // ?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z  0x1800031f0
 // ENDGAME B.3.6 closing pass: the real member (was a function-local lazy
 // ResolveExport cache, a RULE B6-5 shape on a loader-thread path).
@@ -435,60 +427,18 @@ void RtUiDialogInstance_AddController6(void* self, uint32_t typeId, void* dataSo
             *static_cast<const System::String*>(nameString));
 }
 
-// ============================================================================
-// ??0DialogInstance@UI@@QEAA@ PEAVUserInterface@1@ PEBVDialog@1@
-//     V?$InternalPtr@VDialogInstance@UI@@@Object@@ PEAVBase@5@ PEAX H @Z
-//                                                              0x180114870
-//
-//     DialogInstance::DialogInstance(UserInterface* ui, const Dialog* dialog,
-//                                    InternalPtr<DialogInstance> parent,
-//                                    Object::Base* dataSource,
-//                                    void* userData, int userFlags)
-//
-// `parent` is an InternalPtr passed BY HIDDEN REFERENCE (R9 is dereferenced at
-// 0x1801148c9), which is how engine_funcs.h's `fn_DialogInstance_Ctor_t` already
-// spells it and how all sixteen exe call sites pass it.
-//
-// Returns `this` in RAX (0x180114a37). MSVC always does for a ctor; the port
-// must produce it because the exe's call sites are typed to receive it.
-//
-// Every field offset below is asserted in runtime/types/ui/DialogInstance.h and
-// the four holes the ctor never writes (+0x4c, +0x64, +0x99..0x9f, +0xb4) are
-// named there. This body writes exactly the fields it is shown writing; it does
-// not zero the holes.
-// ============================================================================
-void* RtUiDialogInstance_Ctor(void* self, void* ui, const void* dialog,
-                              void** parentPtr, void* dataSource,
-                              void* userData, int32_t userFlags) {
-    InternalCtor(self);                                       // 0x1801148a2
-
-    // 0x1801148a8: the DLL's OWN exported vtable, never a minted one. This is
-    // the `??_7Geometry@Graphics@@6B@` lever from Wave 6 — resolving retail's
-    // table keeps a half-ported class from putting two vtables in play.
-    static void* vtbl = nullptr;
-    if (!vtbl) vtbl = ResolveExport("??_7DialogInstance@UI@@6B@");
-    F<void*>(self, 0x00) = vtbl;
-
-    // ENDGAME B.3.8 block RB (RULE B8-1): everything after the vptr store is
-    // ONE body with the real constructor `UI::DialogInstance(ui, dialog, …)` —
-    // `UI::DialogInstance::InitFields`, below this namespace. The door keeps
-    // the Internal ctor and the minted stamp for still-unconverted subclasses.
-    UI::DialogInstance::DoorBody::Init(
-        reinterpret_cast<UI::DialogInstance*>(self),                       // B.3.8 bridge
-        static_cast<UI::UserInterface*>(ui),
-        static_cast<const UI::Dialog*>(dialog),
-        reinterpret_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentPtr),  // B.3.8 bridge
-        static_cast<Object::Base*>(dataSource), userData, userFlags);
-    return self;   // 0x180114a37 `MOV RAX,RSI`
-}
+// (ENDGAME B.3.9 UI-D: the ??0DialogInstance door `RtUiDialogInstance_Ctor`
+// (0x180114870) is retired; the exe's last three door sites spell
+// `::new (p) UI::DialogInstance(ui, dialog, parent, dataSource, userData,
+// userFlags)`. The ctor's body is `InitFields`, below.)
 
 }  // namespace
 
 // ============================================================================
 // UI::DialogInstance::InitFields — the body of ??0DialogInstance 0x180114870
 // after `CALL ??0Internal` and the vptr store (ENDGAME B.3.8 block RB, B8-1).
-// Shared by the real constructor (DialogInstance.h) and the door
-// `RtUiDialogInstance_Ctor` above. MOVED VERBATIM from the door: it still
+// The real constructor's body (DialogInstance.h); since ENDGAME B.3.9 UI-D no
+// door shares it. MOVED VERBATIM from the retired door: it still
 // works through the field-identical `RtUI::` POD views (cross-asserted in
 // DialogInstance.h), so not one store changed.
 // ============================================================================
@@ -798,12 +748,6 @@ void DialogInstance::AddController(uint32_t typeId, Object::Base* dataSource,
 // ============================================================================
 int RtUiDialogCreateRegister() {
     int n = 0;
-
-    RegisterRuntimeExport(
-        "??0DialogInstance@UI@@QEAA@PEAVUserInterface@1@PEBVDialog@1@"
-        "V?$InternalPtr@VDialogInstance@UI@@@Object@@PEAVBase@5@PEAXH@Z",
-        (void*)&RtUiDialogInstance_Ctor);
-    RegisterRuntimeAddr(0x180114870, (void*)&RtUiDialogInstance_Ctor);                ++n;
 
     RegisterRuntimeExport(
         "?AddController@DialogInstance@UI@@QEAAXIPEAVBase@Object@@"

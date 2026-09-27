@@ -304,7 +304,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x1800244a0, 0x1800a9560, 0x098, "IO::CompressedMemoryStream"),
     RT_DELDTOR(0x180031900, 0x1800dddb0, 0x028, "Engine::UpdateLoop"),
     RT_DELDTOR(0x180035c10, 0x1801161a0, 0x0c0, "UI::Element"),
-    RT_DELDTOR(0x1800458c0, 0x180114d40, 0x0b8, "UI::DialogInstance"),
     RT_DELDTOR(0x18004d4f0, 0x1800dc170, 0x048, "Engine::LoaderLoop"),
     RT_DELDTOR(0x18004d670, 0x1800db060, 0x188, "Engine::DialogLoaderLoopT"),
     RT_DELDTOR(0x18004d8b0, 0x1800db340, 0x168, "Engine::DialogLoopT"),
@@ -1258,10 +1257,6 @@ void* RtDelDtor_UpdateLoop(void* self, unsigned flags) {
 void* RtDelDtor_Element(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x180035c10>());
 }
-// UI::DialogInstance       ~DialogInstance = 0x180114d40  (PORTED, ui/dialog.cpp; this note was stale)
-void* RtDelDtor_DialogInstance(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x1800458c0>());
-}
 // Engine::LoaderLoop       ~LoaderLoop = 0x1800dc170  (PORTED, BATCH 8)
 void* RtDelDtor_LoaderLoop(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18004d4f0>());
@@ -1548,7 +1543,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x1800244a0, (void*)&RtDelDtor_CompressedMemoryStream);
     RegisterRuntimeAddr(0x180031900, (void*)&RtDelDtor_UpdateLoop);
     RegisterRuntimeAddr(0x180035c10, (void*)&RtDelDtor_Element);
-    RegisterRuntimeAddr(0x1800458c0, (void*)&RtDelDtor_DialogInstance);
     RegisterRuntimeAddr(0x18004d4f0, (void*)&RtDelDtor_LoaderLoop);
     RegisterRuntimeAddr(0x18004d670, (void*)&RtDelDtor_DialogLoaderLoopT);
     RegisterRuntimeAddr(0x18004d8b0, (void*)&RtDelDtor_DialogLoopT);

@@ -16,36 +16,11 @@
 // are UNALIGNED or OVERLAP their neighbours and that is what retail does.
 // ============================================================================
 
-const Store kDialogInstance[] = {
-    { 0x000, 8, SK_VTABLE, 0, "??_7DialogInstance@UI@@6B@", 0x180114cc3 },
-    { 0x010, 8, SK_IMM, 0x0ull, nullptr, 0x180114cc8 },
-    { 0x018, 8, SK_IMM, 0x0ull, nullptr, 0x180114ccc },
-    { 0x020, 8, SK_IMM, 0x0ull, nullptr, 0x180114cd0 },
-    { 0x028, 8, SK_IMM, 0x0ull, nullptr, 0x180114cd4 },
-    { 0x038, 8, SK_IMM, 0x0ull, nullptr, 0x180114cd8 },
-    { 0x040, 8, SK_IMM, 0x0ull, nullptr, 0x180114cdc },
-    { 0x048, 4, SK_IMM, 0x0ull, nullptr, 0x180114ce0 },
-    { 0x050, 8, SK_IMM, 0x0ull, nullptr, 0x180114ce3 },
-    { 0x058, 8, SK_IMM, 0x0ull, nullptr, 0x180114ce7 },
-    { 0x060, 4, SK_IMM, 0xffffffffull, nullptr, 0x180114ceb },
-    { 0x068, 8, SK_IMM, 0x0ull, nullptr, 0x180114cf2 },
-    { 0x070, 8, SK_IMM, 0x0ull, nullptr, 0x180114cf6 },
-    { 0x078, 8, SK_IMM, 0x0ull, nullptr, 0x180114cfa },
-    { 0x080, 8, SK_IMM, 0x0ull, nullptr, 0x180114cfe },
-    { 0x088, 8, SK_IMM, 0x0ull, nullptr, 0x180114d05 },
-    { 0x090, 8, SK_IMM, 0xffffffffffffffffull, nullptr, 0x180114d0c },
-    { 0x098, 1, SK_IMM, 0x0ull, nullptr, 0x180114d17 },
-    { 0x0a0, 8, SK_IMM, 0x0ull, nullptr, 0x180114d1d },
-    { 0x0a8, 8, SK_IMM, 0x0ull, nullptr, 0x180114d24 },
-};
+// (ENDGAME B.3.9 UI-D: the DialogInstance row -- its Store list, factory
+// and ??0DialogInstance@UI@@QEAA@XZ door -- is the class's own now,
+// runtime/src/ui/dialog.cpp.)
 
 const Spec kSpecs[] = {
-    { "DialogInstance", 0xb8ull, 8,
-      "??0Internal@Object@@QEAA@XZ", kDialogInstance,
-      (uint16_t)(sizeof(kDialogInstance)/sizeof(Store)),
-      "?CreateNewObject@DialogInstance@UI@@SAPEAVBase@Object@@XZ", 0x1800454f0ull,
-      nullptr, 0ull,
-      "??0DialogInstance@UI@@QEAA@XZ", 0x180114ca0ull },
     { "Element", 0x0ull, 0,
       nullptr, nullptr,
       0,

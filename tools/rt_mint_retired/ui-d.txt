@@ -17,3 +17,4 @@
 
 # -- W2: the bases and the remaining factory rows --
 ??_7SpriteSheet@UI@@6B@                UI-D   real ctor + DeletingDtor (scalar, exe-built) + ~X (door body); FACTUI2 row (ui_factory_wave28.cpp deleted), ??0 door (sprite.cpp), ??1 door, DoorBody, ConstructInPlace, RT_DELDTOR row 0x1800037b0, 9 slot doors deleted; SaveLoad::Draw spells ::new SpriteSheet()
+??_7DialogInstance@UI@@6B@             UI-D   real ctors (default 0x180114ca0, 6-arg 0x180114870, root-Element 0x1801146b0) + DeletingDtor (scalar, exe-built) + ~X (door body); FACTUI1 row (+ ??0 default door), ??0 6-arg door + fn_DialogInstance_Ctor (3 exe sites spell ::new UI::DialogInstance(...)), ??1 door, RT_DELDTOR row 0x1800458c0, 9 slot doors deleted

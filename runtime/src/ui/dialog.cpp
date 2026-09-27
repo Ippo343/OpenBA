@@ -406,10 +406,6 @@ inline const uint8_t* ElementDescriptionTypeInfo() {
 using DeletingDtorFn = void* (*)(void* self, unsigned flags);
 using VoidPtrFn      = void  (*)(void* p);
 
-inline void* VtblDialogInstance() {
-    return RT_DATA_SLOT(void*, "??_7DialogInstance@UI@@6B@");
-}
-
 // Slot 0 of any Object::Base-derived vtable is the SCALAR DELETING DESTRUCTOR
 // (runtime/src/object/deleting_dtor.cpp). Retail calls it with EDX = 1, which
 // means "destruct AND free"; see the note in the block below.
@@ -428,13 +424,6 @@ inline void MemFreeStatic(void* p) {
 // GONE. `self->_children` (DialogInstance.h) is a real
 // `Collection::LinkedList<InternalBasePtr>` member now, so its one caller
 // below calls `.Clear()` on the container directly.
-
-// ??1Internal@Object@@UEAA@XZ — the tail retail inlines. Reached by NAME
-// through the port registry, which is precisely what RtUiDialogController_Dtor
-// already does for the identical tail.
-inline void InternalDtor(void* self) {
-    RT_EXPORT_ONCE(VoidPtrFn, "??1Internal@Object@@UEAA@XZ")(self);
-}
 
 }  // namespace
 
@@ -477,15 +466,8 @@ inline void InternalDtor(void* self) {
 // and no oracle site is manufactured for the sake of a green count over work
 // that never happened
 // (reference_probe_needs_an_effectiveness_control.md).
-extern "C" void RtUiDialogInstance_Persist(void* self, void* stream) {
-    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
-        ->UI::DialogInstance::Persist(stream);
-}
-
-extern "C" void RtUiDialogInstance_OnSerializeSettings(void* self, void* stream) {
-    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
-        ->UI::DialogInstance::OnSerializeSettings(stream);
-}
+// ENDGAME B.3.9 UI-D: the two RET slot doors are retired with the minted
+// table; the members are `DialogInstance::Persist` / `OnSerializeSettings`.
 
 // ---- ?TypeName@DialogInstance@UI@@UEBAPEBDXZ  0x180045400  ord 4379 -------
 //
@@ -522,10 +504,7 @@ extern "C" void RtUiDialogInstance_OnSerializeSettings(void* self, void* stream)
 // the alternative it replaces (a null stamped into a derived vtable, faulting
 // later with no name attached) and is exactly the "do not fix a faithful crash
 // with a null check" case: the fix is upstream, in the mint, not a guard here.
-extern "C" const char* RtUiDialogInstance_TypeName(const void* self) {
-    return reinterpret_cast<const UI::DialogInstance*>(self)   // B.3.6 bridge
-        ->UI::DialogInstance::TypeName();
-}
+// (ENDGAME B.3.9 UI-D: the door is retired; the member is below.)
 
 // ---- ?Type@DialogInstance@UI@@UEBAIXZ  0x1800453e0 ------------------------
 // WAVE 10B LANE DLGV. The corroborating slot the note above cites, now ported
@@ -552,10 +531,6 @@ extern "C" const char* RtUiDialogInstance_TypeName(const void* self) {
 // hidden: the id is verified by the shadow's field comparison, not by an oracle
 // on this body.
 constexpr int kBaseTypeInfoTypeId = 0x00;
-extern "C" uint32_t RtUiDialogInstance_Type(const void* self) {
-    return reinterpret_cast<const UI::DialogInstance*>(self)   // B.3.6 bridge
-        ->UI::DialogInstance::Type();
-}
 
 // ---- ?OnClosed@DialogInstance@UI@@UEAAXXZ  0x180115330  ord 3269
 //
@@ -680,34 +655,11 @@ void RtUiDialogInstance_StopTimer(DialogInstance* self, int32_t id) {
 // The loops carry NO null check on the controller pointer: retail's
 // `MOV RCX,[RDI+RAX] / MOV RAX,[RCX]` dereferences it unguarded. Kept.
 
-// ?OnUpdateLayout@DialogInstance@UI@@UEAAXXZ — retail 0x1801153a0, ord 3289.
-void RtUiDialogInstance_OnUpdateLayout(DialogInstance* self) {
-    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
-        ->UI::DialogInstance::OnUpdateLayout();
-}
-
-// ?OnUpdate@DialogInstance@UI@@UEAAXAEBVTime@System@@@Z — retail 0x180115400, ord 3286.
-void RtUiDialogInstance_OnUpdate(DialogInstance* self, const void* time) {
-    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
-        ->UI::DialogInstance::OnUpdate(*static_cast<const System::Time*>(time));
-}
-
-// ?OnElementEvent@DialogInstance@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z
-// Retail 0x180114ed0, ordinal 3274.
-//
-// The first parameter is an `InternalPtr<Element>` BY VALUE, which at this size
-// MSVC passes by address — retail receives a pointer in RDX, and re-reads
-// `*RDX` into a fresh stack slot on EVERY iteration before handing the ADDRESS
-// of that slot to the controller. Reproduced exactly in the member: the
-// controller is handed a pointer to our own copy, never the caller's.
-void RtUiDialogInstance_OnElementEvent(DialogInstance* self, void** elementPtr,
-                                       int32_t a, int32_t b, int32_t c4,
-                                       int32_t d, int32_t e, void* userData) {
-    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
-        ->UI::DialogInstance::OnElementEvent(
-            reinterpret_cast<Object::InternalPtr<UI::Element>*>(elementPtr),   // B.3.6 bridge
-            a, b, c4, d, e, userData);
-}
+// ?OnUpdateLayout@ (0x1801153a0), ?OnUpdate@ (0x180115400) and
+// ?OnElementEvent@ (0x180114ed0): ENDGAME B.3.9 UI-D retired the three slot
+// doors with the minted table; the members are in the UI section below.
+// OnElementEvent's InternalPtr<Element> arrives BY ADDRESS and the member
+// hands each controller a pointer to its OWN fresh copy, never the caller's.
 
 // ============================================================================
 // UI::DialogInstance — frame leftovers (docs/runtime_port/closure/WORKLIST.md)
@@ -964,34 +916,10 @@ void** RtUiDialogController_GetContainer(DialogController* self, void** out) {
 // those six values ARE what could silently be wrong, and all six are compared
 // against the DLL while the DLL is still there (WAVE9.md §2: the verification
 // budget has to be spent before the removal).
-void RtUiDialogInstance_Dtor(DialogInstance* self) {
-    // LIVENESS ONLY, not a comparison. `calls=` will read 0 here because
-    // nothing is diffed; `worked=` is the whole signal and it answers the one
-    // question a no-oracle port cannot otherwise answer -- did this body EVER
-    // RUN (reference_uncalled_port_is_not_verified.md). It counts calls that
-    // had real teardown to do, so a dtor reached only on an already-empty
-    // dialog cannot inflate it.
-    //
-    // THREAD SAFETY, stated rather than assumed: every
-    // `~DialogInstance` reachable from this tree runs from
-    // `UI::UserInterface::Update` / `CleanRemovedDialogs` / `CloseDialog`, all
-    // of which are called from `Engine::MainLoop::Frame` on the main thread.
-
-    uint8_t* p = reinterpret_cast<uint8_t*>(self);
-
-    *reinterpret_cast<void**>(p) = VtblDialogInstance();
-
-    // ENDGAME B.3.8 block RB (RULE B8-1): the teardown between the vptr store
-    // and the inlined ~Internal is ONE body with the real destructor
-    // `UI::DialogInstance::~DialogInstance` — `ReleaseFields`, in the UI
-    // section of this file.
-    UI::DialogInstance::DoorBody::Release(reinterpret_cast<UI::DialogInstance*>(self));   // B.3.8 bridge
-
-    // Retail inlines Object::Internal::~Internal here; the instruction-for-
-    // instruction comparison is in the block above. Reached through the seam so
-    // that exactly one handle-table mutator is in play.
-    InternalDtor(self);
-}
+// ENDGAME B.3.9 UI-D: the door `RtUiDialogInstance_Dtor` that stood here is
+// retired with the minted table and its RT_DELDTOR row; the body above is
+// `UI::DialogInstance::~DialogInstance` (ReleaseFields, the UI section), and
+// ~Internal is the compiler's chain.
 
 // ============================================================================
 // UI::ElementDescription
@@ -1523,17 +1451,31 @@ const char* DialogInstance::TypeName() const {                 // [1] 0x18004540
         DialogInstanceTypeInfo() + kBaseTypeInfoName);
 }
 
-uint32_t DialogInstance::Type() const {                        // [2] 0x1800453e0
+// ?TypeId@DialogInstance@UI@@SAIXZ 0x1800453f0 — the first dword of the
+// minted `?_typeInfo@DialogInstance@UI@@` record (ENDGAME B.3.9 UI-D).
+uint32_t DialogInstance::TypeId() {
     return *reinterpret_cast<const uint32_t*>(
         DialogInstanceTypeInfo() + kBaseTypeInfoTypeId);
+}
+
+uint32_t DialogInstance::Type() const { return TypeId(); }     // [2] 0x1800453e0
+
+// ?CreateNewObject@DialogInstance@UI@@SAPEAVBase@Object@@XZ  0x1800454f0
+// The retired FACTUI1 row: the locked MemAlloc of 0xb8 bytes, align 8;
+// retail's null branch; then ??0DialogInstance (0x180114ca0) inlined. The
+// class exports no CreateInPlaceObject.
+Object::Base* DialogInstance::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(DialogInstance), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) DialogInstance();
 }
 
 // ============================================================================
 // UI::DialogInstance::ReleaseFields — ??1DialogInstance 0x180114d40 between
 // the vptr store and the inlined ~Internal (ENDGAME B.3.8 block RB, B8-1).
-// Shared by the real destructor (DialogInstance.h) and the door
-// `RtUiDialogInstance_Dtor`. Moved verbatim (`self->x` -> `x`); the four
-// details the door's banner lists hold unchanged.
+// The real destructor's body (DialogInstance.h); the door that shared it,
+// `RtUiDialogInstance_Dtor`, is retired (ENDGAME B.3.9 UI-D). Moved verbatim
+// (`self->x` -> `x`); the four details the old door's banner lists hold.
 // ============================================================================
 void DialogInstance::ReleaseFields() {
     // --- the root Element, through its scalar deleting destructor ------------
@@ -2288,19 +2230,6 @@ int RtUiDialogRegister() {
                           (void*)&RtUiDialogInstance_StopTimer);
     RegisterRuntimeAddr(0x180113730, (void*)&RtUiDialogInstance_StopTimer);            ++n;
 
-    RegisterRuntimeExport("?OnUpdateLayout@DialogInstance@UI@@UEAAXXZ",
-                          (void*)&RtUiDialogInstance_OnUpdateLayout);
-    RegisterRuntimeAddr(0x1801153a0, (void*)&RtUiDialogInstance_OnUpdateLayout);       ++n;
-
-    RegisterRuntimeExport("?OnUpdate@DialogInstance@UI@@UEAAXAEBVTime@System@@@Z",
-                          (void*)&RtUiDialogInstance_OnUpdate);
-    RegisterRuntimeAddr(0x180115400, (void*)&RtUiDialogInstance_OnUpdate);             ++n;
-
-    RegisterRuntimeExport(
-        "?OnElementEvent@DialogInstance@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z",
-        (void*)&RtUiDialogInstance_OnElementEvent);
-    RegisterRuntimeAddr(0x180114ed0, (void*)&RtUiDialogInstance_OnElementEvent);       ++n;
-
     // ---- UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) --------
     RegisterRuntimeExport("?Contains@DialogInstance@UI@@QEBA_NHH@Z",
                           (void*)&RtUiDialogInstance_Contains);
@@ -2361,54 +2290,16 @@ int RtUiDialogRegister() {
                           (void*)&RtUiElementDescription_TypeName);
     RegisterRuntimeAddr(0x1800350f0, (void*)&RtUiElementDescription_TypeName);        ++n;
 
-    // ---- Wave 9 lane Z: three DialogInstance vtable slots ------------------
-    // Registered by NAME and by ADDRESS like the rest of the lane. The name is
-    // what the exe-side vtable builders ask for; the address is what the minted
-    // `??_7DialogInstance@UI@@6B@` looks up through RtPortLookupAddr.
-    RegisterRuntimeExport("?Persist@DialogInstance@UI@@UEAAXAEAVStream@IO@@@Z",
-                          (void*)&RtUiDialogInstance_Persist);
-    RegisterRuntimeAddr(0x180114fa0, (void*)&RtUiDialogInstance_Persist);              ++n;
-
-    RegisterRuntimeExport("?OnSerializeSettings@DialogInstance@UI@@UEAAXAEAVStream@IO@@@Z",
-                          (void*)&RtUiDialogInstance_OnSerializeSettings);
-    RegisterRuntimeAddr(0x180115470, (void*)&RtUiDialogInstance_OnSerializeSettings);  ++n;
-
-    RegisterRuntimeExport("?TypeName@DialogInstance@UI@@UEBAPEBDXZ",
-                          (void*)&RtUiDialogInstance_TypeName);
-    RegisterRuntimeAddr(0x180045400, (void*)&RtUiDialogInstance_TypeName);             ++n;
-
-    // ---- Wave 10B lane DLGV: the fourth DialogInstance vtable slot ---------
-    // Same two doors, same reasons: the name is what the exe-side dialog vtable
-    // builders in code/Game/Dialog/ and code/Game/Player/tool_base_toolui.cpp
-    // ask for (all three already name `?Type@DialogInstance@UI@@UEBAIXZ`), and
-    // the address is what the minted `??_7DialogInstance@UI@@6B@` looks up.
-    RegisterRuntimeExport("?Type@DialogInstance@UI@@UEBAIXZ",
-                          (void*)&RtUiDialogInstance_Type);
-    RegisterRuntimeAddr(0x1800453e0, (void*)&RtUiDialogInstance_Type);                 ++n;
-
-    // ---- Wave 9 lane UID: the teardown half of the dialog lifecycle -------
-    // Registered under BOTH doors, which is the convention lane UIF's
-    // half-registered `?SetUpperLeft@` proved is not decoration:
-    //   * BY NAME  -- engine/funcs/engine_funcs.cpp:1757 binds
-    //     `fn_DialogInstance_Dtor` through ResolveExport.
-    //   * BY ADDRESS -- runtime/src/object/deleting_dtor.cpp's RT_DELDTOR row
-    //     for UI::DialogInstance (0x1800458c0 -> 0x180114d40) reaches ~this
-    //     by address, and the minted `??_7DialogInstance@UI@@6B@` fills its
-    //     slot 0 from that deleting destructor.
-    // The mangling is the VIRTUAL one, UEAA, taken from the shipped export
-    // directory rather than constructed: QEAA would resolve NULL in silence
-    // (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
-    RegisterRuntimeExport("??1DialogInstance@UI@@UEAA@XZ",
-                          (void*)&RtUiDialogInstance_Dtor);
-    RegisterRuntimeAddr(0x180114d40, (void*)&RtUiDialogInstance_Dtor);                ++n;
-
-    // The IDENTITY LINE for this lane. Every measurement in
-    // docs/runtime_port/WAVE9_LANE_UID.md is gated on finding this string in
-    // THAT RUN'S OWN log, not on "I rebuilt" and not on a timestamp -- lanes
-    // in this wave have measured the wrong exe more than once.
-    printf("[RtPort]   WAVE9 LANE UID ARMED -- ~DialogInstance (0x180114d40) + "
-                "LinkedList::Clear (0x1800325f0) + the Array<8>::SetSize address door "
-                "(0x18002fca0).\n");
+    // (ENDGAME B.3.9 UI-D: the DialogInstance slot doors -- Persist,
+    // OnSerializeSettings, TypeName, Type -- and the ??1DialogInstance door
+    // went with the minted table.) The static export and the factory are the
+    // class's own; both doors on each.
+    RegisterRuntimeExport("?TypeId@DialogInstance@UI@@SAIXZ",
+                          (void*)&UI::DialogInstance::TypeId);
+    RegisterRuntimeAddr(0x1800453f0, (void*)&UI::DialogInstance::TypeId);              ++n;
+    RegisterRuntimeExport("?CreateNewObject@DialogInstance@UI@@SAPEAVBase@Object@@XZ",
+                          (void*)&UI::DialogInstance::CreateNewObject);
+    RegisterRuntimeAddr(0x1800454f0, (void*)&UI::DialogInstance::CreateNewObject);     ++n;
 
     // ---- Wave 9 lane UIC: the two rows lane UIF declined at 8 and 11 -------
     // Both names were verified present in the shipped export directory with

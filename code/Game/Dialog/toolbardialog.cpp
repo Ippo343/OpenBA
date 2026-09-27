@@ -624,20 +624,20 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
     void* dialogInst = nullptr;
 
     if (newBuf != nullptr) {
-        // Null parent InternalBasePtr
-        uint8_t nullParent[8];
-        new (nullParent) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-
         // External resource from uiDescItem+0x28
         void* extRes = *(void**)((uintptr_t)uiDescItem + 0x28);
 
-        // DialogInstance ctor: (self, ui, extRes, parentPtr, dataSource, extraPtr, flags)
-        // param is passed as the data source (identifies the utility type)
-        dialogInst = fn_DialogInstance_Ctor(newBuf, userInterface, extRes,
-                                            nullParent, (void*)param, nullptr, 0);
-
-        // Override vtable to ToolUI child dialog vtable
-        *(uintptr_t*)dialogInst = g_ToolUI_ChildDialog_Vtable;
+        // DialogInstance ctor: (ui, extRes, parent = null, dataSource, 0, 0);
+        // param is passed as the data source (identifies the utility type).
+        // ENDGAME B.3.9 UI-D (B9-13 foreign site): the real 6-arg ctor
+        // (0x180114870); its compiler table is the one retail's copy at
+        // 0x14015f5a0 describes, so the hand stamp is gone.
+        dialogInst = ::new (newBuf) UI::DialogInstance(
+            reinterpret_cast<UI::UserInterface*>(userInterface),     // B.3.8 bridge
+            reinterpret_cast<const UI::Dialog*>(extRes),             // B.3.8 bridge
+            Object::InternalPtr<UI::DialogInstance>(),               // parent: null
+            reinterpret_cast<Object::Base*>(param),                  // B.3.8 bridge
+            nullptr, 0);
         extern void* g_HarnessLastUtilityDialog;
         g_HarnessLastUtilityDialog = dialogInst;   // harness: drive its controllers
     }

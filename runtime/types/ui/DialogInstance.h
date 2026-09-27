@@ -360,16 +360,16 @@ static_assert(sizeof(ComboDialog) == 0xd0,
 // (DialogController.h). Slot 8 takes the ADDRESS of the caller's InternalPtr
 // copy, for the reason DialogController.h's banner gives.
 //
-// CONCRETE, REAL CONSTRUCTORS (ENDGAME B.3.8 block RB, B38_RULES D1/D2):
-// 20 exe dialog classes and the ToolUI child dialog still construct this base
-// through the ctor DOOR (`fn_DialogInstance_Ctor`, 21 sites) and stamp
-// hand-built tables until DLG / GOAL / TOOL convert them; the door and the
-// real 6-argument ctor share ONE body (`InitFields`), as the dtor door and
-// `~DialogInstance` share `ReleaseFields`. The default ctor 0x180114ca0 is a
-// real ctor with retail's body. `RtUi_DialogInstance_CtorFromElement`
-// (0x1801146b0, ComboDialog's) stays a door only: no exe class calls it.
-// Slot 0 is concrete because the exe instantiates the class itself (its table
-// copy 0x14015f5a0); the mint's `RT_DELDTOR` row still serves the doors.
+// CONCRETE, REAL CONSTRUCTORS (ENDGAME B.3.8 block RB; B.3.9 UI-D retired
+// the minted table, its RT_DELDTOR row, the ??0 / ??1 doors and the slot
+// doors). Every construction is a real constructor: the 20 exe dialog
+// classes' init lists, the plain child dialogs the exe builds (ToolUI,
+// edit-select, toolbar utility, the main menu's BuildId child:
+// `::new (p) UI::DialogInstance(...)`), ComboDialog / ToolTipDialog, and the
+// factory. The 6-argument ctor's body is `InitFields` and the dtor's is
+// `ReleaseFields` (private helpers; no door shares them any more). Slot 0 is
+// the SCALAR arm because the exe instantiates the class itself (its table
+// copy 0x14015f5a0).
 //
 // UI IS CONSTRUCTED ON THE LOADER THREAD (RULE B6-5): no member below keeps a
 // static initialiser, a lazy singleton or a first-call cache.
@@ -393,8 +393,8 @@ public:
     // 0x14015f5a0 (B38_SLOTS section 4; the ToolUI child dialog and four other
     // stampers), whose slot 0 is the exe's scalar deleting dtor 0x140020cb0:
     //     CALL [??1DialogInstance]  ; TEST BL,1 ; JZ ; CALL [MemFree]  ; MOV RAX,RDI
-    // The DLL's own vector deleting dtor 0x1800458c0 stays the mint's
-    // `RT_DELDTOR` row for the minted-table objects the doors still build.
+    // The DLL's own vector deleting dtor 0x1800458c0 (and its RT_DELDTOR
+    // row) is retired with the minted table (ENDGAME B.3.9 UI-D).
     // Inline so the key function (TypeName) and so the vtable's TU are unchanged.
     Object::Base* DeletingDtor(unsigned flags) override {
         this->~DialogInstance();
@@ -476,14 +476,15 @@ public:
     DialogInstance(const DialogInstance& other);                               // 0x180045630
     DialogInstance& operator=(const DialogInstance& other);                    // 0x180045790
 
-    static uint32_t      TypeId();                                // 0x1800453f0  not ported
+    static uint32_t      TypeId();                                // 0x1800453f0  (dialog.cpp)
     // System::MemoryAllocator statics — B36_RULES 7 keeps them doors
     // (`??3DialogInstance@UI@@SAXPEAX@Z` is one, in spritesheet_new.cpp).
     static void* operator new(std::size_t bytes);                 // 0x180045410
     // Declared, defined NOWHERE: construct in place with `::new (p) X(...)`.
     static void* operator new(std::size_t bytes, void* place);    // 0x180045480
     static void  operator delete(void* p);                        // 0x180045490
-    static Object::Base* CreateNewObject();                       // 0x1800454f0
+    // The class's own factory (B.3.9 UI-D; no CreateInPlaceObject export).
+    static Object::Base* CreateNewObject();                       // 0x1800454f0  (dialog.cpp)
 
     // ---- construction (ENDGAME B.3.8 block RB, RULE B8-1) --------------------
     // REAL constructors now. The compiler stamps Base -> Internal ->
@@ -519,12 +520,9 @@ public:
 
     // ??0DialogInstance@UI@@QEAA@PEAVUserInterface@1@PEBVDialog@1@V?$InternalPtr@
     //     VDialogInstance@UI@@@Object@@PEAVBase@5@PEAXH@Z   0x180114870
-    // The overload the exe's 21 dialog ctors call (`fn_DialogInstance_Ctor`).
-    // ONE body with the door `RtUiDialogInstance_Ctor` (dialog_create.cpp):
-    // the door stamps the MINTED table for still-unconverted subclasses and
-    // then runs the same `InitFields`. A converted class never goes through
-    // the door (B8-1). `parent` is by value here; retail's hidden reference is
-    // the door's concern.
+    // The overload the exe's dialog ctors call. Its body is `InitFields`
+    // (dialog_create.cpp). `parent` is by value (retail passes it by hidden
+    // reference and the callee owns the copy).
     DialogInstance(UserInterface* ui, const Dialog* dialog,
                    Object::InternalPtr<DialogInstance> parent,
                    Object::Base* dataSource, void* userData, int32_t userFlags) {
@@ -542,23 +540,11 @@ public:
                    Object::InternalPtr<DialogInstance> parent,
                    Object::Base* dataSource, void* userData, int32_t userFlags);
 
-    // The doors' way onto the shared bodies (B38_RULES D1): the ctor door
-    // `RtUiDialogInstance_Ctor` and the dtor door `RtUiDialogInstance_Dtor`
-    // stamp the minted table themselves, then call these. Nothing else may.
-    struct DoorBody {
-        static void Init(DialogInstance* d, UserInterface* ui, const Dialog* dialog,
-                         const Object::InternalPtr<DialogInstance>* parent,
-                         Object::Base* dataSource, void* userData, int32_t userFlags) {
-            d->InitFields(ui, dialog, parent, dataSource, userData, userFlags);
-        }
-        static void Release(DialogInstance* d) { d->ReleaseFields(); }
-    };
-
 protected:
     // `??1DialogInstance@UI@@UEAA@XZ` 0x180114d40. NON-VIRTUAL (decision 2).
     // The compiler restamps DialogInstance's table on entry and chains
     // ~Array (x2, no-ops on the zeroed headers) and ~Internal after the body —
-    // retail's inlined ~Internal tail. ONE body with the door.
+    // retail's inlined ~Internal tail.
     ~DialogInstance() { ReleaseFields(); }
 
 private:
