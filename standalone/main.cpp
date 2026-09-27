@@ -62,26 +62,6 @@ extern "C" bool RtAllocSwapArmCutover(void* ourAllocate, void* ourFree,
                                       void** outComposedAllocate, void** outComposedFree);
 
 // ============================================================
-// Mirrors Runtime DLL's BaseTypeInfo struct layout (used by both the probe
-// and the External::Load crash diagnostic).
-// ============================================================
-struct ProbeBaseTypeInfo {
-    uint32_t typeId;
-    uint32_t pad;
-    const char* name;
-    const char* parent;
-    // +0x18 is the type's FILE EXTENSION, compared with _stricmp in
-    // Factory::GetTypeIdForFileExtension (Runtime 0x1800c04c0). It was called
-    // `abstract` here until Wave 3 lane A confirmed the layout against the DLL
-    // (runtime/types/object/TypeInfo.h). All eight OFFSETS were correct; this
-    // one name was not. Nothing reads it, so the misnomer was inert.
-    const char* fileExtension;
-    void* factoryFn;
-    void* inPlaceFn;
-    ProbeBaseTypeInfo* next;
-};
-
-// ============================================================
 // Reset Video* registry keys to known-safe values BEFORE Engine::Startup.
 //
 // Banished stores all settings under HKCU\Software\Shining Rock Software LLC
@@ -661,50 +641,6 @@ static void TerminateHandler() {
     CrashLogf("=== END terminate ===\n");
     FlushLogsToDisk();
     ExitProcess(5);
-}
-
-// ============================================================
-// PROBE: walk Runtime's _firstTypeInfo (head @ Runtime 0x1801fc6e0).
-// BaseTypeInfo struct layout: +0x08 name, +0x10 parent, +0x20 factoryFn,
-// +0x30 next. typeId at +0x00 is 0xFFFFFFFF until Factory::Startup runs.
-// ============================================================
-static void DumpFirstTypeInfo(const char* tag) {
-    uintptr_t headAddr = ResolveAddr(Module::Runtime, 0x1801fc6e0);
-    if (!headAddr) {
-        printf("[Probe %s] Could not resolve _firstTypeInfo head address\n", tag);
-        return;
-    }
-    ProbeBaseTypeInfo* head = *reinterpret_cast<ProbeBaseTypeInfo**>(headAddr);
-    int n = 0;
-    printf("[Probe %s] _firstTypeInfo @ 0x%llx, head=%p\n",
-           tag, (unsigned long long)headAddr, (void*)head);
-    int descMatches = 0;
-    for (ProbeBaseTypeInfo* p = head; p != nullptr && n < 1000; p = p->next, n++) {
-        if (n < 5) {
-            printf("[Probe %s]   #%-3d name=%-32s parent=%s\n",
-                   tag, n,
-                   p->name ? p->name : "(null)",
-                   p->parent ? p->parent : "(null)");
-        }
-        // Spot-check: do the description types referenced in Loading.rsc exist?
-        if (p->name) {
-            const char* targets[] = {
-                "GroupDescription", "RibbonDescription", "ImageDescription",
-                "TextDescription", "AnimatedImageDescription", "ElementDescription",
-                "Dialog", nullptr
-            };
-            for (int i = 0; targets[i]; ++i) {
-                if (strcmp(p->name, targets[i]) == 0) {
-                    printf("[Probe %s] FOUND #%d %s parent=%s\n",
-                           tag, n, p->name, p->parent ? p->parent : "(null)");
-                    ++descMatches;
-                    break;
-                }
-            }
-        }
-    }
-    printf("[Probe %s] Total: %d entries, %d Loading.rsc target descs found\n",
-           tag, n, descMatches);
 }
 
 // ============================================================
@@ -1451,21 +1387,12 @@ static bool Init() {
     //     wrong home for it.
     StallDebug::Mark("redzone/alloc-lock/diagnostic installers");
 
-    // 5. PROBE: dump _firstTypeInfo state right after Runtime DLL load.
-    //    Confirms Runtime self-registered its types via inlined CRT-init stubs
-    //    at 0x180147xxx. Should print 150+ Runtime types (Dialog, Description,
-    //    Element subclasses, etc.).
-    DumpFirstTypeInfo("BEFORE InvokeAllRegistrations");
-    StallDebug::Mark("DumpFirstTypeInfo (before)");
-
-    // 6. (was InvokeAllRegistrations) The exe type records are real
-    //    Object::BaseTypeInfo statics linked into _firstTypeInfo at CRT init
-    //    (ENDGAME B.3.9 RF, code/Game/Object/exe_type.h); there is nothing to
-    //    drain. Engine::Engine::Startup -> Object::Factory::Startup walks the
-    //    chain and populates the typeId tree.
-
-    DumpFirstTypeInfo("AFTER InvokeAllRegistrations");
-    StallDebug::Mark("DumpFirstTypeInfo (after)");
+    // 5./6. (were the two DumpFirstTypeInfo probes around InvokeAllRegistrations)
+    //    The exe type records are real Object::BaseTypeInfo statics linked into
+    //    _firstTypeInfo at CRT init (ENDGAME B.3.9 RF, code/Game/Object/exe_type.h);
+    //    there is nothing to drain. Engine::Engine::Startup ->
+    //    Object::Factory::Startup walks the chain and populates the typeId tree;
+    //    RunGameMain dumps the whole table, order-free, right after it.
 
     // NOTE: component type-ID .rdata globals (FillComponentTypeIdGlobals_nature)
     // are filled later, in RunGameMain right after Engine::Startup —

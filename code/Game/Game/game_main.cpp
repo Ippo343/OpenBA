@@ -48,6 +48,7 @@
 #include "stall_debug.h"
 #include "boot_state_watchdog.h"
 #include "Object/factory_registration.h"   // Object::VerifyExeTypeInfos (ENDGAME B.3.9 RF)
+#include "object/TypeInfo.h"               // Object::BaseTypeInfo::_firstTypeInfo (the dump)
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
@@ -478,16 +479,11 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     // and assigns CRC32-derived typeIds (overwriting the 0xFFFFFFFF ctor default).
     // If the walk succeeded, every entry now has a non-FFFFFFFF typeId.
     {
-        uintptr_t headAddr = ResolveAddr(Module::Runtime, 0x1801fc6e0);
-        // Layout CONFIRMED against the DLL 2026-09-06 (Wave 3 lane A,
-        // runtime/types/object/TypeInfo.h): every offset here is right. The
-        // +0x18 field is the type's FILE EXTENSION (Factory::GetTypeIdForFileExtension,
-        // Runtime 0x1800c04c0), not an "abstract" name as this struct used to say.
-        struct Probe { uint32_t typeId; uint32_t pad; const char* name; const char* parent;
-                       const char* ext; void* f; void* ip; Probe* next; };
-        Probe* head = headAddr ? *reinterpret_cast<Probe**>(headAddr) : nullptr;
+        // ENDGAME B.3.9 RF: the chain head is the class static
+        // Object::BaseTypeInfo::_firstTypeInfo (was a by-address read of 0x1801fc6e0).
+        const ::Object::BaseTypeInfo* const head = ::Object::BaseTypeInfo::_firstTypeInfo;
         int n = 0, withId = 0;
-        for (Probe* p = head; p && n < 1000; p = p->next, n++) {
+        for (const ::Object::BaseTypeInfo* p = head; p && n < 1000; p = p->next, n++) {
             if (p->typeId != 0xFFFFFFFF) withId++;
         }
         printf("[GameMain] Post-Startup _firstTypeInfo: %d entries, %d have non-FF typeId\n",
@@ -498,11 +494,15 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
         // `[FactoryReg] Registered N` line. Only after a Startup that got past
         // Factory::Startup: a failed Startup never assigned the ids.
         if (ok != 0) ::Object::VerifyExeTypeInfos();
-        // Dump typeId for first 10 entries — sanity-check CRC32 algorithm.
-        int s = 0;
-        for (Probe* p = head; p && s < 10; p = p->next, s++) {
-            printf("[GameMain]   typeId=0x%08X name=%s\n", p->typeId,
-                   p->name ? p->name : "?");
+        // The whole table, one line per record: id, name, (namespace-stripped)
+        // parent name or "-". ORDER-FREE by construction -- the chain order is
+        // static-init order and carries no meaning (b39_session/ORDER_MEASUREMENT.md);
+        // the gate SORTS these lines (B39_RULES D6/D9). Replaces the old
+        // "first ten entries" dump, whose content was the chain order.
+        for (const ::Object::BaseTypeInfo* p = head; p; p = p->next) {
+            printf("[GameMain]   typeId=%08X name=%s parent=%s\n", p->typeId,
+                   p->name ? p->name : "?",
+                   p->parentName ? p->parentName : "-");
         }
     }
 
