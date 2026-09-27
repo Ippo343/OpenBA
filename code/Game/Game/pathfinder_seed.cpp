@@ -30,6 +30,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <new>
 #include <cstdio>
 #include <cstdlib>
 #include "system/Thread.h"     // ENDGAME B.3.4b System caller batch (CriticalSection/Thread)
@@ -42,10 +43,8 @@ extern void Pf_ArrayResize18_d830(int64_t* arr, int count);                     
 
 namespace {
 // Runtime-DLL functions (resolved by mangled name; import strings verified in the exe .rdata).
-typedef void* (*fn_ThreadCtor_t)(void* self, unsigned int stackSize);   // ??0Thread@System@@QEAA@I@Z
 typedef void* (*fn_CSCtor_t)(void* self);                               // ??0CriticalSection@System@@QEAA@XZ
 typedef void  (*pf_fn_MemFree_t)(void* ptr);                            // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
-static fn_ThreadCtor_t s_fn_ThreadCtor = nullptr;
 static fn_CSCtor_t     s_fn_CSCtor     = nullptr;
 static pf_fn_MemFree_t s_fn_MemFree    = nullptr;
 
@@ -130,12 +129,11 @@ extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
     uint8_t* game = reinterpret_cast<uint8_t*>(gameObjV);
     if (*reinterpret_cast<void**>(game + 0x68) != nullptr) return;   // already seeded
 
-    if (!s_fn_ThreadCtor) {
-        s_fn_ThreadCtor = reinterpret_cast<fn_ThreadCtor_t>(ResolveExport("??0Thread@System@@QEAA@I@Z"));
+    if (!s_fn_CSCtor) {
         s_fn_CSCtor     = reinterpret_cast<fn_CSCtor_t>(ResolveExport("??0CriticalSection@System@@QEAA@XZ"));
         s_fn_MemFree    = reinterpret_cast<pf_fn_MemFree_t>(ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
     }
-    if (!s_fn_ThreadCtor || !s_fn_CSCtor) {
+    if (!s_fn_CSCtor) {
         fprintf(stderr, "[PfSeed] missing Thread/CS ctor export — skip\n"); fflush(stderr);
         return;
     }
@@ -145,10 +143,9 @@ extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
     uint8_t* p = reinterpret_cast<uint8_t*>(pfV);
 
     // --- FUN_1400a67f0 ctor (inline) ---
-    s_fn_ThreadCtor(pfV, 0x10000);                       // System::Thread::Thread(self, 0x10000) — creates+parks the worker thread
-    // Bridge (B4b-2): the Thread ctor door stamped the minted base table; the
-    // class's own table goes over it, as retail's ctor stamps 0x14015ef18.
-    *reinterpret_cast<const void**>(p)      = PathfinderThread::Vtable();
+    // ENDGAME B.3.9 ENG W2: the REAL class ctor on System::Thread(0x10000) --
+    // creates + parks the worker thread; the 0x14015ef18 stamp is the compiler's.
+    ::new (pfV) PathfinderThread(0x10000);
     s_fn_CSCtor(p + 0x30);                               // System::CriticalSection::CriticalSection(self+0x30)
     *reinterpret_cast<int*>(p + 0x58)       = 1;         // next result-slot generation id
     p[0x5c]                                 = 1;         // priming runs SYNC (a6a30/a6430 apply inline); flipped to 0 (async) after priming

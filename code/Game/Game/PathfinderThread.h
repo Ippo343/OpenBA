@@ -13,11 +13,9 @@
 //   [0] 0x1400a6360 Run          (the worker loop)
 //   [1] 0x18000c590 OnCompleted  (System::Thread's, a bare RET — inherited)
 //
-// CONSTRUCTION: System::Thread's constructor is still a DOOR (B4b-2; the base
-// has no C++ ctor), so the object is built the way Engine::Loader's is: the
-// Thread ctor door on the raw block, then this class's compiler table stamped
-// over the minted base table (pathfinder_seed.cpp). Field layout from the ctor
-// is documented there; the members read offsets.
+// CONSTRUCTION (ENDGAME B.3.9 ENG W2): `::new (p) PathfinderThread(0x10000)`
+// on System::Thread's real ctor (pathfinder_seed.cpp). Field layout from the
+// ctor is documented there; the members read offsets.
 // ============================================================================
 
 #include <cstdint>
@@ -31,8 +29,12 @@ public:
 
     static const void* Vtable();
 
+    // Retail's ctor 0x1400a67f0 (inlined in CreateNaturalResource_impl_sub_e8c0):
+    // `??0Thread@System@@QEAA@I@Z` with 0x10000, then the 0x14015ef18 stamp (the
+    // compiler's). ENDGAME B.3.9 ENG W2; the field stores stay in pathfinder_seed.cpp.
+    explicit PathfinderThread(unsigned int stackSize) : System::Thread(stackSize) {}
+
 protected:
-    PathfinderThread() = delete;                          // built through the Thread ctor door
     ~PathfinderThread() = default;                        // torn down by GameDtor_ThreadDtor_a6720
 
 public:
