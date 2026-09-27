@@ -253,22 +253,14 @@ int ClearArea::OnComplete(void* /*citizen*/, void* treeEntry, int cellIndex) {
 // ============================================================
 // ClearArea::OnCancel (0x1400e5e00)
 // ============================================================
-// Forwards to Cleanup via vtable +0x30 with copied params.
-// Original implementation: deref params, call vtable[6] (Cleanup).
-// Since we control both, just call Cleanup directly.
-int ClearArea::OnCancel(void* citizen, void* treeEntry, int /*arg3*/) {
-    // The original copies *treeEntry and *citizen to stack locals,
-    // then calls vtable +0x30 (Cleanup) via indirect call.
-    // Since Cleanup ignores the extra params and only uses self,
-    // we can call it directly.
-    typedef int (*fn_Cleanup_t)(void* self, void* p1, void* p2);
-    void** vtable = *(void***)this;
-    fn_Cleanup_t cleanup = (fn_Cleanup_t)vtable[6];  // vtable +0x30
-    // Copy values as original does
-    uintptr_t treeCopy = treeEntry ? *(uintptr_t*)treeEntry : 0;
-    uintptr_t citizenCopy = citizen ? *(uintptr_t*)citizen : 0;
-    cleanup(this, &citizenCopy, &treeCopy);
-    return 0;
+// Retail (disassembly): copy *R8 and *RDX to stack slots, then dispatch
+// vtable +0x30 = slot 6 OnComplete(&citizenCopy, &treeCopy, R9 unchanged) and
+// return its result. Slot 6 is OnComplete (3 arguments), not Cleanup (slot 8):
+// the old 2-argument typedef left OnComplete's cellIndex in whatever R9 held.
+int ClearArea::OnCancel(void* citizen, void* treeEntry, int arg3) {
+    uintptr_t treeCopy = *(uintptr_t*)treeEntry;
+    uintptr_t citizenCopy = *(uintptr_t*)citizen;
+    return OnComplete(&citizenCopy, &treeCopy, arg3);
 }
 
 // ============================================================
