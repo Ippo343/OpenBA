@@ -40,6 +40,7 @@
 
 #include "../../types/system/String.h"
 #include "../../funcs/rt_port.h"
+#include "../../types/io/Serializer.h"   // B3X W0: IO::ReaderWriter, called by name
 #include "string.h"
 
 namespace RtSystem {
@@ -908,22 +909,11 @@ struct RtEncoding { void** vtable; };
 struct RtStream   { void** vtable; int32_t loadingFlag; int32_t pad; void* encoding; };
 struct RtSerializer { RtStream* stream; RtEncoding* encoding; };
 
-// Encoding vtable byte offsets used here.
-constexpr int kEncSerializeCharArr = 0x18;  // (count, char*,   name)
-constexpr int kEncSerializeU16Arr  = 0x50;  // (count, ushort*, name)
-constexpr int kEncSerializeUInt    = 0x98;  // (uint&,          name)
-
-inline void EncCallUInt(RtEncoding* enc, uint32_t* v) {
-    using Fn = void (*)(RtEncoding*, uint32_t*, const char*);
-    reinterpret_cast<Fn>(
-        *reinterpret_cast<void**>(reinterpret_cast<char*>(enc->vtable) + kEncSerializeUInt))(
-        enc, v, nullptr);
-}
-inline void EncCallArr(RtEncoding* enc, int slot, uint64_t count, void* p) {
-    using Fn = void (*)(RtEncoding*, uint64_t, void*, const char*);
-    reinterpret_cast<Fn>(
-        *reinterpret_cast<void**>(reinterpret_cast<char*>(enc->vtable) + slot))(
-        enc, count, p, nullptr);
+// B3X W0: `RtSerializer::encoding` is the Serializer's +0x08, i.e. the
+// IO::ReaderWriter, and it is called BY NAME below: SerializeUInt (+0x98),
+// SerializeUShortArray (+0x50), SerializeCharArray (+0x18).
+inline ::IO::ReaderWriter* Rw(RtEncoding* enc) {
+    return reinterpret_cast<::IO::ReaderWriter*>(enc);   // B.3.x bridge
 }
 
 // ---- the legacy UTF-16 branch --------------------------------------------
@@ -987,7 +977,7 @@ void String::Serialize(void* serializerRaw) {
     // flag. On save this is what goes out; on load the call overwrites it.
     uint32_t n = _data ? static_cast<uint32_t>(StringLength(_data) + 1) : 0u;
     n |= 0x80000000u;
-    EncCallUInt(enc, &n);
+    Rw(enc)->SerializeUInt(n, nullptr);                  // +0x98
 
     const bool legacyWide = ((n >> 31) & 1u) == 0u;
     n &= 0x7fffffffu;
@@ -1007,7 +997,8 @@ void String::Serialize(void* serializerRaw) {
         }
 
         uint8_t* buf = static_cast<uint8_t*>(RtMemAlloc(static_cast<uint64_t>(n) * 2, 4));
-        EncCallArr(enc, kEncSerializeU16Arr, n, buf);
+        Rw(enc)->SerializeUShortArray(static_cast<int>(n),
+                                      reinterpret_cast<uint16_t*>(buf), nullptr);   // +0x50
 
         // Retail stops two bytes short: the trailing UTF-16 NUL is not decoded.
         uint8_t* const end = buf + (static_cast<int>(n) * 2 - 2);
@@ -1046,7 +1037,7 @@ void String::Serialize(void* serializerRaw) {
         return;
     }
 
-    EncCallArr(enc, kEncSerializeCharArr, n, _data);
+    Rw(enc)->SerializeCharArray(static_cast<int>(n), _data, nullptr);   // +0x18
 }
 
 // ============================================================

@@ -193,7 +193,6 @@ using RtIo::MemoryStream;
 using rt::io::Encoding;
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
-namespace rw_vtbl = rt::io::rw_vtbl;
 
 using ModArray = Collection::Array<ModInfo>;
 
@@ -227,13 +226,12 @@ using ModArray = Collection::Array<ModInfo>;
 // R8D zeroed by `XOR R8D,R8D` at 0x1800c1bd1 and never reloads it.
 using CreateCodecFn = ReaderWriter* (*)(Encoding*, Serializer*, int);
 
-// IO::ReaderWriter vtable slots. Displacements from runtime/types/io/Serializer.h
-// (RETAIL bytes — the profile build's differ and must never be copied).
-using RwGetVersionFn = int  (*)(ReaderWriter*);                              // +0x08
-using RwScalarUIntFn = void (*)(ReaderWriter*, uint32_t*, const char*);      // +0x98
-using RwScalarIntFn  = void (*)(ReaderWriter*, int*,      const char*);      // +0xa0
-using RwBytesFn      = void (*)(ReaderWriter*, int, void*, const char*);     // +0xc8
-using RwDeleteFn     = void (*)(ReaderWriter*, unsigned int);                // +0x00
+// IO::ReaderWriter: called BY NAME (B3X W0) -- GetVersion +0x08, SerializeUInt
+// +0x98, SerializeInt +0xa0, SerializeBytes +0xc8, DeletingDtor slot 0. `rw` is
+// the rt::io POD view of the object the Encoding factory built.
+inline ::IO::ReaderWriter* Rw(ReaderWriter* rw) {
+    return reinterpret_cast<::IO::ReaderWriter*>(rw);   // B.3.x bridge
+}
 
 using LoadMetaDataFn = void (*)(SaveLoad*, const char**, void**,
                                 int*, int*, int*, ModArray*);
@@ -324,7 +322,7 @@ void Save::SaveLoad::LoadMetaData(System::String& description, void** pixels,
     ReaderWriter* rw = ser.readerWriter;
 
     // ---- 0x1800c1bf7 : out-param 6 = the format version --------------------
-    *version = VSlot<RwGetVersionFn>(rw, rw_vtbl::kGetVersion)(rw);
+    *version = Rw(rw)->GetVersion();
 
     // ---- 0x1800c1c09 : out-param 1 = the description String ----------------
     // ENDGAME B.3.1 step 2: `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`
@@ -336,8 +334,8 @@ void Save::SaveLoad::LoadMetaData(System::String& description, void** pixels,
 
     // ---- 0x1800c1c1c / 0x1800c1c34 : out-params 3 and 4 --------------------
     // Both through the SIGNED scalar slot (+0xa0) with a null field name.
-    VSlot<RwScalarIntFn>(rw, rw_vtbl::kScalarInt)(rw, width,  nullptr);
-    VSlot<RwScalarIntFn>(rw, rw_vtbl::kScalarInt)(rw, height, nullptr);
+    Rw(rw)->SerializeInt(*width,  nullptr);
+    Rw(rw)->SerializeInt(*height, nullptr);
 
     // ---- 0x1800c1c3a..0x1800c1c93 : out-param 2 = the thumbnail ------------
     // `MOV ESI,[RDI] ; IMUL ESI,[RBX] ; SHL ESI,0x2` — a 32-bit product that is
@@ -349,17 +347,17 @@ void Save::SaveLoad::LoadMetaData(System::String& description, void** pixels,
     // MemAlloc (established by Wave 5 on SavedState::Store, same call shape).
     const int32_t byteCount = (*width) * (*height) * 4;
     *pixels = MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(byteCount)), 4);
-    VSlot<RwBytesFn>(rw, rw_vtbl::kSerializeBytes)(rw, byteCount, *pixels, nullptr);
+    Rw(rw)->SerializeBytes(byteCount, *pixels, nullptr);
 
     // ---- 0x1800c1c9a : the mod list, format version 3 and up ---------------
     if (*version > 2) {
         // The SECOND write to the version out-param. See note 1 in the header.
-        VSlot<RwScalarIntFn>(rw, rw_vtbl::kScalarInt)(rw, version, nullptr);
+        Rw(rw)->SerializeInt(*version, nullptr);
 
         // Seeded from the array (the writing path's value), then replaced by the
         // stored count on the reading path. See note 2.
         int count = mods->_size;
-        VSlot<RwScalarIntFn>(rw, rw_vtbl::kScalarInt)(rw, &count, nullptr);
+        Rw(rw)->SerializeInt(count, nullptr);
 
         // `MOV RAX,[RSP+0x20] ; CMP dword ptr [RAX+0x8],0x0` — the stream the
         // SERIALIZER holds, dereferenced, then its direction. This is the
@@ -379,11 +377,11 @@ void Save::SaveLoad::LoadMetaData(System::String& description, void** pixels,
             reinterpret_cast<System::String&>(e->name).Serialize(&ser);
             reinterpret_cast<System::String&>(e->path).Serialize(&ser);
             // +0x98, the UNSIGNED slot, for all three. See note 4.
-            VSlot<RwScalarUIntFn>(rw, rw_vtbl::kScalarUInt)(
-                rw, reinterpret_cast<uint32_t*>(&e->versionMajor), nullptr);
-            VSlot<RwScalarUIntFn>(rw, rw_vtbl::kScalarUInt)(rw, &e->gameVersion, nullptr);
-            VSlot<RwScalarUIntFn>(rw, rw_vtbl::kScalarUInt)(
-                rw, reinterpret_cast<uint32_t*>(&e->versionMinor), nullptr);
+            Rw(rw)->SerializeUInt(
+                *reinterpret_cast<uint32_t*>(&e->versionMajor), nullptr);
+            Rw(rw)->SerializeUInt(e->gameVersion, nullptr);
+            Rw(rw)->SerializeUInt(
+                *reinterpret_cast<uint32_t*>(&e->versionMinor), nullptr);
         }
     }
 
@@ -391,7 +389,7 @@ void Save::SaveLoad::LoadMetaData(System::String& description, void** pixels,
     // The scalar-DELETING destructor with flags = 1, i.e. the codec is freed.
     if (ser.readerWriter != nullptr) {
         ReaderWriter* dying = ser.readerWriter;
-        VSlot<RwDeleteFn>(dying, rw_vtbl::kDtor)(dying, 1u);
+        Rw(dying)->DeletingDtor(1u);
     }
 
     // ---- 0x1800c1d77 : cms.Close() -----------------------------------------
