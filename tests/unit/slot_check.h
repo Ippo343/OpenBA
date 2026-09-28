@@ -24,9 +24,9 @@
 // retail number and translates it with RetailSlot<T> / RetailByteOffset<T>
 // (RetailEntry / RetailSlotFn read the entry).
 //
-// Left for the flip (W1): raw slot-0 reads and calls (slot 0 becomes D1, and
-// D0 is at 1), loops over a whole table's length, and minted-copy lengths —
-// see docs/runtime_port/endgame_b/b3x_session/T0_LEFT_FOR_W1.md.
+// Retail slot 0 itself is the destructor pair (D1 at compiler slot 0, D0 at
+// 1): tests/unit/dtor_check.h reads and proves it. What the flip (B3X W1) did
+// to the suite: docs/runtime_port/endgame_b/b3x_session/W1_TESTS_DONE.md.
 // ============================================================================
 #include "unit.h"
 
