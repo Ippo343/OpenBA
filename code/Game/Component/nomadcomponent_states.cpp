@@ -37,7 +37,7 @@
 #include "Component/CharacterComponent.h"
 #include "Component/ControllerComponent.h"
 #include "Action/exe_bodies.h"   // Pf_ActStackPush_54e0, Pf_MoveToCtor_9170, ActHunt_MarkEntityRemoval_c2ea0
-#include "Game/exe_bodies.h"     // Reimpl_MapGetTerrainPos
+#include "Game/exe_bodies.h"     // Reimpl_MapGetTerrainPos, fn_Random_RandFloatTol
 #include "Game/exe_constants.h"  // kRdata_1401721cc
 #include "Player/exe_bodies.h"   // PlayerPath_FindComponent_3ea0
 #include "Work/exe_bodies.h"     // WorkBase_TaskListCleanup_c5400

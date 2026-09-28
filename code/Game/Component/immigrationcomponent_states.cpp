@@ -71,7 +71,8 @@
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Action/exe_bodies.h"            // Pf_*, ActCNR_NR_SetVariant_1253d0
 #include "Component/exe_bodies.h"         // CitizenComp_DeferredInit_117080
-#include "Game/exe_bodies.h"              // Reimpl_MapGetTerrainPos
+#include "Game/exe_bodies.h"              // Reimpl_MapGetTerrainPos, fn_Random_RandFloatTol
+#include "Entity/exe_bodies.h"            // fn_FindComponent_Character / _Citizen
 #include "Player/exe_bodies.h"            // PlayerPath_FindComponent_3ea0, ToolTile_SetTransformFromYaw_3870
 #include "Work/exe_bodies.h"              // WorkBase_FindComponent_2ed0
 #include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl

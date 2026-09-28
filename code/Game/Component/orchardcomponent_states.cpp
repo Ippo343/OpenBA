@@ -70,6 +70,7 @@
 #include "Component/exe_bodies.h"   // the Component leaves named below
 #include "Component/orchardcomponent_funcs.h"   // OrchardComponent_GetGrowth
 #include "Work/exe_bodies.h"        // WorkBase_FindComponent_3050, the work-item ctors
+#include "Entity/exe_bodies.h"      // fn_FindComponent_SM
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
 #include "Component/ControllerComponent.h"
