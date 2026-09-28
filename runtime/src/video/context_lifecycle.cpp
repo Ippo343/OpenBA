@@ -600,69 +600,6 @@ void BuildCase(Context* c, unsigned seed) {
 }  // namespace
 
 // ============================================================================
-// Registration
-//
-// Every mangled name below was checked against the shipped export directory of
-// C:\GOG Games\Banished\Runtime-x64.dll with pefile BEFORE any body was written
-// (reference_resolveexport_phantom_names.md):
-//
-//   ?ClearResources@Context@Video@@QEAAXXZ            0x1800f2090  ord 1712
-//   ??1Context@Video@@QEAA@XZ                         0x1800f16e0  ord  562
-//   ??1ConstantBuffer@Video@@QEAA@XZ                  0x1800eeee0  ord  558
-//   ??3RenderBuffer@Video@@SAXPEAX@Z                  0x18001f360  ord  995
-//
-// ?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ (0x1800f4400, ord 3369) was in
-// this list and is NOT any more: buffers.cpp registers both of its doors. See
-// the note beside the declaration at the top of this file. NOTE THE ONE
-// BEHAVIOURAL CONSEQUENCE: that registration now rides RT_VIDBUFFERS
-// instead of RT_VIDCTXLIFE, so VIDBUFFERS=0 now really does leave the
-// export on the DLL. It did not before -- this file re-registered it and the
-// kill switch silently failed to kill.
-//
-// Note `??1` for the destructors and `QEAA` (non-virtual) for Context's and
-// ConstantBuffer's — `??1Context@Video@@UEAA@XZ` does not exist and would
-// resolve NULL in silence behind the guard
-// (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
-//
-// ADDRESS DOORS. Five, and each has a named reader in the tree today:
-//   0x1800f16e0  ??1Context@Video@@      engine_funcs.cpp:1623 falls back to it
-//   0x180018500  Context operator delete engine_funcs.cpp:1625 (name-less door)
-//   0x180006a10  buffer operator delete  reached by the dtor above
-//   0x18001cab0 / 0x18001cfc0            reached by ~ConstantBuffer above
-// The last three are UNNAMED in the image, so a name registration alone would
-// register something nobody calls.
-// ============================================================================
-int RtVideoContextLifecycleRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("??1Context@Video@@QEAA@XZ",
-                          (void*)&RtVideo_Context_Dtor); ++n;
-    // ?PlatformDestruct@RenderBuffer@Video@@ is registered by buffers.cpp, which
-    // owns the body. Registering it here too made this file's (now deleted)
-    // duplicate body win both doors.
-    RegisterRuntimeExport("??3RenderBuffer@Video@@SAXPEAX@Z",
-                          (void*)&Video_RenderBuffer_OperatorDelete); ++n;
-
-    RegisterRuntimeAddr(0x1800f16e0, (void*)&RtVideo_Context_Dtor);
-    // 0x1800f4400: likewise buffers.cpp's, see above.
-    RegisterRuntimeAddr(0x18001f360, (void*)&Video_RenderBuffer_OperatorDelete);
-    // Bound by NAME as well as by address since Wave 9 phase 4. It was
-    // address-only for three phases and nothing noticed, because nothing in the
-    // tree asked for `??3Context@Video@@SAXPEAX@Z` by name until
-    // CreateVideoContext was ported; the name door then fell straight through
-    // to the DLL while the address door was ours. An exported symbol with a
-    // port needs BOTH doors, not whichever one its first caller happened to use.
-    RegisterRuntimeExport("??3Context@Video@@SAXPEAX@Z",
-                          (void*)&Video_Context_OperatorDelete); ++n;
-    RegisterRuntimeAddr(0x180018500, (void*)&Video_Context_OperatorDelete);
-    // 0x180006a10 — the SHARED unexported guarded free, not a `Video::` member.
-    // See the banner on `Rt_GuardedObjectFree`; the row is unchanged.
-    RegisterRuntimeAddr(0x180006a10, (void*)&Rt_GuardedObjectFree);
-
-    return n;
-}
-
-// ============================================================================
 // WHAT THIS FILE DOES NOT DO — stated so the gap is measured, not implied
 // ============================================================================
 // `??0Context@Video@@QEAA@PEAVDevice@1@HHHPEAVRenderBuffer@1@@Z` (0x1800f1820)

@@ -337,22 +337,3 @@ void Rt_SetSize_18005cda0(void* a, int n) {   // Array<Array<T>>
 
 }  // namespace rtcoll
 
-// Every one of the six Collection rows is a template instantiation with NO
-// export name in either shipped build (checked against the shipped export
-// directory, not assumed), so all six are RegisterRuntimeAddr and none is a
-// RegisterRuntimeExport. The two TriangleList constructors are unexported too —
-// `??0TriangleList@GraphicsMesh@Graphics@@QEAA@XZ` IS in the directory, but at
-// 0x1800125a0, which is a DIFFERENT function from the 0x1800fefc0 this array's
-// fill loop calls; registering our body under that name would bind it to the
-// wrong address. Addresses only.
-// ENDGAME B.3.2 closing pass (2026-09-18): the two per-element destroy wrappers
-// (0x180014910 TriangleLists, 0x180014af0 inner Arrays) and their rows were
-// removed at zero callers — nothing resolves those addresses in any form, and
-// their cores (DestroyTriangleListRange / DestroyInnerArrayRange) stay, called
-// from this file's own dtor bodies. So the banner above now reads "six rows"
-// for four; the two it counted are these.
-int RtCollectionGraphicsMeshRegister() {
-    // B3R RT-Core: every row this registered lost its last reader. Kept
-    // defined, returning 0, only because runtime/src/graphics/rt_graphics_port.cpp (RT-VG) still calls it.
-    return 0;
-}

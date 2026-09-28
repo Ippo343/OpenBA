@@ -1241,18 +1241,9 @@ int RtSystemStringRegister() {
     RegisterRuntimeExport("??HSystem@@YA?AVString@0@AEBV10@PEBD@Z",
                           (void*)&RtSystem_String_ConcatCStr); ++n;
 
-    // The SAME functions by Ghidra address. Half the exe's String call sites
-    // resolve by name with an `if (!fn) ResolveAddr(Module::Runtime, addr)`
-    // fallback (engine/funcs/engine_funcs.cpp:1649-1698), and ResolveAddr
-    // consults its own registry (standalone/resolve_standalone.cpp:317).
-    // Registering only the names would leave any site whose name lookup failed
-    // silently on the DLL — which is not hypothetical: see the two dead
-    // Filename manglings in filename.cpp's registration block.
-    RegisterRuntimeAddr(0x180006c80, (void*)&RtSystem_String_Dtor);
-    RegisterRuntimeAddr(0x1800c9810, (void*)&RtSystem_String_Assign);
-    RegisterRuntimeAddr(0x1800c8a90, (void*)&RtSystem_String_AppendAssign);
-    RegisterRuntimeAddr(0x1800c92d0, (void*)&RtSystem_String_ConcatCStr);
-       // BATCH 8
+    // B3R W2-RT: the four address rows (0x180006c80, 0x1800c9810, 0x1800c8a90,
+    // 0x1800c92d0) had no reader and went; the names stay while
+    // address_registry.cpp / reg_unreg_lane3.cpp read them.
 
     // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) -------------
     // Four more members, by NAME and by ADDRESS for the reason the block above

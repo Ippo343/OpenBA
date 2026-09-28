@@ -343,32 +343,3 @@ uint32_t VisitorStream::GetSize() const { return 0; }
 
 }  // namespace IO
 
-// ============================================================================
-// Registration
-// ============================================================================
-// EXPORTED bodies get BOTH doors (name and address). The four deleting
-// destructors are UNEXPORTED and get the address door only — which is also the
-// door their mint slots use (`RT_MINT_UNNAMED` on each VA), so registering the
-// address is exactly what turns each row's slot 0 from a trap into this body.
-//
-// `AEAA`/`AEBA` would mean PRIVATE, not unexported; every name below was
-// checked against the shipped DLL's export directory before it was written
-// (reference_resolveexport_phantom_names.md, reference_aeaa_is_private_not_unexported.md).
-int RtIoBaseVtablesRegister() {
-    using namespace RtIo;
-    int n = 0;
-
-    // ---- the six-row prerequisite -----------------------------------------
-    // ENDGAME B.3.9 IO (W2): ?GetSource@Stream@IO@@ (0x18000c6a0) went with the
-    // minted ??_7Stream@IO row, its last reader; the class's slot 1 is the member.
-
-    // ENDGAME B.3.4 callers batch H — by NAME (what runtime_census.py reads)
-    // and by ADDRESS, the same pair the GetSource row above uses.
-
-    // ---- IO::Modification ---------------------------------------------------
-    RegisterRuntimeExport("??1Modification@IO@@QEAA@XZ",
-                          (void*)&RtIo_Modification_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800b0470, (void*)&RtIo_Modification_Dtor);
-
-    return n;
-}

@@ -504,31 +504,8 @@ int RtSystemFilenameRegister() {
     RegisterRuntimeExport("??MFilename@System@@QEBA_NAEBV01@@Z",
                           (void*)&RtSystem_Filename_Less); ++n;
 
-    // The SAME functions by Ghidra address — and here it is not belt-and-braces
-    // but REQUIRED. Two of the exe's Filename resolves use mangled names that
-    // Runtime-x64.dll does not export and never has:
-    //
-    //   engine_funcs.cpp:1748  "?AdjustDelimiters@Filename@System@@QEAAXXZ"
-    //                          (the real export is AEAA — it is private)
-    //   engine_funcs.cpp:3114  "?GetPathIdentifer@Filename@System@@QEBA?AVString@2@XZ"
-    //                          (the real export returns V12 = Filename, not String)
-    //
-    // Both have always resolved to null and both fall through to
-    // ResolveAddr(Module::Runtime, 0x1800c6970 / 0x1800c6610), so registering
-    // only the export names would leave every one of the eight exe call sites
-    // of fn_Filename_AdjustDelimiters — and ProfessionUI's GetPathIdentifer —
-    // on the DLL while the census reported them ported.
-    RegisterRuntimeAddr(0x180026cb0, (void*)&RtSystem_Filename_Less);
-
-    // CONSEQUENCE FOR standalone/filename_runtime_hook.cpp (PLAN.md §2.2
-    // hazard A): that diagnostic resolves 0x1800067d0 / 0x180006980 /
-    // 0x180006770 through this same ResolveAddr seam in order to byte-patch
-    // them, so with BANISHED_FNHOOK=1 it would now try to detour OUR ports.
-    // Its expected-prologue guard makes that a refusal rather than a
-    // corruption, and it is default-OFF, but the instrument is now unsound and
-    // should be retired: its premise ("every caller, including Runtime-
-    // internal ones, routes through the check") stopped being true the moment
-    // our callers started going to this file instead.
+    // B3R W2-RT: the address row (0x180026cb0) had no reader and went; the
+    // name stays while reg_unreg_lane3.cpp reads it.
     printf("[RtPort]   System::Filename: %d exports registered\n", n);
     return n;
 }

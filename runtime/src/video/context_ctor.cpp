@@ -479,16 +479,3 @@ extern "C" void RtEngine_MainLoop_CreateVideoContext(void* self) {
 }
 
 // ============================================================================
-int RtVideoContextCtorRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("??2ImageBuffer@Video@@SAPEAX_K@Z",
-                          (void*)&RtVideo_ImageBuffer_OperatorNew); ++n;
-    RegisterRuntimeAddr(0x18001e910, (void*)&RtVideo_ImageBuffer_OperatorNew);
-
-    RegisterRuntimeExport("??2RenderBuffer@Video@@SAPEAX_K@Z",
-                          (void*)&RtVideo_RenderBuffer_OperatorNew); ++n;
-    RegisterRuntimeAddr(0x18001f2e0, (void*)&RtVideo_RenderBuffer_OperatorNew);
-
-    return n;
-}

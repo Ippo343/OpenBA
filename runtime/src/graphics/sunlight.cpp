@@ -427,14 +427,3 @@ void Graphics::SunLight::ReleaseFields() {
     DeleteRenderBuffer(_renderBuffer);
 }
 
-// ============================================================================
-// Registration
-// ============================================================================
-int RtGraphicsSunLightRegister() {
-    int n = 0;
-
-    // (ENDGAME B.3.9 pilot: the ??0 / ??1 SunLight doors are retired -- see above.)
-
-    printf("[RtPort] Graphics::SunLight (lane GFX2): %d exports registered\n", n);
-    return n;
-}

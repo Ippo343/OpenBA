@@ -418,18 +418,3 @@ void* Rt_ArrayAssign_18001b810(void* d, const void* s) {   // Array<Interpolated
 
 }  // namespace rtcoll
 
-// Every one of the seventeen is a template instantiation with NO export name in
-// either shipped build, so all seventeen are RegisterRuntimeAddr and none is a
-// RegisterRuntimeExport. (array.cpp's banner establishes that for the family:
-// the profile DLL's 5,182-name export directory has no `Array@Collection` row.)
-// ENDGAME B.3.2 closing pass (2026-09-18): the three per-element destroy
-// wrappers (0x180014a40 nodes, 0x18005bce0 states, 0x18005c550 instances) and
-// their rows were removed at zero callers — nothing in the tree resolves those
-// addresses in any form, and their CORES (DestroyMeshNodeRange /
-// DestroyAnimStateRange / DestroyInstanceRange) are still called from this
-// file's own dtor bodies, so only the retail-arity forwarders went.
-int RtCollectionGraphicsAnimRegister() {
-    // B3R RT-Core: every row this registered lost its last reader. Kept
-    // defined, returning 0, only because runtime/src/graphics/animationstate.cpp (RT-VG) still calls it.
-    return 0;
-}

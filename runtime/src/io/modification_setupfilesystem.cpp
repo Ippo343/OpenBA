@@ -357,20 +357,6 @@ void RtIo_Modification_SetupFileSystem(Modification* self) {
 }  // namespace RtIO
 
 // ============================================================================
-// Registration — BOTH DOORS. `QEAA` is public and the name is ordinal 4030 in
-// the retail export directory, verified with pefile before this was written.
-// Both spelled as LITERALS so tools/runtime_census.py can see them.
-// ============================================================================
-int RtIoModificationSetupFileSystemRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?SetupFileSystem@Modification@IO@@QEAAXXZ",
-                          (void*)&RtIO::RtIo_Modification_SetupFileSystem); ++n;
-    RegisterRuntimeAddr(0x1800aebb0,
-                        (void*)&RtIO::RtIo_Modification_SetupFileSystem);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.4 PACKAGE+FS — `IO::Modification::SetupFileSystem`'s member body
 // ============================================================================
 namespace IO {

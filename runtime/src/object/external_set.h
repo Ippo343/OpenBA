@@ -164,5 +164,3 @@ namespace RtObject {
 // ?Clean@ExternalFactory@Object@@QEAAXXZ   retail 0x1800be310
 void RtObject_ExternalFactory_Clean(ExternalFactory* self);
 }  // namespace RtObject
-
-int RtObjectExternalSetRegister();

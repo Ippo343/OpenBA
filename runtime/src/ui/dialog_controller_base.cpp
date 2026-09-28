@@ -220,16 +220,10 @@ extern "C" void RtUiDialogController_OnSerializeSettings(void* self, void* strea
 int RtUiDialogControllerRegister() {
     int n = 0;
 
-    RegisterRuntimeExport("?OnOpened@DialogController@UI@@UEAAXXZ",
-                          (void*)&RtUiDialogController_OnOpened);
+    // B3R W2-RT: the three NAME rows had no reader and went. The address rows
+    // stay while standalone/dlgctrl_route.cpp's kSpecs reads them.
     RegisterRuntimeAddr(0x1800cd2a0, (void*)&RtUiDialogController_OnOpened); ++n;
-
-    RegisterRuntimeExport("?OnClosed@DialogController@UI@@UEAAXXZ",
-                          (void*)&RtUiDialogController_OnClosed);
     RegisterRuntimeAddr(0x1800cd290, (void*)&RtUiDialogController_OnClosed); ++n;
-
-    RegisterRuntimeExport("?OnSerializeSettings@DialogController@UI@@UEAAXAEAVStream@IO@@@Z",
-                          (void*)&RtUiDialogController_OnSerializeSettings);
     RegisterRuntimeAddr(0x1800cd250, (void*)&RtUiDialogController_OnSerializeSettings); ++n;
 
     return n;

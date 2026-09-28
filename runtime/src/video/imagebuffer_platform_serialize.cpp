@@ -370,11 +370,3 @@ extern "C" void Video_ImageBuffer_PlatformSerialize(Video::ImageBuffer* self,
         self, *reinterpret_cast<IO::Serializer*>(serializer));   // B.3.5 bridge
 }
 
-// ============================================================================
-// Registration — BY NAME AND BY ADDRESS
-// ============================================================================
-int RtVideoImageBufferSerializeRegister() {
-    printf("[RtPort] Video::ImageBuffer::PlatformSerialize (Wave 18 lane VRES): "
-           "1 export registered\n");
-    return 1;
-}

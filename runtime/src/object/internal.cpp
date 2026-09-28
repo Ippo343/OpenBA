@@ -438,21 +438,20 @@ int RtObjectInternalRegister() {
     // Both a name and a Ghidra address for every one: half our call sites
     // resolve by name and half by ResolveAddr(Module::Runtime, …) with the
     // other as a fallback (see the same note in runtime/src/system/string.cpp).
+    // B3R W2-RT: the four address rows (0x1800062c0, 0x1800062a0,
+    // 0x1800062b0, 0x1800c0150) had no reader and went; the names stay while
+    // engine_funcs.cpp / address_registry.cpp / reg_unreg_lane1.cpp read them.
     RegisterRuntimeExport("??0InternalBasePtr@Object@@QEAA@XZ",
                           (void*)&RtObject_InternalBasePtr_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800062c0, (void*)&RtObject_InternalBasePtr_Ctor);
 
     RegisterRuntimeExport("??0InternalBasePtr@Object@@QEAA@PEAVInternal@1@@Z",
                           (void*)&RtObject_InternalBasePtr_CtorPtr); ++n;
-    RegisterRuntimeAddr(0x1800062a0, (void*)&RtObject_InternalBasePtr_CtorPtr);
 
     RegisterRuntimeExport("?Copy@InternalBasePtr@Object@@IEAAXAEBV12@@Z",
                           (void*)&RtObject_InternalBasePtr_Copy); ++n;
-    RegisterRuntimeAddr(0x1800062b0, (void*)&RtObject_InternalBasePtr_Copy);
 
     RegisterRuntimeExport("?DeletePtr@InternalBasePtr@Object@@QEAAXXZ",
                           (void*)&RtObject_InternalBasePtr_DeletePtr); ++n;
-    RegisterRuntimeAddr(0x1800c0150, (void*)&RtObject_InternalBasePtr_DeletePtr);
 
     // B.3.4 STREAMS (6/6) — the symbol's FIRST registration. BY NAME *AND* BY
     // ADDRESS, because `ResolveExport` falls through silently for an unported

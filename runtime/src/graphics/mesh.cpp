@@ -1865,9 +1865,11 @@ int RtGraphicsMeshVtableRegister() {
     // ResolveAddr no longer feeds), rt_data_mint_tables.inc (which STAMPS the
     // address, not compares it), and comments. NO NEW IDENTITY-TOKEN CONSUMER
     // HAS APPEARED. The debt GFXMESH paid is still paid.
-    RegisterRuntimeExport("?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z",
-                          (void*)&RtGraphics_MeshInstance_AddDrawItems); ++n;
-    RegisterRuntimeAddr(0x180100f20ull, (void*)&RtGraphics_MeshInstance_AddDrawItems);
+    //
+    // B3R W2-RT: the NAME row had no reader and went. The address row stays
+    // while standalone/scene_watch.cpp's RtPortLookupAddr(0x180100f20) probe
+    // reads it (an identity token; W2-RES deletes the probe, then this row).
+    RegisterRuntimeAddr(0x180100f20ull, (void*)&RtGraphics_MeshInstance_AddDrawItems); ++n;
 
     return n;
 }

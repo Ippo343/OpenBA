@@ -275,19 +275,3 @@ Persistence::~Persistence() {
 }  // namespace IO
 
 // ---------------------------------------------------------------------------
-int RtIoPersistenceSavesRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("??1Persistence@IO@@QEAA@XZ",
-                          (void*)&RtIo_Persistence_dtor); ++n;
-
-    // AND by address. A name-only registration leaves every ResolveAddr door
-    // silently on the DLL, and ResolveAddr(Module::Runtime, ...) is
-    // registry-first, so the two registrations are not redundant
-    // (reference_resolveaddr_consults_port_registry_first.md).
-    RegisterRuntimeAddr(0x1800b7fb0, (void*)&RtIo_Persistence_dtor);
-
-    printf("[RtPort] IO::Persistence saves: %d export registered "
-           "(~Persistence), by name AND address\n", n);
-    return n;
-}
