@@ -3,20 +3,19 @@
 // CompleteRoad action families (and, for 0x1400c3470 / 0x140003110, from many
 // Component & Work files as well).
 //
-// These exe sub-helpers are resolved via ResolveAddr(Module::Exe, 0xADDR) from
-// code/Game/Action/*.cpp (and others). They resolve to 0 (silently skipped) unless
-// registered.
-// This file provides faithful 1:1 reimplementations and a single registration point
+// Their callers call them by name through Action/exe_bodies.h (B3R); the registration
+// (RegisterActionHuntBatch in standalone/reg_action_hunt.cpp) stays for readers other
+// blocks still have.
 #include "Action/exe_bodies.h"
-// (RegisterActionHuntBatch in standalone/reg_action_hunt.cpp) so the shared call
-// sites fire real logic in the standalone exe.
 //
 // Wave 3 (Action). Each function is a 1:1 port of the decompiled exe helper; do not
 // "improve" behavior.
 //
 
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Game/exe_constants.h"       // kRdata_140172234
+#include "system/Value.h"             // RtSystem_Time_Ctor
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -45,11 +44,11 @@ static void* HuntFindComponentByTypeId(uintptr_t entity, void* retIBP, uint32_t 
         uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
         if (t == typeId) {
             void* c = *slot;
-            found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) ? c : nullptr;
+            found = ::Object::IsDerivedFromNullSafe(c, typeId) ? c : nullptr;
             break;
         }
     }
-    if (fn_InternalBasePtr_Ctor) new (retIBP) ::Object::InternalBasePtr(
+    new (retIBP) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(found));   // B.3.3 bridge
     return retIBP;
 }
@@ -76,16 +75,15 @@ bool ActHunt_IsAnimalReady_2a80(void* self) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* obj = *reinterpret_cast<void**>(s + 0x18);
     void* desc = nullptr;
-    if (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, HuntDescription::TypeId())) desc = obj;
+    if (::Object::IsDerivedFromNullSafe(obj, HuntDescription::TypeId())) desc = obj;
 
-    const float* pScale = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172234));
-    float scale = pScale ? *pScale : 0.0f;
+    float scale = kRdata_140172234;   // 0x140172234 = 300.0f
     float holdSeconds = desc ? *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x20) : 0.0f;
 
     int64_t timeTicks = 0;
-    if (fn_Time_Ctor_Float) {
+    {
         int64_t tmp = 0;
-        fn_Time_Ctor_Float(&tmp, holdSeconds * scale);
+        RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&tmp), holdSeconds * scale);   // ??0Time@System@@QEAA@M@Z
         timeTicks = tmp;
     }
     return timeTicks <= *reinterpret_cast<int64_t*>(s + 0x50);
@@ -113,9 +111,8 @@ void ActHunt_DynArraySetCount_3110(void* arrV, int newCount, void* valuePtr) {
         *pCap = newCount;
         if (newCount == oldCount + 1 && oldCount != 0)
             *pCap = newCount * 3;
-        void* nb = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton,
-                                             static_cast<uint64_t>(static_cast<int64_t>(*pCap)) << 3, 8)
-                               : nullptr;
+        void* nb = System::MemoryAllocator::MemAlloc(
+                       static_cast<uint64_t>(static_cast<int64_t>(*pCap)) << 3, 8);
         arr[0] = reinterpret_cast<int64_t>(nb);
     }
 
@@ -133,8 +130,8 @@ void ActHunt_DynArraySetCount_3110(void* arrV, int newCount, void* valuePtr) {
         }
     }
 
-    if (oldBase != reinterpret_cast<void*>(arr[0]) && fn_MemFreeStatic)
-        fn_MemFreeStatic(oldBase);
+    if (oldBase != reinterpret_cast<void*>(arr[0]))
+        System::MemoryAllocator::MemFree(oldBase);
 }
 
 // ============================================================
@@ -201,14 +198,14 @@ void ActHunt_NotifyEntityChanged_c3470(void* self) {
         uint32_t newFlags = *reinterpret_cast<uint32_t*>(s + 0x40);
         if (((oldFlags ^ newFlags) & 4) != 0) {
             void* ibp = nullptr;
-            if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+            new (&ibp) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
             ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(owner + 0x88),
                                           *reinterpret_cast<int*>(owner + 0x90) + 1, &ibp);
         }
         if (((oldFlags ^ newFlags) & 0x10) != 0) {
             void* ibp = nullptr;
-            if (fn_InternalBasePtr_Ctor) new (&ibp) ::Object::InternalBasePtr(
+            new (&ibp) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
             ActHunt_DynArraySetCount_3110(reinterpret_cast<void*>(owner + 0x98),
                                           *reinterpret_cast<int*>(owner + 0xa0) + 1, &ibp);

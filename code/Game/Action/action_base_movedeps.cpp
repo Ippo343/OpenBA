@@ -28,7 +28,8 @@
 // by <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
 #include "graphics/Mesh.h"                 // ENDGAME B.3.5 batch K1
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Game/exe_constants.h"   // kRdata_*
+#include <cstring>
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include <cstdint>
@@ -45,27 +46,20 @@
 // RandFloat slot 0x1401512f8 (both are System::Time / System::Random members now);
 // constants DAT_1401721b8 / DAT_140172234. The original reads BOTH pair[0] and pair[1], so
 // the caller must hand it 8 bytes (two floats), not one.
+// The constants are Game/exe_constants.h's (B3R): DAT_1401721b8 = 12.0f (stored as a
+// bit pattern), DAT_140172234 = 300.0f.
 namespace {
-static const float* s_pK1 = nullptr;  // DAT_1401721b8
-static const float* s_pK2 = nullptr;  // DAT_140172234
-static bool s_a9290Init = false;
-static void Ensure_a9290() {
-    if (s_a9290Init) return;
-    s_pK1 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401721b8));
-    s_pK2 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172234));
-    s_a9290Init = true;
-}
+inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 } // namespace
 
 bool ActMvDep_TimeCheck_a9290(void* timeV, float* pair, void* rng) {
-    Ensure_a9290();
     float weight = pair[1];
     if (!(0.0f < weight)) {                       // weight <= 0 (COMISS 0 < weight)
         *reinterpret_cast<uint64_t*>(timeV) = 0;
         return false;
     }
-    float k1 = s_pK1 ? *s_pK1 : 1.0f;
-    float k2 = s_pK2 ? *s_pK2 : 1.0f;
+    float k1 = RdataF(kRdata_1401721b8);   // 0x1401721b8
+    float k2 = kRdata_140172234;           // 0x140172234
     float denom = pair[0] * k1 * k2;
     float secs = reinterpret_cast<const System::Time*>(timeV)->AsSeconds();   // B.3.4b bridge
     *reinterpret_cast<uint64_t*>(timeV) = 0;
@@ -88,24 +82,10 @@ bool ActMvDep_TimeCheck_a9290(void* timeV, float* pair, void* rng) {
 // Graphics@@@Object@@HAEBVTime@System@@1M@Z), CheckPtr slot 0x140152ab0, FUN_1400c3470.
 // Time is passed by const-ref (pointer); ExternalPtr<AnimationGroup> animData is a single
 // pointer-sized value passed by value.
-namespace {
-typedef void (*fn_TimeCtor_t)(void* retTime, float seconds);                  // 0x140152b00
-typedef void (*fn_Notify_c3470_t)(void* internal);                            // 0x1400c3470
-
-static fn_TimeCtor_t      s_TimeCtor      = nullptr;
-static fn_Notify_c3470_t  s_Notify_c3470  = nullptr;
-static bool s_50f0Init = false;
-static void Ensure_50f0() {
-    if (s_50f0Init) return;
-    s_TimeCtor      = reinterpret_cast<fn_TimeCtor_t>(ResolveExport("??0Time@System@@QEAA@M@Z"));
-    s_Notify_c3470  = reinterpret_cast<fn_Notify_c3470_t>(ResolveAddr(Module::Exe, 0x1400c3470));
-    s_50f0Init = true;
-}
-} // namespace
+// B3R: ??0Time@System@@QEAA@M@Z is RtSystem_Time_Ctor, 0x1400c3470 is
+// ActHunt_NotifyEntityChanged_c3470, both called by name.
 
 void ActMvDep_AnimHelper_50f0(uintptr_t self, uint32_t animId, float p3, float p4, float p5) {
-    Ensure_50f0();
-
     // Standalone-inert guard: `self` is the animation target (a ModelComponent / resource
     // component). In retail it is never null — the caller resolved it from a live entity.
     // In standalone some finds resolve null when a shared type-id global is the unfilled
@@ -128,12 +108,12 @@ void ActMvDep_AnimHelper_50f0(uintptr_t self, uint32_t animId, float p3, float p
     // skipped → the citizen never registers an animation group → AnimationManager::Update
     // no-ops → the skinned bone palette stays frozen (RenderDoc-verified).
     const uint32_t s_tidModelDesc = ModelDescription::TypeId();   // B.3.8: no lazy cache (B6-5)
-    bool derived = (fn_IsDerivedFrom && s_tidModelDesc) ? fn_IsDerivedFrom(obj, s_tidModelDesc) : false;
+    bool derived = s_tidModelDesc ? ::Object::IsDerivedFromNullSafe(obj, s_tidModelDesc) : false;
     void* animHolder = derived ? obj : nullptr;
 
     uint8_t timeA[8] = {0};  // p4
     uint8_t timeB[8] = {0};  // p3
-    if (s_TimeCtor) { s_TimeCtor(timeA, p4); s_TimeCtor(timeB, p3); }
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeA), p4); RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(timeB), p3);
 
     // Defensive: the original reads *(animHolder+0x20) unconditionally (it relies on the
     // type always being derived here). Guard so a type miss in the inert standalone world
@@ -152,6 +132,6 @@ void ActMvDep_AnimHelper_50f0(uintptr_t self, uint32_t animId, float p3, float p
     uint32_t nw = old | 4u;
     *reinterpret_cast<uint32_t*>(self + 0x20) = nw;
     if (((nw ^ old) & 0xffff) != 0 && *reinterpret_cast<uintptr_t*>(self + 0x10) != 0) {
-        if (s_Notify_c3470) s_Notify_c3470(*reinterpret_cast<void**>(self + 0x10));
+        ActHunt_NotifyEntityChanged_c3470(*reinterpret_cast<void**>(self + 0x10));   // 0x1400c3470
     }
 }

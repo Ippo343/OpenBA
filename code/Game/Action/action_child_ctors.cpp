@@ -17,10 +17,10 @@
 // (ShowTool, RemoveNaturalResource, AnimateNaturalResource,
 // CreateNaturalResource — defined below, next to their by-address doors); the
 // compiler stamps the vtables, so the ResolveAddr'd tables are gone.
-// Closure (all already registered elsewhere — bodies NOT duplicated):
-//   Entity_ClearPathQueue        0x140003f60 (reg_action_cnr)
-//   FUN_140004680                0x140004680 (reg_component_nature)
-//   CharacterComponent_impl_f3e0 0x14009f3e0 (mapquery.cpp / cell->world)
+// Closure (bodies NOT duplicated; called by name, B3R):
+//   Entity_ClearPathQueue        0x140003f60 ActCNR_FindComponent_3f60 (action_base_cnr.cpp)
+//   FUN_140004680                0x140004680 FloorComponent_FindResData (floorcomponent.cpp)
+//   CharacterComponent_impl_f3e0 0x14009f3e0 Reimpl_MapGetTerrainPos (mapquery.cpp / cell->world)
 //   Math::Vector3::Normalize     slot 0x1401512c0 / ?Normalize@Vector3@Math@@QEBA?AV12@XZ
 //   Math::Vector3::Heading       slot 0x1401512d8 / ?Heading@Vector3@Math@@QEBAMXZ
 //
@@ -31,36 +31,14 @@
 #include "Action/RemoveNaturalResource.h"
 #include "Action/ShowTool.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Component/exe_bodies.h"   // FloorComponent_FindResData
+#include "Game/exe_bodies.h"        // Reimpl_MapGetTerrainPos
 #include "math/Math.h"
 #include <cstdint>
 #include <new>
 
-namespace {
-
-// --- Registered exe sub-callees for Entity_impl_29a0. ---
-// Entity_ClearPathQueue / FUN_140004680: member-style (RCX=inner, RDX=retIBP) -> retIBP.
-typedef void* (*fn_entityGetIBP_t)(int64_t inner, void* retIBP);
-// CharacterComponent_impl_f3e0: cell-coord -> world pos. RCX=mapPtr, RDX=outVec3,
-// R8=inVec3, R9B=flag(0), [stack]=ptr(0).
-typedef void  (*fn_cellToWorld_t)(void* mapPtr, float* outVec3, float* inVec3, char flag, void* p5);
 // Math::Vector3::Normalize (slot 0x1401512c0) and Heading (slot 0x1401512d8) are direct
 // members of the real class (B.3.1).
-
-static fn_entityGetIBP_t s_fn_ClearPathQueue = nullptr;  // 0x140003f60
-static fn_entityGetIBP_t s_fn_GetCellNode    = nullptr;  // 0x140004680
-static fn_cellToWorld_t  s_fn_CellToWorld     = nullptr;  // 0x14009f3e0
-
-static bool s_init = false;
-static void EnsureInit() {
-    if (s_init) return;
-    s_fn_ClearPathQueue = reinterpret_cast<fn_entityGetIBP_t>(ResolveAddr(Module::Exe, 0x140003f60));
-    s_fn_GetCellNode    = reinterpret_cast<fn_entityGetIBP_t>(ResolveAddr(Module::Exe, 0x140004680));
-    s_fn_CellToWorld    = reinterpret_cast<fn_cellToWorld_t >(ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_init = true;
-}
-
-} // namespace
 
 // ============================================================
 // FUN_140042890 — ShowTool_Action_Ctor
@@ -135,17 +113,16 @@ CreateNaturalResource::CreateNaturalResource(uint64_t desc, uint64_t* parent, ui
 // cell->world sampler. Then v = pos - worldPos; Normalize(v); return Heading(v).
 // ============================================================
 float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2) {
-    EnsureInit();
     float pos[3] = {0.0f, 0.0f, 0.0f};
 
     uint8_t retbuf[8] = {0};  // local_res8 — IBP retval for the getters
     int64_t inner = *reinterpret_cast<int64_t*>(param_2);
-    void* pathIbp = s_fn_ClearPathQueue ? s_fn_ClearPathQueue(inner, retbuf) : nullptr;
+    void* pathIbp = ActCNR_FindComponent_3f60(static_cast<uintptr_t>(inner), retbuf);   // 0x140003f60
 
     if (pathIbp && *reinterpret_cast<int64_t*>(pathIbp) != 0) {
         // --- path node present: read its world pos directly ---
         int64_t inner2 = *reinterpret_cast<int64_t*>(param_2);
-        void* ibp2 = s_fn_ClearPathQueue ? s_fn_ClearPathQueue(inner2, retbuf) : nullptr;
+        void* ibp2 = ActCNR_FindComponent_3f60(static_cast<uintptr_t>(inner2), retbuf);   // 0x140003f60
         int64_t node = ibp2 ? *reinterpret_cast<int64_t*>(ibp2) : 0;
         pos[0] = *reinterpret_cast<float*>(node + 0x158);
         pos[1] = *reinterpret_cast<float*>(node + 0x15c);
@@ -153,7 +130,7 @@ float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2) {
     } else {
         // --- no path node: derive a world pos from the entity's cell node ---
         int64_t inner2 = *reinterpret_cast<int64_t*>(param_2);
-        void* cellIbp = s_fn_GetCellNode ? s_fn_GetCellNode(inner2, retbuf) : nullptr;
+        void* cellIbp = FloorComponent_FindResData(reinterpret_cast<void*>(inner2), retbuf);   // 0x140004680
         int64_t node = cellIbp ? *reinterpret_cast<int64_t*>(cellIbp) : 0;
 
         void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
@@ -176,7 +153,7 @@ float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2) {
         inVec[2] = 0.0f;                               // local_20
 
         float outVec[3] = {0.0f, 0.0f, 0.0f};
-        if (s_fn_CellToWorld) s_fn_CellToWorld(mapPtr, outVec, inVec, 0, nullptr);
+        Reimpl_MapGetTerrainPos(mapPtr, outVec, inVec, 0, nullptr);   // 0x14009f3e0
         pos[0] = outVec[0];
         pos[1] = outVec[1];
         pos[2] = outVec[2];
