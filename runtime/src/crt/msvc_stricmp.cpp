@@ -207,7 +207,6 @@ int StrICmp(const char* a, const char* b) {
 int RtCrtStrICmpRegister() {
     int n = 0;
     RegisterRuntimeAddr(0x18007eefc, (void*)&rtcrt::StrICmp);       ++n;
-    RegisterRuntimeAddr(0x18007eec0, (void*)&rtcrt::AsciiStrICmp);  ++n;
     return n;
 }
 
