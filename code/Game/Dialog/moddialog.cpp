@@ -488,7 +488,7 @@ void ModDialog::OnOpened() {
 
         // Push entry into this->m_entries (array at +0xB8, count at +0xC0)
         int newCount = *(int*)(s + 0xC0) + 1;
-        fn_ModDialog_ArrayPush((void*)(s + 0xB8), newCount, &entry);
+        fn_ModDialog_ArrayPush58_CppImpl((void*)(s + 0xB8), newCount, &entry);   // 0x140012a60
     }
 
     // --- Post-loop: refresh display, add browser controller, hide browse UI ---

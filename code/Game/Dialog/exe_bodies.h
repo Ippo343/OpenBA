@@ -187,6 +187,10 @@ extern "C" void TradeUI_IntroSort_ByComponent_165d0(void* array, int count, void
 // ---- unreg_lane2_mapparamsdialog_ctor.cpp
 extern "C" void* MapParamsDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x14006bd80
 
+// ---- engine/funcs/engine_funcs.cpp (B3R Leftovers: declared here, copied from the
+// definition, so moddialog.cpp calls it by name; W2 moves the body into this module)
+void fn_ModDialog_ArrayPush58_CppImpl(void* arrayHeader, int newCount, void* elementPtr);  // 0x140012a60
+
 // ---- inline bodies (moved from engine/funcs/engine_funcs.h; no .cpp)
 
 // ============================================================
