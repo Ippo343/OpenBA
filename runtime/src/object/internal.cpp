@@ -479,17 +479,16 @@ namespace Object {
 // B.3.4 block 3 — the parameter is the REAL `IO::Serializer`, and the three
 // slot constants are `rt::io::rw_vtbl::k*` instead of the identical
 // `RtObject::kEncSerialize*` that died with `SerializerLite`. Same three retail
-// offsets (0x78 / 0x98 / 0xa0), one spelling. The RAW slot calls STAY: the
-// ReaderWriter reached here still wears a MINTED table (B34_RULES §3.1, §4.2),
-// so this is not the step that turns them into member calls.
+// offsets (0x78 / 0x98 / 0xa0), one spelling. B3X W0: the minted tables are
+// retired (B.3.9), so the ReaderWriter and the object's Type() are called by
+// name -- the same slots.
 void InternalBasePtrSerializeBody(RtObject::Internal** self,
                                   ::IO::Serializer& ser) {
-    void*  enc     = ser._readerWriter;
-    void** encVtbl = *reinterpret_cast<void***>(enc);
+    ::IO::ReaderWriter* const enc = ser._readerWriter;
 
+    // A one-byte `char` through the bool slot (+0x78), as retail passes it.
     char present = (*self != nullptr) ? 1 : 0;
-    reinterpret_cast<void (*)(void*, char*, const char*)>(
-        encVtbl[rt::io::rw_vtbl::kScalarBool / 8])(enc, &present, nullptr);
+    enc->SerializeBool(*reinterpret_cast<bool*>(&present), nullptr);
     if (present == 0) {
         *self = nullptr;
         return;
@@ -503,18 +502,13 @@ void InternalBasePtrSerializeBody(RtObject::Internal** self,
         type  = 0xffffffffu;
     } else {
         index = p->factoryIndex;
-        void** pv = *reinterpret_cast<void***>(p);
-        type = reinterpret_cast<uint32_t (*)(RtObject::Internal*)>(
-            pv[RtObject::kInternalVtblType / 8])(p);
+        type = reinterpret_cast<const Base*>(p)->Type();   // slot 2 +0x10 (B.3.x bridge)
     }
     const uint32_t gen = (*self != nullptr) ? (*self)->generation : 0u;
 
-    reinterpret_cast<void (*)(void*, int*, const char*)>(
-        encVtbl[rt::io::rw_vtbl::kScalarInt / 8])(enc, &index, nullptr);
-    reinterpret_cast<void (*)(void*, uint32_t*, const char*)>(
-        encVtbl[rt::io::rw_vtbl::kScalarUInt / 8])(enc, const_cast<uint32_t*>(&gen), nullptr);
-    reinterpret_cast<void (*)(void*, uint32_t*, const char*)>(
-        encVtbl[rt::io::rw_vtbl::kScalarUInt / 8])(enc, &type, nullptr);
+    enc->SerializeInt(index, nullptr);                          // +0xa0
+    enc->SerializeUInt(const_cast<uint32_t&>(gen), nullptr);    // +0x98
+    enc->SerializeUInt(type, nullptr);                          // +0x98
 
     // The REGISTRY door, not the raw DLL door: PersistObject is ported
     // (internalfactory_persist.cpp) and with the DLL absent the raw door is

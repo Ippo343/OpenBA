@@ -12,7 +12,7 @@
 // registry, though: the constructor reaches the factory through the stream's
 // Encoding VTABLE (a raw slot call), every Serialize member reaches its target
 // through the ReaderWriter's vtable, `GetEncoding` is two loads and the
-// destructor is one raw slot call. So the bodies live here, this file links
+// destructor is one slot-0 call. So the bodies live here, this file links
 // into BOTH the standalone build (picked up by the Makefile's
 // `$(wildcard runtime/src/*/*.cpp)`) and `make unit` (tests/unit/sources.mk),
 // and `tests/unit/io_vtable_abi_test.cpp` exercises the REAL class rather than
@@ -39,12 +39,15 @@
 //     anywhere (CLAUDE.md: retail's unguarded derefs are load-bearing, and a
 //     guard skips the behaviour rather than restoring it).
 //
-// THE RAW `rw_vtbl::k*` SLOT CALLS STAY (B34_RULES.md §3.1). They do not
-// become `_readerWriter->SerializeInt(v, name)` in this step: a live
-// ReaderWriter still wears the MINTED table 0x1801552e0 whose slots resolve
-// back to registered doors, and §4.2 keeps every one of those rows alive until
-// the end of B.3. These 22 bodies are nonetheless the LAST place a CALLER
-// spells those offsets, which is the win the block was for.
+// THE 22 BODIES CALL THE READERWRITER BY NAME (B3X W0, the normal-virtual
+// cutover's "by name first" wave). B.3.4's §3.1 kept raw `rw_vtbl::k*` slot
+// calls here while live ReaderWriters wore the MINTED tables; B.3.9 IO retired
+// those rows and every ReaderWriter is now built by its real constructor, so
+// `_readerWriter->SerializeInt(v, name)` dispatches through exactly the slot
+// the old `rw_vtbl::kScalarInt` read did (Serializer.h:479-512 declares the 26
+// slots in retail order, the unit tests pin each offset). The by-name call is
+// what lets the class take `virtual ~ReaderWriter()` without a slot moving
+// under a caller.
 //
 // THE `rt::io::Stream` BRIDGE CASTS ARE GONE (B.3.4 block 4). Block 3 read
 // `direction` and `encoding` through the POD because `IO::Stream` was only
@@ -62,48 +65,36 @@
 
 #include <cstdint>
 
-// ---------------------------------------------------------------------------
-// The one instruction all 22 bodies compile to: `JMP [RAX + off]`.
-// ---------------------------------------------------------------------------
-// Faithfully UNGUARDED. Retail dereferences `_readerWriter` and its vtable with
-// no null test, and that fault is how a Serializer used before construction
-// announces itself.
-//
-// INSIDE `namespace IO` A BARE `ReaderWriter` BINDS TO THE REAL CLASS
-// (B34_RULES §7.2's grep hazard), so this helper sits at global scope in an
-// anonymous namespace and spells its POD view `rt::io::` explicitly — as does
-// every other POD mention below.
-namespace {
-
-inline void* RwSlot(const IO::ReaderWriter* rw, int byteOffset) {
-    const uint8_t* const* vt = *reinterpret_cast<const uint8_t* const* const*>(rw);
-    return *reinterpret_cast<void* const*>(
-        reinterpret_cast<const uint8_t*>(vt) + byteOffset);
-}
-
-// The scalar shape: `MOV RCX,[RCX+0x08]; MOV RAX,[RCX]; JMP [RAX+SLOT]`.
-// `name` is forwarded although every retail body ignores it — the scalar
-// bodies clobber R8 before the tail jump. Forwarding it is what the exported
-// signature says, and the binary format carries no field names either way.
-template <typename T>
-inline void ScalarCall(IO::ReaderWriter* rw, int slot, T& v, const char* name) {
-    using Fn = void (*)(IO::ReaderWriter*, T*, const char*);
-    reinterpret_cast<Fn>(RwSlot(rw, slot))(rw, &v, name);
-}
-
-template <typename T>
-inline void ArrayCall(IO::ReaderWriter* rw, int slot, int n, T* d, const char* name) {
-    using Fn = void (*)(IO::ReaderWriter*, int, T*, const char*);
-    reinterpret_cast<Fn>(RwSlot(rw, slot))(rw, n, d, name);
-}
-
-}  // namespace
-
-// A member of `IO::X` cannot be defined inside another namespace, so the
-// bodies open `namespace IO` and reach the helpers above as `::RwSlot` etc.
+// Every forwarder below is retail's `MOV RCX,[RCX+0x08]; MOV RAX,[RCX];
+// JMP [RAX+SLOT]` spelled as a virtual call on `_readerWriter`. Faithfully
+// UNGUARDED: retail dereferences `_readerWriter` and its vtable with no null
+// test, and that fault is how a Serializer used before construction announces
+// itself. `name` is forwarded although every retail body ignores it (the
+// scalar bodies clobber R8 before the tail jump); the exported signature
+// carries it and the binary format has no field names either way.
 namespace IO {
 
-namespace rw_vtbl = rt::io::rw_vtbl;
+// ---------------------------------------------------------------------------
+// IO::rw_stream -- the four IO::Stream slots the ReaderWriter family's inline
+// constructors and destructors drive (Serializer.h). Out of line HERE because
+// Serializer.h only forward-declares `IO::Stream` (Stream.h includes it, not
+// the reverse). By name: each is the slot the old byte offset named --
+// +0x10 Write, +0x18 Read, +0x20 SetCurrentPos, +0x28 GetCurrentPos.
+// ---------------------------------------------------------------------------
+namespace rw_stream {
+bool Write(void* s, int32_t n, void* src) {
+    return static_cast<Stream*>(s)->Write(n, src);   // slot 2 +0x10
+}
+bool Read(void* s, int32_t n, void* dst) {
+    return static_cast<Stream*>(s)->Read(n, dst);    // slot 3 +0x18
+}
+void SetPos(void* s, int32_t pos) {
+    static_cast<Stream*>(s)->SetCurrentPos(pos);     // slot 4 +0x20
+}
+int32_t GetPos(void* s) {
+    return static_cast<int32_t>(static_cast<Stream*>(s)->GetCurrentPos());  // slot 5 +0x28
+}
+}  // namespace rw_stream
 
 // ============================================================================
 // Lifetime — 0x1800b9960 / 0x1800b99b0
@@ -171,8 +162,7 @@ Serializer::Serializer(Stream& stream, int version) {
 Serializer::~Serializer() {
     ReaderWriter* rw = _readerWriter;
     if (rw) {
-        using Fn = void (*)(ReaderWriter*, int);
-        reinterpret_cast<Fn>(::RwSlot(rw, rw_vtbl::kDtor))(rw, 1);
+        rw->DeletingDtor(1);   // slot 0, flags == 1
     }
 }
 
@@ -181,9 +171,7 @@ Serializer::~Serializer() {
 // ============================================================================
 // 0x1800070b0 — the same three-instruction forwarder, tail-jumping +0x08.
 int Serializer::GetVersion() const {
-    ReaderWriter* rw = _readerWriter;
-    using Fn = int (*)(ReaderWriter*);
-    return reinterpret_cast<Fn>(::RwSlot(rw, rw_vtbl::kGetVersion))(rw);
+    return _readerWriter->GetVersion();   // slot 1 +0x08
 }
 
 // 0x180006210 — `MOV RAX,[RCX]; MOV EAX,[RAX+0x8]; RET`. Two loads, no
@@ -224,67 +212,65 @@ const Encoding& Serializer::GetEncoding() {
 // shape to every scalar below it; the width is the whole difference, and it is
 // the reason the site could not use the `int&` door.
 void Serializer::Serialize(int64_t& v, const char* name) {
-    ::ScalarCall(_readerWriter, rw_vtbl::kScalarInt64, v, name);
+    _readerWriter->SerializeInt64(v, name);
 }
 void Serializer::Serialize(bool& v, const char* name) {
-    ::ScalarCall(_readerWriter, rw_vtbl::kScalarBool, v, name);
+    _readerWriter->SerializeBool(v, name);
 }
 void Serializer::Serialize(signed char& v, const char* name) {
-    ::ScalarCall(_readerWriter, rw_vtbl::kScalarSChar, v, name);
+    _readerWriter->SerializeSChar(v, name);
 }
 void Serializer::Serialize(unsigned char& v, const char* name) {
-    ::ScalarCall(_readerWriter, rw_vtbl::kScalarUChar, v, name);
+    _readerWriter->SerializeUChar(v, name);
 }
 void Serializer::Serialize(short& v, const char* name) {
-    ::ScalarCall(_readerWriter, rw_vtbl::kScalarShort, v, name);
+    _readerWriter->SerializeShort(v, name);
 }
 void Serializer::Serialize(unsigned short& v, const char* name) {
-    ::ScalarCall(_readerWriter, rw_vtbl::kScalarUShort, v, name);
+    _readerWriter->SerializeUShort(v, name);
 }
 void Serializer::Serialize(int& v, const char* name) {
-    ::ScalarCall(_readerWriter, rw_vtbl::kScalarInt, v, name);
+    _readerWriter->SerializeInt(v, name);
 }
 void Serializer::Serialize(unsigned int& v, const char* name) {
-    ::ScalarCall(_readerWriter, rw_vtbl::kScalarUInt, v, name);
+    _readerWriter->SerializeUInt(v, name);
 }
 void Serializer::Serialize(float& v, const char* name) {
-    ::ScalarCall(_readerWriter, rw_vtbl::kScalarFloat, v, name);
+    _readerWriter->SerializeFloat(v, name);
 }
 
 void Serializer::Serialize(int n, char* d, const char* name) {
-    ::ArrayCall(_readerWriter, rw_vtbl::kArrayChar, n, d, name);
+    _readerWriter->SerializeCharArray(n, d, name);
 }
 void Serializer::Serialize(int n, signed char* d, const char* name) {
-    ::ArrayCall(_readerWriter, rw_vtbl::kArraySChar, n, d, name);
+    _readerWriter->SerializeSCharArray(n, d, name);
 }
 void Serializer::Serialize(int n, bool* d, const char* name) {
-    ::ArrayCall(_readerWriter, rw_vtbl::kArrayBool, n, d, name);
+    _readerWriter->SerializeBoolArray(n, d, name);
 }
 void Serializer::Serialize(int n, unsigned char* d, const char* name) {
-    ::ArrayCall(_readerWriter, rw_vtbl::kArrayUChar, n, d, name);
+    _readerWriter->SerializeUCharArray(n, d, name);
 }
 void Serializer::Serialize(int n, short* d, const char* name) {
-    ::ArrayCall(_readerWriter, rw_vtbl::kArrayShort, n, d, name);
+    _readerWriter->SerializeShortArray(n, d, name);
 }
 void Serializer::Serialize(int n, unsigned short* d, const char* name) {
-    ::ArrayCall(_readerWriter, rw_vtbl::kArrayUShort, n, d, name);
+    _readerWriter->SerializeUShortArray(n, d, name);
 }
 void Serializer::Serialize(int n, int* d, const char* name) {
-    ::ArrayCall(_readerWriter, rw_vtbl::kArrayInt, n, d, name);
+    _readerWriter->SerializeIntArray(n, d, name);
 }
 void Serializer::Serialize(int n, unsigned int* d, const char* name) {
-    ::ArrayCall(_readerWriter, rw_vtbl::kArrayUInt, n, d, name);
+    _readerWriter->SerializeUIntArray(n, d, name);
 }
 void Serializer::Serialize(int n, float* d, const char* name) {
-    ::ArrayCall(_readerWriter, rw_vtbl::kArrayFloat, n, d, name);
+    _readerWriter->SerializeFloatArray(n, d, name);
 }
 
 // 0x1800346d0 — the same three instructions, but the payload is `void*`, which
 // is why retail gives it its own name instead of a nineteenth overload.
 void Serializer::SerializeBytes(int n, void* buf, const char* name) {
-    ReaderWriter* rw = _readerWriter;
-    using Fn = void (*)(ReaderWriter*, int, void*, const char*);
-    reinterpret_cast<Fn>(::RwSlot(rw, rw_vtbl::kSerializeBytes))(rw, n, buf, name);
+    _readerWriter->SerializeBytes(n, buf, name);   // slot 25 +0xC8
 }
 
 }  // namespace IO

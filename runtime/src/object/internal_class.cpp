@@ -699,12 +699,8 @@ void InternalFactory::ResetPersistState(void* stream) {
     ::IO::Serializer* ser = ::new (static_cast<void*>(serStorage))   // B.3.4 bridge
         ::IO::Serializer(*reinterpret_cast<::IO::Stream*>(stream), kSerializerVersion);
 
-    void*  enc     = ser->_readerWriter;
-    void** encVtbl = *reinterpret_cast<void***>(enc);
-
     int count = _objects._size;
-    reinterpret_cast<void (*)(void*, int*, const char*)>(
-        encVtbl[rt::io::rw_vtbl::kScalarInt / 8])(enc, &count, nullptr);
+    ser->_readerWriter->SerializeInt(count, nullptr);   // +0xa0 (B3X W0: by name)
 
     detail::ArrayIntSetSize(&_persistIds, count);
     detail::ArrayPtrReserve(&_objects, count);
@@ -770,16 +766,9 @@ inline int32_t StreamMode(const void* stream) {
         reinterpret_cast<const uint8_t*>(stream) + 0x08);
 }
 
-// vtable slot 3 (+0x18) — `Object::Internal::Persist(IO::Stream&)`. Spelled
-// through the raw table rather than as `obj->Persist(stream)` because the object
-// may be carrying the MINTED `??_7Internal@Object@@6B@`, whose slot 3 is the
-// registered `?Persist@Internal@Object@@` shim. The two are slot-compatible
-// (tests/unit/object_vtable_abi_test.cpp) and this is the instruction retail
-// emits either way.
-inline void SerializeVirtual(void* self, void* stream) {
-    void* const* vt = *reinterpret_cast<void* const* const*>(self);
-    reinterpret_cast<void (*)(void*, void*)>(vt[3])(self, stream);
-}
+// vtable slot 3 (+0x18) — `Object::Internal::Persist(IO::Stream&)`. B3X W0:
+// called by name, `obj->Persist(stream)`; the minted `??_7Internal@Object@@6B@`
+// that once made a raw slot read necessary was retired in B.3.9.
 
 }  // namespace
 
@@ -795,7 +784,7 @@ Internal* InternalFactory::PersistObject(void* stream, uint32_t generation,
         if (persistIds[i] < 0) {
             persistIds[i] = static_cast<int32_t>(i);
             Internal* obj = _objects._data[i];
-            SerializeVirtual(obj, stream);
+            obj->Persist(stream);                                     // slot 3 +0x18
         }
         // `slot` stays `index`: EBX is never reassigned on this arm.
     } else {
@@ -834,7 +823,7 @@ Internal* InternalFactory::PersistObject(void* stream, uint32_t generation,
             _persistIds._data[i] = newIndex;
             slot = _persistIds._data[i];
 
-            SerializeVirtual(obj, stream);                            // 0x1800bffca
+            obj->Persist(stream);                                     // 0x1800bffca  slot 3 +0x18
         }
     }
 

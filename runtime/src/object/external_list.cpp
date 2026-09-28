@@ -80,8 +80,8 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 
 constexpr int kEncCreateReader = 0x18;   // CALL [RAX+0x18]
 constexpr int kEncCreateWriter = 0x20;   // CALL [RAX+0x20]
-constexpr int kRwScalarInt     = 0xa0;   // CALL [RAX+0xa0]
-constexpr int kRwDeletingDtor  = 0x00;   // CALL [RAX]
+// B3X W0: the ReaderWriter's [RAX+0xa0] (SerializeInt) and [RAX] (slot 0,
+// the deleting destructor) are called by name below.
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
@@ -110,8 +110,7 @@ bool ExternalList::Serialize(void* streamv) {
     ser.readerWriter = rw;
 
     int32_t n = _count;
-    using ScalarFn = void (*)(void* rw, void* value, const char* name);
-    reinterpret_cast<ScalarFn>(VTableOf(rw)[kRwScalarInt / 8])(rw, &n, nullptr);
+    reinterpret_cast<::IO::ReaderWriter*>(rw)->SerializeInt(n, nullptr);   // +0xa0 (B.3.x bridge)
 
     if (ser.stream->mode == 0) {
         using SetSizeFn = void (*)(void* array, int n);
@@ -121,8 +120,7 @@ bool ExternalList::Serialize(void* streamv) {
     RtAddr<ArraySerFn>(0x18002f170ull)(&ser, n, _resources);
 
     if (rw != nullptr) {
-        using DeleteFn = void (*)(void* rw, int flag);
-        reinterpret_cast<DeleteFn>(VTableOf(rw)[kRwDeletingDtor / 8])(rw, 1);
+        reinterpret_cast<::IO::ReaderWriter*>(rw)->DeletingDtor(1);        // slot 0 (B.3.x bridge)
     }
     return true;
 }

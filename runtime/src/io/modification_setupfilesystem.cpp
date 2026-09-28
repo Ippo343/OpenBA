@@ -356,16 +356,9 @@ bool PlatformFileExists(const System::Filename* path) {
     return ok;
 }
 
-// vtable slot 2 (+0x10) — `virtual uint32_t GetTypeId() const`.
-inline uint32_t GetTypeIdVirtual(const void* self) {
-    void* const* vt = *reinterpret_cast<void* const* const*>(self);
-    return reinterpret_cast<uint32_t (*)(const void*)>(vt[2])(self);
-}
-// vtable slot 7 (+0x38) — the pre-reload teardown the object does to itself.
-inline void Slot7(void* self) {
-    void* const* vt = *reinterpret_cast<void* const* const*>(self);
-    reinterpret_cast<void (*)(void*)>(vt[7])(self);
-}
+// B3X W0: the two virtuals this body calls go by name --
+// `Object::Base::Type()` (slot 2, +0x10) and `Object::External::Destruct()`
+// (slot 7, +0x38, the pre-reload teardown the object does to itself).
 
 }  // namespace
 
@@ -567,7 +560,7 @@ void Modification::SetupFileSystem() {
             if (present) {
                 // ---- queue the reload, 0x1800af03d --------------------------
                 ReloadEntry entry;
-                entry.typeId   = GetTypeIdVirtual(ext);        // 0x1800af052
+                entry.typeId   = reinterpret_cast<const ::Object::Base*>(ext)->Type();   // 0x1800af052 (B.3.x bridge)
                 entry.external = const_cast<RtObject::External*>(ext);
                 // entry._hole04 is DELIBERATELY left uninitialised: retail's
                 // first store is a DWORD and nothing ever writes +0x04..+0x07.
@@ -614,7 +607,7 @@ void Modification::SetupFileSystem() {
         ReloadEntry* const e = &queue.data[i];
         RtObject::External* const ext = e->external;
 
-        Slot7(ext);                                            // 0x1800af306
+        reinterpret_cast<::Object::External*>(ext)->Destruct();   // 0x1800af306 (B.3.x bridge)
 
         // the type-tree descent, inlined; a MISS yields null and is then
         // dereferenced. See the banner.

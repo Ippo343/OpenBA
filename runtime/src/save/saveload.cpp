@@ -101,6 +101,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/save/SaveLoad.h"
 #include "../../types/io/Stream.h"
+#include "../../types/video/ImageBuffer.h"   // B3X W0: ~SaveInfo deletes one by name
 #include "../../types/system/Value.h"   // System::Time — Update / SetMinOperationTime
 #include <new>                  // placement new into the retail hidden return slot
 #include "../system/string.h"   // RtSystem::String (Wave 2, lane String)
@@ -380,10 +381,9 @@ Save::SaveLoad::SaveInfo::~SaveInfo() {
     const int32_t ownFlag = saveIndex;
     if (owned != nullptr && ownFlag >= 0 && owned != nullptr) {
         // MOV RAX,[RCX] ; MOV EDX,1 ; CALL [RAX]  -- scalar deleting dtor of the
-        // row's Video::ImageBuffer, through its slot 0.
-        using DeletingDtorFn = void* (*)(void*, unsigned int);
-        void** vtable = *reinterpret_cast<void***>(owned);
-        reinterpret_cast<DeletingDtorFn>(vtable[0])(owned, 1u);
+        // row's Video::ImageBuffer (built by SetThumbnail), through its slot 0.
+        // B3X W0: by name.
+        reinterpret_cast<::Video::ImageBuffer*>(owned)->DeletingDtor(1u);   // B.3.x bridge
     }
 
     void* block = thumbPixels;

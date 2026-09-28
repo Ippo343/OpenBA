@@ -127,13 +127,10 @@ namespace {
 using GetPathFn = Filename* (*)(const External* self, Filename* ret);
 
 // External vtable slot +0x28 — `Serialize(IO::Stream&)`. The same slot
-// `External::Load` drives and the one External.h names.
-constexpr size_t kExternalSerializeSlotBytes = 0x28;
-
+// `External::Load` drives and the one External.h names. B3X W0: called by
+// name; the bool result is discarded, as retail does here.
 void ExternalSerialize(External* self, void* stream) {
-    void** vtbl = *reinterpret_cast<void***>(self);
-    using Fn = void (*)(External*, void*);
-    reinterpret_cast<Fn>(vtbl[kExternalSerializeSlotBytes / sizeof(void*)])(self, stream);
+    reinterpret_cast<::Object::External*>(self)->Serialize(stream);   // B.3.x bridge
 }
 
 // ---------------------------------------------------------------------------

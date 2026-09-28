@@ -333,14 +333,11 @@ using CommitFn      = void  (*)(void* self);
 // records the pin.
 using MakeCodecFn   = rt::io::ReaderWriter* (*)(void* encoding,
                                                 rt::io::Serializer* ser, int version);
-// IO::ReaderWriter scalar slot: (this, T& value, const char* debugName).
-using RwScalarFn    = void (*)(rt::io::ReaderWriter* rw, void* value, const char* name);
-// IO::ReaderWriter +0xC8: (this, int byteCount, void* data, const char* debugName).
-using RwBytesFn     = void (*)(rt::io::ReaderWriter* rw, int size, void* data, const char* name);
-// Slot 0 of any polymorphic class here: the scalar-deleting destructor.
-using DeletingDtorFn = void (*)(void* self, int flags);
-// IO::Stream vtable slot 7 (+0x38) is Close() on every concrete Stream.
-using StreamCloseFn = void (*)(void* stream);
+// B3X W0: the ReaderWriter (SerializeInt +0xa0, SerializeUInt +0x98,
+// SerializeBytes +0xC8, DeletingDtor slot 0) and the embedded MemoryStream's
+// Close (slot 7, +0x38) are called BY NAME below. `ReadVtableSlot` stays for
+// the IO::Encoding factory slot alone -- that table has no destructor slot and
+// does not flip.
 
 // ENDGAME B.3.9 IO (W2): the RT_VTABLE_ONCE by-name vtable stamps went with
 // the inlined CompressedMemoryStream ctor/dtor -- the real class stores its own.
@@ -403,17 +400,9 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
             encoding, &ser, 3);
     }
     rt::io::ReaderWriter* rw = ser.readerWriter;
-
-    // Resolved once per call rather than once per use: retail reloads
-    // `[RSP+0x28]` and re-walks the vtable before EVERY one of these calls, but
-    // the pointer it reloads cannot change (nothing writes it), so hoisting is
-    // an equivalence, not a guess.
-    auto scalarInt   = reinterpret_cast<RwScalarFn>(
-                           ReadVtableSlot(rw, rt::io::rw_vtbl::kScalarInt));
-    auto scalarUInt  = reinterpret_cast<RwScalarFn>(
-                           ReadVtableSlot(rw, rt::io::rw_vtbl::kScalarUInt));
-    auto writeBytes  = reinterpret_cast<RwBytesFn>(
-                           ReadVtableSlot(rw, rt::io::rw_vtbl::kSerializeBytes));
+    // Retail reloads `[RSP+0x28]` and re-walks the vtable before EVERY one of
+    // the calls below; a by-name virtual call does the same (B3X W0).
+    ::IO::ReaderWriter* const rwc = reinterpret_cast<::IO::ReaderWriter*>(rw);   // B.3.x bridge
     // ---- the record -------------------------------------------------------
     // ENDGAME B.3.1 step 2: `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`
     // (0x1800c9930) is the class's own member now. `name` is the registered
@@ -427,12 +416,12 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     // The slot takes an `int&` and writes back through it on the read path, so
     // the argument itself is handed over, exactly as retail hands it the home
     // slot.
-    scalarInt(rw, &width,  nullptr);
-    scalarInt(rw, &height, nullptr);
+    rwc->SerializeInt(width,  nullptr);                 // +0xa0
+    rwc->SerializeInt(height, nullptr);                 // +0xa0
 
-    writeBytes(rw, width * height * 4, pixels, nullptr);
+    rwc->SerializeBytes(width * height * 4, pixels, nullptr);   // +0xC8
 
-    scalarInt(rw, &nameMode, nullptr);
+    rwc->SerializeInt(nameMode, nullptr);               // +0xa0
 
     // ---- collect the enabled mods -----------------------------------------
     // The Modification singleton pointer is hoisted (`MOV R14,[...]` once at
@@ -516,7 +505,7 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     // the read path SetSize is what makes them agree. Collapsing them into one
     // variable would be right today and wrong the moment this runs backwards.
     int32_t count = arr.size;
-    scalarInt(rw, &count, nullptr);
+    rwc->SerializeInt(count, nullptr);                  // +0xa0
 
     if (ser.stream->direction == 0) {          // read path; dead here, see above
         ModInfoArraySetSize(&arr, count);
@@ -529,9 +518,9 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
         // transitional cast (B31_RULES, "members of not-yet-converted structs").
         reinterpret_cast<System::String&>(e->name).Serialize(&ser);
         reinterpret_cast<System::String&>(e->path).Serialize(&ser);
-        scalarUInt(rw, &e->versionMajor, nullptr);
-        scalarUInt(rw, &e->gameVersion,  nullptr);
-        scalarUInt(rw, &e->versionMinor, nullptr);
+        rwc->SerializeUInt(*reinterpret_cast<uint32_t*>(&e->versionMajor), nullptr);   // +0x98
+        rwc->SerializeUInt(*reinterpret_cast<uint32_t*>(&e->gameVersion),  nullptr);   // +0x98
+        rwc->SerializeUInt(*reinterpret_cast<uint32_t*>(&e->versionMinor), nullptr);   // +0x98
     }
 
     ModInfoDestroyRange(arr.data, arr.size);
@@ -542,7 +531,7 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
 
     // ---- inlined ~Serializer ----------------------------------------------
     if (rw != nullptr) {
-        reinterpret_cast<DeletingDtorFn>(ReadVtableSlot(rw, rt::io::rw_vtbl::kDtor))(rw, 1);
+        rwc->DeletingDtor(1);                           // slot 0, flags 1
     }
 
     // ---- inlined ?Close@CompressedMemoryStream, then the handoff ----------
@@ -550,8 +539,7 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
     // test keeps a read-mode stream from committing.
     auto commit = RT_EXPORT_ONCE(CommitFn, "?Commit@CompressedStream@IO@@QEAAXXZ");
     if (cs.base.headerSize > 0 && cs.base.base.direction == 1) commit(&cs.base);
-    reinterpret_cast<StreamCloseFn>(
-        ReadVtableSlot(&cs.memoryStream, RtIo::kStreamVtblCloseSlot * 8))(&cs.memoryStream);
+    reinterpret_cast<IO::MemoryStream*>(&cs.memoryStream)->Close();   // slot 7 +0x38 (B.3.x bridge)
 
     // THE ONE SIDE EFFECT THAT LEAVES THIS FUNCTION: the finished record is
     // copied into the EMBEDDED SavedState at SaveLoad+0x28, which is what

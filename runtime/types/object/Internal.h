@@ -208,13 +208,9 @@ static_assert(sizeof(InternalFactory) == 0x9e8,
 // steps 5-8 (§3.3).
 // ============================================================
 
-// Object::Internal vtable slot byte offsets (see the vtable dump above).
-enum : int {
-    kInternalVtblScalarDtor = 0x00,
-    kInternalVtblTypeName   = 0x08,
-    kInternalVtblType       = 0x10,
-    kInternalVtblPersist    = 0x18,
-};
+// B3X W0: the `kInternalVtbl*` byte-offset enum (0x00 / 0x08 / 0x10 / 0x18 =
+// DeletingDtor / TypeName / Type / Persist) lost its last reader when
+// internal.cpp began calling `Type()` by name; it is retired with it.
 
 }  // namespace RtObject
 
@@ -300,25 +296,14 @@ public:
     //     p = _ptr; if (p) { p->vtbl[0](p, 1); _ptr = 0; }
     // Slot 0 with flag 1 is MSVC's scalar deleting destructor: it runs
     // ~Internal (and therefore InternalFactory's swap-remove) and frees the
-    // block. The raw-vtable call is the one the C body already had.
+    // block.
     //
-    // IT STAYS RAW, AND THE REASON IS NOT "IT MAY BE HANDED A MINTED-VTABLE
-    // OBJECT" (B33_RULES §9 6.3 — that reason does not hold and is not written
-    // down here any more). Slot 0 reached through a minted vtable is the SAME
-    // instruction as `p->DeletingDtor(1)`; tests/unit/object_vtable_abi_test.cpp
-    // proves both directions, so a minted receiver is no obstacle to the member
-    // call. The reason that DOES hold is `CallSlot0`'s: the pointee here is
-    // `RtObject::Internal*`, the POD, so spelling it `Object::Destroy(...)`
-    // would add a bridge cast per site and remove no indirection. It converts
-    // when `_ptr` itself becomes `::Object::Internal*`.
-    void DeletePtr() {
-        RtObject::Internal* p = _ptr;
-        if (p != nullptr) {
-            void** vtbl = *reinterpret_cast<void***>(p);
-            reinterpret_cast<void (*)(RtObject::Internal*, int)>(vtbl[0])(p, 1);
-            _ptr = nullptr;
-        }
-    }
+    // B3X W0: the call is `DeletingDtor(1)` BY NAME on `Object::Internal`,
+    // through one bridge cast from the `RtObject::Internal*` POD `_ptr` still
+    // holds. The body is defined below `class Internal` (the class must be
+    // complete for the member call); the declaration and signature are
+    // unchanged for every InternalPtr<T> instantiation.
+    inline void DeletePtr();
 
     // ?Serialize@... 0x1800c0180. Writes/reads {present, index, generation,
     // type} through the ReaderWriter vtable and resolves the triple back
@@ -575,6 +560,16 @@ protected:
 static_assert(sizeof(Internal) == 0x10, "Object::Internal is 16 bytes");
 static_assert(sizeof(Internal) == sizeof(RtObject::Internal),
               "the real class and the POD describe the same bytes");
+
+// ?DeletePtr@InternalBasePtr@Object@@QEAAXXZ 0x1800c0150 -- see the
+// declaration. Slot 0, flags 1, by name (B3X W0).
+inline void InternalBasePtr::DeletePtr() {
+    RtObject::Internal* p = _ptr;
+    if (p != nullptr) {
+        reinterpret_cast<Internal*>(p)->DeletingDtor(1);   // B.3.x bridge
+        _ptr = nullptr;
+    }
+}
 static_assert(offsetof(Internal, _factoryIndex) == 0x08, "Internal::_factoryIndex at +0x08");
 static_assert(offsetof(Internal, _generation)   == 0x0c, "Internal::_generation at +0x0c");
 static_assert(offsetof(Internal, _factoryIndex) == offsetof(RtObject::Internal, factoryIndex),

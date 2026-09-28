@@ -193,17 +193,11 @@ inline void GrowByOne(void*& data, int32_t& size, int32_t& cap,
             "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(oldData);
 }
 
-// The source stream's vtable, used by DecompressFromSource. Slot indices rather
-// than byte offsets so the arithmetic is visible: retail calls `[RAX+0x18]` and
-// `[RAX+0x20]`, i.e. slots 3 and 4.
-constexpr int kStreamSlotRead          = 3;   // +0x18  Read(int n, void* dst)
-constexpr int kStreamSlotSetCurrentPos = 4;   // +0x20  SetCurrentPos(int pos)
-
-typedef bool (*StreamReadFn)(void*, int32_t, void*);
-typedef bool (*StreamSetPosFn)(void*, int32_t);
-
-inline void* SourceSlot(void* stream, int slot) {
-    return (*static_cast<void***>(stream))[slot];
+// The source stream, used by DecompressFromSource. Retail calls `[RAX+0x18]`
+// (Read, slot 3) and `[RAX+0x20]` (SetCurrentPos, slot 4); B3X W0 calls them by
+// name on `IO::Stream`, through the object's own vtable as retail does.
+inline ::IO::Stream* SourceStream(void* stream) {
+    return static_cast<::IO::Stream*>(stream);   // B.3.x bridge
 }
 
 }  // namespace
@@ -293,12 +287,12 @@ extern "C" bool RtIo_CompressedStream_DecompressFromSource(CompressedStream* sel
     w->end   = w->start + h->uncompressedSize;          // 1800a9703 / 1800a9709
 
     void* const src = self->source;                     // 1800a970c
-    reinterpret_cast<StreamSetPosFn>(SourceSlot(src, kStreamSlotSetCurrentPos))(
-        src, static_cast<int32_t>(h->sourceOffset));    // 1800a9715  CALL [RAX+0x20]
+    SourceStream(src)->SetCurrentPos(
+        static_cast<int32_t>(h->sourceOffset));         // 1800a9715  CALL [RAX+0x20]
 
     if (h->compressedSize != 0) {                       // 1800a9723  TEST DX,DX
-        reinterpret_cast<StreamReadFn>(SourceSlot(src, kStreamSlotRead))(
-            src, h->compressedSize, scratch);           // 1800a9730  CALL [RAX+0x18]
+        SourceStream(src)->Read(
+            h->compressedSize, scratch);                // 1800a9730  CALL [RAX+0x18]
         // Rung 1's port, reached through the port-aware door — this is the call
         // that finally gives Compression::Decompress real package bytes.
         RT_EXPORT_ONCE(DecompressFn,
@@ -308,8 +302,8 @@ extern "C" bool RtIo_CompressedStream_DecompressFromSource(CompressedStream* sel
     } else {
         // STORED: read straight into the window. compressedSize == 0 is the
         // stored marker, not an empty block (§2).
-        reinterpret_cast<StreamReadFn>(SourceSlot(src, kStreamSlotRead))(
-            src, h->uncompressedSize, w->buffer);       // 1800a9755
+        SourceStream(src)->Read(
+            h->uncompressedSize, w->buffer);            // 1800a9755  CALL [RAX+0x18]
     }
 
     return true;                                        // 1800a9768

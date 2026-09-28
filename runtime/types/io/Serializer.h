@@ -784,12 +784,11 @@ static_assert(offsetof(Visitor, version) == 0x20,
 // value or in a raw buffer, and `runtime/src/object/internal_class.cpp`
 // destroys one explicitly at the exact retail position.
 //
-// THE 22 MEMBERS KEEP THEIR RAW `rw_vtbl::k*` SLOT CALLS (§3.1). They do NOT
-// become `_readerWriter->SerializeInt(v, name)`. The member call is correct
-// only once nothing hands a Serializer a MINTED-table ReaderWriter any more,
-// and §4.2 says that is the end of B.3, not this step. A faithful partial
-// beats a complete-looking deletion. The win is already banked: these bodies
-// are the LAST place a caller spells those byte offsets.
+// THE 22 MEMBERS CALL THE READERWRITER BY NAME (B3X W0). B.3.4 §3.1 kept raw
+// `rw_vtbl::k*` slot calls here while a Serializer could be handed a
+// MINTED-table ReaderWriter; B.3.9 IO retired those tables, so
+// `_readerWriter->SerializeInt(v, name)` reaches the same slot the old
+// constant named.
 // ===========================================================================
 
 class Serializer {
@@ -921,10 +920,10 @@ static_assert(std::is_standard_layout<Serializer>::value,
 // compiler's tables; the minted ??_7ReaderWriter / BinaryReader / BinaryWriter
 // / Visitor rows were retired with this.
 //
-// THE STREAM IS DRIVEN THROUGH ITS RAW SLOTS (+0x10 Write, +0x18 Read, +0x20
-// SetCurrentPos, +0x28 GetCurrentPos), exactly as the old doors did and as
-// `serialize_family.cpp`'s bodies still do: `IO::Stream` is only forward-
-// declared here, and the byte sequence -- 12 header bytes in the ctor, a
+// THE STREAM IS DRIVEN THROUGH `rw_stream` (+0x10 Write, +0x18 Read, +0x20
+// SetCurrentPos, +0x28 GetCurrentPos -- by name since B3X W0, out of line
+// because `IO::Stream` is only forward-declared here), and the byte
+// sequence -- 12 header bytes in the ctor, a
 // 4-byte trailer (reader) or trailer + back-patch (writer) in the dtor -- is
 // what the resave gate compares. Nothing is reordered, nothing is guarded.
 //
@@ -945,15 +944,15 @@ void  RtMemFree(void* p);
 }
 
 namespace IO {
+// B3X W0: by-name `IO::Stream` calls (Write / Read / SetCurrentPos /
+// GetCurrentPos, slots 2..5). Defined out of line in
+// runtime/src/io/serializer_class.cpp, because `IO::Stream` is only forward-
+// declared in this header.
 namespace rw_stream {
-using RwFn  = bool (*)(void* self, int32_t size, void* buf);
-using PosFn = int32_t (*)(void* self);
-using SeekFn = bool (*)(void* self, int32_t pos);
-inline void* Slot(void* s, int off) { return (*reinterpret_cast<void***>(s))[off / 8]; }
-inline bool    Write(void* s, int32_t n, void* src) { return reinterpret_cast<RwFn>(Slot(s, 0x10))(s, n, src); }
-inline bool    Read(void* s, int32_t n, void* dst)  { return reinterpret_cast<RwFn>(Slot(s, 0x18))(s, n, dst); }
-inline void    SetPos(void* s, int32_t pos)         { reinterpret_cast<SeekFn>(Slot(s, 0x20))(s, pos); }
-inline int32_t GetPos(void* s)                      { return reinterpret_cast<PosFn>(Slot(s, 0x28))(s); }
+bool    Write(void* s, int32_t n, void* src);   // IO::Stream::Write          +0x10
+bool    Read(void* s, int32_t n, void* dst);    // IO::Stream::Read           +0x18
+void    SetPos(void* s, int32_t pos);           // IO::Stream::SetCurrentPos  +0x20
+int32_t GetPos(void* s);                        // IO::Stream::GetCurrentPos  +0x28
 }  // namespace rw_stream
 
 inline ReaderWriter::ReaderWriter(Serializer& ser)

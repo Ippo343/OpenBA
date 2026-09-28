@@ -342,7 +342,6 @@ typedef void      (*VoidThisFn)(FileSystem*);
 typedef Filename* (*GetPackDirectoryFn)(const FileSystem*, Filename*);
 typedef Filename* (*FilenameCopyCtorFn)(Filename*, const Filename*);
 typedef Filename* (*GetFileNameFn)(const PackageFileView*, Filename*, int);
-typedef void      (*DeletingDtorFn)(void*, unsigned);
 
 // `Collection::Array<Filename>` as LoadPackages builds it on its own stack:
 // only _data (+0x00) and _size (+0x08) are ever written or read here — the
@@ -683,10 +682,8 @@ void FileSystem::ClosePackages() {
             // 0, the VECTOR deleting destructor, flag 1 = also free the block.
             // Slot 0 of ??_7PackageFile@IO@@6B@ is 0x1800259d0 (§7); it is
             // reached through the object's own vtable pointer, faithfully, and
-            // not by address, because after the mint the object will carry OUR
-            // table and this must follow it.
-            void** vt = *reinterpret_cast<void***>(again);
-            reinterpret_cast<RtIO::DeletingDtorFn>(vt[0])(again, 1u);
+            // not by address. B3X W0: by name on the object's own class.
+            reinterpret_cast<::IO::PackageFile*>(again)->DeletingDtor(1u);   // B.3.x bridge
         }
     }
 

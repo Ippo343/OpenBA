@@ -52,6 +52,8 @@
 #include "saveload_internal.h"
 #include "../../types/io/Persistence.h"
 #include "../../types/engine/MainLoop.h"   // ENDGAME B.3.9 ENG: the class static
+#include "../../types/engine/UpdateLoop.h" // B3X W0: SaveRestore by name
+#include "../../types/object/VSlot.h"      // B3X W0: the recorder's slot address
 #include "../../types/io/Modification.h"   // UpdateLoad reorders the mod list
 #include "../../types/collection/Collection.h"
 #include "../../types/video/CompanionData.h"  // ENDGAME B.3.5: Video::ImageBufferData
@@ -1142,20 +1144,30 @@ void Save::SaveLoad::UpdateSave() {
         // path does, at gameupdateloop_load.cpp:1596, which passes a real
         // pointer). C++ has no way to spell "whatever is in R9", and
         // manufacturing garbage to be faithful to garbage would be worse than
-        // useless, so this passes nullptr and says so here.
-        using SaveRestoreFn = void (*)(void* self, char save, void* savedState, int* outParam);
+        // useless, so this passed nullptr.
+        //
+        // B3X W0: the call is BY NAME, `Engine::UpdateLoop::SaveRestore(bool,
+        // Save::SavedState*)` (runtime/types/engine/UpdateLoop.h:338). The tree
+        // declares the slot with two arguments and routes retail's fourth
+        // through `GameUpdateLoop::SaveRestoreOut` (code/Game/Game/
+        // gameupdateloop.cpp: the slot-7 override passes nullptr itself; the
+        // base body 0x180031750 is a bare RET), so the nullptr this site used to
+        // put in R9 was read by no body and dropping it changes nothing. The
+        // recorder is given the slot's address taken FROM THE MEMBER
+        // (runtime/types/object/VSlot.h), not a literal index.
         uint8_t** mainLoopSlot = reinterpret_cast<uint8_t**>(&::Engine::MainLoop::_singleton);
         if (mainLoopSlot != nullptr && *mainLoopSlot != nullptr) {
             void*  loop = *reinterpret_cast<void**>(*mainLoopSlot + 0x20);
-            void** vtbl = *reinterpret_cast<void***>(loop);
-            SaveRestoreFn saveRestore = reinterpret_cast<SaveRestoreFn>(vtbl[7]);
+            const void* saveRestore =
+                ::Object::SlotAddressOf(loop, &::Engine::UpdateLoop::SaveRestore);
             // `fresh`, not a re-read of _saveState: retail passes the REGISTER,
             // which on the allocation-failure arm is 0 and equals what it just
             // stored. The two are the same value; this spells the register.
-            if (out.Call("Engine::UpdateLoop::SaveRestore [vtbl+0x38]", (const void*)saveRestore,
+            if (out.Call("Engine::UpdateLoop::SaveRestore [vtbl+0x38]", saveRestore,
                          reinterpret_cast<int64_t>(loop), 1,
                          reinterpret_cast<int64_t>(fresh), 0)) {
-                saveRestore(loop, 1, fresh, nullptr);
+                static_cast<::Engine::UpdateLoop*>(loop)->SaveRestore(       // B.3.x bridge
+                    true, reinterpret_cast<::Save::SavedState*>(fresh));
             }
         }
 

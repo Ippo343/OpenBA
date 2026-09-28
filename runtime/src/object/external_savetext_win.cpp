@@ -140,16 +140,14 @@ using CloseFileFn = void (*)(RtIO::FileSystem* self, RtIO::FileInfo* fi);
 // external_add.cpp drives the same slot and DISCARDS the result, which is why
 // its local typedef spells the return as void — a difference in the call site,
 // not a disagreement about the slot.
+// B3X W0: both by name -- `Object::Base::Type()` (slot 2, +0x10) and
+// `Object::External::Serialize` (slot 5, +0x28).
 uint32_t ExternalGetTypeId(External* self) {
-    void** vtbl = *reinterpret_cast<void***>(self);
-    using Fn = uint32_t (*)(External*);
-    return reinterpret_cast<Fn>(vtbl[0x10 / sizeof(void*)])(self);
+    return reinterpret_cast<const ::Object::Base*>(self)->Type();        // B.3.x bridge
 }
 
 bool ExternalSerialize(External* self, void* stream) {
-    void** vtbl = *reinterpret_cast<void***>(self);
-    using Fn = bool (*)(External*, void*);
-    return reinterpret_cast<Fn>(vtbl[0x28 / sizeof(void*)])(self, stream);
+    return reinterpret_cast<::Object::External*>(self)->Serialize(stream);   // B.3.x bridge
 }
 
 // `if (fi->handle != -1) FileSystem::CloseFile(_singleton, fi);`
