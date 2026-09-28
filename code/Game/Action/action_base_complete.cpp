@@ -15,6 +15,7 @@
 // DEFERRED (NOT in this file): DropOffRawMaterial transfer helpers 0x1400c7570 /
 // 0x1400c7620 — their closure pulls in unregistered code sub-callees (the deep
 // create-raw-material spawn FUN_1400c78c0, MoveTo action ctor FUN_1400c9170, the
+#include "Action/exe_bodies.h"
 // task-list append FUN_1400c54e0, and an allocator dispatch slot). Drafted in
 // notes/wave3_drafts/action_base_complete.cpp.draft; wire once that closure lands.
 //

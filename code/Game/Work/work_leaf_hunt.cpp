@@ -3,6 +3,7 @@
 // referenced via ResolveAddr(Module::Exe, 0xADDR) from the Hunt / HarvestOrchard /
 // Pasture / ConsumeProduce work classes. Each ResolveAddr returns 0 (silently
 // skipped) unless the address is registered. This file provides the clean reimplementations so the
+#include "Work/exe_bodies.h"
 // standalone build fires real logic.
 //
 // Each function below is a byte-faithful port of the decompiled + disassembled exe

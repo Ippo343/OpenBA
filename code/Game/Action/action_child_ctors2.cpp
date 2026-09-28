@@ -11,6 +11,7 @@
 //
 // ENDGAME B.3.8 ACT: the ctors are the classes' REAL constructors now (defined
 // below, next to their by-address doors); the compiler stamps the vtables.
+#include "Action/exe_bodies.h"
 // Closure (all registered):
 // Entity_FindComponent_Storage 0x140006270 (reg_work_base), and the static
 // MemAlloc/MemFree engine helpers.

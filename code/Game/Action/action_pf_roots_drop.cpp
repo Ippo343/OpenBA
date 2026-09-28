@@ -7,6 +7,7 @@
 // cross-checked against disassembly for the call-site arg ABI. Do NOT "improve" — none
 // of this is exercised on the autostart path, so a wrong port is undetectable latent
 // corruption.
+#include "Action/exe_bodies.h"
 //
 // Registration: RegisterPfRootsDropBatch() in standalone/reg_pf_roots_drop.cpp.
 //

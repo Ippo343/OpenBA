@@ -7,6 +7,7 @@
 // the 3x3 mask -> ae180 arg order and the per-vertex AO-uv overwrite offsets (see its block).
 //   0x1400acaa0  Pf_RoadVtxFill_caa0       — fill one road-mesh vertex (uv/height/blend)
 //   0x1400acc10  Pf_RoadQuad_cc10          — build the 4 verts of one road-tile quad
+#include "Action/exe_bodies.h"
 //   0x1400af370  Pf_RoadMeshRebuild_f370   — rebuild the whole road mesh (vert/index buffers)
 //   0x1400aaa20  Pf_CellQuadRay_aa20       — terrain-cell quad (2-tri) ray test
 //   0x1400b0f90  Pf_CellQuadRayWrap_0f90   — wrapper: build a query point, call aa20

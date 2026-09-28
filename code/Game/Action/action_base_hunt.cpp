@@ -7,6 +7,7 @@
 // code/Game/Action/*.cpp (and others). They resolve to 0 (silently skipped) unless
 // registered.
 // This file provides faithful 1:1 reimplementations and a single registration point
+#include "Action/exe_bodies.h"
 // (RegisterActionHuntBatch in standalone/reg_action_hunt.cpp) so the shared call
 // sites fire real logic in the standalone exe.
 //

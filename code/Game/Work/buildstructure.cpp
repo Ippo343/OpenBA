@@ -9,6 +9,7 @@
 //   +0x48: bool   field_48      — use alternate animation flag (serialized)
 //   +0x4C: int    field_4c      — rotating scan index into bool array (serialized)
 //   +0x50: void*  field_50      — byte array (one per build position: 0=free, 1=claimed)
+#include "Work/exe_bodies.h"
 //   +0x58: int    field_58      — count of build positions
 //   +0x60: void*  field_60      — BST root (tracks which entity claimed which position)
 //   +0x68: int    field_68      — build progress counter

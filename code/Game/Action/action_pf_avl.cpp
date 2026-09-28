@@ -2,6 +2,7 @@
 // Pathfinding/Action closure — AVL/BST node-pool + rotation family.
 //
 // Shared by the road A*, region graph, and work BST. 10 exe sub-helpers, faithfully
+#include "Action/exe_bodies.h"
 // transcribed 1:1 from the Ghidra decompile (cross-checked against disassembly for the
 // rotation pointer surgery, the insert child-pointer offsets, and the balance-factor /
 // height fixups). None of this is exercised on the autostart path — a wrong port would be

@@ -15,6 +15,7 @@
 //   0x1400c4f10  action-stack walk/clear (THIS file)         — c54e0
 //   0x1400c3470  NotifyEntityChanged (action_hunt)           — 107260
 //   0x1400012d0  Entity_FindComponent_Family (action_move)   — 107260
+#include "Action/exe_bodies.h"
 //   0x1400c5400  TaskListCleanup (work_base)                 — 107260
 //   0x140006270  Entity_FindComponent_Storage (work_base)    — 116760 / 1167c0
 //   0x14012d150  StorageComponent::SubtractItem (rawmat)     — 116760

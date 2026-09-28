@@ -6,6 +6,7 @@
 // decompile for the exe function 0x1400aXXXX; none is runtime-exercised on the
 // autostart path, so faithfulness is everything (a wrong port is undetectable silent
 // corruption, strictly worse than leaving the addr unregistered).
+#include "Action/exe_bodies.h"
 //
 // Sub-callees are called via ResolveAddr(Module::Exe, 0xADDR) into a once-resolved
 // static fn-ptr; in standalone they resolve to our registered reimpls:

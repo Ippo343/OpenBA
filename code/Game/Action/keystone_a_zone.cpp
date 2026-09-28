@@ -3,6 +3,7 @@
 // ZoneComponent zone-tile rasterizer (0x14009d360), RoadTool zone-cost enqueuer
 // (0x14009ce00) + its helper (0x1400a6e30), and the type-3 worker-queue enqueue
 // (0x1400a6f00). These feed the pathfinder worker-thread command queue whose core
+#include "Action/exe_bodies.h"
 // (a6430/a6b20/a6c10/a6d50/a6a30/a68b0) is already built+registered in
 // action_pf_astar.cpp / action_move / etc.
 //

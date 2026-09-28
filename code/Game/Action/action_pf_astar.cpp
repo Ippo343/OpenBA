@@ -4,6 +4,7 @@
 // closure. NONE of this is exercised on the autostart path, so a wrong transcription
 // is undetectable silent corruption — every offset below is cross-checked against the
 // Ghidra decompile AND disassembly. Do NOT "improve" or simplify.
+#include "Action/exe_bodies.h"
 //
 // Registration point: RegisterPfAstarBatch() in standalone/reg_pf_astar.cpp.
 //

@@ -2,6 +2,7 @@
 // Pathfinder coarse region-connectivity graph — constructor + coarse-cell vector resize.
 //
 // Faithful 1:1 ports of three exe functions that build the pathfinder's coarse
+#include "Action/exe_bodies.h"
 // region-connectivity graph. Each Pf_*_xxxx is a literal transcription of the Ghidra
 // decompile for the named exe address; faithfulness is everything (a wrong offset is
 // silent corruption, strictly worse than leaving the addr unregistered). The same

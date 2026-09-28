@@ -8,6 +8,7 @@
 // (RegisterWorkBaseBatch in standalone/reg_work_base.cpp) so the shared call sites
 // fire real logic in the standalone exe.
 //
+#include "Work/exe_bodies.h"
 // Wave 2 (Work) — shared base-helper sub-batch. Each function is a 1:1 port of the
 // decompiled exe helper; do not "improve" behavior.
 //

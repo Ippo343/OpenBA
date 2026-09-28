@@ -1,0 +1,237 @@
+address	body	defining_file	linkage	declared_in	note
+0x1400e4b50	BuildRoad_CtorParams_Impl	code/Game/Work/buildroad.cpp:76	C++	code/Game/Work/buildroad_funcs.h	existing header; not redeclared; registered at code/Game/Work/buildroad.cpp:519
+0x14002a9f0	MarketBst_a9f0	code/Game/Work/marketwork_bst_a9f0.cpp:288	C	code/Game/Work/marketwork_bst_a9f0.h	existing header; not redeclared; registered at standalone/reg_marketwork_bst.cpp:53
+0x14002aaa0	MarketBst_aaa0	code/Game/Work/marketwork_bst_aaa0.cpp:301	C	code/Game/Work/marketwork_bst_aaa0.h	existing header; not redeclared; registered at standalone/reg_marketwork_bst.cpp:60
+0x14002ac40	MarketBst_ac40	code/Game/Work/marketwork_bst_aaa0.cpp:174	C	code/Game/Work/marketwork_bst_aaa0.h	existing header; not redeclared; registered at standalone/reg_marketwork_bst.cpp:61
+0x14002b290	MarketBst_b290	code/Game/Work/marketwork_bst_b290.cpp:181	C	code/Game/Work/marketwork_bst_b290.h	existing header; not redeclared; registered at standalone/reg_marketwork_bst.cpp:65
+0x14002afb0	MarketBst_afb0	code/Game/Work/marketwork_bst_afb0.cpp:152	C	code/Game/Work/marketwork_bst_afb0.h	existing header; not redeclared; registered at standalone/reg_marketwork_bst.cpp:68
+0x14002b680	MarketBst_b680	code/Game/Work/marketwork_bst_b680.cpp:160	C	code/Game/Work/marketwork_bst_b680.h	existing header; not redeclared; registered at standalone/reg_marketwork_bst.cpp:71
+0x14002ba70	MarketBst_ba70	code/Game/Work/marketwork_bst_ba70.cpp:110	C	code/Game/Work/marketwork_bst_ba70.h	existing header; not redeclared; registered at standalone/reg_marketwork_bst.cpp:74
+0x1400012d0	ActMv_FindComponentFamily_12d0	code/Game/Action/action_base_move.cpp:61	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_move.cpp:52
+0x140002ed0	WorkBase_FindComponent_2ed0	code/Game/Work/work_base_reimpl.cpp:75	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_base.cpp:35
+0x140002f90	WorkBase_FindComponent_2f90	code/Game/Work/work_base_reimpl.cpp:80	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_base.cpp:36
+0x140003050	WorkBase_FindComponent_3050	code/Game/Work/work_base_reimpl.cpp:85	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_base.cpp:37
+0x140003110	ActHunt_DynArraySetCount_3110	code/Game/Action/action_base_hunt.cpp:103	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_hunt.cpp:39
+0x140003f60	ActCNR_FindComponent_3f60	code/Game/Action/action_base_cnr.cpp:183	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_cnr.cpp:41
+0x140004fe0	WorkLeaf_FindComp_4fe0	code/Game/Work/work_leaf_hunt.cpp:108	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_leaf.cpp:66
+0x1400052c0	WorkBase_FindComponent_52c0	code/Game/Work/work_base_reimpl.cpp:90	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_base.cpp:38
+0x140005380	WorkAcc_FindComponent_5380	code/Game/Work/work_base_accessor.cpp:57	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_accessor.cpp:31
+0x140005440	WorkAcc_FindComponent_5440	code/Game/Work/work_base_accessor.cpp:62	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_accessor.cpp:32
+0x140005500	ActHunt_FindComponent_5500	code/Game/Action/action_base_hunt.cpp:57	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_hunt.cpp:36
+0x140006270	WorkBase_FindComponent_6270	code/Game/Work/work_base_reimpl.cpp:95	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_base.cpp:39
+0x140006330	WorkAcc_FindComponent_6330	code/Game/Work/work_base_accessor.cpp:84	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_accessor.cpp:34
+0x1400063d0	WorkLeaf_FindComp_63d0	code/Game/Work/work_leaf_hunt.cpp:140	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_leaf.cpp:67
+0x140008830	WorkBase_CalcDistance_8830	code/Game/Work/work_base_reimpl.cpp:315	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_base.cpp:45
+0x14000a0b0	WorkLeaf_FindComp_a0b0	code/Game/Work/work_leaf_hunt.cpp:78	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_leaf.cpp:65
+0x14000b6f0	Entity_FindConsumeProduce_b6f0	code/Game/Action/action_child_ctors2.cpp:411	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_child_ctors2.cpp:37
+0x14000c3c0	WorkLeaf_FindGrowthDescription_c3c0	code/Game/Work/work_leaf_gather.cpp:99	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_leaf.cpp:61
+0x14000c460	ActCNR_FindComponent_c460	code/Game/Action/action_base_cnr.cpp:191	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_cnr.cpp:42
+0x14000d9d0	ActRm_VectorClone_d9d0	code/Game/Action/action_base_rawmat.cpp:360	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_rawmat.cpp:44
+0x14000da70	ActRm_ArrayResize16_da70	code/Game/Action/action_base_rawmat.cpp:187	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_rawmat.cpp:39
+0x14000e320	WorkBase_TreeNodeFree_e320	code/Game/Work/work_base_reimpl.cpp:177	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_base.cpp:42
+0x14000e450	Pf_AvlRotateB_e450	code/Game/Action/action_pf_avl.cpp:61	C	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_avl.cpp:34
+0x14000e580	Pf_AvlRotateB_e580	code/Game/Action/action_pf_avl.cpp:122	C	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_avl.cpp:35
+0x14000f9e0	Pf_IntArrayClone_f9e0	code/Game/Action/action_pf_pools.cpp:675	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_pools.cpp:49
+0x140013320	ActRm_FindComp_013320	code/Game/Action/action_base_rawmat.cpp:333	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_rawmat.cpp:43
+0x140013480	Pf_AvlRebalanceB_13480	code/Game/Action/action_pf_avl.cpp:330	C	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_avl.cpp:38
+0x140014c30	WorkBase_TreeNodeFree_14c30	code/Game/Work/work_base_reimpl.cpp:168	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_base.cpp:41
+0x140014c70	Pf_AvlRotateL_14c70	code/Game/Action/action_pf_avl.cpp:185	C	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_avl.cpp:36
+0x140014da0	Pf_AvlRotateR_14da0	code/Game/Action/action_pf_avl.cpp:243	C	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_avl.cpp:37
+0x140015140	WorkBase_FindComponent_15140	code/Game/Work/work_base_reimpl.cpp:103	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_base.cpp:40
+0x140018880	Pf_QuadtreeSubdivide_18880	code/Game/Action/action_pf_geom.cpp:382	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_geom.cpp:32
+0x140018dd0	Pf_QuadtreeInit_18dd0	code/Game/Action/action_pf_geom.cpp:475	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_geom.cpp:33
+0x14001a4f0	Pf_AvlInsertA_a4f0	code/Game/Action/action_pf_avl.cpp:560	C	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_avl.cpp:43
+0x14001a680	Pf_AvlNewNodeA_a680	code/Game/Action/action_pf_avl.cpp:430	C	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_avl.cpp:40
+0x14001a6e0	WorkBST_BSTRemove_a6e0	code/Game/Work/work_base_bst.cpp:189	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_bst.cpp:17
+0x14001a8c0	Pf_AvlRebalanceA_a8c0	code/Game/Action/action_pf_avl.cpp:378	C	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_avl.cpp:39
+0x14001a9b0	Pf_NodePoolAlloc18_a9b0	code/Game/Action/action_pf_pools.cpp:78	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_pools.cpp:38
+0x14001c940	Pf_BstInsertB_c940	code/Game/Action/action_pf_avl.cpp:492	C	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_avl.cpp:42
+0x14001ca60	WorkCellBST_Remove_ca60	code/Game/Work/work_base_cellbst.cpp:174	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_cellbst.cpp:16
+0x14001cc40	Pf_AvlNewNodeB_cc40	code/Game/Action/action_pf_avl.cpp:447	C	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_avl.cpp:41
+0x14001d400	Pf_BstFreeRecursive_d400	code/Game/Action/action_pf_pools.cpp:238	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_pools.cpp:41
+0x14001d730	Pf_NodePoolAlloc30_d730	code/Game/Action/action_pf_pools.cpp:135	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_pools.cpp:39
+0x14001d830	Pf_ArrayResize18_d830	code/Game/Action/action_pf_pools.cpp:257	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_pools.cpp:42
+0x14001d940	Pf_VectorResize18Dup_d940	code/Game/Action/action_pf_pools.cpp:463	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_pools.cpp:47
+0x14001db40	Pf_FreeArray18_db40	code/Game/Action/action_pf_pools.cpp:312	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_pools.cpp:43
+0x14001dc00	Pf_RegionAstarRun_dc00	code/Game/Action/action_pf_astar.cpp:677	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_astar.cpp:39
+0x14001df40	Pf_WorklistAlloc_df40	code/Game/Action/action_pf_pools.cpp:188	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_pools.cpp:40
+0x14001e210	Pf_VectorResize30_e210	code/Game/Action/action_pf_pools.cpp:600	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_pools.cpp:48
+0x14001e490	Pf_FreeArray30_e490	code/Game/Action/action_pf_pools.cpp:333	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_pools.cpp:44
+0x14001ee40	Pf_VectorResize14_ee40	code/Game/Action/action_pf_pools.cpp:359	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_pools.cpp:45
+0x14001f8d0	Pf_VectorResize14Fill_f8d0	code/Game/Action/action_pf_pools.cpp:407	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_pools.cpp:46
+0x14001fa80	Pf_VectorResize60_fa80	code/Game/Action/action_pf_pools.cpp:543	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_pools.cpp:53
+0x140021a30	WorkBST_RegisterWork_1a30	code/Game/Work/work_base_bst.cpp:140	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_bst.cpp:16
+0x1400223c0	ActRm_FindComponent_223c0	code/Game/Action/action_base_rawmat.cpp:304	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_rawmat.cpp:42
+0x140022520	WorkAcc_FindComponent_22520	code/Game/Work/work_base_accessor.cpp:72	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_accessor.cpp:33
+0x1400227e0	ActHunt_FindComponent_27e0	code/Game/Action/action_base_hunt.cpp:62	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_hunt.cpp:37
+0x140022970	ActMv_ExternalPtrSerialize_22970	code/Game/Action/action_base_move.cpp:111	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_move.cpp:73
+0x140025520	WorkBST_BSTFindRemove_25520	code/Game/Work/work_base_bst.cpp:261	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_bst.cpp:18
+0x140025a10	PathBST_Insert_25a10	code/Game/Action/action_pf_avl.cpp:645	C	code/Game/Action/exe_bodies.h	registered at standalone/reg_citizen_25_tick.cpp:41
+0x140025b30	PathPairs_Clear_25b30	code/Game/Action/action_pf_avl.cpp:717	C	code/Game/Action/exe_bodies.h	registered at standalone/reg_citizen_25_tick.cpp:42
+0x1400296b0	WorkBST_BST_Serialize_296b0	code/Game/Work/work_base_bst.cpp:283	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_bst.cpp:19
+0x1400298a0	WorkLeaf_BstRemoveByIBP_298a0	code/Game/Work/work_leaf_clear.cpp:102	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_leaf.cpp:45
+0x140029920	WorkLeaf_BstInsertByIBP_29920	code/Game/Work/work_leaf_clear.cpp:151	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_leaf.cpp:46
+0x140029a40	WorkCellBST_Insert_9a40	code/Game/Work/work_base_cellbst.cpp:132	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_cellbst.cpp:15
+0x140029c10	WorkLeaf_BstSerializeIBPpair_29c10	code/Game/Work/work_leaf_clear.cpp:228	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_leaf.cpp:47
+0x140029de0	WorkCellBST_Serialize_9de0	code/Game/Work/work_base_cellbst.cpp:247	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_cellbst.cpp:17
+0x14002a730	WorkLeaf_FindComp_a730	code/Game/Work/work_leaf_hunt.cpp:48	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_leaf.cpp:64
+0x14002af40	WorkLeaf_MarketTreeCleanup_2af40	code/Game/Work/work_leaf_market.cpp:42	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_leaf.cpp:52
+0x14002c710	TradeWork_Insert_c710	code/Game/Work/tradework_serialize.cpp:105	C	code/Game/Work/exe_bodies.h	local extern in tradework.cpp; address from the name
+0x14002c8a0	TradeWork_Serialize_c8a0	code/Game/Work/tradework_serialize.cpp:183	C	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_tail_trade.cpp:52
+0x140042890	ActChild_ShowToolCtor_42890	code/Game/Action/action_child_ctors.cpp:69	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_child_ctors.cpp:23
+0x140044810	ActRm_DynArrayPush4_44810	code/Game/Action/action_base_rawmat.cpp:223	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_rawmat.cpp:40
+0x14004edb0	Pf_PickReachableCell_edb0	code/Game/Action/action_pf_road.cpp:718	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_road.cpp:35
+0x140053ca0	Pf_PastureTargetPick_53ca0	code/Game/Action/action_pf_geom.cpp:522	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_geom.cpp:34
+0x140058fd0	ActRm_ArrayUpsert_58fd0	code/Game/Action/action_base_rawmat.cpp:393	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_rawmat.cpp:45
+0x140087fb0	Pf_EntityAnchorCell_7fb0	code/Game/Action/action_pf_road.cpp:756	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_road.cpp:36
+0x1400881d0	FireWork_SpiralSearch_81d0	code/Game/Work/firework_search.cpp:212	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_tail_fire.cpp:29
+0x140088ef0	ActRm_RegisterRawMaterial_88ef0	code/Game/Action/action_base_rawmat.cpp:458	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_rawmat.cpp:46
+0x140088f90	ActRm_GetResourceCategory_88f90	code/Game/Action/action_base_rawmat.cpp:257	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_rawmat.cpp:41
+0x14008d3c0	PickupGate_TownWants_8d3c0	code/Game/Work/pickup_gate.cpp:167	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_actionctor.cpp:61
+0x14008d590	Pf_PickBestDropTarget_8d590	code/Game/Action/action_pf_roots_route.cpp:422	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_roots_route.cpp:29
+0x140092260	Pf_SpatialProximityQuery_92260	code/Game/Action/action_pf_roots_misc.cpp:312	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_roots_misc.cpp:24
+0x14009bd40	Pf_FindPlacementCell_bd40	code/Game/Action/action_pf_roots_misc.cpp:144	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_roots_misc.cpp:23
+0x14009c170	Pf_FloodFillRegion_9c170	code/Game/Action/action_pf_astar.cpp:1014	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_astar.cpp:47
+0x14009c480	Pf_ZoneRefresh_9c480	code/Game/Action/action_pf_roots_road.cpp:85	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_roots_road.cpp:20
+0x14009c640	Pf_FinalizeRoadTile_9c640	code/Game/Action/action_pf_roots_road.cpp:245	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_roots_road.cpp:23
+0x14009cb00	ActCNR_CheckTerrain_cb00	code/Game/Action/action_base_cnr.cpp:204	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_cnr.cpp:43
+0x14009ccf0	WorkGrid_FindCell_9ccf0	code/Game/Work/work_base_grid.cpp:24	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_grid.cpp:14
+0x14009ce00	RoadTool_sub_ce00	code/Game/Action/keystone_a_zone.cpp:298	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_keystone_a_zone.cpp:24
+0x14009cfb0	ActMv_PathfinderQuery_9cfb0	code/Game/Action/action_base_move.cpp:546	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_move.cpp:80
+0x14009d0a0	Pf_RegionSpiral_9d0a0	code/Game/Action/action_pf_geom.cpp:295	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_geom.cpp:31
+0x14009d360	ZoneComponent_sub_d360	code/Game/Action/keystone_a_zone.cpp:204	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_keystone_a_zone.cpp:23
+0x14009d7c0	WorkLeaf_SortTilesByDistance_9d7c0	code/Game/Work/work_leaf_clear.cpp:329	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_leaf.cpp:48
+0x14009e0e0	Pf_RefreshRegionHeight_9e0e0	code/Game/Action/action_pf_roots_road.cpp:183	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_roots_road.cpp:22
+0x14009e550	ActMv_SetTerrainCosts_e550	code/Game/Action/action_base_move.cpp:424	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_move.cpp:79
+0x14009f2f0	Pf_SetTileRoadFlag_9f2f0	code/Game/Action/action_pf_roots_road.cpp:136	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_roots_road.cpp:21
+0x14009f810	Pf_IsDstReachable_f810	code/Game/Action/action_pf_roots_route.cpp:179	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_roots_route.cpp:26
+0x14009fc00	WorkLeaf_GetTilesInArea_9fc00	code/Game/Work/work_leaf_clear.cpp:407	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_leaf.cpp:49
+0x1400a00f0	WorkBase_ValidateCell_a00f0	code/Game/Work/work_base_reimpl.cpp:347	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_base.cpp:46
+0x1400a5ac0	Pf_RegionPairLookup_5ac0	code/Game/Action/action_pf_geom.cpp:80	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_geom.cpp:26
+0x1400a5b30	Pf_RegionPairCacheInsert_5b30	code/Game/Action/action_pf_region.cpp:909	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_region.cpp:42
+0x1400a5d10	Pf_RegionPairCacheTick_5d10	code/Game/Action/region_paircache.cpp:168	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_region.cpp:43
+0x1400a5ec0	Pf_NeighbourTile_5ec0	code/Game/Action/action_pf_geom.cpp:120	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_geom.cpp:27
+0x1400a6030	Pf_MoveHeuristic_6030	code/Game/Action/action_pf_geom.cpp:156	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_geom.cpp:28
+0x1400a6430	Pf_WorkerApplyCmd_a6430	code/Game/Action/action_pf_astar.cpp:739	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_astar.cpp:41
+0x1400a68b0	Pf_EnqueueCmd4_a68b0	code/Game/Action/action_pf_astar.cpp:857	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_astar.cpp:43
+0x1400a6a30	Pf_EnqueueCmd1_a6a30	code/Game/Action/action_pf_astar.cpp:881	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_astar.cpp:44
+0x1400a6b20	Pf_EnqueueCmd0_a6b20	code/Game/Action/action_pf_astar.cpp:901	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_astar.cpp:45
+0x1400a6c10	Pf_EnqueueTradeRoute_a6c10	code/Game/Action/action_pf_astar.cpp:922	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_astar.cpp:46
+0x1400a6d50	ActMv_CopyPathFromFinder_a6d50	code/Game/Action/action_base_move.cpp:498	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_move.cpp:55
+0x1400a6e30	RoadTool_helper_6e30	code/Game/Action/keystone_a_zone.cpp:120	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_keystone_a_zone.cpp:22
+0x1400a6fe0	Pf_EnqueueCmd2_a6fe0	code/Game/Action/action_pf_astar.cpp:841	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_astar.cpp:42
+0x1400a8420	Pf_DirtyCoarseCellB_8420	code/Game/Action/action_pf_region.cpp:195	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_region.cpp:41
+0x1400a8670	Pf_RegionGraphCtor_8670	code/Game/Action/region_graph_build.cpp:171	C++	code/Game/Action/exe_bodies.h	local extern in code/Game/Game/region_seed.cpp (reg_region_graph.cpp prototype registers nothing)
+0x1400a8a90	Pf_FlushDirtyChunks_8a90	code/Game/Action/action_pf_region.cpp:810	C++	code/Game/Action/exe_bodies.h	local extern in code/Game/Game/region_seed.cpp (reg_pf_region.cpp prototype registers nothing)
+0x1400a8ba0	Pf_RegionPathLength_8ba0	code/Game/Action/action_pf_region.cpp:862	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_region.cpp:44
+0x1400a8c90	Pf_FineCellDirty_a8c90	code/Game/Action/action_pf_road.cpp:522	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_road.cpp:33
+0x1400a9290	ActMvDep_TimeCheck_a9290	code/Game/Action/action_base_movedeps.cpp:59	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_move.cpp:62
+0x1400aa810	Pf_RayTriIntersect_aa810	code/Game/Action/action_pf_geom.cpp:187	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_geom.cpp:29
+0x1400aaa20	Pf_CellQuadRay_aa20	code/Game/Action/action_pf_road.cpp:356	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_road.cpp:30
+0x1400ab150	Pf_RegionDirty4_b150	code/Game/Action/action_pf_road.cpp:487	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_road.cpp:32
+0x1400acc10	Pf_RoadQuad_cc10	code/Game/Action/action_pf_road.cpp:242	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_road.cpp:29
+0x1400ae180	Pf_TileShapeLut_ae180	code/Game/Action/action_pf_geom.cpp:240	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_geom.cpp:30
+0x1400af370	Pf_RoadMeshRebuild_f370	code/Game/Action/action_pf_road.cpp:905	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_road.cpp:37
+0x1400b0f90	Pf_CellQuadRayWrap_0f90	code/Game/Action/action_pf_road.cpp:450	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_road.cpp:31
+0x1400ba9f0	WorkAct_PerformWorkCopyCtor_ba9f0	code/Game/Work/work_act_perform.cpp:198	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_act.cpp:24
+0x1400bb0a0	WorkAct_GrazingWorkCtor_bb0a0	code/Game/Work/work_base_actionctor.cpp:663	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_actionctor.cpp:55
+0x1400bb7b0	WorkAct_GatherWorkCtor_bb7b0	code/Game/Work/work_act_rawmat.cpp:163	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_act.cpp:25
+0x1400bbbc0	WorkAct_HuntWorkCtor_bbbc0	code/Game/Work/work_act_hunt.cpp:155	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_act.cpp:27
+0x1400bbea0	Pf_RemoveAnimalCtor_bbea0	code/Game/Action/action_pf_roots_drop.cpp:321	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_roots_drop.cpp:25
+0x1400bdd20	WorkAct_ShowToolCtor3_bdd20	code/Game/Work/work_act_hunt.cpp:266	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_act.cpp:28
+0x1400be6e0	WorkAct_PlantWorkCtor_be6e0	code/Game/Work/work_base_actionctor.cpp:787	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_actionctor.cpp:56
+0x1400beae0	WorkAct_FishWorkCtor_beae0	code/Game/Work/work_act_rawmat.cpp:290	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_act.cpp:26
+0x1400bef70	WorkAct_ConsumeProduceCtor_bef70	code/Game/Work/work_act_consume.cpp:251	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_act.cpp:32
+0x1400bf790	WorkAct_GatherRawMatCtor_bf790	code/Game/Work/work_act_path.cpp:190	C	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_act.cpp:31
+0x1400bffd0	WorkAct_PerformWorkCtor_bffd0	code/Game/Work/work_act_perform.cpp:392	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_act.cpp:29
+0x1400c0690	BuildStructure_SetupBuildActions	code/Game/Work/build_actions.cpp:109	C	code/Game/Work/exe_bodies.h	registered at standalone/reg_build_actions.cpp:15
+0x1400c0ad0	WorkAct_PerformWorkCtor9_c0ad0	code/Game/Work/work_base_actionctor.cpp:437	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_actionctor.cpp:59
+0x1400c1530	WorkAct_HarvestAreaCtor_c1530	code/Game/Work/work_act_clear.cpp:212	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_act.cpp:30
+0x1400c1eb0	WorkAct_PerformWorkCtor_c1eb0	code/Game/Work/work_base_actionctor.cpp:211	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_actionctor.cpp:53
+0x1400c2490	WorkAct_PlayAnimationCtor_c2490	code/Game/Work/work_base_actionctor.cpp:594	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_actionctor.cpp:54
+0x1400c29a0	ActChild_Entity29a0_c29a0	code/Game/Action/action_child_ctors.cpp:136	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_child_ctors.cpp:27
+0x1400c2ea0	ActHunt_MarkEntityRemoval_c2ea0	code/Game/Action/action_base_hunt.cpp:147	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_hunt.cpp:40
+0x1400c3470	ActHunt_NotifyEntityChanged_c3470	code/Game/Action/action_base_hunt.cpp:182	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_hunt.cpp:41
+0x1400c5400	WorkBase_TaskListCleanup_c5400	code/Game/Work/work_base_reimpl.cpp:195	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_base.cpp:43
+0x1400c54e0	Pf_ActStackPush_54e0	code/Game/Action/action_pf_ctors.cpp:117	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_ctors.cpp:31
+0x1400c57d0	ActChild_AnimateNRCopyCtor_c57d0	code/Game/Action/action_child_ctors.cpp:100	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_child_ctors.cpp:25
+0x1400c59d0	ActChild_CompleteRoadCopyCtor_c59d0	code/Game/Action/action_child_ctors2.cpp:57	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_child_ctors2.cpp:29
+0x1400c5da0	Pf_CompleteTaskCopyCtor_5da0	code/Game/Action/action_pf_ctors.cpp:149	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_ctors.cpp:32
+0x1400c63b0	ActChild_ConsumeRawCopyCtor_c63b0	code/Game/Action/action_child_ctors2.cpp:181	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_child_ctors2.cpp:33
+0x1400c6440	ActChild_ConsumeRawCtor3_c6440	code/Game/Action/action_child_ctors2.cpp:394	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_child_ctors2.cpp:36
+0x1400c64b0	Entity_ConsumeListAppend_64b0	code/Game/Action/action_child_ctors2.cpp:106	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_child_ctors2.cpp:32
+0x1400c6a20	ActChild_CreateNRCopyCtor_c6a20	code/Game/Action/action_child_ctors.cpp:116	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_child_ctors.cpp:26
+0x1400c71a0	Pf_CreateRawMaterialCopyCtor_71a0	code/Game/Action/action_pf_ctors.cpp:170	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_ctors.cpp:33
+0x1400c7570	Pf_SpillAllStorage_7570	code/Game/Action/action_pf_roots_drop.cpp:223	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_roots_drop.cpp:23
+0x1400c7620	Pf_DropOffExec_7620	code/Game/Action/action_pf_roots_drop.cpp:249	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_roots_drop.cpp:24
+0x1400c7cd0	ActChild_DropOffRawCopyCtor_c7cd0	code/Game/Action/action_child_ctors2.cpp:83	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_child_ctors2.cpp:31
+0x1400c8400	ActChild_HuntAnimalCopyCtor_c8400	code/Game/Action/action_child_ctors2.cpp:66	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_child_ctors2.cpp:30
+0x1400c8c10	ActMv_PathSetup_c8c10	code/Game/Action/action_base_move.cpp:604	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_move.cpp:81
+0x1400c8d20	ActMv_UpdateFacing_c8d20	code/Game/Action/action_base_move.cpp:246	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_move.cpp:54
+0x1400c9170	Pf_MoveToCtor_9170	code/Game/Action/action_pf_ctors.cpp:205	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_ctors.cpp:34
+0x1400c9720	Pf_PerformWorkCtor7_9720	code/Game/Action/action_pf_ctors.cpp:261	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_ctors.cpp:35
+0x1400c9b70	WorkAct_PickupRawMaterialCopyCtor_c9b70	code/Game/Work/work_base_actionctor.cpp:403	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_actionctor.cpp:60
+0x1400ca230	ActChild_TransferToCarrier_ca230	code/Game/Action/action_child_ctors2.cpp:204	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_child_ctors2.cpp:34
+0x1400ca520	ActChild_PickupStoredCopyCtor_ca520	code/Game/Action/action_child_ctors2.cpp:292	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_child_ctors2.cpp:35
+0x1400cadf0	ActChild_RemoveNRCopyCtor_cadf0	code/Game/Action/action_child_ctors.cpp:84	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_child_ctors.cpp:24
+0x1400cb1d0	Pf_SendComponentMessageCopyCtor_b1d0	code/Game/Action/action_pf_ctors.cpp:311	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_ctors.cpp:36
+0x1400e3db0	WorkGrid_AutoPickup_e3db0	code/Game/Work/work_base_grid.cpp:117	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_grid.cpp:16
+0x1400e59c0	BuildStructure_CreateInPlaceFull	code/Game/Work/buildstructure.cpp:819	C	code/Game/Work/exe_bodies.h	local extern in buildcomponent_state8.cpp, destroycomponent_states.cpp; address from the caller comment
+0x1400e5a90	BuildStructure_CreateInPlace	code/Game/Work/buildstructure.cpp:823	C	code/Game/Work/exe_bodies.h	local extern in buildcomponent_state8.cpp; address from the caller comment
+0x1400ec710	GatherRawMaterials_Ctor_Impl	code/Game/Work/gatherrawmaterials_ctor.cpp:141	C	code/Game/Work/exe_bodies.h	local extern in buildcomponent_state1.cpp; no registration row today (the comment naming reg_gatherrawmaterials_ctor.cpp is stale)
+0x1400f6ef0	WorkImpl_BuildStructureStep_6ef0	code/Game/Work/work_base_walkpos.cpp:155	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_walkpos.cpp:28
+0x1400f7100	WorkBase_ValidateTask_f7100	code/Game/Work/work_base_reimpl.cpp:272	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_base.cpp:44
+0x1400f8620	WorkGrid_TryAssignWorkplace_f8620	code/Game/Work/work_base_grid.cpp:59	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_grid.cpp:15
+0x1400f8760	ActCt_TryCompleteTask_8760	code/Game/Action/action_base_complete.cpp:107	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_complete.cpp:37
+0x1400f8800	ActCt_TaskReassign_8800	code/Game/Action/action_base_complete.cpp:127	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_complete.cpp:38
+0x1400f8e30	ActCt_TaskCleanup_8e30	code/Game/Action/action_base_complete.cpp:211	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_complete.cpp:39
+0x140107260	Pf_SetFlagRefreshUpdate_107260	code/Game/Action/action_pf_ctors.cpp:353	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_ctors.cpp:37
+0x14010a060	ActMv_SetFacingDirection_a060	code/Game/Action/action_base_move.cpp:209	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_move.cpp:53
+0x14010a1f0	ActMv_SetAnimation_a1f0	code/Game/Action/action_base_move.cpp:307	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_move.cpp:66
+0x140116540	WorkLeaf_FreeStorageCapacity_116540	code/Game/Work/work_leaf_gather.cpp:69	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_leaf.cpp:60
+0x140116650	ActMv_CitizenBreakCheck_116650	code/Game/Action/action_base_move.cpp:339	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_move.cpp:67
+0x140116760	Pf_StorageDropOff_116760	code/Game/Action/action_pf_ctors.cpp:443	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_ctors.cpp:40
+0x1401167c0	Pf_StorageCountDelta_1167c0	code/Game/Action/action_pf_ctors.cpp:457	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_ctors.cpp:41
+0x1401173b0	ActCt_ShowToolOnEntity_1173b0	code/Game/Action/action_base_complete.cpp:412	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_complete.cpp:40
+0x1401176e0	ActCt_HideTool_1176e0	code/Game/Action/action_base_complete.cpp:382	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_complete.cpp:41
+0x1401193a0	WorkLeaf_ConsumeProduce_93a0	code/Game/Work/work_leaf_hunt.cpp:175	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_leaf.cpp:69
+0x140119470	WeightedRandomIndex_119470	code/Game/Action/action_child_ctors2.cpp:446	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_child_ctors2.cpp:38
+0x14011b390	WorkLeaf_PlantArea_b390	code/Game/Work/work_leaf_clear.cpp:72	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_leaf.cpp:50
+0x140120c30	WorkLeaf_FootprintOwnerCheck_120c30	code/Game/Work/work_leaf_gather.cpp:149	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_leaf.cpp:62
+0x140120db0	ActCNR_SetGrowthProgress_120db0	code/Game/Action/action_base_cnr.cpp:232	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_cnr.cpp:44
+0x140122340	Pf_HerdStartMigration_122340	code/Game/Action/action_pf_roots_misc.cpp:495	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_roots_misc.cpp:25
+0x140122a80	ActHunt_IsAnimalReady_2a80	code/Game/Action/action_base_hunt.cpp:74	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_hunt.cpp:38
+0x140122b00	WorkImpl_WalkablePosRecursive_122b00	code/Game/Work/work_base_walkpos.cpp:128	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_walkpos.cpp:27
+0x140122be0	WorkImpl_WalkablePos_122be0	code/Game/Work/work_base_walkpos.cpp:75	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_walkpos.cpp:26
+0x140122e20	Pf_EntityResolvePos_2e20	code/Game/Action/action_pf_road.cpp:592	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_road.cpp:34
+0x140123070	Pf_RecursiveChildSum_123070	code/Game/Action/action_pf_ctors.cpp:377	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_ctors.cpp:38
+0x1401250f0	ActMvDep_AnimHelper_50f0	code/Game/Action/action_base_movedeps.cpp:105	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_move.cpp:63
+0x1401252f0	ActCNR_NR_GetVariantCount_1252f0	code/Game/Action/action_base_cnr.cpp:288	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_cnr.cpp:45
+0x140125320	ActCNR_NR_GetSubVariantCount_125320	code/Game/Action/action_base_cnr.cpp:299	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_cnr.cpp:46
+0x1401253d0	ActCNR_NR_SetVariant_1253d0	code/Game/Action/action_base_cnr.cpp:314	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_cnr.cpp:47
+0x1401260f0	ActCNR_RemoveNatRes_1260f0	code/Game/Action/action_base_cnr.cpp:449	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_cnr.cpp:50
+0x140126440	ActCNR_SetAnimIndex_126440	code/Game/Action/action_base_cnr.cpp:358	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_cnr.cpp:48
+0x140126540	ActCNR_SetupModelAtCell_126540	code/Game/Action/action_base_cnr.cpp:389	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_cnr.cpp:49
+0x140128350	WorkLeaf_Pasture_8350	code/Game/Work/work_leaf_hunt.cpp:214	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_leaf.cpp:68
+0x140129760	ActRm_PositionEntity_9760	code/Game/Action/action_base_rawmat.cpp:490	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_rawmat.cpp:47
+0x14012b310	WorkLeaf_ConsumeProduce_b310	code/Game/Work/work_leaf_hunt.cpp:296	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_leaf.cpp:70
+0x14012c560	Pf_ResourceLimitFlagTest_c560	code/Game/Action/action_pf_ctors.cpp:411	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_ctors.cpp:39
+0x14012cd80	Pf_StorageCanAccept_cd80	code/Game/Action/action_pf_roots_route.cpp:212	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_roots_route.cpp:27
+0x14012d000	ActRm_StorageAdd_d000	code/Game/Action/action_base_rawmat.cpp:114	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_rawmat.cpp:38
+0x14012d150	ActRm_StorageSubtract_d150	code/Game/Action/action_base_rawmat.cpp:77	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_action_rawmat.cpp:37
+0x14012d5d0	Pf_FindBestAdjacentCell_d5d0	code/Game/Action/action_pf_roots_route.cpp:269	C++	code/Game/Action/exe_bodies.h	registered at standalone/reg_pf_roots_route.cpp:28
+0x140132010	WorkImpl_Sqrtf_132010	code/Game/Work/work_base_impl2.cpp:28	C++	code/Game/Work/exe_bodies.h	registered at standalone/reg_work_impl2.cpp:19
+-	BuildStructure_ConstructForSite	code/Game/Work/buildstructure.cpp:843	C	code/Game/Work/exe_bodies.h	standalone harness entry; local extern in construction_force_harness.cpp
+-	BuildStructure_DepsReady	code/Game/Work/buildstructure.cpp:859	C	code/Game/Work/exe_bodies.h	standalone harness entry; local extern in construction_force_harness.cpp
+-	BuildStructure_ForceDrive	code/Game/Work/buildstructure.cpp:851	C	code/Game/Work/exe_bodies.h	standalone harness entry; local extern in construction_force_harness.cpp
+-	ForesterWork_ExecuteReady	code/Game/Work/foresterwork.cpp:339	C++	code/Game/Work/exe_bodies.h	standalone harness entry; local extern in forester_force_harness.cpp
+-	ForesterWork_Factory	code/Game/Work/foresterwork.cpp:1196	C	code/Game/Work/exe_bodies.h	standalone harness entry; local extern in forester_force_harness.cpp
+-	ForesterWork_ForceDrive	code/Game/Work/foresterwork.cpp:346	C	code/Game/Work/exe_bodies.h	standalone harness entry; local extern in forester_force_harness.cpp
+-	GatherRawMaterials_ConstructForSite	code/Game/Work/gatherrawmaterials.cpp:996	C	code/Game/Work/exe_bodies.h	standalone harness entry; local extern in construction_force_harness.cpp
+-	GatherRawMaterials_DepsReady	code/Game/Work/gatherrawmaterials.cpp:1015	C	code/Game/Work/exe_bodies.h	standalone harness entry; local extern in construction_force_harness.cpp
+-	GatherRawMaterials_ForceDrive	code/Game/Work/gatherrawmaterials.cpp:1004	C	code/Game/Work/exe_bodies.h	standalone harness entry; local extern in construction_force_harness.cpp
+-	HarvestOrchard_CtorFromEntity	code/Game/Work/harvestorchard_ctor.cpp:85	C	code/Game/Work/exe_bodies.h	local extern in orchardcomponent_states.cpp
+-	PastureWork_CreateForEntity	code/Game/Work/pasturework.cpp:992	C	code/Game/Work/exe_bodies.h	local extern in pasturecomponent_states.cpp
+-	Pf_RegionPairCache_Build	code/Game/Action/region_paircache.cpp:90	C	code/Game/Action/exe_bodies.h	local extern in code/Game/Game/region_seed.cpp; retail: the tail of 0x14009e8c0, no function of its own
+-	PlantOrchard_CtorFromEntity	code/Game/Work/plantorchard_ctor.cpp:95	C	code/Game/Work/exe_bodies.h	local extern in orchardcomponent_states.cpp
+-	TendArea_CtorFromEntity	code/Game/Work/tendarea_ctor.cpp:45	C	code/Game/Work/exe_bodies.h	local extern in orchardcomponent_states.cpp
