@@ -1,0 +1,19 @@
+B3R W2-EXE: external-linkage bodies whose only reference was an exe row (they STAY; W2_BRIEF rule 3)
+retail addr   name                                   file
+0x14003f010   CitizenAI_Reg_helper_3f010             code/Game/Component/citizenai_housing_idle.cpp
+0x1400f7550   CitizenAI_Reg_helper_7550              code/Game/Component/citizenai_housing_idle.cpp
+0x1400f7830   CitizenAI_Reg_helper_7830              code/Game/Component/citizenai_housing_idle.cpp
+0x1400f79b0   CitizenAI_Reg_helper_79b0              code/Game/Component/citizenai_housing_idle.cpp
+0x1400f7b60   CitizenAI_Reg_helper_7b60              code/Game/Component/citizenai_housing_idle.cpp
+0x1400f7c90   CitizenAI_Reg_helper_7c90              code/Game/Component/citizenai_housing_idle.cpp
+0x1400f8000   CitizenAI_Reg_helper_8000              code/Game/Component/citizenai_housing_idle.cpp
+0x1400899d0   CitizenAI_State_Leisure_sub_99d0_Reg   code/Game/Component/citizenai_leisure.cpp
+0x14002fd50   CitizenAI_State_Leisure_sub_fd50_Reg   code/Game/Component/citizenai_leisure.cpp
+0x14004a720   CitizenAI_helper_a720_Reg              code/Game/Component/citizenai_leisure.cpp
+0x1400a9ac0   Imm_RequestStateTransition_9ac0        code/Game/Component/immigrationcomponent_states.cpp
+0x1400032e0   ImmigrationComp_DynArrayResize         code/Game/Component/immigrationcomponent.cpp
+slot 0x140152a48 (IO::Serializer::GetVersion)  RtSerializer_GetVersion  runtime/src/io/serializer.cpp (+ serializer.h decl)
+Also still caller-less (known before W2-EXE): WorkAcc_ZoneRefresh_9c480 (0x14009c480, code/Game/Work/work_base_accessor.cpp).
+Deleted with their files (static / file-local, existed only to be registered): reg_code_lane4 Lane4_KeyMap_BuildKeyName (0x140099c20),
+Lane4_Game_GetMonthFromTime (0x1400932a0); reg_herd_live Herd_Helper7400_Thunk (0x140107400), Herd_Populate_Thunk (0x140120f50);
+~40 file-static .rdata storage cells (k_rdata_*, g_f_*, k_bits_*, g_storage, s_fConst_1_0 .. s_fCamParam3, s_slot_TimeSerialize).
