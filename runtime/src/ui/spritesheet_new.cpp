@@ -229,19 +229,5 @@ int RtUiSpriteSheetNewRegister() {
                           (void*)&RtUi_SpriteSheet_OperatorNew);
     RegisterRuntimeAddr(0x180002e60, (void*)&RtUi_SpriteSheet_OperatorNew);
 
-    // Three deleting-dtor rows (operator_delete), UI leftovers batch. Each is
-    // one of the per-translation-unit `operator delete` copies
-    // runtime/src/object/deleting_dtor.cpp already catalogued (byte-identical
-    // to the exported `?MemFree@MemoryAllocator@System@@SAXPEAX@Z`), reached
-    // here by whichever class's scalar/vector deleting destructor calls it.
-    RegisterRuntimeExport("??3SpriteSheet@UI@@SAXPEAX@Z", (void*)&RtUi_SpriteSheet_OperatorDelete);
-    RegisterRuntimeAddr(0x180002ee0, (void*)&RtUi_SpriteSheet_OperatorDelete);
-
-    RegisterRuntimeExport("??3ToolTipDialog@UI@@SAXPEAX@Z", (void*)&RtUi_ToolTipDialog_OperatorDelete);
-    RegisterRuntimeAddr(0x18004d050, (void*)&RtUi_ToolTipDialog_OperatorDelete);
-
-    RegisterRuntimeExport("??3DialogInstance@UI@@SAXPEAX@Z", (void*)&RtUi_DialogInstance_OperatorDelete);
-    RegisterRuntimeAddr(0x180045490, (void*)&RtUi_DialogInstance_OperatorDelete);
-
     return 1;
 }

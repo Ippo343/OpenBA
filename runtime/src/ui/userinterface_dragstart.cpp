@@ -246,19 +246,3 @@ extern "C" void RtUi_UserInterface_BeginDragDrop(UserInterface* self,
         reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr),
         reinterpret_cast<Object::InternalPtr<UI::Element>*>(elemPtr), x, y, id, data);
 }
-
-// ---------------------------------------------------------------------------
-// BOTH DOORS, under one switch.
-// ---------------------------------------------------------------------------
-// The export name is spelled as a LITERAL at the call site so tools/
-// runtime_census.py can see it -- it cannot follow a named constant
-// (reference_census_cannot_see_nonliteral_registrations.md), and a live port
-// that the census reads as unported is how a closed row reads as open.
-int RtUiDragStartRegister() {
-    RegisterRuntimeExport("?BeginDragDrop@UserInterface@UI@@QEAAX"
-                          "V?$InternalPtr@VDialogInstance@UI@@@Object@@"
-                          "V?$InternalPtr@VElement@UI@@@4@HHIPEAX@Z",
-                          (void*)&RtUi_UserInterface_BeginDragDrop);
-    RegisterRuntimeAddr(0x18011f5f0, (void*)&RtUi_UserInterface_BeginDragDrop);
-    return 1;
-}

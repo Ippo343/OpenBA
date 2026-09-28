@@ -327,22 +327,6 @@ Object::Base* ButtonElement::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration. ENDGAME B.3.9 UI-A: the seven slot doors (4/5/6/8 were also
-// ComboElement's, 8 also CheckElement's) and the ??0 / copy / ??1 doors, read
-// only by the retired minted tables / RT_DELDTOR rows, are gone.
-// ============================================================================
-int RtUiButtonElementRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@ButtonElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ButtonElement::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180048350ull, (void*)&UI::ButtonElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ButtonElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ButtonElement::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x1800483f0ull, (void*)&UI::ButtonElement::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ButtonElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@ButtonElement@UI@@ (0x1801fa938): name "ButtonElement", parent

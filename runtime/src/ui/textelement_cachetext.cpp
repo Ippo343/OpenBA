@@ -204,18 +204,3 @@ extern "C" void RtUi_TextElement_SetParameterCount(void* self) {
 extern "C" void RtUi_TextElement_CacheText(void* self) {
     reinterpret_cast<UI::TextElement*>(self)->UI::TextElement::CacheText();   // B.3.6 bridge
 }
-
-// ============================================================================
-// Registration. NAME AND ADDRESS, both, for every body.
-// ============================================================================
-int RtUiTextCacheRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?SetParameterCount@TextElement@UI@@AEAAXXZ",
-                          (void*)&RtUi_TextElement_SetParameterCount); ++n;
-    RegisterRuntimeAddr(0x18011e8e0, (void*)&RtUi_TextElement_SetParameterCount);
-
-    RegisterRuntimeExport("?CacheText@TextElement@UI@@AEAAXXZ",
-                          (void*)&RtUi_TextElement_CacheText); ++n;
-    RegisterRuntimeAddr(0x18011ec10, (void*)&RtUi_TextElement_CacheText);
-    return n;
-}

@@ -173,20 +173,6 @@ Object::Base* GroupElement::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration: the factory pair only (B39_RULES D2).
-// ============================================================================
-int RtUiGroupElementRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@GroupElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::GroupElement::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180046ca0ull, (void*)&UI::GroupElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@GroupElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::GroupElement::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180046d30ull, (void*)&UI::GroupElement::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::GroupElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@GroupElement@UI@@ (0x1801fabd8): name "GroupElement", parent

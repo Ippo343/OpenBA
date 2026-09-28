@@ -241,21 +241,6 @@ extern "C" void RtUi_ButtonDescription_ApplyToElement(const void* selfv,
             static_cast<const UI::Dialog*>(dialog));
 }
 
-int RtUiButtonDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@ButtonDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ButtonDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180047f20ull, (void*)&UI::ButtonDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ButtonDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ButtonDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180047fa0ull, (void*)&UI::ButtonDescription::CreateInPlaceObject);
-
-    // ADDRESS ONLY, as before: the export name resolves to this address.
-    RegisterRuntimeAddr(0x1801108d0ull, (void*)&RtUi_ButtonDescription_ApplyToElement); ++n;
-
-    return n;
-}
-
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ButtonDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from

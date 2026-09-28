@@ -421,28 +421,6 @@ extern "C" void RtUi_SpriteCapture_SerializeEntries(void* serv, int count, void*
     }
 }
 
-int RtUiSpriteCaptureClassRegister() {
-    int n = 0;
-
-    // Batch D1. Unexported in both builds (a file-static of the Serialize
-    // translation unit), so the address is the only door.
-    RegisterRuntimeAddr(0x18004c0d0ull, (void*)&RtUi_SpriteCapture_SerializeEntries); ++n;
-
-    // ENDGAME B.3.9 UI-D: the factory pair, the class's own (B39_RULES D2).
-    RegisterRuntimeExport("?CreateNewObject@SpriteCapture@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::SpriteCapture::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x18003c900ull, (void*)&UI::SpriteCapture::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@SpriteCapture@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::SpriteCapture::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x18003c9c0ull, (void*)&UI::SpriteCapture::CreateInPlaceObject);
-
-    RegisterRuntimeExport("?Draw@SpriteCapture@UI@@QEBAXAEAVSpriteContext@2@HH@Z",
-                          (void*)&RtUi_SpriteCapture_Draw);                 ++n;
-    RegisterRuntimeAddr(0x1800d9230ull, (void*)&RtUi_SpriteCapture_Draw);
-
-    return n;
-}
-
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::SpriteCapture's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from

@@ -427,22 +427,6 @@ Object::Base* DocumentTextElement::CreateInPlaceObject(void* place) {
 // ============================================================================
 
 // ============================================================================
-// Registration
-// ============================================================================
-int RtUiDocumentTextElementRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@DocumentTextElement` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@DocumentTextElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::DocumentTextElement::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x18003bf40ull, (void*)&UI::DocumentTextElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@DocumentTextElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::DocumentTextElement::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x18003bfc0ull, (void*)&UI::DocumentTextElement::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::DocumentTextElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@DocumentTextElement@UI@@ (0x1801f9ef0): name "DocumentTextElement", parent

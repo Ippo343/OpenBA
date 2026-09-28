@@ -190,9 +190,5 @@ int RtUiStandAloneRegister() {
                           (void*)&RtUi_UserInterface_UpdateStandAloneUI);
     RegisterRuntimeAddr(0x180120310, (void*)&RtUi_UserInterface_UpdateStandAloneUI);  ++n;
 
-    RegisterRuntimeExport("?DrawStandAloneUI@UserInterface@UI@@CAXAEAVContext@Video@@PEAX@Z",
-                          (void*)&RtUi_UserInterface_DrawStandAloneUI);
-    RegisterRuntimeAddr(0x1801203f0, (void*)&RtUi_UserInterface_DrawStandAloneUI);    ++n;
-
     return n;
 }

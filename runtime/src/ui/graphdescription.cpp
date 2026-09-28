@@ -150,24 +150,6 @@ Object::Base* GraphDescription::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// ENDGAME B.3.9 UI-B: the slot doors (Type .. CreateInstance), the ??1 door
-// and the FACTUI1 ??0 door are gone. Their only readers were the minted
-// `??_7GraphDescription@UI@@6B@`, its RT_DELDTOR row and the FACTUI1 row.
-// ============================================================================
-int RtUiGraphDescriptionRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@GraphDescription` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@GraphDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::GraphDescription::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x180040180ull, (void*)&UI::GraphDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@GraphDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::GraphDescription::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x180040200ull, (void*)&UI::GraphDescription::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::GraphDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@GraphDescription@UI@@ (0x1801f9f98): name "GraphDescription", parent

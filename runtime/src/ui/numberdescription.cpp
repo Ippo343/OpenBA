@@ -192,23 +192,6 @@ Object::Base* NumberDescription::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration. ENDGAME B.3.9 UI-A: the slot doors and the ??1 door (and the
-// FACTUI2 row's ??0 door), read only by the retired minted table / RT_DELDTOR
-// row / factory interpreter, are gone. The factory pair (B39_RULES D2) is the
-// class's own.
-// ============================================================================
-int RtUiNumberDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@NumberDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::NumberDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x18004a330ull, (void*)&UI::NumberDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@NumberDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::NumberDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x18004a420ull, (void*)&UI::NumberDescription::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::NumberDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@NumberDescription@UI@@ (0x1801fac80): name "NumberDescription", parent

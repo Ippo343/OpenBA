@@ -203,24 +203,6 @@ Object::Base* GraphElement::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// ENDGAME B.3.9 UI-B: the slot doors (Type .. Draw), the copy-ctor door and
-// the ??1 door are gone. Their only readers were the minted
-// `??_7GraphElement@UI@@6B@`, its RT_DELDTOR row and the FACTUI1 row.
-// ============================================================================
-int RtUiGraphElementRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@GraphElement` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@GraphElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::GraphElement::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x180040550ull, (void*)&UI::GraphElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@GraphElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::GraphElement::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x1800405d0ull, (void*)&UI::GraphElement::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::GraphElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@GraphElement@UI@@ (0x1801f9fd0): name "GraphElement", parent

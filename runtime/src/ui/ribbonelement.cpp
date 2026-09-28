@@ -218,19 +218,6 @@ Object::Base* RibbonElement::CreateInPlaceObject(void* place) {
 // RibbonElement now wears the compiler's table.
 // ============================================================================
 
-int RtUiRibbonElementRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@RibbonElement` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@RibbonElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::RibbonElement::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x1800447d0ull, (void*)&UI::RibbonElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@RibbonElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::RibbonElement::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x180044880ull, (void*)&UI::RibbonElement::CreateInPlaceObject);
-    return n;
-}
-
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::RibbonElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from

@@ -327,13 +327,6 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
 }
 
 // ============================================================================
-// Registration
-// ============================================================================
-// Called from RtUiSpriteRegister() in sprite.cpp rather than from a new slot in
-// rt_ui_port.cpp, whose header says not to edit it to add a lane — the same
-// route RtUiSpriteContextRegister() already takes. Own kill switch so this
-// lane can be A/B'd without disturbing the rest of the sprite family.
-// ============================================================================
 // 0x1800D8A60  UI::SpriteCapture::EndAddingSprites()      ord 2304
 // WAVE 23 LANE TAIL
 // ============================================================================
@@ -456,36 +449,4 @@ extern "C" void RtUi_SpriteCapture_AddSprite(void* selfRaw, const void* spriteRa
 extern "C" void RtUi_SpriteCapture_EndAddingSprites(void* selfRaw) {
     reinterpret_cast<UI::SpriteCapture*>(selfRaw)                         // B.3.6 bridge
         ->UI::SpriteCapture::EndAddingSprites();
-}
-
-int RtUiSpriteCaptureRegister() {
-    int n = 0;
-    // The other half of lane UI4: the seven SpriteSheet virtual-table slot
-    // bodies that were NAMED TRAPS in the already-minted
-    // `??_7SpriteSheet@UI@@6B@`. Same switch on purpose — the two halves are
-    // verified by one run, and a split A/B would be a third state to reason
-    // about for no benefit. See runtime/src/ui/spritesheet_vtable.cpp.
-    extern int RtUiSpriteSheetVtableRegister();
-    n += RtUiSpriteSheetVtableRegister();
-
-    RegisterRuntimeExport("?AddSprite@SpriteCapture@UI@@QEAAXAEBVSprite@2@HHHHMI@Z",
-                          (void*)&RtUi_SpriteCapture_AddSprite); ++n;
-    RegisterRuntimeAddr(0x1800d8b20, (void*)&RtUi_SpriteCapture_AddSprite);
-    RegisterRuntimeExport("?AddScissor@SpriteCapture@UI@@QEAAXHHHH_N@Z",
-                          (void*)&RtUi_SpriteCapture_AddScissor); ++n;
-    RegisterRuntimeAddr(0x1800d8ef0, (void*)&RtUi_SpriteCapture_AddScissor);
-
-    // WAVE 23 LANE TAIL. Reached by name from
-    // runtime/src/save/saveload_draw.cpp and runtime/src/ui/userinterface_draw.cpp
-    // (which spells it into the constant `kEndSprites`) - two live call sites,
-    // both of which flip onto this body. Both doors, as everywhere in this file.
-    RegisterRuntimeExport("?EndAddingSprites@SpriteCapture@UI@@QEAAXXZ",
-                          (void*)&RtUi_SpriteCapture_EndAddingSprites); ++n;
-    RegisterRuntimeAddr(0x1800d8a60, (void*)&RtUi_SpriteCapture_EndAddingSprites);
-
-    // BOTH doors on purpose. spritecontext.cpp reaches these two by ADDRESS
-    // (0x1800d8b20 / 0x1800d8ef0, its two capture doors), so a name-only
-    // registration would leave the only live caller in the tree walking past
-    // the port into the DLL — reference_bypassed_port_needs_a_source_checker.md.
-    return n;
 }

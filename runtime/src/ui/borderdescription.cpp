@@ -184,27 +184,6 @@ Object::InternalPtr<Element>* BorderDescription::CreateInstance(
 }  // namespace UI
 
 // ============================================================================
-// Registration. ENDGAME B.3.9 UI-A: the eight slot doors (Type / TypeName /
-// GetFileVersion / Construct / Reconstruct / Destruct / Serialize /
-// CreateInstance) and the ??1 door are gone -- their only reader was the minted
-// `??_7BorderDescription@UI@@6B@` (and, for ??1, its RT_DELDTOR row). What is
-// left is the factory pair (B39_RULES D2): the class's OWN statics, by name
-// and address, so the minted `?_typeInfo@BorderDescription@UI@@` record
-// (MintTypeInfos resolves its factory pointers by name, after every
-// *PortInit) builds a real BorderDescription.
-// ============================================================================
-int RtUiBorderDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@BorderDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::BorderDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180040ad0ull, (void*)&UI::BorderDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@BorderDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::BorderDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180040b50ull, (void*)&UI::BorderDescription::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::BorderDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@BorderDescription@UI@@ (0x1801fa890): name "BorderDescription", parent

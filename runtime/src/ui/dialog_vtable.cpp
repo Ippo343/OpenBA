@@ -515,23 +515,6 @@ bool Dialog::Serialize(void* streamv) {                        // [5] 0x1801130c
 }  // namespace UI
 
 // ============================================================================
-// Registration — BOTH doors on every row, for the reason the mint itself gives:
-// a minted vtable slot is filled by NAME, but 30-odd sites in this tree reach
-// exported code by ADDRESS, and a name-only registration leaves those walking
-// past the port into the DLL.
-//
-// Slot 0 (0x180038b20) is NOT registered here — it is row 37 of the family in
-// runtime/src/object/deleting_dtor.cpp.
-// ============================================================================
-int RtUiDialogVtableRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?TypeId@Dialog@UI@@SAIXZ",
-                          (void*)&RtUiDialog_TypeId); ++n;
-    RegisterRuntimeAddr(0x180038430, (void*)&RtUiDialog_TypeId);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::Dialog's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@Dialog@UI@@ (0x1801faa88): name "Dialog", parent

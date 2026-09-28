@@ -1533,63 +1533,6 @@ int RtUiManagerRegister() {
                           (void*)&RtUi_UserInterface_Ctor); ++count;
     RegisterRuntimeAddr(0x180120de0, (void*)&RtUi_UserInterface_Ctor);
 
-    RegisterRuntimeExport("?GetAddDialogCount@UserInterface@UI@@QEBAHXZ",
-                          (void*)&RtUi_UserInterface_GetAddDialogCount); ++count;
-    RegisterRuntimeAddr(0x180031160, (void*)&RtUi_UserInterface_GetAddDialogCount);
-
-    RegisterRuntimeExport("?GetFirstDialog@UserInterface@UI@@QEAA?AUIterator@?$LinkedList@V?$InternalPtr@VDialogInstance@UI@@@Object@@UDefaultAllocator@Collection@@@Collection@@XZ",
-                          (void*)&RtUi_UserInterface_GetFirstDialog); ++count;
-    RegisterRuntimeAddr(0x180031150, (void*)&RtUi_UserInterface_GetFirstDialog);
-
-    RegisterRuntimeExport("?PausesGame@UserInterface@UI@@QEBA_NXZ",
-                          (void*)&RtUi_UserInterface_PausesGame); ++count;
-    RegisterRuntimeAddr(0x18011fa10, (void*)&RtUi_UserInterface_PausesGame);
-
-    RegisterRuntimeExport("?GetFirstContainedDialog@UserInterface@UI@@QEBA?AV?$InternalPtr@VDialogInstance@UI@@@Object@@HH@Z",
-                          (void*)&RtUi_UserInterface_GetFirstContainedDialog); ++count;
-    RegisterRuntimeAddr(0x18011fb00, (void*)&RtUi_UserInterface_GetFirstContainedDialog);
-
-    RegisterRuntimeExport("?EndSpriteCapture@UserInterface@UI@@QEAAXXZ",
-                          (void*)&RtUi_UserInterface_EndSpriteCapture); ++count;
-    RegisterRuntimeAddr(0x18011f4a0, (void*)&RtUi_UserInterface_EndSpriteCapture);
-
-    RegisterRuntimeExport("?SetFullscreenFade@UserInterface@UI@@QEAAX_NI0@Z",
-                          (void*)&RtUi_UserInterface_SetFullscreenFade); ++count;
-    RegisterRuntimeAddr(0x18011f500, (void*)&RtUi_UserInterface_SetFullscreenFade);
-
-    RegisterRuntimeExport("?SetFullscreenFadeSprite@UserInterface@UI@@QEAAXVSprite@2@@Z",
-                          (void*)&RtUi_UserInterface_SetFullscreenFadeSprite); ++count;
-    RegisterRuntimeAddr(0x18011f560, (void*)&RtUi_UserInterface_SetFullscreenFadeSprite);
-
-    // ---- Wave 9 lane Z: the four cutover ports ----------------------------
-    // Same double registration, for the same reason, and the literal-string
-    // rule above applies to these four as well.
-    RegisterRuntimeExport("?AddDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z",
-                          (void*)&RtUi_UserInterface_AddDialog); ++count;
-    RegisterRuntimeAddr(0x180120ee0, (void*)&RtUi_UserInterface_AddDialog);
-
-    RegisterRuntimeExport("?Play@UserInterface@UI@@QEAAXH@Z",
-                          (void*)&RtUi_UserInterface_Play); ++count;
-    RegisterRuntimeAddr(0x1801223d0, (void*)&RtUi_UserInterface_Play);
-
-    RegisterRuntimeExport("?SetCursor@UserInterface@UI@@QEAAXV?$ExternalPtr@VCursor@UI@@@Object@@@Z",
-                          (void*)&RtUi_UserInterface_SetCursor); ++count;
-    RegisterRuntimeAddr(0x1801225f0, (void*)&RtUi_UserInterface_SetCursor);
-
-    RegisterRuntimeExport("?EnableCursor@UserInterface@UI@@QEAAX_N@Z",
-                          (void*)&RtUi_UserInterface_EnableCursor); ++count;
-    RegisterRuntimeAddr(0x180122580, (void*)&RtUi_UserInterface_EnableCursor);
-
-    // ---- Wave 9 lane UIC ---------------------------------------------------
-    // The BY-VALUE `V?$InternalPtr…` spelling. The by-reference `AEAV…` name
-    // this project once asked for is NOT in the export table and resolved NULL
-    // in silence for a whole wave (engine/funcs/engine_funcs.cpp:2934's comment
-    // records that; reference_resolveexport_phantom_names.md). Checked against
-    // the shipped export directory again before this line was written.
-    RegisterRuntimeExport("?BringDialogToFront@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z",
-                          (void*)&RtUi_UserInterface_BringDialogToFront); ++count;
-    RegisterRuntimeAddr(0x180120440, (void*)&RtUi_UserInterface_BringDialogToFront);
-
     // ---- Wave 10 lane UIF --------------------------------------------------
     // `QEAA` is the NON-VIRTUAL spelling and it is the right one here: this
     // class has NO vtable (see runtime/types/ui/UserInterface.h) and the export
@@ -1599,23 +1542,6 @@ int RtUiManagerRegister() {
     RegisterRuntimeExport("??1UserInterface@UI@@QEAA@XZ",
                           (void*)&RtUi_UserInterface_Dtor); ++count;
     RegisterRuntimeAddr(0x180120b90, (void*)&RtUi_UserInterface_Dtor);
-
-    RegisterRuntimeExport("?SaveAllSettings@UserInterface@UI@@QEAAXXZ",
-                          (void*)&RtUi_UserInterface_SaveAllSettings); ++count;
-    RegisterRuntimeAddr(0x1801204b0, (void*)&RtUi_UserInterface_SaveAllSettings);
-
-    // ---- UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) --------
-    RegisterRuntimeExport("?CleanRemovedDialogs@UserInterface@UI@@AEAAXXZ",
-                          (void*)&RtUi_UserInterface_CleanRemovedDialogs); ++count;
-    RegisterRuntimeAddr(0x18011f790, (void*)&RtUi_UserInterface_CleanRemovedDialogs);
-
-    RegisterRuntimeExport("?UpdateEvents@UserInterface@UI@@QEAAXXZ",
-                          (void*)&RtUi_UserInterface_UpdateEvents); ++count;
-    RegisterRuntimeAddr(0x18011fc60, (void*)&RtUi_UserInterface_UpdateEvents);
-
-    RegisterRuntimeExport("?GetMouseCursorIndex@UserInterface@UI@@QEBAHHH@Z",
-                          (void*)&RtUi_UserInterface_GetMouseCursorIndex); ++count;
-    RegisterRuntimeAddr(0x18011fa40, (void*)&RtUi_UserInterface_GetMouseCursorIndex);
 
     // The twin-synthetic oracle is NOT called here — it needs the allocator,
     // which does not exist yet at registration time. It is triggered from the

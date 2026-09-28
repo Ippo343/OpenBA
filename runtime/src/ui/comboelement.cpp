@@ -249,22 +249,6 @@ Object::Base* ComboElement::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration. ENDGAME B.3.9 UI-A: the slot doors and the copy / ??1 doors
-// (and FACTUI1's ??0 door), read only by the retired minted table, its
-// RT_DELDTOR row and the interpreter row, are gone.
-// ============================================================================
-int RtUiComboElementRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@ComboElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ComboElement::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180075020ull, (void*)&UI::ComboElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ComboElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ComboElement::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x1800750a0ull, (void*)&UI::ComboElement::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ComboElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@ComboElement@UI@@ (0x1801faa50): name "ComboElement", parent

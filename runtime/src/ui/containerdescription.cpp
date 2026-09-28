@@ -242,24 +242,6 @@ Object::Base* ContainerDescription::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// ENDGAME B.3.9 UI-B: the slot doors (Type .. CreateInstance), the ??1 door and
-// the FACTUI1 ??0 door are gone. Their only readers were the minted
-// `??_7ContainerDescription@UI@@6B@`, its RT_DELDTOR row and the FACTUI1 row.
-// ============================================================================
-int RtUiContainerDescriptionRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@ContainerDescription` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@ContainerDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ContainerDescription::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x1800399c0ull, (void*)&UI::ContainerDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ContainerDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ContainerDescription::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x180039a40ull, (void*)&UI::ContainerDescription::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ContainerDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@ContainerDescription@UI@@ (0x1801f9da0): name "ContainerDescription", parent

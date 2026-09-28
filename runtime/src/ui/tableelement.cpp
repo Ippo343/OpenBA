@@ -212,19 +212,6 @@ Object::Base* TableElement::CreateInPlaceObject(void* place) {
 // TableElement now wears the compiler's table.
 // ============================================================================
 
-int RtUiTableElementRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@TableElement` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@TableElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::TableElement::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x1800793c0ull, (void*)&UI::TableElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@TableElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::TableElement::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x180079440ull, (void*)&UI::TableElement::CreateInPlaceObject);
-    return n;
-}
-
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::TableElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from

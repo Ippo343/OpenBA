@@ -236,21 +236,6 @@ Object::Base* GroupDescription::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration: the factory pair only (B39_RULES D2). The slot doors and the
-// ??1 door, read only by the retired minted table / RT_DELDTOR row, are gone.
-// ============================================================================
-int RtUiGroupDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@GroupDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::GroupDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180046750ull, (void*)&UI::GroupDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@GroupDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::GroupDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180046840ull, (void*)&UI::GroupDescription::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::GroupDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@GroupDescription@UI@@ (0x1801faba0): name "GroupDescription", parent

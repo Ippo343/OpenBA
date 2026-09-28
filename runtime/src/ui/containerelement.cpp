@@ -385,22 +385,6 @@ Object::Base* ContainerElement::CreateInPlaceObject(void* place) {
 // ============================================================================
 
 // ============================================================================
-// Registration
-// ============================================================================
-int RtUiContainerElementRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@ContainerElement` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@ContainerElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ContainerElement::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x180039db0ull, (void*)&UI::ContainerElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ContainerElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ContainerElement::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x180039e50ull, (void*)&UI::ContainerElement::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ContainerElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@ContainerElement@UI@@ (0x1801f9dd8): name "ContainerElement", parent

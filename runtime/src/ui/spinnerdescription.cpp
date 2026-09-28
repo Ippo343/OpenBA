@@ -206,19 +206,6 @@ Object::Base* SpinnerDescription::CreateInPlaceObject(void* place) {
 // SpinnerDescription now wears the compiler's table.
 // ============================================================================
 
-int RtUiSpinnerDescriptionRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@SpinnerDescription` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@SpinnerDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::SpinnerDescription::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x18004ae50ull, (void*)&UI::SpinnerDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@SpinnerDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::SpinnerDescription::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x18004aed0ull, (void*)&UI::SpinnerDescription::CreateInPlaceObject);
-    return n;
-}
-
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::SpinnerDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from

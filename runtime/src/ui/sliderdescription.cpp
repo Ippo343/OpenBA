@@ -284,19 +284,6 @@ Object::Base* SliderDescription::CreateInPlaceObject(void* place) {
 // SliderDescription now wears the compiler's table.
 // ============================================================================
 
-int RtUiSliderDescriptionRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@SliderDescription` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@SliderDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::SliderDescription::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x180049840ull, (void*)&UI::SliderDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@SliderDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::SliderDescription::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x1800498c0ull, (void*)&UI::SliderDescription::CreateInPlaceObject);
-    return n;
-}
-
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::SliderDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from

@@ -239,23 +239,6 @@ Object::Base* ClipRegionElement::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration. ENDGAME B.3.9 UI-A: the seven slot doors, the ??0 / copy /
-// ??1 doors are gone -- their only readers were the minted
-// `??_7ClipRegionElement@UI@@6B@`, its RT_DELDTOR row and the FACTUI1 row.
-// The factory pair (B39_RULES D2) is the class's own.
-// ============================================================================
-int RtUiClipRegionElementRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@ClipRegionElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ClipRegionElement::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180038060ull, (void*)&UI::ClipRegionElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ClipRegionElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ClipRegionElement::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180038110ull, (void*)&UI::ClipRegionElement::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ClipRegionElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@ClipRegionElement@UI@@ (0x1801f9d68): name "ClipRegionElement", parent

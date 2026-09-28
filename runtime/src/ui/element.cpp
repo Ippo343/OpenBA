@@ -173,14 +173,6 @@ constexpr size_t kElementSize = sizeof(Element);   // 0xC0, static_assert'd in t
 // standalone/main.cpp's crash handler recognises by the offset +0xC0390,
 // because retail calls it on a possibly-null child (see SetOffsets).
 
-// The static 17-argument overload the member GetAlignedPosition forwards to:
-//   ?GetAlignedPosition@Element@UI@@SAXW4Alignment@ElementDescription@2@HHHHHHHHHHAEAH111_N2@Z
-// Ours since Wave 10. B.3.6: the member now calls the static MEMBER directly;
-// the ResolveExport door that used to sit here (and its first-call cache) is
-// gone. The registered door below still carries the name for other callers.
-const char* const kGetAlignedStatic =
-    "?GetAlignedPosition@Element@UI@@SAXW4Alignment@ElementDescription@2@HHHHHHHHHHAEAH111_N2@Z";
-
 // ENDGAME B.3.2 step 2 — the 0x180076900 forwarder that used to sit here is
 // GONE. `Element::_children` is a real `Collection::Array<Element*>` member
 // (Element.h, +0xa0), and 0x180076900 is `kSpec_Fill8Z`, trait-equivalent for
@@ -1064,78 +1056,8 @@ void RtUi_Element_AdjustUpperLeft(Element* self, int32_t dx, int32_t dy) {
 int RtUiElementRegister() {
     int count = 0;
 
-    // ENDGAME B.3.9 UI-D: the ??0 / ??1 doors and the ComputeLayout / Draw
-    // slot doors went with the minted table. The factory is the class's own
-    // (abstract: `xor eax,eax; ret`).
-    RegisterRuntimeExport("?CreateNewObject@Element@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::Element::CreateNewObject); ++count;
-    RegisterRuntimeAddr(0x180035450, (void*)&UI::Element::CreateNewObject);
-
-    RegisterRuntimeExport("?AddChild@Element@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@@Z", (void*)&RtUi_Element_AddChild); ++count;
-    RegisterRuntimeAddr(0x180115df0, (void*)&RtUi_Element_AddChild);
-
-    RegisterRuntimeExport("?Child@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@H@Z", (void*)&RtUi_Element_Child); ++count;
-    RegisterRuntimeAddr(0x180035540, (void*)&RtUi_Element_Child);
-
-    RegisterRuntimeExport("?ChildCount@Element@UI@@QEBAHXZ", (void*)&RtUi_Element_ChildCount); ++count;
-    RegisterRuntimeAddr(0x180035530, (void*)&RtUi_Element_ChildCount);
-
-    RegisterRuntimeExport("?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z", (void*)&RtUi_Element_FindElement); ++count;
-    RegisterRuntimeAddr(0x180115650, (void*)&RtUi_Element_FindElement);
-
-    RegisterRuntimeExport("?FindElementType@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z", (void*)&RtUi_Element_FindElementType); ++count;
-    RegisterRuntimeAddr(0x180115760, (void*)&RtUi_Element_FindElementType);
-
     RegisterRuntimeExport("?GetAlignedPosition@Element@UI@@QEAAXHHHHHHAEAH000_N1@Z", (void*)&RtUi_Element_GetAlignedPosition); ++count;
     RegisterRuntimeAddr(0x180115ff0, (void*)&RtUi_Element_GetAlignedPosition);
-    // WAVE 10: the STATIC 17-argument overload the member forwards to. Name AND
-    // address, the standing convention -- lane B3 registered a port by name only
-    // and left the tree's one address-door bypass (see the RemoveChildren note
-    // in widgets_layout.cpp).
-    RegisterRuntimeExport(kGetAlignedStatic, (void*)&RtUi_Element_GetAlignedPositionStatic); ++count;
-    RegisterRuntimeAddr(0x1801158e0, (void*)&RtUi_Element_GetAlignedPositionStatic);
-    RegisterRuntimeExport("?GetPaddedSize@Element@UI@@QEAAXAEAH0@Z", (void*)&RtUi_Element_GetPaddedSize); ++count;
-    RegisterRuntimeAddr(0x180115f10, (void*)&RtUi_Element_GetPaddedSize);
-
-    RegisterRuntimeExport("?GetUserData@Element@UI@@QEAAPEAVBase@Object@@XZ", (void*)&RtUi_Element_GetUserData); ++count;
-    RegisterRuntimeAddr(0x180115550, (void*)&RtUi_Element_GetUserData);
-
-    RegisterRuntimeExport("?Hide@Element@UI@@QEAAX_N@Z", (void*)&RtUi_Element_Hide); ++count;
-    RegisterRuntimeAddr(0x180035830, (void*)&RtUi_Element_Hide);
-
-    RegisterRuntimeExport("?SetElementId@Element@UI@@QEAAXH@Z", (void*)&RtUi_Element_SetElementId); ++count;
-    RegisterRuntimeAddr(0x180115820, (void*)&RtUi_Element_SetElementId);
-
-    RegisterRuntimeExport("?SetFlagsOnOff@Element@UI@@QEAAXII@Z", (void*)&RtUi_Element_SetFlagsOnOff); ++count;
-    RegisterRuntimeAddr(0x180116160, (void*)&RtUi_Element_SetFlagsOnOff);
-
-    RegisterRuntimeExport("?SetName@Element@UI@@QEAAXAEBVString@System@@@Z", (void*)&RtUi_Element_SetName); ++count;
-    RegisterRuntimeAddr(0x1801154f0, (void*)&RtUi_Element_SetName);
-
-    RegisterRuntimeExport("?SetNeedsSizeCalc@Element@UI@@QEAAXXZ", (void*)&RtUi_Element_SetNeedsSizeCalc); ++count;
-    RegisterRuntimeAddr(0x180035470, (void*)&RtUi_Element_SetNeedsSizeCalc);
-
-    RegisterRuntimeExport("?SetPadding@Element@UI@@QEAAXHHHH@Z", (void*)&RtUi_Element_SetPadding); ++count;
-    RegisterRuntimeAddr(0x180115480, (void*)&RtUi_Element_SetPadding);
-
-    RegisterRuntimeExport("?SetToolTip@Element@UI@@QEAAXVString@2@@Z", (void*)&RtUi_Element_SetToolTip); ++count;
-    RegisterRuntimeAddr(0x180035740, (void*)&RtUi_Element_SetToolTip);
-
-    RegisterRuntimeExport("?SetToolTipString@Element@UI@@QEAAXAEBVString@System@@@Z", (void*)&RtUi_Element_SetToolTipString); ++count;
-    RegisterRuntimeAddr(0x1800356e0, (void*)&RtUi_Element_SetToolTipString);
-
-    RegisterRuntimeExport("?SetUserData@Element@UI@@QEAAXPEAVBase@Object@@@Z", (void*)&RtUi_Element_SetUserData); ++count;
-    RegisterRuntimeAddr(0x180115560, (void*)&RtUi_Element_SetUserData);
-
-    RegisterRuntimeExport("?SetOffsets@ContainerElement@UI@@QEAAXHH@Z", (void*)&RtUi_ContainerElement_SetOffsets); ++count;
-    RegisterRuntimeAddr(0x1800cc1e0, (void*)&RtUi_ContainerElement_SetOffsets);
-
-    // WAVE 9 LANE UIC: the enabling port for ?SetUpperLeft@DialogInstance@.
-    // Exported (checked against the shipped export directory before this line
-    // was written — reference_resolveexport_phantom_names.md) so it is
-    // registered under BOTH doors like every sibling above.
-    RegisterRuntimeExport("?AdjustUpperLeft@Element@UI@@QEAAXHH@Z", (void*)&RtUi_Element_AdjustUpperLeft); ++count;
-    RegisterRuntimeAddr(0x180115840, (void*)&RtUi_Element_AdjustUpperLeft);
 
     return count;
 }

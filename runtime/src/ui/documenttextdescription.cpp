@@ -362,24 +362,6 @@ extern "C" void RtUi_DocumentTextDescription_ApplyToElement(const void* self, vo
             static_cast<const UI::Dialog*>(dialog));
 }
 
-int RtUiDocumentTextDescriptionRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@DocumentTextDescription` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@DocumentTextDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::DocumentTextDescription::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x18003b9f0ull, (void*)&UI::DocumentTextDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@DocumentTextDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::DocumentTextDescription::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x18003ba70ull, (void*)&UI::DocumentTextDescription::CreateInPlaceObject);
-
-    // ADDRESS ONLY: the applier has no export name.
-    RegisterRuntimeAddr(0x1800cf520ull,
-                        (void*)&RtUi_DocumentTextDescription_ApplyToElement);    ++n;
-
-    return n;
-}
-
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::DocumentTextDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from

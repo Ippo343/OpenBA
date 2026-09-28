@@ -487,48 +487,6 @@ bool SpriteSheet::Serialize(void* streamv) {
 }  // namespace UI
 
 // ============================================================================
-// Registration — called from RtUiSpriteCaptureRegister().
-// ============================================================================
-int RtUiSpriteSheetVtableRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?TypeId@SpriteSheet@UI@@SAIXZ",
-                          (void*)&RtUi_SpriteSheet_TypeId); ++n;
-    RegisterRuntimeAddr(0x180002e40, (void*)&RtUi_SpriteSheet_TypeId);
-    // ENDGAME B.3.9 UI-D: the nine slot doors went with the minted table; the
-    // factory pair is the class's own. BOTH doors on each row: the mint's
-    // BaseTypeInfo record fills its factory pointers by NAME, and a by-address
-    // consumer would otherwise walk past the port into the DLL.
-    RegisterRuntimeExport("?CreateNewObject@SpriteSheet@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::SpriteSheet::CreateNewObject);
-    RegisterRuntimeAddr(0x180002f40, (void*)&UI::SpriteSheet::CreateNewObject);       ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@SpriteSheet@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::SpriteSheet::CreateInPlaceObject);
-    RegisterRuntimeAddr(0x180003000, (void*)&UI::SpriteSheet::CreateInPlaceObject);   ++n;
-
-    // ---- WAVE 29 LANE WALL -------------------------------------------------
-    //
-    // 0x180078ad0 — the per-SpriteInfo record walker, and the EXEC-of-0 that
-    // cutover attempt 31 died on. ADDRESS ONLY: it is an unexported internal,
-    // so there is no name to register and the address door is the only door.
-    //
-    // GREPPED BEFORE WRITING, across runtime/, standalone/, code/ and engine/:
-    // 0x180078ad0 appears at exactly four sites, three of them comments in
-    // this file and the fourth the `EntriesSerialize()` door at :469. Nothing
-    // registers it, so this shadows no existing binding
-    // ([[reference_grep_for_the_port_before_writing_it]]).
-    //
-    // This registration is what turns the probe at the top of
-    // `RtUi_SpriteSheet_Serialize` into an oracle for the new body: retail's
-    // outer body reaches 0x180078ad0 by an in-DLL `rel32` CALL, which is not a
-    // door and which we therefore do NOT intercept — so the `theirs` side
-    // keeps running retail's copy while `ours` now runs this file
-    // ([[reference_registering_an_address_converts_a_selfcheck_into_an_oracle]]).
-    // Before this line the probe compared retail's inner body with itself.
-    RegisterRuntimeAddr(0x180078ad0, (void*)&RtUi_SpriteSheet_SerializeEntries); ++n;
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::SpriteSheet's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@SpriteSheet@UI@@ (0x1801fadd0): name "SpriteSheet", parent

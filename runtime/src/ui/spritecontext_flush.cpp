@@ -547,15 +547,3 @@ void RtUiSpriteContextFlushReport() {
         (unsigned long long)g_records, (unsigned long long)g_lines,
         (unsigned long long)g_rotated, (unsigned long long)g_mapFail);
 }
-
-// ============================================================================
-int RtUiSpriteContextFlushRegister() {
-    // *** THIS CHANGES BEHAVIOUR AT EXISTING CALL SITES. ***
-    // spritecontext.cpp's `TheFlush()` resolves 0x18011ba40 through
-    // `ResolveAddr`, which consults the port registry FIRST
-    // (reference_resolveaddr_consults_port_registry_first.md). From here on
-    // `AddLine`, both `SetScissor`s and `FlushDeferred` reach OUR body. That is
-    // the point of the lane: it is lane UIF's one opened address door closing.
-    RegisterRuntimeAddr(0x18011ba40, (void*)&RtUi_SpriteContext_Flush);
-    return 1;
-}

@@ -295,24 +295,6 @@ extern "C" void RtUi_TabElement_UpdateContainers(void* self) {
     reinterpret_cast<UI::TabElement*>(self)->UI::TabElement::UpdateContainers();
 }
 
-int RtUiTabElementRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@TabElement` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@TabElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::TabElement::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x18004c7f0ull, (void*)&UI::TabElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@TabElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::TabElement::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x18004c870ull, (void*)&UI::TabElement::CreateInPlaceObject);
-
-    RegisterRuntimeExport("?UpdateContainers@TabElement@UI@@AEAAXXZ",
-                          (void*)&RtUi_TabElement_UpdateContainers);  ++n;
-    RegisterRuntimeAddr(0x1800d9710ull, (void*)&RtUi_TabElement_UpdateContainers);
-
-    return n;
-}
-
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::TabElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from

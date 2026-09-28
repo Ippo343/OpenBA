@@ -494,22 +494,6 @@ Object::Base* EditElement::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration. ENDGAME B.3.9 UI-A: the seven slot doors (also
-// NumberEditElement's slots 4..7), the copy-ctor door and the ??1 door, read
-// only by the retired minted tables / RT_DELDTOR rows, are gone.
-// ============================================================================
-int RtUiEditElementRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@EditElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::EditElement::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x18003fbd0ull, (void*)&UI::EditElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@EditElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::EditElement::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x18003fc50ull, (void*)&UI::EditElement::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::EditElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@EditElement@UI@@ (0x1801f9f60): name "EditElement", parent

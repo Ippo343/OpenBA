@@ -168,20 +168,6 @@ Object::Base* PageDescription::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration: the factory pair only (B39_RULES D2).
-// ============================================================================
-int RtUiPageDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@PageDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::PageDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180046fd0ull, (void*)&UI::PageDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@PageDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::PageDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180047050ull, (void*)&UI::PageDescription::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::PageDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@PageDescription@UI@@ (0x1801fa1c8): name "PageDescription", parent

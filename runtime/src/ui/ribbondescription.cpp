@@ -252,19 +252,6 @@ Object::Base* RibbonDescription::CreateInPlaceObject(void* place) {
 // RibbonDescription now wears the compiler's table.
 // ============================================================================
 
-int RtUiRibbonDescriptionRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@RibbonDescription` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@RibbonDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::RibbonDescription::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x180044220ull, (void*)&UI::RibbonDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@RibbonDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::RibbonDescription::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x180044310ull, (void*)&UI::RibbonDescription::CreateInPlaceObject);
-    return n;
-}
-
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::RibbonDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from

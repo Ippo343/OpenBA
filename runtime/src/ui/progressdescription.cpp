@@ -248,19 +248,6 @@ Object::Base* ProgressDescription::CreateInPlaceObject(void* place) {
 // ProgressDescription now wears the compiler's table.
 // ============================================================================
 
-int RtUiProgressDescriptionRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@ProgressDescription` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@ProgressDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ProgressDescription::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x180077860ull, (void*)&UI::ProgressDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ProgressDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ProgressDescription::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x1800778e0ull, (void*)&UI::ProgressDescription::CreateInPlaceObject);
-    return n;
-}
-
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ProgressDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from

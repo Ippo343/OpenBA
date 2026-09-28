@@ -333,20 +333,6 @@ Object::Base* LabelElement::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration: the factory pair only (B39_RULES D2).
-// ============================================================================
-int RtUiLabelElementRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@LabelElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::LabelElement::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x1800428e0ull, (void*)&UI::LabelElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@LabelElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::LabelElement::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180042960ull, (void*)&UI::LabelElement::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::LabelElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@LabelElement@UI@@ (0x1801fa040): name "LabelElement", parent

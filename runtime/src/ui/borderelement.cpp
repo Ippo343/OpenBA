@@ -176,20 +176,6 @@ Object::Base* BorderElement::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration: the factory pair only (B39_RULES D2), by name and address.
-// ============================================================================
-int RtUiBorderElementRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@BorderElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::BorderElement::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x1800411a0ull, (void*)&UI::BorderElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@BorderElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::BorderElement::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180041220ull, (void*)&UI::BorderElement::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::BorderElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@BorderElement@UI@@ (0x1801fa8c8): name "BorderElement", parent

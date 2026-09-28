@@ -653,29 +653,3 @@ UI::ComboDialog::ComboDialog(UserInterface* ui, Object::InternalPtr<Element> roo
     }
     // 0x180112106 `MOV RAX,R14`: a ctor returns `this`.
 }
-
-// ============================================================================
-// Registration. BOTH doors — BY NAME and BY ADDRESS, unconditionally.
-//
-// The address door is not redundant with the name door: a caller that reaches a
-// body by address silently keeps using the DLL when only the name is registered
-// (reference_bypassed_port_needs_a_source_checker.md). Both are spelled as
-// LITERALS so tools/runtime_census.py can see them
-// (reference_census_cannot_see_nonliteral_registrations.md).
-//
-// No kill switch and no env gate: DIRECTION.md §2 — a port registers
-// unconditionally.
-// ============================================================================
-int RtUiComboDialogCtorRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("??2ComboDialog@UI@@SAPEAX_K@Z",
-                          (void*)&RtUi_ComboDialog_OperatorNew);
-    RegisterRuntimeAddr(0x180074770, (void*)&RtUi_ComboDialog_OperatorNew);      ++n;
-
-    // ENDGAME B.3.9 UI-D: the ??0DialogInstance (root-Element) and ??0ComboDialog
-    // doors are retired -- both are real constructors now, and their one
-    // caller (ComboElement::Update) spells `::new (p) UI::ComboDialog(...)`.
-
-    return n;
-}

@@ -153,23 +153,6 @@ Cursor::~Cursor() {}
 }  // namespace UI
 
 // ============================================================================
-// Registration. ENDGAME B.3.9 UI-D: the seven slot doors and the ??1 door are
-// gone -- their only reader was the minted `??_7Cursor@UI@@6B@` (and, for ??1,
-// its RT_DELDTOR row). What is left is the factory pair (B39_RULES D2), by
-// name and address.
-// ============================================================================
-int RtUiCursorRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@Cursor@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::Cursor::CreateNewObject);            ++n;
-    RegisterRuntimeAddr(0x18003b070ull, (void*)&UI::Cursor::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@Cursor@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::Cursor::CreateInPlaceObject);        ++n;
-    RegisterRuntimeAddr(0x18003b120ull, (void*)&UI::Cursor::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::Cursor's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@Cursor@UI@@ (0x1801f9e10): name "Cursor", parent

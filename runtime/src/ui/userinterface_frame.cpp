@@ -497,20 +497,3 @@ int32_t UI::UserInterface::Update(const System::Time& timeRef) {
 extern "C" int32_t RtUi_UserInterface_Update(UserInterface* self, const void* time) {
     return self->UI::UserInterface::Update(*static_cast<const System::Time*>(time));
 }
-
-// ---------------------------------------------------------------------------
-// Registration
-// ---------------------------------------------------------------------------
-int RtUiFrameRegister() {
-    int count = 0;
-
-    // Registered under BOTH the mangled name and the address. WAVE7.md §3's
-    // rule: a port registered under the name only can be dead at a call site
-    // that reaches the DLL through the address fallback, while reporting
-    // `calls=0 divergences=0` — a clean-looking oracle over nothing.
-    RegisterRuntimeExport("?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z",
-                          (void*)&RtUi_UserInterface_Update); ++count;
-    RegisterRuntimeAddr(0x1801213c0, (void*)&RtUi_UserInterface_Update);
-
-    return count;
-}

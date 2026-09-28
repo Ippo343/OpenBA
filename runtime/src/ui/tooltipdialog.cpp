@@ -427,43 +427,6 @@ void ToolTipDialog::SetText(const System::String& text) {
 }  // namespace UI
 
 // ============================================================================
-// Registration. Both doors for every row — BY NAME and BY ADDRESS.
-// ============================================================================
-// The address door is not redundant with the name door: a caller that reaches a
-// body by address silently keeps using the DLL when only the name is registered
-// (reference_bypassed_port_needs_a_source_checker.md), and a minted vtable's
-// slots are matched by ADDRESS. Both are spelled as literals so
-// tools/runtime_census.py can see them
-// (reference_census_cannot_see_nonliteral_registrations.md).
-// ============================================================================
-int RtUiToolTipDialogRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("??2ToolTipDialog@UI@@SAPEAX_K@Z",
-                          (void*)&RtUi_ToolTipDialog_OperatorNew);
-    RegisterRuntimeAddr(0x18004cfd0, (void*)&RtUi_ToolTipDialog_OperatorNew);   ++n;
-
-    RegisterRuntimeExport("?GetToolTipString@Element@UI@@QEBA?AVString@System@@XZ",
-                          (void*)&RtUi_Element_GetToolTipString);
-    RegisterRuntimeAddr(0x1800356a0, (void*)&RtUi_Element_GetToolTipString);    ++n;
-
-    RegisterRuntimeExport("?SetText@ToolTipDialog@UI@@QEAAXAEBVString@System@@@Z",
-                          (void*)&RtUi_ToolTipDialog_SetText);
-    RegisterRuntimeAddr(0x1800dab00, (void*)&RtUi_ToolTipDialog_SetText);       ++n;
-
-    // ENDGAME B.3.9 UI-D: the two slot doors (TypeName / Type) are retired with
-    // the minted table; the factory pair is the class's own (B39_RULES D2).
-    RegisterRuntimeExport("?CreateNewObject@ToolTipDialog@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ToolTipDialog::CreateNewObject);
-    RegisterRuntimeAddr(0x18004d0b0, (void*)&UI::ToolTipDialog::CreateNewObject);   ++n;
-    RegisterRuntimeExport("?CreateInPlaceObject@ToolTipDialog@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ToolTipDialog::CreateInPlaceObject);
-    RegisterRuntimeAddr(0x18004d140, (void*)&UI::ToolTipDialog::CreateInPlaceObject); ++n;
-
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ToolTipDialog's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@ToolTipDialog@UI@@ (0x1801fa4a0): name "ToolTipDialog", parent

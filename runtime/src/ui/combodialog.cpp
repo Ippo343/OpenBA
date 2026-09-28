@@ -267,20 +267,6 @@ void ComboDialog::OnElementEvent(Object::InternalPtr<Element>* /*element*/,
 }  // namespace UI
 
 // ============================================================================
-// Registration: the factory pair (B39_RULES D2), the class's own statics.
-// ============================================================================
-int RtUiComboDialogRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@ComboDialog@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ComboDialog::CreateNewObject); ++n;
-    RegisterRuntimeAddr(0x180074850ull, (void*)&UI::ComboDialog::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ComboDialog@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ComboDialog::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr(0x1800748f0ull, (void*)&UI::ComboDialog::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ComboDialog's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@ComboDialog@UI@@ (0x1801fa9e0): name "ComboDialog", parent

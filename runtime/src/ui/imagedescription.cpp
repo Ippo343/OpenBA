@@ -252,26 +252,6 @@ extern "C" void RtUi_ImageDescription_ApplyToElement(const void* selfv, void** e
 }
 
 // ============================================================================
-// Registration: the factory pair (B39_RULES D2) and the applier. The eight slot
-// doors and the ??1 door, read only by the retired minted table / RT_DELDTOR
-// row, are gone; so is ui_factory_wave28.cpp's ??0 door.
-// ============================================================================
-int RtUiImageDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@ImageDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ImageDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180035dc0ull, (void*)&UI::ImageDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ImageDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ImageDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180035eb0ull, (void*)&UI::ImageDescription::CreateInPlaceObject);
-
-    // ADDRESS ONLY, as before: the export name resolves to this address.
-    RegisterRuntimeAddr(0x180118570ull, (void*)&RtUi_ImageDescription_ApplyToElement); ++n;
-
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ImageDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@ImageDescription@UI@@ (0x1801fac10): name "ImageDescription", parent

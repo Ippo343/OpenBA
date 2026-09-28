@@ -388,14 +388,3 @@ int32_t UI::UserInterface::ShowDialog(Object::InternalPtr<DialogInstance>* dialo
     return *reinterpret_cast<int*>(
         reinterpret_cast<uintptr_t>(*dialogPtr) + kDlg_Result);
 }
-
-// Registered under BOTH the mangled name and the address (WAVE7.md §3): a
-// name-only registration is dead at any call site that reaches the DLL through
-// the address fallback, while an oracle over it still reports clean.
-int RtUiShowDialogRegister() {
-    RegisterRuntimeExport(
-        "?ShowDialog@UserInterface@UI@@QEAAHV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z",
-        (void*)&RtUi_UserInterface_ShowDialog);
-    RegisterRuntimeAddr(0x18011fd10, (void*)&RtUi_UserInterface_ShowDialog);
-    return 1;
-}

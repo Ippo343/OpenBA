@@ -311,19 +311,6 @@ Object::Base* TabDescription::CreateInPlaceObject(void* place) {
 // TabDescription now wears the compiler's table.
 // ============================================================================
 
-int RtUiTabDescriptionRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@TabDescription` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@TabDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::TabDescription::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x18004c2e0ull, (void*)&UI::TabDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@TabDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::TabDescription::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x18004c360ull, (void*)&UI::TabDescription::CreateInPlaceObject);
-    return n;
-}
-
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::TabDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from

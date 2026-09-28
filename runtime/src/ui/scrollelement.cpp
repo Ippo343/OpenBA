@@ -343,19 +343,6 @@ Object::Base* ScrollElement::CreateInPlaceObject(void* place) {
 // ScrollElement now wears the compiler's table.
 // ============================================================================
 
-int RtUiScrollElementRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@ScrollElement` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@ScrollElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ScrollElement::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x18003a940ull, (void*)&UI::ScrollElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ScrollElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ScrollElement::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x18003a9c0ull, (void*)&UI::ScrollElement::CreateInPlaceObject);
-    return n;
-}
-
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ScrollElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from

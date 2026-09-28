@@ -151,20 +151,6 @@ Object::Base* RadioElement::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration: the factory pair only (B39_RULES D2).
-// ============================================================================
-int RtUiRadioElementRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@RadioElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::RadioElement::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180047af0ull, (void*)&UI::RadioElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@RadioElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::RadioElement::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180047ba0ull, (void*)&UI::RadioElement::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::RadioElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@RadioElement@UI@@ (0x1801fa270): name "RadioElement", parent

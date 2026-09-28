@@ -440,20 +440,3 @@ void DialogInstance::OnOpened() {                              // [4]
 }
 
 }  // namespace UI
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtUiDialogSettingsRegister() {
-    using namespace RtUi;
-    int n = 0;
-
-    RegisterRuntimeExport("?SaveSettings@DialogInstance@UI@@QEAAXXZ",
-                          (void*)&RtUi_DialogInstance_SaveSettings); ++n;
-    RegisterRuntimeAddr(0x180114240, (void*)&RtUi_DialogInstance_SaveSettings);
-
-    // (ENDGAME B.3.9 UI-D: the OnClosed / OnOpened slot doors went with the
-    // minted `??_7DialogInstance@UI@@6B@`; nothing else reached them.)
-
-    return n;
-}

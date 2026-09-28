@@ -541,7 +541,6 @@ void* RtUi_UIString_ToSystemString(const void* selfRaw, void* retval) {
 }
 
 // WAVE 9 LANE UIF — runtime/src/ui/spritecontext.cpp.
-extern int RtUiSpriteContextRegister();
 
 // ============================================================================
 // ============================================================================
@@ -660,72 +659,4 @@ extern "C" void RtUi_SpriteSheet_Set(void* selfRaw, int p1, int p2,
     reinterpret_cast<UI::SpriteSheet*>(selfRaw)                            // B.3.6 bridge
         ->UI::SpriteSheet::Set(p1, p2, *static_cast<const System::String*>(p3Raw),
                                *static_cast<const System::String*>(p4Raw), p5);
-}
-int RtUiSpriteRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("??0Sprite@UI@@QEAA@XZ", (void*)&RtUi_Sprite_DefaultCtor); ++n;
-    RegisterRuntimeExport("??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@AEBVString@System@@@Z",
-                          (void*)&RtUi_Sprite_CtorByName); ++n;
-    RegisterRuntimeExport("??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@H@Z",
-                          (void*)&RtUi_Sprite_CtorByIndex); ++n;
-    RegisterRuntimeExport("?IsValid@Sprite@UI@@QEBA_NXZ", (void*)&RtUi_Sprite_IsValid); ++n;
-    RegisterRuntimeExport("?Width@Sprite@UI@@QEBAHXZ", (void*)&RtUi_Sprite_Width); ++n;
-    RegisterRuntimeExport("?Height@Sprite@UI@@QEBAHXZ", (void*)&RtUi_Sprite_Height); ++n;
-
-    RegisterRuntimeExport("?GetSpriteCount@SpriteSheet@UI@@QEBAHXZ", (void*)&RtUi_SpriteSheet_GetSpriteCount); ++n;
-    RegisterRuntimeExport("?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z",
-                          (void*)&RtUi_SpriteSheet_GetSpriteIndexFromName); ++n;
-    RegisterRuntimeExport("?GetUVs@SpriteSheet@UI@@QEBAXHAEAM000@Z", (void*)&RtUi_SpriteSheet_GetUVs); ++n;
-    // WAVE 23 LANE TAIL. Reached by name from runtime/src/save/saveload_draw.cpp.
-    RegisterRuntimeExport("?Set@SpriteSheet@UI@@QEAAXHHAEBVString@System@@0_N@Z",
-                          (void*)&RtUi_SpriteSheet_Set); ++n;
-    RegisterRuntimeAddr(0x1800034f0, (void*)&RtUi_SpriteSheet_Set);
-    // WAVE 10 LANE UI4 — the callee this wave's SpriteCapture::AddSprite opened.
-    RegisterRuntimeExport("?GetSpriteNameFromIndex@SpriteSheet@UI@@QEBA?AVString@System@@H@Z",
-                          (void*)&RtUi_SpriteSheet_GetSpriteNameFromIndex); ++n;
-    RegisterRuntimeAddr(0x1800032d0, (void*)&RtUi_SpriteSheet_GetSpriteNameFromIndex);
-    RegisterRuntimeExport("?SetSpriteInfo@SpriteSheet@UI@@QEAAXHHHMMMM@Z", (void*)&RtUi_SpriteSheet_SetSpriteInfo); ++n;
-    RegisterRuntimeExport("?AddSpriteInfo@SpriteSheet@UI@@QEAAXAEBVString@System@@0HHHH@Z",
-                          (void*)&RtUi_SpriteSheet_AddSpriteInfo); ++n;
-
-    // SpriteContext::AddLine / SetScissor x2 -- NO LONGER HELD BACK. Ported by
-    // WAVE 9 LANE UIF in runtime/src/ui/spritecontext.cpp, together with the
-    // two unexported internals they call. Registered from here rather than
-    // from a new slot in rt_ui_port.cpp because that file says, in its own
-    // header, not to edit it to add a lane -- SpriteContext is lane F's row and
-    // this keeps it there.
-    //
-    // The Wave 7 hold-back argument was about `Flush` (0x18011ba40), which
-    // submits into the live GPU vertex buffer and is STILL held back. See
-    // runtime/types/ui/SpriteContext.h for why that argument does not reach
-    // the three exports, and docs/runtime_port/WAVE9_LANE_UIF2.md for the
-    // cutover cost of the address door it leaves open.
-    n += RtUiSpriteContextRegister();
-
-    // WAVE 10 LANE UI4 -- UI::SpriteCapture::AddSprite / AddScissor, the two
-    // rows the wave-9 census recorded UNREACHABLE. Registered from here for
-    // the same reason SpriteContext is: rt_ui_port.cpp says not to edit it to
-    // add a lane, and SpriteCapture is the far side of the same capture path.
-    extern int RtUiSpriteCaptureRegister();
-    n += RtUiSpriteCaptureRegister();
-
-    RegisterRuntimeExport("?GetCount@StringTable@UI@@QEBAHXZ", (void*)&RtUi_StringTable_GetCount); ++n;
-    RegisterRuntimeExport("?GetText@StringTable@UI@@QEBA?AVString@System@@H@Z",
-                          (void*)&RtUi_StringTable_GetText_Index); ++n;
-    // Wave 9 lane B3 -- a REAL DEPENDENCY row (WAVE9_LANE_V.md §1b).
-    RegisterRuntimeExport("?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z",
-                          (void*)&RtUi_StringTable_GetIndexFromName); ++n;
-    RegisterRuntimeExport("?GetText@StringTable@UI@@QEBA?AVString@System@@AEBV34@@Z",
-                          (void*)&RtUi_StringTable_GetText_Key); ++n;
-
-    RegisterRuntimeExport("??0String@UI@@QEAA@XZ", (void*)&RtUi_UIString_DefaultCtor); ++n;
-    RegisterRuntimeExport("??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@AEBV0System@@@Z",
-                          (void*)&RtUi_UIString_CtorByName); ++n;
-    RegisterRuntimeExport("??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@H@Z",
-                          (void*)&RtUi_UIString_CtorByIndex); ++n;
-    RegisterRuntimeExport("?IsValid@String@UI@@QEBA_NXZ", (void*)&RtUi_UIString_IsValid); ++n;
-    RegisterRuntimeExport("??BString@UI@@QEBA?AV0System@@XZ", (void*)&RtUi_UIString_ToSystemString); ++n;
-
-    return n;
 }

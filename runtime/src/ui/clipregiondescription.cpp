@@ -158,22 +158,6 @@ Object::Base* ClipRegionDescription::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration. ENDGAME B.3.9 UI-A: the eight slot doors and the ??1 door are
-// gone -- their only reader was the minted `??_7ClipRegionDescription@UI@@6B@`
-// (and its RT_DELDTOR row). The factory pair (B39_RULES D2) is the class's own.
-// ============================================================================
-int RtUiClipRegionDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@ClipRegionDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ClipRegionDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180037a80ull, (void*)&UI::ClipRegionDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ClipRegionDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ClipRegionDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180037b80ull, (void*)&UI::ClipRegionDescription::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ClipRegionDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@ClipRegionDescription@UI@@ (0x1801f9d30): name "ClipRegionDescription", parent

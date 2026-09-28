@@ -531,25 +531,6 @@ void Element::Update(const System::Time& time, UserInterface* ui,
 // retired with the minted `??_7Element@UI@@6B@`; nothing else reached them.)
 
 // ============================================================================
-// Registration
-// ============================================================================
-// BOTH DOORS ON EVERY ROW: a minted vtable slot is filled by NAME, but sites in
-// this tree reach exported code by ADDRESS, and a name-only registration leaves
-// those walking past the port.
-//
-// Each mangled name is spelled as a LITERAL (tools/runtime_census.py cannot see
-// through a named constant).
-int RtUiElementVtableRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("?TypeId@Element@UI@@SAIXZ",
-                          (void*)&UI::Element::TypeId); ++n;
-    RegisterRuntimeAddr(0x180035430, (void*)&UI::Element::TypeId);
-
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::Element's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@Element@UI@@ (0x1801fab30): name "Element", parent

@@ -659,21 +659,3 @@ void UI::UserInterface::Draw(Video::Context& context) {
 extern "C" void RtUi_UserInterface_Draw(UserInterface* self, void* ctx) {
     self->UI::UserInterface::Draw(*static_cast<Video::Context*>(ctx));
 }
-
-// ---------------------------------------------------------------------------
-// Registration
-// ---------------------------------------------------------------------------
-int RtUiDrawRegister() {
-    int count = 0;
-
-    // Registered under BOTH the mangled name and the address. WAVE7.md §3: a
-    // port registered under the name only can be dead at a call site that
-    // reaches the DLL through the address fallback while reporting a clean
-    // oracle over nothing
-    // (reference_half_registered_port_reads_as_absent.md).
-    RegisterRuntimeExport("?Draw@UserInterface@UI@@QEAAXAEAVContext@Video@@@Z",
-                          (void*)&RtUi_UserInterface_Draw); ++count;
-    RegisterRuntimeAddr(0x180121890, (void*)&RtUi_UserInterface_Draw);
-
-    return count;
-}

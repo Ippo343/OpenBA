@@ -215,8 +215,3 @@ bool ElementDescription::Serialize(void* streamArg) {
 // retired with the minted `??_7ElementDescription@UI@@6B@`; every leaf's
 // Serialize calls the member QUALIFIED, and the exe import slot that once
 // bound the name is gone.)
-
-// ---- Registration ----------------------------------------------------------
-int RtUiElementDescriptionSerializeRegister() {
-    return 0;
-}

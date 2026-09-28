@@ -184,20 +184,6 @@ Object::Base* LabelDescription::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration: the factory pair only (B39_RULES D2).
-// ============================================================================
-int RtUiLabelDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@LabelDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::LabelDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x1800424a0ull, (void*)&UI::LabelDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@LabelDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::LabelDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180042520ull, (void*)&UI::LabelDescription::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::LabelDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@LabelDescription@UI@@ (0x1801fa008): name "LabelDescription", parent

@@ -146,25 +146,6 @@ CharacterSet::~CharacterSet() {
 }  // namespace UI
 
 // ============================================================================
-// Registration. ENDGAME B.3.9 UI-D: the seven slot doors and the ??1 door are
-// gone -- their only reader was the minted `??_7CharacterSet@UI@@6B@` (and,
-// for ??1, its RT_DELDTOR row). What is left is the factory pair (B39_RULES
-// D2): the class's OWN statics, by name and address, so the minted
-// `?_typeInfo@CharacterSet@UI@@` record (MintTypeInfos resolves its factory
-// pointers by name, after every *PortInit) builds a real CharacterSet.
-// ============================================================================
-int RtUiCharacterSetRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@CharacterSet@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::CharacterSet::CreateNewObject);       ++n;
-    RegisterRuntimeAddr(0x180037540ull, (void*)&UI::CharacterSet::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@CharacterSet@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::CharacterSet::CreateInPlaceObject);   ++n;
-    RegisterRuntimeAddr(0x1800375f0ull, (void*)&UI::CharacterSet::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::CharacterSet's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@CharacterSet@UI@@ (0x1801f9cf8): name "CharacterSet", parent

@@ -221,24 +221,6 @@ StringTable::~StringTable() {
 }  // namespace UI
 
 // ============================================================================
-// Registration — called from RtUiPortInit(), before RtDataMintInit(). The
-// factory pair (B39_RULES D2): the class's OWN statics, by name and address,
-// so the minted `?_typeInfo@StringTable@UI@@` record (MintTypeInfos resolves
-// its factory pointers by name) builds a real StringTable.
-// ============================================================================
-int RtUiStringTableFactoryRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateInPlaceObject@StringTable@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::StringTable::CreateInPlaceObject);
-    RegisterRuntimeAddr(0x180002330, (void*)&UI::StringTable::CreateInPlaceObject);  ++n;
-
-    RegisterRuntimeExport("?CreateNewObject@StringTable@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::StringTable::CreateNewObject);
-    RegisterRuntimeAddr(0x180002280, (void*)&UI::StringTable::CreateNewObject);      ++n;
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::StringTable's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@StringTable@UI@@ (0x1801fae08): name "StringTable", parent

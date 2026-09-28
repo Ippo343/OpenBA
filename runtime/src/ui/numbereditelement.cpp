@@ -114,22 +114,6 @@ Object::Base* NumberEditElement::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration. ENDGAME B.3.9 UI-A: the slot doors, the ??0 and ??1 doors,
-// read only by the retired minted table / RT_DELDTOR row / FACTUI2 row, are
-// gone. The factory pair (B39_RULES D2) is the class's own.
-// ============================================================================
-int RtUiNumberEditElementRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@NumberEditElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::NumberEditElement::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180046340ull, (void*)&UI::NumberEditElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@NumberEditElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::NumberEditElement::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x1800463e0ull, (void*)&UI::NumberEditElement::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::NumberEditElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@NumberEditElement@UI@@ (0x1801fa190): name "NumberEditElement", parent

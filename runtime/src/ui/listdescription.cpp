@@ -272,19 +272,6 @@ Object::Base* ListDescription::CreateInPlaceObject(void* place) {
 // ListDescription now wears the compiler's table.
 // ============================================================================
 
-int RtUiListDescriptionRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@ListDescription` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@ListDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ListDescription::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x180044c90ull, (void*)&UI::ListDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ListDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ListDescription::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x180044d10ull, (void*)&UI::ListDescription::CreateInPlaceObject);
-    return n;
-}
-
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ListDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from

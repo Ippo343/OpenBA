@@ -236,21 +236,6 @@ Object::Base* ComboDescription::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration: the factory pair only (B39_RULES D2). The slot doors and the
-// ??1 door, read only by the retired minted table / RT_DELDTOR row, are gone.
-// ============================================================================
-int RtUiComboDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@ComboDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::ComboDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180074bd0ull, (void*)&UI::ComboDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ComboDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::ComboDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180074c70ull, (void*)&UI::ComboDescription::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::ComboDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@ComboDescription@UI@@ (0x1801faa18): name "ComboDescription", parent

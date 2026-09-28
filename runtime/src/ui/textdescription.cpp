@@ -228,20 +228,6 @@ Object::Base* TextDescription::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration: the factory pair only (B39_RULES D2).
-// ============================================================================
-int RtUiTextDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@TextDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::TextDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180041bc0ull, (void*)&UI::TextDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@TextDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::TextDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180041c40ull, (void*)&UI::TextDescription::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::TextDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@TextDescription@UI@@ (0x1801faeb0): name "TextDescription", parent

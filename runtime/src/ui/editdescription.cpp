@@ -189,21 +189,6 @@ Object::Base* EditDescription::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration: the factory pair only (B39_RULES D2). The slot doors and the
-// ??1 door, read only by the retired minted table / RT_DELDTOR row, are gone.
-// ============================================================================
-int RtUiEditDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@EditDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::EditDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x18003f7c0ull, (void*)&UI::EditDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@EditDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::EditDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x18003f840ull, (void*)&UI::EditDescription::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::EditDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@EditDescription@UI@@ (0x1801f9f28): name "EditDescription", parent

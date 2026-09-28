@@ -219,23 +219,6 @@ extern "C" void RtUi_NumberElement_CacheText(void* self) {
 }
 
 // ============================================================================
-int RtUiNumberElementRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CacheText@NumberElement@UI@@AEAAXXZ",
-                          (void*)&RtUi_NumberElement_CacheText);       ++n;
-    RegisterRuntimeAddr(0x1801189f0ull, (void*)&RtUi_NumberElement_CacheText);
-
-    RegisterRuntimeExport("?CreateNewObject@NumberElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::NumberElement::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x18004a910ull, (void*)&UI::NumberElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@NumberElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::NumberElement::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x18004a990ull, (void*)&UI::NumberElement::CreateInPlaceObject);
-
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::NumberElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@NumberElement@UI@@ (0x1801facb8): name "NumberElement", parent

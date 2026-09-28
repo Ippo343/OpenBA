@@ -226,21 +226,6 @@ Object::Base* AnimatedImageDescription::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration: the factory pair only (B39_RULES D2). The slot doors and the
-// ??1 door (and FACTUI1's ??0 door) are gone.
-// ============================================================================
-int RtUiAnimatedImageDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@AnimatedImageDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::AnimatedImageDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x1800367c0ull, (void*)&UI::AnimatedImageDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@AnimatedImageDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::AnimatedImageDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180036840ull, (void*)&UI::AnimatedImageDescription::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::AnimatedImageDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@AnimatedImageDescription@UI@@ (0x1801f9c88): name "AnimatedImageDescription", parent

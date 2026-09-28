@@ -174,8 +174,6 @@ inline const double* TimerSecondsPerTick() {
 // MemoryAllocator::MemFree (0x1800c7ad0) and the two Array bodies
 // 0x180033690 (Array<UI::Event>::SetSize-fill) and 0x18007a0d0 (the generic
 // 8-byte push), neither of which is exported.
-const char* const kCloseDialog  =
-    "?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z";
 
 // A list node: value, prev, next. The same 0x18-byte shape lane UI1 proved from
 // the drain's own stores, and the same one both unlink blocks here walk.
@@ -514,20 +512,4 @@ extern "C" void RtUi_UserInterface_CloseDialog(UserInterface* self, void** dlgPt
 
     self->UI::UserInterface::CloseDialog(
         reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr));
-}
-
-// ---------------------------------------------------------------------------
-// Registration
-// ---------------------------------------------------------------------------
-int RtUiCloseDialogRegister() {
-    int count = 0;
-
-    // Registered under BOTH the mangled name and the address. WAVE7.md §3's
-    // rule: a port registered under the name only can be dead at a call site
-    // that reaches the DLL through the address fallback, while reporting a
-    // clean-looking oracle over nothing.
-    RegisterRuntimeExport(kCloseDialog, (void*)&RtUi_UserInterface_CloseDialog); ++count;
-    RegisterRuntimeAddr(0x180120f20, (void*)&RtUi_UserInterface_CloseDialog);
-
-    return count;
 }

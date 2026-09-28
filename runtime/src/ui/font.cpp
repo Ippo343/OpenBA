@@ -818,31 +818,6 @@ extern "C" void RtUi_Font_ComputeStringLayout(const void* selfv, const void* str
                                         static_cast<UI::Font::Layout*>(layoutv));
 }
 
-int RtUiFontRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@Font@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::Font::CreateNewObject);                 ++n;
-    RegisterRuntimeAddr(0x180031ab0ull, (void*)&UI::Font::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@Font@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::Font::CreateInPlaceObject);             ++n;
-    RegisterRuntimeAddr(0x180031ba0ull, (void*)&UI::Font::CreateInPlaceObject);
-
-    RegisterRuntimeExport(
-        "?ComputeStringLayout@Font@UI@@QEBAXAEBVString@System@@_NHHW4Justify@12@AEAH3PEAULayout@12@@Z",
-        (void*)&RtUi_Font_ComputeStringLayout);                               ++n;
-    RegisterRuntimeAddr(0x180116fd0ull, (void*)&RtUi_Font_ComputeStringLayout);
-
-    RegisterRuntimeExport("?ComputeLineLayout@Font@UI@@QEBAHPEBDHHHHHPEAULayout@12@@Z",
-                          (void*)&RtUi_Font_ComputeLineLayout);               ++n;
-    RegisterRuntimeAddr(0x180116c70ull, (void*)&RtUi_Font_ComputeLineLayout);
-
-    RegisterRuntimeExport("?ComputeCharacterPosition@Font@UI@@QEBAHAEBVString@System@@H@Z",
-                          (void*)&RtUi_Font_ComputeCharacterPosition);        ++n;
-    RegisterRuntimeAddr(0x180116ee0ull, (void*)&RtUi_Font_ComputeCharacterPosition);
-
-    return n;
-}
-
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::Font's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from

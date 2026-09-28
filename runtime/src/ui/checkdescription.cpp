@@ -155,21 +155,6 @@ Object::Base* CheckDescription::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration: the factory pair only (B39_RULES D2). The slot doors and the
-// ??1 door, read only by the retired minted table / RT_DELDTOR row, are gone.
-// ============================================================================
-int RtUiCheckDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@CheckDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::CheckDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180048770ull, (void*)&UI::CheckDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@CheckDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::CheckDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180048800ull, (void*)&UI::CheckDescription::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::CheckDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@CheckDescription@UI@@ (0x1801fa970): name "CheckDescription", parent

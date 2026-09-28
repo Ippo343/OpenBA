@@ -448,24 +448,6 @@ Object::Base* LayoutDescription::CreateInPlaceObject(void* place) {
 // LayoutDescription now wears the compiler's table.
 // ============================================================================
 
-int RtUiLayoutDescriptionRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@LayoutDescription` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@LayoutDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::LayoutDescription::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x180042e30ull, (void*)&UI::LayoutDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@LayoutDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::LayoutDescription::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x180042f20ull, (void*)&UI::LayoutDescription::CreateInPlaceObject);
-
-    // ADDRESS ONLY: the entry-array serializer has no export name.
-    RegisterRuntimeAddr(0x180043f50ull,
-                        (void*)&RtUi_LayoutDescription_SerializeEntries);   ++n;
-
-    return n;
-}
-
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::LayoutDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from

@@ -168,20 +168,6 @@ Object::Base* TextElement::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration: the factory pair only (B39_RULES D2).
-// ============================================================================
-int RtUiTextElementRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@TextElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::TextElement::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180041fe0ull, (void*)&UI::TextElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@TextElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::TextElement::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180042060ull, (void*)&UI::TextElement::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::TextElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@TextElement@UI@@ (0x1801faee8): name "TextElement", parent

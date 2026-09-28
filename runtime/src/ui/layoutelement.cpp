@@ -240,19 +240,6 @@ Object::Base* LayoutElement::CreateInPlaceObject(void* place) {
 // LayoutElement now wears the compiler's table.
 // ============================================================================
 
-int RtUiLayoutElementRegister() {
-    int n = 0;
-    // The factory pair (B39_RULES D2), the class's own statics, by name AND
-    // address; the minted `?_typeInfo@LayoutElement` record resolves them.
-    RegisterRuntimeExport("?CreateNewObject@LayoutElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::LayoutElement::CreateNewObject);      ++n;
-    RegisterRuntimeAddr(0x180043380ull, (void*)&UI::LayoutElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@LayoutElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::LayoutElement::CreateInPlaceObject);  ++n;
-    RegisterRuntimeAddr(0x180043420ull, (void*)&UI::LayoutElement::CreateInPlaceObject);
-    return n;
-}
-
 // ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::LayoutElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from

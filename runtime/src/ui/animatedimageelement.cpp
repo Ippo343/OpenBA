@@ -157,21 +157,6 @@ Object::Base* AnimatedImageElement::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration: the factory pair only (B39_RULES D2). Slots 4/5/6 were
-// ImageElement's addresses; every slot door is retired with the tables.
-// ============================================================================
-int RtUiAnimatedImageElementRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@AnimatedImageElement@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::AnimatedImageElement::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180036ba0ull, (void*)&UI::AnimatedImageElement::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@AnimatedImageElement@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::AnimatedImageElement::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x180036c20ull, (void*)&UI::AnimatedImageElement::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::AnimatedImageElement's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@AnimatedImageElement@UI@@ (0x1801f9cc0): name "AnimatedImageElement", parent

@@ -159,20 +159,3 @@ extern "C" void RtUiStringTable_OperatorDelete(void* p) {
     // the two critical-section imports. Called directly (B3R RT-UI).
     System::MemoryAllocator::MemFree(p);
 }
-
-// ============================================================================
-// Registration
-// ============================================================================
-// BOTH doors for each row: the mint and our own call sites try the NAME first
-// and the ADDRESS second, a name-only registration leaves any by-address
-// consumer on the DLL, and an address-only one is invisible to the census
-// (reference_by_address_door_dies_at_cutover.md,
-//  reference_census_cannot_see_nonliteral_registrations.md -- which is also why
-//  each name is spelled as its own string literal here).
-int RtUiStringTableLifecycleDtorRegister() {
-    int n = 0;
-    RegisterRuntimeExport("??3StringTable@UI@@SAXPEAX@Z", (void*)&RtUiStringTable_OperatorDelete);
-    RegisterRuntimeAddr(0x180002220ull, (void*)&RtUiStringTable_OperatorDelete);    ++n;
-
-    return n;
-}

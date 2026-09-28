@@ -202,20 +202,6 @@ Object::Base* RadioDescription::CreateInPlaceObject(void* place) {
 }  // namespace UI
 
 // ============================================================================
-// Registration: the factory pair only (B39_RULES D2).
-// ============================================================================
-int RtUiRadioDescriptionRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@RadioDescription@UI@@SAPEAVBase@Object@@XZ",
-                          (void*)&UI::RadioDescription::CreateNewObject);        ++n;
-    RegisterRuntimeAddr(0x180047760ull, (void*)&UI::RadioDescription::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@RadioDescription@UI@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&UI::RadioDescription::CreateInPlaceObject);    ++n;
-    RegisterRuntimeAddr(0x1800477e0ull, (void*)&UI::RadioDescription::CreateInPlaceObject);
-    return n;
-}
-
-// ============================================================================
 // ENDGAME B.3.9 TI-UI (B39 D6): UI::RadioDescription's own type record, built at CRT init
 // (head-insert into Object::BaseTypeInfo::_firstTypeInfo). Literals copied from
 // the retired minted row ?_typeInfo@RadioDescription@UI@@ (0x1801fa238): name "RadioDescription", parent
