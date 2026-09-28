@@ -402,11 +402,9 @@ const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self,
 
     while (cursor != nullptr) {
         External* candidate = cursor->element.external;
-        // vtable +0x10 == GetTypeId()
-        typedef uint32_t (*GetTypeIdFn)(const External*);
-        GetTypeIdFn getTypeId = *reinterpret_cast<GetTypeIdFn*>(
-            reinterpret_cast<uint8_t*>(candidate->_vftable) + 0x10);
-        uint32_t actual = getTypeId(candidate);
+        // Object::Base::Type() (retail slot 2, +0x10), by name on the real class.
+        uint32_t actual =
+            reinterpret_cast<const ::Object::Base*>(candidate)->Type();   // B.3.x bridge
 
         if (actual == typeId) { ours = candidate; break; }
 
