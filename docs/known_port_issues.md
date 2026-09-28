@@ -135,3 +135,21 @@ pass what the caller's preceding instructions leave in R9.
 | — | `TradeComponent_SpawnPurchasedLivestock` | takes an `unsigned` quantity; the door passed `int` |
 
 Each call keeps today's bits. The first two need retail's call site read before anything changes.
+
+## 9. Bodies declared `void` whose callers read a return value — SUSPECTED
+
+| address | body | what the caller reads |
+|---|---|---|
+| `0x14009ce00` | `RoadTool_sub_ce00` (road A*) | the path length retail leaves in EAX (`roadtool.cpp`, `roadtool_calcpath.cpp`). The readers were LEFT as resolves by the registry teardown because the signature cannot be settled without retail |
+| `0x1400fd960` | — | a return value |
+| — | `Pf_RoadMeshRebuild_f370` | a return value |
+
+Today the callers read whatever the body's last computation left in EAX. **What a fix must do:**
+read each function's epilogue in retail, give the body its return type and value.
+
+## 10. `0x140172248` is 1000.0f; the code around it says otherwise — SUSPECTED
+
+The image bytes at `0x140172248` are `00 00 7a 44` (1000.0f, read in Ghidra 2026-09-28). A comment
+in the placement code calls the cell 0.5, and `code/Game/Player/tool_base_tile*.cpp` hard-codes
+`250.0f` where retail reads this cell. **What a fix must do:** read retail's instruction at the
+`tool_base_tile` site and use `kRdata_140172248` if that is the operand.
