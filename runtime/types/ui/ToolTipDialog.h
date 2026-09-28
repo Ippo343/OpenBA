@@ -77,8 +77,11 @@ public:
         return this;
     }
 
-    const char* TypeName() const override;                        // [1] 0x18004cfc0
-    uint32_t    Type() const override;                            // [2] 0x18004cfa0
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x18004cfc0, Type 0x18004cfa0, CreateNewObject 0x18004d0b0, CreateInPlaceObject 0x18004d140
+    DECLARE_TYPE(ToolTipDialog)
+public:
 
     // ---- PORTED non-virtual member ---------------------------------------
     void SetText(const System::String& text);                    // 0x1800dab00
@@ -90,15 +93,12 @@ public:
     ToolTipDialog(const ToolTipDialog& other);                    // 0x18004d180
     ToolTipDialog& operator=(const ToolTipDialog& other);         // 0x18004d1e0
     // 0x18004cfb0 — the minted record's type id (tooltipdialog.cpp).
-    static uint32_t      TypeId();
     // MemoryAllocator statics (B36_RULES 7): `??2` 0x18004cfd0 is the door
     // `RtUi_ToolTipDialog_OperatorNew` (tooltipdialog.cpp). The factory pair is
     // the class's own (B39_RULES D2), defined and registered in tooltipdialog.cpp.
     static void* operator new(std::size_t bytes);                 // 0x18004cfd0
     static void* operator new(std::size_t bytes, void* place);    // 0x18004d040
     static void  operator delete(void* p);                        // 0x18004d050
-    static Object::Base* CreateNewObject();                       // 0x18004d0b0
-    static Object::Base* CreateInPlaceObject(void* storage);      // 0x18004d140
 
 protected:
     // `??1ToolTipDialog@UI@@UEAA@XZ` 0x1800dac70 (stamp + tail-JMP to
@@ -108,8 +108,6 @@ protected:
     // RULE B5-15 / B6-7, COPIED from B36_SLOTS section 3:
     //   0x18004cf80  ?_TypeName@       -> "ToolTipDialog"
     //   0x18004cf90  ?_ParentTypeName@ -> "UI::DialogInstance"   (QUALIFIED)
-    static const char* _TypeName();
-    static const char* _ParentTypeName();
 
 public:
     int32_t _unknownB8;   // +0xb8  copied by 0x18004d180, otherwise unread

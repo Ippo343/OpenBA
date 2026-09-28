@@ -77,8 +77,11 @@ public:
         return this;
     }
 
-    const char* TypeName() const override;                        // [1] 0x180074760
-    uint32_t    Type() const override;                            // [2] 0x180074740
+    // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
+    // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
+    // retail: TypeName 0x180074760, Type 0x180074740, CreateNewObject 0x180074850, CreateInPlaceObject 0x1800748f0
+    DECLARE_TYPE(ComboDialog)
+public:
     void OnUpdateLayout() override;                               // [6] 0x180111cb0
     void OnUpdate(const System::Time& time) override;             // [7] 0x180111bd0
     void OnElementEvent(Object::InternalPtr<Element>* element,
@@ -88,7 +91,6 @@ public:
     // ---- exported, NOT PORTED as members ----------------------------------
     ComboDialog(const ComboDialog& other);                        // 0x180074940
     // 0x180074750 — the minted record's type id (combodialog.cpp).
-    static uint32_t      TypeId();
     // MemoryAllocator statics (B36_RULES 7): `??2` 0x180074770 IS ported as the
     // door `RtUi_ComboDialog_OperatorNew` (combodialog_ctor.cpp); the rest not.
     // Placement is spelt `::new (p) ComboDialog(...)` (B9-5).
@@ -96,8 +98,6 @@ public:
     static void* operator new(std::size_t bytes, void* place);    // 0x1800747e0
     static void  operator delete(void* p);                        // 0x1800747f0
     // Retail's factory pair (B39_RULES D2), defined and registered in combodialog.cpp.
-    static Object::Base* CreateNewObject();                       // 0x180074850
-    static Object::Base* CreateInPlaceObject(void* storage);      // 0x1800748f0
 
 protected:
     // `??1ComboDialog@UI@@UEAA@XZ` 0x180111cd0: restamp + ~DialogInstance,
@@ -108,8 +108,6 @@ protected:
     // is BARE here, unlike ToolTipDialog's):
     //   0x180074720  ?_TypeName@       -> "ComboDialog"
     //   0x180074730  ?_ParentTypeName@ -> "DialogInstance"
-    static const char* _TypeName();
-    static const char* _ParentTypeName();
 
 public:
     // ---- the 0x18 bytes ComboDialog adds ------------------------------------

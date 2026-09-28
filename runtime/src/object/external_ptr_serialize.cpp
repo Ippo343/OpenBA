@@ -164,6 +164,9 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
+#include "../../types/ui/DialogControllerConfig.h"   // ENDGAME B.3.9 TI-UI: UI::DialogControllerConfig::GetTypeInfo()
+#include "../../types/ui/Dialog.h"   // ENDGAME B.3.9 TI-UI: UI::Dialog::GetTypeInfo()
+#include "../../types/ui/ElementDescription.h"   // ENDGAME B.3.9 TI-UI: UI::ElementDescription::GetTypeInfo()
 #include "../../types/ui/CharacterSet.h"   // ENDGAME B.3.9 TI-UI: UI::CharacterSet::GetTypeInfo()
 #include "../../types/ui/Font.h"   // ENDGAME B.3.9 TI-UI: UI::Font::GetTypeInfo()
 #include "../../types/ui/SpriteSheet.h"   // ENDGAME B.3.9 TI-UI: UI::SpriteSheet::GetTypeInfo()
@@ -474,11 +477,9 @@ extern "C" void RtObject_ExternalPtr_Serialize(External** self, Serializer* ser,
     }
 
 // 0x180038f90 — ElementDescription+0x48
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_ElementDescription,
-             "?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_ElementDescription, UI::ElementDescription)
 // 0x180076610 — ElementDescription+0x50 (the field the header called `_userData`)
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Dialog,
-             "?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_Dialog, UI::Dialog)
 // 0x1800042a0 — ElementDescription+0x58, and Achievement::Goal+0x20
 EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_StringTable, UI::StringTable)
 // 0x180005dc0 — Achievement::GoalInstance+0x18. The oracle route; see the banner.
@@ -508,8 +509,7 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Material,
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_GraphicsMesh,
              "?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A")
 // 0x1800756d0 — UI::DialogControllerConfig
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_DialogControllerConfig,
-             "?_typeInfo@DialogControllerConfig@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_DialogControllerConfig, UI::DialogControllerConfig)
 // 0x180051790 — Audio::SoundEffect
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_SoundEffect,
              "?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A")
@@ -633,8 +633,7 @@ EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_External,
 EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_Goal,
                    "?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A")
 // 0x1800493d0 — UI::ElementDescription
-EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_ElementDescription,
-                   "?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A")
+EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_ElementDescription, UI::ElementDescription)
 // 0x18005d4a0 — Graphics::MaterialInstance
 EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_MaterialInstance,
                    "?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A")
