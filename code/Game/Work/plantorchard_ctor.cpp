@@ -92,12 +92,6 @@ PlantOrchard::PlantOrchard(void** entityIBP, void* treeType) : Work(entityIBP) {
 // The door OrchardComponent's states 9 and 12 call (orchardcomponent_states.cpp, block
 // MI-B): the real ctor on caller memory (B8-5).
 extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, void* treeType) {
-    // [STANDALONE] plantorchard.cpp's own function-pointer table is filled by
-    // PlantOrchard_ResolveFuncs(). This is the state machine's path — it allocates and
-    // builds the object directly — so wire it here, as before: the first slot the
-    // framework dispatches on the fresh object is GetTarget (+0x50), which calls
-    // s_fn_FindSubEntity with no guard. See reference_vcall_of_0_may_be_a_null_fnptr.
-    PlantOrchard_ResolveFuncs();
     if (!mem) return mem;
     OrchardDiag_NotePlantConstructed();
     return static_cast<Object::Base*>(new (mem) PlantOrchard(entityIBP, treeType));
