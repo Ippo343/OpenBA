@@ -532,3 +532,8 @@ static_assert(sizeof(UserInterface::Iterator) == 0x08,
 // ---- ui/userinterface.cpp
 extern "C" void RtUi_UserInterface_Dtor(UI::UserInterface* self);  // 0x180120b90
 // ==== end B3R W0-P0c ====
+
+// ==== B3R S-Harness (R5: a declaration P0 did not write) ====
+// ---- ui/userinterface_standalone.cpp
+extern "C" void RtUi_UserInterface_UpdateStandAloneUI(const void* time, void* ui);  // 0x180120310
+// ==== end B3R S-Harness ====

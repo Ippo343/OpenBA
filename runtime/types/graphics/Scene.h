@@ -363,3 +363,8 @@ namespace rtgfxd {
 extern "C" void RtGfxd_SceneArraySetSizeFill(void* a, int n, const void* fill);  // 0x1800637b0
 }  // namespace rtgfxd
 // ==== end B3R W0-P0c ====
+
+// ==== B3R S-Harness (R5: a declaration P0 did not write) ====
+// ---- graphics/scene.cpp
+extern "C" void RtGraphics_Scene_Dtor(RtGraphics::Scene* self);  // 0x1801026c0 ??1Scene@Graphics@@QEAA@XZ
+// ==== end B3R S-Harness ====

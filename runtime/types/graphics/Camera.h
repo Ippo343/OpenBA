@@ -751,3 +751,8 @@ static_assert(offsetof(Renderer, _detailId)          == 0x48, "Renderer::_detail
 static_assert(offsetof(Renderer, _pad_4c)            == 0x4c, "Renderer::+0x4c is never written by the ctor (RULE B5-13)");
 
 }  // namespace Graphics
+
+// ==== B3R S-Harness (R5: a declaration P0 did not write) ====
+// ---- graphics/renderer.cpp
+extern "C" void RtGraphics_Renderer_Dtor(RtGraphics::Renderer* self);  // 0x1800180a0 ??1Renderer@Graphics@@QEAA@XZ
+// ==== end B3R S-Harness ====
