@@ -52,7 +52,7 @@ public:
     int   Validate(void* param2) override;                          // [9]  0x1400e7530
     void* GetTarget(void* retbuf) override;                         // [10] 0x1400e8fb0
     int   GetPriority() override;                                   // [11] 0x14002a0f0
-    void  Slot12() override;                                        // [12] 0x1400e9010 (own RET 0)
+    void  Slot12(int version) override;                                      // [12] 0x1400e9010 (own RET 0)
 
     // --- ConsumeProduce fields (+0x48) ---
     uint8_t  field_48;           // +0x48: bool (serialized)

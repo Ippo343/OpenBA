@@ -65,7 +65,10 @@ public:
     // buffer, returned as the buffer): retail RCX = this, RDX = retbuf.
     virtual void* GetTarget(void* retbuf) = 0;                        // [10] pure
     virtual int   GetPriority() = 0;                                  // [11] pure
-    virtual void  Slot12();                                           // [12] 0x140006b10 RET 0
+    // [12] retail passes EDX = the serializer version (Goals_Serialize
+    // 0x1400f9335..0x1400f9340: `CALL GetVersion; MOV EDX,EAX; MOV RCX,RDI;
+    // CALL [RSI+0x60]`). Every body in the tree is an empty `RET 0`.
+    virtual void  Slot12(int version);                                // [12] 0x140006b10 RET 0
 
     // ---- the 0x38 bytes Work adds, retail order ------------------------------
     // PUBLIC while unconverted bodies read them at raw offsets (decision 1).

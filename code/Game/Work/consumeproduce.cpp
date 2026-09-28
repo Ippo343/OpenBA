@@ -341,7 +341,7 @@ static void* FindDescriptionOnObject(uintptr_t obj, uint32_t typeId) {
     uintptr_t arr = *(uintptr_t*)(obj + 0x28);
     for (int i = 0; i < count; i++) {
         void* c = *(void**)(arr + (uintptr_t)i * 8);
-        uint32_t t = (*(uint32_t(**)(void*))(*(uintptr_t*)c + 0x10))(c);
+        uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.x bridge (slot 2)
         if (t == typeId) {
             return fn_IsDerivedFrom(c, typeId) ? c : nullptr;
         }
@@ -356,7 +356,7 @@ static void* FindComponentOnEntity(uintptr_t entity, uint32_t typeId) {
         uintptr_t* compPtr = (uintptr_t*)(compArray + (uintptr_t)i * 8);
         uintptr_t comp = *compPtr;
         // Call vtable slot +0x10 to get component type ID
-        uint32_t compType = (*(uint32_t(**)(void*))(*(uintptr_t*)comp + 0x10))((void*)comp);
+        uint32_t compType = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
         if (compType == typeId) {
             void* found = (void*)*compPtr;
             if (fn_IsDerivedFrom(found, typeId)) {
@@ -1254,7 +1254,7 @@ int ConsumeProduce::GetPriority() {
 
 // Slot12 (+0x60) — retail 0x1400e9010, this class's own `RET 0` (every other Work
 // table shares 0x140006b10). The same behaviour; declared so the table matches.
-void ConsumeProduce::Slot12() {}
+void ConsumeProduce::Slot12(int /*version*/) {}
 
 // ============================================================
 // Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)

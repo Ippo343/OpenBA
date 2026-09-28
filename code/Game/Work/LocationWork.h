@@ -54,7 +54,7 @@ public:
     int   Validate(void* citizenIBP) override;                      // [9]  0x1400ef7c0
     void* GetTarget(void* outPtr) override;                         // [10] 0x1400efb40
     int   GetPriority() override;                                   // [11] 0x1400295a0
-    void  Slot12() override;                                        // [12] 0x1400efae0 (own RET 0)
+    void  Slot12(int version) override;                                      // [12] 0x1400efae0 (own RET 0)
 
     // --- LocationWork fields (+0x48) ---
     void*    _field48;           // +0x48: zeroed

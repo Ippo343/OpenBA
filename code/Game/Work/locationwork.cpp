@@ -434,7 +434,7 @@ void* LocationWork::GetTarget(void* outPtr) {
 // ============================================================
 // Slot12 (+0x60) — retail 0x1400efae0, this class's own `RET 0` (every other Work
 // table shares 0x140006b10). The same behaviour; declared so the table matches.
-void LocationWork::Slot12() {}
+void LocationWork::Slot12(int /*version*/) {}
 
 
 // ============================================================
