@@ -10,6 +10,3 @@
 // Vtable: 0x140163590
 // Size: 0x50 bytes
 // ============================================================
-
-// Init: resolve all internal function pointers (called once at startup)
-void GrowthComponent_InitFuncs();
