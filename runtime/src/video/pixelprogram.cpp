@@ -54,8 +54,8 @@
 // GONE". All four are now ported and registered: 0x1800547e0 and 0x180054a20
 // as `kSpec_StringRefZ_PP` / `kSpec_PpSampler10` in
 // runtime/src/collection/array.cpp, 0x180054920 and 0x180054ba0 as the
-// `kD_Str_08` / `kD_Str_10` Body-B rows in array_destroy.cpp. ResolveAddr is
-// registry-first, so the four calls below already land on our bodies.
+// `kD_Str_08` / `kD_Str_10` Body-B rows in array_destroy.cpp; B3R: the four
+// calls below name those bodies (rtcoll::, Collection.h) directly.
 // ============================================================================
 #include <cstddef>
 #include <cstdint>
@@ -67,14 +67,9 @@
 #include "../../types/system/String.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/video/ShaderProgram.h"
-
-// standalone/resolve.h is DELIBERATELY NOT INCLUDED — it drags in <windows.h>,
-// and <wingdi.h> declares a function called `AlphaBlend`, which would make
-// Video::RenderState::AlphaBlend ambiguous at every use. Same local declaration
-// runtime/src/collection/array.cpp and runtime/src/object/deleting_dtor.cpp
-// carry, for the same PLAN.md §4.1 reason; the linker checks the two spellings.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/collection/Collection.h"   // rtcoll:: the array instantiations
+#include "../../types/object/External.h"         // RtObject_ExternalPtrSerialize_*
+#include "../../types/system/MemoryAllocator.h"
 
 namespace {
 
@@ -92,15 +87,6 @@ void* ActiveDeviceDataPtr() {
     return *reinterpret_cast<void**>(static_cast<uint8_t*>(device) + 0x100);
 }
 
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
-
-using SetSizeFn   = void (*)(void*, int);
-using LoopFn      = void (*)(Serializer* ser, int count, void* data);
-using DestroyFn   = void (*)(void* ignoredThis, void* base, int count);
-using ExtPtrSerFn = void (*)(void* field, Serializer* ser);
-using MemFreeFn   = void (*)(void*);
-
 // B3X W0: the ReaderWriter members, by name on the real class (the
 // `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
 // interchangeable in Serializer.h). `name` is nullptr, as retail passes.
@@ -116,7 +102,7 @@ inline void RwBool(ReaderWriter* rw, void* p) {
 
 struct ArrayHdr { void* data; int32_t size; int32_t capacity; };
 
-void MemFree(void* p) { RtAddr<MemFreeFn>(0x1800c7ad0ull)(p); }
+using System::MemoryAllocator;   // MemFree 0x1800c7ad0
 
 // ---- the version-0 legacy block -------------------------------------------
 void SerializeLegacyV0(Serializer* ser) {
@@ -130,11 +116,12 @@ void SerializeLegacyV0(Serializer* ser) {
     ArrayHdr samplers = { nullptr, 0, 0 };     // stride 0x10 {String, int, 3 bools}
     int32_t  n = 0;
 
-    RtAddr<ExtPtrSerFn>(0x1800542a0ull)(&droppedVertexProgram, ser);
+    RtObject_ExternalPtrSerialize_VertexProgram(                          // 0x1800542a0
+        reinterpret_cast<RtObject::External**>(&droppedVertexProgram), ser);
 
     n = 0;
     RwInt(rw, &n);
-    if (reading) RtAddr<SetSizeFn>(0x1800547e0ull)(&strings8, n);
+    if (reading) rtcoll::RtColl_ArraySetSize_1800547e0(&strings8, n);
     {
         uint8_t* e = static_cast<uint8_t*>(strings8.data);
         // B.3.1 bridge: `strings8` is untyped array storage, one System::String per
@@ -145,17 +132,20 @@ void SerializeLegacyV0(Serializer* ser) {
 
     n = 0;
     RwInt(rw, &n);
-    if (reading) RtAddr<SetSizeFn>(0x180029a80ull)(&namesA, n);
-    RtAddr<LoopFn>(0x180029bb0ull)(ser, n, namesA.data);
+    // RtIo_SerializeStringArray (0x180029bb0): its 4th parameter is unused --
+    // retail spills R9 to its home slot and overwrites that slot (0x180029d00)
+    // before any read.
+    if (reading) rtcoll::RtColl_ArraySetSize_180029a80(&namesA, n);
+    RtIo_SerializeStringArray(ser, n, namesA.data, nullptr);
 
     n = 0;
     RwInt(rw, &n);
-    if (reading) RtAddr<SetSizeFn>(0x180029a80ull)(&namesB, n);
-    RtAddr<LoopFn>(0x180029bb0ull)(ser, n, namesB.data);
+    if (reading) rtcoll::RtColl_ArraySetSize_180029a80(&namesB, n);
+    RtIo_SerializeStringArray(ser, n, namesB.data, nullptr);
 
     n = 0;
     RwInt(rw, &n);
-    if (reading) RtAddr<SetSizeFn>(0x180054a20ull)(&samplers, n);
+    if (reading) rtcoll::RtColl_ArraySetSize_180054a20(&samplers, n);
     {
         uint8_t* e = static_cast<uint8_t*>(samplers.data);
         for (int32_t i = 0; i < n; ++i, e += 0x10) {
@@ -168,14 +158,14 @@ void SerializeLegacyV0(Serializer* ser) {
     }
 
     // Teardown, in retail's order: samplers, namesB, namesA, strings8.
-    RtAddr<DestroyFn>(0x180054ba0ull)(nullptr, samplers.data, samplers.size);
-    MemFree(samplers.data); samplers = ArrayHdr{ nullptr, 0, 0 };
-    RtAddr<DestroyFn>(0x180011010ull)(nullptr, namesB.data, namesB.size);
-    MemFree(namesB.data);   namesB   = ArrayHdr{ nullptr, 0, 0 };
-    RtAddr<DestroyFn>(0x180011010ull)(nullptr, namesA.data, namesA.size);
-    MemFree(namesA.data);   namesA   = ArrayHdr{ nullptr, 0, 0 };
-    RtAddr<DestroyFn>(0x180054920ull)(nullptr, strings8.data, strings8.size);
-    MemFree(strings8.data); strings8 = ArrayHdr{ nullptr, 0, 0 };
+    rtcoll::RtColl_DestroyStrings_180054ba0(nullptr, samplers.data, samplers.size);
+    MemoryAllocator::MemFree(samplers.data); samplers = ArrayHdr{ nullptr, 0, 0 };
+    rtcoll::RtColl_DestroyStrings_180011010(nullptr, namesB.data, namesB.size);
+    MemoryAllocator::MemFree(namesB.data);   namesB   = ArrayHdr{ nullptr, 0, 0 };
+    rtcoll::RtColl_DestroyStrings_180011010(nullptr, namesA.data, namesA.size);
+    MemoryAllocator::MemFree(namesA.data);   namesA   = ArrayHdr{ nullptr, 0, 0 };
+    rtcoll::RtColl_DestroyStrings_180054920(nullptr, strings8.data, strings8.size);
+    MemoryAllocator::MemFree(strings8.data); strings8 = ArrayHdr{ nullptr, 0, 0 };
     (void)samplers; (void)namesA; (void)namesB; (void)strings8; (void)droppedVertexProgram;
 }
 

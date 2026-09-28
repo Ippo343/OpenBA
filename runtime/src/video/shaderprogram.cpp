@@ -139,14 +139,8 @@
 #include "../../types/io/Serializer.h"
 #include "../../types/video/ShaderProgram.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
+#include "../../types/collection/Collection.h"   // rtcoll:: the array instantiations
 
-// standalone/resolve.h is DELIBERATELY NOT INCLUDED — it drags in <windows.h>,
-// and <wingdi.h> declares a function called `AlphaBlend`, which would make
-// Video::RenderState::AlphaBlend ambiguous at every use. Same local declaration
-// runtime/src/collection/array.cpp and runtime/src/object/deleting_dtor.cpp
-// carry, for the same PLAN.md §4.1 reason; the linker checks the two spellings.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
@@ -170,10 +164,6 @@ int32_t ActiveInterface() {
     return *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(device) + 0xF8);
 }
 
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
-
-using SetSizeFn = void (*)(void*, int);
 
 // B3X W0: the ReaderWriter members, by name on the real class (the
 // `rt::io::ReaderWriter` POD and `IO::ReaderWriter` are asserted
@@ -210,13 +200,14 @@ ReaderWriter* MakeReaderWriter(Serializer* ser, int version) {
     return rw;
 }
 
-// One `Array<Parameter>` of the two, in the order retail does them.
-void SerializeParameters(Serializer* ser, Array<ShaderParameter>* arr, uintptr_t setSizeAddr) {
+// One `Array<Parameter>` of the two, in the order retail does them. Both are
+// resized by 0x180055db0, `Array<Parameter>::SetSize`.
+void SerializeParameters(Serializer* ser, Array<ShaderParameter>* arr) {
     ReaderWriter* rw = ser->readerWriter;
     int32_t n = arr->_size;
     RwInt(rw, &n);
     if (ser->stream->direction == rt::io::kDirectionReading)
-        RtAddr<SetSizeFn>(setSizeAddr)(arr, n);
+        rtcoll::RtColl_ArraySetSize_180055db0(arr, n);
 
     ShaderParameter* e = arr->_data;
     for (int32_t i = 0; i < n; ++i, ++e) {
@@ -241,14 +232,14 @@ void PlatformSerializeArm(Video::ShaderProgram* self, Serializer* outer, int32_t
         int32_t n = self->_byteCode._size;
         RwInt(rw, &n);
         if (sub.stream->direction == rt::io::kDirectionReading)
-            RtAddr<SetSizeFn>(0x180053f00ull)(&self->_byteCode, n);   // Array<Array<uint8>>::SetSize
+            rtcoll::RtColl_ArraySetSize_180053f00(&self->_byteCode, n);   // Array<Array<uint8>>::SetSize
 
         Array<uint8_t>* blob = self->_byteCode._data;
         for (int32_t i = 0; i < n; ++i, ++blob) {
             int32_t m = blob->_size;
             RwInt(rw, &m);
             if (sub.stream->direction == rt::io::kDirectionReading)
-                RtAddr<SetSizeFn>(0x180029630ull)(blob, m);           // Array<uint8>::SetSize
+                rtcoll::RtColl_ArraySetSize_180029630(blob, m);           // Array<uint8>::SetSize
             AsRw(rw)->SerializeUCharArray(
                 m, reinterpret_cast<unsigned char*>(blob->_data), nullptr);
         }
@@ -340,10 +331,9 @@ ShaderProgram::~ShaderProgram() {
     // The three Array teardowns, in retail's order (+0x40 first, then +0x30,
     // then +0x20). Each registered body ends in `ArrayDtorImpl`, which zeroes
     // the header, so the compiler-emitted `~Array` that follows frees nothing.
-    using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x18004fbd0ull)(&_byteCode);    // ~Array<Array<uint8>>
-    RtAddr<ArrayDtorFn>(0x18004fb00ull)(&_constants);   // ~Array<Parameter>
-    RtAddr<ArrayDtorFn>(0x18004fb00ull)(&_textures);    // ~Array<Parameter>
+    rtcoll::RtColl_ArrayDtorElem_18004fbd0(&_byteCode);    // ~Array<Array<uint8>>
+    rtcoll::RtColl_ArrayDtorElem_18004fb00(&_constants);   // ~Array<Parameter>
+    rtcoll::RtColl_ArrayDtorElem_18004fb00(&_textures);    // ~Array<Parameter>
 }
 
 // ?CreateNewObject@ / ?CreateInPlaceObject@ (0x18004e0d0 / 0x18004e0e0): the
@@ -395,8 +385,8 @@ bool ShaderProgram::Serialize(void* streamv) {
     Serializer ser = { static_cast<Stream*>(streamv), nullptr };
     ReaderWriter* rw = MakeReaderWriter(&ser, 1);
 
-    SerializeParameters(&ser, &_constants, 0x180055db0ull);   // +0x30 FIRST
-    SerializeParameters(&ser, &_textures,  0x180055db0ull);   // +0x20 second
+    SerializeParameters(&ser, &_constants);   // +0x30 FIRST
+    SerializeParameters(&ser, &_textures);    // +0x20 second
     // Retail CALLs 0x1800f52b0 here; the qualified spelling is that call.
     this->ShaderProgram::PlatformSerialize(&ser);
 

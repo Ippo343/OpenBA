@@ -30,6 +30,7 @@
 #include "../../types/video/Buffers.h"
 #include "../../types/video/Device.h"   // Wave 9 lane W: the lock and +0x100
 #include "../../types/video/CompanionData.h"  // ENDGAME B.3.5: Video::{Index,Vertex}BufferData
+#include "../../types/system/MemoryAllocator.h"
 
 #include <cstdio>
 #include <cstddef>
@@ -42,7 +43,6 @@ void RtVideoDeviceUnlock(void** deviceSingleton);
 
 namespace {
 
-using MemFreeFn           = void (*)(void*);
 
 
 // ENDGAME B.3.5 block VC — `ObjectExternalDtor()` IS GONE. It was an
@@ -56,14 +56,6 @@ using MemFreeFn           = void (*)(void*);
 // (`runtime/src/object/external_class.cpp:128-135`) is the settled rule for why
 // the two base vptr stores are the compiler's and not hand-written on a
 // converted object.
-
-// REGISTRY door, not the raw DLL door. The raw door reads the DLL's export
-// table directly and is NULL with the DLL absent: the 2026-09-12 cutover walk
-// died here on the first ImageBuffer with a name (Environment\RainTexture.png)
-// once the quit path reached ExternalFactory::Clean.
-MemFreeFn MemFree() {
-    return RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
-}
 
 // ENDGAME B.3.9 VS: `ImageBufferVtable()` -- the by-name read of the minted
 // `??_7ImageBuffer@Video@@6B@` the ctor door stamped -- is GONE with the door and
@@ -672,7 +664,7 @@ void ImageBuffer::ReleaseFields() {
         *refcount -= 1;
         if (*refcount == 0) {
             _sourceName = static_cast<uint8_t*>(_sourceName) - 8;
-            MemFree()(_sourceName);
+            System::MemoryAllocator::MemFree(_sourceName);
         } else {
             _sourceName = nullptr;
         }

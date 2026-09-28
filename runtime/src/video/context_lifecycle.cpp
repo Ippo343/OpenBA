@@ -63,6 +63,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/MemoryAllocator.h"
 #include "../../types/video/Buffers.h"
 #include "../../types/video/Context.h"
 #include "../../types/video/Device.h"
@@ -108,28 +109,7 @@ void RtVideoDeviceUnlock(void** deviceSingleton);
 // The two were behaviourally equivalent, so nothing was ever observably wrong;
 // it was one edit away from being wrong.)
 
-// Declared locally rather than by including standalone/resolve.h, which drags
-// in <windows.h> — PLAN §4.1 decision 1 keeps runtime/src/ platform-neutral
-// outside a `_win` twin. Byte-identical to the declarations in
-// runtime/src/collection/array.cpp:133; the linker checks the two agree.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
-
-// ---------------------------------------------------------------------------
-// The allocator boundary, by address, with the RtResolveCached contract:
-// CACHE A HIT, RETRY A MISS. Freezing a null here would take the heap down for
-// the life of the process if anything ran before RegisterAllocatorAddresses()
-// armed the address door — the ordering defect attempt 14 fixed. Same shape as
-// runtime/src/collection/array.cpp:155.
-// ---------------------------------------------------------------------------
-void MemFree(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    if (fn) fn(p);
-}
 
 // `DeviceSlot()` and `FirstRenderBufferSlot()` used to live here. They had
 // exactly one caller between them -- this file's duplicate copy of
@@ -186,7 +166,7 @@ void ReleaseString(void** field) {
     *rc -= 1;
     if (*rc != 0) { *field = nullptr; return; }
     *field = data - 8;
-    MemFree(*field);
+    System::MemoryAllocator::MemFree(*field);
 }
 
 // The 0x18001cfc0 spelling of the same release differs in ONE respect and it is
@@ -203,7 +183,7 @@ void ReleaseStringNoTidy(void** field) {
     *rc -= 1;
     if (*rc != 0) { *field = nullptr; return; }
     *field = data - 8;
-    if (*field) MemFree(*field);
+    if (*field) System::MemoryAllocator::MemFree(*field);
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +227,7 @@ void StringPairArrayDtor(void* arr) {
     void*   data  = *reinterpret_cast<void**>(a);
     int32_t count = *reinterpret_cast<int32_t*>(a + 8);
     StringPairDestroy(arr, data, count);
-    if (data) MemFree(data);
+    if (data) System::MemoryAllocator::MemFree(data);
     *reinterpret_cast<void**>(a)     = nullptr;   // _data
     *reinterpret_cast<uint64_t*>(a + 8) = 0;      // _size and _capacity together
 }
@@ -313,7 +293,7 @@ extern "C" void Video_ConstantBuffer_Dtor(void* selfRaw) {
 // The door keeps its name and both rows.
 // ============================================================================
 void Video::RenderBuffer::operator delete(void* p) {
-    MemFree(p);
+    System::MemoryAllocator::MemFree(p);
 }
 
 extern "C" void Video_RenderBuffer_OperatorDelete(void* p) {
@@ -324,7 +304,7 @@ extern "C" void Video_RenderBuffer_OperatorDelete(void* p) {
 // `Video::Context::operator delete`: `Context.h` declares none of the eight
 // lifecycle spellings, on purpose, and that header — not this file — is where
 // the decision lives. It is a distinct function in the image from the one above.
-extern "C" void Video_Context_OperatorDelete(void* p) { MemFree(p); }
+extern "C" void Video_Context_OperatorDelete(void* p) { System::MemoryAllocator::MemFree(p); }
 
 // ============================================================================
 // 0x180006a10 — ATTRIBUTION CORRECTED, ENDGAME B.3.5 block VC.
@@ -346,7 +326,7 @@ extern "C" void Video_Context_OperatorDelete(void* p) { MemFree(p); }
 // buffer sub-objects through it (which is retail — retail's ~Context calls
 // 0x180006a10 and NOT 0x180018500 for them), and every other caller keeps
 // landing here through the registry-first address door.
-extern "C" void Rt_GuardedObjectFree(void* p) { MemFree(p); }
+extern "C" void Rt_GuardedObjectFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
 // ============================================================================
 // ?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ — retail 0x1800f4400, ord 3369

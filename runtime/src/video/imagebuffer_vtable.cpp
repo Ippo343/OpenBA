@@ -104,13 +104,7 @@
 #include "../../types/video/ImageBuffer.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/io/Stream.h"
-
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h:
-// that header drags in <windows.h> and PLAN §4.1 requires runtime/src/ to stay
-// platform-neutral. Must sit at FILE scope or it declares a different,
-// internal-linkage function. Byte-identical to resolve.h's declaration.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/system/String.h"
 
 // The door over `Video::ImageBuffer`'s protected surface. `?PlatformSerialize@`
 // is PRIVATE in retail (`AEAA`) and `protected` on the class, yet it is exported
@@ -164,24 +158,6 @@ namespace {
 // cache are GONE. Construct / Reconstruct run the real constructor in place,
 // `::new (this) ImageBuffer()` -- retail's `JMP 0x1800f2580`, which stores
 // ImageBuffer's own table exactly as the compiler's constructor does.
-
-// `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` — retail 0x1800c9930,
-// PORTED by Wave 2 (`runtime/src/system/string.cpp:1052`).
-//
-// ASKED FOR BY ADDRESS DELIBERATELY, and the first draft of this line had it
-// wrong. `string.cpp`'s registration block (:1187) is `RegisterRuntimeAddr`
-// ONLY — there is no `RegisterRuntimeExport` for this symbol anywhere in the
-// tree, checked by grep rather than assumed. By NAME this would resolve
-// straight past our own Wave 2 port into the DLL, silently
-// (`reference_converting_a_door_is_not_satisfying_it.md`), and the census would
-// still have counted the port. goal_serialize.cpp reached the same conclusion
-// and states the same reason.
-using StringSerializeFn = void (*)(void*, IO::Serializer*);
-StringSerializeFn StringSerialize() {
-    static StringSerializeFn f =
-        reinterpret_cast<StringSerializeFn>(ResolveAddr(Module::Runtime, 0x1800c9930));
-    return f;
-}
 
 // (B3X W0: `CallSlot0`, which read slot 0 through the object's vptr, is gone.
 // Every live ImageBuffer wears the compiler's table since ENDGAME B.3.9 VS, so
@@ -400,7 +376,8 @@ bool ImageBuffer::Serialize(void* stream) {
         ser.Serialize(reinterpret_cast<uint32_t&>(_addressW), nullptr);     // +0x40
         ser.Serialize(reinterpret_cast<uint32_t&>(_filter), nullptr);       // +0x44
 
-        StringSerialize()(&_sourceName, &ser);          // +0x48, a System::String
+        // +0x48, a System::String (0x1800c9930). B.3.x bridge: the field is a void*.
+        reinterpret_cast<System::String*>(&_sourceName)->Serialize(&ser);
         ImageBufferDoorAccess::PlatformSerialize(this, ser);
     }   // ~Serializer: `if (rw) rw->slot0(rw, 1)` at 0x1800f2820 .. 0x1800f2832
     return true;
