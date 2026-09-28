@@ -22,6 +22,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/application/Application.h"   // B3R: RtApp_SetDestroyTree
 #include "../../types/system/MemoryAllocator.h"    // B3R: rtalloc::FreeLockedIgnoringSelf
+#include "../../types/video/Context.h"             // Rt_GuardedObjectFree (0x180006a10)
 
 namespace {
 
@@ -75,10 +76,7 @@ extern "C" void* RtEngine_Application_ScalarDeletingDtor(void* self) {
     }
     *reinterpret_cast<void**>(p + 0x18) = nullptr;
     *reinterpret_cast<uint32_t*>(p + 0x20) = 0;
-    // PORT GAP 0x180006a10 the guarded object free (`operator delete`): no
-    // body is bound at this address -- its row went with
-    // context_lifecycle.cpp's Rt_GuardedObjectFree in 1386db46 -- so the
-    // by-address resolve here returned null. Retail calls it here. (This body
-    // has no caller: its 0x18004da00 row had no reader.)
+    Rt_GuardedObjectFree(self);                  // 0x180006a10, `operator delete`
+    // (This body has no caller: its 0x18004da00 row had no reader.)
     return self;
 }

@@ -128,6 +128,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/input/Input.h"
 #include "../../types/io/Persistence.h"   // ENDGAME B.3.9 SS1: Persistence::_singleton
+#include "../../types/video/Context.h"    // Rt_GuardedObjectFree (0x180006a10)
 #include "../collection/set_avl_e24.h"
 #include "../system/string.h"
 
@@ -321,11 +322,9 @@ void* RtInput_KeyMap_DeletingDtor(void* selfPtr) {
     set->root  = nullptr;
     set->count = 0;
 
-    // PORT GAP 0x180006a10 the guarded object free (`if (p) { Enter;
-    // Free(_singleton, p); Leave; }`): no body is bound at this address -- its
-    // row went with context_lifecycle.cpp's Rt_GuardedObjectFree in 1386db46,
-    // so the by-address resolve here returned null and nothing was freed.
-    // Retail calls it here. The null arm is kept (B3R_RULES R4).
+    // 0x180006a10 — `if (p) { Enter; Free(_singleton, p); Leave; }`, one
+    // argument (video/context_lifecycle.cpp).
+    Rt_GuardedObjectFree(selfPtr);
 
     // No comparison is possible: the tree is freed, so there is nothing left to
     // compare against, and the shipped body reaches 0x180009c30 through a near
