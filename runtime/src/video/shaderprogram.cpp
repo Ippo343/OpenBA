@@ -156,9 +156,6 @@ using rt::io::ReaderWriter;
 using Collection::Array;
 using ShaderParameter = Video::ShaderProgram::Parameter;
 
-const uint8_t* ShaderProgramTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@ShaderProgram@Video@@0VBaseTypeInfo@Object@@A");
-}
 
 // `?_singleton@Device@Video@@` is the ADDRESS of the Device* static;
 // Device+0xF8 is `activeInterface` (runtime/types/video/Device.h).
@@ -270,8 +267,11 @@ extern "C" uint32_t RtVideo_ShaderProgram_TypeId() {
 // ?_TypeName@ / ?_ParentTypeName@ return string literals out of .rdata
 // (0x180157a28 and 0x180154930); the bytes were read from the shipped file.
 // RULE B5-15: the literal is COPIED, never derived from the C++ base name.
-extern "C" const char* RtVideo_ShaderProgram_StaticTypeName()   { return Video::ShaderProgram::_TypeName(); }
-extern "C" const char* RtVideo_ShaderProgram_ParentTypeName()   { return Video::ShaderProgram::_ParentTypeName(); }
+// ENDGAME B.3.9 TI-REST: the members are DECLARE_TYPE's private statics
+// (retail's `CA`); the doors repeat the literals -- renderstate.cpp's
+// precedent -- rather than widen the access.
+extern "C" const char* RtVideo_ShaderProgram_StaticTypeName()   { return "ShaderProgram"; }
+extern "C" const char* RtVideo_ShaderProgram_ParentTypeName()   { return "Object::CompiledExternal"; }
 
 // ---- the nine non-virtual accessors ---------------------------------------
 extern "C" bool RtVideo_ShaderProgram_IsValid(const void* selfv) {
@@ -327,30 +327,9 @@ extern "C" void RtVideo_ShaderProgram_PlatformSerialize(void* selfv, void* serv)
 // ============================================================================
 namespace Video {
 
-// slot 1 — ?TypeName@ShaderProgram@Video@@UEBAPEBDXZ  0x18004e0c0
-//          `BaseTypeInfo::name`, the record's +0x08. CONTENT-only, never
-//          compared by pointer (reference_basetypeinfo_name_is_content_only.md).
-const char* ShaderProgram::TypeName() const {
-    const char* v = nullptr;
-    std::memcpy(&v, ShaderProgramTypeInfo() + 8, sizeof v);
-    return v;
-}
-
-// slot 2 — ?Type@ShaderProgram@Video@@UEBAIXZ  0x18004e0a0, the same load as TypeId.
-uint32_t ShaderProgram::Type() const { return TypeId(); }
-
-// ?TypeId@ShaderProgram@Video@@SAIXZ  0x18004e0b0 — the same record's +0x00.
-uint32_t ShaderProgram::TypeId() {
-    uint32_t v = 0;
-    std::memcpy(&v, ShaderProgramTypeInfo(), sizeof v);
-    return v;
-}
-
-// RULE B5-15: both literals were READ out of the shipped .rdata, not derived
-// from the C++ base name. `#Parent` stringisation would give
-// "Object::CompiledExternal" here by luck and the wrong answer elsewhere.
-const char* ShaderProgram::_TypeName()       { return "ShaderProgram"; }
-const char* ShaderProgram::_ParentTypeName() { return "Object::CompiledExternal"; }
+// slot 1 (0x18004e0c0), slot 2 (0x18004e0a0), TypeId (0x18004e0b0) and the two
+// literals: DECLARE_TYPE / DEFINE_TYPE's over the class's own record
+// (video_type_records.cpp; ENDGAME B.3.9 TI-REST).
 
 // ??1ShaderProgram@Video@@UEAA@XZ (0x1800f50b0). Retail: stamp ??_7ShaderProgram,
 // the three arrays newest-first, stamp ??_7CompiledExternal, tail-JMP ~External.

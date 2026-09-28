@@ -139,15 +139,9 @@ void RegisterUnregLane3() {
     // (0x140151838 ??0MaterialInstance: row deleted at ENDGAME B.3.9 EXA — its
     // one reader, engine_funcs' fn_MaterialInstance_Ctor, went with the builders.)
 
-    // MaterialInstance::_typeInfo (data slot). g_ppTypeInfo_MaterialInstance's
-    // only two consumers (serialize_struct60b_serialize.cpp, engine_funcs.cpp's
-    // FUN_140007140 wrapper via game_leaf_helpers.cpp) already fall back to
-    // Object::ResolveTypeIdByNameLazy("MaterialInstance") when the slot is
-    // null/unfilled, so this is also a no-op in practice today. Registering it
-    // restores the exact retail lookup (direct BaseTypeInfo* read instead of
-    // the lazy factory-name search) for free.
-    RegisterLane3Slot(0x140151350,
-        (uintptr_t)ResolveExport("?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A"));
+    // (0x140151350 Graphics::MaterialInstance type-info import slot: row deleted
+    // at ENDGAME B.3.9 TI-REST -- every reader uses
+    // Graphics::MaterialInstance::TypeId().)
 
     // (0x140151858 Graphics::Material, 0x140151f20 Graphics::GraphicsMesh and
     // 0x140151420 Graphics::Particle type-info import slots: rows deleted at ENDGAME

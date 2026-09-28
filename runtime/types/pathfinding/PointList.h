@@ -115,8 +115,13 @@ public:
         return this;
     }
 
-    const char*   TypeName() const override;                   // [1] 0x180070e40
-    uint32_t      Type() const override;                       // [2] 0x180070e20
+    // [1] 0x180070e40 TypeName / [2] 0x180070e20 Type, the static TypeId
+    // 0x180070e30, `_TypeName` / `_ParentTypeName` and the factory pair
+    // 0x180070f30 / 0x180070ff0 (pointlist.cpp): retail's macro (ENDGAME
+    // B.3.9 TI-REST, B39_RULES D6). The record is `DEFINE_TYPE`d in
+    // runtime/src/pathfinding/pathfinding_type_records.cpp.
+    DECLARE_TYPE(PointList)
+public:
     int32_t       GetFileVersion() const override;             // [3] 0x18010f880
     CompileResult Compile(const System::Filename& path) override; // [4] 0x18010f6d0
     bool          Serialize(void* stream) override;            // [5] 0x18010f6e0
@@ -132,10 +137,6 @@ public:
     // bumps the refcount exactly as retail's `INC [RAX-4]` does.
     System::String GetMeshName() const { return _meshName; }
 
-    // 0x180070e30 -- `MOV EAX,[_typeInfo]`: the id of the (still minted)
-    // `?_typeInfo@PointList@Pathfinding@@` record (B39_RULES D6 step 1).
-    static uint32_t TypeId();
-
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     PointList(const PointList& src);                          // 0x1800711f0
     PointList& operator=(const PointList& src);               // 0x1800712c0
@@ -146,8 +147,7 @@ public:
     // the null-tested in-place ctor. Defined in pointlist.cpp. The class
     // declares its own placement `operator new` (0x180070ec0, not ported), so
     // every placement construction spells `::new (p) PointList()`.
-    static Object::Base* CreateNewObject();                    // 0x180070f30
-    static Object::Base* CreateInPlaceObject(void* place);     // 0x180070ff0
+    // (Declared by DECLARE_TYPE above.)
 
 protected:
     // `??1PointList@Pathfinding@@UEAA@XZ` 0x18010f8e0. NON-VIRTUAL (no virtual

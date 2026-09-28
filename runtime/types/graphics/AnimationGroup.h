@@ -142,8 +142,12 @@ public:
         return this;
     }
 
-    const char* TypeName() const override;                 // [1] 0x180016310
-    uint32_t    Type() const override;                     // [2] 0x1800162f0
+    // [1] 0x180016310 TypeName / [2] 0x1800162f0 Type, TypeId 0x180016300, `_TypeName` / `_ParentTypeName`
+    // and the factory pair: retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES
+    // D6); the record is `DEFINE_TYPE`d in
+    // runtime/src/graphics/graphics_type_records.cpp.
+    DECLARE_TYPE(AnimationGroup)
+public:
     int32_t     GetFileVersion() const override;           // [3] 0x1800fb680
     CompileResult Compile(const System::Filename& path) override;  // [4] 0x1800fb690
     bool        Serialize(void* stream) override;          // [5] 0x1800fb6a0
@@ -169,10 +173,6 @@ public:
     //   Hidden retslot. Reads `_defaultBlend` (+0x30), in SECONDS.
     System::Time GetDefaultBlendTime() const;
 
-    // ?TypeId@AnimationGroup@Graphics@@SAIXZ 0x180016300 -- ENDGAME B.3.9 GFX:
-    // over the minted `?_typeInfo@` record until the W3 fold.
-    static uint32_t TypeId();
-
     // ??0AnimationGroup@Graphics@@QEAA@AEBV01@@Z    0x180016670 — NOT PORTED
     // ??4AnimationGroup@Graphics@@QEAAAEAV01@AEBV01@@Z 0x180016730 — NOT PORTED
     AnimationGroup(const AnimationGroup&);
@@ -188,8 +188,7 @@ public:
     static void* operator new(std::size_t bytes);
     static void* operator new(std::size_t bytes, void* place);
     static void  operator delete(void* p);
-    static Object::Base* CreateNewObject();
-    static Object::Base* CreateInPlaceObject(void* place);
+    // (CreateNewObject / CreateInPlaceObject: declared by DECLARE_TYPE above.)
 
 protected:
     // ??1AnimationGroup@Graphics@@UEAA@XZ  0x1800fb620. NON-virtual (no virtual

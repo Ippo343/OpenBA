@@ -40,24 +40,13 @@ using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
 
-const uint8_t* SurfaceTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@Surface@Collision2D@@0VBaseTypeInfo@Object@@A");
-}
-
 }  // namespace
 
 namespace Collision2D {
 
-// 0x180064a60: `MOV EAX,[_typeInfo] ; RET` -- the static accessor.
-uint32_t Surface::TypeId() {
-    uint32_t v = 0; std::memcpy(&v, SurfaceTypeInfo(), sizeof v); return v;
-}
-// [2] 0x180064a50: the same load.
-uint32_t Surface::Type() const { return TypeId(); }
-// [1] 0x180064a70: the name pointer at +8 of the same record.
-const char* Surface::TypeName() const {
-    const char* v = nullptr; std::memcpy(&v, SurfaceTypeInfo() + 8, sizeof v); return v;
-}
+// TypeId 0x180064a60 / [2] 0x180064a50 / [1] 0x180064a70: DECLARE_TYPE's
+// loads over the class's own record (collision2d_type_records.cpp; ENDGAME
+// B.3.9 TI-REST).
 // [3] 0x18010ca30: `MOV EAX,1 ; RET`.
 int32_t Surface::GetFileVersion() const { return 1; }
 
@@ -124,9 +113,9 @@ bool Surface::Serialize(void* streamv) {
 int RtCollision2DSurfaceRegister() {
     int n = 0;
     // ---- the factory pair (B39_RULES D2): the class's OWN statics, both
-    // doors, replacing the FACTREST row. The minted `?_typeInfo@Surface`
-    // record's factoryFn / inPlaceFactoryFn resolve these by name (MintTypeInfos
-    // runs after every *PortInit), so `Object::Factory` builds a real Surface.
+    // doors, replacing the FACTREST row. The class's own `DEFINE_TYPE` record
+    // (collision2d_type_records.cpp) carries them, so `Object::Factory` builds
+    // a real Surface.
     RegisterRuntimeExport("?CreateNewObject@Surface@Collision2D@@SAPEAVBase@Object@@XZ",
                           (void*)&Collision2D::Surface::CreateNewObject); ++n;
     RegisterRuntimeAddr  (0x180064b60ull, (void*)&Collision2D::Surface::CreateNewObject);

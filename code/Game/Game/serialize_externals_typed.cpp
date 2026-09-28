@@ -18,6 +18,7 @@
 // anonymous namespace, so we duplicate the body here under a new name).
 
 #include "engine_funcs.h"
+#include "graphics/Material.h"   // ENDGAME B.3.9 TI-REST: Graphics::MaterialInstance::TypeId()
 #include "system/Filename.h"
 #include "system/String.h"
 #include "resolve.h"
@@ -183,10 +184,9 @@ extern "C" void Reimpl_ExternalPtr_Serialize_Typed_7140(
     // 0x140007140 resolves back to ourselves via the address registry, so we
     // always run the cleaned body here.
 
-    const uint32_t* typeIdPtr = nullptr;
-    if (g_ppTypeInfo_MaterialInstance && *g_ppTypeInfo_MaterialInstance) {
-        typeIdPtr = *g_ppTypeInfo_MaterialInstance;
-    }
+    // Retail reads the BaseTypeInfo* in import slot 0x140151350; ENDGAME B.3.9
+    // TI-REST: the class's own record.
+    const uint32_t* typeIdPtr = &Graphics::MaterialInstance::GetTypeInfo().typeId;
     ExternalPtrSerializeGeneric_7140(reinterpret_cast<void**>(refField),
                                      serializer, typeIdPtr,
                                      "Graphics::MaterialInstance");

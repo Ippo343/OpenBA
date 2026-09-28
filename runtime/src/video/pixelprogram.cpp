@@ -85,9 +85,6 @@ using Video::PixelProgram;
 namespace ddvt = rt::video::devicedata_vtbl;
 namespace pdvt = rt::video::programdata_vtbl;
 
-const uint8_t* PixelProgramTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A");
-}
 void* ActiveDeviceDataPtr() {
     void** slot = reinterpret_cast<void**>(&::Video::Device::_singleton);
     void* device = slot ? *slot : nullptr;
@@ -188,8 +185,13 @@ extern "C" uint32_t RtVideo_PixelProgram_TypeId() {
 }
 // .rdata literals at 0x180157a50 / 0x180157a28 / 0x180157a38. RULE B5-15: each
 // is the EXACT retail literal, copied, never derived from the C++ base name.
-extern "C" const char* RtVideo_PixelProgram_StaticTypeName() { return Video::PixelProgram::_TypeName(); }
-extern "C" const char* RtVideo_PixelProgram_ParentTypeName() { return Video::PixelProgram::_ParentTypeName(); }
+// ENDGAME B.3.9 TI-REST: `_TypeName` / `_ParentTypeName` are DECLARE_TYPE's
+// private statics (retail's `CA`), which an `extern "C"` door cannot reach, so
+// the two doors repeat the literals -- renderstate.cpp's precedent -- rather
+// than widen the access. The record (video_type_records.cpp) is built from the
+// class's own accessors.
+extern "C" const char* RtVideo_PixelProgram_StaticTypeName() { return "PixelProgram"; }
+extern "C" const char* RtVideo_PixelProgram_ParentTypeName() { return "ShaderProgram"; }
 extern "C" const char* RtVideo_PixelProgram_FileExtension()  { return Video::PixelProgram::_FileExtension(); }
 extern "C" const void* RtVideo_PixelProgram_GetData(const void* selfv) {
     return reinterpret_cast<const PixelProgram*>(selfv)
@@ -220,16 +222,9 @@ extern "C" void RtVideo_PixelProgram_PlatformDestructExport(void* selfv) {
 // ============================================================================
 namespace Video {
 
-const char* PixelProgram::TypeName() const {
-    const char* v = nullptr; std::memcpy(&v, PixelProgramTypeInfo() + 8, sizeof v); return v;
-}
-uint32_t PixelProgram::TypeId() {
-    uint32_t v = 0; std::memcpy(&v, PixelProgramTypeInfo(), sizeof v); return v;
-}
-uint32_t PixelProgram::Type() const { return TypeId(); }
+// TypeName / TypeId / Type / `_TypeName` / `_ParentTypeName`: DECLARE_TYPE /
+// DEFINE_TYPE's (video_type_records.cpp; ENDGAME B.3.9 TI-REST).
 // RULE B5-15: read out of .rdata, not derived from the C++ base name.
-const char* PixelProgram::_TypeName()       { return "PixelProgram"; }
-const char* PixelProgram::_ParentTypeName() { return "ShaderProgram"; }
 const char* PixelProgram::_FileExtension()  { return "srsl"; }
 
 // slot 3 — 0x1800f3a80 is `MOV EAX,5 ; RET`.

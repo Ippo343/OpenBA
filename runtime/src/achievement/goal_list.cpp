@@ -185,15 +185,10 @@
 
 namespace {
 
-// `?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A` @ 0x1801f9940.
-// Retail reads its +0x00 (the typeId) INSIDE the loop, at 0x18009f178.
-uint32_t GoalInstanceTypeId() {
-    const uint8_t* node = RT_DATA_SLOT(const uint8_t*,
-        "?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A");
-    uint32_t v = 0;
-    std::memcpy(&v, node, sizeof v);      // BaseTypeInfo::typeId @ +0x00
-    return v;
-}
+// GoalInstance's type record @ retail 0x1801f9940. Retail reads its +0x00 (the
+// typeId) INSIDE the loop, at 0x18009f178. ENDGAME B.3.9 TI-REST: the class's
+// own `DEFINE_TYPE` record, read fresh on each call.
+uint32_t GoalInstanceTypeId() { return Achievement::GoalInstance::TypeId(); }
 
 // `?_singleton@Factory@Object@@0PEAV12@EA` @ 0x1801fc6e8. ENDGAME B.3.9 SS1
 // (B39_RULES D7): the class static now -- read fresh, no lazy cache (this body

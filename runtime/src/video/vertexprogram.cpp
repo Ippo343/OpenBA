@@ -124,9 +124,6 @@ using Video::VertexProgram;
 namespace ddvt = rt::video::devicedata_vtbl;
 namespace pdvt = rt::video::programdata_vtbl;
 
-const uint8_t* VertexProgramTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A");
-}
 void* ActiveDeviceDataPtr() {
     void** slot = reinterpret_cast<void**>(&::Video::Device::_singleton);
     void* device = slot ? *slot : nullptr;
@@ -233,8 +230,11 @@ extern "C" uint32_t RtVideo_VertexProgram_TypeId() {
 }
 // .rdata literals at 0x180157a40 / 0x180157a28 / 0x180157a38. RULE B5-15: each
 // is the EXACT retail literal, copied, never derived from the C++ base name.
-extern "C" const char* RtVideo_VertexProgram_StaticTypeName() { return Video::VertexProgram::_TypeName(); }
-extern "C" const char* RtVideo_VertexProgram_ParentTypeName() { return Video::VertexProgram::_ParentTypeName(); }
+// ENDGAME B.3.9 TI-REST: `_TypeName` / `_ParentTypeName` are DECLARE_TYPE's
+// private statics (retail's `CA`); the two doors repeat the literals --
+// renderstate.cpp's precedent -- rather than widen the access.
+extern "C" const char* RtVideo_VertexProgram_StaticTypeName() { return "VertexProgram"; }
+extern "C" const char* RtVideo_VertexProgram_ParentTypeName() { return "ShaderProgram"; }
 extern "C" const char* RtVideo_VertexProgram_FileExtension()  { return Video::VertexProgram::_FileExtension(); }
 extern "C" const void* RtVideo_VertexProgram_GetData(const void* selfv) {
     return reinterpret_cast<const VertexProgram*>(selfv)
@@ -269,22 +269,11 @@ extern "C" void RtVideo_VertexProgram_PlatformDestructExport(void* selfv) {
 // ============================================================================
 namespace Video {
 
-// slots 1 / 2 and the two static reflection companions: the `_typeInfo` record's
-// +0x08 (name, CONTENT-only) and +0x00 (the type id, 0xFFFFFFFF until
-// Factory::Startup).
-const char* VertexProgram::TypeName() const {
-    const char* v = nullptr; std::memcpy(&v, VertexProgramTypeInfo() + 8, sizeof v); return v;
-}
-uint32_t VertexProgram::TypeId() {
-    uint32_t v = 0; std::memcpy(&v, VertexProgramTypeInfo(), sizeof v); return v;
-}
-uint32_t VertexProgram::Type() const { return TypeId(); }
-// RULE B5-15: read out of .rdata, not derived. "ShaderProgram" is NOT namespaced
-// here even though "Object::CompiledExternal" is on ShaderProgram itself — the
-// pattern is "qualified iff the parent is in a different namespace", and it is a
-// pattern, not a guarantee, which is why all three are copied literals.
-const char* VertexProgram::_TypeName()       { return "VertexProgram"; }
-const char* VertexProgram::_ParentTypeName() { return "ShaderProgram"; }
+// slots 1 / 2 and the two static reflection companions: DECLARE_TYPE /
+// DEFINE_TYPE's over the class's own record (video_type_records.cpp; ENDGAME
+// B.3.9 TI-REST). The parent literal "ShaderProgram" is NOT namespaced even
+// though "Object::CompiledExternal" is on ShaderProgram itself — copied, not
+// derived.
 const char* VertexProgram::_FileExtension()  { return "srsl"; }
 
 // slot 3 — 0x1800f6230 is `MOV EAX,5 ; RET`. A GetFileVersion that returns the

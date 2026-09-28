@@ -324,19 +324,9 @@ int32_t* FrameIndexPtr() {
 // read for its FIRST DWORD only -- the typeId. That is the whole of what the
 // DLL's consumers of a BaseTypeInfo read
 // (reference_basetypeinfo_name_is_content_only.md).
-uint32_t ParticleSystemTypeId() {
-    static uint32_t id = 0;
-    static bool tried = false;
-    if (!tried) {
-        tried = true;
-        void* ti = ResolveExport("?_typeInfo@ParticleSystem@Graphics@@0VBaseTypeInfo@Object@@A");
-        if (ti) std::memcpy(&id, ti, sizeof id);
-        else    std::fprintf(stderr,
-                    "[PARTSYS28] ?_typeInfo@ParticleSystem@Graphics@@ resolved NULL -- "
-                    "every IsDerivedFrom will fail and the emitter pointer will be null\n");
-    }
-    return id;
-}
+// ENDGAME B.3.9 TI-REST: the class's own `DEFINE_TYPE` record, read fresh
+// (the function-local cache over the minted record is gone, B9-10).
+uint32_t ParticleSystemTypeId() { return Graphics::ParticleSystem::TypeId(); }
 
 using IsDerivedFromFn = bool (*)(const void* obj, uint32_t typeId);
 using SetBoundsFn     = void (*)(void* geometry, const void* box);

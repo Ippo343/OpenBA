@@ -851,8 +851,12 @@ public:
         return this;
     }
 
-    const char* TypeName() const override;                 // [1] 0x180012c90
-    uint32_t    Type() const override;                     // [2] 0x180012c70
+    // [1] 0x180012c90 TypeName / [2] 0x180012c70 Type, TypeId 0x180012c80, `_TypeName` / `_ParentTypeName`
+    // and the factory pair: retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES
+    // D6); the record is `DEFINE_TYPE`d in
+    // runtime/src/graphics/graphics_type_records.cpp.
+    DECLARE_TYPE(EdgeMesh)
+public:
     int32_t     GetFileVersion() const override;           // [3] 0x1800a23d0
     // *** ITS OWN, not `Object::External`'s. *** `MOV EAX,1 ; RET`, six bytes,
     // reading NEITHER `this` NOR the `Filename&` (no RCX, no RDX operand).
@@ -951,15 +955,14 @@ public:
     EdgeMesh(const EdgeMesh& src);                          // 0x180012f70  not ported
     EdgeMesh& operator=(const EdgeMesh& src);               // 0x180013230  not ported
 
-    static uint32_t TypeId();                               // 0x180012c80  B.3.9 GFX: minted record until W3
     // The reflection block's five statics. ENDGAME B.3.9 GFX: the factory pair
     // is the class's own (edgemesh_vtable.cpp, B39_RULES D2); the three
     // operators stay declared and undefined (placement is `::new`).
     static void* operator new(std::size_t bytes);            // 0x180012ca0
     static void* operator new(std::size_t bytes, void* place);// 0x180012d10
     static void  operator delete(void* p);                   // 0x180012d20
-    static Object::Base* CreateNewObject();                  // 0x180012d80
-    static Object::Base* CreateInPlaceObject(void* place);   // 0x180012e00
+    // CreateNewObject 0x180012d80 / CreateInPlaceObject 0x180012e00: declared
+    // by DECLARE_TYPE above.
 
     // ??0EdgeMesh@Graphics@@QEAA@XZ 0x1800a2830 — the REAL constructor
     // (ENDGAME B.3.9 GFX; mesh.cpp): External() and the three stamps are the

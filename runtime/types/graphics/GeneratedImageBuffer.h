@@ -177,8 +177,12 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char*   TypeName() const override;                  // [ 1] 0x18001ede0
-    uint32_t      Type() const override;                      // [ 2] 0x18001edc0
+    // [ 1] 0x18001ede0 TypeName / [ 2] 0x18001edc0 Type, TypeId, `_TypeName` / `_ParentTypeName`
+    // and the factory pair: retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES
+    // D6); the record is `DEFINE_TYPE`d in
+    // runtime/src/graphics/graphics_type_records.cpp.
+    DECLARE_TYPE(GeneratedImageBuffer)
+public:
     int32_t       GetFileVersion() const override;            // [ 3] 0x1800a3eb0 — `MOV EAX,0x7`
     bool          Serialize(void* stream) override;           // [ 5] 0x1800a3ec0
 
@@ -216,14 +220,10 @@ protected:
     bool BeginGeneration(int32_t generation) const;   // ?BeginGeneration@ — not ported
     void EndGeneration(int32_t generation) const;     // ?EndGeneration@   — not ported
 
-    // RULE B5-15 — see the class banner.
-    static const char* _TypeName();
-    static const char* _ParentTypeName();
+    // RULE B5-15 — see the class banner (the literals are DEFINE_TYPE's).
 
 public:
-    static uint32_t      TypeId();
-    static Object::Base* CreateNewObject();
-    static Object::Base* CreateInPlaceObject(void* storage);
+    // TypeId and the factory pair: DECLARE_TYPE's.
     GeneratedImageBuffer(const GeneratedImageBuffer& other);            // ??0…AEBV01 — not ported
     GeneratedImageBuffer& operator=(const GeneratedImageBuffer& other); // ??4…      — not ported
 
@@ -299,8 +299,12 @@ public:
         _planeZ = 1.0f;
         _planeD = 0.0f;
     }
-    const char*       TypeName() const override;                   // [ 1] 0x1800221d0
-    uint32_t          Type() const override;                       // [ 2] 0x1800221b0
+    // [ 1] 0x1800221d0 TypeName / [ 2] 0x1800221b0 Type, TypeId, `_TypeName` / `_ParentTypeName`
+    // and the factory pair: retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES
+    // D6); the record is `DEFINE_TYPE`d in
+    // runtime/src/graphics/graphics_type_records.cpp.
+    DECLARE_TYPE(ReflectionImageBuffer)
+public:
     int32_t           GetFileVersion() const override;             // [ 3] 0x1800a70a0 — 0x1007
     bool              Serialize(void* stream) override;            // [ 5] 0x1800a6f00
     Object::External* Reconstruct() override;                       // [ 6] 0x1800223e0
@@ -320,13 +324,8 @@ protected:
     // ~GeneratedImageBuffer / ~ImageBuffer are the compiler's chain.
     ~ReflectionImageBuffer();
 
-    static const char* _TypeName();
-    static const char* _ParentTypeName();
-
 public:
-    static uint32_t      TypeId();
-    static Object::Base* CreateNewObject();
-    static Object::Base* CreateInPlaceObject(void* storage);
+    // TypeId, the factory pair and the two literals: DECLARE_TYPE / DEFINE_TYPE's.
     static void*         operator new(size_t size);             // ??2 — reached by name
     static void*         operator new(size_t size, void* storage);
     static void          operator delete(void* p);              // ??3

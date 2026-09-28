@@ -172,7 +172,7 @@ struct EdgeMeshProbe final : Graphics::EdgeMesh {
 // EAX with NO hidden return slot (B35_RULES section 2.5 excludes `?AW4`), so it
 // raw-calls safely too — but it is NOT marked, because three of the four classes
 // inherit `Object::External`'s body, which does not Note().
-void CheckExternalFamilySlots(void* raw) {
+void CheckExternalFamilySlots(void* raw, const ::Object::BaseTypeInfo* record) {
     using DtorFn = void* (*)(void*, unsigned);
     using NameFn = const char* (*)(const void*);
     using TypeFn = uint32_t (*)(const void*);
@@ -185,11 +185,16 @@ void CheckExternalFamilySlots(void* raw) {
     CHECK_EQ(g_lastMark, kDeletingDtor / 8);
     CHECK(g_lastSelf == raw);
 
-    Reset(); SlotAt<NameFn>(raw, kTypeName)(raw);
-    CHECK_EQ(g_lastMark, kTypeName / 8);
+    if (record) {   // DECLARE_TYPE's real slots 1/2 over the class's record (B.3.9 TI-REST)
+        CHECK(SlotAt<NameFn>(raw, kTypeName)(raw) == record->name);
+        CHECK_EQ(SlotAt<TypeFn>(raw, kType)(raw), record->typeId);
+    } else {
+        Reset(); SlotAt<NameFn>(raw, kTypeName)(raw);
+        CHECK_EQ(g_lastMark, kTypeName / 8);
 
-    Reset(); SlotAt<TypeFn>(raw, kType)(raw);
-    CHECK_EQ(g_lastMark, kType / 8);
+        Reset(); SlotAt<TypeFn>(raw, kType)(raw);
+        CHECK_EQ(g_lastMark, kType / 8);
+    }
 
     Reset(); SlotAt<VerFn>(raw, kGetFileVersion)(raw);
     CHECK_EQ(g_lastMark, kGetFileVersion / 8);
@@ -223,7 +228,7 @@ UNIT_TEST(graphics_material_slot_order_is_retails) {
     MaterialProbe probe;
     void* raw = static_cast<void*>(&probe);
 
-    CheckExternalFamilySlots(raw);
+    CheckExternalFamilySlots(raw, &Graphics::Material::GetTypeInfo());
     CheckNineDistinctSlots(raw);
 
     // *** SLOT 4 IS INHERITED. *** B35_SLOTS.md:141 marks Material's [4] as
@@ -243,7 +248,7 @@ UNIT_TEST(graphics_materialinstance_slot_order_is_retails) {
     MaterialInstanceProbe probe;
     void* raw = static_cast<void*>(&probe);
 
-    CheckExternalFamilySlots(raw);
+    CheckExternalFamilySlots(raw, &Graphics::MaterialInstance::GetTypeInfo());
     CheckNineDistinctSlots(raw);
 
     BareExternalProbe bare;
@@ -422,7 +427,7 @@ UNIT_TEST(graphics_graphicsmesh_slot_order_is_retails) {
     GraphicsMeshProbe probe;
     void* raw = static_cast<void*>(&probe);
 
-    CheckExternalFamilySlots(raw);
+    CheckExternalFamilySlots(raw, &Graphics::GraphicsMesh::GetTypeInfo());
     CheckNineDistinctSlots(raw);
 
     // Slot 4 is INHERITED `?Compile@External@Object@@` (0x1800066e0), the same
@@ -548,7 +553,7 @@ UNIT_TEST(graphics_edgemesh_slot_order_is_retails) {
     EdgeMeshProbe probe;
     void* raw = static_cast<void*>(&probe);
 
-    CheckExternalFamilySlots(raw);
+    CheckExternalFamilySlots(raw, &Graphics::EdgeMesh::GetTypeInfo());
     CheckNineDistinctSlots(raw);
 
     // *** SLOT 4 IS ITS OWN, AND THAT IS THE ASYMMETRY THIS TEST EXISTS FOR. ***
@@ -792,8 +797,6 @@ UNIT_TEST(b39_gfx_graphicsmesh_concrete_ctor_stores_and_both_slot0_arms) {
 
 namespace Graphics {
 
-const char* Material::TypeName() const { Note(this, kTypeName / 8); return "Material"; }
-uint32_t    Material::Type() const { Note(this, kType / 8); return 0u; }
 int32_t     Material::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 5; }
 bool        Material::Serialize(void*) { Note(this, kSerialize / 8); return true; }
 Object::External* Material::Reconstruct() { Note(this, kReconstruct / 8); return this; }
@@ -801,8 +804,6 @@ void        Material::Destruct() { Note(this, kDestruct / 8); }
 Object::External* Material::Construct() { Note(this, kConstruct / 8); return this; }
 Material::~Material() { NoteDtor(this); }
 
-const char* MaterialInstance::TypeName() const { Note(this, kTypeName / 8); return "MaterialInstance"; }
-uint32_t    MaterialInstance::Type() const { Note(this, kType / 8); return 0u; }
 int32_t     MaterialInstance::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 4; }
 bool        MaterialInstance::Serialize(void*) { Note(this, kSerialize / 8); return true; }
 Object::External* MaterialInstance::Reconstruct() { Note(this, kReconstruct / 8); return this; }
@@ -810,8 +811,6 @@ void        MaterialInstance::Destruct() { Note(this, kDestruct / 8); }
 Object::External* MaterialInstance::Construct() { Note(this, kConstruct / 8); return this; }
 MaterialInstance::~MaterialInstance() {}
 
-const char* GraphicsMesh::TypeName() const { Note(this, kTypeName / 8); return "GraphicsMesh"; }
-uint32_t    GraphicsMesh::Type() const { Note(this, kType / 8); return 0u; }
 int32_t     GraphicsMesh::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 0x3415; }
 bool        GraphicsMesh::Serialize(void*) { Note(this, kSerialize / 8); return true; }
 Object::External* GraphicsMesh::Reconstruct() { Note(this, kReconstruct / 8); return this; }
@@ -819,8 +818,6 @@ void        GraphicsMesh::Destruct() { Note(this, kDestruct / 8); }
 Object::External* GraphicsMesh::Construct() { Note(this, kConstruct / 8); return this; }
 GraphicsMesh::~GraphicsMesh() { NoteDtor(this); }
 
-const char* EdgeMesh::TypeName() const { Note(this, kTypeName / 8); return "EdgeMesh"; }
-uint32_t    EdgeMesh::Type() const { Note(this, kType / 8); return 0u; }
 int32_t     EdgeMesh::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 2; }
 // The ONE marker in this file that stands for an OVERRIDE of slot 4 rather than
 // an inherited body. It answers retail's 1, which the slot-order test reads back.

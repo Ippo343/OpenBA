@@ -897,8 +897,7 @@ void ParticleSystemInstance::SetParticle(ExternalPtrHandle particle) {
         tried = true;
         isDerived = reinterpret_cast<IsDerivedFn>(
             ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
-        psTypeInfo = reinterpret_cast<const uint32_t*>(
-            ResolveExport("?_typeInfo@ParticleSystem@Graphics@@0VBaseTypeInfo@Object@@A"));
+        psTypeInfo = &ParticleSystem::GetTypeInfo().typeId;   // ENDGAME B.3.9 TI-REST
         if (!isDerived || !psTypeInfo)
             std::fprintf(stderr, "[GFXPART27] PSI::SetParticle: IsDerivedFrom=%p "
                                  "ParticleSystem::_typeInfo=%p -- no emitter is built\n",

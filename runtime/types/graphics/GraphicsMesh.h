@@ -370,8 +370,12 @@ public:
         return this;
     }
 
-    const char* TypeName() const override;                 // [1] 0x180012390
-    uint32_t    Type() const override;                     // [2] 0x180012370
+    // [1] 0x180012390 TypeName / [2] 0x180012370 Type, TypeId 0x180012380, `_TypeName` / `_ParentTypeName`
+    // and the factory pair: retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES
+    // D6); the record is `DEFINE_TYPE`d in
+    // runtime/src/graphics/graphics_type_records.cpp.
+    DECLARE_TYPE(GraphicsMesh)
+public:
     int32_t     GetFileVersion() const override;           // [3] 0x1800ff3a0
     bool        Serialize(void* stream) override;           // [5] 0x1800ff3b0
     Object::External* Reconstruct() override;               // [6] 0x180012510
@@ -436,14 +440,13 @@ public:
     GraphicsMesh(const GraphicsMesh& src);                 // 0x180012970  not ported
     GraphicsMesh& operator=(const GraphicsMesh& src);      // 0x180012a90  not ported
 
-    static uint32_t TypeId();                              // 0x180012380  B.3.9: minted record until W3
     // The three operators stay declared and undefined (placement is `::new`);
     // the factory pair is the class's own (B39_RULES D2, graphicsmesh_vtable.cpp).
     static void* operator new(std::size_t bytes);           // 0x1800123a0
     static void* operator new(std::size_t bytes, void* place);// 0x180012410
     static void  operator delete(void* p);                  // 0x180012420
-    static Object::Base* CreateNewObject();                 // 0x180012480
-    static Object::Base* CreateInPlaceObject(void* place);  // 0x180012500
+    // CreateNewObject 0x180012480 / CreateInPlaceObject 0x180012500: declared
+    // by DECLARE_TYPE above.
 
 private:
     // `?Set@GraphicsMesh@Graphics@@AEAA_NHPEBV?$ExternalPtr@VMaterialInstance@

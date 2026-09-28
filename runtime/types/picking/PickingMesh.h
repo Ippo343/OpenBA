@@ -175,8 +175,13 @@ public:
         return this;
     }
 
-    const char*   TypeName() const override;                   // [1] 0x180071ab0
-    uint32_t      Type() const override;                       // [2] 0x180071a90
+    // [1] 0x180071ab0 TypeName / [2] 0x180071a90 Type, the static TypeId
+    // 0x180071aa0, `_TypeName` / `_ParentTypeName` and the factory pair
+    // 0x180071ba0 / 0x180071c60 (pickingmesh.cpp): retail's macro (ENDGAME
+    // B.3.9 TI-REST, B39_RULES D6). The record is `DEFINE_TYPE`d in
+    // runtime/src/picking/picking_type_records.cpp.
+    DECLARE_TYPE(PickingMesh)
+public:
     int32_t       GetFileVersion() const override;             // [3] 0x180122940
     CompileResult Compile(const System::Filename& path) override; // [4] 0x180122950
     bool          Serialize(void* stream) override;            // [5] 0x180122960
@@ -207,11 +212,7 @@ public:
     // the null-tested in-place ctor. Defined in pickingmesh.cpp. NOTE the class
     // declares its own placement `operator new` (0x180071b30, not ported), so
     // every placement construction in the tree spells `::new (p) PickingMesh()`.
-    // 0x180071aa0 -- `MOV EAX,[_typeInfo]` over the (still minted)
-    // `?_typeInfo@PickingMesh@Picking@@` record (B39_RULES D6 step 1).
-    static uint32_t TypeId();
-    static Object::Base* CreateNewObject();                    // 0x180071ba0
-    static Object::Base* CreateInPlaceObject(void* place);     // 0x180071c60
+    // (Declared by DECLARE_TYPE above.)
 
 protected:
     // `??1PickingMesh@Picking@@UEAA@XZ` 0x1801228a0. NON-VIRTUAL (no virtual

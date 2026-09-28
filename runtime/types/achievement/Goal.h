@@ -165,8 +165,13 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180001b60
-    uint32_t    Type() const override;                            // [2] 0x180001b40
+    // [1] 0x180001b60 TypeName / [2] 0x180001b40 Type, the static TypeId
+    // 0x180001b50, `_TypeName` 0x180001b20 / `_ParentTypeName` 0x180001b30 and
+    // the ABSTRACT class's factory pair 0x180001b70 / 0x180001b80 (`XOR EAX,EAX
+    // ; RET` both, goal.cpp): retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES
+    // D6); the record is `DEFINE_TYPE`d in achievement_type_records.cpp.
+    DECLARE_TYPE(Goal)
+public:
     int32_t     GetFileVersion() const override;                  // [3] 0x18009ee10 — 0x10000
     //          Compile                                           // [4] External's, inherited
     bool        Serialize(void* stream) override;                 // [5] 0x18009ee20 (IO::Stream&)
@@ -189,13 +194,6 @@ public:
     // ?GetText@Goal@Achievement@@QEBA?AVString@System@@XZ  0x180001ba0
     System::String GetText() const;
 
-    // 0x180001b50 — `MOV EAX,[_typeInfo]` over the (still minted)
-    // `?_typeInfo@Goal@Achievement@@` record (B39_RULES D6 step 1).
-    static uint32_t TypeId();
-    // 0x180001b70 / 0x180001b80 — retail's factory pair for an ABSTRACT class:
-    // `XOR EAX,EAX ; RET` both (goal.cpp; registered by name and VA).
-    static Object::Base* CreateNewObject();
-    static Object::Base* CreateInPlaceObject(void* place);
     Goal(const Goal& other);                                      // 0x180001be0 — not ported
     Goal& operator=(const Goal& other);                           // 0x180001c80 — not ported
 
@@ -210,13 +208,6 @@ protected:
     // body is EMPTY because the compiler emits all three: the vptr store on
     // entry, `~String` on `_text` (a class member), then `~External()`.
     ~Goal();
-
-private:
-    // RULE B5-15 / B7-2, COPIED from B37_SLOTS.md §3 — recorded, not DEFINE_TYPE'd:
-    //   0x180001b20  ?_TypeName@Goal@Achievement@@       -> "Goal"
-    //   0x180001b30  ?_ParentTypeName@Goal@Achievement@@ -> "Object::External"
-    static const char* _TypeName();
-    static const char* _ParentTypeName();
 
 public:
     // ---- the 0x10 bytes Goal adds ------------------------------------------
@@ -283,8 +274,14 @@ public:
         if (flags & 1u) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char* TypeName() const override;                        // [1] 0x180001e60
-    uint32_t    Type() const override;                            // [2] 0x180001e40
+    // [1] 0x180001e60 TypeName / [2] 0x180001e40 Type, the static TypeId
+    // 0x180001e50, `_TypeName` 0x180001e20 / `_ParentTypeName` 0x180001e30 and
+    // CreateNewObject 0x180001f50: retail's macro (ENDGAME B.3.9 TI-REST); the
+    // record is `DEFINE_TYPE`d in achievement_type_records.cpp. Retail's
+    // record's in-place half is the SHARED ?CreateInPlaceObject@Internal@Object@@
+    // (0x1800070c0); the macro's CreateInPlaceObject forwards to it there.
+    DECLARE_TYPE(GoalInstance)
+public:
     void        Persist(void* stream) override;                   // [3] 0x18009ef70 (IO::Stream&)
     virtual void Startup();                                       // [4] 0x18009f000
     virtual void Update(const System::Time& time, const GoalList& list);  // [5] 0x18009f010
@@ -299,16 +296,13 @@ public:
     // ExternalPtr arrives BARE in RDX (B7-5); not ported (no caller).
     void SetGoal(Object::ExternalPtr<Goal> goal);
 
-    // 0x180001e50 — `MOV EAX,[_typeInfo]` over the (still minted)
-    // `?_typeInfo@GoalInstance@Achievement@@` record (B39_RULES D6 step 1).
-    static uint32_t TypeId();
     static void* operator new(std::size_t bytes);                 // 0x180001e70 — not ported
     static void* operator new(std::size_t bytes, void* place);    // 0x180001ee0 — not ported
     static void  operator delete(void* p);                        // 0x180001ef0 — not ported
     // 0x180001f50 — MemAlloc(0x20, 8) + the ctor (goal.cpp, B39_RULES D2). The
     // in-place half is the SHARED `?CreateInPlaceObject@Internal@Object@@`.
     // The class declares its own placement new: placement spells `::new (p)`.
-    static Object::Base* CreateNewObject();
+    // (Declared by DECLARE_TYPE above.)
     GoalInstance(const GoalInstance& other);                      // 0x180001ff0 — not ported
     GoalInstance& operator=(const GoalInstance& other);           // 0x180002050 — not ported
 
@@ -317,12 +311,6 @@ protected:
     // Retail: re-stamp, tail-jump ~Internal. EMPTY body — the compiler emits
     // the stamp and the `~Internal()` (InternalFactory swap-remove) itself.
     ~GoalInstance();
-
-private:
-    //   0x180001e20  ?_TypeName@GoalInstance@Achievement@@       -> "GoalInstance"
-    //   0x180001e30  ?_ParentTypeName@GoalInstance@Achievement@@ -> "Object::Internal"
-    static const char* _TypeName();
-    static const char* _ParentTypeName();
 
 public:
     uint32_t                  _flags;   // +0x10  kFlagMet | kFlagFailed

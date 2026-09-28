@@ -105,8 +105,13 @@ public:
         return this;
     }
 
-    const char*   TypeName() const override;                   // [1] 0x18000b8b0
-    uint32_t      Type() const override;                       // [2] 0x18000b890
+    // [1] 0x18000b8b0 TypeName / [2] 0x18000b890 Type, the static TypeId
+    // 0x18000b8a0, `_TypeName` 0x18000b870 / `_ParentTypeName` 0x18000b880 and
+    // the factory pair 0x18000b9a0 / 0x18000ba90: retail's macro (ENDGAME B.3.9
+    // TI-REST, B39_RULES D6); the record is `DEFINE_TYPE`d in
+    // runtime/src/audio/audio_type_records.cpp.
+    DECLARE_TYPE(SoundBuffer)
+public:
     int32_t       GetFileVersion() const override;             // [3] 0x1800e0470
     // [4] Compile — inherited from Object::External (0x1800066e0), NOT declared.
     bool          Serialize(void* stream) override;            // [5] 0x1800e0480
@@ -139,16 +144,10 @@ public:
     // Retail's factory pair (B39_RULES D2), defined in
     // vtbatch7_soundbuffer_soundeffect.cpp. The class declares its own
     // placement `operator new` (not ported): placement spells `::new (p)`.
-    static Object::Base* CreateNewObject();                    // 0x18000b9a0
-    static Object::Base* CreateInPlaceObject(void* place);     // 0x18000ba90
-    // 0x18000b8a0 -- `MOV EAX,[_typeInfo]` over the (still minted)
-    // `?_typeInfo@SoundBuffer@Audio@@` record (B39_RULES D6 step 1).
-    static uint32_t TypeId();
+    // (Declared by DECLARE_TYPE above.)
 
 private:
-    static const char* _TypeName();                            // 0x18000b870 "SoundBuffer"
-    static const char* _ParentTypeName();                      // 0x18000b880 "Object::CompiledExternal"
-    void PlatformConstruct();                                  // 0x1800e0550
+    void PlatformConstruct();                                 // 0x1800e0550
     void PlatformDestruct();                                   // 0x1800e0580
 
 protected:

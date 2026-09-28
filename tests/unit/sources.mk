@@ -300,3 +300,14 @@ UNIT_TREE_SRCS +=
 # and could not link without the whole animation surface behind it. Math::Transform
 # and Math::Scalar come in through runtime/types/math/Math.h, already on this list.
 UNIT_TREE_SRCS +=
+# ENDGAME B.3.9 TI-REST (B39_RULES D6 W3): the Runtime namespaces' DEFINE_TYPE
+# records, one registry-free TU per namespace (tests/unit/b39_ti_rest_test.cpp
+# runs a Factory::Startup over them; the factory statics are its markers).
+UNIT_TREE_SRCS += runtime/src/picking/picking_type_records.cpp \
+                  runtime/src/pathfinding/pathfinding_type_records.cpp
+UNIT_TREE_SRCS += runtime/src/io/io_type_records.cpp
+UNIT_TREE_SRCS += runtime/src/audio/audio_type_records.cpp
+UNIT_TREE_SRCS += runtime/src/collision2d/collision2d_type_records.cpp
+UNIT_TREE_SRCS += runtime/src/achievement/achievement_type_records.cpp
+UNIT_TREE_SRCS += runtime/src/video/video_type_records.cpp
+UNIT_TREE_SRCS += runtime/src/graphics/graphics_type_records.cpp

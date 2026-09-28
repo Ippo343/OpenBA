@@ -141,12 +141,10 @@ static_assert(offsetof(MaterialInstance, textures)           == 0x50, "MaterialI
 // @0x1801029a0 disassembled is exactly those three LEA/MOV pairs. That is the
 // mistake B35_RULES section 2.1 warns about for `Video::VideoProgram`.
 //
-// RULE B5-15 — THE FOUR NAME LITERALS, COPIED FROM B35_SLOTS.md AND RECORDED,
-// NOT USED. No `_typeInfo` row is retired and no `DEFINE_TYPE` is introduced
-// here (B35_RULES section 11); slots 1/2 keep reading
-// `?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A` (0x1801fa740) and
-// `?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A` (0x1801fa778).
-// The literals are written down so a later `DEFINE_TYPE` is COPIED:
+// RULE B5-15 — THE FOUR NAME LITERALS, COPIED FROM B35_SLOTS.md. ENDGAME B.3.9
+// TI-REST: they are the two classes' `DEFINE_TYPE`s now
+// (runtime/src/graphics/graphics_type_records.cpp); the minted records
+// 0x1801fa740 / 0x1801fa778 are retired:
 //     ?_TypeName@Material@Graphics@@         -> "Material"
 //     ?_ParentTypeName@Material@Graphics@@   -> "Object::External"
 //     ?_TypeName@MaterialInstance@Graphics@@ -> "MaterialInstance"
@@ -286,8 +284,12 @@ public:
         return this;
     }
 
-    const char* TypeName() const override;                 // [1] 0x1800118d0
-    uint32_t    Type() const override;                     // [2] 0x1800118b0
+    // [1] 0x1800118d0 TypeName / [2] 0x1800118b0 Type, TypeId 0x1800118c0, `_TypeName` / `_ParentTypeName`
+    // and the factory pair: retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES
+    // D6); the record is `DEFINE_TYPE`d in
+    // runtime/src/graphics/graphics_type_records.cpp.
+    DECLARE_TYPE(Material)
+public:
     int32_t     GetFileVersion() const override;           // [3] 0x180102a40
     bool        Serialize(void* stream) override;           // [5] 0x180102a50
     Object::External* Reconstruct() override;               // [6] 0x180011ae0
@@ -327,14 +329,13 @@ public:
     Material(const Material& src);                          // 0x180011be0  not ported
     Material& operator=(const Material& src);               // 0x180011c80  not ported
 
-    static uint32_t TypeId();                               // 0x1800118c0  B.3.9: minted record until W3
     // The three operators stay declared and undefined (placement is `::new`);
     // the factory pair is the class's own (B39_RULES D2, material.cpp).
     static void* operator new(std::size_t bytes);            // 0x1800118e0
     static void* operator new(std::size_t bytes, void* place);// 0x180011950
     static void  operator delete(void* p);                   // 0x180011960
-    static Object::Base* CreateNewObject();                  // 0x1800119c0
-    static Object::Base* CreateInPlaceObject(void* place);   // 0x180011a70
+    // CreateNewObject 0x1800119c0 / CreateInPlaceObject 0x180011a70: declared
+    // by DECLARE_TYPE above.
 
 protected:
     // `??1Material@Graphics@@UEAA@XZ` @ 0x180102a00. NON-VIRTUAL (decision 2).
@@ -397,8 +398,13 @@ public:
         return this;
     }
 
-    const char* TypeName() const override;                 // [1] 0x180002810
-    uint32_t    Type() const override;                     // [2] 0x1800027f0
+    // [1] 0x180002810 TypeName / [2] 0x1800027f0 Type, TypeId 0x180002800
+    // (retail's static `?TypeId@MaterialInstance@Graphics@@SAIXZ`, ported here), `_TypeName` / `_ParentTypeName`
+    // and the factory pair: retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES
+    // D6); the record is `DEFINE_TYPE`d in
+    // runtime/src/graphics/graphics_type_records.cpp.
+    DECLARE_TYPE(MaterialInstance)
+public:
     int32_t     GetFileVersion() const override;           // [3] 0x180103a60
     bool        Serialize(void* stream) override;           // [5] 0x180103a70
     Object::External* Reconstruct() override;               // [6] 0x180002a50
@@ -446,15 +452,14 @@ public:
     MaterialInstance(const MaterialInstance& src);          // 0x180002ba0  not ported
     MaterialInstance& operator=(const MaterialInstance& src);// 0x180002c80  not ported
 
-    static uint32_t TypeId();                               // 0x180002800  not ported
     // `??2MaterialInstance@Graphics@@SAPEAX_K@Z` (0x180002820) IS ported, in
     // `wave21_lane_gfxbody.cpp`; ENDGAME B.3.9 GFX: the factory pair is the
     // class's own (wave24_lane_gfxmat.cpp, B39_RULES D2).
     static void* operator new(std::size_t bytes);            // 0x180002820  wave21
     static void* operator new(std::size_t bytes, void* place);// 0x180002890
     static void  operator delete(void* p);                   // 0x1800028a0
-    static Object::Base* CreateNewObject();                  // 0x180002900
-    static Object::Base* CreateInPlaceObject(void* place);    // 0x1800029d0
+    // CreateNewObject 0x180002900 / CreateInPlaceObject 0x1800029d0: declared
+    // by DECLARE_TYPE above.
 
     // ??0MaterialInstance@Graphics@@QEAA@XZ 0x180103980 — the REAL constructor,
     // PUBLIC: the class is concrete. External() and the stamps are the
