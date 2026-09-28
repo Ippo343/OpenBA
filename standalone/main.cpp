@@ -18,6 +18,7 @@
 #include "options.h"
 #include "resolve.h"
 #include "runtime_funcs.h"
+#include "runtime_init.h"
 #include "dx11_seam.h"
 #include "video_interface.h"
 #include "renderdoc_integration.h"
@@ -1314,6 +1315,7 @@ static bool Init() {
     //     Must run BEFORE AddressRegistryInit and EngineFuncsInit: both cache
     //     Runtime function pointers through ResolveExport/ResolveAddr, and a
     //     port registered after they run would be resolved by nobody.
+    RuntimeInit();
     RuntimePortInit();
     StallDebug::Mark("RuntimePortInit");
 

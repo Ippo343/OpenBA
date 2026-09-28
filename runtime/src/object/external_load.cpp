@@ -460,7 +460,7 @@ void DumpLoadCounters() {
 // The loader's counters are printed at exit: `[ExtLoad] calls=… openFileFail=…` is a
 // GATE INVARIANT (new game 5683 / 0, tutorial 5773 / 12). The hook used to be installed
 // by RtObjectExternalLoadRegister(), which went with its two dead registry rows (B3R
-// RT-Core); the Object port's init installs it instead.
+// RT-Core); RuntimeInit() (standalone/runtime_init.cpp) installs it instead.
 // The same went for `[ExtAdd]` (external_add.cpp) and `[ExtSaveText]`
 // (external_savetext_win.cpp), whose hooks sat in register functions that are gone.
 namespace RtObject {

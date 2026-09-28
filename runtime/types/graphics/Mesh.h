@@ -1042,3 +1042,8 @@ void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, const void*
 // standalone/scene_watch.cpp's IsMeshInstance compares a vtable entry with it.
 extern "C" void RtGraphics_MeshInstance_AddDrawItems(const void* self, const void* scene,
                                                      void* renderer);  // 0x180100f20
+
+// runtime/src/graphics/wave29_lane_slots.cpp -- prints the `[SLOTS29]` attendance
+// line (MeshInstance::Update / SetSharedInstanceData counters). Called once at
+// boot, from RuntimeInit() (standalone/runtime_init.cpp).
+extern "C" void RtGraphicsWave29SlotsSummary();

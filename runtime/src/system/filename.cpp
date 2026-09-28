@@ -492,21 +492,3 @@ void RtSystem_Filename_AdjustDelimiters(Filename* self) {
 }
 
 }  // namespace RtSystem
-
-// ============================================================
-// Registration
-// ============================================================
-#ifndef BANISHED_UNIT_TEST
-int RtSystemFilenameRegister() {
-    using namespace RtSystem;
-    int n = 0;
-
-    RegisterRuntimeExport("??MFilename@System@@QEBA_NAEBV01@@Z",
-                          (void*)&RtSystem_Filename_Less); ++n;
-
-    // B3R W2-RT: the address row (0x180026cb0) had no reader and went; the
-    // name stays while reg_unreg_lane3.cpp reads it.
-    printf("[RtPort]   System::Filename: %d exports registered\n", n);
-    return n;
-}
-#endif  // BANISHED_UNIT_TEST

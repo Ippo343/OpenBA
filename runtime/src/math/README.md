@@ -36,18 +36,12 @@ Host unit tests: `tests/unit/math_test.cpp`, run by `mingw32-make unit`.
 ## Ported here
 
 - `vector.cpp` / `vector.h` — Math::Scalar, Math::Vector2, Math::Vector3, Math::Vector4
-  (Wave 1 Lane 1). 28 retail functions registered from `rt_math_port.cpp`'s
-  `RtMathPortInit()`. Byte-faithful.
-- `rt_math_port.cpp` — `RtMathPortInit()`, the Math namespace entry
-  point. Registers Lane 1's exports then calls Lane 2's
-  `RtMathTransformRegister()` (Matrix/Quaternion/Transform family).
-- `transform.cpp` / `transform.h` — Math::Matrix, Math::Quaternion,
-  Math::Transform, Math::Transform2, Math::Transform3 (Wave 1 Lane 2). 28
-  retail functions registered (25 assigned + 3 dependencies that are genuine
-  Math:: exports in their own right: `Quaternion::operator*(Quaternion)`,
-  the 3-`Vector3` basis `Quaternion` ctor, and `Transform::FromDirection`).
+  (Wave 1 Lane 1). Byte-faithful.
+- `transform.cpp` — Math::Matrix, Math::Quaternion,
+  Math::Transform, Math::Transform2, Math::Transform3 (Wave 1 Lane 2), including 3
+  dependencies that are genuine Math:: exports in their own right: `Quaternion::operator*(Quaternion)`,
+  the 3-`Vector3` basis `Quaternion` ctor, and `Transform::FromDirection`.
   Byte-faithful.
   `Graphics::InterpolatedState<Transform>::Lerp` (0x18001aff0) was left
   unported — its call site does not pin `InterpolatedState<T>`'s layout or
-  `Transform::Lerp`'s own signature unambiguously; see the comment above
-  `RtMathTransformRegister()` in transform.cpp.
+  `Transform::Lerp`'s own signature unambiguously.

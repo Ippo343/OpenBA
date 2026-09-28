@@ -801,7 +801,7 @@ extern "C" void RtVideo_Device_Shutdown(Device* self) {
 // Run identity. B3R W2-RT: this was RtVideoDeviceStartupRegister(), which
 // registered nothing any more. The one line it printed is kept, printed from
 // this translation unit (its __DATE__ / __TIME__ are this file's), and
-// RtVideoPortInit() calls it where it called the register function.
+// RuntimeInit() (standalone/runtime_init.cpp) calls it once at boot.
 // ============================================================================
 void RtVideoDeviceStartupIdentity() {
     // ---- RUN IDENTITY -----------------------------------------------------

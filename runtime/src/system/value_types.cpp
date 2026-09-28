@@ -620,19 +620,3 @@ System::String System::Configuration::GetVersionString(uint32_t version, bool de
 System::String System::Configuration::CurrentVersion() {
     return GetVersionString(0x010007ffu, false);
 }
-
-// ============================================================
-// RtSystemValueRegister — called from RtSystemPortInit() (rt_system_port.cpp).
-// ============================================================
-int RtSystemValueRegister() {
-    int n = 0;
-
-    // B3R W2-EZ: ??0Random@System@@QEAA@XZ, ?AsString@DateTime@System@@...,
-    // ?CurrentBuildId@ / ?CurrentVersion@ / ?GetVersionString@Configuration@System@@...
-    // went: their one reader was EngineFuncsInit (deleted).
-
-    RegisterRuntimeExport("??0Time@System@@QEAA@M@Z", (void*)&RtSystem_Time_Ctor); ++n;
-    RegisterRuntimeExport("?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z", (void*)&RtSystem_Time_Serialize); ++n;
-
-    return n;
-}

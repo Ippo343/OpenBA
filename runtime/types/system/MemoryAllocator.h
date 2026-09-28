@@ -460,6 +460,11 @@ typedef bool (*RtAllocCutoverArmer)(void* ourAllocate, void* ourFree,
                                     void** outComposedFree);
 extern "C" void RtSystemAllocatorSetCutoverArmer(RtAllocCutoverArmer fn);
 
+// runtime/src/system/allocator.cpp -- installs the platform seam, calls the
+// cutover armer and prints `[RtAlloc] ARMED` / `[RtAlloc] ATTEST`. Called once,
+// from RuntimeInit() (standalone/runtime_init.cpp).
+void RtSystemAllocatorArm();
+
 // (The DLL-present detour-installer and lock-retire seams died with the DLL, ENDGAME A.3.)
 
 // runtime/src/system/allocator_win.cpp — installs the Win32 seam and holds the

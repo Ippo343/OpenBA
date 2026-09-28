@@ -1012,3 +1012,8 @@ void Video_RenderBuffer_Dtor(Video::RenderBuffer* self);  // 0x1800f4020
 void Video_Configuration_Dtor(void* self);  // 0x1800f6f80  ??1Configuration@Video@@QEAA@XZ
 void Video_Device_Dtor(RtVideo::Device* self);  // 0x1800f7290  ??1Device@Video@@QEAA@XZ
 // ==== end B3R W0-P0c ====
+
+// runtime/src/video/device_startup.cpp -- prints the run-identity line (this
+// translation unit's build stamp). Called once, from RuntimeInit()
+// (standalone/runtime_init.cpp).
+void RtVideoDeviceStartupIdentity();

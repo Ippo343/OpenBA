@@ -1054,3 +1054,8 @@ extern "C" void RtObject_ExternalPtrSerialize_CharacterSet(RtObject::External** 
 extern "C" void RtObject_ExternalPtrSerialize_SoundBuffer(RtObject::External** self, rt::io::Serializer* ser);  // 0x180052a50
 extern "C" void RtObject_ExternalPtrSerialize_ExternalList(RtObject::External** self, rt::io::Serializer* ser);  // 0x18003dc90
 // ==== end B3R W0-P0c ====
+
+// runtime/src/object/external_load.cpp -- installs the atexit hooks that print the
+// `[ExtLoad]`, `[ExtAdd]` and `[ExtSaveText]` exit lines. Called once, from
+// RuntimeInit() (standalone/runtime_init.cpp).
+void RtObjectExternalLoadInstallCounters();

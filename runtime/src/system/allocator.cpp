@@ -40,17 +40,10 @@
 //   0x1801ff300  file-static: largest `size` ever passed to Allocate
 //
 // ---------------------------------------------------------------------------
-// WHY THIS LANE IS OPT-IN AND SHIPS SWITCHED OFF
-// ---------------------------------------------------------------------------
-// RegisterRuntimeExport redirects OUR ~1,180 call sites and nothing else. The
-// DLL's own internal calls to MemAlloc/Free are direct rel32 CALLs. Registering
-// MemAlloc without detouring Allocate/Free would mean: we hand out blocks from
-// our arena, the DLL frees them into its own boundary tags, and the corruption
-// is silent and total. So RtSystemAllocatorRegister() below REFUSES to register
-// anything unless it can perform the ATOMIC SWAP — detour Allocate and Free so
-// every caller in the process comes to us, in the same breath as the export
-// registration. Two host-installed seams are required for that, and neither
-// exists in the tree yet, so today this function logs why and returns 0.
+// ARMING. RtSystemAllocatorArm() (below, called once at boot from
+// standalone/runtime_init.cpp) installs the platform seam and hands the host's
+// cutover armer its chance to refuse; it prints `[RtAlloc] ARMED` when both are
+// in place. Every caller reaches the allocator by name.
 //
 // ---------------------------------------------------------------------------
 // FAITHFULNESS NOTES (things a "cleanup" would break)
@@ -1103,45 +1096,13 @@ extern "C" void RtAllocShadowHealth(uint64_t* mapFull, uint64_t* freeUnmapped) {
 }
 
 // ============================================================================
-// REGISTRATION — the atomic swap, and why it does not happen today
-// ============================================================================
-//
-// The host must supply an installer that detours BOTH Allocate and Free before
-// a single export is registered. That installer lives in standalone/ because
-// standalone/runtime_detour.h pulls in <windows.h>, which PLAN.md §4.1 forbids
-// under runtime/src. Until it is installed this function registers NOTHING.
+// ARMING -- RtSystemAllocatorArm(), called once at boot (standalone/runtime_init.cpp)
 // ============================================================================
 
 namespace {
 
-// ---------------------------------------------------------------------------
-// Prologue guard — refuse to arm if anything has already patched the two
-// functions we are about to detour.
-// ---------------------------------------------------------------------------
-// standalone/allocator_lock.cpp is DEFAULT-ON and patches exactly these two
-// prologues (13 bytes at Allocate, 12 at Free) to add the critical section that
-// retail's raw Allocate/Free do not take. In the current boot order
-// RuntimePortInit() runs BEFORE InstallAllocatorLock(), so if we detoured first
-// the lock installer's own memcmp guard would refuse and the ported allocator
-// would run with NO LOCK AT ALL -- reintroducing the free-list race that lock
-// was written to fix, announced by a single line in standalone_error.log.
-//
-// So: before touching anything, compare both prologues against the bytes the
-// shipped DLL actually has. This is deliberately broader than "is the allocator
-// lock installed" -- it catches ANY foreign patch on these two entry points,
-// including a future one nobody has written yet, and it needs no cooperation
-// from the patching file. Bytes taken from memory, not from a mnemonic listing:
-// this build emits redundant REX prefixes, so PUSH RBX is `40 53`, not `53`.
-//
-// Retail Allocate (0x1800c6e60):
-//   40 53          PUSH RBX          41 57       PUSH R15
-//   57             PUSH RDI          48 83 EC 20 SUB RSP,0x20
-//   41 54          PUSH R12
-//   41 56          PUSH R14
-// Retail Free (0x1800c6c00):
-//   48 85 D2             TEST RDX,RDX
-//   0F 84 4F 02 00 00    JZ Free+0x258      (rel32: same bytes under ASLR)
-//   48 8B C4             MOV RAX,RSP
+// The host's cutover armer (standalone/alloc_cutover_arm.cpp), handed in by
+// RtSystemAllocatorSetCutoverArmer() before RtSystemAllocatorArm() runs.
 RtAllocCutoverArmer    g_armCutover     = nullptr;
 
 // Which member of the platform seam is still null. Returns nullptr when the
@@ -1162,9 +1123,6 @@ const char* PlatformSeamMissing() {
     return nullptr;
 }
 
-// Defined below, after RtSystemAllocatorRegister, next to the export list it
-// owns; both arming paths call it.
-int RegisterAllocatorExports(void* allocateEntry);
 }
 
 extern "C" void RtSystemAllocatorSetCutoverArmer(RtAllocCutoverArmer fn) {
@@ -1186,12 +1144,12 @@ extern "C" void RtSystemAllocatorSetCutoverArmer(RtAllocCutoverArmer fn) {
 // stderr survives the strip (see the note in standalone/log_strip.h) and lands
 // in standalone_error.log, which tools/stress_run.sh already collects per run.
 // One line, once, at init, outside every measurement window.
-static void AttestArming(const char* verdict, int exports) {
-    fprintf(stderr, "[RtAlloc] ATTEST: %s (exports=%d)\n", verdict, exports);
+static void AttestArming(const char* verdict) {
+    fprintf(stderr, "[RtAlloc] ATTEST: %s\n", verdict);
     std::fflush(stderr);
 }
 
-int RtSystemAllocatorRegister() {
+void RtSystemAllocatorArm() {
 #if defined(_WIN32)
     if (!g_platInstalled) RtSystemAllocatorInstallPlatform();
 #endif
@@ -1202,69 +1160,34 @@ int RtSystemAllocatorRegister() {
                "not install it). A half-built seam is worse than none: rtalloc::Construct "
                "would call a null lockInit. See docs/runtime_port/WAVE2_ALLOCATOR.md\n",
                missing ? missing : "(table complete but g_platInstalled is false)");
-        AttestArming("REFUSED: platform seam incomplete", 0);
-        return 0;
+        AttestArming("REFUSED: platform seam incomplete");
+        return;
     }
 
-    // There is no DLL, so no detour is possible OR necessary: there is no second
-    // allocator and no DLL-internal caller to redirect, so registering the
-    // exports IS the complete swap. The one thing that does NOT come for free is
-    // the critical section; the host hands the composed (locked) entry points
-    // back through the cutover armer, and they are what gets registered.
-    {
-        if (g_armCutover == nullptr) {
-            printf("[RtPort] MemoryAllocator: REFUSING to arm -- Runtime-x64.dll is absent "
-                   "and no cutover armer is installed. Registering the raw bodies alone "
-                   "would leave ?Allocate@/?Free@ running with NO critical section, which "
-                   "is the free-list race allocator_lock.cpp exists to prevent. "
-                   "standalone/main.cpp must call RtSystemAllocatorSetCutoverArmer().\n");
-            AttestArming("REFUSED: cutover, no armer installed", 0);
-            return 0;
-        }
-        void* composedAlloc = nullptr;
-        void* composedFree  = nullptr;
-        if (!g_armCutover(reinterpret_cast<void*>(&rtalloc::Allocate),
-                          reinterpret_cast<void*>(&rtalloc::Free),
-                          &composedAlloc, &composedFree) ||
-            composedAlloc == nullptr || composedFree == nullptr) {
-            printf("[RtPort] MemoryAllocator: cutover armer REFUSED -- registering nothing\n");
-            AttestArming("REFUSED: cutover armer said no", 0);
-            return 0;
-        }
-        const int n = RegisterAllocatorExports(composedAlloc);
-        // B3R W2-EZ: RegisterAllocatorAddresses() and its "[RtAlloc] cutover: N
-        // allocator ADDRESSES registered" line went: its last row, 0x1800c6e60
-        // (?Allocate@, the composed entry), had one reader, EngineFuncsInit's
-        // fn_MemAlloc, deleted with engine/funcs/.
-        printf("[RtAlloc] ARMED (cutover: Runtime-x64.dll absent) -- %d exports registered, "
-               "no detour installed because there are no DLL-internal callers to redirect. "
-               "?Allocate@/?Free@ point at the COMPOSED entry points, which take the "
-               "allocator critical section.\n", n);
-        AttestArming("ARMED (cutover, DLL absent)", n);
-        return n;
+    // There is no DLL, so no detour is possible OR necessary. The one thing that
+    // does NOT come for free is the critical section; the host composes it
+    // (standalone/alloc_cutover_arm.cpp), and the cutover armer is its hook.
+    if (g_armCutover == nullptr) {
+        printf("[RtPort] MemoryAllocator: REFUSING to arm -- Runtime-x64.dll is absent "
+               "and no cutover armer is installed. "
+               "standalone/main.cpp must call RtSystemAllocatorSetCutoverArmer().\n");
+        AttestArming("REFUSED: cutover, no armer installed");
+        return;
     }
-}
-
-// The registration block. `allocateEntry` and
-// `freeEntry` are what the two MEMBER exports point at: the raw ported bodies on
-// the DLL-present path (where the composed stub is reached through the detour,
-// and RtAllocSwapPostRegister repoints these afterwards), or the composed locked
-// entry points on the cutover path, where there is no detour and no
-// allocator_lock patch, so the critical section has to come from here.
-namespace {
-int RegisterAllocatorExports(void* allocateEntry) {
-    RegisterRuntimeExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z",
-                          reinterpret_cast<void*>(&MemoryAllocator::MemAlloc));
-    RegisterRuntimeExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z",
-                          reinterpret_cast<void*>(&MemoryAllocator::MemFree));
-    // B3R RT-Core: the six Platform* rows, the member thunks' rows and
-    // ?Startup@/?Shutdown@ had no reader and are gone. B3R W2-RT: so is
-    // ?Allocate@. B3R W2-EZ: so is its ADDRESS row 0x1800c6e60 (its one reader,
-    // engine_funcs.cpp, is deleted); the composed entry is no longer registered
-    // anywhere -- BANISHED_REDZONE's shim reaches the same composed body by name
-    // (RtAllocInstrument_MemAlloc, standalone/alloc_cutover_arm.cpp).
-    (void)allocateEntry;
-    return 2;
+    void* composedAlloc = nullptr;
+    void* composedFree  = nullptr;
+    if (!g_armCutover(reinterpret_cast<void*>(&rtalloc::Allocate),
+                      reinterpret_cast<void*>(&rtalloc::Free),
+                      &composedAlloc, &composedFree) ||
+        composedAlloc == nullptr || composedFree == nullptr) {
+        printf("[RtPort] MemoryAllocator: cutover armer REFUSED\n");
+        AttestArming("REFUSED: cutover armer said no");
+        return;
+    }
+    printf("[RtAlloc] ARMED (cutover: Runtime-x64.dll absent) -- no detour installed "
+           "because there are no DLL-internal callers to redirect; the composed entry "
+           "points take the allocator critical section.\n");
+    AttestArming("ARMED (cutover, DLL absent)");
 }
 
 // ============================================================================
@@ -1389,7 +1312,6 @@ int RegisterAllocatorExports(void* allocateEntry) {
 // now lives inside it, so the "observed" property the banner asks for holds.
 // B3R RT-Core: external linkage, declared in runtime/types/system/
 // MemoryAllocator.h, so its readers call it by name.
-}  // namespace
 namespace rtalloc {
 void FreeLockedIgnoringSelf(void* /*ignoredThis*/, void* p) {
     MemoryAllocator::MemFree(p);

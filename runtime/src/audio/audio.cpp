@@ -1137,12 +1137,6 @@ bool RtAudio_Configuration_Startup(void* selfPtr) {
     return reinterpret_cast<Audio::Configuration*>(selfPtr)->Audio::Configuration::Startup();   // B.3.7 bridge
 }
 
-int RtAudioSceneRegister() {
-    // B3R W2-EZ: ??0Scene@Audio@@QEAA@XZ went: its one reader was EngineFuncsInit
-    // (deleted). This function registers nothing.
-    return 0;
-}
-
 // ---------------------------------------------------------------------------
 // Audio::Configuration::~Configuration() - retail 0x1800DE0D0, ord 554.
 // WAVE 23 LANE TAIL.
