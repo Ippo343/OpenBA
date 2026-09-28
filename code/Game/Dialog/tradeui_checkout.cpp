@@ -66,7 +66,8 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "Action/exe_bodies.h"      // B3R: ActRm_StorageSubtract_d150, _StorageAdd_d000, _GetResourceCategory_88f90
+#include "Component/exe_bodies.h"   // B3R: TradeComponent_SpawnPurchasedLivestock
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -87,23 +88,8 @@ extern void TownMgr_AddAvailableAgri(uint8_t* townMgr, void* desc);
 
 namespace {
 
-// ── Registered exe leaves resolved on first use ──────────────────────────────
-typedef void (*StorageSubtract_t)(void* storageComp, void* entity, int qty);   // 0x14012d150
-typedef int  (*GetResourceCategory_t)(void* storageComp, void* entity);        // 0x140088f90
-
-StorageSubtract_t     s_storageSubtract = nullptr;   // 0x14012d150 (reg_action_rawmat)
-GetResourceCategory_t s_resourceCategory = nullptr;  // 0x140088f90 (reg_action_rawmat)
-
-bool s_resolved = false;
-
-void ResolveOnce() {
-    if (s_resolved) return;
-    s_resolved = true;
-    s_storageSubtract    = reinterpret_cast<StorageSubtract_t>(
-                               ResolveAddr(Module::Exe, 0x14012d150));
-    s_resourceCategory   = reinterpret_cast<GetResourceCategory_t>(
-                               ResolveAddr(Module::Exe, 0x140088f90));
-}
+// ── Exe leaves, called by name (B3R) ─────────────────────────────────────────
+//   0x14012d150 ActRm_StorageSubtract_d150, 0x140088f90 ActRm_GetResourceCategory_88f90
 
 // Probe a purchased entity's component array for an object of a given type-id.
 //
@@ -124,7 +110,7 @@ void* FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
         if (!obj) continue;
         // vtable slot +0x10 = GetTypeId()
         if (reinterpret_cast<Object::Base*>(obj)->Type() != typeId) continue;  // B.3.8 bridge
-        return fn_IsDerivedFrom(obj, typeId) ? obj : nullptr;  // match, derived-or-bust
+        return ::Object::IsDerivedFromNullSafe(obj, typeId) ? obj : nullptr;  // match, derived-or-bust
     }
     return nullptr;
 }
@@ -197,7 +183,7 @@ extern "C" void TradeDescription_ExtendMerchantStay(void* tradeComp) {
     void* desc = *reinterpret_cast<void**>(tc + 0x18);
     // 0x1401c4bb8 is TradeDescription's type-id cell (Table 1).
     const uint32_t tidTradeDesc = TradeDescription::TypeId();
-    if (!desc || !fn_IsDerivedFrom(desc, tidTradeDesc)) return;
+    if (!desc || !::Object::IsDerivedFromNullSafe(desc, tidTradeDesc)) return;
     uintptr_t d = reinterpret_cast<uintptr_t>(desc);
 
     uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
@@ -208,10 +194,9 @@ extern "C" void TradeDescription_ExtendMerchantStay(void* tradeComp) {
     float* dstWeight = reinterpret_cast<float*>(townMgr + 0x1a8);
     if (weight > *dstWeight) *dstWeight = weight;
 
-    if (!fn_Time_Ctor_Float) return;
     int32_t units = *reinterpret_cast<int32_t*>(d + 0x6c);
     int64_t stay = 0;                                  // 8 bytes — the ctor fills all of it
-    fn_Time_Ctor_Float(&stay, static_cast<float>(units) * 300.0f);
+    RtSystem_Time_Ctor(reinterpret_cast<System::Time*>(&stay), static_cast<float>(units) * 300.0f);
     int64_t* dstStay = reinterpret_cast<int64_t*>(townMgr + 0x1a0);
     if (*dstStay < stay) *dstStay = stay;
 }
@@ -226,13 +211,12 @@ extern "C" void TradeDescription_ExtendMerchantStay(void* tradeComp) {
 // pass zeroes, and it ignores them.
 extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/, int64_t /*p4*/) {
     if (!self) return;
-    ResolveOnce();
 
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
 
     // The panel's subject entity (self+0x28), narrowed to a ComponentEntity.
     void* subject = *reinterpret_cast<void**>(s + 0x28);
-    void* entity  = fn_IsDerivedFrom(subject, ComponentEntity::TypeId()) ? subject : nullptr;
+    void* entity  = ::Object::IsDerivedFromNullSafe(subject, ComponentEntity::TypeId()) ? subject : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
     new (&entityPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(entity));   // B.3.3 bridge
@@ -273,12 +257,14 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
             void* storage = reinterpret_cast<void*>(storagePtr[0]);
             void* resEntity = *reinterpret_cast<void**>(entry);
 
-            if (s_storageSubtract) s_storageSubtract(storage, resEntity, qty);
+            ActRm_StorageSubtract_d150(reinterpret_cast<uintptr_t>(storage),
+                                       reinterpret_cast<int64_t>(resEntity), qty);   // 0x14012d150
 
             // Credit the town's per-category produced-goods tally.
             //   townMgr+0x170 = category array, stride 0x20, running total at +0x0c
-            if (s_resourceCategory) {
-                int cat = s_resourceCategory(storage, resEntity);
+            {
+                int cat = ActRm_GetResourceCategory_88f90(
+                    storage, reinterpret_cast<uintptr_t>(resEntity));   // 0x140088f90
                 if (cat >= 0) {
                     uintptr_t catArray = *reinterpret_cast<uintptr_t*>(townMgr + 0x170);
                     int* total = reinterpret_cast<int*>(
@@ -330,7 +316,8 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
             // Raw material: deliver into the post's storage, and make the
             // material available to the town.
             if (FindComponentByTypeId(boughtEntity, RawMaterialDescription::TypeId())) {
-                fn_StorageAddItem(reinterpret_cast<void*>(storagePtr[0]), bought, qty);
+                ActRm_StorageAdd_d000(static_cast<uintptr_t>(storagePtr[0]),
+                                      reinterpret_cast<int64_t>(bought), qty);   // 0x14012d000
                 RawMaterialComponent_RegisterRawMaterial(
                     reinterpret_cast<void*>(townMgr), bought);
             }
@@ -341,27 +328,11 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
             // Livestock: availability, plus spawn the animals into the world.
             else if (FindComponentByTypeId(boughtEntity, LivestockDescription::TypeId())) {
                 TownMgr_AddAvailableAgri(reinterpret_cast<uint8_t*>(townMgr), bought);
-                if (fn_Building_AddBuyToStorage) {
-                    fn_Building_AddBuyToStorage(reinterpret_cast<void*>(tradePtr[0]), bought, qty);
-                } else {
-                    // 0x14005ace0 IS ported now
-                    // (code/Game/Component/tradecomponent_livestock.cpp) and
-                    // registered in reg_tradeui_checkout.cpp, so this arm survives
-                    // only as EXEC-of-0 insurance for a build where that
-                    // registration wave is not linked in. The order is still
-                    // committed and the animal type is still unlocked for pastures
-                    // — only the delivered animals would be missing.
-                    static bool s_warned = false;
-                    if (!s_warned) {
-                        s_warned = true;
-                        fprintf(stderr, "[TradeUI] livestock purchased, but the spawn leaf "
-                                        "(0x14005ace0) did not resolve — is "
-                                        "reg_tradeui_checkout.cpp linked? The order is "
-                                        "committed and the type is unlocked, but NO ANIMALS "
-                                        "were delivered.\n");
-                        fflush(stderr);
-                    }
-                }
+                // The door was named fn_Building_AddBuyToStorage; it is bound to
+                // 0x14005ace0 TradeComponent_SpawnPurchasedLivestock (B3R: the binding
+                // decides). The never-taken "did not resolve" arm went with the door.
+                TradeComponent_SpawnPurchasedLivestock(reinterpret_cast<void*>(tradePtr[0]), bought,
+                                                       static_cast<unsigned int>(qty));
             }
 
             // Zero the row's spinner and its pending quantity.

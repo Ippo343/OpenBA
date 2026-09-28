@@ -64,6 +64,7 @@
 #include "Component/StateMachineComponent.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/ComponentDescription.h"   // X::TypeId() (B.3.9 CG2)
 #include "Component/SelectDescription.h"   // X::TypeId() (B.3.9 CG2)
+#include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 
 // Retail's sell/buy tables call the min/max setter through exe .rdata dispatch slot
@@ -114,42 +115,8 @@
 // no-ops (identical to the old stub) and a single loud line names what is missing.
 // Once the 11 land, this promotion goes live with no further edit here.
 namespace tradeui_sa {
-    // Every exe leaf the wired slots can reach. Null while unported/unregistered.
-    bool DepsReady() {
-        static int s_ok = -1;
-        if (s_ok >= 0) return s_ok != 0;
-        struct Dep { const char* name; const void* fn; };
-        const Dep deps[] = {
-            { "fn_Building_GetSellableCount (0x14005a520)",  (const void*)fn_Building_GetSellableCount },
-            { "fn_Building_GetBuyEntries (0x140059670)",     (const void*)fn_Building_GetBuyEntries },
-            { "fn_Building_GetOrderName (0x140015fd0)",      (const void*)fn_Building_GetOrderName },
-            { "fn_Building_AddPurchaseOrder (0x140059490)",  (const void*)fn_Building_AddPurchaseOrder },
-            { "fn_DynArray_Clear_0x20 (0x140016050)",        (const void*)fn_DynArray_Clear_0x20 },
-            { "fn_DynArray_Clear_0x18_Buy (0x140016130)",    (const void*)fn_DynArray_Clear_0x18_Buy },
-            { "fn_DynArray_Clear_0x18 (0x140016200)",        (const void*)fn_DynArray_Clear_0x18 },
-            { "fn_IntroSort_ByComponent (0x1400165d0)",      (const void*)fn_IntroSort_ByComponent },
-            { "fn_IntroSort_ByName (0x1400162d0)",           (const void*)fn_IntroSort_ByName },
-            { "fn_StorageTree_Insert (0x14000e1c0)",         (const void*)fn_StorageTree_Insert },
-            // NOTE: fn_TradeUI_OnTradeButton (0x140081420) is deliberately NOT in this
-            // list. It is the Wave D checkout, reachable ONLY from the slot-9 buttonTrade
-            // branch, which null-guards it at the call site (tradeui.cpp). Including it
-            // here would mean the panel could not open until Wave D landed — the opposite
-            // of the intent, since rendering the panel needs none of the checkout.
-        };
-        int missing = 0;
-        for (const Dep& d : deps) if (!d.fn) ++missing;
-        s_ok = (missing == 0) ? 1 : 0;
-        if (missing) {
-            std::fprintf(stderr, "[TradeUI] STAYING STUBBED — %d unresolved exe leaf(s); the "
-                         "panel would EXEC-of-0 on its setup slot. Missing:\n", missing);
-            for (const Dep& d : deps)
-                if (!d.fn) std::fprintf(stderr, "[TradeUI]     %s\n", d.name);
-            std::fprintf(stderr, "[TradeUI]   Port+register these, then TradeUI goes live with "
-                         "no further change to ui_dialog_stub_factories.cpp.\n");
-            std::fflush(stderr);
-        }
-        return s_ok != 0;
-    }
+    // B3R: DepsReady() is gone -- the eleven door pointers it tested are the bodies
+    // below, called by name, and were never null.
     // Slot 4 builds the element caches (+0xC0..+0x140) every other slot dereferences.
     // Same hazard ProfessionUI documents: the framework dispatches the per-frame slots
     // before setup has run, so they must skip until the caches exist.
@@ -194,7 +161,7 @@ namespace tradeui_sa {
 
 // [5] 0x140082a70
 void TradeUI::OnOpened() {
-    if (!tradeui_sa::DepsReady() || !tradeui_sa::IsSetUp(this)) return;
+    if (!tradeui_sa::IsSetUp(this)) return;
     tradeui_sa::Trace("Slot5-draw", this);
     uintptr_t s = (uintptr_t)this;
 
@@ -205,7 +172,7 @@ void TradeUI::OnOpened() {
 
     // Get owning entity and find BuildingComponent
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -228,11 +195,11 @@ void TradeUI::OnOpened() {
 
 // [6] 0x140082a00
 void TradeUI::OnClosed() {
-    if (!tradeui_sa::DepsReady() || !tradeui_sa::IsSetUp(this)) return;
+    if (!tradeui_sa::IsSetUp(this)) return;
     uintptr_t s = (uintptr_t)this;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -265,7 +232,7 @@ static void* TradeUI_FindTypedElement(void* dialogElem, const char* name, uint32
     void* elem = *(void**)foundBuf;
     void* result = nullptr;
     if (elem && typeId) {
-        bool derived = fn_IsDerivedFrom(elem, *typeId);
+        bool derived = ::Object::IsDerivedFromNullSafe(elem, *typeId);
         if (derived) result = elem;
     }
     uint64_t ibpBuf[1] = {0};
@@ -324,7 +291,7 @@ static void* FindDescComponent(void* descEntity, uint32_t typeId)
         void* comp = arr[i];
         int tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if ((uint32_t)tid == typeId) {
-            if (fn_IsDerivedFrom(comp, typeId))
+            if (::Object::IsDerivedFromNullSafe(comp, typeId))
                 return comp;
             return nullptr;
         }
@@ -404,7 +371,7 @@ void TradeUI_RefreshSellTable(TradeUI* self)
 
     // Get entity, BuildingComponent, StateMachineComponent
     void* entityRaw = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entityRaw, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(entityRaw, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entityRaw : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -414,7 +381,7 @@ void TradeUI_RefreshSellTable(TradeUI* self)
     fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
 
     // Check TradeDescription on building
-    fn_IsDerivedFrom(*(void**)(buildingPtr[0] + 0x18), TradeDescription::TypeId());
+    ::Object::IsDerivedFromNullSafe(*(void**)(buildingPtr[0] + 0x18), TradeDescription::TypeId());
 
     uint64_t smPtr[2] = {0, 0};
     fn_FindComponent_Storage((void*)entityPtr[0], &smPtr);
@@ -424,7 +391,7 @@ void TradeUI_RefreshSellTable(TradeUI* self)
     int resourceCount = *(int*)((uintptr_t)resourceMgr + 0x118);
 
     // Clear sell data array at +0x30 (stride 0x20)
-    fn_DynArray_Clear_0x20((void*)(s + 0x30));
+    TradeUI_DynArrayClear_16050(reinterpret_cast<int64_t*>(s + 0x30));   // 0x140016050
 
     // Phase 2: Iterate resources and build sell entries
     if (resourceCount > 0) {
@@ -458,7 +425,7 @@ void TradeUI_RefreshSellTable(TradeUI* self)
                             void* comp = descArray[d];
                             int tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                             if ((uint32_t)tid == RawMaterialDescription::TypeId()) {
-                                if (fn_IsDerivedFrom(comp, RawMaterialDescription::TypeId()))
+                                if (::Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId()))
                                     resTypeComp = comp;
                                 break;
                             }
@@ -468,7 +435,7 @@ void TradeUI_RefreshSellTable(TradeUI* self)
                             void* comp = descArray[d];
                             int tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                             if ((uint32_t)tid == ValueDescription::TypeId()) {
-                                if (fn_IsDerivedFrom(comp, ValueDescription::TypeId()))
+                                if (::Object::IsDerivedFromNullSafe(comp, ValueDescription::TypeId()))
                                     valueDesc = comp;
                                 break;
                             }
@@ -506,7 +473,7 @@ void TradeUI_RefreshSellTable(TradeUI* self)
             void* comp = compArr[i];
             int tid = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
             if ((uint32_t)tid == StateMachineComponent::TypeId()) {
-                if (fn_IsDerivedFrom(comp, StateMachineComponent::TypeId()))
+                if (::Object::IsDerivedFromNullSafe(comp, StateMachineComponent::TypeId()))
                     buildStateComp = comp;
                 break;
             }
@@ -532,7 +499,7 @@ void TradeUI_RefreshSellTable(TradeUI* self)
             uintptr_t* sellUI = (uintptr_t*)(*(uintptr_t*)(s + 0x60) + dataOffset);
 
             // Get sellable count from building
-            int sellableCount = fn_Building_GetSellableCount(
+            int sellableCount = TradeUI_GetResourcePrice_a520(
                 (void*)buildingPtr[0], (void*)sellData[0]);
 
             bool hasStock = (sellableCount > 0);
@@ -664,7 +631,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
 
     // Get entity, BuildingComponent, TradeDescription
     void* entityRaw = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entityRaw, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(entityRaw, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entityRaw : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -674,11 +641,11 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
     fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
 
     void* tradeDescRaw = *(void**)(buildingPtr[0] + 0x18);
-    bool isTrade = fn_IsDerivedFrom(tradeDescRaw, TradeDescription::TypeId());
+    bool isTrade = ::Object::IsDerivedFromNullSafe(tradeDescRaw, TradeDescription::TypeId());
     void* tradeDesc = isTrade ? tradeDescRaw : nullptr;
 
     // Clear buy data array at +0x40 (stride 0x18)
-    fn_DynArray_Clear_0x18_Buy((void*)(s + 0x40));
+    TradeUI_DynArrayClear_16130(reinterpret_cast<int64_t*>(s + 0x40));   // 0x140016130
 
     // Phase 2: Set order header text elements
     for (int ti = 0; ti < 2; ti++) {
@@ -690,7 +657,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
         // IsDerivedFrom TextElement
         void* textElem = nullptr;
         if (*(void**)foundBuf) {
-            bool isText = fn_IsDerivedFrom(*(void**)foundBuf, UI::TextElement::TypeId());
+            bool isText = ::Object::IsDerivedFromNullSafe(*(void**)foundBuf, UI::TextElement::TypeId());
             if (isText) textElem = *(void**)foundBuf;
         }
         uint64_t textIbp[1] = {0};
@@ -707,7 +674,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
 
             // Set parameter 0: order name string
             System::String orderNameBuf;
-            fn_Building_GetOrderName((void*)buildingPtr[0], &orderNameBuf);
+            TradeUI_GetOrderName_15fd0(static_cast<int64_t>(buildingPtr[0]), &orderNameBuf);   // 0x140015fd0
             reinterpret_cast<UI::TextElement*>(*textIbp)->SetParameter(0, orderNameBuf);  // B.3.6 bridge
 
             // Set parameter 1: UI string from order entry
@@ -843,12 +810,12 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
     int orderIdx = *(int*)(buildingPtr[0] + 0x2c);
     if (orderIdx < 0) {
         // No active order — clear purchase list
-        fn_MemFreeStatic(*(void**)(s + 0xb0));
+        System::MemoryAllocator::MemFree(*(void**)(s + 0xb0));
         *(uint64_t*)(s + 0xb0) = 0;
         *(uint64_t*)(s + 0xb8) = 0;
     } else {
         // Populate purchase reserved entries via helper
-        fn_Building_GetBuyEntries((void*)buildingPtr[0], (void*)(s + 0xb0));
+        TradeUI_GetBuyEntries_59670((void*)buildingPtr[0], (void*)(s + 0xb0));
     }
 
     // Phase 7: Set order combo current item and enabled state
@@ -885,7 +852,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
                 // IsDerivedFrom TextElement check
                 void* childElem = nullptr;
                 if (*(void**)childBuf) {
-                    bool isText = fn_IsDerivedFrom(*(void**)childBuf, UI::TextElement::TypeId());
+                    bool isText = ::Object::IsDerivedFromNullSafe(*(void**)childBuf, UI::TextElement::TypeId());
                     if (isText) childElem = *(void**)childBuf;
                 }
                 uint64_t childIbp[2] = {0, 0};
@@ -947,7 +914,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
 
                 void* childElem = nullptr;
                 if (*(void**)childBuf) {
-                    bool isText = fn_IsDerivedFrom(*(void**)childBuf, UI::TextElement::TypeId());
+                    bool isText = ::Object::IsDerivedFromNullSafe(*(void**)childBuf, UI::TextElement::TypeId());
                     if (isText) childElem = *(void**)childBuf;
                 }
                 uint64_t childIbp[2] = {0, 0};
@@ -1013,14 +980,13 @@ static void TradeUI_ReportSpinnerTag(const char* family, int idx, void* spinner,
 void TradeUI::OnCreated() {
     // Slot 4 is idempotent-guarded for the same reason ProfessionUI's Slot5 is: a second
     // run re-clones table rows and appends to the element arrays instead of clearing.
-    if (!tradeui_sa::DepsReady()) return;
     if (tradeui_sa::IsSetUp(this)) { tradeui_sa::Trace("Slot4-skip(already set up)", this); return; }
     tradeui_sa::Trace("Slot4-setup", this);
     uintptr_t s = (uintptr_t)this;
 
     // --- Get entity and find BuildingComponent ---
     void* entityRaw = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entityRaw, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(entityRaw, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entityRaw : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -1182,7 +1148,7 @@ void TradeUI::OnCreated() {
         etuFactory->FindNext(ComponentDescription::TypeId(), nullptr)); // B.3.3 bridge
     while (buildExt != nullptr) {
         // Check if this ComponentDescription external has a SelectDescription sub-component
-        bool isDerivedBuild = fn_IsDerivedFrom(buildExt, ComponentDescription::TypeId());
+        bool isDerivedBuild = ::Object::IsDerivedFromNullSafe(buildExt, ComponentDescription::TypeId());
         void* buildComp = isDerivedBuild ? buildExt : nullptr;
         if (buildComp) {
             int compCount = *(int*)((uintptr_t)buildComp + 0x30);
@@ -1192,7 +1158,7 @@ void TradeUI::OnCreated() {
                 int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
                 if (typeId == (int)SelectDescription::TypeId()) {
                     void* selectComp = nullptr;
-                    if (fn_IsDerivedFrom(comp, SelectDescription::TypeId()))
+                    if (::Object::IsDerivedFromNullSafe(comp, SelectDescription::TypeId()))
                         selectComp = comp;
                     if (selectComp) selectableCount++;
                     break;
@@ -1460,7 +1426,7 @@ static int FindResourceValue(void* resourceEntity) {
         int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if (typeId == (int)RawMaterialDescription::TypeId()) {
             // Verify with IsDerivedFrom, then return value at +0x48
-            bool isRes = fn_IsDerivedFrom(comp, RawMaterialDescription::TypeId());
+            bool isRes = ::Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId());
             if (isRes) return *(int*)((uintptr_t)comp + 0x48);
             break;
         }
@@ -1470,13 +1436,13 @@ static int FindResourceValue(void* resourceEntity) {
 
 // [7] 0x140082150
 void TradeUI::OnUpdateLayout() {
-    if (!tradeui_sa::DepsReady() || !tradeui_sa::IsSetUp(this)) return;
+    if (!tradeui_sa::IsSetUp(this)) return;
     tradeui_sa::Trace("Slot7-values", this);
     uintptr_t s = (uintptr_t)this;
 
     // Find BuildingComponent and StateMachineComponent
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -1600,12 +1566,12 @@ void TradeUI::OnUpdateLayout() {
 
 // [8] 0x1400827b0
 void TradeUI::OnUpdate(const System::Time& /*time*/) {
-    if (!tradeui_sa::DepsReady() || !tradeui_sa::IsSetUp(this)) return;
+    if (!tradeui_sa::IsSetUp(this)) return;
     uintptr_t s = (uintptr_t)this;
 
     // Get owning entity and find BuildingComponent
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -1652,7 +1618,7 @@ void TradeUI::OnUpdate(const System::Time& /*time*/) {
 void TradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t eventType, int32_t eventId,
                              int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     void* param2 = element;
-    if (!tradeui_sa::DepsReady() || !tradeui_sa::IsSetUp(this)) return;
+    if (!tradeui_sa::IsSetUp(this)) return;
     tradeui_sa::Trace("Slot9-event", this);
     uintptr_t s = (uintptr_t)this;
 
@@ -1662,24 +1628,9 @@ void TradeUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t 
         // --- eventType 0x12: click events ---
         if (eventId == 0x4e20) {
             // buttonTrade — the CHECKOUT. Ported in code/Game/Dialog/tradeui_checkout.cpp
-            // and registered at 0x140081420 (reg_tradeui_checkout.cpp), so
-            // fn_TradeUI_OnTradeButton is non-null. It is nonetheless still gated:
-            // the handler itself is opt-in behind BANISHED_LIVE_TRADE_CHECKOUT and
-            // returns without committing anything while that is unset. The null
-            // check below survives only as EXEC-of-0 insurance for a build where the
-            // registration wave is not linked in.
-            if (!fn_TradeUI_OnTradeButton) {
-                static bool s_warned = false;
-                if (!s_warned) {
-                    s_warned = true;
-                    fprintf(stderr, "[TradeUI] buttonTrade clicked but the checkout "
-                            "(0x140081420) did not resolve — is reg_tradeui_checkout.cpp "
-                            "linked? Ignoring the click.\n");
-                    fflush(stderr);
-                }
-                return;
-            }
-            fn_TradeUI_OnTradeButton(this, param2, nullptr, 0);
+            // as TradeUI_OnTradeButton (0x140081420) and called by name (B3R; the
+            // never-taken "did not resolve" arm went with the door pointer).
+            TradeUI_OnTradeButton(this, param2, nullptr, 0);
             return;
         }
         if (eventId == 0x4e21) {
@@ -1790,7 +1741,7 @@ check_type14:
 // [10] 0x1400868c0
 void TradeUI::OnSerializeSettings(void* stream) {
     int64_t p4 = 0;
-    if (!tradeui_sa::DepsReady() || !tradeui_sa::IsSetUp(this)) return;
+    if (!tradeui_sa::IsSetUp(this)) return;
     uintptr_t s = (uintptr_t)this;
 
     // Find "tradeTabs" TabElement
@@ -1803,7 +1754,7 @@ void TradeUI::OnSerializeSettings(void* stream) {
 
     // Cast to TabElement via IsDerivedFrom
     void* tabElement = nullptr;
-    if (element && fn_IsDerivedFrom(element, UI::TabElement::TypeId())) {
+    if (element && ::Object::IsDerivedFromNullSafe(element, UI::TabElement::TypeId())) {
         tabElement = element;
     }
 
@@ -1854,7 +1805,7 @@ void TradeUI_UpdateBuyTotals(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -1909,7 +1860,7 @@ void TradeUI_UpdateSellTotals(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -1929,7 +1880,7 @@ void TradeUI_UpdateSellTotals(TradeUI* self) {
         if (qty != 0) {
             void* resourceEntity = *(void**)(entry);
             // FUN_14005a520: gets available sell value for this resource at the building
-            int unitVal = fn_Building_GetSellableCount((void*)building, resourceEntity);
+            int unitVal = TradeUI_GetResourcePrice_a520((void*)building, resourceEntity);
             total += qty * unitVal;
         }
     }
@@ -1993,7 +1944,7 @@ void TradeUI_OnComboPurchase(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2020,7 +1971,7 @@ void TradeUI_OnComboOrder(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2049,7 +2000,7 @@ void TradeUI_OnOrderAmountSpinner(TradeUI* self, int idx) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2079,7 +2030,7 @@ void TradeUI_OnOrderSpinner(TradeUI* self, int idx, int idx2) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2125,7 +2076,7 @@ void TradeUI_OnDismissButton(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2166,7 +2117,7 @@ void TradeUI_OnPurchaseButton(TradeUI* self, int idx) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2188,7 +2139,8 @@ void TradeUI_OnPurchaseButton(TradeUI* self, int idx) {
     void* resourceEntity = *(void**)(reservedBase + (uintptr_t)idx * 8);
 
     // Call Building_AddPurchaseOrder
-    fn_Building_AddPurchaseOrder((void*)buildingPtr[0], resourceEntity, checked);
+    TradeUI_AddPurchaseOrder_59490(static_cast<int64_t>(buildingPtr[0]),
+                                   reinterpret_cast<int64_t>(resourceEntity), checked);   // 0x140059490
 }
 
 // ============================================================
@@ -2209,7 +2161,7 @@ void TradeUI_OnStorageSpinner(TradeUI* self, int idx, void* /*reserved*/) {
     int newVal = reinterpret_cast<const UI::SpinnerElement*>(*(void**)(storageEntries + 0x08 + entryOffset))->GetValue();  // B.3.6 bridge
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2231,7 +2183,7 @@ void TradeUI_OnStorageSpinner(TradeUI* self, int idx, void* /*reserved*/) {
     // If not found: insert new leaf
     uint64_t newEntry[2] = { (uint64_t)resourceEntity, (uint64_t)(uint32_t)newVal };
     void* retval = nullptr;
-    fn_StorageTree_Insert((void*)storageBST, &retval, newEntry);
+    TradeUI_StorageTree_Insert_e1c0(reinterpret_cast<int64_t*>(storageBST), &retval, newEntry);   // 0x14000e1c0
 
     // If we got a result back (found existing), update its qty
     if (retval) {
@@ -2256,7 +2208,7 @@ void TradeUI_RefreshOrderQuantityDisplay(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2267,7 +2219,7 @@ void TradeUI_RefreshOrderQuantityDisplay(TradeUI* self) {
 
     // Check building's base type — used later for sprite/text lookups
     // IsDerivedFrom call on building's type desc at +0x18 — just a type check, result unused here
-    // fn_IsDerivedFrom(*(void**)(buildingPtr[0] + 0x18), DAT_1401c4bb8);
+    // ::Object::IsDerivedFromNullSafe(*(void**)(buildingPtr[0] + 0x18), DAT_1401c4bb8);
 
     uint64_t storageCompPtr[2] = {0, 0};
     fn_FindComponent_Storage((void*)entityPtr[0], &storageCompPtr);
@@ -2319,7 +2271,7 @@ void TradeUI_RefreshSellSpinnerValues(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2329,7 +2281,7 @@ void TradeUI_RefreshSellSpinnerValues(TradeUI* self) {
     fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
 
     // Type check on building's class info at +0x18 (unused result, but done in original)
-    // fn_IsDerivedFrom(*(void**)(buildingPtr[0] + 0x18), DAT_1401c4bb8);
+    // ::Object::IsDerivedFromNullSafe(*(void**)(buildingPtr[0] + 0x18), DAT_1401c4bb8);
 
     uint64_t storageCompPtr[2] = {0, 0};
     fn_FindComponent_Storage((void*)entityPtr[0], &storageCompPtr);
@@ -2357,7 +2309,7 @@ void TradeUI_RefreshSellSpinnerValues(TradeUI* self) {
             void* resourceEntity  = *(void**)(sellOrders + sellOffset);
 
             // Get available sell count from building component
-            int available = fn_Building_GetSellableCount((void*)buildingPtr[0], resourceEntity);
+            int available = TradeUI_GetResourcePrice_a520((void*)buildingPtr[0], resourceEntity);
 
             // Search StorageComponent's item list for current stored qty
             uintptr_t storageComp = storageCompPtr[0];
@@ -2417,7 +2369,7 @@ void TradeUI_RefreshOrderDisplay(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     void* entity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(entity, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? entity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2450,7 +2402,7 @@ void TradeUI_RefreshOrderDisplay(TradeUI* self) {
         int typeIdx = *(int*)(ordersBase2 + orderOff + 4);
 
         // IsDerivedFrom check for TradeDescription — original does this each iteration
-        bool isTradeDesc = fn_IsDerivedFrom(rawDesc, TradeDescription::TypeId());
+        bool isTradeDesc = ::Object::IsDerivedFromNullSafe(rawDesc, TradeDescription::TypeId());
         void* tradeDesc = isTradeDesc ? rawDesc : nullptr;
 
         // Construct UI::Sprite via fn_Sprite_Ctor (NOT raw struct init)
@@ -2474,7 +2426,7 @@ void TradeUI_RefreshOrderDisplay(TradeUI* self) {
         uintptr_t ordersBase3 = *(uintptr_t*)(buildingPtr[0] + 0x40);
         typeIdx = *(int*)(ordersBase3 + orderOff + 4);
 
-        isTradeDesc = fn_IsDerivedFrom(rawDesc, TradeDescription::TypeId());
+        isTradeDesc = ::Object::IsDerivedFromNullSafe(rawDesc, TradeDescription::TypeId());
         tradeDesc = isTradeDesc ? rawDesc : nullptr;
 
         // Construct UI::String via fn_UIString_Ctor (NOT raw struct init)
@@ -2536,7 +2488,7 @@ static void* FindDescSubObject(void* descEntity, uint32_t* typeIdPtr) {
         if (!comp) continue;
         int typeId = reinterpret_cast<Object::Base*>(comp)->Type();  // B.3.8 bridge
         if ((uint32_t)typeId == target) {
-            if (fn_IsDerivedFrom(comp, target))
+            if (::Object::IsDerivedFromNullSafe(comp, target))
                 return comp;
             break;
         }
@@ -2552,7 +2504,7 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
     int entityCount = *(int*)(tradeList + 0x118);
 
     // Clear display entries array at self+0x50
-    fn_DynArray_Clear_0x18((void*)(s + 0x50));
+    TradeUI_DynArrayClear_16200(reinterpret_cast<int64_t*>(s + 0x50));   // 0x140016200
 
     // Build display entries: for each trade entity, find ResourceType + ValueDescription
     for (int i = 0; i < entityCount; i++) {
@@ -2575,7 +2527,7 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
 
     // Get owning entity -> TradeComponent + StorageComponent
     void* ownerEntity = *(void**)(s + 0x28);
-    bool isDerived = fn_IsDerivedFrom(ownerEntity, ComponentEntity::TypeId());
+    bool isDerived = ::Object::IsDerivedFromNullSafe(ownerEntity, ComponentEntity::TypeId());
     void* compEntity = isDerived ? ownerEntity : nullptr;
 
     uint64_t entityPtr[2] = {0, 0};
@@ -2586,7 +2538,7 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
     fn_FindComponent_Building((void*)entityPtr[0], &tradePtr);
 
     // Validate TradeDescription derivation (result unused — validation only)
-    fn_IsDerivedFrom(*(void**)(tradePtr[0] + 0x18), TradeDescription::TypeId());
+    ::Object::IsDerivedFromNullSafe(*(void**)(tradePtr[0] + 0x18), TradeDescription::TypeId());
 
     // Find StorageComponent
     uint64_t storagePtr[2] = {0, 0};
@@ -2600,12 +2552,12 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
         // Sort by name
         if (entryCount > 1) {
             uint64_t sortCtx = (uint64_t)tradeList;
-            fn_IntroSort_ByName(*(void**)(s + 0x50), entryCount, &sortCtx, p4);
+            TradeUI_IntroSort_ByName_162d0(*(void**)(s + 0x50), entryCount, &sortCtx, p4);
         }
     } else {
         // Sort by quantity (uses TradeComponent as context)
         uint64_t sortCtx = tradePtr[0];
-        fn_IntroSort_ByComponent(*(void**)(s + 0x50), entryCount, &sortCtx);
+        TradeUI_IntroSort_ByComponent_165d0(*(void**)(s + 0x50), entryCount, &sortCtx);
     }
 
     // Re-read count (may have been modified)

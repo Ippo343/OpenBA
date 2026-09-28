@@ -79,7 +79,7 @@ void* PriceFindComponentByTypeId(const void* entity, uint32_t typeId) {
         if (reinterpret_cast<Object::Base*>(comp)->Type() != typeId) continue;  // B.3.8 bridge
         // Retail stops at the FIRST id match and then confirms; a failed confirm
         // yields null rather than continuing the scan.
-        if (fn_IsDerivedFrom && !fn_IsDerivedFrom(comp, typeId)) return nullptr;
+        if (!::Object::IsDerivedFromNullSafe(comp, typeId)) return nullptr;
         return comp;
     }
     return nullptr;
@@ -124,8 +124,7 @@ extern "C" int TradeUI_GetResourcePrice_a520(void* tradeState, void* resourceEnt
         : 0;
 
     void* tradeDesc = *reinterpret_cast<void* const*>(ts + 0x18);
-    if (tradeDesc && fn_IsDerivedFrom &&
-        !fn_IsDerivedFrom(tradeDesc, TradeDescription::TypeId())) {
+    if (tradeDesc && !::Object::IsDerivedFromNullSafe(tradeDesc, TradeDescription::TypeId())) {
         tradeDesc = nullptr;                       // retail keeps null on a failed check
     }
     if (!tradeDesc) return 0;                      // retail would deref null here
