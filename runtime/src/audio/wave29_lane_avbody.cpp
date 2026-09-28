@@ -388,18 +388,6 @@ extern "C" void RtAudio_Scene_OnSoundEnded(void* audioChannel, void* userData, u
 
 namespace rtavbody29 {
 
-int Register() {
-    int count = 0;
-    RegisterRuntimeExport("?GetVolumeForPosition@Scene@Audio@@AEBAMAEBVVector3@Math@@MM0@Z",
-                          (void*)&RtAudio_Scene_GetVolumeForPosition); ++count;
-    RegisterRuntimeExport("?GetAttenuatedVolume@Scene@Audio@@AEBAMAEBUAttenutedEffect@12@"
-                          "AEBVVector3@Math@@M@Z",
-                          (void*)&RtAudio_Scene_GetAttenuatedVolume); ++count;
-    RegisterRuntimeExport("?OnSoundEnded@Scene@Audio@@SAXPEAUAudioChannel@Device@2@PEAXI@Z",
-                          (void*)&RtAudio_Scene_OnSoundEnded); ++count;
-    return count;
-}
-
 // ---- attendance, printed UNCONDITIONALLY -----------------------------------
 // See shader_program_names.cpp's matching note: Wave 28 defect #7 (every
 // lane's *Summary() is written and nothing calls it) REPRODUCED on this lane's
@@ -423,5 +411,3 @@ AvbodyReport g_avbodyReport;
 }  // namespace
 
 }  // namespace rtavbody29
-
-int RtAudioWave29AvbodyRegister() { return rtavbody29::Register(); }

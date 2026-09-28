@@ -9,6 +9,7 @@
 // transcribed instruction for instruction; do not "simplify" an expression --
 // floating point is not associative and every reassociation is a last-bit bug.
 #include "msvc_libm.h"
+#include "../../funcs/rt_libm.h"
 #include "msvc_libm_tables.h"
 
 #include <cstdint>
@@ -854,36 +855,10 @@ float Fmodf(float xf, float yf) {
 }  // namespace MsvcLibm
 
 // ===========================================================================
-// Registration -- the six CRT math bodies at their retail addresses.
+// B3R (registry teardown, W1 RT-Core): the six address rows went. Five had no
+// reader by address; 0x180127560 (powf) had one, audio_play_platform.cpp's
+// PowF, which now calls RtCrt_Powf by name (runtime/funcs/rt_libm.h). The five
+// static one-line wrappers went with their rows.
 // ===========================================================================
-// These have no export name in either build (the DLL statically links the MSVC
-// CRT), so they are `RegisterRuntimeAddr` only. Until BATCH 4 they were ported
-// but UNREGISTERED, which is why the cutover closure still listed all six plus
-// the error-reporting subtree they reach (0x18012a070, 0x18012a940,
-// 0x18012a524, 0x18012a428, 0x18012a5c0, 0x180129e24, 0x18012b8c0) as work to
-// do. Registering the six cuts that subtree out of the closure: it is reachable
-// ONLY from these bodies' domain-error arms, which this file deliberately does
-// not port (msvc_libm.h's FAITHFULNESS BOUNDARY -- every RETURN VALUE is
-// ported, the errno/_matherr traffic is not).
-//
-// Registering here does NOT disturb the RtLibm seam:
-// rt_libm.cpp reaches the DLL bodies through ResolveRuntimeRaw, which skips the
-// port registry on purpose.
-static float RtCrt_Sqrtf (float x)          { return MsvcLibm::Sqrtf(x); }
-static float RtCrt_Sinf  (float x)          { return MsvcLibm::Sinf(x); }
-static float RtCrt_Cosf  (float x)          { return MsvcLibm::Cosf(x); }
-static float RtCrt_Atan2f(float y, float x) { return MsvcLibm::Atan2f(y, x); }
-static float RtCrt_Powf  (float b, float e) { return MsvcLibm::Powf(b, e); }
-static float RtCrt_Fmodf (float x, float y) { return MsvcLibm::Fmodf(x, y); }
-
-void RegisterRuntimeAddr(uintptr_t ghidra_addr, void* our_fn);
-
-int RtCrtLibmRegister() {
-    RegisterRuntimeAddr(0x180128110ull, (void*)&RtCrt_Sqrtf);   // Crt_sqrtf
-    RegisterRuntimeAddr(0x180127d90ull, (void*)&RtCrt_Sinf);    // Crt_sinf
-    RegisterRuntimeAddr(0x180126d10ull, (void*)&RtCrt_Cosf);    // Crt_cosf
-    RegisterRuntimeAddr(0x180126680ull, (void*)&RtCrt_Atan2f);  // Crt_atan2f
-    RegisterRuntimeAddr(0x180127560ull, (void*)&RtCrt_Powf);    // Crt_powf
-    RegisterRuntimeAddr(0x180127010ull, (void*)&RtCrt_Fmodf);   // Crt_fmodf
-    return 6;
-}
+// B3R: external linkage (runtime/funcs/rt_libm.h) -- audio calls it by name.
+extern "C" float RtCrt_Powf(float b, float e) { return MsvcLibm::Powf(b, e); }

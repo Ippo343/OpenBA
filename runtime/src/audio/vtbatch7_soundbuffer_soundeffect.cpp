@@ -126,7 +126,6 @@
 #include <new>          // placement new of the two SoundBuffer Strings
 
 #include "../../funcs/rt_port.h"
-#include "../../../standalone/resolve.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
 #include "../../types/collection/Collection.h"   // rtcoll::MemAlloc / MemFree
@@ -142,9 +141,6 @@ using rt::io::Stream;
 extern "C" void RtAudio_SoundEffect_SerializeBuffers(void* serv, int32_t count, void* basev);
 
 namespace {
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 // The ReaderWriter members, by name on the real class: the `rt::io::ReaderWriter`
 // POD and `IO::ReaderWriter` are asserted interchangeable (Serializer.h).
@@ -418,8 +414,7 @@ bool SoundEffect::Serialize(void* streamv) {
     AsRw(ser.readerWriter)->SerializeInt(n, nullptr);               // +0xa0
     if (IsReading(stream)) {
         // 0x180053190 — kSpec_SfxBuffer18 (array.cpp), unexported Collection code.
-        using SetSizeFn = void (*)(void*, int32_t);
-        RtAddr<SetSizeFn>(0x180053190ull)(&_samples, n);
+        rtcoll::RtColl_ArraySetSize_180053190(&_samples, n);
     }
     // 0x180053300 — this file's own element walk, called directly.
     RtAudio_SoundEffect_SerializeBuffers(&ser, n, _samples._data);
@@ -450,8 +445,7 @@ bool SoundEffect::Serialize(void* streamv) {
 // the header, so the compiler-emitted `_samples.~Array()` afterwards is a
 // no-op -- then ~External (the compiler's chain, retail's tail call).
 SoundEffect::~SoundEffect() {
-    using ArrayDtorFn = void (*)(void*);
-    RtAddr<ArrayDtorFn>(0x1800516c0ull)(&_samples);
+    rtcoll::RtColl_ArrayDtorElem_1800516c0(&_samples);
 }
 
 }  // namespace Audio
@@ -472,17 +466,13 @@ SoundEffect::~SoundEffect() {
 //                 kScalarFloat p+0x08 / p+0x0c / p+0x10
 //
 // `ser->readerWriter` is re-read before every virtual call, as retail does.
-// 0x180052a50 is the ExternalPtr serialize helper of the sibling batch and is
-// reached BY ADDRESS — registry-first, so it needs no edit here when it lands.
+// 0x180052a50 is the ExternalPtr serialize helper of the sibling batch
+// (object/external_ptr_serialize.cpp), called by name (B3R).
 extern "C" void RtAudio_SoundEffect_SerializeBuffers(void* serv, int32_t count,
                                                     void* basev) {
     if (count <= 0) return;                                   // 180053300 TEST/JLE
     Serializer* ser = static_cast<Serializer*>(serv);
     uint8_t*    e   = static_cast<uint8_t*>(basev);
-
-    using ExtPtrSerFn = void (*)(void* field, Serializer* ser);
-    ExtPtrSerFn extSer = RtAddr<ExtPtrSerFn>(0x180052a50ull);
-    using SetSizeFn = void (*)(void*, int32_t);
 
     for (int32_t i = 0; i < count; ++i, e += 0x18) {
         AsRw(ser->readerWriter)->SerializeFloat(*reinterpret_cast<float*>(e + 0x00), nullptr);
@@ -491,11 +481,11 @@ extern "C" void RtAudio_SoundEffect_SerializeBuffers(void* serv, int32_t count,
         AsRw(ser->readerWriter)->SerializeInt(n, nullptr);     // 18005335a
 
         if (IsReading(ser->stream))                            // 180053360
-            RtAddr<SetSizeFn>(0x180052e60ull)(e + 0x08, n);    // 180053370
+            rtcoll::RtColl_ArraySetSize_180052e60(e + 0x08, n);   // 180053370
 
         uint8_t* p = *reinterpret_cast<uint8_t**>(e + 0x08);   // 180053379
         for (int32_t k = 0; k < n; ++k, p += 0x18) {           // 180053390
-            extSer(p + 0x00, ser);
+            RtObject_ExternalPtrSerialize_SoundBuffer(reinterpret_cast<RtObject::External**>(p + 0x00), ser);
             AsRw(ser->readerWriter)->SerializeFloat(*reinterpret_cast<float*>(p + 0x08), nullptr);
             AsRw(ser->readerWriter)->SerializeFloat(*reinterpret_cast<float*>(p + 0x0c), nullptr);
             AsRw(ser->readerWriter)->SerializeFloat(*reinterpret_cast<float*>(p + 0x10), nullptr);
@@ -525,33 +515,4 @@ extern "C" void RtAudio_SoundEffect_SerializeBuffers(void* serv, int32_t count,
 // ============================================================================
 extern "C" void RtAudio_SoundBuffer_PlatformSerialize(void* selfv, void* serv) {
     reinterpret_cast<Audio::SoundBuffer*>(selfv)->Audio::SoundBuffer::PlatformSerialize(serv);        // B.3.7 bridge
-}
-
-int RtAudioBatch7SoundBufferSoundEffectRegister() {
-    int n = 0;
-
-    // Batch D1: unexported in both builds, address door only.
-    RegisterRuntimeAddr  (0x180053300ull, (void*)&RtAudio_SoundEffect_SerializeBuffers); ++n;
-
-    RegisterRuntimeExport("?PlatformSerialize@SoundBuffer@Audio@@AEAAXAEAVSerializer@IO@@@Z",
-                          (void*)&RtAudio_SoundBuffer_PlatformSerialize); ++n;
-    RegisterRuntimeAddr  (0x1800e05c0ull, (void*)&RtAudio_SoundBuffer_PlatformSerialize);
-
-    // ---- the factory pairs (B39_RULES D2): the classes' OWN statics, both
-    // doors, replacing the FACTREST rows. The classes' own `DEFINE_TYPE`
-    // records (audio_type_records.cpp) carry them as factoryFn /
-    // inPlaceFactoryFn.
-    RegisterRuntimeExport("?CreateNewObject@SoundBuffer@Audio@@SAPEAVBase@Object@@XZ",
-                          (void*)&Audio::SoundBuffer::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x18000b9a0ull, (void*)&Audio::SoundBuffer::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@SoundBuffer@Audio@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Audio::SoundBuffer::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x18000ba90ull, (void*)&Audio::SoundBuffer::CreateInPlaceObject);
-    RegisterRuntimeExport("?CreateNewObject@SoundEffect@Audio@@SAPEAVBase@Object@@XZ",
-                          (void*)&Audio::SoundEffect::CreateNewObject); ++n;
-    RegisterRuntimeAddr  (0x180050430ull, (void*)&Audio::SoundEffect::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@SoundEffect@Audio@@SAPEAVBase@Object@@PEAX@Z",
-                          (void*)&Audio::SoundEffect::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr  (0x1800504f0ull, (void*)&Audio::SoundEffect::CreateInPlaceObject);
-    return n;
 }

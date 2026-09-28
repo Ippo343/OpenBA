@@ -81,8 +81,6 @@
 #include "../../types/audio/Device.h"
 #include "../../types/audio/SoundEffect.h"
 #include "../../types/system/Value.h"         // System::Time
-#include "../engine/mainloop_internal.h"      // rtengine::AtomicResolve (B6-5)
-#include <atomic>
 
 // The EffectSlot bulk serialize, this directory's own body at 0x180052640
 // (audio_effectslot_serialize.cpp). Called directly (B.3.7).
@@ -92,8 +90,6 @@ extern "C" void RtAudio_Scene_SerializeEffectSlots(void* serv, int32_t count, vo
 // ResolveAddr / Module, forward-declared rather than pulled in from
 // standalone/resolve.h — same reason input.cpp does it (windows.h leaks
 // engine-colliding macros). Must stay byte-identical to resolve.h.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 using RtAudio::Scene;
 using RtAudio::Configuration;
@@ -564,16 +560,15 @@ uint32_t Scene::PlayEffect3D(Object::ExternalPtr<SoundEffect> effect, SoundType 
 // ============================================================================
 void Configuration::Save() {
 
-    using SetIntFn = void (*)(void*, const char*, const char*, int);    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
-    void* persistence = ::IO::Persistence::_singleton;
+    // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
+    ::IO::Persistence* persistence = ::IO::Persistence::_singleton;
 
-    // RT_EXPORT_ONCE: IO::Persistence::Set(int) is ported (io/persistence.cpp:311).
-    auto setFn = RT_EXPORT_ONCE(SetIntFn, "?Set@Persistence@IO@@QEAAXPEBD0H@Z");
+    // IO::Persistence::Set(int) (0x1800b80c0), called by name (B3R).
     if (persistence) {
-        setFn(persistence, "Audio", "UIVolume",      uiVolume);
-        setFn(persistence, "Audio", "MusicVolume",   musicVolume);
-        setFn(persistence, "Audio", "AmbientVolume", ambientVolume);
-        setFn(persistence, "Audio", "EffectVolume",  effectVolume);
+        persistence->Set("Audio", "UIVolume",      static_cast<int>(uiVolume));
+        persistence->Set("Audio", "MusicVolume",   static_cast<int>(musicVolume));
+        persistence->Set("Audio", "AmbientVolume", static_cast<int>(ambientVolume));
+        persistence->Set("Audio", "EffectVolume",  static_cast<int>(effectVolume));
     }
 
 }
@@ -589,20 +584,19 @@ void Configuration::Save() {
 // ============================================================================
 bool Configuration::Startup() {
 
-    using GetIntFn = bool (*)(void*, const char*, const char*, int*);
     // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
-    void* persistence = ::IO::Persistence::_singleton;
-    auto getFn = RT_EXPORT_ONCE(GetIntFn, "?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z");   // ported
+    // IO::Persistence::Get(int&) (0x1800b81e0), called by name (B3R).
+    const ::IO::Persistence* persistence = ::IO::Persistence::_singleton;
 
     // Retail leaves the field untouched (whatever the ctor/last value set) when
     // the key is not found — Get(int)'s own contract, which this reproduces by
     // only writing on success.
     if (persistence) {
         int v;
-        if (getFn(persistence, "Audio", "UIVolume", &v))      uiVolume = v;
-        if (getFn(persistence, "Audio", "MusicVolume", &v))   musicVolume = v;
-        if (getFn(persistence, "Audio", "AmbientVolume", &v)) ambientVolume = v;
-        if (getFn(persistence, "Audio", "EffectVolume", &v))  effectVolume = v;
+        if (persistence->Get("Audio", "UIVolume", v))      uiVolume = v;
+        if (persistence->Get("Audio", "MusicVolume", v))   musicVolume = v;
+        if (persistence->Get("Audio", "AmbientVolume", v)) ambientVolume = v;
+        if (persistence->Get("Audio", "EffectVolume", v))  effectVolume = v;
     }
 
   // retail's own body always returns true (no failure path)
@@ -973,15 +967,9 @@ void Scene::Pause(int32_t soundType, bool paused) {
 // `EffectSlot::positions` is `Collection::Array<EmitterInstance>`
 // (runtime/types/audio/Audio.h) with `EmitterInstance` a trivially destructible
 // POD, so the trait-derived `~Array()` on the stack temporary IS that body.
-using AudioArrayAssignFn = void (*)(void* dst, const void* src);
-
-// B.3.7 (B6-5): the function-local first-call cache StopEffect3D kept for this
-// address door is a NAMESPACE-SCOPE atomic slot now.
-static std::atomic<void*> g_arrayAssignSlot{nullptr};
-static AudioArrayAssignFn ArrayAssign16() {
-    return reinterpret_cast<AudioArrayAssignFn>(rtengine::AtomicResolve(g_arrayAssignSlot, [] {
-        return reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180050d30));
-    }));
+// B3R: called by name (it was an address door behind an atomic slot).
+static void ArrayAssign16(void* dst, const void* src) {
+    rtsort::Array16Assign(dst, src);
 }
 
 void Scene::StopEffect3D(uint32_t id) {
@@ -1017,7 +1005,7 @@ void Scene::StopEffect3D(uint32_t id) {
     slot->channelHandle  = 0;
     slot->idTag          = 0;
     slot->baseVolume     = 1.0f;
-    ArrayAssign16()(&slot->positions, &tmp.positions);
+    ArrayAssign16(&slot->positions, &tmp.positions);
     // retail 0x180051d80 (`tmp`'s ~Array() tail call) is GONE, not converted to
     // an explicit `.~Array()` call: `tmp` is a local EffectSlot, and now that
     // `Collection::Array<EmitterInstance>` carries a real destructor,
@@ -1153,47 +1141,6 @@ int RtAudioSceneRegister() {
     int n = 0;
     RegisterRuntimeExport("??0Scene@Audio@@QEAA@XZ", (void*)&RtAudio_Scene_Ctor); ++n;
     RegisterRuntimeExport("??1Scene@Audio@@QEAA@XZ", (void*)&RtAudio_Scene_Dtor); ++n;
-    RegisterRuntimeExport("?AddEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@M@Z", (void*)&RtAudio_Scene_AddEmitter); ++n;
-    RegisterRuntimeExport("?MoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@0@Z", (void*)&RtAudio_Scene_MoveEmitter); ++n;
-    RegisterRuntimeExport("?RemoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@@Z", (void*)&RtAudio_Scene_RemoveEmitter); ++n;
-    RegisterRuntimeExport("?SetEmitterVolume@Scene@Audio@@QEAAXIAEBVVector3@Math@@M@Z", (void*)&RtAudio_Scene_SetEmitterVolume); ++n;
-    RegisterRuntimeExport("?GetEmitterCount@Scene@Audio@@QEBAHI@Z", (void*)&RtAudio_Scene_GetEmitterCount); ++n;
-    RegisterRuntimeExport("?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z", (void*)&RtAudio_Scene_IsEffectPlaying); ++n;
-    RegisterRuntimeExport("?FindEffect3D@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@@Z", (void*)&RtAudio_Scene_FindEffect3D); ++n;
-    // Wave 9 lane W. Registered under the name AND the address: PlayEffect3D
-    // reaches it by name through RT_EXPORT_ONCE, and registering the address
-    // too keeps any ResolveAddr caller (engine_funcs.cpp's fallback shape) off
-    // the DLL as well -- port_bypass_audit.py's ADDRESS door.
-    RegisterRuntimeExport("?FindFree3DEffect@Scene@Audio@@AEBAHV?$ExternalPtr@VSoundEffect@Audio@@@Object@@AEBVTime@System@@AEBVVector3@Math@@@Z", (void*)&RtAudio_Scene_FindFree3DEffect); ++n;
-    RegisterRuntimeAddr(0x1800deae0, (void*)&RtAudio_Scene_FindFree3DEffect);
-    // PlayEffect: register under BOTH the real (QEAA) mangled name AND the
-    // retail address, per WAVE8.md §4 — engine_funcs.cpp's own address
-    // fallback (0x1800def60) must land on OUR port too, not just the name.
-    RegisterRuntimeExport("?PlayEffect@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@AEBVTime@System@@@Z", (void*)&RtAudio_Scene_PlayEffect); ++n;
-    RegisterRuntimeAddr(0x1800def60, (void*)&RtAudio_Scene_PlayEffect);
-    RegisterRuntimeExport("?PlayEffect3D@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@AEBVTime@System@@AEBVVector3@Math@@@Z", (void*)&RtAudio_Scene_PlayEffect3D); ++n;
-
-    // Wave 9 lane A: unblocked once retail's IO::Encoding offsets turned out to
-    // be recorded already (Wave 4), and verified by the lane S save-stream A/B
-    // oracle rather than by call-level replay, which the save path cannot have.
-    RegisterRuntimeExport("?Serialize@Scene@Audio@@QEAAXAEAVSerializer@IO@@@Z",
-                          (void*)&RtAudio_Scene_Serialize);
-    RegisterRuntimeAddr(0x1800e0050, (void*)&RtAudio_Scene_Serialize); ++n;
-
-    // Wave 8.5 close-out: the channel-teardown family. Unblocked by reading
-    // the bodies per function rather than as a group -- the Device is only
-    // reachable through a non-null Channel::platformChannel[b], which is a
-    // SCENE field, so a synthetic scene replays all five with no device fake.
-    // Verified by ProbeAudioScene (standalone/rt_orphan_probe.cpp) and by a
-    // live SHADOW check each; see the block comment above these bodies.
-    RegisterRuntimeExport("?PauseEffect@Scene@Audio@@QEAAXI@Z", (void*)&RtAudio_Scene_PauseEffect); ++n;
-    RegisterRuntimeExport("?StopEffect@Scene@Audio@@QEAAXI@Z", (void*)&RtAudio_Scene_StopEffect); ++n;
-    RegisterRuntimeExport("?Pause@Scene@Audio@@QEAAXH_N@Z", (void*)&RtAudio_Scene_Pause);
-    // engine_funcs.cpp has an address fallback for Pause (it reads the exe
-    // dispatch slot when the name misses), so the address must land on us too.
-    RegisterRuntimeAddr(0x1800df070, (void*)&RtAudio_Scene_Pause); ++n;
-    RegisterRuntimeExport("?StopEffect3D@Scene@Audio@@QEAAXI@Z", (void*)&RtAudio_Scene_StopEffect3D); ++n;
-    RegisterRuntimeExport("?StopAll@Scene@Audio@@QEAAXXZ", (void*)&RtAudio_Scene_StopAll); ++n;
     return n;
 }
 
@@ -1237,19 +1184,6 @@ Audio::Configuration::~Configuration() {
 void RtAudio_Configuration_Dtor(void* selfPtr) {
     reinterpret_cast<Audio::Configuration*>(selfPtr)->Audio::Configuration::~Configuration();   // B.3.7 bridge
 }
-
-int RtAudioConfigurationRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?Save@Configuration@Audio@@QEAAXXZ", (void*)&RtAudio_Configuration_Save); ++n;
-    RegisterRuntimeExport("?Startup@Configuration@Audio@@QEAA_NXZ", (void*)&RtAudio_Configuration_Startup); ++n;
-    // WAVE 23 LANE TAIL. Reached by name from
-    // runtime/src/engine/engine_lifecycle.cpp's Engine::Shutdown teardown.
-    // Both doors, as everywhere else in this lane.
-    RegisterRuntimeExport("??1Configuration@Audio@@QEAA@XZ", (void*)&RtAudio_Configuration_Dtor);
-    RegisterRuntimeAddr(0x1800de0d0, (void*)&RtAudio_Configuration_Dtor); ++n;
-    return n;
-}
-
 
 // ?_singleton@Configuration@Audio@@0PEAV12@EA (0x1801fe758) -- the class static (ENDGAME B.3.9 ENG, B39_RULES D7);
 // RtAudioPortInit redirects the minted storage row onto it.

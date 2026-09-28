@@ -476,15 +476,6 @@ int RtApplicationPlatformStartupRegister() {
     // re-check without re-deriving. Literals, never named constants
     // (reference_census_cannot_see_nonliteral_registrations.md).
 
-    // Wave 9 lane PLAT also took the NEXT boot wall after Video's, which lives
-    // in another namespace: `?PlatformStartup@Device@Audio@@AEAA_NXZ`
-    // (engine_lifecycle.cpp:730, g_startupFailAt == 12). Registered from here
-    // so the whole family lands behind ONE switch and one identity line.
-    {
-        extern int RtAudioPlatformStartupRegister();
-        n += RtAudioPlatformStartupRegister();
-    }
-
     // ...and the wall after Audio's: `?PlatformStartup@Device@Input@@AEAA_NXZ`
     // (engine_lifecycle.cpp:741, g_startupFailAt == 13), plus the three
     // exported message callbacks it installs, which are equally unreachable

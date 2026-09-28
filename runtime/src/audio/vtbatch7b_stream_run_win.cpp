@@ -163,9 +163,6 @@ using RtIo::FileStream;
 using RtIO::FileInfo;
 using RtSystem::String;
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module m, uintptr_t ghidra_addr);
-
 namespace {
 
 // ENDGAME B.3.7 block B4: the `kStream*`, `kChannel*`, `kVoiceCallback*` and
@@ -223,8 +220,6 @@ struct Xa2BufferWma {       // XAUDIO2_BUFFER_WMA
 static_assert(offsetof(Xa2BufferWma, packetCount) == 0x08,
               "XAUDIO2_BUFFER_WMA::PacketCount @ +0x08");
 
-using ReadFileFn  = bool  (*)(void*, FileInfo*, int, void*);
-using CloseFileFn = void  (*)(void*, FileInfo*);
 using GetStateFn  = void  (*)(void* voice, Xa2VoiceState* out);
 using SubmitFn    = int32_t (*)(void* voice, const Xa2Buffer*, const Xa2BufferWma*);
 
@@ -259,7 +254,7 @@ void* AudioDeviceSingleton() {
     void** slot = reinterpret_cast<void**>(&::Audio::Device::_singleton);
     return slot ? *slot : nullptr;
 }
-void* FileSystemSingleton() {
+::IO::FileSystem* FileSystemSingleton() {
     // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now -- same one deref.
     return ::IO::FileSystem::_singleton;
 }
@@ -323,20 +318,16 @@ void Stream::Run() {
     FileStream* const st = reinterpret_cast<FileStream*>(storage);
     ::new (static_cast<void*>(storage)) IO::FileStream();              // 1800a100c..6a  (B.3.9 IO: the class)
 
-    void* const fsys = FileSystemSingleton();
+    ::IO::FileSystem* const fsys = FileSystemSingleton();
 
     // The three temporaries are declared so that reverse-order destruction is
     // retail's release order — path (1800a10c6), joined (1800a10ef), dataDir
     // (1800a1118) — and the inner scope ends them where retail ends them.
     bool opened;
     {
-        // IO::FileSystem is another batch's class, so GetDataDirectory stays a
-        // name lookup; its result is a real System::Filename.
-        using GetDirFn = System::Filename* (*)(void* self, System::Filename* ret);
-        System::Filename dataDir;
-        RT_EXPORT_ONCE(GetDirFn,
-            "?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(
-                fsys, &dataDir);                                        // 1800a107f
+        // IO::FileSystem::GetDataDirectory (0x180007bd0), called by name
+        // (B3R); its by-value result is constructed in place.
+        System::Filename dataDir = fsys->GetDataDirectory();           // 1800a107f
 
         const System::String joined =
             dataDir.AsString() + buf->GetStreamPath();                  // 1800a1090
@@ -388,10 +379,8 @@ void Stream::Run() {
 
             const int64_t slotByte = slotIndex * kSlotBytes;            // 1800a11c0
             uint8_t* const table = reinterpret_cast<uint8_t*>(_buffers);
-            RT_EXPORT_ONCE(ReadFileFn,
-                "?ReadFile@FileSystem@IO@@QEAA_NAEAUFileInfo@12@HPEAX@Z")(
-                    fsys, &st->file, byteCount,
-                    table + slotByte + kSlotAudio);                     // 1800a11e7
+            fsys->ReadFile(st->file, byteCount,
+                           table + slotByte + kSlotAudio);              // 1800a11e7, 0x1800ace00
 
             // Rebase this chunk's cumulative-byte entries onto the chunk, and
             // write them into the slot's first 0x40 bytes.
@@ -515,8 +504,7 @@ void Stream::Run() {
         // kExitStop (1800a13af -> 1800a13da) holds no lock and needs no release.
 
         if (st->file.handle != -1)                                      // 1800a13da
-            RT_EXPORT_ONCE(CloseFileFn,
-                "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z")(fsys, &st->file);
+            fsys->CloseFile(st->file);                                  // 0x1800accc0
     }
 
     reinterpret_cast<IO::FileStream*>(st)->IO::FileStream::~FileStream();  // 1800a14b3..1654  (B.3.9 IO)
