@@ -29,9 +29,15 @@ instruments on a named hook. Until it has merged, do NOT convert an allocator do
 `?MemAlloc@` / `?MemFree@` / `?Allocate@` / `?Free@`, `InternalMemAlloc/Free` wrappers, per-file
 `*MemAlloc*` / `*MemFree*` wrappers). Convert everything else first. Then `git merge main`: if
 `runtime/types/system/MemoryAllocator.h` declares `MemAlloc` / `MemFree` as static members, convert
-the allocator doors to them (the door decides which member: `?Allocate@` takes the singleton first
-and is NOT `MemAlloc`); if it does not yet, hand in without them and say so — the coordinator sends
-you back for them.
+the allocator doors to them; if it does not yet, hand in without them and say so — the coordinator
+sends you back for them.
+**CORRECTED 2026-09-28 (W0-A0):** `fn_MemAlloc(g_pMemAllocSingleton, n, a)` becomes
+`System::MemoryAllocator::MemAlloc(n, a)` and `fn_MemFree` / `fn_MemFreeStatic` become
+`System::MemoryAllocator::MemFree(p)` — NOT `_singleton->Allocate()` / `->Free()`. The global was
+bound to `?Allocate@`, but the body registered under that name was `SwapAllocate`, which takes the
+allocator lock; the MEMBER `Allocate` is retail's raw unlocked body. `MemAlloc` is the same lock, the
+same heap, and the instrument hook. Check the argument order of each door against the member's
+declaration in `runtime/types/system/MemoryAllocator.h` before converting.
 `g_pMemAllocSingleton` as an ARGUMENT disappears with the call that took it. Any OTHER read of it
 becomes `System::MemoryAllocator::_singleton` read live; say where.
 

@@ -273,7 +273,40 @@ or down to the STUB list; what remains of the registry is listed BY NAME with it
 passes; `stepclose.sh`.
 
 ## 7. Run log
-(the coordinator appends one line per gated merge; the table is `b3r_session/GATE_TABLE.md`)
+The table is `b3r_session/GATE_TABLE.md` (one row per gated merge).
+- Block 0: six read-only inventories (opus), the rule sheet, the kit.
+- The seven items owed from the cutover: one branch, merged first.
+- W0: P0b, P0a, SM, P0c, A0 — five gated merges, 0 problems; two re-cuts of the `[RtPort]` line
+  (1347 / 1817 -> 1338 / 1537 -> 1247 / 1444), unit 919 -> 918.
 
 ## 8. Corrections
 (dated, as the blocks find them)
+
+1. **2026-09-28, W0-A0 — R9 was wrong about `fn_MemAlloc`.** R9 says "after A0 the name is
+   `MemoryAllocator::Allocate`". The global was bound to `?Allocate@`, but the body registered under
+   that name was `SwapAllocate`, which takes the allocator LOCK; the member `Allocate` is retail's
+   raw, unlocked body. `fn_MemAlloc(g_pMemAllocSingleton, n, a)` becomes
+   `System::MemoryAllocator::MemAlloc(n, a)`; `fn_MemFree` / `fn_MemFreeStatic` become
+   `MemoryAllocator::MemFree(p)`. (`W1_BRIEF.md` carries the corrected rule.)
+2. **2026-09-28, W0-SM — the mirror kept 7 keys alive, not 16** (INVENTORY_C's regex missed
+   registrations written as split string literals; eight of its keys had no bound reader; it missed
+   0x1800fdb20 `AnimationState::Update`). `[RtPort]` fell by 9 / 280, not 28 / 273. The file keeps
+   the name `reg_rt_mirror16.cpp`.
+3. **2026-09-28, W0-SM — `Debug::_disableHandler`'s row left with the mint (M3), not in M2**: it was
+   the mint's last row, and retiring it alone made the generator emit an empty array. The mint
+   registered AFTER the `[RtPort]` count was printed, so M3 did not move that line.
+4. **2026-09-28 — `code/Game/Component` is FOUR reader blocks** (433 files with headers): G-CompA
+   `citizen*`, G-CompB `a`-`f` except `citizen*`, G-CompC `g`-`o`, G-CompD `p`-`z`, all
+   case-insensitive. §4's three-way split is superseded.
+5. **2026-09-28 — a STORAGE block sits between W1 and the AUDIT.** R7's class statics do not exist
+   yet and the cells are file-statics of `address_registry.cpp`. W1 blocks LEAVE every read of an
+   `engine_funcs` STORAGE global (`g_pGameWorldSingleton`, `g_pGameSettingsPtr`, the singleton cells
+   and exrefs) and its pointer test, and count them in the hand-in. A file-local resolve of a cell
+   that such a global is bound to (0x1401c3dd8, 0x1401c3de0 …) is rewritten to read the global
+   (same cell, same number of dereferences), so the STORAGE block converts one name per cell.
+   The `.rdata` constants are not part of this: they convert in W1.
+6. **2026-09-28, W0-P0c — counts.** The shared StringTable serialize body serves 5 exe addresses
+   (INVENTORY_E said 3). INVENTORY_A's "212 already declared" counted the class MEMBER; the C-door
+   functions had 4 declarations, so P0c added 280. 30 bodies have internal linkage
+   (`data/P0c_declared.tsv`): the W1 block that owns the DEFINING file gives them external linkage.
+   The `.rdata` "floats" include one double (0x140172168) and one 64-bit mask (0x1401722b0).

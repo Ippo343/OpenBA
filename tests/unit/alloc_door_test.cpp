@@ -1,32 +1,36 @@
 // ============================================================================
-// tests/unit/alloc_door_test.cpp — ENDGAME B.3.2 closing pass, item 1
-//   `rtcoll::DoorAlloc` / `rtcoll::DoorFree` (runtime/src/collection/alloc_door.cpp)
+// tests/unit/alloc_door_test.cpp — `rtcoll::DoorAlloc` / `rtcoll::DoorFree`
+//   (runtime/src/collection/alloc_door.cpp) and the allocator's instrument seat
 // ============================================================================
 //
-// WHAT THERE IS TO TEST, GIVEN THERE IS NO ALLOCATOR HERE
-// -------------------------------------------------------
-// The door does not allocate: it ANSWERS WITH THE FUNCTION TO CALL. Everything
-// that can go wrong with it is in that answer, and all of it is reachable from
-// a host test through `g_unitResolveAddr` (tests/unit/rt_port_stub.cpp):
+// WHAT THESE TESTS PINNED BEFORE B3R W0-A0
+// ----------------------------------------
+// The door re-read the exe dispatch slot (0x140152b60 / 0x140152b68) on EVERY
+// call, answering through `g_unitResolveAddr`, because `RedzoneAlloc_Install()`
+// rewrote the slot's contents after the containers had already allocated: a
+// door that cached the pointer would have put every container allocation
+// outside BANISHED_REDZONE.
 //
-//   1. the exe dispatch slot (0x140152b60 / 0x140152b68) wins over the runtime
-//      address — that is the whole point, because the slot is the door
-//      `standalone/redzone_alloc.cpp` rewrites and the runtime address is the
-//      one the containers used to resolve behind its back;
-//   2. THE SLOT IS RE-READ ON EVERY CALL. `RedzoneAlloc_Install()` overwrites
-//      the slot's CONTENTS after the containers have already allocated, so a
-//      door that cached the function it first found there would pin the
-//      pre-install pointer and put the containers back outside the instrument.
-//      This is the case the whole file exists for;
-//   3. a MISS IS RETRIED, not frozen — the RtResolveCached contract. Freezing
-//      a null would fail every later allocation for the life of the process
-//      (Wave 9 attempt 14);
-//   4. an unregistered or null slot falls back to the runtime address, which
-//      is the ordinary pre-registration boot state.
+// WHAT THEY PIN NOW
+// -----------------
+// There is no slot to re-read: the door answers the allocator's own statics,
+// `System::MemoryAllocator::MemAlloc` / `MemFree`, and the instruments sit on
+// the ONE seat inside those statics (`System::g_memoryAllocatorInstrument`,
+// runtime/types/system/MemoryAllocator.h). So the property the old tests
+// protected — "an instrument armed AFTER the containers first allocated still
+// sees every later container allocation, and alloc and free move together" —
+// is now a property of the seat, and that is what is tested:
 //
-// The two doors have INDEPENDENT caches, so each test below drives its own from
-// the virgin state; nothing else in the suite calls either one. The resolver
-// hook is installed and cleared inside each test.
+//   1. the door answers exactly the static (the one allocator API, B3R R9);
+//   2. a call through the door reaches whichever hook is in the seat AT THE
+//      TIME OF THE CALL: arming, re-arming and disarming after the door has
+//      already answered all take effect on the next call;
+//   3. the armed hook receives the arguments unchanged and is called once.
+//
+// The unit build links runtime/src/system/allocator.cpp (tests/unit/sources.mk)
+// so the real statics run; with a hook in the seat they never touch
+// `_singleton` (null here), which is the seat's contract. Each test clears the
+// seat before it ends. No other test arms it.
 // ============================================================================
 
 #include "unit.h"
@@ -34,109 +38,84 @@
 #include <cstdint>
 
 #include "collection/Collection.h"
-
-extern uintptr_t (*g_unitResolveAddr)(int module, uintptr_t ghidraAddr);
+#include "system/MemoryAllocator.h"
 
 namespace {
 
-// The two candidate answers, told apart by identity only.
-void* RuntimeAlloc(uint64_t, int) { return nullptr; }
-void* SlotAllocA(uint64_t, int)   { return nullptr; }
-void* SlotAllocB(uint64_t, int)   { return nullptr; }
-void  RuntimeFree(void*) {}
-void  SlotFreeA(void*)   {}
-void  SlotFreeB(void*)   {}
+int      g_allocCallsA = 0, g_allocCallsB = 0;
+uint64_t g_lastSize = 0;
+int      g_lastAlign = 0;
+char     g_blockA[16], g_blockB[16];
 
-// Stand-ins for the exe `.rdata` slots: one pointer of storage each, which the
-// resolver hands back the ADDRESS of, exactly as `ResolveAddr(Module::Exe, …)`
-// hands back the address of the real slot.
-void* g_allocSlot = nullptr;
-void* g_freeSlot  = nullptr;
-
-bool g_allocSlotRegistered = false;
-bool g_freeSlotRegistered  = false;
-bool g_runtimeRegistered   = false;
-
-uintptr_t Resolve(int module, uintptr_t addr) {
-    if (module == 0) {   // Module::Exe — the dispatch slots
-        if (addr == 0x140152b60 && g_allocSlotRegistered)
-            return reinterpret_cast<uintptr_t>(&g_allocSlot);
-        if (addr == 0x140152b68 && g_freeSlotRegistered)
-            return reinterpret_cast<uintptr_t>(&g_freeSlot);
-        return 0;
-    }
-    if (module == 1 && g_runtimeRegistered) {   // Module::Runtime — the fallback
-        if (addr == 0x1800c7a50) return reinterpret_cast<uintptr_t>(&RuntimeAlloc);
-        if (addr == 0x1800c7ad0) return reinterpret_cast<uintptr_t>(&RuntimeFree);
-    }
-    return 0;
+void* HookAllocA(uint64_t size, int align) {
+    ++g_allocCallsA; g_lastSize = size; g_lastAlign = align; return g_blockA;
 }
+void* HookAllocB(uint64_t size, int align) {
+    ++g_allocCallsB; g_lastSize = size; g_lastAlign = align; return g_blockB;
+}
+
+int   g_freeCallsA = 0, g_freeCallsB = 0;
+void* g_lastFreed = nullptr;
+
+void HookFreeA(void* p) { ++g_freeCallsA; g_lastFreed = p; }
+void HookFreeB(void* p) { ++g_freeCallsB; g_lastFreed = p; }
 
 }  // namespace
 
-UNIT_TEST(alloc_door_prefers_the_dispatch_slot_and_rereads_it) {
-    g_unitResolveAddr = &Resolve;
+UNIT_TEST(alloc_door_is_memalloc_and_the_instrument_seat_is_read_per_call) {
+    System::MemoryAllocatorInstrument& seat = System::g_memoryAllocatorInstrument;
+    CHECK(seat.memAlloc == nullptr);
 
-    // (3) Nothing registered yet: no answer — and, crucially, the null is not
-    // remembered.
-    g_allocSlotRegistered = false;
-    g_runtimeRegistered   = false;
-    CHECK(rtcoll::DoorAlloc() == nullptr);
+    // (1) The door answers the static itself — no cell, no resolver.
+    const rtcoll::DoorAllocFn_t door = rtcoll::DoorAlloc();
+    CHECK(door == &System::MemoryAllocator::MemAlloc);
 
-    // (3) The runtime address arms (RegisterAllocatorAddresses). The door must
-    // pick it up despite having already answered null once.
-    g_runtimeRegistered = true;
-    CHECK(rtcoll::DoorAlloc() == &RuntimeAlloc);
+    // (2) Armed AFTER the door answered: the next call is instrumented.
+    g_allocCallsA = g_allocCallsB = 0;
+    seat.memAlloc = &HookAllocA;
+    CHECK(door(0x30, 8) == g_blockA);
+    CHECK_EQ(g_allocCallsA, 1);                        // (3) once
+    CHECK_EQ(static_cast<int>(g_lastSize), 0x30);      // (3) unchanged
+    CHECK_EQ(g_lastAlign, 8);
 
-    // (4) The slot is registered but still empty — the ordinary boot state
-    // before standalone/address_registry.cpp fills it. Fall back.
-    g_allocSlotRegistered = true;
-    g_allocSlot           = nullptr;
-    CHECK(rtcoll::DoorAlloc() == &RuntimeAlloc);
+    // (2) Re-armed: the door, asked again or not, reaches the new hook.
+    seat.memAlloc = &HookAllocB;
+    CHECK(rtcoll::DoorAlloc()(0x10, 4) == g_blockB);
+    CHECK_EQ(g_allocCallsA, 1);
+    CHECK_EQ(g_allocCallsB, 1);
+    CHECK_EQ(g_lastAlign, 4);
 
-    // (1) The slot is filled: it wins over the runtime address.
-    g_allocSlot = reinterpret_cast<void*>(&SlotAllocA);
-    CHECK(rtcoll::DoorAlloc() == &SlotAllocA);
-
-    // (2) THE CASE THIS FILE EXISTS FOR: `RedzoneAlloc_Install()` rewrites the
-    // slot's contents. A door that cached the pointer would still answer
-    // SlotAllocA and every container allocation would bypass the shim.
-    g_allocSlot = reinterpret_cast<void*>(&SlotAllocB);
-    CHECK(rtcoll::DoorAlloc() == &SlotAllocB);
-
-    // (4) And a slot emptied again falls back rather than answering null.
-    g_allocSlot = nullptr;
-    CHECK(rtcoll::DoorAlloc() == &RuntimeAlloc);
-
-    g_unitResolveAddr = nullptr;
+    seat.memAlloc = nullptr;
 }
 
-UNIT_TEST(free_door_prefers_the_dispatch_slot_and_rereads_it) {
-    g_unitResolveAddr = &Resolve;
+UNIT_TEST(free_door_is_memfree_and_the_instrument_seat_is_read_per_call) {
+    System::MemoryAllocatorInstrument& seat = System::g_memoryAllocatorInstrument;
+    CHECK(seat.memFree == nullptr);
 
-    g_freeSlotRegistered = false;
-    g_runtimeRegistered  = false;
-    CHECK(rtcoll::DoorFree() == nullptr);
+    const rtcoll::DoorFreeFn_t door = rtcoll::DoorFree();
+    CHECK(door == &System::MemoryAllocator::MemFree);
 
-    g_runtimeRegistered = true;
-    CHECK(rtcoll::DoorFree() == &RuntimeFree);
-
-    g_freeSlotRegistered = true;
-    g_freeSlot           = nullptr;
-    CHECK(rtcoll::DoorFree() == &RuntimeFree);
-
-    g_freeSlot = reinterpret_cast<void*>(&SlotFreeA);
-    CHECK(rtcoll::DoorFree() == &SlotFreeA);
+    g_freeCallsA = g_freeCallsB = 0;
+    seat.memFree = &HookFreeA;
+    door(g_blockA);
+    CHECK_EQ(g_freeCallsA, 1);
+    CHECK(g_lastFreed == g_blockA);
 
     // The alloc and the free must move TOGETHER — a block allocated through the
     // shim and freed around it leaves a stale live-block entry and the canary
     // scan then reports a phantom overflow (redzone_alloc.cpp's
-    // `ShimAllocStatic` banner: seen twice as a "corrupt decal vertex pool").
-    g_freeSlot = reinterpret_cast<void*>(&SlotFreeB);
-    CHECK(rtcoll::DoorFree() == &SlotFreeB);
+    // `ShimAllocStatic` banner). One seat for both makes that structural.
+    seat.memFree = &HookFreeB;
+    rtcoll::DoorFree()(g_blockB);
+    CHECK_EQ(g_freeCallsA, 1);
+    CHECK_EQ(g_freeCallsB, 1);
+    CHECK(g_lastFreed == g_blockB);
 
-    g_freeSlot = nullptr;
-    CHECK(rtcoll::DoorFree() == &RuntimeFree);
+    // A null reaches the hook too: the seat is consulted before retail's own
+    // null test, and every armed hook handles null (ShimFree, SwapFree).
+    door(nullptr);
+    CHECK_EQ(g_freeCallsB, 2);
+    CHECK(g_lastFreed == nullptr);
 
-    g_unitResolveAddr = nullptr;
+    seat.memFree = nullptr;
 }

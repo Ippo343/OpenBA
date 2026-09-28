@@ -74,14 +74,6 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/system/MemoryAllocator.h"
 
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// — same reasoning array.cpp and linkedlist.cpp give (resolve.h drags in
-// <windows.h>, whose <wingdi.h> declares a function called `Rectangle`). Must
-// stay byte-identical to resolve.h's declaration; the linker checks the two
-// against each other.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 using rt::system::MemoryAllocator;
 using rt::system::MemoryRange;
 using rt::system::RtSysMemPlatform;
@@ -98,6 +90,10 @@ using rt::system::kThisFreeShl2;
 // ?_singleton@MemoryAllocator@System@@0PEAV12@EA (0x1801fc718): BSS in retail,
 // zero until the ctor below runs (B3R W0-SM M1: was the mint's storage cell).
 System::MemoryAllocator* System::MemoryAllocator::_singleton = nullptr;
+
+// The instrument seat (MemoryAllocator.h): STANDALONE DEVIATION, instrument
+// seat, retail has no such branch. Constant-initialised null; armed at boot only.
+System::MemoryAllocatorInstrument System::g_memoryAllocatorInstrument = { nullptr, nullptr };
 
 // ---------------------------------------------------------------------------
 // Platform seam (see MemoryAllocator.h). Null until the host installs it.
@@ -157,25 +153,6 @@ void FatalOutOfMemory(const char* text, bool stopApplication) {
 }
 
 // ---------------------------------------------------------------------------
-// GetBinForLargeSize (0x1800c7920) / GetBinForSize (0x1800c78d0)
-// ---------------------------------------------------------------------------
-int GetBinForLargeSize(uint64_t n) {
-    int shift = 0x20;
-    int bits  = 0x40;
-    do {
-        uint64_t v = n >> shift;
-        if (v != 0) { bits -= shift; n = v; }
-        shift >>= 1;
-    } while (shift != 0);
-    return static_cast<int>(n) - bits + 0xb6;
-}
-
-int GetBinForSize(uint64_t n) {
-    if (n < 0x201) return static_cast<int>(static_cast<int32_t>(n)) >> 2;
-    return GetBinForLargeSize(n);
-}
-
-// ---------------------------------------------------------------------------
 // FUN_180034d60 — record "my previous block is free, and here is its size".
 // Called on the tag that FOLLOWS a newly created free block.
 // ---------------------------------------------------------------------------
@@ -191,36 +168,40 @@ void SetPrevTagInfo(uint8_t* next, const uint8_t* prev) {
     }
 }
 
+inline MemoryTag* AsTag(uint8_t* p)  { return reinterpret_cast<MemoryTag*>(p); }
+inline FreeTag*   AsNode(uint8_t* p) { return reinterpret_cast<FreeTag*>(p); }
+
 }  // namespace
 
-// ---------------------------------------------------------------------------
-// The ported class. Free functions with the retail raw ABI (`self` explicit),
-// exactly like Wave 1 — never C++ methods, so nothing can add a hidden this
-// adjustment or a return slot we did not ask for.
-// ---------------------------------------------------------------------------
-namespace rtalloc {
-
+// ===========================================================================
+// The members (B3R W0-A0). Each body is the transcription that used to be the
+// free function `rtalloc::X(MemoryAllocator* self, …)`; `self` is `this`.
 // The parameter types are the ones the DLL's own mangled signatures name:
 // PEAUMemoryTag@12@ and PEAUFreeTag@12@. A FreeTag* is the USER pointer of a
 // free block (tag + 8); a MemoryTag* is the block header itself.
-void  LinkFreeTag(MemoryAllocator* self, MemoryTag* tagp);
-void  UnlinkFreeTag(MemoryAllocator* self, FreeTag* nodep, FreeTag* unused);
-void  UnlinkFreeTagT(MemoryAllocator* self, MemoryTag* tagp);
-void  CommitToPage(MemoryAllocator* self, MemoryRange* range, void* upTo);
-void  ReleaseToPage(MemoryAllocator* self, MemoryRange* range, void* downTo);
-bool  ExpandMemoryRangeTable(MemoryAllocator* self);
-bool  AddNewMemoryRange(MemoryAllocator* self, uint64_t want);
-FreeTag* GetFreeTagForSize(MemoryAllocator* self, uint64_t want);
+// ===========================================================================
 
-inline MemoryTag* AsTag(uint8_t* p)  { return reinterpret_cast<MemoryTag*>(p); }
-inline FreeTag*   AsNode(uint8_t* p) { return reinterpret_cast<FreeTag*>(p); }
-void* Allocate(MemoryAllocator* self, uint64_t size, int align);
-void  Free(MemoryAllocator* self, void* p);
+// --- GetBinForLargeSize (0x1800c7920) / GetBinForSize (0x1800c78d0) ---------
+int MemoryAllocator::GetBinForLargeSize(uint64_t n) const {
+    int shift = 0x20;
+    int bits  = 0x40;
+    do {
+        uint64_t v = n >> shift;
+        if (v != 0) { bits -= shift; n = v; }
+        shift >>= 1;
+    } while (shift != 0);
+    return static_cast<int>(n) - bits + 0xb6;
+}
+
+int MemoryAllocator::GetBinForSize(uint64_t n) const {
+    if (n < 0x201) return static_cast<int>(static_cast<int32_t>(n)) >> 2;
+    return GetBinForLargeSize(n);
+}
 
 // --- GetMemoryRange (0x1800c71f0) ------------------------------------------
-MemoryRange* GetMemoryRange(MemoryAllocator* self, void* p) {
-    MemoryRange* r = self->ranges;
-    for (int i = 0; i < self->rangeCount; ++i, ++r) {
+MemoryRange* MemoryAllocator::GetMemoryRange(void* p) {
+    MemoryRange* r = ranges;
+    for (int i = 0; i < rangeCount; ++i, ++r) {
         if (r->base <= static_cast<uint8_t*>(p) && static_cast<uint8_t*>(p) < r->end)
             return r;
     }
@@ -228,22 +209,22 @@ MemoryRange* GetMemoryRange(MemoryAllocator* self, void* p) {
 }
 
 // --- GetAllocationSize (0x1800c71d0) ---------------------------------------
-uint64_t GetAllocationSize(MemoryAllocator* /*self*/, void* p) {
+uint64_t MemoryAllocator::GetAllocationSize(void* p) {
     return (*reinterpret_cast<uint64_t*>(static_cast<uint8_t*>(p) - 8) & kTagSizeMask) << 2;
 }
 
 // --- GetAllocatedSize (0x18007c0b0) ----------------------------------------
-int64_t GetAllocatedSize(const MemoryAllocator* self) { return self->allocatedBytes; }
+int64_t MemoryAllocator::GetAllocatedSize() const { return allocatedBytes; }
 
 // --- GetFreeTagForSize (0x1800c7230) ---------------------------------------
 // Returns a FreeTag* (== tag + 8), i.e. the USER pointer of a free block whose
 // byte size is >= `want`. First fit within a bin, then the next bin up.
-FreeTag* GetFreeTagForSize(MemoryAllocator* self, uint64_t want) {
+FreeTag* MemoryAllocator::GetFreeTagForSize(uint64_t want) {
     int bin = GetBinForSize(want);
-    if (bin < self->minBin) bin = self->minBin;
+    if (bin < minBin) bin = minBin;
 
     for (; bin < 0xc0; ++bin) {
-        uint8_t* cur = reinterpret_cast<uint8_t*>(self->freeLists[bin]);
+        uint8_t* cur = reinterpret_cast<uint8_t*>(freeLists[bin]);
         if (cur == nullptr) continue;
         for (;;) {
             if (((TagC(cur - 8) & kTagSizeMask) << 2) >= want) return AsNode(cur);
@@ -258,19 +239,19 @@ FreeTag* GetFreeTagForSize(MemoryAllocator* self, uint64_t want) {
 
 // --- LinkFreeTag (0x1800c7310) ---------------------------------------------
 // Push `tag` onto the head of its bin. Blocks under 16 bytes are never linked.
-void LinkFreeTag(MemoryAllocator* self, MemoryTag* tagp) {
+void MemoryAllocator::LinkFreeTag(MemoryTag* tagp) {
     uint8_t* tag = reinterpret_cast<uint8_t*>(tagp);
     uint64_t bytes = (Tag(tag) & kTagSizeMask) * 4;
     if (bytes < 0x10) return;
 
     uint8_t* node = tag + 8;
     int bin = GetBinForSize(bytes);
-    uint64_t* head = &self->freeLists[bin];
+    uint64_t* head = &freeLists[bin];
 
     if (*head == 0) {
         Node(node) = 0;
         Tag(tag) &= 0x00003fffffffffffull;          // clear the prev-link high bits
-        if (bin < self->minBin) self->minBin = bin;
+        if (bin < minBin) minBin = bin;
     } else {
         uint8_t* oldHead = reinterpret_cast<uint8_t*>(*head);
         Node(node) = static_cast<uint64_t>(oldHead - node) & kTagSizeMask;
@@ -283,12 +264,12 @@ void LinkFreeTag(MemoryAllocator* self, MemoryTag* tagp) {
         Tag(oldHead - 8) |= (back & 0xffffffffff800000ull) << 23;
     }
     *head = reinterpret_cast<uint64_t>(node);
-    self->freeTagCount++;
+    freeTagCount++;
 }
 
 // --- UnlinkFreeTag(FreeTag*, FreeTag*) (0x1800c7410) -----------------------
 // The second parameter is unused by retail; kept for ABI shape.
-void UnlinkFreeTag(MemoryAllocator* self, FreeTag* nodep, FreeTag* /*unused*/) {
+void MemoryAllocator::UnlinkFreeTag(FreeTag* nodep, FreeTag* /*unused*/) {
     uint8_t* node = reinterpret_cast<uint8_t*>(nodep);
     uint64_t bytes = (TagC(node - 8) & kTagSizeMask) * 4;
     int bin = GetBinForSize(bytes);
@@ -305,9 +286,9 @@ void UnlinkFreeTag(MemoryAllocator* self, FreeTag* nodep, FreeTag* /*unused*/) {
 
     if (prev == nullptr) {
         if (next == nullptr) {
-            self->freeLists[bin] = 0;
+            freeLists[bin] = 0;
         } else {
-            self->freeLists[bin] = reinterpret_cast<uint64_t>(next);
+            freeLists[bin] = reinterpret_cast<uint64_t>(next);
             Node(next) &= kTagSizeMask;
             Tag(next - 8) &= 0x00003fffffffffffull;
         }
@@ -326,25 +307,25 @@ void UnlinkFreeTag(MemoryAllocator* self, FreeTag* nodep, FreeTag* /*unused*/) {
     Node(node) = 0;
     Tag(node - 8) &= 0x00003fffffffffffull;
 
-    int cursor = self->minBin;
-    if (bin == cursor && self->freeLists[bin] == 0) {
-        while (cursor < 0xc0 && self->freeLists[self->minBin] == 0) {
-            cursor = self->minBin + 1;
-            self->minBin = cursor;
+    int cursor = minBin;
+    if (bin == cursor && freeLists[bin] == 0) {
+        while (cursor < 0xc0 && freeLists[minBin] == 0) {
+            cursor = minBin + 1;
+            minBin = cursor;
         }
     }
-    self->freeTagCount--;
+    freeTagCount--;
 }
 
 // --- UnlinkFreeTag(MemoryTag*) (0x1800c7580) -------------------------------
-void UnlinkFreeTagT(MemoryAllocator* self, MemoryTag* tagp) {
+void MemoryAllocator::UnlinkFreeTag(MemoryTag* tagp) {
     uint8_t* tag = reinterpret_cast<uint8_t*>(tagp);
-    if (3 < (Tag(tag) & kTagSizeMask)) UnlinkFreeTag(self, AsNode(tag + 8), nullptr);
+    if (3 < (Tag(tag) & kTagSizeMask)) UnlinkFreeTag(AsNode(tag + 8), nullptr);
 }
 
 // --- CommitToPage (0x1800c7bd0) --------------------------------------------
-void CommitToPage(MemoryAllocator* self, MemoryRange* range, void* upTo) {
-    uint64_t page = self->pageSize;
+void MemoryAllocator::CommitToPage(MemoryRange* range, void* upTo) {
+    uint64_t page = pageSize;
     uint64_t have = range->committed;
     uint64_t need = ((page - reinterpret_cast<uint64_t>(range->base) - 1 +
                       reinterpret_cast<uint64_t>(upTo)) / page) * page;
@@ -355,8 +336,8 @@ void CommitToPage(MemoryAllocator* self, MemoryRange* range, void* upTo) {
 }
 
 // --- ReleaseToPage (0x1800c7c80) -------------------------------------------
-void ReleaseToPage(MemoryAllocator* self, MemoryRange* range, void* downTo) {
-    uint64_t page = self->pageSize;
+void MemoryAllocator::ReleaseToPage(MemoryRange* range, void* downTo) {
+    uint64_t page = pageSize;
     uint64_t need = ((page - reinterpret_cast<uint64_t>(range->base) - 1 +
                       reinterpret_cast<uint64_t>(downTo)) / page) * page;
     if (need < range->committed) {
@@ -368,51 +349,51 @@ void ReleaseToPage(MemoryAllocator* self, MemoryRange* range, void* downTo) {
 // --- ExpandMemoryRangeTable (0x1800c77e0) ----------------------------------
 // Grows the range table by TWO entries at a time, into its own committed
 // VirtualAlloc reservation — never through the arena itself.
-bool ExpandMemoryRangeTable(MemoryAllocator* self) {
-    uint64_t page   = self->pageSize;
-    int      oldCap = self->rangeCapacity;
-    void*    src    = self->ranges;
+bool MemoryAllocator::ExpandMemoryRangeTable() {
+    uint64_t page   = pageSize;
+    int      oldCap = rangeCapacity;
+    void*    src    = ranges;
 
-    self->rangeCapacity = oldCap + 2;
+    rangeCapacity = oldCap + 2;
     uint64_t bytes = ((page - 1 + static_cast<uint64_t>(oldCap + 2) * 0x18) / page) * page;
     void* dst = g_plat.reserveCommit(nullptr, bytes);
-    self->ranges = static_cast<MemoryRange*>(dst);
+    ranges = static_cast<MemoryRange*>(dst);
     if (dst == nullptr) return false;
 
     std::memcpy(dst, src, static_cast<size_t>(oldCap) * 0x18);
     std::memset(static_cast<uint8_t*>(dst) + static_cast<size_t>(oldCap) * 0x18, 0,
-                static_cast<size_t>(self->rangeCapacity - oldCap) * 0x18);
+                static_cast<size_t>(rangeCapacity - oldCap) * 0x18);
     if (oldCap != 0) g_plat.release(src);
     return true;
 }
 
 // --- AddNewMemoryRange (0x1800c7690) ---------------------------------------
-bool AddNewMemoryRange(MemoryAllocator* self, uint64_t want) {
-    uint64_t size = self->minRangeSize;
+bool MemoryAllocator::AddNewMemoryRange(uint64_t want) {
+    uint64_t size = minRangeSize;
     if (size < want) size = want;
 
-    if (self->maxTotalSize != 0 && self->maxTotalSize < size + self->totalReserved)
+    if (maxTotalSize != 0 && maxTotalSize < size + totalReserved)
         return false;
 
-    if (self->rangeCount == self->rangeCapacity && !ExpandMemoryRangeTable(self))
+    if (rangeCount == rangeCapacity && !ExpandMemoryRangeTable())
         return false;
 
-    MemoryRange* range = self->ranges + self->rangeCount;
-    uint64_t page = self->pageSize;
-    self->rangeCount++;
+    MemoryRange* range = ranges + rangeCount;
+    uint64_t page = pageSize;
+    rangeCount++;
 
     uint8_t* base = static_cast<uint8_t*>(g_plat.reserve(nullptr, ((page - 1 + size) / page) * page));
     range->base = base;
     if (base != nullptr) {
         range->committed = 0;
         range->end = base + size;
-        CommitToPage(self, range, base + 0x10);
+        CommitToPage(range, base + 0x10);
         Tag(base) = (((size & kSizeBytesMask) | kThisFreeShl2) >> 2) |
                     (Tag(base) & 0xffffe00000000000ull);
         Node(base + 8) = 0;
         Tag(base) &= 0x00003fffffffffffull;
-        LinkFreeTag(self, AsTag(base));
-        self->totalReserved += size;
+        LinkFreeTag(AsTag(base));
+        totalReserved += size;
     } else {
         FatalOutOfMemory("Memory: The application failed to allocate a memory range!", false);
     }
@@ -420,7 +401,7 @@ bool AddNewMemoryRange(MemoryAllocator* self, uint64_t want) {
 }
 
 // --- Allocate (0x1800c6e60) ------------------------------------------------
-void* Allocate(MemoryAllocator* self, uint64_t size, int align) {
+void* MemoryAllocator::Allocate(uint64_t size, int align) {
     if (g_largestRequestedSize < size) g_largestRequestedSize = size;
 
     const uint32_t align8 = (static_cast<uint32_t>(align) + 7u) & 0xfffffff8u;
@@ -431,25 +412,25 @@ void* Allocate(MemoryAllocator* self, uint64_t size, int align) {
     if (total < 8) total = 8;
     uint64_t want = total + 8;
 
-    FreeTag* freeTag = GetFreeTagForSize(self, want);
+    FreeTag* freeTag = GetFreeTagForSize(want);
     if (freeTag == nullptr) {
-        AddNewMemoryRange(self, want);
-        freeTag = GetFreeTagForSize(self, want);
+        AddNewMemoryRange(want);
+        freeTag = GetFreeTagForSize(want);
         if (freeTag == nullptr) {
             FatalOutOfMemory(
                 "Failed to allocate memory. Either too many packages (mods) are loaded, "
                 "no more memory is available, or an error has occured.", true);
         }
     }
-    UnlinkFreeTag(self, freeTag, nullptr);
+    UnlinkFreeTag(freeTag, nullptr);
 
     uint8_t* tag = reinterpret_cast<uint8_t*>(freeTag) - 8;
 
     // Inlined GetMemoryRange. Retail does not guard the miss and neither do we.
     MemoryRange* range = nullptr;
     {
-        MemoryRange* r = self->ranges;
-        for (int i = 0; i < self->rangeCount; ++i, ++r) {
+        MemoryRange* r = ranges;
+        for (int i = 0; i < rangeCount; ++i, ++r) {
             if (r->base <= tag && tag < r->end) { range = r; break; }
         }
     }
@@ -473,7 +454,7 @@ void* Allocate(MemoryAllocator* self, uint64_t size, int align) {
         // The head of the block becomes a `pad`-byte free block …
         Tag(tag) = (((static_cast<uint64_t>(padS) & kSizeBytesMask) | kThisFreeShl2) >> 2) |
                    (orig & 0xffffe00000000000ull);
-        LinkFreeTag(self, AsTag(tag));
+        LinkFreeTag(AsTag(tag));
 
         // … and the aligned remainder becomes the block we hand out.
         uint8_t* newTag = tag + (Tag(tag) & kTagSizeMask) * 4;
@@ -498,7 +479,7 @@ void* Allocate(MemoryAllocator* self, uint64_t size, int align) {
         uint64_t nv = (((want >> 2) ^ tv) & kTagSizeMask) ^ tv;
         Tag(tag) = nv;
         uint64_t nq = nv & kTagSizeMask;
-        CommitToPage(self, range, tag + (nq + 4) * 4);
+        CommitToPage(range, tag + (nq + 4) * 4);
 
         uint8_t* rem = tag + nq * 4;
         uint64_t remBytes = (sizeQ * 4 - (Tag(tag) & kTagSizeMask) * 4) & kSizeBytesMask;
@@ -519,12 +500,12 @@ void* Allocate(MemoryAllocator* self, uint64_t size, int align) {
                 }
             }
         }
-        LinkFreeTag(self, AsTag(rem));
+        LinkFreeTag(AsTag(rem));
     }
 
     // Inlined CommitToPage over the block we are handing out.
     {
-        uint64_t page = self->pageSize;
+        uint64_t page = pageSize;
         uint64_t have = range->committed;
         uint64_t need = (((Tag(tag) & kTagSizeMask) * 4 -
                           reinterpret_cast<uint64_t>(range->base) - 1 + page +
@@ -535,27 +516,27 @@ void* Allocate(MemoryAllocator* self, uint64_t size, int align) {
         }
     }
 
-    self->allocatedBytes += static_cast<int64_t>((Tag(tag) & kTagSizeMask) * 4);
-    self->allocCount++;
+    allocatedBytes += static_cast<int64_t>((Tag(tag) & kTagSizeMask) * 4);
+    allocCount++;
     return tag + 8;
 }
 
 // --- Free (0x1800c6c00) ----------------------------------------------------
-void Free(MemoryAllocator* self, void* p) {
+void MemoryAllocator::Free(void* p) {
     if (p == nullptr) return;
 
     uint8_t* tag = static_cast<uint8_t*>(p) - 8;
 
     MemoryRange* range = nullptr;
     {
-        MemoryRange* r = self->ranges;
-        for (int i = 0; i < self->rangeCount; ++i, ++r) {
+        MemoryRange* r = ranges;
+        for (int i = 0; i < rangeCount; ++i, ++r) {
             if (r->base <= tag && tag < r->end) { range = r; break; }
         }
     }
 
-    self->allocCount--;
-    self->allocatedBytes -= static_cast<int64_t>((Tag(tag) & kTagSizeMask) * 4);
+    allocCount--;
+    allocatedBytes -= static_cast<int64_t>((Tag(tag) & kTagSizeMask) * 4);
 
     uint64_t tv  = Tag(tag);
     uint8_t* blk = tag;
@@ -569,7 +550,7 @@ void Free(MemoryAllocator* self, void* p) {
             back = static_cast<uint64_t>(static_cast<uint32_t>(tv >> 0x27) & 0x1c);
 
         blk = tag - back;
-        if (3 < (Tag(blk) & kTagSizeMask)) UnlinkFreeTag(self, AsNode(blk + 8), nullptr);
+        if (3 < (Tag(blk) & kTagSizeMask)) UnlinkFreeTag(AsNode(blk + 8), nullptr);
         uint64_t pv = Tag(blk);
         Tag(blk) = ((((Tag(tag) + pv) & 0x3fffffffffffffffull) ^ pv) & kTagSizeMask) ^ pv;
     }
@@ -593,7 +574,7 @@ void Free(MemoryAllocator* self, void* p) {
         } else {
             // Forward coalesce, then repeat the bookkeeping on the block after.
             Tag(blk) = ((((nv + bv) & 0x3fffffffffffffffull) ^ bv) & kTagSizeMask) ^ bv;
-            if (3 < (Tag(next) & kTagSizeMask)) UnlinkFreeTag(self, AsNode(next + 8), nullptr);
+            if (3 < (Tag(next) & kTagSizeMask)) UnlinkFreeTag(AsNode(next + 8), nullptr);
             next = next + (Tag(next) & kTagSizeMask) * 4;
             if (next != range->end) {
                 uint64_t n2 = Tag(next);
@@ -613,18 +594,18 @@ void Free(MemoryAllocator* self, void* p) {
     }
 
     if (blk + (Tag(blk) & kTagSizeMask) * 4 == range->end)
-        ReleaseToPage(self, range, blk + 0x10);
+        ReleaseToPage(range, blk + 0x10);
 
     Tag(blk) = (Tag(blk) & 0xffffe1ffffffffffull) | kTagThisFree;
-    LinkFreeTag(self, AsTag(blk));
+    LinkFreeTag(AsTag(blk));
 }
 
 // --- Startup (0x1800c7620) -------------------------------------------------
-bool Startup(MemoryAllocator* self, uint64_t minRangeMB, uint64_t maxTotalMB) {
-    self->minRangeSize = minRangeMB << 20;
-    self->maxTotalSize = maxTotalMB << 20;
-    self->pageSize = g_plat.pageSize();
-    if (!AddNewMemoryRange(self, 0)) {
+bool MemoryAllocator::Startup(uint64_t minRangeMB, uint64_t maxTotalMB) {
+    minRangeSize = minRangeMB << 20;
+    maxTotalSize = maxTotalMB << 20;
+    pageSize = g_plat.pageSize();
+    if (!AddNewMemoryRange(0)) {
         FatalOutOfMemory("Memory: The application failed to start the memory allocator!", false);
         return false;
     }
@@ -632,13 +613,62 @@ bool Startup(MemoryAllocator* self, uint64_t minRangeMB, uint64_t maxTotalMB) {
 }
 
 // --- Shutdown (0x1800c75b0) ------------------------------------------------
-void Shutdown(MemoryAllocator* self) {
-    for (int i = 0; i < self->rangeCount; ++i) g_plat.release(self->ranges[i].base);
-    g_plat.release(self->ranges);
+void MemoryAllocator::Shutdown() {
+    for (int i = 0; i < rangeCount; ++i) g_plat.release(ranges[i].base);
+    g_plat.release(ranges);
 }
 
+// --- Get (0x1800534e0) -----------------------------------------------------
+MemoryAllocator* MemoryAllocator::Get() {
+    return _singleton;
+}
+
+// --- MemAlloc (0x1800c7a50) / MemFree (0x1800c7ad0) ------------------------
+// Both open with the instrument seat (MemoryAllocator.h): STANDALONE DEVIATION,
+// instrument seat, retail has no such branch. Null unless BANISHED_REDZONE or
+// BANISHED_ALLOC_STATS armed it at boot; the armed hook does the whole call.
+void* MemoryAllocator::MemAlloc(uint64_t size, int align) {
+    if (System::g_memoryAllocatorInstrument.memAlloc)                // STANDALONE DEVIATION
+        return System::g_memoryAllocatorInstrument.memAlloc(size, align);
+    MemoryAllocator* self = Get();
+    g_plat.lockEnter(self->lock);
+    void* r = self->Allocate(size, align);
+    g_plat.lockLeave(self->lock);
+    return r;
+}
+
+void MemoryAllocator::MemFree(void* p) {
+    if (System::g_memoryAllocatorInstrument.memFree) {               // STANDALONE DEVIATION
+        System::g_memoryAllocatorInstrument.memFree(p);
+        return;
+    }
+    if (p == nullptr) return;
+    MemoryAllocator* self = Get();
+    g_plat.lockEnter(self->lock);
+    self->Free(p);
+    g_plat.lockLeave(self->lock);
+}
+
+// --- PointerOffset (0x180034e20) -------------------------------------------
+int64_t MemoryAllocator::PointerOffset(void* a, void* b) {
+    return static_cast<uint8_t*>(a) - static_cast<uint8_t*>(b);
+}
+
+// --- The Platform* family (0x1800c7b30 / b50 / b60 / bb0 / c40 / c70) ------
+// These six are defined in runtime/src/system/allocator_win.cpp. They are the
+// platform seam the ORIGINAL authors drew, and PLAN.md 4.1's `_win` rule falls
+// on the same line, so the OS header goes there and nowhere else.
+
+// ===========================================================================
+// rtalloc:: — what is left of the free-function door.
+// ===========================================================================
+namespace rtalloc {
+
 // --- ctor (0x1800c79a0) / dtor (0x1800c7960) -------------------------------
-// Both write the class static System::MemoryAllocator::_singleton (0x1801fc718).
+// NOT members: the class declares no ctor/dtor (see MemoryAllocator.h, "NOT
+// DECLARED, ON PURPOSE"). Called from runtime/src/engine/singleton_ctors.cpp
+// (Ctor_/Dtor_MemoryAllocator, the ??0 / ??1 rows). Both write the class static
+// System::MemoryAllocator::_singleton (0x1801fc718).
 void Construct(MemoryAllocator* self) {
     self->ranges = nullptr;
     self->rangeCount = 0;
@@ -661,45 +691,29 @@ void Destruct(MemoryAllocator* self) {
     g_plat.lockDelete(self->lock);
 }
 
-// --- Get (0x1800534e0) -----------------------------------------------------
-MemoryAllocator* Get() {
-    return MemoryAllocator::_singleton;
-}
-
-// --- MemAlloc (0x1800c7a50) / MemFree (0x1800c7ad0) ------------------------
-void* MemAlloc(uint64_t size, int align) {
-    MemoryAllocator* self = Get();
-    g_plat.lockEnter(self->lock);
-    void* r = Allocate(self, size, align);
-    g_plat.lockLeave(self->lock);
-    return r;
-}
-
-void MemFree(void* p) {
-    if (p == nullptr) return;
-    MemoryAllocator* self = Get();
-    g_plat.lockEnter(self->lock);
-    Free(self, p);
-    g_plat.lockLeave(self->lock);
-}
-
-// --- GetBinForSize / GetBinForLargeSize, member-shaped (RCX = this) --------
-// The file-scope helpers above take the size in RCX because that is what the
-// port's own call sites need; the EXPORTS are const members and put `this`
-// there. Registering the file-scope forms directly would shift every argument.
-int GetBinForSizeM(const MemoryAllocator* /*self*/, uint64_t n)      { return GetBinForSize(n); }
-int GetBinForLargeSizeM(const MemoryAllocator* /*self*/, uint64_t n) { return GetBinForLargeSize(n); }
-
-// --- The Platform* family (0x1800c7b30 / b50 / b60 / bb0 / c40 / c70) ------
-// These six live in runtime/src/system/allocator_win.cpp. They are the platform
-// seam the ORIGINAL authors drew, and PLAN.md 4.1's `_win` rule falls on the
-// same line, so the OS header goes there and nowhere else. Nothing in this file
-// declares them, so nothing here can be tempted to reimplement them.
-
-// --- PointerOffset (0x180034e20) -------------------------------------------
-int64_t PointerOffset(void* a, void* b) {
-    return static_cast<uint8_t*>(a) - static_cast<uint8_t*>(b);
-}
+// --- Registration thunks ----------------------------------------------------
+// A registry row stores a plain function address and its callers pass `this`
+// in RCX, so each non-static member is registered through a one-line `self`-
+// explicit thunk. They exist only for the RegisterRuntimeExport rows at the
+// bottom of this file and die with those rows (W2). The statics (MemAlloc,
+// MemFree, Get, PointerOffset) are registered directly.
+void*    Allocate(MemoryAllocator* self, uint64_t size, int align) { return self->Allocate(size, align); }
+void     Free(MemoryAllocator* self, void* p)                      { self->Free(p); }
+uint64_t GetAllocationSize(MemoryAllocator* self, void* p)         { return self->GetAllocationSize(p); }
+int64_t  GetAllocatedSize(const MemoryAllocator* self)             { return self->GetAllocatedSize(); }
+MemoryRange* GetMemoryRange(MemoryAllocator* self, void* p)        { return self->GetMemoryRange(p); }
+FreeTag* GetFreeTagForSize(MemoryAllocator* self, uint64_t want)   { return self->GetFreeTagForSize(want); }
+void     LinkFreeTag(MemoryAllocator* self, MemoryTag* tag)        { self->LinkFreeTag(tag); }
+void     UnlinkFreeTag(MemoryAllocator* self, FreeTag* n, FreeTag* u) { self->UnlinkFreeTag(n, u); }
+void     UnlinkFreeTagT(MemoryAllocator* self, MemoryTag* tag)     { self->UnlinkFreeTag(tag); }
+void     CommitToPage(MemoryAllocator* self, MemoryRange* r, void* p)  { self->CommitToPage(r, p); }
+void     ReleaseToPage(MemoryAllocator* self, MemoryRange* r, void* p) { self->ReleaseToPage(r, p); }
+bool     AddNewMemoryRange(MemoryAllocator* self, uint64_t want)   { return self->AddNewMemoryRange(want); }
+bool     ExpandMemoryRangeTable(MemoryAllocator* self)             { return self->ExpandMemoryRangeTable(); }
+bool     Startup(MemoryAllocator* self, uint64_t a, uint64_t b)    { return self->Startup(a, b); }
+void     Shutdown(MemoryAllocator* self)                           { self->Shutdown(); }
+int      GetBinForSizeM(const MemoryAllocator* self, uint64_t n)      { return self->GetBinForSize(n); }
+int      GetBinForLargeSizeM(const MemoryAllocator* self, uint64_t n) { return self->GetBinForLargeSize(n); }
 
 }  // namespace rtalloc
 
@@ -934,7 +948,7 @@ extern "C" bool RtAllocShadowStartup(uint64_t minRangeMB, uint64_t maxTotalMB) {
     g_shadow.minRangeSize = minRangeMB << 20;
     g_shadow.maxTotalSize = maxTotalMB << 20;
     g_shadow.pageSize = g_plat.pageSize();
-    if (!rtalloc::AddNewMemoryRange(&g_shadow, 0)) return false;
+    if (!g_shadow.AddNewMemoryRange(0)) return false;
 
     // AFTER range 0 exists, so range 0 matches retail byte for byte and only
     // the growth path can ever notice. See the `grow` note above.
@@ -959,7 +973,7 @@ extern "C" void RtAllocShadowAlloc(uint64_t size, int align, void* theirs,
     const int32_t preRanges = g_shadow.rangeCount;
     const int32_t preCap    = g_shadow.rangeCapacity;
 
-    void* ours = rtalloc::Allocate(&g_shadow, reqSize, align);
+    void* ours = g_shadow.Allocate(reqSize, align);
 
     if (g_shadow.rangeCount   > preRanges) g_shadowGrow++;
     if (g_shadow.rangeCapacity > preCap && preCap != 0) g_shadowTableCopy++;
@@ -1005,7 +1019,7 @@ extern "C" void RtAllocShadowFree(void* theirs, const MemoryAllocator* theirSelf
         g_shadowFreeUnmapped++;          // dropped it -- either way, not comparable
         return;
     }
-    rtalloc::Free(&g_shadow, ours);
+    g_shadow.Free(ours);
     g_shadowCalls++;
 
     const bool equal = (g_shadow.allocCount     == theirSelf->allocCount) &&
@@ -1269,13 +1283,13 @@ int RtSystemAllocatorRegister() {
 namespace {
 int RegisterAllocatorExports(void* allocateEntry, void* freeEntry) {
     RegisterRuntimeExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z",
-                          reinterpret_cast<void*>(&rtalloc::MemAlloc));
+                          reinterpret_cast<void*>(&MemoryAllocator::MemAlloc));
     RegisterRuntimeExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z",
-                          reinterpret_cast<void*>(&rtalloc::MemFree));
+                          reinterpret_cast<void*>(&MemoryAllocator::MemFree));
     RegisterRuntimeExport("?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z", allocateEntry);
     RegisterRuntimeExport("?Free@MemoryAllocator@System@@QEAAXPEAX@Z", freeEntry);
     RegisterRuntimeExport("?Get@MemoryAllocator@System@@SAPEAV12@XZ",
-                          reinterpret_cast<void*>(&rtalloc::Get));
+                          reinterpret_cast<void*>(&MemoryAllocator::Get));
     RegisterRuntimeExport("?GetAllocationSize@MemoryAllocator@System@@QEAA_KPEAX@Z",
                           reinterpret_cast<void*>(&rtalloc::GetAllocationSize));
     RegisterRuntimeExport("?GetAllocatedSize@MemoryAllocator@System@@QEBA_JXZ",
@@ -1303,7 +1317,7 @@ int RegisterAllocatorExports(void* allocateEntry, void* freeEntry) {
     RegisterRuntimeExport("?Shutdown@MemoryAllocator@System@@QEAAXXZ",
                           reinterpret_cast<void*>(&rtalloc::Shutdown));
     RegisterRuntimeExport("?PointerOffset@MemoryAllocator@System@@CA_JPEAX0@Z",
-                          reinterpret_cast<void*>(&rtalloc::PointerOffset));
+                          reinterpret_cast<void*>(&MemoryAllocator::PointerOffset));
     RegisterRuntimeExport("?GetBinForSize@MemoryAllocator@System@@AEBAH_K@Z",
                           reinterpret_cast<void*>(&rtalloc::GetBinForSizeM));
     RegisterRuntimeExport("?GetBinForLargeSize@MemoryAllocator@System@@AEBAH_K@Z",
@@ -1431,11 +1445,11 @@ int RegisterAllocatorExports(void* allocateEntry, void* freeEntry) {
 // path supplies the address, and a caller that ran first would otherwise freeze
 // a null in for the life of the process.
 //
+// B3R W0-A0: the static, called directly. The by-address door above was bound
+// to this same function (RegisterAllocatorAddresses), and the instrument seat
+// now lives inside it, so the "observed" property the banner asks for holds.
 void FreeLockedIgnoringSelf(void* /*ignoredThis*/, void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    if (fn) fn(p);
+    MemoryAllocator::MemFree(p);
 }
 
 // ============================================================================
@@ -1477,8 +1491,8 @@ void RegisterAllocatorSharedAddressesImpl() {
 }
 
 int RegisterAllocatorAddresses(void* allocateEntry, void* freeEntry) {
-    RegisterRuntimeAddr(0x1800c7a50, reinterpret_cast<void*>(&rtalloc::MemAlloc));
-    RegisterRuntimeAddr(0x1800c7ad0, reinterpret_cast<void*>(&rtalloc::MemFree));
+    RegisterRuntimeAddr(0x1800c7a50, reinterpret_cast<void*>(&MemoryAllocator::MemAlloc));
+    RegisterRuntimeAddr(0x1800c7ad0, reinterpret_cast<void*>(&MemoryAllocator::MemFree));
     RegisterRuntimeAddr(0x1800c6e60, allocateEntry);
     RegisterRuntimeAddr(0x1800c6c00, freeEntry);
     // 0x180009c30 is NOT registered here -- see
