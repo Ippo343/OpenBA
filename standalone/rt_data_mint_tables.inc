@@ -3,8 +3,8 @@
 // harvest of Runtime-x64.dll) re-verified against the DLL at generation
 // time. Regenerate with:
 //   tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py
-// Counts: 4 vtables, 100 BaseTypeInfo, 10 storage symbols.
-// Retired (ENDGAME B.3 step 9): 190 row(s), listed in tools/rt_mint_retired/*.txt.
+// Counts: 4 vtables, 98 BaseTypeInfo, 10 storage symbols.
+// Retired (ENDGAME B.3 step 9): 192 row(s), listed in tools/rt_mint_retired/*.txt.
 
 // ---- Per-slot traps. One function per (vtable, slot) so an unreachable
 // slot that DOES get called names itself instead of aborting anonymously.
@@ -89,7 +89,7 @@ static RtMintVtable kMintVtables[] = {
 // ---- Object::BaseTypeInfo. Fields are link-time constants copied from
 // the DLL; `next` is deliberately NOT copied (it reads 0x0 on disk and is
 // built by running constructors) and is rebuilt from OUR init order.
-static RtObject::BaseTypeInfo kTypeInfoStorage[100];
+static RtObject::BaseTypeInfo kTypeInfoStorage[98];
 RT_MINT_TI_TRAP(0,0)
 RT_MINT_TI_TRAP(0,1)
 RT_MINT_TI_TRAP(1,0)
@@ -286,10 +286,6 @@ RT_MINT_TI_TRAP(96,0)
 RT_MINT_TI_TRAP(96,1)
 RT_MINT_TI_TRAP(97,0)
 RT_MINT_TI_TRAP(97,1)
-RT_MINT_TI_TRAP(98,0)
-RT_MINT_TI_TRAP(98,1)
-RT_MINT_TI_TRAP(99,0)
-RT_MINT_TI_TRAP(99,1)
 static RtMintTypeInfo kMintTypeInfos[] = {
     { "?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A", 0x1801f9898ull, &kTypeInfoStorage[0],
       "Achievement", "Object::External", nullptr,
@@ -619,78 +615,70 @@ static RtMintTypeInfo kMintTypeInfos[] = {
       "SliderElement", "Element", nullptr,
       "?CreateNewObject@SliderElement@UI@@SAPEAVBase@Object@@XZ", 0x180049e10ull, &RtMintTiTrapStub_81_0,
       "?CreateInPlaceObject@SliderElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180049e90ull, &RtMintTiTrapStub_81_1 },
-    { "?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A", 0x1801fa4d8ull, &kTypeInfoStorage[82],
-      "SoundBuffer", "Object::CompiledExternal", nullptr,
-      "?CreateNewObject@SoundBuffer@Audio@@SAPEAVBase@Object@@XZ", 0x18000b9a0ull, &RtMintTiTrapStub_82_0,
-      "?CreateInPlaceObject@SoundBuffer@Audio@@SAPEAVBase@Object@@PEAX@Z", 0x18000ba90ull, &RtMintTiTrapStub_82_1 },
-    { "?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A", 0x1801fa510ull, &kTypeInfoStorage[83],
-      "SoundEffect", "Object::External", nullptr,
-      "?CreateNewObject@SoundEffect@Audio@@SAPEAVBase@Object@@XZ", 0x180050430ull, &RtMintTiTrapStub_83_0,
-      "?CreateInPlaceObject@SoundEffect@Audio@@SAPEAVBase@Object@@PEAX@Z", 0x1800504f0ull, &RtMintTiTrapStub_83_1 },
-    { "?_typeInfo@SpinnerDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa388ull, &kTypeInfoStorage[84],
+    { "?_typeInfo@SpinnerDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa388ull, &kTypeInfoStorage[82],
       "SpinnerDescription", "ElementDescription", nullptr,
-      "?CreateNewObject@SpinnerDescription@UI@@SAPEAVBase@Object@@XZ", 0x18004ae50ull, &RtMintTiTrapStub_84_0,
-      "?CreateInPlaceObject@SpinnerDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004aed0ull, &RtMintTiTrapStub_84_1 },
-    { "?_typeInfo@SpinnerElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa3c0ull, &kTypeInfoStorage[85],
+      "?CreateNewObject@SpinnerDescription@UI@@SAPEAVBase@Object@@XZ", 0x18004ae50ull, &RtMintTiTrapStub_82_0,
+      "?CreateInPlaceObject@SpinnerDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004aed0ull, &RtMintTiTrapStub_82_1 },
+    { "?_typeInfo@SpinnerElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa3c0ull, &kTypeInfoStorage[83],
       "SpinnerElement", "Element", nullptr,
-      "?CreateNewObject@SpinnerElement@UI@@SAPEAVBase@Object@@XZ", 0x18004b200ull, &RtMintTiTrapStub_85_0,
-      "?CreateInPlaceObject@SpinnerElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004b290ull, &RtMintTiTrapStub_85_1 },
-    { "?_typeInfo@SpriteCapture@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa3f8ull, &kTypeInfoStorage[86],
+      "?CreateNewObject@SpinnerElement@UI@@SAPEAVBase@Object@@XZ", 0x18004b200ull, &RtMintTiTrapStub_83_0,
+      "?CreateInPlaceObject@SpinnerElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004b290ull, &RtMintTiTrapStub_83_1 },
+    { "?_typeInfo@SpriteCapture@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa3f8ull, &kTypeInfoStorage[84],
       "SpriteCapture", "Object::External", nullptr,
-      "?CreateNewObject@SpriteCapture@UI@@SAPEAVBase@Object@@XZ", 0x18003c900ull, &RtMintTiTrapStub_86_0,
-      "?CreateInPlaceObject@SpriteCapture@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18003c9c0ull, &RtMintTiTrapStub_86_1 },
-    { "?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A", 0x1801fadd0ull, &kTypeInfoStorage[87],
+      "?CreateNewObject@SpriteCapture@UI@@SAPEAVBase@Object@@XZ", 0x18003c900ull, &RtMintTiTrapStub_84_0,
+      "?CreateInPlaceObject@SpriteCapture@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18003c9c0ull, &RtMintTiTrapStub_84_1 },
+    { "?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A", 0x1801fadd0ull, &kTypeInfoStorage[85],
       "SpriteSheet", "Object::External", nullptr,
-      "?CreateNewObject@SpriteSheet@UI@@SAPEAVBase@Object@@XZ", 0x180002f40ull, &RtMintTiTrapStub_87_0,
-      "?CreateInPlaceObject@SpriteSheet@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180003000ull, &RtMintTiTrapStub_87_1 },
-    { "?_typeInfo@StringTable@UI@@0VBaseTypeInfo@Object@@A", 0x1801fae08ull, &kTypeInfoStorage[88],
+      "?CreateNewObject@SpriteSheet@UI@@SAPEAVBase@Object@@XZ", 0x180002f40ull, &RtMintTiTrapStub_85_0,
+      "?CreateInPlaceObject@SpriteSheet@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180003000ull, &RtMintTiTrapStub_85_1 },
+    { "?_typeInfo@StringTable@UI@@0VBaseTypeInfo@Object@@A", 0x1801fae08ull, &kTypeInfoStorage[86],
       "StringTable", "Object::External", nullptr,
-      "?CreateNewObject@StringTable@UI@@SAPEAVBase@Object@@XZ", 0x180002280ull, &RtMintTiTrapStub_88_0,
-      "?CreateInPlaceObject@StringTable@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180002330ull, &RtMintTiTrapStub_88_1 },
-    { "?_typeInfo@Surface@Collision2D@@0VBaseTypeInfo@Object@@A", 0x1801fa820ull, &kTypeInfoStorage[89],
+      "?CreateNewObject@StringTable@UI@@SAPEAVBase@Object@@XZ", 0x180002280ull, &RtMintTiTrapStub_86_0,
+      "?CreateInPlaceObject@StringTable@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180002330ull, &RtMintTiTrapStub_86_1 },
+    { "?_typeInfo@Surface@Collision2D@@0VBaseTypeInfo@Object@@A", 0x1801fa820ull, &kTypeInfoStorage[87],
       "Surface", "Object::External", nullptr,
-      "?CreateNewObject@Surface@Collision2D@@SAPEAVBase@Object@@XZ", 0x180064b60ull, &RtMintTiTrapStub_89_0,
-      "?CreateInPlaceObject@Surface@Collision2D@@SAPEAVBase@Object@@PEAX@Z", 0x180064c10ull, &RtMintTiTrapStub_89_1 },
-    { "?_typeInfo@TabDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa430ull, &kTypeInfoStorage[90],
+      "?CreateNewObject@Surface@Collision2D@@SAPEAVBase@Object@@XZ", 0x180064b60ull, &RtMintTiTrapStub_87_0,
+      "?CreateInPlaceObject@Surface@Collision2D@@SAPEAVBase@Object@@PEAX@Z", 0x180064c10ull, &RtMintTiTrapStub_87_1 },
+    { "?_typeInfo@TabDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa430ull, &kTypeInfoStorage[88],
       "TabDescription", "ElementDescription", nullptr,
-      "?CreateNewObject@TabDescription@UI@@SAPEAVBase@Object@@XZ", 0x18004c2e0ull, &RtMintTiTrapStub_90_0,
-      "?CreateInPlaceObject@TabDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004c360ull, &RtMintTiTrapStub_90_1 },
-    { "?_typeInfo@TabElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa468ull, &kTypeInfoStorage[91],
+      "?CreateNewObject@TabDescription@UI@@SAPEAVBase@Object@@XZ", 0x18004c2e0ull, &RtMintTiTrapStub_88_0,
+      "?CreateInPlaceObject@TabDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004c360ull, &RtMintTiTrapStub_88_1 },
+    { "?_typeInfo@TabElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa468ull, &kTypeInfoStorage[89],
       "TabElement", "Element", nullptr,
-      "?CreateNewObject@TabElement@UI@@SAPEAVBase@Object@@XZ", 0x18004c7f0ull, &RtMintTiTrapStub_91_0,
-      "?CreateInPlaceObject@TabElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004c870ull, &RtMintTiTrapStub_91_1 },
-    { "?_typeInfo@TableDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fae40ull, &kTypeInfoStorage[92],
+      "?CreateNewObject@TabElement@UI@@SAPEAVBase@Object@@XZ", 0x18004c7f0ull, &RtMintTiTrapStub_89_0,
+      "?CreateInPlaceObject@TabElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004c870ull, &RtMintTiTrapStub_89_1 },
+    { "?_typeInfo@TableDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801fae40ull, &kTypeInfoStorage[90],
       "TableDescription", "ElementDescription", nullptr,
-      "?CreateNewObject@TableDescription@UI@@SAPEAVBase@Object@@XZ", 0x180078fc0ull, &RtMintTiTrapStub_92_0,
-      "?CreateInPlaceObject@TableDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180079040ull, &RtMintTiTrapStub_92_1 },
-    { "?_typeInfo@TableElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fae78ull, &kTypeInfoStorage[93],
+      "?CreateNewObject@TableDescription@UI@@SAPEAVBase@Object@@XZ", 0x180078fc0ull, &RtMintTiTrapStub_90_0,
+      "?CreateInPlaceObject@TableDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180079040ull, &RtMintTiTrapStub_90_1 },
+    { "?_typeInfo@TableElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801fae78ull, &kTypeInfoStorage[91],
       "TableElement", "Element", nullptr,
-      "?CreateNewObject@TableElement@UI@@SAPEAVBase@Object@@XZ", 0x1800793c0ull, &RtMintTiTrapStub_93_0,
-      "?CreateInPlaceObject@TableElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180079440ull, &RtMintTiTrapStub_93_1 },
-    { "?_typeInfo@TextDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801faeb0ull, &kTypeInfoStorage[94],
+      "?CreateNewObject@TableElement@UI@@SAPEAVBase@Object@@XZ", 0x1800793c0ull, &RtMintTiTrapStub_91_0,
+      "?CreateInPlaceObject@TableElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180079440ull, &RtMintTiTrapStub_91_1 },
+    { "?_typeInfo@TextDescription@UI@@0VBaseTypeInfo@Object@@A", 0x1801faeb0ull, &kTypeInfoStorage[92],
       "TextDescription", "ElementDescription", nullptr,
-      "?CreateNewObject@TextDescription@UI@@SAPEAVBase@Object@@XZ", 0x180041bc0ull, &RtMintTiTrapStub_94_0,
-      "?CreateInPlaceObject@TextDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180041c40ull, &RtMintTiTrapStub_94_1 },
-    { "?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801faee8ull, &kTypeInfoStorage[95],
+      "?CreateNewObject@TextDescription@UI@@SAPEAVBase@Object@@XZ", 0x180041bc0ull, &RtMintTiTrapStub_92_0,
+      "?CreateInPlaceObject@TextDescription@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180041c40ull, &RtMintTiTrapStub_92_1 },
+    { "?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A", 0x1801faee8ull, &kTypeInfoStorage[93],
       "TextElement", "Element", nullptr,
-      "?CreateNewObject@TextElement@UI@@SAPEAVBase@Object@@XZ", 0x180041fe0ull, &RtMintTiTrapStub_95_0,
-      "?CreateInPlaceObject@TextElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180042060ull, &RtMintTiTrapStub_95_1 },
-    { "?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa4a0ull, &kTypeInfoStorage[96],
+      "?CreateNewObject@TextElement@UI@@SAPEAVBase@Object@@XZ", 0x180041fe0ull, &RtMintTiTrapStub_93_0,
+      "?CreateInPlaceObject@TextElement@UI@@SAPEAVBase@Object@@PEAX@Z", 0x180042060ull, &RtMintTiTrapStub_93_1 },
+    { "?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa4a0ull, &kTypeInfoStorage[94],
       "ToolTipDialog", "UI::DialogInstance", nullptr,
-      "?CreateNewObject@ToolTipDialog@UI@@SAPEAVBase@Object@@XZ", 0x18004d0b0ull, &RtMintTiTrapStub_96_0,
-      "?CreateInPlaceObject@ToolTipDialog@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004d140ull, &RtMintTiTrapStub_96_1 },
-    { "?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa660ull, &kTypeInfoStorage[97],
+      "?CreateNewObject@ToolTipDialog@UI@@SAPEAVBase@Object@@XZ", 0x18004d0b0ull, &RtMintTiTrapStub_94_0,
+      "?CreateInPlaceObject@ToolTipDialog@UI@@SAPEAVBase@Object@@PEAX@Z", 0x18004d140ull, &RtMintTiTrapStub_94_1 },
+    { "?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa660ull, &kTypeInfoStorage[95],
       "VertexLayout", "Object::CompiledExternal", nullptr,
-      "?CreateNewObject@VertexLayout@Video@@SAPEAVBase@Object@@XZ", 0x18004ddc0ull, &RtMintTiTrapStub_97_0,
-      "?CreateInPlaceObject@VertexLayout@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18004de40ull, &RtMintTiTrapStub_97_1 },
-    { "?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa698ull, &kTypeInfoStorage[98],
+      "?CreateNewObject@VertexLayout@Video@@SAPEAVBase@Object@@XZ", 0x18004ddc0ull, &RtMintTiTrapStub_95_0,
+      "?CreateInPlaceObject@VertexLayout@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18004de40ull, &RtMintTiTrapStub_95_1 },
+    { "?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa698ull, &kTypeInfoStorage[96],
       "VertexProgram", "ShaderProgram", nullptr,
-      "?CreateNewObject@VertexProgram@Video@@SAPEAVBase@Object@@XZ", 0x18004e650ull, &RtMintTiTrapStub_98_0,
-      "?CreateInPlaceObject@VertexProgram@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18004e6d0ull, &RtMintTiTrapStub_98_1 },
-    { "?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa5b8ull, &kTypeInfoStorage[99],
+      "?CreateNewObject@VertexProgram@Video@@SAPEAVBase@Object@@XZ", 0x18004e650ull, &RtMintTiTrapStub_96_0,
+      "?CreateInPlaceObject@VertexProgram@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18004e6d0ull, &RtMintTiTrapStub_96_1 },
+    { "?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A", 0x1801fa5b8ull, &kTypeInfoStorage[97],
       "VideoProgram", "Object::External", nullptr,
-      "?CreateNewObject@VideoProgram@Video@@SAPEAVBase@Object@@XZ", 0x18004ed40ull, &RtMintTiTrapStub_99_0,
-      "?CreateInPlaceObject@VideoProgram@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18004edc0ull, &RtMintTiTrapStub_99_1 },
+      "?CreateNewObject@VideoProgram@Video@@SAPEAVBase@Object@@XZ", 0x18004ed40ull, &RtMintTiTrapStub_97_0,
+      "?CreateInPlaceObject@VideoProgram@Video@@SAPEAVBase@Object@@PEAX@Z", 0x18004edc0ull, &RtMintTiTrapStub_97_1 },
 };
 
 // ---- Plain storage: the singleton pointers plus the ten other exported

@@ -164,6 +164,8 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
+#include "../../types/audio/SoundBuffer.h"     // ENDGAME B.3.9 TI-REST: the thunks' records
+#include "../../types/audio/SoundEffect.h"
 #include "../../types/system/Filename.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
@@ -463,6 +465,12 @@ extern "C" void RtObject_ExternalPtr_Serialize(External** self, Serializer* ser,
         RtObject_ExternalPtr_Serialize(self, ser, ti);                         \
     }
 
+// ENDGAME B.3.9 D6 W3: the same thunk over a folded class's own record.
+#define EXTPTR_THUNK_OF(fnName, Class)                                         \
+    extern "C" void fnName(External** self, Serializer* ser) {                 \
+        RtObject_ExternalPtr_Serialize(self, ser, &Class::GetTypeInfo());      \
+    }
+
 // 0x180038f90 — ElementDescription+0x48
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_ElementDescription,
              "?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A")
@@ -503,8 +511,7 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_GraphicsMesh,
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_DialogControllerConfig,
              "?_typeInfo@DialogControllerConfig@UI@@0VBaseTypeInfo@Object@@A")
 // 0x180051790 — Audio::SoundEffect
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_SoundEffect,
-             "?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_SoundEffect, Audio::SoundEffect)
 // 0x18005b840 — Graphics::AnimationGroup
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_AnimationGroup,
              "?_typeInfo@AnimationGroup@Graphics@@0VBaseTypeInfo@Object@@A")
@@ -566,8 +573,7 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_AnimationEvent,
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_CharacterSet,
              "?_typeInfo@CharacterSet@UI@@0VBaseTypeInfo@Object@@A")
 // 0x180052a50 — ExternalPtr<Audio::SoundBuffer>
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_SoundBuffer,
-             "?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_SoundBuffer, Audio::SoundBuffer)
 // 0x18003dc90 — ExternalPtr<Object::ExternalList>. The export spells the
 // enclosing namespace with a back-reference (`@2@`), exactly as
 // `?_typeInfo@External@Object@@0VBaseTypeInfo@2@A` does.
@@ -575,6 +581,7 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_ExternalList,
              "?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A")
 
 #undef EXTPTR_THUNK
+#undef EXTPTR_THUNK_OF
 
 // ============================================================================
 // The ARRAY form of the same template — 818 bytes, eight instantiations.
@@ -611,6 +618,12 @@ extern "C" void RtObject_ExternalPtrArray_Serialize(Serializer* ser, int count,
             return;                                                            \
         }                                                                      \
         RtObject_ExternalPtrArray_Serialize(ser, count, elems, ti);            \
+    }
+
+// ENDGAME B.3.9 D6 W3: the same thunk over a folded class's own record.
+#define EXTPTR_ARRAY_THUNK_OF(fnName, Class)                                   \
+    extern "C" void fnName(Serializer* ser, int count, External** elems) {     \
+        RtObject_ExternalPtrArray_Serialize(ser, count, elems, &Class::GetTypeInfo()); \
     }
 
 // 0x18002f170 — Object::External (note the `@2@` back-reference in the export)
@@ -654,6 +667,7 @@ EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_Surface,
                    "?_typeInfo@Surface@Collision2D@@0VBaseTypeInfo@Object@@A")
 
 #undef EXTPTR_ARRAY_THUNK
+#undef EXTPTR_ARRAY_THUNK_OF
 
 // ---- Registration ----------------------------------------------------------
 //

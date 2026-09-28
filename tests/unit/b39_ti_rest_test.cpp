@@ -46,6 +46,8 @@
 #include "../../runtime/types/picking/PickingMesh.h"
 #include "../../runtime/types/pathfinding/PointList.h"
 #include "../../runtime/types/io/PackageFile.h"
+#include "../../runtime/types/audio/SoundBuffer.h"
+#include "../../runtime/types/audio/SoundEffect.h"
 
 // ===========================================================================
 // Factory-pair markers (see the banner).
@@ -57,6 +59,8 @@
 TIR_FACTORY_MARKERS(Picking::PickingMesh)
 TIR_FACTORY_MARKERS(Pathfinding::PointList)
 TIR_FACTORY_MARKERS(IO::PackageFile)
+TIR_FACTORY_MARKERS(Audio::SoundBuffer)
+TIR_FACTORY_MARKERS(Audio::SoundEffect)
 
 namespace {
 
@@ -83,6 +87,9 @@ std::vector<Expect> Rows() {
         TIR_ROW(Pathfinding::PointList, "PointList",   "External", 0x3BC4D9A5u),
         // ---- IO ----
         TIR_ROW(IO::PackageFile,        "PackageFile", "External", 0x3C81C678u),
+        // ---- Audio ----
+        TIR_ROW(Audio::SoundBuffer,     "SoundBuffer", "CompiledExternal", 0x15B34526u),
+        TIR_ROW(Audio::SoundEffect,     "SoundEffect", "External",         0x58171CB6u),
     };
 }
 

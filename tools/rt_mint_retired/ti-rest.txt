@@ -12,3 +12,7 @@
 
 # -- IO --
 ?_typeInfo@PackageFile@IO@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(IO::PackageFile, "Object::External", nullptr); the atomic-slot ResolveExport accessor in package_file.cpp deleted
+
+# -- Audio --
+?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Audio::SoundBuffer, "Object::CompiledExternal", nullptr); RT_DATA_SLOT accessor (vtbatch7_soundbuffer_soundeffect.cpp) and the by-name EXTPTR_THUNK read (external_ptr_serialize.cpp) converted
+?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A   TI-REST   DEFINE_TYPE(Audio::SoundEffect, "Object::External", nullptr); RT_DATA_SLOT accessor and the by-name EXTPTR_THUNK read converted
