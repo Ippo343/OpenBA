@@ -67,18 +67,18 @@ bool GraphDescription::Serialize(void* streamArg) {
     ElementDescription::Serialize(stream);                              // 1800d1a4a
 
     Serializer ser = { stream, nullptr };
-    void* rw = MakeReaderWriter(stream, &ser);
+    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
 
-    RwScalar(rw, kRwScalarInt,  &_width);                               // 1800d1a8e
-    RwScalar(rw, kRwScalarInt,  &_height);                              // 1800d1aa3
-    RwScalar(rw, kRwScalarInt,  &_tickSize);                            // 1800d1ab8
-    RwScalar(rw, kRwScalarUInt, &_unknown74);                           // 1800d1acd
+    rw->SerializeInt(_width, nullptr);                                  // 1800d1a8e
+    rw->SerializeInt(_height, nullptr);                                 // 1800d1aa3
+    rw->SerializeInt(_tickSize, nullptr);                               // 1800d1ab8
+    rw->SerializeUInt(_unknown74, nullptr);                             // 1800d1acd
 
     using FieldSerFn = void (*)(void*, Serializer*);
     RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser);            // 1800d1adc ExternalPtr<SpriteSheet>
     RtAddr<FieldSerFn>(0x1800c9930ull)(&_spriteName, &ser);             // 1800d1aed System::String
 
-    DestroyReaderWriter(rw);                                            // 1800d1b05
+    if (rw != nullptr) rw->DeletingDtor(1);                             // 1800d1b05
     return true;
 }
 

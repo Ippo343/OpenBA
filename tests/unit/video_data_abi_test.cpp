@@ -37,6 +37,7 @@
 #include <type_traits>
 
 #include "unit.h"
+#include "slot_check.h"
 
 #include "video/CompanionData.h"
 #include "video/VertexLayout.h"
@@ -44,11 +45,12 @@
 namespace {
 
 // The one instruction every raw caller idiom compiles to.
-template <typename Fn>
+// `byteOffset` is RETAIL's; T (the object's class, here the mirror) decides the compiler's.
+template <typename Fn, class T>
 Fn SlotAt(const void* obj, int byteOffset) {
     const uint8_t* const* vt = *reinterpret_cast<const uint8_t* const* const*>(obj);
-    return reinterpret_cast<Fn>(
-        *reinterpret_cast<void* const*>(reinterpret_cast<const uint8_t*>(vt) + byteOffset));
+    return reinterpret_cast<Fn>(*reinterpret_cast<void* const*>(
+        reinterpret_cast<const uint8_t*>(vt) + RetailByteOffset<T>(byteOffset)));
 }
 
 const void* g_lastSelf = nullptr;
@@ -251,16 +253,16 @@ UNIT_TEST(video_companion_data_slot_order) {
 
     // Direction A: a raw `(*(void***)p)[N]` caller lands on slot N's override,
     // `this` unadjusted.
-    Reset(); SlotAt<void* (*)(void*, unsigned)>(d, 0x00)(d, 1);
+    Reset(); SlotAt<void* (*)(void*, unsigned), MirrorDeviceData>(d, 0x00)(d, 1);
     CHECK_EQ(g_lastMark, 0); CHECK(g_lastSelf == d); CHECK_EQ(g_lastArg, 1);
-    Reset(); SlotAt<bool (*)(void*)>(d, 0x08)(d);  CHECK_EQ(g_lastMark, 1);
-    Reset(); SlotAt<bool (*)(void*)>(d, 0x10)(d);  CHECK_EQ(g_lastMark, 2);
-    Reset(); SlotAt<void (*)(void*)>(d, 0x18)(d);  CHECK_EQ(g_lastMark, 3);
-    Reset(); SlotAt<void (*)(void*)>(d, 0x20)(d);  CHECK_EQ(g_lastMark, 4);
-    Reset(); SlotAt<float (*)(void*)>(d, 0x28)(d); CHECK_EQ(g_lastMark, 5);
-    Reset(); SlotAt<bool (*)(void*)>(d, 0x30)(d);  CHECK_EQ(g_lastMark, 6);
-    Reset(); SlotAt<bool (*)(void*)>(d, 0x38)(d);  CHECK_EQ(g_lastMark, 7);
-    Reset(); SlotAt<void (*)(void*, void*, int, int)>(d, 0x40)(d, nullptr, 9, 3);
+    Reset(); SlotAt<bool (*)(void*), MirrorDeviceData>(d, 0x08)(d);  CHECK_EQ(g_lastMark, 1);
+    Reset(); SlotAt<bool (*)(void*), MirrorDeviceData>(d, 0x10)(d);  CHECK_EQ(g_lastMark, 2);
+    Reset(); SlotAt<void (*)(void*), MirrorDeviceData>(d, 0x18)(d);  CHECK_EQ(g_lastMark, 3);
+    Reset(); SlotAt<void (*)(void*), MirrorDeviceData>(d, 0x20)(d);  CHECK_EQ(g_lastMark, 4);
+    Reset(); SlotAt<float (*)(void*), MirrorDeviceData>(d, 0x28)(d); CHECK_EQ(g_lastMark, 5);
+    Reset(); SlotAt<bool (*)(void*), MirrorDeviceData>(d, 0x30)(d);  CHECK_EQ(g_lastMark, 6);
+    Reset(); SlotAt<bool (*)(void*), MirrorDeviceData>(d, 0x38)(d);  CHECK_EQ(g_lastMark, 7);
+    Reset(); SlotAt<void (*)(void*, void*, int, int), MirrorDeviceData>(d, 0x40)(d, nullptr, 9, 3);
     CHECK_EQ(g_lastMark, 8); CHECK_EQ(g_lastArg, 9);
 
     // The eleven factories, 9..19 == +0x48..+0x98. `Video::ConstantBuffer`'s
@@ -268,7 +270,7 @@ UNIT_TEST(video_companion_data_slot_order) {
     // (slot 14); both are checked by position here.
     for (int slot = 9; slot <= 19; ++slot) {
         Reset();
-        SlotAt<void* (*)(void*, void*)>(d, slot * 8)(d, nullptr);
+        SlotAt<void* (*)(void*, void*), MirrorDeviceData>(d, slot * 8)(d, nullptr);
         CHECK_EQ(g_lastMark, slot);
     }
 
@@ -281,17 +283,17 @@ UNIT_TEST(video_companion_data_slot_order) {
     MirrorIndexBufferData* b = &ib;
     // The two byte offsets `Video::{Index,Vertex}Buffer::Lock/Unlock` tail-jump
     // through (companion_data.cpp, retail 0x1800f34e0 / 0x1800f34c0).
-    Reset(); SlotAt<void* (*)(void*, int32_t, int32_t*)>(b, 0x18)(b, 64, nullptr);
+    Reset(); SlotAt<void* (*)(void*, int32_t, int32_t*), MirrorIndexBufferData>(b, 0x18)(b, 64, nullptr);
     CHECK_EQ(g_lastMark, 3); CHECK_EQ(g_lastArg, 64);
-    Reset(); SlotAt<void (*)(void*)>(b, 0x20)(b);
+    Reset(); SlotAt<void (*)(void*), MirrorIndexBufferData>(b, 0x20)(b);
     CHECK_EQ(g_lastMark, 4);
-    Reset(); SlotAt<void (*)(void*)>(b, 0x28)(b);  CHECK_EQ(g_lastMark, 5);
-    Reset(); SlotAt<void (*)(void*, void*)>(b, 0x30)(b, nullptr); CHECK_EQ(g_lastMark, 6);
+    Reset(); SlotAt<void (*)(void*), MirrorIndexBufferData>(b, 0x28)(b);  CHECK_EQ(g_lastMark, 5);
+    Reset(); SlotAt<void (*)(void*, void*), MirrorIndexBufferData>(b, 0x30)(b, nullptr); CHECK_EQ(g_lastMark, 6);
 
     ProbeVertexLayoutData vl;
     MirrorVertexLayoutData* v = &vl;
     // `Video::VertexLayout::Serialize` calls PlatformCreate as `_data->vt[2]`.
-    Reset(); SlotAt<void (*)(void*)>(v, 0x10)(v);
+    Reset(); SlotAt<void (*)(void*), MirrorVertexLayoutData>(v, 0x10)(v);
     CHECK_EQ(g_lastMark, 2); CHECK(g_lastSelf == v);
 }
 
@@ -432,19 +434,19 @@ UNIT_TEST(video_vertexlayout_slot_order) {
     MirrorVertexLayout vl;
     void* p = &vl;
 
-    Reset(); SlotAt<void* (*)(void*, unsigned)>(p, 0x00)(p, 0); CHECK_EQ(g_lastMark, 0);
-    Reset(); SlotAt<const char* (*)(void*)>(p, 0x08)(p);        CHECK_EQ(g_lastMark, 1);
-    Reset(); SlotAt<uint32_t (*)(void*)>(p, 0x10)(p);           CHECK_EQ(g_lastMark, 2);
-    Reset(); SlotAt<int32_t (*)(void*)>(p, 0x18)(p);            CHECK_EQ(g_lastMark, 3);
+    Reset(); SlotAt<void* (*)(void*, unsigned), MirrorVertexLayout>(p, 0x00)(p, 0); CHECK_EQ(g_lastMark, 0);
+    Reset(); SlotAt<const char* (*)(void*), MirrorVertexLayout>(p, 0x08)(p);        CHECK_EQ(g_lastMark, 1);
+    Reset(); SlotAt<uint32_t (*)(void*), MirrorVertexLayout>(p, 0x10)(p);           CHECK_EQ(g_lastMark, 2);
+    Reset(); SlotAt<int32_t (*)(void*), MirrorVertexLayout>(p, 0x18)(p);            CHECK_EQ(g_lastMark, 3);
     // Slot 4 is the base's own body, INHERITED — retail's slot 4 is
     // `?Compile@External@Object@@`, byte-identical to the base table's.
-    Reset(); SlotAt<uint32_t (*)(void*, const void*)>(p, 0x20)(p, nullptr);
+    Reset(); SlotAt<uint32_t (*)(void*, const void*), MirrorVertexLayout>(p, 0x20)(p, nullptr);
     CHECK_EQ(g_lastMark, 4);
-    Reset(); SlotAt<bool (*)(void*, void*)>(p, 0x28)(p, nullptr); CHECK_EQ(g_lastMark, 5);
-    Reset(); SlotAt<void* (*)(void*)>(p, 0x30)(p);              CHECK_EQ(g_lastMark, 6);
-    Reset(); SlotAt<void (*)(void*)>(p, 0x38)(p);               CHECK_EQ(g_lastMark, 7);
+    Reset(); SlotAt<bool (*)(void*, void*), MirrorVertexLayout>(p, 0x28)(p, nullptr); CHECK_EQ(g_lastMark, 5);
+    Reset(); SlotAt<void* (*)(void*), MirrorVertexLayout>(p, 0x30)(p);              CHECK_EQ(g_lastMark, 6);
+    Reset(); SlotAt<void (*)(void*), MirrorVertexLayout>(p, 0x38)(p);               CHECK_EQ(g_lastMark, 7);
     // THE SLOT THIS TEST EXISTS FOR.
-    Reset(); SlotAt<void* (*)(void*)>(p, 0x40)(p);              CHECK_EQ(g_lastMark, 8);
+    Reset(); SlotAt<void* (*)(void*), MirrorVertexLayout>(p, 0x40)(p);              CHECK_EQ(g_lastMark, 8);
 
     // GetFileVersion is 3, not 1. A `VertexLayout::GetFileVersion` returning 1
     // silently failed every `MeshLayout\*.rsc` version check once, which

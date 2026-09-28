@@ -115,23 +115,20 @@ bool NumberDescription::Serialize(void* streamv) {
     void*  factory = stream->encodingFactory;
     void** fvt     = VTableOf(factory);
     const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = void* (*)(void* factory, Serializer* ser, int version);
-    void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
+    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
+    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
     ser.readerWriter = rw;                                     // 180118e7a
 
     using FieldSerFn = void (*)(void* field, Serializer* ser);
     RtAddr<FieldSerFn>(0x18003f1e0ull)(&_font, &ser);          // 180118e88
 
-    using ScalarFn = void (*)(void* rw, void* value, const char* name);
-    void** rvt = VTableOf(rw);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarUInt  / 8])(rw, &_u70, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt   / 8])(rw, &_i74, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarFloat / 8])(rw, &_f78, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarBool  / 8])(rw, &_b7c, nullptr);
+    rw->SerializeUInt(_u70, nullptr);
+    rw->SerializeInt(_i74, nullptr);
+    rw->SerializeFloat(_f78, nullptr);
+    rw->SerializeBool(reinterpret_cast<bool&>(_b7c), nullptr);
 
     if (rw != nullptr) {                                       // 180118ee7
-        using DeleteFn = void (*)(void* rw, int flag);
-        reinterpret_cast<DeleteFn>(rvt[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+        rw->DeletingDtor(1);
     }
     return true;
 }

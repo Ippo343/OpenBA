@@ -128,10 +128,10 @@ bool GroupDescription::Serialize(void* streamv) {
     ElementDescription::Serialize(stream);                     // 180117d1a
 
     rtdesc::Serializer ser = { stream, nullptr };              // [RSP+0x28], [RSP+0x30]
-    void* rw = rtdesc::MakeReaderWriter(stream, &ser);         // 180117d4a
+    IO::ReaderWriter* rw = rtdesc::MakeReaderWriter(stream, &ser); // 180117d4a
 
     int32_t n = _children._size;                               // 180117d4f
-    rtdesc::RwScalar(rw, rtdesc::kRwScalarInt, &n);            // 180117d66
+    rw->SerializeInt(n, nullptr);                              // 180117d66
 
     if (ser.stream->mode == 0) {                               // 180117d6c (re-read)
         using SetSizeFn = void (*)(void* array, int n);
@@ -141,7 +141,7 @@ bool GroupDescription::Serialize(void* streamv) {
     using ElemSerFn = void (*)(rtdesc::Serializer* ser, int count, void* data);
     rtdesc::RtAddr<ElemSerFn>(0x1800493d0ull)(&ser, n, _children._data);
 
-    rtdesc::DestroyReaderWriter(rw);                           // 180117d9c
+    if (rw != nullptr) rw->DeletingDtor(1);                    // 180117d9c
     return true;                                               // MOV AL,1
 }
 

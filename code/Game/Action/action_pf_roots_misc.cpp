@@ -426,7 +426,7 @@ int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float*
                             int uVar17 = 0;
                             while (true) {
                                 void** self = reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(lv + 0x30) + uVar14 * 8);
-                                int iVar12 = (*reinterpret_cast<int(**)(void*)>(*reinterpret_cast<int64_t*>(*self) + 0x10))(*self);
+                                int iVar12 = reinterpret_cast<Object::Base*>(*self)->Type();   // B.3.x bridge (slot 2)
                                 if (iVar12 == param_5) {
                                     found = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(lv + 0x30) + uVar14 * 8);
                                     break;
@@ -552,7 +552,7 @@ void Pf_HerdStartMigration_122340(void* param_1) {
                 while (true) {
                     void** puVar1 = reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(lv + 0x30) + slotOff * 8);
                     uint32_t wantId = AnimalComponent::TypeId();
-                    uint32_t gotId = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<int64_t*>(*puVar1) + 0x10))(*puVar1);
+                    uint32_t gotId = reinterpret_cast<Object::Base*>(*puVar1)->Type();   // B.3.x bridge (slot 2)
                     if (gotId == wantId) {
                         // LAB_1401225ef: re-read the slot, IsDerivedFrom-confirm.
                         void** p2 = reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(lv + 0x30) + slotOff * 8);

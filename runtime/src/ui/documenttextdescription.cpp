@@ -104,7 +104,7 @@ bool DocumentTextDescription::Serialize(void* streamArg) {
     ElementDescription::Serialize(stream);                  // 1800cf8c6
 
     Serializer ser = { stream, nullptr };                   // [RBP-0x18], [RBP-0x10]
-    void* rw = MakeReaderWriter(stream, &ser);
+    IO::ReaderWriter* rw = MakeReaderWriter(stream, &ser);
 
     using FieldSerFn   = void (*)(void*, Serializer*);
     using SetSizeFn    = void (*)(void*, int32_t);
@@ -117,33 +117,33 @@ bool DocumentTextDescription::Serialize(void* streamArg) {
     int32_t n;                                              // [RBP+0x10], the scratch
 
     n = _frameNamesCount;                                   // 1800cf91e
-    RwScalar(rw, kRwScalarInt, &n);                         // 1800cf935
+    rw->SerializeInt(n, nullptr);                           // 1800cf935
     if (ser.stream->mode == 0)                              // 1800cf93b re-read
         RtAddr<SetSizeFn>(0x180029a80ull)(&_frameNamesData, n);        // 1800cf94f
     RtAddr<ArraySerFn>(0x180029bb0ull)(&ser, n, _frameNamesData);
 
     RtAddr<FieldSerFn>(0x1800c9930ull)(&_underlineSpriteName, &ser);   // 1800cf972 System::String
 
-    RwScalar(rw, kRwScalarUInt, &_linkColor);               // 1800cf988
-    RwScalar(rw, kRwScalarUInt, &_linkHoverColor);          // 1800cf99f
-    RwScalar(rw, kRwScalarUInt, &_linkPressedColor);        // 1800cf9b6
-    RwScalar(rw, kRwScalarInt,  &_tabWidth);                // 1800cf9cd
-    RwScalar(rw, kRwScalarInt,  &_wrapWidth);               // 1800cf9e4
+    rw->SerializeUInt(_linkColor, nullptr);                 // 1800cf988
+    rw->SerializeUInt(_linkHoverColor, nullptr);            // 1800cf99f
+    rw->SerializeUInt(_linkPressedColor, nullptr);          // 1800cf9b6
+    rw->SerializeInt(_tabWidth, nullptr);                   // 1800cf9cd
+    rw->SerializeInt(_wrapWidth, nullptr);                  // 1800cf9e4
 
     n = _fontsCount;                                        // 1800cf9ea
-    RwScalar(rw, kRwScalarInt, &n);                         // 1800cfa01
+    rw->SerializeInt(n, nullptr);                           // 1800cfa01
     if (ser.stream->mode == 0)                              // 1800cfa07
         RtAddr<SetSizeFn>(0x18003e600ull)(&_fontsData, n);  // 1800cfa1b
     RtAddr<ArraySerFn>(0x18003e710ull)(&ser, n, _fontsData);
 
     n = _sheetsCount;                                       // 1800cfa33
-    RwScalar(rw, kRwScalarInt, &n);                         // 1800cfa4a
+    rw->SerializeInt(n, nullptr);                           // 1800cfa4a
     if (ser.stream->mode == 0)                              // 1800cfa50
         RtAddr<SetSizeFn>(0x18003ea50ull)(&_sheetsData, n); // 1800cfa64
     RtAddr<ArraySerFn>(0x18003eb60ull)(&ser, n, _sheetsData);
 
     n = _colorsCount;                                       // 1800cfa7c
-    RwScalar(rw, kRwScalarInt, &n);                         // 1800cfa93
+    rw->SerializeInt(n, nullptr);                           // 1800cfa93
     if (ser.stream->mode == 0)                              // 1800cfa99
         RtAddr<SetSizeFn>(0x18003eea0ull)(&_colorsData, n); // 1800cfaad
     {
@@ -151,14 +151,14 @@ bool DocumentTextDescription::Serialize(void* streamArg) {
         // AFTER the SetSize call (`MOV RBX,[RSI+0xd0]` at 0x1800cfab2).
         int32_t* q = _colorsData;                              // 1800cfab2
         for (int32_t k = n; k > 0; --k) {                      // 1800cfabc / 1800cfadc
-            RwScalar(rw, kRwScalarUInt, q);                    // 1800cfacf
+            rw->SerializeUInt(*reinterpret_cast<uint32_t*>(q), nullptr);  // 1800cfacf (+0x98)
             ++q;                                               // 1800cfad5
         }
     }
 
     RtAddr<FieldSerFn>(0x18003dc90ull)(&_resourceList, &ser);   // 1800cfae9
 
-    DestroyReaderWriter(rw);                                // 1800cfb00
+    if (rw != nullptr) rw->DeletingDtor(1);                 // 1800cfb00
     return true;
 }
 

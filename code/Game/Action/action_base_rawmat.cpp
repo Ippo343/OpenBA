@@ -261,7 +261,7 @@ int ActRm_GetResourceCategory_88f90(void* /*unused*/, uintptr_t entity) {
     uintptr_t base = *reinterpret_cast<uintptr_t*>(entity + 0x28);
     for (int idx = 0; idx < n; idx++) {
         void* c = *reinterpret_cast<void**>(base + static_cast<uintptr_t>(idx) * 8);
-        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(c) + 0x10))(c);
+        uint32_t t = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.x bridge (slot 2)
         if (t == typeId) {
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, typeId)) comp = c;
             break;
@@ -309,7 +309,7 @@ void* ActRm_FindComponent_223c0(uintptr_t entity, void* retIBP) {
     for (int idx = 0; idx < n; idx++) {
         void** ibp = reinterpret_cast<void**>(base + static_cast<uintptr_t>(idx) * 8);
         void* obj = *ibp;
-        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(obj) + 0x10))(obj);
+        uint32_t t = reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.x bridge (slot 2)
         if (t == typeId) {
             void** ibp2 = reinterpret_cast<void**>(base + static_cast<uintptr_t>(idx) * 8);
             void* o = *ibp2;
@@ -338,7 +338,7 @@ void* ActRm_FindComp_013320(uintptr_t self, void* retIBP) {
     for (int idx = 0; idx < n; idx++) {
         void** ibp = reinterpret_cast<void**>(base + static_cast<uintptr_t>(idx) * 8);
         void* obj = *ibp;
-        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(obj) + 0x10))(obj);
+        uint32_t t = reinterpret_cast<Object::Base*>(obj)->Type();   // B.3.x bridge (slot 2)
         if (t == typeId) {
             void** ibp2 = reinterpret_cast<void**>(base + static_cast<uintptr_t>(idx) * 8);
             void* o = *ibp2;

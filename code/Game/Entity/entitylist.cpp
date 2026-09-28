@@ -164,19 +164,18 @@ void EntityList_TreeNodeHandler(int64_t entity, void* time) {
             // CheckPtr again before vtable call
             comp = *(int64_t*)compIBP;
 
-            // Call component vtable slot +0x40 (slot index 8)
-            void** vtbl = *(void***)(uintptr_t)comp;
-            typedef void (*CompSlot8_t)(void*, void*);
+            // Component slot 8 (+0x40) Tick, by name.
+            Component* c = reinterpret_cast<Component*>(comp);   // B.3.x bridge
             if (g_compProfOn >= 2) {
                 // [STRESS] BANISHED_STRESS_COMPPROF=2: attribute the per-frame (slot 8) tick
                 // per component type, separately from the slot-9 bucket Update (kind 1 =
                 // "/tree"). Opt-in: ~30k QPC pairs per frame at 800x10 (~+0.8 ms/frame).
                 const int slot = CompProf_BeginKind((void*)(uintptr_t)comp, 1);
                 const long long q0 = CompProf_Now();
-                ((CompSlot8_t)vtbl[8])((void*)(uintptr_t)comp, time);
+                c->Tick(time);
                 CompProf_End(slot, CompProf_Now() - q0);
             } else {
-                ((CompSlot8_t)vtbl[8])((void*)(uintptr_t)comp, time);
+                c->Tick(time);
             }
         }
 
@@ -225,10 +224,8 @@ void EntityList_PostUpdateNodeHandler(int64_t entity) {
             // CheckPtr again before vtable call
             comp = *(int64_t*)compIBP;
 
-            // Call component vtable slot +0x50 (slot index 10)
-            void** vtbl = *(void***)(uintptr_t)comp;
-            typedef void (*CompSlot10_t)(void*);
-            ((CompSlot10_t)vtbl[10])((void*)(uintptr_t)comp);
+            // Component slot 10 (+0x50) PostUpdate, by name.
+            reinterpret_cast<Component*>(comp)->PostUpdate();   // B.3.x bridge
         }
 
         ci++;
@@ -759,19 +756,17 @@ void EntityList_Update(EntityList* self, void* time) {
                                 // Verified from disassembly: MOV ECX,[RAX+0x20]; SHR ECX,3
                                 if ((*(uint32_t*)(compIBP + 0x20) >> 3) & 1) {
 
-                                    // Call component vtable slot +0x48 (slot index 9 = Update)
-                                    void** vtbl = *(void***)(uintptr_t)compIBP;
-                                    typedef void (*CompUpdate_t)(void* self, void* time);
-                                    CompUpdate_t compUpdate = (CompUpdate_t)vtbl[9];
+                                    // Component slot 9 (+0x48) Update, by name.
+                                    Component* comp = reinterpret_cast<Component*>(compIBP);   // B.3.x bridge
                                     if (g_compProfOn) {
                                         // [STRESS] per-component-type Update cost. Keyed by
                                         // vtable, so the only per-call cost is two QPC reads.
                                         const int slot = CompProf_Begin((void*)(uintptr_t)compIBP);
                                         const long long q0 = CompProf_Now();
-                                        compUpdate((void*)(uintptr_t)compIBP, deltaTime);
+                                        comp->Update(deltaTime);
                                         CompProf_End(slot, CompProf_Now() - q0);
                                     } else {
-                                        compUpdate((void*)(uintptr_t)compIBP, deltaTime);
+                                        comp->Update(deltaTime);
                                     }
                                 }
 

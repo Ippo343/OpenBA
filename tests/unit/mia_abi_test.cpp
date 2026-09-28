@@ -24,6 +24,7 @@
 // toolchain). No slot of these classes is a retslot or takes a hidden pointer.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "Component/AbsorbResourceComponent.h"
 #include "Component/AttendanceComponent.h"
@@ -46,17 +47,6 @@
 
 namespace {
 
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting: not single inheritance
-    return words[0] - 1;
-}
-
-constexpr uintptr_t S(int slot) { return static_cast<uintptr_t>(slot) * 8; }
 
 // ===========================================================================
 // PART A — LAYOUT
@@ -139,10 +129,10 @@ void CheckLeafShape() {
     CHECK((std::is_base_of<Object::Internal, T>::value));
     CHECK(!std::has_virtual_destructor<typename T::StateController>::value);
     CHECK_EQ(alignof(T), (size_t)8);
-    CHECK_EQ(SlotOffset(&T::DeletingDtor),    S(0));
-    CHECK_EQ(SlotOffset(&T::Persist),         S(3));
-    CHECK_EQ(SlotOffset(&T::GetDefaultState), S(16));
-    CHECK_EQ(SlotOffset(&T::GetController),   S(17));
+    CHECK_DTOR_SLOT(T);
+    CHECK_SLOT(T, Persist,         3);
+    CHECK_SLOT(T, GetDefaultState, 16);
+    CHECK_SLOT(T, GetController,   17);
 }
 
 UNIT_TEST(mia_component_class_shape_rules) {
@@ -165,26 +155,26 @@ UNIT_TEST(mia_component_class_shape_rules) {
 // PART C — SLOT ORDER (the leaf's own slots, B38_SLOTS.md §6)
 // ===========================================================================
 UNIT_TEST(mia_component_own_slots_land_on_retail_indices) {
-    CHECK_EQ(SlotOffset(&AttendanceComponent::OnRemove),     S(7));    // 0x1400443d0
-    CHECK_EQ(SlotOffset(&AttendanceComponent::Update),       S(9));    // 0x140044370
-    CHECK_EQ(SlotOffset(&AttendanceComponent::CommandMask),  S(13));   // 0x140043f10
-    CHECK_EQ(SlotOffset(&AttendanceComponent::Command),      S(14));   // 0x140043e80
-    CHECK_EQ(SlotOffset(&BuildComponent::Startup),           S(4));    // 0x140108d60
-    CHECK_EQ(SlotOffset(&BuildComponent::OnAdded),           S(6));    // 0x140108d40
-    CHECK_EQ(SlotOffset(&BuildComponent::OnRemove),          S(7));    // 0x140108cb0
-    CHECK_EQ(SlotOffset(&BuildComponent::Slot11),            S(11));   // 0x140108d70
-    CHECK_EQ(SlotOffset(&BuildComponent::OnMessage),         S(15));   // 0x140108710
-    CHECK_EQ(SlotOffset(&CemeteryComponent::Startup),        S(4));    // 0x1400475b0
-    CHECK_EQ(SlotOffset(&CemeteryComponent::OnAdded),        S(6));    // 0x140047200
-    CHECK_EQ(SlotOffset(&CemeteryComponent::OnRemove),       S(7));    // 0x1400471c0
-    CHECK_EQ(SlotOffset(&DestroyComponent::Startup),         S(4));    // 0x14011db00
-    CHECK_EQ(SlotOffset(&DestroyComponent::OnMessage),       S(15));   // 0x14011daf0
-    CHECK_EQ(SlotOffset(&HappinessComponent::OnRemove),      S(7));    // 0x14004aa20
-    CHECK_EQ(SlotOffset(&HappinessComponent::OnMessage),     S(15));   // 0x14004a780
-    CHECK_EQ(SlotOffset(&HealerComponent::OnRemove),         S(7));    // 0x14004ae70
-    CHECK_EQ(SlotOffset(&NomadComponent::OnRemove),          S(7));    // 0x14004fd20
-    CHECK_EQ(SlotOffset(&ResidenceComponent::Startup),       S(4));    // 0x14012a120
-    CHECK_EQ(SlotOffset(&ResidenceComponent::OnRemove),      S(7));    // 0x14012a0e0
+    CHECK_SLOT(AttendanceComponent, OnRemove,    7);    // 0x1400443d0
+    CHECK_SLOT(AttendanceComponent, Update,      9);    // 0x140044370
+    CHECK_SLOT(AttendanceComponent, CommandMask, 13);   // 0x140043f10
+    CHECK_SLOT(AttendanceComponent, Command,     14);   // 0x140043e80
+    CHECK_SLOT(BuildComponent, Startup,          4);    // 0x140108d60
+    CHECK_SLOT(BuildComponent, OnAdded,          6);    // 0x140108d40
+    CHECK_SLOT(BuildComponent, OnRemove,         7);    // 0x140108cb0
+    CHECK_SLOT(BuildComponent, Slot11,           11);   // 0x140108d70
+    CHECK_SLOT(BuildComponent, OnMessage,        15);   // 0x140108710
+    CHECK_SLOT(CemeteryComponent, Startup,       4);    // 0x1400475b0
+    CHECK_SLOT(CemeteryComponent, OnAdded,       6);    // 0x140047200
+    CHECK_SLOT(CemeteryComponent, OnRemove,      7);    // 0x1400471c0
+    CHECK_SLOT(DestroyComponent, Startup,        4);    // 0x14011db00
+    CHECK_SLOT(DestroyComponent, OnMessage,      15);   // 0x14011daf0
+    CHECK_SLOT(HappinessComponent, OnRemove,     7);    // 0x14004aa20
+    CHECK_SLOT(HappinessComponent, OnMessage,    15);   // 0x14004a780
+    CHECK_SLOT(HealerComponent, OnRemove,        7);    // 0x14004ae70
+    CHECK_SLOT(NomadComponent, OnRemove,         7);    // 0x14004fd20
+    CHECK_SLOT(ResidenceComponent, Startup,      4);    // 0x14012a120
+    CHECK_SLOT(ResidenceComponent, OnRemove,     7);    // 0x14012a0e0
 }
 
 // ===========================================================================

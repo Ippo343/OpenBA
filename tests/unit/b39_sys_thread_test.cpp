@@ -22,6 +22,7 @@
 // ============================================================================
 
 #include "unit.h"
+#include "slot_check.h"
 #include "system_abi_stubs.h"
 #include "../../runtime/types/system/Thread.h"
 
@@ -32,17 +33,6 @@
 namespace {
 
 void* VptrOf(const void* p) { return *static_cast<void* const*>(p); }
-
-// Itanium pointer-to-virtual-member: { ptr = 1 + vtable_byte_offset, adj }.
-template <typename PMF>
-long ThreadSlotOf(PMF pmf, uintptr_t* adj) {
-    static_assert(sizeof(PMF) == 2 * sizeof(void*), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof(words));
-    *adj = words[1];
-    if ((words[0] & 1u) == 0) return -1;
-    return static_cast<long>((words[0] - 1) / sizeof(void*));
-}
 
 int   g_realRunCalls = 0;
 void* g_vptrInDerivedCtorBody = nullptr;
@@ -78,12 +68,10 @@ UNIT_TEST(b39_sys_thread_shape) {
 }
 
 UNIT_TEST(b39_sys_thread_slot_order_via_pmf) {
-    uintptr_t adj = 99;
-    CHECK_EQ(ThreadSlotOf(&System::Thread::Run, &adj), 0L);
-    CHECK_EQ(adj, static_cast<uintptr_t>(0));
-    adj = 99;
-    CHECK_EQ(ThreadSlotOf(&System::Thread::OnCompleted, &adj), 1L);
-    CHECK_EQ(adj, static_cast<uintptr_t>(0));
+    // CompilerSlot also requires adjustment 0. Thread has no destructor slot
+    // (no virtual destructor), so its retail slots are its compiler slots.
+    CHECK_SLOT(System::Thread, Run,         0);
+    CHECK_SLOT(System::Thread, OnCompleted, 1);
 }
 
 UNIT_TEST(b39_sys_thread_real_ctor_runs_the_shared_body_once_under_the_base_table) {

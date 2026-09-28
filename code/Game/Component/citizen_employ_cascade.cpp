@@ -77,8 +77,6 @@ inline int64_t   LaborerKey()  { return *reinterpret_cast<int64_t*>(*reinterpret
 inline void Ctor(void* self, void* obj) { if (fn_InternalBasePtr_Ctor) new (self) ::Object::InternalBasePtr(
     reinterpret_cast<RtObject::Internal*>(obj)); }   // B.3.3 bridge
 
-typedef uint32_t (*GetTypeId_t)(void*);
-
 // citizen adult (desc+0x44 <= cz+0x3c) && idle (cz+0x208 == 0). No CheckPtr (caller
 // already CheckPtr'd; the exe reads these two fields before the mid-check CheckPtr).
 inline bool AdultIdle(int64_t cz) {
@@ -97,7 +95,7 @@ void* FindResidenceComp(int64_t entity) {
     while (i < cnt) {
         void* elem = reinterpret_cast<void*>(arr + off);
         void* comp = *reinterpret_cast<void**>(elem);
-        uint32_t tid = ((GetTypeId_t)(*reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10)))(comp);
+        uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
         if (tid == s_tidResidence) {
             void* elem2 = reinterpret_cast<void*>(arr + off);
             void* compVal = *reinterpret_cast<void**>(elem2);

@@ -190,14 +190,6 @@ enum : size_t {
     kChildrenData = 0xa0,   // ?Child@         0x180035540
     kChildrenSize = 0xa8,   // ?ChildCount@    0x180035530
 };
-// Vtable slots. Slot 2 (+0x10) is Object::Internal's Type slot — the same
-// offset runtime/types/object/Internal.h calls kInternalVtblType. Slot 4
-// (+0x20) is ComputeSize(), which is _purecall in the Element base and
-// overridden by every class this file calls it on.
-enum : int {
-    kVtblType        = 0x10,
-    kVtblComputeSize = 0x20,
-};
 }  // namespace EL
 
 // UI::Element::_flags bits, named by runtime/types/ui/Element.h.
@@ -310,19 +302,8 @@ void* DeviceSingleton() {
     return ::Video::Device::_singleton;
 }
 
-// ---- virtual dispatch ------------------------------------------------------
-inline uint32_t VCallType(void* el) {
-    void* const* const vt = *reinterpret_cast<void* const* const*>(el);
-    return reinterpret_cast<uint32_t (*)(void*)>(
-        *reinterpret_cast<void* const*>(
-            reinterpret_cast<const uint8_t*>(vt) + EL::kVtblType))(el);
-}
-inline void VCallComputeSize(void* el) {
-    void* const* const vt = *reinterpret_cast<void* const* const*>(el);
-    reinterpret_cast<void (*)(void*)>(
-        *reinterpret_cast<void* const*>(
-            reinterpret_cast<const uint8_t*>(vt) + EL::kVtblComputeSize))(el);
-}
+// (B3X W0: the VCallType / VCallComputeSize byte-offset helpers are gone; the
+// three call sites below dispatch Type() / ComputeSize() by name.)
 
 // ===========================================================================
 // The four inlined member functions, each reproduced as the shipped stream
@@ -335,7 +316,7 @@ inline void VCallComputeSize(void* el) {
 // one level retail open-coded. Both the children POINTER and the child COUNT
 // are re-read every iteration, exactly as 0x180111dc0 / 0x180111df0 do.
 void* FindSelfOrUnderChildren(void* root, uint32_t typeId) {
-    if (VCallType(root) == typeId) return root;      // 0x180111da4 CMP / JZ
+    if (static_cast<const UI::Element*>(root)->Type() == typeId) return root;      // 0x180111da4 CMP / JZ
 
     int32_t i = 0;
     while (i < F<int32_t>(root, EL::kChildrenSize)) {
@@ -376,7 +357,7 @@ void ContainerSetSize(void* el, int32_t w, int32_t h) {
 // ?GetContentSize@ClipRegionElement@UI@@QEAAXAEAH0@Z  0x1800381e0, inlined at
 // 0x180111f3e: ComputeSize() first, then the two dwords.
 void ClipGetContentSize(void* el, int32_t* outW, int32_t* outH) {
-    VCallComputeSize(el);
+    static_cast<UI::Element*>(el)->ComputeSize();
     *outW = F<int32_t>(el, kClipContentWidth);
     *outH = F<int32_t>(el, kClipContentHeight);
 }
@@ -387,7 +368,7 @@ void ClipGetContentSize(void* el, int32_t* outW, int32_t* outH) {
 // dimension scaled by the ROOT dialog's UI scale. `flags` is captured ONCE,
 // before the walk to the root, which is what both the export and the inline do.
 void GetPaddedSize(void* el, int32_t* outW, int32_t* outH) {
-    VCallComputeSize(el);
+    static_cast<UI::Element*>(el)->ComputeSize();
 
     int32_t w = F<int32_t>(el, EL::kLayoutWidth)
               + F<int32_t>(el, EL::kRightPad)

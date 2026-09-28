@@ -33,6 +33,7 @@
 //     and the names, not the ids.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -181,14 +182,14 @@ UNIT_TEST(internal_vtable_slot_order_is_retail) {
 
     // Slot 1 — `?TypeName@…@@UEBAPEBDXZ`, 0x1800064c0 in retail.
     const char* nameThroughSlot =
-        reinterpret_cast<const char* (*)(const void*)>(vt[kSlotTypeName])(obj);
+        reinterpret_cast<const char* (*)(const void*)>(vt[RetailSlot<TestInternal>(kSlotTypeName)])(obj);
     CHECK_STREQ(nameThroughSlot, "TestInternal");
     CHECK_STREQ(nameThroughSlot, obj->TypeName());
 
     // Slot 2 — `?Type@…@@UEBAIXZ`, 0x1800064d0 in retail. 0xFFFFFFFF until
     // `Factory::Startup` runs, and this host never runs it.
     const uint32_t typeThroughSlot =
-        reinterpret_cast<uint32_t (*)(const void*)>(vt[kSlotType])(obj);
+        reinterpret_cast<uint32_t (*)(const void*)>(vt[RetailSlot<TestInternal>(kSlotType)])(obj);
     CHECK_EQ(typeThroughSlot, 0xFFFFFFFFu);
     CHECK_EQ(typeThroughSlot, obj->Type());
     CHECK_EQ(typeThroughSlot, TestInternal::TypeId());
@@ -197,7 +198,7 @@ UNIT_TEST(internal_vtable_slot_order_is_retail) {
     // `InternalFactory::PersistObject` reaches it as `vtbl[0x18]`, i.e. THIS
     // index, on both of its arms.
     const int before = g_persistCalls;
-    reinterpret_cast<void (*)(void*, void*)>(vt[kSlotPersist])(obj, nullptr);
+    reinterpret_cast<void (*)(void*, void*)>(vt[RetailSlot<TestInternal>(kSlotPersist)])(obj, nullptr);
     CHECK_EQ(g_persistCalls, before + 1);
 
     ::Object::Destroy(obj);

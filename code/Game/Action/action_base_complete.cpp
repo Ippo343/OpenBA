@@ -51,6 +51,7 @@
 #include "scene_watch.h"
 #include <windows.h>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Work/Work.h"         // B.3.x W0: Work slots 6/7/8/10 by name
 
 namespace {
 
@@ -113,9 +114,10 @@ bool ActCt_TryCompleteTask_8760(void* taskMgr, void* entityRef, int taskIdx,
     uintptr_t* owner = *reinterpret_cast<uintptr_t**>(ibp);
     void* entityCopy = *reinterpret_cast<void**>(entityRef);
 
-    typedef uint64_t (*vfn_t)(void* self, void* a, void* b, uint32_t p);
-    vfn_t vf = *reinterpret_cast<vfn_t*>(*owner + 0x30);
-    uint64_t r = vf(owner, &entityCopy, &targetCopy, taskParam);
+    // Work slot 6. The receiver is the scheduler's work IBP (node+0x08 of the id map
+    // CitizenAI_impl_88a0 0x1400f88a0 fills with the posted Work leaves).
+    int r = reinterpret_cast<Work*>(owner)->OnComplete(&entityCopy, &targetCopy,
+                                                       static_cast<int>(taskParam));   // B.3.x bridge (slot 6)
     return (r & 0xff) != 0;
 }
 
@@ -132,9 +134,8 @@ void ActCt_TaskReassign_8800(void* taskMgr, void* entityRef, int taskIdx,
     uintptr_t* owner = *reinterpret_cast<uintptr_t**>(ibp);
     void* entityCopy = *reinterpret_cast<void**>(entityRef);
 
-    typedef void (*vfn_t)(void* self, void* a, void* b, uint32_t p);
-    vfn_t vf = *reinterpret_cast<vfn_t*>(*owner + 0x38);
-    vf(owner, &entityCopy, &targetCopy, taskParam);
+    reinterpret_cast<Work*>(owner)->OnCancel(&entityCopy, &targetCopy,
+                                             static_cast<int>(taskParam));   // B.3.x bridge (slot 7)
 }
 
 // ============================================================
@@ -271,9 +272,8 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
     {
         uintptr_t* owner = *reinterpret_cast<uintptr_t**>(reinterpret_cast<uintptr_t>(task) + 0x8);
         uint64_t keyTmp = 0;
-        typedef uint64_t* (*vfn50_t)(void* self, void* out);
-        vfn50_t vf50 = *reinterpret_cast<vfn50_t*>(*owner + 0x50);
-        uint64_t* keyPtr = vf50(owner, &keyTmp);
+        uint64_t* keyPtr = static_cast<uint64_t*>(
+            reinterpret_cast<Work*>(owner)->GetTarget(&keyTmp));   // B.3.x bridge (slot 10, retslot)
 
         // Walk the +0x120 BST (value@+0, left@+0x20, right@+0x28; entry list at node+0x8).
         uint64_t* node = *reinterpret_cast<uint64_t**>(self + 0x120);
@@ -317,7 +317,7 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
     }
     {
         uintptr_t* owner = *reinterpret_cast<uintptr_t**>(reinterpret_cast<uintptr_t>(task) + 0x8);
-        (*reinterpret_cast<void(**)(void*)>(*owner + 0x40))(owner);
+        reinterpret_cast<Work*>(owner)->Cleanup();   // B.3.x bridge (slot 8)
     }
     if (fn_InternalBasePtr_DeletePtr)
         reinterpret_cast< ::Object::InternalBasePtr*>(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(task) + 0x8))->DeletePtr(
@@ -468,7 +468,7 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
             uintptr_t arr = *reinterpret_cast<uintptr_t*>(item + 0x28);
             for (int i = 0; i < n; i++) {
                 void* comp = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-                uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+                uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
                 if (t == tidModelDesc) {
                     void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
                     if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidModelDesc)) fenceComp = c;
@@ -486,7 +486,7 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
             uintptr_t arr = *reinterpret_cast<uintptr_t*>(item + 0x28);
             for (int i = 0; i < n; i++) {
                 void* comp = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-                uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+                uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.x bridge (slot 2)
                 if (t == tidRawMat) {
                     void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
                     if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidRawMat)) rawComp = c;

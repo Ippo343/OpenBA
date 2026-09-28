@@ -133,14 +133,12 @@ bool ProgressDescription::Serialize(void* streamArg) {
     void*  factory = stream->encodingFactory;
     void** fvt     = VTableOf(factory);
     const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = void* (*)(void* factory, Serializer* ser, int version);
-    void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
+    using MakeRwFn = IO::ReaderWriter* (*)(void* factory, Serializer* ser, int version);   // B.3.x bridge: the factory returns the class
+    IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
     ser.readerWriter = rw;                                              // 180119faa
 
-    using ScalarFn = void (*)(void* rw, void* value, const char* name);
-    void** rvt = VTableOf(rw);
     // kScalarUInt, NOT kScalarInt — vt+0x98 at 0x180119fbe.
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &_unknown68, nullptr);
+    rw->SerializeUInt(_unknown68, nullptr);
 
     using FieldSerFn = void (*)(void* field, Serializer* ser);
     RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser);            // 180119fcd ExternalPtr<SpriteSheet>
@@ -153,8 +151,7 @@ bool ProgressDescription::Serialize(void* streamArg) {
     RtAddr<FieldSerFn>(0x180038f90ull)(&_childDescription, &ser);       // 18011a041 ExternalPtr<ElementDescription>
 
     if (rw != nullptr) {                                                // 18011a04f
-        using DeleteFn = void (*)(void* rw, int flag);
-        reinterpret_cast<DeleteFn>(rvt[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+        rw->DeletingDtor(1);
     }
     return true;
 }

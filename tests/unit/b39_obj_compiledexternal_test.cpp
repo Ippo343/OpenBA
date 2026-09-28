@@ -11,6 +11,7 @@
 // ============================================================================
 
 #include "unit.h"
+#include "slot_check.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -32,16 +33,6 @@ public:
 };
 static_assert(sizeof(TestCompiled) == 0x20, "the leaf adds no bytes");
 
-template <typename PMF>
-uintptr_t CeSlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);          // this-adjustment
-    return words[0] - 1;
-}
-
 }  // namespace
 
 UNIT_TEST(b39_obj_compiledexternal_protected_nonvirtual_dtor) {
@@ -54,14 +45,14 @@ UNIT_TEST(b39_obj_compiledexternal_protected_nonvirtual_dtor) {
 // ??_7CompiledExternal@Object@@6B@ 0x180154a30, eight slots.
 UNIT_TEST(b39_obj_compiledexternal_slot_order_by_pmf) {
     using CE = Object::CompiledExternal;
-    CHECK_EQ(CeSlotOffset(&CE::DeletingDtor),   (uintptr_t)0x00);   // 0x18000b7e0
-    CHECK_EQ(CeSlotOffset(&CE::TypeName),       (uintptr_t)0x08);   // 0x18000b6b0
-    CHECK_EQ(CeSlotOffset(&CE::Type),           (uintptr_t)0x10);   // 0x18000b690
-    CHECK_EQ(CeSlotOffset(&CE::GetFileVersion), (uintptr_t)0x18);   // purecall
-    CHECK_EQ(CeSlotOffset(&CE::Compile),        (uintptr_t)0x20);   // 0x1800066e0 (External's)
-    CHECK_EQ(CeSlotOffset(&CE::Serialize),      (uintptr_t)0x28);   // purecall
-    CHECK_EQ(CeSlotOffset(&CE::Reconstruct),    (uintptr_t)0x30);   // purecall
-    CHECK_EQ(CeSlotOffset(&CE::Destruct),       (uintptr_t)0x38);   // purecall
+    CHECK_DTOR_SLOT(CE);   // 0x18000b7e0
+    CHECK_SLOT(CE, TypeName,       0x08/8);   // 0x18000b6b0
+    CHECK_SLOT(CE, Type,           0x10/8);   // 0x18000b690
+    CHECK_SLOT(CE, GetFileVersion, 0x18/8);   // purecall
+    CHECK_SLOT(CE, Compile,        0x20/8);   // 0x1800066e0 (External's)
+    CHECK_SLOT(CE, Serialize,      0x28/8);   // purecall
+    CHECK_SLOT(CE, Reconstruct,    0x30/8);   // purecall
+    CHECK_SLOT(CE, Destruct,       0x38/8);   // purecall
 }
 
 // ??0CompiledExternal 0x1800bb920: External's zero stores, then the table.
@@ -124,7 +115,7 @@ UNIT_TEST(b39_obj_external_deletingdtor_both_arms) {
     CHECK(std::is_abstract<Object::External>::value);
     CHECK(!std::is_destructible<Object::External>::value);
     CHECK(!std::has_virtual_destructor<Object::External>::value);
-    CHECK_EQ(CeSlotOffset(&Object::External::DeletingDtor), (uintptr_t)0x00);   // 0x180006640
+    CHECK_DTOR_SLOT(Object::External);   // 0x180006640
 
     void* p = Object::detail::InternalMemAlloc(sizeof(TestPlainExternal), 8);
     CHECK(p != nullptr);
@@ -155,9 +146,9 @@ static_assert(sizeof(TestBaseLeaf) == 8, "one vtable pointer");
 UNIT_TEST(b39_obj_base_deletingdtor_both_arms) {
     CHECK(!std::is_destructible<Object::Base>::value);
     CHECK(!std::has_virtual_destructor<Object::Base>::value);
-    CHECK_EQ(CeSlotOffset(&Object::Base::DeletingDtor), (uintptr_t)0x00);   // 0x1800065b0
-    CHECK_EQ(CeSlotOffset(&Object::Base::TypeName),     (uintptr_t)0x08);   // _purecall
-    CHECK_EQ(CeSlotOffset(&Object::Base::Type),         (uintptr_t)0x10);   // 0x1800c0380
+    CHECK_DTOR_SLOT(Object::Base);   // 0x1800065b0
+    CHECK_SLOT(Object::Base, TypeName, 0x08/8);   // _purecall
+    CHECK_SLOT(Object::Base, Type,     0x10/8);   // 0x1800c0380
 
     void* p = Object::detail::InternalMemAlloc(sizeof(TestBaseLeaf), 8);
     CHECK(p != nullptr);

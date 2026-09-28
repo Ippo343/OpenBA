@@ -254,21 +254,20 @@ void BuildComponent_DrawReimpl(void* selfP) {
             int hc = *(int*)(host + 0x38);
             for (int k = 0; k < hc; k++) {
                 int64_t* h = *(int64_t**)(*(int64_t*)(host + 0x30) + (int64_t)k * 8);
-                typedef void (*VFn_t)(void*);
-                ((VFn_t)(*(uintptr_t*)(*h + 0x60)))(h);
+                // Retail passes EDX = 0 here too (0x140108a2e XOR EDX,EDX before
+                // CALL [RAX+0x60] at 0x140108a33); the old C call dropped it.
+                reinterpret_cast<Component*>(h)->OnEvent(0);   // B.3.x bridge (slot 12)
             }
         } else {
             if (mark >= 0) {
-                typedef void (*VFn38_t)(int64_t*);
-                ((VFn38_t)(*(uintptr_t*)(*node + 0x38)))(node);
+                reinterpret_cast<Component*>(node)->OnRemove();   // B.3.x bridge (slot 7)
             }
             *(int16_t*)((uintptr_t)node + 0x166) = (int16_t)0xffff;
             int64_t host = node[2];
             int hc = *(int*)(host + 0x38);
             for (int k = 0; k < hc; k++) {
                 int64_t* h = *(int64_t**)(*(int64_t*)(host + 0x30) + (int64_t)k * 8);
-                typedef void (*VFn_t)(void*, int);
-                ((VFn_t)(*(uintptr_t*)(*h + 0x60)))(h, 0);
+                reinterpret_cast<Component*>(h)->OnEvent(0);   // B.3.x bridge (slot 12)
             }
         }
         int64_t* sslot = (int64_t*)(self[0xd] + (int64_t)i * 8);

@@ -23,6 +23,7 @@
 // tests/unit/exe_class_abi_test.cpp PART C's proof of DEFINE_EXE_VTABLE.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "Component/AutoPickupComponent.h"
 #include "Component/DecalComponent.h"
@@ -57,17 +58,6 @@
 
 namespace {
 
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting: not single inheritance
-    return words[0] - 1;
-}
-
-constexpr uintptr_t S(int slot) { return static_cast<uintptr_t>(slot) * 8; }
 
 // ===========================================================================
 // PART A — LAYOUT
@@ -162,7 +152,7 @@ void CheckShape() {
     CHECK(!std::has_virtual_destructor<T>::value);
     CHECK((std::is_base_of<Base, T>::value));
     CHECK_EQ(alignof(T), (size_t)8);
-    CHECK_EQ(SlotOffset(&T::DeletingDtor), S(0));
+    CHECK_DTOR_SLOT(T);
 }
 
 template <typename T>
@@ -170,7 +160,7 @@ void CheckComponentShape() {
     CheckShape<T, Component>();
     CHECK((std::is_base_of<Object::Internal, T>::value));
     CHECK(!(std::is_base_of<ControllerComponent, T>::value));   // D6: members, not bases
-    CHECK_EQ(SlotOffset(&T::Persist), S(3));
+    CHECK_SLOT(T, Persist, 3);
 }
 
 UNIT_TEST(vis_class_shape_rules) {
@@ -214,117 +204,117 @@ UNIT_TEST(vis_class_shape_rules) {
 // PART C — SLOT ORDER (the leaf's own slots, B38_SLOTS.md §6)
 // ===========================================================================
 UNIT_TEST(vis_component_own_slots_land_on_retail_indices) {
-    CHECK_EQ(SlotOffset(&AutoPickupComponent::Startup),       S(4));    // 0x140044990
-    CHECK_EQ(SlotOffset(&AutoPickupComponent::CommandMask),   S(13));   // 0x140044970
-    CHECK_EQ(SlotOffset(&AutoPickupComponent::Command),       S(14));   // 0x140044930
-    CHECK_EQ(SlotOffset(&DecalComponent::Startup),            S(4));    // 0x14011b7d0
-    CHECK_EQ(SlotOffset(&DecalComponent::OnAdded),            S(6));    // 0x14011b560
-    CHECK_EQ(SlotOffset(&DecalComponent::OnRemove),           S(7));    // 0x14011b510
-    CHECK_EQ(SlotOffset(&DecalComponent::Tick),               S(8));    // tree divergence
-    CHECK_EQ(SlotOffset(&DecalComponent::Slot11),             S(11));   // 0x14011b810
-    CHECK_EQ(SlotOffset(&DecalComponent::OnEvent),            S(12));   // 0x14011b760
-    CHECK_EQ(SlotOffset(&FloorComponent::OnAdded),            S(6));    // 0x14011f340
-    CHECK_EQ(SlotOffset(&FloorComponent::OnRemove),           S(7));    // 0x14011f2a0
-    CHECK_EQ(SlotOffset(&FloorComponent::Slot11),             S(11));   // 0x14011f540
-    CHECK_EQ(SlotOffset(&FloorComponent::OnEvent),            S(12));   // 0x14011f520
-    CHECK_EQ(SlotOffset(&HighlightComponent::OnRemove),       S(7));    // tree divergence
-    CHECK_EQ(SlotOffset(&HighlightComponent::Tick),           S(8));    // 0x14004c850
-    CHECK_EQ(SlotOffset(&HighlightComponent::OnEvent),        S(12));   // 0x14004c870
-    CHECK_EQ(SlotOffset(&InteractComponent::OnAdded),         S(6));    // 0x140123110
-    CHECK_EQ(SlotOffset(&MapComponent::OnAdded),              S(6));    // 0x140124370
-    CHECK_EQ(SlotOffset(&MapComponent::OnRemove),             S(7));    // 0x1401242f0
-    CHECK_EQ(SlotOffset(&MapComponent::OnEvent),              S(12));   // 0x1401243c0
-    CHECK_EQ(SlotOffset(&MineComponent::OnAdded),             S(6));    // 0x14004f250
-    CHECK_EQ(SlotOffset(&MineComponent::OnRemove),            S(7));    // 0x14004f240
-    CHECK_EQ(SlotOffset(&ModelComponent::Startup),            S(4));    // 0x140124ac0
-    CHECK_EQ(SlotOffset(&ModelComponent::OnAdded),            S(6));    // 0x140124a30
-    CHECK_EQ(SlotOffset(&ModelComponent::OnRemove),           S(7));    // 0x1401249d0
-    CHECK_EQ(SlotOffset(&ModelComponent::Tick),               S(8));    // 0x140124960
-    CHECK_EQ(SlotOffset(&PickingComponent::Startup),          S(4));    // 0x140128c30
-    CHECK_EQ(SlotOffset(&PickingComponent::OnAdded),          S(6));    // 0x140128b90
-    CHECK_EQ(SlotOffset(&PickingComponent::OnRemove),         S(7));    // 0x140128b50
-    CHECK_EQ(SlotOffset(&PickingComponent::Slot11),           S(11));   // 0x140128ba0
-    CHECK_EQ(SlotOffset(&QuarryComponent::OnAdded),           S(6));    // 0x140055220
-    CHECK_EQ(SlotOffset(&QuarryComponent::OnRemove),          S(7));    // 0x140055210
-    CHECK_EQ(SlotOffset(&QuarryComponent::OnEvent),           S(12));   // 0x1400550f0
-    CHECK_EQ(SlotOffset(&QuarryComponent::OnMessage),         S(15));   // 0x140054b80
-    CHECK_EQ(SlotOffset(&RawMaterialComponent::Startup),      S(4));    // 0x1401292c0
-    CHECK_EQ(SlotOffset(&RawMaterialComponent::OnAdded),      S(6));    // 0x1401291d0
-    CHECK_EQ(SlotOffset(&RawMaterialComponent::Update),       S(9));    // 0x140129130
-    CHECK_EQ(SlotOffset(&StateMachineComponent::Startup),     S(4));    // 0x14012b6a0
-    CHECK_EQ(SlotOffset(&StateMachineComponent::OnAdded),     S(6));    // 0x14012b660
-    CHECK_EQ(SlotOffset(&StateMachineComponent::Tick),        S(8));    // 0x14012b640
-    CHECK_EQ(SlotOffset(&StateMachineComponent::Update),      S(9));    // 0x14012b620
-    CHECK_EQ(SlotOffset(&StateMachineComponent::Slot11),      S(11));   // 0x14012b7d0
-    CHECK_EQ(SlotOffset(&StatusIconComponent::Startup),       S(4));    // 0x14012bed0
-    CHECK_EQ(SlotOffset(&StatusIconComponent::OnRemove),      S(7));    // 0x14012beb0 (tree body)
-    CHECK_EQ(SlotOffset(&StatusIconComponent::Tick),          S(8));    // 0x14012bbd0
-    CHECK_EQ(SlotOffset(&StatusIconComponent::Slot11),        S(11));   // 0x14012bf40
-    CHECK_EQ(SlotOffset(&StorageComponent::Startup),          S(4));    // 0x14012c720
-    CHECK_EQ(SlotOffset(&StorageComponent::OnAdded),          S(6));    // 0x14012c640
-    CHECK_EQ(SlotOffset(&StorageDisplayComponent::Startup),   S(4));    // 0x140056930
-    CHECK_EQ(SlotOffset(&StorageDisplayComponent::OnAdded),   S(6));    // 0x140056730
-    CHECK_EQ(SlotOffset(&StorageDisplayComponent::OnRemove),  S(7));    // 0x1400566b0
-    CHECK_EQ(SlotOffset(&StorageDisplayComponent::Update),    S(9));    // 0x1400566a0
-    CHECK_EQ(SlotOffset(&StorageDisplayComponent::Slot11),    S(11));   // 0x140056940
-    CHECK_EQ(SlotOffset(&TerraformComponent::OnAdded),        S(6));    // 0x1400574f0
-    CHECK_EQ(SlotOffset(&TerraformComponent::OnRemove),       S(7));    // 0x140057350
-    CHECK_EQ(SlotOffset(&TerraformComponent::OnEvent),        S(12));   // 0x140057310
-    CHECK_EQ(SlotOffset(&UIComponent::Startup),               S(4));    // 0x14012dca0
-    CHECK_EQ(SlotOffset(&WorkComponent::OnAdded),             S(6));    // 0x14012e6f0
-    CHECK_EQ(SlotOffset(&WorkComponent::OnRemove),            S(7));    // 0x14012e6c0
-    CHECK_EQ(SlotOffset(&WorkComponent::CommandMask),         S(13));   // 0x14012e6b0
-    CHECK_EQ(SlotOffset(&WorkComponent::Command),             S(14));   // 0x14012e6a0
-    CHECK_EQ(SlotOffset(&ZoneComponent::OnAdded),             S(6));    // 0x1401301f0
-    CHECK_EQ(SlotOffset(&ZoneComponent::OnRemove),            S(7));    // 0x140130080
+    CHECK_SLOT(AutoPickupComponent, Startup,      4);    // 0x140044990
+    CHECK_SLOT(AutoPickupComponent, CommandMask,  13);   // 0x140044970
+    CHECK_SLOT(AutoPickupComponent, Command,      14);   // 0x140044930
+    CHECK_SLOT(DecalComponent, Startup,           4);    // 0x14011b7d0
+    CHECK_SLOT(DecalComponent, OnAdded,           6);    // 0x14011b560
+    CHECK_SLOT(DecalComponent, OnRemove,          7);    // 0x14011b510
+    CHECK_SLOT(DecalComponent, Tick,              8);    // tree divergence
+    CHECK_SLOT(DecalComponent, Slot11,            11);   // 0x14011b810
+    CHECK_SLOT(DecalComponent, OnEvent,           12);   // 0x14011b760
+    CHECK_SLOT(FloorComponent, OnAdded,           6);    // 0x14011f340
+    CHECK_SLOT(FloorComponent, OnRemove,          7);    // 0x14011f2a0
+    CHECK_SLOT(FloorComponent, Slot11,            11);   // 0x14011f540
+    CHECK_SLOT(FloorComponent, OnEvent,           12);   // 0x14011f520
+    CHECK_SLOT(HighlightComponent, OnRemove,      7);    // tree divergence
+    CHECK_SLOT(HighlightComponent, Tick,          8);    // 0x14004c850
+    CHECK_SLOT(HighlightComponent, OnEvent,       12);   // 0x14004c870
+    CHECK_SLOT(InteractComponent, OnAdded,        6);    // 0x140123110
+    CHECK_SLOT(MapComponent, OnAdded,             6);    // 0x140124370
+    CHECK_SLOT(MapComponent, OnRemove,            7);    // 0x1401242f0
+    CHECK_SLOT(MapComponent, OnEvent,             12);   // 0x1401243c0
+    CHECK_SLOT(MineComponent, OnAdded,            6);    // 0x14004f250
+    CHECK_SLOT(MineComponent, OnRemove,           7);    // 0x14004f240
+    CHECK_SLOT(ModelComponent, Startup,           4);    // 0x140124ac0
+    CHECK_SLOT(ModelComponent, OnAdded,           6);    // 0x140124a30
+    CHECK_SLOT(ModelComponent, OnRemove,          7);    // 0x1401249d0
+    CHECK_SLOT(ModelComponent, Tick,              8);    // 0x140124960
+    CHECK_SLOT(PickingComponent, Startup,         4);    // 0x140128c30
+    CHECK_SLOT(PickingComponent, OnAdded,         6);    // 0x140128b90
+    CHECK_SLOT(PickingComponent, OnRemove,        7);    // 0x140128b50
+    CHECK_SLOT(PickingComponent, Slot11,          11);   // 0x140128ba0
+    CHECK_SLOT(QuarryComponent, OnAdded,          6);    // 0x140055220
+    CHECK_SLOT(QuarryComponent, OnRemove,         7);    // 0x140055210
+    CHECK_SLOT(QuarryComponent, OnEvent,          12);   // 0x1400550f0
+    CHECK_SLOT(QuarryComponent, OnMessage,        15);   // 0x140054b80
+    CHECK_SLOT(RawMaterialComponent, Startup,     4);    // 0x1401292c0
+    CHECK_SLOT(RawMaterialComponent, OnAdded,     6);    // 0x1401291d0
+    CHECK_SLOT(RawMaterialComponent, Update,      9);    // 0x140129130
+    CHECK_SLOT(StateMachineComponent, Startup,    4);    // 0x14012b6a0
+    CHECK_SLOT(StateMachineComponent, OnAdded,    6);    // 0x14012b660
+    CHECK_SLOT(StateMachineComponent, Tick,       8);    // 0x14012b640
+    CHECK_SLOT(StateMachineComponent, Update,     9);    // 0x14012b620
+    CHECK_SLOT(StateMachineComponent, Slot11,     11);   // 0x14012b7d0
+    CHECK_SLOT(StatusIconComponent, Startup,      4);    // 0x14012bed0
+    CHECK_SLOT(StatusIconComponent, OnRemove,     7);    // 0x14012beb0 (tree body)
+    CHECK_SLOT(StatusIconComponent, Tick,         8);    // 0x14012bbd0
+    CHECK_SLOT(StatusIconComponent, Slot11,       11);   // 0x14012bf40
+    CHECK_SLOT(StorageComponent, Startup,         4);    // 0x14012c720
+    CHECK_SLOT(StorageComponent, OnAdded,         6);    // 0x14012c640
+    CHECK_SLOT(StorageDisplayComponent, Startup,  4);    // 0x140056930
+    CHECK_SLOT(StorageDisplayComponent, OnAdded,  6);    // 0x140056730
+    CHECK_SLOT(StorageDisplayComponent, OnRemove, 7);    // 0x1400566b0
+    CHECK_SLOT(StorageDisplayComponent, Update,   9);    // 0x1400566a0
+    CHECK_SLOT(StorageDisplayComponent, Slot11,   11);   // 0x140056940
+    CHECK_SLOT(TerraformComponent, OnAdded,       6);    // 0x1400574f0
+    CHECK_SLOT(TerraformComponent, OnRemove,      7);    // 0x140057350
+    CHECK_SLOT(TerraformComponent, OnEvent,       12);   // 0x140057310
+    CHECK_SLOT(UIComponent, Startup,              4);    // 0x14012dca0
+    CHECK_SLOT(WorkComponent, OnAdded,            6);    // 0x14012e6f0
+    CHECK_SLOT(WorkComponent, OnRemove,           7);    // 0x14012e6c0
+    CHECK_SLOT(WorkComponent, CommandMask,        13);   // 0x14012e6b0
+    CHECK_SLOT(WorkComponent, Command,            14);   // 0x14012e6a0
+    CHECK_SLOT(ZoneComponent, OnAdded,            6);    // 0x1401301f0
+    CHECK_SLOT(ZoneComponent, OnRemove,           7);    // 0x140130080
     // Slots 1/2 answer the class's own registration (DECLARE_EXE_TYPE).
-    CHECK_EQ(SlotOffset(&MineComponent::TypeName),            S(1));
-    CHECK_EQ(SlotOffset(&MineComponent::Type),                S(2));
+    CHECK_SLOT(MineComponent, TypeName, 1);
+    CHECK_SLOT(MineComponent, Type,     2);
 }
 
 UNIT_TEST(vis_member_tables_land_on_retail_indices) {
     // StateMachineComponent's root node (member table 0x1401644d0).
     using Root = StateMachineComponent::RootController;
-    CHECK_EQ(SlotOffset(&Root::FindState),      S(0));
-    CHECK_EQ(SlotOffset(&Root::FindTransition), S(1));
-    CHECK_EQ(SlotOffset(&Root::PostEvent),      S(2));
-    CHECK_EQ(SlotOffset(&Root::Enter),          S(3));
-    CHECK_EQ(SlotOffset(&Root::Update),         S(4));
-    CHECK_EQ(SlotOffset(&Root::OnTransition),   S(5));
-    CHECK_EQ(SlotOffset(&Root::Tick),           S(6));
-    CHECK_EQ(SlotOffset(&Root::TickAlt),        S(7));
-    CHECK_EQ(SlotOffset(&Root::HasStates),      S(8));
+    CHECK_SLOT(Root, FindState,      0);
+    CHECK_SLOT(Root, FindTransition, 1);
+    CHECK_SLOT(Root, PostEvent,      2);
+    CHECK_SLOT(Root, Enter,          3);
+    CHECK_SLOT(Root, Update,         4);
+    CHECK_SLOT(Root, OnTransition,   5);
+    CHECK_SLOT(Root, Tick,           6);
+    CHECK_SLOT(Root, TickAlt,        7);
+    CHECK_SLOT(Root, HasStates,      8);
     // StatusIcon's billboard (member table 0x14015f0c0): 0-3 its own, 4-8 Geometry's.
-    CHECK_EQ(SlotOffset(&StatusIconGeometry::DeletingDtor), S(0));   // 0x14001ebb0
-    CHECK_EQ(SlotOffset(&StatusIconGeometry::Update),       S(1));   // 0x1400aa430
-    CHECK_EQ(SlotOffset(&StatusIconGeometry::Draw),         S(2));   // 0x1400a9c10
-    CHECK_EQ(SlotOffset(&StatusIconGeometry::AddDrawItems), S(3));   // 0x1400a9b90
-    CHECK_EQ(SlotOffset(&Graphics::Geometry::UpdateAttached), S(4));
-    CHECK_EQ(SlotOffset(&Graphics::Geometry::Clean),          S(8));
+    CHECK_DTOR_SLOT(StatusIconGeometry);   // 0x14001ebb0
+    CHECK_SLOT(StatusIconGeometry, Update,         1);   // 0x1400aa430
+    CHECK_SLOT(StatusIconGeometry, Draw,           2);   // 0x1400a9c10
+    CHECK_SLOT(StatusIconGeometry, AddDrawItems,   3);   // 0x1400a9b90
+    CHECK_SLOT(Graphics::Geometry, UpdateAttached, 4);
+    CHECK_SLOT(Graphics::Geometry, Clean,          8);
 }
 
 UNIT_TEST(vis_stray_own_slots_land_on_retail_indices) {
-    CHECK_EQ(SlotOffset(&AnimAudioEvent::GetFileVersion),   S(3));   // 0x140087f30
-    CHECK_EQ(SlotOffset(&AnimAudioEvent::Serialize),        S(5));   // 0x140087ed0
-    CHECK_EQ(SlotOffset(&AnimAudioEvent::Reconstruct),      S(6));   // 0x140016fb0
-    CHECK_EQ(SlotOffset(&AnimAudioEvent::Destruct),         S(7));   // 0x140001640
-    CHECK_EQ(SlotOffset(&AnimAudioEvent::Construct),        S(8));   // 0x140087e40 (the trigger)
-    CHECK_EQ(SlotOffset(&AnimAudioEvent::ConstructInPlace), S(9));   // 0x140016f60
-    CHECK_EQ(SlotOffset(&CaptureBoxElement::ComputeSize),   S(4));   // 0x140078fb0
-    CHECK_EQ(SlotOffset(&CaptureBoxElement::ComputeLayout), S(5));   // 0x140078ee0
-    CHECK_EQ(SlotOffset(&CaptureBoxElement::Draw),          S(6));   // 0x140078da0
-    CHECK_EQ(SlotOffset(&FrustumOutlineElement::ComputeSize),   S(4));   // 0x14006c290
-    CHECK_EQ(SlotOffset(&FrustumOutlineElement::ComputeLayout), S(5));   // 0x14006c1c0
-    CHECK_EQ(SlotOffset(&FrustumOutlineElement::Draw),          S(6));   // 0x14006be90
-    CHECK_EQ(SlotOffset(&FrustumOutlineElement::Enable),        S(8));   // inherited
-    CHECK_EQ(SlotOffset(&CaptureBoxDescription::GetFileVersion), S(3));  // 0x140079210
-    CHECK_EQ(SlotOffset(&CaptureBoxDescription::Serialize),      S(5));  // 0x1400791a0
-    CHECK_EQ(SlotOffset(&CaptureBoxDescription::Reconstruct),    S(6));  // 0x140013e40
-    CHECK_EQ(SlotOffset(&CaptureBoxDescription::Destruct),       S(7));  // 0x140001640
-    CHECK_EQ(SlotOffset(&CaptureBoxDescription::Construct),      S(9));  // 0x140013df0
-    CHECK_EQ(SlotOffset(&FrustumOutlineDescription::GetFileVersion), S(3));  // 0x14006c500
-    CHECK_EQ(SlotOffset(&FrustumOutlineDescription::Serialize),      S(5));  // 0x14006c460
-    CHECK_EQ(SlotOffset(&FrustumOutlineDescription::Construct),      S(9));  // 0x140012330
+    CHECK_SLOT(AnimAudioEvent, GetFileVersion,            3);   // 0x140087f30
+    CHECK_SLOT(AnimAudioEvent, Serialize,                 5);   // 0x140087ed0
+    CHECK_SLOT(AnimAudioEvent, Reconstruct,               6);   // 0x140016fb0
+    CHECK_SLOT(AnimAudioEvent, Destruct,                  7);   // 0x140001640
+    CHECK_SLOT(AnimAudioEvent, Construct,                 8);   // 0x140087e40 (the trigger)
+    CHECK_SLOT(AnimAudioEvent, ConstructInPlace,          9);   // 0x140016f60
+    CHECK_SLOT(CaptureBoxElement, ComputeSize,            4);   // 0x140078fb0
+    CHECK_SLOT(CaptureBoxElement, ComputeLayout,          5);   // 0x140078ee0
+    CHECK_SLOT(CaptureBoxElement, Draw,                   6);   // 0x140078da0
+    CHECK_SLOT(FrustumOutlineElement, ComputeSize,        4);   // 0x14006c290
+    CHECK_SLOT(FrustumOutlineElement, ComputeLayout,      5);   // 0x14006c1c0
+    CHECK_SLOT(FrustumOutlineElement, Draw,               6);   // 0x14006be90
+    CHECK_SLOT(FrustumOutlineElement, Enable,             8);   // inherited
+    CHECK_SLOT(CaptureBoxDescription, GetFileVersion,     3);  // 0x140079210
+    CHECK_SLOT(CaptureBoxDescription, Serialize,          5);  // 0x1400791a0
+    CHECK_SLOT(CaptureBoxDescription, Reconstruct,        6);  // 0x140013e40
+    CHECK_SLOT(CaptureBoxDescription, Destruct,           7);  // 0x140001640
+    CHECK_SLOT(CaptureBoxDescription, Construct,          9);  // 0x140013df0
+    CHECK_SLOT(FrustumOutlineDescription, GetFileVersion, 3);  // 0x14006c500
+    CHECK_SLOT(FrustumOutlineDescription, Serialize,      5);  // 0x14006c460
+    CHECK_SLOT(FrustumOutlineDescription, Construct,      9);  // 0x140012330
 }
 
 // ===========================================================================
@@ -336,8 +326,8 @@ UNIT_TEST(vis_description_slot8_is_the_retslot_create_instance) {
     using FOSig = Ret* (FrustumOutlineDescription::*)(Ret*, const UI::Dialog*) const;
     CBSig cb = &CaptureBoxDescription::CreateInstance;
     FOSig fo = &FrustumOutlineDescription::CreateInstance;
-    CHECK_EQ(SlotOffset(cb), S(8));   // 0x1400790a0
-    CHECK_EQ(SlotOffset(fo), S(8));   // 0x14006c340
+    CHECK_PMF_SLOT(cb, 8);   // 0x1400790a0
+    CHECK_PMF_SLOT(fo, 8);   // 0x14006c340
 }
 
 }  // namespace

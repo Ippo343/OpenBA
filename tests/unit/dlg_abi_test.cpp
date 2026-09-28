@@ -21,6 +21,7 @@
 // gate verify those.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "Dialog/MessageDialog.h"
 #include "Dialog/OptionInputBindDialog.h"
@@ -49,16 +50,6 @@
 
 namespace {
 
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
-    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
-    return words[0] - 1;
-}
-
 template <typename T>
 void CheckShape() {
     CHECK(std::is_polymorphic<T>::value);
@@ -72,16 +63,16 @@ void CheckShape() {
 // override or the inherited base body answers at the same offset).
 template <typename T>
 void CheckDialogInstanceSlots() {
-    CHECK_EQ(SlotOffset(&T::DeletingDtor),        (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&T::TypeName),            (uintptr_t)0x08);
-    CHECK_EQ(SlotOffset(&T::Type),                (uintptr_t)0x10);
-    CHECK_EQ(SlotOffset(&T::Persist),             (uintptr_t)0x18);
-    CHECK_EQ(SlotOffset(&T::OnOpened),            (uintptr_t)0x20);
-    CHECK_EQ(SlotOffset(&T::OnClosed),            (uintptr_t)0x28);
-    CHECK_EQ(SlotOffset(&T::OnUpdateLayout),      (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&T::OnUpdate),            (uintptr_t)0x38);
-    CHECK_EQ(SlotOffset(&T::OnElementEvent),      (uintptr_t)0x40);
-    CHECK_EQ(SlotOffset(&T::OnSerializeSettings), (uintptr_t)0x48);
+    CHECK_DTOR_SLOT(T);
+    CHECK_SLOT(T, TypeName,            0x08/8);
+    CHECK_SLOT(T, Type,                0x10/8);
+    CHECK_SLOT(T, Persist,             0x18/8);
+    CHECK_SLOT(T, OnOpened,            0x20/8);
+    CHECK_SLOT(T, OnClosed,            0x28/8);
+    CHECK_SLOT(T, OnUpdateLayout,      0x30/8);
+    CHECK_SLOT(T, OnUpdate,            0x38/8);
+    CHECK_SLOT(T, OnElementEvent,      0x40/8);
+    CHECK_SLOT(T, OnSerializeSettings, 0x48/8);
 }
 
 }  // namespace
@@ -104,12 +95,12 @@ UNIT_TEST(dlg_message_dialog_slots) {
     CHECK((std::is_base_of<MessageDialog, OptionInputBindDialog>::value));
     CheckDialogInstanceSlots<MessageDialog>();
     CheckDialogInstanceSlots<OptionInputBindDialog>();
-    CHECK_EQ(SlotOffset(&MessageDialog::OnOk),             (uintptr_t)0x50);
-    CHECK_EQ(SlotOffset(&MessageDialog::OnCancel),         (uintptr_t)0x58);
-    CHECK_EQ(SlotOffset(&MessageDialog::OnYes),            (uintptr_t)0x60);
-    CHECK_EQ(SlotOffset(&MessageDialog::OnNo),             (uintptr_t)0x68);
-    CHECK_EQ(SlotOffset(&OptionInputBindDialog::OnOk),     (uintptr_t)0x50);
-    CHECK_EQ(SlotOffset(&OptionInputBindDialog::OnNo),     (uintptr_t)0x68);
+    CHECK_SLOT(MessageDialog, OnOk,         0x50/8);
+    CHECK_SLOT(MessageDialog, OnCancel,     0x58/8);
+    CHECK_SLOT(MessageDialog, OnYes,        0x60/8);
+    CHECK_SLOT(MessageDialog, OnNo,         0x68/8);
+    CHECK_SLOT(OptionInputBindDialog, OnOk, 0x50/8);
+    CHECK_SLOT(OptionInputBindDialog, OnNo, 0x68/8);
 }
 
 // ===========================================================================

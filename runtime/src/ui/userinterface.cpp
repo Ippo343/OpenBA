@@ -1449,8 +1449,6 @@ namespace {
 struct UiSerializer { void* stream; void* rw; };
 
 using UiCreateRwFn   = void* (*)(void* enc, UiSerializer* out, const char* name);
-using UiScalarFn     = void  (*)(void* rw, void* value, const char* name);
-using UiDelDtorFn    = void  (*)(void* self, int flags);
 
 } // namespace
 
@@ -1501,8 +1499,8 @@ void UI::UserInterface::SaveAllSettings() {
             // ---- 6. the controller loop -----------------------------------
             int32_t count = *reinterpret_cast<int32_t*>(dlg + 0x80);
             if (rw) {
-                reinterpret_cast<UiScalarFn>(
-                    (*reinterpret_cast<void***>(rw))[20])(rw, &count, nullptr); // +0xa0
+                reinterpret_cast<IO::ReaderWriter*>(rw)->SerializeInt(        // B.3.x bridge
+                    count, nullptr);                                           // +0xa0
             }
             for (int32_t i = 0; i < count; ++i) {
                 uint8_t* arr = *reinterpret_cast<uint8_t**>(dlg + 0x78);
@@ -1511,8 +1509,8 @@ void UI::UserInterface::SaveAllSettings() {
                 int32_t  id  = static_cast<int32_t>(
                     reinterpret_cast<UI::DialogController*>(ctl)->Type());      // B.3.6 bridge
                 if (rw) {
-                    reinterpret_cast<UiScalarFn>(
-                        (*reinterpret_cast<void***>(rw))[19])(rw, &id, nullptr); // +0x98
+                    reinterpret_cast<IO::ReaderWriter*>(rw)->SerializeUInt(   // B.3.x bridge
+                        reinterpret_cast<uint32_t&>(id), nullptr);             // +0x98
                 }
 
                 UiSerializer ser2{ st, nullptr };
@@ -1533,15 +1531,13 @@ void UI::UserInterface::SaveAllSettings() {
                 reinterpret_cast<UI::DialogController*>(ctl)->OnSerializeSettings(st); // B.3.6 bridge
 
                 if (rw2) {
-                    reinterpret_cast<UiDelDtorFn>(
-                        (*reinterpret_cast<void***>(rw2))[0])(rw2, 1);
+                    reinterpret_cast<IO::ReaderWriter*>(rw2)->DeletingDtor(1); // B.3.x bridge
                 }
             }
 
             // ---- 7. teardown ----------------------------------------------
             if (rw) {
-                reinterpret_cast<UiDelDtorFn>(
-                    (*reinterpret_cast<void***>(rw))[0])(rw, 1);
+                reinterpret_cast<IO::ReaderWriter*>(rw)->DeletingDtor(1);      // B.3.x bridge
             }
             // ~MemoryStream (dead buffer free: never owns) then ~Stream (the
             // encoding): the class's destructor chain, no free of the storage.

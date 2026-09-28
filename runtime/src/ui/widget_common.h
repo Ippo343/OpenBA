@@ -37,6 +37,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "../../types/ui/Element.h"     // B3X W0: InlineGetPaddedSize calls ComputeSize by name
 
 // ResolveAddr lives in standalone/resolve.h, which drags in <windows.h>; PLAN
 // §4.1 keeps that out of runtime/src. Declared here exactly as ~30 sibling
@@ -63,10 +64,6 @@ inline uint32_t U32c(const void* p, int off) { return *reinterpret_cast<const ui
 inline float    F32c(const void* p, int off) { return *reinterpret_cast<const float*>(B(p, off)); }
 inline uint8_t  U8c (const void* p, int off) { return *reinterpret_cast<const uint8_t*>(B(p, off)); }
 inline void*    PTRc(const void* p, int off) { return *reinterpret_cast<void* const*>(B(p, off)); }
-
-inline void** VTable(const void* o) {
-    return *reinterpret_cast<void** const*>(o);
-}
 
 template <typename Fn>
 inline Fn RtAddr(uintptr_t ghidra) {
@@ -99,14 +96,6 @@ constexpr int kElParent       = 0x98;
 constexpr int kElChildren     = 0xa0;   // Array<Element*>::_data
 constexpr int kElChildCount   = 0xa8;   // Array<Element*>::_size
 constexpr int kElBorder       = 0xb0;
-
-// Element vtable byte offsets (Element.h's twelve-slot table).
-constexpr int kVtComputeSize   = 0x20;
-constexpr int kVtComputeLayout = 0x28;
-constexpr int kVtDraw          = 0x30;
-constexpr int kVtUpdate        = 0x38;
-constexpr int kVtEnable        = 0x40;
-constexpr int kVtSetColor      = 0x50;
 
 // Element::_flags bits used by these bodies (names from Element.h).
 constexpr uint32_t kFlagHidden        = 0x00000001;
@@ -168,11 +157,6 @@ using ArraySetSizeFillFn = void (*)(void* hdr, int32_t n, const void* fill);
 using MemFreeFn        = void (*)(void* p);
 using ToIntegerFn      = int32_t (*)(const char* s);
 using IsDerivedFromFn  = bool (*)(const void* self, uint32_t typeId);
-using ComputeSizeSlotFn   = void (*)(void* self);
-using ComputeLayoutSlotFn = void (*)(void* self, int32_t x, int32_t y, int32_t r, int32_t b);
-using DrawSlotFn          = void (*)(const void* self, void* ctx, uint8_t alpha);
-using EnableSlotFn        = void (*)(void* self, bool on);
-using SetColorSlotFn      = void (*)(void* self, uint32_t color);
 
 // `?AddSprite@SpriteContext@UI@@QEAAXAEBVSprite@2@HHI@Z`      0x18011cf00
 using AddSprite3Fn = void (*)(void* ctx, const void* sprite, int32_t x, int32_t y, uint32_t c);
@@ -315,8 +299,7 @@ inline float RootUiScale(void* e) {
 // copy of a sequence that is otherwise pasted twelve times.
 // ---------------------------------------------------------------------------
 inline void InlineGetPaddedSize(void* child, int32_t* w, int32_t* h) {
-    void** vt = *reinterpret_cast<void***>(child);
-    reinterpret_cast<ComputeSizeSlotFn>(vt[kVtComputeSize / 8])(child);
+    static_cast<::UI::Element*>(child)->ComputeSize();     // Element slot 4, by name
 
     const uint32_t flags = U32(child, kElFlags);
     int32_t cw = I32(child, kElLayoutWidth)  + I32(child, kElLeftPad) + I32(child, kElRightPad);

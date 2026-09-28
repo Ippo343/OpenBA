@@ -28,6 +28,7 @@
 //   spellings until the caller round renames their users.
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/engine/UpdateLoop.h"
 #include "runtime/types/engine/MainLoop.h"
@@ -47,18 +48,6 @@
 #include <type_traits>
 
 namespace {
-
-// Itanium pointer-to-virtual-member: { ptr = 1 + vtable_byte_offset, adj }.
-template <typename PMF>
-long SlotOf(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(void*), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof(words));
-    // (A NON-virtual member's pointer names its body, which this binary does
-    // not link -- so only virtual members are measured here.)
-    if ((words[0] & 1u) == 0) return -1;           // not virtual
-    return static_cast<long>((words[0] - 1) / sizeof(void*));
-}
 
 // ---------------------------------------------------------------- PART A
 UNIT_TEST(engine_loop_sizes_and_shape) {
@@ -111,36 +100,36 @@ UNIT_TEST(engine_mainloop_and_engine_shape) {
 // ---------------------------------------------------------------- PART B
 UNIT_TEST(engine_updateloop_retail_slot_order) {
     // B37_SLOTS.md sec. 1, ??_7UpdateLoop@Engine@@6B@ 0x180155ba0.
-    CHECK_EQ(SlotOf(&Engine::UpdateLoop::DeletingDtor), 0L);
-    CHECK_EQ(SlotOf(&Engine::UpdateLoop::Startup), 1L);            // NOT Object::Base::TypeName
-    CHECK_EQ(SlotOf(&Engine::UpdateLoop::Shutdown), 2L);
-    CHECK_EQ(SlotOf(&Engine::UpdateLoop::Update), 3L);
-    CHECK_EQ(SlotOf(&Engine::UpdateLoop::Draw), 4L);
-    CHECK_EQ(SlotOf(&Engine::UpdateLoop::DrawFailed), 5L);
-    CHECK_EQ(SlotOf(&Engine::UpdateLoop::Load), 6L);
-    CHECK_EQ(SlotOf(&Engine::UpdateLoop::SaveRestore), 7L);
-    CHECK_EQ(SlotOf(&Engine::UpdateLoop::OnVideoError), 8L);
-    CHECK_EQ(SlotOf(&Engine::UpdateLoop::OnVideoRestart), 9L);
-    CHECK_EQ(SlotOf(&Engine::UpdateLoop::GetResourceFilename), 10L);
-    CHECK_EQ(SlotOf(&Engine::UpdateLoop::AllowsModChanges), 11L);
+    CHECK_DTOR_SLOT(Engine::UpdateLoop);
+    CHECK_SLOT(Engine::UpdateLoop, Startup,             1);            // NOT Object::Base::TypeName
+    CHECK_SLOT(Engine::UpdateLoop, Shutdown,            2);
+    CHECK_SLOT(Engine::UpdateLoop, Update,              3);
+    CHECK_SLOT(Engine::UpdateLoop, Draw,                4);
+    CHECK_SLOT(Engine::UpdateLoop, DrawFailed,          5);
+    CHECK_SLOT(Engine::UpdateLoop, Load,                6);
+    CHECK_SLOT(Engine::UpdateLoop, SaveRestore,         7);
+    CHECK_SLOT(Engine::UpdateLoop, OnVideoError,        8);
+    CHECK_SLOT(Engine::UpdateLoop, OnVideoRestart,      9);
+    CHECK_SLOT(Engine::UpdateLoop, GetResourceFilename, 10);
+    CHECK_SLOT(Engine::UpdateLoop, AllowsModChanges,    11);
 }
 
 UNIT_TEST(engine_derived_loop_slot_order) {
     // The overrides keep their base slots ...
-    CHECK_EQ(SlotOf(&Engine::LoaderLoop::Startup), 1L);
-    CHECK_EQ(SlotOf(&Engine::LoaderLoop::Load), 6L);
-    CHECK_EQ(SlotOf(&Engine::LoaderLoop::OnVideoError), 8L);
-    CHECK_EQ(SlotOf(&Engine::DialogLoopT::Draw), 4L);
-    CHECK_EQ(SlotOf(&Engine::DialogLoaderLoopT::Update), 3L);
-    CHECK_EQ(SlotOf(&Engine::DialogLoaderLoopT::Shutdown), 2L);
+    CHECK_SLOT(Engine::LoaderLoop, Startup,         1);
+    CHECK_SLOT(Engine::LoaderLoop, Load,            6);
+    CHECK_SLOT(Engine::LoaderLoop, OnVideoError,    8);
+    CHECK_SLOT(Engine::DialogLoopT, Draw,           4);
+    CHECK_SLOT(Engine::DialogLoaderLoopT, Update,   3);
+    CHECK_SLOT(Engine::DialogLoaderLoopT, Shutdown, 2);
     // ... DialogLoaderLoopT inherits LoaderLoop's OnVideoError (B7-1.3) ...
-    CHECK_EQ(SlotOf(&Engine::DialogLoaderLoopT::OnVideoError), 8L);
+    CHECK_SLOT(Engine::DialogLoaderLoopT, OnVideoError, 8);
     // ... and slot 12 is NEW on each Dialog loop.
-    CHECK_EQ(SlotOf(&Engine::DialogLoopT::CreateLoopDialog), 12L);
-    CHECK_EQ(SlotOf(&Engine::DialogLoaderLoopT::CreateLoopDialog), 12L);
+    CHECK_SLOT(Engine::DialogLoopT, CreateLoopDialog,       12);
+    CHECK_SLOT(Engine::DialogLoaderLoopT, CreateLoopDialog, 12);
     // Loader: ??_7Loader@Engine@@6B@ 0x180157a08 -- [0] Run, [1] OnCompleted.
-    CHECK_EQ(SlotOf(&Engine::Loader::Run), 0L);
-    CHECK_EQ(SlotOf(&Engine::Loader::OnCompleted), 1L);
+    CHECK_SLOT(Engine::Loader, Run,         0);
+    CHECK_SLOT(Engine::Loader, OnCompleted, 1);
 }
 
 // ---------------------------------------------------------------- PART C

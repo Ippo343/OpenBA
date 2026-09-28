@@ -423,12 +423,9 @@ void DialogInstance::InitFields(UserInterface* uiArg, const Dialog* dialogArg,
     // 0x1801148e7: `_dialog->_rootDescription`'s vtable slot 8, with the hidden
     // return slot pointed AT THE OBJECT'S OWN `_root` FIELD and the Dialog as
     // the second argument — the same slot the 6-arg AddController calls.
-    {
-        void* const rootDesc = dlg->_rootDescription;
-        void* const* const vt = *reinterpret_cast<void* const* const*>(rootDesc);
-        reinterpret_cast<void** (*)(void*, void**, const void*)>(vt[8])(
-            rootDesc, &d->_root, dialog);
-    }
+    static_cast<const UI::ElementDescription*>(dlg->_rootDescription)->CreateInstance(
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(&d->_root),   // B.3.x bridge
+        dialogArg);
 
     d->_spriteSheet = dlg->_spriteSheet;           // +0x58
     // 0x180114900: -1 when the sheet is null, otherwise the sheet's lookup of
@@ -656,12 +653,11 @@ void DialogInstance::AddController(uint32_t typeId, Object::Base* dataSource,
 
         void* newEl = nullptr;
         {
-            // The description's slot 8 (CreateInstance, RETSLOT) — block A's
-            // class, still reached through its table.
-            void* const* const vt = *reinterpret_cast<void* const* const*>(desc);
-            void** const ret = reinterpret_cast<void** (*)(void*, void**, void*)>(vt[8])(
-                desc, &newEl, tmpDialog);
-            newEl = *ret;             // 0x1801135ef `MOV RDI,qword ptr [RAX]`
+            // The description's slot 8 (CreateInstance, RETSLOT, B6-2).
+            Object::InternalPtr<Element>* const ret = description.Get()->CreateInstance(
+                reinterpret_cast<Object::InternalPtr<Element>*>(&newEl),   // B.3.x bridge
+                tmpDlg);
+            newEl = *reinterpret_cast<void**>(ret);   // 0x1801135ef `MOV RDI,qword ptr [RAX]`
         }
         createdElement = newEl;
 

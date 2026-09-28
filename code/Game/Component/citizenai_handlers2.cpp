@@ -64,6 +64,7 @@
 #include "Component/InteractDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/CitizenDescription.h"   // B.3.8 CB1a (TypeId)
 #include "graphics/Mesh.h"
+#include "Component/Component.h"   // B.3.x W0: Component slots by name
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
@@ -314,8 +315,8 @@ extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1) {
                         }
                         int64_t t0 = 0;
                         if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t0, 0.0f);
-                        typedef void (*slot40_t)(int64_t, int64_t*);
-                        (*reinterpret_cast<slot40_t*>(*reinterpret_cast<int64_t*>(mi) + 0x40))(mi, &t0);
+                        // `mi` is a Component (the +0x10 entity / +0x20 flag-notify idiom below).
+                        reinterpret_cast<Component*>(mi)->Tick(&t0);   // B.3.x bridge (slot 8)
                         uint32_t before = *reinterpret_cast<uint32_t*>(mi + 0x20);
                         uint32_t after = before | 4;
                         *reinterpret_cast<uint32_t*>(mi + 0x20) = after;

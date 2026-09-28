@@ -30,6 +30,7 @@
 // PART D — the QUALIFIED call on the slot this block introduces (12).
 // ============================================================================
 #include "unit.h"
+#include "slot_check.h"
 
 #include "runtime/types/ui/TextDescription.h"
 #include "runtime/types/ui/LabelDescription.h"
@@ -71,14 +72,18 @@ void Reset() { g_lastSelf = nullptr; g_lastMark = -1; g_lastArg = 0; }
 const ::Object::BaseTypeInfo* WhoRecord(int tag);
 
 
-template <typename Fn>
+// The offset / index is RETAIL's; T decides the compiler's. Default T: every object this file reads raw is a UI class, all Object::Base-rooted
+// (a virtual destructor is inherited, so the root answers for every class).
+template <typename Fn, class T = Object::Base>
 Fn SlotAt(const void* obj, int byteOffset) {
     const uint8_t* vt = *reinterpret_cast<const uint8_t* const*>(obj);
     Fn f = nullptr;
-    const void* raw = *reinterpret_cast<const void* const*>(vt + byteOffset);
+    const void* raw = *reinterpret_cast<const void* const*>(vt + RetailByteOffset<T>(byteOffset));
     std::memcpy(&f, &raw, sizeof f);
     return f;
 }
+// Retail slot n of a table in this file, as the compiler numbers it.
+constexpr long Retail(int n) { return RetailSlot<Object::Base>(n); }
 const void* const* VTableOf(const void* obj) {
     return *reinterpret_cast<const void* const* const*>(obj);
 }
@@ -392,7 +397,7 @@ void CheckDescriptionSlots(void* raw, int tag, const void* compileEntry) {
     CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(raw, kS2)(raw), WhoRecord(tag)->typeId);
     Reset(); SlotAt<int32_t (*)(const void*)>(raw, kS3)(raw);
     CHECK_EQ(g_lastMark, tag * 100 + 3);
-    CHECK(VTableOf(raw)[kS4 / 8] == compileEntry);
+    CHECK(RetailEntry<Object::Base>(raw, kS4 / 8) == compileEntry);
     Reset(); SlotAt<bool (*)(void*, void*)>(raw, kS5)(raw, (void*)0x55);
     CHECK_EQ(g_lastMark, tag * 100 + 5); CHECK_EQ(g_lastArg, 0x55);
     Reset(); SlotAt<void* (*)(void*)>(raw, kS6)(raw);
@@ -417,7 +422,7 @@ UNIT_TEST(ui_c3_description_slot_order_is_retails) {
     NumberDescriptionProbe nd;
 
     // Every one inherits the same External::Compile at slot 4 (B6-1.5).
-    const void* compile = VTableOf(&td)[kS4 / 8];
+    const void* compile = RetailEntry<Object::Base>(&td, kS4 / 8);
     CheckDescriptionSlots(&td, kTD, compile);
     CheckDescriptionSlots(&ld, kLD, compile);
     CheckDescriptionSlots(&ed, kED, compile);
@@ -427,7 +432,7 @@ UNIT_TEST(ui_c3_description_slot_order_is_retails) {
     // Label OVERRIDES all of Text's 1..9 but 4: none of its entries is Text's.
     for (int s = 1; s < 10; ++s) {
         if (s == 4) continue;
-        CHECK(VTableOf(&ld)[s] != VTableOf(&td)[s]);
+        CHECK(VTableOf(&ld)[Retail(s)] != VTableOf(&td)[Retail(s)]);
     }
     CHECK(static_cast<void*>(static_cast<UI::TextDescription*>(&ld)) == static_cast<void*>(&ld));
 }
@@ -459,9 +464,9 @@ UNIT_TEST(ui_c3_text_and_label_element_slot_order_is_retails) {
 
     // ...and INHERITS 3, 7, 8, 9, 11 through TextElement (Element's bodies).
     const int inherited[] = { 3, 7, 8, 9, 11 };
-    for (int s : inherited) CHECK(VTableOf(l)[s] == VTableOf(t)[s]);
+    for (int s : inherited) CHECK(VTableOf(l)[Retail(s)] == VTableOf(t)[Retail(s)]);
     // Text does NOT override SetColor; Label does.
-    CHECK(VTableOf(l)[10] != VTableOf(t)[10]);
+    CHECK(VTableOf(l)[Retail(10)] != VTableOf(t)[Retail(10)]);
 }
 
 UNIT_TEST(ui_c3_edit_and_numberedit_element_slot_order_is_retails) {
@@ -485,12 +490,12 @@ UNIT_TEST(ui_c3_edit_and_numberedit_element_slot_order_is_retails) {
     CHECK(SlotAt<const char* (*)(const void*)>(n, kS1)(n) == WhoRecord(kNEE)->name);
     CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(n, kS2)(n), WhoRecord(kNEE)->typeId);
     Reset(); SlotAt<void (*)(void*)>(n, kS12)(n);             CHECK_EQ(g_lastMark, kNEE * 100 + 12);
-    for (int s = 3; s <= 11; ++s) CHECK(VTableOf(n)[s] == VTableOf(e)[s]);
+    for (int s = 3; s <= 11; ++s) CHECK(VTableOf(n)[Retail(s)] == VTableOf(e)[Retail(s)]);
     Reset(); SlotAt<void (*)(void*)>(n, kS4)(n);              CHECK_EQ(g_lastMark, kEE * 100 + 4);
 
     // Edit overrides Update (7); Text inherits Element's.
-    CHECK(VTableOf(e)[7] != VTableOf(&te)[7]);
-    CHECK(VTableOf(e)[8] == VTableOf(&te)[8]);
+    CHECK(VTableOf(e)[Retail(7)] != VTableOf(&te)[Retail(7)]);
+    CHECK(VTableOf(e)[Retail(8)] == VTableOf(&te)[Retail(8)]);
 }
 
 UNIT_TEST(ui_c3_number_element_slot_order_is_retails) {
@@ -506,7 +511,7 @@ UNIT_TEST(ui_c3_number_element_slot_order_is_retails) {
     Reset(); SlotAt<void (*)(const void*, void*, uint8_t)>(n, kS6)(n, nullptr, 3);
     CHECK_EQ(g_lastMark, kNE * 100 + 6);
     // 7..11 are Element's, shared with TextElement.
-    for (int s = 7; s <= 11; ++s) CHECK(VTableOf(n)[s] == VTableOf(&te)[s]);
+    for (int s = 7; s <= 11; ++s) CHECK(VTableOf(n)[Retail(s)] == VTableOf(&te)[Retail(s)]);
 }
 
 // ===========================================================================
@@ -563,15 +568,6 @@ UNIT_TEST(ui_c3_qualified_finalizetext_does_not_redispatch) {
 // ENDGAME B.3.9 UI-A (B39_RULES D1/D2, rule B9-16) — the CONCRETE classes.
 // ===========================================================================
 namespace {
-template <typename PMF>
-uintptr_t SlotOffset(PMF pmf) {
-    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
-    uintptr_t words[2];
-    std::memcpy(words, &pmf, sizeof words);
-    if ((words[0] & 1u) == 0) return ~uintptr_t(0);
-    if (words[1] != 0) return ~uintptr_t(0);
-    return words[0] - 1;
-}
 
 template <typename T, typename Make>
 void B39ExpectBothArms(size_t elemSize, Make make) {
@@ -598,18 +594,18 @@ void B39ExpectBothArms(size_t elemSize, Make make) {
 }  // namespace
 
 UNIT_TEST(b39_uia_edit_number_slot0_by_pmf) {
-    CHECK_EQ(SlotOffset(&UI::EditDescription::DeletingDtor),       (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&UI::EditDescription::Construct),          (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::EditElement::DeletingDtor),           (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&UI::EditElement::FinalizeText),           (uintptr_t)0x60);
-    CHECK_EQ(SlotOffset(&UI::NumberEditDescription::DeletingDtor), (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&UI::NumberEditDescription::Construct),    (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::NumberEditElement::DeletingDtor),     (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&UI::NumberEditElement::FinalizeText),     (uintptr_t)0x60);
-    CHECK_EQ(SlotOffset(&UI::NumberDescription::DeletingDtor),     (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&UI::NumberDescription::CreateInstance),   (uintptr_t)0x40);
-    CHECK_EQ(SlotOffset(&UI::NumberElement::DeletingDtor),         (uintptr_t)0x00);
-    CHECK_EQ(SlotOffset(&UI::NumberElement::Draw),                 (uintptr_t)0x30);
+    CHECK_DTOR_SLOT(UI::EditDescription);
+    CHECK_SLOT(UI::EditDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::EditElement);
+    CHECK_SLOT(UI::EditElement, FinalizeText, 0x60/8);
+    CHECK_DTOR_SLOT(UI::NumberEditDescription);
+    CHECK_SLOT(UI::NumberEditDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::NumberEditElement);
+    CHECK_SLOT(UI::NumberEditElement, FinalizeText, 0x60/8);
+    CHECK_DTOR_SLOT(UI::NumberDescription);
+    CHECK_SLOT(UI::NumberDescription, CreateInstance, 0x40/8);
+    CHECK_DTOR_SLOT(UI::NumberElement);
+    CHECK_SLOT(UI::NumberElement, Draw, 0x30/8);
 }
 
 // The real ctors make retail's stores (each header cites the transcribed
@@ -704,14 +700,14 @@ UNIT_TEST(b39_uia_edit_number_deletingdtor_both_arms) {
 }
 
 UNIT_TEST(b39_uia_text_label_slot0_by_pmf) {
-    CHECK_EQ(SlotOffset(&UI::TextDescription::DeletingDtor),  (uintptr_t)0x00);   // 0x180041e30
-    CHECK_EQ(SlotOffset(&UI::TextDescription::Construct),     (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::LabelDescription::DeletingDtor), (uintptr_t)0x00);   // 0x180042730
-    CHECK_EQ(SlotOffset(&UI::LabelDescription::Construct),    (uintptr_t)0x48);
-    CHECK_EQ(SlotOffset(&UI::TextElement::DeletingDtor),      (uintptr_t)0x00);   // 0x1800422f0
-    CHECK_EQ(SlotOffset(&UI::TextElement::Draw),              (uintptr_t)0x30);
-    CHECK_EQ(SlotOffset(&UI::LabelElement::DeletingDtor),     (uintptr_t)0x00);   // 0x180042bb0
-    CHECK_EQ(SlotOffset(&UI::LabelElement::SetColor),         (uintptr_t)0x50);
+    CHECK_DTOR_SLOT(UI::TextDescription);   // 0x180041e30
+    CHECK_SLOT(UI::TextDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::LabelDescription);   // 0x180042730
+    CHECK_SLOT(UI::LabelDescription, Construct, 0x48/8);
+    CHECK_DTOR_SLOT(UI::TextElement);   // 0x1800422f0
+    CHECK_SLOT(UI::TextElement, Draw, 0x30/8);
+    CHECK_DTOR_SLOT(UI::LabelElement);   // 0x180042bb0
+    CHECK_SLOT(UI::LabelElement, SetColor, 0x50/8);
 }
 
 UNIT_TEST(b39_uia_text_label_ctors_make_retails_stores) {

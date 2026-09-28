@@ -324,7 +324,7 @@ PickupStoredRawMaterial::PickupStoredRawMaterial(uint64_t* param_2, uint64_t* pa
         while (true) {
             int64_t arr = *reinterpret_cast<int64_t*>(param_4 + 0x28);
             void* child = *reinterpret_cast<void**>(arr + byteOff);
-            uint32_t tid = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<int64_t*>(child) + 0x10))(child);
+            uint32_t tid = reinterpret_cast<Object::Base*>(child)->Type();   // B.3.x bridge (slot 2)
             if (tid == wantTid) {
                 int64_t arr2 = *reinterpret_cast<int64_t*>(param_4 + 0x28);
                 void* match = *reinterpret_cast<void**>(arr2 + (int64_t)idx * 8);
@@ -419,7 +419,7 @@ void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2) {
         while (true) {
             int64_t* slot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x30) + byteOff);
             void* child = reinterpret_cast<void*>(*slot);
-            uint32_t tid = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<int64_t*>(child) + 0x10))(child);
+            uint32_t tid = reinterpret_cast<Object::Base*>(child)->Type();   // B.3.x bridge (slot 2)
             if (tid == wantTid) {
                 int64_t* mslot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x30) + (int64_t)idx * 8);
                 void* match = reinterpret_cast<void*>(*mslot);
