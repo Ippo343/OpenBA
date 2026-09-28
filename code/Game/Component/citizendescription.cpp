@@ -43,8 +43,9 @@
 #include "Component/coll_bridge.h"
 #include <cstring>
 #include <cstdint>
-#include <new>
+#include <new>
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
+#include "Game/exe_bodies.h"
 
 namespace {
 // The retail ctor stores raw IEEE bit patterns; this keeps them exact.
@@ -180,10 +181,10 @@ bool CitizenDescription::Serialize(void* stream) {
             // B.3.2 bridge: exe 0x140001bb0 IS Collection::Array<void*>::SetSize(n).
             GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(&_refs)).SetSize(count);
         }
-        typedef void (*fn_RefArraySerialize_t)(void* serializer, int count, void* base, void* p4);  // 0x14001bcc0
-        fn_RefArraySerialize_t sa =
-            reinterpret_cast<fn_RefArraySerialize_t>(ResolveAddr(Module::Exe, 0x14001bcc0));
-        if (sa) sa(&ser, count, _refs, nullptr);
+        // 0x14001bcc0 takes three arguments: its prologue spills R9 to the home slot
+        // [RBP+0x58], which the body only reuses as a local after writing it, so the
+        // old door's 4th nullptr was never read.
+        Reimpl_Array_Serialize_External_GraphicsMesh(&ser, count, _refs);
     }
     ser.Serialize(_f114, nullptr);
     ser.Serialize(_i118, nullptr);
@@ -202,10 +203,9 @@ bool CitizenDescription::Serialize(void* stream) {
     ser.Serialize(_ibc, nullptr);
     {
         // ExternalRef<Profession> x3 at +0x20/+0x28/+0x30 (0x140018020)
-        typedef void (*fn_ExternalRefSerialize_t)(void* refField, void* serializer);
-        fn_ExternalRefSerialize_t f =
-            reinterpret_cast<fn_ExternalRefSerialize_t>(ResolveAddr(Module::Exe, 0x140018020));
-        if (f) { f(&_professions[0], &ser); f(&_professions[1], &ser); f(&_professions[2], &ser); }
+        Reimpl_ExternalPtr_Serialize_StringTable(&_professions[0], &ser);
+        Reimpl_ExternalPtr_Serialize_StringTable(&_professions[1], &ser);
+        Reimpl_ExternalPtr_Serialize_StringTable(&_professions[2], &ser);
     }
     ser.Serialize(_f64, nullptr);
     ser.Serialize(_f68, nullptr);
