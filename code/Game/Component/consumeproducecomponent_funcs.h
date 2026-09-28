@@ -11,5 +11,3 @@
 // Two non-trivial overrides: Shutdown, Serialize
 // ============================================================
 
-// Init: resolve all internal function pointers (called once at startup)
-void ConsumeProduceComponent_InitFuncs();

@@ -52,29 +52,12 @@
 
 namespace {
 
-// ---- resolved engine helpers (shared by all four bodies) -------------------
-typedef void (*fn_ComponentSerialize_t)(void* self, void* stream);
-typedef bool (*fn_IsDerived_t)(void* obj, uint32_t typeId);
+// ---- engine helpers (shared by all four bodies) ----------------------------
+// 0x1401189b0 is Component_SerializeReimpl; the import slot 0x140152a98 is
+// Object::Base::IsDerivedFrom. Both are called directly.
 // 0x1400032e0 was Collection::Array<void*>::SetSize(n) monomorphised into the
 // exe (ENDGAME B.3.2 step 2, ImmigrationComp_DynArrayResize body: stride 8,
 // align 8, zero tail) — the resolved pointer is gone, see the call sites below.
-
-fn_ComponentSerialize_t s_Base       = nullptr;  // 0x1401189b0
-fn_IsDerived_t          s_IsDerived  = nullptr;  // slot 0x140152a98
-
-bool s_resolved = false;
-
-void Resolve() {
-    if (s_resolved) return;
-    s_Base = reinterpret_cast<fn_ComponentSerialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_IsDerived = *reinterpret_cast<fn_IsDerived_t*>(slot);
-
-    s_resolved = true;
-}
 
 // True when the serializer is READING (retail: *(int*)(stream + 8) == 0,
 // reached through the serializer's first field).
@@ -87,7 +70,7 @@ inline bool Loading(void* ser) {
 inline void SerializeValidatedIBP(void* ibp, void* ser, uint32_t tid) {
     reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     void* obj = *reinterpret_cast<void**>(ibp);
-    if (obj && s_IsDerived && tid && !s_IsDerived(obj, tid))
+    if (obj && tid && !reinterpret_cast<const ::Object::Base*>(obj)->IsDerivedFrom(tid))   // B.3.x bridge
         *reinterpret_cast<uint64_t*>(ibp) = 0;
 }
 
@@ -130,9 +113,8 @@ inline uint8_t* At(void* self, ptrdiff_t off) {
 // smooth Time(+0x60), ints +0x68/+0x6c.
 // ============================================================
 extern "C" void PopulationComponent_Serialize_Real(void* self, void* stream) {
-    Resolve();
     if (!self || !stream) return;
-    if (s_Base) s_Base(self, stream);
+    Component_SerializeReimpl(self, stream);   // 0x1401189b0
 
     alignas(8) uint8_t ser[24];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
@@ -174,7 +156,6 @@ extern "C" void PopulationComponent_Serialize_Real(void* self, void* stream) {
 }
 
 void AnimalComponent::Persist(void* stream) {
-    Resolve();
     if (!stream) return;
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
@@ -196,15 +177,14 @@ void AnimalComponent::Persist(void* stream) {
         // and drops the value; the local never leaves the frame).
         uint64_t legacy = 0;
         reinterpret_cast<Object::InternalBasePtr*>(&legacy)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-        if (legacy && s_IsDerived)
-            s_IsDerived(reinterpret_cast<void*>(legacy), PopulationComponent::TypeId());
+        if (legacy)
+            reinterpret_cast<const ::Object::Base*>(legacy)->IsDerivedFrom(PopulationComponent::TypeId());   // B.3.x bridge
     }
 
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 void HerdComponent::Persist(void* stream) {
-    Resolve();
     if (!stream) return;
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
@@ -231,7 +211,6 @@ void HerdComponent::Persist(void* stream) {
 }
 
 void LivestockComponent::Persist(void* stream) {
-    Resolve();
     if (!stream) return;
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
