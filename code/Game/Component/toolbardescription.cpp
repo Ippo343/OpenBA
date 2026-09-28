@@ -133,14 +133,13 @@ ToolbarDescription::~ToolbarDescription() {
 
 // [5] 0x14012da30: stream order as retail.
 bool ToolbarDescription::Serialize(void* stream) {
-    if (!fn_ExternalPtr_Serialize2) return true;   // standalone: the door is unwired
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     // +0x20 in the exe uses FUN_14000bd30; +0x30 uses FUN_14000bf40. Both have
     // a byte-identical stream layout (only the validated typeId differs, trusted
     // in standalone). Use the registered Serialize2 for both.
-    fn_ExternalPtr_Serialize2(&_descRef, &ser);   // 1. _descRef
+    Reimpl_ExternalPtr_Serialize_StringTable(&_descRef, &ser);   // 1. _descRef
     _name.Serialize(&ser);                        // 2. _name
-    fn_ExternalPtr_Serialize2(&_iconRef, &ser);   // 3. _iconRef (StringTable)
+    Reimpl_ExternalPtr_Serialize_StringTable(&_iconRef, &ser);   // 3. _iconRef (StringTable)
     _str1.Serialize(&ser);                        // 4.
     _str2.Serialize(&ser);                        // 5.
     _str3.Serialize(&ser);                        // 6.
@@ -174,8 +173,7 @@ bool ToolbarDescription::Serialize(void* stream) {
     // Byte-for-byte the same five instructions as 0x1400431f0.
     bool loading = (static_cast<int>(ser.GetDirection()) == 0);
     if (loading) {
-        if (fn_StringArray_Resize) fn_StringArray_Resize(&_entries, count);
-        else ToolbarDescription_StringArrayResize(&_entries, (unsigned)count);
+        ToolbarDescription_StringArrayResize(&_entries, (unsigned)count);   // 0x140028860
     }
     
     // 9. per-element String::Serialize (stride 8)
