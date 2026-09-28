@@ -183,12 +183,3 @@ extern "C" void RtUi_UserInterface_DrawStandAloneUI(void* videoContext, void* ui
 // ============================================================================
 // REGISTRATION — both doors for both rows (see userinterface_hover.cpp).
 // ============================================================================
-int RtUiStandAloneRegister() {
-    int n = 0;
-
-    RegisterRuntimeExport("?UpdateStandAloneUI@UserInterface@UI@@CAXAEBVTime@System@@PEAX@Z",
-                          (void*)&RtUi_UserInterface_UpdateStandAloneUI);
-    RegisterRuntimeAddr(0x180120310, (void*)&RtUi_UserInterface_UpdateStandAloneUI);  ++n;
-
-    return n;
-}

@@ -215,19 +215,3 @@ UI::SpriteSheet::~SpriteSheet() {
     rtcoll::RtColl_ArrayDtorElem_180004f50(p + 0x20);   // m_sprites, Array<SpriteInfo>
 }
 
-// ============================================================================
-// Registration. BOTH doors — BY NAME and BY ADDRESS.
-// ============================================================================
-// The address door is not redundant with the name door: a caller that reaches a
-// body by address silently keeps using the DLL when only the name is registered
-// (reference_bypassed_port_needs_a_source_checker.md). Both are spelled as
-// LITERALS so tools/runtime_census.py can see them
-// (reference_census_cannot_see_nonliteral_registrations.md).
-// ============================================================================
-int RtUiSpriteSheetNewRegister() {
-    RegisterRuntimeExport("??2SpriteSheet@UI@@SAPEAX_K@Z",
-                          (void*)&RtUi_SpriteSheet_OperatorNew);
-    RegisterRuntimeAddr(0x180002e60, (void*)&RtUi_SpriteSheet_OperatorNew);
-
-    return 1;
-}
