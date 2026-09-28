@@ -149,8 +149,12 @@ public:
         if (flags & 1) Object::detail::InternalMemFree(this);
         return this;
     }
-    const char*       TypeName() const override;                  // [ 1] 0x18001efb0
-    uint32_t          Type() const override;                      // [ 2] 0x18001ef90
+    // [ 1] 0x18001efb0 TypeName / [ 2] 0x18001ef90 Type, TypeId, `_TypeName` / `_ParentTypeName`
+    // and the factory pair: retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES
+    // D6); the record is `DEFINE_TYPE`d in
+    // runtime/src/graphics/graphics_type_records.cpp.
+    DECLARE_TYPE(FrameCopyImageBuffer)
+public:
     int32_t           GetFileVersion() const override;             // [ 3] 0x1800a3c70 — 0x1007
     bool              Serialize(void* stream) override;            // [ 5] 0x1800a3c40
     Object::External* Reconstruct() override;                      // [ 6] 0x18001f130
@@ -188,16 +192,12 @@ protected:
 
 protected:
 
-    // RULE B5-15, both COPIED from B35_SLOTS section 3:
+    // RULE B5-15, both COPIED from B35_SLOTS section 3 into the DEFINE_TYPE:
     //   0x18001ef70  ?_TypeName@       -> "FrameCopyImageBuffer"
     //   0x18001ef80  ?_ParentTypeName@ -> "GeneratedImageBuffer"   (NO namespace)
-    static const char* _TypeName();
-    static const char* _ParentTypeName();
 
 public:
-    static uint32_t      TypeId();                              // ?TypeId@
-    static Object::Base* CreateNewObject();                     // 0x18001f0a0 (B.3.9 GFX)
-    static Object::Base* CreateInPlaceObject(void* storage);     // 0x18001f120 (B.3.9 GFX)
+    // TypeId and the factory pair 0x18001f0a0 / 0x18001f120: DECLARE_TYPE's.
     static void*         operator new(size_t size);             // ??2 — reached by name
     static void*         operator new(size_t size, void* storage);
     static void          operator delete(void* p);              // ??3

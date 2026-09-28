@@ -61,8 +61,6 @@ void ImageBuffer::ReleaseFields() { ++g_rel; g_relVptr = VptrOf(this); }
 }  // namespace Video
 
 namespace Graphics {
-const char* GeneratedImageBuffer::TypeName() const { return "GeneratedImageBuffer"; }
-uint32_t    GeneratedImageBuffer::Type() const { return 0; }
 int32_t     GeneratedImageBuffer::GetFileVersion() const { return 7; }
 bool        GeneratedImageBuffer::Serialize(void*) { return true; }
 }  // namespace Graphics

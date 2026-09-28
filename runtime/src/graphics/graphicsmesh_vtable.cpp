@@ -81,10 +81,6 @@ using Graphics::GraphicsMesh;
 // MINTED and PROMOTED (standalone/reg_mint_promoted.cpp:936). Read through the
 // name for the reason graphics_typeinfo_accessors.cpp gives.
 // ---------------------------------------------------------------------------
-const uint8_t* TypeInfoGraphicsMesh() {
-    return RT_DATA_SLOT(const uint8_t*,
-        "?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A");
-}
 
 // ---------------------------------------------------------------------------
 // Named dependencies — RT_EXPORT_ONCE, so a ported one is reached as ours.
@@ -290,17 +286,11 @@ namespace Graphics {
 
 // [2] ?Type@GraphicsMesh@Graphics@@UEBAIXZ  0x180012370
 //     `MOV EAX,dword ptr [0x1801fa708]` — the BaseTypeInfo record's +0x00.
-uint32_t GraphicsMesh::Type() const {
-    uint32_t v = 0; std::memcpy(&v, TypeInfoGraphicsMesh(), sizeof v); return v;
-}
+// ENDGAME B.3.9 TI-REST: Type / TypeName / TypeId are DECLARE_TYPE's bodies over the class's own
+// record (graphics_type_records.cpp).
 
 // [1] ?TypeName@GraphicsMesh@Graphics@@UEBAPEBDXZ  0x180012390
 //     `MOV RAX,qword ptr [0x1801fa710]` (= ?_typeInfo@… + 8).
-const char* GraphicsMesh::TypeName() const {
-    const char* v = nullptr;
-    std::memcpy(&v, TypeInfoGraphicsMesh() + 8, sizeof v);
-    return v;
-}
 
 // [3] ?GetFileVersion@GraphicsMesh@Graphics@@UEBAHXZ  0x1800ff3a0
 //     `MOV EAX,0x3415 ; RET`. 13333 decimal; a LITERAL, and nothing in this tree
@@ -378,9 +368,6 @@ GraphicsMesh::~GraphicsMesh() {
 
 // ?TypeId@GraphicsMesh@Graphics@@SAIXZ 0x180012380 -- the static twin of slot
 // 2: the minted record's +0x00 until the W3 fold (B39_RULES D6 step 1).
-uint32_t GraphicsMesh::TypeId() {
-    uint32_t v = 0; std::memcpy(&v, TypeInfoGraphicsMesh(), sizeof v); return v;
-}
 
 // ?CreateNewObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@XZ 0x180012480 --
 // the FACTREST row it replaces called ??0GraphicsMesh after the locked

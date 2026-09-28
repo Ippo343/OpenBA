@@ -310,3 +310,4 @@ UNIT_TREE_SRCS += runtime/src/audio/audio_type_records.cpp
 UNIT_TREE_SRCS += runtime/src/collision2d/collision2d_type_records.cpp
 UNIT_TREE_SRCS += runtime/src/achievement/achievement_type_records.cpp
 UNIT_TREE_SRCS += runtime/src/video/video_type_records.cpp
+UNIT_TREE_SRCS += runtime/src/graphics/graphics_type_records.cpp

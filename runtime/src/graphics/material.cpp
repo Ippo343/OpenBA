@@ -62,9 +62,6 @@ using rt::io::Serializer;
 using rt::io::Stream;
 using rt::io::ReaderWriter;
 
-const uint8_t* MaterialTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A");
-}
 
 // ENDGAME B.3.9 block GFX: `ConstructBody` (retail 0x1801029a0 open-coded as
 // three MINTED vptr stamps plus the zero stores) and `CallSlot0` are gone: the
@@ -88,18 +85,10 @@ Fn RtAddr(uintptr_t ghidra) {
 namespace Graphics {
 
 // [2] ?Type@Material@Graphics@@UEBAIXZ  0x1800118b0 — BaseTypeInfo +0x00.
-uint32_t Material::Type() const {
-    uint32_t v = 0;
-    std::memcpy(&v, MaterialTypeInfo(), sizeof v);
-    return v;
-}
+// ENDGAME B.3.9 TI-REST: Type / TypeName / TypeId are DECLARE_TYPE's bodies over the class's own
+// record (graphics_type_records.cpp).
 
 // [1] ?TypeName@Material@Graphics@@UEBAPEBDXZ  0x1800118d0 — BaseTypeInfo +0x08.
-const char* Material::TypeName() const {
-    const char* v = nullptr;
-    std::memcpy(&v, MaterialTypeInfo() + 8, sizeof v);
-    return v;
-}
 
 // [3] ?GetFileVersion@Material@Graphics@@UEBAHXZ  0x180102a40 — `MOV EAX,5; RET`.
 // A LITERAL. B35_RULES section 6.1: `VertexLayout::GetFileVersion` returning 1
@@ -174,11 +163,6 @@ Material::~Material() {
 
 // ?TypeId@Material@Graphics@@SAIXZ 0x1800118c0 -- the static twin of slot 2:
 // the minted record's +0x00 until the W3 fold (B39_RULES D6 step 1).
-uint32_t Material::TypeId() {
-    uint32_t v = 0;
-    std::memcpy(&v, MaterialTypeInfo(), sizeof v);
-    return v;
-}
 
 // ?CreateNewObject@Material@Graphics@@SAPEAVBase@Object@@XZ 0x1800119c0 --
 // `?MemAlloc@MemoryAllocator` (0x1800c7a50) of 0x38, align 8; retail's null

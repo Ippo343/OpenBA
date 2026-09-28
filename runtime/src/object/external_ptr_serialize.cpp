@@ -174,6 +174,10 @@
 #include "../../types/video/VertexLayout.h"
 #include "../../types/video/RenderState.h"
 #include "../../types/video/VideoProgram.h"
+#include "../../types/graphics/Animation.h"
+#include "../../types/graphics/AnimationGroup.h"
+#include "../../types/graphics/GraphicsMesh.h"
+#include "../../types/graphics/Material.h"
 #include "../../types/system/Filename.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
@@ -498,8 +502,7 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_SpriteSheet,
 // 0x180014520 — the SIXTH (WAVE 29 LANE WALL). `SpriteSheet+0x30`, and also
 // the four material slots of `Graphics::EdgeMeshInstance` and
 // `Graphics::Particle`. See the registration block below for why it moves now.
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_MaterialInstance,
-             "?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_MaterialInstance, Graphics::MaterialInstance)
 
 // ---- 2026-09-12: the rest of the family that the cutover closure reaches ----
 // (docs/runtime_port/closure/WORKLIST.md). Same 748-byte body, one typeInfo
@@ -508,19 +511,16 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_MaterialInstance,
 // 0x18005d0f0 — Video::ImageBuffer
 EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_ImageBuffer, Video::ImageBuffer)
 // 0x180061100 — Graphics::Material (cutover attempt 33's wall, from MaterialInstance::Serialize+0x83)
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Material,
-             "?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_Material, Graphics::Material)
 // 0x180014230 — Graphics::GraphicsMesh
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_GraphicsMesh,
-             "?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_GraphicsMesh, Graphics::GraphicsMesh)
 // 0x1800756d0 — UI::DialogControllerConfig
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_DialogControllerConfig,
              "?_typeInfo@DialogControllerConfig@UI@@0VBaseTypeInfo@Object@@A")
 // 0x180051790 — Audio::SoundEffect
 EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_SoundEffect, Audio::SoundEffect)
 // 0x18005b840 — Graphics::AnimationGroup
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_AnimationGroup,
-             "?_typeInfo@AnimationGroup@Graphics@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_AnimationGroup, Graphics::AnimationGroup)
 // 0x180006d10 — Achievement::Achievement. The export spells the class with a
 // back-reference (`@Achievement@1@`), which is why a grep for
 // `Achievement@Achievement@@` finds nothing; the name below is verified against
@@ -548,8 +548,7 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Font,
 // (runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp), the same
 // 748-byte shared template as every other row here; typeInfo confirmed against
 // the retail export table (pefile) at 0x1801f9978, not assumed.
-EXTPTR_THUNK(RtObject_ExternalPtrSerialize_AnimationEvent,
-             "?_typeInfo@AnimationEvent@Graphics@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK_OF(RtObject_ExternalPtrSerialize_AnimationEvent, Graphics::AnimationEvent)
 
 // ---- BATCH B (2026-09-12): the last three single-pointer instantiations -----
 //
@@ -636,8 +635,7 @@ EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_Goal, Achievement::Goal
 EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_ElementDescription,
                    "?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A")
 // 0x18005d4a0 — Graphics::MaterialInstance
-EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_MaterialInstance,
-                   "?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A")
+EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_MaterialInstance, Graphics::MaterialInstance)
 // 0x1800605e0 -- Video::VideoProgram (Material::_programs; not in the static
 // closure because Material::Serialize is reached only through a vtable slot)
 EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_VideoProgram, Video::VideoProgram)

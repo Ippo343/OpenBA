@@ -57,6 +57,14 @@
 #include "../../runtime/types/video/VertexLayout.h"
 #include "../../runtime/types/video/RenderState.h"
 #include "../../runtime/types/video/VideoProgram.h"
+#include "../../runtime/types/graphics/Animation.h"
+#include "../../runtime/types/graphics/AnimationGroup.h"
+#include "../../runtime/types/graphics/Mesh.h"
+#include "../../runtime/types/graphics/GraphicsMesh.h"
+#include "../../runtime/types/graphics/Material.h"
+#include "../../runtime/types/graphics/Particle.h"
+#include "../../runtime/types/graphics/GeneratedImageBuffer.h"
+#include "../../runtime/types/graphics/FrameCopyImageBuffer.h"
 
 // ===========================================================================
 // Factory-pair markers (see the banner).
@@ -81,6 +89,17 @@ TIR_FACTORY_MARKERS(Video::PixelProgram)
 TIR_FACTORY_MARKERS(Video::VertexLayout)
 TIR_FACTORY_MARKERS(Video::RenderState)
 TIR_FACTORY_MARKERS(Video::VideoProgram)
+TIR_FACTORY_MARKERS(Graphics::AnimationEvent)
+TIR_FACTORY_MARKERS(Graphics::AnimationGroup)
+TIR_FACTORY_MARKERS(Graphics::EdgeMesh)
+TIR_FACTORY_MARKERS(Graphics::GraphicsMesh)
+TIR_FACTORY_MARKERS(Graphics::Material)
+TIR_FACTORY_MARKERS(Graphics::MaterialInstance)
+TIR_FACTORY_MARKERS(Graphics::Particle)
+TIR_FACTORY_MARKERS(Graphics::ParticleSystem)
+TIR_FACTORY_MARKERS(Graphics::GeneratedImageBuffer)
+TIR_FACTORY_MARKERS(Graphics::FrameCopyImageBuffer)
+TIR_FACTORY_MARKERS(Graphics::ReflectionImageBuffer)
 // The two Object::Internal subclasses: only CreateNewObject is the class's;
 // the in-place half is the real forwarder in achievement_type_records.cpp.
 ::Object::Base* Achievement::AchievementInstance::CreateNewObject() { return nullptr; }
@@ -130,6 +149,18 @@ std::vector<Expect> Rows() {
         TIR_ROW(Video::VertexLayout,  "VertexLayout",  "CompiledExternal", 0x48B28673u),
         TIR_ROW(Video::RenderState,   "RenderState",   "External",         0x779102E5u),
         TIR_ROW(Video::VideoProgram,  "VideoProgram",  "External",         0x7319BD9Du),
+        // ---- Graphics ----
+        TIR_ROW(Graphics::AnimationEvent, "AnimationEvent", "External", 0x5BF7AEE4u),
+        TIR_ROW(Graphics::AnimationGroup, "AnimationGroup", "External", 0x99A746DFu),
+        TIR_ROW(Graphics::EdgeMesh, "EdgeMesh", "External", 0x78E68D30u),
+        TIR_ROW(Graphics::GraphicsMesh, "GraphicsMesh", "CompiledExternal", 0xE61C2FFEu),
+        TIR_ROW(Graphics::Material, "Material", "External", 0x418398A4u),
+        TIR_ROW(Graphics::MaterialInstance, "MaterialInstance", "External", 0x2EBEED54u),
+        TIR_ROW(Graphics::Particle, "Particle", "External", 0x2A5DC6DAu),
+        TIR_ROW(Graphics::ParticleSystem, "ParticleSystem", "Particle", 0xF00915C5u),
+        TIR_ROW(Graphics::GeneratedImageBuffer, "GeneratedImageBuffer", "ImageBuffer", 0xA1AF3CD9u),
+        TIR_ROW(Graphics::FrameCopyImageBuffer, "FrameCopyImageBuffer", "GeneratedImageBuffer", 0x741792D4u),
+        TIR_ROW(Graphics::ReflectionImageBuffer, "ReflectionImageBuffer", "GeneratedImageBuffer", 0x6AB5F8FCu),
     };
 }
 

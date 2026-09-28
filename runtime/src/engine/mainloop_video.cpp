@@ -202,6 +202,10 @@
 #include "../../types/video/VertexLayout.h"
 #include "../../types/video/RenderState.h"
 #include "../../types/video/VideoProgram.h"
+#include "../../types/graphics/Mesh.h"
+#include "../../types/graphics/GraphicsMesh.h"
+#include "../../types/graphics/GeneratedImageBuffer.h"
+#include "../../types/graphics/FrameCopyImageBuffer.h"
 #include "../collection/array_internal.h"
 #include "../collection/array_destroy_internal.h"
 #include "../system/string.h"
@@ -337,16 +341,16 @@ uint32_t TypeIdVideoProgram() {
     return Video::VideoProgram::TypeId();    // ENDGAME B.3.9 TI-REST
 }
 uint32_t TypeIdEdgeMesh() {
-    return *RT_DATA_SLOT(const uint32_t*, "?_typeInfo@EdgeMesh@Graphics@@0VBaseTypeInfo@Object@@A");
+    return Graphics::EdgeMesh::TypeId();              // ENDGAME B.3.9 TI-REST
 }
 uint32_t TypeIdGraphicsMesh() {
-    return *RT_DATA_SLOT(const uint32_t*, "?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A");
+    return Graphics::GraphicsMesh::TypeId();          // ENDGAME B.3.9 TI-REST
 }
 uint32_t TypeIdReflectionImageBuffer() {
-    return *RT_DATA_SLOT(const uint32_t*, "?_typeInfo@ReflectionImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A");
+    return Graphics::ReflectionImageBuffer::TypeId(); // ENDGAME B.3.9 TI-REST
 }
 uint32_t TypeIdFrameCopyImageBuffer() {
-    return *RT_DATA_SLOT(const uint32_t*, "?_typeInfo@FrameCopyImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A");
+    return Graphics::FrameCopyImageBuffer::TypeId();  // ENDGAME B.3.9 TI-REST
 }
 uint32_t TypeIdExternal() {
     return *RT_DATA_SLOT(const uint32_t*, "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A");
