@@ -58,24 +58,17 @@
 
 #include "../../funcs/rt_port.h"
 #include "string.h"
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/system/MemoryAllocator.h"
 
 namespace rtclosure2b {
 
-// ---- the allocator boundary, by address (see the banner) -------------------
+// ---- the allocator boundary (B3R W0-A0: the statics, called directly; they
+// were resolved by address, 0x1800c7a50 / 0x1800c7ad0, bound to these two) ---
 void* MemAllocAt(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn(bytes, align);
+    return System::MemoryAllocator::MemAlloc(bytes, align);
 }
 void MemFreeAt(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    fn(p);                                   // 0x1800c7ad0 re-tests null itself
+    System::MemoryAllocator::MemFree(p);     // 0x1800c7ad0 re-tests null itself
 }
 
 }  // namespace rtclosure2b

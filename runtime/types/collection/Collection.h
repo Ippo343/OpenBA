@@ -382,21 +382,17 @@ using ArrayHdr = Collection::Array<uint8_t>;
 // alloc_door.cpp — read its banner for the evidence).
 //
 // `MemAlloc`/`MemFree` below, the Set node pair and the LinkedList node pair
-// all ask these two for the function to call, and they answer with whatever the
-// exe `.rdata` dispatch slots 0x140152b60 / 0x140152b68 currently hold — the
-// same door `code/Game`'s allocating bodies use, and the one
-// `standalone/redzone_alloc.cpp` rewrites when `BANISHED_REDZONE` is armed.
-// Resolving `?MemAlloc@`'s RUNTIME address directly, which is what all four
-// seams used to do, reaches the same allocator through a door the instrument
-// cannot see — and a HALF-shimmed heap is worse than an unshimmed one
-// (redzone_alloc.cpp's `ShimAllocStatic` banner: alloc through one channel and
-// free through the other leaves a stale live-block entry and the canary scan
-// then reports a PHANTOM overflow).
+// all ask these two for the function to call. Since B3R W0-A0 they answer
+// `System::MemoryAllocator::MemAlloc` / `MemFree` directly: the diagnostic
+// instruments (BANISHED_REDZONE, BANISHED_ALLOC_STATS) sit on the allocator's
+// instrument seat inside those two statics, so every container allocation and
+// free goes through the same channel (a HALF-shimmed heap is worse than an
+// unshimmed one: redzone_alloc.cpp's `ShimAllocStatic` banner). Before W0-A0
+// they re-read the exe dispatch slots 0x140152b60 / 0x140152b68 per call.
 //
 // They hand back a POINTER rather than performing the call so that each seam
-// keeps its own null handling: `MemAlloc` calls unguarded (a faithful crash
-// names an unarmed allocator), the Set and LinkedList seams keep their
-// `fn ? fn(…) : nullptr` shape.
+// keeps its own null handling: `MemAlloc` calls unguarded, the Set and
+// LinkedList seams keep their `fn ? fn(…) : nullptr` shape (never null now).
 // ---------------------------------------------------------------------------
 using DoorAllocFn_t = void* (*)(uint64_t bytes, int align);
 using DoorFreeFn_t  = void  (*)(void* p);

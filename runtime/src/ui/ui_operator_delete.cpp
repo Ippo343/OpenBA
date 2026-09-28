@@ -52,13 +52,16 @@
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
-#include "../../types/collection/Collection.h"   // rtcoll::MemFree
+#include "../../types/system/MemoryAllocator.h"
+
 
 // ---------------------------------------------------------------------------
 // The one body.
 // ---------------------------------------------------------------------------
+// B3R W0-A0: the allocator's static, called directly (it went through
+// rtcoll::MemFree -> rtcoll::DoorFree(), which answers this same function).
 extern "C" void RtUi_ClassOperatorDelete(void* p) {
-    rtcoll::MemFree(p);                     // if (p) { Enter; Free; Leave; }
+    System::MemoryAllocator::MemFree(p);    // if (p) { Enter; Free; Leave; }
 }
 
 namespace {

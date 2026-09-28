@@ -74,14 +74,6 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/system/MemoryAllocator.h"
 
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// — same reasoning array.cpp and linkedlist.cpp give (resolve.h drags in
-// <windows.h>, whose <wingdi.h> declares a function called `Rectangle`). Must
-// stay byte-identical to resolve.h's declaration; the linker checks the two
-// against each other.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 using rt::system::MemoryAllocator;
 using rt::system::MemoryRange;
 using rt::system::RtSysMemPlatform;
@@ -1453,11 +1445,11 @@ int RegisterAllocatorExports(void* allocateEntry, void* freeEntry) {
 // path supplies the address, and a caller that ran first would otherwise freeze
 // a null in for the life of the process.
 //
+// B3R W0-A0: the static, called directly. The by-address door above was bound
+// to this same function (RegisterAllocatorAddresses), and the instrument seat
+// now lives inside it, so the "observed" property the banner asks for holds.
 void FreeLockedIgnoringSelf(void* /*ignoredThis*/, void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    if (fn) fn(p);
+    MemoryAllocator::MemFree(p);
 }
 
 // ============================================================================
