@@ -21,10 +21,6 @@
 #include "../../runtime/types/object/External.h"
 #include "../../runtime/types/object/Internal.h"   // Object::detail::InternalMemAlloc
 
-namespace Object {
-extern const BaseTypeInfo* g_unitCompiledExternalTypeInfo;
-}  // namespace Object
-
 namespace {
 
 class TestCompiled : public Object::CompiledExternal {
@@ -45,8 +41,6 @@ uintptr_t CeSlotOffset(PMF pmf) {
     if (words[1] != 0) return ~uintptr_t(0);          // this-adjustment
     return words[0] - 1;
 }
-
-Object::BaseTypeInfo g_compiledRecord;
 
 }  // namespace
 
@@ -73,10 +67,6 @@ UNIT_TEST(b39_obj_compiledexternal_slot_order_by_pmf) {
 // ??0CompiledExternal 0x1800bb920: External's zero stores, then the table.
 // Slots 1/2 answer CompiledExternal's record, not External's.
 UNIT_TEST(b39_obj_compiledexternal_ctor_and_own_type_slots) {
-    g_compiledRecord.typeId = 0xAE5B8F65u;
-    g_compiledRecord.name   = "CompiledExternal";
-    ::Object::g_unitCompiledExternalTypeInfo = &g_compiledRecord;
-
     alignas(8) uint8_t buf[0x20];
     std::memset(buf, 0xCD, sizeof buf);
     TestCompiled* c = ::new (buf) TestCompiled();
@@ -85,9 +75,15 @@ UNIT_TEST(b39_obj_compiledexternal_ctor_and_own_type_slots) {
     CHECK_EQ(c->_refs._size, 0);
     CHECK_EQ(c->_refs._capacity, 0);
     Object::Base* b = c;
-    CHECK_EQ(b->Type(), 0xAE5B8F65u);
+    // The class record (DEFINE_TYPE): the unit harness never runs
+    // Factory::Startup, so the id is the ctor's sentinel -- the point is that
+    // slots 1/2 read CompiledExternal's record, not External's.
+    CHECK_EQ(b->Type(), Object::CompiledExternal::TypeId());
     CHECK(std::strcmp(b->TypeName(), "CompiledExternal") == 0);
-    CHECK_EQ(Object::CompiledExternal::TypeId(), 0xAE5B8F65u);
+    CHECK(std::strcmp(Object::CompiledExternal::GetTypeInfo().parentName, "External") == 0);
+    CHECK(Object::CompiledExternal::GetTypeInfo().fileExtension == nullptr);
+    CHECK(Object::CompiledExternal::CreateNewObject() == nullptr);
+    CHECK(Object::CompiledExternal::CreateInPlaceObject(buf) == nullptr);
     CHECK(b->DeletingDtor(0) == b);   // flags 0: destroy, no free
 }
 

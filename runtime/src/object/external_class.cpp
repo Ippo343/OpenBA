@@ -71,10 +71,8 @@ namespace Object {
 // reads one. This is a TEST seam, not a guard on a faithful path — the real
 // build's door below is unguarded, as retail's rip-relative load is.
 const BaseTypeInfo* g_unitExternalTypeInfo         = nullptr;
-const BaseTypeInfo* g_unitCompiledExternalTypeInfo = nullptr;
 
 const BaseTypeInfo* ExternalTypeInfoRecord()         { return g_unitExternalTypeInfo; }
-const BaseTypeInfo* CompiledExternalTypeInfoRecord() { return g_unitCompiledExternalTypeInfo; }
 #else
 // ############################################################################
 // ENDGAME B.3.9 OBJ — THE RUNTIME `TypeId()` ACCESSOR PATTERN (B39_RULES D6
@@ -100,7 +98,6 @@ const BaseTypeInfo* CompiledExternalTypeInfoRecord() { return g_unitCompiledExte
 namespace {
 
 std::atomic<const BaseTypeInfo*> g_externalTypeInfo{nullptr};          // 0x1801f9b38
-std::atomic<const BaseTypeInfo*> g_compiledExternalTypeInfo{nullptr};  // 0x1801f9b00
 
 const BaseTypeInfo* MintedRecord(std::atomic<const BaseTypeInfo*>& slot,
                                  const char* mangled) {
@@ -117,10 +114,6 @@ const BaseTypeInfo* MintedRecord(std::atomic<const BaseTypeInfo*>& slot,
 const BaseTypeInfo* ExternalTypeInfoRecord() {
     return MintedRecord(g_externalTypeInfo,
                         "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A");
-}
-const BaseTypeInfo* CompiledExternalTypeInfoRecord() {
-    return MintedRecord(g_compiledExternalTypeInfo,
-                        "?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A");
 }
 #endif
 
@@ -256,13 +249,19 @@ System::Filename External::GetPath() const {
 // Object::CompiledExternal
 // ============================================================================
 
-// ?TypeId@CompiledExternal@Object@@SAIXZ  0x18000b6a0 — `MOV EAX,[0x1801f9b00]`.
-uint32_t CompiledExternal::TypeId() { return CompiledExternalTypeInfoRecord()->typeId; }
+// ?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A — 0x1801f9b00.
+// ENDGAME B.3.9 OBJ (B39_RULES D6 W3): name "CompiledExternal", parent literal
+// "External" EXACTLY as the retail record carries it, no extension. Slots 1/2
+// and TypeId() (0x18000b6b0 / 0x18000b690 / 0x18000b6a0) are DECLARE_TYPE's
+// over it. The minted record is retired in the same commit.
+DEFINE_TYPE(Object::CompiledExternal, "External", nullptr)
 
-// slot 1 — 0x18000b6b0 `MOV RAX,[0x1801f9b08]` (the record's name, content-only)
-// slot 2 — 0x18000b690 `MOV EAX,[0x1801f9b00]` (the record's type id)
-const char* CompiledExternal::TypeName() const { return CompiledExternalTypeInfoRecord()->name; }
-uint32_t    CompiledExternal::Type() const     { return TypeId(); }
+// ?CreateNewObject@CompiledExternal@Object@@SAPEAVBase@2@XZ          0x18000b6c0
+// ?CreateInPlaceObject@CompiledExternal@Object@@SAPEAVBase@2@PEAX@Z  0x18000b6d0
+// Both `XOR EAX,EAX; RET` (the FACTREST row had no steps): the class is
+// abstract. Registered by name and VA from external.cpp (B39_RULES D2).
+Base* CompiledExternal::CreateNewObject()          { return nullptr; }
+Base* CompiledExternal::CreateInPlaceObject(void*) { return nullptr; }
 
 // ??1CompiledExternal@Object@@UEAA@XZ   retail 0x1800bb980
 //

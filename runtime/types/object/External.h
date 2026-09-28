@@ -690,6 +690,13 @@ static_assert(offsetof(External, _refs) == 0x10, "External::_refs @ +0x10 (~Exte
 // 0x20, i.e. the same as External's: this class adds no data.
 // ============================================================
 class CompiledExternal : public External {
+    // ?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A (0x1801f9b00):
+    // slot 1 TypeName 0x18000b6b0 `MOV RAX,[_typeInfo+8]`, slot 2 Type
+    // 0x18000b690 `MOV EAX,[_typeInfo]`, TypeId 0x18000b6a0 and the factory
+    // pair 0x18000b6c0 / 0x18000b6d0 (both `XOR EAX,EAX; RET` -- abstract).
+    // DEFINE_TYPE is in external_class.cpp (ENDGAME B.3.9 OBJ, D6 W3).
+    DECLARE_TYPE(CompiledExternal)
+
 public:
     // ??0CompiledExternal@Object@@QEAA@XZ  retail 0x1800bb920: Base's and
     // External's vptr, +0x08/+0x10/+0x18 zero (External(), the compiler's),
@@ -715,17 +722,6 @@ public:
         if (flags & 1u) TypeTreeFree(this);
         return this;
     }
-    // [1] ?TypeName@CompiledExternal@Object@@UEBAPEBDXZ 0x18000b6b0
-    //     `MOV RAX,[_typeInfo+8]`; [2] ?Type@CompiledExternal@Object@@UEBAIXZ
-    //     0x18000b690 `MOV EAX,[_typeInfo]` — the class's own record, not
-    //     External's (the compiler table used to inherit External's two).
-    const char* TypeName() const override;
-    uint32_t    Type() const override;
-
-    // ?TypeId@CompiledExternal@Object@@SAIXZ 0x18000b6a0 — `MOV EAX,[_typeInfo]`
-    // over the (still minted) record, through the Object accessor slot
-    // (external_class.cpp; B39_RULES D6 step 1).
-    static uint32_t TypeId();
 protected:
     ~CompiledExternal();     // 0x1800bb980
 };
@@ -1084,6 +1080,5 @@ static_assert(offsetof(ExternalFactory, _simpleLoadEnabled)    == 0x42, "_simple
 // "faithful partial beats a complete-looking conversion" rule.
 // ############################################################################
 const BaseTypeInfo* ExternalTypeInfoRecord();          // ?_typeInfo@External@Object@@
-const BaseTypeInfo* CompiledExternalTypeInfoRecord();  // ?_typeInfo@CompiledExternal@Object@@
 
 }  // namespace Object

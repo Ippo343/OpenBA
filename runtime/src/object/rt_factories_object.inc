@@ -12,20 +12,6 @@
 // ============================================================================
 
 // --------------------------------------------------------------------------
-// Object::CompiledExternal
-//   ?CreateNewObject@CompiledExternal@Object@@SAPEAVBase@2@XZ  0x18000b6c0
-//   ?CreateInPlaceObject@CompiledExternal@Object@@SAPEAVBase@2@PEAX@Z  0x18000b6d0
-// --------------------------------------------------------------------------
-static uint64_t kCountObject_CompiledExternal[3];
-static const RtFactoryClass kClsObject_CompiledExternal = {
-    "Object::CompiledExternal", 0x0, 0,
-    nullptr, nullptr,
-    0x18000b6c0ull, 0x18000b6d0ull, kCountObject_CompiledExternal,
-};
-extern "C" void* RtFactNew_Object_CompiledExternal()          { return RtFactoryNew(kClsObject_CompiledExternal); }
-extern "C" void* RtFactIP_Object_CompiledExternal(void* p)    { return RtFactoryInPlace(kClsObject_CompiledExternal, p); }
-
-// --------------------------------------------------------------------------
 // Object::ExtensionCompiler
 //   ?CreateNewObject@ExtensionCompiler@Object@@SAPEAVBase@2@XZ  0x18002c260
 //   ?CreateInPlaceObject@ExtensionCompiler@Object@@SAPEAVBase@2@PEAX@Z  0x18002c270
@@ -69,8 +55,6 @@ extern "C" void* RtFactIP_Object_ExternalCompiler(void* p)    { return RtFactory
 
 
 static const RtFactoryReg kRegs[] = {
-    { "?CreateNewObject@CompiledExternal@Object@@SAPEAVBase@2@XZ", 0x18000b6c0ull, (void*)&RtFactNew_Object_CompiledExternal,
-      "?CreateInPlaceObject@CompiledExternal@Object@@SAPEAVBase@2@PEAX@Z", 0x18000b6d0ull, (void*)&RtFactIP_Object_CompiledExternal, &kClsObject_CompiledExternal },
     { "?CreateNewObject@ExtensionCompiler@Object@@SAPEAVBase@2@XZ", 0x18002c260ull, (void*)&RtFactNew_Object_ExtensionCompiler,
       "?CreateInPlaceObject@ExtensionCompiler@Object@@SAPEAVBase@2@PEAX@Z", 0x18002c270ull, (void*)&RtFactIP_Object_ExtensionCompiler, &kClsObject_ExtensionCompiler },
     { "?CreateNewObject@External@Object@@SAPEAVBase@2@XZ", 0x18002c980ull, (void*)&RtFactNew_Object_External,

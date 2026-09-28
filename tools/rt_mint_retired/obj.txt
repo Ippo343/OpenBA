@@ -21,3 +21,4 @@
 
 # -- W3: the Object _typeInfo folds (B39_RULES D6) --
 ?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A   OBJ   DEFINE_TYPE(Object::ExternalList, "Object::External", nullptr) in external_class.cpp; readers (ExtPtr thunk, UpdateLoop LoadResources, ExternalList slots) read the class record
+?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A   OBJ   DEFINE_TYPE(Object::CompiledExternal, "External", nullptr) in external_class.cpp; factory pair the class's own (FACTREST row deleted); readers were the class accessor only

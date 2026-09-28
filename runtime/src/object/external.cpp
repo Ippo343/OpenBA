@@ -560,6 +560,14 @@ int RtObjectExternalRegister() {
 
     int n = 0;
 
+    // ENDGAME B.3.9 OBJ (B39_RULES D2): CompiledExternal's factory pair is the
+    // class's own statics (external_class.cpp), not a FACTREST row.
+    RegisterRuntimeExport("?CreateNewObject@CompiledExternal@Object@@SAPEAVBase@2@XZ",
+                          (void*)&::Object::CompiledExternal::CreateNewObject); ++n;
+    RegisterRuntimeAddr(0x18000b6c0, (void*)&::Object::CompiledExternal::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@CompiledExternal@Object@@SAPEAVBase@2@PEAX@Z",
+                          (void*)&::Object::CompiledExternal::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr(0x18000b6d0, (void*)&::Object::CompiledExternal::CreateInPlaceObject);
     RegisterRuntimeExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ",
                           (void*)&RtObject_External_GetPath); ++n;
     RegisterRuntimeExport("?EnableReferenceMode@ExternalFactory@Object@@QEAAX_N@Z",
