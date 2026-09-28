@@ -82,10 +82,3 @@ extern "C" void RtObject_InternalPtrArraySerialize_GoalInstance(
         ::IO::Serializer* ser, int count, InternalBasePtr* elems) {
     RtObject_InternalPtrArray_Serialize(ser, count, elems, Achievement::GoalInstance::TypeId());
 }
-
-int RtObjectInternalPtrArraySerializeRegister() {
-    int n = 0;
-    RegisterRuntimeAddr(0x180009a20, (void*)&RtObject_InternalPtrArraySerialize_AchievementInstance); ++n;
-    RegisterRuntimeAddr(0x180009fa0, (void*)&RtObject_InternalPtrArraySerialize_GoalInstance);        ++n;
-    return n;
-}

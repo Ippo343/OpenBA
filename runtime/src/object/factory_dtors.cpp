@@ -103,13 +103,8 @@
 #include "../../types/object/External.h"
 #include "../system/string.h"
 #include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
-
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// for the reason array.cpp:127 gives: resolve.h drags in <windows.h>, whose
-// <windef.h> #defines `near`/`far` away. This declaration must stay
-// byte-identical to resolve.h's; the linker checks the two.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../collection/avl_trees.h"   // B3R: rtavl::PtrArrayDtor (0x1800093e0)
+#include "../../types/system/MemoryAllocator.h"   // B3R: rtalloc::FreeLockedIgnoringSelf (0x180009c30)
 
 namespace RtObjFactoryDtor {
 
@@ -147,37 +142,15 @@ struct PathStackArray {
 };
 
 // ---------------------------------------------------------------------------
-// The four already-ported callees, through the port-aware address door.
-// Each pointer is cached in a function-local static AFTER a successful
-// resolve only, so a miss during early init is retried rather than frozen
-// (reference_the_macro_expands_to_the_prescribed_fix).
+// The two already-ported callees, called by name (B3R RT-Core):
+//   0x1800093e0  rtavl::PtrArrayDtor -- a trivial J1-equivalent
+//                `Array<T*>::~Array` over `TypeNode::value.children`, three
+//                independently named scalar fields in TypeInfo.h rather than
+//                a real `Collection::Array<TypeRecord*>` member, so it stays
+//                the free body.
+//   0x180009c30  rtalloc::FreeLockedIgnoringSelf -- arg 1 IS IGNORED by the
+//                callee, and kept for exactly that reason.
 // ---------------------------------------------------------------------------
-
-// NOT CONVERTED (ENDGAME B.3.2 step 2): 0x1800093e0 is `rtavl::PtrArrayDtor`,
-// a trivial J1-equivalent `Array<T*>::~Array` (avl_trees.cpp's own banner on
-// this address). Its two callers below operate on `TypeNode::value.children`
-// (`TypeRecord::{children, childCount, childCapacity}`,
-// runtime/types/object/TypeInfo.h) — three independently named scalar fields,
-// not a real `Collection::Array<TypeRecord*>` member, the same split-layout
-// situation `video/video_resources.cpp`'s `Device` hits. `TypeRecord` is used
-// by name (`->children`, `->childCount`) throughout type_system.cpp, so
-// folding the three fields into one Array member is struct-layout work with
-// wide fallout, not a caller conversion — stays a by-address call.
-static void PtrArrayDtor_1800093e0(void* arrayHdr) {
-    using Fn = void* (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800093e0));
-    fn(arrayHdr);
-}
-
-// arg 1 IS IGNORED by the callee. Kept in the signature for exactly that
-// reason: dropping it would read the wrong register on every call.
-static void SetNodeFree_180009c30(void* ignoredThis, void* node) {
-    using Fn = void (*)(void*, void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180009c30));
-    fn(ignoredThis, node);
-}
 
 // ENDGAME B.3.2 step 2 — `ArrayDtor_18001c750` and `ArrayDtor_18002fb70`
 // (0x18001c750, 0x18002fb70) are GONE: their one caller, RtObject_
@@ -214,8 +187,8 @@ void TypeSubtreeFree(void* set, TypeNode* node) {
         return;
     TypeSubtreeFree(set, node->left);
     TypeSubtreeFree(set, node->right);
-    PtrArrayDtor_1800093e0(reinterpret_cast<uint8_t*>(node) + 0x20);
-    SetNodeFree_180009c30(set, node);
+    rtavl::PtrArrayDtor(reinterpret_cast<uint8_t*>(node) + 0x20);
+    rtalloc::FreeLockedIgnoringSelf(set, node);
 }
 
 // ============================================================================
@@ -256,8 +229,8 @@ void RtObject_Factory_Dtor(void* self) {
     if (root != nullptr) {
         TypeSubtreeFree(self, root->left);
         TypeSubtreeFree(self, root->right);
-        PtrArrayDtor_1800093e0(reinterpret_cast<uint8_t*>(root) + 0x20);
-        SetNodeFree_180009c30(self, root);
+        rtavl::PtrArrayDtor(reinterpret_cast<uint8_t*>(root) + 0x20);
+        rtalloc::FreeLockedIgnoringSelf(self, root);
     }
     s->root  = nullptr;
     s->count = 0;
@@ -440,7 +413,7 @@ void ReferenceSubtreeFree(void* set, void* node) {
     // ~Filename (0x180006980) over `ReferenceEntry::path`, addressed by offset
     // because the node is raw container bytes here.
     reinterpret_cast<System::Filename*>(n + 0x08)->~Filename();
-    SetNodeFree_180009c30(set, node);
+    rtalloc::FreeLockedIgnoringSelf(set, node);
 }
 
 // ============================================================================
@@ -470,7 +443,7 @@ void ResourceSubtreeFree(void* set, void* node) {
     ResourceSubtreeFree(set, *reinterpret_cast<void**>(n + 0x28));
     // ~Filename over `ResourceEntry::path`, the key at +0x00.
     reinterpret_cast<System::Filename*>(n)->~Filename();
-    SetNodeFree_180009c30(set, node);
+    rtalloc::FreeLockedIgnoringSelf(set, node);
 }
 
 // ============================================================================
@@ -539,76 +512,3 @@ extern "C" void RtObject_Factory_Shutdown(void* /*self — RCX is overwritten*/)
 namespace Object {
 void Factory::Shutdown() { RtObject_Factory_Shutdown(this); }
 }  // namespace Object
-
-// ============================================================================
-// Registration
-// ============================================================================
-//
-// Both the mangled NAME and the Ghidra ADDRESS for each row: our call site
-// (engine_lifecycle.cpp) resolves by name through RT_EXPORT_ONCE, and the
-// address door is what keeps the row alive at cutover
-// (reference_by_address_door_dies_at_cutover). ~Factory gets TWO addresses,
-// the EH thunk and the body it tail-jumps to, because a caller that reached
-// either one in retail must reach ours.
-//
-// The three helper addresses this file OWNS are registered too — without them
-// the ported bodies would be the only thing in the tree that can reach those
-// nodes, and any future by-address caller would silently take the DLL.
-// 0x18002fb70 is NOT registered here: it belongs to the J1 family and is
-// registered by its owner, runtime/src/collection/array.cpp.
-// ============================================================================
-// external_path_stack.cpp's port of 0x18002e8d0 -- the one body behind that
-// address door. See the note at the registration below.
-extern "C" void RtObject_PathStackDestroyRange_18002e8d0(void*, uint8_t*, int);
-
-int RtObjectFactoryDtorsRegister() {
-    using namespace RtObjFactoryDtor;
-    int n = 0;
-
-    RegisterRuntimeExport("??1Factory@Object@@QEAA@XZ",
-                          (void*)&RtObject_Factory_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800071a0, (void*)&RtObject_Factory_Dtor);  // EH thunk
-    RegisterRuntimeAddr(0x180008110, (void*)&RtObject_Factory_Dtor);  // real body
-
-    // ENDGAME B.3.3 step 7 — ?Shutdown@Factory@Object@@QEAAXXZ, 0x1800c0600.
-    RegisterRuntimeExport("?Shutdown@Factory@Object@@QEAAXXZ",
-                          (void*)&RtObject_Factory_Shutdown); ++n;
-    RegisterRuntimeAddr(0x1800c0600, (void*)&RtObject_Factory_Shutdown);
-
-    RegisterRuntimeExport("??1InternalFactory@Object@@QEAA@XZ",
-                          (void*)&RtObject_InternalFactory_Dtor); ++n;
-    RegisterRuntimeAddr(0x18002f860, (void*)&RtObject_InternalFactory_Dtor);
-
-    RegisterRuntimeExport("??1ExternalFactory@Object@@QEAA@XZ",
-                          (void*)&RtObject_ExternalFactory_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800be760, (void*)&RtObject_ExternalFactory_Dtor);
-
-    // Helpers owned by this file.
-    RegisterRuntimeAddr(0x180008250, (void*)&TypeSubtreeFree);
-    // 0x18002e8d0 -- ONE ADDRESS, ONE REGISTERED BODY.
-    //
-    // external_path_stack.cpp ports the same retail function as
-    // RtObject_PathStackDestroyRange_18002e8d0 and registers this address too,
-    // under a DIFFERENT switch (EXTERNAL+PATHSTACK, where this block is
-    // FACTORYDTOR), and it registers LAST, so its body has been the one behind
-    // this address all along. The two bodies agree instruction for instruction
-    // -- same 0x10 stride, same filename-before-directory release order, same
-    // RtString_ReleaseInline -- so nothing was observably wrong, but two
-    // spellings of one retail function is one edit away from a silent
-    // divergence, and the address door must not depend on which switch is on.
-    //
-    // So this registration now names the SAME body the other file registers.
-    // `PathStackDestroyRange` below stays as this file's own helper for
-    // PathStackArrayDtor's inlined call; it is no longer an address door.
-    RegisterRuntimeAddr(0x18002e8d0, (void*)&RtObject_PathStackDestroyRange_18002e8d0);
-    RegisterRuntimeAddr(0x18002e9e0, (void*)&PathStackArrayDtor);
-    RegisterRuntimeAddr(0x18002ebf0, (void*)&ReferenceSubtreeFree);
-    RegisterRuntimeAddr(0x18002eea0, (void*)&ResourceSubtreeFree);
-
-    printf("[RtPort]   Object::factory dtors: %d exports + 5 helper addresses "
-           "registered. NOTE: their only caller in this tree is "
-           "Engine::Shutdown, which itself has calls=0 -- see "
-           "docs/runtime_port/WAVE11_LANE_OBJLIFE.md before reading a 0 here "
-           "as a regression.\n", n);
-    return n;
-}

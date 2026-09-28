@@ -189,6 +189,7 @@
 #include "../../types/system/String.h"
 #include "../system/string.h"
 #include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
+#include "external_compiled.h"      // B3R: RtObject_ExternalFactory_FindOrLoad
 
 using RtObject::External;
 using RtObject::ExternalFactory;
@@ -200,44 +201,11 @@ using rt::io::Stream;
 
 namespace {
 
-// ---- the dependency doors, all by EXPORTED NAME through the port registry ---
-//
-// RT_EXPORT_ONCE, not the raw DLL door: the point is to reach OUR port of each
-// of these where one exists, not the shipped body
-// ([[reference_rtoriginal_is_getprocaddress]] is about the cost, and
-// port-bypass is about the correctness). One cache per call site.
-
-using GetPathFn        = Filename* (*)(const External*, Filename*);
-using FindOrLoadFn     = const External* (*)(ExternalFactory*, const Filename*);
-using IsDerivedFromFn  = bool (*)(const void*, uint32_t);
-using GetRefIdFn       = uint32_t (*)(const ExternalFactory*, const External*);
-using GetPathForIdFn   = Filename* (*)(const ExternalFactory*, Filename*, uint32_t);
-
-Filename* CallGetPath(const External* e, Filename* ret) {
-    return RT_EXPORT_ONCE(GetPathFn,
-        "?GetPath@External@Object@@QEBA?AVFilename@System@@XZ")(e, ret);
-}
-
-// Ported since this line was first written (external_compiled.cpp), and reached
-// here by name, so it needed no edit. See the FindOrLoad block in the banner.
-const External* CallFindOrLoad(ExternalFactory* f, const Filename* p) {
-    return RT_EXPORT_ONCE(FindOrLoadFn,
-        "?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z")(f, p);
-}
-
-bool CallIsDerivedFrom(const void* obj, uint32_t typeId) {
-    return RT_EXPORT_ONCE(IsDerivedFromFn,
-        "?IsDerivedFrom@Base@Object@@QEBA_NI@Z")(obj, typeId);
-}
-
-uint32_t CallGetReferenceId(const ExternalFactory* f, const External* e) {
-    return RT_EXPORT_ONCE(GetRefIdFn,
-        "?GetReferenceId@ExternalFactory@Object@@QEBAIPEBVExternal@2@@Z")(f, e);
-}
-
-Filename* CallGetPathForReferenceId(const ExternalFactory* f, Filename* ret, uint32_t id) {
-    return RT_EXPORT_ONCE(GetPathForIdFn,
-        "?GetPathForReferenceId@ExternalFactory@Object@@QEBA?AVFilename@System@@I@Z")(f, ret, id);
+// ---- the dependency bodies (B3R RT-Core: called by name) -----------------
+//   GetPath 0x180006250, FindOrLoad 0x1800bf320, Base::IsDerivedFrom
+//   0x1800c0390, GetReferenceId 0x1800bf100, GetPathForReferenceId 0x1800bf1d0.
+bool IsDerivedFrom(const RtObject::External* obj, uint32_t typeId) {
+    return reinterpret_cast<const ::Object::Base*>(obj)->IsDerivedFrom(typeId);
 }
 
 // ENDGAME B.3.1 step 2 removed two of this file's name doors:
@@ -346,13 +314,13 @@ void ExternalPtrSerializeBody(RtObject::External** self, Serializer& serRef,
         // it is CONSTRUCTED INTO by the call and must not be constructed twice;
         // its release is the destructor at the return below.
         System::Filename scratch;               // [rbp+0x38]
-        CallGetPath(cur, reinterpret_cast<Filename*>(&scratch));
-        const RtObject::External* found =
-            CallFindOrLoad(::Factory(), reinterpret_cast<const Filename*>(&scratch));
+        RtObject::RtObject_External_GetPath(cur, reinterpret_cast<Filename*>(&scratch));
+        const RtObject::External* found = RtObject::RtObject_ExternalFactory_FindOrLoad(
+            ::Factory(), reinterpret_cast<const Filename*>(&scratch));
         if (found != nullptr) {
             // The answer is genuinely discarded — retail calls it for the side
             // effect of nothing, and keeps the pointer it already had.
-            (void)CallIsDerivedFrom(found, *static_cast<const uint32_t*>(typeInfo));
+            (void)IsDerivedFrom(found, *static_cast<const uint32_t*>(typeInfo));
         }
         return;
     }
@@ -367,7 +335,7 @@ void ExternalPtrSerializeBody(RtObject::External** self, Serializer& serRef,
     if (factory->_referenceModeEnabled) {
         // ---- mode 2: reference id ------------------------------------------
         uint32_t refId = (*self != nullptr)
-            ? CallGetReferenceId(factory, *self)
+            ? RtObject::RtObject_ExternalFactory_GetReferenceId(factory, *self)
             : kNoReferenceId;
 
         // 0x180004372. The odd arm, transcribed rather than rationalised: when
@@ -387,8 +355,8 @@ void ExternalPtrSerializeBody(RtObject::External** self, Serializer& serRef,
 
         if (stream->direction == rt::io::kDirectionReading) {   // 0x1800043c1
             System::Filename tmp;               // [rbp+0x48], another retslot
-            CallGetPathForReferenceId(factory, reinterpret_cast<Filename*>(&tmp),
-                                      refId);
+            RtObject::RtObject_ExternalFactory_GetPathForReferenceId(
+                factory, reinterpret_cast<Filename*>(&tmp), refId);
             // 0x1800043dd release-then-adopt plus the AdjustDelimiters that
             // follows it IS `Filename::operator=`, 0x180006770.
             path = tmp;
@@ -405,7 +373,7 @@ void ExternalPtrSerializeBody(RtObject::External** self, Serializer& serRef,
         RtObject::External* cur = *self;
         if (cur != nullptr) {                   // saving: fill `path` from the object
             System::Filename tmp;               // [rbp+0x48], GetPath's retslot
-            CallGetPath(cur, reinterpret_cast<Filename*>(&tmp));
+            RtObject::RtObject_External_GetPath(cur, reinterpret_cast<Filename*>(&tmp));
             path = tmp;                         // operator=, as above
         }
         path.AsString().Serialize(ser);         // 0x180004500; load fills `path`
@@ -417,10 +385,11 @@ void ExternalPtrSerializeBody(RtObject::External** self, Serializer& serRef,
     // straight to the release below.
     if (stream->direction == rt::io::kDirectionReading) {
         const RtObject::External* loaded =
-            CallFindOrLoad(::Factory(), reinterpret_cast<const Filename*>(&path));
+            RtObject::RtObject_ExternalFactory_FindOrLoad(
+                ::Factory(), reinterpret_cast<const Filename*>(&path));
         RtObject::External* result = nullptr;
         if (loaded != nullptr &&
-            CallIsDerivedFrom(loaded, *static_cast<const uint32_t*>(typeInfo))) {
+            IsDerivedFrom(loaded, *static_cast<const uint32_t*>(typeInfo))) {
             // CMOVNE: the loaded object survives only if it IS a T. A resource
             // of the wrong type is dropped, not kept — this is the check the
             // exe-side sibling in code/Game/Component/ambient_externalptr_serialize.cpp
@@ -617,7 +586,6 @@ EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_VideoProgram, Video::Vi
 // documenttextdescription.cpp:171 and :177, spritecapture_class.cpp:216.
 EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_Font, UI::Font)
 EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_SpriteSheet, UI::SpriteSheet)
-EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_Surface, Collision2D::Surface)
 
 #undef EXTPTR_ARRAY_THUNK_OF
 
@@ -638,10 +606,6 @@ EXTPTR_ARRAY_THUNK_OF(RtObject_ExternalPtrArraySerialize_Surface, Collision2D::S
 // what turns their lane-S probes into real oracles for this body.
 int RtObjectExternalPtrSerializeRegister() {
     int n = 0;
-    RegisterRuntimeAddr(0x180038f90, (void*)&RtObject_ExternalPtrSerialize_ElementDescription); ++n;
-    RegisterRuntimeAddr(0x180076610, (void*)&RtObject_ExternalPtrSerialize_Dialog);            ++n;
-    RegisterRuntimeAddr(0x1800042a0, (void*)&RtObject_ExternalPtrSerialize_StringTable);       ++n;
-    RegisterRuntimeAddr(0x180005dc0, (void*)&RtObject_ExternalPtrSerialize_Goal);              ++n;
 
     // ---- WAVE 26 LANE INT33: the fifth ------------------------------------
     //
@@ -674,7 +638,6 @@ int RtObjectExternalPtrSerializeRegister() {
     // this DLL exports its privates ([[reference_aeaa_is_private_not_unexported]]).
     // So RT_DATA_SLOT opens a NAME door here, not an address door, and this
     // registration adds ZERO to the cutover address surface.
-    RegisterRuntimeAddr(0x180004590, (void*)&RtObject_ExternalPtrSerialize_SpriteSheet); ++n;
 
     // ---- WAVE 29 LANE WALL: the sixth --------------------------------------
     //
@@ -724,22 +687,14 @@ int RtObjectExternalPtrSerializeRegister() {
     RegisterRuntimeAddr(0x18005d0f0, (void*)&RtObject_ExternalPtrSerialize_ImageBuffer);            ++n;
     RegisterRuntimeAddr(0x180061100, (void*)&RtObject_ExternalPtrSerialize_Material);               ++n;
     RegisterRuntimeAddr(0x180014230, (void*)&RtObject_ExternalPtrSerialize_GraphicsMesh);           ++n;
-    RegisterRuntimeAddr(0x1800756d0, (void*)&RtObject_ExternalPtrSerialize_DialogControllerConfig); ++n;
-    RegisterRuntimeAddr(0x180051790, (void*)&RtObject_ExternalPtrSerialize_SoundEffect);            ++n;
     RegisterRuntimeAddr(0x18005b840, (void*)&RtObject_ExternalPtrSerialize_AnimationGroup);         ++n;
-    RegisterRuntimeAddr(0x180006d10, (void*)&RtObject_ExternalPtrSerialize_Achievement);            ++n;
     RegisterRuntimeAddr(0x180055090, (void*)&RtObject_ExternalPtrSerialize_VertexLayout);           ++n;
     RegisterRuntimeAddr(0x1800542a0, (void*)&RtObject_ExternalPtrSerialize_VertexProgram);          ++n;
     RegisterRuntimeAddr(0x180055380, (void*)&RtObject_ExternalPtrSerialize_PixelProgram);           ++n;
     RegisterRuntimeAddr(0x180055670, (void*)&RtObject_ExternalPtrSerialize_RenderState);            ++n;
     // vtable batch 2: UI::TextDescription::Serialize CALLs this over +0x68.
-    RegisterRuntimeAddr(0x18003f1e0, (void*)&RtObject_ExternalPtrSerialize_Font);                   ++n;
     // VTABLE BATCH 7 (2026-09-12): AnimationGroup's clip event list.
-    RegisterRuntimeAddr(0x1800594a0, (void*)&RtObject_ExternalPtrSerialize_AnimationEvent);          ++n;
     // array form
-    RegisterRuntimeAddr(0x18002f170, (void*)&RtObject_ExternalPtrArraySerialize_External);           ++n;
-    RegisterRuntimeAddr(0x180005220, (void*)&RtObject_ExternalPtrArraySerialize_Goal);               ++n;
-    RegisterRuntimeAddr(0x1800493d0, (void*)&RtObject_ExternalPtrArraySerialize_ElementDescription); ++n;
     RegisterRuntimeAddr(0x18005d4a0, (void*)&RtObject_ExternalPtrArraySerialize_MaterialInstance);   ++n;
     RegisterRuntimeAddr(0x1800605e0, (void*)&RtObject_ExternalPtrArraySerialize_VideoProgram);        ++n;
 
@@ -747,11 +702,5 @@ int RtObjectExternalPtrSerializeRegister() {
     // With these the family is complete: every address the masked sweep found
     // is now ours. 0x180076e90 is the one the Font wall needs
     // (runtime/src/ui/font.cpp:381).
-    RegisterRuntimeAddr(0x180076e90, (void*)&RtObject_ExternalPtrSerialize_CharacterSet);            ++n;
-    RegisterRuntimeAddr(0x180052a50, (void*)&RtObject_ExternalPtrSerialize_SoundBuffer);             ++n;
-    RegisterRuntimeAddr(0x18003dc90, (void*)&RtObject_ExternalPtrSerialize_ExternalList);            ++n;
-    RegisterRuntimeAddr(0x18003e710, (void*)&RtObject_ExternalPtrArraySerialize_Font);               ++n;
-    RegisterRuntimeAddr(0x18003eb60, (void*)&RtObject_ExternalPtrArraySerialize_SpriteSheet);        ++n;
-    RegisterRuntimeAddr(0x1800667f0, (void*)&RtObject_ExternalPtrArraySerialize_Surface);            ++n;
     return n;
 }

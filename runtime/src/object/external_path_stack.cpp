@@ -389,34 +389,3 @@ extern "C" void* RtObject_PathStackRemoveLast_18002ccb0(void* arrVoid, void* out
     return out;
 }
 
-
-// ============================================================================
-// Registration
-// ============================================================================
-// At GLOBAL scope, matching the other five `RtObject*Register()` hooks
-// rt_object_port.cpp declares.
-int RtObjectExternalPathStackRegister() {
-    using namespace RtObject;
-    int n = 0;
-
-    RegisterRuntimeExport("?PushPath@ExternalFactory@Object@@QEAAXAEBVFilename@System@@@Z",
-                          (void*)&RtObject_ExternalFactory_PushPath); ++n;
-    RegisterRuntimeAddr(0x1800bd0e0, (void*)&RtObject_ExternalFactory_PushPath);
-
-    RegisterRuntimeExport("?PopPath@ExternalFactory@Object@@QEAAXXZ",
-                          (void*)&RtObject_ExternalFactory_PopPath); ++n;
-    RegisterRuntimeAddr(0x1800bd040, (void*)&RtObject_ExternalFactory_PopPath);
-
-    // The four container bodies. ADDRESSES ONLY — `Collection::Array<T>` is
-    // header-only and has no export in either build (WAVE9 lane Q). Registering
-    // them is what keeps this port from being one that CALLS the DLL by
-    // address: every address our own bodies jump to is an address we own.
-    RegisterRuntimeAddr(0x18002e220, (void*)&RtObject_PathStackSetSize_18002e220);
-    RegisterRuntimeAddr(0x18002e8d0, (void*)&RtObject_PathStackDestroyRange_18002e8d0);
-    RegisterRuntimeAddr(0x18002ccb0, (void*)&RtObject_PathStackRemoveLast_18002ccb0);
-    RegisterRuntimeAddr(0x18002de30, (void*)&RtObject_PathStackRemoveAt_18002de30);
-
-    // THE IDENTITY LINE. Nothing else in the tree prints "PathStack".
-    printf("[PathStack] registered %d exports + 4 container addresses\n", n);
-    return n;
-}

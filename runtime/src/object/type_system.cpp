@@ -48,19 +48,6 @@
 #include "../../types/io/Serializer.h"   // ENDGAME B.3.4 callers batch H
 #include "../../funcs/rt_port.h"
 
-// ----------------------------------------------------------------------------
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// ----------------------------------------------------------------------------
-// Same reasoning rt_port.h gives for declaring RegisterRuntimeExport locally:
-// resolve.h drags in <windows.h>, whose <wingdi.h> declares a function called
-// `Rectangle` and whose <windef.h> #defines `near`/`far` away. This declaration
-// must stay byte-identical to resolve.h's and to the copy in
-// runtime/src/collection/array.cpp; the linker checks all three.
-//
-// Added by Wave 9 lane OBJ2 for Factory::Startup's ONE unexported callee, the
-// Collection::Set insert at 0x180030140.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace RtObject {
 
@@ -119,29 +106,6 @@ inline const ::Object::Base* AsBase(const void* self) {
     return reinterpret_cast<const ::Object::Base*>(self);
 }
 
-// ---- Raw ABI typedefs for the originals ----------------------------------
-// None of the six returns a class by value, so none has a hidden return slot
-// (checked against each mangled name: `_N` bool, `I` unsigned, `PEAVBase` and
-// `PEAV12` pointers, `X` void). The BaseTypeInfo ctor DOES return `this` in
-// RAX — MSVC always does — even though the mangling says the ctor returns
-// void; engine/funcs/engine_funcs.h declares it `void` and that is harmless
-// for a caller that ignores RAX, but the port must still produce it.
-typedef bool          (*fn_IsA_t)(const void* self, uint32_t typeId);
-typedef bool          (*fn_IsDerivedFrom_t)(const void* self, uint32_t typeId);
-typedef void*         (*fn_CreateObject_t)(const void* factory, uint32_t typeId);
-typedef uint32_t      (*fn_GetTypeIdFromName_t)(const void* factory, const char* name, bool existingOnly);
-typedef const char*   (*fn_GetTypeName_t)(const void* factory, uint32_t typeId);
-typedef BaseTypeInfo* (*fn_BaseTypeInfoCtor_t)(BaseTypeInfo*, const char*, const char*,
-                                               const char*, void*, void*);
-
-const char* const kNameIsA           = "?IsA@Base@Object@@QEBA_NI@Z";
-const char* const kNameIsDerivedFrom = "?IsDerivedFrom@Base@Object@@QEBA_NI@Z";
-const char* const kNameCreateObject  = "?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z";
-const char* const kNameGetTypeIdFromName = "?GetTypeIdFromName@Factory@Object@@QEBAIPEBD_N@Z";
-const char* const kNameGetTypeName   = "?GetTypeName@Factory@Object@@QEBAPEBDI@Z";
-const char* const kNameTypeSerialize = "?Serialize@Type@Object@@QEAAXAEAVSerializer@IO@@@Z";
-const char* const kNameBaseTypeInfoCtor =
-    "??0BaseTypeInfo@Object@@QEAA@PEBD00P6APEAVBase@1@XZP6APEAV21@PEAX@Z@Z";
 
 } // namespace
 
@@ -216,92 +180,6 @@ bool RtObject_Base_IsDerivedFrom(const void* self, uint32_t typeId) {
 }
 
 // ============================================================================
-// ?GetTypeIdFromName@Factory@Object@@QEBAIPEBD_N@Z
-//                                        retail 0x1800c0580 / profile 0x18008cbe0
-//
-//     uint32_t Factory::GetTypeIdFromName(const char* name, bool existingOnly) const
-//
-// CRC the name, then confirm the id is in the tree; return the id if it is and
-// 0 if it is not.
-//
-// `existingOnly` IS UNUSED IN RETAIL. The retail disassembly never touches R8
-// (0x1800c0580..0x1800c05b6). The profile build shows why: it guards an assert,
-//     "!existingOnly || IsTypeValid(type)"  "Type is not registered!"
-//     Object\Factory.cpp:0x59
-// which retail compiles out. Every one of our call sites passes `true`. The
-// parameter is accepted and ignored, deliberately, and this comment is the
-// reason it is not "cleaned up".
-//
-// DIFF: full oracle.
-// ============================================================================
-uint32_t RtObject_Factory_GetTypeIdFromName(const void* factory, const char* name,
-                                            bool existingOnly) {
-    return AsFactory(factory)->GetTypeIdFromName(name, existingOnly);
-}
-
-// ============================================================================
-// ?GetTypeFromNameCRC@Factory@Object@@AEBAIPEBD@Z   retail 0x1800c0930, ord 2989
-//
-//     unsigned int Factory::GetTypeFromNameCRC(char const* name) const
-//
-// BATCH 5 (2026-09-12). *** THE BODY WAS ALREADY HERE AND WAS NOT REACHABLE. ***
-// `TypeNameCRC` above is this function, transcribed by Wave 3 lane A as a
-// private helper for GetTypeIdFromName — but no entry point carried the retail
-// ABI and nothing registered the address, so `0x1800c0930` stayed on the
-// closure worklist as an unported engine function while its algorithm sat
-// twenty lines up. This adds the ABI shim and the two doors; it does NOT add a
-// second copy of the algorithm, which would be a place for the two to drift.
-//
-// `this` IS READ BY NOTHING. Retail's RCX is dead from the first instruction
-// (the body opens `LEA RAX,[RSP+0x...]` and never touches RCX again); the CRC
-// depends only on the name. The parameter is kept because the mangling is a
-// const member and the caller passes it.
-//
-// `AEBA` is PRIVATE, and private is not unexported: this DLL exports its
-// private members and the name above is ordinal 2989 in the retail export
-// directory, verified with pefile before this was written
-// (reference_aeaa_is_private_not_unexported.md). So the NAME door is real and
-// is registered alongside the address door.
-//
-// NO DIFF SITE. A `the diff oracle` here would compare `TypeNameCRC` against
-// the shipped 0x1800c0930 — but `RtObject_Factory_GetTypeIdFromName`'s own
-// site already compares a value DERIVED from exactly this computation against
-// the shipped GetTypeIdFromName on every call, which is a strictly stronger
-// check on the same arithmetic and has run clean since Wave 3. Adding a second
-// site on the same bytes would inflate `calls=` without adding coverage.
-// ============================================================================
-uint32_t RtObject_Factory_GetTypeFromNameCRC(const void* /*factory*/, const char* name) {
-    return TypeNameCRC(name);
-}
-
-// ============================================================================
-// ?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z
-//                                        retail 0x1800c0ae0 / profile 0x18008cde0
-//
-//     Base* Factory::CreateObject(unsigned int typeId) const
-//     { return FindNode(typeId)->value.info->factoryFn(); }
-//
-// A tail-jump through BaseTypeInfo+0x20. The sibling overload CreateObject(id,
-// void*) jumps through +0x28 instead; it is not in lane A's scope (our tree
-// does not call it) and is NOT ported.
-//
-// DIFF: PARTIAL, and this is the honest limit of it. Running the original as
-// an oracle would construct a SECOND object and leak it, so the site does not.
-// What it does instead is a real independent check of the only part we
-// reimplement — the tree walk — by asking the DLL's own
-// `Factory::GetTypeName(id)` (0x1800c0a60), which returns
-// `FindNode(id)->value.info->name` from its own walk, and comparing that
-// pointer with the one our walk produced. If our walk lands on a different
-// node, the two names differ. It proves nothing about the factory dispatch,
-// which is one indirect call through a pointer we did not compute.
-// ============================================================================
-void* RtObject_Factory_CreateObject(const void* factory, uint32_t typeId) {
-    // Faithful: retail's `MOV RCX,[RAX+0x10]` at 0x1800c0b03 runs on a null
-    // RAX and faults. No guard — `Object::Factory::CreateObject` keeps it.
-    return reinterpret_cast<void*>(AsFactory(factory)->CreateObject(typeId));
-}
-
-// ============================================================================
 // ?Serialize@Type@Object@@QEAAXAEAVSerializer@IO@@@Z      retail 0x1800c0c40
 //
 //     void Type::Serialize(IO::Serializer& s)
@@ -338,68 +216,6 @@ void* RtObject_Factory_CreateObject(const void* factory, uint32_t typeId) {
 // argument `0` was the ignored `const char* name`.
 void RtObject_Type_Serialize(void* self, void* serializer) {
     reinterpret_cast<::IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(self), nullptr);   // B.3.4 bridge  (0x98 = uint door)
-}
-
-// ============================================================================
-// ??0BaseTypeInfo@Object@@QEAA@PEBD00P6APEAVBase@1@XZP6APEAV21@PEAX@Z@Z
-//                                        retail 0x180006320 / profile 0x1800234e0
-//
-//     BaseTypeInfo::BaseTypeInfo(const char* name, const char* parentName,
-//                                const char* fileExtension,
-//                                Base* (*factory)(), Base* (*inPlace)(void*))
-//
-// Stores the five arguments, stamps typeId = 0xFFFFFFFF, head-inserts into
-// `_firstTypeInfo`, then rewrites `parentName` to point past the LAST ':' it
-// contains (so "Object::Base" becomes "Base"). Only the parent is stripped.
-//
-// Retail's backward scan, transcribed exactly (0x180006381-0x18000639b):
-// it starts at the NUL terminator, walks down while `q > p`, and when the loop
-// falls out at `q == p` it tests that byte once more before giving up. An
-// empty parent string therefore still gets its single (NUL) byte tested.
-//
-// THE ONE MUTATING PORT IN THIS LANE. It writes a DLL global, and it runs
-// interleaved with the DLL's own static initialisers (which have already run
-// by the time RuntimePortInit registers us, so the chain we insert into is
-// already populated) and with ours, from
-// code/Game/Object/factory_registration.cpp's InvokeAllRegistrations.
-//
-// DIFF: REAL, but it needs the list put back. Running the original as-is would
-// link a second node. Instead the site runs OURS for real, then rewinds
-// `_firstTypeInfo` to the value it had on entry, runs the ORIGINAL into a
-// private scratch BaseTypeInfo, restores `_firstTypeInfo` to what our port
-// left, and compares all seven fields. The DLL's ctor touches nothing else —
-// the disassembly at 0x180006320 is 21 instructions and the only global it
-// reads or writes is `_firstTypeInfo` — so the rewind is complete, not
-// approximate. This runs only under the old DLL-era switch and only during static
-// registration, which is single-threaded.
-// ============================================================================
-// B.3.3 step 3: THE BODY IS NOW `Object::BaseTypeInfo`'s constructor
-// (runtime/src/object/type_reflection.cpp), including the backward scan, which
-// is retail's own `?StripNamespace@BaseTypeInfo@Object@@QEAAXXZ`. This is the
-// ABI shim the registry and code/Game/Object/factory_registration.cpp still call
-// by name and by address: it placement-constructs the real class into storage
-// the CALLER owns, exactly as retail's ctor does.
-//
-// `?_firstTypeInfo@` is no longer resolved — see the "NEITHER OF THE TWO DLL
-// GLOBALS" banner at the top of the anonymous namespace. The consequence that
-// matters at cutover: this shim no longer needs the registry at all, so it
-// works from a static initialiser.
-BaseTypeInfo* RtObject_BaseTypeInfo_Ctor(BaseTypeInfo* self,
-                                         const char* name,
-                                         const char* parentName,
-                                         const char* fileExtension,
-                                         void* factoryFn,
-                                         void* inPlaceFactoryFn) {
-    using Real = ::Object::BaseTypeInfo;
-    static_assert(sizeof(Real) == sizeof(BaseTypeInfo),
-                  "the shim writes the caller's 0x38 bytes in place");
-
-    new (static_cast<void*>(self)) Real(
-        name, parentName, fileExtension,
-        reinterpret_cast<Real::FactoryFn>(factoryFn),
-        reinterpret_cast<Real::InPlaceFn>(inPlaceFactoryFn));
-
-    return self;   // MSVC returns `this` from every ctor; so does retail (RAX=R10)
 }
 
 // ============================================================================
@@ -504,23 +320,6 @@ namespace {
 
 }  // namespace
 
-// ============================================================================
-// The registered entry point.
-//
-// DIFF: SHADOW ONLY, and deliberately so. `calls=` will read 1. The real
-// verification is the probe above; the shadow here is a structural invariant
-// that can be checked without a second implementation — every entry in the
-// chain got a typeId that is the CRC of its own name, and the tree has as many
-// nodes as the chain had entries. Read the site as "this port executed and its
-// own postcondition holds", NOT as "this port agrees with the DLL".
-// ============================================================================
-bool RtObject_Factory_Startup(void* factory) {
-    // `factory` is the singleton `??0Factory@Object@@` built
-    // (runtime/src/engine/singleton_ctors.cpp:288) — 0x10 bytes, zeroed. The
-    // real class is laid over it; the walk itself is Object::Factory::Startup.
-    return AsFactory(factory)->Startup();
-}
-
 } // namespace RtObject
 
 // ============================================================================
@@ -559,29 +358,17 @@ int RtObjectTypeSystemRegister() {
                           (void*)&RtObject_Base_IsA); ++n;
     RegisterRuntimeExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z",
                           (void*)&RtObject_Base_IsDerivedFrom); ++n;
-    RegisterRuntimeExport("?GetTypeIdFromName@Factory@Object@@QEBAIPEBD_N@Z",
-                          (void*)&RtObject_Factory_GetTypeIdFromName); ++n;
-    RegisterRuntimeExport("?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z",
-                          (void*)&RtObject_Factory_CreateObject); ++n;
     RegisterRuntimeExport("?Serialize@Type@Object@@QEAAXAEAVSerializer@IO@@@Z",
                           (void*)&RtObject_Type_Serialize); ++n;
-    RegisterRuntimeExport("??0BaseTypeInfo@Object@@QEAA@PEBD00P6APEAVBase@1@XZP6APEAV21@PEAX@Z@Z",
-                          (void*)&RtObject_BaseTypeInfo_Ctor); ++n;
 
     // Wave 9 lane OBJ2. `?Startup@Factory@Object@@QEAA_NXZ` (0x1800c0630, ord
     // 4096) verified present in the shipped DLL's export table with pefile on
     // 2026-09-08 before a line of it was written.
     //
-    RegisterRuntimeExport("?Startup@Factory@Object@@QEAA_NXZ",
-                          (void*)&RtObject_Factory_Startup); ++n;
-    RegisterRuntimeAddr(0x1800c0630, (void*)&RtObject_Factory_Startup);
 
     RegisterRuntimeAddr(0x1800491c0, (void*)&RtObject_Base_IsA);
     RegisterRuntimeAddr(0x1800c0390, (void*)&RtObject_Base_IsDerivedFrom);
-    RegisterRuntimeAddr(0x1800c0580, (void*)&RtObject_Factory_GetTypeIdFromName);
-    RegisterRuntimeAddr(0x1800c0ae0, (void*)&RtObject_Factory_CreateObject);
     RegisterRuntimeAddr(0x1800c0c40, (void*)&RtObject_Type_Serialize);
-    RegisterRuntimeAddr(0x180006320, (void*)&RtObject_BaseTypeInfo_Ctor);
 
     // (Ordinals 3089 for IsA and 2991 for GetTypeIdFromName used to be
     // registered here as well. ENDGAME A.3 deleted the ordinal door; both
@@ -590,9 +377,6 @@ int RtObjectTypeSystemRegister() {
 
     // BATCH 5 (2026-09-12): the private CRC helper. Both doors — the name is a
     // real export (ordinal 2989) despite the `AEBA` private mangling.
-    RegisterRuntimeExport("?GetTypeFromNameCRC@Factory@Object@@AEBAIPEBD@Z",
-                          (void*)&RtObject_Factory_GetTypeFromNameCRC); ++n;
-    RegisterRuntimeAddr(0x1800c0930, (void*)&RtObject_Factory_GetTypeFromNameCRC);
 
     return n;
 }

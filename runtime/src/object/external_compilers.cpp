@@ -24,22 +24,3 @@ Base* ExternalCompiler::CreateNewObject()           { return nullptr; }   // 0x1
 Base* ExternalCompiler::CreateInPlaceObject(void*)  { return nullptr; }   // 0x18002c0f0
 
 }  // namespace Object
-
-// Retail's factory pairs by name AND VA (B39_RULES D2). Called from
-// RtObjectPortInit (rt_object_port.cpp).
-int RtObjectExternalCompilersRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@ExtensionCompiler@Object@@SAPEAVBase@2@XZ",
-                          (void*)&Object::ExtensionCompiler::CreateNewObject); ++n;
-    RegisterRuntimeAddr(0x18002c260ull, (void*)&Object::ExtensionCompiler::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ExtensionCompiler@Object@@SAPEAVBase@2@PEAX@Z",
-                          (void*)&Object::ExtensionCompiler::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr(0x18002c270ull, (void*)&Object::ExtensionCompiler::CreateInPlaceObject);
-    RegisterRuntimeExport("?CreateNewObject@ExternalCompiler@Object@@SAPEAVBase@2@XZ",
-                          (void*)&Object::ExternalCompiler::CreateNewObject); ++n;
-    RegisterRuntimeAddr(0x18002c0e0ull, (void*)&Object::ExternalCompiler::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ExternalCompiler@Object@@SAPEAVBase@2@PEAX@Z",
-                          (void*)&Object::ExternalCompiler::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr(0x18002c0f0ull, (void*)&Object::ExternalCompiler::CreateInPlaceObject);
-    return n;
-}

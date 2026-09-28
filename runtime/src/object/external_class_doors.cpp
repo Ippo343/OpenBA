@@ -66,8 +66,6 @@ Filename* RtObject_External_GetPath(const External* self, Filename* ret);
 // external_savetext_win.cpp:246 — `extern "C"`, so the linker name is unqualified.
 extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
                                            const Filename* name);
-bool      RtObject_ExternalFactory_IsReferenceModeEnabled(const ExternalFactory* self);
-void      RtObject_ExternalFactory_EnableReferenceMode(ExternalFactory* self, bool enable);
 const External* RtObject_ExternalFactory_Find(const ExternalFactory* self, const Filename* path);
 const External* RtObject_ExternalFactory_FindNext(const ExternalFactory* self, uint32_t typeId,
                                                   const External* prev);

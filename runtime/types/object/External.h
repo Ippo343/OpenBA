@@ -1016,6 +1016,13 @@ static_assert(offsetof(ExternalFactory, _simpleLoadEnabled)    == 0x42, "_simple
 namespace RtObject {
 // ---- object/external_load.cpp
 extern "C" External* RtObject_External_Load(const RtSystem::Filename* path, External* existing);  // 0x1800bc620
+// ---- B3R RT-Core: object/external.cpp, external_find.cpp, external_add.cpp
+RtSystem::Filename* RtObject_External_GetPath(const External* self, RtSystem::Filename* ret);  // 0x180006250
+uint32_t RtObject_ExternalFactory_GetReferenceId(const ExternalFactory* self, const External* external);  // 0x1800bf100
+RtSystem::Filename* RtObject_ExternalFactory_GetPathForReferenceId(const ExternalFactory* self,
+                                                                   RtSystem::Filename* ret, uint32_t id);  // 0x1800bf1d0
+External* RtObject_ExternalFactory_Find(ExternalFactory* self, const RtSystem::Filename* path);  // 0x1800be0e0 (private Find)
+extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* external);  // 0x1800be570
 }  // namespace RtObject
 
 // ---- object/external_ptr_serialize.cpp

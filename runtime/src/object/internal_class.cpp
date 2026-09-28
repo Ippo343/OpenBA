@@ -64,6 +64,7 @@
 #if !defined(BANISHED_UNIT_TEST)
 #include "../../funcs/rt_port.h"
 #include "../../types/system/MemoryAllocator.h"
+#include "../../types/system/Value.h"   // B3R: System::Random::Rand by name
 #endif
 
 namespace Object {
@@ -127,8 +128,6 @@ uint32_t InternalRand(::Random* random) {
 
 #else
 
-typedef uint32_t (*InternalRandFn)(void*);
-
 // B3R W0-A0: the allocator's statics, called directly (they were resolved by
 // name through RT_EXPORT_ONCE, which was bound to these same two bodies).
 void* InternalMemAlloc(uint64_t bytes, int align) {
@@ -139,7 +138,7 @@ void InternalMemFree(void* p) {
 }
 // Wave 2 ported this and proved it bit-exact over 16,035,064 calls.
 uint32_t InternalRand(::Random* random) {
-    return RT_EXPORT_ONCE(InternalRandFn, "?Rand@Random@System@@QEAAIXZ")(random);
+    return reinterpret_cast<System::Random*>(random)->Rand();   // 0x1800c7f90
 }
 
 // B.3.4 STREAMS (6/6) — `Internal::Clone`'s two `IO::MemoryStream` locals.
@@ -713,17 +712,6 @@ RtObject::Factory** FactorySingletonSlot() {
 // that either record winning gives the same type tree and the same resave,
 // b39_session/ORDER_MEASUREMENT.md variant C.)
 
-// `?IsDerivedFrom@Base@Object@@QEBA_NI@Z` (0x1800c0390), ported and registered
-// by runtime/src/object/type_system.cpp. Reached through the registry so this
-// call lands on OUR body with the DLL present or absent.
-bool PersistIsDerivedFrom(const void* self, uint32_t typeId) {
-    using Fn = bool (*)(const void*, uint32_t);
-    static void* cache = nullptr;
-    Fn fn = reinterpret_cast<Fn>(
-        RtResolveCached("?IsDerivedFrom@Base@Object@@QEBA_NI@Z", &cache));
-    return fn(self, typeId);
-}
-
 // IO::Stream + 0x08 — `0 == reading`, non-zero == writing. The only field of
 // Stream this body touches.
 inline int32_t StreamMode(const void* stream) {
@@ -773,7 +761,8 @@ Internal* InternalFactory::PersistObject(void* stream, uint32_t generation,
                 reinterpret_cast<void* (*)()>(info->factoryFn)();     // CALL [RCX+0x20]
 
             const uint32_t internalTypeId = Internal::TypeId();       // [0x1801f9c18]
-            Internal* obj = PersistIsDerivedFrom(created, internalTypeId)
+            Internal* obj =                                           // 0x1800c0390
+                static_cast<const Base*>(created)->IsDerivedFrom(internalTypeId)
                                 ? static_cast<Internal*>(created)
                                 : nullptr;                            // CMOVNZ RSI,RBX
 

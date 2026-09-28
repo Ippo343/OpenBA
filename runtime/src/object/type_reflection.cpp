@@ -31,6 +31,7 @@
 
 #if !defined(BANISHED_UNIT_TEST)
 #include "../../funcs/rt_port.h"
+#include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 #endif
 
 namespace Object {
@@ -64,18 +65,14 @@ void  TypeChildFree(void* p)                        { std::free(p); }
 
 #else
 
-typedef void* (*FactoryMemAllocFn)(uint64_t, int);
-typedef void  (*FactoryMemFreeFn)(void*);
-
 void* TypeTreeAlloc(uint64_t bytes, int align) {
-    return RT_EXPORT_ONCE(FactoryMemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(bytes, align);
+    return System::MemoryAllocator::MemAlloc(bytes, align);   // 0x1800c7a50
 }
 void TypeTreeFree(void* p) {
     // The `if (p)` lives INSIDE 0x1800c7ad0 (`TEST RCX,RCX; JZ ret` is its
     // first instruction). The call sites still test, because retail does too,
     // at 0x1800c086e.
-    RT_EXPORT_ONCE(FactoryMemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
+    System::MemoryAllocator::MemFree(p);                      // 0x1800c7ad0
 }
 void* TypeChildAlloc(uint64_t bytes, int align) { return TypeTreeAlloc(bytes, align); }
 void  TypeChildFree(void* p)                    { TypeTreeFree(p); }

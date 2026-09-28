@@ -87,9 +87,6 @@
 #include "../../types/object/External.h"
 #include "../../types/io/FileStream.h"
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 // `??0Filename@System@@QEAA@AEBV01@@Z` (0x1800067d0) used to be forward-declared
 // here as a C entry point. ENDGAME B.3.1 step 2 calls it as what it is — the
 // `System::Filename` copy constructor — so the declaration is gone with its one
@@ -103,28 +100,10 @@ using RtSystem::Filename;
 
 namespace {
 
-// ---------------------------------------------------------------------------
-// Doors. Every one of these is a NAME door except the Encoding delete, which
-// has no export in either build.
-// ---------------------------------------------------------------------------
-
-// `?GetPath@External@Object@@QEBA?AVFilename@System@@XZ` returns a Filename BY
-// VALUE, so there IS a hidden return slot and a typedef that omits it writes
-// past the caller's frame while still returning the right answer -- the shipped
-// defect reference_hidden_retslot_wild_write.md records.
-//
-// THE ORDER IS (this, retslot), NOT (retslot, this). The inherited draft's
-// comment here said the opposite; its CODE was right and only the prose was
-// wrong, which is the more dangerous way round because the next reader fixes
-// the code to match the comment. Read off the call site rather than from a
-// remembered ABI rule:
-//     1800be594  lea rdx,[rbp+0x30]     <- the return slot, SECOND
-//     1800be598  mov rcx,rsi            <- `external`, FIRST
-//     1800be59b  call 0x180006250       (?GetPath@External@Object@@)
-//     1800be5a1  mov rdx,rax            <- and the callee returns the slot
-// so RCX is `this` and RDX is the slot, and the copy-ctor below takes the
-// returned RAX as its source.
-using GetPathFn = Filename* (*)(const External* self, Filename* ret);
+// `?GetPath@External@Object@@QEBA?AVFilename@System@@XZ` (0x180006250) returns
+// a Filename BY VALUE: RCX is `this` and RDX the hidden return slot, read off
+// the call site (1800be594 lea rdx,[rbp+0x30]; 1800be598 mov rcx,rsi). B3R
+// RT-Core: RtObject_External_GetPath is called by name.
 
 // External vtable slot +0x28 — `Serialize(IO::Stream&)`. The same slot
 // `External::Load` drives and the one External.h names. B3X W0: called by
@@ -215,9 +194,7 @@ extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* ex
     // ENDGAME B.3.1 step 2. `tmp` is GetPath's hidden return slot: it is
     // declared null and CONSTRUCTED INTO by the call, never assigned to.
     System::Filename tmp;
-    RT_EXPORT_ONCE(GetPathFn,
-        "?GetPath@External@Object@@QEBA?AVFilename@System@@XZ")
-        (external, reinterpret_cast<Filename*>(&tmp));
+    RtObject_External_GetPath(external, reinterpret_cast<Filename*>(&tmp));   // 0x180006250
 
     // 1800be5d3 — the second reference the comment above is about, taken by
     // retail's copy ctor (0x1800067d0) and kept.
@@ -329,27 +306,3 @@ void DumpAddCounters() {
 }
 
 }  // namespace RtObject
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtObjectExternalAddRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?Add@ExternalFactory@Object@@QEAAXPEAVExternal@2@@Z",
-                          (void*)&RtObject::RtObject_ExternalFactory_Add); ++n;
-    RegisterRuntimeAddr(0x1800be570, (void*)&RtObject::RtObject_ExternalFactory_Add);
-
-    printf("[RtPort]   Object::ExternalFactory::Add "
-                "(wave 11f lane IOSTREAM): %d export registered\n", n);
-
-    // WAS MISSING IN THE INHERITED DRAFT, AND IT WAS THE FILE'S OWN POSITIVE
-    // CONTROL. `DumpAddCounters` was defined and never scheduled, so `g_ac` --
-    // the counter this file's comments repeatedly call "the positive control
-    // that says so from inside this function" -- could never print. An
-    // instrument that is never reached prints a plausible ZERO, not an error;
-    // here it printed nothing at all. Both sibling files in this directory
-    // (external_find.cpp:302, external_path_win.cpp:993) schedule theirs the
-    // same way.
-    std::atexit(&RtObject::DumpAddCounters);
-    return n;
-}

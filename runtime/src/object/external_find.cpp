@@ -180,42 +180,4 @@ External* RtObject_ExternalFactory_Find(ExternalFactory* self, const Filename* p
     return result;
 }
 
-namespace {
-
-void DumpFindCounters() {
-    printf("[ResFind] counters: calls=%llu hits=%llu misses=%llu "
-                "| ident def/present=%llu/%llu | pointer disagreements=%llu\n",
-                (unsigned long long)g_fc.calls,
-                (unsigned long long)g_fc.hits,
-                (unsigned long long)g_fc.misses,
-                (unsigned long long)g_fc.identDefaulted,
-                (unsigned long long)g_fc.identPresent,
-                (unsigned long long)g_fc.divergent);
-    std::fflush(stdout);
-}
-
-}  // namespace
-
 }  // namespace RtObject
-
-// ============================================================================
-// Registration
-// ============================================================================
-int RtObjectExternalFindRegister() {
-    using namespace RtObject;
-    int n = 0;
-
-    // Literal mangled name, not a constant: tools/runtime_census.py matches
-    // `RegisterRuntimeExport("<literal>"` and cannot see through a named
-    // constant (reference_census_cannot_see_nonliteral_registrations.md).
-    RegisterRuntimeExport(
-        "?Find@ExternalFactory@Object@@AEAAPEAVExternal@2@AEBVFilename@System@@@Z",
-        (void*)&RtObject_ExternalFactory_Find); ++n;
-    RegisterRuntimeAddr(0x1800be0e0, (void*)&RtObject_ExternalFactory_Find);
-
-    printf("[ResFind] registered %d door + 1 address\n", n);
-    std::fflush(stdout);
-
-    std::atexit(&DumpFindCounters);
-    return n;
-}

@@ -77,12 +77,7 @@
 #include "../../funcs/rt_port.h"
 #include "../system/string.h"
 #include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
-
-// Declared locally rather than including standalone/resolve.h, which drags in
-// <windows.h> (PLAN §4.1 decision 1). Byte-identical to set_avl.cpp's and
-// avl_trees.cpp's; the linker checks the three agree.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree / FreeLockedIgnoringSelf
 
 // `??0Filename@System@@QEAA@AEBV01@@Z` (0x1800067d0) used to be forward-declared
 // here as a C entry point. ENDGAME B.3.1 step 2 calls it as what it is — the
@@ -109,43 +104,9 @@ ProbeCounters g_rc = {};
 // import slots keeps four fragile facts out of this file. Lane E's allocator
 // port owns all of them.
 //
-// CACHE A HIT, RETRY A MISS — the RtResolveCached contract. Freezing a null
-// here would leak every node for the life of the process if anything ran before
-// the allocator armed its address door, which is the ordering defect attempt 14
-// fixed for `rtcoll::MemAlloc` (reference_singleton_slot_freezes_a_null).
+// B3R RT-Core: the two statics (0x1800c7a50 / 0x1800c7ad0) and the
+// ignored-`this` free (0x180009c30) are called by name.
 // ---------------------------------------------------------------------------
-static void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn ? fn(bytes, align) : nullptr;
-}
-
-// 0x1800c7ad0 null-checks its own argument, which is why every caller below
-// hands it a possibly-null pointer exactly as retail's inlined form does.
-static void MemFree(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    if (fn) fn(p);
-}
-
-// The same door, non-static, for `Clean`'s array-storage free. A named
-// forwarder rather than making `MemFree` itself non-static, so nothing else in
-// the tree acquires a second MemFree door by accident.
-void MemFreeForClean(void* p) { MemFree(p); }
-
-// The 0x180009c30 boundary: TWO parameters, and the callee IGNORES THE FIRST.
-// `runtime/src/system/allocator.cpp` registers `FreeLockedIgnoringSelf` there
-// for exactly that reason — a one-argument `MemFree` registered at that address
-// would free the ignored `this` and corrupt the free list (set_avl.cpp's "THE
-// FIFTH HELPER"). Retail passes junk in the first slot; so does this port.
-static void SetNodeFree(void* ignored, void* node) {
-    using Fn = void (*)(void*, void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180009c30));
-    if (fn) fn(ignored, node);
-}
 
 // The refcounted-String release retail inlines at every site in this family:
 //     dec [p-4]; if (0) { p -= 8; MemFree(p) } else { slot = null }
@@ -416,7 +377,7 @@ Node* PairCtor(Node* node, const ResourceEntry* src, Node* parent) {
 // prints it as arithmetic on the size, which it is; the value is 8.
 // ---------------------------------------------------------------------------
 Node* AllocNode(void* /*ignored, never read*/, const ResourceEntry* src, Node* parent) {
-    Node* n = static_cast<Node*>(MemAlloc(0x38, 8));
+    Node* n = static_cast<Node*>(System::MemoryAllocator::MemAlloc(0x38, 8));
     if (n == nullptr) return nullptr;
     return PairCtor(n, src, parent);
 }
@@ -531,7 +492,7 @@ Node** Insert(Set* set, Node** out, const Filename* key, const EntryValue* value
 void FreeEntryNode(void* ignored, Node* node) {
     if (node == nullptr) return;
     ReleaseInline(&Elem(node)->path);
-    rtresset::SetNodeFree(ignored, node);
+    rtalloc::FreeLockedIgnoringSelf(ignored, node);   // 0x180009c30
 }
 
 // ---------------------------------------------------------------------------
@@ -584,7 +545,7 @@ void Erase(Set* set, Node* z) {
         if (replacement) replacement->parent = z->parent;
 
         ReleaseInline(&Elem(z)->path);      // 0x18002cfdc, inlined here
-        rtresset::SetNodeFree(set, z);                // 0x18002d005
+        rtalloc::FreeLockedIgnoringSelf(set, z);      // 0x18002d005
         rtresset::Retrace(set, replacement ? &retraceFromChild : &retraceFromParent);
         return;
     }
@@ -715,7 +676,7 @@ void ArrayResize(FilenameArray* self, int newSize, const Filename* fill) {
         self->capacity = newSize;
         if (newSize == oldSize + 1 && oldSize != 0) self->capacity = newSize * 3;
         self->data = static_cast<Filename*>(
-            MemAlloc(static_cast<uint64_t>(self->capacity) * 8, 8));
+            System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(self->capacity) * 8, 8));
     }
 
     int i = (oldData == self->data) ? oldSize : 0;
@@ -728,7 +689,7 @@ void ArrayResize(FilenameArray* self, int newSize, const Filename* fill) {
 
     if (oldData != self->data) {
         ArrayDestroyRange(self, oldData, oldSize);    // 0x18002e0a3
-        MemFree(oldData);                             // 0x18002e0ad..0x18002e0dd
+        System::MemoryAllocator::MemFree(oldData);    // 0x18002e0ad..0x18002e0dd
     } else if (oldSize > newSize) {
         ArrayDestroyRange(self, oldData + newSize, oldSize - newSize);  // 0x18002e0f2
     }
@@ -859,7 +820,7 @@ void RtObject_ExternalFactory_Clean(ExternalFactory* self) {
     // allocator lock. Routed through the MemFree door for the reason in
     // THE ALLOCATOR BOUNDARY above. The `if (keys)` is retail's own
     // `TEST R14,R14 / JZ`, kept even though MemFree null-checks too.
-    if (keys) rtresset::MemFreeForClean(keys);
+    if (keys) System::MemoryAllocator::MemFree(keys);   // 0x1800c7ad0
 
     evicted.data     = nullptr;          // 0x1800be53f
     evicted.size     = 0;
@@ -884,49 +845,3 @@ void RtObject_ExternalFactory_Clean(ExternalFactory* self) {
 }
 
 }  // namespace RtObject
-
-// ============================================================================
-// Registration
-//
-// ADDRESS DOORS for the ten Set bodies: none of them is exported. Checked
-// against the retail export directory and against Runtime-x64-profile.dll's
-// 5,182 names — no symbol resolves to any of the ten. Said explicitly rather
-// than left implied (lane PICK §3).
-//
-// ONE EXPORTED NAME: `?Clean@ExternalFactory@Object@@QEAAXXZ`, registered by
-// BOTH its mangled name and its address, because `runtime/src/engine/loops.cpp`
-// reaches it by name and the DLL's own callers reach 0x1800be310.
-//
-// `RegisterRuntimeAddr` is LAST-BINDING-WINS and silently makes an earlier body
-// dead code (reference_grep_for_the_port_before_writing_it.md). All eleven
-// addresses were grepped across code/, runtime/, engine/, dx11/ and standalone/
-// before this file was written: zero prior registrations, zero prior call sites.
-// ============================================================================
-int RtObjectExternalSetRegister() {
-    int n = 0;
-
-    RegisterRuntimeAddr(0x18002d860, (void*)&rtresset::RotateLeft);     ++n;
-    RegisterRuntimeAddr(0x18002d990, (void*)&rtresset::RotateRight);    ++n;
-    RegisterRuntimeAddr(0x18002d370, (void*)&rtresset::Retrace);        ++n;
-    RegisterRuntimeAddr(0x18002e6e0, (void*)&rtresset::PairCtor);       ++n;
-    RegisterRuntimeAddr(0x18002e740, (void*)&rtresset::AllocNode);      ++n;
-    RegisterRuntimeAddr(0x18002ce60, (void*)&rtresset::InsertCore);     ++n;
-    RegisterRuntimeAddr(0x18002ca00, (void*)&rtresset::Insert);         ++n;
-    RegisterRuntimeAddr(0x18002ee40, (void*)&rtresset::FreeEntryNode);  ++n;
-    RegisterRuntimeAddr(0x18002cf60, (void*)&rtresset::Erase);          ++n;
-    RegisterRuntimeAddr(0x18002dd70, (void*)&rtresset::Find);           ++n;
-    RegisterRuntimeAddr(0x18002e3d0, (void*)&rtresset::ArrayDestroyRange); ++n;
-    RegisterRuntimeAddr(0x18002dff0, (void*)&rtresset::ArrayResize);    ++n;
-
-    RegisterRuntimeExport("?Clean@ExternalFactory@Object@@QEAAXXZ",
-                          (void*)&RtObject::RtObject_ExternalFactory_Clean);  ++n;
-    RegisterRuntimeAddr(0x1800be310, (void*)&RtObject::RtObject_ExternalFactory_Clean);
-
-    // THE IDENTITY LINE. WAVE9.md's rule 4: gate every measurement on a string
-    // only THIS build emits, read out of the run's own log — not on "I
-    // rebuilt", not on a timestamp. Lanes have measured the wrong exe
-    // repeatedly. Nothing else in the tree prints "ResSet".
-    printf("[ResSet] registered %d doors (12 Set bodies + Clean by name and "
-                "address, resource-tree-instantiation=0x18002xxx)\n", n);
-    return n;
-}

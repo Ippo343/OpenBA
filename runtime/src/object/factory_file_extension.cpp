@@ -46,33 +46,10 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/object/TypeInfo.h"
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../funcs/rt_libm.h"   // B3R: rtcrt::StrICmp (0x18007eefc), called by name
 
 using RtObject::Factory;
 using RtObject::TypeNode;
-
-namespace {
-
-// _stricmp, retail 0x18007eefc — the DLL's own statically linked CRT copy,
-// PORTED by Wave 9 lane COLL (runtime/src/crt/msvc_stricmp.cpp registers the
-// address). Reached through ResolveAddr, which consults the port registry
-// FIRST, so this call already lands in our code today
-// (reference_resolveaddr_consults_port_registry_first.md).
-//
-// Using the HOST CRT's `_stricmp` here instead would be a real divergence and
-// not a convenience: msvc_stricmp.cpp measured the two against each other and
-// they differ on non-ASCII bytes, because retail's `__ascii_stricmp` lowers
-// only 'A'-'Z' while the host's is locale-aware.
-int StrICmp(const char* a, const char* b) {
-    using Fn = int (*)(const char*, const char*);
-    static Fn fn = nullptr;   // cache a hit, RETRY a miss
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18007eefc));
-    return fn ? fn(a, b) : 1;
-}
-
-}  // namespace
 
 // ============================================================================
 // unsigned int Object::Factory::GetTypeIdForFileExtension(const char* ext) const
@@ -145,7 +122,7 @@ extern "C" uint32_t RtObject_Factory_GetTypeIdForFileExtension(const Factory* se
             const char* ext = info->fileExtension;                      // +0x18
             if (ext != nullptr) {
                 ++compared;
-                if (StrICmp(ext, wanted) == 0) {
+                if (rtcrt::StrICmp(ext, wanted) == 0) {   // 0x18007eefc
                     ours = node->key;   // *(u32*)node, NOT info->typeId
                     break;
                 }
@@ -206,28 +183,4 @@ extern "C" uint32_t RtObject_Factory_GetTypeIdForFileExtension(const Factory* se
         // how a dead loop reads as a clean one.
     }
     return ours;
-}
-
-// ============================================================================
-// Registration
-// ============================================================================
-//
-// BOTH doors, and that is not belt-and-braces:
-//   * the NAME door is what the two exe call sites use (they resolve ordinal
-//     2990, and standalone/resolve_standalone.cpp:886 maps that ordinal to this
-//     mangled name), and it is the door tools/runtime_census.py counts;
-//   * the ADDRESS door is what a by-address caller inside the DLL would take,
-//     and a by-address call dies at cutover unless something registers that
-//     address (reference_by_address_door_dies_at_cutover.md).
-//
-// Checked for a duplicate before adding either: a second RegisterRuntimeAddr on
-// the same address is LAST-BINDING-WINS and silently turns one of the two
-// bodies into dead code. `grep -rn 0x1800c04c0 runtime/ code/ standalone/
-// engine/ dx11/` returns only comments before this file.
-// ============================================================================
-int RtObjectFactoryFileExtensionRegister() {
-    RegisterRuntimeExport("?GetTypeIdForFileExtension@Factory@Object@@QEBAIPEBD@Z",
-                          (void*)&RtObject_Factory_GetTypeIdForFileExtension);
-    RegisterRuntimeAddr(0x1800c04c0, (void*)&RtObject_Factory_GetTypeIdForFileExtension);
-    return 1;
 }

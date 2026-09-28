@@ -52,14 +52,9 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/object/External.h"
 #include "../../types/object/Internal.h"   // Object::detail::InternalMemAlloc
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/collection/Collection.h"   // B3R: rtcoll::RtColl_ArraySetSize_18002f070
 
 namespace {
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 // Same Serializer-pair shape as runtime/src/ui/groupdescription.cpp; retail
 // vtable offsets into Encoding/ReaderWriter, RETAIL not profile
@@ -85,11 +80,6 @@ constexpr int kEncCreateWriter = 0x20;   // CALL [RAX+0x20]
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
-// The ExternalPtrArraySerialize_External thunk (runtime/src/object/
-// external_ptr_serialize.cpp), reached by address since it is an unexported
-// internal.
-using ArraySerFn = void (*)(Serializer* ser, int count, Object::External** elems);
-
 }  // namespace
 
 namespace Object {
@@ -113,11 +103,14 @@ bool ExternalList::Serialize(void* streamv) {
     reinterpret_cast<::IO::ReaderWriter*>(rw)->SerializeInt(n, nullptr);   // +0xa0 (B.3.x bridge)
 
     if (ser.stream->mode == 0) {
-        using SetSizeFn = void (*)(void* array, int n);
-        RtAddr<SetSizeFn>(0x18002f070ull)(&_resources, n);
+        rtcoll::RtColl_ArraySetSize_18002f070(&_resources, n);   // 0x18002f070
     }
 
-    RtAddr<ArraySerFn>(0x18002f170ull)(&ser, n, _resources);
+    // The ExternalPtrArraySerialize_External thunk (external_ptr_serialize.cpp),
+    // an unexported internal: 0x18002f170.
+    RtObject_ExternalPtrArraySerialize_External(
+        reinterpret_cast<rt::io::Serializer*>(&ser), n,
+        reinterpret_cast<RtObject::External**>(_resources));
 
     if (rw != nullptr) {
         delete reinterpret_cast<::IO::ReaderWriter*>(rw);        // slot 0 (B.3.x bridge)
@@ -144,19 +137,3 @@ Base* ExternalList::CreateInPlaceObject(void* place) {
 }
 
 }  // namespace Object
-
-// ============================================================================
-// Registration — the factory pair (B39_RULES D2): the class's OWN statics by
-// retail name AND VA. The class record (DEFINE_TYPE, external_class.cpp)
-// names them directly.
-// ============================================================================
-int RtObjectExternalListRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?CreateNewObject@ExternalList@Object@@SAPEAVBase@2@XZ",
-                          (void*)&Object::ExternalList::CreateNewObject); ++n;
-    RegisterRuntimeAddr(0x180007460ull, (void*)&Object::ExternalList::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@ExternalList@Object@@SAPEAVBase@2@PEAX@Z",
-                          (void*)&Object::ExternalList::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr(0x180007510ull, (void*)&Object::ExternalList::CreateInPlaceObject);
-    return n;
-}

@@ -135,35 +135,6 @@ namespace {
 // callers and those are now the real class's members. WAVE2's warning stands
 // where they live now: one ported body cannot serve two element widths.
 
-// ---- 0x18002fca0 — THE ADDRESS DOOR FOR THAT BODY --------------------------
-// WAVE 9 LANE UID. `ArrayPtrSetSize` has BEEN the port of FUN_18002fca0 since
-// Wave 3 — the comment above it says so — but nothing ever registered it at
-// that address, so `ResolveAddr(Module::Runtime, 0x18002fca0)` fell through to
-// the DLL and would be a null call at cutover
-// (reference_by_address_door_dies_at_cutover.md). Two lane docs recorded
-// 0x18002fca0 as an UNPORTED blocker of `??1DialogInstance@UI@@`
-// (WAVE9_LANE_UIF.md row 6, WAVE9_LANE_UIC.md §7); the body was already here.
-// That is reference_grep_for_the_port_before_writing_it.md read from the other
-// side: the miss was not a duplicate port, it was a HALF-REGISTERED one.
-//
-// Registered UNGATED, deliberately, and it is NOT part of the `table` tier:
-// this body is a container primitive that operates on whatever array its
-// caller hands it. It mutates the handle table only when the CALLER passes
-// `_singleton->_objects`, which only `~Internal` does — and that one stays
-// behind `table`. Registering the primitive therefore arms no handle-table
-// mutation of its own.
-//
-// It is unexported (checked against the shipped export directory with pefile),
-// so ADDRESS ONLY, and the void* signature is the shape every address caller
-// reaches it through. Element width is 8 and the type is erased in the callee,
-// so `Internal*` here is a name, not a constraint.
-extern "C" void RtObject_ArrayPtrSetSize_18002fca0(void* arrayPtr, int newSize) {
-    // B.3.3 bridge — the caller hands us whatever array it owns; the element
-    // type is erased in the callee and the width is 8 either way.
-    ::Object::detail::ArrayPtrSetSize(
-        static_cast<Collection::Array< ::Object::Internal*>*>(arrayPtr), newSize);
-}
-
 // ---- ENDGAME B.3.1 step 1: the bridge to the real class ---------------------
 //
 // `Object::InternalBasePtr` (runtime/types/object/Internal.h) now owns every
@@ -212,67 +183,9 @@ void RtObject_InternalBasePtr_Copy(InternalBasePtr* self, const InternalBasePtr*
     ::Object::InternalBasePtr::Shim_Copy(AsClass(self), AsClass(other));
 }
 
-// ?CheckPtr@InternalBasePtr@Object@@IEBAXXZ
-//                                      retail 0x1800c0290, profile 0x18008c5d0
-//
-// *** A BARE `RET 0` IN BOTH BUILDS. *** It validates nothing. The profile
-// build — asserts compiled in, 5,182 exports — has the identical empty body, so
-// this was compiled out at the SOURCE level in every shipped configuration, not
-// optimised out of retail. `?AssignId@InternalBasePtr@Object@@IEAAXXZ`
-// (0x1800c0280) is the same three bytes.
-//
-// B.3.3 STEP 6D REWROTE THIS BANNER, because the argument it used to carry is now
-// false in both directions and a false justification is worse than either choice.
-//
-// What it used to say: the port must be registered because 2,333 of the 3,475
-// exe-side `fn_InternalBasePtr_CheckPtr(...)` sites had no null guard, so an
-// unregistered symbol would be an EXEC-of-0 at cutover; and there was a long
-// story about `engine_funcs.cpp` sniffing the first byte of the resolved body,
-// the `g_checkPtrIsNop` flag, `BANISHED_CHECKPTR_NOP` and
-// `BANISHED_CHECKPTR_STATIC_NOP`.
-//
-// NONE OF THAT EXISTS ANY MORE. Step 6D deleted all 4,570 exe-side call sites —
-// every one was a call to these three bytes — together with the pointer, the
-// typedef, the macro, the byte sniff, the flag and the perf-build -D. There is no
-// exe-side caller of this symbol left, by name or by address.
-//
-// IT IS STILL REGISTERED, and the reason is now a different one: the SYMBOL is the
-// ABI door for `Object::InternalBasePtr::CheckPtr()`, a real member of the real
-// class in runtime/types/object/Internal.h, which `Shim_CheckPtr` forwards to and
-// which `tests/unit/object_ptr_test.cpp` exercises on both a live and a stale
-// pointer. The class keeps the member because retail has it; the door keeps the
-// registration because the mangled name has to resolve at cutover. It is a
-// REGISTERED SYMBOL, not an EXERCISED one
-// (reference_uncalled_port_is_not_verified.md, acknowledged rather than hidden).
-//
-// B.3.1: still empty, and `Object::InternalBasePtr::CheckPtr` it forwards to is
-// empty too. NEVER ADD VALIDATION TO EITHER, AND NEVER ADD A CALLER BACK.
-void RtObject_InternalBasePtr_CheckPtr(const InternalBasePtr* self) {
-    ::Object::InternalBasePtr::Shim_CheckPtr(AsClass(self));
-}
-
 // ?Persist@Internal@Object@@UEAAXAEAVStream@IO@@@Z (0x1800bfda0, slot 3):
 // ENDGAME B.3.9 OBJ -- the slot door went with the minted table, its only
 // reader; the body is `Object::Internal::Persist` (internal_class.cpp).
-
-// ?Clone@Internal@Object@@QEAAPEAV12@XZ            retail 0x1800bfb10, ord 1716
-//
-// ENDGAME B.3.4 STREAMS (6/6). The body is `Object::Internal::Clone` in
-// internal_class.cpp; this is the registered entry point, and it is the FIRST
-// one this symbol has ever had — B34_RULES §6.5(e) measured it as genuinely
-// unported, with no registration by name or by address, no stub and no TODO.
-//
-// `Clone` IS NOT A VTABLE SLOT. It is `QEAA` — public, non-virtual — and it
-// appears in none of `??_7Internal@Object@@6B@`'s four slots. So unlike the
-// `Persist` shim above this one is NOT slot 3, there is no minted table that
-// resolves back into it, and the qualification below is ordinary style rather
-// than the recursion guard it is next door. Spelled qualified anyway so the two
-// shims read the same way.
-Internal* RtObject_Internal_Clone(Internal* self) {
-    // B.3.3 bridge
-    ::Object::Internal* p = reinterpret_cast< ::Object::Internal*>(self);
-    return reinterpret_cast<Internal*>(p->Object::Internal::Clone());
-}
 
 // ?DeletePtr@InternalBasePtr@Object@@QEAAXXZ
 //                                      retail 0x1800c0150, profile 0x18008c5a0
@@ -318,79 +231,6 @@ void RtObject_InternalBasePtr_DeletePtr(InternalBasePtr* self) {
 // door's caller) and import slot 0x140152768 (the ??0 door's). The bodies are
 // `Object::Internal::Internal()` / `~Internal()` (internal_class.cpp); the
 // [RtInternalTable] / [RtInternalVtbl] instruments went with them (D9).
-
-// ?ClearPersistState@InternalFactory@Object@@QEAAXXZ
-//                                      retail 0x1800bfe30, profile 0x18008c0b0
-// Frees the persist-id array and zeroes all three of its fields. Retail inlines
-// the free (FUN_18001c750); the profile build calls MemFree — and it calls it
-// UNCONDITIONALLY, where retail's inline null-checks first. Same behaviour:
-// MemoryAllocator::Free opens with `test rdx,rdx; jz`.
-void RtObject_InternalFactory_ClearPersistState(InternalFactory* self) {
-    // LIVENESS. This body is DEFAULT-ON as of Wave 11 lane OBJINT, and a
-    // verified body that nothing calls is dead code that reads exactly like a
-    // landed port (reference_uncalled_port_is_not_verified.md). Once per
-    // process, on a function the save/load path enters once per transaction.
-    static bool first = true;
-    if (first) { first = false;
-        printf("[RtPort] FIRST LIVE CALL into our ?ClearPersistState@InternalFactory@Object@@ "
-               "(default-on since Wave 11 lane OBJINT)\n"); }
-
-    // B.3.3 bridge — the body is `Object::InternalFactory::ClearPersistState`.
-    reinterpret_cast< ::Object::InternalFactory*>(self)->ClearPersistState();
-}
-
-// ?ResetPersistState@InternalFactory@Object@@QEAAXAEAVStream@IO@@@Z
-//                                      retail 0x1800bfe40, profile 0x18008bfc0
-//
-//     Serializer ser(stream, 0);              // inlined; see below
-//     int count = _objects._size;
-//     ser.readerWriter->vtbl[0xa0](encoding, &count, 0);   // WRITE on save, READ on load
-//     _persistIds.SetSize(count);
-//     _objects.Reserve(count);
-//     for (i = 0; i < _persistIds._size; ++i) _persistIds[i] = -1;
-//     ~Serializer(ser);                       // encoding->vtbl[0](encoding, 1)
-//
-// The Serializer construction is reproduced from ??0Serializer@IO@@QEAA@AEAVStream@1@H@Z
-// (0x1800b9960), which retail inlines here verbatim: stream+0x08 selects the
-// direction (0 == reading) and stream+0x10 is the encoding factory whose vtable
-// slot 3 (+0x18) makes a reader and slot 4 (+0x20) makes a writer.
-//
-// ARITY — RESOLVED 2026-09-08, WAVE 9 LANE Y. This block used to say the arity
-// was unknown and "should be disassembled if this function is ever taken live";
-// that was WAVE3_LANE_B.md's gate step 2, and it is now closed from the bytes.
-// Retail, 0x1800bfe68-0x1800bfe84:
-//
-//     MOV RCX,[RDX+0x10]     ; arg1 = stream->encoding  (the factory)
-//     XOR R8D,R8D            ; arg3 = 0                 <-- SET BEFORE the test
-//     MOV RAX,[RCX]          ; factory vtable
-//     CMP [RDX+0x8],EBX      ; direction == 0 ?
-//     LEA RDX,[RSP+0x28]     ; arg2 = &serializer
-//     JNZ +5
-//     CALL [RAX+0x18]        ; reading -> CreateReader
-//     CALL [RAX+0x20]        ; writing -> CreateWriter
-//
-// THREE arguments, identical on both branches, and the third is a literal 0.
-// The port passed only two, leaving R8 holding whatever the caller left there.
-//
-// It is not an academic point, and the tree had already proved it: Wave 4's
-// IO::Serializer port disassembled the SAME two slots from the out-of-line
-// ??0Serializer@IO@@QEAA@AEAVStream@1@H@Z (0x1800b9960) and wrote in
-// runtime/src/io/serializer.cpp: "The `int version` argument is NOT ignored …
-// R8D is live all the way to the CALL, and the thing being called is
-// ??0Binary{Reader,Writer}@IO@@QEAA@AEAVSerializer@1@H@Z — (Serializer&, int).
-// BinaryWriter STORES it and writes it to the stream. That pins the arity of
-// both factory slots at 3." So the callee reads R8, and a two-argument call
-// would have handed BinaryWriter a garbage stream version.
-//
-// The third argument is the serializer VERSION, and retail's inlined copy here
-// passes 0 — this call site does not version its record. Written as a named
-// constant so the 0 cannot be mistaken for a placeholder.
-void RtObject_InternalFactory_ResetPersistState(InternalFactory* self, void* stream) {
-    // B.3.3 bridge — the body is `Object::InternalFactory::ResetPersistState`,
-    // moved verbatim including the three-argument encoding-factory call and the
-    // RETAIL ReaderWriter vtable offsets.
-    reinterpret_cast< ::Object::InternalFactory*>(self)->ResetPersistState(stream);
-}
 
 // ?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z
 //                                      retail 0x1800c0180, profile 0x18008c460
@@ -510,21 +350,10 @@ void InternalBasePtrSerializeBody(RtObject::Internal** self,
     enc->SerializeUInt(const_cast<uint32_t&>(gen), nullptr);    // +0x98
     enc->SerializeUInt(type, nullptr);                          // +0x98
 
-    // The REGISTRY door, not the raw DLL door: PersistObject is ported
-    // (internalfactory_persist.cpp) and with the DLL absent the raw door is
-    // NULL. First DLL-absent Load Game (2026-09-12) died here, EXEC-of-0, with
-    // the InternalFactory in RCX -- the same wall as video/buffers.cpp MemFree.
-    using PersistObjectFn = RtObject::Internal* (*)(RtObject::InternalFactory*, void*,
-                                                    uint32_t, int, uint32_t);
-    PersistObjectFn persist = RT_EXPORT_ONCE(PersistObjectFn,
-        "?PersistObject@InternalFactory@Object@@QEAAPEAVInternal@2@AEAVStream@IO@@IHI@Z");
-    // B.3.3 bridge — the singleton comes from `Object::InternalFactory::Get()`
-    // now (the same `?_singleton@InternalFactory@Object@@0PEAV12@EA` door this
-    // file's own `Factory()` used to open), and the shim it is handed to still
-    // takes the POD alias.
-    *self = persist(reinterpret_cast<RtObject::InternalFactory*>(
-                        ::Object::InternalFactory::Get()),
-                    ser._stream, gen, index, type);
+    // ?PersistObject@InternalFactory@Object@@ (0x1800bff10), the member by
+    // name (B3R RT-Core) on `Object::InternalFactory::Get()`.
+    *self = reinterpret_cast<RtObject::Internal*>(
+        ::Object::InternalFactory::Get()->PersistObject(ser._stream, gen, index, type));
 }
 
 }  // namespace Object
@@ -634,9 +463,6 @@ int RtObjectInternalRegister() {
     // string-literal concatenation — and was read off the export directory at
     // the VA whose bytes the body transcribes (ord 1716), not assembled by
     // analogy with its `UEAA` neighbours (reference_resolveexport_phantom_names.md).
-    RegisterRuntimeExport("?Clone@Internal@Object@@QEAAPEAV12@XZ",
-                          (void*)&RtObject_Internal_Clone); ++n;
-    RegisterRuntimeAddr(0x1800bfb10, (void*)&RtObject_Internal_Clone);
 
     // ---- CheckPtr: STILL REGISTERED, for a reason B.3.3 step 6D changed ------
     //
@@ -651,9 +477,6 @@ int RtObjectInternalRegister() {
     // `Object::InternalBasePtr::CheckPtr()`, a real (empty) member of the real
     // class, exercised by tests/unit/object_ptr_test.cpp through `Shim_CheckPtr`.
     // The full argument is on the function above.
-    RegisterRuntimeExport("?CheckPtr@InternalBasePtr@Object@@IEBAXXZ",
-                          (void*)&RtObject_InternalBasePtr_CheckPtr); ++n;
-    RegisterRuntimeAddr(0x1800c0290, (void*)&RtObject_InternalBasePtr_CheckPtr);
 
     // ---- InternalBasePtr::Serialize — UNGATED 2026-09-07 (Wave 9) -----------
     // It sat in the TABLE tier below, but not because it touches the handle
@@ -667,16 +490,12 @@ int RtObjectInternalRegister() {
     //   null      1 emission identical, full compare, no stop needed
     // Gated-because-unverified is not the same as gated-because-dangerous, and
     // keeping the two in one switch made a verified port look like a NO-GO.
-    RegisterRuntimeExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z",
-                          (void*)&RtObject_InternalBasePtr_Serialize); ++n;
-    RegisterRuntimeAddr(0x1800c0180, (void*)&RtObject_InternalBasePtr_Serialize);
 
     // ---- WAVE 9 LANE UID — the address door for FUN_18002fca0 --------------
     // The body is ArrayPtrSetSize, ported since Wave 3 and never registered.
     // Ungated for the reason spelled out at the adapter: it is a container
     // primitive, not a handle-table mutator. Its first address caller is
     // `??1DialogInstance@UI@@` (runtime/src/ui/dialog.cpp, lane UID).
-    RegisterRuntimeAddr(0x18002fca0, (void*)&RtObject_ArrayPtrSetSize_18002fca0); ++n;
 
     // ---- ClearPersistState — UNGATED 2026-09-09 (Wave 11 lane OBJINT) -------
     //
@@ -711,9 +530,6 @@ int RtObjectInternalRegister() {
     // NOT registered in SHADOW mode: the shadow wrapper above claims the same
     // two doors, and a second binding would win and silently replace the
     // oracle with the thing it was measuring.
-    RegisterRuntimeExport("?ClearPersistState@InternalFactory@Object@@QEAAXXZ",
-                          (void*)&RtObject_InternalFactory_ClearPersistState); ++n;
-    RegisterRuntimeAddr(0x1800bfe30, (void*)&RtObject_InternalFactory_ClearPersistState);
 
     // ---- Tier 2: the real table ports. ---------------------------------------
         // ---- ResetPersistState — STAYS IN THE TIER, and NOT because it is
@@ -739,9 +555,6 @@ int RtObjectInternalRegister() {
         // a different state from the UNVERIFIED it was in until today, and the
         // measurement it still owes is a live tier-2 load run, not another
         // oracle.
-        RegisterRuntimeExport("?ResetPersistState@InternalFactory@Object@@QEAAXAEAVStream@IO@@@Z",
-                              (void*)&RtObject_InternalFactory_ResetPersistState); ++n;
-        RegisterRuntimeAddr(0x1800bfe40, (void*)&RtObject_InternalFactory_ResetPersistState);
 
 
     // ENDGAME B.3.9 OBJ (B39_RULES D2): retail's factory pair is the class's
@@ -749,12 +562,6 @@ int RtObjectInternalRegister() {
     // name AND VA here instead of by the FACTREST interpreter row. The in-place
     // one is the SHARED `?CreateInPlaceObject@Internal@Object@@` every
     // Internal-rooted class's record names; it stays registered here.
-    RegisterRuntimeExport("?CreateNewObject@Internal@Object@@SAPEAVBase@2@XZ",
-                          (void*)&::Object::Internal::CreateNewObject); ++n;
-    RegisterRuntimeAddr(0x18002fc80, (void*)&::Object::Internal::CreateNewObject);
-    RegisterRuntimeExport("?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z",
-                          (void*)&::Object::Internal::CreateInPlaceObject); ++n;
-    RegisterRuntimeAddr(0x1800070c0, (void*)&::Object::Internal::CreateInPlaceObject);
 
     printf("[RtPort]   Object::Internal: TABLE mode — our code drives the handle "
            "table. Shadow gate step 1 was met in Wave 3 (93,387 calls each on the "
