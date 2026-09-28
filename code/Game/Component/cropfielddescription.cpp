@@ -30,13 +30,6 @@ CropFieldDescription::CropFieldDescription()
       _type(5),
       _f24(0.0f) {}
 
-// [0] 0x140033040: ~CropFieldDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* CropFieldDescription::DeletingDtor(unsigned flags) {
-    this->~CropFieldDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14011b270: stream order as retail.
 bool CropFieldDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (External::Serialize takes void*)
@@ -45,15 +38,15 @@ bool CropFieldDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140032fe0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140032fe0: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* CropFieldDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~CropFieldDescription();
     return new (static_cast<void*>(this)) CropFieldDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void CropFieldDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void CropFieldDescription::Destruct() { this->~CropFieldDescription(); }
 
 // [8] 0x140033030: CropFieldComponent's type id through the hidden return slot.
 Object::Type* CropFieldDescription::GetComponentType(Object::Type* ret) const {

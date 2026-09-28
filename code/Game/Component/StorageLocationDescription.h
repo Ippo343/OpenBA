@@ -27,7 +27,7 @@ class StorageLocationDescription final : public Description {
 public:
     StorageLocationDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140038f60
+    ~StorageLocationDescription() override = default;                      // [0] 0x140038f60
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x14012d4c0
     bool              Serialize(void* stream) override;                    // [5] 0x14012d470
     Object::External* Reconstruct() override;                              // [6] 0x140038f00
@@ -38,9 +38,6 @@ public:
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     uint32_t _locationType;                     // +0x20 enum (serialized through the uint door)
     uint8_t _pad24[4];                          // +0x24 never written by the ctor
-
-protected:
-    ~StorageLocationDescription() = default;
 };
 
 static_assert(sizeof(StorageLocationDescription) == 0x28, "StorageLocationDescription is 0x28 (create 0x140038e50 MemAlloc(0x28))");

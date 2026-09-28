@@ -488,13 +488,6 @@ extern "C" void DecalComponent_MarkOwnerBuilt(void* entity) {
     }
 }
 
-// [0] 0x1400338d0: ~DecalComponent (0x14011b8b0: restamp + ~Internal), MemFree on &1.
-Object::Base* DecalComponent::DeletingDtor(unsigned flags) {
-    this->~DecalComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x1400337c0: MemAlloc(0x38, 8), then the ctor.
 void* DecalComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(DecalComponent), 8);

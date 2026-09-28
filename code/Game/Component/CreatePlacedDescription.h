@@ -28,7 +28,7 @@ class CreatePlacedDescription final : public Description {
 public:
     CreatePlacedDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140032ad0
+    ~CreatePlacedDescription() override;                                   // [0] 0x140032ad0
     int32_t           GetFileVersion() const override { return 4; }    // [3] 0x1401199f0
     bool              Serialize(void* stream) override;                    // [5] 0x1401198d0
     Object::External* Reconstruct() override;                              // [6] 0x140032ab0
@@ -48,9 +48,6 @@ public:
     int32_t _i48;                               // +0x48
     uint8_t _pad4c[4];                          // +0x4c never written by the ctor
     void* _created;                             // +0x50 ExternalRef: created description (weak)
-
-protected:
-    ~CreatePlacedDescription();
 };
 
 static_assert(sizeof(CreatePlacedDescription) == 0x58, "CreatePlacedDescription is 0x58 (create 0x140032a60 MemAlloc(0x58))");

@@ -50,13 +50,6 @@ extern "C" uintptr_t* HerbalistComponent_CreateWork(void*, uintptr_t*);   // res
 // 0x14004b2a0: the RP ctor (CALL 0x14012b3d0) and the compiler's stamp. Nothing else.
 HerbalistComponent::HerbalistComponent() : ResourceProduceComponent() {}
 
-// [0] 0x140006d60: restamps + ~Internal (the compiler chain), MemFree on &1.
-Object::Base* HerbalistComponent::DeletingDtor(unsigned flags) {
-    this->~HerbalistComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140006b40: MemAlloc(0x50, 8), then the ctor.
 void* HerbalistComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HerbalistComponent), 8);

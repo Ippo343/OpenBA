@@ -150,11 +150,11 @@ Object::External* TabDescription::Construct() {
 }
 // [6] 0x18004c370 — destroy in place through slot 0 (flag 0), re-run the ctor.
 Object::External* TabDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~TabDescription();
     return ::new (this) TabDescription();
 }
 // [7] 0x18004c3a0
-void TabDescription::Destruct() { DeletingDtor(0); }
+void TabDescription::Destruct() { this->~TabDescription(); }
 
 // ============================================================================
 // [5] ?Serialize@TabDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800da760
@@ -207,7 +207,7 @@ bool TabDescription::Serialize(void* streamArg) {
     }
 
     if (rw != nullptr) {                                                // 1800da8ad
-        rw->DeletingDtor(1);
+        delete rw;
     }
     return true;
 }

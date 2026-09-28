@@ -35,16 +35,14 @@ class Tornado final : public Graphics::Particle {
 public:
     Tornado();                                                        // 0x1400d23c0
 
-    Object::Base* DeletingDtor(unsigned flags) override;              // [0] 0x140024f00
+    // retail's body is the restamp and ~Particle
+    ~Tornado() override = default;                                    // [0] 0x140024f00
     int32_t GetFileVersion() const override;                          // [3] 0x1400d2370
     bool Serialize(void* stream) override;                            // [5] 0x1400d2210
     Object::External* Reconstruct() override;                         // [6] 0x140024ee0
     void Destruct() override;                                         // [7] 0x140001640
     Graphics::ParticleInstance* CreateSystem() const override;        // [8] 0x1400d21b0
     virtual Object::External* Construct();                            // [9] 0x140024ed0
-
-protected:
-    ~Tornado() = default;   // retail's body is the restamp and ~Particle
 
 public:
     // Names are the ToolKit ones (Tornado.rsc lists the 15 fields Serialize reads).
@@ -83,11 +81,9 @@ public:
     // Keep ParticleInstance's non-virtual `bool Update()` visible beside slot 1.
     using Graphics::ParticleInstance::Update;
 
-    Graphics::Geometry* DeletingDtor(unsigned flags) override;        // [0] 0x140024f50
+    // retail's body is ~ParticleInstance
+    ~TornadoInstance() override = default;                            // [0] 0x140024f50
     void Update(const System::Time& time) override;                   // [1] 0x1400d2470
-
-protected:
-    ~TornadoInstance() = default;   // retail's body is ~ParticleInstance
 
 public:
     float    _funnelSpinDegrees;     // +0xd8  accumulated funnel rotation (int 0 in the ctor)

@@ -58,13 +58,6 @@ RawMaterialDescription::RawMaterialDescription()
       _unknown58(false),
       _flags(0) {}
 
-// [0] 0x140037350: ~RawMaterialDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* RawMaterialDescription::DeletingDtor(unsigned flags) {
-    this->~RawMaterialDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140129520: stream order as retail.
 bool RawMaterialDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
@@ -84,15 +77,15 @@ bool RawMaterialDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140037320: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140037320: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* RawMaterialDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~RawMaterialDescription();
     return new (static_cast<void*>(this)) RawMaterialDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void RawMaterialDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void RawMaterialDescription::Destruct() { this->~RawMaterialDescription(); }
 
 // [8] 0x140037340: RawMaterialComponent's type id through the hidden return slot.
 Object::Type* RawMaterialDescription::GetComponentType(Object::Type* ret) const {

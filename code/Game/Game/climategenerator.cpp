@@ -64,25 +64,19 @@ ClimateGenerator::~ClimateGenerator() {
     reinterpret_cast<System::String*>(&_field28)->~String();   // B.3.1 bridge: the COW pointer
 }
 
-Object::Base* ClimateGenerator::DeletingDtor(unsigned flags) {
-    this->~ClimateGenerator();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // ClimateGenerator::Reconstruct (vtable +0x30, Slot6) -- Reset to defaults
 // ============================================================
 // Original: 0x140018f40. Destroys the object (slot 0, flags 0: no free) then
 // re-constructs in place.
 Object::External* ClimateGenerator::Reconstruct() {
-    DeletingDtor(0);
+    this->~ClimateGenerator();
     return ::new (static_cast<void*>(this)) ClimateGenerator();
 }
 
 // [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
 // slot 0 with flags 0 (destroy, no free).
-void ClimateGenerator::Destruct() { DeletingDtor(0); }
+void ClimateGenerator::Destruct() { this->~ClimateGenerator(); }
 
 // ============================================================
 // ClimateGenerator::Serialize (vtable +0x28, Slot5)

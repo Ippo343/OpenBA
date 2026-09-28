@@ -41,7 +41,8 @@ public:
 
     BoatComponent();                                      // 0x140046800
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140003970
+    // 0x140046770
+    ~BoatComponent() override;                                    // [0]  0x140003970
     void          Persist(void* stream) override;                 // [3]  0x1400465d0
     int         GetDefaultState() const override { return 0; }  // [16] 0x140003730
     Controller* GetController() override { return &_controller; }  // [17] 0x140003720
@@ -61,9 +62,6 @@ public:
     int32_t         data70;        // +0x70 route index (retail ctor: -1)
     uint8_t         _pad74[4];     // +0x74
     StateController _controller;   // +0x78 the embedded controller (D6)
-
-protected:
-    ~BoatComponent();                                     // 0x140046770
 };
 
 static_assert(sizeof(BoatComponent) == 0x98, "BoatComponent is 0x98 (create 0x1400036e0)");

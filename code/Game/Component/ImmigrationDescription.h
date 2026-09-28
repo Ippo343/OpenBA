@@ -27,7 +27,7 @@ class ImmigrationDescription final : public Description {
 public:
     ImmigrationDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140007b00
+    ~ImmigrationDescription() override;                                    // [0] 0x140007b00
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x14004e930
     bool              Serialize(void* stream) override;                    // [5] 0x14004e7f0
     Object::External* Reconstruct() override;                              // [6] 0x140007ad0
@@ -52,9 +52,6 @@ public:
     int32_t _i5c;                               // +0x5c
     float _f60;                                 // +0x60
     int32_t _i64;                               // +0x64
-
-protected:
-    ~ImmigrationDescription();
 };
 
 static_assert(sizeof(ImmigrationDescription) == 0x68, "ImmigrationDescription is 0x68 (create 0x140007a80 MemAlloc(0x68))");

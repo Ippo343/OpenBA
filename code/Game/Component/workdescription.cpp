@@ -50,13 +50,6 @@ WorkDescription::WorkDescription()
       _i30(1),
       _b34(false) {}
 
-// [0] 0x140039f50: ~WorkDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* WorkDescription::DeletingDtor(unsigned flags) {
-    this->~WorkDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14012e8b0: stream order as retail.
 bool WorkDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
@@ -69,15 +62,15 @@ bool WorkDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140039f20: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140039f20: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* WorkDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~WorkDescription();
     return new (static_cast<void*>(this)) WorkDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void WorkDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void WorkDescription::Destruct() { this->~WorkDescription(); }
 
 // [8] 0x140039f40: WorkComponent's type id through the hidden return slot.
 Object::Type* WorkDescription::GetComponentType(Object::Type* ret) const {

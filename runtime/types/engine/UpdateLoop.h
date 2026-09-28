@@ -269,17 +269,18 @@ static_assert(offsetof(DialogLoaderLoopT, _ui)             == 0x60, "DialogLoade
 // `RT_DELDTOR` rows and every ctor / dtor / slot DOOR are RETIRED. The exe's
 // five loops (GameUpdateLoop, MenuDialogLoopT, the splash loop, two LoaderLoop
 // subclasses) are real subclasses built by their own real ctors (EXE-1), so
-// every live loop wears a COMPILER table. Slot 0 is a concrete `DeletingDtor`
-// with the retired row's VECTOR arms on all four; `LoaderLoop` is CONCRETE as
-// in retail; `UpdateLoop` (pure 1,2,3,4,6) and the two Dialog loops (pure 12)
+// every live loop wears a COMPILER table. Slot 0 is the virtual destructor on
+// all four; `LoaderLoop` is CONCRETE as in retail; `UpdateLoop` (pure 1,2,3,4,6) and the two Dialog loops (pure 12)
 // stay abstract, as in retail. A call from an exe slot body to a member that
 // is VIRTUAL on the base is QUALIFIED (`->Engine::DialogLoopT::Load()`), or it
 // would dispatch back into itself.
 //
-// NO VIRTUAL DESTRUCTOR (ENDGAME B.2): GCC spends two slots on one, which would
-// push `Startup` off slot 1. The destructors here are protected and
-// non-virtual; every destroyable subclass declares its own `DeletingDtor`
-// (B9-4).
+// THE DESTRUCTOR IS VIRTUAL (the normal-virtual cutover, B3X W1). Retail's
+// slot 0 is MSVC's deleting destructor, ONE slot; GCC spends TWO on
+// `virtual ~T()` (D1 + D0), so retail slot N >= 1 (the `[N]` comments below)
+// is compiler slot N + 1. Every caller reaches a slot by name. A loop is ended
+// with `delete loop` (D0: the destructor chain, then UpdateLoop's
+// `operator delete`, retail's MemFree arm).
 //
 // THREADS (RULE B7-7): `Loader::Run` runs on the LOADER thread and dispatches
 // the loop's slot 6 `Load` there, so every `Load` body and everything it calls
@@ -289,11 +290,6 @@ static_assert(offsetof(DialogLoaderLoopT, _ui)             == 0x60, "DialogLoade
 namespace System { class Time; class String; }
 namespace Save   { class SavedState; }
 namespace UI     { class DialogInstance; }
-// `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` (0x1800c7ad0), the free every
-// loop `DeletingDtor` arm below makes (the retired RT_DELDTOR rows' MemFree).
-// Declared, not included: runtime/types/object/Internal.h drags Value.h's
-// global `struct Time` (see the banner above) into the exe tree.
-namespace Object { namespace detail { void InternalMemFree(void* p); } }
 
 namespace Engine {
 
@@ -302,25 +298,16 @@ namespace Engine {
 // ============================================================================
 class UpdateLoop {
 public:
-    // [0] 0x180031900 (unexported) -- MSVC's VECTOR deleting destructor, both
-    // arms exactly as the retired RT_DELDTOR row ran them (DeletingDtorCore,
-    // element 0x28): `flags & 2` reads the SIGNED int32 count at `this - 8`,
-    // destroys the elements DOWNWARD, frees `this - 8` on `flags & 1` and
-    // returns it; otherwise ~UpdateLoop, free on `flags & 1`. Every exe loop
-    // declares its own slot 0 (B9-4), so this runs only for a bare base.
-    virtual UpdateLoop* DeletingDtor(unsigned flags) {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<UpdateLoop*>(self + static_cast<int64_t>(i) * 0x28)->~UpdateLoop();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<UpdateLoop*>(self - 8);
-        }
-        this->~UpdateLoop();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // [0] 0x180031900 (unexported) -- retail's VECTOR deleting destructor
+    // (element 0x28); here D1 + D0. The body is
+    // `??1UpdateLoop@Engine@@UEAA@XZ` 0x1800dddb0: the compiler restamps on
+    // entry; bit hand-back, ExternalFactory::Clean, the list cleanup tail. Its
+    // `??1` door died with the RT_DELDTOR row (B.3.9 ENG W2).
+    virtual ~UpdateLoop() { ReleaseFields(); }
+
+    // Retail's `flags & 1` arm: MemoryAllocator::MemFree for every loop
+    // (runtime/src/object/root_operator_delete.cpp; unit build: free).
+    static void operator delete(void* p);
     virtual void Startup() = 0;                                    // [1] _purecall
     virtual void Shutdown() = 0;                                   // [2] _purecall
     virtual bool Update(const System::Time& time) = 0;             // [3] _purecall
@@ -353,10 +340,6 @@ protected:
     // allocation. The `??0` door is gone (ENDGAME B.3.9 ENG W2): every loop is
     // built by a subclass's real ctor.
     UpdateLoop() { InitFields(); }
-    // `??1UpdateLoop@Engine@@UEAA@XZ` 0x1800dddb0. NON-VIRTUAL; the compiler
-    // restamps on entry. Bit hand-back, ExternalFactory::Clean, the list
-    // cleanup tail. Its `??1` door died with the RT_DELDTOR row (B.3.9 ENG W2).
-    ~UpdateLoop() { ReleaseFields(); }
 
 private:
     // The bodies live in loops.cpp; tests/unit/rb_engine_abi_test.cpp links
@@ -419,21 +402,10 @@ public:
         InitFields(nextLoop, *reinterpret_cast<const int64_t*>(&delay));
     }
 
-    // [0] 0x18004d4f0 -- the VECTOR deleting destructor (element 0x48), both
-    // arms as the retired RT_DELDTOR row ran them; see UpdateLoop's.
-    UpdateLoop* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<LoaderLoop*>(self + static_cast<int64_t>(i) * 0x48)->~LoaderLoop();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<UpdateLoop*>(self - 8);
-        }
-        this->~LoaderLoop();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // [0] 0x18004d4f0 -- retail's VECTOR deleting destructor (element 0x48).
+    // `??1LoaderLoop@Engine@@UEAA@XZ` 0x1800dc170: its own restamp, then
+    // ~UpdateLoop folded in — both the compiler's chain. Nothing of its own.
+    ~LoaderLoop() override {}
     void Startup() override;                                       // [1] 0x1800dc260
     void Shutdown() override;                                      // [2] 0x1800dc280
     bool Update(const System::Time& time) override;                // [3] 0x1800dc2a0
@@ -454,11 +426,6 @@ public:
     // no lock (retail takes none); LoaderLoop::Shutdown joins it before ~Engine.
     static Loader _loader;
 
-protected:
-    // `??1LoaderLoop@Engine@@UEAA@XZ` 0x1800dc170: its own restamp, then
-    // ~UpdateLoop folded in — both the compiler's chain. Nothing of its own.
-    ~LoaderLoop() {}
-
 private:
     void InitFields(UpdateLoop* nextLoop, int64_t delayTicks);   // loops.cpp
 
@@ -475,21 +442,13 @@ public:
 // ============================================================================
 class DialogLoopT : public UpdateLoop {
 public:
-    // [0] 0x18004d8b0 -- the VECTOR deleting destructor (element 0x168), both
-    // arms as the retired RT_DELDTOR row ran them; see UpdateLoop's.
-    UpdateLoop* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<DialogLoopT*>(self + static_cast<int64_t>(i) * 0x168)->~DialogLoopT();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<UpdateLoop*>(self - 8);
-        }
-        this->~DialogLoopT();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // [0] 0x18004d8b0 -- retail's VECTOR deleting destructor (element 0x168).
+    // `??1DialogLoopT@Engine@@UEAA@XZ` 0x1800db340: restamp, ~UserInterface
+    // (the body, shared with the door), then ~String on +0x28 and ~UpdateLoop
+    // — which the compiler's member/base chain runs in exactly that order.
+    // `_ui`'s own implicit destructor after the body is a no-op: the
+    // UserInterface door zeroes every array it frees.
+    ~DialogLoopT() override { ReleaseFields(); }
     void Startup() override;                                       // [1] 0x1800db2f0
     void Shutdown() override;                                      // [2] 0x1800db2c0
     bool Update(const System::Time& time) override;                // [3] 0x1800db270
@@ -523,12 +482,6 @@ protected:
     explicit DialogLoopT(const System::String& filename) : _dialogFilename(filename) {
         InitFields();
     }
-    // `??1DialogLoopT@Engine@@UEAA@XZ` 0x1800db340: restamp, ~UserInterface
-    // (the body, shared with the door), then ~String on +0x28 and ~UpdateLoop
-    // — which the compiler's member/base chain runs in exactly that order.
-    // `_ui`'s own implicit destructor after the body is a no-op: the
-    // UserInterface door zeroes every array it frees.
-    ~DialogLoopT() { ReleaseFields(); }
 
 private:
     void InitFields();      // loops.cpp
@@ -547,21 +500,11 @@ public:
 // Inherits `LoaderLoop::OnVideoError` (slot 8, 0x1800dc360), B7-1.3.
 class DialogLoaderLoopT : public LoaderLoop {
 public:
-    // [0] 0x18004d670 -- the VECTOR deleting destructor (element 0x188), both
-    // arms as the retired RT_DELDTOR row ran them; see UpdateLoop's.
-    UpdateLoop* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<DialogLoaderLoopT*>(self + static_cast<int64_t>(i) * 0x188)->~DialogLoaderLoopT();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<UpdateLoop*>(self - 8);
-        }
-        this->~DialogLoaderLoopT();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // [0] 0x18004d670 -- retail's VECTOR deleting destructor (element 0x188).
+    // `??1DialogLoaderLoopT@Engine@@UEAA@XZ` 0x1800db060: restamp,
+    // ~UserInterface (shared body), ~String, ~LoaderLoop — the compiler's
+    // chain runs the last two in that order.
+    ~DialogLoaderLoopT() override { ReleaseFields(); }
     void Startup() override;                                       // [1] 0x1800db000
     void Shutdown() override;                                      // [2] 0x1800dafc0
     bool Update(const System::Time& time) override;                // [3] 0x1800daf20
@@ -584,10 +527,6 @@ protected:
         : LoaderLoop(nextLoop, delay), _dialogFilename(filename) {
         InitFields();
     }
-    // `??1DialogLoaderLoopT@Engine@@UEAA@XZ` 0x1800db060: restamp,
-    // ~UserInterface (shared body), ~String, ~LoaderLoop — the compiler's
-    // chain runs the last two in that order.
-    ~DialogLoaderLoopT() { ReleaseFields(); }
 
 private:
     void InitFields();      // loops.cpp

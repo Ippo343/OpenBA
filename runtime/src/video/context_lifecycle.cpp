@@ -494,9 +494,9 @@ extern "C" void RtVideo_Context_Dtor(Context* self) {
         Rt_GuardedObjectFree(p);
     }
     if (void* p = self->_defaultColorImage)
-        reinterpret_cast<Video::ImageBuffer*>(p)->DeletingDtor(1);     // B.3.5 bridge
+        delete reinterpret_cast<Video::ImageBuffer*>(p);     // B.3.5 bridge
     if (void* p = self->_defaultDepthImage)
-        reinterpret_cast<Video::ImageBuffer*>(p)->DeletingDtor(1);     // B.3.5 bridge
+        delete reinterpret_cast<Video::ImageBuffer*>(p);     // B.3.5 bridge
     if (void* p = self->_defaultRenderBuffer) {
         reinterpret_cast<Video::RenderBuffer*>(p)                      // B.3.5 bridge
             ->Video::RenderBuffer::PlatformDestruct();

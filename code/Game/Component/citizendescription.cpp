@@ -134,13 +134,6 @@ CitizenDescription::~CitizenDescription() {
     }
 }
 
-// [0] 0x1400301f0: ~CitizenDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* CitizenDescription::DeletingDtor(unsigned flags) {
-    this->~CitizenDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140114900: stream order as retail.
 bool CitizenDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
@@ -224,15 +217,15 @@ bool CitizenDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x1400301c0: DeletingDtor(0) (destroy in place), then the ctor again on
+// [6] 0x1400301c0: `this->~T()` (retail: slot 0, flags 0 -- destroy in place), then the ctor again on
 // `this`. The hand-built table's Cleanup trampoline already did this.
 Object::External* CitizenDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~CitizenDescription();
     return new (static_cast<void*>(this)) CitizenDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void CitizenDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void CitizenDescription::Destruct() { this->~CitizenDescription(); }
 
 // [8] 0x1400301e0: CitizenComponent's type id through the hidden return slot.
 Object::Type* CitizenDescription::GetComponentType(Object::Type* ret) const {

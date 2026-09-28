@@ -53,13 +53,6 @@ extern "C" uintptr_t* FishingComponent_CreateWork(void*, uintptr_t*);   // resou
 FishingComponent::FishingComponent()
     : ResourceProduceComponent(), fishingFlag(0), _pad51{}, fishingRate(0.0f) {}
 
-// [0] 0x140034560: restamps + ~Internal (the compiler chain), MemFree on &1.
-Object::Base* FishingComponent::DeletingDtor(unsigned flags) {
-    this->~FishingComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140034350: MemAlloc(0x58, 8), then the ctor.
 void* FishingComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FishingComponent), 8);

@@ -27,7 +27,7 @@ class AmbientEmitterDescription final : public Description {
 public:
     AmbientEmitterDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140001660
+    ~AmbientEmitterDescription() override;                                 // [0] 0x140001660
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x140043250
     bool              Serialize(void* stream) override;                    // [5] 0x1400431b0
     Object::External* Reconstruct() override;                              // [6] 0x1400015e0
@@ -41,9 +41,6 @@ public:
     void* _emitters;                            // +0x28 ExternalPtr array data
     int32_t _emitterCount;                      // +0x30
     int32_t _emitterCap;                        // +0x34
-
-protected:
-    ~AmbientEmitterDescription();
 };
 
 static_assert(sizeof(AmbientEmitterDescription) == 0x38, "AmbientEmitterDescription is 0x38 (create 0x140001510 MemAlloc(0x38))");

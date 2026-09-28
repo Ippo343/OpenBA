@@ -27,13 +27,6 @@ UIComponent::UIComponent() : uiData0(nullptr), uiData1(nullptr) {
 // behaviour is kept here; porting it is its own titled commit.
 void UIComponent::Startup() {}
 
-// [0] 0x140039760: ~UIComponent (0x14012dda0; its array free is a PORT GAP, see the header), MemFree on &1.
-Object::Base* UIComponent::DeletingDtor(unsigned flags) {
-    this->~UIComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140039550: MemAlloc(0x38, 8), then the ctor.
 void* UIComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(UIComponent), 8);

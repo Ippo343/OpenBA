@@ -42,7 +42,8 @@ public:
 
     ResidenceComponent();                                 // 0x14012a2a0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140037610
+    // 0x14012a230
+    ~ResidenceComponent() override;                               // [0]  0x140037610
     void          Persist(void* stream) override;                 // [3]  0x14012a170
     void          Startup() override;                             // [4]  0x14012a120
     void          OnRemove() override;                            // [7]  0x14012a0e0
@@ -55,9 +56,6 @@ public:
     void*           residentSlots; // +0x50 resident slot array (0x10 stride)
     int32_t         residentSlotCount; // +0x58 slot count (desc capacity +0x20)
     uint8_t         _pad5c[4];     // +0x5c
-
-protected:
-    ~ResidenceComponent();                                // 0x14012a230
 };
 
 static_assert(sizeof(ResidenceComponent) == 0x60, "ResidenceComponent is 0x60 (create 0x140037440)");

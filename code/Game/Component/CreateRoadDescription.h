@@ -27,7 +27,7 @@ class CreateRoadDescription final : public Description {
 public:
     CreateRoadDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140032e50
+    ~CreateRoadDescription() override = default;                           // [0] 0x140032e50
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x140119ce0
     bool              Serialize(void* stream) override;                    // [5] 0x140119c80
     Object::External* Reconstruct() override;                              // [6] 0x140032df0
@@ -39,9 +39,6 @@ public:
     bool _b20;                                  // +0x20
     uint8_t _pad21[7];                          // +0x21 never written by the ctor
     void* _created;                             // +0x28 ExternalPtr (created-resource description)
-
-protected:
-    ~CreateRoadDescription() = default;
 };
 
 static_assert(sizeof(CreateRoadDescription) == 0x30, "CreateRoadDescription is 0x30 (create 0x140032d30 MemAlloc(0x30))");

@@ -30,13 +30,6 @@ CemeteryDescription::CemeteryDescription()
     : Description(),
       _ref20(nullptr) {}
 
-// [0] 0x1400041c0: ~CemeteryDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* CemeteryDescription::DeletingDtor(unsigned flags) {
-    this->~CemeteryDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140047800: stream order as retail.
 bool CemeteryDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
@@ -45,15 +38,15 @@ bool CemeteryDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140004160: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140004160: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* CemeteryDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~CemeteryDescription();
     return new (static_cast<void*>(this)) CemeteryDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void CemeteryDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void CemeteryDescription::Destruct() { this->~CemeteryDescription(); }
 
 // [8] 0x1400041b0: CemeteryComponent's type id through the hidden return slot.
 Object::Type* CemeteryDescription::GetComponentType(Object::Type* ret) const {

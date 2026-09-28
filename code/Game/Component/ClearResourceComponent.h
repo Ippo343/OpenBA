@@ -40,16 +40,14 @@ public:
 
     ClearResourceComponent();                             // 0x1401186a0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140031770
+    // 0x140118640
+    ~ClearResourceComponent() override;                           // [0]  0x140031770
     void          Persist(void* stream) override;                 // [3]  0x1401185e0
     int         GetDefaultState() const override { return 2; }  // [16] 0x1400026c0
     Controller* GetController() override { return &_controller; }  // [17] 0x140004080
 
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     StateController _controller;   // +0x28 the embedded controller (D6)
-
-protected:
-    ~ClearResourceComponent();                            // 0x140118640
 };
 
 static_assert(sizeof(ClearResourceComponent) == 0x48, "ClearResourceComponent is 0x48 (create 0x1400315a0)");

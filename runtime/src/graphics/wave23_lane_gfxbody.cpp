@@ -306,9 +306,9 @@ Graphics::FrameCopyImageBuffer::~FrameCopyImageBuffer() {
         RenderBufferOperatorDelete(p->_destTarget);
     }
     if (_backBufferImage != nullptr) {               // +0x70
-        // EDX = 1 -> the deleting destructor frees as well as destructs.
-        // By name on the real member (B3X W0): `Video::ImageBuffer*`.
-        _backBufferImage->DeletingDtor(1);
+        // Retail: slot 0 with EDX = 1 -> the deleting destructor frees as well
+        // as destructs. `Video::ImageBuffer*`: `delete` is that call.
+        delete _backBufferImage;
     }
 }
 

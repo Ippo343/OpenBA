@@ -50,7 +50,8 @@ public:
               uint64_t roadDescExtra, uint32_t roadTypeExisting,
               uint32_t roadState, uint32_t terrainType);                // 0x1400e4b50
 
-    Object::Base* DeletingDtor(unsigned flags) override;                // [0]  0x1400295b0
+    // retail's dtor only re-stamps the tables
+    ~BuildRoad() override = default;                                    // [0]  0x1400295b0
     void  Persist(void* stream) override;                               // [3]  0x1400e4980
     int   Execute(void* entityIBP, void* context) override;  // [4]  0x1400e4190
     int   OnComplete(void* citizen, void* arg2, int param4) override;   // [6]  0x1400e4150
@@ -69,9 +70,6 @@ public:
     int32_t  field_64;           // +0x64: field (serialized, version >= 1)
     int32_t  field_68;           // +0x68: material count (2 default if version < 1)
     uint8_t  _pad6c[4];          // +0x6C: padding
-
-protected:
-    ~BuildRoad() = default;      // retail's dtor only re-stamps the tables
 };
 
 static_assert(sizeof(BuildRoad) == 0x70, "BuildRoad is 0x70 (create 0x140029560 MemAlloc(0x70))");

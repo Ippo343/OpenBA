@@ -768,13 +768,6 @@ void StatusIconComponent::Tick(void* /*time*/) {
 // the inert stub is kept here.
 void StatusIconComponent::Slot11() {}
 
-// [0] 0x140038ac0: ~StatusIconComponent (0x14012c070: ~Geometry on the billboard member, then ~Internal), MemFree on &1.
-Object::Base* StatusIconComponent::DeletingDtor(unsigned flags) {
-    this->~StatusIconComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x1400388c0: MemAlloc(0x108, 8), then the ctor.
 void* StatusIconComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(StatusIconComponent), 8);

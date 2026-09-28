@@ -62,22 +62,15 @@ Tutorial::~Tutorial() {
     reinterpret_cast<Collection::Array<void*>*>(&steps)->~Array();   // B.3.2 bridge
 }
 
-// [0] 0x140026f50: ~Tutorial, MemFree on &1.
-Object::Base* Tutorial::DeletingDtor(unsigned flags) {
-    this->~Tutorial();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // Tutorial::Reconstruct [6] 0x140026f00 / Destruct [7] 0x140001640
 // ============================================================
-// DeletingDtor(0) (destroy in place), then the ctor on `this`.
+// `this->~T()` (retail: slot 0, flags 0 -- destroy in place), then the ctor on `this`.
 Object::External* Tutorial::Reconstruct() {
-    DeletingDtor(0);
+    this->~Tutorial();
     return ::new (static_cast<void*>(this)) Tutorial();
 }
-void Tutorial::Destruct() { DeletingDtor(0); }
+void Tutorial::Destruct() { this->~Tutorial(); }
 
 // ============================================================
 // Tutorial::Construct (vtable +0x40, 0x140026eb0)

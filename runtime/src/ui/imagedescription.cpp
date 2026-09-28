@@ -82,11 +82,11 @@ Object::External* ImageDescription::Construct() {
 // 0x180035f60: slot 0 with flag 0 through the object's own table, then the
 // inlined ctor. No null test.
 Object::External* ImageDescription::Reconstruct() {
-    DeletingDtor(0);                                           // 180035f77
+    this->~ImageDescription();                                           // 180035f77
     return ::new (this) ImageDescription();
 }
 // 0x1800360c0: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void ImageDescription::Destruct() { DeletingDtor(0); }
+void ImageDescription::Destruct() { this->~ImageDescription(); }
 
 // ============================================================================
 // ?Serialize@ImageDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1801184b0
@@ -117,7 +117,7 @@ bool ImageDescription::Serialize(void* streamv) {
     rw->SerializeInt(_width, nullptr);
     rw->SerializeInt(_height, nullptr);
 
-    if (rw != nullptr) rw->DeletingDtor(1);                    // 18011854b
+    if (rw != nullptr) delete rw;                    // 18011854b
     return true;
 }
 

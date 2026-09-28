@@ -51,7 +51,8 @@ public:
     ClearArea(void* pEntityIBP, uint64_t descRef, uint8_t clearTrees,
               uint8_t clearGround, uint8_t clearBuildings);
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x140029870
+    // 0x1400e6810: frees both BSTs
+    ~ClearArea() override;                                          // [0]  0x140029870
     void  Persist(void* stream) override;                           // [3]  0x1400e6740
     int   Execute(void* actionStack, void* time) override;  // [4]  0x1400e5ee0
     int   OnComplete(void* citizen, void* treeEntry, int cellIndex) override;  // [6]  0x1400e5e30
@@ -73,9 +74,6 @@ public:
     uint8_t  field_71;           // +0x71: bool — clear ground (version >= 1)
     uint8_t  field_72;           // +0x72: bool — clear buildings (version >= 1)
     uint8_t  _pad73[5];          // +0x73: padding
-
-protected:
-    ~ClearArea();                                                  // 0x1400e6810: frees both BSTs
 };
 
 static_assert(sizeof(ClearArea) == 0x78, "ClearArea is 0x78 (retail create MemAlloc)");

@@ -31,7 +31,8 @@ class MapComponent final : public Component {
 public:
     MapComponent();                                               // 0x1401244d0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140035850
+    // 0x140124490
+    ~MapComponent() override = default;                           // [0]  0x140035850
     void Persist(void* stream) override;                          // [3]  0x1401243e0
     void OnAdded() override;                                      // [6]  0x140124370
     void OnRemove() override;                                     // [7]  0x1401242f0
@@ -44,9 +45,6 @@ public:
     uint16_t tileY1;       // +0x2E footprint rect h (retail ctor 0xFFFF)
     int32_t  extraField;   // +0x30 serialized int (rotation)
     uint8_t  _pad34[4];    // +0x34
-
-protected:
-    ~MapComponent() = default;                                    // 0x140124490
 };
 
 static_assert(sizeof(MapComponent) == 0x38, "MapComponent is 0x38 (create 0x140035700)");

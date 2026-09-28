@@ -88,11 +88,11 @@ Object::External* CharacterSet::Construct() {
 // dispatched VIRTUALLY on purpose: a subclass's deleting destructor is what
 // has to run.
 Object::External* CharacterSet::Reconstruct() {
-    DeletingDtor(0);                                         // 180037667
+    this->~CharacterSet();                                         // 180037667
     return ::new (this) CharacterSet();                      // 18003766e..1800376a6
 }
 // [7] 0x180037710: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void CharacterSet::Destruct() { DeletingDtor(0); }
+void CharacterSet::Destruct() { this->~CharacterSet(); }
 
 // ?CreateNewObject@CharacterSet@UI@@SAPEAVBase@Object@@XZ  0x180037540
 // The FACTUI1 row this replaces: the locked MemAlloc of 0x28 bytes, align 8;
@@ -134,7 +134,7 @@ bool CharacterSet::Serialize(void* streamv) {
     RtAddr<StrSerFn>(0x1800c9930ull)(&_string20, &ser);      // 1800cb7fb
 
     if (rw != nullptr) {                                     // 1800cb806
-        rw->DeletingDtor(1);                                 // 1800cb813
+        delete rw;                                 // 1800cb813
     }
     return true;                                             // 1800cb815 MOV AL,1
 }

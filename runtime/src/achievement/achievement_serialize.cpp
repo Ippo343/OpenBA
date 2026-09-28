@@ -131,7 +131,7 @@ IO::ReaderWriter* AsRw(ReaderWriter* rw) {
 // `if (rw) rw->vtable[0](rw, 1)` — the scalar DELETING destructor.
 void DestroyCodec(ReaderWriter* rw) {
     if (!rw) return;
-    AsRw(rw)->DeletingDtor(1);
+    delete AsRw(rw);
 }
 
 // ---- the unexported internals, by address ---------------------------------

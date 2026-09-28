@@ -47,7 +47,11 @@ public:
     // `??0Internal` door + stamp in FireWork_CtorFull_e9bd0.
     FireWork(void* pEntityIBP, uint32_t capacity);
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002a230
+    // PORT GAP (retail 0x1400e9ac0) — B38 D9: retail's dtor (reached from slot 0
+    // 0x14002a230) is its own body; the tree's slot 0 was Work_GenericScalarDtor
+    // (stamp Work, ~Internal), which is what this empty dtor + the compiler chain
+    // still does. Whether retail frees the +0x50 citizen BST here is not read.
+    ~FireWork() override = default;                                 // [0]  0x14002a230
     void  Persist(void* stream) override;                           // [3]  0x1400e9a50
     int   Execute(void* citizenIBP, void* time) override;  // [4]  0x1400e9620
     int   OnComplete(void* citizenIBP, void* arg2, int arg3) override;    // [6]  0x1400e9600
@@ -62,13 +66,6 @@ public:
     void*    _field50;           // +0x50: zeroed
     uint32_t _field58;           // +0x58: zeroed
     uint8_t  _pad5C[4];          // +0x5C: padding
-
-protected:
-    // PORT GAP (retail 0x1400e9ac0) — B38 D9: retail's dtor (reached from slot 0
-    // 0x14002a230) is its own body; the tree's slot 0 was Work_GenericScalarDtor
-    // (stamp Work, ~Internal), which is what this empty dtor + the compiler chain
-    // still does. Whether retail frees the +0x50 citizen BST here is not read.
-    ~FireWork() = default;
 };
 
 static_assert(sizeof(FireWork) == 0x60, "FireWork is 0x60 (retail create MemAlloc)");

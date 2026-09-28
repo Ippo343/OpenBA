@@ -18,13 +18,6 @@
 // ToolSetting
 // ============================================================================
 
-// [0] 0x14002e960: stamp 0x140161ee8, `~Internal`, MemFree on &1.
-Object::Base* ToolSetting::DeletingDtor(unsigned flags) {
-    this->~ToolSetting();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [1] TypeName / [2] Type, the record and retail's abstract factory (create =
 // the logging stub, in-place = null): ENDGAME B.3.9 RF.
 DEFINE_EXE_ABSTRACT_TYPE(ToolSetting, "Object::Internal")
@@ -32,13 +25,6 @@ DEFINE_EXE_ABSTRACT_TYPE(ToolSetting, "Object::Internal")
 // ============================================================================
 // RotationSetting
 // ============================================================================
-
-// [0] 0x140026dd0: the dtor 0x1400dea40 (restamps only), MemFree on &1.
-Object::Base* RotationSetting::DeletingDtor(unsigned flags) {
-    this->~RotationSetting();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 
 // create 0x140026d20: MemAlloc(0x18, 8), then the (inlined) ctor.
 void* RotationSetting::CreateNewObject() {

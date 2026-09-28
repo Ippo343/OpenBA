@@ -27,7 +27,7 @@ class HighlightDescription final : public Description {
 public:
     HighlightDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140006fe0
+    ~HighlightDescription() override;                                      // [0] 0x140006fe0
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x14004cad0
     bool              Serialize(void* stream) override;                    // [5] 0x14004c9d0
     Object::External* Reconstruct() override;                              // [6] 0x140006f70
@@ -41,9 +41,6 @@ public:
     int32_t _groupCap;                          // +0x2c
     void* _ref0;                                // +0x30 ExternalPtr
     void* _ref1;                                // +0x38 ExternalPtr
-
-protected:
-    ~HighlightDescription();
 };
 
 static_assert(sizeof(HighlightDescription) == 0x40, "HighlightDescription is 0x40 (create 0x140006ea0 MemAlloc(0x40))");

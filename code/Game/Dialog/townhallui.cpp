@@ -2392,14 +2392,6 @@ TownHallUI::~TownHallUI() {
 
 
 
-// [0] 0x1400146b0: ~TownHallUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* TownHallUI::DeletingDtor(unsigned flags) {
-    this->~TownHallUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140014660: MemAlloc(0x1e8, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* TownHallUI::CreateNewObject() {

@@ -246,23 +246,17 @@ MusicList::~MusicList() {
     reinterpret_cast<MusicTrackArray*>(&_entries)->~Array();   // B.3.2 bridge: entries header
 }
 
-Object::Base* MusicList::DeletingDtor(unsigned flags) {
-    this->~MusicList();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // MusicList::Reconstruct (vtable +0x30, exe 0x14001c310) — dtor(0) then re-init
 // ============================================================
 Object::External* MusicList::Reconstruct() {
-    DeletingDtor(0);
+    this->~MusicList();
     return ::new (static_cast<void*>(this)) MusicList();
 }
 
 // [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
 // slot 0 with flags 0 (destroy, no free).
-void MusicList::Destruct() { DeletingDtor(0); }
+void MusicList::Destruct() { this->~MusicList(); }
 
 // ============================================================
 // MusicList::Construct (vtable +0x40, exe 0x14001c2c0) — in-place init

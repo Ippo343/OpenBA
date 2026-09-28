@@ -748,14 +748,6 @@ TornadoComponent::TornadoComponent()
     OrFlagsInCtor(0x84);
 }
 
-// [0] 0x14000d640. PORT GAP (retail frees the +0x40 waypoint array first) —
-// the tree's Inert_ScalarDtor never did; kept (TornadoComponent.h).
-Object::Base* TornadoComponent::DeletingDtor(unsigned flags) {
-    this->~TornadoComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // TornadoComponent::Serialize — vtable slot 3 (+0x18), 0x140058b80
 // ============================================================

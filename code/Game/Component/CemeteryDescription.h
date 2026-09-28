@@ -27,7 +27,7 @@ class CemeteryDescription final : public Description {
 public:
     CemeteryDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x1400041c0
+    ~CemeteryDescription() override = default;                             // [0] 0x1400041c0
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x140047850
     bool              Serialize(void* stream) override;                    // [5] 0x140047800
     Object::External* Reconstruct() override;                              // [6] 0x140004160
@@ -37,9 +37,6 @@ public:
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     void* _ref20;                               // +0x20 ExternalPtr (a raw pointer)
-
-protected:
-    ~CemeteryDescription() = default;
 };
 
 static_assert(sizeof(CemeteryDescription) == 0x28, "CemeteryDescription is 0x28 (create 0x1400040b0 MemAlloc(0x28))");

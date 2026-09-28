@@ -27,11 +27,8 @@ public:
     OptionInputBindDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                           Object::InternalPtr<UI::DialogInstance> parent);  // 0x140071d30
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140012f80
+    ~OptionInputBindDialog() override = default;                   // [0] 0x140012f80
     void OnUpdate(const System::Time& time) override;              // [7] 0x140071c80
-
-protected:
-    ~OptionInputBindDialog() = default;
 
 public:
     int32_t keyIndex;                                              // +0xc0 captured key / button

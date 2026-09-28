@@ -203,11 +203,11 @@ Object::External* LayoutDescription::Construct() {
 }
 // 0x180042fc0 — slot 0 (VIRTUAL) with flag 0, then the inlined ctor.
 Object::External* LayoutDescription::Reconstruct() {
-    DeletingDtor(0);                                           // 180042fd7
+    this->~LayoutDescription();                                           // 180042fd7
     return ::new (this) LayoutDescription();                   // .. 180043052
 }
 // 0x180043100
-void LayoutDescription::Destruct() { DeletingDtor(0); }
+void LayoutDescription::Destruct() { this->~LayoutDescription(); }
 
 // ============================================================================
 // ?Serialize@LayoutDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800d3940
@@ -238,7 +238,7 @@ bool LayoutDescription::Serialize(void* streamv) {
     RtAddr<EntriesSerFn>(0x180043f50ull)(&ser, n, _entries._data);   // 1800d39d1
 
     if (rw != nullptr) {                                       // 1800d39df
-        rw->DeletingDtor(1);
+        delete rw;
     }
     return true;
 }

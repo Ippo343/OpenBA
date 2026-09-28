@@ -43,7 +43,8 @@ public:
 
     MultiObjectComponent();                                              // 0x140125a70
 
-    Object::Base* DeletingDtor(unsigned flags) override;                // [0]  0x1400360c0
+    // 0x140125a00
+    ~MultiObjectComponent() override;                                   // [0]  0x1400360c0
     void          Persist(void* stream) override;                       // [3]  0x140125880
     // PORT GAP (retail 0x1401257c0) — B38 D9: the removal hook (mark every child for
     // removal) is ported as MultiObjectComponent_OnCreate but was never wired in the
@@ -59,9 +60,6 @@ public:
     void*    field50;              // +0x50 its count (dword) / capacity
     uint32_t multiCount;           // +0x58 1 in retail's ctor
     uint8_t  _pad5C[4];            // +0x5c
-
-protected:
-    ~MultiObjectComponent();                                             // 0x140125a00
 };
 
 static_assert(sizeof(MultiObjectComponent) == 0x60, "MultiObjectComponent is 0x60 (create 0x140035ef0)");

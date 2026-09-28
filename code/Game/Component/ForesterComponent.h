@@ -28,7 +28,8 @@ class ForesterComponent final : public ResourceProduceComponent {
 public:
     ForesterComponent();                                                 // 0x14011fa40
 
-    Object::Base* DeletingDtor(unsigned flags) override;                // [0]  0x140034a70
+    // 0x140034a70: no body
+    ~ForesterComponent() override = default;                            // [0]  0x140034a70
     void        Persist(void* stream) override;                         // [3]  0x14011f960
     uint32_t    CommandMask(int command) override;                      // [13] 0x14011f920
     void        Command(int command) override;                          // [14] 0x14011f890
@@ -37,9 +38,6 @@ public:
     // +0x50 "plant trees" (command 1), +0x51 "cut trees" (command 2), each a bool.
     uint16_t foresterFlags;     // +0x50: 0x101 from the ctor
     uint8_t  _pad52[6];         // +0x52
-
-protected:
-    ~ForesterComponent() = default;                                      // 0x140034a70: no body
 };
 
 static_assert(sizeof(ForesterComponent) == 0x58, "ForesterComponent is 0x58 (create 0x140034870)");

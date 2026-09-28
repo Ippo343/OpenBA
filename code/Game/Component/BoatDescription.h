@@ -26,16 +26,13 @@ class BoatDescription final : public Description {
 public:
     BoatDescription() = default;
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140003910
+    ~BoatDescription() override = default;                                 // [0] 0x140003910
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x140046a00
     bool              Serialize(void* stream) override;                    // [5] 0x1400469c0
     Object::External* Reconstruct() override;                              // [6] 0x140003810
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140003860
     virtual Object::External* Construct();                                 // [9] 0x1400037c0
-
-protected:
-    ~BoatDescription() = default;
 };
 
 static_assert(sizeof(BoatDescription) == 0x20, "BoatDescription is 0x20 (create 0x140003760 MemAlloc(0x20))");

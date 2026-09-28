@@ -1048,7 +1048,7 @@ inline void UiMemFree(void* p) {
 // `Object::Base::DeletingDtor(unsigned)`, slot 0 of the real `UI::DialogInstance`
 // — a VIRTUAL call, dispatched through the dialog's own (minted or exe) table.
 inline void UiDeleteDialog(void* dlg) {
-    reinterpret_cast<UI::DialogInstance*>(dlg)->DeletingDtor(1);   // B.3.6 bridge
+    delete reinterpret_cast<UI::DialogInstance*>(dlg);   // B.3.6 bridge
 }
 
 // ---- the NEGATIVE CONTROL knob ---------------------------------------------
@@ -1531,17 +1531,17 @@ void UI::UserInterface::SaveAllSettings() {
                 reinterpret_cast<UI::DialogController*>(ctl)->OnSerializeSettings(st); // B.3.6 bridge
 
                 if (rw2) {
-                    reinterpret_cast<IO::ReaderWriter*>(rw2)->DeletingDtor(1); // B.3.x bridge
+                    delete reinterpret_cast<IO::ReaderWriter*>(rw2); // B.3.x bridge
                 }
             }
 
             // ---- 7. teardown ----------------------------------------------
             if (rw) {
-                reinterpret_cast<IO::ReaderWriter*>(rw)->DeletingDtor(1);      // B.3.x bridge
+                delete reinterpret_cast<IO::ReaderWriter*>(rw);      // B.3.x bridge
             }
             // ~MemoryStream (dead buffer free: never owns) then ~Stream (the
             // encoding): the class's destructor chain, no free of the storage.
-            st->IO::MemoryStream::DeletingDtor(0);
+            st->IO::MemoryStream::~MemoryStream();
         }
         node = *reinterpret_cast<uint8_t**>(node + 0x10);
     } while (node);

@@ -29,7 +29,9 @@ class AmbientEmitterComponent final : public Component {
 public:
     AmbientEmitterComponent();                                    // 0x1400430c0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x1400016d0
+    // PORT GAP (retail 0x1400016d0) — B38 D2: retail frees the emitter array at
+    // +0x38; the tree never did (Inert_ScalarDtor). Kept as the tree's.
+    ~AmbientEmitterComponent() override = default;                // [0] 0x1400016d0
     void Persist(void* stream) override;                          // [3] 0x140042f30
     void OnAdded() override;                                      // [6] 0x140042ba0
     void OnRemove() override;                                     // [7] 0x140042b90 PORT GAP
@@ -40,11 +42,6 @@ public:
     uint8_t  _pad34[4];    // +0x34
     void*    field38;      // +0x38 emitter array data (0x10-byte entries)
     void*    field40;      // +0x40 emitter array count / capacity
-
-protected:
-    // PORT GAP (retail 0x1400016d0) — B38 D2: retail frees the emitter array at
-    // +0x38; the tree never did (Inert_ScalarDtor). Kept as the tree's.
-    ~AmbientEmitterComponent() = default;
 };
 
 static_assert(sizeof(AmbientEmitterComponent) == 0x48, "AmbientEmitterComponent is 0x48 (create 0x1400014b0)");

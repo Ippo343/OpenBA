@@ -31,7 +31,9 @@ class SpawnComponent final : public Component {
 public:
     SpawnComponent();                                             // 0x140056030
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x14000c350
+    // PORT GAP (retail 0x14000c350) — B38 D2: retail frees the timer array at
+    // +0x28; the tree never did (Inert_ScalarDtor).
+    ~SpawnComponent() override = default;                         // [0] 0x14000c350
     void Persist(void* stream) override;                          // [3] 0x140055ee0
     void Startup() override;                                      // [4] 0x140055e90
     void Update(void* time) override;                             // [9] 0x140055ad0
@@ -39,11 +41,6 @@ public:
     // PUBLIC while the ported bodies read them (B38 decision 1).
     void*    field28;      // +0x28 per-entry timer array data (freed by the retail dtor)
     void*    field30;      // +0x30 its count / capacity
-
-protected:
-    // PORT GAP (retail 0x14000c350) — B38 D2: retail frees the timer array at
-    // +0x28; the tree never did (Inert_ScalarDtor).
-    ~SpawnComponent() = default;
 };
 
 static_assert(sizeof(SpawnComponent) == 0x38, "SpawnComponent is 0x38 (create 0x14000c170)");

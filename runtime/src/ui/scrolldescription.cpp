@@ -116,11 +116,11 @@ Object::External* ScrollDescription::Construct() {
 }
 // 0x18003a2a0 — slot 0 (VIRTUAL) with flag 0, then the ctor.
 Object::External* ScrollDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~ScrollDescription();
     return ::new (this) ScrollDescription();
 }
 // 0x18003a2d0
-void ScrollDescription::Destruct() { DeletingDtor(0); }
+void ScrollDescription::Destruct() { this->~ScrollDescription(); }
 
 // ?Serialize@ScrollDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x18011a940
 bool ScrollDescription::Serialize(void* streamv) {
@@ -149,7 +149,7 @@ bool ScrollDescription::Serialize(void* streamv) {
     rw->SerializeUInt(_unknownC4, nullptr);
 
     if (rw != nullptr) {                                       // 18011aa96
-        rw->DeletingDtor(1);
+        delete rw;
     }
     return true;
 }

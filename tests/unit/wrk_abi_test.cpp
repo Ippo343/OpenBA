@@ -11,7 +11,7 @@
 //   1 + vtable byte offset; adjustment must be 0 — there is no multiple
 //   inheritance in the exe). Work's 13 slots in retail order; every leaf
 //   override lands on retail's index.
-// PART C — SHAPE: abstract bases, concrete leaves, no virtual destructor.
+// PART C — SHAPE: abstract bases, concrete leaves, a virtual destructor (B3X W1).
 // PART D — the one hidden-pointer member (slot 10 GetTarget, retail RCX = this,
 //   RDX = the return buffer): a raw retail-order call through a compiler
 //   vtable of the same declaration shape delivers (this, retbuf) in that order.
@@ -105,21 +105,21 @@ UNIT_TEST(wrk_base_class_shape_rules) {
     CHECK(std::is_polymorphic<Work>::value);
     CHECK(std::is_abstract<Work>::value);             // 4, 6-11 _purecall
     CHECK(std::is_abstract<AutoPickupWork>::value);   // inherits 4, 6, 7, 9-11 pure
-    CHECK(!std::has_virtual_destructor<Work>::value);
-    CHECK(!std::has_virtual_destructor<AutoPickupWork>::value);
+    CHECK(std::has_virtual_destructor<Work>::value);
+    CHECK(std::has_virtual_destructor<AutoPickupWork>::value);
     CHECK((std::is_base_of<Object::Internal, Work>::value));
     CHECK((std::is_base_of<Work, AutoPickupWork>::value));
 }
 
 // ===========================================================================
 // PART E — the leaves: size against retail's create MemAlloc (B38_RULES §1.3),
-// concrete, no virtual destructor, and every override on retail's slot index.
+// concrete, a virtual destructor (B3X W1), and every override on retail's slot index.
 // ===========================================================================
 #define WRK_LEAF_SHAPE(Class, Parent, Size)                                     \
     CHECK_EQ(sizeof(Class), (size_t)(Size));                                    \
     CHECK_EQ(alignof(Class), (size_t)8);                                        \
     CHECK(!std::is_abstract<Class>::value);                                     \
-    CHECK(!std::has_virtual_destructor<Class>::value);                          \
+    CHECK(std::has_virtual_destructor<Class>::value);                          \
     CHECK((std::is_base_of<Parent, Class>::value));                             \
     CHECK_DTOR_SLOT(Class);                                                     \
     CHECK_SLOT(Class, TypeName,    0x08/8);                                     \

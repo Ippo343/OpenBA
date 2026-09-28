@@ -139,12 +139,6 @@ static const bool s_clearAreaStateTableBuilt = (ClearAreaCtrl_PopulateTable(), t
 // ticks the node, so the component needs no self-tick bit (0x80).
 ClearAreaComponent::ClearAreaComponent() : _controller(this), clearState(0), _pad4C{} {}
 
-// [0] 0x1400310c0: ~ClearAreaComponent (0x140117f40), MemFree on &1.
-Object::Base* ClearAreaComponent::DeletingDtor(unsigned flags) {
-    this->~ClearAreaComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // 0x140117f40: restamp + ~Internal, no own work.
 ClearAreaComponent::~ClearAreaComponent() = default;
 

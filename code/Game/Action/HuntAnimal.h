@@ -22,7 +22,7 @@ class HuntAnimal final : public Action {
 public:
     HuntAnimal();                                                   // create 0x140022700
     HuntAnimal(uint64_t* herd, uint64_t* animal);   // 0x1400c8400
-    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x140022770
+    ~HuntAnimal() override = default;                          // [0] 0x140022770
     void Persist(void* stream) override;                       // [3] 0x1400c8260
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c8250
     int  Execute(void* actionStack, void* time) override;      // [5] 0x1400c8240
@@ -35,9 +35,6 @@ public:
     void*     _field30;          // +0x30 
     uint8_t   _field38;          // +0x38 hunt started flag
     uint8_t   _pad39[7];         // +0x39 padding
-
-protected:
-    ~HuntAnimal() = default;
 };
 
 static_assert(sizeof(HuntAnimal) == 0x40, "HuntAnimal is 0x40 (create 0x140022700 MemAlloc)");

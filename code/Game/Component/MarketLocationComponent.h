@@ -40,16 +40,14 @@ public:
 
     MarketLocationComponent();                                           // 0x14004f060
 
-    Object::Base* DeletingDtor(unsigned flags) override;                // [0]  0x140008900
+    // 0x140008900: no body
+    ~MarketLocationComponent() override = default;                      // [0]  0x140008900
     void          Persist(void* stream) override;                       // [3]  0x14004efa0
     void          OnRemove() override;                                  // [7]  0x14004ef60
     int         GetDefaultState() const override { return 2; }          // [16] 0x1400026c0
     Controller* GetController() override { return &_controller; }       // [17] 0x140004080
 
     StateController _controller;   // +0x28 the embedded controller (D6)
-
-protected:
-    ~MarketLocationComponent() = default;                                // 0x140008900: no body
 };
 
 static_assert(sizeof(MarketLocationComponent) == 0x48, "MarketLocationComponent is 0x48 (create 0x1400086c0)");

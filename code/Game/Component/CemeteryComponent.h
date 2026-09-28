@@ -42,7 +42,8 @@ public:
 
     CemeteryComponent();                                  // 0x1400476f0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140004220
+    // 0x140047680
+    ~CemeteryComponent() override;                                // [0]  0x140004220
     void          Persist(void* stream) override;                 // [3]  0x1400475c0
     void          Startup() override {}                           // [4]  0x1400475b0 `RET 0` (own)
     void          OnAdded() override;                             // [6]  0x140047200
@@ -57,9 +58,6 @@ public:
     int32_t*        plots;         // +0x48 cell indices
     int32_t         plotCount;     // +0x50
     int32_t         plotCapacity;  // +0x54
-
-protected:
-    ~CemeteryComponent();                                 // 0x140047680
 };
 
 static_assert(sizeof(CemeteryComponent) == 0x58, "CemeteryComponent is 0x58 (create 0x140004040)");

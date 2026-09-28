@@ -398,14 +398,6 @@ SpawnComponent::SpawnComponent() : field28(nullptr), field30(nullptr) {
     OrFlagsInCtor(0x88);
 }
 
-// [0] 0x14000c350. PORT GAP (retail frees the +0x28 timer array first) — the
-// tree's Inert_ScalarDtor never did; kept (SpawnComponent.h).
-Object::Base* SpawnComponent::DeletingDtor(unsigned flags) {
-    this->~SpawnComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // SpawnComponent::Serialize (vtable slot [3], +0x18, original 0x140055ee0 —
 // Ghidra mislabels it SpawnComponent_Shutdown; the body is a stream

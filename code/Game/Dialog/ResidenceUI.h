@@ -26,7 +26,12 @@ class ResidenceUI final : public UI::DialogController {
 public:
     ResidenceUI() = default;                             // 0x140020f60 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140020fc0
+    // 0x140020fc0 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    // Retail frees the row array at +0x30; the tree's teardown body (moved into
+    // ~ResidenceUI unchanged) does the same.
+    // the tree's teardown body (see the .cpp)
+    ~ResidenceUI() override;                                      // [0] 0x140020fc0
     void Persist(void* /*stream*/) override {}   // [3] 0x1400b5db0  RET 0 in retail
     void OnCreated() override;   // [4] 0x1400b5850
     void OnUpdateLayout() override;   // [7] 0x1400b51f0
@@ -38,13 +43,6 @@ public:
     // ---- fields (the Panels.h POD's names, kept for the bodies) --------
     uint64_t data30 = 0;           // +0x30: zeroed
     uint64_t data38 = 0;           // +0x38: zeroed
-
-protected:
-    // 0x140020fc0 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // Retail frees the row array at +0x30; the tree's teardown body (moved into
-    // ~ResidenceUI unchanged) does the same.
-    ~ResidenceUI();   // the tree's teardown body (see the .cpp)
 };
 
 static_assert(sizeof(ResidenceUI) == 0x40, "ResidenceUI is 0x40 (create 0x140020f60 MemAlloc(0x40))");

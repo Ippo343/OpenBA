@@ -27,7 +27,7 @@ class FloorDescription final : public Description {
 public:
     FloorDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140034790
+    ~FloorDescription() override = default;                                // [0] 0x140034790
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x14011f6e0
     bool              Serialize(void* stream) override;                    // [5] 0x14011f680
     Object::External* Reconstruct() override;                              // [6] 0x140034720
@@ -39,9 +39,6 @@ public:
     void* _ref20;                               // +0x20 ExternalPtr (a raw pointer)
     bool _b28;                                  // +0x28
     uint8_t _pad29[7];                          // +0x29 never written by the ctor
-
-protected:
-    ~FloorDescription() = default;
 };
 
 static_assert(sizeof(FloorDescription) == 0x30, "FloorDescription is 0x30 (create 0x140034660 MemAlloc(0x30))");

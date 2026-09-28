@@ -42,7 +42,8 @@ public:
 
     DestroyComponent();                                   // 0x14011dc80
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140033dd0
+    // 0x14011dc20
+    ~DestroyComponent() override;                                 // [0]  0x140033dd0
     void          Persist(void* stream) override;                 // [3]  0x14011db50
     void          Startup() override;                             // [4]  0x14011db00
     void          OnMessage(int message, void* data,
@@ -58,9 +59,6 @@ public:
     uint32_t        field54;       // +0x54 demolition progress (OnMessage credit)
     void*           field58;       // +0x58 demolition target (low dword)
     void*           field60;       // +0x60 target description (Startup)
-
-protected:
-    ~DestroyComponent();                                  // 0x14011dc20
 };
 
 static_assert(sizeof(DestroyComponent) == 0x68, "DestroyComponent is 0x68 (create 0x140033bc0)");

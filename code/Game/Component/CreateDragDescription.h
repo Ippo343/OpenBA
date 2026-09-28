@@ -27,7 +27,7 @@ class CreateDragDescription final : public Description {
 public:
     CreateDragDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x1400329e0
+    ~CreateDragDescription() override = default;                           // [0] 0x1400329e0
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x140119810
     bool              Serialize(void* stream) override;                    // [5] 0x140119750
     Object::External* Reconstruct() override;                              // [6] 0x1400329c0
@@ -44,9 +44,6 @@ public:
     int32_t _i30;                               // +0x30
     int32_t _i34;                               // +0x34
     void* _created;                             // +0x38 ExternalRef: created-resource description (weak)
-
-protected:
-    ~CreateDragDescription() = default;
 };
 
 static_assert(sizeof(CreateDragDescription) == 0x40, "CreateDragDescription is 0x40 (create 0x140032970 MemAlloc(0x40))");

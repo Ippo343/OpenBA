@@ -33,7 +33,8 @@ class CitizenAIComponent final : public Component {
 public:
     CitizenAIComponent();                                         // 0x14010fb70
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x14002fcf0
+    // no own work
+    ~CitizenAIComponent() override = default;                     // [0]  0x14002fcf0
     void Persist(void* stream) override;                          // [3]  0x14010f960
     void Startup() override;                                      // [4]  0x14010f920
     void OnAdded() override;                                      // [6]  0x14010f880 PORT GAP
@@ -50,9 +51,6 @@ public:
     int64_t  timers[16];   // +0x40 System::Time per-state cooldowns
     uint64_t dataC0;       // +0xC0
     uint64_t dataC8;       // +0xC8
-
-protected:
-    ~CitizenAIComponent() = default;                              // no own work
 };
 
 // PORT GAP (ENDGAME B.3.9 CB): the SendComponentMessage actions the work / AI action

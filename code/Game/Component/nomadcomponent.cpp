@@ -475,12 +475,6 @@ NomadComponent::NomadComponent()
     OrFlagsInCtor(0x2);
 }
 
-// [0] 0x140009230: ~NomadComponent (0x14004fd50), MemFree on &1.
-Object::Base* NomadComponent::DeletingDtor(unsigned flags) {
-    this->~NomadComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // 0x14004fd50: restamp + ~Internal, no own work.
 NomadComponent::~NomadComponent() = default;
 

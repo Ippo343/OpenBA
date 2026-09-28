@@ -236,13 +236,6 @@ CompleteTask::CompleteTask()
       taskIndex(0),
       taskParam(0) {}
 
-// [0] 0x140022030
-Object::Base* CompleteTask::DeletingDtor(unsigned flags) {
-    this->~CompleteTask();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x1400c5be0
 // [4] 0x1400c5b40
 // [8] 0x1400c5ac0

@@ -173,13 +173,6 @@ TutorialGoalCount::~TutorialGoalCount() {
     reinterpret_cast<System::String*>(&typeName)->~String();      // B.3.1 bridge
 }
 
-// [0] 0x140027820: ~TutorialGoalCount, MemFree on &1.
-Object::Base* TutorialGoalCount::DeletingDtor(unsigned flags) {
-    this->~TutorialGoalCount();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // TutorialGoalCount::Serialize (vtable +0x28, 0x1400df900)
 // ============================================================
@@ -222,12 +215,12 @@ bool TutorialGoalCount::Serialize(void* stream) {
 // ============================================================
 // TutorialGoalCount::Reconstruct [6] 0x140027800 / Destruct [7] 0x140001640
 // ============================================================
-// DeletingDtor(0), then the ctor (0x1400dfa60) on `this`.
+// `~T()` (slot 0, flags 0), then the ctor (0x1400dfa60) on `this`.
 Object::External* TutorialGoalCount::Reconstruct() {
-    DeletingDtor(0);
+    this->~TutorialGoalCount();
     return ::new (static_cast<void*>(this)) TutorialGoalCount();
 }
-void TutorialGoalCount::Destruct() { DeletingDtor(0); }
+void TutorialGoalCount::Destruct() { this->~TutorialGoalCount(); }
 
 // ============================================================
 // TutorialGoalCount::Check (vtable +0x40, 0x1400df290)

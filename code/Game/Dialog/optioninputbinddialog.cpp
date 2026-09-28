@@ -75,14 +75,6 @@ OptionInputBindDialog::OptionInputBindDialog(UI::UserInterface* ui, const UI::Di
                                              Object::InternalPtr<UI::DialogInstance> parent)
     : MessageDialog(ui, dialog, parent), keyIndex(0), inputType(-1) {}
 
-// [0] 0x140012f80: ~OptionInputBindDialog -> ~MessageDialog -> ~DialogInstance
-// -> ~Internal, MemFree on &1.
-Object::Base* OptionInputBindDialog::DeletingDtor(unsigned flags) {
-    this->~OptionInputBindDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140012e60: MemAlloc(0xc8, 8), then the ctor.
 void* OptionInputBindDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(OptionInputBindDialog), 8);

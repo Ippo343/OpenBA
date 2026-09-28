@@ -52,13 +52,6 @@ CreateBridgeDescription::CreateBridgeDescription()
     for (void*& r : _refs) r = nullptr;
 }
 
-// [0] 0x1400328f0: ~CreateBridgeDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* CreateBridgeDescription::DeletingDtor(unsigned flags) {
-    this->~CreateBridgeDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x1401195d0: stream order as retail.
 bool CreateBridgeDescription::Serialize(void* stream) {
     if (!fn_ExternalRefArray_Serialize) return true;   // standalone: the door is unwired
@@ -73,15 +66,15 @@ bool CreateBridgeDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x1400328d0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x1400328d0: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* CreateBridgeDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~CreateBridgeDescription();
     return new (static_cast<void*>(this)) CreateBridgeDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void CreateBridgeDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void CreateBridgeDescription::Destruct() { this->~CreateBridgeDescription(); }
 
 // [8] 0x140004950 (shared by 19 tables): `MOV dword [RDX],0; MOV RAX,RDX; RET` —
 // a data-only description builds no component.

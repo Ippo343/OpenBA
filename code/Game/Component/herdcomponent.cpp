@@ -892,14 +892,6 @@ HerdComponent::HerdComponent()
     OrFlagsInCtor(0x0b);
 }
 
-// [0] 0x140034ea0. PORT GAP (retail frees the +0x38 member array first) — the
-// tree's Inert_ScalarDtor never did; kept (HerdComponent.h).
-Object::Base* HerdComponent::DeletingDtor(unsigned flags) {
-    this->~HerdComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 void HerdComponent::OnAdded() {
     EnsureHelpers();
     EnsureHerdExtras();

@@ -5,14 +5,16 @@
 //   Collision2D::CollisionMesh  : Object::External  0x70  9 slots (Compile overridden)
 //
 // Both were file-local PODs built by the FACTREST step table until block ENG
-// defined the classes (B39_RULES D1/D2, rule B9-16): concrete, protected
-// non-virtual dtor, slot order by PMF, the real ctor's retail stores, both
-// DeletingDtor arms. The out-of-line members are MARKERS here
-// (runtime/src/collision2d does not link into a host test); the ctors and
-// DeletingDtor are inline in the headers and are the code under test.
+// defined the classes (B39_RULES D1/D2, rule B9-16): concrete, slot order by
+// PMF, the real ctor's retail stores, both arms of retail's slot-0 deleting
+// destructor (B3X W1: a public `virtual ~T()`, D1 + D0; the vector arm is
+// retired, `delete[]` replaces it). The out-of-line members are MARKERS here
+// (runtime/src/collision2d does not link into a host test); the ctors are
+// inline in the headers and are the code under test.
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
 
 #include "runtime/types/collision2d/Surface.h"
 #include "runtime/types/collision2d/CollisionMesh.h"
@@ -53,29 +55,30 @@ namespace {
 
 const void* VTableOf(const void* obj) { return *reinterpret_cast<const void* const*>(obj); }
 
-// Array-arm driver: `n` elements behind an 8-byte cookie, destroyed through
-// element 0's slot 0 with flags 3.
+// Retail flags 1 is `delete p` (T's D0: the chain once, then the class-scope
+// MemFree operator delete; InternalMemFree == free here). The free is proven on
+// a Recording<T> stand-in. The retired vector arm (flags 3: elements behind an
+// 8-byte cookie, destroyed through element 0's slot 0) becomes `delete[]` of a
+// `new T[3]`: three destructors, downward.
 template <class T, int kSize>
 void CheckBothArms() {
+    static_assert(sizeof(T) == kSize, "the row's element size");
+    static_assert(dtor_check::HasClassDelete<T>::value, "D0 frees through a class-scope operator delete");
     void* m = Object::detail::InternalMemAlloc(kSize, 8);
     CHECK(m != nullptr);
     T* p = ::new (m) T();
     g_dtorCount = 0;
-    CHECK(p->DeletingDtor(1) == p);
+    delete p;
     CHECK_EQ(g_dtorCount, 1);
 
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * kSize, 8));
-    CHECK(block != nullptr);
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    T* e[3];
-    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * kSize) T();
-    g_dtorCount = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
-    CHECK_EQ(g_dtorCount, 3);
-    CHECK(g_dtorOrder[0] == e[2]);
-    CHECK(g_dtorOrder[1] == e[1]);
-    CHECK(g_dtorOrder[2] == e[0]);
+    T* r = dtor_check::NewOnMalloc<dtor_check::Recording<T>>();
+    g_dtorCount = 0; dtor_check::ResetFrees();
+    delete r;
+    CHECK_EQ(g_dtorCount, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == static_cast<const void*>(r));
+
+    CHECK_ARRAY_DELETE(T, g_dtorCount, g_dtorOrder);
 }
 
 }  // namespace
@@ -85,10 +88,11 @@ UNIT_TEST(b39_eng_collision2d_classes_are_concrete) {
     CHECK((std::is_base_of<Object::External, Collision2D::CollisionMesh>::value));
     CHECK(!std::is_abstract<Collision2D::Surface>::value);
     CHECK(!std::is_abstract<Collision2D::CollisionMesh>::value);
-    CHECK(!std::is_destructible<Collision2D::Surface>::value);
-    CHECK(!std::is_destructible<Collision2D::CollisionMesh>::value);
-    CHECK(!std::has_virtual_destructor<Collision2D::Surface>::value);
-    CHECK(!std::has_virtual_destructor<Collision2D::CollisionMesh>::value);
+    // B3X W1: public virtual destructors (retail slot 0 = D1 + D0).
+    CHECK(std::is_destructible<Collision2D::Surface>::value);
+    CHECK(std::is_destructible<Collision2D::CollisionMesh>::value);
+    CHECK(std::has_virtual_destructor<Collision2D::Surface>::value);
+    CHECK(std::has_virtual_destructor<Collision2D::CollisionMesh>::value);
     CHECK_EQ((int)sizeof(Collision2D::Surface), 0x30);
     CHECK_EQ((int)sizeof(Collision2D::CollisionMesh), 0x70);
 }
@@ -138,8 +142,8 @@ UNIT_TEST(b39_eng_surface_ctor_makes_retails_stores) {
     CHECK(VTableOf(s) != nullptr);
     CHECK(VTableOf(s) == VTableOf(s2));
     g_dtorCount = 0;
-    CHECK(s->DeletingDtor(0) == s);
-    CHECK(s2->DeletingDtor(0) == s2);
+    s->~Surface();                          // retail slot 0, flags 0
+    s2->~Surface();
     CHECK_EQ(g_dtorCount, 2);
 }
 
@@ -156,11 +160,14 @@ UNIT_TEST(b39_eng_collisionmesh_ctor_makes_retails_stores) {
         CHECK_EQ(q, (uint64_t)0);
     }
     g_dtorCount = 0;
-    CHECK(c->DeletingDtor(0) == c);
+    c->~CollisionMesh();                    // retail slot 0, flags 0
     CHECK_EQ(g_dtorCount, 1);
 }
 
+// Retail slot-0 bodies whose vector arm is retired: Surface 0x180064ea0,
+// CollisionMesh 0x1800656b0.
 UNIT_TEST(b39_eng_surface_deletingdtor_frees_both_arms) {
+
     CheckBothArms<Collision2D::Surface, 0x30>();
 }
 UNIT_TEST(b39_eng_collisionmesh_deletingdtor_frees_both_arms) {

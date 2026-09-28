@@ -27,7 +27,7 @@ class ClearAreaDescription final : public Description {
 public:
     ClearAreaDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140031060
+    ~ClearAreaDescription() override = default;                            // [0] 0x140031060
     int32_t           GetFileVersion() const override { return 6; }    // [3] 0x1401181c0
     bool              Serialize(void* stream) override;                    // [5] 0x1401180f0
     Object::External* Reconstruct() override;                              // [6] 0x140030fe0
@@ -46,9 +46,6 @@ public:
     uint8_t _pad2e[2];                          // +0x2e never written by the ctor
     int32_t _value;                             // +0x30
     uint8_t _pad34[4];                          // +0x34 never written by the ctor
-
-protected:
-    ~ClearAreaDescription() = default;
 };
 
 static_assert(sizeof(ClearAreaDescription) == 0x38, "ClearAreaDescription is 0x38 (create 0x140030f00 MemAlloc(0x38))");

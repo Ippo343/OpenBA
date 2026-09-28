@@ -22,7 +22,7 @@ class CompleteTask final : public Action {
 public:
     CompleteTask();                                                   // create 0x140021fc0
     CompleteTask(uint32_t taskIndex, uint64_t* workEntity, uint64_t* targetEntity, uint32_t taskParam);   // 0x1400c5da0
-    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x140022030
+    ~CompleteTask() override = default;                        // [0] 0x140022030
     void Persist(void* stream) override;                       // [3] 0x1400c5be0
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c5b40
     void CheckEntity() override;                               // [8] 0x1400c5ac0
@@ -33,9 +33,6 @@ public:
     void*     targetEntity;      // +0x28 target entity ref
     int32_t   taskIndex;         // +0x30 task index (0x7FFFFFFF = unresolved)
     int32_t   taskParam;         // +0x34 task parameter
-
-protected:
-    ~CompleteTask() = default;
 };
 
 static_assert(sizeof(CompleteTask) == 0x38, "CompleteTask is 0x38 (create 0x140021fc0 MemAlloc)");

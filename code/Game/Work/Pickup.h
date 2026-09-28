@@ -41,7 +41,8 @@ class Pickup final : public Work {
 public:
     Pickup();                                                       // 0x1400f3c00
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002c010
+    // nothing of its own to free
+    ~Pickup() override = default;                                   // [0]  0x14002c010
     void  Persist(void* stream) override;                           // [3]  0x1400f3aa0
     int   Execute(void* entityIBP, void* context) override;  // [4]  0x1400f2f00
     int   Slot5(void* entityIBP, void* context) override;           // [5]  0x1400f38f0 (re-target)
@@ -57,9 +58,6 @@ public:
     uint8_t  _pad4C[4];          // +0x4C: padding
     void*    citizenIBP;         // +0x50: InternalBasePtr to citizen entity
     void*    candidateList;      // +0x58: array/list for pickup candidates
-
-protected:
-    ~Pickup() = default;                                     // nothing of its own to free
 };
 
 static_assert(sizeof(Pickup) == 0x60, "Pickup is 0x60 (retail create MemAlloc)");

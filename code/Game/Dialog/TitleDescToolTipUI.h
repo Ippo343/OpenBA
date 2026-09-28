@@ -23,15 +23,12 @@ class TitleDescToolTipUI final : public UI::DialogController {
 public:
     TitleDescToolTipUI() = default;                      // 0x1400144c0 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140014510
+    // 0x140014510 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    ~TitleDescToolTipUI() override = default;                     // [0] 0x140014510
     void Persist(void* /*stream*/) override {}   // [3] 0x14007b8a0  RET 0 in retail
     void OnCreated() override;   // [4] 0x14007b730
 
-
-protected:
-    // 0x140014510 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    ~TitleDescToolTipUI() = default;
 };
 
 static_assert(sizeof(TitleDescToolTipUI) == 0x30, "TitleDescToolTipUI is 0x30 (create 0x1400144c0 MemAlloc(0x30))");

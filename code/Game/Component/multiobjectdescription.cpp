@@ -23,28 +23,21 @@
 #include <cstdint>
 #include <new>
 
-// [0] 0x140036060: ~MultiObjectDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* MultiObjectDescription::DeletingDtor(unsigned flags) {
-    this->~MultiObjectDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140125b50: one EMPTY Serializer(stream, 0) scope, then `MOV AL,1`.
 bool MultiObjectDescription::Serialize(void* stream) {
     IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     return true;
 }
 
-// [6] 0x140036000: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140036000: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* MultiObjectDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~MultiObjectDescription();
     return new (static_cast<void*>(this)) MultiObjectDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void MultiObjectDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void MultiObjectDescription::Destruct() { this->~MultiObjectDescription(); }
 
 // [8] 0x140036050: MultiObjectComponent's type id through the hidden return slot.
 Object::Type* MultiObjectDescription::GetComponentType(Object::Type* ret) const {

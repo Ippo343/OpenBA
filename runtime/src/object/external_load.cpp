@@ -407,7 +407,7 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
         // Both the good and the bad exits run it; they differ only in where
         // they go next, which is what decides the return value.
         if (ser.impl != nullptr) {
-            reinterpret_cast<::IO::ReaderWriter*>(ser.impl)->DeletingDtor(1);   // slot 0 (B.3.x bridge)
+            delete reinterpret_cast<::IO::ReaderWriter*>(ser.impl);   // slot 0 (B.3.x bridge)
         } else {
             ++g_lc.nullSerializer;
         }
@@ -441,7 +441,7 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
     // ~BinaryFileStream (~FileStream, ~Stream), ~CompressedStream (Release, the
     // three Array dtors +0x50/+0x40/+0x30, ~Stream frees the encoding) -- same
     // order, same frees, at the same position; no free of the storage.
-    cfsObj->IO::CompressedFileStream::DeletingDtor(0);                    // 1800bc88b..91c
+    cfsObj->IO::CompressedFileStream::~CompressedFileStream();                    // 1800bc88b..91c
 
     return result;                                                         // 1800bc921
 }

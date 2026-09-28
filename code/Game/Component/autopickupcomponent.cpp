@@ -122,13 +122,6 @@ void AutoPickupComponent::Startup() {}
 uint32_t AutoPickupComponent::CommandMask(int) { return 0; }
 void AutoPickupComponent::Command(int) {}
 
-// [0] 0x140003590: ~AutoPickupComponent (0x140044a80; its array free is a PORT GAP, see the header), MemFree on &1.
-Object::Base* AutoPickupComponent::DeletingDtor(unsigned flags) {
-    this->~AutoPickupComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x1400033c0: MemAlloc(0x40, 8), then the ctor.
 void* AutoPickupComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AutoPickupComponent), 8);

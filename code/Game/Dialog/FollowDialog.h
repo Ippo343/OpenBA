@@ -30,7 +30,7 @@ public:
     FollowDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                  Object::InternalPtr<UI::DialogInstance> parent);   // 0x140069510 family
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140011af0
+    ~FollowDialog() override = default;                            // [0] 0x140011af0
     void OnOpened() override;                                      // [4] 0x140069340
     void OnClosed() override;                                      // [5] 0x140069320
     void OnUpdateLayout() override;                                // [6] 0x140068f70
@@ -38,9 +38,6 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element,
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x140069230
-
-protected:
-    ~FollowDialog() = default;
 
 public:
     uint64_t dataB8;           // +0xB8: the followed citizen (CitizenAI InternalBasePtr)

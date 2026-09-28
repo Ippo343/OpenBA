@@ -27,7 +27,9 @@ class EntityUI final : public UI::DialogController {
 public:
     EntityUI() = default;                                // 0x140011270 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x1400112d0
+    // 0x1400112d0 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    ~EntityUI() override = default;                               // [0] 0x1400112d0
     void Persist(void* /*stream*/) override {}   // [3] 0x1400672a0  RET 0 in retail
     void OnCreated() override;   // [4] 0x1400670d0
     void OnClosed() override;   // [6] 0x140067090
@@ -40,11 +42,6 @@ public:
     uint64_t data30 = 0;           // +0x30: zeroed
     uint64_t data38 = 0;           // +0x38: zeroed
     uint64_t data40 = 0;           // +0x40: zeroed
-
-protected:
-    // 0x1400112d0 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    ~EntityUI() = default;
 };
 
 static_assert(sizeof(EntityUI) == 0x48, "EntityUI is 0x48 (create 0x140011270 MemAlloc(0x48))");

@@ -24,20 +24,17 @@ class ProductionUI final : public UI::DialogController {
 public:
     ProductionUI() = default;                            // 0x140013230 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x1400132b0
+    // 0x1400132b0 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    // PORT GAP (B38 D2): retail runs `eh vector destructor iterator` over the two 0x10-byte
+    // members at +0x30; the tree never did (leak kept).
+    ~ProductionUI() override = default;                           // [0] 0x1400132b0
     void Persist(void* /*stream*/) override {}   // [3] 0x140076300  RET 0 in retail
     void OnCreated() override;   // [4] 0x140075da0
     void OnUpdateLayout() override;   // [7] 0x140075a20
 
     // ---- fields (the Panels.h POD's names, kept for the bodies) --------
     uint8_t vectorItems[0x20] = {};// +0x30: 2x 0x10-byte items (constructor-initialized)
-
-protected:
-    // 0x1400132b0 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail runs `eh vector destructor iterator` over the two 0x10-byte
-    // members at +0x30; the tree never did (leak kept).
-    ~ProductionUI() = default;
 };
 
 static_assert(sizeof(ProductionUI) == 0x50, "ProductionUI is 0x50 (create 0x140013230 MemAlloc(0x50))");

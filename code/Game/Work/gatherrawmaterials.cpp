@@ -941,17 +941,6 @@ GatherRawMaterials::~GatherRawMaterials() {
 }
 
 
-// ============================================================
-// GatherRawMaterials::ScalarDtor (0x14002a410)
-// Calls dtor body, then conditional free.
-// ============================================================
-// [0] 0x14002a410: ~GatherRawMaterials, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* GatherRawMaterials::DeletingDtor(unsigned flags) {
-    this->~GatherRawMaterials();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 
 // Slot11 (+0x58) — retail 0x14002a400 is `return 0 < *(int*)(self + 0x70)` (this class
 // keeps its tree count at +0x70). Was pinned to 0 by Work_SlotRet0 (2026-09-05).

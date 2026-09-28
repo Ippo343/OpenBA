@@ -26,16 +26,13 @@ class CreatePathDescription final : public Description {
 public:
     CreatePathDescription() = default;
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140004d30
+    ~CreatePathDescription() override = default;                           // [0] 0x140004d30
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x140047ab0
     bool              Serialize(void* stream) override;                    // [5] 0x140047a70
     Object::External* Reconstruct() override;                              // [6] 0x140004ce0
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x140004950
     virtual Object::External* Construct();                                 // [9] 0x140004c90
-
-protected:
-    ~CreatePathDescription() = default;
 };
 
 static_assert(sizeof(CreatePathDescription) == 0x20, "CreatePathDescription is 0x20 (create 0x140004c30 MemAlloc(0x20))");

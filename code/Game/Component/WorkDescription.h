@@ -27,7 +27,7 @@ class WorkDescription final : public Description {
 public:
     WorkDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140039f50
+    ~WorkDescription() override = default;                                 // [0] 0x140039f50
     int32_t           GetFileVersion() const override { return 4; }    // [3] 0x14012e960
     bool              Serialize(void* stream) override;                    // [5] 0x14012e8b0
     Object::External* Reconstruct() override;                              // [6] 0x140039f20
@@ -44,9 +44,6 @@ public:
     int32_t _i30;                               // +0x30
     bool _b34;                                  // +0x34
     uint8_t _pad35[3];                          // +0x35 never written by the ctor
-
-protected:
-    ~WorkDescription() = default;
 };
 
 static_assert(sizeof(WorkDescription) == 0x38, "WorkDescription is 0x38 (create 0x140039ed0 MemAlloc(0x38))");

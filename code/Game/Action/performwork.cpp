@@ -370,13 +370,6 @@ PerformWork::PerformWork()
       _pad41{},
       field44(-1) {}
 
-// [0] 0x140022bd0
-Object::Base* PerformWork::DeletingDtor(unsigned flags) {
-    this->~PerformWork();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x1400c9550
 // [4] 0x1400c9420
 // [5] 0x1400c93c0

@@ -300,14 +300,6 @@ void OrchardUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_
 
 
 
-// [0] 0x1400130e0: ~OrchardUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* OrchardUI::DeletingDtor(unsigned flags) {
-    this->~OrchardUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140012ff0: MemAlloc(0x48, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* OrchardUI::CreateNewObject() {

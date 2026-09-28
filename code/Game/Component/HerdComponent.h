@@ -33,7 +33,9 @@ class HerdComponent final : public Component {
 public:
     HerdComponent();                                              // 0x140122150
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140034ea0
+    // PORT GAP (retail 0x140034ea0) — B38 D2: retail frees the member array at
+    // +0x38; the tree never did (Inert_ScalarDtor).
+    ~HerdComponent() override = default;                          // [0] 0x140034ea0
     void Persist(void* stream) override;                          // [3] 0x140121f90
     // [4] inherited: Component's `RET` 0x140118a50 (the ctor writes +0x4c = -1).
     void OnAdded() override;                                      // [6] 0x140121f40
@@ -50,11 +52,6 @@ public:
     int32_t  data4C;       // +0x4C tile (ctor -1)
     uint64_t data50;       // +0x50 System::Time timer
     uint64_t data58;       // +0x58
-
-protected:
-    // PORT GAP (retail 0x140034ea0) — B38 D2: retail frees the member array at
-    // +0x38; the tree never did (Inert_ScalarDtor).
-    ~HerdComponent() = default;
 };
 
 static_assert(sizeof(HerdComponent) == 0x60, "HerdComponent is 0x60 (create 0x140034cd0)");

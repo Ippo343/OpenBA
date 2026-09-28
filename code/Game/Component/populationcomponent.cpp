@@ -388,15 +388,6 @@ PopulationComponent::PopulationComponent()
     OrFlagsInCtor(0xcb);
 }
 
-// [0] 0x14000b0a0. PORT GAP (retail 0x140054660 frees the +0x50 and +0x38
-// arrays first) — the tree's Inert_ScalarDtor never did; kept
-// (PopulationComponent.h).
-Object::Base* PopulationComponent::DeletingDtor(unsigned flags) {
-    this->~PopulationComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 void PopulationComponent::Persist(void* stream) { PopulationComponent_Serialize_Real(this, stream); }   // [3] 0x1400544a0
 void PopulationComponent::Startup() {
     uint8_t* self = reinterpret_cast<uint8_t*>(this);

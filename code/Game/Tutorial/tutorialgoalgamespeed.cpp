@@ -28,13 +28,6 @@
 // External(), the two stamps (the compiler's), targetSpeed = 1.
 TutorialGoalGameSpeed::TutorialGoalGameSpeed() : targetSpeed(1), _pad24{} {}
 
-// [0] 0x140027730: stamp, stamp TutorialGoal, ~External, MemFree on &1.
-Object::Base* TutorialGoalGameSpeed::DeletingDtor(unsigned flags) {
-    this->~TutorialGoalGameSpeed();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // TutorialGoalGameSpeed::IsComplete (vtable +0x40, 0x1400df150)
 // ============================================================
@@ -76,10 +69,10 @@ bool TutorialGoalGameSpeed::Serialize(void* stream) {
 // TutorialGoalGameSpeed::Reconstruct [6] 0x1400276e0 / Destruct [7] 0x140001640
 // ============================================================
 Object::External* TutorialGoalGameSpeed::Reconstruct() {
-    DeletingDtor(0);
+    this->~TutorialGoalGameSpeed();
     return ::new (static_cast<void*>(this)) TutorialGoalGameSpeed();
 }
-void TutorialGoalGameSpeed::Destruct() { DeletingDtor(0); }
+void TutorialGoalGameSpeed::Destruct() { this->~TutorialGoalGameSpeed(); }
 
 // ============================================================
 // TutorialGoalGameSpeed::Construct (vtable +0x48, 0x140027690)

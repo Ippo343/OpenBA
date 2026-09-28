@@ -27,7 +27,7 @@ class ModelDescription final : public Description {
 public:
     ModelDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140035a70
+    ~ModelDescription() override;                                          // [0] 0x140035a70
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x140124ef0
     bool              Serialize(void* stream) override;                    // [5] 0x140124dc0
     Object::External* Reconstruct() override;                              // [6] 0x140035a00
@@ -43,9 +43,6 @@ public:
     int32_t _lod1;                              // +0x34
     bool _castShadow;                           // +0x38
     uint8_t _pad39[7];                          // +0x39 never written by the ctor
-
-protected:
-    ~ModelDescription();
 };
 
 static_assert(sizeof(ModelDescription) == 0x40, "ModelDescription is 0x40 (create 0x140035930 MemAlloc(0x40))");

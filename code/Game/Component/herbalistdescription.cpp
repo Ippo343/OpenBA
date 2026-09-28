@@ -53,13 +53,6 @@ HerbalistDescription::~HerbalistDescription() {
     _herbs = nullptr;
 }
 
-// [0] 0x140006cf0: ~HerbalistDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* HerbalistDescription::DeletingDtor(unsigned flags) {
-    this->~HerbalistDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14004b2e0: stream order as retail.
 bool HerbalistDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
@@ -77,15 +70,15 @@ bool HerbalistDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140006c80: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140006c80: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* HerbalistDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~HerbalistDescription();
     return new (static_cast<void*>(this)) HerbalistDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void HerbalistDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void HerbalistDescription::Destruct() { this->~HerbalistDescription(); }
 
 // [8] 0x140006ce0: HerbalistComponent's type id through the hidden return slot.
 Object::Type* HerbalistDescription::GetComponentType(Object::Type* ret) const {

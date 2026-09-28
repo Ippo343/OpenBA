@@ -18,7 +18,7 @@
 //
 // PART A — LAYOUT: sizeof / alignof / every offset the headers claim, the
 //   class-vs-POD agreement for the Descriptions (DescriptionsBatch1.h), the
-//   parent edges `_ParentTypeName` proves, no virtual destructor, abstract.
+//   parent edges `_ParentTypeName` proves, abstract (B3X W1: a public virtual destructor).
 // PART B — SLOT ORDER: probe subclasses of the REAL classes; each own slot is
 //   raw-called by byte offset and the marker that runs names the member; each
 //   INHERITED slot is compared, pointer for pointer, with the parent's entry
@@ -35,6 +35,8 @@
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
+
 
 #include "runtime/types/ui/Element.h"
 #include "runtime/types/ui/ElementDescription.h"
@@ -133,47 +135,26 @@ enum : int {
 };
 
 // ---------------------------------------------------------------------------
-// Probes. Each overrides ONLY slot 0 (the one pure slot a leaf keeps), so every
-// other entry in its table is the leaf's (or an ancestor's) member.
+// Probes. Each is a final subclass with its own table and its own implicit
+// destructor (B3X W1: retail slot 0 is the destructor pair), so every other
+// entry in its table is the leaf's (or an ancestor's) member.
 // ---------------------------------------------------------------------------
 struct BareElementProbe final : UI::Element {          // the parent's entries
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     void ComputeSize() override {}
 };
-struct ButtonElementProbe final : UI::ButtonElement {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
-};
-struct CheckElementProbe final : UI::CheckElement {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
-};
-struct BorderElementProbe final : UI::BorderElement {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
-};
-struct BorderDescriptionProbe final : UI::BorderDescription {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
-};
-struct ClipRegionElementProbe final : UI::ClipRegionElement {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
-};
-struct ClipRegionDescriptionProbe final : UI::ClipRegionDescription {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
-};
-struct ComboElementProbe final : UI::ComboElement {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
-};
-struct ComboDescriptionProbe final : UI::ComboDescription {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
-};
-struct ButtonDescriptionProbe final : UI::ButtonDescription {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
-};
-struct CheckDescriptionProbe final : UI::CheckDescription {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
-};
+struct ButtonElementProbe final : UI::ButtonElement {};
+struct CheckElementProbe final : UI::CheckElement {};
+struct BorderElementProbe final : UI::BorderElement {};
+struct BorderDescriptionProbe final : UI::BorderDescription {};
+struct ClipRegionElementProbe final : UI::ClipRegionElement {};
+struct ClipRegionDescriptionProbe final : UI::ClipRegionDescription {};
+struct ComboElementProbe final : UI::ComboElement {};
+struct ComboDescriptionProbe final : UI::ComboDescription {};
+struct ButtonDescriptionProbe final : UI::ButtonDescription {};
+struct CheckDescriptionProbe final : UI::CheckDescription {};
 
 // Plain `Object::External` leaf: its slot 4 is `External::Compile`.
 struct BareExternalProbe final : Object::External {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     int32_t GetFileVersion() const override { return 0; }
     bool Serialize(void*) override { return true; }
     Object::External* Reconstruct() override { return this; }
@@ -183,9 +164,9 @@ struct BareExternalProbe final : Object::External {
 }  // namespace
 
 // ENDGAME B.3.9 UI-A: the destructor markers of the CONCRETE classes RECORD
-// each call, so the real `DeletingDtor` (inline in each header, the one under
-// test) can be seen running ~X once per element and in retail's DESCENDING
-// order.
+// each call, so the destructors (B3X W1: D1, D0 and delete[], the retired
+// slot-0 arms) can be seen running ~X once per element and in retail's
+// DESCENDING order.
 namespace {
 int         g_b39DtorCount = 0;
 const void* g_b39DtorOrder[8] = {};
@@ -480,17 +461,17 @@ UNIT_TEST(ui_c1_button_check_sizes_and_parents) {
     CHECK((std::is_base_of<UI::ButtonDescription, UI::CheckDescription>::value));
 
     CHECK(!std::is_abstract<UI::ButtonElement>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::ButtonElement>::value);  // protected non-virtual dtor
+    CHECK(std::is_destructible<UI::ButtonElement>::value);  // B3X W1: public virtual dtor
     CHECK(!std::is_abstract<UI::CheckElement>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::CheckElement>::value);  // protected non-virtual dtor
+    CHECK(std::is_destructible<UI::CheckElement>::value);  // B3X W1: public virtual dtor
     CHECK(!std::is_abstract<UI::ButtonDescription>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::ButtonDescription>::value);  // protected non-virtual dtor
+    CHECK(std::is_destructible<UI::ButtonDescription>::value);  // B3X W1: public virtual dtor
     CHECK(!std::is_abstract<UI::CheckDescription>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::CheckDescription>::value);  // protected non-virtual dtor
-    CHECK(!std::has_virtual_destructor<UI::ButtonElement>::value);
-    CHECK(!std::has_virtual_destructor<UI::CheckElement>::value);
-    CHECK(!std::has_virtual_destructor<UI::ButtonDescription>::value);
-    CHECK(!std::has_virtual_destructor<UI::CheckDescription>::value);
+    CHECK(std::is_destructible<UI::CheckDescription>::value);  // B3X W1: public virtual dtor
+    CHECK(std::has_virtual_destructor<UI::ButtonElement>::value);
+    CHECK(std::has_virtual_destructor<UI::CheckElement>::value);
+    CHECK(std::has_virtual_destructor<UI::ButtonDescription>::value);
+    CHECK(std::has_virtual_destructor<UI::CheckDescription>::value);
 }
 
 UNIT_TEST(ui_c1_button_check_offsets) {
@@ -575,10 +556,11 @@ UNIT_TEST(ui_c1_buttondescription_slot_order_is_retails) {
         ExpectDescriptionSlot(raw, off, kButtonD);
     // Slot 4 is Object::External::Compile, inherited (RULE B6-1.5).
     CHECK(RetailEntry<Object::Base>(raw, kD4_Compile / 8) == RetailEntry<Object::Base>(static_cast<void*>(&bare), kD4_Compile / 8));
-    // Ten distinct entries; Construct (9) is BEHIND CreateInstance (8) — B6-1.1.
+    // Ten distinct retail entries = eleven compiler entries (D1 != D0 too);
+    // Construct (9) is BEHIND CreateInstance (8) — B6-1.1.
     const void* const* vt = VTableOf(raw);
-    for (int i = 0; i < 10; ++i)
-        for (int j = i + 1; j < 10; ++j)
+    for (int i = 0; i < 11; ++i)
+        for (int j = i + 1; j < 11; ++j)
             CHECK(vt[i] != vt[j]);
 }
 
@@ -650,9 +632,10 @@ UNIT_TEST(ui_c1_qualified_calls_do_not_reenter_the_door) {
     CheckElementProbe probe{};
     void* raw = static_cast<void*>(&probe);
 
-    const void* minted[12] = {};
+    const void* minted[13] = {};   // twelve retail slots = thirteen compiler slots
     const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 12; ++i) minted[i] = real[i];
+    for (int i = 0; i < 13; ++i) minted[i] = real[i];
+
     minted[RetailSlot<Object::Base>(kE7_Update / 8)] = reinterpret_cast<const void*>(&MintedCheckUpdateDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
@@ -683,11 +666,11 @@ UNIT_TEST(ui_c1_combo_layout) {
     CHECK((std::is_base_of<UI::ButtonElement, UI::ComboElement>::value));
     CHECK((std::is_base_of<UI::ButtonDescription, UI::ComboDescription>::value));
     CHECK(!std::is_abstract<UI::ComboElement>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::ComboElement>::value);  // protected non-virtual dtor
+    CHECK(std::is_destructible<UI::ComboElement>::value);  // B3X W1: public virtual dtor
     CHECK(!std::is_abstract<UI::ComboDescription>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::ComboDescription>::value);  // protected non-virtual dtor
-    CHECK(!std::has_virtual_destructor<UI::ComboElement>::value);
-    CHECK(!std::has_virtual_destructor<UI::ComboDescription>::value);
+    CHECK(std::is_destructible<UI::ComboDescription>::value);  // B3X W1: public virtual dtor
+    CHECK(std::has_virtual_destructor<UI::ComboElement>::value);
+    CHECK(std::has_virtual_destructor<UI::ComboDescription>::value);
 
     CHECK_EQ(offsetof(UI::ComboElement, _listDesc),    (size_t)0xd8);
     CHECK_EQ(offsetof(UI::ComboElement, _itemDesc),    (size_t)0xe0);
@@ -773,15 +756,15 @@ UNIT_TEST(ui_c1_border_clipregion_layout) {
     CHECK((std::is_base_of<UI::ElementDescription, UI::BorderDescription>::value));
     CHECK((std::is_base_of<UI::ElementDescription, UI::ClipRegionDescription>::value));
     CHECK(!std::is_abstract<UI::BorderElement>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::BorderElement>::value);  // protected non-virtual dtor
+    CHECK(std::is_destructible<UI::BorderElement>::value);  // B3X W1: public virtual dtor
     CHECK(!std::is_abstract<UI::ClipRegionElement>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::ClipRegionElement>::value);  // protected non-virtual dtor
+    CHECK(std::is_destructible<UI::ClipRegionElement>::value);  // B3X W1: public virtual dtor
     CHECK(!std::is_abstract<UI::BorderDescription>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::BorderDescription>::value);  // protected non-virtual dtor
+    CHECK(std::is_destructible<UI::BorderDescription>::value);  // B3X W1: public virtual dtor
     CHECK(!std::is_abstract<UI::ClipRegionDescription>::value);      // B.3.9 UI-A: concrete
-    CHECK(!std::is_destructible<UI::ClipRegionDescription>::value);  // protected non-virtual dtor
-    CHECK(!std::has_virtual_destructor<UI::BorderElement>::value);
-    CHECK(!std::has_virtual_destructor<UI::ClipRegionElement>::value);
+    CHECK(std::is_destructible<UI::ClipRegionDescription>::value);  // B3X W1: public virtual dtor
+    CHECK(std::has_virtual_destructor<UI::BorderElement>::value);
+    CHECK(std::has_virtual_destructor<UI::ClipRegionElement>::value);
 
     // Nine 0x10-byte sprites, row major, fill BorderElement to its end.
     CHECK_EQ(offsetof(UI::BorderElement, _topLeft),     (size_t)0x0c0);
@@ -871,9 +854,10 @@ UNIT_TEST(ui_c1_clipregion_contains_reaches_the_base_without_reentry) {
     ClipRegionElementProbe probe{};
     void* raw = static_cast<void*>(&probe);
 
-    const void* minted[12] = {};
+    const void* minted[13] = {};   // twelve retail slots = thirteen compiler slots
     const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 12; ++i) minted[i] = real[i];
+    for (int i = 0; i < 13; ++i) minted[i] = real[i];
+
     minted[RetailSlot<Object::Base>(kE9_Contains / 8)] = reinterpret_cast<const void*>(&MintedClipContainsDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
@@ -899,27 +883,31 @@ namespace {
 // Build three elements behind an array cookie, run the ARRAY arm of slot 0 and
 // check it destroys downward, frees and returns the block; then the scalar
 // arm with a free. `Make` placement-constructs one real object.
+// B3X W1: retail's flags-1 arm is `delete one` (T's own D0: the chain once,
+// then T's class-scope operator delete, InternalMemFree == free here); the
+// free is PROVEN on a dtor_check::Recording<T> stand-in. Retail's flags-3
+// vector arm has no Itanium counterpart: `delete[]` of `new T[3]` runs three
+// destructors, downward.
 template <typename T, typename Make>
 void B39ExpectBothArms(size_t elemSize, Make make) {
+    static_assert(dtor_check::HasClassDelete<T>::value, "D0 frees through a class-scope operator delete");
+    CHECK_EQ(sizeof(T), elemSize);
     void* p = Object::detail::InternalMemAlloc(elemSize, 8);
     CHECK(p != nullptr);
     T* one = make(p);
     g_b39DtorCount = 0;
-    CHECK(one->DeletingDtor(1) == one);
+    delete one;
     CHECK_EQ(g_b39DtorCount, 1);
 
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * elemSize, 8));
-    CHECK(block != nullptr);
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    T* e[3];
-    for (int i = 0; i < 3; ++i) e[i] = make(block + 8 + i * elemSize);
+    T* r = dtor_check::NewOnMalloc<dtor_check::Recording<T>>();
     g_b39DtorCount = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
-    CHECK_EQ(g_b39DtorCount, 3);
-    CHECK(g_b39DtorOrder[0] == e[2]);
-    CHECK(g_b39DtorOrder[1] == e[1]);
-    CHECK(g_b39DtorOrder[2] == e[0]);
+    dtor_check::ResetFrees();
+    delete r;
+    CHECK_EQ(g_b39DtorCount, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == r);
+
+    CHECK_ARRAY_DELETE(T, g_b39DtorCount, g_b39DtorOrder);
 }
 }  // namespace
 
@@ -964,8 +952,8 @@ UNIT_TEST(b39_uia_borderelement_ctor_makes_retails_stores) {
     CHECK(VTableOf(e) == VTableOf(e2));
     CHECK(VTableOf(e) != VTableOf(&probe));
     g_b39DtorCount = 0;
-    CHECK(e->DeletingDtor(0) == e);
-    CHECK(e2->DeletingDtor(0) == e2);
+    e->~BorderElement();
+    e2->~BorderElement();
     CHECK_EQ(g_b39DtorCount, 2);
 }
 
@@ -980,10 +968,11 @@ UNIT_TEST(b39_uia_borderdescription_ctor_makes_retails_stores) {
     BorderDescriptionProbe probe;
     CHECK(VTableOf(d) != VTableOf(&probe));
     g_b39DtorCount = 0;
-    CHECK(d->DeletingDtor(0) == d);
+    d->~BorderDescription();
     CHECK_EQ(g_b39DtorCount, 1);
 }
 
+// Retired vector arms: BorderElement 0x1800414f0, BorderDescription 0x180040ff0.
 UNIT_TEST(b39_uia_border_deletingdtor_both_arms) {
     FactoryScope scope;
     B39ExpectBothArms<UI::BorderElement>(0x150, [](void* p) { return ::new (p) UI::BorderElement(); });
@@ -1027,7 +1016,7 @@ UNIT_TEST(b39_uia_clipregion_ctors_make_retails_stores) {
     ClipRegionElementProbe probe{};
     CHECK(VTableOf(e) != VTableOf(&probe));
     g_b39DtorCount = 0;
-    CHECK(e->DeletingDtor(0) == e);
+    e->~ClipRegionElement();
     CHECK_EQ(g_b39DtorCount, 1);
 
     alignas(8) uint8_t dbuf[0x78];
@@ -1038,10 +1027,11 @@ UNIT_TEST(b39_uia_clipregion_ctors_make_retails_stores) {
     CHECK_EQ(d->_height, 0x64);
     CHECK(d->_childDesc == nullptr);
     g_b39DtorCount = 0;
-    CHECK(d->DeletingDtor(0) == d);
+    d->~ClipRegionDescription();
     CHECK_EQ(g_b39DtorCount, 1);
 }
 
+// Retired vector arms: ClipRegionElement 0x180038370, ClipRegionDescription 0x180037eb0.
 UNIT_TEST(b39_uia_clipregion_deletingdtor_both_arms) {
     FactoryScope scope;
     B39ExpectBothArms<UI::ClipRegionElement>(0xd8, [](void* p) { return ::new (p) UI::ClipRegionElement(); });
@@ -1079,7 +1069,7 @@ UNIT_TEST(b39_uia_button_family_ctors_make_retails_stores) {
         CheckElementProbe probe{};
         CHECK(VTableOf(e) != VTableOf(&probe));
         g_b39DtorCount = 0;
-        CHECK(e->DeletingDtor(0) == e);
+        e->~CheckElement();
         CHECK_EQ(g_b39DtorCount, 2);                  // ~CheckElement, ~ButtonElement
     }
     {
@@ -1097,7 +1087,7 @@ UNIT_TEST(b39_uia_button_family_ctors_make_retails_stores) {
         CHECK_EQ(e->_pad11c, 0xCDCDCDCDu);
         CHECK(e->_openDialog == nullptr);
         g_b39DtorCount = 0;
-        CHECK(e->DeletingDtor(0) == e);
+        e->~ComboElement();
         CHECK_EQ(g_b39DtorCount, 2);                  // ~ComboElement, ~ButtonElement
     }
     {
@@ -1111,7 +1101,7 @@ UNIT_TEST(b39_uia_button_family_ctors_make_retails_stores) {
         CHECK(d->_itemDesc == nullptr);
         CHECK(d->_stringTable == nullptr);
         g_b39DtorCount = 0;
-        CHECK(d->DeletingDtor(0) == d);
+        d->~ComboDescription();
         CHECK_EQ(g_b39DtorCount, 2);                  // ~ComboDescription, ~ButtonDescription
     }
     {
@@ -1120,11 +1110,13 @@ UNIT_TEST(b39_uia_button_family_ctors_make_retails_stores) {
         UI::CheckDescription* d = ::new (buf) UI::CheckDescription();
         CHECK(d->_childDesc[4] == nullptr);
         CHECK(d->_checkDesc == nullptr);
-        CHECK(d->DeletingDtor(0) == d);
+        d->~CheckDescription();
     }
 }
 
+// Retired vector arms: ButtonElement 0x1800485b0, ButtonDescription 0x1800481a0.
 UNIT_TEST(b39_uia_button_family_deletingdtor_both_arms) {
+
     FactoryScope scope;
     B39ExpectBothArms<UI::ButtonElement>(0xd8, [](void* p) { return ::new (p) UI::ButtonElement(); });
     B39ExpectBothArms<UI::ButtonDescription>(0xa0, [](void* p) { return ::new (p) UI::ButtonDescription(); });

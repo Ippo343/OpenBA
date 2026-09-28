@@ -63,19 +63,9 @@ public:
 
     // [0] 0x18004d270 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0xc0`, the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<ToolTipDialog*>(self + static_cast<int64_t>(i) * 0xc0)->~ToolTipDialog();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~ToolTipDialog();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1ToolTipDialog@UI@@UEAA@XZ` 0x1800dac70 (stamp + tail-JMP to
+    // ~DialogInstance, both the compiler's). EMPTY, retail's body.
+    ~ToolTipDialog() override;
 
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
@@ -98,12 +88,7 @@ public:
     // the class's own (B39_RULES D2), defined and registered in tooltipdialog.cpp.
     static void* operator new(std::size_t bytes);                 // 0x18004cfd0
     static void* operator new(std::size_t bytes, void* place);    // 0x18004d040
-    static void  operator delete(void* p);                        // 0x18004d050
-
-protected:
-    // `??1ToolTipDialog@UI@@UEAA@XZ` 0x1800dac70 (stamp + tail-JMP to
-    // ~DialogInstance, both the compiler's). EMPTY, retail's body.
-    ~ToolTipDialog();
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                        // 0x18004d050
 
     // RULE B5-15 / B6-7, COPIED from B36_SLOTS section 3:
     //   0x18004cf80  ?_TypeName@       -> "ToolTipDialog"

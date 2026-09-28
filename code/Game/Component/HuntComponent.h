@@ -27,7 +27,8 @@ class HuntComponent final : public ResourceProduceComponent {
 public:
     HuntComponent();                                                     // 0x1401228e0
 
-    Object::Base* DeletingDtor(unsigned flags) override;                // [0]  0x140035100
+    // 0x140035100: no body
+    ~HuntComponent() override = default;                                // [0]  0x140035100
     void        Persist(void* stream) override;                         // [3]  0x140122820
     // [9] receives the System::Time BY VALUE (an 8-byte tick count in RDX); the
     // base declares the register as `void*`, so the body reads its bits.
@@ -36,9 +37,6 @@ public:
 
     // +0x50 the hunt-progress accumulator (a System::Time, in ticks).
     void*    huntData;          // +0x50
-
-protected:
-    ~HuntComponent() = default;                                          // 0x140035100: no body
 };
 
 static_assert(sizeof(HuntComponent) == 0x58, "HuntComponent is 0x58 (create 0x140034f30)");

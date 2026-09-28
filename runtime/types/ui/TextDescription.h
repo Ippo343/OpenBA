@@ -48,8 +48,8 @@
 //
 // ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
 // ctor is retail's `??0TextDescription@UI@@QEAA@XZ` (0x18011ea20) minus its vptr stores;
-// slot 0 is the class's own vector deleting dtor; ~TextDescription is protected and
-// non-virtual. The factory pair is the class's own; the minted
+// slot 0 is the class's own vector deleting dtor; ~TextDescription is public and
+// virtual. The factory pair is the class's own; the minted
 // `??_7TextDescription@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
 // the doors are retired.
 // ============================================================================
@@ -90,20 +90,11 @@ public:
     // ---- the ten slots, in measured order ---------------------------------
     // [0] 0x180041e30 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x90`, the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<TextDescription*>(self + static_cast<int64_t>(i) * 0x90)
-                    ->~TextDescription();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~TextDescription();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1TextDescription@UI@@UEAA@XZ` (0x18011eae0). VIRTUAL (B3X W1)
+    // (textdescription.cpp): releases the name String at +0x78; the compiler
+    // chains ~ElementDescription (+0x60) and ~External. +0x68 / +0x70 are NOT
+    // released (retail's).
+    ~TextDescription() override;
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
     // retail: TypeName 0x180041ad0, Type 0x180041ab0, TypeId 0x180041ac0, _TypeName 0x180041a90
@@ -137,14 +128,7 @@ public:
     // Reflection statics / allocation. `_typeInfo` is the MINTED record.
     static void* operator new(std::size_t bytes);                // 0x180041ae0  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x180041b50  not ported
-    static void  operator delete(void* p);                       // 0x180041b60  not ported
-
-protected:
-    // `??1TextDescription@UI@@UEAA@XZ` (0x18011eae0). NON-VIRTUAL
-    // (textdescription.cpp): releases the name String at +0x78; the compiler
-    // chains ~ElementDescription (+0x60) and ~External. +0x68 / +0x70 are NOT
-    // released (retail's).
-    ~TextDescription();
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                       // 0x180041b60  not ported
 
 private:
 
@@ -165,7 +149,7 @@ public:
 static_assert(sizeof(TextDescription) == 0x90,
               "UI::TextDescription is 0x90 (MOV EDX,0x90 in 0x180041e30)");
 static_assert(alignof(TextDescription) == 8, "UI::TextDescription aligns to 8");
-static_assert(!std::has_virtual_destructor<TextDescription>::value, "ENDGAME decision 2");
+static_assert(std::has_virtual_destructor<TextDescription>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<TextDescription>::value, "B39 D1: concrete");
 static_assert(offsetof(TextDescription, _font) == sizeof(ElementDescription),
               "TextDescription's own fields begin at the end of ElementDescription");

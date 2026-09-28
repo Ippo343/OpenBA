@@ -31,15 +31,12 @@ class TimeGoalInstance final : public Achievement::GoalInstance {
 public:
     TimeGoalInstance();                                            // 0x1400dad90
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140026800
+    ~TimeGoalInstance() override = default;                        // [0] 0x140026800
     void Persist(void* stream) override;                           // [3] 0x1400dad30
     void Startup() override {}                                     // [4] 0x1400daca0 RET
     void Update(const System::Time& time,
                 const Achievement::GoalList& list) override;       // [5] 0x1400dac30
     Achievement::Goal::GoalState CheckGoalState() const override;  // [6] 0x1400dacb0
-
-protected:
-    ~TimeGoalInstance() = default;
 
 public:
     int64_t  elapsedTime;        // +0x20: accumulated System::Time ticks

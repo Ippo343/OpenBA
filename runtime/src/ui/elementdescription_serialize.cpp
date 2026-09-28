@@ -180,7 +180,7 @@ ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
 
 void DestroyCodec(ReaderWriter* rw) {
     if (!rw) return;
-    reinterpret_cast<IO::ReaderWriter*>(rw)->DeletingDtor(1);   // B.3.x bridge
+    delete reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
 }
 
 void RecInt(ReaderWriter* rw, int32_t* v) {

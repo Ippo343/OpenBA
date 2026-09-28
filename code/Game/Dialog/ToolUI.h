@@ -25,7 +25,9 @@ class ToolUI final : public UI::DialogController {
 public:
     ToolUI() = default;                                  // 0x140014580 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x1400145f0
+    // 0x1400145f0 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    ~ToolUI() override = default;                                 // [0] 0x1400145f0
     void Persist(void* /*stream*/) override {}   // [3] 0x14007c070  RET 0 in retail
     void OnCreated() override;   // [4] 0x14007bd70
     void OnUpdate(const System::Time& time) override;   // [8] 0x14007b9b0
@@ -45,11 +47,6 @@ public:
     uint8_t _pad4E[2] = {};        // +0x4E: gap
     int32_t dragStartX = 0;       // +0x50: drag start mouse X
     int32_t dragStartY = 0;       // +0x54: drag start mouse Y
-
-protected:
-    // 0x1400145f0 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    ~ToolUI() = default;
 };
 
 static_assert(sizeof(ToolUI) == 0x58, "ToolUI is 0x58 (create 0x140014580 MemAlloc(0x58))");

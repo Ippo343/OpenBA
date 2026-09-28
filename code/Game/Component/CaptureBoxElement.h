@@ -32,7 +32,8 @@ class CaptureBoxElement final : public UI::Element {
 public:
     CaptureBoxElement();                                              // 0x140079040
 
-    Object::Base* DeletingDtor(unsigned flags) override;              // [0] 0x140014070
+    // ~Element only
+    ~CaptureBoxElement() override = default;                          // [0] 0x140014070
     void ComputeSize() override;                                      // [4] 0x140078fb0
     void ComputeLayout(int32_t x, int32_t y,
                        int32_t w, int32_t h) override;                // [5] 0x140078ee0
@@ -44,9 +45,6 @@ public:
     int32_t    _y0;           // +0xd4
     int32_t    _x1;           // +0xd8 opposite corner (ctor 0)
     int32_t    _y1;           // +0xdc
-
-protected:
-    ~CaptureBoxElement() = default;                                   // ~Element only
 };
 
 static_assert(sizeof(CaptureBoxElement) == 0xe0, "CaptureBoxElement is 0xe0 (create 0x140013eb0)");

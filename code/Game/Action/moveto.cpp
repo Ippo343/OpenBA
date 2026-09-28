@@ -760,13 +760,6 @@ MoveTo::MoveTo()
       speedMultiplier(1.0f),
       _pad47C{} {}
 
-// [0] 0x140022900
-Object::Base* MoveTo::DeletingDtor(unsigned flags) {
-    this->~MoveTo();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x1400c8ec0
 // [4] 0x1400c8ab0
 // [5] 0x1400c8570

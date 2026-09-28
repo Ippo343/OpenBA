@@ -122,11 +122,11 @@ Object::External* VideoProgram::Construct() {
 
 // slot 6 — 0x18004edd0: slot 0 with flags 0 (destroy in place), then the ctor.
 Object::External* VideoProgram::Reconstruct() {
-    DeletingDtor(0);
+    this->~VideoProgram();
     return ::new (this) VideoProgram();
 }
 // slot 7 — 0x18004ee00: `XOR EDX,EDX ; JMP [RAX]` — slot 0, flags 0.
-void VideoProgram::Destruct() { DeletingDtor(0); }
+void VideoProgram::Destruct() { this->~VideoProgram(); }
 
 // ??1VideoProgram@Video@@UEAA@XZ (0x1800f4650), read as disassembly:
 //   1800f4666  LEA RAX,[0x180157a70] / MOV [RCX],RAX     the vtable stamp
@@ -215,7 +215,7 @@ bool VideoProgram::Serialize(void* streamv) {
         this->Video::VideoProgram::PlatformCreate();   // retail derefs _data unguarded
     }
     if (rw != nullptr) {
-        AsRw(rw)->DeletingDtor(1);
+        delete AsRw(rw);
     }
     return true;
 }

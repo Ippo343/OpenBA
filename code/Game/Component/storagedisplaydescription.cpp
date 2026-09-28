@@ -22,28 +22,21 @@
 #include <cstdint>
 #include <new>
 
-// [0] 0x14000c8e0: ~StorageDisplayDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* StorageDisplayDescription::DeletingDtor(unsigned flags) {
-    this->~StorageDisplayDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140056a80: one EMPTY Serializer(stream, 0) scope, then `MOV AL,1`.
 bool StorageDisplayDescription::Serialize(void* stream) {
     IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     return true;
 }
 
-// [6] 0x14000c880: DeletingDtor(0) (destroy in place), then the ctor again on
+// [6] 0x14000c880: `this->~T()` (retail: slot 0, flags 0 -- destroy in place), then the ctor again on
 // `this`. The hand-built table's Cleanup trampoline already did this.
 Object::External* StorageDisplayDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~StorageDisplayDescription();
     return new (static_cast<void*>(this)) StorageDisplayDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void StorageDisplayDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void StorageDisplayDescription::Destruct() { this->~StorageDisplayDescription(); }
 
 // [8] 0x14000c8d0: StorageDisplayComponent's type id through the hidden return slot.
 Object::Type* StorageDisplayDescription::GetComponentType(Object::Type* ret) const {

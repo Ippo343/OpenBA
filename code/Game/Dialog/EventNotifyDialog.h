@@ -30,7 +30,8 @@ public:
     EventNotifyDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                       Object::InternalPtr<UI::DialogInstance> parent);  // 0x140068ab0
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140011550
+    // 0x140011550's body
+    ~EventNotifyDialog() override;                                 // [0] 0x140011550
     void OnOpened() override;                                      // [4] 0x1400686d0
     void OnClosed() override;                                      // [5] 0x1400686c0 RET
     void OnUpdateLayout() override;                                // [6] 0x1400680c0
@@ -38,9 +39,6 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element,
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x140068680
-
-protected:
-    ~EventNotifyDialog();                                          // 0x140011550's body
 
 public:
     uint64_t dataB8;           // +0xB8: the parent (toolbar) dialog reference

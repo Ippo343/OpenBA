@@ -129,10 +129,10 @@ Object::External* NumberEditDescription::Construct() {
     return ::new (this) NumberEditDescription();
 }
 Object::External* NumberEditDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~NumberEditDescription();
     return ::new (this) NumberEditDescription();
 }
-void NumberEditDescription::Destruct() { DeletingDtor(0); }
+void NumberEditDescription::Destruct() { this->~NumberEditDescription(); }
 
 // ============================================================================
 // ?Serialize@NumberEditDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800d4ee0
@@ -167,7 +167,7 @@ bool NumberEditDescription::Serialize(void* streamv) {
     rw->SerializeBool(reinterpret_cast<bool&>(_b80), nullptr);
 
     if (rw != nullptr) {                                       // 1800d4faf
-        rw->DeletingDtor(1);
+        delete rw;
     }
     return true;
 }

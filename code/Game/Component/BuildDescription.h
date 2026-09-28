@@ -27,7 +27,7 @@ class BuildDescription final : public Description {
 public:
     BuildDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x14002f460
+    ~BuildDescription() override;                                          // [0] 0x14002f460
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x140109220
     bool              Serialize(void* stream) override;                    // [5] 0x140109140
     Object::External* Reconstruct() override;                              // [6] 0x14002f3f0
@@ -42,9 +42,6 @@ public:
     int32_t _i30;                               // +0x30
     bool _b34;                                  // +0x34
     uint8_t _pad35[3];                          // +0x35 never written by the ctor
-
-protected:
-    ~BuildDescription();
 };
 
 static_assert(sizeof(BuildDescription) == 0x38, "BuildDescription is 0x38 (create 0x14002f320 MemAlloc(0x38))");

@@ -415,11 +415,14 @@ public:
     // `GetSource` is: two transcriptions of one load is not a divergence risk.
     Direction GetDirection() const { return static_cast<Direction>(_direction); }
 
-    // slot 0  +0x00  0x18000c610 — PURE: the class is abstract and every
-    // concrete stream declares its own (B9-4). ENDGAME B.3.9 IO (W2): the
-    // minted table 0x1801549a0 and the `RT_DELDTOR` row that filled its slot 0
-    // are retired -- nothing stamps an IO::Stream table any more.
-    virtual Stream* DeletingDtor(unsigned flags) = 0;
+    // slot 0  +0x00  0x18000c610 — retail's deleting destructor. Here a PURE
+    // virtual destructor (GCC: D1 + D0, two slots) with the body of
+    // ??1Stream@IO@@UEAA@XZ below the class: the class stays abstract.
+    virtual ~Stream() = 0;
+
+    // Retail's slot-0 free arm: `delete` on any stream frees through
+    // MemoryAllocator::MemFree (root_operator_delete.cpp; unit build: free).
+    static void operator delete(void* p);
 
     // slot 1  +0x08  0x18000c6a0 — `String GetSource() const { return String(); }`
     //
@@ -458,17 +461,15 @@ protected:
     // every concrete stream opens with: +0x08 = 0, +0x10 = null (+0x0c is not
     // written). Protected: the class is abstract.
     Stream() : _direction(0), _encoding(nullptr) {}
-
-    // ??1Stream@IO@@UEAA@XZ 0x1800b9a40: frees the owned encoding with a
-    // direct MemFree (an Encoding has no destructor slot -- Serializer.h).
-    // Decision 2's base shape: non-virtual (Itanium spends TWO slots on a
-    // virtual destructor, which would shift every slot after it) and protected,
-    // because nothing deletes a Stream through this type. ENDGAME B.3.9 IO
-    // (W2): the `??1Stream` door and the minted Stream row are retired.
-    ~Stream() {
-        if (_encoding) RtSystem::RtMemFree(_encoding);
-    }
 };
+
+// ??1Stream@IO@@UEAA@XZ 0x1800b9a40: frees the owned encoding with a direct
+// MemFree (an Encoding has no destructor slot -- Serializer.h). The body of the
+// pure virtual destructor above. ENDGAME B.3.9 IO (W2): the `??1Stream` door and
+// the minted Stream row are retired.
+inline Stream::~Stream() {
+    if (_encoding) RtSystem::RtMemFree(_encoding);
+}
 
 static_assert(sizeof(Stream) == 0x18, "IO::Stream is 0x18 bytes");
 static_assert(offsetof(Stream, _direction) == 0x08, "??0Stream@IO@@ 0x1800b99d0: +0x08 = 0");
@@ -484,9 +485,9 @@ static_assert(offsetof(Stream, _encoding)  == 0x10, "?SetEncoding@Stream@IO@@ wr
 // same slot meaning and `FileStream.h` says so again from its side.
 // ENDGAME B.3.9 IO: CONSTRUCTIBLE. The minted ??_7MemoryStream row is retired;
 // the public constructor below is retail's and stores the compiler's table.
-// The destructor is protected and non-virtual (Decision 2): a stack instance
-// is built with placement new into raw storage and ended by a non-virtual
-// `DeletingDtor(0)`, exactly as retail's inlined teardown frees it.
+// The destructor is protected and virtual (B3X W1).: a stack instance
+// is built with placement new into raw storage and ended by a qualified
+// `T::~T()`, exactly as retail's inlined teardown frees it.
 class MemoryStream : public Stream {
 public:
     // ENDGAME B.3.9 IO -- ??0MemoryStream@IO@@QEAA@XZ 0x1800ae710: after the
@@ -502,18 +503,12 @@ public:
     }
 
     // slot 0  +0x00  0x1800242a0 — MSVC's vector deleting dtor, stride 0x30.
-    Stream* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<MemoryStream*>(self + static_cast<int64_t>(i) * 0x30)->~MemoryStream();
-            if (flags & 1u) RtSystem::RtMemFree(self - 8);
-            return reinterpret_cast<Stream*>(self - 8);
-        }
-        this->~MemoryStream();
-        if (flags & 1u) RtSystem::RtMemFree(this);
-        return this;
+    // ??1MemoryStream@IO@@UEAA@XZ 0x1800ae890: free the buffer when owned
+    // (the pointer is left dangling, as in retail), then ~Stream frees the
+    // encoding. Virtual (B3X W1); CompressedMemoryStream, which holds one by value
+    // at +0x68, reaches it as a friend.
+    ~MemoryStream() override {
+        if (_ownsData && _data != nullptr) RtSystem::RtMemFree(_data);
     }
     // slot 1 is NOT overridden: 0x1801555b0[1] is IO::Stream's own 0x18000c6a0.
     bool     Write(int n, const void* src) override;   // slot 2 +0x10  0x1800ae8f0
@@ -539,13 +534,6 @@ public:
     uint32_t _pad2c;       // +0x2C
 
 protected:
-    // ??1MemoryStream@IO@@UEAA@XZ 0x1800ae890: free the buffer when owned
-    // (the pointer is left dangling, as in retail), then ~Stream frees the
-    // encoding. Non-virtual; CompressedMemoryStream, which holds one by value
-    // at +0x68, reaches it as a friend.
-    ~MemoryStream() {
-        if (_ownsData && _data != nullptr) RtSystem::RtMemFree(_data);
-    }
     friend class CompressedMemoryStream;   // the by-value holder, +0x68
 };
 
@@ -670,7 +658,11 @@ namespace IO {
 // Slot 1 is NOT overridden — 0x180155640[1] is `IO::Stream`'s own 0x18000c6a0.
 class CompressedStream : public Stream {
 public:
-    Stream*  DeletingDtor(unsigned flags) override = 0;  // slot 0 +0x00  0x180023fd0
+    // slot 0 +0x00  0x180023fd0. ??1CompressedStream@IO@@UEAA@XZ 0x1800aa650
+    // without its two restamps and the encoding free (that is ~Stream): Release,
+    // then the three Array destructors (+0x50, +0x40, +0x30). PURE (the class
+    // is abstract); the body is out of line in compressed_stream_release.cpp.
+    ~CompressedStream() override = 0;
     bool     Write(int n, const void* src) override;     // slot 2 +0x10  0x1800aa6c0
     bool     Read(int n, void* dst) override;            // slot 3 +0x18  0x1800aa780
     bool     SetCurrentPos(int pos) override;            // slot 4 +0x20  0x1800aa830
@@ -716,14 +708,6 @@ protected:
         if (_encoding) RtSystem::RtMemFree(_encoding);
         _encoding = static_cast<Encoding*>(enc);
     }
-
-    // ??1CompressedStream@IO@@UEAA@XZ 0x1800aa650 without its two restamps and
-    // the encoding free (that is ~Stream): Release, then the three Array
-    // destructors (+0x50, +0x40, +0x30). Out of line in
-    // compressed_stream_release.cpp; non-virtual (Decision 2). The registered
-    // ??1CompressedStream door still serves the minted CompressedStream /
-    // CompressedMemoryStream rows until they retire (W2).
-    ~CompressedStream();
 };
 
 static_assert(sizeof(CompressedStream) == 0x68, "IO::CompressedStream is 0x68 bytes");
@@ -763,20 +747,13 @@ public:
     CompressedMemoryStream() {}
 
     // slot 0  +0x00  0x1800244a0 -- MSVC's vector deleting dtor, stride 0x98.
-    Stream* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<CompressedMemoryStream*>(
-                    self + static_cast<int64_t>(i) * 0x98)->~CompressedMemoryStream();
-            if (flags & 1u) RtSystem::RtMemFree(self - 8);
-            return reinterpret_cast<Stream*>(self - 8);
-        }
-        this->~CompressedMemoryStream();
-        if (flags & 1u) RtSystem::RtMemFree(this);
-        return this;
-    }
+    // ??1CompressedMemoryStream@IO@@UEAA@XZ 0x1800a9560 without its restamps:
+    // CompressedStream::Close inlined (the guard, then Commit), then the
+    // member's Close dispatched VIRTUALLY (+0x38). The compiler then runs
+    // ~MemoryStream on the member and ~CompressedStream on the base -- retail's
+    // two remaining steps, in retail's order. Out of line in
+    // compressedstream.cpp; virtual (B3X W1).
+    ~CompressedMemoryStream() override;
     void Close() override;                               // slot 7  0x1800a9620
     void PreCommit() override;                           // slot 8  0x1800a9660
 
@@ -796,15 +773,6 @@ public:
     // and that this class must be a `friend` of to reach its protected
     // destructor (B.3.9 IO).
     MemoryStream _memoryStream;
-
-protected:
-    // ??1CompressedMemoryStream@IO@@UEAA@XZ 0x1800a9560 without its restamps:
-    // CompressedStream::Close inlined (the guard, then Commit), then the
-    // member's Close dispatched VIRTUALLY (+0x38). The compiler then runs
-    // ~MemoryStream on the member and ~CompressedStream on the base -- retail's
-    // two remaining steps, in retail's order. Out of line in
-    // compressedstream.cpp; non-virtual (Decision 2).
-    ~CompressedMemoryStream();
 };
 
 static_assert(offsetof(CompressedMemoryStream, _memoryStream) == 0x68,

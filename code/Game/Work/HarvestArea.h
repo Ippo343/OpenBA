@@ -37,7 +37,8 @@ class HarvestArea final : public AutoPickupWork {
 public:
     HarvestArea();                                                  // (Work_GenericCtor shape)
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002a4d0
+    // frees the validity array and the cell BST
+    ~HarvestArea() override;                                        // [0]  0x14002a4d0
     void  Persist(void* stream) override;                           // [3]  0x1400ed350
     int   Execute(void* entityIBP, void* context) override;  // [4]  0x1400eccd0
     int   OnComplete(void* param2, void* param3, int arg3) override;  // [6]  0x1400ecc20
@@ -53,9 +54,6 @@ public:
     uint8_t  _pad54[4];          // +0x54: padding
     void*    _field58;           // +0x58: zeroed
     void*    _field60;           // +0x60: zeroed
-
-protected:
-    ~HarvestArea();                                                // frees the validity array and the cell BST
 };
 
 static_assert(sizeof(HarvestArea) == 0x68, "HarvestArea is 0x68 (retail create MemAlloc)");

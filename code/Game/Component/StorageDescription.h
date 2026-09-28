@@ -27,7 +27,7 @@ class StorageDescription final : public Description {
 public:
     StorageDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140038cf0
+    ~StorageDescription() override;                                        // [0] 0x140038cf0
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x14012caa0
     bool              Serialize(void* stream) override;                    // [5] 0x14012c9a0
     Object::External* Reconstruct() override;                              // [6] 0x140038c80
@@ -45,9 +45,6 @@ public:
     void* _volumes;                             // +0x30 volume array data (0x10 stride: External* ref, int)
     int32_t _volumeCount;                       // +0x38
     int32_t _volumeCap;                         // +0x3c
-
-protected:
-    ~StorageDescription();
 };
 
 static_assert(sizeof(StorageDescription) == 0x40, "StorageDescription is 0x40 (create 0x140038bb0 MemAlloc(0x40))");

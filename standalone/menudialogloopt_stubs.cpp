@@ -263,6 +263,9 @@ MenuDialogLoopT::MenuDialogLoopT(const System::String& filename)
 // (~UserInterface, ~String, ~UpdateLoop). The elements the arrays point at were
 // deleted by Shutdown (0x14009b280), as in retail.
 MenuDialogLoopT::~MenuDialogLoopT() {
+    // Retail 0x14001a2e0 (slot 0) calls this, then MemFree on &1 (UpdateLoop's
+    // operator delete); the log line the old slot-0 body carried.
+    printf("[MenuDLT::Destroy] self=%p\n", (void*)this);
     for (uint8_t* arr : {_sceneIdArray, _instanceArray, _particleArray}) {
         fn_MemFreeStatic(*reinterpret_cast<void**>(arr));   // MemFree(null) returns
         *reinterpret_cast<uint64_t*>(arr)     = 0;          // _data
@@ -287,16 +290,6 @@ MenuDialogLoopT::~MenuDialogLoopT() {
     // (UI, filename, arrays, Audio::Scene) is retail's. Remove when Inner Load
     // loads the PlacementTool resources under its own dropped bit.
     _loadBit = -1;
-}
-
-Engine::UpdateLoop* MenuDialogLoopT::DeletingDtor(unsigned flags) {
-    printf("[MenuDLT::Destroy] self=%p flags=%d\n", (void*)this, (int)flags);
-    // Retail 0x14001a2e0: ~MenuDialogLoopT (0x14001a310, below), MemFree on &1.
-    this->~MenuDialogLoopT();
-    if (flags & 1) {
-        fn_MemFreeStatic(this);
-    }
-    return this;
 }
 
 void MenuDialogLoopT::Startup() {
@@ -448,7 +441,7 @@ void MenuDialogLoopT::Shutdown() {
     // scene-grid instances) is a Graphics::Geometry, which is its OWN hierarchy
     // root -- not an Object::Base. Slot 0 through the object's own root.
     auto deleteObject = [](void* o) {                // MOV RAX,[RCX]; MOV EDX,1; CALL [RAX]
-        static_cast<Graphics::Geometry*>(o)->DeletingDtor(1);
+        delete static_cast<Graphics::Geometry*>(o);
     };
     typedef void (*DtorFn)(void*);
     static DtorFn s_sceneDtor = reinterpret_cast<DtorFn>(

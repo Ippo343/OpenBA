@@ -34,7 +34,9 @@ class TornadoComponent final : public Component {
 public:
     TornadoComponent();                                           // 0x140058cf0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x14000d640
+    // PORT GAP (retail 0x14000d640) — B38 D2: retail frees the waypoint array
+    // at +0x40; the tree never did (Inert_ScalarDtor).
+    ~TornadoComponent() override = default;                       // [0] 0x14000d640
     void Persist(void* stream) override;                          // [3] 0x140058b80
     void Startup() override;                                      // [4] 0x1400585a0
     void Tick(void* time) override;                               // [8] 0x140057cd0
@@ -54,11 +56,6 @@ public:
     float    posY;              // +0x5C
     float    posZ;              // +0x60
     uint8_t  _pad64[4];         // +0x64
-
-protected:
-    // PORT GAP (retail 0x14000d640) — B38 D2: retail frees the waypoint array
-    // at +0x40; the tree never did (Inert_ScalarDtor).
-    ~TornadoComponent() = default;
 };
 
 static_assert(sizeof(TornadoComponent) == 0x68, "TornadoComponent is 0x68 (create 0x14000d500)");

@@ -296,22 +296,31 @@ class BaseTypeInfo;
 //   [1] +0x08  0x18007ec28  _purecall  -> pure `TypeName()`
 //   [2] +0x10  0x1800c0380  `XOR EAX,EAX; RET` -> `?Type@Base@Object@@UEBAIXZ`
 //
-// NO VIRTUAL DESTRUCTOR, and that is the whole premise of per-class migration:
-// GCC spends TWO slots on `virtual ~T()` (complete + deleting) and every slot
-// after it shifts, so the ~83 files that still stamp the MINTED
-// `??_7Base@Object@@6B@` into their objects would start dispatching one slot
-// out. `tests/unit/object_vtable_abi_test.cpp` is the regression test for that
-// rule, and it also proves the two tables are interchangeable in both
-// directions — which is why this class and the minted one coexist.
+// THE DESTRUCTOR IS VIRTUAL (the normal-virtual cutover, B3X W1). Retail's
+// slot 0 is MSVC's deleting destructor, ONE slot; GCC spends TWO on
+// `virtual ~T()` (D1 complete, D0 deleting), so retail slot N >= 1 is compiler
+// slot N + 1 for every class in this hierarchy. Every caller reaches a slot by
+// name; nothing reads the table by index, and the `// [N]` slot comments in
+// the headers stay RETAIL slot numbers.
 //
-// Deletion goes through `Object::Destroy(p)`, never `delete p`; `~Base()` is
-// protected and non-virtual so `delete (Base*)p` does not compile.
+// Deletion is `delete p` (`Object::Destroy(p)` below is the same thing): the
+// compiler's D0 runs the most-derived destructor chain and then this class's
+// `operator delete`, retail's `flags & 1` free arm (MemoryAllocator::MemFree).
+// `Destruct()` bodies end an object in place with an UNQUALIFIED `this->~T()`
+// (retail's virtual slot-0 call with flags 0); a stack or embedded object is
+// ended with a QUALIFIED `p->T::~T()`, never `delete`.
 // ============================================================
 class Base {
 public:
-    // slot 0. MSVC's vector deleting destructor: flags&1 = free the storage,
-    // flags&2 = array form. Returns `this`, as every MSVC `??_G` does.
-    virtual Base* DeletingDtor(unsigned flags);
+    // slot 0. Retail: MSVC's vector deleting destructor 0x1800065b0 (flags&1 =
+    // free the storage, flags&2 = array form). Here D1 + D0.
+    virtual ~Base() = default;                          // ??1Base 0x1800c0360
+
+    // Retail's `flags & 1` arm: MemoryAllocator::MemFree, one definition for
+    // the whole hierarchy (runtime/src/object/root_operator_delete.cpp; the
+    // unit build frees with std::free). A class that declares its own (retail
+    // has a `??3` per class, all MemFree) hides this one.
+    static void operator delete(void* p);
 
     // slot 1. `?TypeName@X@Ns@@UEBAPEBDXZ` in every subclass; `_purecall` in
     // Base itself, so it is pure here. DECLARE_TYPE emits the override.
@@ -345,7 +354,6 @@ protected:
     // emits for us. `= default` rather than a user-provided no-op (B31_RULES
     // class rule 5).
     Base() = default;
-    ~Base() = default;   // NON-VIRTUAL — decision 2. Reached by DeletingDtor.
 
 private:
     // ?_typeInfo@Base@Object@@0VBaseTypeInfo@2@A   retail 0x1801f9c50 — name
@@ -360,16 +368,11 @@ static_assert(sizeof(Base) == 8, "Object::Base is one vtable pointer");
 static_assert(sizeof(Base) == sizeof(RtObject::Base),
               "the real class and the POD describe the same bytes");
 
-// `Object::Destroy(p)` — decision 2's one deletion helper. `CallSlot0(p, 1)`
-// and the 194 `DeletePtr` sites become this as their classes convert; the
-// flags are retail's (`&1` = free the storage).
-//
-// It is NOT `delete p`: `~Base()` is non-virtual, so `delete` would run the
-// wrong destructor and skip every derived member. The "normal virtual cutover"
-// ENDGAME decision 2 describes — `DeletingDtor` becomes `virtual ~T()` and
-// `Destroy` becomes `delete` — happens only when the LAST hand-built vtable is
-// gone, which is a long way past B.3.3.
-inline void Destroy(Base* p) { if (p) p->DeletingDtor(1); }
+// `Object::Destroy(p)` — retail's slot-0 call with flags 1 (destroy, then free).
+// Since the normal-virtual cutover (B3X W1) it is exactly `delete p`: the
+// destructor is virtual, so the most-derived chain runs, then Base's
+// `operator delete`.
+inline void Destroy(Base* p) { delete p; }
 
 using TypeRecord = RtObject::TypeRecord;
 
@@ -646,15 +649,15 @@ uint32_t TypeNameCRC(const char* name);
 // and `MOV RAX,[qword]` over the class's own `_typeInfo` record, which is where
 // the two globals retail reads live.
 //
-// THE THREE `operator new`/`delete` OVERLOADS ARE STILL NOT EMITTED, and this
-// is a decision, not an omission. Retail's route every allocation through
+// THE THREE `operator new`/`delete` OVERLOADS ARE NOT EMITTED PER CLASS, and
+// this is a decision, not an omission. Retail's route every allocation through
 // `System::MemoryAllocator` (`??2X@Ns@@SAPEAX_K@Z` is `MemAlloc(size, 4)`,
 // `??3X@Ns@@SAXPEAX@Z` is `MemFree` verbatim — proved for 88 classes in
 // runtime/src/object/class_operator_delete.cpp and ui_operator_delete.cpp).
-// Emitting them here would silently reroute every future `new X` in converted
-// code through a `RT_EXPORT_ONCE` seam, in a commit that has no caller to
-// justify it and no gate that would notice. They land with the allocator's own
-// conversion, and a class that needs them before then declares its own.
+// Since the normal-virtual cutover `Object::Base` declares the one
+// `operator delete` (MemFree) that every class's deleting destructor inherits;
+// `operator new` stays undeclared (objects are built with placement new on
+// MemAlloc'd storage), and a class that needs its own declares it.
 //
 // `X::TypeId()` returns `_typeInfo.typeId`, which is 0xFFFFFFFF until
 // `Factory::Startup` runs — B33_RULES §2.5: it is NOT self-initialising, and

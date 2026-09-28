@@ -32,6 +32,8 @@
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
+
 
 #include "runtime/types/ui/Dialog.h"
 #include "runtime/types/ui/DialogInstance.h"
@@ -91,32 +93,32 @@ const void* const* VTableOf(void* obj) {
 
 // Retail byte offsets, B36_SLOTS.md section 1.
 namespace DI {   // UI::DialogInstance and its two subclasses
-constexpr int kDeletingDtor = 0x00, kTypeName = 0x08, kType = 0x10, kPersist = 0x18,
+constexpr int kRetailDtor = 0x00, kTypeName = 0x08, kType = 0x10, kPersist = 0x18,
               kOnOpened = 0x20, kOnClosed = 0x28, kOnUpdateLayout = 0x30,
               kOnUpdate = 0x38, kOnElementEvent = 0x40, kOnSerializeSettings = 0x48;
 }
 namespace DC {   // UI::DialogController — ONE SLOT APART (RULE B6-1.2)
-constexpr int kDeletingDtor = 0x00, kTypeName = 0x08, kType = 0x10, kPersist = 0x18,
+constexpr int kRetailDtor = 0x00, kTypeName = 0x08, kType = 0x10, kPersist = 0x18,
               kOnCreated = 0x20, kOnOpened = 0x28, kOnClosed = 0x30,
               kOnUpdateLayout = 0x38, kOnUpdate = 0x40, kOnElementEvent = 0x48,
               kOnSerializeSettings = 0x50;
 }
 namespace EX {   // the Object::External family
-constexpr int kDeletingDtor = 0x00, kTypeName = 0x08, kType = 0x10,
+constexpr int kRetailDtor = 0x00, kTypeName = 0x08, kType = 0x10,
               kGetFileVersion = 0x18, kCompile = 0x20, kSerialize = 0x28,
               kReconstruct = 0x30, kDestruct = 0x38, kConstruct = 0x40;
 }
 
 // ---------------------------------------------------------------------------
-// Probes. Each overrides only slot 0 (pure in every one of the six) — plus, for
-// DialogControllerConfig, the four External slots retail leaves `_purecall`.
+// Probes. Each overrides only retail slot 0 — B3X W1: the destructor pair; the
+// destructor records mark 0 and a recording class-scope operator delete stands
+// for retail flags 1's MemFree — plus, for DialogControllerConfig, the four
+// External slots retail leaves `_purecall`.
 // ---------------------------------------------------------------------------
 struct BareInternalProbe final : Object::Internal {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     const char* TypeName() const override { return "bare"; }
 };
 struct BareExternalProbe final : Object::External {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     const char* TypeName() const override { return "bare"; }
     int32_t GetFileVersion() const override { return 0; }
     bool Serialize(void*) override { return true; }
@@ -125,29 +127,33 @@ struct BareExternalProbe final : Object::External {
 };
 
 struct DialogInstanceProbe final : UI::DialogInstance {
-    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    ~DialogInstanceProbe() override { Note(this, 0); }
+    DTOR_CHECK_RECORDING_DELETE
 };
 struct ComboDialogProbe final : UI::ComboDialog {
-    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    ~ComboDialogProbe() override { Note(this, 0); }
+    DTOR_CHECK_RECORDING_DELETE
 };
 struct ToolTipDialogProbe final : UI::ToolTipDialog {
-    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    ~ToolTipDialogProbe() override { Note(this, 0); }
+    DTOR_CHECK_RECORDING_DELETE
 };
 struct DialogControllerProbe final : UI::DialogController {
-    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    ~DialogControllerProbe() override { Note(this, 0); }
+    DTOR_CHECK_RECORDING_DELETE
 };
 struct DialogProbe final : UI::Dialog {
-    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    ~DialogProbe() override { Note(this, 0); }
+    DTOR_CHECK_RECORDING_DELETE
 };
 struct ConfigProbe final : UI::DialogControllerConfig {
-    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    ~ConfigProbe() override { Note(this, 0); }
     int32_t GetFileVersion() const override { Note(this, 3); return 0; }
     bool Serialize(void*) override { Note(this, 5); return true; }
     Object::External* Reconstruct() override { Note(this, 6); return this; }
     void Destruct() override { Note(this, 7); }
 };
 
-using DtorFn  = void* (*)(void*, unsigned);
 using NameFn  = const char* (*)(const void*);
 using TypeFn  = uint32_t (*)(const void*);
 using VoidFn  = void (*)(void*);
@@ -158,8 +164,9 @@ using EventFn = void (*)(void*, void*, int32_t, int32_t, int32_t, int32_t, int32
 // slot's marker records, `owner` whose marker it is (0 = DialogInstance's own,
 // otherwise the subclass's).
 void CheckInstanceSlots(void* raw, const ::Object::BaseTypeInfo& rec) {
-    Reset(); SlotAt<DtorFn>(raw, DI::kDeletingDtor)(raw, 0u);   CHECK_EQ(g_lastMark, 0);
-    CHECK(g_lastSelf == raw);
+    // Retail slot 0 is the destructor pair (CheckProbeDtorPair): D1 != D0.
+    static_assert(DI::kRetailDtor == 0, "retail slot 0");
+    CHECK(VTableOf(raw)[0] != VTableOf(raw)[1]);
     // Slots 1/2 (ENDGAME B.3.9 TI-UI): DECLARE_TYPE's bodies over the own record.
     CHECK(SlotAt<NameFn>(raw, DI::kTypeName)(raw) == rec.name);
     CHECK_EQ(SlotAt<TypeFn>(raw, DI::kType)(raw), rec.typeId);
@@ -178,6 +185,27 @@ void CheckInstanceSlots(void* raw, const ::Object::BaseTypeInfo& rec) {
     CHECK_EQ(g_lastMark % 100, 9);
 }
 
+// Retail slot 0 (kRetailDtor) is the destructor pair (B3X W1), read raw:
+// compiler [0] D1 runs ~Probe once and frees nothing (flags 0), on a
+// placement-new'd probe that is never destroyed again (a stack probe would be
+// destroyed twice); [1] D0 runs it and hands the block to the recording
+// operator delete (flags 1). Run inside a FactoryScope for Internal probes.
+template <typename Probe>
+void CheckProbeDtorPair() {
+    alignas(Probe) unsigned char buf[sizeof(Probe)];
+    Probe* p = ::new (static_cast<void*>(buf)) Probe();
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD1(p);
+    CHECK_EQ(g_lastMark, 0); CHECK(g_lastSelf == p);
+    CHECK_EQ(dtor_check::g_frees, 0);
+    Probe* h = dtor_check::NewOnMalloc<Probe>();
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD0(h);
+    CHECK_EQ(g_lastMark, 0); CHECK(g_lastSelf == h);
+    CHECK_EQ(dtor_check::g_frees, 1); CHECK(dtor_check::g_lastFree == h);
+}
+
+// `n` is the COMPILER entry count: retail's count + 1 (D1 and D0).
 void CheckDistinct(void* raw, int n) {
     const void* const* vt = VTableOf(raw);
     for (int i = 0; i < n; ++i)
@@ -195,7 +223,8 @@ UNIT_TEST(ui_dialoginstance_slot_order_is_retails) {
     DialogInstanceProbe probe;
     void* raw = static_cast<void*>(&probe);
     CheckInstanceSlots(raw, UI::DialogInstance::GetTypeInfo());
-    CheckDistinct(raw, 10);
+    CheckProbeDtorPair<DialogInstanceProbe>();
+    CheckDistinct(raw, 11);   // ten retail slots
     // Persist is DialogInstance's OWN body (0x180114fa0), not Internal's
     // 0x1800bfda0 — so the +0x18 entries must differ.
     BareInternalProbe bare;
@@ -207,7 +236,8 @@ UNIT_TEST(ui_dialogcontroller_slot_order_is_one_apart) {
     FactoryScope scope;   // the probes are Object::Internal objects
     DialogControllerProbe probe;
     void* raw = static_cast<void*>(&probe);
-    Reset(); SlotAt<DtorFn>(raw, DC::kDeletingDtor)(raw, 0u);   CHECK_EQ(g_lastMark, 0);
+    CHECK(VTableOf(raw)[0] != VTableOf(raw)[1]);   // retail slot 0 = D1 + D0
+    CheckProbeDtorPair<DialogControllerProbe>();
     CHECK(SlotAt<NameFn>(raw, DC::kTypeName)(raw) == UI::DialogController::GetTypeInfo().name);   // TI-UI
     CHECK_EQ(SlotAt<TypeFn>(raw, DC::kType)(raw), UI::DialogController::GetTypeInfo().typeId);
     Reset(); SlotAt<VoidFn>(raw, DC::kOnCreated)(raw);          CHECK_EQ(g_lastMark, 204);
@@ -240,6 +270,7 @@ UNIT_TEST(ui_combodialog_slot_order_is_retails) {
     ComboDialogProbe probe;
     void* raw = static_cast<void*>(&probe);
     CheckInstanceSlots(raw, UI::ComboDialog::GetTypeInfo());
+    CheckProbeDtorPair<ComboDialogProbe>();
     // Own: 1, 2, 6, 7, 8 (marks 3xx); inherited from DialogInstance: 3, 4, 5, 9.
     CHECK(SlotAt<NameFn>(raw, DI::kTypeName)(raw) == UI::ComboDialog::GetTypeInfo().name);   // TI-UI
     Reset(); SlotAt<VoidFn>(raw, DI::kOnUpdateLayout)(raw); CHECK_EQ(g_lastMark, 306);
@@ -256,6 +287,7 @@ UNIT_TEST(ui_tooltipdialog_overrides_only_slots_0_1_2) {
     ToolTipDialogProbe probe;
     void* raw = static_cast<void*>(&probe);
     CheckInstanceSlots(raw, UI::ToolTipDialog::GetTypeInfo());
+    CheckProbeDtorPair<ToolTipDialogProbe>();
     CHECK(SlotAt<NameFn>(raw, DI::kTypeName)(raw) == UI::ToolTipDialog::GetTypeInfo().name);   // TI-UI
     CHECK_EQ(SlotAt<TypeFn>(raw, DI::kType)(raw), UI::ToolTipDialog::GetTypeInfo().typeId);
     DialogInstanceProbe base;
@@ -269,7 +301,8 @@ UNIT_TEST(ui_dialog_slot_order_is_retails_construct_at_8) {
     using VerFn = int32_t (*)(const void*);
     using SerFn = bool (*)(void*, void*);
     using PtrFn = void* (*)(void*);
-    Reset(); SlotAt<DtorFn>(raw, EX::kDeletingDtor)(raw, 0u);   CHECK_EQ(g_lastMark, 0);
+    static_assert(EX::kRetailDtor == 0, "retail slot 0");
+    CheckProbeDtorPair<DialogProbe>();
     CHECK(SlotAt<NameFn>(raw, EX::kTypeName)(raw) == UI::Dialog::GetTypeInfo().name);   // TI-UI
     CHECK_EQ(SlotAt<TypeFn>(raw, EX::kType)(raw), UI::Dialog::GetTypeInfo().typeId);
     Reset(); CHECK_EQ(SlotAt<VerFn>(raw, EX::kGetFileVersion)(raw), 6);
@@ -278,7 +311,7 @@ UNIT_TEST(ui_dialog_slot_order_is_retails_construct_at_8) {
     Reset(); SlotAt<PtrFn>(raw, EX::kReconstruct)(raw);         CHECK_EQ(g_lastMark, 506);
     Reset(); SlotAt<VoidFn>(raw, EX::kDestruct)(raw);           CHECK_EQ(g_lastMark, 507);
     Reset(); SlotAt<PtrFn>(raw, EX::kConstruct)(raw);           CHECK_EQ(g_lastMark, 508);
-    CheckDistinct(raw, 9);
+    CheckDistinct(raw, 10);   // nine retail slots
     // Slot 4 is External's Compile, inherited.
     BareExternalProbe bare;
     CHECK(RetailEntry<Object::Base>(raw, EX::kCompile / 8) == RetailEntry<Object::Base>(static_cast<void*>(&bare), EX::kCompile / 8));
@@ -314,9 +347,9 @@ UNIT_TEST(ui_dialoginstance_qualified_call_does_not_reenter_the_door) {
     FactoryScope scope;   // the probes are Object::Internal objects
     DialogInstanceProbe probe;
     void* raw = static_cast<void*>(&probe);
-    const void* minted[10] = {};
+    const void* minted[11] = {};   // ten retail slots = eleven compiler slots
     const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 10; ++i) minted[i] = real[i];
+    for (int i = 0; i < 11; ++i) minted[i] = real[i];
     minted[RetailSlot<Object::Base>(DI::kOnUpdateLayout / 8)] = reinterpret_cast<const void*>(&MintedOnUpdateLayoutDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
@@ -360,13 +393,13 @@ UNIT_TEST(ui_dialog_family_layout) {
     CHECK(!std::is_abstract<UI::DialogController>::value);
     CHECK(std::is_abstract<UI::DialogControllerConfig>::value);
     CHECK(!std::is_abstract<UI::Dialog>::value);
-    CHECK(!std::is_destructible<UI::Dialog>::value);            // protected dtor
-    CHECK(!std::is_destructible<UI::DialogController>::value);
-    CHECK(!std::has_virtual_destructor<UI::Dialog>::value);
+    CHECK(std::is_destructible<UI::Dialog>::value);             // B3X W1: public virtual dtor
+    CHECK(std::is_destructible<UI::DialogController>::value);
+    CHECK(std::has_virtual_destructor<UI::Dialog>::value);
     CHECK(!std::is_abstract<UI::ComboDialog>::value);     // B.3.9 UI-D: own slot 0
     CHECK(!std::is_abstract<UI::ToolTipDialog>::value);
-    CHECK(!std::is_destructible<UI::ComboDialog>::value);
-    CHECK(!std::is_destructible<UI::ToolTipDialog>::value);
+    CHECK(std::is_destructible<UI::ComboDialog>::value);        // B3X W1
+    CHECK(std::is_destructible<UI::ToolTipDialog>::value);
 
     // Own fields start at sizeof(base).
     CHECK_EQ((int)offsetof(UI::DialogInstance, _ui), (int)sizeof(Object::Internal));
@@ -410,32 +443,36 @@ static void B39UidDlgNoteDtor(const void* self) {
     ++g_b39DtorCount;
 }
 namespace {
-// Scalar arm (with a free) on one object, then the VECTOR arm on three behind
-// an array cookie: destroyed downward, the block freed and returned.
+// B3X W1: retail's flags-1 arm is `delete one` (T's own D0: the chain once,
+// then T's class-scope operator delete, InternalMemFree == free here); the
+// free is PROVEN on a dtor_check::Recording<T> stand-in. Retail's flags-3
+// vector arm has no Itanium counterpart: `delete[]` of `new T[3]` runs three
+// destructors, downward.
 template <typename T, typename Make>
 void B39ExpectBothArms(size_t elemSize, Make make) {
+    static_assert(dtor_check::HasClassDelete<T>::value, "D0 frees through a class-scope operator delete");
+    CHECK_EQ(sizeof(T), elemSize);
     void* p = Object::detail::InternalMemAlloc(elemSize, 8);
     CHECK(p != nullptr);
     T* one = make(p);
     g_b39DtorCount = 0;
-    CHECK(one->DeletingDtor(1) == one);
+    delete one;
     CHECK_EQ(g_b39DtorCount, 1);
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * elemSize, 8));
-    CHECK(block != nullptr);
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    T* e[3];
-    for (int i = 0; i < 3; ++i) e[i] = make(block + 8 + i * elemSize);
+
+    T* r = dtor_check::NewOnMalloc<dtor_check::Recording<T>>();
     g_b39DtorCount = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
-    CHECK_EQ(g_b39DtorCount, 3);
-    CHECK(g_b39DtorOrder[0] == e[2]);
-    CHECK(g_b39DtorOrder[1] == e[1]);
-    CHECK(g_b39DtorOrder[2] == e[0]);
+    dtor_check::ResetFrees();
+    delete r;
+    CHECK_EQ(g_b39DtorCount, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == r);
+
+    CHECK_ARRAY_DELETE(T, g_b39DtorCount, g_b39DtorOrder);
 }
-// Subclasses that INHERIT the class's own slot 0 (no fields, same stride).
-struct B39DcLeaf final : UI::DialogController {};
-struct B39CfgLeaf final : UI::DialogControllerConfig {
+// Subclasses that INHERIT the class's own destructor (no fields, same stride).
+// Not `final`: B39ExpectBothArms derives its Recording<T> stand-in from them.
+struct B39DcLeaf : UI::DialogController {};
+struct B39CfgLeaf : UI::DialogControllerConfig {
     int32_t GetFileVersion() const override { return 0; }
     bool Serialize(void*) override { return true; }
     Object::External* Reconstruct() override { return this; }
@@ -470,7 +507,7 @@ UNIT_TEST(b39_uid_dialog_ctor_makes_retails_stores) {
     DialogProbe probe;
     CHECK(VTableOf(d) != VTableOf(&probe));
     g_b39DtorCount = 0;
-    CHECK(d->DeletingDtor(0) == d);
+    d->~Dialog();
     CHECK_EQ(g_b39DtorCount, 1);
 }
 
@@ -494,7 +531,7 @@ UNIT_TEST(b39_uid_combo_tooltip_default_ctors) {
     ComboDialogProbe cprobe;
     CHECK(VTableOf(c) != VTableOf(&cprobe));
     g_b39DtorCount = 0;
-    CHECK(c->DeletingDtor(0) == c);
+    c->~ComboDialog();
     CHECK_EQ(g_b39DtorCount, 1);
 
     alignas(8) uint8_t tbuf[0xc0];
@@ -504,11 +541,15 @@ UNIT_TEST(b39_uid_combo_tooltip_default_ctors) {
     CHECK_EQ(*reinterpret_cast<uint32_t*>(tbuf + 0xbc), 0xCDCDCDCDu);
     CHECK_EQ(t->_spriteIndex, -1);
     g_b39DtorCount = 0;
-    CHECK(t->DeletingDtor(0) == t);
+    t->~ToolTipDialog();
     CHECK_EQ(g_b39DtorCount, 1);
 }
 
+// Retired vector arms: ComboDialog 0x180074a10, ToolTipDialog 0x18004d270,
+// Dialog 0x180038b20, DialogController 0x18003b800, DialogControllerConfig
+// 0x18003b600.
 UNIT_TEST(b39_uid_combo_tooltip_deleting_dtor_both_arms) {
+
     FactoryScope scope;
     B39ExpectBothArms<UI::ComboDialog>(0xd0, [](void* p) { return ::new (p) UI::ComboDialog(); });
     B39ExpectBothArms<UI::ToolTipDialog>(0xc0, [](void* p) { return ::new (p) UI::ToolTipDialog(); });

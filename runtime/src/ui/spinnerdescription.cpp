@@ -113,11 +113,11 @@ Object::External* SpinnerDescription::Construct() {
 }
 // [6] 0x18004aee0 — destroy in place through slot 0 (flag 0), re-run the ctor.
 Object::External* SpinnerDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~SpinnerDescription();
     return ::new (this) SpinnerDescription();
 }
 // [7] 0x18004af10
-void SpinnerDescription::Destruct() { DeletingDtor(0); }
+void SpinnerDescription::Destruct() { this->~SpinnerDescription(); }
 
 // [5] ?Serialize@SpinnerDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x1800d8880
 bool SpinnerDescription::Serialize(void* streamArg) {
@@ -143,7 +143,7 @@ bool SpinnerDescription::Serialize(void* streamArg) {
     rw->SerializeInt(_increment, nullptr);
 
     if (rw != nullptr) {                                                // 1800d891a
-        rw->DeletingDtor(1);
+        delete rw;
     }
     return true;
 }

@@ -28,7 +28,7 @@ class ResidenceDescription final : public Description {
 public:
     ResidenceDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x1400375b0
+    ~ResidenceDescription() override = default;                            // [0] 0x1400375b0
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x14012a460
     bool              Serialize(void* stream) override;                    // [5] 0x14012a3d0
     Object::External* Reconstruct() override;                              // [6] 0x140037550
@@ -41,9 +41,6 @@ public:
     int32_t _maxResidentsPerFamily;             // +0x24
     float _coldThreshold;                       // +0x28 temp below which the house burns fuel
     float _heatInterval;                        // +0x2c fuel-consumption period
-
-protected:
-    ~ResidenceDescription() = default;
 };
 
 static_assert(sizeof(ResidenceDescription) == 0x30, "ResidenceDescription is 0x30 (create 0x1400374a0 MemAlloc(0x30))");

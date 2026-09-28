@@ -165,14 +165,6 @@ void NaturalResourceComponent_InitFuncs() {
 NaturalResourceComponent::NaturalResourceComponent()
     : resourceScale(1.0f), resourceFlags(0x100), _pad2E{} {}
 
-// [0] 0x1400366b0: ~NaturalResourceComponent (0x140125d80: restamp +
-// ~Internal, no own work), MemFree on &1.
-Object::Base* NaturalResourceComponent::DeletingDtor(unsigned flags) {
-    this->~NaturalResourceComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // NaturalResourceComponent::Persist (vtable slot [3], 0x140125cf0)
 // ============================================================

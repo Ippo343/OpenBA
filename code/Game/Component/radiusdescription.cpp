@@ -36,13 +36,6 @@ RadiusDescription::RadiusDescription()
       _ref20(nullptr),
       _radius(0x1e) {}
 
-// [0] 0x14000bb10: ~RadiusDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* RadiusDescription::DeletingDtor(unsigned flags) {
-    this->~RadiusDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140055530: stream order as retail.
 bool RadiusDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_Serialize3) return true;   // standalone: the door is unwired
@@ -52,15 +45,15 @@ bool RadiusDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x14000bab0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x14000bab0: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* RadiusDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~RadiusDescription();
     return new (static_cast<void*>(this)) RadiusDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void RadiusDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void RadiusDescription::Destruct() { this->~RadiusDescription(); }
 
 // [8] 0x140004950 (shared by 19 tables): `MOV dword [RDX],0; MOV RAX,RDX; RET` —
 // a data-only description builds no component.

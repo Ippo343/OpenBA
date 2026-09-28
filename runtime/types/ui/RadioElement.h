@@ -42,8 +42,8 @@
 //
 // ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
 // ctor is retail's `??0RadioElement@UI@@QEAA@XZ` (0x1800d5870) minus its vptr stores;
-// slot 0 is the class's own vector deleting dtor; ~RadioElement is protected and
-// non-virtual. The factory pair is the class's own; the minted
+// slot 0 is the class's own vector deleting dtor; ~RadioElement is public and
+// virtual. The factory pair is the class's own; the minted
 // `??_7RadioElement@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
 // the doors are retired.
 // ============================================================================
@@ -74,20 +74,11 @@ public:
     // ---- the slots it owns ------------------------------------------------
     // [0] 0x180047d50 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0xd8`, the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<RadioElement*>(self + static_cast<int64_t>(i) * 0xd8)
-                    ->~RadioElement();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~RadioElement();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1RadioElement@UI@@UEAA@XZ` (0x1800d5820). EMPTY
+    // (radioelement.cpp): the check-box array's J1 ~Array (retail 0x1800490e0)
+    // is the compiler's member ~Array; the restamps and ~Element are the
+    // compiler's chain through ~GroupElement.
+    ~RadioElement() override;
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
     // retail: TypeName 0x180047a00, Type 0x1800479e0, TypeId 0x1800479f0, _TypeName 0x1800479c0
@@ -115,13 +106,6 @@ public:
     RadioElement(const RadioElement& src);                        // 0x180047c20  not ported
     RadioElement& operator=(const RadioElement& src);             // 0x180047c90  not ported
 
-protected:
-    // `??1RadioElement@UI@@UEAA@XZ` (0x1800d5820). NON-VIRTUAL and EMPTY
-    // (radioelement.cpp): the check-box array's J1 ~Array (retail 0x1800490e0)
-    // is the compiler's member ~Array; the restamps and ~Element are the
-    // compiler's chain through ~GroupElement.
-    ~RadioElement();
-
 public:
     // `?FindCheckBoxes@RadioElement@UI@@AEAAXV?$InternalPtr@VElement@UI@@@Object@@@Z`
     // (0x1800d5750, `AEAA` = PRIVATE). The handle is by value in the source, so
@@ -142,7 +126,7 @@ public:
 static_assert(sizeof(RadioElement) == 0xd8,
               "UI::RadioElement is 0xd8 bytes (MOV EDX,0xd8 in 0x180047d50)");
 static_assert(alignof(RadioElement) == 8, "UI::RadioElement aligns to 8");
-static_assert(!std::has_virtual_destructor<RadioElement>::value, "ENDGAME decision 2");
+static_assert(std::has_virtual_destructor<RadioElement>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<RadioElement>::value, "B39 D1: concrete");
 static_assert(offsetof(RadioElement, _checkBoxes)  == sizeof(GroupElement),
               "RadioElement's own fields begin at the end of GroupElement");

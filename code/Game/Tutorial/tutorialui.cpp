@@ -29,14 +29,6 @@ TutorialUI::TutorialUI()
     : data30(0), preText(nullptr), postText(nullptr), imageTable(nullptr),
       nextButton(nullptr), quitButton(nullptr) {}
 
-// [0] 0x140029470: ~TutorialUI (restamp; ~DialogController chained by the
-// compiler), MemFree on &1.
-Object::Base* TutorialUI::DeletingDtor(unsigned flags) {
-    this->~TutorialUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // Helper: FindElemByName with IsDerivedFrom check, stores InternalBasePtr
 static void FindAndStore(void* container, const char* name, void** field) {
     System::String nameBuf(name);

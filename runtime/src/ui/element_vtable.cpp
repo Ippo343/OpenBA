@@ -355,7 +355,7 @@ void Element::Persist(void* stream) {
         // slot 0 (node, 1) — the scalar deleting destructor with the delete
         // flag, exactly as 0x1801168b4 spells it. The node is the
         // IO::ReaderWriter the encoding factory returned, not a UI class.
-        reinterpret_cast<IO::ReaderWriter*>(node)->DeletingDtor(1);        // B.3.x bridge
+        delete reinterpret_cast<IO::ReaderWriter*>(node);        // B.3.x bridge
     }
 }
 

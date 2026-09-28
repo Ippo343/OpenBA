@@ -220,11 +220,11 @@ Object::External* Font::Construct() {
 // CLEAR, i.e. destroy in place, VIRTUALLY — and then the same inlined
 // constructor. NOT a tail jump: there is no out-of-line ctor to jump to.
 Object::External* Font::Reconstruct() {
-    DeletingDtor(0);                                                 // 180031c57
+    this->~Font();                                                 // 180031c57
     return ::new (this) Font();                                      // 180031c5e..180031ccf
 }
 // 0x180031d80: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void Font::Destruct() { DeletingDtor(0); }
+void Font::Destruct() { this->~Font(); }
 
 // ?CreateNewObject@Font@UI@@SAPEAVBase@Object@@XZ  0x180031ab0
 // The FACTUI1 row this replaces: the locked MemAlloc of 0x90 bytes, align 8;
@@ -407,7 +407,7 @@ bool Font::Serialize(void* streamv) {
     }
 
     if (rw != nullptr) {                                             // 180117b32
-        rw->DeletingDtor(1);                                         // slot 0, flag 1
+        delete rw;                                         // slot 0, flag 1
     }
     return true;                                                     // 180117b3e MOV AL,1
 }

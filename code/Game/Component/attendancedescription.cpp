@@ -27,13 +27,6 @@ AttendanceDescription::AttendanceDescription()
     : Description(),
       _i20(0xf) {}
 
-// [0] 0x140002800: ~AttendanceDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* AttendanceDescription::DeletingDtor(unsigned flags) {
-    this->~AttendanceDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x1400446b0: stream order as retail.
 bool AttendanceDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
@@ -41,15 +34,15 @@ bool AttendanceDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x1400027a0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x1400027a0: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* AttendanceDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~AttendanceDescription();
     return new (static_cast<void*>(this)) AttendanceDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void AttendanceDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void AttendanceDescription::Destruct() { this->~AttendanceDescription(); }
 
 // [8] 0x1400027f0: AttendanceComponent's type id through the hidden return slot.
 Object::Type* AttendanceDescription::GetComponentType(Object::Type* ret) const {

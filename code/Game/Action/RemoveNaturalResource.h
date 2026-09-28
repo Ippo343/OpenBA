@@ -22,7 +22,7 @@ class RemoveNaturalResource final : public Action {
 public:
     RemoveNaturalResource();                                                   // create 0x140022f70
     RemoveNaturalResource(uint64_t* p2, uint64_t* p3, uint8_t flag);   // 0x1400cadf0
-    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x140022fe0
+    ~RemoveNaturalResource() override = default;               // [0] 0x140022fe0
     void Persist(void* stream) override;                       // [3] 0x1400cac50
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400cab10
     void CheckEntity() override;                               // [8] 0x1400caaa0
@@ -33,9 +33,6 @@ public:
     void*     _field28;          // +0x28 
     uint8_t   _field30;          // +0x30 flag
     uint8_t   _pad31[7];         // +0x31 padding
-
-protected:
-    ~RemoveNaturalResource() = default;
 };
 
 static_assert(sizeof(RemoveNaturalResource) == 0x38, "RemoveNaturalResource is 0x38 (create 0x140022f70 MemAlloc)");

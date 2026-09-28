@@ -447,18 +447,6 @@ int LocationWork::GetPriority() {
 }
 
 
-// ============================================================
-// LocationWork::ScalarDtor (0x14002a850)
-// Simpler than BST classes — just vtable chain + Internal dtor.
-// Sets LocationWork vtable, then Work vtable, calls Internal dtor,
-// then conditional free.
-// ============================================================
-// [0] 0x14002a850: ~LocationWork, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* LocationWork::DeletingDtor(unsigned flags) {
-    this->~LocationWork();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // ~LocationWork is defaulted: the LocationWork then Work stamps and `~Internal` are the
 // compiler's chain — all retail's 0x14002a850 does before the free.
 

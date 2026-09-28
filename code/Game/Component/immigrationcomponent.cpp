@@ -78,12 +78,6 @@ static const bool s_immigrationStateTableBuilt = (ImmigrationCtrl_PopulateTable(
 ImmigrationComponent::ImmigrationComponent()
     : _controller(this), field48(nullptr), field50(0), _pad54{}, field58(nullptr), field60(nullptr) {}
 
-// [0] 0x140007b70: ~ImmigrationComponent (0x14004e5d0), MemFree on &1.
-Object::Base* ImmigrationComponent::DeletingDtor(unsigned flags) {
-    this->~ImmigrationComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // 0x14004e5d0: the group array (+0x58 data, +0x60 count/capacity) is freed and
 // zeroed; the member's and the bases' dtors (restamps only) and ~Internal are the
 // compiler's chain.

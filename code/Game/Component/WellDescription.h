@@ -19,7 +19,7 @@
 //     [6] 0x14000fd90 Reconstruct: `CALL [vptr+0] (this, 0)` (destroy in place),
 //         then the ctor on `this` again, returns this
 //     [7] 0x140001640 Destruct: `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]` —
-//         DeletingDtor(0); the one shared body in 119 tables
+//         `~T()` (slot 0, flags 0); the one shared body in 119 tables
 //     [8] 0x14000fde0 GetComponentType: WellComponent's TypeId through the
 //         hidden return slot (Description.h)
 //     [9] 0x14000fd40 Construct: placement-new on `this` (folded with createInPlace)
@@ -36,16 +36,14 @@ class WellDescription final : public Description {
 public:
     WellDescription() = default;                                   // 0x14005d200
 
-    Object::Base*  DeletingDtor(unsigned flags) override;          // [0] 0x14000fdf0
+    // 0x14005d1c0
+    ~WellDescription() override = default;                         // [0] 0x14000fdf0
     int32_t        GetFileVersion() const override { return 1; }   // [3] 0x14005d1b0
     bool           Serialize(void* stream) override;               // [5] 0x14005d170
     Object::External* Reconstruct() override;                      // [6] 0x14000fd90
     void           Destruct() override;                            // [7] 0x140001640
     Object::Type*  GetComponentType(Object::Type* ret) const override;   // [8] 0x14000fde0
     virtual Object::External* Construct();                         // [9] 0x14000fd40
-
-protected:
-    ~WellDescription() = default;                                  // 0x14005d1c0
 };
 
 static_assert(sizeof(WellDescription) == 0x20, "WellDescription is 0x20 (create 0x14000fce0 MemAlloc(0x20))");

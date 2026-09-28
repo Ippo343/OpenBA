@@ -35,7 +35,9 @@ class SelectResourceUI : public UI::DialogController {
     DECLARE_EXE_TYPE(SelectResourceUI)
 
 public:
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140013ca0
+    // The leaf dtors restamp 0x14015d330 and chain ~DialogController; the
+    // +0x30 InternalBasePtr has no release in retail either.
+    ~SelectResourceUI() override = default;                       // [0]  0x140013ca0
     // [1] / [2]: the abstract base answers its own registration (only a
     // half-built object dispatches here) — the pilot's Component shape.
     // [1] TypeName 0x140013c90 and [2] Type 0x140013c80: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
@@ -61,9 +63,6 @@ protected:
     // Inlined into every leaf ctor by retail; the InternalBasePtr(null) is
     // the field initialiser above.
     SelectResourceUI() = default;
-    // The leaf dtors restamp 0x14015d330 and chain ~DialogController; the
-    // +0x30 InternalBasePtr has no release in retail either.
-    ~SelectResourceUI() = default;
 };
 
 static_assert(sizeof(SelectResourceUI) == 0x38, "SelectResourceUI adds one qword to DialogController");

@@ -51,7 +51,8 @@ public:
 
     WellComponent();                                              // 0x14005d060
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x14000fe50
+    // 0x14005d000
+    ~WellComponent() override = default;                          // [0]  0x14000fe50
     void          Persist(void* stream) override;                 // [3]  0x14005cfa0
     void          OnRemove() override;                            // [7]  0x14005cf60
     int           GetDefaultState() const override { return 2; }  // [16] 0x1400026c0
@@ -60,9 +61,6 @@ public:
     // +0x28 — the embedded controller (D6). Public: StateMachineComponent and
     // the controller dispatch read it through slot 17 and at +0x28 raw.
     StateController _controller;
-
-protected:
-    ~WellComponent() = default;                                   // 0x14005d000
 };
 
 static_assert(sizeof(WellComponent) == 0x48, "WellComponent is 0x48 (create 0x14000fc80 MemAlloc(0x48))");

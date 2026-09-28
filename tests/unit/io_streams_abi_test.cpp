@@ -43,6 +43,7 @@
 
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
 
 #include "runtime/types/io/Stream.h"
 #include "runtime/types/io/FileStream.h"
@@ -78,7 +79,7 @@ Fn SlotAt(const void* obj, int byteOffset) {
 // Byte offsets, spelled once. `IO::Stream` is 7 slots; the concrete classes
 // append theirs (B34_RULES section 1.3).
 // ---------------------------------------------------------------------------
-constexpr int kDtor          = 0x00;
+constexpr int kDtor          = 0x00;   // B3X W1: the D1/D0 pair (CheckStreamDtorPair)
 constexpr int kGetSource     = 0x08;
 constexpr int kWrite         = 0x10;
 constexpr int kRead          = 0x18;
@@ -94,12 +95,6 @@ constexpr int kSlot8         = 0x40;   // PreCommit; the compressed branch only
 // declared at offset/8, with `this` unadjusted.
 void CheckSharedStreamSlots(void* raw) {
     uint8_t scratch[8] = {0};
-
-    Reset();
-    using DtorFn = void* (*)(void*, unsigned);
-    SlotAt<DtorFn, IO::Stream>(raw, kDtor)(raw, 0u);
-    CHECK_EQ(g_lastMark, kDtor / 8);
-    CHECK(g_lastSelf == raw);
 
     Reset();
     using WriteFn = bool (*)(void*, int, const void*);
@@ -139,21 +134,53 @@ void CheckCompressedTail(void* raw) {
     CHECK_EQ(g_lastMark, 8);
 }
 
-// n distinct entries — which is what turns "every slot but one is pinned" into
-// "slot 1 is `GetSource`".
+// n distinct RETAIL slots — which is what turns "every slot but one is pinned"
+// into "slot 1 is `GetSource`". B3X W1: retail's n slots are n + 1 compiler
+// entries (retail slot 0 is the D1/D0 pair), all distinct, D1 != D0 included.
 void CheckDistinctSlots(void* raw, int n) {
     void* const* vt = *reinterpret_cast<void* const* const*>(raw);
-    for (int a = 0; a < n; ++a)
-        for (int b = a + 1; b < n; ++b)
+    const int entries = static_cast<int>(RetailSlot<IO::Stream>(n - 1)) + 1;
+    CHECK_EQ(entries, n + 1);
+    CHECK(vt[0] != vt[1]);
+    for (int a = 0; a < entries; ++a)
+        for (int b = a + 1; b < entries; ++b)
             CHECK(vt[a] != vt[b]);
+}
+
+// Retail slot 0 (kDtor) is the compiler's destructor pair, read raw: [0] D1
+// runs ~P once and frees nothing (retail flags 0); [1] D0 runs it and hands the
+// block to the class-scope operator delete (flags 1). D1 is called on a probe
+// placement-new'd into a buffer and never destroyed again (a stack probe would
+// be destroyed twice).
+template <class P>
+void CheckStreamDtorPair() {
+    static_assert(kDtor == 0, "retail slot 0");
+    alignas(P) unsigned char buf[sizeof(P)];
+    P* p = ::new (static_cast<void*>(buf)) P();
+    void* raw = static_cast<void*>(static_cast<IO::Stream*>(p));
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD1(raw);
+    CHECK_EQ(g_lastMark, kDtor / 8);
+    CHECK(g_lastSelf == raw);
+    CHECK_EQ(dtor_check::g_frees, 0);
+    P* h = dtor_check::NewOnMalloc<P>();
+    void* rawH = static_cast<void*>(static_cast<IO::Stream*>(h));
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD0(rawH);
+    CHECK_EQ(g_lastMark, kDtor / 8);
+    CHECK(g_lastSelf == rawH);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == rawH);
 }
 
 // ---------------------------------------------------------------------------
 // The probes. Nine slots is the widest table in the family; the narrower
-// classes simply declare fewer.
+// classes simply declare fewer. B3X W1: retail slot 0 is each probe's own
+// `~Probe() override { Note(this, 0); }` (written per probe), and the macro
+// carries a recording class-scope operator delete (retail flags 1's free).
 // ---------------------------------------------------------------------------
 #define STREAM_PROBE_SEVEN                                                     \
-    IO::Stream* DeletingDtor(unsigned) override { Note(this, 0); return this; }\
+    DTOR_CHECK_RECORDING_DELETE                                                \
     System::String GetSource() const override { Note(this, 1); return System::String(); } \
     bool     Write(int, const void*) override  { Note(this, 2); return true; } \
     bool     Read(int, void*) override         { Note(this, 3); return true; } \
@@ -165,21 +192,21 @@ struct CompressedStreamProbe final : IO::CompressedStream {
     STREAM_PROBE_SEVEN
     void Close() override     { Note(this, 7); }
     void PreCommit() override { Note(this, 8); }
-    ~CompressedStreamProbe() = default;
+    ~CompressedStreamProbe() override { Note(this, 0); }
 };
 
 struct CompressedMemoryStreamProbe final : IO::CompressedMemoryStream {
     STREAM_PROBE_SEVEN
     void Close() override     { Note(this, 7); }
     void PreCommit() override { Note(this, 8); }
-    ~CompressedMemoryStreamProbe() = default;
+    ~CompressedMemoryStreamProbe() override { Note(this, 0); }
 };
 
 struct CompressedFileStreamProbe final : IO::CompressedFileStream {
     STREAM_PROBE_SEVEN
     void Close() override     { Note(this, 7); }
     void PreCommit() override { Note(this, 8); }
-    ~CompressedFileStreamProbe() = default;
+    ~CompressedFileStreamProbe() override { Note(this, 0); }
 };
 
 UNIT_TEST(the_real_CompressedStream_has_9_slots_Close_at_7_PreCommit_at_8) {
@@ -189,6 +216,7 @@ UNIT_TEST(the_real_CompressedStream_has_9_slots_Close_at_7_PreCommit_at_8) {
     CheckSharedStreamSlots(raw);
     CheckCompressedTail(raw);
     CheckDistinctSlots(raw, 9);
+    CheckStreamDtorPair<CompressedStreamProbe>();
 
     // Slot 1 by elimination, and confirmed to be a virtual at all by an
     // ordinary C++ call through the base.
@@ -197,13 +225,14 @@ UNIT_TEST(the_real_CompressedStream_has_9_slots_Close_at_7_PreCommit_at_8) {
     CHECK_EQ(g_lastMark, kGetSource / 8);
 
     // Nine, not eight: this is the branch that adds PreCommit. The FileStream
-    // branch stops at eight and gives slot 7 a DIFFERENT meaning.
-    static_assert(!std::has_virtual_destructor<IO::CompressedStream>::value,
-                  "IO::CompressedStream must not acquire a virtual destructor");
-    static_assert(!std::has_virtual_destructor<IO::CompressedMemoryStream>::value,
-                  "IO::CompressedMemoryStream must not acquire a virtual destructor");
-    static_assert(!std::has_virtual_destructor<IO::CompressedFileStream>::value,
-                  "IO::CompressedFileStream must not acquire a virtual destructor");
+    // branch stops at eight and gives slot 7 a DIFFERENT meaning. B3X W1: the
+    // family's retail slot 0 is a virtual destructor (D1 + D0).
+    static_assert(std::has_virtual_destructor<IO::CompressedStream>::value,
+                  "IO::CompressedStream: retail slot 0 is a virtual destructor");
+    static_assert(std::has_virtual_destructor<IO::CompressedMemoryStream>::value,
+                  "IO::CompressedMemoryStream: retail slot 0 is a virtual destructor");
+    static_assert(std::has_virtual_destructor<IO::CompressedFileStream>::value,
+                  "IO::CompressedFileStream: retail slot 0 is a virtual destructor");
 }
 
 UNIT_TEST(the_two_compressed_subclasses_keep_the_9_slot_order) {
@@ -212,12 +241,14 @@ UNIT_TEST(the_two_compressed_subclasses_keep_the_9_slot_order) {
     CheckSharedStreamSlots(rawCms);
     CheckCompressedTail(rawCms);
     CheckDistinctSlots(rawCms, 9);
+    CheckStreamDtorPair<CompressedMemoryStreamProbe>();
 
     CompressedFileStreamProbe cfs;
     void* rawCfs = static_cast<void*>(static_cast<IO::Stream*>(&cfs));
     CheckSharedStreamSlots(rawCfs);
     CheckCompressedTail(rawCfs);
     CheckDistinctSlots(rawCfs, 9);
+    CheckStreamDtorPair<CompressedFileStreamProbe>();
 
     // `this` is unadjusted at every level of the chain, which every raw slot
     // caller in runtime/src assumes when it hands the same pointer to any of
@@ -321,12 +352,12 @@ struct TextFileStreamProbe final : IO::TextFileStream {
     bool Create(const System::Filename&, int32_t, int32_t) override {
         Note(this, 9); return true;
     }
-    ~TextFileStreamProbe() = default;
+    ~TextFileStreamProbe() override { Note(this, 0); }
 };
 
 struct VisitorStreamProbe final : IO::VisitorStream {
     STREAM_PROBE_SEVEN
-    ~VisitorStreamProbe() = default;
+    ~VisitorStreamProbe() override { Note(this, 0); }
 };
 
 UNIT_TEST(the_real_TextFileStream_has_10_slots_with_Open_at_7_and_OpenWithFormat_at_8) {
@@ -362,6 +393,7 @@ UNIT_TEST(the_real_TextFileStream_has_10_slots_with_Open_at_7_and_OpenWithFormat
     CHECK_EQ(g_lastMark, 9);
 
     CheckDistinctSlots(raw, 10);
+    CheckStreamDtorPair<TextFileStreamProbe>();
 
     // Slot 1 by elimination (the file's banner explains why GetSource is never
     // raw-called), plus the ordinary virtual call that proves it is a virtual.
@@ -369,8 +401,8 @@ UNIT_TEST(the_real_TextFileStream_has_10_slots_with_Open_at_7_and_OpenWithFormat
     { const IO::Stream& s = p; (void)s.GetSource(); }
     CHECK_EQ(g_lastMark, kGetSource / 8);
 
-    static_assert(!std::has_virtual_destructor<IO::TextFileStream>::value,
-                  "IO::TextFileStream must not acquire a virtual destructor");
+    static_assert(std::has_virtual_destructor<IO::TextFileStream>::value,
+                  "IO::TextFileStream: retail slot 0 is a virtual destructor (B3X W1)");
 
     // `this` is unadjusted through the three-level chain, which every raw slot
     // caller in runtime/src assumes.
@@ -386,6 +418,7 @@ UNIT_TEST(the_real_VisitorStream_has_exactly_7_slots_and_no_fields) {
 
     CheckSharedStreamSlots(raw);
     CheckDistinctSlots(raw, 7);
+    CheckStreamDtorPair<VisitorStreamProbe>();
 
     Reset();
     { const IO::Stream& s = p; (void)s.GetSource(); }
@@ -398,8 +431,9 @@ UNIT_TEST(the_real_VisitorStream_has_exactly_7_slots_and_no_fields) {
     static_assert(sizeof(IO::VisitorStream) == 0x18, "eh_vector stride 0x18002bf80");
     static_assert(sizeof(IO::VisitorStream) == sizeof(IO::Stream),
                   "IO::VisitorStream adds no field to IO::Stream");
-    static_assert(!std::has_virtual_destructor<IO::VisitorStream>::value,
-                  "IO::VisitorStream must not acquire a virtual destructor");
+    static_assert(std::has_virtual_destructor<IO::VisitorStream>::value,
+                  "IO::VisitorStream: retail slot 0 is a virtual destructor (B3X W1)");
+
 
     CHECK(static_cast<void*>(static_cast<IO::Stream*>(&p)) ==
           static_cast<void*>(static_cast<IO::VisitorStream*>(&p)));

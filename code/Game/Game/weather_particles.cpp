@@ -158,12 +158,6 @@ WeatherParticleGeometry::~WeatherParticleGeometry() {
     // Graphics::Geometry::~Geometry: the compiler's chain.
 }
 
-Graphics::Geometry* WeatherParticleGeometry::DeletingDtor(unsigned flags) {
-    this->~WeatherParticleGeometry();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // Config — port of TradeWork_impl_3f80(geo, Weather* descriptor).
 // Allocates + seeds the particle array and index buffer from the descriptor.

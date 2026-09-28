@@ -115,11 +115,11 @@ Object::External* ProgressDescription::Construct() {
 }
 // [6] 0x1800778f0 — destroy in place through slot 0 (flag 0), re-run the ctor.
 Object::External* ProgressDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~ProgressDescription();
     return ::new (this) ProgressDescription();
 }
 // [7] 0x180077920
-void ProgressDescription::Destruct() { DeletingDtor(0); }
+void ProgressDescription::Destruct() { this->~ProgressDescription(); }
 
 // [5] ?Serialize@ProgressDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x180119f60
 bool ProgressDescription::Serialize(void* streamArg) {
@@ -151,7 +151,7 @@ bool ProgressDescription::Serialize(void* streamArg) {
     RtAddr<FieldSerFn>(0x180038f90ull)(&_childDescription, &ser);       // 18011a041 ExternalPtr<ElementDescription>
 
     if (rw != nullptr) {                                                // 18011a04f
-        rw->DeletingDtor(1);
+        delete rw;
     }
     return true;
 }

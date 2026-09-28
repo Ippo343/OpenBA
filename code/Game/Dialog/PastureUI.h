@@ -25,7 +25,8 @@ class PastureUI final : public SelectResourceUI {
 public:
     PastureUI() = default;                                        // 0x1400b51a0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140020ee0
+    // 0x140020ee0 minus the free: restamps + ~DialogController only
+    ~PastureUI() override = default;                              // [0]  0x140020ee0
     void  OnCreated() override;                                   // [4]  0x1400b5090
     void  OnUpdateLayout() override;                              // [7]  0x1400b4e50
     // [8] STANDALONE DEVIATION: retail inherits SelectResourceUI's 0x140078d30;
@@ -39,9 +40,6 @@ public:
 
     // ---- fields -----------------------------------------------------------------
     uint64_t data38 = 0;           // +0x38: livestock slider (InternalBasePtr)
-
-protected:
-    ~PastureUI() = default;        // 0x140020ee0 minus the free: restamps + ~DialogController only
 };
 
 static_assert(sizeof(PastureUI) == 0x40, "PastureUI is 0x40 (create 0x140020e10 MemAlloc(0x40))");

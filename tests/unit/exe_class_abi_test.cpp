@@ -59,11 +59,11 @@ UNIT_TEST(exe_component_sizes_match_retail) {
 }
 
 UNIT_TEST(exe_component_class_shape_rules) {
-    // Decision 2: polymorphic, NO virtual destructor anywhere in the family.
+    // B3X W1: polymorphic with a virtual destructor (retail slot 0 = D1 + D0); the Controller interface (slot 0 FindState) has none.
     CHECK(std::is_polymorphic<Component>::value);
-    CHECK(!std::has_virtual_destructor<Component>::value);
-    CHECK(!std::has_virtual_destructor<WellComponent>::value);
-    CHECK(!std::has_virtual_destructor<WellDescription>::value);
+    CHECK(std::has_virtual_destructor<Component>::value);
+    CHECK(std::has_virtual_destructor<WellComponent>::value);
+    CHECK(std::has_virtual_destructor<WellDescription>::value);
     CHECK(!std::has_virtual_destructor<Ctl>::value);
     CHECK(std::is_abstract<ControllerComponent>::value);   // 16/17 pure (0x140162c00/08)
     CHECK(std::is_abstract<Ctl>::value);                   // 9 x _purecall (0x14015f070)

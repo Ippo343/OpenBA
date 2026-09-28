@@ -121,13 +121,6 @@ TradeDescription::~TradeDescription() {
     _prices = nullptr;
 }
 
-// [0] 0x14000dc50: ~TradeDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* TradeDescription::DeletingDtor(unsigned flags) {
-    this->~TradeDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14005c7f0: stream order as retail.
 bool TradeDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_BuildSerialize || !fn_MemAlloc || !g_pMemAllocSingleton) return true;   // standalone: unwired doors
@@ -197,15 +190,15 @@ bool TradeDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x14000dc20: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x14000dc20: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* TradeDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~TradeDescription();
     return new (static_cast<void*>(this)) TradeDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void TradeDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void TradeDescription::Destruct() { this->~TradeDescription(); }
 
 // [8] 0x14000dc40: TradeComponent's type id through the hidden return slot.
 Object::Type* TradeDescription::GetComponentType(Object::Type* ret) const {

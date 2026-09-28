@@ -573,7 +573,7 @@ int RwVersion(ReaderWriter* rw) {
 }
 void DeleteRw(ReaderWriter* rw) {
     if (rw == nullptr) return;
-    AsRw(rw)->DeletingDtor(1);
+    delete AsRw(rw);
 }
 bool IsReading(const Stream* s) { return s->direction == rt::io::kDirectionReading; }
 

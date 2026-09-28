@@ -30,6 +30,7 @@
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
 
 #include "runtime/types/audio/Audio.h"
 #include "runtime/types/audio/Device.h"
@@ -52,7 +53,7 @@ int         g_lastMark = -1;
 void Note(const void* self, int mark) { g_lastSelf = self; g_lastMark = mark; }
 void Reset() { g_lastSelf = nullptr; g_lastMark = -1; }
 // ENDGAME B.3.9 ENG: the destructor markers RECORD each call, so the real
-// inline `DeletingDtor`s can be seen running the dtor per element, downward.
+// destructors can be seen running per element, downward (B3X W1: `delete[]`).
 int         g_dtorCount = 0;
 const void* g_dtorOrder[8] = {};
 void NoteDtor(const void* self) {
@@ -73,7 +74,7 @@ const void* const* VTableOf(void* obj) {
     return *reinterpret_cast<const void* const* const*>(obj);
 }
 
-constexpr int kDeletingDtor   = 0x00;
+constexpr int kDtorSlot   = 0x00;
 constexpr int kTypeName       = 0x08;
 constexpr int kType           = 0x10;
 constexpr int kGetFileVersion = 0x18;
@@ -86,7 +87,6 @@ constexpr int kConstruct      = 0x40;
 // A bare Object::External leaf: whatever it carries at +0x20 IS
 // `?Compile@External@Object@@` (0x1800066e0).
 struct BareExternalProbe final : Object::External {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     int32_t GetFileVersion() const override { return 0; }
     bool Serialize(void*) override { return true; }
     Object::External* Reconstruct() override { return this; }
@@ -125,15 +125,19 @@ Configuration::~Configuration() { Note(this, 90); }
 
 namespace {
 
+// B3X W1: retail slot 0 (the deleting destructor) is the destructor pair;
+// the probe records in its destructor and frees through a recording
+// class-scope operator delete (retail flags 1's MemFree).
 struct SoundBufferProbe final : Audio::SoundBuffer {
-    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    ~SoundBufferProbe() override { Note(this, 0); }
+    DTOR_CHECK_RECORDING_DELETE
 };
 struct SoundEffectProbe final : Audio::SoundEffect {
-    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+    ~SoundEffectProbe() override { Note(this, 0); }
+    DTOR_CHECK_RECORDING_DELETE
 };
 struct StreamProbe final : Audio::Stream {};
 
-using DtorFn    = void* (*)(void*, unsigned);
 using NameFn    = const char* (*)(const void*);
 using TypeFn    = uint32_t (*)(const void*);
 using VerFn     = int32_t (*)(const void*);
@@ -147,8 +151,6 @@ using VoidFn    = void (*)(void*);
 // (ENDGAME B.3.9 TI-REST), checked against that record.
 template <class T>
 void CheckOwnSlotsExceptCompile(void* raw, const ::Object::BaseTypeInfo& record) {
-    Reset(); SlotAt<DtorFn, T>(raw, kDeletingDtor)(raw, 0u);
-    CHECK_EQ(g_lastMark, kDeletingDtor / 8); CHECK(g_lastSelf == raw);
     CHECK((SlotAt<NameFn, T>(raw, kTypeName)(raw)) == record.name);
     CHECK_EQ((SlotAt<TypeFn, T>(raw, kType)(raw)), record.typeId);
     Reset(); (SlotAt<VerFn, T>(raw, kGetFileVersion)(raw));     CHECK_EQ(g_lastMark, kGetFileVersion / 8);
@@ -157,6 +159,28 @@ void CheckOwnSlotsExceptCompile(void* raw, const ::Object::BaseTypeInfo& record)
     Reset(); (SlotAt<VoidFn, T>(raw, kDestruct)(raw));          CHECK_EQ(g_lastMark, kDestruct / 8);
     Reset(); (SlotAt<PtrFn, T>(raw, kConstruct)(raw));          CHECK_EQ(g_lastMark, kConstruct / 8);
     CHECK(g_lastSelf == raw);
+}
+
+// Retail slot 0 (kDtorSlot) is now the destructor pair, read raw: compiler
+// [0] D1 runs ~P once and frees nothing (retail flags 0); [1] D0 runs it and
+// hands the block to the class-scope operator delete (flags 1). D1 is called on
+// a placement-new'd probe that is never destroyed again (a stack probe would be
+// destroyed twice).
+template <class P>
+void CheckDtorPair() {
+    static_assert(kDtorSlot == 0, "retail slot 0");
+    alignas(P) unsigned char buf[sizeof(P)];
+    P* p = ::new (static_cast<void*>(buf)) P();
+    CHECK(VTableOf(p)[0] != VTableOf(p)[1]);
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD1(p);
+    CHECK_EQ(g_lastMark, kDtorSlot / 8); CHECK(g_lastSelf == p);
+    CHECK_EQ(dtor_check::g_frees, 0);
+    P* h = dtor_check::NewOnMalloc<P>();
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD0(h);
+    CHECK_EQ(g_lastMark, kDtorSlot / 8); CHECK(g_lastSelf == h);
+    CHECK_EQ(dtor_check::g_frees, 1); CHECK(dtor_check::g_lastFree == h);
 }
 
 // The qualified door (vtbatch7_soundbuffer_soundeffect.cpp's
@@ -191,10 +215,11 @@ UNIT_TEST(audio_soundbuffer_layout) {
     CHECK_EQ((int)sizeof(Audio::SoundBuffer), 0x80);
     CHECK_EQ((int)alignof(Audio::SoundBuffer), 8);
     CHECK((std::is_base_of<Object::CompiledExternal, Audio::SoundBuffer>::value));  // B7-2
-    // ENDGAME B.3.9 ENG: concrete, protected non-virtual dtor.
+    // ENDGAME B.3.9 ENG: concrete. B3X W1: public virtual destructor (retail
+    // slot 0 = D1 + D0).
     CHECK(!std::is_abstract<Audio::SoundBuffer>::value);
-    CHECK(!std::is_destructible<Audio::SoundBuffer>::value);
-    CHECK(!std::has_virtual_destructor<Audio::SoundBuffer>::value);
+    CHECK(std::is_destructible<Audio::SoundBuffer>::value);
+    CHECK(std::has_virtual_destructor<Audio::SoundBuffer>::value);
     CHECK_EQ((int)offsetof(Audio::SoundBuffer, _loopForever),     0x20);
     CHECK_EQ((int)offsetof(Audio::SoundBuffer, _streamed),        0x21);
     CHECK_EQ((int)offsetof(Audio::SoundBuffer, _durationSeconds), 0x24);
@@ -213,8 +238,8 @@ UNIT_TEST(audio_soundeffect_layout) {
     CHECK((std::is_base_of<Object::External, Audio::SoundEffect>::value));
     CHECK(!(std::is_base_of<Object::CompiledExternal, Audio::SoundEffect>::value));
     CHECK(!std::is_abstract<Audio::SoundEffect>::value);
-    CHECK(!std::is_destructible<Audio::SoundEffect>::value);
-    CHECK(!std::has_virtual_destructor<Audio::SoundEffect>::value);
+    CHECK(std::is_destructible<Audio::SoundEffect>::value);
+    CHECK(std::has_virtual_destructor<Audio::SoundEffect>::value);
     CHECK_EQ((int)offsetof(Audio::SoundEffect, _radius),      0x20);
     CHECK_EQ((int)offsetof(Audio::SoundEffect, _innerRadius), 0x24);
     CHECK_EQ((int)offsetof(Audio::SoundEffect, _maxLength),   0x28);
@@ -288,6 +313,7 @@ UNIT_TEST(audio_soundbuffer_slot_order_and_inherited_compile) {
     SoundBufferProbe probe;
     void* raw = static_cast<void*>(&probe);
     CheckOwnSlotsExceptCompile<SoundBufferProbe>(raw, Audio::SoundBuffer::GetTypeInfo());
+    CheckDtorPair<SoundBufferProbe>();
     // Slot 4 is NOT SoundBuffer's: it is Object::External's Compile, the same
     // pointer a bare External leaf carries, and it answers retail's 1.
     BareExternalProbe bare;
@@ -300,15 +326,18 @@ UNIT_TEST(audio_soundeffect_slot_order_and_own_compile) {
     SoundEffectProbe probe;
     void* raw = static_cast<void*>(&probe);
     CheckOwnSlotsExceptCompile<SoundEffectProbe>(raw, Audio::SoundEffect::GetTypeInfo());
+    CheckDtorPair<SoundEffectProbe>();
     Reset();
     CHECK_EQ((SlotAt<CompileFn, SoundEffectProbe>(raw, kCompile)(raw, nullptr)), 1u);
     CHECK_EQ(g_lastMark, kCompile / 8);
     BareExternalProbe bare;
     CHECK(RetailEntry<SoundEffectProbe>(raw, kCompile / 8) !=
           RetailEntry<BareExternalProbe>(&bare, kCompile / 8));
+    // Nine retail slots, ten compiler slots (D1 and D0 for retail slot 0): all
+    // distinct, D1 != D0 included.
     const void* const* vt = VTableOf(raw);
-    for (int i = 0; i < 9; ++i)
-        for (int j = i + 1; j < 9; ++j)
+    for (int i = 0; i < 10; ++i)
+        for (int j = i + 1; j < 10; ++j)
             CHECK(vt[i] != vt[j]);
 }
 
@@ -336,9 +365,9 @@ UNIT_TEST(audio_stream_slot0_is_run_and_slot1_is_threads_oncompleted) {
 UNIT_TEST(audio_soundeffect_qualified_call_does_not_reenter_the_door) {
     SoundEffectProbe probe;
     void* raw = static_cast<void*>(&probe);
-    const void* minted[9] = {};
+    const void* minted[10] = {};   // nine retail slots = ten compiler slots
     const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 9; ++i) minted[i] = real[i];
+    for (int i = 0; i < 10; ++i) minted[i] = real[i];
     minted[RetailSlot<SoundEffectProbe>(kCompile / 8)] =reinterpret_cast<const void*>(&MintedSoundEffectCompileDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
@@ -425,26 +454,29 @@ UNIT_TEST(audio_accessors_read_retails_offsets) {
 // ENDGAME B.3.9 ENG (B39_RULES D1/D2, rule B9-16) -- the concrete classes.
 // ---------------------------------------------------------------------------
 namespace {
+// B3X W1: retail's flags-1 arm is `delete p`: T's own deleting destructor runs
+// the chain once and frees through T's class-scope operator delete (MemFree;
+// InternalMemFree == free here, matching InternalMemAlloc). The free itself is
+// proven on a Recording<T> stand-in whose class operator delete records.
+// Retail's flags-3 vector arm has no Itanium counterpart; `delete[]` of a
+// `new T[3]` block replaces it (three destructors, downward).
 template <class T, int kSize>
 void CheckBothArms() {
+    static_assert(sizeof(T) == kSize, "the row's element size");
+    static_assert(dtor_check::HasClassDelete<T>::value, "D0 frees through a class-scope operator delete");
     void* m = Object::detail::InternalMemAlloc(kSize, 8);
     CHECK(m != nullptr);
     T* p = ::new (m) T();
     g_dtorCount = 0;
-    CHECK(p->DeletingDtor(1) == p);
+    delete p;
     CHECK_EQ(g_dtorCount, 1);
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * kSize, 8));
-    CHECK(block != nullptr);
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    T* e[3];
-    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * kSize) T();
-    g_dtorCount = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
-    CHECK_EQ(g_dtorCount, 3);
-    CHECK(g_dtorOrder[0] == e[2]);
-    CHECK(g_dtorOrder[1] == e[1]);
-    CHECK(g_dtorOrder[2] == e[0]);
+    T* r = dtor_check::NewOnMalloc<dtor_check::Recording<T>>();
+    g_dtorCount = 0; dtor_check::ResetFrees();
+    delete r;
+    CHECK_EQ(g_dtorCount, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == r);
+    CHECK_ARRAY_DELETE(T, g_dtorCount, g_dtorOrder);
 }
 }  // namespace
 
@@ -491,9 +523,11 @@ UNIT_TEST(b39_eng_soundbuffer_ctor_makes_retails_stores) {
     CHECK(VTableOf(b) == VTableOf(b2));
     CHECK(VTableOf(b) != VTableOf(&probe));
     g_dtorCount = 0;
-    CHECK(b->DeletingDtor(0) == b);
-    CHECK(b2->DeletingDtor(0) == b2);
+    dtor_check::ResetFrees();
+    b->~SoundBuffer();                      // retail slot 0, flags 0: no free
+    b2->~SoundBuffer();
     CHECK_EQ(g_dtorCount, 2);
+    CHECK_EQ(dtor_check::g_frees, 0);
 }
 
 // SoundEffect's factory stores (0x180050493..4d0): one qword 0x3f800000 over
@@ -514,11 +548,14 @@ UNIT_TEST(b39_eng_soundeffect_ctor_makes_retails_stores) {
         CHECK_EQ(q, (uint64_t)0);
     }
     g_dtorCount = 0;
-    CHECK(e->DeletingDtor(0) == e);
+    e->~SoundEffect();                      // retail slot 0, flags 0
     CHECK_EQ(g_dtorCount, 1);
 }
 
+// Retail slot-0 bodies whose vector arm is retired: SoundBuffer 0x18000bef0,
+// SoundEffect 0x180050820.
 UNIT_TEST(b39_eng_soundbuffer_deletingdtor_frees_both_arms) {
+
     CheckBothArms<Audio::SoundBuffer, 0x80>();
 }
 UNIT_TEST(b39_eng_soundeffect_deletingdtor_frees_both_arms) {

@@ -26,16 +26,13 @@ class StorageDisplayDescription final : public Description {
 public:
     StorageDisplayDescription() = default;
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x14000c8e0
+    ~StorageDisplayDescription() override = default;                       // [0] 0x14000c8e0
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x140056ac0
     bool              Serialize(void* stream) override;                    // [5] 0x140056a80
     Object::External* Reconstruct() override;                              // [6] 0x14000c880
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x14000c8d0
     virtual Object::External* Construct();                                 // [9] 0x14000c830
-
-protected:
-    ~StorageDisplayDescription() = default;
 };
 
 static_assert(sizeof(StorageDisplayDescription) == 0x20, "StorageDisplayDescription is 0x20 (create 0x14000c7d0 MemAlloc(0x20))");

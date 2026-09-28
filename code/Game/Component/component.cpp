@@ -28,13 +28,6 @@ Component::Component()
       _flags(0x80),
       _pad24(0) {}
 
-// [0] 0x140031cc0: stamp 0x140162920, `~Internal`, `if (flags & 1) MemFree`.
-Object::Base* Component::DeletingDtor(unsigned flags) {
-    this->~Component();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [1] TypeName / [2] Type, the record and retail's abstract factory (create =
 // the logging stub, in-place = null): ENDGAME B.3.9 RF.
 DEFINE_EXE_ABSTRACT_TYPE(Component, "Object::Internal")
@@ -98,13 +91,6 @@ void     Component::OnMessage(int, void*, uint32_t, uint32_t) {}   // 0x140118ae
 // ============================================================================
 // ControllerComponent
 // ============================================================================
-
-// [0] 0x140032800: stamp 0x140162b80, stamp 0x140162920, `~Internal`, MemFree on &1.
-Object::Base* ControllerComponent::DeletingDtor(unsigned flags) {
-    this->~ControllerComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 
 // [1] TypeName / [2] Type, the record and retail's abstract factory (create =
 // the logging stub, in-place = null): ENDGAME B.3.9 RF.

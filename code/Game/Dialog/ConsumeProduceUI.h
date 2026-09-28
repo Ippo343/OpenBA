@@ -24,7 +24,9 @@ class ConsumeProduceUI final : public UI::DialogController {
 public:
     ConsumeProduceUI() = default;                        // 0x140010ae0 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140010b90
+    // 0x140010b90 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    ~ConsumeProduceUI() override = default;                       // [0] 0x140010b90
     void OnCreated() override;   // [4] 0x14005f3d0
     void OnUpdateLayout() override;   // [7] 0x14005f1f0
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
@@ -33,11 +35,6 @@ public:
     // ---- fields (the Panels.h POD's names, kept for the bodies) --------
     uint64_t data30 = 0;           // +0x30: zeroed
     uint64_t data38 = 0;           // +0x38: zeroed
-
-protected:
-    // 0x140010b90 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    ~ConsumeProduceUI() = default;
 };
 
 static_assert(sizeof(ConsumeProduceUI) == 0x40, "ConsumeProduceUI is 0x40 (create 0x140010ae0 MemAlloc(0x40))");

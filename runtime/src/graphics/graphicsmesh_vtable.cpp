@@ -239,7 +239,7 @@ IO::ReaderWriter* AsRw(ReaderWriter* rw) {
 
 void DestroyCodec(ReaderWriter* rw) {
     if (!rw) return;
-    AsRw(rw)->DeletingDtor(1);
+    delete AsRw(rw);
 }
 
 void EmitInt(ReaderWriter* rw, int32_t* p) {
@@ -303,7 +303,7 @@ int32_t GraphicsMesh::GetFileVersion() const { return 0x3415; }
 // [7] ?Destruct@GraphicsMesh@Graphics@@UEAAXXZ  0x180012540
 //     `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]` — slot 0 with flags 0, dispatched
 //     VIRTUALLY on purpose: a subclass's deleting destructor is what has to run.
-void GraphicsMesh::Destruct() { DeletingDtor(0u); }
+void GraphicsMesh::Destruct() { this->~GraphicsMesh(); }
 
 // [8] ?Construct@GraphicsMesh@Graphics@@UEAAPEAVExternal@Object@@XZ 0x180012530
 //     `TEST RCX,RCX; JNZ 0x1800ff170; XOR EAX,EAX` -- the constructor in place.
@@ -317,7 +317,7 @@ Object::External* GraphicsMesh::Construct() {
 //     Slot 0 with flags 0 (destroy IN PLACE, not free), then the ctor on the
 //     same storage.
 Object::External* GraphicsMesh::Reconstruct() {
-    DeletingDtor(0u);
+    this->~GraphicsMesh();
     return ::new (this) GraphicsMesh();
 }
 

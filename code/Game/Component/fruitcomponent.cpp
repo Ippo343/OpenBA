@@ -125,13 +125,6 @@ FruitComponent::FruitComponent()
     OrFlagsInCtor(0x88);
 }
 
-// [0] 0x140005b20: restamp + ~Internal (no own work), MemFree on &1.
-Object::Base* FruitComponent::DeletingDtor(unsigned flags) {
-    this->~FruitComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // FruitComponent::Startup / OnCreate (vtable slot [4], +0x20, original 0x14004a030)
 // ============================================================

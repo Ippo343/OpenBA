@@ -84,7 +84,7 @@ UNIT_TEST(mib_rp_member_and_fields) {
 UNIT_TEST(mib_rp_base_shape) {
     CHECK(std::is_polymorphic<ResourceProduceComponent>::value);
     CHECK(std::is_abstract<ResourceProduceComponent>::value);           // slot 18 _purecall
-    CHECK(!std::has_virtual_destructor<ResourceProduceComponent>::value);
+    CHECK(std::has_virtual_destructor<ResourceProduceComponent>::value);
     CHECK((std::is_base_of<ControllerComponent, ResourceProduceComponent>::value));
     CHECK_EQ(alignof(ResourceProduceComponent), (size_t)8);
     CHECK_DTOR_SLOT(ResourceProduceComponent);
@@ -104,7 +104,7 @@ void CheckRpLeafShape() {
     CHECK(std::is_polymorphic<T>::value);
     CHECK(!std::is_abstract<T>::value);
     CHECK(std::is_final<T>::value);
-    CHECK(!std::has_virtual_destructor<T>::value);
+    CHECK(std::has_virtual_destructor<T>::value);
     CHECK((std::is_base_of<ResourceProduceComponent, T>::value));
     CHECK((std::is_base_of<ControllerComponent, T>::value));
     CHECK((std::is_base_of<Object::Internal, T>::value));
@@ -155,7 +155,7 @@ void CheckCtlLeaf(size_t memberOff) {
     CHECK(std::is_polymorphic<T>::value);
     CHECK(!std::is_abstract<T>::value);
     CHECK(std::is_final<T>::value);
-    CHECK(!std::has_virtual_destructor<T>::value);
+    CHECK(std::has_virtual_destructor<T>::value);
     CHECK((std::is_base_of<ControllerComponent, T>::value));
     CHECK(!(std::is_base_of<ResourceProduceComponent, T>::value));
     CHECK((std::is_base_of<Object::Internal, T>::value));

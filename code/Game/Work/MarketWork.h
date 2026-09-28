@@ -40,7 +40,8 @@ class MarketWork final : public Work {
 public:
     MarketWork();                                                   // 0x1400f1f70
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002a910
+    // frees the +0x48 demand tree
+    ~MarketWork() override;                                         // [0]  0x14002a910
     void  Persist(void* stream) override;                           // [3]  0x1400f1d70
     int   Execute(void* citizenHolder, void* ctx) override;  // [4]  0x1400eff80
     int   OnComplete(void* param2, void* arg2, int arg3) override;  // [6]  0x1400eff60
@@ -54,9 +55,6 @@ public:
     void*    _field48;           // +0x48: zeroed
     uint32_t _field50;           // +0x50: zeroed
     uint8_t  _pad54[4];          // +0x54: padding
-
-protected:
-    ~MarketWork();                                                // frees the +0x48 demand tree
 };
 
 static_assert(sizeof(MarketWork) == 0x58, "MarketWork is 0x58 (retail create MemAlloc)");

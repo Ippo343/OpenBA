@@ -334,14 +334,6 @@ void ControlUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_
 // and then drives Slot7.
 
 
-// [0] 0x140010e20: ~ControlUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* ControlUI::DeletingDtor(unsigned flags) {
-    this->~ControlUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140010c00: MemAlloc(0x40, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* ControlUI::CreateNewObject() {

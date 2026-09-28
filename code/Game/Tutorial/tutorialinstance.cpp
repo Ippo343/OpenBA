@@ -33,14 +33,6 @@ TutorialInstance::TutorialInstance()
     ::new (static_cast<void*>(&ibpField20)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 }
 
-// [0] 0x1400281a0: stamp, ~Internal (the InternalFactory swap-remove),
-// MemFree on &1.
-Object::Base* TutorialInstance::DeletingDtor(unsigned flags) {
-    this->~TutorialInstance();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // TutorialInstance::Persist -- Slot3 (vtable +0x18, 0x1400e1520)
 // ============================================================

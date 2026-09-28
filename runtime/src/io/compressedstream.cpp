@@ -175,7 +175,7 @@ void CallStreamCloseVirtual(MemoryStream* ms) {
 // (Save::SaveLoad::SaveMetaData / LoadMetaData, PackageFile::ReadPackfile,
 // the exe's GameUpdateLoop::SaveRestoreOut and its roundtrip check) spells
 // `::new (p) IO::CompressedMemoryStream()` and ends the object with a
-// non-virtual `DeletingDtor(0)` at the position the door call had.
+// qualified `T::~T()` at the position the door call had.
 namespace RtIo {
 extern "C" bool RtIo_CompressedStream_Open(CompressedStream*, Stream*, int32_t);    // 0x1800aa560
 extern "C" bool RtIo_CompressedStream_Create(CompressedStream*, Stream*, int32_t);  // 0x1800aa4b0
@@ -397,11 +397,11 @@ bool IO::MemoryStream::Create(int size) {
 // ENDGAME B.3.9 IO: that is `IO::MemoryStream::~MemoryStream` followed by
 // `~Stream` (Stream.h). The door STAYS for its by-name callers
 // (CompressedMemoryStream's dtor above, Object::Internal::Clone, the dialog
-// settings load) and is one non-virtual slot-0 call with flags 0: the
+// settings load) and is a qualified `T::~T()` call (retail: slot 0, flags 0): the
 // destructor chain, no free (B9-6).
 // ENDGAME B.3.9 IO (W2): the ??1MemoryStream door that stood here is gone --
 // Object::Internal::Clone and the dialog-settings load end their stack
-// streams with the class's non-virtual DeletingDtor(0).
+// streams with qualified `T::~T()`.
 
 // ============================================================================
 // Wave 9 lane W, round 2 — ??0MemoryStream and ??0CompressedStream

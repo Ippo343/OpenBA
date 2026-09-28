@@ -44,7 +44,10 @@ public:
         : selectedEntity(0), _field30(nullptr), _field38(nullptr), _field40(nullptr),
           _field48(0), _pad4C{}, _field50(nullptr), _field58(0), _pad5C{} {}
 
-    Object::Base* DeletingDtor(unsigned flags) override;                   // [0]  0x140026b70
+    // 0x1400de950: releases the three Collection::Array buffers (+0x50, +0x40,
+    // +0x30, in that order) — the inlined ~Array bodies. The hand-rolled tree
+    // dtor never did (it leaked them on every PathTool teardown).
+    ~PathTool() override;                                                  // [0]  0x140026b70
     void Startup() override {}                                             // [4]  0x1400de940 RET
     void Shutdown() override;                                              // [5]  0x1400de930
     char OnKey(char active) override;                                      // [6]  0x1400de6b0
@@ -67,12 +70,6 @@ public:
     void*    _field50;         // +0x50 int-pair[] line segments
     int32_t  _field58;         // +0x58 segment count
     uint8_t  _pad5C[4];        // +0x5c
-
-protected:
-    // 0x1400de950: releases the three Collection::Array buffers (+0x50, +0x40,
-    // +0x30, in that order) — the inlined ~Array bodies. The hand-rolled tree
-    // dtor never did (it leaked them on every PathTool teardown).
-    ~PathTool();
 };
 
 namespace PathToolAddr {

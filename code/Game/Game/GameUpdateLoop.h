@@ -42,7 +42,9 @@ public:
                    int32_t mapSize, bool disasters, void* mapConfig,
                    void* terrainConfig, void* climateConfig);
 
-    Engine::UpdateLoop* DeletingDtor(unsigned flags) override;   // [0] 0x140019dd0
+    // [0] 0x140019dd0's body: g_pGameWorldSingleton = 0; then ~String(+0x28) and
+    // ~UpdateLoop are the compiler's member/base chain, in retail's order.
+    ~GameUpdateLoop() override;                                  // [0] 0x140019dd0
     void Startup() override;                                     // [1] 0x140097c00
     void Shutdown() override;                                    // [2] 0x1400977c0
     bool Update(const System::Time& time) override;              // [3] 0x140096380
@@ -65,11 +67,6 @@ public:
     void OnScenarioComplete();                                   // 0x140096830
 
     static const void* Vtable();
-
-protected:
-    // 0x140019dd0's body: g_pGameWorldSingleton = 0; then ~String(+0x28) and
-    // ~UpdateLoop are the compiler's member/base chain, in retail's order.
-    ~GameUpdateLoop();
 
 public:
     // Construction parameters (stored by the ctor, used by Load)

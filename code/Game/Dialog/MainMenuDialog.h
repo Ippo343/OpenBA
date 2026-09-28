@@ -35,7 +35,7 @@ public:
                    Object::InternalPtr<UI::DialogInstance> parent,
                    void* game, void* loop);                         // 0x14009ba30 / pause
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140020da0
+    ~MainMenuDialog() override = default;                          // [0] 0x140020da0
     // [4] PORT GAP: the tree runs a slim Setup (buttons + BuildId child) where
     // retail 0x1400b3cd0 also pauses the audio scenes and hides the in-game
     // buttons (MainMenuDialog_Slot4, kept in mainmenudialog.cpp, is that port).
@@ -46,9 +46,6 @@ public:
     void OnElementEvent(Object::InternalPtr<UI::Element>* element,
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x1400b3b50
-
-protected:
-    ~MainMenuDialog() = default;
 
 public:
     uint64_t dataB8;           // +0xB8: the running game (0 at the front end)

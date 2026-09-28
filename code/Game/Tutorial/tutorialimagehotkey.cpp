@@ -67,13 +67,6 @@ TutorialImageHotKey::~TutorialImageHotKey() {
     reinterpret_cast<System::String*>(&hotkeyName)->~String();   // B.3.1 bridge
 }
 
-// [0] 0x140027d70: ~TutorialImageHotKey, MemFree on &1.
-Object::Base* TutorialImageHotKey::DeletingDtor(unsigned flags) {
-    this->~TutorialImageHotKey();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // TutorialImageHotKey::Serialize (vtable +0x28, 0x1400e0540)
 // ============================================================
@@ -118,7 +111,7 @@ bool TutorialImageHotKey::Serialize(void* stream) {
 // TutorialImageHotKey::Reconstruct [6] 0x140027d50 / Construct [8] 0x140027d40
 // ============================================================
 Object::External* TutorialImageHotKey::Reconstruct() {
-    DeletingDtor(0);
+    this->~TutorialImageHotKey();
     return ::new (static_cast<void*>(this)) TutorialImageHotKey();
 }
 Object::External* TutorialImageHotKey::Construct() {

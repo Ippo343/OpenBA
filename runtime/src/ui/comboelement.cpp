@@ -202,7 +202,7 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
         RtAddr<DynArrayPushFn>(0x18007a0d0ull)(u + kUiDialogs,
                                                I32(u, kUiDialogCount) + 1, &pushed);
 
-        stackDialog->DeletingDtor(0);                                // ??1Dialog
+        stackDialog->UI::Dialog::~Dialog();                          // ??1Dialog
     }
 
     Object::InternalPtr<DialogInstance> dlgCopy = *dialog;

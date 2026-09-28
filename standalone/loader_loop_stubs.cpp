@@ -120,16 +120,12 @@ void WaitForEngineLoader() {
 // LOADER_READ_SPIN.md). The transition itself is the inherited
 // LoaderLoop::Update: next loop once the loader is idle and the delay passed.
 
-Engine::UpdateLoop* InnerLoaderLoop::DeletingDtor(unsigned flags) {
-    printf("[InnerLL::Destroy] self=%p flags=%u\n", (void*)this, flags);
-    // Retail 0x140001150: CALL ??1LoaderLoop@Engine@@ (import 0x140152ba8),
-    // then MemFree on &1. The compiler's chain runs ~LoaderLoop -> ~UpdateLoop
-    // (the _loadBit hand-back + ExternalFactory::Clean + the list cleanup).
-    this->~InnerLoaderLoop();
-    if (flags & 1) {
-        fn_MemFreeStatic(this);
-    }
-    return this;
+// Retail 0x140001150 (slot 0): CALL ??1LoaderLoop@Engine@@ (import
+// 0x140152ba8), then MemFree on &1. The compiler's chain runs ~LoaderLoop ->
+// ~UpdateLoop (the _loadBit hand-back + ExternalFactory::Clean + the list
+// cleanup); the free is UpdateLoop's operator delete.
+InnerLoaderLoop::~InnerLoaderLoop() {
+    printf("[InnerLL::Destroy] self=%p\n", (void*)this);
 }
 
 void InnerLoaderLoop::Startup() {
@@ -172,14 +168,9 @@ const char* InnerLoaderLoop::GetResourceFilename() {
 // Retail overrides only [0]; every other slot is the base's (inherited).
 // [1] Startup: the same STANDALONE DIVERGENCE as InnerLoaderLoop's.
 
-Engine::UpdateLoop* GameLoaderLoop::DeletingDtor(unsigned flags) {
-    printf("[OuterLL::Destroy] self=%p flags=%u\n", (void*)this, flags);
-    // Retail 0x140001190: the same shape as the inner loop's slot 0.
-    this->~GameLoaderLoop();
-    if (flags & 1) {
-        fn_MemFreeStatic(this);
-    }
-    return this;
+// Retail 0x140001190 (slot 0): the same shape as the inner loop's.
+GameLoaderLoop::~GameLoaderLoop() {
+    printf("[OuterLL::Destroy] self=%p\n", (void*)this);
 }
 
 void GameLoaderLoop::Startup() {

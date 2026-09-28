@@ -38,6 +38,7 @@
 
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
 
 #include "video/CompanionData.h"
 #include "video/VertexLayout.h"
@@ -122,7 +123,9 @@ UNIT_TEST(video_companion_data_layout) {
 // `ContextData`), 7 (`ImageBufferData` / `IndexBufferData` / `VertexBufferData`)
 // and 3 (five classes; `ConstantBufferData` / `RenderBufferData`'s 4 is the same
 // claim one slot longer). Slot 0 is `DeletingDtor(unsigned)` and is an ordinary
-// virtual, NOT a destructor — ENDGAME B.1 decision 2.
+// virtual, NOT a destructor — ENDGAME B.1 decision 2. B3X W1 kept this shape
+// for the twelve `Video::*Data` classes on purpose (exempt by decision,
+// B3X_RULES X1: dx11's hand tables are built in retail order).
 //
 // The mirrors give slot 0 a BODY where the real classes declare it `= 0`. That
 // is the one deliberate difference: the real slot-0 bodies are the twelve
@@ -384,10 +387,12 @@ UNIT_TEST(video_vertexlayout_layout) {
                  offsetof(Collection::Array<uint8_t>, _size),
              (size_t)0x40);
 
-    // Not constructible (B34_BRIEFS A.4): the default constructor is protected,
-    // so an accidental `Video::VertexLayout vl;` cannot stamp GCC's table on an
-    // object the tree reads through the MINTED one.
-    CHECK(!std::is_default_constructible<Video::VertexLayout>::value);
+    // Was "not constructible" (B34_BRIEFS A.4: a protected default constructor
+    // kept `Video::VertexLayout vl;` from stamping GCC's table on an object read
+    // through the MINTED one). ENDGAME B.3.9 VID made the constructor retail's
+    // public one (the mint row is retired) and B3X W1 made the destructor
+    // public and virtual, so the class is default-constructible now.
+    CHECK(std::is_default_constructible<Video::VertexLayout>::value);
 }
 
 // ===========================================================================
@@ -401,9 +406,14 @@ UNIT_TEST(video_vertexlayout_layout) {
 // ===========================================================================
 namespace {
 
+// B3X W1: `Video::VertexLayout` is an Object::Base class and FLIPPED (retail
+// slot 0 = `virtual ~T()`, D1 + D0 under GCC); the mirror follows it, with a
+// recording class-scope operator delete for the root's MemFree one. (The
+// `*Data` mirrors above are EXEMPT by decision, B3X_RULES X1, and keep theirs.)
 class MirrorCompiledExternal {
 public:
-    virtual void* DeletingDtor(unsigned flags) { Note(this, 0, flags); return this; }
+    virtual ~MirrorCompiledExternal() { Note(this, 0); }      // [0] D1 + D0
+    DTOR_CHECK_RECORDING_DELETE
     virtual const char* TypeName() const = 0;                 // [1]
     virtual uint32_t    Type() const = 0;                     // [2]
     virtual int32_t     GetFileVersion() const = 0;           // [3]
@@ -412,8 +422,6 @@ public:
     virtual bool        Serialize(void* stream) = 0;           // [5]
     virtual void*       Reconstruct() = 0;                     // [6]
     virtual void        Destruct() = 0;                        // [7]
-protected:
-    ~MirrorCompiledExternal() = default;
 };
 
 class MirrorVertexLayout final : public MirrorCompiledExternal {
@@ -434,7 +442,24 @@ UNIT_TEST(video_vertexlayout_slot_order) {
     MirrorVertexLayout vl;
     void* p = &vl;
 
-    Reset(); SlotAt<void* (*)(void*, unsigned), MirrorVertexLayout>(p, 0x00)(p, 0); CHECK_EQ(g_lastMark, 0);
+    // Retail slot 0 is D1 (raw) / D0 (compiler slot 1). D1 really destroys, so
+    // it runs on a placement-new'd object never destroyed again (`vl` on the
+    // stack would be destroyed twice); D0 frees through the class operator delete.
+    {
+        alignas(MirrorVertexLayout) unsigned char buf[sizeof(MirrorVertexLayout)];
+        MirrorVertexLayout* q = ::new (static_cast<void*>(buf)) MirrorVertexLayout();
+        CHECK(dtor_check::CompilerEntry<const void*>(q, 0) != dtor_check::CompilerEntry<const void*>(q, 1));
+        Reset(); dtor_check::ResetFrees();
+        SlotAt<void (*)(void*), MirrorVertexLayout>(q, 0x00)(q);
+        CHECK_EQ(g_lastMark, 0); CHECK(g_lastSelf == q);
+        CHECK_EQ(dtor_check::g_frees, 0);
+        MirrorVertexLayout* h = dtor_check::NewOnMalloc<MirrorVertexLayout>();
+        Reset(); dtor_check::ResetFrees();
+        dtor_check::CallD0(h);
+        CHECK_EQ(g_lastMark, 0); CHECK(g_lastSelf == h);
+        CHECK_EQ(dtor_check::g_frees, 1); CHECK(dtor_check::g_lastFree == h);
+    }
+
     Reset(); SlotAt<const char* (*)(void*), MirrorVertexLayout>(p, 0x08)(p);        CHECK_EQ(g_lastMark, 1);
     Reset(); SlotAt<uint32_t (*)(void*), MirrorVertexLayout>(p, 0x10)(p);           CHECK_EQ(g_lastMark, 2);
     Reset(); SlotAt<int32_t (*)(void*), MirrorVertexLayout>(p, 0x18)(p);            CHECK_EQ(g_lastMark, 3);

@@ -28,7 +28,12 @@ class TradeUI final : public UI::DialogController {
 public:
     TradeUI() = default;                                 // 0x140015f80 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140016020
+    // 0x140016020 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    // PORT GAP (B38 D2): retail (0x140086a50) frees the Array/String members at +0x128,
+    // +0xb0, +0xa0, +0x90, +0x80, +0x70, +0x60, +0x50, +0x40, +0x30; the tree never did
+    // (leak kept).
+    ~TradeUI() override = default;                                // [0] 0x140016020
     void OnCreated() override;   // [4] 0x140084dd0
     void OnOpened() override;   // [5] 0x140082a70
     void OnClosed() override;   // [6] 0x140082a00
@@ -74,14 +79,6 @@ public:
     uint64_t data130 = 0;          // +0x130
     uint64_t data138 = 0;          // +0x138
     uint64_t data140 = 0;          // +0x140
-
-protected:
-    // 0x140016020 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail (0x140086a50) frees the Array/String members at +0x128,
-    // +0xb0, +0xa0, +0x90, +0x80, +0x70, +0x60, +0x50, +0x40, +0x30; the tree never did
-    // (leak kept).
-    ~TradeUI() = default;
 };
 
 static_assert(sizeof(TradeUI) == 0x148, "TradeUI is 0x148 (create 0x140015f80 MemAlloc(0x148))");

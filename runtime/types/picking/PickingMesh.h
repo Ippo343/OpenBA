@@ -161,19 +161,11 @@ public:
     // `flags & 1` and returns it; otherwise ~PickingMesh, free on `flags & 1`.
     // Nothing `new[]`s a PickingMesh, so the array arm is the faithful
     // unreachable it is in Object::Internal's (internal_class.cpp).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<PickingMesh*>(self + static_cast<int64_t>(i) * 0x48)->~PickingMesh();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~PickingMesh();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1PickingMesh@Picking@@UEAA@XZ` 0x1801228a0. VIRTUAL (the normal-virtual
+    // cutover, B3X W1); pickingmesh.cpp holds retail's
+    // body (the SubMesh array through 0x180073720, then both Strings) and the
+    // compiler chains ~External, retail's tail call.
+    ~PickingMesh() override;
 
     // [1] 0x180071ab0 TypeName / [2] 0x180071a90 Type, the static TypeId
     // 0x180071aa0, `_TypeName` / `_ParentTypeName` and the factory pair
@@ -207,19 +199,12 @@ public:
     PickingMesh& operator=(const PickingMesh& src);           // 0x180071f60
     static void* operator new(std::size_t bytes);              // 0x180071ac0
     static void* operator new(std::size_t bytes, void* place); // 0x180071b30
-    static void  operator delete(void* p);                     // 0x180071b40
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                     // 0x180071b40
     // Retail's factory pair (B39_RULES D2): `MemAlloc(0x48, 8)` + the ctor, and
     // the null-tested in-place ctor. Defined in pickingmesh.cpp. NOTE the class
     // declares its own placement `operator new` (0x180071b30, not ported), so
     // every placement construction in the tree spells `::new (p) PickingMesh()`.
     // (Declared by DECLARE_TYPE above.)
-
-protected:
-    // `??1PickingMesh@Picking@@UEAA@XZ` 0x1801228a0. NON-VIRTUAL (no virtual
-    // dtor until the normal-virtual cutover); pickingmesh.cpp holds retail's
-    // body (the SubMesh array through 0x180073720, then both Strings) and the
-    // compiler chains ~External, retail's tail call.
-    ~PickingMesh();
 
 public:
     // ---- the 0x28 bytes PickingMesh adds (public: the doors and the Scene

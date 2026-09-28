@@ -35,7 +35,8 @@ class FrustumOutlineElement final : public UI::Element {
 public:
     FrustumOutlineElement();                                          // 0x14006c2f0
 
-    Object::Base* DeletingDtor(unsigned flags) override;              // [0] 0x140012560
+    // ~Element only
+    ~FrustumOutlineElement() override = default;                      // [0] 0x140012560
     void ComputeSize() override;                                      // [4] 0x14006c290
     void ComputeLayout(int32_t x, int32_t y,
                        int32_t w, int32_t h) override;                // [5] 0x14006c1c0
@@ -45,9 +46,6 @@ public:
     UI::Sprite _lineSprite;   // +0xc0 the outline's line sprite
     int32_t    _width;        // +0xd0 minimap width  (ctor -1)
     int32_t    _height;       // +0xd4 minimap height (ctor -1)
-
-protected:
-    ~FrustumOutlineElement() = default;                               // ~Element only
 };
 
 static_assert(sizeof(FrustumOutlineElement) == 0xd8, "FrustumOutlineElement is 0xd8 (create 0x140012400)");

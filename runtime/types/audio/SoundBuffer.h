@@ -91,19 +91,11 @@ public:
     // [0] 0x18000bef0 -- MSVC's VECTOR deleting destructor (`TEST DL,2`,
     // `MOV EDX,0x80`, the eh-vector dtor over ~SoundBuffer 0x1800e03b0), both
     // arms as the retired RT_DELDTOR row ran them. Nothing `new[]`s one.
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<SoundBuffer*>(self + static_cast<int64_t>(i) * 0x80)->~SoundBuffer();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~SoundBuffer();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1SoundBuffer@Audio@@UEAA@XZ` 0x1800e03b0. VIRTUAL
+    // (B3X W1). batchc_audio_leaves.cpp holds retail's
+    // body (the Device callback, the two buffer frees); the compiler releases
+    // both Strings and chains ~CompiledExternal -> ~External, retail's order.
+    ~SoundBuffer() override;
 
     // [1] 0x18000b8b0 TypeName / [2] 0x18000b890 Type, the static TypeId
     // 0x18000b8a0, `_TypeName` 0x18000b870 / `_ParentTypeName` 0x18000b880 and
@@ -140,7 +132,7 @@ public:
     SoundBuffer& operator=(const SoundBuffer& src);            // 0x18000bdc0
     static void* operator new(std::size_t bytes);              // 0x18000b8c0
     static void* operator new(std::size_t bytes, void* place); // 0x18000b930
-    static void  operator delete(void* p);                     // 0x18000b940
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                     // 0x18000b940
     // Retail's factory pair (B39_RULES D2), defined in
     // vtbatch7_soundbuffer_soundeffect.cpp. The class declares its own
     // placement `operator new` (not ported): placement spells `::new (p)`.
@@ -149,13 +141,6 @@ public:
 private:
     void PlatformConstruct();                                 // 0x1800e0550
     void PlatformDestruct();                                   // 0x1800e0580
-
-protected:
-    // `??1SoundBuffer@Audio@@UEAA@XZ` 0x1800e03b0. NON-VIRTUAL (no virtual dtor
-    // until the normal-virtual cutover). batchc_audio_leaves.cpp holds retail's
-    // body (the Device callback, the two buffer frees); the compiler releases
-    // both Strings and chains ~CompiledExternal -> ~External, retail's order.
-    ~SoundBuffer();
 
 public:
     // ---- the 0x60 bytes SoundBuffer adds (public: the doors, the Device and

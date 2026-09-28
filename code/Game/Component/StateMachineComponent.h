@@ -68,7 +68,8 @@ public:
 
     StateMachineComponent();                                      // 0x14012ba30
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x1400384a0
+    // 0x14012b9e0
+    ~StateMachineComponent() override = default;                  // [0]  0x1400384a0
     void Persist(void* stream) override;                          // [3]  0x14012b940
     void Startup() override;                                      // [4]  0x14012b6a0
     void OnAdded() override;                                      // [6]  0x14012b660
@@ -81,9 +82,6 @@ public:
     void*    controllerSelf;      // +0x48 StateMachine: current node (retail ctor this+0x28)
     uint32_t stateFlags;          // +0x50 input/active/pending/transition (retail ctor 0xff00ffff)
     uint8_t  _pad54[4];           // +0x54
-
-protected:
-    ~StateMachineComponent() = default;                           // 0x14012b9e0
 };
 
 static_assert(sizeof(StateMachineComponent) == 0x58, "StateMachineComponent is 0x58 (create 0x1400382d0)");

@@ -42,7 +42,8 @@ public:
 
     PastureComponent();                                                  // 0x1401280e0
 
-    Object::Base* DeletingDtor(unsigned flags) override;                // [0]  0x140036910
+    // 0x140128070
+    ~PastureComponent() override;                                       // [0]  0x140036910
     void          Persist(void* stream) override;                       // [3]  0x140127f40
     void          Startup() override;                                   // [4]  0x140127a50
     void          OnAdded() override;                                   // [6]  0x140127a30
@@ -62,9 +63,6 @@ public:
     uint8_t  _pad40[4];            // +0x40 capacity (OnAdded); not written by the ctor
     uint32_t field44;              // +0x44
     StateController _controller;   // +0x48 the embedded controller (D6)
-
-protected:
-    ~PastureComponent();                                                 // 0x140128070
 };
 
 static_assert(sizeof(PastureComponent) == 0x68, "PastureComponent is 0x68 (create 0x140036730)");

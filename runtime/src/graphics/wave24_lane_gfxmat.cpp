@@ -444,7 +444,7 @@ namespace Graphics {
 
 // ---------------------------------------------------------------------------
 // The three lifecycle slots, 8 / 7 / 6. ENDGAME B.3.9 GFX: placement new of the
-// class and `DeletingDtor(0)`; the doors are retired.
+// class and `~T()` (slot 0, flags 0); the doors are retired.
 // ---------------------------------------------------------------------------
 
 // [8] ?Construct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ 0x180002ad0
@@ -463,7 +463,7 @@ Object::External* MaterialInstance::Construct() {
 //     has to run.
 void MaterialInstance::Destruct() {
     ++g_destructCalls;
-    DeletingDtor(0u);
+    this->~MaterialInstance();
 }
 
 // [6] ?Reconstruct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ 0x180002a50
@@ -472,7 +472,7 @@ void MaterialInstance::Destruct() {
 //     asymmetry, kept.
 Object::External* MaterialInstance::Reconstruct() {
     ++g_reconstructCalls;
-    DeletingDtor(0u);
+    this->~MaterialInstance();
     return ::new (this) MaterialInstance();
 }
 
@@ -571,7 +571,7 @@ bool MaterialInstance::Serialize(void* streamv) {
         this->MaterialInstance::BuildParameters();
     }
 
-    if (enc) AsRw(enc)->DeletingDtor(1);
+    if (enc) delete AsRw(enc);
 
     // Attendance and an effectiveness count. NOT a comparison — see the header
     // block: the replay for this body lives in tools/gfxmat24_probe/.
@@ -700,7 +700,7 @@ void AnimationManager::Serialize(IO::Serializer& s) {
 
     RtAddr<AnimSerElemFn>(0x18005c660ull)(&localSer, n, _instances._data);
 
-    if (enc) AsRw(enc)->DeletingDtor(1);
+    if (enc) delete AsRw(enc);
 }
 
 }  // namespace Graphics

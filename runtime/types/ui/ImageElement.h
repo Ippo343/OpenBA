@@ -53,8 +53,8 @@
 //
 // ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
 // ctor is retail's `??0ImageElement@UI@@QEAA@XZ` (0x180118410) minus its vptr stores;
-// slot 0 is the class's own vector deleting dtor; ~ImageElement is protected and
-// non-virtual. The factory pair is the class's own; the minted
+// slot 0 is the class's own vector deleting dtor; ~ImageElement is public and
+// virtual. The factory pair is the class's own; the minted
 // `??_7ImageElement@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
 // the doors are retired.
 // ============================================================================
@@ -86,20 +86,9 @@ public:
     // ---- the twelve slots, in measured order ------------------------------
     // [0] 0x180036600 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0xe0`, the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<ImageElement*>(self + static_cast<int64_t>(i) * 0xe0)
-                    ->~ImageElement();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~ImageElement();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1ImageElement@UI@@UEAA@XZ` (0x180118470). EMPTY
+    // (imageelement.cpp): restamp, then ~Element, which the compiler chains.
+    ~ImageElement() override;
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
     // retail: TypeName 0x1800362b0, Type 0x180036290, TypeId 0x1800362a0, _TypeName 0x180036270
@@ -130,11 +119,6 @@ public:
     ImageElement(const ImageElement& src);                        // 0x1800364c0  not ported (door retired: no caller)
     ImageElement& operator=(const ImageElement& src);             // 0x180036540  not ported
 
-protected:
-    // `??1ImageElement@UI@@UEAA@XZ` (0x180118470). NON-VIRTUAL and EMPTY
-    // (imageelement.cpp): restamp, then ~Element, which the compiler chains.
-    ~ImageElement();
-
 private:
 
 public:
@@ -148,7 +132,7 @@ public:
 static_assert(sizeof(ImageElement) == 0xE0,
               "UI::ImageElement is 0xE0 bytes (MOV EDX,0xe0 in 0x180036600)");
 static_assert(alignof(ImageElement) == 8, "UI::ImageElement aligns to 8");
-static_assert(!std::has_virtual_destructor<ImageElement>::value, "ENDGAME decision 2");
+static_assert(std::has_virtual_destructor<ImageElement>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<ImageElement>::value, "B39 D1: concrete");
 static_assert(offsetof(ImageElement, _sprite) == sizeof(Element),
               "ImageElement's own fields begin at the end of UI::Element");

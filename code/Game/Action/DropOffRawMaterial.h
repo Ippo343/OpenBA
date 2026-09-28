@@ -23,7 +23,7 @@ public:
     DropOffRawMaterial();                                                   // create 0x140022600
     DropOffRawMaterial(uint64_t* storage, uint64_t* source, uint64_t resType, uint32_t count,
                        uint8_t flag);   // 0x1400c7cd0
-    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x140022670
+    ~DropOffRawMaterial() override = default;                  // [0] 0x140022670
     void Persist(void* stream) override;                       // [3] 0x1400c7b10
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c7300
     void CheckEntity() override;                               // [8] 0x1400c72f0 (JMP 0x1400c7570)
@@ -36,9 +36,6 @@ public:
     void*     _field28;          // +0x28 resource type
     void*     _field30;          // +0x30 target storage
     void*     _field38;          // +0x38 source entity
-
-protected:
-    ~DropOffRawMaterial() = default;
 };
 
 static_assert(sizeof(DropOffRawMaterial) == 0x40, "DropOffRawMaterial is 0x40 (create 0x140022600 MemAlloc)");

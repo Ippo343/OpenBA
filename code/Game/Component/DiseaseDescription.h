@@ -29,7 +29,7 @@ class DiseaseDescription final : public Description {
 public:
     DiseaseDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140004f20
+    ~DiseaseDescription() override = default;                              // [0] 0x140004f20
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x140048f20
     bool              Serialize(void* stream) override;                    // [5] 0x140048e40
     Object::External* Reconstruct() override;                              // [6] 0x140004ec0
@@ -57,9 +57,6 @@ public:
     float durationMonths;                       // +0x3c outbreak length
     int32_t spreadRadius;                       // +0x40 spread offset, tiles
     int32_t _i44;                               // +0x44 zeroed by the tree's ctor, never serialized
-
-protected:
-    ~DiseaseDescription() = default;
 };
 
 static_assert(sizeof(DiseaseDescription) == 0x48, "DiseaseDescription is 0x48 (create 0x140004e10 MemAlloc(0x48))");

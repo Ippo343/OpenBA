@@ -24,7 +24,11 @@ class StatusIconUI final : public UI::DialogController {
 public:
     StatusIconUI() = default;                            // 0x140014180 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140014370
+    // 0x140014370 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    // PORT GAP (B38 D2): retail frees the Array/String member at +0x30; the tree never did
+    // (leak kept).
+    ~StatusIconUI() override = default;                           // [0] 0x140014370
     void OnCreated() override;   // [4] 0x14007b270
     void OnUpdateLayout() override;   // [7] 0x14007b0a0
     // [8] STANDALONE DEVIATION: retail inherits DialogController::OnUpdate (RET); the tree drives this panel's per-frame refresh here.
@@ -33,13 +37,6 @@ public:
     // ---- fields (the Panels.h POD's names, kept for the bodies) --------
     uint64_t data30 = 0;           // +0x30: zeroed
     uint64_t data38 = 0;           // +0x38: zeroed
-
-protected:
-    // 0x140014370 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail frees the Array/String member at +0x30; the tree never did
-    // (leak kept).
-    ~StatusIconUI() = default;
 };
 
 static_assert(sizeof(StatusIconUI) == 0x40, "StatusIconUI is 0x40 (create 0x140014180 MemAlloc(0x40))");

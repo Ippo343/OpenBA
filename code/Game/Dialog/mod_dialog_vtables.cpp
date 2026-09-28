@@ -150,11 +150,11 @@ ModDialog::~ModDialog() {
         uintptr_t e = entries + static_cast<uintptr_t>(i) * 0x58;
         // Retail order +0x50, +0x48, +0x40; each deleted through its own slot 0 (B.3.x bridge).
         if (void* sheet = *reinterpret_cast<void**>(e + 0x50))
-            reinterpret_cast<UI::SpriteSheet*>(sheet)->DeletingDtor(1);
+            delete reinterpret_cast<UI::SpriteSheet*>(sheet);
         if (void* mat = *reinterpret_cast<void**>(e + 0x48))
-            reinterpret_cast<Graphics::MaterialInstance*>(mat)->DeletingDtor(1);
+            delete reinterpret_cast<Graphics::MaterialInstance*>(mat);
         if (void* image = *reinterpret_cast<void**>(e + 0x40))
-            reinterpret_cast<Video::ImageBuffer*>(image)->DeletingDtor(1);
+            delete reinterpret_cast<Video::ImageBuffer*>(image);
     }
     if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(entries));
     *reinterpret_cast<uint64_t*>(s + 0xB8) = 0;
@@ -167,13 +167,6 @@ ModDialog::~ModDialog() {
         new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *reinterpret_cast<uint64_t*>(s + 0xD0) = nullIbp;
     }
-}
-
-// [0] 0x140012a30: ~ModDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
-Object::Base* ModDialog::DeletingDtor(unsigned flags) {
-    this->~ModDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
 }
 
 // create 0x140012900: MemAlloc(0xd8, 8), then the ctor.
@@ -205,13 +198,6 @@ ModDetailsDialog::ModDetailsDialog() : dataB8(0), modIndex(0), _padC4(0) {}
 
 ModDetailsDialog::~ModDetailsDialog() {
     if (this == g_lastModDetails) g_lastModDetails = nullptr;
-}
-
-// [0] 0x140012890.
-Object::Base* ModDetailsDialog::DeletingDtor(unsigned flags) {
-    this->~ModDetailsDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
 }
 
 // create 0x140012790: MemAlloc(0xc8, 8), then the ctor.

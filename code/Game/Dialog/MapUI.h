@@ -24,7 +24,12 @@ class MapUI final : public UI::DialogController {
 public:
     MapUI() = default;                                   // 0x140012240 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x1400124d0
+    // 0x1400124d0 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    // PORT GAP (B38 D2): retail (0x14006ce90) destroys the four owned objects at +0x38,
+    // +0x30, +0x48, +0x40 through their slot 0 with flags 1; the tree never did (leak
+    // kept).
+    ~MapUI() override = default;                                  // [0] 0x1400124d0
     void Persist(void* /*stream*/) override {}   // [3] 0x14006ce80  RET 0 in retail
     void OnCreated() override;   // [4] 0x14006ca80
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
@@ -35,14 +40,6 @@ public:
     uint64_t data38 = 0;           // +0x38
     uint64_t data40 = 0;           // +0x40
     uint64_t data48 = 0;           // +0x48
-
-protected:
-    // 0x1400124d0 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail (0x14006ce90) destroys the four owned objects at +0x38,
-    // +0x30, +0x48, +0x40 through their slot 0 with flags 1; the tree never did (leak
-    // kept).
-    ~MapUI() = default;
 };
 
 static_assert(sizeof(MapUI) == 0x50, "MapUI is 0x50 (create 0x140012240 MemAlloc(0x50))");

@@ -23,17 +23,14 @@ class AttendanceUI final : public UI::DialogController {
 public:
     AttendanceUI() = default;                            // 0x1400104b0 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140010560
+    // 0x140010560 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    ~AttendanceUI() override = default;                           // [0] 0x140010560
     void OnCreated() override;   // [4] 0x14005dd40
     void OnUpdateLayout() override;   // [7] 0x14005dc50
 
     // ---- fields (the Panels.h POD's names, kept for the bodies) --------
     uint64_t data30 = 0;           // +0x30: zeroed
-
-protected:
-    // 0x140010560 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    ~AttendanceUI() = default;
 };
 
 static_assert(sizeof(AttendanceUI) == 0x38, "AttendanceUI is 0x38 (create 0x1400104b0 MemAlloc(0x38))");

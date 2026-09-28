@@ -56,21 +56,11 @@ public:
     }
 
     // ---- the ten slots, in retail order -----------------------------------
-    // [0] 0x1800403a0 -- MSVC's VECTOR deleting destructor, both arms exactly as the
-    // retired RT_DELDTOR row ran them (`MOV EDX,0x88` = the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<GraphDescription*>(self + static_cast<int64_t>(i) * 0x88)->~GraphDescription();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~GraphDescription();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // [0] 0x1800403a0 -- MSVC's VECTOR deleting destructor (retail; here the
+    // virtual destructor, B3X W1) (`MOV EDX,0x88` = the element size).
+    // ??1GraphDescription 0x1800d1b30 -- VIRTUAL (B3X W1); retail's body in
+    // graphdescription.cpp, the compiler chains ~ElementDescription / ~External.
+    ~GraphDescription() override;
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
     // retail: TypeName 0x180040090, Type 0x180040070, _TypeName 0x180040050, _ParentTypeName 0x180040060
@@ -89,11 +79,6 @@ public:
 
     GraphDescription(const GraphDescription& src);                // 0x180040250  not ported
     GraphDescription& operator=(const GraphDescription& src);     // 0x1800402d0  not ported
-
-protected:
-    // ??1GraphDescription 0x1800d1b30 -- NON-VIRTUAL; retail's body in
-    // graphdescription.cpp, the compiler chains ~ElementDescription / ~External.
-    ~GraphDescription();
 
 private:
 

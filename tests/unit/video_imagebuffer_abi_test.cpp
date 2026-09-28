@@ -48,6 +48,7 @@
 
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
 
 #include "video/ImageBuffer.h"
 #include "video/RenderState.h"
@@ -132,8 +133,12 @@ UNIT_TEST(video_imagebuffer_layout) {
 // ===========================================================================
 // PART B — slot order across the whole chain, on mirrors.
 //
-// Slot 0 is `DeletingDtor(unsigned)` and is an ordinary virtual, NOT a
-// destructor (ENDGAME B.1 decision 2). The mirrors give slot 0, slot 9 and
+// Retail slot 0 is the deleting destructor. Since B3X W1 the real chain
+// declares `virtual ~T()` there, which GCC lays out as TWO entries (D1
+// complete, D0 deleting): retail slot n >= 1 is compiler slot n + 1, and the
+// SlotAt reads translate (RetailByteOffset). The mirrors follow the product,
+// with a recording class-scope operator delete for the root's MemFree one.
+// The mirrors give slot 9, `Compile` and
 // `Generate` a BODY where the real classes declare them `= 0`; that is the one
 // deliberate difference, and the reason is the same as block A's — the real
 // bodies are `deleting_dtor.cpp` table rows and `buffers.cpp` /
@@ -152,11 +157,16 @@ namespace {
 // inherits, flattened into the mirror so the indices line up with retail's.
 class MirrorImageBuffer {
 public:
-    virtual MirrorImageBuffer* DeletingDtor(unsigned flags) { Note(this, 0, flags); return this; }
+    virtual ~MirrorImageBuffer() { Note(this, 0); }                // [0] D1 + D0
+    DTOR_CHECK_RECORDING_DELETE
     virtual const char* TypeName() const = 0;                      // [1]
     virtual uint32_t    Type() const = 0;                          // [2]
     virtual int32_t     GetFileVersion() const = 0;                // [3]
-    virtual uint32_t    Compile(const void* path) = 0;             // [4] External's
+    // [4] External's own, NOT pure in retail (`?Compile@External@Object@@`);
+    // given a body here so PART C has a concrete base member to call qualified.
+    virtual uint32_t    Compile(const void* path) {
+        Note(this, 104, static_cast<long long>(reinterpret_cast<uintptr_t>(path))); return 1u;
+    }
     virtual bool        Serialize(void* stream) = 0;               // [5]
     virtual void*       Reconstruct() = 0;                         // [6]
     virtual void        Destruct() = 0;                            // [7]
@@ -164,8 +174,6 @@ public:
     virtual bool        Create(int32_t a, int32_t b, int32_t c, uint32_t d,
                                int32_t w, int32_t h, int32_t f,
                                int32_t u, int32_t v, int32_t ww, void* lv) = 0;  // [9]
-protected:
-    ~MirrorImageBuffer() = default;
 };
 
 // The intermediate base: inherits 6, 7, 8 AND 9 and adds two PURE slots.
@@ -174,8 +182,6 @@ public:
     virtual void Generate(void* context, int32_t generation) const = 0;   // [10]
     virtual void Render(void* renderer, const void* scene, const void* camera,
                         int32_t generation) const = 0;                    // [11]
-protected:
-    ~MirrorGenerated() = default;
 };
 
 // `ReflectionImageBuffer`'s override set: 1,2,3,5,6,7,8,10,11 — and slot 9
@@ -213,7 +219,7 @@ UNIT_TEST(video_imagebuffer_chain_slot_order) {
     CHECK_EQ((const void*)base, (const void*)&probe);
     CHECK_EQ((const void*)static_cast<MirrorGenerated*>(&probe), (const void*)&probe);
 
-    using DelDtorFn   = void* (*)(void*, unsigned);
+    using DtorFn      = void (*)(void*);
     using TypeNameFn  = const char* (*)(const void*);
     using TypeFn      = uint32_t (*)(const void*);
     using VersionFn   = int32_t (*)(const void*);
@@ -226,9 +232,26 @@ UNIT_TEST(video_imagebuffer_chain_slot_order) {
     using GenerateFn  = void (*)(const void*, void*, int32_t);
     using RenderFn    = void (*)(const void*, void*, const void*, const void*, int32_t);
 
-    Reset(); SlotAt<DelDtorFn, ProbeGenerated>(&probe, 0x00)(&probe, 3u);
-    CHECK_EQ(g_lastMark, 0); CHECK_EQ(g_lastArg, 3LL);
-    CHECK_EQ((const void*)g_lastSelf, (const void*)&probe);
+    // Retail slot 0: raw D1 (really destroys, so on a placement-new'd probe
+    // never destroyed again — `probe` on the stack would run twice) and D0 at
+    // compiler slot 1, which frees through the class operator delete.
+    {
+        alignas(ProbeGenerated) unsigned char buf[sizeof(ProbeGenerated)];
+        ProbeGenerated* q = ::new (static_cast<void*>(buf)) ProbeGenerated();
+        CHECK(dtor_check::CompilerEntry<const void*>(q, 0) != dtor_check::CompilerEntry<const void*>(q, 1));
+        Reset(); dtor_check::ResetFrees();
+        SlotAt<DtorFn, ProbeGenerated>(q, 0x00)(q);
+        CHECK_EQ(g_lastMark, 0);
+        CHECK_EQ((const void*)g_lastSelf, (const void*)q);
+        CHECK_EQ(dtor_check::g_frees, 0);
+        ProbeGenerated* h = dtor_check::NewOnMalloc<ProbeGenerated>();
+        Reset(); dtor_check::ResetFrees();
+        dtor_check::CallD0(h);
+        CHECK_EQ(g_lastMark, 0);
+        CHECK_EQ((const void*)g_lastSelf, (const void*)h);
+        CHECK_EQ(dtor_check::g_frees, 1);
+        CHECK(dtor_check::g_lastFree == h);
+    }
 
     Reset(); (SlotAt<TypeNameFn, ProbeGenerated>(&probe, 0x08)(&probe));  CHECK_EQ(g_lastMark, 1);
     Reset(); (SlotAt<TypeFn, ProbeGenerated>(&probe, 0x10)(&probe));      CHECK_EQ(g_lastMark, 2);
@@ -262,12 +285,14 @@ UNIT_TEST(video_imagebuffer_chain_slot_order) {
     Reset(); SlotAt<RenderFn, ProbeGenerated>(&probe, 0x58)(&probe, nullptr, nullptr, nullptr, 7);
     CHECK_EQ(g_lastMark, 11); CHECK_EQ(g_lastArg, 7LL);
 
-    // TWELVE slots and not thirteen: no virtual destructor anywhere in the
-    // chain. Itanium spends TWO slots on one, so a `virtual ~X()` added to any
-    // of the five real classes would push `Generate` and `Render` off +0x50 and
-    // +0x58 and mis-aim `saveload_draw.cpp`'s hand-walked slot.
+    // TWELVE retail slots, THIRTEEN compiler entries: B3X W1 gave the chain a
+    // virtual destructor, and Itanium spends TWO slots on it, so `Generate` and
+    // `Render` (retail +0x50 / +0x58) sit at compiler +0x58 / +0x60 — which is
+    // why a hand-walked retail offset (`saveload_draw.cpp`) must now go by name
+    // or through RetailByteOffset.
     CHECK(!std::is_polymorphic<int>::value);   // sanity: the trait is live
-    CHECK(std::has_virtual_destructor<ProbeGenerated>::value == false);
+    CHECK(std::has_virtual_destructor<ProbeGenerated>::value == true);
+    CHECK_EQ(RetailByteOffset<ProbeGenerated>(0x50), (uintptr_t)0x58);
 }
 
 // ===========================================================================
@@ -293,11 +318,18 @@ UNIT_TEST(video_imagebuffer_qualified_call_is_not_virtual) {
     // The base-class arm: qualified, so it must NOT re-enter the override.
     // `MirrorImageBuffer::Serialize` is pure, so the closest thing this mirror
     // can state is that the qualified form of a CONCRETE base member resolves
-    // statically — checked on `DeletingDtor`, which the mirror base defines.
+    // statically, argument and all. B3X W1: this used to be the base's slot-0
+    // body with a flags argument; a destructor takes none, so it is checked on
+    // the base's own `Compile` (retail slot 4, External's body), which the probe
+    // overrides.
     Reset();
-    p->MirrorImageBuffer::DeletingDtor(9u);      // the BASE body, not the probe's
-    CHECK_EQ(g_lastMark, 0);
-    CHECK_EQ(g_lastArg, 9LL);
+    int marker = 0;
+    p->MirrorImageBuffer::Compile(&marker);      // the BASE body, not the probe's
+    CHECK_EQ(g_lastMark, 104);
+    CHECK_EQ(g_lastArg, static_cast<long long>(reinterpret_cast<uintptr_t>(&marker)));
+    Reset();
+    p->Compile(&marker);                         // virtual -> the override
+    CHECK_EQ(g_lastMark, 4);
 }
 
 // ===========================================================================
@@ -408,14 +440,15 @@ UNIT_TEST(video_renderstate_layout) {
     CHECK_EQ(offsetof(Video::RenderState::AlphaBlend, writeMask), (size_t)0x10);
     CHECK_EQ(offsetof(Video::RenderState::Depth, func),           (size_t)0x04);
 
-    // Neither `RenderState` nor `ImageBuffer` may ever acquire a virtual
-    // destructor: Itanium spends two slots on one, which would shift every slot
-    // after it and mis-aim the minted tables the live objects wear.
-    CHECK(std::has_virtual_destructor<Video::RenderState>::value == false);
-    CHECK(std::has_virtual_destructor<Video::ImageBuffer>::value == false);
-    CHECK(std::has_virtual_destructor<Graphics::GeneratedImageBuffer>::value == false);
-    CHECK(std::has_virtual_destructor<Graphics::FrameCopyImageBuffer>::value == false);
-    CHECK(std::has_virtual_destructor<Graphics::ReflectionImageBuffer>::value == false);
+    // B3X W1: `RenderState` and the `ImageBuffer` chain DID acquire a virtual
+    // destructor (retail slot 0 = D1 + D0 under GCC), all five together; every
+    // raw reader of these tables went by name first (B3X W0).
+    CHECK(std::has_virtual_destructor<Video::RenderState>::value == true);
+    CHECK(std::has_virtual_destructor<Video::ImageBuffer>::value == true);
+    CHECK(std::has_virtual_destructor<Graphics::GeneratedImageBuffer>::value == true);
+    CHECK(std::has_virtual_destructor<Graphics::FrameCopyImageBuffer>::value == true);
+    CHECK(std::has_virtual_destructor<Graphics::ReflectionImageBuffer>::value == true);
+
 }
 
 // ===========================================================================

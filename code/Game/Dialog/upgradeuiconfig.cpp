@@ -47,14 +47,6 @@
 // GetTypeId cache are gone; the compiler emits the table.
 // ============================================================================
 
-// [0] 0x140016d00: ~UpgradeUIConfig (restamp + ~DialogControllerConfig + ~External, all
-// the compiler's), MemFree on &1.
-Object::Base* UpgradeUIConfig::DeletingDtor(unsigned flags) {
-    this->~UpgradeUIConfig();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [4] not declared: retail's slot is the imported External::Compile, which
 // the class inherits.
 
@@ -77,7 +69,7 @@ Object::External* UpgradeUIConfig::Reconstruct() {
 
 // [7] 0x140001640, the body shared by 119 exe tables:
 // `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]` = destroy in place, no free.
-void UpgradeUIConfig::Destruct() { DeletingDtor(0); }
+void UpgradeUIConfig::Destruct() { this->~UpgradeUIConfig(); }
 
 // [8] 0x140016c60 — placement construction (MSVC folded it with createInPlace).
 Object::External* UpgradeUIConfig::Construct() { return new (this) UpgradeUIConfig(); }

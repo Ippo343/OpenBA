@@ -19,7 +19,7 @@
 //
 // `vtable[0]` WITH FLAG 1 IS THE SCALAR DELETING DESTRUCTOR: the list OWNS its
 // GoalInstances and frees each one — `Object::Destroy(p)`, the virtual
-// `DeletingDtor(1)` (Goal.h's slot 0).
+// `delete` (slot 0, flags 1) (Goal.h's slot 0).
 //
 // THE FREE IS INLINED IN RETAIL as lock / Free / unlock around the allocator's
 // +0x640 critical section. goal_list.cpp:194 already records that this triple
@@ -64,7 +64,7 @@ GoalList::~GoalList() {
         Object::InternalPtr<GoalInstance>& slot = _goals._data[i];
         GoalInstance* const inst = slot.Get();
         if (inst == nullptr) continue;
-        Object::Destroy(inst);
+        delete inst;
         slot = Object::InternalPtr<GoalInstance>();
     }
 }

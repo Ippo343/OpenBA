@@ -82,13 +82,6 @@ ModelDescription::~ModelDescription() {
     _meshGroupCap = 0;
 }
 
-// [0] 0x140035a70: ~ModelDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* ModelDescription::DeletingDtor(unsigned flags) {
-    this->~ModelDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140124dc0: stream order as retail.
 bool ModelDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_Serialize_GraphicsMesh || !fn_Array_Serialize_External_GraphicsMesh) return true;   // standalone: unwired doors
@@ -128,15 +121,15 @@ bool ModelDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140035a00: DeletingDtor(0) (destroy in place), then the ctor again on
+// [6] 0x140035a00: `this->~T()` (retail: slot 0, flags 0 -- destroy in place), then the ctor again on
 // `this`. The hand-built table's Cleanup trampoline already did this.
 Object::External* ModelDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~ModelDescription();
     return new (static_cast<void*>(this)) ModelDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void ModelDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void ModelDescription::Destruct() { this->~ModelDescription(); }
 
 // [8] 0x140035a60: ModelComponent's type id through the hidden return slot.
 Object::Type* ModelDescription::GetComponentType(Object::Type* ret) const {

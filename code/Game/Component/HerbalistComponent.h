@@ -27,12 +27,10 @@ class HerbalistComponent final : public ResourceProduceComponent {
 public:
     HerbalistComponent();                                                // 0x14004b2a0
 
-    Object::Base* DeletingDtor(unsigned flags) override;                // [0]  0x140006d60
+    // 0x140006d60: no body
+    ~HerbalistComponent() override = default;                           // [0]  0x140006d60
     void        Persist(void* stream) override;                         // [3]  0x14004b200
     uintptr_t*  CreateWork(uintptr_t* out) override;                    // [18] 0x14004b160
-
-protected:
-    ~HerbalistComponent() = default;                                     // 0x140006d60: no body
 };
 
 static_assert(sizeof(HerbalistComponent) == 0x50, "HerbalistComponent is 0x50 (create 0x140006b40)");

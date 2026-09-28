@@ -761,13 +761,6 @@ char StateMachineComponent::RootController::Tick(void*, void*, int) { return 0; 
 char StateMachineComponent::RootController::TickAlt(void*, void*, int) { return 0; }
 char StateMachineComponent::RootController::HasStates() { return 0; }
 
-// [0] 0x1400384a0: ~StateMachineComponent (0x14012b9e0: restamps + ~Internal; the member has no dtor slot), MemFree on &1.
-Object::Base* StateMachineComponent::DeletingDtor(unsigned flags) {
-    this->~StateMachineComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x1400382d0: MemAlloc(0x58, 8), then the ctor.
 void* StateMachineComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(StateMachineComponent), 8);

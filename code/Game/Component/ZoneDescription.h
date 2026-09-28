@@ -26,16 +26,13 @@ class ZoneDescription final : public Description {
 public:
     ZoneDescription() = default;
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x14003a810
+    ~ZoneDescription() override = default;                                 // [0] 0x14003a810
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x140130470
     bool              Serialize(void* stream) override;                    // [5] 0x140130430
     Object::External* Reconstruct() override;                              // [6] 0x14003a7b0
     void              Destruct() override;                                 // [7] 0x140001640
     Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x14003a800
     virtual Object::External* Construct();                                 // [9] 0x14003a760
-
-protected:
-    ~ZoneDescription() = default;
 };
 
 static_assert(sizeof(ZoneDescription) == 0x20, "ZoneDescription is 0x20 (create 0x14003a700 MemAlloc(0x20))");

@@ -34,19 +34,6 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
-// DragPlacementTool::DeletingDtor (vtable +0x00) — 0x14002d900
-// ============================================================
-// ENDGAME B.3.8 TOOL: the hand-rolled DragPlacementTool_Dtor restamped the
-// leaf, DragTool and Tool tables read by address — the last two UNREGISTERED,
-// so it stored a NULL vptr before ~Internal (B38 D9 #3). The compiler's dtor
-// chain restamps the real tables, then runs Object::Internal::~Internal.
-Object::Base* DragPlacementTool::DeletingDtor(unsigned flags) {
-    this->~DragPlacementTool();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
-// ============================================================
 // Helper: search entity component list for a specific type ID
 // ============================================================
 // Returns the first component matching targetTypeId, or nullptr.

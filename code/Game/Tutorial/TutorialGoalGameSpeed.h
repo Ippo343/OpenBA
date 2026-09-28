@@ -29,16 +29,13 @@ class TutorialGoalGameSpeed final : public TutorialGoal {
 public:
     TutorialGoalGameSpeed();                                       // 0x1400df240
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140027730
+    ~TutorialGoalGameSpeed() override = default;                   // [0] 0x140027730
     int32_t           GetFileVersion() const override { return 1; }// [3] 0x1400df1f0
     bool              Serialize(void* stream) override;            // [5] 0x1400df170
     Object::External* Reconstruct() override;                      // [6] 0x1400276e0
     void              Destruct() override;                         // [7] 0x140001640
     bool              IsComplete(void* time, void* instance) override;  // [8] 0x1400df150
     virtual Object::External* Construct();                         // [9] 0x140027690
-
-protected:
-    ~TutorialGoalGameSpeed() = default;
 
 public:
     int32_t  targetSpeed;        // +0x20: target game speed (default 1)

@@ -662,13 +662,6 @@ FireWork::FireWork(void* pEntityIBP, uint32_t capacity)
     FireWork_ResolveFuncs();
 }
 
-// [0] 0x14002a230: ~FireWork, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* FireWork::DeletingDtor(unsigned flags) {
-    this->~FireWork();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================

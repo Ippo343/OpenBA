@@ -260,13 +260,14 @@ void DeleteRenderBuffer(void* rb) {
     OperatorDelete(rb);
 }
 
-// `if (ib) (*ib->vtable[0])(ib, 1)` — the scalar deleting destructor
+// `if (ib) (*ib->vtable[0])(ib, 1)` — retail's deleting destructor
 // (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md: slot 0 is ??_E, not ??_G).
-// B3X W0 audit: by name, through the object's own class (Object::Base root).
+// B3X W0 audit: by name, through the object's own class (Object::Base root);
+// B3X W1: that call is `delete`.
 void DeleteImageBuffer(void* ib) {
     if (ib == nullptr)
         return;
-    reinterpret_cast<Video::ImageBuffer*>(ib)->DeletingDtor(1);   // B.3.x bridge
+    delete reinterpret_cast<Video::ImageBuffer*>(ib);   // B.3.x bridge
 }
 
 // The two float constants the ctor's bounds block uses, LIFTED AS RAW BITS and

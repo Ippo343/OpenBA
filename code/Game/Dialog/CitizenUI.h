@@ -26,7 +26,11 @@ class CitizenUI final : public UI::DialogController {
 public:
     CitizenUI() = default;                               // 0x140010f80 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140010fd0
+    // 0x140010fd0 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    // PORT GAP (B38 D2): retail (0x140065990) frees the Array/String members at +0xd0,
+    // +0xc0, +0xb0, +0xa0; the tree never did (leak kept).
+    ~CitizenUI() override = default;                              // [0] 0x140010fd0
     void OnCreated() override;   // [4] 0x1400651a0
     void OnClosed() override;   // [6] 0x140065130
     void OnUpdateLayout() override;   // [7] 0x140064ae0
@@ -59,13 +63,6 @@ public:
     uint64_t dataD0 = 0;           // +0xD0
     uint64_t dataD8 = 0;           // +0xD8
     uint64_t internalBasePtr = 0;  // +0xE0: Object::InternalBasePtr (init to null)
-
-protected:
-    // 0x140010fd0 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail (0x140065990) frees the Array/String members at +0xd0,
-    // +0xc0, +0xb0, +0xa0; the tree never did (leak kept).
-    ~CitizenUI() = default;
 };
 
 static_assert(sizeof(CitizenUI) == 0xe8, "CitizenUI is 0xe8 (create 0x140010f80 MemAlloc(0xe8))");

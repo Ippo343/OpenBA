@@ -291,7 +291,7 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
 
     // --- Teardown: exactly what the exe vtable's slot 0 (0x140019d50) does ----
     // ENDGAME B.3.9 GFX: that slot 0 IS ~FrameCopyImageBuffer then MemFree.
-    reinterpret_cast<Graphics::FrameCopyImageBuffer*>(frameCopy)->DeletingDtor(1u);
+    delete reinterpret_cast<Graphics::FrameCopyImageBuffer*>(frameCopy);
 
     // The ONLY clearer of m_quickSavePressed / m_quickLoadPressed. Retail stores
     // a single 16-bit zero over both bytes at self+0xC0.

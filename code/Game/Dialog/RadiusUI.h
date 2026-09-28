@@ -23,20 +23,18 @@ class RadiusUI final : public UI::DialogController {
 public:
     RadiusUI() = default;                                // 0x140013590 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140013640
+    // 0x140013640 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    // STANDALONE DEVIATION: retail's dtor 0x140013640 has no body of its own;
+    // the tree's teardown drops the radius overlay (Slot6) here, kept.
+    // the tree's teardown body (see the .cpp)
+    ~RadiusUI() override;                                         // [0] 0x140013640
     void OnOpened() override;   // [5] 0x140077650
     void OnClosed() override;   // [6] 0x140077600
 
     // ---- fields (the Panels.h POD's names, kept for the bodies) --------
     int32_t data30 = -1;           // +0x30: initialized to -1
     uint8_t _pad34[4] = {};        // +0x34: gap
-
-protected:
-    // 0x140013640 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // STANDALONE DEVIATION: retail's dtor 0x140013640 has no body of its own;
-    // the tree's teardown drops the radius overlay (Slot6) here, kept.
-    ~RadiusUI();   // the tree's teardown body (see the .cpp)
 };
 
 static_assert(sizeof(RadiusUI) == 0x38, "RadiusUI is 0x38 (create 0x140013590 MemAlloc(0x38))");

@@ -96,11 +96,11 @@ Object::External* SpriteCapture::Construct() {
 }
 // 0x18003ca40: slot0(this, 0) — VIRTUALLY — then the same inlined ctor.
 Object::External* SpriteCapture::Reconstruct() {
-    DeletingDtor(0);                                         // 18003ca57
+    this->~SpriteCapture();                                         // 18003ca57
     return ::new (this) SpriteCapture();                     // 18003ca5e..18003caae
 }
 // 0x18003cb40: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void SpriteCapture::Destruct() { DeletingDtor(0); }
+void SpriteCapture::Destruct() { this->~SpriteCapture(); }
 
 // ?CreateNewObject@SpriteCapture@UI@@SAPEAVBase@Object@@XZ  0x18003c900
 // The FACTUI2 row this replaces: the locked MemAlloc of 0x58 bytes, align 8;
@@ -241,7 +241,7 @@ bool SpriteCapture::Serialize(void* streamv) {
     }
 
     if (rw != nullptr) {                                     // 1800d96da
-        rw->DeletingDtor(1);                                 // slot 0, flag 1
+        delete rw;                                 // slot 0, flag 1
     }
     return true;                                             // 1800d96e9 MOV AL,1
 }

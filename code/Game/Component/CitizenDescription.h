@@ -28,7 +28,7 @@ class CitizenDescription final : public Description {
 public:
     CitizenDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x1400301f0
+    ~CitizenDescription() override;                                        // [0] 0x1400301f0
     int32_t           GetFileVersion() const override { return 17; }    // [3] 0x140114e00
     bool              Serialize(void* stream) override;                    // [5] 0x140114900
     Object::External* Reconstruct() override;                              // [6] 0x1400301c0
@@ -103,9 +103,6 @@ public:
     void* _refs;                                // +0x138 Array<External*> data (entries are non-owning)
     int32_t _refCount;                          // +0x140 Array count
     int32_t _refCap;                            // +0x144 Array capacity
-
-protected:
-    ~CitizenDescription();
 };
 
 static_assert(sizeof(CitizenDescription) == 0x148, "CitizenDescription is 0x148 (create 0x140030170 MemAlloc(0x148))");

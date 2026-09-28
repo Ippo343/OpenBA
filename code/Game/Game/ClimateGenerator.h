@@ -15,8 +15,8 @@
 //       element Serialize on it: a wrong constant silently drops the element)
 //   [4] IMPORT Object::External::Compile
 //   [5] 0x140092fa0 Serialize (AL=1)
-//   [6] 0x140018f40 Reconstruct (DeletingDtor(0), ctor again)
-//   [7] 0x140001640 Destruct (DeletingDtor(0), the shared body)
+//   [6] 0x140018f40 Reconstruct (`~T()` (slot 0, flags 0), ctor again)
+//   [7] 0x140001640 Destruct (`~T()` (slot 0, flags 0), the shared body)
 //   [8] 0x140018f30 Construct (placement-new, null-checked)
 // ============================================================================
 
@@ -31,16 +31,13 @@ class ClimateGenerator final : public Object::External {
 public:
     ClimateGenerator();                                           // 0x1400930c0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140018f60
+    ~ClimateGenerator() override;                                 // [0] 0x140018f60
     int32_t GetFileVersion() const override { return 3; }         // [3] 0x1400930b0
     // [4] Compile: inherited (retail's slot is the Object::External import)
     bool Serialize(void* stream) override;                        // [5] 0x140092fa0
     Object::External* Reconstruct() override;                     // [6] 0x140018f40
-    void Destruct() override;                                     // [7] 0x140001640 DeletingDtor(0)
+    void Destruct() override;                                     // [7] 0x140001640 this->~T()
     virtual Object::External* Construct();                        // [8] 0x140018f30
-
-protected:
-    ~ClimateGenerator();
 
 public:
     void*    _field20;           // +0x20: ExternalPtr (serialized via FUN_14000bf40)

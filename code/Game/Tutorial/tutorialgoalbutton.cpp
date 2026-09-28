@@ -42,13 +42,6 @@ TutorialGoalButton::~TutorialGoalButton() {
     reinterpret_cast<System::String*>(&elementPath)->~String();   // B.3.1 bridge
 }
 
-// [0] 0x1400273b0: ~TutorialGoalButton, MemFree on &1.
-Object::Base* TutorialGoalButton::DeletingDtor(unsigned flags) {
-    this->~TutorialGoalButton();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // TutorialGoalButton::Serialize (vtable +0x28, 0x1400deda0)
 // ============================================================
@@ -74,12 +67,12 @@ bool TutorialGoalButton::Serialize(void* stream) {
 // ============================================================
 // TutorialGoalButton::Reconstruct [6] 0x140027350 / Destruct [7] 0x140001640
 // ============================================================
-// DeletingDtor(0) (destroy in place), then the ctor on `this`.
+// `this->~T()` (retail: slot 0, flags 0 -- destroy in place), then the ctor on `this`.
 Object::External* TutorialGoalButton::Reconstruct() {
-    DeletingDtor(0);
+    this->~TutorialGoalButton();
     return ::new (static_cast<void*>(this)) TutorialGoalButton();
 }
-void TutorialGoalButton::Destruct() { DeletingDtor(0); }
+void TutorialGoalButton::Destruct() { this->~TutorialGoalButton(); }
 
 // ============================================================
 // TutorialGoalButton::IsComplete (vtable +0x40, 0x1400dece0)

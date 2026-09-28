@@ -25,7 +25,9 @@ class SpriteCaptureUI final : public UI::DialogController {
 public:
     SpriteCaptureUI() = default;                         // 0x140013d10 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140013fc0
+    // 0x140013fc0 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    ~SpriteCaptureUI() override = default;                        // [0] 0x140013fc0
     void Persist(void* /*stream*/) override {}   // [3] 0x140079850  RET 0 in retail
     void OnCreated() override;   // [4] 0x140079640  PORT GAP
     void OnUpdate(const System::Time& time) override;   // [8] 0x1400793a0  PORT GAP
@@ -45,11 +47,6 @@ public:
     void* pendingExternal = nullptr;  // +0x60: External* awaiting save (set externally)
     int32_t saveFrameCount = 0;   // +0x68: incremented each frame; triggers save at ==1
     uint8_t _pad6C[4] = {};        // +0x6C: pad to 0x70
-
-protected:
-    // 0x140013fc0 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    ~SpriteCaptureUI() = default;
 };
 
 static_assert(sizeof(SpriteCaptureUI) == 0x70, "SpriteCaptureUI is 0x70 (create 0x140013d10 MemAlloc(0x70))");

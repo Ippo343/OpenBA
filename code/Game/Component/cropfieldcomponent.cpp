@@ -294,12 +294,6 @@ CropFieldComponent::CropFieldComponent()
     OrFlagsInCtor(0x80);
 }
 
-// [0] 0x1400330a0: ~CropFieldComponent (0x14011af60), MemFree on &1.
-Object::Base* CropFieldComponent::DeletingDtor(unsigned flags) {
-    this->~CropFieldComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // 0x14011af60: MemFree(+0x58), +0x58 = +0x60 = 0, then the restamps and ~Internal
 // (the compiler chain).
 CropFieldComponent::~CropFieldComponent() {

@@ -108,13 +108,6 @@ void HighlightComponent::Persist(void* stream) {
 void HighlightComponent::Tick(void*) {}
 void HighlightComponent::OnEvent(int) {}
 
-// [0] 0x140007040: ~HighlightComponent (0x14004c8c0; its EdgeMeshInstance teardown is a PORT GAP, see the header), MemFree on &1.
-Object::Base* HighlightComponent::DeletingDtor(unsigned flags) {
-    this->~HighlightComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140006e40: MemAlloc(0x128, 8), then the ctor.
 void* HighlightComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HighlightComponent), 8);

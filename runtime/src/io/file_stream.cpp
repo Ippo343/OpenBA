@@ -314,11 +314,11 @@ extern "C" void RtIo_FileInfo_Dtor(FileInfo* self) {
 // through `??0FileStream` / `??0BinaryFileStream`: Audio::Stream::Run, the
 // persistence jobs, Object::External::Load (CompressedFileStream's member,
 // through ??1FileStream exactly as retail's 1800bc8c6) and
-// Video::ImageBuffer::SaveImageToFile. Each is one non-virtual slot-0 call with
-// flags 0 -- the destructor chain, no free (B9-6).
+// Video::ImageBuffer::SaveImageToFile. Each is a qualified `T::~T()`
+// call (retail: slot 0, flags 0) -- the destructor chain, no free (B9-6).
 // ENDGAME B.3.9 IO (W2): the ??1FileStream / ??1BinaryFileStream doors that
 // stood here are gone -- every caller ends its stream with the class's
-// non-virtual DeletingDtor(0) at the position the door call had.
+// qualified `T::~T()` at the position the door call had.
 
 
 // Two callees this file does not otherwise use, declared rather than included:

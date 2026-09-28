@@ -27,7 +27,7 @@ class LivestockDescription final : public Description {
 public:
     LivestockDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140035620
+    ~LivestockDescription() override = default;                            // [0] 0x140035620
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x140123ff0
     bool              Serialize(void* stream) override;                    // [5] 0x140123f60
     Object::External* Reconstruct() override;                              // [6] 0x1400355b0
@@ -39,9 +39,6 @@ public:
     void* _byproduct;                           // +0x20 ExternalPtr (byproduct)
     uint32_t _type;                             // +0x28 enum (serialized through the uint door)
     float _f2c;                                 // +0x2c
-
-protected:
-    ~LivestockDescription() = default;
 };
 
 static_assert(sizeof(LivestockDescription) == 0x30, "LivestockDescription is 0x30 (create 0x1400354e0 MemAlloc(0x30))");

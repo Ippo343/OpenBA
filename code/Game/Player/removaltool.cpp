@@ -23,19 +23,6 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
-// RemovalTool::DeletingDtor (vtable +0x00) — 0x14002e7f0
-// ============================================================
-// ENDGAME B.3.8 TOOL: the hand-rolled RemovalTool_Dtor restamped the Removal,
-// DragTool and Tool tables read by address — the last two UNREGISTERED, so it
-// stored a NULL vptr before ~Internal (B38 D9 #3). The compiler's dtor chain
-// restamps the real tables, then runs Object::Internal::~Internal.
-Object::Base* RemovalTool::DeletingDtor(unsigned flags) {
-    this->~RemovalTool();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
-// ============================================================
 // RemovalTool::Startup (vtable +0x20, Slot4)
 // ============================================================
 // Searches the entity's component list for a component matching the

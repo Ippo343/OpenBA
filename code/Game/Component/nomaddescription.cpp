@@ -35,13 +35,6 @@ NomadDescription::NomadDescription()
       _ref28(nullptr),
       _ref30(nullptr) {}
 
-// [0] 0x1400091d0: ~NomadDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* NomadDescription::DeletingDtor(unsigned flags) {
-    this->~NomadDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14004ff20: stream order as retail.
 bool NomadDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
@@ -52,15 +45,15 @@ bool NomadDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140009160: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140009160: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* NomadDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~NomadDescription();
     return new (static_cast<void*>(this)) NomadDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void NomadDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void NomadDescription::Destruct() { this->~NomadDescription(); }
 
 // [8] 0x1400091c0: NomadComponent's type id through the hidden return slot.
 Object::Type* NomadDescription::GetComponentType(Object::Type* ret) const {

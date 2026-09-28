@@ -33,7 +33,9 @@ class TerraformComponent final : public Component {
 public:
     TerraformComponent();                                         // 0x140057620
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x14000ce90
+    // PORT GAP (retail 0x1400575b0) — B38 D2: retail frees both undo arrays; the
+    // tree never did (Inert_ScalarDtor). Kept as the tree's.
+    ~TerraformComponent() override = default;                     // [0]  0x14000ce90
     void Persist(void* stream) override;                          // [3]  0x140057500
     void OnAdded() override;                                      // [6]  0x1400574f0 own RET
     void OnRemove() override;                                     // [7]  0x140057350
@@ -46,11 +48,6 @@ public:
     void*    tileRecord;   // +0x38 int32[] of retyped map cell indices (freed by the retail dtor)
     int32_t  tileCount;    // +0x40
     int32_t  tileCap;      // +0x44
-
-protected:
-    // PORT GAP (retail 0x1400575b0) — B38 D2: retail frees both undo arrays; the
-    // tree never did (Inert_ScalarDtor). Kept as the tree's.
-    ~TerraformComponent() = default;
 };
 
 static_assert(sizeof(TerraformComponent) == 0x48, "TerraformComponent is 0x48 (create 0x14000cc90)");

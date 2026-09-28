@@ -27,7 +27,12 @@ class StatusBarUI final : public UI::DialogController {
 public:
     StatusBarUI() = default;                             // 0x1400140e0 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140014130
+    // 0x140014130 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    // Retail frees the icon arrays at +0x138, +0x128, +0x118, +0x108; the tree's
+    // teardown body (moved into ~StatusBarUI unchanged) does the same.
+    // the tree's teardown body (see the .cpp)
+    ~StatusBarUI() override;                                      // [0] 0x140014130
     // [4] STANDALONE DEVIATION: retail inherits DialogController::OnCreated (RET); the tree drives this panel from here.
     void OnCreated() override;
     void OnOpened() override;   // [5] 0x14007a3d0
@@ -77,13 +82,6 @@ public:
     void* imagePartlySunny = nullptr;    // +0x1B8
     void* imageSunny = nullptr;          // +0x1C0
     void* imageSnow = nullptr;           // +0x1C8
-
-protected:
-    // 0x140014130 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // Retail frees the icon arrays at +0x138, +0x128, +0x118, +0x108; the tree's
-    // teardown body (moved into ~StatusBarUI unchanged) does the same.
-    ~StatusBarUI();   // the tree's teardown body (see the .cpp)
 };
 
 static_assert(sizeof(StatusBarUI) == 0x1d0, "StatusBarUI is 0x1d0 (create 0x1400140e0 MemAlloc(0x1d0))");

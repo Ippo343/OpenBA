@@ -39,6 +39,7 @@
 
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
 
 #include "video/ShaderProgram.h"
 #include "video/VertexLayout.h"
@@ -202,6 +203,11 @@ UNIT_TEST(video_shader_parameter_trivial) {
 // The mirrors give slot 0 a body where the real classes declare it `= 0`, for
 // the reason block A's mirrors do: a probe has to be instantiable to have a
 // vtable to read.
+//
+// B3X W1: retail slot 0 is `virtual ~T()` in the real family now — TWO GCC
+// entries (D1 complete, D0 deleting) — so retail slot n >= 1 is compiler slot
+// n + 1 and the SlotAt reads translate. The mirror follows the product, with a
+// recording class-scope operator delete for the root's MemFree one.
 // ===========================================================================
 namespace {
 
@@ -211,7 +217,8 @@ namespace {
 // +0x20.
 class MirrorShaderProgram {
 public:
-    virtual void*       DeletingDtor(unsigned f) { Note(0); (void)f; return this; }  // [0] +0x00
+    virtual ~MirrorShaderProgram()               { Note(0); }                        // [0] D1 + D0
+    DTOR_CHECK_RECORDING_DELETE
     virtual const char* TypeName() const         { Note(1); return nullptr; }        // [1] +0x08
     virtual uint32_t    Type() const             { Note(2); return 0; }              // [2] +0x10
     virtual int32_t     GetFileVersion() const   { Note(3); return 0; }              // [3] +0x18
@@ -219,7 +226,6 @@ public:
     virtual bool        Serialize(void*)         { Note(5); return true; }           // [5] +0x28
     virtual void*       Reconstruct()            { Note(6); return this; }           // [6] +0x30
     virtual void        Destruct()               { Note(7); }                        // [7] +0x38
-    ~MirrorShaderProgram() = default;
 };
 
 // The 9-slot leaf: the SAME eight, overridden, plus `Construct` introduced at 8.
@@ -243,7 +249,21 @@ UNIT_TEST(video_program_slot_order) {
 
     // The base's eight slots, reached by BYTE OFFSET, dispatching to the leaf's
     // overrides — which is what a live object wearing the minted table does.
-    Reset(); SlotAt<void* (*)(void*, unsigned), MirrorShaderProgram>(p, 0x00)(p, 0);   CHECK_EQ(g_lastMark, 0);
+    // Retail slot 0: raw D1 on a placement-new'd leaf (D1 really destroys; `vp`
+    // on the stack would be destroyed twice), D0 at compiler slot 1 frees
+    // through the class operator delete.
+    {
+        alignas(MirrorVertexProgram) unsigned char buf[sizeof(MirrorVertexProgram)];
+        MirrorVertexProgram* q = ::new (static_cast<void*>(buf)) MirrorVertexProgram();
+        CHECK(dtor_check::CompilerEntry<const void*>(q, 0) != dtor_check::CompilerEntry<const void*>(q, 1));
+        dtor_check::ResetFrees();
+        Reset(); SlotAt<void (*)(void*), MirrorShaderProgram>(q, 0x00)(q);         CHECK_EQ(g_lastMark, 0);
+        CHECK_EQ(dtor_check::g_frees, 0);
+        MirrorVertexProgram* h = dtor_check::NewOnMalloc<MirrorVertexProgram>();
+        Reset(); dtor_check::CallD0(h);                                            CHECK_EQ(g_lastMark, 0);
+        CHECK_EQ(dtor_check::g_frees, 1);
+        CHECK(dtor_check::g_lastFree == h);
+    }
     Reset(); SlotAt<const char* (*)(void*), MirrorShaderProgram>(p, 0x08)(p);          CHECK_EQ(g_lastMark, 101);
     Reset(); SlotAt<uint32_t (*)(void*), MirrorShaderProgram>(p, 0x10)(p);             CHECK_EQ(g_lastMark, 102);
     Reset(); SlotAt<int32_t (*)(void*), MirrorShaderProgram>(p, 0x18)(p);              CHECK_EQ(g_lastMark, 103);
@@ -321,21 +341,29 @@ UNIT_TEST(video_program_qualified_call) {
 }
 
 // ===========================================================================
-// PART F — none of the five is constructible, and that is load-bearing.
+// PART F — which of the five is constructible.
 //
-// Every live instance is built by a registered ctor DOOR that stamps the MINTED
-// `??_7…@Video@@6B@`. A `Video::VertexProgram p;` would stamp GCC's table on an
-// object the rest of the tree reads through the minted one, with no build error —
-// which is what the `protected = default` constructors and the pure slot 0
-// prevent. `= default` keeps them trivially default-constructible, so no layout
-// pin moves.
+// Written when every live instance was built by a registered ctor DOOR that
+// stamped a MINTED `??_7…@Video@@6B@`, and `protected = default` constructors
+// plus a pure slot 0 kept a `Video::VertexProgram p;` from stamping GCC's table.
+// ENDGAME B.3.9 VID made the four leaves concrete with retail's public
+// constructors (the mint rows are retired); B3X W1 made the destructors public
+// and virtual. So the abstract base alone is still not default-constructible.
 // ===========================================================================
 UNIT_TEST(video_program_not_constructible) {
+    // B3X W1: `is_default_constructible` also asks for an accessible
+    // destructor. Until the cutover every destructor here was protected, so
+    // all five answered false; since ENDGAME B.3.9 VID the four concrete
+    // classes have retail's PUBLIC constructor (0x1800f6100 VertexProgram,
+    // 0x1800f3950 PixelProgram, VertexLayout, VideoProgram), and with the
+    // public virtual destructor they are default-constructible. The abstract
+    // base's constructor stays protected. (Test name kept.)
     CHECK(!(std::is_default_constructible<Video::ShaderProgram>::value));
-    CHECK(!(std::is_default_constructible<Video::VertexProgram>::value));
-    CHECK(!(std::is_default_constructible<Video::PixelProgram>::value));
-    CHECK(!(std::is_default_constructible<Video::VertexLayout>::value));
-    CHECK(!(std::is_default_constructible<Video::VideoProgram>::value));
+    CHECK((std::is_default_constructible<Video::VertexProgram>::value));
+    CHECK((std::is_default_constructible<Video::PixelProgram>::value));
+    CHECK((std::is_default_constructible<Video::VertexLayout>::value));
+    CHECK((std::is_default_constructible<Video::VideoProgram>::value));
+
 
     // Abstract, because slot 0 is `override = 0` — the `RT_DELDTOR` rows in
     // deleting_dtor.cpp are the bodies and B35_RULES 11 keeps them.
@@ -346,11 +374,12 @@ UNIT_TEST(video_program_not_constructible) {
     // ENDGAME B.3.9 VID: VideoProgram is CONCRETE (tests/unit/b39_vid_program_test.cpp).
     CHECK(!(std::is_abstract<Video::VideoProgram>::value));
 
-    // NO VIRTUAL DESTRUCTOR anywhere in the family (ENDGAME B.1 decision 2):
-    // slot 0 is `DeletingDtor(unsigned)` and deletion is `Object::Destroy(p)`.
-    CHECK(!(std::has_virtual_destructor<Video::ShaderProgram>::value));
-    CHECK(!(std::has_virtual_destructor<Video::VertexProgram>::value));
-    CHECK(!(std::has_virtual_destructor<Video::PixelProgram>::value));
-    CHECK(!(std::has_virtual_destructor<Video::VertexLayout>::value));
-    CHECK(!(std::has_virtual_destructor<Video::VideoProgram>::value));
+    // B3X W1 retired ENDGAME B.1 decision 2: the whole family has a virtual
+    // destructor (retail slot 0 = D1 + D0) and deletion is `delete p`.
+    CHECK((std::has_virtual_destructor<Video::ShaderProgram>::value));
+    CHECK((std::has_virtual_destructor<Video::VertexProgram>::value));
+    CHECK((std::has_virtual_destructor<Video::PixelProgram>::value));
+    CHECK((std::has_virtual_destructor<Video::VertexLayout>::value));
+    CHECK((std::has_virtual_destructor<Video::VideoProgram>::value));
+
 }

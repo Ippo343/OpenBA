@@ -24,7 +24,11 @@ class ProfessionUI final : public UI::DialogController {
 public:
     ProfessionUI() = default;                            // 0x140013400 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140013450
+    // 0x140013450 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    // PORT GAP (B38 D2): retail's dtor mirrors ctor 0x1400775a0 (owning members released);
+    // the tree never did (leak kept).
+    ~ProfessionUI() override = default;                           // [0] 0x140013450
     void OnOpened() override;   // [5] 0x140076ca0
     void OnUpdate(const System::Time& time) override;   // [8] 0x1400765a0
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
@@ -42,13 +46,6 @@ public:
     uint8_t _pad6C[4] = {};        // +0x6C: gap
     uint32_t data70 = 0;           // +0x70: zeroed (u32 write)
     uint8_t _pad74[4] = {};        // +0x74: gap
-
-protected:
-    // 0x140013450 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail's dtor mirrors ctor 0x1400775a0 (owning members released);
-    // the tree never did (leak kept).
-    ~ProfessionUI() = default;
 };
 
 static_assert(sizeof(ProfessionUI) == 0x78, "ProfessionUI is 0x78 (create 0x140013400 MemAlloc(0x78))");

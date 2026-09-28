@@ -306,7 +306,7 @@ IO::ReaderWriter* AsRw(ReaderWriter* rw) {
 }
 void DestroyCodec(ReaderWriter* rw) {
     if (!rw) return;
-    AsRw(rw)->DeletingDtor(1);
+    delete AsRw(rw);
 }
 
 }  // namespace

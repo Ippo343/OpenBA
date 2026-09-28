@@ -25,19 +25,6 @@
 #include <cstdio>
 
 // ============================================================
-// BridgeTool::DeletingDtor (vtable +0x00) — 0x14002d7f0
-// ============================================================
-// ENDGAME B.3.8 TOOL: the hand-rolled BridgeTool_Dtor restamped the Bridge,
-// DragTool and Tool tables read by address — the last two UNREGISTERED, so it
-// stored a NULL vptr before ~Internal (B38 D9 #3). The compiler's dtor chain
-// restamps the real tables, then runs Object::Internal::~Internal.
-Object::Base* BridgeTool::DeletingDtor(unsigned flags) {
-    this->~BridgeTool();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
-// ============================================================
 // BridgeTool::Startup (vtable +0x20, Slot4)
 // ============================================================
 // Searches the entity's component list for a component matching the

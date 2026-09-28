@@ -522,13 +522,6 @@ OrchardComponent::OrchardComponent()
     OrFlagsInCtor(0x80);
 }
 
-// [0] 0x140009a70: ~OrchardComponent (0x140051ed0), MemFree on &1.
-Object::Base* OrchardComponent::DeletingDtor(unsigned flags) {
-    this->~OrchardComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // 0x140051ed0: MemFree(+0x50), +0x50 = +0x58 = 0, then the restamps and ~Internal
 // (the compiler chain).
 OrchardComponent::~OrchardComponent() {

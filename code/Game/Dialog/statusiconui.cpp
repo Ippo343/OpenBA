@@ -318,14 +318,6 @@ void StatusIconUI::OnUpdate(const System::Time& /*time*/) {
     StatusIconUI::OnUpdateLayout();
 }
 
-// [0] 0x140014370: ~StatusIconUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* StatusIconUI::DeletingDtor(unsigned flags) {
-    this->~StatusIconUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140014180: MemAlloc(0x40, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* StatusIconUI::CreateNewObject() {

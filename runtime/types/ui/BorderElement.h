@@ -32,7 +32,7 @@
 // ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
 // ctor is retail's `??0BorderElement@UI@@QEAA@XZ` (0x18010fd40) minus its vptr
 // store; slot 0 is the class's own vector deleting dtor; ~BorderElement is
-// protected and non-virtual. BorderDescription::CreateInstance and the class's
+// public and virtual. BorderDescription::CreateInstance and the class's
 // own factory pair (borderelement.cpp) build it; the minted
 // `??_7BorderElement@UI@@6B@`, its RT_DELDTOR row, the FACTUI1 row and the
 // doors are retired.
@@ -73,20 +73,9 @@ public:
     // ---- the twelve slots, in measured order ------------------------------
     // [0] 0x1800414f0 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x150`, the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<BorderElement*>(self + static_cast<int64_t>(i) * 0x150)
-                    ->~BorderElement();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~BorderElement();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1BorderElement@UI@@UEAA@XZ` (0x180041230). VIRTUAL (B3X W1). Retail's body
+    // is only the tail into ~Element, which the compiler chains.
+    ~BorderElement() override;
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
     // retail: TypeName 0x1800410b0, Type 0x180041090, TypeId 0x1800410a0, _TypeName 0x180041070
@@ -103,11 +92,6 @@ public:
     BorderElement& operator=(const BorderElement& src);           // 0x180041390  not ported
 
     // Retail's factory pair (B39_RULES D2), borderelement.cpp.
-
-protected:
-    // `??1BorderElement@UI@@UEAA@XZ` (0x180041230). NON-VIRTUAL. Retail's body
-    // is only the tail into ~Element, which the compiler chains.
-    ~BorderElement();
 
 private:
 
@@ -127,7 +111,7 @@ public:
 static_assert(sizeof(BorderElement) == 0x150,
               "UI::BorderElement is 0x150 bytes (MOV EDX,0x150 in 0x1800414f0)");
 static_assert(alignof(BorderElement) == 8, "UI::BorderElement aligns to 8");
-static_assert(!std::has_virtual_destructor<BorderElement>::value, "ENDGAME decision 2");
+static_assert(std::has_virtual_destructor<BorderElement>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<BorderElement>::value, "B39 D1: concrete");
 static_assert(offsetof(BorderElement, _topLeft) == sizeof(Element),
               "BorderElement's own fields begin at the end of UI::Element");

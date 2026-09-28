@@ -95,13 +95,6 @@ ConsumeProduceDescription::~ConsumeProduceDescription() {
     _recipes = nullptr;
 }
 
-// [0] 0x1400323e0: ~ConsumeProduceDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* ConsumeProduceDescription::DeletingDtor(unsigned flags) {
-    this->~ConsumeProduceDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x1401190e0: stream order as retail.
 bool ConsumeProduceDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_BuildSerialize || !fn_MemAlloc || !g_pMemAllocSingleton) return true;   // standalone: unwired doors
@@ -154,15 +147,15 @@ bool ConsumeProduceDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x1400323b0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x1400323b0: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* ConsumeProduceDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~ConsumeProduceDescription();
     return new (static_cast<void*>(this)) ConsumeProduceDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void ConsumeProduceDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void ConsumeProduceDescription::Destruct() { this->~ConsumeProduceDescription(); }
 
 // [8] 0x1400323d0: ConsumeProduceComponent's type id through the hidden return slot.
 Object::Type* ConsumeProduceDescription::GetComponentType(Object::Type* ret) const {

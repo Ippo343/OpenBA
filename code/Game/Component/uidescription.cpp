@@ -103,13 +103,6 @@ UIDescription::~UIDescription() {
     _entryCap = 0;
 }
 
-// [0] 0x140039700: ~UIDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* UIDescription::DeletingDtor(unsigned flags) {
-    this->~UIDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14012de80: stream order as retail.
 bool UIDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_Serialize2) return true;   // standalone: the door is unwired
@@ -178,15 +171,15 @@ bool UIDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140039680: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140039680: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* UIDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~UIDescription();
     return new (static_cast<void*>(this)) UIDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void UIDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void UIDescription::Destruct() { this->~UIDescription(); }
 
 // [8] 0x1400396e0: UIComponent's type id when _valTail > 0, else 0 (see above).
 // The tree read the id through a first-call cache over the exe cell 0x1401c7fc8;

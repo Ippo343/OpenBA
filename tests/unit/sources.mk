@@ -311,3 +311,9 @@ UNIT_TREE_SRCS += runtime/src/collision2d/collision2d_type_records.cpp
 UNIT_TREE_SRCS += runtime/src/achievement/achievement_type_records.cpp
 UNIT_TREE_SRCS += runtime/src/video/video_type_records.cpp
 UNIT_TREE_SRCS += runtime/src/graphics/graphics_type_records.cpp
+# B3X W1, the normal-virtual cutover: the class-scope `operator delete` of the
+# five DeletingDtor roots (Object::Base, Graphics::Geometry, IO::Stream,
+# IO::ReaderWriter, Engine::UpdateLoop). Every `virtual ~T()` below them emits
+# a deleting destructor that calls one of these; registry-free, and std::free
+# under -DBANISHED_UNIT_TEST.
+UNIT_TREE_SRCS += runtime/src/object/root_operator_delete.cpp

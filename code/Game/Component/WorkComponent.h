@@ -30,7 +30,8 @@ class WorkComponent final : public Component {
 public:
     WorkComponent();                                              // 0x14012e820
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140039fb0
+    // 0x14012e7e0
+    ~WorkComponent() override = default;                          // [0]  0x140039fb0
     void     Persist(void* stream) override;                      // [3]  0x14012e710
     void     OnAdded() override;                                  // [6]  0x14012e6f0 PORT GAP
     void     OnRemove() override;                                 // [7]  0x14012e6c0
@@ -42,9 +43,6 @@ public:
     uint32_t workFlags;    // +0x2c (ctor 0x80000000 = the same sentinel)
     int32_t  workState;    // +0x30 work capacity (ctor 0)
     uint8_t  _pad34[4];    // +0x34
-
-protected:
-    ~WorkComponent() = default;                                   // 0x14012e7e0
 };
 
 static_assert(sizeof(WorkComponent) == 0x38, "WorkComponent is 0x38 (create 0x140039e70)");

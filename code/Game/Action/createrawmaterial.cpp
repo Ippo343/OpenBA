@@ -522,13 +522,6 @@ CreateRawMaterial::CreateRawMaterial()
       placeNearFlag(0),
       _pad52{} {}
 
-// [0] 0x140022350
-Object::Base* CreateRawMaterial::DeletingDtor(unsigned flags) {
-    this->~CreateRawMaterial();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x1400c6f30
 // [4] 0x1400c6b40
 // [9] 0x1400c6aa0

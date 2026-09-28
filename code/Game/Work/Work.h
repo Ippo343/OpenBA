@@ -51,7 +51,8 @@ class Work : public Object::Internal {
 
 public:
     // ---- the 13 slots, in retail order -------------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override;             // [0]  0x14002ca60
+    // No body in retail (slot 0 only re-stamps the table before ~Internal).
+    ~Work() override = default;                                      // [0]  0x14002ca60
     // [1]/[2]: the abstract base answers its own record (ENDGAME B.3.9 RF:
     // DEFINE_EXE_TYPE with retail's abstract factory); every leaf overrides both.
     // [1] TypeName 0x14002ca50 and [2] Type 0x14002ca40: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
@@ -105,8 +106,6 @@ protected:
     Work();
     // 0x1400f72e0: the entity-seeded base ctor (Work_Ctor25).
     explicit Work(void* pEntityIBP);
-    // No body in retail (slot 0 only re-stamps the table before ~Internal).
-    ~Work() = default;
 
 public:
     // Vtable() (DECLARE_EXE_TYPE) is the compiler's vtable (B38 D5): served at

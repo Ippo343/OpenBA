@@ -27,7 +27,7 @@ class NomadDescription final : public Description {
 public:
     NomadDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x1400091d0
+    ~NomadDescription() override = default;                                // [0] 0x1400091d0
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x14004ff90
     bool              Serialize(void* stream) override;                    // [5] 0x14004ff20
     Object::External* Reconstruct() override;                              // [6] 0x140009160
@@ -39,9 +39,6 @@ public:
     void* _ref20;                               // +0x20 ExternalPtr (a raw pointer)
     void* _ref28;                               // +0x28 ExternalPtr (a raw pointer)
     void* _ref30;                               // +0x30 ExternalPtr (a raw pointer)
-
-protected:
-    ~NomadDescription() = default;
 };
 
 static_assert(sizeof(NomadDescription) == 0x38, "NomadDescription is 0x38 (create 0x140009090 MemAlloc(0x38))");

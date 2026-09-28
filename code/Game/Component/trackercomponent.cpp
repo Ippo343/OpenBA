@@ -131,13 +131,6 @@ void TrackerComponent::Persist(void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
-// [0] 0x14000d9a0: ~TrackerComponent (0x140059280; its array frees are a PORT GAP, see the header), MemFree on &1.
-Object::Base* TrackerComponent::DeletingDtor(unsigned flags) {
-    this->~TrackerComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x14000d7a0: MemAlloc(0x50, 8), then the ctor.
 void* TrackerComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TrackerComponent), 8);

@@ -222,14 +222,6 @@ AmbientEmitterComponent::AmbientEmitterComponent()
     OrFlagsInCtor(0x43);
 }
 
-// [0] 0x1400016d0. PORT GAP (retail frees the +0x38 emitter array first) — the
-// tree's Inert_ScalarDtor never did; kept (AmbientEmitterComponent.h).
-Object::Base* AmbientEmitterComponent::DeletingDtor(unsigned flags) {
-    this->~AmbientEmitterComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x140042f30 — the body resolves its own helpers first.
 // ============================================================
 // AmbientEmitterComponent::Shutdown (vtable slot [3], 0x140042f30)

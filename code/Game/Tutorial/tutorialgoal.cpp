@@ -15,14 +15,6 @@
 #include <new>
 #include "Object/exe_type.h"   // DEFINE_EXE_ABSTRACT_TYPE
 
-// [0] 0x140027220: stamp, ~External, MemFree on &1. Only a half-built or
-// half-destroyed object dispatches here (the class is abstract).
-Object::Base* TutorialGoal::DeletingDtor(unsigned flags) {
-    this->~TutorialGoal();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [1] TypeName / [2] Type, the record and retail's abstract factory (create =
 // the logging stub, in-place = null): ENDGAME B.3.9 RF.
 DEFINE_EXE_ABSTRACT_TYPE(TutorialGoal, "Object::External")

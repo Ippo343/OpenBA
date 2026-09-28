@@ -33,7 +33,7 @@ public:
                   Object::InternalPtr<UI::DialogInstance> parent,
                   uint64_t toolbarGroup);                           // 0x1400b9910
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140021760
+    ~ToolbarDialog() override;                                     // [0] 0x140021760
     void OnOpened() override;                                      // [4] 0x1400b97c0
     void OnClosed() override;                                      // [5] 0x1400b97b0
     void OnUpdateLayout() override;                                // [6] 0x1400b8d40
@@ -44,9 +44,6 @@ public:
     // FUN_1400b9730: close the open sub-toolbar dialog and reset the radio. Not a
     // slot: slot 5 is a JMP to it and button case 5 calls it on the parent.
     void CloseSubDialog();
-
-protected:
-    ~ToolbarDialog();
 
 public:
     uint64_t radioElement;      // +0xB8: the "toolbarContent" RadioElement

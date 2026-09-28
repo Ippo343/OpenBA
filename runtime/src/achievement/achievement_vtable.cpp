@@ -210,7 +210,7 @@ IO::ReaderWriter* AsRw(ReaderWriter* rw) {
 // `if (rw) rw->vtable[0](rw, 1)` — the scalar DELETING destructor.
 void DestroyCodec(ReaderWriter* rw) {
     if (!rw) return;
-    AsRw(rw)->DeletingDtor(1);
+    delete AsRw(rw);
 }
 
 // Two unexported template instantiations reached by ADDRESS (no mangled name
@@ -244,11 +244,11 @@ namespace Achievement {
 // ============================================================================
 // void Achievement::Destruct() — SLOT 7   ?Destruct@Achievement@1@UEAAXXZ  0x180001370
 //     MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]
-// `this->DeletingDtor(0)` — slot 0 with the free bit CLEAR. VIRTUAL on purpose:
+// `this->~T()` — slot 0 with the free bit CLEAR. VIRTUAL on purpose:
 // on the exe's Scenario it runs Scenario's destructor.
 // ============================================================================
 void Achievement::Destruct() {
-    DeletingDtor(0);
+    this->~Achievement();
 }
 
 // ============================================================================
@@ -259,7 +259,7 @@ void Achievement::Destruct() {
 // re-stamps. Retail's.
 // ============================================================================
 Object::External* Achievement::Reconstruct() {
-    DeletingDtor(0);
+    this->~Achievement();
     return ::new (this) Achievement();
 }
 

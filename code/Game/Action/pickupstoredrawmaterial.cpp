@@ -420,13 +420,6 @@ PickupStoredRawMaterial::~PickupStoredRawMaterial() {
     _field38 = nullptr;
 }
 
-// [0] 0x140022dd0
-Object::Base* PickupStoredRawMaterial::DeletingDtor(unsigned flags) {
-    this->~PickupStoredRawMaterial();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x1400ca0d0
 // [4] 0x1400c9d40
 // [8] 0x1400c9c70

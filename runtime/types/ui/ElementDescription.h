@@ -253,21 +253,11 @@ public:
     enum Alignment : int32_t {};
 
     // ---- the nine slots, in measured order ---------------------------------
-    // [0] 0x180035350 — MSVC's VECTOR deleting destructor, both arms exactly
-    // as the retired RT_DELDTOR row ran them (`MOV EDX,0x68`).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<ElementDescription*>(self + static_cast<int64_t>(i) * 0x68)->~ElementDescription();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~ElementDescription();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // [0] 0x180035350 — MSVC's VECTOR deleting destructor (retail; here
+    // the virtual destructor, B3X W1) (`MOV EDX,0x68`).
+    // `??1ElementDescription@UI@@UEAA@XZ` (0x180116100). VIRTUAL (B3X W1); the
+    // compiler restamps on entry and chains ~External (retail's tail JMP).
+    ~ElementDescription() override { ReleaseFields(); }
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
     // retail: TypeName 0x1800350f0, Type 0x1800350d0, TypeId 0x1800350e0, _TypeName 0x1800350b0
@@ -303,9 +293,6 @@ protected:
     // and runs External() (retail inlines its three zero stores); the body is
     // `InitFields`.
     ElementDescription() { InitFields(); }
-    // `??1ElementDescription@UI@@UEAA@XZ` (0x180116100). NON-VIRTUAL; the
-    // compiler restamps on entry and chains ~External (retail's tail JMP).
-    ~ElementDescription() { ReleaseFields(); }
 
 private:
     void InitFields();      // +0x20..+0x67 stores of 0x180115a40 (dialog.cpp)

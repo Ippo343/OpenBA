@@ -332,13 +332,6 @@ DropOffRawMaterial::DropOffRawMaterial()
       _field30(nullptr),
       _field38(nullptr) {}
 
-// [0] 0x140022670
-Object::Base* DropOffRawMaterial::DeletingDtor(unsigned flags) {
-    this->~DropOffRawMaterial();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x1400c7b10
 // [4] 0x1400c7300
 // [8] 0x1400c72f0 (JMP 0x1400c7570)

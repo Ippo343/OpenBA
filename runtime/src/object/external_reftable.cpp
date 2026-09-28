@@ -415,7 +415,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
     // ---- destroy the codec the factory allocated ----------------------------
     // 1800bcf17. Skipping it leaks 0x30 bytes per call.
     if (rw)
-        Rw(rw)->DeletingDtor(1);                 // slot 0, flags 1
+        delete Rw(rw);                 // slot 0, flags 1
 
     // ---- report, HERE, inside the subject's live window ---------------------
     // Not only from the exit summary. This body runs at most twice per session

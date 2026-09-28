@@ -2497,15 +2497,15 @@ void GameUpdateLoop::Shutdown() {
     if (m_worldGeometry != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying WorldGeometry...\n");
         // Caller batch CB6: slot 0 of the real class (proved as in Update step 8).
-        static_cast<WorldGeometry*>(m_worldGeometry)->DeletingDtor(1);   // B.3.8 bridge
+        delete static_cast<WorldGeometry*>(m_worldGeometry);   // B.3.8 bridge
     }
     if (m_sunLight != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying SunLight...\n");
-        static_cast<Graphics::SunLight*>(m_sunLight)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
+        delete static_cast<Graphics::SunLight*>(m_sunLight);   // B.3.x bridge (slot 0, free)
     }
     if (m_skyMesh != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying SkyMesh...\n");
-        static_cast<Graphics::MeshInstance*>(m_skyMesh)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
+        delete static_cast<Graphics::MeshInstance*>(m_skyMesh);   // B.3.x bridge (slot 0, free)
     }
 
     // AnimationManager
@@ -2667,26 +2667,16 @@ void GameUpdateLoop::OnScenarioComplete() {
 // on m_saveName, ~UpdateLoop) are the compiler's member and base chain, in that
 // order (step 1, the restamp, is the compiler's too). The old slot reached the
 // base through the `??1UpdateLoop@Engine@@` door, which shares its body with
-// the real ~UpdateLoop (RB).
+// the real ~UpdateLoop (RB). Step 5, the free, is UpdateLoop's operator delete
+// (the virtual destructor's D0); nothing may touch the object after it, so the
+// old EXIT trace is gone.
 GameUpdateLoop::~GameUpdateLoop() {
-    // Step 2: Clear game world singleton
-    *g_pGameWorldSingleton = nullptr;
-}
-
-Engine::UpdateLoop* GameUpdateLoop::DeletingDtor(unsigned flags) {
     EnsureInit();
 
-    TRACE("[GameUpdateLoop::Destroy] ENTER (self=%p, flags=0x%x)\n", (void*)this, flags);
+    TRACE("[GameUpdateLoop::Destroy] ENTER (self=%p)\n", (void*)this);
 
-    this->~GameUpdateLoop();
-
-    // Step 5: Conditional free
-    if (flags & 1) {
-        fn_MemFreeStatic(this);
-    }
-
-    TRACE("[GameUpdateLoop::Destroy] EXIT\n");
-    return this;
+    // Step 2: Clear game world singleton
+    *g_pGameWorldSingleton = nullptr;
 }
 
 

@@ -34,13 +34,6 @@
 TutorialSetupCamera::TutorialSetupCamera()
     : cameraX(-1), cameraChunkRow(-1), cameraY(-1), cameraChunkCol(-1) {}
 
-// [0] 0x140028530: stamp, stamp TutorialSetup, ~External, MemFree on &1.
-Object::Base* TutorialSetupCamera::DeletingDtor(unsigned flags) {
-    this->~TutorialSetupCamera();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // TutorialSetupCamera::Serialize (vtable +0x28, 0x1400e2120)
 // ============================================================
@@ -62,10 +55,10 @@ bool TutorialSetupCamera::Serialize(void* stream) {
 // TutorialSetupCamera::Reconstruct [6] 0x1400284d0 / Destruct [7] 0x140001640
 // ============================================================
 Object::External* TutorialSetupCamera::Reconstruct() {
-    DeletingDtor(0);
+    this->~TutorialSetupCamera();
     return ::new (static_cast<void*>(this)) TutorialSetupCamera();
 }
-void TutorialSetupCamera::Destruct() { DeletingDtor(0); }
+void TutorialSetupCamera::Destruct() { this->~TutorialSetupCamera(); }
 
 // ============================================================
 // TutorialSetupCamera::Begin (vtable +0x40, 0x1400e20d0)

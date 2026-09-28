@@ -191,11 +191,11 @@ Object::External* PointList::Construct() {
 // [6] 0x180071060: slot0(this, 0) dispatched VIRTUALLY (a subclass's deleting
 // destructor is what has to run), then the same inlined constructor.
 Object::External* PointList::Reconstruct() {
-    DeletingDtor(0);
+    this->~PointList();
     return ::new (this) PointList();
 }
 // [7] 0x180071150: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void PointList::Destruct() { DeletingDtor(0); }
+void PointList::Destruct() { this->~PointList(); }
 
 // ?CreateNewObject@PointList@Pathfinding@@SAPEAVBase@Object@@XZ  0x180070f30
 // The FACTREST row this replaces (rt_factories_pathfinding.inc): MemAlloc of
@@ -259,7 +259,7 @@ bool PointList::Serialize(void* streamv) {
     serializeArray(&_points);       // then this+0x30
 
     if (rw != nullptr) {
-        rwc->DeletingDtor(1);
+        delete rwc;
     }
     return true;
 }

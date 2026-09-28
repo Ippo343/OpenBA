@@ -440,7 +440,7 @@ bool EdgeMesh::Serialize(void* stream) {
     // ReaderWriter the factory made in step 2 is owned by this frame. By name
     // since B3X W0 (the ReaderWriter's own root, `IO::ReaderWriter`).
     if (ctx.encoding) {
-        static_cast<IO::ReaderWriter*>(ctx.encoding)->DeletingDtor(1);   // B.3.x bridge
+        delete static_cast<IO::ReaderWriter*>(ctx.encoding);   // B.3.x bridge
     }
 
     return true;   // MOV AL,1 — no failure path exists in the shipped body.
@@ -459,7 +459,7 @@ bool EdgeMesh::Serialize(void* stream) {
 // No null test. Retail has none; destructing a null faults here exactly as it
 // faults in the DLL (CLAUDE.md, "Don't fix a faithful crash with a null check").
 void EdgeMesh::Destruct() {
-    DeletingDtor(0u);
+    this->~EdgeMesh();
 }
 
 // ---- slot 8  ?Construct@EdgeMesh@Graphics@@UEAAPEAVExternal@Object@@XZ -----
@@ -493,7 +493,7 @@ Object::External* EdgeMesh::Construct() {
 // The identical asymmetry exists in the MaterialInstance pair and was kept
 // there for the same reason (wave24_lane_gfxmat.cpp:440).
 Object::External* EdgeMesh::Reconstruct() {
-    DeletingDtor(0u);
+    this->~EdgeMesh();
     return ::new (this) EdgeMesh();
 }
 

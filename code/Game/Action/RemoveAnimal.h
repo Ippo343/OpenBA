@@ -22,7 +22,7 @@ class RemoveAnimal final : public Action {
 public:
     RemoveAnimal();                                                   // create 0x140022e70
     explicit RemoveAnimal(uint64_t animal);   // inlined in 0x1400bbea0 (action_pf_roots_drop.cpp)
-    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x140022ee0
+    ~RemoveAnimal() override = default;                        // [0] 0x140022ee0
     void Persist(void* stream) override;                       // [3] 0x1400ca870
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400ca7f0
     void CheckEntity() override;                               // [8] 0x1400ca760
@@ -30,9 +30,6 @@ public:
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
     void*     _field20;          // +0x20 animal entity
-
-protected:
-    ~RemoveAnimal() = default;
 };
 
 static_assert(sizeof(RemoveAnimal) == 0x28, "RemoveAnimal is 0x28 (create 0x140022e70 MemAlloc)");

@@ -811,10 +811,10 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // vtable[0](obj, 1) is MSVC's scalar deleting destructor. Unguarded, as
     // retail is; see the banner. B3X W0: by name, each on the class its own
     // operator new / constructor above proves.
-    sheet->DeletingDtor(1);                                                    // UI::SpriteSheet
-    reinterpret_cast<Graphics::MaterialInstance*>(mat)->DeletingDtor(1);       // B.3.x bridge
-    reinterpret_cast<Video::ImageBuffer*>(target)->DeletingDtor(1);            // B.3.x bridge
-    reinterpret_cast<Graphics::FrameCopyImageBuffer*>(frameCopy)->DeletingDtor(1);   // B.3.x bridge
+    delete sheet;                                                    // UI::SpriteSheet
+    delete reinterpret_cast<Graphics::MaterialInstance*>(mat);       // B.3.x bridge
+    delete reinterpret_cast<Video::ImageBuffer*>(target);            // B.3.x bridge
+    delete reinterpret_cast<Graphics::FrameCopyImageBuffer*>(frameCopy);   // B.3.x bridge
 
     if (renderBuffer != nullptr) {
         reinterpret_cast<Video::RenderBuffer*>(renderBuffer)

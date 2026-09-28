@@ -160,13 +160,13 @@ uint32_t InternalRand(::Random* random) {
 // precisely so that `IO::MemoryStream ms;` is a compile error here.
 
 // ENDGAME B.3.9 IO (W2, foreign site): the real class -- the ??0 / ??1 doors
-// are gone. The destructor is the non-virtual slot-0 call with flags 0 (the
+// are gone. The destructor is a qualified `T::~T()` call (retail: slot 0, flags 0) (the
 // destructor chain, no free of the stack object).
 void* MemoryStreamCtor(void* self) {
     return ::new (self) IO::MemoryStream();
 }
 void MemoryStreamDtor(void* self) {
-    static_cast<IO::MemoryStream*>(self)->IO::MemoryStream::DeletingDtor(0);
+    static_cast<IO::MemoryStream*>(self)->IO::MemoryStream::~MemoryStream();
 }
 
 #endif
@@ -387,41 +387,6 @@ Internal& Internal::operator=(const Internal& other) {
 Internal::~Internal() {
     _generation = 0;                                 // 0x1800bfdd0
     InternalFactory::Get()->RemoveObject(this);      // 0x1800bfdd7..0x1800bfe0d
-}
-
-// ---- vtable slot 0 — 0x180006440 -------------------------------------------
-//
-// MSVC's VECTOR deleting destructor. Two arms, transcribed:
-//
-//   TEST DL,0x2 -> the ARRAY arm (0x180006454): reads the element count at
-//                  `this - 8`, calls the EH vector-destructor helper
-//                  (0x18007ec98) with elem size 0x10 and ~Internal
-//                  (0x1800bfdb0), optionally frees `this - 8`, returns
-//                  `this - 8`. `Object::Destroy` never takes it (flags 1) and
-//                  nothing in retail `new[]`s an Internal, so it is transcribed
-//                  as the faithful UNREACHABLE it is rather than reimplemented
-//                  against an array cookie our allocator does not write. Taking
-//                  it is a bug upstream and it faults at `this - 8` exactly as
-//                  retail would.
-//   else        -> 0x180006491: CALL ~Internal, then `TEST SIL,0x1` /
-//                  CALL 0x180006a10 (the free), then RAX = this.
-Base* Internal::DeletingDtor(unsigned flags) {
-    if (flags & 2) {
-        // The array arm. Faithful, and faithfully unreachable: the cookie read
-        // faults loudly instead of silently destroying one element.
-        const uint64_t count = *reinterpret_cast<const uint64_t*>(
-            reinterpret_cast<const char*>(this) - 8);
-        char* const base = reinterpret_cast<char*>(this) - 8;
-        for (uint64_t i = count; i-- > 0;)
-            reinterpret_cast<Internal*>(reinterpret_cast<char*>(this) + i * 0x10)->~Internal();
-        if (flags & 1)
-            detail::InternalMemFree(base);
-        return reinterpret_cast<Base*>(base);
-    }
-    this->~Internal();                          // 0x180006491
-    if (flags & 1)
-        detail::InternalMemFree(this);          // 0x18000649f -> 0x180006a10
-    return this;                                // 0x1800064a4
 }
 
 // ---- vtable slot 3 — 0x1800bfda0, a bare RET in retail AND in the profile

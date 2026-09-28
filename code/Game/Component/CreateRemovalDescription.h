@@ -27,7 +27,7 @@ class CreateRemovalDescription final : public Description {
 public:
     CreateRemovalDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140032ca0
+    ~CreateRemovalDescription() override;                                  // [0] 0x140032ca0
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x140119bc0
     bool              Serialize(void* stream) override;                    // [5] 0x140119ac0
     Object::External* Reconstruct() override;                              // [6] 0x140032c40
@@ -47,9 +47,6 @@ public:
     bool _b42;                                  // +0x42
     bool _b43;                                  // +0x43
     uint8_t _pad44[4];                          // +0x44 never written by the ctor
-
-protected:
-    ~CreateRemovalDescription();
 };
 
 static_assert(sizeof(CreateRemovalDescription) == 0x48, "CreateRemovalDescription is 0x48 (create 0x140032b70 MemAlloc(0x48))");

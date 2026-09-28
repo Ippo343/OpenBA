@@ -881,7 +881,7 @@ void GameUpdateLoop::SaveRestoreOut(bool save, Save::SavedState* savedState, int
     // (0x98 bytes: the 0x68 CompressedStream base + the MemoryStream member at
     // +0x68; runtime/types/io/Stream.h) built on stack storage where the door
     // built it, its members called where the doors were, and ended by a
-    // non-virtual DeletingDtor(0) (the destructor chain, no free) where
+    // qualified `T::~T()` (the destructor chain, no free) where
     // ??1CompressedMemoryStream was.
     alignas(16) uint8_t cmsStorage[sizeof(IO::CompressedMemoryStream)];
     IO::CompressedMemoryStream* const cms =
@@ -897,7 +897,7 @@ void GameUpdateLoop::SaveRestoreOut(bool save, Save::SavedState* savedState, int
         cms->IO::CompressedMemoryStream::Close();
         savedState->Store(cms->GetMemoryStream());
     }
-    cms->IO::CompressedMemoryStream::DeletingDtor(0);
+    cms->IO::CompressedMemoryStream::~CompressedMemoryStream();
 }
 
 // ============================================================
@@ -920,12 +920,12 @@ static bool RoundtripDecompress(void* savedState, uint8_t** outData, uint32_t* o
         ::new (static_cast<void*>(cmsStorage)) IO::CompressedMemoryStream();
     reinterpret_cast<Save::SavedState*>(savedState)->Retrieve(   // B.3.7 bridge
         cms->GetMemoryStream());
-    if (!cms->Open()) { cms->IO::CompressedMemoryStream::DeletingDtor(0); return false; }
+    if (!cms->Open()) { cms->IO::CompressedMemoryStream::~CompressedMemoryStream(); return false; }
     const uint32_t size = cms->IO::CompressedStream::GetSize();
     uint8_t* data = static_cast<uint8_t*>(std::malloc(size ? size : 1));
     const bool ok = size == 0 || cms->IO::CompressedStream::Read(static_cast<int>(size), data);
     cms->IO::CompressedMemoryStream::Close();
-    cms->IO::CompressedMemoryStream::DeletingDtor(0);
+    cms->IO::CompressedMemoryStream::~CompressedMemoryStream();
     *outData = data; *outSize = size;
     return ok;
 }

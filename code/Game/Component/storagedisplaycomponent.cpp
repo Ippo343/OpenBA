@@ -313,14 +313,14 @@ void StorageDisplayComponent_MeshArrayResize(void* arrayBase, int newCount) {
         if (newCount < oldCount) {
             uintptr_t p = (uintptr_t)oldBuf + (uintptr_t)newCount * STRIDE;
             for (int i = 0; i < oldCount - newCount; i++) {
-                reinterpret_cast<Graphics::MeshInstance*>(p)->~MeshInstance();
+                reinterpret_cast<Graphics::MeshInstance*>(p)->Graphics::MeshInstance::~MeshInstance();
                 p += STRIDE;
             }
         }
     } else {
         uintptr_t p = (uintptr_t)oldBuf;
         for (int i = 0; i < oldCount; i++) {
-            reinterpret_cast<Graphics::MeshInstance*>(p)->~MeshInstance();
+            reinterpret_cast<Graphics::MeshInstance*>(p)->Graphics::MeshInstance::~MeshInstance();
             p += STRIDE;
         }
         if (oldBuf) fn_MemFreeStatic(oldBuf);
@@ -675,13 +675,6 @@ void StorageDisplayComponent::Slot11() {
 
     // Call Update
     StorageDisplayComponent_Update(this);
-}
-
-// [0] 0x14000c940: ~StorageDisplayComponent (0x1400569b0; its array teardown is a PORT GAP, see the header), MemFree on &1.
-Object::Base* StorageDisplayComponent::DeletingDtor(unsigned flags) {
-    this->~StorageDisplayComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
 }
 
 // create 0x14000c770: MemAlloc(0x38, 8), then the ctor.

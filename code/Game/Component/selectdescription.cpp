@@ -44,13 +44,6 @@ SelectDescription::SelectDescription()
       _ref30(nullptr),
       _u40(0) {}
 
-// [0] 0x14000bcc0: ~SelectDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* SelectDescription::DeletingDtor(unsigned flags) {
-    this->~SelectDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140055630: stream order as retail.
 bool SelectDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_Serialize || !fn_ExternalPtr_Serialize2) return true;   // standalone: unwired doors
@@ -63,15 +56,15 @@ bool SelectDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x14000bc60: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x14000bc60: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* SelectDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~SelectDescription();
     return new (static_cast<void*>(this)) SelectDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void SelectDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void SelectDescription::Destruct() { this->~SelectDescription(); }
 
 // [8] 0x140004950 (shared by 19 tables): `MOV dword [RDX],0; MOV RAX,RDX; RET` —
 // a data-only description builds no component.

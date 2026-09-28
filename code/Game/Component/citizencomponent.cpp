@@ -3015,15 +3015,6 @@ CitizenComponent::CitizenComponent()
     OrFlagsInCtor(0xcb);
 }
 
-// [0] 0x140030270 = the dtor 0x1401146f0 + MemFree on &1. PORT GAP (retail's
-// dtor runs ~MeshInstance(+0xb8), frees the +0x98 array and releases the +0x28
-// InternalBasePtr) — the tree's Inert_ScalarDtor never did; kept.
-Object::Base* CitizenComponent::DeletingDtor(unsigned flags) {
-    this->~CitizenComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 
 // [4] 0x140114050.
 // Faithful port of CitizenComponent::Startup (0x140114050) + the ctor scalar init

@@ -36,7 +36,7 @@
 //
 // ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2) -- the paragraph below is
 // HISTORY: the class is now CONCRETE. A real public ctor (retail's stores), its
-// own slot 0 (the vector deleting dtor), a protected non-virtual ~TabDescription holding
+// own slot 0 (the vector deleting dtor), a virtual ~TabDescription holding
 // the retired ??1 door's body, and the factory pair as the class's own statics;
 // every live one wears the COMPILER's table. The minted `??_7TabDescription@UI@@6B@`,
 // its RT_DELDTOR row 0x18004c640 and the ctor / dtor / slot doors are retired
@@ -70,21 +70,12 @@ public:
         _tabsCapacity             = 0;
     }
 
-    // [0] 0x18004c640 -- MSVC's VECTOR deleting destructor, both arms exactly as the
-    // retired RT_DELDTOR row ran them (`MOV EDX,0xb8` = the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<TabDescription*>(self + static_cast<int64_t>(i) * 0xb8)->~TabDescription();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~TabDescription();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // [0] 0x18004c640 -- MSVC's VECTOR deleting destructor (retail; here the
+    // virtual destructor, B3X W1) (`MOV EDX,0xb8` = the element size).
+    // `??1TabDescription@UI@@UEAA@XZ` (0x1800da8e0): VIRTUAL (the normal-virtual
+    // cutover, B3X W1). Retail's body is in tabdescription.cpp;
+    // the compiler chains the base's.
+    ~TabDescription() override;
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
     // retail: TypeName 0x18004c1f0, Type 0x18004c1d0, _TypeName 0x18004c1b0, _ParentTypeName 0x18004c1c0
@@ -101,12 +92,6 @@ public:
 
     TabDescription(const TabDescription& src);                    // 0x18004c3b0  not ported
     TabDescription& operator=(const TabDescription& src);         // 0x18004c4a0  not ported
-
-protected:
-    // `??1TabDescription@UI@@UEAA@XZ` (0x1800da8e0): NON-VIRTUAL (no virtual dtor until
-    // the normal-virtual cutover). Retail's body is in tabdescription.cpp;
-    // the compiler chains the base's.
-    ~TabDescription();
 
 private:
 

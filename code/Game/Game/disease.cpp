@@ -48,13 +48,6 @@ Disease::~Disease() {
     reinterpret_cast<System::String*>(&_name)->~String();   // B.3.1 bridge: the field is the COW pointer
 }
 
-// [0] 0x140018f60
-Object::Base* Disease::DeletingDtor(unsigned flags) {
-    this->~Disease();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x1400932d0 — returns AL=1.
 bool Disease::Serialize(void* stream) {
     alignas(8) uint8_t serializer[24];
@@ -75,13 +68,13 @@ bool Disease::Serialize(void* stream) {
 // [6] 0x1400190a0 — slot 0 with flags 0 (destroy, no free), then the ctor
 // again in place (retail inlines the ctor: External(), stamp, the defaults).
 Object::External* Disease::Reconstruct() {
-    DeletingDtor(0);
+    this->~Disease();
     return ::new (static_cast<void*>(this)) Disease();
 }
 
 // [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
 // slot 0 with flags 0 (destroy, no free).
-void Disease::Destruct() { DeletingDtor(0); }
+void Disease::Destruct() { this->~Disease(); }
 
 // [8] 0x140019040 — placement-new of the class on `this` (the old table's
 // CreateInPlace, the same behaviour).

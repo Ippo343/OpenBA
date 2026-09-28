@@ -32,13 +32,6 @@ Work::Work(void* pEntityIBP) : Object::Internal() {
     InitFromEntity(pEntityIBP);
 }
 
-// [0] 0x14002ca60: stamp 0x140161a80, `~Internal`, `if (flags & 1) MemFree`.
-Object::Base* Work::DeletingDtor(unsigned flags) {
-    this->~Work();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [1] TypeName / [2] Type, the record and retail's abstract factory (create =
 // the logging stub, in-place = null): ENDGAME B.3.9 RF.
 DEFINE_EXE_ABSTRACT_TYPE(Work, "Object::Internal")

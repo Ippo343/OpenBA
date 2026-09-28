@@ -76,8 +76,8 @@
 // (0x18004e360). The three minted rows, their RT_DELDTOR rows, the ??0 / ??1
 // doors and the slot doors are retired (tools/rt_mint_retired/vid.txt).
 //
-// NO VIRTUAL DESTRUCTOR (ENDGAME B.1 decision 2): slot 0 is
-// `DeletingDtor(unsigned)`; `~ShaderProgram()` is non-virtual and has no slot.
+// THE DESTRUCTOR IS VIRTUAL (B3X W1): retail slot 0 is
+// the deleting destructor; `~ShaderProgram()` is D1 + D0 here.
 // The destructor CHAIN is retail's teardown, and that is not a coincidence:
 // ~VertexProgram (0x1800f61b0) is ~ShaderProgram (0x1800f50b0) inlined followed
 // by ~External (0x1800bc950), which is precisely what GCC emits for
@@ -155,19 +155,9 @@ public:
     // eh-vector dtor over ~ShaderProgram 0x1800f50b0), both arms as the retired
     // RT_DELDTOR row ran them. Reached only on a ShaderProgram-typed object,
     // which nothing builds (the class is abstract); each subclass has its own.
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<ShaderProgram*>(self + static_cast<int64_t>(i) * 0x50)->~ShaderProgram();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~ShaderProgram();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ??1ShaderProgram@Video@@UEAA@XZ (0x1800f50b0). Virtual (B3X W1); also the
+    // subclasses' base destructor.
+    ~ShaderProgram() override;
     // [1] 0x18004e0c0 TypeName / [2] 0x18004e0a0 Type, TypeId 0x18004e0b0, `_TypeName` / `_ParentTypeName` and the factory pair:
     // retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES D6); the record is
     // `DEFINE_TYPE`d in runtime/src/video/video_type_records.cpp.
@@ -233,10 +223,6 @@ protected:
     // own constructors -- retail's six qword stores. +0x50 is never touched.
     ShaderProgram() : Object::CompiledExternal(), _textures(), _constants(), _byteCode() {}
 
-    // ??1ShaderProgram@Video@@UEAA@XZ (0x1800f50b0). NON-virtual (no virtual dtor
-    // until the normal-virtual cutover); reached by slot 0 and as the subclasses'
-    // base destructor.
-    ~ShaderProgram();
 
 public:
     // ---- the 0x30 bytes ShaderProgram adds ------------------------------
@@ -288,19 +274,9 @@ public:
     // eh-vector dtor over ~VertexProgram 0x1800f61b0), both arms as the retired
     // RT_DELDTOR row ran them. The scalar arm's class-specific operator delete is
     // the locked MemFree. Nothing `new[]`s one.
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<VertexProgram*>(self + static_cast<int64_t>(i) * 0x58)->~VertexProgram();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~VertexProgram();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ??1VertexProgram@Video@@UEAA@XZ 0x1800f61b0. Virtual (B3X W1). reached through slot 0.
+    // ~ShaderProgram / ~CompiledExternal / ~External are the chain.
+    ~VertexProgram() override;
     // [1] 0x18004e560 TypeName / [2] 0x18004e540 Type, TypeId 0x18004e550, `_TypeName` / `_ParentTypeName` and the factory pair:
     // retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES D6); the record is
     // `DEFINE_TYPE`d in runtime/src/video/video_type_records.cpp.
@@ -325,7 +301,7 @@ public:
     // placement `operator new` (not ported): `::new (p)`.
     static void*         operator new(size_t size);               // 0x18004e570 — not ported
     static void*         operator new(size_t size, void* storage);// 0x18004e5e0 — not ported
-    static void          operator delete(void* p);                // 0x18004e5f0 — class_operator_delete.cpp
+    static void          operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                // 0x18004e5f0 — class_operator_delete.cpp
 
     // Real exported bodies, not compiler defaults; see ShaderProgram's pair.
     VertexProgram(const VertexProgram& other);                    // 0x18004e730 — not ported
@@ -341,11 +317,6 @@ public:
     // `_TypeName` 0x18004e520 -> "VertexProgram", `_ParentTypeName` 0x18004e530
     // -> "ShaderProgram": DECLARE_TYPE's.
     static const char* _FileExtension();   // 0x18004e510 -> "srsl"
-
-protected:
-    // ??1VertexProgram@Video@@UEAA@XZ 0x1800f61b0. NON-virtual; reached through slot 0.
-    // ~ShaderProgram / ~CompiledExternal / ~External are the chain.
-    ~VertexProgram();
 
 public:
     void* _data;   // +0x50  Video::VertexProgramData*, from DeviceData slot +0x78
@@ -376,19 +347,9 @@ public:
     // eh-vector dtor over ~PixelProgram 0x1800f3a00), both arms as the retired
     // RT_DELDTOR row ran them. The scalar arm's class-specific operator delete is
     // the locked MemFree. Nothing `new[]`s one.
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<PixelProgram*>(self + static_cast<int64_t>(i) * 0x58)->~PixelProgram();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~PixelProgram();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ??1PixelProgram@Video@@UEAA@XZ 0x1800f3a00. Virtual (B3X W1). reached through slot 0.
+    // ~ShaderProgram / ~CompiledExternal / ~External are the chain.
+    ~PixelProgram() override;
     // [1] 0x18004e8e0 TypeName / [2] 0x18004e8c0 Type, TypeId 0x18004e8d0, `_TypeName` / `_ParentTypeName` and the factory pair:
     // retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES D6); the record is
     // `DEFINE_TYPE`d in runtime/src/video/video_type_records.cpp.
@@ -410,7 +371,7 @@ public:
     // placement `operator new` (not ported): `::new (p)`.
     static void*         operator new(size_t size);               // 0x18004e8f0 — not ported
     static void*         operator new(size_t size, void* storage);// 0x18004e960 — not ported
-    static void          operator delete(void* p);                // 0x18004e970 — class_operator_delete.cpp
+    static void          operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                // 0x18004e970 — class_operator_delete.cpp
 
     PixelProgram(const PixelProgram& other);                      // 0x18004eab0 — not ported
     PixelProgram& operator=(const PixelProgram& other);           // 0x18004eb00 — not ported
@@ -422,11 +383,6 @@ public:
     // `_TypeName` 0x18004e8a0 -> "PixelProgram", `_ParentTypeName` 0x18004e8b0
     // -> "ShaderProgram": DECLARE_TYPE's.
     static const char* _FileExtension();   // 0x18004e890 -> "srsl"
-
-protected:
-    // ??1PixelProgram@Video@@UEAA@XZ 0x1800f3a00. NON-virtual; reached through slot 0.
-    // ~ShaderProgram / ~CompiledExternal / ~External are the chain.
-    ~PixelProgram();
 
 public:
     void* _data;   // +0x50  Video::PixelProgramData*, from DeviceData slot +0x80

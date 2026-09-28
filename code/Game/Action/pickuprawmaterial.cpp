@@ -240,13 +240,6 @@ PickupRawMaterial::PickupRawMaterial()
     : _field20(nullptr),
       _field28(nullptr) {}
 
-// [0] 0x140022cd0
-Object::Base* PickupRawMaterial::DeletingDtor(unsigned flags) {
-    this->~PickupRawMaterial();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x1400c99e0
 // [4] 0x1400c98d0
 // [9] 0x1400c9860

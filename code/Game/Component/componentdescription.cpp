@@ -149,13 +149,6 @@ ComponentDescription::~ComponentDescription() {
     _subDescCount = 0;
 }
 
-// [0] 0x140032030: ~ComponentDescription -> ~External, MemFree on &1.
-Object::Base* ComponentDescription::DeletingDtor(unsigned flags) {
-    this->~ComponentDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140118af0.
 bool ComponentDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
@@ -179,15 +172,15 @@ bool ComponentDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140031fe0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140031fe0: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* ComponentDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~ComponentDescription();
     return new (static_cast<void*>(this)) ComponentDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void ComponentDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void ComponentDescription::Destruct() { this->~ComponentDescription(); }
 
 // [8] 0x140031f90: placement-new on `this`, the same body as createInPlace (D9 #10).
 Object::External* ComponentDescription::Construct() {

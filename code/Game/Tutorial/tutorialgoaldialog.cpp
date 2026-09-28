@@ -36,13 +36,6 @@ TutorialGoalDialog::~TutorialGoalDialog() {
     reinterpret_cast<System::String*>(&dialogName)->~String();   // B.3.1 bridge
 }
 
-// [0] 0x140027590: ~TutorialGoalDialog, MemFree on &1.
-Object::Base* TutorialGoalDialog::DeletingDtor(unsigned flags) {
-    this->~TutorialGoalDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // TutorialGoalDialog::Serialize (vtable +0x28, 0x1400defd0)
 // ============================================================
@@ -78,10 +71,10 @@ bool TutorialGoalDialog::Serialize(void* stream) {
 // ============================================================
 // Reconstruct: vtable[0](this, 0), then the ctor on `this`.
 Object::External* TutorialGoalDialog::Reconstruct() {
-    DeletingDtor(0);
+    this->~TutorialGoalDialog();
     return ::new (static_cast<void*>(this)) TutorialGoalDialog();
 }
-void TutorialGoalDialog::Destruct() { DeletingDtor(0); }
+void TutorialGoalDialog::Destruct() { this->~TutorialGoalDialog(); }
 Object::External* TutorialGoalDialog::Construct() {
     return ::new (static_cast<void*>(this)) TutorialGoalDialog();
 }

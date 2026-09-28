@@ -144,7 +144,7 @@ namespace Graphics {
 // strings for ONE class disagree about namespacing, so neither can be derived
 // from the other or from the C++ base name.
 //
-// *** NOT CONSTRUCTIBLE IN B.3.5 *** and NO VIRTUAL DESTRUCTOR — the same two
+// *** NOT CONSTRUCTIBLE IN B.3.5 *** and (until B3X W1) NO VIRTUAL DESTRUCTOR — the same two
 // statements `Video::ImageBuffer` carries, for the same two reasons. Its ctor
 // (0x1800a3e70) and dtor (0x1800a3e40) stay registered DOORS in
 // `runtime/src/graphics/imagebuffer_derived.cpp`: the ctor has to stamp the
@@ -163,20 +163,9 @@ public:
     // [0] 0x18001eee0 -- MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x70` = the element size).
     // Both subclasses declare their own (B9-4).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<GeneratedImageBuffer*>(self + static_cast<int64_t>(i) * 0x70)
-                    ->~GeneratedImageBuffer();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~GeneratedImageBuffer();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ??1… 0x1800a3e40 is `restamp; JMP ~ImageBuffer` — both the compiler's
+    // chain, so the body is empty.
+    ~GeneratedImageBuffer() override {}
     // [ 1] 0x18001ede0 TypeName / [ 2] 0x18001edc0 Type, TypeId, `_TypeName` / `_ParentTypeName`
     // and the factory pair: retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES
     // D6); the record is `DEFINE_TYPE`d in
@@ -207,9 +196,6 @@ protected:
     // compiler's; `MOV dword [RBX+0x68],0` is the body. +0x6c is never written.
     // (ENDGAME B.3.9 GFX: the door and `DoorBody` are retired.)
     GeneratedImageBuffer() { _generation = 0; }
-    // ??1… 0x1800a3e40 is `restamp; JMP ~ImageBuffer` — both the compiler's
-    // chain, so the body is empty.
-    ~GeneratedImageBuffer() {}
 
 protected:
 
@@ -259,7 +245,7 @@ static_assert(offsetof(GeneratedImageBuffer, _generation)
 // (0x1800221a0) -> "GeneratedImageBuffer", NO namespace. RULE B5-15.
 //
 // ENDGAME B.3 step 9 (block GFX, B39_RULES D1/D2): CONCRETE. A real public
-// ctor (retail 0x1800a7130), its own vector slot 0, a protected non-virtual
+// ctor (retail 0x1800a7130), its own vector slot 0, a virtual
 // ~ReflectionImageBuffer holding the retired ??1 door's body, the factory pair
 // as the class's own statics; Construct / Reconstruct placement-new the class.
 // The minted `??_7ReflectionImageBuffer@Graphics@@6B@`, its RT_DELDTOR row
@@ -270,20 +256,10 @@ class ReflectionImageBuffer : public GeneratedImageBuffer {
 public:
     // [0] 0x180022600 -- MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x90` = the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<ReflectionImageBuffer*>(self + static_cast<int64_t>(i) * 0x90)
-                    ->~ReflectionImageBuffer();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~ReflectionImageBuffer();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ??1… 0x1800a70b0. VIRTUAL (B3X W1). ENDGAME B.3.9 GFX: the retired door's body
+    // (imagebuffer_derived.cpp) -- the two owned GPU objects; the restamps and
+    // ~GeneratedImageBuffer / ~ImageBuffer are the compiler's chain.
+    ~ReflectionImageBuffer() override;
 
     // ??0ReflectionImageBuffer@Graphics@@QEAA@XZ 0x1800a7130 -- the REAL ctor
     // (retail also inlines it into both factories, Construct and Reconstruct).
@@ -318,24 +294,18 @@ public:
     void Render(void* renderer, const void* scene, const void* camera,
                 int32_t generation) const override;
 
-protected:
-    // ??1… 0x1800a70b0. NON-VIRTUAL. ENDGAME B.3.9 GFX: the retired door's body
-    // (imagebuffer_derived.cpp) -- the two owned GPU objects; the restamps and
-    // ~GeneratedImageBuffer / ~ImageBuffer are the compiler's chain.
-    ~ReflectionImageBuffer();
-
 public:
     // TypeId, the factory pair and the two literals: DECLARE_TYPE / DEFINE_TYPE's.
     static void*         operator new(size_t size);             // ??2 — reached by name
     static void*         operator new(size_t size, void* storage);
-    static void          operator delete(void* p);              // ??3
+    static void          operator delete(void* p) { ::Object::detail::InternalMemFree(p); }              // ??3
     ReflectionImageBuffer(const ReflectionImageBuffer& other);            // not ported
     ReflectionImageBuffer& operator=(const ReflectionImageBuffer& other); // not ported
 
     // ---- the 0x20 bytes ReflectionImageBuffer adds ------------------------
     // What the five fields are: the POD's banner above, which is the byte read.
     // `_depth` is typed `Video::ImageBuffer*` now, which is what lets its
-    // teardown be `_depth->DeletingDtor(1)` instead of a hand-indexed slot 0;
+    // teardown be `delete _depth` instead of a hand-indexed slot 0;
     // `_target` stays `void*` because `Video::RenderBuffer` is still a POD in
     // `Device.h` and is block D2's to convert.
     Video::ImageBuffer* _depth;    // +0x70  owned, usage = 1 (a DEPTH buffer)

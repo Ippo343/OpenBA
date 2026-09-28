@@ -190,20 +190,6 @@ static inline uintptr_t GetGameWorld() {
 }
 
 // ============================================================
-// PlacementTool::DeletingDtor (vtable +0x00) — 0x14002dc90
-// ============================================================
-// ENDGAME B.3.8 TOOL: the hand-rolled PlacementTool_Dtor_Impl restamped the
-// Placement and Tool tables read by address — Tool's UNREGISTERED, so it
-// stored a NULL vptr before ~Internal (B38 D9 #3). The compiler's dtor chain
-// restamps the real tables, then runs Object::Internal::~Internal. Retail's
-// dtor frees nothing: slot 5 (Shutdown) releases the preview.
-Object::Base* PlacementTool::DeletingDtor(unsigned flags) {
-    this->~PlacementTool();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
-// ============================================================
 // PlacementTool::Shutdown2 (vtable +0x28, Slot5)
 // ============================================================
 // Removes placement preview from the scene, destroys the mesh instance,
@@ -232,7 +218,7 @@ void PlacementTool::Shutdown() {
     // Destroy mesh instance via vtable dtor if allocated
     void* mesh = meshInstance;
     if (mesh) {
-        reinterpret_cast<Graphics::MeshInstance*>(mesh)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
+        delete reinterpret_cast<Graphics::MeshInstance*>(mesh);   // B.3.x bridge (slot 0, free)
     }
 
     // Close dialog if open: dialogPtr (+0x10) points to an InternalBasePtr

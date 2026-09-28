@@ -50,7 +50,8 @@ class ResourceProduceComponent : public ControllerComponent {
 public:
     using StateController = ::ControllerLive::TableController<RPCtrlTag>;
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x140037d40
+    // 0x140037d40 has no body beyond the restamps: the compiler chain is it.
+    ~ResourceProduceComponent() override = default;                 // [0]  0x140037d40
     // [1]/[2]: the abstract base answers its own record (DEFINE_EXE_TYPE,
     // ENDGAME B.3.9 RF); every leaf overrides both.
     // [1] TypeName 0x140037d30 and [2] Type 0x140037d20: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
@@ -76,8 +77,6 @@ public:
 protected:
     // 0x14012b3d0 minus its vptr stores; retail's leaf ctors all CALL it.
     ResourceProduceComponent();
-    // 0x140037d40 has no body beyond the restamps: the compiler chain is it.
-    ~ResourceProduceComponent() = default;
 };
 
 static_assert(sizeof(ResourceProduceComponent) == 0x50, "ResourceProduceComponent is 0x50 (Market/Herbalist add nothing)");

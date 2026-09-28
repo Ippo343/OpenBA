@@ -67,13 +67,6 @@ TutorialImageToolbarIcon::~TutorialImageToolbarIcon() {
     reinterpret_cast<System::String*>(&_toolbarString)->~String();   // B.3.1 bridge
 }
 
-// [0] 0x140028090: ~TutorialImageToolbarIcon, MemFree on &1.
-Object::Base* TutorialImageToolbarIcon::DeletingDtor(unsigned flags) {
-    this->~TutorialImageToolbarIcon();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // Slot5: Serialize (0x1400e0af0)
 // ============================================================
@@ -121,7 +114,7 @@ bool TutorialImageToolbarIcon::Serialize(void* stream) {
 // Slot6: Reconstruct (0x140028070) / Slot8: Construct (0x140028060)
 // ============================================================
 Object::External* TutorialImageToolbarIcon::Reconstruct() {
-    DeletingDtor(0);
+    this->~TutorialImageToolbarIcon();
     return ::new (static_cast<void*>(this)) TutorialImageToolbarIcon();
 }
 Object::External* TutorialImageToolbarIcon::Construct() {

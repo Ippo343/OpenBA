@@ -12,8 +12,8 @@
 //     [1] TypeName  [2] Type  [3] 0x1400e03a0 GetFileVersion `MOV EAX,0x1000`
 //     [4] Object::External::Compile (import) — inherited
 //     [5] 0x1400e0330 Serialize
-//     [6] 0x140027a30 Reconstruct: DeletingDtor(0), then the ctor on `this`
-//     [7] 0x140001640 Destruct: DeletingDtor(0)
+//     [6] 0x140027a30 Reconstruct: this->~T(), then the ctor on `this`
+//     [7] 0x140001640 Destruct: this->~T()
 //     [8] 0x1400279e0 Construct (folded with createInPlace) — NEW here
 //     [9] 0x1400e0300 CreateElement — NEW here: builds the image's UI element
 //         in a dialog and returns it BY VALUE through the hidden return slot
@@ -34,16 +34,13 @@ class TutorialImage : public Object::External {
 public:
     TutorialImage();                                               // create 0x140027980 (inlined)
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140027a80
+    ~TutorialImage() override = default;                           // [0] 0x140027a80
     int32_t           GetFileVersion() const override { return 0x1000; }  // [3] 0x1400e03a0
     bool              Serialize(void* stream) override;            // [5] 0x1400e0330
     Object::External* Reconstruct() override;                      // [6] 0x140027a30
     void              Destruct() override;                         // [7] 0x140001640
     virtual Object::External* Construct();                         // [8] 0x1400279e0
     virtual void*     CreateElement(void* ret, void* dialog);      // [9] 0x1400e0300 (retslot)
-
-protected:
-    ~TutorialImage() = default;
 
 public:
     void*    imageRef;           // +0x20: ExternalPtr<UI::ElementDescription> (the image)

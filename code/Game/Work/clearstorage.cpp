@@ -460,19 +460,6 @@ phase2:
     return removeCount == 0 ? 1 : 0;
 }
 
-// ============================================================
-// ClearStorage::ScalarDtor (vtable +0x00, 0x14002a100)
-// ============================================================
-// Calls the ClearStorage destructor (frees BST + aux data; the vtable chain to
-// Work and Internal::~Internal are the compiler's), then conditionally frees the
-// object's memory.
-// [0] 0x14002a100: ~ClearStorage, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* ClearStorage::DeletingDtor(unsigned flags) {
-    this->~ClearStorage();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // 0x1400e73b0. The stamps (ClearStorage, then Work) and `~Internal` are the compiler's.
 ClearStorage::~ClearStorage() {
     ClearStorage_InitFuncs();

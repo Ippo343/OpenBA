@@ -967,13 +967,6 @@ EventNotifyDialog::~EventNotifyDialog() {
     *(uint64_t*)(s + 0xD8) = 0; *(uint64_t*)(s + 0xE0) = 0;
 }
 
-// [0] 0x140011550: the body above, ~DialogInstance, MemFree on &1.
-Object::Base* EventNotifyDialog::DeletingDtor(unsigned flags) {
-    this->~EventNotifyDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140011500: MemAlloc(0xf0, 8), then the ctor.
 void* EventNotifyDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(EventNotifyDialog), 8);

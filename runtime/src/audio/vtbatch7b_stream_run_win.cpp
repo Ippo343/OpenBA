@@ -519,7 +519,7 @@ void Stream::Run() {
                 "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z")(fsys, &st->file);
     }
 
-    reinterpret_cast<IO::FileStream*>(st)->IO::FileStream::DeletingDtor(0);  // 1800a14b3..1654  (B.3.9 IO)
+    reinterpret_cast<IO::FileStream*>(st)->IO::FileStream::~FileStream();  // 1800a14b3..1654  (B.3.9 IO)
 
 }
 

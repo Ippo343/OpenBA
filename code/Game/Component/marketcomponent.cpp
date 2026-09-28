@@ -30,13 +30,6 @@
 // 0x14004eb70: the RP ctor (CALL 0x14012b3d0) and the compiler's stamp. Nothing else.
 MarketComponent::MarketComponent() : ResourceProduceComponent() {}
 
-// [0] 0x140008440: restamps + ~Internal (the compiler chain), MemFree on &1.
-Object::Base* MarketComponent::DeletingDtor(unsigned flags) {
-    this->~MarketComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140008220: MemAlloc(0x50, 8), then the ctor.
 void* MarketComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MarketComponent), 8);

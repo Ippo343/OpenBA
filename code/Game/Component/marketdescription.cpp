@@ -52,13 +52,6 @@ MarketDescription::~MarketDescription() {
     _ratios = nullptr;
 }
 
-// [0] 0x1400083d0: ~MarketDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* MarketDescription::DeletingDtor(unsigned flags) {
-    this->~MarketDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14004ebb0: stream order as retail.
 bool MarketDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
@@ -82,15 +75,15 @@ bool MarketDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140008360: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140008360: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* MarketDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~MarketDescription();
     return new (static_cast<void*>(this)) MarketDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void MarketDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void MarketDescription::Destruct() { this->~MarketDescription(); }
 
 // [8] 0x1400083c0: MarketComponent's type id through the hidden return slot.
 Object::Type* MarketDescription::GetComponentType(Object::Type* ret) const {

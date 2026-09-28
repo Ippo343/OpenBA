@@ -40,7 +40,8 @@ public:
 
     ClearAreaComponent();                                 // 0x140117fa0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x1400310c0
+    // 0x140117f40
+    ~ClearAreaComponent() override;                               // [0]  0x1400310c0
     void          Persist(void* stream) override;                 // [3]  0x140117ec0
     int         GetDefaultState() const override { return 0; }  // [16] 0x140003730
     Controller* GetController() override { return &_controller; }  // [17] 0x140004080
@@ -49,9 +50,6 @@ public:
     StateController _controller;   // +0x28 the embedded controller (D6)
     uint32_t        clearState;    // +0x48
     uint8_t         _pad4C[4];     // +0x4c
-
-protected:
-    ~ClearAreaComponent();                                // 0x140117f40
 };
 
 static_assert(sizeof(ClearAreaComponent) == 0x50, "ClearAreaComponent is 0x50 (create 0x140030ea0)");

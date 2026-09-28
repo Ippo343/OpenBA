@@ -43,7 +43,7 @@
 // ENDGAME B.3 step 9 (block UI-D, B39_RULES D1/D2): CONCRETE, the
 // CharacterSet.h shape. The real public ctor is retail's `??0StringTable`
 // (0x18011d890) minus its vptr stores; slot 0 the class's own vector deleting
-// dtor; ~StringTable protected and non-virtual with the retired ??1 door's
+// dtor; ~StringTable virtual, with the retired ??1 door's
 // body. The factory pair is the class's own (stringtable_factory.cpp); the
 // minted `??_7StringTable@UI@@6B@` is retired.
 // ============================================================================
@@ -75,19 +75,9 @@ public:
     // [0] 0x180002740 — MSVC's VECTOR deleting destructor (`MOV EDX,0x30`, the
     // element size; the scalar arm is ??1 inlined, then ??3StringTable — one
     // body with the global MemFree, stringtable_lifecycle.cpp's banner).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<StringTable*>(self + static_cast<int64_t>(i) * 0x30)->~StringTable();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~StringTable();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // 0x18011d8f0 — ~Array<TextEntry> (stringtable_factory.cpp), then the
+    // compiler chains ~External.
+    ~StringTable() override;
 
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
@@ -117,14 +107,9 @@ public:
     // `??3` keeps its registered door in stringtable_lifecycle.cpp.
     static void* operator new(std::size_t bytes);              // 0x1800021a0
     static void* operator new(std::size_t bytes, void* place); // 0x180002210
-    static void  operator delete(void* p);                     // 0x180002220  (door)
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                     // 0x180002220  (door)
     // Retail's factory pair (B39_RULES D2), defined and registered in
     // stringtable_factory.cpp.
-
-protected:
-    // 0x18011d8f0 — ~Array<TextEntry> (stringtable_factory.cpp), then the
-    // compiler chains ~External.
-    ~StringTable();
 
 public:
     // ---- the 0x10 bytes StringTable adds: Collection::Array<TextEntry> -----

@@ -42,7 +42,8 @@ public:
 
     TradeComponent();                                                    // 0x14005c430
 
-    Object::Base* DeletingDtor(unsigned flags) override;                // [0]  0x14000dc80
+    // 0x14005c340
+    ~TradeComponent() override;                                         // [0]  0x14000dc80
     void          Persist(void* stream) override;                       // [3]  0x14005bd50
     void          OnAdded() override;                                   // [6]  0x14005c1d0
     void          OnRemove() override;                                  // [7]  0x14005c190
@@ -68,9 +69,6 @@ public:
     void*    field78;           // +0x78
     void*    field80;           // +0x80
     StateController _controller;   // +0x88 the embedded controller (D6)
-
-protected:
-    ~TradeComponent();                                                   // 0x14005c340
 };
 
 static_assert(sizeof(TradeComponent) == 0xa8, "TradeComponent is 0xa8 (create 0x14000db60)");

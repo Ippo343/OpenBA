@@ -111,12 +111,12 @@ Object::External* Material::Construct() {
 //     storage. Slot 0 is dispatched VIRTUALLY on purpose — a subclass's deleting
 //     destructor is what has to run.
 Object::External* Material::Reconstruct() {
-    DeletingDtor(0);
+    this->~Material();
     return ::new (this) Material();
 }
 
 // [7] ?Destruct@Material@Graphics@@UEAAXXZ  0x180011bc0
-void Material::Destruct() { DeletingDtor(0); }
+void Material::Destruct() { this->~Material(); }
 
 // [5] ?Serialize@Material@Graphics@@UEAA_NAEAVStream@IO@@@Z  0x180102a50
 bool Material::Serialize(void* streamv) {
@@ -145,7 +145,7 @@ bool Material::Serialize(void* streamv) {
     RtAddr<ElemSerFn>(0x1800605e0ull)(&ser, n, _passes._data);
 
     if (rw != nullptr) {
-        irw->DeletingDtor(1);
+        delete irw;
     }
     return true;
 }

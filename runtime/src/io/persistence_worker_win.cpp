@@ -696,7 +696,7 @@ extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
     // leaves the handle open for this same check to close. One site, not
     // three, exactly as FUN_1800b6e00's tail reads.
     if (bfs.base.file.handle != -1) RtIO::RtIo_FileSystem_CloseFile(Fs(), &bfs.base.file);
-    bfsObj->IO::BinaryFileStream::DeletingDtor(0);
+    bfsObj->IO::BinaryFileStream::~BinaryFileStream();
 
 }
 

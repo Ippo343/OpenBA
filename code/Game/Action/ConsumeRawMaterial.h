@@ -23,7 +23,8 @@ public:
     ConsumeRawMaterial();                                                   // create 0x1400220c0
     ConsumeRawMaterial(uint64_t* storage, int64_t resType, uint8_t reserve);   // 0x1400c63b0
     explicit ConsumeRawMaterial(uint64_t* storage);                         // 0x1400c6440
-    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x140022130 (frees the +0x28 list)
+    // Retail 0x140022130: frees the +0x28 consume list, then Action's dtor.
+    ~ConsumeRawMaterial() override;                            // [0] 0x140022130 (frees the +0x28 list)
     void Persist(void* stream) override;                       // [3] 0x1400c6120
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c5f50
     void CheckEntity() override;                               // [8] 0x1400c5e30
@@ -35,10 +36,6 @@ public:
     void*     _field30;          // +0x30 consume list count (+0x30) / capacity (+0x34)
     uint8_t   _field38;          // +0x38 reserve flag
     uint8_t   _pad39[7];         // +0x39 padding
-
-protected:
-    // Retail 0x140022130: frees the +0x28 consume list, then Action's dtor.
-    ~ConsumeRawMaterial();
 };
 
 static_assert(sizeof(ConsumeRawMaterial) == 0x40, "ConsumeRawMaterial is 0x40 (create 0x1400220c0 MemAlloc)");

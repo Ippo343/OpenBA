@@ -249,7 +249,7 @@ extern "C" void RtIo_PersistenceWorker_Load(void* worker) {
         p->status = 2;
     }
 
-    reinterpret_cast<IO::FileStream*>(st)->IO::FileStream::DeletingDtor(0);
+    reinterpret_cast<IO::FileStream*>(st)->IO::FileStream::~FileStream();
     fs->platformExistsGate = savedGate;
 }
 

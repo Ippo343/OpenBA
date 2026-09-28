@@ -235,12 +235,12 @@ Object::External* RenderState::Construct() {
 // flags 0 ("destroy, do NOT free" — the argument Ghidra's C output drops), then
 // re-construct on the SAME storage: `Object::External`'s device-lost primitive.
 Object::External* RenderState::Reconstruct() {
-    DeletingDtor(0);
+    this->~RenderState();
     return ::new (this) RenderState();
 }
 
 // slot 7 — ?Destruct@ 0x18004b720. `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`.
-void RenderState::Destruct() { DeletingDtor(0); }
+void RenderState::Destruct() { this->~RenderState(); }
 
 //
 // Retail's order: stamp RenderState's vtable, PlatformDestruct, then TAIL-JMP

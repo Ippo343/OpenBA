@@ -25,7 +25,11 @@ class EventLogUI final : public UI::DialogController {
 public:
     EventLogUI() = default;                              // 0x1400113e0 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x1400114b0
+    // 0x1400114b0 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    // PORT GAP (B38 D2): retail frees the Array/String members at +0x70, +0x60, +0x50; the
+    // tree never did (leak kept).
+    ~EventLogUI() override = default;                             // [0] 0x1400114b0
     void OnOpened() override;   // [5] 0x140067640
     void OnClosed() override {}   // [6] 0x140067630  RET 0 in retail
     void OnUpdateLayout() override;   // [7] 0x140067440
@@ -43,13 +47,6 @@ public:
     uint64_t data68 = 0;           // +0x68
     uint64_t data70 = 0;           // +0x70
     uint64_t data78 = 0;           // +0x78
-
-protected:
-    // 0x1400114b0 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail frees the Array/String members at +0x70, +0x60, +0x50; the
-    // tree never did (leak kept).
-    ~EventLogUI() = default;
 };
 
 static_assert(sizeof(EventLogUI) == 0x80, "EventLogUI is 0x80 (create 0x1400113e0 MemAlloc(0x80))");

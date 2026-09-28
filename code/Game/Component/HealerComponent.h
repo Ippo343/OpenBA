@@ -40,7 +40,8 @@ public:
 
     HealerComponent();                                    // 0x14004af70
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140006660
+    // 0x14004af10
+    ~HealerComponent() override;                                  // [0]  0x140006660
     void          Persist(void* stream) override;                 // [3]  0x14004aeb0
     void          OnRemove() override;                            // [7]  0x14004ae70
     int         GetDefaultState() const override { return 2; }  // [16] 0x1400026c0
@@ -48,9 +49,6 @@ public:
 
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     StateController _controller;   // +0x28 the embedded controller (D6)
-
-protected:
-    ~HealerComponent();                                   // 0x14004af10
 };
 
 static_assert(sizeof(HealerComponent) == 0x48, "HealerComponent is 0x48 (create 0x140006490)");

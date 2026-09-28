@@ -214,8 +214,8 @@ namespace Video {
 // wears the compiler's table. The `??0` / `??1` doors, the FACTREST row, the
 // `RT_DELDTOR` row and the minted `??_7ImageBuffer@Video@@6B@` are retired.
 //
-// NO VIRTUAL DESTRUCTOR (ENDGAME B.1 decision 2): slot 0 is
-// `DeletingDtor(unsigned)`. `~ImageBuffer()` is non-virtual and has no slot.
+// THE DESTRUCTOR IS VIRTUAL (B3X W1): retail slot 0 is
+// the deleting destructor. `~ImageBuffer()` is D1 + D0 here.
 // ============================================================
 class ImageBuffer : public Object::CompiledExternal {
 public:
@@ -264,18 +264,15 @@ public:
     // about different things.
     //
     // ENDGAME B.3.8 block RB (B38_RULES D1/D2): the exe instantiates the class
-    // ITSELF (its table copy 0x14015c8c0; ModDialog, NoiseUI, TradeWork), so
-    // slot 0 is now CONCRETE — the exe copy's own slot 0 0x1400129d0, the
-    // scalar deleting dtor (`~ImageBuffer`; MemFree on flags & 1). Inline, so
-    // the key function (TypeName) and the vtable's TU do not move. ENDGAME
-    // B.3.9 VS: the mint's RT_DELDTOR row (the DLL table's VECTOR slot 0
-    // 0x18001ed20) is retired; every object wears this table, and the two
-    // arms differ only on flags & 2, which nothing passes (B39_RULES D1.2).
-    Object::Base* DeletingDtor(unsigned flags) override {             // [0]
-        this->~ImageBuffer();
-        if (flags & 1) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ITSELF (its table copy 0x14015c8c0; ModDialog, NoiseUI, TradeWork); its
+    // slot 0 is the exe copy's 0x1400129d0, the scalar deleting dtor
+    // (`~ImageBuffer`; MemFree on flags & 1) -- the DLL table's is the VECTOR
+    // one 0x18001ed20. Since B3X W1 that slot is the virtual destructor (D1 +
+    // D0; `delete` frees through this class's `operator delete`, MemFree).
+    // ??1ImageBuffer@Video@@UEAA@XZ (0x1800f2610): reached by the deleting
+    // destructor (so `Destruct` / `Reconstruct` too) and by the three Graphics
+    // subclasses' destructor chains. Its door is gone (ENDGAME B.3.9 VS).
+    ~ImageBuffer() override;
     // [1] 0x18001e900 TypeName / [2] 0x18001e8e0 Type, TypeId 0x18001e8f0, `_TypeName` / `_ParentTypeName` and the factory pair:
     // retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES D6); the record is
     // `DEFINE_TYPE`d in runtime/src/video/video_type_records.cpp.
@@ -421,14 +418,14 @@ public:
     static void*         operator new(size_t size);
     // ??2ImageBuffer@Video@@SAPEAX_KPEAX@Z 0x18001e980 — not ported.
     static void*         operator new(size_t size, void* storage);
-    // ??3ImageBuffer@Video@@SAXPEAX@Z 0x18001e990 — NOT PORTED, and the previous
-    // attribution to `closure_batch2b.cpp` was wrong: that file holds
-    // `Video::ShaderProgram`'s blob-array helper and a `Volume::Frustum` leaf,
-    // and no `??3ImageBuffer@Video@@` body or registration exists anywhere in
-    // the tree. (0x180006a10 — the address `context_lifecycle.cpp` registers —
-    // is NOT this: it is the shared unexported guarded free that IO, Save,
-    // Input, Object and Engine all reach by address.)
-    static void          operator delete(void* p);
+    // ??3ImageBuffer@Video@@SAXPEAX@Z 0x18001e990 — read in retail (B3X W1):
+    // `if (p) { Enter(lock); MemoryAllocator::Free(p); Leave(lock); }`, i.e.
+    // MemFree verbatim. Defined inline since the normal-virtual cutover: the
+    // deleting destructor of every ImageBuffer class calls it. (0x180006a10 —
+    // the address `context_lifecycle.cpp` registers — is NOT this: it is the
+    // shared unexported guarded free that IO, Save, Input, Object and Engine
+    // all reach by address.)
+    static void          operator delete(void* p) { ::Object::detail::InternalMemFree(p); }
 
     // ---- PUBLIC BY NECESSITY, ENDGAME B.3.5 block VC ----------------------
     // `~ImageBuffer` is non-virtual and PROTECTED in retail, and the two platform
@@ -446,13 +443,6 @@ public:
     // and the stamp are the compiler's; the field stores and `PlatformConstruct`
     // are `InitFields`. ENDGAME B.3.9 VS: the ctor door is gone.
     ImageBuffer() { InitFields(); }
-
-protected:
-    // ??1ImageBuffer@Video@@UEAA@XZ (0x1800f2610) — NON-virtual, in no slot,
-    // PROTECTED (B39_RULES D1.3; retail's is protected too): reached by slot 0
-    // (`DeletingDtor`, so `Destruct` / `Reconstruct` too) and by the three
-    // Graphics subclasses' destructor chains. Its door is gone (ENDGAME B.3.9 VS).
-    ~ImageBuffer();
 
 private:
     // The ctor / dtor bodies minus the compiler's stores, out of line (buffers.cpp)

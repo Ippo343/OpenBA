@@ -96,8 +96,8 @@
 //
 // ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
 // ctor is retail's `??0NumberElement@UI@@QEAA@XZ` (0x180118c70) minus its vptr stores;
-// slot 0 is the class's own vector deleting dtor; ~NumberElement is protected and
-// non-virtual. The factory pair is the class's own; the minted
+// slot 0 is the class's own vector deleting dtor; ~NumberElement is public and
+// virtual. The factory pair is the class's own; the minted
 // `??_7NumberElement@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
 // the doors are retired.
 // ============================================================================
@@ -187,20 +187,10 @@ public:
 
     // [0] 0x18004ab80 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0xe8`, the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<NumberElement*>(self + static_cast<int64_t>(i) * 0xe8)
-                    ->~NumberElement();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~NumberElement();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1NumberElement@UI@@UEAA@XZ` (0x180118ce0). VIRTUAL (B3X W1);
+    // numberelement.cpp holds retail's body (release _cachedText); the
+    // compiler chains ~Element.
+    ~NumberElement() override;
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
     // retail: TypeName 0x18004a820, Type 0x18004a800, TypeId 0x18004a810, _TypeName 0x18004a7e0
@@ -231,13 +221,7 @@ public:
     NumberElement& operator=(const NumberElement& src);          // 0x18004aa80  not ported
     static void* operator new(std::size_t bytes);                // 0x18004a830  not ported
     static void* operator new(std::size_t bytes, void* place);   // 0x18004a8a0  not ported
-    static void  operator delete(void* p);                       // 0x18004a8b0  not ported
-
-protected:
-    // `??1NumberElement@UI@@UEAA@XZ` (0x180118ce0). NON-VIRTUAL;
-    // numberelement.cpp holds retail's body (release _cachedText); the
-    // compiler chains ~Element.
-    ~NumberElement();
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                       // 0x18004a8b0  not ported
 
 private:
 
@@ -254,7 +238,7 @@ public:
 
 static_assert(sizeof(NumberElement) == 0xe8, "UI::NumberElement is 0xe8");
 static_assert(alignof(NumberElement) == 8, "UI::NumberElement aligns to 8");
-static_assert(!std::has_virtual_destructor<NumberElement>::value, "ENDGAME decision 2");
+static_assert(std::has_virtual_destructor<NumberElement>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<NumberElement>::value, "B39 D1: concrete");
 static_assert(offsetof(NumberElement, _font) == sizeof(Element),
               "NumberElement's own fields begin at the end of Element");

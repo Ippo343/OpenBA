@@ -25,7 +25,7 @@ class ResourceLimitUIConfig final : public UI::DialogControllerConfig {
 public:
     ResourceLimitUIConfig() = default;                             // 0x140013780 (inlined)
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140013880
+    ~ResourceLimitUIConfig() override = default;                   // [0] 0x140013880
     int32_t           GetFileVersion() const override { return 1; }// [3] 0x140077b60
     bool              Serialize(void* stream) override;            // [5] 0x140077b10
     Object::External* Reconstruct() override;                      // [6] 0x140013830
@@ -36,9 +36,6 @@ public:
     // manager's limit table.
     int32_t _resourceIndex = 0;                                    // +0x20
     uint8_t _pad24[4]      = {};                                   // +0x24 (never written by retail)
-
-protected:
-    ~ResourceLimitUIConfig() = default;
 };
 
 static_assert(sizeof(ResourceLimitUIConfig) == 0x28, "ResourceLimitUIConfig is 0x28 (create 0x140013780)");

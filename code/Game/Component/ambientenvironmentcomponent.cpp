@@ -294,13 +294,6 @@ AmbientEnvironmentComponent::AmbientEnvironmentComponent()
     OrFlagsInCtor(0x88);
 }
 
-// [0] 0x140002170: restamp + ~Internal (no own work), MemFree on &1.
-Object::Base* AmbientEnvironmentComponent::DeletingDtor(unsigned flags) {
-    this->~AmbientEnvironmentComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 
 // [9] 0x140043690 (`JMP 0x140043310`). RDX is a pointer to the elapsed
 // System::Time (EntityList bucket tick 0x1400c42af).

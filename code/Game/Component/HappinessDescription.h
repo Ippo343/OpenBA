@@ -27,7 +27,7 @@ class HappinessDescription final : public Description {
 public:
     HappinessDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140005d50
+    ~HappinessDescription() override = default;                            // [0] 0x140005d50
     int32_t           GetFileVersion() const override { return 3; }    // [3] 0x14004ad50
     bool              Serialize(void* stream) override;                    // [5] 0x14004acb0
     Object::External* Reconstruct() override;                              // [6] 0x140005ce0
@@ -42,9 +42,6 @@ public:
     uint8_t _pad26[2];                          // +0x26 never written by the ctor
     uint32_t _u28;                              // +0x28 enum (serialized through the uint door)
     int32_t _i2c;                               // +0x2c
-
-protected:
-    ~HappinessDescription() = default;
 };
 
 static_assert(sizeof(HappinessDescription) == 0x30, "HappinessDescription is 0x30 (create 0x140005c10 MemAlloc(0x30))");

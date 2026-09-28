@@ -210,7 +210,7 @@ check_pressed:
                 ->SaveText(pathFilename, filenameRsc);
 
             // g. Delete the External through its own slot 0 (flag 1 = free)
-            reinterpret_cast<::Object::External*>(pending)->DeletingDtor(1);   // B.3.x bridge (slot 0)
+            delete reinterpret_cast<::Object::External*>(pending);   // B.3.x bridge (slot 0)
 
             // h. Clear pendingExternal
             self->pendingExternal = nullptr;

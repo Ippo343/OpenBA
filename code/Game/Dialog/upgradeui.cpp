@@ -255,14 +255,6 @@ void UpgradeUI::OnUpdate(const System::Time& /*time*/) {
 }
 
 
-// [0] 0x140016d50: ~UpgradeUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* UpgradeUI::DeletingDtor(unsigned flags) {
-    this->~UpgradeUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140016b30: MemAlloc(0x38, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* UpgradeUI::CreateNewObject() {

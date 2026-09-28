@@ -58,7 +58,7 @@ namespace {
 namespace IO {
 
 // ---- IO::MemoryStream (runtime/src/io/memory_stream.cpp) -------------------
-// Slot 0 is the class's own inline DeletingDtor (ENDGAME B.3.9 IO).
+// Retail slot 0 is the class's own virtual destructor (B3X W1; ENDGAME B.3.9 IO).
 bool     MemoryStream::Write(int, const void*) { StubReached("MemoryStream::Write"); }
 bool     MemoryStream::Read(int, void*)        { StubReached("MemoryStream::Read"); }
 bool     MemoryStream::SetCurrentPos(int)      { StubReached("MemoryStream::SetCurrentPos"); }
@@ -79,7 +79,7 @@ bool     FileStream::Open(const System::Filename&) { StubReached("FileStream::Op
 // ---- IO::BinaryFileStream --------------------------------------------------
 // Its ONE override, slot 0, whose real body is the registered thunk at
 // 0x180023d80 in file_stream.cpp.
-// ENDGAME B.3.9 IO: BinaryFileStream::DeletingDtor is inline now (retail's
+// ENDGAME B.3.9 IO: BinaryFileStream's slot 0 is its own destructor now (retail's
 // vector deleting dtor). The three out-of-line lifecycle bodies below are
 // file_stream.cpp's, which stands on the FileSystem singleton and the port
 // registry; the host versions touch no file. ~FileStream's host body releases

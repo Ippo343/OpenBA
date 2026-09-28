@@ -103,12 +103,12 @@ Object::External* RibbonDescription::Construct() {
 }
 // [6] 0x1800443c0 — destroy in place through slot 0 (flag 0), re-run the ctor.
 Object::External* RibbonDescription::Reconstruct() {
-    DeletingDtor(0);                                                    // 1800443d7
+    this->~RibbonDescription();                                                    // 1800443d7
     return ::new (this) RibbonDescription();
 }
 // [7] 0x180044520 is three instructions: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`
 // — a tail jump into slot 0 with flag 0, i.e. destroy without freeing.
-void RibbonDescription::Destruct() { DeletingDtor(0); }
+void RibbonDescription::Destruct() { this->~RibbonDescription(); }
 
 // ============================================================================
 // [5] ?Serialize@RibbonDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800d5f00
@@ -159,7 +159,7 @@ bool RibbonDescription::Serialize(void* streamArg) {
     RtAddr<ElemSerFn>(0x1800493d0ull)(&ser, n, _itemsData);
 
     if (rw != nullptr) {                                                // 1800d5fd5
-        rw->DeletingDtor(1);
+        delete rw;
     }
     return true;
 }

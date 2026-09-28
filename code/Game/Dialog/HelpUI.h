@@ -25,7 +25,11 @@ class HelpUI final : public UI::DialogController {
 public:
     HelpUI() = default;                                  // 0x140011ca0 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140011cf0
+    // 0x140011cf0 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    // PORT GAP (B38 D2): retail frees the Array/String member at +0x68 before
+    // ~DialogController (0x14006a8d0); the tree never did (leak kept).
+    ~HelpUI() override = default;                                 // [0] 0x140011cf0
     void OnCreated() override;   // [4] 0x14006a500
     void OnOpened() override {}   // [5] 0x14006a4f0  RET 0 in retail
     void OnUpdateLayout() override;   // [7] 0x14006a230
@@ -42,13 +46,6 @@ public:
     int64_t data60 = -1;           // +0x60: initialized to -1 (0xFFFFFFFFFFFFFFFF)
     uint64_t data68 = 0;           // +0x68: zeroed
     uint64_t data70 = 0;           // +0x70: zeroed
-
-protected:
-    // 0x140011cf0 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail frees the Array/String member at +0x68 before
-    // ~DialogController (0x14006a8d0); the tree never did (leak kept).
-    ~HelpUI() = default;
 };
 
 static_assert(sizeof(HelpUI) == 0x78, "HelpUI is 0x78 (create 0x140011ca0 MemAlloc(0x78))");

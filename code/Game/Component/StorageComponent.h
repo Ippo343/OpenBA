@@ -29,7 +29,9 @@ class StorageComponent final : public Component {
 public:
     StorageComponent();                                           // 0x14012c8d0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140038d60
+    // PORT GAP (retail 0x14012c870) — B38 D2: retail frees the +0x28 slot array;
+    // the tree never did (Inert_ScalarDtor). Kept as the tree's.
+    ~StorageComponent() override = default;                       // [0] 0x140038d60
     void Persist(void* stream) override;                          // [3] 0x14012c730
     void Startup() override;                                      // [4] 0x14012c720 own RET
     void OnAdded() override;                                      // [6] 0x14012c640
@@ -39,11 +41,6 @@ public:
     int32_t  slotCount;    // +0x30 number of storage slots
     uint8_t  _pad34[4];    // +0x34 (capacity of the slot array)
     void*    field38;      // +0x38 capacity (+0x38) / default type (+0x3c)
-
-protected:
-    // PORT GAP (retail 0x14012c870) — B38 D2: retail frees the +0x28 slot array;
-    // the tree never did (Inert_ScalarDtor). Kept as the tree's.
-    ~StorageComponent() = default;
 };
 
 static_assert(sizeof(StorageComponent) == 0x40, "StorageComponent is 0x40 (create 0x140038b50)");

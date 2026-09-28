@@ -27,7 +27,7 @@ class QuarryDescription final : public Description {
 public:
     QuarryDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x14000b570
+    ~QuarryDescription() override = default;                               // [0] 0x14000b570
     int32_t           GetFileVersion() const override { return 4; }    // [3] 0x140055390
     bool              Serialize(void* stream) override;                    // [5] 0x140055320
     Object::External* Reconstruct() override;                              // [6] 0x14000b500
@@ -39,9 +39,6 @@ public:
     void* _product;                             // +0x20 ExternalPtr (product material)
     float _minDepth;                            // +0x28
     float _maxDepth;                            // +0x2c
-
-protected:
-    ~QuarryDescription() = default;
 };
 
 static_assert(sizeof(QuarryDescription) == 0x30, "QuarryDescription is 0x30 (create 0x14000b430 MemAlloc(0x30))");

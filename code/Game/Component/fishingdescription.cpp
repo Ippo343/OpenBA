@@ -35,13 +35,6 @@ FishingDescription::FishingDescription()
       _u28(5),
       _u2c(0x180) {}
 
-// [0] 0x140034500: ~FishingDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* FishingDescription::DeletingDtor(unsigned flags) {
-    this->~FishingDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14011f170: stream order as retail.
 bool FishingDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
@@ -52,15 +45,15 @@ bool FishingDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140034490: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140034490: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* FishingDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~FishingDescription();
     return new (static_cast<void*>(this)) FishingDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void FishingDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void FishingDescription::Destruct() { this->~FishingDescription(); }
 
 // [8] 0x1400344f0: FishingComponent's type id through the hidden return slot.
 Object::Type* FishingDescription::GetComponentType(Object::Type* ret) const {

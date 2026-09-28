@@ -21,14 +21,6 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
 
-// [0] 0x1400294e0: stamp 0x140160fa0, stamp 0x140161a80, `~Internal`, MemFree on &1.
-// The old slot did the same by hand (two stamps + the IAT ~Internal).
-Object::Base* AutoPickupWork::DeletingDtor(unsigned flags) {
-    this->~AutoPickupWork();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [1] TypeName / [2] Type, the record and retail's abstract factory (create =
 // the logging stub, in-place = null): ENDGAME B.3.9 RF.
 DEFINE_EXE_ABSTRACT_TYPE(AutoPickupWork, "Work")

@@ -990,14 +990,6 @@ void WorkPlaceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, 
 
 }
 
-// [0] 0x140016e90: ~WorkPlaceUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* WorkPlaceUI::DeletingDtor(unsigned flags) {
-    this->~WorkPlaceUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140016dc0: MemAlloc(0x68, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* WorkPlaceUI::CreateNewObject() {

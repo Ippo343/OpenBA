@@ -32,7 +32,7 @@ class TutorialSetupRestrictPlayer final : public TutorialSetup {
 public:
     TutorialSetupRestrictPlayer();                                 // 0x1400e3220
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140028bb0
+    ~TutorialSetupRestrictPlayer() override;                       // [0] 0x140028bb0
     int32_t           GetFileVersion() const override { return 4; }// [3] 0x1400e31b0
     bool              Serialize(void* stream) override;            // [5] 0x1400e3090
     Object::External* Reconstruct() override;                      // [6] 0x140028b90
@@ -41,9 +41,6 @@ public:
     void              Update(void* /*time*/) override {}           // [9] 0x1400e2f10 RET
     void              End() override;                              // [10] 0x1400e2e90
     virtual Object::External* Construct();                         // [11] 0x140028b80
-
-protected:
-    ~TutorialSetupRestrictPlayer();
 
 public:
     int32_t  restrictMinX;       // +0x20: cell X min (-1 = unrestricted)

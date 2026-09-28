@@ -37,7 +37,8 @@ class FrustumOutlineDescription final : public UI::ElementDescription {
 public:
     FrustumOutlineDescription();                                         // 0x14006c520
 
-    Object::Base*     DeletingDtor(unsigned flags) override;             // [0] 0x140012500
+    // ~String(+0x70), ~ElementDescription
+    ~FrustumOutlineDescription() override = default;                     // [0] 0x140012500
     int32_t           GetFileVersion() const override;                   // [3] 0x14006c500
     bool              Serialize(void* stream) override;                  // [5] 0x14006c460
     Object::External* Reconstruct() override;                            // [6] 0x140012390
@@ -55,9 +56,6 @@ public:
     System::String _spriteName;    // +0x70
     int32_t        _width;         // +0x78 (ctor -1)
     int32_t        _height;        // +0x7c (ctor -1)
-
-protected:
-    ~FrustumOutlineDescription() = default;                              // ~String(+0x70), ~ElementDescription
 };
 
 static_assert(sizeof(FrustumOutlineDescription) == 0x80, "FrustumOutlineDescription is 0x80 (create 0x1400122c0)");

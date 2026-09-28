@@ -24,7 +24,9 @@ class ResourceLimitUI final : public UI::DialogController {
 public:
     ResourceLimitUI() = default;                         // 0x1400136b0 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x1400138d0
+    // 0x1400138d0 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    ~ResourceLimitUI() override = default;                        // [0] 0x1400138d0
     void OnCreated() override;   // [4] 0x140077970
     void OnUpdateLayout() override;   // [7] 0x1400778d0
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
@@ -33,11 +35,6 @@ public:
     // ---- fields (the Panels.h POD's names, kept for the bodies) --------
     uint64_t data30 = 0;           // +0x30: zeroed
     uint64_t data38 = 0;           // +0x38: zeroed
-
-protected:
-    // 0x1400138d0 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    ~ResourceLimitUI() = default;
 };
 
 static_assert(sizeof(ResourceLimitUI) == 0x40, "ResourceLimitUI is 0x40 (create 0x1400136b0 MemAlloc(0x40))");

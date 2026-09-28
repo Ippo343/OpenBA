@@ -38,7 +38,8 @@ class HuntWork final : public AutoPickupWork {
 public:
     HuntWork();                                                 // (Work_GenericCtor shape)
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002a700
+    // frees the +0x48 citizen BST
+    ~HuntWork() override;                                           // [0]  0x14002a700
     void  Persist(void* stream) override;                           // [3]  0x1400ef600
     int   Execute(void* entityIBP, void* context) override;  // [4]  0x1400eeff0
     int   OnComplete(void* param2, void* arg2, int arg3) override;  // [6]  0x1400eefd0
@@ -52,9 +53,6 @@ public:
     void*    _field48;           // +0x48: zeroed
     uint32_t _field50;           // +0x50: zeroed
     uint8_t  _pad54[4];          // +0x54: padding
-
-protected:
-    ~HuntWork();                                               // frees the +0x48 citizen BST
 };
 
 static_assert(sizeof(HuntWork) == 0x58, "HuntWork is 0x58 (retail create MemAlloc)");

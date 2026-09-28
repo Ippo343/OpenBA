@@ -209,13 +209,6 @@ PlayAnimation::PlayAnimation()
       _field30(nullptr),
       _field38(nullptr) {}
 
-// [0] 0x140001260
-Object::Base* PlayAnimation::DeletingDtor(unsigned flags) {
-    this->~PlayAnimation();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x140042480
 // [4] 0x140042420
 // [5] 0x140042400

@@ -44,7 +44,8 @@ public:
     GatherRawMaterials();                                           // (Work_GenericCtor shape)
     explicit GatherRawMaterials(void* buildEntityIBP);              // 0x1400ec710 (site ctor)
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002a410
+    // 0x1400ec650: frees the BST and both arrays
+    ~GatherRawMaterials() override;                                 // [0]  0x14002a410
     void  Persist(void* stream) override;                           // [3]  0x1400ec560
     int   Execute(void* entityIBP, void* context) override;  // [4]
     int   OnComplete(void* param2, void* param3, int arg3) override;  // [6]
@@ -64,9 +65,6 @@ public:
     void*    field_68;           // +0x68: tree node ptr (zeroed)
     int32_t  field_70;           // +0x70: count (zeroed)
     uint8_t  _pad74[4];          // +0x74: padding
-
-protected:
-    ~GatherRawMaterials();                                         // 0x1400ec650: frees the BST and both arrays
 };
 
 static_assert(sizeof(GatherRawMaterials) == 0x78, "GatherRawMaterials is 0x78 (retail create MemAlloc)");

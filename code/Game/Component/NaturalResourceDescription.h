@@ -29,7 +29,7 @@ class NaturalResourceDescription final : public Description {
 public:
     NaturalResourceDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140036650
+    ~NaturalResourceDescription() override = default;                      // [0] 0x140036650
     int32_t           GetFileVersion() const override { return 4; }    // [3] 0x140125fc0
     bool              Serialize(void* stream) override;                    // [5] 0x140125e10
     Object::External* Reconstruct() override;                              // [6] 0x140036620
@@ -62,9 +62,6 @@ public:
     void* _profession;                          // +0x78 ExternalRef<Profession> (0x140018020 serialize)
     uint32_t _u80;                              // +0x80 enum, default 11
     uint8_t _pad84[4];                          // +0x84 never written by the ctor
-
-protected:
-    ~NaturalResourceDescription() = default;
 };
 
 static_assert(sizeof(NaturalResourceDescription) == 0x88, "NaturalResourceDescription is 0x88 (create 0x1400365d0 MemAlloc(0x88))");

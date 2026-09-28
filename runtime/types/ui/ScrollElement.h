@@ -22,7 +22,7 @@
 //
 // ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2) -- the paragraph below is
 // HISTORY: the class is now CONCRETE. A real public ctor (retail's stores), its
-// own slot 0 (the vector deleting dtor), a protected non-virtual ~ScrollElement holding
+// own slot 0 (the vector deleting dtor), a virtual ~ScrollElement holding
 // the retired ??1 door's body, and the factory pair as the class's own statics;
 // every live one wears the COMPILER's table. The minted `??_7ScrollElement@UI@@6B@`,
 // its RT_DELDTOR row 0x18003adc0 and the ctor / dtor / slot doors are retired
@@ -72,21 +72,12 @@ public:
         _dragValue      = 0.0f;
     }
 
-    // [0] 0x18003adc0 -- MSVC's VECTOR deleting destructor, both arms exactly as the
-    // retired RT_DELDTOR row ran them (`MOV EDX,0x178` = the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<ScrollElement*>(self + static_cast<int64_t>(i) * 0x178)->~ScrollElement();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~ScrollElement();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // [0] 0x18003adc0 -- MSVC's VECTOR deleting destructor (retail; here the
+    // virtual destructor, B3X W1) (`MOV EDX,0x178` = the element size).
+    // `??1ScrollElement@UI@@UEAA@XZ` (0x18011a900): VIRTUAL (the normal-virtual
+    // cutover, B3X W1). Retail's body is in scrollelement.cpp;
+    // the compiler chains the base's.
+    ~ScrollElement() override;
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
     // retail: TypeName 0x18003a850, Type 0x18003a830, _TypeName 0x18003a810, _ParentTypeName 0x18003a820
@@ -113,12 +104,6 @@ public:
 
     ScrollElement(const ScrollElement& src);                      // 0x18003aa30  not ported
     ScrollElement& operator=(const ScrollElement& src);           // 0x18003abe0  not ported
-
-protected:
-    // `??1ScrollElement@UI@@UEAA@XZ` (0x18011a900): NON-VIRTUAL (no virtual dtor until
-    // the normal-virtual cutover). Retail's body is in scrollelement.cpp;
-    // the compiler chains the base's.
-    ~ScrollElement();
 
 private:
 

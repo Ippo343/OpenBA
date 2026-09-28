@@ -26,16 +26,13 @@ class ProfessionList final : public Object::External {
 public:
     ProfessionList();                                             // factory 0x14001e5c0 body
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x14001e760
+    ~ProfessionList() override;                                   // [0] 0x14001e760
     int32_t GetFileVersion() const override { return 2; }         // [3]
     // [4] Compile: inherited (retail's slot is the Object::External import)
     bool Serialize(void* stream) override;                        // [5] 0x1400a8e30
     Object::External* Reconstruct() override;                     // [6] 0x14001e690
-    void Destruct() override;                                     // [7] 0x140001640 DeletingDtor(0)
+    void Destruct() override;                                     // [7] 0x140001640 this->~T()
     virtual Object::External* Construct();                        // [8] 0x14001e630
-
-protected:
-    ~ProfessionList();
 
 public:
     void*    arrayData;          // +0x20: Profession* array data (freed in dtor)

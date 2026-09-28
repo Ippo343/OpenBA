@@ -33,13 +33,11 @@ class RotationSetting final : public ToolSetting {
 public:
     RotationSetting() : rotation(0), _pad14(0) {}           // inlined into 0x140026d20
 
-    Object::Base* DeletingDtor(unsigned flags) override;   // [0] 0x140026dd0
+    // 0x1400dea40: no body
+    ~RotationSetting() override = default;                 // [0] 0x140026dd0
 
     uint32_t rotation;   // +0x10 0..3 (the ctor writes 0)
     uint32_t _pad14;     // +0x14 never written by retail (zeroed here)
-
-protected:
-    ~RotationSetting() = default;                          // 0x1400dea40: no body
 };
 
 static_assert(sizeof(RotationSetting) == 0x18, "RotationSetting is 0x18 (create 0x140026d20 MemAlloc(0x18))");

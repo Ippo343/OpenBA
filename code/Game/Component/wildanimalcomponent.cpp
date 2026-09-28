@@ -129,13 +129,6 @@ WildAnimalComponent::WildAnimalComponent() : data28(0) {
     OrFlagsInCtor(0x02);
 }
 
-// [0] 0x140039df0: restamp + ~Internal (no own work), MemFree on &1.
-Object::Base* WildAnimalComponent::DeletingDtor(unsigned flags) {
-    this->~WildAnimalComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // WildAnimalComponent::Serialize (vtable slot [3], 0x14012e300)
 // ============================================================

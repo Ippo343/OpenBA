@@ -80,13 +80,6 @@ DecalDescription::~DecalDescription() {
     _quads = nullptr; _quadCount = 0; _quadCap = 0;
 }
 
-// [0] 0x1400338a0: ~DecalDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* DecalDescription::DeletingDtor(unsigned flags) {
-    this->~DecalDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14011b980: stream order as retail.
 bool DecalDescription::Serialize(void* stream) {
     if (!fn_Array_Serialize_External_GraphicsMesh) return true;   // standalone: the door is unwired
@@ -129,15 +122,15 @@ bool DecalDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140033870: DeletingDtor(0) (destroy in place), then the ctor again on
+// [6] 0x140033870: `this->~T()` (retail: slot 0, flags 0 -- destroy in place), then the ctor again on
 // `this`. The hand-built table's Cleanup trampoline already did this.
 Object::External* DecalDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~DecalDescription();
     return new (static_cast<void*>(this)) DecalDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void DecalDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void DecalDescription::Destruct() { this->~DecalDescription(); }
 
 // [8] 0x140033890: DecalComponent's type id through the hidden return slot.
 Object::Type* DecalDescription::GetComponentType(Object::Type* ret) const {

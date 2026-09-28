@@ -168,16 +168,6 @@ ClearArea::~ClearArea() {
 }
 
 // ============================================================
-// ClearArea::ScalarDtor (0x140029870)
-// ============================================================
-// [0] 0x140029870: ~ClearArea, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* ClearArea::DeletingDtor(unsigned flags) {
-    this->~ClearArea();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
-// ============================================================
 // ClearArea::Serialize (0x1400e6740)
 // ============================================================
 // Pattern: Work_Serialize + Serializer(v1) + BST_Serialize(+0x48) +

@@ -101,16 +101,16 @@ UNIT_TEST(achievement_field_offsets) {
 }
 
 UNIT_TEST(achievement_class_shape_rules) {
-    // B7-13 / ENDGAME B.1 decision 2: polymorphic, abstract, NO virtual dtor.
+    // B7-13 / ENDGAME B.1 decision 2: polymorphic, abstract; B3X W1: public virtual dtor (retail slot 0 = D1 + D0).
     CHECK(std::is_polymorphic<Goal>::value);
     CHECK(std::is_abstract<Goal>::value);
     CHECK(!std::is_abstract<GoalInstance>::value);        // concrete since B.3.9 ENG
     CHECK(!std::is_abstract<AchClass>::value);            // concrete since B.3.9 ENG
     CHECK(!std::is_abstract<AchievementInstance>::value);   // concrete since B.3.8 RB (exe table copy 0x14015e350)
-    CHECK(!std::has_virtual_destructor<Goal>::value);
-    CHECK(!std::has_virtual_destructor<GoalInstance>::value);
-    CHECK(!std::has_virtual_destructor<AchClass>::value);
-    CHECK(!std::has_virtual_destructor<AchievementInstance>::value);
+    CHECK(std::has_virtual_destructor<Goal>::value);
+    CHECK(std::has_virtual_destructor<GoalInstance>::value);
+    CHECK(std::has_virtual_destructor<AchClass>::value);
+    CHECK(std::has_virtual_destructor<AchievementInstance>::value);
     // B7-8: GoalList is a value type with a DEEP copy and an owning dtor.
     CHECK(!std::is_polymorphic<GoalList>::value);
     CHECK(!std::is_trivially_copyable<GoalList>::value);

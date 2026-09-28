@@ -79,23 +79,16 @@ TutorialStep::~TutorialStep() {
     reinterpret_cast<System::String*>(&titleStr)->~String();          // B.3.1 bridge
 }
 
-// [0] 0x140028cc0: the dtor 0x1400e33f0, MemFree on &1.
-Object::Base* TutorialStep::DeletingDtor(unsigned flags) {
-    this->~TutorialStep();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // TutorialStep::Reconstruct [6] 0x140028ca0 / Destruct [7] / Construct [8]
 // ============================================================
-// Reconstruct: DeletingDtor(0) (the tree called the dtor body directly — the
+// Reconstruct: `~T()` (slot 0, flags 0) (the tree called the dtor body directly — the
 // same effect), then the ctor 0x1400e3480 on `this`.
 Object::External* TutorialStep::Reconstruct() {
-    DeletingDtor(0);
+    this->~TutorialStep();
     return ::new (static_cast<void*>(this)) TutorialStep();
 }
-void TutorialStep::Destruct() { DeletingDtor(0); }
+void TutorialStep::Destruct() { this->~TutorialStep(); }
 Object::External* TutorialStep::Construct() {                     // 0x140028c90
     return ::new (static_cast<void*>(this)) TutorialStep();
 }

@@ -27,7 +27,7 @@ class CreateFencedDescription final : public Description {
 public:
     CreateFencedDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140004960
+    ~CreateFencedDescription() override = default;                         // [0] 0x140004960
     int32_t           GetFileVersion() const override { return 3; }    // [3] 0x1400479c0
     bool              Serialize(void* stream) override;                    // [5] 0x1400478f0
     Object::External* Reconstruct() override;                              // [6] 0x140004930
@@ -46,9 +46,6 @@ public:
     bool _b68;                                  // +0x68
     uint8_t _pad69[7];                          // +0x69 never written by the ctor
     void* _ref70;                               // +0x70 ExternalPtr (a raw pointer)
-
-protected:
-    ~CreateFencedDescription() = default;
 };
 
 static_assert(sizeof(CreateFencedDescription) == 0x78, "CreateFencedDescription is 0x78 (create 0x1400048e0 MemAlloc(0x78))");

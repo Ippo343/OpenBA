@@ -31,6 +31,8 @@
 // ============================================================================
 #include "unit.h"
 #include "slot_check.h"
+#include "dtor_check.h"
+
 
 #include "runtime/types/ui/TextDescription.h"
 #include "runtime/types/ui/LabelDescription.h"
@@ -122,12 +124,14 @@ enum : int {
     kS12 = 0x60,
 };
 
-// ---- probes: each overrides only slot 0 (pure in every real class) ---------
+// ---- probes: each overrides only retail slot 0 ------------------------------
+// B3X W1: retail slot 0 is the destructor pair; the probe's destructor records
+// kProbeDtor, and a recording class-scope operator delete stands for retail
+// flags 1's MemFree.
 #define C3_PROBE(NAME, BASE)                                                   \
     struct NAME final : BASE {                                                 \
-        Object::Base* DeletingDtor(unsigned flags) override {                  \
-            Note(this, kProbeDtor, flags); return this;                        \
-        }                                                                      \
+        ~NAME() override { Note(this, kProbeDtor); }                           \
+        DTOR_CHECK_RECORDING_DELETE                                            \
     };
 C3_PROBE(TextDescriptionProbe,       UI::TextDescription)
 C3_PROBE(LabelDescriptionProbe,      UI::LabelDescription)
@@ -143,9 +147,7 @@ C3_PROBE(NumberElementProbe,         UI::NumberElement)
 
 // A probe that overrides the slot EditElement INTRODUCES, for PART D.
 struct EditFinalizeProbe final : UI::EditElement {
-    Object::Base* DeletingDtor(unsigned flags) override {
-        Note(this, kProbeDtor, flags); return this;
-    }
+    ~EditFinalizeProbe() override { Note(this, kProbeDtor); }
     void FinalizeText() override { Note(this, kProbeFinalize); }
 };
 
@@ -153,9 +155,9 @@ void* const kRetSentinel = reinterpret_cast<void*>(static_cast<uintptr_t>(0xE1E1
 
 }  // namespace
 
-// ENDGAME B.3.9 UI-A: the destructor markers RECORD each call, so the real
-// `DeletingDtor` of a concrete class (inline in its header) can be seen
-// running ~X once per element, in retail's DESCENDING order.
+// ENDGAME B.3.9 UI-A: the destructor markers RECORD each call, so a concrete
+// class's destructors (B3X W1: D1 / D0 / delete[]) can be seen running ~X
+// once per element, in retail's DESCENDING order.
 namespace {
 int         g_b39DtorCount = 0;
 const void* g_b39DtorOrder[8] = {};
@@ -314,7 +316,7 @@ UNIT_TEST(ui_c3_sizes_and_parents_match_retail) {
     CHECK((std::is_base_of<UI::Element, UI::NumberElement>::value));
     CHECK(!(std::is_base_of<UI::TextElement, UI::NumberElement>::value));
 
-    // Abstract, no virtual destructor (ENDGAME decision 2).
+    // Concrete since B.3.9 UI-A; public virtual destructor since B3X W1.
     CHECK(!std::is_abstract<UI::TextDescription>::value);    // B.3.9 UI-A: concrete
     CHECK(!std::is_abstract<UI::LabelElement>::value);       // B.3.9 UI-A: concrete
     CHECK(!std::is_abstract<UI::TextElement>::value);
@@ -323,7 +325,7 @@ UNIT_TEST(ui_c3_sizes_and_parents_match_retail) {
                                std::is_destructible<UI::TextElement>::value,
                                std::is_destructible<UI::LabelDescription>::value,
                                std::is_destructible<UI::LabelElement>::value })
-        CHECK(!destructible);                                  // protected non-virtual dtors
+        CHECK(destructible);                                   // B3X W1: public virtual dtors
     CHECK(!std::is_abstract<UI::NumberEditElement>::value);   // B.3.9 UI-A: concrete
     for (bool destructible : { std::is_destructible<UI::EditDescription>::value,
                                std::is_destructible<UI::EditElement>::value,
@@ -331,14 +333,14 @@ UNIT_TEST(ui_c3_sizes_and_parents_match_retail) {
                                std::is_destructible<UI::NumberEditElement>::value,
                                std::is_destructible<UI::NumberDescription>::value,
                                std::is_destructible<UI::NumberElement>::value })
-        CHECK(!destructible);                                  // protected non-virtual dtors
+        CHECK(destructible);                                   // B3X W1: public virtual dtors
     CHECK(!std::is_abstract<UI::EditDescription>::value);
     CHECK(!std::is_abstract<UI::EditElement>::value);
     CHECK(!std::is_abstract<UI::NumberEditDescription>::value);
     CHECK(!std::is_abstract<UI::NumberDescription>::value);
     CHECK(!std::is_abstract<UI::NumberElement>::value);
-    CHECK(!std::has_virtual_destructor<UI::TextElement>::value);
-    CHECK(!std::has_virtual_destructor<UI::NumberEditDescription>::value);
+    CHECK(std::has_virtual_destructor<UI::TextElement>::value);            // B3X W1
+    CHECK(std::has_virtual_destructor<UI::NumberEditDescription>::value);
 }
 
 UNIT_TEST(ui_c3_field_offsets_and_pod_agreement) {
@@ -388,11 +390,32 @@ UNIT_TEST(ui_c3_field_offsets_and_pod_agreement) {
 // ===========================================================================
 namespace {
 
+// Retail slot 0 (kS0) is the destructor pair (B3X W1), read raw: compiler [0]
+// D1 runs ~Probe once and frees nothing (flags 0), on a placement-new'd probe
+// that is never destroyed again (a stack probe would be destroyed twice); [1]
+// D0 runs it and hands the block to the recording operator delete (flags 1).
+template <typename Probe>
+void CheckProbeDtorPair() {
+    static_assert(kS0 == 0, "retail slot 0");
+    alignas(Probe) unsigned char buf[sizeof(Probe)];
+    Probe* p = ::new (static_cast<void*>(buf)) Probe();
+    CHECK(VTableOf(p)[0] != VTableOf(p)[1]);
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD1(p);
+    CHECK_EQ(g_lastMark, kProbeDtor); CHECK(g_lastSelf == p);
+    CHECK_EQ(dtor_check::g_frees, 0);
+    Probe* h = dtor_check::NewOnMalloc<Probe>();
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD0(h);
+    CHECK_EQ(g_lastMark, kProbeDtor); CHECK(g_lastSelf == h);
+    CHECK_EQ(dtor_check::g_frees, 1); CHECK(dtor_check::g_lastFree == h);
+}
+
 // Slots 1,2,3,5,6,7,8,9 of a leaf Description reach the class's own markers,
-// slot 0 the probe, slot 4 `Object::External::Compile` (inherited).
+// slot 0 the probe (CheckProbeDtorPair), slot 4 `Object::External::Compile`
+// (inherited).
 void CheckDescriptionSlots(void* raw, int tag, const void* compileEntry) {
-    Reset(); SlotAt<void* (*)(void*, unsigned)>(raw, kS0)(raw, 0u);
-    CHECK_EQ(g_lastMark, kProbeDtor); CHECK(g_lastSelf == raw);
+    CHECK(VTableOf(raw)[0] != VTableOf(raw)[1]);   // D1 != D0
     CHECK(SlotAt<const char* (*)(const void*)>(raw, kS1)(raw) == WhoRecord(tag)->name);
     CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(raw, kS2)(raw), WhoRecord(tag)->typeId);
     Reset(); SlotAt<int32_t (*)(const void*)>(raw, kS3)(raw);
@@ -428,6 +451,11 @@ UNIT_TEST(ui_c3_description_slot_order_is_retails) {
     CheckDescriptionSlots(&ed, kED, compile);
     CheckDescriptionSlots(&ned, kNED, compile);
     CheckDescriptionSlots(&nd, kND, compile);
+    CheckProbeDtorPair<TextDescriptionProbe>();
+    CheckProbeDtorPair<LabelDescriptionProbe>();
+    CheckProbeDtorPair<EditDescriptionProbe>();
+    CheckProbeDtorPair<NumberEditDescriptionProbe>();
+    CheckProbeDtorPair<NumberDescriptionProbe>();
 
     // Label OVERRIDES all of Text's 1..9 but 4: none of its entries is Text's.
     for (int s = 1; s < 10; ++s) {
@@ -569,27 +597,31 @@ UNIT_TEST(ui_c3_qualified_finalizetext_does_not_redispatch) {
 // ===========================================================================
 namespace {
 
+// B3X W1: retail's flags-1 arm is `delete one` (T's own D0: the chain once,
+// then T's class-scope operator delete, InternalMemFree == free here); the
+// free is PROVEN on a dtor_check::Recording<T> stand-in. Retail's flags-3
+// vector arm has no Itanium counterpart: `delete[]` of `new T[3]` runs three
+// destructors, downward.
 template <typename T, typename Make>
 void B39ExpectBothArms(size_t elemSize, Make make) {
+    static_assert(dtor_check::HasClassDelete<T>::value, "D0 frees through a class-scope operator delete");
+    CHECK_EQ(sizeof(T), elemSize);
     void* p = Object::detail::InternalMemAlloc(elemSize, 8);
     CHECK(p != nullptr);
     T* one = make(p);
     g_b39DtorCount = 0;
-    CHECK(one->DeletingDtor(1) == one);
+    delete one;
     CHECK_EQ(g_b39DtorCount, 1);
 
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * elemSize, 8));
-    CHECK(block != nullptr);
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    T* e[3];
-    for (int i = 0; i < 3; ++i) e[i] = make(block + 8 + i * elemSize);
+    T* r = dtor_check::NewOnMalloc<dtor_check::Recording<T>>();
     g_b39DtorCount = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
-    CHECK_EQ(g_b39DtorCount, 3);
-    CHECK(g_b39DtorOrder[0] == e[2]);
-    CHECK(g_b39DtorOrder[1] == e[1]);
-    CHECK(g_b39DtorOrder[2] == e[0]);
+    dtor_check::ResetFrees();
+    delete r;
+    CHECK_EQ(g_b39DtorCount, 1);
+    CHECK_EQ(dtor_check::g_frees, 1);
+    CHECK(dtor_check::g_lastFree == r);
+
+    CHECK_ARRAY_DELETE(T, g_b39DtorCount, g_b39DtorOrder);
 }
 }  // namespace
 
@@ -624,7 +656,7 @@ UNIT_TEST(b39_uia_edit_number_ctors_make_retails_stores) {
         CHECK_EQ((int)buf[0x7d], 0xCD);
         CHECK(d->_string80 == nullptr);
         g_b39DtorCount = 0;
-        CHECK(d->DeletingDtor(0) == d);
+        d->~EditDescription();
         CHECK_EQ(g_b39DtorCount, 1);
     }
     {
@@ -637,7 +669,7 @@ UNIT_TEST(b39_uia_edit_number_ctors_make_retails_stores) {
         CHECK_EQ(d->_i78, -32767);
         CHECK_EQ(d->_i7c, 0x7fff);
         CHECK_EQ((int)d->_b80, 1);
-        CHECK(d->DeletingDtor(0) == d);
+        d->~NumberEditDescription();
     }
     {
         alignas(8) uint8_t buf[0x88];
@@ -648,7 +680,7 @@ UNIT_TEST(b39_uia_edit_number_ctors_make_retails_stores) {
         CHECK_EQ(d->_i74, 0);
         CHECK(d->_f78 == 0.0f);
         CHECK_EQ((int)d->_b7c, 0);
-        CHECK(d->DeletingDtor(0) == d);
+        d->~NumberDescription();
     }
     {
         alignas(8) uint8_t buf[0x100];
@@ -670,7 +702,7 @@ UNIT_TEST(b39_uia_edit_number_ctors_make_retails_stores) {
         NumberEditElementProbe probe{};
         CHECK(VTableOf(e) != VTableOf(&probe));
         g_b39DtorCount = 0;
-        CHECK(e->DeletingDtor(0) == e);
+        e->~NumberEditElement();                    // retail slot 0, flags 0
         CHECK_EQ(g_b39DtorCount, 2);                // ~NumberEditElement, then ~EditElement
     }
     {
@@ -686,7 +718,7 @@ UNIT_TEST(b39_uia_edit_number_ctors_make_retails_stores) {
         CHECK_EQ(e->_intValue, 0);
         CHECK(e->_floatValue == 0.0f);
         CHECK_EQ((int)e->_showSign, 0);
-        CHECK(e->DeletingDtor(0) == e);
+        e->~NumberElement();
     }
 }
 
@@ -730,7 +762,7 @@ UNIT_TEST(b39_uia_text_label_ctors_make_retails_stores) {
         TextDescriptionProbe probe;
         CHECK(VTableOf(d) != VTableOf(&probe));
         g_b39DtorCount = 0;
-        CHECK(d->DeletingDtor(0) == d);
+        d->~TextDescription();
         CHECK_EQ(g_b39DtorCount, 1);
     }
     {
@@ -747,7 +779,7 @@ UNIT_TEST(b39_uia_text_label_ctors_make_retails_stores) {
         CHECK(d->_spriteSheet == nullptr);
         CHECK(d->_spriteName == nullptr);
         g_b39DtorCount = 0;
-        CHECK(d->DeletingDtor(0) == d);
+        d->~LabelDescription();                       // retail slot 0, flags 0
         CHECK_EQ(g_b39DtorCount, 2);                  // ~LabelDescription, ~TextDescription
     }
     {
@@ -772,7 +804,7 @@ UNIT_TEST(b39_uia_text_label_ctors_make_retails_stores) {
         CHECK_EQ(e->_justify, 0);
         CHECK(e->_cachedText == nullptr);
         g_b39DtorCount = 0;
-        CHECK(e->DeletingDtor(0) == e);
+        e->~TextElement();
         CHECK_EQ(g_b39DtorCount, 1);
     }
     {
@@ -796,11 +828,13 @@ UNIT_TEST(b39_uia_text_label_ctors_make_retails_stores) {
         LabelElementProbe probe{};
         CHECK(VTableOf(e) != VTableOf(&probe));
         g_b39DtorCount = 0;
-        CHECK(e->DeletingDtor(0) == e);
+        e->~LabelElement();                           // retail slot 0, flags 0
         CHECK_EQ(g_b39DtorCount, 2);                  // ~LabelElement, ~TextElement
+
     }
 }
 
+// Retired vector arms: TextDescription 0x180041e30, TextElement 0x1800422f0.
 UNIT_TEST(b39_uia_text_label_deletingdtor_both_arms) {
     FactoryScope scope;
     B39ExpectBothArms<UI::TextDescription>(0x90, [](void* p) { return ::new (p) UI::TextDescription(); });

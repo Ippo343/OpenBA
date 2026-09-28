@@ -44,7 +44,8 @@ public:
 
     AttendanceComponent();                                // 0x140044580
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140002860
+    // 0x140044510
+    ~AttendanceComponent() override;                              // [0]  0x140002860
     void          Persist(void* stream) override;                 // [3]  0x140044410
     void          OnRemove() override;                            // [7]  0x1400443d0
     void          Update(void* time) override;                    // [9]  0x140044370
@@ -57,9 +58,6 @@ public:
     void*           field28;       // +0x28 waiting-queue array (InternalBasePtr[])
     void*           field30;       // +0x30 queue count (int) / capacity (int)
     StateController _controller;   // +0x38 the embedded controller (D6)
-
-protected:
-    ~AttendanceComponent();                               // 0x140044510
 };
 
 static_assert(sizeof(AttendanceComponent) == 0x58, "AttendanceComponent is 0x58 (create 0x140002670)");

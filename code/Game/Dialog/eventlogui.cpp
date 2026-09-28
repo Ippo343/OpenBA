@@ -351,14 +351,6 @@ void EventLogUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32
 
 
 
-// [0] 0x1400114b0: ~EventLogUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* EventLogUI::DeletingDtor(unsigned flags) {
-    this->~EventLogUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x1400113e0: MemAlloc(0x80, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* EventLogUI::CreateNewObject() {

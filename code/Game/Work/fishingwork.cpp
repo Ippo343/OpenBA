@@ -1013,13 +1013,6 @@ FishingWork::FishingWork()
     FishingWork_ResolveFuncs();
 }
 
-// [0] 0x14002a2c0: ~FishingWork, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* FishingWork::DeletingDtor(unsigned flags) {
-    this->~FishingWork();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================

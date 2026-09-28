@@ -31,7 +31,8 @@ class AnimalComponent final : public Component {
 public:
     AnimalComponent();                                            // 0x140106fc0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x14002f170
+    // no own work
+    ~AnimalComponent() override = default;                        // [0]  0x14002f170
     void Persist(void* stream) override;                          // [3]  0x140106e40
     void Startup() override;                                      // [4]  0x140106d50
     void OnAdded() override;                                      // [6]  0x140106c20
@@ -50,9 +51,6 @@ public:
     uint32_t data48;       // +0x48  float age of death (rolled by Startup)
     uint8_t  _pad4C[4];    // +0x4C
     uint64_t data50;       // +0x50  System::Time graze timer
-
-protected:
-    ~AnimalComponent() = default;                                 // no own work
 };
 
 static_assert(sizeof(AnimalComponent) == 0x58, "AnimalComponent is 0x58 (create 0x14002f020)");

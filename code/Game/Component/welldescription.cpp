@@ -18,14 +18,6 @@
 
 // Description's own members (the abstract base) live in description.cpp.
 
-// [0] 0x14000fdf0: ~WellDescription (0x14005d1c0) -> ~Description -> ~External,
-// then MemFree on &1. Retail's chain; the old table's slot 0 did the same by hand.
-Object::Base* WellDescription::DeletingDtor(unsigned flags) {
-    this->~WellDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14005d170: one EMPTY Serializer(stream, 0) scope (no payload), then
 // `MOV AL,1`. The old slot was declared `void` and returned whatever RAX held.
 bool WellDescription::Serialize(void* stream) {
@@ -34,14 +26,14 @@ bool WellDescription::Serialize(void* stream) {
 }
 
 // [6] 0x14000fd90 / [7] 0x140001640. Retail:
-// Reconstruct = a virtual DeletingDtor(0) then the ctor again on `this`
+// Reconstruct = a virtual `this->~T()` (retail: slot 0, flags 0) then the ctor again on `this`
 // (0x14000fda7 `CALL [RAX]` with EDX=0, then the inlined ctor); Destruct =
 // the shared `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`. D9 #10 (block K1).
 Object::External* WellDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~WellDescription();
     return new (static_cast<void*>(this)) WellDescription();
 }
-void WellDescription::Destruct() { DeletingDtor(0); }
+void WellDescription::Destruct() { this->~WellDescription(); }
 
 // [8] 0x14000fde0: WellComponent's type id through the hidden return slot.
 Object::Type* WellDescription::GetComponentType(Object::Type* ret) const {

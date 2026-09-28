@@ -74,15 +74,6 @@ StatusIconGeometry::StatusIconGeometry()
     : iconSize(0.0f), spriteCount(0), activeMask(0), constantSize(0), _padCD{},
       spriteSheet(nullptr) {}
 
-// [0] 0x14001ebb0: ~Geometry (import 0x1401525a0), MemFree (0x140152b68) on &1.
-// Never reached for the embedded member (the component's dtor chains the
-// member dtor directly), kept for the slot.
-Graphics::Geometry* StatusIconGeometry::DeletingDtor(unsigned flags) {
-    this->~StatusIconGeometry();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [1] 0x1400aa430 — `RET`.
 void StatusIconGeometry::Update(const System::Time&) {}
 

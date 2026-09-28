@@ -82,11 +82,11 @@ Object::External* AnimatedImageDescription::Construct() {
 // 0x180036850: slot0(this, 0) through the object's own table, then a TAIL JUMP
 // to the same ctor.
 Object::External* AnimatedImageDescription::Reconstruct() {
-    DeletingDtor(0);                                           // 18003685e
+    this->~AnimatedImageDescription();                                           // 18003685e
     return ::new (this) AnimatedImageDescription();            // 180036868 JMP
 }
 // 0x180036880: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void AnimatedImageDescription::Destruct() { DeletingDtor(0); }
+void AnimatedImageDescription::Destruct() { this->~AnimatedImageDescription(); }
 
 // ============================================================================
 // ?Serialize@AnimatedImageDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x1800cb5c0
@@ -123,7 +123,7 @@ bool AnimatedImageDescription::Serialize(void* streamv) {
 
     rw->SerializeInt(_framesPerSecond, nullptr);
 
-    if (rw != nullptr) rw->DeletingDtor(1);                    // 1800cb67d
+    if (rw != nullptr) delete rw;                    // 1800cb67d
     return true;
 }
 

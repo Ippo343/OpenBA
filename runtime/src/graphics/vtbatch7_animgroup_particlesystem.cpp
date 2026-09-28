@@ -219,7 +219,7 @@ ReaderWriter* MakeReaderWriter(Serializer* ser, Stream* stream) {
 }
 void DestroyReaderWriter(ReaderWriter* rw) {
     if (!rw) return;
-    AsRw(rw)->DeletingDtor(1);
+    delete AsRw(rw);
 }
 
 // (ENDGAME B.3.9 block GFX: the minted Base / External stamp accessors and
@@ -387,13 +387,13 @@ Object::External* AnimationGroup::Construct() {
 //     VIRTUALLY on purpose — retail dispatches it, and a subclass's deleting
 //     destructor is what has to run.
 Object::External* AnimationGroup::Reconstruct() {
-    DeletingDtor(0);
+    this->~AnimationGroup();
     return ::new (this) AnimationGroup();
 }
 
 // [7] ?Destruct@AnimationGroup@Graphics@@UEAAXXZ  0x180016650 -- `MOV RAX,[RCX]
 //     ; XOR EDX,EDX ; JMP [RAX]`: slot 0, dispatched.
-void AnimationGroup::Destruct() { DeletingDtor(0); }
+void AnimationGroup::Destruct() { this->~AnimationGroup(); }
 
 // [5] ?Serialize@AnimationGroup@Graphics@@UEAA_NAEAVStream@IO@@@Z  0x1800fb6a0
 //
@@ -660,12 +660,12 @@ Object::External* ParticleSystem::Construct() {
 //     VIRTUALLY on purpose — retail dispatches it, and a subclass's deleting
 //     destructor is what has to run.
 Object::External* ParticleSystem::Reconstruct() {
-    DeletingDtor(0);
+    this->~ParticleSystem();
     return ::new (this) ParticleSystem();
 }
 
 // [7] ?Destruct@ParticleSystem@Graphics@@UEAAXXZ  0x180020590
-void ParticleSystem::Destruct() { DeletingDtor(0); }
+void ParticleSystem::Destruct() { this->~ParticleSystem(); }
 
 // ??1ParticleSystem@Graphics@@UEAA@XZ  0x1800a51c0 — retail's body, moved here
 // from the retired door in batchc_gfx_leaves.cpp (ENDGAME B.3.9 block GFX):

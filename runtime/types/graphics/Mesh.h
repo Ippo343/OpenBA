@@ -495,11 +495,21 @@ public:
     // 0x140019e80 (`CALL [??1MeshInstance]; if (flags & 1) MemFree`). ENDGAME
     // B.3.9 GFX: the minted table and its RT_DELDTOR row 0x180017330 are
     // retired; the class keeps the exe's SCALAR arm (D1.2).
-    Geometry* DeletingDtor(unsigned flags) override {
-        this->~MeshInstance();
-        if (flags & 1) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1MeshInstance@Graphics@@UEAA@XZ` @ 0x180017060, `UEAA` because retail's
+    // is virtual — the non-virtual `QEAA` spelling is a name the DLL does not
+    // contain (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md). NON-VIRTUAL
+    // here (ENDGAME decision 2). The body (mesh.cpp: the three retail `~Array`
+    // calls, nodes / layers / materials) zeroes each header, so the compiler's
+    // implicit member ~Arrays after it are no-ops, and then ~Geometry runs —
+    // retail's order. (ENDGAME B.3.9 GFX: its door is retired.)
+    //
+    // PUBLIC since ENDGAME B.3.9 block GFX (coordinator ruling 4): retail's is
+    // public (`U` = public virtual) and the exe calls it DIRECTLY on MeshInstance
+    // objects EMBEDDED in its components (ModelComponent +0x28, its dtor
+    // 0x140124cd0; StorageDisplayComponent's 0x128-stride array) through import
+    // slot 0x1401514a8 -- a plain destructor call, never a delete. The C++
+    // spelling of that call is `mi->~MeshInstance()`, which needs it public.
+    ~MeshInstance() override;
     void Update(const System::Time& time) override;                      // [1] 0x180100800
     void Draw(Video::Context& context, const Camera& camera,
               ExternalPtrHandle material,
@@ -582,21 +592,6 @@ public:
     // news one as a C++ object (see the ABSTRACT banner above). Recorded here so
     // the omission is a decision, not a gap.
 
-    // `??1MeshInstance@Graphics@@UEAA@XZ` @ 0x180017060, `UEAA` because retail's
-    // is virtual — the non-virtual `QEAA` spelling is a name the DLL does not
-    // contain (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md). NON-VIRTUAL
-    // here (ENDGAME decision 2). The body (mesh.cpp: the three retail `~Array`
-    // calls, nodes / layers / materials) zeroes each header, so the compiler's
-    // implicit member ~Arrays after it are no-ops, and then ~Geometry runs —
-    // retail's order. (ENDGAME B.3.9 GFX: its door is retired.)
-    //
-    // PUBLIC since ENDGAME B.3.9 block GFX (coordinator ruling 4): retail's is
-    // public (`U` = public virtual) and the exe calls it DIRECTLY on MeshInstance
-    // objects EMBEDDED in its components (ModelComponent +0x28, its dtor
-    // 0x140124cd0; StorageDisplayComponent's 0x128-stride array) through import
-    // slot 0x1401514a8 -- a plain destructor call, never a delete. The C++
-    // spelling of that call is `mi->~MeshInstance()`, which needs it public.
-    ~MeshInstance();
 
 public:
     RtGraphics::ExternalPtr                        _mesh;         // +0xc0  ExternalPtr<GraphicsMesh>
@@ -682,20 +677,10 @@ public:
 
     // [0] 0x1800175d0 -- MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0xd0` = the element size).
-    Geometry* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<EdgeMeshInstance*>(self + static_cast<int64_t>(i) * 0xd0)
-                    ->~EdgeMeshInstance();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Geometry*>(self - 8);
-        }
-        this->~EdgeMeshInstance();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // 0x1800174d0 -- PORTED (ENDGAME B.3.9 GFX, mesh.cpp): retail's body is a
+    // bare tail into ~Geometry, so the member is empty and the chain is the
+    // compiler's. (Its ??1 door is retired with the RT_DELDTOR row.)
+    ~EdgeMeshInstance() override;
     void Update(const System::Time& time) override;                      // [1] 0x1800a39b0
     void Draw(Video::Context& context, const Camera& camera,
               ExternalPtrHandle material,
@@ -713,12 +698,6 @@ public:
 
     // `??2`/`??3` operator new/delete (0x1800173e0 / 0x180017450 / 0x180017460)
     // are deliberately not declared; see MeshInstance's note above.
-
-protected:
-    // 0x1800174d0 -- PORTED (ENDGAME B.3.9 GFX, mesh.cpp): retail's body is a
-    // bare tail into ~Geometry, so the member is empty and the chain is the
-    // compiler's. (Its ??1 door is retired with the RT_DELDTOR row.)
-    ~EdgeMeshInstance();
 
 public:
     RtGraphics::ExternalPtr _mesh;      // +0xc0  ExternalPtr<EdgeMesh>; ctor 0
@@ -837,19 +816,11 @@ public:
     // [0] 0x1800134b0 -- MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x180` = the element size).
     // ENDGAME B.3.9 GFX: concrete (B39_RULES D1).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<EdgeMesh*>(self + static_cast<int64_t>(i) * 0x180)->~EdgeMesh();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~EdgeMesh();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1EdgeMesh@Graphics@@UEAA@XZ` @ 0x1800a2780. VIRTUAL (B3X W1).
+    // ENDGAME B.3.9 GFX: the retired door's body (batchc_gfx_leaves.cpp) -- the
+    // two list arrays and the eight PlatformDestructs in retail's order; the
+    // restamp and the tail ~External are the compiler's chain.
+    ~EdgeMesh() override;
 
     // [1] 0x180012c90 TypeName / [2] 0x180012c70 Type, TypeId 0x180012c80, `_TypeName` / `_ParentTypeName`
     // and the factory pair: retail's macro (ENDGAME B.3.9 TI-REST, B39_RULES
@@ -960,7 +931,7 @@ public:
     // operators stay declared and undefined (placement is `::new`).
     static void* operator new(std::size_t bytes);            // 0x180012ca0
     static void* operator new(std::size_t bytes, void* place);// 0x180012d10
-    static void  operator delete(void* p);                   // 0x180012d20
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                   // 0x180012d20
     // CreateNewObject 0x180012d80 / CreateInPlaceObject 0x180012e00: declared
     // by DECLARE_TYPE above.
 
@@ -970,13 +941,6 @@ public:
     // pointers, the eight (header, PlatformConstruct) pairs, the two lists and
     // the empty box. The "NO REAL CONSTRUCTOR" paragraph above is history.
     EdgeMesh();
-
-protected:
-    // `??1EdgeMesh@Graphics@@UEAA@XZ` @ 0x1800a2780. NON-VIRTUAL (decision 2).
-    // ENDGAME B.3.9 GFX: the retired door's body (batchc_gfx_leaves.cpp) -- the
-    // two list arrays and the eight PlatformDestructs in retail's order; the
-    // restamp and the tail ~External are the compiler's chain.
-    ~EdgeMesh();
 
 public:
     // ---- the 0x160 bytes EdgeMesh adds after Object::External ---------------

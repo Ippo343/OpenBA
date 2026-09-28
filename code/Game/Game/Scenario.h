@@ -18,8 +18,8 @@
 //     [3] 0x1400a9460 GetFileVersion: Achievement's | 0x600
 //     [4] Object::External::Compile (import) — inherited
 //     [5] 0x1400a9370 Serialize
-//     [6] 0x14001ead0 Reconstruct: DeletingDtor(0), then the ctor on `this`
-//     [7] 0x140001640 Destruct: DeletingDtor(0)
+//     [6] 0x14001ead0 Reconstruct: this->~T(), then the ctor on `this`
+//     [7] 0x140001640 Destruct: this->~T()
 //     [8] 0x14001ea70 Construct (Achievement's slot 8; folded with createInPlace)
 //   sizeof 0x90.
 // ============================================================================
@@ -35,15 +35,12 @@ class Scenario final : public Achievement::Achievement {
 public:
     Scenario();                                                    // 0x1400a9480
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x14001eb40
+    ~Scenario() override;                                          // [0] 0x14001eb40
     int32_t           GetFileVersion() const override;             // [3] 0x1400a9460
     bool              Serialize(void* stream) override;            // [5] 0x1400a9370
     Object::External* Reconstruct() override;                      // [6] 0x14001ead0
     void              Destruct() override;                         // [7] 0x140001640
     Object::External* Construct() override;                        // [8] 0x14001ea70
-
-protected:
-    ~Scenario();
 
 public:
     void*    scenarioName;       // +0x58: System::String (COW refcounted)

@@ -75,19 +75,10 @@ public:
     // ---- the ten slots, in measured order ----------------------------------
     // [0] 0x180039c00 -- MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x90` = the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<ContainerDescription*>(self + static_cast<int64_t>(i) * 0x90)->~ContainerDescription();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~ContainerDescription();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1ContainerDescription@UI@@UEAA@XZ` (0x1800ccff0). VIRTUAL (B3X W1); retail's
+    // body is the restamps and ~ElementDescription's +0x60 release, all the
+    // compiler's chain (containerdescription.cpp).
+    ~ContainerDescription() override;
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
     // retail: TypeName 0x1800398d0, Type 0x1800398b0, _TypeName 0x180039890, _ParentTypeName 0x1800398a0
@@ -109,12 +100,6 @@ public:
     ContainerDescription& operator=(const ContainerDescription&); // 0x180039b10
     // 0x1800398c0 -- over the minted `?_typeInfo@` record until the W3 fold.
     // Retail's factory pair (B39_RULES D2), containerdescription.cpp.
-
-protected:
-    // `??1ContainerDescription@UI@@UEAA@XZ` (0x1800ccff0). NON-VIRTUAL; retail's
-    // body is the restamps and ~ElementDescription's +0x60 release, all the
-    // compiler's chain (containerdescription.cpp).
-    ~ContainerDescription();
 
 private:
 

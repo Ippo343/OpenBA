@@ -12,7 +12,7 @@
 // differs is spelled out.
 //
 // PART A — LAYOUT. Sizes, alignments, every offset the headers claim, the
-//   abstract / no-virtual-dtor / single-inheritance claims, and the
+//   abstract / virtual-dtor (B3X W1) / single-inheritance claims, and the
 //   ContainerDescription class-vs-POD agreement (DescriptionsBatch1.h).
 //
 // PART B — SLOT ORDER. A probe subclass of each leaf overrides only slot 0.
@@ -115,12 +115,13 @@ struct FactoryScope {
     }
 };
 
-// ---- probes: override slot 0 only ------------------------------------------
+// ---- probes: override retail slot 0 only (B3X W1: the destructor pair) ------
+// The destructor records mark 0; a recording class-scope operator delete
+// stands for retail flags 1's MemFree.
 #define C4_PROBE(NAME, BASE)                                                   \
     struct NAME final : BASE {                                                 \
-        Object::Base* DeletingDtor(unsigned flags) override {                  \
-            Note(this, 0, flags); return this;                                 \
-        }                                                                      \
+        ~NAME() override { Note(this, 0); }                                    \
+        DTOR_CHECK_RECORDING_DELETE                                            \
     };
 C4_PROBE(ContainerDProbe, UI::ContainerDescription)
 C4_PROBE(LayoutDProbe,    UI::LayoutDescription)
@@ -136,11 +137,9 @@ C4_PROBE(TableEProbe,     UI::TableElement)
 
 // The bases, for the inherited-slot identity checks.
 struct BaseElementProbe final : UI::Element {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     void ComputeSize() override {}
 };
 struct BareExternalProbe final : Object::External {
-    Object::Base* DeletingDtor(unsigned) override { return this; }
     int32_t GetFileVersion() const override { return 0; }
     bool Serialize(void*) override { return true; }
     Object::External* Reconstruct() override { return this; }
@@ -274,7 +273,7 @@ UNIT_TEST(ui_c4_classes_are_abstract_single_base_no_virtual_dtor) {
     // test below); the rest stay abstract until their commit.
 #define C4_SHAPE(CLS, BASE)                                                 \
     CHECK(std::is_abstract<UI::CLS>::value);                                \
-    CHECK(!std::has_virtual_destructor<UI::CLS>::value);                    \
+    CHECK(std::has_virtual_destructor<UI::CLS>::value);  /* B3X W1 */       \
     CHECK((std::is_base_of<UI::BASE, UI::CLS>::value));
 #define C4_CONCRETE(CLS, BASE)                                              \
     CHECK(B39IsConcreteShape<UI::CLS>());                                   \
@@ -296,7 +295,7 @@ UNIT_TEST(ui_c4_classes_are_abstract_single_base_no_virtual_dtor) {
 // ===========================================================================
 // ENDGAME B.3.9 block UI-B (B39_RULES D1, rule B9-16): the concrete classes —
 // slot order by PMF on the real header, the real ctor's retail stores, both
-// DeletingDtor arms.
+// retired slot-0 arms (B3X W1: the destructor pair, delete, delete[]).
 // ===========================================================================
 UNIT_TEST(b39_uib_c4_slot_order_by_pmf) {
     B39CheckDescriptionPmf<UI::ContainerDescription>();
@@ -318,14 +317,14 @@ UNIT_TEST(b39_uib_c4_layout_list_ctor_stores) {
     CHECK_EQ(lds->_entries._size, 0);
     CHECK_EQ(lds->_entries._capacity, 0);
     CHECK_EQ(lds->_id, -1);
-    lds->DeletingDtor(0);
+    lds->~LayoutDescription();                 // retail slot 0, flags 0
     alignas(8) uint8_t le[0xd0];
     std::memset(le, 0xCD, sizeof le);
     auto* les = ::new (static_cast<void*>(le)) UI::LayoutElement();
     CHECK(les->_childRecords._data == nullptr);
     CHECK_EQ(les->_childRecords._size, 0);
     CHECK_EQ(les->_childRecords._capacity, 0);
-    les->DeletingDtor(0);
+    les->~LayoutElement();
 
     // ??0ListDescription 0x1800d49b0.
     alignas(8) uint8_t d[0x90];
@@ -337,7 +336,7 @@ UNIT_TEST(b39_uib_c4_layout_list_ctor_stores) {
     CHECK(lsd->_spriteName == nullptr);
     CHECK_EQ(lsd->_hoverColor, 0xff808080u);
     CHECK_EQ(lsd->_selectColor, 0xffffffffu);
-    lsd->DeletingDtor(0);
+    lsd->~ListDescription();
     // ??0ListElement 0x1800d4570.
     alignas(8) uint8_t e[0x100];
     std::memset(e, 0xCD, sizeof e);
@@ -352,19 +351,19 @@ UNIT_TEST(b39_uib_c4_layout_list_ctor_stores) {
     CHECK_EQ(lse->_userData._size, 0);
     CHECK(lse->_ribbon == nullptr);
     CHECK(lse->_clip == nullptr);
-    lse->DeletingDtor(0);
+    lse->~ListElement();
 }
 
 UNIT_TEST(b39_uib_c4_layout_list_deletingdtor_arms) {
     FactoryScope scope;
     LayoutDProbe ldp;
-    B39CheckDeletingDtorArms<UI::LayoutDescription, 0x78>(VTableOf(&ldp));
+    B39CheckDestructorArms<UI::LayoutDescription, 0x78>(VTableOf(&ldp));
     LayoutEProbe lep;
-    B39CheckDeletingDtorArms<UI::LayoutElement, 0xd0>(VTableOf(&lep));
+    B39CheckDestructorArms<UI::LayoutElement, 0xd0>(VTableOf(&lep));
     ListDProbe sdp;
-    B39CheckDeletingDtorArms<UI::ListDescription, 0x90>(VTableOf(&sdp));
+    B39CheckDestructorArms<UI::ListDescription, 0x90>(VTableOf(&sdp));
     ListEProbe sep;
-    B39CheckDeletingDtorArms<UI::ListElement, 0x100>(VTableOf(&sep));
+    B39CheckDestructorArms<UI::ListElement, 0x100>(VTableOf(&sep));
 }
 
 UNIT_TEST(b39_uib_c4_container_ctor_stores) {
@@ -384,7 +383,7 @@ UNIT_TEST(b39_uib_c4_container_ctor_stores) {
     for (int i = 0; i < 3; ++i) CHECK(cd->_partDescs[i] == nullptr);
     CHECK_EQ(cd->_id, -1);                  // ElementDescription's real ctor
     CHECK_EQ((int)cd->_elementType, 3);
-    cd->DeletingDtor(0);
+    cd->~ContainerDescription();               // retail slot 0, flags 0
 
     // ??0ContainerElement 0x1800ccb40: +0xc8 0, +0xcc WORD 0, +0xd0 0;
     // +0xc0/+0xc4 and the pads are NOT written.
@@ -399,15 +398,15 @@ UNIT_TEST(b39_uib_c4_container_ctor_stores) {
     CHECK_EQ((int)e[0xc4], 0xCD);
     CHECK_EQ((int)e[0xce], 0xCD);
     CHECK_EQ((int)e[0xd4], 0xCD);
-    ce->DeletingDtor(0);
+    ce->~ContainerElement();
 }
 
 UNIT_TEST(b39_uib_c4_container_deletingdtor_arms) {
     FactoryScope scope;
     ContainerDProbe dp;
-    B39CheckDeletingDtorArms<UI::ContainerDescription, 0x90>(VTableOf(&dp));
+    B39CheckDestructorArms<UI::ContainerDescription, 0x90>(VTableOf(&dp));
     ContainerEProbe ep;
-    B39CheckDeletingDtorArms<UI::ContainerElement, 0xd8>(VTableOf(&ep));
+    B39CheckDestructorArms<UI::ContainerElement, 0xd8>(VTableOf(&ep));
 }
 
 UNIT_TEST(ui_c4_description_field_offsets) {
@@ -494,14 +493,33 @@ UNIT_TEST(ui_c4_element_field_offsets) {
 // ===========================================================================
 namespace {
 
+// Retail slot 0 is the destructor pair (B3X W1), read raw: compiler [0] D1
+// runs ~Probe once and frees nothing (flags 0), on a placement-new'd probe
+// that is never destroyed again (a stack probe would be destroyed twice);
+// [1] D0 runs it and hands the block to the recording operator delete
+// (flags 1).
+template <typename Probe>
+void CheckProbeDtorPair() {
+    alignas(Probe) unsigned char buf[sizeof(Probe)];
+    Probe* p = ::new (static_cast<void*>(buf)) Probe();
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD1(p);
+    CHECK_EQ(g_mark, 0); CHECK(g_self == p);
+    CHECK_EQ(dtor_check::g_frees, 0);
+    Probe* h = dtor_check::NewOnMalloc<Probe>();
+    Reset(); dtor_check::ResetFrees();
+    dtor_check::CallD0(h);
+    CHECK_EQ(g_mark, 0); CHECK(g_self == h);
+    CHECK_EQ(dtor_check::g_frees, 1); CHECK(dtor_check::g_lastFree == h);
+}
+
 // Ten description slots: own 1,2,3,5,6,7,8(retslot, PART C),9; 4 inherited.
 template <typename Probe>
 void CheckDescriptionSlots(int tag) {
     Probe probe;
     void* raw = static_cast<void*>(&probe);
 
-    Reset(); SlotAt<void* (*)(void*, unsigned)>(raw, 0)(raw, 0u);
-    CHECK_EQ(g_mark, 0); CHECK(g_self == raw);
+    CheckProbeDtorPair<Probe>();
     CHECK(SlotAt<const char* (*)(const void*)>(raw, 1)(raw) == WhoRecord(tag)->name);
     CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(raw, 2)(raw), WhoRecord(tag)->typeId);
     Reset(); SlotAt<int32_t (*)(const void*)>(raw, 3)(raw);       CHECK_EQ(g_mark, tag * 100 + 3);
@@ -516,10 +534,10 @@ void CheckDescriptionSlots(int tag) {
     BareExternalProbe bare;
     CHECK(VTableOf(raw)[Retail(4)] == VTableOf(static_cast<void*>(&bare))[Retail(4)]);
 
-    // Ten distinct entries.
+    // Ten retail entries = eleven compiler entries (D1, D0), all distinct.
     const void* const* vt = VTableOf(raw);
-    for (int i = 0; i < 10; ++i)
-        for (int j = i + 1; j < 10; ++j)
+    for (int i = 0; i < 11; ++i)
+        for (int j = i + 1; j < 11; ++j)
             CHECK(vt[i] != vt[j]);
     CHECK(static_cast<void*>(static_cast<UI::ElementDescription*>(&probe)) == raw);
 }
@@ -535,8 +553,8 @@ void CheckElementSlots(int tag, bool ownsUpdate) {
     const void* const* vt  = VTableOf(raw);
     const void* const* bvt = VTableOf(static_cast<void*>(&base));
 
-    Reset(); SlotAt<void* (*)(void*, unsigned)>(raw, 0)(raw, 0u);
-    CHECK_EQ(g_mark, 0); CHECK(g_self == raw);
+    CheckProbeDtorPair<Probe>();
+    CHECK(vt[0] != vt[1]);
     CHECK(SlotAt<const char* (*)(const void*)>(raw, 1)(raw) == WhoRecord(tag)->name);
     CHECK_EQ(SlotAt<uint32_t (*)(const void*)>(raw, 2)(raw), WhoRecord(tag)->typeId);
     Reset(); SlotAt<void (*)(void*)>(raw, 4)(raw);                CHECK_EQ(g_mark, tag * 100 + 4);
@@ -645,9 +663,10 @@ UNIT_TEST(ui_c4_qualified_call_does_not_reenter_the_door) {
     TableEProbe probe;
     void* raw = static_cast<void*>(&probe);
 
-    const void* minted[12] = {};
+    const void* minted[13] = {};   // twelve retail slots = thirteen compiler slots
     const void* const* real = VTableOf(raw);
-    for (int i = 0; i < 12; ++i) minted[i] = real[i];
+    for (int i = 0; i < 13; ++i) minted[i] = real[i];
+
     minted[Retail(4)] = reinterpret_cast<const void*>(&MintedComputeSizeDoor);
     *reinterpret_cast<const void* const**>(raw) = minted;
 
@@ -700,7 +719,7 @@ UNIT_TEST(b39_uib_c4_scroll) {
     CHECK_EQ(sd->_inset, 1);
     CHECK_EQ(sd->_barColor, 0xffffffffu);
     CHECK_EQ(sd->_unknownC4, 0xffffffffu);
-    sd->DeletingDtor(0);
+    sd->~ScrollDescription();                  // retail slot 0, flags 0
     // ??0ScrollElement 0x18011a7f0: _inset (+0x15c) NOT written.
     alignas(8) uint8_t e[0x178];
     std::memset(e, 0xCD, sizeof e);
@@ -716,12 +735,12 @@ UNIT_TEST(b39_uib_c4_scroll) {
     CHECK(se->_maxValue == 4.0f);
     CHECK(se->_dragAnchor == 0.0f);
     CHECK(se->_dragValue == 0.0f);
-    se->DeletingDtor(0);
+    se->~ScrollElement();
 
     ScrollDProbe dp;
-    B39CheckDeletingDtorArms<UI::ScrollDescription, 0xc8>(VTableOf(&dp));
+    B39CheckDestructorArms<UI::ScrollDescription, 0xc8>(VTableOf(&dp));
     ScrollEProbe ep;
-    B39CheckDeletingDtorArms<UI::ScrollElement, 0x178>(VTableOf(&ep));
+    B39CheckDestructorArms<UI::ScrollElement, 0x178>(VTableOf(&ep));
 }
 
 // ---- Table (ENDGAME B.3.9 UI-B) --------------------------------------------
@@ -742,7 +761,7 @@ UNIT_TEST(b39_uib_c4_table) {
     CHECK_EQ(td->_cells._size, 0);
     CHECK_EQ(td->_unknown88, 0ull);
     CHECK(td->_unknown90 == nullptr);
-    td->DeletingDtor(0);
+    td->~TableDescription();                   // retail slot 0, flags 0
     // ??0TableElement 0x18011e2f0: +0xcc not written.
     alignas(8) uint8_t e[0xf0];
     std::memset(e, 0xCD, sizeof e);
@@ -754,10 +773,10 @@ UNIT_TEST(b39_uib_c4_table) {
     CHECK(te->_rowSizes._data == nullptr);
     CHECK(te->_columnSizes._data == nullptr);
     CHECK_EQ(te->_columnSizes._capacity, 0);
-    te->DeletingDtor(0);
+    te->~TableElement();
 
     TableDProbe dp;
-    B39CheckDeletingDtorArms<UI::TableDescription, 0x98>(VTableOf(&dp));
+    B39CheckDestructorArms<UI::TableDescription, 0x98>(VTableOf(&dp));
     TableEProbe ep;
-    B39CheckDeletingDtorArms<UI::TableElement, 0xf0>(VTableOf(&ep));
+    B39CheckDestructorArms<UI::TableElement, 0xf0>(VTableOf(&ep));
 }

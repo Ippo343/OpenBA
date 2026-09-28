@@ -123,20 +123,13 @@ public:
     // the retired RT_DELDTOR row ran them (`MOV EDX,0xd8` = the element size).
     // Every subclass (ParticleSystemInstance, the exe's TornadoInstance)
     // declares its own (B9-4).
-    Geometry* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<ParticleInstance*>(self + static_cast<int64_t>(i) * 0xd8)
-                    ->~ParticleInstance();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Geometry*>(self - 8);
-        }
-        this->~ParticleInstance();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ??1ParticleInstance@Graphics@@UEAA@XZ  0x1801041f0, retail whole:
+    //     LEA RAX,[??_7ParticleInstance] ; MOV [RCX],RAX ; CALL 0x1801040b0
+    //     (RemoveState) ; JMP 0x1800a41c0 (~Geometry)
+    // The restamp and the ~Geometry tail are the compiler's; the body is the
+    // call. (ENDGAME B.3.9 GFX: the ??1 door in deleting_dtor_leaves.cpp is
+    // retired with the RT_DELDTOR row it served.)
+    ~ParticleInstance() override { RemoveState(); }
     // slot [1] Update(const Time&) is NOT overridden here: still _purecall.
     void Draw(Video::Context& context, const Camera& camera,
               ExternalPtrHandle material,
@@ -185,13 +178,6 @@ protected:
         _boundsPtr = nullptr;   // +0xc8
         _index     = -1;        // +0xd0  (+0xd4 not written)
     }
-    // ??1ParticleInstance@Graphics@@UEAA@XZ  0x1801041f0, retail whole:
-    //     LEA RAX,[??_7ParticleInstance] ; MOV [RCX],RAX ; CALL 0x1801040b0
-    //     (RemoveState) ; JMP 0x1800a41c0 (~Geometry)
-    // The restamp and the ~Geometry tail are the compiler's; the body is the
-    // call. (ENDGAME B.3.9 GFX: the ??1 door in deleting_dtor_leaves.cpp is
-    // retired with the RT_DELDTOR row it served.)
-    ~ParticleInstance() { RemoveState(); }
 
 public:
     RtGraphics::ParticleResource*     _resource;   // +0xc0  null until attached
@@ -249,20 +235,10 @@ public:
 
     // [0] 0x180020ce0 -- MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0xe0` = the element size).
-    Geometry* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<ParticleSystemInstance*>(self + static_cast<int64_t>(i) * 0xe0)
-                    ->~ParticleSystemInstance();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Geometry*>(self - 8);
-        }
-        this->~ParticleSystemInstance();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ??1ParticleSystemInstance@Graphics@@UEAA@XZ 0x1800a5520. VIRTUAL (B3X W1).
+    // ENDGAME B.3.9 GFX: the retired door's body (batchc_gfx_leaves.cpp); the
+    // restamps, ~ParticleInstance (RemoveState) and ~Geometry are the chain.
+    ~ParticleSystemInstance() override;
     void Update(const System::Time& time) override;                        // [1] 0x1800a5600
     void SetParticle(ExternalPtrHandle particle) override;                  // [9] 0x1800a6a80
     // slots 2..8 are ParticleInstance's / Geometry's bodies, inherited unchanged.
@@ -273,12 +249,6 @@ public:
     // the ??0 door is retired; ParticleSystem::CreateSystem and the exe menu
     // scene spell `::new (p) ParticleSystemInstance()`.)
     ParticleSystemInstance() { _f_d8 = nullptr; }
-
-protected:
-    // ??1ParticleSystemInstance@Graphics@@UEAA@XZ 0x1800a5520. NON-VIRTUAL.
-    // ENDGAME B.3.9 GFX: the retired door's body (batchc_gfx_leaves.cpp); the
-    // restamps, ~ParticleInstance (RemoveState) and ~Geometry are the chain.
-    ~ParticleSystemInstance();
 
 public:
     void* _f_d8;     // +0xd8  UNVERIFIED beyond "zeroed by the ctor"

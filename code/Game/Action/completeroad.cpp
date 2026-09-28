@@ -122,13 +122,6 @@ CompleteRoad::CompleteRoad(uint32_t roadTypeArg, uint32_t tileIndex, uint8_t dir
       roadType(static_cast<int32_t>(roadTypeArg)),
       roadDirection(direction) {}
 
-// [0] 0x140021f30: stamp 0x14015fb70, then Action's dtor, MemFree on &1.
-Object::Base* CompleteRoad::DeletingDtor(unsigned flags) {
-    this->~CompleteRoad();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 void* CompleteRoad::CreateNewObject() {
     CompleteRoad_ResolveFuncs();
     void* p = Object::detail::InternalMemAlloc(sizeof(CompleteRoad), 8);

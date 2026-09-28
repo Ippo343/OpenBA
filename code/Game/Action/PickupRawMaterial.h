@@ -22,7 +22,7 @@ class PickupRawMaterial final : public Action {
 public:
     PickupRawMaterial();                                                   // create 0x140022c60
 
-    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x140022cd0
+    ~PickupRawMaterial() override = default;                   // [0] 0x140022cd0
     void Persist(void* stream) override;                       // [3] 0x1400c99e0
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c98d0
     bool GetTarget(void* param) override;                      // [9] 0x1400c9860
@@ -30,9 +30,6 @@ public:
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
     void*     _field20;          // +0x20 
     void*     _field28;          // +0x28 
-
-protected:
-    ~PickupRawMaterial() = default;
 };
 
 static_assert(sizeof(PickupRawMaterial) == 0x30, "PickupRawMaterial is 0x30 (create 0x140022c60 MemAlloc)");

@@ -34,8 +34,8 @@
 //
 // ENDGAME B.3 step 9 (block UI-A, B39_RULES D1/D2): CONCRETE. The real public
 // ctor is retail's `??0ComboDescription@UI@@QEAA@XZ` (0x180074bd0 (the factory's inlined copy)) minus its vptr stores;
-// slot 0 is the class's own vector deleting dtor; ~ComboDescription is protected and
-// non-virtual. The factory pair is the class's own; the minted
+// slot 0 is the class's own vector deleting dtor; ~ComboDescription is public and
+// virtual. The factory pair is the class's own; the minted
 // `??_7ComboDescription@UI@@6B@`, its RT_DELDTOR row, the factory-interpreter row and
 // the doors are retired.
 // ============================================================================
@@ -64,20 +64,10 @@ public:
     // ---- the ten slots, in measured order ---------------------------------
     // [0] 0x180074e70 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0xb8`, the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<ComboDescription*>(self + static_cast<int64_t>(i) * 0xb8)
-                    ->~ComboDescription();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~ComboDescription();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1ComboDescription@UI@@UEAA@XZ` (0x180112370). EMPTY
+    // (combodescription.cpp): three restamps and the base's +0x60, all the
+    // compiler's chain.
+    ~ComboDescription() override;
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
     // retail: TypeName 0x180074ae0, Type 0x180074ac0, TypeId 0x180074ad0, _TypeName 0x180074aa0
@@ -98,12 +88,6 @@ public:
     ComboDescription& operator=(const ComboDescription& src);     // 0x180074df0  not ported
 
 
-protected:
-    // `??1ComboDescription@UI@@UEAA@XZ` (0x180112370). NON-VIRTUAL and EMPTY
-    // (combodescription.cpp): three restamps and the base's +0x60, all the
-    // compiler's chain.
-    ~ComboDescription();
-
 private:
 
 public:
@@ -121,7 +105,7 @@ public:
 static_assert(sizeof(ComboDescription) == 0xb8,
               "UI::ComboDescription is 0xb8 bytes (MOV EDX,0xb8 in 0x180074e70)");
 static_assert(alignof(ComboDescription) == 8, "UI::ComboDescription aligns to 8");
-static_assert(!std::has_virtual_destructor<ComboDescription>::value, "ENDGAME decision 2");
+static_assert(std::has_virtual_destructor<ComboDescription>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<ComboDescription>::value, "B39 D1: concrete");
 static_assert(offsetof(ComboDescription, _listDesc) == sizeof(ButtonDescription), "");
 static_assert(offsetof(ComboDescription, _listDesc)    == 0xa0, "");

@@ -177,6 +177,10 @@ static_assert(sizeof(VisitorCodec) == 0x28, "VisitorCodec is 0x28 bytes (allocat
 //
 // DO NOT copy these from a profile-build decompile: there the same three slots
 // are bool +0x90, uint +0xb0, int +0xb8.
+// These are RETAIL byte offsets (documentation). Since the normal-virtual
+// cutover (B3X W1) `IO::ReaderWriter` has `virtual ~ReaderWriter()`, which GCC
+// lays out as TWO slots, so for every k >= kGetVersion the compiler's offset is
+// retail's + 8. Nothing indexes the compiler's table with these.
 namespace rw_vtbl {
     constexpr int kDtor            = 0x00;  // scalar-deleting dtor(flags)
     constexpr int kGetVersion      = 0x08;  // () -> int
@@ -456,11 +460,12 @@ static_assert(rt::io::encoding_vtbl::kCreateWriter == 0x20, "Encoding slot 4");
 // and stay real C++ overloads — that is block 3, and it is what lets the 861
 // caller sites read `ser.Serialize(x, "name")`.
 //
-// NO VIRTUAL DESTRUCTOR ANYWHERE. Itanium spends two slots on one, which would
-// push every slot after it and silently mis-aim the `rw_vtbl::k*` byte offsets
-// that 54 files under runtime/src still use.
-// `a_virtual_destructor_would_shift_every_ReaderWriter_slot` in
-// tests/unit/io_vtable_abi_test.cpp is the guard.
+// THE DESTRUCTOR IS VIRTUAL (the normal-virtual cutover, B3X W1). Retail's
+// slot 0 is MSVC's deleting destructor, ONE slot; GCC spends TWO on
+// `virtual ~T()` (D1 complete, D0 deleting), so retail slot N >= 1 is compiler
+// slot N + 1 and the `rw_vtbl::k*` constants are RETAIL byte offsets, never a
+// compiler index. Every caller reaches a slot by name; nothing reads this table
+// by index.
 //
 // THE SIGNATURES ARE RETAIL'S. The scalar slots take `T&` (mangled `AEAD`,
 // `AEA_N`, …) and the array slots take `(int, T*, const char*)` (`PEAD`, …).
@@ -474,9 +479,15 @@ static_assert(rt::io::encoding_vtbl::kCreateWriter == 0x20, "Encoding slot 4");
 class ReaderWriter {
 public:
     // slot 0  +0x00  rw_vtbl::kDtor        ReaderWriter's own is 0x180023bd0.
-    // PURE: slots 1..25 are `_purecall` in retail's own table, so nothing is
-    // ever a bare ReaderWriter; each concrete class declares its own (B9-4).
-    virtual ReaderWriter* DeletingDtor(unsigned flags) = 0;
+    // Retail's slot 0 is the deleting destructor; here a PURE virtual
+    // destructor (GCC: D1 + D0, two slots) whose body is below the class --
+    // slots 1..25 are `_purecall` in retail's own table, so nothing is ever a
+    // bare ReaderWriter.
+    virtual ~ReaderWriter() = 0;
+
+    // Retail's slot-0 free arm: `delete` on any reader/writer frees through
+    // MemoryAllocator::MemFree (root_operator_delete.cpp; unit build: free).
+    static void operator delete(void* p);
     // slot 1  +0x08  rw_vtbl::kGetVersion
     virtual int  GetVersion() const = 0;
     // slot 2  +0x10  rw_vtbl::kSkip
@@ -526,11 +537,12 @@ protected:
     //     MOV RAX,[RDX]; MOV [RCX+0x18],RAX   serializer->_stream
     // +0x09..+0x0f are not written. Defined after `Serializer` below.
     explicit ReaderWriter(Serializer& ser);
-
-    // ??1ReaderWriter@IO@@UEAA@XZ 0x1800b9150 is a bare base-table stamp, which
-    // the compiler does for us. NON-virtual -- there is no second slot.
-    ~ReaderWriter() = default;
 };
+
+// ??1ReaderWriter@IO@@UEAA@XZ 0x1800b9150 is a bare base-table stamp, which the
+// compiler does for us: the body of the pure virtual destructor is empty and
+// out of line in runtime/src/io/serializer_class.cpp (an inline one became the
+// first COMDAT of some objects and collided with MinGW's `.weak.` alias naming).
 
 static_assert(sizeof(ReaderWriter) == 0x20, "IO::ReaderWriter is 0x20 bytes");
 static_assert(sizeof(ReaderWriter) == sizeof(rt::io::ReaderWriter),
@@ -565,7 +577,9 @@ public:
     // the 12-byte record header. Defined after `Serializer` below.
     BinaryReader(Serializer& ser, int ver);
 
-    ReaderWriter* DeletingDtor(unsigned flags) override;                   // 0x180023a10 (below)
+    // ??1BinaryReader@IO@@UEAA@XZ   0x1800a82f0 -- reads and DISCARDS the
+    // 4-byte trailer. Defined below.
+    ~BinaryReader() override;                                              // [0] 0x180023a10
     int  GetVersion() const override { return version; }               // 0x180023930
     void Skip() override;                                              // 0x1800a83f0
     void SerializeCharArray  (int, char*,          const char*) override;
@@ -596,11 +610,6 @@ public:
     int32_t word24;    // +0x24  GetCurrentPos() just after it
     int32_t version;   // +0x28
     int32_t _pad2c;    // +0x2c
-
-protected:
-    // ??1BinaryReader@IO@@UEAA@XZ   0x1800a82f0 -- reads and DISCARDS the
-    // 4-byte trailer. NON-virtual; reached through slot 0 only.
-    ~BinaryReader();
 };
 
 class BinaryWriter final : public ReaderWriter {
@@ -609,7 +618,9 @@ public:
     // the 12-byte record header. Defined after `Serializer` below.
     BinaryWriter(Serializer& ser, int ver);
 
-    ReaderWriter* DeletingDtor(unsigned flags) override;                   // 0x180023b50 (below)
+    // ??1BinaryWriter@IO@@UEAA@XZ   0x1800a8980 -- writes the 0xBBBBBBBB
+    // trailer and BACK-PATCHES the record length. Defined below.
+    ~BinaryWriter() override;                                              // [0] 0x180023b50
     int  GetVersion() const override { return version; }               // 0x180023ab0
     void Skip() override {}   // 0x1800a8b00 is a bare RET: a writer has nothing
                               // ahead of the cursor to skip over. Faithful, not a stub.
@@ -641,11 +652,6 @@ public:
     int32_t word24;    // +0x24  the position just after it
     int32_t version;   // +0x28
     int32_t _pad2c;    // +0x2c
-
-protected:
-    // ??1BinaryWriter@IO@@UEAA@XZ   0x1800a8980 -- writes the 0xBBBBBBBB
-    // trailer and BACK-PATCHES the record length. NON-virtual.
-    ~BinaryWriter();
 };
 
 // Every one of its 23 Serialize slots, and Skip, is a three-byte `RET` in the
@@ -659,7 +665,9 @@ public:
     // +0x20 (MOV [RDI+0x20],EBP). No stream header. Defined below.
     Visitor(Serializer& ser, int ver);
 
-    ReaderWriter* DeletingDtor(unsigned flags) override;                   // 0x18002b710 (below)
+    // ??1Visitor@IO@@UEAA@XZ   0x1800bac90 -- two table stamps and nothing
+    // else, which is what the compiler's own dtor does.
+    ~Visitor() override = default;                                         // [0] 0x18002b710
     int  GetVersion() const override { return version; }               // 0x18002b670
     void Skip() override {}
     void SerializeCharArray  (int, char*,          const char*) override {}
@@ -688,11 +696,6 @@ public:
 
     int32_t version;   // +0x20  NOT +0x28 — see the trap note above
     int32_t _pad24;    // +0x24
-
-protected:
-    // ??1Visitor@IO@@UEAA@XZ   0x1800bac90 -- two table stamps and nothing
-    // else, which is what the compiler's own dtor does.
-    ~Visitor() = default;
 };
 
 static_assert(sizeof(BinaryReader) == 0x30, "the factory asks MemAlloc for 0x30");
@@ -1009,47 +1012,5 @@ inline BinaryWriter::~BinaryWriter() {
 }
 
 inline Visitor::Visitor(Serializer& ser, int ver) : ReaderWriter(ser), version(ver) {}
-
-inline ReaderWriter* BinaryReader::DeletingDtor(unsigned flags) {               // 0x180023a10
-    if (flags & 2u) {
-        uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-        const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-        for (int32_t i = count; --i >= 0;)
-            reinterpret_cast<BinaryReader*>(self + static_cast<int64_t>(i) * 0x30)->~BinaryReader();
-        if (flags & 1u) RtSystem::RtMemFree(self - 8);
-        return reinterpret_cast<ReaderWriter*>(self - 8);
-    }
-    this->~BinaryReader();
-    if (flags & 1u) RtSystem::RtMemFree(this);
-    return this;
-}
-
-inline ReaderWriter* BinaryWriter::DeletingDtor(unsigned flags) {               // 0x180023b50
-    if (flags & 2u) {
-        uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-        const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-        for (int32_t i = count; --i >= 0;)
-            reinterpret_cast<BinaryWriter*>(self + static_cast<int64_t>(i) * 0x30)->~BinaryWriter();
-        if (flags & 1u) RtSystem::RtMemFree(self - 8);
-        return reinterpret_cast<ReaderWriter*>(self - 8);
-    }
-    this->~BinaryWriter();
-    if (flags & 1u) RtSystem::RtMemFree(this);
-    return this;
-}
-
-inline ReaderWriter* Visitor::DeletingDtor(unsigned flags) {                    // 0x18002b710
-    if (flags & 2u) {
-        uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-        const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-        for (int32_t i = count; --i >= 0;)
-            reinterpret_cast<Visitor*>(self + static_cast<int64_t>(i) * 0x28)->~Visitor();
-        if (flags & 1u) RtSystem::RtMemFree(self - 8);
-        return reinterpret_cast<ReaderWriter*>(self - 8);
-    }
-    this->~Visitor();
-    if (flags & 1u) RtSystem::RtMemFree(this);
-    return this;
-}
 
 } // namespace IO

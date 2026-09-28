@@ -8,7 +8,7 @@
 //            1 + vtable byte offset; adjustment 0 = single inheritance):
 //            retail table 0x14015faa0, 10 slots, and each leaf's overrides at
 //            retail's index (B38_SLOTS.md §6).
-//   PART C — class-shape rules: polymorphic, no virtual destructor, Action
+//   PART C — class-shape rules: polymorphic, a virtual destructor (B3X W1: retail slot 0 = D1 + D0), Action
 //            abstract (slot 4 `_purecall`), every leaf concrete.
 //
 // NOT PROVEN HERE: `X::Vtable() == *(void**)&obj` needs a constructed object,
@@ -60,7 +60,7 @@ UNIT_TEST(act_action_layout) {
 UNIT_TEST(act_action_shape) {
     CHECK(std::is_polymorphic<Action>::value);
     CHECK(std::is_abstract<Action>::value);                 // [4] _purecall 0x14003addc
-    CHECK(!std::has_virtual_destructor<Action>::value);
+    CHECK(std::has_virtual_destructor<Action>::value);
     CHECK((std::is_base_of<Object::Internal, Action>::value));
     CHECK(std::is_trivially_destructible<Object::InternalBasePtr>::value);
 }
@@ -88,7 +88,7 @@ void CheckLeafShape(size_t size) {
     CHECK_EQ(alignof(T), (size_t)8);
     CHECK(std::is_polymorphic<T>::value);
     CHECK(!std::is_abstract<T>::value);
-    CHECK(!std::has_virtual_destructor<T>::value);
+    CHECK(std::has_virtual_destructor<T>::value);
     CHECK((std::is_base_of<Action, T>::value));
     CHECK_DTOR_SLOT(T);
     CHECK_SLOT(T, TypeName,     0x08/8);

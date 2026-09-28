@@ -27,7 +27,7 @@ class HerdDescription final : public Description {
 public:
     HerdDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140034e40
+    ~HerdDescription() override = default;                                 // [0] 0x140034e40
     int32_t           GetFileVersion() const override { return 2; }    // [3] 0x1401222a0
     bool              Serialize(void* stream) override;                    // [5] 0x1401221e0
     Object::External* Reconstruct() override;                              // [6] 0x140034de0
@@ -43,9 +43,6 @@ public:
     float _f34;                                 // +0x34
     int32_t _i38;                               // +0x38
     float _f3c;                                 // +0x3c
-
-protected:
-    ~HerdDescription() = default;
 };
 
 static_assert(sizeof(HerdDescription) == 0x40, "HerdDescription is 0x40 (create 0x140034d30 MemAlloc(0x40))");

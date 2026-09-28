@@ -416,7 +416,7 @@ ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
 
 void DestroyCodec(ReaderWriter* rw) {
     if (!rw) return;
-    reinterpret_cast<IO::ReaderWriter*>(rw)->DeletingDtor(1);   // B.3.x bridge
+    delete reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
 }
 
 void RecUInt(ReaderWriter* rw, uint32_t* v) {
@@ -439,7 +439,7 @@ const char* const kSerializeMangled =
 // (runtime/types/ui/Dialog.h). Unchanged except `self->x` became `x` (the
 // Serialize offsets are the named fields they always were) and the
 // hand-inlined slot-0 call `(*(void***)self)[0](self, 0)` became the virtual
-// `DeletingDtor(0)`: it dispatches through the OBJECT's own table exactly as
+// `~T()` (slot 0, flags 0): it dispatches through the OBJECT's own table exactly as
 // the tail jump did, so a derived Dialog still reaches its own slot 0.
 // ############################################################################
 namespace UI {
@@ -447,7 +447,7 @@ namespace UI {
 int32_t Dialog::GetFileVersion() const { return 6; }           // [3] 0x1801130b0
 
 void Dialog::Destruct() {                                      // [7] 0x1800387f0
-    DeletingDtor(0);          // `JMP qword ptr [RAX]` with EDX = 0 — VIRTUAL
+    this->~Dialog();          // `JMP qword ptr [RAX]` with EDX = 0 — VIRTUAL
 }
 
 Object::External* Dialog::Construct() {                        // [8] 0x180038750
@@ -455,7 +455,7 @@ Object::External* Dialog::Construct() {                        // [8] 0x18003875
 }
 
 Object::External* Dialog::Reconstruct() {                      // [6] 0x1800386b0
-    DeletingDtor(0);          // NO null test on this path — retail's
+    this->~Dialog();          // NO null test on this path — retail's
     return ::new (this) Dialog();
 }
 

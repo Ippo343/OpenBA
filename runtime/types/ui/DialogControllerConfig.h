@@ -48,19 +48,9 @@ public:
     // [0] 0x18003b600 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x20`, the element size).
     // The class's OWN (B9-4): the four exe configs declare theirs.
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<DialogControllerConfig*>(self + static_cast<int64_t>(i) * 0x20)->~DialogControllerConfig();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~DialogControllerConfig();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // `??1DialogControllerConfig@UI@@UEAA@XZ` 0x18003b4f0. EMPTY, which is
+    // retail's body (restamp + ~External, both the compiler's).
+    ~DialogControllerConfig() override;
 
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
@@ -85,9 +75,6 @@ protected:
     // empty. No ctor door exists to share it with (the four exe configs build
     // their base through `fn_External_External`, EXE_SUBCLASSES.md 1C).
     DialogControllerConfig() {}
-    // `??1DialogControllerConfig@UI@@UEAA@XZ` 0x18003b4f0. EMPTY, which is
-    // retail's body (restamp + ~External, both the compiler's).
-    ~DialogControllerConfig();
 
     // RULE B5-15 / B6-7, COPIED from B36_SLOTS section 3:
     //   0x18003b430  ?_TypeName@       -> "DialogControllerConfig"

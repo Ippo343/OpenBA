@@ -37,7 +37,7 @@
 // ENDGAME B.3 step 9 (block UI-D, B39_RULES D1/D2): CONCRETE, the
 // CharacterSet.h shape: the real public ctor is the inlined one (seven stores
 // in Construct 0x18003b1e0, the last `[RCX+0x28] = 0`), slot 0 the class's own
-// vector deleting dtor, ~Cursor protected, non-virtual and EMPTY (retail's is a
+// vector deleting dtor, ~Cursor virtual and EMPTY (retail's is a
 // restamp and a tail jump to ~External — the ExternalPtr at +0x28 is NOT
 // released). The factory pair is the class's own (cursor.cpp), replacing the
 // FACTUI1 row; the minted `??_7Cursor@UI@@6B@` and its RT_DELDTOR row are
@@ -63,19 +63,7 @@ public:
 
     // [0] 0x18003b3a0 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x30`, the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<Cursor*>(self + static_cast<int64_t>(i) * 0x30)->~Cursor();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~Cursor();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    ~Cursor() override;  // 0x1800cd1c0: empty; the compiler chains ~External
 
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
@@ -103,11 +91,8 @@ public:
     // Placement is spelt `::new (p) Cursor()` (B9-5): these stay undefined.
     static void* operator new(std::size_t bytes);              // 0x18003af90
     static void* operator new(std::size_t bytes, void* place); // 0x18003b000
-    static void  operator delete(void* p);                     // 0x18003b010
+    static void  operator delete(void* p) { ::Object::detail::InternalMemFree(p); }                     // 0x18003b010
     // Retail's factory pair (B39_RULES D2), defined and registered in cursor.cpp.
-
-protected:
-    ~Cursor();              // 0x1800cd1c0: empty; the compiler chains ~External
 
 public:
     // ---- the 0x10 bytes Cursor adds (public: the doors reach them) ---------

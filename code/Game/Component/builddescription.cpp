@@ -69,13 +69,6 @@ BuildDescription::~BuildDescription() {
     _costCap = 0;
 }
 
-// [0] 0x14002f460: ~BuildDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* BuildDescription::DeletingDtor(unsigned flags) {
-    this->~BuildDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140109140: stream order as retail.
 bool BuildDescription::Serialize(void* stream) {
     if (!fn_MemAlloc || !g_pMemAllocSingleton) return true;   // standalone: the allocator is unwired
@@ -154,15 +147,15 @@ bool BuildDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x14002f3f0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x14002f3f0: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* BuildDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~BuildDescription();
     return new (static_cast<void*>(this)) BuildDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void BuildDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void BuildDescription::Destruct() { this->~BuildDescription(); }
 
 // [8] 0x14002f450: BuildComponent's type id through the hidden return slot.
 Object::Type* BuildDescription::GetComponentType(Object::Type* ret) const {

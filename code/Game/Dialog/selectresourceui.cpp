@@ -291,13 +291,6 @@ void SelectResourceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*elemen
 // CropUI (inherited, as in retail); 8 is overridden by all three in the tree.
 // ============================================================================
 
-// [0] 0x140013ca0: ~SelectResourceUI (restamp, ~DialogController), MemFree on &1.
-Object::Base* SelectResourceUI::DeletingDtor(unsigned flags) {
-    this->~SelectResourceUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [1] TypeName / [2] Type, the record and retail's abstract factory (create =
 // the logging stub, in-place = null): ENDGAME B.3.9 RF.
 DEFINE_EXE_ABSTRACT_TYPE(SelectResourceUI, "UI::DialogController")

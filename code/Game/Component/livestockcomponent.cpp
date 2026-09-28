@@ -91,13 +91,6 @@ LivestockComponent::LivestockComponent() : data28(0), data30(0) {
     OrFlagsInCtor(0x0b);
 }
 
-// [0] 0x140035680: restamp + ~Internal (no own work), MemFree on &1.
-Object::Base* LivestockComponent::DeletingDtor(unsigned flags) {
-    this->~LivestockComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 void LivestockComponent::OnAdded() {
     if (data28 != 0) return;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;

@@ -32,16 +32,14 @@ class QuarryComponent final : public Component {
 public:
     QuarryComponent();                                            // 0x1400552b0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x14000b5d0
+    // 0x140055270
+    ~QuarryComponent() override = default;                        // [0]  0x14000b5d0
     void Persist(void* stream) override;                          // [3]  0x140055230
     void OnAdded() override;                                      // [6]  0x140055220 own RET
     void OnRemove() override;                                     // [7]  0x140055210 own RET
     void OnEvent(int eventId) override;                           // [12] 0x1400550f0
     void OnMessage(int message, void* data,
                    uint32_t arg0, uint32_t arg1) override;        // [15] 0x140054b80
-
-protected:
-    ~QuarryComponent() = default;                                 // 0x140055270
 };
 
 static_assert(sizeof(QuarryComponent) == 0x28, "QuarryComponent is 0x28 (create 0x14000b3d0)");

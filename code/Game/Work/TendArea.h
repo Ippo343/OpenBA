@@ -42,7 +42,8 @@ public:
     TendArea();                                                     // (Work_GenericCtor shape)
     TendArea(void** entityIBP, int kind);                           // 0x1400f5a80
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002c5d0
+    // frees the +0x48 citizen BST
+    ~TendArea() override;                                           // [0]  0x14002c5d0
     void  Persist(void* stream) override;                           // [3]  0x1400f5900
     int   Execute(void* citizenIBP, void* context) override;  // [4]  0x1400f5490
     int   OnComplete(void* param2, void* arg2, int arg3) override;  // [6]  0x1400f5470
@@ -57,9 +58,6 @@ public:
     uint32_t workerCount;        // +0x50: number of workers in BST
     uint8_t  _pad54[4];          // +0x54: padding
     uint32_t tendMode;           // +0x58: 0=crop/area, nonzero=orchard mode (serialized int)
-
-protected:
-    ~TendArea();                                               // frees the +0x48 citizen BST
 };
 
 static_assert(sizeof(TendArea) == 0x60, "TendArea is 0x60 (retail create MemAlloc)");

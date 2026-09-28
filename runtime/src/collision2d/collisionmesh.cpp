@@ -254,11 +254,11 @@ Object::External* CollisionMesh::Construct() {
 }
 // [6] 0x1800651b0: slot0(this, 0) dispatched VIRTUALLY, then the same stores.
 Object::External* CollisionMesh::Reconstruct() {
-    DeletingDtor(0);
+    this->~CollisionMesh();
     return ::new (this) CollisionMesh();
 }
 // [7] 0x1800652c0: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void CollisionMesh::Destruct() { DeletingDtor(0); }
+void CollisionMesh::Destruct() { this->~CollisionMesh(); }
 
 // ?CreateNewObject@CollisionMesh@Collision2D@@SAPEAVBase@Object@@XZ  0x180065060
 // The FACTREST row this replaces: MemAlloc of 0x70 bytes, align 8 (the locked
@@ -350,7 +350,7 @@ bool CollisionMesh::Serialize(void* streamv) {
     }
 
     if (rw != nullptr) {
-        rwc->DeletingDtor(1);
+        delete rwc;
     }
     return true;
 }

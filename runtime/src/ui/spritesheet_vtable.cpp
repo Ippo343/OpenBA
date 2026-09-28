@@ -128,7 +128,7 @@ Object::External::CompileResult SpriteSheet::Compile(const System::Filename&) { 
 // destructor — with flag 0, i.e. "destroy, do not free". Reading the vtable
 // from the OBJECT and not from a resolved constant is load-bearing: a derived
 // SpriteSheet would dispatch to its own slot 0.
-void SpriteSheet::Destruct() { DeletingDtor(0); }
+void SpriteSheet::Destruct() { this->~SpriteSheet(); }
 
 // ---- slot 8  ?Construct@SpriteSheet@UI@@UEAAPEAVExternal@Object@@XZ  0x180003100
 //   if (this) { <the constructor, inlined>; return this; } else return nullptr.
@@ -141,7 +141,7 @@ Object::External* SpriteSheet::Construct() {
 //   Destruct (through slot 0, virtually) then construct on the SAME storage;
 //   no null test on this path (0x180003092 dereferences RCX immediately).
 Object::External* SpriteSheet::Reconstruct() {
-    DeletingDtor(0);
+    this->~SpriteSheet();
     return ::new (static_cast<void*>(this)) SpriteSheet();
 }
 
@@ -343,7 +343,7 @@ ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
 
 void DestroyCodec(ReaderWriter* rw) {
     if (!rw) return;
-    reinterpret_cast<IO::ReaderWriter*>(rw)->DeletingDtor(1);   // B.3.x bridge
+    delete reinterpret_cast<IO::ReaderWriter*>(rw);   // B.3.x bridge
 }
 
 void RecInt(ReaderWriter* rw, int32_t* v) {

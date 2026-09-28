@@ -522,8 +522,8 @@ int32_t UI::UserInterface::Update(const System::Time& timeRef) {
         out.Ptr(S + 0x60, nullptr, "_dragDropDialog = 0");
         void* const dragEl = *reinterpret_cast<void**>(S + 0x68);
         if (dragEl) {
-            // Element vtable slot 0 `DeletingDtor(1)` — VIRTUAL.
-            reinterpret_cast<UI::Element*>(dragEl)->DeletingDtor(1);   // B.3.6 bridge
+            // Element vtable slot 0 `delete` (slot 0, flags 1) — VIRTUAL.
+            delete reinterpret_cast<UI::Element*>(dragEl);   // B.3.6 bridge
             out.Ptr(S + 0x68, nullptr, "_dragDropElement = 0 (inside the guard)");
         }
         out.Ptr(S + 0x68, nullptr, "_dragDropElement = 0 (again, unguarded)");

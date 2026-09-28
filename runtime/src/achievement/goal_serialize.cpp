@@ -176,7 +176,7 @@ ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
 // allocated. Skipping it leaks 0x30 bytes per Serialize.
 void DestroyCodec(ReaderWriter* rw) {
     if (!rw) return;
-    AsRw(rw)->DeletingDtor(1);
+    delete AsRw(rw);
 }
 
 }  // namespace

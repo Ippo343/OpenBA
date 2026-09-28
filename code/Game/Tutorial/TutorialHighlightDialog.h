@@ -42,16 +42,14 @@ public:
                             Object::InternalPtr<UI::DialogInstance> parent,
                             void* targetElement, int32_t rotation, void* targetEntity);
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140027910
+    // 0x1400e01a0: restamp only
+    ~TutorialHighlightDialog() override = default;                 // [0] 0x140027910
     // [3] Persist: DialogInstance's, inherited (B38 D3.1).
     void OnOpened() override;                                      // [4] 0x1400e0020
     // [5] OnClosed: DialogInstance's, inherited.
     void OnUpdateLayout() override;                                // [6] 0x1400dffe0
     void OnUpdate(const System::Time& time) override;              // [7] 0x1400e0000
     // [8] OnElementEvent, [9] OnSerializeSettings: DialogInstance's, inherited.
-
-protected:
-    ~TutorialHighlightDialog() = default;                          // 0x1400e01a0: restamp only
 
 private:
     void PlaceOnElement();                                         // 0x1400dfac0

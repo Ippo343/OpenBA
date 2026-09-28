@@ -360,13 +360,13 @@ int32_t ExternalList::GetFileVersion() const { return 3; }
 //          `slot0(this, 0)` dispatched VIRTUALLY — destroy without freeing —
 //          then the ctor body again, with NO null test.
 External* ExternalList::Reconstruct() {
-    DeletingDtor(0);
+    this->~ExternalList();
     return ::new (this) ExternalList();
 }
 
 // slot 7 — ?Destruct@ExternalList@Object@@UEAAXXZ   0x180007640
 //          `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void ExternalList::Destruct() { DeletingDtor(0); }
+void ExternalList::Destruct() { this->~ExternalList(); }
 
 // slot 8 — ?Construct@ExternalList@Object@@UEAAPEAVExternal@2@XZ   0x1800075e0
 //          ExternalList's OWN new virtual; External's table stops at eight.

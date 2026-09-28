@@ -32,14 +32,11 @@ public:
                      Object::InternalPtr<UI::DialogInstance> parent,
                      uint64_t sprite, int32_t modIndex);            // inlined by ModDialog
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140012890
+    ~ModDetailsDialog() override;                                  // [0] 0x140012890
     void OnOpened() override;                                      // [4] 0x14006d700
     void OnElementEvent(Object::InternalPtr<UI::Element>* element,
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x14006d6a0
-
-protected:
-    ~ModDetailsDialog();
 
 public:
     uint64_t dataB8;           // +0xB8: the mod's thumbnail sprite (borrowed)

@@ -27,7 +27,7 @@ class UpgradeUIConfig final : public UI::DialogControllerConfig {
 public:
     UpgradeUIConfig() = default;                                   // 0x140016c00 (inlined)
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140016d00
+    ~UpgradeUIConfig() override = default;                         // [0] 0x140016d00
     int32_t           GetFileVersion() const override { return 1; }// [3] 0x140087000
     bool              Serialize(void* stream) override;            // [5] 0x140086fb0
     Object::External* Reconstruct() override;                      // [6] 0x140016cb0
@@ -37,9 +37,6 @@ public:
     // +0x20 Object::ExternalPtr<ComponentEntity> — raw pointer spelling: the
     // readers (UpgradeUI, DestroyComponent state 5) reach it at the offset.
     void* _target = nullptr;                                       // +0x20
-
-protected:
-    ~UpgradeUIConfig() = default;
 };
 
 static_assert(sizeof(UpgradeUIConfig) == 0x28, "UpgradeUIConfig is 0x28 (create 0x140016c00)");

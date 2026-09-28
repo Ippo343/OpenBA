@@ -248,7 +248,7 @@ extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
                                 reinterpret_cast<Graphics::Geometry*>(geo));   // B.3.5 bridge
                     }
                     // Geometry slot 0: the scalar deleting dtor, free = 1.
-                    reinterpret_cast<Graphics::Geometry*>(geo)->DeletingDtor(1);   // B.3.x bridge (slot 0)
+                    delete reinterpret_cast<Graphics::Geometry*>(geo);   // B.3.x bridge (slot 0)
                     activeArray[i] = nullptr;
                     // (audio IBP slot w+0x60[i] stays null — no audio spawned)
                 }

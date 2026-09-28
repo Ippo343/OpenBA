@@ -233,13 +233,6 @@ RemoveAnimal::RemoveAnimal()
 RemoveAnimal::RemoveAnimal(uint64_t animal)
     : _field20(reinterpret_cast<void*>(animal)) {}
 
-// [0] 0x140022ee0
-Object::Base* RemoveAnimal::DeletingDtor(unsigned flags) {
-    this->~RemoveAnimal();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x1400ca870
 // [4] 0x1400ca7f0
 // [8] 0x1400ca760

@@ -65,12 +65,6 @@ Toolbar::~Toolbar() {
     reinterpret_cast<System::String*>(&_field30)->~String();
 }
 
-Object::Base* Toolbar::DeletingDtor(unsigned flags) {
-    this->~Toolbar();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // Toolbar::Serialize (vtable +0x28, Slot5) -- Serialize fields
 // ============================================================
@@ -126,13 +120,13 @@ bool Toolbar::Serialize(void* stream) {
 // ============================================================
 // Original: 0x140024bf0. Destroys (slot 0, flags 0) then re-constructs in place.
 Object::External* Toolbar::Reconstruct() {
-    DeletingDtor(0);
+    this->~Toolbar();
     return ::new (static_cast<void*>(this)) Toolbar();
 }
 
 // [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
 // slot 0 with flags 0 (destroy, no free).
-void Toolbar::Destruct() { DeletingDtor(0); }
+void Toolbar::Destruct() { this->~Toolbar(); }
 
 // ============================================================
 // Toolbar::Construct (vtable +0x40)

@@ -34,7 +34,9 @@ class CharacterComponent final : public Component {
 public:
     CharacterComponent();                                         // 0x140109d20
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x14002faa0
+    // PORT GAP (retail 0x14002faa0) — B38 D2: retail releases the action stack
+    // at +0x48 (0x1400c5150); the tree never did (Inert_ScalarDtor).
+    ~CharacterComponent() override = default;                     // [0] 0x14002faa0
     void Persist(void* stream) override;                          // [3] 0x140109ab0
     void Startup() override;                                      // [4] 0x140109a30
     void OnAdded() override;                                      // [6] 0x1401099c0 PORT GAP
@@ -60,11 +62,6 @@ public:
     uint64_t data68;       // +0x68 ModelComponent
     uint64_t data70;       // +0x70 PickingComponent
     uint64_t data78;       // +0x78 CharacterDescription
-
-protected:
-    // PORT GAP (retail 0x14002faa0) — B38 D2: retail releases the action stack
-    // at +0x48 (0x1400c5150); the tree never did (Inert_ScalarDtor).
-    ~CharacterComponent() = default;
 };
 
 static_assert(sizeof(CharacterComponent) == 0x80, "CharacterComponent is 0x80 (create 0x14002f960)");

@@ -75,14 +75,6 @@
 // ---- BuildRequirementUI: the slot body and its standalone guards live in buildrequirementui.cpp.
 
 
-// [0] 0x140010860: ~BuildRequirementUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* BuildRequirementUI::DeletingDtor(unsigned flags) {
-    this->~BuildRequirementUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x1400107f0: MemAlloc(0x60, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* BuildRequirementUI::CreateNewObject() {
@@ -102,14 +94,6 @@ DEFINE_EXE_TYPE(BuildRequirementUI, "UI::DialogController")
 // ---- HotKeyToolTipUI: the slot body and its standalone guard live in hotkeytooltipui.cpp.
 
 
-// [0] 0x140011e70: ~HotKeyToolTipUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* HotKeyToolTipUI::DeletingDtor(unsigned flags) {
-    this->~HotKeyToolTipUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140011e20: MemAlloc(0x30, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* HotKeyToolTipUI::CreateNewObject() {
@@ -128,14 +112,6 @@ DEFINE_EXE_TYPE(HotKeyToolTipUI, "UI::DialogController")
 
 // ---- AttendanceUI: the slot bodies and their standalone guards live in attendanceui.cpp.
 
-
-// [0] 0x140010560: ~AttendanceUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* AttendanceUI::DeletingDtor(unsigned flags) {
-    this->~AttendanceUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 
 // create 0x1400104b0: MemAlloc(0x38, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
@@ -157,14 +133,6 @@ DEFINE_EXE_TYPE(AttendanceUI, "UI::DialogController")
 // ---- CemeteryUI: the slot bodies and their standalone guards live in cemeteryui.cpp.
 
 
-// [0] 0x1400109b0: ~CemeteryUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* CemeteryUI::DeletingDtor(unsigned flags) {
-    this->~CemeteryUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140010900: MemAlloc(0x38, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* CemeteryUI::CreateNewObject() {
@@ -182,14 +150,6 @@ void* CemeteryUI::CreateInPlaceObject(void* storage) {
 DEFINE_EXE_TYPE(CemeteryUI, "UI::DialogController")
 // ---- ConsumeProduceUI: the slot bodies and their standalone guards live in consumeproduceui.cpp.
 
-
-// [0] 0x140010b90: ~ConsumeProduceUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* ConsumeProduceUI::DeletingDtor(unsigned flags) {
-    this->~ConsumeProduceUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 
 // create 0x140010ae0: MemAlloc(0x40, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
@@ -230,14 +190,6 @@ DEFINE_EXE_TYPE(ConsumeProduceUI, "UI::DialogController")
 
 
 
-// [0] 0x140011cf0: ~HelpUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* HelpUI::DeletingDtor(unsigned flags) {
-    this->~HelpUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140011ca0: MemAlloc(0x78, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* HelpUI::CreateNewObject() {
@@ -259,14 +211,6 @@ DEFINE_EXE_TYPE(HelpUI, "UI::DialogController")
 
 
 
-// [0] 0x140011fd0: ~ImmigrationUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* ImmigrationUI::DeletingDtor(unsigned flags) {
-    this->~ImmigrationUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140011ee0: MemAlloc(0x50, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* ImmigrationUI::CreateNewObject() {
@@ -285,14 +229,6 @@ DEFINE_EXE_TYPE(ImmigrationUI, "UI::DialogController")
 // ---- MapUI: the slot bodies and their standalone guards live in mapui.cpp.
 
 
-
-// [0] 0x1400124d0: ~MapUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* MapUI::DeletingDtor(unsigned flags) {
-    this->~MapUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 
 // create 0x140012240: MemAlloc(0x50, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
@@ -327,14 +263,6 @@ void NoiseUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int3
                              int32_t /*b*/, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/,
                              void* /*userData*/) {}
 
-// [0] 0x140012720: ~ModBrowseUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* ModBrowseUI::DeletingDtor(unsigned flags) {
-    this->~ModBrowseUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x1400126d0: MemAlloc(0x30, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* ModBrowseUI::CreateNewObject() {
@@ -350,14 +278,6 @@ void* ModBrowseUI::CreateInPlaceObject(void* storage) {
 }
 
 DEFINE_EXE_TYPE(ModBrowseUI, "UI::DialogController")
-
-// [0] 0x140012da0: ~NoiseUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* NoiseUI::DeletingDtor(unsigned flags) {
-    this->~NoiseUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 
 // create 0x140012d30: MemAlloc(0x70, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
@@ -379,14 +299,6 @@ DEFINE_EXE_TYPE(NoiseUI, "UI::DialogController")
 
 
 
-// [0] 0x1400131c0: ~PageToggleUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* PageToggleUI::DeletingDtor(unsigned flags) {
-    this->~PageToggleUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140013160: MemAlloc(0x48, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* PageToggleUI::CreateNewObject() {
@@ -407,14 +319,6 @@ DEFINE_EXE_TYPE(PageToggleUI, "UI::DialogController")
 
 
 
-// [0] 0x1400132b0: ~ProductionUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* ProductionUI::DeletingDtor(unsigned flags) {
-    this->~ProductionUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140013230: MemAlloc(0x50, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* ProductionUI::CreateNewObject() {
@@ -434,14 +338,6 @@ DEFINE_EXE_TYPE(ProductionUI, "UI::DialogController")
 
 
 
-
-// [0] 0x140013450: ~ProfessionUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* ProfessionUI::DeletingDtor(unsigned flags) {
-    this->~ProfessionUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 
 // create 0x140013400: MemAlloc(0x78, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
@@ -469,14 +365,6 @@ DEFINE_EXE_TYPE(ProfessionUI, "UI::DialogController")
 
 
 
-
-// [0] 0x1400138d0: ~ResourceLimitUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* ResourceLimitUI::DeletingDtor(unsigned flags) {
-    this->~ResourceLimitUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 
 // create 0x1400136b0: MemAlloc(0x40, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
@@ -508,14 +396,6 @@ void SpriteCaptureUI::OnUpdate(const System::Time& /*time*/) {}
 void SpriteCaptureUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
                                      int32_t /*a*/, int32_t /*b*/, int32_t /*c*/,
                                      int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {}
-
-// [0] 0x140013fc0: ~SpriteCaptureUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* SpriteCaptureUI::DeletingDtor(unsigned flags) {
-    this->~SpriteCaptureUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 
 // create 0x140013d10: MemAlloc(0x70, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
@@ -561,14 +441,6 @@ DEFINE_EXE_TYPE(SpriteCaptureUI, "UI::DialogController")
 // being able to fault.
 
 
-// [0] 0x140014510: ~TitleDescToolTipUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* TitleDescToolTipUI::DeletingDtor(unsigned flags) {
-    this->~TitleDescToolTipUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x1400144c0: MemAlloc(0x30, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* TitleDescToolTipUI::CreateNewObject() {
@@ -588,14 +460,6 @@ DEFINE_EXE_TYPE(TitleDescToolTipUI, "UI::DialogController")
 
 
 
-
-// [0] 0x1400145f0: ~ToolUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* ToolUI::DeletingDtor(unsigned flags) {
-    this->~ToolUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 
 // create 0x140014580: MemAlloc(0x58, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
@@ -623,14 +487,6 @@ DEFINE_EXE_TYPE(ToolUI, "UI::DialogController")
 
 
 
-
-// [0] 0x140016020: ~TradeUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* TradeUI::DeletingDtor(unsigned flags) {
-    this->~TradeUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 
 // create 0x140015f80: MemAlloc(0x148, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
@@ -660,14 +516,6 @@ DEFINE_EXE_TYPE(TradeUI, "UI::DialogController")
 
 
 
-
-// [0] 0x140020a90: ~BuildUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* BuildUI::DeletingDtor(unsigned flags) {
-    this->~BuildUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 
 // create 0x1400209e0: MemAlloc(0x50, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).

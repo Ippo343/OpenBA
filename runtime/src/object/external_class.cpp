@@ -107,30 +107,6 @@ External::~External() {
     RtSystem::Sys(_path).~Filename();
 }
 
-// slot 0 — the `??_G` vector deleting destructor at 0x180006640, whose
-// `MOV EDX,0x20` is the element size and whose `LEA R9,[0x1800bc950]` is
-// ~External. `flags & 1` frees the storage; `flags & 2` is the array form,
-// which reads the SIGNED int32 count from `this - 8` — a header only
-// `operator new[]` writes, so taking that arm on an object that was not
-// array-allocated faults at `this - 8` exactly as retail would — destroys the
-// elements DOWNWARD with the 0x20 stride, frees `this - 8` on `& 1` and returns
-// it. Both arms as the retired RT_DELDTOR row 0x180006640 ran them (ENDGAME
-// B.3.9 OBJ). Deletion is `Object::Destroy(p)`, never `delete p` (~External is
-// non-virtual).
-Base* External::DeletingDtor(unsigned flags) {
-    if (flags & 2u) {
-        uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-        const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-        for (int32_t i = count; --i >= 0;)
-            reinterpret_cast<External*>(self + static_cast<int64_t>(i) * 0x20)->~External();
-        if (flags & 1u) TypeTreeFree(self - 8);
-        return reinterpret_cast<Base*>(self - 8);
-    }
-    this->~External();
-    if (flags & 1u) TypeTreeFree(this);
-    return this;
-}
-
 // ?_typeInfo@External@Object@@0VBaseTypeInfo@2@A — 0x1801f9b38. ENDGAME
 // B.3.9 OBJ (B39_RULES D6 W3): name "External", parent literal "Base" EXACTLY
 // as the retail record carries it, no extension. Slot 1 TypeName (0x1800066c0,

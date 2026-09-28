@@ -29,13 +29,6 @@ StorageLocationDescription::StorageLocationDescription()
     : Description(),
       _locationType(0) {}
 
-// [0] 0x140038f60: ~StorageLocationDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* StorageLocationDescription::DeletingDtor(unsigned flags) {
-    this->~StorageLocationDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x14012d470: stream order as retail.
 bool StorageLocationDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
@@ -43,15 +36,15 @@ bool StorageLocationDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140038f00: DeletingDtor(0) (destroy in place), then the ctor again on
+// [6] 0x140038f00: `this->~T()` (retail: slot 0, flags 0 -- destroy in place), then the ctor again on
 // `this`. The hand-built table's Cleanup trampoline already did this.
 Object::External* StorageLocationDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~StorageLocationDescription();
     return new (static_cast<void*>(this)) StorageLocationDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void StorageLocationDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void StorageLocationDescription::Destruct() { this->~StorageLocationDescription(); }
 
 // [8] 0x140038f50: StorageLocationComponent's type id through the hidden return slot.
 Object::Type* StorageLocationDescription::GetComponentType(Object::Type* ret) const {

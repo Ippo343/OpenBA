@@ -465,13 +465,6 @@ void FloorComponent::Slot11() {
     FloorComponent_SubF390(this);
 }
 
-// [0] 0x1400347f0: ~FloorComponent (0x14011f5c0: restamp + ~Internal), MemFree on &1.
-Object::Base* FloorComponent::DeletingDtor(unsigned flags) {
-    this->~FloorComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140034600: MemAlloc(0x30, 8), then the ctor.
 void* FloorComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FloorComponent), 8);

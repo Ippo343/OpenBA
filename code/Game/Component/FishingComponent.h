@@ -28,7 +28,8 @@ class FishingComponent final : public ResourceProduceComponent {
 public:
     FishingComponent();                                                  // 0x14011f130
 
-    Object::Base* DeletingDtor(unsigned flags) override;                // [0]  0x140034560
+    // 0x140034560: no body
+    ~FishingComponent() override = default;                             // [0]  0x140034560
     void        Persist(void* stream) override;                         // [3]  0x14011f050
     uintptr_t*  CreateWork(uintptr_t* out) override;                    // [18] 0x14011efe0
     char        OnEnterProducing() override;                            // [19] 0x14011ee80
@@ -38,9 +39,6 @@ public:
     uint8_t  fishingFlag;       // +0x50: the dock's coverage-registered latch (bool)
     uint8_t  _pad51[3];         // +0x51
     float    fishingRate;       // +0x54: the per-tick production rate (serialized)
-
-protected:
-    ~FishingComponent() = default;                                       // 0x140034560: no body
 };
 
 static_assert(sizeof(FishingComponent) == 0x58, "FishingComponent is 0x58 (create 0x140034350)");

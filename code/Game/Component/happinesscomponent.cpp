@@ -476,12 +476,6 @@ HappinessComponent::HappinessComponent() : happinessFlag(0), _pad29{}, _controll
     OrFlagsInCtor(0x2);
 }
 
-// [0] 0x140005db0: ~HappinessComponent (0x14004ab00), MemFree on &1.
-Object::Base* HappinessComponent::DeletingDtor(unsigned flags) {
-    this->~HappinessComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // 0x14004ab00: restamp + ~Internal, no own work.
 HappinessComponent::~HappinessComponent() = default;
 

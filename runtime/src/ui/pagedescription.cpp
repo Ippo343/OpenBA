@@ -86,10 +86,10 @@ Object::External* PageDescription::Construct() {
 // 0x180047060: slot 0 with flag 0 (destroy WITHOUT freeing, through the
 // object's own table), then the ctor again. No null test.
 Object::External* PageDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~PageDescription();
     return ::new (this) PageDescription();
 }
-void PageDescription::Destruct() { DeletingDtor(0); }          // 0x180047090
+void PageDescription::Destruct() { this->~PageDescription(); }          // 0x180047090
 
 // ============================================================================
 // ?Serialize@PageDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800d5410
@@ -108,7 +108,7 @@ bool PageDescription::Serialize(void* streamv) {
 
     rw->SerializeInt(_activePage, nullptr);
 
-    if (rw != nullptr) rw->DeletingDtor(1);                    // 1800d547d
+    if (rw != nullptr) delete rw;                    // 1800d547d
     return true;
 }
 

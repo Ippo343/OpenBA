@@ -26,7 +26,13 @@ class TownHallUI final : public UI::DialogController {
 public:
     TownHallUI() = default;                              // 0x140014660 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x1400146b0
+    // 0x1400146b0 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    // Retail (0x1400810d0) releases the owned trees/arrays at +0x1d8, +0x1c8, +0x138,
+    // +0x118, +0xf0, +0xe0, +0xd0, +0xc0, +0xb0, +0x50 and +0x40; the tree's teardown
+    // body (moved into ~TownHallUI unchanged) does the same frees.
+    // the tree's teardown body (see the .cpp)
+    ~TownHallUI() override;                                       // [0] 0x1400146b0
     void OnCreated() override;   // [4] 0x140081000
     void OnUpdateLayout() override;   // [7] 0x14007d550
     void OnUpdate(const System::Time& time) override;   // [8] 0x14007e550
@@ -96,14 +102,6 @@ public:
     uint64_t agriBST = 0;          // +0x1D8: agriculture BST root (sorted by entity ptr)
     uint32_t agriBSTCount = 0;     // +0x1E0: agriculture BST item count
     uint8_t _pad1E4[4] = {};       // +0x1E4: gap
-
-protected:
-    // 0x1400146b0 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // Retail (0x1400810d0) releases the owned trees/arrays at +0x1d8, +0x1c8, +0x138,
-    // +0x118, +0xf0, +0xe0, +0xd0, +0xc0, +0xb0, +0x50 and +0x40; the tree's teardown
-    // body (moved into ~TownHallUI unchanged) does the same frees.
-    ~TownHallUI();   // the tree's teardown body (see the .cpp)
 };
 
 static_assert(sizeof(TownHallUI) == 0x1e8, "TownHallUI is 0x1e8 (create 0x140014660 MemAlloc(0x1e8))");

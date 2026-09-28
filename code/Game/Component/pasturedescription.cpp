@@ -28,13 +28,6 @@ PastureDescription::PastureDescription()
     : Description(),
       _type(5) {}
 
-// [0] 0x1400368b0: ~PastureDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* PastureDescription::DeletingDtor(unsigned flags) {
-    this->~PastureDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140128220: stream order as retail.
 bool PastureDescription::Serialize(void* stream) {
     IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
@@ -42,15 +35,15 @@ bool PastureDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140036850: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140036850: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* PastureDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~PastureDescription();
     return new (static_cast<void*>(this)) PastureDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void PastureDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void PastureDescription::Destruct() { this->~PastureDescription(); }
 
 // [8] 0x1400368a0: PastureComponent's type id through the hidden return slot.
 Object::Type* PastureDescription::GetComponentType(Object::Type* ret) const {

@@ -29,7 +29,7 @@ class RawMaterialDescription final : public Description {
 public:
     RawMaterialDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140037350
+    ~RawMaterialDescription() override = default;                          // [0] 0x140037350
     int32_t           GetFileVersion() const override { return 8; }    // [3] 0x140129630
     bool              Serialize(void* stream) override;                    // [5] 0x140129520
     Object::External* Reconstruct() override;                              // [6] 0x140037320
@@ -51,9 +51,6 @@ public:
     bool _unknown58;                            // +0x58
     uint8_t _pad59[3];                          // +0x59 never written by the ctor
     uint32_t _flags;                            // +0x5c RawMaterialFlags bitfield (.rsc _flags)
-
-protected:
-    ~RawMaterialDescription() = default;
 };
 
 static_assert(sizeof(RawMaterialDescription) == 0x60, "RawMaterialDescription is 0x60 (create 0x1400372d0 MemAlloc(0x60))");

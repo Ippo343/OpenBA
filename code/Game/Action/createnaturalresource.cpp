@@ -343,13 +343,6 @@ CreateNaturalResource::CreateNaturalResource()
       cellIndex(0),
       _pad34{} {}
 
-// [0] 0x140022240
-Object::Base* CreateNaturalResource::DeletingDtor(unsigned flags) {
-    this->~CreateNaturalResource();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [3] 0x1400c6890
 // [4] 0x1400c6650
 // [9] 0x1400c6610

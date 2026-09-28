@@ -861,17 +861,6 @@ PlantArea::~PlantArea() {
 }
 
 
-// ============================================================
-// PlantArea::ScalarDtor -- 0x14002c4b0
-// Calls dtor body, then conditional free.
-// ============================================================
-// [0] 0x14002c4b0: ~PlantArea, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* PlantArea::DeletingDtor(unsigned flags) {
-    this->~PlantArea();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 
 
 // Ctor 0x1400f4770 (factory variant): `??0Internal`, the Work base fields, the leaf

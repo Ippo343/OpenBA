@@ -27,7 +27,7 @@ class FishingDescription final : public Description {
 public:
     FishingDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x140034500
+    ~FishingDescription() override = default;                              // [0] 0x140034500
     int32_t           GetFileVersion() const override { return 4; }    // [3] 0x14011f200
     bool              Serialize(void* stream) override;                    // [5] 0x14011f170
     Object::External* Reconstruct() override;                              // [6] 0x140034490
@@ -39,9 +39,6 @@ public:
     void* _fish;                                // +0x20 ExternalPtr (fish material)
     uint32_t _u28;                              // +0x28 enum (serialized through the uint door)
     uint32_t _u2c;                              // +0x2c enum (serialized through the uint door)
-
-protected:
-    ~FishingDescription() = default;
 };
 
 static_assert(sizeof(FishingDescription) == 0x30, "FishingDescription is 0x30 (create 0x1400343c0 MemAlloc(0x30))");

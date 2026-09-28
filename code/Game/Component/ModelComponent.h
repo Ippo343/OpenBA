@@ -39,7 +39,8 @@ class ModelComponent final : public Component {
 public:
     ModelComponent();                                             // 0x140124d20
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140035ad0
+    // 0x140124cd0
+    ~ModelComponent() override;                                   // [0] 0x140035ad0
     void Persist(void* stream) override;                          // [3] 0x140124b70
     void Startup() override;                                      // [4] 0x140124ac0
     void OnAdded() override;                                      // [6] 0x140124a30
@@ -51,9 +52,6 @@ public:
     uint8_t  transform[0x1C];     // +0x148 Math::Transform
     uint8_t  _pad164[8];          // +0x164 variantIdx / modelVariant / scale (ctor 0)
     int32_t  modelId;             // +0x16C scene id (ctor -1 = not in scene)
-
-protected:
-    ~ModelComponent();                                            // 0x140124cd0
 };
 
 static_assert(sizeof(ModelComponent) == 0x170, "ModelComponent is 0x170 (create 0x1400358d0)");

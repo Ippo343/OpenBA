@@ -41,7 +41,7 @@ template <typename T, typename Base>
 void CheckShape(bool abstract) {
     CHECK(std::is_polymorphic<T>::value);
     CHECK_EQ(std::is_abstract<T>::value, abstract);
-    CHECK(!std::has_virtual_destructor<T>::value);
+    CHECK(std::has_virtual_destructor<T>::value);
     CHECK((std::is_base_of<Base, T>::value));
     CHECK_EQ(alignof(T), (size_t)8);
 }

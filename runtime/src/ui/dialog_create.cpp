@@ -263,7 +263,7 @@ void** ElementFindElement(void* self, void** out, const void* nameString) {
 // ??0Dialog@UI@@QEAA@XZ 0x180112db0 / ??1Dialog@UI@@UEAA@XZ 0x180112e40: the
 // 6-arg AddController builds a default UI::Dialog on its stack with both
 // bodies INLINED. ENDGAME B.3.9 UI-D: `::new (p) UI::Dialog()` and
-// `DeletingDtor(0)` (the door pair is retired).
+// `~T()` (slot 0, flags 0) (the door pair is retired).
 
 // The two type ids the bodies test against. Retail loads the FIRST DWORD of
 // each class's `_typeInfo` (`MOV EDX,dword ptr [0x1801f9e48]` for
@@ -677,7 +677,7 @@ void DialogInstance::AddController(uint32_t typeId, Object::Base* dataSource,
             walk = F<void*>(walk, EL::kParent);
         } while (walk);
 
-        tmpDlg->DeletingDtor(0);
+        tmpDlg->UI::Dialog::~Dialog();
     }
 
     // ---- phase 3: id 0 means "element only, no controller" ---------------

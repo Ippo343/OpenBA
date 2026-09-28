@@ -60,7 +60,8 @@ public:
     PlantOrchard();                                                 // 0x1400f50b0
     PlantOrchard(void** entityIBP, void* treeType);                 // 0x1400f5140
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002c540
+    // 0x1400f5010: frees the slot array and the BST
+    ~PlantOrchard() override;                                       // [0]  0x14002c540
     void  Persist(void* stream) override;                           // [3]  0x1400f4f50
     int   Execute(void* entityIBP, void* context) override;  // [4]  0x1400f4af0
     int   OnComplete(void* param2, void* param3, int param4) override;  // [6]  0x1400f4a90
@@ -83,9 +84,6 @@ public:
     void*    field_68;           // +0x68: ExternalPtr to the TREE TYPE template chosen in
                                  //        OrchardUI's combo (copied from OrchardComponent+0x60).
                                  //        NOT the OrchardDescription — the old comment misled.
-
-protected:
-    ~PlantOrchard();                                               // 0x1400f5010: frees the slot array and the BST
 };
 
 static_assert(sizeof(PlantOrchard) == 0x70, "PlantOrchard is 0x70 (retail create MemAlloc)");

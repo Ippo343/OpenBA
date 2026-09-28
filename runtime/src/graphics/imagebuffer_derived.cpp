@@ -254,7 +254,7 @@ bool FrameCopyImageBuffer::Serialize(void* stream) {
 
 // slot 7 — ?Destruct@ ... retail 0x18001f160.  `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`
 void FrameCopyImageBuffer::Destruct() {
-    DeletingDtor(0u);                             // flags 0 = destroy, DO NOT free
+    this->~FrameCopyImageBuffer();                             // flags 0 = destroy, DO NOT free
 }
 
 // slot 8 — ?Construct@ ... retail 0x18001f150.
@@ -269,7 +269,7 @@ Object::External* FrameCopyImageBuffer::Construct() {
 // 0 with flags 0, then tail-jump the constructor onto the SAME storage: the
 // device-lost recovery primitive.
 Object::External* FrameCopyImageBuffer::Reconstruct() {
-    DeletingDtor(0u);
+    this->~FrameCopyImageBuffer();
     return ::new (this) FrameCopyImageBuffer();
 }
 
@@ -351,7 +351,7 @@ namespace Graphics {
 // The two restamps and the tail jump to ~ImageBuffer (via the empty
 // ~GeneratedImageBuffer) are the compiler's destructor chain.
 ReflectionImageBuffer::~ReflectionImageBuffer() {
-    if (_depth != nullptr) _depth->DeletingDtor(1u);   // EDX = 1: free it too
+    if (_depth != nullptr) delete _depth;   // retail: slot 0, EDX = 1: free it too
     if (_target != nullptr) {
         RenderBufferPlatformDestruct(_target);
         RenderBufferOperatorDelete(_target);
@@ -385,7 +385,7 @@ int32_t ReflectionImageBuffer::GetFileVersion() const { return 0x1007; }
 // (Both are DEFINE_TYPE's, graphics_type_records.cpp.)
 
 // slot 7 — retail 0x1800224c0, byte-identical to FrameCopy's: slot 0, flags 0.
-void ReflectionImageBuffer::Destruct() { DeletingDtor(0u); }
+void ReflectionImageBuffer::Destruct() { this->~ReflectionImageBuffer(); }
 
 // slot 8 — retail 0x180022450. The ctor is INLINED here (unlike FrameCopy's,
 // which jumps to 0x1800a3d10): placement new of the class. (ENDGAME B.3.9 GFX:
@@ -396,7 +396,7 @@ Object::External* ReflectionImageBuffer::Construct() {
 
 // slot 6 — retail 0x1800223e0. Slot 0 with flags 0, then the inlined ctor.
 Object::External* ReflectionImageBuffer::Reconstruct() {
-    DeletingDtor(0u);
+    this->~ReflectionImageBuffer();
     return ::new (this) ReflectionImageBuffer();
 }
 
@@ -465,7 +465,7 @@ bool ReflectionImageBuffer::Serialize(void* stream) {
 
         if (s.GetDirection() == IO::kReading) {
             // --- the depth target ---------------------------------------------
-            if (_depth != nullptr) _depth->DeletingDtor(1u);
+            if (_depth != nullptr) delete _depth;
 
             void* const img = ImageBufferOperatorNew(0x68);
             if (img != nullptr) ImageBufferCtor(img);

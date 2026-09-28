@@ -730,7 +730,7 @@ void Element::ReleaseFields() {
     if (_border != nullptr) {
         void* border = _border;
         if (border != nullptr)             // retail's second, redundant test
-            static_cast<Element*>(border)->DeletingDtor(1u);
+            delete static_cast<Element*>(border);
         _border = nullptr;
     }
 

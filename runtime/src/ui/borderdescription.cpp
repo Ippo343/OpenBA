@@ -66,11 +66,11 @@ Object::External* BorderDescription::Construct() {
 // again, with NO null test — retail derefs `this` to reach the vtable before it
 // could test it, so a null here faults in retail too.
 Object::External* BorderDescription::Reconstruct() {
-    DeletingDtor(0);                                            // 180040b6e
+    this->~BorderDescription();                                            // 180040b6e
     return ::new (this) BorderDescription();                    // 180040b78 JMP
 }
 // 0x180040b90: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-void BorderDescription::Destruct() { DeletingDtor(0); }
+void BorderDescription::Destruct() { this->~BorderDescription(); }
 
 // ??1BorderDescription@UI@@UEAA@XZ   0x18010fb20 — retail's body, moved here
 // from the retired `RtUi_BorderDescription_Dtor` door (ENDGAME B.3.9 UI-A):
@@ -130,7 +130,7 @@ bool BorderDescription::Serialize(void* streamv) {
     for (int i = 0; i < 9; ++i)                             // 18010fe7d .. 18010ff0b
         RtAddr<FieldSerFn>(0x1800c9930ull)(&_spriteName[i], &ser);
 
-    if (rw != nullptr) rw->DeletingDtor(1);                 // 18010ff23
+    if (rw != nullptr) delete rw;                 // 18010ff23
     return true;                                            // MOV AL,1
 }
 

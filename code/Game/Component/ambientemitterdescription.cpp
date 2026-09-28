@@ -50,13 +50,6 @@ AmbientEmitterDescription::~AmbientEmitterDescription() {
     _emitterCap = 0;
 }
 
-// [0] 0x140001660: ~AmbientEmitterDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* AmbientEmitterDescription::DeletingDtor(unsigned flags) {
-    this->~AmbientEmitterDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x1400431b0: stream order as retail.
 bool AmbientEmitterDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_Serialize2) return true;   // standalone: the door is unwired
@@ -99,15 +92,15 @@ bool AmbientEmitterDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x1400015e0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x1400015e0: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* AmbientEmitterDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~AmbientEmitterDescription();
     return new (static_cast<void*>(this)) AmbientEmitterDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void AmbientEmitterDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void AmbientEmitterDescription::Destruct() { this->~AmbientEmitterDescription(); }
 
 // [8] 0x140001650: AmbientEmitterComponent's type id through the hidden return slot.
 Object::Type* AmbientEmitterDescription::GetComponentType(Object::Type* ret) const {

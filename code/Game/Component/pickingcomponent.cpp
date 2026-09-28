@@ -309,13 +309,6 @@ void PickingComponent::OnRemove() {
 // body as slot 6) — B38 D9: the tree's table left it inert; kept inert here.
 void PickingComponent::Slot11() {}
 
-// [0] 0x140036fa0: ~PickingComponent (0x140128c40: restamp + ~Internal), MemFree on &1.
-Object::Base* PickingComponent::DeletingDtor(unsigned flags) {
-    this->~PickingComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140036da0: MemAlloc(0x38, 8), then the ctor.
 void* PickingComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(PickingComponent), 8);

@@ -145,14 +145,14 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
         // Destroy MaterialInstance at +0x30 (scalar deleting destructor, vtable[0])
         void* matInst = *(void**)(entryBase + 0x30);
         if (matInst) {
-            reinterpret_cast<Graphics::MaterialInstance*>(matInst)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
+            delete reinterpret_cast<Graphics::MaterialInstance*>(matInst);   // B.3.x bridge (slot 0, free)
         }
 
         // Destroy SpriteSheet at +0x38 if materialInstance was non-null
         if (*(void**)(entryBase + 0x30) != nullptr) {
             void* sheet = *(void**)(entryBase + 0x38);
             if (sheet) {
-                reinterpret_cast<UI::SpriteSheet*>(sheet)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
+                delete reinterpret_cast<UI::SpriteSheet*>(sheet);   // B.3.x bridge (slot 0, free)
             }
         }
     }
@@ -1229,13 +1229,6 @@ SaveLoadDialog::SaveLoadDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
 SaveLoadDialog::SaveLoadDialog() {
     InitFields(0, nullptr, nullptr);
     *(uint32_t*)((uintptr_t)this + 0xC4) = 0;   // saveCount
-}
-
-// [0] 0x1400211b0: ~SaveLoadDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
-Object::Base* SaveLoadDialog::DeletingDtor(unsigned flags) {
-    this->~SaveLoadDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
 }
 
 // create 0x140021160: MemAlloc(0x160, 8), then the ctor.

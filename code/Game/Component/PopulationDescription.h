@@ -29,7 +29,7 @@ class PopulationDescription final : public Description {
 public:
     PopulationDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x14000b030
+    ~PopulationDescription() override = default;                           // [0] 0x14000b030
     int32_t           GetFileVersion() const override { return 3; }    // [3] 0x1400548e0
     bool              Serialize(void* stream) override;                    // [5] 0x1400547e0
     Object::External* Reconstruct() override;                              // [6] 0x14000b000
@@ -51,9 +51,6 @@ public:
     bool _b48;                                  // +0x48
     uint8_t _pad49[7];                          // +0x49 never written by the ctor
     void* _ref50;                               // +0x50 ExternalPtr (a raw pointer)
-
-protected:
-    ~PopulationDescription() = default;
 };
 
 static_assert(sizeof(PopulationDescription) == 0x58, "PopulationDescription is 0x58 (create 0x14000afb0 MemAlloc(0x58))");

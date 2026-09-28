@@ -862,16 +862,6 @@ TradeWork::~TradeWork() {
 }
 
 
-// ============================================================
-// TradeWork::ScalarDtor (0x14002c660)
-// ============================================================
-// [0] 0x14002c660: ~TradeWork, then MemFree on &1 (the compiler chains the base dtors).
-Object::Base* TradeWork::DeletingDtor(unsigned flags) {
-    this->~TradeWork();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,

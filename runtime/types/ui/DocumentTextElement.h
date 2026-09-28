@@ -218,21 +218,11 @@ public:
     }
 
     // ---- the twelve slots, in retail order --------------------------------
-    // [0] 0x18003c650 -- MSVC's VECTOR deleting destructor, both arms exactly as the
-    // retired RT_DELDTOR row ran them (`MOV EDX,0x1c8` = the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<DocumentTextElement*>(self + static_cast<int64_t>(i) * 0x1c8)->~DocumentTextElement();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~DocumentTextElement();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // [0] 0x18003c650 -- MSVC's VECTOR deleting destructor (retail; here the
+    // virtual destructor, B3X W1) (`MOV EDX,0x1c8` = the element size).
+    // ??1 0x1800cf320 -- VIRTUAL (B3X W1); retail's body (documenttextelement.cpp),
+    // the compiler chains ~Element (retail's tail JMP).
+    ~DocumentTextElement() override;
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
     // retail: TypeName 0x18003be50, Type 0x18003be30, _TypeName 0x18003be10, _ParentTypeName 0x18003be20
@@ -272,11 +262,6 @@ public:
     void    EndLink();                                            // 0x1800cde00
     void    EndRow();                                             // 0x1800cddb0  not ported
     bool    IsWhiteSpace(char c) const;                           // 0x1800cf030  not ported
-
-protected:
-    // ??1 0x1800cf320 -- NON-VIRTUAL; retail's body (documenttextelement.cpp),
-    // the compiler chains ~Element (retail's tail JMP).
-    ~DocumentTextElement();
 
 private:
 

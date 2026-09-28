@@ -37,7 +37,8 @@ class TutorialSetupDialog final : public TutorialSetup {
 public:
     TutorialSetupDialog();                                         // 0x1400e2cc0
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140028620
+    // 0x1400e2bf0
+    ~TutorialSetupDialog() override;                               // [0] 0x140028620
     int32_t           GetFileVersion() const override { return 6; }// [3] 0x1400e2be0
     bool              Serialize(void* stream) override;            // [5] 0x1400e2a60
     Object::External* Reconstruct() override;                      // [6] 0x140028600
@@ -46,9 +47,6 @@ public:
     void              Update(void* time) override;                 // [9] 0x1400e24c0
     void              End() override;                              // [10] 0x1400e2460
     virtual Object::External* Construct();                         // [11] 0x1400285f0
-
-protected:
-    ~TutorialSetupDialog();                                        // 0x1400e2bf0
 
 public:
     // Collection::Array<System::String>: element paths ("Dialog.Element") left

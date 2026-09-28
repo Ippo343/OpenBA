@@ -41,7 +41,8 @@ public:
     PastureWork();                                                  // (Work_GenericCtor shape)
     explicit PastureWork(void* entityIBP);                          // 0x1400f2d80
 
-    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002bf70
+    // 0x1400f2ce0: frees the +0x48 citizen BST
+    ~PastureWork() override;                                        // [0]  0x14002bf70
     void  Persist(void* stream) override;                           // [3]  0x1400f2c60
     int   Execute(void* entityIBP, void* context) override;  // [4]  0x1400f2370
     int   OnComplete(void* param2, void* arg2, int arg3) override;  // [6]  0x1400f2350
@@ -55,9 +56,6 @@ public:
     void*    _field48;           // +0x48: zeroed
     uint32_t _field50;           // +0x50: zeroed
     uint8_t  _pad54[4];          // +0x54: padding
-
-protected:
-    ~PastureWork();                                               // 0x1400f2ce0: frees the +0x48 citizen BST
 };
 
 static_assert(sizeof(PastureWork) == 0x58, "PastureWork is 0x58 (retail create MemAlloc)");

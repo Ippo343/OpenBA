@@ -22,7 +22,7 @@ class CompleteRoad final : public Action {
 public:
     CompleteRoad();                                                   // create 0x140021ec0
     CompleteRoad(uint32_t roadType, uint32_t tileIndex, uint8_t direction);   // 0x1400c59d0
-    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x140021f30
+    ~CompleteRoad() override = default;                        // [0] 0x140021f30
     void Persist(void* stream) override;                       // [3] 0x1400c5880
     int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c5850
 
@@ -31,9 +31,6 @@ public:
     int32_t   roadType;          // +0x24 road type id
     uint8_t   roadDirection;     // +0x28 direction
     uint8_t   _pad29[7];         // +0x29 padding
-
-protected:
-    ~CompleteRoad() = default;
 };
 
 static_assert(sizeof(CompleteRoad) == 0x30, "CompleteRoad is 0x30 (create 0x140021ec0 MemAlloc)");

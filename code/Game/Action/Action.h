@@ -44,7 +44,9 @@ class Action : public Object::Internal {
 
 public:
     // ---- the 10 slots, in retail order -------------------------------------
-    Object::Base* DeletingDtor(unsigned flags) override;         // [0] 0x140021c90
+    // The retail dtor's non-vptr work: release +0x10. `~Internal` is chained by
+    // the compiler.
+    ~Action() override { if (_entity) _entity.DeletePtr(); }         // [0] 0x140021c90
     // [1]/[2]: the abstract base answers its own registration by name (B38 D4,
     // as the pilot's Component); every leaf overrides both.
     // [1] TypeName 0x140021c80 and [2] Type 0x140021c70: DECLARE_EXE_TYPE (retail `MOV RAX,[ti+8]` / `MOV EAX,[ti]`).
@@ -73,9 +75,6 @@ protected:
     // The inlined retail base ctor: `Internal()`, then +0x10 = 0, +0x18 = 0.
     // The vptr store is the compiler's.
     Action() : Object::Internal(), _entity(), _status(false) {}
-    // The retail dtor's non-vptr work: release +0x10. `~Internal` is chained by
-    // the compiler.
-    ~Action() { if (_entity) _entity.DeletePtr(); }
 };
 
 static_assert(sizeof(Action) == 0x20, "Action is 0x20 bytes (0x10 Internal + 0x10)");

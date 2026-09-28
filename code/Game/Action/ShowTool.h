@@ -22,7 +22,7 @@ class ShowTool final : public Action {
 public:
     ShowTool();                                                   // create 0x1400013b0
     ShowTool(void* entity, int toolId);   // 0x140042890
-    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x140001420
+    ~ShowTool() override = default;                            // [0] 0x140001420
     void Persist(void* stream) override;                       // [3] 0x140042780
     int  AbstractImpl(void* actionStack) override;             // [4] 0x140042710
     void Exit(void* actionStack) override;                     // [7] 0x140042700 own `RET 0` (same bytes as the base body)
@@ -33,9 +33,6 @@ public:
     void*     _field20;          // +0x20 entity IBP
     int32_t   _field28;          // +0x28 tool id (-1 = the carried resource)
     uint8_t   _pad2C[4];         // +0x2C padding
-
-protected:
-    ~ShowTool() = default;
 };
 
 static_assert(sizeof(ShowTool) == 0x30, "ShowTool is 0x30 (create 0x1400013b0 MemAlloc)");

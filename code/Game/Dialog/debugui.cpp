@@ -1573,14 +1573,6 @@ void DebugUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t 
     DebugUI_Slot9(this, reinterpret_cast<uint64_t>(element), a, b);
 }
 
-// [0] 0x140010f10: ~DebugUI (restamp, ~DialogController, ~Internal — the
-// compiler's chain), MemFree on &1.
-Object::Base* DebugUI::DeletingDtor(unsigned flags) {
-    this->~DebugUI();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140010ec0: MemAlloc(0x130, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
 void* DebugUI::CreateNewObject() {

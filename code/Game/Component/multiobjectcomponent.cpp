@@ -179,12 +179,6 @@ MultiObjectComponent::MultiObjectComponent()
     OrFlagsInCtor(0x2);
 }
 
-// [0] 0x1400360c0: ~MultiObjectComponent (0x140125a00), MemFree on &1.
-Object::Base* MultiObjectComponent::DeletingDtor(unsigned flags) {
-    this->~MultiObjectComponent();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
 // 0x140125a00: MemFree(+0x48), +0x48 = +0x50 = 0, then the restamps and ~Internal
 // (the compiler chain).
 MultiObjectComponent::~MultiObjectComponent() {

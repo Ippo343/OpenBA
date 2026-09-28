@@ -23,7 +23,7 @@
 //
 // ENDGAME B.3 step 9 (block UI-B, B39_RULES D1/D2) -- the paragraph below is
 // HISTORY: the class is now CONCRETE. A real public ctor (retail's stores), its
-// own slot 0 (the vector deleting dtor), a protected non-virtual ~TableDescription holding
+// own slot 0 (the vector deleting dtor), a virtual ~TableDescription holding
 // the retired ??1 door's body, and the factory pair as the class's own statics;
 // every live one wears the COMPILER's table. The minted `??_7TableDescription@UI@@6B@`,
 // its RT_DELDTOR row 0x180079210 and the ctor / dtor / slot doors are retired
@@ -80,21 +80,12 @@ public:
         _unknown90   = nullptr;
     }
 
-    // [0] 0x180079210 -- MSVC's VECTOR deleting destructor, both arms exactly as the
-    // retired RT_DELDTOR row ran them (`MOV EDX,0x98` = the element size).
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
-            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<TableDescription*>(self + static_cast<int64_t>(i) * 0x98)->~TableDescription();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~TableDescription();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // [0] 0x180079210 -- MSVC's VECTOR deleting destructor (retail; here the
+    // virtual destructor, B3X W1) (`MOV EDX,0x98` = the element size).
+    // `??1TableDescription@UI@@UEAA@XZ` (0x18011e6f0): VIRTUAL (the normal-virtual
+    // cutover, B3X W1). Retail's body is in tabledescription.cpp;
+    // the compiler chains the base's.
+    ~TableDescription() override;
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
     // retail: TypeName 0x180078ed0, Type 0x180078eb0, _TypeName 0x180078e90, _ParentTypeName 0x180078ea0
@@ -112,12 +103,6 @@ public:
     // ---- exported, not ported: declared, deliberately undefined ------------
     TableDescription(const TableDescription& src);                // 0x180079090
     TableDescription& operator=(const TableDescription& src);     // 0x180079130
-
-protected:
-    // `??1TableDescription@UI@@UEAA@XZ` (0x18011e6f0): NON-VIRTUAL (no virtual dtor until
-    // the normal-virtual cutover). Retail's body is in tabledescription.cpp;
-    // the compiler chains the base's.
-    ~TableDescription();
 
 private:
 

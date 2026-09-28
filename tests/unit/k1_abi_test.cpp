@@ -115,7 +115,7 @@ int CheckDescriptionLeaf(size_t size) {
     bad += alignof(D) != 8;
     bad += !std::is_polymorphic<D>::value;
     bad += std::is_abstract<D>::value;
-    bad += std::has_virtual_destructor<D>::value;
+    bad += !std::has_virtual_destructor<D>::value;
     bad += !(std::is_base_of<Description, D>::value);
     bad += !slot_check::DtorSlotOk<D>();
     bad += !slot_check::SlotOk(&D::TypeName,         0x08/8);
@@ -248,7 +248,7 @@ int CheckExternalLeaf(size_t size) {
     bad += alignof(D) != 8;
     bad += !std::is_polymorphic<D>::value;
     bad += std::is_abstract<D>::value;
-    bad += std::has_virtual_destructor<D>::value;
+    bad += !std::has_virtual_destructor<D>::value;
     bad += std::is_base_of<Description, D>::value;
     bad += !(std::is_base_of<Object::External, D>::value);
     bad += !slot_check::DtorSlotOk<D>();
@@ -277,7 +277,7 @@ UNIT_TEST(k1_component_entity) {
     CHECK_EQ(alignof(E), (size_t)8);
     CHECK(std::is_polymorphic<E>::value);
     CHECK(!std::is_abstract<E>::value);
-    CHECK(!std::has_virtual_destructor<E>::value);
+    CHECK(std::has_virtual_destructor<E>::value);
     CHECK((std::is_base_of<Object::Internal, E>::value));
     CHECK_DTOR_SLOT(E);
     CHECK_SLOT(E, TypeName, 0x08/8);

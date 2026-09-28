@@ -15,7 +15,7 @@
 //   [2] 0x140010cb0 Type                   [3] 0x14005fbd0 GetFileVersion -> 1
 //   [4] External::Compile (IMPORT, inherited — not declared)
 //   [5] 0x14005fb70 Serialize   [6] 0x140010d80 Reconstruct
-//   [7] 0x140001640 Destruct (= DeletingDtor(0))   [8] 0x140010d30 Construct
+//   [7] 0x140001640 Destruct (= `~T()` (slot 0, flags 0))   [8] 0x140010d30 Construct
 // ============================================================================
 
 #include <cstdint>
@@ -29,7 +29,7 @@ class ControlUIConfig final : public UI::DialogControllerConfig {
 public:
     ControlUIConfig() = default;                                   // 0x140010cd0 (inlined)
 
-    Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140010dd0
+    ~ControlUIConfig() override = default;                         // [0] 0x140010dd0
     int32_t           GetFileVersion() const override { return 1; }// [3] 0x14005fbd0
     bool              Serialize(void* stream) override;            // [5] 0x14005fb70
     Object::External* Reconstruct() override;                      // [6] 0x140010d80
@@ -40,9 +40,6 @@ public:
     // work 2, split 1, empty 0). +0x24 the TARGET component's Object::Type.
     int32_t  _command       = 0;                                   // +0x20
     uint32_t _componentType = 0;                                   // +0x24
-
-protected:
-    ~ControlUIConfig() = default;
 };
 
 static_assert(sizeof(ControlUIConfig) == 0x28, "ControlUIConfig is 0x28 (create 0x140010cd0 MemAlloc(0x28))");

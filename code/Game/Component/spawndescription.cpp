@@ -54,13 +54,6 @@ SpawnDescription::~SpawnDescription() {
     _entries = nullptr;
 }
 
-// [0] 0x14000c2e0: ~SpawnDescription -> ~Description -> ~External, MemFree on &1.
-Object::Base* SpawnDescription::DeletingDtor(unsigned flags) {
-    this->~SpawnDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x1400560b0: stream order as retail.
 bool SpawnDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
@@ -85,15 +78,15 @@ bool SpawnDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x14000c280: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x14000c280: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* SpawnDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~SpawnDescription();
     return new (static_cast<void*>(this)) SpawnDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void SpawnDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void SpawnDescription::Destruct() { this->~SpawnDescription(); }
 
 // [8] 0x14000c2d0: SpawnComponent's type id through the hidden return slot.
 Object::Type* SpawnDescription::GetComponentType(Object::Type* ret) const {

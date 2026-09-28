@@ -71,10 +71,10 @@ Object::External* RadioDescription::Construct() {
 // 0x1800477f0: slot 0 with flag 0 through the object's own table, then the
 // ctor (tail jump at 0x180047808). No null test.
 Object::External* RadioDescription::Reconstruct() {
-    DeletingDtor(0);                                           // 1800477fe
+    this->~RadioDescription();                                           // 1800477fe
     return ::new (this) RadioDescription();
 }
-void RadioDescription::Destruct() { DeletingDtor(0); }         // 0x180047820
+void RadioDescription::Destruct() { this->~RadioDescription(); }         // 0x180047820
 
 // ============================================================================
 // ?Serialize@RadioDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800d5a80
@@ -98,7 +98,7 @@ bool RadioDescription::Serialize(void* streamv) {
 
     rw->SerializeInt(_activeRadio, nullptr);
 
-    if (rw != nullptr) rw->DeletingDtor(1);                    // 1800d5aed
+    if (rw != nullptr) delete rw;                    // 1800d5aed
     return true;
 }
 

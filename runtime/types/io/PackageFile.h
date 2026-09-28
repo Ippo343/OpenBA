@@ -180,19 +180,11 @@ public:
     // `this - 8` on `flags & 1` and returns it; otherwise ~PackageFile, then
     // 0x1800251e0 (PackageFile's operator delete: the locked MemFree) on
     // `flags & 1`. Nothing `new[]`s a PackageFile.
-    Object::Base* DeletingDtor(unsigned flags) override {
-        if (flags & 2u) {
-            uint8_t* const self  = reinterpret_cast<uint8_t*>(this);
-            const int32_t count  = *reinterpret_cast<const int32_t*>(self - 8);
-            for (int32_t i = count; --i >= 0;)
-                reinterpret_cast<PackageFile*>(self + static_cast<int64_t>(i) * 0xf0)->~PackageFile();
-            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
-            return reinterpret_cast<Object::Base*>(self - 8);
-        }
-        this->~PackageFile();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ??1PackageFile@IO@@UEAA@XZ 0x1800b4540 — ENDGAME B.3.9 IO: retail's
+    // body, moved from the retired door into package_file_dtor.cpp. Every
+    // member above is a POD, so the compiler adds nothing but the tail into
+    // ~External (retail's JMP at 0x1800b4679). Virtual (B3X W1).
+    ~PackageFile() override;
 
     // [1] 0x180025150 TypeName / [2] 0x180025130 Type, the static TypeId
     // 0x180025140, `_TypeName` / `_ParentTypeName` and the factory pair
@@ -384,13 +376,6 @@ public:
     // out-of-order sequence (+0x00, +0x08, +0x10, +0x20, +0x28, and only then
     // +0x18 = -1, the Win32 HANDLE).
     RtIO::FileInfo _file;    // +0xc0 .. +0xef
-
-protected:
-    // ??1PackageFile@IO@@UEAA@XZ 0x1800b4540 — ENDGAME B.3.9 IO: retail's
-    // body, moved from the retired door into package_file_dtor.cpp. Every
-    // member above is a POD, so the compiler adds nothing but the tail into
-    // ~External (retail's JMP at 0x1800b4679). NON-virtual (Decision 2).
-    ~PackageFile();
 };
 
 // ---- the layout pins ------------------------------------------------------

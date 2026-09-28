@@ -23,13 +23,6 @@
 // ctor 0x1400d78f0: Goal(), the vptr, targetPop = 100.
 PopulationGoal::PopulationGoal() : targetPop(100), _pad34{} {}
 
-// [0] 0x140026000: ~PopulationGoal (empty) -> ~Goal -> ~External, MemFree on &1.
-Object::Base* PopulationGoal::DeletingDtor(unsigned flags) {
-    this->~PopulationGoal();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // ============================================================
 // PopulationGoal::Serialize (vtable +0x28, 0x1400d7870)
 // ============================================================
@@ -54,13 +47,13 @@ bool PopulationGoal::Serialize(void* stream) {
 // ============================================================
 // PopulationGoal::Reconstruct [6] 0x140025fb0 / Destruct [7] 0x140001640
 // ============================================================
-// retail 0x140025fb0: vtable[0](this, 0) (DeletingDtor(0): destroy in place),
+// retail 0x140025fb0: vtable[0](this, 0) (`~T()` (slot 0, flags 0): destroy in place),
 // then the ctor on `this`.
 Object::External* PopulationGoal::Reconstruct() {
-    DeletingDtor(0);
+    this->~PopulationGoal();
     return ::new (static_cast<void*>(this)) PopulationGoal();
 }
-void PopulationGoal::Destruct() { DeletingDtor(0); }
+void PopulationGoal::Destruct() { this->~PopulationGoal(); }
 
 // ============================================================
 // PopulationGoal::CheckGoalState (vtable +0x40, 0x1400d7820)

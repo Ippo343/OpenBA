@@ -32,7 +32,8 @@ class NaturalResourceComponent final : public Component {
 public:
     NaturalResourceComponent();                                   // 0x140125dc0
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x1400366b0
+    // 0x140125d80, no own work
+    ~NaturalResourceComponent() override = default;               // [0] 0x1400366b0
     void Persist(void* stream) override;                          // [3] 0x140125cf0
     void Tick(void* time) override;                               // [8] 0x140125c40 PORT GAP
 
@@ -40,9 +41,6 @@ public:
     float    resourceScale; // +0x28 (ctor 1.0f)
     uint16_t resourceFlags; // +0x2C (ctor 0x100: +0x2c mature 0, +0x2d harvestable 1)
     uint8_t  _pad2E[2];     // +0x2E
-
-protected:
-    ~NaturalResourceComponent() = default;                        // 0x140125d80, no own work
 };
 
 static_assert(sizeof(NaturalResourceComponent) == 0x30, "NaturalResourceComponent is 0x30 (create 0x140036550)");

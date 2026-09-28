@@ -31,7 +31,8 @@ class FloorComponent final : public Component {
 public:
     FloorComponent();                                             // 0x14011f600
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x1400347f0
+    // 0x14011f5c0
+    ~FloorComponent() override = default;                         // [0]  0x1400347f0
     void Persist(void* stream) override;                          // [3]  0x14011f560
     void OnAdded() override;                                      // [6]  0x14011f340
     void OnRemove() override;                                     // [7]  0x14011f2a0
@@ -42,9 +43,6 @@ public:
     uint8_t  floorFlag;    // +0x28 "a floor is placed" (the one persisted field; ctor 0)
     uint8_t  _pad29[3];    // +0x29
     int32_t  floorId;      // +0x2C picking-mesh id (ctor -1 = none)
-
-protected:
-    ~FloorComponent() = default;                                  // 0x14011f5c0
 };
 
 static_assert(sizeof(FloorComponent) == 0x30, "FloorComponent is 0x30 (create 0x140034600)");

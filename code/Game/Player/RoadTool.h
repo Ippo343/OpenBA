@@ -35,7 +35,8 @@ class RoadTool final : public DragTool {
 public:
     RoadTool() : roadDesc(nullptr), modifierFlag(0), _pad41{} {}           // 0x1401057d0
 
-    Object::Base* DeletingDtor(unsigned flags) override;                   // [0]  0x14002e8c0
+    // 0x140105780: no body
+    ~RoadTool() override = default;                                        // [0]  0x14002e8c0
     void Startup() override;                                               // [4]  0x1401056e0
     void Shutdown() override {}                                            // [5]  0x1401056d0 RET
     char OnKey(char active) override;                                      // [6]  0x140105690
@@ -48,9 +49,6 @@ public:
     void*   roadDesc;       // +0x38 CreateRoadDescription* — set by Startup
     uint8_t modifierFlag;   // +0x40 0 = new road, 1 = upgrade (OnKey, KeyMap 0x16)
     uint8_t _pad41[7];      // +0x41 never written by retail (zeroed here)
-
-protected:
-    ~RoadTool() = default;                                                 // 0x140105780: no body
 };
 
 namespace RoadToolAddr {

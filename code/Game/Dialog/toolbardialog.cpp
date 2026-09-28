@@ -1873,13 +1873,6 @@ ToolbarDialog::~ToolbarDialog() {
     }
 }
 
-// [0] 0x140021760: the body above, MemFree on &1.
-Object::Base* ToolbarDialog::DeletingDtor(unsigned flags) {
-    this->~ToolbarDialog();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // create 0x140021710: MemAlloc(0x108, 8), then the default ctor.
 void* ToolbarDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ToolbarDialog), 8);

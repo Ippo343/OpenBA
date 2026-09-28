@@ -29,7 +29,7 @@ class SelectDescription final : public Description {
 public:
     SelectDescription();
 
-    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x14000bcc0
+    ~SelectDescription() override = default;                               // [0] 0x14000bcc0
     int32_t           GetFileVersion() const override { return 1; }    // [3] 0x1400556c0
     bool              Serialize(void* stream) override;                    // [5] 0x140055630
     Object::External* Reconstruct() override;                              // [6] 0x14000bc60
@@ -44,9 +44,6 @@ public:
     System::String _s38;                        // +0x38 String
     uint32_t _u40;                              // +0x40 enum (serialized through the uint door)
     uint8_t _pad44[4];                          // +0x44 never written by the ctor
-
-protected:
-    ~SelectDescription() = default;
 };
 
 static_assert(sizeof(SelectDescription) == 0x48, "SelectDescription is 0x48 (create 0x14000bb90 MemAlloc(0x48))");

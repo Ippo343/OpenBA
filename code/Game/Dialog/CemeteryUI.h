@@ -23,17 +23,14 @@ class CemeteryUI final : public UI::DialogController {
 public:
     CemeteryUI() = default;                              // 0x140010900 (ctor inlined in the factory)
 
-    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x1400109b0
+    // 0x1400109b0 minus the free. The compiler chains ~DialogController (and so
+    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
+    ~CemeteryUI() override = default;                             // [0] 0x1400109b0
     void OnCreated() override;   // [4] 0x14005f090
     void OnUpdateLayout() override;   // [7] 0x14005ef50
 
     // ---- fields (the Panels.h POD's names, kept for the bodies) --------
     uint64_t data30 = 0;           // +0x30: zeroed
-
-protected:
-    // 0x1400109b0 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    ~CemeteryUI() = default;
 };
 
 static_assert(sizeof(CemeteryUI) == 0x38, "CemeteryUI is 0x38 (create 0x140010900 MemAlloc(0x38))");

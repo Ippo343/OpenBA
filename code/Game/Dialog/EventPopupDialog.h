@@ -30,15 +30,12 @@ public:
                      Object::InternalPtr<UI::DialogInstance> parent,
                      int32_t eventIndex);                           // 0x140068e30 family
 
-    Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x1400119b0
+    ~EventPopupDialog() override = default;                        // [0] 0x1400119b0
     void OnOpened() override;                                      // [4] 0x140068c20
     // [5] / [6] / [7]: DialogInstance's bodies, inherited (B38 D3.1).
     void OnElementEvent(Object::InternalPtr<UI::Element>* element,
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x140068bd0
-
-protected:
-    ~EventPopupDialog() = default;
 
 public:
     int32_t eventIndex;                                            // +0xb8 event-log index

@@ -424,7 +424,7 @@ void Impl_b930(int64_t self) {
     // Release the previous EdgeMesh (vtable slot 0 = scalar deleting dtor, arg 1 = free).
     void** oldMesh = *reinterpret_cast<void***>(self + 0xf8);
     if (oldMesh) {
-        reinterpret_cast<Graphics::EdgeMesh*>(oldMesh)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
+        delete reinterpret_cast<Graphics::EdgeMesh*>(oldMesh);   // B.3.x bridge (slot 0, free)
         *reinterpret_cast<void**>(self + 0xf8) = nullptr;
     }
 
@@ -532,7 +532,7 @@ void Impl_c4a0(int64_t self) {
         void** m = *reinterpret_cast<void***>(self + 0xf8);
         *reinterpret_cast<uint32_t*>(self + 0x120) = 0xffffffff;
         if (m) {
-            reinterpret_cast<Graphics::EdgeMesh*>(m)->DeletingDtor(1);   // B.3.x bridge (slot 0, free)
+            delete reinterpret_cast<Graphics::EdgeMesh*>(m);   // B.3.x bridge (slot 0, free)
             *reinterpret_cast<void**>(self + 0xf8) = nullptr;
         }
     }

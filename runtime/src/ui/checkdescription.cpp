@@ -67,10 +67,10 @@ Object::External* CheckDescription::Construct() {
 }
 // 0x180048850: slot 0 with flag 0, then the same construction, NO null test.
 Object::External* CheckDescription::Reconstruct() {
-    DeletingDtor(0);                                           // 180048867
+    this->~CheckDescription();                                           // 180048867
     return ::new (this) CheckDescription();                    // 180048871..18004888c
 }
-void CheckDescription::Destruct() { DeletingDtor(0); }
+void CheckDescription::Destruct() { this->~CheckDescription(); }
 
 // ============================================================================
 // ?Serialize@CheckDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x180111930
@@ -89,7 +89,7 @@ bool CheckDescription::Serialize(void* streamv) {
     using FieldSerFn = void (*)(void*, Serializer*);
     RtAddr<FieldSerFn>(0x180038f90ull)(&_checkDesc, &ser); // 18011198b
 
-    if (rw != nullptr) rw->DeletingDtor(1);                // 1801119a3
+    if (rw != nullptr) delete rw;                // 1801119a3
     return true;
 }
 

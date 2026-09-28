@@ -78,13 +78,6 @@ EnvironmentDescription::~EnvironmentDescription() {
     _weatherCap = 0;
 }
 
-// [0] 0x140019190: ~EnvironmentDescription -> ~External, MemFree on &1.
-Object::Base* EnvironmentDescription::DeletingDtor(unsigned flags) {
-    this->~EnvironmentDescription();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-
 // [5] 0x140094040.
 bool EnvironmentDescription::Serialize(void* stream) {
     // standalone: the two weather doors are unwired (see the banner).
@@ -126,15 +119,15 @@ bool EnvironmentDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140019170: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// [6] 0x140019170: retail destroys and rebuilds in place: a virtual `this->~T()` (retail: slot 0, flags 0),
 // then the ctor again on `this` (D9 #10).
 Object::External* EnvironmentDescription::Reconstruct() {
-    DeletingDtor(0);
+    this->~EnvironmentDescription();
     return new (static_cast<void*>(this)) EnvironmentDescription();
 }
 
-// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
-void EnvironmentDescription::Destruct() { DeletingDtor(0); }
+// [7] 0x140001640: retail's shared body, a virtual `this->~T()` (retail: slot 0, flags 0) (D9 #10).
+void EnvironmentDescription::Destruct() { this->~EnvironmentDescription(); }
 
 // [8] 0x140019160: placement-new on `this` (folded with createInPlace). The
 // hand-built table already held createInPlace here.

@@ -27,7 +27,8 @@ class WorldGeometry final : public Graphics::Geometry {
 public:
     WorldGeometry();                                                  // 0x1400b00e0
 
-    Graphics::Geometry* DeletingDtor(unsigned flags) override;        // [0] 0x14001ecc0
+    // body 0x1400aed50
+    ~WorldGeometry() override;                                        // [0] 0x14001ecc0
     void Update(const System::Time& time) override;                   // [1] 0x1400aed40
     void Draw(Video::Context& context, const Graphics::Camera& camera,
               Graphics::ExternalPtrHandle material,
@@ -39,9 +40,6 @@ public:
     // also reached by address through the Reimpl_GeometryChunkUpdate door).
     void RebuildDirtyChunks();
 
-
-protected:
-    ~WorldGeometry();                                                 // body 0x1400aed50
 
 public:
     int32_t  _gridSize;           // +0xC0  heightmap edge (cells)

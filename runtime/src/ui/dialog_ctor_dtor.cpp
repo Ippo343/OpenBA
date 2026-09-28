@@ -190,7 +190,7 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 // are the compiler's); the destructor is `UI::Dialog::~Dialog()` below, which
 // the retired `RtUiDialog_Dtor` door ran by hand. Their callers -- the factory
 // pair, Construct/Reconstruct and the four stack temporaries retail inlines --
-// spell `::new (p) UI::Dialog()` and `DeletingDtor(0)`. With the doors go the
+// spell `::new (p) UI::Dialog()` and `~T()` (slot 0, flags 0). With the doors go the
 // `[DLG2] FIRST LIVE CALL` lines.
 // ============================================================================
 namespace {
