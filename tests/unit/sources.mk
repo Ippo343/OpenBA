@@ -317,3 +317,9 @@ UNIT_TREE_SRCS += runtime/src/graphics/graphics_type_records.cpp
 # a deleting destructor that calls one of these; registry-free, and std::free
 # under -DBANISHED_UNIT_TEST.
 UNIT_TREE_SRCS += runtime/src/object/root_operator_delete.cpp
+# B3R W0-A0: alloc_door.cpp now answers System::MemoryAllocator::MemAlloc / MemFree
+# directly, and tests/unit/alloc_door_test.cpp drives the allocator's instrument
+# seat through them, so the allocator's two translation units link here. With a
+# hook in the seat the statics never touch `_singleton`; nothing else in the
+# suite calls them (array.cpp / linkedlist.cpp keep their malloc seams).
+UNIT_TREE_SRCS += runtime/src/system/allocator.cpp runtime/src/system/allocator_win.cpp

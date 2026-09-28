@@ -20,10 +20,11 @@
 //
 // Only the unsized form is declared, so D0 calls exactly this function.
 //
-// REGISTRY-FREE by construction, like internal_class.cpp: the product arm goes
-// through `Object::detail::InternalMemFree`, the door the old slot-0 bodies
-// used, and `make unit` links this file (tests/unit/sources.mk) with the host
-// arm, `std::free` — the same split internal_class.cpp:88-95 has.
+// REGISTRY-FREE by construction, like internal_class.cpp: the product arm calls
+// `System::MemoryAllocator::MemFree` directly (B3R W0-A0; it went through
+// `Object::detail::InternalMemFree`, which is that call), and `make unit` links
+// this file (tests/unit/sources.mk) with the host arm, `std::free` — the same
+// split internal_class.cpp has.
 // ============================================================================
 
 #include <cstdlib>
@@ -34,6 +35,9 @@
 #include "../../types/io/Serializer.h"
 #include "../../types/io/Stream.h"
 #include "../../types/engine/UpdateLoop.h"
+#if !defined(BANISHED_UNIT_TEST)
+#include "../../types/system/MemoryAllocator.h"
+#endif
 
 namespace {
 
@@ -41,7 +45,7 @@ inline void RootFree(void* p) {
 #if defined(BANISHED_UNIT_TEST)
     std::free(p);
 #else
-    Object::detail::InternalMemFree(p);   // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
+    System::MemoryAllocator::MemFree(p);   // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
 #endif
 }
 
