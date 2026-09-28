@@ -73,11 +73,10 @@
 // type), no longer a name lookup.
 // ============================================================================
 
-#include <atomic>
 #include <cstdint>
 #include <cstddef>
 
-#include "element_common.h"   // rtuielem::AtomicExport (RULE B6-5), ResolveAddr
+#include "element_common.h"   // MemoryAllocator
 #include "../../types/system/String.h"
 #include "../../types/ui/TextElement.h"
 #include "../../types/ui/String.h"
@@ -92,12 +91,9 @@ inline int32_t& RefCount(void* data) {
 }
 
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z (0x1800c7ad0) — PORTED, Wave 2.
-// A namespace-scope atomic slot, not a first-call static (RULE B6-5).
-std::atomic<void*> g_memFreeSlot{nullptr};
-using MemFreeFn = void (*)(void*);
+// Called by name (B3R RT-UI).
 inline void MemFree(void* p) {
-    reinterpret_cast<MemFreeFn>(rtuielem::AtomicExport(
-        g_memFreeSlot, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(p);
+    System::MemoryAllocator::MemFree(p);
 }
 
 // 0x180029a80: `Array<System::String>::SetSize`, `kSpec_StringRefZ` —

@@ -157,9 +157,6 @@ namespace {
 using UI::UserInterface;
 using UI::Element;
 
-const char* const kPlay = "?Play@UserInterface@UI@@QEAAXH@Z";
-using PlayFn = void (*)(void*, int32_t);
-
 // ---------------------------------------------------------------------------
 // ENTRY COUNTERS — the evidence that a registered body RAN AT ALL.
 //

@@ -72,15 +72,13 @@
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/Font.h"
 #include "../../types/system/String.h"
+#include "../../types/io/Stream.h"
+#include "../../types/object/External.h"
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/collection/Collection.h"
 #include <new>
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 // IO::Stream / IO::Serializer, the two-field pair every Serialize in this
 // family builds on its stack. Same shape as characterset.cpp's and
@@ -101,20 +99,15 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
-// ---- the dependencies these bodies call, all by address ---------------------
+// ---- the dependencies these bodies call -------------------------------------
 //
-// ResolveAddr is registry-first, so each of these reaches our own port where
-// one exists. Ported today: 0x1800c9930 (System::String::Serialize),
-// 0x180004590 / 0x180014520 (the two ExternalPtr<>::Serialize doors),
-// 0x1800c9fc0 (IO::TextCodec::DecodeOne), 0x18002fea0 (Array<int32>::SetSize),
-// 0x1800c7ad0 (MemoryAllocator::MemFree), 0x18001c750 (Array<T>::~Array),
-// 0x1800bc950 (Object::External::~External). NOT ported yet, and listed in
-// this file's report: 0x180033c50, 0x180076e90, 0x1800774d0, 0x180077330,
-// 0x180076d10, 0x180076a40.
+// B3R RT-UI: every one by name -- System::String::Serialize (0x1800c9930), the
+// ExternalPtr<>::Serialize bodies (runtime/types/object/External.h), IO's
+// DecodeOne (0x1800c9fc0), the rtcoll Array bodies (Collection.h) and
+// MemoryAllocator::MemFree (0x1800c7ad0).
 
-using StringSerializeFn = void (*)(void* str, Serializer* ser);
 void StringSerialize(void* str, Serializer* ser) {
-    RtAddr<StringSerializeFn>(0x1800c9930ull)(str, ser);
+    reinterpret_cast<System::String*>(str)->Serialize(ser);
 }
 
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z — 0x1800c7ad0. Retail inlines the
@@ -123,16 +116,13 @@ void StringSerialize(void* str, Serializer* ser) {
 // front of it, so calling it from inside retail's own `if (p)` is instruction
 // for instruction the same work. runtime/src/collection/array.cpp:171 records
 // the same equivalence for the same reason.
-using MemFreeFn = void (*)(void* p);
-void MemFree(void* p) { RtAddr<MemFreeFn>(0x1800c7ad0ull)(p); }
+void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
 // IO::TextCodec::DecodeOne, 0x1800c9fc0. Every caller in this file passes
 // format 2 (UTF-8) in BOTH the ECX and the arg-5 position, exactly as retail
 // does (`MOV ECX,0x2` + `MOV dword ptr [RSP+0x20],0x2`).
-using DecodeOneFn = int32_t (*)(int32_t fmtEcx, const void* src, const void* end,
-                                int32_t* cp, int32_t fmtArg5);
 int32_t DecodeUtf8(const void* src, const void* end, int32_t* cp) {
-    return RtAddr<DecodeOneFn>(0x1800c9fc0ull)(2, src, end, cp, 2);
+    return RtIo_TextCodec_DecodeOne(2, src, end, cp, 2);
 }
 
 // The two literals Serialize measures when it meets a file written before
@@ -311,10 +301,9 @@ bool Font::Serialize(void* streamv) {
     StringSerialize(p + 0x88, &ser);                                 // 180117788
     StringSerialize(p + 0x78, &ser);                                 // 180117795
 
-    using PairFn = void (*)(void* field, Serializer* ser);
-    RtAddr<PairFn>(0x180076e90ull)(p + 0x28, &ser);                  // 1801177a2
-    RtAddr<PairFn>(0x180004590ull)(p + 0x60, &ser);                  // 1801177af  ExternalPtr<SpriteSheet>
-    RtAddr<PairFn>(0x180014520ull)(p + 0x68, &ser);                  // 1801177bc  ExternalPtr<MaterialInstance>
+    RtObject_ExternalPtrSerialize_CharacterSet(reinterpret_cast<RtObject::External**>(p + 0x28), reinterpret_cast<rt::io::Serializer*>(&ser));                  // 1801177a2
+    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(p + 0x60), reinterpret_cast<rt::io::Serializer*>(&ser));                  // 1801177af  ExternalPtr<SpriteSheet>
+    RtObject_ExternalPtrSerialize_MaterialInstance(reinterpret_cast<RtObject::External**>(p + 0x68), reinterpret_cast<rt::io::Serializer*>(&ser));                  // 1801177bc  ExternalPtr<MaterialInstance>
 
     const int32_t version = rw->GetVersion();                        // 1801177c8
 
@@ -327,14 +316,12 @@ bool Font::Serialize(void* streamv) {
         ScalarInt(rw, &n);                                           // 1801177f4
 
         if (ser.stream->mode == 0) {                                 // 1801177fe (re-read)
-            using U16SetSizeFn = void (*)(void* array, int32_t n);
-            RtAddr<U16SetSizeFn>(0x1800774d0ull)(&tmp, n);           // 18011780b
+            rtcoll::RtColl_ArraySetSize_1800774d0(&tmp, n);           // 18011780b
         }
 
         rw->SerializeUShortArray(n, tmp._data, nullptr);             // 180117827 (+0x50)
 
-        using I32SetSizeFn = void (*)(void* array, int32_t n);
-        RtAddr<I32SetSizeFn>(0x18002fea0ull)(p + 0x30, tmp._size);   // 180117833
+        rtcoll::RtColl_ArraySetSize_18002fea0(p + 0x30, tmp._size);   // 180117833
 
         for (int32_t i = 0; i < tmp._size; ++i) {                    // 180117850
             // `MOV RAX,qword ptr [R14]` sits INSIDE the loop: the destination
@@ -353,8 +340,7 @@ bool Font::Serialize(void* streamv) {
         ScalarInt(rw, &n);                                           // 1801178c4
 
         if (ser.stream->mode == 0) {                                 // 1801178ce
-            using I32SetSizeFn = void (*)(void* array, int32_t n);
-            RtAddr<I32SetSizeFn>(0x18002fea0ull)(p + 0x30, n);       // 1801178da
+            rtcoll::RtColl_ArraySetSize_18002fea0(p + 0x30, n);       // 1801178da
         }
 
         rw->SerializeIntArray(n, *reinterpret_cast<int32_t**>(p + 0x30),
@@ -369,8 +355,7 @@ bool Font::Serialize(void* streamv) {
     ScalarInt(rw, &glyphs);                                          // 180117906
 
     if (ser.stream->mode == 0) {                                     // 180117910
-        using GlyphSetSizeFn = void (*)(void* array, int32_t n);
-        RtAddr<GlyphSetSizeFn>(0x180077330ull)(p + 0x40, glyphs);    // 18011791d
+        rtcoll::RtColl_ArraySetSize_180077330(p + 0x40, glyphs);    // 18011791d
     }
 
     uint8_t* row = *reinterpret_cast<uint8_t**>(p + 0x40);           // 180117922
@@ -505,8 +490,7 @@ int32_t Font::ComputeLineLayout(const char* text, int32_t count, int32_t startX,
                                        spriteTop;                    // 180116da0..daf
                             entry[3] = line;                         // 180116dc0
 
-                            using AppendFn = void (*)(void* array, int32_t n, void* value);
-                            RtAddr<AppendFn>(0x180076d10ull)(
+                            rtcoll::RtColl_ArraySetSizeFill_180076d10(
                                 layout + 0x08,
                                 *reinterpret_cast<int32_t*>(layout + 0x10) + 1,
                                 entry);                              // 180116dc4
@@ -622,10 +606,8 @@ void Font::ComputeStringLayout(const System::String& text, bool multiline,
     uint8_t* layout = reinterpret_cast<uint8_t*>(layoutArg);
 
     if (layout != nullptr) {                                         // 180117003
-        using I32SetSizeFn = void (*)(void* array, int32_t n);
-        RtAddr<I32SetSizeFn>(0x18002fea0ull)(layout + 0x18, 0);      // 18011700b
-        using ClearFn = void (*)(void* array);
-        RtAddr<ClearFn>(0x180076a40ull)(layout + 0x08);              // 180117014
+        rtcoll::RtColl_ArraySetSize_18002fea0(layout + 0x18, 0);      // 18011700b
+        rtcoll::RtColl_ArraySetSize_180076a40(layout + 0x08);              // 180117014
         *reinterpret_cast<void**>(layout) = nullptr;                 // 180117021, one qword
     }
 
@@ -658,11 +640,10 @@ void Font::ComputeStringLayout(const System::String& text, bool multiline,
     int32_t lineIndex   = 0;    // R13D
     int32_t byteIdx     = 0;    // ESI
 
-    using AppendIntFn = void (*)(void* array, int32_t n, void* value);
     auto appendLineWidth = [&](int32_t w) {
         if (layout == nullptr) return;                               // 180117188
         int32_t v = w;
-        RtAddr<AppendIntFn>(0x180023830ull)(
+        rtcoll::RtColl_ArraySetSizeFill_180023830(
             layout + 0x18, *reinterpret_cast<int32_t*>(layout + 0x20) + 1, &v);
     };
 

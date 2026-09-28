@@ -39,13 +39,7 @@
 #include "../../types/ui/CharacterSet.h"
 #include <new>
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 // IO::Stream / IO::Serializer, the two-field pair every Serialize in this
 // family builds on its stack. Same shape as animatedimagedescription.cpp's.
@@ -130,8 +124,7 @@ bool CharacterSet::Serialize(void* streamv) {
     IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
     ser.readerWriter = rw;                                   // 1800cb7ed
 
-    using StrSerFn = void (*)(void* str, Serializer* ser);
-    RtAddr<StrSerFn>(0x1800c9930ull)(&_string20, &ser);      // 1800cb7fb
+    reinterpret_cast<System::String*>(&_string20)->Serialize(&ser);      // 1800cb7fb
 
     if (rw != nullptr) {                                     // 1800cb806
         delete rw;                                 // 1800cb813

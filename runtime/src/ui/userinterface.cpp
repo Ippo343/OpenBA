@@ -280,11 +280,6 @@ static_assert(kUiSize == 0x128, "layout header and this file must agree");
 // AUDIT in the lane-Z block below for the row numbers — so none of these is a
 // new cutover obligation.
 //
-// ENDGAME B.3.6 (RULE B6-5): the member bodies below run on objects the LOADER
-// thread constructs, so each slot is a namespace-scope atomic resolved through
-// `rtuielem::AtomicExport` (the same never-cache-a-null contract) instead of
-// RT_DATA_SLOT's function-local static.
-std::atomic<void*> g_memFreeSlot{nullptr};
 // ENDGAME B.3.9 SS1 (B39_RULES D7): all four are class statics now (redirect
 // in their namespace's *PortInit) -- read fresh, no lazy AtomicExport cache
 // (B9-10; this body runs on the LOADER THREAD, per the banner above).
@@ -300,20 +295,6 @@ inline void** ApplicationSingleton() {
 inline void** InputConfigSingleton() {
     return reinterpret_cast<void**>(&::Input::Configuration::_singleton);
 }
-
-// ---- the mangled names, once ------------------------------------------------
-const char* const kCtor            = "??0UserInterface@UI@@QEAA@XZ";
-const char* const kEndSpriteCapture= "?EndSpriteCapture@UserInterface@UI@@QEAAXXZ";
-const char* const kGetAddCount     = "?GetAddDialogCount@UserInterface@UI@@QEBAHXZ";
-const char* const kGetFirstDialog  =
-    "?GetFirstDialog@UserInterface@UI@@QEAA?AUIterator@?$LinkedList@V?$InternalPtr@VDialogInstance@UI@@@Object@@UDefaultAllocator@Collection@@@Collection@@XZ";
-const char* const kGetFirstCont    =
-    "?GetFirstContainedDialog@UserInterface@UI@@QEBA?AV?$InternalPtr@VDialogInstance@UI@@@Object@@HH@Z";
-const char* const kPausesGame      = "?PausesGame@UserInterface@UI@@QEBA_NXZ";
-const char* const kSetFade         = "?SetFullscreenFade@UserInterface@UI@@QEAAX_NI0@Z";
-const char* const kSetFadeSprite   = "?SetFullscreenFadeSprite@UserInterface@UI@@QEAAXVSprite@2@@Z";
-// WAVE 10 LANE UIF. Oracle lookup only; the registration repeats the literal.
-const char* const kSaveAllSettings = "?SaveAllSettings@UserInterface@UI@@QEAAXXZ";
 
 } // namespace
 
@@ -1029,14 +1010,9 @@ void UI::UserInterface::BringDialogToFront(Object::InternalPtr<DialogInstance>* 
 namespace {
 
 // `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` 0x1800c7ad0 — retail's four
-// inlined lock+Free sequences, out of line. Reached through the PORT-AWARE door
-// so that lane E's port of it is what runs when it is registered.
-// ENDGAME B.3.6: a namespace-scope atomic slot (RULE B6-5), not RT_EXPORT_ONCE's
-// function-local static — the member bodies below reach it.
-using UiVoidPtrFn = void (*)(void*);
+// inlined lock+Free sequences, out of line. Called directly (B3R RT-UI).
 inline void UiMemFree(void* p) {
-    reinterpret_cast<UiVoidPtrFn>(rtuielem::AtomicExport(
-        g_memFreeSlot, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(p);
+    System::MemoryAllocator::MemFree(p);
 }
 
 // ENDGAME B.3.2 step 2 — the 0x1800325f0 forwarder (`UiListClear`) that used

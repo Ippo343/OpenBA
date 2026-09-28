@@ -129,18 +129,10 @@
 #include "../../types/ui/GroupElement.h"
 #include "../../types/ui/Element.h"       // ENDGAME B.3.6 closing pass: FindElement
 #include "../../types/ui/SpriteSheet.h"   // ENDGAME B.3.6 closing pass: GetSpriteIndexFromName
+#include "../../types/system/MemoryAllocator.h"
 #include <new>
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Fill8Z
 
-// ---- ResolveExport / ResolveAddr -------------------------------------------
-// Forward-declared rather than pulled in from standalone/resolve.h, for the
-// reason rt_port.h gives: resolve.h drags in <windows.h>, whose <wingdi.h>
-// declares a function called `Rectangle` and whose <windef.h> #defines
-// `near`/`far` away. These declarations must stay byte-identical to
-// resolve.h's; the linker checks the two against each other.
-void* ResolveExport(const char* mangled_name);
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 using RtUI::Dialog;
 using RtUI::DialogController;
 using RtUI::DialogInstance;
@@ -174,16 +166,10 @@ enum : size_t {
 constexpr uint32_t kElementNeedsSizeCalc = 0x8000000u;
 
 // ---- The allocator boundary ------------------------------------------------
-// BY ADDRESS, NOT BY NAME, and deliberately: see the banner. Identical to
-// runtime/src/collection/array.cpp's pair, including the retry-a-miss contract
-// (at cutover this address is supplied by the allocator's own arming path, and
-// a caller that ran before that point would otherwise freeze a null into the
-// static for the life of the process).
+// `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` (0x1800c7a50), called
+// directly (B3R RT-UI).
 void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn(bytes, align);
+    return System::MemoryAllocator::MemAlloc(bytes, align);
 }
 
 // ---- Probe scheduling ------------------------------------------------------
@@ -205,9 +191,7 @@ template <class T> inline const T& F(const void* p, size_t off) {
 }
 
 // ============================================================================
-// Callees, all through the SEAM (ResolveAddr / ResolveExport), never the raw
-// door — so that when another lane ports one of these, our body follows it,
-// which is what retail's own direct near-CALL into the same DLL amounted to.
+// Callees, called by name (B3R RT-UI).
 // ============================================================================
 
 // ENDGAME B.3.2 step 2 — the three forwarders that used to sit here are GONE.
@@ -237,13 +221,9 @@ int32_t GetSpriteIndexFromName(const void* sheet, const void* nameString) {
         *static_cast<const System::String*>(nameString));
 }
 
-// ?IsDerivedFrom@Base@Object@@QEBA_NI@Z  0x1800c0390  (PORTED, Wave 3 lane A —
-// which is exactly why this goes through the seam and not the raw address.)
+// ?IsDerivedFrom@Base@Object@@QEBA_NI@Z  0x1800c0390.
 bool IsDerivedFrom(const void* obj, uint32_t typeId) {
-    using Fn = bool (*)(const void*, uint32_t);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
-    return fn(obj, typeId);
+    return reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(typeId);   // B.3.x bridge
 }
 
 

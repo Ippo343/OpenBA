@@ -33,7 +33,6 @@
 // POINTER (RULE B6-11), so those members take the pointer.
 // ============================================================================
 
-#include <atomic>
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
@@ -54,6 +53,7 @@
 #include "../../types/ui/PageElement.h"
 #include "../../types/ui/GraphElement.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_I32 etc.
+#include "../../types/collection/Collection.h"
 // B6-5 door caches (AtomicAddr / AtomicExport) and the ResolveAddr
 // declaration this file used to spell for itself.
 #include "element_common.h"
@@ -96,15 +96,9 @@ void RtStringAssign(void* self, const void* other) {
         *reinterpret_cast<const System::String*>(other);
 }
 
-// RULE B6-5: the namespace-scope door caches the member bodies read through.
-std::atomic<void*> g_memFree{nullptr};          // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
-std::atomic<void*> g_graphArrayClear{nullptr};  // 0x1800416d0
-
-// ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
+// ?MemFree@MemoryAllocator@System@@SAXPEAX@Z (0x1800c7ad0), called by name.
 void RtMemFree(void* p) {
-    using Fn = void (*)(void*);
-    reinterpret_cast<Fn>(rtuielem::AtomicExport(
-        g_memFree, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(p);
+    System::MemoryAllocator::MemFree(p);
 }
 
 // ENDGAME B.3.2 step 2 — the `RtArrayInt32SetSize`/`RtArrayCellsSetSize`
@@ -130,10 +124,9 @@ inline void RtArrayCellsSetSize(void* arrayHeader, int32_t n) {
 // off a `DestroySpec` (`kD_InnerArr_18`), a different type/dispatch from the
 // `rtcoll::ArraySpec` a `Collection::Array<T>::~Array()` would call, and no
 // `kSpec_*` row exists for it — per the batch rule, a "DtorElem" helper may
-// not be convertible at all. Retry a miss rather than caching it.
+// not be convertible at all. Called by name (B3R RT-UI).
 void RtGraphArrayClear(void* arrayHeader) {
-    using Fn = void (*)(void*);
-    reinterpret_cast<Fn>(rtuielem::AtomicAddr(g_graphArrayClear, 0x1800416d0))(arrayHeader);
+    rtcoll::RtColl_ArrayDtorElem_1800416d0(arrayHeader);
 }
 
 namespace TAE = UI::TabElementOffsets;

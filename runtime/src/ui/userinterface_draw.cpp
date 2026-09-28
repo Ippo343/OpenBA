@@ -146,6 +146,8 @@
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
 #include "../../types/input/Device.h"   // ENDGAME B.3.9 SS1: Input::Device::_singleton
 #include "../../types/input/Input.h"    // ENDGAME B.3.9 SS1: Input::Configuration::_singleton
+#include "../../types/collection/Collection.h"
+#include "../../funcs/runtime_funcs.h"   // RtGraphics_Camera_Ctor
 
 #include <atomic>
 
@@ -160,12 +162,6 @@ using UI::SpriteDraw;
 // mint must be able to retry rather than freeze the DLL's answer for the
 // process (reference_resolveexport_phantom_names.md).
 //
-// ENDGAME B.3.6 (RULE B6-5): namespace-scope atomic slots, not RT_DATA_SLOT /
-// RT_EXPORT_ONCE function-local statics — the member body runs on UI objects
-// the loader thread constructs.
-std::atomic<void*> g_cameraCtorSlot{nullptr};
-std::atomic<void*> g_memFreeSlot{nullptr};
-std::atomic<void*> g_spriteDrawSetSize0Slot{nullptr};
 // ENDGAME B.3.9 SS1 (B39_RULES D7): all three are class statics now, no lazy
 // AtomicExport cache (B9-10).
 inline void** VideoDeviceSingleton() {          // 0x1801fe7a8
@@ -183,34 +179,12 @@ inline void** InputConfigSingleton() {          // 0x1801fe768
 // directory with pefile rather than assumed — `AEAA` means PRIVATE, not
 // unexported, and both `Flush` and `AddSpriteDraw` are `AEAA` names that the DLL
 // exports all the same (reference_aeaa_is_private_not_unexported.md).
-const char* const kCameraCtor  = "??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z";
-const char* const kBegin       = "?Begin@SpriteContext@UI@@QEAAXMPEAVSpriteCapture@2@PEAVViewport@Video@@@Z";
-const char* const kFlush       = "?Flush@SpriteContext@UI@@AEAAXXZ";
-const char* const kAddSprite   = "?AddSpriteDraw@SpriteContext@UI@@AEAAXAEBUSpriteDraw@12@@Z";
-const char* const kEndSprites  = "?EndAddingSprites@SpriteCapture@UI@@QEAAXXZ";
-const char* const kMemFree     = "?MemFree@MemoryAllocator@System@@SAXPEAX@Z";
-
-// THE ONE ADDRESS DOOR, declared rather than hidden.
-//
-// 0x1800783d0 is `Collection::Array<UI::SpriteDraw>::SetSize(0)`, the deferred
-// batch's clear. It is the ONLY one of the eight callees absent from the export
-// table (checked with pefile), so there is no name door for it. It is however
-// ALREADY PORTED AND REGISTERED at that address by Wave 9 lane UIF
-// (runtime/src/collection/array.cpp:1638), and `ResolveAddr(Module::Runtime, …)`
-// consults the port registry FIRST — so this door resolves to OUR body, not the
-// DLL's (reference_resolveaddr_consults_port_registry_first.md). It is still
-// recorded as a cutover obligation rather than left for a residue run to
-// rediscover (reference_by_address_door_dies_at_cutover.md).
-constexpr uintptr_t kSpriteDrawSetSize0Addr = 0x1800783d0;
-
-using CameraCtorFn = void* (*)(void*, const Frustum*, const Transform3*, bool);
-using BeginFn      = void  (*)(void*, float, void*, void*);
-using FlushFn      = void  (*)(void*);
-using AddSpriteFn  = void  (*)(void*, const SpriteDraw*);
-using EndSpritesFn = void  (*)(void*);
-using FreeFn       = void  (*)(void*);
-using SetSize0Fn   = void  (*)(void*);
-using ElemDrawFn   = void  (*)(void*, void*, uint8_t);
+// B3R RT-UI: all called by name -- the Camera ctor body
+// (`??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z`,
+// 0x1800fe960, still a free body: RtGraphics_Camera_Ctor), the SpriteContext /
+// SpriteCapture members, MemoryAllocator::MemFree (0x1800c7ad0) and
+// 0x1800783d0, `Collection::Array<UI::SpriteDraw>::SetSize(0)`, the deferred
+// batch's clear (not exported: rtcoll::RtColl_ArraySetSize_1800783d0).
 
 // A dialog-list node: value, prev, next. Same shape lane UI1 pinned from the
 // drain's own stores; `Draw` only ever walks it forwards through `next`.
@@ -313,13 +287,9 @@ void UI::UserInterface::Draw(Video::Context& context) {
     // 0x00..0xd4 and `SetFrustum` fills the projection.
     RtGraphics::Camera cam;
 
-    // `Graphics::Camera`'s ctor STAYS A DOOR (B4b-2, B35_RULES leave list), so
-    // it is reached by name through an atomic slot (RULE B6-5).
-    CameraCtorFn camCtor = reinterpret_cast<CameraCtorFn>(
-        rtuielem::AtomicExport(g_cameraCtorSlot, kCameraCtor));
-    if (out.Call("Graphics::Camera::Camera(frustum, identity, false)",
-                 (const void*)camCtor))
-        camCtor(&cam, &fr, &t3, false);
+    // `Graphics::Camera`'s ctor stays a free body (B4b-2, B35_RULES leave
+    // list), called by name.
+    RtGraphics_Camera_Ctor(&cam, &fr, &t3, false);          // 0x1800fe960
 
     // ---- 0x180121b00: Transform3::AsMatrix, inlined -----------------------
     // Rows from the three basis vectors and the translation, w = 0/0/0/1.
@@ -556,11 +526,8 @@ void UI::UserInterface::Draw(Video::Context& context) {
                     }
                     sc->Flush();                        // end of dialog
 
-                    SetSize0Fn clearDeferred = reinterpret_cast<SetSize0Fn>(
-                        rtuielem::AtomicAddr(g_spriteDrawSetSize0Slot, kSpriteDrawSetSize0Addr));
-                    if (out.Call("Array<SpriteDraw>::SetSize(0) (clear _deferred)",
-                                 (const void*)clearDeferred) && clearDeferred)
-                        clearDeferred(&sc->_deferred);
+                    // Array<SpriteDraw>::SetSize(0) (clear _deferred), 0x1800783d0
+                    rtcoll::RtColl_ArraySetSize_1800783d0(&sc->_deferred);
                 }
                 sc->_deferring = 0;
             }
@@ -679,13 +646,11 @@ void UI::UserInterface::Draw(Video::Context& context) {
     //
     // The order is retail's: +0x68, +0x58, +0x40, +0x10. Each clears the
     // pointer and the size/capacity qword that follows it.
-    FreeFn memFree = reinterpret_cast<FreeFn>(rtuielem::AtomicExport(g_memFreeSlot, kMemFree));
     constexpr size_t kFreeSlots[4] = { 0x68, 0x58, 0x40, 0x10 };
     for (size_t k = 0; k < 4; ++k) {
         uint8_t* const slot = scStorage + kFreeSlots[k];
         if (void* const p = *reinterpret_cast<void**>(slot)) {
-            if (out.Call("MemFree (SpriteContext buffer)", (const void*)memFree))
-                memFree(p);
+            System::MemoryAllocator::MemFree(p);                // 0x1800c7ad0
         }
         *reinterpret_cast<void**>(slot)     = nullptr;
         *reinterpret_cast<uint64_t*>(slot + 8) = 0;

@@ -125,9 +125,6 @@
 // runtime/src/). These must stay byte-identical to resolve.h's; the linker
 // checks them. Same reasoning and same spelling as runtime/src/ui/sprite.cpp.
 // ----------------------------------------------------------------------------
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
 
 using UI::SpriteContext;

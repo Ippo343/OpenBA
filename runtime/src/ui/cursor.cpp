@@ -49,15 +49,10 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/Cursor.h"
+#include "../../types/object/External.h"
 #include <new>
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
-
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
 struct Stream {
     uint8_t _head00[0x08];
@@ -138,8 +133,7 @@ bool Cursor::Serialize(void* streamv) {
     IO::ReaderWriter* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
     ser.readerWriter = rw;                                // 1800cd14d
 
-    using PtrSerFn = void (*)(void* extPtr, Serializer* ser);
-    RtAddr<PtrSerFn>(0x180004590ull)(&_spriteSheet, &ser);  // 1800cd15b
+    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));  // 1800cd15b
 
     rw->SerializeInt(_hotSpotX, nullptr);
     rw->SerializeInt(_hotSpotY, nullptr);

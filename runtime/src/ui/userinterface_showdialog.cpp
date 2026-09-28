@@ -90,14 +90,14 @@
 #include <cstdint>
 #include <cstdio>
 
-#include <atomic>
 
-#include "resolve.h"
 #include "rt_port.h"
 #include "ui/UserInterface.h"
 #include "ui/DialogInstance.h"
 #include "engine/MainLoop.h"   // ENDGAME B.3.7 callers (K5): Engine::MainLoop::Frame
 #include "system/Timer.h"      // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "system/MemoryAllocator.h"
+#include "collection/Collection.h"
 
 // ENDGAME B.3.6 block E: the three UserInterface doors this body used to reach
 // by name are members or doors of the same class now. The ctor and the dtor
@@ -113,9 +113,8 @@ extern "C" void  RtUi_UserInterface_DrawStandAloneUI(void* videoContext, void* u
 namespace {
 
 // --- Shipped addresses of the callees, for the reader ------------------------
-// Only kAddDialogsSetSize is used to RESOLVE; the rest are reached by mangled
-// name (see the atomic accessors below) and are listed here because a Ghidra address is
-// what a future reader will have in hand.
+// B3R RT-UI: every callee is called by name; the addresses are listed
+// because a Ghidra address is what a future reader will have in hand.
 //   0x180120de0  ??0UserInterface@UI@@QEAA@XZ
 //   0x180120b90  ??1UserInterface@UI@@QEAA@XZ
 //   0x1801213c0  ?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z
@@ -124,7 +123,9 @@ namespace {
 //   0x1800dd100  ?Frame@MainLoop@Engine@@QEAA_N_N@Z
 //   0x1801fe750  ?_singleton@MainLoop@Engine@@1PEAV12@EA          (DATA)
 //   0x1801fe728  ?_secondsPerTick@Timer@System@@0NA               (DATA)
-constexpr uintptr_t kAddDialogsSetSize      = 0x18007a0d0;  // Array<InternalPtr<DialogInstance>>::SetSize
+//   0x18007a0d0  Array<InternalPtr<DialogInstance>>::SetSize (not exported:
+//                rtcoll::RtColl_ArraySetSizeFill_18007a0d0)
+//   0x1800c7a50 / 0x1800c7ad0  MemoryAllocator::MemAlloc / MemFree
 
 // --- Object layout ----------------------------------------------------------
 constexpr uintptr_t kUI_Dialogs      = 0x00;   // list head; node->dialog +0x00, node->next +0x10
@@ -142,74 +143,17 @@ constexpr uintptr_t kML_UpdArr  = 0x90, kML_UpdCnt  = 0x98, kML_UpdCap  = 0x9c;
 
 struct Entry { void* fn; void* ctx; };
 
-// The exported allocator statics. Retail inlines
-// `EnterCriticalSection(alloc+0x640); Allocate(...); LeaveCriticalSection(...)`
-// six times in this body; `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z`
-// (0x1800c7a50) and `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` (0x1800c7ad0)
-// ARE that sequence -- lane UI1 decompiled and compared them. Calling them
-// reproduces the lock discipline exactly with no windows.h in a runtime/src
-// file, which is what ~30 other ported files already do.
-typedef void* (*fn_MemAllocS_t)(uint64_t size, int align);
-typedef void  (*fn_MemFreeS_t)(void* p);
-
-// ENDGAME B.3.6 (RULE B6-5): every door this body still needs is cached in a
-// namespace-scope atomic, never in a function-local static — ShowDialog runs
-// on UI objects the loader thread constructs. Same never-cache-a-null
-// contract as the RT_EXPORT_ONCE shape it replaces.
-std::atomic<void*> g_memAllocSlot{nullptr};
-std::atomic<void*> g_memFreeSlot{nullptr};
-std::atomic<void*> g_setSizeSlot{nullptr};
-
-void* AtomicByName(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        p = ResolveExport(mangled);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-void* AtomicByAddr(std::atomic<void*>& slot, uintptr_t ghidra) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, ghidra));
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
-}
-
+// Retail inlines `EnterCriticalSection(alloc+0x640); Allocate(...);
+// LeaveCriticalSection(...)` six times in this body;
+// `System::MemoryAllocator::MemAlloc` (0x1800c7a50) and `MemFree` (0x1800c7ad0)
+// ARE that sequence -- lane UI1 decompiled and compared them.
 void* MemAllocS(uint64_t size, int align) {
-    fn_MemAllocS_t f = (fn_MemAllocS_t)AtomicByName(g_memAllocSlot,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
-    return f ? f(size, align) : nullptr;
+    return System::MemoryAllocator::MemAlloc(size, align);
 }
 void MemFreeS(void* p) {
-    fn_MemFreeS_t f = (fn_MemFreeS_t)AtomicByName(g_memFreeSlot,
-        "?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
-    if (f) f(p);
+    System::MemoryAllocator::MemFree(p);
 }
 
-typedef void  (*fn_SetSize_t)(void* arr, int newCount, const void* fill);
-
-// EVERY callee of this body except one has a NAME door. That was checked
-// against the shipped export directory with pefile rather than assumed:
-// `UpdateStandAloneUI` and `DrawStandAloneUI` mangle as `CAXA...`, i.e. private
-// STATIC members, and this DLL exports its private members
-// (reference_aeaa_is_private_not_unexported.md). Reaching them by address when
-// a name exists is how silent address doors accumulate, so they are named here.
-//
-// THE ONE ADDRESS DOOR, declared as a cutover obligation
-// (reference_by_address_door_dies_at_cutover.md):
-//   0x18007a0d0  Collection::Array<InternalPtr<DialogInstance>>::SetSize
-//                NOT exported. Already ported and registered by
-//                runtime/src/collection/array.cpp (J3_ENTRY3(18007a0d0,
-//                kSpec_Fill8Z)) and reached through ResolveAddr(Module::Runtime,
-//                ...), which consults the port registry first -- so this door is
-//                already satisfied today, unlike a fresh one.
-// (The old `Resolved R()` function-local static — a lazily initialised cache of
-// nine doors — is gone: RULE B6-5. The survivors are the three accessors below;
-// ENDGAME B.3.7 callers (K5): the fourth, the `MainLoop::Frame` name door, is a
-// member call on the real class now.)
-fn_SetSize_t  SetSizeDoor()   { return (fn_SetSize_t)AtomicByAddr(g_setSizeSlot, kAddDialogsSetSize); }
 // ENDGAME B.3.9 SS1 (B39_RULES D7): both class statics now, no lazy cache.
 void**        MainLoopSlot()  { return reinterpret_cast<void**>(&::Engine::MainLoop::_singleton); }
 const double* SecondsPerTick(){ return &::System::Timer::_secondsPerTick; }
@@ -366,10 +310,9 @@ int32_t UI::UserInterface::ShowDialog(Object::InternalPtr<DialogInstance>* dialo
     //    InternalPtr the stack slot from step 4 holds -- retail passes that same
     //    slot (LEA R8,[RSP+0x80]).
     {
-        auto setSize = SetSizeDoor();
         void* arr = reinterpret_cast<void*>(n + kUI_AddDialogs);
         int   cnt = *reinterpret_cast<int*>(n + kUI_AddDialogs + 8);
-        setSize(arr, cnt + 1, &dialog);
+        rtcoll::RtColl_ArraySetSizeFill_18007a0d0(arr, cnt + 1, &dialog);
     }
 
     // 6. Update(nested, Time(0)). Retail computes `(int64)(0.0 / _secondsPerTick)`

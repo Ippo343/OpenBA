@@ -51,6 +51,7 @@
 #include "../../types/ui/SpriteCapture.h"
 #include "../../types/ui/SpriteSheet.h"
 #include "../../types/system/String.h"
+#include "../../types/system/MemoryAllocator.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_CaptureEntry
 
 // ----------------------------------------------------------------------------
@@ -59,9 +60,6 @@
 // runtime/src/). Byte-identical to resolve.h's; the linker checks them. Same
 // spelling as runtime/src/ui/spritecontext.cpp and sprite.cpp.
 // ----------------------------------------------------------------------------
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
 
 using UI::Sprite;
@@ -101,29 +99,15 @@ using UI::SpriteCapture;
 // (0x18004bde0 is registered by array.cpp now — the "NOT PORTED" half of the
 // old comment here is stale.)
 
-// System::String::Set(char const*) — 0x1800c95d0, PORTED in
-// runtime/src/system/string.cpp and registered there BY ADDRESS, so this door
-// reaches our body (ResolveAddr consults the port registry first —
-// reference_resolveaddr_consults_port_registry_first.md).
-typedef void (*StringSetFn)(void* self, const char* src);
-// ENDGAME B.3.6 block D (RULE B6-5): these three resolvers no longer keep a
-// first-call static — they run inside UI::SpriteCapture's members, on
-// whichever thread draws. `ResolveAddr` is a registry lookup.
-inline StringSetFn TheStringSet() {
-    return reinterpret_cast<StringSetFn>(ResolveAddr(Module::Runtime, 0x1800c95d0));
-}
-
-// System::MemoryAllocator::MemAlloc / MemFree, the same two doors
-// runtime/src/collection/array.cpp uses and for the same reason. Retail spells
-// both open in these bodies (`[0x1801fc718]+0x640`, Enter, Allocate, Leave);
-// 0x1800c7a50 and 0x1800c7ad0 ARE that sequence.
+// System::MemoryAllocator::MemAlloc / MemFree (0x1800c7a50 / 0x1800c7ad0),
+// called directly. Retail spells both open in these bodies
+// (`[0x1801fc718]+0x640`, Enter, Allocate, Leave); the two statics ARE that
+// sequence.
 inline void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50))(bytes, align);
+    return System::MemoryAllocator::MemAlloc(bytes, align);
 }
 inline void MemFree(void* p) {
-    using Fn = void (*)(void*);
-    reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0))(p);
+    System::MemoryAllocator::MemFree(p);
 }
 
 // ---- the System::String refcount idiom -------------------------------------
@@ -181,7 +165,7 @@ void SpriteCapture::AddScissor(int32_t x, int32_t y, int32_t right, int32_t bott
 
     // The empty name. Set() on a null slot allocates a fresh refcounted block.
     char* tmp = nullptr;
-    TheStringSet()(&tmp, "");
+    reinterpret_cast<System::String*>(&tmp)->Set("");   // System::String::Set 0x1800c95d0
     if (tmp) {
         e.name = tmp;
         ++StringRc(tmp);

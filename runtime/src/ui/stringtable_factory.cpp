@@ -102,13 +102,9 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/StringTable.h"
+#include "../../types/system/String.h"
+#include "../../types/collection/Collection.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_StringPair10
-
-// ResolveAddr lives in standalone/resolve.h, which drags in <windows.h> and so
-// must not be included from runtime/src (rt_port.h explains why). Declared here
-// exactly as ~30 sibling runtime files already declare it.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module m, uintptr_t ghidra_addr);
 
 namespace {
 
@@ -118,8 +114,6 @@ static_assert(kTiTypeIdOffset == 0, "BaseTypeInfo::typeId is at +0x00");
 static_assert(kTiNameOffset == 8,   "BaseTypeInfo::name is at +0x08");
 
 using SerFactoryFn = void* (*)(void* encoding, void* ser, int flag);
-using StrSerFn     = void  (*)(void* str, void* ser);
-using VoidPtrFn    = void  (*)(void*);
 
 struct SerializerPair {
     void* stream;   // +0x00
@@ -196,11 +190,10 @@ bool StringTable::Serialize(void* streamV) {
     }
 
     uint8_t* e = reinterpret_cast<uint8_t*>(_data);          // 18011d9bc
-    StrSerFn strSer = reinterpret_cast<StrSerFn>(
-        ResolveAddr(Module::Runtime, 0x1800c9930));          // String::Serialize
+    // System::String::Serialize (0x1800c9930), by name.
     for (int32_t i = 0; i < count; ++i, e += 0x10) {         // bound is the LOCAL
-        strSer(e,       &ser);                               // 18011d9d8
-        strSer(e + 0x8, &ser);                               // 18011d9e6
+        reinterpret_cast<System::String*>(e)->Serialize(&ser);         // 18011d9d8
+        reinterpret_cast<System::String*>(e + 0x8)->Serialize(&ser);   // 18011d9e6
     }
 
     if (ser.impl != nullptr) {                               // 18011d9f9
@@ -218,11 +211,11 @@ bool StringTable::Serialize(void* streamV) {
 //     18011d91a  JMP 0x1800bc950                   ~External (the compiler's)
 // 0x180004a90 releases both refcounted strings of every entry, frees the block
 // and zeroes the header; it is ported (array_destroy.cpp J2, spec kD_Str2_10)
-// and reached registry-first. `_data/_size/_capacity` are raw words (the
-// NON-TRIVIAL kSpec_StringPair10 row), so it stays a by-address call rather
-// than a member ~Array.
+// and called by name. `_data/_size/_capacity` are raw words (the NON-TRIVIAL
+// kSpec_StringPair10 row), so it stays a free-function call rather than a
+// member ~Array.
 StringTable::~StringTable() {
-    reinterpret_cast<VoidPtrFn>(ResolveAddr(Module::Runtime, 0x180004a90))(&_data);  // 18011d914
+    rtcoll::RtColl_ArrayDtorElem_180004a90(&_data);          // 18011d914
 }
 
 }  // namespace UI

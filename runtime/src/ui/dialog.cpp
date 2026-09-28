@@ -211,6 +211,8 @@
 #include "../../types/ui/StringTable.h"   // WAVE 10 LANE UIF — the twin's table
 #include "../../types/system/Timer.h"     // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
 #include "../../types/video/Device.h"     // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "../../types/system/MemoryAllocator.h"
+#include "../../types/object/External.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Event30
 // ⚠ WAVE 9 LANE Z — `runtime/types/object/TypeInfo.h` IS NOT INCLUDABLE HERE,
 // and the reason is a real defect in another lane's header rather than anything
@@ -237,81 +239,7 @@ using RtUI::kDialogInstanceCtorExtent;
 using RtUI::DialogNamedTemplate;   // WAVE 9 LANE UIC (?CreateElement@Dialog@)
 
 // ----------------------------------------------------------------------------
-// ResolveExport, forward-declared rather than pulled in from standalone/resolve.h
-// ----------------------------------------------------------------------------
-// Same reasoning rt_port.h gives for declaring RegisterRuntimeExport locally:
-// resolve.h drags in <windows.h>, whose <wingdi.h> declares a function called
-// `Rectangle` and whose <windef.h> still #defines `near`/`far` away, and
-// PLAN.md §4.1 decision 1 requires runtime/src/ to stay platform-neutral.
-// This declaration must stay byte-identical to resolve.h's; the linker checks
-// the two against each other. (Precedent: runtime/src/video/context.cpp and
-// runtime/src/achievement/achievement_manager.cpp declare the same prototype.)
-void* ResolveExport(const char* mangled_name);
-
-// WAVE 10 LANE UIF negative-control knob; defined in runtime/src/ui/userinterface.cpp.
-
-// ResolveAddr, same reasoning and the same "must stay byte-identical to
-// resolve.h's" contract. WAVE 9 LANE UIC needs it for one unexported-by-us edge
-// (`?AdjustUpperLeft@Element@UI@@`, reached through the seam so that
-//
-// AND IT IS NOT "ALWAYS THE DLL": ResolveAddr(Module::Runtime, …) consults the
-// port registry FIRST (standalone/resolve_standalone.cpp:471,
-// reference_resolveaddr_consults_port_registry_first.md). That is the point of
-// using it here rather than calling the C++ symbol directly.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-// WAVE 9 LANE UID. The RAW address door -- the shipped DLL and nothing else --
-// needed by the two shape oracles at the bottom of the anonymous namespace,
-// which must read the SHIPPED instruction stream and not our own prologue
-// (reference_resolveaddr_consults_port_registry_first.md, and the thirteen
-// detour installers lane FNHOOK found aimed at our own bytes). Byte-identical
-
 namespace {
-
-// ============================================================================
-// Mangled names.
-//
-// The registrations at the bottom of this file deliberately repeat each name
-// as its own string literal instead of using these constants:
-// tools/runtime_census.py cannot see through a NAMED CONSTANT and would
-// under-count the lane, which is how Wave 3's Object count stood at 21/41 when
-// it was really 27/41 (reference_census_cannot_see_nonliteral_registrations.md).
-// ============================================================================
-const char* const kGetRoot =
-    "?GetRoot@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ";
-const char* const kGetController =
-    "?GetController@DialogInstance@UI@@QEBA?AV?$InternalPtr@VDialogController@UI@@@Object@@I@Z";
-const char* const kFindElement =
-    "?FindElement@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z";
-const char* const kFindElementType =
-    "?FindElementType@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z";
-const char* const kSetFlagsOnOff = "?SetFlagsOnOff@DialogInstance@UI@@QEAAXII@Z";
-const char* const kStopTimer     = "?StopTimer@DialogInstance@UI@@QEAAXH@Z";
-const char* const kGetTemplate =
-    "?GetTemplate@Dialog@UI@@QEBA?AV?$ExternalPtr@VElementDescription@UI@@@Object@@H@Z";
-const char* const kGetContainer =
-    "?GetContainer@DialogController@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ";
-const char* const kEdCtor        = "??0ElementDescription@UI@@QEAA@XZ";
-const char* const kEdFileVersion = "?GetFileVersion@ElementDescription@UI@@UEBAHXZ";
-// WAVE 9 LANE UIC
-const char* const kCreateElement =
-    "?CreateElement@Dialog@UI@@QEBA?AV?$InternalPtr@VElement@UI@@@Object@@"
-    "V?$ExternalPtr@VElementDescription@UI@@@4@@Z";
-const char* const kSetUpperLeft  = "?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z";
-// WAVE 10 LANE UIF. Oracle lookup only — the REGISTRATION at the bottom of this
-// file repeats the literal, for the census reason the block above gives.
-const char* const kEdCreateInstance =
-    "?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z";
-
-// The Element helpers the two Find* forwarders tail into. Neither is in this
-// lane's scope; both are exported and both are resolved through the SEAM
-// (ResolveExport) so that if lane A registers a port of
-// either, our forwarder follows it — which is what retail's direct near-CALL
-// into the same DLL would have amounted to.
-const char* const kElementFindElement =
-    "?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z";
-const char* const kElementFindElementType =
-    "?FindElementType@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z";
 
 // ---- Raw retail ABI typedefs ----------------------------------------------
 // Every member below takes `this` in RCX. Every one whose C++ return type is a
@@ -321,15 +249,6 @@ const char* const kElementFindElementType =
 //   MOV RAX,[RCX+0x50] / MOV [RDX],RAX / MOV RAX,RDX / RET.
 // Getting this wrong is the wild-write family
 // (reference_hidden_retslot_wild_write.md), so it is spelled out per typedef.
-using PtrOutFn      = void** (*)(void* self, void** out);
-using PtrOutU32Fn   = void** (*)(void* self, void** out, uint32_t key);
-using PtrOutI32Fn   = void** (*)(void* self, void** out, int32_t index);
-using PtrOutStrFn   = void** (*)(void* self, void** out, const void* str);
-using SetFlagsFn    = void   (*)(void* self, uint32_t on, uint32_t off);
-using StopTimerFn   = void   (*)(void* self, int32_t id);
-using CtorFn        = void*  (*)(void* self);
-using IntFn         = int32_t(*)(const void* self);
-using TypeIdFn      = uint32_t(*)(void* controller);
 
 // ---- WAVE 9 LANE UIC helpers ----------------------------------------------
 // The `System::String` release retail open-codes at every temporary, with its
@@ -345,10 +264,7 @@ void ReleaseStringLocal(char*& p) {
     if (!p) return;
     if (--RtSystem::StringRefCount(p) == 0) {
         p -= 8;
-        using FreeFn = void (*)(void*);
-        static FreeFn freeFn = reinterpret_cast<FreeFn>(
-            ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-        if (freeFn) freeFn(p);
+        System::MemoryAllocator::MemFree(p);        // 0x1800c7ad0
     } else {
         p = nullptr;
     }
@@ -372,21 +288,12 @@ inline void** VideoDeviceSingleton() {
 // of this file); the RT_DATA_SLOT accessors of the minted rows are gone.
 
 
-// ---- WAVE 9 LANE UID helpers ----------------------------------------------
-// All four use the RETRY-a-miss form (RT_DATA_SLOT / RT_EXPORT_ONCE, and the
-// hand-written equivalent for the one address door), not the frozen
-// function-local static this file uses elsewhere. That is lane E3's finding
-// applied rather than repeated: 22 sites in the tree let the FIRST caller fix
-// a null for the life of the process, and `~DialogInstance` runs during
-// teardown, which is exactly when an ordering assumption is least safe.
-
-using VoidPtrFn      = void  (*)(void* p);
-
-// 0x1800c7ad0, which is the out-of-line spelling of the lock+Free retail
-// inlines at both of this dtor's array frees. Same argument
-// runtime/src/collection/linkedlist.cpp's header block makes for 0x180009c30.
+// 0x1800c7ad0 (`?MemFree@MemoryAllocator@System@@`), the out-of-line spelling
+// of the lock+Free retail inlines at both of ~DialogInstance's array frees.
+// Same argument runtime/src/collection/linkedlist.cpp's header block makes for
+// 0x180009c30. Called directly (B3R RT-UI).
 inline void MemFreeStatic(void* p) {
-    RT_EXPORT_ONCE(VoidPtrFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
+    System::MemoryAllocator::MemFree(p);
 }
 
 // ENDGAME B.3.2 step 2 — the 0x1800325f0 forwarder that used to sit here is
@@ -1189,9 +1096,6 @@ void RtUiDialogInstance_SetUpperLeft(DialogInstance* self, int32_t x, int32_t y,
 
 namespace {
 
-// `?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z` 0x180002470.
-using GetIndexFromNameFn = int32_t (*)(const void* table, const void* str);
-
 // The retail-inlined `??0Dialog@UI@@QEAA@XZ` / `??1Dialog@UI@@UEAA@XZ` pair is
 // `::new (p) UI::Dialog()` / `~T()` (slot 0, flags 0) since ENDGAME B.3.9 UI-D (the
 // temporary is a real UI::Dialog wearing the class's table).
@@ -1236,32 +1140,9 @@ extern "C" void RtUiElementDescription_CreateInstance(const ElementDescription* 
 
 namespace {
 
-// Retry-a-miss name doors the member bodies need (RULE B6-5: no member keeps
-// a static of its own; the caches live here, in the file-scope helpers).
-// NULL when unresolved; the caller keeps the door's `if (getPath)` guard.
-using GetPathFn = void* (*)(const void* self, void* out);
-inline GetPathFn ExternalGetPathFn() {
-    return RT_EXPORT_ONCE(GetPathFn,
-        "?GetPath@External@Object@@QEBA?AVFilename@System@@XZ");
-}
-
-// ?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z 0x180002470 --
-// block D's class, still a name door here. Fragment pass F2 moved the static
-// UI::ElementDescription::CreateInstance used to keep out to this helper.
-inline GetIndexFromNameFn StringTableGetIndexFromNameFn() {
-    return RT_EXPORT_ONCE(GetIndexFromNameFn,
-        "?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z");
-}
-
-// ?AdjustUpperLeft@Element@UI@@ 0x180115840, reached through the seam
-// (ResolveAddr consults the port registry first). Retry-a-miss.
-using AdjustFn = void (*)(void*, int32_t, int32_t);
-inline AdjustFn ElementAdjustUpperLeft() {
-    static AdjustFn adjust = nullptr;
-    if (!adjust) adjust = reinterpret_cast<AdjustFn>(
-        ResolveAddr(Module::Runtime, 0x180115840));
-    return adjust;
-}
+// B3R RT-UI: Object::External::GetPath (0x180006250), StringTable::
+// GetIndexFromName (0x180002470) and Element::AdjustUpperLeft (0x180115840) are
+// called by name in the bodies below.
 
 inline const uint8_t* Bytes(const void* p) { return static_cast<const uint8_t*>(p); }
 inline uint8_t*       Bytes(void* p)       { return static_cast<uint8_t*>(p); }
@@ -1344,22 +1225,16 @@ DialogInstance::GetController(uint32_t typeId) const {         // 0x180113320
     return Object::InternalPtr<DialogController>(found);
 }
 
-// Forwarders into Element (block A's class, still a name door). NO NULL
-// CHECK on _root — retail has none.
+// Forwarders into Element (0x180115650 / 0x180115760). NO NULL CHECK on
+// _root — retail has none.
 Object::InternalPtr<Element>
 DialogInstance::FindElement(const System::String& name) {      // 0x180114c70
-    Object::InternalPtr<Element> out;
-    reinterpret_cast<PtrOutStrFn>(ResolveExport(kElementFindElement))(
-        _root, reinterpret_cast<void**>(&out), &name);
-    return out;
+    return static_cast<Element*>(_root)->FindElement(name);     // B.3.x bridge
 }
 
 Object::InternalPtr<Element>
 DialogInstance::FindElementType(uint32_t typeId) {             // 0x1801140c0
-    Object::InternalPtr<Element> out;
-    reinterpret_cast<PtrOutU32Fn>(ResolveExport(kElementFindElementType))(
-        _root, reinterpret_cast<void**>(&out), typeId);
-    return out;
+    return static_cast<Element*>(_root)->FindElementType(typeId);   // B.3.x bridge
 }
 
 // ---- self-contained mutators ------------------------------------------------
@@ -1736,14 +1611,13 @@ void DialogInstance::SetUpperLeft(int32_t x, int32_t y, bool scaled) {  // 0x180
         *reinterpret_cast<int32_t*>(r + 0x6c) += dy;
         *reinterpret_cast<int32_t*>(r + 0x74) += dy;
 
-        const AdjustFn adjust = ElementAdjustUpperLeft();
         const int32_t n = *reinterpret_cast<const int32_t*>(r + 0xa8);
         for (int32_t i = 0; i < n; ++i) {
             void* child = (*reinterpret_cast<void** const*>(r + 0xa0))[i];
-            if (child && adjust) adjust(child, dx, dy);
+            if (child) static_cast<Element*>(child)->AdjustUpperLeft(dx, dy);   // 0x180115840
         }
         if (void* border = *reinterpret_cast<void* const*>(r + 0xb0))
-            if (adjust) adjust(border, dx, dy);
+            static_cast<Element*>(border)->AdjustUpperLeft(dx, dy);
 
         _upperLeftX = x;
         _upperLeftY = y;
@@ -1772,10 +1646,10 @@ Dialog::CreateElement(Object::ExternalPtr<ElementDescription> description) const
     if (!desc) return result;
 
     char* name = nullptr;
-    if (const GetPathFn getPath = ExternalGetPathFn()) {
+    {
         // identTmp's destructor runs before pathTmp's — retail's order.
-        System::Filename pathTmp;
-        getPath(desc, &pathTmp);
+        System::Filename pathTmp =                                  // 0x180006250
+            static_cast<const Object::External*>(desc)->GetPath();
         const System::Filename identTmp = pathTmp.GetPathIdentifer();
         name = identTmp._data;
         if (name) { ++RtSystem::StringRefCount(name); }   // 0x180112f3e INC [RCX-4]
@@ -1900,21 +1774,16 @@ void ElementDescription::ReleaseFields() {
 // The full evidence block (facts (a)..(c)) is at the door above.
 void ElementDescription::CreateInstance(Object::InternalPtr<Element>* element) const {
     // ---- 1. elem->_name = this->GetPath().GetPathIdentifer() --------------
-    // Object::External::GetPath stays a name lookup (another batch's class);
-    // GetPathIdentifer is System::Filename's member.
-    const GetPathFn getPath = ExternalGetPathFn();
-
+    // Object::External::GetPath (0x180006250) and System::Filename::
+    // GetPathIdentifer, both members.
     uint8_t* elem = reinterpret_cast<uint8_t*>(element->Get());
 
     // The inner scope ends the two temporaries' lives where retail's two
     // inlined releases are, in retail's order (identTmp, then pathTmp).
     {
-        System::Filename pathTmp;
+        System::Filename pathTmp = Object::External::GetPath();
         System::Filename identTmp;
-        if (getPath) {
-            getPath(this, &pathTmp);
-            identTmp = pathTmp.GetPathIdentifer();
-        }
+        identTmp = pathTmp.GetPathIdentifer();
 
         char*    want = identTmp._data;
         // B.3.1 bridge: Element::_name at +0x10, retail's inlined assign stays.
@@ -1956,8 +1825,8 @@ void ElementDescription::CreateInstance(Object::InternalPtr<Element>* element) c
     void*   table = _stringTable;
     int32_t index = -1;
     if (table) {
-        if (const GetIndexFromNameFn gifn = StringTableGetIndexFromNameFn())
-            index = gifn(table, &_textName);
+        index = static_cast<const StringTable*>(table)                   // 0x180002470
+                    ->GetIndexFromName(*reinterpret_cast<const System::String*>(&_textName));
     }
     elem = ED_ELEM;
     *reinterpret_cast<void**>(elem + 0x48)  = table;

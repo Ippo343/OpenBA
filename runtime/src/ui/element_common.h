@@ -35,7 +35,6 @@
 // PORTABILITY: no <windows.h> (PLAN.md §4.1 decision 1).
 // ============================================================================
 
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
@@ -58,37 +57,6 @@ namespace rtuielem {
 template <typename Fn>
 inline Fn RtAddr(uintptr_t ghidra) {
     return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra));
-}
-
-// ---------------------------------------------------------------------------
-// RULE B6-5 door caches (ENDGAME B.3.6). UI is constructed on the LOADER
-// thread while the main thread draws, so a member body that needs another
-// class's door may not keep a function-local static first-call cache
-// (`RT_EXPORT_ONCE`'s shape). It keeps a namespace-scope `std::atomic<void*>`
-// slot instead and resolves through one of these. Same never-cache-a-null
-// contract as RT_EXPORT_ONCE: a miss is retried on the next call.
-// ---------------------------------------------------------------------------
-//
-// The slot is filled only when RtResolveCached itself would have cached the
-// answer (it leaves `scratch` null for a pre-RuntimePortInit hit, which must
-// NOT be frozen - rt_resolve_cache.cpp section 6; ENDGAME B.3.6 closing pass: this
-// helper used to store every hit).
-inline void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        void* scratch = nullptr;
-        p = RtResolveCached(mangled, &scratch);
-        if (scratch != nullptr) slot.store(scratch, std::memory_order_release);
-    }
-    return p;
-}
-inline void* AtomicAddr(std::atomic<void*>& slot, uintptr_t ghidra) {
-    void* p = slot.load(std::memory_order_acquire);
-    if (p == nullptr) {
-        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, ghidra));
-        if (p != nullptr) slot.store(p, std::memory_order_release);
-    }
-    return p;
 }
 
 // (B3X W0: `VTableOf`, `VSlot<Fn>(o, INDEX)`, the `kSlot*` Element slot

@@ -154,6 +154,8 @@
 #include "../../types/input/Device.h"    // ENDGAME B.3.9 SS1: Input::Device::_singleton
 #include "../../types/input/Input.h"     // ENDGAME B.3.9 SS1: Input::Configuration::_singleton
 #include "../../types/system/Timer.h"    // ENDGAME B.3.9 SS1: Timer::_secondsPerTick
+#include "../../types/collection/Collection.h"
+#include "../../types/system/MemoryAllocator.h"
 
 #include <atomic>
 
@@ -164,14 +166,6 @@ using UI::UserInterface;
 inline uint8_t* B(void* p, size_t off) { return static_cast<uint8_t*>(p) + off; }
 
 // ---- data slots -------------------------------------------------------------
-// Never caches a null, for the reason userinterface.cpp gives: a slot resolved
-// before the mint must be able to retry rather than freeze the DLL's answer
-// for the process. ENDGAME B.3.6 (RULE B6-5): namespace-scope atomics rather
-// than RT_DATA_SLOT / RT_EXPORT_ONCE function-local statics — `Update` runs on
-// UI objects the loader thread constructs, every frame.
-std::atomic<void*> g_memAllocSlot{nullptr};
-std::atomic<void*> g_memFreeSlot{nullptr};
-std::atomic<void*> g_eventsSetSizeSlot{nullptr};
 // ENDGAME B.3.9 SS1 (B39_RULES D7): all four are class statics now, no lazy
 // AtomicExport cache (B9-10).
 inline const double* TimerSecondsPerTick() {
@@ -188,47 +182,11 @@ inline void** InputConfigSingleton() {
 }
 
 // ---- the callees ------------------------------------------------------------
-// Nine of the ten are EXPORTED, verified against the shipped export directory
-// with pefile rather than inferred (`AEAA` means PRIVATE, not unexported —
-// reference_aeaa_is_private_not_unexported.md; `CleanRemovedDialogs` is an
-// `AEAA` name and is exported all the same).
-const char* const kCleanRemoved = "?CleanRemovedDialogs@UserInterface@UI@@AEAAXXZ";
-const char* const kCloseDialog  = "?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z";
-const char* const kPlay         = "?Play@UserInterface@UI@@QEAAXH@Z";
-const char* const kUpdateEvents = "?UpdateEvents@UserInterface@UI@@QEAAXXZ";
-const char* const kComputeLayout= "?ComputeLayout@DialogInstance@UI@@QEAAXHHHH@Z";
-const char* const kDlgUpdate    = "?Update@DialogInstance@UI@@QEAAXAEBVTime@System@@PEAVUserInterface@2@AEAUUpdateState@Element@2@@Z";
-const char* const kCursorIndex  = "?GetMouseCursorIndex@UserInterface@UI@@QEBAHHH@Z";
-const char* const kMemAlloc     = "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z";
-const char* const kMemFree      = "?MemFree@MemoryAllocator@System@@SAXPEAX@Z";
-
-// THE ONE ADDRESS DOOR, declared rather than hidden.
-//
-// 0x180033690 is `Collection::Array<UI::Event>::SetSize(int, const Event*)` —
-// the grow-and-fill helper both event pushes call. It is **not in the export
-// table** (checked with pefile; the eight other callees are), so there is no
-// name door for it. A by-address call is a CUTOVER OBLIGATION, not a free
-// choice: `reference_by_address_door_dies_at_cutover.md`. Recorded as such in
-// docs/runtime_port/WAVE10_LANE_UI1.md rather than left for a residue run to
-// rediscover.
-//
-// It is reached through `ResolveAddr(Module::Runtime, ...)`, which consults the
-// port registry FIRST — so the day anyone ports this helper we get theirs, which
-// is the correct outcome and not a bypass
-// (reference_resolveaddr_consults_port_registry_first.md).
-constexpr uintptr_t kEventsSetSizeAddr = 0x180033690;
-
-using CleanFn   = void  (*)(void*);
-using CloseFn   = void  (*)(void*, void*);
-using PlayFn    = void  (*)(void*, int32_t);
-using EventsFn  = void  (*)(void*);
-using LayoutFn  = void  (*)(void*, int32_t, int32_t, int32_t, int32_t);
-using DlgUpdFn  = void  (*)(void*, const void*, void*, void*);
-using CursorFn  = int32_t (*)(const void*, int32_t, int32_t);
-using AllocFn   = void* (*)(uint64_t, int32_t);
-using FreeFn    = void  (*)(void*);
-using SetSizeFn = void  (*)(void*, int32_t, const void*);
-using DeleteFn  = void  (*)(void*, int32_t);
+// B3R RT-UI: all called by name -- MemoryAllocator::MemAlloc / MemFree
+// (0x1800c7a50 / 0x1800c7ad0) and 0x180033690,
+// `Collection::Array<UI::Event>::SetSize(int, const Event*)`, the grow-and-fill
+// helper both event pushes call (not exported:
+// rtcoll::RtColl_ArraySetSizeFill_180033690).
 
 // ---------------------------------------------------------------------------
 // UI::Element::UpdateState — 0x30 bytes, recovered from THIS function's frame
@@ -317,9 +275,9 @@ int32_t UI::UserInterface::Update(const System::Time& timeRef) {
         void** const addData = *reinterpret_cast<void***>(S + 0x28);
 
         Node* node = nullptr;
-        if (out.Call("MemAlloc(0x18, 8) — list node", (const void*)kMemAlloc, 0x18, 8)) {
-            node = static_cast<Node*>(reinterpret_cast<AllocFn>(
-                rtuielem::AtomicExport(g_memAllocSlot, kMemAlloc))(0x18, 8));
+        if (out.Call("MemAlloc(0x18, 8) — list node",
+                     reinterpret_cast<const void*>(&System::MemoryAllocator::MemAlloc), 0x18, 8)) {
+            node = static_cast<Node*>(System::MemoryAllocator::MemAlloc(0x18, 8));
             if (node) {
                 node->value = nullptr;          // retail zeroes then stores
                 node->value = addData[i];
@@ -377,9 +335,9 @@ int32_t UI::UserInterface::Update(const System::Time& timeRef) {
     // QWORD store (0x180121525: MOV qword[RSI+0x30], 0).
     void* const addData = *reinterpret_cast<void**>(S + 0x28);
     if (addData) {
-        FreeFn mfree = reinterpret_cast<FreeFn>(rtuielem::AtomicExport(g_memFreeSlot, kMemFree));
-        if (out.Call("MemFree(_addDialogs._data)", (const void*)mfree))
-            mfree(addData);
+        if (out.Call("MemFree(_addDialogs._data)",
+                     reinterpret_cast<const void*>(&System::MemoryAllocator::MemFree)))
+            System::MemoryAllocator::MemFree(addData);
     }
     out.Ptr(S + 0x28, nullptr, "_addDialogs._data = 0");
     out.U64(S + 0x30, 0, "_addDialogs._size/_capacity = 0 (one qword)");
@@ -499,9 +457,6 @@ int32_t UI::UserInterface::Update(const System::Time& timeRef) {
 
     // ---- end drag-drop ----------------------------------------------------
     if (!leftDown && *reinterpret_cast<void**>(S + 0x60) != nullptr) {
-        SetSizeFn setSize = reinterpret_cast<SetSizeFn>(
-            rtuielem::AtomicAddr(g_eventsSetSizeSlot, kEventsSetSizeAddr));
-
         for (int32_t id = 0xd; id <= 0xe; ++id) {
             EventRecord rec;
             rec.dialog   = *reinterpret_cast<void**>(S + 0x60);
@@ -515,8 +470,9 @@ int32_t UI::UserInterface::Update(const System::Time& timeRef) {
             // and the grow helper never copies it.
             const int32_t newSize = *reinterpret_cast<int32_t*>(S + 0x50) + 1;
             if (out.Call("Array<Event>::SetSize (drag-drop end/cancel)",
-                         (const void*)setSize, newSize, id) && setSize)
-                setSize(S + 0x48, newSize, &rec);
+                         reinterpret_cast<const void*>(&rtcoll::RtColl_ArraySetSizeFill_180033690),
+                         newSize, id))
+                rtcoll::RtColl_ArraySetSizeFill_180033690(S + 0x48, newSize, &rec);
         }
 
         out.Ptr(S + 0x60, nullptr, "_dragDropDialog = 0");

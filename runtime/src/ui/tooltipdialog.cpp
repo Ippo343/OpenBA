@@ -93,13 +93,8 @@
 #include "../../types/ui/Element.h"
 #include "../../types/ui/TextElement.h"
 #include "../../types/ui/ToolTipDialog.h"
+#include "../../types/system/MemoryAllocator.h"
 #include "../system/string.h"   // RtSystem_String_Set / _Assign, RtString_*
-
-// ResolveAddr lives in standalone/resolve.h, which drags in <windows.h> and so
-// must not be included from runtime/src (rt_port.h explains why). Declared here
-// exactly as ~30 sibling runtime files already declare it.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module m, uintptr_t ghidra_addr);
 
 namespace {
 
@@ -162,30 +157,17 @@ TipDlgSummary g_summary;
 // `?MemAlloc@MemoryAllocator@System@@SAPEAXKH@Z`, 0x1800c7a50. See the
 // operator-new banner: the two functions are the SAME nineteen instructions and
 // differ only in whether the alignment is a parameter or the immediate 8.
-// Reached by ADDRESS because ResolveAddr consults the port registry FIRST
-// (reference_resolveaddr_consults_port_registry_first.md), so when the
-// allocator port is armed this goes through our body, and it is the same door
-// runtime/src/video/context_ctor.cpp already uses for the same equivalence.
+// Called directly (B3R RT-UI).
 void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn ? fn(bytes, align) : nullptr;
+    return System::MemoryAllocator::MemAlloc(bytes, align);
 }
-
-// `?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z`
-// (0x180115650) — PORTED, runtime/src/ui/element.cpp. HIDDEN RETURN SLOT in
-// RDX: (this, ret, name), returns that same pointer in RAX. Reached by NAME.
-using FindElementFn = void* (*)(void* self, void** ret, const char* const* name);
 
 // `?CacheText@TextElement@UI@@AEAAXXZ` (0x18011ec10) — private but EXPORTED
 // (AEAA means PRIVATE, not unexported; this DLL exports its private members —
-// reference_aeaa_means_private_not_unexported.md). NOT reimplemented: it owns
-// the cached-formatted-text pointer at +0xF8 and its refcount, which is why
-// runtime/src/ui/widgets_layout.cpp calls through to it too.
+// reference_aeaa_means_private_not_unexported.md). It owns the
+// cached-formatted-text pointer at +0xF8 and its refcount. The member, by name.
 void CacheText(void* self) {
-    using Fn = void (*)(void*);
-    RT_EXPORT_ONCE(Fn, "?CacheText@TextElement@UI@@AEAAXXZ")(self);
+    static_cast<UI::TextElement*>(self)->CacheText();                    // B.3.x bridge
 }
 
 // (ENDGAME B.3.9 TI-UI: slots 1/2 and TypeId -- 0x18004cfc0 / 0x18004cfa0 /
@@ -332,12 +314,12 @@ extern "C" void RtUi_ToolTipDialog_SetText(void* self, const System::String* tex
 
 // ============================================================================
 namespace {
-// Element::FindElement (block A's class), a RETSLOT name door. File scope so
-// no member keeps a static of its own (RULE B6-5). Spelled as ONE literal on
-// ONE line on purpose: a SPLIT string literal is invisible to a naive grep
-// for the mangled name (userinterface_hover.cpp:23 records the miss).
+// ?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z
+// (0x180115650): RETSLOT, the member's prvalue placed in the caller's slot.
 inline void ElementFindElement(void* child, void** hit, char* const* name) {
-    RT_EXPORT_ONCE(FindElementFn, "?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z")(child, hit, name);  // 0x1800daba2
+    new (static_cast<void*>(hit)) Object::InternalPtr<UI::Element>(          // 0x1800daba2
+        static_cast<UI::Element*>(child)->FindElement(                       // B.3.x bridge
+            *reinterpret_cast<const System::String*>(name)));
 }
 }  // namespace
 

@@ -145,9 +145,6 @@
 // Same forward declarations, same spelling, as spritecontext.cpp and
 // spritecontext_flush.cpp — the linker checks them against standalone/resolve.h.
 // See spritecontext.cpp's banner for why resolve.h is not included from here.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
 
 using UI::SpriteContext;

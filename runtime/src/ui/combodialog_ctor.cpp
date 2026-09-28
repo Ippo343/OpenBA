@@ -148,16 +148,8 @@
 #include "../../types/ui/ContainerElement.h"
 #include "../../types/ui/ListElement.h"
 #include "../../types/video/Device.h"   // ENDGAME B.3.9 SS1: Video::Device::_singleton
+#include "../../types/system/MemoryAllocator.h"
 #include <new>
-
-// ResolveAddr / ResolveExport live in standalone/resolve.h, which drags in
-// <windows.h> (whose <wingdi.h> declares a function called `Rectangle` and
-// whose <windef.h> #defines `near`/`far` away), so they are declared here
-// exactly as ~30 sibling runtime files declare them. The linker checks these
-// against resolve.h's.
-void* ResolveExport(const char* mangled_name);
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 using RtUI::ComboDialog;
 using RtUI::DialogInstance;
@@ -247,30 +239,17 @@ struct ComboDialogSummary {
 ComboDialogSummary g_summary;
 
 // ===========================================================================
-// Callees reached through the SEAM (ResolveAddr / ResolveExport), never the raw
-// door — so that when another lane ports one of these, this body follows it,
-// which is what retail's own direct near-CALL into the same DLL amounted to.
+// Callees, called by name (B3R RT-UI).
 // ===========================================================================
 
-// `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z`, 0x1800c7a50. BY ADDRESS, the
-// same pair runtime/src/collection/array.cpp and runtime/src/ui/dialog_create.cpp
-// use, including the retry-a-miss contract: at cutover this address is supplied
-// by the allocator's own arming path, and a caller that ran before that point
-// would otherwise freeze a null into the static for the life of the process.
+// `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z`, 0x1800c7a50.
 void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return fn ? fn(bytes, align) : nullptr;
+    return System::MemoryAllocator::MemAlloc(bytes, align);
 }
 
-// ?IsDerivedFrom@Base@Object@@QEBA_NI@Z  0x1800c0390 — PORTED (Wave 3 lane A),
-// which is exactly why this goes through the seam and not the raw address.
+// ?IsDerivedFrom@Base@Object@@QEBA_NI@Z  0x1800c0390.
 bool IsDerivedFrom(const void* obj, uint32_t typeId) {
-    using Fn = bool (*)(const void*, uint32_t);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
-    return fn(obj, typeId);
+    return reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(typeId);   // B.3.x bridge
 }
 
 // ?FindElementType@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z

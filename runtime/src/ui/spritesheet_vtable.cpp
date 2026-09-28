@@ -88,15 +88,10 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/SpriteSheet.h"
+#include "../../types/object/External.h"
+#include "../../types/system/String.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Sprite38Z
 
-// Forward-declared rather than pulled in from standalone/resolve.h, for the
-// reason rt_port.h gives: that header drags in <windows.h> and runtime/src/
-// must stay platform-neutral. Byte-identical to resolve.h's declaration; the
-// same pair already appears in runtime/src/ui/elementdescription_serialize.cpp
-// and runtime/src/achievement/goal_serialize.cpp.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 // ############################################################################
 // UI::SpriteSheet's slot bodies (ENDGAME B.3.6 block D), inside `namespace UI`
@@ -287,21 +282,9 @@ using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
 
-using SerMemberFn = void (*)(void*, Serializer*);
-
-SerMemberFn ByAddr(uintptr_t addr) {
-    return reinterpret_cast<SerMemberFn>(ResolveAddr(Module::Runtime, addr));
-}
-
-// ?Serialize@String@System@@ — exported, ported, reached by address because the
-// shipped instruction is `CALL 0x1800c9930`.
-// ENDGAME B.3.6 block D (RULE B6-5): the three resolvers below no longer
-// keep a function-local static — UI is constructed and serialized on the
-// LOADER thread, and a first-call cache inside a member's call path is what
-// the class blocks remove. `ResolveAddr` is a registry lookup; Serialize is
-// once per sheet load, not per frame.
-SerMemberFn StringSerialize() {
-    return ByAddr(0x1800c9930);
+// ?Serialize@String@System@@ (0x1800c9930), called by name (B3R RT-UI).
+void StringSerialize(void* field, Serializer* ser) {
+    reinterpret_cast<System::String*>(field)->Serialize(ser);              // B.3.x bridge
 }
 // ENDGAME B.3.2 step 2 — the 0x180078950 forwarder that used to sit here is
 // GONE. `m_sprites` + `m_spriteCount` + `m_spriteCapacity` (SpriteSheet.h,
@@ -310,14 +293,10 @@ SerMemberFn StringSerialize() {
 // offsets (same situation sprite.cpp's `AddSpriteInfo` bridges), and
 // `kSpec_Sprite38Z` is NON-TRIVIAL, so the call site below bridges through the
 // hand-derived row.
-// (serializer, count, entries)
-using EntriesSerializeFn = void (*)(Serializer*, uint32_t, void*);
-EntriesSerializeFn EntriesSerialize() {
-    return reinterpret_cast<EntriesSerializeFn>(
-        ResolveAddr(Module::Runtime, 0x180078ad0));
-}
-SerMemberFn MaterialPtrSerialize() {
-    return ByAddr(0x180014520);
+// ExternalPtr<MaterialInstance>::Serialize (0x180014520), by name.
+void MaterialPtrSerialize(void* field, Serializer* ser) {
+    RtObject_ExternalPtrSerialize_MaterialInstance(
+        reinterpret_cast<RtObject::External**>(field), ser);               // B.3.x bridge
 }
 
 // The inlined ctor at 0x18011d747..0x18011d772, and the inlined dtor at
@@ -457,8 +436,8 @@ extern "C" void RtUi_SpriteSheet_SerializeEntries(Serializer* ser,
 
     SpriteInfo* e = entries;
     do {
-        StringSerialize()(&e->name,  ser);  // +0x00  CALL 0x1800c9930
-        StringSerialize()(&e->group, ser);  // +0x08  CALL 0x1800c9930
+        StringSerialize(&e->name,  ser);  // +0x00  CALL 0x1800c9930
+        StringSerialize(&e->group, ser);  // +0x08  CALL 0x1800c9930
 
         RecIntVia(ser, &e->x);              // +0x10
         RecIntVia(ser, &e->y);              // +0x14
@@ -482,8 +461,8 @@ bool SpriteSheet::Serialize(void* streamv) {
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
-    StringSerialize()(&m_groupName,   &ser);   // +0x40 FIRST — see banner
-    StringSerialize()(&m_textureName, &ser);   // +0x38 second
+    StringSerialize(&m_groupName,   &ser);   // +0x40 FIRST — see banner
+    StringSerialize(&m_textureName, &ser);   // +0x38 second
 
     RecInt (rw, &m_field48);   // +0x48
     RecInt (rw, &m_field4C);   // +0x4c
@@ -497,9 +476,9 @@ bool SpriteSheet::Serialize(void* streamv) {
             ->SetSize(static_cast<int>(count));            // retail 0x180078950
 
     // Re-read AFTER SetSize: it reallocates.
-    EntriesSerialize()(&ser, static_cast<uint32_t>(count), m_sprites);
+    RtUi_SpriteSheet_SerializeEntries(&ser, count, m_sprites);   // 0x180078ad0
 
-    MaterialPtrSerialize()(&m_field30, &ser);  // +0x30
+    MaterialPtrSerialize(&m_field30, &ser);  // +0x30
 
     DestroyCodec(rw);
     return true;

@@ -203,14 +203,10 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/Dialog.h"
+#include "../../types/object/External.h"
+#include "../../types/system/String.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_ExtStr10at08 etc.
 
-// Forward-declared rather than pulled in from standalone/resolve.h, for the
-// reason rt_port.h gives: that header drags in <windows.h> and runtime/src/
-// must stay platform-neutral. Byte-identical to resolve.h's declaration; the
-// same pair appears in spritesheet_vtable.cpp and elementdescription_serialize.cpp.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace RtUiDlgV {
 
@@ -343,22 +339,17 @@ using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
 
-using SerMemberFn = void (*)(void*, Serializer*);
-
-SerMemberFn ByAddr(uintptr_t addr) {
-    return reinterpret_cast<SerMemberFn>(ResolveAddr(Module::Runtime, addr));
+// B3R RT-UI: the field serializers are called by name --
+// System::String::Serialize (0x1800c9930) and the ExternalPtr<T>::Serialize /
+// element-walk bodies of runtime/types/object/External.h (0x180038f90
+// ElementDescription, 0x180004590 SpriteSheet, 0x1800756d0
+// DialogControllerConfig, 0x1800493d0 / 0x18002f170 the two array walks).
+RtObject::External** ExtField(void* field) {
+    return reinterpret_cast<RtObject::External**>(field);                  // B.3.x bridge
 }
-
-// ?Serialize@String@System@@ — EXPORTED and already ported
-// (runtime/src/system/string.cpp registers both doors). Reached by address here
-// because that is what the shipped instruction is, and it lands on our port.
-SerMemberFn StringSerialize()      { static SerMemberFn f = ByAddr(0x1800c9930); return f; }
-// The three ExternalPtr<T>::Serialize instantiations. All three are in lane
-// EXTPTR's table of 25; that lane registered four and deliberately left these.
-// Registering them HERE would be the duplicate-registration trap it refused.
-SerMemberFn ElementDescPtrSerialize() { static SerMemberFn f = ByAddr(0x180038f90); return f; }
-SerMemberFn SpriteSheetPtrSerialize() { static SerMemberFn f = ByAddr(0x180004590); return f; }
-SerMemberFn ConfigPtrSerialize()      { static SerMemberFn f = ByAddr(0x1800756d0); return f; }
+void StringSerialize(void* field, Serializer* ser) {
+    reinterpret_cast<System::String*>(field)->Serialize(ser);              // B.3.x bridge
+}
 
 // ENDGAME B.3.2 step 2 — the four by-address SetSize forwarders that used to
 // sit here are GONE. All four target fields are the {pointer, count,
@@ -382,17 +373,6 @@ SerMemberFn ConfigPtrSerialize()      { static SerMemberFn f = ByAddr(0x1800756d
 //                Array<ExternalPtr<Object::External>>
 //
 // Every one of the four is the TWO-argument `SetSize(int)` member (no fill).
-
-// (serializer, count, entries)
-using EntriesSerializeFn = void (*)(Serializer*, uint32_t, void*);
-EntriesSerializeFn TemplatesWalker() {
-    static EntriesSerializeFn f = reinterpret_cast<EntriesSerializeFn>(
-        ResolveAddr(Module::Runtime, 0x1800493d0)); return f;
-}
-EntriesSerializeFn ReferencesWalker() {
-    static EntriesSerializeFn f = reinterpret_cast<EntriesSerializeFn>(
-        ResolveAddr(Module::Runtime, 0x18002f170)); return f;
-}
 
 // The inlined ctor at 0x1801130e3..0x18011310b and the inlined dtor at
 // 0x1801132eb. Spelled out here rather than shared with the two other files
@@ -426,9 +406,6 @@ void RecUInt(ReaderWriter* rw, uint32_t* v) {
 void RecInt(ReaderWriter* rw, int32_t* v) {
     reinterpret_cast<IO::ReaderWriter*>(rw)->SerializeInt(*v, nullptr);   // B.3.x bridge
 }
-
-const char* const kSerializeMangled =
-    "?Serialize@Dialog@UI@@UEAA_NAEAVStream@IO@@@Z";
 
 }  // namespace
 }  // namespace RtUiDlgV
@@ -467,9 +444,9 @@ bool Dialog::Serialize(void* streamv) {                        // [5] 0x1801130c
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
     RecUInt(rw, &_defaultFlags);                               // +0x40
-    ElementDescPtrSerialize()(&_rootDescription, &ser);        // +0x38
-    SpriteSheetPtrSerialize()(&_spriteSheet, &ser);            // +0x20
-    StringSerialize()(&_spriteName, &ser);                     // +0x28
+    RtObject_ExternalPtrSerialize_ElementDescription(ExtField(&_rootDescription), &ser);        // +0x38
+    RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), &ser);            // +0x20
+    StringSerialize(&_spriteName, &ser);                     // +0x28
     RecUInt(rw, &_backgroundColor);                            // +0x30
 
     const bool reading = (ser.stream->direction == rt::io::kDirectionReading);
@@ -484,8 +461,8 @@ bool Dialog::Serialize(void* streamv) {                        // [5] 0x1801130c
         // RE-READ after SetSize: it reallocates.
         uint8_t* e = reinterpret_cast<uint8_t*>(_namedTemplates);
         for (int32_t i = 0; i < count; ++i, e += 0x10) {
-            ElementDescPtrSerialize()(e, &ser);             // entry+0x00
-            StringSerialize()(e + 8, &ser);                 // entry+0x08
+            RtObject_ExternalPtrSerialize_ElementDescription(ExtField(e), &ser);             // entry+0x00
+            StringSerialize(e + 8, &ser);                 // entry+0x08
         }
     }
 
@@ -496,7 +473,8 @@ bool Dialog::Serialize(void* streamv) {                        // [5] 0x1801130c
         if (reading)
             rtcoll::AsArray<&rtcoll::kSpec_U64Zero>(&_templates)
                 ->SetSize(count);          // retail 0x1800492d0
-        TemplatesWalker()(&ser, static_cast<uint32_t>(count), _templates);
+        RtObject_ExternalPtrArraySerialize_ElementDescription(          // 0x1800493d0
+            &ser, count, ExtField(_templates));
     }
 
     // -- array 3: _controllerConfigs (+0x48), count +0x50, stride 0x20 ------
@@ -509,9 +487,9 @@ bool Dialog::Serialize(void* streamv) {                        // [5] 0x1801130c
         uint8_t* e = reinterpret_cast<uint8_t*>(_controllerConfigs);
         for (int32_t i = 0; i < count; ++i, e += 0x20) {
             RecUInt(rw, reinterpret_cast<uint32_t*>(e));    // entry+0x00 _typeId
-            ElementDescPtrSerialize()(e + 0x08, &ser);      // entry+0x08 _elementDesc
-            ConfigPtrSerialize()(e + 0x10, &ser);           // entry+0x10 _config
-            StringSerialize()(e + 0x18, &ser);              // entry+0x18 _name
+            RtObject_ExternalPtrSerialize_ElementDescription(ExtField(e + 0x08), &ser);      // entry+0x08 _elementDesc
+            RtObject_ExternalPtrSerialize_DialogControllerConfig(ExtField(e + 0x10), &ser);           // entry+0x10 _config
+            StringSerialize(e + 0x18, &ser);              // entry+0x18 _name
         }
     }
 
@@ -522,7 +500,8 @@ bool Dialog::Serialize(void* streamv) {                        // [5] 0x1801130c
         if (reading)
             rtcoll::AsArray<&rtcoll::kSpec_U64Zero>(&_references)
                 ->SetSize(count);          // retail 0x18002f070
-        ReferencesWalker()(&ser, static_cast<uint32_t>(count), _references);
+        RtObject_ExternalPtrArraySerialize_External(                    // 0x18002f170
+            &ser, count, ExtField(_references));
     }
 
     RecInt(rw, &_drawLevel);    // +0x34 — the FIELD, not a copy. LAST.

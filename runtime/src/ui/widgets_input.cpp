@@ -114,11 +114,10 @@
 // directly (NumberEditElement::SetValue, EditElement::SetText,
 // NumberElement::CacheText, TextElement::CacheText, Element::FindElementType,
 // UserInterface::CloseDialog, Object::Base::IsDerivedFrom) or through a
-// namespace-scope `std::atomic` slot (element_common.h's AtomicAddr /
-// AtomicExport) for the data exports and the two addressed helpers.
+// named free body (B3R RT-UI: MemoryAllocator::MemFree and the Collection
+// body 0x180010ab0).
 // ============================================================================
 
-#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -143,6 +142,7 @@
 #include "../../types/ui/LabelElement.h"
 #include "../../types/ui/Sprite.h"
 #include "../../types/ui/UserInterface.h"
+#include "../../types/collection/Collection.h"
 // WAVE 9 LANE UIW2 PART 2. The String primitives the two newly ported
 // address-door bodies call as ordinary C++ rather than through a door:
 // RtString_StrCompare, RtString_ReleaseInline and RtSystem_String_Assign.
@@ -160,10 +160,6 @@ namespace {
 // `?IsDerivedFrom@Base@Object@@QEBA_NI@Z` (0x1800c0390, ord 3110, exported) is
 // `Object::Base::IsDerivedFrom` — a real member since B.3.3 — and every "first
 // child" lookup below calls it as one, exactly where retail calls the export.
-
-// RULE B6-5: the namespace-scope door caches the member bodies read through.
-std::atomic<void*> g_memFree{nullptr};              // 0x1800c7ad0
-std::atomic<void*> g_stringArrayCleanup{nullptr};   // 0x180010ab0
 
 // The NumberEditElement type id every SpinnerElement export reads as
 // `dword ptr [0x1801fa190]` (disassembly of 0x1800d7cb0 and siblings): the first
@@ -213,13 +209,7 @@ std::atomic<void*> g_stringArrayCleanup{nullptr};   // 0x180010ab0
 // EditElement::SetText below.
 
 // `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` (0x1800c7ad0) — the static free
-// EditElement::SetText itself calls. Resolved by ADDRESS, and that address IS
-// registered (the Wave 2 allocator port). A miss is retried, not cached — at
-// cutover this address arrives with the allocator's arming path.
-using MemFreeFn = void (*)(void*);
-MemFreeFn MemFreeStatic() {
-    return reinterpret_cast<MemFreeFn>(rtuielem::AtomicAddr(g_memFree, 0x1800c7ad0));
-}
+// EditElement::SetText itself calls -- called by name (B3R RT-UI).
 
 // ----------------------------------------------------------------------------
 // WAVE 9 LANE UIW — the Collection::Array entry points ComboElement and
@@ -256,13 +246,8 @@ MemFreeFn MemFreeStatic() {
 // array_destroy.cpp's J2_ENTRY driving `ReleaseStringsCounted` off a
 // `DestroySpec` (`kD_Str_08`), not an `rtcoll::ArraySpec`, so there is no
 // `kSpec_*` row the class template could take — per the batch rule, this
-// "DtorElem" helper stays a free-function call through the seam. CACHE A HIT,
-// RETRY A MISS: at cutover it arrives with the Collection port's init.
-using ArrayCleanupFn = void (*)(void*);
-ArrayCleanupFn ArrayCleanup_180010ab0() {
-    return reinterpret_cast<ArrayCleanupFn>(
-        rtuielem::AtomicAddr(g_stringArrayCleanup, 0x180010ab0));
-}
+// "DtorElem" helper stays a free-function call, by name
+// (rtcoll::RtColl_ArrayDtorElem_180010ab0, B3R RT-UI).
 
 // Resolve SpinnerElement/SliderElement/ProgressElement's wrapped "value"
 // widget: Element::_children._data[0], returned only if IsDerivedFrom(typeId)
@@ -546,7 +531,7 @@ int32_t ComboElement::AddItem(const UI::Sprite& sprite, const System::String& te
 // omission and it is not this port's business to repair it — CLAUDE.md's rule
 // on faithful crashes applies to faithful *leaks* for the same reason.
 void ComboElement::RemoveAllItems() {
-    ArrayCleanup_180010ab0()(&_strings);   // 0x180010ab0 — J2, not convertible; see the banner
+    rtcoll::RtColl_ArrayDtorElem_180010ab0(&_strings);   // 0x180010ab0 — J2, not convertible; see the banner
     _sprites.~Array();                     // retail 0x180037310 (J1)
     _userData.~Array();                    // retail 0x180024aa0 (J1)
     _currentItem = -1;
@@ -745,7 +730,7 @@ void EditElement::SetText(const System::String& text) {
                 int32_t* refcount = reinterpret_cast<int32_t*>(oldPtr - 4);
                 *refcount -= 1;
                 if (*refcount == 0) {
-                    MemFreeStatic()(oldPtr - 8);
+                    System::MemoryAllocator::MemFree(oldPtr - 8);
                 }
             }
             _text = newPtr;

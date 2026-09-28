@@ -120,34 +120,28 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/ComboDialog.h"
+#include "../../types/ui/ComboElement.h"
+#include "../../types/ui/UserInterface.h"
 #include "../../types/ui/Element.h"     // B3X W0: the root's Contains by name
 #include "../../types/input/Device.h"   // ENDGAME B.3.9 SS1: Input::Device::_singleton
 
 namespace RtUI {
 
+// The members the bodies below reach in other classes (ComboElement,
+// UserInterface), called by name (B3R RT-UI).
 namespace {
-
-
-
-using SetCurrentItemFn = void (*)(void* combo, int32_t index);
-using PlayFn           = void (*)(void* ui, int32_t soundId);
-using CloseDialogFn    = void (*)(void* ui, void** dlgPtr);
-
-}  // namespace
-
-// Other blocks' doors the member bodies reach (ComboElement, UserInterface),
-// file-scope so that no member keeps a static of its own (RULE B6-5).
-namespace {
+// ?SetCurrentItem@ComboElement@UI@@QEAAXH@Z  0x180112540
 inline void ComboSetCurrentItem(void* combo, int32_t index) {
-    RT_EXPORT_ONCE(SetCurrentItemFn, "?SetCurrentItem@ComboElement@UI@@QEAAXH@Z")(combo, index);
+    static_cast<UI::ComboElement*>(combo)->SetCurrentItem(index);          // B.3.x bridge
 }
+// ?Play@UserInterface@UI@@QEAAXH@Z  0x1801223d0
 inline void UiPlay(void* ui, int32_t sound) {
-    RT_EXPORT_ONCE(PlayFn, "?Play@UserInterface@UI@@QEAAXH@Z")(ui, sound);
+    static_cast<UI::UserInterface*>(ui)->Play(sound);                     // B.3.x bridge
 }
+// ?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z  0x180120f20
 inline void UiCloseDialog(void* ui, void** dlgPtr) {
-    RT_EXPORT_ONCE(CloseDialogFn,
-        "?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z")
-        (ui, dlgPtr);
+    static_cast<UI::UserInterface*>(ui)->CloseDialog(                     // B.3.x bridge
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr));
 }
 }  // namespace
 

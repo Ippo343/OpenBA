@@ -76,6 +76,7 @@
 #include "../../types/ui/StringTable.h"
 #include "../../types/ui/String.h"
 #include "../../types/system/String.h"
+#include "../../types/system/MemoryAllocator.h"
 #include "../system/string.h"   // RtString_StrCompare, for GetIndexFromName
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Sprite38
 
@@ -87,9 +88,6 @@
 // to resolve.h's; the linker checks them against it. (Precedent:
 // runtime/src/achievement/achievement_manager.cpp:69-71.)
 // ----------------------------------------------------------------------------
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-void*     ResolveExport(const char* mangled_name);
 
 namespace {
 
@@ -627,14 +625,9 @@ inline void RtUi_SpriteSheetAssignString(char*& slot, char* const* src) {
     if (old) {
         if (--*reinterpret_cast<int32_t*>(old - 4) == 0) {
             slot -= 8;                       // the member is adjusted...
-            // ...and then freed THROUGH the member, via the port-registry
-            // door so the ported MemoryAllocator answers: every String block
-            // here is allocated and freed through the SAME door, and mixing
-            // doors inside one refcounted block is the hazard.
-            using FreeFn = void (*)(void*);
-            FreeFn memFree = RT_EXPORT_ONCE(FreeFn,
-                "?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
-            memFree(slot);
+            // ...and then freed THROUGH the member, by
+            // ?MemFree@MemoryAllocator@System@@ (0x1800c7ad0).
+            System::MemoryAllocator::MemFree(slot);
         } else {
             slot = nullptr;                  // dead store, faithful - see banner
         }

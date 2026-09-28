@@ -63,6 +63,7 @@
 // ENDGAME B.3.6 block E: element_common.h carries the declaration exactly as
 // ~30 sibling runtime files spell it, and the RULE B6-5 atomic door caches.
 #include "element_common.h"
+#include "../../types/collection/Collection.h"
 
 #include <atomic>
 #include <new>
@@ -75,28 +76,9 @@ using UI::Element;
 // ---------------------------------------------------------------------------
 // Dependencies these bodies CALL rather than reimplement.
 // ---------------------------------------------------------------------------
-constexpr uintptr_t kEventsSetSizeAddr     = 0x180033690;  // Array<UI::Event>::SetSize
-constexpr uintptr_t kAddDialogsSetSizeAddr = 0x18007a0d0;  // Array<InternalPtr<DialogInstance>>::SetSize
-
-using SetSizeFn      = void  (*)(void* array, int32_t newSize, const void* fill);
-using OperatorNewFn  = void* (*)(uint64_t size);
-
-// ENDGAME B.3.6 (RULE B6-5): the two address doors used to be function-local
-// `static` first-call caches, and every other door this file still needs is a
-// namespace-scope atomic slot — the member bodies below run on UI objects the
-// loader thread constructs.
-std::atomic<void*> g_eventsSetSizeSlot{nullptr};
-std::atomic<void*> g_addDialogsSetSizeSlot{nullptr};
-std::atomic<void*> g_tipOperatorNewSlot{nullptr};
-
-SetSizeFn EventsSetSize() {
-    return reinterpret_cast<SetSizeFn>(
-        rtuielem::AtomicAddr(g_eventsSetSizeSlot, kEventsSetSizeAddr));
-}
-SetSizeFn AddDialogsSetSize() {
-    return reinterpret_cast<SetSizeFn>(
-        rtuielem::AtomicAddr(g_addDialogsSetSizeSlot, kAddDialogsSetSizeAddr));
-}
+// B3R RT-UI: called by name -- 0x180033690 (Array<UI::Event>::SetSize-fill),
+// 0x18007a0d0 (Array<InternalPtr<DialogInstance>>::SetSize-fill) and
+// `??2ToolTipDialog@UI@@SAPEAX_K@Z` (0x18004cfd0, RtUi_ToolTipDialog_OperatorNew).
 // `?GetToolTipString@Element@UI@@QEBA?AVString@System@@XZ` (0x1800356a0) —
 // fragment pass F2 defined the member (tooltipdialog.cpp): a direct member
 // call now, its prvalue constructed straight into the caller's slot exactly
@@ -254,7 +236,7 @@ void UI::UserInterface::EndDragDrop() {
     rec.userData  = nullptr;                // 0x180120b36
     rec.dragId    = _dragDropId;            // 0x180120b09 / 0x180120b10
     rec.dragData  = _dragDropData;          // 0x180120b14 / 0x180120b3b
-    EventsSetSize()(&_events, _events._size + 1, &rec);               // 0x180120b40
+    rtcoll::RtColl_ArraySetSizeFill_180033690(&_events, _events._size + 1, &rec);               // 0x180120b40
 
     _dragDropDialog = nullptr;                                        // 0x180120b45
 
@@ -318,7 +300,7 @@ void UI::DialogInstance::EndHover(UserInterface* ui) {
         rec.userData  = nullptr;                    // 0x180113d4a
         rec.dragId    = 0;                          // 0x180113d51
         rec.dragData  = nullptr;                    // 0x180113d55
-        EventsSetSize()(&ui->_events, ui->_events._size + 1, &rec);   // 0x180113d5a
+        rtcoll::RtColl_ArraySetSizeFill_180033690(&ui->_events, ui->_events._size + 1, &rec);   // 0x180113d5a
     }
 
     // 0x180113d5f: XORPS XMM0,XMM0 / DIVSD XMM0,[0x1801fe728] / CVTTSD2SI
@@ -407,8 +389,7 @@ void UI::UserInterface::BeginToolTip(Object::InternalPtr<DialogInstance>* dialog
     // element, userData = 0, flags = 0, then the stamp — spelt as the real
     // constructor (the DialogInstance ctor door and the minted
     // `??_7ToolTipDialog` stamp are retired).
-    void* tip = reinterpret_cast<OperatorNewFn>(rtuielem::AtomicExport(
-        g_tipOperatorNewSlot, "??2ToolTipDialog@UI@@SAPEAX_K@Z"))(0xc0);  // 0x1801208f0
+    void* tip = RtUi_ToolTipDialog_OperatorNew(0xc0);                   // 0x1801208f0
     if (tip) {
         ::new (tip) ToolTipDialog(                                     // 0x180120907..0x18012092e
             self, static_cast<const Dialog*>(elem->_toolTipDialog),
@@ -476,7 +457,7 @@ void UI::UserInterface::BeginToolTip(Object::InternalPtr<DialogInstance>* dialog
     // dispatched through the stamped ToolTipDialog table.
     reinterpret_cast<DialogInstance*>(queued)->OnOpened();              // 0x180120a37  B.3.6 bridge
 
-    AddDialogsSetSize()(&self->_addDialogs,
+    rtcoll::RtColl_ArraySetSizeFill_18007a0d0(&self->_addDialogs,
                         self->_addDialogs._size + 1, &queued);          // 0x180120a47
 }
 
